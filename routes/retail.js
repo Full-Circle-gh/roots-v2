@@ -8472,7 +8472,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   if (fallbackChoice === 'cancel_missing' || fallbackChoice === 'replace_missing' || fallbackChoice === 'wait_for_restock') {
     // All three need shortage analysis at the nearest store. (Bundle carts are
     // already refused above, so resolved == its own components here.)
-    const a = inventory.analyzeShortage({
+    const a = await inventory.analyzeShortage({
       address,
       items: expandStockLines(resolved),
       deliverySlotId, channel: 'wechat',
@@ -8624,7 +8624,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   } else if (isWaitFlow) {
     // Wait flow always uses the nearest store regardless of stock; we
     // know stock is short there and that's the whole point.
-    const a = inventory.analyzeShortage({
+    const a = await inventory.analyzeShortage({
       address,
       items: expandStockLines(resolved),
       deliverySlotId, channel: 'wechat',
@@ -8634,7 +8634,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     fulfillingStore = a.nearest?.store || a.resolved?.store;
     routingReason   = 'wait_for_restock';
   } else {
-    const routing = inventory.routeOrder({
+    const routing = await inventory.routeOrder({
       address,
       items: expandStockLines(mutatedItems),   // bundles → component demand
       channel: 'wechat',
@@ -24158,7 +24158,7 @@ function reverseOrderPoints(orderId) {
 // Body: { address_id, items:[{product_id,qty,choices:[]}], delivery_mode }
 // Returns the same numbers the actual order-create will use — so the
 // mini-app can show a faithful breakdown before the customer commits.
-router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (req, res) => {
+router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), async (req, res) => {
   const body = req.body || {};
   const addressId    = body.address_id;
   const items        = body.items;
@@ -24319,7 +24319,7 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), (re
     const quotePendingOrderIds = tdb().prepare(
       "SELECT id FROM retail_orders WHERE customer_id = ? AND status = 'pending_payment'"
     ).all(req.customer.id).map(r => r.id);
-    const analysis = inventory.analyzeShortage({
+    const analysis = await inventory.analyzeShortage({
       address, items: cleanItems,
       deliverySlotId: body.delivery_slot_id || null,
       channel: 'wechat',
