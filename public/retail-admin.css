@@ -8083,19 +8083,25 @@
   .topbar .topbar-ico { color: var(--td-text2); }
   .topbar .topbar-ico:hover { background: var(--td-raised); color: var(--td-text); }
 
-  /* Unseen inbox marker → calm Amber. Never red, no alarm pulse. */
+  /* Unseen inbox marker → Graphite, never Dusk. Dusk means "Tacet acted"; an
+     inbox count is customers acting, so it doesn't earn the automation colour
+     — same rule this chrome applies everywhere else. Count/shape/position
+     unchanged, colour only. */
   .topbar .tab-badge {
-    background: var(--td-amber);
+    background: var(--td-text2);
     box-shadow: 0 0 0 2px var(--bg-pane);
     animation: none;
     color: #fff;
   }
 
-  /* Avatar → Ink circle, Paper initial (no Tea green). Dusk focus ring. */
+  /* Avatar → Ink circle, Paper initial (no Tea green), Graphite focus ring —
+     not Dusk. The circle is real data (initials from /me) doing an ordinary
+     job (identify the operator), not automation, so it doesn't earn Dusk
+     either; same rule as the badge above. Zero Dusk left in global chrome. */
   .topbar .acct-circle { background: var(--td-text); color: var(--td-paper); box-shadow: 0 0 0 1px var(--td-border) inset; }
   .topbar .acct-btn:hover .acct-circle,
   .topbar .acct-btn:focus-visible .acct-circle,
-  .topbar .acct-btn[aria-expanded="true"] .acct-circle { box-shadow: 0 0 0 2px var(--td-dusk); }
+  .topbar .acct-btn[aria-expanded="true"] .acct-circle { box-shadow: 0 0 0 2px var(--td-text2); }
 
   /* Account dropdown — Tacet card: 14px radius, warm border, one soft shadow. */
   .topbar .acct-menu {
