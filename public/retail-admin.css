@@ -194,13 +194,13 @@
   ::selection { background: var(--ring); color: var(--text-1); }
 
   /* ── Rail width — the ONE source of truth for the left rail's width ────
-     Consumed by: .tabs width, main margin-left, the embedded editors' left, and
-     the topbar's left PADDING (which keeps its crumb flush to the rail). The
-     topbar's own left EDGE stays 0 — it is locked full-width and does not read
-     this. body.nav-collapsed swaps it to the folded width, so those consumers
-     fold in lockstep with the rail. This is a LAYOUT variable and deliberately
-     lives outside the --td-* colour tokens. */
-  :root { --rail-w: 236px; }
+     Consumed by: .tabs width, main margin-left, and the embedded editors' left —
+     all fold in lockstep when body.nav-collapsed swaps --rail-w to the folded
+     width. --rail-w-open is the UNFOLDED width, held CONSTANT; the topbar reads
+     it (never --rail-w) for its left padding, so the bar is fully static and the
+     fold never touches it. LAYOUT variables, deliberately outside the --td-*
+     colour tokens. */
+  :root { --rail-w-open: 236px; --rail-w: var(--rail-w-open); }
 
   /* ═══════════════════════════════════════════════════════════════════
      TOPBAR
@@ -210,11 +210,10 @@
     background: var(--bg-pane);
     border-bottom: 1px solid var(--line-soft);
     display: flex; align-items: center;
-    /* Left padding clears the rail so #tb-page's crumb hugs the rail's right edge
-       (+14px seam). It rides --rail-w so the crumb stays flush THROUGH the fold —
-       but the BAR itself never resizes or moves (see position below); only this
-       inner indent tracks the rail. Right keeps --s5. */
-    padding: 0 var(--s5) 0 calc(var(--rail-w) + 14px);
+    /* Left padding clears the EXPANDED rail (--rail-w-open, held constant, +14px
+       seam) — it reads the constant, NOT --rail-w, so nothing in the bar shifts
+       when the rail folds. The bar is fully static. Right keeps --s5. */
+    padding: 0 var(--s5) 0 calc(var(--rail-w-open) + 14px);
     gap: var(--s4);
     /* LOCKED FULL-WIDTH. left:0 unconditionally — the bar spans the whole window
        and never moves; folding the rail changes ONLY the rail (the bar simply
@@ -590,15 +589,13 @@
 
   .tabs { transition: width var(--t-fast) ease, padding var(--t-fast) ease; }
   main    { transition: margin-left var(--t-fast) ease; }
-  /* The topbar is locked full-width and never moves; only its inner crumb indent
-     (padding-left) tracks the rail, so animate that to keep the crumb flush as
-     the rail folds. */
-  .topbar { transition: padding-left var(--t-fast) ease; }
+  /* No .topbar transition — the bar is locked full-width and fully static;
+     nothing in it tracks the fold, so there is nothing to animate. */
 
   /* Fold = swap the rail-width variable once; .tabs/main/editors all read it, so
      they narrow in lockstep. The consuming properties still carry their own
-     transitions above, so the fold still animates. The topbar stays full-width —
-     only its crumb padding tracks the fold; the bar itself does not move. */
+     transitions above, so the fold still animates. The topbar reads --rail-w-open
+     (constant), so it is fully static — the fold never touches it. */
   body.nav-collapsed { --rail-w: 62px; }
   body.nav-collapsed .tabs { width: var(--rail-w); padding-left: 8px; padding-right: 8px; }
   body.nav-collapsed main   { margin-left: var(--rail-w); }
@@ -8139,11 +8136,12 @@
     font-size: 12.5px; font-weight: 600; letter-spacing: .02em; text-transform: none;
     color: var(--td-text2); white-space: nowrap; flex: none;
   }
-  /* Dashboard names itself in-content (the "Good evening…" greeting), so the
-     topbar crumb is redundant there — drop it, leaving a clean top-left. Every
-     other page keeps its label (some rely on it as their only page title).
-     tbSetPage() stamps #tb-page[data-page] with the active tab. */
-  #tb-page[data-page="dashboard"] .tb-crumb { display: none; }
+  /* The page-name crumb is hidden on EVERY page (2026-07-24, by request) — the
+     topbar left stays clean and each page identifies itself by its own in-content
+     heading. The Products / Purchasing sub-view switches still live here; their
+     leading "/" separator is dropped too so no dangling slash shows. */
+  .tb-crumb { display: none; }
+  #tb-subviews .tb-sep, #tb-pu-subviews .tb-sep { display: none; }
   /* Products sub-view switch, moved up from the content (Option B). Hidden until
      the Products tab is active; the slash rides with it so a lone crumb never
      shows a dangling "/". data-cap on the container hides the whole switch (incl.

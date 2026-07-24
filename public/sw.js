@@ -10,7 +10,7 @@
 //
 // Bump CACHE on every UI shape change to force every client to evict
 // its old shell on next load (activate handler deletes all old caches).
-const CACHE = 'roots-v2-shell-v617-dashboard-crumb-hidden';
+const CACHE = 'roots-v2-shell-v618-topbar-static-crumb-gone';
 const SHELL = ['/', '/login'];
 
 // Heuristic — request that wants HTML?

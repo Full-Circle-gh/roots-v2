@@ -318,11 +318,6 @@ function tbSetPage() {
   if (!crumb) return;
   const active = document.querySelector('.tabs [data-tab].active');
   crumb.textContent = active ? _tbRailLabel(active) : '';
-  // Tag the topbar with the active page so CSS can drop the crumb where it's
-  // redundant — the Dashboard already names itself in-content ("Good evening…"),
-  // so it hides the crumb there while every other page keeps its label.
-  const page = document.getElementById('tb-page');
-  if (page) page.dataset.page = active ? (active.dataset.tab || '') : '';
 }
 if (typeof window.onLangChange === 'function') window.onLangChange(() => tbSetPage());
 if (document.readyState !== 'loading') tbSetPage();
