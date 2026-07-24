@@ -726,39 +726,23 @@ window.addEventListener('message', (ev) => {
   }
 });
 // ── Rail sub-menu flyout ──────────────────────────────────────────────────
-// A group (Marketing, Loyalty & Wallet, Editor) reveals its children as an
-// overlay panel to the RIGHT of the rail rather than expanding in place. The
-// panel is position:fixed, so JS places it from the trigger's rect each time it
-// opens; it works the same whether the rail is open or folded. Opens on hover /
-// keyboard focus / click; closes on outside-click, Esc, scroll, or picking a
-// child (handled in the [data-tab] handler above). Only one open at a time.
+// A group (Marketing, Loyalty & Wallet, Editor) reveals its children as a
+// full-height panel flush against the rail's right edge (see .tabs-popover in
+// the CSS) rather than expanding in place. Its position (top/left/bottom) is
+// pure CSS — left:var(--rail-w) rides the fold automatically — so no JS
+// positioning is needed here, just open/close state. Opens on hover / keyboard
+// focus / click; closes on outside-click, Esc, or picking a child (handled in
+// the [data-tab] handler above). Only one open at a time.
 var _flyCloseTimer = null;  // var (not let): closeFlyouts() is hoisted and may be
                             // reached by an early tab activation before this line.
 function _flyGroupTrigger(g) {
   return g.querySelector('.tabs-group-trigger') || g.querySelector('.nav-parent-link');
-}
-function _positionFlyout(group) {
-  const trig = _flyGroupTrigger(group);
-  const pop = group.querySelector('.tabs-popover');
-  if (!trig || !pop) return;
-  const r = trig.getBoundingClientRect();
-  // Sit just right of the rail edge, top-aligned with the trigger. Clamp the
-  // height (and nudge up if needed) so a tall panel never runs off-screen.
-  const gap = 6;
-  pop.style.left = Math.round(r.right + gap) + 'px';
-  const maxH = window.innerHeight - 12;
-  pop.style.maxHeight = maxH + 'px';
-  let top = r.top;
-  const h = Math.min(pop.scrollHeight, maxH);
-  if (top + h > window.innerHeight - 6) top = Math.max(6, window.innerHeight - 6 - h);
-  pop.style.top = Math.round(top) + 'px';
 }
 function openFlyout(group) {
   if (!group || !group.querySelector('.tabs-popover')) return;
   clearTimeout(_flyCloseTimer);
   $$('.tabs-group.open').forEach(g => { if (g !== group) { g.classList.remove('open'); _flySyncAria(g); } });
   group.classList.add('open');
-  _positionFlyout(group);
   _flySyncAria(group);
 }
 function closeFlyouts() {
@@ -792,15 +776,10 @@ $$('.tabs-group').forEach(group => {
     group.classList.contains('open') ? closeFlyouts() : openFlyout(group);
   });
 });
-// Dismiss on outside-click, Esc, resize, or a page/rail scroll (the fixed panel
-// would otherwise drift away from its trigger). A scroll INSIDE the panel itself
-// (a tall menu on a short screen) must not close it.
+// Dismiss on outside-click, Esc, or a breakpoint-changing resize (past 720px
+// the rail — and this panel with it — is hidden outright by the mobile block).
 document.addEventListener('click', (e) => { if (!e.target.closest('.tabs-group')) closeFlyouts(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeFlyouts(); });
-window.addEventListener('scroll', (e) => {
-  if (e.target instanceof Element && e.target.closest('.tabs-popover')) return;
-  closeFlyouts();
-}, true);
 window.addEventListener('resize', closeFlyouts);
 
 // ── Collapsible rail ──────────────────────────────────────────────────────

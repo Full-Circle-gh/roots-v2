@@ -686,13 +686,14 @@
   }
 
   /* Grouped sub-menus in the vertical rail (Marketing, Loyalty & Wallet,
-     Editor). The group no longer expands IN PLACE — its children fly out as an
-     overlay panel to the RIGHT of the rail, floating over the content. Because
-     the rail is overflow:auto (which would clip anything spilling past its
-     edge), the panel is position:fixed and JS sets its top/left from the
-     trigger's rect on open (see the fold/flyout wiring in 01-core.js). It opens
-     on hover / focus / click and dismisses on outside-click, Esc, scroll, or
-     picking a child. Works identically whether the rail is open or folded. */
+     Editor). The group no longer expands IN PLACE — its children fly out as a
+     FULL-HEIGHT panel flush against the rail's right edge (below the topbar,
+     down to the bottom of the viewport), overlaying the content. Not a floating
+     card: no shadow, no border-radius, no icons — a header names the group,
+     then plain text rows. left:var(--rail-w) means pure CSS placement, no JS
+     positioning, and it rides the fold automatically (flush against either
+     236px or the folded 62px). It opens on hover / focus / click and dismisses
+     on outside-click, Esc, or picking a child. */
   .tabs-group { position: relative; display: flex; flex-direction: column; }
   .tabs-group.has-active > .tabs-group-trigger,
   .tabs-group.open > .tabs-group-trigger { color: var(--text-1); }
@@ -702,41 +703,40 @@
   .tabs-chev { width: 10px !important; height: 10px !important; opacity: .6; }
   .tabs-popover {
     display: none;
-    position: fixed; z-index: 45;
+    position: fixed; z-index: 10; /* above main content, below the rail (11) + topbar (12) */
+    top: 56px; left: var(--rail-w); bottom: 0;
+    width: 280px;
     flex-direction: column;
     gap: 1px;
-    min-width: 208px; max-width: 260px;
-    padding: 6px;
-    background: var(--bg-pane);
-    border: 1px solid var(--line);
-    border-radius: var(--r-lg);
-    box-shadow: 0 14px 36px rgba(17, 26, 43, .28);
+    padding: 22px 24px;
+    background: var(--bg-app);
+    border-right: 1px solid var(--line-soft);
     overflow-y: auto;
   }
   .tabs-group.open > .tabs-popover { display: flex; animation: zen-pop-in 180ms cubic-bezier(.16, 1, .3, 1); }
+  .tabs-popover-head {
+    font-family: 'Fraunces', Georgia, serif; font-weight: 500; font-size: 19px;
+    color: var(--text-1); margin: 0 0 14px;
+  }
   .tabs-popover button {
     width: 100%;
-    padding: 8px 12px;
-    font-size: 13.5px;
-    border-radius: var(--r-md);
+    padding: 10px 0;
+    font-size: 15px;
     justify-content: flex-start;
-    gap: 11px;
     font-weight: 400;
+    background: none; border-radius: 0;
     position: relative;
   }
-  .tabs-popover button svg { width: 16px; height: 16px; }
-  .tabs-popover button:hover { background: var(--bg-elev-1); }
-  .tabs-popover button.active {
-    background: var(--bg-elev-1);
-    color: var(--text-1);
-    box-shadow: inset 3px 0 0 var(--brass);
-  }
+  /* Text-only rows — no icons in this panel (unlike the rail itself). */
+  .tabs-popover button svg { display: none; }
+  .tabs-popover button:hover { color: var(--text-1); background: none; text-decoration: underline; text-underline-offset: 3px; }
+  .tabs-popover button.active { color: var(--text-1); font-weight: 600; }
   /* The flyout is a floating overlay, NOT part of the folded icon strip — so its
-     rows keep their labels even when the rail is folded (which otherwise zeroes
-     every .tabs button's text, gap and side padding). Higher specificity than
-     `body.nav-collapsed .tabs button` so it wins. */
+     rows keep their labels + layout even when the rail is folded (which
+     otherwise zeroes every .tabs button's text/gap/padding). Higher specificity
+     than `body.nav-collapsed .tabs button` so it wins. */
   body.nav-collapsed .tabs .tabs-popover button {
-    font-size: 13.5px; gap: 11px; justify-content: flex-start; padding: 8px 12px;
+    font-size: 15px; justify-content: flex-start; padding: 10px 0;
   }
   @media (prefers-reduced-motion: reduce) {
     .tabs-group.open > .tabs-popover { animation: none; }
