@@ -720,18 +720,23 @@
   .tabs-group.open .tabs-chev { display: none; }
   /* The sub-menu panel — a full-height second column flush against the rail's
      right edge, resting OVER the page (which keeps its width; nothing reflows).
-     Surface = raised cream (--td-raised); a 1px border + one soft ambient shadow
-     read its right edge. left:var(--rail-w) rides the fold, and the transition
-     lets it re-flush when you fold while it's open (it stays open). */
+     Surface is the SAME as the rail (var(--bg-pane)) — no tonal step; the two
+     read as one continuous chrome surface. Two edges doing different work:
+     border-LEFT (--td-border) is the seam against the rail — the only thing
+     separating the two same-coloured surfaces, since the rail's own right border
+     is faint --line-soft; border-RIGHT (--td-border) + one soft shadow separate
+     chrome from page content. left:var(--rail-w) rides the fold, and the
+     transition re-flushes it when you fold while it's open (it stays open). */
   .tabs-popover {
     display: none;
     position: fixed; z-index: 20;
     top: 56px; left: var(--rail-w); bottom: 0;
-    width: 224px;
+    width: 224px; box-sizing: border-box;
     flex-direction: column;
     gap: 2px;
     padding: 10px;
-    background: var(--td-raised);
+    background: var(--bg-pane);
+    border-left: 1px solid var(--td-border);
     border-right: 1px solid var(--td-border);
     box-shadow: 0 4px 16px rgba(17, 26, 43, .04);
     overflow-y: auto;
