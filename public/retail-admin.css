@@ -731,6 +731,13 @@
     color: var(--text-1);
     box-shadow: inset 3px 0 0 var(--brass);
   }
+  /* The flyout is a floating overlay, NOT part of the folded icon strip — so its
+     rows keep their labels even when the rail is folded (which otherwise zeroes
+     every .tabs button's text, gap and side padding). Higher specificity than
+     `body.nav-collapsed .tabs button` so it wins. */
+  body.nav-collapsed .tabs .tabs-popover button {
+    font-size: 13.5px; gap: 11px; justify-content: flex-start; padding: 8px 12px;
+  }
   @media (prefers-reduced-motion: reduce) {
     .tabs-group.open > .tabs-popover { animation: none; }
   }
