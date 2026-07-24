@@ -499,8 +499,8 @@
   .brand-credit {
     margin-top: auto; display: flex; align-items: center; gap: 9px;
     padding: 14px 16px 10px; color: var(--text-3);
-    font-family: 'Fraunces', Georgia, serif; font-weight: 300;
-    font-size: 13px; letter-spacing: .12em;
+    font-family: 'Inter', var(--f-sans); font-weight: 400;
+    font-size: 13px; letter-spacing: .04em;
   }
   .brand-credit svg { width: 34px; height: 13px; stroke: var(--text-2); stroke-width: 14; flex: none; }
   /* The topbar carries the brand on desktop now that it is full-width — the
@@ -695,48 +695,78 @@
      236px or the folded 62px). It opens on hover / focus / click and dismisses
      on outside-click, Esc, or picking a child. */
   .tabs-group { position: relative; display: flex; flex-direction: column; }
-  .tabs-group.has-active > .tabs-group-trigger,
-  .tabs-group.open > .tabs-group-trigger { color: var(--text-1); }
+  /* Two parent treatments carry "where you are" vs "what you're browsing":
+     OPEN (this group's panel is showing) = full Ink fill; CURRENT (the group
+     your active page lives in, panel closed) = quiet fill + a 3px Ink edge bar.
+     Current is also INERT — hovering/clicking it does nothing (rule 2), so it
+     takes the default cursor and keeps its fill on hover. */
   .tabs-group.open > .tabs-group-trigger,
-  .tabs-group.open > .nav-parent-link { background: var(--bg-elev-1); }
-  /* Chevron points RIGHT (the panel opens to the right); it no longer flips. */
+  .tabs-group.open > .nav-parent-link {
+    background: var(--td-text); color: var(--td-surface);
+  }
+  .tabs-group.has-active:not(.open) > .tabs-group-trigger,
+  .tabs-group.has-active:not(.open) > .nav-parent-link {
+    background: rgba(var(--td-heat-rgb), .05); color: var(--td-text);
+    font-weight: 500; cursor: default;
+  }
+  .tabs-group.has-active:not(.open) > .tabs-group-trigger::before,
+  .tabs-group.has-active:not(.open) > .nav-parent-link::before {
+    content: ""; position: absolute; left: 0; top: 7px; bottom: 7px;
+    width: 3px; border-radius: 0 3px 3px 0; background: var(--td-text);
+  }
+  /* Chevron points RIGHT (the panel opens to the right); hidden once the group
+     is open (its Ink fill is the affordance) and when the rail is folded. */
   .tabs-chev { width: 10px !important; height: 10px !important; opacity: .6; }
+  .tabs-group.open .tabs-chev { display: none; }
+  /* The sub-menu panel — a full-height second column flush against the rail's
+     right edge, resting OVER the page (which keeps its width; nothing reflows).
+     Surface = raised cream (--td-raised); a 1px border + one soft ambient shadow
+     read its right edge. left:var(--rail-w) rides the fold, and the transition
+     lets it re-flush when you fold while it's open (it stays open). */
   .tabs-popover {
     display: none;
-    position: fixed; z-index: 10; /* above main content, below the rail (11) + topbar (12) */
+    position: fixed; z-index: 20;
     top: 56px; left: var(--rail-w); bottom: 0;
-    width: 280px;
+    width: 224px;
     flex-direction: column;
-    gap: 1px;
-    padding: 22px 24px;
-    background: var(--bg-app);
-    border-right: 1px solid var(--line-soft);
+    gap: 2px;
+    padding: 10px;
+    background: var(--td-raised);
+    border-right: 1px solid var(--td-border);
+    box-shadow: 0 4px 16px rgba(17, 26, 43, .04);
     overflow-y: auto;
+    transition: left var(--t-fast) ease;
   }
   .tabs-group.open > .tabs-popover { display: flex; animation: zen-pop-in 180ms cubic-bezier(.16, 1, .3, 1); }
+  /* Group heading — Inter 500 (NOT Fraunces; no brand serif inside product UI). */
   .tabs-popover-head {
-    font-family: 'Fraunces', Georgia, serif; font-weight: 500; font-size: 19px;
-    color: var(--text-1); margin: 0 0 14px;
+    font-family: 'Inter', var(--f-sans); font-weight: 500; font-size: 15px;
+    color: var(--td-text); padding: 8px 12px 10px; margin: 0;
   }
   .tabs-popover button {
     width: 100%;
-    padding: 10px 0;
-    font-size: 15px;
+    padding: 8px 12px;
+    font-size: 14px;
+    border-radius: 8px;
     justify-content: flex-start;
     font-weight: 400;
-    background: none; border-radius: 0;
+    color: var(--td-text2);
+    background: none;
     position: relative;
   }
   /* Text-only rows — no icons in this panel (unlike the rail itself). */
   .tabs-popover button svg { display: none; }
-  .tabs-popover button:hover { color: var(--text-1); background: none; text-decoration: underline; text-underline-offset: 3px; }
-  .tabs-popover button.active { color: var(--text-1); font-weight: 600; }
-  /* The flyout is a floating overlay, NOT part of the folded icon strip — so its
-     rows keep their labels + layout even when the rail is folded (which
-     otherwise zeroes every .tabs button's text/gap/padding). Higher specificity
-     than `body.nav-collapsed .tabs button` so it wins. */
+  .tabs-popover button:hover { color: var(--td-text); background: rgba(var(--td-heat-rgb), .04); }
+  /* The current sub-page ("here") — quiet fill, no amber bar (override the rail's
+     active ::before) — matching the approved study. */
+  .tabs-popover button.active { color: var(--td-text); background: rgba(var(--td-heat-rgb), .05); font-weight: 500; }
+  .tabs-popover button.active::before { content: none; }
+  /* The panel is a full-height overlay, NOT part of the folded icon strip — so
+     its rows keep their labels + layout even when the rail is folded (which
+     otherwise zeroes every .tabs button's text/padding). Higher specificity than
+     `body.nav-collapsed .tabs button` so it wins. */
   body.nav-collapsed .tabs .tabs-popover button {
-    font-size: 15px; justify-content: flex-start; padding: 10px 0;
+    font-size: 14px; justify-content: flex-start; padding: 8px 12px;
   }
   @media (prefers-reduced-motion: reduce) {
     .tabs-group.open > .tabs-popover { animation: none; }
@@ -3219,7 +3249,7 @@
      live/positive tint) whenever at least one poll is currently open — driven by
      body.vot-open. Just a status badge, so no dimming. */
   body.vot-open .tabs-popover [data-tab="voting"]::after {
-    content: "LIVE"; width: auto; height: auto;
+    content: "Live"; width: auto; height: auto;
     position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
     font: 700 9px/1 var(--f-mono, monospace); letter-spacing: .06em;
     padding: 3px 5px; border-radius: 6px;

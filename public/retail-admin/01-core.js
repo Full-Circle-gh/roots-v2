@@ -740,6 +740,10 @@ function _flyGroupTrigger(g) {
 }
 function openFlyout(group) {
   if (!group || !group.querySelector('.tabs-popover')) return;
+  // Rule 2: the parent of the page you're already on is INERT — opening its own
+  // panel would just show the list you're already inside, so it does nothing.
+  // Every other group still opens normally.
+  if (group.classList.contains('has-active')) return;
   clearTimeout(_flyCloseTimer);
   $$('.tabs-group.open').forEach(g => { if (g !== group) { g.classList.remove('open'); _flySyncAria(g); } });
   group.classList.add('open');
@@ -778,7 +782,11 @@ $$('.tabs-group').forEach(group => {
 });
 // Dismiss on outside-click, Esc, or a breakpoint-changing resize (past 720px
 // the rail — and this panel with it — is hidden outright by the mobile block).
-document.addEventListener('click', (e) => { if (!e.target.closest('.tabs-group')) closeFlyouts(); });
+// The fold control is exempt: folding while a panel is open must KEEP it open
+// (it re-flushes to the new rail width via the CSS `left` transition).
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.tabs-group') && !e.target.closest('#railSeamFold')) closeFlyouts();
+});
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeFlyouts(); });
 window.addEventListener('resize', closeFlyouts);
 
