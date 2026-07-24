@@ -11181,10 +11181,14 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   // rows in retail_orders (channel='gzgrocery') must therefore be excluded from
   // every retail_orders revenue/order aggregation here, or its takings would be
   // counted twice. (Meituan, by contrast, IS sourced from retail_orders and stays
-  // included.) No-op until the gzgrocery order daemon starts writing mirror rows.
+  // included.) Order COUNTS are the exception: the gzgrocery daemon's mirror rows
+  // are real fulfilled orders (see gzgrocery-order-daemon.js), so the headline
+  // "orders today" / trend / AOV use PAID_ALL (all channels) to count them — only
+  // the revenue SUM stays gzgrocery-excluded to avoid double-booking its takings.
   const NOTGZ  = "COALESCE(channel,'') != 'gzgrocery'";
   const NOTGZO = "COALESCE(o.channel,'') != 'gzgrocery'";
-  const PAID  = `status IN ('paid','preparing','dispatched','delivered','awaiting_restock') AND ${NOTGZ}`;
+  const PAID_ALL = "status IN ('paid','preparing','dispatched','delivered','awaiting_restock')";
+  const PAID  = `${PAID_ALL} AND ${NOTGZ}`;
   const PAIDO = `o.status IN ('paid','preparing','dispatched','delivered','awaiting_restock') AND ${NOTGZO}`;
   // Revenue date = day payment landed (see header note). PDATE for bare-table
   // queries, PDATEO when the orders table is aliased `o`, PHOUR for the hourly
@@ -11216,11 +11220,11 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   // ── Headline KPIs (current + previous window) ──
   const kpiSql = `
     SELECT COUNT(*) AS orders,
-           COALESCE(SUM(total), 0) AS revenue,
-           COALESCE(AVG(total), 0) AS aov,
+           COALESCE(SUM(CASE WHEN ${NOTGZ} THEN total ELSE 0 END), 0) AS revenue,
+           COALESCE(AVG(CASE WHEN ${NOTGZ} THEN total END), 0) AS aov,
            COUNT(DISTINCT customer_id) AS buyers
       FROM retail_orders
-     WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?`;
+     WHERE ${PAID_ALL} AND ${PDATE} BETWEEN ? AND ?`;
   const kpi     = tdb().prepare(kpiSql).get(from, to);
   const kpiPrev = tdb().prepare(kpiSql).get(prevFrom, prevTo);
 
@@ -11319,9 +11323,9 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   if (hourly) {
     const o = tdb().prepare(`
       SELECT CAST(${PHOUR} AS INTEGER) AS b,
-             COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
+             COUNT(*) AS orders, COALESCE(SUM(CASE WHEN ${NOTGZ} THEN total ELSE 0 END), 0) AS revenue
         FROM retail_orders
-       WHERE ${PAID} AND ${PDATE} = ?
+       WHERE ${PAID_ALL} AND ${PDATE} = ?
        GROUP BY b`).all(from);
     const v = tdb().prepare(`
       SELECT CAST(strftime('%H', created_at, '${TZ}') AS INTEGER) AS b,
@@ -11348,9 +11352,9 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   } else {
     const o = tdb().prepare(`
       SELECT ${PDATE} AS b,
-             COUNT(*) AS orders, COALESCE(SUM(total), 0) AS revenue
+             COUNT(*) AS orders, COALESCE(SUM(CASE WHEN ${NOTGZ} THEN total ELSE 0 END), 0) AS revenue
         FROM retail_orders
-       WHERE ${PAID} AND ${PDATE} BETWEEN ? AND ?
+       WHERE ${PAID_ALL} AND ${PDATE} BETWEEN ? AND ?
        GROUP BY b`).all(from, to);
     const v = tdb().prepare(`
       SELECT date(created_at, '${TZ}') AS b,
