@@ -833,13 +833,15 @@
 </nav>
 
 <div class="topbar">
-  <!-- Tacet wordmark — the waveform settling into a straight line (chaos → calm)
-       with the Dusk automation dot at its end, then lowercase "tacet" in
-       Fraunces. Mark stroke = currentColor so it flips ink/paper by theme. -->
+  <!-- Topbar brand — PHONES ONLY. On desktop the brand lives in the rail head
+       (.nav-brand below); this copy is hidden (`.brand{display:none}`) and
+       re-shown only in the ≤720px layout, where the rail is display:none. Same
+       waveform-settling-to-calm mark + Dusk dot + lowercase "tacet". -->
   <div class="brand">
-    <!-- Tenant logo (co-brand) — hidden until applyBrand() sets its src from /me.
-         When shown it hides the waveform + wordmark below. data-no-i18n so the
-         translation walker never touches brand assets. -->
+    <!-- Tenant logo (co-brand), phones — hidden until applyBrand() sets its src
+         from /me; body.cobrand then hides the waveform + wordmark below. The
+         rail's own logo (#brandMarkRail) carries co-brand on desktop.
+         data-no-i18n so the translation walker never touches brand assets. -->
     <img class="brand-logo" id="brandLogoTop" alt="" data-no-i18n>
     <span class="brand-mark" aria-hidden="true">
       <svg viewBox="0 0 340 110" fill="none">
@@ -982,14 +984,14 @@
 </div>
 
 <div class="tabs">
-  <!-- Brand head — the tacet wordmark moved here from the topbar (2026-07-07) so
-       it anchors the nav column; the topbar shrank to the content area. Sticky at
-       the rail top. On phones the whole rail is hidden, so the topbar's own
-       .brand (kept in the markup above) shows the wordmark there instead. -->
+  <!-- Brand head — the tacet mark + wordmark live here at the top of the rail
+       (2026-07-24), anchoring the nav column; the topbar is the content-area bar
+       beside it. On phones the whole rail is hidden, so the topbar's own .brand
+       (retained in the markup above) carries the brand there instead. -->
   <div class="nav-brand">
-    <!-- Tenant mark (co-brand). The open rail always keeps the tacet wordmark
-         below; the folded rail swaps in the tenant's square mark instead —
-         revealed by body.cobrand once applyBrand() fills it in. -->
+    <!-- Tenant logo (co-brand) — replaces the waveform + wordmark in the OPEN
+         rail once applyBrand() fills it in and body.cobrand flips on. The folded
+         rail shows the tacet waveform mark alone (no tenant logo at 62px). -->
     <img class="brand-mark-img" id="brandMarkRail" alt="" data-no-i18n>
     <span class="brand-mark" aria-hidden="true">
       <svg viewBox="0 0 340 110" fill="none">
