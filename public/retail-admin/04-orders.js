@@ -2291,13 +2291,20 @@ function renderCourierListLine(o) {
   // delivered/cancelled/refunded, the frozen "En route · ~1m · 91m" line is a lie, so
   // bail and let renderTrackingCell fall through to the settled arrival line.
   if (o.status === 'delivered' || o.status === 'cancelled' || o.status === 'refunded') return '';
-  const label = c.stage === 'in_transit'       ? cuT('En route', '配送中')
+  const label = c.stage === 'in_transit'        ? cuT('En route', '配送中')
+              : c.stage === 'heading_to_pickup' ? cuT('Rider coming', '骑手前往取货')
               : c.stage === 'awaiting_dispatch' ? cuT('Finding rider', '正在找骑手')
               : '';
   if (!label) return '';
+  // eta_seconds is time-to-STORE while heading_to_pickup (Qingyun's own routeInfo
+  // targets the shop until the parcel is actually collected) — showing it here
+  // would read as "arriving in 1m" when the rider hasn't even picked up yet, so
+  // only surface the countdown once genuinely in_transit to the customer.
   const mins = (c.stage === 'in_transit' && c.eta_seconds != null)
     ? `~${Math.max(1, Math.round(c.eta_seconds / 60))}${cuT('m', '分')}` : '';
-  const dist = (c.stage === 'in_transit' && c.rider_to_cust_m != null)
+  // rider_to_cust_m is the real straight-line distance to the customer regardless
+  // of stage, so it's safe to show while heading_to_pickup too.
+  const dist = ((c.stage === 'in_transit' || c.stage === 'heading_to_pickup') && c.rider_to_cust_m != null)
     ? (c.rider_to_cust_m >= 1000 ? (c.rider_to_cust_m / 1000).toFixed(1) + 'km' : Math.round(c.rider_to_cust_m) + 'm') : '';
   const sub = [mins, dist].filter(Boolean).join(' · ');
   return `<div style="display:flex; align-items:center; gap:3px; font-size:11px; font-weight:600; color:#B4533E;">${deliveryIcon('scooter', 12)}<span>${label}</span></div>`
@@ -3162,13 +3169,16 @@ function renderLocalEtaCard(o, s, hoisted) {
 
 // ── Same-city courier (Qingyun) live status ────────────────────────────────
 // The Qingyun daemon writes the real rider stage into delivery_jobs every ~25s;
-// the server hands it to the drawer as o.courier. Three reliable stages — the
-// finer "assigned vs physically picked up" step isn't in the data, so we don't
-// pretend to it. These mirror what the customer already sees in the mini-app.
+// the server hands it to the drawer as o.courier. heading_to_pickup vs in_transit
+// is read off deliveryStatus server-side (see routes/retail.js deliveryJobStage) —
+// a rider can be assigned and moving well before they've actually collected the
+// parcel, so "On the way" must wait for the pickup, not just the assignment.
+// These mirror what the customer already sees in the mini-app.
 const COURIER_STAGE = {
-  awaiting_dispatch: { en: 'Finding a rider', cn: '正在找骑手', dot: '#9A6E2A' },
-  in_transit:        { en: 'On the way',      cn: '配送中',     dot: '#5C7A4E' },
-  delivered:         { en: 'Delivered',       cn: '已送达',     dot: '#5C7A4E' },
+  awaiting_dispatch: { en: 'Finding a rider', cn: '正在找骑手',   dot: '#9A6E2A' },
+  heading_to_pickup: { en: 'Rider coming',    cn: '骑手前往取货', dot: '#4A72B0' },
+  in_transit:        { en: 'On the way',      cn: '配送中',       dot: '#5C7A4E' },
+  delivered:         { en: 'Delivered',       cn: '已送达',       dot: '#5C7A4E' },
 };
 
 // SQLite hands naive UTC ("YYYY-MM-DD HH:MM:SS", no zone); a bare new Date()
@@ -3222,8 +3232,9 @@ function orderStatusPill(o) {
     // "Mark dispatched", so the courier job can outrun our own status) and
     // Meituan's "Rider coming" mirrors.
     if (o.status === 'dispatched' || o.status === 'rider_pickup' || o.status === 'preparing') {
-      if (c.stage === 'awaiting_dispatch') return { cls: 'st-preparing',  label: cuT('Finding a rider', '正在找骑手') };
-      if (c.stage === 'in_transit')        return { cls: 'st-dispatched', label: cuT('On the way', '配送中') };
+      if (c.stage === 'awaiting_dispatch') return { cls: 'st-preparing',    label: cuT('Finding a rider', '正在找骑手') };
+      if (c.stage === 'heading_to_pickup') return { cls: 'st-rider_pickup', label: cuT('Rider coming', '骑手前往取货') };
+      if (c.stage === 'in_transit')        return { cls: 'st-dispatched',  label: cuT('On the way', '配送中') };
     }
   }
   return { cls: 'st-' + o.status, label: humanStatus(o.status, o.fulfillment_type) };
@@ -3243,9 +3254,14 @@ function renderCourierStatusCard(o, c, meta, stale, delivered) {
   // once the row has gone stale (the numbers would be a frozen snapshot) or the
   // order is already delivered (a delivered row's frozen "~5 min away" is a lie).
   const bits = [];
+  // eta_seconds means "time to the STORE" while heading_to_pickup and "time to the
+  // CUSTOMER" while in_transit — different legs, so word it accordingly rather than
+  // always saying "away" (which implies away from the customer).
   if (c.stage === 'in_transit' && !stale && !delivered && c.eta_seconds != null)
     bits.push(cuT(`~${Math.max(1, Math.round(c.eta_seconds / 60))} min away`, `约 ${Math.max(1, Math.round(c.eta_seconds / 60))} 分钟`));
-  if (c.stage === 'in_transit' && !stale && !delivered && c.rider_to_cust_m != null)
+  if (c.stage === 'heading_to_pickup' && !stale && !delivered && c.eta_seconds != null)
+    bits.push(cuT(`~${Math.max(1, Math.round(c.eta_seconds / 60))} min to store`, `约 ${Math.max(1, Math.round(c.eta_seconds / 60))} 分钟到店`));
+  if ((c.stage === 'in_transit' || c.stage === 'heading_to_pickup') && !stale && !delivered && c.rider_to_cust_m != null)
     bits.push(c.rider_to_cust_m >= 1000 ? (c.rider_to_cust_m / 1000).toFixed(1) + ' km' : Math.round(c.rider_to_cust_m) + ' m');
   const etaLine = bits.length ? `<div class="muted" style="font-size:11px; margin-top:5px;">${bits.join(' · ')}</div>` : '';
   const carrier = c.carrier ? `<span class="muted" style="font-size:11px; margin-left:auto;" data-no-i18n>${escapeHtml(c.carrier)}</span>` : '';
@@ -3261,7 +3277,7 @@ function renderCourierStatusCard(o, c, meta, stale, delivered) {
   // stale, not delivered), which is exactly when a rider position exists to plot.
   // The container is filled by mountCourierMap() after the drawer renders; it
   // loads AMap on demand and polls the admin track endpoint every ~25s.
-  const showMap = c.stage === 'in_transit' && !stale && !delivered;
+  const showMap = (c.stage === 'in_transit' || c.stage === 'heading_to_pickup') && !stale && !delivered;
   const mapEl = showMap
     ? `<div id="courier-map-${o.id}" class="courier-map" aria-label="${cuT('Live rider location', '骑手实时位置')}"
            style="height:180px; margin-bottom:10px; border-radius:8px; overflow:hidden; position:relative; background:var(--bg-elev-2, #ECEAE3);">
@@ -3451,9 +3467,11 @@ function renderQyDispatch(o) {
   // not a cancel. Show it as Delivered (green, done) and never flag it stale.
   const delivered = !!(c && (o.status === 'delivered' || c.stage === 'delivered'));
   const meta = c && (delivered ? COURIER_STAGE.delivered : COURIER_STAGE[c.stage]);
-  // A live "on the way" order whose row has frozen (>10 min) is a likely cancel/
-  // drop — warn on the card and reopen the dispatch button so staff can re-book.
-  const stale = !delivered && !!(c && c.stage === 'in_transit' && courierAgeMs(c.updated_at) > COURIER_STALE_MS);
+  // A live "on the way" (or "coming to pick up") order whose row has frozen
+  // (>10 min) is a likely cancel/drop — warn on the card and reopen the dispatch
+  // button so staff can re-book.
+  const stale = !delivered && !!(c && (c.stage === 'in_transit' || c.stage === 'heading_to_pickup')
+    && courierAgeMs(c.updated_at) > COURIER_STALE_MS);
   const card = meta ? renderCourierStatusCard(o, c, meta, stale, delivered) : '';
   // Keep the compare/dispatch button while there's no rider yet (still looking,
   // or not dispatched), or when a live run has gone stale; hide it while a rider

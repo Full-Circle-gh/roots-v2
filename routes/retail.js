@@ -10210,15 +10210,27 @@ router.get('/api/retail/orders/:id', requireRetailAuth, async (req, res) => {
 // a live deliveryStatus / a rider. Stages:
 //   scheduled          created 待配送, not dispatched — no live tracking yet
 //   awaiting_dispatch  dispatched, no rider on it — "finding a rider"
-//   in_transit         a rider accepted / is delivering — "on the way"
+//   heading_to_pickup  rider assigned but hasn't collected the parcel yet
+//   in_transit         picked up — actually en route to the customer — "on the way"
 //   delivered          已送达
+//
+// heading_to_pickup vs in_transit is read off deliveryStatus, NOT orderStatus:
+// orderStatus alone goes 20→30 the moment a rider is assigned, well before they've
+// physically collected the parcel — checked against live raw_track, Qingyun's own
+// routeInfo (the rider's active navigation leg) targets the SHOP while
+// deliveryStatus is 20, and only switches to targeting the CUSTOMER once
+// deliveryStatus hits 30. So orderStatus>=30 alone showing "On the way" is wrong
+// while the rider is still en route to (or standing in) the store.
 function deliveryJobStage(job) {
   const os = job.order_status;
   const dispatched = !!(job.delivery_id || job.carrier_name || job.rider_name
     || (job.delivery_status != null && Number(job.delivery_status) > 0));
   if (os != null) {
     if (os >= 50) return 'delivered';
-    if (os >= 30) return 'in_transit';
+    if (os >= 30) {
+      const ds = job.delivery_status;
+      return (ds != null && Number(ds) < 30) ? 'heading_to_pickup' : 'in_transit';
+    }
     // os is 待配送 (20): NO rider is actively on it. Trust the status over any
     // rider name — the daemon keeps a stale rider_name (COALESCE upsert), so a
     // rider who CANCELLED reverts the order here, and we must fall back to

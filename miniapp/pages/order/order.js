@@ -558,11 +558,14 @@ Page({
       const STAGE = {
         // 'scheduled' = the order is queued for its slot but NO courier is being
         // sought yet — show the map (store → you) with a calm label, never
-        // "finding a courier".
-        scheduled:         cn ? '等待配送'      : 'Delivery scheduled',
-        awaiting_dispatch: cn ? '正在为您找骑手' : 'Finding a courier',
-        in_transit:        cn ? '骑手配送中'    : 'On the way',
-        delivered:         cn ? '已送达'        : 'Delivered',
+        // "finding a courier". 'heading_to_pickup' = a rider is assigned and moving
+        // but hasn't collected the parcel from the store yet — must not say
+        // "On the way" (that's reserved for once they're actually carrying it here).
+        scheduled:         cn ? '等待配送'        : 'Delivery scheduled',
+        awaiting_dispatch: cn ? '正在为您找骑手'   : 'Finding a courier',
+        heading_to_pickup: cn ? '骑手正在取货'     : 'Rider picking up your order',
+        in_transit:        cn ? '骑手配送中'      : 'On the way',
+        delivered:         cn ? '已送达'          : 'Delivered',
       };
       const mk = (pos, text, who, id) => ({
         id, latitude: pos.lat, longitude: pos.lng, width: 22, height: 22,
@@ -587,7 +590,10 @@ Page({
       const parts = [];
       if (d.rider && d.rider.name) parts.push(d.rider.name);
       if (d.rider_to_cust_m != null) parts.push((d.rider_to_cust_m / 1000).toFixed(1) + (cn ? 'km' : ' km'));
-      if (d.eta_seconds != null && d.stage !== 'delivered' && d.stage !== 'scheduled') {
+      // eta_seconds is time-to-the-STORE while heading_to_pickup (not yet collected),
+      // so only surface it as "arriving in ~N min" once truly in_transit to the
+      // customer — otherwise a rider still walking into the shop reads as seconds away.
+      if (d.eta_seconds != null && d.stage === 'in_transit') {
         const min = Math.max(1, Math.round(d.eta_seconds / 60));
         parts.push(cn ? ('约 ' + min + ' 分钟') : ('~' + min + ' min'));
       }

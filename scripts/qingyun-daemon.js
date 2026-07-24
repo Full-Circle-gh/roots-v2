@@ -307,7 +307,12 @@ function stampLocalEta(retailOrderId, d, track) {
     || (track && track.deliveryId) || (track && Number(track.deliveryStatus) > 0));
   if (!dispatched) return;
   let hhmm = beijingSameDayHHMM(d.expectedDeliveredTime);
-  if (!hhmm && track && Number.isFinite(track.etaSeconds) && track.etaSeconds > 0) {
+  // track.etaSeconds is route.duration, which tracks whichever leg the rider is
+  // CURRENTLY navigating — the shop until they've collected the parcel (deliveryStatus
+  // < 30), the customer after. Before pickup that's time-to-shop, not time-to-customer,
+  // so only trust it as the fallback "estimated arrival" once actually picked up.
+  const pickedUp = track && Number(track.deliveryStatus) >= 30;
+  if (!hhmm && pickedUp && Number.isFinite(track.etaSeconds) && track.etaSeconds > 0) {
     hhmm = beijingSameDayHHMM(Date.now() + track.etaSeconds * 1000);
   }
   if (!hhmm) return;

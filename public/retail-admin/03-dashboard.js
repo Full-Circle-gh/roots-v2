@@ -908,6 +908,9 @@ function dashOnroadRender() {
       const m = c.eta_seconds != null ? Math.max(1, Math.round(c.eta_seconds / 60)) : null;
       return { txt: m != null ? cuT('En route · ' + m + ' min', '配送中 · ' + m + ' 分钟') : cuT('En route', '配送中'), soon: m != null && m <= 10 };
     }
+    // Rider assigned but hasn't collected the parcel yet — not "en route" to the
+    // customer, so must not share that copy (see routes/retail.js deliveryJobStage).
+    if (c && c.stage === 'heading_to_pickup') return { txt: cuT('Rider coming', '骑手前往取货'), soon: false };
     if (c && c.stage === 'awaiting_dispatch') return { txt: cuT('Finding rider', '正在找骑手'), soon: false };
     return { txt: cuT('Out for delivery', '配送中'), soon: false };
   };
