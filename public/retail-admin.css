@@ -698,8 +698,8 @@
   /* Two parent treatments carry "where you are" vs "what you're browsing":
      OPEN (this group's panel is showing) = full Ink fill; CURRENT (the group
      your active page lives in, panel closed) = quiet fill + a 3px Ink edge bar.
-     Current is also INERT — hovering/clicking it does nothing (rule 2), so it
-     takes the default cursor and keeps its fill on hover. */
+     Current still opens its own panel on click/hover (to reach a sibling), so
+     it keeps the pointer cursor. */
   .tabs-group.open > .tabs-group-trigger,
   .tabs-group.open > .nav-parent-link {
     background: var(--td-text); color: var(--td-surface);
@@ -707,7 +707,7 @@
   .tabs-group.has-active:not(.open) > .tabs-group-trigger,
   .tabs-group.has-active:not(.open) > .nav-parent-link {
     background: rgba(var(--td-heat-rgb), .05); color: var(--td-text);
-    font-weight: 500; cursor: default;
+    font-weight: 500;
   }
   .tabs-group.has-active:not(.open) > .tabs-group-trigger::before,
   .tabs-group.has-active:not(.open) > .nav-parent-link::before {
@@ -3238,7 +3238,7 @@
      brass-bar ::after when you're viewing the row while it's off. */
   body.lb-off .tabs-popover button[data-tab="leaderboard"]:not(.active) { opacity: .5; }
   body.lb-off .tabs-popover [data-tab="leaderboard"]::after {
-    content: "OFF"; width: auto; height: auto;
+    content: "Off"; width: auto; height: auto;
     position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
     font: 700 9px/1 var(--f-mono, monospace); letter-spacing: .06em;
     padding: 3px 5px; border-radius: 6px;
@@ -3260,7 +3260,7 @@
   /* Flash-sales nav row gets a LIVE pill (same mechanic as the Voting OPEN pill)
      whenever a flash sale is currently active — driven by body.fs-live. */
   body.fs-live .tabs-popover [data-tab="flash"]::after {
-    content: "LIVE"; width: auto; height: auto;
+    content: "Live"; width: auto; height: auto;
     position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
     font: 700 9px/1 var(--f-mono, monospace); letter-spacing: .06em;
     padding: 3px 5px; border-radius: 6px;

@@ -740,10 +740,9 @@ function _flyGroupTrigger(g) {
 }
 function openFlyout(group) {
   if (!group || !group.querySelector('.tabs-popover')) return;
-  // Rule 2: the parent of the page you're already on is INERT — opening its own
-  // panel would just show the list you're already inside, so it does nothing.
-  // Every other group still opens normally.
-  if (group.classList.contains('has-active')) return;
+  // The parent of the page you're on opens its panel like any other group (so
+  // you can reach a sibling), with the current sub-item marked inside it. It
+  // just opens — no navigation, no flicker; you stay on your page.
   clearTimeout(_flyCloseTimer);
   $$('.tabs-group.open').forEach(g => { if (g !== group) { g.classList.remove('open'); _flySyncAria(g); } });
   group.classList.add('open');
