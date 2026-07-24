@@ -754,13 +754,14 @@ function setNavCollapsed(on) {
   on = !!on;
   document.body.classList.toggle('nav-collapsed', on);
   try { localStorage.setItem(NAV_COLLAPSE_KEY, on ? '1' : '0'); } catch (e) {}
-  // Keep the seam dot's state in sync — its tooltip/aria flip with the fold, and
-  // the chevron direction is handled in CSS off body.nav-collapsed.
+  // Keep the fold control's state in sync — its tooltip/aria flip with the fold,
+  // and the filled↔hollow side-panel glyph is handled in CSS off
+  // body.nav-collapsed. aria-pressed=true means "rail is folded".
   const btn = document.getElementById('railSeamFold');
   if (btn) {
     const T = (typeof cuT === 'function') ? cuT : ((en) => en);
     btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-    btn.title = on ? T('Expand menu', '展开菜单') : T('Collapse menu', '收起菜单');
+    btn.title = on ? T('Show sidebar', '显示侧栏') : T('Hide sidebar', '隐藏侧栏');
     btn.setAttribute('aria-label', btn.title);
   }
   _navRailButtons().forEach(b => {

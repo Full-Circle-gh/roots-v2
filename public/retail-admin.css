@@ -194,11 +194,11 @@
   ::selection { background: var(--ring); color: var(--text-1); }
 
   /* ── Rail width — the ONE source of truth for the left rail's width ────
-     Consumed by four rules: .tabs width, main margin-left, .topbar left,
-     and the embedded editors' left. body.nav-collapsed swaps it to the
-     folded width, so those four consumers fold in lockstep with the rail.
-     This is a LAYOUT variable and deliberately lives outside the --td-*
-     colour tokens. */
+     Consumed by three rules: .tabs width, main margin-left, and the embedded
+     editors' left. body.nav-collapsed swaps it to the folded width, so those
+     consumers fold in lockstep with the rail. (The topbar deliberately does
+     NOT read this — it is locked full-width; see .topbar below.) This is a
+     LAYOUT variable and deliberately lives outside the --td-* colour tokens. */
   :root { --rail-w: 236px; }
 
   /* ═══════════════════════════════════════════════════════════════════
@@ -209,16 +209,18 @@
     background: var(--bg-pane);
     border-bottom: 1px solid var(--line-soft);
     display: flex; align-items: center;
-    padding: 0 var(--s5);
+    /* Left inset is 14px (not the symmetric --s5) so the brand mark keeps the
+       exact x it had as the rail head — the wordmark doesn't jump when it moves
+       from the rail into this now-full-width bar. Right keeps --s5. */
+    padding: 0 var(--s5) 0 14px;
     gap: var(--s4);
-    /* Fixed (not sticky) so it shares the rail's positioning context — see the
-       comment at `.topbar { … }` below. left set to the rail width. z-index sits
-       ABOVE the rail (.tabs is z:11) so the seam fold dot — an absolute child
-       anchored to the topbar's left edge — can straddle the divider and render
-       its rail-side half over the rail instead of being clipped behind it. The
-       two boxes don't overlap spatially (topbar starts at the rail's right edge),
-       so raising the topbar has no other visual effect. */
-    position: fixed; top: 0; left: var(--rail-w); right: 0; z-index: 12;
+    /* LOCKED FULL-WIDTH. left:0 unconditionally — the topbar spans the whole
+       window and never moves; folding the rail changes only the rail. It stays
+       position:fixed (pinned to the viewport, the most drift-proof anchor) and
+       z-index:12 sits ABOVE the rail (z:11), so its opaque pane covers the
+       rail's top 56px — which is why the rail's own brand head is retired to
+       this bar (see .nav-brand / .topbar .brand below). */
+    position: fixed; top: 0; left: 0; right: 0; z-index: 12;
   }
   .brand {
     display: flex; align-items: center; gap: 10px;
@@ -474,35 +476,20 @@
     position: fixed; top: 0; left: 0; bottom: 0; width: var(--rail-w); z-index: 11;
     overflow-y: auto; overflow-x: hidden;
   }
-  /* Rail brand head — the wordmark moved here from the topbar (2026-07-07) so it
-     anchors the nav column and the topbar shrinks to the content area. Sticky at
-     the rail top; full-bleed (negative margins cancel .tabs' 10px padding) so its
-     bottom border meets the topbar's at y:56 for one continuous divider. The
-     topbar keeps its own .brand for phones (rail hidden there) — hidden here on
-     desktop, re-shown in the mobile block. */
-  .nav-brand {
-    /* Static + flex:none (was position:sticky). Sticky drifts under the Aa
-       text-size `zoom`, so the brand stopped meeting the now-fixed topbar at
-       110%+. Static keeps it at the rail's top (y:0) and is zoom-safe like the
-       topbar; flex:none stops the rail's flex column from ever shrinking it
-       below 56px so its bottom border always lands at y:56. */
-    position: static; flex: none;
-    display: flex; align-items: center; gap: 10px;
-    height: 56px; padding: 0 14px; margin: -10px -10px 6px;
-    background: var(--bg-pane); border-bottom: 1px solid var(--td-border);
-  }
-  .nav-brand .brand-mark { color: var(--text-1); display: inline-flex; }
-  .nav-brand .brand-mark svg { width: 46px; height: 15px; display: block; }
-  .nav-brand .brand-name {
-    font-family: 'Fraunces', Georgia, serif; font-weight: 300; font-size: 18px;
-    letter-spacing: .20em; color: var(--text-1);
-  }
-  /* ── Co-brand identity — the tenant's uploaded logo replaces our waveform +
-     wordmark on the topbar (mobile brand) only. The open rail always keeps the
-     tacet mark + wordmark as-is; a tenant's own identity shows up ONLY as the
-     small square mark on the FOLDED rail (body.nav-collapsed.cobrand below) —
-     it never takes over the full expanded rail. Logo images are hidden by
-     default; body.cobrand (set once the logo loads) reveals the topbar one. */
+  /* Rail brand head — RETIRED to a 56px spacer (2026-07-24). The brand (the
+     wordmark, or a tenant's co-brand logo) now lives in the full-width topbar
+     (.topbar .brand). This box is kept only so the rail's nav clears the fixed
+     topbar, whose opaque pane covers the rail's top 56px. Its mark / wordmark /
+     logo are hidden on desktop; on phones the whole rail is display:none, so it
+     never shows there either. */
+  .nav-brand { flex: none; height: 56px; margin: -10px -10px 6px; }
+  .nav-brand .brand-mark, .nav-brand .brand-name, .nav-brand .brand-mark-img { display: none; }
+  /* ── Co-brand identity — a tenant's uploaded logo replaces the waveform +
+     wordmark in the TOPBAR brand (desktop and phones alike, now that the topbar
+     is full-width). It shows in EVERY rail state — open or folded — because the
+     topbar is independent of the fold; the old "only on the folded rail" mark is
+     gone. Logo images are hidden by default; body.cobrand (set once the logo
+     loads, by applyBrand()) reveals it. */
   .brand-logo, .brand-mark-img { display: none; object-fit: contain; }
   body.cobrand .brand .brand-mark { display: none; }  /* topbar waveform */
   body.cobrand .brand .brand-name { display: none; }  /* topbar name text */
@@ -516,13 +503,11 @@
     font-size: 13px; letter-spacing: .12em;
   }
   .brand-credit svg { width: 34px; height: 13px; stroke: var(--text-2); stroke-width: 14; flex: none; }
-  /* Topbar spans only the content column (right of the rail) and is position:fixed
-     like the rail — both then share ONE positioning context, so their bottom
-     borders always meet at y:56. (A sticky topbar drifted from the fixed rail
-     under the Text-size `zoom`; the `main` comment notes fixed is zoom-safe.)
-     `main` reserves the 56px below; collapse + mobile adjust `left` below. The
-     topbar's own brand is hidden on desktop. */
-  .topbar .brand { display: none; }
+  /* The topbar carries the brand on desktop now that it is full-width — the
+     .brand base (display:flex) applies; it sits at the topbar's far left and
+     overhangs the folded 62px rail, by design. (It was display:none here while
+     the rail owned the desktop brand; that rule is gone.) The mobile block
+     still shows it explicitly for phones, where the rail is hidden. */
   .tabs button, .tabs a {
     position: relative;
     background: transparent;
@@ -584,33 +569,24 @@
 
   .tabs { transition: width var(--t-fast) ease, padding var(--t-fast) ease; }
   main    { transition: margin-left var(--t-fast) ease; }
-  .topbar { transition: left var(--t-fast) ease; }
+  /* No .topbar transition — it is locked full-width and never moves. */
 
-  /* Fold = swap the rail-width variable once; .tabs/main/.topbar/editors all
-     read it, so they narrow in lockstep. The consuming properties still carry
-     their own transitions above, so the fold still animates. */
+  /* Fold = swap the rail-width variable once; .tabs/main/editors all read it,
+     so they narrow in lockstep. The consuming properties still carry their own
+     transitions above, so the fold still animates. The topbar does NOT ride the
+     rail — it stays full-width. */
   body.nav-collapsed { --rail-w: 62px; }
   body.nav-collapsed .tabs { width: var(--rail-w); padding-left: 8px; padding-right: 8px; }
   body.nav-collapsed main   { margin-left: var(--rail-w); }
-  /* Topbar + the fixed embedded editors ride the rail's width so they stay
-     flush against its right edge when it folds to icons. */
-  body.nav-collapsed .topbar { left: var(--rail-w); }
+  /* The fixed embedded editors ride the rail's width so they stay flush against
+     its right edge when it folds to icons. */
   body.nav-collapsed #tab-mini-app-editor,
   body.nav-collapsed #tab-product-editor { left: var(--rail-w); }
-  /* Collapsed rail brand → just the centered mark; wordmark + full-bleed inset
-     follow the rail's tighter 8px padding. */
-  body.nav-collapsed .nav-brand { justify-content: center; padding: 0; margin: -8px -8px 6px; }
-  body.nav-collapsed .nav-brand .brand-name { display: none; }
-  /* Collapsed, the rail head shrinks to 62px and its mark ends right on the seam
-     — exactly where the fold dot's expand arrow sits — so the arrow would cover
-     the wordmark. Hide the mark while folded; the 56px head + its bottom border
-     stay, so the y:56 divider is unbroken and only the arrow occupies the corner. */
-  body.nav-collapsed .nav-brand .brand-mark { display: none; }
-  /* Co-brand folded: the square mark (auto-cropped from the tenant's logo) takes
-     over the folded rail — the ONE place a tenant's own identity shows, centered
-     so it clears the fold arrow on the seam. The credit shrinks to its bare
-     waveform. The open rail never shows this tenant mark (see body.cobrand above). */
-  body.nav-collapsed.cobrand .nav-brand .brand-mark-img { display: block; width: 30px; height: 30px; border-radius: 7px; margin: 0 auto; }
+  /* Collapsed rail brand rules retired 2026-07-24: the rail brand is now a blank
+     spacer (see .nav-brand above) and the brand — including any tenant co-brand
+     logo — lives in the always-full-width topbar, so there is nothing to hide or
+     re-center on fold. The old body.nav-collapsed .nav-brand .brand-name /
+     .brand-mark hides and the folded-only .cobrand .brand-mark-img mark are gone. */
   body.nav-collapsed .brand-credit { justify-content: center; padding: 12px 0 6px; }
   body.nav-collapsed .brand-credit span { display: none; }
   body.nav-collapsed .tabs button, body.nav-collapsed .tabs a {
@@ -626,41 +602,47 @@
   /* The fold control lives inside .tabs, which is hidden wholesale on phones
      (the rail is replaced by the bottom nav), so no mobile rule is needed. */
 
-  /* ── Seam fold dot ─────────────────────────────────────────────────
-     The primary rail-fold control (replaces the old topbar hamburger). It sits
-     on the divider between the rail and the content, level with the search bar.
-     Anchored to the topbar's own left edge (left:0) — which IS the seam, since
-     the topbar's `left` equals the rail width — so it tracks the divider in
-     every state (open/collapsed) and under the Aa `zoom` with no hardcoded
-     widths. It straddles the line (translateX(-50%)); the topbar sits above the
-     rail (z-index below) so the half over the rail isn't clipped. It's a bare
-     Dusk-purple arrow, shown at all times — no dot, no ring, no swell. The arrow
-     points into the rail (collapse) when open and flips outward (expand) once
-     folded; on hover it nudges a couple px toward the way it points, so it reads
-     as alive. */
-  .seam-fold {
-    position: absolute; top: 50%; left: 0; transform: translate(-50%, -50%);
-    z-index: 3; border: 0; background: none; padding: 8px; margin: 0;
-    cursor: pointer;
+  /* ── Rail fold control ─────────────────────────────────────────────
+     The primary rail-fold control. It lives INSIDE the rail now (re-parented
+     out of the topbar, which is locked full-width), in its own zone at the top
+     of the rail above the nav items. The side-panel glyph STATES WHAT IS TRUE
+     NOW rather than what a click will do: the left column is filled while the
+     rail is open, hollow once folded (see .sf-col). One icon, one region
+     changing — no chevron, no icon swap. Open, it aligns with the nav rows;
+     folded, it centres in the 62px rail. */
+  /* All rules scope under `.tabs` so they outrank `.tabs button` (this control
+     is a <button> in the rail): a bare `.seam-fold` (0,1,0) would lose to
+     `.tabs button` (0,1,1) and inherit border:0, killing the focus/hover
+     border. `.tabs .seam-fold` is (0,2,0) and wins. Row geometry matches the
+     nav buttons (11px 12px) so the fold row aligns with them; margin-bottom
+     gives it its own zone above the nav. */
+  .tabs .seam-fold {
+    order: 0;
+    flex: none; box-sizing: border-box;
+    display: flex; align-items: center;
+    width: 100%; margin: 0 0 8px; padding: 11px 12px;
+    border: 1px solid transparent; border-radius: var(--r-lg);
+    background: none; color: var(--text-2); cursor: pointer;
+    transition: color var(--t-fast) ease, background var(--t-fast) ease, border-color var(--t-fast) ease;
   }
-  .seam-dot {
-    display: flex; align-items: center; justify-content: center;
-    color: #6E67AF;
+  /* Hover: a quiet fill + border shift (no swell). */
+  .tabs .seam-fold:hover { color: var(--text-1); background: var(--bg-elev-1); border-color: var(--line); }
+  /* Focus: a Dusk border, no glow. */
+  .tabs .seam-fold:focus-visible { outline: none; border-color: #6E67AF; }
+  .tabs .seam-dot { display: inline-flex; align-items: center; justify-content: center; color: inherit; }
+  .tabs .seam-dot svg { width: 19px; height: 19px; display: block; }
+  /* The filled left column reads the "open" state; folding hollows it out. */
+  .tabs .sf-col { transition: opacity var(--t-fast) ease; }
+  body.nav-collapsed .tabs .sf-col { opacity: 0; }
+  /* Folded: the control centres in the 62px rail like the nav icons do. */
+  body.nav-collapsed .tabs .seam-fold { justify-content: center; padding-left: 0; padding-right: 0; }
+  /* Phones swap the rail for the bottom nav, so the fold control has no home. */
+  @media (max-width: 720px) { .tabs .seam-fold { display: none; } }
+  /* Respect reduced motion for the whole fold: rail width/padding, the content
+     reflow, and the control's own hover/glyph transitions all settle instantly. */
+  @media (prefers-reduced-motion: reduce) {
+    .tabs, main, .tabs .seam-fold, .tabs .sf-col { transition: none; }
   }
-  .seam-dot svg {
-    width: 15px; height: 15px; display: block;
-    transition: transform var(--t-fast) ease;
-  }
-  /* Open: points left (collapse); hover nudges it left. */
-  .seam-fold:hover .seam-dot svg,
-  .seam-fold:focus-visible .seam-dot svg { transform: translateX(-2px); }
-  /* Folded: chevron flips outward (expand); the hover nudge follows the flip, so
-     it drifts right on screen — still toward the way it points. */
-  body.nav-collapsed .seam-dot svg { transform: rotate(180deg); }
-  body.nav-collapsed .seam-fold:hover .seam-dot svg,
-  body.nav-collapsed .seam-fold:focus-visible .seam-dot svg { transform: rotate(180deg) translateX(-2px); }
-  /* Phones swap the rail for the bottom nav, so the seam control has no home. */
-  @media (max-width: 720px) { .seam-fold { display: none; } }
 
   /* Unseen-orders notification on the Orders tab. Hidden by default;
      JS adds .has-unseen when the unseen-count > 0. The dot pulses to grab
@@ -813,12 +795,10 @@
   section { display: none; }
   /* Embedded editors (Mini App / Product Page) — pin the iframe to the full
      viewport below the topbar (56px) + tab nav (~42px) so it uses the whole
-     screen, not main's centered column. position:fixed is zoom-safe: the
-     offsets live in the same scaled px as the (zoomed) topbar + nav, so they
-     line up at any text size — no `vw` math that the root `zoom` would distort
-     (that was cropping both panes). z-index stays under the topbar (10) + nav
-     (9). The editor inside skips its own zoom when embedded, so scale isn't
-     applied twice (see is-embedded in the editors). */
+     screen, not main's centered column. position:fixed keeps it flush to the
+     rail: left reads --rail-w, so it rides the fold; z-index stays under the
+     topbar (12) + nav. (Both are real <iframe>s at width/height:100%, so the
+     embedded doc reflows to the new width when the rail folds.) */
   #tab-mini-app-editor, #tab-product-editor {
     position: fixed; top: 56px; left: var(--rail-w); right: 0; bottom: 0;
     margin: 0; padding: 0; z-index: 1;

@@ -833,22 +833,6 @@
 </nav>
 
 <div class="topbar">
-  <!-- Rail-fold dot — sits on the seam between the rail and the content, level
-       with the search bar (replaces the old topbar hamburger). It's anchored to
-       the topbar's own left edge (left:0), which IS the divider by construction:
-       the topbar's `left` equals the rail width and animates with it, so the dot
-       tracks the seam automatically in every state and under the Aa `zoom` with
-       no pixel guessing. It straddles the line (translateX(-50%)); the topbar's
-       z-index is raised above the rail so the half over the rail isn't clipped.
-       A bare Dusk-purple arrow, shown at all times; hover nudges it toward the
-       way it points, click folds. setNavCollapsed() keeps its title/aria in
-       sync; the chevron flip is CSS. -->
-  <button class="seam-fold" id="railSeamFold" type="button" onclick="toggleNavCollapse()"
-          title="Collapse menu · 收起菜单" aria-label="Collapse menu · 收起菜单" aria-pressed="false">
-    <span class="seam-dot">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 6 9 12 15 18"/></svg>
-    </span>
-  </button>
   <!-- Tacet wordmark — the waveform settling into a straight line (chaos → calm)
        with the Dusk automation dot at its end, then lowercase "tacet" in
        Fraunces. Mark stroke = currentColor so it flips ink/paper by theme. -->
@@ -1015,6 +999,22 @@
     </span>
     <span class="brand-name" data-no-i18n>tacet</span>
   </div>
+  <!-- Rail fold control — re-parented here from the topbar (2026-07-24), in its
+       own zone at the top of the rail above the nav. The side-panel glyph states
+       what is TRUE NOW: the left column is filled while the rail is open, hollow
+       once folded (see .sf-col in the CSS). One icon, one region changing — no
+       chevron, no swap. setNavCollapsed() keeps title / aria-label / aria-pressed
+       in sync with the fold; the filled↔hollow swap is CSS off body.nav-collapsed. -->
+  <button class="seam-fold" id="railSeamFold" type="button" onclick="toggleNavCollapse()"
+          title="Hide sidebar" aria-label="Hide sidebar" aria-pressed="false">
+    <span class="seam-dot" aria-hidden="true">
+      <svg class="sf-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="4" width="18" height="16" rx="2.5"/>
+        <line x1="9" y1="4" x2="9" y2="20"/>
+        <path class="sf-col" d="M5.5 4 H9 V20 H5.5 A2.5 2.5 0 0 1 3 17.5 V6.5 A2.5 2.5 0 0 1 5.5 4 Z" fill="currentColor" stroke="none"/>
+      </svg>
+    </span>
+  </button>
   <!-- "runs on tacet" credit — sits at the rail bottom (flex pushes it there via
        margin-top:auto + high order). Shown by applyBrand() only for a co-branded
        tenant (custom logo/name) whose brandCredit is on; hidden for Tacet itself. -->
@@ -1217,9 +1217,8 @@
   <!-- Brand + Billing moved into Settings (#settings-nav) 2026-07-14 —
        see public/retail-admin.html #settings-nav for the links. -->
 
-  <!-- Rail-fold control lives on the seam now (#railSeamFold, in the topbar) —
-       the old .nav-foot chevron button was removed 2026-07-07 so the dot is the
-       single fold control. -->
+  <!-- Rail-fold control (#railSeamFold) now lives at the TOP of this rail, just
+       under the brand spacer (moved out of the topbar 2026-07-24). -->
 </div>
 
 <!-- ─── COMMAND SEARCH PALETTE ───
