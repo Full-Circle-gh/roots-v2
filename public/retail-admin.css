@@ -219,7 +219,20 @@
        position:fixed (pinned to the viewport, the most drift-proof anchor) and
        z-index:12 sits ABOVE the rail (z:11), so its opaque pane covers the
        rail's top 56px — which is why the rail's own brand head is retired to
-       this bar (see .nav-brand / .topbar .brand below). */
+       this bar (see .nav-brand / .topbar .brand below).
+       ⚠ DO NOT put the brand (or anything else meant to stay put) in the rail
+       head and expect this topbar to stay full-width. The two are mutually
+       exclusive by geometry, not by this stacking choice: the rail (.tabs) is
+       OPAQUE and its width is --rail-w, which is fold-dependent (236px open,
+       62px collapsed). Whatever occupies the rail's top 56px band — regardless
+       of which layer is "above" the other — visually consumes that band, and
+       the band's width changes when the rail folds. Raise the rail above this
+       topbar (as tried 2026-07-24, commit 65230ada) and the topbar's visible
+       left edge tracks the fold, reading as "the topbar folding" even though
+       this box never moves. There is no z-index fix for that — moving the
+       brand into the rail necessarily makes SOMETHING at that corner
+       fold-dependent. Reverted in 52ef0b28; brand-in-rail is retired for good
+       (2026-07-24). If this comment is gone, the bug is back. */
     position: fixed; top: 0; left: 0; right: 0; z-index: 12;
   }
   .brand {
