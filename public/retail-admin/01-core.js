@@ -265,8 +265,10 @@ $$('.tabs [data-tab]').forEach(btn => btn.addEventListener('click', () => {
   $$('.tabs [data-tab]').forEach(b => b.classList.toggle('active', b === btn));
   $$('main section').forEach(s => s.classList.toggle('active', s.id === 'tab-' + btn.dataset.tab));
   $$('.tabs-group').forEach(g => g.classList.toggle('has-active', g.contains(btn)));
-  // Accordion rail: keep the active tab's group expanded; collapse the others.
-  $$('.tabs-group').forEach(g => g.classList.toggle('open', g.contains(btn)));
+  // Picking a tab dismisses any open sub-menu flyout (the group it belongs to
+  // is marked .has-active above, which styles the trigger — no need to keep the
+  // panel hanging over the content).
+  closeFlyouts();
   tbSetPage();
 }));
 // Sales overview → jump into a single channel's full admin. The "Configure"
@@ -295,8 +297,8 @@ function goTab(tab) {
   $$('.tabs-group').forEach(g => {
     const has = !!g.querySelector('[data-tab="' + tab + '"]');
     g.classList.toggle('has-active', has);
-    g.classList.toggle('open', has);
   });
+  closeFlyouts();
   tbSetPage();
 }
 
@@ -723,18 +725,83 @@ window.addEventListener('message', (ev) => {
     }
   }
 });
-// Group trigger toggles its popover; only one group open at a time.
-$$('.tabs-group-trigger').forEach(btn => btn.addEventListener('click', (ev) => {
-  ev.stopPropagation();
-  // These groups (Marketing / Loyalty) have no destination of their own — the
-  // trigger only opens the accordion, which is hidden while the rail is folded.
-  // So un-fold the rail first, then reveal the children.
-  if (document.body.classList.contains('nav-collapsed')) setNavCollapsed(false);
-  const group = btn.closest('.tabs-group');
-  const wasOpen = group.classList.contains('open');
-  $$('.tabs-group.open').forEach(g => g.classList.remove('open'));
-  if (!wasOpen) group.classList.add('open');
-}));
+// ── Rail sub-menu flyout ──────────────────────────────────────────────────
+// A group (Marketing, Loyalty & Wallet, Editor) reveals its children as an
+// overlay panel to the RIGHT of the rail rather than expanding in place. The
+// panel is position:fixed, so JS places it from the trigger's rect each time it
+// opens; it works the same whether the rail is open or folded. Opens on hover /
+// keyboard focus / click; closes on outside-click, Esc, scroll, or picking a
+// child (handled in the [data-tab] handler above). Only one open at a time.
+var _flyCloseTimer = null;  // var (not let): closeFlyouts() is hoisted and may be
+                            // reached by an early tab activation before this line.
+function _flyGroupTrigger(g) {
+  return g.querySelector('.tabs-group-trigger') || g.querySelector('.nav-parent-link');
+}
+function _positionFlyout(group) {
+  const trig = _flyGroupTrigger(group);
+  const pop = group.querySelector('.tabs-popover');
+  if (!trig || !pop) return;
+  const r = trig.getBoundingClientRect();
+  // Sit just right of the rail edge, top-aligned with the trigger. Clamp the
+  // height (and nudge up if needed) so a tall panel never runs off-screen.
+  const gap = 6;
+  pop.style.left = Math.round(r.right + gap) + 'px';
+  const maxH = window.innerHeight - 12;
+  pop.style.maxHeight = maxH + 'px';
+  let top = r.top;
+  const h = Math.min(pop.scrollHeight, maxH);
+  if (top + h > window.innerHeight - 6) top = Math.max(6, window.innerHeight - 6 - h);
+  pop.style.top = Math.round(top) + 'px';
+}
+function openFlyout(group) {
+  if (!group || !group.querySelector('.tabs-popover')) return;
+  clearTimeout(_flyCloseTimer);
+  $$('.tabs-group.open').forEach(g => { if (g !== group) { g.classList.remove('open'); _flySyncAria(g); } });
+  group.classList.add('open');
+  _positionFlyout(group);
+  _flySyncAria(group);
+}
+function closeFlyouts() {
+  clearTimeout(_flyCloseTimer);
+  $$('.tabs-group.open').forEach(g => { g.classList.remove('open'); _flySyncAria(g); });
+}
+window.closeFlyouts = closeFlyouts;
+function _flyScheduleClose() { clearTimeout(_flyCloseTimer); _flyCloseTimer = setTimeout(closeFlyouts, 160); }
+function _flySyncAria(g) {
+  const trig = _flyGroupTrigger(g);
+  if (trig) trig.setAttribute('aria-expanded', g.classList.contains('open') ? 'true' : 'false');
+}
+$$('.tabs-group').forEach(group => {
+  if (!group.querySelector('.tabs-popover')) return;
+  const trig = _flyGroupTrigger(group);
+  if (trig) { trig.setAttribute('aria-haspopup', 'true'); trig.setAttribute('aria-expanded', 'false'); }
+  // Hover: the panel is a DOM child of the group, so moving onto it keeps the
+  // group "hovered"; the short close delay covers the gap between the two.
+  group.addEventListener('mouseenter', () => openFlyout(group));
+  group.addEventListener('mouseleave', _flyScheduleClose);
+  // Keyboard: focus into the group opens it; focus leaving closes it.
+  group.addEventListener('focusin', () => openFlyout(group));
+  group.addEventListener('focusout', (e) => {
+    if (!group.contains(e.relatedTarget)) _flyScheduleClose();
+  });
+  // A destination-less trigger (Marketing / Loyalty) toggles on click too, so a
+  // tap works where hover can't. The nav-parent link (Editor) keeps navigating.
+  const clickTrig = group.querySelector('.tabs-group-trigger');
+  if (clickTrig) clickTrig.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    group.classList.contains('open') ? closeFlyouts() : openFlyout(group);
+  });
+});
+// Dismiss on outside-click, Esc, resize, or a page/rail scroll (the fixed panel
+// would otherwise drift away from its trigger). A scroll INSIDE the panel itself
+// (a tall menu on a short screen) must not close it.
+document.addEventListener('click', (e) => { if (!e.target.closest('.tabs-group')) closeFlyouts(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeFlyouts(); });
+window.addEventListener('scroll', (e) => {
+  if (e.target instanceof Element && e.target.closest('.tabs-popover')) return;
+  closeFlyouts();
+}, true);
+window.addEventListener('resize', closeFlyouts);
 
 // ── Collapsible rail ──────────────────────────────────────────────────────
 // A topbar toggle folds the left rail to an icon-only strip; the pre-paint

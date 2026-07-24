@@ -594,7 +594,8 @@
     padding-left: 0; padding-right: 0;
   }
   body.nav-collapsed .tabs .tabs-chev { display: none; }
-  body.nav-collapsed .tabs-group.open > .tabs-popover { display: none; }
+  /* The flyout panel is position:fixed (outside the rail), so a folded rail no
+     longer needs to hide it — it opens beside the folded icon just the same. */
   /* Collapsed: section headers shrink to a centered dot; the auto marker hides. */
   body.nav-collapsed .nav-sec { text-align: center; padding: 14px 0 6px; }
   body.nav-collapsed .nav-sec span { display: none; }
@@ -684,36 +685,54 @@
     100% { box-shadow: 0 0 0 0   rgba(220, 38, 38, 0);    transform: scale(1); }
   }
 
-  /* Grouped category dropdowns inside the tab bar. Trigger sits inline with
-     direct tabs; popover drops below + uses .tabs-popover-item styling. */
-  /* In the vertical rail a group is an inline accordion: the trigger row and,
-     below it, the indented children that reveal/collapse in place. */
+  /* Grouped sub-menus in the vertical rail (Marketing, Loyalty & Wallet,
+     Editor). The group no longer expands IN PLACE — its children fly out as an
+     overlay panel to the RIGHT of the rail, floating over the content. Because
+     the rail is overflow:auto (which would clip anything spilling past its
+     edge), the panel is position:fixed and JS sets its top/left from the
+     trigger's rect on open (see the fold/flyout wiring in 01-core.js). It opens
+     on hover / focus / click and dismisses on outside-click, Esc, scroll, or
+     picking a child. Works identically whether the rail is open or folded. */
   .tabs-group { position: relative; display: flex; flex-direction: column; }
-  .tabs-group.has-active > .tabs-group-trigger { color: var(--text-1); }
-  .tabs-chev { width: 10px !important; height: 10px !important; opacity: .6; transition: transform var(--t-fast) ease; }
-  .tabs-group.open .tabs-chev { transform: rotate(180deg); }
+  .tabs-group.has-active > .tabs-group-trigger,
+  .tabs-group.open > .tabs-group-trigger { color: var(--text-1); }
+  .tabs-group.open > .tabs-group-trigger,
+  .tabs-group.open > .nav-parent-link { background: var(--bg-elev-1); }
+  /* Chevron points RIGHT (the panel opens to the right); it no longer flips. */
+  .tabs-chev { width: 10px !important; height: 10px !important; opacity: .6; }
   .tabs-popover {
     display: none;
+    position: fixed; z-index: 45;
     flex-direction: column;
     gap: 1px;
-    padding: 2px 0 4px;
+    min-width: 208px; max-width: 260px;
+    padding: 6px;
+    background: var(--bg-pane);
+    border: 1px solid var(--line);
+    border-radius: var(--r-lg);
+    box-shadow: 0 14px 36px rgba(17, 26, 43, .28);
+    overflow-y: auto;
   }
-  .tabs-group.open .tabs-popover { display: flex; animation: zen-pop-in 380ms cubic-bezier(.16, 1, .3, 1); }
+  .tabs-group.open > .tabs-popover { display: flex; animation: zen-pop-in 180ms cubic-bezier(.16, 1, .3, 1); }
   .tabs-popover button {
     width: 100%;
-    padding: 7px 12px 7px 40px;
+    padding: 8px 12px;
     font-size: 13.5px;
     border-radius: var(--r-md);
     justify-content: flex-start;
+    gap: 11px;
     font-weight: 400;
     position: relative;
   }
-  .tabs-popover button svg { width: 14px; height: 14px; }
+  .tabs-popover button svg { width: 16px; height: 16px; }
   .tabs-popover button:hover { background: var(--bg-elev-1); }
   .tabs-popover button.active {
     background: var(--bg-elev-1);
     color: var(--text-1);
     box-shadow: inset 3px 0 0 var(--brass);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tabs-group.open > .tabs-popover { animation: none; }
   }
   /* Live-poll dot + sound toggle now live in the TOPBAR cluster (see
      .tb-cluster), not the rail foot — their selectors below are un-scoped
