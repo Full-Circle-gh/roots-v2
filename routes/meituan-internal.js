@@ -126,6 +126,21 @@ function internalStatusForChannel(desc) {
   return null; // 待支付 / unknown → keep 'paid'
 }
 
+// Whether a status label is a CONFIRMED, terminal void — the only thing that
+// should return stock. A bare 退款/退货/取消 is NOT enough: Meituan surfaces a
+// refund/cancel *request* with those words while the order is still live, and if
+// the merchant/platform rejects it the order goes on to ship (rider picks up,
+// delivered). Restocking on the request then double-counts. So we require an
+// explicit settled form and explicitly exclude pending/in-progress wording.
+function isConfirmedVoid(desc) {
+  const d = String(desc || '');
+  if (!d) return false;
+  // Pending / under-review / negotiating → not settled, never restock.
+  if (/申请|待处理|处理中|审核|退款中|退货中|协商|部分退款/.test(d)) return false;
+  // Settled cancels and completed refunds.
+  return /已取消|交易取消|订单取消|已关闭|交易关闭|已退款|退款成功|退款完成|全额退款/.test(d);
+}
+
 // POST /api/internal/meituan/ingest-order
 // Mirrors a parsed Meituan order into roots: creates a retail_order and deducts
 // store stock (ledgered, which re-pushes the corrected number to Meituan +
@@ -182,11 +197,16 @@ router.post('/ingest-order', (req, res) => {
     // 2. Deduct stock via the ledgered adjuster (also re-pushes to Meituan +
     //    Guanyi). Clamp at 0 — a Meituan oversell shouldn't drive us negative.
     const unresolved = [];
+    const oversold = [];
     let deducted = 0;
     for (const it of items) {
       if (!it.productId) { unresolved.push({ name: it.name, sku: it.sku, qty: it.qty, reason: it.matchBy }); continue; }
       const cur  = db.prepare('SELECT physical_qty FROM retail_store_stock WHERE store_id = ? AND product_id = ?').get(storeId, it.productId);
       const oldQ = cur ? cur.physical_qty : 0;
+      // On-hand can't cover the line (oversell, or an already-negative row). We
+      // still clamp at 0 so a channel oversell can't drive us negative, but flag
+      // the shortfall (below) instead of letting it vanish into the clamp.
+      if (oldQ < it.qty) oversold.push({ name: it.nameEn, sku: it.sku, have: oldQ, want: it.qty });
       inventory.adjustStock({
         storeId, productId: it.productId,
         newPhysicalQty: Math.max(0, oldQ - it.qty),
@@ -220,6 +240,26 @@ router.post('/ingest-order', (req, res) => {
       }
     }
 
+    // 4. Surface oversold lines. The deduction clamped at 0, so an order whose
+    //    on-hand was already short (or negative) leaves no visible drop — exactly
+    //    the "why didn't this one move?" confusion. Flag it so the count can be
+    //    reconciled rather than silently swallowed by the clamp.
+    if (oversold.length) {
+      try {
+        db.prepare(`
+          INSERT INTO meituan_sync_log (store_code, event_type, status, detail, error_msg)
+          VALUES (?, 'order_oversold', 'warn', ?, ?)
+        `).run(
+          storeCode || null,
+          JSON.stringify({ ref, oversold }),
+          `${oversold.length} line(s) exceeded on-hand (clamped at 0): ` +
+            oversold.map(o => `${o.name}${o.sku ? ` (${o.sku})` : ''} have ${o.have} want ${o.want}`).join('; ')
+        );
+      } catch (logErr) {
+        console.error('[meituan-internal] order_oversold log failed:', logErr.message);
+      }
+    }
+
     res.json({ ok: true, orderId, orderNo, items: items.length, deducted, unresolved });
   } catch (err) {
     console.error('[meituan-internal] ingest-order error:', err);
@@ -246,7 +286,7 @@ router.post('/update-order-status', (req, res) => {
 
     // Snapshot the order BEFORE we advance it — the restock below keys off the
     // PREVIOUS status, which is what makes it idempotent under a repeating poll.
-    const prev = db.prepare('SELECT status, store_id FROM retail_orders WHERE id = ?').get(imp.retail_order_id);
+    const prev = db.prepare('SELECT status, store_id, channel_stock_restored FROM retail_orders WHERE id = ?').get(imp.retail_order_id);
 
     // A terminal label also advances the internal status so the order leaves the
     // Paid worklist for Delivered/Cancelled/Refunded; in-progress leaves it alone.
@@ -268,32 +308,59 @@ router.post('/update-order-status', (req, res) => {
     // the transition into cancelled/refunded (prev status was neither), so a poll that
     // re-reads the same 订单取消 label can never restock twice. Best-effort: a restock
     // failure must not fail the status write, or the order would stick on a stale label.
-    let restocked = 0;
-    const alreadyVoid = !!prev && ['cancelled', 'refunded'].includes(prev.status);
-    if (prev && !alreadyVoid && (internal === 'cancelled' || internal === 'refunded')) {
+    // Gate on a CONFIRMED void, not a bare 退款/取消 (which may be a request the
+    // order later shrugs off). channel_stock_restored keeps it idempotent under a
+    // repeating poll AND lets a transient void that flips back to a live status
+    // re-deduct what we returned — otherwise a rejected refund inflates our count.
+    let restocked = 0, rededucted = 0;
+    const confirmedVoid   = isConfirmedVoid(desc);
+    const alreadyRestored = !!prev && prev.channel_stock_restored === 1;
+    const orderLines = () => db.prepare(
+      'SELECT product_id, name_en, qty FROM retail_order_items WHERE order_id = ? AND product_id IS NOT NULL'
+    ).all(imp.retail_order_id);
+    const stockOf = (pid) => {
+      const cur = db.prepare('SELECT physical_qty FROM retail_store_stock WHERE store_id = ? AND product_id = ?')
+        .get(prev.store_id, pid);
+      return cur ? cur.physical_qty : 0;
+    };
+    if (prev && confirmedVoid && !alreadyRestored) {
+      // Order truly voided → give the deducted stock back, exactly once.
       try {
-        const lines = db.prepare(
-          'SELECT product_id, name_en, qty FROM retail_order_items WHERE order_id = ? AND product_id IS NOT NULL'
-        ).all(imp.retail_order_id);
-        for (const it of lines) {
-          const cur  = db.prepare('SELECT physical_qty FROM retail_store_stock WHERE store_id = ? AND product_id = ?')
-            .get(prev.store_id, it.product_id);
-          const oldQ = cur ? cur.physical_qty : 0;
+        for (const it of orderLines()) {
           inventory.adjustStock({
             storeId: prev.store_id, productId: it.product_id,
-            newPhysicalQty: oldQ + it.qty,
+            newPhysicalQty: stockOf(it.product_id) + it.qty,
             actorLabel: 'Meituan cancel',
             reason: 'meituan_cancel',
-            note: `Meituan ${String(meituanOrderNo)} ${internal} — restored ${it.name_en} x${it.qty}`,
+            note: `Meituan ${String(meituanOrderNo)} ${internal || 'void'} — restored ${it.name_en} x${it.qty}`,
           });
           restocked++;
         }
+        db.prepare('UPDATE retail_orders SET channel_stock_restored = 1 WHERE id = ?').run(imp.retail_order_id);
       } catch (e) {
         console.error('[meituan-internal] restock on cancel failed:', e.message);
       }
+    } else if (prev && alreadyRestored && !confirmedVoid) {
+      // Stock was returned for a void that has since flipped back to a live status
+      // (request rejected, rider picked up) → re-deduct so we don't over-report.
+      try {
+        for (const it of orderLines()) {
+          inventory.adjustStock({
+            storeId: prev.store_id, productId: it.product_id,
+            newPhysicalQty: Math.max(0, stockOf(it.product_id) - it.qty),
+            actorLabel: 'Meituan uncancel',
+            reason: 'meituan_uncancel',
+            note: `Meituan ${String(meituanOrderNo)} back to ${desc} — re-deducted ${it.name_en} x${it.qty}`,
+          });
+          rededucted++;
+        }
+        db.prepare('UPDATE retail_orders SET channel_stock_restored = 0 WHERE id = ?').run(imp.retail_order_id);
+      } catch (e) {
+        console.error('[meituan-internal] re-deduct on uncancel failed:', e.message);
+      }
     }
 
-    res.json({ ok: true, changed: r.changes > 0, restocked });
+    res.json({ ok: true, changed: r.changes > 0, restocked, rededucted });
   } catch (err) {
     console.error('[meituan-internal] update-order-status error:', err.message);
     res.status(500).json({ error: err.message });

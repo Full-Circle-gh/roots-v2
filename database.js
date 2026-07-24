@@ -1620,6 +1620,12 @@ addColumn('retail_orders', 'wx_shipping_uploaded_at', 'DATETIME'); // set on a c
 addColumn('retail_orders', 'wx_shipping_status',      'TEXT');     // last result, e.g. 'ok' | 'err:<code> <msg>' | 'perm:<code> <msg>' (won't retry)
 addColumn('retail_orders', 'wx_shipping_attempts',    'INTEGER DEFAULT 0'); // upload tries so far; the retry sweeper stops after a cap
 
+// Channel void bookkeeping: 1 once we've returned stock for a Meituan/channel
+// cancel|refund, 0 otherwise. Makes the restock idempotent under a repeating
+// poll AND lets us re-deduct if a *transient* void (a refund request that gets
+// rejected) flips back to a live status — otherwise phantom stock accumulates.
+addColumn('retail_orders', 'channel_stock_restored', 'INTEGER DEFAULT 0');
+
 try {
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_retail_orders_idem
              ON retail_orders(customer_id, idempotency_key)
