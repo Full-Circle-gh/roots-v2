@@ -24601,6 +24601,50 @@ function sendWecomOrderAddonAlert(orderId, amount, items) {
 // award earn-points, and ping the store. Idempotent (guarded by status), so
 // safe to call from both DEV-mode auto-pay and the async WeChat callback.
 // NOTE: re-prices NOTHING — items_json was server-priced at create time.
+// How much of an order's already-paid base delivery fee is waived when
+// `addonSubtotal` of new items pushes the order over its free-shipping
+// threshold. Recomputes the zone delivery fee at the NEW subtotal (same rules
+// as checkout) and returns the drop versus what the order already charged — base
+// fee only; the same-day surcharge portion of shipping_fee is never waived.
+// Returns 0 for pickup, orders that paid no base delivery, weight-priced zones
+// that don't get cheaper, or any recompute error (fail safe → charge full).
+function computeAddonFreedShipping(order, addonSubtotal, resolvedAddonItems) {
+  try {
+    if (!order || order.fulfillment_type === 'pickup') return 0;
+    const surcharge = Number(order.same_day_surcharge_fee) || 0;
+    const oldBaseDelivery = Math.max(0, (Number(order.shipping_fee) || 0) - surcharge);
+    if (oldBaseDelivery <= 0.005) return 0;            // nothing was charged to waive
+    const zone = zoneForOrder(order);
+    if (!zone) return 0;
+    const newSubtotal = (Number(order.subtotal) || 0) + Number(addonSubtotal || 0);
+    // Whole-order weight + qty at the new state (existing lines + the add-on),
+    // for weight-priced zones. Flat / threshold zones ignore grams.
+    let grams = 0, qty = 0;
+    const existing = tdb().prepare(
+      `SELECT oi.qty, COALESCE(oi.size, sp.weight) AS size
+         FROM retail_order_items oi
+         LEFT JOIN store_products sp ON sp.id = oi.product_id
+        WHERE oi.order_id = ?`
+    ).all(order.id);
+    for (const r of existing) {
+      const n = Number(r.qty) || 0; qty += n;
+      const g = parseWeightToGrams(r.size); grams += g ? g * n : 0;
+    }
+    for (const r of (resolvedAddonItems || [])) {
+      const n = Number(r.qty) || 0; qty += n;
+      const g = parseWeightToGrams(r.product && r.product.size); grams += g ? g * n : 0;
+    }
+    const fees = computeDeliveryAndPacking(zone, newSubtotal, order.delivery_mode || 'standard', qty, grams);
+    if (fees.error) return 0;
+    const newBaseDelivery = Number(fees.deliveryFee) || 0;
+    const freed = Math.round((oldBaseDelivery - newBaseDelivery) * 100) / 100;
+    return Math.max(0, Math.min(freed, oldBaseDelivery));
+  } catch (e) {
+    console.warn('[computeAddonFreedShipping]', e.message);
+    return 0;
+  }
+}
+
 function finalizeOrderAddon(addonId) {
   const a = tdb().prepare('SELECT * FROM retail_order_addons WHERE id = ?').get(addonId);
   if (!a || a.status === 'success') return false;
@@ -24622,10 +24666,22 @@ function finalizeOrderAddon(addonId) {
   const c = tdb().prepare('SELECT tier_key FROM retail_customers WHERE id = ?').get(a.customer_id);
   const tierMult  = tierMultiplierFor(c?.tier_key);
   // Add-on is charged at plain item price (no voucher/points discount on it),
-  // so subtotal == total == amount for the earn-base.
+  // so points earn on the gateway charge (a.amount).
   const earnBase  = pointsEarnBaseAmount(a.amount, a.amount);
   const pts       = pointsEarnedFor(earnBase, tierMult);
   const expiresAt = pts > 0 ? nextEarnExpiry() : null;
+
+  // Shipping netting. addon_subtotal is the real items value (bumps subtotal);
+  // freed_shipping is the base delivery waived by crossing the free-shipping
+  // threshold. `a.amount` is the gateway charge = addon_subtotal − freed_shipping.
+  // shippingReduction is capped at the items value so the order total never
+  // drops below what was already paid (keeps total == payments); any leftover
+  // (freed shipping bigger than the items added — rare) is returned as store
+  // balance below. Older rows (pre-netting) fall back to amount with no waiver.
+  const addonSubtotal     = a.addon_subtotal != null ? Number(a.addon_subtotal) : Number(a.amount);
+  const freedShipping     = Number(a.freed_shipping) || 0;
+  const shippingReduction = Math.min(freedShipping, addonSubtotal);
+  const remainderCredit   = Math.round((freedShipping - shippingReduction) * 100) / 100;
 
   const insItem = tdb().prepare(
     `INSERT INTO retail_order_items
@@ -24668,16 +24724,19 @@ function finalizeOrderAddon(addonId) {
     // Land the new items in the order's open parcel (or a fresh one).
     mergeAddonItemsIntoShipments(order.id, newItemIds);
 
-    // Bump the order money: add-on price only, no extra delivery fee, voucher
-    // untouched. points_earned mirrors the running total for the receipt.
+    // Bump the order money: subtotal by the items' real value, shipping down by
+    // the freed base delivery, total by the net gateway charge (a.amount =
+    // addon_subtotal − freed_shipping). total change == a.amount, so it stays in
+    // lockstep with the payment row recorded below.
     tdb().prepare(
       `UPDATE retail_orders
           SET subtotal = COALESCE(subtotal, 0) + ?,
+              shipping_fee = MAX(0, COALESCE(shipping_fee, 0) - ?),
               total    = COALESCE(total, 0) + ?,
               points_earned = COALESCE(points_earned, 0) + ?,
               updated_at = CURRENT_TIMESTAMP
         WHERE id = ?`
-    ).run(a.amount, a.amount, pts, order.id);
+    ).run(addonSubtotal, shippingReduction, a.amount, pts, order.id);
 
     // Record the add-on as a first-class payment so it's refundable and shows up
     // in tender reconciliation. Without this, the add-on's WeChat money lived
@@ -24687,11 +24746,31 @@ function finalizeOrderAddon(addonId) {
     // original tender). INSERT OR IGNORE: the out_trade_no is UNIQUE, so a retry
     // callback that re-finalizes never doubles the row. transaction_id is set by
     // the pay callback just before finalize; null in dev (no real gateway money).
-    tdb().prepare(
-      `INSERT OR IGNORE INTO retail_payments
-         (order_id, method, amount, status, out_trade_no, transaction_id, completed_at)
-       VALUES (?, ?, ?, 'success', ?, ?, CURRENT_TIMESTAMP)`
-    ).run(order.id, a.payment_method || 'wechat', a.amount, a.out_trade_no || null, a.transaction_id || null);
+    // Skip when the freed shipping fully covered the add-on (a.amount == 0) — no
+    // gateway money changed hands, so there's no payment to record.
+    if (Number(a.amount) > 0.005) {
+      tdb().prepare(
+        `INSERT OR IGNORE INTO retail_payments
+           (order_id, method, amount, status, out_trade_no, transaction_id, completed_at)
+         VALUES (?, ?, ?, 'success', ?, ?, CURRENT_TIMESTAMP)`
+      ).run(order.id, a.payment_method || 'wechat', a.amount, a.out_trade_no || null, a.transaction_id || null);
+    }
+
+    // Rare: the freed shipping exceeded the add-on's own value (the customer was
+    // within a shipping-fee's reach of the threshold and added something small).
+    // Return the leftover as store balance so they're not out the difference.
+    // Unique out_trade_no makes the credit idempotent across retry callbacks.
+    if (remainderCredit > 0.005) {
+      const credIns = tdb().prepare(
+        `INSERT OR IGNORE INTO retail_topup_transactions
+           (customer_id, amount, bonus_points, payment_method, status, out_trade_no, paid_at)
+         VALUES (?, ?, 0, 'shipping_credit', 'success', ?, CURRENT_TIMESTAMP)`
+      ).run(a.customer_id, remainderCredit, `addoncredit:${order.id}:${addonId}`);
+      if (credIns.changes === 1) {
+        tdb().prepare('UPDATE retail_customers SET balance = COALESCE(balance, 0) + ? WHERE id = ?')
+          .run(remainderCredit, a.customer_id);
+      }
+    }
 
     // Earn-points on the add-on spend. Own ledger row + own expiry batch, with
     // a distinct source so awardOrderPoints' idempotency marker is untouched.
@@ -24766,7 +24845,9 @@ router.post('/api/retail/orders/:id/addon/create', requireRetailAuth, express.js
   if (!rawItems.length) return res.status(400).json({ success: false, error: 'no_items' });
 
   const order = tdb().prepare(
-    'SELECT id, order_no, status, customer_id, address_json, fulfillment_type FROM retail_orders WHERE id = ? AND customer_id = ?'
+    `SELECT id, order_no, status, customer_id, address_json, fulfillment_type,
+            subtotal, shipping_fee, same_day_surcharge_fee, delivery_zone_id, delivery_mode
+       FROM retail_orders WHERE id = ? AND customer_id = ?`
   ).get(orderId, req.customer.id);
   if (!order) return res.status(404).json({ success: false, error: 'order_not_found' });
 
@@ -24841,8 +24922,16 @@ router.post('/api/retail/orders/:id/addon/create', requireRetailAuth, express.js
     }
   }
 
-  const amount = Math.round(resolved.reduce((s, r) => s + r.lineTotal, 0) * 100) / 100;
-  if (!(amount > 0)) return res.status(400).json({ success: false, error: 'zero_amount' });
+  const addonSubtotal = Math.round(resolved.reduce((s, r) => s + r.lineTotal, 0) * 100) / 100;
+  if (!(addonSubtotal > 0)) return res.status(400).json({ success: false, error: 'zero_amount' });
+
+  // Net any freed shipping off the charge: adding these items may push the order
+  // over the free-shipping threshold, waiving the base delivery fee it paid. We
+  // subtract that from the add-on charge rather than issuing a separate refund —
+  // instant and tender-agnostic (there is no Alipay refund API). The gateway
+  // amount is the difference; freed_shipping is applied to the order at finalize.
+  const freedShipping = computeAddonFreedShipping(order, addonSubtotal, resolved);
+  const amount = Math.max(0, Math.round((addonSubtotal - freedShipping) * 100) / 100);
 
   // Stage the priced lines — finalize reads these verbatim and never re-prices.
   const staged = resolved.map(r => ({
@@ -24860,16 +24949,17 @@ router.post('/api/retail/orders/:id/addon/create', requireRetailAuth, express.js
 
   const outTradeNo = `${WX_ADDON_OUT_TRADE_PREFIX}${Date.now()}${orderId}`;
   const info = tdb().prepare(
-    `INSERT INTO retail_order_addons (order_id, customer_id, items_json, amount, payment_method, status, out_trade_no)
-     VALUES (?, ?, ?, ?, 'wechat', 'pending', ?)`
-  ).run(orderId, req.customer.id, JSON.stringify(staged), amount, outTradeNo);
+    `INSERT INTO retail_order_addons (order_id, customer_id, items_json, amount, addon_subtotal, freed_shipping, payment_method, status, out_trade_no)
+     VALUES (?, ?, ?, ?, ?, ?, 'wechat', 'pending', ?)`
+  ).run(orderId, req.customer.id, JSON.stringify(staged), amount, addonSubtotal, freedShipping, outTradeNo);
   const addonId = info.lastInsertRowid;
 
   const payCtx = payContext();
-  if (payCtx.devMode) {
-    // No real merchant — settle immediately so the customer sees the items added.
+  // A ¥0 charge (freed shipping fully covered the add-on) has no gateway step —
+  // settle immediately so the items land, same as dev mode.
+  if (amount <= 0 || payCtx.devMode) {
     finalizeOrderAddon(addonId);
-    return res.json({ success: true, data: { dev: true, status: 'success', addon_id: addonId, amount, out_trade_no: outTradeNo } });
+    return res.json({ success: true, data: { dev: payCtx.devMode || undefined, status: 'success', addon_id: addonId, amount, addon_subtotal: addonSubtotal, freed_shipping: freedShipping, out_trade_no: outTradeNo } });
   }
 
   // ── PROD: WeChat Pay v3 JSAPI handoff for the difference ──────────────
@@ -24886,7 +24976,7 @@ router.post('/api/retail/orders/:id/addon/create', requireRetailAuth, express.js
     const params = buildWxRequestPaymentParams(prepayId, payCtx);
     return res.json({
       success: true,
-      data: { method: 'wechat', status: 'prepay', addon_id: addonId, amount, out_trade_no: outTradeNo, ...params },
+      data: { method: 'wechat', status: 'prepay', addon_id: addonId, amount, addon_subtotal: addonSubtotal, freed_shipping: freedShipping, out_trade_no: outTradeNo, ...params },
     });
   } catch (e) {
     console.error('[order addon/create]', e);

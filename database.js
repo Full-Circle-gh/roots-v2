@@ -2332,6 +2332,16 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_retail_pts_customer ON retail_points_transactions(customer_id, created_at);
 `);
 
+// "Forgot something?" add-ons net freed shipping off the charge: when the added
+// items push an order's subtotal over the free-shipping threshold, the base
+// delivery fee that's now waived is subtracted from what the customer pays for
+// the add-on (tender-agnostic — no separate refund, which matters because there
+// is no Alipay refund API). addon_subtotal = the real items value (bumps the
+// order subtotal); freed_shipping = the base delivery waived (reduces the order
+// shipping_fee); `amount` stays the gateway charge = addon_subtotal − freed_shipping.
+addColumn('retail_order_addons', 'addon_subtotal', 'REAL');
+addColumn('retail_order_addons', 'freed_shipping', 'REAL DEFAULT 0');
+
 // ─── Customer migration credits (OUT1N → roots) ───────────────────────────
 // Staging table for the one-time migration of wallet balance + points from
 // the legacy OUT1N store. We can't pre-create retail_customers rows (openid is
