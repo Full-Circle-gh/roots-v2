@@ -193,6 +193,14 @@
   input[type="checkbox"], input[type="radio"] { accent-color: var(--accent); }
   ::selection { background: var(--ring); color: var(--text-1); }
 
+  /* ── Rail width — the ONE source of truth for the left rail's width ────
+     Consumed by four rules: .tabs width, main margin-left, .topbar left,
+     and the embedded editors' left. body.nav-collapsed swaps it to the
+     folded width, so those four consumers fold in lockstep with the rail.
+     This is a LAYOUT variable and deliberately lives outside the --td-*
+     colour tokens. */
+  :root { --rail-w: 236px; }
+
   /* ═══════════════════════════════════════════════════════════════════
      TOPBAR
      ═══════════════════════════════════════════════════════════════════ */
@@ -210,7 +218,7 @@
        its rail-side half over the rail instead of being clipped behind it. The
        two boxes don't overlap spatially (topbar starts at the rail's right edge),
        so raising the topbar has no other visual effect. */
-    position: fixed; top: 0; left: 236px; right: 0; z-index: 12;
+    position: fixed; top: 0; left: var(--rail-w); right: 0; z-index: 12;
   }
   .brand {
     display: flex; align-items: center; gap: 10px;
@@ -463,7 +471,7 @@
     padding: 10px 10px 14px;
     background: var(--bg-pane);
     border-right: 1px solid var(--line-soft);
-    position: fixed; top: 0; left: 0; bottom: 0; width: 236px; z-index: 11;
+    position: fixed; top: 0; left: 0; bottom: 0; width: var(--rail-w); z-index: 11;
     overflow-y: auto; overflow-x: hidden;
   }
   /* Rail brand head — the wordmark moved here from the topbar (2026-07-07) so it
@@ -578,13 +586,17 @@
   main    { transition: margin-left var(--t-fast) ease; }
   .topbar { transition: left var(--t-fast) ease; }
 
-  body.nav-collapsed .tabs { width: 62px; padding-left: 8px; padding-right: 8px; }
-  body.nav-collapsed main   { margin-left: 62px; }
+  /* Fold = swap the rail-width variable once; .tabs/main/.topbar/editors all
+     read it, so they narrow in lockstep. The consuming properties still carry
+     their own transitions above, so the fold still animates. */
+  body.nav-collapsed { --rail-w: 62px; }
+  body.nav-collapsed .tabs { width: var(--rail-w); padding-left: 8px; padding-right: 8px; }
+  body.nav-collapsed main   { margin-left: var(--rail-w); }
   /* Topbar + the fixed embedded editors ride the rail's width so they stay
      flush against its right edge when it folds to icons. */
-  body.nav-collapsed .topbar { left: 62px; }
+  body.nav-collapsed .topbar { left: var(--rail-w); }
   body.nav-collapsed #tab-mini-app-editor,
-  body.nav-collapsed #tab-product-editor { left: 62px; }
+  body.nav-collapsed #tab-product-editor { left: var(--rail-w); }
   /* Collapsed rail brand → just the centered mark; wordmark + full-bleed inset
      follow the rail's tighter 8px padding. */
   body.nav-collapsed .nav-brand { justify-content: center; padding: 0; margin: -8px -8px 6px; }
@@ -797,7 +809,7 @@
   /* ═══════════════════════════════════════════════════════════════════
      LAYOUT
      ═══════════════════════════════════════════════════════════════════ */
-  main { padding: calc(var(--s6) + 56px) var(--s6) var(--s7); max-width: 1440px; margin: 0 0 0 236px; }
+  main { padding: calc(var(--s6) + 56px) var(--s6) var(--s7); max-width: 1440px; margin: 0 0 0 var(--rail-w); }
   section { display: none; }
   /* Embedded editors (Mini App / Product Page) — pin the iframe to the full
      viewport below the topbar (56px) + tab nav (~42px) so it uses the whole
@@ -808,7 +820,7 @@
      (9). The editor inside skips its own zoom when embedded, so scale isn't
      applied twice (see is-embedded in the editors). */
   #tab-mini-app-editor, #tab-product-editor {
-    position: fixed; top: 56px; left: 236px; right: 0; bottom: 0;
+    position: fixed; top: 56px; left: var(--rail-w); right: 0; bottom: 0;
     margin: 0; padding: 0; z-index: 1;
   }
   .tab-embed-editor .ed-frame {
