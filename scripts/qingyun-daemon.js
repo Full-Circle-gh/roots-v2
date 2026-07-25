@@ -38,6 +38,8 @@ const { sendOpsAlert } = require('../lib/ops-alert');
 // Hold off on channel calls while a holder Chrome is freshly launched (mirrors
 // shangou-daemon) — a cold browser hit seconds after launch earns the 风控 403.
 const { coldMsRemaining, isColdStartChallenge } = require('../lib/browser-warmup');
+// Ops-alert latches that survive a restart (see lib/alert-latch).
+const { latchStore } = require('../lib/alert-latch');
 const geocode = require('../lib/geocode'); // Tencent/AMap — resolve English/pin-less addresses
 const inventory = require('../lib/inventory'); // isQingyunSameCityToday — same-city/same-day eligibility
 
@@ -101,7 +103,9 @@ function proxyHealthy(timeoutSec = 8) {
   });
 }
 function maskProxy(u) { return String(u || '').replace(/:[^:@/]+@/, ':****@'); }
-let proxyDownFlagged = false;
+// Alert latches live on disk (lib/alert-latch) so a daemon restart mid-incident
+// still knows it owes the ops group a recovery message.
+const alerts = latchStore('qingyun');
 // Residential VPN links blip for well under a minute; only page ops after the
 // proxy fails this many consecutive probes (mirrors shangou-daemon).
 let proxyFailStreak = 0;
@@ -111,7 +115,7 @@ const PROXY_DOWN_GRACE = Number(process.env.MEITUAN_PROXY_DOWN_GRACE || 3);
 const VERIFY_COOLDOWN_BASE_MS = 30 * 60_000;
 const VERIFY_COOLDOWN_MAX_MS  = 4 * 60 * 60_000;
 const verifyState   = {};
-const verifyFlagged = {};
+const verifyFlagged = alerts; // keyed 'verify:<storeCode>'
 function inVerifyCooldown(storeCode, now = Date.now()) {
   const s = verifyState[storeCode];
   return !!(s && s.until && now < s.until);
@@ -122,8 +126,8 @@ function noteVerifyResult(storeCode, challenged) {
     s.strikes = Math.min(s.strikes + 1, 8);
     const wait = Math.min(VERIFY_COOLDOWN_BASE_MS * 2 ** (s.strikes - 1), VERIFY_COOLDOWN_MAX_MS);
     s.until = Date.now() + wait;
-    if (!verifyFlagged[storeCode]) {
-      verifyFlagged[storeCode] = true;
+    if (!verifyFlagged['verify:' + storeCode]) {
+      verifyFlagged['verify:' + storeCode] = true;
       const mins = Math.round(wait / 60000);
       // Cold browser vs. a genuinely dead session — see shangou-daemon for the story.
       const cold = isColdStartChallenge(resolveCdpUrl(storeCode));
@@ -137,15 +141,15 @@ function noteVerifyResult(storeCode, challenged) {
     }
     log(storeCode, `verification challenge — cooling down ~${Math.round(wait / 60000)} min (strike ${s.strikes})`);
   } else {
-    if (verifyFlagged[storeCode]) {
-      verifyFlagged[storeCode] = false;
+    if (verifyFlagged['verify:' + storeCode]) {
+      verifyFlagged['verify:' + storeCode] = false;
       logSync(storeCode, 'verify_cleared', 'ok', null, 'verification cleared — tracking resumed');
       sendOpsAlert(`✅ 青云聚信 ${storeCode} 已恢复，配送跟踪继续\nQingyun ${storeCode} recovered — tracking resumed`);
     }
     s.strikes = 0; s.until = 0;
   }
 }
-const downFlagged = {};
+const downFlagged = alerts; // keyed 'login:<storeCode>'
 // A single isLoggedIn() false is usually a transient blip (residential-proxy hiccup
 // or an H5guard signing retry) that clears on the very next poll — 2026-07-16 a lone
 // skipped poll paged ops at 03:21 and self-healed 5min later. Only alert once the
@@ -155,7 +159,7 @@ const LOGIN_DOWN_GRACE = Number(process.env.QINGYUN_LOGIN_DOWN_GRACE || 3);
 // Bootstrap = logged in but no captured order/list to replay (page reloaded).
 // 2026-07-02: yuexiu sat in this state 10h unnoticed — alert once it persists.
 const bootstrapSince = {};
-const bootstrapFlagged = {};
+const bootstrapFlagged = alerts; // keyed 'bootstrap:<storeCode>'
 const BOOTSTRAP_ALERT_MS = Number(process.env.QINGYUN_BOOTSTRAP_ALERT_MS || 10 * 60_000);
 
 // ── Match a Qingyun delivery to a roots order ──────────────────────────────────
@@ -495,16 +499,16 @@ async function pollStore(storeCode) {
       log(storeCode, `not logged in — skipping poll (${loginFailStreak[storeCode]}/${LOGIN_DOWN_GRACE})`);
       // Debounce: only page ops once the session has stayed down for GRACE consecutive
       // polls — a lone transient blip clears before we ever alert (no more 3am false alarms).
-      if (!downFlagged[storeCode] && loginFailStreak[storeCode] >= LOGIN_DOWN_GRACE) {
-        downFlagged[storeCode] = true;
+      if (!downFlagged['login:' + storeCode] && loginFailStreak[storeCode] >= LOGIN_DOWN_GRACE) {
+        downFlagged['login:' + storeCode] = true;
         logSync(storeCode, 'needs_login', 'error', null, '青云 Chrome not logged in — scan the QR on the box');
         sendOpsAlert(`🔴 青云聚信 ${storeCode} 未登录，配送跟踪已停止，需要扫码重新登录\nQingyun ${storeCode} not logged in — tracking stopped, scan QR to re-login`);
       }
       heartbeat(storeCode, false);
       return;
     }
-    const wasDown = downFlagged[storeCode];
-    downFlagged[storeCode] = false;
+    const wasDown = downFlagged['login:' + storeCode];
+    downFlagged['login:' + storeCode] = false;
     loginFailStreak[storeCode] = 0;
     heartbeat(storeCode, true);
 
@@ -522,19 +526,19 @@ async function pollStore(storeCode) {
       // silently stops until a human reopens the 配送中 view. Page ops once it has
       // clearly persisted — a fresh login/redirect settles well inside the grace.
       if (!bootstrapSince[storeCode]) bootstrapSince[storeCode] = Date.now();
-      if (!bootstrapFlagged[storeCode] && Date.now() - bootstrapSince[storeCode] >= BOOTSTRAP_ALERT_MS) {
-        bootstrapFlagged[storeCode] = true;
+      if (!bootstrapFlagged['bootstrap:' + storeCode] && Date.now() - bootstrapSince[storeCode] >= BOOTSTRAP_ALERT_MS) {
+        bootstrapFlagged['bootstrap:' + storeCode] = true;
         sendOpsAlert(`🔴 青云聚信 ${storeCode} 页面丢失订单列表（可能页面被刷新），配送跟踪已停止 — 请在盒子上打开订单页的配送中标签\nQingyun ${storeCode} lost the captured order list (page likely reloaded) — tracking stopped; open the 配送中 tab on the box`);
       }
       log(storeCode, 'no order/list captured yet — open the order page in the genuine Chrome (待取货/配送中 view)');
       logSync(storeCode, 'bootstrap', 'ok', null, 'waiting for the app to issue an order/list (open the order page)');
       return;
     }
-    if (bootstrapFlagged[storeCode]) {
+    if (bootstrapFlagged['bootstrap:' + storeCode]) {
       sendOpsAlert(`✅ 青云聚信 ${storeCode} 订单列表已恢复，配送跟踪继续\nQingyun ${storeCode} order list recaptured — tracking resumed`);
     }
     bootstrapSince[storeCode] = 0;
-    bootstrapFlagged[storeCode] = false;
+    bootstrapFlagged['bootstrap:' + storeCode] = false;
     if (!ok) return;
 
     let tracked = 0;
@@ -597,8 +601,8 @@ async function main() {
 
     if (!(await proxyHealthy())) {
       proxyFailStreak++;
-      if (!proxyDownFlagged && proxyFailStreak >= PROXY_DOWN_GRACE) {
-        proxyDownFlagged = true;
+      if (!alerts['proxy_down'] && proxyFailStreak >= PROXY_DOWN_GRACE) {
+        alerts['proxy_down'] = true;
         console.log(`[qingyun-daemon] ${new Date().toISOString()} PROXY UNREACHABLE (${maskProxy(PROXY)}) — pausing (session NOT logged out)`);
         for (const s of STORES) logSync(s, 'proxy_down', 'error', null, 'proxy cannot reach Meituan — tracking paused');
         sendOpsAlert(`🔴 青云聚信 代理掉线，无法连接，配送跟踪已暂停（未掉登录）\nQingyun proxy down — tracking paused (not logged out)`);
@@ -607,8 +611,8 @@ async function main() {
       continue;
     }
     proxyFailStreak = 0;
-    if (proxyDownFlagged) {
-      proxyDownFlagged = false;
+    if (alerts['proxy_down']) {
+      alerts['proxy_down'] = false;
       console.log(`[qingyun-daemon] ${new Date().toISOString()} proxy recovered — resuming`);
       for (const s of STORES) logSync(s, 'proxy_up', 'ok', null, 'proxy reachable again — tracking resumed');
       sendOpsAlert(`✅ 青云聚信 代理已恢复，配送跟踪继续\nQingyun proxy recovered — tracking resumed`);

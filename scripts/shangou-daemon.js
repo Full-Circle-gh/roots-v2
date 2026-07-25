@@ -39,6 +39,9 @@ const { sendOpsAlert } = require('../lib/ops-alert');
 // Hold off on channel calls while the holder Chrome is freshly launched — a cold
 // browser that gets hit seconds after launch is what earns the 风控 403.
 const { coldMsRemaining, isColdStartChallenge } = require('../lib/browser-warmup');
+// Ops-alert latches that survive a restart, so a bounce mid-incident can't swallow
+// the recovery message the group is waiting on.
+const { latchStore } = require('../lib/alert-latch');
 
 const SHANGOU_STORES = (process.env.SHANGOU_STORES || 'yuexiu')
   .split(',').map(s => s.trim()).filter(Boolean);
@@ -106,7 +109,9 @@ function proxyHealthy(timeoutSec = 8) {
   });
 }
 function maskProxy(u) { return String(u || '').replace(/:[^:@/]+@/, ':****@'); }
-let proxyDownFlagged = false;
+// Alert latches live on disk (lib/alert-latch) so a daemon restart mid-incident
+// still knows it owes the ops group a recovery message.
+const alerts = latchStore('shangou');
 // Debounce: the residential SOCKS5 exit flaps for seconds at a time. Pause sync on
 // the first missed probe (safe), but only PAGE ops after a sustained outage so brief
 // blips don't spam the alerts group. ~grace × QUEUE_CHECK_MS.
@@ -121,7 +126,7 @@ const PROXY_DOWN_GRACE = Number(process.env.MEITUAN_PROXY_DOWN_GRACE || 3);
 const VERIFY_COOLDOWN_BASE_MS = 30 * 60_000;      // first strike: 30 min
 const VERIFY_COOLDOWN_MAX_MS  = 4 * 60 * 60_000;  // cap: 4 h
 const verifyState   = {}; // storeCode -> { until: epochMs, strikes: n }
-const verifyFlagged = {}; // storeCode -> bool (log once per transition)
+const verifyFlagged = alerts; // keyed 'verify:<storeCode>' (log once per transition)
 
 function inVerifyCooldown(storeCode, now = Date.now()) {
   const s = verifyState[storeCode];
@@ -137,8 +142,8 @@ function noteVerifyResult(storeCode, challenged) {
     s.strikes = Math.min(s.strikes + 1, 8);
     const wait = Math.min(VERIFY_COOLDOWN_BASE_MS * 2 ** (s.strikes - 1), VERIFY_COOLDOWN_MAX_MS);
     s.until = Date.now() + wait;
-    if (!verifyFlagged[storeCode]) {
-      verifyFlagged[storeCode] = true;
+    if (!verifyFlagged['verify:' + storeCode]) {
+      verifyFlagged['verify:' + storeCode] = true;
       const mins = Math.round(wait / 60000);
       // A challenge minutes after the holder Chrome relaunched is the cold browser,
       // not an expired session: the profile is still logged in and the cool-down
@@ -154,8 +159,8 @@ function noteVerifyResult(storeCode, challenged) {
     }
     log(storeCode, `verification challenge — cooling down ~${Math.round(wait / 60000)} min (strike ${s.strikes})`);
   } else {
-    if (verifyFlagged[storeCode]) {
-      verifyFlagged[storeCode] = false;
+    if (verifyFlagged['verify:' + storeCode]) {
+      verifyFlagged['verify:' + storeCode] = false;
       logSync(storeCode, 'verify_cleared', 'ok', null, 'verification cleared — sync resumed');
       sendOpsAlert(`✅ 美团闪购 ${storeCode} 已恢复，库存同步继续\nMeituan 闪购 ${storeCode} recovered — stock sync resumed`);
     }
@@ -183,7 +188,7 @@ function storeIdFor(storeCode) {
 }
 
 // Latch so "needs login" / "chrome down" is logged once per transition.
-const downFlagged = {};
+const downFlagged = alerts; // keyed 'login:<storeCode>'
 const rawCaptured = {}; // store_code → true once we've logged a raw order sample
 
 // ── Stock push ────────────────────────────────────────────────────────────────
@@ -239,16 +244,16 @@ async function processStockQueue() {
         // challenge gets the escalating cool-down, not a "go log in" alert (and we
         // stop re-hitting it every 10s).
         if (browser.verificationRequired) { noteVerifyResult(storeCode, true); continue; }
-        if (!downFlagged[storeCode]) {
-          downFlagged[storeCode] = true;
+        if (!downFlagged['login:' + storeCode]) {
+          downFlagged['login:' + storeCode] = true;
           logSync(storeCode, 'needs_login', 'error', null, '闪购 Chrome not logged in — a human must log in on the box');
           log(storeCode, 'not logged in — skipping stock push');
           sendOpsAlert(`🔴 美团闪购 ${storeCode} 未登录，库存同步已停止，需要重新登录\nMeituan 闪购 ${storeCode} not logged in — stock sync stopped, needs re-login`);
         }
         continue;
       }
-      const wasDown = downFlagged[storeCode];
-      downFlagged[storeCode] = false;
+      const wasDown = downFlagged['login:' + storeCode];
+      downFlagged['login:' + storeCode] = false;
       if (wasDown) sendOpsAlert(`✅ 美团闪购 ${storeCode} 重新登录成功，库存同步继续\nMeituan 闪购 ${storeCode} logged back in — stock sync resumed`);
       noteVerifyResult(storeCode, false); // clean call — clear any prior cool-down
 
@@ -739,8 +744,8 @@ async function main() {
     // and log the outage once. No-op in direct mode (no proxy configured).
     if (!(await proxyHealthy())) {
       proxyFailStreak++;
-      if (!proxyDownFlagged && proxyFailStreak >= PROXY_DOWN_GRACE) {
-        proxyDownFlagged = true;
+      if (!alerts['proxy_down'] && proxyFailStreak >= PROXY_DOWN_GRACE) {
+        alerts['proxy_down'] = true;
         console.log(`[shangou-daemon] ${new Date().toISOString()} PROXY UNREACHABLE (${maskProxy(SHANGOU_PROXY)}) — pausing sync until it recovers (the session is NOT logged out)`);
         for (const s of SHANGOU_STORES) logSync(s, 'proxy_down', 'error', null, 'proxy cannot reach Meituan — sync paused');
         sendOpsAlert(`🔴 美团闪购 代理掉线，无法连接美团，同步已暂停（未掉登录）\nMeituan 闪购 proxy down — can't reach Meituan, sync paused (not logged out)`);
@@ -749,8 +754,8 @@ async function main() {
       continue;
     }
     proxyFailStreak = 0;
-    if (proxyDownFlagged) {
-      proxyDownFlagged = false;
+    if (alerts['proxy_down']) {
+      alerts['proxy_down'] = false;
       console.log(`[shangou-daemon] ${new Date().toISOString()} proxy recovered — resuming sync`);
       for (const s of SHANGOU_STORES) logSync(s, 'proxy_up', 'ok', null, 'proxy reachable again — sync resumed');
       sendOpsAlert(`✅ 美团闪购 代理已恢复，同步继续\nMeituan 闪购 proxy recovered — sync resumed`);

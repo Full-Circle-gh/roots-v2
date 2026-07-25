@@ -42,6 +42,8 @@ try {
 const db = require('../database');
 const { getBrowser, closeAll } = require('../lib/meituan-browser');
 const { sendOpsAlert } = require('../lib/ops-alert');
+// Ops-alert latches that survive a restart (see lib/alert-latch).
+const { latchStore } = require('../lib/alert-latch');
 
 // Stores handled by a DIFFERENT channel daemon (e.g. yuexiu on 闪购/shangou-sync).
 // Listed here so THIS 外卖 daemon never polls their (logged-out) e.waimai session or
@@ -174,7 +176,9 @@ function proxyHealthy(timeoutSec = 8) {
 }
 function maskProxy(u) { return String(u || '').replace(/:[^:@/]+@/, ':****@'); }
 // Latch so a proxy outage is logged once per transition, not every tick.
-let proxyDownFlagged = false;
+// Alert latches live on disk (lib/alert-latch) so a daemon restart mid-incident
+// still knows it owes the ops group a recovery message.
+const alerts = latchStore('meituan');
 // Debounce: the residential SOCKS5 exit (store Lenovo over WireGuard) flaps for a
 // few seconds at a time. We still pause sync on the first missed probe (safe), but
 // only PAGE ops after MEITUAN_PROXY_DOWN_GRACE consecutive failures (~grace × 10s
@@ -184,7 +188,7 @@ const PROXY_DOWN_GRACE = Number(process.env.MEITUAN_PROXY_DOWN_GRACE || 3);
 
 // Per-store latch so a 验证中心 challenge is logged once on transition, not
 // every poll (which would flood the sync log the admin tab reads).
-const verifyFlagged = {};
+const verifyFlagged = alerts; // keyed 'verify:<storeCode>'
 
 // Per-store latch so the "store closed → pausing polls" / "reopened → resuming"
 // edge is logged once on transition, not on every loop tick.
@@ -197,7 +201,7 @@ const closedFlagged = {};
 // at ~04:35 and was only noticed hours later via a missing order). Track the first
 // crash-class failure; if it persists past DOWN_ALERT_AFTER_MS, page ops once.
 // Cleared (with a recovery alert) the moment a poll comes back clean.
-const browserDown = {}; // storeCode -> { since: epochMs|null, alerted: bool }
+const browserDown = {}; // storeCode -> { since: epochMs|null } (the alerted latch is on disk)
 const DOWN_ALERT_AFTER_MS = 10 * 60_000; // ~5 failed order polls before paging
 
 // Does this error look like the browser/page died (vs. a verify/proxy issue,
@@ -212,20 +216,21 @@ function isBrowserDeadError(msg) {
 // pages once it has persisted past the threshold. Non-crash failures are ignored
 // here (verify/proxy own their own alerts) so we don't double-page.
 function noteBrowserHealth(storeCode, ok, errMsg) {
-  const s = browserDown[storeCode] || (browserDown[storeCode] = { since: null, alerted: false });
+  const s = browserDown[storeCode] || (browserDown[storeCode] = { since: null });
+  const latch = 'browser_down:' + storeCode;   // on disk: survives a daemon restart
   if (ok) {
-    if (s.alerted) {
+    if (alerts[latch]) {
       logSync(storeCode, 'browser_recovered', 'ok', null, 'browser back up — sync resumed');
       sendOpsAlert(`✅ 美团外卖 ${storeCode} 浏览器已恢复，库存/订单同步继续\nMeituan 外卖 ${storeCode} browser recovered — stock/order sync resumed`);
     }
-    s.since = null; s.alerted = false;
+    s.since = null; alerts[latch] = false;
     return;
   }
   if (!isBrowserDeadError(errMsg)) return; // not our concern
   const now = Date.now();
   if (s.since == null) s.since = now;
-  if (!s.alerted && now - s.since >= DOWN_ALERT_AFTER_MS) {
-    s.alerted = true;
+  if (!alerts[latch] && now - s.since >= DOWN_ALERT_AFTER_MS) {
+    alerts[latch] = true;
     const mins = Math.round((now - s.since) / 60000);
     logSync(storeCode, 'browser_down', 'error', null,
       `browser keeps crashing (~${mins} min) — auto-relaunch not sticking, may need the box`);
@@ -257,16 +262,16 @@ function noteVerifyResult(storeCode, challenged) {
     s.strikes = Math.min(s.strikes + 1, 8);
     const wait = Math.min(VERIFY_COOLDOWN_BASE_MS * 2 ** (s.strikes - 1), VERIFY_COOLDOWN_MAX_MS);
     s.until = Date.now() + wait;
-    if (!verifyFlagged[storeCode]) {
-      verifyFlagged[storeCode] = true;
+    if (!verifyFlagged['verify:' + storeCode]) {
+      verifyFlagged['verify:' + storeCode] = true;
       logSync(storeCode, 'verify_required', 'error', null,
         `Meituan 验证中心 challenge — a human must pass the captcha; backing off ~${Math.round(wait / 60000)} min`);
       sendOpsAlert(`🔴 美团外卖 ${storeCode} 掉线：验证中心风控，同步已暂停，需要人工验证\nMeituan 外卖 ${storeCode} disconnected (验证中心) — sync paused, needs a human to pass the captcha`);
     }
     log(storeCode, `verification challenge — cooling down ~${Math.round(wait / 60000)} min (strike ${s.strikes})`);
   } else {
-    if (verifyFlagged[storeCode]) {
-      verifyFlagged[storeCode] = false;
+    if (verifyFlagged['verify:' + storeCode]) {
+      verifyFlagged['verify:' + storeCode] = false;
       logSync(storeCode, 'verify_cleared', 'ok', null, 'verification cleared — sync resumed');
       sendOpsAlert(`✅ 美团外卖 ${storeCode} 已恢复，同步继续\nMeituan 外卖 ${storeCode} recovered — sync resumed`);
     }
@@ -286,7 +291,7 @@ function noteVerifyResult(storeCode, challenged) {
 // succeeds. Time-latched (not first-blip) so a one-off transient 10002 never pages.
 // See reference_meituan_tianhe_session_binding_loss.
 const BINDING_ALERT_AFTER_MS = 5 * 60_000; // must persist this long before paging
-const bindingDown = {}; // storeCode -> { since: epochMs|null, alerted: bool }
+const bindingDown = {}; // storeCode -> { since: epochMs|null } (the alerted latch is on disk)
 
 // True while a store is currently suspected of having lost its binding — the
 // daemon skips pushing to it (pointless + burns nothing useful); the ~5 min order
@@ -300,19 +305,20 @@ function bindingSuspected(storeCode) {
 // latch and pages once it has persisted past the threshold; lost=false clears it
 // (and pages a recovery if we'd alerted).
 function noteBindingResult(storeCode, lost) {
-  const s = bindingDown[storeCode] || (bindingDown[storeCode] = { since: null, alerted: false });
+  const s = bindingDown[storeCode] || (bindingDown[storeCode] = { since: null });
+  const latch = 'binding_lost:' + storeCode;   // on disk: survives a daemon restart
   if (!lost) {
-    if (s.alerted) {
+    if (alerts[latch]) {
       logSync(storeCode, 'binding_cleared', 'ok', null, 'store binding restored — sync resumed');
       sendOpsAlert(`✅ 美团外卖 ${storeCode} 门店绑定已恢复，库存/订单同步继续\nMeituan 外卖 ${storeCode} store binding restored — stock/order sync resumed`);
     }
-    s.since = null; s.alerted = false;
+    s.since = null; alerts[latch] = false;
     return;
   }
   const now = Date.now();
   if (s.since == null) s.since = now;
-  if (!s.alerted && now - s.since >= BINDING_ALERT_AFTER_MS) {
-    s.alerted = true;
+  if (!alerts[latch] && now - s.since >= BINDING_ALERT_AFTER_MS) {
+    alerts[latch] = true;
     logSync(storeCode, 'binding_lost', 'error', null,
       'session authed but lost store binding (acctId/region) — needs re-login');
     sendOpsAlert(`🔴 美团外卖 ${storeCode} 掉了门店绑定（acctId/区域丢失），库存和订单同步已停，需要重新登录（ops-screen 扫码后选回门店）\nMeituan 外卖 ${storeCode} lost its store binding (acctId/region) — stock + order sync DOWN, needs a re-login (ops-screen QR, then re-select the store).`);
@@ -327,7 +333,7 @@ function noteBindingResult(storeCode, lost) {
 // constantly — a stale clock means something we didn't anticipate has wedged.
 const HEARTBEAT_STALE_MS = Number(process.env.MEITUAN_HEARTBEAT_STALE_MIN || 45) * 60_000;
 const lastOrderFetchOk = {}; // storeCode -> epochMs of last clean order read
-const heartbeatFlagged = {}; // storeCode -> bool latch
+const heartbeatFlagged = alerts; // keyed 'heartbeat:<storeCode>'
 
 function noteOrderFetchOk(storeCode) { lastOrderFetchOk[storeCode] = Date.now(); }
 
@@ -342,13 +348,13 @@ function heartbeatTick(storeCode) {
                   || bindingSuspected(storeCode) || (bd && bd.since != null);
   if (excused || lastOrderFetchOk[storeCode] == null) { lastOrderFetchOk[storeCode] = now; return; }
   const stale = now - lastOrderFetchOk[storeCode] >= HEARTBEAT_STALE_MS;
-  if (stale && !heartbeatFlagged[storeCode]) {
-    heartbeatFlagged[storeCode] = true;
+  if (stale && !heartbeatFlagged['heartbeat:' + storeCode]) {
+    heartbeatFlagged['heartbeat:' + storeCode] = true;
     const mins = Math.round((now - lastOrderFetchOk[storeCode]) / 60000);
     logSync(storeCode, 'sync_stalled', 'error', null, `no successful order read in ~${mins} min during open hours`);
     sendOpsAlert(`🔴 美团外卖 ${storeCode} 同步疑似卡住：营业时间内约 ${mins} 分钟没有一次成功的订单读取，请检查\nMeituan 外卖 ${storeCode} sync looks stalled — no successful order read in ~${mins} min during open hours; please check`);
-  } else if (!stale && heartbeatFlagged[storeCode]) {
-    heartbeatFlagged[storeCode] = false;
+  } else if (!stale && heartbeatFlagged['heartbeat:' + storeCode]) {
+    heartbeatFlagged['heartbeat:' + storeCode] = false;
     logSync(storeCode, 'sync_resumed', 'ok', null, 'order reads succeeding again');
     sendOpsAlert(`✅ 美团外卖 ${storeCode} 同步恢复正常\nMeituan 外卖 ${storeCode} sync back to normal`);
   }
@@ -1028,8 +1034,8 @@ async function main() {
     // simply wait it out and log the outage once (the admin sync log is the alert).
     if (!(await proxyHealthy())) {
       proxyFailStreak++;
-      if (!proxyDownFlagged && proxyFailStreak >= PROXY_DOWN_GRACE) {
-        proxyDownFlagged = true;
+      if (!alerts['proxy_down'] && proxyFailStreak >= PROXY_DOWN_GRACE) {
+        alerts['proxy_down'] = true;
         console.log(`[meituan-daemon] ${new Date().toISOString()} PROXY UNREACHABLE (${maskProxy(process.env.MEITUAN_PROXY_URL)}) — pausing sync until it recovers (the session is NOT logged out)`);
         for (const s of stores) logSync(s.storeCode, 'proxy_down', 'error', null, 'proxy cannot reach Meituan — sync paused');
         sendOpsAlert(`🔴 美团外卖 代理掉线，无法连接美团，同步已暂停（未掉登录）\nMeituan 外卖 proxy down — can't reach Meituan, sync paused (not logged out)`);
@@ -1038,8 +1044,8 @@ async function main() {
       continue;
     }
     proxyFailStreak = 0;
-    if (proxyDownFlagged) {
-      proxyDownFlagged = false;
+    if (alerts['proxy_down']) {
+      alerts['proxy_down'] = false;
       console.log(`[meituan-daemon] ${new Date().toISOString()} proxy recovered — resuming sync`);
       for (const s of stores) logSync(s.storeCode, 'proxy_up', 'ok', null, 'proxy reachable again — sync resumed');
       sendOpsAlert(`✅ 美团外卖 代理已恢复，同步继续\nMeituan 外卖 proxy recovered — sync resumed`);

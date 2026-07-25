@@ -17,6 +17,8 @@ data/*.db.bak.*
 data/roots-pre-*.db*
 # Per-box runtime state (holder-Chrome launch GUIDs for lib/browser-warmup)
 data/chrome-warmup/
+# Per-box runtime state (open ops-alert latches for lib/alert-latch)
+data/alert-latch/
 # Root-level dev database (live data, never commit)
 /roots.db
 /roots.db-shm
