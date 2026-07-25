@@ -1,3 +1,9 @@
+/* global document --
+   a browser global referenced INSIDE page.evaluate() callbacks, which run in the
+   Chrome page context (not Node). Declaring it keeps the deploy's eslint no-undef
+   gate happy without disabling the rule for genuine Node typos. Same treatment as
+   lib/meituan-browser.js and lib/qingyun-browser.js. */
+
 // Standalone Meituan product-list PROBE — for fast, iterative DOM diagnosis
 // without touching the daemon's push loop. Restores the saved session
 // (read-only: never overwrites it), opens the product list, searches for a

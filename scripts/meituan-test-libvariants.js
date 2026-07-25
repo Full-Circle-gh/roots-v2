@@ -1,3 +1,9 @@
+/* global document --
+   a browser global referenced INSIDE page.evaluate() callbacks, which run in the
+   Chrome page context (not Node). Declaring it keeps the deploy's eslint no-undef
+   gate happy without disabling the rule for genuine Node typos. Same treatment as
+   lib/meituan-browser.js and lib/qingyun-browser.js. */
+
 // Integration test for the multi-variant rule in lib/meituan-browser.js.
 // Calls the REAL b.updateStock() for a multi-SKU product at N=2 (low) and N=5
 // (plenty), verifies the per-variant result, then restores the originals.

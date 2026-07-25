@@ -372,7 +372,10 @@
 
   function rImageBand(b, L) {
     var u = b.url || '';
-    if (u && !/^(https?:|data:|blob:)/i.test(u) && u.charAt(0) === '/') u = u; // same-origin pass-through
+    // A same-origin absolute path ('/uploads/x.jpg') is already usable as-is, so
+    // there is deliberately nothing to rewrite here. This used to be an explicit
+    // `u = u` no-op, which eslint's no-self-assign flags as an error and which
+    // blocked any full deploy sync.
     if (!u) return '';
     var caption = pickLang(b.caption_en, b.caption_cn, L) || '';
     var ratio = ['wide', 'square', 'tall', 'natural'].indexOf(b.ratio) >= 0 ? b.ratio : 'wide';

@@ -1,3 +1,9 @@
+/* global document --
+   a browser global referenced INSIDE page.evaluate() callbacks, which run in the
+   Chrome page context (not Node). Declaring it keeps the deploy's eslint no-undef
+   gate happy without disabling the rule for genuine Node typos. Same treatment as
+   lib/meituan-browser.js and lib/qingyun-browser.js. */
+
 // Multi-variant (multi-SKU) product diagnostic + write test.
 // Resolves a product's spuId + category from searchSugByName, opens that
 // category so getSpuListCommon returns the full product (with ALL its skus),
