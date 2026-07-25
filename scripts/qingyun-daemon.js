@@ -106,6 +106,10 @@ function maskProxy(u) { return String(u || '').replace(/:[^:@/]+@/, ':****@'); }
 // Alert latches live on disk (lib/alert-latch) so a daemon restart mid-incident
 // still knows it owes the ops group a recovery message.
 const alerts = latchStore('qingyun');
+// Both qingyun daemons (tianhe + yuexiu) write the same latch dir, so the
+// process-wide proxy latch gets its own key per store set — otherwise one
+// daemon's recovery would clear the other's open incident.
+const PROXY_LATCH = 'proxy_down:' + STORES.join('_');
 // Residential VPN links blip for well under a minute; only page ops after the
 // proxy fails this many consecutive probes (mirrors shangou-daemon).
 let proxyFailStreak = 0;
@@ -519,23 +523,29 @@ async function pollStore(storeCode) {
     if (wasDown) sendOpsAlert(`✅ 青云聚信 ${storeCode} 重新登录成功，配送跟踪继续\nQingyun ${storeCode} logged back in — tracking resumed`);
     noteVerifyResult(storeCode, false);
 
-    const { ok, bootstrap, orders } = await br.getActiveDeliveries();
+    const { ok, bootstrap, orders, reason } = await br.getActiveDeliveries();
     if (br.verificationRequired) { noteVerifyResult(storeCode, true); return; }
     if (bootstrap) {
-      // A page reload wipes the captured order/list body (window.__qy) and tracking
-      // silently stops until a human reopens the 配送中 view. Page ops once it has
-      // clearly persisted — a fresh login/redirect settles well inside the grace.
+      // EVERY order/list tab call failed and the self-heal drive (re-arm capture →
+      // order page → 配送中 tab → reload) didn't restore it. The old alert here said
+      // "lost the captured order list — open the 配送中 tab", which described the
+      // capture-replay design the poll no longer uses: since order/list moved to our
+      // own signed calls, this state means the page can't reach the API at all. Say
+      // that, and carry the last failure so whoever gets paged knows whether they're
+      // walking to the box for a risk-control block, a dead session, or a hung page.
       if (!bootstrapSince[storeCode]) bootstrapSince[storeCode] = Date.now();
       if (!bootstrapFlagged['bootstrap:' + storeCode] && Date.now() - bootstrapSince[storeCode] >= BOOTSTRAP_ALERT_MS) {
         bootstrapFlagged['bootstrap:' + storeCode] = true;
-        sendOpsAlert(`🔴 青云聚信 ${storeCode} 页面丢失订单列表（可能页面被刷新），配送跟踪已停止 — 请在盒子上打开订单页的配送中标签\nQingyun ${storeCode} lost the captured order list (page likely reloaded) — tracking stopped; open the 配送中 tab on the box`);
+        const mins = Math.round((Date.now() - bootstrapSince[storeCode]) / 60000);
+        const why = reason ? ` [${reason}]` : '';
+        sendOpsAlert(`🔴 青云聚信 ${storeCode} 订单接口连续约 ${mins} 分钟失败，自动修复无效，配送跟踪已停止 — 请在盒子上打开青云订单页，确认仍处于登录状态${why}\nQingyun ${storeCode} order/list failing for ~${mins} min and self-heal didn't fix it — tracking stopped; open the Qingyun order page on the box and check it's still logged in${why}`);
       }
-      log(storeCode, 'no order/list captured yet — open the order page in the genuine Chrome (待取货/配送中 view)');
-      logSync(storeCode, 'bootstrap', 'ok', null, 'waiting for the app to issue an order/list (open the order page)');
+      log(storeCode, `order/list unavailable — self-heal did not restore it${reason ? ` (${reason})` : ''}`);
+      logSync(storeCode, 'bootstrap', 'error', null, `order/list unavailable — self-heal did not restore it${reason ? ` (${reason})` : ''}`);
       return;
     }
     if (bootstrapFlagged['bootstrap:' + storeCode]) {
-      sendOpsAlert(`✅ 青云聚信 ${storeCode} 订单列表已恢复，配送跟踪继续\nQingyun ${storeCode} order list recaptured — tracking resumed`);
+      sendOpsAlert(`✅ 青云聚信 ${storeCode} 订单接口已恢复，配送跟踪继续\nQingyun ${storeCode} order/list answering again — tracking resumed`);
     }
     bootstrapSince[storeCode] = 0;
     bootstrapFlagged['bootstrap:' + storeCode] = false;
@@ -601,8 +611,8 @@ async function main() {
 
     if (!(await proxyHealthy())) {
       proxyFailStreak++;
-      if (!alerts['proxy_down'] && proxyFailStreak >= PROXY_DOWN_GRACE) {
-        alerts['proxy_down'] = true;
+      if (!alerts[PROXY_LATCH] && proxyFailStreak >= PROXY_DOWN_GRACE) {
+        alerts[PROXY_LATCH] = true;
         console.log(`[qingyun-daemon] ${new Date().toISOString()} PROXY UNREACHABLE (${maskProxy(PROXY)}) — pausing (session NOT logged out)`);
         for (const s of STORES) logSync(s, 'proxy_down', 'error', null, 'proxy cannot reach Meituan — tracking paused');
         sendOpsAlert(`🔴 青云聚信 代理掉线，无法连接，配送跟踪已暂停（未掉登录）\nQingyun proxy down — tracking paused (not logged out)`);
@@ -611,8 +621,8 @@ async function main() {
       continue;
     }
     proxyFailStreak = 0;
-    if (alerts['proxy_down']) {
-      alerts['proxy_down'] = false;
+    if (alerts[PROXY_LATCH]) {
+      alerts[PROXY_LATCH] = false;
       console.log(`[qingyun-daemon] ${new Date().toISOString()} proxy recovered — resuming`);
       for (const s of STORES) logSync(s, 'proxy_up', 'ok', null, 'proxy reachable again — tracking resumed');
       sendOpsAlert(`✅ 青云聚信 代理已恢复，配送跟踪继续\nQingyun proxy recovered — tracking resumed`);
