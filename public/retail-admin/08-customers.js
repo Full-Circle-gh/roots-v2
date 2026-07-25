@@ -178,6 +178,10 @@ let _CU_KPI_AT = 0;
 let _CU_KPI_DASH = null;
 let _CU_KPI_TOTAL = null;
 let _CU_KPI_RETURNING = null; // { buyers, returners } | null
+// Real per-segment counts from the server: { all, new_week, sleeping, blocked }.
+// Only Blocked is painted today (it always had a count); the other three are
+// fetched now so the chips can show theirs without a second round of plumbing.
+let _CU_SEG_COUNTS = null;
 let _CU_KPI_LANG_HOOKED = false;
 async function cuLoadKpis(force) {
   if (!document.getElementById('cu-stats')) return;
@@ -188,17 +192,21 @@ async function cuLoadKpis(force) {
   try {
     const [dash, tot] = await Promise.all([
       api(`/api/retail-admin/dashboard?from=${todayGz}&to=${todayGz}`),
-      api('/api/retail-admin/customers?includeBlocked=1&pageSize=1&withReturning=1'),
+      api('/api/retail-admin/customers?includeBlocked=1&pageSize=1&withReturning=1&withSegments=1'),
     ]);
     _CU_KPI_DASH = dash.data || {};
     _CU_KPI_TOTAL = (tot && typeof tot.total === 'number') ? tot.total : null;
     _CU_KPI_RETURNING = (tot && tot.returning) ? tot.returning : null;
+    _CU_SEG_COUNTS = (tot && tot.segments) ? tot.segments : null;
     cuRenderKpis();
   } catch (e) {}
 }
-// Blocked count, cached for the segment chip (cuLoad paints it too).
+// Blocked count, cached for the segment chip (cuLoad paints it too). Now a
+// real COUNT(is_blocked = 1) from the server; the old total − Σ tier-counts
+// subtraction stays only as the fallback for a response without `segments`.
 let _CU_BLOCKED = 0;
 function cuBlockedCount() {
+  if (_CU_SEG_COUNTS && typeof _CU_SEG_COUNTS.blocked === 'number') return _CU_SEG_COUNTS.blocked;
   const d = _CU_KPI_DASH; if (!d) return 0;
   const activeBase = (d.tiers || []).reduce((s, t) => s + Number(t.n || 0), 0);
   const total = _CU_KPI_TOTAL != null ? _CU_KPI_TOTAL : activeBase;
@@ -208,7 +216,7 @@ function cuRenderKpis() {
   const d = _CU_KPI_DASH; if (!d) return;
   const activeBase = (d.tiers || []).reduce((s, t) => s + Number(t.n || 0), 0);
   const total = _CU_KPI_TOTAL != null ? _CU_KPI_TOTAL : activeBase;
-  _CU_BLOCKED = Math.max(0, total - activeBase);
+  _CU_BLOCKED = cuBlockedCount();
   // Buyers — accounts with at least one order. Same figure Returning rate
   // has always divided by; now it leads the strip instead of raw signups.
   const ret = _CU_KPI_RETURNING;

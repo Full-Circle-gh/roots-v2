@@ -13272,11 +13272,23 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
 
   // Roster segments — the cuts an operator actually reaches for. Timestamps are
   // UTC text, so SQLite's datetime() comparisons work on them directly.
-  // "Sleeping" falls back to the join date for a customer who never logged in,
-  // so an old account that never came back still surfaces.
+  //
+  // "Sleeping" is ORDER recency, not login recency: someone who has bought
+  // before but has placed no paid order in 60 days. That is exactly
+  // audienceWhere()'s activity='lapsed', reused here verbatim so the roster
+  // chip and a broadcast audience can never disagree about who is asleep.
+  // Accounts that never ordered at all are NOT sleeping — the "Never ordered"
+  // stat tile is their cut.
+  const SEG_PAID_IN     = BC_PAID_STATUSES.map(() => '?').join(',');
+  const SEG_PAID_EXISTS = `SELECT 1 FROM retail_orders o WHERE o.customer_id = retail_customers.id AND o.status IN (${SEG_PAID_IN})`;
   if      (segment === 'blocked')  where.push('is_blocked = 1');
   else if (segment === 'new_week') where.push("created_at >= datetime('now', '-7 days')");
-  else if (segment === 'sleeping') where.push("COALESCE(last_login_at, created_at) < datetime('now', '-60 days')");
+  else if (segment === 'sleeping') {
+    where.push(`EXISTS (${SEG_PAID_EXISTS})`);
+    params.push(...BC_PAID_STATUSES);
+    where.push(`NOT EXISTS (${SEG_PAID_EXISTS} AND o.placed_at >= datetime('now', '-60 days'))`);
+    params.push(...BC_PAID_STATUSES);
+  }
 
   if (q) {
     const like = '%' + q + '%';
@@ -13320,7 +13332,7 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
 
   const rows = tdb().prepare(
     `SELECT id, nickname, phone, openid, email, tier_key, lifetime_spend,
-            points_balance, balance, is_blocked, created_at, last_login_at,
+            points_balance, balance, is_blocked, created_at, last_login_at, seen_at,
             (SELECT COUNT(*) FROM retail_orders WHERE customer_id = retail_customers.id) AS orders_count,
             ${CHANNEL_SQL} AS channel
        FROM retail_customers
@@ -13341,7 +13353,30 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
     returning = { buyers: r.buyers || 0, returners: r.returners || 0 };
   }
 
-  res.json({ success: true, data: rows, page, pageSize, total, returning });
+  // Real counts for every roster segment chip (withSegments=1 — only the
+  // stat-strip's grand-total call asks). Each figure is queried with the SAME
+  // predicate the corresponding `segment=` filter applies above, so a chip can
+  // never promise a row count the roster then doesn't produce. Search / tier /
+  // channel filters are deliberately NOT applied: the chips describe the whole
+  // base, exactly as the Blocked chip always has.
+  // Replaces the old client-side derivation of Blocked (total − Σ tier counts).
+  let segments = null;
+  if (req.query.withSegments === '1') {
+    const seg = tdb().prepare(
+      `SELECT
+         COALESCE(SUM(CASE WHEN is_blocked = 0 THEN 1 ELSE 0 END), 0) AS all_count,
+         COALESCE(SUM(CASE WHEN is_blocked = 0 AND created_at >= datetime('now', '-7 days') THEN 1 ELSE 0 END), 0) AS new_week,
+         COALESCE(SUM(CASE WHEN is_blocked = 0
+                            AND EXISTS (${SEG_PAID_EXISTS})
+                            AND NOT EXISTS (${SEG_PAID_EXISTS} AND o.placed_at >= datetime('now', '-60 days'))
+                       THEN 1 ELSE 0 END), 0) AS sleeping,
+         COALESCE(SUM(CASE WHEN is_blocked = 1 THEN 1 ELSE 0 END), 0) AS blocked
+       FROM retail_customers`
+    ).get(...BC_PAID_STATUSES, ...BC_PAID_STATUSES);
+    segments = { all: seg.all_count, new_week: seg.new_week, sleeping: seg.sleeping, blocked: seg.blocked };
+  }
+
+  res.json({ success: true, data: rows, page, pageSize, total, returning, segments });
 });
 
 // List grants for a voucher (who has it, who used it).
@@ -13419,6 +13454,16 @@ router.get('/api/retail-admin/customers/:id', requireRetailAdmin, (req, res) => 
   const customer = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(id);
   if (!customer) return res.status(404).json({ success: false, error: 'not_found' });
 
+  // Mark the record seen by staff the first time ANYONE opens it — same shared
+  // model as retail_orders.seen_at (one stamp, no operator identity, so NULL
+  // means "nobody on this team has opened this", not "you haven't").
+  // Idempotent: only the first open stamps it.
+  if (!customer.seen_at) {
+    const nowIso = new Date().toISOString();
+    try { tdb().prepare('UPDATE retail_customers SET seen_at = ? WHERE id = ? AND seen_at IS NULL').run(nowIso, id); } catch {}
+    customer.seen_at = nowIso;
+  }
+
   const addresses = tdb().prepare(
     'SELECT * FROM retail_customer_addresses WHERE customer_id = ? ORDER BY is_default DESC, id DESC'
   ).all(id);
@@ -13429,8 +13474,16 @@ router.get('/api/retail-admin/customers/:id', requireRetailAdmin, (req, res) => 
        SUM(CASE WHEN status NOT IN ('cancelled','refunded','pending_payment') THEN 1 ELSE 0 END) AS completed_count,
        SUM(CASE WHEN status = 'refunded'  THEN 1 ELSE 0 END) AS refunded_count,
        SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) AS cancelled_count,
-       COALESCE(SUM(CASE WHEN status NOT IN ('cancelled','refunded','pending_payment') THEN total ELSE 0 END), 0) AS revenue,
-       AVG(CASE WHEN status NOT IN ('cancelled','refunded','pending_payment') THEN total ELSE NULL END) AS aov,
+       -- One money measure across the section: SUBTOTAL, the goods total before
+       -- discounts and shipping. That is exactly what the list column
+       -- lifetime_spend accumulates (see the order_earn handler), so the
+       -- drawer's figure and the roster's figure now mean the same thing.
+       -- KNOWN RESIDUAL, recorded not chased: lifetime_spend is only reversed
+       -- by a FULL refund, never reduced by a PARTIAL one. So on a customer
+       -- who has had a partial refund this live figure can sit slightly below
+       -- the stored lifetime_spend. Pre-existing; not introduced here.
+       COALESCE(SUM(CASE WHEN status NOT IN ('cancelled','refunded','pending_payment') THEN subtotal ELSE 0 END), 0) AS revenue,
+       AVG(CASE WHEN status NOT IN ('cancelled','refunded','pending_payment') THEN subtotal ELSE NULL END) AS aov,
        MAX(placed_at) AS last_order_at,
        MIN(placed_at) AS first_order_at
        FROM retail_orders WHERE customer_id = ?`
@@ -13478,12 +13531,36 @@ router.get('/api/retail-admin/customers/:id', requireRetailAdmin, (req, res) => 
   ).get(id).n;
 
   const topItems = tdb().prepare(
-    `SELECT i.name_en, i.name_cn, SUM(i.qty) AS qty, SUM(i.line_total) AS spend
+    // Grouped by PRODUCT IDENTITY, not by the name text snapshotted on the
+    // line — otherwise renaming a product splits one customer's history into
+    // two rows. Reports already group by i.product_id; this is the last query
+    // in the file that didn't.
+    //
+    // Channel lines (meituan / eleme) can carry a NULL product_id when the
+    // item never matched a catalogue product. Grouping on product_id alone
+    // would collapse EVERY unmatched line — across all channels and all
+    // products — into one meaningless row, so those fall back to the name
+    // snapshot as their identity. Matched lines: one row per product.
+    // Unmatched lines: one row per distinct name, which is the best identity
+    // that exists for them.
+    //
+    // SKU resolves order-line snapshot → live product, the same COALESCE
+    // fallback the order drawer uses. MAX() only because a grouped select
+    // needs an aggregate; within a group the value is the same. Eleme never
+    // writes a SKU, so absent is normal and comes back as '' — never a dash.
+    `SELECT MAX(i.product_id) AS product_id,
+            COALESCE(NULLIF(MAX(p.name_en), ''), MAX(i.name_en)) AS name_en,
+            COALESCE(NULLIF(MAX(p.name_cn), ''), MAX(i.name_cn)) AS name_cn,
+            COALESCE(MAX(COALESCE(NULLIF(i.sku, ''), NULLIF(p.sku, ''))), '') AS sku,
+            SUM(i.qty) AS qty, SUM(i.line_total) AS spend
        FROM retail_order_items i
        JOIN retail_orders o ON o.id = i.order_id
+       LEFT JOIN store_products p ON p.id = i.product_id
       WHERE o.customer_id = ?
         AND o.status NOT IN ('cancelled','refunded','pending_payment')
-      GROUP BY i.name_en, i.name_cn
+      GROUP BY CASE WHEN i.product_id IS NULL
+                    THEN 'n:' || COALESCE(i.name_en, '') || '|' || COALESCE(i.name_cn, '')
+                    ELSE 'p:' || i.product_id END
       ORDER BY qty DESC
       LIMIT 5`
   ).all(id);
@@ -13491,7 +13568,10 @@ router.get('/api/retail-admin/customers/:id', requireRetailAdmin, (req, res) => 
   const ordersByMonth = tdb().prepare(
     `SELECT strftime('%Y-%m', placed_at) AS month,
             COUNT(*) AS n,
-            COALESCE(SUM(CASE WHEN status NOT IN ('cancelled','refunded','pending_payment') THEN total ELSE 0 END), 0) AS revenue
+            -- SUBTOTAL, same measure as stats.orders.revenue above, so the
+            -- chart's bars sum to the headline figure instead of overshooting
+            -- it by shipping and undershooting it by discounts.
+            COALESCE(SUM(CASE WHEN status NOT IN ('cancelled','refunded','pending_payment') THEN subtotal ELSE 0 END), 0) AS revenue
        FROM retail_orders
       WHERE customer_id = ?
         AND placed_at >= datetime('now', '-12 months')
