@@ -837,17 +837,24 @@
        with the Dusk automation dot at its end, then lowercase "tacet" in
        Fraunces. Mark stroke = currentColor so it flips ink/paper by theme. -->
   <div class="brand">
-    <!-- Tenant logo (co-brand) — hidden until applyBrand() sets its src from /me.
-         When shown it hides the waveform + wordmark below. data-no-i18n so the
-         translation walker never touches brand assets. -->
-    <img class="brand-logo" id="brandLogoTop" alt="" data-no-i18n>
+    <!-- Tacet lockup — the waveform settling into a straight line (chaos → calm),
+         then lowercase "tacet" in Fraunces. Design-system §8 path VERBATIM; stroke
+         is set optically at this small size (§8a: 3.5 units renders 0.64px and
+         vanishes, so it is held at 1.6px). Stroke = currentColor, so it flips ink
+         (light) / paper (dark) by theme. No Dusk dot — the chrome spends zero Dusk. -->
     <span class="brand-mark" aria-hidden="true">
       <svg viewBox="0 0 340 110" fill="none">
-        <path d="M20 55 C30 15, 40 95, 50 55 C59 22, 68 88, 77 55 C85 30, 93 80, 101 55 C109 38, 117 72, 125 55 C133 44, 141 66, 149 55 C160 50, 171 60, 182 55 C215 55, 260 55, 305 55" stroke="currentColor" stroke-width="7" stroke-linecap="round"/>
-        <circle cx="305" cy="55" r="9" fill="#6E67AF"/>
+        <path d="M20 55 C30 15, 40 95, 50 55 C59 22, 68 88, 77 55 C85 30, 93 80, 101 55 C109 38, 117 72, 125 55 C133 44, 141 66, 149 55 C160 50, 171 60, 182 55 C215 55, 260 55, 305 55" stroke="currentColor" stroke-width="8.8" stroke-linecap="round"/>
       </svg>
     </span>
     <span class="brand-name" data-no-i18n>tacet</span>
+    <!-- Co-brand lockup (§8b) — a 1px hairline then the merchant's own logo
+         (#brandLogoTop, src set by applyBrand()). Tacet first, merchant as the
+         qualifier — both shown TOGETHER (no white-label swap). Hidden until
+         body.cobrand; no logo uploaded ⇒ no hairline, no placeholder, no upload
+         prompt — the tacet lockup sits alone. -->
+    <span class="brand-rule" aria-hidden="true"></span>
+    <img class="brand-logo" id="brandLogoTop" alt="" data-no-i18n>
   </div>
   <!-- Page identity (crumb #tb-crumb, sub-view mirrors #tb-subviews/#tb-pu-subviews,
        ⓘ #tb-info-wrap) removed 2026-07-25 — the topbar is CLOSED (§1.1d). Nothing

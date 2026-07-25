@@ -246,10 +246,15 @@
     color: var(--text-1);
     background: none; border: 0; box-shadow: none;
   }
-  .brand-mark svg { width: 46px; height: 15px; display: block; }
+  /* 20px tall (§8a). Width auto → uniform scale 20/110; stroke-width 8.8 in the
+     340×110 viewBox renders at 1.6px, the optical hold that keeps the decay
+     visible at chrome size (a viewBox-scaled 3.5 would vanish). */
+  .brand-mark svg { height: 20px; width: auto; display: block; }
   .brand .brand-name {
-    font-family: 'Fraunces', Georgia, serif; font-weight: 300; font-size: 17px;
-    letter-spacing: .20em; text-transform: none; color: var(--text-1);
+    /* The one sanctioned Fraunces in product UI — the wordmark. 24px is the
+       design-system minimum wordmark height; Light 300, 0.2em tracking. */
+    font-family: 'Fraunces', Georgia, serif; font-weight: 300; font-size: 24px;
+    line-height: 1; letter-spacing: .20em; text-transform: none; color: var(--text-1);
   }
   .brand .divider {
     width: auto; height: auto; background: none; margin: 0 1px;
@@ -504,10 +509,25 @@
      gone. Logo images are hidden by default; body.cobrand (set once the logo
      loads, by applyBrand()) reveals it. */
   .brand-logo, .brand-mark-img { display: none; object-fit: contain; }
-  body.cobrand .brand .brand-mark { display: none; }  /* topbar waveform */
-  body.cobrand .brand .brand-name { display: none; }  /* topbar name text */
+  /* Co-brand is a LOCKUP, not a swap (§8b, decided 2026-07-25): the tacet mark +
+     wordmark always stay; a tenant's logo is ADDED to their right behind a
+     hairline. The old white-label swap (hiding .brand-mark / .brand-name under
+     body.cobrand) is removed — it showed a logo-merchant no tacet at all. */
   body.cobrand .brand .brand-logo { display: block; }
-  .brand .brand-logo { height: 26px; max-width: 150px; }       /* full logo, topbar/phones */
+  body.cobrand .brand .brand-rule { display: block; }
+  /* Hairline between the tacet lockup and the merchant logo — 1px, 24px tall,
+     16px either side (§8b). .brand's 10px flex gap sits on both sides too, so the
+     margin is 6px to total 16px; if that gap changes, retune this. */
+  .brand-rule {
+    display: none; flex: none; width: 1px; height: 24px;
+    margin: 0 6px; background: var(--td-border);
+  }
+  /* Merchant logo fit (§8b): scale to fit inside max 24px tall / 210px wide,
+     preserving aspect (object-fit:contain above) — never crop, never stretch.
+     The 14px min-height FLOOR is delivered by the 210px width ceiling (a 15:1
+     banner lands at exactly 14px), NOT a literal min-height, which would letterbox
+     a wide logo. Past 15:1 the ceiling wins and it renders shorter — ugly, bounded. */
+  .brand .brand-logo { max-height: 24px; max-width: 210px; width: auto; height: auto; }
   /* "runs on tacet" credit — pinned to the rail foot via margin-top:auto. */
   .brand-credit {
     margin-top: auto; display: flex; align-items: center; gap: 9px;
