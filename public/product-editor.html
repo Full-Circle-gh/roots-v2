@@ -1034,10 +1034,13 @@
     border-radius: 38px;
     padding: 10px;
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55), 0 2px 8px rgba(0,0,0,.3);
-    /* Fixed-size device (like the Mini App Editor) — the canvas scrolls around
-       it instead of the frame shrinking to fit, so the phone stays full-size at
-       any text-size zoom rather than squishing short. */
-    flex-shrink: 0;
+    /* Shrinks to the space the canvas actually has. Was flex-shrink:0, which
+       made the canvas scroll around an oversized phone — and since the phone
+       has its own scrollbar it ate the wheel, so that outer scroll was
+       unreachable. Letting the frame shrink means the canvas never overflows,
+       so the wheel always lands on the phone's own scroll. */
+    flex: 0 1 auto;
+    min-height: 0;
     display: flex;
     flex-direction: column;
   }
@@ -1046,15 +1049,13 @@
     width: 100%;
     /* Real device viewport height — the product page scrolls inside the screen.
        Was flex-fill, which let the frame collapse on short/zoomed windows.
-       Capped to what the canvas can actually show (topbar 56 + pad 48 + langbar
-       44 + frame pad 20 = 168, plus 4px slack): at a flat 812px the frame
-       overflowed the canvas on any laptop, and since the screen has its own
-       scrollbar it swallowed the wheel — the canvas could never scroll, so the
-       bottom of the phone was unreachable. Fitting the height means nothing
-       overflows. Measured against .pa-prev-langbar; re-check if that bar grows. */
-    height: min(812px, calc(100vh - 172px));
-    min-height: 420px;
-    flex: none;
+       812 is the flex BASE, not a floor: flex-shrink lets it give back whatever
+       the canvas can't show, so the phone is full-size on a tall monitor and
+       fits itself to a laptop without the canvas ever overflowing. No viewport
+       arithmetic — it adapts to any zoom, DPI, or window size on its own. */
+    height: 812px;
+    flex: 1 1 auto;
+    min-height: 320px;
     border-radius: 30px;
     overflow-y: auto; overflow-x: hidden;
     position: relative;
