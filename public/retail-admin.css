@@ -8038,6 +8038,17 @@
     --td-surface:    #18233A;
     --td-raised:     #1E2A44;
     --td-border:     #2A3550;
+    /* --td-header = the column-header band on EVERY table. Deliberately deeper
+       than --td-raised, which sat too close to the body rows to separate the
+       header at a glance.
+       --td-unseen = the row surface for a record nobody has opened yet.
+       Deliberately LIGHTER than --td-header: a row's unseen state is transient
+       content and must never read as heavy as the page's own chrome. In any
+       frame the header band must read visibly stronger than any unseen row.
+       Pairs with a Sage left edge drawn as an inset box-shadow, never a border.
+       Do not "correct" the two toward each other. */
+    --td-header:     #364058;
+    --td-unseen:     #182329;
     --td-text:       #FBF9F4;
     --td-text2:      #9AA3B2;
     --td-heat-rgb:   251, 249, 244;   /* heatmap tint = the theme's ink, as rgb() parts */
@@ -8058,6 +8069,8 @@
     --td-surface:    #FFFFFF;
     --td-raised:     #F6F3EC;
     --td-border:     #E4E0D5;
+    --td-header:     #DAD5C6;
+    --td-unseen:     #F4F5F0;
     --td-text:       #111A2B;
     --td-text2:      #58606E;
     --td-heat-rgb:   17, 26, 43;
