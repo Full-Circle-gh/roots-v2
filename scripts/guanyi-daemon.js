@@ -32,6 +32,7 @@ try {
 
 const db = require('../database');
 const { getBrowser, closeAll } = require('../lib/guanyi-browser');
+const { sendOpsAlert } = require('../lib/ops-alert');
 
 // Defensive: ensure the pickup-inference tables exist even if the deployed
 // database.js predates them (the box is deployed by scp, not a migration run).
@@ -68,6 +69,24 @@ const RECONCILE_MS       = Number(process.env.GUANYI_RECONCILE_MS || 60_000);   
 const PICKUP_CAP         = Number(process.env.GUANYI_PICKUP_CAP || 50);          // a single drop bigger than this is flagged, not applied
 const SETTLE_TIMEOUT_MS  = Number(process.env.GUANYI_SETTLE_TIMEOUT_MS || 180_000); // give a push this long to settle before trusting drift
 let _lastReconcileAt = 0;
+
+// ── Session health + auto-heal ────────────────────────────────────────────────
+// The stock push is only as good as the Guanyi login behind it. When that session
+// dies, pushes stop, Guanyi freezes at its last numbers, and gzgrocery keeps
+// selling against them — silently, because processStockQueue only ever ran when
+// something was queued and nothing here ever paged ops (unlike qingyun-daemon).
+// So: probe the session on a timer whether or not work is pending, alert the
+// System-Alerts WeCom group once it has genuinely gone (debounced, mirroring
+// QINGYUN_LOGIN_DOWN_GRACE), alert again on recovery, and re-assert Tianhe's
+// numbers for everything whose push died while we were locked out.
+const HEALTH_MS        = Number(process.env.GUANYI_HEALTH_MS || 60_000);
+const LOGIN_DOWN_GRACE = Number(process.env.GUANYI_LOGIN_DOWN_GRACE || 3);
+const AUTOHEAL         = (process.env.GUANYI_AUTOHEAL || 'on').toLowerCase() !== 'off';
+const RESYNC_MAX       = Number(process.env.GUANYI_RESYNC_MAX_PER_CYCLE || 25);
+const loginFailStreak = {};   // storeCode -> consecutive failed probes
+const downFlagged     = {};   // storeCode -> already alerted for this outage
+const healedOnce      = {};   // storeCode -> heal has run since process start
+let _lastHealthAt = 0;
 
 // Don't fire on an exact fixed cadence.
 function jitter(baseMs, frac = 0.3) {
@@ -455,12 +474,182 @@ function reconcileOne(storeCode, m, cur) {
   return detected;
 }
 
+// ── Session health + auto-heal ────────────────────────────────────────────────
+
+// Every store we mirror stock into (the map is the authority; fall back to the
+// configured single store so a fresh install still gets probed).
+function guanyiStoreCodes() {
+  try {
+    const rows = db.prepare(`SELECT DISTINCT store_code FROM guanyi_product_map WHERE store_code IS NOT NULL AND store_code <> ''`).all();
+    if (rows.length) return rows.map(r => r.store_code);
+  } catch (e) { /* table missing on an older DB */ }
+  return [GUANYI_STORE_CODE];
+}
+
+// Queue one product at the stock it has RIGHT NOW. Never re-queues a stale
+// target: the number that failed to push minutes or days ago is not necessarily
+// the number we hold today, and pushing it would write the wrong figure into
+// Guanyi. Skips products that already have work waiting.
+function enqueueCurrentStock(storeCode, retailStoreId, productId) {
+  const pending = db.prepare(
+    `SELECT 1 FROM guanyi_sync_queue WHERE retail_store_id=? AND product_id=? AND status IN ('pending','processing')`
+  ).get(retailStoreId, productId);
+  if (pending) return false;
+  const row = db.prepare(
+    `SELECT COALESCE(physical_qty, 0) AS q FROM retail_store_stock WHERE store_id=? AND product_id=?`
+  ).get(retailStoreId, productId);
+  db.prepare(`INSERT INTO guanyi_sync_queue (retail_store_id, product_id, store_code, new_qty, status)
+              VALUES (?, ?, ?, ?, 'pending')`).run(retailStoreId, productId, storeCode, row ? row.q : 0);
+  return true;
+}
+
+// Put right whatever went stale while the push was broken. Runs on the first
+// healthy probe after start-up and after every recovery, with the listing we
+// just read so no extra Guanyi traffic is needed.
+function autoHeal(storeCode, listing) {
+  if (!AUTOHEAL) return;
+  const bySku = new Map();
+  for (const r of listing.rows) bySku.set(String(r.skuId), r);
+
+  const maps = db.prepare(`
+    SELECT m.product_id, m.retail_store_id, m.guanyi_sku_id, m.sync_enabled, m.guanyi_name,
+           p.sku, p.name_en, COALESCE(s.physical_qty, 0) AS tianhe_qty
+      FROM guanyi_product_map m
+      LEFT JOIN store_products p ON p.id = m.product_id
+      LEFT JOIN retail_store_stock s ON s.product_id = m.product_id AND s.store_id = m.retail_store_id
+     WHERE m.store_code = ? AND m.guanyi_sku_id IS NOT NULL
+  `).all(storeCode);
+  if (!maps.length) return;
+
+  // A partial or garbage listing read must never drive a mass re-push. If most of
+  // our mapped SKUs are missing from what we just read, treat the read as bad.
+  const seen = maps.filter(m => bySku.has(String(m.guanyi_sku_id))).length;
+  if (seen < maps.length * 0.5) {
+    log(storeCode, `auto-heal: only ${seen}/${maps.length} mapped SKUs in the listing read — treating as a bad read, skipping`);
+    logSync(storeCode, 'autoheal', 'skip', { seen, mapped: maps.length }, 'bad listing read');
+    return;
+  }
+
+  const reenabled = [], revived = [], resynced = [];
+
+  // 1. Mappings the daemon switched off itself (guanyi-daemon marks 已停用 SKUs
+  //    sync_enabled=0 and nothing ever turned them back on). If Guanyi lists the
+  //    SKU as active again, put it back in the fan-out.
+  for (const m of maps) {
+    if (m.sync_enabled) continue;
+    const cur = bySku.get(String(m.guanyi_sku_id));
+    if (!cur || cur.disabled) continue;
+    db.prepare(`UPDATE guanyi_product_map SET sync_enabled=1, updated_at=CURRENT_TIMESTAMP
+                 WHERE retail_store_id=? AND product_id=?`).run(m.retail_store_id, m.product_id);
+    enqueueCurrentStock(storeCode, m.retail_store_id, m.product_id);
+    reenabled.push(m.sku || m.guanyi_name || m.product_id);
+  }
+
+  // 2. Queue rows that died. processStockQueue only reads status='pending' AND
+  //    attempts<3, so anything that burned its attempts (or hit a hard error while
+  //    we were logged out) would sit dead for ever. Retire them and queue a fresh
+  //    push at today's stock.
+  const dead = db.prepare(`
+    SELECT q.id, q.retail_store_id, q.product_id, p.sku
+      FROM guanyi_sync_queue q LEFT JOIN store_products p ON p.id = q.product_id
+     WHERE q.store_code = ? AND q.status = 'error'
+  `).all(storeCode);
+  const retire = db.prepare(`UPDATE guanyi_sync_queue SET status='done', processed_at=CURRENT_TIMESTAMP,
+                                    last_error='auto-healed — re-queued at current stock' WHERE id=?`);
+  for (const d of dead) {
+    if (enqueueCurrentStock(storeCode, d.retail_store_id, d.product_id)) revived.push(d.sku || d.product_id);
+    retire.run(d.id);
+  }
+
+  // 3. Safety net: anything where Guanyi simply disagrees with Tianhe. Skipped
+  //    while pickup inference is live — that mode READS a downward drift as a
+  //    gzgrocery sale, so re-pushing our number first would erase the very signal
+  //    it works from. Capped, so a surprise never turns into a push storm.
+  if (PICKUP_MODE !== 'live') {
+    for (const m of maps) {
+      if (!m.sync_enabled) continue;
+      if (resynced.length >= RESYNC_MAX) break;
+      const cur = bySku.get(String(m.guanyi_sku_id));
+      if (!cur || cur.disabled) continue;
+      if (Number(cur.currentQty) === Number(m.tianhe_qty)) continue;
+      if (enqueueCurrentStock(storeCode, m.retail_store_id, m.product_id)) {
+        resynced.push(`${m.sku || m.product_id} ${cur.currentQty}→${m.tianhe_qty}`);
+      }
+    }
+  }
+
+  const total = reenabled.length + revived.length + resynced.length;
+  if (!total) return;
+  const parts = [];
+  if (reenabled.length) parts.push(`re-enabled ${reenabled.length} (${reenabled.slice(0, 5).join(', ')})`);
+  if (revived.length)   parts.push(`revived ${revived.length} dead push(es) (${revived.slice(0, 5).join(', ')})`);
+  if (resynced.length)  parts.push(`re-synced ${resynced.length} mismatch(es) (${resynced.slice(0, 5).join(', ')})`);
+  const summary = parts.join('; ');
+  log(storeCode, `auto-heal: ${summary}`);
+  logSync(storeCode, 'autoheal', 'ok', { reenabled, revived, resynced });
+  sendOpsAlert(`🩹 管易 ${storeCode} 库存同步已自动修复：${total} 个商品重新推送\nGuanyi ${storeCode} auto-healed — ${summary}`);
+}
+
+// Probe the login on a timer, regardless of whether anything is queued: an
+// outage that starts while the queue is empty is exactly the one that goes
+// unnoticed until gzgrocery orders something we do not have.
+async function processSessionHealth() {
+  const now = Date.now();
+  if (now - _lastHealthAt < HEALTH_MS) return;
+  _lastHealthAt = now;
+
+  for (const storeCode of guanyiStoreCodes()) {
+    let listing = null;
+    try {
+      const browser = await getBrowser(storeCode);
+      listing = await browser.fetchListings();   // null = not logged in / bad response
+    } catch (e) {
+      log(storeCode, `health probe error: ${e.message}`);
+    }
+
+    if (!listing || !listing.rows || !listing.rows.length) {
+      loginFailStreak[storeCode] = (loginFailStreak[storeCode] || 0) + 1;
+      log(storeCode, `health: cannot read Guanyi (${loginFailStreak[storeCode]}/${LOGIN_DOWN_GRACE})`);
+      // Debounce so a lone proxy blip or a slow page never pages ops at 3am —
+      // same grace pattern qingyun-daemon uses for its own login watch.
+      if (!downFlagged[storeCode] && loginFailStreak[storeCode] >= LOGIN_DOWN_GRACE) {
+        downFlagged[storeCode] = true;
+        logSync(storeCode, 'needs_login', 'error', null, 'Guanyi session expired — stock push STOPPED');
+        sendOpsAlert(
+          `🔴 管易 ${storeCode} 登录已失效，库存推送已停止！gzgrocery 仍按旧库存下单，请在盒子上运行 scripts/guanyi-login.js 重新登录\n` +
+          `Guanyi ${storeCode} session expired — stock push STOPPED. gzgrocery is still ordering against stale numbers; re-run scripts/guanyi-login.js on the box.`
+        );
+      }
+      continue;
+    }
+
+    const wasDown = downFlagged[storeCode];
+    downFlagged[storeCode] = false;
+    loginFailStreak[storeCode] = 0;
+    if (wasDown) {
+      logSync(storeCode, 'needs_login', 'ok', null, 'session recovered');
+      sendOpsAlert(`✅ 管易 ${storeCode} 已重新登录，库存推送恢复\nGuanyi ${storeCode} logged back in — stock push resumed`);
+    }
+    // Heal after any recovery, and once at start-up: a box restarted after a long
+    // outage has no "down" transition to hang the heal off, but is exactly the
+    // case where Guanyi is furthest out of date.
+    if (wasDown || !healedOnce[storeCode]) {
+      healedOnce[storeCode] = true;
+      try { autoHeal(storeCode, listing); } catch (e) { log(storeCode, `auto-heal failed: ${e.message}`); }
+    }
+  }
+}
+
 // ── Main loop ───────────────────────────────────────────────────────────────────
 
 async function main() {
-  console.log(`[guanyi-daemon] starting (pickup-mode=${PICKUP_MODE}, reconcile=${RECONCILE_MS}ms, cap=${PICKUP_CAP})`);
+  console.log(`[guanyi-daemon] starting (pickup-mode=${PICKUP_MODE}, reconcile=${RECONCILE_MS}ms, cap=${PICKUP_CAP}, ` +
+              `health=${HEALTH_MS}ms grace=${LOGIN_DOWN_GRACE}, autoheal=${AUTOHEAL ? 'on' : 'off'})`);
   // eslint-disable-next-line no-constant-condition
   while (true) {
+    // Health first: it owns the login alert and the heal, and a dead session makes
+    // everything below it a no-op anyway.
+    try { await processSessionHealth(); } catch (e) { console.error('[guanyi-daemon] health:', e.message); }
     try { await processStockQueue(); } catch (e) { console.error('[guanyi-daemon] queue:', e.message); }
     try { await processPickupReconcile(); } catch (e) { console.error('[guanyi-daemon] reconcile:', e.message); }
     try { await processListingJobs(); } catch (e) { console.error('[guanyi-daemon] jobs:', e.message); }
