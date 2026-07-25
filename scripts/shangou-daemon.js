@@ -34,8 +34,11 @@ catch {
 }
 
 const db = require('../database');
-const { getShangouBrowser, closeAllShangou } = require('../lib/shangou-browser');
+const { getShangouBrowser, closeAllShangou, shangouCdpUrl } = require('../lib/shangou-browser');
 const { sendOpsAlert } = require('../lib/ops-alert');
+// Hold off on channel calls while the holder Chrome is freshly launched — a cold
+// browser that gets hit seconds after launch is what earns the 风控 403.
+const { coldMsRemaining, isColdStartChallenge } = require('../lib/browser-warmup');
 
 const SHANGOU_STORES = (process.env.SHANGOU_STORES || 'yuexiu')
   .split(',').map(s => s.trim()).filter(Boolean);
@@ -136,9 +139,18 @@ function noteVerifyResult(storeCode, challenged) {
     s.until = Date.now() + wait;
     if (!verifyFlagged[storeCode]) {
       verifyFlagged[storeCode] = true;
+      const mins = Math.round(wait / 60000);
+      // A challenge minutes after the holder Chrome relaunched is the cold browser,
+      // not an expired session: the profile is still logged in and the cool-down
+      // clears it on its own. Say so, instead of sending ops to the box to re-login.
+      const cold = isColdStartChallenge(shangouCdpUrl());
       logSync(storeCode, 'verify_required', 'error', null,
-        `闪购 验证中心 challenge — a human must pass the captcha; backing off ~${Math.round(wait / 60000)} min`);
-      sendOpsAlert(`🔴 美团闪购 ${storeCode} 掉线：风控/验证，库存同步已暂停，需要在盒子上重新登录\nMeituan 闪购 ${storeCode} disconnected (risk-control 403) — stock sync paused, needs re-login`);
+        cold
+          ? `闪购 验证中心 challenge right after a browser relaunch — session intact; backing off ~${mins} min`
+          : `闪购 验证中心 challenge — a human must pass the captcha; backing off ~${mins} min`);
+      sendOpsAlert(cold
+        ? `🟠 美团闪购 ${storeCode} 风控/验证（浏览器刚重启，登录未掉），库存同步暂停约 ${mins} 分钟后自动恢复，无需操作\nMeituan 闪购 ${storeCode} risk-control right after a browser restart — NOT logged out, stock sync auto-resumes in ~${mins} min, no action needed`
+        : `🔴 美团闪购 ${storeCode} 掉线：风控/验证，库存同步已暂停，需要在盒子上重新登录\nMeituan 闪购 ${storeCode} disconnected (risk-control 403) — stock sync paused, needs re-login`);
     }
     log(storeCode, `verification challenge — cooling down ~${Math.round(wait / 60000)} min (strike ${s.strikes})`);
   } else {
@@ -712,6 +724,7 @@ async function main() {
   recoverOrphanedProcessing(SHANGOU_STORES);
 
   let lastOrderPoll = 0;
+  let warmupFlagged = false;   // log the cold-Chrome hold once per transition
   let orderPollGap = jitter(ORDER_POLL_MS, 0.4);
   let lastOrderSweep = 0;
   const lastMapRefresh = {}; // store_code → ts of last auto-map pass
@@ -741,6 +754,26 @@ async function main() {
       console.log(`[shangou-daemon] ${new Date().toISOString()} proxy recovered — resuming sync`);
       for (const s of SHANGOU_STORES) logSync(s, 'proxy_up', 'ok', null, 'proxy reachable again — sync resumed');
       sendOpsAlert(`✅ 美团闪购 代理已恢复，同步继续\nMeituan 闪购 proxy recovered — sync resumed`);
+    }
+
+    // Cold-browser gate. The holder Chrome relaunches on a crash, on a proxy
+    // failover switch, and on any pm2 restart — and a data call fired seconds into
+    // a brand-new browser is exactly what earned the 403 验证中心 on 2026-07-25.
+    // Wait the warm-up out: a paused cycle costs ~90s, a challenge costs 30 min.
+    const coldMs = await coldMsRemaining(shangouCdpUrl());
+    if (coldMs > 0) {
+      if (!warmupFlagged) {
+        warmupFlagged = true;
+        console.log(`[shangou-daemon] ${new Date().toISOString()} holder Chrome relaunched — holding calls ~${Math.round(coldMs / 1000)}s so it isn't hit cold`);
+        for (const s of SHANGOU_STORES) logSync(s, 'chrome_warmup', 'ok', null, 'holder Chrome relaunched — pausing calls for the warm-up window');
+      }
+      await sleep(Math.min(coldMs + 500, QUEUE_CHECK_MS));
+      continue;
+    }
+    if (warmupFlagged) {
+      warmupFlagged = false;
+      console.log(`[shangou-daemon] ${new Date().toISOString()} browser warm — resuming sync`);
+      for (const s of SHANGOU_STORES) logSync(s, 'chrome_warm', 'ok', null, 'warm-up over — sync resumed');
     }
 
     if (now - lastOrderPoll >= orderPollGap) {

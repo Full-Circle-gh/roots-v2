@@ -197,7 +197,9 @@ done
 # bounce_holder rule further down, which fires solely when their OWN script (or
 # the one lib they actually require) shipped. Daemons still bounce as before —
 # they reattach to the surviving Chrome, which is the designed path.
-is_holder_name() { case "$1" in *-chrome|*-chrome-*) return 0 ;; *) return 1 ;; esac; }
+# When a holder DOES have to bounce, lib/browser-warmup.js is the second net: the
+# daemons watch the CDP endpoint's launch GUID and hold every channel call for the
+# warm-up window, so the fresh Chrome isn't hit cold the second it comes up.
 
 bounce_daemon() {   # $1 = key (for the pm2-name match), $2 = repo path of its script
   local key="$1" script="$2" touched="$SHARED_TOUCHED" f name

@@ -33,8 +33,11 @@ catch {
 }
 
 const db = require('../database');
-const { getQingyunBrowser, closeAllQingyun } = require('../lib/qingyun-browser');
+const { getQingyunBrowser, closeAllQingyun, resolveCdpUrl } = require('../lib/qingyun-browser');
 const { sendOpsAlert } = require('../lib/ops-alert');
+// Hold off on channel calls while a holder Chrome is freshly launched (mirrors
+// shangou-daemon) — a cold browser hit seconds after launch earns the 风控 403.
+const { coldMsRemaining, isColdStartChallenge } = require('../lib/browser-warmup');
 const geocode = require('../lib/geocode'); // Tencent/AMap — resolve English/pin-less addresses
 const inventory = require('../lib/inventory'); // isQingyunSameCityToday — same-city/same-day eligibility
 
@@ -121,9 +124,16 @@ function noteVerifyResult(storeCode, challenged) {
     s.until = Date.now() + wait;
     if (!verifyFlagged[storeCode]) {
       verifyFlagged[storeCode] = true;
+      const mins = Math.round(wait / 60000);
+      // Cold browser vs. a genuinely dead session — see shangou-daemon for the story.
+      const cold = isColdStartChallenge(resolveCdpUrl(storeCode));
       logSync(storeCode, 'verify_required', 'error', null,
-        `青云 验证中心 challenge — a human must pass the captcha; backing off ~${Math.round(wait / 60000)} min`);
-      sendOpsAlert(`🔴 青云聚信 ${storeCode} 风控/验证，配送跟踪已暂停，需要在盒子上重新登录\nQingyun ${storeCode} risk-control — delivery tracking paused, needs re-login`);
+        cold
+          ? `青云 验证中心 challenge right after a browser relaunch — session intact; backing off ~${mins} min`
+          : `青云 验证中心 challenge — a human must pass the captcha; backing off ~${mins} min`);
+      sendOpsAlert(cold
+        ? `🟠 青云聚信 ${storeCode} 风控/验证（浏览器刚重启，登录未掉），配送跟踪暂停约 ${mins} 分钟后自动恢复，无需操作\nQingyun ${storeCode} risk-control right after a browser restart — NOT logged out, tracking auto-resumes in ~${mins} min, no action needed`
+        : `🔴 青云聚信 ${storeCode} 风控/验证，配送跟踪已暂停，需要在盒子上重新登录\nQingyun ${storeCode} risk-control — delivery tracking paused, needs re-login`);
     }
     log(storeCode, `verification challenge — cooling down ~${Math.round(wait / 60000)} min (strike ${s.strikes})`);
   } else {
@@ -579,6 +589,7 @@ async function main() {
   console.log(`[qingyun-daemon] starting — stores: ${STORES.join(', ')}`);
   let gap = jitter(POLL_MS, 0.3);
   let last = 0;
+  const warmupFlagged = {};  // store_code → log the cold-Chrome hold once per transition
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
@@ -606,7 +617,26 @@ async function main() {
     if (now - last >= gap) {
       last = now;
       gap = jitter(POLL_MS, 0.3);
-      for (const storeCode of STORES) await pollStore(storeCode);
+      for (const storeCode of STORES) {
+        // Each store has its own holder Chrome (own CDP port) — skip only the one
+        // that just relaunched, and only until it's warm. A skipped poll costs one
+        // cycle; hitting a cold browser costs a 30-min risk-control cool-down.
+        const coldMs = await coldMsRemaining(resolveCdpUrl(storeCode));
+        if (coldMs > 0) {
+          if (!warmupFlagged[storeCode]) {
+            warmupFlagged[storeCode] = true;
+            log(storeCode, `holder Chrome relaunched — holding calls ~${Math.round(coldMs / 1000)}s so it isn't hit cold`);
+            logSync(storeCode, 'chrome_warmup', 'ok', null, 'holder Chrome relaunched — pausing calls for the warm-up window');
+          }
+          continue;
+        }
+        if (warmupFlagged[storeCode]) {
+          warmupFlagged[storeCode] = false;
+          log(storeCode, 'browser warm — resuming polling');
+          logSync(storeCode, 'chrome_warm', 'ok', null, 'warm-up over — tracking resumed');
+        }
+        await pollStore(storeCode);
+      }
     }
     await sleep(jitter(5_000));
   }
