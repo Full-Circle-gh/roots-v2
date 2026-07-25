@@ -184,6 +184,21 @@ for f in "${FILES[@]}"; do
   esac
 done
 
+# ⚠️ The `scripts/*-chrome.js` processes are NOT daemons — they are long-lived
+# browser HOLDERS (shangou-chrome, qingyun-chrome*). Each owns a real logged-in
+# Chrome the daemon then attaches to over CDP. Restarting one throws away a warm,
+# trusted session: the channel sees a cold browser hit its API seconds after
+# launch and answers with a 风控/验证中心 challenge, which pauses stock sync until
+# the cool-down expires or a human passes a captcha. That is exactly what a
+# one-line, column-only `database.js` migration did on 2026-07-25 — it set
+# SHARED_TOUCHED, and the name regex below ("shangou" matches "shangou-chrome")
+# bounced four browser holders that load no business code at all.
+# So: holders are excluded from the daemon match and bounced only by the explicit
+# bounce_holder rule further down, which fires solely when their OWN script (or
+# the one lib they actually require) shipped. Daemons still bounce as before —
+# they reattach to the surviving Chrome, which is the designed path.
+is_holder_name() { case "$1" in *-chrome|*-chrome-*) return 0 ;; *) return 1 ;; esac; }
+
 bounce_daemon() {   # $1 = key (for the pm2-name match), $2 = repo path of its script
   local key="$1" script="$2" touched="$SHARED_TOUCHED" f name
   if [ "$touched" != "1" ]; then
@@ -199,6 +214,8 @@ bounce_daemon() {   # $1 = key (for the pm2-name match), $2 = repo path of its s
     const re = new RegExp(process.env.PM_KEY, "i");
     for (const p of d) {
       const s = (p.pm2_env && p.pm2_env.pm_exec_path) || "";
+      // Never match a browser holder — see the comment above bounce_daemon.
+      if (/-chrome\.js$/.test(s) || /-chrome(-|$)/.test(p.name || "")) continue;
       if (s.endsWith("/" + base) || re.test(p.name || "")) console.log(p.name);
     }' 2>/dev/null || true)
   if [ ${#procs[@]} -gt 0 ]; then
@@ -212,6 +229,37 @@ bounce_daemon() {   # $1 = key (for the pm2-name match), $2 = repo path of its s
     echo "note: no $key daemon in pm2 — nothing to bounce (start it with: pm2 start $script)"
   fi
 }
+
+# Browser holders: bounce ONLY when their own script, or the single lib they
+# actually require (lib/proxy-manager.js), shipped. Everything else leaves the
+# warm logged-in Chrome alone — see the comment above bounce_daemon.
+bounce_holder() {   # $1 = repo path of the holder script
+  local script="$1" f name touched=0
+  for f in "${FILES[@]}"; do
+    case "$f" in
+      "$script"|lib/proxy-manager.js) touched=1; break ;;
+    esac
+  done
+  [ "$touched" = "1" ] || return 0
+  local procs
+  mapfile -t procs < <(pm2 jlist | PM_SCRIPT="$script" node -e '
+    const d = JSON.parse(require("fs").readFileSync(0));
+    const base = process.env.PM_SCRIPT.split("/").pop();
+    for (const p of d) {
+      const s = (p.pm2_env && p.pm2_env.pm_exec_path) || "";
+      if (s.endsWith("/" + base)) console.log(p.name);
+    }' 2>/dev/null || true)
+  [ ${#procs[@]} -gt 0 ] || return 0
+  for name in "${procs[@]}"; do
+    echo "=== bounce browser holder $name (its own script shipped) ==="
+    pm2 restart "$name" --update-env >/dev/null 2>&1 \
+      && echo "  restarted $name — expect a risk-control challenge on the cold session" \
+      || echo "  WARN: restart of $name failed — bounce it by hand (pm2 restart $name)"
+  done
+}
+
+bounce_holder scripts/shangou-chrome.js
+bounce_holder scripts/qingyun-chrome.js
 
 bounce_daemon qingyun   scripts/qingyun-daemon.js
 bounce_daemon guanyi    scripts/guanyi-daemon.js
