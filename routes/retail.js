@@ -2287,6 +2287,7 @@ router.get('/api/retail/products/:id', (req, res) => {
     product.variants = tdb().prepare(
       `SELECT p.id, p.variant_label, p.variant_label_cn, p.name_en, p.name_cn, p.sku, p.weight AS size,
               p.sell_price AS price, p.compare_at_price, p.ship_from_supplier, p.supplier_paused,
+              p.oos_policy, p.is_batch_made,
               p.flash_price, p.flash_starts_at, p.flash_ends_at,
               p.flash_stock_limit, p.flash_sold,
               p.image_url, p.updated_at,
@@ -2306,11 +2307,21 @@ router.get('/api/retail/products/:id', (req, res) => {
       }
       delete v.has_image;
       delete v.updated_at;
-      return flashsales.decorateProduct(v, nowMs);
+      // Whether an out-of-stock size may still be pre-ordered (out-of-city only;
+      // the order gate re-checks the address). Lets the storefront offer
+      // "Pre-order" instead of a dead "SOLD OUT" on a backorder_gz size.
+      const vPre = effectiveOosPolicy(v) === 'backorder_gz';
+      delete v.oos_policy;
+      delete v.is_batch_made;
+      const dec = flashsales.decorateProduct(v, nowMs);
+      dec.oos_preorder = vPre;
+      return dec;
     });
   } else {
     product.variants = [];
   }
+  // Same pre-order flag for the single (non-variant) product hero.
+  product.oos_preorder = effectiveOosPolicy(product) === 'backorder_gz';
 
   // "Buy together" bundle — resolved to item cards (each its own product/stock).
   const bundleRow = tdb().prepare('SELECT bundle FROM store_products WHERE id = ?').get(id);

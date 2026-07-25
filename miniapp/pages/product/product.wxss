@@ -82,6 +82,7 @@
 }
 .stock-out  { background: var(--berry); color: #fff; }
 .stock-low  { background: var(--carrot); color: #fff; }
+.stock-pre  { background: var(--olive); color: #fff; }
 /* PDP hero placeholder — minimalist jar at 25% of the hero size,
    centred. Matches the tab-bar icon weight and the shop-card placeholder
    so a product without a photo looks consistent everywhere. */
@@ -753,6 +754,11 @@
 .vp-opt-oos {
   font-size: calc(18rpx * var(--font-scale)); letter-spacing: 0.1em;
   background: rgba(0,0,0,.1); color: var(--olive); padding: 2rpx 12rpx; border-radius: 999rpx;
+}
+/* Pre-order: an out-of-stock size out-of-city shoppers can still reserve. */
+.vp-opt-pre {
+  font-size: calc(18rpx * var(--font-scale)); letter-spacing: 0.08em; font-weight: 700;
+  background: var(--olive); color: #fff; padding: 2rpx 12rpx; border-radius: 999rpx;
 }
 .vp-opt-price-stack { display: flex; align-items: baseline; gap: 10rpx; flex-shrink: 0; }
 .vp-opt-price { font-size: calc(36rpx * var(--font-scale)); color: var(--ink); letter-spacing: 0.04em; }

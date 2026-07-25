@@ -305,6 +305,7 @@
               <text wx:if="{{opt.low}}" class="vp-opt-low f-toni">{{opt.low}}</text>
               <text wx:if="{{opt.save}}" class="vp-opt-save f-toni">{{opt.save}}</text>
               <text wx:if="{{opt.soldOut}}" class="vp-opt-oos f-toni">{{oosLabel}}</text>
+              <text wx:elif="{{opt.preorder}}" class="vp-opt-pre f-toni">{{preLabel}}</text>
             </view>
             <view class="vp-opt-price-stack">
               <text wx:if="{{opt.priceWas}}" class="vp-opt-was f-aleo">{{opt.priceWas}}</text>

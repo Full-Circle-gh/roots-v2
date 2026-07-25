@@ -166,14 +166,16 @@ Page({
     exTitle: 'Add extras?',
     exAddLabel: 'Add to basket',
     oosLabel: 'SOLD OUT',
+    preLabel: 'PRE-ORDER',
     qty: 1,
     lang: 'en',
     loading: true,
     notFound: false,
     addBtnLabel: 'ADD TO BASKET',
     soldOut: false,
-    stockTag: '',          // 'Only 3 left' / 'Sold out' / ''
-    stockTagKind: '',      // 'low' | 'out' | ''
+    preorder: false,       // 0-stock but out-of-city pre-order allowed
+    stockTag: '',          // 'Only 3 left' / 'Sold out' / 'Pre-order' / ''
+    stockTagKind: '',      // 'low' | 'out' | 'pre' | ''
     reviewAvg: 0,          // avg rating
     reviewAvgDisplay: '',  // '4.7' or ''
     reviewCount: 0,        // count
@@ -415,8 +417,10 @@ Page({
     // Variant axis noun ("color"/"颜色") for the size-picker heading — operator-set.
     this._variantNoun = { en: (p.variant_noun_en || '').trim(), cn: (p.variant_noun_cn || '').trim() };
     const hasVariants = this._variants.length > 1;
-    // Stock state — null means untracked (treat as in-stock).
-    let soldOut = false, stockTag = '', stockTagKind = '';
+    // Stock state — null means untracked (treat as in-stock). `preorder` is a
+    // 0-stock size/product the operator lets out-of-city shoppers reserve
+    // (oos_preorder from the server); it stays orderable instead of dead-blocked.
+    let soldOut = false, preorder = false, stockTag = '', stockTagKind = '';
     if (p.ship_from_supplier) {
       // Supplier-direct: no stock of ours. Always available unless the operator
       // paused it (supplier is out), which shows a soft "Temporarily unavailable".
@@ -426,14 +430,22 @@ Page({
         stockTagKind = 'out';
       }
     } else if (hasVariants) {
-      // Variant product: sold out only when EVERY size is out. Per-size
-      // "Only N left" lives in the picker, so the hero badge stays quiet.
-      soldOut = this._variants.every(v => v.stock != null && Number(v.stock) <= 0);
+      // Variant product: sold out only when EVERY size is hard-out. A size that's
+      // out but pre-orderable keeps the product available. Per-size "Only N left"
+      // / "Pre-order" lives in the picker, so the hero badge stays quiet.
+      soldOut = this._variants.every(v =>
+        v.stock != null && Number(v.stock) <= 0 && !v.oos_preorder);
     } else if (p.stock != null) {
       if (Number(p.stock) <= 0) {
-        soldOut = true;
-        stockTag = L === 'cn' ? '已售罄' : 'SOLD OUT';
-        stockTagKind = 'out';
+        if (p.oos_preorder) {
+          preorder = true;
+          stockTag = L === 'cn' ? '可预订' : 'PRE-ORDER';
+          stockTagKind = 'pre';
+        } else {
+          soldOut = true;
+          stockTag = L === 'cn' ? '已售罄' : 'SOLD OUT';
+          stockTagKind = 'out';
+        }
       } else if (Number(p.stock) <= 5) {
         stockTag = L === 'cn' ? '仅剩 ' + p.stock + ' 件' : 'Only ' + p.stock + ' left';
         stockTagKind = 'low';
@@ -671,12 +683,16 @@ Page({
       choiceSel: this._buildChoiceSel(selected),
       hasVariants,
       oosLabel: L === 'cn' ? '售罄' : 'SOLD OUT',
+      preLabel: L === 'cn' ? '可预订' : 'PRE-ORDER',
       addBtnLabel: soldOut
         ? (L === 'cn' ? '已售罄' : 'SOLD OUT')
         : hasVariants
           ? (L === 'cn' ? '选择规格' : 'CHOOSE A SIZE')
-          : (L === 'cn' ? '加入购物车' : 'ADD TO BASKET'),
+          : preorder
+            ? (L === 'cn' ? '预订' : 'PRE-ORDER')
+            : (L === 'cn' ? '加入购物车' : 'ADD TO BASKET'),
       soldOut,
+      preorder,
       stockTag,
       stockTagKind,
       reviewAvg: avg,
@@ -801,7 +817,7 @@ Page({
     // add-ons) → add. Skip straight to whichever applies; add directly if none.
     if (this.data.optionsSingle.length) { this._openOptionPicker(); return; }
     if (this.data.optionsExtra.length)  { this._openExtrasPicker(); return; }
-    if (this._doAddWithOptions()) this._finishAdd();
+    if (this._doAddWithOptions()) this._finishAdd(this.data.preorder);
   },
 
   // Chosen choice-ids for an option group (scalar→[id], array as-is).
@@ -875,7 +891,7 @@ Page({
       }
     }
     if (this.data.optionsExtra.length) { this.setData({ opShow: false }); this._openExtrasPicker(); return; }
-    if (this._doAddWithOptions()) { this.setData({ opShow: false }); this._finishAdd(); }
+    if (this._doAddWithOptions()) { this.setData({ opShow: false }); this._finishAdd(this.data.preorder); }
   },
 
   // ── Sheet 2: optional paid extras (pickles, sauce…) ──────────────────
@@ -885,15 +901,17 @@ Page({
   },
   closeExtrasPicker() { this.setData({ exShow: false }); },
   confirmExtras() {
-    if (this._doAddWithOptions()) { this.setData({ exShow: false }); this._finishAdd(); }
+    if (this._doAddWithOptions()) { this.setData({ exShow: false }); this._finishAdd(this.data.preorder); }
   },
 
   // Shared post-add: confirm toast + pop back to where they came from.
-  _finishAdd() {
+  _finishAdd(preorder) {
     wx.showToast({
-      title: this.data.lang === 'cn' ? '已加入购物车' : 'Added to cart',
-      icon: 'success',
-      duration: 1200,
+      title: preorder
+        ? (this.data.lang === 'cn' ? '已预订，加入购物车' : 'Added — pre-order')
+        : (this.data.lang === 'cn' ? '已加入购物车' : 'Added to cart'),
+      icon: preorder ? 'none' : 'success',
+      duration: preorder ? 1500 : 1200,
     });
     setTimeout(() => wx.navigateBack({ fail: () => wx.switchTab({ url: '/pages/home/home' }) }), 500);
   },
@@ -951,7 +969,11 @@ Page({
       const wasN = isFlash ? regular : (cmp > eff && eff > 0 ? cmp : 0);
       const saveN = wasN > eff && eff > 0 ? Math.round((wasN - eff) * 100) / 100 : 0;
       const stock = m.stock == null ? null : Number(m.stock);
-      const soldOut = m.ship_from_supplier ? !!m.supplier_paused : (stock != null && stock <= 0);
+      const out = m.ship_from_supplier ? !!m.supplier_paused : (stock != null && stock <= 0);
+      // Out but pre-orderable (out-of-city) → keep it tappable with a Pre-order
+      // badge; only a hard-out size shows the dead SOLD OUT pill.
+      const preorder = out && !m.ship_from_supplier && !!m.oos_preorder;
+      const soldOut = out && !preorder;
       return {
         id: m.id,
         // Link to this size's own product page — unless it's the one we're
@@ -964,7 +986,8 @@ Page({
         save: saveN > 0 ? (L === 'cn' ? '省¥' : 'SAVE ¥') + (Number.isInteger(saveN) ? saveN : saveN.toFixed(2)) : '',
         isFlash,
         soldOut,
-        low: (!soldOut && stock != null && stock <= 5)
+        preorder,
+        low: (!out && stock != null && stock <= 5)
           ? (L === 'cn' ? `仅剩 ${stock}` : `Only ${stock} left`)
           : '',
       };
@@ -999,8 +1022,11 @@ Page({
     const m = (this._variants || []).find(x => Number(x.id) === id);
     if (!m) return;
     const stock = m.stock == null ? null : Number(m.stock);
-    const vSoldOut = m.ship_from_supplier ? !!m.supplier_paused : (stock != null && stock <= 0);
-    if (vSoldOut) {
+    const out = m.ship_from_supplier ? !!m.supplier_paused : (stock != null && stock <= 0);
+    // A pre-orderable out-of-stock size stays orderable — the checkout gate
+    // re-checks the address and blocks only same-day Guangzhou.
+    const vPreorder = out && !m.ship_from_supplier && !!m.oos_preorder;
+    if (out && !vPreorder) {
       wx.showToast({ title: this.data.lang === 'cn' ? (m.ship_from_supplier ? '暂时缺货' : '已售罄') : (m.ship_from_supplier ? 'Unavailable' : 'Sold out'), icon: 'none' });
       return;
     }
@@ -1018,6 +1044,6 @@ Page({
       ship_from_supplier: m.ship_from_supplier,
     }, this.data.qty, []);
     this.setData({ vpShow: false });
-    this._finishAdd();
+    this._finishAdd(vPreorder);
   },
 });
