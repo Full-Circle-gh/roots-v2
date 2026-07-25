@@ -432,7 +432,11 @@
     font: 13px var(--f-sans); color: var(--text-1);
   }
   .pe-prod-search:focus { outline: none; border-color: var(--line-strong); box-shadow: 0 0 0 3px var(--ring); }
-  .pe-prod-list { max-height: 42vh; overflow-y: auto; }
+  /* Capped in px as well as vh: on a laptop 42vh ate the whole rail, pushing
+     Page + Sections off-screen. Worse, a full product list never reaches its
+     end, so the wheel stayed trapped in here and never chained to the rail.
+     Search is right above it — filter rather than scroll. */
+  .pe-prod-list { max-height: min(42vh, 220px); overflow-y: auto; }
   /* Empty canvas state — shown until a product is chosen. */
   .pe-canvas-empty {
     position: absolute; inset: 0;
@@ -1041,8 +1045,15 @@
     background: #F2E7DF;
     width: 100%;
     /* Real device viewport height — the product page scrolls inside the screen.
-       Was flex-fill, which let the frame collapse on short/zoomed windows. */
-    height: 812px;
+       Was flex-fill, which let the frame collapse on short/zoomed windows.
+       Capped to what the canvas can actually show (topbar 56 + pad 48 + langbar
+       44 + frame pad 20 = 168, plus 4px slack): at a flat 812px the frame
+       overflowed the canvas on any laptop, and since the screen has its own
+       scrollbar it swallowed the wheel — the canvas could never scroll, so the
+       bottom of the phone was unreachable. Fitting the height means nothing
+       overflows. Measured against .pa-prev-langbar; re-check if that bar grows. */
+    height: min(812px, calc(100vh - 172px));
+    min-height: 420px;
     flex: none;
     border-radius: 30px;
     overflow-y: auto; overflow-x: hidden;
