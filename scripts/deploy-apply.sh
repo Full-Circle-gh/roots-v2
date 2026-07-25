@@ -166,33 +166,59 @@ fi
 
 echo "--- recent out log ---"; tail -n 6 /root/.pm2/logs/roots-v2-out.log
 
-# The qingyun-sync daemon is a SEPARATE pm2 process that runs
-# scripts/qingyun-daemon.js and require()s this same lib/ + database.js. The
-# `pm2 restart roots-v2` above does NOT reload it, so a change to the daemon or
+# The channel daemons are SEPARATE pm2 processes, each running its own
+# scripts/<name>-daemon.js and require()ing this same lib/ + database.js. The
+# `pm2 restart roots-v2` above does NOT reload them, so a change to a daemon or
 # to a shared lib it loads would otherwise keep running stale in that process
-# (e.g. the same-city/same-day auto-push gate lives in lib/inventory.js). Bounce
-# it too — but ONLY when this ship actually touched a file it loads, discover the
-# process by its script path so an alternate pm2 name still matches, and never
-# let a daemon hiccup fail an already-healthy app deploy (best-effort).
-DAEMON_TOUCHED=0
+# (e.g. the same-city/same-day auto-push gate lives in lib/inventory.js, and the
+# guanyi stock-push alerting in scripts/guanyi-daemon.js + lib/guanyi-browser.js).
+# That staleness is invisible: the deploy reports SUCCESS while the daemon keeps
+# executing the previous build. Bounce each one — but ONLY when this ship actually
+# touched a file it loads, discover the process by its script path so an alternate
+# pm2 name still matches, and never let a daemon hiccup fail an already-healthy
+# app deploy (best-effort).
+SHARED_TOUCHED=0
 for f in "${FILES[@]}"; do
   case "$f" in
-    scripts/qingyun-daemon.js|lib/*|database.js) DAEMON_TOUCHED=1; break ;;
+    lib/*|database.js) SHARED_TOUCHED=1; break ;;
   esac
 done
-if [ "$DAEMON_TOUCHED" = "1" ]; then
-  mapfile -t QY < <(pm2 jlist | node -e 'let d=JSON.parse(require("fs").readFileSync(0));for(const p of d){const s=(p.pm2_env&&p.pm2_env.pm_exec_path)||"";if(/qingyun-daemon\.js$/.test(s)||/qingyun/i.test(p.name||""))console.log(p.name)}' 2>/dev/null || true)
-  if [ ${#QY[@]} -gt 0 ]; then
-    echo "=== bounce qingyun daemon(s) (shipped a file it loads): ${QY[*]} ==="
-    for name in "${QY[@]}"; do
+
+bounce_daemon() {   # $1 = key (for the pm2-name match), $2 = repo path of its script
+  local key="$1" script="$2" touched="$SHARED_TOUCHED" f name
+  if [ "$touched" != "1" ]; then
+    for f in "${FILES[@]}"; do
+      if [ "$f" = "$script" ]; then touched=1; break; fi
+    done
+  fi
+  [ "$touched" = "1" ] || return 0
+  local procs
+  mapfile -t procs < <(pm2 jlist | PM_SCRIPT="$script" PM_KEY="$key" node -e '
+    const d = JSON.parse(require("fs").readFileSync(0));
+    const base = process.env.PM_SCRIPT.split("/").pop();
+    const re = new RegExp(process.env.PM_KEY, "i");
+    for (const p of d) {
+      const s = (p.pm2_env && p.pm2_env.pm_exec_path) || "";
+      if (s.endsWith("/" + base) || re.test(p.name || "")) console.log(p.name);
+    }' 2>/dev/null || true)
+  if [ ${#procs[@]} -gt 0 ]; then
+    echo "=== bounce $key daemon(s) (shipped a file it loads): ${procs[*]} ==="
+    for name in "${procs[@]}"; do
       pm2 restart "$name" --update-env >/dev/null 2>&1 \
         && echo "  restarted $name" \
         || echo "  WARN: restart of $name failed — bounce it by hand (pm2 restart $name)"
     done
   else
-    echo "note: no qingyun daemon found in pm2 — nothing to bounce (start it with: pm2 start scripts/qingyun-daemon.js --name qingyun-sync)"
+    echo "note: no $key daemon in pm2 — nothing to bounce (start it with: pm2 start $script)"
   fi
-fi
+}
+
+bounce_daemon qingyun   scripts/qingyun-daemon.js
+bounce_daemon guanyi    scripts/guanyi-daemon.js
+bounce_daemon meituan   scripts/meituan-daemon.js
+bounce_daemon eleme     scripts/eleme-daemon.js
+bounce_daemon shangou   scripts/shangou-daemon.js
+bounce_daemon gzgrocery scripts/gzgrocery-order-daemon.js
 
 rm -rf "$STAGE"
 echo "RESULT=SUCCESS backup=$BK"
