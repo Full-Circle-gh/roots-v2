@@ -3323,6 +3323,16 @@ addColumn('retail_customers', 'referral_applied_at',      'DATETIME');
 // user id that created a manual record. Reporting treats NULL as 'app'.
 addColumn('retail_customers', 'source',                   'TEXT');
 addColumn('retail_customers', 'created_by',               'INTEGER');
+// Staff "seen" timestamp — stamped the first time ANY operator opens the
+// customer detail. NULL = nobody on the team has opened this record yet.
+//
+// DELIBERATELY the SHARED model, mirroring retail_orders.seen_at: ONE
+// timestamp, stamped by whoever opens the record first, with no operator
+// identity attached. It means "nobody on this team has opened this", NOT
+// "you haven't". Chosen 2026-07-25 to match Orders rather than build a
+// per-operator seen table — do not "correct" this into per-operator.
+// Not backfilled: existing customers read as never-opened, which is true.
+addColumn('retail_customers', 'seen_at',                  'DATETIME');
 try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_retail_customers_refcode ON retail_customers(referral_code) WHERE referral_code IS NOT NULL'); } catch {}
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_customers_refby ON retail_customers(referred_by_customer_id)'); } catch {}
 
