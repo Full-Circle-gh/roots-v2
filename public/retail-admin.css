@@ -291,6 +291,24 @@
   /* Unread badge → corner pip on the icon (it was an inline dot in the rail). */
   .topbar-ico .tab-badge { position: absolute; top: 4px; right: 4px; margin: 0; }
 
+  /* Search — a 320px field-shaped button (structure here; colours in the Tacet
+     reskin block). Looks like an input, is a button: opens the ⌘K palette. */
+  .gsearch-trigger {
+    display: inline-flex; align-items: center; gap: 8px; flex: none;
+    width: 320px; height: 36px; padding: 0 8px 0 12px;
+    border-radius: 8px; cursor: pointer;
+    background: var(--td-raised); border: 1px solid var(--td-border);
+    color: var(--td-text2); font: 500 13.5px var(--f-sans);
+    transition: border-color var(--t-fast) ease;
+  }
+  .gsearch-ico { width: 16px; height: 16px; flex: none; }
+  .gsearch-label { flex: 1 1 auto; text-align: left; }
+  .gsearch-kbd {
+    flex: none; font: 500 11px var(--f-sans); line-height: 1;
+    padding: 3px 6px; border-radius: 5px;
+    border: 1px solid var(--td-border); background: var(--td-surface);
+  }
+
   /* ── Account widget — Google-style profile circle + dropdown ───────────── */
   .acct { position: relative; flex: none; }
   .acct-btn {
@@ -299,10 +317,10 @@
     border-radius: 50%; line-height: 0;
   }
   .acct-circle {
-    width: 28px; height: 28px; flex: none; border-radius: 50%; overflow: hidden;
+    width: 32px; height: 32px; flex: none; border-radius: 50%; overflow: hidden;
     display: inline-flex; align-items: center; justify-content: center;
     background: var(--accent); color: #fff;
-    font-size: 11px; font-weight: 600; letter-spacing: .02em;
+    font-size: 13px; font-weight: 500; letter-spacing: .02em;
     text-transform: uppercase; user-select: none;
     box-shadow: 0 0 0 1px var(--line) inset;
     transition: box-shadow var(--t-fast) ease;
@@ -8094,10 +8112,10 @@
   }
 
   /* Search — neutral pill, never Dusk. Ctrl K in a quiet cream chip. */
-  .topbar .gsearch-trigger { background: var(--td-surface); border-color: var(--td-border); color: var(--td-text2); }
+  .topbar .gsearch-trigger { background: var(--td-raised); border-color: var(--td-border); color: var(--td-text2); }
   .topbar .gsearch-trigger:hover { border-color: var(--td-text2); }
   .topbar .gsearch-label { color: var(--td-text2); font-weight: 500; }
-  .topbar .gsearch-kbd { color: var(--td-text2); border-color: var(--td-border); background: var(--td-raised); font-weight: 500; }
+  .topbar .gsearch-kbd { color: var(--td-text2); border-color: var(--td-border); background: var(--td-surface); font-weight: 500; }
 
   /* Icon buttons → graphite, hover raised. */
   .topbar .topbar-ico { color: var(--td-text2); }
@@ -8107,11 +8125,16 @@
      inbox count is customers acting, so it doesn't earn the automation colour
      — same rule this chrome applies everywhere else. Count/shape/position
      unchanged, colour only. */
-  .topbar .tab-badge {
-    background: var(--td-text2);
+  /* Unseen inbox = ONE 6px Sage dot, never a count, never red (§1.1). Covers the
+     Inbox trigger pip and the Reviews/Feedback rows in the dropdown (all .tab-badge
+     inside .topbar). The count text is suppressed; the size is pinned even when the
+     badge has content, out-specificity-ing the base :not(:empty) count-pill rule. */
+  .topbar .tab-badge,
+  .topbar .has-unseen .tab-badge:not(:empty) {
+    min-width: 6px; width: 6px; height: 6px; padding: 0;
+    border-radius: 50%; background: var(--td-sage);
     box-shadow: 0 0 0 2px var(--bg-pane);
-    animation: none;
-    color: #fff;
+    animation: none; font-size: 0; color: transparent;
   }
 
   /* Avatar → Ink circle, Paper initial (no Tea green), Graphite focus ring —

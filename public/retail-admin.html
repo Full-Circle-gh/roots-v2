@@ -862,10 +862,14 @@
        heading. Products/Purchasing keep their sub-view switch in the content
        (#stk-views / .pu2-subnav), un-hidden by dropping the desktop @media rule. -->
   <div class="grow"></div>
-  <!-- Search — collapsed from the old wide field to a single trigger icon; the
-       command palette it opens (openCmdSearch, Ctrl/⌘ K) is unchanged. -->
-  <button class="topbar-ico" id="gsearch-trigger" type="button" onclick="openCmdSearch()" title="Search anything · 搜索任何设置 (Ctrl K)" aria-label="Search">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+  <!-- Search — a 320px field-shaped BUTTON, never a real <input> and never takes
+       a caret: it opens the ⌘K command palette (openCmdSearch). The keyboard hint
+       is platform-aware — ⌘K on Mac, Ctrl K on Windows, never both — set by JS on
+       load (see 01-core). -->
+  <button class="gsearch-trigger" id="gsearch-trigger" type="button" onclick="openCmdSearch()" title="Search" aria-label="Search">
+    <svg class="gsearch-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <span class="gsearch-label">Search</span>
+    <span class="gsearch-kbd" id="gsearch-kbd">Ctrl K</span>
   </button>
 
   <!-- Inbox + live-poll dot + sound — moved up from the rail foot into the

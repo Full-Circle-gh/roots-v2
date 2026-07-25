@@ -303,6 +303,21 @@ function goTab(tab) {
 // (Topbar page-identity crumb removed 2026-07-25 — the bar is closed, §1.1d.
 // tbSetPage()/_tbRailLabel() and their tab-switch + language-change hooks are
 // gone with it; the page names itself with its own in-content heading.)
+
+// Search-field keyboard hint — platform-aware: ⌘K on Mac, Ctrl K everywhere
+// else, never both. The trigger is a button that opens the same palette either
+// way; this only sets the label glyph.
+(function _tbSearchHint() {
+  const set = () => {
+    const kbd = document.getElementById('gsearch-kbd');
+    if (!kbd) return;
+    const plat = (navigator.userAgentData && navigator.userAgentData.platform)
+              || navigator.platform || navigator.userAgent || '';
+    kbd.textContent = /Mac|iPhone|iPad|iPod/i.test(plat) ? '⌘K' : 'Ctrl K';
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', set, { once: true });
+  else set();
+})();
 // Topbar Inbox dropdown (Reviews / Feedback).
 function toggleInboxMenu(ev) {
   if (ev) ev.stopPropagation();
