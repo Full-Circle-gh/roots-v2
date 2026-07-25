@@ -8118,93 +8118,16 @@
   .topbar .acct-danger svg { color: var(--td-brick-ink); }
   .topbar .acct-danger:hover { background: var(--td-brick-tint); color: var(--td-brick-ink); }
 
-  /* Top-bar left edge — page identity (2026-07-13). Search left this spot for an
-     icon in the right cluster; the bar now carries WHERE you are. margin-left
-     keeps the crumb clear of the seam-fold dot straddling the topbar's left edge. */
-  .tb-page {
-    display: flex; align-items: center; gap: 10px;
-    flex: 0 1 auto; min-width: 0; margin-left: 14px;
-  }
-  .tb-crumb {
-    font-size: 12.5px; font-weight: 600; letter-spacing: .02em; text-transform: none;
-    color: var(--td-text2); white-space: nowrap; flex: none;
-  }
-  /* The page-name crumb is hidden on EVERY page (2026-07-24, by request) — the
-     topbar left stays clean and each page identifies itself by its own in-content
-     heading. The Products / Purchasing sub-view switches still live here; their
-     leading "/" separator is dropped too so no dangling slash shows. */
-  .tb-crumb { display: none; }
-  #tb-subviews .tb-sep, #tb-pu-subviews .tb-sep { display: none; }
-  /* Products sub-view switch, moved up from the content (Option B). Hidden until
-     the Products tab is active; the slash rides with it so a lone crumb never
-     shows a dangling "/". data-cap on the container hides the whole switch (incl.
-     the always-on Catalogue) for operators without activity/categories — parity
-     with the in-content #stk-views it mirrors. */
-  .tb-subviews { display: none; align-items: center; gap: 2px; min-width: 0; }
-  body:has(#tab-products.active) #tb-subviews { display: inline-flex; }
-  /* Purchasing sub-view switch — same mirror, own id so it never shows
-     alongside (or instead of) the Products one. */
-  body:has(#tab-purchasing.active) #tb-pu-subviews { display: inline-flex; }
-  .tb-sep { color: var(--td-border); font-size: 16px; font-weight: 300; margin: 0 4px 0 1px; }
-  .tb-subview {
-    appearance: none; background: none; border: 0; cursor: pointer;
-    font: 500 13.5px var(--f-sans); color: var(--td-text2);
-    padding: 7px 12px; border-radius: 8px; white-space: nowrap;
-    display: inline-flex; align-items: center; gap: 7px;
-    transition: color .18s cubic-bezier(.16,1,.3,1), background .18s cubic-bezier(.16,1,.3,1);
-  }
-  .tb-subview:hover { color: var(--td-text); background: var(--td-raised); }
-  .tb-subview.on { color: var(--td-text); background: var(--td-raised); font-weight: 600; }
-  .tb-stk-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; background: var(--td-amber); }
-  /* ⓘ lives outside the switch so it stays for cap-limited operators too; shown
-     only on Products. Reuses the .pa-info / .pa-info-pop styling from the head. */
-  #tb-info-wrap { display: none; }
-  body:has(#tab-products.active) #tb-info-wrap { display: inline-flex; }
-
-  /* Desktop: the topbar carries the page's name (the crumb), so each page's own
-     redundant title text drops out — the content starts higher. We hide only the
-     bare TITLE, never functional siblings (a date range, a "New …" action), so
-     those header rows keep their controls. On phones (≤720) the topbar page
-     region is hidden and every in-content title stays, so nothing is lost.
-     Dashboard keeps #td-greeting — that's a personalised greeting, not a title. */
-  @media (min-width: 721px) {
-    /* Products — eyebrow + title row + sub-view switch all move into the bar. */
-    #tab-products > .t-ord-eyebrow,
-    #tab-products > .pa-head-row,
-    #tab-products > .stk-views { display: none; }
-    /* Purchasing — puChrome's own page-head + sub-nav move into the bar too;
-       the ledger/wizard/etc. body underneath is untouched. Doubled selector
-       (not just #tab-purchasing .pu2-*) to out-specificity the base
-       #prod-view-purchasing .pu2-subnav{display:flex} rule below, which sits
-       later in the cascade and would otherwise win the tie. */
-    #tab-purchasing #prod-view-purchasing .pu2-pagehead,
-    #tab-purchasing #prod-view-purchasing .pu2-subnav { display: none; }
-    /* Bare page titles that now just repeat the crumb. Keep the range beside
-       Reports and the New-customer action beside Customers. */
-    #tab-orders > h2,
-    #tab-reports .db-head > h2,
-    #tab-customers .cul-head > h2,
-    /* Secondary pages — same redundant title. Any descriptive subtitle under it
-       stays and reads as the page's lede; header-row actions (Sales) stay too. */
-    #tab-snippets > h2,
-    #tab-topup > h2,
-    #tab-reviews > h2,
-    #tab-feedback > h2,
-    #tab-media > h2,
-    #tab-about > h2,
-    #tab-legal > h2,
-    #tab-faq > h2,
-    /* meituan / guanyi / eleme deliberately excluded — no rail button, so their
-       crumb would be empty; they keep their in-content title. */
-    #tab-social h2,
-    #tab-vouchers .td-greet-col > h2,
-    #tab-delivery .dlv-view[data-dlv="hub"] > h2,
-    #tab-sales .td-head > h2,
-    #tab-sharing .sc-h2 { display: none; }
-  }
-  @media (max-width: 720px) {
-    .tb-page { display: none; }
-  }
+  /* Page identity retired from the topbar 2026-07-25 (§1.1d — the bar is CLOSED).
+     The crumb (#tb-crumb), the Products/Purchasing sub-view mirrors
+     (.tb-subviews / #tb-pu-subviews) and the ⓘ mirror (#tb-info-wrap) are gone,
+     with their styles. Nothing in the chrome names the page; each page names
+     itself with its own in-content heading. The @media(min-width:721px) rule that
+     hid those in-content headings (because the crumb had named them) is removed
+     too, in the SAME change — otherwise 16 tabs would ship with no visible title
+     at all, and Products/Purchasing would lose their now-restored in-content
+     sub-view switch (#stk-views / .pu2-subnav). meituan/guanyi/eleme were never in
+     that rule (no rail button ⇒ no crumb ⇒ they already keep their own title). */
 
   /* ── shared chrome ── */
   /* Content is a centered 1120px column (like the mockup's .page), so the

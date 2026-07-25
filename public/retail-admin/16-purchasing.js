@@ -164,23 +164,11 @@
     else if (_screen === 'bills')     paintBills();
     else if (_screen === 'reorder')   paintReorder();
     else if (_screen === 'pricehist') paintPriceHistory();
-    tbSyncPuTabs();
     try { applyCapGates(); } catch (_) {}
   }
 
-  // Mirror the active tab onto the desktop topbar switch (Option B), same as
-  // Products' prodShowView. Runs on every paint() so it also tracks drill-in
-  // screens (wizard/receive → Orders; supplier/import → Suppliers) that don't
-  // render puChrome themselves.
-  const PU_SCREEN_TAB = {
-    orders: 'orders', wizard: 'orders', receive: 'orders',
-    suppliers: 'suppliers', supplier: 'suppliers', import: 'suppliers',
-    bills: 'bills', reorder: 'reorder',
-  };
-  function tbSyncPuTabs() {
-    const active = PU_SCREEN_TAB[_screen] || 'orders';
-    PU_TABS.forEach(([key]) => document.getElementById('tb-pu-btn-' + key)?.classList.toggle('on', key === active));
-  }
+  // (Topbar Purchasing sub-view mirror removed 2026-07-25 — the bar is closed
+  // (§1.1d). The in-content .pu2-subnav is the sole sub-view switch again.)
 
   function backBtn(label, fn) {
     return `<button class="pu2-btn ghost sm" onclick="${fn}"><span class="pu2-ic">${I.back}</span>${esc(label)}</button>`;

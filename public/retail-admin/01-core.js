@@ -269,7 +269,6 @@ $$('.tabs [data-tab]').forEach(btn => btn.addEventListener('click', () => {
   // is marked .has-active above, which styles the trigger — no need to keep the
   // panel hanging over the content).
   closeFlyouts();
-  tbSetPage();
 }));
 // Sales overview → jump into a single channel's full admin. The "Configure"
 // buttons on #tab-sales call this; it clicks the channel's rail button, which
@@ -299,29 +298,11 @@ function goTab(tab) {
     g.classList.toggle('has-active', has);
   });
   closeFlyouts();
-  tbSetPage();
 }
 
-// Topbar page identity (Option B) — paint the active section's own name into the
-// left of the topbar, where the search field used to sit. The label is lifted
-// straight from the active rail button's DIRECT text (so it tracks the live
-// language and never picks up an SVG icon or a badge span). Products additionally
-// shows its sub-view switch there (wired in the markup); every other tab just
-// gets its name. Called on every tab switch and on language change.
-function _tbRailLabel(btn) {
-  let s = '';
-  btn.childNodes.forEach(n => { if (n.nodeType === 3) s += n.nodeValue; });
-  return s.replace(/\s+/g, ' ').trim();
-}
-function tbSetPage() {
-  const crumb = document.getElementById('tb-crumb');
-  if (!crumb) return;
-  const active = document.querySelector('.tabs [data-tab].active');
-  crumb.textContent = active ? _tbRailLabel(active) : '';
-}
-if (typeof window.onLangChange === 'function') window.onLangChange(() => tbSetPage());
-if (document.readyState !== 'loading') tbSetPage();
-else document.addEventListener('DOMContentLoaded', tbSetPage);
+// (Topbar page-identity crumb removed 2026-07-25 — the bar is closed, §1.1d.
+// tbSetPage()/_tbRailLabel() and their tab-switch + language-change hooks are
+// gone with it; the page names itself with its own in-content heading.)
 // Topbar Inbox dropdown (Reviews / Feedback).
 function toggleInboxMenu(ev) {
   if (ev) ev.stopPropagation();

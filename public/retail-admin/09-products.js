@@ -464,8 +464,6 @@ function prodShowView(view) {
     const el = document.getElementById(id);
     if (el) el.style.display = v === view ? '' : 'none';
     document.getElementById('stk-view-btn-' + v)?.classList.toggle('on', v === view);
-    // Mirror the active state onto the desktop topbar switch (Option B).
-    document.getElementById('tb-stk-btn-' + v)?.classList.toggle('on', v === view);
   }
   // actAdminInit loads the ledger and starts its own 15s poll; that poll asks
   // actTabVisible(), which checks this view is the one on screen.
