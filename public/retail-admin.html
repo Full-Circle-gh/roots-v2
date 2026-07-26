@@ -2250,11 +2250,14 @@
       /* New customer is the page's ONE Dusk element (precedent: #tab-sales's
          "Set up"). Scoped to its own class, NOT to #tab-customers .btn-primary,
          because the customer modals hold five more .btn-primary saves that must
-         stay quiet. */
-      #tab-customers .cul-new {
+         stay quiet. ⚠️The class is `cul-addcust`, NOT `cul-new` — `.cul-new` is
+         already taken by the sage "New" pill on a customer row (#cu-table
+         .cul-new); a `#tab-customers .cul-new:hover` rule here would outrank
+         that pill's own colour and flash it Dusk on row hover. */
+      #tab-customers .cul-addcust {
         background: var(--td-dusk); border-color: var(--td-dusk); color: #FFFFFF;
       }
-      #tab-customers .cul-new:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); }
+      #tab-customers .cul-addcust:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); }
 
       /* Stat strip — slim cards. Blocked hides itself at zero (an empty state
          shouldn't own a card) and only turns amber when it's real. */
@@ -2751,7 +2754,7 @@
       <div class="td-head">
         <h2>Customers · 顾客</h2>
         <span class="sp"></span>
-        <button class="btn btn-primary cul-new" onclick="cuOpenCreate()" title="Add a walk-in / phone-order customer · 添加到店或电话下单的顾客">
+        <button class="btn btn-primary cul-addcust" onclick="cuOpenCreate()" title="Add a walk-in / phone-order customer · 添加到店或电话下单的顾客">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           New customer · 新增顾客
         </button>
