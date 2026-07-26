@@ -350,6 +350,46 @@ function cuRepaintKpis() {
 let CU_TOTAL_ALL = 0;
 
 function cuNum(v) { return Number(v || 0).toLocaleString('en-US'); }
+
+// Order status, spelled the way the whole product spells it. humanStatus()
+// (04-orders.js) is the single source: it turns the raw enum into a real label
+// ('pending_payment' -> "Pending") and relabels dispatched/delivered for pickup
+// orders ("Ready" / "Picked up"), which no amount of CSS could do.
+// ⚠ Do NOT fall back to raw `o.status` or to text-transform:capitalize — the
+// first prints an enum at the operator and the second turns "Awaiting restock"
+// into "Awaiting Restock" and "Rider coming" into "Rider Coming".
+function cuStatusLabel(o) {
+  return (typeof humanStatus === 'function')
+    ? humanStatus(o.status, o.fulfillment_type)
+    : String(o.status || '');
+}
+// First letter up, for raw enums that have no label map of their own (top-up
+// status: success / pending / failed). Only the first word, unlike CSS.
+function cuCap(s) {
+  const t = String(s || '');
+  return t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
+}
+// Points-ledger sources. Every value live in retail_points_transactions today:
+// order_earn, migration, order_redeem, poll_vote, refund_reverse,
+// refund_redeem, order_addon_earn, admin_adjust, topup_bonus. An unmapped
+// source falls back to its raw key rather than a guess — visibly odd is better
+// than plausibly wrong, and it tells us a new source appeared.
+const CU_PTS_SOURCE = {
+  order_earn:       ['Earned on order', '订单获得'],
+  order_addon_earn: ['Earned on add-on', '加购获得'],
+  order_redeem:     ['Redeemed on order', '订单抵扣'],
+  refund_reverse:   ['Reversed by refund', '退款收回'],
+  refund_redeem:    ['Returned by refund', '退款返还'],
+  migration:        ['Carried over', '账户迁移'],
+  topup_bonus:      ['Top-up bonus', '充值赠送'],
+  poll_vote:        ['Poll vote', '投票获得'],
+  admin_adjust:     ['Staff adjustment', '后台调整'],
+  expiry:           ['Expired', '已过期'],
+};
+function cuPtsSource(src) {
+  const m = CU_PTS_SOURCE[src];
+  return m ? cuT(m[0], m[1]) : String(src || '');
+}
 // Money drops a trailing .00 — "¥1,430", not "¥1430.00" — but real decimals
 // still show, because ¥12.50 rounded to ¥13 is a different number.
 function cuMoney(v) {
@@ -730,6 +770,13 @@ function cuCopyChip(btn, text) {
 // contacts support saying the app is broken: see their exact app build, phone,
 // OS, and recent errors instead of guessing. Strings use cuT (one live
 // language) per the admin i18n rule — never stacked EN+CN.
+// ⚠ TIMESTAMPS IN HERE STAY ABSOLUTE (cuFmtTime), and that is a deliberate
+// exception to the drawer's relative-time rule. Every ledger above — recent
+// orders, points, top-ups — reads "2h ago", because there you want recency at
+// a glance. A diagnostics log is forensic: it is read to line an error up
+// against something else that happened, so "2h ago" throws away the precision
+// that makes it worth keeping. Different job, deliberately different rule.
+// Do not "make it consistent" with the ledgers.
 function renderDiagnosticsBlock(diag) {
   const dev = diag && diag.device_last_seen;
   const logs = (diag && diag.recent_logs) || [];
@@ -854,6 +901,9 @@ function cuRenderDetail() {
       ? { maximumFractionDigits: 0 }
       : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
+  // Money WITHOUT the symbol, for attribute values (the chart tooltip prints
+  // its own ¥). Same .00-dropping, comma-grouping rule as yuan().
+  const yuanBare = v => yuan(v).slice(1);
 
   // Drawer action bar — two everyday buttons (Message, Edit profile). The
   // rare/deliberate actions (Sign out all devices, Block) fold into a More ▾
@@ -899,7 +949,7 @@ function cuRenderDetail() {
   const maxN = Math.max(1, ...months.map(m => m.n));
   const barMax = 78;   // fixed quiet height — the summary line carries the headline
   const monthBars = months.map(m => `
-    <div class="cu-bar-col" data-m="${m.key}" data-n="${m.n}" data-rev="${Number(m.revenue || 0).toFixed(2)}" onmousemove="cuBarTip(event)" onmouseleave="cuBarTipHide()">
+    <div class="cu-bar-col" data-m="${m.key}" data-n="${m.n}" data-rev="${escapeAttr(yuanBare(m.revenue))}" onmousemove="cuBarTip(event)" onmouseleave="cuBarTipHide()">
       <div class="cu-bar ${m.n === 0 ? 'empty' : (m.n === maxN ? 'peak' : '')}" style="height: ${m.n === 0 ? 3 : Math.max(8, (m.n / maxN) * barMax)}px;"></div>
       <div class="cu-bar-label">${m.key.slice(5)}</div>
     </div>
@@ -922,10 +972,10 @@ function cuRenderDetail() {
   const recentOrdersRows = d.recent_orders.length
     ? d.recent_orders.map(o => `
         <tr class="cu-order-row" tabindex="0" onclick="cuGotoOrder(${o.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();cuGotoOrder(${o.id});}">
-          <td>${escapeHtml(o.order_no)}</td>
-          <td><span class="cu-pill">${escapeHtml(o.status)}</span></td>
-          <td class="numeric">¥${Number(o.total || 0).toFixed(2)}</td>
-          <td class="muted">${cuFmtTime(o.created_at)}</td>
+          <td data-no-i18n>${escapeHtml(o.order_no)}</td>
+          <td><span class="cu-pill">${escapeHtml(cuStatusLabel(o))}</span></td>
+          <td class="numeric" data-no-i18n>${yuan(o.total)}</td>
+          <td class="muted" data-no-i18n>${escapeHtml(courierAgo(o.created_at))}</td>
         </tr>`).join('')
     : '<tr><td colspan="4" class="muted">No orders yet · 暂无订单</td></tr>';
   // The fold shows only the last 10 (backend LIMIT). When the customer has more,
@@ -938,11 +988,11 @@ function cuRenderDetail() {
   const recentPtsRows = d.recent_points.length
     ? d.recent_points.map(p => `
         <tr>
-          <td><span class="cu-pill">${escapeHtml(p.source)}</span></td>
-          <td class="numeric" style="color: ${p.delta >= 0 ? 'var(--accent)' : 'var(--danger)'}; font-weight: 600;">${p.delta >= 0 ? '+' : ''}${p.delta}</td>
-          <td class="numeric">${p.balance_after}</td>
+          <td><span class="cu-pill">${escapeHtml(cuPtsSource(p.source))}</span></td>
+          <td class="numeric" data-no-i18n style="color: ${p.delta >= 0 ? 'var(--accent)' : 'var(--danger)'}; font-weight: 600;">${p.delta >= 0 ? '+' : ''}${cuNum(p.delta)}</td>
+          <td class="numeric" data-no-i18n>${cuNum(p.balance_after)}</td>
           <td class="muted">${escapeHtml(p.note || '')}</td>
-          <td class="muted">${cuFmtTime(p.created_at)}</td>
+          <td class="muted" data-no-i18n>${escapeHtml(courierAgo(p.created_at))}</td>
         </tr>`).join('')
     : '<tr><td colspan="5" class="muted">No points activity · 暂无积分变动</td></tr>';
 
@@ -950,10 +1000,10 @@ function cuRenderDetail() {
     ? d.recent_topups.map(t => `
         <tr>
           <td>${paymentBrandHTML(t.payment_method)}</td>
-          <td class="numeric">¥${Number(t.amount || 0).toFixed(2)}</td>
-          <td class="numeric">+${t.bonus_points || 0} pts · 分</td>
-          <td><span class="cu-pill">${escapeHtml(t.status)}</span></td>
-          <td class="muted">${cuFmtTime(t.created_at)}</td>
+          <td class="numeric" data-no-i18n>${yuan(t.amount)}</td>
+          <td class="numeric" data-no-i18n>+${cuNum(t.bonus_points || 0)} pts</td>
+          <td><span class="cu-pill">${escapeHtml(cuCap(t.status))}</span></td>
+          <td class="muted" data-no-i18n>${escapeHtml(courierAgo(t.created_at))}</td>
         </tr>`).join('')
     : '<tr><td colspan="5" class="muted">No top-up activity · 暂无充值记录</td></tr>';
 
@@ -1063,7 +1113,7 @@ function cuRenderDetail() {
   // No orders → say so; never a dash.
   const lastOrd = (d.recent_orders && d.recent_orders[0]) || null;
   const lastOrderV = lastOrd
-    ? '#' + (lastOrd.order_no || lastOrd.id) + ' · ' + (lastOrd.status || '')
+    ? '#' + (lastOrd.order_no || lastOrd.id) + ' · ' + cuStatusLabel(lastOrd)
     : cuT('no orders yet', '暂无订单');
   const buildV = (d.diagnostics && d.diagnostics.device_last_seen) || null;
   // "not recorded", not "—": the app build is absent because this customer has
@@ -1104,7 +1154,7 @@ function cuRenderDetail() {
         <div class="cux-name" data-no-i18n>
           <span class="hn-name">${c.nickname ? escapeHtml(c.nickname) : `<span class="none">${escapeHtml(cuT('No name', '未填姓名'))}</span>`}</span>
           <span class="hn-pills">
-            <span class="cu-pill tier-${escapeHtml(c.tier_key || 'seed')}">${escapeHtml(c.tier_key || 'seed')}</span>
+            <span class="cu-pill tier-${escapeHtml(c.tier_key || 'seed')}">${escapeHtml(cuCap(c.tier_key || 'seed'))}</span>
             ${c.is_blocked ? `<span class="cu-pill blocked">${escapeHtml(cuT('Blocked', '已封禁'))}</span>` : ''}
           </span>
         </div>
@@ -1143,7 +1193,7 @@ function cuRenderDetail() {
         <div class="cux-frow"><div class="k">Last order · 最近订单</div><div class="v${lastOrd ? '' : ' none'}" data-no-i18n>${escapeHtml(lastOrderV)}</div></div>
         <!-- Relative, via the same cuFmtSeen the roster's Last seen column uses,
              so "3d ago" means the same thing on both surfaces. -->
-        <div class="cux-frow"><div class="k">Last login · 最近登录</div><div class="v quiet" data-no-i18n>${escapeHtml(cuFmtSeen(c.last_login_at))}</div></div>
+        <div class="cux-frow"><div class="k">Last login · 最近登录</div><div class="v quiet" data-no-i18n>${escapeHtml(c.last_login_at ? courierAgo(c.last_login_at) : cuT('never', '从未'))}</div></div>
         <!-- Bare "46 / 48": the two numbers ARE the sentence. -->
         <div class="cux-frow"><div class="k">Completed · 已完成</div><div class="v" data-no-i18n>${cuNum(ord.completed_count || 0)} / ${cuNum(ordersN)}</div></div>
         ${(rev.count || 0) > 0 ? `<div class="cux-frow"><div class="k">Reviews · 评价</div><div class="v" data-no-i18n>${rev.count}${rev.avg_rating ? ' <span class="muted">· ' + Number(rev.avg_rating).toFixed(1) + '★</span>' : ''}</div></div>` : ''}

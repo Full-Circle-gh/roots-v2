@@ -2792,7 +2792,20 @@
       .cu-pill { display: inline-flex; align-items: center; gap: .4em; }
 
       /* Pills — quiet rounded chips (tier stays sage; blocked brick). */
-      #cu-drawer .cu-pill { font-family: var(--f-sans); font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: capitalize; border-radius: 999px; padding: 4px 13px; border: none; background: var(--bg-elev-1); color: var(--text-2); }
+      /* 🔴 NO text-transform. There WAS a `capitalize` here and it had to go.
+         It capitalises EVERY word, and it only ever looked right because this
+         pill was being fed single-word enums ('paid', 'root', 'success'). It
+         was one status away from rendering "Awaiting Restock" and "Rider
+         Coming" — and it was already printing the points source `order_earn`
+         as "Order_earn", underscore and all.
+         Labels now arrive already spelled, from code that MAPS rather than
+         transforms: order status via humanStatus() (which also relabels
+         dispatched/delivered as Ready/Picked up for pickup orders — a business
+         rule no CSS could express), points source via cuPtsSource(), and the
+         genuinely single-word enums via cuCap().
+         ⚠ Re-adding any text-transform here silently breaks every multi-word
+         label again, and it will look fine in whatever one-word case you test. */
+      #cu-drawer .cu-pill { font-family: var(--f-sans); font-size: 13px; font-weight: 500; letter-spacing: 0; border-radius: 999px; padding: 4px 13px; border: none; background: var(--bg-elev-1); color: var(--text-2); }
       /* Seed is where everyone starts, so it stays quiet; earned tiers colour. */
       #cu-drawer .cu-pill.tier-seed { background: var(--bg-elev-1); color: var(--text-2); }
       #cu-drawer .cu-pill.tier-sprout { background: var(--tacet-sage-tint); color: var(--tacet-sage-ink); }
