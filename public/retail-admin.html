@@ -2515,8 +2515,11 @@
       #cu-table .cul-chanico { display: inline-flex; align-items: center; color: var(--text-2); flex: none; }
       #cu-table .cul-chanico svg { width: 15px; height: 15px; display: block; }
 
-      /* Tier pill. Seed — the tier everyone starts on — stays quiet cream; only
-         an EARNED tier takes colour, so an upgraded customer stands out. */
+      /* Tier pill — ONE neutral treatment for every tier, per the mockup. The
+         tier is a fact about the customer, not a state needing attention, so it
+         doesn't compete for the eye; the Sage/Amber per-tier colours that used
+         to sit here spent the palette's attention colours on a value nobody
+         acts on. Blocked keeps Brick, because that one IS a state. */
       #cu-table .cul-pill {
         display: inline-flex; align-items: center;
         padding: 3px 11px;
@@ -2526,10 +2529,10 @@
         border: 1px solid transparent;
         background: var(--bg-elev-1); color: var(--text-2);
       }
-      #cu-table .cul-pill.tier-seed   { border-color: var(--line); }
-      #cu-table .cul-pill.tier-sprout { background: var(--tacet-sage-tint);  color: var(--tacet-sage-ink); }
-      #cu-table .cul-pill.tier-root,
-      #cu-table .cul-pill.tier-tree   { background: var(--tacet-amber-tint); color: var(--tacet-amber-ink); }
+      /* No per-tier colours. Seed / Sprout / Root / Tree all wear the neutral
+         pill above. ⚠ Do not reintroduce tier-sprout Sage or tier-root/tree
+         Amber here — Amber is reserved for states needing attention and a tier
+         is not one. */
       #cu-table .cul-pill.blocked     { background: var(--tacet-brick-tint); color: var(--tacet-brick); }
 
       /* Figures: tabular, right-aligned, and zeros fade back so real balances

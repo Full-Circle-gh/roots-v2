@@ -13245,10 +13245,10 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
   // Comma-separated so the Tier column header can filter by several tiers at
   // once (e.g. "root,tree"); a single value still works the same as before.
   const tiers          = String(req.query.tier || '').trim().split(',').map(s => s.trim()).filter(Boolean);
-  // Same pattern for the Channel column filter — the channel shown per
-  // customer is their MOST RECENT order's channel (matches the label already
-  // used per-order in the Orders table). No orders yet → 'wechat' (mini app),
-  // the only channel an account can be created through today.
+  // Same pattern for the Channel filter. Values are SIGNUP channels —
+  // 'wechat' | 'web' | 'manual' | 'unknown' — derived from openid by
+  // CHANNEL_SQL below, which the SELECT and this WHERE both read so the icon
+  // on a row and the filter that returns it can never disagree.
   const channels       = String(req.query.channel || '').trim().split(',').map(s => s.trim()).filter(Boolean);
   const segment        = String(req.query.segment || '').trim();
   // The roster asks for one segment at a time; the stat strip still calls this
@@ -13260,9 +13260,43 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
   const pageSize       = Math.min(100, Math.max(1, parseInt(req.query.pageSize, 10) || 20));
   const offset         = (page - 1) * pageSize;
 
-  // Correlated subquery reused in both SELECT and WHERE so "the channel
-  // shown" and "the channel filtered on" can never drift apart.
-  const CHANNEL_SQL = `COALESCE((SELECT channel FROM retail_orders WHERE customer_id = retail_customers.id ORDER BY placed_at DESC LIMIT 1), 'wechat')`;
+  // ── Signup channel — WHERE THEY SIGNED UP, not where they last ordered ──
+  //
+  // Derived from `openid`, which is UNIQUE NOT NULL and whose prefix is written
+  // by the insert site itself — so it cannot be lost, shared, or disagree with
+  // anything. It IS the source of truth. `retail_customers.source` is
+  // deliberately NOT backfilled from it: two fields carrying the same fact must
+  // then agree forever, and on the day they diverge nobody can say which is
+  // right. `source` stays as it is — written only by the admin create path,
+  // which is correct and simply hasn't fired yet.
+  //
+  // This replaced a last-order-channel lookup that defaulted to 'wechat' for
+  // anyone with no orders — a claim about origin made from no evidence, on 511
+  // of 690 rows.
+  //
+  // `_reset_` is an ARCHIVE WRAPPER, not an origin: reset_test_customer stores
+  // `_reset_<epoch>_<original openid>`, so unwrap it first and classify what is
+  // underneath. (LIKE needs ESCAPE here — `_` is LIKE's single-char wildcard.)
+  const OPENID_RAW =
+    `CASE WHEN retail_customers.openid LIKE '\\_reset\\_%' ESCAPE '\\'
+          THEN SUBSTR(retail_customers.openid, 8 + INSTR(SUBSTR(retail_customers.openid, 8), '_'))
+          ELSE retail_customers.openid END`;
+  // 🔴 NO CATCH-ALL `else`. The native WeChat shape is asserted explicitly
+  // (28 chars, leading 'o', base64url charset). Anything matching nothing —
+  // including a future signup path that forgets to namespace its synthetic
+  // openid — comes back 'unknown' and renders NO icon. Classifying by exclusion
+  // is how a wrong value ships and nobody notices.
+  const CHANNEL_SQL = `CASE
+      WHEN (${OPENID_RAW}) LIKE 'manual:%' THEN 'manual'
+      WHEN (${OPENID_RAW}) LIKE 'web:%'    THEN 'web'
+      WHEN (${OPENID_RAW}) LIKE 'google:%' THEN 'web'
+      WHEN (${OPENID_RAW}) LIKE 'apple:%'  THEN 'web'
+      WHEN (${OPENID_RAW}) LIKE 'email:%'  THEN 'web'
+      WHEN (${OPENID_RAW}) LIKE 'wxweb:%'  THEN 'web'
+      WHEN (${OPENID_RAW}) LIKE 'dev:%'    THEN 'wechat'
+      WHEN LENGTH(${OPENID_RAW}) = 28
+       AND (${OPENID_RAW}) GLOB 'o[A-Za-z0-9_-]*'  THEN 'wechat'
+      ELSE 'unknown' END`;
 
   const where  = [];
   const params = [];

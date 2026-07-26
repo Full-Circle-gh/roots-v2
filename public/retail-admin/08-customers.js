@@ -363,22 +363,24 @@ function cuMoney(v) {
 
 // Channel icon for the Customer cell.
 //
-// 🔴 NO FALLBACK, DELIBERATELY. The row's channel comes from the customer's
-// most recent order, and the endpoint defaults it to 'wechat' when they have
-// none — which is 511 of 689 live customers (74%). Painting a Mini app icon
-// from that default states where someone came from on no evidence at all, on
-// three quarters of the page. So: an order establishes the channel, or the
-// cell stays empty. Not a default, not a placeholder, not a dash — the same
-// rule an absent SKU follows. Do NOT "restore" this as a missing default.
+// r.channel is the SIGNUP channel, derived server-side from openid by
+// CHANNEL_SQL (retail.js) — where they signed up, not where they last ordered.
+// The same expression answers the Channel filter, so a row's icon and the
+// filter that returns it cannot disagree.
+//
+// 🔴 NO FALLBACK. An unrecognised openid classifies as 'unknown' and gets NO
+// icon rather than a guess — not a default, not a placeholder, not a dash, the
+// same rule an absent SKU follows. Zero rows are unknown today; a future signup
+// path that forgets to namespace its openid would land here and show nothing,
+// which is the point. Do NOT add an `|| CU_CHAN_ICON.wechat`.
 const CU_CHAN_ICON = {
   wechat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg>',
   web:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.4 2.5 15.6 0 18M12 3c-2.5 2.4-2.5 15.6 0 18"/></svg>',
   manual: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="8" r="3.4"/><path d="M3.5 20a6.5 6.5 0 0 1 13 0"/><path d="M18 7v6M15 10h6"/></svg>',
 };
 function cuChanIcon(r) {
-  if (!Number(r.orders_count || 0)) return '';       // no order ⇒ no claim
   const c = String(r.channel || '').toLowerCase();
-  const svg = CU_CHAN_ICON[c];
+  const svg = CU_CHAN_ICON[c];                        // 'unknown' ⇒ undefined ⇒ no icon
   if (!svg) return '';
   const opt = CU_CHAN_OPTS.find(o => o[0] === c);
   const label = opt ? cuT(opt[1], opt[2]) : c;
