@@ -1872,9 +1872,29 @@ function cuOpenAdjust(kind) {
   $('#cu-adjust-title').textContent  = kind === 'points'
     ? 'Adjust points balance · 调整积分余额'
     : 'Adjust wallet balance · 调整钱包余额';
+  // 🔴 ONE LANGUAGE, CHOSEN BY cuT. Two separate failures were live here in
+  // sequence, and fixing only the visible one would have made it worse.
+  //
+  //   1. What was on screen: the element carried data-no-i18n, so the walker
+  //      skipped it and BOTH halves of "Current · 当前: ¥0" rendered at once.
+  //      The shield was the cause.
+  //   2. What un-shielding alone would have done: the walker splits on the
+  //      FIRST ' · ', giving en="Current" and cn="当前: ¥0". English would have
+  //      rendered "Current" with the VALUE SILENTLY GONE.
+  //
+  // A shield that shows too much is visible and gets reported. A split that
+  // drops the number is not — it just looks like a label. So the fix is
+  // neither shielding nor splitting: keep the pair away from the walker
+  // ENTIRELY by composing one language with cuT().
+  //
+  // ⚠ THE SHAPE RULE THIS STRING BROKE: a bilingual pair must be clean English
+  // on the LEFT and Chinese on the RIGHT, with NOTHING after the Chinese. A
+  // trailing colon and value on the Chinese side makes the string unsplittable
+  // no matter how it is wrapped — the walker has no way to know the "¥0"
+  // belongs to both languages.
   $('#cu-adjust-current').textContent = kind === 'points'
-    ? `Current · 当前: ${cuNum(c.points_balance || 0)} pts`
-    : `Current · 当前: ${cuMoneyPlain(c.balance)}`;
+    ? cuT(`Current: ${cuNum(c.points_balance || 0)} pts`, `当前:${cuNum(c.points_balance || 0)} 分`)
+    : cuT(`Current: ${cuMoneyPlain(c.balance)}`, `当前:${cuMoneyPlain(c.balance)}`);
   $('#cu-adjust-delta').value  = '';
   $('#cu-adjust-reason').value = '';
   cuShowModal('#cu-adjust-bg');

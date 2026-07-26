@@ -1313,6 +1313,18 @@
           <div class="bn-inner">
             <div class="bn-head">
               <svg class="bn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg>
+              <!-- ⚠ RECORDED, NOT FIXED (2026-07-26) — belongs to the Dashboard.
+                   data-no-i18n sits on an element whose OWN text is a bilingual
+                   pair, so the walker skips it and both halves would render
+                   glued. It is saved only by tdRecapHeadPaint() overwriting the
+                   text with cuT(...) — and that function returns early when
+                   TD.recapSince is not computed, so the glued text CAN surface
+                   when the recap does not load.
+                   Same pattern as the Customers adjust-modal bug fixed in
+                   08-customers.js (see cuOpenAdjust): the fix there was to
+                   compose one language with cuT rather than shield a pair.
+                   Left alone deliberately — this is a Dashboard call, not a
+                   Customers one. -->
               <h3 id="td-recap-title" data-no-i18n>While you were away · 您不在的这段时间</h3>
               <span class="bn-meta" id="td-recap-meta" data-no-i18n></span>
               <button class="bn-go" type="button" id="td-recap-work-btn" onclick="tdRecapToggleWork()">Show the work ▾ · 查看明细 ▾</button>
@@ -3374,9 +3386,13 @@
           <!-- Says WHY the reason is required, before the operator meets the
                required field — not after they've been refused by it. -->
           <div class="cu-mnote">This changes a customer balance and is written to the ledger with the reason below. · 此操作会改变顾客余额,并连同下方原因一并记入流水。</div>
-          <div id="cu-adjust-current" class="muted" style="font-size: 12px; margin-bottom: var(--s3);" data-no-i18n></div>
+          <!-- No data-no-i18n. Shielding this glued "Current · 当前: ¥0" on screen:
+                 the walker skipped it, so BOTH halves rendered. Its text is now
+                 composed in a single language by cuT() in cuOpenAdjust, so there is
+                 no pair here for the walker to split and nothing to shield. -->
+          <div id="cu-adjust-current" class="muted" style="font-size: 12px; margin-bottom: var(--s3);"></div>
           <div class="field">
-            <label class="stacked">Delta (negative to deduct) · 变动量(负数表示扣减)</label>
+            <label class="stacked">Amount · 金额</label>
             <input type="number" id="cu-adjust-delta" step="any" placeholder="e.g. 50 or -20">
             <div class="helper">Writes a ledger row so the audit trail stays intact. Cannot push the balance below zero. · 会写入流水以保留审计轨迹。不可将余额扣至负数。</div>
           </div>
