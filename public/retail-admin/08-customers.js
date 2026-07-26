@@ -21,8 +21,9 @@ let cuSearchTimer = null;
 // "Include blocked" checkbox: the chip only exists when someone IS blocked.
 let CU_SEGMENT = '';
 
-// Sort + tier filter now live on the table's own columns (the old "All tiers"
-// / "Recent login" toolbar selects are gone) — see cuSortBy / cuTierCheck.
+// Sorting is no longer an operator control — the column headers carry no
+// carets. These two are kept only because the endpoint takes them, and they
+// pin the roster to its one sensible default order: most recently seen first.
 let CU_SORT = 'last_seen';
 let CU_SORT_DIR = 'desc';
 let CU_TIER_FILTERS = new Set();
@@ -33,7 +34,6 @@ let CU_TIER_FILTERS = new Set();
 // Filters on each customer's MOST RECENT order's channel (backend default
 // 'wechat' for customers with zero orders yet, the only signup path today).
 let CU_CHAN_FILTER = '';
-const CU_SORT_DEFAULT_DIR = { name: 'asc', tier: 'desc', orders: 'desc', spend: 'desc', points: 'desc', wallet: 'desc', last_seen: 'desc' };
 const CU_TIER_LABEL = { seed: 'Seed · 种子', sprout: 'Sprout · 嫩芽', root: 'Root · 根系', tree: 'Tree · 大树' };
 
 function cuSearchDebounced() {
@@ -57,115 +57,133 @@ function cuSegment(btn, seg) {
   cuFilterChanged();
 }
 
-// ── Column-header sort ────────────────────────────────────────────────────
-// Click a sortable column: first click sorts by it (in that column's natural
-// default direction), a second click on the same column flips direction.
-function cuSortBy(key) {
-  if (CU_SORT === key) CU_SORT_DIR = (CU_SORT_DIR === 'asc') ? 'desc' : 'asc';
-  else { CU_SORT = key; CU_SORT_DIR = CU_SORT_DEFAULT_DIR[key] || 'desc'; }
-  cuPaintSortHeaders();
-  cuFilterChanged();
-}
-function cuPaintSortHeaders() {
-  document.querySelectorAll('#cu-table thead th[data-sort]').forEach(th => {
-    const active = th.dataset.sort === CU_SORT;
-    th.classList.toggle('cul-sort-active', active);
-    const car = th.querySelector('.cul-carets');
-    if (!car) return;
-    car.innerHTML = active
-      ? (CU_SORT_DIR === 'asc'
-          ? '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 6l6 8H6z"/></svg>'
-          : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 18l-6-8h12z"/></svg>')
-      : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 6l6 8H6z"/></svg>'
-      + '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 18l-6-8h12z"/></svg>';
-  });
-}
+// ── Filter row — Tier and Channel dropdowns ──────────────────────────────
+// Sorting is gone from the column headers (no carets), and the tier funnel /
+// channel chip strip are gone with it. Both filters are dropdowns now; when
+// either is set to anything but All its button becomes the applied-filter
+// pill itself — Ink fill, the chosen value, a hairline divider, then ×. There
+// is no separate pill element: a second chip restating the button beside it
+// was the redundancy the strip already had.
+//
+// CU_TIER_FILTERS stays a Set even though the dropdown picks one value at a
+// time — cuMobTier() and the phone chip row share it, and reshaping it here
+// would silently break the phone list.
+const CU_TIER_ORDER = ['tree', 'root', 'sprout', 'seed'];
+// value → [EN, 中文]. The stored value is the ORDER channel, so "Mini app" is
+// `wechat`, NOT `mini`: the mockup's key is a demo label, and filtering on
+// 'mini' would match nothing at all.
+const CU_CHAN_OPTS = [
+  ['',       'All channels', '全部渠道'],
+  ['wechat', 'Mini app',     '小程序'],
+  ['web',    'Web',          '网页'],
+  ['manual', 'Added by staff', '手动添加'],
+];
+let CU_MENU_OPEN = null;   // 'tier' | 'chan' | null
 
-// ── Tier column filter — funnel + checkbox popover ───────────────────────
-function cuTierPopToggle(e) {
+function cuMenuToggle(kind, e) {
   if (e) e.stopPropagation();
-  const pop = document.getElementById('cu-tier-pop');
-  if (!pop) return;
-  const opening = !pop.classList.contains('open');
-  pop.classList.toggle('open', opening);
-  if (opening) setTimeout(() => document.addEventListener('mousedown', cuTierPopOutside), 0);
-  else document.removeEventListener('mousedown', cuTierPopOutside);
+  CU_MENU_OPEN = (CU_MENU_OPEN === kind) ? null : kind;
+  cuPaintFilterBar();
+  if (CU_MENU_OPEN) setTimeout(() => document.addEventListener('mousedown', cuMenuOutside), 0);
+  else document.removeEventListener('mousedown', cuMenuOutside);
 }
-function cuTierPopClose() {
-  const pop = document.getElementById('cu-tier-pop');
-  if (pop) pop.classList.remove('open');
-  document.removeEventListener('mousedown', cuTierPopOutside);
+function cuMenuClose() {
+  CU_MENU_OPEN = null;
+  document.removeEventListener('mousedown', cuMenuOutside);
+  cuPaintFilterBar();
 }
-function cuTierPopOutside(e) {
-  if (e.target.closest && e.target.closest('#cu-tier-pop, #cu-tier-filter-btn')) return;
-  cuTierPopClose();
+function cuMenuOutside(e) {
+  if (e.target.closest && e.target.closest('.cul-selwrap')) return;
+  cuMenuClose();
 }
-function cuTierCheck(tier, checked) {
-  if (checked) CU_TIER_FILTERS.add(tier); else CU_TIER_FILTERS.delete(tier);
-  cuPaintTierFilterUI();
-  cuFilterChanged();
-}
-function cuTierFilterClear() {
+function cuPickTier(v) {
   CU_TIER_FILTERS.clear();
+  if (v) CU_TIER_FILTERS.add(v);
+  cuMenuClose();
   cuPaintTierFilterUI();
   cuFilterChanged();
 }
-function cuTierFilterRemove(tier) {
-  CU_TIER_FILTERS.delete(tier);
-  cuPaintTierFilterUI();
+function cuPickChan(v) {
+  CU_CHAN_FILTER = v || '';
+  cuMenuClose();
+  cuPaintFilterBar();
   cuFilterChanged();
 }
+// The × on an applied pill. It must actually clear the filter — an × that only
+// closes a menu is an inert control.
+function cuClearTier(e) { if (e) e.stopPropagation(); cuPickTier(''); }
+function cuClearChan(e) { if (e) e.stopPropagation(); cuPickChan(''); }
+
+function cuTierFilterClear() { cuPickTier(''); }
+function cuTierFilterRemove() { cuPickTier(''); }
+
 function cuPaintTierFilterUI() {
   const active = CU_TIER_FILTERS.size > 0;
-  const btn = document.getElementById('cu-tier-filter-btn');
-  if (btn) btn.classList.toggle('is-active', active);
-  document.querySelectorAll('#cu-tier-pop input[type=checkbox]').forEach(cb => {
-    cb.checked = CU_TIER_FILTERS.has(cb.value);
-  });
   // Mirror into the phone quick-tier chips (single-select there).
   const mob = document.getElementById('cu-mob-tiers');
   if (mob) mob.querySelectorAll('.cu-tchip').forEach(b => {
     const v = b.dataset.v || '';
     b.classList.toggle('on', v ? (CU_TIER_FILTERS.size === 1 && CU_TIER_FILTERS.has(v)) : !active);
   });
-  cuPaintFilterPills();
+  cuPaintFilterBar();
 }
 
-// ── Channel filter — chip strip, single value, mirrors setOrderChannel ────
-function cuSetChan(chan) {
-  CU_CHAN_FILTER = chan || '';
-  cuPaintChanChips();
-  cuFilterChanged();
+function cuCaretSvg() {
+  return '<svg class="cr" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
 }
-function cuPaintChanChips() {
-  const bar = document.getElementById('cu-chan-chips');
-  if (!bar) return;
-  bar.querySelectorAll('.cul-chan-chip').forEach(b => {
-    b.classList.toggle('on', (b.dataset.chan || '') === CU_CHAN_FILTER);
-  });
+function cuClearSvg(fn) {
+  return `<span class="cul-clear" role="button" tabindex="0" onclick="${fn}(event)"
+     title="${cuT('Clear filter', '清除筛选')}" aria-label="${cuT('Clear filter', '清除筛选')}"
+     ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></span>`;
+}
+function cuPaintFilterBar() {
+  const tierBtn = document.getElementById('cu-tier-btn');
+  const chanBtn = document.getElementById('cu-chan-btn');
+  if (tierBtn) {
+    const t = [...CU_TIER_FILTERS][0] || '';
+    const on = !!t;
+    tierBtn.classList.toggle('on', on);
+    tierBtn.innerHTML = `${cuT('Tier', '等级')}: ${on ? (CU_TIER_LABEL[t] || t) : cuT('All', '全部')} `
+      + (on ? cuClearSvg('cuClearTier') : cuCaretSvg());
+  }
+  if (chanBtn) {
+    const opt = CU_CHAN_OPTS.find(o => o[0] === CU_CHAN_FILTER) || CU_CHAN_OPTS[0];
+    const on = !!CU_CHAN_FILTER;
+    chanBtn.classList.toggle('on', on);
+    chanBtn.innerHTML = `${cuT('Channel', '渠道')}: ${cuT(opt[1], opt[2])} `
+      + (on ? cuClearSvg('cuClearChan') : cuCaretSvg());
+  }
+  const tierMenu = document.getElementById('cu-tier-menu');
+  const chanMenu = document.getElementById('cu-chan-menu');
+  if (tierMenu) {
+    tierMenu.hidden = CU_MENU_OPEN !== 'tier';
+    const cur = [...CU_TIER_FILTERS][0] || '';
+    tierMenu.innerHTML = [['', cuT('All tiers', '全部等级')]]
+      .concat(CU_TIER_ORDER.map(t => [t, CU_TIER_LABEL[t] || t]))
+      .map(([v, l]) => `<button type="button" class="${v === cur ? 'sel' : ''}" onclick="cuPickTier('${v}')">${l}</button>`).join('');
+  }
+  if (chanMenu) {
+    chanMenu.hidden = CU_MENU_OPEN !== 'chan';
+    chanMenu.innerHTML = CU_CHAN_OPTS
+      .map(([v, en, cn]) => `<button type="button" class="${v === CU_CHAN_FILTER ? 'sel' : ''}" onclick="cuPickChan('${v}')">${cuT(en, cn)}</button>`).join('');
+  }
 }
 
-// Clears both filters — the "Clear all" action above the table.
+// Clears every filter — used by the "no results" state's own action.
 function cuFilterClearAll() {
   CU_TIER_FILTERS.clear();
   CU_CHAN_FILTER = '';
+  CU_SEGMENT = '';
+  const q = document.getElementById('cu-q'); if (q) q.value = '';
+  const segs = document.getElementById('cu-segs');
+  if (segs) segs.querySelectorAll('.cul-seg').forEach(b => b.classList.toggle('on', (b.dataset.seg || '') === ''));
   cuPaintTierFilterUI();
-  cuPaintChanChips();
   cuFilterChanged();
 }
-
-// Pill strip — Tier only today (Channel's own chip strip already shows its
-// selection state, so it doesn't need a second, redundant pill).
-function cuPaintFilterPills() {
-  const row = document.getElementById('cu-afil-row');
-  const pills = document.getElementById('cu-afil-pills');
-  if (!row || !pills) return;
-  const active = CU_TIER_FILTERS.size > 0;
-  row.hidden = !active;
-  pills.innerHTML = [...CU_TIER_FILTERS].map(t => `
-    <span class="cul-afil-pill">${CU_TIER_LABEL[t] || t}<button type="button" onclick="cuTierFilterRemove('${t}')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
-    </button></span>`).join('');
+// True when anything is narrowing the roster — drives which empty state shows.
+function cuAnyFilter() {
+  const q = document.getElementById('cu-q');
+  return !!(CU_SEGMENT || CU_TIER_FILTERS.size || CU_CHAN_FILTER || (q && q.value.trim()));
 }
 
 // ── Customers stat strip — three figures, then the roster ────────────────
@@ -250,16 +268,21 @@ function cuRenderKpis() {
     const pips = dots.querySelectorAll('i');
     if (pips[4]) pips[4].style.display = _CU_BLOCKED > 0 ? '' : 'none';
   }
-  const chip = $('#cu-seg-blocked');
-  if (chip) {
-    chip.hidden = _CU_BLOCKED === 0;
-    const ct = $('#cu-seg-blocked-ct'); if (ct) ct.textContent = _CU_BLOCKED || '';
-    // The last blocked customer was just unblocked while that chip was active —
-    // fall back to All rather than leaving the operator on an empty roster.
-    if (_CU_BLOCKED === 0 && CU_SEGMENT === 'blocked') {
-      const all = document.querySelector('#cu-segs .cul-seg[data-seg=""]');
-      if (all) cuSegment(all, '');
-    }
+  // All four chips carry their real count. A chip with nothing to report shows
+  // NO number — never a zero, which reads as a measurement rather than an
+  // absence. The chips themselves always render: a chip is how an operator
+  // learns the cut exists, so it must not appear and vanish with its contents.
+  const seg = _CU_SEG_COUNTS || {};
+  const paintCt = (id, v) => { const el = $(id); if (el) el.textContent = Number(v || 0) ? cuNum(v) : ''; };
+  paintCt('#cu-seg-all-ct',     seg.all);
+  paintCt('#cu-seg-new-ct',     seg.new_week);
+  paintCt('#cu-seg-sleep-ct',   seg.sleeping);
+  paintCt('#cu-seg-blocked-ct', _CU_BLOCKED);
+  // The last blocked customer was just unblocked while that chip was active —
+  // fall back to All rather than leaving the operator on an empty roster.
+  if (_CU_BLOCKED === 0 && CU_SEGMENT === 'blocked') {
+    const all = document.querySelector('#cu-segs .cul-seg[data-seg=""]');
+    if (all) cuSegment(all, '');
   }
   cuRepaintKpis();
 }
@@ -315,6 +338,124 @@ function cuRepaintKpis() {
   const bsub = $('#cu-kpi-blocked-sub');
   if (bsub) bsub.textContent = cuT('tap the chip to review', '点标签查看');
 }
+// ── Row rendering helpers ────────────────────────────────────────────────
+// Last unfiltered roster size, so the "no results" sentence can say how many
+// customers the filter looked through.
+let CU_TOTAL_ALL = 0;
+
+function cuNum(v) { return Number(v || 0).toLocaleString('en-US'); }
+// Money drops a trailing .00 — "¥1,430", not "¥1430.00" — but real decimals
+// still show, because ¥12.50 rounded to ¥13 is a different number.
+function cuMoney(v) {
+  const n = Number(v || 0);
+  const whole = Math.round(n * 100) % 100 === 0;
+  const s = n.toLocaleString('en-US', whole
+    ? { maximumFractionDigits: 0 }
+    : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return '<span class="cur">¥</span>' + s;
+}
+
+// Channel icon for the Customer cell.
+//
+// 🔴 NO FALLBACK, DELIBERATELY. The row's channel comes from the customer's
+// most recent order, and the endpoint defaults it to 'wechat' when they have
+// none — which is 511 of 689 live customers (74%). Painting a Mini app icon
+// from that default states where someone came from on no evidence at all, on
+// three quarters of the page. So: an order establishes the channel, or the
+// cell stays empty. Not a default, not a placeholder, not a dash — the same
+// rule an absent SKU follows. Do NOT "restore" this as a missing default.
+const CU_CHAN_ICON = {
+  wechat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg>',
+  web:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.4 2.5 15.6 0 18M12 3c-2.5 2.4-2.5 15.6 0 18"/></svg>',
+  manual: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="8" r="3.4"/><path d="M3.5 20a6.5 6.5 0 0 1 13 0"/><path d="M18 7v6M15 10h6"/></svg>',
+};
+function cuChanIcon(r) {
+  if (!Number(r.orders_count || 0)) return '';       // no order ⇒ no claim
+  const c = String(r.channel || '').toLowerCase();
+  const svg = CU_CHAN_ICON[c];
+  if (!svg) return '';
+  const opt = CU_CHAN_OPTS.find(o => o[0] === c);
+  const label = opt ? cuT(opt[1], opt[2]) : c;
+  return `<span class="cul-chanico" title="${escapeHtml(label)}">${svg}</span>`;
+}
+
+// One state, drawn inside the card where the rows would be.
+function cuStateRow(title, body, actions) {
+  const wave = '<svg class="st-wave" viewBox="0 0 120 22" fill="none" stroke="currentColor" stroke-width="2"><path d="M0 11h30c4 0 5-7 9-7s5 14 9 14 5-7 9-7 5 7 9 7 5-14 9-14 5 7 9 7h27"/></svg>';
+  return `<tr><td colspan="8" class="muted"><div class="cul-state">${wave}`
+    + `<div class="st-title">${title}</div><div class="st-body">${body}</div>`
+    + (actions ? `<div class="st-actions">${actions}</div>` : '')
+    + `</div></td></tr>`;
+}
+function cuErrorRow() {
+  return cuStateRow(
+    cuT("Couldn't load your customers", '无法加载顾客名单'),
+    cuT("The request didn't come back. Nothing has changed — try again.", '请求没有返回。数据没有变化 — 请重试。'),
+    `<button type="button" class="btn cul-statebtn" id="cu-retry" onclick="cuRetry(this)">${cuT('Retry', '重试')}</button>`);
+}
+// The roster's one control that talks to the server. It disables and says so
+// while it works — the only in-flight state this page owns (every control that
+// writes lives in the drawer and the modals).
+async function cuRetry(btn) {
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = cuT('Retrying…', '正在重试…');
+  }
+  await cuLoad();
+  cuLoadKpis(true);
+}
+// Names what is narrowing the roster, so the empty sentence can point at it.
+function cuFilterSummary() {
+  const q = document.getElementById('cu-q');
+  const term = q ? q.value.trim() : '';
+  if (term) return cuT(`“${escapeHtml(term)}”`, `“${escapeHtml(term)}”`);
+  return cuT('these filters', '当前筛选');
+}
+function cuSkeletonRows() {
+  const w = [62, 44, 58, 38, 52, 46];
+  const bar = (width, extra) => `<span class="cul-sk" style="width:${width}${extra || ''}"></span>`;
+  return w.map(pc => `<tr class="cul-row">
+    <td><div class="cul-who"><span class="cul-sk circle"></span><span class="main">${bar(pc + '%')}${bar(Math.round(pc * .6) + '%', ';margin-top:8px;height:10px')}</span></div></td>
+    <td>${bar('58px')}</td>
+    <td class="numeric">${bar('24px', ';margin-left:auto')}</td>
+    <td class="numeric">${bar('54px', ';margin-left:auto')}</td>
+    <td class="numeric">${bar('34px', ';margin-left:auto')}</td>
+    <td class="numeric">${bar('40px', ';margin-left:auto')}</td>
+    <td>${bar('52px')}</td>
+    <td></td></tr>`).join('');
+}
+// Tiles after a failed load: their labels, and honestly nothing else. No
+// invented figures, and no dashes standing in for numbers.
+function cuKpisNotLoaded() {
+  ['cu-kpi-buyers', 'cu-kpi-new', 'cu-kpi-returning', 'cu-kpi-neverordered'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.textContent = '';
+  });
+  ['cu-kpi-buyers-sub', 'cu-kpi-returning-sub', 'cu-kpi-neverordered-sub'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.textContent = cuT('not loaded', '未加载');
+  });
+  const w = document.getElementById('cu-kpi-new-word'); if (w) w.textContent = cuT('not loaded', '未加载');
+  const sp = document.getElementById('cu-kpi-new-spark'); if (sp) sp.innerHTML = '';
+}
+
+// The band gives up its top corners the moment it pins, so the card's corner
+// and the band's corner are never both drawn. Watches the card, not the
+// window, so it stays correct when the rail folds or the strip reflows.
+let CU_PIN_BOUND = false;
+function cuPinWatch() {
+  const card = document.querySelector('#tab-customers .list-card');
+  if (!card) return;
+  const paint = () => {
+    // 56px = the fixed topbar the band pins under.
+    card.classList.toggle('is-pinned', card.getBoundingClientRect().top < 56);
+  };
+  if (!CU_PIN_BOUND) {
+    CU_PIN_BOUND = true;
+    window.addEventListener('scroll', paint, { passive: true });
+    window.addEventListener('resize', paint, { passive: true });
+  }
+  paint();
+}
+
 async function cuLoad() {
   const params = new URLSearchParams({
     q: $('#cu-q').value.trim(),
@@ -327,57 +468,81 @@ async function cuLoad() {
     pageSize: CU_PAGE_SIZE
   });
   const tbody = $('#cu-table tbody');
-  tbody.innerHTML = '<tr><td colspan="8" class="muted">Loading…</td></tr>';
+  // Loading — skeleton rows that settle, under the real column labels. No
+  // spinner: the shape of what's coming is more use than a rotating disc.
+  tbody.innerHTML = cuSkeletonRows();
   let j;
   try {
     const res = await fetch('/api/retail-admin/customers?' + params);
     j = await res.json();
   } catch (e) {
-    tbody.innerHTML = '<tr><td colspan="8" class="muted">Network error. · 网络错误。</td></tr>';
+    tbody.innerHTML = cuErrorRow();
+    cuKpisNotLoaded();
     if (window.rmRenderCustomerCards) rmRenderCustomerCards(null, 'Network error · 网络错误');
     return;
   }
   if (!j.success) {
-    tbody.innerHTML = '<tr><td colspan="8" class="muted">Failed to load. · 加载失败。</td></tr>';
+    tbody.innerHTML = cuErrorRow();
+    cuKpisNotLoaded();
     if (window.rmRenderCustomerCards) rmRenderCustomerCards(null, 'Failed to load · 加载失败');
     return;
   }
   CU_TOTAL = j.total || 0;
   const rows = j.data || [];
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td colspan="8" class="muted">No customers found. · 未找到客户。</td></tr>';
+    // Two different empty states. Nothing to find at all is a compliment that
+    // names what will arrive; a filter that matched nothing names the filter
+    // and offers to clear it — never a compliment, the operator asked for
+    // something specific and didn't get it.
+    const looked = CU_TOTAL_ALL
+      ? cuT(`${cuNum(CU_TOTAL_ALL)} customers`, `${cuNum(CU_TOTAL_ALL)} 位顾客`)
+      : cuT('your customers', '你的顾客');
+    tbody.innerHTML = cuAnyFilter()
+      ? cuStateRow(
+          cuT('No customers match this search', '没有符合条件的顾客'),
+          cuT(`Nothing in ${looked} matches ${cuFilterSummary()}. Clear it and the whole list comes back.`,
+              `${looked}中没有匹配${cuFilterSummary()}的记录。清除筛选即可看到全部名单。`),
+          `<button type="button" class="btn cul-statebtn" onclick="cuFilterClearAll()">${cuT('Clear filters', '清除筛选')}</button>`)
+      : cuStateRow(
+          cuT('No customers yet', '还没有顾客'),
+          cuT('They settle in here as soon as someone orders — every channel, remembered without you asking.',
+              '有人下单后就会出现在这里 — 各个渠道,自动记住,无需你操作。'));
   } else {
-    const today = cuGzDay(Date.now());
+    CU_TOTAL_ALL = cuAnyFilter() ? CU_TOTAL_ALL : CU_TOTAL;
     tbody.innerHTML = rows.map(r => {
       const tier = escapeHtml(r.tier_key || 'seed');
-      const isNew = r.created_at && cuGzDay(r.created_at) === today;
+      // Free-text nickname: it can contain " · ", which the i18n walker treats
+      // as an EN/CN pair and splits. Shield the name and the phone — never the
+      // genuine bilingual labels around them.
       const nameHtml = r.nickname
-        ? escapeHtml(r.nickname)
-        : '<span class="cul-empty">—</span>';
+        ? `<span class="nick">${escapeHtml(r.nickname)}</span>`
+        : `<span class="nick cul-empty">${cuT('No name', '未填姓名')}</span>`;
+      const orders = Number(r.orders_count || 0);
+      const spend  = Number(r.lifetime_spend || 0);
+      const points = Number(r.points_balance || 0);
+      const wallet = Number(r.balance || 0);
       return `
-      <tr class="cul-row${r.is_blocked ? ' is-blocked' : ''}" onclick="cuOpenDetail(${r.id})">
+      <tr class="cul-row${r.is_blocked ? ' is-blocked' : ''}${r.seen_at ? '' : ' is-unseen'}" onclick="cuOpenDetail(${r.id})">
         <td>
           <div class="cul-who">
             <span class="cul-mono" data-no-i18n>${cuMonogram(r.nickname)}</span>
             <span class="main">
-              <span class="nm">${nameHtml}
-                ${isNew ? `<span class="cul-new">${cuT('New', '新客')}</span>` : ''}
-                ${r.is_blocked ? `<span class="cul-pill blocked">${cuT('Blocked', '已封禁')}</span>` : ''}
-              </span>
+              <span class="nm" data-no-i18n>${cuChanIcon(r)}${nameHtml}${r.is_blocked ? `<span class="cul-pill blocked">${cuT('Blocked', '已封禁')}</span>` : ''}</span>
               ${r.phone ? `<span class="ph" data-no-i18n>${escapeHtml(r.phone)}</span>` : ''}
             </span>
           </div>
         </td>
         <td><span class="cul-pill tier-${tier}">${tier}</span></td>
-        <td class="numeric cul-num ${(r.orders_count || 0) === 0 ? 'is-zero' : ''}">${r.orders_count || 0}</td>
-        <td class="numeric cul-num ${Number(r.lifetime_spend || 0) === 0 ? 'is-zero' : ''}">¥${Number(r.lifetime_spend || 0).toFixed(2)}</td>
-        <td class="numeric cul-num ${(r.points_balance || 0) === 0 ? 'is-zero' : ''}">${r.points_balance || 0}</td>
-        <td class="numeric cul-num ${Number(r.balance || 0) === 0 ? 'is-zero' : ''}">¥${Number(r.balance || 0).toFixed(2)}</td>
-        <td class="cul-last" data-no-i18n>${escapeHtml(cuFmtSeen(r.last_login_at))}</td>
-        <td class="cul-chan" data-no-i18n><span class="cul-chan-in">${chanIcon(r.channel)}<span>${ordChannelLabel(r)}</span></span></td>
+        <td class="numeric cul-num ${orders ? '' : 'is-zero'}" data-no-i18n>${cuNum(orders)}</td>
+        <td class="numeric cul-num ${spend  ? '' : 'is-zero'}" data-no-i18n>${cuMoney(spend)}</td>
+        <td class="numeric cul-num ${points ? '' : 'is-zero'}" data-no-i18n>${cuNum(points)}</td>
+        <td class="numeric cul-num ${wallet ? '' : 'is-zero'}" data-no-i18n>${cuMoney(wallet)}</td>
+        <td class="cul-last${r.last_login_at ? '' : ' is-never'}" data-no-i18n>${escapeHtml(cuFmtSeen(r.last_login_at))}</td>
+        <td class="cul-chev" data-no-i18n>›</td>
       </tr>`;
     }).join('');
   }
+  cuPinWatch();
   // Clamp: blocking a customer (or toggling "include blocked") can shrink the
   // roster under the operator's feet and leave CU_PAGE past the last page.
   // Snap back and refetch once rather than painting an empty table.
@@ -1517,9 +1682,14 @@ function cuFmtSeen(iso) {
 // Monogram for the roster's identity cell — first letter of the nickname, or a
 // quiet middot when there's no name yet. Array.from so an emoji or a Chinese
 // character survives as one glyph instead of a broken surrogate half.
+// Monogram = the first real LETTER, Latin or CJK. Nicknames open with emoji,
+// quotes and symbols often enough that taking character [0] gave a wall of 🍌
+// and 「 tiles. No letter anywhere in the name → the plain person icon, never
+// a punctuation mark and never a dash.
 function cuMonogram(nickname) {
-  const ch = Array.from(String(nickname || '').trim())[0];
-  return ch ? escapeHtml(ch.toUpperCase()) : '·';
+  const m = String(nickname || '').match(/[A-Za-z一-龥]/);
+  if (m) return escapeHtml(m[0].toUpperCase());
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></svg>';
 }
 
 function cuFmtDate(iso) {
@@ -1535,7 +1705,7 @@ document.querySelector('[data-tab="customers"]').addEventListener('click', () =>
   cuLoadKpis();   // throttled (45s) — keeps the New-today pulse fresh on open
 });
 
-// The table header exists in the DOM from page load (not just once the
-// customers tab is first opened), so paint its default sort state right away.
-cuPaintSortHeaders();
+// The filter row exists in the DOM from page load (not just once the
+// customers tab is first opened), so paint both dropdowns right away.
+cuPaintFilterBar();
 

@@ -2250,10 +2250,9 @@
       /* New customer is the page's ONE Dusk element (precedent: #tab-sales's
          "Set up"). Scoped to its own class, NOT to #tab-customers .btn-primary,
          because the customer modals hold five more .btn-primary saves that must
-         stay quiet. ⚠️The class is `cul-addcust`, NOT `cul-new` — `.cul-new` is
-         already taken by the sage "New" pill on a customer row (#cu-table
-         .cul-new); a `#tab-customers .cul-new:hover` rule here would outrank
-         that pill's own colour and flash it Dusk on row hover. */
+         stay quiet. (It is `cul-addcust` rather than the obvious `cul-new`
+         because that name belonged to a row pill when this landed — check the
+         section's existing class names before adding one, either way.) */
       #tab-customers .cul-addcust {
         background: var(--td-dusk); border-color: var(--td-dusk); color: #FFFFFF;
       }
@@ -2266,9 +2265,10 @@
         background: var(--bg-pane); border: 1px solid var(--line); border-radius: 14px;
         padding: 16px 20px 14px; display: flex; flex-direction: column; gap: 2px; min-width: 0;
       }
+      /* Sentence case, not caps — §1.6 allows no uppercase anywhere. */
       #tab-customers .cul-stat .lbl {
-        font-size: 11px; font-weight: 500; letter-spacing: .1em;
-        text-transform: uppercase; color: var(--text-2);
+        font-size: 13px; font-weight: 400; letter-spacing: 0;
+        text-transform: none; color: var(--text-2);
       }
       #tab-customers .cul-stat .fig {
         font-size: 26px; font-weight: 500; line-height: 1.25; color: var(--text-1);
@@ -2293,7 +2293,8 @@
         position: absolute; left: 11px; top: 50%; transform: translateY(-50%);
         width: 15px; height: 15px; color: var(--text-3); pointer-events: none;
       }
-      #tab-customers .cul-segs { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+      /* Chips are their own row above the filter bar now, not a tail on it. */
+      #tab-customers .cul-segs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
       #tab-customers .cul-seg {
         font: 500 12.5px var(--f-sans); color: var(--text-2);
         background: var(--bg-pane); border: 1px solid var(--line);
@@ -2302,130 +2303,171 @@
       }
       #tab-customers .cul-seg:hover { border-color: var(--text-3); color: var(--text-1); }
       #tab-customers .cul-seg.on { background: var(--text-1); border-color: var(--text-1); color: var(--bg-pane); }
-      #tab-customers .cul-seg.warn { background: var(--tacet-amber-tint); border-color: rgba(201,149,74,.45); color: var(--tacet-amber-ink); }
-      #tab-customers .cul-seg.warn.on { background: var(--tacet-amber-ink); border-color: var(--tacet-amber-ink); color: var(--tacet-paper); }
-      #tab-customers .cul-seg .ct { margin-left: 6px; font-weight: 400; font-variant-numeric: tabular-nums; opacity: .8; }
-
-      /* Roster — one paper card, hairline rows, calm hover. */
-      #tab-customers .table-wrap {
-        background: var(--bg-pane); border: 1px solid var(--line); border-radius: 14px;
-        overflow: hidden; overflow-x: auto;
-        box-shadow: 0 1px 2px rgba(17,26,43,.05), 0 4px 16px rgba(17,26,43,.04);
+      /* Count treatments.
+         Normal — a filled grey pill with light text, on the white chip.
+         Active — the chip inverts to Ink, so the pill inverts too: light pill,
+                  dark text, still legible against the fill.
+         Attention (Blocked) — no pill at all: an amber dot then the figure in
+                  amber. A pill would make it look like the same kind of count. */
+      #tab-customers .cul-seg .ct { margin-left: 7px; font-variant-numeric: tabular-nums; }
+      #tab-customers .cul-seg .ct:empty { display: none; margin-left: 0; }
+      #tab-customers .cul-seg .ct:not(.alert) {
+        min-width: 16px; height: 16px; padding: 0 5px; border-radius: 999px;
+        font-size: 10px; font-weight: 500; line-height: 1;
+        display: inline-grid; place-items: center;
+        background: #58606E; color: #FBF9F4;
       }
+      #tab-customers .cul-seg.on .ct:not(.alert) { background: var(--bg-pane); color: var(--text-1); }
+      #tab-customers .cul-seg .ct.alert {
+        display: inline-flex; align-items: center; gap: 4px;
+        font-size: 12.5px; font-weight: 500; color: var(--tacet-amber-ink);
+      }
+      #tab-customers .cul-seg .ct.alert::before {
+        content: ""; width: 5px; height: 5px; border-radius: 999px;
+        background: var(--tacet-amber); display: inline-block;
+      }
+      #tab-customers .cul-seg.on .ct.alert { color: var(--bg-pane); }
+      #tab-customers .cul-seg.on .ct.alert::before { background: var(--bg-pane); opacity: .85; }
+      /* The state cards' one action. */
+      #tab-customers .cul-statebtn { height: 32px; padding: 0 12px; font-size: 13px; }
+
+      /* ── Roster card + the column-header band ───────────────────────────
+         The band IS the card's top edge. One card only: .list-card draws the
+         paper, border, radius and shadow, and .table-wrap is collapsed to a
+         bare pass-through so the two don't each draw a border.
+
+         🔴 NEITHER MAY CLIP. `overflow:hidden` (or overflow-x:auto) on the
+         card or the wrap makes that element the containing block for the
+         sticky band, which would then pin to the card and scroll away with
+         it. The brief asked for "let the card clip" AND "the band pins below
+         the topbar"; those two cannot both hold, and pinning is the one the
+         operator feels. So the band draws its own top corners instead — see
+         the derivation on .cul-band-* below. The page scrolls horizontally
+         instead of the card (min-width, not an inner scroller).
+
+         The pager sits below the table inside the same card, so IT owns the
+         bottom corners; without the card's clip, a square pager would poke
+         out through the rounded bottom edge. */
+      #tab-customers .list-card { overflow: visible; }
+      #tab-customers .table-wrap {
+        background: transparent; border: 0; border-radius: 0; box-shadow: none;
+        overflow: visible;
+      }
+      #tab-customers #cu-pager { border-radius: 0 0 13px 13px; overflow: hidden; }
       /* table-layout:fixed + the colgroup above give every column a
          deterministic share instead of the browser's auto-guess, which used
          to hand almost all the slack to Customer and leave the numeric
          columns cramped against each other (same fix as #orders-table). */
-      #cu-table { border-collapse: collapse; width: 100%; background: var(--bg-pane); table-layout: fixed; }
+      #cu-table { border-collapse: separate; border-spacing: 0; width: 100%; background: transparent; table-layout: fixed; min-width: 1000px; }
+      /* The band. Deeper than the rows on purpose (--td-header), Ink labels
+         rather than Graphite, and one size smaller than the 14px row text —
+         at 13px the labels read as heavy as the data and the band looked like
+         one more row. 12px + 5px/12px padding + the deeper colour are one
+         package; changing any of them alone re-opens that. */
       #cu-table thead th {
-        background: var(--bg-pane); color: var(--text-1); font-family: var(--f-sans);
-        font-weight: 700; font-size: 13.5px; letter-spacing: .02em; text-transform: none;
-        padding: 0; border-bottom: 1px solid var(--line); white-space: nowrap; position: relative;
+        position: sticky; top: 56px; z-index: 3;
+        background: var(--td-header); color: var(--td-text);
+        font-family: var(--f-sans); font-weight: 500; font-size: 12px; line-height: 1.2;
+        letter-spacing: 0; text-transform: none; text-align: left;
+        padding: 5px 12px; border-bottom: 1px solid var(--td-border); white-space: nowrap;
       }
+      /* 🔴 13px = the card's 14px radius MINUS its 1px border — the inner edge
+         of that border, DERIVED, never matched by eye. If the card's radius or
+         border width changes, this number changes with it. The Orders pass
+         burned three rounds nudging radii by eye; do not re-open that by
+         "correcting" this to some other value.
+         The band gives its corners up the instant it pins, so only ONE element
+         ever draws a corner at a time — that is the rule being honoured here,
+         not broken. */
+      #cu-table thead th:first-child { border-top-left-radius: 13px; }
+      #cu-table thead th:last-child  { border-top-right-radius: 13px; }
+      #tab-customers .list-card.is-pinned #cu-table thead th:first-child,
+      #tab-customers .list-card.is-pinned #cu-table thead th:last-child { border-top-left-radius: 0; border-top-right-radius: 0; }
 
-      /* Sortable column header — a button so the whole label (+ the caret
-         hint) is one click target; the funnel (Tier only) is a second,
-         independent button beside it. */
-      #cu-table .cul-th-inner { display: flex; align-items: center; gap: 6px; padding: 13px 18px; width: 100%; }
-      #cu-table th.numeric .cul-th-inner { justify-content: flex-end; }
-      #cu-table .cul-sort-btn {
-        display: flex; align-items: center; gap: 5px; font: inherit; font-weight: inherit;
-        letter-spacing: inherit; text-transform: inherit; color: inherit;
-        background: none; border: 0; padding: 2px 3px; margin: -2px -3px; border-radius: 5px; cursor: pointer;
-      }
-      #cu-table .cul-sort-btn:hover { background: rgba(17,26,43,.06); color: var(--text-1); }
-      #cu-table .cul-carets { display: flex; flex-direction: column; gap: 1px; opacity: .35; }
-      #cu-table .cul-carets svg { width: 8px; height: 8px; display: block; }
-      #cu-table th.cul-sort-active .cul-sort-btn { color: var(--text-1); }
-      #cu-table th.cul-sort-active .cul-carets { opacity: 1; }
-
-      /* Tier filter — funnel button + checkbox popover, anchored to the th
-         (position:relative above). The popover escapes the table-wrap's
-         clipping the same way the Orders card's menus do: table-wrap only
-         clips horizontally (overflow-x:auto), not vertically. */
-      #cu-table .cul-filter-btn {
-        width: 20px; height: 20px; border-radius: 6px; display: inline-flex; align-items: center;
-        justify-content: center; flex: none; position: relative; color: var(--text-3);
-        background: none; border: 0; padding: 0; cursor: pointer;
-      }
-      #cu-table .cul-filter-btn:hover { background: rgba(17,26,43,.08); color: var(--text-1); }
-      #cu-table .cul-filter-btn svg { width: 12px; height: 12px; display: block; }
-      #cu-table .cul-filter-btn.is-active { color: var(--text-1); }
-      #cu-table .cul-filter-btn .dot {
-        position: absolute; top: 1px; right: 1px; width: 6px; height: 6px; border-radius: 50%;
-        background: var(--tacet-amber-ink); display: none;
-      }
-      #cu-table .cul-filter-btn.is-active .dot { display: block; }
-      #cu-table .cul-pop {
-        position: absolute; top: calc(100% + 6px); left: 16px; z-index: 30; min-width: 180px;
-        background: var(--bg-pane); border: 1px solid var(--line); border-radius: 12px;
-        box-shadow: 0 14px 36px rgba(20,15,3,.16); padding: 8px;
-        display: none; text-transform: none; letter-spacing: 0; font-weight: 400;
-      }
-      #cu-table .cul-pop.open { display: block; }
-      #cu-table .cul-pop-title { font-size: 11px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); padding: 6px 8px 8px; }
-      #cu-table .cul-pop-opt {
-        display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; padding: 7px 8px;
-        border-radius: 7px; font-size: 13.5px; font-weight: 500; color: var(--text-1); cursor: pointer;
-      }
-      #cu-table .cul-pop-opt:hover { background: var(--bg-elev-1); }
-      #cu-table .cul-pop-opt input { width: 14px; height: 14px; accent-color: var(--text-1); flex: none; }
-      #cu-table .cul-pop-foot { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px 2px; margin-top: 2px; border-top: 1px solid var(--bg-elev-1); }
-      #cu-table .cul-pop-foot button { font-size: 12.5px; font-weight: 500; background: none; border: 0; padding: 0; cursor: pointer; }
-      #cu-table .cul-pop-foot .clear { color: var(--text-2); }
-      #cu-table .cul-pop-foot .clear:hover { color: var(--text-1); }
-      #cu-table .cul-pop-foot .done { color: var(--text-1); }
-
-      /* Channel filter — chip strip (same pill/icon/label/ink-fill language
-         Orders' channel filter uses, now a dropdown there — see .chd-btn). */
-      #tab-customers .cul-chan-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 16px; }
-      #tab-customers .cul-chan-chip {
-        display: inline-flex; align-items: center; background: var(--bg-pane); border: 1px solid var(--line);
-        color: var(--text-2); border-radius: 999px; padding: 6px 14px; font-size: 13px; font-weight: 500; cursor: pointer;
+      /* Tier / Channel dropdowns. A set filter turns its OWN button into the
+         applied pill — Ink fill, the value, a hairline divider, then ×. No
+         second chip restating the button beside it. */
+      #tab-customers .cul-selwrap { position: relative; display: inline-flex; }
+      #tab-customers .cul-sel {
+        display: inline-flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px;
+        border: 1px solid var(--line); border-radius: 8px; background: var(--bg-pane);
+        font: 500 13px var(--f-sans); color: var(--text-1); cursor: pointer; white-space: nowrap;
         transition: background var(--t-fast) ease, border-color var(--t-fast) ease, color var(--t-fast) ease;
       }
-      #tab-customers .cul-chan-chip:hover { border-color: var(--text-3); color: var(--text-1); }
-      #tab-customers .cul-chan-chip.on { background: var(--tacet-ink); border-color: var(--tacet-ink); color: var(--tacet-paper); }
-      [data-theme="dark"] #tab-customers .cul-chan-chip.on { background: var(--tacet-paper); border-color: var(--tacet-paper); color: var(--tacet-ink); }
-      #tab-customers .cul-chan-ico { display: inline-flex; align-items: center; margin-right: 8px; }
-      #tab-customers .cul-chan-ico svg { width: 15px; height: 15px; display: block; }
-
-      /* Active column-filter pills, above the table. */
-      #tab-customers .cul-afil { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; font-size: 12.5px; color: var(--text-2); flex-wrap: wrap; }
-      #tab-customers .cul-afil-pill {
-        display: inline-flex; align-items: center; gap: 7px; background: var(--bg-pane); border: 1px solid var(--line);
-        border-radius: 999px; padding: 5px 8px 5px 12px; font-weight: 500; color: var(--text-1);
+      #tab-customers .cul-sel:hover { border-color: var(--text-3); }
+      #tab-customers .cul-sel.on { background: var(--tacet-ink); border-color: var(--tacet-ink); color: var(--tacet-paper); }
+      [data-theme="dark"] #tab-customers .cul-sel.on { background: var(--tacet-paper); border-color: var(--tacet-paper); color: var(--tacet-ink); }
+      #tab-customers .cul-sel .cr { width: 14px; height: 14px; color: var(--text-2); display: block; }
+      #tab-customers .cul-sel.on .cr { color: inherit; }
+      /* The × and its 1px divider. currentColor so it inverts with the pill. */
+      #tab-customers .cul-clear {
+        display: inline-grid; place-items: center; width: 19px; height: 19px; border-radius: 999px;
+        margin-left: 4px; cursor: pointer; position: relative; color: inherit;
       }
-      #tab-customers .cul-afil-pill button {
-        width: 16px; height: 16px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
-        color: var(--text-3); background: none; border: 0; padding: 0; cursor: pointer;
+      #tab-customers .cul-clear svg { width: 13px; height: 13px; display: block; }
+      #tab-customers .cul-clear::before {
+        content: ""; position: absolute; left: -4px; top: 50%; transform: translateY(-50%);
+        width: 1px; height: 14px; background: currentColor; opacity: .28;
       }
-      #tab-customers .cul-afil-pill button:hover { background: var(--bg-elev-1); color: var(--text-1); }
-      #tab-customers .cul-afil-pill button svg { width: 9px; height: 9px; display: block; }
-      #tab-customers .cul-afil-clear { color: var(--text-2); text-decoration: underline; text-underline-offset: 2px; font-weight: 500; background: none; border: 0; padding: 0; cursor: pointer; }
-      #tab-customers .cul-afil-clear:hover { color: var(--text-1); }
-      #cu-table tbody td { background: var(--bg-pane); border-bottom: 1px solid var(--line); padding: 13px 18px; font-size: 14px; color: var(--text-1); vertical-align: middle; }
+      #tab-customers .cul-clear:hover { background: rgba(17,26,43,.10); }
+      #tab-customers .cul-sel.on .cul-clear:hover { background: rgba(251,249,244,.22); }
+      #tab-customers .cul-menu {
+        position: absolute; top: 40px; left: 0; z-index: 30; min-width: 172px;
+        background: var(--bg-pane); border: 1px solid var(--line); border-radius: 12px;
+        box-shadow: 0 14px 36px rgba(20,15,3,.16); padding: 6px;
+      }
+      #tab-customers .cul-menu button {
+        display: flex; width: 100%; text-align: left; font: 400 14px var(--f-sans); color: var(--text-1);
+        background: none; border: 0; border-radius: 8px; padding: 8px 10px; cursor: pointer;
+      }
+      #tab-customers .cul-menu button:hover { background: var(--bg-elev-1); }
+      #tab-customers .cul-menu button.sel { font-weight: 500; }
+      /* Rows. The Sage edge is an INSET SHADOW, never a border — a border
+         would add 4px to the row box and make the whole list twitch sideways
+         as records get opened. Every td carries a transparent inset so the
+         opened/unopened rows are byte-identical in geometry.
+         Both halves of the unopened state (surface + edge) are declared
+         together and settle together; one without the other reads as a
+         rendering fault rather than a state. */
+      #cu-table tbody td {
+        background: var(--bg-pane); border-bottom: 1px solid var(--line);
+        padding: 11px 12px; font-size: 14px; color: var(--text-1); vertical-align: top;
+        box-shadow: inset 4px 0 0 transparent;
+        transition: background .6s cubic-bezier(.16,1,.3,1), box-shadow .6s cubic-bezier(.16,1,.3,1);
+      }
       #cu-table tbody tr:last-child td { border-bottom: none; }
-      #cu-table tbody tr.cul-row { cursor: pointer; transition: background var(--t-med) var(--ease-out); }
-      #cu-table tbody tr.cul-row:hover td { background: var(--bg-app); }
+      #cu-table tbody tr.cul-row { cursor: pointer; }
+      #cu-table tbody tr.cul-row:not(.is-unseen):hover td { background: var(--bg-app); }
+      /* Unopened — nobody on the team has opened this record yet. Settles back
+         to the ordinary row surface (NOT paper: an opened row must be
+         indistinguishable from every other row in the card). */
+      #cu-table tbody tr.cul-row.is-unseen td { background: var(--td-unseen); }
+      #cu-table tbody tr.cul-row.is-unseen td:first-child { box-shadow: inset 4px 0 0 var(--td-sage); }
+      @media (prefers-reduced-motion: reduce) { #cu-table tbody td { transition: none; } }
       /* A blocked customer stays in the roster but stops competing for the eye. */
       #cu-table tbody tr.cul-row.is-blocked td { opacity: .62; }
 
-      /* Customer cell — monogram, name (+ New badge), phone underneath.
+      /* Customer cell — monogram, channel icon, name, phone underneath.
          The old "#" id column and its own Phone column are gone: ids live in
          the drawer, and one identity belongs in one cell. */
-      #cu-table .cul-who { display: flex; align-items: center; gap: 12px; min-width: 0; }
+      #cu-table .cul-who { display: flex; align-items: center; gap: 11px; min-width: 0; }
       #cu-table .cul-mono {
-        width: 30px; height: 30px; border-radius: 50%; flex: none;
+        width: 30px; height: 30px; border-radius: 8px; flex: none;
         background: var(--bg-elev-1); border: 1px solid var(--line);
         display: flex; align-items: center; justify-content: center;
-        font-size: 12.5px; font-weight: 500; color: var(--text-2);
+        font-size: 13px; font-weight: 500; color: var(--text-1);
       }
-      #cu-table .cul-who .main { min-width: 0; }
-      #cu-table .cul-who .nm { font-weight: 500; line-height: 1.3; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-      #cu-table .cul-who .ph { font-size: 12.5px; color: var(--text-2); line-height: 1.4; font-variant-numeric: tabular-nums; }
-      #cu-table .cul-new { font-size: 11px; font-weight: 500; border-radius: 999px; padding: 1px 8px;
-        background: var(--tacet-sage-tint); color: var(--tacet-sage-ink); }
+      #cu-table .cul-mono svg { width: 16px; height: 16px; color: var(--text-2); }
+      #cu-table .cul-who .main { min-width: 0; flex: 1; }
+      /* nowrap, not wrap: a long name ellipses inside its own span rather than
+         pushing the row to a second line. */
+      #cu-table .cul-who .nm { font-weight: 500; line-height: 1.3; display: flex; align-items: center; gap: 7px; flex-wrap: nowrap; min-width: 0; }
+      #cu-table .cul-who .nm .nick { min-width: 0; flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #cu-table .cul-who .ph { font-size: 12px; color: var(--text-2); line-height: 1.4; font-variant-numeric: tabular-nums; margin-top: 2px; }
+      /* Channel icon — rendered ONLY where a real order establishes the
+         channel. See cuChanIcon() for why there is no fallback. */
+      #cu-table .cul-chanico { display: inline-flex; align-items: center; color: var(--text-2); flex: none; }
+      #cu-table .cul-chanico svg { width: 15px; height: 15px; display: block; }
 
       /* Tier pill. Seed — the tier everyone starts on — stays quiet cream; only
          an EARNED tier takes colour, so an upgraded customer stands out. */
@@ -2448,15 +2490,31 @@
          carry the weight. A page of ¥0.00 shouldn't shout. */
       #cu-table :is(td, th).numeric { text-align: right; }
       #cu-table td.cul-num { font-variant-numeric: tabular-nums; }
-      #cu-table td.cul-num.is-zero { color: var(--text-3); opacity: .7; }
-      #cu-table td.cul-last { color: var(--text-2); font-size: 13px; white-space: nowrap; text-align: right; }
-      #cu-table td.cul-chan { white-space: nowrap; }
-      #cu-table .cul-chan-in { display: inline-flex; align-items: center; gap: 7px; font-size: 13.5px; color: var(--text-1); }
-      #cu-table .cul-chan-in svg { width: 14px; height: 14px; flex: none; color: var(--text-2); }
-      #cu-table td.muted[colspan] { padding: 30px 16px; text-align: center; color: var(--text-3); font-size: 13px; }
+      /* Zero is a real answer, so it is stated plainly — just in Graphite, so a
+         page of them doesn't shout over the real balances. */
+      #cu-table td.cul-num.is-zero, #cu-table td.cul-num.is-zero .cur { color: var(--text-2); }
+      #cu-table td.cul-num .cur { color: var(--text-2); font-weight: 400; margin-right: 1px; }
+      #cu-table td.cul-last { color: var(--text-1); font-size: 13px; white-space: nowrap; }
+      #cu-table td.cul-last.is-never { color: var(--text-2); }
+      #cu-table td.cul-chev { text-align: right; color: var(--text-2); opacity: .5; font-size: 18px; line-height: 1; }
+      #cu-table td.muted[colspan] { padding: 0; }
 
-      /* A customer who signed in but never set a name. */
-      #cu-table .cul-empty { color: var(--text-3); }
+      /* A customer who signed in but never set a name. Reads "No name" — the
+         dash is banned as a value product-wide. */
+      #cu-table .cul-empty { color: var(--text-2); font-weight: 400; }
+
+      /* ── The six states, drawn inside the card ─────────────────────────── */
+      #tab-customers .cul-state { padding: 64px 32px; text-align: center; }
+      #tab-customers .cul-state .st-wave { height: 22px; width: 120px; margin: 0 auto 20px; color: var(--line-strong); display: block; }
+      #tab-customers .cul-state .st-title { font-size: 18px; font-weight: 500; color: var(--text-1); margin-bottom: 6px; }
+      #tab-customers .cul-state .st-body { font-size: 14px; color: var(--text-2); max-width: 52ch; margin: 0 auto; text-wrap: pretty; }
+      #tab-customers .cul-state .st-actions { margin-top: 20px; display: flex; gap: 10px; justify-content: center; }
+      /* Skeleton — settling, never a spinner. */
+      #tab-customers .cul-sk { display: block; height: 12px; border-radius: 6px; background: var(--td-raised); }
+      #tab-customers .cul-sk.circle { width: 30px; height: 30px; border-radius: 8px; flex: 0 0 30px; }
+      #tab-customers .cul-sk.pill { height: 32px; border-radius: 8px; }
+      @keyframes culShimmer { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+      @media (prefers-reduced-motion: no-preference) { #tab-customers .cul-sk { animation: culShimmer 1.6s cubic-bezier(.16,1,.3,1) infinite; } }
 
       /* Narrow desktop / tablet: the strip stacks before the table scrolls. */
       @media (max-width: 900px) {
@@ -2812,38 +2870,34 @@
       <!-- Filter bar — search, the cuts an operator actually reaches for, then
            tier + sort. The old "Include blocked" checkbox is gone: the Blocked
            chip appears only when someone is blocked, and selects them. -->
+      <!-- Segment chips. All four always render — a chip is how an operator
+           learns the cut exists, so it doesn't come and go with its own
+           contents. A chip with nothing to report simply carries no number
+           (never a zero). Blocked's count is the attention one: amber dot,
+           amber figure, no pill. -->
+      <span class="cul-segs" id="cu-segs">
+        <button type="button" class="cul-seg on" data-seg=""         onclick="cuSegment(this,'')">All · 全部<span class="ct" id="cu-seg-all-ct" data-no-i18n></span></button>
+        <button type="button" class="cul-seg"    data-seg="new_week" onclick="cuSegment(this,'new_week')">New this week · 本周新客<span class="ct" id="cu-seg-new-ct" data-no-i18n></span></button>
+        <button type="button" class="cul-seg"    data-seg="sleeping" onclick="cuSegment(this,'sleeping')">Sleeping 60d+ · 沉睡 60 天<span class="ct" id="cu-seg-sleep-ct" data-no-i18n></span></button>
+        <button type="button" class="cul-seg"    data-seg="blocked"  id="cu-seg-blocked" onclick="cuSegment(this,'blocked')">Blocked · 已封禁<span class="ct alert" id="cu-seg-blocked-ct" data-no-i18n></span></button>
+      </span>
+
+      <!-- Filter row — Tier, Channel, then search. Each dropdown BECOMES its
+           own applied-filter pill when set: Ink fill, the value, a hairline
+           divider, then × (which really clears it). -->
       <div class="cul-bar" id="cu-toolbar">
+        <span class="cul-selwrap">
+          <button type="button" class="cul-sel" id="cu-tier-btn" onclick="cuMenuToggle('tier', event)" aria-haspopup="true"></button>
+          <div class="cul-menu" id="cu-tier-menu" hidden></div>
+        </span>
+        <span class="cul-selwrap">
+          <button type="button" class="cul-sel" id="cu-chan-btn" onclick="cuMenuToggle('chan', event)" aria-haspopup="true"></button>
+          <div class="cul-menu" id="cu-chan-menu" hidden></div>
+        </span>
         <span class="cul-search">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
-          <input type="text" id="cu-q" data-ph-en="Name, phone, openid, or order #…" data-ph-cn="姓名、电话、openid 或订单号…" placeholder="Name, phone, openid, or order #…" oninput="cuSearchDebounced()">
+          <input type="text" id="cu-q" data-ph-en="Search name or phone" data-ph-cn="搜索姓名或电话" placeholder="Search name or phone" oninput="cuSearchDebounced()">
         </span>
-        <span class="cul-segs" id="cu-segs">
-          <button type="button" class="cul-seg on" data-seg=""         onclick="cuSegment(this,'')">All · 全部</button>
-          <button type="button" class="cul-seg"    data-seg="new_week" onclick="cuSegment(this,'new_week')">New this week · 本周新客</button>
-          <button type="button" class="cul-seg"    data-seg="sleeping" onclick="cuSegment(this,'sleeping')">Sleeping 60d+ · 沉睡 60 天</button>
-          <button type="button" class="cul-seg warn" data-seg="blocked" id="cu-seg-blocked" hidden onclick="cuSegment(this,'blocked')">Blocked · 已封禁<span class="ct" id="cu-seg-blocked-ct" data-no-i18n></span></button>
-        </span>
-      </div>
-      <!-- Channel filter — chip strip, not a column-header popover. It's the
-           filter an operator reaches for on every visit here, so it stays one
-           click, always visible, never a popover that can open past the
-           table's right edge. (Orders' channel filter is lower-traffic and
-           now a dropdown — see .chd-btn.) Tier keeps its column funnel below:
-           an occasional cut, comfortable near the left. -->
-      <div class="cul-chan-chips" id="cu-chan-chips">
-        <button type="button" class="cul-chan-chip on" data-chan="" onclick="cuSetChan('')"><span class="cul-chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></span>All channels · 全部渠道</button>
-        <button type="button" class="cul-chan-chip" data-chan="wechat" onclick="cuSetChan('wechat')"><span class="cul-chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 10.2c0-3.6-3.2-6.2-7.1-6.2S2.3 6.6 2.3 10.2c0 1.8.8 3.4 2.1 4.6-.1.9-.4 1.8-.9 2.6a8 8 0 0 0 3.3-1.2c.9.2 1.8.3 2.7.2"/><path d="M21.7 15.4c0-2.9-2.6-5.1-5.7-5.1-.4 0-.8 0-1.2.1.4.9.6 1.8.6 2.8 0 1.6-.6 3-1.7 4.1a6.9 6.9 0 0 0 2.3.4c.6 0 1.2-.1 1.8-.2a6.4 6.4 0 0 0 2.6 1c-.3-.6-.5-1.3-.6-2 .6-.9.9-1.9.9-3.1Z"/><circle cx="6.3" cy="9.6" r="0.85" fill="currentColor" stroke="none"/><circle cx="10.3" cy="9.6" r="0.85" fill="currentColor" stroke="none"/></svg></span>Mini app · 小程序</button>
-        <button type="button" class="cul-chan-chip" data-chan="web" onclick="cuSetChan('web')"><span class="cul-chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18z"/></svg></span>Web · 网页</button>
-        <button type="button" class="cul-chan-chip" data-chan="meituan" onclick="cuSetChan('meituan')"><span class="cul-chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="17" r="2.5"/><circle cx="18" cy="17" r="2.5"/><path d="M8.5 17h7"/><path d="M18 17l-3-8h-3"/><path d="M3 9h4l3.5 8"/><path d="M14 6h3v3"/></svg></span>Meituan · 美团</button>
-        <button type="button" class="cul-chan-chip" data-chan="gzgrocery" onclick="cuSetChan('gzgrocery')"><span class="cul-chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M3 9a2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 3 0"/><line x1="9" y1="20" x2="9" y2="14"/><line x1="15" y1="20" x2="15" y2="14"/></svg></span>Gzgrocery · 果满多</button>
-      </div>
-      <!-- Active column-filter pills — Tier today, generic enough for a
-           future column filter to drop in the same way. Hidden (via
-           [hidden]) whenever nothing is filtered. -->
-      <div class="cul-afil" id="cu-afil-row" hidden>
-        <span>Filtered by · 已筛选</span>
-        <span id="cu-afil-pills"></span>
-        <button type="button" class="cul-afil-clear" onclick="cuFilterClearAll()">Clear · 清除</button>
       </div>
       <!-- One clipped list card: table + phone cards + pager footer. See the
            matching note on the Orders card — the pager is a CHILD so the
@@ -2851,49 +2905,25 @@
       <div class="list-card">
       <div class="table-wrap">
         <table id="cu-table">
+          <!-- No sort carets: sorting is gone from the header. The Channel
+               column is gone too — the channel is now a small icon beside the
+               name, so identity lives in one cell. -->
           <colgroup>
-            <col style="width:25%"><col style="width:10%"><col style="width:9%">
-            <col style="width:13%"><col style="width:9%"><col style="width:11%">
-            <col style="width:12%"><col style="width:11%">
+            <col><col style="width:104px"><col style="width:86px">
+            <col style="width:132px"><col style="width:92px"><col style="width:96px">
+            <col style="width:120px"><col style="width:40px">
           </colgroup>
           <thead><tr>
-            <th data-sort="name">
-              <span class="cul-th-inner">
-                <button type="button" class="cul-sort-btn" onclick="cuSortBy('name')">Customer · 顾客<span class="cul-carets"></span></button>
-              </span>
-            </th>
-            <th data-sort="tier">
-              <span class="cul-th-inner">
-                <button type="button" class="cul-sort-btn" onclick="cuSortBy('tier')">Tier · 等级<span class="cul-carets"></span></button>
-                <button type="button" class="cul-filter-btn" id="cu-tier-filter-btn" onclick="cuTierPopToggle(event)" aria-haspopup="true" title="Filter by tier · 按等级筛选">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16l-6 7.5V19l-4 2v-8.5z"/></svg>
-                  <span class="dot"></span>
-                </button>
-                <div class="cul-pop" id="cu-tier-pop">
-                  <div class="cul-pop-title">Filter by tier · 按等级筛选</div>
-                  <label class="cul-pop-opt"><input type="checkbox" value="seed" onchange="cuTierCheck('seed', this.checked)"> Seed · 种子</label>
-                  <label class="cul-pop-opt"><input type="checkbox" value="sprout" onchange="cuTierCheck('sprout', this.checked)"> Sprout · 嫩芽</label>
-                  <label class="cul-pop-opt"><input type="checkbox" value="root" onchange="cuTierCheck('root', this.checked)"> Root · 根系</label>
-                  <label class="cul-pop-opt"><input type="checkbox" value="tree" onchange="cuTierCheck('tree', this.checked)"> Tree · 大树</label>
-                  <div class="cul-pop-foot">
-                    <button type="button" class="clear" onclick="cuTierFilterClear()">Clear · 清除</button>
-                    <button type="button" class="done" onclick="cuTierPopClose()">Done · 完成</button>
-                  </div>
-                </div>
-              </span>
-            </th>
-            <th class="numeric" data-sort="orders"><span class="cul-th-inner"><button type="button" class="cul-sort-btn" onclick="cuSortBy('orders')">Orders · 订单数<span class="cul-carets"></span></button></span></th>
-            <th class="numeric" data-sort="spend"><span class="cul-th-inner"><button type="button" class="cul-sort-btn" onclick="cuSortBy('spend')">Total spent ¥ · 累计消费<span class="cul-carets"></span></button></span></th>
-            <th class="numeric" data-sort="points"><span class="cul-th-inner"><button type="button" class="cul-sort-btn" onclick="cuSortBy('points')">Points · 积分<span class="cul-carets"></span></button></span></th>
-            <th class="numeric" data-sort="wallet"><span class="cul-th-inner"><button type="button" class="cul-sort-btn" onclick="cuSortBy('wallet')">Wallet ¥ · 钱包<span class="cul-carets"></span></button></span></th>
-            <th class="numeric" data-sort="last_seen"><span class="cul-th-inner"><button type="button" class="cul-sort-btn" onclick="cuSortBy('last_seen')">Last seen · 最近活动<span class="cul-carets"></span></button></span></th>
-            <th>
-              <span class="cul-th-inner">
-                <span class="cul-sort-btn" style="cursor:default;">Channel · 渠道</span>
-              </span>
-            </th>
+            <th>Customer · 顾客</th>
+            <th>Tier · 等级</th>
+            <th class="numeric">Orders · 订单数</th>
+            <th class="numeric">Ordered ¥ · 累计消费</th>
+            <th class="numeric">Points · 积分</th>
+            <th class="numeric">Wallet ¥ · 钱包</th>
+            <th>Last seen · 最近活动</th>
+            <th></th>
           </tr></thead>
-          <tbody><tr><td colspan="8" class="muted">Loading…</td></tr></tbody>
+          <tbody><tr><td colspan="8" class="muted"></td></tr></tbody>
         </table>
       </div>
 
