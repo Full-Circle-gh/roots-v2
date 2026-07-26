@@ -13562,6 +13562,17 @@ router.get('/api/retail-admin/customers/:id', requireRetailAdmin, (req, res) => 
   ).get(id);
 
   const points = tdb().prepare(
+    // These buckets are ALLOWLISTS, which is the right shape — but they are
+    // knowingly INCOMPLETE. Five of the nine live sources fall into no bucket:
+    // 'migration' (+10,735 points), 'poll_vote' (+39), 'refund_reverse' (-8),
+    // 'refund_redeem' (+20) and 'order_addon_earn' (+1). So "earned" excludes
+    // every migrated point.
+    // Left alone deliberately (2026-07-26): what "earned" should MEAN for a
+    // point the customer carried over rather than won is a definitional
+    // question, not a bug, and it touches the same migration machinery as an
+    // open question elsewhere — so it gets decided there, once, not patched
+    // here. An incomplete allowlist UNDERSTATES rather than inventing a
+    // figure, which is the safe direction to be wrong in.
     `SELECT
        COALESCE(SUM(CASE WHEN delta > 0 AND source IN ('order_earn','topup_bonus') THEN delta ELSE 0 END), 0) AS earned,
        COALESCE(SUM(CASE WHEN delta < 0 AND source = 'order_redeem'                 THEN -delta ELSE 0 END), 0) AS redeemed,
@@ -13600,6 +13611,12 @@ router.get('/api/retail-admin/customers/:id', requireRetailAdmin, (req, res) => 
        -- admin_adjust ONLY, so wallet SPENDING was summed as money coming in
        -- and the figure could go negative — customer 233 read "¥-0.49 topped
        -- up" from -38.80 + 23.11 + 15.20.
+       -- 🔴 IT WAS ALSO UNDERSTATING, NOT ONLY GOING NEGATIVE — and that is the
+       -- real reason the SHAPE matters rather than the result. Customer 713's
+       -- genuine ¥1,000 wechat top-up was reported as ¥18.60: a -1,000
+       -- 'order_redeem' and a +18.60 'refund_reverse' were summed alongside it,
+       -- off by ¥981.40. A negative total looks wrong and gets caught; a small
+       -- plausible positive does not, and would have sat there indefinitely.
        -- Naming what counts is the same rule the signup-channel derivation
        -- follows: classify by inclusion, because a denylist silently accepts
        -- every method invented after it was written. Matches

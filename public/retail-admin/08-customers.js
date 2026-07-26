@@ -905,6 +905,16 @@ function renderDiagnosticsBlock(diag) {
         const detailHtml = detail
           ? `<details style="margin-top: var(--s2);"><summary class="muted" style="cursor: pointer; font-size: 12px;">${cuT('stack / details', '堆栈 / 详情')}</summary><pre style="white-space: pre-wrap; word-break: break-word; font-size: 11px; margin: var(--s2) 0 0; max-height: 240px; overflow: auto;">${escapeHtml(detail)}</pre></details>`
           : '';
+        // ⚠ THE DASHES BELOW STAY. This is the ONLY place in the product
+        // where a dash survives as a value, and a consistency pass will
+        // otherwise "fix" it, so: in a FORENSIC LOG a dash means the log row
+        // genuinely carried no value for that field — the client reported
+        // nothing there. That is a fact about the record, and the reader needs
+        // to see the gap to reason about it.
+        // The product-wide ban is about a dash STANDING IN for something known:
+        // for zero on a KPI tile, or for a missing name in the roster, where it
+        // makes the reader guess between "none", "not loaded" and "broken".
+        // Here there is nothing to stand in for. Decided 2026-07-26.
         return `
         <tr${isErr ? ' style="background: color-mix(in srgb, var(--danger) 7%, transparent);"' : ''}>
           <td class="muted" style="white-space: nowrap;">${cuFmtTime(l.created_at)}</td>
@@ -947,6 +957,9 @@ function cuCopyDiagnostics() {
   const c = d.customer || {};
   const diag = d.diagnostics || {};
   const dev = diag.device_last_seen || {};
+  // Same rule as the log table above: a dash here means the device snapshot
+  // carried no value for that field, which is what support needs to know.
+  // Not a stand-in — do not "consistency-fix" these either.
   const lines = [
     `Customer #${c.id}${c.phone ? ' · ' + c.phone : ''}${c.nickname ? ' · ' + c.nickname : ''}`,
     `App: ${dev.app_version || '—'} · Phone: ${dev.device_model || '—'} · System: ${dev.system || '—'} · WeChat: ${dev.wx_version || '—'}`,
