@@ -863,54 +863,10 @@ function openEditShipTo(orderId) {
 
 // `silent` = called by the poller. Skip the "Loading…" placeholder, skip
 // the rebuild when the fingerprint matches, flash new rows on arrival.
-// ── Orders view options (tweaks) ──────────────────────────────────────
-// Per-operator display preferences for the orders table: status signaling,
-// row rhythm and type character. Theme rides the global retail-admin theme.
-// Applied as classes on #orders-table (which persists across tbody re-renders)
-// + scoped CSS, so the row template never has to know about them.
-const ORDER_TWEAK_DEFAULTS = { statusStyle: 'pill', rowTreat: 'hairlines', typeMode: 'mixed' };
-function ordTweaksLoad() {
-  try { return { ...ORDER_TWEAK_DEFAULTS, ...(JSON.parse(localStorage.getItem('retail-admin-order-tweaks') || '{}')) }; }
-  catch (e) { return { ...ORDER_TWEAK_DEFAULTS }; }
-}
-let ORD_TWEAKS = ordTweaksLoad();
-function ordTweaksApply() {
-  const tbl = document.getElementById('orders-table'); if (!tbl) return;
-  tbl.classList.remove('os-pill', 'os-bar', 'os-glyph', 'rt-hairlines', 'rt-striped', 'rt-cards', 'tm-mixed', 'tm-mono-heavy', 'tm-all-mono');
-  tbl.classList.add('os-' + ORD_TWEAKS.statusStyle, 'rt-' + ORD_TWEAKS.rowTreat, 'tm-' + ORD_TWEAKS.typeMode);
-}
-function ordTweakSet(key, val) {
-  if (key === 'theme') { cuSetTheme(val); ordTweakSyncPanel(); return; }
-  ORD_TWEAKS[key] = val;
-  try { localStorage.setItem('retail-admin-order-tweaks', JSON.stringify(ORD_TWEAKS)); } catch (e) {}
-  ordTweaksApply();
-  ordTweakSyncPanel();
-}
-function ordTweakSyncPanel() {
-  const pop = document.getElementById('ord-view-pop'); if (!pop) return;
-  const theme = document.documentElement.getAttribute('data-theme') || 'dark';
-  const vals = { theme, statusStyle: ORD_TWEAKS.statusStyle, rowTreat: ORD_TWEAKS.rowTreat, typeMode: ORD_TWEAKS.typeMode };
-  pop.querySelectorAll('.ovp-seg').forEach(seg => {
-    const key = seg.getAttribute('data-tw');
-    seg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.getAttribute('data-v') === vals[key]));
-  });
-}
-function ordTweakToggle() {
-  const pop = document.getElementById('ord-view-pop'); if (!pop) return;
-  if (pop.hidden) {
-    pop.hidden = false;
-    ordTweakSyncPanel();
-    setTimeout(() => document.addEventListener('mousedown', ordTweakOutside), 0);
-  } else { ordTweakClose(); }
-}
-function ordTweakClose() {
-  const pop = document.getElementById('ord-view-pop'); if (pop) pop.hidden = true;
-  document.removeEventListener('mousedown', ordTweakOutside);
-}
-function ordTweakOutside(e) {
-  const wrap = e.target.closest && e.target.closest('.ovp-wrap');
-  if (!wrap) ordTweakClose();
-}
+// The orders "View" popover was retired with the Tacet port. Its per-operator
+// row-style preferences (retail-admin-order-tweaks: statusStyle / rowTreat /
+// typeMode) went with it — the reader is gone, so the table renders one style
+// for everyone. The stored key is left alone rather than cleared, per §1.16.
 
 // ── Orders KPI strip — today's pulse (shared fc-* layer) ────────────────────
 // Reuses /dashboard?from=today&to=today (the same call the dashboard hero
@@ -1147,7 +1103,6 @@ async function loadOrders(opts = {}) {
         <td class="muted" style="font-size: 11px">${formatDate(o.placed_at)}</td>
       </tr>`;
     }).join('');
-    ordTweaksApply();
     if (window.rmRenderOrderCards) rmRenderOrderCards(j.data);
 
     _ORDERS_SEEN_IDS = newIds;
