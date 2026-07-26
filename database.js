@@ -3331,8 +3331,25 @@ addColumn('retail_customers', 'created_by',               'INTEGER');
 // identity attached. It means "nobody on this team has opened this", NOT
 // "you haven't". Chosen 2026-07-25 to match Orders rather than build a
 // per-operator seen table — do not "correct" this into per-operator.
-// Not backfilled: existing customers read as never-opened, which is true.
 addColumn('retail_customers', 'seen_at',                  'DATETIME');
+// One-shot backfill: stamp every customer that existed when the column
+// landed as already seen, so only records created from this point on read
+// as unopened. Decided 2026-07-25, same call the Orders backfill made.
+//
+// WHY, so a later pass doesn't undo it: the unopened treatment exists to
+// point an operator at what needs them. Ship it un-backfilled and all 683
+// existing rows arrive tinted — the marker then means "everything", which
+// means nothing, and operators learn to ignore it before it is ever used
+// for its purpose. Marker in _migrations, so a restart can't re-stamp rows
+// an operator has since left genuinely unopened.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('retail_customers_seen_at_backfill_v1');
+  if (!ran) {
+    const r = db.prepare("UPDATE retail_customers SET seen_at = COALESCE(created_at, datetime('now')) WHERE seen_at IS NULL").run();
+    console.log(`[migration retail_customers_seen_at_backfill_v1] marked ${r.changes} existing customers as seen`);
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('retail_customers_seen_at_backfill_v1');
+  }
+} catch (e) { console.error('[migration retail_customers_seen_at_backfill_v1]', e); }
 try { db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_retail_customers_refcode ON retail_customers(referral_code) WHERE referral_code IS NOT NULL'); } catch {}
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_customers_refby ON retail_customers(referred_by_customer_id)'); } catch {}
 
