@@ -2341,6 +2341,117 @@
          and a lone amber dot on Blocked. Driven by a class rather than `:empty`
          so a stray whitespace text node can't quietly re-show it. */
       #tab-customers .cul-seg .ct.is-none { display: none; }
+      /* The create flow's one-shot note, above the identity block. Graphite on
+         raised paper — it is context, not an alert, so it takes no colour. */
+      #cu-drawer .cux-note {
+        display: flex; align-items: flex-start; gap: 12px;
+        font-size: 13px; color: var(--text-2); background: var(--bg-elev-1);
+        border-radius: 10px; padding: 12px 14px; margin-bottom: 20px;
+        line-height: 1.5; text-wrap: pretty;
+      }
+      #cu-drawer .cux-note .nx {
+        flex: 0 0 auto; border: 0; background: none; color: var(--text-2);
+        font-family: var(--f-sans); font-size: 13px; cursor: pointer; padding: 0; line-height: 1.5;
+      }
+      #cu-drawer .cux-note .nx:hover { color: var(--text-1); }
+
+      /* ── Customer modals ────────────────────────────────────────────────
+         Every write on this page is a modal, and they all wear one shell.
+         Values are the mockup's `.ovs .modal*` block, property for property:
+         460px cap, 14px radius, 18px/500 title, 13px/500 sentence-case labels,
+         38px fields, 8px radius. The 460 is the drawn-and-approved width; the
+         rulebook's general 560 guidance is not what this was built to.
+         Scoped to the five customer modals so the product editor and every
+         other .pu-editor-bg keeps its own look.
+
+         ⚠ EACH OF THESE FIVE CARRIED AN INLINE `style="width: 540px"` (480,
+         560…) AND IT HAD TO GO. An inline style beats any stylesheet rule
+         regardless of specificity, so this max-width would have applied to
+         nothing while looking perfectly correct in the source — a CSS bug that
+         isn't in the CSS. Same class of trap as the `overflow-x` specificity
+         fight in build 3: the rule was fine, something else was simply louder.
+         If a modal here ever needs a different width, change it HERE — do not
+         reach for an inline style. */
+      #tab-customers :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .pu-editor {
+        width: 100%; max-width: 460px; background: var(--td-paper);
+        border: 1px solid var(--td-border); border-radius: 14px; overflow: hidden;
+      }
+      #tab-customers :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .pu-editor-head {
+        padding: 18px 20px 6px; border-bottom: 0; background: none;
+      }
+      #tab-customers :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .pu-editor-head h3 {
+        font-size: 18px; font-weight: 500; color: var(--td-text); letter-spacing: 0; text-transform: none;
+      }
+      /* ✕ where a "Close" button used to sit — the title line's control is a
+         dismiss, not an action, and a worded button reads as one. */
+      #tab-customers .cu-modal-x {
+        margin-left: auto; width: 32px; height: 32px; border: 0; background: none;
+        border-radius: 8px; color: var(--text-2); cursor: pointer; font-size: 18px;
+        display: grid; place-items: center; line-height: 1; padding: 0;
+      }
+      #tab-customers .cu-modal-x:hover { background: var(--bg-elev-1); color: var(--text-1); }
+      #tab-customers :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .pu-editor-body {
+        padding: 8px 20px 4px; background: none;
+      }
+      /* Sentence case, 13px/500 Ink. The shared label.stacked is 11px/600
+         UPPERCASE Graphite — §1.6 allows no uppercase anywhere. */
+      #tab-customers :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) label.stacked {
+        font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none;
+        color: var(--td-text); margin-bottom: 6px;
+      }
+      #tab-customers :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .field { margin-bottom: 14px; }
+      #tab-customers :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .field :is(input, select) {
+        width: 100%; height: 38px; background: var(--td-surface); border: 1px solid var(--td-border);
+        border-radius: 8px; padding: 0 12px; font-family: var(--f-sans); font-size: 14px; color: var(--td-text);
+      }
+      #tab-customers :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .field textarea {
+        width: 100%; min-height: 84px; background: var(--td-surface); border: 1px solid var(--td-border);
+        border-radius: 8px; padding: 9px 12px; line-height: 1.5; resize: vertical;
+        font-family: var(--f-sans); font-size: 14px; color: var(--td-text);
+      }
+      /* Dusk focus ring, and it does NOT breach §1's "zero Dusk in any modal".
+         That rule is about Dusk ELEMENTS — no second CTA competing with the
+         primary. A focus ring makes no claim; it is the browser showing where
+         the keyboard is, and the design system exempts focus rings from the
+         one-Dusk rule explicitly. Settled 2026-07-26 — do not re-litigate this
+         into Ink on a reading of the rule's headline. */
+      #tab-customers :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .field :is(input, select, textarea):focus {
+        outline: none; border-color: var(--td-dusk);
+      }
+      #tab-customers :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .helper,
+      #tab-customers .cu-mnote {
+        font-size: 13px; color: var(--text-2); line-height: 1.5; margin-top: 6px; text-wrap: pretty;
+      }
+      #tab-customers .cu-mnote { margin: 0 0 8px; }
+      #tab-customers :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .pu-editor-foot {
+        padding: 12px 20px 18px; border-top: 0; background: none; justify-content: flex-end; gap: 8px;
+      }
+      /* Primary is INK, not Dusk — a modal's primary is the merchant acting.
+         (The mockup's class is literally `.btn.dusk`, but its own rule
+         overrides that to var(--td-text); the name is a misnomer.) */
+      #tab-customers :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .btn-primary {
+        background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); font-weight: 500;
+      }
+      #tab-customers :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .btn-primary:hover {
+        background: color-mix(in srgb, var(--td-text) 88%, var(--td-paper));
+        border-color: color-mix(in srgb, var(--td-text) 88%, var(--td-paper));
+      }
+      /* Destructive is a Brick OUTLINE, never a solid slab. */
+      #tab-customers .cu-btn-danger {
+        background: transparent; border-color: var(--tacet-brick); color: var(--tacet-brick-ink);
+      }
+      #tab-customers .cu-btn-danger:hover { background: var(--tacet-brick-tint); }
+      /* Inline validation — Brick, beneath the field that caused it, never a
+         toast. The field itself takes a Brick border so the eye lands on it. */
+      #tab-customers .cu-err { font-size: 13px; color: var(--tacet-brick-ink); margin-top: 6px; line-height: 1.45; text-wrap: pretty; }
+      #tab-customers .cu-err:empty { display: none; }
+      #tab-customers .field.is-bad :is(input, select, textarea) { border-color: var(--tacet-brick); }
+      /* Every write control goes dead while the write is in flight — the
+         primary AND Cancel. §1.12: a live control invites a double-submit. */
+      #tab-customers :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .btn:disabled {
+        opacity: .5; cursor: default;
+      }
+
       /* The state cards' one action. */
       #tab-customers .cul-statebtn { height: 32px; padding: 0 12px; font-size: 13px; }
 
@@ -3101,15 +3212,15 @@
 
     <!-- EDIT MODAL -->
     <div id="cu-edit-bg" class="pu-editor-bg tacet">
-      <div class="pu-editor" style="width: 540px;">
+      <div class="pu-editor">
         <div class="pu-editor-head">
           <h3 style="margin: 0; font-size: 14px;">Edit customer · 编辑顾客</h3>
-          <button class="btn" onclick="cuCloseEdit()">Close · 关闭</button>
+          <button type="button" class="cu-modal-x" onclick="cuCloseEdit()" title="Close · 关闭 (Esc)" aria-label="Close">&#10005;</button>
         </div>
         <div class="pu-editor-body" style="grid-template-columns: 1fr; padding: 18px;">
           <div class="field"><label class="stacked">Nickname · 昵称</label><input type="text" id="cu-edit-nickname"></div>
-          <div class="field"><label class="stacked">Phone · 电话</label><input type="text" id="cu-edit-phone" placeholder="+86…"></div>
-          <div class="field"><label class="stacked">Email · 邮箱</label><input type="text" id="cu-edit-email"></div>
+          <div class="field" id="cu-edit-phone-field"><label class="stacked">Phone · 电话</label><input type="text" id="cu-edit-phone" placeholder="+86…"><div class="cu-err" id="cu-edit-phone-err" data-no-i18n></div></div>
+          <div class="field" id="cu-edit-email-field"><label class="stacked">Email · 邮箱</label><input type="text" id="cu-edit-email"><div class="cu-err" id="cu-edit-email-err" data-no-i18n></div></div>
           <div class="field"><label class="stacked">Gender · 性别</label>
             <select id="cu-edit-gender">
               <option value="">— unknown —</option>
@@ -3121,7 +3232,7 @@
           <!-- Tier · 等级 is auto-derived from lifetime spend (thresholds in routes/retail.js → TIER_THRESHOLDS). The detail header already shows the current pill — no manual override here. -->
         </div>
         <div class="pu-editor-foot">
-          <button class="btn" onclick="cuCloseEdit()">Cancel · 取消</button>
+          <button class="btn" id="cu-edit-cancel" onclick="cuCloseEdit()">Cancel · 取消</button>
           <button class="btn btn-primary" id="cu-edit-save" onclick="cuSaveEdit()">Save changes · 保存修改</button>
         </div>
       </div>
@@ -3131,21 +3242,21 @@
          signed up through the app. A synthetic 'manual:' identity is minted
          server-side; a matching phone links to the existing record instead. -->
     <div id="cu-create-bg" class="pu-editor-bg tacet">
-      <div class="pu-editor" style="width: 480px;">
+      <div class="pu-editor">
         <div class="pu-editor-head">
           <h3 style="margin: 0; font-size: 14px;">New customer · 新增顾客</h3>
-          <button class="btn" onclick="cuCloseCreate()">Close · 关闭</button>
+          <button type="button" class="cu-modal-x" onclick="cuCloseCreate()" title="Close · 关闭 (Esc)" aria-label="Close">&#10005;</button>
         </div>
         <div class="pu-editor-body" style="grid-template-columns: 1fr; padding: 18px;">
           <div class="field"><label class="stacked">Name · 姓名</label><input type="text" id="cu-new-nickname" maxlength="60" placeholder="e.g. 王小姐 / Ms Wang"></div>
-          <div class="field"><label class="stacked">Phone · 电话</label><input type="text" id="cu-new-phone" maxlength="20" placeholder="+86…"></div>
-          <div class="field" style="margin-bottom: 0;"><label class="stacked">Email · 邮箱 <span class="muted">(optional · 选填)</span></label><input type="text" id="cu-new-email" maxlength="120" placeholder="name@example.com">
+          <div class="field" id="cu-new-phone-field"><label class="stacked">Phone · 电话</label><input type="text" id="cu-new-phone" maxlength="20" placeholder="+86…"><div class="cu-err" id="cu-new-phone-err" data-no-i18n></div></div>
+          <div class="field" id="cu-new-email-field" style="margin-bottom: 0;"><label class="stacked">Email · 邮箱 <span class="muted">(optional · 选填)</span></label><input type="text" id="cu-new-email" maxlength="120" placeholder="name@example.com"><div class="cu-err" id="cu-new-email-err" data-no-i18n></div>
             <div class="helper">Enter a name or a phone (or both). If the phone already belongs to a customer, we link to that record instead of creating a duplicate. · 填写姓名或电话(可都填)。若该电话已有顾客,将关联到现有记录而非新建。</div>
           </div>
         </div>
         <div class="pu-editor-foot">
-          <button class="btn" onclick="cuCloseCreate()">Cancel · 取消</button>
-          <button class="btn btn-primary" id="cu-new-save" onclick="cuCreateCustomer()">Create · 创建</button>
+          <button class="btn" id="cu-new-cancel" onclick="cuCloseCreate()">Cancel · 取消</button>
+          <button class="btn btn-primary" id="cu-new-save" onclick="cuCreateCustomer()">Create customer · 创建顾客</button>
         </div>
       </div>
     </div>
@@ -3153,10 +3264,10 @@
     <!-- MESSAGE MODAL — operator opens a direct-message thread with this customer.
          Reuses the feedback thread tables; the customer replies in-app. -->
     <div id="cu-msg-bg" class="pu-editor-bg tacet">
-      <div class="pu-editor" style="width: 480px;">
+      <div class="pu-editor">
         <div class="pu-editor-head">
           <h3 style="margin: 0; font-size: 14px;">Message customer · 给顾客发消息</h3>
-          <button class="btn" onclick="cuCloseMsg()">Close · 关闭</button>
+          <button type="button" class="cu-modal-x" onclick="cuCloseMsg()" title="Close · 关闭 (Esc)" aria-label="Close">&#10005;</button>
         </div>
         <div class="pu-editor-body" style="grid-template-columns: 1fr; padding: 18px;">
           <div id="cu-msg-who" class="muted" style="font-size: 12px; margin-bottom: var(--s3);"></div>
@@ -3167,7 +3278,7 @@
           </div>
         </div>
         <div class="pu-editor-foot">
-          <button class="btn" onclick="cuCloseMsg()">Cancel · 取消</button>
+          <button class="btn" id="cu-msg-cancel" onclick="cuCloseMsg()">Cancel · 取消</button>
           <button class="btn btn-primary" id="cu-msg-send" onclick="cuSendMsg()">Send message · 发送消息</button>
         </div>
       </div>
@@ -3175,25 +3286,29 @@
 
     <!-- ADJUST MODAL (points & wallet share same UI) -->
     <div id="cu-adjust-bg" class="pu-editor-bg tacet">
-      <div class="pu-editor" style="width: 480px;">
+      <div class="pu-editor">
         <div class="pu-editor-head">
           <h3 id="cu-adjust-title" style="margin: 0; font-size: 14px;">Adjust balance · 调整余额</h3>
-          <button class="btn" onclick="cuCloseAdjust()">Close · 关闭</button>
+          <button type="button" class="cu-modal-x" onclick="cuCloseAdjust()" title="Close · 关闭 (Esc)" aria-label="Close">&#10005;</button>
         </div>
         <div class="pu-editor-body" style="grid-template-columns: 1fr; padding: 18px;">
-          <div id="cu-adjust-current" class="muted" style="font-size: 12px; margin-bottom: var(--s3);"></div>
+          <!-- Says WHY the reason is required, before the operator meets the
+               required field — not after they've been refused by it. -->
+          <div class="cu-mnote">This changes a customer balance and is written to the ledger with the reason below. · 此操作会改变顾客余额,并连同下方原因一并记入流水。</div>
+          <div id="cu-adjust-current" class="muted" style="font-size: 12px; margin-bottom: var(--s3);" data-no-i18n></div>
           <div class="field">
             <label class="stacked">Delta (negative to deduct) · 变动量(负数表示扣减)</label>
             <input type="number" id="cu-adjust-delta" step="any" placeholder="e.g. 50 or -20">
             <div class="helper">Writes a ledger row so the audit trail stays intact. Cannot push the balance below zero. · 会写入流水以保留审计轨迹。不可将余额扣至负数。</div>
           </div>
-          <div class="field" style="margin-bottom: 0;">
-            <label class="stacked">Reason (required, recorded in audit log) · 原因(必填,记入审计日志)</label>
+          <div class="field" id="cu-adjust-reason-field" style="margin-bottom: 0;">
+            <label class="stacked">Reason · 原因</label>
             <textarea id="cu-adjust-reason" placeholder="e.g. Goodwill credit for late delivery"></textarea>
+            <div class="cu-err" id="cu-adjust-reason-err" data-no-i18n></div>
           </div>
         </div>
         <div class="pu-editor-foot">
-          <button class="btn" onclick="cuCloseAdjust()">Cancel · 取消</button>
+          <button class="btn" id="cu-adjust-cancel" onclick="cuCloseAdjust()">Cancel · 取消</button>
           <button class="btn btn-primary" id="cu-adjust-save" onclick="cuSaveAdjust()">Apply adjustment · 应用调整</button>
         </div>
       </div>
@@ -3201,10 +3316,10 @@
 
     <!-- ADDRESS MODAL (add / edit) -->
     <div id="cu-addr-bg" class="pu-editor-bg tacet">
-      <div class="pu-editor" style="width: 560px;">
+      <div class="pu-editor">
         <div class="pu-editor-head">
           <h3 id="cu-addr-title" style="margin: 0; font-size: 14px;">Add address · 添加地址</h3>
-          <button class="btn" onclick="cuCloseAddrModal()">Close · 关闭</button>
+          <button type="button" class="cu-modal-x" onclick="cuCloseAddrModal()" title="Close · 关闭 (Esc)" aria-label="Close">&#10005;</button>
         </div>
         <div class="pu-editor-body" style="grid-template-columns: 1fr; padding: 18px;">
           <div class="row" style="gap: var(--s3);">
@@ -3251,7 +3366,7 @@
           </label>
         </div>
         <div class="pu-editor-foot">
-          <button class="btn" onclick="cuCloseAddrModal()">Cancel · 取消</button>
+          <button class="btn" id="cu-addr-cancel" onclick="cuCloseAddrModal()">Cancel · 取消</button>
           <button class="btn btn-primary" id="cu-addr-save" onclick="cuSaveAddr()">Save address · 保存地址</button>
         </div>
       </div>

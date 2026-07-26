@@ -10494,11 +10494,14 @@ function grantSignupVouchers(customerId) {
 // retail_migration_credits now holds EVERY OUT1N phone (incl. zero-balance
 // customers seeded with 0/0), so "phone present in that table" == "returning
 // OUT1N customer", regardless of whether they had money or have claimed yet.
+// Returns the number of signup vouchers GRANTED (0 when it pulled them back,
+// or when there was no phone to decide on yet) so a caller can tell the
+// operator what actually arrived. Callers that don't care can ignore it.
 function reconcileSignupVouchers(customerId) {
-  if (!customerId) return;
+  if (!customerId) return 0;
   const c = tdb().prepare('SELECT id, phone FROM retail_customers WHERE id = ?').get(customerId);
   const phone = normalizeMigrationPhone(c && c.phone);
-  if (!phone) return;                         // defer — phone not captured yet
+  if (!phone) return 0;                       // defer — phone not captured yet
   const returning = tdb().prepare(
     'SELECT 1 FROM retail_migration_credits WHERE phone = ? LIMIT 1'
   ).get(phone);
@@ -10513,8 +10516,9 @@ function reconcileSignupVouchers(customerId) {
           AND granted_note = 'Auto-granted on signup'
           AND voucher_id IN (SELECT id FROM retail_vouchers WHERE auto_grant_signup = 1)`
     ).run(customerId);
+    return 0;                                 // returning customer — nothing new
   } else {
-    grantSignupVouchers(customerId);          // genuine new signup
+    return grantSignupVouchers(customerId);   // genuine new signup
   }
 }
 
@@ -13225,13 +13229,26 @@ router.post('/api/retail-admin/customers', requireRetailAdmin, express.json(), (
   const id = info.lastInsertRowid;
   // Same post-create hooks the self-service flows run — apply any migration
   // credit / signup vouchers keyed to this phone. Best-effort.
+  // Capture what these two actually MOVED, so the drawer can name it. Both
+  // already knew; neither used to say. Without this the operator sees a
+  // balance they didn't type and has no idea where it came from.
+  let credit = null, vouchers = 0;
   if (phone) {
-    try { claimMigrationCredit(id); } catch (e) { console.warn('[retail-admin/customer create] migration claim failed:', e.message); }
-    try { reconcileSignupVouchers(id); } catch (e) { console.warn('[retail-admin/customer create] voucher reconcile failed:', e.message); }
+    try { credit = claimMigrationCredit(id); } catch (e) { console.warn('[retail-admin/customer create] migration claim failed:', e.message); }
+    try { vouchers = reconcileSignupVouchers(id) || 0; } catch (e) { console.warn('[retail-admin/customer create] voucher reconcile failed:', e.message); }
   }
   const customer = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(id);
   logActivity(req.user.id, req.user.username, 'create_manual', 'retail_customer', id, { phone, nickname }, req.ip);
-  res.json({ success: true, reused: false, data: publicCustomer(customer) });
+  res.json({
+    success: true, reused: false, data: publicCustomer(customer),
+    // Only ever non-zero when something genuinely transferred — the client
+    // says nothing at all when all three are zero.
+    carried: {
+      balance:  Number(credit?.balance || 0),
+      points:   Number(credit?.points  || 0),
+      vouchers: vouchers,
+    },
+  });
 });
 
 // Customer search — used by the voucher-grant modal in /retail-admin.

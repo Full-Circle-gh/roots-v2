@@ -15,6 +15,13 @@ let CU_PAGE_SIZE = 20;
 let CU_TOTAL = 0;
 let CU_CURRENT = null;      // detail data for currently-open customer
 let CU_ADJUST_KIND = null;  // 'points' | 'wallet'
+// A one-shot note for the NEXT drawer render — set by the create flow when
+// something happened the operator didn't type (a legacy balance arrived, or
+// their new customer turned out to already exist). Consumed on render and
+// cleared, so it never reappears when they open that customer again later.
+// Inline in the drawer rather than a toast: the note explains figures that are
+// right there, and a toast would announce them somewhere else and then leave.
+let CU_PENDING_NOTE = null;
 let cuSearchTimer = null;
 // Roster segment — '' | 'new_week' | 'sleeping' | 'blocked'. The cuts an
 // operator actually reaches for, one tap each. 'blocked' replaces the old
@@ -769,6 +776,46 @@ function cuShowList() { closeDrawer('#cu-drawer'); }
 // Rare/destructive actions (Sign out all devices, Block) live behind one
 // calm "More" button so the everyday header stays two buttons. Closed on
 // outside-click; each item closes the menu before it acts.
+// Esc closes whichever customer modal is open.
+//
+// ⚠ There was NO Esc handler for .pu-editor-bg ANYWHERE — and the ✕ has been
+// carrying a `title="Close · 关闭 (Esc)"` tooltip the whole time. The interface
+// was promising a behaviour that did not exist, which is worse than not
+// offering it: an operator who trusts the tooltip presses Esc, nothing
+// happens, and they learn to distrust the next hint the page gives them.
+//
+// 🔴 IT REFUSES TO FIRE MID-WRITE. If any control in the modal is disabled a
+// save is in flight, and Esc is ignored. A modal that vanishes mid-save leaves
+// the operator with no idea whether the write went through — they can't see
+// the request, so the panel disappearing is the only evidence they have, and
+// it would be lying. Same guard the buttons use, for the same reason.
+// (Topmost-first ordering is moot here: only one of these opens at a time.)
+const CU_MODALS = [
+  ['#cu-create-bg', 'cuCloseCreate'],
+  ['#cu-edit-bg',   'cuCloseEdit'],
+  ['#cu-adjust-bg', 'cuCloseAdjust'],
+  ['#cu-msg-bg',    'cuCloseMsg'],
+  ['#cu-addr-bg',   'cuCloseAddrModal'],
+];
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  for (const [sel, closer] of CU_MODALS) {
+    const el = document.querySelector(sel);
+    if (!el || !el.classList.contains('show')) continue;
+    if (el.querySelector('.btn[disabled], button[disabled]')) return;   // mid-write
+    e.preventDefault();
+    if (typeof window[closer] === 'function') window[closer]();
+    return;
+  }
+});
+
+// Dismissing the note removes it outright — it has already been read, and it
+// describes a moment (the create) rather than a state of the record.
+function cuDismissNote() {
+  const el = document.getElementById('cu-drawer-note');
+  if (el) el.remove();
+}
+
 function cuMoreToggle() {
   const m = document.getElementById('cux-more-menu'); if (!m) return;
   m.hidden = !m.hidden;
@@ -1185,7 +1232,14 @@ function cuRenderDetail() {
   const affTotal = Number((d.affiliate && d.affiliate.summary && d.affiliate.summary.total) || 0);
   const noneHint = escapeHtml(cuT('none', '无'));
   const chevron = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>';
+  const noteHtml = CU_PENDING_NOTE
+    ? `<div class="cux-note" id="cu-drawer-note"><span>${escapeHtml(CU_PENDING_NOTE)}</span>`
+      + `<button type="button" class="nx" onclick="cuDismissNote()" title="${escapeHtml(cuT('Dismiss', '关闭'))}" aria-label="${escapeHtml(cuT('Dismiss', '关闭'))}">&#10005;</button></div>`
+    : '';
+  CU_PENDING_NOTE = null;   // one-shot: consumed by this render
+
   $('#cu-detail-body').innerHTML = `
+    ${noteHtml}
     <div class="cux-head">
       ${avatar}
       <div style="flex: 1; min-width: 0;">
@@ -1479,29 +1533,73 @@ function cuOpenCreate() {
 function cuCloseCreate() { $('#cu-create-bg').classList.remove('show'); }
 
 async function cuCreateCustomer() {
+  const SLOTS = [['cu-new-phone-err', 'cu-new-phone-field'], ['cu-new-email-err', 'cu-new-email-field']];
+  cuErrClear(...SLOTS);
   const body = {
     nickname: $('#cu-new-nickname').value.trim(),
     phone:    $('#cu-new-phone').value.trim(),
     email:    $('#cu-new-email').value.trim(),
   };
+  // Neither identifier — the one error that belongs to the PAIR, so it sits
+  // under Phone (the field an operator is likeliest to have meant to fill).
   if (!body.nickname && !body.phone) {
-    toast(cuT('Enter a name or a phone · 请填写姓名或电话', '请填写姓名或电话'), 'err');
+    cuErr('cu-new-phone-err', cuErrText('name_or_phone_required'), 'cu-new-phone-field');
     return;
   }
   try {
     const j = await adminWrite({
-      btnId: 'cu-new-save', url: '/api/retail-admin/customers', method: 'POST',
-      body, errLabelEn: 'Create failed', errLabelCn: '创建失败',
+      btnId: 'cu-new-save', url: '/api/retail-admin/customers', method: 'POST', body,
+      silent: true,
+      busyLabel: cuT('Creating…', '创建中…'),
+      also: '#cu-new-cancel',
     });
     cuCloseCreate();
-    toast(j.reused
-      ? cuT('Linked to existing customer · 已关联到现有顾客', '已关联到现有顾客')
-      : cuT('Customer created · 已创建顾客', '已创建顾客'));
     cuLoad();
     cuLoadKpis(true);
     const id = j?.data?.id;
-    if (id != null) cuOpenDetail(id);
-  } catch {}
+    if (id == null) return;
+
+    // ── The four outcomes ────────────────────────────────────────────────
+    // The drawer opening IS the confirmation for a plain create, so (a) says
+    // nothing. Only the two outcomes that carry a surprise get a note, and it
+    // goes INLINE in the drawer — never a toast, which would announce the
+    // surprise somewhere other than where its evidence is.
+    //   (d) is handled for free: cuOpenDetail() GETs the record, which stamps
+    //       seen_at, so a brand-new customer is never an unopened row.
+    let note = null;
+    if (j.reused) {
+      // (c) Nothing was created. Say so plainly — an operator who typed a new
+      // name and got someone else's record needs to know why.
+      const who = j?.data?.nickname ? ` (${j.data.nickname})` : '';
+      note = cuT(
+        `${body.phone} already belongs to this customer${who} — opened their record instead of creating a new one.`,
+        `${body.phone} 已属于该顾客${who} — 已打开其记录,未新建。`);
+    } else {
+      // (b) Created, and the endpoint moved something across. Name exactly
+      // what arrived, and ONLY what actually did — a note listing zeros would
+      // be noise dressed as news.
+      const carried = [];
+      const bal = Number(j?.carried?.balance || 0);
+      const pts = Number(j?.carried?.points || 0);
+      const vch = Number(j?.carried?.vouchers || 0);
+      if (bal) carried.push(cuT(`${cuMoneyPlain(bal)} balance`, `余额 ${cuMoneyPlain(bal)}`));
+      if (pts) carried.push(cuT(`${cuNum(pts)} points`, `${cuNum(pts)} 积分`));
+      if (vch) carried.push(cuT(`${cuNum(vch)} welcome voucher${vch > 1 ? 's' : ''}`, `${cuNum(vch)} 张欢迎券`));
+      if (carried.length) {
+        note = cuT(`Created. ${carried.join(' and ')} carried over from their old account.`,
+                   `已创建。从旧账户带入${carried.join('、')}。`);
+      }
+      // (a) nothing carried → note stays null → the drawer just opens.
+    }
+    CU_PENDING_NOTE = note;
+    cuOpenDetail(id);
+  } catch (e) {
+    const code = e.code;
+    if (code === 'bad_phone') cuErr('cu-new-phone-err', cuErrText('bad_phone'), 'cu-new-phone-field');
+    else if (code === 'bad_email') cuErr('cu-new-email-err', cuErrText('bad_email'), 'cu-new-email-field');
+    else if (code === 'name_or_phone_required') cuErr('cu-new-phone-err', cuErrText(code), 'cu-new-phone-field');
+    else cuErr('cu-new-phone-err', cuT('Create failed', '创建失败') + ': ' + cuErrText(code), null);
+  }
 }
 
 // ── Direct message — operator opens a conversation with this customer ───────
@@ -1525,11 +1623,12 @@ async function cuSendMsg() {
   if (!message) { $('#cu-msg-text').focus(); return; }
   try {
     const j = await adminWrite({
-      btnId: 'cu-msg-send', url: '/api/retail-admin/customers/' + c.id + '/message',
+      btnId: 'cu-msg-send', busyLabel: cuT('Sending…', '发送中…'), also: '#cu-msg-cancel', url: '/api/retail-admin/customers/' + c.id + '/message',
       method: 'POST', body: { message }, errLabelEn: 'Send failed', errLabelCn: '发送失败',
     });
     cuCloseMsg();
-    toast(cuT('Message sent · customer notified', '已发送 · 已通知顾客'), 'ok');
+    // No toast: the thread drawer opening below IS the confirmation, and it
+    // shows the message itself rather than asserting it was sent.
     // Hand off to the Feedback thread drawer so the conversation is visible and
     // the operator can keep replying. Close the customer drawer first so the
     // thread drawer isn't painted behind it (same z-layer).
@@ -1552,13 +1651,31 @@ async function cuSendMsg() {
 //   - `btn` can be an element, an id string, or undefined (no busy state).
 //   - Resolves with the JSON envelope on success; throws on failure
 //     (already toasted, caller can `try { ... } catch {}` to swallow).
-async function adminWrite({ btn, btnId, url, method = 'POST', body, errLabelEn = 'Failed', errLabelCn = '失败' }) {
+//
+// Two OPT-IN options, added for the Customers modals (§1.12) and defaulted OFF
+// so Orders, Refunds and Tracking keep the exact behaviour they have today.
+// Changing a shared helper's defaults to suit one page is how a fix on one
+// surface becomes a bug on three:
+//   • silent     — skip the error toast and just throw, so the caller can put
+//                  the failure INLINE next to the field that caused it.
+//   • busyLabel  — what the pressed button says while it works ("Saving…").
+//                  Without it the button shows the historic bare '…'.
+//   • also       — extra elements to disable for the duration (the modal's
+//                  Cancel button, which nothing used to disable).
+async function adminWrite({ btn, btnId, url, method = 'POST', body, errLabelEn = 'Failed', errLabelCn = '失败',
+                            silent = false, busyLabel = null, also = null }) {
   const btnEl = btn instanceof Element ? btn
               : btn ? document.querySelector(btn)
               : btnId ? document.getElementById(btnId)
               : null;
+  // Everything that must go dead while the write is in flight. A write control
+  // that stays live is an invitation to double-submit.
+  const alsoEls = (Array.isArray(also) ? also : (also ? [also] : []))
+    .map(x => x instanceof Element ? x : document.querySelector(x))
+    .filter(Boolean);
+  alsoEls.forEach(el => { el.disabled = true; });
   const restore = btnEl ? btnEl.textContent : null;
-  if (btnEl) { btnEl.disabled = true; btnEl.dataset.busy = '1'; btnEl.textContent = '…'; }
+  if (btnEl) { btnEl.disabled = true; btnEl.dataset.busy = '1'; btnEl.textContent = busyLabel || '…'; }
   try {
     const opts = { method, headers: body ? { 'Content-Type': 'application/json' } : undefined };
     if (body) opts.body = JSON.stringify(body);
@@ -1571,26 +1688,56 @@ async function adminWrite({ btn, btnId, url, method = 'POST', body, errLabelEn =
       const code = j.error || 'unknown';
       const reason = j.message ? `${j.message} [${code}]` : code;
       const extra = j.current !== undefined ? ` (current · 当前: ${j.current})` : '';
-      toast(`${errLabelEn} · ${errLabelCn}: ${reason}${extra}`, 'err');
+      if (!silent) toast(`${errLabelEn} · ${errLabelCn}: ${reason}${extra}`, 'err');
       const err = new Error(j.error || 'request_failed');
       err.code = code;
+      err.payload = j;            // silent callers render the reason themselves
       throw err;
     }
     return j;
   } catch (e) {
-    if (!e.message || (e.message !== 'request_failed' && !e.message.startsWith('Error'))) {
+    if (!silent && (!e.message || (e.message !== 'request_failed' && !e.message.startsWith('Error')))) {
       toast(`${errLabelEn} · ${errLabelCn}: ${e.message || 'network'}`, 'err');
     }
     throw e;
   } finally {
     if (btnEl) { btnEl.disabled = false; delete btnEl.dataset.busy; if (restore != null) btnEl.textContent = restore; }
+    alsoEls.forEach(el => { el.disabled = false; });
   }
 }
 // Back-compat alias: Customers drawer used `cuWriteRequest({ btnId, ... })`.
 const cuWriteRequest = adminWrite;
 
+// ── Inline validation for the customer modals ────────────────────────────
+// §1.12: a failure belongs BESIDE the field that caused it, not in a toast
+// that appears somewhere else and then leaves. cuErr() puts the sentence
+// under the field and marks the field itself; cuErrClear() wipes every slot
+// in a modal before each submit so a stale message can't outlive its cause.
+function cuErr(slotId, msg, fieldId) {
+  const slot = document.getElementById(slotId);
+  if (slot) slot.textContent = msg || '';
+  const field = fieldId ? document.getElementById(fieldId) : null;
+  if (field) field.classList.toggle('is-bad', !!msg);
+}
+function cuErrClear(...pairs) {
+  pairs.forEach(([slotId, fieldId]) => cuErr(slotId, '', fieldId));
+}
+// The endpoints' own rejection codes, said in words. Anything unmapped falls
+// through to its raw code rather than a soothing generic — an unrecognised
+// failure should look unhandled, not handled.
+const CU_ERR_TEXT = {
+  bad_phone:  ['That phone doesn’t look like a number we can reach. Use digits, optionally with +86.', '这个号码看起来无法接通。请填写数字,可加 +86。'],
+  bad_email:  ['That email is missing its @ or its domain. Write it like name@example.com.', '邮箱缺少 @ 或域名。请按 name@example.com 格式填写。'],
+  name_or_phone_required: ['Enter a name or a phone — one of the two is needed.', '请填写姓名或电话 — 两者至少填一项。'],
+};
+function cuErrText(code) {
+  const m = CU_ERR_TEXT[code];
+  return m ? cuT(m[0], m[1]) : String(code || '');
+}
+
 async function cuSaveEdit() {
   if (!CU_CURRENT?.customer) return;
+  cuErrClear(['cu-edit-phone-err', 'cu-edit-phone-field'], ['cu-edit-email-err', 'cu-edit-email-field']);
   const body = {
     nickname: $('#cu-edit-nickname').value.trim(),
     phone:    $('#cu-edit-phone').value.trim(),
@@ -1601,12 +1748,32 @@ async function cuSaveEdit() {
   try {
     await cuWriteRequest({
       btnId: 'cu-edit-save', url: '/api/retail-admin/customers/' + CU_CURRENT.customer.id,
-      method: 'PATCH', body, errLabelEn: 'Save failed', errLabelCn: '保存失败',
+      method: 'PATCH', body,
+      // Inline, not toasted: the two checks this can fail (email shape,
+      // duplicate phone) both point at a specific field.
+      silent: true,
+      busyLabel: cuT('Saving…', '保存中…'),
+      also: '#cu-edit-cancel',
     });
-    toast('Saved · 已保存');
     cuCloseEdit();
     cuOpenDetail(CU_CURRENT.customer.id);
-  } catch {}
+  } catch (e) {
+    const j = e.payload || {};
+    if (e.code === 'phone_taken') {
+      // Name WHO holds it — "taken" alone leaves the operator to go hunting.
+      const who = j.nickname ? `${j.nickname} (#${j.customer_id})` : `#${j.customer_id}`;
+      cuErr('cu-edit-phone-err',
+        cuT(`That number already belongs to ${who}. One customer per number.`,
+            `该号码已属于 ${who}。一个号码只能对应一位顾客。`),
+        'cu-edit-phone-field');
+    } else if (e.code === 'bad_phone') {
+      cuErr('cu-edit-phone-err', cuErrText('bad_phone'), 'cu-edit-phone-field');
+    } else if (e.code === 'bad_email') {
+      cuErr('cu-edit-email-err', cuErrText('bad_email'), 'cu-edit-email-field');
+    } else {
+      cuErr('cu-edit-phone-err', cuT('Save failed', '保存失败') + ': ' + cuErrText(e.code), null);
+    }
+  }
 }
 
 async function cuToggleBlock(ev) {
@@ -1685,27 +1852,45 @@ function cuCloseAdjust() { $('#cu-adjust-bg').classList.remove('show'); }
 
 async function cuSaveAdjust() {
   if (!CU_CURRENT?.customer) return;
+  cuErrClear(['cu-adjust-reason-err', 'cu-adjust-reason-field']);
   const deltaRaw = Number($('#cu-adjust-delta').value);
   const reason   = $('#cu-adjust-reason').value.trim();
-  if (!Number.isFinite(deltaRaw) || deltaRaw === 0) return toast('Enter a non-zero delta · 请填写非零变动量', 'err');
-  if (!reason) return toast('Reason is required · 请填写原因', 'err');
+  if (!Number.isFinite(deltaRaw) || deltaRaw === 0) {
+    return cuErr('cu-adjust-reason-err', cuT('Enter a non-zero amount.', '请填写非零变动量。'), null);
+  }
+  // Required, and refused INLINE next to the field rather than by a toast that
+  // appears away from the empty box it is about.
+  if (!reason) {
+    return cuErr('cu-adjust-reason-err',
+      cuT('A reason is required — it is written to the ledger with this adjustment.',
+          '必须填写原因 — 它会连同本次调整一并记入流水。'),
+      'cu-adjust-reason-field');
+  }
   // Points must be integers — reject decimals up front rather than silently
   // truncating (which the server would do anyway but the customer-facing
   // ledger row would then disagree with what the operator typed).
   if (CU_ADJUST_KIND === 'points' && !Number.isInteger(deltaRaw)) {
-    return toast('Points must be a whole number · 积分必须是整数', 'err');
+    return cuErr('cu-adjust-reason-err', cuT('Points must be a whole number.', '积分必须是整数。'), null);
   }
   const delta = CU_ADJUST_KIND === 'points' ? Math.trunc(deltaRaw) : deltaRaw;
   const path  = CU_ADJUST_KIND === 'points' ? 'points-adjust' : 'wallet-adjust';
   try {
     await cuWriteRequest({
       btnId: 'cu-adjust-save', url: '/api/retail-admin/customers/' + CU_CURRENT.customer.id + '/' + path,
-      method: 'POST', body: { delta, reason }, errLabelEn: 'Adjustment failed', errLabelCn: '调整失败',
+      method: 'POST', body: { delta, reason },
+      silent: true, busyLabel: cuT('Applying…', '应用中…'), also: '#cu-adjust-cancel',
     });
-    toast('Saved · 已保存');
     cuCloseAdjust();
     cuOpenDetail(CU_CURRENT.customer.id);
-  } catch {}
+  } catch (e) {
+    // silent:true means nothing else will report this — the endpoint's own
+    // reason (the balance floor, a cap) goes inline. An empty catch here would
+    // swallow the refusal and leave the operator thinking it worked.
+    const j = e.payload || {};
+    const extra = j.current !== undefined ? cuT(` (current: ${j.current})`, `(当前:${j.current})`) : '';
+    cuErr('cu-adjust-reason-err',
+      (j.message || cuErrText(e.code) || cuT('Adjustment failed', '调整失败')) + extra, null);
+  }
 }
 
 let CU_ADDR_EDIT_ID = null;  // null when adding a new address
@@ -1828,10 +2013,11 @@ async function cuSaveAddr() {
     : `/api/retail-admin/customers/${cid}/addresses`;
   try {
     await cuWriteRequest({
-      btnId: 'cu-addr-save', url, method: CU_ADDR_EDIT_ID ? 'PUT' : 'POST', body,
+      btnId: 'cu-addr-save', busyLabel: cuT('Saving…', '保存中…'), also: '#cu-addr-cancel', url, method: CU_ADDR_EDIT_ID ? 'PUT' : 'POST', body,
       errLabelEn: 'Save failed', errLabelCn: '保存失败',
     });
-    toast('Saved · 已保存');
+    // No toast: the drawer reopens with the address in the list — the result
+    // is the confirmation, and it's the thing the operator was looking at.
     cuCloseAddrModal();
     cuOpenDetail(cid);
   } catch {}
