@@ -2479,7 +2479,11 @@ async function peSmartDivide() {
   if (overlay) overlay.hidden = true;
   const prog = _peComposeProgress();
   try {
-    const r = await fetch('/api/ai/compose-blocks', {
+    // retail-admin twin of the compose route. The bare /api/ai/* path is gated by
+    // the KITCHEN session (requireAuth + permission), which this editor never
+    // holds — it 403s, and the 403 branch below bounces the operator to the
+    // dashboard mid-edit. Always use the /api/retail-admin/ prefix here.
+    const r = await fetch('/api/retail-admin/ai/compose-blocks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'same-origin',
@@ -2597,7 +2601,7 @@ async function peAutoFillFromKitchen(p) {
   _peAutoFilledFor = p.id;
   toast(cuT('Auto-filling sections from the kitchen description… · 正在根据厨房描述生成板块…', '正在根据厨房描述生成板块…'));
   try {
-    const r = await fetch('/api/ai/compose-blocks', {
+    const r = await fetch('/api/retail-admin/ai/compose-blocks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'same-origin',
@@ -2606,7 +2610,12 @@ async function peAutoFillFromKitchen(p) {
         product: { id: p.id, name_en: p.name_en, name_cn: p.name_cn, category: p.category },
       }),
     });
-    if (r.status === 401 || r.status === 403) { peAuthBail(); return; }
+    // No peAuthBail here. This is a background nicety fired from peMount, so a
+    // 401/403 would throw the operator out to the dashboard the instant they
+    // opened any product that has kitchen copy but no design yet — the editor
+    // looked like it crashed on that one product. Stay silent; a real expired
+    // session surfaces on the next save, which is a path worth bouncing.
+    if (r.status === 401 || r.status === 403) return;
     const j = await r.json().catch(() => ({}));
     // Convenience step, not a required one — fail quietly (AI off, error, etc.).
     if (!r.ok || !j.success) return;
