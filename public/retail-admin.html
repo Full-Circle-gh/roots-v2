@@ -2237,13 +2237,24 @@
          those names meant the old cascade repainted this page. A fresh prefix
          nothing else can reach is the whole point of building it from scratch. */
 
-      /* Head — title, then New customer. */
-      #tab-customers .cul-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
-      #tab-customers .cul-head h2 {
-        margin: 0; font-family: var(--f-sans); font-weight: 500; font-size: 24px;
-        letter-spacing: -.01em; color: var(--text-1); text-transform: none;
+      /* Head — the standard Tacet page header. `.td-head` + `.td-head h2` own
+         the 24px/500/-.01em title in --td-text, so this page states no type of
+         its own; the local h2 rule that used to duplicate those values is gone.
+         No section label above the title and no status line beneath it: this
+         page's counts are carried by its tiles and its chips, and a line here
+         would be a fifth copy of them. The title alone is a finished header.
+         Centred rather than the shared baseline so the button reads level with
+         the title — the same override #tab-sales makes. */
+      #tab-customers .td-head { align-items: center; flex-wrap: wrap; }
+      #tab-customers .td-head .sp { flex: 1; }
+      /* New customer is the page's ONE Dusk element (precedent: #tab-sales's
+         "Set up"). Scoped to its own class, NOT to #tab-customers .btn-primary,
+         because the customer modals hold five more .btn-primary saves that must
+         stay quiet. */
+      #tab-customers .cul-new {
+        background: var(--td-dusk); border-color: var(--td-dusk); color: #FFFFFF;
       }
-      #tab-customers .cul-head .sp { flex: 1; }
+      #tab-customers .cul-new:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); }
 
       /* Stat strip — slim cards. Blocked hides itself at zero (an empty state
          shouldn't own a card) and only turns amber when it's real. */
@@ -2737,10 +2748,10 @@
            Refresh is gone: the roster loads on open and reloads itself after
            every write. The View pop-over (tier-badge shape, empty-value label)
            is gone too — per-operator chrome nobody asked for. -->
-      <div class="cul-head">
+      <div class="td-head">
         <h2>Customers · 顾客</h2>
         <span class="sp"></span>
-        <button class="btn btn-primary" onclick="cuOpenCreate()" title="Add a walk-in / phone-order customer · 添加到店或电话下单的顾客">
+        <button class="btn btn-primary cul-new" onclick="cuOpenCreate()" title="Add a walk-in / phone-order customer · 添加到店或电话下单的顾客">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           New customer · 新增顾客
         </button>

@@ -13281,8 +13281,15 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
   // stat tile is their cut.
   const SEG_PAID_IN     = BC_PAID_STATUSES.map(() => '?').join(',');
   const SEG_PAID_EXISTS = `SELECT 1 FROM retail_orders o WHERE o.customer_id = retail_customers.id AND o.status IN (${SEG_PAID_IN})`;
+  //
+  // "New this week" is anchored to GUANGZHOU calendar days, not a rolling UTC
+  // 168-hour window. The "New today" stat tile above the roster already counts
+  // a GZ day (date(created_at,'+8 hours')); a rolling UTC window put the two
+  // eight hours out of step on one screen, so a signup at 07:00 GZ today read
+  // as "today" on the tile and as a day old on the roster. Today plus the
+  // previous 6 GZ days, so today is always inside this week.
   if      (segment === 'blocked')  where.push('is_blocked = 1');
-  else if (segment === 'new_week') where.push("created_at >= datetime('now', '-7 days')");
+  else if (segment === 'new_week') where.push("date(created_at, '+8 hours') >= date('now', '+8 hours', '-6 days')");
   else if (segment === 'sleeping') {
     where.push(`EXISTS (${SEG_PAID_EXISTS})`);
     params.push(...BC_PAID_STATUSES);
@@ -13365,7 +13372,7 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
     const seg = tdb().prepare(
       `SELECT
          COALESCE(SUM(CASE WHEN is_blocked = 0 THEN 1 ELSE 0 END), 0) AS all_count,
-         COALESCE(SUM(CASE WHEN is_blocked = 0 AND created_at >= datetime('now', '-7 days') THEN 1 ELSE 0 END), 0) AS new_week,
+         COALESCE(SUM(CASE WHEN is_blocked = 0 AND date(created_at, '+8 hours') >= date('now', '+8 hours', '-6 days') THEN 1 ELSE 0 END), 0) AS new_week,
          COALESCE(SUM(CASE WHEN is_blocked = 0
                             AND EXISTS (${SEG_PAID_EXISTS})
                             AND NOT EXISTS (${SEG_PAID_EXISTS} AND o.placed_at >= datetime('now', '-60 days'))
