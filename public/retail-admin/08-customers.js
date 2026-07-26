@@ -69,14 +69,26 @@ function cuSegment(btn, seg) {
 // time — cuMobTier() and the phone chip row share it, and reshaping it here
 // would silently break the phone list.
 const CU_TIER_ORDER = ['tree', 'root', 'sprout', 'seed'];
-// value → [EN, 中文]. The stored value is the ORDER channel, so "Mini app" is
-// `wechat`, NOT `mini`: the mockup's key is a demo label, and filtering on
-// 'mini' would match nothing at all.
+// value → [EN, 中文]. Labels follow ordChannelLabel() in 04-orders.js, which is
+// what the operator reads on every order row: WeChat / Web / Manual. The stored
+// value really is `wechat` — the design mockup's key was `mini`, and filtering
+// on that would have matched nothing at all.
+// ⚠ Meituan and Gzgrocery are deliberately absent: every order on both carries
+// a NULL customer_id, so neither filter can ever return a customer. Settled
+// 2026-07-26 against live data — do not re-add them.
+//
+// ⚠ KNOWN, DELIBERATE INCONSISTENCY: Orders' own channel dropdown
+// (retail-admin.html) and the mobile order cards (chanLabel, same file) still
+// call this channel "Mini app". Orders is internally split — ordChannelLabel()
+// in 04-orders.js, which labels every order ROW, already says "WeChat", and
+// that is the spelling taken here. Orders is a separate pass; the two
+// remaining "Mini app" spellings were left knowingly on 2026-07-26 and are
+// recorded rather than fixed. Not an oversight.
 const CU_CHAN_OPTS = [
   ['',       'All channels', '全部渠道'],
-  ['wechat', 'Mini app',     '小程序'],
+  ['wechat', 'WeChat',       '微信'],
   ['web',    'Web',          '网页'],
-  ['manual', 'Added by staff', '手动添加'],
+  ['manual', 'Manual',       '手动'],
 ];
 let CU_MENU_OPEN = null;   // 'tier' | 'chan' | null
 
@@ -164,8 +176,12 @@ function cuPaintFilterBar() {
   }
   if (chanMenu) {
     chanMenu.hidden = CU_MENU_OPEN !== 'chan';
+    // Each option carries its channel's glyph, from the same shared CHAN_ICON
+    // the rows use — so the icon an operator picks in the menu is the icon they
+    // then see on the rows it returns. 'All channels' has its own glyph in that
+    // map ('all'), so the whole menu is iconed rather than three-of-four.
     chanMenu.innerHTML = CU_CHAN_OPTS
-      .map(([v, en, cn]) => `<button type="button" class="${v === CU_CHAN_FILTER ? 'sel' : ''}" onclick="cuPickChan('${v}')">${cuT(en, cn)}</button>`).join('');
+      .map(([v, en, cn]) => `<button type="button" class="cul-menu-chan${v === CU_CHAN_FILTER ? ' sel' : ''}" onclick="cuPickChan('${v}')"><span class="cul-menu-ico">${chanIcon(v || 'all')}</span>${cuT(en, cn)}</button>`).join('');
   }
 }
 
@@ -412,19 +428,24 @@ function cuMoney(v) {
 // icon rather than a guess — not a default, not a placeholder, not a dash, the
 // same rule an absent SKU follows. Zero rows are unknown today; a future signup
 // path that forgets to namespace its openid would land here and show nothing,
-// which is the point. Do NOT add an `|| CU_CHAN_ICON.wechat`.
-const CU_CHAN_ICON = {
-  wechat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg>',
-  web:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.4 2.5 15.6 0 18M12 3c-2.5 2.4-2.5 15.6 0 18"/></svg>',
-  manual: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="8" r="3.4"/><path d="M3.5 20a6.5 6.5 0 0 1 13 0"/><path d="M18 7v6M15 10h6"/></svg>',
-};
+// which is the point. Do NOT add an `|| chanIcon('wechat')` fallback.
+// Channel glyphs come from the SHARED CHAN_ICON map via chanIcon() (01-core.js)
+// — the same source the Orders dropdown and the Orders rows draw from — so a
+// Customers row, its filter option, and an Orders row all show one glyph per
+// channel. Do NOT re-add a local copy here: that is how the row and the filter
+// drifted apart in the first place.
 function cuChanIcon(r) {
   const c = String(r.channel || '').toLowerCase();
-  const svg = CU_CHAN_ICON[c];                        // 'unknown' ⇒ undefined ⇒ no icon
-  if (!svg) return '';
-  const opt = CU_CHAN_OPTS.find(o => o[0] === c);
-  const label = opt ? cuT(opt[1], opt[2]) : c;
-  return `<span class="cul-chanico" title="${escapeHtml(label)}">${svg}</span>`;
+  const opt = CU_CHAN_OPTS.find(o => o[0] === c && o[0]);
+  // 🔴 THE CHECK MUST HAPPEN BEFORE THE CALL, and it must be against our OWN
+  // option list — never against chanIcon()'s return value. chanIcon ends in
+  // `|| CHAN_ICON.wechat`, so it ALWAYS returns a glyph: for an unrecognised
+  // channel it hands back the WeChat one. Testing what it gave us would
+  // therefore always pass, silently reinstating the invented-channel claim
+  // this rule exists to prevent. Ask "is this a channel we know?" first;
+  // only then ask for its glyph. Unknown ⇒ no icon.
+  if (!opt) return '';
+  return `<span class="cul-chanico" title="${escapeHtml(cuT(opt[1], opt[2]))}">${chanIcon(c)}</span>`;
 }
 
 // One state, drawn inside the card where the rows would be.

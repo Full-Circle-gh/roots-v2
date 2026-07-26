@@ -25,6 +25,17 @@ const CHAN_ICON = {
   web:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18z"/></svg>',
   meituan:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="17" r="2.5"/><circle cx="18" cy="17" r="2.5"/><path d="M8.5 17h7"/><path d="M18 17l-3-8h-3"/><path d="M3 9h4l3.5 8"/><path d="M14 6h3v3"/></svg>',
   gzgrocery: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M3 9a2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 3 0"/><line x1="9" y1="20" x2="9" y2="14"/><line x1="15" y1="20" x2="15" y2="14"/></svg>',
+
+  // Staff-created. Was MISSING from this map, so chanIcon('manual') fell
+  // through to `|| CHAN_ICON.wechat` and painted a WeChat glyph beside the
+  // word "Manual" on every manual order row in Orders — a fabricated claim
+  // about where an order came from, already live, found by accident while
+  // wiring the Customers channel filter. It is the SAME failure as the
+  // Customers list's old COALESCE(...,'wechat') default: a fallback that
+  // looks like data. A missing glyph must render nothing, never a guess.
+  // Glyph copied byte-for-byte from the Orders channel dropdown, which had
+  // it inline only and so never hit this fallback.
+  manual:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
 };
 // Resolve a channel string to its glyph (mini-app 'wechat' is the default).
 function chanIcon(channel) {

@@ -2468,6 +2468,10 @@
       }
       #tab-customers .cul-menu button:hover { background: var(--bg-elev-1); }
       #tab-customers .cul-menu button.sel { font-weight: 500; }
+      /* Channel options carry their glyph, matching the Orders dropdown. */
+      #tab-customers .cul-menu button.cul-menu-chan { align-items: center; gap: 9px; }
+      #tab-customers .cul-menu-ico { display: inline-flex; align-items: center; color: var(--text-2); flex: none; }
+      #tab-customers .cul-menu-ico svg { width: 15px; height: 15px; display: block; }
       /* Rows. The Sage edge is an INSET SHADOW, never a border — a border
          would add 4px to the row box and make the whole list twitch sideways
          as records get opened. Every td carries a transparent inset so the
