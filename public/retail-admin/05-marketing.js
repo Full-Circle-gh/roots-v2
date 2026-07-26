@@ -39,9 +39,10 @@ function vchLabel(v) {
 function vchRules(v) {
   const parts = [];
   if (Number(v.min_subtotal) > 0) parts.push(cuT('Orders over ¥' + fmt(v.min_subtotal), '满 ¥' + fmt(v.min_subtotal)));
-  const per = Number(v.per_customer_limit);
+  const per = Number(v.per_customer_limit || 0);
   if (per === 1) parts.push(cuT('once each', '每人一次'));
   else if (per > 1) parts.push(cuT(per + ' each', '每人 ' + per + ' 次'));
+  else parts.push(cuT('every order', '每人不限次'));
   if (v.max_uses != null) parts.push(cuT(v.max_uses + ' total', '共 ' + v.max_uses + ' 张'));
   return parts.length ? parts.join(cuT(' · ', '、')) : '—';
 }
@@ -57,10 +58,22 @@ function vchPillsHtml(v) {
   const pills = [];
   // Dusk is scarce and means "the system does this for you" — auto-apply
   // is exactly that, so it is the one Dusk pill (breathing dot per canon).
-  if (v.auto_apply) pills.push('<span class="vch-pill dusk"><span class="dot"></span>' + cuT('Applied for them', '自动抵扣') + '</span>');
+  // Auto-apply follows the coupon's audience, so the pill has to say WHOSE
+  // checkout it lands on — "Applied for them" alone read as "the people I chose"
+  // on a coupon that was in fact discounting the whole store.
+  if (v.auto_apply) {
+    pills.push('<span class="vch-pill dusk"><span class="dot"></span>'
+      + (v.is_public ? cuT('Applied for everyone', '全场自动抵扣') : cuT('Applied for chosen customers', '指定顾客自动抵扣'))
+      + '</span>');
+  }
   if (v.is_public) pills.push('<span class="vch-pill">' + cuT('In the app', '小程序可领') + '</span>');
   if (v.auto_grant_signup) pills.push('<span class="vch-pill">' + cuT('New signups', '新客自动发') + '</span>');
-  if (v.grant_count) pills.push('<span class="vch-pill">' + cuT('Given ', '已发 ') + (v.grant_used_count || 0) + '/' + v.grant_count + '</span>');
+  // A standing coupon is never spent, so an M/N here would read 0/N forever.
+  if (v.grant_count) {
+    pills.push('<span class="vch-pill">' + cuT('Given ', '已发 ')
+      + (Number(v.per_customer_limit || 0) !== 1 ? v.grant_count : (v.grant_used_count || 0) + '/' + v.grant_count)
+      + '</span>');
+  }
   return pills.length ? '<div class="vch-pills">' + pills.join('') + '</div>' : '';
 }
 
@@ -175,6 +188,36 @@ function vchDrawerRender() {
     + '<div><div class="t">' + title + '</div><div class="d">' + desc + '</div></div>'
     + '</div>';
   const dateVal = v.expires_at ? String(v.expires_at).slice(0, 10) : '';
+  // Per-customer ceiling, editable in place. 0 = no limit, which is what makes a
+  // standing discount possible; keep whatever odd number the coupon already
+  // carries in the list so opening the drawer can't silently change it.
+  const perVal = Number(v.per_customer_limit || 0);
+  const perLabel = n => n === 0 ? cuT('No limit', '不限')
+    : n === 1 ? cuT('Once', '1 次') : cuT(n + ' times', n + ' 次');
+  const perOpts = [1, 2, 3, 5, 10];
+  if (perVal > 0 && !perOpts.includes(perVal)) perOpts.push(perVal);
+  perOpts.sort((a, b) => a - b).push(0);
+  const perSel = '<select class="vch-per" onchange="vchSetPerLimit(' + v.id + ', this.value)">'
+    + perOpts.map(n => '<option value="' + n + '"' + (n === perVal ? ' selected' : '') + '>' + perLabel(n) + '</option>').join('')
+    + '</select>';
+  // "Apply it for them" follows the coupon's audience, so the description has to
+  // as well — on a private coupon it reaches only the people it was handed to.
+  const autoDesc = v.is_public
+    ? cuT('Every customer gets it at checkout — no code, no tap.', '每位顾客结账时自动抵扣,无需输入或点选。')
+    : cuT('Only the customers you give it to get it at checkout — no code, no tap.', '仅发放到的顾客结账时自动抵扣,无需输入或点选。');
+  // A standing coupon is never "spent", so a used-count off the hand-outs would
+  // read 0 forever. Say what they actually get instead.
+  const standing = perVal !== 1;
+  const grantLine = v.grant_count
+    ? (standing
+        ? cuT('Given to ' + v.grant_count + (v.grant_count === 1 ? ' customer' : ' customers') + ' — they keep it, '
+              + (perVal === 0 ? 'with no limit on how many orders' : 'for up to ' + perVal + ' orders') + '.',
+              '已发放给 ' + v.grant_count + ' 位顾客 — 可长期使用,'
+              + (perVal === 0 ? '不限订单数' : '最多 ' + perVal + ' 单') + '。')
+        : cuT('Given to ' + v.grant_count + (v.grant_count === 1 ? ' customer' : ' customers') + ' — '
+              + (v.grant_used_count || 0) + ' of those have used it.',
+              '已发放给 ' + v.grant_count + ' 位顾客,' + (v.grant_used_count || 0) + ' 张已使用。'))
+    : cuT('Hand it to specific customers — it lands in their coupons, no code needed.', '发给指定顾客,直接进入他们的优惠券,无需编码。');
   mount.innerHTML =
     '<div class="vch-dw-head"><span class="vch-dw-code">' + escapeHtml(v.code) + '</span>' + status + '</div>'
     + (expired && v.is_active ? '<div class="vch-note amber">' + cuT('This coupon ended. Set a new end date below to run it again.', '优惠券已到期。在下方设置新的截止日期即可重新生效。') + '</div>' : '')
@@ -182,7 +225,7 @@ function vchDrawerRender() {
     + '<div class="vch-fact"><span class="k">' + cuT('Gives', '优惠') + '</span><span class="v">' + vchGives(v) + '</span></div>'
     + '<div class="vch-fact"><span class="k">' + cuT('On orders over', '最低订单金额') + '</span><span class="v">' + (Number(v.min_subtotal) > 0 ? '¥' + fmt(v.min_subtotal) : cuT('Any order', '无门槛')) + '</span></div>'
     + '<div class="vch-fact"><span class="k">' + cuT('Used', '已使用') + '</span><span class="v">' + v.used_count + (v.max_uses != null ? ' / ' + v.max_uses : '') + '</span></div>'
-    + '<div class="vch-fact"><span class="k">' + cuT('Per customer', '每人限用') + '</span><span class="v">' + (Number(v.per_customer_limit) > 0 ? v.per_customer_limit + cuT(v.per_customer_limit === 1 ? ' time' : ' times', ' 次') : cuT('No limit', '不限')) + '</span></div>'
+    + '<div class="vch-fact"><span class="k">' + cuT('Per customer', '每人限用') + '</span><span class="v">' + perSel + '</span></div>'
     + '<div class="vch-fact"><span class="k">' + cuT('Ends', '截止') + '</span><span class="v"><input type="date" class="vch-date" value="' + dateVal + '" onchange="vchSetExpiry(' + v.id + ', this.value)"></span></div>'
     + '</div>'
     + '<div class="vch-kicker">' + cuT('How customers get it', '顾客怎么获得') + '</div>'
@@ -193,8 +236,7 @@ function vchDrawerRender() {
         cuT('Give to new signups', '发给新注册顾客'),
         cuT('Lands in every new customer’s coupons automatically.', '自动进入每位新顾客的优惠券。'))
     + sw('auto_apply', !!v.auto_apply,
-        cuT('Apply it for them', '自动抵扣'),
-        cuT('At checkout the best coupon is applied — no code, no tap.', '结账时自动使用最优的一张,无需操作。'), true)
+        cuT('Apply it for them', '自动抵扣'), autoDesc, true)
     + '<div class="vch-kicker">' + cuT('What customers see', '顾客看到的文字') + '</div>'
     + (v.is_public && !(v.title_en || v.title_cn) ? '<div class="vch-note amber" style="margin: 0 0 8px;">' + cuT('Public coupons need a label customers can read.', '公开优惠券需要顾客能看懂的标签。') + '</div>' : '')
     + '<div class="vch-labels">'
@@ -204,9 +246,7 @@ function vchDrawerRender() {
     + '</div>'
     + '<div class="vch-kicker">' + cuT('Give it out', '发放') + '</div>'
     + '<div class="vch-grants">'
-    + '<span class="d">' + (v.grant_count
-        ? cuT('Given to ' + v.grant_count + (v.grant_count === 1 ? ' customer' : ' customers') + ', ' + (v.grant_used_count || 0) + ' used.', '已发放给 ' + v.grant_count + ' 位顾客,' + (v.grant_used_count || 0) + ' 张已使用。')
-        : cuT('Hand it to specific customers — it lands in their coupons, no code needed.', '发给指定顾客,直接进入他们的优惠券,无需编码。')) + '</span>'
+    + '<span class="d">' + grantLine + '</span>'
     + '<button type="button" class="btn btn-sm" onclick=\'openGrantModal(' + v.id + ', ' + JSON.stringify(String(v.code)) + ')\'>' + cuT('Give to a customer', '发放给顾客') + '</button>'
     + '</div>'
     + '<div class="vch-dw-foot">'
@@ -229,6 +269,31 @@ async function vchSetExpiry(id, value) {
   try {
     await vchPatch(id, { expires_at: value || null });
     toast(value ? cuT('End date set', '已更新截止日期') : cuT('No end date — runs until turned off', '已改为无截止日期'));
+  } catch (e) { toast(cuT('Failed: ', '失败:') + e.message, 'err'); }
+}
+async function vchSetPerLimit(id, value) {
+  const n = parseInt(value, 10) || 0;
+  const v = _vchData.find(x => x.id === id);
+  // Moving off "once each" turns every hand-out into a standing one — including
+  // hand-outs a customer already spent, which come back to life. That's a real
+  // discount handed back to real people, so never let it happen silently.
+  const revived = (v && n !== 1) ? Number(v.grant_used_count || 0) : 0;
+  if (revived > 0) {
+    const ok = await askConfirm({
+      title: cuT('Give it back to customers who already used it?', '让已使用过的顾客重新获得?'),
+      body: cuT(revived + (revived === 1 ? ' customer has' : ' customers have')
+                + ' already used this coupon. They get it back and can use it again.',
+                '已有 ' + revived + ' 位顾客使用过这张优惠券。他们会重新获得,并可再次使用。'),
+      confirmLabel: cuT('Yes, let them use it again', '确认'),
+    });
+    // Cancelled — redraw so the select snaps back to what's actually stored.
+    if (!ok) { vchDrawerRender(); return; }
+  }
+  try {
+    await vchPatch(id, { per_customer_limit: n });
+    toast(n === 0 ? cuT('No limit — each customer can use it on every order', '已改为不限次数')
+        : n === 1 ? cuT('Once per customer', '每人限用 1 次')
+        : cuT('Up to ' + n + ' orders per customer', '每人最多 ' + n + ' 次'));
   } catch (e) { toast(cuT('Failed: ', '失败:') + e.message, 'err'); }
 }
 async function vchSaveLabel(id) {
@@ -345,18 +410,28 @@ async function loadGrantedList() {
       mount.innerHTML = '<div class="muted" style="padding: 8px 0; font-size: 12px;">No grants yet. · 暂无发放记录。</div>';
       return;
     }
+    // A standing coupon (per customer ≠ once) is never stamped used, so
+    // Used/Unused would read "Unused" forever no matter how often they redeem
+    // it. Say the coupon is theirs instead, and keep Revoke available.
+    // Fall back to one-shot when the coupon isn't in _vchData (a failed
+    // loadVouchers swallows its own error) — the stricter label is the safe
+    // guess, since it never offers a Revoke the server will refuse.
+    const gv = _vchData.find(x => x.id === _grantVoucherId);
+    const standing = !!gv && Number(gv.per_customer_limit || 0) !== 1;
     mount.innerHTML = data.map(g => `
       <div style="display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 12px;">
         <div style="min-width: 0;">
           <span style="font-weight: 600;">${escapeHtml(g.nickname || '(no name)')}</span>
           <span class="muted">#${g.customer_id} · ${escapeHtml(g.phone || '—')}</span>
-          ${g.used_at
-            ? '<span class="pill pub" style="margin-left: 8px; font-size: 10px;">Used · 已使用</span>'
-            : '<span class="pill draft" style="margin-left: 8px; font-size: 10px;">Unused · 未使用</span>'}
+          ${standing
+            ? '<span class="pill pub" style="margin-left: 8px; font-size: 10px;">' + cuT('Has it', '已拥有') + '</span>'
+            : g.used_at
+              ? '<span class="pill pub" style="margin-left: 8px; font-size: 10px;">' + cuT('Used', '已使用') + '</span>'
+              : '<span class="pill draft" style="margin-left: 8px; font-size: 10px;">' + cuT('Unused', '未使用') + '</span>'}
         </div>
-        ${g.used_at
+        ${!standing && g.used_at
           ? ''
-          : `<button class="btn btn-sm" onclick="revokeGrant(${g.id})">Revoke · 撤销</button>`}
+          : `<button class="btn btn-sm" onclick="revokeGrant(${g.id})">${cuT('Revoke', '撤销')}</button>`}
       </div>`).join('');
   } catch (e) {
     mount.innerHTML = `<div class="err" style="padding: 8px 0; font-size: 12px;">Failed · 失败: ${escapeHtml(e.message)}</div>`;

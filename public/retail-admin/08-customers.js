@@ -1212,7 +1212,11 @@ function cuRenderDetail() {
     if (topTotal) { en.push(`${yuan(topTotal)} topped up`); cn.push(`累计充值 ${yuan(topTotal)}`); }
     if ((top.bonus_pts_total || 0) > 0) { en.push(`+${top.bonus_pts_total} bonus pts`); cn.push(`赠送积分 ${top.bonus_pts_total}`); }
     if (topAdj) { en.push(`admin ${yuan(topAdj)}`); cn.push(`后台调整 ${yuan(topAdj)}`); }
-    if (vUnused || vUsed) { en.push(`${vUnused}/${vUsed} vouchers`); cn.push(`优惠券 ${vUnused}/${vUsed}`); }
+    // Spelled out rather than "N/N vouchers" — the bare pair read as a ratio,
+    // and it says nothing on a standing coupon, which is never marked used no
+    // matter how many orders it has come off.
+    if (vUnused) { en.push(`${vUnused} coupon${vUnused === 1 ? '' : 's'} to use`); cn.push(`${vUnused} 张优惠券可用`); }
+    if (vUsed)   { en.push(`${vUsed} used`); cn.push(`${vUsed} 张已使用`); }
     walSub = escapeHtml(cuT(en.join(' · '), cn.join(' · ')));
   }
 

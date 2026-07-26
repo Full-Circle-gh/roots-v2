@@ -10608,11 +10608,12 @@ tr.vch-row.is-off .vch-code, tr.vch-row.is-off .vch-gives { color: var(--text-2)
 .vch-fact:last-child { border-bottom: none; }
 .vch-fact .k { color: var(--text-2); }
 .vch-fact .v { font-weight: 500; color: var(--text-1); text-align: right; font-variant-numeric: tabular-nums; }
-.vch-date {
+.vch-date, .vch-per {
   border: 1px solid var(--line); background: var(--bg-input); color: var(--text-1);
   border-radius: 8px; padding: 5px 8px; font: 400 13px var(--f-sans);
 }
-.vch-date:focus { outline: none; border-color: var(--tacet-dusk); }
+.vch-date:focus, .vch-per:focus { outline: none; border-color: var(--tacet-dusk); }
+.vch-per { cursor: pointer; }
 .vch-swrow { display: flex; align-items: flex-start; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); }
 .vch-swrow .t { font-size: 13.5px; font-weight: 500; color: var(--text-1); }
 .vch-swrow .d { font-size: 12px; color: var(--text-2); line-height: 1.5; }

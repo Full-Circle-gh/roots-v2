@@ -6742,10 +6742,14 @@ function publicCustomer(c) {
          FROM retail_customer_vouchers g
          JOIN retail_vouchers v ON v.id = g.voucher_id
         WHERE g.customer_id = ?
-          AND g.used_at IS NULL
+          AND (g.used_at IS NULL OR ${SQL_GRANT_IS_STANDING})
           AND v.is_active = 1
           AND (v.expires_at IS NULL OR datetime(v.expires_at) > CURRENT_TIMESTAMP)
-          AND (v.max_uses IS NULL OR v.used_count < v.max_uses)`
+          AND (v.max_uses IS NULL OR v.used_count < v.max_uses)
+          AND (COALESCE(v.per_customer_limit, 0) <= 0
+               OR (SELECT COUNT(*) FROM retail_orders o
+                    WHERE o.customer_id = g.customer_id AND o.voucher_code = v.code
+                      AND o.status NOT IN ('cancelled')) < v.per_customer_limit)`
     ).get(c.id).n;
   } catch (e) { console.warn('[publicCustomer coupon_count]', e.message); }
   return {
@@ -8905,23 +8909,13 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     // A signup voucher (auto_grant_signup) is ALWAYS grant-gated, even if it's
     // also flagged is_public — otherwise a returning customer (whose grant was
     // revoked / never issued, e.g. migrated OUT1N customers) could redeem it as
-    // a public code. So require an unused personal grant when the code is
-    // private OR a signup voucher.
+    // a public code. So require a personal grant when the code is private OR a
+    // signup voucher. One-shot coupons need an unused grant; a standing one
+    // (per_customer_limit ≠ 1) keeps its grant and is bounded by the cap below.
     if (ok && (!candidate.is_public || candidate.auto_grant_signup)) {
-      const grant = tdb().prepare(
-        `SELECT 1 FROM retail_customer_vouchers
-          WHERE customer_id = ? AND voucher_id = ? AND used_at IS NULL LIMIT 1`
-      ).get(req.customer.id, candidate.id);
-      if (!grant) ok = false;
+      if (!customerHoldsVoucher(req.customer.id, candidate)) ok = false;
     }
-    if (ok && candidate.per_customer_limit && candidate.per_customer_limit > 0) {
-      const used = tdb().prepare(
-        `SELECT COUNT(*) AS n FROM retail_orders
-          WHERE customer_id = ? AND voucher_code = ?
-            AND status NOT IN ('cancelled')`
-      ).get(req.customer.id, candidate.code).n;
-      if (used >= candidate.per_customer_limit) ok = false;
-    }
+    if (ok && voucherCapReached(req.customer.id, candidate)) ok = false;
     if (ok) {
       const result = computeVoucherDiscount(candidate, subtotal, shippingFee, couponableSubtotal);
       if (result.applied) {
@@ -9087,13 +9081,16 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
         err.code = 'voucher_exhausted';
         throw err;
       }
-      // If this customer had a personal grant for this voucher, mark the
-      // grant used so it disappears from their wallet/checkout list.
-      tdb().prepare(
-        `UPDATE retail_customer_vouchers
-            SET used_at = CURRENT_TIMESTAMP, used_order_id = ?
-          WHERE customer_id = ? AND voucher_id = ? AND used_at IS NULL`
-      ).run(orderId, req.customer.id, voucher.id);
+      // Spend the customer's personal grant so it leaves their wallet/checkout
+      // list. A STANDING grant is left alone — the customer keeps the coupon for
+      // their next order and per_customer_limit does the counting instead.
+      if (!voucherGrantIsStanding(voucher)) {
+        tdb().prepare(
+          `UPDATE retail_customer_vouchers
+              SET used_at = CURRENT_TIMESTAMP, used_order_id = ?
+            WHERE customer_id = ? AND voucher_id = ? AND used_at IS NULL`
+        ).run(orderId, req.customer.id, voucher.id);
+      }
     }
 
     const insertItem = tdb().prepare(
@@ -10629,14 +10626,60 @@ function computeVoucherDiscount(voucher, subtotal, shippingFee, couponableSubtot
   return { discount: 0, free_shipping: false, applied: false };
 }
 
+// A personal grant is normally ONE-SHOT: checkout stamps used_at and the coupon
+// leaves the customer's wallet for good. That's right for a gift ("¥20 off, once")
+// but it made a standing per-customer discount impossible — hand someone "8% off"
+// and they'd get it on exactly one order, with no way to re-issue it (all three
+// grant INSERTs are INSERT OR IGNORE against a UNIQUE(customer_id, voucher_id),
+// so a spent row permanently blocks a re-grant).
+//
+// So when the coupon lets a customer redeem more than once (per_customer_limit
+// 0 = no limit, or > 1) the grant STAYS in their wallet and per_customer_limit
+// alone does the counting — off order history, which is the honest source since
+// it drops cancelled orders. per_customer_limit = 1, the schema default and what
+// nearly every existing coupon carries, keeps the old burn-on-use behaviour.
+function voucherGrantIsStanding(v) {
+  return !!v && Number(v.per_customer_limit || 0) !== 1;
+}
+// SQL twin of voucherGrantIsStanding, for queries that filter grants directly.
+const SQL_GRANT_IS_STANDING = 'COALESCE(v.per_customer_limit, 0) <> 1';
+
+// Does this customer hold a personal grant that's still good? One-shot coupons
+// need an UNUSED grant row; a standing coupon accepts any grant row it issued —
+// the per-customer cap is enforced separately by every caller.
+function customerHoldsVoucher(customerId, v) {
+  if (!customerId || !v) return false;
+  return !!tdb().prepare(
+    voucherGrantIsStanding(v)
+      ? 'SELECT 1 FROM retail_customer_vouchers WHERE customer_id = ? AND voucher_id = ? LIMIT 1'
+      : `SELECT 1 FROM retail_customer_vouchers
+          WHERE customer_id = ? AND voucher_id = ? AND used_at IS NULL LIMIT 1`
+  ).get(customerId, v.id);
+}
+
+// How many times this customer has already redeemed a code, off order history
+// (cancelled orders don't count — cancelling hands the use back).
+function voucherRedemptionsBy(customerId, code) {
+  return tdb().prepare(
+    `SELECT COUNT(*) AS n FROM retail_orders
+      WHERE customer_id = ? AND voucher_code = ? AND status NOT IN ('cancelled')`
+  ).get(customerId, code).n;
+}
+// Has this customer hit the coupon's per-customer ceiling? limit 0/null = none.
+function voucherCapReached(customerId, v) {
+  if (!customerId || !v.per_customer_limit || v.per_customer_limit <= 0) return false;
+  return voucherRedemptionsBy(customerId, v.code) >= v.per_customer_limit;
+}
+
 // Pick the single best auto-apply voucher for this customer + cart. Auto-apply
-// vouchers are store-wide automatic promos: no code, no personal grant. We still
-// honour expiry / usage pool / min-subtotal / per-customer cap. Signup-only
-// vouchers (auto_grant_signup) are NEVER auto-applied this way — they stay
-// grant-gated so a returning/migrated customer can't silently redeem one. A
-// free-shipping voucher is valued at the live shipping fee so it can be compared
-// like-for-like against a ¥/% discount. Returns
-// { voucher, discount, free_shipping } or null.
+// means "no code, no tap" — it does NOT mean store-wide. The coupon's own
+// audience decides who it reaches: a public promo applies to everyone, a PRIVATE
+// one only to the customers it was handed to. We still honour expiry / usage
+// pool / min-subtotal / per-customer cap. Signup-only vouchers
+// (auto_grant_signup) are NEVER auto-applied this way — they stay tap-to-use so
+// a returning/migrated customer can't silently redeem one. A free-shipping
+// voucher is valued at the live shipping fee so it can be compared like-for-like
+// against a ¥/% discount. Returns { voucher, discount, free_shipping } or null.
 function bestAutoVoucher(customerId, subtotal, shippingFee, couponableSubtotal = subtotal) {
   const rows = tdb().prepare(
     `SELECT * FROM retail_vouchers
@@ -10646,13 +10689,12 @@ function bestAutoVoucher(customerId, subtotal, shippingFee, couponableSubtotal =
   ).all();
   let best = null, bestValue = 0;
   for (const v of rows) {
-    if (customerId && v.per_customer_limit && v.per_customer_limit > 0) {
-      const used = tdb().prepare(
-        `SELECT COUNT(*) AS n FROM retail_orders
-          WHERE customer_id = ? AND voucher_code = ? AND status NOT IN ('cancelled')`
-      ).get(customerId, v.code).n;
-      if (used >= v.per_customer_limit) continue;
-    }
+    // Audience gate. A private coupon auto-applies ONLY for the customers it was
+    // handed to. Without this the auto_apply flag was read on its own — blind to
+    // is_public and to who actually held the coupon — so a private coupon granted
+    // to nobody still discounted every checkout in the store.
+    if (!v.is_public && !customerHoldsVoucher(customerId, v)) continue;
+    if (voucherCapReached(customerId, v)) continue;
     const r = computeVoucherDiscount(v, subtotal, shippingFee, couponableSubtotal);
     if (!r.applied) continue;
     const value = (Number(r.discount) || 0) + (r.free_shipping ? (Number(shippingFee) || 0) : 0);
@@ -10679,13 +10721,10 @@ function nearMissAutoVoucher(customerId, subtotal, couponableSubtotal = subtotal
   ).all(subtotal);
   let best = null, bestGap = Infinity;
   for (const v of rows) {
-    if (customerId && v.per_customer_limit && v.per_customer_limit > 0) {
-      const used = tdb().prepare(
-        `SELECT COUNT(*) AS n FROM retail_orders
-          WHERE customer_id = ? AND voucher_code = ? AND status NOT IN ('cancelled')`
-      ).get(customerId, v.code).n;
-      if (used >= v.per_customer_limit) continue;
-    }
+    // Same audience gate as bestAutoVoucher — never tease a private coupon to a
+    // customer who doesn't hold it (that would leak both its existence and code).
+    if (!v.is_public && !customerHoldsVoucher(customerId, v)) continue;
+    if (voucherCapReached(customerId, v)) continue;
     const gap = Number(v.min_subtotal) - Number(subtotal);
     if (gap > 0 && gap < bestGap) {
       // Value the promo AT its threshold so the teaser figure is honest even
@@ -10748,23 +10787,26 @@ router.get('/api/retail/vouchers/public', (req, res) => {
   res.json({ success: true, data: filtered });
 });
 
-// Customer's own granted vouchers — admin-granted, unused, still-valid.
-// These appear as tappable cards in the wallet + checkout (no code).
+// Customer's own granted vouchers — admin-granted, still-valid. These appear as
+// tappable cards in the wallet + checkout (no code). A one-shot grant drops off
+// the moment it's spent; a STANDING one (per_customer_limit ≠ 1) is never
+// stamped used, so it stays until the customer hits the per-customer cap — which
+// is counted off order history below, the same way checkout counts it.
 router.get('/api/retail/my-vouchers', requireRetailAuth, (req, res) => {
   const rows = tdb().prepare(
     `SELECT v.id, v.code, v.type, v.value, v.min_subtotal, v.expires_at,
-            v.title_en, v.title_cn, v.description,
+            v.title_en, v.title_cn, v.description, v.per_customer_limit,
             g.id AS grant_id, g.granted_at, g.granted_note
        FROM retail_customer_vouchers g
        JOIN retail_vouchers v ON v.id = g.voucher_id
       WHERE g.customer_id = ?
-        AND g.used_at IS NULL
+        AND (g.used_at IS NULL OR ${SQL_GRANT_IS_STANDING})
         AND v.is_active = 1
         AND (v.expires_at IS NULL OR datetime(v.expires_at) > CURRENT_TIMESTAMP)
         AND (v.max_uses IS NULL OR v.used_count < v.max_uses)
       ORDER BY g.granted_at DESC`
   ).all(req.customer.id);
-  res.json({ success: true, data: rows });
+  res.json({ success: true, data: rows.filter(v => !voucherCapReached(req.customer.id, v)) });
 });
 
 // Best auto-apply promo for a given subtotal — lets the checkout show (and
@@ -10909,11 +10951,7 @@ router.post('/api/retail/vouchers/validate', requireRetailAuth, express.json(), 
   // vouchers (auto_grant_signup) are grant-gated too even when public, so a
   // returning customer with no grant (e.g. migrated OUT1N) can't redeem one.
   if (!v.is_public || v.auto_grant_signup) {
-    const grant = tdb().prepare(
-      `SELECT 1 FROM retail_customer_vouchers
-        WHERE customer_id = ? AND voucher_id = ? AND used_at IS NULL LIMIT 1`
-    ).get(req.customer.id, v.id);
-    if (!grant) {
+    if (!customerHoldsVoucher(req.customer.id, v)) {
       // A signup/welcome coupon the customer doesn't hold. Its code is meant to
       // be claimed by new customers (surfaced on the home Coupon block), so tell
       // them plainly WHY instead of a misleading "invalid code" — the grant is
@@ -13505,12 +13543,27 @@ router.post('/api/retail-admin/vouchers/:id/grant', requireRetailAdmin, express.
   res.json({ success: true, granted, skipped, to_all: toAll });
 });
 
-// Revoke an unused grant.
+// Take a grant back. A one-shot grant can only be pulled while it's unspent —
+// once redeemed there's nothing left to revoke and the row is the receipt.
+//
+// A STANDING grant has to stay revocable for its whole life: it's what keeps the
+// discount running, and customerHoldsVoucher() honours the row whether or not it
+// carries a legacy used_at stamp (from before the coupon was made standing). If
+// this DELETE still demanded used_at IS NULL, a customer who had redeemed such a
+// coupon once would hold an unremovable standing discount — the only way off it
+// would be disabling the coupon for everyone.
 router.delete('/api/retail-admin/voucher-grants/:grantId', requireRetailAdmin, (req, res) => {
   const gid = parseInt(req.params.grantId, 10);
-  const r = tdb().prepare(
-    'DELETE FROM retail_customer_vouchers WHERE id = ? AND used_at IS NULL'
-  ).run(gid);
+  const row = tdb().prepare(
+    `SELECT g.id, v.per_customer_limit
+       FROM retail_customer_vouchers g
+       JOIN retail_vouchers v ON v.id = g.voucher_id
+      WHERE g.id = ?`
+  ).get(gid);
+  if (!row) return res.status(409).json({ success: false, error: 'already_used_or_missing' });
+  const r = voucherGrantIsStanding(row)
+    ? tdb().prepare('DELETE FROM retail_customer_vouchers WHERE id = ?').run(gid)
+    : tdb().prepare('DELETE FROM retail_customer_vouchers WHERE id = ? AND used_at IS NULL').run(gid);
   if (!r.changes) return res.status(409).json({ success: false, error: 'already_used_or_missing' });
   res.json({ success: true });
 });
