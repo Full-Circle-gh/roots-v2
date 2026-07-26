@@ -13774,12 +13774,61 @@ router.patch('/api/retail-admin/customers/:id', requireRetailAdmin, express.json
     updates.push(`${col} = ?`); params.push(v); changed[col] = v;
   };
   setStr('nickname', 60);
-  setStr('email', 120);
+
+  // Email — SAME check the create endpoint applies. This edit path had none at
+  // all, so anything typed here was stored verbatim: create rejected
+  // "wang@" and edit accepted it, which meant the validation was really just a
+  // speed bump you got past by creating first and editing after.
+  if (b.email !== undefined) {
+    const raw = b.email;
+    // normEmail returns '' for anything malformed, and lowercases what it
+    // accepts — so this path now stores the same normalised form create does,
+    // where it used to keep whatever was typed. Length cap kept from the
+    // setStr() this replaced.
+    const v = (raw === null || raw === '') ? null : (normEmail(raw).slice(0, 120) || '');
+    if (raw && !v) return res.status(400).json({ success: false, error: 'bad_email' });
+    updates.push('email = ?'); params.push(v); changed.email = v;
+  }
 
   if (b.phone !== undefined) {
     const v = b.phone === null || b.phone === '' ? null : String(b.phone).replace(/\s+/g, '').slice(0, 20);
     if (v && !/^\+?[0-9]{7,15}$/.test(v)) {
       return res.status(400).json({ success: false, error: 'bad_phone' });
+    }
+    // 🔴 DUPLICATE-PHONE CHECK. Create dedupes by phone (it links to the
+    // existing record instead of making a second one) — but this endpoint had
+    // no such check, so create-then-edit walked straight around it and left two
+    // customers holding one number. Everything keyed on phone then becomes
+    // ambiguous: migration credit, signup vouchers, and create's own reuse
+    // lookup, which takes `ORDER BY id LIMIT 1` and would silently pick one.
+    // ⚠ ONLY FIRES WHEN THE NUMBER IS ACTUALLY CHANGING. 17 live customers
+    // already share 4 numbers between them (legacy: 8 on one), from before any
+    // check existed. Validating on every save would 409 those records for good
+    // — an operator could not fix a typo in the NAME of a customer caught in a
+    // pre-existing duplicate. The rule is "don't create NEW collisions", not
+    // "refuse to touch old ones". Cleaning the existing 4 up is a data job, not
+    // this endpoint's.
+    //
+    // The 4 groups as at 2026-07-26, so the next survey doesn't re-chase them:
+    //   15360475622 → ids 76,224,239,332,352,360,382,721 — EIGHT records, the
+    //                 one that actually needs a human.
+    //   18613159912 → ids 57,64,233 — NOT a real duplicate: 233 is the `asher`
+    //                 test account and 57/64 are the two `_reset_` archive rows
+    //                 from that same test. Test data; leave it.
+    //   18924071446 → ids 52,58,472
+    //   19927404435 → ids 320,383,410
+    if (v && v !== c.phone) {
+      const clash = tdb().prepare(
+        'SELECT id, nickname FROM retail_customers WHERE phone = ? AND id != ? ORDER BY id LIMIT 1'
+      ).get(v, id);
+      if (clash) {
+        return res.status(409).json({
+          success: false,
+          error: 'phone_taken',
+          customer_id: clash.id,
+          nickname: clash.nickname || null,
+        });
+      }
     }
     updates.push('phone = ?'); params.push(v); changed.phone = v;
   }
