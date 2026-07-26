@@ -599,6 +599,41 @@ if (typeof retailLiveSubscribe === 'function') {
   });
 }
 
+// Typed `stock` nudge — fired by lib/inventory.adjustStock on every ledgered
+// move, wherever it came from (Quick Stock on a phone, the editor, an order,
+// a restock ship). Repaints the catalogue's per-store counts and the sold-out
+// tiles so the desk never shows a shelf that was refilled minutes ago.
+let _paStockNudgeAt = 0, _paStockNudgeTimer = null, _paStockStale = false;
+function _paStockNudge() {
+  // Off-screen nudges are remembered, not dropped: a tab left on Orders all
+  // morning would otherwise come back to Products holding page-load counts.
+  // The docked editor already refetches the grid on close (paCloseEditor), so
+  // leave it alone — a re-render underneath an open editor buys nothing.
+  if (document.hidden || _paEditorOpen
+      || !document.getElementById('tab-products')?.classList.contains('active')) {
+    _paStockStale = true;
+    return;
+  }
+  // Never yank the grid out from under a hand that's mid-recount — the
+  // re-render would replace the very input being typed into. Wait it out.
+  const busy = document.activeElement?.classList?.contains('pa-stock-input');
+  const wait = busy ? 5000 : Math.max(0, 8000 - (Date.now() - _paStockNudgeAt));
+  clearTimeout(_paStockNudgeTimer);
+  _paStockNudgeTimer = setTimeout(() => {
+    if (document.activeElement?.classList?.contains('pa-stock-input')) return _paStockNudge();
+    _paStockStale = false;
+    _paStockNudgeAt = Date.now();
+    paLoadStoreStock();
+  }, wait);
+}
+function _paStockCatchUp() { if (_paStockStale) _paStockNudge(); }
+if (typeof retailLiveOn === 'function') {
+  retailLiveOn('stock', _paStockNudge);
+  document.addEventListener('visibilitychange', _paStockCatchUp);
+  document.querySelector('.tabs [data-tab="products"]')
+    ?.addEventListener('click', () => setTimeout(_paStockCatchUp, 0));
+}
+
 document.getElementById('pa-search').addEventListener('input', _paDebouncedRender);
 document.getElementById('pa-filter').addEventListener('change', () => {
   PA_PAGE = 1;
@@ -655,6 +690,18 @@ async function paLoadStoreStock() {
       const m = {};
       (p.stocks || []).forEach(s => { m[s.store_id] = Number(s.physical_qty) || 0; });
       PA_STOCK[p.product_id] = m;
+      // Carry the fresh counts into effective_stock too. The Stock COLUMNS read
+      // PA_STOCK, but the "Out of stock" / "Low" KPI tiles and their row filters
+      // read p.effective_stock — which only ever arrived with the /products
+      // payload. So a phone recount left the desk's sold-out list still holding
+      // a product that had been refilled minutes earlier, until someone opened
+      // it (the editor's save path mirrors, see _paStockMirror).
+      // Only when a real per-store row exists: with none, the server falls back
+      // to legacy stock_qty and a computed 0 here would invent a sold-out.
+      const prod = (PA_PRODUCTS || []).find(x => x.id === p.product_id);
+      if (prod && (p.stocks || []).some(s => s.stocked)) {
+        prod.effective_stock = Object.values(m).reduce((s, v) => s + v, 0);
+      }
     });
     PA_STOCK_LOADED = true;
     // A remembered store that no longer exists falls back to "All".
@@ -665,6 +712,7 @@ async function paLoadStoreStock() {
     paRenderStoreSeg();
     paSyncLowStockUi();   // refresh the KPI subtitle + editor placeholder
     paRender();   // stock cells now know per-store counts
+    paRenderKpis(false);   // …and the health strip follows the same counts
   } catch (e) {
     PA_STOCK_LOADED = false;   // leave the column on the read-only combined total
   }
