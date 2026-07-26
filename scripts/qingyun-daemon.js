@@ -166,6 +166,41 @@ const bootstrapSince = {};
 const bootstrapFlagged = alerts; // keyed 'bootstrap:<storeCode>'
 const BOOTSTRAP_ALERT_MS = Number(process.env.QINGYUN_BOOTSTRAP_ALERT_MS || 10 * 60_000);
 
+// ── Heartbeat canary (generic stall backstop) ──────────────────────────────────
+// The verify / login / bootstrap / proxy alerts above each cover a KNOWN silent
+// mode — but pollStore()'s outer catch (bottom of this file) just logs to console
+// on anything else, with NO alert. That gap is real: 2026-07-26 yuexiu's holder
+// Chrome SEGV-crash-looped for hours (browserType.connectOverCDP timing out /
+// ECONNREFUSED on every attempt) — every failure happened before isLoggedIn() was
+// even reached, so none of the four alerts above ever fired. Zero WeCom pages for
+// a multi-hour outage. This tracks "time since a poll last got past the login
+// check" per store and pages ops if it's stale, regardless of the reason — parked
+// while a known cause is already alerting so we don't double-page one incident.
+const HEARTBEAT_STALE_MS = Number(process.env.QINGYUN_HEARTBEAT_STALE_MIN || 10) * 60_000;
+const lastPollOk = {};
+const heartbeatFlagged = alerts; // keyed 'stall:<storeCode>'
+function noteLoginOk(storeCode) { lastPollOk[storeCode] = Date.now(); }
+function heartbeatTick(storeCode) {
+  const now = Date.now();
+  const excused = inVerifyCooldown(storeCode)
+    || downFlagged['login:' + storeCode]
+    || bootstrapFlagged['bootstrap:' + storeCode]
+    || alerts[PROXY_LATCH];
+  if (excused || lastPollOk[storeCode] == null) { lastPollOk[storeCode] = now; return; }
+  const stale = now - lastPollOk[storeCode] >= HEARTBEAT_STALE_MS;
+  if (stale && !heartbeatFlagged['stall:' + storeCode]) {
+    heartbeatFlagged['stall:' + storeCode] = true;
+    const mins = Math.round((now - lastPollOk[storeCode]) / 60000);
+    logSync(storeCode, 'poll_stalled', 'error', null,
+      `no clean poll in ~${mins} min, not explained by login/verify/proxy — the Chrome process is likely crash-looping`);
+    sendOpsAlert(`🔴 青云聚信 ${storeCode} 约 ${mins} 分钟没有一次成功轮询（非登录/验证/代理原因），浏览器可能在反复崩溃，请检查\nQingyun ${storeCode} — no successful poll in ~${mins} min, not explained by login/verify/proxy — the Chrome process may be crash-looping; please check`);
+  } else if (!stale && heartbeatFlagged['stall:' + storeCode]) {
+    heartbeatFlagged['stall:' + storeCode] = false;
+    logSync(storeCode, 'poll_resumed', 'ok', null, 'polling succeeding again');
+    sendOpsAlert(`✅ 青云聚信 ${storeCode} 轮询已恢复\nQingyun ${storeCode} polling back to normal`);
+  }
+}
+
 // ── Match a Qingyun delivery to a roots order ──────────────────────────────────
 // Primary: the roots order_no (e.g. R2026...) stamped into the 备注/userRemark at
 // dispatch. Fallback: the recipient phone against a recent non-delivered roots order.
@@ -515,6 +550,7 @@ async function pollStore(storeCode) {
     downFlagged['login:' + storeCode] = false;
     loginFailStreak[storeCode] = 0;
     heartbeat(storeCode, true);
+    noteLoginOk(storeCode);
 
     // Phase 2: create any queued paid delivery orders in Qingyun (no-op unless the
     // toggle is on and rows are pending). Runs while logged in, before tracking, so
@@ -627,6 +663,8 @@ async function main() {
       for (const s of STORES) logSync(s, 'proxy_up', 'ok', null, 'proxy reachable again — tracking resumed');
       sendOpsAlert(`✅ 青云聚信 代理已恢复，配送跟踪继续\nQingyun proxy recovered — tracking resumed`);
     }
+
+    for (const s of STORES) heartbeatTick(s);
 
     if (now - last >= gap) {
       last = now;
