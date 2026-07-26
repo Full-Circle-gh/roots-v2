@@ -2889,8 +2889,20 @@ function selectedPopupPages() {
   return Array.from($('#pu-pages').querySelectorAll('.pu-page-chip.on')).map(el => el.dataset.page);
 }
 
+// Pop-up picture preset — same pipeline as the product editor so a raw 4–10MB
+// phone photo doesn't ship whole. The pop-up card is a phone-width panel, so
+// 1200px on the long edge is retina-sharp; JPEG q0.88 lands a typical upload
+// around 200–400KB. Falls back to the raw file if the resizer isn't loaded.
+const PU_IMG_OPTS = { maxLong: 1200, quality: 0.88, format: 'jpeg', passThroughBelow: 200 * 1024 };
 async function uploadPopupImage(file) {
   if (!file) return;
+  if (typeof pdHandleImageUpload === 'function') {
+    const dataURL = await pdHandleImageUpload(file, PU_IMG_OPTS);
+    if (!dataURL) return;           // it already toasted the reason
+    const shrunk = await fetch(dataURL).then(r => r.blob());
+    const base = (file.name || 'popup').replace(/\.[^.]+$/, '');
+    file = new File([shrunk], base + '.jpg', { type: shrunk.type || 'image/jpeg' });
+  }
   const fd = new FormData(); fd.append('file', file);
   toast('Uploading… · 上传中…');
   try {
