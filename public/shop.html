@@ -2501,20 +2501,46 @@ function renderCoBalance(d){
     <label class="cx-sw"><input type="checkbox" id="coUseBal" ${co.useBalance?'checked':''} ${dis}><span class="tr"></span><span class="kn"></span></label></div>`;
   $('#coUseBal').addEventListener('change',e=>{co.useBalance=e.target.checked;coQuote();});
 }
+/* The server never stamps a `slot_kind` onto slot objects — it only echoes one
+   back on reschedule — so `s.slot_kind` is always undefined here and the order
+   POST used to send delivery_slot_kind=''. In a day-only ship-district (Panyu)
+   the server reads that as "not same-day", pins the order to the out-of-city
+   warehouse and couriers it next day, WHILE resolveDeliverySlot still charges
+   the same-day surcharge: paid for today, delivered tomorrow. Derive the kind
+   the way the reschedule picker below already does.
+   Scoped to day-only slots on purpose. Time-slot zones (Yuexiu/Tianhe) carry no
+   surcharge and are never pinned, and their '' kind feeds the admin ship-by
+   column — so they keep sending exactly what they sent before. */
+function coSlotKind(s){
+  if(!s)return'';
+  if(s.slot_kind)return s.slot_kind;
+  if(s.slot_id==='right_away')return'right_away';
+  if(s.is_day_only)return s.is_same_day?'today':'express';
+  return'';
+}
 function renderCoSlots(d){
-  const box=$('#coSlots'); if(!box)return; const cn=state.lang==='cn'; const sc=d.scheduling||{}; const slots=Array.isArray(sc.slots)?sc.slots:[];
+  const box=$('#coSlots'); if(!box)return; const cn=state.lang==='cn'; const sc=d.scheduling||{}; let slots=Array.isArray(sc.slots)?sc.slots:[];
+  /* Day-only zones return ONLY the surcharged Today chip in `slots`; the free
+     earliest-day option lives in the sibling `express_slot`, which this page
+     never read. That left a Panyu customer with a single pre-selected option
+     they could not decline — the surcharge was effectively compulsory. Offer
+     both, free one first so it is what they land on. */
+  if(sc.mode==='day_only'&&sc.express_slot){
+    const today=sc.today_day_chip||slots.find(s=>s.is_same_day)||null;
+    slots=today?[sc.express_slot,today]:[sc.express_slot];
+  }
   if(!slots.length){
     if(!co.slotId){co.slotId='right_away';co.slotKind='right_away';}
     box.innerHTML=`<div class="cx-opt on"><div class="cx-opt-body"><div class="cx-opt-label">${cn?'尽快送达':'As soon as possible'}</div><div class="cx-opt-sub">${cn?'我们会尽快为你发货':'we ship on the earliest available day'}</div></div><span class="cx-check"><span class="cx-check-dot"></span></span></div>`;
     return;
   }
-  if(!co.slotId||!slots.find(s=>s.slot_id===co.slotId)){ co.slotId=slots[0].slot_id; co.slotKind=slots[0].slot_kind||''; }
+  if(!co.slotId||!slots.find(s=>s.slot_id===co.slotId)){ co.slotId=slots[0].slot_id; co.slotKind=coSlotKind(slots[0]); }
   box.innerHTML=slots.map(s=>{
     const on=s.slot_id===co.slotId, sur=Number(s.surcharge)>0?` (+${money(s.surcharge)})`:'';
     const label=esc(cn?(s.label_cn||s.label_en):(s.label_en||s.label_cn));
     return `<div class="cx-opt ${on?'on':''}" data-id="${escAttr(s.slot_id)}"><div class="cx-opt-body"><div class="cx-opt-label">${label}${sur}</div>${s.sub_label?`<div class="cx-opt-sub">${esc(s.sub_label)}</div>`:''}</div><span class="cx-check"><span class="cx-check-dot"></span></span></div>`;
   }).join('');
-  box.querySelectorAll('.cx-opt[data-id]').forEach(el=>el.addEventListener('click',()=>{const s=slots.find(x=>x.slot_id===el.dataset.id);co.slotId=el.dataset.id;co.slotKind=s?(s.slot_kind||''):'';coQuote();}));
+  box.querySelectorAll('.cx-opt[data-id]').forEach(el=>el.addEventListener('click',()=>{const s=slots.find(x=>x.slot_id===el.dataset.id);co.slotId=el.dataset.id;co.slotKind=coSlotKind(s);coQuote();}));
 }
 function renderCoSummary(d){
   const box=$('#coSummary'); if(!box)return; const cn=state.lang==='cn';
