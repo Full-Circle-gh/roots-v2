@@ -1443,7 +1443,7 @@ function renderAffiliateBlock(aff) {
   // Referrer and invitee nicknames are free text — shield them from the
   // walker's " · " split. The bilingual labels around them are NOT shielded.
   const referredBy = aff.referred_by
-    ? `<a href="#" data-no-i18n onclick="event.preventDefault(); cuOpenDetail(${aff.referred_by.id})">${escapeHtml(aff.referred_by.nickname || ('#' + aff.referred_by.id))}</a>
+    ? `<a href="#" data-no-i18n onclick="event.preventDefault(); cuOpenDetail(${aff.referred_by.id})">${escapeHtml(aff.referred_by.nickname || cuT('No name', '未填姓名'))}</a>
        ${aff.referred_by.referral_code ? `<span class="muted" style="margin-left: 8px; font-size: 11px;">via <code>${escapeHtml(aff.referred_by.referral_code)}</code></span>` : ''}`
     : '<span class="muted">— none — · 无</span>';
 
@@ -1451,7 +1451,7 @@ function renderAffiliateBlock(aff) {
   const invRows = (aff.invites || []).length
     ? aff.invites.map(i => `
         <tr>
-          <td><a href="#" data-no-i18n onclick="event.preventDefault(); cuOpenDetail(${i.invitee_id})">${escapeHtml(i.invitee_nickname || ('#' + i.invitee_id))}</a><div class="muted" data-no-i18n style="font-size: 11px;">${escapeHtml(i.invitee_phone || '')}</div></td>
+          <td><a href="#" data-no-i18n onclick="event.preventDefault(); cuOpenDetail(${i.invitee_id})">${escapeHtml(i.invitee_nickname || cuT('No name', '未填姓名'))}</a><div class="muted" data-no-i18n style="font-size: 11px;">${escapeHtml(i.invitee_phone || '')}</div></td>
           <td>${afStatusPill(i.status)}</td>
           <td class="numeric">¥${fmt(i.reward_amount || 0)}</td>
           <td>${escapeHtml(cuFmtDate(i.joined_at) || '')}</td>
@@ -1617,7 +1617,11 @@ function cuMessageCustomer() {
   const c = CU_CURRENT?.customer;
   if (!c) return;
   $('#cu-msg-text').value = '';
-  $('#cu-msg-who').textContent = (c.nickname || ('#' + c.id)) + ' · #' + c.id;
+  // A nameless customer reads "No name · #464", not "#464 · #464": the
+  // nickname half used to fall back to the id, which the line then appended
+  // again. "No name" is the exact wording the roster uses, so one customer
+  // is described the same way wherever they appear.
+  $('#cu-msg-who').textContent = (c.nickname || cuT('No name', '未填姓名')) + ' · #' + c.id;
   cuShowModal('#cu-msg-bg');
   setTimeout(() => { const t = $('#cu-msg-text'); if (t) t.focus(); }, 60);
 }

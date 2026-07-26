@@ -2865,9 +2865,40 @@
         letter-spacing: .14em; text-transform: uppercase; color: var(--text-4);
       }
 
+      /* 🔴 NO TINTED HEADER BAND on any table in this drawer — REMOVED, not
+         realigned.
+         It never came from drawer CSS: the global `th { background:
+         var(--bg-app) }` in retail-admin.css gave every thead a band the
+         drawer never asked for. And inside a padded card it can only ever be
+         the wrong width — the th boxes span the TABLE, while the CARD owns the
+         24px padding, so the band and the card are measuring different things.
+         No amount of alignment fixes that; the two would have to agree forever.
+         ⚠ The roster's band (build 3) works for the opposite reason: there the
+         table IS the card's full width, so band and card share one geometry.
+         That is why the same treatment cannot be carried inside a padded card.
+         The mockup's `.titbl th` carries no background at all — a hairline
+         separates the header from the rows and nothing else needs to.
+         Anyone "restoring" a header background inside a drawer card brings the
+         misalignment straight back. */
+      #cu-detail-body thead th { background: transparent; }
+
       /* The ledger folds (cux-fold, further down) height-interpolate their
          ::details-content; that needs interpolate-size on their ancestor. */
       #cu-detail-body { interpolate-size: allow-keywords; }
+      /* 🔴 HOVER MEANS "THIS DOES SOMETHING". That is the rule being enforced
+         here, and it is the reason for the shape of these two lines.
+         The tint was never drawer CSS either: the global
+         `tbody tr:hover { background: var(--bg-elev-1) }` in retail-admin.css
+         was inherited by EVERY table in the drawer — Top items, points ledger,
+         top-ups, affiliate invites, diagnostics logs — none of which are
+         clickable. A row that answers the pointer promises an action, and on
+         all of those the promise was empty.
+         So: suppressed drawer-wide, then re-granted to `.cu-order-row` alone,
+         which is the one interactive row type in here (it opens that order).
+         ⚠ Re-granting hover to any other table promises an action that does
+         not exist — the fix is to make the row do something, or leave it
+         quiet. */
+      #cu-detail-body tbody tr:hover { background: transparent; }
       /* Recent-orders rows are clickable → open that order. */
       #cu-detail-body tr.cu-order-row { cursor: pointer; transition: background var(--t-fast) ease; }
       #cu-detail-body tr.cu-order-row:hover,
