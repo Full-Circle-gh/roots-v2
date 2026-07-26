@@ -392,7 +392,21 @@ router.get('/api/retail-admin/category-counts', requireRetailAdmin, (req, res) =
   ).all();
   // name → tally, so an unsaved rename in the editor still reads the old row.
   const byTop = new Map();          // topName -> { n, published }
-  const bySub = new Map();          // topName + ' ' + subName -> { n, published }
+  // Composite key: NUL cannot occur in a category name, so it is a separator
+  // that can never collide with the data it joins.
+  //
+  // 🔴 WRITTEN AS THE ESCAPE '\u0000', NEVER AS A LITERAL NUL BYTE.
+  // One literal NUL anywhere in a file makes git classify the WHOLE file as
+  // binary, and that costs three things at once:
+  //   • it is exempt from `* text=auto`, so line endings never normalise
+  //     and the file silently flips CRLF/LF between machines;
+  //   • every diff becomes all-or-nothing — a 20-line change shows as 26,000;
+  //   • grep refuses to print matches without -a, so an ordinary search of
+  //     this file returns NOTHING rather than something wrong, which is worse.
+  // The escape compiles to a byte-identical string at runtime. Anyone
+  // "simplifying" these three back to literal NULs reintroduces all of it, and
+  // nothing will fail loudly enough to say so.
+  const bySub = new Map();          // topName + '\u0000' + subName -> { n, published }
   for (const r of rows) {
     const top = (r.t || '').trim();
     if (!top) continue;             // untagged products belong to no node
@@ -400,13 +414,13 @@ router.get('/api/retail-admin/category-counts', requireRetailAdmin, (req, res) =
     acc.n += r.n; acc.published += (r.pub || 0);
     byTop.set(top, acc);
     const sub = (r.s || '').trim();
-    if (sub) bySub.set(top + ' ' + sub, { n: r.n, published: r.pub || 0 });
+    if (sub) bySub.set(top + '\u0000' + sub, { n: r.n, published: r.pub || 0 });
   }
   const counts = {};
   for (const t of getCategoryTree(tdb())) {
     if (t.id) counts[t.id] = byTop.get(t.name) || { n: 0, published: 0 };
     for (const s of (t.subs || [])) {
-      if (s.id) counts[s.id] = bySub.get(t.name + ' ' + s.name) || { n: 0, published: 0 };
+      if (s.id) counts[s.id] = bySub.get(t.name + '\u0000' + s.name) || { n: 0, published: 0 };
     }
   }
   res.json({ success: true, counts });
