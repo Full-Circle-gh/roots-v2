@@ -5831,7 +5831,11 @@ const TWEAK_BG_VALUES  = ['paper', 'grid', 'studio'];
       // categories table is gone — the tree is the only category system). Each
       // top → { id, name (EN, matches products.category), name_cn }.
       api('/api/retail-admin/category-tree'),
-      api('/api/retail-admin/products'),
+      // ?text=1 — the product_grid list view prints a tagline under each
+      // product (falling back to the description), and the list endpoint
+      // leaves that long text out by default so the Products page isn't
+      // carrying editor-only text for the whole catalogue.
+      api('/api/retail-admin/products?text=1'),
       fetch('/api/retail/flash-sales', { credentials: 'same-origin' }).then(r => r.json()).catch(() => ({ data: [] })),
       // Polls feed the voting_block auto-pull preview + the per-block
       // poll picker. Cheap (small table) so we load once at boot.

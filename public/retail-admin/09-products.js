@@ -657,11 +657,26 @@ function _paDebouncedRender() { clearTimeout(_paT); _paT = setTimeout(() => { PA
 async function paLoad() {
   const grid = document.getElementById('pa-grid');
   grid.innerHTML = '<div class="muted" style="grid-column:1/-1;text-align:center;padding:40px">Loading… · 加载中…</div>';
+  // paLoad re-fires after every mutation and replaces the whole array with slim
+  // rows. Carry the open product's editor-only columns across, or the next
+  // buLoad / bpLoad / vaLoad (which each re-read PA_PRODUCTS) would find them
+  // missing and quietly empty the buy-together, bundle and variant panels.
+  // Hold the outgoing array and read the carry AFTER the fetch: a pdOpen that
+  // hydrates while this request is in flight writes into that same array, and
+  // capturing up front would take the snapshot before it landed.
+  const prev = PA_PRODUCTS;
   try {
     const res = await fetch('/api/retail-admin/products');
     const j = await res.json();
     if (!j.success) throw new Error(j.error || 'load_failed');
+    const carryId = _pdHydratedId;
+    const carry   = carryId == null ? null : _pdCarryEditorCols(carryId, prev);
     PA_PRODUCTS = j.data || [];
+    if (carry) {
+      const h = PA_PRODUCTS.findIndex(x => x.id === carryId);
+      if (h >= 0) PA_PRODUCTS[h] = { ...PA_PRODUCTS[h], ...carry };
+      else _pdHydratedId = null;            // product is gone from the catalogue
+    }
     paFillCatFilter();                       // category options from the catalogue
     pdLoadCatTree().then(paFillCatFilter);   // re-label bilingually once the tree lands
     paRender();
@@ -2203,6 +2218,61 @@ function pdSetSourceMode(shipsFromSupplier) {
   sup.checked = !!shipsFromSupplier;
   pdSyncSupplierUi();
 }
+// ── Editor hydration ──────────────────────────────────────────────────────
+// The catalogue LIST endpoint ships only what the grid, the KPI band and the
+// filters read. The editor-only text (descriptions, notes, free-of, facts,
+// badge tags, keywords, taglines, colophon, the buy-together bundle) was 75%
+// of a 1.08 MB payload that re-crossed the wire after every save, so it now
+// comes per product from GET /products/:id instead.
+//
+// The full record is merged INTO the cached PA_PRODUCTS row rather than passed
+// around: vaLoad / buLoad / bpLoad each do their own PA_PRODUCTS.find(id), so
+// hydrating the row in place keeps all three working with no signature change.
+//
+// image_data and bundle_items are deliberately NOT merged. The list ships a
+// lazy image URL (merging the raw base64 blob back in would undo the thumbnail
+// work) and the raw [{id,qty}] recipe that _paBundleStock and bpLoad expect —
+// /products/:id hydrates that into component cards and drops any component
+// whose product row is gone.
+
+// Exactly the columns the list SELECT no longer ships — keep in step with it
+// (routes/retail.js, GET /api/retail-admin/products). This is the set paLoad
+// has to restore after it replaces PA_PRODUCTS wholesale; re-applying the whole
+// hydrated row instead would push its stale stock / published / sort values
+// back over freshly loaded ones.
+const PD_EDITOR_ONLY_COLS = [
+  'description_en', 'description_cn', 'description_format', 'description_blocks',
+  'keywords_en', 'keywords_cn', 'tagline_en', 'tagline_cn',
+  'notes', 'nutrition', 'product_facts', 'bundle', 'free_of', 'tags',
+  'colophon_character', 'colophon_tagline_en', 'colophon_tagline_cn',
+];
+let _pdHydratedId = null;   // which product's cached row currently carries them
+let _pdOpenSeq    = 0;      // a slow fetch must not paint over a newer click
+
+// Lift the editor-only columns off a cached row, so paLoad can put them back
+// after it replaces the array. Read from the LIVE row rather than a snapshot
+// taken at open time: pdSaveCore merges each save's response into that row, so
+// the live copy is always current where a snapshot would go stale the moment
+// the operator edited a description or a bundle.
+function _pdCarryEditorCols(id, from) {
+  const cur = id == null ? null : (from || PA_PRODUCTS || []).find(x => x.id === id);
+  const out = {};
+  if (cur) PD_EDITOR_ONLY_COLS.forEach(k => { if (k in cur) out[k] = cur[k]; });
+  return out;
+}
+
+async function pdHydrate(id) {
+  const j = await api('/api/retail-admin/products/' + id);
+  // _img / _bi / _ib are destructured only to keep them OUT of `full`.
+  const { image_data: _img, bundle_items: _bi, is_bundle: _ib, ...full } = (j && j.data) || {};
+  if (full.id == null) throw new Error('not_found');
+  const i = (PA_PRODUCTS || []).findIndex(x => x.id === Number(id));
+  const merged = i >= 0 ? { ...PA_PRODUCTS[i], ...full } : full;
+  if (i >= 0) PA_PRODUCTS[i] = merged;
+  _pdHydratedId = Number(id);
+  return merged;
+}
+
 async function pdOpen(id) {
   // Flush any not-yet-fired debounced autosave from whatever product is
   // currently loaded BEFORE overwriting the form below. Switching products
@@ -2214,7 +2284,25 @@ async function pdOpen(id) {
     _pdAutoTimer = null;
     try { await pdAutoSaveNow(); } catch (e) {}
   }
-  const p = id != null ? (PA_PRODUCTS || []).find(x => x.id === id) : null;
+  // Pull the editor-only columns the list no longer carries. This MUST land
+  // before a single field is written: pdCollectBody reads description_en/cn,
+  // notes, free_of, product_facts and tags straight off the DOM, and autosave
+  // fires on any input event — so painting the form from a slim row and then
+  // touching anything would write those blanks back over real data. On failure
+  // we leave the previous product's form (and its autosave wiring) untouched
+  // and say so, rather than open an editor that can only do damage.
+  const mySeq = ++_pdOpenSeq;
+  let p = null;
+  if (id != null) {
+    try {
+      p = await pdHydrate(id);
+    } catch (e) {
+      if (mySeq !== _pdOpenSeq) return;   // superseded — the newer open owns the UI
+      toast(cuT('Couldn’t open that product: ', '无法打开该产品:') + (e && e.message || e), 'err');
+      return;
+    }
+    if (mySeq !== _pdOpenSeq) return;     // a newer click already took over
+  }
   const set = (el, v) => { const n = document.getElementById(el); if (n) n.value = (v == null ? '' : v); };
   document.getElementById('pd-id').value = p ? p.id : '';
   document.getElementById('pd-title').textContent = p ? (p.name_en || p.name_cn || 'Product · 产品') : 'New product · 新增产品';
@@ -2408,6 +2496,8 @@ function pdClose() {
   // editor doesn't close the page; the list stays put.)
   _pdSelectedId = null;
   _paEditorOpen = false;
+  _pdHydratedId = null;   // nothing on screen needs the editor-only columns now
+  _pdOpenSeq++;           // cancel any open still in flight
   const empty = document.getElementById('pd-empty');
   const ed    = document.getElementById('pd-editor');
   if (ed)    ed.style.display = 'none';

@@ -16959,8 +16959,8 @@ router.get('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
             description_en, description_cn, description_format, image_data, image_url, is_published, sort_order,
             status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
             keywords_en, keywords_cn, tagline_en, tagline_cn, description_blocks, nutrition, bundle, bundle_items, bundle_mode, tags,
-            variant_group_id, variant_label, variant_sort, variant_noun_en, variant_noun_cn,
-            is_batch_made, oos_policy, ship_from_supplier, supplier_paused, page_template,
+            variant_group_id, variant_label, variant_label_cn, variant_sort, variant_noun_en, variant_noun_cn,
+            is_batch_made, oos_policy, ship_from_supplier, supplier_paused, page_template, use_block_design,
             colophon_character, colophon_tagline_en, colophon_tagline_cn
        FROM store_products WHERE id = ? AND COALESCE(is_active, 1) = 1`
   ).get(id);
@@ -17558,8 +17558,28 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
   // MB and the page slow to load. So: omit image_data (send a lazy image URL
   // instead) and description_blocks (send a has_blocks flag). The per-product
   // editor fetches the real image + blocks on demand.
+  //
+  // Same reasoning, second pass: the long-form TEXT columns (descriptions,
+  // keywords, taglines, notes, nutrition, product facts, free-of, badge tags,
+  // colophon, the buy-together bundle) were 0.81 MB of a 1.08 MB response for
+  // 249 products — 75% of it — and no grid cell, KPI tile or filter reads any
+  // of them. Only the docked editor does, one product at a time, so it now
+  // pulls them from GET /products/:id (pdHydrate in 09-products.js). The
+  // response is no-store and re-fetched after every save, so this came off the
+  // wire on each one. That takes 1.08 MB → ~0.19 MB for the same 249 rows.
+  //
+  // The editor-only SCALARS (status, barcode, is_market, is_restock_only,
+  // is_batch_made, oos_policy, use_block_design) are deliberately left in:
+  // measured over the live catalogue they are 33 KB of that 0.19 MB, and the
+  // failure mode for getting one wrong is silent — pdOpen paints the field
+  // blank and pdCollectBody autosaves the blank back over real data. Not a
+  // trade worth 33 KB.
+  //
+  // ?text=1 opts the long text back in for the Storefront Editor (cms.html),
+  // which renders a tagline under every product in its product_grid list view.
+  const wantText = req.query.text === '1';
   let sql = `SELECT id, name_en, name_cn, sku, category, top_category, subcategory, weight AS size,
-                    sell_price, compare_at_price, stock_qty, ship_modes, image_url,
+                    sell_price, compare_at_price, stock_qty, low_stock_threshold, ship_modes, image_url,
                     -- Effective stock = what the customer shop actually sees
                     -- (sum of per-store physical_qty, falling back to the legacy
                     -- stock_qty only when a product has no per-store rows). The
@@ -17573,13 +17593,11 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
                       stock_qty
                     ) AS effective_stock,
                     is_published, sort_order, updated_at,
-                    status, barcode, free_of, notes, product_facts, is_market, is_restock_only,
-                    description_en, description_cn, description_format,
-                    keywords_en, keywords_cn, tagline_en, tagline_cn,
-                    nutrition, bundle, bundle_items, bundle_mode, tags,
+                    status, barcode, is_market, is_restock_only,
+                    bundle_items, bundle_mode,
                     variant_group_id, variant_label, variant_label_cn, variant_sort,
                     is_batch_made, oos_policy, ship_from_supplier, supplier_paused, use_block_design,
-                    colophon_character, colophon_tagline_en, colophon_tagline_cn,
+                    ${wantText ? 'description_en, description_cn, description_format, tagline_en, tagline_cn,' : ''}
                     ${hasImageFallbackSql('p')} AS has_image_data,
                     (description_blocks IS NOT NULL AND description_blocks != '' AND description_blocks != '[]') AS has_blocks
                FROM store_products p WHERE COALESCE(is_active, 1) = 1`;
@@ -17605,22 +17623,9 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
     delete r.has_image_data;
     // has_blocks is a 0/1 from SQLite — normalise to a real boolean.
     r.has_blocks = !!r.has_blocks;
-    // Parse the nutrition panel JSON so the editor can pre-fill it.
-    if (typeof r.nutrition === 'string' && r.nutrition.trim()) {
-      try {
-        const n = JSON.parse(r.nutrition);
-        r.nutrition = (n && (n.basis_en || n.basis_cn || (n.rows || []).length)) ? n : null;
-      } catch { r.nutrition = null; }
-    } else {
-      r.nutrition = null;
-    }
-    r.product_facts = parseFactsCol(r.product_facts);
-    // Parse the buy-together bundle JSON so the editor can pre-fill it.
-    if (typeof r.bundle === 'string' && r.bundle.trim()) {
-      try { r.bundle = JSON.parse(r.bundle); } catch { r.bundle = null; }
-    } else {
-      r.bundle = null;
-    }
+    // The nutrition / product_facts / bundle JSON columns are no longer
+    // selected here (editor-only — see the note on the SELECT), so there is
+    // nothing to parse. GET /products/:id parses them for the editor.
     // Bundle PRODUCT flag for the list card (cheap parse, no component lookup).
     r.bundle_items = parseBundleItems(r.bundle_items);
     r.is_bundle = r.bundle_items.length > 0;
