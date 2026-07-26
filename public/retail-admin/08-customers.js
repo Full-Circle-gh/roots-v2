@@ -608,6 +608,13 @@ async function cuOpenDetail(id, restore = null) {
     return;
   }
   CU_CURRENT = j.data;
+  // The GET above stamps seen_at server-side, so this row is no longer unopened.
+  // Clear it HERE rather than waiting for the next cuLoad(): dropping the class
+  // lets the row's own 600ms transition settle the surface and the Sage edge out
+  // under the drawer, which is the whole point of the treatment. Without this
+  // the row stays tinted until something else happens to reload the roster.
+  const seenRow = document.querySelector(`#cu-table tbody tr.cul-row.is-unseen[onclick*="cuOpenDetail(${id})"]`);
+  if (seenRow) seenRow.classList.remove('is-unseen');
   cuRenderDetail();
   if (switching) requestAnimationFrame(() => body.classList.remove('cu-swapping'));  // fade new in
   // Returning from an order opened via a Recent-orders row: expand that ledger
@@ -885,12 +892,17 @@ function cuRenderDetail() {
     </div>
   `).join('');
 
+  // SKU rides on a SECOND LINE under the product name rather than taking its
+  // own column — at the drawer's real width a fourth column forces the name to
+  // wrap, and the name must never wrap. An absent SKU renders nothing at all
+  // (Eleme lines genuinely have none) — never a dash.
   const topItemsRows = d.top_items.length
     ? d.top_items.map(t => `
         <tr>
-          <td>${escapeHtml(t.name_en || t.name_cn || '—')}</td>
-          <td class="numeric">${t.qty}</td>
-          <td class="numeric">¥${Number(t.spend || 0).toFixed(2)}</td>
+          <td><span class="ti-name" data-no-i18n>${escapeHtml(t.name_en || t.name_cn || '')}</span>${
+            t.sku ? `<span class="ti-sku" data-no-i18n>${escapeHtml(t.sku)}</span>` : ''}</td>
+          <td class="numeric" data-no-i18n>${cuNum(t.qty)}</td>
+          <td class="numeric" data-no-i18n>${yuan(t.spend)}</td>
         </tr>`).join('')
     : '<tr><td colspan="3" class="muted">No completed orders yet. · 暂无已完成订单。</td></tr>';
 
@@ -935,25 +947,32 @@ function cuRenderDetail() {
   const addressesHtml = d.addresses.length
     ? d.addresses.map(a => {
         const full = [a.province, a.city, a.district, a.address, a.detail].filter(Boolean).join(' ');
+        // A ROW inside the Addresses card, separated by a hairline — not a
+        // nested card. The action row wraps to a second line rather than
+        // pushing the card wider. Recipient name and phone are free text, so
+        // both carry data-no-i18n against the walker's " · " split.
         return `
         <div class="cux-addr">
           <div class="top">
-            <span class="nm">${escapeHtml(a.recipient_name)}</span>
-            <span class="ph">${escapeHtml(a.phone)}</span>
+            <span class="nm" data-no-i18n>${escapeHtml(a.recipient_name || '')}</span>
+            <span class="ph" data-no-i18n>${escapeHtml(a.phone || '')}</span>
             ${a.is_default ? '<span class="def">Default · 默认</span>' : ''}
             <span class="acts">
               <button onclick="cuOpenAddrModal(${a.id})">Edit · 编辑</button>
               <button class="del" onclick="cuDeleteAddr(${a.id}, event)">Delete · 删除</button>
             </span>
           </div>
-          <div class="line2" data-no-i18n title="${escapeAttr(full)}">${escapeHtml(full) || '—'}</div>
+          <div class="line2" data-no-i18n title="${escapeAttr(full)}">${escapeHtml(full)}</div>
         </div>`;
       }).join('')
     : '<div class="muted" style="font-size: 12.5px;">No saved addresses. · 暂无收货地址。</div>';
 
+  // No photo → the monogram, which takes the first real LETTER (Latin or CJK)
+  // and skips emoji, quotes and symbols; no letter anywhere → the person icon.
+  // Same rule as the roster's avatar, via the shared cuMonogram().
   const avatar = c.avatar_url
     ? `<img src="${escapeHtml(c.avatar_url)}" class="cu-avatar" onerror="this.style.display='none'">`
-    : `<div class="cu-avatar"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="4"/><path d="M4 21c1.4-4 4.4-6 8-6s6.6 2 8 6"/></svg></div>`;
+    : `<div class="cu-avatar" data-no-i18n>${cuMonogram(c.nickname)}</div>`;
 
   // ── Snapshot sub-lines — one quiet line per figure. Zero rows simply
   // don't appear (the old tiles rendered four lines of ¥0.00 for a new
@@ -1041,9 +1060,17 @@ function cuRenderDetail() {
         <div class="cux-eyebrow" data-no-i18n>${escapeHtml(cuT(
           'Customer #' + c.id + (cuFmtDate(c.created_at) ? ' · joined ' + cuFmtDate(c.created_at) : ''),
           '顾客 #' + c.id + (cuFmtDate(c.created_at) ? ' · ' + cuFmtDate(c.created_at) + ' 加入' : '')))}</div>
-        <div class="cux-name">${escapeHtml(c.nickname || '—')}
-          <span class="cu-pill tier-${escapeHtml(c.tier_key || 'seed')}">${escapeHtml(c.tier_key || 'seed')}</span>
-          ${c.is_blocked ? '<span class="cul-pill blocked">Blocked · 已封禁</span>' : ''}
+        <!-- data-no-i18n: a nickname is free text and can contain " · ",
+             which the walker reads as an EN/CN pair and splits. The pills
+             beside it are wrapped in one span so they travel TOGETHER — if
+             both don't fit next to the name they wrap as a pair, never one up
+             and one down. -->
+        <div class="cux-name" data-no-i18n>
+          <span class="hn-name">${c.nickname ? escapeHtml(c.nickname) : `<span class="none">${escapeHtml(cuT('No name', '未填姓名'))}</span>`}</span>
+          <span class="hn-pills">
+            <span class="cu-pill tier-${escapeHtml(c.tier_key || 'seed')}">${escapeHtml(c.tier_key || 'seed')}</span>
+            ${c.is_blocked ? `<span class="cu-pill blocked">${escapeHtml(cuT('Blocked', '已封禁'))}</span>` : ''}
+          </span>
         </div>
         ${(c.phone || c.email) ? `<div class="cux-phone" data-no-i18n>
           ${c.phone ? `${escapeHtml(c.phone)}<button class="cux-copy" title="Copy · 复制" onclick="cuCopyText('${escapeAttr(c.phone)}')">${copyIco}</button>` : ''}
@@ -1090,30 +1117,38 @@ function cuRenderDetail() {
       </div>
     </div>
 
-    <!-- Chart — short and quiet; the headline sentence carries the story. -->
-    <div class="cux-chart">
-      <div class="cux-sec">Orders by month · 月度订单
+    <!-- Orders by month — a card like the others: title left, summary right,
+         on the SAME line. Below three orders the bars are HIDDEN and the card
+         keeps its title and summary: eleven empty stubs and one bar is not a
+         chart, it's a chart-shaped apology. The card itself stays so the
+         drawer's shape doesn't change between customers.
+         Month labels are NUMERIC (08 09 10 …) — single letters give two "A"s
+         and two "M"s in one row. -->
+    <div class="cux-card cux-chart">
+      <div class="cux-kicker">Orders by month · 月度订单
         <span class="side" data-no-i18n>${chartSummary}</span>
       </div>
-      <div class="cu-bar-host" style="position: relative;">
+      ${ordersN >= 3 ? `<div class="cu-bar-host" style="position: relative;">
         <div class="cu-bar-row">${monthBars}</div>
         <!-- tooltip is a body-level singleton (cuBarTip) so the drawer can't crop it -->
-      </div>
+      </div>` : ''}
     </div>
 
+    <!-- Two white cards side by side. Each takes its NATURAL height and
+         top-aligns — neither stretches to match the other, so an uneven bottom
+         edge is correct, not a bug. They stack full-width when they can't sit
+         side by side; the panel never scrolls sideways. -->
     <div class="cu-detail-pairs">
-      <div>
-        <div class="cux-sec">Top items · 热销商品</div>
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>Item · 商品</th><th class="numeric">Qty · 数量</th><th class="numeric">Spend · 消费</th></tr></thead>
-            <tbody>${topItemsRows}</tbody>
-          </table>
-        </div>
+      <div class="cux-card">
+        <div class="cux-kicker">Top items · 热销商品</div>
+        <table class="cux-titbl">
+          <thead><tr><th>Item · 商品</th><th class="numeric">Qty · 数量</th><th class="numeric">Spend · 消费</th></tr></thead>
+          <tbody>${topItemsRows}</tbody>
+        </table>
       </div>
-      <div>
-        <div class="cux-sec">Addresses · 地址
-          <span class="side"><button class="btn btn-sm" onclick="cuOpenAddrModal(null)">+ Add address · 添加地址</button></span>
+      <div class="cux-card">
+        <div class="cux-kicker">Addresses · 地址
+          <span class="side"><button class="btn btn-sm" onclick="cuOpenAddrModal(null)">+ Add · 添加</button></span>
         </div>
         ${addressesHtml}
       </div>
@@ -1209,8 +1244,10 @@ function renderAffiliateBlock(aff) {
   const codeHtml = aff.referral_code
     ? `<code>${escapeHtml(aff.referral_code)}</code>`
     : '<span class="muted">(none yet) · 暂无</span>';
+  // Referrer and invitee nicknames are free text — shield them from the
+  // walker's " · " split. The bilingual labels around them are NOT shielded.
   const referredBy = aff.referred_by
-    ? `<a href="#" onclick="event.preventDefault(); cuOpenDetail(${aff.referred_by.id})">${escapeHtml(aff.referred_by.nickname || ('#' + aff.referred_by.id))}</a>
+    ? `<a href="#" data-no-i18n onclick="event.preventDefault(); cuOpenDetail(${aff.referred_by.id})">${escapeHtml(aff.referred_by.nickname || ('#' + aff.referred_by.id))}</a>
        ${aff.referred_by.referral_code ? `<span class="muted" style="margin-left: 8px; font-size: 11px;">via <code>${escapeHtml(aff.referred_by.referral_code)}</code></span>` : ''}`
     : '<span class="muted">— none — · 无</span>';
 
@@ -1218,7 +1255,7 @@ function renderAffiliateBlock(aff) {
   const invRows = (aff.invites || []).length
     ? aff.invites.map(i => `
         <tr>
-          <td><a href="#" onclick="event.preventDefault(); cuOpenDetail(${i.invitee_id})">${escapeHtml(i.invitee_nickname || ('#' + i.invitee_id))}</a><div class="muted" style="font-size: 11px;">${escapeHtml(i.invitee_phone || '')}</div></td>
+          <td><a href="#" data-no-i18n onclick="event.preventDefault(); cuOpenDetail(${i.invitee_id})">${escapeHtml(i.invitee_nickname || ('#' + i.invitee_id))}</a><div class="muted" data-no-i18n style="font-size: 11px;">${escapeHtml(i.invitee_phone || '')}</div></td>
           <td>${afStatusPill(i.status)}</td>
           <td class="numeric">¥${fmt(i.reward_amount || 0)}</td>
           <td>${escapeHtml(cuFmtDate(i.joined_at) || '')}</td>

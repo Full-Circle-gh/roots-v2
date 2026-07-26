@@ -2646,7 +2646,8 @@
       .cu-bar-tip .r span { color: rgba(255,255,255,.6); }
       .cu-bar-tip .r b { font-weight: 700; }
 
-      .cu-detail-pairs { display: grid; grid-template-columns: 55fr 45fr; gap: var(--s6); align-items: start; }
+      /* Top items | Addresses — 50/50, top-aligned, each its natural height. */
+      .cu-detail-pairs { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s6); align-items: start; }
       @media (max-width: 720px) {
         /* minmax(0,1fr) lets the single column shrink below its content's
            intrinsic width — without it the Top items table's min-content forces
@@ -2781,13 +2782,25 @@
       #cu-drawer .cux-snap .sub .warn { color: var(--tacet-amber-ink); }
 
       /* Facts cards — Activity / Device & account. */
-      #cu-drawer .cux-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 24px; }
-      #cu-drawer .cux-card { background: var(--bg-pane); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; }
-      #cu-drawer .cux-kicker { font-size: 14px; font-weight: 500; color: var(--text-2); letter-spacing: .01em; margin-bottom: 9px; }
-      #cu-drawer .cux-frow { display: grid; grid-template-columns: 118px 1fr; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line-soft); align-items: baseline; }
+      /* Every block below the snapshot band is a white card: 1px --td-border,
+         14px radius, 24px padding, its title inside at the top. Cards take
+         their NATURAL height and top-align — neither stretches to match its
+         neighbour, so an uneven bottom edge is correct. */
+      #cu-drawer .cux-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 24px; align-items: start; }
+      #cu-drawer .cux-card {
+        background: var(--bg-pane); border: 1px solid var(--td-border); border-radius: 14px;
+        padding: 24px; min-width: 0; align-self: start;
+      }
+      #cu-drawer .cux-kicker { display: flex; align-items: baseline; gap: 8px; font-size: 13px; font-weight: 500; color: var(--text-1); letter-spacing: 0; margin-bottom: 10px; }
+      #cu-drawer .cux-kicker .side { margin-left: auto; font-weight: 400; font-size: 13px; color: var(--text-2); font-variant-numeric: tabular-nums; }
+      /* A hairline between every row inside a card. */
+      #cu-drawer .cux-frow { display: grid; grid-template-columns: 118px 1fr; gap: 12px; padding: 9px 0; border-top: 1px solid var(--td-border); align-items: baseline; }
       #cu-drawer .cux-kicker + .cux-frow { border-top: none; padding-top: 0; }
-      #cu-drawer .cux-frow .k { font-size: 14px; color: var(--text-3); }
-      #cu-drawer .cux-frow .v { font-size: 16px; font-weight: 600; color: var(--text-1); min-width: 0; overflow-wrap: anywhere; }
+      /* Label and value must not look alike — the reader should know which half
+         is the answer before reading either. Label 13/400 Graphite, value
+         15/500 Ink. */
+      #cu-drawer .cux-frow .k { font-size: 13px; font-weight: 400; color: var(--text-2); }
+      #cu-drawer .cux-frow .v { font-size: 15px; font-weight: 500; color: var(--text-1); min-width: 0; overflow-wrap: anywhere; text-align: right; }
       #cu-drawer .cux-frow .v .muted { color: var(--text-3); font-weight: 400; }
       #cu-drawer .cux-frow .v.quiet { font-weight: 400; color: var(--text-2); }
       #cu-drawer .cux-frow .v.warn { color: var(--tacet-amber-ink); }
@@ -2809,17 +2822,48 @@
       /* Tables inside the drawer — sentence-case Inter headers. */
       #cu-drawer #cu-detail-body thead th { font-family: var(--f-sans); font-weight: 500; font-size: 11.5px; letter-spacing: .02em; text-transform: none; color: var(--text-2); }
 
-      /* Address cards. */
-      #cu-drawer .cux-addr { background: var(--bg-pane); border: 1px solid var(--line); border-radius: 12px; padding: 13px 15px; margin-bottom: 10px; }
-      #cu-drawer .cux-addr .top { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; }
-      #cu-drawer .cux-addr .nm { font-weight: 600; font-size: 15px; color: var(--text-1); }
-      #cu-drawer .cux-addr .ph { color: var(--text-2); font-size: 14px; font-variant-numeric: tabular-nums; }
-      #cu-drawer .cux-addr .def { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--tacet-sage-ink); background: var(--tacet-sage-tint); border-radius: 999px; padding: 2px 9px; }
-      #cu-drawer .cux-addr .acts { margin-left: auto; display: flex; gap: 4px; }
+      /* Addresses — ONE card (see .cux-card), each address a ROW inside it
+         separated by a hairline. Not a nested card: a card inside a card gave
+         the drawer two competing borders and stole 30px of width per address. */
+      #cu-drawer .cux-addr { padding: 9px 0; min-width: 0; }
+      #cu-drawer .cux-addr + .cux-addr { border-top: 1px solid var(--td-border); }
+      #cu-drawer .cux-addr:last-child { padding-bottom: 0; }
+      #cu-drawer .cux-addr .top { display: flex; align-items: baseline; gap: 9px; flex-wrap: wrap; min-width: 0; }
+      #cu-drawer .cux-addr .nm { font-weight: 500; font-size: 14px; color: var(--text-1); }
+      #cu-drawer .cux-addr .ph { color: var(--text-2); font-size: 13px; font-variant-numeric: tabular-nums; }
+      #cu-drawer .cux-addr .def { font-size: 10px; font-weight: 500; letter-spacing: .04em; color: var(--text-2); background: var(--bg-elev-1); border: 1px solid var(--td-border); border-radius: 999px; padding: 1px 7px; }
+      /* The action row WRAPS to a second line rather than pushing the card
+         wider — the panel must never scroll sideways. */
+      #cu-drawer .cux-addr .acts { margin-left: auto; display: flex; gap: 4px; flex-wrap: wrap; }
       #cu-drawer .cux-addr .acts button { border: 0; background: none; font-family: var(--f-sans); font-size: 13.5px; color: var(--text-2); cursor: pointer; padding: 2px 6px; border-radius: 6px; }
       #cu-drawer .cux-addr .acts button:hover { color: var(--text-1); background: var(--bg-elev-1); }
       #cu-drawer .cux-addr .acts button.del:hover { color: var(--tacet-brick); background: var(--tacet-brick-tint); }
-      #cu-drawer .cux-addr .line2 { color: var(--text-3); font-size: 13px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #cu-drawer .cux-addr .line2 { color: var(--text-2); font-size: 12px; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+      /* Top items — Item · Qty · Spend, with the SKU on a SECOND LINE under the
+         product name. A fourth column at this width forces the name to wrap,
+         and the name must never wrap: it truncates with an ellipsis instead.
+         An absent SKU renders nothing (Eleme lines have none) — never a dash. */
+      #cu-drawer .cux-titbl { width: 100%; border-collapse: collapse; table-layout: auto; font-size: 13px; }
+      #cu-drawer .cux-titbl th { text-align: left; font-weight: 500; color: var(--text-2); font-size: 12px; padding: 0 0 6px; border-bottom: 1px solid var(--td-border); }
+      #cu-drawer .cux-titbl td { padding: 9px 0; border-bottom: 1px solid var(--td-border); line-height: 1.4; }
+      #cu-drawer .cux-titbl tr:last-child td { border-bottom: 0; }
+      #cu-drawer .cux-titbl :is(th, td).numeric { text-align: right; padding-left: 16px; white-space: nowrap; width: 1%; font-variant-numeric: tabular-nums; }
+      #cu-drawer .cux-titbl :is(th, td):first-child { width: 100%; max-width: 0; min-width: 0; }
+      #cu-drawer .cux-titbl .ti-name { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-1); }
+      #cu-drawer .cux-titbl .ti-sku { display: block; font-size: 13px; color: var(--text-2); font-variant-numeric: tabular-nums; margin-top: 2px; }
+
+      /* 🔴 THE PANEL NEVER SCROLLS SIDEWAYS. A horizontal scrollbar inside the
+         drawer is a bug at any width — if two cards can't sit side by side they
+         STACK full-width. Container queries, not a viewport breakpoint: the
+         drawer's own width is what matters, and it doesn't track the window. */
+      #cu-drawer .drawer-body { overflow-x: hidden; }
+      /* The container is the BODY, not the grids — a container query matches
+         descendants of the container, never the container element itself. */
+      #cu-drawer #cu-detail-body { container-type: inline-size; }
+      @container (max-width: 560px) {
+        #cu-drawer .cu-detail-pairs, #cu-drawer .cux-cards { grid-template-columns: minmax(0, 1fr); }
+      }
 
       /* Ledger folds — flat rows, svg chevron, right-side hint. */
       #cu-drawer .cux-folds { border-top: 1px solid var(--line); margin-top: 26px; }
