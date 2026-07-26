@@ -1301,7 +1301,14 @@ function cuRenderDetail() {
       <div class="cux-card">
         <div class="cux-kicker">Device &amp; account · 设备与账号</div>
         <div class="cux-frow"><div class="k">App build · 版本</div><div class="v${(buildV && buildV.app_version) ? ' quiet' : ' none'}" data-no-i18n>${escapeHtml(buildText)}</div></div>
-        <div class="cux-frow"><div class="k">Sessions · 会话</div><div class="v${sessions >= 5 ? ' warn' : ''}" data-no-i18n>${sessions} <span class="muted">${escapeHtml(cuT('active', '个活跃'))}</span></div></div>
+        <!-- Number in Ink, "active" in Graphite — the same treatment every
+             other value in this card gets. It used to turn AMBER at 5+
+             sessions, but Amber is the attention colour and a session count
+             is a FACT, not a warning: someone with eight devices signed in
+             has not done anything wrong, and colouring it asks the operator
+             to act on nothing. Points-expiring is the only legitimate Amber
+             in this drawer. -->
+        <div class="cux-frow"><div class="k">Sessions · 会话</div><div class="v" data-no-i18n>${cuNum(sessions)} <span class="muted">${escapeHtml(cuT('active', '个活跃'))}</span></div></div>
         <div class="cux-frow"><div class="k">openid</div><div class="v mono${openid ? '' : ' none'}" data-no-i18n>${escapeHtml(openidShort)}${openid ? `<button class="cux-copy" onclick="cuCopyChip(this, '${escapeAttr(openid)}')">${escapeHtml(cuT('Copy', '复制'))}</button>` : ''}</div></div>
       </div>
     </div>
@@ -1907,7 +1914,7 @@ function cuAddrPopulateProvinces(selectedProvinceCn) {
     const p = c.province_cn || '';
     if (p && !seen.has(p)) seen.set(p, c.province_en || '');
   }
-  let html = '<option value="">— Select province · 选择省份 —</option>';
+  let html = '<option value="">Select province · 选择省份</option>';
   for (const [p, en] of seen) {
     html += `<option value="${escapeAttr(p)}">${escapeHtml(p + (en ? ' · ' + en : ''))}</option>`;
   }
@@ -1922,7 +1929,7 @@ function cuAddrPopulateProvinces(selectedProvinceCn) {
 function cuAddrPopulateCities(provinceCn, selectedCityCn) {
   const sel = $('#cu-addr-city'); if (!sel) return;
   const list = (_regions.cities || []).filter(c => (c.province_cn || '') === provinceCn);
-  let html = '<option value="">— Select city · 选择城市 —</option>';
+  let html = '<option value="">Select city · 选择城市</option>';
   for (const c of list) {
     html += `<option value="${escapeAttr(c.name_cn)}">${escapeHtml(c.name_cn + (c.name_en ? ' · ' + c.name_en : ''))}</option>`;
   }
@@ -1937,7 +1944,7 @@ function cuAddrPopulateCities(provinceCn, selectedCityCn) {
 // Load the district list for the chosen city into the District <select>.
 async function cuAddrLoadDistricts(cityCn, selectedDistrictCn) {
   const sel = $('#cu-addr-district'); if (!sel) return;
-  if (!cityCn) { sel.innerHTML = '<option value="">— Select district · 选择区/县 —</option>'; return; }
+  if (!cityCn) { sel.innerHTML = '<option value="">Select district · 选择区/县</option>'; return; }
   sel.innerHTML = '<option value="">Loading… · 加载中…</option>';
   let list = [];
   try {
@@ -1945,7 +1952,7 @@ async function cuAddrLoadDistricts(cityCn, selectedDistrictCn) {
     const j = await r.json();
     list = (j && j.data) || [];
   } catch (e) { /* fall through to empty */ }
-  let html = '<option value="">— Select district · 选择区/县 —</option>';
+  let html = '<option value="">Select district · 选择区/县</option>';
   for (const d of list) html += `<option value="${escapeAttr(d.name_cn)}">${escapeHtml(d.name_cn + (d.name_en ? ' · ' + d.name_en : ''))}</option>`;
   sel.innerHTML = html;
   if (selectedDistrictCn) {
@@ -1959,7 +1966,7 @@ async function cuAddrLoadDistricts(cityCn, selectedDistrictCn) {
 // Province picked → narrow the city list + reset district.
 function cuAddrProvinceChanged() {
   cuAddrPopulateCities($('#cu-addr-province').value, '');
-  $('#cu-addr-district').innerHTML = '<option value="">— Select district · 选择区/县 —</option>';
+  $('#cu-addr-district').innerHTML = '<option value="">Select district · 选择区/县</option>';
 }
 
 // City picked → reload the district list for that city.
@@ -1973,7 +1980,18 @@ async function cuOpenAddrModal(addrId) {
   const a = addrId ? (CU_CURRENT.addresses || []).find(x => x.id === addrId) : null;
   $('#cu-addr-title').textContent      = a ? 'Edit address · 编辑地址' : 'Add address · 新建地址';
   $('#cu-addr-recipient').value        = a ? (a.recipient_name || '') : '';
+  const inheritedPhone = !a && !!CU_CURRENT.customer.phone;
   $('#cu-addr-phone').value            = a ? (a.phone          || '') : (CU_CURRENT.customer.phone || '');
+  // A silently pre-filled field is indistinguishable from one the operator
+  // typed — so it says where the number came from, and that it can be changed.
+  const phNote = $('#cu-addr-phone-note');
+  if (phNote) {
+    phNote.hidden = !inheritedPhone;
+    phNote.textContent = inheritedPhone
+      ? cuT("Using the customer's number — change it if this address has its own.",
+            '已填入顾客本人号码 — 若该地址另有联系电话请修改。')
+      : '';
+  }
   $('#cu-addr-address').value          = a ? (a.address        || '') : '';
   $('#cu-addr-detail').value           = a ? (a.detail         || '') : '';
   $('#cu-addr-postal').value           = a ? (a.postal_code    || '') : '';
@@ -2004,8 +2022,11 @@ async function cuSaveAddr() {
     postal_code:    $('#cu-addr-postal').value.trim(),
     is_default:     $('#cu-addr-default').checked,
   };
+  cuErr('cu-addr-err', '', null);
   if (!body.recipient_name || !body.phone || !body.address) {
-    return toast('Recipient, phone, and street address are required · 收件人、电话、地址必填', 'err');
+    return cuErr('cu-addr-err',
+      cuT('Recipient, phone and street address are all needed.',
+          '收件人、电话和详细地址都需要填写。'), null);
   }
   const cid = CU_CURRENT.customer.id;
   const url = CU_ADDR_EDIT_ID
@@ -2014,13 +2035,17 @@ async function cuSaveAddr() {
   try {
     await cuWriteRequest({
       btnId: 'cu-addr-save', busyLabel: cuT('Saving…', '保存中…'), also: '#cu-addr-cancel', url, method: CU_ADDR_EDIT_ID ? 'PUT' : 'POST', body,
-      errLabelEn: 'Save failed', errLabelCn: '保存失败',
+      silent: true,
     });
     // No toast: the drawer reopens with the address in the list — the result
     // is the confirmation, and it's the thing the operator was looking at.
     cuCloseAddrModal();
     cuOpenDetail(cid);
-  } catch {}
+  } catch (e) {
+    // silent:true means nothing else reports this — say it inline.
+    const j = e.payload || {};
+    cuErr('cu-addr-err', j.message || cuErrText(e.code) || cuT('Save failed', '保存失败'), null);
+  }
 }
 
 async function cuDeleteAddr(addrId, ev) {

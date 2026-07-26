@@ -2361,6 +2361,21 @@
          460px cap, 14px radius, 18px/500 title, 13px/500 sentence-case labels,
          38px fields, 8px radius. The 460 is the drawn-and-approved width; the
          rulebook's general 560 guidance is not what this was built to.
+         🔴 SCOPED ON THE MODAL IDS, NOT ON `#tab-customers`. These modals are
+         authored inside <section id="tab-customers">, but cuShowModal()
+         RE-PARENTS them to <body> on open (it has to: the section forms a
+         stacking context, so a z-300 modal left inside it paints behind the
+         z-200 drawer that launched it). The moment a modal opens it is no
+         longer a descendant of the tab, so every rule scoped under
+         `#tab-customers` stops matching. That shipped once: the whole shell
+         below — 460px cap, sentence-case labels, Ink primary, field and error
+         styling — applied to nothing, and the only visible tell was a ✕ that
+         still looked boxed. There is no error and no obvious break; the CSS is
+         simply inert until someone opens a modal and looks closely.
+         The ids are globally unique and travel with the element, so they hold
+         wherever it is re-parented to. ⚠ Do NOT "tidy" these back under the
+         tab selector.
+
          Scoped to the five customer modals so the product editor and every
          other .pu-editor-bg keeps its own look.
 
@@ -2372,39 +2387,39 @@
          fight in build 3: the rule was fine, something else was simply louder.
          If a modal here ever needs a different width, change it HERE — do not
          reach for an inline style. */
-      #tab-customers :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .pu-editor {
+      :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .pu-editor {
         width: 100%; max-width: 460px; background: var(--td-paper);
         border: 1px solid var(--td-border); border-radius: 14px; overflow: hidden;
       }
-      #tab-customers :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .pu-editor-head {
+      :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .pu-editor-head {
         padding: 18px 20px 6px; border-bottom: 0; background: none;
       }
-      #tab-customers :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .pu-editor-head h3 {
+      :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .pu-editor-head h3 {
         font-size: 18px; font-weight: 500; color: var(--td-text); letter-spacing: 0; text-transform: none;
       }
       /* ✕ where a "Close" button used to sit — the title line's control is a
          dismiss, not an action, and a worded button reads as one. */
-      #tab-customers .cu-modal-x {
+      :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .cu-modal-x {
         margin-left: auto; width: 32px; height: 32px; border: 0; background: none;
         border-radius: 8px; color: var(--text-2); cursor: pointer; font-size: 18px;
         display: grid; place-items: center; line-height: 1; padding: 0;
       }
-      #tab-customers .cu-modal-x:hover { background: var(--bg-elev-1); color: var(--text-1); }
-      #tab-customers :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .pu-editor-body {
+      :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .cu-modal-x:hover { background: var(--bg-elev-1); color: var(--text-1); }
+      :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .pu-editor-body {
         padding: 8px 20px 4px; background: none;
       }
       /* Sentence case, 13px/500 Ink. The shared label.stacked is 11px/600
          UPPERCASE Graphite — §1.6 allows no uppercase anywhere. */
-      #tab-customers :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) label.stacked {
+      :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) label.stacked {
         font-size: 13px; font-weight: 500; letter-spacing: 0; text-transform: none;
         color: var(--td-text); margin-bottom: 6px;
       }
-      #tab-customers :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .field { margin-bottom: 14px; }
-      #tab-customers :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .field :is(input, select) {
+      :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .field { margin-bottom: 14px; }
+      :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .field :is(input, select) {
         width: 100%; height: 38px; background: var(--td-surface); border: 1px solid var(--td-border);
         border-radius: 8px; padding: 0 12px; font-family: var(--f-sans); font-size: 14px; color: var(--td-text);
       }
-      #tab-customers :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .field textarea {
+      :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .field textarea {
         width: 100%; min-height: 84px; background: var(--td-surface); border: 1px solid var(--td-border);
         border-radius: 8px; padding: 9px 12px; line-height: 1.5; resize: vertical;
         font-family: var(--f-sans); font-size: 14px; color: var(--td-text);
@@ -2415,40 +2430,58 @@
          the keyboard is, and the design system exempts focus rings from the
          one-Dusk rule explicitly. Settled 2026-07-26 — do not re-litigate this
          into Ink on a reading of the rule's headline. */
-      #tab-customers :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .field :is(input, select, textarea):focus {
+      :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .field :is(input, select, textarea):focus {
         outline: none; border-color: var(--td-dusk);
       }
-      #tab-customers :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .helper,
-      #tab-customers .cu-mnote {
+      :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .helper,
+      :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .cu-mnote {
         font-size: 13px; color: var(--text-2); line-height: 1.5; margin-top: 6px; text-wrap: pretty;
       }
-      #tab-customers .cu-mnote { margin: 0 0 8px; }
-      #tab-customers :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .pu-editor-foot {
+      :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .cu-mnote { margin: 0 0 8px; }
+      :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .pu-editor-foot {
         padding: 12px 20px 18px; border-top: 0; background: none; justify-content: flex-end; gap: 8px;
       }
       /* Primary is INK, not Dusk — a modal's primary is the merchant acting.
          (The mockup's class is literally `.btn.dusk`, but its own rule
          overrides that to var(--td-text); the name is a misnomer.) */
-      #tab-customers :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .btn-primary {
+      :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .btn-primary {
         background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); font-weight: 500;
       }
-      #tab-customers :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .btn-primary:hover {
+      :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .btn-primary:hover {
         background: color-mix(in srgb, var(--td-text) 88%, var(--td-paper));
         border-color: color-mix(in srgb, var(--td-text) 88%, var(--td-paper));
       }
       /* Destructive is a Brick OUTLINE, never a solid slab. */
-      #tab-customers .cu-btn-danger {
+      :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .cu-btn-danger {
         background: transparent; border-color: var(--tacet-brick); color: var(--tacet-brick-ink);
       }
-      #tab-customers .cu-btn-danger:hover { background: var(--tacet-brick-tint); }
+      :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .cu-btn-danger:hover { background: var(--tacet-brick-tint); }
       /* Inline validation — Brick, beneath the field that caused it, never a
          toast. The field itself takes a Brick border so the eye lands on it. */
-      #tab-customers .cu-err { font-size: 13px; color: var(--tacet-brick-ink); margin-top: 6px; line-height: 1.45; text-wrap: pretty; }
-      #tab-customers .cu-err:empty { display: none; }
-      #tab-customers .field.is-bad :is(input, select, textarea) { border-color: var(--tacet-brick); }
+      :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .cu-err { font-size: 13px; color: var(--tacet-brick-ink); margin-top: 6px; line-height: 1.45; text-wrap: pretty; }
+      :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .cu-err:empty { display: none; }
+      :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .field.is-bad :is(input, select, textarea) { border-color: var(--tacet-brick); }
+      /* Address form — one steady two-column grid. Spacing, field height,
+         radius and label size all come from the shell above, so this modal
+         belongs to the same set as the other four rather than looking like
+         the one nobody designed. */
+      #cu-addr-bg .cu-addr-grid {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px;
+        padding: 8px 20px 4px; background: none;
+      }
+      #cu-addr-bg .cu-addr-wide { grid-column: 1 / -1; }
+      #cu-addr-bg .cu-addr-check {
+        display: inline-flex; align-items: center; gap: 8px;
+        font-size: 13px; color: var(--td-text); cursor: pointer; margin-bottom: 14px;
+      }
+      #cu-addr-bg .cu-addr-check input { width: 16px; height: 16px; flex: none; accent-color: var(--td-text); }
+      /* The grid's own gap owns the horizontal rhythm; .field keeps the
+         vertical. Selects need the same box as the inputs beside them. */
+      #cu-addr-bg .cu-addr-grid .field { min-width: 0; }
+
       /* Every write control goes dead while the write is in flight — the
          primary AND Cancel. §1.12: a live control invites a double-submit. */
-      #tab-customers :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .btn:disabled {
+      :is(#cu-edit-bg, #cu-create-bg, #cu-msg-bg, #cu-adjust-bg, #cu-addr-bg) .btn:disabled {
         opacity: .5; cursor: default;
       }
 
@@ -3321,49 +3354,60 @@
           <h3 id="cu-addr-title" style="margin: 0; font-size: 14px;">Add address · 添加地址</h3>
           <button type="button" class="cu-modal-x" onclick="cuCloseAddrModal()" title="Close · 关闭 (Esc)" aria-label="Close">&#10005;</button>
         </div>
-        <div class="pu-editor-body" style="grid-template-columns: 1fr; padding: 18px;">
-          <div class="row" style="gap: var(--s3);">
-            <div class="field" style="flex: 1; min-width: 200px;">
-              <label class="stacked">Recipient name * · 收件人 *</label>
-              <input type="text" id="cu-addr-recipient">
-            </div>
-            <div class="field" style="flex: 1; min-width: 200px;">
-              <label class="stacked">Phone * · 电话 *</label>
-              <input type="text" id="cu-addr-phone">
-            </div>
-          </div>
-          <div class="row" style="gap: var(--s3);">
-            <div class="field" style="flex: 1; min-width: 140px;">
-              <label class="stacked">Province · 省份</label>
-              <select id="cu-addr-province" onchange="cuAddrProvinceChanged()"><option value="">— Select province · 选择省份 —</option></select>
-            </div>
-            <div class="field" style="flex: 1; min-width: 140px;">
-              <label class="stacked">City · 城市</label>
-              <select id="cu-addr-city" onchange="cuAddrCityChanged()"><option value="">— Select city · 选择城市 —</option></select>
-            </div>
-            <div class="field" style="flex: 1; min-width: 140px;">
-              <label class="stacked">District · 区/县</label>
-              <select id="cu-addr-district"><option value="">— Select district · 选择区/县 —</option></select>
-            </div>
+        <div class="pu-editor-body cu-addr-grid">
+          <!-- ONE consistent two-column rhythm the whole way down. It used to
+               change shape four times (2 cols → 3 → 1 → 2), which made the eye
+               re-find the alignment on every row. Long free-text fields span
+               both columns; everything else pairs. Province/City/District were
+               3-up: at this width that left ~140px each, too narrow for the
+               bilingual option text, so District pairs with Postal code.
+               ⚠ No asterisks. This product marks the OPTIONAL field instead —
+               the same way the create modal says "Email (optional)" — so the
+               absence of a marker means required, and nothing is coloured to
+               say it. -->
+          <div class="field">
+            <label class="stacked">Recipient name · 收件人</label>
+            <input type="text" id="cu-addr-recipient">
           </div>
           <div class="field">
-            <label class="stacked">Street address * · 详细地址 *</label>
+            <label class="stacked">Phone · 电话</label>
+            <input type="text" id="cu-addr-phone">
+            <!-- The phone arrives pre-filled from the customer's own record on
+                 a NEW address. Helpful, but silent prefill is indistinguishable
+                 from something the operator typed, so it says which. -->
+            <div class="helper" id="cu-addr-phone-note" hidden data-no-i18n></div>
+          </div>
+          <div class="field">
+            <label class="stacked">Province · 省份 <span class="muted">(optional · 选填)</span></label>
+            <select id="cu-addr-province" onchange="cuAddrProvinceChanged()"><option value="">Select province · 选择省份</option></select>
+          </div>
+          <div class="field">
+            <label class="stacked">City · 城市 <span class="muted">(optional · 选填)</span></label>
+            <select id="cu-addr-city" onchange="cuAddrCityChanged()"><option value="">Select city · 选择城市</option></select>
+          </div>
+          <div class="field">
+            <label class="stacked">District · 区/县 <span class="muted">(optional · 选填)</span></label>
+            <select id="cu-addr-district"><option value="">Select district · 选择区/县</option></select>
+          </div>
+          <div class="field">
+            <label class="stacked">Postal code · 邮编 <span class="muted">(optional · 选填)</span></label>
+            <input type="text" id="cu-addr-postal">
+          </div>
+          <div class="field cu-addr-wide">
+            <label class="stacked">Street address · 详细地址</label>
             <input type="text" id="cu-addr-address" placeholder="Street, building number">
           </div>
-          <div class="row" style="gap: var(--s3);">
-            <div class="field" style="flex: 2; min-width: 200px;">
-              <label class="stacked">Detail · 详情</label>
-              <input type="text" id="cu-addr-detail" placeholder="Floor, unit, apt">
-            </div>
-            <div class="field" style="flex: 1; min-width: 140px;">
-              <label class="stacked">Postal code · 邮编</label>
-              <input type="text" id="cu-addr-postal">
-            </div>
+          <div class="field cu-addr-wide">
+            <label class="stacked">Detail · 详情 <span class="muted">(optional · 选填)</span></label>
+            <input type="text" id="cu-addr-detail" placeholder="Floor, unit, apt">
           </div>
-          <label style="display: inline-flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; margin-top: var(--s2);">
-            <input type="checkbox" id="cu-addr-default" style="width: 16px; height: 16px;">
-            Set as default address · 设为默认地址
-          </label>
+          <div class="cu-addr-wide">
+            <label class="cu-addr-check">
+              <input type="checkbox" id="cu-addr-default">
+              Set as default address · 设为默认地址
+            </label>
+          </div>
+          <div class="cu-err cu-addr-wide" id="cu-addr-err" data-no-i18n></div>
         </div>
         <div class="pu-editor-foot">
           <button class="btn" id="cu-addr-cancel" onclick="cuCloseAddrModal()">Cancel · 取消</button>
@@ -10635,6 +10679,11 @@
 <div id="order-scrim" class="ord-scrim" aria-hidden="true" onclick="orderDrawerBack()"></div>
 
 <!-- Customer detail drawer — same slide-in pattern as Orders. -->
+<!-- Focus scrim. Reuses Orders' OWN .ord-scrim class rather than copying
+     its values, so the two can never drift apart: dim + blur are defined
+     once, in one rule. The list stays VISIBLE behind it — that is what
+     makes this a drawer and not a modal — but reads as inactive. -->
+<div id="cu-scrim" class="ord-scrim" aria-hidden="true" onclick="closeDrawer('#cu-drawer')"></div>
 <aside id="cu-drawer" class="side-drawer dw-dismiss" aria-hidden="true">
   <button type="button" class="drawer-close" onclick="closeDrawer('#cu-drawer')" title="Close · 关闭 (Esc)" aria-label="Close drawer">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>

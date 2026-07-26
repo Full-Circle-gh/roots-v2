@@ -3735,8 +3735,11 @@ function openDrawer(sel) {
   d.classList.add('open');
   d.setAttribute('aria-hidden', 'false');
   // Order drawer opens in focus mode: raise the blur+dim scrim behind it.
-  if (d.id === 'order-drawer') {
-    const sc = document.getElementById('order-scrim');
+  // Drawers that open in focus mode raise a blur+dim scrim behind them. Keyed
+  // by id so no other drawer changes behaviour.
+  const scrimId = { 'order-drawer': 'order-scrim', 'cu-drawer': 'cu-scrim' }[d.id];
+  if (scrimId) {
+    const sc = document.getElementById(scrimId);
     if (sc) sc.classList.add('show');
   }
 }
@@ -3746,9 +3749,10 @@ function closeDrawer(sel) {
   d.classList.remove('open');
   // Order drawer: drop the focus scrim (and the legacy in-flow page mode)
   // synchronously so the list returns at once.
-  if (d.id === 'order-drawer') {
-    document.body.classList.remove('ord-viewing');
-    const sc = document.getElementById('order-scrim');
+  if (d.id === 'order-drawer') document.body.classList.remove('ord-viewing');
+  const closeScrimId = { 'order-drawer': 'order-scrim', 'cu-drawer': 'cu-scrim' }[d.id];
+  if (closeScrimId) {
+    const sc = document.getElementById(closeScrimId);
     if (sc) sc.classList.remove('show');
   }
   d.setAttribute('aria-hidden', 'true');
