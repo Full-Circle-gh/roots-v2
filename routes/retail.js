@@ -1532,68 +1532,99 @@ router.get('/api/retail/products', (req, res) => {
   res.json({ success: true, data: rows, meta: { total, limit, offset, server_time_ms: now } });
 });
 
-// GET /api/retail/products/:id/image — public: stream a product's primary
-// photo as real image bytes so the shop-list payload can ship a tiny URL per
-// row instead of an inline base64 blob (see GET /api/retail/products above).
-// image_data is a data: URI — decode and send with a long cache window
-// (?v=updated_at busts it when the photo changes). Plain-URL images redirect.
-// Only published + active products are exposed. This is the public twin of
-// /api/retail-admin/products/:id/image (no auth, public cache).
-// In-process cache of resized thumbnails. Keyed per tenant + id + width + photo
-// version (?v=updated_at) so a photo change or a different size never collides.
-// Bounded LRU-ish (oldest key evicted at the cap); thumbnails are a few kB each.
+// ── Product photo streaming ────────────────────────────────────────────────
+// Photos live in store_products.image_data as a base64 data: URI. Both the
+// storefront and the staff catalogue ship a tiny URL per row and let the
+// browser pull the bytes from here, rather than inlining a blob per product.
+//
+// In-process cache of decoded/resized bytes. Keyed per scope + tenant + id +
+// width + photo version (?v=updated_at) so a photo change, a different size or
+// a different realm never collides. Bounded LRU-ish (oldest key evicted at the
+// cap); thumbnails are a few kB each.
 const THUMB_CACHE = new Map();
-const THUMB_CACHE_MAX = 800;
-router.get('/api/retail/products/:id/image', async (req, res) => {
+// Both the storefront and the staff catalogue keep entries here, and the staff
+// grid asks for two sizes (list rows 120px, cards 400px). A ~250-product
+// catalogue therefore needs ~500 slots on its own before the storefront gets a
+// look in, so the old 800 cap thrashed. Thumbnails are a few kB, so 2000 is
+// ~20 MB worst case.
+const THUMB_CACHE_MAX = 2000;
+
+// Clamp a ?w= request to a sane range. 0 means "send the original" — we only
+// ever downsize, never enlarge. Returns 0 when sharp is unavailable so the
+// endpoints degrade to full-res bytes instead of erroring.
+function thumbWidth(q) {
+  const w = parseInt(q, 10);
+  return (sharp && Number.isFinite(w)) ? Math.max(80, Math.min(1200, w)) : 0;
+}
+
+// Downscale to `w` px wide, keeping the source format. SVGs are vector — never
+// rasterize them. On any failure the original bytes come back unchanged, so a
+// bad photo still renders rather than 500ing.
+async function thumbnailBytes(buf, mime, w) {
+  if (!w || !/^image\//i.test(mime) || /svg/i.test(mime)) return { buf, mime };
+  try {
+    let pipe = sharp(buf).resize({ width: w, withoutEnlargement: true });
+    // Re-encode at a grid-thumbnail quality — mozjpeg ~q72 is visually clean on
+    // a small card and roughly halves the bytes vs sharp's default q80. PNGs
+    // keep transparency (max zlib + palette quantise); other formats pass through.
+    if (/jpe?g/i.test(mime))     pipe = pipe.jpeg({ quality: 72, mozjpeg: true });
+    else if (/png/i.test(mime))  pipe = pipe.png({ compressionLevel: 9, palette: true });
+    const out = await pipe.toBuffer({ resolveWithObject: true });
+    return { buf: out.data, mime: 'image/' + out.info.format };
+  } catch (e) { return { buf, mime }; }
+}
+
+// Shared body of the two /image endpoints. `scope` keeps the staff and public
+// caches apart: the public route only serves published products, and a staff
+// request for an unpublished photo must never seed a key the public route
+// would then hit. `gate` returns falsy to 404 before any work happens.
+async function serveProductImage(req, res, { scope, cacheControl, gate }) {
   const id = parseInt(req.params.id, 10);
   if (!Number.isFinite(id)) return res.status(400).end();
-  // Optional thumbnail width — clamp to a sane range; only ever downsizes.
-  let w = parseInt(req.query.w, 10);
-  w = (sharp && Number.isFinite(w)) ? Math.max(80, Math.min(1200, w)) : 0;
-  const ver  = String(req.query.v || '');
+  const w   = thumbWidth(req.query.w);
+  const ver = String(req.query.v || '');
   // Cache full-res reads too (not just thumbnails) — a client re-loading a
   // product grid without ?w hammers the DB + base64-decode on every request
   // otherwise, which was enough to stall the event loop under a burst (2026-07-13).
-  const ckey = `${tenantCacheKey()}|${id}|w${w || 0}|${ver}`;
+  const ckey = `${scope}|${tenantCacheKey()}|${id}|w${w || 0}|${ver}`;
   const hit = THUMB_CACHE.get(ckey);
   if (hit) {
     res.set('Content-Type', hit.mime);
-    res.set('Cache-Control', 'public, max-age=31536000, immutable');
+    res.set('Cache-Control', cacheControl);
     return res.send(hit.buf);
   }
-  const gate = tdb().prepare(
-    `SELECT id FROM store_products
-      WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
-  ).get(id);
+  if (gate && !gate(id)) return res.status(404).end();
   // Variant with no photo of its own falls back to a sibling's (resolveProductImage).
-  const data = gate && resolveProductImage(id);
+  const data = resolveProductImage(id);
   if (!data) return res.status(404).end();
   const m = /^data:([^;,]*?)(;base64)?,([\s\S]*)$/.exec(data);
   if (!m) return res.redirect(String(data));
-  const mime = m[1] || 'application/octet-stream';
-  let buf  = m[2] ? Buffer.from(m[3], 'base64') : Buffer.from(decodeURIComponent(m[3]), 'utf8');
-  let outMime = mime;
-  // Downscale on the fly when a width is requested (sharp keeps the source
-  // format). SVGs are vector — never rasterize them. On any failure fall back
-  // to the original bytes so the image still renders.
-  if (w && /^image\//i.test(mime) && !/svg/i.test(mime)) {
-    try {
-      let pipe = sharp(buf).resize({ width: w, withoutEnlargement: true });
-      // Re-encode at a grid-thumbnail quality — mozjpeg ~q72 is visually clean on
-      // a small card and roughly halves the bytes vs sharp's default q80. PNGs
-      // keep transparency (max zlib + palette quantise); other formats pass through.
-      if (/jpe?g/i.test(mime))     pipe = pipe.jpeg({ quality: 72, mozjpeg: true });
-      else if (/png/i.test(mime))  pipe = pipe.png({ compressionLevel: 9, palette: true });
-      const out = await pipe.toBuffer({ resolveWithObject: true });
-      buf = out.data;
-      outMime = 'image/' + out.info.format;
-    } catch (e) { /* keep original bytes */ }
-  }
+  const srcMime = m[1] || 'application/octet-stream';
+  const srcBuf  = m[2] ? Buffer.from(m[3], 'base64') : Buffer.from(decodeURIComponent(m[3]), 'utf8');
+  const { buf, mime } = await thumbnailBytes(srcBuf, srcMime, w);
   if (THUMB_CACHE.size >= THUMB_CACHE_MAX) THUMB_CACHE.delete(THUMB_CACHE.keys().next().value);
-  THUMB_CACHE.set(ckey, { buf, mime: outMime });
-  res.set('Content-Type', outMime);
-  res.set('Cache-Control', 'public, max-age=31536000, immutable');
+  THUMB_CACHE.set(ckey, { buf, mime });
+  res.set('Content-Type', mime);
+  res.set('Cache-Control', cacheControl);
   res.send(buf);
+}
+
+// GET /api/retail/products/:id/image — public twin: only published + active
+// products are exposed, and the bytes are publicly cacheable. These handlers
+// are async, so a rejection must be handed to the global error middleware —
+// left unhandled it only fires the process-level alert and the request hangs
+// forever instead of returning a 500.
+router.get('/api/retail/products/:id/image', async (req, res, next) => {
+  try {
+    await serveProductImage(req, res, {
+      scope: 'pub',
+      cacheControl: 'public, max-age=31536000, immutable',
+      gate: (id) => !!tdb().prepare(
+        `SELECT id FROM store_products
+          WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
+      ).get(id),
+    });
+  } catch (e) { next(e); }
 });
 
 // GET /api/retail/products/:productId/substitute-options?store_id=N
@@ -17656,18 +17687,17 @@ router.get('/api/retail-admin/products', requireRetailAdmin, (req, res) => {
 // as real image bytes so the catalogue list can ship a small URL per row
 // instead of an inline base64 blob. image_data is a data: URI: decode and send
 // with a long cache window (?v=updated_at busts it). Plain-URL images redirect.
-router.get('/api/retail-admin/products/:id/image', requireRetailAdmin, (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  // Variant with no photo of its own falls back to a sibling's (resolveProductImage).
-  const data = resolveProductImage(id);
-  if (!data) return res.status(404).end();
-  const m = /^data:([^;,]*?)(;base64)?,([\s\S]*)$/.exec(data);
-  if (!m) return res.redirect(String(data));
-  const mime = m[1] || 'application/octet-stream';
-  const buf  = m[2] ? Buffer.from(m[3], 'base64') : Buffer.from(decodeURIComponent(m[3]), 'utf8');
-  res.set('Content-Type', mime);
-  res.set('Cache-Control', 'private, max-age=31536000, immutable');
-  res.send(buf);
+// Takes ?w= like its public twin: source photos are up to 1600px / 500 kB and
+// the catalogue draws them at 44–212 px, so one page of 50 cards was pulling
+// ~5 MB of full-res originals and starving the /products JSON on the same
+// HTTP/2 connection. No published gate — staff see drafts too.
+router.get('/api/retail-admin/products/:id/image', requireRetailAdmin, async (req, res, next) => {
+  try {
+    await serveProductImage(req, res, {
+      scope: 'adm',
+      cacheControl: 'private, max-age=31536000, immutable',
+    });
+  } catch (e) { next(e); }
 });
 
 // Photo gallery for the editor — returns the ordered image list, falling back

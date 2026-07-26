@@ -174,6 +174,24 @@ function _paStatusMatch(p) {
 let PA_PAGE_SIZE = 50;
 const PA_DOCK_PAGE_SIZE = 18;
 let PA_PAGE = 1;
+
+// ── Catalogue thumbnails ───────────────────────────────────────────────────
+// Product photos are stored at full resolution (commonly 1200–1600px, up to
+// ~500 kB each) but the catalogue draws them tiny: 44px in a list row, ~212px
+// on a card. Pulling the originals meant a 50-card page fetched ~5 MB of image
+// bytes, which on one HTTP/2 connection starved the /products JSON behind it —
+// the "Loading…" wait. Ask the image endpoint for a downscaled copy instead.
+// Widths are fixed (not devicePixelRatio-derived) so every operator shares the
+// same server-side thumbnail cache entries.
+const PA_THUMB_ROW  = 120;   // list rows render at 30–46 px → crisp on retina
+const PA_THUMB_CARD = 400;   // grid cards render at 148–212 px
+function paThumb(p, w) {
+  const src = (p && (p.image_data || p.image_url)) || '';
+  // Only our own endpoint understands ?w=. An external image_url is somebody
+  // else's URL — pass it through untouched. The src already carries ?v=, so
+  // the width joins with &.
+  return /^\/api\/retail-admin\/products\/\d+\/image\?/.test(src) ? src + '&w=' + w : src;
+}
 function paSetPageSize(v) {
   PA_PAGE_SIZE = (v === 'all') ? 'all' : parseInt(v, 10);
   PA_PAGE = 1;
@@ -1708,7 +1726,7 @@ function paRender() {
       </div>` : '';
     grid.innerHTML = head + pageUnits.map((u, ui) => {
       const p = u.p;
-      const img  = p.image_data || p.image_url || '';
+      const img  = paThumb(p, PA_THUMB_ROW);
       if (overview) {
         // A variant family shows "N sizes" as a pill beside the name (below),
         // and a plain "—" in the SKU column (each size owns its own SKU).
@@ -1773,7 +1791,7 @@ function paRender() {
   grid.className = PA_VIEW === 'compact' ? 'pa-grid pa-grid-compact' : 'pa-grid';
   grid.innerHTML = pageUnits.map(u => {
     const p = u.p;
-    const img = p.image_data || p.image_url || '';
+    const img = paThumb(p, PA_THUMB_CARD);
     // A group reflects the whole family: designed if ANY size has sections,
     // and only Draft when EVERY size is unpublished (so a partly-live family
     // doesn't read as a draft).
@@ -2220,7 +2238,7 @@ async function pdOpen(id) {
   document.getElementById('pd-title').textContent = p ? (p.name_en || p.name_cn || 'Product · 产品') : 'New product · 新增产品';
   // Header identity strip: product thumbnail, SKU · shop-state subtitle, bundle pill.
   { const th = document.getElementById('pd-head-thumb');
-    if (th) { const img = p && (p.image_data || p.image_url); th.style.backgroundImage = img ? 'url("' + img + '")' : ''; }
+    if (th) { const img = p && paThumb(p, PA_THUMB_ROW); th.style.backgroundImage = img ? 'url("' + img + '")' : ''; }
     const sub = document.getElementById('pd-head-sub');
     if (sub) sub.textContent = p
       ? ((p.sku ? 'SKU ' + p.sku : cuT('No SKU', '无货号')) + ' · ' + (p.is_published === 1 ? cuT('In the shop', '已上架') : cuT('Disabled', '已下架')))
@@ -5517,7 +5535,9 @@ function paRenderPreview() {
   const colResTag  = colTagEN || colTagCN || 'From Soil to Soul';
   const colIsAuto  = !colChar;
 
-  const img = p.image_data || p.image_url || '';
+  // Phone-preview hero fills a ~375px-wide frame — 750 keeps it retina-sharp
+  // without pulling the full-resolution original.
+  const img = paThumb(p, 750);
   const heroStyle = img ? `background-image:url('${escapeAttr(img)}'); background-color:transparent;` : '';
   const blocksHtml = (window._paBlocks || []).map(_paPreviewBlockHtml).filter(Boolean).join('');
 
