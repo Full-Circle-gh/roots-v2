@@ -8,10 +8,17 @@ const api = require('./api');
 
 let _cache = null;
 let _at = 0;
+let _inflight = null;
 const TTL_MS = 60 * 1000;
 
 async function load(force = false) {
   if (!force && _cache && Date.now() - _at < TTL_MS) return _cache;
+  // Share one round-trip between concurrent callers. `_cache` is only set
+  // once the response lands, so at cold start app.js's launch fetch, the
+  // page's own load(), and popup-manager's wait would each open a separate
+  // request for the same payload. An in-flight fetch is already fresh, so
+  // this satisfies `force` too.
+  if (_inflight) return _inflight;
   // CMS draft-preview pass-through. When app.globalData.preview.token is
   // populated (set by app.js onLaunch from a preview QR scene or a
   // DevTools custom-compile path), tack `?preview_token=...` onto the
@@ -24,16 +31,23 @@ async function load(force = false) {
     const tok = app?.globalData?.preview?.token;
     if (tok) path += '?preview_token=' + encodeURIComponent(tok);
   } catch {}
-  try {
-    const data = await api.get(path);
-    _cache = data;
-    _at = Date.now();
-    return data;
-  } catch (e) {
-    // Fall back to whatever's cached, even if stale
-    if (_cache) return _cache;
-    throw e;
-  }
+  // then/catch rather than await + finally, so `_inflight` is cleared on both
+  // paths without relying on Promise.prototype.finally in older base libraries.
+  const p = api.get(path)
+    .then((data) => {
+      _cache = data;
+      _at = Date.now();
+      _inflight = null;
+      return data;
+    })
+    .catch((e) => {
+      _inflight = null;
+      // Fall back to whatever's cached, even if stale
+      if (_cache) return _cache;
+      throw e;
+    });
+  _inflight = p;
+  return p;
 }
 
 function layout(page) {

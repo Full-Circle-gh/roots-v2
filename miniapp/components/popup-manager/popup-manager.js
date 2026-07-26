@@ -7,6 +7,7 @@
 // Picks the first eligible popup and schedules it per its trigger.
 
 const lang = require('../../utils/lang');
+const config = require('../../utils/config');
 const { BASE } = require('../../utils/api');
 
 function absUrl(u) {
@@ -73,21 +74,43 @@ Component({
       const app = getApp();
       if (!app.globalData.sessionStartMs) app.globalData.sessionStartMs = nowMs();
       this._timer = null;
+      this._visible = false;
+      this._waitedForConfig = false;
     },
     detached() {
+      this._visible = false;
       if (this._timer) { clearTimeout(this._timer); this._timer = null; }
     },
   },
   pageLifetimes: {
-    show() { this.evaluate(); },
+    show() {
+      this._visible = true;
+      this._waitedForConfig = false;
+      this.evaluate();
+    },
     hide() {
+      this._visible = false;
       if (this._timer) { clearTimeout(this._timer); this._timer = null; }
     },
   },
 
   methods: {
-    evaluate() {
-      const cfg = getApp().globalData.config || {};
+    evaluate(cfgOverride) {
+      const cfg = cfgOverride || getApp().globalData.config || {};
+
+      // The app loads config fire-and-forget (app.js onLaunch), so on a cold
+      // start the launch page shows before the round-trip lands and this reads
+      // an empty object. Nothing re-runs evaluate() once the config arrives, so
+      // without this the pop-up is skipped on exactly the visit it targets.
+      // Wait for the shared (60s-cached) load once per show, then re-evaluate.
+      if (!cfg.popups && !this._waitedForConfig) {
+        this._waitedForConfig = true;
+        config.load()
+          .then((loaded) => { if (this._visible && loaded) this.evaluate(loaded); })
+          .catch(() => {});
+        return;
+      }
+
       const list = Array.isArray(cfg.popups?.list) ? cfg.popups.list : [];
       const page = this.properties.page || '';
       const eligible = list
