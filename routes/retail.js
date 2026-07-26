@@ -13593,8 +13593,19 @@ router.get('/api/retail-admin/customers/:id', requireRetailAdmin, (req, res) => 
 
   const topup = tdb().prepare(
     `SELECT
-       COALESCE(SUM(CASE WHEN status='success' AND COALESCE(payment_method,'') != 'admin_adjust' THEN amount       ELSE 0 END), 0) AS topup_total,
-       COALESCE(SUM(CASE WHEN status='success' AND COALESCE(payment_method,'') != 'admin_adjust' THEN bonus_points ELSE 0 END), 0) AS bonus_pts_total,
+       -- 🔴 ALLOWLIST, not an exclusion list. retail_topup_transactions is an
+       -- overloaded ledger: besides real gateway top-ups it also holds
+       -- 'order_redeem' (a NEGATIVE wallet-spend row), 'refund_reverse'
+       -- clawbacks and 'admin_adjust' operator credits. This used to exclude
+       -- admin_adjust ONLY, so wallet SPENDING was summed as money coming in
+       -- and the figure could go negative — customer 233 read "¥-0.49 topped
+       -- up" from -38.80 + 23.11 + 15.20.
+       -- Naming what counts is the same rule the signup-channel derivation
+       -- follows: classify by inclusion, because a denylist silently accepts
+       -- every method invented after it was written. Matches
+       -- topupCashReceived() above, which already gets this right.
+       COALESCE(SUM(CASE WHEN status='success' AND payment_method IN ('wechat','alipay') THEN amount       ELSE 0 END), 0) AS topup_total,
+       COALESCE(SUM(CASE WHEN status='success' AND payment_method IN ('wechat','alipay') THEN bonus_points ELSE 0 END), 0) AS bonus_pts_total,
        COALESCE(SUM(CASE WHEN status='success' AND payment_method='admin_adjust'                  THEN amount       ELSE 0 END), 0) AS admin_adjust_total
        FROM retail_topup_transactions WHERE customer_id = ?`
   ).get(id);
@@ -13841,8 +13852,19 @@ router.patch('/api/retail-admin/customers/:id', requireRetailAdmin, express.json
     // this endpoint's.
     //
     // The 4 groups as at 2026-07-26, so the next survey doesn't re-chase them:
-    //   15360475622 → ids 76,224,239,332,352,360,382,721 — EIGHT records, the
-    //                 one that actually needs a human.
+    //   15360475622 → ids 76,224,239,332,352,360,382,721 — EIGHT records, and
+    //                 ALSO NOT a real duplicate: all eight are test accounts
+    //                 from ONE Android emulator (every auth token reads
+    //                 "AOSP on Pixel"), created on seven days across six weeks.
+    //                 All have zero orders, zero spend, zero addresses and no
+    //                 email; six carry raw `wxid_*` nicknames (6 of only 10 in
+    //                 the whole DB) and one is literally `wx_test11111`. Each
+    //                 earned exactly 1 point from a poll_vote and never
+    //                 returned — together they are 7 of the 39 poll votes on
+    //                 record. Leave them: deleting touches poll votes and a
+    //                 (zero-value) migration credit for no benefit.
+    //                 ⚠ A survey that finds this cluster and chases it is
+    //                 chasing a test. Investigated 2026-07-26.
     //   18613159912 → ids 57,64,233 — NOT a real duplicate: 233 is the `asher`
     //                 test account and 57/64 are the two `_reset_` archive rows
     //                 from that same test. Test data; leave it.

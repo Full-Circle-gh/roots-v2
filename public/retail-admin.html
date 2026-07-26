@@ -2693,7 +2693,16 @@
       #cu-table td.cul-num .cur { color: var(--text-2); font-weight: 400; margin-right: 1px; }
       #cu-table td.cul-last { color: var(--text-1); font-size: 13px; white-space: nowrap; }
       #cu-table td.cul-last.is-never { color: var(--text-2); }
-      #cu-table td.cul-chev { text-align: right; color: var(--text-2); opacity: .5; font-size: 18px; line-height: 1; }
+      /* 🔴 THE OPACITY BELONGS TO THE GLYPH, NOT THE CELL. It was on the td,
+         and `opacity` on a td makes the WHOLE cell translucent — background
+         included. On an ordinary row that is invisible (white on white), but on
+         an unopened row it halved the --td-unseen tint, so the surface appeared
+         to stop before the last column. The mockup puts .chev on a SPAN inside
+         the cell for exactly this reason; dropping the span was the regression.
+         The td now carries alignment only, so the row's surface and its 600ms
+         settle reach every cell edge to edge. */
+      #cu-table td.cul-chev { text-align: right; }
+      #cu-table .cul-chevg { color: var(--text-2); opacity: .5; font-size: 18px; line-height: 1; }
       #cu-table td.muted[colspan] { padding: 0; }
 
       /* A customer who signed in but never set a name. Reads "No name" — the

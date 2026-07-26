@@ -623,7 +623,7 @@ async function cuLoad() {
         <td class="numeric cul-num ${points ? '' : 'is-zero'}" data-no-i18n>${cuNum(points)}</td>
         <td class="numeric cul-num ${wallet ? '' : 'is-zero'}" data-no-i18n>${cuMoney(wallet)}</td>
         <td class="cul-last${r.last_login_at ? '' : ' is-never'}" data-no-i18n>${escapeHtml(cuFmtSeen(r.last_login_at))}</td>
-        <td class="cul-chev" data-no-i18n>›</td>
+        <td class="cul-chev" data-no-i18n><span class="cul-chevg">›</span></td>
       </tr>`;
     }).join('');
   }
@@ -1176,7 +1176,14 @@ function cuRenderDetail() {
     }
     ptsSub = escapeHtml(cuT(en.join(' · '), cn.join(' · ')))
       + ((pts.expiring_30d || 0) > 0
-        ? ` · <span class="warn">${escapeHtml(cuT(pts.expiring_30d + ' expiring soon', '临期 ' + pts.expiring_30d))}</span>`
+        // "all 6" vs "6": the code already knows the difference — the clamp
+        // computes both numbers side by side — it just used to print them the
+        // same way, so a customer about to lose their WHOLE balance read
+        // identically to one losing 2 of 60. Still a count, never a date.
+        ? ` · <span class="warn">${escapeHtml(
+            Number(pts.expiring_30d) >= ptsBal && ptsBal > 0
+              ? cuT('all ' + cuNum(pts.expiring_30d) + ' expiring soon', '全部 ' + cuNum(pts.expiring_30d) + ' 分即将过期')
+              : cuNum(pts.expiring_30d) + ' ' + cuT('expiring soon', '分即将过期'))}</span>`
         : ` · ${escapeHtml(cuT('none expiring soon', '暂无临期'))}`);
   }
 
