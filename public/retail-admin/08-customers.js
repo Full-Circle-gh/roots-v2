@@ -822,7 +822,16 @@ function cuRenderDetail() {
   const vch = (s.vouchers || {});
   const rev = (s.reviews  || {});
   const sessions = Number(s.active_sessions) || 0;
-  const yuan = v => '¥' + Number(v || 0).toFixed(2);
+  // Money, plain text: comma-grouped, and a trailing .00 dropped because a
+  // whole amount doesn't need two zeros to prove it's money — real decimals
+  // still show. "¥1,690.68", "¥1,430", never "¥1690.68" or "¥1430.00".
+  const yuan = v => {
+    const n = Number(v || 0);
+    const whole = Math.round(n * 100) % 100 === 0;
+    return '¥' + n.toLocaleString('en-US', whole
+      ? { maximumFractionDigits: 0 }
+      : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  };
 
   // Drawer action bar — two everyday buttons (Message, Edit profile). The
   // rare/deliberate actions (Sign out all devices, Block) fold into a More ▾
@@ -956,8 +965,15 @@ function cuRenderDetail() {
   let ordSub;
   if (!ordersN) ordSub = escapeHtml(cuT('no orders yet', '暂无订单'));
   else {
-    const en = [`${yuan(ord.revenue)} lifetime`, `AOV ${yuan(ord.aov)}`];
-    const cn = [`累计 ${yuan(ord.revenue)}`, `客单价 ${yuan(ord.aov)}`];
+    // ONE money measure, and it is called "ordered" — the figure sums order
+    // SUBTOTAL (build 1 aligned it with the list's Ordered ¥ column). Never
+    // "lifetime", "paid", "cash", "collected" or "spent": each of those names
+    // a different measure, and this page shows only one.
+    const en = [`${yuan(ord.revenue)} ordered`];
+    const cn = [`已下单 ${yuan(ord.revenue)}`];
+    // AOV is the same number as the order on a one-order customer — printing
+    // both invites the reader to compare two identical figures for meaning.
+    if (ordersN > 1) { en.push(`AOV ${yuan(ord.aov)}`); cn.push(`客单价 ${yuan(ord.aov)}`); }
     if ((ord.refunded_count || 0) > 0)  { en.push(`${ord.refunded_count} refunded`);  cn.push(`退款 ${ord.refunded_count}`); }
     if ((ord.cancelled_count || 0) > 0) { en.push(`${ord.cancelled_count} cancelled`); cn.push(`取消 ${ord.cancelled_count}`); }
     ordSub = escapeHtml(cuT(en.join(' · '), cn.join(' · ')));
@@ -1012,7 +1028,8 @@ function cuRenderDetail() {
     `近 12 个月 ${yr} 单 · ${yuan(yrRev)}`));
 
   // Fold hints — say what's inside before it's opened.
-  const diagErrs = (d.diagnostics && d.diagnostics.error_count_7d) || 0;
+  const diagErrs   = (d.diagnostics && d.diagnostics.error_count_7d) || 0;
+  const diagUnavail = !!(d.diagnostics && d.diagnostics.unavailable);
   const affTotal = Number((d.affiliate && d.affiliate.summary && d.affiliate.summary.total) || 0);
   const noneHint = escapeHtml(cuT('none', '无'));
   const chevron = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>';
@@ -1107,8 +1124,16 @@ function cuRenderDetail() {
          the customer's app reported errors. -->
     <div class="cux-folds">
       <details class="cux-fold">
+        <!-- The summary states the customer's TRUE order count, not how many
+             rows this fold happens to hold. recent_orders is LIMIT 10, so a
+             48-order customer used to read "10" here — a number that looked
+             like an answer and wasn't. stats.orders.orders_count is already
+             on the payload; the list below is still the last 10, and the
+             "View all N" link at its foot says so. -->
         <summary>${chevron}<span class="t">Recent orders · 近期订单</span>
-          <span class="hint" data-no-i18n>${d.recent_orders.length || noneHint}</span></summary>
+          <span class="hint" data-no-i18n>${ordersN
+            ? escapeHtml(cuT(cuNum(ordersN) + (ordersN === 1 ? ' order' : ' orders'), cuNum(ordersN) + ' 单'))
+            : noneHint}</span></summary>
         <div class="cux-fold-body">
           <div class="table-wrap">
             <table>
@@ -1121,8 +1146,14 @@ function cuRenderDetail() {
       </details>
 
       <details class="cux-fold">
+        <!-- Was recent_points.length — capped at 20 by the query and labelled
+             "earned", so it was neither the row count nor the earned total.
+             stats.points.earned is the real lifetime figure and is already on
+             the payload. -->
         <summary>${chevron}<span class="t">Points ledger · 积分明细</span>
-          <span class="hint" data-no-i18n>${d.recent_points.length || noneHint}</span></summary>
+          <span class="hint" data-no-i18n>${(pts.earned || 0)
+            ? escapeHtml(cuT(cuNum(pts.earned) + ' earned', '累计获得 ' + cuNum(pts.earned)))
+            : escapeHtml(cuT('no activity', '暂无变动'))}</span></summary>
         <div class="cux-fold-body">
           <div class="table-wrap">
             <table>
@@ -1146,12 +1177,19 @@ function cuRenderDetail() {
         </div>
       </details>
 
+      <!-- Three states, not two. "no errors in 7 days" is an ALL-CLEAR and is
+           only earned when the query actually ran and returned zero. When the
+           read failed (diagnostics.unavailable) the summary says so plainly —
+           a failure that reads as good news is worse than no news. -->
       <details class="cux-fold"${diagErrs > 0 ? ' open' : ''}>
         <summary>${chevron}<span class="t">Diagnostics · 诊断</span>
-          <span class="hint${diagErrs > 0 ? ' warn' : ' ok'}" data-no-i18n>${diagErrs > 0
-            ? escapeHtml(cuT(diagErrs + ' errors in 7 days', '近 7 天报错 ' + diagErrs))
+          <span class="hint${diagUnavail ? ' warn' : (diagErrs > 0 ? ' warn' : ' ok')}" data-no-i18n>${
+            diagUnavail ? escapeHtml(cuT("couldn't be read", '无法读取'))
+            : diagErrs > 0 ? escapeHtml(cuT(diagErrs + ' errors in 7 days', '近 7 天报错 ' + diagErrs))
             : escapeHtml(cuT('no errors in 7 days', '近 7 天无报错'))}</span></summary>
-        <div class="cux-fold-body">${renderDiagnosticsBlock(d.diagnostics)}</div>
+        <div class="cux-fold-body">${diagUnavail
+          ? `<div class="muted">${escapeHtml(cuT("Diagnostics couldn't be read for this customer. This is not an all-clear — the check itself failed.", '无法读取该顾客的诊断数据。这不代表一切正常 — 是检查本身失败了。'))}</div>`
+          : renderDiagnosticsBlock(d.diagnostics)}</div>
       </details>
 
       <details class="cux-fold">

@@ -13676,7 +13676,11 @@ router.get('/api/retail-admin/customers/:id', requireRetailAdmin, (req, res) => 
   // the last events (errors first-class) for "it's broken" triage. error_count
   // (last 7d) is a quick at-a-glance health signal. Table is self-healing
   // across tenants but guard anyway so an older tenant DB never 500s here.
-  let deviceLastSeen = null, recentClientLogs = [], clientErrors7d = 0;
+  // diagUnavailable distinguishes "the query ran and found no errors" from
+  // "the query could not run at all". Without it the catch below returns the
+  // same zeros a healthy customer produces, and the drawer renders a failure
+  // as the reassuring "no errors in 7 days" — an all-clear nobody checked.
+  let deviceLastSeen = null, recentClientLogs = [], clientErrors7d = 0, diagUnavailable = false;
   try {
     deviceLastSeen = tdb().prepare(
       `SELECT app_version, platform, device_model, system, wx_version, lib_version, created_at
@@ -13696,7 +13700,12 @@ router.get('/api/retail-admin/customers/:id', requireRetailAdmin, (req, res) => 
         WHERE customer_id = ? AND kind = 'error'
           AND created_at >= datetime('now','-7 days')`
     ).get(id).n;
-  } catch (e) { /* table absent on a stale tenant DB — diagnostics just empty */ }
+  } catch (e) {
+    // Table absent on a stale tenant DB, or the read failed. Say so — do NOT
+    // let it fall through as an all-clear.
+    diagUnavailable = true;
+    console.warn('[retail-admin/customer diagnostics] unavailable:', e.message);
+  }
 
   res.json({
     success: true,
@@ -13726,6 +13735,7 @@ router.get('/api/retail-admin/customers/:id', requireRetailAdmin, (req, res) => 
         device_last_seen: deviceLastSeen,
         recent_logs:      recentClientLogs,
         error_count_7d:   clientErrors7d,
+        unavailable:      diagUnavailable,   // true = the read failed, NOT "all clear"
       }
     }
   });
