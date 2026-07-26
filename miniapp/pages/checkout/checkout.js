@@ -134,6 +134,7 @@ Page({
     // Day-only mode (Panyu-style) — three radio options below the address.
     selectedSlotKind: '',        // 'express' | 'today' | 'schedule'
     hasTodayOption: false,       // shown only when zone has same-day surcharge AND today is in slots
+    sameDayLost: false,          // true → customer had picked same-day but it's no longer on offer; say so instead of silently downgrading
     expressLabel: '',            // localized headline for the default option
     expressSub: '',              // localized sub-line
     // Fulfillment routing — when the nearest store is short of stock and a
@@ -1538,6 +1539,66 @@ Page({
     return [...byDate.values()];
   },
 
+  // ── Same-day intent memory ──────────────────────────────────────────────
+  // The day-only picker (Panyu-style) defaults to Express — the SLOWER option.
+  // `deliverySlotId` lives only in page data, so leaving checkout and coming
+  // back (bounce to the cart to sort out a shortage, then re-enter) lands on a
+  // fresh page instance with an empty pick, and applyDayOnlyDefaults quietly
+  // re-defaults to Express. A customer who had deliberately chosen "Get it
+  // today (+¥N)" lost it with nothing on screen to say so, and the order then
+  // shipped as a next-day courier parcel — which server-side also re-routes it
+  // to the out-of-city warehouse (routing_reason 'scheduled_ship_district').
+  //
+  // We remember the KIND ('today' | 'express' | 'schedule'), never the slot_id:
+  // the id is a bare date that goes stale at midnight, so re-resolving against
+  // the chip the server is offering right now means we can never book a dead
+  // day or re-apply a surcharge the zone has since stopped charging.
+  //
+  // Deliberately short-lived — same calendar day, one-hour window, cleared the
+  // moment an order is created. Restoring a FASTER, PAID option is only honest
+  // while the customer still remembers choosing it; silently adding a same-day
+  // surcharge to some later order would be a worse bug than the one this fixes.
+  _slotIntentKey: 'checkout_slot_intent',
+  _slotIntentMaxAgeMs: 60 * 60 * 1000,
+
+  // Device-local date. The server stamps its chips in its own (UTC+8) clock;
+  // this only has to scope the memory to "today", and the chip is always
+  // re-resolved against the live quote, so a midnight edge can't mis-book.
+  localDateIso() {
+    const t = new Date();
+    const pad = n => String(n).padStart(2, '0');
+    return `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
+  },
+
+  rememberSlotIntent(kind) {
+    if (!kind) return;
+    try {
+      wx.setStorageSync(this._slotIntentKey, {
+        kind, date_iso: this.localDateIso(), at: Date.now(),
+      });
+    } catch {}
+  },
+
+  readSlotIntent() {
+    let saved = null;
+    try { saved = wx.getStorageSync(this._slotIntentKey); } catch { return ''; }
+    if (!saved || !saved.kind) return '';
+    if (saved.date_iso !== this.localDateIso()) return '';
+    if (!(Date.now() - Number(saved.at) < this._slotIntentMaxAgeMs)) return '';
+    return saved.kind;
+  },
+
+  clearSlotIntent() {
+    try { wx.removeStorageSync(this._slotIntentKey); } catch {}
+  },
+
+  // Customer tapped a slot option — record what they actually want and drop
+  // any "same-day is gone" notice, since they've now chosen with it on screen.
+  noteSlotPick(kind) {
+    this.rememberSlotIntent(kind);
+    if (this.data.sameDayLost) this.setData({ sameDayLost: false });
+  },
+
   // Day-only mode setup — runs after each /quote when scheduling.mode = 'day_only'.
   // Computes which radio options to show, the picker's date range, and a
   // default selection (the earliest non-surcharge slot, i.e. tomorrow).
@@ -1549,7 +1610,9 @@ Page({
     // synthesise the Express slot from schedule.min_date locally so the
     // radio still has a label and a working tap target.
     if (!sch || sch.mode !== 'day_only') {
-      this.setData({ hasTodayOption: false, scheduleMinDate: '', scheduleMaxDate: '', expressLabel: '', expressSub: '' });
+      // Drop the same-day notice too — it belongs to the day-only picker, and
+      // switching to a time-slot zone (address change) makes it meaningless.
+      this.setData({ hasTodayOption: false, sameDayLost: false, scheduleMinDate: '', scheduleMaxDate: '', expressLabel: '', expressSub: '' });
       return;
     }
     let slots = Array.isArray(sch.slots) ? sch.slots : [];
@@ -1566,7 +1629,7 @@ Page({
       }];
     }
     if (!slots.length) {
-      this.setData({ hasTodayOption: false, scheduleMinDate: '', scheduleMaxDate: '', expressLabel: '', expressSub: '' });
+      this.setData({ hasTodayOption: false, sameDayLost: false, scheduleMinDate: '', scheduleMaxDate: '', expressLabel: '', expressSub: '' });
       return;
     }
     const surcharge = Number(sch.same_day_surcharge) || 0;
@@ -1600,10 +1663,25 @@ Page({
       expressSub,
     });
 
-    // Auto-pick the Express default on first land OR if the previous pick
-    // is no longer in the slot list (zone changed, day rolled over).
-    if (forceDefault && expressSlot) {
-      this.applyDayOnlySlot(expressSlot, 'express');
+    // Restore the customer's own pick BEFORE falling back to the default.
+    // forceDefault fires on a fresh land (nothing picked yet) and whenever the
+    // previous pick left the slot list. Dropping straight onto Express here is
+    // what silently cancelled paid same-day picks — so check what they wanted
+    // first, and when same-day was wanted but is no longer on offer (past the
+    // cutoff, kitchen closed, zone changed), SAY so rather than quietly
+    // downgrading them to a next-day parcel.
+    if (forceDefault) {
+      const wanted = this.data.selectedSlotKind || this.readSlotIntent();
+      // Mirror pickToday's source so we can only ever re-select the very chip
+      // the picker is rendering — hasTodayOption gates on a real surcharge.
+      const todayChip = sch.today_day_chip || todaySlot;
+      if (wanted === 'today' && hasTodayOption && todayChip) {
+        this.setData({ sameDayLost: false });
+        this.applyDayOnlySlot(todayChip, 'today');
+        return;
+      }
+      if (wanted === 'today') this.setData({ sameDayLost: true });
+      if (expressSlot) this.applyDayOnlySlot(expressSlot, 'express');
     }
   },
 
@@ -1628,6 +1706,7 @@ Page({
   // schedule.min_date slot for older servers that don't return express_slot.
   // Either way it must NEVER carry the Today chip's same-day surcharge.
   pickExpress() {
+    this.noteSlotPick('express');
     const sch = this.data.scheduling || {};
     const es = this.prettyExpressSlot();
     if (es) {
@@ -1656,7 +1735,9 @@ Page({
   pickToday() {
     const chip = this.data.scheduling?.today_day_chip
               || (this.data.scheduling?.slots || []).find(x => x.is_same_day);
-    if (chip) this.applyDayOnlySlot(chip, 'today');
+    if (!chip) return;
+    this.noteSlotPick('today');
+    this.applyDayOnlySlot(chip, 'today');
   },
 
   // Customer picked a date in the <picker mode="date"> calendar wheel.
@@ -1675,6 +1756,7 @@ Page({
       });
       return;
     }
+    this.noteSlotPick('schedule');
     // Pretty label for the chosen date — matches the bilingual format
     // used elsewhere on the checkout page.
     const [y, m, d] = picked.split('-').map(Number);
@@ -2740,6 +2822,10 @@ Page({
       }
       const orderId = order?.id || order?.data?.id;
       if (!orderId) throw new Error(this.data.lang === 'cn' ? '订单创建失败' : 'Could not create order');
+      // The slot is committed to the order now, so the remembered intent has
+      // done its job. Drop it here (not on the success redirect) so an
+      // abandoned payment can't carry a same-day surcharge into the next cart.
+      this.clearSlotIntent();
 
       // 3. Initiate payment
       console.log('[checkout] POST /api/retail/payment/create →', { order_id: orderId });

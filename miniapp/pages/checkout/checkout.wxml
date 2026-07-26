@@ -305,6 +305,14 @@
            we'd show an unlabeled box with just a radio dot (older clients
            hit this when slots was empty; see applyDayOnlyDefaults). -->
       <block wx:if="{{scheduling.mode === 'day_only'}}">
+        <!-- Same-day was picked but is no longer on offer. Never let that
+             downgrade happen quietly — the customer chose (and expected to
+             pay for) today, and would otherwise only find out on delivery. -->
+        <view wx:if="{{sameDayLost}}" class="slot-lost">
+          <view class="slot-lost__title f-bear">{{lang === 'cn' ? '今日送达已不可选' : 'Same-day is no longer available'}}</view>
+          <view class="slot-lost__sub">{{lang === 'cn' ? '订单将按下方所选日期送达。' : 'Your order will arrive on the date selected below.'}}</view>
+        </view>
+
         <view wx:if="{{expressLabel}}" class="slot-option {{selectedSlotKind === 'express' ? 'on' : ''}}" bindtap="pickExpress">
           <view class="opt-body">
             <view class="opt-label f-bear">{{expressLabel}}</view>

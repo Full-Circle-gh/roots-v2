@@ -476,6 +476,24 @@
   background: transparent;
 }
 .slot-option.on { background: rgba(54, 83, 41, 0.06); }
+/* "Same-day is no longer available" — sits directly above the day-only radios
+   so the customer reads why the selection changed before picking again.
+   Lime-tinted like .bind-empty (a state notice, not an error), and it clears
+   itself the moment they tap any option. */
+.slot-lost {
+  border: 2rpx solid var(--ink);
+  background: rgba(204, 217, 0, 0.14);
+  padding: 20rpx 24rpx;
+  margin-top: 14rpx;
+}
+.slot-lost__title { font-size: calc(26rpx * var(--font-scale)); line-height: 1.25; color: var(--ink); }
+.slot-lost__sub {
+  font-size: calc(22rpx * var(--font-scale));
+  line-height: 1.4;
+  margin-top: 6rpx;
+  color: var(--ink);
+  opacity: 0.8;
+}
 .slot-option .opt-body { flex: 1; min-width: 0; }
 .slot-option .opt-label { font-size: calc(28rpx * var(--font-scale)); line-height: 1.25; }
 .slot-option .opt-sub { font-size: calc(22rpx * var(--font-scale)); margin-top: 4rpx; line-height: 1.35; }
