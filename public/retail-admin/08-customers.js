@@ -442,24 +442,11 @@ function cuKpisNotLoaded() {
   const w = document.getElementById('cu-kpi-new-word'); if (w) w.textContent = cuT('not loaded', '未加载');
 }
 
-// The band gives up its top corners the moment it pins, so the card's corner
-// and the band's corner are never both drawn. Watches the card, not the
-// window, so it stays correct when the rail folds or the strip reflows.
-let CU_PIN_BOUND = false;
-function cuPinWatch() {
-  const card = document.querySelector('#tab-customers .list-card');
-  if (!card) return;
-  const paint = () => {
-    // 56px = the fixed topbar the band pins under.
-    card.classList.toggle('is-pinned', card.getBoundingClientRect().top < 56);
-  };
-  if (!CU_PIN_BOUND) {
-    CU_PIN_BOUND = true;
-    window.addEventListener('scroll', paint, { passive: true });
-    window.addEventListener('resize', paint, { passive: true });
-  }
-  paint();
-}
+// No scroll watcher for the header's corners. The card clips with clip-path,
+// so the band never draws a corner and there is no pinned state to track —
+// the whole thing is CSS. (There was a cuPinWatch() here that toggled an
+// .is-pinned class on scroll; it worked, but it was a moving part standing in
+// for a static rule.)
 
 async function cuLoad() {
   const params = new URLSearchParams({
@@ -547,7 +534,6 @@ async function cuLoad() {
       </tr>`;
     }).join('');
   }
-  cuPinWatch();
   // Clamp: blocking a customer (or toggling "include blocked") can shrink the
   // roster under the operator's feet and leave CU_PAGE past the last page.
   // Snap back and refetch once rather than painting an empty table.

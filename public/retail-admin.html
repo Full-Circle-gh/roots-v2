@@ -2349,19 +2349,30 @@
          paper, border, radius and shadow, and .table-wrap is collapsed to a
          bare pass-through so the two don't each draw a border.
 
-         🔴 NEITHER MAY CLIP. `overflow:hidden` (or overflow-x:auto) on the
-         card or the wrap makes that element the containing block for the
-         sticky band, which would then pin to the card and scroll away with
-         it. The brief asked for "let the card clip" AND "the band pins below
-         the topbar"; those two cannot both hold, and pinning is the one the
-         operator feels. So the band draws its own top corners instead — see
-         the derivation on .cul-band-* below. The page scrolls horizontally
-         instead of the card (min-width, not an inner scroller).
+         🔴 THE CARD CLIPS WITH clip-path, DELIBERATELY NOT overflow:hidden.
+         Both round the corners; only one of them is safe here. `overflow`
+         (hidden, auto, or even overflow-x:auto alone, which computes the
+         other axis to auto) makes the card a SCROLL CONTAINER, and a sticky
+         header pins to its nearest scroll container. The band would then park
+         itself 56px down from the card's own top — sitting squarely on row
+         one. That exact bug shipped once already. `clip-path` clips without
+         creating a scroll container, so the band still reaches the page
+         scroller and pins under the topbar as intended.
+         ⚠ Anyone "simplifying" this to overflow:hidden silently brings the
+         bug back. It is not a style choice.
 
-         The pager sits below the table inside the same card, so IT owns the
-         bottom corners; without the card's clip, a square pager would poke
-         out through the rounded bottom edge. */
-      #tab-customers .list-card { overflow: visible; }
+         Corner strategy is Orders' (`Orders (A) - Build.html`): the card
+         clips, so the header cells carry NO radius at all and there is no
+         pinned-state toggle to keep in sync. "Only one element draws a
+         corner" holds literally, by construction rather than by timing. The
+         card also clips the pager's bottom corners for free. */
+      #tab-customers .list-card {
+        overflow: visible;
+        clip-path: inset(0 round 14px);
+      }
+      /* Phones drop the card chrome entirely (see retail-admin.css's
+         max-width:720px block), so there are no corners left to clip. */
+      @media (max-width: 720px) { #tab-customers .list-card { clip-path: none; } }
       /* 🔴 MUST match retail-admin.css's `#tab-customers .list-card >
          .table-wrap` selector, which sets overflow-x:auto at (1,2,0). A plain
          `#tab-customers .table-wrap` here is (1,1,0) and LOSES — that shipped
@@ -2380,36 +2391,44 @@
          plus the colgroup already guarantees what the floor was protecting: the
          seven numeric columns keep their pixel widths and never cramp, and the
          slack comes out of Customer, whose name ellipses by design. */
-      #tab-customers #cu-pager { border-radius: 0 0 13px 13px; overflow: hidden; }
       /* table-layout:fixed + the colgroup above give every column a
          deterministic share instead of the browser's auto-guess, which used
          to hand almost all the slack to Customer and leave the numeric
          columns cramped against each other (same fix as #orders-table). */
       #cu-table { border-collapse: separate; border-spacing: 0; width: 100%; background: transparent; table-layout: fixed; }
-      /* The band. Deeper than the rows on purpose (--td-header), Ink labels
-         rather than Graphite, and one size smaller than the 14px row text —
-         at 13px the labels read as heavy as the data and the band looked like
-         one more row. 12px + 5px/12px padding + the deeper colour are one
-         package; changing any of them alone re-opens that. */
+      /* 🔴 THE BAND IS A PRODUCT-WIDE COMPONENT AND ORDERS IS ITS ANCHOR.
+         It was invented in the Orders mockup — that is where --td-header came
+         from — and every value below is copied from `Orders (A) - Build.html`
+         property for property: 13px/500 in --td-text on --td-header, padding
+         10px 12px, no set height, 1px --td-border along the bottom.
+         15px was tried there and rejected for reading as another row rather
+         than a header; 13px is the value that was kept.
+         The Customers mockup drifted to 12px with 5px vertical padding. That
+         drift is NOT a later decision — it shipped here once and was reverted.
+         Do not re-tighten this band to fit one page, and do not average the
+         two: if this needs to change, it changes in Orders first and every
+         table follows.
+         Only `top` is local — the Orders mockup pins at top:0 inside its own
+         inner scroller; this product scrolls the window under a fixed 56px
+         topbar, so the band pins there instead. */
       #cu-table thead th {
-        position: sticky; top: 56px; z-index: 3;
+        position: sticky; top: 56px; z-index: 5;
         background: var(--td-header); color: var(--td-text);
-        font-family: var(--f-sans); font-weight: 500; font-size: 12px; line-height: 1.2;
+        font-family: var(--f-sans); font-weight: 500; font-size: 13px;
         letter-spacing: 0; text-transform: none; text-align: left;
-        padding: 5px 12px; border-bottom: 1px solid var(--td-border); white-space: nowrap;
+        padding: 10px 12px; border-bottom: 1px solid var(--td-border); white-space: nowrap;
       }
-      /* 🔴 13px = the card's 14px radius MINUS its 1px border — the inner edge
-         of that border, DERIVED, never matched by eye. If the card's radius or
-         border width changes, this number changes with it. The Orders pass
-         burned three rounds nudging radii by eye; do not re-open that by
-         "correcting" this to some other value.
-         The band gives its corners up the instant it pins, so only ONE element
-         ever draws a corner at a time — that is the rule being honoured here,
-         not broken. */
-      #cu-table thead th:first-child { border-top-left-radius: 13px; }
-      #cu-table thead th:last-child  { border-top-right-radius: 13px; }
-      #tab-customers .list-card.is-pinned #cu-table thead th:first-child,
-      #tab-customers .list-card.is-pinned #cu-table thead th:last-child { border-top-left-radius: 0; border-top-right-radius: 0; }
+      /* 🔴 NO RADIUS ON THE HEADER CELLS — the card's clip-path already rounds
+         them, so the band must not draw a corner of its own. This is Orders'
+         strategy (`.tblcard .tbl thead th{border-radius:0}`) and it is why
+         there is no pinned-state class to keep in sync: "only one element
+         draws a corner" holds by construction, not by timing.
+         An earlier pass here gave the band a 13px radius (14px card minus its
+         1px border) and flipped it to 0 on a scroll listener. It worked, but
+         it was two elements agreeing about a corner — the arrangement that
+         cost the Orders pass three rounds. Do not reintroduce it. */
+      #cu-table thead th:first-child,
+      #cu-table thead th:last-child { border-radius: 0; }
 
       /* Tier / Channel dropdowns. A set filter turns its OWN button into the
          applied pill — Ink fill, the value, a hairline divider, then ×. No
