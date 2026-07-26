@@ -2295,7 +2295,13 @@
       }
       /* Chips are their own row above the filter bar now, not a tail on it. */
       #tab-customers .cul-segs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+      /* The chip is a flex row, so the gap between label and count is the
+         chip's OWN gap — not a margin on the count, and not the whitespace
+         between them in the markup. A hidden count then contributes nothing:
+         flex gap is not applied around a display:none child, so an empty chip
+         ends cleanly at its label instead of carrying a phantom space. */
       #tab-customers .cul-seg {
+        display: inline-flex; align-items: center; gap: 7px;
         font: 500 12.5px var(--f-sans); color: var(--text-2);
         background: var(--bg-pane); border: 1px solid var(--line);
         border-radius: 999px; padding: 6px 14px; cursor: pointer;
@@ -2307,10 +2313,10 @@
          Normal — a filled grey pill with light text, on the white chip.
          Active — the chip inverts to Ink, so the pill inverts too: light pill,
                   dark text, still legible against the fill.
-         Attention (Blocked) — no pill at all: an amber dot then the figure in
-                  amber. A pill would make it look like the same kind of count. */
-      #tab-customers .cul-seg .ct { margin-left: 7px; font-variant-numeric: tabular-nums; }
-      #tab-customers .cul-seg .ct:empty { display: none; margin-left: 0; }
+         Attention (Blocked) — no pill at all, ever: an amber dot then the
+                  figure in amber. A pill would make it read as the same kind
+                  of count as the others. */
+      #tab-customers .cul-seg .ct { font-variant-numeric: tabular-nums; }
       #tab-customers .cul-seg .ct:not(.alert) {
         min-width: 16px; height: 16px; padding: 0 5px; border-radius: 999px;
         font-size: 10px; font-weight: 500; line-height: 1;
@@ -2328,6 +2334,13 @@
       }
       #tab-customers .cul-seg.on .ct.alert { color: var(--bg-pane); }
       #tab-customers .cul-seg.on .ct.alert::before { background: var(--bg-pane); opacity: .85; }
+      /* 🔴 NOTHING TO REPORT = NO PILL, NO DOT, NO NUMBER. This must be the LAST
+         word on `display`: the three rules above set inline-grid / inline-flex
+         at the SAME specificity, so an earlier `:empty { display:none }` loses
+         on source order — that shipped once as an empty grey circle on Sleeping
+         and a lone amber dot on Blocked. Driven by a class rather than `:empty`
+         so a stray whitespace text node can't quietly re-show it. */
+      #tab-customers .cul-seg .ct.is-none { display: none; }
       /* The state cards' one action. */
       #tab-customers .cul-statebtn { height: 32px; padding: 0 12px; font-size: 13px; }
 
@@ -2349,16 +2362,30 @@
          bottom corners; without the card's clip, a square pager would poke
          out through the rounded bottom edge. */
       #tab-customers .list-card { overflow: visible; }
-      #tab-customers .table-wrap {
+      /* 🔴 MUST match retail-admin.css's `#tab-customers .list-card >
+         .table-wrap` selector, which sets overflow-x:auto at (1,2,0). A plain
+         `#tab-customers .table-wrap` here is (1,1,0) and LOSES — that shipped
+         once and put the band 56px below the card's top, sitting on row one:
+         overflow-x:auto computes overflow-y to auto, the wrap becomes a scroll
+         container, and the sticky th then pins to the WRAP instead of the page.
+         Both axes must stay visible for the band to reach the page scroller. */
+      #tab-customers .list-card > .table-wrap {
         background: transparent; border: 0; border-radius: 0; box-shadow: none;
-        overflow: visible;
+        overflow: visible; overflow-x: visible;
       }
+      /* No min-width on either. The mockup pinned its card at 1002px, but this
+         shell gives the content column only ~996px on a 1280px laptop once the
+         rail and gutters are taken out — a floor that high would scroll the
+         whole PAGE sideways on the commonest window there is. table-layout:fixed
+         plus the colgroup already guarantees what the floor was protecting: the
+         seven numeric columns keep their pixel widths and never cramp, and the
+         slack comes out of Customer, whose name ellipses by design. */
       #tab-customers #cu-pager { border-radius: 0 0 13px 13px; overflow: hidden; }
       /* table-layout:fixed + the colgroup above give every column a
          deterministic share instead of the browser's auto-guess, which used
          to hand almost all the slack to Customer and leave the numeric
          columns cramped against each other (same fix as #orders-table). */
-      #cu-table { border-collapse: separate; border-spacing: 0; width: 100%; background: transparent; table-layout: fixed; min-width: 1000px; }
+      #cu-table { border-collapse: separate; border-spacing: 0; width: 100%; background: transparent; table-layout: fixed; }
       /* The band. Deeper than the rows on purpose (--td-header), Ink labels
          rather than Graphite, and one size smaller than the 14px row text —
          at 13px the labels read as heavy as the data and the band looked like
@@ -2833,10 +2860,9 @@
         <div class="cul-stat">
           <div class="lbl">New today · 今日新增</div>
           <div class="fig" id="cu-kpi-new">—</div>
-          <div class="sub">
-            <span class="fc-spark-wrap sm" id="cu-kpi-new-spark" onmousemove="fcSparkMove(event)" onmouseleave="fcSparkLeave(event)"></span>
-            <span id="cu-kpi-new-word" data-no-i18n>&nbsp;</span>
-          </div>
+          <!-- No sparkline. All four tiles are label, number, and the line
+               beneath — no chart on any of them. -->
+          <div class="sub"><span id="cu-kpi-new-word" data-no-i18n>&nbsp;</span></div>
         </div>
         <div class="cul-stat">
           <div class="lbl">Returning rate · 复购率</div>
@@ -2876,10 +2902,10 @@
            (never a zero). Blocked's count is the attention one: amber dot,
            amber figure, no pill. -->
       <span class="cul-segs" id="cu-segs">
-        <button type="button" class="cul-seg on" data-seg=""         onclick="cuSegment(this,'')">All · 全部<span class="ct" id="cu-seg-all-ct" data-no-i18n></span></button>
-        <button type="button" class="cul-seg"    data-seg="new_week" onclick="cuSegment(this,'new_week')">New this week · 本周新客<span class="ct" id="cu-seg-new-ct" data-no-i18n></span></button>
-        <button type="button" class="cul-seg"    data-seg="sleeping" onclick="cuSegment(this,'sleeping')">Sleeping 60d+ · 沉睡 60 天<span class="ct" id="cu-seg-sleep-ct" data-no-i18n></span></button>
-        <button type="button" class="cul-seg"    data-seg="blocked"  id="cu-seg-blocked" onclick="cuSegment(this,'blocked')">Blocked · 已封禁<span class="ct alert" id="cu-seg-blocked-ct" data-no-i18n></span></button>
+        <button type="button" class="cul-seg on" data-seg=""         onclick="cuSegment(this,'')">All · 全部<span class="ct is-none" id="cu-seg-all-ct" data-no-i18n></span></button>
+        <button type="button" class="cul-seg"    data-seg="new_week" onclick="cuSegment(this,'new_week')">New this week · 本周新客<span class="ct is-none" id="cu-seg-new-ct" data-no-i18n></span></button>
+        <button type="button" class="cul-seg"    data-seg="sleeping" onclick="cuSegment(this,'sleeping')">Sleeping 60d+ · 沉睡 60 天<span class="ct is-none" id="cu-seg-sleep-ct" data-no-i18n></span></button>
+        <button type="button" class="cul-seg"    data-seg="blocked"  id="cu-seg-blocked" onclick="cuSegment(this,'blocked')">Blocked · 已封禁<span class="ct alert is-none" id="cu-seg-blocked-ct" data-no-i18n></span></button>
       </span>
 
       <!-- Filter row — Tier, Channel, then search. Each dropdown BECOMES its

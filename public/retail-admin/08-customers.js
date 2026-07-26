@@ -273,7 +273,12 @@ function cuRenderKpis() {
   // absence. The chips themselves always render: a chip is how an operator
   // learns the cut exists, so it must not appear and vanish with its contents.
   const seg = _CU_SEG_COUNTS || {};
-  const paintCt = (id, v) => { const el = $(id); if (el) el.textContent = Number(v || 0) ? cuNum(v) : ''; };
+  const paintCt = (id, v) => {
+    const el = $(id); if (!el) return;
+    const n = Number(v || 0);
+    el.textContent = n ? cuNum(n) : '';
+    el.classList.toggle('is-none', !n);   // hides pill, dot and number together
+  };
   paintCt('#cu-seg-all-ct',     seg.all);
   paintCt('#cu-seg-new-ct',     seg.new_week);
   paintCt('#cu-seg-sleep-ct',   seg.sleeping);
@@ -288,9 +293,10 @@ function cuRenderKpis() {
 }
 function cuRepaintKpis() {
   const d = _CU_KPI_DASH; if (!d) return;
-  const k = d.kpis || {}, b = d.baseline || null, trend = d.trend || [];
-  fcRenderSpark($('#cu-kpi-new-spark'), trend.map(p => Number(p.new_customers || 0)), trend.map(p => p.bucket),
-                v => v + ' ' + cuT(v === 1 ? 'signup' : 'signups', '注册'), true);
+  const k = d.kpis || {}, b = d.baseline || null;
+  // No sparkline here — the tiles carry a label, a number and one line of
+  // words, and nothing on this page draws a chart. The trend data still comes
+  // down with the dashboard payload; it just isn't rendered.
   // Fewer signups than usual is not an alarm — no red arrow, no percentage.
   // Say it in words, in graphite, and keep the number in the tooltip.
   const word = $('#cu-kpi-new-word');
@@ -434,7 +440,6 @@ function cuKpisNotLoaded() {
     const el = document.getElementById(id); if (el) el.textContent = cuT('not loaded', '未加载');
   });
   const w = document.getElementById('cu-kpi-new-word'); if (w) w.textContent = cuT('not loaded', '未加载');
-  const sp = document.getElementById('cu-kpi-new-spark'); if (sp) sp.innerHTML = '';
 }
 
 // The band gives up its top corners the moment it pins, so the card's corner
