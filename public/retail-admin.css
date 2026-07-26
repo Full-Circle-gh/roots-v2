@@ -4595,6 +4595,14 @@
      drawer Payment tile and top-up history rows. Two flavors:
      default = inline-tight, `.lg` = drawer hero with a bit more
      breathing room. Keeps the same visual language as status pills. */
+  /* An unrecognised payment method, from paymentBrandHTML's fallback. Quiet
+     and unweighted ON PURPOSE — every real method above it is bold, so an
+     unhandled key must not borrow that authority and pass for a brand. It
+     should read as "not handled yet", not as a payment type. */
+  .pay-unknown {
+    font-weight: 400;
+    color: var(--text-2);
+  }
   .pay-brand {
     display: inline-flex;
     align-items: center;

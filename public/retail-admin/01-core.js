@@ -240,9 +240,18 @@ function paymentBrandHTML(method, size) {
   // gateway badge (the operator didn't use the in-app gateway).
   const offline = { cash: 'Cash · 现金', bank_transfer: 'Bank transfer · 银行转账', wechat_offline: 'WeChat off-app · 微信(线下)', alipay_offline: 'Alipay off-app · 支付宝(线下)', other: 'Other · 其他' }[m];
   if (offline) return `<b>${offline}</b>`;
-  // Unknown / dash — keep as plain text so we don't invent a brand the
-  // operator didn't actually use.
-  return `<b>${escapeHtml(method || '—')}</b>`;
+  // Unknown method. Render the RAW KEY, unstyled — no <b>, no badge.
+  //
+  // 🔴 This fallback used to bold it, and bold is how a brand reads here:
+  // "Cash", "Bank transfer" and every gateway label above are bold, so an
+  // unhandled key inherited their authority and passed for a payment type.
+  // That is exactly how `admin_adjust`, `order_redeem` and `refund_reverse`
+  // shipped into the customer's top-up history looking like money the customer
+  // had handed over. Unstyled raw text reads as UNHANDLED — visibly odd, which
+  // is the point: it says "nobody has taught this screen that word yet"
+  // instead of quietly asserting something false. Same principle as
+  // cuPtsSource()'s fallback. Do not re-add the bold.
+  return `<span class="pay-unknown">${escapeHtml(method || '')}</span>`;
 }
 
 // The payment row to surface on an order. An order can carry more than one

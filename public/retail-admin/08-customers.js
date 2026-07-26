@@ -257,19 +257,23 @@ function cuRenderKpis() {
   const buyers = (ret && typeof ret.buyers === 'number') ? ret.buyers : null;
   dashCountUp($('#cu-kpi-buyers'), buyers != null ? buyers : 0);
   dashCountUp($('#cu-kpi-new'), Number(d.kpis && d.kpis.new_customers || 0));
-  // Returning rate — share of buyers who came back for a 2nd order. No
-  // buyers yet = nothing to divide, so the tile shows a dash rather than 0%.
+  // Returning rate — share of buyers who came back for a 2nd order.
+  // 🔴 ZERO IS A REAL ANSWER. With no buyers this used to print a dash, which
+  // makes the reader guess between "none", "not loaded" and "broken". "0%" is
+  // true and says which. The sub-line beneath already explains why it's zero.
   const retFig = $('#cu-kpi-returning');
   if (retFig) {
-    if (ret && ret.buyers > 0) retFig.textContent = Math.round(ret.returners / ret.buyers * 100) + '%';
-    else retFig.textContent = '—';
+    retFig.textContent = (ret && ret.buyers > 0)
+      ? Math.round(ret.returners / ret.buyers * 100) + '%'
+      : '0%';
   }
   // Never ordered — total minus buyers. The signup-to-purchase gap the old
   // "Total customers" tile hid; same numbers, framed as the one worth acting on.
   const neverFig = $('#cu-kpi-neverordered');
   if (neverFig) {
-    if (buyers != null && total > 0) dashCountUp(neverFig, Math.max(0, total - buyers));
-    else neverFig.textContent = '—';
+    // Same rule: a real 0, never a dash. (An outright load FAILURE is a
+    // different state and blanks the tiles — see cuKpisNotLoaded.)
+    dashCountUp(neverFig, (buyers != null && total > 0) ? Math.max(0, total - buyers) : 0);
   }
   // Nobody blocked = nothing to show. An empty state shouldn't own a card, so
   // the tile (and its swipe dot, and the filter chip) simply aren't there.
@@ -354,7 +358,7 @@ function cuRepaintKpis() {
       const pct = Math.round((_CU_KPI_TOTAL - ret.buyers) / _CU_KPI_TOTAL * 100);
       neverSub.textContent = cuT(`${pct}% of accounts`, `占账户 ${pct}%`);
     } else {
-      neverSub.textContent = '—';
+      neverSub.textContent = cuT('no orders yet', '暂无订单');
     }
   }
   const bsub = $('#cu-kpi-blocked-sub');
@@ -366,6 +370,16 @@ function cuRepaintKpis() {
 let CU_TOTAL_ALL = 0;
 
 function cuNum(v) { return Number(v || 0).toLocaleString('en-US'); }
+// Plain-text money for places that can't take markup (modal copy, titles).
+// Same rule as cuMoney/yuan: comma-grouped, a trailing .00 dropped, real
+// decimals kept.
+function cuMoneyPlain(v) {
+  const n = Number(v || 0);
+  const whole = Math.round(n * 100) % 100 === 0;
+  return '¥' + n.toLocaleString('en-US', whole
+    ? { maximumFractionDigits: 0 }
+    : { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
 
 // Order status, spelled the way the whole product spells it. humanStatus()
 // (04-orders.js) is the single source: it turns the raw enum into a real label
@@ -402,6 +416,15 @@ const CU_PTS_SOURCE = {
   admin_adjust:     ['Staff adjustment', '后台调整'],
   expiry:           ['Expired', '已过期'],
 };
+// Rows in retail_topup_transactions whose payment_method is NOT a payment —
+// they are ledger movements that happen to live in the top-up table. Left
+// alone they printed their raw enum through paymentBrandHTML's fallback and
+// read as money the customer had handed over. They are labelled from
+// CU_PTS_SOURCE above, so the SAME event is named identically here and in the
+// Points ledger: a redemption is "Redeemed on order" in both places.
+// (The aggregate above this list already excludes admin_adjust; these three
+// were only ever wrong in the ROW list.)
+const CU_NON_PAYMENT_METHODS = new Set(['admin_adjust', 'order_redeem', 'refund_reverse']);
 function cuPtsSource(src) {
   const m = CU_PTS_SOURCE[src];
   return m ? cuT(m[0], m[1]) : String(src || '');
@@ -1020,7 +1043,9 @@ function cuRenderDetail() {
   const recentTopupsRows = d.recent_topups.length
     ? d.recent_topups.map(t => `
         <tr>
-          <td>${paymentBrandHTML(t.payment_method)}</td>
+          <td>${CU_NON_PAYMENT_METHODS.has(String(t.payment_method || ''))
+            ? `<span class="cu-pill">${escapeHtml(cuPtsSource(t.payment_method))}</span>`
+            : paymentBrandHTML(t.payment_method)}</td>
           <td class="numeric" data-no-i18n>${yuan(t.amount)}</td>
           <td class="numeric" data-no-i18n>+${cuNum(t.bonus_points || 0)} pts</td>
           <td><span class="cu-pill">${escapeHtml(cuCap(t.status))}</span></td>
@@ -1650,8 +1675,8 @@ function cuOpenAdjust(kind) {
     ? 'Adjust points balance · 调整积分余额'
     : 'Adjust wallet balance · 调整钱包余额';
   $('#cu-adjust-current').textContent = kind === 'points'
-    ? `Current · 当前: ${c.points_balance || 0} pts`
-    : `Current · 当前: ¥${Number(c.balance || 0).toFixed(2)}`;
+    ? `Current · 当前: ${cuNum(c.points_balance || 0)} pts`
+    : `Current · 当前: ${cuMoneyPlain(c.balance)}`;
   $('#cu-adjust-delta').value  = '';
   $('#cu-adjust-reason').value = '';
   cuShowModal('#cu-adjust-bg');
