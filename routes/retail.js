@@ -13539,13 +13539,26 @@ router.get('/api/retail-admin/customers/:id', requireRetailAdmin, (req, res) => 
        FROM retail_points_transactions WHERE customer_id = ?`
   ).get(id);
 
-  const expiringSoon = tdb().prepare(
+  // Points due to expire in the next 30 days. This sums the EARNING rows only;
+  // redemptions are separate negative rows and are not matched against the lots
+  // they consumed, so the raw figure can exceed what the customer still holds —
+  // earn 500 expiring, spend 400, and the balance reads 100 beside "500
+  // expiring soon".
+  //
+  // ⚠ THE MIN() BELOW IS A DISPLAY CLAMP, NOT LOT-TRACKING. It makes the
+  // printed figure a true statement — "you will lose AT MOST this" — because
+  // you cannot lose more than you hold. It is NOT accounting: it does not know
+  // which lots a redemption actually consumed, so do not read it as, or build
+  // on it as, a settled expiry number. Real FIFO lot-tracking is a feature in
+  // its own right and deliberately not attempted here.
+  const expiringSoonRaw = tdb().prepare(
     `SELECT COALESCE(SUM(delta), 0) AS pts
        FROM retail_points_transactions
       WHERE customer_id = ? AND delta > 0
         AND expires_at IS NOT NULL AND expired_at IS NULL
         AND expires_at <= datetime('now', '+30 days')`
   ).get(id).pts;
+  const expiringSoon = Math.max(0, Math.min(Number(expiringSoonRaw) || 0, Number(customer.points_balance) || 0));
 
   const topup = tdb().prepare(
     `SELECT
