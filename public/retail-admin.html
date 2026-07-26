@@ -2733,15 +2733,56 @@
          reference/customer-drawer-mockup.html. */
 
       /* Header — avatar + eyebrow + 27px name + phone w/ copy. */
-      #cu-drawer .cux-head { display: flex; gap: 16px; padding-right: 46px; margin-bottom: 18px; }
-      #cu-drawer .cu-avatar { width: 52px; height: 52px; background: var(--bg-elev-1); border: 1px solid var(--line-soft); color: var(--text-3); }
-      #cu-drawer .cux-eyebrow { font-size: 14px; color: var(--text-2); margin-bottom: 6px; }
-      #cu-drawer .cux-name { font-size: 27px; font-weight: 600; letter-spacing: -.005em; line-height: 1.15; color: var(--text-1); display: flex; align-items: center; gap: 13px; flex-wrap: wrap; }
+      /* PINNED action row — a flex sibling of .drawer-body, so the body scrolls
+         under it. 1px hairline beneath, matching the mockup's .dtop. Buttons are
+         plain text: no icons. Message · Edit profile · More sit together on the
+         left; only the floating ✕ is on the right (padding-right clears it).
+
+         ⚠ IT NO LONGER PLAYS THE ENTRANCE STAGGER, AND THAT IS CORRECT.
+         `.side-drawer .drawer-body > *` fades and lifts each child in on open;
+         moving this row out of the body took it out of that selector, so it now
+         appears immediately. Deliberate: the stagger belongs to CONTENT arriving
+         in a scrolling body, and a bar that never moves should not perform an
+         entrance. Do not "restore" the animation by moving this back inside the
+         body — that would un-pin it, which is the bug this fixed. */
+      #cu-drawer #cu-drawer-actions {
+        flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+        padding: 14px 56px 14px 16px; margin: 0;
+        border-bottom: 1px solid var(--td-border); flex-wrap: wrap;
+      }
+
+      #cu-drawer .cux-head { display: flex; gap: 14px; align-items: flex-start; margin-bottom: 18px; }
+      /* Rounded SQUARE, not a circle — 56px at 8px radius, on --td-raised. */
+      #cu-drawer .cu-avatar {
+        width: 56px; height: 56px; flex: 0 0 56px; border-radius: 8px;
+        background: var(--td-raised); border: 1px solid var(--td-border);
+        color: var(--text-1); font-size: 20px; font-weight: 500;
+        display: grid; place-items: center;
+      }
+      #cu-drawer .cu-avatar svg { width: 26px; height: 26px; color: var(--text-2); }
+      #cu-drawer .cux-eyebrow { font-size: 12px; color: var(--text-2); margin-bottom: 0; font-variant-numeric: tabular-nums; }
+      /* 20px/500. Nothing in the drawer goes above weight 500. */
+      #cu-drawer .cux-name { font-size: 20px; font-weight: 500; letter-spacing: 0; line-height: 1.3; color: var(--text-1); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 2px 0 6px; }
+      #cu-drawer .cux-name .hn-name { min-width: 0; overflow-wrap: anywhere; }
+      /* Pills wrap ONLY when the name crowds them out, and then both together —
+         the rule is "never one up, one down", not "always on their own line".
+         flex-wrap on the parent plus `flex: 0 0 auto` here is what guarantees
+         it: the pair is one indivisible flex item, so it moves as a unit.
+         ⚠ Do NOT put `flex: 1 1 100%` on .hn-name to force the wrap — that
+         spends a line on every short name, which is most customers. */
+      #cu-drawer .cux-name .hn-pills { display: inline-flex; align-items: center; gap: 8px; flex: 0 0 auto; }
       #cu-drawer .cux-phone { font-size: 15px; color: var(--text-2); margin-top: 5px; font-variant-numeric: tabular-nums; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
       #cu-drawer .cux-phone .muted { color: var(--text-3); }
-      #cu-drawer .cux-copy { width: 20px; height: 20px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg-pane); color: var(--text-3); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; flex: none; }
-      #cu-drawer .cux-copy svg { width: 11px; height: 11px; }
-      #cu-drawer .cux-copy:hover { color: var(--text-1); border-color: var(--line-strong); }
+      /* Copy control — a TEXT button that confirms in place ("Copy" → "Copied"),
+         not an icon that fires a toast. No toasts is a house rule, and a toast
+         confirms somewhere other than where the operator is looking. */
+      #cu-drawer .cux-copy {
+        border: 1px solid var(--line); border-radius: 6px; background: none;
+        color: var(--text-2); font-family: var(--f-sans); font-size: 11px; line-height: 1.6;
+        padding: 0 5px; cursor: pointer; flex: none; white-space: nowrap;
+      }
+      #cu-drawer .cux-copy:hover { color: var(--text-1); background: var(--bg-elev-1); }
+      #cu-drawer .cux-copy.ok { color: var(--tacet-sage-ink); border-color: var(--tacet-sage-ink); }
 
       /* Drawer pills (.cu-pill) — the roster uses .cul-pill instead. This base
          carries the layout; the id-scoped rules below carry the Tacet skin and
@@ -2830,9 +2871,14 @@
       #cu-drawer .cux-addr .nm { font-weight: 500; font-size: 14px; color: var(--text-1); }
       #cu-drawer .cux-addr .ph { color: var(--text-2); font-size: 13px; font-variant-numeric: tabular-nums; }
       #cu-drawer .cux-addr .def { font-size: 10px; font-weight: 500; letter-spacing: .04em; color: var(--text-2); background: var(--bg-elev-1); border: 1px solid var(--td-border); border-radius: 999px; padding: 1px 7px; }
-      /* The action row WRAPS to a second line rather than pushing the card
-         wider — the panel must never scroll sideways. */
-      #cu-drawer .cux-addr .acts { margin-left: auto; display: flex; gap: 4px; flex-wrap: wrap; }
+      /* Actions sit on the SAME line as the identifiers, pushed right — they
+         only wrap if the row genuinely can't hold them, never by default. */
+      #cu-drawer .cux-addr .acts { margin-left: auto; display: flex; gap: 4px; flex-wrap: wrap; flex: 0 0 auto; }
+      /* "+ Add" is a ghost link, not a bordered button. */
+      #cu-drawer .cux-ghost { border-color: transparent; background: none; color: var(--text-2); }
+      #cu-drawer .cux-ghost:hover { color: var(--text-1); background: var(--bg-elev-1); }
+      /* An absent value reads as Graphite prose, never as data. */
+      #cu-drawer .cux-frow .v.none { color: var(--text-2); font-weight: 400; }
       #cu-drawer .cux-addr .acts button { border: 0; background: none; font-family: var(--f-sans); font-size: 13.5px; color: var(--text-2); cursor: pointer; padding: 2px 6px; border-radius: 6px; }
       #cu-drawer .cux-addr .acts button:hover { color: var(--text-1); background: var(--bg-elev-1); }
       #cu-drawer .cux-addr .acts button.del:hover { color: var(--tacet-brick); background: var(--tacet-brick-tint); }
@@ -10467,11 +10513,14 @@
   <button type="button" class="drawer-back" onclick="closeDrawer('#cu-drawer')" title="Back · 返回" aria-label="Back">
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
   </button>
+  <!-- PINNED action row. It is a SIBLING of .drawer-body, not a child: the
+       drawer is already display:flex/column with .drawer-body flex:1 +
+       overflow-y:auto, so a sibling stays put while the body scrolls under it.
+       Inside the body it scrolled away with everything else.
+       padding-right reserves room for the floating close ✕ (32px @ right:14px);
+       on phones the ✕ becomes a left chevron — see mobile CSS. -->
+  <div id="cu-drawer-actions" class="row"></div>
   <div class="drawer-body">
-    <!-- padding-right reserves room for the floating close ✕ (32px @ right:14px)
-         so the right-aligned "View" button doesn't slide under it (desktop only;
-         on phones the × is swapped for a left chevron — see mobile CSS). -->
-    <div id="cu-drawer-actions" class="row" style="margin-bottom: var(--s4); gap: 8px; flex-wrap: wrap; padding-right: 40px;"></div>
     <div id="cu-detail-body"></div>
   </div>
 </aside>

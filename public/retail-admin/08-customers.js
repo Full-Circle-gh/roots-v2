@@ -701,12 +701,27 @@ function cuMoreOutside(e) {
 }
 
 // Small copy-to-clipboard for the header phone + openid rows.
-function cuCopyText(text) {
-  const done = () => (typeof toast === 'function' ? toast(cuT('Copied', '已复制')) : null);
-  const fail = () => (typeof toast === 'function' ? toast(cuT('Copy failed', '复制失败'), 'err') : null);
+// Copy control that confirms IN PLACE — the button's own label flips to
+// "Copied" for 1.2s and settles back. No toast: a toast is a house-rule
+// violation here and, worse, it confirms somewhere other than where the
+// operator is looking. The label reverts on a timer rather than on the next
+// render, so switching customers mid-flip can't strand it.
+function cuCopyChip(btn, text) {
+  if (!btn) return;
+  const label = btn.dataset.label || btn.textContent;
+  btn.dataset.label = label;
+  const settle = (ok) => {
+    btn.textContent = ok ? cuT('Copied', '已复制') : cuT('Failed', '失败');
+    btn.classList.toggle('ok', ok);
+    clearTimeout(btn._cuCopyT);
+    btn._cuCopyT = setTimeout(() => {
+      btn.textContent = label;
+      btn.classList.remove('ok');
+    }, 1200);
+  };
   if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(text).then(done, fail);
-  } else { fail(); }
+    navigator.clipboard.writeText(text).then(() => settle(true), () => settle(false));
+  } else { settle(false); }
 }
 
 // Diagnostics block — "what's happening on this customer's phone". Built from
@@ -851,14 +866,12 @@ function cuRenderDetail() {
     : `<button class="cux-mi danger" onclick="cuMoreClose(); cuToggleBlock(event)">
          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m5.6 5.6 12.8 12.8"/></svg>
          Block customer · 封禁顾客</button>`;
+  // Plain-text buttons, no icons, and NO spacer before More — Message, Edit
+  // profile and More sit together immediately after one another; the only thing
+  // on the right is the floating ✕.
   $('#cu-drawer-actions').innerHTML = `
-    <button class="btn" onclick="cuMessageCustomer()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/></svg>
-      Message · 发消息</button>
-    <button class="btn" onclick="cuOpenEdit()">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
-      Edit profile · 编辑资料</button>
-    <div style="flex: 1;"></div>
+    <button class="btn" onclick="cuMessageCustomer()">Message · 发消息</button>
+    <button class="btn" onclick="cuOpenEdit()">Edit profile · 编辑资料</button>
     <div class="cux-more-wrap">
       <button class="btn" onclick="cuMoreToggle()" aria-haspopup="true">More · 更多
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
@@ -901,7 +914,7 @@ function cuRenderDetail() {
         <tr>
           <td><span class="ti-name" data-no-i18n>${escapeHtml(t.name_en || t.name_cn || '')}</span>${
             t.sku ? `<span class="ti-sku" data-no-i18n>${escapeHtml(t.sku)}</span>` : ''}</td>
-          <td class="numeric" data-no-i18n>${cuNum(t.qty)}</td>
+          <td class="numeric" data-no-i18n>×${cuNum(t.qty)}</td>
           <td class="numeric" data-no-i18n>${yuan(t.spend)}</td>
         </tr>`).join('')
     : '<tr><td colspan="3" class="muted">No completed orders yet. · 暂无已完成订单。</td></tr>';
@@ -948,9 +961,18 @@ function cuRenderDetail() {
     ? d.addresses.map(a => {
         const full = [a.province, a.city, a.district, a.address, a.detail].filter(Boolean).join(' ');
         // A ROW inside the Addresses card, separated by a hairline — not a
-        // nested card. The action row wraps to a second line rather than
-        // pushing the card wider. Recipient name and phone are free text, so
-        // both carry data-no-i18n against the walker's " · " split.
+        // nested card. Recipient name and phone are free text, so both carry
+        // data-no-i18n against the walker's " · " split.
+        //
+        // ⚠ RECIPIENT-FIRST IS DELIBERATE. The mockup leads each row with an
+        // address LABEL ("Home", "Office") — that is invented demo data.
+        // retail_customer_addresses has no label column (recipient_name, phone,
+        // province, city, district, address, detail, postal_code, is_default,
+        // lat, lng…), and deriving one from `district` would be inventing a
+        // name the customer never chose. A real address label is a feature with
+        // a schema change and an input in the address modal, not a drawer fix.
+        // Considered 2026-07-26 and deliberately not added — its absence is a
+        // decision, not an oversight.
         return `
         <div class="cux-addr">
           <div class="top">
@@ -1032,12 +1054,27 @@ function cuRenderDetail() {
   }
 
   // Facts-card values.
-  const dso = ord.days_since_last_order;
-  const lastOrderV = (dso === null || dso === undefined) ? '—'
-    : (dso === 0 ? cuT('today', '今天') : cuT(dso + ' days ago', dso + ' 天前'));
+  // 🔴 NO DASHES AS VALUES, anywhere in these cards. A dash is not an answer —
+  // it makes the reader guess whether the figure is zero, missing, or broken.
+  // Each absence says what it actually is, in the shape of the thing missing.
+  // Last order names the ORDER, not the elapsed time: "#R26071234 · delivered"
+  // tells the operator what happened, where "today" only told them when. The
+  // newest row of recent_orders IS that order (the query is ORDER BY id DESC).
+  // No orders → say so; never a dash.
+  const lastOrd = (d.recent_orders && d.recent_orders[0]) || null;
+  const lastOrderV = lastOrd
+    ? '#' + (lastOrd.order_no || lastOrd.id) + ' · ' + (lastOrd.status || '')
+    : cuT('no orders yet', '暂无订单');
   const buildV = (d.diagnostics && d.diagnostics.device_last_seen) || null;
+  // "not recorded", not "—": the app build is absent because this customer has
+  // no client log, which is a fact about our records rather than about them.
+  const buildText = (buildV && buildV.app_version)
+    ? buildV.app_version + (buildV.device_model ? ' · ' + buildV.device_model : '')
+    : cuT('not recorded', '未记录');
   const openid = c.openid || '';
-  const openidShort = openid.length > 18 ? openid.slice(0, 8) + '…' + openid.slice(-6) : (openid || '—');
+  const openidShort = openid
+    ? (openid.length > 18 ? openid.slice(0, 8) + '…' + openid.slice(-6) : openid)
+    : cuT('none on file', '无');
 
   // Chart headline — for sparse customers the sentence reads faster than the bars.
   const yr    = months.reduce((a, m) => a + m.n, 0);
@@ -1052,7 +1089,6 @@ function cuRenderDetail() {
   const affTotal = Number((d.affiliate && d.affiliate.summary && d.affiliate.summary.total) || 0);
   const noneHint = escapeHtml(cuT('none', '无'));
   const chevron = '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 6 6 6-6 6"/></svg>';
-  const copyIco = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
   $('#cu-detail-body').innerHTML = `
     <div class="cux-head">
       ${avatar}
@@ -1073,7 +1109,7 @@ function cuRenderDetail() {
           </span>
         </div>
         ${(c.phone || c.email) ? `<div class="cux-phone" data-no-i18n>
-          ${c.phone ? `${escapeHtml(c.phone)}<button class="cux-copy" title="Copy · 复制" onclick="cuCopyText('${escapeAttr(c.phone)}')">${copyIco}</button>` : ''}
+          ${c.phone ? `${escapeHtml(c.phone)}<button class="cux-copy" onclick="cuCopyChip(this, '${escapeAttr(c.phone)}')">${escapeHtml(cuT('Copy', '复制'))}</button>` : ''}
           ${c.email ? `<span${c.phone ? ' class="muted"' : ''}>${escapeHtml(c.email)}</span>` : ''}
         </div>` : ''}
       </div>
@@ -1104,16 +1140,19 @@ function cuRenderDetail() {
     <div class="cux-cards">
       <div class="cux-card">
         <div class="cux-kicker">Activity · 动态</div>
-        <div class="cux-frow"><div class="k">Last order · 最近订单</div><div class="v" data-no-i18n>${escapeHtml(lastOrderV)}</div></div>
-        <div class="cux-frow"><div class="k">Last login · 最近登录</div><div class="v quiet" data-no-i18n>${escapeHtml(cuFmtTime(c.last_login_at) || cuT('never', '从未'))}</div></div>
-        <div class="cux-frow"><div class="k">Completed · 已完成</div><div class="v" data-no-i18n>${ord.completed_count || 0} <span class="muted">${escapeHtml(cuT('of ' + ordersN + ' orders', '/ 共 ' + ordersN + ' 单'))}</span></div></div>
+        <div class="cux-frow"><div class="k">Last order · 最近订单</div><div class="v${lastOrd ? '' : ' none'}" data-no-i18n>${escapeHtml(lastOrderV)}</div></div>
+        <!-- Relative, via the same cuFmtSeen the roster's Last seen column uses,
+             so "3d ago" means the same thing on both surfaces. -->
+        <div class="cux-frow"><div class="k">Last login · 最近登录</div><div class="v quiet" data-no-i18n>${escapeHtml(cuFmtSeen(c.last_login_at))}</div></div>
+        <!-- Bare "46 / 48": the two numbers ARE the sentence. -->
+        <div class="cux-frow"><div class="k">Completed · 已完成</div><div class="v" data-no-i18n>${cuNum(ord.completed_count || 0)} / ${cuNum(ordersN)}</div></div>
         ${(rev.count || 0) > 0 ? `<div class="cux-frow"><div class="k">Reviews · 评价</div><div class="v" data-no-i18n>${rev.count}${rev.avg_rating ? ' <span class="muted">· ' + Number(rev.avg_rating).toFixed(1) + '★</span>' : ''}</div></div>` : ''}
       </div>
       <div class="cux-card">
         <div class="cux-kicker">Device &amp; account · 设备与账号</div>
-        <div class="cux-frow"><div class="k">App build · 版本</div><div class="v quiet" data-no-i18n>${(buildV && buildV.app_version) ? escapeHtml(buildV.app_version + (buildV.device_model ? ' · ' + buildV.device_model : '')) : '—'}</div></div>
+        <div class="cux-frow"><div class="k">App build · 版本</div><div class="v${(buildV && buildV.app_version) ? ' quiet' : ' none'}" data-no-i18n>${escapeHtml(buildText)}</div></div>
         <div class="cux-frow"><div class="k">Sessions · 会话</div><div class="v${sessions >= 5 ? ' warn' : ''}" data-no-i18n>${sessions} <span class="muted">${escapeHtml(cuT('active', '个活跃'))}</span></div></div>
-        <div class="cux-frow"><div class="k">openid</div><div class="v mono" data-no-i18n>${escapeHtml(openidShort)}${openid ? `<button class="cux-copy" title="Copy · 复制" onclick="cuCopyText('${escapeAttr(openid)}')">${copyIco}</button>` : ''}</div></div>
+        <div class="cux-frow"><div class="k">openid</div><div class="v mono${openid ? '' : ' none'}" data-no-i18n>${escapeHtml(openidShort)}${openid ? `<button class="cux-copy" onclick="cuCopyChip(this, '${escapeAttr(openid)}')">${escapeHtml(cuT('Copy', '复制'))}</button>` : ''}</div></div>
       </div>
     </div>
 
@@ -1148,7 +1187,7 @@ function cuRenderDetail() {
       </div>
       <div class="cux-card">
         <div class="cux-kicker">Addresses · 地址
-          <span class="side"><button class="btn btn-sm" onclick="cuOpenAddrModal(null)">+ Add · 添加</button></span>
+          <span class="side"><button class="btn btn-sm cux-ghost" onclick="cuOpenAddrModal(null)">+ Add · 添加</button></span>
         </div>
         ${addressesHtml}
       </div>
@@ -1740,7 +1779,10 @@ function cuGzDay(v) {
 function cuFmtSeen(iso) {
   if (!iso) return cuT('never', '从未');
   const s = formatDate(iso);
-  if (!s) return '—';
+  // An unparseable timestamp is still not a dash. It also must not be a
+  // TRUTHY dash: callers write `cuFmtSeen(x) || 'never'`, and '—' satisfies
+  // that `||`, so a dash here would silently outrank the real fallback.
+  if (!s) return cuT('never', '从未');
   const day = s.slice(0, 10), clock = s.slice(11);
   if (day === cuGzDay(Date.now()))                    return cuT('Today', '今天') + ' ' + clock;
   if (day === cuGzDay(Date.now() - 24 * 3600 * 1000)) return cuT('Yesterday', '昨天') + ' ' + clock;
