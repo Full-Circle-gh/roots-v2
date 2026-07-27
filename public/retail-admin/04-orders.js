@@ -6263,7 +6263,46 @@ async function refreshOrderStatusCounts() {
     set('oc-awaiting_restock',d.awaiting_restock);
     set('refund-queue-count', d.refunds_open);
     set('oc-needs_invoice',   d.needs_invoice);
+    ordRenderStatusLine(d.oldest_unfulfilled_secs);
   } catch {}
+}
+
+// Page header status line (§1.7) — how long the oldest order still waiting on an
+// operator has waited. The age is the only half of that question nothing else on
+// the page answers; the COUNT is deliberately absent, because Paid and Preparing
+// are chips a few pixels below and a third copy of them here is exactly the
+// duplication §1.7 rules out.
+//
+// Nothing waiting → no line at all. Not "0", not an empty element: the header is
+// then title + CTA, and the space is what says the queue is clear. With six
+// orders on a normal day this is the common case, not an edge case.
+//
+// Language is picked at render time by cuT(), so the line is never a glued
+// "EN · 中文" pair (§1.11). It re-renders on a toggle through the list's existing
+// hook — _ordRepaintOnLang → loadOrders → refreshOrderStatusCounts → here — and
+// carries data-no-i18n so the DOM walker leaves the rendered half alone.
+function ordRenderStatusLine(secs) {
+  const el = document.getElementById('ord-statusline');
+  if (!el) return;
+  if (secs == null) { el.textContent = ''; el.hidden = true; return; }
+  const mins = Math.floor(secs / 60);
+  const hrs  = Math.floor(mins / 60);
+  const days = Math.floor(hrs / 24);
+  let age;
+  if (hrs < 1) {
+    // The bottom rung the brief left open. Floor-to-hours would print
+    // "0 hours" for anything under an hour — the most likely reading of all on
+    // a quiet day — so this follows the dashboard's own m → h → d ladder, and
+    // never says "0 minutes".
+    const n = Math.max(1, mins);
+    age = cuT(n + (n === 1 ? ' minute' : ' minutes'), n + ' 分钟');
+  } else if (hrs < 24) {
+    age = cuT(hrs + (hrs === 1 ? ' hour' : ' hours'), hrs + ' 小时');
+  } else {
+    age = cuT(days + (days === 1 ? ' day' : ' days'), days + ' 天');
+  }
+  el.textContent = cuT('Oldest unfulfilled order', '最早待处理订单') + ' · ' + age;
+  el.hidden = false;
 }
 
 // Channel chips are a plain filter axis — no per-channel counts. The actionable

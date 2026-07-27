@@ -92,6 +92,23 @@
     font-size:24px; letter-spacing:-.01em; color:var(--text-1); text-transform:none; }
   #tab-orders .t-ord-shown { font-size:12px; color:var(--text-2); margin-top:10px; }
 
+  /* Orders page header (§1.7) — title + status line on the left, the page's one
+     Dusk CTA on the right. `.td-head` / `.td-head h2` (retail-admin.css) own the
+     row and the 24px/500 title, the same pair Customers uses, so this page
+     states no type of its own; only the column, the spacer and the status line
+     are local. The row KEEPS `.td-head`'s baseline alignment (Customers centres
+     its own because its head is one line tall) — with a two-line column,
+     baseline is what puts the button level with the TITLE rather than floating
+     it down to the middle of the column. */
+  #tab-orders .td-head .ord-head-col { display:flex; flex-direction:column; gap:3px; min-width:0; }
+  #tab-orders .td-head .sp { flex:1; }
+  #tab-orders .ord-statusline { margin:0; font:400 15px var(--f-sans); color:var(--text-2);
+    letter-spacing:0; font-variant-numeric:tabular-nums; font-feature-settings:"tnum"; }
+  /* Phones drop the whole head, exactly as `#tab-orders > h2` did before the
+     title gained a wrapper: the bottom nav already labels the tab, and New
+     order rides the filter row that mobile also hides. */
+  @media (max-width:720px){ #tab-orders > .td-head { display:none; } }
+
   /* Order drawer head — white pane, distinct from the paper body below. */
   #order-drawer.side-drawer .drawer-head { background:var(--bg-pane); }
 
@@ -1867,7 +1884,28 @@
        status chip filters the list to fapiao requests, each row carries the
        invoice summary, and issuing happens in the order drawer.) -->
   <section id="tab-orders">
-    <h2>Orders · 订单</h2>
+    <!-- Page header (§1.7): title, a status line where there is work waiting,
+         and one Dusk CTA. Three elements, no fourth — no section label and no
+         eyebrow above the title.
+         The status line carries the ONE fact nothing else on this page reports:
+         how long the oldest order still waiting on an operator has waited. It
+         deliberately carries no count — Paid and Preparing sit as chips a few
+         pixels below, and a third copy of them here would be the duplication
+         §1.7 warns about. Empty (and absent, not "0") whenever nothing is
+         waiting; ordRenderStatusLine() in 04-orders.js is the whole rule. -->
+    <div class="td-head">
+      <div class="ord-head-col">
+        <h2>Orders · 订单</h2>
+        <p class="ord-statusline" id="ord-statusline" data-no-i18n hidden></p>
+      </div>
+      <span class="sp"></span>
+      <!-- The page's ONE Dusk element (§1.8 rule 1: the header CTA has first
+           claim). Moved here from the right-hand end of the filter row. -->
+      <button class="btn btn-primary t-cta" onclick="omOpen()" title="Create an order on a customer's behalf · 代客下单">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        New order · 新建订单
+      </button>
+    </div>
 
     <!-- Today's pulse — KPI strip on the shared fc-* layer. Reuses the same
          /dashboard?from=today&to=today call the dashboard hero makes (no extra
@@ -1954,11 +1992,9 @@
       </select>
       <input type="text" id="orders-q" oninput="debouncedLoadOrders()" data-ph-en="Search order #, name, phone…" data-ph-cn="搜索订单号、姓名、电话…" placeholder="Search order #, name, phone…" style="flex: 1; min-width: 220px">
       <!-- No Refresh button and no live indicator: the list updates itself over
-           the admin's live connection and can never be paused. -->
-      <button class="btn btn-primary t-cta" onclick="omOpen()" title="Create an order on a customer's behalf · 代客下单">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        New order · 新建订单
-      </button>
+           the admin's live connection and can never be paused.
+           "New order" used to end this row; it is the page header's CTA now
+           (§1.7). The gap it left is expected — this row is rebuilt next. -->
       <!-- Bulk attach tracking — hidden by default; a tenant turns it on from
            Settings → Delivery (delivery.bulkTracking → body.ord-bulk-tracking).
            Kept as a secondary button so it never competes with the one Dusk CTA. -->

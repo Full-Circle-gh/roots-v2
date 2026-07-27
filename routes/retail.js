@@ -18277,7 +18277,7 @@ router.get('/api/retail-admin/order-status-counts', requireRetailAdmin, (req, re
   const where = " AND COALESCE(channel,'') NOT IN ('meituan','gzgrocery')" + (sid ? ' AND store_id = ?' : '');
   const args  = sid ? [sid] : [];
 
-  const out = { pending_payment: 0, paid: 0, preparing: 0, rider_pickup: 0, dispatched: 0, awaiting_restock: 0, refunds_open: 0 };
+  const out = { pending_payment: 0, paid: 0, preparing: 0, rider_pickup: 0, dispatched: 0, awaiting_restock: 0, refunds_open: 0, oldest_unfulfilled_secs: null };
   const rows = tdb().prepare(
     `SELECT status, COUNT(*) AS n FROM retail_orders
       WHERE status IN ('pending_payment','paid','preparing','dispatched','awaiting_restock')${where}
@@ -18321,6 +18321,30 @@ router.get('/api/retail-admin/order-status-counts', requireRetailAdmin, (req, re
         AND COALESCE(invoice_status, 'requested') <> 'issued'
         AND status NOT IN ('cancelled','pending_payment')${where}`
   ).get(...args).n;
+
+  // How long the OLDEST order still waiting on an operator has waited — the one
+  // number behind the Orders page header's status line (§1.7). No new route and
+  // no new round trip: the orders list already calls this on every load, and the
+  // line is deliberately age-only, since Paid/Preparing are chips on the same
+  // screen and a count here would be a third copy of them.
+  //   • "Unfulfilled" = paid / preparing / rider_pickup, with the same read-only
+  //     channel exclusion and store filter `where` gives every badge above.
+  //     (Note: rider_pickup is a Meituan-only bucket today, so that exclusion
+  //     empties it — the state is named here so the definition still holds if a
+  //     non-mirror channel ever uses it.)
+  //   • Age reads `waiting_since` = COALESCE(paid_at, placed_at), the dashboard's
+  //     own field. paid_at alone is null on legacy/bulk-paste rows, which would
+  //     surface as an infinite wait; the COALESCE never is.
+  //   • Elapsed SECONDS, not the timestamp, so a skewed client clock can never
+  //     move the figure (the dashboard corrects for the same thing with
+  //     server_now). NULL when nothing is waiting — the header then renders no
+  //     line at all, which is the finished answer, not a gap.
+  const oldestSecs = tdb().prepare(
+    `SELECT CAST((julianday('now') - julianday(MIN(COALESCE(paid_at, placed_at)))) * 86400 AS INTEGER) AS secs
+       FROM retail_orders
+      WHERE status IN ('paid','preparing','rider_pickup')${where}`
+  ).get(...args).secs;
+  out.oldest_unfulfilled_secs = oldestSecs == null ? null : Math.max(0, oldestSecs);
 
   res.json({ success: true, data: out });
 });
