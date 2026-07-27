@@ -1566,7 +1566,7 @@ function slotEndAnchor(scheduledForIso, label) {
 }
 // ── Ship-by: ONE decision shared by the orders-list cell, the drawer tile,
 // AND the printed receipt / packing slip (the print side mirrors this in
-// lib/feie.js shipByPrintLine() — keep the two in sync). Rule: the MOST
+// lib/feie.js shipByPrintParts() — keep the two in sync). Rule: the MOST
 // CONCRETE fact wins, and whenever a real date exists we show that DATE,
 // never a vague "ASAP".
 //   1 pickup     → counter window
@@ -3805,8 +3805,14 @@ function orderDangerPick(id, next, ev) {
 // orders), mirroring how the voucher segment is conditional.
 function orderTotalSubline(o) {
   let s = `${cuT('subtotal','小计')} ¥${fmt(o.subtotal)} · ${cuT('shipping','运费')} ¥${fmt(o.shipping_fee)}`;
-  if (Number(o.packing_fee) > 0) s += ` · ${cuT('packing','打包费')} ¥${fmt(o.packing_fee)}`;
-  if (o.voucher_amount)          s += ` · ${cuT('voucher','优惠券')} −¥${fmt(o.voucher_amount)}`;
+  if (Number(o.packing_fee) > 0)    s += ` · ${cuT('packing','打包费')} ¥${fmt(o.packing_fee)}`;
+  // Deductions last, grouped. Points and wallet were missing entirely, so an
+  // order paid partly from either showed charges that read like a total and
+  // weren't one — 44 of 616 live orders, two off by more than ¥1000. Wallet is
+  // what the Customers page calls balance_used, so the two surfaces agree.
+  if (Number(o.voucher_amount) > 0) s += ` · ${cuT('voucher','优惠券')} −¥${fmt(o.voucher_amount)}`;
+  if (Number(o.points_amount) > 0)  s += ` · ${cuT('points','积分')} −¥${fmt(o.points_amount)}`;
+  if (Number(o.balance_used) > 0)   s += ` · ${cuT('wallet','钱包')} −¥${fmt(o.balance_used)}`;
   return s;
 }
 function renderOrderTotalBanner(o) {
