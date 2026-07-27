@@ -155,13 +155,49 @@
   [data-theme="dark"] #tab-orders .status-chip.active,
   [data-theme="dark"] #tab-orders .status-chip.active[class*="st-"] { background:var(--tacet-paper);
     border-color:var(--tacet-paper); color:var(--tacet-ink); }
-  #tab-orders .status-chip .chip-ct { margin-left:6px; font-weight:400; color:var(--text-2); opacity:1;
-    font-variant-numeric:tabular-nums; }
-  #tab-orders .status-chip.active .chip-ct { color:rgba(251,249,244,.7); }
-  [data-theme="dark"] #tab-orders .status-chip.active .chip-ct { color:rgba(17,26,43,.6); }
+  /* Count badge — a rounded token rather than a bare number. The fill stays
+     NEUTRAL in every state: the badge is a shape, never a signal. Only the four
+     attention chips tint their number, and they alone carry the dot below.
+     `.status-chip` is already inline-flex with gap:6px, so the badge needs no
+     margin of its own — margin-left:0 cancels retail-admin.css:5064.
+     Height is 16px, matching the chip's own text line box (`body{font:13px …}`
+     resets line-height to `normal`, ≈16px at 13px Inter). Any taller and the
+     eight counted chips would stand proud of the four bare ones.
+     🔴 `:empty` must be re-stated here. retail-admin.css:5065 hides an empty
+     badge at (0,3,0); this ID-scoped block outranks it, so without this line a
+     cleared queue would draw an empty pill instead of nothing. Not redundant —
+     zero-hiding survives only because of it. */
+  #tab-orders .status-chip .chip-ct { display:inline-flex; align-items:center; justify-content:center;
+    gap:4px; margin-left:0; padding:0 6px; min-width:17px; height:16px; border-radius:999px;
+    background:var(--bg-elev-1); font-size:11.5px; font-weight:500; line-height:1;
+    color:var(--text-2); opacity:1; font-variant-numeric:tabular-nums; }
+  #tab-orders .status-chip .chip-ct:empty { display:none; }
+  #tab-orders .status-chip.active .chip-ct { background:rgba(251,249,244,.16); color:rgba(251,249,244,.82); }
+  [data-theme="dark"] #tab-orders .status-chip.active .chip-ct { background:rgba(17,26,43,.14); color:rgba(17,26,43,.62); }
   #tab-orders .status-chip .chip-ct.alert { color:var(--tacet-amber-ink); }
-  #tab-orders .status-chip.active .chip-ct.alert { color:rgba(251,249,244,.85); }
+  #tab-orders .status-chip.active .chip-ct.alert { color:rgba(251,249,244,.9); }
+  /* An active attention chip in dark mode fills with PAPER, so the light-on-ink
+     rule above would paint cream on cream. Pre-existing: the old pair tied at
+     (1,4,0) and source order decided it. This override is (1,5,0) so it can't. */
+  [data-theme="dark"] #tab-orders .status-chip.active .chip-ct.alert { color:rgba(17,26,43,.8); }
+  /* The attention dot — punctuation, not an alarm. `currentColor` makes it the
+     same amber ink as the number beside it, so it introduces NO new colour to
+     the page and needs no dark-theme or active-state override of its own.
+     4px, flat fill, no animation. Generated content doesn't affect `:empty`,
+     so a zeroed chip still hides the badge and the dot with it. */
+  #tab-orders .status-chip .chip-ct.alert::before { content:''; width:4px; height:4px; flex:none;
+    border-radius:50%; background:currentColor; }
   #chd-btn .chan-ico svg { width:15px; height:15px; }
+
+  /* Filter row — store · channel · search share ONE line. `.row` already gives
+     flex + gap + wrap; these two only stop the store select and the channel
+     trigger being squashed by the flex:1 search box, so "one line" holds.
+     🔴 Scoped by ID, never via `#tab-orders .ovp-wrap`. `.ovp-wrap` is shared
+     by three other popovers — #pv-btn (products View), #dzv-btn (delivery
+     zones) and .odm-wrap (refund / cancel, which renders INSIDE #tab-orders) —
+     and none of them may pick up filter-row layout. */
+  #tab-orders .ord-filterbar > #orders-store { flex:none; }
+  #tab-orders .ord-filterbar > #chd-wrap { flex:none; }
 
   /* Data table — paper card, hairline rows, calm hover. */
   #tab-orders .table-wrap { background:var(--bg-pane); border:1px solid var(--line); border-radius:14px;
@@ -1965,47 +2001,40 @@
       <div class="status-chip st-awaiting_restock"       data-status="needs_invoice"    onclick="setOrderStatus(this)" title="Orders with an invoice request — the count is the ones still to issue · 开票申请订单,计数为待开票"><span class="dot"></span>Invoice<span class="chip-ct alert" id="oc-needs_invoice"></span></div>
     </div>
 
-    <!-- Channel filter — orthogonal to status. Filters the combined order
-         list by origin. Meituan rows ride the list read-only (view only).
-         A dropdown, not a chip row: channel is a secondary facet reached for
-         far less often than status, so it collapses into one control instead
-         of costing its own line (was 6 chips wide). -->
-    <div class="ovp-wrap chd-wrap" id="chd-wrap" style="margin-bottom: var(--s3)">
-      <button type="button" class="chd-btn" id="chd-btn" onclick="chdToggle()" aria-haspopup="true">
-        <span class="chan-ico" id="chd-btn-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></span>
-        <span><span class="chd-lbl-dim">Channel:</span> <span id="chd-btn-txt">All channels</span></span>
-        <svg class="chd-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
-      </button>
-      <div class="chd-pop" id="chd-pop" hidden>
-        <button type="button" class="chd-item active" data-channel=""        onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></span>All channels<svg class="chd-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button>
-        <button type="button" class="chd-item"        data-channel="wechat"  onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 10.2c0-3.6-3.2-6.2-7.1-6.2S2.3 6.6 2.3 10.2c0 1.8.8 3.4 2.1 4.6-.1.9-.4 1.8-.9 2.6a8 8 0 0 0 3.3-1.2c.9.2 1.8.3 2.7.2"/><path d="M21.7 15.4c0-2.9-2.6-5.1-5.7-5.1-.4 0-.8 0-1.2.1.4.9.6 1.8.6 2.8 0 1.6-.6 3-1.7 4.1a6.9 6.9 0 0 0 2.3.4c.6 0 1.2-.1 1.8-.2a6.4 6.4 0 0 0 2.6 1c-.3-.6-.5-1.3-.6-2 .6-.9.9-1.9.9-3.1Z"/><circle cx="6.3" cy="9.6" r="0.85" fill="currentColor" stroke="none"/><circle cx="10.3" cy="9.6" r="0.85" fill="currentColor" stroke="none"/></svg></span>WeChat<svg class="chd-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button>
-        <button type="button" class="chd-item"        data-channel="web"     onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18z"/></svg></span>Web<svg class="chd-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button>
-        <button type="button" class="chd-item"        data-channel="meituan" onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="17" r="2.5"/><circle cx="18" cy="17" r="2.5"/><path d="M8.5 17h7"/><path d="M18 17l-3-8h-3"/><path d="M3 9h4l3.5 8"/><path d="M14 6h3v3"/></svg></span>Meituan<svg class="chd-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button>
-        <button type="button" class="chd-item"        data-channel="gzgrocery" onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M3 9a2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 3 0"/><line x1="9" y1="20" x2="9" y2="14"/><line x1="15" y1="20" x2="15" y2="14"/></svg></span>gzgrocery<svg class="chd-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button>
-        <button type="button" class="chd-item"        data-channel="manual"  onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span>Manual · 手动<svg class="chd-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button>
-      </div>
-    </div>
-    <input type="hidden" id="orders-channel" value="">
-    <!-- Hidden source-of-truth for existing loadOrders() reads -->
-    <select id="orders-status" style="display: none">
-      <option value="" selected></option>
-      <option value="pending_payment"></option>
-      <option value="paid"></option>
-      <option value="preparing"></option>
-      <option value="rider_pickup"></option>
-      <option value="dispatched"></option>
-      <option value="delivered"></option>
-      <option value="awaiting_restock"></option>
-      <option value="cancelled"></option>
-      <option value="refunded"></option>
-      <option value="refunds_open"></option>
-      <option value="needs_invoice"></option>
-    </select>
-
-    <div class="row" style="margin-bottom: var(--s4)">
+    <!-- Filter row — store · channel · search on ONE line, actions after it.
+         Channel used to be a standalone block above this row with its own
+         margin-bottom, so it could never share a line no matter how wide the
+         viewport got. It is a flex child here now and the row owns the spacing.
+         Search carries flex:1, so it absorbs the slack and the two controls
+         either side of it stay their natural width.
+         The Dusk "New order" CTA left this row for the page header in 291202f0;
+         bulk tracking is last, which is what puts it at the right-hand end. -->
+    <div class="row ord-filterbar" style="margin-bottom: var(--s4)">
       <select id="orders-store" onchange="ordFilterChanged()">
         <option value="">All stores · 全部门店</option>
       </select>
+
+      <!-- Channel filter — orthogonal to status. Filters the combined order
+           list by origin. Meituan rows ride the list read-only (view only).
+           A dropdown, not a chip row: channel is a secondary facet reached for
+           far less often than status, so it collapses into one control instead
+           of costing its own line (was 6 chips wide). -->
+      <div class="ovp-wrap chd-wrap" id="chd-wrap">
+        <button type="button" class="chd-btn" id="chd-btn" onclick="chdToggle()" aria-haspopup="true">
+          <span class="chan-ico" id="chd-btn-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></span>
+          <span><span class="chd-lbl-dim">Channel:</span> <span id="chd-btn-txt">All channels</span></span>
+          <svg class="chd-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+        <div class="chd-pop" id="chd-pop" hidden>
+          <button type="button" class="chd-item active" data-channel=""        onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></span>All channels<svg class="chd-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button>
+          <button type="button" class="chd-item"        data-channel="wechat"  onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 10.2c0-3.6-3.2-6.2-7.1-6.2S2.3 6.6 2.3 10.2c0 1.8.8 3.4 2.1 4.6-.1.9-.4 1.8-.9 2.6a8 8 0 0 0 3.3-1.2c.9.2 1.8.3 2.7.2"/><path d="M21.7 15.4c0-2.9-2.6-5.1-5.7-5.1-.4 0-.8 0-1.2.1.4.9.6 1.8.6 2.8 0 1.6-.6 3-1.7 4.1a6.9 6.9 0 0 0 2.3.4c.6 0 1.2-.1 1.8-.2a6.4 6.4 0 0 0 2.6 1c-.3-.6-.5-1.3-.6-2 .6-.9.9-1.9.9-3.1Z"/><circle cx="6.3" cy="9.6" r="0.85" fill="currentColor" stroke="none"/><circle cx="10.3" cy="9.6" r="0.85" fill="currentColor" stroke="none"/></svg></span>WeChat<svg class="chd-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button>
+          <button type="button" class="chd-item"        data-channel="web"     onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a14 14 0 0 1 0 18 14 14 0 0 1 0-18z"/></svg></span>Web<svg class="chd-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button>
+          <button type="button" class="chd-item"        data-channel="meituan" onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="17" r="2.5"/><circle cx="18" cy="17" r="2.5"/><path d="M8.5 17h7"/><path d="M18 17l-3-8h-3"/><path d="M3 9h4l3.5 8"/><path d="M14 6h3v3"/></svg></span>Meituan<svg class="chd-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button>
+          <button type="button" class="chd-item"        data-channel="gzgrocery" onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9"/><path d="M4 9v10a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V9"/><path d="M3 9a2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 5 0 2.5 2.5 0 0 0 3 0"/><line x1="9" y1="20" x2="9" y2="14"/><line x1="15" y1="20" x2="15" y2="14"/></svg></span>gzgrocery<svg class="chd-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button>
+          <button type="button" class="chd-item"        data-channel="manual"  onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg></span>Manual · 手动<svg class="chd-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button>
+        </div>
+      </div>
+
       <input type="text" id="orders-q" oninput="debouncedLoadOrders()" data-ph-en="Search order #, name, phone…" data-ph-cn="搜索订单号、姓名、电话…" placeholder="Search order #, name, phone…" style="flex: 1; min-width: 220px">
       <!-- No Refresh button and no live indicator: the list updates itself over
            the admin's live connection and can never be paused. -->
@@ -2022,6 +2051,25 @@
       <!-- The per-operator "View" display-tweak popover was removed in the Tacet
            port: Orders now has one clean, consistent table. -->
     </div>
+
+    <!-- Hidden source-of-truth for existing loadOrders() reads. Both are read by
+         id, never by position, so they sit outside the filter row rather than
+         inside it as display:none flex children. -->
+    <input type="hidden" id="orders-channel" value="">
+    <select id="orders-status" style="display: none">
+      <option value="" selected></option>
+      <option value="pending_payment"></option>
+      <option value="paid"></option>
+      <option value="preparing"></option>
+      <option value="rider_pickup"></option>
+      <option value="dispatched"></option>
+      <option value="delivered"></option>
+      <option value="awaiting_restock"></option>
+      <option value="cancelled"></option>
+      <option value="refunded"></option>
+      <option value="refunds_open"></option>
+      <option value="needs_invoice"></option>
+    </select>
 
     <!-- Bulk attach tracking modal -->
     <div id="bulk-trk-bg" class="pu-editor-bg">
