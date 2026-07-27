@@ -10534,10 +10534,19 @@ tr.vch-row.is-off .vch-code, tr.vch-row.is-off .vch-gives { color: var(--text-2)
   padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 12.5px;
 }
 .vch-holder:last-child { border-bottom: none; }
-.vch-holder .who { font-weight: 500; color: var(--text-1); min-width: 0; }
+/* Name + phone are one target that opens the customer; Take it back stays its
+   own control, so the row can't send you to a page you meant to revoke from. */
+.vch-holder .go {
+  flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 10px;
+  border: 0; background: none; padding: 0; margin: 0;
+  font: inherit; text-align: left; cursor: pointer;
+}
+.vch-holder .go:hover .who { color: var(--tacet-dusk); }
+.vch-holder .go:focus-visible { outline: 2px solid var(--tacet-dusk); outline-offset: 3px; border-radius: 4px; }
+.vch-holder .who { font-weight: 500; color: var(--text-1); flex: none; }
 .vch-holder .ph {
   color: var(--text-2); font-variant-numeric: tabular-nums;
-  margin-right: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .vch-holders .lnk {
   flex: none; border: 0; background: none; padding: 0; cursor: pointer;

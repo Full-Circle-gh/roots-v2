@@ -278,8 +278,11 @@ async function vchLoadHolders(id, count) {
     if (!data.length) { mount.innerHTML = ''; return; }
     const rows = data.map(g =>
       '<div class="vch-holder">'
-      + '<span class="who">' + escapeHtml(g.nickname || cuT('(no name)', '(未填写昵称)')) + '</span>'
-      + '<span class="ph">' + escapeHtml(g.phone || '—') + '</span>'
+      + '<button type="button" class="go" onclick="vchGotoCustomer(' + g.customer_id + ')"'
+      +   ' title="' + escapeAttr(cuT('Open this customer', '查看该顾客')) + '">'
+      +   '<span class="who">' + escapeHtml(g.nickname || cuT('(no name)', '(未填写昵称)')) + '</span>'
+      +   '<span class="ph">' + escapeHtml(g.phone || '—') + '</span>'
+      + '</button>'
       + '<button type="button" class="lnk" onclick="vchTakeBack(' + g.id + ')">' + cuT('Take it back', '收回') + '</button>'
       + '</div>').join('');
     const more = n > data.length
@@ -291,6 +294,15 @@ async function vchLoadHolders(id, count) {
   } catch (e) {
     mount.innerHTML = '<div class="vch-holder err">' + cuT('Couldn’t load who has it: ', '无法加载持有名单:') + escapeHtml(e.message) + '</div>';
   }
+}
+
+// Jump from a holder row to that customer's detail. Same shape as
+// orderGotoCustomer: close this drawer first rather than switching tabs, so the
+// two side-drawers don't stack and the tab-click drawer purge can't eat it.
+function vchGotoCustomer(id) {
+  if (!id) return;
+  closeDrawer('#vch-drawer');
+  cuOpenDetail(Number(id));
 }
 
 // Take the coupon off one customer, straight from the drawer.
