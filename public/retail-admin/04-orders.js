@@ -1074,7 +1074,9 @@ async function loadOrders(opts = {}) {
       // Unread until any operator opens the detail (server seen_at). Stays
       // bold + lit across reloads/devices, unlike the transient arrival flash.
       const isUnread = !o.seen_at && isActionable(o);
-      const unread = isUnread ? ' is-unread' : '';
+      // .is-unseen, not .is-unread — same name Customers uses, and it leaves
+      // retail-admin.css's `tr.order-row.is-unread` wash/bold matching nothing.
+      const unread = isUnread ? ' is-unseen' : '';
       // Read-only channels (Meituan / gzgrocery) show a channel tag + "view
       // only". They still open a view-only detail drawer (product / SKU / qty) —
       // renderOpenOrder branches to renderReadonlyOrder for these, with no
@@ -1085,7 +1087,7 @@ async function loadOrders(opts = {}) {
       const chanCell = `<div class="ord-chan">${chanIcon(o.channel)}${ordChannelLabel(o)}</div>`;
       return `
       <tr class="order-row${fresh}${unread}${ro ? ' order-row--ro' : ''}" data-order-id="${o.id}" tabindex="0"${ro ? ' data-readonly="1"' : ''}>
-        <td>${isUnread ? '<span class="new-chip">NEW · 新</span>' : ''}<span class="ord-no" title="${escapeHtml(o.order_no || '')}">${escapeHtml(ordShortNo(o.order_no))}</span></td>
+        <td><span class="ord-no" title="${escapeHtml(o.order_no || '')}">${escapeHtml(ordShortNo(o.order_no))}</span></td>
         <td class="oc-chan">${chanCell}</td>
         <td>
           <div class="ord-cust">${escapeHtml(ordCustomerLines(o).name)}</div>
@@ -3585,12 +3587,11 @@ async function openOrder(id, opts = {}) {
     // The GET above stamped seen_at server-side (shared across staff). Clear
     // this row's unread treatment immediately so it doesn't wait for the next
     // poll; a later list rebuild reflects the server seen_at and stays cleared.
+    // Dropping .is-unseen lets the row settle back — the td's transparent
+    // inset shadow and its .6s transition carry the surface and edge out
+    // together, rather than snapping.
     const _row = document.querySelector('tr.order-row[data-order-id="' + id + '"]');
-    if (_row) {
-      _row.classList.remove('is-unread');
-      const _chip = _row.querySelector('.new-chip');
-      if (_chip) _chip.remove();
-    }
+    if (_row) _row.classList.remove('is-unseen');
     // In-page breadcrumb (desktop page mode).
     const _crumb = document.getElementById('ord-page-crumb');
     if (_crumb) _crumb.textContent = o.order_no || '';

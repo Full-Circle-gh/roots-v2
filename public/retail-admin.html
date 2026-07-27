@@ -179,22 +179,90 @@
      still has exactly one author and nothing doubles. border-spacing:0 keeps
      the cells flush, so the table stays pixel-identical. */
   #orders-table { border-collapse:separate; border-spacing:0; width:100%; }
-  #orders-table thead th { background:var(--bg-pane); color:var(--text-1); font-family:var(--f-sans);
-    font-weight:700; font-size:13.5px; letter-spacing:.02em; text-transform:none; padding:11px 10px;
-    border-bottom:1px solid var(--line); }
+  /* 🔴 THE COLUMN-HEADER BAND — a PRODUCT-WIDE component, and Orders is its
+     anchor (§1.13a rule 3 + tacet-design-system "Table header surface").
+     Every value below is the spec's, not a per-page choice. It was invented
+     in the Orders mockup — that is where --td-header came from — and shipped
+     first on Customers; this makes Orders the second consumer. If any of it
+     needs to change it changes here first and every table follows.
+     13px, not 15px: 15 was tried and reads as another row, not a header.
+     --td-text (Ink), not --td-text2 (Graphite).
+
+     `top: 56px` is the ONLY local value. It is the height of .topbar, which
+     is position:fixed/top:0/z-index:12 — verified, not copied on faith.
+     Nothing inside #tab-orders is sticky or fixed, so the KPI tiles, status
+     chips and filter row scroll away above the band normally (§1.13a rule 1).
+     Orders has more above its table than Customers, but none of it pins, so
+     the offset is the same 56px.
+
+     z-index 5 sits under the topbar's 12 and above the rows, and the
+     background is fully opaque so a tinted row passing underneath cannot
+     bleed through it.
+
+     NO RADIUS on the cells: .list-card's clip-path (build 1) already rounds
+     the corners, so the band must not draw one of its own. One element owns
+     the shape — that is why there is no pinned-state class to keep in sync.
+
+     text-transform:none and the explicit colour/background are load-bearing:
+     the global `th` reset in retail-admin.css sets uppercase, 11px/600 and
+     --bg-app, and would otherwise leak through (uppercase would also breach
+     §1.6). text-align:left restates that same reset — a no-op here, kept so
+     the rule is self-contained rather than depending on a reset elsewhere. */
+  #orders-table thead th {
+    position: sticky; top: 56px; z-index: 5;
+    background: var(--td-header); color: var(--td-text);
+    font-family: var(--f-sans); font-weight: 500; font-size: 13px;
+    letter-spacing: 0; text-transform: none; text-align: left;
+    padding: 10px 12px; border-bottom: 1px solid var(--td-border); white-space: nowrap;
+  }
+  #orders-table thead th:first-child,
+  #orders-table thead th:last-child { border-radius: 0; }
+  /* The transparent inset shadow here is what makes the unseen edge SETTLE
+     rather than snap: the sage marker below animates against a same-geometry
+     shadow that already exists on every td. Without it the edge would appear
+     and vanish instantly. Same shape as #cu-table tbody td. */
   #orders-table tbody td { border-bottom:1px solid var(--line); padding:13px 10px; color:var(--text-1);
-    font-size:13.5px; vertical-align:top; }
-  #orders-table tbody tr.order-row { cursor:pointer; transition:background var(--t-med) var(--ease-out); }
-  #orders-table tbody tr.order-row:hover td { background:var(--bg-elev-1); }
-  #orders-table tbody tr.order-row:focus-visible { outline:none; }
-  #orders-table tbody tr.order-row:focus-visible td { background:var(--bg-elev-1);
-    box-shadow:inset 2px 0 0 var(--tacet-ink); }
+    font-size:13.5px; vertical-align:top;
+    box-shadow: inset 4px 0 0 transparent;
+    transition: background .6s cubic-bezier(.16,1,.3,1), box-shadow .6s cubic-bezier(.16,1,.3,1); }
+  @media (prefers-reduced-motion: reduce) { #orders-table tbody td { transition: none; } }
+  #orders-table tbody tr.order-row { cursor:pointer; }
+  /* :not(.is-unseen) — hover must not wipe the unseen surface. Copied from
+     #cu-table tbody tr.cul-row:not(.is-unseen):hover td. */
+  #orders-table tbody tr.order-row:not(.is-unseen):hover td { background:var(--bg-elev-1); }
+  /* 🔴 The focus ring moved OFF box-shadow and onto outline, and is now Dusk.
+     Two reasons, both rules: box-shadow does not stack across rules — last
+     declared wins — so an Ink ring on the td would erase the unseen row's
+     sage edge the moment the row took focus. And §1.8 rule 3: focus rings are
+     Dusk and exempt from the one-Dusk budget, so the old Ink ring was
+     off-spec regardless. outline-offset:-2px keeps it inside the row so it
+     cannot change row height or nudge the columns. */
+  #orders-table tbody tr.order-row:focus-visible { outline:2px solid var(--td-dusk); outline-offset:-2px; }
+  #orders-table tbody tr.order-row:focus-visible td { background:var(--bg-elev-1); }
+
+  /* ── Unopened rows — the product's ONE unseen treatment (design-system
+     "Unseen-row surface"; reference implementation is #cu-table). ───────────
+     Replaces three signals that all meant "nobody has opened this": the Ink
+     NEW chip, a sage wash, and bolded order#/customer. One meaning, one
+     treatment.
+     Named .is-unseen, matching Customers, so both pages call one thing by one
+     name. It also sidesteps retail-admin.css's `tr.order-row.is-unread`
+     rules, which stop matching entirely rather than needing to be fought.
+     The trigger is unchanged: !o.seen_at && isActionable(o).
+     Surface and edge always together, never one without the other. The edge
+     is an inset shadow, NOT a border, so an unseen row is the exact same
+     height as a seen one and the list never jumps as records are opened. */
+  #orders-table tbody tr.order-row.is-unseen td { background: var(--td-unseen); }
+  #orders-table tbody tr.order-row.is-unseen td:first-child { box-shadow: inset 4px 0 0 var(--td-sage); }
   #orders-table tbody tr.order-row:last-child td { border-bottom:none; }
 
-  /* NEW chip — small ink pill. */
-  #tab-orders .new-chip { background:var(--tacet-ink); color:var(--tacet-paper); border:none;
-    font-size:10px; font-weight:500; letter-spacing:.04em; border-radius:999px; padding:2px 7px; }
-  [data-theme="dark"] #tab-orders .new-chip { background:var(--tacet-paper); color:var(--tacet-ink); }
+  /* The NEW chip is gone — the unseen row surface + sage edge above carry that
+     meaning now, once instead of three times. It also rendered UPPERCASE: this
+     rule overrode colour, size, weight and radius but never reset
+     `text-transform: uppercase` from the .new-chip primitive in
+     retail-admin.css, so it was a live §1.6 breach. (That primitive is sage
+     and never painted here — the Ink override above always won. It was never
+     the Dusk pill several docs describe.) */
 
   /* Status pills — tinted fill + matching text, small dot; health via colour. */
   :is(#tab-orders, #order-drawer) .pill { border:none; font-weight:500; font-size:12.5px; letter-spacing:0;
