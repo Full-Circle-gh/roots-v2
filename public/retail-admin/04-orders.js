@@ -4059,6 +4059,15 @@ function renderOpenOrder(o) {
               <div class="kicker">Payment · 付款 ${_pmt?.transaction_id ? copyChip(_pmt.transaction_id, 'Txn ID') : ''}</div>
               <div class="val">${paymentBrandHTML(o.payment_method, 'lg')} · ${escapeHtml(paymentStatusLabel(_pmt?.status))}</div>
             </div>`; })()}
+            <!-- Voucher: same gate as the total line's voucher term, so the two can
+                 never disagree. Code comes straight off the order, never looked up —
+                 it stays true after the coupon is deleted. Printed EXACTLY as stored:
+                 the uppercase is the merchant's code, not our typography. Don't
+                 "fix" the case. Missing code reads as unknown, never a dash. -->
+            ${Number(o.voucher_amount) > 0 ? `<div>
+              <div class="kicker">${cuT('voucher','优惠券')}</div>
+              <div class="val" data-no-i18n>${o.voucher_code ? `<b>${escapeHtml(o.voucher_code)}</b>` : cuT('not recorded','未记录')}</div>
+            </div>` : ''}
             ${renderShipByTile(o)}
             ${o.store_code ? `<div>
               <div class="kicker">Fulfilled by · 出货门店</div>
