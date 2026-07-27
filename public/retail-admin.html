@@ -135,7 +135,50 @@
   /* Data table — paper card, hairline rows, calm hover. */
   #tab-orders .table-wrap { background:var(--bg-pane); border:1px solid var(--line); border-radius:14px;
     overflow:hidden; overflow-x:auto; }
-  #orders-table { border-collapse:collapse; width:100%; }
+
+  /* ── Preconditions for the pinned column-header band (§1.13a) ──────────
+     Nothing here is visible. These three changes only clear the obstacles
+     that stop a sticky th reaching the page scroller; the band itself is a
+     later commit. Copied from Customers, the one place this works today.
+
+     🔴 Every ancestor with an `overflow` in EITHER axis becomes the sticky
+     element's scrollport — and a visible axis paired with a non-visible one
+     computes BOTH to auto. So `overflow:visible; overflow-x:auto` is a
+     scroll container, and the band would pin 56px down from the card's own
+     top, landing on row one. That shipped once on Customers. */
+
+  /* The card must clip its corners WITHOUT becoming a scroll container, so
+     clip-path replaces overflow:hidden. What it clips: the pager's bottom
+     corners and the last row's td backgrounds (hover --bg-elev-1, and the
+     focus-visible inset edge marker). Radius is 14px taken from
+     `.list-card{border-radius:14px}` in retail-admin.css, not assumed. */
+  #tab-orders .list-card {                        /* (1,1,0) beats .list-card (0,1,0) */
+    overflow: visible;
+    clip-path: inset(0 round 14px);
+  }
+  /* ≤720px the shared .list-card drops to border-radius:0/overflow:visible —
+     no corners left to clip, and a 14px clip would round a square card. That
+     rule is (0,1,0) and would lose to the (1,1,0) above, so undo it here. */
+  @media (max-width: 720px) { #tab-orders .list-card { clip-path: none; } }
+
+  /* 🔴 MUST match retail-admin.css's `#tab-orders .list-card > .table-wrap`
+     selector, which sets overflow-x:auto at (1,2,0). A plain
+     `#tab-orders .table-wrap` here is (1,1,0) and LOSES. Equal specificity +
+     later source (this block opens after the stylesheet link) wins.
+     Losing overflow-x costs nothing: #orders-table is table-layout:fixed,
+     width:100%, with a colgroup summing to exactly 100% and no min-width,
+     so it is never wider than its container and the scroll never fired. */
+  #tab-orders .list-card > .table-wrap {          /* (1,2,0) */
+    overflow: visible; overflow-x: visible;
+  }
+
+  /* Under `collapse` a cell border belongs to the table's border grid, so a
+     sticky th scrolls away from its own border-bottom. `separate` gives the
+     th its border back. Safe here because every border on this table is a
+     `border-bottom` — no cell declares border-top/left/right, so each line
+     still has exactly one author and nothing doubles. border-spacing:0 keeps
+     the cells flush, so the table stays pixel-identical. */
+  #orders-table { border-collapse:separate; border-spacing:0; width:100%; }
   #orders-table thead th { background:var(--bg-pane); color:var(--text-1); font-family:var(--f-sans);
     font-weight:700; font-size:13.5px; letter-spacing:.02em; text-transform:none; padding:11px 10px;
     border-bottom:1px solid var(--line); }
