@@ -1925,25 +1925,24 @@
 
     <!-- Today's pulse — KPI strip on the shared fc-* layer. Reuses the same
          /dashboard?from=today&to=today call the dashboard hero makes (no extra
-         backend). Orders + Revenue carry intraday sparklines; deltas compare to
-         the trailing baseline (calm rule: a down delta is clay, never red). -->
+         backend). Every tile carries the same foot: what changed, and what it
+         changed against — the trailing 7-day average, named on the badge rather
+         than left in a hover (calm rule: a down delta is clay, never red). -->
     <div class="fc-kpis" id="ord-kpis">
       <div class="fc-kpi accent">
         <div class="lbl">Orders today · 今日订单</div>
         <div class="val" id="ord-kpi-orders">—</div>
         <div class="fc-kpi-foot"><span class="fc-delta is-flat" id="ord-kpi-orders-d" onmouseenter="fcDeltaHover(event)" onmouseleave="fcDeltaLeave(event)">—</span></div>
-        <div class="fc-spark-wrap sm" id="ord-kpi-orders-spark" onmousemove="fcSparkMove(event)" onmouseleave="fcSparkLeave(event)"></div>
       </div>
       <div class="fc-kpi">
         <div class="lbl">Revenue today · 今日营收</div>
         <div class="val" id="ord-kpi-rev">—</div>
         <div class="fc-kpi-foot"><span class="fc-delta is-flat" id="ord-kpi-rev-d" onmouseenter="fcDeltaHover(event)" onmouseleave="fcDeltaLeave(event)">—</span></div>
-        <div class="fc-spark-wrap sm" id="ord-kpi-rev-spark" onmousemove="fcSparkMove(event)" onmouseleave="fcSparkLeave(event)"></div>
       </div>
       <div class="fc-kpi">
-        <div class="lbl">Avg order value · 客单价</div>
+        <div class="lbl">Average order value · 客单价</div>
         <div class="val" id="ord-kpi-aov">—</div>
-        <div class="fc-kpi-foot"><span class="sub">per order today · 今日每单</span></div>
+        <div class="fc-kpi-foot"><span class="fc-delta is-flat" id="ord-kpi-aov-d" onmouseenter="fcDeltaHover(event)" onmouseleave="fcDeltaLeave(event)">—</span></div>
       </div>
     </div>
     <!-- Swipe-dot pager (phone only) — signals the KPI strip scrolls sideways. -->

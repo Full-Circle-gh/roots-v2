@@ -900,7 +900,7 @@ async function ordLoadKpis(force) {
   if (!document.getElementById('ord-kpis')) return;
   if (!force && Date.now() - _ORD_KPI_AT < 45000) return;
   _ORD_KPI_AT = Date.now();
-  // Re-render the language-dependent bits (delta words, spark tip labels) on a
+  // Re-render the language-dependent bits (the delta badges' wording) on a
   // language toggle, without refetching. Registered lazily so window.onLangChange
   // (defined later in the i18n module) exists by the time we wire it.
   if (!_ORD_KPI_LANG_HOOKED && window.onLangChange) { _ORD_KPI_LANG_HOOKED = true; onLangChange(ordRepaintKpiLabels); }
@@ -917,21 +917,82 @@ function ordRenderKpis() {
   const orders = Number(k.orders || 0), revenue = Number(k.revenue || 0);
   dashCountUp($('#ord-kpi-orders'), orders);
   dashCountUp($('#ord-kpi-rev'), revenue, n => '¥' + Math.round(n).toLocaleString());
-  $('#ord-kpi-aov').textContent = orders ? '¥' + Math.round(revenue / orders).toLocaleString() : '—';
-  ordRepaintKpiLabels();   // deltas + sparklines (language-aware)
+  // No orders means no average — which is ¥0, not an unreadable dash. A money
+  // tile carries a number.
+  $('#ord-kpi-aov').textContent = orders ? '¥' + Math.round(revenue / orders).toLocaleString() : '¥0';
+  ordRepaintKpiLabels();   // deltas (language-aware)
 }
-// Language-dependent half — delta badges (the "new" word) and sparkline tip
-// labels. Split out so a language toggle reflows wording without re-animating
-// the headline numbers.
+// The Orders strip's own delta badge. Same states, same arithmetic and the same
+// calm rule as the dashboard's fcSetDelta — with one difference: it writes the
+// comparison onto the badge ("▲ 18 vs 7-day avg") instead of parking it in a
+// hover tip, so a number nobody hovers is still a number you can act on.
+// Deliberately local: fcSetDelta / dashSetDelta is the dashboard's, and the
+// dashboard's badges must keep rendering exactly as they do.
+//   cur    — today's figure. 0 means nothing has happened yet.
+//   avg    — the trailing-day average of the same figure (null / 0 → no baseline)
+//   days   — how many days that average covers
+//   change — (cur, avg) → the signed amount to print, already rounded to the
+//            precision it shows at: a count for orders, a percentage for money
+//   unit   — '' after a count, '%' after a percentage
+//   fmtAvg — formats `avg` for the hover tip
+//   per    — what that average is per: a day for the daily figures, an order
+//            for order value. One word, one measure.
+function ordSetDelta(sel, cur, avg, days, change, unit, fmtAvg, per) {
+  const el = $(sel); if (!el) return;
+  el.classList.remove('is-up', 'is-down', 'is-flat');
+  el._tip = '';
+  if (!cur) {
+    el.classList.add('is-flat'); el.textContent = '—';
+    el._tip = cuT('none yet today', '今日暂无');
+    return;
+  }
+  if (!days || !(avg > 0)) {
+    el.classList.add('is-up'); el.textContent = '▲ ' + cuT('new', '新');
+    el._tip = cuT('no recent baseline', '暂无近期基准');
+    return;
+  }
+  // The badge names the comparison; the tip carries the figure behind it.
+  const vs = ' ' + cuT(`vs ${days}-day avg`, `较近 ${days} 日均值`);
+  el._tip = cuT(`${days}-day avg · ${fmtAvg(avg)}/${per}`, `近 ${days} 日均值 · ${fmtAvg(avg)}/${per}`);
+  const d = change(cur, avg);
+  if (d > 0)      { el.classList.add('is-up');   el.textContent = '▲ ' + d + unit + vs; }
+  else if (d < 0) { el.classList.add('is-down'); el.textContent = '▼ ' + Math.abs(d) + unit + vs; }
+  else            { el.classList.add('is-flat'); el.textContent = '±0' + unit + vs; }
+}
+// Language-dependent half — the delta badges (the comparison wording and the
+// "new" word). Split out so a language toggle reflows wording without
+// re-animating the headline numbers.
+//
+// Orders reads as a count and the other two as percentages, on purpose. At the
+// small numbers a single store sees in a day, "18 more orders" is a fact an
+// operator can act on where "up 43%" is 6 orders against 24. Money is the other
+// way round — a percentage is how revenue is read.
 function ordRepaintKpiLabels() {
   const data = _ORD_KPI_DATA; if (!data || !document.getElementById('ord-kpis')) return;
   const k = data.kpis || {}, b = data.baseline || null;
-  fcSetDelta('#ord-kpi-orders-d', b && b.orders,        Number(k.orders || 0),        b && b.days, v => dashTrim(v) + ' ' + cuT(v === 1 ? 'order' : 'orders', '单'));
-  fcSetDelta('#ord-kpi-rev-d',    b && b.revenue,       Number(k.revenue || 0),       b && b.days, v => '¥' + Math.round(v).toLocaleString());
-  const trend = data.trend || [];
-  const labels = trend.map(p => String(p.bucket || ''));
-  fcRenderSpark($('#ord-kpi-orders-spark'), trend.map(p => Number(p.orders || 0)),  labels, v => v + ' ' + cuT(v === 1 ? 'order' : 'orders', '单'), false);
-  fcRenderSpark($('#ord-kpi-rev-spark'),    trend.map(p => Number(p.revenue || 0)), labels, v => '¥' + Math.round(v).toLocaleString(), true);
+  const days    = b ? b.days : 0;
+  const orders  = Number(k.orders || 0), revenue = Number(k.revenue || 0);
+  const ordAvg  = b && b.orders  ? Number(b.orders.avg  || 0) : 0;
+  const revAvg  = b && b.revenue ? Number(b.revenue.avg || 0) : 0;
+  const count   = (cur, avg) => Math.round(cur - avg);
+  // One decimal, matching what the server already computes for baseline.delta.
+  const pct     = (cur, avg) => Math.round(((cur - avg) / avg) * 1000) / 10;
+  const money   = v => '¥' + Math.round(v).toLocaleString();
+  const perDay  = cuT('day', '日');
+  ordSetDelta('#ord-kpi-orders-d', orders,  ordAvg, days, count, '',
+    v => dashTrim(v) + ' ' + cuT(v === 1 ? 'order' : 'orders', '单'), perDay);
+  // The server already expresses revenue's change as a percentage — use its
+  // number rather than a second expression for the same thing (§1.17 rule 1).
+  ordSetDelta('#ord-kpi-rev-d',    revenue, revAvg, days,
+    () => (b && b.revenue && b.revenue.delta != null ? b.revenue.delta : pct(revenue, revAvg)), '%',
+    money, perDay);
+  // A typical day's order value. Not on the wire, but exact from what is: both
+  // averages divide by the same `days`, so revenue.avg / orders.avg is the real
+  // 7-day AOV, not an approximation of it.
+  const aov    = orders  ? revenue / orders  : 0;
+  const aovAvg = ordAvg  ? revAvg  / ordAvg  : 0;
+  ordSetDelta('#ord-kpi-aov-d',    aov,     aovAvg, days, pct, '%',
+    money, cuT('order', '单'));
 }
 
 async function loadOrders(opts = {}) {
