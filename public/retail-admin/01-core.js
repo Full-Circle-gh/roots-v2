@@ -37,10 +37,17 @@ const CHAN_ICON = {
   // it inline only and so never hit this fallback.
   manual:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>',
 };
-// Resolve a channel string to its glyph (mini-app 'wechat' is the default).
+// Resolve a channel string to its glyph. An UNKNOWN channel gets NO glyph —
+// never WeChat's (§1.17 rule 2). This used to end `|| CHAN_ICON.wechat`, which
+// painted a WeChat mark beside every channel the map had never heard of; that
+// is the same fabricated claim the `manual` key was added to stop, one layer
+// down. Returns '' rather than undefined so callers can interpolate it
+// straight into HTML.
+// The `|| 'wechat'` on the input stays and is not a guess: retail_orders.channel
+// is DEFAULT 'wechat', so an absent value genuinely is the mini app.
 function chanIcon(channel) {
   const c = String(channel || 'wechat').toLowerCase();
-  return CHAN_ICON[c] || CHAN_ICON.wechat;
+  return CHAN_ICON[c] || '';
 }
 
 function toast(msg, kind = 'ok', ms) {
