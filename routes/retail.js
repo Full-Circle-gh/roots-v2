@@ -18322,6 +18322,22 @@ router.get('/api/retail-admin/order-status-counts', requireRetailAdmin, (req, re
         AND status NOT IN ('cancelled','pending_payment')${where}`
   ).get(...args).n;
 
+  // Oldest UNFULFILLED order, for the Orders page header status line (§1.7).
+  // "Unfulfilled" = paid but not yet gone: paid / preparing / rider_pickup.
+  // NOT the list's `isActionable`, which admits dispatched, delivered and
+  // refunded — that answers "is this ours to touch at all", a different
+  // question. Read-only channels are excluded by the shared `where`, same as
+  // every count above, so rider_pickup (a Meituan-only bucket) contributes
+  // nothing today; it is named so the definition stays true if that changes.
+  // Age is measured from `waiting_since` = COALESCE(paid_at, placed_at), the
+  // dashboard's own precedent: paid_at alone is null on some rows, placed_at
+  // alone measures from cart rather than from when the work started.
+  // Null when nothing is waiting — the header then renders NO line at all.
+  out.oldest_unfulfilled = tdb().prepare(
+    `SELECT MIN(COALESCE(paid_at, placed_at)) AS d FROM retail_orders
+      WHERE status IN ('paid','preparing','rider_pickup')${where}`
+  ).get(...args).d || null;
+
   res.json({ success: true, data: out });
 });
 

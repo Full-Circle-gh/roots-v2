@@ -90,6 +90,37 @@
     text-transform:uppercase; color:var(--text-3); margin:0 0 6px; }
   :is(#tab-orders, #tab-invoices, #tab-products) > h2 { font-family:var(--f-sans); font-weight:500;
     font-size:24px; letter-spacing:-.01em; color:var(--text-1); text-transform:none; }
+
+  /* ── §1.7 page header ──────────────────────────────────────────────────
+     Title + status line + one Dusk CTA. The section becomes the containing
+     block ONLY so the CTA can be positioned; nothing inside it was absolutely
+     positioned against a further ancestor (the popovers anchor to their own
+     .ovp-wrap, which is already position:relative), so this re-anchors nothing. */
+  #tab-orders { position: relative; }
+  /* Level with the title: --s6 matches the h2's own margin-top, so the button
+     sits on the title's line without either knowing the other's height. */
+  #tab-orders > .ord-head-cta { position: absolute; top: var(--s6); right: 0; z-index: 2; }
+  /* Reserve the CTA's lane so a long title or status line can never run under
+     it — both are short today, but neither should depend on staying short. */
+  #tab-orders > h2,
+  #tab-orders > .ord-status-line { padding-right: 190px; }
+  /* Status line — §1.7's values: 15px Inter 400, Graphite, sentence case,
+     tabular figures. Sits directly under the title. Zero Dusk: it is state,
+     not the AI acting. */
+  #tab-orders > .ord-status-line {
+    margin: -6px 0 var(--s4);
+    font: 400 15px var(--f-sans); color: var(--td-text2);
+    font-variant-numeric: tabular-nums;
+  }
+  #tab-orders > .ord-status-line[hidden] { display: none; }
+  /* Phones: retail-admin.css hides `#tab-orders > .row`, which is where this
+     button used to live — so it has never rendered on a phone. Keep it that
+     way; the title and status line are hidden there too. */
+  @media (max-width: 720px) {
+    #tab-orders > .ord-head-cta,
+    #tab-orders > .ord-status-line { display: none; }
+    #tab-orders > h2 { padding-right: 0; }
+  }
   #tab-orders .t-ord-shown { font-size:12px; color:var(--text-2); margin-top:10px; }
 
   /* Order drawer head — white pane, distinct from the paper body below. */
@@ -1867,7 +1898,30 @@
        status chip filters the list to fapiao requests, each row carries the
        invoice summary, and issuing happens in the order drawer.) -->
   <section id="tab-orders">
+    <!-- §1.7 page header — three elements, no fourth. No eyebrow: the section
+         label is retired product-wide and the title carries the page alone.
+         🔴 The h2 stays a DIRECT CHILD of the section. Two live rules select it
+         that way — `:is(#tab-orders,…) > h2` gives it its 24px/500 page-title
+         size, and retail-admin.css's `#tab-orders > h2 {display:none}` hides it
+         on phones. Wrapping it in a header div silently breaks both, reverting
+         the title to the base 11px uppercase section-label style. The CTA is
+         positioned instead of wrapped, precisely to keep that selector intact. -->
     <h2>Orders · 订单</h2>
+    <!-- Status line — work waiting, never population (§1.7's work rule). Stays
+         EMPTY and hidden until refreshOrderStatusCounts finds unfulfilled work;
+         a page with nothing waiting gets no line, and the space means finished.
+         data-no-i18n because ordRenderStatusLine bakes one language with cuT()
+         and re-renders it itself — it is not a glued pair for the walker to
+         split, and shielding it stops the walker mangling the " · ". -->
+    <div class="ord-status-line" id="ord-status-line" data-no-i18n hidden></div>
+    <!-- The page's ONE Dusk element (§1.8 rule 1 — the header CTA has first
+         claim). Moved here from the filter row 2026-07-27. Absolutely
+         positioned so the h2 above stays a direct child; the section is
+         position:relative only for this. -->
+    <button class="btn btn-primary t-cta ord-head-cta" onclick="omOpen()" title="Create an order on a customer's behalf · 代客下单">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      New order · 新建订单
+    </button>
 
     <!-- Today's pulse — KPI strip on the shared fc-* layer. Reuses the same
          /dashboard?from=today&to=today call the dashboard hero makes (no extra
@@ -1955,10 +2009,9 @@
       <input type="text" id="orders-q" oninput="debouncedLoadOrders()" data-ph-en="Search order #, name, phone…" data-ph-cn="搜索订单号、姓名、电话…" placeholder="Search order #, name, phone…" style="flex: 1; min-width: 220px">
       <!-- No Refresh button and no live indicator: the list updates itself over
            the admin's live connection and can never be paused. -->
-      <button class="btn btn-primary t-cta" onclick="omOpen()" title="Create an order on a customer's behalf · 代客下单">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-        New order · 新建订单
-      </button>
+      <!-- The Dusk "New order" CTA moved to the page header 2026-07-27 (§1.7:
+           the primary action sits top-right, level with the title). Brief 3
+           rebuilds this row onto one line; the gap it leaves is expected. -->
       <!-- Bulk attach tracking — hidden by default; a tenant turns it on from
            Settings → Delivery (delivery.bulkTracking → body.ord-bulk-tracking).
            Kept as a secondary button so it never competes with the one Dusk CTA. -->

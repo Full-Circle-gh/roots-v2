@@ -6248,6 +6248,44 @@ async function openRefundEvents(orderId) {
 // states (delivered/cancelled/refunded/all) grow forever, so they stay bare.
 // Each badge is hidden when its count is 0 (.chip-ct:empty), so cleared queues
 // don't carry a "0". Honours the active store filter, matching the list.
+// ── §1.7 status line — "Oldest unfulfilled order · 3 days" ──────────────────
+// Deliberately NOT a count. "5 awaiting fulfilment" would restate Paid (2) +
+// Preparing (3), two chips sitting directly under the line, and §1.7's
+// non-duplication test rules that out. The age is the one fact nothing else on
+// this page reports.
+// The raw timestamp is cached so a language toggle can re-word the line without
+// another round trip; the server sends null when nothing is waiting.
+let _ORD_OLDEST_UNFULFILLED = null;
+// How long the oldest job has been waiting, in one language.
+// Under an hour is its own case: flooring to hours would print "0 hours".
+// Chinese has no plural form, so one string covers both counts there.
+function ordWaitingAge(iso) {
+  // 🔴 Parse via courierAgeMs, never `new Date(iso)`. SQLite writes
+  // 'YYYY-MM-DD HH:MM:SS' with NO zone marker, and bare `new Date()` reads that
+  // as LOCAL time. In Guangzhou (UTC+8) the value then lands 8 hours EARLY, so
+  // every age reads 8 hours OLDER than it is — measured: 81h against a true
+  // 73h — silently, with a correct-looking number. courierAgeMs normalises
+  // both shapes (zoned ISO like seen_at, and the bare SQLite form) and is the
+  // same helper formatDate's comment describes.
+  const ms = courierAgeMs(iso);
+  if (!isFinite(ms) || ms < 0) return null;          // unparseable / clock skew
+  const hours = Math.floor(ms / 3600000);
+  if (hours < 1)  return cuT('under an hour', '不到 1 小时');
+  if (hours < 24) return cuT(hours === 1 ? '1 hour' : hours + ' hours', hours + ' 小时');
+  const days = Math.floor(hours / 24);
+  return cuT(days === 1 ? '1 day' : days + ' days', days + ' 天');
+}
+// Nothing waiting → the element stays hidden and EMPTY. §1.7: a page with
+// nothing waiting gets no line at all, and that space is the finished answer —
+// not a "0", not an empty box holding its height.
+function ordRenderStatusLine() {
+  const el = document.getElementById('ord-status-line'); if (!el) return;
+  const age = _ORD_OLDEST_UNFULFILLED ? ordWaitingAge(_ORD_OLDEST_UNFULFILLED) : null;
+  if (!age) { el.hidden = true; el.textContent = ''; return; }
+  el.textContent = cuT('Oldest unfulfilled order', '最久未处理的订单') + ' · ' + age;
+  el.hidden = false;
+}
+
 async function refreshOrderStatusCounts() {
   if (!document.getElementById('orders-status-chips')) return;
   const storeId = (document.getElementById('orders-store') || {}).value || '';
@@ -6263,6 +6301,10 @@ async function refreshOrderStatusCounts() {
     set('oc-awaiting_restock',d.awaiting_restock);
     set('refund-queue-count', d.refunds_open);
     set('oc-needs_invoice',   d.needs_invoice);
+    // Same call, same store filter, same read-only-channel exclusion as the
+    // badges above — so the header line can never disagree with the chips.
+    _ORD_OLDEST_UNFULFILLED = d.oldest_unfulfilled || null;
+    ordRenderStatusLine();
   } catch {}
 }
 
