@@ -187,13 +187,22 @@ function ordShortNo(no) {
   // Short enough already — but drop a wrapping hyphen.
   return s.includes('-') ? prefix + digits : s;
 }
+// Classify by inclusion, never by fall-through (§1.17 rule 2). This used to
+// end in a bare `return 'WeChat'`, so any channel it had never heard of —
+// eleme is the live candidate, eleme-internal.js writes retail_orders rows —
+// was labelled WeChat on every row, with a default's full authority. An
+// unrecognised channel now renders its own raw key: visibly odd beats
+// plausibly wrong. Same shape as csName in 01-core.js (`|| ch`).
+// A null/empty channel still resolves to WeChat, which is not a guess — the
+// retail_orders.channel column is DEFAULT 'wechat'.
 function ordChannelLabel(o) {
   const c = String(o.channel || 'wechat').toLowerCase();
   if (c === 'meituan')   return 'Meituan';
   if (c === 'gzgrocery') return 'Gzgrocery';
   if (c === 'web')       return 'Web';
   if (c === 'manual')    return cuT('Manual', '手动');
-  return 'WeChat';
+  if (c === 'wechat')    return 'WeChat';
+  return c;
 }
 // Read-only channels (Meituan) carry their OWN order lifecycle we don't fulfil.
 // The daemon mirrors the platform's current status label into channel_status
