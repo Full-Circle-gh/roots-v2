@@ -2127,47 +2127,6 @@
       }
       .odm-item:hover { background: var(--danger-soft, rgba(220,60,60,.12)); border-color: var(--danger); }
 
-      /* ── Tweak: status signaling (default = pill, the existing look) ── */
-      #orders-table.os-bar .pill {
-        background: none; border: none; border-left: 2px solid currentColor;
-        border-radius: 0; padding: 2px 0 2px 9px;
-      }
-      #orders-table.os-bar .pill .dot { display: none; }
-      #orders-table.os-glyph .pill {
-        background: none; border: none; border-radius: 0; padding: 2px 0;
-      }
-
-      /* ── Tweak: row rhythm (default = hairlines, the existing look) ── */
-      #orders-table.rt-striped tbody td { border-bottom: none; }
-      #orders-table.rt-striped tbody tr.order-row:nth-child(even) td { background: var(--bg-elev-1); }
-      /* In striped view the zebra bands already separate rows, so the row-hover
-         tint just makes the stripes "jump" as the cursor moves. Disable the
-         hover background here — stripes stay put; cursor:pointer still signals
-         the row is clickable. */
-      #orders-table.rt-striped tbody tr.order-row:hover { background: transparent; }
-      #orders-table.rt-cards { border-collapse: separate; border-spacing: 0 6px; }
-      #orders-table.rt-cards thead th { border-bottom: none; }
-      #orders-table.rt-cards tbody td {
-        background: var(--bg-elev-1);
-        border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft);
-      }
-      #orders-table.rt-cards tbody td:first-child {
-        border-left: 1px solid var(--line-soft);
-        border-top-left-radius: 8px; border-bottom-left-radius: 8px;
-      }
-      #orders-table.rt-cards tbody td:last-child {
-        border-right: 1px solid var(--line-soft);
-        border-top-right-radius: 8px; border-bottom-right-radius: 8px;
-      }
-
-      /* ── Tweak: type character (default = mixed, the existing look) ── */
-      #orders-table.tm-mono-heavy .oc-total,
-      #orders-table.tm-mono-heavy .oc-store,
-      #orders-table.tm-all-mono .oc-total,
-      #orders-table.tm-all-mono .oc-store { font-family: var(--f-mono); }
-      #orders-table.tm-all-mono tbody td:not(.status-cell),
-      #orders-table.tm-all-mono tbody td:not(.status-cell) div { font-family: var(--f-mono); }
-
       /* ── Pinned column widths ──
          The table is width:100%; with the browser's default auto layout it
          hands leftover width to whichever columns it likes — and it used to

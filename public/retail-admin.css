@@ -5569,9 +5569,7 @@
   }
   .pack-badge.refunded .rf-ic { flex: none; }
   .refunded-row { opacity: .6; }
-  .refunded-row .mf-name, .refunded-row .mf-total,
-  .refunded-row .oi-name, .refunded-row .oi-total,
-  .refunded-row .oic-name, .refunded-row .oic-total {
+  .refunded-row .mf-name, .refunded-row .mf-total {
     text-decoration: line-through; text-decoration-color: rgba(176, 64, 56, .7);
   }
   .refunded-row .oi-thumb { filter: grayscale(1); }
@@ -5613,73 +5611,6 @@
     border: 1px solid var(--line-soft); display: inline-block; vertical-align: middle;
   }
   .oi-thumb.is-empty { background: var(--bg-app); }
-
-  /* ─── Order detail · per-operator View tweaks ───────────────────────────
-     The Full Circle Order Detail "Tweaks" panel made operator-selectable:
-     total placement (banner / inline / footer), items layout (manifest /
-     table / cards), and density. Defaults (banner / manifest / comfortable)
-     reproduce the standard look, so nothing changes until an operator picks. */
-
-  /* Total — inline tile inside the info grid */
-  .od-total-inline .od-total-big { font-size: 28px; font-weight: 500; color: var(--text-1); line-height: 1; letter-spacing: -.02em; }
-  .od-total-inline .od-total-sub { font-family: var(--f-mono); font-size: 11px; color: var(--text-3); margin-top: 4px; letter-spacing: .02em; }
-
-  /* Total — sticky footer receipt bar that follows you as you scroll */
-  .order-total-banner.otb-footer {
-    position: sticky; bottom: 0; z-index: 3;
-    align-items: center;
-    margin-top: var(--s5); margin-bottom: 0;
-    box-shadow: 0 -6px 18px rgba(0, 0, 0, .18);
-  }
-  .order-total-banner.otb-footer .otb-amount { font-size: 26px; }
-  .order-total-banner.otb-footer .otb-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-left: auto; }
-
-  /* Items — table (grid columns) */
-  .oi-grid { background: var(--bg-pane); border: 1px solid var(--line-soft); border-radius: var(--r-md); overflow: hidden; }
-  .oi-grid .oi-th, .oi-grid .oi-row {
-    display: grid; grid-template-columns: 1fr 64px 80px 84px auto;
-    align-items: center; gap: var(--s3); padding: var(--s3) var(--s4);
-  }
-  .oi-grid .oi-th { background: var(--bg-app); border-bottom: 1px solid var(--line-soft); }
-  .oi-grid .oi-th span { font-family: var(--f-mono); font-size: 10px; letter-spacing: .2em; text-transform: uppercase; color: var(--text-4); }
-  .oi-grid .oi-row { border-bottom: 1px solid var(--line-soft); }
-  .oi-grid .oi-row:last-child { border-bottom: none; }
-  .oi-grid .oi-name { font-size: 13px; font-weight: 500; color: var(--text-1); }
-  .oi-grid .oi-zh { font-family: var(--f-sans); font-size: 11px; font-weight: 300; color: var(--text-3); margin-top: 2px; }
-  .oi-grid .oi-c { font-family: var(--f-mono); font-size: 12px; color: var(--text-2); text-align: center; }
-  .oi-grid .oi-r { font-family: var(--f-mono); font-size: 12px; color: var(--text-2); text-align: right; }
-  .oi-grid .oi-total { font-size: 13px; font-weight: 600; color: var(--text-1); text-align: right; }
-  .oi-grid .oi-packs { text-align: right; white-space: nowrap; }
-  .oi-grid .oi-packs .pack-badge { margin-right: 0; margin-left: 4px; }
-
-  /* Items — cards */
-  .oi-cards { display: flex; flex-direction: column; gap: var(--s2); }
-  .oi-cards .oic { background: var(--bg-pane); border: 1px solid var(--line-soft); border-radius: var(--r-md); padding: var(--s3) var(--s4); }
-  .oi-cards .oic-top { display: flex; align-items: baseline; justify-content: space-between; gap: var(--s3); }
-  .oi-cards .oic-name { font-size: 14px; font-weight: 500; color: var(--text-1); }
-  .oi-cards .oic-zh { font-family: var(--f-sans); font-size: 11px; font-weight: 300; color: var(--text-3); margin-top: 2px; }
-  .oi-cards .oic-total { font-size: 18px; font-weight: 400; color: var(--text-1); white-space: nowrap; }
-  .oi-cards .oic-bot { display: flex; align-items: center; gap: 10px; margin-top: var(--s2); padding-top: var(--s2); border-top: 1px solid var(--line-soft); flex-wrap: wrap; }
-  .oi-cards .oic-meta { font-family: var(--f-mono); font-size: 11px; color: var(--text-3); letter-spacing: .02em; }
-  .oi-cards .oic-packs { margin-left: auto; display: inline-flex; }
-  .oi-cards .oic-packs .pack-badge { margin-right: 0; margin-left: 4px; }
-
-  /* Density — compact / editorial reshape the drawer rhythm */
-  .order-card.odd-compact .order-detail { gap: var(--s3) var(--s4); margin-bottom: var(--s4); padding-bottom: var(--s4); }
-  .order-card.odd-compact .order-total-banner { padding: var(--s3) var(--s4); margin-bottom: var(--s4); }
-  .order-card.odd-compact .order-total-banner .otb-amount { font-size: 32px; }
-  .order-card.odd-compact .manifest .mf-row { padding: 10px 0; }
-  .order-card.odd-compact .oi-grid .oi-th,
-  .order-card.odd-compact .oi-grid .oi-row { padding-top: 9px; padding-bottom: 9px; }
-  .order-card.odd-compact .oi-cards .oic { padding: 10px var(--s3); }
-
-  .order-card.odd-editorial .order-detail { gap: var(--s6) var(--s7); margin-bottom: var(--s6); padding-bottom: var(--s6); }
-  .order-card.odd-editorial .order-total-banner { padding: var(--s5) var(--s6); margin-bottom: var(--s6); }
-  .order-card.odd-editorial .order-total-banner .otb-amount { font-size: 52px; }
-  .order-card.odd-editorial .manifest .mf-row { padding: var(--s4) 0; }
-  .order-card.odd-editorial .manifest .mf-name { font-size: 14px; }
-  .order-card.odd-editorial .oi-grid .oi-th,
-  .order-card.odd-editorial .oi-grid .oi-row { padding-top: var(--s4); padding-bottom: var(--s4); }
 
   .sort-chips {
     display: flex; flex-wrap: wrap; gap: 6px;
@@ -6992,45 +6923,12 @@
     #order-drawer .order-head { flex-wrap: wrap; }
     #order-drawer .order-head .od-head-tx { flex-basis: 100%; margin-top: 8px; }
 
-    /* "View" popover trigger → ⋯ kebab pinned top-right of the app-bar. */
-    #order-drawer .order-head .ovp-wrap {
-      /* !important beats the inline margin-right:40px on the popover wrap —
-         otherwise that margin drags the absolutely-pinned kebab ~40px left
-         into the status pill, making them collide. */
-      position: absolute; top: 8px; right: 6px; margin: 0 !important; z-index: 8;
-    }
-    #order-drawer .order-head .ovp-wrap #odv-btn {
-      width: 36px; height: 36px; padding: 0; min-width: 0;
-      border: 0; background: transparent; color: var(--text-1);
-      font-size: 0; border-radius: 999px;
-    }
-    #order-drawer .order-head .ovp-wrap #odv-btn svg { display: none; }
-    #order-drawer .order-head .ovp-wrap #odv-btn::after {
-      content: "\22EF"; font-size: 22px; line-height: 1; color: var(--text-1);
-    }
-    #order-drawer .order-head .ovp-wrap #odv-btn:active { background: var(--bg-elev-1); }
-
     /* Stock Reservations: drop the secondary columns (Expires / Committed /
        Released) on phones so the 4 core columns — Product, Qty, Channel, Status
        — fit without the side-scroll that was clipping the "committed" pill. */
     #order-drawer .resv-table { min-width: 0; }
     #order-drawer .resv-table th:nth-child(n+5),
     #order-drawer .resv-table td:nth-child(n+5) { display: none; }
-
-    /* Items · TABLE view: the desktop 5-col grid (1fr 64 80 84 auto) is wider
-       than a phone, so it overflowed right (clipping the Total header) and
-       starved the Item column — the qty chip rode over the thumbnail and the
-       CN name wrapped one glyph per line. Drop Unit + Pack on mobile, leaving
-       a clean Item / Qty / Total table that fits the width. */
-    #order-drawer .oi-grid .oi-th,
-    #order-drawer .oi-grid .oi-row {
-      grid-template-columns: 1fr auto auto;
-      gap: var(--s2); padding-left: var(--s3); padding-right: var(--s3);
-    }
-    #order-drawer .oi-grid .oi-th span:nth-child(3),
-    #order-drawer .oi-grid .oi-th span:nth-child(5),
-    #order-drawer .oi-grid .oi-row .oi-r,
-    #order-drawer .oi-grid .oi-row .oi-packs { display: none; }
 
     /* Hide the desktop table + the whole dense toolbar on phones. The topbar
        power-search (the magnifier / Ctrl-K) already finds orders live by #,

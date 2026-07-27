@@ -863,54 +863,10 @@ function openEditShipTo(orderId) {
 
 // `silent` = called by the poller. Skip the "Loading…" placeholder, skip
 // the rebuild when the fingerprint matches, flash new rows on arrival.
-// ── Orders view options (tweaks) ──────────────────────────────────────
-// Per-operator display preferences for the orders table: status signaling,
-// row rhythm and type character. Theme rides the global retail-admin theme.
-// Applied as classes on #orders-table (which persists across tbody re-renders)
-// + scoped CSS, so the row template never has to know about them.
-const ORDER_TWEAK_DEFAULTS = { statusStyle: 'pill', rowTreat: 'hairlines', typeMode: 'mixed' };
-function ordTweaksLoad() {
-  try { return { ...ORDER_TWEAK_DEFAULTS, ...(JSON.parse(localStorage.getItem('retail-admin-order-tweaks') || '{}')) }; }
-  catch (e) { return { ...ORDER_TWEAK_DEFAULTS }; }
-}
-let ORD_TWEAKS = ordTweaksLoad();
-function ordTweaksApply() {
-  const tbl = document.getElementById('orders-table'); if (!tbl) return;
-  tbl.classList.remove('os-pill', 'os-bar', 'os-glyph', 'rt-hairlines', 'rt-striped', 'rt-cards', 'tm-mixed', 'tm-mono-heavy', 'tm-all-mono');
-  tbl.classList.add('os-' + ORD_TWEAKS.statusStyle, 'rt-' + ORD_TWEAKS.rowTreat, 'tm-' + ORD_TWEAKS.typeMode);
-}
-function ordTweakSet(key, val) {
-  if (key === 'theme') { cuSetTheme(val); ordTweakSyncPanel(); return; }
-  ORD_TWEAKS[key] = val;
-  try { localStorage.setItem('retail-admin-order-tweaks', JSON.stringify(ORD_TWEAKS)); } catch (e) {}
-  ordTweaksApply();
-  ordTweakSyncPanel();
-}
-function ordTweakSyncPanel() {
-  const pop = document.getElementById('ord-view-pop'); if (!pop) return;
-  const theme = document.documentElement.getAttribute('data-theme') || 'dark';
-  const vals = { theme, statusStyle: ORD_TWEAKS.statusStyle, rowTreat: ORD_TWEAKS.rowTreat, typeMode: ORD_TWEAKS.typeMode };
-  pop.querySelectorAll('.ovp-seg').forEach(seg => {
-    const key = seg.getAttribute('data-tw');
-    seg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.getAttribute('data-v') === vals[key]));
-  });
-}
-function ordTweakToggle() {
-  const pop = document.getElementById('ord-view-pop'); if (!pop) return;
-  if (pop.hidden) {
-    pop.hidden = false;
-    ordTweakSyncPanel();
-    setTimeout(() => document.addEventListener('mousedown', ordTweakOutside), 0);
-  } else { ordTweakClose(); }
-}
-function ordTweakClose() {
-  const pop = document.getElementById('ord-view-pop'); if (pop) pop.hidden = true;
-  document.removeEventListener('mousedown', ordTweakOutside);
-}
-function ordTweakOutside(e) {
-  const wrap = e.target.closest && e.target.closest('.ovp-wrap');
-  if (!wrap) ordTweakClose();
-}
+// The orders "View" popover was retired with the Tacet port. Its per-operator
+// row-style preferences (retail-admin-order-tweaks: statusStyle / rowTreat /
+// typeMode) went with it — the reader is gone, so the table renders one style
+// for everyone. The stored key is left alone rather than cleared, per §1.16.
 
 // ── Orders KPI strip — today's pulse (shared fc-* layer) ────────────────────
 // Reuses /dashboard?from=today&to=today (the same call the dashboard hero
@@ -1147,7 +1103,6 @@ async function loadOrders(opts = {}) {
         <td class="muted" style="font-size: 11px">${formatDate(o.placed_at)}</td>
       </tr>`;
     }).join('');
-    ordTweaksApply();
     if (window.rmRenderOrderCards) rmRenderOrderCards(j.data);
 
     _ORDERS_SEEN_IDS = newIds;
@@ -2819,20 +2774,16 @@ function flipReorder(host, swap) {
   });
 }
 
-// Items render as a numbered packing manifest (per shipment) by default.
-// The operator's View tweak (ODV.itemsLayout) can swap to a column table or
-// stacked cards. Sort order is preserved from sortOrderItems so the
-// Packaging / SKU / Shipping chips still re-order the list.
+// Items render as a numbered packing manifest, per shipment. Sort order is
+// preserved from sortOrderItems so the Packaging / SKU / Shipping chips still
+// re-order the list.
 function renderItemsTable(items, showPack = true) {
   const sorted = sortOrderItems(items, _ITEMS_SORT_MODE);
-  if (ODV.itemsLayout === 'table') return renderItemsAsGrid(sorted, showPack);
-  if (ODV.itemsLayout === 'cards') return renderItemsAsCards(sorted, showPack);
   return `<div class="manifest">
     ${sorted.map((it, i) => renderItemRow(it, { showPack, index: i + 1 })).join('')}
   </div>`;
 }
 
-// Items layout · TABLE — aligned columns (Item / Qty / Unit / Total / Pack).
 // Bundle line → a small "Inside" pack list so whoever fulfils the order knows
 // exactly what to box. pack_qty = per-bundle qty × this line's qty (server-set).
 function renderBundleInside(it) {
@@ -2847,70 +2798,6 @@ function renderBundleInside(it) {
     return `<div class="oi-bndl-row"><span class="oi-bndl-qty">${c.pack_qty}×</span>${sku}<span>${nm}${cn}</span></div>`;
   }).join('');
   return `<div class="oi-bndl"><div class="oi-bndl-h">${cuT('Inside this bundle', '套装内含')}</div>${rows}</div>`;
-}
-
-function renderItemsAsGrid(items, showPack = true) {
-  const head = `<div class="oi-th">
-    <span>Item · 商品</span>
-    <span style="text-align:center">Qty · 数量</span>
-    <span style="text-align:right">Unit · 单价</span>
-    <span style="text-align:right">Total · 小计</span>
-    <span style="text-align:right">Pack · 包装</span>
-  </div>`;
-  const rows = items.map(it => {
-    const nn = orderItemNames(it);
-    const nm = `<span class="oi-name">${escapeHtml(nn.primary)}</span>`;
-    const _href = productHref(it.product_id);
-    const nameCell = _href
-      ? `<a href="${_href}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${nm}</a>`
-      : nm;
-    const zh = it.size ? `<div class="oi-zh">${escapeHtml(it.size)}</div>` : '';
-    const refundPill = itemRefundHtml(it);
-    return `<div class="oi-row${itemFullyRefunded(it) ? ' refunded-row' : ''}" data-fk="${it.id}">
-      <div style="min-width:0; display:flex; align-items:center; gap:var(--s3);">
-        ${itemThumb(it)}
-        <div style="min-width:0">${nameCell}${zh}<div style="margin-top:4px">${itemSkuHtml(it)}</div>${itemOptionsHtml(it)}${renderBundleInside(it)}</div>
-      </div>
-      <span class="oi-c">${itemQtyHtml(it)}</span>
-      <span class="oi-r">¥${fmt(it.unit_price)}</span>
-      <span class="oi-total">¥${fmt(it.line_total)}</span>
-      <span class="oi-packs">${refundPill}${showPack ? renderPackBadges(it) : ''}</span>
-    </div>`;
-  }).join('');
-  return `<div class="oi-grid">${head}${rows}</div>`;
-}
-
-// Items layout · CARDS — each line a bordered card, total emphasised.
-function renderItemsAsCards(items, showPack = true) {
-  const cards = items.map(it => {
-    const nn = orderItemNames(it);
-    const nm = `<span class="oic-name">${escapeHtml(nn.primary)}</span>`;
-    const _href = productHref(it.product_id);
-    const nameCell = _href
-      ? `<a href="${_href}" target="_blank" rel="noopener" class="prod-link" title="Open product in new tab · 在新标签页打开商品">${nm}</a>`
-      : nm;
-    const zh = it.size ? `<div class="oic-zh">${escapeHtml(it.size)}</div>` : '';
-    const refundPill = itemRefundHtml(it);
-    return `<div class="oic${itemFullyRefunded(it) ? ' refunded-row' : ''}" data-fk="${it.id}">
-      <div class="oic-top">
-        <div style="min-width:0; display:flex; align-items:center; gap:var(--s3);">
-          ${itemThumb(it)}
-          <div style="min-width:0">${nameCell}${zh}</div>
-        </div>
-        <span class="oic-total">¥${fmt(it.line_total)}</span>
-      </div>
-      <div class="oic-bot">
-        ${itemSkuHtml(it)}
-        ${itemQtyHtml(it)}
-        <span class="item-unit">@ ¥${fmt(it.unit_price)}</span>
-        ${refundPill ? `<span class="oic-packs">${refundPill}</span>` : ''}
-        ${showPack ? `<span class="oic-packs">${renderPackBadges(it)}</span>` : ''}
-      </div>
-      ${itemOptionsHtml(it)}
-      ${renderBundleInside(it)}
-    </div>`;
-  }).join('');
-  return `<div class="oi-cards">${cards}</div>`;
 }
 
 // Monochrome line icons for shipment modes — inherit currentColor so they sit
@@ -3641,8 +3528,7 @@ function renderSplitPanel(o, s) {
 async function openOrder(id, opts = {}) {
   _OPEN_ORDER = null;
   _ORDER_BACK_CUSTOMER = null;
-  _ODV_OPEN = false;               // View popover starts closed on a fresh open
-  _ODM_OPEN = false;               // Refund/Cancel menu likewise closed on open
+  _ODM_OPEN = false;               // Refund/Cancel menu closed on a fresh open
   const mount = $('#order-detail-mount');
   const drawer = document.getElementById('order-drawer');
   // Switching orders in an already-open drawer → cross-fade: hold the old
@@ -3857,53 +3743,6 @@ document.addEventListener('keydown', (e) => {
   if (id) openOrder(Number(id));
 });
 
-// ── Order detail · per-operator View tweaks ───────────────────────────
-// Order-detail layout defaults (the per-operator "Tweaks" popover was removed
-// in the Tacet port; these fixed defaults now drive the one clean layout):
-// total placement (banner / inline / footer), items layout (manifest /
-// table / cards), and density. Persisted to localStorage; defaults match
-// the standard banner+manifest look so nothing changes until a pick.
-const ORDER_DETAIL_TWEAK_DEFAULTS = { totalPlacement: 'banner', itemsLayout: 'manifest', density: 'comfortable' };
-function odvLoad() {
-  try { return { ...ORDER_DETAIL_TWEAK_DEFAULTS, ...(JSON.parse(localStorage.getItem('retail-admin-order-detail-tweaks') || '{}')) }; }
-  catch (e) { return { ...ORDER_DETAIL_TWEAK_DEFAULTS }; }
-}
-let ODV = odvLoad();
-let _ODV_OPEN = false;
-function odvSet(key, val) {
-  ODV[key] = val;
-  try { localStorage.setItem('retail-admin-order-detail-tweaks', JSON.stringify(ODV)); } catch (e) {}
-  _ODV_OPEN = false;                      // close the popover once a view is chosen
-  document.removeEventListener('mousedown', odvOutside);
-  // Defer the re-render to the next tick. Re-rendering synchronously inside
-  // the click handler detaches the clicked button before the drawer's
-  // click-outside-to-dismiss handler runs; that handler's `closest('.side-drawer')`
-  // guard then fails on the orphaned target and closes the whole drawer.
-  // Deferring lets the click fully resolve (button still attached → no dismiss)
-  // before we rebuild. Preserve scroll so the drawer doesn't jump to the top.
-  if (_OPEN_ORDER) setTimeout(() => {
-    if (!_OPEN_ORDER) return;
-    const body = document.querySelector('#order-drawer .drawer-body');
-    const y = body ? body.scrollTop : 0;
-    renderOpenOrder(_OPEN_ORDER);
-    if (body) body.scrollTop = y;
-  }, 0);
-}
-function odvToggle() {
-  _ODV_OPEN = !_ODV_OPEN;
-  const pop = document.getElementById('odv-pop'); if (pop) pop.hidden = !_ODV_OPEN;
-  if (_ODV_OPEN) setTimeout(() => document.addEventListener('mousedown', odvOutside), 0);
-  else document.removeEventListener('mousedown', odvOutside);
-}
-function odvOutside(e) {
-  if (e.target.closest && e.target.closest('.ovp-wrap')) return;
-  _ODV_OPEN = false;
-  const pop = document.getElementById('odv-pop'); if (pop) pop.hidden = true;
-  document.removeEventListener('mousedown', odvOutside);
-}
-function odvBtn(key, val, label) {
-  return `<button data-v="${val}" class="${ODV[key] === val ? 'active' : ''}" onclick="odvSet('${key}','${val}')">${label}</button>`;
-}
 // Refund / Cancel actions collapse into ONE button that opens a small menu.
 // Before, "Refund" and "Cancel + refund" sat side by side as two red buttons
 // in the drawer header — the operator asked for a single button with the
@@ -3951,42 +3790,6 @@ function orderDangerPick(id, next, ev) {
   orderDangerClose();
   transition(id, next, ev);
 }
-function renderOrderViewPopover() {
-  return `
-    <div class="ovp-wrap" style="margin-right: 40px; flex-shrink: 0;">
-      <button class="btn btn-sm" id="odv-btn" onclick="odvToggle()" aria-haspopup="true" title="Display options · 显示选项">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10M4 12h7M4 18h10"/><circle cx="18" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>
-        View · 视图
-      </button>
-      <div id="odv-pop" class="ovp" ${_ODV_OPEN ? '' : 'hidden'}>
-        <div class="ovp-head">Display options · 显示选项</div>
-        <div class="ovp-group">
-          <div class="ovp-label">Total placement · 总额位置</div>
-          <div class="ovp-seg">
-            ${odvBtn('totalPlacement', 'banner', 'Banner · 横幅')}
-            ${odvBtn('totalPlacement', 'inline', 'Inline · 行内')}
-            ${odvBtn('totalPlacement', 'footer', 'Footer · 底栏')}
-          </div>
-        </div>
-        <div class="ovp-group">
-          <div class="ovp-label">Items layout · 商品布局</div>
-          <div class="ovp-seg">
-            ${odvBtn('itemsLayout', 'manifest', 'Manifest · 清单')}
-            ${odvBtn('itemsLayout', 'table', 'Table · 表格')}
-            ${odvBtn('itemsLayout', 'cards', 'Cards · 卡片')}
-          </div>
-        </div>
-        <div class="ovp-group">
-          <div class="ovp-label">Density · 密度</div>
-          <div class="ovp-seg">
-            ${odvBtn('density', 'comfortable', 'Comfortable · 舒适')}
-            ${odvBtn('density', 'compact', 'Compact · 紧凑')}
-            ${odvBtn('density', 'editorial', 'Editorial · 宽松')}
-          </div>
-        </div>
-      </div>
-    </div>`;
-}
 // Money breakdown under the order total: subtotal · shipping · (packing) · (voucher).
 // Packing fee only renders when one was actually charged (zero on most delivery
 // orders), mirroring how the voucher segment is conditional.
@@ -4004,25 +3807,6 @@ function renderOrderTotalBanner(o) {
         <div class="otb-sub">${orderTotalSubline(o)}</div>
       </div>
       <div class="otb-amount">¥${fmt(o.total)}</div>
-    </div>`;
-}
-function renderOrderTotalInline(o) {
-  return `
-    <div class="od-total-inline">
-      <div class="kicker">Order total · 订单总额</div>
-      <div class="od-total-big">¥${fmt(o.total)}</div>
-      <div class="od-total-sub">${orderTotalSubline(o)}</div>
-    </div>`;
-}
-function renderOrderTotalFooter(o, transitionsHtml) {
-  return `
-    <div class="order-total-banner otb-footer">
-      <div>
-        <div class="otb-label">Order total · 订单总额</div>
-        <div class="otb-sub">${orderTotalSubline(o)}</div>
-      </div>
-      <div class="otb-amount">¥${fmt(o.total)}</div>
-      ${transitionsHtml ? `<div class="otb-actions">${transitionsHtml}</div>` : ''}
     </div>`;
 }
 
@@ -4078,7 +3862,7 @@ function renderReadonlyOrder(o) {
   // genuinely can't act on (accept/prepare still live on the platform either way).
   const roTag = o.courier ? '' : ` · ${cuT('view only', '只读')}`;
   mount.innerHTML = `
-    <div class="order-card odd-${ODV.density}">
+    <div class="order-card">
       <div class="order-head">
         <div class="od-head-main">
           <div class="title-row">
@@ -4199,7 +3983,7 @@ function renderOpenOrder(o) {
         : '')
     + renderRefundMenu(o, dangerTx);
     mount.innerHTML = `
-      <div class="order-card odd-${ODV.density}">
+      <div class="order-card">
         ${_ORDER_BACK_CUSTOMER ? `<button class="btn btn-sm order-back-cust" style="margin-bottom: var(--s3);" onclick="cuBackToCustomer()">← Back to customer · 返回顾客</button>` : ''}
         <div class="order-head">
           <div class="od-eyebrow">Order placed ${formatDate(o.placed_at)} · 下单于 ${formatDate(o.placed_at)}</div>
@@ -4227,10 +4011,8 @@ function renderOpenOrder(o) {
         ${(o.needs_invoice && o.invoice_status !== 'issued')
           ? `<div style="margin-bottom: var(--s4);">${renderInvoiceBlock(o)}</div>` : ''}
 
-        <!-- Order total — placement is an operator View tweak: a full-width
-             hero banner here (default), an inline tile in the info grid, or a
-             sticky footer receipt at the bottom. -->
-        ${ODV.totalPlacement === 'banner' ? renderOrderTotalBanner(o) : ''}
+        <!-- Order total — full-width hero banner above the info grid. -->
+        ${renderOrderTotalBanner(o)}
 
         <div class="order-detail">
           ${o.fulfillment_type === 'pickup' ? `
@@ -4272,7 +4054,6 @@ function renderOpenOrder(o) {
           </div>
           ${fulfillmentShortStrip(o)}
           ${renderAlipayProof(o)}
-          ${ODV.totalPlacement === 'inline' ? renderOrderTotalInline(o) : ''}
           ${o.customer_note ? `<div class="full"><div class="kicker">Customer note · 顾客备注</div><div style="font-weight: 700; color: var(--text-1); font-size: 14px; line-height: 1.5;">${escapeHtml(o.customer_note)}</div></div>` : ''}
           ${o.needs_cutlery ? `<div class="full"><span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--text-1); background: var(--bg-elev-2); border: 1px solid var(--line); border-radius: 99px; padding: 4px 12px; font-size: 12px;"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 3v6a2 2 0 0 0 2 2 2 2 0 0 0 2-2V3"/><path d="M6 11v10"/><path d="M17 3c-1.7 0-3 2-3 5s1.3 4 3 4"/><path d="M17 3v18"/></svg> Cutlery requested · 需要餐具</span></div>` : ''}
           ${(o.needs_invoice && o.invoice_status === 'issued') ? renderInvoiceBlock(o) : ''}
@@ -4363,7 +4144,6 @@ function renderOpenOrder(o) {
         </details>`;
         })()}
 
-        ${ODV.totalPlacement === 'footer' ? renderOrderTotalFooter(o) : ''}
       </div>`;
   // Print controls live in a footer pinned to the bottom of the drawer (outside
   // the scroll area) so a reprint is always one click, never buried mid-scroll.
