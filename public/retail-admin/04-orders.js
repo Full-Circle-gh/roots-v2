@@ -3695,6 +3695,16 @@ document.addEventListener('click', (e) => {
   // drawer but lives outside it in the DOM — clicks inside the modal, incl.
   // its Close button, must not dismiss the drawer behind it.
   if (e.target.closest('.pu-editor-bg')) return;
+  // The shared Tacet dialogs (`.tdlg-scrim` — askConfirm / askPrompt /
+  // askReason) layer on top the same way, but unlike the pickers above they do
+  // NOT delete themselves on click: close() fades the scrim and removes it
+  // 260ms later. So the confirming click is still attached when it reaches
+  // here and reads as a genuine outside-click — which closed the drawer under
+  // every confirm, and the close hook then wiped the drawer's mount 240ms
+  // later, blanking the body of the drawer the action had just re-rendered
+  // (the "blank order drawer after Combine into one parcel" report). Covers
+  // the dialog's own dimmed backdrop too, which cancels the same way.
+  if (e.target.closest('.tdlg-scrim')) return;
   // Dashboard activity rows open the order drawer on click — that same click
   // bubbles here, so exempt them or the drawer closes the instant it opens.
   // .rm-ocard / .rm-cucard = the mobile order/customer cards (Variant A), which
