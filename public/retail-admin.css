@@ -10511,7 +10511,42 @@ tr.vch-row.is-off .vch-code, tr.vch-row.is-off .vch-gives { color: var(--text-2)
   border-radius: 8px; padding: 5px 8px; font: 400 13px var(--f-sans);
 }
 .vch-date:focus, .vch-per:focus { outline: none; border-color: var(--tacet-dusk); }
-.vch-per { cursor: pointer; }
+/* Native select arrow is painted over the label at this width, so suppress it
+   and draw our own chevron on the wrapper (::after inherits currentColor, which
+   a background-image data URI can't). */
+.vch-perwrap { position: relative; display: inline-block; }
+.vch-perwrap::after {
+  content: ""; position: absolute; right: 10px; top: 50%; margin-top: -5px;
+  width: 6px; height: 6px; pointer-events: none;
+  border-right: 1.5px solid var(--text-2); border-bottom: 1.5px solid var(--text-2);
+  transform: rotate(45deg);
+}
+.vch-per {
+  cursor: pointer; appearance: none; -webkit-appearance: none;
+  padding-right: 26px; text-align: left;
+}
+.vch-per::-ms-expand { display: none; }
+
+/* Who holds this coupon — a short head of the grant list, in the drawer. */
+.vch-holders:not(:empty) { margin-top: 10px; border-top: 1px solid var(--line); }
+.vch-holder {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 12.5px;
+}
+.vch-holder:last-child { border-bottom: none; }
+.vch-holder .who { font-weight: 500; color: var(--text-1); min-width: 0; }
+.vch-holder .ph {
+  color: var(--text-2); font-variant-numeric: tabular-nums;
+  margin-right: auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.vch-holders .lnk {
+  flex: none; border: 0; background: none; padding: 0; cursor: pointer;
+  font: inherit; color: var(--text-2); text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.vch-holders .lnk:hover { color: var(--tacet-brick); }
+.vch-holders .lnk.more { display: block; margin-top: 8px; color: var(--text-1); }
+.vch-holders .lnk.more:hover { color: var(--tacet-dusk); }
 .vch-swrow { display: flex; align-items: flex-start; gap: 12px; padding: 11px 0; border-bottom: 1px solid var(--line); }
 .vch-swrow .t { font-size: 13.5px; font-weight: 500; color: var(--text-1); }
 .vch-swrow .d { font-size: 12px; color: var(--text-2); line-height: 1.5; }

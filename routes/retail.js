@@ -13489,9 +13489,16 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
   res.json({ success: true, data: rows, page, pageSize, total, returning, segments });
 });
 
-// List grants for a voucher (who has it, who used it).
+// List grants for a voucher (who has it, who used it). `limit` trims the rows
+// for the coupon drawer's short holder list — a grant-to-all can run to
+// thousands, and the drawer only ever shows the first handful. `total` is always
+// the full count so the caller can say how many it isn't showing.
 router.get('/api/retail-admin/vouchers/:id/grants', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
+  const limit = Math.min(500, Math.max(0, parseInt(req.query.limit, 10) || 0));
+  const total = tdb().prepare(
+    'SELECT COUNT(*) AS n FROM retail_customer_vouchers WHERE voucher_id = ?'
+  ).get(id).n;
   const rows = tdb().prepare(
     `SELECT g.id, g.customer_id, g.granted_at, g.granted_note,
             g.used_at, g.used_order_id,
@@ -13499,9 +13506,10 @@ router.get('/api/retail-admin/vouchers/:id/grants', requireRetailAdmin, (req, re
        FROM retail_customer_vouchers g
        LEFT JOIN retail_customers c ON c.id = g.customer_id
       WHERE g.voucher_id = ?
-      ORDER BY g.granted_at DESC`
+      ORDER BY g.granted_at DESC
+      ${limit ? 'LIMIT ' + limit : ''}`
   ).all(id);
-  res.json({ success: true, data: rows });
+  res.json({ success: true, data: rows, total });
 });
 
 // Grant a voucher to one or more customers, or to every non-blocked customer

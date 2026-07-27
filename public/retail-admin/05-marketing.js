@@ -197,9 +197,11 @@ function vchDrawerRender() {
   const perOpts = [1, 2, 3, 5, 10];
   if (perVal > 0 && !perOpts.includes(perVal)) perOpts.push(perVal);
   perOpts.sort((a, b) => a - b).push(0);
-  const perSel = '<select class="vch-per" onchange="vchSetPerLimit(' + v.id + ', this.value)">'
+  // Wrapped so the chevron is drawn by ::after in currentColor — a bare <select>
+  // paints its own native arrow on top of the label at this width.
+  const perSel = '<span class="vch-perwrap"><select class="vch-per" onchange="vchSetPerLimit(' + v.id + ', this.value)">'
     + perOpts.map(n => '<option value="' + n + '"' + (n === perVal ? ' selected' : '') + '>' + perLabel(n) + '</option>').join('')
-    + '</select>';
+    + '</select></span>';
   // "Apply it for them" follows the coupon's audience, so the description has to
   // as well — on a private coupon it reaches only the people it was handed to.
   const autoDesc = v.is_public
@@ -249,12 +251,61 @@ function vchDrawerRender() {
     + '<span class="d">' + grantLine + '</span>'
     + '<button type="button" class="btn btn-sm" onclick=\'openGrantModal(' + v.id + ', ' + JSON.stringify(String(v.code)) + ')\'>' + cuT('Give to a customer', '发放给顾客') + '</button>'
     + '</div>'
+    // Who actually holds it. "Given to 2 customers" answers how many but not who,
+    // and the names were buried behind a button that reads as "add someone".
+    + '<div class="vch-holders" id="vch-holders"></div>'
     + '<div class="vch-dw-foot">'
     + (v.is_active
         ? '<button type="button" class="btn vch-off-btn" onclick="vchTurn(' + v.id + ', 0)">' + cuT('Turn off', '停用') + '</button>'
         : '<button type="button" class="btn btn-primary" onclick="vchTurn(' + v.id + ', 1)">' + cuT('Turn on', '开启') + '</button>')
     + '<span class="d">' + cuT('Turning it off keeps its history.', '停用会保留历史记录,可随时重新开启。') + '</span>'
     + '</div>';
+  if (v.grant_count) vchLoadHolders(v.id, v.grant_count);
+}
+
+// Fill the drawer's holder list. Only ever a short head of the list — a
+// grant-to-all can run to thousands, so anything past HEAD is left to the modal.
+const VCH_HOLDER_HEAD = 8;
+async function vchLoadHolders(id, count) {
+  const mount = document.getElementById('vch-holders');
+  if (!mount) return;
+  mount.innerHTML = '<div class="vch-holder muted">' + cuT('Loading…', '加载中…') + '</div>';
+  try {
+    const { data, total } = await api('/api/retail-admin/vouchers/' + id + '/grants?limit=' + VCH_HOLDER_HEAD);
+    // The drawer may have been closed or switched coupons mid-flight.
+    if (_vchOpenId !== id || !document.getElementById('vch-holders')) return;
+    const n = total != null ? total : (count || data.length);
+    if (!data.length) { mount.innerHTML = ''; return; }
+    const rows = data.map(g =>
+      '<div class="vch-holder">'
+      + '<span class="who">' + escapeHtml(g.nickname || cuT('(no name)', '(未填写昵称)')) + '</span>'
+      + '<span class="ph">' + escapeHtml(g.phone || '—') + '</span>'
+      + '<button type="button" class="lnk" onclick="vchTakeBack(' + g.id + ')">' + cuT('Take it back', '收回') + '</button>'
+      + '</div>').join('');
+    const more = n > data.length
+      ? '<button type="button" class="lnk more" onclick=\'openGrantModal(' + id + ', '
+        + JSON.stringify(String((_vchData.find(x => x.id === id) || {}).code || '')) + ')\'>'
+        + cuT('See all ' + n, '查看全部 ' + n) + '</button>'
+      : '';
+    mount.innerHTML = rows + more;
+  } catch (e) {
+    mount.innerHTML = '<div class="vch-holder err">' + cuT('Couldn’t load who has it: ', '无法加载持有名单:') + escapeHtml(e.message) + '</div>';
+  }
+}
+
+// Take the coupon off one customer, straight from the drawer.
+async function vchTakeBack(grantId) {
+  if (!(await askConfirm({
+    title: cuT('Take this coupon back?', '收回这张优惠券?'),
+    body: cuT('They lose it at their next checkout. Orders they already placed keep their discount.',
+              '该顾客下次结账将不再享有。已下单的订单不受影响。'),
+    confirmLabel: cuT('Take it back', '收回'), danger: true,
+  }))) return;
+  try {
+    await api('/api/retail-admin/voucher-grants/' + grantId, { method: 'DELETE' });
+    toast(cuT('Taken back', '已收回'));
+    await loadVouchers();
+  } catch (e) { toast(cuT('Failed: ', '失败:') + e.message, 'err'); }
 }
 
 async function vchPatch(id, body) {
