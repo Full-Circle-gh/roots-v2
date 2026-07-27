@@ -1566,7 +1566,7 @@ function slotEndAnchor(scheduledForIso, label) {
 }
 // ── Ship-by: ONE decision shared by the orders-list cell, the drawer tile,
 // AND the printed receipt / packing slip (the print side mirrors this in
-// lib/feie.js shipByPrintLine() — keep the two in sync). Rule: the MOST
+// lib/feie.js shipByPrintParts() — keep the two in sync). Rule: the MOST
 // CONCRETE fact wins, and whenever a real date exists we show that DATE,
 // never a vague "ASAP".
 //   1 pickup     → counter window
