@@ -165,6 +165,30 @@ function chdClose() {
   const wrap = document.getElementById('chd-wrap'); if (wrap) wrap.classList.remove('open');
   document.removeEventListener('mousedown', chdOutside);
 }
+// The × on the trigger, shown only once a channel is applied. Modelled on
+// Customers' cuClearChan (08-customers.js:134), which is this same control on
+// this same facet.
+//
+// It hands the real "All channels" menu item to setOrderChannel — the SAME
+// call picking that item makes — rather than zeroing the filter itself. One
+// way to clear the channel, so the trigger's label, its icon, the is-set fill,
+// the menu's tick and the hidden #orders-channel input can never disagree
+// about what "cleared" means.
+//
+// stopPropagation is what keeps the click off #chd-btn; without it the button
+// beneath would toggle the menu open on the way past, which is the opposite of
+// what the operator asked for. An × that only opens a menu is an inert control.
+function chdClear(e) {
+  if (e) { e.stopPropagation(); e.preventDefault(); }
+  const all = document.querySelector('#chd-pop .chd-item[data-channel=""]');
+  if (!all) return;
+  setOrderChannel(all);
+  // Clearing hides the × that was just activated, so a keyboard operator would
+  // be dropped back to <body> mid-page. Hand focus to the trigger it lived in.
+  // Harmless on a mouse click — :focus-visible suppresses the ring there.
+  const btn = document.getElementById('chd-btn');
+  if (btn) btn.focus();
+}
 // Which non-storefront channels are shown read-only in the combined list — the
 // storefront doesn't fulfil/print them, so no drawer, NEW mark, or chime. For
 // now just Meituan (mirrored in to deduct stock); gzgrocery joins in phase 2.
