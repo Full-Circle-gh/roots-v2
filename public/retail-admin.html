@@ -179,9 +179,44 @@
      still has exactly one author and nothing doubles. border-spacing:0 keeps
      the cells flush, so the table stays pixel-identical. */
   #orders-table { border-collapse:separate; border-spacing:0; width:100%; }
-  #orders-table thead th { background:var(--bg-pane); color:var(--text-1); font-family:var(--f-sans);
-    font-weight:700; font-size:13.5px; letter-spacing:.02em; text-transform:none; padding:11px 10px;
-    border-bottom:1px solid var(--line); }
+  /* 🔴 THE COLUMN-HEADER BAND — a PRODUCT-WIDE component, and Orders is its
+     anchor (§1.13a rule 3 + tacet-design-system "Table header surface").
+     Every value below is the spec's, not a per-page choice. It was invented
+     in the Orders mockup — that is where --td-header came from — and shipped
+     first on Customers; this makes Orders the second consumer. If any of it
+     needs to change it changes here first and every table follows.
+     13px, not 15px: 15 was tried and reads as another row, not a header.
+     --td-text (Ink), not --td-text2 (Graphite).
+
+     `top: 56px` is the ONLY local value. It is the height of .topbar, which
+     is position:fixed/top:0/z-index:12 — verified, not copied on faith.
+     Nothing inside #tab-orders is sticky or fixed, so the KPI tiles, status
+     chips and filter row scroll away above the band normally (§1.13a rule 1).
+     Orders has more above its table than Customers, but none of it pins, so
+     the offset is the same 56px.
+
+     z-index 5 sits under the topbar's 12 and above the rows, and the
+     background is fully opaque so a tinted row passing underneath cannot
+     bleed through it.
+
+     NO RADIUS on the cells: .list-card's clip-path (build 1) already rounds
+     the corners, so the band must not draw one of its own. One element owns
+     the shape — that is why there is no pinned-state class to keep in sync.
+
+     text-transform:none and the explicit colour/background are load-bearing:
+     the global `th` reset in retail-admin.css sets uppercase, 11px/600 and
+     --bg-app, and would otherwise leak through (uppercase would also breach
+     §1.6). text-align:left restates that same reset — a no-op here, kept so
+     the rule is self-contained rather than depending on a reset elsewhere. */
+  #orders-table thead th {
+    position: sticky; top: 56px; z-index: 5;
+    background: var(--td-header); color: var(--td-text);
+    font-family: var(--f-sans); font-weight: 500; font-size: 13px;
+    letter-spacing: 0; text-transform: none; text-align: left;
+    padding: 10px 12px; border-bottom: 1px solid var(--td-border); white-space: nowrap;
+  }
+  #orders-table thead th:first-child,
+  #orders-table thead th:last-child { border-radius: 0; }
   #orders-table tbody td { border-bottom:1px solid var(--line); padding:13px 10px; color:var(--text-1);
     font-size:13.5px; vertical-align:top; }
   #orders-table tbody tr.order-row { cursor:pointer; transition:background var(--t-med) var(--ease-out); }
