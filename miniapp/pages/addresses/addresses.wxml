@@ -115,7 +115,9 @@
     <view class="field">
       <input class="input" placeholder-class="input-placeholder" placeholder="{{copy.placeholders.detail}}" value="{{form.detail}}" data-field="detail" bindinput="onField"/>
     </view>
-    <view class="default-row">
+    <!-- Editing only. A new address is always the one we'll use, so the switch
+         would just be a redundant thing to tick. -->
+    <view wx:if="{{form.id}}" class="default-row">
       <switch checked="{{form.is_default}}" bindchange="onDefaultToggle" color="#1a1a17"/>
       <view class="default-label">{{copy.setDefault}}</view>
     </view>
