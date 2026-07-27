@@ -2024,6 +2024,17 @@
           <span class="chan-ico" id="chd-btn-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></span>
           <span><span class="chd-lbl-dim">Channel:</span> <span id="chd-btn-txt">All channels</span></span>
           <svg class="chd-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          <!-- Clear ×, shown only when a channel is applied. Markup shape copied
+               from Customers' cuClearSvg (08-customers.js:153) — same span,
+               role, tabindex, title/aria-label pair and × path. It REPLACES the
+               chevron rather than joining it, which is what Customers does.
+               onkeydown because a tabindex span does not fire click on Enter or
+               Space the way a real button would; the handler is Customers' own
+               idiom, lifted from cu-order-row (08-customers.js:1078). -->
+          <span class="chd-clear" role="button" tabindex="0" onclick="chdClear(event)"
+             onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();chdClear(event);}"
+             title="Clear channel filter · 清除渠道筛选" aria-label="Clear channel filter · 清除渠道筛选"
+             ><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg></span>
         </button>
         <div class="chd-pop" id="chd-pop" hidden>
           <button type="button" class="chd-item active" data-channel=""        onclick="setOrderChannel(this)"><span class="chan-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg></span>All channels<svg class="chd-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></button>
@@ -2275,6 +2286,38 @@
       [data-theme="dark"] .chd-btn.is-set { background: var(--tacet-paper); border-color: var(--tacet-paper); color: var(--tacet-ink); }
       [data-theme="dark"] .chd-btn.is-set .chd-lbl-dim,
       [data-theme="dark"] .chd-btn.is-set .chd-chev { color: rgba(17,26,43,.6); }
+
+      /* ── Clear × on the channel trigger ──────────────────────────────────
+         Copied from Customers' .cul-clear (retail-admin.html:2769) — the same
+         control on the same facet. Same 19px round hit area, same 13px glyph,
+         same 1px currentColor divider at .28 opacity, same inverted hover on
+         the filled pill, and the × REPLACES the chevron rather than sitting
+         beside it. currentColor throughout, so it inverts with the pill in
+         both themes without a colour of its own.
+         🔴 Scoped to #chd-btn by id. `.ovp-wrap` is untouched — it is shared
+         with #pv-btn, #dzv-btn and .odm-wrap. */
+      .chd-btn .chd-clear { display: none; }
+      .chd-btn.is-set .chd-chev { display: none; }
+      .chd-btn.is-set .chd-clear {
+        display: inline-grid; place-items: center; width: 19px; height: 19px; border-radius: 999px;
+        margin-left: 4px; cursor: pointer; position: relative; color: inherit; flex: none;
+      }
+      .chd-btn .chd-clear svg { width: 13px; height: 13px; display: block; }
+      .chd-btn .chd-clear::before {
+        content: ""; position: absolute; left: -4px; top: 50%; transform: translateY(-50%);
+        width: 1px; height: 14px; background: currentColor; opacity: .28;
+      }
+      /* The pill is Ink in light mode, so the hover wash is paper. Customers
+         stops here; in dark mode its pill turns Paper and the cream wash goes
+         invisible against it. The dark override below is an addition, not a
+         copy — Customers has the same gap at retail-admin.css-level today. */
+      .chd-btn.is-set .chd-clear:hover { background: rgba(251,249,244,.22); }
+      [data-theme="dark"] .chd-btn.is-set .chd-clear:hover { background: rgba(17,26,43,.14); }
+      /* Focus ring — Dusk, per §1.8 rule 3 (rings are exempt from the
+         one-Dusk budget; the header CTA keeps the page's only Dusk element).
+         Matches #orders-table's own row ring, which already uses --td-dusk.
+         Customers gives .cul-clear no ring at all; this is an addition. */
+      .chd-btn .chd-clear:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 2px; }
 
       .chd-pop {
         position: absolute; top: calc(100% + 6px); left: 0; z-index: 30; min-width: 200px;
