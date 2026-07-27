@@ -1674,10 +1674,6 @@ function applyBrand(tenant) {
   probe.onload = () => document.body.classList.add('cobrand');
   probe.onerror = () => document.body.classList.remove('cobrand');
   probe.src = logoUrl;
-
-  // "runs on tacet" credit — shown for a co-branded tenant whose credit is on.
-  const credit = document.getElementById('brandCredit');
-  if (credit) credit.hidden = !tenant.brandCredit;
 }
 
 // ── Account menu — Google-style profile circle + dropdown ────────────────

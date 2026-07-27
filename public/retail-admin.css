@@ -546,14 +546,6 @@
      banner lands at exactly 14px), NOT a literal min-height, which would letterbox
      a wide logo. Past 15:1 the ceiling wins and it renders shorter — ugly, bounded. */
   .brand .brand-logo { max-height: 24px; max-width: 210px; width: auto; height: auto; }
-  /* "runs on tacet" credit — pinned to the rail foot via margin-top:auto. */
-  .brand-credit {
-    margin-top: auto; display: flex; align-items: center; gap: 9px;
-    padding: 14px 16px 10px; color: var(--text-3);
-    font-family: 'Inter', var(--f-sans); font-weight: 400;
-    font-size: 13px; letter-spacing: .04em;
-  }
-  .brand-credit svg { width: 34px; height: 13px; stroke: var(--text-2); stroke-width: 14; flex: none; }
   /* The topbar carries the brand on desktop now that it is full-width — the
      .brand base (display:flex) applies; it sits at the topbar's far left and
      overhangs the folded 62px rail, by design. (It was display:none here while
@@ -638,8 +630,6 @@
      logo — lives in the always-full-width topbar, so there is nothing to hide or
      re-center on fold. The old body.nav-collapsed .nav-brand .brand-name /
      .brand-mark hides and the folded-only .cobrand .brand-mark-img mark are gone. */
-  body.nav-collapsed .brand-credit { justify-content: center; padding: 12px 0 6px; }
-  body.nav-collapsed .brand-credit span { display: none; }
   body.nav-collapsed .tabs button, body.nav-collapsed .tabs a {
     font-size: 0; gap: 0; justify-content: center;
     padding-left: 0; padding-right: 0;

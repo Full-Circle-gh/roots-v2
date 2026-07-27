@@ -214,11 +214,12 @@ needs" is unbounded — a 1200×40 banner would demand 420px and eat the bar.
 Live `body.cobrand` (`retail-admin.css:507–509`) *swaps*: `.brand-logo`
 appears and `.brand-mark` + `.brand-name` are hidden, so a merchant with a
 logo sees **no tacet at all** in the bar. That is a white-label model, and it
-has a matching half — `#brandCredit` ("runs on tacet") at the foot of the
+had a matching half — `#brandCredit` ("runs on tacet") at the foot of the
 rail. **The approved bar replaces it with a true co-brand lockup:** the swap
 rule comes out, both marks render side by side with the hairline between.
-*Follow-on, undecided:* `#brandCredit` is arguably redundant once tacet sits
-in the bar on every page.
+**Banned element:** the "runs on tacet" attribution mark is removed
+product-wide and must not be reintroduced in any surface, mockup, print
+template, or email.
 
 **No logo uploaded → show nothing.** No placeholder, no grey box, no
 initials tile, no invitation to upload. The hairline goes with the logo;

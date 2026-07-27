@@ -417,10 +417,6 @@ function brandedLoginHtml(req) {
       html = html.replace(/<span class="wave"[\s\S]*?<\/span>/,
         `<img class="brandlogo" src="/api/backend/brand/${t.id}/logo?v=${stamp}" alt="">`);
     }
-    // co-branded page credits the platform — unless white-label cleared it
-    if (t.brand_credit !== 0) {
-      html = html.replace('<div class="logincredit" hidden>', '<div class="logincredit">');
-    }
   } catch (e) { /* any hiccup → stock page */ }
   return html;
 }
