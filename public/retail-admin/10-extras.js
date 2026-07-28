@@ -675,9 +675,12 @@ cuApplyThemeIcon();
   // created, removed, or restructured, so flex/grid layouts and charts are
   // physically untouched. Disconnected nodes are pruned on toggle.
   const _reg = [];
-  // Same idea for help tooltips: their text lives in the data-tip attribute,
-  // not a text node, so it needs its own registry. { el, en, cn }.
+  // Same idea for tooltips: their text lives in an attribute, not a text node,
+  // so it needs its own registry. { el, attr, en, cn }. Two attributes carry
+  // tooltip copy — data-tt (the shared tooltip component in 01-core.js) and
+  // the older data-tip — and both are authored "EN · CN" the same way.
   const _tipReg = [];
+  const TIP_ATTRS = ['data-tt', 'data-tip'];
   // Opt-in bilingual placeholders: tag an input/textarea with data-ph-en +
   // data-ph-cn and we swap its `placeholder` on toggle. Opt-in (not auto-split
   // like text) because many placeholders carry a decorative " · " that is NOT a
@@ -780,12 +783,12 @@ cuApplyThemeIcon();
     });
   }
 
-  // Help tooltips store their text in a data-tip="EN · CN" attribute, which
-  // the text-node walker never sees. Split it once, register both halves, and
-  // show the active language — the same model used for text nodes.
-  function processTip(el) {
-    if (el.__i18nTipDone) return;
-    const raw = el.getAttribute('data-tip') || '';
+  // Tooltips store their text in an "EN · CN" attribute, which the text-node
+  // walker never sees. Split it once, register both halves, and show the
+  // active language — the same model used for text nodes.
+  function processTipAttr(el, attr) {
+    if (el.__i18nTipDone && el.__i18nTipDone[attr]) return;
+    const raw = el.getAttribute(attr) || '';
     const idx = raw.indexOf(' · ');
     if (idx === -1) return;
     const en = raw.slice(0, idx).trim();
@@ -795,14 +798,18 @@ cuApplyThemeIcon();
     // Chinese (e.g. district names like 天河区 used as examples), so we only
     // require the CN half to be Chinese — the first ' · ' is the divider.
     if (!hasChinese(cn)) return;
-    el.__i18nTipDone = true;
-    el.setAttribute('data-tip', _lang === 'cn' ? cn : en);
-    _tipReg.push({ el, en, cn });
+    (el.__i18nTipDone = el.__i18nTipDone || {})[attr] = true;
+    el.setAttribute(attr, _lang === 'cn' ? cn : en);
+    _tipReg.push({ el, attr, en, cn });
+  }
+  function processTip(el) {
+    for (const a of TIP_ATTRS) if (el.hasAttribute(a)) processTipAttr(el, a);
   }
   function processTips(root) {
     const scope = (root && root.nodeType === 1) ? root : document.body;
-    if (scope.hasAttribute && scope.hasAttribute('data-tip')) processTip(scope);
-    scope.querySelectorAll && scope.querySelectorAll('[data-tip]').forEach(processTip);
+    const sel = TIP_ATTRS.map(a => '[' + a + ']').join(',');
+    if (scope.matches && scope.matches(sel)) processTip(scope);
+    scope.querySelectorAll && scope.querySelectorAll(sel).forEach(processTip);
   }
 
   // Opt-in bilingual placeholders — see _phReg note above.
@@ -872,7 +879,7 @@ cuApplyThemeIcon();
     for (let i = _tipReg.length - 1; i >= 0; i--) {
       const e = _tipReg[i];
       if (!e.el.isConnected) { _tipReg.splice(i, 1); continue; }
-      e.el.setAttribute('data-tip', lang === 'cn' ? e.cn : e.en);
+      e.el.setAttribute(e.attr, lang === 'cn' ? e.cn : e.en);
     }
     for (let i = _phReg.length - 1; i >= 0; i--) {
       const e = _phReg[i];
