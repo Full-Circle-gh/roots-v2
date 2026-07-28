@@ -2750,14 +2750,52 @@
          shell gives the content column only ~996px on a 1280px laptop once the
          rail and gutters are taken out — a floor that high would scroll the
          whole PAGE sideways on the commonest window there is. table-layout:fixed
-         plus the colgroup already guarantees what the floor was protecting: the
-         seven numeric columns keep their pixel widths and never cramp, and the
-         slack comes out of Customer, whose name ellipses by design. */
-      /* table-layout:fixed + the colgroup above give every column a
+         plus the colgroup already guarantees what the floor was protecting: at
+         that ~996px the numeric columns still clear their widest real value by
+         a margin (the floors are listed with the widths below), and what has to
+         give is Customer, whose name ellipses by design. */
+      /* table-layout:fixed + the colgroup below give every column a
          deterministic share instead of the browser's auto-guess, which used
          to hand almost all the slack to Customer and leave the numeric
          columns cramped against each other (same fix as #orders-table). */
       #cu-table { border-collapse: separate; border-spacing: 0; width: 100%; background: transparent; table-layout: fixed; }
+
+      /* ── Pinned column widths ──
+         PERCENTAGES SUMMING TO 100, THE WAY #orders-table DOES IT (see its own
+         "Pinned column widths" block). Orders is the anchor for table shape the
+         same way it is for the header band; this table now states its widths
+         the same way, in CSS on classed cols rather than inline on the markup.
+
+         These were PIXELS, with Customer left widthless — so Customer absorbed
+         ALL the slack, one hundred percent of it. On a 1280px laptop that was
+         invisible (782px of fixed columns out of ~996px left Customer a
+         reasonable 214px), but every pixel of a wider monitor went to that one
+         column: at 1600px Customer took 818px and the other eight bunched into
+         a cluster on the right with a canyon in front of them. One column
+         growing while eight stand still is the whole bug — percentages make
+         every boundary widen together, so the spacing stays even at any width.
+
+         Customer is the widest share on purpose: it is the only cell stacking
+         two lines (name over phone) beside a 30px monogram, so it carries
+         about 67px of chrome before a name starts. 29% gives it MORE room than
+         the old layout did on a laptop, and stops it running away above that.
+
+         Floors these were checked against, at the ~996px table a 1280px laptop
+         gives (content width minus 24px cell padding):
+           Ordered ¥ 120px  — "¥178,000" ≈ 67px          Points   80px — "12,470" ≈ 50px
+           Wallet ¥   90px  — "¥17,800"  ≈ 59px          Orders   70px — 2-3 digits
+           Channel   100px  — glyph 13 + gap 6 + "WeChat" ≈ 48px
+           Tier       90px  — the "sprout" pill ≈ 50px   Last seen 120px — unchanged
+         Nothing cramps, and Last seen keeps the exact width it shipped with. */
+      #cu-table col.cu-c-cust    { width: 29%; }
+      #cu-table col.cu-c-chan    { width: 10%; }
+      #cu-table col.cu-c-tier    { width:  9%; }
+      #cu-table col.cu-c-orders  { width:  7%; }
+      #cu-table col.cu-c-spend   { width: 12%; }
+      #cu-table col.cu-c-points  { width:  8%; }
+      #cu-table col.cu-c-wallet  { width:  9%; }
+      #cu-table col.cu-c-seen    { width: 12%; }
+      #cu-table col.cu-c-chev    { width:  4%; }
       /* 🔴 THE BAND IS A PRODUCT-WIDE COMPONENT AND ORDERS IS ITS ANCHOR.
          It was invented in the Orders mockup — that is where --td-header came
          from — and every value below is copied from `Orders (A) - Build.html`
@@ -3477,10 +3515,12 @@
                Orders — glyph plus the channel's name, under a labelled header.
                It was a bare icon tucked beside the name; an icon alone made the
                operator decode it, and the same value now reads as a word. -->
+          <!-- Widths live in CSS on these classes, not inline here — Orders'
+               arrangement (col.oc-c-*). See "Pinned column widths" above. -->
           <colgroup>
-            <col><col style="width:112px"><col style="width:104px"><col style="width:86px">
-            <col style="width:132px"><col style="width:92px"><col style="width:96px">
-            <col style="width:120px"><col style="width:40px">
+            <col class="cu-c-cust"><col class="cu-c-chan"><col class="cu-c-tier"><col class="cu-c-orders">
+            <col class="cu-c-spend"><col class="cu-c-points"><col class="cu-c-wallet">
+            <col class="cu-c-seen"><col class="cu-c-chev">
           </colgroup>
           <thead><tr>
             <th>Customer · 顾客</th>
