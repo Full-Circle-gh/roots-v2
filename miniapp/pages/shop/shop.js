@@ -33,6 +33,19 @@ function _effPrice(p) {
   return eff;
 }
 
+// Stock verdict for one catalog row, shared by the cards and the quick-add size
+// picker so both read a sold-out product the same way the PDP does.
+//   out      → no stock (supplier-direct rows are out only when paused).
+//   preorder → out, but the operator lets out-of-city shoppers reserve it
+//              (oos_preorder from the server). Stays orderable + tappable.
+//   soldOut  → hard out: dead SOLD OUT pill, no + button, picker row disabled.
+function _stockState(p) {
+  const stock = p.stock == null ? null : Number(p.stock);
+  const out = p.ship_from_supplier ? !!p.supplier_paused : (stock != null && stock <= 0);
+  const preorder = out && !p.ship_from_supplier && !!p.oos_preorder;
+  return { out, preorder, soldOut: out && !preorder, stock };
+}
+
 const DIETARY_FILTERS = [
   { key: 'gluten', en: 'GLUTEN FREE', cn: '无麸质' },
   { key: 'nuts',   en: 'NUT FREE',    cn: '无坚果' },
@@ -147,6 +160,7 @@ Page({
     inStockLabel: 'IN STOCK',
     priceFromLabel: '¥',
     oosLabel: 'SOLD OUT',
+    preLabel: 'PRE-ORDER',
     dietaryFilters: DIETARY_FILTERS.map(f => ({ ...f, label: f.en })),
     badgeFilters:   BADGE_FILTERS.map(b   => ({ ...b, label: b.en })),
 
@@ -226,6 +240,7 @@ Page({
       inStockLabel:      L === 'cn' ? '有货' : 'IN STOCK',
       priceFromLabel:    L === 'cn' ? '价格' : '¥',
       oosLabel:          L === 'cn' ? '售罄' : 'SOLD OUT',
+      preLabel:          L === 'cn' ? '可预订' : 'PRE-ORDER',
       emptyTitle:        L === 'cn' ? '暂无商品' : 'No products yet.',
       emptySub:          L === 'cn' ? '请在管理后台发布商品' : 'Publish products in the Roots admin to see them here.',
       dietaryFilters: DIETARY_FILTERS.map(f => ({ ...f, label: L === 'cn' ? f.cn : f.en })),
@@ -479,7 +494,7 @@ Page({
       const eff = Number(p.effective_price) > 0 ? Number(p.effective_price) : regular;
       const isFlash = !members && !!p.is_on_flash && eff < regular;
 
-      let price, priceWas = '', pricePrefix = '', outOfStock, soldUnits, subline;
+      let price, priceWas = '', pricePrefix = '', outOfStock, preorder, soldUnits, subline;
       if (members) {
         // Collapsed variant card. `price` is just the lowest amount (e.g.
         // "¥89") so it stays in League Gothic at the cards' big price size;
@@ -495,14 +510,18 @@ Page({
         price = minP > 0 ? money(minP) : '—';
         pricePrefix = (minP > 0 && !allSame) ? (L === 'cn' ? '起' : 'from') : '';
         // Supplier-direct members carry no stock of ours — out only if paused.
-        outOfStock = members.every(m => m.ship_from_supplier
-          ? !!m.supplier_paused
-          : (m.stock != null && Number(m.stock) <= 0));
+        // A size that's out but pre-orderable keeps the card orderable: the
+        // group only goes dead when EVERY size is hard-out, and the card shows
+        // PRE-ORDER when the only remaining sizes are reservable ones.
+        const states = members.map(_stockState);
+        outOfStock = states.every(s => s.soldOut);
+        preorder = !outOfStock && states.every(s => s.out) && states.some(s => s.preorder);
         soldUnits = members.reduce((s, m) => s + (Number(m.units_sold) || 0), 0);
         subline = '';
       } else {
-        const stockNum = p.stock == null ? null : Number(p.stock);
-        outOfStock = p.ship_from_supplier ? !!p.supplier_paused : (stockNum != null && stockNum <= 0);
+        const st = _stockState(p);
+        outOfStock = st.soldOut;
+        preorder = st.preorder;
         // All-time units sold (server min-gates this to 0 below the badge
         // threshold), shown as a small "X SOLD" popularity caption on the card.
         soldUnits = Number(p.units_sold) || 0;
@@ -522,6 +541,7 @@ Page({
         badge: pickBadge(p.tags),
         soldCaption: soldUnits > 0 ? (L === 'cn' ? `已售 ${soldUnits}` : `${soldUnits} SOLD`) : '',
         outOfStock,
+        preorder,
         // image_data may now be a streamed-image URL (/api/retail/products/:id/
         // image) since the list omits inline base64 — absUrl() resolves it
         // against the API host. data: URIs and absolute URLs pass through.
@@ -945,13 +965,15 @@ Page({
       wx.navigateTo({ url: '/pages/product/product?id=' + id });
       return;
     }
-    this._addRawToCart(raw, id);
+    this._addRawToCart(raw, id, _stockState(raw).preorder);
   },
 
   // Add one product row to the cart + run the fly-to-cart animation. originId
   // is the id of the card whose + button anchors the animation (the
   // representative card, even when the chosen size is a different sibling).
-  _addRawToCart(raw, originId) {
+  // preorder: the row is out of stock but reservable — say so, so a quick-add
+  // never silently looks like a normal in-stock add.
+  _addRawToCart(raw, originId, preorder) {
     cart.add({
       id: raw.id,
       name_en: raw.name_en,
@@ -968,6 +990,14 @@ Page({
       bundle_worth: raw.bundle_worth,   // a bundle card: its "separately" worth
     }, 1, []);
 
+    if (preorder) {
+      wx.showToast({
+        title: this.data.lang === 'cn' ? '已预订，加入购物车' : 'Added — pre-order',
+        icon: 'none',
+        duration: 1500,
+      });
+    }
+
     const imgUrl = absUrl(raw.image_url) || absUrl(raw.image_data) || '';
     wx.createSelectorQuery()
       .in(this)
@@ -976,7 +1006,7 @@ Page({
       .exec((res) => {
         const rect = res && res[0];
         if (!rect) {
-          wx.showToast({ title: this.data.lang === 'cn' ? '已加入' : 'Added', icon: 'success', duration: 800 });
+          if (!preorder) wx.showToast({ title: this.data.lang === 'cn' ? '已加入' : 'Added', icon: 'success', duration: 800 });
           return;
         }
         const startX = rect.left + (rect.width / 2) - 20;
@@ -999,8 +1029,10 @@ Page({
       const cmp = Number(m.compare_at_price) || 0;
       const wasN = isFlash ? regular : (cmp > eff && eff > 0 ? cmp : 0);
       const saveN = wasN > eff && eff > 0 ? Math.round((wasN - eff) * 100) / 100 : 0;
-      const stock = m.stock == null ? null : Number(m.stock);
-      const soldOut = m.ship_from_supplier ? !!m.supplier_paused : (stock != null && stock <= 0);
+      // Out but pre-orderable (out-of-city) → keep the row tappable with a
+      // PRE-ORDER badge; only a hard-out size shows the dead SOLD OUT pill.
+      // Mirrors the PDP's own size picker.
+      const { out, preorder, soldOut, stock } = _stockState(m);
       return {
         id: m.id,
         label: lang.pickVariantLabel(m.variant_label, m.variant_label_cn, L) || lang.pick(m.name_en, m.name_cn, L) || ('#' + m.id),
@@ -1010,7 +1042,8 @@ Page({
         save: saveN > 0 ? (L === 'cn' ? '省¥' : 'SAVE ¥') + (Number.isInteger(saveN) ? saveN : saveN.toFixed(2)) : '',
         isFlash,
         soldOut,
-        low: (!soldOut && stock != null && stock <= 5)
+        preorder,
+        low: (!out && stock != null && stock <= 5)
           ? (L === 'cn' ? `仅剩 ${stock}` : `Only ${stock} left`)
           : '',
       };
@@ -1037,15 +1070,16 @@ Page({
     const members = (this._memberMap && this._memberMap[this._vpRepId]) || [];
     const m = members.find(x => Number(x.id) === id);
     if (!m) return;
-    const stock = m.stock == null ? null : Number(m.stock);
-    const vSoldOut = m.ship_from_supplier ? !!m.supplier_paused : (stock != null && stock <= 0);
-    if (vSoldOut) {
+    // A pre-orderable out-of-stock size stays orderable — the checkout gate
+    // re-checks the address and blocks only same-day Guangzhou.
+    const { preorder, soldOut } = _stockState(m);
+    if (soldOut) {
       wx.showToast({ title: this.data.lang === 'cn' ? (m.ship_from_supplier ? '暂时缺货' : '已售罄') : (m.ship_from_supplier ? 'Unavailable' : 'Sold out'), icon: 'none' });
       return;
     }
     this.setData({ vpShow: false });
     // Fly from the representative card's + button (still in the DOM).
-    this._addRawToCart(m, this._vpRepId);
+    this._addRawToCart(m, this._vpRepId, preorder);
   },
 
   _launchFly(startX, startY, imgUrl) {

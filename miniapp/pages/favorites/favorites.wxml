@@ -59,6 +59,7 @@
         </view>
         <view wx:if="{{item.priceDrop}}" class="tag-drop f-bear">−¥{{item.priceDrop}}</view>
         <view wx:if="{{item.soldOut}}" class="tag-out f-gothic">{{copy.soldOut}}</view>
+        <view wx:elif="{{item.preorder}}" class="tag-pre f-gothic">{{copy.preorder}}</view>
       </view>
       <view class="card-name f-bear">{{item.name}}</view>
       <view wx:if="{{item.subLine}}" class="card-sub f-yuan">{{item.subLine}}</view>
@@ -84,6 +85,7 @@
           <text class="row-saved f-toni">{{item.savedDisplay}}</text>
           <text wx:if="{{item.priceDrop}}" class="row-drop f-bear">−¥{{item.priceDrop}}</text>
           <text wx:if="{{item.soldOut}}" class="row-out f-gothic">{{copy.soldOut}}</text>
+          <text wx:elif="{{item.preorder}}" class="row-pre f-gothic">{{copy.preorder}}</text>
         </view>
       </view>
       <view class="row-right">

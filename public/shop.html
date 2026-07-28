@@ -998,6 +998,9 @@
     .sl-vp-lb{font-family:var(--bf-bear);font-size:15px;color:var(--ink);}
     .sl-vp-wt{font-family:var(--bf-toni);font-size:11px;color:var(--olive);margin-left:6px;}
     .sl-vp-low{font-family:var(--bf-toni);font-size:10px;color:var(--berry);margin-left:6px;}
+    /* Pre-order: an out-of-stock size out-of-city shoppers can still reserve. */
+    .sl-vp-pre{font-family:var(--bf-toni);font-size:10px;letter-spacing:.08em;font-weight:700;
+      background:var(--olive);color:#fff;padding:1px 8px;border-radius:999px;margin-left:6px;}
     .sl-vp-ps{display:flex;align-items:baseline;gap:6px;flex:none;}
     .sl-vp-was{font-size:11px;color:rgba(0,0,0,.4);text-decoration:line-through;}
     .sl-vp-pr{font-family:var(--bf-bear);font-size:16px;color:var(--ink);}
@@ -4430,6 +4433,20 @@ const SL_VIEWS=[
 const SL_LIST=['list','list-compact'];
 function slMoney(v){return '¥'+(Number.isInteger(v)?v:v.toFixed(2));}
 function slEff(p){const r=Number(p.price??p.sell_price)||0;const e=Number(p.effective_price)>0?Number(p.effective_price):r;return e;}
+// Stock verdict for one catalog row, shared by the size pickers so a quick-add
+// reads a sold-out size exactly like the product page does.
+//   out      -> no stock (supplier-direct rows are out only when paused).
+//   pre      -> out, but reservable by out-of-city shoppers (pre-order): the row
+//               stays tappable and shows a PRE-ORDER pill.
+//   soldOut  -> hard out: dimmed, dead row.
+// `oos_preorder` is the server's own verdict (shipped by the PDP and the list
+// endpoints); oosBackorder() is the client-side fallback for older payloads.
+function slStock(m){
+  const stock=m.stock==null?null:Number(m.stock);
+  const out=m.ship_from_supplier?!!m.supplier_paused:(stock!=null&&stock<=0);
+  const pre=out&&!m.ship_from_supplier&&(m.oos_preorder!=null?!!m.oos_preorder:oosBackorder(m));
+  return {out,pre,soldOut:out&&!pre,stock};
+}
 // Card image. The slim list puts the streamed-image URL in image_data (not
 // image_url) and only substitutes the literal 'data:' sentinel when the row's
 // image_data was inline base64 (stripped to save bytes). So: prefer image_url,
@@ -4833,10 +4850,15 @@ function slAdd(id,srcEl){
 }
 function slAddRaw(raw,srcEl){
   const price=slEff(raw);
+  const pre=slStock(raw).pre;
   cartAdd({product_id:raw.id,qty:1,choices:[],
     name:pick(raw.name_en,raw.name_cn),
     price,image:slImg(raw),size:raw.size||'',optLabel:'',ship_from_supplier:!!raw.ship_from_supplier});
-  if(flyToCart(srcEl,slImg(raw)))return;          // animation replaces toast when it runs
+  const flew=flyToCart(srcEl,slImg(raw));
+  // A pre-order always gets its own toast (even alongside the animation) so a
+  // quick-add never looks like a normal in-stock add.
+  if(pre){toast(state.lang==='cn'?'已预订，加入购物车 🌱':'Added — pre-order 🌱');return;}
+  if(flew)return;                                 // animation replaces toast when it runs
   toast(state.lang==='cn'?'已加入 🌱':'Added 🌱');
 }
 // Fly the product image from the tapped + button into the cart icon (header or mobile tabbar).
@@ -4871,12 +4893,11 @@ function slOpenVp(repId,members){
     const isFlash=!!m.is_on_flash&&eff<regular;
     const cmp=Number(m.compare_at_price)||0;
     const wasN=isFlash?regular:(cmp>eff&&eff>0?cmp:0);
-    const stock=m.stock==null?null:Number(m.stock);
-    const soldOut=m.ship_from_supplier?!!m.supplier_paused:(stock!=null&&stock<=0);
+    const {out,pre,soldOut,stock}=slStock(m);
     const label=pick(m.variant_label,m.variant_label_cn)||pick(m.name_en,m.name_cn)||('#'+m.id);
     return {id:m.id,label,weight:(m.size||'').toString().trim(),
-      price:eff>0?slMoney(eff):'',priceWas:wasN>0?slMoney(wasN):'',isFlash,soldOut,
-      low:(!soldOut&&stock!=null&&stock<=5)?(L==='cn'?`仅剩 ${stock}`:`Only ${stock} left`):''};
+      price:eff>0?slMoney(eff):'',priceWas:wasN>0?slMoney(wasN):'',isFlash,soldOut,pre,
+      low:(!out&&stock!=null&&stock<=5)?(L==='cn'?`仅剩 ${stock}`:`Only ${stock} left`):''};
   });
   const rep=(SL.prods||[]).find(p=>Number(p.id)===Number(repId));
   // Picker heading uses the operator-set variant axis noun ("color"→"Choose a
@@ -4890,7 +4911,7 @@ function slOpenVp(repId,members){
       ${rep?`<div class="sl-vp-n">${esc(pick(rep.name_en,rep.name_cn))}</div>`:''}
     </div><div class="sl-vp-x" id="slVpX">×</div></div>
     ${opts.map(o=>`<div class="sl-vp-o ${o.soldOut?'sold':''}" data-id="${o.id}">
-      <div><span class="sl-vp-lb">${esc(o.label)}</span>${o.weight?`<span class="sl-vp-wt">${esc(o.weight)}</span>`:''}${o.low?`<span class="sl-vp-low">${esc(o.low)}</span>`:''}${o.soldOut?`<span class="sl-vp-wt">${L==='cn'?'售罄':'Sold out'}</span>`:''}</div>
+      <div><span class="sl-vp-lb">${esc(o.label)}</span>${o.weight?`<span class="sl-vp-wt">${esc(o.weight)}</span>`:''}${o.low?`<span class="sl-vp-low">${esc(o.low)}</span>`:''}${o.soldOut?`<span class="sl-vp-wt">${L==='cn'?'售罄':'Sold out'}</span>`:''}${o.pre?`<span class="sl-vp-pre">${L==='cn'?'可预订':'PRE-ORDER'}</span>`:''}</div>
       <div class="sl-vp-ps">${o.priceWas?`<span class="sl-vp-was">${o.priceWas}</span>`:''}<span class="sl-vp-pr">${o.price}</span></div>
     </div>`).join('')}
   </div>`;
@@ -5161,12 +5182,11 @@ async function renderProduct(id){
         const isFl=!!m.is_on_flash&&eff<regular;
         const cmp=Number(m.compare_at_price)||0;
         const wasN=isFl?regular:(cmp>eff&&eff>0?cmp:0);
-        const stock=m.stock==null?null:Number(m.stock);
-        const soldOut=m.ship_from_supplier?!!m.supplier_paused:(stock!=null&&stock<=0);
+        const {out,pre,soldOut,stock}=slStock(m);
         const label=pick(m.variant_label,m.variant_label_cn)||pick(m.name_en,m.name_cn)||('#'+m.id);
         return {id:m.id,label,weight:(m.size||'').toString().trim(),
-          price:eff>0?slMoney(eff):'',priceWas:wasN>0?slMoney(wasN):'',soldOut,
-          low:(!soldOut&&stock!=null&&stock<=5)?(L==='cn'?`仅剩 ${stock}`:`Only ${stock} left`):''};
+          price:eff>0?slMoney(eff):'',priceWas:wasN>0?slMoney(wasN):'',soldOut,pre,
+          low:(!out&&stock!=null&&stock<=5)?(L==='cn'?`仅剩 ${stock}`:`Only ${stock} left`):''};
       });
       const nounEn=(p.variant_noun_en||'').trim(),nounCn=(p.variant_noun_cn||'').trim();
       const vpTitle=L==='cn'?(nounCn?`选择${nounCn}`:'选择规格'):(nounEn?`Choose a ${nounEn}`:'Choose a size');
@@ -5177,7 +5197,7 @@ async function renderProduct(id){
           <div class="sl-vp-n">${esc(pick(p.name_en,p.name_cn))}</div>
         </div><div class="sl-vp-x" data-x>×</div></div>
         ${opts.map(o=>`<div class="sl-vp-o ${o.soldOut?'sold':''}" data-id="${o.id}">
-          <div><span class="sl-vp-lb">${esc(o.label)}</span>${o.weight?`<span class="sl-vp-wt">${esc(o.weight)}</span>`:''}${o.low?`<span class="sl-vp-low">${esc(o.low)}</span>`:''}${o.soldOut?`<span class="sl-vp-wt">${L==='cn'?'售罄':'Sold out'}</span>`:''}</div>
+          <div><span class="sl-vp-lb">${esc(o.label)}</span>${o.weight?`<span class="sl-vp-wt">${esc(o.weight)}</span>`:''}${o.low?`<span class="sl-vp-low">${esc(o.low)}</span>`:''}${o.soldOut?`<span class="sl-vp-wt">${L==='cn'?'售罄':'Sold out'}</span>`:''}${o.pre?`<span class="sl-vp-pre">${L==='cn'?'可预订':'PRE-ORDER'}</span>`:''}</div>
           <div class="sl-vp-ps">${o.priceWas?`<span class="sl-vp-was">${o.priceWas}</span>`:''}<span class="sl-vp-pr">${o.price}</span></div>
         </div>`).join('')}
       </div>`;
@@ -5191,7 +5211,9 @@ async function renderProduct(id){
           name:pick(m.name_en,m.name_cn),price:slEff(m),
           image:slImg(m)||thumb(p),size:m.size||m.variant_label||'',optLabel:'',
           ship_from_supplier:!!m.ship_from_supplier});
-        toast(state.lang==='cn'?'已加入购物车 🌱':'Added to cart 🌱');
+        toast(slStock(m).pre
+          ? (state.lang==='cn'?'已预订，加入购物车 🌱':'Added — pre-order 🌱')
+          : (state.lang==='cn'?'已加入购物车 🌱':'Added to cart 🌱'));
       });
     }
     $('#addBtn').addEventListener('click',()=>{

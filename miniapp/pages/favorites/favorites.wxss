@@ -190,6 +190,18 @@
   font-size: calc(20rpx * var(--font-scale));
   letter-spacing: 0.08em;
 }
+/* Pre-order: a sold-out favourite the operator lets out-of-city shoppers
+   reserve. Olive instead of the dead ink SOLD OUT tag — the + stays live. */
+.tag-pre {
+  position: absolute;
+  bottom: 12rpx;
+  left: 12rpx;
+  background: var(--olive);
+  color: #fff;
+  padding: 4rpx 12rpx;
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.08em;
+}
 .card-name {
   margin-top: 12rpx;
   font-size: calc(28rpx * var(--font-scale));
@@ -278,6 +290,12 @@
 }
 .row-out {
   background: var(--ink);
+  color: #fff;
+  padding: 2rpx 10rpx;
+  font-size: calc(18rpx * var(--font-scale));
+}
+.row-pre {
+  background: var(--olive);
   color: #fff;
   padding: 2rpx 10rpx;
   font-size: calc(18rpx * var(--font-scale));

@@ -17,6 +17,7 @@ const COPY_EN = {
   inStockKicker: 'IN STOCK',
   addAll: 'ADD ALL TO CART',
   soldOut: 'SOLD OUT',
+  preorder: 'PRE-ORDER',
   catAll: 'ALL',
   toastAddedAll: 'Added to cart',
   toastRemoved: 'Removed',
@@ -33,6 +34,7 @@ const COPY_CN = {
   inStockKicker: '可购买',
   addAll: '全部加入购物车',
   soldOut: '已售罄',
+  preorder: '可预订',
   catAll: '全部',
   toastAddedAll: '已加入购物车',
   toastRemoved: '已取消收藏',
@@ -124,7 +126,11 @@ Page({
       const eff   = Number(p.effective_price) > 0 ? Number(p.effective_price) : Number(p.price) || 0;
       const reg   = Number(p.price) || 0;
       const flash = !!p.is_on_flash && eff < reg;
-      const soldOut = p.ship_from_supplier ? !!p.supplier_paused : (p.stock != null && Number(p.stock) <= 0);
+      // Out of stock but pre-orderable (out-of-city) → stays quick-addable with
+      // a PRE-ORDER tag; only a hard-out favourite goes dead. Mirrors the shop.
+      const out = p.ship_from_supplier ? !!p.supplier_paused : (p.stock != null && Number(p.stock) <= 0);
+      const preorder = out && !p.ship_from_supplier && !!p.oos_preorder;
+      const soldOut = out && !preorder;
       const priceDrop = flash && reg > eff ? Math.round(reg - eff) : 0;
       const name = L === 'cn' ? (p.name_cn || p.name_en) : (p.name_en || p.name_cn);
       const cnSub = L === 'cn' ? (p.name_en || '') : (p.name_cn || '');
@@ -138,13 +144,16 @@ Page({
         priceDisplay: '¥' + Math.round(eff),
         savedDisplay: (L === 'cn' ? '收藏于 ' : 'SAVED ') + fmtSavedDate(p.favorited_at, L),
         soldOut,
+        preorder,
         priceDrop,
         priceN: eff,
         product: p,
       };
     });
 
-    const inStock = visible.filter(v => !v.soldOut);
+    // "IN STOCK" total / add-all stays literal: a pre-orderable favourite is
+    // quick-addable on its own, but isn't swept into a bulk add.
+    const inStock = visible.filter(v => !v.soldOut && !v.preorder);
     const inStockCount = inStock.length;
     const inStockTotal = inStock.reduce((s, v) => s + (v.priceN || 0), 0);
 
@@ -201,8 +210,9 @@ Page({
     if (!id) return;
     const p = (this.data.all || []).find(x => x.id === id);
     if (!p) return;
-    const soldOut = p.ship_from_supplier ? !!p.supplier_paused : (p.stock != null && Number(p.stock) <= 0);
-    if (soldOut) {
+    const out = p.ship_from_supplier ? !!p.supplier_paused : (p.stock != null && Number(p.stock) <= 0);
+    const preorder = out && !p.ship_from_supplier && !!p.oos_preorder;
+    if (out && !preorder) {
       wx.showToast({ title: this.data.copy.soldOut, icon: 'none' });
       return;
     }
@@ -214,13 +224,16 @@ Page({
     }
     cart.add(p, 1, []);
     wx.showToast({
-      title: this.data.lang === 'cn' ? '已加入购物车' : 'Added',
-      icon: 'success', duration: 900,
+      title: preorder
+        ? (this.data.lang === 'cn' ? '已预订，加入购物车' : 'Added — pre-order')
+        : (this.data.lang === 'cn' ? '已加入购物车' : 'Added'),
+      icon: preorder ? 'none' : 'success',
+      duration: preorder ? 1500 : 900,
     });
   },
 
   onAddAll() {
-    const inStock = (this.data.visible || []).filter(v => !v.soldOut);
+    const inStock = (this.data.visible || []).filter(v => !v.soldOut && !v.preorder);
     if (!inStock.length) return;
     inStock.forEach(v => cart.add(v.product, 1, []));
     wx.showToast({

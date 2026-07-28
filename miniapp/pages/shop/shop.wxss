@@ -291,6 +291,14 @@
   text-align: center; padding: 8rpx 0;
   font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.12em;
 }
+/* Pre-order: a sold-out card out-of-city shoppers can still reserve. Olive
+   band instead of the dead black SOLD OUT one — the + button stays live. */
+.card-pre {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  background: var(--olive); color: #fff;
+  text-align: center; padding: 8rpx 0;
+  font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.12em; font-weight: 700;
+}
 .card .name { font-size: calc(30rpx * var(--font-scale)); margin-top: 16rpx; line-height: 1.2; }
 .card .price { font-size: calc(28rpx * var(--font-scale)); margin-top: 4rpx; color: var(--olive); }
 .card .price.is-flash { color: #E96174; font-weight: 700; }
@@ -342,6 +350,12 @@
   background: rgba(0, 0, 0, 0.75); color: #fff;
   text-align: center; padding: 12rpx 0;
   font-size: calc(24rpx * var(--font-scale)); letter-spacing: 0.12em;
+}
+.gal-pre {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  background: var(--olive); color: #fff;
+  text-align: center; padding: 12rpx 0;
+  font-size: calc(24rpx * var(--font-scale)); letter-spacing: 0.12em; font-weight: 700;
 }
 .gal-meta { margin-top: 20rpx; }
 .gal-name { font-size: calc(44rpx * var(--font-scale)); line-height: 1.1; color: var(--ink); }
@@ -525,6 +539,12 @@
   padding: 2rpx 12rpx;
   font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.1em;
 }
+.row-pre {
+  display: inline-block; margin-top: 10rpx; margin-left: 8rpx;
+  background: var(--olive); color: #fff;
+  padding: 2rpx 12rpx; border-radius: 999rpx;
+  font-size: calc(20rpx * var(--font-scale)); letter-spacing: 0.08em; font-weight: 700;
+}
 .row-right { text-align: right; min-width: 88rpx; display: flex; flex-direction: column; align-items: flex-end; }
 .row-price { font-size: calc(32rpx * var(--font-scale)); color: var(--ink); letter-spacing: 0.04em; line-height: 1; }
 .row-price.is-flash { color: #E96174; font-weight: 700; }
@@ -657,6 +677,11 @@
 .vp-opt-oos {
   font-size: calc(18rpx * var(--font-scale)); letter-spacing: 0.1em;
   background: rgba(0,0,0,.1); color: var(--olive); padding: 2rpx 12rpx; border-radius: 999rpx;
+}
+/* Pre-order: an out-of-stock size out-of-city shoppers can still reserve. */
+.vp-opt-pre {
+  font-size: calc(18rpx * var(--font-scale)); letter-spacing: 0.08em; font-weight: 700;
+  background: var(--olive); color: #fff; padding: 2rpx 12rpx; border-radius: 999rpx;
 }
 .vp-opt-price-stack { display: flex; align-items: baseline; gap: 10rpx; flex-shrink: 0; }
 .vp-opt-price { font-size: calc(36rpx * var(--font-scale)); color: var(--ink); letter-spacing: 0.04em; }

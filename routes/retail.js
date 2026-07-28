@@ -1514,6 +1514,12 @@ router.get('/api/retail/products', (req, res) => {
     );
     for (const r of rows) r.has_options = optSet.has(r.id);
   }
+  // Pre-order flag per row — same field the PDP ships (GET /products/:id). A
+  // sold-out row whose policy is backorder_gz stays orderable for out-of-city
+  // shoppers, so the shop grid + its quick-add size picker can show "PRE-ORDER"
+  // instead of a dead "SOLD OUT" without re-implementing the policy fallback
+  // (oos_policy → legacy is_batch_made) on every client.
+  for (const r of rows) r.oos_preorder = effectiveOosPolicy(r) === 'backorder_gz';
   attachSoldCounts(rows);
   resolveAutoBadges(rows);
   const termClause = terms.map(() => 'AND ' + termClauseFor()).join(' ');
@@ -26338,6 +26344,9 @@ router.get('/api/retail/favorites', requireRetailAuth, (req, res) => {
     .map(r => flashsales.decorateProduct(r, now))
     // Swap heavy inline base64 photos for streamed-image URLs (see shop-list).
     .map(r => lazifyProductImage(r, baseUrl));
+  // Pre-order flag (see the shop list above): a sold-out favourite on the
+  // backorder_gz policy stays quick-addable instead of reading as dead stock.
+  for (const r of rows) r.oos_preorder = effectiveOosPolicy(r) === 'backorder_gz';
   resolveAutoBadges(rows);
   res.json({ success: true, data: rows, meta: { count: rows.length, server_time_ms: now } });
 });
