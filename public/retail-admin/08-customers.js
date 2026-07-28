@@ -447,24 +447,36 @@ function cuMoney(v) {
   return '<span class="cur">¥</span>' + s;
 }
 
-// Channel icon for the Customer cell.
+// The Channel cell — glyph on the left, the channel's name on the right.
+//
+// This is the Orders channel column's pattern, deliberately: Orders builds
+// `<div class="ord-chan">${chanIcon(o.channel)}${ordChannelLabel(o)}</div>`
+// (04-orders.js), and an operator reading both pages should not have to learn
+// two ways of being told the same thing. It used to be a bare glyph tucked
+// between the avatar and the name, which asked the operator to decode an icon
+// — and to hover it to find out they'd guessed wrong.
 //
 // r.channel is the SIGNUP channel, derived server-side from openid by
 // CHANNEL_SQL (retail.js) — where they signed up, not where they last ordered.
-// The same expression answers the Channel filter, so a row's icon and the
-// filter that returns it cannot disagree.
+// The same expression answers the Channel filter, so a row's channel and the
+// filter that returns it cannot disagree. The LABEL likewise comes from
+// CU_CHAN_OPTS, which is what the "Channel" dropdown reads, so the word on the
+// row is the word in the filter that found it — one term per value, always.
 //
 // 🔴 NO FALLBACK. An unrecognised openid classifies as 'unknown' and gets NO
 // icon rather than a guess — not a default, not a placeholder, not a dash, the
 // same rule an absent SKU follows. Zero rows are unknown today; a future signup
-// path that forgets to namespace its openid would land here and show nothing,
-// which is the point. Do NOT add an `|| chanIcon('wechat')` fallback.
+// path that forgets to namespace its openid would land here and say so, which
+// is the point. Do NOT add an `|| chanIcon('wechat')` fallback.
+// The unknown row shows its RAW key as the text, iconless — the same choice
+// ordChannelLabel() makes with its `return c`: visibly odd beats plausibly
+// wrong. It is never dressed up as a channel we support.
 // Channel glyphs come from the SHARED CHAN_ICON map via chanIcon() (01-core.js)
 // — the same source the Orders dropdown and the Orders rows draw from — so a
 // Customers row, its filter option, and an Orders row all show one glyph per
 // channel. Do NOT re-add a local copy here: that is how the row and the filter
 // drifted apart in the first place.
-function cuChanIcon(r) {
+function cuChanCell(r) {
   const c = String(r.channel || '').toLowerCase();
   const opt = CU_CHAN_OPTS.find(o => o[0] === c && o[0]);
   // 🔴 THE CHECK MUST HAPPEN BEFORE THE CALL, and it must be against our OWN
@@ -473,15 +485,15 @@ function cuChanIcon(r) {
   // channel it hands back the WeChat one. Testing what it gave us would
   // therefore always pass, silently reinstating the invented-channel claim
   // this rule exists to prevent. Ask "is this a channel we know?" first;
-  // only then ask for its glyph. Unknown ⇒ no icon.
-  if (!opt) return '';
-  return `<span class="cul-chanico" title="${escapeHtml(cuT(opt[1], opt[2]))}">${chanIcon(c)}</span>`;
+  // only then ask for its glyph. Unknown ⇒ no icon, raw key as the word.
+  if (!opt) return `<span class="cul-chan is-unknown">${escapeHtml(c)}</span>`;
+  return `<span class="cul-chan">${chanIcon(c)}${escapeHtml(cuT(opt[1], opt[2]))}</span>`;
 }
 
 // One state, drawn inside the card where the rows would be.
 function cuStateRow(title, body, actions) {
   const wave = '<svg class="st-wave" viewBox="0 0 120 22" fill="none" stroke="currentColor" stroke-width="2"><path d="M0 11h30c4 0 5-7 9-7s5 14 9 14 5-7 9-7 5 7 9 7 5-14 9-14 5 7 9 7h27"/></svg>';
-  return `<tr><td colspan="8" class="muted"><div class="cul-state">${wave}`
+  return `<tr><td colspan="9" class="muted"><div class="cul-state">${wave}`
     + `<div class="st-title">${title}</div><div class="st-body">${body}</div>`
     + (actions ? `<div class="st-actions">${actions}</div>` : '')
     + `</div></td></tr>`;
@@ -515,6 +527,7 @@ function cuSkeletonRows() {
   const bar = (width, extra) => `<span class="cul-sk" style="width:${width}${extra || ''}"></span>`;
   return w.map(pc => `<tr class="cul-row">
     <td><div class="cul-who"><span class="cul-sk circle"></span><span class="main">${bar(pc + '%')}${bar(Math.round(pc * .6) + '%', ';margin-top:8px;height:10px')}</span></div></td>
+    <td>${bar('64px')}</td>
     <td>${bar('58px')}</td>
     <td class="numeric">${bar('24px', ';margin-left:auto')}</td>
     <td class="numeric">${bar('54px', ';margin-left:auto')}</td>
@@ -612,11 +625,12 @@ async function cuLoad() {
           <div class="cul-who">
             <span class="cul-mono" data-no-i18n>${cuMonogram(r.nickname)}</span>
             <span class="main">
-              <span class="nm" data-no-i18n>${cuChanIcon(r)}${nameHtml}${r.is_blocked ? `<span class="cul-pill blocked">${cuT('Blocked', '已封禁')}</span>` : ''}</span>
+              <span class="nm" data-no-i18n>${nameHtml}${r.is_blocked ? `<span class="cul-pill blocked">${cuT('Blocked', '已封禁')}</span>` : ''}</span>
               ${r.phone ? `<span class="ph" data-no-i18n>${escapeHtml(r.phone)}</span>` : ''}
             </span>
           </div>
         </td>
+        <td class="cul-chancell">${cuChanCell(r)}</td>
         <td><span class="cul-pill tier-${tier}">${tier}</span></td>
         <td class="numeric cul-num ${orders ? '' : 'is-zero'}" data-no-i18n>${cuNum(orders)}</td>
         <td class="numeric cul-num ${spend  ? '' : 'is-zero'}" data-no-i18n>${cuMoney(spend)}</td>
