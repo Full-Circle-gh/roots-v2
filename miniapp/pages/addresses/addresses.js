@@ -56,7 +56,8 @@ Page({
       // since "default" is jargon the customer doesn't need to think about.
       selectedBadge: 'SELECTED',
       tapToSelectHint: 'Tap an address to use it',
-      setDefault: 'Set as default',
+      // Same flag the list badges as SELECTED — one idea, one wording.
+      setDefault: 'Use this address',
       saveBtn: 'Save',
       cancelBtn: 'Cancel',
       formAdd: 'Add address',
@@ -161,7 +162,7 @@ Page({
         defaultBadge: '默认',
         selectedBadge: '已选',
         tapToSelectHint: '点击地址即可使用',
-        setDefault: '设为默认',
+        setDefault: '使用此地址',
         saveBtn: '保存',
         cancelBtn: '取消',
         formAdd: '新增地址',
@@ -571,12 +572,19 @@ Page({
         province: f.province,
         city: f.city,
         district: f.district,
-        is_default: !!f.is_default,
+        // A brand-new address is the one the customer wants to use — that's why
+        // they just typed it. The list calls that flag SELECTED and checkout
+        // reads the same flag, so adding and choosing are one step instead of
+        // save → find the new card → tap it. Editing a stored address says
+        // nothing about where to ship, so there the switch still decides.
+        is_default: f.id ? !!f.is_default : true,
       };
+      let newId = null;
       if (f.id) {
         await api.put('/api/retail/addresses/' + f.id, body);
       } else {
-        await api.post('/api/retail/addresses', body);
+        const saved = await api.post('/api/retail/addresses', body);
+        newId = (saved && saved.id) || null;
       }
       wx.showToast({ title: this.data.lang === 'cn' ? '已保存' : 'Saved', icon: 'success' });
       this.setData({
@@ -589,6 +597,18 @@ Page({
         areaIndex: [0, 0, 0],
       });
       await this.refresh();
+      if (newId) {
+        // Point the rest of the app at the address they just added: the cart
+        // reads this for its free-shipping threshold, and a checkout page
+        // sitting underneath us re-pulls on the flag (same handoff as
+        // pickAddress) instead of keeping its older pick.
+        try { getApp().globalData.activeAddressId = newId; } catch {}
+        const pages = getCurrentPages();
+        const prev = pages.length > 1 ? pages[pages.length - 2] : null;
+        if (prev && prev.setData) {
+          try { prev.setData({ _addressJustPicked: newId }); } catch {}
+        }
+      }
       // New/edited row's geocode resolves in the background — keep refreshing
       // until its delivery pill appears, so the customer doesn't have to leave.
       this.scheduleEtaSettle();

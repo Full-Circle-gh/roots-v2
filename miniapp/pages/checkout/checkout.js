@@ -704,6 +704,16 @@ Page({
       // over the previously-picked one so the new pick takes effect without
       // forcing the customer to also tap CHANGE on this page.
       const justPicked = this.data._addressJustPicked;
+      // Never touch a new-address form the customer is part-way through. It
+      // carries no id, so the fallback below would mirror the DEFAULT saved
+      // row over it — re-attaching that row's id to whatever they type next.
+      // placeOrder ships to the id, so the order went to the old address book
+      // entry while the screen still showed the new one (and the typed street
+      // kept reverting, which is why customers re-enter it "several times").
+      // Anything that backgrounds this page fires onShow: the map picker, a
+      // trip to the chat list, a share sheet. An explicit card tap over on
+      // /pages/addresses still wins — that one closes the form.
+      if (this.data.showNewForm && !justPicked) { this.setData(patch); return; }
       const targetId = justPicked || this.data.address?.id;
       let next = targetId ? list.find(a => a.id === targetId) : null;
       if (!next && list.length) next = list.find(a => a.is_default) || list[0];
@@ -723,8 +733,13 @@ Page({
           city_en: next.city_en || '',
           district_en: next.district_en || '',
         };
-        // Clear the cross-page flag so onShow doesn't keep re-applying it.
-        if (justPicked) patch._addressJustPicked = null;
+        // Clear the cross-page flag so onShow doesn't keep re-applying it, and
+        // collapse the new-address form — the customer just chose a saved card,
+        // so that card is what should show (and ship).
+        if (justPicked) {
+          patch._addressJustPicked = null;
+          patch.showNewForm = false;
+        }
         try { getApp().globalData.activeAddressId = next.id; } catch {}
         this.setData(patch);
         this.syncAreaLabel();
@@ -736,6 +751,19 @@ Page({
       }
       this.setData(patch);
     } catch {}
+  },
+
+  // True when `address` claims a saved-address id but its visible fields no
+  // longer match that saved row — i.e. the screen and the id disagree about
+  // where the order goes. Only compares what the customer can actually edit;
+  // the *_en companions are derived labels, not shipping data. An id we can't
+  // find in the list counts as diverged: the screen is the source of truth.
+  addressDivergedFromSaved(a) {
+    const saved = (this.data.savedAddresses || []).find(x => x.id === a.id);
+    if (!saved) return true;
+    const norm = (v) => String(v == null ? '' : v).trim();
+    return ['recipient_name', 'phone', 'address', 'detail', 'province', 'city', 'district']
+      .some(k => norm(a[k]) !== norm(saved[k]));
   },
 
   // Routes the customer into the WeChat-profile bind flow. After they save
@@ -2687,7 +2715,12 @@ Page({
     try {
       // 1. Save address if it's new (id is null) — delivery only. Pickup
       // carries the store + contact instead of a delivery address.
+      //
+      // An id that no longer matches what's on screen is treated as new too:
+      // the order must go where the customer can see it's going. Sending a
+      // stale id ships the saved row and silently drops everything they typed.
       let addressId = a.id;
+      if (!isPickup && addressId && this.addressDivergedFromSaved(a)) addressId = null;
       if (!isPickup && !addressId) {
         const saved = await api.post('/api/retail/addresses', {
           recipient_name: a.recipient_name,

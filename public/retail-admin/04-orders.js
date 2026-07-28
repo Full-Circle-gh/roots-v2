@@ -165,6 +165,30 @@ function chdClose() {
   const wrap = document.getElementById('chd-wrap'); if (wrap) wrap.classList.remove('open');
   document.removeEventListener('mousedown', chdOutside);
 }
+// The × on the trigger, shown only once a channel is applied. Modelled on
+// Customers' cuClearChan (08-customers.js:134), which is this same control on
+// this same facet.
+//
+// It hands the real "All channels" menu item to setOrderChannel — the SAME
+// call picking that item makes — rather than zeroing the filter itself. One
+// way to clear the channel, so the trigger's label, its icon, the is-set fill,
+// the menu's tick and the hidden #orders-channel input can never disagree
+// about what "cleared" means.
+//
+// stopPropagation is what keeps the click off #chd-btn; without it the button
+// beneath would toggle the menu open on the way past, which is the opposite of
+// what the operator asked for. An × that only opens a menu is an inert control.
+function chdClear(e) {
+  if (e) { e.stopPropagation(); e.preventDefault(); }
+  const all = document.querySelector('#chd-pop .chd-item[data-channel=""]');
+  if (!all) return;
+  setOrderChannel(all);
+  // Clearing hides the × that was just activated, so a keyboard operator would
+  // be dropped back to <body> mid-page. Hand focus to the trigger it lived in.
+  // Harmless on a mouse click — :focus-visible suppresses the ring there.
+  const btn = document.getElementById('chd-btn');
+  if (btn) btn.focus();
+}
 // Which non-storefront channels are shown read-only in the combined list — the
 // storefront doesn't fulfil/print them, so no drawer, NEW mark, or chime. For
 // now just Meituan (mirrored in to deduct stock); gzgrocery joins in phase 2.
@@ -916,7 +940,7 @@ async function ordLoadKpis(force) {
   if (!document.getElementById('ord-kpis')) return;
   if (!force && Date.now() - _ORD_KPI_AT < 45000) return;
   _ORD_KPI_AT = Date.now();
-  // Re-render the language-dependent bits (delta words, spark tip labels) on a
+  // Re-render the language-dependent bits (the delta badges' wording) on a
   // language toggle, without refetching. Registered lazily so window.onLangChange
   // (defined later in the i18n module) exists by the time we wire it.
   if (!_ORD_KPI_LANG_HOOKED && window.onLangChange) { _ORD_KPI_LANG_HOOKED = true; onLangChange(ordRepaintKpiLabels); }
@@ -933,21 +957,82 @@ function ordRenderKpis() {
   const orders = Number(k.orders || 0), revenue = Number(k.revenue || 0);
   dashCountUp($('#ord-kpi-orders'), orders);
   dashCountUp($('#ord-kpi-rev'), revenue, n => '¥' + Math.round(n).toLocaleString());
-  $('#ord-kpi-aov').textContent = orders ? '¥' + Math.round(revenue / orders).toLocaleString() : '—';
-  ordRepaintKpiLabels();   // deltas + sparklines (language-aware)
+  // No orders means no average — which is ¥0, not an unreadable dash. A money
+  // tile carries a number.
+  $('#ord-kpi-aov').textContent = orders ? '¥' + Math.round(revenue / orders).toLocaleString() : '¥0';
+  ordRepaintKpiLabels();   // deltas (language-aware)
 }
-// Language-dependent half — delta badges (the "new" word) and sparkline tip
-// labels. Split out so a language toggle reflows wording without re-animating
-// the headline numbers.
+// The Orders strip's own delta badge. Same states, same arithmetic and the same
+// calm rule as the dashboard's fcSetDelta — with one difference: it writes the
+// comparison onto the badge ("▲ 18 vs 7-day avg") instead of parking it in a
+// hover tip, so a number nobody hovers is still a number you can act on.
+// Deliberately local: fcSetDelta / dashSetDelta is the dashboard's, and the
+// dashboard's badges must keep rendering exactly as they do.
+//   cur    — today's figure. 0 means nothing has happened yet.
+//   avg    — the trailing-day average of the same figure (null / 0 → no baseline)
+//   days   — how many days that average covers
+//   change — (cur, avg) → the signed amount to print, already rounded to the
+//            precision it shows at: a count for orders, a percentage for money
+//   unit   — '' after a count, '%' after a percentage
+//   fmtAvg — formats `avg` for the hover tip
+//   per    — what that average is per: a day for the daily figures, an order
+//            for order value. One word, one measure.
+function ordSetDelta(sel, cur, avg, days, change, unit, fmtAvg, per) {
+  const el = $(sel); if (!el) return;
+  el.classList.remove('is-up', 'is-down', 'is-flat');
+  el._tip = '';
+  if (!cur) {
+    el.classList.add('is-flat'); el.textContent = '—';
+    el._tip = cuT('none yet today', '今日暂无');
+    return;
+  }
+  if (!days || !(avg > 0)) {
+    el.classList.add('is-up'); el.textContent = '▲ ' + cuT('new', '新');
+    el._tip = cuT('no recent baseline', '暂无近期基准');
+    return;
+  }
+  // The badge names the comparison; the tip carries the figure behind it.
+  const vs = ' ' + cuT(`vs ${days}-day avg`, `较近 ${days} 日均值`);
+  el._tip = cuT(`${days}-day avg · ${fmtAvg(avg)}/${per}`, `近 ${days} 日均值 · ${fmtAvg(avg)}/${per}`);
+  const d = change(cur, avg);
+  if (d > 0)      { el.classList.add('is-up');   el.textContent = '▲ ' + d + unit + vs; }
+  else if (d < 0) { el.classList.add('is-down'); el.textContent = '▼ ' + Math.abs(d) + unit + vs; }
+  else            { el.classList.add('is-flat'); el.textContent = '±0' + unit + vs; }
+}
+// Language-dependent half — the delta badges (the comparison wording and the
+// "new" word). Split out so a language toggle reflows wording without
+// re-animating the headline numbers.
+//
+// Orders reads as a count and the other two as percentages, on purpose. At the
+// small numbers a single store sees in a day, "18 more orders" is a fact an
+// operator can act on where "up 43%" is 6 orders against 24. Money is the other
+// way round — a percentage is how revenue is read.
 function ordRepaintKpiLabels() {
   const data = _ORD_KPI_DATA; if (!data || !document.getElementById('ord-kpis')) return;
   const k = data.kpis || {}, b = data.baseline || null;
-  fcSetDelta('#ord-kpi-orders-d', b && b.orders,        Number(k.orders || 0),        b && b.days, v => dashTrim(v) + ' ' + cuT(v === 1 ? 'order' : 'orders', '单'));
-  fcSetDelta('#ord-kpi-rev-d',    b && b.revenue,       Number(k.revenue || 0),       b && b.days, v => '¥' + Math.round(v).toLocaleString());
-  const trend = data.trend || [];
-  const labels = trend.map(p => String(p.bucket || ''));
-  fcRenderSpark($('#ord-kpi-orders-spark'), trend.map(p => Number(p.orders || 0)),  labels, v => v + ' ' + cuT(v === 1 ? 'order' : 'orders', '单'), false);
-  fcRenderSpark($('#ord-kpi-rev-spark'),    trend.map(p => Number(p.revenue || 0)), labels, v => '¥' + Math.round(v).toLocaleString(), true);
+  const days    = b ? b.days : 0;
+  const orders  = Number(k.orders || 0), revenue = Number(k.revenue || 0);
+  const ordAvg  = b && b.orders  ? Number(b.orders.avg  || 0) : 0;
+  const revAvg  = b && b.revenue ? Number(b.revenue.avg || 0) : 0;
+  const count   = (cur, avg) => Math.round(cur - avg);
+  // One decimal, matching what the server already computes for baseline.delta.
+  const pct     = (cur, avg) => Math.round(((cur - avg) / avg) * 1000) / 10;
+  const money   = v => '¥' + Math.round(v).toLocaleString();
+  const perDay  = cuT('day', '日');
+  ordSetDelta('#ord-kpi-orders-d', orders,  ordAvg, days, count, '',
+    v => dashTrim(v) + ' ' + cuT(v === 1 ? 'order' : 'orders', '单'), perDay);
+  // The server already expresses revenue's change as a percentage — use its
+  // number rather than a second expression for the same thing (§1.17 rule 1).
+  ordSetDelta('#ord-kpi-rev-d',    revenue, revAvg, days,
+    () => (b && b.revenue && b.revenue.delta != null ? b.revenue.delta : pct(revenue, revAvg)), '%',
+    money, perDay);
+  // A typical day's order value. Not on the wire, but exact from what is: both
+  // averages divide by the same `days`, so revenue.avg / orders.avg is the real
+  // 7-day AOV, not an approximation of it.
+  const aov    = orders  ? revenue / orders  : 0;
+  const aovAvg = ordAvg  ? revAvg  / ordAvg  : 0;
+  ordSetDelta('#ord-kpi-aov-d',    aov,     aovAvg, days, pct, '%',
+    money, cuT('order', '单'));
 }
 
 async function loadOrders(opts = {}) {
@@ -6353,6 +6438,44 @@ async function openRefundEvents(orderId) {
 // states (delivered/cancelled/refunded/all) grow forever, so they stay bare.
 // Each badge is hidden when its count is 0 (.chip-ct:empty), so cleared queues
 // don't carry a "0". Honours the active store filter, matching the list.
+// ── §1.7 status line — "Oldest unfulfilled order · 3 days" ──────────────────
+// Deliberately NOT a count. "5 awaiting fulfilment" would restate Paid (2) +
+// Preparing (3), two chips sitting directly under the line, and §1.7's
+// non-duplication test rules that out. The age is the one fact nothing else on
+// this page reports.
+// The raw timestamp is cached so a language toggle can re-word the line without
+// another round trip; the server sends null when nothing is waiting.
+let _ORD_OLDEST_UNFULFILLED = null;
+// How long the oldest job has been waiting, in one language.
+// Under an hour is its own case: flooring to hours would print "0 hours".
+// Chinese has no plural form, so one string covers both counts there.
+function ordWaitingAge(iso) {
+  // 🔴 Parse via courierAgeMs, never `new Date(iso)`. SQLite writes
+  // 'YYYY-MM-DD HH:MM:SS' with NO zone marker, and bare `new Date()` reads that
+  // as LOCAL time. In Guangzhou (UTC+8) the value then lands 8 hours EARLY, so
+  // every age reads 8 hours OLDER than it is — measured: 81h against a true
+  // 73h — silently, with a correct-looking number. courierAgeMs normalises
+  // both shapes (zoned ISO like seen_at, and the bare SQLite form) and is the
+  // same helper formatDate's comment describes.
+  const ms = courierAgeMs(iso);
+  if (!isFinite(ms) || ms < 0) return null;          // unparseable / clock skew
+  const hours = Math.floor(ms / 3600000);
+  if (hours < 1)  return cuT('under an hour', '不到 1 小时');
+  if (hours < 24) return cuT(hours === 1 ? '1 hour' : hours + ' hours', hours + ' 小时');
+  const days = Math.floor(hours / 24);
+  return cuT(days === 1 ? '1 day' : days + ' days', days + ' 天');
+}
+// Nothing waiting → the element stays hidden and EMPTY. §1.7: a page with
+// nothing waiting gets no line at all, and that space is the finished answer —
+// not a "0", not an empty box holding its height.
+function ordRenderStatusLine() {
+  const el = document.getElementById('ord-status-line'); if (!el) return;
+  const age = _ORD_OLDEST_UNFULFILLED ? ordWaitingAge(_ORD_OLDEST_UNFULFILLED) : null;
+  if (!age) { el.hidden = true; el.textContent = ''; return; }
+  el.textContent = cuT('Oldest unfulfilled order', '最久未处理的订单') + ' · ' + age;
+  el.hidden = false;
+}
+
 async function refreshOrderStatusCounts() {
   if (!document.getElementById('orders-status-chips')) return;
   const storeId = (document.getElementById('orders-store') || {}).value || '';
@@ -6368,6 +6491,10 @@ async function refreshOrderStatusCounts() {
     set('oc-awaiting_restock',d.awaiting_restock);
     set('refund-queue-count', d.refunds_open);
     set('oc-needs_invoice',   d.needs_invoice);
+    // Same call, same store filter, same read-only-channel exclusion as the
+    // badges above — so the header line can never disagree with the chips.
+    _ORD_OLDEST_UNFULFILLED = d.oldest_unfulfilled || null;
+    ordRenderStatusLine();
   } catch {}
 }
 
