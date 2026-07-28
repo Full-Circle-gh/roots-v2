@@ -8,10 +8,28 @@ const api = require('./api');
 
 let _cache = null;
 let _at = 0;
+let _inflight = null;
 const TTL_MS = 60 * 1000;
 
-async function load(force = false) {
-  if (!force && _cache && Date.now() - _at < TTL_MS) return _cache;
+function load(force = false) {
+  if (!force && _cache && Date.now() - _at < TTL_MS) return Promise.resolve(_cache);
+  // Cold launch fires four config.load() calls at once (onLaunch, home's
+  // onboarding gate, home's refresh, the popup manager). _cache is still null
+  // while the first one is in flight, so without this every caller would open
+  // its own GET. Ordinary callers join whatever request is already running —
+  // including a forced one, whose response is by definition the freshest.
+  if (!force && _inflight) return _inflight;
+  // force always opens its own request. It's used for preview-mode swaps,
+  // where joining an in-flight fetch could hand back a response issued
+  // before the preview token existed.
+  const p = _fetch();
+  _inflight = p;
+  const clear = () => { if (_inflight === p) _inflight = null; };
+  p.then(clear, clear);
+  return p;
+}
+
+async function _fetch() {
   // CMS draft-preview pass-through. When app.globalData.preview.token is
   // populated (set by app.js onLaunch from a preview QR scene or a
   // DevTools custom-compile path), tack `?preview_token=...` onto the
