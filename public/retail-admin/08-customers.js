@@ -13,6 +13,21 @@ let CUSTOMERS_LOADED = false;
 let CU_PAGE = 1;
 let CU_PAGE_SIZE = 20;
 let CU_TOTAL = 0;
+// Silent-refresh state — see the live-refresh block at the foot of this file.
+//   _CU_IN_FLIGHT   a load is running; a silent tick declines rather than stack
+//   _CU_LAST_FP     fingerprint of what's on screen, so an unchanged refetch
+//                   touches no DOM at all — the real reason a poller can't flash
+//   _CU_LAST_FP_KEY the filter/sort/page cut that fingerprint belongs to; a
+//                   different cut drops the baseline, so switching filters can't
+//                   fake-flash rows that were merely hidden before
+//   _CU_PAINTED     the table holds a real rendered state (rows or empty), not
+//                   skeletons — so a fingerprint match has something to skip
+//   _CU_SEEN_IDS    ids from the previous paint; anything new fades in once
+let _CU_IN_FLIGHT = false;
+let _CU_LAST_FP = null;
+let _CU_LAST_FP_KEY = null;
+let _CU_PAINTED = false;
+let _CU_SEEN_IDS = null;
 let CU_CURRENT = null;      // detail data for currently-open customer
 let CU_ADJUST_KIND = null;  // 'points' | 'wallet'
 // A one-shot note for the NEXT drawer render — set by the create flow when
@@ -541,114 +556,193 @@ function cuKpisNotLoaded() {
 // .is-pinned class on scroll; it worked, but it was a moving part standing in
 // for a static rule.)
 
-async function cuLoad() {
-  const params = new URLSearchParams({
-    q: $('#cu-q').value.trim(),
-    tier: [...CU_TIER_FILTERS].join(','),
-    channel: CU_CHAN_FILTER,
-    sort: CU_SORT,
-    dir: CU_SORT_DIR,
-    segment: CU_SEGMENT,
-    page: CU_PAGE,
-    pageSize: CU_PAGE_SIZE
-  });
-  const tbody = $('#cu-table tbody');
-  // Loading — skeleton rows that settle, under the real column labels. No
-  // spinner: the shape of what's coming is more use than a rotating disc.
-  tbody.innerHTML = cuSkeletonRows();
-  let j;
+// Cheap fingerprint of everything a paint would put on screen — every field the
+// row template reads, plus the total the pager reads. Equal fingerprint means a
+// rebuild would produce byte-identical markup, so a silent refresh can skip the
+// DOM entirely. That skip is what lets the roster poll without ever flashing.
+function _cuFp(rows, total) {
+  return total + '#' + rows.map(r => [
+    r.id, r.nickname, r.phone, r.channel, r.tier_key,
+    r.orders_count, r.lifetime_spend, r.points_balance, r.balance,
+    r.last_login_at, r.is_blocked ? 1 : 0, r.seen_at ? 1 : 0,
+  ].join('~')).join('|');
+}
+
+// opts.silent — a poller / live-nudge refresh rather than the operator's own
+// hand. Silent loads repaint in place: no skeleton over data already on screen,
+// no error row replacing good rows, and no DOM work at all when nothing moved
+// (docs/tacet-desktop-patterns.md — "a poller refresh never shows it, never
+// flashes, never puts a placeholder over data that is already on screen").
+// Every operator-initiated call stays loud and keeps its skeletons.
+async function cuLoad(opts = {}) {
+  const silent = !!opts.silent;
+  if (silent && _CU_IN_FLIGHT) return;   // one fetch in flight is enough
+  _CU_IN_FLIGHT = true;
+
   try {
-    const res = await fetch('/api/retail-admin/customers?' + params);
-    j = await res.json();
-  } catch (e) {
-    tbody.innerHTML = cuErrorRow();
-    cuKpisNotLoaded();
-    if (window.rmRenderCustomerCards) rmRenderCustomerCards(null, 'Network error · 网络错误');
-    return;
+    const params = new URLSearchParams({
+      q: $('#cu-q').value.trim(),
+      tier: [...CU_TIER_FILTERS].join(','),
+      channel: CU_CHAN_FILTER,
+      sort: CU_SORT,
+      dir: CU_SORT_DIR,
+      segment: CU_SEGMENT,
+      page: CU_PAGE,
+      pageSize: CU_PAGE_SIZE
+    });
+    const tbody = $('#cu-table tbody');
+    // Loading — skeleton rows that settle, under the real column labels. No
+    // spinner: the shape of what's coming is more use than a rotating disc.
+    // A silent refresh skips this entirely: the rows already on screen are
+    // better than a placeholder over the top of them.
+    if (!silent) tbody.innerHTML = cuSkeletonRows();
+    let j;
+    try {
+      const res = await fetch('/api/retail-admin/customers?' + params);
+      j = await res.json();
+    } catch (e) {
+      // A background refresh that fails leaves the good rows alone — an error
+      // row here would be the poller destroying what it came to update.
+      if (silent) return;
+      tbody.innerHTML = cuErrorRow();
+      cuKpisNotLoaded();
+      if (window.rmRenderCustomerCards) rmRenderCustomerCards(null, 'Network error · 网络错误');
+      return;
+    }
+    if (!j.success) {
+      if (silent) return;
+      tbody.innerHTML = cuErrorRow();
+      cuKpisNotLoaded();
+      if (window.rmRenderCustomerCards) rmRenderCustomerCards(null, 'Failed to load · 加载失败');
+      return;
+    }
+    CU_TOTAL = j.total || 0;
+    const rows = j.data || [];
+
+    // A different cut of the data → the old fingerprint and the old id set
+    // describe something else entirely. Drop both, or the first paint after a
+    // filter change flashes every row as "new" when they were only hidden.
+    const fpKey = params.toString();
+    if (fpKey !== _CU_LAST_FP_KEY) {
+      _CU_LAST_FP_KEY = fpKey;
+      _CU_LAST_FP = null;
+      _CU_SEEN_IDS = null;
+    }
+    // Nothing moved since the last paint — leave the DOM completely alone. The
+    // rows, the pager and the phone cards would all rebuild to identical
+    // markup, so the only thing a repaint could add is a flicker. This gate is
+    // what makes a 5s live nudge and a 60s backstop cost nothing on screen.
+    const fp = _cuFp(rows, CU_TOTAL);
+    if (silent && _CU_PAINTED && fp === _CU_LAST_FP) return;
+    _CU_LAST_FP = fp;
+    const prevSeen = _CU_SEEN_IDS;
+    _CU_SEEN_IDS = new Set(rows.map(r => r.id));
+
+    if (!rows.length) {
+      // Two different empty states. Nothing to find at all is a compliment that
+      // names what will arrive; a filter that matched nothing names the filter
+      // and offers to clear it — never a compliment, the operator asked for
+      // something specific and didn't get it.
+      const looked = CU_TOTAL_ALL
+        ? cuT(`${cuNum(CU_TOTAL_ALL)} customers`, `${cuNum(CU_TOTAL_ALL)} 位顾客`)
+        : cuT('your customers', '你的顾客');
+      tbody.innerHTML = cuAnyFilter()
+        ? cuStateRow(
+            cuT('No customers match this search', '没有符合条件的顾客'),
+            cuT(`Nothing in ${looked} matches ${cuFilterSummary()}. Clear it and the whole list comes back.`,
+                `${looked}中没有匹配${cuFilterSummary()}的记录。清除筛选即可看到全部名单。`),
+            `<button type="button" class="btn cul-statebtn" onclick="cuFilterClearAll()">${cuT('Clear filters', '清除筛选')}</button>`)
+        : cuStateRow(
+            cuT('No customers yet', '还没有顾客'),
+            cuT('They settle in here as soon as someone orders — every channel, remembered without you asking.',
+                '有人下单后就会出现在这里 — 各个渠道,自动记住,无需你操作。'));
+    } else {
+      CU_TOTAL_ALL = cuAnyFilter() ? CU_TOTAL_ALL : CU_TOTAL;
+      tbody.innerHTML = rows.map(r => {
+        const tier = escapeHtml(r.tier_key || 'seed');
+        // Free-text nickname: it can contain " · ", which the i18n walker treats
+        // as an EN/CN pair and splits. Shield the name and the phone — never the
+        // genuine bilingual labels around them.
+        const nameHtml = r.nickname
+          ? `<span class="nick">${escapeHtml(r.nickname)}</span>`
+          : `<span class="nick cul-empty">${cuT('No name', '未填姓名')}</span>`;
+        const orders = Number(r.orders_count || 0);
+        const spend  = Number(r.lifetime_spend || 0);
+        const points = Number(r.points_balance || 0);
+        const wallet = Number(r.balance || 0);
+        return `
+        <tr class="cul-row${r.is_blocked ? ' is-blocked' : ''}${r.seen_at ? '' : ' is-unseen'}" onclick="cuOpenDetail(${r.id})">
+          <td>
+            <div class="cul-who">
+              <span class="cul-mono" data-no-i18n>${cuMonogram(r.nickname)}</span>
+              <span class="main">
+                <span class="nm" data-no-i18n>${cuChanIcon(r)}${nameHtml}${r.is_blocked ? `<span class="cul-pill blocked">${cuT('Blocked', '已封禁')}</span>` : ''}</span>
+                ${r.phone ? `<span class="ph" data-no-i18n>${escapeHtml(r.phone)}</span>` : ''}
+              </span>
+            </div>
+          </td>
+          <td><span class="cul-pill tier-${tier}">${tier}</span></td>
+          <td class="numeric cul-num ${orders ? '' : 'is-zero'}" data-no-i18n>${cuNum(orders)}</td>
+          <td class="numeric cul-num ${spend  ? '' : 'is-zero'}" data-no-i18n>${cuMoney(spend)}</td>
+          <td class="numeric cul-num ${points ? '' : 'is-zero'}" data-no-i18n>${cuNum(points)}</td>
+          <td class="numeric cul-num ${wallet ? '' : 'is-zero'}" data-no-i18n>${cuMoney(wallet)}</td>
+          <td class="cul-last${r.last_login_at ? '' : ' is-never'}" data-no-i18n>${escapeHtml(cuFmtSeen(r.last_login_at))}</td>
+          <td class="cul-chev" data-no-i18n><span class="cul-chevg">›</span></td>
+        </tr>`;
+      }).join('');
+    }
+    _CU_PAINTED = true;
+
+    // Arrival fade — a row that wasn't on screen a moment ago settles in once.
+    // Silent refreshes only, and never on the first paint of a cut (prevSeen
+    // null), or opening the tab would flash the whole roster. `row-flash` is the
+    // shared one-shot Sage wash from retail-admin.css; nothing turns red.
+    // Note a brand-new signup ALSO carries .is-unseen, whose persistent cell
+    // wash sits above this row-level animation — that stronger, longer-lived
+    // marker is the intended treatment for arrivals, and it already survives
+    // until an operator opens the row. This fade is what shows on rows that
+    // merely CHANGED: an order landed, a tier moved, points were spent.
+    if (silent && prevSeen && rows.length) {
+      const trs = tbody.querySelectorAll('tr.cul-row');
+      rows.forEach((r, i) => {
+        if (prevSeen.has(r.id)) return;
+        const tr = trs[i];
+        if (!tr) return;
+        tr.classList.add('row-flash');
+        setTimeout(() => tr.classList.remove('row-flash'), 1600);
+      });
+    }
+
+    // Clamp: blocking a customer (or toggling "include blocked") can shrink the
+    // roster under the operator's feet and leave CU_PAGE past the last page.
+    // Snap back and refetch once rather than painting an empty table.
+    const pages = Math.max(1, Math.ceil(CU_TOTAL / CU_PAGE_SIZE));
+    if (CU_PAGE > pages) {
+      CU_PAGE = pages;
+      _CU_IN_FLIGHT = false;   // release before recursing, or the silent guard bails
+      await cuLoad(opts);      // carry `silent` through — a clamp must not flash
+      return;
+    }
+    rmRenderPager('cu-pager', {
+      page: CU_PAGE, pageSize: CU_PAGE_SIZE, total: CU_TOTAL,
+      sizes: [20, 50, 100],
+      noun: { en: 'customers', one: 'customer', cn: '位客户' },
+      onPage: p => {
+        CU_PAGE = p;
+        cuLoad();
+        // Land on the top of the new page, not the foot of it. The desktop table
+        // is display:none on phones, so scroll whichever list is really visible.
+        const tbl   = document.getElementById('cu-table');
+        const cards = document.getElementById('rm-cu-cards');
+        const target = (cards && cards.offsetParent) ? cards : tbl;
+        if (target) target.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      },
+      onSize: s => { CU_PAGE_SIZE = s; CU_PAGE = 1; cuLoad(); },
+    });
+    if (window.rmRenderCustomerCards) rmRenderCustomerCards(rows);  // phone card list (same data)
+  } finally {
+    _CU_IN_FLIGHT = false;
   }
-  if (!j.success) {
-    tbody.innerHTML = cuErrorRow();
-    cuKpisNotLoaded();
-    if (window.rmRenderCustomerCards) rmRenderCustomerCards(null, 'Failed to load · 加载失败');
-    return;
-  }
-  CU_TOTAL = j.total || 0;
-  const rows = j.data || [];
-  if (!rows.length) {
-    // Two different empty states. Nothing to find at all is a compliment that
-    // names what will arrive; a filter that matched nothing names the filter
-    // and offers to clear it — never a compliment, the operator asked for
-    // something specific and didn't get it.
-    const looked = CU_TOTAL_ALL
-      ? cuT(`${cuNum(CU_TOTAL_ALL)} customers`, `${cuNum(CU_TOTAL_ALL)} 位顾客`)
-      : cuT('your customers', '你的顾客');
-    tbody.innerHTML = cuAnyFilter()
-      ? cuStateRow(
-          cuT('No customers match this search', '没有符合条件的顾客'),
-          cuT(`Nothing in ${looked} matches ${cuFilterSummary()}. Clear it and the whole list comes back.`,
-              `${looked}中没有匹配${cuFilterSummary()}的记录。清除筛选即可看到全部名单。`),
-          `<button type="button" class="btn cul-statebtn" onclick="cuFilterClearAll()">${cuT('Clear filters', '清除筛选')}</button>`)
-      : cuStateRow(
-          cuT('No customers yet', '还没有顾客'),
-          cuT('They settle in here as soon as someone orders — every channel, remembered without you asking.',
-              '有人下单后就会出现在这里 — 各个渠道,自动记住,无需你操作。'));
-  } else {
-    CU_TOTAL_ALL = cuAnyFilter() ? CU_TOTAL_ALL : CU_TOTAL;
-    tbody.innerHTML = rows.map(r => {
-      const tier = escapeHtml(r.tier_key || 'seed');
-      // Free-text nickname: it can contain " · ", which the i18n walker treats
-      // as an EN/CN pair and splits. Shield the name and the phone — never the
-      // genuine bilingual labels around them.
-      const nameHtml = r.nickname
-        ? `<span class="nick">${escapeHtml(r.nickname)}</span>`
-        : `<span class="nick cul-empty">${cuT('No name', '未填姓名')}</span>`;
-      const orders = Number(r.orders_count || 0);
-      const spend  = Number(r.lifetime_spend || 0);
-      const points = Number(r.points_balance || 0);
-      const wallet = Number(r.balance || 0);
-      return `
-      <tr class="cul-row${r.is_blocked ? ' is-blocked' : ''}${r.seen_at ? '' : ' is-unseen'}" onclick="cuOpenDetail(${r.id})">
-        <td>
-          <div class="cul-who">
-            <span class="cul-mono" data-no-i18n>${cuMonogram(r.nickname)}</span>
-            <span class="main">
-              <span class="nm" data-no-i18n>${cuChanIcon(r)}${nameHtml}${r.is_blocked ? `<span class="cul-pill blocked">${cuT('Blocked', '已封禁')}</span>` : ''}</span>
-              ${r.phone ? `<span class="ph" data-no-i18n>${escapeHtml(r.phone)}</span>` : ''}
-            </span>
-          </div>
-        </td>
-        <td><span class="cul-pill tier-${tier}">${tier}</span></td>
-        <td class="numeric cul-num ${orders ? '' : 'is-zero'}" data-no-i18n>${cuNum(orders)}</td>
-        <td class="numeric cul-num ${spend  ? '' : 'is-zero'}" data-no-i18n>${cuMoney(spend)}</td>
-        <td class="numeric cul-num ${points ? '' : 'is-zero'}" data-no-i18n>${cuNum(points)}</td>
-        <td class="numeric cul-num ${wallet ? '' : 'is-zero'}" data-no-i18n>${cuMoney(wallet)}</td>
-        <td class="cul-last${r.last_login_at ? '' : ' is-never'}" data-no-i18n>${escapeHtml(cuFmtSeen(r.last_login_at))}</td>
-        <td class="cul-chev" data-no-i18n><span class="cul-chevg">›</span></td>
-      </tr>`;
-    }).join('');
-  }
-  // Clamp: blocking a customer (or toggling "include blocked") can shrink the
-  // roster under the operator's feet and leave CU_PAGE past the last page.
-  // Snap back and refetch once rather than painting an empty table.
-  const pages = Math.max(1, Math.ceil(CU_TOTAL / CU_PAGE_SIZE));
-  if (CU_PAGE > pages) { CU_PAGE = pages; return cuLoad(); }
-  rmRenderPager('cu-pager', {
-    page: CU_PAGE, pageSize: CU_PAGE_SIZE, total: CU_TOTAL,
-    sizes: [20, 50, 100],
-    noun: { en: 'customers', one: 'customer', cn: '位客户' },
-    onPage: p => {
-      CU_PAGE = p;
-      cuLoad();
-      // Land on the top of the new page, not the foot of it. The desktop table
-      // is display:none on phones, so scroll whichever list is really visible.
-      const tbl   = document.getElementById('cu-table');
-      const cards = document.getElementById('rm-cu-cards');
-      const target = (cards && cards.offsetParent) ? cards : tbl;
-      if (target) target.scrollIntoView({ block: 'start', behavior: 'smooth' });
-    },
-    onSize: s => { CU_PAGE_SIZE = s; CU_PAGE = 1; cuLoad(); },
-  });
-  if (window.rmRenderCustomerCards) rmRenderCustomerCards(rows);  // phone card list (same data)
 }
 
 // Phone tier-chip filter — drives the same CU_TIER_FILTERS the desktop Tier
@@ -2166,11 +2260,76 @@ function cuFmtDate(iso) {
 }
 
 document.querySelector('[data-tab="customers"]').addEventListener('click', () => {
+  // First open loads loud — skeletons are right when there is nothing to
+  // replace. Every later open is a silent catch-up instead: the roster may
+  // have moved while the operator was on another tab, and the page must
+  // survive show/hide without re-fetching from zero. The 50ms wait lets the
+  // tab switcher mark #tab-customers .active first — _cuAutoTick checks it.
   if (!CUSTOMERS_LOADED) { CUSTOMERS_LOADED = true; cuLoad(); }
+  else setTimeout(_cuAutoTick, 50);
   cuLoadKpis();   // throttled (45s) — keeps the New-today pulse fresh on open
 });
 
 // The filter row exists in the DOM from page load (not just once the
 // customers tab is first opened), so paint both dropdowns right away.
 cuPaintFilterBar();
+
+
+// ── Live refresh ───────────────────────────────────────────────────────
+// The roster keeps itself current: a new signup, a customer's first order, a
+// tier move — all land without the operator reloading. Primary trigger is the
+// admin-wide SSE hub (retailLiveSubscribe, 01-core.js), whose 5s watermark
+// already samples retail_customers, so a signup nudges every open dashboard
+// of this tenant. The interval below is only a backstop for a dead socket.
+//
+// Every refresh goes through cuLoad({ silent: true }), which repaints in place
+// and does no DOM work at all when the fingerprint is unchanged. Nothing here
+// ever shows a loading state over data already on screen.
+const CUSTOMERS_POLL_MS = 60000;
+
+// Refetch gate. Skips only when the work would be wasted or destructive.
+// Deliberately NOT gated on the detail drawer being open: the list stays live
+// behind a drawer by design (docs/tacet-desktop-patterns.md — "Drawer →
+// inherits. The list stays live behind it — rows visible, poller running"),
+// and the fingerprint gate means an unchanged roster never moves under it.
+function _cuAutoTick() {
+  if (document.hidden) return;
+  const sec = document.getElementById('tab-customers');
+  if (!sec || !sec.classList.contains('active')) return;
+  // Mid-input: refetching would fight the operator for the caret, and a
+  // repaint can drop the dropdown they are reading.
+  const ae = document.activeElement;
+  if (ae && ae !== document.body && ae.matches('input, select, textarea, [contenteditable="true"]')) return;
+  // Page 2+ is a fixed window into a newest-first list: one signup shifts every
+  // row down a slot and can push the last one onto the next page. Refreshing
+  // under an operator who is reading page 3 would move the row they are aiming
+  // at — so only page 1 auto-updates. Turning a page reloads anyway, and the
+  // KPI strip above keeps telling them new customers are arriving.
+  if (CU_PAGE !== 1) return;
+  cuLoad({ silent: true });
+  cuLoadKpis();   // throttled (45s) — keeps the New-today pulse honest
+}
+
+// Coalesce a burst of nudges into one refetch. Several rows can land in the
+// same instant and the server's watermark tick can fire mid-batch — one fetch
+// a moment later sees all of them.
+let _CU_LIVE_DEBOUNCE = null;
+function _cuLiveNudge() {
+  clearTimeout(_CU_LIVE_DEBOUNCE);
+  // _cuAutoTick already declines when hidden, off-tab, mid-input or off page 1
+  // — nothing to guard here.
+  _CU_LIVE_DEBOUNCE = setTimeout(_cuAutoTick, 400);
+}
+
+(function _startCustomersPoller() {
+  if (window._customersPollerWired) return;
+  window._customersPollerWired = true;
+  // Live push — the primary path. New customers appear on their own.
+  if (typeof retailLiveSubscribe === 'function') retailLiveSubscribe(_cuLiveNudge);
+  setInterval(_cuAutoTick, CUSTOMERS_POLL_MS);
+  // Coming back to the tab or the window: _cuAutoTick declines while hidden,
+  // so catch up the moment the operator can actually see the list again.
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) _cuAutoTick(); });
+  window.addEventListener('focus', _cuAutoTick);
+})();
 
