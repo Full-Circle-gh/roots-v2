@@ -297,6 +297,22 @@ function ordCustomerLines(o) {
   return { name: (o && (o.nickname || o.recipient_name)) || '—', phone: (o && o.recipient_phone) || '' };
 }
 window.ordCustomerLines = ordCustomerLines;
+// The Customer cell's rendered form. ordCustomerLines keeps '—' as its internal
+// "nothing stored" sentinel — renderReadonlyOrder tests it (`cust.name !== '—'`)
+// and the phone card reads it — so the honest wording is applied HERE, at the
+// cell, and the sentinel is left untouched.
+// Classified by fact, not by channel (§1.17 rule 2): the cell says "No name"
+// when no name is stored, whatever the channel. Meituan is the only channel that
+// hits it today — all 167 rows carry no customer_id and no recipient_name — and
+// gzgrocery never does: all 110 of its rows carry a real parsed name, which
+// falls through below and renders unchanged.
+// The real name is outside-our-system text, so it carries data-no-i18n (§1.11);
+// the "No name" label is ours and stays walkable/repaintable.
+function ordCustomerCell(o) {
+  const name = ordCustomerLines(o).name;
+  if (!name || name === '—') return `<span class="muted">${cuT('No name', '无姓名')}</span>`;
+  return `<span data-no-i18n>${escapeHtml(name)}</span>`;
+}
 let _ordersSearchTimer = null;
 function debouncedLoadOrders() {
   clearTimeout(_ordersSearchTimer);
@@ -1035,6 +1051,9 @@ async function loadOrders(opts = {}) {
     const fp = _ordersFp(j.data);
     if (silent && fp === _ORDERS_LAST_FP && tbody.querySelector('tr.order-row, .empty-state')) {
       // Nothing changed and the table is already painted — skip the rebuild.
+      // The relative-time line still has to move, though: it's the one cell whose
+      // correct value changes with no order changing. Text-only, no rebuild.
+      ordRestampAgo();
       return;
     }
     const prevSeen = _ORDERS_SEEN_IDS;
@@ -1099,7 +1118,7 @@ async function loadOrders(opts = {}) {
         <td><span class="ord-no" title="${escapeHtml(o.order_no || '')}">${escapeHtml(ordShortNo(o.order_no))}</span></td>
         <td class="oc-chan">${chanCell}</td>
         <td>
-          <div class="ord-cust">${escapeHtml(ordCustomerLines(o).name)}</div>
+          <div class="ord-cust">${ordCustomerCell(o)}</div>
         </td>
         <td class="oc-store">
           ${o.store_code ? `<div>${escapeHtml(o.store_name_en || o.store_code)}</div>
@@ -1111,7 +1130,7 @@ async function loadOrders(opts = {}) {
         <td class="numeric oc-total">¥${fmt(o.total)}</td>
         <td class="status-cell"><div class="stack">${(() => { const p = orderStatusPill(o); return `<span class="pill ${p.cls}"><span class="dot"></span>${p.label}</span>`; })()}${refundBadge(o)}${addonBadge(o)}</div>${stockPendingBadge(o)}${invoiceLine(o)}</td>
         <td class="oc-delivery">${renderDeliveryCell(o)}</td>
-        <td class="muted" style="font-size: 11px">${formatDate(o.placed_at)}</td>
+        <td class="muted" style="font-size: 11px"><div>${formatDate(o.placed_at)}</div>${ordAgoLine(o.placed_at)}</td>
       </tr>`;
     }).join('');
     if (window.rmRenderOrderCards) rmRenderOrderCards(j.data);
@@ -2225,11 +2244,28 @@ function renderDeliveryCell(o) {
   // Mirrored ledger rows (Meituan / gzgrocery): we don't fulfil them. Surface
   // the platform's delivery time — the ETA while in flight, and the same time
   // read back as the arrival once it lands, which is what the drawer shows.
-  // Voided orders never arrived, so they keep the bare dash.
   if (typeof ordIsReadonlyChannel === 'function' && ordIsReadonlyChannel(o)) {
     if (o.channel_eta && !['cancelled', 'refunded'].includes(o.status)) {
       return renderTrackingCell(o);
     }
+    // No ETA to show. Name who has the order rather than leave the cell blank: an
+    // empty cell reads as a loading failure, and the operator needs to see that
+    // nobody here is meant to act. The two channels are not the same fact —
+    // Meituan runs its own riders, while gzgrocery is collected at the counter, so
+    // nobody delivers it at all.
+    // A voided order was never handed to anyone, so it never claims it was. Live
+    // today: 2 cancelled Meituan rows; gzgrocery has none, but the mirror daemon
+    // writes 'cancelled' on a void, so the branch is reachable by construction.
+    const chan = String(o.channel || '').toLowerCase();
+    const voided = ['cancelled', 'refunded'].includes(o.status);
+    if (chan === 'gzgrocery') {
+      return `<span class="muted" style="font-size:11px;">${voided ? cuT('Not collected', '未自提') : cuT('Collected', '已自提')}</span>`;
+    }
+    if (chan === 'meituan') {
+      return `<span class="muted" style="font-size:11px;">${voided ? cuT('Not delivered', '未送达') : cuT('Handled by Meituan', '美团配送')}</span>`;
+    }
+    // A read-only channel this function has never heard of gets no invented label
+    // (§1.17 rule 2). Unreachable while ordIsReadonlyChannel matches only these two.
     return '<span class="muted">—</span>';
   }
   // Pickup carries no parcel — the counter window IS the delivery fact.
@@ -2379,10 +2415,31 @@ function shipToLangBlock(en, cn) {
        + `<span data-lang-block="cn">${escapeHtml(cn)}</span>`;
 }
 function renderShipToCell(o) {
-  if (o.ship_pickup || o.fulfillment_type === 'pickup') {
+  const chan = String(o.channel || '').toLowerCase();
+  // gzgrocery is collected at the counter — confirmed with Ash 2026-07-28 — so it
+  // renders as any other pickup order does, reusing the same strings and the same
+  // lang-block pair. It cannot match the test on its own: the mirror daemon
+  // hardcodes fulfillment_type='delivery' on every insert
+  // (scripts/gzgrocery-order-daemon.js), so all 110 rows read 'delivery'. Named
+  // here rather than corrected at the column, because that column also feeds the
+  // revenue ledger and stock — not just this cell.
+  if (o.ship_pickup || o.fulfillment_type === 'pickup' || chan === 'gzgrocery') {
     return `<span class="muted" style="font-size:11px;">${pickupIcon(11)} ${shipToLangBlock('Pickup','自提')}</span>`;
   }
-  if (!o.ship_city) return '<span class="muted">—</span>';
+  // Meituan keeps the address on its own side: all 167 rows have no
+  // recipient_name, no address_full and no address_json — nothing is stored for us
+  // to show. So name where the address actually lives instead of rendering a dash,
+  // which claims there is no address at all.
+  if (chan === 'meituan') {
+    return `<span class="muted" style="font-size:11px;">${shipToLangBlock('In Meituan app','在美团App内')}</span>`;
+  }
+  // Not in the brief's six, but it is a bare dash in this column and the brief
+  // asks that none remain here. Reachable only when the order has no address at
+  // all: annotateShipTo (routes/retail.js) leaves ship_city unset only when BOTH
+  // address_json and address_full are empty — an address that merely fails to
+  // parse still yields a city — so "No address" states a fact, not a parse
+  // failure. One live row today, the single manual order.
+  if (!o.ship_city) return `<span class="muted" style="font-size:11px;">${cuT('No address', '无地址')}</span>`;
   const district = (o.ship_district && o.ship_district !== o.ship_city)
     ? `<div class="muted" style="font-size: 11px; margin-top: 2px">${shipToLangBlock(o.ship_district_en, o.ship_district)}</div>`
     : '';
@@ -2432,6 +2489,54 @@ function formatDate(iso) {
     hour: '2-digit', minute: '2-digit', hour12: false,
   }).formatToParts(d).reduce((o, x) => (o[x.type] = x.value, o), {});
   return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`;
+}
+
+// How long ago a timestamp was — "2m ago" / "2 分钟前". The list's Placed column
+// pairs it under the absolute time so a glance answers "how long has this been
+// sitting?" without arithmetic.
+//
+// New rather than reused, deliberately: 11-meituan.js's fmtAgo is function-scoped
+// AND English-only, courierAgo is worded for a live courier stage, and
+// 15-integrations.js's igAgo is scoped to that module. courierAgo is the closest
+// model and the buckets match it. On window so the next caller has one to reach for.
+//
+// Same naive-UTC handling as formatDate: SQLite stores 'YYYY-MM-DD HH:MM:SS' with
+// no zone marker, and a bare new Date() reads that as LOCAL time — in UTC+8 that
+// would make a brand-new order read "8h ago".
+function ordAgo(iso) {
+  if (!iso) return '';
+  const s = String(iso).trim().replace(' ', 'T');
+  const t = new Date(/[zZ]$|[+-]\d\d:?\d\d$/.test(s) ? s : s + 'Z').getTime();
+  if (isNaN(t)) return '';
+  const diff = Date.now() - t;
+  // Also catches a negative diff (client clock behind the server) — "just now"
+  // rather than "-1m ago".
+  if (diff < 60000)     return cuT('just now', '刚刚');
+  if (diff < 3600000)   return cuT(Math.floor(diff / 60000) + 'm ago', Math.floor(diff / 60000) + ' 分钟前');
+  if (diff < 86400000)  return cuT(Math.floor(diff / 3600000) + 'h ago', Math.floor(diff / 3600000) + ' 小时前');
+  return cuT(Math.floor(diff / 86400000) + 'd ago', Math.floor(diff / 86400000) + ' 天前');
+}
+window.ordAgo = ordAgo;
+
+// The sub-line itself. Carries the raw timestamp so ordRestampAgo() can refresh
+// the wording in place without a table rebuild. Renders nothing when the
+// timestamp is missing or unparseable — a Placed cell with no date has no age.
+function ordAgoLine(iso) {
+  const txt = ordAgo(iso);
+  if (!txt) return '';
+  return `<div class="ord-ago" data-ago="${escapeHtml(String(iso))}" style="font-size:10px; margin-top:2px; color:var(--text-3);">${txt}</div>`;
+}
+
+// Keep the relative line honest between rebuilds. loadOrders' fingerprint gate
+// skips the DOM rebuild whenever no order changed, and the poll is 60s — so
+// without this "2m ago" would freeze at whatever it said when the table was last
+// rebuilt, which is exactly the claim the line exists to make. Rewrites the text
+// only: no rebuild, so it never fights the row settle transition, focus or hover.
+function ordRestampAgo() {
+  document.querySelectorAll('#orders-table .ord-ago[data-ago]').forEach(el => {
+    const txt = ordAgo(el.getAttribute('data-ago'));
+    if (txt && el.textContent !== txt) el.textContent = txt;
+  });
 }
 
 // Clock-only (HH:MM, store-local) for a UTC datetime — used for the Meituan
