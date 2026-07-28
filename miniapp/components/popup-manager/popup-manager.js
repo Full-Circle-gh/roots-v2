@@ -7,6 +7,7 @@
 // Picks the first eligible popup and schedules it per its trigger.
 
 const lang = require('../../utils/lang');
+const config = require('../../utils/config');
 const { BASE } = require('../../utils/api');
 
 function absUrl(u) {
@@ -70,25 +71,38 @@ Component({
 
   lifetimes: {
     attached() {
-      const app = getApp();
-      if (!app.globalData.sessionStartMs) app.globalData.sessionStartMs = nowMs();
       this._timer = null;
     },
     detached() {
+      this._visible = false;
       if (this._timer) { clearTimeout(this._timer); this._timer = null; }
     },
   },
   pageLifetimes: {
-    show() { this.evaluate(); },
+    // evaluate() is async (it awaits the storefront config), so fire it
+    // without blocking the page's show — the pop-up lands a beat after the
+    // page paints rather than holding up first frame.
+    show() { this._visible = true; this.evaluate(); },
     hide() {
+      this._visible = false;
       if (this._timer) { clearTimeout(this._timer); this._timer = null; }
     },
   },
 
   methods: {
-    evaluate() {
-      const cfg = getApp().globalData.config || {};
-      const list = Array.isArray(cfg.popups?.list) ? cfg.popups.list : [];
+    // Awaits the real config rather than reading app.globalData.config, which
+    // is only populated when the launch-time fetch resolves (app.js) — on a
+    // cold launch this component's first `show` fires well before that, so a
+    // synchronous read saw an empty list and no pop-up ever rendered until the
+    // customer left and re-entered. config.load() is module-cached, so on
+    // re-entry / later shows this resolves without a second round-trip.
+    async evaluate() {
+      let cfg;
+      try { cfg = await config.load(); } catch { return; }
+      // The page may have been hidden or the component detached while the
+      // config was in flight — don't pop up onto a screen nobody's looking at.
+      if (!this._visible) return;
+      const list = Array.isArray(cfg?.popups?.list) ? cfg.popups.list : [];
       const page = this.properties.page || '';
       const eligible = list
         .filter(p => p && p.enabled)

@@ -34,6 +34,13 @@ App({
   },
 
   onLaunch(options = {}) {
+    // Start of this app session. `frequency: session` pop-ups compare their
+    // stored "last shown" against this, so it has to be stamped once per cold
+    // start — it used to be stamped by whichever popup-manager attached first,
+    // which made the baseline drift with navigation. globalData lives until
+    // WeChat evicts the mini app, so the next cold start gets a fresh stamp.
+    this.globalData.sessionStartMs = Date.now();
+
     this.capturePreviewLaunch(options);
 
     // Capture the WeChat launch-scene code for traffic attribution.
