@@ -11107,7 +11107,11 @@
   function hasChinese(s) { return /[一-鿿]/.test(s); }
 
   const _reg = [];
+  // Two attributes carry tooltip copy — data-tt (the shared tooltip component
+  // in 01-core.js) and data-tip (the CSS-only .mc-info dot) — and both are
+  // authored "EN · CN" the same way. { el, attr, en, cn }.
   const _tipReg = [];
+  const TIP_ATTRS = ['data-tt', 'data-tip'];
   const _phReg = [];
   const _titleReg = [];
 
@@ -11188,23 +11192,27 @@
     });
   }
 
-  function processTip(el) {
-    if (el.__i18nTipDone) return;
-    const raw = el.getAttribute('data-tip') || '';
+  function processTipAttr(el, attr) {
+    if (el.__i18nTipDone && el.__i18nTipDone[attr]) return;
+    const raw = el.getAttribute(attr) || '';
     const idx = raw.indexOf(' · ');
     if (idx === -1) return;
     const en = raw.slice(0, idx).trim();
     const cn = raw.slice(idx + 3).trim();
     if (!en || !cn) return;
     if (!hasChinese(cn)) return;
-    el.__i18nTipDone = true;
-    el.setAttribute('data-tip', _lang === 'cn' ? cn : en);
-    _tipReg.push({ el, en, cn });
+    (el.__i18nTipDone = el.__i18nTipDone || {})[attr] = true;
+    el.setAttribute(attr, _lang === 'cn' ? cn : en);
+    _tipReg.push({ el, attr, en, cn });
+  }
+  function processTip(el) {
+    for (const a of TIP_ATTRS) if (el.hasAttribute(a)) processTipAttr(el, a);
   }
   function processTips(root) {
     const scope = (root && root.nodeType === 1) ? root : document.body;
-    if (scope.hasAttribute && scope.hasAttribute('data-tip')) processTip(scope);
-    scope.querySelectorAll && scope.querySelectorAll('[data-tip]').forEach(processTip);
+    const sel = TIP_ATTRS.map(a => '[' + a + ']').join(',');
+    if (scope.matches && scope.matches(sel)) processTip(scope);
+    scope.querySelectorAll && scope.querySelectorAll(sel).forEach(processTip);
   }
 
   function processPh(el) {
@@ -11269,7 +11277,7 @@
     for (let i = _tipReg.length - 1; i >= 0; i--) {
       const e = _tipReg[i];
       if (!e.el.isConnected) { _tipReg.splice(i, 1); continue; }
-      e.el.setAttribute('data-tip', lang === 'cn' ? e.cn : e.en);
+      e.el.setAttribute(e.attr, lang === 'cn' ? e.cn : e.en);
     }
     for (let i = _phReg.length - 1; i >= 0; i--) {
       const e = _phReg[i];
