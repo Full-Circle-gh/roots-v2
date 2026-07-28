@@ -520,11 +520,11 @@ function renderZoneTable() {
 
   if (_zoneView === 'pricing') {
     head.innerHTML = `<tr>
-      <th>Zone · 配送区 <span class="help-i" data-tip="The delivery area. GZ chip = a Guangzhou district (e.g. 天河区). CITY = anywhere else (e.g. 深圳). · 配送区域。GZ = 广州市辖区;CITY = 其他城市。">?</span></th>
-      <th class="numeric">Base ¥ <span class="help-i" data-tip="Default delivery fee for this zone — charged on every order unless the cart hits the free-over threshold. · 此区默认运费;若达免运门槛则免收。">?</span></th>
-      <th class="numeric">Free over ¥ <span class="help-i" data-tip="Cart subtotal that unlocks free delivery in this zone. Leave blank to use the global default. · 达此金额免运;留空使用全局默认值。">?</span></th>
-      <th>Extras · 额外 <span class="help-i" data-tip="Zone add-ons: GZ districts may set MAX (any-distance flat). Cities may set packing fee per item + cap. · 配送区附加:广州区可设 MAX 封顶价;外地城市可设按件包装费及上限。">?</span></th>
-      <th style="text-align: center;">On · 启用 <span class="help-i" data-tip="Off = this zone won't match any address; affected customers see 'we don't deliver here' at checkout. · 关闭后此区不参与匹配,相关顾客结账时会看到「暂不配送」提示。">?</span></th>
+      <th>Zone · 配送区</th>
+      <th class="numeric">Base ¥</th>
+      <th class="numeric">Free over ¥</th>
+      <th>Extras · 额外</th>
+      <th style="text-align: center;">On · 启用</th>
       <th></th>
     </tr>`;
     if (!rows.length) {
@@ -549,12 +549,12 @@ function renderZoneTable() {
       </tr>`);
   } else {
     head.innerHTML = `<tr>
-      <th>Zone · 配送区 <span class="help-i" data-tip="The delivery area. GZ chip = a Guangzhou district (e.g. 天河区). CITY = anywhere else (e.g. 深圳). · 配送区域。GZ = 广州市辖区;CITY = 其他城市。">?</span></th>
-      <th>Mode · 模式 <span class="help-i" data-tip="Time-slot = customer picks a 2-hour window today (1pm–3pm, etc.). Day-only = customer just picks a date — Express / Today / Schedule (Panyu-style). · 按时段 = 顾客选 2 小时窗口;仅按日 = 顾客只选日期(番禺模式:加急/今日/稍后)。">?</span></th>
-      <th>Lead → Max · 提前 → 最远 <span class="help-i" data-tip="Earliest day the customer can schedule for, and the furthest day the calendar offers. 0d → 14d = today through 2 weeks ahead. · 顾客可预约的最早 → 最远天数。0d→14d 表示今天起最多两周。">?</span></th>
-      <th>Same-day · 同日 <span class="help-i" data-tip="Whether today's delivery is allowed in this zone, plus any surcharge. '+¥10' = ¥10 extra for picking today; 'free' = no surcharge; '✗' = same-day blocked. · 是否允许同日及加价。+¥10 = 选今日加 ¥10;free = 不加价;✗ = 禁止同日。">?</span></th>
-      <th>Hours · 时间 <span class="help-i" data-tip="Kitchen open–close hours (24-hour clock) used to build today's time slots. 10–20 = first slot starts 10am, last slot ends 8pm. · 厨房开放时间(24 时制),用于生成今日时段。10–20 = 早 10 至晚 8。">?</span></th>
-      <th class="numeric">Slot · 时段 <span class="help-i" data-tip="Length of each time-slot chip in minutes. 120 = 2-hour windows (1–3pm, 3–5pm…). Ignored in Day-only mode. · 每段长度(分钟)。120 = 2 小时窗口;仅按日模式下忽略。">?</span></th>
+      <th>Zone · 配送区</th>
+      <th>Mode · 模式</th>
+      <th>Lead → Max · 提前 → 最远</th>
+      <th>Same-day · 同日</th>
+      <th>Hours · 时间</th>
+      <th class="numeric">Slot · 时段</th>
       <th></th>
     </tr>`;
     if (!rows.length) {

@@ -5778,23 +5778,6 @@
   }
   .snip-row .label { font-size: 13px; font-weight: 500; color: var(--text-1); margin-bottom: 2px; }
   .snip-row .help { font-size: 11px; color: var(--text-3); margin-bottom: 8px; line-height: 1.4; }
-  /* Inline help icon — sits next to a label/header. Used in <th>, drawer
-     <label>s, and any other context that needs a "?" tooltip. The popup
-     shows below the icon so a parent overflow:hidden can't clip it. */
-  /* Info markers carry the Aged Brass attention accent (Full Circle: brass =
-     info/attention), kept subtle at ~70% so dense forms don't shout. */
-  .help-i {
-    position: relative;
-    display: inline-flex; align-items: center; justify-content: center;
-    width: 14px; height: 14px;
-    margin-left: 4px;
-    border: 1px solid rgba(201, 149, 74, .45); border-radius: 50%;
-    font-size: 9px; font-weight: 700; line-height: 1;
-    color: rgba(201, 149, 74, .85);
-    cursor: help; vertical-align: middle;
-    text-transform: none; letter-spacing: 0;
-  }
-  .help-i:hover { color: var(--brass); border-color: var(--brass); }
 
   /* Tea-green toggle switch — a real on/off slider (replaces bare checkboxes
      where a stateful toggle reads better than a tickbox, e.g. Holiday mode). */
@@ -5815,31 +5798,6 @@
   .fc-switch input:checked + .fc-switch-track { background: var(--accent); border-color: var(--accent); }
   .fc-switch input:checked + .fc-switch-track::after { transform: translateX(18px); background: var(--accent-ink); }
   .fc-switch input:focus-visible + .fc-switch-track { box-shadow: 0 0 0 3px var(--ring); }
-  /* Help tooltip — a single popup appended to <body> and positioned by JS
-     (see the help-tip controller). position:fixed + viewport clamping means
-     it never clips inside a scrollable drawer or at a screen edge, so we no
-     longer need per-context left/right anchor rules. Text is the active
-     language (the i18n layer rewrites data-tip on toggle). */
-  .help-tip-pop {
-    position: fixed;
-    display: none;
-    max-width: 280px;
-    padding: 10px 12px;
-    background: #1a1a1a;
-    color: #fff;
-    font-size: 11px;
-    font-weight: 400;
-    letter-spacing: 0;
-    text-transform: none;
-    line-height: 1.5;
-    text-align: left;
-    border: 1px solid var(--line-soft);
-    border-radius: 6px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
-    white-space: normal;
-    z-index: 100000;
-    pointer-events: none;
-  }
   .snip-row .key  { font-family: var(--f-mono); font-size: 10px; color: var(--text-4); }
   .snip-row .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .snip-row .pair .lang-wrap {

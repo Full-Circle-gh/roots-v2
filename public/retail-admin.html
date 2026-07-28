@@ -6118,7 +6118,6 @@
       <div class="card" style="margin: var(--s4) 0;">
         <h3 class="fc-sec" style="margin-bottom: 4px;">
           Everywhere else — default delivery · 其他地区 — 默认配送
-          <span class="help-i" data-tip="One flat fee for any mainland address not covered by a zone above. Turn this on and you only need to add zones for the exceptions (cheaper provinces, same-day Guangzhou, Hong Kong). Off = addresses with no matching zone can't check out. · 适用于上方未单独设置区域的任何中国大陆地址的统一运费。开启后,您只需为「例外」添加区域(更便宜的省份、广州当日达、香港)。关闭时,无匹配区域的地址将无法结账。">?</span>
         </h3>
         <div class="muted" style="font-size: 11px; margin-bottom: 12px;">A zone above always wins over this default. Guangzhou same-day and Hong Kong are unaffected. · 上方任何区域都优先于此默认值。广州当日达与香港不受影响。</div>
         <div class="row" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
@@ -6135,11 +6134,11 @@
             <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:12px;">¥</span><input type="number" id="dlv-default-fee" min="0" step="0.01" value="25" style="width: 90px;"></span>
           </div>
           <div class="field" style="margin: 0;">
-            <label class="stacked">Free over · 满额免运 <span class="help-i" data-tip="Order subtotal at or above this ships free. Leave blank for never free. · 订单小计达到或超过此金额时免运费。留空表示不免运。">?</span></label>
+            <label class="stacked">Free over · 满额免运</label>
             <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:12px;">¥</span><input type="number" id="dlv-default-free" min="0" step="0.01" placeholder="329" style="width: 90px;"></span>
           </div>
           <div class="field" style="margin: 0;">
-            <label class="stacked">Packing / item · 每件包装费 <span class="help-i" data-tip="Added per item, capped below. 0 = no packing fee. · 按每件商品加收,上限见右侧。0 = 不收包装费。">?</span></label>
+            <label class="stacked">Packing / item · 每件包装费</label>
             <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:12px;">¥</span><input type="number" id="dlv-default-pack" min="0" step="0.01" value="0" style="width: 80px;"></span>
           </div>
           <div class="field" style="margin: 0;">
@@ -6147,7 +6146,7 @@
             <span style="display:inline-flex;align-items:center;gap:6px;"><span style="font-size:12px;">¥</span><input type="number" id="dlv-default-pack-cap" min="0" step="0.01" placeholder="—" style="width: 80px;"></span>
           </div>
           <div class="field" style="margin: 0;">
-            <label class="stacked">Lead time · 备货天数 <span class="help-i" data-tip="Earliest fulfilment is this many days out. These addresses ship by date (no same-day time slots). · 最早可在此天数后发货。这些地址按日期发货(无当日时段)。">?</span></label>
+            <label class="stacked">Lead time · 备货天数</label>
             <span style="display:inline-flex;align-items:center;gap:6px;"><input type="number" id="dlv-default-lead" min="0" step="1" value="3" style="width: 70px;"> <span style="font-size:12px;">days · 天</span></span>
           </div>
           <button class="btn btn-primary" onclick="saveDefaultZone()" style="align-self: flex-end;">Save · 保存</button>
@@ -6162,7 +6161,7 @@
           <h3 class="fc-sec" style="margin-bottom: 12px;">Kitchen address (customer-facing) · 厨房地址(顾客可见)</h3>
           <div class="row" style="gap: 12px; align-items: flex-end; flex-wrap: wrap;">
             <div class="field" style="margin: 0; flex: 1; min-width: 240px;">
-              <label class="stacked">Address · 地址 <span class="help-i" data-tip="Shown on the mini-app checkout when a customer's address doesn't match any zone — so they know where you ship from. Not used for distance calculations. · 当顾客地址不在任何配送区时,在小程序结账页显示给顾客,告知厨房位置。不用于距离计算。">?</span></label>
+              <label class="stacked">Address · 地址</label>
               <input type="text" id="dlv-kitchen-address" placeholder="广州市天河区 (Roots Kitchen)" style="width: 100%;">
             </div>
             <button class="btn btn-primary" onclick="saveDeliveryDefaults()">Save · 保存</button>
@@ -6408,7 +6407,6 @@
       <div class="card" style="margin-bottom: var(--s4);">
         <h3 class="fc-sec" style="margin-bottom: 4px;">
           Batch schedule · 制作排期
-          <span class="help-i" data-tip="Sets the cadence and tells the customer the exact ship + arrival dates. · 设置制作周期,并告知顾客确切的发货与送达日期。">?</span>
         </h3>
         <div class="muted" style="font-size: 11px; margin-bottom: 12px;">In-Guangzhou orders are unaffected. · 广州市内订单不受影响。</div>
         <div class="row" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
@@ -6421,22 +6419,22 @@
             </label>
           </div>
           <div class="field" style="margin: 0;">
-            <label class="stacked">A batch day · 某个制作日 <span class="help-i" data-tip="Any one date the kitchen makes a batch. The rhythm repeats out from this date in both directions. Move it only to permanently re-time the whole rhythm. · 厨房制作的任意一个日期。制作周期以此日期为基准向前后重复。仅在需要永久调整整个周期时才更改。">?</span></label>
+            <label class="stacked">A batch day · 某个制作日</label>
             <input type="date" id="batch-anchor" style="width: 170px;">
           </div>
           <div class="field" style="margin: 0;">
-            <label class="stacked">Make every · 每隔 <span class="help-i" data-tip="Days between batches. 'Every other day' = 2. · 两次制作之间相隔的天数。「每隔一天」= 2。">?</span></label>
+            <label class="stacked">Make every · 每隔</label>
             <span style="display:inline-flex;align-items:center;gap:6px;"><input type="number" id="batch-interval" min="1" step="1" value="2" style="width: 70px;"> <span style="font-size:12px;">days · 天</span></span>
           </div>
           <div class="field" style="margin: 0; flex: 1; min-width: 240px;">
-            <label class="stacked">Skip these dates (vacations) · 跳过这些日期(假期) <span class="help-i" data-tip="One date per line (YYYY-MM-DD). A batch that would land on a skipped date rolls forward to the next batch day. · 每行一个日期(YYYY-MM-DD)。原本落在跳过日期的制作批次将顺延到下一个制作日。">?</span></label>
+            <label class="stacked">Skip these dates (vacations) · 跳过这些日期(假期)</label>
             <textarea id="batch-skip" rows="3" style="width: 100%; font-family: monospace; font-size: 12px;" placeholder="2026-07-14&#10;2026-07-16"></textarea>
           </div>
           <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
             <div class="muted" style="font-size: 11px; margin-bottom: 8px;">The checkout popup the customer sees. Leave any field blank to use the default wording. · 顾客在结账页看到的弹窗。任意字段留空则使用默认文案。</div>
           </div>
           <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
-            <label class="stacked">Popup eyebrow — English · 弹窗小标题(英文) <span class="help-i" data-tip="The small uppercase label above the title (default: FRESHLY MADE). · 标题上方的小号大写标签(默认:FRESHLY MADE)。">?</span></label>
+            <label class="stacked">Popup eyebrow — English · 弹窗小标题(英文)</label>
             <input id="batch-kicker-en" type="text" maxlength="40" style="width: 100%;" placeholder="Freshly made">
           </div>
           <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
@@ -6444,7 +6442,7 @@
             <input id="batch-kicker-cn" type="text" maxlength="40" style="width: 100%;" placeholder="新鲜现做">
           </div>
           <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
-            <label class="stacked">Popup title — English · 弹窗标题(英文) <span class="help-i" data-tip="The big heading in the popup (default: Made fresh for you). · 弹窗中的大标题(默认:Made fresh for you)。">?</span></label>
+            <label class="stacked">Popup title — English · 弹窗标题(英文)</label>
             <input id="batch-title-en" type="text" maxlength="60" style="width: 100%;" placeholder="Made fresh for you">
           </div>
           <div class="field" style="margin: 0; flex: 1; min-width: 200px;">
@@ -6452,7 +6450,7 @@
             <input id="batch-title-cn" type="text" maxlength="60" style="width: 100%;" placeholder="为您新鲜现做">
           </div>
           <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
-            <label class="stacked">Checkout notice — English · 结账提示(英文) <span class="help-i" data-tip="The popup body. Shown when a cart holds a batch-made item shipping outside Guangzhou OR to a far GZ district (Panyu, Huadu, Nansha, Conghua, Zengcheng). Use {ship_date} and {delivery_date} as placeholders — they're replaced with the real dates. Leave blank to use the default. · 弹窗正文。当订单含「分批现做」商品且配送至广州以外或较远的广州城区(番禺、花都、南沙、从化、增城)时显示。可用 {ship_date} 与 {delivery_date} 占位符,系统会替换为真实日期。留空则使用默认。">?</span></label>
+            <label class="stacked">Checkout notice — English · 结账提示(英文)</label>
             <textarea id="batch-msg-en" rows="2" style="width: 100%;" placeholder="Your order includes freshly-made items. We make the next batch on {ship_date} and ship it the same day, so it arrives fresh on {delivery_date}."></textarea>
           </div>
           <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
@@ -6460,7 +6458,7 @@
             <textarea id="batch-msg-cn" rows="2" style="width: 100%;" placeholder="您的订单包含新鲜现做的商品。我们将于 {ship_date} 制作下一批并当天发货,预计 {delivery_date} 新鲜送达。"></textarea>
           </div>
           <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
-            <label class="stacked">Freshness tip — English · 新鲜提示(英文) <span class="help-i" data-tip="A small reminder line shown below the dates in the popup (e.g. enjoy within 48 hours). Plain text — no date placeholders. Leave blank to use the default. · 弹窗日期下方的小提示(例如建议尽快享用)。纯文本,无日期占位符。留空则使用默认。">?</span></label>
+            <label class="stacked">Freshness tip — English · 新鲜提示(英文)</label>
             <textarea id="batch-tip-en" rows="2" style="width: 100%;" placeholder="We recommend enjoying these freshly-made items within 48 hours of arrival for the best taste and freshness."></textarea>
           </div>
           <div class="field" style="margin: 0; flex: 1 1 100%; min-width: 260px;">
@@ -6474,7 +6472,6 @@
       <div class="card" style="margin-bottom: var(--s4);">
         <h3 class="fc-sec" style="margin-bottom: 4px;">
           Reschedule cutoff · 改期截止
-          <span class="help-i" data-tip="For an order that contains a 'Made fresh in batches' product: how late the customer may still change their own delivery/pickup time. The time locks at this hour the evening BEFORE the scheduled day, and also locks the moment staff start preparing. Default 20 = 8pm the night before. Non-fresh orders are unaffected — they stay changeable until they leave. · 含「分批新鲜现做」商品的订单:顾客最晚可在配送日「前一天」的此时间点之前自助修改配送/取货时间;开始备货后也会锁定。默认 20 = 前一晚 20:00。非新鲜订单不受影响,发货前始终可改。">?</span>
         </h3>
         <div class="muted" style="font-size: 11px; margin-bottom: 12px;">Only affects orders containing a batch-made product. A same-day slot can never be chosen for a fresh order. · 仅影响含「分批现做」商品的订单。新鲜订单不可改为当日时段。</div>
         <div class="row" style="gap: 12px; align-items: flex-end; flex-wrap: wrap;">
@@ -6532,7 +6529,6 @@
       <div class="card" style="margin-bottom: var(--s4);">
         <h3 class="fc-sec" style="margin-bottom: 4px;">
           Bulk attach tracking · 批量绑定运单号
-          <span class="help-i" data-tip="Adds a 'Bulk attach tracking' button to the Orders page so you can paste a list of order numbers + waybill numbers and attach them in one go. Off by default — turn it on only if you enter tracking numbers by hand. · 在订单页添加「批量绑定运单号」按钮,可粘贴订单号+运单号一次性绑定。默认关闭,仅在手动录入运单号时开启。">?</span>
         </h3>
         <div class="muted" style="font-size: 11px; margin-bottom: 12px;">When on, a button appears in the Orders toolbar. When off, the button is hidden — the tool stays available but out of the way. · 开启后订单页工具栏会显示该按钮;关闭后按钮隐藏,不占据界面。</div>
         <div class="row" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
@@ -6555,7 +6551,6 @@
       <div class="card" style="margin-bottom: var(--s4);">
         <h3 class="fc-sec" style="margin-bottom: 4px;">
           Label printing · 面单打印
-          <span class="help-i" data-tip="This computer only (the one running 京东物流云打印组件). When on, the JD waybill label prints automatically the moment a waybill is created — no print dialog. Set it once on each label-printer PC. · 仅本机(运行京东物流云打印组件的电脑)。开启后生成运单时自动打印京东面单,无需弹窗。每台标签打印机电脑设置一次。">?</span>
         </h3>
         <div class="muted" style="font-size: 11px; margin-bottom: 12px;">Auto-print the JD waybill label on this computer as soon as a waybill is created. · 生成京东运单时,在本机自动打印面单。</div>
         <div class="field" style="margin: 0;">
@@ -6574,7 +6569,6 @@
       <div class="card" style="margin-bottom: var(--s4);">
         <h3 class="fc-sec" style="margin-bottom: 4px;">
           Box label · 箱贴打印
-          <span class="help-i" data-tip="Adds a 'Box label' button + an auto-print toggle to the order page for printing 70×45mm parcel stickers (order no / name / phone) on a local label printer. Off by default — turn it on only if your store packs with its own stickers instead of the JD waybill label. · 在订单页添加「打印箱贴」按钮和自动打印开关,用本地标签打印机打印 70×45mm 箱贴(订单号/姓名/电话)。默认关闭,仅在门店使用自有箱贴而非京东面单时开启。">?</span>
         </h3>
         <div class="muted" style="font-size: 11px; margin-bottom: 12px;">When on, the order page shows the Box-label controls. When off, they're hidden — the tool stays available but out of the way. · 开启后订单页显示箱贴按钮;关闭后隐藏,不占据界面。</div>
         <div class="row" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
@@ -6805,7 +6799,7 @@
 
           <!-- Type segment — only when adding new -->
           <div class="field" id="dz-edit-type-row" style="margin: 0;">
-            <label class="stacked">Type · 类型 <span class="help-i" data-tip="Guangzhou district = matched on the address's district field (天河区, 越秀区…). Other city = flat fee per city, optionally with a packing fee. · 广州区:按地址区名匹配;其他城市:按城市整体匹配,可加包装费。">?</span></label>
+            <label class="stacked">Type · 类型</label>
             <div class="dz-seg" id="dz-edit-type-seg">
               <button type="button" data-type="gz_district" onclick="setZoneEditType('gz_district')">Guangzhou district · 广州区/县</button>
               <button type="button" data-type="city"        onclick="setZoneEditType('city')">Other city · 其他城市</button>
@@ -6847,27 +6841,27 @@
           <h4>Pricing · 定价</h4>
           <div class="dz-grid">
             <div class="field" style="margin: 0;">
-              <label class="stacked">Base fee ¥ · 基础运费 <span class="help-i" data-tip="Default delivery fee charged on every order in this zone (unless the cart hits the free-over threshold). · 此区每单运费;若达免运门槛则免收。">?</span></label>
+              <label class="stacked">Base fee ¥ · 基础运费</label>
               <input type="number" id="dz-gz-base" placeholder="15">
             </div>
             <div class="field" style="margin: 0;">
-              <label class="stacked">Free over ¥ · 满 ¥ 免运费 <span class="help-i" data-tip="Cart subtotal that unlocks free delivery for this zone. Leave blank to use the global default (set on the Delivery defaults card). · 此区订单达此金额免运;留空使用全局默认值。">?</span></label>
+              <label class="stacked">Free over ¥ · 满 ¥ 免运费</label>
               <input type="number" id="dz-gz-free" placeholder="(use default)">
             </div>
             <div class="field dz-only-gz" style="margin: 0;">
-              <label class="stacked">MAX flat ¥ · 任意距离封顶 <span class="help-i" data-tip="Optional 'any-distance' alternative (Guangzhou only). When set, the customer sees a second delivery option that costs this flat fee no matter how far they live. Leave blank to not offer. · 可选的「任意距离封顶」选项(仅广州区)。设置后顾客可选 MAX,无论距离收取此固定金额;留空则不提供此选项。">?</span></label>
+              <label class="stacked">MAX flat ¥ · 任意距离封顶</label>
               <input type="number" id="dz-gz-max" placeholder="(no MAX)">
             </div>
             <div class="field dz-only-city" style="margin: 0; display: none;">
-              <label class="stacked">Packing ¥/item · 每件包装费 <span class="help-i" data-tip="Extra fee charged per item in the cart for out-of-Guangzhou orders. Covers ice packs, sturdier boxes, etc. · 外地订单按购物车件数收取的额外包装费(冰袋、加固箱等)。">?</span></label>
+              <label class="stacked">Packing ¥/item · 每件包装费</label>
               <input type="number" id="dz-city-pack" placeholder="1">
             </div>
             <div class="field dz-only-city" style="margin: 0; display: none;">
-              <label class="stacked">Packing cap ¥ · 包装费上限 <span class="help-i" data-tip="Upper limit on the per-item packing fee — protects large carts from runaway packing charges. e.g. ¥1/item × 100 items capped at ¥20. · 单笔包装费上限,防止大单包装费过高。">?</span></label>
+              <label class="stacked">Packing cap ¥ · 包装费上限</label>
               <input type="number" id="dz-city-pack-cap" placeholder="20">
             </div>
             <div class="field" style="margin: 0; grid-column: 1 / -1;">
-              <label class="stacked">By weight (optional) · 按重量计费(可选) <span class="help-i" data-tip="Courier-style rate for THIS area: a price for the first kilogram, then a price per extra kg (首重/续重). Fill BOTH to charge this zone by cart weight instead of the flat Base fee above. Leave blank for flat pricing. Products need a weight (e.g. 500g) filled in; items without one fall back to the Base fee. · 此区的快递式运费:首重一个价,续重每公斤加价。两项都填则此区按购物车重量计费(覆盖上方基础运费);留空则用固定运费。商品需填写重量(如 500g),未填的按基础运费计。">?</span></label>
+              <label class="stacked">By weight (optional) · 按重量计费(可选)</label>
               <span class="dz-hours-pair">
                 <input type="number" id="dz-gz-w1" placeholder="First kg ¥ · 首重">
                 <span class="dash">+</span>
@@ -6880,15 +6874,15 @@
           <h4>Scheduling · 时间</h4>
           <div class="dz-grid">
             <div class="field" style="margin: 0;">
-              <label class="stacked">Earliest lead (days) · 提前天数 <span class="help-i" data-tip="Earliest day the customer can schedule for via the calendar. 0 = today (if same-day allowed); 1 = tomorrow; 2 = day after tomorrow. The 'Schedule for later' calendar always starts at least day 3 regardless. · 顾客可预约的最早天数。0 = 今天(若允许同日);2 = 后天。「稍后送达」日历最早自第 3 天起。">?</span></label>
+              <label class="stacked">Earliest lead (days) · 提前天数</label>
               <input type="number" id="dz-edit-lead" placeholder="0">
             </div>
             <div class="field" style="margin: 0;">
-              <label class="stacked">Furthest day · 最远天数 <span class="help-i" data-tip="How far ahead the 'Schedule for later' calendar lets the customer pick. 14 = up to 2 weeks ahead. · 「稍后送达」日历最远可选天数。14 = 最多两周内。">?</span></label>
+              <label class="stacked">Furthest day · 最远天数</label>
               <input type="number" id="dz-edit-maxlead" placeholder="14">
             </div>
             <div class="field" style="margin: 0;">
-              <label class="stacked">Kitchen hours · 开放时间 <span class="help-i" data-tip="Kitchen open and close hours (24-hour clock). Used to build today's 2-hour time-slot chips and to decide when 'right away' is offered. 10–20 = open 10am, close 8pm. · 厨房开放时间(24 时制),用于生成今日时段及决定是否提供「立即配送」。10–20 = 早 10 至晚 8。">?</span></label>
+              <label class="stacked">Kitchen hours · 开放时间</label>
               <span class="dz-hours-pair">
                 <input type="number" id="dz-edit-hours-start" placeholder="10">
                 <span class="dash">–</span>
@@ -6896,22 +6890,22 @@
               </span>
             </div>
             <div class="field" style="margin: 0;">
-              <label class="stacked">Slot length (min) · 时段长度 <span class="help-i" data-tip="Width of each time-slot chip in minutes. 120 = 2-hour windows (1–3pm, 3–5pm…). Ignored in Day-only mode (no time chips shown). · 每个时段的长度(分钟)。120 = 2 小时窗口。仅按日模式下忽略。">?</span></label>
+              <label class="stacked">Slot length (min) · 时段长度</label>
               <input type="number" id="dz-edit-slot" placeholder="120">
             </div>
           </div>
           <div class="dz-check-row dz-only-gz">
-            <label class="dz-check-row"><input type="checkbox" id="dz-edit-sd" onchange="onSdToggle()"> Allow same-day · 允许同日送达 <span class="help-i" data-tip="Customers in this zone can pick today's delivery. Turn off to force everyone to schedule a future date. · 允许此区顾客选择今日送达;关闭后所有人必须预约未来日期。">?</span></label>
+            <label class="dz-check-row"><input type="checkbox" id="dz-edit-sd" onchange="onSdToggle()"> Allow same-day · 允许同日送达</label>
             <span style="flex:1;"></span>
-            <label class="dz-check-row" id="dz-edit-sd-fee-row" style="gap: 6px;">+SD ¥ <span class="help-i" data-tip="Optional same-day surcharge. 0 = same-day is free (typical for inside-GZ districts). Setting e.g. 10 charges customers +¥10 if they pick today's delivery (Panyu-style). · 同日加价(可选)。0 = 不加价;设为 10 则顾客选今日加收 ¥10(番禺模式)。">?</span> <input type="number" id="dz-edit-sd-fee" style="width: 80px;" placeholder="0" oninput="onSdFeeInput()"></label>
+            <label class="dz-check-row" id="dz-edit-sd-fee-row" style="gap: 6px;">+SD ¥ <input type="number" id="dz-edit-sd-fee" style="width: 80px;" placeholder="0" oninput="onSdFeeInput()"></label>
           </div>
           <div class="dz-check-row">
-            <label class="dz-check-row"><input type="checkbox" id="dz-edit-dayonly"> Day-only (no time slots) · 仅按日 <span class="help-i" data-tip="Hides the 2-hour time-slot chips. Customer just picks a date — three radio options: Express / Today (if same-day on) / Schedule. Use for further-out zones where exact hour windows don't make sense. · 隐藏 2 小时时段,顾客只选日期(加急/今日/稍后)。适用于较远配送区。">?</span></label>
+            <label class="dz-check-row"><input type="checkbox" id="dz-edit-dayonly"> Day-only (no time slots) · 仅按日</label>
           </div>
 
           <!-- Active toggle -->
           <div class="dz-check-row" style="border-top: 1px solid var(--line); padding-top: 12px;">
-            <label class="dz-check-row"><input type="checkbox" id="dz-edit-active" checked> Active · 启用 <span class="help-i" data-tip="Off = this zone won't match any customer address; affected customers see 'we don't deliver here' at checkout. Use to temporarily pause a zone without deleting it. · 关闭后此区不参与匹配,相关顾客结账时会看到「暂不配送」。可用于临时停服而不删除配置。">?</span></label>
+            <label class="dz-check-row"><input type="checkbox" id="dz-edit-active" checked> Active · 启用</label>
           </div>
         </div>
     </div>

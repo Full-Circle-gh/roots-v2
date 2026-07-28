@@ -678,7 +678,8 @@ cuApplyThemeIcon();
   // Same idea for tooltips: their text lives in an attribute, not a text node,
   // so it needs its own registry. { el, attr, en, cn }. Two attributes carry
   // tooltip copy — data-tt (the shared tooltip component in 01-core.js) and
-  // the older data-tip — and both are authored "EN · CN" the same way.
+  // data-tip (still read by the CSS-only .mc-info dot on the channel-connect
+  // screen) — and both are authored "EN · CN" the same way.
   const _tipReg = [];
   const TIP_ATTRS = ['data-tt', 'data-tip'];
   // Opt-in bilingual placeholders: tag an input/textarea with data-ph-en +
@@ -952,55 +953,6 @@ cuApplyThemeIcon();
   } else {
     document.addEventListener('DOMContentLoaded', init);
   }
-})();
-
-
-// ── Help tooltip (floating, viewport-clamped) ──
-// One shared popup positioned on hover, so a tooltip never clips inside a
-// scrollable drawer or at a screen edge — replaces the old centered CSS
-// ::after tooltip. Reads data-tip at show time (already language-switched by
-// the i18n layer above), so it needs no language logic of its own.
-(function () {
-  let pop = null;
-  function ensure() {
-    if (pop) return pop;
-    pop = document.createElement('div');
-    pop.className = 'help-tip-pop';
-    document.body.appendChild(pop);
-    return pop;
-  }
-  function place(target) {
-    const tip = target.getAttribute('data-tip');
-    if (!tip) return;
-    const el = ensure();
-    el.textContent = tip;
-    el.style.left = '0px';
-    el.style.top = '0px';
-    el.style.display = 'block';
-    const m = 8;
-    const r = target.getBoundingClientRect();
-    const tr = el.getBoundingClientRect();
-    let left = r.left + r.width / 2 - tr.width / 2;
-    left = Math.max(m, Math.min(left, window.innerWidth - tr.width - m));
-    let top = r.bottom + 8;                       // default: below the icon
-    if (top + tr.height > window.innerHeight - m) {
-      const above = r.top - tr.height - 8;        // flip above if it'd clip
-      if (above >= m) top = above;
-    }
-    el.style.left = Math.round(left) + 'px';
-    el.style.top = Math.round(top) + 'px';
-  }
-  function hide() { if (pop) pop.style.display = 'none'; }
-  document.addEventListener('mouseover', function (e) {
-    const t = e.target.closest && e.target.closest('.help-i[data-tip]');
-    if (t) place(t);
-  });
-  document.addEventListener('mouseout', function (e) {
-    const t = e.target.closest && e.target.closest('.help-i[data-tip]');
-    if (t) hide();
-  });
-  document.addEventListener('scroll', hide, true);
-  window.addEventListener('resize', hide);
 })();
 
 
