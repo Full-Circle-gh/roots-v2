@@ -72,6 +72,13 @@ Component({
   lifetimes: {
     attached() {
       this._timer = null;
+      // The page's first show() is dispatched before this component exists —
+      // it's created during that first render — so pageLifetimes.show alone
+      // never fires on a cold launch, and the pop-up only appeared once the
+      // customer navigated away and back. Evaluate on attach too. Same
+      // both-hooks shape cs-button uses for the same reason.
+      this._visible = true;
+      this.evaluate();
     },
     detached() {
       this._visible = false;
@@ -91,17 +98,19 @@ Component({
 
   methods: {
     // Awaits the real config rather than reading app.globalData.config, which
-    // is only populated when the launch-time fetch resolves (app.js) — on a
-    // cold launch this component's first `show` fires well before that, so a
-    // synchronous read saw an empty list and no pop-up ever rendered until the
-    // customer left and re-entered. config.load() is module-cached, so on
-    // re-entry / later shows this resolves without a second round-trip.
+    // is only populated when the launch-time fetch resolves (app.js) — that's
+    // a network round trip, so on a cold launch this runs first and a
+    // synchronous read saw an empty pop-up list with nothing to re-check it.
+    // config.load() is module-cached, so later shows cost no round-trip.
     async evaluate() {
       let cfg;
       try { cfg = await config.load(); } catch { return; }
       // The page may have been hidden or the component detached while the
       // config was in flight — don't pop up onto a screen nobody's looking at.
       if (!this._visible) return;
+      // attached() and show() can both land on the first render depending on
+      // base-library version. Never stack a second pop-up over an open one.
+      if (this.data.open) return;
       const list = Array.isArray(cfg?.popups?.list) ? cfg.popups.list : [];
       const page = this.properties.page || '';
       const eligible = list
