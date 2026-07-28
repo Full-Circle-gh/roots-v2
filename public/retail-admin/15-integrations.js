@@ -734,13 +734,6 @@
     info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 11.5v4.5"/><path d="M12 8h.01"/></svg>',
     x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   };
-  // Info dot: the "where do I find this?" explanations live in a hover tooltip
-  // now (data-tip), not as always-on grey text under every field. Keyboard-
-  // reachable (tabindex) so the hint is available without a mouse.
-  function mcInfo(en, cn) {
-    const t = esc(cuT(en, cn));
-    return `<span class="mc-info" tabindex="0" role="note" aria-label="${t}" data-tip="${t}">${MC_SVG.info}</span>`;
-  }
   function mcSaveBtnHtml() { return `${MC_SVG.shield}<span>${cuT('Save & verify', '保存并验证')}</span>`; }
 
   // Router: a brand-new account gets the step-by-step setup wizard; an account
@@ -787,8 +780,7 @@
     const env = cfg.source === 'env';   // env-managed account (Roots): read-only view
 
     const chip = (ok, en, cn) => `<span class="mc-chip${ok ? ' on' : ''}">${ok ? MC_SVG.check : MC_SVG.circle}<span>${cuT(en, cn)}</span></span>`;
-    // tip: [en, cn] pair → an info dot after the label (hover reveals it).
-    const txt = (id, label, val, tip) => `<div class="mc-f"><label class="field-label">${label}${tip ? mcInfo(tip[0], tip[1]) : ''}</label>
+    const txt = (id, label, val) => `<div class="mc-f"><label class="field-label">${label}</label>
       <input type="text" id="${id}" value="${esc(val || '')}" spellcheck="false" autocapitalize="off" style="font-family:var(--f-mono,monospace)"${env ? ' readonly' : ''}></div>`;
     // Secret field: saved secrets show a locked "Saved" row; Replace reveals an
     // empty input (blank on save = keep the stored value, matching the API).
@@ -796,12 +788,11 @@
       o = o || {};
       const cls = 'mc-f' + (o.wide ? ' wide' : '');
       const optTag = o.optional ? `<span class="mc-opt">${cuT('Optional', '选填')}</span>` : '';
-      const tip = o.tip ? mcInfo(o.tip[0], o.tip[1]) : '';
       const field = o.pem
         ? `<textarea id="${id}" rows="3" placeholder="${o.ph || ''}" spellcheck="false" style="width:100%;font-family:var(--f-mono,monospace);font-size:11.5px"></textarea>`
         : `<input type="password" id="${id}" autocomplete="new-password" placeholder="${o.ph || ''}">`;
-      if (!isSet) return `<div class="${cls}"><label class="field-label">${label}${optTag}${tip}</label>${field}</div>`;
-      return `<div class="${cls}" id="${id}_f"><label class="field-label">${label}${optTag}${tip}</label>
+      if (!isSet) return `<div class="${cls}"><label class="field-label">${label}${optTag}</label>${field}</div>`;
+      return `<div class="${cls}" id="${id}_f"><label class="field-label">${label}${optTag}</label>
         <div class="mc-saved">${MC_SVG.lock}<span class="tx"><span class="dots">••••••••</span><span>${cuT('Saved', '已保存')}</span></span>
           ${env ? '' : `<button type="button" class="btn btn-sm" onclick="igMcReplace('${id}_f')">${cuT('Replace', '更换')}</button>`}</div>
         <div class="mc-edit">${field}<div class="mc-keep-row"><button type="button" class="mc-keep" onclick="igMcKeep('${id}_f')">${cuT('Keep saved value', '保留已保存的值')}</button></div></div>
@@ -823,26 +814,24 @@
       </div>
 
       <div class="mc-sec">
-        <div class="mc-sec-head"><span class="mc-ico">${MC_SVG.phone}</span><b>${cuT('WeChat Mini Program', '微信小程序')}</b>${mcInfo('Runs the storefront and signs customers in.', '用于店面展示和顾客登录。')}</div>
+        <div class="mc-sec-head"><span class="mc-ico">${MC_SVG.phone}</span><b>${cuT('WeChat Mini Program', '微信小程序')}</b></div>
         <div class="ig-wiz-grid">
-          ${txt('mc_appid', 'AppID', cfg.appId, ['WeChat MP console → Development → Development settings.', '微信公众平台 → 开发 → 开发设置。'])}
-          ${sec('mc_secret', 'AppSecret', cfg.appSecretSet, { ph: cuT('Paste the AppSecret', '粘贴 AppSecret'), tip: ['Leave as is unless WeChat issued a new secret.', '除非微信重置了密钥，否则保持原样。'] })}
+          ${txt('mc_appid', 'AppID', cfg.appId)}
+          ${sec('mc_secret', 'AppSecret', cfg.appSecretSet, { ph: cuT('Paste the AppSecret', '粘贴 AppSecret') })}
         </div>
       </div>
 
       <div class="mc-sec">
-        <div class="mc-sec-head"><span class="mc-ico">${MC_SVG.card}</span><b>${cuT('WeChat Pay', '微信支付')}</b>${mcInfo('Takes payment inside the mini app.', '在小程序内向顾客收款。')}</div>
+        <div class="mc-sec-head"><span class="mc-ico">${MC_SVG.card}</span><b>${cuT('WeChat Pay', '微信支付')}</b></div>
         <div class="ig-wiz-grid">
-          ${txt('mc_mchid', cuT('Merchant ID', '商户号'), pay.mchId, ['WeChat Pay merchant platform → Account center.', '微信支付商户平台 → 账户中心。'])}
-          ${txt('mc_serial', cuT('Certificate serial', '证书序列号'), pay.serialNo, ['Shown next to the API certificate in API security.', '在 API 安全页的 API 证书旁显示。'])}
-          ${sec('mc_v3', cuT('API v3 key', 'APIv3 密钥'), pay.apiV3KeySet, { ph: cuT('Paste the API v3 key', '粘贴 APIv3 密钥'), tip: ['A 32-character key you set yourself in WeChat Pay → API security.', '在 微信支付 → API 安全 里由你自己设定的 32 位密钥。'] })}
+          ${txt('mc_mchid', cuT('Merchant ID', '商户号'), pay.mchId)}
+          ${txt('mc_serial', cuT('Certificate serial', '证书序列号'), pay.serialNo)}
+          ${sec('mc_v3', cuT('API v3 key', 'APIv3 密钥'), pay.apiV3KeySet, { ph: cuT('Paste the API v3 key', '粘贴 APIv3 密钥') })}
           <div></div>
           ${sec('mc_pkey', cuT('Merchant private key', '商户私钥'), pay.privateKeySet,
-            { pem: true, wide: true, ph: cuT('Paste the full PEM, including the BEGIN and END lines', '粘贴完整 PEM，包含 BEGIN 与 END 行'),
-              tip: ['Open apiclient_key.pem (from the certificate tool) and paste all of it, BEGIN and END lines included.', '打开证书工具生成的 apiclient_key.pem，全部内容(含 BEGIN 与 END 行)粘贴进来。'] })}
+            { pem: true, wide: true, ph: cuT('Paste the full PEM, including the BEGIN and END lines', '粘贴完整 PEM，包含 BEGIN 与 END 行') })}
           ${sec('mc_pubkey', cuT('WeChat platform public key', '微信平台公钥'), pay.platformPubKeySet,
-            { pem: true, wide: true, optional: true, ph: cuT('Paste PEM contents', '粘贴 PEM 内容'),
-              tip: ['Only needed if your merchant account uses platform public keys instead of platform certificates.', '仅当商户账号使用平台公钥(而非平台证书)时需要。'] })}
+            { pem: true, wide: true, optional: true, ph: cuT('Paste PEM contents', '粘贴 PEM 内容') })}
         </div>
       </div>
 
@@ -1334,18 +1323,18 @@
       </div>
 
       <div class="mc-sec">
-        <div class="mc-sec-head"><span class="mc-ico">${WC_SVG.globe}</span><b>${cuT('Shop address', '商店网址')}</b>${mcInfo('Where customers reach your store. A free address is included — add your own domain any time.', '顾客访问商店的网址。已含免费网址,可随时接入自有域名。')}</div>
+        <div class="mc-sec-head"><span class="mc-ico">${WC_SVG.globe}</span><b>${cuT('Shop address', '商店网址')}</b></div>
         ${addrHtml}
         ${customHtml}
       </div>
 
       <div class="mc-sec">
-        <div class="mc-sec-head"><span class="mc-ico">${WC_SVG.user}</span><b>${cuT('Customer sign-in', '顾客登录')}</b>${mcInfo('How shoppers sign in on the web. Turn on the ones you want — nothing to set up.', '顾客在网页端的登录方式。按需开启即可,无需配置。')}</div>
+        <div class="mc-sec-head"><span class="mc-ico">${WC_SVG.user}</span><b>${cuT('Customer sign-in', '顾客登录')}</b></div>
         ${methodRows}
       </div>
 
       <div class="mc-sec">
-        <div class="mc-sec-head"><span class="mc-ico">${MC_SVG.card}</span><b>${cuT('Payments', '收款')}</b>${mcInfo('How customers pay on the web. WeChat Pay uses the merchant setup from your WeChat.', '顾客在网页端的付款方式。微信支付沿用小程序的商户配置。')}</div>
+        <div class="mc-sec-head"><span class="mc-ico">${MC_SVG.card}</span><b>${cuT('Payments', '收款')}</b></div>
         ${payHtml}
       </div>
 
