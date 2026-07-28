@@ -11160,3 +11160,80 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   /* Toggle becomes the card header — drop the full-bleed hairline-row look. */
   #pd-editor .pdb-vgrid .pd-var-toggle { border-top: none; padding: 15px 3px; }
   #pd-editor .pdb-vgrid .pd-var-toggle:hover { background: transparent; border-top-color: transparent; }
+
+  /* ═══════════════════════════════════════════════════════════════════
+     TOOLTIP — the shared one
+     ═══════════════════════════════════════════════════════════════════
+     One bubble for the whole product, driven by data-tt on the trigger.
+     Controller lives in 01-core.js; it appends a single .tt-pop to <body>
+     and positions it. Everything here is appearance only — placement,
+     flipping and viewport clamping are all done in JS, which is why there
+     is no side-placement rule to be found: there is no side placement.
+
+     The bubble INVERTS against the page. --td-text and --td-paper both flip
+     with the theme, so this reads Ink-on-Paper in light and Paper-on-Ink in
+     dark — the same pairing the spark tips already use. Do NOT hardcode
+     #111A2B here: on a dark page the bubble would go invisible. */
+  .tt-pop {
+    position: fixed; top: 0; left: 0;
+    z-index: 100002;                 /* above the mobile full-screen overlay */
+    max-width: 250px;
+    padding: 9px 12px;
+    background: var(--td-text, #111A2B);
+    color: var(--td-paper, #FBF9F4);
+    font: 400 12px/1.45 var(--f-sans);
+    letter-spacing: 0; text-transform: none; text-align: left;
+    border: 0;
+    border-radius: var(--r-lg, 10px);
+    box-shadow: 0 4px 12px rgba(17,26,43,.08), 0 12px 32px rgba(17,26,43,.18);
+    white-space: normal; overflow-wrap: break-word;
+    pointer-events: none;
+    visibility: hidden; opacity: 0;
+    transform: translateY(4px);
+    transition: opacity .16s ease, transform .16s ease, visibility 0s linear .16s;
+  }
+  /* Quiet fade and a small rise — it settles into place rather than popping. */
+  .tt-pop.on {
+    visibility: visible; opacity: 1;
+    transform: translateY(0);
+    transition: opacity .16s ease, transform .16s ease, visibility 0s;
+  }
+  /* Arrow on the edge nearest the element, flipping with the placement. Its
+     horizontal position is --tt-ax, set by JS off the ELEMENT's centre — so
+     when the bubble shifts sideways to stay on screen the arrow stays put,
+     still pointing at the thing being explained. */
+  .tt-pop::after {
+    content: ''; position: absolute;
+    left: var(--tt-ax, 50%); margin-left: -5px;
+    width: 0; height: 0;
+    border: 5px solid transparent;
+  }
+  .tt-pop[data-place="above"]::after {
+    top: 100%;
+    border-bottom-width: 0;
+    border-top-color: var(--td-text, #111A2B);
+  }
+  .tt-pop[data-place="below"]::after {
+    bottom: 100%;
+    border-top-width: 0;
+    border-bottom-color: var(--td-text, #111A2B);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tt-pop, .tt-pop.on { transform: none; transition: opacity .01s linear, visibility 0s; }
+  }
+  /* Touch tap target — OPT IN, on the triggers that actually need it.
+     A bare icon is smaller than a finger, so it gets a 44px hit area without
+     growing on screen. Add .tt-hit alongside data-tt for those.
+     Deliberately NOT applied to every [data-tt]: a trigger that is already a
+     real control (a filter chip, a button with a label) is comfortably
+     tappable, and forcing 44px on it would change layouts product-wide.
+     Phone chip sizing is a decision for the mobile pass, made once across the
+     whole admin — not something a tooltip settles on its way past. */
+  @media (pointer: coarse) {
+    .tt-hit { position: relative; }
+    .tt-hit::before {
+      content: ''; position: absolute;
+      top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: max(100%, 44px); height: max(100%, 44px);
+    }
+  }

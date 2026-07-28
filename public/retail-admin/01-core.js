@@ -1665,3 +1665,168 @@ function rmRenderPager(mount, o) {
   // nothing once the window resizes under it.
   if (sel)  sel.onchange = () => o.onSize(parseInt(sel.value, 10));
 }
+
+
+// ── Tooltip — the shared one ───────────────────────────────────────────────
+// One bubble for the whole product. Put data-tt="..." on any element and it
+// gets a tooltip; there is no per-instance JS and nothing to wire up. All the
+// listeners below are delegated off document, so an element rendered an hour
+// from now works the same as one in the static markup.
+//
+// Opens on hover (after a beat), on tap, and on keyboard focus. Closes on
+// pointer-leave, tap-elsewhere, focus-out, Escape, scroll and resize. There is
+// deliberately NO dismiss control — no ✕, no click-to-pin. A tooltip that has
+// to be closed is a panel wearing a tooltip's clothes.
+//
+// Placement is above the element, flipping below only when there isn't room
+// above. Those are the only two placements: no left/right variant, ever. The
+// bubble is position:fixed and clamped to the viewport by hand, so it never
+// clips inside a scrollable drawer or hangs off a screen edge — it shifts
+// sideways to stay in and the arrow keeps pointing at the element.
+//
+// Text is authored "EN · 中文" like every other label; the i18n layer in
+// 10-extras.js splits data-tt on load and rewrites it on language toggle, so
+// by the time we read the attribute it already holds the active language.
+(function () {
+  const SEL      = '[data-tt]';
+  const GAP      = 8;    // bubble-to-element breathing room
+  const EDGE     = 8;    // closest the bubble may come to a viewport edge
+  const DELAY    = 350;  // hover dwell before it opens — long enough not to
+                         // flicker as the pointer crosses on its way elsewhere
+  const canHover = window.matchMedia && window.matchMedia('(hover: hover)').matches;
+
+  let pop = null, current = null, timer = null;
+
+  function ensure() {
+    if (pop) return pop;
+    pop = document.createElement('div');
+    pop.className = 'tt-pop';
+    pop.id = 'tt-pop';
+    pop.setAttribute('role', 'tooltip');
+    document.body.appendChild(pop);
+    return pop;
+  }
+
+  // A trigger has to be reachable by keyboard or the focus path is decorative.
+  // Real buttons/links/inputs already are; anything else is given a tabindex.
+  // Author triggers as real buttons where you can — this only covers the rest.
+  const NATIVE = 'a[href], button, input, select, textarea, [tabindex]';
+  function focusable(el) {
+    if (el.matches(NATIVE)) return;
+    el.setAttribute('tabindex', '0');
+  }
+
+  function show(el) {
+    const text = el.getAttribute('data-tt');
+    if (!text) return;
+    if (current === el) return;
+    hide();
+    current = el;
+
+    const b = ensure();
+    b.textContent = text;
+    b.classList.remove('on');           // measure in the settled state
+    b.style.left = '0px';
+    b.style.top  = '0px';
+
+    const r  = el.getBoundingClientRect();
+    const bb = b.getBoundingClientRect();
+
+    // Above by default; below only when above would clip. Never on top of the
+    // element it explains — that is what the GAP either side buys us.
+    let place = 'above';
+    let top   = r.top - bb.height - GAP;
+    if (top < EDGE) {
+      const below = r.bottom + GAP;
+      if (below + bb.height <= window.innerHeight - EDGE || below - EDGE > (window.innerHeight - r.bottom)) {
+        place = 'below';
+        top   = below;
+      }
+    }
+
+    // Centre on the element, then shift horizontally to stay on screen. The
+    // arrow is placed off the ELEMENT's centre, not the bubble's, so shifting
+    // the bubble leaves the arrow still pointing at the thing it explains.
+    const wantLeft = r.left + r.width / 2 - bb.width / 2;
+    const left = Math.max(EDGE, Math.min(wantLeft, window.innerWidth - bb.width - EDGE));
+
+    // Keep the arrow inside the bubble's rounded corners.
+    const ax = Math.max(12, Math.min(r.left + r.width / 2 - left, bb.width - 12));
+
+    b.dataset.place = place;
+    b.style.setProperty('--tt-ax', Math.round(ax) + 'px');
+    b.style.left = Math.round(left) + 'px';
+    b.style.top  = Math.round(top) + 'px';
+
+    el.setAttribute('aria-describedby', 'tt-pop');
+    // Straight on — the getBoundingClientRect() above already forced a style
+    // flush, so the closed state is committed and the fade has a start value
+    // to run from. Deliberately NOT requestAnimationFrame: rAF never fires in
+    // a hidden tab, which left the callback queued and popped the bubble open
+    // whenever the operator came back to the tab.
+    b.classList.add('on');
+  }
+
+  function hide() {
+    clearTimeout(timer);
+    if (current) current.removeAttribute('aria-describedby');
+    current = null;
+    if (pop) pop.classList.remove('on');
+  }
+
+  function trigger(e) {
+    const t = e.target;
+    return (t && t.closest) ? t.closest(SEL) : null;
+  }
+
+  if (canHover) {
+    document.addEventListener('mouseover', function (e) {
+      const t = trigger(e);
+      if (!t) return;
+      if (t === current) return;
+      focusable(t);
+      clearTimeout(timer);
+      timer = setTimeout(() => show(t), DELAY);
+    });
+    document.addEventListener('mouseout', function (e) {
+      const t = trigger(e);
+      if (!t) return;
+      // Ignore moves between the trigger's own children.
+      if (e.relatedTarget && t.contains(e.relatedTarget)) return;
+      hide();
+    });
+  }
+
+  // Tap. On a touch screen the trigger's own click still runs — a tooltip
+  // never swallows the action of the thing it sits on.
+  document.addEventListener('click', function (e) {
+    const t = trigger(e);
+    if (!t) { hide(); return; }
+    focusable(t);
+    if (t === current) return;   // second tap on an open one leaves it be
+    clearTimeout(timer);
+    show(t);
+  });
+
+  // Keyboard. Focus opens immediately — a dwell delay on focus would just read
+  // as lag to someone tabbing through.
+  document.addEventListener('focusin', function (e) {
+    const t = trigger(e);
+    if (t) { clearTimeout(timer); show(t); }
+    else if (current) hide();
+  });
+  document.addEventListener('focusout', function (e) {
+    if (trigger(e)) hide();
+  });
+
+  // Escape closes. This is standard keyboard behaviour, not a dismiss control:
+  // nothing visible is added to the bubble for it.
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && current) hide();
+  });
+
+  // A tooltip is anchored to a rect we measured once; the moment that rect can
+  // have moved, the honest thing is to close rather than to chase it.
+  document.addEventListener('scroll', hide, true);
+  window.addEventListener('resize', hide);
+})();
