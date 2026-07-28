@@ -9184,7 +9184,10 @@
   /* ── Mini App configuration (.mc-wiz) — Tacet skin ──
      Opened by Configure on the Mini app card; renders in #sales-setup-host
      inside #tab-sales. Scoped to .mc-wiz so the other credential pages that
-     reuse the base .mc-*/.ig-wiz classes aren't half-restyled. */
+     reuse the base mc- and ig-wiz classes aren't half-restyled.
+     Do NOT write that pair as a glob followed by a slash: those two characters
+     spell a comment terminator, which ends this comment early and takes the
+     rule below it down with it. That is exactly what happened here. */
   :is(#tab-sales, .cfg-host) .mc-wiz {
     background: var(--td-surface); border: 1px solid var(--td-border);
     border-radius: 14px; padding: 24px; margin: 4px 0 16px; color: var(--td-text);
