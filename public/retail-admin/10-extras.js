@@ -676,12 +676,12 @@ cuApplyThemeIcon();
   // physically untouched. Disconnected nodes are pruned on toggle.
   const _reg = [];
   // Same idea for tooltips: their text lives in an attribute, not a text node,
-  // so it needs its own registry. { el, attr, en, cn }. Two attributes carry
-  // tooltip copy — data-tt (the shared tooltip component in 01-core.js) and
-  // data-tip (still read by the CSS-only .mc-info dot on the channel-connect
-  // screen) — and both are authored "EN · CN" the same way.
+  // so it needs its own registry. data-tt (the shared tooltip component in
+  // 01-core.js) is the only one left — it is authored "EN · CN" like every
+  // other label. The list stays a list so a second attribute is a one-word
+  // change. { el, attr, en, cn }.
   const _tipReg = [];
-  const TIP_ATTRS = ['data-tt', 'data-tip'];
+  const TIP_ATTRS = ['data-tt'];
   // Opt-in bilingual placeholders: tag an input/textarea with data-ph-en +
   // data-ph-cn and we swap its `placeholder` on toggle. Opt-in (not auto-split
   // like text) because many placeholders carry a decorative " · " that is NOT a

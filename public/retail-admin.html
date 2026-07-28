@@ -11101,11 +11101,12 @@
   function hasChinese(s) { return /[一-鿿]/.test(s); }
 
   const _reg = [];
-  // Two attributes carry tooltip copy — data-tt (the shared tooltip component
-  // in 01-core.js) and data-tip (the CSS-only .mc-info dot) — and both are
-  // authored "EN · CN" the same way. { el, attr, en, cn }.
+  // Tooltip copy lives in an attribute, not a text node, so it needs its own
+  // registry. data-tt (the shared tooltip component in 01-core.js) is the only
+  // one left — it is authored "EN · CN" like every other label. The list stays
+  // a list so a second attribute is a one-word change. { el, attr, en, cn }.
   const _tipReg = [];
-  const TIP_ATTRS = ['data-tt', 'data-tip'];
+  const TIP_ATTRS = ['data-tt'];
   const _phReg = [];
   const _titleReg = [];
 
