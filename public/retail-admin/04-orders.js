@@ -5147,6 +5147,12 @@ function jdSuggestedService(mode, isFresh) {
 // to the JD label printer runs the component, so the auto-fire flag is stored
 // per browser, not per account. Default ON — the common setup.
 const JD_PRINT_PORTS = [9113, 9114, 9115];
+// How long to wait for the component's reply to ONE label. Generous: it renders
+// the template and drives the printer before answering, and a 一单多件 job asks
+// it to do that once per box. This is NOT the connect timeout (4s, below) — the
+// two were the same number once, which made every 2-box job look like a missing
+// component. See jdSendToComponent.
+const JD_PRINT_REPLY_MS = 20000;
 
 function jdAutoPrintOn() {
   try {
@@ -5179,16 +5185,27 @@ function jdPromptPrinterName() {
   return v;
 }
 
-// Open the local print component (trying each port in turn), send ONE print job
-// covering ALL of `labels` (report format 2's `contents` list takes more than one
-// entry — this is how a 一单多件 waybill prints every box's label in a single
-// job), and resolve { ok, msg }. Times out per port so a missing component never
-// hangs the UI. Protocol = JD cloud-print 报文2 (report format 2): an
-// "orderType":"PRINT","version":"2" frame whose `parameters` carry the target
-// `printName` and a `contents:[{ tempUrl, printData }, ...]` list — the component
-// renders each entry's template `tempUrl` with its encrypted `printData` (the
-// perPrintData string from pullData) and prints them. It echoes a status frame:
+// Open the local print component (trying each port in turn), print every entry
+// in `labels`, and resolve { ok, msg }. Protocol = JD cloud-print 报文2 (report
+// format 2): an "orderType":"PRINT","version":"2" frame whose `parameters` carry
+// the target `printName` and a `contents:[{ tempUrl, printData }]` list — the
+// component renders the template `tempUrl` with the encrypted `printData` (the
+// perPrintData string from pullData) and prints it. It echoes a status frame:
 // status 500 = ok, success "true"/"false", errors[] on failure.
+//
+// A 一单多件 waybill (one waybill, several boxes) yields one label per box, and
+// each goes as its OWN print task, sent after the previous one is acked. Two
+// reasons not to pack them into a single frame's `contents` list: the component
+// answers per task, so one reply can't tell us box 2 actually printed, and a
+// long multi-label render used to blow the connect timeout (below).
+//
+// The port hunt covers the CONNECTION only. Once the socket opens, this is the
+// component — a later error or silence is a real print failure, not a wrong
+// port. Conflating the two is what made a 2-box job report "component not
+// detected": rendering the second label pushed the reply past the 4s connect
+// timeout, the handler fell through to 9114/9115 where nothing listens, and the
+// exhausted list surfaced as component_unreachable while the component was
+// sitting right there on 9113.
 function jdSendToComponent(labels, printName, ports) {
   ports = ports || JD_PRINT_PORTS;
   return new Promise((resolve) => {
@@ -5196,35 +5213,49 @@ function jdSendToComponent(labels, printName, ports) {
     const tryPort = () => {
       if (i >= ports.length) { resolve({ ok: false, msg: 'component_unreachable' }); return; }
       const port = ports[i++];
-      let ws, settled = false, timer;
+      let ws, settled = false, opened = false, timer, queue = [], sent = 0;
       const finish = (r) => {
         if (settled) return; settled = true;
         clearTimeout(timer);
         try { ws && ws.close(); } catch (e) {}
         resolve(r);
       };
-      // A failed connection should fall through to the next port, not resolve.
-      const nextOrFail = () => { if (settled) return; settled = true; clearTimeout(timer); try { ws && ws.close(); } catch (e) {} tryPort(); };
+      // Before the socket opens: a failure means wrong port, so fall through to
+      // the next one. After it opens: the component is here, so report what
+      // actually went wrong instead of hunting ports that aren't listening.
+      const nextOrFail = () => {
+        if (settled) return;
+        if (opened) { finish({ ok: false, msg: sent > 1 ? 'no_reply_partial' : 'no_reply' }); return; }
+        settled = true; clearTimeout(timer);
+        try { ws && ws.close(); } catch (e) {}
+        tryPort();
+      };
       try { ws = new WebSocket('ws://127.0.0.1:' + port); }
       catch (e) { nextOrFail(); return; }
-      timer = setTimeout(nextOrFail, 4000);
-      ws.onopen = () => {
+      timer = setTimeout(nextOrFail, 4000);          // connect timeout only
+      // Send the next queued label and re-arm the clock for ITS reply; an empty
+      // queue means every box was acked.
+      const sendNext = () => {
+        const l = queue.shift();
+        clearTimeout(timer);
+        if (!l) { finish({ ok: true }); return; }
+        sent++;
+        timer = setTimeout(nextOrFail, JD_PRINT_REPLY_MS);
         const msg = {
           orderType: 'PRINT',
           version: '2',
           key: (window.crypto && crypto.randomUUID ? crypto.randomUUID() : 'k' + Date.now() + Math.round(Math.random() * 1e6)),
           parameters: {
             printName: printName || '',
-            contents: labels.map(l => ({ tempUrl: l.tempUrl, printData: l.printData })),
+            contents: [{ tempUrl: l.tempUrl, printData: l.printData }],
           },
         };
         try { ws.send(JSON.stringify(msg)); } catch (e) { finish({ ok: false, msg: 'send_failed' }); }
       };
+      ws.onopen = () => { opened = true; queue = labels.slice(); sendNext(); };
       ws.onmessage = (ev) => {
-        // Connected + got a reply → this IS the component; from here a bad reply
-        // is a real print failure, not a "wrong port", so we finish (not retry).
         let d = ev.data;
-        try { d = JSON.parse(ev.data); } catch (e) { finish({ ok: true }); return; }  // non-JSON ack
+        try { d = JSON.parse(ev.data); } catch (e) { sendNext(); return; }   // non-JSON ack
         const status  = d && d.status;
         const success = d && d.success;
         const errs    = d && (d.errors || (d.detailinfo && d.detailinfo.errors));
@@ -5234,9 +5265,11 @@ function jdSendToComponent(labels, printName, ports) {
         // JD component: status 500 (or success "true") = printed/queued ok.
         const ok     = status === 500 || status === '500' || success === 'true' || success === true;
         const failed = success === 'false' || success === false || (Array.isArray(errs) && errs.length > 0);
-        finish(ok || !failed ? { ok: true } : { ok: false, msg: errMsg || 'print_failed' });
+        if (ok || !failed) { sendNext(); return; }        // this box is done — next
+        finish({ ok: false, msg: errMsg || 'print_failed' });
       };
-      ws.onerror = nextOrFail;
+      ws.onerror  = nextOrFail;
+      ws.onclose  = nextOrFail;    // component dropped the socket mid-job
     };
     tryPort();
   });
@@ -5275,9 +5308,18 @@ async function printJdLabel(orderId, shipmentId, opts) {
       : cuT('JD label sent to printer', '京东面单已发送打印'));
     return true;
   }
-  toast(sent.msg === 'component_unreachable'
-    ? cuT('JD print component not detected on this PC — open 京东物流云打印组件', '未检测到本机京东打印组件 — 请打开京东物流云打印组件')
-    : (cuT('JD label print failed', '京东面单打印失败') + ': ' + sent.msg), 'err', 6000);
+  // Name the actual failure. "Component not detected" is only ever true when we
+  // could not connect at all — saying it for a mid-job stall sends staff off to
+  // restart a component that was working fine.
+  const failMsg = {
+    component_unreachable: cuT('JD print component not detected on this PC — open 京东物流云打印组件',
+                               '未检测到本机京东打印组件 — 请打开京东物流云打印组件'),
+    no_reply: cuT('The print component did not answer — check it and the printer, then print again',
+                  '打印组件没有回应 — 请检查组件和打印机后重新打印'),
+    no_reply_partial: cuT('The print component stopped answering partway — check the printer and how many labels came out before printing again',
+                          '打印组件中途停止回应 — 请先看看已打出几张,检查打印机后再重新打印'),
+  }[sent.msg];
+  toast(failMsg || (cuT('JD label print failed', '京东面单打印失败') + ': ' + sent.msg), 'err', 6000);
   return false;
 }
 

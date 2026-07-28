@@ -10,7 +10,7 @@
 //
 // Bump CACHE on every UI shape change to force every client to evict
 // its old shell on next load (activate handler deletes all old caches).
-const CACHE = 'roots-v2-shell-v664-shared-tooltip';
+const CACHE = 'roots-v2-shell-v665-jd-multibox-print';
 const SHELL = ['/', '/login'];
 
 // Heuristic — request that wants HTML?
