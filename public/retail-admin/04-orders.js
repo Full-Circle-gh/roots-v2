@@ -964,20 +964,22 @@ function ordRenderKpis() {
 function ordSetDelta(sel, cur, avg, days, change, unit, fmtAvg, per) {
   const el = $(sel); if (!el) return;
   el.classList.remove('is-up', 'is-down', 'is-flat');
-  el._tip = '';
+  ttSet(el, '');
   if (!cur) {
     el.classList.add('is-flat'); el.textContent = '—';
-    el._tip = cuT('none yet today', '今日暂无');
+    ttSet(el, cuT('none yet today', '今日暂无'));
     return;
   }
   if (!days || !(avg > 0)) {
     el.classList.add('is-up'); el.textContent = '▲ ' + cuT('new', '新');
-    el._tip = cuT('no recent baseline', '暂无近期基准');
+    ttSet(el, cuT('no recent baseline', '暂无近期基准'));
     return;
   }
-  // The badge names the comparison; the tip carries the figure behind it.
+  // The badge names the comparison; the tip carries the figure behind it. Em
+  // dash, not " · " — that sequence is the i18n splitter's divider and would cut
+  // this tooltip in half (see ttSet in 01-core.js).
   const vs = ' ' + cuT(`vs ${days}-day avg`, `较近 ${days} 日均值`);
-  el._tip = cuT(`${days}-day avg · ${fmtAvg(avg)}/${per}`, `近 ${days} 日均值 · ${fmtAvg(avg)}/${per}`);
+  ttSet(el, cuT(`${days}-day avg — ${fmtAvg(avg)}/${per}`, `近 ${days} 日均值 — ${fmtAvg(avg)}/${per}`));
   const d = change(cur, avg);
   if (d > 0)      { el.classList.add('is-up');   el.textContent = '▲ ' + d + unit + vs; }
   else if (d < 0) { el.classList.add('is-down'); el.textContent = '▼ ' + Math.abs(d) + unit + vs; }

@@ -430,12 +430,9 @@ function dashHeroInit() {
   if (window.onLangChange) onLangChange(() => {
     if (DASH_HERO.ready) dashReadyRender();
   });
-  // Hover the delta badges for a chip explaining the comparison baseline.
-  ['#db-today-rev-d', '#db-today-ord-d', '#db-today-new-d'].forEach(sel => {
-    const b = $(sel); if (!b) return;
-    b.addEventListener('pointerenter', dashDeltaHover);
-    b.addEventListener('pointerleave', dashDeltaLeave);
-  });
+  // The delta badges explain their comparison through the product's own
+  // tooltip (data-tt, 01-core.js) — dashSetDelta writes the text and the shared
+  // component does the rest, so there is nothing to wire up here any more.
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) dashHeroStop();
     // Returning to the tab: restart the backstop polls, and if a live nudge
@@ -646,16 +643,16 @@ function dashTrim(n) {
 function dashSetDelta(sel, base, cur, baseline, fmtAvg) {
   const el = $(sel); if (!el) return;
   el.classList.remove('is-up', 'is-down', 'is-flat');
-  el._tip = '';
+  ttSet(el, '');
   const days = baseline && baseline.days;
   if (!cur) {
     el.classList.add('is-flat'); el.textContent = '—';
-    el._tip = cuT('none yet today', '今日暂无');
+    ttSet(el, cuT('none yet today', '今日暂无'));
     return;
   }
   if (!base || !days || base.delta == null) {
     el.classList.add('is-up'); el.textContent = '▲ ' + cuT('new', '新');
-    el._tip = cuT('no same-weekday history yet', '暂无同一星期几的历史数据');
+    ttSet(el, cuT('no same-weekday history yet', '暂无同一星期几的历史数据'));
     return;
   }
   const dow = dashWeekdayName(baseline.weekday, days);
@@ -663,11 +660,14 @@ function dashSetDelta(sel, base, cur, baseline, fmtAvg) {
   // average behind this arrow means "by now", not "all day", and the tooltip has
   // to say so — otherwise it reads as a full day's takings and the arrow looks
   // far worse than it is every morning.
-  el._tip = baseline.clipped
-    ? cuT(`vs the last ${days} ${dow.en} at this time · ${fmtAvg(base.avg)} each by now`,
-          `较前 ${days} 个${dow.cn}同一时段 · 平均 ${fmtAvg(base.avg)}`)
-    : cuT(`vs the last ${days} ${dow.en} · ${fmtAvg(base.avg)} each`,
-          `较前 ${days} 个${dow.cn} · 平均 ${fmtAvg(base.avg)}`);
+  // An em dash inside each half, never " · ": that sequence is the i18n
+  // splitter's divider, and a decorative one here would have the tooltip cut in
+  // half at it (see ttSet).
+  ttSet(el, baseline.clipped
+    ? cuT(`vs the last ${days} ${dow.en} at this time — ${fmtAvg(base.avg)} each by now`,
+          `较前 ${days} 个${dow.cn}同一时段 — 平均 ${fmtAvg(base.avg)}`)
+    : cuT(`vs the last ${days} ${dow.en} — ${fmtAvg(base.avg)} each`,
+          `较前 ${days} 个${dow.cn} — 平均 ${fmtAvg(base.avg)}`));
   const r = Math.round(base.delta);
   if (r > 0)      { el.classList.add('is-up');   el.textContent = '▲ ' + r + '%'; }
   else if (r < 0) { el.classList.add('is-down'); el.textContent = '▼ ' + Math.abs(r) + '%'; }
@@ -686,15 +686,19 @@ function dashWeekdayName(idx, n) {
   };
 }
 // Badge hover → reuse the spark chip to explain the comparison baseline.
-function dashDeltaHover(e) {
-  const el = e.currentTarget; if (!el._tip) return;
-  const tip = dashSparkTipEl(el);
-  tip.textContent = el._tip;
-  tip.style.left = '50%';
-  tip.style.top  = '0';
-  tip.classList.add('show');
-}
-function dashDeltaLeave(e) { dashSparkTipEl(e.currentTarget).classList.remove('show'); }
+// The delta badges used to carry their own tooltip: a spark-tip bubble parked
+// at left:50%, top:0 with no viewport clamping and no flip. Both failures were
+// visible at once on the Today card — the bubble hung off the left edge of the
+// screen with its first words cut off, and what remained sat on top of the very
+// figure it was explaining.
+//
+// None of that needed solving. The product has one tooltip (data-tt, 01-core.js)
+// that clamps to the viewport, flips above/below, waits a beat before opening
+// and is reachable by keyboard. This was a second, worse one. It is gone;
+// dashSetDelta and ordSetDelta write data-tt through ttSet instead.
+//
+// dashSparkTipEl stays — the sparkline scrub is a different thing: a readout
+// that tracks the cursor along a chart, not a hover explanation.
 
 // ── Interactive sparkline scrub ──────────────────────────────────────────
 // Render a sparkline into a wrap and stash its series so a hover can scrub it.
@@ -793,8 +797,9 @@ const fcSetDelta    = dashSetDelta;
 // resolvable from an inline handler's scope chain.
 function fcSparkMove(e)  { return dashSparkMove(e); }
 function fcSparkLeave(e) { return dashSparkLeave(e); }
-function fcDeltaHover(e) { return dashDeltaHover(e); }
-function fcDeltaLeave(e) { return dashDeltaLeave(e); }
+// fcDeltaHover / fcDeltaLeave retired with the bespoke delta tooltip — the
+// Orders KPI badges they served now carry data-tt like everything else, and
+// their inline handlers came off the markup in the same change.
 // Magnitude-bar rows in the shared .fc-barrow markup (mirror of dashBarRows,
 // which emits the dashboard's db-tile-list-row markup).
 function fcBarRows(items, opt) {

@@ -1880,6 +1880,22 @@ function rmRenderPager(mount, o) {
 
 
 // ── Tooltip — the shared one ───────────────────────────────────────────────
+// Set (or clear) a tooltip whose text is built in JS rather than authored in
+// the markup. Two rules it exists to keep:
+//
+//   • Empty means NO attribute, not an empty one. `[data-tt]` still matches an
+//     empty attribute, which would make the element focusable and hoverable for
+//     a bubble that never has anything in it.
+//   • The text must already be in ONE language (built with cuT). The i18n layer
+//     splits authored data-tt on the first " · ", so a single-language string
+//     carrying a decorative " · " would be cut in half at it. Callers use an
+//     em dash inside a half for that reason — see dashSetDelta / ordSetDelta.
+function ttSet(el, text) {
+  if (!el) return;
+  if (text) el.setAttribute('data-tt', text);
+  else el.removeAttribute('data-tt');
+}
+
 // One bubble for the whole product. Put data-tt="..." on any element and it
 // gets a tooltip; there is no per-instance JS and nothing to wire up. All the
 // listeners below are delegated off document, so an element rendered an hour
