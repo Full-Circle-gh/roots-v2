@@ -2980,24 +2980,67 @@
 
          Customer is the widest share on purpose: it is the only cell stacking
          two lines (name over phone) beside a 30px monogram, so it carries
-         about 67px of chrome before a name starts. 29% gives it MORE room than
-         the old layout did on a laptop, and stops it running away above that.
+         about 67px of chrome before a name starts. It was 29%, which was more
+         than the old pixel layout gave it — but 29% turned out to be more than
+         it NEEDS, while two other columns overflowed (see below). At 23% it is
+         still by far the widest column, with 229px on a 1280px laptop and
+         ~164px of that for the name itself.
 
-         Floors these were checked against, at the ~996px table a 1280px laptop
-         gives (content width minus 24px cell padding):
-           Ordered ¥ 120px  — "¥178,000" ≈ 67px          Points   80px — "12,470" ≈ 50px
-           Wallet ¥   90px  — "¥17,800"  ≈ 59px          Orders   70px — 2-3 digits
-           Channel   100px  — glyph 13 + gap 6 + "WeChat" ≈ 48px
-           Tier       90px  — the "sprout" pill ≈ 50px   Last seen 120px — unchanged
-         Nothing cramps, and Last seen keeps the exact width it shipped with. */
-      #cu-table col.cu-c-cust    { width: 29%; }
-      #cu-table col.cu-c-chan    { width: 10%; }
-      #cu-table col.cu-c-tier    { width:  9%; }
-      #cu-table col.cu-c-orders  { width:  7%; }
-      #cu-table col.cu-c-spend   { width: 12%; }
+         🔴 THE FIRST SET OF FLOORS WAS CHECKED AGAINST THE WRONG STRINGS, and
+         two columns overflowed on the commonest window there is. The note that
+         stood here claimed "nothing cramps"; measured in a browser at 996px,
+         two things did:
+
+           Channel   100px available, needed 105 — it was checked against
+                     "WeChat" (~48px). The widest channel is "Gzgrocery"
+                     (~62px), and .cul-chancell is inline-flex, so the label
+                     spills sideways instead of wrapping.
+           Last seen 120px available, needed 136 — it was never measured at
+                     all, only carried forward as "unchanged". cuFmtSeen()'s
+                     widest output is "Yesterday 10:36 PM", and td.cul-last is
+                     white-space:nowrap, so it ran under the chevron column.
+
+         Tier (+7) and Orders (+6) were inside 8px of the same fate, and at
+         1156px Last seen had +3. Meanwhile Customer held 289px for a name that
+         ellipses by design — +208px of slack next to two overflows.
+
+         So the shares are rebalanced, and every number below is MEASURED, not
+         estimated — headers in both languages and the widest real value for
+         every column, at 996 / 1156 / 1636px. Slack at 996px, the ~table a
+         1280px window gives (available minus the 24px of cell padding):
+
+           col       %    px    needs  binding        slack
+           Customer  23   229   81     EN header      +148   (ellipses; still widest)
+           Channel   12   120   105    "Gzgrocery"     +14
+           Tier      10   100   83     "sprout" pill   +17
+           Orders     8    80   64     EN header       +16
+           Ordered ¥ 11   110   84     EN header       +26
+           Points     8    80   65     "12,470"        +15
+           Wallet ¥   9    90   72     "¥17,800"       +17
+           Last seen 15   149   136    "Yesterday …"   +14
+           chevron    4    40   28     the glyph       +11
+
+         Note how often the BINDING constraint is the header, not the data —
+         Orders, Ordered ¥ and Customer are all sized by their own English
+         label. §1.11 requires the widths survive 中文 too; the CN headers are
+         narrower in every column here (顾客 50 vs Customer 81), so English
+         sets every floor and Chinese has room to spare. Design in English,
+         verify in Chinese — done, both directions.
+
+         🔴 DO NOT reach for clamp()/min()/max()/calc() to express these as
+         floors and ceilings. Under table-layout:fixed a math function on a col
+         width is IGNORED and the column falls back to auto. Orders shipped
+         that exact idea and the table split into ten equal parts; see its
+         "Pinned column widths" block for the full finding. Percentages summing
+         to 100 is the only arrangement that works. */
+      #cu-table col.cu-c-cust    { width: 23%; }
+      #cu-table col.cu-c-chan    { width: 12%; }
+      #cu-table col.cu-c-tier    { width: 10%; }
+      #cu-table col.cu-c-orders  { width:  8%; }
+      #cu-table col.cu-c-spend   { width: 11%; }
       #cu-table col.cu-c-points  { width:  8%; }
       #cu-table col.cu-c-wallet  { width:  9%; }
-      #cu-table col.cu-c-seen    { width: 12%; }
+      #cu-table col.cu-c-seen    { width: 15%; }
       #cu-table col.cu-c-chev    { width:  4%; }
       /* 🔴 THE BAND IS A PRODUCT-WIDE COMPONENT AND ORDERS IS ITS ANCHOR.
          It was invented in the Orders mockup — that is where --td-header came

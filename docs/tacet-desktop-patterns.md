@@ -1,4 +1,4 @@
-# Tacet desktop patterns — v3.1
+# Tacet desktop patterns — v3.2
 
 > The rulebook for every desktop admin surface. `tacet-design-system.md` governs how Tacet **looks**. `tacet-brand-concept.md` governs how it **sounds**. `tacet-ia-blueprint.md` governs what **exists**. This file governs **how a page is put together** — so that Orders and Pop-ups feel like the same product despite having different layouts.
 >
@@ -911,6 +911,66 @@ Callers read `tdWhen(value, 'dateTime')`. Nothing else. A page that needs a form
 
 ---
 
+### 1.19 Table column widths — percentages summing to 100, and nothing else
+
+*Added 2026-07-30, from the Orders 13" pass and the Customers audit that followed it. Both tables had shipped a broken arrangement; this is the rule neither of them had.*
+
+**The rule, in one line: every list table is `table-layout: fixed` with a classed `<col>` per column, and those cols carry PERCENTAGES THAT SUM TO EXACTLY 100.** No pixels, no `auto`, no math functions, no per-page invention. `#orders-table` and `#cu-table` are both this shape and are the two reference implementations.
+
+**Why this section exists.** The rulebook legislated the header band (§1.13a), tabular numerals in six places, and date formats down to the character (§1.18) — and never said how wide a column is. So three arrangements shipped in turn, each broken differently, and the third only looked right because nobody measured it.
+
+#### 🔴 Math functions on a `<col>` width are IGNORED
+
+**`clamp()`, `min()`, `max()` and `calc()` on a `col` width do nothing under `table-layout: fixed`. The declaration parses, the cascade accepts it, and layout discards it — the column falls back to `auto`.**
+
+This is the expensive one, so the mechanism travels with it. Orders shipped `clamp(floor, %, ceiling)` on the seven columns whose content cannot break and `auto` on the three that ellipse. Seven ignored clamps plus three deliberate autos meant **all ten columns were auto, and the table split itself into ten equal parts** — `Items`, holding one digit, got exactly as much room as `Delivery`. Measured at 996px:
+
+| | ord | chan | cust | store | shipto | items | total | status | delivery | placed |
+|---|---|---|---|---|---|---|---|---|---|---|
+| clamp set | 100 | 100 | 100 | 100 | 100 | 100 | 100 | 100 | 100 | 100 |
+| plain % | 90 | 100 | 120 | 90 | 90 | 60 | 80 | 100 | 149 | 120 |
+
+**And the safety net does not work either.** That commit hedged with `width: 9%; width: clamp(…)` on every col, on the theory that a browser rejecting `clamp` would keep the percentage. **A two-declaration fallback only defends against invalidity at PARSE time.** `clamp()` parses fine, so the cascade throws the percentage away, and only then does layout ignore what's left. The hedge was called "not a bet" in its own commit message. It was a bet, and it lost.
+
+So: **floors and ceilings cannot be expressed in CSS here.** A column's minimum is a number you work out by measuring and then encode as a percentage. That is the whole reason this section is long.
+
+#### Sizing a column: measure the widest string, in both languages
+
+A percentage is only correct relative to the narrowest table you support. **The reference width is ~996px** — what the content column gets on a 1280px window once the rail and gutters are taken out. Size every column there; wider screens take care of themselves.
+
+For each column, the requirement is `max(EN header, CN header, widest real value) + cell padding`, plus any chrome inside the cell (a monogram, a glyph and its gap, a pill's own padding).
+
+**Three traps, all of which have shipped:**
+
+1. **The header is often the binding constraint, not the data.** Orders' `Items` column needs ~58px for the word "Items" and ~45px for the digit — sized to the digit at 5%, the header overflows into `Total`. On Customers, `Orders`, `Ordered ¥` and `Customer` are all sized by their own English label. **`thead th` is `white-space: nowrap` by rule, so a too-narrow header does not wrap — it spills.**
+
+2. **Size against the widest REAL value, not a typical one.** Customers' `Channel` was checked against `"WeChat"` (~48px) and shipped at 100px; the widest channel is `"Gzgrocery"` (~62px) and the column needed 105px. Its `Last seen` was never measured at all, only carried forward as "unchanged" — `cuFmtSeen()`'s widest output is `"Yesterday 10:36 PM"`, needing 136px against the 120px it had.
+
+3. **A `nowrap` cell overflows silently; a wrapping cell breaks visibly.** Both are wrong, but they fail differently and only one gets reported. `td.cul-last` and `.ord-chan`/`.cul-chancell` (inline-flex) spill sideways under a neighbour. Orders' `Placed` wrapped its timestamp onto two lines for weeks.
+
+**§1.11 already binds and is not optional here: column widths must survive 中文.** In practice English sets nearly every floor, because 中文 is shorter — `顾客` measures 50px where `Customer` measures 81px. That is not a reason to skip the Chinese pass; it is the reason the Chinese pass is cheap. Design in English, verify in Chinese, ship both.
+
+#### Where the slack comes from
+
+**One or two columns absorb the remainder, and they are the ones whose content ellipses or stacks by design** — a customer name, an address, a routing note. Never a number, never a pill, never a timestamp.
+
+**But they absorb it as a percentage share, not as `auto`.** A width-less column takes *every* pixel of a wide monitor: Customers once had `Customer` widthless and at 1600px it held 818px while the other eight bunched into a cluster on the right with a canyon in front of them. Percentages make every boundary widen together.
+
+The corollary is that a generous share is not automatically safe. Customers shipped `Customer` at 29% — 289px for a name that ellipses, **+208px of slack sitting next to two columns that were overflowing.** Slack in the wrong column is the same defect as a column that is too narrow.
+
+#### The checks, before it ships
+
+- **The percentages sum to exactly 100.** A set summing under 100 lets the browser distribute the surplus across *all* columns and quietly defeats the arrangement.
+- **Every column has positive slack at 996px**, computed against the widest header and value in both languages.
+- **Measured in a browser, not estimated.** Both broken arrangements were signed off on arithmetic. Eyeballing a screenshot is not measurement either — column boundaries read off an image put a wrong diagnosis into a commit message once already.
+- **Re-check on every content change.** A new channel name, a new tier, a longer status label or a format change under §1.18 can invalidate a column that was correct when it was written. §1.18's `relative` name is the sharpest edge here: `"Yesterday 10:36 PM"` is far wider than `"Jul 29"`.
+
+#### Where this is written down
+
+Widths live in **CSS on classed cols** (`col.oc-c-*`, `col.cu-c-*`), never inline on the markup, and the measurement table lives in the comment beside them. Both files carry the numbers, the binding constraint per column, and the clamp finding — **a rule that says what to do without why is one survey away from being "corrected" into a bug** (§7's lesson, and this section is its most expensive example).
+
+---
+
 
 ## 2. The archetypes
 
@@ -1315,6 +1375,7 @@ grep -rhoE "toLocale(Date|Time)?String\(\s*\)" \
 - [ ] Every number tabular · down deltas Graphite
 - [ ] **Every date and time through one of §1.18's eight names** — no locale at the call site, no format string, no ISO slice. `machine` still ISO in exports, inputs and channel payloads
 - [ ] One language on screen, never glued · both strings exist in source · column widths survive 中文
+- [ ] §1.19 Table columns: `<col>` percentages sum to **exactly 100** · no `clamp()`/`calc()`/`min()`/`max()`/`auto` on a col width · every column has positive slack at 996px against its widest **header and value in both languages** · measured in a browser, not estimated
 - [ ] Keyboard: rows focusable, drawer closes on Esc, focus visible
 - [ ] `prefers-reduced-motion` respected
 
