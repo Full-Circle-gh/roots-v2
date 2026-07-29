@@ -8348,20 +8348,20 @@
   .bn-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 
   /* ── metrics ──
-     Label above figure, two across. Three-metric cards (.is-three) run THREE
-     across instead: three items in a two-column grid orphan the third and leave
-     the same ragged bottom the card grid exists to avoid, one level down. Both
-     drop to a single column only when the card itself is a narrow lone column.
+     Label above figure, two across, every card. There used to be an .is-three
+     variant running three across, because a three-metric card in a two-column
+     grid orphans the third and leaves a ragged bottom. Customers was its only
+     user and now carries four, so the variant is retired rather than left
+     behind as a rule nothing selects — if a three-metric card ever comes back,
+     the orphan problem is real and this is the fix for it.
      When a card spans its row the metrics run one row across, so the width the
      span won is used rather than left sitting beside them. */
   .bn-mgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px 20px; margin-bottom: 20px; }
-  .bn-mgrid.is-three { grid-template-columns: repeat(3, 1fr); }
   .td-span .bn-mgrid { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 22px 32px; }
-  /* The only place three-across genuinely cannot hold is a restricted role's
-     phone, which keeps this desktop surface instead of #rm-dash. Two up there,
-     for both grids. */
+  /* A spanning card's one-row-across cannot hold on a restricted role's phone,
+     which keeps this desktop surface instead of #rm-dash. Two up there. */
   @media (max-width: 720px) {
-    .bn-mgrid, .bn-mgrid.is-three,
+    .bn-mgrid,
     .td-span .bn-mgrid { grid-template-columns: 1fr 1fr; grid-auto-flow: row; }
   }
   .bn-ml { font-size: 13px; color: var(--td-text2); }

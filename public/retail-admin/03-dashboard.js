@@ -1984,6 +1984,27 @@ function tdSecPaint() {
                                   `${Number(k.orders || 0).toLocaleString()} 单 ÷ ${sessions.toLocaleString()} 次会话`);
       }
     }
+    // Returning buyers — the Customers card's fourth cell, and the only number
+    // on this dashboard about whether the shop KEEPS anyone.
+    //
+    // The population trap this sub-line exists to defuse: `buyers` and
+    // `new_buyers` both count people who PAID today (new_vs_returning in
+    // routes/retail.js — "new" there means first-ever paid order), while "New
+    // today" two cells away counts ACCOUNTS CREATED today. Different
+    // populations, and read as a pair they would look like they should add up.
+    // So this cell names its own denominator out loud, the same way Conversion
+    // above it does. With no buyers yet there is nothing to be a fraction of,
+    // so it shows a dash rather than a 0 that looks like churn.
+    const nvr = today.new_vs_returning || {};
+    const buyers = Number(nvr.buyers || 0);
+    set('td-sec-returning', buyers ? String(Number(nvr.returning_buyers || 0)) : '—');
+    const retSub = document.getElementById('td-sec-returning-sub');
+    if (retSub) {
+      retSub.textContent = buyers
+        ? cuT(`of ${buyers} who bought today`, `今日 ${buyers} 位买家中`)
+        : cuT('nobody has bought yet', '今日暂无买家');
+    }
+
     // Refunds — the only number in the Today strip that is money leaving. On a
     // good day it reads 0 and says so plainly rather than showing a rate of 0%.
     const refunded = Number(k.refunded_orders || 0);

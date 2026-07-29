@@ -1574,12 +1574,12 @@
             <div class="bn-body">
               <div class="bn-mgrid">
                 <div class="bn-m">
-                  <div class="bn-ml">Revenue today · 今日营收</div>
+                  <div class="bn-ml">Revenue · 营收</div>
                   <div class="bn-mv" id="db-today-rev">¥—</div>
                   <div class="bn-mc"><span class="db-delta" id="db-today-rev-d"></span></div>
                 </div>
                 <div class="bn-m">
-                  <div class="bn-ml">Orders today · 今日订单</div>
+                  <div class="bn-ml">Orders · 订单</div>
                   <div class="bn-mv" id="db-today-ord">—</div>
                   <div class="bn-mc"><span class="db-delta" id="db-today-ord-d"></span></div>
                 </div>
@@ -1600,12 +1600,18 @@
         </div>
       </div>
 
-      <!-- Customers — three metrics, three across at every width where the card
-           is not a single narrow column. Three in a two-column grid orphans the
-           third and leaves a ragged bottom, which is the same problem the card
-           grid solves one level up. Sessions is the only denominator here now;
-           "New today" carries no sub-line because the number it used to quote
-           is the cell beside it. -->
+      <!-- Customers — four metrics in the same 2×2 as Today beside it. It ran
+           three across (.is-three) for as long as it HAD three: three in a
+           two-column grid orphans the third and leaves a ragged bottom. But
+           three across also meant one row of numbers over an empty lower half
+           while Today next to it was filled, and the flat-row rule stretches
+           this card to Today's height, so the emptiness was structural rather
+           than something a shorter card would have absorbed. A fourth number
+           fixes it properly. .is-three had no other user and is gone.
+
+           Row one is the two counts, row two the two quality numbers. Sessions
+           is the only denominator here; "New today" carries no sub-line because
+           the number it used to quote is the cell beside it. -->
       <div class="td-block" data-block="customers">
         <button class="bn-hide" onclick="dashArrangeHide('customers')" title="Hide this card"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
         <div class="bn-card">
@@ -1615,7 +1621,7 @@
               <h3>Customers · 客户</h3>
             </div>
             <div class="bn-body">
-              <div class="bn-mgrid is-three">
+              <div class="bn-mgrid">
                 <div class="bn-m">
                   <div class="bn-ml">New today · 今日新客</div>
                   <div class="bn-mv" id="db-today-new">—</div>
@@ -1628,6 +1634,11 @@
                   <div class="bn-ml">Conversion · 转化率</div>
                   <div class="bn-mv" id="td-sec-conv">—</div>
                   <div class="bn-mc" id="td-sec-conv-sub" data-no-i18n></div>
+                </div>
+                <div class="bn-m">
+                  <div class="bn-ml">Returning · 回头客</div>
+                  <div class="bn-mv" id="td-sec-returning">—</div>
+                  <div class="bn-mc" id="td-sec-returning-sub" data-no-i18n></div>
                 </div>
               </div>
             </div>
