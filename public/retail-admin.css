@@ -8212,7 +8212,22 @@
     background: transparent; cursor: pointer; color: var(--td-text);
     font-family: var(--f-sans); border-radius: 8px;
   }
-  .td-nrow:last-child { border-bottom: 0; padding-bottom: 2px; }
+  /* The last row keeps the SAME padding as every other row, and gives its
+     trailing space back with a negative margin instead.
+
+     It used to drop to padding-bottom:2px, which was fine while a row was just
+     text on a line: it stopped the list adding a band of space inside the card.
+     But the row is a hoverable rounded block now, and 14px of padding above the
+     text against 2px below means that block is not centred on its own text —
+     roomy at the top, shaved off at the bottom. On a card showing a single fire,
+     where the only row is also the last one, that is the whole highlight
+     sitting crooked.
+
+     The -12px cancels the 12px the restored padding adds, so the card is exactly
+     as tall as before; only the hover block changed shape. It lives on the row
+     rather than on #td-attn so it cannot pull up the "nothing waiting" state,
+     which has no row at all. */
+  .td-nrow:last-child { border-bottom: 0; margin-bottom: -12px; }
   .td-nrow:hover { background: rgba(var(--td-heat-rgb), .03); }
   .td-nrow:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: -2px; }
   .td-nico { display: flex; flex: 0 0 auto; }
