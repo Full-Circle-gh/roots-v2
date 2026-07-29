@@ -502,6 +502,13 @@
   #order-drawer .od-facts .val { grid-column:2; }
   #order-drawer .od-facts .sub { grid-column:2; margin-top:2px; }
 
+  /* "Moved by the customer" — the ship-to above changed after this order was
+     placed, so anything already read or printed is stale. Amber attention, not
+     an error: nothing is wrong, it just needs a second look. */
+  #order-drawer .od-addr-moved { display:inline-flex; align-items:center; gap:6px; margin-top:8px;
+    background:var(--tacet-amber-tint); color:var(--tacet-amber-ink); border-radius:999px;
+    padding:4px 12px; font-size:13px; font-weight:600; }
+
   /* Shipment cards + manifest — larger, calmer. */
   #order-drawer .shipment-head .mode-pill { font-size:13.5px; padding:5px 14px; }
   #order-drawer .shipment-head .count { font-size:13px; }

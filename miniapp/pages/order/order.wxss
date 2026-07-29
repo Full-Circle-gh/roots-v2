@@ -588,6 +588,30 @@
   font-size: calc(24rpx * var(--font-scale));
 }
 
+/* ─── Change delivery address ───────────────────────────────────────── */
+.adr-list { display: flex; flex-direction: column; gap: 16rpx; margin-bottom: 20rpx; }
+.adr-card {
+  padding: 20rpx 24rpx;
+  border: 3rpx solid rgba(0,0,0,.15);
+  border-radius: 12rpx;
+  background: rgba(255,255,255,.4);
+}
+.adr-card.on {
+  border-color: var(--ink);
+  background: rgba(255,255,255,.85);
+}
+/* The order's own address, and any address in another delivery area — shown
+   for orientation, dimmed because tapping them does nothing. */
+.adr-card.off { opacity: .5; }
+.adr-who { font-size: calc(28rpx * var(--font-scale)); }
+.adr-full { margin-top: 6rpx; font-size: calc(25rpx * var(--font-scale)); }
+.adr-note { margin-top: 10rpx; font-size: calc(23rpx * var(--font-scale)); }
+.adr-add {
+  padding: 8rpx 0 20rpx;
+  font-size: calc(26rpx * var(--font-scale));
+  text-decoration: underline;
+}
+
 /* ─── Shipment tracking section ─────────────────────────────────── */
 .tracking-section { }
 

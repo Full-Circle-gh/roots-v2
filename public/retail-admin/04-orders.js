@@ -4136,6 +4136,7 @@ function renderOpenOrder(o) {
             <div class="kicker">Ship to · 收货人 ${copyChip([o.recipient_name, o.recipient_phone, o.address_full].filter(Boolean).join('\n'), 'Ship-to')}</div>
             <div class="val" data-no-i18n><b>${escapeHtml(o.recipient_name || '')}</b> · ${escapeHtml(o.recipient_phone || '')}</div>
             <div class="sub" data-no-i18n>${escapeHtml(o.address_full || '')}</div>
+            ${o.address_changed_at ? `<div class="od-addr-moved">${pinIcon(12)} ${cuT('Moved by the customer', '顾客已修改地址')} · ${escapeHtml(formatDate(o.address_changed_at))}</div>` : ''}
             <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">
               <button class="btn btn-sm" onclick="openEditShipTo(${o.id})">${pinIcon(13)} ${cuT('Edit ship-to', '修改收货地址')}</button>
               ${/[A-Za-z]/.test(o.address_full || '') ? `<button class="btn btn-sm" onclick="openAddressToChinese(${o.id})">${pinIcon(13)} ${cuT('Make address Chinese', '转为中文地址')}</button>` : ''}

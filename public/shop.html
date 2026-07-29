@@ -2961,6 +2961,12 @@ async function renderOrderDetail(id){
   } else if(rs.reason==='fresh_cutoff'||rs.reason==='fresh_preparing'){
     rsCtl=`<div class="rs-hint">${cn?'鲜食已在为您备制，如需改期请联系我们 💚':'Your fresh items are already being prepared — message us to change the time 💚'}</div>`;
   }
+  // Self-service address change (redirect it before it ships). Server-decided,
+  // same as reschedule; delivery orders only.
+  const ac=o.address_change||{};
+  const acCtl=ac.allowed
+    ? `<button class="rs-btn" id="odAddr">${cn?'修改收货地址':'Change delivery address'}</button>`
+    : '';
   const sub=Number(o.subtotal)||0, ship=Number(o.shipping_fee)||0, pack=Number(o.packing_fee)||0, vou=Number(o.voucher_amount)||0, pts=Number(o.points_amount)||0, tot=Number(o.total)||0;
   v.innerHTML=`<div class="wrap"><div class="co">
     <div class="crumb"><a href="#/orders">${cn?'我的订单':'My orders'}</a> / ${esc(o.order_no||('#'+o.id))}</div>
@@ -2970,6 +2976,7 @@ async function renderOrderDetail(id){
       <div style="font-size:14px;line-height:1.5">${where||'—'}</div>
       ${slot?`<div style="font-size:13px;color:var(--muted);margin-top:6px">${slot}</div>`:''}
       ${track?`<div style="font-size:13px;color:var(--muted);margin-top:6px">${cn?'物流':'Tracking'}: ${track}</div>`:''}
+      ${acCtl}
       ${rsCtl}
     </div>
     <div class="co-sec"><h3>${cn?'金额':'Payment'}</h3>
@@ -2985,6 +2992,7 @@ async function renderOrderDetail(id){
   </div></div>`;
   const pay=$('#odPay'); if(pay)pay.addEventListener('click',()=>coStartPayment({id:o.id,order_no:o.order_no,total:o.total}));
   const rb=$('#odResched'); if(rb)rb.addEventListener('click',()=>openReschedule(o));
+  const ab=$('#odAddr'); if(ab)ab.addEventListener('click',()=>openAddressChange(o));
 }
 function rsReasonText(reason,cn){
   switch(reason){
@@ -3064,6 +3072,84 @@ async function openReschedule(o){
     catch(e){ $('#rsErr').textContent=cn?'网络错误。':'Network error.'; save.disabled=false; return; }
     const j=await r.json().catch(()=>({}));
     if(!r.ok||!j.success){ $('#rsErr').textContent=rsErrText(j,cn); save.disabled=false; return; }
+    close(); renderOrderDetail(o.id);
+  });
+}
+
+// Change the delivery address of an order that hasn't shipped yet. Twin of the
+// mini-app sheet: the server owns the window and flags which saved addresses
+// keep the order in the same delivery area — a cross-area address is listed but
+// not selectable, because moving it would re-price and re-route the order.
+function acReasonText(reason,cn){
+  switch(reason){
+    case 'departed':
+    case 'labelled':
+    case 'courier_booked': return cn?'订单已在配送途中，如需更改地址请联系我们。':'Your order is already on its way — please message us to change the address.';
+    case 'refund':         return cn?'退款处理中，暂时无法修改地址。':'A refund is in progress, so the address can’t be changed right now.';
+    case 'pickup':         return cn?'自提订单没有收货地址。':'A pickup order has no delivery address.';
+    default:               return cn?'该订单暂时无法修改地址。':'This order’s address can’t be changed.';
+  }
+}
+// route_change = the address ships a different way (other side of the Guangzhou
+// / ship-district split, so it would need re-routing); price_change = same path
+// but a different delivery fee.
+function acWhyText(reason,cn){
+  if(reason==='route_change') return cn?'超出本订单的配送区域，如需更改请联系我们 💚':'Outside this order’s delivery area — message us to move it 💚';
+  if(reason==='price_change') return cn?'该地址会改变配送费，如需更改请联系我们 💚':'This address changes the delivery fee — message us to move it 💚';
+  return '';
+}
+async function openAddressChange(o){
+  const cn=state.lang==='cn';
+  const ov=document.createElement('div'); ov.className='lm-overlay'; ov.id='acModal';
+  ov.innerHTML=`<div class="lm-card"><button class="lm-x" id="acX">×</button>
+    <div class="lm-title">${cn?'修改收货地址':'Change delivery address'}</div>
+    <div class="lm-sub" id="acSub">${cn?'加载中…':'Loading…'}</div>
+    <div class="lm-step" id="acBody" hidden></div>
+    <div class="lm-err" id="acErr"></div>
+    <button class="lm-btn" id="acSave" hidden disabled>${cn?'确认修改':'Confirm change'}</button>
+  </div>`;
+  document.body.appendChild(ov);
+  const close=()=>ov.remove();
+  $('#acX').addEventListener('click',close);
+  ov.addEventListener('click',e=>{if(e.target===ov)close();});
+
+  let opt; try{ opt=await api('/api/retail/orders/'+encodeURIComponent(o.id)+'/address-options'); }catch(e){ opt=null; }
+  if(!opt){ $('#acSub').textContent=cn?'无法加载，请稍后再试。':'Could not load your addresses.'; return; }
+  if(!opt.eligibility||!opt.eligibility.allowed){ $('#acSub').textContent=acReasonText(opt.eligibility&&opt.eligibility.reason,cn); return; }
+
+  const rows=Array.isArray(opt.addresses)?opt.addresses:[];
+  $('#acSub').textContent=(cn?'当前：':'Current: ')+((opt.current&&opt.current.address_full)||'—');
+  const body=$('#acBody'); body.hidden=false;
+  const save=$('#acSave'); save.hidden=false;
+  let picked=null;
+
+  if(!rows.length){
+    body.innerHTML=`<div style="font-size:13px;color:var(--muted)">${cn?'暂无已保存的地址。':'You have no saved addresses yet.'}</div>`;
+  } else {
+    body.innerHTML='<div class="rs-slots" style="flex-direction:column;align-items:stretch">'+rows.map(a=>{
+      const pickable=a.eligible&&!a.is_current;
+      const note=a.is_current?(cn?'当前地址':'Current address'):acWhyText(a.reason,cn);
+      return `<label class="rs-slot" style="${pickable?'':'opacity:.5'}">
+        <input type="radio" name="acaddr" value="${escAttr(String(a.id))}"${pickable?'':' disabled'}>
+        <span><b>${esc([a.recipient_name,a.phone].filter(Boolean).join(' · '))}</b><br>${esc(a.address_full||'')}${note?`<br><i style="font-style:normal;color:var(--muted)">${esc(note)}</i>`:''}</span>
+      </label>`;
+    }).join('')+'</div>';
+    body.querySelectorAll('input[name=acaddr]').forEach(r=>r.addEventListener('change',()=>{ picked=r.value; save.disabled=false; }));
+  }
+  body.insertAdjacentHTML('beforeend',`<div style="margin-top:10px"><a class="more" href="#/addresses">${cn?'管理收货地址 →':'Manage addresses →'}</a></div>`);
+
+  save.addEventListener('click',async()=>{
+    $('#acErr').textContent=''; if(!picked)return; save.disabled=true;
+    let r;
+    try{ r=await fetch('/api/retail/orders/'+encodeURIComponent(o.id)+'/address',{method:'POST',headers:authHeaders({'Accept':'application/json','Content-Type':'application/json'}),body:JSON.stringify({address_id:Number(picked)})}); }
+    catch(e){ $('#acErr').textContent=cn?'网络错误。':'Network error.'; save.disabled=false; return; }
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok||!j.success){
+      $('#acErr').textContent = acWhyText(j.error,cn)
+        || (j.error==='not_changeable' ? acReasonText(j.reason,cn)
+        : (cn?'修改失败，请重试。':'Could not change the address. Please try again.'));
+      save.disabled=false; return;
+    }
     close(); renderOrderDetail(o.id);
   });
 }

@@ -3982,6 +3982,35 @@ function sendWecomOrderAlert(orderId, { awaitingRestock = false } = {}) {
   } catch (e) { console.warn('[wecom alert setup]', e.message); }
 }
 
+// Tell the merchant group a PAID order's ship-to just moved. The kitchen slip
+// printed on payment carries the old address, so a silent DB update would ship
+// it to the wrong door — this is the nudge to re-read it (the order also
+// re-flags as unseen in the admin queue). Unpaid orders are skipped: nothing
+// has been printed or planned yet, so there's nothing to correct.
+function sendWecomAddressChangeAlert(orderId, fromAddress) {
+  const hasApp = !!wecomAppCreds();
+  const webhook = wecomWebhookUrl();
+  if (!hasApp && !webhook) return;
+  try {
+    const o = tdb().prepare(
+      `SELECT order_no, status, recipient_name, recipient_phone, address_full
+         FROM retail_orders WHERE id = ?`
+    ).get(orderId);
+    if (!o || o.status === 'pending_payment') return;
+    const content = [
+      '**📍 地址已修改 · Address changed**',
+      `> 订单号 Order: \`${o.order_no}\``,
+      fromAddress ? `> 原 From: ${fromAddress}` : null,
+      `> 现 To: <font color="warning">${o.address_full || ''}</font>`,
+      o.recipient_name ? `> 收货人 To: ${o.recipient_name} ${o.recipient_phone || ''}`.trim() : null,
+      '> 请重新核对配送单 · please re-check the slip before it ships',
+    ].filter(Boolean).join('\n');
+    const send = hasApp ? sendWecomAppMessage(content) : postWecomMarkdown(webhook, content);
+    send.then(r => { if (!r.ok) console.warn('[wecom addr change]', orderId, r.msg); })
+        .catch(e => console.warn('[wecom addr change]', orderId, e.message));
+  } catch (e) { console.warn('[wecom addr change setup]', e.message); }
+}
+
 // ── Nuonuo auto-issue (dormant until creds + fapiao.autoIssue) ──────────────
 // Seller (销方) details for the fapiao come from config; the tax NUMBER comes
 // from the saved Nuonuo credential (saler_tax). taxRate/taxCode default here but
@@ -9599,6 +9628,9 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '') {
   // delivery/pickup time? scheduled_for is left raw (not in GZ_LOCAL_TS_FIELDS)
   // so the cutoff math below reads the real timestamp.
   o.reschedule = rescheduleEligibility(o, o.items.map((it) => it.product_id));
+  // Can the customer still redirect it to another address? Same shape as
+  // reschedule — the button is server-decided, the client only renders it.
+  o.address_change = addressChangeEligibility(o);
   return o;
 }
 
@@ -9661,6 +9693,158 @@ function rescheduleEligibility(o, productIds, now = new Date()) {
     }
   }
   return { allowed: true, reason: null, fresh, kind };
+}
+
+// ── Customer self-service address change (redirect before it ships) ───────
+// Decide whether the customer may still point this order at a different saved
+// address. Returns { allowed, reason }.
+//
+// The window is "placed but not committed to a destination": an unpaid order,
+// or a paid/preparing one that hasn't been handed to anyone. Locks (any one
+// blocks):
+//   • delivery only — a pickup order has no address to change (swap the store
+//     by re-ordering instead)
+//   • status must be pending_payment|paid|preparing|awaiting_restock
+//   • nothing has departed — order-level dispatched_at OR any parcel moved
+//   • no waybill printed — the label already carries the old address, so the
+//     parcel would go there whatever the app says
+//   • the same-city courier (Qingyun) already holds a copy of the order — we
+//     have no update/cancel channel to correct it
+//   • no refund in flight
+// The zone guard (new address must sit in the SAME delivery zone) is NOT here:
+// it depends on which address they pick, so it's enforced per-option at the
+// endpoints below.
+function addressChangeEligibility(o) {
+  const block = (reason) => ({ allowed: false, reason });
+  if (!o) return block('not_found');
+  if (o.fulfillment_type === 'pickup') return block('pickup');
+  if (!['pending_payment', 'paid', 'preparing', 'awaiting_restock'].includes(o.status)) {
+    return block('status');
+  }
+  if (o.dispatched_at) return block('departed');
+  if (o.tracking_number) return block('labelled');
+  if (['pending', 'reviewing', 'approved'].includes(o.refund_status || '')) {
+    return block('refund');
+  }
+  // Any parcel already labelled/dispatched/delivered (split orders depart
+  // per-parcel, and a printed waybill fixes the destination on its own).
+  try {
+    const moved = tdb().prepare(
+      `SELECT 1 FROM retail_shipments
+        WHERE order_id = ?
+          AND (dispatched_at IS NOT NULL OR delivered_at IS NOT NULL
+               OR tracking_number IS NOT NULL OR tracking_status = 'delivered')
+        LIMIT 1`
+    ).get(o.id);
+    if (moved) return block('departed');
+  } catch (_) { /* shipments table optional on older DBs */ }
+
+  // Same-city auto-push: once qingyun-daemon has actually created the order on
+  // the courier platform, that copy carries the OLD address and we have no
+  // write-back to fix it. A row still 'pending' is safe — the daemon reads the
+  // order fresh when it drains, so it will push whatever we save here.
+  try {
+    const booked = tdb().prepare(
+      `SELECT 1 FROM qingyun_push_queue
+        WHERE retail_order_id = ?
+          AND (status IN ('processing', 'done') OR qingyun_order_id IS NOT NULL)
+        LIMIT 1`
+    ).get(o.id);
+    if (booked) return block('courier_booked');
+  } catch (_) { /* queue table optional */ }
+
+  return { allowed: true, reason: null };
+}
+
+// ── Is a given move price- and route-neutral? ─────────────────────────────
+// The address-change guard. A move is allowed only when the customer's bill
+// and the parcel's path both come out unchanged — the order is never re-priced
+// or re-routed behind them. Two independent tests:
+//
+//   1. SAME SHIPPING PATH. in/out of Guangzhou, and inner-GZ vs the opt-in
+//      ship-districts (花都/番禺/南沙/从化/增城, i.e. zones that charge a
+//      same-day surcharge or are day-only). That pair is what decides which
+//      store fulfils the order and where its slip prints. Crossing it needs a
+//      re-route — moving the stock hold to another store — which nothing in
+//      the system does today.
+//   2. SAME BILL. Re-quote this exact cart against both zones and require an
+//      identical delivery + packing fee, plus a zone that makes the same
+//      promise about timing (same-day, lead days, slot shape) so the delivery
+//      window the customer already picked still stands.
+//
+// Deliberately compares quote-to-quote rather than quote-to-stored-fee: an
+// order whose shipping was waived by a free-shipping voucher still moves freely
+// between equally-priced areas.
+const ZONE_PROMISE_COLS = [
+  'same_day_allowed', 'same_day_surcharge', 'min_lead_days', 'max_lead_days',
+  'day_only', 'slot_start_hour', 'slot_end_hour', 'slot_duration_minutes',
+];
+function zonesPromiseSame(a, b) {
+  if (!a || !b) return !a && !b;
+  return ZONE_PROMISE_COLS.every(k => String(a[k] ?? '') === String(b[k] ?? ''));
+}
+
+// Cart shape the fee quote needs: units (packing fee) and grams (weight-priced
+// zones). Product weight lives as a freeform string in `size`; unparseable ones
+// contribute 0, exactly as at checkout.
+function orderCartForQuote(orderId) {
+  let totalQty = 0, cartGrams = 0;
+  const rows = tdb().prepare(
+    `SELECT oi.qty, p.size
+       FROM retail_order_items oi
+       LEFT JOIN retail_products p ON p.id = oi.product_id
+      WHERE oi.order_id = ?`
+  ).all(orderId);
+  for (const r of rows) {
+    const q = Number(r.qty) || 0;
+    totalQty += q;
+    const g = parseWeightToGrams(r.size);
+    if (g) cartGrams += g * q;
+  }
+  return { totalQty, cartGrams };
+}
+
+// Build a reusable test for one order: pass a normalized address, get back null
+// (move is neutral) or a reason code. Everything about the CURRENT order is
+// resolved once so checking a whole address book stays cheap.
+function addressMoveChecker(o) {
+  const currentZone = zoneForOrder(o);
+  let currentAddr = {};
+  try { currentAddr = o.address_json ? JSON.parse(o.address_json) : {}; } catch (_) {}
+  currentAddr = normalizeChinaAddress(currentAddr);
+  const currentInGz  = inventory.isGuangzhouAddress(currentAddr);
+  const currentOptIn = inventory.isOptInSameDayDistrict(currentAddr);
+  const mode     = o.delivery_mode || 'standard';
+  const subtotal = Number(o.subtotal) || 0;
+  const cart     = orderCartForQuote(o.id);
+  const currentQuote = currentZone
+    ? computeDeliveryAndPacking(currentZone, subtotal, mode, cart.totalQty, cart.cartGrams)
+    : null;
+
+  return function blockerFor(addr) {
+    if (inventory.isGuangzhouAddress(addr) !== currentInGz) return 'route_change';
+    if (inventory.isOptInSameDayDistrict(addr) !== currentOptIn) return 'route_change';
+
+    const newZone = matchDeliveryZone(addr);
+    // Both on the legacy flat-fee fallback (no zone configured for either):
+    // that price depends only on subtotal + mode, so it can't move.
+    if (!currentZone && !newZone) return null;
+    if (!currentZone || !newZone) return 'price_change';
+    if (!zonesPromiseSame(currentZone, newZone)) return 'price_change';
+
+    const newQuote = computeDeliveryAndPacking(newZone, subtotal, mode, cart.totalQty, cart.cartGrams);
+    if (currentQuote.error || newQuote.error) return 'price_change';
+    if (currentQuote.deliveryFee !== newQuote.deliveryFee) return 'price_change';
+    if (currentQuote.packingFee  !== newQuote.packingFee)  return 'price_change';
+    return null;
+  };
+}
+
+// The one-line address snapshot, joined exactly the way checkout writes
+// retail_orders.address_full — so a redirected order reads identically to one
+// placed at the same address in the first place.
+function addressOneLine(a) {
+  return [a.province, a.city, a.district, a.address, a.detail].filter(Boolean).join(' ');
 }
 
 // Reconstruct the delivery zone an order shipped under, so reschedule offers
@@ -15947,6 +16131,134 @@ router.post('/api/retail/orders/:id/reschedule', requireRetailAuth, express.json
   res.json({
     success: true,
     data: { scheduled_for: scheduledFor, slot_label: slotLabel, slot_kind: slotKind },
+  });
+});
+
+// ─── Customer self-service address change ──────────────────────────────────
+// Point an order that hasn't shipped yet at a different saved address — the
+// typo, the "I'm at the office today", the just-moved case. Window + locks
+// live in addressChangeEligibility (unpaid, or paid/preparing with nothing
+// labelled, dispatched, or handed to the courier).
+//
+// PRICE- AND ROUTE-NEUTRAL, like the reschedule flow: the new address must sit
+// in the SAME delivery zone as the one the order was quoted under. Zone is what
+// sets the delivery fee, the slot windows, same-day availability, and whether
+// the parcel ships from the local shop or the out-of-city warehouse — so a
+// same-zone move changes nothing but the street, while a cross-zone move would
+// need re-pricing and re-routing we deliberately don't do behind the customer's
+// back. Those get a clear "message us" instead.
+
+const ADDRESS_CHANGE_ORDER_COLS = `id, order_no, status, fulfillment_type,
+        delivery_zone_id, delivery_mode, address_json, address_full,
+        recipient_name, recipient_phone, subtotal,
+        refund_status, dispatched_at, tracking_number`;
+
+router.get('/api/retail/orders/:id/address-options', requireRetailAuth, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const o = tdb().prepare(
+    `SELECT ${ADDRESS_CHANGE_ORDER_COLS} FROM retail_orders WHERE id = ? AND customer_id = ?`
+  ).get(id, req.customer.id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+
+  const eligibility = addressChangeEligibility(o);
+  const data = {
+    eligibility,
+    current: {
+      recipient_name:  o.recipient_name,
+      recipient_phone: o.recipient_phone,
+      address_full:    o.address_full,
+    },
+    addresses: [],
+  };
+  if (eligibility.allowed) {
+    const blockerFor = addressMoveChecker(o);
+    const rows = tdb().prepare(
+      `SELECT ${ADDRESS_PUBLIC_COLS} FROM retail_customer_addresses
+        WHERE customer_id = ? ORDER BY is_default DESC, updated_at DESC`
+    ).all(req.customer.id);
+    data.addresses = rows.map((r) => {
+      const norm = normalizeChinaAddress(r);
+      const full = addressOneLine(norm);
+      const blocker = blockerFor(norm);
+      return {
+        ...r,
+        address_full: full,
+        is_current: full === (o.address_full || ''),
+        eligible: !blocker,
+        reason: blocker,
+      };
+    });
+  }
+  res.json({ success: true, data });
+});
+
+router.post('/api/retail/orders/:id/address', requireRetailAuth, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const o = tdb().prepare(
+    `SELECT ${ADDRESS_CHANGE_ORDER_COLS} FROM retail_orders WHERE id = ? AND customer_id = ?`
+  ).get(id, req.customer.id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+
+  const eligibility = addressChangeEligibility(o);
+  if (!eligibility.allowed) {
+    return res.status(409).json({
+      success: false, error: 'not_changeable', reason: eligibility.reason,
+    });
+  }
+
+  const addressId = parseInt(req.body?.address_id, 10);
+  if (!addressId) return res.status(400).json({ success: false, error: 'address_required' });
+  const row = tdb().prepare(
+    'SELECT * FROM retail_customer_addresses WHERE id = ? AND customer_id = ?'
+  ).get(addressId, req.customer.id);
+  if (!row) return res.status(400).json({ success: false, error: 'address_not_found' });
+
+  // Same normalization the checkout ran, so the stored snapshot matches what a
+  // fresh order from this address would have written.
+  const addr = normalizeChinaAddress(row);
+  const blocker = addressMoveChecker(o)(addr);
+  if (blocker) return res.status(409).json({ success: false, error: blocker });
+  const newZone = matchDeliveryZone(addr);
+
+  const addressFull = addressOneLine(addr);
+  const addressJson = JSON.stringify({
+    province: addr.province || null, city: addr.city || null, district: addr.district || null,
+    address: addr.address || null, detail: addr.detail || null,
+    postal_code: addr.postal_code || null,
+  });
+
+  // Three ways staff find out, because a ship-to they've already read (or
+  // printed) has just moved under them: seen_at = NULL puts the row back to
+  // bold/unread in the Orders list, address_changed_at draws the "moved by the
+  // customer" line in the order drawer, and a paid order also pushes a WeCom
+  // card below.
+  tdb().prepare(
+    `UPDATE retail_orders
+        SET recipient_name = ?, recipient_phone = ?, address_full = ?, address_json = ?,
+            delivery_zone_id = ?, seen_at = NULL,
+            address_changed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?`
+  ).run(
+    row.recipient_name || null, row.phone || null, addressFull, addressJson,
+    newZone && !newZone.is_default ? newZone.id : null,
+    id
+  );
+
+  try {
+    logActivity(null, 'customer', 'address_change', 'retail_order', id,
+      { from: o.address_full || '', to: addressFull, address_id: addressId }, req.ip);
+  } catch (_) { /* audit trail is best-effort */ }
+  // Paid orders only — the merchant group already has a slip with the old
+  // ship-to on it. Fire-and-forget.
+  try { sendWecomAddressChangeAlert(id, o.address_full || ''); } catch (_) { /* best-effort */ }
+
+  res.json({
+    success: true,
+    data: {
+      recipient_name:  row.recipient_name || null,
+      recipient_phone: row.phone || null,
+      address_full:    addressFull,
+    },
   });
 });
 

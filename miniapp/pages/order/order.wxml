@@ -260,6 +260,11 @@
       <view class="addr-full muted">{{address}}</view>
     </view>
 
+    <!-- Change the delivery address (unpaid, or paid before it's handed over) -->
+    <view wx:if="{{canChangeAddress}}" class="cust-actions rsc-cta">
+      <button class="btn ghost f-toni" bindtap="openAddressChange">{{copy.addrChangeBtn}}</button>
+    </view>
+
     <!-- Change delivery/pickup time (before departure) -->
     <view wx:if="{{canReschedule}}" class="cust-actions rsc-cta">
       <button class="btn ghost f-toni" bindtap="openReschedule">{{rescheduleKind === 'pickup' ? copy.rescheduleBtnPickup : copy.rescheduleBtnDelivery}}</button>
@@ -484,6 +489,39 @@
         <button class="btn ghost f-toni" bindtap="closeRescheduleSheet" disabled="{{rscBusy}}">{{copy.refundCancelBtn}}</button>
         <button class="btn primary f-toni" bindtap="confirmReschedule" disabled="{{rscBusy}}">
           {{rscBusy ? copy.paying : copy.rescheduleConfirm}}
+        </button>
+      </view>
+    </block>
+  </view>
+</view>
+
+<!-- ── Change delivery address bottom sheet ──────────────────────────── -->
+<view wx:if="{{addrSheetOpen}}" class="rs-mask" bindtap="onAddressMaskTap">
+  <view class="rs-sheet" catchtap="noop">
+    <view class="rs-handle"></view>
+    <view class="rs-title f-toni">{{copy.addrChangeTitle}}</view>
+
+    <view wx:if="{{addrLoading}}" class="rsc-loading muted">…</view>
+
+    <block wx:else>
+      <view class="adr-list">
+        <view wx:for="{{addrList}}" wx:key="id"
+              class="adr-card {{item.sel ? 'on' : ''}} {{item.eligible ? '' : 'off'}}"
+              data-id="{{item.id}}" bindtap="pickAddress">
+          <view class="adr-who f-bear">{{item.who}}</view>
+          <view class="adr-full muted">{{item.full}}</view>
+          <view wx:if="{{item.note}}" class="adr-note muted">{{item.note}}</view>
+        </view>
+      </view>
+      <view wx:if="{{!addrList.length}}" class="rsc-empty muted">{{copy.addrChangeNone}}</view>
+
+      <view class="adr-add f-toni" bindtap="goAddAddress">{{copy.addrChangeAdd}}</view>
+
+      <view wx:if="{{addrErr}}" class="rsc-err">{{addrErr}}</view>
+      <view class="rs-actions">
+        <button class="btn ghost f-toni" bindtap="closeAddressSheet" disabled="{{addrBusy}}">{{copy.refundCancelBtn}}</button>
+        <button class="btn primary f-toni" bindtap="confirmAddressChange" disabled="{{addrBusy}}">
+          {{addrBusy ? copy.paying : copy.addrChangeConfirm}}
         </button>
       </view>
     </block>

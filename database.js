@@ -2681,6 +2681,13 @@ addColumn('retail_stores', 'low_stock_threshold', 'INTEGER');
   }
 }
 
+// When the CUSTOMER last redirected this order to a different address from the
+// mini app / web store (see the address-change endpoints in routes/retail.js).
+// NULL = the ship-to is still the one they checked out with. Drives the "moved
+// by the customer" line in the backend order drawer, so an operator who already
+// read (or printed) the old ship-to knows to look again.
+addColumn('retail_orders', 'address_changed_at', 'DATETIME');
+
 // Outbound logistics — populated when staff (or the JD API, once wired)
 // attaches a carrier + waybill to a dispatched order. tracking_events_json
 // is the cached carrier feed so the customer mini app can render the

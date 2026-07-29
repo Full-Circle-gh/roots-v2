@@ -137,6 +137,16 @@ Page({
       rescheduleNoSlots: 'No times available right now.',
       rescheduleFreshHint: 'Your fresh items are already being prepared — message us to change the time 💚',
       rescheduleSaved: 'Time updated ✓',
+      addrChangeBtn: 'Change delivery address',
+      addrChangeTitle: 'Change delivery address',
+      addrChangeCurrent: 'Current address',
+      addrChangeConfirm: 'Confirm change',
+      addrChangeSaved: 'Address updated ✓',
+      addrChangeNone: 'You have no other saved addresses.',
+      addrChangeAdd: '+ Add a new address',
+      addrChangeOutOfArea: 'Outside this order\'s delivery area — message us to move it 💚',
+      addrChangeFeeChange: 'This address changes the delivery fee — message us to move it 💚',
+      addrChangeLocked: 'This order is already on its way — message us to change the address 💚',
     },
     // Reschedule (change delivery/pickup time) state
     canReschedule: false,
@@ -154,6 +164,15 @@ Page({
     rscPickupTime: '',
     rscPickupWindow: { open: '10:00', close: '20:00' },
     rscErr: '',
+    // Change-delivery-address state (server decides the window; see
+    // data.address_change on the order payload)
+    canChangeAddress: false,
+    addrSheetOpen: false,
+    addrLoading: false,
+    addrBusy: false,
+    addrList: [],                   // [{ id, who, full, eligible, is_current, note, sel }]
+    addrPicked: null,
+    addrErr: '',
     // Refund sheet state
     refundSheetOpen: false,
     refundBusy: false,
@@ -186,6 +205,12 @@ Page({
     // back from the Alipay page, or returning after the admin advanced the
     // order) re-pull so the status/timeline reflect the latest state.
     if (this.data.order) this.refresh(true);
+    // Back from the addresses page mid-change — reopen the sheet so the new
+    // address is right there instead of making them find the button again.
+    if (this._reopenAddrSheet) {
+      this._reopenAddrSheet = false;
+      this.openAddressChange();
+    }
     // Keep the order live while it's on screen and still in flight.
     if (!this._orderPoller) {
       this._orderPoller = createPoller(() => {
@@ -286,6 +311,16 @@ Page({
         rescheduleNoSlots: '暂无可选时间。',
         rescheduleFreshHint: '鲜食已在为您备制，如需改期请联系我们 💚',
         rescheduleSaved: '时间已更新 ✓',
+        addrChangeBtn: '修改收货地址',
+        addrChangeTitle: '修改收货地址',
+        addrChangeCurrent: '当前地址',
+        addrChangeConfirm: '确认修改',
+        addrChangeSaved: '地址已更新 ✓',
+        addrChangeNone: '暂无其他已保存的地址。',
+        addrChangeAdd: '+ 添加新地址',
+        addrChangeOutOfArea: '超出本订单的配送区域，如需更改请联系我们 💚',
+        addrChangeFeeChange: '该地址会改变配送费，如需更改请联系我们 💚',
+        addrChangeLocked: '订单已在配送途中，如需更改地址请联系我们 💚',
       },
     });
   },
@@ -485,6 +520,11 @@ Page({
         ? this.data.copy.rescheduleFreshHint
         : '';
 
+      // Change the delivery address — open while the order is unpaid, or paid/
+      // preparing with nothing labelled, dispatched, or handed to the courier.
+      // Server-decided, same as reschedule.
+      const canChangeAddress = !!(data.address_change && data.address_change.allowed);
+
       const isPickup = data.fulfillment_type === 'pickup';
       const pa = data.address || {};
       const pickupStoreName = isPickup
@@ -512,6 +552,7 @@ Page({
         canReschedule,
         rescheduleKind,
         rescheduleHint,
+        canChangeAddress,
         isPickup,
         pickupStoreName,
         pickupAddress,
@@ -897,6 +938,100 @@ Page({
     if (/slot_/.test(m))            return cn ? '请选择有效的时间。' : 'Please pick a valid time.';
     if (/pickup_time/.test(m))      return cn ? '请选择营业时间内的取货时间。' : 'Pick a time within opening hours.';
     return cn ? '修改失败，请重试。' : 'Could not change the time. Please try again.';
+  },
+
+  // ─── Change delivery address (before the parcel is committed) ─────────────
+  // Shaped like the reschedule flow: the server owns the window, we list the
+  // customer's saved addresses and mark which ones keep this order in the same
+  // delivery area. A cross-area address is shown but not pickable — moving it
+  // would re-price and re-route the order, so that one goes through us.
+  async openAddressChange() {
+    const cn = this.data.lang === 'cn';
+    this.setData({ addrSheetOpen: true, addrLoading: true, addrErr: '', addrList: [], addrPicked: null });
+    try {
+      const r = await api.get('/api/retail/orders/' + this.data.id + '/address-options');
+      const d = r?.data || r;
+      if (!d || !d.eligibility || !d.eligibility.allowed) {
+        this.setData({ addrLoading: false, addrErr: this.data.copy.addrChangeLocked });
+        return;
+      }
+      const copy = this.data.copy;
+      const list = (Array.isArray(d.addresses) ? d.addresses : []).map(a => ({
+        id: a.id,
+        who: [a.recipient_name, a.phone].filter(Boolean).join(' · '),
+        full: a.address_full || '',
+        // The order's own address is listed for orientation, not as a choice.
+        eligible: !!a.eligible && !a.is_current,
+        is_current: !!a.is_current,
+        note: a.is_current ? copy.addrChangeCurrent : this._addrReasonText(a.reason),
+        sel: false,
+      }));
+      this.setData({ addrLoading: false, addrList: list });
+    } catch (e) {
+      this.setData({
+        addrLoading: false,
+        addrErr: cn ? '无法加载地址，请稍后再试。' : 'Could not load your addresses.',
+      });
+    }
+  },
+  closeAddressSheet() {
+    if (this.data.addrBusy) return;
+    this.setData({ addrSheetOpen: false });
+  },
+  onAddressMaskTap() { this.closeAddressSheet(); },
+  pickAddress(e) {
+    const id = e.currentTarget.dataset.id;
+    const row = this.data.addrList.find(a => a.id === id);
+    if (!row || !row.eligible) return;
+    this.setData({
+      addrList: this.data.addrList.map(a => ({ ...a, sel: a.id === id })),
+      addrPicked: id,
+      addrErr: '',
+    });
+  },
+  // Adding/editing lives on the addresses page. Flag the sheet to reopen on the
+  // way back so a freshly-added address is one tap from being used.
+  goAddAddress() {
+    this._reopenAddrSheet = true;
+    this.setData({ addrSheetOpen: false });
+    wx.navigateTo({ url: '/pages/addresses/addresses' });
+  },
+  async confirmAddressChange() {
+    if (this.data.addrBusy) return;
+    const cn = this.data.lang === 'cn';
+    if (!this.data.addrPicked) {
+      this.setData({ addrErr: cn ? '请选择一个地址。' : 'Pick an address.' });
+      return;
+    }
+    this.setData({ addrBusy: true, addrErr: '' });
+    try {
+      await api.post('/api/retail/orders/' + this.data.id + '/address', {
+        address_id: this.data.addrPicked,
+      });
+      this.setData({ addrBusy: false, addrSheetOpen: false });
+      wx.showToast({ title: this.data.copy.addrChangeSaved, icon: 'success' });
+      await this.refresh(true);
+    } catch (e) {
+      this.setData({ addrBusy: false, addrErr: this._addressErrText(e) });
+    }
+  },
+  // Why an address can't be used, in customer words. route_change = it ships a
+  // different way (other side of the Guangzhou / ship-district split);
+  // price_change = same path, different delivery fee.
+  _addrReasonText(reason) {
+    if (reason === 'route_change') return this.data.copy.addrChangeOutOfArea;
+    if (reason === 'price_change') return this.data.copy.addrChangeFeeChange;
+    return '';
+  },
+  // not_changeable means the order moved on while the sheet was open.
+  _addressErrText(e) {
+    const cn = this.data.lang === 'cn';
+    const m = (e && (e.code || e.message)) || '';
+    if (/route_change/.test(m))   return this.data.copy.addrChangeOutOfArea;
+    if (/price_change/.test(m))   return this.data.copy.addrChangeFeeChange;
+    if (/not_changeable/.test(m)) return this.data.copy.addrChangeLocked;
+    if (/address_(not_found|required)/.test(m)) return cn ? '请选择一个地址。' : 'Pick an address.';
+    return cn ? '修改失败，请重试。' : 'Could not change the address. Please try again.';
   },
 
   reorder() {
