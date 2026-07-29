@@ -540,6 +540,10 @@ async function drainPushQueue(storeCode, br) {
         .run(done ? 'error' : 'pending', String(e.message).slice(0, 300), row.id);
       log(storeCode, `push: order ${row.retail_order_id} failed (attempt ${attempts}${done ? ', giving up' : ''}): ${e.message}`);
       if (done) {
+        // Deliberately NOT gated on alertsAllowed: giving up is terminal (nothing
+        // retries this row), so holding the page for opening hours would mean an
+        // order quietly never reaching Qingyun. It's one message that sits in the
+        // group until morning, not a repeating page.
         logSync(storeCode, 'push', 'error', null, e.message);
         sendOpsAlert(`🔴 青云聚信 ${storeCode} 自动发单失败（订单#${row.retail_order_id}）：${e.message}\nQingyun ${storeCode} auto-create failed for order #${row.retail_order_id} — push it by hand`);
       }
