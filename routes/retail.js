@@ -11837,6 +11837,12 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
     }
     const days = cand.length;
     let sumRev = 0, sumOrd = 0, sumNew = 0;
+    // Each same-weekday's own takings, not just their total. The loop already
+    // pays for these queries to build the average, so keeping the individual
+    // numbers costs nothing — and it is the only way to answer "is today the
+    // best Tuesday in a month?", which the average cannot: a day can beat the
+    // mean while still trailing three of the four days that made it.
+    const dayRev = [];
     for (const d of cand) {
       const k = tdb().prepare(kpiSql).get(d, d);
       sumOrd += Number(k.orders || 0);
@@ -11845,9 +11851,11 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       // exactly as the headline blends them into today — otherwise the delta
       // would compare a blended today against a storefront-only past. Orders
       // stay storefront-only on both sides, as they are everywhere else here.
-      sumRev += Number(k.revenue || 0)
-              + guanyiPickupSales(tdb(), d, d, { hourly: false }).revenue
-              + topupCashReceived(tdb(), d, d, { hourly: false }).received;
+      const rev = Number(k.revenue || 0)
+                + guanyiPickupSales(tdb(), d, d, { hourly: false }).revenue
+                + topupCashReceived(tdb(), d, d, { hourly: false }).received;
+      dayRev.push(rev);
+      sumRev += rev;
     }
     const pctOf = (cur, avg) => (avg > 0 ? Math.round(((cur - avg) / avg) * 1000) / 10 : null);
     const mk = (cur, sum) => {
@@ -11864,6 +11872,13 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       revenue:       mk(kpi.revenue, sumRev),
       orders:        mk(kpi.orders,  sumOrd),
       new_customers: mk(newCust,     sumNew),
+      // Is today outright ahead of EVERY same weekday behind it? Strictly
+      // greater, so a tie is not a record, and null rather than false when
+      // there are too few days to make the claim mean anything — one prior
+      // Tuesday would make "best in weeks" true on a slow morning. The client
+      // says this out loud only when it is true, so a false here is silence,
+      // not bad news.
+      best_in_weeks: days >= 2 && dayRev.every(r => kpi.revenue > r),
     };
   }
 

@@ -519,11 +519,22 @@ function dashHeroSyncStamp() {
 function dashRenderSync() {
   const el = $('#db-hero-sync'); if (!el || !DASH_HERO.lastSync) return;
   const secs = Math.max(0, Math.round((Date.now() - DASH_HERO.lastSync) / 1000));
-  let en, cn;
-  if (secs < 8)        { en = 'synced just now';   cn = '刚刚同步'; }
-  else if (secs < 60)  { en = `synced ${secs}s ago`; cn = `${secs}秒前同步`; }
-  else                 { const m = Math.floor(secs / 60); en = `synced ${m}m ago`; cn = `${m}分钟前同步`; }
-  el.textContent = `${en} · ${cn}`;
+  if (secs < 8)       el.textContent = cuT('synced just now', '刚刚同步');
+  else if (secs < 60) el.textContent = cuT(`synced ${secs}s ago`, `${secs}秒前同步`);
+  else {
+    const m = Math.floor(secs / 60);
+    el.textContent = cuT(`synced ${m}m ago`, `${m}分钟前同步`);
+  }
+  // Built and then left hidden in the markup, so it has never been on screen.
+  // Un-hidden on the first paint rather than in the HTML, so a dashboard that
+  // never manages a sync shows nothing instead of an empty strip — the element
+  // appears at the moment it has something true to report.
+  //
+  // It answers the one question a clock cannot: is what I am looking at
+  // current? A stale dashboard shows a confident wrong number at 3:47pm just
+  // as happily as a fresh one, and the operator's own device already has the
+  // time on it twice over.
+  el.hidden = false;
 }
 
 async function dashHeroLoadPresence() {
@@ -583,6 +594,7 @@ async function dashHeroLoadToday(opts) {
     // AOV, refunded. The intraday hourly chart + typical-day ghost were cut in
     // the simplification pass (an hour-by-hour comparison is a Reports job).
     dashHeroTodayRepaint();   // delta badges (language-aware)
+    tdObservationRender();    // the day's one line — reads data.baseline
     dashMarkReady('today');   // one half of the boot-splash release signal
   } catch (e) {
     if (!DASH_HERO.todayData) dashBootRetry('today', dashHeroLoadToday);
@@ -1257,9 +1269,10 @@ const TD_SEEN_KEY = 'retail-admin-last-seen';
 function tdInit() {
   tdGreetRender();
   tdDateRender();
+  tdObservationRender();   // no-op until the Today payload lands; hides itself
   tdEnsureStores();   // populate the Running-low store dropdown (multi-store only)
   // Language toggle repaints the JS-built strings (greeting, date, recap, attention).
-  if (window.onLangChange) onLangChange(() => { tdGreetRender(); tdDateRender(); tdRecapHeadPaint(); tdRecapRender(); tdRecapWorkRender(); tdRecapWorkBtnSync(); tdAttnRender(); tdSecPaint(); dashUnhandledRender(); dashStockDrawerRender(); });
+  if (window.onLangChange) onLangChange(() => { tdGreetRender(); tdDateRender(); tdObservationRender(); tdRecapHeadPaint(); tdRecapRender(); tdRecapWorkRender(); tdRecapWorkBtnSync(); tdAttnRender(); tdSecPaint(); dashUnhandledRender(); dashStockDrawerRender(); });
   tdRecapLoad();     // reads the last-seen stamp BEFORE tdSeenInit overwrites it
   tdSeenInit();
   tdOpsLoad();
@@ -1516,15 +1529,52 @@ function tdGreetRender() {
 }
 
 // Today's date under the page title — the calm anchor for "Today" numbers.
+// Today's date under the greeting, weekday first — the weekday is the part
+// that does work here, because every delta on this page compares against the
+// same weekday over the last four weeks.
+//
+// Goes through tdWhen (§1.18) rather than building the string by hand. What was
+// here before called toLocaleDateString('en-GB'), which renders "Tuesday, 29
+// July" — British order, in an app whose own rule says English is US-style. The
+// shared formatter owns that decision for both languages, so this no longer has
+// an opinion about it.
 function tdDateRender() {
   const el = document.getElementById('td-date'); if (!el) return;
-  const d = new Date();
-  if (window.cuLang && cuLang() === 'cn') {
-    const DOW = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
-    el.textContent = `${d.getMonth() + 1}月${d.getDate()}日 ${DOW[d.getDay()]}`;
-  } else {
-    el.textContent = d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
-  }
+  el.textContent = (typeof tdWhen === 'function') ? tdWhen(new Date(), 'weekday') : '';
+}
+
+// ── The day's one observation ───────────────────────────────────────────────
+// A single sentence under the date, and only when there is genuinely one to
+// say. Three rules decide what may appear here:
+//
+//   1. It must be TRUE from the payload — never an encouraging guess.
+//   2. It must be neutral or good. "Your worst Tuesday in a month" is also a
+//      daily observation and nobody wants to be greeted by it; bad news has a
+//      home on this page already (Needs you) and does not belong in a hello.
+//   3. It must not repeat a card. Every card on this dashboard states its own
+//      number, so "14 new customers today" is not an observation, it is the
+//      Customers card read aloud. What no card can show is how today compares
+//      with the same weekday behind it — which is exactly what these two say.
+//
+// Silence is a valid, and normal, outcome: most days beat nothing and trail
+// nothing worth mentioning, and a line that speaks every day stops being read
+// by the end of the week. Nothing to say ⇒ the span stays hidden.
+function tdObservationRender() {
+  const el = document.getElementById('td-observation'); if (!el) return;
+  const b = ((DASH_HERO && DASH_HERO.todayData) || {}).baseline || null;
+  const say = (en, cn) => { el.textContent = cuT(en, cn); el.hidden = false; };
+  el.hidden = true; el.textContent = '';
+  if (!b || !(b.days >= 2)) return;   // too little history to compare against
+  const dowEn = DASH_DOW_EN[b.weekday] || '';
+  const dowCn = DASH_DOW_CN[b.weekday] || '';
+  // Outright ahead of every same weekday behind it — the rarer, better fact,
+  // so it wins when both are true.
+  if (b.best_in_weeks) return say(`Your best ${dowEn} in ${b.days} weeks.`,
+                                  `这是最近 ${b.days} 周里最好的${dowCn}。`);
+  // Clearly ahead of the average of them. The floor is 15% rather than 0 so
+  // this stays a remark worth making instead of noise about a rounding win.
+  const d = b.revenue && b.revenue.delta;
+  if (d != null && d >= 15) return say(`Ahead of a typical ${dowEn}.`, `比往常的${dowCn}要好。`);
 }
 
 // ── Last-seen stamp — feeds The Recap's "while you were away" window. ──────

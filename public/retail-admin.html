@@ -1470,7 +1470,22 @@
            the boot splash covers the swap, so it is not seen in normal use.
            data-no-i18n because the greeting is assembled language-aware in JS
            and the " · " walker must not touch it. -->
-      <h2 id="td-greeting" data-no-i18n>Dashboard</h2>
+      <div class="td-hd-col">
+        <h2 id="td-greeting" data-no-i18n>Dashboard</h2>
+        <!-- The quiet line under the greeting: today's date, and — only when
+             there is one — a single observation about the day.
+
+             The date is not decoration. Every delta arrow on this page is
+             measured against the same weekday over the last four weeks, not
+             against yesterday, so "▼21%" means "down against other Tuesdays".
+             Naming the weekday is what makes the arrows readable.
+
+             The observation is hidden unless tdObservationRender finds
+             something true AND good to say; see the rules there. Both spans
+             are painted language-aware in JS, hence data-no-i18n on the line
+             so the " · " walker leaves it alone. -->
+        <p class="td-hd-sub" data-no-i18n><span id="td-date"></span><span id="td-observation" hidden></span></p>
+      </div>
       <span class="td-head-sp"></span>
       <!-- Arrange — stood down for this release and rebuilt in the next one
            against live element boxes (its drag read the retired solver's pixel
@@ -1604,7 +1619,9 @@
               </div>
             </div>
           </div>
-          <span class="db-hero-sync" id="db-hero-sync" hidden></span>
+          <!-- "synced 12s ago" — un-hidden by dashRenderSync on its first real
+               stamp, and written with cuT, hence data-no-i18n. -->
+          <span class="db-hero-sync" id="db-hero-sync" data-no-i18n hidden></span>
           <div class="td-sec-foot" id="td-sec-orders-foot" data-no-i18n></div>
         </div>
       </div>

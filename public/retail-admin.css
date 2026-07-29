@@ -8109,11 +8109,23 @@
     font-family: var(--f-sans); font-size: 24px; font-weight: 500;
     letter-spacing: -.01em; text-transform: none; color: var(--td-text);
   }
-  /* The title stands alone. There is no status line under it and no greeting in
-     it: every honest candidate for that line restates something Needs-you or a
-     card already says, and a line that only counts what is on screen is exactly
-     the census the work rule forbids. Silence under the title is the answer, not
-     a gap waiting to be filled. */
+  /* This used to read "the title stands alone", on the reasoning that every
+     honest candidate for a line under it restates something Needs-you or a card
+     already says — a census of what is already on screen. That objection was
+     right and it still governs: it is why the line under the greeting carries
+     the DATE and, at most, one comparison against the same weekday. Neither is
+     on any card. The weekday is what makes the delta arrows legible (they are
+     measured against the last four same weekdays, not against yesterday), and
+     the comparison is the one fact a single-day dashboard cannot otherwise
+     show. Anything that merely counts what a card already states still does not
+     belong here — see the rules in tdObservationRender. */
+  .td-hd-col { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .td-head .td-hd-col h2 { margin: 0; }
+  .td-hd-sub { margin: 0; font-size: 13px; color: var(--td-text2); }
+  /* The separator belongs to the observation, not to the line, so hiding the
+     observation takes its dot with it and the date is never left trailing one. */
+  #td-observation[hidden] { display: none; }
+  #td-observation::before { content: '·'; margin: 0 .5em; color: var(--td-border); }
   .td-head-sp { flex: 1; }
   .td-kicker {
     font-size: 11px; font-weight: 500; letter-spacing: .1em; text-transform: uppercase;
@@ -8424,6 +8436,10 @@
   .td-live-num { font-weight: 500; color: var(--td-text); font-variant-numeric: tabular-nums; }
   .td-live.is-zero .td-live-num { display: none; }
   .db-hero-sync[hidden] { display: none; }
+  /* Sits between the card's padded inner and its cream footer, so it carries
+     its own side padding or it runs flush to the card edge. Right-aligned and
+     quiet: it is a freshness stamp to glance at, not a number to read. */
+  .td-block .db-hero-sync { padding: 0 24px 12px; text-align: right; }
 
   /* The card's footer: its one attention line, and the way in. Amber dot = something waits, sage = all clear.
      Empty (no data yet) collapses so the card doesn't show a bare strip. */
