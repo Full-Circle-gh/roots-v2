@@ -41,6 +41,7 @@ const { coldMsRemaining, isColdStartChallenge } = require('../lib/browser-warmup
 // Ops-alert latches that survive a restart (see lib/alert-latch).
 const { latchStore } = require('../lib/alert-latch');
 const geocode = require('../lib/geocode'); // Tencent/AMap — resolve English/pin-less addresses
+const { buildCreatePayload } = require('../lib/qingyun-payload'); // shared with the ship-from override
 const inventory = require('../lib/inventory'); // isQingyunSameCityToday — same-city/same-day eligibility
 
 const STORES = (process.env.QINGYUN_STORES || 'tianhe')
@@ -54,7 +55,6 @@ function jitter(baseMs, frac = 0.3) {
   return Math.round(baseMs - spread + Math.random() * spread * 2);
 }
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
-const norm = (s) => String(s == null ? '' : s).trim();
 
 function log(storeCode, msg) {
   console.log(`[qingyun-daemon:${storeCode}] ${new Date().toISOString()} ${msg}`);
@@ -244,6 +244,18 @@ function matchRetailOrderId(d) {
   return null;
 }
 
+// An abandoned copy: staff moved this order's pickup point to another store, so a
+// NEW Qingyun order carries the delivery and this one is only waiting to be cancelled
+// in the old store's app. Both copies carry the same order_no in their 备注, so the
+// match above would happily re-link this one and the drawer would flip between two
+// riders. Superseded rows stay unlinked for good.
+function isSuperseded(qingyunOrderId) {
+  try {
+    const r = db.prepare('SELECT superseded FROM delivery_jobs WHERE qingyun_order_id = ?').get(String(qingyunOrderId));
+    return !!(r && r.superseded);
+  } catch { return false; }
+}
+
 // Build the delivery_jobs upsert row from a parsed order (+ optional live track).
 // track is null for a completion reconcile (a delivered order has no live GPS); the
 // upsert COALESCEs carrier/rider/waybill/etc, so a track-less row never wipes them.
@@ -386,65 +398,15 @@ function cfg(key, fallback) {
 // Turn a roots order into the createOrder() field bag. Throws (→ retry) if it lacks
 // the essentials (recipient name/phone/address). Coords: the mini-app/web capture the
 // customer's GCJ-02 pin — Qingyun's datum — so we pass them ×1e6; else geocode.
-async function buildCreatePayload(order, shop, br) {
-  let addr = {}; try { addr = JSON.parse(order.address_json || '{}') || {}; } catch { addr = {}; }
-  const name  = norm(order.recipient_name || addr.name || addr.contact);
-  const phone = norm(order.recipient_phone || addr.phone || addr.mobile);
-  // Recipient address: the street/building line plus the floor/unit/room detail
-  // ('901房') folded in. Qingyun keeps only recipientAddress reliably — the separate
-  // recipientDoorInfo field is not surfaced to the courier — so a room number that
-  // lives only in addr.detail would otherwise silently drop and need manual re-entry.
-  const streetText = norm(addr.address) || norm([addr.city, addr.district, addr.address].filter(Boolean).join(''));
-  const detailText = norm(addr.detail);
-  const text = norm([streetText || detailText, (detailText && detailText !== streetText) ? detailText : ''].filter(Boolean).join(' '));
-  if (!name || !phone || !text) throw new Error('missing recipient name/phone/address');
-
-  // Resolve the drop-off pin (Qingyun wants GCJ-02 ×1e6; the app's geocoders + the
-  // mini-app map picker are all GCJ-02, so datums match). Chain, most-reliable first:
-  //   1) the order's own coords (customer picked a pin) — best, language-agnostic;
-  //   2) the app's Tencent/AMap geocoder over the Chinese 省/市/区 + street — resolves
-  //      even an English-typed street, since the region anchors it;
-  //   3) Qingyun's own POI search (weak on English) as a last automatic try;
-  //   4) give up → the row retries then ops-alerts (never guesses a wrong spot).
-  let lng = null, lat = null, cityId = shop.cityId;
-  const dLng = Number(addr.lng), dLat = Number(addr.lat);
-  if (Number.isFinite(dLng) && Number.isFinite(dLat) && dLng !== 0 && dLat !== 0) {
-    lng = Math.round(dLng * 1e6); lat = Math.round(dLat * 1e6);
-  } else {
-    let g = null;
-    try {
-      if (geocode.configured()) {
-        const c = await geocode.geocodeAddress({
-          province: norm(addr.province), city: norm(addr.city), district: norm(addr.district),
-          address: [norm(addr.address), norm(addr.detail)].filter(Boolean).join(' ') || text,
-        });
-        if (c && Number.isFinite(Number(c.lat)) && Number.isFinite(Number(c.lng))) {
-          g = { lng: Math.round(Number(c.lng) * 1e6), lat: Math.round(Number(c.lat) * 1e6), cityId: shop.cityId };
-        }
-      }
-    } catch (e) { log('push', `maps geocode failed for ${norm(order.order_no)}: ${e.message}`); }
-    if (!g) g = await br.geocode(text, shop.cityId);   // Qingyun POI search fallback
-    if (!g) throw new Error('geocode failed for address (no pin, unresolved text)');
-    lng = g.lng; lat = g.lat; cityId = g.cityId || shop.cityId;
-  }
-
-  // Delivery time: a chosen slot → its epoch; else ASAP (~1h out). 待配送 only, so
-  // this is informational until staff dispatch.
-  const slotEpoch = order.scheduled_for ? Math.floor(Date.parse(order.scheduled_for) / 1000) : 0;
-  const target = (slotEpoch && slotEpoch > Math.floor(Date.now() / 1000)) ? slotEpoch : Math.floor(Date.now() / 1000) + 3600;
-
-  const slot = norm(order.delivery_slot_label);
-  const remark = (norm(order.order_no) + (slot ? ` · ${slot}` : '')).slice(0, 200);
-  const doorInfo = norm(addr.detail && addr.detail !== text ? addr.detail : '');
-
-  return {
-    shopId: shop.shopId,
-    recipientName: name, recipientPhone: phone, recipientAddress: text, doorInfo,
-    recipientLng: lng, recipientLat: lat, cityId,
-    goods: [{ name: `Roots ${norm(order.order_no)}`, price: 0, count: 1 }],
-    goodsPicUrl: norm(cfg('delivery.qingyunGoodsPicUrl', 'https://s3plus.meituan.net/dap-orderdetail/qy/1783175410205_goods.png')),
-    remark, expectFrom: target, expectTo: target,
-  };
+// The builder itself lives in lib/qingyun-payload so the ship-from override in
+// routes/retail.js (which re-creates the order under another store's account) builds
+// byte-identical fields — above all the 备注, which is how tracking finds its way back.
+function pushPayload(order, shop, br) {
+  return buildCreatePayload(order, shop, br, {
+    geocode,
+    goodsPicUrl: cfg('delivery.qingyunGoodsPicUrl', 'https://s3plus.meituan.net/dap-orderdetail/qy/1783175410205_goods.png'),
+    onWarn: (msg) => log('push', msg),
+  });
 }
 async function drainPushQueue(storeCode, br) {
   if (cfg('delivery.qingyunAutoPush', false) !== true) return;
@@ -504,7 +466,7 @@ async function drainPushQueue(storeCode, br) {
         log(storeCode, `push: skipped order ${order.order_no} — not same-city same-day`);
         continue;
       }
-      const payload = await buildCreatePayload(order, shop, br);
+      const payload = await pushPayload(order, shop, br);
       const res = await br.createOrder(payload);
       if (res.ok) {
         db.prepare("UPDATE qingyun_push_queue SET status='done', qingyun_order_id=?, last_error=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(res.orderId, row.id);
@@ -596,7 +558,7 @@ async function pollStore(storeCode) {
         try { track = await br.getRiderTrack(d.qingyunOrderId); }
         catch (e) { log(storeCode, `getRiderTrack ${d.qingyunOrderId} error: ${e.message}`); }
       }
-      const retailOrderId = matchRetailOrderId(d);
+      const retailOrderId = isSuperseded(d.qingyunOrderId) ? null : matchRetailOrderId(d);
       upsert.run(buildDeliveryRow(d, track, storeCode, retailOrderId));
       // Auto-fill the customer-facing "Estimated arrival" from the courier's
       // promised time (unless an operator set it by hand).
@@ -619,11 +581,13 @@ async function pollStore(storeCode) {
       for (const d of done) {
         if (!d.qingyunOrderId) continue;
         const existing = db.prepare(
-          'SELECT retail_order_id, order_status FROM delivery_jobs WHERE qingyun_order_id = ?'
+          'SELECT retail_order_id, order_status, superseded FROM delivery_jobs WHERE qingyun_order_id = ?'
         ).get(d.qingyunOrderId);
         if (!existing) continue;                                  // untracked → skip
         if ((existing.order_status ?? 0) >= DELIVERED_STATUS) continue; // already delivered
-        const retailOrderId = existing.retail_order_id || matchRetailOrderId(d);
+        const retailOrderId = existing.superseded
+          ? null                                                  // abandoned copy — never re-link
+          : (existing.retail_order_id || matchRetailOrderId(d));
         upsert.run(buildDeliveryRow(d, null, storeCode, retailOrderId));
         reconciled++;
       }

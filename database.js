@@ -4179,6 +4179,14 @@ db.exec(`
     FOREIGN KEY (retail_order_id) REFERENCES retail_orders(id) ON DELETE SET NULL
   );
 `);
+// An abandoned copy of a delivery: staff moved the order's pickup point to another
+// store (the ship-from override in routes/retail.js re-creates it under that store's
+// Qingyun account), so THIS row is the old location's leftover. It still sits in the
+// old store's 待配送 list until staff cancel it there, and it still carries the roots
+// order_no in its 备注 — so without this flag the daemon would keep re-linking it to
+// the order and the drawer could show the abandoned copy instead of the live one.
+// A superseded row is never matched to a roots order again.
+addColumn('delivery_jobs', 'superseded', 'INTEGER NOT NULL DEFAULT 0');
 
 // Append-only log of qingyun-daemon events (polls, track fetches, login/verify,
 // proxy) for the admin sync-status panel and debugging. Same shape as
@@ -4232,6 +4240,13 @@ db.exec(`
   );
 `);
 try { db.exec("CREATE INDEX IF NOT EXISTS idx_qingyun_push_pending ON qingyun_push_queue(store_code, status)"); } catch {}
+// A leftover the ship-from override couldn't clean up: when an order's pickup point
+// moves, the copy at the OLD location is deleted from Qingyun automatically. If that
+// delete fails (session blip, Qingyun refuses), the old copy is still sitting in that
+// store's list where someone could dispatch it — so we remember which one, and the
+// order drawer offers a Remove button until it's gone. Cleared on success.
+addColumn('qingyun_push_queue', 'stale_qingyun_order_id', 'TEXT');
+addColumn('qingyun_push_queue', 'stale_store_code', 'TEXT');
 
 // Meituan-only bundles (套餐/combos) that have no single roots product. Each is
 // defined as a set of component products; its sellable stock is computed as the

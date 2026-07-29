@@ -3477,9 +3477,171 @@ function renderQyDispatch(o) {
     <div style="margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft);">
       <div class="kicker" style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom: var(--s2);">Same-city courier · 同城运力</div>
       ${card}
+      ${renderQyShipFrom(o)}
       ${compareBtn}
       <div id="qy-carriers-${o.id}" style="margin-top:8px;"></div>
     </div>`;
+}
+
+// Where the rider collects this order. The routing rule picked the store at
+// checkout and the order was created in that store's Qingyun account, whose shop
+// address IS the pickup point — so this line is the only place staff can see it,
+// and the only place they can move it. Shown for orders we created in Qingyun
+// ourselves (server sends o.qingyun_ship_from only for those).
+//
+// Once a courier has been called the line goes read-only: a rider already heading
+// for the old door can't be redirected from here, and we have no cancel API — that
+// has to happen in the Qingyun app first.
+function renderQyShipFrom(o) {
+  const sf = o.qingyun_ship_from;
+  if (!sf) return '';
+  const name = escapeHtml(cuT(sf.name_en || sf.store_code, sf.name_cn || sf.store_code));
+  // The order still belongs to its original store for stock, printing and reports —
+  // only the collection point moved. Say so, or the numbers look wrong later.
+  const moved = !!(o.store_code && sf.store_code !== o.store_code);
+  const movedNote = moved
+    ? `<div class="muted" style="font-size:11px; margin-top:4px; line-height:1.5;">${cuT(
+        `Collected here, but the order still counts against ${escapeHtml(o.store_name_en || o.store_code)} for stock and reports.`,
+        `在此取货,但库存与报表仍算在 ${escapeHtml(o.store_name_cn || o.store_code)}。`)}</div>`
+    : '';
+  const blockedNote = sf.blocked_by && sf.blocked_by !== 'delivered'
+    ? `<div class="muted" style="font-size:11px; margin-top:4px; line-height:1.5;">${cuT(
+        'A courier is already on this one. To collect it somewhere else, cancel it in the Qingyun app first.',
+        '已呼叫运力。如需改到其他门店取货,请先在青云 App 取消该单。')}</div>`
+    : '';
+  const changeBtn = !sf.blocked_by
+    ? `<button class="btn btn-sm" id="qy-sf-btn-${o.id}" onclick="qyLoadShipFrom(${o.id}, this)">${cuT('Change', '更改')}</button>`
+    : '';
+  // Moving an order deletes the copy at the old location automatically. This only
+  // appears when that delete failed — and it matters: the old copy is a live 待配送
+  // order anyone at that store could dispatch, so you'd pay for a second rider.
+  const stale = sf.stale
+    ? `<div style="display:flex; align-items:flex-start; gap:5px; font-size:11px; font-weight:600; margin-top:7px; color:#9A6E2A;">
+         ${deliveryIcon('alert', 12)}
+         <span>${cuT(
+           `The old job at ${escapeHtml(sf.stale.name_en || sf.stale.store_code)} is still in Qingyun — someone there could send a rider for it.`,
+           `${escapeHtml(sf.stale.name_cn || sf.stale.store_code)} 的原配送单仍在青云中 — 那边有人可能会再叫一位骑手。`)}</span>
+       </div>
+       <button class="btn btn-sm" style="margin-top:6px;" onclick="qyRemoveStale(${o.id}, this)">${cuT('Remove it', '删除原单')}</button>`
+    : '';
+  return `
+    <div style="margin:8px 0;">
+      <div class="row" style="gap:10px; align-items:center; flex-wrap:wrap;">
+        <span style="font-size:12px; color:var(--text-3);">${cuT('Ships from', '取货门店')}</span>
+        <b style="font-size:13px;">${name}</b>
+        ${changeBtn}
+      </div>
+      ${movedNote}${blockedNote}${stale}
+      <div id="qy-shipfrom-${o.id}" style="margin-top:8px;"></div>
+    </div>`;
+}
+
+// Retry the delete that failed during a move. No confirm: it removes a duplicate
+// nobody has been sent for, which is the tidy-up the move already intended.
+async function qyRemoveStale(orderId, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = cuT('Removing…', '删除中…'); }
+  try {
+    const r = await fetch(`/api/retail-admin/orders/${orderId}/qingyun/remove-stale`, { method: 'POST' });
+    const j = await r.json();
+    if (j.success) {
+      toast(cuT('Old job removed', '原配送单已删除'), 'success');
+      openOrder(orderId, { instant: true });
+      return;
+    }
+    if (btn) { btn.disabled = false; btn.textContent = cuT('Remove it', '删除原单'); }
+    toast(cuT('Could not remove it — do it in the Qingyun app', '删除失败 — 请在青云 App 中删除'), 'err');
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = cuT('Remove it', '删除原单'); }
+    toast(cuT('Could not remove it — do it in the Qingyun app', '删除失败 — 请在青云 App 中删除'), 'err');
+  }
+}
+
+// Pick a different pickup location. Only stores whose Qingyun session is live can
+// take the order — a disconnected one would fail at create time, so it's listed but
+// not selectable, with the reason said plainly.
+async function qyLoadShipFrom(orderId, btn) {
+  const box = document.getElementById('qy-shipfrom-' + orderId);
+  if (!box) return;
+  if (box.innerHTML) { box.innerHTML = ''; return; }   // second click closes it
+  if (btn) { btn.disabled = true; btn.textContent = cuT('Loading…', '加载中…'); }
+  const reset = () => { if (btn) { btn.disabled = false; btn.textContent = cuT('Change', '更改'); } };
+  try {
+    const r = await fetch(`/api/retail-admin/orders/${orderId}/qingyun/ship-from`);
+    const j = await r.json();
+    reset();
+    if (!j.success || !j.data || !j.data.available) {
+      box.innerHTML = `<div class="muted" style="font-size:12px">${cuT('This order has no Qingyun job to move.', '该订单在青云没有可转移的配送单。')}</div>`;
+      return;
+    }
+    const stores = (j.data.stores || []).filter(s => s.code !== j.data.current);
+    if (!stores.length) {
+      box.innerHTML = `<div class="muted" style="font-size:12px">${cuT('No other location is set up for same-city delivery.', '暂无其他门店开通同城配送。')}</div>`;
+      return;
+    }
+    const rows = stores.map(s => `
+      <label class="qy-row" style="${s.connected ? '' : 'opacity:.55;'}">
+        <input type="radio" name="qy-sf-${orderId}" value="${escapeAttr(s.code)}" ${s.connected ? '' : 'disabled'}>
+        <span style="flex:1; min-width:0;">
+          <span class="qy-name"><b>${escapeHtml(cuT(s.name_en || s.code, s.name_cn || s.code))}</b></span>
+          ${s.connected ? '' : `<span class="qy-meta">${cuT('not connected to Qingyun', '未连接青云')}</span>`}
+        </span>
+      </label>`).join('');
+    box.innerHTML = rows +
+      `<button class="btn btn-primary btn-sm" onclick="qySetShipFrom(${orderId}, this)" style="margin-top:6px;">${cuT('Ship from here', '改为此门店取货')}</button>`;
+  } catch (e) {
+    reset();
+    box.innerHTML = `<div class="muted" style="font-size:12px;color:var(--danger)">${cuT('Load failed', '加载失败')}</div>`;
+  }
+}
+
+// Move it. The old job stays in the previous store's Qingyun app until someone
+// cancels it there — we have no cancel API — so that instruction leads the confirm
+// and repeats in the toast. Leave it and a second rider can be dispatched for the
+// same order, at your cost.
+async function qySetShipFrom(orderId, btn) {
+  const sel = document.querySelector(`input[name="qy-sf-${orderId}"]:checked`);
+  if (!sel) { toast(cuT('Pick a location', '请选择门店'), 'err'); return; }
+  const storeCode = sel.value;
+  const label = sel.closest('label')?.querySelector('b')?.textContent || storeCode;
+  const from = (_OPEN_ORDER && _OPEN_ORDER.qingyun_ship_from) || null;
+  const fromName = from ? cuT(from.name_en || from.store_code, from.name_cn || from.store_code) : '';
+  // askConfirm renders title/body as HTML — escape the store names going into it.
+  const labelHtml = escapeHtml(label), fromHtml = escapeHtml(fromName);
+  if (!(await askConfirm({
+    title: cuT(`Collect this order at ${labelHtml} instead?`, `改由 ${labelHtml} 取货?`),
+    body: cuT(
+      `A new delivery job is created at ${labelHtml}, and the one at ${fromHtml} is deleted. Nobody has been sent for it yet, so nothing is charged.`,
+      `将在 ${labelHtml} 新建配送单,并删除 ${fromHtml} 的原配送单。尚未呼叫运力,不产生费用。`),
+    confirmLabel: cuT('Move it', '确认更改'),
+  }))) return;
+  if (btn) { btn.disabled = true; btn.textContent = cuT('Moving…', '更改中…'); }
+  try {
+    const r = await fetch(`/api/retail-admin/orders/${orderId}/qingyun/ship-from`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ store_code: storeCode }),
+    });
+    const j = await r.json();
+    if (j.success) {
+      // old_removed:false → the old copy is still live at the previous store; the
+      // drawer re-renders with the Remove button, so say why it's there.
+      toast(j.old_removed === false
+        ? cuT(`Now collected at ${label} — but the old job couldn't be deleted, remove it below`,
+              `已改为 ${label} 取货 — 但原配送单未能删除,请在下方删除`)
+        : cuT(`Now collected at ${label}`, `已改为 ${label} 取货`),
+      j.old_removed === false ? 'err' : 'success');
+      openOrder(orderId, { instant: true });
+      loadOrders();
+      return;
+    }
+    if (btn) { btn.disabled = false; btn.textContent = cuT('Ship from here', '改为此门店取货'); }
+    if (j.error === 'courier_already_called') toast(cuT('A courier is already on it — cancel it in the Qingyun app first', '已呼叫运力 — 请先在青云 App 取消'), 'err');
+    else if (j.error === 'store_not_connected') toast(cuT("That location isn't connected to Qingyun", '该门店未连接青云'), 'err');
+    else if (j.error === 'store_not_reachable') toast(cuT("That location's Qingyun account isn't wired up yet — ask ops to set it up", '该门店的青云账号尚未接通 — 请联系运维配置'), 'err');
+    else toast(cuT('Could not move it', '更改失败'), 'err');
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = cuT('Ship from here', '改为此门店取货'); }
+    toast(cuT('Could not move it', '更改失败'), 'err');
+  }
 }
 
 // Fetch live carrier prices for one order and render a pick list (cheapest pre-selected).

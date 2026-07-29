@@ -10482,11 +10482,15 @@ function findDeliveryJobForOrder(orderId, recipientPhone) {
       if (phone.length >= 7) {
         // Exclude rows already claimed by a DIFFERENT order — a repeat customer's
         // phone otherwise matches their OLD (already-delivered) job and this
-        // order's card silently shows a stranger's rider as its own.
+        // order's card silently shows a stranger's rider as its own. Superseded
+        // rows are excluded for the same reason: the abandoned copy left behind by
+        // a ship-from change is deliberately unlinked, and it carries this very
+        // order's recipient phone, so the fallback would otherwise re-adopt it.
         job = tdb().prepare(
           `SELECT * FROM delivery_jobs
             WHERE REPLACE(REPLACE(recipient_phone,' ',''),'-','') LIKE ?
               AND (retail_order_id IS NULL OR retail_order_id = ?)
+              AND COALESCE(superseded, 0) = 0
             ORDER BY updated_at DESC LIMIT 1`
         ).get('%' + phone.slice(-8) + '%', orderId);
       }
@@ -18928,6 +18932,7 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
           `SELECT * FROM delivery_jobs
             WHERE REPLACE(REPLACE(recipient_phone,' ',''),'-','') LIKE ?
               AND (retail_order_id IS NULL OR retail_order_id = ?)
+              AND COALESCE(superseded, 0) = 0
             ORDER BY updated_at DESC LIMIT 1`
         ).get('%' + phone.slice(-8) + '%', id);
       }
@@ -18947,6 +18952,12 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
       };
     }
   } catch (e) { /* delivery_jobs missing (pre-migration) — no courier block */ }
+
+  // Where the rider collects, and whether staff can still change it. Present only
+  // for orders WE created in Qingyun (auto-push), which are the only ones we can
+  // re-create at another location — see qingyunShipFromState.
+  try { o.qingyun_ship_from = qingyunShipFromState(id); }
+  catch (e) { o.qingyun_ship_from = null; }
 
   // Whether the daemon will actually execute a queued Meituan action. The drawer
   // hides the Accept button when this is off, so staff can't queue a click that
@@ -19833,22 +19844,9 @@ router.get('/api/retail-admin/integrations', requireRetailAdmin, (req, res) => {
 // the qingyun_status heartbeat so an idle store (no deliveries) still reads true.
 const QY_FRESH_MS = 5 * 60 * 1000;
 router.get('/api/retail-admin/integrations/qingyun', requireRetailAdmin, (req, res) => {
-  const stores = tdb().prepare(
-    'SELECT code, name_en, name_cn FROM retail_stores WHERE is_active = 1 ORDER BY sort_order, id'
-  ).all();
-  const hb = {};
-  try {
-    for (const r of tdb().prepare('SELECT store_code, logged_in, updated_at FROM qingyun_status').all()) {
-      hb[r.store_code] = r;
-    }
-  } catch (_) { /* table missing pre-migration — all read as not-connected */ }
-  const now = Date.now();
-  const data = stores.map(s => {
-    const h = hb[s.code];
-    const fresh = h && h.updated_at &&
-      (now - Date.parse(String(h.updated_at).replace(' ', 'T') + 'Z')) < QY_FRESH_MS;
-    return { code: s.code, name_en: s.name_en, name_cn: s.name_cn, connected: !!(fresh && h.logged_in) };
-  });
+  // Same read as the order drawer's ship-from picker (_qingyunStoreStatus), so
+  // "connected" can never mean one thing here and another there.
+  const data = _qingyunStoreStatus();
   const autoPush = cfgValue('delivery.qingyunAutoPush', false) === true;
   const anyConnected = data.some(s => s.connected);
   res.json({ success: true, data, autoPush, anyConnected });
@@ -19945,6 +19943,266 @@ router.post('/api/retail-admin/orders/:id/qingyun/dispatch', requireRetailAdmin,
     console.error('[qingyun dispatch]', e.message);
     res.json({ success: false, error: 'dispatch_failed' });
   }
+});
+
+// ── Ship from another location (move an order's pickup point) ────────────────
+// The routing rule picks a store at checkout, and auto-push creates the order in
+// THAT store's Qingyun account — whose shop address is where the rider collects.
+// Sometimes staff need it collected somewhere else: the stock is actually at the
+// other shop, the near store is slammed, its staff have gone home. Qingyun can't
+// move an existing order between shops, so we re-create it under the target store's
+// account and abandon the original copy.
+//
+// What this does NOT touch: the roots order keeps its own store. Stock, the receipt
+// printer and store reports stay where they were — this changes the courier leg
+// only. Moving stock between stores is the transfer flow's job.
+//
+// Two leftovers this has to be honest about:
+//   • the original Qingyun order still sits in the old store's 待配送 list. We never
+//     recon'd Qingyun's cancel API, so staff must cancel it in the Qingyun app or
+//     someone may dispatch it and pay a second rider.
+//   • both copies carry the same order_no in their 备注, so we mark the old one
+//     superseded — the daemon then never re-links it (see the delivery_jobs note).
+const QY_GOODS_PIC_DEFAULT = 'https://s3plus.meituan.net/dap-orderdetail/qy/1783175410205_goods.png';
+
+// Active stores + whether each one's Qingyun session is live right now. Shared with
+// the Delivery settings card so "connected" means exactly one thing everywhere.
+function _qingyunStoreStatus() {
+  const stores = tdb().prepare(
+    'SELECT code, name_en, name_cn FROM retail_stores WHERE is_active = 1 ORDER BY sort_order, id'
+  ).all();
+  const hb = {};
+  try {
+    for (const r of tdb().prepare('SELECT store_code, logged_in, updated_at FROM qingyun_status').all()) {
+      hb[r.store_code] = r;
+    }
+  } catch (_) { /* table missing pre-migration — all read as not-connected */ }
+  const now = Date.now();
+  return stores.map(s => {
+    const h = hb[s.code];
+    const fresh = h && h.updated_at &&
+      (now - Date.parse(String(h.updated_at).replace(' ', 'T') + 'Z')) < QY_FRESH_MS;
+    return { code: s.code, name_en: s.name_en, name_cn: s.name_cn, connected: !!(fresh && h.logged_in) };
+  });
+}
+
+// The push-queue row is the authority for "we created this Qingyun order ourselves,
+// so we can re-create it elsewhere". An order we merely TRACK (a Meituan delivery
+// Qingyun piped in) has no queue row — its pickup point belongs to the platform that
+// created it, and re-creating it here would just duplicate the delivery.
+function _qingyunPushRow(retailOrderId) {
+  try {
+    return tdb().prepare(
+      'SELECT * FROM qingyun_push_queue WHERE retail_order_id = ? AND qingyun_order_id IS NOT NULL'
+    ).get(retailOrderId) || null;
+  } catch (_) { return null; }
+}
+
+// Is a courier already committed to the current copy? Returns the blocking stage, or
+// null when the order is still a plain 待配送 with nobody sent for it. Moving the
+// pickup point after a courier is called would send a rider to the wrong door, so the
+// override closes and staff cancel in the Qingyun app first.
+function _qingyunMoveBlockedBy(qyOrderId) {
+  try {
+    const job = tdb().prepare('SELECT * FROM delivery_jobs WHERE qingyun_order_id = ?').get(String(qyOrderId));
+    if (!job) return null;                        // not tracked yet — nothing dispatched
+    const stage = deliveryJobStage(job);
+    return stage === 'scheduled' ? null : stage;
+  } catch (_) { return null; }
+}
+
+// Delete one order from a store's Qingyun list — the portal's 更多 → 删除订单, replayed
+// through lib/qingyun-browser.cancelOrder. Only valid for an order nobody has been
+// sent for; the callers below check that first. Never throws: a failure just means
+// the copy is still sitting there, which the caller has to report honestly.
+async function _qingyunDeleteCopy(storeCode, qyOrderId) {
+  let out;
+  try {
+    const { getQingyunBrowser } = require('../lib/qingyun-browser');
+    const br = await getQingyunBrowser(storeCode);
+    const r = await br.cancelOrder(String(qyOrderId));
+    out = { ok: !!r.ok, msg: r.msg || '' };
+  } catch (e) {
+    console.error('[qingyun delete copy]', e.message);
+    out = { ok: false, msg: e.message };
+  }
+  try {
+    tdb().prepare(
+      `INSERT INTO qingyun_sync_log (store_code, event_type, status, detail, error_msg)
+       VALUES (?, 'delete_copy', ?, ?, ?)`
+    ).run(storeCode, out.ok ? 'ok' : 'error',
+      JSON.stringify({ qingyun_order_id: String(qyOrderId) }),
+      out.ok ? null : String(out.msg || 'delete failed').slice(0, 300));
+  } catch (_) { /* logging must never sink the result */ }
+  return out;
+}
+
+// Where this order is set to be collected, and whether that can still be changed.
+// Attached to the drawer payload (o.qingyun_ship_from) — see the order detail route.
+function qingyunShipFromState(retailOrderId) {
+  const q = _qingyunPushRow(retailOrderId);
+  if (!q) return null;
+  const nameOf = (code) => {
+    const st = tdb().prepare('SELECT name_en, name_cn FROM retail_stores WHERE code = ?').get(code);
+    return { name_en: (st && st.name_en) || code, name_cn: (st && st.name_cn) || code };
+  };
+  return {
+    store_code: q.store_code,
+    ...nameOf(q.store_code),
+    qingyun_order_id: String(q.qingyun_order_id),
+    blocked_by: _qingyunMoveBlockedBy(q.qingyun_order_id),   // null = still movable
+    // An old copy we failed to delete after a move — still dispatchable by whoever
+    // is standing at that store, so the drawer surfaces it until it's gone.
+    stale: q.stale_qingyun_order_id
+      ? { store_code: q.stale_store_code, ...nameOf(q.stale_store_code) }
+      : null,
+  };
+}
+
+// The locations this order could be collected from instead.
+router.get('/api/retail-admin/orders/:id/qingyun/ship-from', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const state = qingyunShipFromState(id);
+  if (!state) return res.json({ success: true, data: { available: false, reason: 'not_in_qingyun' } });
+  res.json({
+    success: true,
+    data: {
+      available: true,
+      current: state.store_code,
+      blocked_by: state.blocked_by,
+      stores: _qingyunStoreStatus(),
+    },
+  });
+});
+
+// Do the move: create the same delivery under the target store's Qingyun account,
+// then point the order's queue row at the new copy and retire the old one.
+router.post('/api/retail-admin/orders/:id/qingyun/ship-from', requireRetailAdmin, express.json(), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const target = String(req.body?.store_code || '').trim();
+  if (!target) return res.status(400).json({ success: false, error: 'store_code required' });
+
+  const q = _qingyunPushRow(id);
+  if (!q) return res.status(400).json({ success: false, error: 'order_not_in_qingyun' });
+  if (q.store_code === target) return res.json({ success: true, unchanged: true, store_code: target });
+
+  const store = _qingyunStoreStatus().find(s => s.code === target);
+  if (!store) return res.status(400).json({ success: false, error: 'unknown_store' });
+  if (!store.connected) return res.status(409).json({ success: false, error: 'store_not_connected' });
+
+  const order = tdb().prepare(
+    `SELECT id, order_no, status, recipient_name, recipient_phone, address_json,
+            scheduled_for, delivery_slot_label
+       FROM retail_orders WHERE id = ?`
+  ).get(id);
+  if (!order) return res.status(404).json({ success: false, error: 'not_found' });
+  if (['cancelled', 'refunded', 'delivered'].includes(order.status)) {
+    return res.status(409).json({ success: false, error: 'order_closed' });
+  }
+  const blocked = _qingyunMoveBlockedBy(q.qingyun_order_id);
+  if (blocked) return res.status(409).json({ success: false, error: 'courier_already_called', stage: blocked });
+
+  try {
+    const { getQingyunBrowser, resolveCdpUrl } = require('../lib/qingyun-browser');
+    const { buildCreatePayload } = require('../lib/qingyun-payload');
+    // Each store's Qingyun session lives in its OWN Chrome on the box, found via
+    // QINGYUN_CDP_URL_<STORE>; an unset one silently falls back to the default port.
+    // Without this check a store nobody wired up would create the order in the
+    // CURRENT store's account — a duplicate in the same shop, reported as "moved".
+    if (resolveCdpUrl(target) === resolveCdpUrl(q.store_code)) {
+      return res.status(409).json({ success: false, error: 'store_not_reachable' });
+    }
+    const br = await getQingyunBrowser(target);
+    const shop = await br.getShop();
+    if (!shop || !shop.shopId) return res.json({ success: false, error: 'store_unavailable' });
+    const payload = await buildCreatePayload(order, shop, br, {
+      geocode,
+      goodsPicUrl: cfgValue('delivery.qingyunGoodsPicUrl', QY_GOODS_PIC_DEFAULT),
+      onWarn: (m) => console.warn('[qingyun ship-from]', m),
+    });
+    const created = await br.createOrder(payload);
+    if (!created.ok || !created.orderId) {
+      // Nothing has changed yet — the order still belongs to its current location,
+      // so the operator can simply try again. Leave a trace either way.
+      try {
+        tdb().prepare(
+          `INSERT INTO qingyun_sync_log (store_code, event_type, status, detail, error_msg)
+           VALUES (?, 'ship_from', 'error', ?, ?)`
+        ).run(target, JSON.stringify({ order_no: order.order_no, from: q.store_code, to: target }),
+          String(created.msg || 'create failed').slice(0, 300));
+      } catch (_) { /* logging must never sink the response */ }
+      return res.json({ success: false, error: created.msg || 'create_failed' });
+    }
+
+    // Retire the old copy BEFORE repointing, so no poll in between can re-link it.
+    // A stub row is enough when the daemon hasn't seen that order yet.
+    tdb().prepare(
+      `INSERT INTO delivery_jobs (qingyun_order_id, store_code, retail_order_id, superseded)
+       VALUES (?, ?, NULL, 1)
+       ON CONFLICT(qingyun_order_id) DO UPDATE SET
+         superseded = 1, retail_order_id = NULL, updated_at = CURRENT_TIMESTAMP`
+    ).run(String(q.qingyun_order_id), q.store_code);
+
+    // Delete the old copy from the previous store's Qingyun list. Left behind, it's
+    // a live 待配送 order anyone there could dispatch — a second rider for the same
+    // delivery, billed to you. Safe to delete: we only got here because nobody has
+    // been sent for it. If it fails we remember it (stale_*) so the drawer can offer
+    // a Remove button — the move itself still stands, the leftover is just untidy.
+    const removed = await _qingyunDeleteCopy(q.store_code, q.qingyun_order_id);
+    tdb().prepare(
+      `UPDATE qingyun_push_queue
+          SET store_code = ?, qingyun_order_id = ?, status = 'done', last_error = NULL,
+              updated_at = CURRENT_TIMESTAMP
+        WHERE retail_order_id = ?`
+    ).run(target, String(created.orderId), id);
+    // Record the leftover only on failure, and never CLEAR one here: moving twice
+    // (A→B leaving a leftover at A, then B→C cleanly) must not forget the copy still
+    // live at A. Only a successful delete of that exact copy clears it — see
+    // /qingyun/remove-stale.
+    if (!removed.ok) {
+      tdb().prepare(
+        `UPDATE qingyun_push_queue SET stale_qingyun_order_id = ?, stale_store_code = ?
+          WHERE retail_order_id = ?`
+      ).run(String(q.qingyun_order_id), q.store_code, id);
+    }
+
+    const who = (req.backendUser && (req.backendUser.name || req.backendUser.username)) || 'admin';
+    try {
+      tdb().prepare(
+        `INSERT INTO qingyun_sync_log (store_code, event_type, status, detail)
+         VALUES (?, 'ship_from', 'ok', ?)`
+      ).run(target, JSON.stringify({
+        order_no: order.order_no, from: q.store_code, to: target,
+        old_qingyun_order_id: String(q.qingyun_order_id), qingyun_order_id: String(created.orderId), by: who,
+      }));
+    } catch (_) { /* logging must never sink the move */ }
+
+    res.json({
+      success: true,
+      store_code: target, name_en: store.name_en, name_cn: store.name_cn,
+      qingyun_order_id: String(created.orderId),
+      old_removed: removed.ok,          // false → the drawer shows the Remove button
+      previous: { store_code: q.store_code, qingyun_order_id: String(q.qingyun_order_id) },
+    });
+  } catch (e) {
+    console.error('[qingyun ship-from]', e.message);
+    res.json({ success: false, error: 'move_failed' });
+  }
+});
+
+// Retry deleting the leftover copy a move couldn't remove. Powers the drawer's
+// "Remove it" button; safe to press repeatedly (an already-gone order clears the flag).
+router.post('/api/retail-admin/orders/:id/qingyun/remove-stale', requireRetailAdmin, express.json(), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const q = _qingyunPushRow(id);
+  if (!q || !q.stale_qingyun_order_id) return res.json({ success: true, nothing_to_remove: true });
+  const r = await _qingyunDeleteCopy(q.stale_store_code, q.stale_qingyun_order_id);
+  if (!r.ok) return res.json({ success: false, error: r.msg || 'remove_failed' });
+  tdb().prepare(
+    `UPDATE qingyun_push_queue SET stale_qingyun_order_id = NULL, stale_store_code = NULL,
+            updated_at = CURRENT_TIMESTAMP WHERE retail_order_id = ?`
+  ).run(id);
+  res.json({ success: true });
 });
 
 // A store owner asks us to connect same-city tracking for their store. We can't
