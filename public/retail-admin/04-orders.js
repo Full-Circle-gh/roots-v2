@@ -1906,31 +1906,22 @@ function renderShipByCell(o) {
           ${ageLine || ((subText || tag) ? `<div style="font-size: 10px; margin-top: 2px; color: var(--text-3);">${subText}${tag}</div>` : '')}
           ${surcharge}`;
 }
+// A delivery slot — "Jul 29, 2:26 PM" / "7月29日 14:26" (§1.18).
 function fmtSlotShort(dt) {
-  const pad = n => String(n).padStart(2, '0');
-  // Read the instant in Guangzhou wall-clock (UTC+8), not the browser's — an
-  // operator abroad must still see the day the customer actually chose.
-  const g = gzParts(dt);
   // Midnight (00:00) is never a real delivery time — it's how a DATE-ONLY pick
   // (schedule-for-later day / day-only zone) lands when parsed. Drop the fake
-  // time tail so it reads "Jun 18" / "6月18日", not "Jun 18 · 00:00".
-  const dateOnly = (g.h === 0 && g.mi === 0);
-  // In Chinese mode show "6月25日 · 14:30" instead of "Jun 25 · 14:30".
-  if (typeof window !== 'undefined' && window.cuLang && window.cuLang() === 'cn') {
-    return `${g.mo + 1}月${g.da}日${dateOnly ? '' : ` · ${pad(g.h)}:${pad(g.mi)}`}`;
-  }
-  const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][g.mo];
-  return `${M} ${pad(g.da)}${dateOnly ? '' : ` · ${pad(g.h)}:${pad(g.mi)}`}`;
-}
-// Date only — "Jun 17" / "6月17日". A ship-by DEADLINE is a day, not a minute,
-// so we drop the time tail that fmtSlotShort carries. GZ wall-clock (UTC+8).
-function fmtDateShort(dt) {
+  // time tail so it reads "Jul 18", not "Jul 18, 12:00 AM". Read in Guangzhou
+  // wall-clock, not the browser's: an operator abroad must see the day the
+  // customer actually chose, and a midnight slot is exactly the value that
+  // lands on the previous day if you read it with the browser's own getHours().
   const g = gzParts(dt);
-  if (typeof window !== 'undefined' && window.cuLang && window.cuLang() === 'cn') {
-    return `${g.mo + 1}月${g.da}日`;
-  }
-  const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][g.mo];
-  return `${M} ${String(g.da).padStart(2, '0')}`;
+  const dateOnly = (g.h === 0 && g.mi === 0);
+  return tdWhen(dt, dateOnly ? 'date' : 'dateTime');
+}
+// Date only — "Jul 17" / "7月17日". A ship-by DEADLINE is a day, not a minute,
+// so we drop the time tail that fmtSlotShort carries.
+function fmtDateShort(dt) {
+  return tdWhen(dt, 'date');
 }
 // A slot label captured at checkout can LEAD with a relative day word —
 // "Tomorrow 10:00–12:00" / "明天 10:00–12:00" — frozen at the moment the customer
@@ -2509,37 +2500,29 @@ function humanStatus(s, fulfillmentType) {
   }
   return { pending_payment: 'Pending', paid: 'Paid', preparing: 'Preparing', rider_pickup: 'Rider coming', dispatched: 'Dispatched', delivered: 'Delivered', cancelled: 'Cancelled', refunded: 'Refunded', awaiting_restock: 'Awaiting restock' }[s] || s;
 }
+// "Jul 29, 2:49 PM" / "7月29日 14:49" — §1.18.
+//
+// This function used to do the whole job by hand: parse SQLite's zone-less
+// UTC, hop to the store's wall clock, and then decide on a format. The first
+// two were right and now live in tdWhen(); only the third was ever ours to
+// make, and §1.18 made it once for the whole product.
+//
+// Kept as a named wrapper rather than deleted because ~30 call sites across
+// Orders, Customers and Marketing read it. The name is now the only thing it
+// contributes — the behaviour is the platform rule.
 function formatDate(iso) {
-  if (!iso) return '';
-  // SQLite stores timestamps in UTC as 'YYYY-MM-DD HH:MM:SS' (no zone marker).
-  // Parse as UTC, then render in Guangzhou time (UTC+8) — the store's local
-  // clock — so "Placed" matches the wall clock instead of showing raw UTC.
-  let s = String(iso).trim().replace(' ', 'T');
-  if (!/[zZ]$|[+-]\d\d:?\d\d$/.test(s)) s += 'Z';
-  const d = new Date(s);
-  if (isNaN(d.getTime())) return String(iso).slice(0, 16).replace('T', ' ');
-  const p = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'Asia/Shanghai',
-    year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hour12: false,
-  }).formatToParts(d).reduce((o, x) => (o[x.type] = x.value, o), {});
-  return `${p.year}-${p.month}-${p.day} ${p.hour}:${p.minute}`;
+  return tdWhen(iso, 'dateTime');
 }
 
-// Clock-only (HH:MM, store-local) for a UTC datetime — used for the Meituan
-// delivery ETA. Reuses formatDate's UTC→Asia/Shanghai handling.
+// Clock only — "2:49 PM" / "14:49". Used for the Meituan rider ETA.
 function formatEtaClock(iso) {
-  const s = formatDate(iso);
-  return s ? s.slice(11) : '';
+  return tdWhen(iso, 'time');
 }
-// Date-only normalizer for fields like coupon expiry, where values may be
-// stored in mixed formats ("2026-06-09", "2026/10/6"). Always renders a
-// padded YYYY-MM-DD; falls back to the raw first-10 chars if unparseable.
+// Date only, for fields like coupon expiry where stored values are mixed
+// ("2026-06-09", "2026/10/6"). tdWhen() normalises both. The dash stays a
+// decision of this helper: callers render it straight into a cell.
 function formatDateOnly(v) {
-  if (!v) return '—';
-  const m = String(v).match(/(\d{4})\D(\d{1,2})\D(\d{1,2})/);
-  if (!m) return String(v).slice(0, 10);
-  return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+  return tdWhen(v, 'date') || '—';
 }
 
 // Status transition button labels — bilingual per the EN · 中文 admin rule
@@ -3760,10 +3743,14 @@ async function markParcelDelivered(id, sid, ev) {
   }
 }
 
-// Stored ETA is a 24h "HH:MM"; render it on a 12h clock for the office card.
+// Stored ETA is a bare 24h "HH:MM" with no date attached, so it can't go
+// through tdWhen() — but it still owes §1.18 its language rule: a 12h clock
+// in English, a 24h clock in Chinese. It used to render 12h in BOTH, which
+// put an English-shaped clock on a Chinese screen.
 function formatEtaPretty(hhmm) {
   const m = /^(\d{2}):(\d{2})$/.exec(hhmm || '');
   if (!m) return hhmm || '';
+  if (typeof cuLang === 'function' && cuLang() === 'cn') return `${m[1]}:${m[2]}`;
   const h = parseInt(m[1], 10);
   const h12 = (h % 12) || 12;
   return `${h12}:${m[2]} ${h < 12 ? 'AM' : 'PM'}`;
@@ -4157,7 +4144,7 @@ function renderReadonlyOrder(o) {
             <span class="pill" style="background: var(--bg-elev-1); color: var(--text-2);" title="${escapeHtml(chan)} orders are mirrored in for visibility — accept &amp; prepare them in ${escapeHtml(chan)}">${escapeHtml(chan)}${roTag}</span>
             ${preOrder ? `<span class="pill" style="background:#FBF0DC; color:#8A6516;"><span class="dot" style="background:#B98B21;"></span>${cuT('Pre-order', '预订单')}</span>` : ''}
           </div>
-          <div class="od-eyebrow">Order placed ${formatDate(o.placed_at)} · 下单于 ${formatDate(o.placed_at)}</div>
+          <div class="od-eyebrow"><span>Order placed · 下单于</span> ${formatDate(o.placed_at)}</div>
         </div>
       </div>
 
@@ -4307,7 +4294,7 @@ function renderOpenOrder(o) {
       <div class="order-card">
         ${_ORDER_BACK_CUSTOMER ? `<button class="btn btn-sm order-back-cust" style="margin-bottom: var(--s3);" onclick="cuBackToCustomer()">← Back to customer · 返回顾客</button>` : ''}
         <div class="order-head">
-          <div class="od-eyebrow">Order placed ${formatDate(o.placed_at)} · 下单于 ${formatDate(o.placed_at)}</div>
+          <div class="od-eyebrow"><span>Order placed · 下单于</span> ${formatDate(o.placed_at)}</div>
           <div class="title-row">
             <b>${escapeHtml(o.order_no)}</b>
             ${(() => { const p = orderStatusPill(o); return `<span class="pill ${p.cls}"><span class="dot"></span>${p.label}</span>`; })()}
@@ -5036,9 +5023,11 @@ function renderShipmentTrackingCard(o, s, hoisted) {
   const carrierOpts = (TRACKING_CARRIERS || []).map(c =>
     `<option value="${c.code}" ${ (has ? t.carrier_code : 'jd') === c.code ? 'selected' : '' }>${escapeHtml(c.name_en)} · ${escapeHtml(c.name_cn)}</option>`
   ).join('');
-  // Short stamp (drop the leading year — "2026-07-06 13:59" → "07-06 13:59")
-  // so the footer reads "Updated 07-06 13:59" like the mockup, not the long form.
-  const syncShort = t?.synced_at ? formatDate(t.synced_at).replace(/^\d{4}-/, '') : '';
+  // This used to strip the leading year off the ISO stamp by regex so the
+  // footer read "Updated 07-06 13:59". §1.18's year rule does exactly that
+  // job — and does it correctly across a year boundary, which the regex did
+  // not — so the hack goes and the stamp is just the stamp.
+  const syncShort = t?.synced_at ? formatDate(t.synced_at) : '';
   const synced = t?.synced_at ? cuT(`Updated ${syncShort}`, `更新于 ${syncShort}`) : cuT('no live sync yet', '尚未实时同步');
   const trackLink = (has && t.track_url)
     ? `<a href="${t.track_url}" target="_blank" rel="noopener" class="btn btn-sm">${cuT('Carrier site →', '承运商官网 →')}</a>`

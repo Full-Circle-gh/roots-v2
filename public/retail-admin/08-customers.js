@@ -2130,32 +2130,36 @@ async function cuDeleteAddr(addrId, ev) {
 }
 
 function cuFmtTime(iso) {
-  // Single source of truth — Guangzhou (UTC+8) formatting, correct on any
-  // machine regardless of the browser's own timezone.
+  // Single source of truth — §1.18's `dateTime`, rendered in the store's
+  // wall clock and correct on any machine regardless of the browser's zone.
   return formatDate(iso);
 }
 
-// Guangzhou calendar day ('YYYY-MM-DD') for a UTC timestamp or epoch ms.
-// formatDate already does the UTC→Asia/Shanghai hop; take its date half.
+// The store's calendar day ('YYYY-MM-DD') for a UTC timestamp or epoch ms.
+// A COMPARISON KEY, never shown — hence §1.18's `machine`, which is exempt
+// from localisation for exactly this reason. It used to slice the first ten
+// characters off formatDate()'s output, which only worked while that output
+// happened to start with an ISO date; it does not any more.
 function cuGzDay(v) {
-  if (v == null || v === '') return '';
-  if (typeof v === 'number') return new Date(v + 8 * 3600 * 1000).toISOString().slice(0, 10);
-  return (formatDate(v) || '').slice(0, 10);
+  return tdWhen(v, 'machine');
 }
 
-// List "Last seen" — Today 14:35 / Yesterday 23:24 / 2026-07-03. The roster is
+// List "Last seen" — Today 2:35 PM / Yesterday 11:24 PM / Jul 3. The roster is
 // mostly today and yesterday, so repeating the date on every row is noise.
 function cuFmtSeen(iso) {
   if (!iso) return cuT('never', '从未');
-  const s = formatDate(iso);
+  // Compare on `machine` days and render with `time` / `date` (§1.18). This
+  // used to slice a clock out of formatDate()'s output by character offset,
+  // which stopped being an ISO stamp the moment the rule landed.
+  const day = cuGzDay(iso);
   // An unparseable timestamp is still not a dash. It also must not be a
   // TRUTHY dash: callers write `cuFmtSeen(x) || 'never'`, and '—' satisfies
   // that `||`, so a dash here would silently outrank the real fallback.
-  if (!s) return cuT('never', '从未');
-  const day = s.slice(0, 10), clock = s.slice(11);
+  if (!day) return cuT('never', '从未');
+  const clock = tdWhen(iso, 'time');
   if (day === cuGzDay(Date.now()))                    return cuT('Today', '今天') + ' ' + clock;
   if (day === cuGzDay(Date.now() - 24 * 3600 * 1000)) return cuT('Yesterday', '昨天') + ' ' + clock;
-  return day;
+  return tdWhen(iso, 'date');
 }
 
 // Monogram for the roster's identity cell — first letter of the nickname, or a
@@ -2171,12 +2175,11 @@ function cuMonogram(nickname) {
   return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></svg>';
 }
 
+// A shown "joined" date — §1.18's `date`. It used to build YYYY-MM-DD out of
+// getFullYear()/getMonth()/getDate(), which read the BROWSER's clock, so an
+// operator abroad saw a different join date than the one in Guangzhou.
 function cuFmtDate(iso) {
-  if (!iso) return '';
-  const d = new Date((typeof iso === 'string' && iso.indexOf('T') < 0 ? iso.replace(' ', 'T') + 'Z' : iso));
-  if (isNaN(d)) return String(iso);
-  const pad = n => String(n).padStart(2, '0');
-  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  return tdWhen(iso, 'date');
 }
 
 document.querySelector('[data-tab="customers"]').addEventListener('click', () => {

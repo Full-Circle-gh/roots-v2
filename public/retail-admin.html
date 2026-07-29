@@ -680,6 +680,7 @@
 <!-- File split (2026-06-11): page CSS lives in /assets/retail-admin.css; the
      main app JS lives in /assets/retail-admin/*.js (10 files, loaded mid-body, same spot
      the inline block used to be). Smaller page-specific blocks remain inline. -->
+<link rel="preload" href="/assets/td-datetime.js" as="script">
 <link rel="preload" href="/assets/retail-admin/01-core.js" as="script">
 <link rel="preload" href="/assets/retail-admin/02-settings-ops.js" as="script">
 <link rel="preload" href="/assets/retail-admin/03-dashboard.js" as="script">
@@ -11357,6 +11358,11 @@
 })();
 </script>
 <script src="/assets/tacet-dialogs.js"></script>
+<!-- Dates and times (docs/tacet-desktop-patterns.md §1.18). Must load BEFORE
+     the parts — 04-orders.js and 08-customers.js call tdWhen() at render time,
+     and the inline i18n engine above defines window.cuLang(), which tdWhen
+     reads to pick the language. -->
+<script src="/assets/td-datetime.js"></script>
 <script src="/assets/retail-admin/01-core.js"></script>
 <script src="/assets/retail-admin/02-settings-ops.js"></script>
 <script src="/assets/retail-admin/03-dashboard.js"></script>
