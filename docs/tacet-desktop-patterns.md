@@ -1,4 +1,4 @@
-# Tacet desktop patterns — v3.0
+# Tacet desktop patterns — v3.1
 
 > The rulebook for every desktop admin surface. `tacet-design-system.md` governs how Tacet **looks**. `tacet-brand-concept.md` governs how it **sounds**. `tacet-ia-blueprint.md` governs what **exists**. This file governs **how a page is put together** — so that Orders and Pop-ups feel like the same product despite having different layouts.
 >
@@ -671,6 +671,36 @@ Two gaps the rebrand left. Defined here from Tacet primitives.
 - **Avatar** — a **rounded square**, 8px radius, `--td-dusk-tint` fill, `--td-dusk` text, single initial, Inter 500. Sizes: 26 (table), 32 (row), 56 (header). **Never a circle.** (Team ships 50% circles today — invented in the absence of a rule.)
 - **Link** — `--td-text` with a 1px underline at 60% opacity; solid on hover. **Never a new colour.** Tacet has no link blue, and Dusk is unavailable — a link is not an automation.
 
+### 1.14a Tooltips — one bubble, one attribute
+
+*Added 2026-07-30. The component shipped with the Customers build and was never written down. Within a single session a second, worse tooltip had grown beside it on the Dashboard — proof of §1.4's "a shared component with an unwritten treatment is two components", one section over.*
+
+**There is one tooltip. Put `data-tt` on the element and stop.** Controller in `01-core.js`, delegated off `document`, so an element rendered an hour from now behaves the same as one in the static markup; a single `.tt-pop` is appended to `<body>` and reused; appearance only in `retail-admin.css:11089`. **No per-instance JS. No second implementation, ever.** The canonical use is the Customers segment strip (`retail-admin.html:3689`, "Sleeping 60d+").
+
+**Placement is above, flipping below only when above would clip. There is no left/right variant** — not "prefer above", not "side when it fits". Two placements exist.
+
+**It clamps to the viewport, and the arrow still points.** The bubble is `position:fixed` and shifted horizontally by hand to stay on screen. The arrow's offset (`--tt-ax`) is measured from the **element's** centre, not the bubble's, so a bubble that has been pushed sideways to stay on screen keeps pointing at the thing it explains.
+
+**It never covers what it explains** — an 8px gap on the flipping edge, which is the whole reason placement flips rather than overlaps.
+
+**Opens** on hover after a 350ms dwell (long enough not to flicker as a pointer crosses on its way elsewhere), on tap, and on keyboard focus. **Focus opens immediately** — a dwell delay on focus reads as lag to someone tabbing through.
+
+**Closes** on pointer-leave, tap-elsewhere, focus-out, Escape, scroll and resize. **There is deliberately NO dismiss control — no ✕, no click-to-pin.** A tooltip that has to be closed is a panel wearing a tooltip's clothes.
+
+**On scroll it closes rather than chases.** It is anchored to a rect measured once; the moment that rect can have moved, the honest thing is to close.
+
+**A tap never swallows the trigger's own click.** The tooltip is additive to the control it sits on, never a mode in front of it.
+
+**It inverts against the page** — `--td-text` ground, `--td-paper` ink, so it reads Ink-on-Paper in light and Paper-on-Ink in dark. **Never hardcode `#111A2B`**: on a dark page the bubble goes invisible.
+
+**Max 250px wide, 12px Inter 400, wrapping.** Something that needs more room than that is a panel, and §1.13 picks which one.
+
+**Language — two traps, both live.** Authored text is `"EN · 中文"` like every other label and the i18n layer splits it on the first `" · "` (`TIP_ATTRS`). **Edit that splitter in the right place:** the engine that actually runs is **inline in `retail-admin.html:11312`** — it has to be, or a cold refresh flashes both languages — and `10-extras.js:684` is a guarded fallback copy (`window.__raI18nEngine`). They are the same code twice; changing only the module changes nothing. But text **built in JS** must already be in one language via `cuT()` **and must not contain `" · "`** — use an em dash inside a half. The splitter cuts at the first `" · "` and would take half the tooltip with it; this is §1.11's glue constraint reaching an attribute. Set JS-built text with `ttSet()` (`01-core.js`), which also enforces the second trap: **empty means no attribute, not an empty one.** `[data-tt]` matches an empty attribute, which leaves the element focusable and hoverable for a bubble that never has anything in it.
+
+**Content.** A tooltip explains something already on screen. It never carries an instruction the operator has to act on, and never the only copy of something they need — that is a §1.12 empty state or a line in the page, not a hover.
+
+**One open question, flagged rather than quietly "corrected."** `.tt-pop` carries `0 4px 12px rgba(17,26,43,.08), 0 12px 32px rgba(17,26,43,.18)` — heavier than the single ambient overlay shadow §1.4 permits, and §1.4 already calls out `.fc-spark-tip` / `.db-spark-tip` for stacking two. Whether §1.4's overlay shadow is meant to govern a bubble this small is undecided. **Do not restyle it on the strength of §1.4 alone; settle the question first.**
+
 ### 1.15 Voice
 
 - Sentence case everywhere. **No exclamation marks — ever**, including good news.
@@ -1094,7 +1124,7 @@ Shared components live in one place and are never re-implemented per page. Build
 2. **Button** (Primary/Secondary/Ghost/Destructive) · **Card** · **Badge** (Sage/Amber/Brick/Dusk-auto) · **Input + Label** · **Dusk dot** · **Avatar** · **Link** · tabular-number utility.
 3. **KPI tile** + strip (A1, A7) · **Filter chip strip** with live counts (A1) · **Data table** (A1)
 4. **Segment control** — serves both A2's lifecycle filter and the A7/§1.7 sub-view strip. One component, two active-state treatments.
-5. **Drawer** shell (A1, A4) · **Modal** shell · **Popover** shell
+5. **Drawer** shell (A1, A4) · **Modal** shell · **Popover** shell · **Tooltip** (§1.14a) — already built and product-wide (`data-tt`); listed because it was missing from this list, and a shared component absent from the "never re-implemented" list is one someone re-implements.
 6. **Master switch card** + **setting row** (A4)
 7. **Channel card** (A5)
 8. **The Recap** (A6) — build first among the signature pieces; it sets the voice for everything.
@@ -1361,6 +1391,12 @@ Small, non-blocking. Resolve during Batch 0.
 ---
 
 *v3.0 · 2026-07-29.*
+
+**v3.1 changes: §1.14a added — tooltips.** One rule added, nothing removed or altered. Raised by Ash 2026-07-30: *"we already have tooltip in customers section and it built with certain rules. if we dont have this rules in desktop patterns we need to update this rule."* The rule is not new — the component has behaved this way since the Customers build. Only the writing-down is new.
+
+**Why it needed writing down, demonstrated the same day.** The Dashboard's delta badges had grown their **own** tooltip: a spark-tip bubble parked at `left:50%, top:0` with no viewport clamping and no flip. Both omissions were visible in one hover — the bubble hung off the left edge of the window with its opening words cut away, and what remained sat on top of the very figure it was explaining. The Orders KPI strip carried the identical defect through `ordSetDelta`, unhit. Neither author was ignoring a rule; **there was no rule to ignore**, because the working component documented itself only in a code comment. This is §1.4's "a shared component with an unwritten treatment is two components" happening to a component nobody had thought of as shared. Both surfaces now write `data-tt`; the bespoke bubble, its two `fcDelta*` aliases and the inline handlers on three Orders spans are deleted.
+
+**One trap the write-up surfaced that the code had not hit yet.** The old delta tip read `"vs the last 4 Thursdays at this time · ¥147 each by now"`. Moved to `data-tt` unchanged, the i18n splitter would have cut it at its own decorative `" · "` and thrown away the second half — §1.11's glue constraint, reaching an attribute for the first time. Recorded in §1.14a rather than left for whoever hit it.
 
 **v3.0 changes: §1.18 added — dates and times.** One rule added, nothing removed or altered. **The surface's language picks the convention and then that convention is followed completely** — English renders US dates and times, Chinese renders Chinese ones. Decided by Ash 2026-07-29 from a measured three-variant mockup (`reference/datetime-format-mockup.html`).
 
