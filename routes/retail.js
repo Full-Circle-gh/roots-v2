@@ -10479,6 +10479,15 @@ function findDeliveryJobForOrder(orderId, recipientPhone) {
     ).get(orderId);
     if (!job) {
       const phone = String(recipientPhone || '').replace(/\D/g, '');
+      // A job that stopped moving BEFORE this order was even placed cannot be this
+      // order's delivery. Without this bound, TC000101 (placed 2026-07-29, just paid)
+      // adopted an unlinked job from 2026-07-04 and the drawer read "Delivered ·
+      // updated 24d ago" on a brand-new order. The phones weren't even the same —
+      // 18313159912 vs 18613159912 share their last 8 digits, which is all the
+      // fallback below compares. The grace hour covers a job that was created moments
+      // before the order row it belongs to.
+      const placedAt = tdb().prepare('SELECT placed_at FROM retail_orders WHERE id = ?').get(orderId);
+      const notBefore = placedAt && placedAt.placed_at ? placedAt.placed_at : null;
       if (phone.length >= 7) {
         // Exclude rows already claimed by a DIFFERENT order — a repeat customer's
         // phone otherwise matches their OLD (already-delivered) job and this
@@ -10488,11 +10497,12 @@ function findDeliveryJobForOrder(orderId, recipientPhone) {
         // order's recipient phone, so the fallback would otherwise re-adopt it.
         job = tdb().prepare(
           `SELECT * FROM delivery_jobs
-            WHERE REPLACE(REPLACE(recipient_phone,' ',''),'-','') LIKE ?
-              AND (retail_order_id IS NULL OR retail_order_id = ?)
+            WHERE REPLACE(REPLACE(recipient_phone,' ',''),'-','') LIKE @tail
+              AND (retail_order_id IS NULL OR retail_order_id = @oid)
               AND COALESCE(superseded, 0) = 0
+              AND (@not_before IS NULL OR updated_at >= datetime(@not_before, '-1 hour'))
             ORDER BY updated_at DESC LIMIT 1`
-        ).get('%' + phone.slice(-8) + '%', orderId);
+        ).get({ tail: '%' + phone.slice(-8) + '%', oid: orderId, not_before: notBefore });
       }
     }
     return job || null;
@@ -18920,23 +18930,10 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
   // job (JD parcel / off-system courier / pre-migration) → no courier block, and
   // the drawer falls back to the plain order status as before.
   try {
-    let job = tdb().prepare(
-      'SELECT * FROM delivery_jobs WHERE retail_order_id = ? ORDER BY updated_at DESC LIMIT 1'
-    ).get(id);
-    if (!job) {
-      const phone = String(o.recipient_phone || '').replace(/\D/g, '');
-      if (phone.length >= 7) {
-        // Exclude rows already claimed by a DIFFERENT order — see
-        // findDeliveryJobForOrder for why (repeat customer, stale rider leak).
-        job = tdb().prepare(
-          `SELECT * FROM delivery_jobs
-            WHERE REPLACE(REPLACE(recipient_phone,' ',''),'-','') LIKE ?
-              AND (retail_order_id IS NULL OR retail_order_id = ?)
-              AND COALESCE(superseded, 0) = 0
-            ORDER BY updated_at DESC LIMIT 1`
-        ).get('%' + phone.slice(-8) + '%', id);
-      }
-    }
+    // Was a second copy of findDeliveryJobForOrder's match. It drifted: the helper
+    // grew a "the job can't predate the order" bound after a brand-new order adopted
+    // a month-old job here, and this copy didn't have it. One code path now.
+    const job = findDeliveryJobForOrder(id, o.recipient_phone);
     if (job) {
       const stage = deliveryJobStage(job);
       o.courier = {
