@@ -11533,6 +11533,18 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   // added to revenue.
   const creditRedeemed = storeCreditRedeemed(tdb(), from, to);
 
+  // ⚠ `visitors` IS KNOWN-WRONG AND NOTHING READS IT. It double-counts anyone
+  // who signs in mid-session: miniapp/utils/track.js only ever sends session_id,
+  // and customer_id/openid are filled in server-side from the Bearer token — so
+  // the anonymous rows of a session key on session_id while the signed-in rows of
+  // the SAME session key on customer_id, and the COALESCE below yields two
+  // "visitors" for one person. (Measured 2026-07-29: 17 sessions in one day had
+  // more than one key, which is how 59 visitors can show against 47 sessions —
+  // arithmetically impossible for a real headcount.) Fixing it needs the mini app
+  // to send a stable device id, which is its own change; until then Sessions is
+  // the single denominator the dashboard shows. The column stays so the shape of
+  // this payload does not change under other callers — do not put it on a card,
+  // and do not treat it as a headcount in a report.
   const visitsSql = `
     SELECT COUNT(*) AS visits,
            COUNT(DISTINCT session_id) AS sessions,
@@ -11546,33 +11558,45 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
   const newCust     = tdb().prepare(newCustSql).get(from, to).n;
   const newCustPrev = tdb().prepare(newCustSql).get(prevFrom, prevTo).n;
 
-  // ── Trailing 7-day baseline (single-day view only). A calmer comparison than
-  // a single noisy "yesterday": average each metric over the active days in the
-  // prior week so "Today" reads against a typical recent day. `days` counts only
-  // days with history behind them, so a young shop isn't diluted by pre-launch
-  // zeros (days = 0 → no baseline yet → the UI shows "new"). ──
+  // ── Same-weekday baseline (single-day view only) ──
+  // "Today vs a typical day" used to average the trailing SEVEN days, which
+  // blends Saturday trade into a Tuesday and makes a normal weekday read as a
+  // slump (and every Saturday read as a triumph). A shop's week has a shape, so
+  // the only honest comparison for a Wednesday is other Wednesdays: average the
+  // same weekday over the last four weeks.
+  //
+  // `days` is how many same-weekdays actually EXIST behind this shop — a
+  // candidate only counts from the first day it had anything to compare — so a
+  // three-week-old shop compares against three Wednesdays and says so. The
+  // client states that number in the delta's hover chip ("vs the last 3
+  // Wednesdays"), which is the whole point: a thin baseline has to read as thin
+  // rather than hide behind a flat "4-week average". days = 0 → no baseline yet
+  // → the UI shows "new" instead of a percentage.
+  const DASH_BASELINE_WEEKS = 4;
   let baseline = null;
   if (hourly) {
-    const baseFrom = new Date(new Date(from).getTime() - 7 * 86400000).toISOString().slice(0, 10);
-    const baseTo   = prevTo;   // the day before `from`
-    const bk   = tdb().prepare(kpiSql).get(baseFrom, baseTo);
-    const bnew = tdb().prepare(newCustSql).get(baseFrom, baseTo).n;
-    // Blend gzgrocery REVENUE into the baseline too, so "Today vs a typical day"
-    // compares like with like (today's revenue already includes gzgrocery above).
-    // Orders stay storefront-only on both sides.
-    const gyBase = guanyiPickupSales(tdb(), baseFrom, baseTo, { hourly: false });
-    bk.revenue = Number(bk.revenue || 0) + gyBase.revenue;
-    // Blend top-up cash into the baseline too, so "Today vs a typical day"
-    // compares like with like (today's revenue already includes it above).
-    const tuBase = topupCashReceived(tdb(), baseFrom, baseTo, { hourly: false });
-    bk.revenue = Number(bk.revenue || 0) + tuBase.received;
     const fo = tdb().prepare(`SELECT MIN(${PDATE}) AS d FROM retail_orders WHERE ${PAID}`).get().d;
     const fc = tdb().prepare(`SELECT MIN(date(created_at, '${TZ}')) AS d FROM retail_customers`).get().d;
     const firstD = [fo, fc].filter(Boolean).sort()[0] || null;
-    let days = 0;
-    if (firstD) {
-      const lo = firstD > baseFrom ? firstD : baseFrom;
-      days = Math.min(7, Math.max(0, Math.round((new Date(baseTo) - new Date(lo)) / 86400000) + 1));
+    // `from` minus 7·1..4 days — each the same weekday by construction.
+    const cand = [];
+    for (let w = 1; w <= DASH_BASELINE_WEEKS; w++) {
+      const d = new Date(new Date(from).getTime() - w * 7 * 86400000).toISOString().slice(0, 10);
+      if (!firstD || d >= firstD) cand.push(d);
+    }
+    const days = cand.length;
+    let sumRev = 0, sumOrd = 0, sumNew = 0;
+    for (const d of cand) {
+      const k = tdb().prepare(kpiSql).get(d, d);
+      sumOrd += Number(k.orders || 0);
+      sumNew += tdb().prepare(newCustSql).get(d, d).n;
+      // Blend gzgrocery pickup takings and top-up cash into each baseline day,
+      // exactly as the headline blends them into today — otherwise the delta
+      // would compare a blended today against a storefront-only past. Orders
+      // stay storefront-only on both sides, as they are everywhere else here.
+      sumRev += Number(k.revenue || 0)
+              + guanyiPickupSales(tdb(), d, d, { hourly: false }).revenue
+              + topupCashReceived(tdb(), d, d, { hourly: false }).received;
     }
     const pctOf = (cur, avg) => (avg > 0 ? Math.round(((cur - avg) / avg) * 1000) / 10 : null);
     const mk = (cur, sum) => {
@@ -11581,9 +11605,14 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
     };
     baseline = {
       days,
-      revenue:       mk(kpi.revenue, bk.revenue),
-      orders:        mk(kpi.orders,  bk.orders),
-      new_customers: mk(newCust,     bnew),
+      // 0–6, Sunday first. Sent as an index, never a word: the client owns the
+      // language, and a weekday name built here would freeze in one of them.
+      // getUTCDay because `from` is a bare YYYY-MM-DD (parsed as UTC midnight),
+      // so this is the calendar date's own weekday whatever the server's zone.
+      weekday:       new Date(from).getUTCDay(),
+      revenue:       mk(kpi.revenue, sumRev),
+      orders:        mk(kpi.orders,  sumOrd),
+      new_customers: mk(newCust,     sumNew),
     };
   }
 
@@ -11671,44 +11700,12 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
     if (tuB) { t.revenue = +(Number(t.revenue || 0) + tuB.revenue).toFixed(2); }
   }
 
-  // ── "Typical {weekday}" ghost curve (single-day view only). The hourly-average
-  // blended revenue for the SAME weekday over the trailing 6 same-weekdays that
-  // have history — so the Today day-line can plot today against a normal
-  // same-weekday, by this hour. Candidate dates are `from` minus 7·1..6 days
-  // (each the same weekday by construction); only those on/after the first sale
-  // count, so a young shop divides by what it actually has (null when none yet).
-  // gzgrocery pickup is blended in per hour, matching the today curve above. ──
-  let typical = null;
-  if (hourly) {
-    const foDate = tdb().prepare(`SELECT MIN(${PDATE}) AS d FROM retail_orders WHERE ${PAID}`).get().d;
-    const cand = [];
-    for (let w = 1; w <= 6; w++) {
-      const d = new Date(new Date(from).getTime() - w * 7 * 86400000).toISOString().slice(0, 10);
-      if (!foDate || d >= foDate) cand.push(d);
-    }
-    if (cand.length) {
-      const ph = cand.map(() => '?').join(',');
-      const rows = tdb().prepare(`
-        SELECT CAST(${PHOUR} AS INTEGER) AS b, COALESCE(SUM(total), 0) AS revenue
-          FROM retail_orders
-         WHERE ${PAID} AND ${PDATE} IN (${ph})
-         GROUP BY b`).all(...cand);
-      const sum = new Array(24).fill(0);
-      for (const r of rows) sum[r.b] = Number(r.revenue || 0);
-      for (const d of cand) {
-        const gy = guanyiPickupSales(tdb(), d, d, { hourly: true });
-        const tu = topupCashReceived(tdb(), d, d, { hourly: true });
-        for (let h = 0; h < 24; h++) {
-          const hk = String(h).padStart(2, '0');
-          const g = gy.byBucket[hk];
-          if (g) sum[h] += Number(g.revenue || 0);
-          const tb = tu.byBucket[hk];
-          if (tb) sum[h] += Number(tb.revenue || 0);
-        }
-      }
-      typical = sum.map(v => +(v / cand.length).toFixed(2));
-    }
-  }
+  // The "typical {weekday}" ghost curve used to be computed here — 24 hourly
+  // averages over the trailing same-weekdays, to draw a dotted comparison line
+  // behind the Today chart. That chart was cut in the 2026-07-18 simplification
+  // and nothing has read the array since, so it was 4 extra day-queries plus two
+  // ledger walks on every single-day dashboard load, thrown away. The same
+  // same-weekday idea now lives in `baseline` above, where it is actually read.
 
   // ── Payment-method split ──
   // Base buckets sum order.total by the order's primary tender. But a WeChat
@@ -12040,7 +12037,6 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       },
       baseline,
       trend,
-      typical,
       funnel: byStatus,
       new_vs_returning: {
         buyers: nvr.buyers || 0,
@@ -12911,6 +12907,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
   let delivery_alerts = { count: 0, items: [] };
   let invoices = { count: 0, items: [] };
   let unhandled = { count: 0, items: [] };
+  let awaiting_restock = { count: 0, items: [] };
 
   // Optional per-store scope (mirrors the dashboard's store picker). When a
   // store_id is supplied we count that store's own shelf (its retail_store_stock
@@ -13018,24 +13015,33 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
       SELECT COUNT(*) AS n FROM retail_orders
        WHERE refund_status IN ('pending','reviewing')
     `).get().n;
+    // `waiting_since` is what the card ages from, and it must never be null —
+    // refund_requested_at is only stamped when a CUSTOMER files the request, so
+    // a refund opened by staff (or migrated in) carries none, and raw age math
+    // on it renders a blank cell or "NaN min". placed_at is the floor: it is
+    // DEFAULT CURRENT_TIMESTAMP, so it always exists. Same rule as `unhandled`
+    // below. The raw column still ships as `requested_at` for anything that
+    // wants the truthful "did the customer file this" signal.
     const refItems = tdb().prepare(`
       SELECT o.id, o.order_no, o.refund_amount_requested AS amount,
              o.refund_status AS status, o.refund_requested_at,
+             COALESCE(o.refund_requested_at, o.placed_at) AS waiting_since,
              COALESCE(NULLIF(TRIM(c.nickname), ''), NULLIF(TRIM(o.recipient_name), ''), NULLIF(TRIM(o.recipient_phone), ''), NULLIF(TRIM(c.phone), '')) AS buyer
         FROM retail_orders o
         LEFT JOIN retail_customers c ON c.id = o.customer_id
        WHERE o.refund_status IN ('pending','reviewing')
-       ORDER BY o.refund_requested_at DESC LIMIT ?
+       ORDER BY waiting_since ASC LIMIT ?
     `).all(previewLimit);
     refunds = {
       count: refOpen,
       items: refItems.map(r => ({
-        id:           r.id,
-        order_no:     r.order_no,
-        amount:       r.amount,
-        status:       r.status,
-        requested_at: r.refund_requested_at,
-        buyer:        r.buyer,
+        id:            r.id,
+        order_no:      r.order_no,
+        amount:        r.amount,
+        status:        r.status,
+        requested_at:  r.refund_requested_at,
+        waiting_since: r.waiting_since,
+        buyer:         r.buyer,
       })),
     };
 
@@ -13087,13 +13093,22 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     const airCount = tdb().prepare(`
       SELECT COUNT(*) AS n FROM retail_orders o WHERE ${AIR_DELAY_EXISTS}
     `).get().n;
+    // The age this row states is how long the CUSTOMER has been living with a
+    // late cold-chain parcel, so it counts from the air leg's dispatched_at —
+    // not tracking_synced_at, which only says when we last heard from the
+    // carrier and would reset to "2m" on every poll. Same subquery the EXISTS
+    // above walks; it just returns the stamp now.
     const airItems = tdb().prepare(`
       SELECT o.id, o.order_no, o.tracking_synced_at,
+             (SELECT MIN(sha.dispatched_at) FROM retail_shipments sha
+               WHERE sha.order_id = o.id AND sha.mode = 'air'
+                 AND sha.dispatched_at IS NOT NULL
+                 AND sha.air_delay_cleared_at IS NULL) AS waiting_since,
              COALESCE(NULLIF(TRIM(c.nickname), ''), NULLIF(TRIM(o.recipient_name), ''), NULLIF(TRIM(o.recipient_phone), ''), NULLIF(TRIM(c.phone), '')) AS buyer
         FROM retail_orders o
         LEFT JOIN retail_customers c ON c.id = o.customer_id
        WHERE ${AIR_DELAY_EXISTS}
-       ORDER BY o.tracking_synced_at DESC LIMIT ?
+       ORDER BY waiting_since ASC LIMIT ?
     `).all(previewLimit);
 
     // Meituan (view-only channel) never writes tracking_status/scenario — the
@@ -13121,13 +13136,22 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     const mtCount = tdb().prepare(`
       SELECT COUNT(*) AS n FROM retail_orders o WHERE ${MT_ALERT_WHERE}
     `).get().n;
+    // The honest age for an overdue Meituan order is how far past the promised
+    // time it is, so `waiting_since` is channel_eta — the clock the WHERE above
+    // already tests. channel_status_at only says when the platform last touched
+    // the row, which moves on every poll and would read as "just now" on an
+    // order three hours late. The no-ETA orphans have nothing better, so they
+    // fall back to when the platform last spoke (that IS their overdue clock,
+    // per the +3h branch above).
     const mtItems = tdb().prepare(`
       SELECT o.id, o.order_no, o.channel_status, o.channel_status_at,
+             COALESCE(NULLIF(o.channel_eta, ''), o.channel_status_at, o.placed_at) AS waiting_since,
+             CASE WHEN o.channel_eta IS NOT NULL AND o.channel_eta != '' THEN 1 ELSE 0 END AS past_eta,
              COALESCE(NULLIF(TRIM(c.nickname), ''), NULLIF(TRIM(o.recipient_name), ''), NULLIF(TRIM(o.recipient_phone), ''), NULLIF(TRIM(c.phone), '')) AS buyer
         FROM retail_orders o
         LEFT JOIN retail_customers c ON c.id = o.customer_id
        WHERE ${MT_ALERT_WHERE}
-       ORDER BY o.channel_status_at DESC LIMIT ?
+       ORDER BY waiting_since ASC LIMIT ?
     `).all(previewLimit);
 
     // Same-city (青云 Qingyun rider) — our own local deliveries carry NO waybill
@@ -13162,28 +13186,42 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
          WHERE o.fulfillment_type = 'delivery' AND o.status = 'dispatched'
       `).all();
       const nowD = new Date();
-      localStuck = localRows.filter(r => {
+      localStuck = localRows.map(r => {
         // Must have a FRESH live Qingyun job that hasn't reached pickup (os < 30) —
         // i.e. still finding / awaiting a rider. An in-transit rider (os >= 30) is
         // on the way and resolves on drop-off, so it's not "stuck".
-        if (r.job_os == null || r.job_os >= 30) return false;
+        if (r.job_os == null || r.job_os >= 30) return null;
         const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(r.local_eta || '').trim());
-        if (!m) return false;
+        if (!m) return null;
         if (r.scheduled_for) {
           const sched = new Date(r.scheduled_for);
           if (!isNaN(sched.getTime()) &&
               new Date(sched.getFullYear(), sched.getMonth(), sched.getDate()).getTime() >
               new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate()).getTime()) {
-            return false;   // scheduled for a later day — not overdue today
+            return null;   // scheduled for a later day — not overdue today
           }
         }
         const eta = new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate(), +m[1], +m[2], 0, 0);
-        return nowD.getTime() > eta.getTime() + LOCAL_STUCK_GRACE_MIN * 60_000;
-      }).slice(0, previewLimit);
+        if (nowD.getTime() <= eta.getTime() + LOCAL_STUCK_GRACE_MIN * 60_000) return null;
+        // The row's age is "how long past the promised time", so it ages from the
+        // resolved ETA — the very instant this filter just judged it late by. Ship
+        // that instant rather than the bare "HH:MM", so the client never has to
+        // re-resolve a wall-clock string against its own timezone. Deliberately the
+        // SAME Date the test above used: if the two ever drifted, a row could appear
+        // while claiming it wasn't late yet.
+        return { ...r, waiting_since: eta.toISOString() };
+      }).filter(Boolean).slice(0, previewLimit);
     } catch (e) {
       if (!/no such column|no such table/i.test(e.message)) throw e;   // pre-migration tenant → skip
     }
 
+    // `waiting_since` is the one field the Needs-you row ages from, and each
+    // sub-type earns it from its OWN clock — see each query above. The carrier
+    // exception is the exception: the only stamp it has is tracking_synced_at,
+    // which is when we last heard from the courier, not how long the customer
+    // has waited. Ageing off it would reset to "2m" on every poll of a parcel
+    // that has been stuck for days, so it deliberately ships with NO
+    // waiting_since and the card states the problem instead of a duration.
     delivery_alerts = {
       count: daCount + airCount + mtCount + localStuck.length,
       items: daItems.map(r => ({
@@ -13198,6 +13236,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
         order_no:   r.order_no,
         air_delayed: 1,
         synced_at:  r.tracking_synced_at,
+        waiting_since: r.waiting_since,
         buyer:      r.buyer,
       }))).concat(mtItems.map(r => ({
         id:         r.id,
@@ -13205,11 +13244,14 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
         channel:    'meituan',
         overdue:    1,
         synced_at:  r.channel_status_at,
+        waiting_since: r.waiting_since,
+        past_eta:   r.past_eta ? 1 : 0,
         buyer:      r.buyer,
       }))).concat(localStuck.map(r => ({
         id:          r.id,
         order_no:    r.order_no,
         local_stuck: 1,
+        waiting_since: r.waiting_since,
         buyer:       r.buyer,
       }))),
     };
@@ -13243,6 +13285,10 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
         // personal ones fall back to the buyer's name.
         title:     r.invoice_title || r.buyer,
         placed_at: r.placed_at,
+        // The invoice queue ages from when the order was placed — the moment the
+        // debt started. placed_at is DEFAULT CURRENT_TIMESTAMP, so it is never
+        // null; shipped under the shared name every aged row reads.
+        waiting_since: r.placed_at,
       })),
     };
 
@@ -13289,12 +13335,49 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
         buyer:         o.buyer,
       })),
     };
+
+    // Orders awaiting restock — paid, and parked until stock lands. This is a
+    // fire on the Needs-you card in its own right: the customer's money is taken
+    // and their order cannot move. /order-status-counts already carries the
+    // count, but only the count — the card needs a clock too, so it comes from
+    // here alongside the other fires rather than from a second endpoint.
+    //
+    // There is no "went awaiting_restock at" stamp anywhere, so the age counts
+    // from when the customer PAID. That is the honest reading in any case: what
+    // the row states is how long they have been waiting on an order they have
+    // already paid for, not how long our queue has known about it. Same
+    // never-null COALESCE as `unhandled` above, for the same reason. Read-only
+    // channel mirrors are excluded, matching every other order worklist here.
+    const awWhere = "o.status = 'awaiting_restock'"
+      + " AND COALESCE(o.channel,'') NOT IN ('meituan','gzgrocery')"
+      + (storeId ? ' AND o.store_id = @store_id' : '');
+    const awCount = tdb().prepare(
+      `SELECT COUNT(*) AS n FROM retail_orders o WHERE ${awWhere}`
+    ).get(storeBind).n;
+    const awItems = tdb().prepare(`
+      SELECT o.id, o.order_no,
+             COALESCE(o.paid_at, o.placed_at) AS waiting_since,
+             COALESCE(NULLIF(TRIM(c.nickname), ''), NULLIF(TRIM(o.recipient_name), ''), NULLIF(TRIM(o.recipient_phone), ''), NULLIF(TRIM(c.phone), '')) AS buyer
+        FROM retail_orders o
+        LEFT JOIN retail_customers c ON c.id = o.customer_id
+       WHERE ${awWhere}
+       ORDER BY waiting_since ASC LIMIT @preview
+    `).all({ ...storeBind, preview: previewLimit });
+    awaiting_restock = {
+      count: awCount,
+      items: awItems.map(o => ({
+        id:            o.id,
+        order_no:      o.order_no,
+        waiting_since: o.waiting_since,
+        buyer:         o.buyer,
+      })),
+    };
   } catch (e) {
     console.error('[dashboard/ops]', e.message);
   }
 
   res.set('Cache-Control', 'no-store');
-  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, server_now: Date.now() } });
+  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, awaiting_restock, server_now: Date.now() } });
 });
 
 // Admin CRUD for vouchers.
