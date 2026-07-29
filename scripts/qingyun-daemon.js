@@ -224,6 +224,18 @@ function matchRetailOrderId(d) {
       if (byChan && byChan.retail_order_id) return byChan.retail_order_id;
     }
     const remark = String(d.userRemark || '');
+    // Our own pushes stamp `<order_no> · <slot>` into the 备注, so the FIRST token is
+    // the order number verbatim — match it as-is. The prefix patterns below only knew
+    // R… and MA…, so every TC-numbered order missed: those linked by phone luck alone,
+    // and not at all once the order closed (the phone fallback skips cancelled ones).
+    // Order numbers are per-tenant, so no new prefix belongs in a pattern here.
+    // A marketplace remark is a customer note ("环保单，顾客不需要附带餐具"); its first
+    // token isn't an order number and simply won't match a row.
+    const tok = remark.split('·')[0].trim().split(/\s+/)[0].replace(/[^A-Za-z0-9-]/g, '');
+    if (tok.length >= 4) {
+      const byTok = db.prepare('SELECT id FROM retail_orders WHERE UPPER(order_no) = ?').get(tok.toUpperCase());
+      if (byTok) return byTok.id;
+    }
     const m = remark.match(/MA\d{7}/i) || remark.match(/R\d{6,}/i) || remark.match(/#\s*(\d{3,})/);
     if (m) {
       const ref = (m[0].startsWith('#') ? m[1] : m[0]).toUpperCase();
