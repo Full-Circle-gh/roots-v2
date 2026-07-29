@@ -20034,6 +20034,54 @@ async function _qingyunDeleteCopy(storeCode, qyOrderId) {
   return out;
 }
 
+// An order just closed (cancelled / refunded) — take its same-city delivery out of
+// Qingyun. Nothing used to do this: the roots order went away and its 待配送 copy
+// stayed in the store's list, dispatchable by anyone standing there, and you'd pay
+// for a rider sent to collect an order that no longer exists. Seen live on TC000101.
+//
+// Only touches a delivery NO courier has been called for — the same guard the
+// ship-from move uses, for the same reason: we can delete a waiting order, but
+// calling off a live delivery is a different action we haven't captured, and it can
+// carry a fee. When a courier IS on it we deliberately leave the copy and record it
+// as stale, so the drawer keeps showing "still in Qingyun" with the Remove button
+// rather than quietly doing nothing about a rider who is still coming.
+//
+// Fire-and-forget: it talks to a browser on the box and must never delay, or fail,
+// the cancel the operator just asked for.
+function qingyunDropCopyForClosedOrder(orderId, why) {
+  let q;
+  try { q = _qingyunPushRow(orderId); } catch (_) { return; }
+  if (!q || !q.qingyun_order_id) return;
+  const markStale = () => {
+    try {
+      tdb().prepare(
+        `UPDATE qingyun_push_queue SET stale_qingyun_order_id = ?, stale_store_code = ?,
+                updated_at = CURRENT_TIMESTAMP WHERE retail_order_id = ?`
+      ).run(String(q.qingyun_order_id), q.store_code, orderId);
+    } catch (_) { /* best effort */ }
+  };
+  const blocked = _qingyunMoveBlockedBy(q.qingyun_order_id);
+  if (blocked) {
+    console.warn(`[qingyun ${why}] order ${orderId}: courier already ${blocked}, leaving the Qingyun copy for staff to cancel`);
+    markStale();
+    return;
+  }
+  _qingyunDeleteCopy(q.store_code, q.qingyun_order_id)
+    .then((r) => {
+      if (r.ok) {
+        try {
+          tdb().prepare(
+            `UPDATE qingyun_push_queue SET qingyun_order_id = NULL, status = 'skipped',
+                    last_error = ?, updated_at = CURRENT_TIMESTAMP WHERE retail_order_id = ?`
+          ).run('order ' + why, orderId);
+        } catch (_) { /* best effort */ }
+      } else {
+        markStale();
+      }
+    })
+    .catch(() => markStale());
+}
+
 // Where this order is set to be collected, and whether that can still be changed.
 // Attached to the drawer payload (o.qingyun_ship_from) — see the order detail route.
 function qingyunShipFromState(retailOrderId) {
@@ -22211,6 +22259,13 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
   // Doesn't block the response — push is best-effort.
   notifyOrderStatusChange(id, status);
 
+  // A closed order must not leave a live delivery waiting in Qingyun for someone to
+  // dispatch. Best-effort and after the notify, so it can never hold up the cancel.
+  if (status === 'cancelled' || status === 'refunded') {
+    try { qingyunDropCopyForClosedOrder(id, status); }
+    catch (e) { console.warn('[qingyun drop-on-close]', e.message); }
+  }
+
   res.json({ success: true, data: tdb().prepare('SELECT * FROM retail_orders WHERE id = ?').get(id) });
 });
 
@@ -22564,6 +22619,9 @@ router.post('/api/retail-admin/orders/:id/refund/approve', requireRetailAdmin, e
   // Full refund flips the order's main status too.
   if (isFull && o.status !== 'refunded' && o.status !== 'cancelled') {
     tdb().prepare("UPDATE retail_orders SET status = 'refunded' WHERE id = ?").run(id);
+    // …and takes its same-city delivery out of Qingyun, same as a cancel.
+    try { qingyunDropCopyForClosedOrder(id, 'refunded'); }
+    catch (e) { console.warn('[qingyun drop-on-close]', e.message); }
   }
 
   logRefundEvent({
@@ -22878,6 +22936,8 @@ router.post('/api/retail-admin/orders/:id/refund/direct', requireRetailAdmin, ex
     try { reverseLifetimeCommission(id); } catch (e) { console.error('[reverseLifetimeCommission direct]', e); }
     if (o.status !== 'refunded' && o.status !== 'cancelled') {
       tdb().prepare("UPDATE retail_orders SET status = 'refunded' WHERE id = ?").run(id);
+      try { qingyunDropCopyForClosedOrder(id, 'refunded'); }
+      catch (e) { console.warn('[qingyun drop-on-close]', e.message); }
     }
   }
 
