@@ -502,12 +502,13 @@
   #order-drawer .od-facts .val { grid-column:2; }
   #order-drawer .od-facts .sub { grid-column:2; margin-top:2px; }
 
-  /* "Moved by the customer" — the ship-to above changed after this order was
-     placed, so anything already read or printed is stale. Amber attention, not
-     an error: nothing is wrong, it just needs a second look. */
-  #order-drawer .od-addr-moved { display:inline-flex; align-items:center; gap:6px; margin-top:8px;
-    background:var(--tacet-amber-tint); color:var(--tacet-amber-ink); border-radius:999px;
-    padding:4px 12px; font-size:13px; font-weight:600; }
+  /* "Address changed by the customer" — the ship-to above moved after this
+     order was placed, so anything already read or printed is stale. Borrows the
+     amber band above; only the spacing is its own. Amber attention, not an
+     error: nothing is wrong, it just needs a second look before it ships. */
+  #order-drawer .od-addr-moved { margin-top:10px; }
+  /* Already shipped — the instruction is spent, so this is just the trace. */
+  #order-drawer .od-addr-moved-past { margin-top:8px; font-size:13px; color:var(--text-3); }
 
   /* Shipment cards + manifest — larger, calmer. */
   #order-drawer .shipment-head .mode-pill { font-size:13.5px; padding:5px 14px; }

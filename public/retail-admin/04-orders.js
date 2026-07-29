@@ -4059,6 +4059,26 @@ function cityEn(city) {
   return CITY_EN[bare] || String(city);
 }
 
+// The customer moved this order's ship-to after placing it. Anything already
+// read, printed, or written on a label is stale, so before it goes out this is
+// an amber attention band with the instruction on it — the same treatment the
+// split/combine notes use. Once it HAS gone out the instruction is moot, so it
+// drops to a quiet trace: the fact stays on the record, the nagging doesn't.
+function addressChangedNote(o) {
+  if (!o.address_changed_at) return '';
+  const when = escapeHtml(formatDate(o.address_changed_at));
+  if (o.dispatched_at) {
+    return `<div class="od-addr-moved-past">${cuT('Address changed by the customer', '顾客修改了收货地址')} · ${when}</div>`;
+  }
+  return `<div class="outside-gz-note od-addr-moved">
+    <span class="ogz-ico"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+    <span class="ogz-text">
+      <span class="ogz-h"><span data-lang-block="en">Address changed by the customer</span><span data-lang-block="cn">顾客修改了收货地址</span></span>
+      <span class="ogz-sub"><span data-lang-block="en">Check the shipping label against the address above before this goes out · ${when}</span><span data-lang-block="cn">发货前请核对面单与上方地址 · ${when}</span></span>
+    </span>
+  </div>`;
+}
+
 function renderOpenOrder(o) {
   // Read-only channels (Meituan / gzgrocery) get a stripped view-only panel —
   // no fulfilment, refund or edit controls, which don't apply to a mirrored order.
@@ -4136,7 +4156,7 @@ function renderOpenOrder(o) {
             <div class="kicker">Ship to · 收货人 ${copyChip([o.recipient_name, o.recipient_phone, o.address_full].filter(Boolean).join('\n'), 'Ship-to')}</div>
             <div class="val" data-no-i18n><b>${escapeHtml(o.recipient_name || '')}</b> · ${escapeHtml(o.recipient_phone || '')}</div>
             <div class="sub" data-no-i18n>${escapeHtml(o.address_full || '')}</div>
-            ${o.address_changed_at ? `<div class="od-addr-moved">${pinIcon(12)} ${cuT('Moved by the customer', '顾客已修改地址')} · ${escapeHtml(formatDate(o.address_changed_at))}</div>` : ''}
+            ${addressChangedNote(o)}
             <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:8px;">
               <button class="btn btn-sm" onclick="openEditShipTo(${o.id})">${pinIcon(13)} ${cuT('Edit ship-to', '修改收货地址')}</button>
               ${/[A-Za-z]/.test(o.address_full || '') ? `<button class="btn btn-sm" onclick="openAddressToChinese(${o.id})">${pinIcon(13)} ${cuT('Make address Chinese', '转为中文地址')}</button>` : ''}
