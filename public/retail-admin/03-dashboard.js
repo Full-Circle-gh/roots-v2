@@ -263,6 +263,11 @@ const DASH_CARD_CAP = {
   delivery: ['orders:edit', 'orders:dispatch_courier'],
   refunds:  'orders:refund',
   invoices: 'invoices:manage',
+  // Orders awaiting restock — an order worklist, so it is gated on being able to
+  // see orders at all. Named explicitly rather than left out of this map:
+  // dashCardWants treats an unknown key as "always show", which would put a fire
+  // on the dashboard of an operator with no way to act on it.
+  orders:   'orders:view',
 };
 function dashCardWants(kind) {
   const cap = DASH_CARD_CAP[kind];
@@ -584,36 +589,37 @@ async function dashHeroLoadToday(opts) {
   }
 }
 
-// Repaint the language-dependent bit of the Today mini-row — the delta badges
-// (vs a trailing 7-day average). Split from the loader so a language toggle
-// reflows the wording + hover chips without refetching (numbers + sparklines
-// are language-neutral).
+// Repaint the language-dependent bit of the Today card — the delta badges and
+// their hover chips. Split from the loader so a language toggle reflows the
+// wording without refetching (the numbers themselves are language-neutral).
 function dashHeroTodayRepaint() {
   const data = DASH_HERO.todayData; if (!data) return;
   const k = data.kpis || {}, b = data.baseline || null;
-  dashSetDelta('#db-today-rev-d', b && b.revenue,       Number(k.revenue || 0),       b && b.days, v => '¥' + Math.round(v).toLocaleString());
-  // The Today card only carries the revenue delta now (the order / new-customer
-  // cells are plain, per the mockup) — but the badge elements may be absent, and
-  // dashSetDelta no-ops on a missing selector, so these stay safe if present.
-  dashSetDelta('#db-today-ord-d', b && b.orders,        Number(k.orders || 0),        b && b.days, v => dashTrim(v) + ' ' + cuT(v === 1 ? 'order' : 'orders', '单'));
-  dashSetDelta('#db-today-new-d', b && b.new_customers, Number(k.new_customers || 0), b && b.days, v => dashTrim(v) + ' ' + cuT(v === 1 ? 'new customer' : 'new customers', '新客'));
-  // The Orders / Customers section vitals this payload also feeds (avg order
-  // value, visitors, visits, conversion) — language-aware, so they repaint here.
+  dashSetDelta('#db-today-rev-d', b && b.revenue, Number(k.revenue || 0), b, v => '¥' + Math.round(v).toLocaleString());
+  dashSetDelta('#db-today-ord-d', b && b.orders,  Number(k.orders || 0),  b, v => dashTrim(v) + ' ' + cuT(v === 1 ? 'order' : 'orders', '单'));
+  dashSetDelta('#db-today-new-d', b && b.new_customers, Number(k.new_customers || 0), b, v => dashTrim(v) + ' ' + cuT(v === 1 ? 'new customer' : 'new customers', '新客'));
+  // The Customers card's vitals come from this same payload and are
+  // language-aware, so they repaint here too.
   if (typeof tdSecPaint === 'function') tdSecPaint();
 }
 // Integer when whole, else one decimal — keeps "/day" averages readable.
 function dashTrim(n) {
   return Number.isInteger(n) ? String(n) : (Math.round(n * 10) / 10).toFixed(1);
 }
-// Delta badge vs the trailing N-day average. Nothing yet today → a calm dash,
-// never an alarming ▼100%. No baseline yet (young shop) or activity today but a
-// flat-zero recent average → genuinely "new". Otherwise ▲/▼ % vs the average.
-// Stashes a language-aware hover chip on the element (el._tip) for the badge
-// scrub wired in dashHeroInit.
-function dashSetDelta(sel, base, cur, days, fmtAvg) {
+// Delta badge vs the SAME WEEKDAY, averaged over the last few weeks.
+//
+// The chip names how many of those weekdays actually existed — "vs the last 3
+// Wednesdays", not a flat "4-week average" — because a shop three weeks old and
+// a shop three years old otherwise show the identical sentence over wildly
+// different confidence. A thin baseline has to read as thin.
+//
+// Nothing yet today → a calm dash, never an alarming ▼100%. No same-weekday
+// history at all, or activity today against a flat-zero average → "new".
+function dashSetDelta(sel, base, cur, baseline, fmtAvg) {
   const el = $(sel); if (!el) return;
   el.classList.remove('is-up', 'is-down', 'is-flat');
   el._tip = '';
+  const days = baseline && baseline.days;
   if (!cur) {
     el.classList.add('is-flat'); el.textContent = '—';
     el._tip = cuT('none yet today', '今日暂无');
@@ -621,14 +627,28 @@ function dashSetDelta(sel, base, cur, days, fmtAvg) {
   }
   if (!base || !days || base.delta == null) {
     el.classList.add('is-up'); el.textContent = '▲ ' + cuT('new', '新');
-    el._tip = cuT('no recent baseline', '暂无近期基准');
+    el._tip = cuT('no same-weekday history yet', '暂无同一星期几的历史数据');
     return;
   }
-  el._tip = cuT(`vs typical day · ${days}-day avg · ${fmtAvg(base.avg)}/day`, `较日常 · 近 ${days} 日均值 · ${fmtAvg(base.avg)}/日`);
+  const dow = dashWeekdayName(baseline.weekday, days);
+  el._tip = cuT(`vs the last ${days} ${dow.en} · ${fmtAvg(base.avg)} each`,
+                `较前 ${days} 个${dow.cn} · 平均 ${fmtAvg(base.avg)}`);
   const r = Math.round(base.delta);
   if (r > 0)      { el.classList.add('is-up');   el.textContent = '▲ ' + r + '%'; }
   else if (r < 0) { el.classList.add('is-down'); el.textContent = '▼ ' + Math.abs(r) + '%'; }
   else            { el.classList.add('is-flat'); el.textContent = '±0%'; }
+}
+// The weekday the baseline is built from, in both languages. The server sends
+// an index (0–6, Sunday first) rather than a word, so the name follows the UI
+// language instead of freezing in whichever one was live at first paint.
+// English pluralises ("3 Wednesdays"); Chinese counts with 个 and does not.
+function dashWeekdayName(idx, n) {
+  const i = Number(idx);
+  const en = DASH_DOW_EN[i] || '';
+  return {
+    en: en ? (n === 1 ? en : en + 's') : cuT('days', '天'),
+    cn: DASH_DOW_CN[i] || '天',
+  };
 }
 // Badge hover → reuse the spark chip to explain the comparison baseline.
 function dashDeltaHover(e) {
@@ -669,7 +689,13 @@ function dashSparkPct(vals, idx, scale) {
 // show at once — moving to another spark relocates the same chip.
 let _dashSparkTip = null;
 function dashSparkTipEl(host) {
-  if (!_dashSparkTip) { _dashSparkTip = document.createElement('div'); _dashSparkTip.className = 'db-spark-tip'; }
+  if (!_dashSparkTip) {
+    _dashSparkTip = document.createElement('div');
+    _dashSparkTip.className = 'db-spark-tip';
+    // Its text is built here in one language and separated by " · " — exactly
+    // the shape the i18n walker treats as an EN·CN pair and tears in half.
+    _dashSparkTip.setAttribute('data-no-i18n', '');
+  }
   if (_dashSparkTip.parentNode !== host) { _dashSparkTip.classList.remove('show'); host.appendChild(_dashSparkTip); }
   return _dashSparkTip;
 }
@@ -856,24 +882,19 @@ function dashUnhandledRender() {
     if (foot) foot.textContent = '';
     return;
   }
-  const now = Number(DASH_OPS.server_now) || Date.now();
-  // waiting_since is a UTC SQLite datetime ("YYYY-MM-DD HH:MM:SS"); parse as UTC.
   const ageTxt = (since) => {
-    const t = new Date(String(since || '').replace(' ', 'T') + 'Z').getTime();
-    if (!t || isNaN(t)) return '';   // defensive — never render "NaN min"
-    const mins = Math.max(0, Math.round((now - t) / 60000));
+    const mins = dashAgeMins(since);
+    if (mins == null) return '';   // defensive — never render "NaN min"
     if (mins < 60) return cuT(`waiting ${mins}m`, `等待 ${mins} 分钟`);
     const hrs = Math.floor(mins / 60);
     if (hrs < 24) return cuT(`waiting ${hrs}h`, `等待 ${hrs} 小时`);
     return cuT(`waiting ${Math.floor(hrs / 24)}d`, `等待 ${Math.floor(hrs / 24)} 天`);
   };
-  host.innerHTML = (u.items || []).slice(0, 5).map((it, i) => {
-    const cls = i >= 4 ? ' detail2' : (i >= 2 ? ' detail' : '');
-    return `<div class="bx-in-row${cls}">
+  host.innerHTML = (u.items || []).slice(0, 5).map(it => `
+    <div class="bx-in-row">
       <span class="bx-in-nm" data-no-i18n>${escapeHtml(it.order_no || '')}<span class="bx-in-sub">${escapeHtml(String(it.buyer || ''))}</span></span>
       <span class="bx-in-eta">${escapeHtml(ageTxt(it.waiting_since))}</span>
-    </div>`;
-  }).join('');
+    </div>`).join('');
   if (foot) foot.textContent = cuT(`${u.count} waiting · oldest first`, `${u.count} 单待处理 · 最早优先`);
 }
 
@@ -1187,6 +1208,39 @@ function dashJumpTab(name) {
 
 let DASH_OPS = null;
 
+// ── ageing a queue row ──────────────────────────────────────────────────────
+// Every row that states how long something has waited measures from the ops
+// snapshot's own clock, not the browser's: a laptop whose clock is an hour out
+// would otherwise report "waiting 1h" on an order that landed a moment ago, or
+// worse, a negative age clamped to 0. `server_now` rides along on every
+// /dashboard/ops payload for exactly this.
+function dashNow() {
+  return Number(DASH_OPS && DASH_OPS.server_now) || Date.now();
+}
+// Minutes since `since`, or null when there is nothing real to measure. Accepts
+// both shapes the payload carries: a bare SQLite UTC stamp ("YYYY-MM-DD
+// HH:MM:SS", no zone marker — the common case) and a full ISO string with its
+// own Z (the resolved local-delivery ETA). Appending a Z to the second would
+// produce "…000ZZ" and parse to NaN, which is how a row silently renders blank.
+// null — never 0 — for a missing value, so a caller can tell "no clock" apart
+// from "arrived this second" and print a state instead of "0m".
+function dashAgeMins(since) {
+  const s = String(since || '').trim();
+  if (!s) return null;
+  const iso = /[Zz]|[+-]\d{2}:?\d{2}$/.test(s) ? s : s.replace(' ', 'T') + 'Z';
+  const t = new Date(iso).getTime();
+  if (!t || isNaN(t)) return null;
+  return Math.max(0, Math.round((dashNow() - t) / 60000));
+}
+// "47m" → "4h" → "2d". Tabular by the stylesheet; the unit letters stay in both
+// languages because they are read as a glyph, not a word — the surrounding copy
+// carries the language.
+function dashAgeShort(mins) {
+  if (mins == null) return '';
+  if (mins < 60) return mins + 'm';
+  if (mins < 1440) return Math.round(mins / 60) + 'h';
+  return Math.round(mins / 1440) + 'd';
+}
 
 // Pick a product's name in the active UI language, falling back to the
 // other language when the preferred one is missing.
@@ -1213,523 +1267,167 @@ function tdInit() {
   if (!TD._opsTimer) {
     TD._opsTimer = setInterval(() => { if (!document.hidden) { tdOpsLoad(); tdSecCountsLoad(); } }, 60000);
   }
-  // Restore the operator's saved card arrangement, wire drag, and paint the
-  // language-aware Arrange chrome. Repaint the chrome + tray on a language flip.
+  // Restore the operator's saved card order, then watch the grid's width so the
+  // lone-card span follows the column count.
   dashArrangeApply();
   dashArrangeWire();
-  dashArrangeChromePaint();
-  if (window.onLangChange) onLangChange(dashArrangeChromePaint);
 }
 
 // ════════════════════════════════════════════════════════════════
-// SELF-ARRANGING BENTO — the dashboard as the operator's own space.
-// Rebuilt from the dashboard-bento mockup. Each .td-block[data-block]
-// declares the shapes it may take; a small packing solver picks one
-// shape per VISIBLE block so every row fills the six-column grid,
-// whatever the operator hides or reorders. The block is then placed
-// absolutely at the solved rect and its content adapts to the shape
-// via [data-tier] (retail-admin.css). Order + hidden set persist per
-// user; live data keeps landing in the blocks' inner ids untouched.
-// Proven to tile every subset with no gap/overlap (headless solver test).
+// THE CARD GRID — the dashboard as the operator's own space.
+// Each .td-block[data-block] is one tile in a CSS grid whose column
+// count comes from a container query, so a card's height is set by
+// its own content and a row ends flat against the tallest card in it.
+// The operator's saved order is applied as CSS `order`; live data
+// keeps landing in the blocks' inner ids untouched.
 // ════════════════════════════════════════════════════════════════
-// Key bumped to -v10: the dashboard simplification release removes five cards
-// (movers, week, channels, moves die entirely; the hourly chart is cut from
-// Today) and adds Unhandled orders. A saved order/hidden set from before this
-// release references ids that no longer exist and — with hide/show retired —
-// could strand a card, so the key resets everyone to the fresh default once.
+// The key stays at -v10 through this release. dashArrangeApply filters a saved
+// order against DASH_BLOCK_DEFAULT and appends anything missing, so dropping
+// `needs` out of the set self-heals every stored layout without a bump — and a
+// bump would throw away an order the operator chose, for no gain.
 const DASH_LAYOUT_KEY = 'retail-admin-dash-layout-v10';
-const DASH_BLOCK_DEFAULT = ['recap', 'needs', 'orders', 'customers', 'unhandled', 'inventory', 'incoming', 'onroad', 'ready', 'delivery'];
-// Tray-chip / restore labels for each block (bilingual via cuT at paint time).
-const DASH_BLOCK_TITLES = {
-  recap:     ['While you were away', '您不在的这段时间'],
-  needs:     ['Needs you', '需要您处理'],
-  orders:    ['Orders', '订单'],
-  customers: ['Customers', '客户'],
-  unhandled: ['Unhandled orders', '待处理订单'],
-  inventory: ['Inventory', '库存'],
-  incoming:  ['On the way / Drafts', '在途 / 待发送'],
-  onroad:    ['On the road', '配送在途'],
-  ready:     ['Ready to hand off', '待交接'],
-  delivery:  ['Delivery', '配送'],
-};
+// Needs-you is deliberately NOT here. It is not a tile: it is full width, first,
+// and lives outside #td-blocks, so it has no place in the grid and no place in
+// the order. Nothing can move it and nothing can hide it.
+const DASH_BLOCK_DEFAULT = ['recap', 'orders', 'customers', 'unhandled', 'inventory', 'incoming', 'onroad', 'ready', 'delivery'];
 
-// The grid: six columns, 16px gutters, 120px row unit (h1 = 120, h2 = 256).
-const DASH_COLS = 6, DASH_GAP = 16, DASH_ROW = 120;
-// Shape menus [w,h] in grid units, preferred first. recap/needs/orders prefer
-// tall shapes so the default gives them height; every block keeps {2,3,4}-wide
-// options so exact 6-unit partitions always exist. Tuned + headless-verified.
-const DASH_SHAPES = {
-  // recap + needs prefer a half-width (3-col) 2-row shape FIRST so, when both
-  // are on the page, the solver packs them side by side in one row (3+3=6)
-  // instead of stacking two full-width heroes. [6,2] stays in the menu right
-  // after, so whichever is alone (needs auto-hides on a calm day) still fills
-  // the row full-width — a lone 3-wide can't form a valid 2-row band (sum<4),
-  // so the solo case always lands on [6,2]. Tiling proven in dash-solver-test.
-  recap:     [[3,2],[6,2],[4,2],[6,1],[4,1],[3,1],[2,1]],
-  needs:     [[3,2],[6,2],[4,2],[6,1],[4,1],[3,1],[2,1]],
-  // orders (Today) joins the same half-width-first rule so it pairs side by side
-  // with whatever big card sits next to it (recap on a calm day, or needs);
-  // solo it still lands on [6,2] full-width (a lone 3-wide can't form a 2-row band).
-  orders:    [[3,2],[4,2],[6,2],[2,2],[4,1],[3,1],[2,1]],
-  customers: [[3,1],[4,1],[2,1],[3,2],[2,2],[6,1]],
-  inventory: [[2,2],[3,2],[4,2],[3,1],[2,1],[4,1],[6,1]],
-  // incoming = warehouse-only "On the way / Drafts" (in-transit POs + drafted-
-  // not-placed, merged into one card). List block, same width menu as its
-  // siblings. Tiling proven in scripts/dash-solver-test.js.
-  incoming:  [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
-  // onroad/ready = dispatch/CS list blocks.
-  onroad:    [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
-  ready:     [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
-  // unhandled = "Unhandled orders" (status=paid), warehouse + dispatch/CS. List
-  // block, same width menu. Tiling proven in scripts/dash-solver-test.js.
-  unhandled: [[3,2],[4,2],[2,2],[3,1],[4,1],[2,1],[6,1]],
-  delivery:  [[2,1],[3,1],[4,1],[2,2],[6,1]],
-};
-const DASH_PRI = { recap: 2, needs: 2, orders: 3, customers: 1, inventory: 2, incoming: 2, onroad: 2, ready: 2, unhandled: 2, delivery: 1 };
+// ── the card grid ───────────────────────────────────────────────────────────
+// Cards are placed by CSS grid inside a container query. What used to live here
+// was a packing solver: every card declared a menu of [w,h] shapes, the solver
+// picked one per visible card so each row filled six columns exactly, wrote the
+// result as absolute pixel rects, and the card's CONTENT was then folded away
+// with [data-tier] + .detail/.detail2 until it fit the box it had been handed.
+//
+// That is backwards. A card's height should come from what the card has to say,
+// not the other way round. So the shape menus, the packer and the tier tables
+// are gone, and two rules stand in their place:
+//
+//   A — cards in a row stretch to the tallest card's own content, and every
+//       card's footer pins to its bottom edge, so the slack collects above the
+//       footer and the row ends flat. Pure CSS: the grid stretches its items,
+//       and each card's footer carries margin-top:auto.
+//   B — a card that would otherwise sit alone in the last row spans the row.
+//
+// Only B needs script, because CSS cannot count tiles against the resolved
+// column count. dashRender does exactly that and nothing else — no geometry, no
+// pixel heights, no absolute positioning, no shapes.
+//
+// Needs-you is NOT in this grid. It is full width, structurally first, and
+// lives outside #td-blocks, which is also why it cannot be dragged out of
+// position — there is no position for it to be dragged out of.
 
-let DASH_ARRANGING = false;
+// Column thresholds, in px of the grid's own width. These MIRROR the @container
+// rules in retail-admin.css; change them in both places together or Rule B will
+// span the wrong card at a band edge.
+const DASH_COL_2 = 760, DASH_COL_3 = 1140;
+
 let DASH_ORDER = [...DASH_BLOCK_DEFAULT];
-let DASH_HIDDEN = new Set();
-// Per-card width the operator forced by dropping one card beside another:
-// { block: 'half' } (pairs 3-wide with an adjacent half card) or 'full' (takes
-// the whole row). Absent = auto (the solver's own preference). Persisted with
-// order + hidden; honoured by dashComputeRects in every view, not just Arrange.
-let DASH_WIDTHS = {};
-let _dashRects = {};
-let _dashDrag = null;
 
 function dashLayoutLoad() {
   try {
     const v = JSON.parse(localStorage.getItem(DASH_LAYOUT_KEY) || '{}');
-    return {
-      order: Array.isArray(v.order) ? v.order : [],
-      hidden: Array.isArray(v.hidden) ? v.hidden : [],
-      widths: (v.widths && typeof v.widths === 'object') ? v.widths : {},
-    };
-  } catch (e) { return { order: [], hidden: [], widths: {} }; }
-}
-function dashLayoutSave(order, hidden, widths) {
-  try { localStorage.setItem(DASH_LAYOUT_KEY, JSON.stringify({ order, hidden, widths: widths || {} })); } catch (e) {}
-}
-function dashArrangePersist() { dashLayoutSave(DASH_ORDER, [...DASH_HIDDEN], DASH_WIDTHS); }
-
-// Drop stale width pins: a 'half' card with no adjacent 'half' partner (its
-// pair was moved away / hidden) reverts to auto; a pin on a card no longer in
-// the order is forgotten. Keeps a lonely half from leaving a 3-wide gap.
-function dashPruneWidths() {
-  const vis = DASH_ORDER.filter(id => !DASH_HIDDEN.has(id));
-  for (const id of Object.keys(DASH_WIDTHS)) {
-    const w = DASH_WIDTHS[id];
-    if (w === 'half') {
-      const k = vis.indexOf(id);
-      const paired = k >= 0 && ((k > 0 && DASH_WIDTHS[vis[k - 1]] === 'half')
-                             || (k < vis.length - 1 && DASH_WIDTHS[vis[k + 1]] === 'half'));
-      if (!paired) delete DASH_WIDTHS[id];
-    } else if (w === 'full') {
-      if (!vis.includes(id)) delete DASH_WIDTHS[id];
-    } else {
-      delete DASH_WIDTHS[id];
-    }
-  }
+    return { order: Array.isArray(v.order) ? v.order : [] };
+  } catch (e) { return { order: [] }; }
 }
 
-// ── the packing solver (identical algorithm to the mockup) ──────────────────
-function dashPrefScore(id, w, h) {
-  const S = DASH_SHAPES[id]; if (!S) return null;
-  const i = S.findIndex(s => s[0] === w && s[1] === h);
-  if (i < 0) return null;
-  // preference order primary; priority only nudges area as a tiebreak
-  return (S.length - i) * 20 + (DASH_PRI[id] || 1) * (w * h);
-}
-function dashGenBands(ids, i, emit) {
-  (function rec1(k, cells, sum, score) {
-    if (k >= ids.length) return;
-    for (const [w, h] of DASH_SHAPES[ids[k]]) {
-      if (h !== 1) continue;
-      const s2 = sum + w; if (s2 > DASH_COLS) continue;
-      const sc = score + dashPrefScore(ids[k], w, 1);
-      const cl = cells.concat([{ idx: k, w }]);
-      if (s2 >= 2) emit({ h: 1, cells: cl, sum: s2, score: sc - (DASH_COLS - s2) * 70, next: k + 1 });
-      rec1(k + 1, cl, s2, sc);
-    }
-  })(i, [], 0, 0);
-  (function rec2(k, slots, sum, score) {
-    if (slots.length && sum >= 4) emit({ h: 2, slots, sum, score: score - (DASH_COLS - sum) * 70, next: k });
-    if (k >= ids.length || sum >= DASH_COLS) return;
-    const a = ids[k];
-    for (const [w, h] of DASH_SHAPES[a]) {
-      if (h !== 2 || sum + w > DASH_COLS) continue;
-      rec2(k + 1, slots.concat([{ type: 'one', idx: k, w }]), sum + w, score + dashPrefScore(a, w, 2));
-    }
-    if (k + 1 < ids.length) {
-      const b = ids[k + 1];
-      const aw = new Set(DASH_SHAPES[a].filter(s => s[1] === 1).map(s => s[0]));
-      for (const [w, h] of DASH_SHAPES[b]) {
-        if (h !== 1 || !aw.has(w) || sum + w > DASH_COLS) continue;
-        rec2(k + 2, slots.concat([{ type: 'pair', a: k, b: k + 1, w }]), sum + w,
-          score + dashPrefScore(a, w, 1) + dashPrefScore(b, w, 1) + 6);
-      }
-    }
-  })(i, [], 0, 0);
-}
-function dashSolve(ids) {
-  const N = ids.length, memo = new Array(N + 1);
-  function best(i) {
-    if (i === N) return { score: 0, bands: [] };
-    if (memo[i] !== undefined) return memo[i];
-    let bs = null; const opts = [];
-    dashGenBands(ids, i, b => opts.push(b));
-    for (const b of opts) {
-      const r = best(b.next); if (!r) continue;
-      const sc = b.score + r.score;
-      if (!bs || sc > bs.score) bs = { score: sc, bands: [b].concat(r.bands) };
-    }
-    return (memo[i] = bs);
-  }
-  return best(0);
-}
-function dashTier(uw, uh) {
-  if (uh === 1) return uw <= 3 ? 'a' : 'b';
-  if (uw === 2) return 'c';
-  if (uw === 3) return 'd';
-  return 'e';
-}
+// Resolve the column count the CSS has landed on, from the grid's own width.
+function dashCols(w) { return w >= DASH_COL_3 ? 3 : w >= DASH_COL_2 ? 2 : 1; }
 
-// ── solve the current visible set into pixel rectangles ─────────────────────
-function dashComputeRects() {
-  const host = document.getElementById('td-blocks');
-  if (!host) return { rects: {}, height: 0 };
-  // A block with nothing to say marks itself .is-quiet (e.g. Needs-you on a
-  // calm day) and drops out of the layout — unless arranging, where quiet
-  // blocks reappear dimmed so they can still be reordered. A block the operator's
-  // ROLE hides (display:none via the DASHBOARDS BY POSITION rules) must also drop
-  // out, or it would reserve an empty grid slot and gap the restricted-role page.
-  const present = new Set([...host.querySelectorAll('.td-block')]
-    .filter(b => (DASH_ARRANGING || !b.classList.contains('is-quiet'))
-              && getComputedStyle(b).display !== 'none')
-    .map(b => b.dataset.block));
-  const allIds = DASH_ORDER.filter(id => !DASH_HIDDEN.has(id) && present.has(id));
-  if (!allIds.length) return { rects: {}, height: 0 };
-
-  const W = host.clientWidth || 1088;
-  const unit = (W - (DASH_COLS - 1) * DASH_GAP) / DASH_COLS;
-  const rects = {};
-
-  // Pack a contiguous run of blocks into bands and write their rects starting at
-  // startY; returns the y just past the last band. `quietStrip` restricts every
-  // block in the run to a single-row menu (the compact "nothing today" strip).
-  const layout = (ids, startY, quietStrip) => {
-    if (!ids.length) return startY;
-    // Narrow a block's shape menu for THIS solve only (restored right after),
-    // never stranding it with an empty menu.
-    const savedShapes = {};
-    const restrict = (id, keep) => {
-      if (!DASH_SHAPES[id]) return;
-      const f = DASH_SHAPES[id].filter(keep);
-      if (!f.length) return;
-      if (!(id in savedShapes)) savedShapes[id] = DASH_SHAPES[id];
-      DASH_SHAPES[id] = f;
-    };
-    // Operator-forced widths (apply in every view so the arrangement persists):
-    // 'full' → 6-wide, 'half' → 3-wide but ONLY when an adjacent visible sibling
-    // is also 'half' (so a widowed half card falls back to auto, no 3-wide gap).
-    for (let k = 0; k < ids.length; k++) {
-      const id = ids[k], w = DASH_WIDTHS[id];
-      if (w === 'full') restrict(id, s => s[0] === 6);
-      else if (w === 'half'
-        && ((k > 0 && DASH_WIDTHS[ids[k - 1]] === 'half') || (k < ids.length - 1 && DASH_WIDTHS[ids[k + 1]] === 'half'))) {
-        // the 3-wide 2-ROW shape specifically — a 3-wide 1-row would let the solver
-        // stack the pair vertically in one column instead of side by side.
-        restrict(id, s => s[0] === 3 && s[1] === 2);
-      }
-    }
-    if (quietStrip) for (const id of ids) restrict(id, s => s[1] === 1);
-    let sol = dashSolve(ids);
-    for (const id in savedShapes) DASH_SHAPES[id] = savedShapes[id];   // restore real menus
-    if (!sol) sol = { bands: ids.map((id, k) => ({ h: 1, cells: [{ idx: k, w: 6 }], sum: 6, next: k + 1 })) };
-    let y = startY;
-    for (const band of sol.bands) {
-      const slots = band.h === 1
-        ? band.cells.map(c => ({ units: c.w, parts: [{ idx: c.idx, row: 0, rows: 1 }] }))
-        : band.slots.map(s => s.type === 'one'
-            ? { units: s.w, parts: [{ idx: s.idx, row: 0, rows: 2 }] }
-            : { units: s.w, parts: [{ idx: s.a, row: 0, rows: 1 }, { idx: s.b, row: 1, rows: 1 }] });
-      const n = slots.length, avail = W - (n - 1) * DASH_GAP; let x = 0;
-      for (const slot of slots) {
-        const wpx = band.sum === DASH_COLS ? slot.units * unit + (slot.units - 1) * DASH_GAP : avail * slot.units / band.sum;
-        const effW = Math.max(2, Math.min(6, Math.round((wpx + DASH_GAP) / (unit + DASH_GAP))));
-        for (const part of slot.parts) {
-          rects[ids[part.idx]] = {
-            x, y: y + part.row * (DASH_ROW + DASH_GAP), w: wpx,
-            h: part.rows * DASH_ROW + (part.rows - 1) * DASH_GAP,
-            tier: dashTier(effW, part.rows),
-          };
-        }
-        x += wpx + DASH_GAP;
-      }
-      y += (band.h === 2 ? 2 * DASH_ROW + DASH_GAP : DASH_ROW) + DASH_GAP;
-    }
-    return y;
-  };
-
-  // The data-bearing cards pack first, EXACTLY as they will when Arrange is left
-  // (outside arrange there are no quiet cards, so this is the whole set). The
-  // quiet (empty-today) cards only surface while arranging, and they must not
-  // sit INSIDE the real packing: an extra strip wedged between two cards changes
-  // the band math and makes the arrange preview pair cards differently from the
-  // committed layout — the "card jumps when I click Done" bug. So they're laid
-  // out as their own compact strip appended BELOW the real cards, where they
-  // stay draggable/hide-able without disturbing what Done will produce.
-  const quiet = DASH_ARRANGING
-    ? new Set([...host.querySelectorAll('.td-block.is-quiet')].map(b => b.dataset.block))
-    : new Set();
-  const realIds = allIds.filter(id => !quiet.has(id));
-  const quietIds = allIds.filter(id => quiet.has(id));
-
-  let y = layout(realIds, 0, false);
-  if (quietIds.length) y = layout(quietIds, y, true);
-  return { rects, height: Math.max(0, y - DASH_GAP) };
-}
-
-// Paint the solved layout: absolutely position every visible block, tag its
-// tier for the adaptive CSS, and hide the rest. skipId keeps a block being
-// dragged under the pointer (its left/top are driven by the drag instead).
-function dashRender(skipId) {
+// Place the cards: order them, then apply Rule B. Everything else is CSS.
+function dashRender() {
   const host = document.getElementById('td-blocks');
   if (!host) return;
-  // Orphan blocks: a card removed from the set (DASH_BLOCK_DEFAULT) whose markup
-  // still lingers in the DOM until a later commit deletes it. It has no solved
-  // rect, so on the absolute-positioned desktop path it would sit un-positioned
-  // at 0,0 over the top card, and on the stacked mobile path it would show as an
-  // empty tile. Drop it out of the layout entirely, on every path. (A permanent
-  // safety net — an unknown data-block id never reaches the solver either.)
+
+  // If the grid has no measurable width yet (the dashboard laid out before its
+  // tab is shown, or the rail's margin transition hasn't settled) the column
+  // count would resolve to 1 and Rule B would span the wrong card. Defer a
+  // frame; the ResizeObserver re-runs this once the width lands.
+  if (host.clientWidth === 0) { requestAnimationFrame(dashRender); return; }
+
+  const tiles = [];
   host.querySelectorAll('.td-block').forEach(el => {
-    if (!DASH_BLOCK_DEFAULT.includes(el.dataset.block)) el.style.display = 'none';
+    const id = el.dataset.block;
+    // Orphans: markup for a card that has left the set — or moved out of the
+    // grid entirely, as Needs-you did — can linger until a later commit deletes
+    // it. Drop it out of the flow rather than let it hold an empty cell.
+    if (!DASH_BLOCK_DEFAULT.includes(id)) { el.style.display = 'none'; return; }
+    // Reordering is CSS `order`, never a DOM move: the loaders paint into these
+    // nodes by id, and re-parenting them mid-poll would strand a render.
+    el.style.order = DASH_ORDER.indexOf(id);
+    el.classList.remove('td-span');
+    // A card with nothing to say today marks itself .is-quiet and leaves the
+    // page (CSS hides it); a card the operator's ROLE hides is display:none from
+    // the DASHBOARDS BY POSITION rules. Neither occupies a cell, so neither can
+    // be the card left alone in the last row.
+    if (el.classList.contains('is-quiet')) return;
+    if (getComputedStyle(el).display === 'none') return;
+    tiles.push(el);
   });
-  // If the host has no measurable width yet (dashboard laid out before the tab
-  // is shown / the rail's margin transition has settled), a solve here would
-  // use dashComputeRects' phantom 1088px fallback and paint a grid too wide for
-  // the real column — the load-time "clipped left column". Defer to the next
-  // frame instead; the ResizeObserver re-solves once the width lands.
-  if (host.clientWidth === 0 && !window.matchMedia('(max-width: 1000px)').matches) {
-    requestAnimationFrame(() => dashRender(skipId));
-    return;
+
+  // Rule B — the last row holds one card, so give it the whole row. Worked out
+  // from tile count against the resolved column count, never placed by hand, so
+  // the five-card warehouse and dispatch sets land the same way as the owner's
+  // four without anyone writing a rule for either.
+  const cols = dashCols(host.clientWidth);
+  if (cols > 1 && tiles.length % cols === 1) {
+    tiles.sort((a, b) => (Number(a.style.order) || 0) - (Number(b.style.order) || 0));
+    tiles[tiles.length - 1].classList.add('td-span');
   }
-  // Below the bento's comfortable width the solver is bypassed (CSS stacks the
-  // blocks in one column); clear inline geometry so the stylesheet can.
-  if (window.matchMedia && window.matchMedia('(max-width: 1000px)').matches) {
-    host.style.height = '';
-    host.querySelectorAll('.td-block').forEach(el => {
-      el.classList.toggle('is-hidden', DASH_HIDDEN.has(el.dataset.block));
-      el.style.left = el.style.top = el.style.width = el.style.height = '';
-      el.removeAttribute('data-tier');
-    });
-    host.classList.add('td-solved');
-    dashArrangeTray();
-    return;
-  }
-  const { rects, height } = dashComputeRects();
-  _dashRects = rects;
-  host.style.height = height + 'px';
-  host.querySelectorAll('.td-block').forEach(el => {
-    // is-hidden tracks the user's hide only; .is-quiet (auto-empty) keeps its
-    // own class so a block that fills again isn't stranded hidden.
-    el.classList.toggle('is-hidden', DASH_HIDDEN.has(el.dataset.block));
-    const r = rects[el.dataset.block];
-    if (!r) { el.style.left = el.style.top = el.style.width = el.style.height = ''; el.removeAttribute('data-tier'); return; }
-    el.dataset.tier = r.tier;
-    // Only honour the skip while a drag is genuinely live for THIS block. A
-    // dashRender(dragId) call queued via the requestAnimationFrame retry above
-    // (host.clientWidth was 0 at call time) carries its dragId across frames —
-    // if the drag finishes (finish() clears _dashDrag + repaints cleanly)
-    // before that deferred call fires, the stale dragId would otherwise still
-    // match here and skip painting this card forever after a clean drag.
-    if (el.dataset.block === skipId && _dashDrag && _dashDrag.live && _dashDrag.id === skipId) return;
-    el.style.left = r.x + 'px'; el.style.top = r.y + 'px';
-    el.style.width = r.w + 'px'; el.style.height = r.h + 'px';
-  });
   host.classList.add('td-solved');
-  dashArrangeTray();
 }
 
-// Restore the saved arrangement (order + hidden), then paint. Any block missing
-// from the saved order surfaces at the tail (new blocks in a later release
-// appear rather than vanish); unknown ids are dropped.
+// Restore the operator's saved card order, then paint. A block missing from the
+// saved order surfaces at the tail (a card added in a later release appears
+// rather than vanishes); unknown ids are dropped.
+//
+// The saved `widths` (the half/full pins the old drop-beside gesture wrote) and
+// the saved `hidden` set are both IGNORED now, deliberately and for different
+// reasons. Widths described shapes in a six-column packer that no longer
+// exists. Hidden is worse than obsolete: with Arrange stood down there is no
+// way to bring a card back, so honouring an old hide would silently strip a
+// card off the dashboard for good. Both keys stay in localStorage untouched —
+// ship 2 rewrites the layout record once Arrange returns.
 function dashArrangeApply() {
-  const { order, hidden, widths } = dashLayoutLoad();
+  const { order } = dashLayoutLoad();
   const known = DASH_BLOCK_DEFAULT;
   const seq = (order && order.length ? order : DASH_BLOCK_DEFAULT).filter(id => known.includes(id));
   known.forEach(id => { if (!seq.includes(id)) seq.push(id); });
   DASH_ORDER = seq;
-  DASH_HIDDEN = new Set((hidden || []).filter(id => known.includes(id)));
-  DASH_WIDTHS = {};
-  for (const id in (widths || {})) {
-    if (known.includes(id) && (widths[id] === 'half' || widths[id] === 'full')) DASH_WIDTHS[id] = widths[id];
-  }
-  dashPruneWidths();
   dashRender();
 }
 
-// Enter / leave Arrange mode. Blocks are draggable only while arranging;
-// leaving saves the layout.
-function dashArrangeToggle() {
-  DASH_ARRANGING = !DASH_ARRANGING;
-  document.body.classList.toggle('td-arranging', DASH_ARRANGING);
-  dashArrangeChromePaint();
-  // Toggling arranging changes which quiet blocks the CSS reveals (they surface
-  // dimmed so they can be reordered) — re-solve so those newly-visible cards get
-  // real geometry instead of sitting at their stale/empty left:0;top:0 default,
-  // which would stack them on top of whatever card solved to that corner.
-  dashRender();
-  if (!DASH_ARRANGING) dashArrangePersist();
-}
-
-// Paint the language-aware Arrange chrome (button label, hint, reset, tray).
-function dashArrangeChromePaint() {
-  const lbl = document.getElementById('td-arrange-lbl');
-  if (lbl) lbl.textContent = DASH_ARRANGING ? cuT('Done', '完成') : cuT('Arrange', '整理');
-  const hint = document.getElementById('td-arrange-hint-txt');
-  if (hint) hint.textContent = cuT(
-    "Drag to reorder. Drop a card onto the side of another to sit them side by side. Hide the ones you don't need — they wait in the tray below.",
-    '拖动排序。把一张卡片拖到另一张的左右两侧，即可并排放置。隐藏不需要的卡片 — 它们会保存在下方的托盘里。');
-  const reset = document.getElementById('td-arrange-reset');
-  if (reset) reset.textContent = cuT('Reset to default', '恢复默认');
-  dashArrangeTray();
-}
-
-function dashArrangeHide(key) {
-  DASH_HIDDEN.add(key);
-  dashRender();
-  dashArrangePersist();
-}
-function dashArrangeShow(key) {
-  DASH_HIDDEN.delete(key);
-  DASH_ORDER = DASH_ORDER.filter(id => id !== key).concat([key]);  // restored cards land at the end
-  dashRender();
-  dashArrangePersist();
-}
-
-// Render the hidden-cards tray (a row of "+ add back" chips). Shown only in
-// Arrange mode (CSS), and only when it has items.
-function dashArrangeTray() {
-  const tray = document.getElementById('td-tray');
-  const row = document.getElementById('td-tray-row');
-  if (!tray || !row) return;
-  const hidden = DASH_ORDER.filter(id => DASH_HIDDEN.has(id));
-  tray.classList.toggle('has-items', hidden.length > 0);
-  row.innerHTML = hidden.map(key => {
-    const t = DASH_BLOCK_TITLES[key];
-    const nm = t ? cuT(t[0], t[1]) : key;
-    return `<span class="td-chip">${escapeHtml(nm)}`
-      + `<button type="button" class="td-chip-add" title="${escapeAttr(cuT('Add back', '恢复'))}" onclick="dashArrangeShow('${key}')">`
-      + `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg></button></span>`;
-  }).join('');
-}
-
-// Reset to the shipped default: forget the saved layout, un-hide everything,
-// restore the default order.
-function dashArrangeReset() {
-  try { localStorage.removeItem(DASH_LAYOUT_KEY); } catch (e) {}
-  DASH_ORDER = [...DASH_BLOCK_DEFAULT];
-  DASH_HIDDEN = new Set();
-  DASH_WIDTHS = {};
-  dashRender();
-}
-
-// ── drag to reorder (pointer-based, wired once, arrange-gated) ───────────────
+// Re-run Rule B when the grid's width changes — the column count moves with it,
+// and so does which card is left alone.
 function dashArrangeWire() {
   const host = document.getElementById('td-blocks');
   if (!host || host._bentoWired) return;
   host._bentoWired = true;
-  host.querySelectorAll('.td-block').forEach(el => dashWireBlock(el, host));
   window.addEventListener('resize', () => dashRender());
   if (window.ResizeObserver) {
     let w = host.clientWidth;
     new ResizeObserver(() => { if (host.clientWidth !== w) { w = host.clientWidth; dashRender(); } }).observe(host);
   }
-  // Re-solve once webfonts + the rail's margin transition have fully settled —
-  // the initial solve can run against a not-yet-final width, and with the morph
-  // scoped to Arrange mode this correction snaps rather than sliding.
+  // Webfonts and the rail's margin transition can both land after the first
+  // paint; re-run once everything has settled.
   if (document.readyState !== 'complete') window.addEventListener('load', () => dashRender(), { once: true });
 }
-function dashWireBlock(el, host) {
-  el.addEventListener('pointerdown', e => {
-    if (!DASH_ARRANGING || e.button !== 0) return;
-    if (e.target.closest('.bn-hide')) return;   // the hide ✕ handles its own click
-    // A quiet (empty-today) card has no slot on the live board — it parks in the
-    // trailing strip and rejoins the layout on its own once it has something to
-    // show. Dragging it would just snap back, so it isn't a drag surface; the ✕
-    // still works to hide it for good.
-    if (el.classList.contains('is-quiet')) return;
-    const r = _dashRects[el.dataset.block]; if (!r) return;
-    _dashDrag = { id: el.dataset.block, el, sx: e.clientX, sy: e.clientY, ox: r.x, oy: r.y, live: false };
-    try { el.setPointerCapture(e.pointerId); } catch (err) {}
-  });
-  el.addEventListener('pointermove', e => {
-    if (!_dashDrag || _dashDrag.el !== el) return;
-    const dx = e.clientX - _dashDrag.sx, dy = e.clientY - _dashDrag.sy;
-    if (!_dashDrag.live) { if (Math.hypot(dx, dy) < 7) return; _dashDrag.live = true; el.classList.add('td-dragging'); }
-    el.style.left = (_dashDrag.ox + dx) + 'px';
-    el.style.top = (_dashDrag.oy + dy) + 'px';
-    const box = host.getBoundingClientRect(), px = e.clientX - box.left, py = e.clientY - box.top;
-    const dragId = _dashDrag.id;
-    const others = DASH_ORDER.filter(id => !DASH_HIDDEN.has(id) && id !== dragId);
-    // Only cards with a 3-wide 2-row shape can pair side by side (a few tiny
-    // list cards have no [3,2] and stay full-width droppers).
-    const canHalf = id => DASH_SHAPES[id] && DASH_SHAPES[id].some(s => s[0] === 3 && s[1] === 2);
 
-    // Drop-beside: is the pointer over a card's LEFT or RIGHT half? If so — and
-    // both cards can go 3-wide — pair them: drop the dragged card immediately
-    // before / after the target and pin both 'half'. This is how the operator
-    // forces two cards to sit side by side.
-    let B = null, side = null;
-    for (const oid of others) {
-      const q = _dashRects[oid]; if (!q) continue;
-      if (px >= q.x - DASH_GAP && px <= q.x + q.w + DASH_GAP && py >= q.y && py <= q.y + q.h) {
-        B = oid; side = (px - q.x) / q.w < 0.5 ? 'before' : 'after'; break;
-      }
-    }
-
-    let target;
-    if (B && canHalf(dragId) && canHalf(B)) {
-      target = [...others];
-      const bi = target.indexOf(B);
-      target.splice(side === 'before' ? bi : bi + 1, 0, dragId);
-      DASH_WIDTHS[dragId] = 'half'; DASH_WIDTHS[B] = 'half';
-    } else {
-      // No card under the pointer → plain reorder into the nearest gap, and the
-      // dragged card drops any forced width (back to auto / full row).
-      let ins = others.length;
-      for (let j = 0; j < others.length; j++) {
-        const q = _dashRects[others[j]]; if (!q) continue;
-        const cx = q.x + q.w / 2, cy = q.y + q.h / 2;
-        if (py < q.y - 4 || (py < q.y + q.h && px < cx && py < cy + q.h / 2)) { ins = j; break; }
-        if (py < cy && px < cx) { ins = j; break; }
-      }
-      target = [...others]; target.splice(ins, 0, dragId);
-      delete DASH_WIDTHS[dragId];
-    }
-
-    // Re-render when the order OR the forced widths changed (a pairing can flip
-    // widths without moving anything in the list).
-    const wsig = target.map(id => DASH_WIDTHS[id] || 'a').join();
-    const visOrder = DASH_ORDER.filter(id => !DASH_HIDDEN.has(id));
-    if (target.join() !== visOrder.join() || wsig !== _dashDrag._wsig) {
-      _dashDrag._wsig = wsig;
-      DASH_ORDER = target.concat(DASH_ORDER.filter(id => DASH_HIDDEN.has(id)));
-      dashRender(dragId);
-    }
-  });
-  const finish = () => {
-    if (!_dashDrag || _dashDrag.el !== el) return;
-    const live = _dashDrag.live;
-    el.classList.remove('td-dragging');
-    _dashDrag = null;
-    if (live) { dashPruneWidths(); dashRender(); dashArrangePersist(); }
-  };
-  el.addEventListener('pointerup', finish);
-  el.addEventListener('pointercancel', finish);
-}
+// ── Arrange — stood down for this release ───────────────────────────────────
+// The drag gesture read the solver's pixel rects to decide where a dropped card
+// belonged, and those rects no longer exist. Rather than ship a half-working
+// drag, the control is hidden (CSS) and rebuilt in the next release against
+// live element boxes, with the old half/full width pins becoming grid spans.
+// The markup — the Arrange button, each card's hide ✕, the tray — is left in
+// place so that rebuild is a behaviour change and not a markup change. These
+// stubs exist because that markup still carries inline onclick handlers: a
+// hidden button can still be reached by a script or a stale accessibility tree,
+// and a missing function there would throw rather than do nothing.
+const DASH_ARRANGING = false;
+function dashArrangeToggle() {}
+function dashArrangeHide() {}
+function dashArrangeShow() {}
+function dashArrangeReset() {}
+function dashArrangeChromePaint() {}
 
 // Load the store list once so the Running-low card can offer a per-store filter.
 // Single-store tenants get no dropdown (nothing to choose).
@@ -1981,12 +1679,32 @@ function tdRecapRender() {
                               `记录 <b>${pickups.length}</b> 笔 gzgrocery 提货`);
 
   const close = document.getElementById('td-recap-close');
+  const block = host.closest('.td-block');
+  const line  = document.getElementById('td-recap-line');
   if (!rows.length) {
-    host.innerHTML = `<div class="td-recap-quiet">${TD.reallyAway
-      ? cuT('All quiet while you were away.', '您不在时，一切平静。')
-      : cuT('All quiet just now.', '目前一切平静。')}</div>`;
+    // Nothing happened while they were away, so the Recap does not need a card
+    // to say so. It leaves the grid entirely and becomes one line of quiet text
+    // above the remaining cards — which also means a calm dashboard carries no
+    // cream at all and reads as quiet rather than as empty furniture. The card
+    // keeps its markup and its place in the order, so a busy morning brings it
+    // back without rebuilding anything.
+    if (line) {
+      line.textContent = TD.reallyAway
+        ? cuT('All quiet while you were away. Nothing needed doing.', '您不在时一切平静，无需处理。')
+        : cuT('All quiet just now. Nothing needed doing.', '目前一切平静，无需处理。');
+      line.hidden = false;
+    }
+    if (block && !block.classList.contains('is-quiet')) {
+      block.classList.add('is-quiet');
+      if (typeof dashRender === 'function') dashRender();
+    }
     if (close) close.hidden = true;
     return;
+  }
+  if (line) { line.hidden = true; line.textContent = ''; }
+  if (block && block.classList.contains('is-quiet')) {
+    block.classList.remove('is-quiet');
+    if (typeof dashRender === 'function') dashRender();
   }
   host.innerHTML = rows.join('');
   if (close) {
@@ -2149,17 +1867,24 @@ async function tdSecCountsLoad() {
   } catch (e) { /* silent — the 60s tick retries; the footer just stays quiet */ }
 }
 
-// One text node per attention item, in the order an operator would work them.
-// `href` is a thunk so the deep link runs on click, not at build time.
-function tdSecFootHtml(items) {
+// One text node per attention item, in the order an operator would work them,
+// then the card's own way in — right-pinned, so every card's footer reads the
+// same: a dot, what is happening, and the door.
+function tdSecFootHtml(items, go) {
   const live = items.filter(it => it.n > 0);
-  if (!live.length) {
-    return `<span class="td-sec-dot is-clear"></span>${escapeHtml(cuT('Nothing waiting.', '暂无待办。'))}`;
-  }
   const sep = '<span class="td-sec-sep">·</span>';
-  return `<span class="td-sec-dot"></span>` + live.map(it =>
-    `<button type="button" class="td-sec-link" onclick="${it.go}">${escapeHtml(it.label(it.n))}</button>`
-  ).join(sep);
+  const body = live.length
+    ? `<span class="td-sec-dot"></span>` + live.map(it =>
+        `<button type="button" class="td-sec-link" onclick="${it.go}">${escapeHtml(it.label(it.n))}</button>`
+      ).join(sep)
+    : `<span class="td-sec-dot is-clear"></span>${escapeHtml(cuT('Nothing waiting.', '暂无待办。'))}`;
+  return body + (go ? tdSecGoHtml(go.label, go.run) : '');
+}
+// The card's trailing link. It used to sit in the card header; it belongs at the
+// bottom, where the eye already is after reading the numbers, and where it can
+// share the footer's baseline with the working-state line.
+function tdSecGoHtml(label, run) {
+  return `<button type="button" class="td-sec-go" onclick="${run}">${escapeHtml(label)}</button>`;
 }
 
 // Jump to the Orders tab and apply one of its status chips. The chips are
@@ -2182,28 +1907,38 @@ function tdSecPaint() {
     const k = today.kpis || {};
     const aov = Number(k.aov || 0);
     set('td-sec-aov', aov ? '¥' + (Math.round(aov * 100) / 100).toLocaleString() : '¥—');
-    const visitors = Number(k.visitors || 0);
-    set('td-sec-visitors', visitors
-      ? cuT(`of ${visitors.toLocaleString()} visitors`, `共 ${visitors.toLocaleString()} 访客`)
-      : cuT('no visitors yet', '暂无访客'));
-    set('td-sec-visits', Number(k.visits || 0).toLocaleString());
+    // Sessions is the ONLY denominator this card shows. It used to carry three
+    // side by side — "of 58 visitors", "93 visits", "46 sessions" — which asked
+    // the operator to hold three definitions of the same idea in their head to
+    // read one card. Worse, they disagreed: `visitors` double-counts anyone who
+    // signs in mid-session (see the note on visitsSql in routes/retail.js), so
+    // it could show MORE visitors than sessions, which cannot be true of people.
+    // `visits` counts page views, so a customer who browses more looks like more
+    // traffic. Sessions is the one that is both well-defined and correct, and it
+    // is already what conversion divides by — so keeping it is also the only
+    // choice that leaves this card internally consistent.
     const sessions = Number(k.sessions || 0);
-    set('td-sec-sessions', sessions
-      ? sessions.toLocaleString() + ' ' + cuT('sessions', '会话')
-      : cuT('no data yet', '暂无数据'));
+    set('td-sec-sessions', sessions ? sessions.toLocaleString() : '—');
     // Conversion, honest at small denominators (spec §1.1b — small merchants
     // ARE the core case). Below a meaningful session count a percentage is noise
     // rendered as a crisis (0.0% over 2 sessions), so under the threshold we show
-    // the raw ratio instead — orders of sessions — and only above it a %. At zero
-    // sessions there's nothing to divide, so a calm dash. Threshold tuned here.
+    // the raw counts instead and only above it a %. At zero sessions there's
+    // nothing to divide, so a calm dash. Threshold tuned here.
     const CONV_MIN_SESSIONS = 20;
+    const convSub = document.getElementById('td-sec-conv-sub');
     if (!sessions) {
       set('td-sec-conv', '—');
+      if (convSub) convSub.textContent = cuT('no sessions yet', '暂无会话');
     } else if (sessions < CONV_MIN_SESSIONS) {
       const conv = Number(k.orders || 0);
-      set('td-sec-conv', cuT(`${conv} of ${sessions} visits`, `${sessions} 次访问中 ${conv} 单`));
+      set('td-sec-conv', String(conv));
+      if (convSub) convSub.textContent = cuT(`orders from ${sessions} sessions`, `来自 ${sessions} 次会话`);
     } else {
       set('td-sec-conv', k.conversion_rate == null ? '—' : Number(k.conversion_rate).toFixed(1) + '%');
+      if (convSub) {
+        convSub.textContent = cuT(`${Number(k.orders || 0).toLocaleString()} orders ÷ ${sessions.toLocaleString()} sessions`,
+                                  `${Number(k.orders || 0).toLocaleString()} 单 ÷ ${sessions.toLocaleString()} 次会话`);
+      }
     }
     // Refunds — the only number in the Today strip that is money leaving. On a
     // good day it reads 0 and says so plainly rather than showing a rate of 0%.
@@ -2239,7 +1974,7 @@ function tdSecPaint() {
       { n: Number(c.awaiting_restock || 0), go: "tdSecOpenOrders('awaiting_restock')", label: n => cuT(`${n} awaiting restock`, `${n} 单待补货`) },
       { n: Number(c.refunds_open || 0),     go: "tdSecOpenOrders('refunds_open')",     label: n => cuT(`${n} in the refund queue`, `${n} 单待退款`) },
       { n: Number(c.needs_invoice || 0),    go: "dashOpenInvoices()",                  label: n => cuT(`${n} ${n === 1 ? 'invoice' : 'invoices'} to issue`, `${n} 张待开票`) },
-    ]);
+    ], { label: cuT('Open orders', '前往订单'), run: "dashJumpTab('orders')" });
   }
 
   // Inventory: out-of-stock is the emergency; low stock is the nudge. The footer
@@ -2253,6 +1988,7 @@ function tdSecPaint() {
         + `<button type="button" class="td-sec-link" onclick="dashStockDrawerOpen(event)">${escapeHtml(oos
             ? cuT(`${oos} out of stock`, `${oos} 项已售罄`)
             : cuT(`${low} running low`, `${low} 项库存不足`))}</button>`;
+    invFoot.innerHTML += tdSecGoHtml(cuT('Open restock', '前往补货'), 'dashOpenRestock()');
   }
 
   // Delivery: the carrier's own "needs a call" flags — the same signal the
@@ -2263,31 +1999,20 @@ function tdSecPaint() {
     delFoot.innerHTML = alerts === 0
       ? `<span class="td-sec-dot is-clear"></span>${escapeHtml(cuT('Every delivery is on track.', '配送一切正常。'))}`
       : `<span class="td-sec-dot"></span><button type="button" class="td-sec-link" onclick="tdSecOpenOrders('dispatched')">${escapeHtml(cuT(`${alerts} ${alerts === 1 ? 'delivery needs' : 'deliveries need'} a call`, `${alerts} 单配送需要联系`))}</button>`;
+    delFoot.innerHTML += tdSecGoHtml(cuT('Open delivery', '前往配送'), "tdSecOpenOrders('dispatched')");
   }
 }
 
-// Tone-coloured line icons for the attention-card headers (24-box, currentColor
-// so the .td-ic-<tone> class tints them to the card's ink), matching the mockup.
+// Line icons for the Needs-you rows (24-box, currentColor so .td-nico.is-<sev>
+// tints each one to its row's severity — the icon repeating the colour is what
+// lets severity survive a glance without a second chip on the row).
 const TD_ATTN_ICON = {
-  box:   '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>',
-  truck: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35a1 1 0 0 0-.78-.38H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>',
-  refund:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-7.7L3 8"/></svg>',
-  invoice:'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>',
-  check: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><path d="m9 11 3 3L22 4"/></svg>',
+  box:   '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 8 4.5v9L12 20l-8-4.5v-9Z"/><path d="M4 6.5 12 11l8-4.5M12 11v9"/></svg>',
+  truck: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h11v9H3zM14 9h4l3 3v3h-7"/><circle cx="7" cy="18" r="1.6"/><circle cx="17" cy="18" r="1.6"/></svg>',
+  order: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1Z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h4"/></svg>',
+  refund:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h12a4 4 0 0 1 0 8h-6"/><path d="m8 5-4 4 4 4"/></svg>',
+  invoice:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2Z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>',
 };
-function tdAttnCard(tone, icon, title, count, rowsHtml, moreText, action, headerCtrl) {
-  return `<section class="card td-card td-attn-card is-${tone}">
-    <div class="td-attn-head">
-      <span class="td-attn-ic td-ic-${tone}" aria-hidden="true">${TD_ATTN_ICON[icon] || ''}</span>
-      <h3>${title}</h3>
-      ${headerCtrl || ''}
-      ${count === '' ? '' : `<span class="td-pill td-pill-${tone}">${count}</span>`}
-    </div>
-    <div class="td-attn-rows">${rowsHtml}</div>
-    ${moreText ? `<div class="td-attn-more">${moreText}</div>` : ''}
-    ${action || ''}
-  </section>`;
-}
 
 // ── Running-low rolling window ─────────────────────────────────────────────
 // The card is a glanceable slice of a long list (often many out + many low).
@@ -2422,156 +2147,164 @@ function tdInvLowRender() {
 
 function tdAttnRender() {
   const host = document.getElementById('td-attn'); if (!host) return;
-  // The stock list is the Inventory block's business now — paint it from the
-  // same ops snapshot, on every path that repaints this (poll, SSE, store
-  // change, language toggle).
+  // The stock list is the Inventory block's business, not this card's — paint it
+  // from the same ops snapshot, on every path that repaints this (poll, SSE,
+  // store change, language toggle). It lives here because this is the one
+  // function every one of those paths already calls.
   tdInvLowRender();
   if (!DASH_OPS) {
     host.innerHTML = `<div class="td-muted">${cuT('Loading…', '加载中…')}</div>`;
     return;
   }
-  // Feed the Today pulse's "refund requests" cell from the same live ops
-  // snapshot (the open-refund queue) — 0 when clear, matching the mockup.
+  // Feed the Today card's "refund requests" cell from the same live ops
+  // snapshot (the open-refund queue) — 0 when clear.
   const refCell = document.getElementById('td-today-ref');
   if (refCell) refCell.textContent = String((DASH_OPS.refunds && DASH_OPS.refunds.count) || 0);
-  const cards = [];
 
-  // Restock — the stock fire lives here now (dedup: the Inventory block keeps the
-  // counts + rolling low list, but the restock CTA moved out of its footer to
-  // here — one fire, one place). Counts + one line, deep-linking to the restock
-  // filter; gated on the stock capability, like the Inventory low-stock list.
+  // One entry per fire. `mins` is how long the OLDEST thing in the queue has
+  // waited; null means this fire has no clock and states its condition instead.
+  const fires = [];
+
+  // Delivery — the carrier, the platform or our own rider has left someone
+  // waiting. Brick: this is the only one of the five where a customer is
+  // already having a bad day.
+  const da = DASH_OPS.delivery_alerts || { count: 0, items: [] };
+  if (da.count && dashCardWants('delivery')) {
+    fires.push({
+      sev: 'brick', icon: 'truck',
+      label: cuT('Delivery needs a call', '配送需要跟进'),
+      n: da.count,
+      // The oldest across every kind of delivery trouble. Each sub-list arrives
+      // oldest-first, so the true oldest is always inside the preview even when
+      // the count runs past it. A carrier exception carries no waiting_since at
+      // all (see the ops route) and simply doesn't vote.
+      mins: tdOldestMins(da.items),
+      cta: cuT('Open delivery', '前往配送'), go: "tdSecOpenOrders('dispatched')",
+    });
+  }
+
+  // Refunds — money the customer has asked for back and nobody has decided on.
+  const rf = DASH_OPS.refunds || { count: 0, items: [] };
+  if (rf.count && dashCardWants('refunds')) {
+    fires.push({
+      sev: 'amber', icon: 'refund',
+      label: cuT('Refunds waiting', '退款待处理'),
+      n: rf.count, mins: tdOldestMins(rf.items),
+      cta: cuT('Open refunds', '前往退款'), go: "tdSecOpenOrders('refunds_open')",
+    });
+  }
+
+  // Orders awaiting restock — paid, and parked until stock lands. The customer
+  // has been waiting since they paid, so that is what the age counts from.
+  const aw = DASH_OPS.awaiting_restock || { count: 0, items: [] };
+  if (aw.count && dashCardWants('orders')) {
+    fires.push({
+      sev: 'amber', icon: 'order',
+      label: cuT('Orders awaiting restock', '订单待补货'),
+      n: aw.count, mins: tdOldestMins(aw.items),
+      cta: cuT('Open orders', '前往订单'), go: "tdSecOpenOrders('awaiting_restock')",
+    });
+  }
+
+  // Invoices to issue — un-issued fapiao, oldest debt first.
+  const inv = DASH_OPS.invoices || { count: 0, items: [] };
+  if (inv.count && dashCardWants('invoices')) {
+    fires.push({
+      sev: 'amber', icon: 'invoice',
+      label: cuT('Invoices to issue', '待开发票'),
+      n: inv.count, mins: tdOldestMins(inv.items),
+      cta: cuT('Open invoices', '前往开票'), go: 'dashOpenInvoices()',
+    });
+  }
+
+  // Restock — the one fire with no clock and never any. "15 out of stock" is a
+  // state, not a queue: nothing records when a product went short, and inventing
+  // a duration for it would be inventing precision. It states its condition
+  // where the others state an age, and the row is a complete sentence either way
+  // because nothing reserves a column for the age.
   const oosc = (DASH_OPS.out_of_stock && DASH_OPS.out_of_stock.count) || 0;
   const lowc = (DASH_OPS.low_stock && DASH_OPS.low_stock.count) || 0;
   if ((oosc + lowc) > 0 && dashCardWants('stock')) {
-    // Comma, not " · ", so the i18n walker never mistakes the line for an EN·CN
-    // pair; data-no-i18n as well since tdAttnRender rebuilds it on a lang toggle.
-    const summary = (oosc && lowc)
-      ? cuT(`${oosc} out of stock, ${lowc} running low`, `${oosc} 项已售罄，${lowc} 项库存不足`)
-      : oosc ? cuT(`${oosc} out of stock`, `${oosc} 项已售罄`)
-             : cuT(`${lowc} running low`, `${lowc} 项库存不足`);
-    const rows = `<div class="td-attn-sub" data-no-i18n>${escapeHtml(summary)}</div>`;
-    const action = `<button type="button" class="td-attn-go" onclick="dashOpenRestock()">${cuT('Open restock', '前往补货')}</button>`;
-    cards.push(tdAttnCard('amber', 'box', cuT('Restock needed', '需要补货'), oosc + lowc, rows, '', action));
+    // Comma, not " · " — the i18n walker splits on the middot and would tear a
+    // constructed line in half. data-no-i18n on the node as well, below.
+    const state = (oosc && lowc)
+      ? cuT(`out of stock, ${lowc} running low`, `已售罄，另有 ${lowc} 项库存不足`)
+      : oosc ? cuT('out of stock', '已售罄')
+             : cuT('running low', '库存不足');
+    fires.push({
+      sev: 'amber', icon: 'box',
+      label: cuT('Restock needed', '需要补货'),
+      // The pill counts what is actually OUT; the state line names the rest. A
+      // single number summing both would say "23" and mean neither.
+      n: oosc || lowc, mins: null, state,
+      cta: cuT('Open restock', '前往补货'), go: 'dashOpenRestock()',
+    });
   }
 
-  // Delivery — the brick "needs a call" card only when the carrier has flagged a
-  // problem. When it's clear there's no card here; the calm channels are folded
-  // into the single "All clear" roll-up at the end instead of one card each.
-  const da = DASH_OPS.delivery_alerts || { count: 0, items: [] };
-  if (da.count && dashCardWants('delivery')) {
-    const reasonOf = it => {
-      // A late air parcel is a delivered order flagged for a food-safety call —
-      // it has no live tracking_status to read, so name it directly (mirrors the
-      // "AIR DELAYED · contact customer" badge in the orders list).
-      if (it.air_delayed) return cuT('air delayed · contact customer', '空运延误 · 联系客户');
-      // Meituan is a view-only channel with no live tracking_status; a flagged
-      // Meituan order is one the auto-deliver sweep left stuck past its promised
-      // time (see the dashboard/ops endpoint), so name it as an overdue delivery.
-      if (it.overdue || it.channel === 'meituan')
-        return cuT('overdue · check delivery', '配送超时 · 请跟进');
-      // Same-city (Qingyun) local delivery stuck before a rider grabbed it — the
-      // promised arrival time passed with no rider on the way. Name it directly;
-      // these orders carry no tracking_status for deliveryStateInfo to read.
-      if (it.local_stuck)
-        return cuT('no rider yet · check delivery', '暂无骑手接单 · 请跟进');
-      const info = (typeof deliveryStateInfo === 'function' && deliveryStateInfo(it))
-        || { en: 'delivery issue', cn: '配送异常' };
-      return cuT(info.en, info.cn);
-    };
-    // Long order numbers (R260616000003) crowd the row, so show a short head+tail
-    // ref — still recognisable, and the whole row is a deep link anyway.
-    const shortRef = no => { no = String(no || ''); return no.length > 10 ? `${no.slice(0, 5)}…${no.slice(-3)}` : no; };
-    const cap = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
-    const daChev = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>';
-    const daPhone = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>';
+  // Severity first, then oldest first, and a fire with no age sorts last —
+  // a state cannot be ranked by how long it has waited.
+  const sevRank = { brick: 0, amber: 1 };
+  fires.sort((a, b) => {
+    const s = (sevRank[a.sev] ?? 9) - (sevRank[b.sev] ?? 9);
+    if (s) return s;
+    if (a.mins == null && b.mins == null) return 0;
+    if (a.mins == null) return 1;
+    if (b.mins == null) return -1;
+    return b.mins - a.mins;
+  });
 
-    const shown = (da.items || []).slice(0, 4).map(it => ({
-      id: Number(it.id), buyer: String(it.buyer || '').trim(),
-      order_no: it.order_no || '', reason: reasonOf(it),
-    }));
-    // When every flagged order carries the same reason (the common "air delayed"
-    // case), say it once under the title and let each row just show who to call.
-    // When reasons differ, drop the shared line and label each row instead.
-    const daReasons = [...new Set(shown.map(r => r.reason))];
-    const daShared = daReasons.length === 1 ? daReasons[0] : '';
-    const rows = (daShared ? `<div class="td-attn-sub">${daPhone}${escapeHtml(cap(daShared))}</div>` : '')
-      + shown.map(r => {
-        // Lead with who to call; fall back to the order number when no name's on
-        // file. The short ref only rides along when the buyer name is the label.
-        const nm  = escapeHtml(r.buyer || r.order_no);
-        const ref = r.buyer ? `<span class="td-da-ref">${escapeHtml(shortRef(r.order_no))}</span>` : '';
-        const rsn = daShared ? '' : `<span class="rsn">${escapeHtml(cap(r.reason))}</span>`;
-        return `
-      <button type="button" class="td-attn-row td-da-row" onclick="openOrder(${r.id})">
-        <span class="td-da-main"><span class="nm" data-no-i18n>${nm}</span>${rsn}</span>
-        ${ref}<span class="td-da-chev" aria-hidden="true">${daChev}</span>
-      </button>`;
-      }).join('');
-    const first = shown[0] || {};
-    const more = da.count > 4 ? cuT(`and ${da.count - 4} more`, `另有 ${da.count - 4} 个`) : '';
-    const action = da.count === 1 && first.id
-      ? `<button type="button" class="td-attn-go" onclick="openOrder(${Number(first.id)})">${cuT('Open the order', '打开订单')}</button>`
-      : '';
-    cards.push(tdAttnCard('brick', 'truck', cuT('Delivery needs a call', '配送需要跟进'), da.count, rows, more, action));
-  }
-
-  // Refund queue — pending / reviewing requests.
-  const rf = DASH_OPS.refunds || { count: 0, items: [] };
-  if (rf.count && dashCardWants('refunds')) {
-    const rows = (rf.items || []).slice(0, 4).map(it => `
-      <button type="button" class="td-attn-row"${it.id ? ` onclick="openOrder(${Number(it.id)})"` : ''}>
-        <span class="name" data-no-i18n>${escapeHtml(it.order_no || '')} · ${escapeHtml(it.buyer || '')}</span>
-        <span class="val">${it.amount ? '¥' + Number(it.amount).toLocaleString() : '—'}</span>
-      </button>`).join('');
-    cards.push(tdAttnCard('amber', 'refund', cuT('Refunds waiting', '退款待处理'), rf.count, rows,
-      rf.count > 4 ? cuT(`and ${rf.count - 4} more`, `另有 ${rf.count - 4} 笔`) : ''));
-  }
-
-  // Invoices to issue — un-issued fapiao requests, oldest first (the retired
-  // Invoices tab's queue). Rows open the order drawer (where issuing happens);
-  // the card action deep-links to the Orders list pre-filtered on the
-  // "Needs invoice" chip — same pattern as Running-low → Open restock.
-  const inv = DASH_OPS.invoices || { count: 0, items: [] };
-  if (inv.count && dashCardWants('invoices')) {
-    const rows = (inv.items || []).slice(0, 4).map(it => `
-      <button type="button" class="td-attn-row"${it.id ? ` onclick="openOrder(${Number(it.id)})"` : ''}>
-        <span class="name" data-no-i18n>${escapeHtml(it.order_no || '')} · ${escapeHtml(it.title || '')}</span>
-        <span class="val">${it.amount ? '¥' + Number(it.amount).toLocaleString() : '—'}</span>
-      </button>`).join('');
-    cards.push(tdAttnCard('amber', 'invoice', cuT('Invoices to issue', '待开发票'), inv.count, rows,
-      inv.count > 4 ? cuT(`and ${inv.count - 4} more`, `另有 ${inv.count - 4} 张`) : '',
-      `<button type="button" class="td-attn-go" onclick="dashOpenInvoices()">${cuT('Open in Orders', '前往订单')}</button>`));
-  }
-
-  // There is no "All clear" card. It was written when the blocks had no
-  // footers; now every block ends in its own sage line ("Every delivery is on
-  // track", "Nothing waiting"), so a card that gathers those lines up and
-  // repeats them announces only that nothing is happening. Silence says that.
-
-  // Nothing waiting → the whole block leaves the page: heading, card and all.
-  // A shorter dashboard IS the good news. The block stays in the DOM (hidden
-  // by CSS) so Arrange mode can still show it — parked in the trailing strip
-  // with a note (below) that only the operator sees while arranging.
+  // Nothing waiting → the whole block leaves the page: heading, rows and all.
+  // A shorter dashboard IS the good news, and The Recap moves up to lead on its
+  // own. The block stays in the DOM (hidden by CSS) so nothing has to be rebuilt
+  // when the next fire lights.
   const block = host.closest('.td-block');
   const wasQuiet = block && block.classList.contains('is-quiet');
-  if (!cards.length) {
-    // The note only ever shows in Arrange mode (the whole card is display:none
-    // otherwise), so it spells out why this card sits parked at the bottom and
-    // can't be dragged: it's empty, so it's off the dashboard for now, and it
-    // reappears in its own spot the moment something needs attention.
-    host.innerHTML = `<div class="td-quiet-note">`
-      + `<b>${escapeHtml(cuT('Nothing needs you right now.', '目前没有待办。'))}</b>`
-      + `<span>${escapeHtml(cuT('This card is off your dashboard while it’s empty. It comes back in its usual spot on its own the moment something needs attention — no need to place it.', '空闲时这张卡片不会显示在仪表盘上。有待办时会自动回到原来的位置，无需手动摆放。'))}</span>`
-      + `</div>`;
+  if (!fires.length) {
+    host.innerHTML = '';
     if (block) block.classList.add('is-quiet');
-    // Needs-you just emptied — re-solve so the bento closes its gap.
     if (!wasQuiet && typeof dashRender === 'function') dashRender();
     return;
   }
   if (block) block.classList.remove('is-quiet');
-  host.innerHTML = `<div class="td-attn-grid">${cards.join('')}</div>`;
-  // Needs-you just appeared — re-solve so it takes its place in the layout.
+  host.innerHTML = fires.map(tdAttnRowHtml).join('');
   if (wasQuiet && typeof dashRender === 'function') dashRender();
+}
+
+// The oldest thing in a queue, in minutes — or null when not one row in it
+// carries a clock we trust. Rows without a waiting_since are skipped rather
+// than counted as zero, so one age-less row can never drag a real age down.
+function tdOldestMins(items) {
+  let oldest = null;
+  for (const it of (items || [])) {
+    const m = dashAgeMins(it && it.waiting_since);
+    if (m == null) continue;
+    if (oldest == null || m > oldest) oldest = m;
+  }
+  return oldest;
+}
+
+// One line per fire: icon · what it is · how many · how long the oldest has
+// waited · where it gets fixed.
+//
+// Nothing reserves a column for the age. The count pill and the meta run are
+// welded to the label and only the link pins right, so "Restock needed · 15 ·
+// out of stock, 8 running low" is a complete sentence that simply ends sooner
+// than "Delivery needs a call · 2 · oldest 4h". A right-aligned age column was
+// the obvious first shape and it is exactly what leaves a visible hole on the
+// row that has no age — there is no empty cell here because there was never a
+// cell.
+function tdAttnRowHtml(f) {
+  const meta = f.mins == null ? (f.state || '')
+    : cuT(`oldest ${dashAgeShort(f.mins)}`, `最久 ${dashAgeShort(f.mins)}`);
+  const chev = '<svg class="td-nchev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>';
+  return `<button type="button" class="td-nrow" onclick="${f.go}">
+    <span class="td-nico is-${f.sev}" aria-hidden="true">${TD_ATTN_ICON[f.icon] || ''}</span>
+    <span class="td-nlbl">${escapeHtml(f.label)}</span>
+    <span class="td-npill is-${f.sev}" data-no-i18n>${Number(f.n).toLocaleString()}</span>
+    <span class="td-nmeta" data-no-i18n title="${escapeAttr(meta)}">${escapeHtml(meta)}</span>
+    <span class="td-nspring"></span>
+    <span class="td-ncta">${escapeHtml(f.cta)}</span>${chev}
+  </button>`;
 }
 
 // ── Running-low stock drawer ────────────────────────────────────────────────

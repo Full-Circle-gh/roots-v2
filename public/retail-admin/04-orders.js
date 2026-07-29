@@ -3962,11 +3962,12 @@ document.addEventListener('click', (e) => {
   // also open their detail drawer on tap. .rm-sheet = the shared mobile
   // Sort/Manage bottom sheet, whose "Open full details" row opens the order
   // drawer — without this the opening tap bubbles here and closes it instantly.
-  // .td-attn-row / .td-attn-go = the "Needs you" attention-card rows + their
-  // action button (Delivery needs a call, Refunds waiting, Invoices to issue),
-  // which likewise open the order drawer on click.
+  // .td-nrow = the "Needs you" rows (delivery, refunds, awaiting restock,
+  // invoices, restock), each of which jumps to a filtered list or opens a
+  // drawer. .td-attn-row = the Inventory card's running-low rows, which open the
+  // product. Both would otherwise close the very drawer their click opened.
   // tr.vch-row = the Coupons table rows, which open the coupon drawer on click.
-  if (e.target.closest('tr.order-row, tr.cul-row, tr.vch-row, .db-feed-row, .td-attn-row, .td-attn-go, .rm-ocard, .rm-cucard, .rm-sheet')) return;
+  if (e.target.closest('tr.order-row, tr.cul-row, tr.vch-row, .db-feed-row, .td-nrow, .td-attn-row, .rm-ocard, .rm-cucard, .rm-sheet')) return;
   const sel = window.getSelection && window.getSelection();
   if (sel && sel.toString().length > 0) return;
   // Same topmost + back-to-customer semantics as Esc, over the dw-dismiss set,
