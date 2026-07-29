@@ -930,7 +930,10 @@ function railDrill(group, opts) {
   group.classList.add('rail-open');
   rail.classList.add('rail-drilled');
   _railSyncAria();
-  if (!already) { _railAnim('drill'); railAnnounceLevel(); }
+  // `silent` skips the slide — used when the level is being RESTORED (unfolding
+  // back into the folder you were already in), where the rail is already moving
+  // and a second animation on top of the widening reads as a glitch.
+  if (!already) { if (!(opts && opts.silent)) _railAnim('drill'); railAnnounceLevel(); }
   // Going forward → the top of the new list.
   if (opts && opts.moveFocus) { const first = _railChildren(group)[0]; if (first) first.focus(); }
 }
@@ -944,7 +947,7 @@ function railGoRoot(opts) {
   was.classList.remove('rail-open');
   rail.classList.remove('rail-drilled');
   _railSyncAria();
-  _railAnim('back');
+  if (!(opts && opts.silent)) _railAnim('back');
   railAnnounceLevel();
   // Coming back → the group row you came from, not the top of the rail.
   if (opts && opts.moveFocus) { const trig = _railTrigger(was); if (trig) trig.focus(); }
@@ -955,10 +958,10 @@ window.railDrill = railDrill;
 // clicks, palette jumps, salesGo(), dashboard drill-through, first paint.
 // §2.1: picking a child leaves the rail drilled (Coupons → Flash sales is the
 // common motion, and snapping back would charge a re-drill on every hop).
-function railResolveFor(tab) {
+function railResolveFor(tab, opts) {
   const g = RAIL_PARENT[tab] ? railGroupEl(RAIL_PARENT[tab]) : null;
-  if (g && g.style.display !== 'none' && !g.classList.contains('rail-flat')) railDrill(g);
-  else railGoRoot();
+  if (g && g.style.display !== 'none' && !g.classList.contains('rail-flat')) railDrill(g, opts);
+  else railGoRoot(opts);
 }
 window.railResolveFor = railResolveFor;
 
@@ -977,7 +980,7 @@ $$('.tabs .tabs-group').forEach(group => {
     // Folded + click a folder → unfold AND drill in one gesture. It stays
     // unfolded: the operator is now working inside a folder, and there is no
     // folded drilled state to fall back to (the children have no icons).
-    if (document.body.classList.contains('nav-collapsed')) setNavCollapsed(false);
+    if (document.body.classList.contains('nav-collapsed')) setNavCollapsed(false, { keepLevel: true });
     railDrill(group, { moveFocus: true });
   });
 });
@@ -1018,7 +1021,7 @@ function _navRailLabel(b) {
 function _navRailButtons() {
   return $$('.tabs > button, .tabs .tabs-group-trigger');
 }
-function setNavCollapsed(on) {
+function setNavCollapsed(on, opts) {
   on = !!on;
   // Drilled + fold → return to root FIRST, then fold. There is no folded drilled
   // state: the children are words with no icons, so a folded drilled rail would
@@ -1027,6 +1030,15 @@ function setNavCollapsed(on) {
   // across a fold, which is the opposite of what the level needs to do.)
   if (on) railGoRoot();
   document.body.classList.toggle('nav-collapsed', on);
+  // …and unfolding puts the level BACK, read off the page you're actually on:
+  // fold while sitting in Coupons and unfold, and the rail returns to Marketing,
+  // not to root. Folding is a way to make room, not a way to leave the folder.
+  // `keepLevel` is for the one caller that is about to set the level itself
+  // (clicking a folder row while folded), so it doesn't drill twice.
+  if (!on && !(opts && opts.keepLevel)) {
+    const active = document.querySelector('.tabs [data-tab].active');
+    if (active) railResolveFor(active.dataset.tab, { silent: true });
+  }
   try { localStorage.setItem(NAV_COLLAPSE_KEY, on ? '1' : '0'); } catch (e) {}
   // Keep the fold control's state in sync — its tooltip/aria flip with the fold,
   // and the filled↔hollow side-panel glyph is handled in CSS off
