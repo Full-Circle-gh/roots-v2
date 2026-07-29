@@ -2460,18 +2460,103 @@
          wide empty canyon. table-layout:fixed + this colgroup gives every
          column a deterministic share, so the merged Delivery column (old
          Tracking + Ship by) takes the roomy slot and nothing floats apart.
-         Desktop-only: the table is hidden ≤720px, where order cards render. */
+         Desktop-only: the table is hidden ≤720px, where order cards render.
+
+         These were TEN PERCENTAGES SUMMING TO 100, and that is what broke a
+         13" laptop. Percentages shrink every column by the same ratio, so the
+         columns holding something unbreakable shrank alongside the ones that
+         can ellipse. Placed was 8%: on the ~996px a 1280px window gives this
+         content area that is 80px, 60px of it usable after padding, and
+         "Jul 29, 10:36 AM" needs ~88px at 11px. It wrapped after the comma on
+         every row. At 1440px it was still ~15px short — it never fit on any
+         13" screen. Meanwhile Items held one digit in 60px.
+
+         So the columns are now split by what their content can survive:
+
+         ATOMIC — content that must not break, so each gets a px FLOOR it can
+         never shrink below, a percentage share for the middle range, and a px
+         CEILING so a wide monitor cannot inflate it. clamp() does all three.
+         Floors are the widest REAL value plus the 20px of cell padding, and
+         where a bilingual header is wider than the data the header sets it
+         (Items is the case: "Items" needs 58px, the digit needs 45).
+           Order #  88 — "TC000104" 12px mono ≈ 58 · header "Order #" ≈ 74
+           Channel 100 — glyph 13 + gap 4 + "Gzgrocery" ≈ 62 (was overflowing
+                         its 90px silently: .ord-chan is inline-flex, so a long
+                         label spills sideways instead of wrapping)
+           Items    60 — the header, not the data
+           Total    84 — "¥12,345.60" ≈ 72, numeric, must never wrap
+           Status  104 — exactly what 10% gave it at 996px; unchanged on purpose
+           Placed  112 — "Jul 29, 10:36 AM" ≈ 88, the whole point of this change
+           Delivery 140 — two lines by design, but not below its own headline
+
+         PROSE — Customer, Store and Ship to carry names and addresses that
+         already ellipse or stack. They take `auto`, which under fixed layout
+         means they split whatever is left after the atomic columns are paid.
+
+         🔴 At least one column MUST stay `auto`. Under fixed layout, if every
+         column states a width and they sum to less than the table, browsers
+         spread the surplus across ALL of them — which would push the atomic
+         columns straight through their ceilings and undo half this block.
+         The three prose columns are what absorb it instead.
+
+         The known cost, stated plainly: giving slack to `auto` columns is the
+         shape that #cu-table moved AWAY from (see its own "Pinned column
+         widths" — one width-less column ate every pixel of a wide monitor).
+         Three auto columns split it three ways instead of one taking it all,
+         and they are the three that genuinely use the room — a long name, a
+         routing note, a city and district. It is that bug tamed, not gone.
+
+         Worst case is the 1280px laptop, where the floors bind and the prose
+         columns land at ~99px each. That is below Customer's old 130px, but
+         its old 130px was only affordable because Placed was broken. A name
+         ellipses there by design; a timestamp cannot.
+
+         EVERY col STATES ITS WIDTH TWICE, and the first line is not dead code.
+         clamp() on a table-column width under fixed layout is the one part of
+         this that is not provable from the stylesheet, and it could not be
+         checked here: file:// pages render as script-less snapshots and this
+         app's server does not boot on Windows, so no measurement was taken.
+         Rather than ship on faith, the plain percentage goes FIRST — if a
+         browser drops the clamp() line as unsupported it keeps the percentage
+         instead of falling back to auto and collapsing the arrangement.
+         Those fallback percentages are not filler either: they still sum to
+         100 and they still fix the 13" laptop on their own (Placed at 11% of
+         996px is 110px, ~90px of text room against the ~88px the timestamp
+         needs). So the floor-and-ceiling version is an improvement layered on
+         a fix, not a bet — the bad case is last month's behaviour with a
+         correct Placed column, not a broken table. */
       #orders-table { table-layout: fixed; }
-      #orders-table col.oc-c-ord      { width: 10%; }
-      #orders-table col.oc-c-chan     { width: 9%; }
-      #orders-table col.oc-c-cust     { width: 13%; }
-      #orders-table col.oc-c-store    { width: 10%; }
-      #orders-table col.oc-c-shipto   { width: 11%; }
-      #orders-table col.oc-c-items    { width: 6%; }
-      #orders-table col.oc-c-total    { width: 8%; }
-      #orders-table col.oc-c-status   { width: 10%; }
-      #orders-table col.oc-c-delivery { width: 15%; }
-      #orders-table col.oc-c-placed   { width: 8%; }
+      #orders-table col.oc-c-ord      { width:  9%; width: clamp(88px,  9%, 116px); }
+      #orders-table col.oc-c-chan     { width: 10%; width: clamp(100px, 9%, 124px); }
+      #orders-table col.oc-c-items    { width:  5%; width: clamp(60px,  5%,  72px); }
+      #orders-table col.oc-c-total    { width:  8%; width: clamp(84px,  8%, 104px); }
+      #orders-table col.oc-c-status   { width: 10%; width: clamp(104px, 10%, 132px); }
+      #orders-table col.oc-c-delivery { width: 16%; width: clamp(140px, 14%, 200px); }
+      #orders-table col.oc-c-placed   { width: 11%; width: clamp(112px, 10%, 136px); }
+      #orders-table col.oc-c-cust     { width: 12%; width: auto; }
+      #orders-table col.oc-c-store    { width:  9%; width: auto; }
+      #orders-table col.oc-c-shipto   { width: 10%; width: auto; }
+
+      /* The floor above is what stops Placed wrapping; this is what makes it
+         SAY SO if the floor is ever lost. Without it a future width change
+         quietly reintroduces the two-line timestamp and nobody notices for a
+         month. With it the cell overruns its column instead — visibly wrong,
+         which is the point. Class, not :last-child, so adding a column to the
+         right of Placed later cannot silently move this rule onto it. */
+      #orders-table tbody td.oc-placed { white-space: nowrap; }
+
+      /* ── Laptop breathing room ──────────────────────────────────────────
+         Independent of the widths above and safe to revert alone: the floors
+         are all sized against the CURRENT 20px of cell padding, so nothing
+         here is load-bearing. It just returns ~40px across the row on the
+         screens that have none to spare.
+         Both cells drop by the same 2px so the existing 2px offset between
+         header text and cell text is preserved rather than accidentally
+         "fixed" — that offset is not this change's business. */
+      @media (max-width: 1440px) {
+        #orders-table thead th   { padding: 10px 10px; }
+        #orders-table tbody td   { padding: 13px 8px; }
+      }
     </style>
     <!-- ── The list card ────────────────────────────────────────────────
          ONE rounded, clipped surface holding the desktop table, the phone

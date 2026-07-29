@@ -1196,7 +1196,7 @@ async function loadOrders(opts = {}) {
         <td class="numeric oc-total">¥${fmt(o.total)}</td>
         <td class="status-cell"><div class="stack">${(() => { const p = orderStatusPill(o); return `<span class="pill ${p.cls}"><span class="dot"></span>${p.label}</span>`; })()}${refundBadge(o)}${addonBadge(o)}</div>${stockPendingBadge(o)}${invoiceLine(o)}</td>
         <td class="oc-delivery">${renderDeliveryCell(o)}</td>
-        <td class="muted" style="font-size: 11px">${formatDate(o.placed_at)}</td>
+        <td class="muted oc-placed" style="font-size: 11px">${formatDate(o.placed_at)}</td>
       </tr>`;
     }).join('');
     if (window.rmRenderOrderCards) rmRenderOrderCards(j.data);
