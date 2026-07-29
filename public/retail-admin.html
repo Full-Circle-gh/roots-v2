@@ -1619,8 +1619,11 @@
               </div>
             </div>
           </div>
-          <!-- "synced 12s ago" — un-hidden by dashRenderSync on its first real
-               stamp, and written with cuT, hence data-no-i18n. -->
+          <!-- Stale-data warning. Empty and hidden almost always: dashRenderSync
+               only fills it once the numbers above have stopped refreshing, so
+               on a healthy dashboard this element is never seen. Everyday "are
+               we live?" is the topbar's pulsing poll dot, not this. Written
+               with cuT, hence data-no-i18n. -->
           <span class="db-hero-sync" id="db-hero-sync" data-no-i18n hidden></span>
           <div class="td-sec-foot" id="td-sec-orders-foot" data-no-i18n></div>
         </div>

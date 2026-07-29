@@ -8452,9 +8452,15 @@
   .td-live.is-zero .td-live-num { display: none; }
   .db-hero-sync[hidden] { display: none; }
   /* Sits between the card's padded inner and its cream footer, so it carries
-     its own side padding or it runs flush to the card edge. Right-aligned and
-     quiet: it is a freshness stamp to glance at, not a number to read. */
-  .td-block .db-hero-sync { padding: 0 24px 12px; text-align: right; }
+     its own side padding or it runs flush to the card edge. Left-aligned: the
+     only thing this element ever shows now is a sentence (see dashRenderSync),
+     and a sentence ranged right reads as a caption rather than a warning. */
+  .td-block .db-hero-sync { padding: 0 24px 12px; }
+  /* The stale state — the ONLY state that renders. Amber, because this is the
+     same "something is wrong and it is on you" register as a Needs-you row, and
+     a shade heavier than the muted grey it inherits so it does not read as the
+     card's small print. */
+  .db-hero-sync.is-stale { color: var(--td-amber-ink); font-weight: 500; }
 
   /* The card's footer: its one attention line, and the way in. Amber dot = something waits, sage = all clear.
      Empty (no data yet) collapses so the card doesn't show a bare strip. */

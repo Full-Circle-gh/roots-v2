@@ -447,6 +447,10 @@ function dashHeroInit() {
 }
 function dashHeroStart() {
   dashHeroStop();  // idempotent — clear any stale timers first
+  // When this is a resume from a hidden tab, lastSync is however old the tab is
+  // and the refresh below has not landed yet. dashRenderSync reads this stamp
+  // so it holds its warning until the refresh has had a fair chance.
+  DASH_HERO._resumedAt = Date.now();
   dashHeroRefreshAll();
   DASH_HERO.presence = setInterval(dashHeroLoadPresence, DASH_HERO_INTERVALS.presence);
   DASH_HERO.today    = setInterval(dashHeroLoadToday,    DASH_HERO_INTERVALS.today);
@@ -516,24 +520,36 @@ function dashHeroSyncStamp() {
 // Relative "synced Xs/Xm ago" stamp — re-rendered on each poll and by the 10s
 // ticker so it stays honest between polls. Keeps EN free of " · " for the i18n
 // splitter.
+// Silent while the data is fresh; speaks only when it is not.
+//
+// This shipped for one day as a running "synced 12s ago" caption, and that was
+// the wrong shape. Presence re-stamps every 15s and this repaints every 10, so
+// the caption could only ever read "just now" or a single-digit age — a field
+// whose value never varies is furniture, not information. Worse, the one moment
+// it had something to say (polling silently dead, numbers frozen but still
+// looking authoritative) it said it in 11px grey in a corner, which is the
+// wrong loudness for what is really a correctness problem.
+//
+// So it is inverted: nothing at all under the threshold, a plain amber warning
+// over it. The everyday "are we live?" question is already answered by the
+// pulsing live-poll dot in the topbar; this exists only to catch the case that
+// dot does NOT cover — polling that is failing rather than paused.
+const DASH_SYNC_STALE_S = 180;   // 12 missed presence polls
+// Returning to a hidden tab restarts the timers AND fires a refresh, but that
+// refresh is in flight — lastSync is still the old one until it lands. Without
+// this grace a slow response would flash a warning that is about to be untrue,
+// and a warning that cries wolf is worth less than no warning.
+const DASH_SYNC_RESUME_GRACE_MS = 20000;
 function dashRenderSync() {
-  const el = $('#db-hero-sync'); if (!el || !DASH_HERO.lastSync) return;
+  const el = $('#db-hero-sync'); if (!el) return;
+  const quiet = () => { el.hidden = true; el.textContent = ''; el.classList.remove('is-stale'); };
+  if (!DASH_HERO.lastSync) return quiet();
   const secs = Math.max(0, Math.round((Date.now() - DASH_HERO.lastSync) / 1000));
-  if (secs < 8)       el.textContent = cuT('synced just now', '刚刚同步');
-  else if (secs < 60) el.textContent = cuT(`synced ${secs}s ago`, `${secs}秒前同步`);
-  else {
-    const m = Math.floor(secs / 60);
-    el.textContent = cuT(`synced ${m}m ago`, `${m}分钟前同步`);
-  }
-  // Built and then left hidden in the markup, so it has never been on screen.
-  // Un-hidden on the first paint rather than in the HTML, so a dashboard that
-  // never manages a sync shows nothing instead of an empty strip — the element
-  // appears at the moment it has something true to report.
-  //
-  // It answers the one question a clock cannot: is what I am looking at
-  // current? A stale dashboard shows a confident wrong number at 3:47pm just
-  // as happily as a fresh one, and the operator's own device already has the
-  // time on it twice over.
+  if (secs < DASH_SYNC_STALE_S) return quiet();
+  if (Date.now() - (DASH_HERO._resumedAt || 0) < DASH_SYNC_RESUME_GRACE_MS) return quiet();
+  const m = Math.floor(secs / 60);
+  el.textContent = cuT(`Not updating — last synced ${m}m ago`, `未在更新 — ${m}分钟前同步`);
+  el.classList.add('is-stale');
   el.hidden = false;
 }
 
