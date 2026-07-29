@@ -8168,10 +8168,28 @@
     0%, 100% { opacity: 1; transform: scale(1); }
     50%      { opacity: .45; transform: scale(.8); }
   }
-  .td-recap-close {
-    margin: 18px 0 0; padding-top: 16px; border-top: 1px solid var(--td-border);
-    font-size: 13px; color: var(--td-text2);
+  /* The Recap's closing row: what the card has to say for itself on the left,
+     the "Show the work" fold toggle pinned right. The rule and the spacing that
+     used to belong to the closing line now belong to this row, because the
+     toggle lives here too and the closing line is hidden on plenty of days —
+     hanging the border off a sometimes-absent element left the button floating
+     against the rows with no separation. align-items:baseline so a 13px
+     sentence and a 13px control sit on one line rather than on their boxes. */
+  .td-recap-foot {
+    margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--td-border);
+    display: flex; align-items: baseline; gap: 12px; flex: none;
   }
+  .td-recap-close { margin: 0; min-width: 0; font-size: 13px; color: var(--td-text2); }
+  /* Pinned right by the spring, and allowed to keep its full width while the
+     sentence beside it ellipsises — a half-visible control is worse than a
+     shortened sentence. */
+  .td-recap-work-btn {
+    margin-left: auto; flex: 0 0 auto; border: 0; background: none; padding: 0;
+    font-family: var(--f-sans); font-size: 13px; color: var(--td-text2);
+    white-space: nowrap; cursor: pointer;
+    transition: color .2s cubic-bezier(.16,1,.3,1);
+  }
+  .td-recap-work-btn:hover { color: var(--td-text); }
 
   /* ── "Show the work" fold — the banner unfolds in place into the day's feed.
      Away-window rows carry a dusk tint; the boundary is the "you left here"
@@ -8334,8 +8352,22 @@
   .td-blocks {
     display: grid; grid-template-columns: 1fr; gap: 16px; align-items: stretch;
   }
-  @container (min-width: 760px)  { .td-blocks { grid-template-columns: 1fr 1fr; } }
-  @container (min-width: 1140px) { .td-blocks { grid-template-columns: 1fr 1fr 1fr; } }
+  /* Never draw more columns than there are cards to put in them. Two cards in a
+     three-column grid left the pair hugging the left edge with a column of
+     nothing beside them — the grid describing a card that is not there. The cap
+     is applied per band, not globally, so it can only ever REMOVE a column the
+     width would have allowed: two cards in the narrow band stay one-up.
+     dashRender sets the class, because CSS cannot count how many cards are
+     actually showing once quiet and role-hidden ones drop out. */
+  @container (min-width: 760px)  {
+    .td-blocks { grid-template-columns: 1fr 1fr; }
+    .td-blocks.is-cols-1 { grid-template-columns: 1fr; }
+  }
+  @container (min-width: 1140px) {
+    .td-blocks { grid-template-columns: 1fr 1fr 1fr; }
+    .td-blocks.is-cols-1 { grid-template-columns: 1fr; }
+    .td-blocks.is-cols-2 { grid-template-columns: 1fr 1fr; }
+  }
   .td-block { min-width: 0; animation: td-settle .6s cubic-bezier(.16,1,.3,1) both; }
   /* Rule B. `1 / -1` spans whatever the column count currently is, so the span
      survives a resize across a band edge even before dashRender re-runs. */
@@ -8430,9 +8462,11 @@
     flex: 1 1 auto; min-height: 0; max-height: none;
     margin-top: 0; padding-top: 0; border-top: 0;
   }
-  /* The closing line keeps its place under the feed rather than being squeezed
-     out of it by the flexing fold. */
-  .bn-body:has(> .td-recap-work:not([hidden])) .td-recap-close { flex: none; }
+  /* The closing row keeps its place under the feed rather than being squeezed
+     out of it by the flexing fold. It is the ROW that must hold now, not the
+     closing line inside it — the line is hidden on plenty of days and the fold
+     toggle beside it is not. */
+  .bn-body:has(> .td-recap-work:not([hidden])) .td-recap-foot { flex: none; }
   /* Each row is a grid item, so its automatic minimum size is its min-content —
      and a nowrap line's min-content is the whole sentence, which is what put a
      horizontal scrollbar under the feed once the card narrowed from the old

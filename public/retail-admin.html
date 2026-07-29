@@ -1571,12 +1571,21 @@
                    Customers one. -->
               <h3 id="td-recap-title" data-no-i18n>While you were away · 您不在的这段时间</h3>
               <span class="bn-meta" id="td-recap-meta" data-no-i18n></span>
-              <button class="bn-go" type="button" id="td-recap-work-btn" onclick="tdRecapToggleWork()">Show the work ▾ · 查看明细 ▾</button>
             </div>
             <div class="bn-body">
               <div class="bn-recap-rows" id="td-recap-rows"><div class="td-muted">Loading… · 加载中…</div></div>
               <div class="td-recap-work" id="td-recap-work" hidden></div>
-              <p class="td-recap-close" id="td-recap-close" hidden></p>
+              <!-- "Show the work" used to sit up in the header beside the title
+                   and the "since HH:MM" stamp. Three things do not fit across a
+                   card one column wide: the title ellipsised to "While you
+                   we…", which is not a title any more. It reads better down
+                   here anyway — the eye is already at the bottom once the rows
+                   are read, and every other card on this dashboard ends with a
+                   line of state and a way in. -->
+              <div class="td-recap-foot">
+                <p class="td-recap-close" id="td-recap-close" hidden></p>
+                <button class="td-recap-work-btn" type="button" id="td-recap-work-btn" onclick="tdRecapToggleWork()">Show the work ▾ · 查看明细 ▾</button>
+              </div>
             </div>
           </div>
         </div>

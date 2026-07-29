@@ -1397,7 +1397,19 @@ function dashRender() {
   // from tile count against the resolved column count, never placed by hand, so
   // the five-card warehouse and dispatch sets land the same way as the owner's
   // four without anyone writing a rule for either.
-  const cols = dashCols(host.clientWidth);
+  // Cap the grid at the number of cards actually showing. With three columns
+  // and two cards the pair sat against the left edge with an empty column
+  // beside them — the layout describing a card that is not there, which is
+  // exactly what happens on a quiet day when The Recap steps off the page. CSS
+  // cannot do this itself: it cannot count the cards that survived the quiet
+  // and role-hidden filters above. Only ever narrower than the width allows,
+  // never wider.
+  const rawCols = dashCols(host.clientWidth);
+  const cols = Math.max(1, Math.min(rawCols, tiles.length));
+  host.classList.remove('is-cols-1', 'is-cols-2');
+  if (tiles.length && tiles.length < rawCols) host.classList.add('is-cols-' + tiles.length);
+  // Rule B is measured against the capped count, or it would span a card that
+  // is already full width and, worse, read 2 % 3 as a partial row needing one.
   if (cols > 1 && tiles.length % cols === 1) {
     tiles.sort((a, b) => (Number(a.style.order) || 0) - (Number(b.style.order) || 0));
     tiles[tiles.length - 1].classList.add('td-span');
