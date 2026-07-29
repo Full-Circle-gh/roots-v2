@@ -23,6 +23,7 @@ const CAT = {
   refund:    { en: 'REFUND',       cn: '退款' },
   invoice:   { en: 'INVOICE',      cn: '发票' },
   feedback:  { en: 'REPLY',        cn: '回复' },
+  account:   { en: 'ACCOUNT',      cn: '账户' },
   broadcast: { en: '📣 ANNOUNCEMENT', cn: '📣 公告' },
 };
 

@@ -37,6 +37,7 @@ const _socialAuth = require('../lib/social-auth');   // Google/Apple/WeChat-web 
 const qrpng = require('../lib/qrpng');  // zero-dep QR→PNG (renders the Alipay qr_code)
 const alipayOcr = require('../lib/alipay-ocr');  // Vision-AI read of manual-Alipay payment screenshots
 const { sendOpsAlert } = require('../lib/ops-alert'); // WeCom ops page on auto-shipping-upload failure
+const wxSec = require('../lib/wx-sec-check');   // WeChat 内容安全 — every customer-published surface
 // Optional on-the-fly image resize for grid thumbnails (?w=). Guarded so a box
 // that hasn't `npm install`ed sharp yet still serves full-size originals rather
 // than crashing — the image endpoint just skips the resize branch when null.
@@ -2807,6 +2808,21 @@ router.post('/api/retail/auth', express.json(), async (req, res) => {
     return res.status(502).json({ success: false, error: e.code || 'wechat_exchange_failed' });
   }
 
+  // Login is the other door a nickname can come through, so it gets the same
+  // content check as the profile page — otherwise a hand-rolled auth call
+  // would plant an unchecked name straight into the customer row. A refusal
+  // must never break the login itself: we just don't keep the name.
+  let safeNickname = nickname;
+  if (typeof safeNickname === 'string' && safeNickname.trim()) {
+    const v = await wxSec.checkText(await wxSecToken(), {
+      text: safeNickname, openid, scene: wxSec.SCENE.PROFILE,
+    });
+    if (v.verdict === 'risky') {
+      console.warn('[wx-sec] risky nickname dropped at login for', openid);
+      safeNickname = null;
+    }
+  }
+
   // Upsert customer. On first login we set nickname/avatar from the body
   // if present (the mini app collects them via wx.getUserProfile separately).
   let customer = tdb().prepare('SELECT * FROM retail_customers WHERE openid = ?').get(openid);
@@ -2814,7 +2830,7 @@ router.post('/api/retail/auth', express.json(), async (req, res) => {
     const info = tdb().prepare(
       `INSERT INTO retail_customers (openid, unionid, nickname, avatar_url, last_login_at)
        VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)`
-    ).run(openid, unionid, nickname || null, avatar_url || null);
+    ).run(openid, unionid, safeNickname || null, avatar_url || null);
     customer = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(info.lastInsertRowid);
     // Signup voucher is deliberately NOT granted here: at first auth we only
     // have the openid, not the phone, so we can't yet distinguish a genuine new
@@ -2830,7 +2846,7 @@ router.post('/api/retail/auth', express.json(), async (req, res) => {
               nickname   = COALESCE(NULLIF(nickname, ''), ?),
               avatar_url = COALESCE(NULLIF(avatar_url, ''), ?)
         WHERE id = ?`
-    ).run(nickname || customer.nickname || null,
+    ).run(safeNickname || customer.nickname || null,
           avatar_url || customer.avatar_url || null,
           customer.id);
     customer = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(customer.id);
@@ -5236,6 +5252,241 @@ async function getWeChatAccessToken() {
   _wxTokenCache.set(appId, { token: j.access_token, expiresAt: Date.now() + (Number(j.expires_in) || 7200) * 1000 });
   return j.access_token;
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// WeChat content safety (内容安全)
+// ═══════════════════════════════════════════════════════════════════════
+// WeChat rejects a mini program that lets a customer publish anything without
+// checking it first — that is what killed the 2026-07 audit ("头像 功能在进行
+// 内容安全验证时，存在信息安全风险"). Every surface where a customer's own words
+// or pictures end up on a screen routes through the two helpers below:
+//
+//   nickname + avatar       → profile scene
+//   review text + photos    → comment scene
+//   feedback text + photos  → comment scene
+//
+// Text is decided on the spot. Images can't be: WeChat only accepts the job
+// and pushes the verdict back later (see the /api/wx/callback route), so an
+// image is held as 'pending' and stays unpublished until it passes.
+
+// Resolve this tenant's access token without ever letting a token failure
+// throw into a request handler.
+async function wxSecToken() {
+  try { return await getWeChatAccessToken(); }
+  catch (e) { console.warn('[wx-sec] access token unavailable:', e.message); return null; }
+}
+
+// Text gate. Returns true when the caller should refuse the content.
+async function isRiskyText(customer, text, scene) {
+  const r = await wxSec.checkText(await wxSecToken(), {
+    text, openid: customer && customer.openid, scene,
+  });
+  if (r.verdict === 'risky') {
+    console.warn('[wx-sec] risky text refused — customer', customer && customer.id, 'scene', scene, 'label', r.label);
+    return true;
+  }
+  return false;
+}
+
+// The single refusal a customer ever sees. WeChat asks only that we tell them
+// the content contains disallowed information — no label, no category, no
+// score, because naming what tripped it teaches people how to get around it.
+function refuseContent(res) {
+  return res.status(400).json({
+    success: false,
+    error: 'content_violation',
+    message_en: 'That contains something we cannot publish. Please change it and try again.',
+    message_cn: '内容含违规信息，请修改后重试。',
+  });
+}
+
+// Image gate. Submits a freshly-uploaded media row to WeChat and records the
+// hold. Returns the sec_status now stored on the row: 'pending' when the job
+// is running, 'skipped' when no check was possible (dev mode, web login,
+// WeChat unreachable) — 'skipped' publishes immediately, because holding every
+// image hostage to an outage would break uploads for everyone.
+async function submitImageSecCheck(mediaId, customer, scene) {
+  const url = `${PAY_NOTIFY_ORIGIN}/api/retail/media/${mediaId}`;
+  const r = await wxSec.submitMediaCheck(await wxSecToken(), {
+    url, openid: customer && customer.openid, scene,
+  });
+  const status = r.ok ? 'pending' : 'skipped';
+  try {
+    tdb().prepare(
+      `UPDATE retail_media
+          SET sec_status = ?, sec_trace_id = ?,
+              sec_checked_at = CASE WHEN ? = 'skipped' THEN CURRENT_TIMESTAMP ELSE NULL END
+        WHERE id = ?`
+    ).run(status, r.traceId || null, status, mediaId);
+  } catch (e) { console.warn('[wx-sec] could not record media hold:', e.message); }
+  return status;
+}
+
+// Apply a verdict to one media row and to everything that row is published in.
+// Called from the message-push callback, and from the stale-hold sweep below.
+function applyMediaVerdict(mediaId, verdict) {
+  const url = `/api/retail/media/${mediaId}`;
+  tdb().prepare(
+    `UPDATE retail_media SET sec_status = ?, sec_checked_at = CURRENT_TIMESTAMP WHERE id = ?`
+  ).run(verdict, mediaId);
+
+  if (verdict === 'risky') {
+    // Pull the picture off anything it is currently the face of, and tell the
+    // owner why it vanished — WeChat requires the customer be told.
+    const owners = tdb().prepare('SELECT id FROM retail_customers WHERE avatar_url = ?').all(url);
+    if (owners.length) {
+      tdb().prepare('UPDATE retail_customers SET avatar_url = NULL WHERE avatar_url = ?').run(url);
+      for (const o of owners) {
+        try {
+          tdb().prepare(
+            `INSERT INTO retail_notifications (customer_id, category, type, title_en, title_cn, body_en, body_cn)
+             VALUES (?, 'account', 'avatar_removed', ?, ?, ?, ?)`
+          ).run(o.id,
+            'Your photo was removed', '头像已被移除',
+            'The picture you set contains something we cannot publish. Please pick another one.',
+            '您设置的图片含违规信息，请更换后重新上传。');
+        } catch (e) { console.warn('[wx-sec] avatar notice failed:', e.message); }
+      }
+    }
+    // Hide any review carrying the photo — including one the stale-hold sweep
+    // already released, since a late verdict still outranks a guess. Hiding is
+    // always the safe direction; only RELEASING has to respect what a human
+    // moderator decided, which is why sec_hold guards that side and not this
+    // one. sec_hold goes back to 0: this is a final answer, not a wait.
+    tdb().prepare(
+      `UPDATE retail_reviews SET is_visible = 0, sec_hold = 0
+        WHERE photos_json LIKE ?`
+    ).run(`%"${url}"%`);
+    return;
+  }
+
+  // Passed. Release only reviews WE put on hold, and only once none of their
+  // photos is still waiting — a review with two photos must not appear on the
+  // strength of the first verdict.
+  const held = tdb().prepare(
+    `SELECT id, photos_json FROM retail_reviews WHERE sec_hold = 1 AND photos_json LIKE ?`
+  ).all(`%"${url}"%`);
+  for (const r of held) {
+    let ids = [];
+    try {
+      ids = (JSON.parse(r.photos_json) || [])
+        .map(p => parseInt(String(p).split('/').pop(), 10))
+        .filter(Boolean);
+    } catch { ids = []; }
+    const stillWaiting = ids.length && tdb().prepare(
+      `SELECT 1 FROM retail_media
+        WHERE id IN (${ids.map(() => '?').join(',')}) AND sec_status = 'pending' LIMIT 1`
+    ).get(...ids);
+    if (stillWaiting) continue;
+    tdb().prepare('UPDATE retail_reviews SET is_visible = 1, sec_hold = 0 WHERE id = ?').run(r.id);
+  }
+}
+
+// Safety net. If the message-push URL is misconfigured (or WeChat simply never
+// answers) a held image would stay invisible forever and the customer would
+// think the app is broken. After 15 minutes with no verdict we let it through
+// and say so in the log — the alternative is a silent, permanent black hole.
+const SEC_HOLD_TIMEOUT_MIN = 15;
+function sweepStaleSecHolds() {
+  let stale = [];
+  try {
+    stale = tdb().prepare(
+      `SELECT id FROM retail_media
+        WHERE sec_status = 'pending'
+          AND uploaded_at < datetime('now', '-${SEC_HOLD_TIMEOUT_MIN} minutes')
+        LIMIT 200`
+    ).all();
+  } catch (e) { return; }
+  if (!stale.length) return;
+  console.warn('[wx-sec] releasing', stale.length, 'image(s) with no verdict after',
+    SEC_HOLD_TIMEOUT_MIN, 'min — is 消息推送 configured?');
+  for (const row of stale) {
+    try { applyMediaVerdict(row.id, 'timeout'); }
+    catch (e) { console.warn('[wx-sec] stale release failed:', e.message); }
+  }
+}
+// Walk every active tenant, same shape as the other sweeps in this file.
+function tickSweepStaleSecHolds() {
+  let tenants;
+  try { tenants = db.prepare("SELECT id FROM tenants WHERE status = 'active'").all(); }
+  catch { tenants = null; }   // tenants table not migrated yet → single-DB fallback
+  const run = (tid) => {
+    try {
+      const tdb_ = tid == null ? tdb() : getTenantDb(tid);
+      tenantAls.run(tdb_, () => sweepStaleSecHolds());
+    } catch (e) { console.warn('[wx-sec] sweep', tid, e.message); }
+  };
+  if (!tenants) run(null);
+  else for (const t of tenants) run(t.id);
+}
+const _secHoldSweep = setInterval(tickSweepStaleSecHolds, 5 * 60 * 1000);
+if (_secHoldSweep.unref) _secHoldSweep.unref();
+
+// ── WeChat message push (消息推送) ────────────────────────────────────────
+// Set in 微信公众平台 → 开发管理 → 消息推送: URL = this route, Token =
+// WECHAT_MSG_PUSH_TOKEN, 数据格式 JSON, 加密方式 明文. WeChat verifies the URL
+// once with a GET it expects `echostr` echoed back to, then POSTs events here
+// forever. The only event we act on is wxa_media_check — the verdict for an
+// image submitted to mediaCheckAsync. Everything else is acknowledged and
+// ignored so WeChat stops retrying it.
+//
+// Roots keeps the unsuffixed path; a second tenant on its own AppID points its
+// console at /callback/:tid, same shape as the Pay callbacks above.
+const WECHAT_MSG_PUSH_TOKEN = process.env.WECHAT_MSG_PUSH_TOKEN || '';
+
+function handleWxPushVerify(req, res) {
+  if (!WECHAT_MSG_PUSH_TOKEN) {
+    console.warn('[wx-sec] message push hit but WECHAT_MSG_PUSH_TOKEN is unset');
+    return res.status(503).end();
+  }
+  if (!wxSec.verifyPushSignature(WECHAT_MSG_PUSH_TOKEN, req.query)) return res.status(403).end();
+  res.type('text/plain').send(String(req.query.echostr || ''));
+}
+
+function handleWxPushEvent(req, res) {
+  if (!wxSec.verifyPushSignature(WECHAT_MSG_PUSH_TOKEN, req.query)) return res.status(403).end();
+  // WeChat wants the literal string "success" inside 5 seconds or it retries
+  // the delivery three times. Answer first, then do the work.
+  res.type('text/plain').send('success');
+
+  // Body arrives as text and is parsed here rather than by express.json(),
+  // because WeChat's content-type varies with the console's 数据格式 setting —
+  // an unparseable body should be shrugged off, not thrown as a 500 that
+  // WeChat then retries.
+  let body = {};
+  try { body = typeof req.body === 'string' ? JSON.parse(req.body) : (req.body || {}); }
+  catch (e) { return console.warn('[wx-sec] unparseable push body — is 数据格式 set to JSON?'); }
+  if (body.Event !== 'wxa_media_check') return;
+  const traceId = body.trace_id;
+  if (!traceId) return;
+  try {
+    const row = tdb().prepare('SELECT id FROM retail_media WHERE sec_trace_id = ?').get(traceId);
+    if (!row) return console.warn('[wx-sec] verdict for unknown trace', traceId);
+    // errcode 0 with suggest 'risky' is the refusal. Anything WeChat couldn't
+    // even fetch (errcode set) is treated as pass — the customer shouldn't be
+    // punished for WeChat failing to download our own image.
+    const suggest = body.result && body.result.suggest;
+    const verdict = (!body.errcode && suggest === 'risky') ? 'risky' : 'pass';
+    console.log('[wx-sec] media verdict', traceId, '→', verdict);
+    applyMediaVerdict(row.id, verdict);
+  } catch (e) {
+    console.error('[wx-sec] verdict handling failed:', e.message);
+  }
+}
+
+router.get('/api/wx/callback', handleWxPushVerify);
+const wxPushBody = express.text({ type: '*/*', limit: '256kb' });
+router.post('/api/wx/callback', wxPushBody, handleWxPushEvent);
+router.get('/api/wx/callback/:tid', (req, res) => {
+  const tid = resolveCallbackTid(req.params.tid);
+  if (!tid) return res.status(404).end();
+  handleWxPushVerify(req, res);
+});
+router.post('/api/wx/callback/:tid', wxPushBody, (req, res) => {
+  const tid = resolveCallbackTid(req.params.tid);
+  if (!tid) return res.status(404).end();
+  tenantAls.run(getTenantDb(tid), () => handleWxPushEvent(req, res));
+});
 
 // Push a subscribeMessage to a customer if they have an unused consent for
 // the given template. Idempotent — marks consent used after send so it
@@ -15376,7 +15627,7 @@ router.get('/api/retail/products/:id/reviews', (req, res) => {
 // Customer uploads a single review photo. Same base64-data-URI flow as
 // the avatar endpoint — wx.uploadFile's separate AppID whitelist isn't
 // provisioned on the preview AppID so we go through wx.request.
-router.post('/api/retail/review-photos', requireRetailAuth, express.json({ limit: '8mb' }), (req, res) => {
+router.post('/api/retail/review-photos', requireRetailAuth, express.json({ limit: '8mb' }), async (req, res) => {
   const { data } = req.body || {};
   if (typeof data !== 'string' || !data.startsWith('data:image/')) {
     return res.status(400).json({ success: false, error: 'bad_data_uri' });
@@ -15401,7 +15652,13 @@ router.post('/api/retail/review-photos', requireRetailAuth, express.json({ limit
       `INSERT INTO retail_media (filename, mime_type, size_bytes, data, uploaded_by)
        VALUES (?, ?, ?, ?, NULL)`
     ).run('review-photo', mime, sizeBytes, normData);
-    res.json({ success: true, data: { url: `/api/retail/media/${info.lastInsertRowid}` } });
+    // Same content check as the avatar, on the comment scene. The review that
+    // carries this photo stays hidden until the verdict says it's fine.
+    const secStatus = await submitImageSecCheck(info.lastInsertRowid, req.customer, wxSec.SCENE.COMMENT);
+    res.json({
+      success: true,
+      data: { url: `/api/retail/media/${info.lastInsertRowid}`, sec_status: secStatus },
+    });
   } catch (e) {
     console.error('[retail/review-photo] insert failed:', e.message);
     res.status(500).json({ success: false, error: 'db_insert_failed' });
@@ -15412,9 +15669,13 @@ router.post('/api/retail/review-photos', requireRetailAuth, express.json({ limit
 // form. One-way: it lands read-only in the Mini App Backend → Feedback tab
 // (separate from the staff `feedback` table). Photos arrive as already-uploaded
 // /api/retail/media/:id URLs (same uploader as reviews: base64 → retail_media).
-router.post('/api/retail/feedback', requireRetailAuth, express.json({ limit: '1mb' }), (req, res) => {
+router.post('/api/retail/feedback', requireRetailAuth, express.json({ limit: '1mb' }), async (req, res) => {
   const message = (req.body?.message || '').toString().trim().slice(0, 4000);
   if (!message) return res.status(400).json({ success: false, error: 'message_required' });
+  // Staff read this, and staff reply to it in a thread the customer sees back,
+  // so it counts as published content for the audit. Photos were already
+  // submitted by the uploader they share with reviews.
+  if (await isRiskyText(req.customer, message, wxSec.SCENE.COMMENT)) return refuseContent(res);
   const pageContext = (req.body?.page_context || '').toString().slice(0, 200) || null;
   const appVersion  = (req.body?.app_version  || '').toString().slice(0, 60)  || null;
   // Keep only our own media URLs — drop anything that isn't a /api/retail/media/:id
@@ -15531,7 +15792,7 @@ router.post('/api/retail/feedback/:id/reply', requireRetailAuth, express.json(),
 // Customer submits a review. Must own a 'delivered' order containing this
 // product (anti-spam — only buyers can review). One review per
 // (customer, product, order) — UNIQUE constraint catches dupes.
-router.post('/api/retail/products/:id/reviews', requireRetailAuth, express.json(), (req, res) => {
+router.post('/api/retail/products/:id/reviews', requireRetailAuth, express.json(), async (req, res) => {
   const productId = parseInt(req.params.id, 10);
   const orderId   = parseInt(req.body?.order_id, 10);
   const rating    = parseInt(req.body?.rating, 10);
@@ -15561,16 +15822,37 @@ router.post('/api/retail/products/:id/reviews', requireRetailAuth, express.json(
         AND o.status = 'delivered'`
   ).get(orderId, req.customer.id, productId);
   if (!eligible) return res.status(403).json({ success: false, error: 'not_eligible' });
+
+  // A review is the most public thing a customer can write here, so both the
+  // words and the pictures go past WeChat before anyone else can read them.
+  if (comment.trim() && await isRiskyText(req.customer, comment, wxSec.SCENE.COMMENT)) {
+    return refuseContent(res);
+  }
+  // Photos were submitted for checking when they were uploaded. Refuse a
+  // review outright if a verdict already came back bad; hold it back (hidden,
+  // sec_hold = 1) while any verdict is still outstanding.
+  let secHold = 0;
+  if (photos.length) {
+    const ids = photos.map(p => parseInt(p.split('/').pop(), 10)).filter(Boolean);
+    const rows = ids.length ? tdb().prepare(
+      `SELECT sec_status FROM retail_media WHERE id IN (${ids.map(() => '?').join(',')})`
+    ).all(...ids) : [];
+    if (rows.some(r => r.sec_status === 'risky')) return refuseContent(res);
+    secHold = rows.some(r => r.sec_status === 'pending') ? 1 : 0;
+  }
+
   try {
     const info = tdb().prepare(
       `INSERT INTO retail_reviews
-         (customer_id, product_id, order_id, rating, comment, tags_json, photos_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+         (customer_id, product_id, order_id, rating, comment, tags_json, photos_json,
+          is_visible, sec_hold)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       req.customer.id, productId, orderId,
       rating, comment || null,
       tags.length   ? JSON.stringify(tags)   : null,
       photos.length ? JSON.stringify(photos) : null,
+      secHold ? 0 : 1, secHold,
     );
     res.json({ success: true, data: { id: info.lastInsertRowid } });
   } catch (e) {
@@ -16408,15 +16690,27 @@ router.get('/api/retail/customer', requireRetailAuth, (req, res) => {
 // (POST /api/retail/phone), which proves the caller actually owns the number.
 // Accepting a free-form phone here would let any logged-in customer set a
 // victim's number and steal their migrated balance/points.
-router.patch('/api/retail/customer', requireRetailAuth, express.json(), (req, res) => {
+router.patch('/api/retail/customer', requireRetailAuth, express.json(), async (req, res) => {
   const { nickname, avatar_url } = req.body || {};
   const sets = [];
   const params = [];
   if (typeof nickname === 'string') {
     const trimmed = nickname.trim().slice(0, 40);
+    // A nickname is published content — it sits on the Me page and on every
+    // review this customer writes — so WeChat requires it be checked.
+    if (trimmed && await isRiskyText(req.customer, trimmed, wxSec.SCENE.PROFILE)) {
+      return refuseContent(res);
+    }
     sets.push('nickname = ?'); params.push(trimmed || null);
   }
   if (typeof avatar_url === 'string') {
+    // The picture was already submitted to WeChat when it was uploaded. If the
+    // verdict has landed and it failed, refuse to make it anyone's face.
+    const mediaId = parseInt(String(avatar_url).split('/').pop(), 10);
+    if (mediaId) {
+      const row = tdb().prepare('SELECT sec_status FROM retail_media WHERE id = ?').get(mediaId);
+      if (row && row.sec_status === 'risky') return refuseContent(res);
+    }
     sets.push('avatar_url = ?'); params.push(avatar_url.slice(0, 512) || null);
   }
   if (!sets.length) return res.status(400).json({ success: false, error: 'no_fields' });
@@ -16493,7 +16787,7 @@ function ensureAvatarsFolderId() {
 // Reason: wx.uploadFile has its own AppID whitelist that customers can't
 // control on the legacy preview AppID — sending base64 over wx.request
 // reuses the request whitelist, which IS already provisioned.
-router.post('/api/retail/customer/avatar', requireRetailAuth, express.json({ limit: '8mb' }), (req, res) => {
+router.post('/api/retail/customer/avatar', requireRetailAuth, express.json({ limit: '8mb' }), async (req, res) => {
   const { data } = req.body || {};
   if (typeof data !== 'string' || !data.startsWith('data:image/')) {
     return res.status(400).json({ success: false, error: 'bad_data_uri' });
@@ -16521,11 +16815,32 @@ router.post('/api/retail/customer/avatar', requireRetailAuth, express.json({ lim
       `INSERT INTO retail_media (filename, mime_type, size_bytes, data, uploaded_by, folder_id)
        VALUES (?, ?, ?, ?, NULL, ?)`
     ).run('avatar', mime, sizeBytes, normData, folderId);
-    res.json({ success: true, data: { url: `/api/retail/media/${info.lastInsertRowid}` } });
+    // Hand the stored picture to WeChat's content check before it becomes
+    // anyone's face. The row has to exist first — WeChat fetches it over HTTP
+    // from the public media URL. `sec_status` tells the app whether to wait.
+    const secStatus = await submitImageSecCheck(info.lastInsertRowid, req.customer, wxSec.SCENE.PROFILE);
+    res.json({
+      success: true,
+      data: { url: `/api/retail/media/${info.lastInsertRowid}`, sec_status: secStatus },
+    });
   } catch (e) {
     console.error('[retail/avatar] insert failed:', e.message);
     res.status(500).json({ success: false, error: 'db_insert_failed' });
   }
+});
+
+// Verdict poll. The app calls this for a few seconds after an upload so it can
+// say "that picture isn't allowed" while the customer is still looking at it,
+// instead of silently dropping the avatar minutes later.
+router.get('/api/retail/media/:id/sec-status', requireRetailAuth, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const row = id
+    ? tdb().prepare('SELECT sec_status FROM retail_media WHERE id = ?').get(id)
+    : null;
+  if (!row) return res.status(404).json({ success: false, error: 'not_found' });
+  // A row that was never submitted (staff upload, or the check couldn't run)
+  // has nothing to wait for.
+  res.json({ success: true, data: { status: row.sec_status || 'skipped' } });
 });
 
 // ═══════════════════════════════════════════════════════════════════════
