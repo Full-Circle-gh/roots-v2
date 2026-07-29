@@ -1486,30 +1486,33 @@ function tdGreetName() {
   return /^[\x00-\x7F]+$/.test(src) ? src.split(/\s+/)[0] : src;
 }
 
-// The greeting line: weekend overrides the time-of-day band. Bands mirror the
-// mockup (05–11 morning · 11–17 afternoon · 17–22 evening · 22–05 late).
+// The greeting line. Bands: 05–12 morning · 12–17 afternoon · 17–23 evening ·
+// 23–05 late. Read off the BROWSER's clock, not the store's timezone — this
+// greets the person at the keyboard, and a manager checking Guangzhou trade
+// from another country is still having their own morning.
+//
+// There was a weekend override here ("Happy weekend") that beat every band, so
+// Saturday never said good morning. Wrong product: a shop's weekend is its
+// busiest trading, and wishing a happy weekend to someone working the Saturday
+// rush lands badly. Time of day is true seven days a week.
 function tdGreetLine() {
   const name = tdGreetName();
   const nm = name ? ', ' + name : '', nmCn = name ? '，' + name : '';
-  const d = new Date(), day = d.getDay(), h = d.getHours();
-  if (day === 0 || day === 6) return cuT(`Happy weekend${nm}`, `周末愉快${nmCn}`);
-  if (h >= 5  && h < 11) return cuT(`Good morning${nm}`,   `早上好${nmCn}`);
-  if (h >= 11 && h < 17) return cuT(`Good afternoon${nm}`, `下午好${nmCn}`);
-  if (h >= 17 && h < 22) return cuT(`Good evening${nm}`,   `晚上好${nmCn}`);
+  const h = new Date().getHours();
+  if (h >= 5  && h < 12) return cuT(`Good morning${nm}`,   `早上好${nmCn}`);
+  if (h >= 12 && h < 17) return cuT(`Good afternoon${nm}`, `下午好${nmCn}`);
+  if (h >= 17 && h < 23) return cuT(`Good evening${nm}`,   `晚上好${nmCn}`);
   return name ? cuT(`Still up, ${name}?`, `还没休息${nmCn}？`) : cuT('Still up?', '还没休息?');
 }
 
-// Paint the greeting heading + the quiet "Here's your {weekday}." sub-line.
+// Paint the greeting heading. There was a "Here's your Thursday." sub-line too;
+// it is gone. The header no longer carries a date element beside it for the
+// weekday to pair with, and a second line of text that tells the operator
+// nothing they can act on is the kind of thing that reads once and becomes
+// wallpaper.
 function tdGreetRender() {
   const el = document.getElementById('td-greeting'); if (!el) return;
   el.textContent = tdGreetLine();
-  const sub = document.getElementById('td-greet-sub');
-  if (sub) {
-    const d = new Date();
-    const EN = DASH_DOW_EN[d.getDay()];
-    const CN = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'][d.getDay()];
-    sub.textContent = cuT(`Here's your ${EN}.`, `这是你的${CN}。`);
-  }
 }
 
 // Today's date under the page title — the calm anchor for "Today" numbers.
@@ -1688,10 +1691,17 @@ function tdRecapRender() {
     // cream at all and reads as quiet rather than as empty furniture. The card
     // keeps its markup and its place in the order, so a busy morning brings it
     // back without rebuilding anything.
+    // It used to add "Nothing needed doing." — a claim this line is not
+    // entitled to make. The Recap watches the ACTIVITY FEED and nothing else;
+    // it cannot see stock, and the Needs-you card directly above it is what
+    // owns the question of whether anything needs doing. On a morning with 15
+    // products out of stock the two sat one line apart contradicting each
+    // other, and the reassuring one was the bigger sentence. So the line now
+    // says only what it can actually know: the feed was quiet.
     if (line) {
       line.textContent = TD.reallyAway
-        ? cuT('All quiet while you were away. Nothing needed doing.', '您不在时一切平静，无需处理。')
-        : cuT('All quiet just now. Nothing needed doing.', '目前一切平静，无需处理。');
+        ? cuT('All quiet while you were away.', '您不在时一切平静。')
+        : cuT('Nothing new just now.', '暂时没有新动静。');
       line.hidden = false;
     }
     if (block && !block.classList.contains('is-quiet')) {

@@ -1461,7 +1461,16 @@
     <div class="td-wrap">
 
     <div class="db-head td-head">
-      <h2 id="td-page-title">Dashboard · 仪表盘</h2>
+      <!-- The heading greets whoever is signed in — "Good morning, Asher" —
+           rather than naming a page the sidebar is already highlighting. That
+           makes this the one line on the dashboard doing no work, so it may as
+           well be warm. Painted by tdGreetRender in 03-dashboard.js from the
+           resolved account user, and repainted when /me lands or the language
+           flips. The literal "Dashboard" is the fallback if that never runs;
+           the boot splash covers the swap, so it is not seen in normal use.
+           data-no-i18n because the greeting is assembled language-aware in JS
+           and the " · " walker must not touch it. -->
+      <h2 id="td-greeting" data-no-i18n>Dashboard</h2>
       <span class="td-head-sp"></span>
       <!-- Arrange — stood down for this release and rebuilt in the next one
            against live element boxes (its drag read the retired solver's pixel
