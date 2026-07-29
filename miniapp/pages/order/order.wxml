@@ -513,14 +513,19 @@
           <view wx:if="{{item.note}}" class="adr-note muted">{{item.note}}</view>
         </view>
       </view>
-      <view wx:if="{{!addrList.length}}" class="rsc-empty muted">{{copy.addrChangeNone}}</view>
+      <!-- Empty book, not a failed load: with addrErr set the list is empty
+           because the fetch died, and "no saved addresses" would read as an
+           answer when it's really an error. -->
+      <view wx:if="{{!addrList.length && !addrErr}}" class="rsc-empty muted">{{copy.addrChangeNone}}</view>
 
       <view class="adr-add f-toni" bindtap="goAddAddress">{{copy.addrChangeAdd}}</view>
 
       <view wx:if="{{addrErr}}" class="rsc-err">{{addrErr}}</view>
       <view class="rs-actions">
         <button class="btn ghost f-toni" bindtap="closeAddressSheet" disabled="{{addrBusy}}">{{copy.refundCancelBtn}}</button>
-        <button class="btn primary f-toni" bindtap="confirmAddressChange" disabled="{{addrBusy}}">
+        <!-- Nothing to pick (empty book, or the load failed) → no Confirm to
+             offer; Cancel takes the row on its own. -->
+        <button wx:if="{{addrList.length}}" class="btn primary f-toni" bindtap="confirmAddressChange" disabled="{{addrBusy}}">
           {{addrBusy ? copy.paying : copy.addrChangeConfirm}}
         </button>
       </view>
