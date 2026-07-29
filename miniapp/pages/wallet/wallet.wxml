@@ -48,7 +48,6 @@
       <view class="bal-amt f-bear">¥{{walletBal}}</view>
       <view class="bal-btns">
         <view class="btn btn-primary tap" bindtap="openTopup">{{copy.topup}}</view>
-        <view class="btn btn-ghost tap" bindtap="showWithdraw">{{copy.withdraw}}</view>
       </view>
     </view>
 
