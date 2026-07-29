@@ -9785,23 +9785,30 @@ function zonesPromiseSame(a, b) {
 }
 
 // Cart shape the fee quote needs: units (packing fee) and grams (weight-priced
-// zones). Product weight lives as a freeform string in `size`; unparseable ones
-// contribute 0, exactly as at checkout.
+// zones). Product weight is the freeform `weight` string checkout reads as
+// `size`; unparseable ones contribute 0, exactly as at checkout. `error` fails
+// the guard CLOSED — a cart we can't measure can't be proven price-neutral.
 function orderCartForQuote(orderId) {
   let totalQty = 0, cartGrams = 0;
-  const rows = tdb().prepare(
-    `SELECT oi.qty, p.size
-       FROM retail_order_items oi
-       LEFT JOIN retail_products p ON p.id = oi.product_id
-      WHERE oi.order_id = ?`
-  ).all(orderId);
+  let rows;
+  try {
+    rows = tdb().prepare(
+      `SELECT oi.qty, p.weight AS size
+         FROM retail_order_items oi
+         LEFT JOIN store_products p ON p.id = oi.product_id
+        WHERE oi.order_id = ?`
+    ).all(orderId);
+  } catch (e) {
+    console.error('[orderCartForQuote]', orderId, e.message);
+    return { totalQty: 0, cartGrams: 0, error: true };
+  }
   for (const r of rows) {
     const q = Number(r.qty) || 0;
     totalQty += q;
     const g = parseWeightToGrams(r.size);
     if (g) cartGrams += g * q;
   }
-  return { totalQty, cartGrams };
+  return { totalQty, cartGrams, error: false };
 }
 
 // Build a reusable test for one order: pass a normalized address, get back null
@@ -9822,6 +9829,9 @@ function addressMoveChecker(o) {
     : null;
 
   return function blockerFor(addr) {
+    // Couldn't measure the cart → can't prove the fee holds. Refuse every move
+    // rather than risk re-pricing one; the customer gets "message us".
+    if (cart.error) return 'price_change';
     if (inventory.isGuangzhouAddress(addr) !== currentInGz) return 'route_change';
     if (inventory.isOptInSameDayDistrict(addr) !== currentOptIn) return 'route_change';
 
