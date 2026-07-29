@@ -1604,6 +1604,12 @@ let ENTITLEMENTS = {};
     document.body.classList.toggle('ent-' + f.key, ent);
     document.body.classList.toggle('feat-' + f.key, ent && f.def);
   }
+  // Recount the rail folders now that entitlement is known. setCaps() above
+  // already ran railSyncGroups() via applyCapGates, but that was BEFORE these
+  // ent-* classes existed — so a tenant who isn't entitled to a child would have
+  // been counted as still having it, and a folder that should flatten (or
+  // disappear) wouldn't have.
+  try { if (typeof railSyncGroups === 'function') railSyncGroups(); } catch (e) {}
   // Boot each surface in ISOLATION. Previously these ran as a flat sequence, so
   // a single throw — e.g. a script part that transiently didn't load/parse after
   // a bad deploy or a stale SW-cached partial, leaving an early call like

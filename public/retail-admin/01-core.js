@@ -169,6 +169,14 @@ function setCaps(list){ CAPS = Array.isArray(list) ? new Set(list) : null; try {
 // Nav section (data-tab / mobile data-go) → the capability that reveals it. An
 // array means "any of these". Untracked tabs stay visible. Settings (config) is
 // shown if the operator holds any one of its sub-area caps.
+//
+// These are keyed by data-tab, so a cap follows its BUTTON wherever the button
+// sits. That is how `editor:view` moved when the Editor group became the Content
+// folder (2026-07-29): the group row lost its data-tab and the new child row
+// gained it, so the /cms embed is still gated and no key here had to change. A
+// folder row holds no capability of its own — it only inherits the hide-if-empty
+// rule in railSyncGroups(). If you ever move a page between rows, move its
+// data-tab with it or the page ships ungated.
 const TAB_CAP = {
   dashboard: 'dashboard:view', reports: 'reports:view', orders: 'orders:view',
   customers: 'customers:view', products: 'products:view', categories: 'categories:view',
@@ -183,8 +191,38 @@ const TAB_CAP = {
   activity: 'activity:view', purchasing: 'purchasing:view',
   config: ['settings:shop', 'settings:push', 'settings:payments', 'stores:view', 'shipping:config'],
 };
+// Rail folders, recounted after the gates (§2.5 of the drill-down amendment).
+// The count is taken AFTER all three gates — capability, feature flag, data
+// precondition — so a feat-off child drops out of it: Affiliate and Social proof
+// leave Marketing's count when their flags are off. That is why this runs at the
+// END of applyCapGates and on every language change, not once at boot.
+//
+//   0 visible children → the group row is absent entirely. No chevron, no
+//                        disabled row, nothing. Silence is a feature.
+//   1                  → the folder FLATTENS into a direct button to that child:
+//                        the child's label wearing the parent's icon. One click
+//                        instead of two, and nothing on screen is untrue — the
+//                        operator never learns a folder existed. A folder holding
+//                        one item advertises six things they may not have.
+//   2+                 → a folder, as designed.
+function railSyncGroups() {
+  $$('.tabs .tabs-group').forEach(g => {
+    const kids = _railChildren(g);
+    const trig = _railTrigger(g);
+    g.style.display = kids.length ? '' : 'none';
+    if (trig) trig.style.display = kids.length ? '' : 'none';
+    const flat = kids.length === 1;
+    g.classList.toggle('rail-flat', flat);
+    const lbl = trig && trig.querySelector('.tabs-flat-label');
+    if (lbl) lbl.textContent = flat ? _railRowLabel(kids[0]) : '';
+    // A group that just stopped being a folder can't stay the open level.
+    if (g.classList.contains('rail-open') && kids.length < 2) railGoRoot();
+  });
+}
+window.railSyncGroups = railSyncGroups;
+
 // Hide nav sections + any [data-cap]-tagged control the operator can't use, then
-// collapse a dropdown group whose every child tab ended up hidden.
+// recount each rail folder (hide at 0, flatten at 1).
 function applyCapGates() {
   document.querySelectorAll('.tabs [data-tab]').forEach(btn => {
     const cap = TAB_CAP[btn.dataset.tab];
@@ -196,17 +234,14 @@ function applyCapGates() {
     if (cap === undefined) return;
     btn.style.display = _capAllows(cap) ? '' : 'none';
   });
-  document.querySelectorAll('.tabs-group').forEach(g => {
-    const anyVisible = Array.prototype.some.call(g.querySelectorAll('[data-tab]'), t => t.style.display !== 'none');
-    const trig = g.querySelector('.tabs-group-trigger');
-    if (trig) trig.style.display = anyVisible ? '' : 'none';
-  });
   // Generic hook: tag any button/section with data-cap="x" (or "x y" for any-of)
   // and it disappears for operators without it. Used by section files in later phases.
   document.querySelectorAll('[data-cap]').forEach(el => {
     const v = el.dataset.cap.trim();
     el.style.display = _capAllows(v.includes(' ') ? v.split(/\s+/) : v) ? '' : 'none';
   });
+  // Last, because it counts what the passes above just hid.
+  railSyncGroups();
 }
 window.can = can; window.canAny = canAny; window.applyCapGates = applyCapGates; window.setCaps = setCaps;
 
@@ -280,11 +315,11 @@ function paymentStatusLabel(s) {
            refunded: T('refunded', '已退'), failed: T('failed', '失败') }[s] || (s || '—');
 }
 
-// ── Tab switcher — supports flat tabs AND dropdown groups ──
-// Buttons with data-tab activate a section. Buttons without (the group
-// triggers) just toggle their popover open. The parent .tabs-group gets
-// .has-active when one of its child tabs is the current active tab, so
-// the trigger picks up the same accent underline as a direct tab.
+// ── Tab switcher — supports flat tabs AND drill-down groups ──
+// Buttons with data-tab activate a section. Buttons without (the group triggers)
+// open their level in the rail instead — see the drill-down block below. The
+// parent .tabs-group gets .has-active when one of its child tabs is the current
+// active tab, so a folder sitting at root shows which one you're inside.
 $$('.tabs [data-tab]').forEach(btn => btn.addEventListener('click', () => {
   // Switching tabs dismisses any open side-drawer (order/customer detail,
   // editors) so it doesn't hang over the newly-shown section.
@@ -292,10 +327,10 @@ $$('.tabs [data-tab]').forEach(btn => btn.addEventListener('click', () => {
   $$('.tabs [data-tab]').forEach(b => b.classList.toggle('active', b === btn));
   $$('main section').forEach(s => s.classList.toggle('active', s.id === 'tab-' + btn.dataset.tab));
   $$('.tabs-group').forEach(g => g.classList.toggle('has-active', g.contains(btn)));
-  // Picking a tab dismisses any open sub-menu flyout (the group it belongs to
-  // is marked .has-active above, which styles the trigger — no need to keep the
-  // panel hanging over the content).
-  closeFlyouts();
+  // Put the rail at the level that owns this tab. Picking a child KEEPS the rail
+  // drilled (§2.1) — Coupons → Flash sales is the common motion; picking a root
+  // row returns it to root.
+  railResolveFor(btn.dataset.tab);
 }));
 // Sales overview → jump into a single channel's full admin. The "Configure"
 // buttons on #tab-sales call this; it clicks the channel's rail button, which
@@ -318,13 +353,18 @@ function goTab(tab) {
   const btn = document.querySelector('.tabs [data-tab="' + tab + '"]');
   if (btn) { btn.click(); return; }
   $$('.side-drawer.open').forEach(d => closeDrawer(d));
-  $$('.tabs [data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+  // A rail-less tab (a channel admin, the Product Page Editor) lights the row it
+  // sits under rather than nothing at all — RAIL_STANDIN names it. Everything
+  // else lights itself; a tab in neither camp (Inbox's reviews / feedback, which
+  // live in the topbar) lights nothing, which is the honest answer.
+  const lit = RAIL_STANDIN[tab] || tab;
+  $$('.tabs [data-tab]').forEach(b => b.classList.toggle('active', b.dataset.tab === lit));
   $$('main section').forEach(s => s.classList.toggle('active', s.id === 'tab-' + tab));
   $$('.tabs-group').forEach(g => {
-    const has = !!g.querySelector('[data-tab="' + tab + '"]');
+    const has = !!g.querySelector('[data-tab="' + lit + '"]');
     g.classList.toggle('has-active', has);
   });
-  closeFlyouts();
+  railResolveFor(tab);
 }
 
 // (Topbar page-identity crumb removed 2026-07-25 — the bar is closed, §1.1d.
@@ -748,86 +788,244 @@ window.addEventListener('message', (ev) => {
     }
   }
 });
-// ── Rail sub-menu flyout ──────────────────────────────────────────────────
-// A group (Marketing, Loyalty & Wallet, Editor) reveals its children as a
-// full-height panel flush against the rail's right edge (see .tabs-popover in
-// the CSS) rather than expanding in place. Its position (top/left/bottom) is
-// pure CSS — left:var(--rail-w) rides the fold automatically — so no JS
-// positioning is needed here, just open/close state. Opens on hover / keyboard
-// focus / click; closes on outside-click, Esc, or picking a child (handled in
-// the [data-tab] handler above). Only one open at a time.
-var _flyCloseTimer = null;  // var (not let): closeFlyouts() is hoisted and may be
-                            // reached by an early tab activation before this line.
-function _flyGroupTrigger(g) {
-  return g.querySelector('.tabs-group-trigger') || g.querySelector('.nav-parent-link');
+// ── Rail drill-down ───────────────────────────────────────────────────────
+// Replaced the sub-menu flyout 2026-07-29 (`tacet-rail-drilldown-amendment.md`).
+// A group (Marketing, Loyalty & wallet, Content) no longer opens a panel BESIDE
+// the rail — it REPLACES the rail's own contents with its children. One column,
+// one level at a time. Depth is permanently one: no group contains a group, so
+// there is no recursive stack here and none should be built for a two-level tree.
+//
+// Opening a folder LOADS NOTHING. All three groups are containers with no page
+// of their own: clicking Marketing changes the rail and leaves the content area
+// on whatever was already there. For a moment the rail reads "Marketing" and the
+// screen reads "Orders" — correct and intended. Do not auto-load the first child;
+// that discards the page the operator was reading to answer a question they did
+// not ask.
+//
+// TRIGGER IS CLICK ONLY (plus Enter/Space, which a <button> gives us free). The
+// flyout also opened on `mouseenter` and `focusin`. Both are destructive here and
+// must not come back: hover would wipe the rail's contents over and over as the
+// pointer travelled down the column, and focusin would drill into every folder in
+// turn on Tab — a keyboard user could never reach Settings.
+//
+// Esc is deliberately NOT bound. Esc closes drawers and modals; the rail is
+// persistent navigation, not an overlay, and overloading it would make one
+// keypress unpredictable with a drawer open over a drilled rail.
+//
+// (`closeFlyouts` is gone. It was on `window`, but a repo-wide grep found no
+// caller outside this file; its two internal callers now resolve the level
+// instead of dismissing a panel — see the tab handler and goTab above.)
+
+// Child tab → the rail group it lives under. This map is the real point of the
+// change: sections are reached from the ⌘K palette, dashboard tiles, cross-links,
+// salesGo() and plain reloads, and in every one of those the rail must ALREADY be
+// sitting at the right level when the operator arrives. A rail that reports the
+// wrong place is worse than the flyout it replaced.
+const RAIL_PARENT = {
+  vouchers: 'marketing', flash: 'marketing', popups: 'marketing',
+  affiliate: 'marketing', sharing: 'marketing', broadcasts: 'marketing',
+  social: 'marketing',
+  membership: 'loyalty', topup: 'loyalty', leaderboard: 'loyalty', voting: 'loyalty',
+  // "editor" is the Content group's INTERNAL id — the label changed, the id did
+  // not, because the bottom-nav mirror, the CSS and TAB_CAP all key off it.
+  // mini-app-editor is now an ordinary child row, not the group row.
+  'mini-app-editor': 'editor', snippets: 'editor', about: 'editor',
+  media: 'editor', legal: 'editor', faq: 'editor',
+  // The Product Page Editor is not a second destination and there is no route to
+  // it from Products: a link INSIDE the Mini App Editor swaps the same iframe.
+  // Same tab, same page — so the rail stays on Content › Editor and must not
+  // jump to Products.
+  'product-editor': 'editor',
+};
+// Tabs with no rail row of their own → the row that stays lit while you are in
+// there (§2.3: "the nearest ancestor that does have one"). A tab in neither map
+// resolves to root highlighting itself; a tab with no rail row and no entry here
+// — Inbox's reviews / feedback, which live in the topbar — resolves to root with
+// nothing highlighted, which is the honest answer.
+const RAIL_STANDIN = {
+  meituan: 'sales', guanyi: 'sales', gzgrocery: 'sales', eleme: 'sales',
+  'product-editor': 'mini-app-editor',
+};
+
+var _railAnimTimer = null;  // var: the helpers below are hoisted and may be
+                            // reached by an early tab activation.
+function _railEl()           { return document.querySelector('.tabs'); }
+function railGroupEl(id)     { return document.querySelector('.tabs .tabs-group[data-group="' + id + '"]'); }
+function railOpenGroup()     { return document.querySelector('.tabs .tabs-group.rail-open'); }
+function _railTrigger(g)     { return g ? g.querySelector('.tabs-group-trigger') : null; }
+// Is this rail row gated away? Two gates hide, and they hide DIFFERENTLY:
+//   • capability — applyCapGates writes an inline style.display, so read that.
+//   • entitlement — a `body:not(.ent-X) [data-feat="X"]` CSS rule removes the
+//     row; there is no inline style to read, hence the class check.
+// Note what does NOT count as hidden: feature gating here is Option B — "off
+// never hides a feature, it dims it". An entitled-but-OFF row stays in the rail,
+// dimmed with an "Off" pill, so it is still a row the operator can reach and it
+// still counts towards its folder. Only NOT ENTITLED takes a row out of the
+// count. (The amendment's §2.5 example assumed feat-off hides; live does not.)
+function _railRowHidden(b) {
+  if (b.style.display === 'none') return true;
+  const f = b.getAttribute('data-feat');
+  return !!(f && !document.body.classList.contains('ent-' + f));
 }
-function openFlyout(group) {
+// A level's rows are its visible children — that is what makes the flatten/hide
+// counts below honest.
+function _railChildren(g) {
+  if (!g) return [];
+  return Array.prototype.filter.call(g.querySelectorAll('.tabs-popover [data-tab]'),
+                                     b => !_railRowHidden(b));
+}
+// A rail row's visible label, icons and badges dropped. The i18n engine has
+// already collapsed "English · 中文" to the live language in these text nodes,
+// so this never glues the two halves.
+function _railRowLabel(el) {
+  if (!el) return '';
+  const c = el.cloneNode(true);
+  c.querySelectorAll('svg, .tab-badge, .tabs-flat-label').forEach(n => n.remove());
+  return (c.textContent || '').replace(/\s+/g, ' ').trim();
+}
+function _railGroupLabel(g) {
+  const trig = _railTrigger(g);
+  return _railRowLabel(trig && trig.querySelector('.tabs-glabel') ? trig.querySelector('.tabs-glabel') : trig);
+}
+// Horizontal slide, 200ms ease-out — root out left / children in from the right,
+// reversed on the way back. Deliberately NOT the drawer's 350ms settle: that is a
+// heavier gesture over a longer distance, once per record; a level change is
+// short, light and frequent. Recorded so a later pass does not "correct" the two
+// into agreement. The attribute is cleared once the run is over so a row
+// re-shown by applyCapGates doesn't inherit a stale animation.
+function _railAnim(dir) {
+  const rail = _railEl();
+  if (!rail) return;
+  rail.setAttribute('data-rail-anim', dir);
+  clearTimeout(_railAnimTimer);
+  _railAnimTimer = setTimeout(() => rail.removeAttribute('data-rail-anim'), 240);
+}
+function _railSyncAria() {
+  $$('.tabs .tabs-group').forEach(g => {
+    const trig = _railTrigger(g);
+    if (trig) trig.setAttribute('aria-expanded', g.classList.contains('rail-open') ? 'true' : 'false');
+  });
+}
+// The rail replacing its own contents is a silent change for anyone not looking
+// at the column, so every level change is spoken.
+function railAnnounceLevel() {
+  const live = document.getElementById('railLevelLive');
+  if (!live) return;
+  const T = (typeof cuT === 'function') ? cuT : ((en) => en);
+  const g = railOpenGroup();
+  if (!g) { live.textContent = T('Main menu', '主菜单'); return; }
+  const n = _railChildren(g).length;
+  live.textContent = _railGroupLabel(g) + T(', ' + n + ' items', '，' + n + ' 项');
+}
+// Drill into a folder. `moveFocus` is for the drill GESTURE only — level
+// resolution (arriving from the palette, a dashboard tile, a reload) must not
+// steal focus from wherever the operator actually landed.
+function railDrill(group, opts) {
   if (!group || !group.querySelector('.tabs-popover')) return;
-  // The parent of the page you're on opens its panel like any other group (so
-  // you can reach a sibling), with the current sub-item marked inside it. It
-  // just opens — no navigation, no flicker; you stay on your page.
-  clearTimeout(_flyCloseTimer);
-  $$('.tabs-group.open').forEach(g => { if (g !== group) { g.classList.remove('open'); _flySyncAria(g); } });
-  group.classList.add('open');
-  _flySyncAria(group);
+  if (group.classList.contains('rail-flat')) return;   // flattened — not a folder
+  const rail = _railEl();
+  if (!rail) return;
+  const already = group.classList.contains('rail-open');
+  $$('.tabs .tabs-group.rail-open').forEach(g => g.classList.remove('rail-open'));
+  group.classList.add('rail-open');
+  rail.classList.add('rail-drilled');
+  _railSyncAria();
+  if (!already) { _railAnim('drill'); railAnnounceLevel(); }
+  // Going forward → the top of the new list.
+  if (opts && opts.moveFocus) { const first = _railChildren(group)[0]; if (first) first.focus(); }
 }
-function closeFlyouts() {
-  clearTimeout(_flyCloseTimer);
-  $$('.tabs-group.open').forEach(g => { g.classList.remove('open'); _flySyncAria(g); });
+// Return the rail to root. Also the single answer for "the level must reset":
+// the back row, folding the rail, and a jump to a tab outside the open folder.
+function railGoRoot(opts) {
+  const rail = _railEl();
+  if (!rail) return;
+  const was = railOpenGroup();
+  if (!was) return;                                     // already at root
+  was.classList.remove('rail-open');
+  rail.classList.remove('rail-drilled');
+  _railSyncAria();
+  _railAnim('back');
+  railAnnounceLevel();
+  // Coming back → the group row you came from, not the top of the rail.
+  if (opts && opts.moveFocus) { const trig = _railTrigger(was); if (trig) trig.focus(); }
 }
-window.closeFlyouts = closeFlyouts;
-function _flyScheduleClose() { clearTimeout(_flyCloseTimer); _flyCloseTimer = setTimeout(closeFlyouts, 160); }
-function _flySyncAria(g) {
-  const trig = _flyGroupTrigger(g);
-  if (trig) trig.setAttribute('aria-expanded', g.classList.contains('open') ? 'true' : 'false');
+window.railGoRoot = railGoRoot;
+window.railDrill = railDrill;
+// Put the rail at the level that owns `tab`. Called on EVERY switch — rail
+// clicks, palette jumps, salesGo(), dashboard drill-through, first paint.
+// §2.1: picking a child leaves the rail drilled (Coupons → Flash sales is the
+// common motion, and snapping back would charge a re-drill on every hop).
+function railResolveFor(tab) {
+  const g = RAIL_PARENT[tab] ? railGroupEl(RAIL_PARENT[tab]) : null;
+  if (g && g.style.display !== 'none' && !g.classList.contains('rail-flat')) railDrill(g);
+  else railGoRoot();
 }
-$$('.tabs-group').forEach(group => {
-  if (!group.querySelector('.tabs-popover')) return;
-  const trig = _flyGroupTrigger(group);
-  if (trig) { trig.setAttribute('aria-haspopup', 'true'); trig.setAttribute('aria-expanded', 'false'); }
-  // Hover: the panel is a DOM child of the group, so moving onto it keeps the
-  // group "hovered"; the short close delay covers the gap between the two.
-  group.addEventListener('mouseenter', () => openFlyout(group));
-  group.addEventListener('mouseleave', _flyScheduleClose);
-  // Keyboard: focus into the group opens it; focus leaving closes it.
-  group.addEventListener('focusin', () => openFlyout(group));
-  group.addEventListener('focusout', (e) => {
-    if (!group.contains(e.relatedTarget)) _flyScheduleClose();
-  });
-  // A destination-less trigger (Marketing / Loyalty) toggles on click too, so a
-  // tap works where hover can't. The nav-parent link (Editor) keeps navigating.
-  const clickTrig = group.querySelector('.tabs-group-trigger');
-  if (clickTrig) clickTrig.addEventListener('click', (ev) => {
-    ev.stopPropagation();
-    group.classList.contains('open') ? closeFlyouts() : openFlyout(group);
+window.railResolveFor = railResolveFor;
+
+$$('.tabs .tabs-group').forEach(group => {
+  const trig = _railTrigger(group);
+  if (!trig || !group.querySelector('.tabs-popover')) return;
+  trig.setAttribute('aria-expanded', 'false');
+  trig.addEventListener('click', () => {
+    // Flattened to one visible child: the row IS that child, so click it.
+    if (group.classList.contains('rail-flat')) {
+      const only = _railChildren(group)[0];
+      if (only) only.click();
+      return;
+    }
+    if (group.classList.contains('rail-open')) { railGoRoot({ moveFocus: true }); return; }
+    // Folded + click a folder → unfold AND drill in one gesture. It stays
+    // unfolded: the operator is now working inside a folder, and there is no
+    // folded drilled state to fall back to (the children have no icons).
+    if (document.body.classList.contains('nav-collapsed')) setNavCollapsed(false);
+    railDrill(group, { moveFocus: true });
   });
 });
-// Dismiss on outside-click, Esc, or a breakpoint-changing resize (past 720px
-// the rail — and this panel with it — is hidden outright by the mobile block).
-// The fold control is exempt: folding while a panel is open must KEEP it open
-// (it re-flushes to the new rail width via the CSS `left` transition).
-document.addEventListener('click', (e) => {
-  if (!e.target.closest('.tabs-group') && !e.target.closest('#railSeamFold')) closeFlyouts();
-});
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeFlyouts(); });
-window.addEventListener('resize', closeFlyouts);
+// A flattened row shows the CHILD's label, which is a plain string the i18n
+// engine's node registry does not own — so re-derive it after every toggle,
+// once the engine has rewritten the child it was copied from.
+if (window.onLangChange) window.onLangChange(() => { railSyncGroups(); railAnnounceLevel(); });
+railSyncGroups();
+// First paint. The page opens on whatever row the markup marks active — read it
+// rather than assuming root, so this keeps holding if the landing tab changes or
+// a deep link is ever added.
+(function _railInitLevel() {
+  const active = document.querySelector('.tabs [data-tab].active');
+  if (active) railResolveFor(active.dataset.tab);
+})();
 
 // ── Collapsible rail ──────────────────────────────────────────────────────
-// A topbar toggle folds the left rail to an icon-only strip; the pre-paint
-// snippet in the page restores the last state, and this keeps it in sync.
+// #railSeamFold — which lives at the TOP OF THE RAIL, not the topbar (it was
+// re-parented 2026-07-24; an older comment here still said topbar) — folds the
+// rail to an icon-only strip; the pre-paint snippet in the page restores the
+// last state, and this keeps it in sync.
 // While collapsed the CSS zeroes each label, so we mirror the label into a
 // native `title` — hovering an icon still names it — and clear those titles
 // again on expand so we don't double up with the visible text.
 const NAV_COLLAPSE_KEY = 'ra:navCollapsed';
 function _navRailLabel(b) {
+  // Group rows carry their label in a span (.tabs-glabel), and a FLATTENED group
+  // carries the child's label in a second one (.tabs-flat-label) — so read the
+  // span that is actually showing, and fall back to the direct text nodes that
+  // every plain rail button uses.
+  const flat = b.querySelector && b.querySelector('.tabs-flat-label');
+  if (flat && (flat.textContent || '').trim()) return flat.textContent.replace(/\s+/g, ' ').trim();
+  const span = b.querySelector && b.querySelector('.tabs-glabel');
+  if (span) return (span.textContent || '').replace(/\s+/g, ' ').trim();
   return Array.prototype.filter.call(b.childNodes, n => n.nodeType === 3)
     .map(n => n.textContent).join('').replace(/\s+/g, ' ').trim();
 }
 function _navRailButtons() {
-  return $$('.tabs > button, .tabs .nav-parent-link, .tabs .tabs-group-trigger');
+  return $$('.tabs > button, .tabs .tabs-group-trigger');
 }
 function setNavCollapsed(on) {
   on = !!on;
+  // Drilled + fold → return to root FIRST, then fold. There is no folded drilled
+  // state: the children are words with no icons, so a folded drilled rail would
+  // have nothing to draw. (This is also why the old outside-click handler's
+  // #railSeamFold exemption is gone — it existed to PRESERVE an open flyout
+  // across a fold, which is the opposite of what the level needs to do.)
+  if (on) railGoRoot();
   document.body.classList.toggle('nav-collapsed', on);
   try { localStorage.setItem(NAV_COLLAPSE_KEY, on ? '1' : '0'); } catch (e) {}
   // Keep the fold control's state in sync — its tooltip/aria flip with the fold,
@@ -853,8 +1051,10 @@ window.setNavCollapsed = setNavCollapsed;
 window.toggleNavCollapse = toggleNavCollapse;
 // Sync button state + tooltips to whatever the pre-paint snippet restored.
 setNavCollapsed(document.body.classList.contains('nav-collapsed'));
-// The vertical rail is an inline accordion — groups stay expanded while you
-// work in the content area, so the old click-outside-to-close handler is gone.
+// The rail is persistent navigation, not an overlay: a level stays put while you
+// work in the content area. Nothing dismisses it by clicking away, and Esc is not
+// bound to it — only the back row, folding, or moving to a tab outside the open
+// folder returns it to root.
 // ── Categories — "the shelf" (Products → Categories sub-view) ─────────────
 // Rebuilt from scratch 2026-07-10 (was a standalone tab of paired input boxes).
 //
