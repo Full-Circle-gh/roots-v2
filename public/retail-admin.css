@@ -8270,7 +8270,12 @@
     transition: border-color .2s cubic-bezier(.16,1,.3,1);
   }
   .td-store-sel:hover { border-color: var(--td-text2); }
-  .td-store-sel:focus { outline: none; border-color: var(--td-dusk); }
+  /* box-shadow:none is load-bearing. The global `input:focus, select:focus`
+     rule paints a 3px tea-green glow from the legacy --ring; this rule only
+     outranks it on border-color, so without the reset the Dusk border keeps a
+     green halo. Tacet inputs focus with a Dusk border and no ring at all
+     (design-system, Inputs; desktop-patterns Dusk rule 3). */
+  .td-store-sel:focus { outline: none; border-color: var(--td-dusk); box-shadow: none; }
   .td-pill-amber { background: var(--td-amber-tint); color: var(--td-amber-ink); }
   .td-attn-clear { font-size: 14px; color: var(--td-text2); padding: 2px 0; }
   /* Running-low rolling window: the rows box cross-fades as it pages through the
