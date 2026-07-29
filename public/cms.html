@@ -10627,7 +10627,7 @@ function renderBlockBody(b) {
       // aspect-ratio / object-position styles when a crop ratio is set.
       const linkedHtml = linked ? `
         <div class="rcp-card">
-          <div class="rcp-card-img">${linked.image_url ? `<img src="${escapeAttr(linked.image_url)}" alt="">` : ''}</div>
+          <div class="rcp-card-img">${thumbUrl(linked) ? `<img src="${escapeAttr(thumbUrl(linked))}" alt="">` : ''}</div>
           <div class="rcp-card-meta">
             <div class="rcp-card-name">${escapeHtml(pickLang(linked.name_en, linked.name_cn) || '')}</div>
             <div class="rcp-card-price">¥${Number(linked.effective_price ?? linked.sell_price ?? linked.price ?? 0).toFixed(2)} →</div>
