@@ -8456,6 +8456,19 @@
     transition: color .2s cubic-bezier(.16,1,.3,1);
   }
   .td-sec-foot .td-sec-go:hover { color: var(--td-text); text-decoration: underline; text-underline-offset: 2px; }
+  /* Icon-only door — a chevron, no words. Only for cards whose link lands where
+     the card title already says (Today, Customers); a card pointing SOMEWHERE
+     ELSE keeps its label, because there the words are the only thing naming the
+     destination. The negative margins buy a 28px touch target without moving
+     the glyph off the footer's padding edge, and margin-left stays auto so it
+     is still what pins the button right. Nothing visible is underlined here, so
+     the inherited hover rule is dropped — colour alone carries the hover. */
+  .td-sec-foot .td-sec-go.is-icon {
+    display: inline-flex; align-items: center;
+    padding: 6px; margin: -6px -6px -6px auto;
+  }
+  .td-sec-foot .td-sec-go.is-icon:hover { text-decoration: none; }
+  .td-sec-go .td-sec-chev { width: 16px; height: 16px; flex: none; }
 
   @media (max-width: 720px) {
     .td-sec-foot { padding: 12px 22px; }

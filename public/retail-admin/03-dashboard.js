@@ -1909,13 +1909,26 @@ function tdSecFootHtml(items, go) {
         `<button type="button" class="td-sec-link" onclick="${it.go}">${escapeHtml(it.label(it.n))}</button>`
       ).join(sep)
     : `<span class="td-sec-dot is-clear"></span>${escapeHtml(cuT('Nothing waiting.', '暂无待办。'))}`;
-  return body + (go ? tdSecGoHtml(go.label, go.run) : '');
+  return body + (go ? tdSecGoHtml(go.label, go.run, go.icon) : '');
 }
 // The card's trailing link. It used to sit in the card header; it belongs at the
 // bottom, where the eye already is after reading the numbers, and where it can
 // share the footer's baseline with the working-state line.
-function tdSecGoHtml(label, run) {
-  return `<button type="button" class="td-sec-go" onclick="${run}">${escapeHtml(label)}</button>`;
+//
+// iconOnly renders a chevron instead of the label. Use it when the door leads
+// where the card's own title already says — Today → orders, Customers →
+// customers — because there the words are the third time you read the same
+// noun. Where the door leads SOMEWHERE ELSE (Inventory → restock, Delivery →
+// orders) keep the words: there the label is the only thing on the card that
+// says where you're going, and a bare chevron would throw that away. The label
+// still names the button for screen readers and as its tooltip either way, so
+// nothing is lost but the ink.
+function tdSecGoHtml(label, run, iconOnly) {
+  const body = iconOnly
+    ? `<span class="sr-only">${escapeHtml(label)}</span>`
+      + `<svg class="td-sec-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>`
+    : escapeHtml(label);
+  return `<button type="button" class="td-sec-go${iconOnly ? ' is-icon' : ''}" onclick="${run}" title="${escapeHtml(label)}">${body}</button>`;
 }
 
 // Jump to the Orders tab and apply one of its status chips. The chips are
@@ -2000,12 +2013,18 @@ function tdSecPaint() {
       // Paid and untouched — nobody has started it yet. This is the most urgent
       // thing on the page and it had no home until now: the operator saw
       // "preparing" but never the orders waiting to BE prepared.
-      { n: Number(c.paid || 0),             go: "tdSecOpenOrders('paid')",             label: n => cuT(`${n} to start`, `${n} 单待处理`) },
+      //
+      // It read "4 to start", which never said start WHAT and scanned like a
+      // countdown — "4 minutes to start". The line under it is "N preparing",
+      // so the pair only reads if this one names the same verb: 4 waiting to be
+      // prepared → 3 preparing. The CN was vaguer still (单待处理, "pending"),
+      // and now matches (单待备货).
+      { n: Number(c.paid || 0),             go: "tdSecOpenOrders('paid')",             label: n => cuT(`${n} waiting to be prepared`, `${n} 单待备货`) },
       { n: Number(c.preparing || 0),        go: "tdSecOpenOrders('preparing')",        label: n => cuT(`${n} preparing`, `${n} 单备货中`) },
       { n: Number(c.awaiting_restock || 0), go: "tdSecOpenOrders('awaiting_restock')", label: n => cuT(`${n} awaiting restock`, `${n} 单待补货`) },
       { n: Number(c.refunds_open || 0),     go: "tdSecOpenOrders('refunds_open')",     label: n => cuT(`${n} in the refund queue`, `${n} 单待退款`) },
       { n: Number(c.needs_invoice || 0),    go: "dashOpenInvoices()",                  label: n => cuT(`${n} ${n === 1 ? 'invoice' : 'invoices'} to issue`, `${n} 张待开票`) },
-    ], { label: cuT('Open orders', '前往订单'), run: "dashJumpTab('orders')" });
+    ], { label: cuT('Open orders', '前往订单'), run: "dashJumpTab('orders')", icon: true });
   }
 
   // Inventory: out-of-stock is the emergency; low stock is the nudge. The footer

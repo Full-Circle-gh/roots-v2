@@ -1570,7 +1570,6 @@
             <div class="bn-head">
               <svg class="bn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17l5-5 4 3 7-8"/><path d="M3 21h18"/></svg>
               <h3>Today · 今日</h3>
-              <span class="bn-sub">so far · 截至此刻</span>
             </div>
             <div class="bn-body">
               <div class="bn-mgrid">
@@ -1614,7 +1613,6 @@
             <div class="bn-head">
               <svg class="bn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c1.4-3.4 4-5 7-5s5.6 1.6 7 5"/></svg>
               <h3>Customers · 客户</h3>
-              <span class="bn-sub">live · 实时</span>
             </div>
             <div class="bn-body">
               <div class="bn-mgrid is-three">
@@ -1636,7 +1634,13 @@
           </div>
           <div class="td-sec-foot">
             <span class="td-live is-zero" id="td-live"><i class="td-live-dot" aria-hidden="true"></i><b class="td-live-num" id="db-live-num">0</b><span class="td-live-lbl" id="td-live-lbl"></span></span>
-            <button type="button" class="td-sec-go" onclick="dashJumpTab('customers')">Open customers · 前往客户</button>
+            <!-- Chevron, not "Open customers": this door leads to the Customers
+                 tab, on a card headed Customers, so the words were the third
+                 time you read the same noun. The name survives for screen
+                 readers and as a tooltip. Footers whose door leads SOMEWHERE
+                 ELSE (Inventory → restock) keep their words — see .is-icon in
+                 the css. -->
+            <button type="button" class="td-sec-go is-icon" onclick="dashJumpTab('customers')" title="Open customers · 前往客户"><span class="sr-only">Open customers · 前往客户</span><svg class="td-sec-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg></button>
           </div>
         </div>
       </div>
