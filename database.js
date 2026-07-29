@@ -2645,6 +2645,12 @@ addColumn('retail_orders', 'channel_status_at', 'DATETIME');
 // 'YYYY-MM-DD HH:MM:SS' like the other timestamps so the admin renders it in
 // store-local time. Read-only channels have no waybill/rider ETA of our own.
 addColumn('retail_orders', 'channel_eta',       'DATETIME');
+// The customer booked this order for a later window instead of "as soon as
+// possible" (Meituan 预订单, basicVo.isPreOrder). Holds the START of the booked
+// delivery window (deliveryBtime), stored UTC like channel_eta. NULL = a normal
+// order to prepare now. Without it a pre-order is indistinguishable from an
+// order due immediately, and the kitchen packs it hours early.
+addColumn('retail_orders', 'channel_preorder_at', 'DATETIME');
 
 // Store pickup: a store is offered as a pickup point at checkout only when
 // this flag is on (admin toggles it per store in the mini-app backend).

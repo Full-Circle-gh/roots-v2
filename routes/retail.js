@@ -18416,6 +18416,9 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     o.customer_id, c.nickname, c.phone AS customer_phone,
                     o.store_id, o.routing_reason, o.routed_by_distance, o.channel, o.fulfillment_type,
                     o.channel_status, o.channel_status_at, o.channel_eta,
+                    -- 预订单 marker: the list's delivery cell shows a booked window
+                    -- differently from a live ETA (same clock time, different job).
+                    o.channel_preorder_at,
                     o.fulfillment_short_pids, o.reroute_short_pids,
                     (SELECT COUNT(*) FROM retail_order_addons ad
                        WHERE ad.order_id = o.id AND ad.status = 'success') AS addon_count,

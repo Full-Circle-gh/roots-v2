@@ -2377,9 +2377,16 @@ function renderTrackingCell(o) {
     if (live) return live;
     if (o.channel_eta && !['cancelled', 'refunded'].includes(o.status)) {
       const done = o.status === 'delivered';
-      const colour = done ? 'var(--text-3)' : '#5C7A4E';
-      const label = done ? cuT('arrived', '已送达') : cuT('arrival', '预计送达');
-      return `<div style="display:flex; align-items:center; gap:3px; font-size:11px; font-weight:600; color:${colour};">${deliveryIcon('scooter', 12)}<span>${escapeHtml(formatEtaClock(o.channel_eta))}</span></div>
+      // 预订单: a booked window, not a delivery in progress. Same time, different
+      // meaning — green "arrival" on a 3-hour-out pre-order reads as an order
+      // already on its way, so booked ones get their own amber "booked" line.
+      const booked = !done && !!o.channel_preorder_at;
+      const colour = done ? 'var(--text-3)' : booked ? '#8A6516' : '#5C7A4E';
+      const label = done ? cuT('arrived', '已送达')
+                  : booked ? cuT('booked', '顾客预约')
+                  : cuT('arrival', '预计送达');
+      const when = booked ? o.channel_preorder_at : o.channel_eta;
+      return `<div style="display:flex; align-items:center; gap:3px; font-size:11px; font-weight:600; color:${colour};">${deliveryIcon('scooter', 12)}<span>${escapeHtml(formatEtaClock(when))}</span></div>
               <div class="muted" style="font-size:10px; margin-top:2px;">${label}</div>`;
     }
     return '<span class="muted">—</span>';
@@ -3972,6 +3979,12 @@ function renderReadonlyOrder(o) {
   // true — staff can call the rider from right here. Keep the tag only for orders we
   // genuinely can't act on (accept/prepare still live on the platform either way).
   const roTag = o.courier ? '' : ` · ${cuT('view only', '只读')}`;
+  // 预订单: the customer booked a delivery window instead of ordering for now, so
+  // this is NOT due immediately. Without saying so the drawer reads exactly like a
+  // normal order and the bag gets packed hours early (or, worse, at the last
+  // minute because the ETA looked far off). Amber, matching the other "read this
+  // before you act" bands in the drawer.
+  const preOrder = !!o.channel_preorder_at;
   mount.innerHTML = `
     <div class="order-card">
       <div class="order-head">
@@ -3980,6 +3993,7 @@ function renderReadonlyOrder(o) {
             <b>${escapeHtml(o.order_no)}</b>
             ${(() => { const p = orderStatusPill(o); return `<span class="pill ${p.cls}"><span class="dot"></span>${p.label}</span>`; })()}
             <span class="pill" style="background: var(--bg-elev-1); color: var(--text-2);" title="${escapeHtml(chan)} orders are mirrored in for visibility — accept &amp; prepare them in ${escapeHtml(chan)}">${escapeHtml(chan)}${roTag}</span>
+            ${preOrder ? `<span class="pill" style="background:#FBF0DC; color:#8A6516;"><span class="dot" style="background:#B98B21;"></span>${cuT('Pre-order', '预订单')}</span>` : ''}
           </div>
           <div class="od-eyebrow">Order placed ${formatDate(o.placed_at)} · 下单于 ${formatDate(o.placed_at)}</div>
         </div>
@@ -4012,11 +4026,19 @@ function renderReadonlyOrder(o) {
           ${caveat}
         </div>`;
         })()}
-        ${o.channel_eta ? `<div>
-          <div class="kicker">ETA · 预计送达</div>
-          <div class="val"><b>${escapeHtml(formatEtaClock(o.channel_eta))}</b></div>
-          <div class="sub">${formatDate(o.channel_eta)}</div>
-        </div>` : ''}
+        ${(() => {
+          // On a pre-order the headline time is the window the CUSTOMER booked,
+          // not an ETA we're racing — say which it is, so nobody reads a 15:30 on
+          // a 12:03 order as a late delivery. Falls back to the plain ETA cell for
+          // every normal order.
+          const when = preOrder ? (o.channel_preorder_at || o.channel_eta) : o.channel_eta;
+          if (!when) return '';
+          return `<div>
+          <div class="kicker">${preOrder ? 'Booked for · 顾客预约' : 'ETA · 预计送达'}</div>
+          <div class="val"><b>${escapeHtml(formatEtaClock(when))}</b></div>
+          <div class="sub">${formatDate(when)}</div>
+        </div>`;
+        })()}
         ${hasCust ? `<div>
           <div class="kicker">Customer · 顾客</div>
           <div class="val" data-no-i18n><b>${escapeHtml(cust.name)}</b></div>
@@ -4037,6 +4059,12 @@ function renderReadonlyOrder(o) {
             : `<div class="muted" style="padding: 8px 0;">${cuT('No line items captured', '未记录商品明细')}</div>`}
         </div>
       </div>
+
+      ${o.customer_note ? `<div>
+        <div class="kicker" style="margin: 14px 0 6px;">Customer note · 顾客备注</div>
+        <div data-no-i18n style="font-weight: 700; color: var(--text-1); font-size: 14px; line-height: 1.5;">${escapeHtml(o.customer_note)}</div>
+      </div>` : ''}
+      ${o.needs_cutlery ? `<div style="margin-top: 10px;"><span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--text-1); background: var(--bg-elev-2); border: 1px solid var(--line); border-radius: 99px; padding: 4px 12px; font-size: 12px;"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 3v6a2 2 0 0 0 2 2 2 2 0 0 0 2-2V3"/><path d="M6 11v10"/><path d="M17 3c-1.7 0-3 2-3 5s1.3 4 3 4"/><path d="M17 3v18"/></svg> Cutlery requested · 需要餐具</span></div>` : ''}
     </div>`;
 }
 

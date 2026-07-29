@@ -165,6 +165,18 @@ router.post('/ingest-order', (req, res) => {
     // /update-order-status.
     const channelStatus = (order.statusDesc && String(order.statusDesc).trim()) || null;
     const channelEta    = (order.eta && String(order.eta).trim()) || null;
+    // 预订单 — booked for a later window, not to be packed now. NULL on a normal
+    // order. The Orders list and drawer both key their "Pre-order" treatment off
+    // this, so a booked order stops reading as "due immediately".
+    const preOrderAt    = (order.preOrderAt && String(order.preOrderAt).trim()) || null;
+    // Prefer Meituan's own order time over our import time (a ~5 min poll means
+    // CURRENT_TIMESTAMP is always late, and near midnight it lands on the wrong
+    // day). Falls back to now when the platform didn't give us one.
+    const placedAt      = (order.placedAt && String(order.placedAt).trim()) || null;
+    // What the customer typed, plus their cutlery answer — both are on the order
+    // in Meituan and both matter to whoever packs the bag.
+    const customerNote  = (order.note && String(order.note).trim()) || null;
+    const needsCutlery  = order.needsCutlery ? 1 : 0;
     // A terminal Meituan label (已完成/已取消/退款…) maps to the matching internal
     // status so the order lands in the right tab; anything in-progress → 'paid'.
     const internalStatus = internalStatusForChannel(channelStatus) || 'paid';
@@ -175,11 +187,14 @@ router.post('/ingest-order', (req, res) => {
         INSERT INTO retail_orders (
           order_no, status, payment_method, subtotal, total,
           store_id, channel, fulfillment_type, placed_at, paid_at,
-          channel_status, channel_status_at, channel_eta
+          channel_status, channel_status_at, channel_eta, channel_preorder_at,
+          customer_note, needs_cutlery
         ) VALUES (?, ?, 'meituan', ?, ?, ?, 'meituan', 'delivery',
-                  CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
-                  ?, CASE WHEN ? IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END, ?)
-      `).run(orderNo, internalStatus, total, total, storeId, channelStatus, channelStatus, channelEta);
+                  COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP),
+                  ?, CASE WHEN ? IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END, ?, ?,
+                  ?, ?)
+      `).run(orderNo, internalStatus, total, total, storeId, placedAt, placedAt,
+             channelStatus, channelStatus, channelEta, preOrderAt, customerNote, needsCutlery);
       const oid = r.lastInsertRowid;
       for (const it of items) {
         // Snapshot the Meituan 货号 (SKU token) so the view-only order drawer can
