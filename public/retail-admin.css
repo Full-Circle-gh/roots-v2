@@ -4459,9 +4459,19 @@
   input[type=time]:hover::-webkit-calendar-picker-indicator {
     opacity: 1;
   }
+  /* Focus for every field in the admin. Tacet: "focus = border turns Dusk, no
+     glow rings" (design-system, Inputs) and focus rings are Dusk (rulebook
+     §1.8 rule 3). This used to paint a tea-green border plus a 3px --ring glow,
+     both leftovers from Full Circle. Because it is the rule everything
+     inherits, a component that re-pointed only its border-color to Dusk still
+     wore the green halo — it looked migrated and was not.
+     box-shadow:none is stated, not omitted, so the reset survives if a legacy
+     rule above ever puts a glow back. --ring itself is untouched: switches,
+     ::selection and the order-row outline still use it, and those are not
+     input focus rings. */
   input:focus, select:focus, textarea:focus {
-    border-color: rgba(163, 180, 159, .50);
-    box-shadow: 0 0 0 3px var(--ring);
+    border-color: var(--td-dusk);
+    box-shadow: none;
   }
   input:hover:not(:focus), select:hover:not(:focus), textarea:hover:not(:focus) {
     border-color: var(--line-strong);
@@ -8270,12 +8280,7 @@
     transition: border-color .2s cubic-bezier(.16,1,.3,1);
   }
   .td-store-sel:hover { border-color: var(--td-text2); }
-  /* box-shadow:none is load-bearing. The global `input:focus, select:focus`
-     rule paints a 3px tea-green glow from the legacy --ring; this rule only
-     outranks it on border-color, so without the reset the Dusk border keeps a
-     green halo. Tacet inputs focus with a Dusk border and no ring at all
-     (design-system, Inputs; desktop-patterns Dusk rule 3). */
-  .td-store-sel:focus { outline: none; border-color: var(--td-dusk); box-shadow: none; }
+  .td-store-sel:focus { outline: none; border-color: var(--td-dusk); }
   .td-pill-amber { background: var(--td-amber-tint); color: var(--td-amber-ink); }
   .td-attn-clear { font-size: 14px; color: var(--td-text2); padding: 2px 0; }
   /* Running-low rolling window: the rows box cross-fades as it pages through the
