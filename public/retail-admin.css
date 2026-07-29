@@ -603,10 +603,12 @@
      localStorage (restored pre-paint by an inline snippet in the page so
      there's no flash). Collapsed, each label is zeroed to font-size:0 —
      every rail button keeps its explicit svg size, so only the text
-     disappears — and the group chevrons + open accordions hide. The two
-     destination-less groups (Marketing / Loyalty) re-expand the rail on
-     click so their children stay reachable. Hidden on phones, where the
-     rail is already swapped for the fixed bottom nav. */
+     disappears — and the group chevrons hide. Clicking a folder while folded
+     unfolds the rail AND drills into it in one gesture (there is no folded
+     drilled state: children carry no icons, so there would be nothing to
+     draw), and folding FROM a drilled level returns to root first. Both are
+     handled in setNavCollapsed / the trigger's click handler. Hidden on
+     phones, where the rail is already swapped for the fixed bottom nav. */
   /* The rail-foot fold row (.nav-foot / .nav-fold-chev) was removed 2026-07-07 —
      the single fold control is now the seam dot (#railSeamFold, styled below). */
 
@@ -635,8 +637,8 @@
     padding-left: 0; padding-right: 0;
   }
   body.nav-collapsed .tabs .tabs-chev { display: none; }
-  /* The flyout panel is position:fixed (outside the rail), so a folded rail no
-     longer needs to hide it — it opens beside the folded icon just the same. */
+  /* No folded rule is needed for the children list: folding returns the rail to
+     root first, so a folded rail is never drilled. */
   /* Collapsed: section headers shrink to a centered dot; the auto marker hides. */
   body.nav-collapsed .nav-sec { text-align: center; padding: 14px 0 6px; }
   body.nav-collapsed .nav-sec span { display: none; }
@@ -726,96 +728,137 @@
     100% { box-shadow: 0 0 0 0   rgba(220, 38, 38, 0);    transform: scale(1); }
   }
 
-  /* Grouped sub-menus in the vertical rail (Marketing, Loyalty & Wallet,
-     Editor). The group no longer expands IN PLACE — its children fly out as a
-     FULL-HEIGHT panel flush against the rail's right edge (below the topbar,
-     down to the bottom of the viewport), overlaying the content. Not a floating
-     card: no shadow, no border-radius, no icons — a header names the group,
-     then plain text rows. left:var(--rail-w) means pure CSS placement, no JS
-     positioning, and it rides the fold automatically (flush against either
-     236px or the folded 62px). It opens on hover / focus / click and dismisses
-     on outside-click, Esc, or picking a child. */
+  /* ══ Rail drill-down (Marketing, Loyalty & wallet, Content) ══════════════
+     Rewritten 2026-07-29 — `tacet-rail-drilldown-amendment.md`. The flyout is
+     GONE: a group no longer opens a full-height panel beside the rail, it
+     REPLACES the rail's own contents with its children. One column, one level
+     at a time. Two states only, and depth is permanently one — no group holds
+     a group, so there is no recursive stack here and none should be built.
+
+     Why not an accordion (the other way to kill the flyout): the rail is 14
+     rows at root, and Marketing open would make it 21 ≈ 980px, which scrolls
+     on the 1080p laptop most merchants use. Drill-down caps any level at 9.
+     Re-open that decision only if the ROOT rail gets substantially shorter. */
   .tabs-group { position: relative; display: flex; flex-direction: column; }
-  /* Two parent treatments carry "where you are" vs "what you're browsing":
-     OPEN (this group's panel is showing) = full Ink fill; CURRENT (the group
-     your active page lives in, panel closed) = quiet fill + a 3px Ink edge bar.
-     Current still opens its own panel on click/hover (to reach a sibling), so
-     it keeps the pointer cursor. */
-  .tabs-group.open > .tabs-group-trigger,
-  .tabs-group.open > .nav-parent-link {
-    background: var(--td-text); color: var(--td-surface);
-  }
-  .tabs-group.has-active:not(.open) > .tabs-group-trigger,
-  .tabs-group.has-active:not(.open) > .nav-parent-link {
+  /* CURRENT (the group your active page lives in, sitting at root) = quiet fill
+     + a 3px Ink edge bar. There is no "open" treatment any more: an open group
+     is the only thing in the column, so nothing needs distinguishing from its
+     siblings — it becomes the back row instead (see .rail-open below). */
+  .tabs-group.has-active:not(.rail-open) > .tabs-group-trigger {
     background: rgba(var(--td-heat-rgb), .05); color: var(--td-text);
     font-weight: 500;
   }
-  .tabs-group.has-active:not(.open) > .tabs-group-trigger::before,
-  .tabs-group.has-active:not(.open) > .nav-parent-link::before {
+  .tabs-group.has-active:not(.rail-open) > .tabs-group-trigger::before {
     content: ""; position: absolute; left: 0; top: 7px; bottom: 7px;
     width: 3px; border-radius: 0 3px 3px 0; background: var(--td-text);
   }
-  /* Chevron points RIGHT (the panel opens to the right); hidden once the group
-     is open (its Ink fill is the affordance) and when the rail is folded. */
+  /* The trailing chevron is the ONLY thing marking a folder apart from a
+     destination at root, so it stays exactly as it was. It goes at the drilled
+     level (nothing left to open) and on a flattened group (no folder at all). */
   .tabs-chev { width: 10px !important; height: 10px !important; opacity: .6; }
-  .tabs-group.open .tabs-chev { display: none; }
-  /* The sub-menu panel — a full-height second column flush against the rail's
-     right edge, resting OVER the page (which keeps its width; nothing reflows).
-     Surface is the SAME as the rail (var(--bg-pane)) — no tonal step; the two
-     read as one continuous chrome surface. Two edges doing different work:
-     border-LEFT (--td-border) is the seam against the rail — the only thing
-     separating the two same-coloured surfaces, since the rail's own right border
-     is faint --line-soft; border-RIGHT (--td-border) + one soft shadow separate
-     chrome from page content. left:var(--rail-w) rides the fold, and the
-     transition re-flushes it when you fold while it's open (it stays open). */
+  .tabs-group.rail-open .tabs-chev,
+  .tabs-group.rail-flat .tabs-chev { display: none; }
+  /* The back arrow is the mirror: hidden at root, and at the drilled level it
+     takes the group icon's slot so `← Marketing` reads as one control — the
+     level title AND the way out, one row, not two. */
+  .tabs-back { display: none; }
+  .tabs-group.rail-open > .tabs-group-trigger > .tabs-back { display: block; }
+  .tabs-group.rail-open > .tabs-group-trigger > .tabs-gicon { display: none; }
+
+  /* ── Drilled: the rail shows one folder and nothing else ────────────────
+     Root rows are hidden outright (not scrolled away) — the fold control and
+     the brand spacer stay, because folding from a drilled level is a legal
+     move (it returns to root first, in setNavCollapsed). */
+  .tabs.rail-drilled > button:not(.seam-fold),
+  .tabs.rail-drilled > .tabs-group:not(.rail-open),
+  .tabs.rail-drilled > .nav-sec { display: none; }
+  /* No `order` override for the open group, and do not add one: every rail row
+     carries its order INLINE (style="order:11"), which beats any stylesheet rule.
+     None is needed — with the rest of the column hidden, the only flex items left
+     are the brand spacer and the fold control (both order:0, both above it), so
+     the level lands directly under the fold whatever its own order is. */
+  /* Back row: plain, no fill, no edge bar — it is a title, not a destination,
+     and the level below it is the thing being pointed at. */
+  .tabs-group.rail-open > .tabs-group-trigger {
+    background: none; color: var(--td-text); font-weight: 500;
+  }
+  .tabs-group.rail-open > .tabs-group-trigger::before { content: none; }
+  .tabs-group.rail-open > .tabs-group-trigger:hover {
+    background: var(--bg-elev-1); color: var(--td-text);
+  }
+
+  /* ── The children list ──────────────────────────────────────────────────
+     A plain in-flow list under the back row, separated by one hairline. Not a
+     panel: no surface of its own, no shadow, no border-radius — it IS the rail
+     now. Hidden until its group is the open level. */
   .tabs-popover {
     display: none;
-    position: fixed; z-index: 20;
-    top: 56px; left: var(--rail-w); bottom: 0;
-    width: 224px; box-sizing: border-box;
     flex-direction: column;
     gap: 2px;
-    padding: 10px;
-    background: var(--bg-pane);
-    border-left: 1px solid var(--td-border);
-    border-right: 1px solid var(--td-border);
-    box-shadow: 0 4px 16px rgba(17, 26, 43, .04);
-    overflow-y: auto;
-    transition: left var(--t-fast) ease;
+    margin: 7px 0 0;
+    padding: 7px 0 0;
+    border-top: 1px solid var(--td-border);
   }
-  .tabs-group.open > .tabs-popover { display: flex; animation: zen-pop-in 180ms cubic-bezier(.16, 1, .3, 1); }
-  /* Group heading — Inter 500 (NOT Fraunces; no brand serif inside product UI). */
-  .tabs-popover-head {
-    font-family: 'Inter', var(--f-sans); font-weight: 500; font-size: 15px;
-    color: var(--td-text); padding: 8px 12px 10px; margin: 0;
-  }
+  .tabs-group.rail-open > .tabs-popover { display: flex; }
+  /* Children indent so their labels sit on the SAME text edge as the back row's
+     label — 12px row padding + a 20px icon + the 13px flex gap = 45px. The level
+     title and its items then read as one unit instead of a detached list hanging
+     to the left of the title it belongs to. If the rail's row padding, icon size
+     or gap ever change, retune this with them.
+     The empty left gutter is intentional and reads as calm: children carry NO
+     icons (six of the sixteen would need invented glyphs), which is also why
+     there is no folded drilled state — there would be nothing to draw. */
   .tabs-popover button {
     width: 100%;
-    padding: 8px 12px;
+    padding: 9px 12px 9px 45px;
     font-size: 14px;
-    border-radius: 8px;
+    border-radius: var(--r-lg);
     justify-content: flex-start;
     font-weight: 400;
     color: var(--td-text2);
     background: none;
     position: relative;
   }
-  /* Text-only rows — no icons in this panel (unlike the rail itself). */
+  /* The svg stays in the markup — the phone More sheet clones it (buildMore) —
+     it just never shows in the column. */
   .tabs-popover button svg { display: none; }
   .tabs-popover button:hover { color: var(--td-text); background: rgba(var(--td-heat-rgb), .04); }
   /* The current sub-page ("here") — quiet fill, no amber bar (override the rail's
      active ::before) — matching the approved study. */
   .tabs-popover button.active { color: var(--td-text); background: rgba(var(--td-heat-rgb), .05); font-weight: 500; }
   .tabs-popover button.active::before { content: none; }
-  /* The panel is a full-height overlay, NOT part of the folded icon strip — so
-     its rows keep their labels + layout even when the rail is folded (which
-     otherwise zeroes every .tabs button's text/padding). Higher specificity than
-     `body.nav-collapsed .tabs button` so it wins. */
-  body.nav-collapsed .tabs .tabs-popover button {
-    font-size: 14px; justify-content: flex-start; padding: 8px 12px;
-  }
+
+  /* ── Flattened group (§2.5): one visible child after all three gates ─────
+     The folder collapses into a direct button to that child — the child's
+     label wearing the parent's icon. One click instead of two, and the
+     operator never learns a folder existed. .tabs-flat-label is filled by
+     applyCapGates (and refreshed on language change); the group's own label
+     steps aside for it. */
+  .tabs-flat-label { display: none; }
+  .tabs-group.rail-flat > .tabs-group-trigger > .tabs-glabel { display: none; }
+  .tabs-group.rail-flat > .tabs-group-trigger > .tabs-flat-label { display: inline; }
+
+  /* ── Motion ─────────────────────────────────────────────────────────────
+     A horizontal slide at 200ms ease-out: short, light and frequent, which is
+     why it is deliberately NOT the drawer's 350ms settle (a heavier gesture
+     over a longer distance, once per record). Recorded here so a later pass
+     does not "correct" the two into agreement.
+     No `fill: both` — a persisted transform on .tabs-group would make it a
+     containing block and clip any fixed menu opened from inside the rail. */
+  @keyframes rail-drill-in { from { opacity: 0; transform: translateX(12px); } to { opacity: 1; transform: none; } }
+  @keyframes rail-back-in  { from { opacity: 0; transform: translateX(-12px); } to { opacity: 1; transform: none; } }
+  .tabs[data-rail-anim="drill"] > .tabs-group.rail-open { animation: rail-drill-in 200ms ease-out; }
+  .tabs[data-rail-anim="back"] > button:not(.seam-fold),
+  .tabs[data-rail-anim="back"] > .tabs-group { animation: rail-back-in 200ms ease-out; }
   @media (prefers-reduced-motion: reduce) {
-    .tabs-group.open > .tabs-popover { animation: none; }
+    .tabs[data-rail-anim] > button,
+    .tabs[data-rail-anim] > .tabs-group { animation: none; }
+  }
+
+  /* The level announcer — spoken, never seen. */
+  .sr-only {
+    position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0;
+    overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
   }
   /* Live-poll dot + sound toggle now live in the TOPBAR cluster (see
      .tb-cluster), not the rail foot — their selectors below are un-scoped

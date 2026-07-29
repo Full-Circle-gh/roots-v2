@@ -1235,18 +1235,31 @@
     Purchasing · 采购
   </button>
 
-  <!-- Editor → Content pages. The parent opens the Mini App Editor (embedded
-       /cms); its children are the mini-app content surfaces folded in from the
-       old "Content" dropdown. The Product Page Editor swaps in under this same
-       tab via showProductSection / the message handler. -->
-  <div class="tabs-group nav-parent" data-group="editor" style="order:14">
-    <button class="nav-parent-link" data-tab="mini-app-editor">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l3-.7L18.5 7.8a2 2 0 0 0-2.8-2.8L4.2 16.5 4 20z"/><path d="M14.5 6.5l3 3"/></svg>
-      Editor · 编辑器
+  <!-- Content — a FOLDER, not a destination (rail drill-down amendment §2.2,
+       2026-07-29). It was "Editor": a group that was also a live tab, the only
+       one of the three with a page of its own. The group row is now labelled
+       Content and carries no data-tab; its page moved down to the first child
+       row, "Editor", which is where `editor:view` now lands (TAB_CAP keys off
+       data-tab, so the gate followed the button — see applyCapGates).
+       INTERNAL NAMES ARE UNCHANGED on purpose: data-group stays "editor", the
+       tab id stays "mini-app-editor", the cap strings stay editor:view /
+       content:view. They are invisible to the merchant and load-bearing for the
+       bottom-nav data-go mirror, the CSS and TAB_CAP.
+       The Product Page Editor is not a second rail entry: a link inside the
+       Mini App Editor swaps the same iframe (showProductSection / the message
+       handler), so the rail keeps saying Content → Editor throughout. -->
+  <div class="tabs-group" data-group="editor" style="order:14">
+    <button type="button" class="tabs-group-trigger">
+      <svg class="tabs-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="11 18 5 12 11 6"/></svg>
+      <svg class="tabs-gicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l3-.7L18.5 7.8a2 2 0 0 0-2.8-2.8L4.2 16.5 4 20z"/><path d="M14.5 6.5l3 3"/></svg>
+      <span class="tabs-glabel">Content · 内容</span><span class="tabs-flat-label" data-no-i18n></span>
       <svg class="tabs-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
     </button>
     <div class="tabs-popover">
-      <div class="tabs-popover-head">Editor · 编辑器</div>
+      <button data-tab="mini-app-editor">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l3-.7L18.5 7.8a2 2 0 0 0-2.8-2.8L4.2 16.5 4 20z"/><path d="M14.5 6.5l3 3"/></svg>
+        Editor · 编辑器
+      </button>
       <button data-tab="snippets">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7V4h16v3"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></svg>
         Copy · 文案
@@ -1273,12 +1286,12 @@
   <!-- Marketing — promos + retention -->
   <div class="tabs-group" data-group="marketing" style="order:11">
     <button type="button" class="tabs-group-trigger">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6l10 5V4L4 9z"/><path d="M14 7l6-3v16l-6-3"/></svg>
-      Marketing · 营销
+      <svg class="tabs-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="11 18 5 12 11 6"/></svg>
+      <svg class="tabs-gicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9v6l10 5V4L4 9z"/><path d="M14 7l6-3v16l-6-3"/></svg>
+      <span class="tabs-glabel">Marketing · 营销</span><span class="tabs-flat-label" data-no-i18n></span>
       <svg class="tabs-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
     </button>
     <div class="tabs-popover">
-      <div class="tabs-popover-head">Marketing · 营销</div>
       <button data-tab="vouchers">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v4a2 2 0 0 1 2 2 2 2 0 0 1-2 2v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4a2 2 0 0 1-2-2 2 2 0 0 1 2-2z"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
         Coupons · 优惠券
@@ -1315,12 +1328,12 @@
        voting rewards, and wallet top-up all live together here. -->
   <div class="tabs-group" data-group="loyalty" style="order:12">
     <button type="button" class="tabs-group-trigger">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="5"/><path d="M9 13l-1.5 8L12 18l4.5 3L15 13"/></svg>
-      Loyalty &amp; wallet · 会员与钱包
+      <svg class="tabs-back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="11 18 5 12 11 6"/></svg>
+      <svg class="tabs-gicon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="9" r="5"/><path d="M9 13l-1.5 8L12 18l4.5 3L15 13"/></svg>
+      <span class="tabs-glabel">Loyalty &amp; wallet · 会员与钱包</span><span class="tabs-flat-label" data-no-i18n></span>
       <svg class="tabs-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg>
     </button>
     <div class="tabs-popover">
-      <div class="tabs-popover-head">Loyalty &amp; wallet · 会员与钱包</div>
       <button data-tab="membership" data-feat="membership">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1 3-6z"/></svg>
         Membership &amp; points · 会员积分
@@ -1379,6 +1392,12 @@
 
   <!-- Rail-fold control (#railSeamFold) now lives at the TOP of this rail, just
        under the brand spacer (moved out of the topbar 2026-07-24). -->
+
+  <!-- Drill-down level announcer. The rail REPLACES its own contents when a
+       folder opens, which is a silent change for anyone not looking at the
+       column — so each level change is spoken here ("Marketing, 7 items").
+       Off-screen, never a rail row; railAnnounceLevel() fills it. -->
+  <div id="railLevelLive" class="sr-only" aria-live="polite" data-no-i18n></div>
 </div>
 
 <!-- ─── COMMAND SEARCH PALETTE ───
@@ -11689,10 +11708,14 @@
       var grp = src.closest('.tabs-group');
       var gkey = grp ? (grp.getAttribute('data-group') || '') : '';
       if (gkey && gkey !== lastGroup) {
-        var trig = grp.querySelector('.tabs-group-trigger') || grp.querySelector('.nav-parent-link');
+        var trig = grp.querySelector('.tabs-group-trigger');
+        // Read the group's own label span, not the whole button: a flattened
+        // group (one visible child) also carries .tabs-flat-label, and
+        // textContent would glue the two into "MarketingCoupons".
+        var lbl = trig ? (trig.querySelector('.tabs-glabel') || trig) : null;
         var h = document.createElement('div');
         h.className = 'rm-sheet-sec';
-        h.textContent = trig ? trig.textContent.replace(/\s+/g, ' ').trim() : gkey;
+        h.textContent = lbl ? lbl.textContent.replace(/\s+/g, ' ').trim() : gkey;
         list.appendChild(h);
         lastGroup = gkey;
       } else if (!gkey) {
