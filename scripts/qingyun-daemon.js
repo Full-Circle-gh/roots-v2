@@ -43,12 +43,52 @@ const { latchStore } = require('../lib/alert-latch');
 const geocode = require('../lib/geocode'); // Tencent/AMap — resolve English/pin-less addresses
 const { buildCreatePayload } = require('../lib/qingyun-payload'); // shared with the ship-from override
 const inventory = require('../lib/inventory'); // isQingyunSameCityToday — same-city/same-day eligibility
+const { storeHours, within } = require('../lib/store-hours'); // opening hours, for the alert window
 
 const STORES = (process.env.QINGYUN_STORES || 'tianhe')
   .split(',').map(s => s.trim()).filter(Boolean);
 
 const POLL_MS = Number(process.env.QINGYUN_POLL_MS || 25_000); // ~25s (jittered)
 const DELIVERED_STATUS = 50; // orderStatus once 已送达
+
+// ── When ops alerts may page ──────────────────────────────────────────────────
+// Tracking itself stays on round the clock, on purpose: a rider dispatched at
+// 20:10 is still on the road at 20:40, and tomorrow's orders keep draining the
+// push queue overnight. It's the PAGES that need opening hours. Every session-
+// health alert below ends in "walk to the box and scan the QR" — 2026-07-29
+// yuexiu paged 未登录/scan-QR at 23:15, three hours after it shut, with nothing in
+// flight and nobody able to act until the morning.
+//
+// Outside the window we neither send nor latch, and the condition is re-checked on
+// every poll. So a fault that survives the night pages once at opening; one that
+// heals overnight clears quietly; and an incident raised during the day still gets
+// its recovery ✅ (its latch was never touched while muted).
+const ALERT_OPEN_GRACE_MIN  = Number(process.env.QINGYUN_ALERT_OPEN_GRACE_MIN  || 15); // staff arrive before the doors open
+const ALERT_CLOSE_GRACE_MIN = Number(process.env.QINGYUN_ALERT_CLOSE_GRACE_MIN || 90); // …and the last rider is still out after they shut
+// Fallback for stores whose retail_stores row carries no hours, mirroring
+// meituan-daemon/shangou-daemon so all three agree on the same windows today.
+// Filling in a store's "Opens · 开门 / Closes · 关门" fields overrides this, and is
+// all a new tenant has to do. ⚠️ Those two fields ALSO drive the customer pickup
+// window (resolvePickupTime in routes/retail.js), which is why this stays a
+// daemon-local fallback instead of being written into the store rows.
+const LEGACY_ALERT_HOURS = {
+  tianhe: { open: 10 * 60 + 0, close: 20 * 60 + 0  }, // 10:00–20:00
+  yuexiu: { open: 11 * 60 + 0, close: 20 * 60 + 15 }, // 11:00–20:15
+};
+// Escape hatch for a genuine 24h store, or for testing an alert path on demand.
+const ALERT_ALWAYS = process.env.QINGYUN_ALERT_ALWAYS === '1';
+
+// True when a page for this store would reach someone who can act on it.
+function alertsAllowed(storeCode, now = new Date()) {
+  if (ALERT_ALWAYS) return true;
+  const hours = storeHours(storeCode) || LEGACY_ALERT_HOURS[storeCode] || null;
+  return within(hours, {
+    openGraceMin: ALERT_OPEN_GRACE_MIN, closeGraceMin: ALERT_CLOSE_GRACE_MIN, now,
+  });
+}
+// The proxy serves every store this process holds, so it only goes quiet once they
+// are all shut.
+function anyStoreAlertsAllowed() { return STORES.some(s => alertsAllowed(s)); }
 
 function jitter(baseMs, frac = 0.3) {
   const spread = baseMs * frac;
@@ -130,7 +170,7 @@ function noteVerifyResult(storeCode, challenged) {
     s.strikes = Math.min(s.strikes + 1, 8);
     const wait = Math.min(VERIFY_COOLDOWN_BASE_MS * 2 ** (s.strikes - 1), VERIFY_COOLDOWN_MAX_MS);
     s.until = Date.now() + wait;
-    if (!verifyFlagged['verify:' + storeCode]) {
+    if (!verifyFlagged['verify:' + storeCode] && alertsAllowed(storeCode)) {
       verifyFlagged['verify:' + storeCode] = true;
       const mins = Math.round(wait / 60000);
       // Cold browser vs. a genuinely dead session — see shangou-daemon for the story.
@@ -145,7 +185,10 @@ function noteVerifyResult(storeCode, challenged) {
     }
     log(storeCode, `verification challenge — cooling down ~${Math.round(wait / 60000)} min (strike ${s.strikes})`);
   } else {
-    if (verifyFlagged['verify:' + storeCode]) {
+    // Hold the recovery note (not the cool-down reset below it) until the store is
+    // open, so an incident raised in the afternoon still gets its all-clear —
+    // in the morning rather than at 3am.
+    if (verifyFlagged['verify:' + storeCode] && alertsAllowed(storeCode)) {
       verifyFlagged['verify:' + storeCode] = false;
       logSync(storeCode, 'verify_cleared', 'ok', null, 'verification cleared — tracking resumed');
       sendOpsAlert(`✅ 青云聚信 ${storeCode} 已恢复，配送跟踪继续\nQingyun ${storeCode} recovered — tracking resumed`);
@@ -182,10 +225,13 @@ const heartbeatFlagged = alerts; // keyed 'stall:<storeCode>'
 function noteLoginOk(storeCode) { lastPollOk[storeCode] = Date.now(); }
 function heartbeatTick(storeCode) {
   const now = Date.now();
+  // Also excused outside opening hours — the clock restarts at opening, so a shut
+  // store can't hand ops a "no clean poll in ~700 min" page the moment it opens.
   const excused = inVerifyCooldown(storeCode)
     || downFlagged['login:' + storeCode]
     || bootstrapFlagged['bootstrap:' + storeCode]
-    || alerts[PROXY_LATCH];
+    || alerts[PROXY_LATCH]
+    || !alertsAllowed(storeCode);
   if (excused || lastPollOk[storeCode] == null) { lastPollOk[storeCode] = now; return; }
   const stale = now - lastPollOk[storeCode] >= HEARTBEAT_STALE_MS;
   if (stale && !heartbeatFlagged['stall:' + storeCode]) {
@@ -509,10 +555,15 @@ async function pollStore(storeCode) {
     if (!(await br.isLoggedIn())) {
       if (br.verificationRequired) { noteVerifyResult(storeCode, true); return; }
       loginFailStreak[storeCode] = (loginFailStreak[storeCode] || 0) + 1;
-      log(storeCode, `not logged in — skipping poll (${loginFailStreak[storeCode]}/${LOGIN_DOWN_GRACE})`);
+      const held = loginFailStreak[storeCode] >= LOGIN_DOWN_GRACE && !alertsAllowed(storeCode);
+      log(storeCode, `not logged in — skipping poll (${loginFailStreak[storeCode]}/${LOGIN_DOWN_GRACE})`
+        + (held ? ' — store shut, holding the page until it opens' : ''));
       // Debounce: only page ops once the session has stayed down for GRACE consecutive
       // polls — a lone transient blip clears before we ever alert (no more 3am false alarms).
-      if (!downFlagged['login:' + storeCode] && loginFailStreak[storeCode] >= LOGIN_DOWN_GRACE) {
+      // The streak keeps counting while the store is shut, so a session that's still
+      // down at opening pages on the first poll of the day rather than 90s later.
+      if (!downFlagged['login:' + storeCode] && loginFailStreak[storeCode] >= LOGIN_DOWN_GRACE
+          && alertsAllowed(storeCode)) {
         downFlagged['login:' + storeCode] = true;
         logSync(storeCode, 'needs_login', 'error', null, '青云 Chrome not logged in — scan the QR on the box');
         sendOpsAlert(`🔴 青云聚信 ${storeCode} 未登录，配送跟踪已停止，需要扫码重新登录\nQingyun ${storeCode} not logged in — tracking stopped, scan QR to re-login`);
@@ -520,8 +571,10 @@ async function pollStore(storeCode) {
       heartbeat(storeCode, false);
       return;
     }
-    const wasDown = downFlagged['login:' + storeCode];
-    downFlagged['login:' + storeCode] = false;
+    // Keep the latch until we're allowed to say it's over, so a session that dropped
+    // at 19:00 and came back at 02:00 still gets its all-clear when someone's there.
+    const wasDown = downFlagged['login:' + storeCode] && alertsAllowed(storeCode);
+    if (wasDown) downFlagged['login:' + storeCode] = false;
     loginFailStreak[storeCode] = 0;
     heartbeat(storeCode, true);
     noteLoginOk(storeCode);
@@ -543,8 +596,12 @@ async function pollStore(storeCode) {
       // own signed calls, this state means the page can't reach the API at all. Say
       // that, and carry the last failure so whoever gets paged knows whether they're
       // walking to the box for a risk-control block, a dead session, or a hung page.
+      // The clock keeps running while the store is shut and the page waits for
+      // opening, so the morning's alert carries the true duration — a "~900 min"
+      // tells ops straight away this is an overnight death, not a fresh blip.
       if (!bootstrapSince[storeCode]) bootstrapSince[storeCode] = Date.now();
-      if (!bootstrapFlagged['bootstrap:' + storeCode] && Date.now() - bootstrapSince[storeCode] >= BOOTSTRAP_ALERT_MS) {
+      if (!bootstrapFlagged['bootstrap:' + storeCode] && Date.now() - bootstrapSince[storeCode] >= BOOTSTRAP_ALERT_MS
+          && alertsAllowed(storeCode)) {
         bootstrapFlagged['bootstrap:' + storeCode] = true;
         const mins = Math.round((Date.now() - bootstrapSince[storeCode]) / 60000);
         const why = reason ? ` [${reason}]` : '';
@@ -554,11 +611,11 @@ async function pollStore(storeCode) {
       logSync(storeCode, 'bootstrap', 'error', null, `order/list unavailable — self-heal did not restore it${reason ? ` (${reason})` : ''}`);
       return;
     }
-    if (bootstrapFlagged['bootstrap:' + storeCode]) {
+    if (bootstrapFlagged['bootstrap:' + storeCode] && alertsAllowed(storeCode)) {
+      bootstrapFlagged['bootstrap:' + storeCode] = false;
       sendOpsAlert(`✅ 青云聚信 ${storeCode} 订单接口已恢复，配送跟踪继续\nQingyun ${storeCode} order/list answering again — tracking resumed`);
     }
     bootstrapSince[storeCode] = 0;
-    bootstrapFlagged['bootstrap:' + storeCode] = false;
     if (!ok) return;
 
     let tracked = 0;
@@ -623,9 +680,14 @@ async function main() {
 
     if (!(await proxyHealthy())) {
       proxyFailStreak++;
-      if (!alerts[PROXY_LATCH] && proxyFailStreak >= PROXY_DOWN_GRACE) {
-        alerts[PROXY_LATCH] = true;
+      // Log the outage the moment the streak crosses, whatever the hour — the page
+      // itself waits for a store to be open (see alertsAllowed), so the console is
+      // the only trace of a night-time drop until then.
+      if (proxyFailStreak === PROXY_DOWN_GRACE) {
         console.log(`[qingyun-daemon] ${new Date().toISOString()} PROXY UNREACHABLE (${maskProxy(PROXY)}) — pausing (session NOT logged out)`);
+      }
+      if (!alerts[PROXY_LATCH] && proxyFailStreak >= PROXY_DOWN_GRACE && anyStoreAlertsAllowed()) {
+        alerts[PROXY_LATCH] = true;
         for (const s of STORES) logSync(s, 'proxy_down', 'error', null, 'proxy cannot reach Meituan — tracking paused');
         sendOpsAlert(`🔴 青云聚信 代理掉线，无法连接，配送跟踪已暂停（未掉登录）\nQingyun proxy down — tracking paused (not logged out)`);
       }
@@ -633,7 +695,7 @@ async function main() {
       continue;
     }
     proxyFailStreak = 0;
-    if (alerts[PROXY_LATCH]) {
+    if (alerts[PROXY_LATCH] && anyStoreAlertsAllowed()) {
       alerts[PROXY_LATCH] = false;
       console.log(`[qingyun-daemon] ${new Date().toISOString()} proxy recovered — resuming`);
       for (const s of STORES) logSync(s, 'proxy_up', 'ok', null, 'proxy reachable again — tracking resumed');
