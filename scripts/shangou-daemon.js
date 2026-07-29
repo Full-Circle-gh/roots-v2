@@ -285,7 +285,7 @@ async function processStockQueue() {
       if (challenged) noteVerifyResult(storeCode, true);
 
       for (const res of results) {
-        const { row, isBundle, newQty, ok, transient } = res;
+        const { row, isBundle, newQty, ok, transient, msg } = res;
         if (ok) {
           db.prepare(`UPDATE meituan_sync_queue SET status='done', processed_at=CURRENT_TIMESTAMP, last_error=NULL WHERE id=?`).run(row.id);
           if (!isBundle) {
@@ -314,13 +314,21 @@ async function processStockQueue() {
           db.prepare(`UPDATE meituan_sync_queue SET status='pending', last_error='transient push failure — will retry' WHERE id=?`).run(row.id);
         } else {
           // Genuine 闪购 API rejection, or transient retries exhausted → terminal.
+          // Carry 闪购's OWN words through when it gave us any: the generic wording
+          // below describes a matching failure, and most rejections are not that.
+          // 越秀's four stuck listings answered "商品正在审核中/被驳回" — a review-queue
+          // state no code can clear — and reading "未匹配" instead cost hours of
+          // looking for a 货号 bug that was never there.
+          const why = msg
+            ? `闪购 refused: ${msg}`
+            : (transient ? 'no 闪购 match / transient — retries exhausted' : 'no 闪购 match or update failed');
           db.prepare(`UPDATE meituan_sync_queue SET status='error', processed_at=CURRENT_TIMESTAMP, last_error=? WHERE id=?`)
-            .run(transient ? 'no 闪购 match / transient — retries exhausted' : 'no 闪购 match or update failed', row.id);
+            .run(why, row.id);
           logSync(storeCode, 'stock_push', 'error',
             { name_en: isBundle ? row.meituan_name : row.name_en,
               name_cn: isBundle ? row.meituan_name : row.name_cn,
-              sku: isBundle ? null : row.sku, qty: newQty, bundle: isBundle },
-            transient ? 'no 闪购 match after retries · 闪购多次重试仍未匹配' : 'no 闪购 sku match or update failed · 闪购未匹配或更新失败');
+              sku: isBundle ? null : row.sku, qty: newQty, bundle: isBundle, reason: msg || null },
+            msg || (transient ? 'no 闪购 match after retries · 闪购多次重试仍未匹配' : 'no 闪购 sku match or update failed · 闪购未匹配或更新失败'));
         }
       }
     } catch (err) {
