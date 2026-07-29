@@ -1717,9 +1717,40 @@ function tdRecapRender() {
 // in place into the real feed. The away window's events sit tinted dusk above
 // a "you left here" line, the rest of today below; every row drills through
 // to its order / customer / product via dashFeedClick.
+// Readable floor for the open fold, used ONLY where the card has no neighbour
+// to disturb (see tdRecapToggleWork). Roughly eight feed rows.
+const TD_WORK_MIN_H = 360;
+
 async function tdRecapToggleWork() {
   const fold = document.getElementById('td-recap-work'); if (!fold) return;
-  if (!fold.hidden) { fold.hidden = true; tdRecapWorkBtnSync(); return; }
+  const block = fold.closest('.td-block');
+  if (!fold.hidden) {
+    fold.hidden = true;
+    if (block) block.style.height = '';   // back to content height
+    tdRecapWorkBtnSync();
+    return;
+  }
+  // Opening the fold must not resize the card. Measure the card FIRST and pin it
+  // there, so the feed scrolls inside the space the digest was using instead of
+  // growing the card — which, with the flat-row rule, would stretch every other
+  // card in the row to the full length of the day's feed and push the page down.
+  //
+  // The grid has already stretched this block to its row's height, so this reads
+  // the ROW height, not the Recap's own content height: pinning it means the row
+  // is bit-for-bit unchanged, which is the point. The old solver did the same
+  // thing permanently by handing every card a computed pixel height; this does it
+  // only for as long as the fold is open.
+  if (block) {
+    const rowH = Math.round(block.getBoundingClientRect().height);
+    // One exception. In the single-column band nothing sits beside this card, so
+    // there is no row to keep still — and the pin there is the Recap's own short
+    // content height, which leaves about two rows of feed visible. That is a
+    // keyhole, not a list. Let the card reach a readable minimum in that band,
+    // and only in that band, where growing it disturbs nothing.
+    const host = document.getElementById('td-blocks');
+    const alone = host && dashCols(host.clientWidth) === 1;
+    block.style.height = (alone ? Math.max(rowH, TD_WORK_MIN_H) : rowH) + 'px';
+  }
   fold.hidden = false;
   tdRecapWorkBtnSync();
   fold.innerHTML = `<div class="td-muted">${cuT('Loading…', '加载中…')}</div>`;

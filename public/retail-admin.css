@@ -8379,17 +8379,29 @@
      would then say the same thing twice, so it folds away and the feed owns the
      card.
 
-     The fold KEEPS the 420px cap and the inner scroll from its base rule. That
-     used to be overridden to `max-height: none` here, which was right when the
-     card was a fixed-height tile that did the clipping itself — the fold just
-     filled it. It is wrong now: a content-height card grows to the full length
-     of the day's feed, and Rule A then stretches every other card in the row to
-     match, so opening the fold on a busy morning pushed Today and Customers into
-     a screen of empty paper. The feed scrolls inside the card instead. */
+     The fold fills the card and scrolls INSIDE it — the card itself does not
+     change size. That only works because tdRecapToggleWork pins the block's
+     height before revealing the fold: a content-height card has nothing bounding
+     it, so an open fold would otherwise grow to the full length of the day's
+     feed and the flat-row rule would stretch every other card in the row to
+     match. With the pin in place the chain is card → inner → body → fold, every
+     link min-height:0 so the flex algorithm can actually shrink it, and the
+     overflow-y:auto from the base rule does the rest. Drop the pin and this
+     silently goes back to growing the page. */
   .bn-body:has(> .td-recap-work:not([hidden])) .bn-recap-rows { display: none; }
   .bn-body:has(> .td-recap-work:not([hidden])) .td-recap-work {
+    flex: 1 1 auto; min-height: 0; max-height: none;
     margin-top: 0; padding-top: 0; border-top: 0;
   }
+  /* The closing line keeps its place under the feed rather than being squeezed
+     out of it by the flexing fold. */
+  .bn-body:has(> .td-recap-work:not([hidden])) .td-recap-close { flex: none; }
+  /* Each row is a grid item, so its automatic minimum size is its min-content —
+     and a nowrap line's min-content is the whole sentence, which is what put a
+     horizontal scrollbar under the feed once the card narrowed from the old
+     full-width tile to a third of the page. Let the rows shrink; .td-feed-text
+     already ellipsises inside them. */
+  .td-recap-work .td-feed-row { min-width: 0; }
 
   /* RULE A, the half CSS owns: every card's footer pins to the bottom edge, so
      when the grid stretches a short card to match the tallest one in its row,
