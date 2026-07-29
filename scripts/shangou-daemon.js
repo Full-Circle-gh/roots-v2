@@ -42,6 +42,7 @@ const { coldMsRemaining, isColdStartChallenge } = require('../lib/browser-warmup
 // Ops-alert latches that survive a restart, so a bounce mid-incident can't swallow
 // the recovery message the group is waiting on.
 const { latchStore } = require('../lib/alert-latch');
+const { sweepStockDrift } = require('../lib/meituan-drift-sweep');
 
 const SHANGOU_STORES = (process.env.SHANGOU_STORES || 'yuexiu')
   .split(',').map(s => s.trim()).filter(Boolean);
@@ -54,6 +55,10 @@ const ORDER_POLL_MS  = 120_000;  // poll new orders ~2 min (jittered)
 const ORDER_SWEEP_MS  = 1_800_000;                                   // 30 min
 const ORDER_SWEEP_DAYS = Number(process.env.SHANGOU_SWEEP_DAYS) || 3; // window back
 const QUEUE_CHECK_MS = 10_000;   // process stock-push queue every ~10s
+// Stock-drift backstop — same reasoning as the 外卖 daemon, same shared queue: a
+// terminally-failed push leaves that listing frozen with nothing left to retry it.
+// See lib/meituan-drift-sweep for the cool-down and cap that keep it cheap.
+const DRIFT_SWEEP_MS = 1_800_000; // 30 min
 const MAP_REFRESH_MS = 60 * 60_000; // re-map by 货号 hourly so new products self-activate
 const INTERNAL_PORT  = process.env.PORT || 3000;
 const INTERNAL_BASE  = `http://127.0.0.1:${INTERNAL_PORT}`;
@@ -286,6 +291,12 @@ async function processStockQueue() {
           if (!isBundle) {
             db.prepare(`UPDATE meituan_product_map SET last_pushed_qty=?, last_pushed_at=CURRENT_TIMESTAMP WHERE retail_store_id=? AND product_id=?`)
               .run(newQty, row.retail_store_id, row.product_id);
+          } else {
+            // Record the bundle's landed qty too (the 外卖 daemon always did; this
+            // side didn't). Without it a bundle looks permanently unsynced, which
+            // would have the drift sweep re-push every combo on every pass.
+            db.prepare(`UPDATE meituan_bundles SET last_pushed_qty=?, last_pushed_at=CURRENT_TIMESTAMP WHERE id=?`)
+              .run(newQty, row.bundle_id);
           }
           logSync(storeCode, 'stock_push', 'ok',
             { name_en: isBundle ? row.meituan_name : row.name_en,
@@ -314,9 +325,18 @@ async function processStockQueue() {
       }
     } catch (err) {
       log(storeCode, `processStockQueue error: ${err.message}`);
+      // The BATCH died (Chrome/page crash, navigation timeout, proxy blip) — that
+      // says nothing about any single product, and most of these rows never reached
+      // 闪购 at all. Burying them as terminal 'error' is what froze the 外卖 side's
+      // stock for weeks, so requeue them as pending instead. The attempt is kept,
+      // not refunded, so a Chrome that dies on every batch can't retry forever at
+      // 10s intervals; attempts<3 bounds it and the 30-minute drift sweep is what
+      // recovers the row if all three tries get eaten.
       for (const row of pushRows) {
-        db.prepare(`UPDATE meituan_sync_queue SET status='error', last_error=? WHERE id=? AND status='processing'`)
-          .run(err.message.slice(0, 200), row.id);
+        db.prepare(`UPDATE meituan_sync_queue
+                       SET status='pending', last_error=?
+                     WHERE id=? AND status='processing'`)
+          .run(`batch failed (${err.message.slice(0, 150)}) — will retry`, row.id);
       }
     }
   }
@@ -732,6 +752,9 @@ async function main() {
   let warmupFlagged = false;   // log the cold-Chrome hold once per transition
   let orderPollGap = jitter(ORDER_POLL_MS, 0.4);
   let lastOrderSweep = 0;
+  // 0 = sweep on the first cycle so a deploy re-queues whatever the previous build
+  // left stranded, instead of waiting out the interval.
+  let lastDriftSweep = 0;
   const lastMapRefresh = {}; // store_code → ts of last auto-map pass
 
   // eslint-disable-next-line no-constant-condition
@@ -796,6 +819,16 @@ async function main() {
       lastOrderSweep = now;
       await autoDeliverPastEta(); // time-based delivered flip (no browser)
       for (const storeCode of SHANGOU_STORES) await sweepStaleOrders(storeCode);
+    }
+
+    // Re-enqueue anything whose stock no longer matches what 闪购 last accepted,
+    // before the push so recovered rows go out in this same cycle. No browser.
+    if (now - lastDriftSweep >= DRIFT_SWEEP_MS) {
+      lastDriftSweep = now;
+      sweepStockDrift(db, {
+        storeCodes: SHANGOU_STORES, // only this daemon's stores — the queue is shared
+        channel: '闪购', log, logSync, sendOpsAlert, alerts,
+      });
     }
 
     await processStockQueue();
