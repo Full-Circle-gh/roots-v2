@@ -492,7 +492,14 @@ async function refreshOrderStatus(storeCode, order) {
     const res = await fetch(`${INTERNAL_BASE}/api/internal/meituan/update-order-status`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Internal-Secret': internalSecret() },
-      body: JSON.stringify({ meituanOrderNo: order.meituanOrderNo, statusDesc: order.statusDesc, eta: order.eta }),
+      // Send the platform-owned extras too: an order mirrored before we parsed
+      // them (pre-order window, note, cutlery, real order time) backfills itself
+      // on the next poll instead of staying permanently blank.
+      body: JSON.stringify({
+        meituanOrderNo: order.meituanOrderNo, statusDesc: order.statusDesc, eta: order.eta,
+        preOrderAt: order.preOrderAt, note: order.note,
+        needsCutlery: order.needsCutlery, placedAt: order.placedAt,
+      }),
     });
     if (res.ok) {
       const data = await res.json().catch(() => ({}));

@@ -288,7 +288,7 @@ router.post('/ingest-order', (req, res) => {
 // only writes when the label actually changed, and returns { changed }. Looked up
 // by Meituan order no via meituan_order_import → retail_order_id.
 router.post('/update-order-status', (req, res) => {
-  const { meituanOrderNo, statusDesc, eta } = req.body || {};
+  const { meituanOrderNo, statusDesc, eta, preOrderAt, note, needsCutlery, placedAt } = req.body || {};
   const desc = (statusDesc && String(statusDesc).trim()) || null;
   const etaVal = (eta && String(eta).trim()) || null;
   if (!meituanOrderNo || !desc) return res.status(400).json({ error: 'meituanOrderNo and statusDesc required' });
@@ -316,6 +316,31 @@ router.post('/update-order-status', (req, res) => {
               OR status != COALESCE(?, status)
               OR (? IS NOT NULL AND COALESCE(channel_eta,'') != ?))
     `).run(desc, internal, etaVal, imp.retail_order_id, desc, internal, etaVal, etaVal);
+
+    // Backfill the platform-owned facts an older import didn't carry: the 预订单
+    // window, the customer's note, their cutlery answer, and Meituan's own order
+    // time. Every poll re-reads them, so orders mirrored before those were parsed
+    // heal themselves on the next sweep instead of needing a hand-written UPDATE.
+    // Guarded so a re-poll can't undo anything: the note only fills when blank,
+    // and placed_at only moves EARLIER — our import stamp is by definition later
+    // than the real order time, so an earlier platform time is always the truer
+    // one, and a correct row can never be dragged forward.
+    const noteVal    = (note && String(note).trim()) || null;
+    const preVal     = (preOrderAt && String(preOrderAt).trim()) || null;
+    const placedVal  = (placedAt && String(placedAt).trim()) || null;
+    const cutleryVal = needsCutlery == null ? null : (needsCutlery ? 1 : 0);
+    db.prepare(`
+      UPDATE retail_orders
+         SET channel_preorder_at = COALESCE(?, channel_preorder_at),
+             customer_note = CASE WHEN COALESCE(customer_note,'') = '' THEN COALESCE(?, customer_note) ELSE customer_note END,
+             needs_cutlery = COALESCE(?, needs_cutlery),
+             placed_at = CASE WHEN ? IS NOT NULL AND ? < placed_at THEN ? ELSE placed_at END,
+             paid_at   = CASE WHEN ? IS NOT NULL AND ? < paid_at   THEN ? ELSE paid_at   END
+       WHERE id = ?
+    `).run(preVal, noteVal, cutleryVal,
+           placedVal, placedVal, placedVal,
+           placedVal, placedVal, placedVal,
+           imp.retail_order_id);
 
     // Meituan voided the order → give the stock back. Ingest deducted it (ledgered)
     // and nothing else ever returned it, so without this EVERY cancel drifts our count
