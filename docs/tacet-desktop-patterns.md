@@ -1,4 +1,4 @@
-# Tacet desktop patterns — v2.9
+# Tacet desktop patterns — v3.0
 
 > The rulebook for every desktop admin surface. `tacet-design-system.md` governs how Tacet **looks**. `tacet-brand-concept.md` governs how it **sounds**. `tacet-ia-blueprint.md` governs what **exists**. This file governs **how a page is put together** — so that Orders and Pop-ups feel like the same product despite having different layouts.
 >
@@ -786,6 +786,101 @@ The rule is *don't create new collisions*, never *refuse to touch old ones*.
 
 ---
 
+### 1.18 Dates and times — the language decides, and it decides everything
+
+*Added 2026-07-29, decided by Ash from a measured three-variant mockup (`reference/datetime-format-mockup.html`).*
+
+**The rule, in one line: the surface's language picks the convention, and then that convention is followed completely.** English renders US dates and times. Chinese renders Chinese dates and times. There is no third style, no house style, and no per-page exception.
+
+**Why this section exists.** This document legislated tabular numerals in six places and never once said what a date looks like. So eight formats shipped, none of them chosen:
+
+| Where | Renders | Source |
+|---|---|---|
+| Orders `Placed` + drawer header | `2026-07-29 14:49` | `formatDate()` — `04-orders.js:2512` |
+| Orders `Delivery` | `Jul 29` / `7月29日` | `fmtDateShort()` — `04-orders.js:1927` — **the only language-aware one** |
+| Delivery slots | `Jul 29 · 14:26` | `fmtSlotShort()` — `04-orders.js:1912` |
+| Dashboard | `by 29 Jul`, `Wednesday, 29 July` | hard-coded **`en-GB`** — `03-dashboard.js:783, 826, 1825, 2081` |
+| Dashboard, elsewhere | `Jul 29` | `en-US` — `03-dashboard.js:2696` |
+| Media panel, save toasts | **whatever the operator's laptop says** | 71 locale-less `toLocaleString()` calls |
+| Billing, coupon expiry | `2026-07-29` | `toISOString().slice(0,10)`, `formatDateOnly()` |
+
+Three of these are not stylistic drift, they are defects. **Nobody chose British** — `en-GB` was typed once and copied four times. **The 71 locale-less calls render in the operator's OS locale**, so the same screen is a different screen on two laptops in the same office, and no review catches it because the reviewer's machine looks fine. And the one function that *is* language-aware is language-aware because a single author happened to care, not because a rule asked.
+
+**A rule that was never written cannot have been broken. This is the rule.**
+
+#### The eight names
+
+A caller asks for a **name**. It never passes a format string, a locale, a pattern, or a slice index. This is the entire vocabulary; anything outside it is drift.
+
+| Name | English (US) | Chinese | Used for |
+|---|---|---|---|
+| `dateTime` | `Jul 29, 2:49 PM` | `7月29日 14:49` | Orders Placed · drawer headers · audit rows |
+| `date` | `Jul 29` | `7月29日` | Ship-by · deliver-on · coupon expiry |
+| `time` | `2:49 PM` | `14:49` | Rider ETA · arrival · pickup slot |
+| `weekday` | `Wednesday, July 29` | `7月29日 周三` | Dashboard greeting · The Recap |
+| `month` | `July 2026` | `2026年7月` | Report headers · billing periods |
+| `range` | `Jul 1 – 29` | `7月1日–29日` | Report ranges · campaign windows |
+| `relative` | `2 min ago` | `2分钟前` | Live nudges · save toasts · sync status |
+| `machine` | `2026-07-29` | `2026-07-29` | **Never localised — see below** |
+
+**Chinese uses a 24-hour clock because that is the Chinese convention** — not because we kept ours and skipped the translation. Each language follows its own actual rules. That is the whole point of the rule, and it is the test for whether a future addition belongs: if the CN column is just the EN column with the words swapped, the format was designed in English and translated, which is the failure this section exists to prevent.
+
+#### The year rule
+
+**The year appears only when the date is not in the current year.** `Jul 29` now; `Dec 14, 2025` once it rolls over. Without this, every ops table grows a redundant `, 2026` on every row, and the redundancy is on the busiest column of the busiest page.
+
+This is not a nicety — it is what makes the US format *cheaper* than what ships today. See the measurement below.
+
+#### 🔴 `machine` is exempt from all of it, forever
+
+`machine` renders `YYYY-MM-DD` in every language, on every surface, permanently. It governs:
+
+- `input[type=date]` / `datetime-local` values
+- CSV and XLSX exports, and generated filenames
+- every payload to **Meituan, Guanyi, JD, gzgrocery** and our own API
+- sort keys and `data-*` attributes read back by code
+
+**Localising any of these breaks an integration silently** — a channel accepts the request, stores a wrong date, and nothing surfaces until an order ships on the wrong day. `machine` is a machine format that happens to be readable, not a date style. Never "improve" it.
+
+#### Timezone — the one thing the current code already gets right
+
+**Every timestamp renders in the store's own wall clock, never the browser's.** Values are stored UTC (SQLite `YYYY-MM-DD HH:MM:SS`, no zone marker) and must be parsed as UTC before formatting — `formatDate()` at `04-orders.js:2512` does this correctly with an explicit `Intl` `timeZone`, and that handling survives the rewrite unchanged. It is the reference implementation for the parse step.
+
+A `new Date(sqliteString)` without the `Z` fix is a bug class, not a style choice: it silently shifts every timestamp by the operator's UTC offset.
+
+The zone is the **tenant's configured store timezone**, not a constant. `Asia/Shanghai` is Roots' value, not the platform's.
+
+#### What is banned
+
+1. **No locale-less `toLocale*` call.** `toLocaleString()`, `toLocaleDateString()`, `toLocaleTimeString()` with no locale argument follow the operator's OS. 71 of these ship today.
+2. **No hard-coded locale string.** No `'en-GB'`, no `'en-US'`, no `'zh-CN'` at a call site. The locale comes from `cuLang()`, once, inside the module.
+3. **No ad-hoc format strings** — no `Intl.DateTimeFormat` options object outside the module, no manual `${y}-${m}-${d}`, no `.slice(0, 10)` / `.slice(11, 16)` on an ISO string to fake a format.
+4. **No glued languages.** §1.11 already binds: `Jul 29 · 7月29日` is two formats on one screen, which is the same error as a glued label.
+
+#### The measurement, because the density objection was raised and was wrong
+
+Three variants were built on twelve real Orders rows and measured in-browser at the real type size:
+
+| | `Placed` column | Rider clock |
+|---|---|---|
+| **A** — today, `2026-07-29 14:49` | 116px | 35px (`14:26`) |
+| **B** — US 12-hour, `Jul 29, 2:49 PM` | **108px** (−8) | **56px** (`3:40 PM`, +60%) |
+| **C** — US date, 24-hour clock | 81px (−35) | 35px |
+
+**The busiest column gets narrower, not wider.** Dropping the redundant year more than pays for `PM`. The real cost is 21px on the standalone rider clock in the `Delivery` column — and that is the entire trade.
+
+**B was chosen over C deliberately.** C is genuinely tighter, but it requires the rulebook to say *"US, except clocks"*, and a rule with a carve-out written into it on day one is a rule that erodes. **21px on one sub-label is the price of never having to defend an exception.** *(Recorded because the tighter option was on the table and lost on purpose — do not "optimise" back to C without reopening this.)*
+
+#### Implementation
+
+**One module, `public/td-datetime.js`, is the only place any of this is written.** It is a standalone file rather than part of `01-core.js` because the standalone pages — `backend-account`, `backend-billing`, `pos`, `cms`, `app.html` — never load the retail-admin parts and have the same drift.
+
+Callers read `tdWhen(value, 'dateTime')`. Nothing else. A page that needs a format the eight names don't cover is a conversation, not a local helper — the same gate as §6 for archetypes. Passing a name outside the eight throws rather than falling back, so the closed set is enforced at runtime and not only on trust.
+
+**The table above is executable.** `node scripts/td-datetime-check.js` asserts every row of it in both languages, plus the cases a 12-hour clock gets wrong (midnight, noon), the missing-`Z` shift, day-only values, and dirty stored dates. §7's audit is executable on purpose and so is this — **a formatting contract nobody can run is how eight formats shipped in the first place.** If the check and this table ever disagree, one of them is wrong and the answer is not to adjust the check.
+
+---
+
 
 ## 2. The archetypes
 
@@ -1132,6 +1227,31 @@ grep -c 'font-size: *[0-9]*\.5px' public/retail-admin.css                  # →
 
 # Fraunces in the admin
 grep -c 'Fraunces' public/retail-admin.css public/retail-admin.html        # → 0
+
+# ── Dates and times (§1.18) ──────────────────────────────────────────
+# A locale chosen at the call site. All five are 03-dashboard.js; four are
+# en-GB, which nobody ever decided.
+grep -rnoE "toLocale(Date|Time)String\(\s*'[a-zA-Z-]+'" \
+  public/retail-admin.html public/retail-admin/*.js | wc -l               # 5 → 0
+
+# No locale at all — renders in the OPERATOR'S OS language. Same screen,
+# two laptops, two results, and the reviewer's machine always looks fine.
+grep -rnoE "toLocale(Date|Time)String\(\s*\)" \
+  public/retail-admin.html public/retail-admin/*.js | wc -l               # 2 → 0
+
+# The same defect wearing a different name: a Date through bare
+# toLocaleString(). NOT a count — Number(x).toLocaleString() is legitimate
+# and dominates this grep. Read each hit; only the Date ones are in scope.
+grep -rn 'Date([^)]*)\.toLocaleString()' public/retail-admin/*.js         # → review
+
+# A format faked by slicing an ISO string. NOT a count either — plenty of
+# these slice things that are not dates. Read each hit.
+grep -rnE "\.slice\(0, ?(10|16)\)|\.slice\(11, ?16\)" public/retail-admin/*.js  # → review
+
+# Platform-wide, for the surfaces after the admin (app.html, pos, cms,
+# storefront, mini-app). The admin is roughly a third of the problem.
+grep -rhoE "toLocale(Date|Time)?String\(\s*\)" \
+  public/ miniapp/ --include=*.js --include=*.html | wc -l                # 73 → 0
 ```
 
 **Per-page checklist**
@@ -1163,6 +1283,7 @@ grep -c 'Fraunces' public/retail-admin.css public/retail-admin.html        # →
 - [ ] Empty is a compliment and names what arrives · no-results is separate · every write control disables while writing · failures render where the operator is looking, never only a toast
 - [ ] All three gated states designed (§1.9)
 - [ ] Every number tabular · down deltas Graphite
+- [ ] **Every date and time through one of §1.18's eight names** — no locale at the call site, no format string, no ISO slice. `machine` still ISO in exports, inputs and channel payloads
 - [ ] One language on screen, never glued · both strings exist in source · column widths survive 中文
 - [ ] Keyboard: rows focusable, drawer closes on Esc, focus visible
 - [ ] `prefers-reduced-motion` respected
@@ -1236,6 +1357,24 @@ Small, non-blocking. Resolve during Batch 0.
    instinct" tidy §1.2 warns against. **What the brief still requires:** correct the
    orientation to match the shell (dark-first, `[data-theme="light"]` the opt-in — it is
    currently light-first) and clear the §1.6 uppercase + the `.acc-*`/`.who-role` rot.
+
+---
+
+*v3.0 · 2026-07-29.*
+
+**v3.0 changes: §1.18 added — dates and times.** One rule added, nothing removed or altered. **The surface's language picks the convention and then that convention is followed completely** — English renders US dates and times, Chinese renders Chinese ones. Decided by Ash 2026-07-29 from a measured three-variant mockup (`reference/datetime-format-mockup.html`).
+
+**Why this took until v3.0 to write.** This document has legislated tabular numerals since v1 — in six separate places — and never once said what a date looks like. Eight formats shipped in the gap, and three of them are defects rather than taste: **four hard-coded `en-GB` calls** on the Dashboard that nobody ever decided (`03-dashboard.js:783, 826, 1825, 2081`), **71 locale-less `toLocale*` calls platform-wide** that render in the *operator's* OS language — so the same screen is a different screen on two laptops in the same office, and no review catches it because the reviewer's machine looks fine — and **exactly one language-aware formatter** (`fmtDateShort()`, `04-orders.js:1927`), which is language-aware because one author happened to care rather than because a rule asked. **A rule that was never written cannot have been broken.** §1.18 is the rule.
+
+**What it fixes structurally:** callers ask for one of **eight names** (`dateTime` · `date` · `time` · `weekday` · `month` · `range` · `relative` · `machine`) and never pass a locale, a format string, an `Intl` options object, or a `.slice()` index. One module, `public/td-datetime.js` — standalone rather than inside `01-core.js`, because the pages with the same drift (`backend-account`, `backend-billing`, `pos`, `cms`, `app.html`) never load the retail-admin parts.
+
+**Two carve-outs are load-bearing and both are 🔴.** `machine` stays `YYYY-MM-DD` in every language forever — date inputs, CSV/XLSX exports, filenames, and every Meituan / Guanyi / JD / gzgrocery payload. Localising one of those breaks a channel *silently*: the request is accepted, a wrong date is stored, and nothing surfaces until an order ships on the wrong day. And **every timestamp renders in the store's own wall clock, never the browser's** — values are stored UTC without a zone marker, so a `new Date(sqliteString)` with no `Z` fix shifts every stamp by the operator's offset. `formatDate()` (`04-orders.js:2512`) already does the parse correctly and is named in §1.18 as the reference implementation; it is the one part of the current code that is right.
+
+**The density objection was raised, tested, and was wrong.** Three variants were built on twelve real Orders rows and measured in-browser at the real type size. The busiest column — Orders `Placed` — **gets narrower under strict US format**: 108px against today's 116px, because §1.18's year rule (show the year only outside the current year) drops a redundant `, 2026` from every row and that saves more than `PM` costs. The real cost is **21px on the standalone rider clock** in `Delivery` (`14:26` → `3:40 PM`), and that is the whole trade.
+
+**B was chosen over the tighter option on purpose, and the loser is on the record.** A "US date, 24-hour clock" variant measured 35px narrower on `Placed` and cost nothing on the rider clock — but it requires this document to say *"US, except clocks"*, and a rule shipped with a carve-out written into it on day one is a rule that erodes. **21px on one sub-label is the price of never having to defend an exception.** Do not optimise back to it without reopening the decision.
+
+**§7 gains five greps and the per-page checklist gains a line.** Two of the greps are explicitly marked *review, not count* — `Number(x).toLocaleString()` is legitimate and dominates one of them, and plenty of `.slice(0, 10)` calls slice things that are not dates. Marked so because §1.17's honesty rule binds this document too: a count that cannot honestly reach zero is a broken audit line, and a broken audit line gets ignored along with the ones next to it.
 
 ---
 

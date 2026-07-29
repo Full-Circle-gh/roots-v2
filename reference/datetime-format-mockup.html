@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dates and times — format decision</title>
+<style>
+  /* ── Tacet tokens, pasted verbatim from public/retail-admin.css :7932–7982 ── */
+  :root {
+    --td-surface:    #18233A;
+    --td-raised:     #1E2A44;
+    --td-border:     #2A3550;
+    --td-header:     #364058;
+    --td-unseen:     #182329;
+    --td-text:       #FBF9F4;
+    --td-text2:      #9AA3B2;
+    --td-heat-rgb:   251, 249, 244;
+    --td-dusk:       #6E67AF;
+    --td-dusk-hi:    #7E77BF;
+    --td-dusk-tint:  #262A4A;
+    --td-sage:       #A3B49F;
+    --td-sage-tint:  #1E2C26;
+    --td-sage-ink:   #A3B49F;
+    --td-amber:      #C9954A;
+    --td-amber-tint: #33290F;
+    --td-amber-ink:  #C9954A;
+    --td-brick:      #B4533E;
+    --td-brick-tint: #351B14;
+    --td-brick-ink:  #D07A66;
+  }
+  :root[data-theme="light"] {
+    --td-surface:    #FFFFFF;
+    --td-raised:     #F6F3EC;
+    --td-border:     #E4E0D5;
+    --td-header:     #DAD5C6;
+    --td-unseen:     #F4F5F0;
+    --td-text:       #111A2B;
+    --td-text2:      #58606E;
+    --td-heat-rgb:   17, 26, 43;
+    --td-dusk-tint:  #EEEDF6;
+    --td-sage-tint:  #EDF1EC;
+    --td-sage-ink:   #4A6249;
+    --td-amber-tint: #F7EEDE;
+    --td-amber-ink:  #8A6425;
+    --td-brick-tint: #F6E7E3;
+    --td-brick-ink:  #B4533E;
+  }
+  :root { --td-paper: #111A2B; }
+  :root[data-theme="light"] { --td-paper: #FBF9F4; }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--td-paper);
+    color: var(--td-text);
+    font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    font-size: 15px;
+    line-height: 1.6;
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 32px 48px 96px; }
+
+  /* Page header — title, status line, no section label (§1.7) */
+  .ph { margin-bottom: 32px; }
+  .ph h1 { font-size: 24px; font-weight: 500; letter-spacing: -0.01em; margin: 0 0 4px; }
+  .ph .status { font-size: 15px; color: var(--td-text2); margin: 0; }
+
+  .region { margin-bottom: 48px; }
+  .region > h2 { font-size: 18px; font-weight: 500; margin: 0 0 4px; }
+  .region > .lede { font-size: 15px; color: var(--td-text2); margin: 0 0 16px; max-width: 68ch; }
+
+  .card {
+    background: var(--td-surface);
+    border: 1px solid var(--td-border);
+    border-radius: 14px;
+    padding: 24px;
+  }
+  .card + .card { margin-top: 24px; }
+
+  /* Variant comparison — three copies of the two affected columns */
+  .vgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
+  .variant {
+    background: var(--td-surface);
+    border: 1px solid var(--td-border);
+    border-radius: 14px;
+    overflow: hidden;
+  }
+  .variant.pick { border-color: var(--td-sage-ink); }
+  .vhead { padding: 16px 16px 12px; border-bottom: 1px solid var(--td-border); }
+  .vhead .vname { font-size: 15px; font-weight: 500; margin: 0; }
+  .vhead .vsub { font-size: 13px; color: var(--td-text2); margin: 2px 0 0; }
+  .vtag {
+    display: inline-block; font-size: 13px; padding: 1px 10px; border-radius: 999px;
+    background: var(--td-sage-tint); color: var(--td-sage-ink); margin-bottom: 8px;
+  }
+  .vtag.neutral { background: var(--td-raised); color: var(--td-text2); }
+
+  table { border-collapse: collapse; width: 100%; font-size: 15px; }
+  thead th {
+    background: var(--td-header);
+    font-size: 13px; font-weight: 500; color: var(--td-text);
+    text-align: left; padding: 10px 16px; white-space: nowrap;
+  }
+  tbody td { padding: 12px 16px; border-top: 1px solid var(--td-border); vertical-align: top; }
+  tbody tr.unseen td { background: var(--td-unseen); }
+  td.num { text-align: right; }
+  .dt { white-space: nowrap; }
+  .sub { display: block; font-size: 13px; color: var(--td-text2); }
+  .eyebrow { display: block; font-size: 13px; color: var(--td-text2); letter-spacing: .04em; }
+  .deliver-day { display: block; font-weight: 500; color: var(--td-amber-ink); }
+  .rider { font-weight: 500; }
+  .dash { color: var(--td-text2); }
+
+  .badge {
+    display: inline-block; font-size: 13px; padding: 1px 10px; border-radius: 999px; white-space: nowrap;
+  }
+  .badge.paid { background: var(--td-sage-tint); color: var(--td-sage-ink); }
+  .badge.prep { background: var(--td-amber-tint); color: var(--td-amber-ink); }
+
+  /* Measured-width readout */
+  .measure { margin-top: 12px; padding: 12px 16px; border-top: 1px solid var(--td-border); font-size: 13px; color: var(--td-text2); }
+  .measure b { color: var(--td-text); font-weight: 500; }
+
+  /* Specimen table */
+  .spec td:first-child { color: var(--td-text2); font-size: 13px; white-space: nowrap; }
+  .spec td { padding: 10px 16px; }
+
+  .note { font-size: 13px; color: var(--td-text2); margin-top: 12px; }
+  .rule-list { margin: 0; padding-left: 18px; }
+  .rule-list li { margin-bottom: 8px; max-width: 68ch; }
+  .rule-list li:last-child { margin-bottom: 0; }
+
+  @media (max-width: 900px) {
+    .vgrid { grid-template-columns: 1fr; }
+    .wrap { padding: 24px 16px 64px; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="ph">
+    <h1>Dates and times</h1>
+    <p class="status">One rule, eight formats · 12 real Orders rows from Jul 29 · English surface</p>
+  </div>
+
+  <!-- ══ 1. The decision ══ -->
+  <div class="region">
+    <h2>The decision</h2>
+    <p class="lede">Only two columns change: <b>Placed</b> and <b>Delivery</b>. Everything else on Orders is untouched. Here are the same twelve rows in each candidate, side by side, at real density.</p>
+
+    <div class="vgrid">
+
+      <!-- A · today -->
+      <div class="variant">
+        <div class="vhead">
+          <span class="vtag neutral">Today</span>
+          <p class="vname">A · Mixed</p>
+          <p class="vsub">ISO date, 24-hour clock. No rule behind it.</p>
+        </div>
+        <table>
+          <thead><tr><th>Delivery</th><th>Placed</th></tr></thead>
+          <tbody>
+            <tr><td>Courier — ship when ready<span class="sub">placed Jul 29</span></td><td class="dt" data-m="a">2026-07-29 14:49</td></tr>
+            <tr><td><span class="rider">14:26</span><span class="sub">arrived</span></td><td class="dt" data-m="a">2026-07-29 13:37</td></tr>
+            <tr><td><span class="eyebrow">DELIVER</span><span class="deliver-day">Jul 31</span><span class="sub">made fresh · ship Jul 30</span></td><td class="dt" data-m="a">2026-07-29 13:21</td></tr>
+            <tr><td><span class="rider">15:40</span><span class="sub">arrived</span></td><td class="dt" data-m="a">2026-07-29 13:21</td></tr>
+            <tr><td>Courier — ship when ready<span class="sub">placed Jul 29</span></td><td class="dt" data-m="a">2026-07-29 13:17</td></tr>
+            <tr><td>Courier — ship when ready<span class="sub">placed Jul 29</span></td><td class="dt" data-m="a">2026-07-29 13:15</td></tr>
+            <tr><td>Courier — ship when ready<span class="sub">placed Jul 29</span></td><td class="dt" data-m="a">2026-07-29 12:10</td></tr>
+            <tr class="unseen"><td><span class="rider">15:30</span><span class="sub">arrived</span></td><td class="dt" data-m="a">2026-07-29 12:03</td></tr>
+            <tr><td><span class="dash">—</span></td><td class="dt" data-m="a">2026-07-29 11:37</td></tr>
+            <tr><td>Courier — ship when ready<span class="sub">placed Jul 29</span></td><td class="dt" data-m="a">2026-07-29 11:18</td></tr>
+            <tr><td>Courier — ship when ready<span class="sub">placed Jul 29</span></td><td class="dt" data-m="a">2026-07-29 10:36</td></tr>
+            <tr><td>Courier — ship when ready<span class="sub">placed Jul 29</span></td><td class="dt" data-m="a">2026-07-29 09:40</td></tr>
+          </tbody>
+        </table>
+        <div class="measure">Placed column · <b data-w="a">—</b></div>
+      </div>
+
+      <!-- B · full US -->
+      <div class="variant pick">
+        <div class="vhead">
+          <span class="vtag">Recommended</span>
+          <p class="vname">B · US, 12-hour</p>
+          <p class="vsub">Strict US convention. One rule, zero exceptions.</p>
+        </div>
+        <table>
+          <thead><tr><th>Delivery</th><th>Placed</th></tr></thead>
+          <tbody>
+            <tr><td>Courier — ship when ready<span class="sub">placed Jul 29</span></td><td class="dt" data-m="b">Jul 29, 2:49 PM</td></tr>
+            <tr><td><span class="rider">2:26 PM</span><span class="sub">arrived</span></td><td class="dt" data-m="b">Jul 29, 1:37 PM</td></tr>
+            <tr><td><span class="eyebrow">DELIVER</span><span class="deliver-day">Jul 31</span><span class="sub">made fresh · ship Jul 30</span></td><td class="dt" data-m="b">Jul 29, 1:21 PM</td></tr>
+            <tr><td><span class="rider">3:40 PM</span><span class="sub">arrived</span></td><td class="dt" data-m="b">Jul 29, 1:21 PM</td></tr>
+            <tr><td>Courier — ship when ready<span class="sub">placed Jul 29</span></td><td class="dt" data-m="b">Jul 29, 1:17 PM</td></tr>
+            <tr><td>Courier — ship when ready<span class="sub">placed Jul 29</span></td><td class="dt" data-m="b">Jul 29, 1:15 PM</td></tr>
+            <tr><td>Courier — ship when ready<span class="sub">placed Jul 29</span></td><td class="dt" data-m="b">Jul 29, 12:10 PM</td></tr>
+            <tr class="unseen"><td><span class="rider">3:30 PM</span><span class="sub">arrived</span></td><td class="dt" data-m="b">Jul 29, 12:03 PM</td></tr>
+            <tr><td><span class="dash">—</span></td><td class="dt" data-m="b">Jul 29, 11:37 AM</td></tr>
+            <tr><td>Courier — ship when ready<span class="sub">placed Jul 29</span></td><td class="dt" data-m="b">Jul 29, 11:18 AM</td></tr>
+            <tr><td>Courier — ship when ready<span class="sub">placed Jul 29</span></td><td class="dt" data-m="b">Jul 29, 10:36 AM</td></tr>
+            <tr><td>Courier — ship when ready<span class="sub">placed Jul 29</span></td><td class="dt" data-m="b">Jul 29, 9:40 AM</td></tr>
+          </tbody>
+        </table>
+        <div class="measure">Placed column · <b data-w="b">—</b></div>
+      </div>
+
+      <!-- C · US date, 24h clock -->
+      <div class="variant">
+        <div class="vhead">
+          <span class="vtag neutral">Exception</span>
+          <p class="vname">C · US date, 24-hour clock</p>
+          <p class="vsub">US everywhere except the clock. Needs a written carve-out.</p>
+        </div>
+        <table>
+          <thead><tr><th>Delivery</th><th>Placed</th></tr></thead>
+          <tbody>
+            <tr><td>Courier — ship when ready<span class="sub">placed Jul 29</span></td><td class="dt" data-m="c">Jul 29, 14:49</td></tr>
+            <tr><td><span class="rider">14:26</span><span class="sub">arrived</span></td><td class="dt" data-m="c">Jul 29, 13:37</td></tr>
+            <tr><td><span class="eyebrow">DELIVER</span><span class="deliver-day">Jul 31</span><span class="sub">made fresh · ship Jul 30</span></td><td class="dt" data-m="c">Jul 29, 13:21</td></tr>
+            <tr><td><span class="rider">15:40</span><span class="sub">arrived</span></td><td class="dt" data-m="c">Jul 29, 13:21</td></tr>
+            <tr><td>Courier — ship when ready<span class="sub">placed Jul 29</span></td><td class="dt" data-m="c">Jul 29, 13:17</td></tr>
+            <tr><td>Courier — ship when ready<span class="sub">placed Jul 29</span></td><td class="dt" data-m="c">Jul 29, 13:15</td></tr>
+            <tr><td>Courier — ship when ready<span class="sub">placed Jul 29</span></td><td class="dt" data-m="c">Jul 29, 12:10</td></tr>
+            <tr class="unseen"><td><span class="rider">15:30</span><span class="sub">arrived</span></td><td class="dt" data-m="c">Jul 29, 12:03</td></tr>
+            <tr><td><span class="dash">—</span></td><td class="dt" data-m="c">Jul 29, 11:37</td></tr>
+            <tr><td>Courier — ship when ready<span class="sub">placed Jul 29</span></td><td class="dt" data-m="c">Jul 29, 11:18</td></tr>
+            <tr><td>Courier — ship when ready<span class="sub">placed Jul 29</span></td><td class="dt" data-m="c">Jul 29, 10:36</td></tr>
+            <tr><td>Courier — ship when ready<span class="sub">placed Jul 29</span></td><td class="dt" data-m="c">Jul 29, 09:40</td></tr>
+          </tbody>
+        </table>
+        <div class="measure">Placed column · <b data-w="c">—</b></div>
+      </div>
+
+    </div>
+    <p class="note">Widths measured live in your browser, from the widest cell in each column at the real type size.</p>
+
+    <div class="card" style="margin-top:24px;">
+      <h3 style="font-size:15px;font-weight:500;margin:0 0 12px;">What the measurement actually says</h3>
+      <ul class="rule-list">
+        <li><b>The Placed column gets narrower, not wider.</b> B measures <b>108px</b> against today’s <b>116px</b> — <b>8px saved</b>. Dropping the redundant “2026-” from every row more than pays for “PM”. The density worry was wrong here.</li>
+        <li><b>The cost is real, but it is only the standalone clocks.</b> A rider time goes from <b>35px</b> (<span class="rider">14:26</span>) to <b>56px</b> (<span class="rider">3:40 PM</span>) — <b>+60%</b> on that one element. That is the entire trade, and it lives in the Delivery column, not in Placed.</li>
+        <li><b>So the question narrows.</b> It is not “is US format too wide for Orders” — it is “is a 21px wider rider clock worth never having to write down an exception”.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ══ 2. The whole table ══ -->
+  <div class="region">
+    <h2>The whole page, in B</h2>
+    <p class="lede">All ten Orders columns with the recommended format applied. The year is dropped because these are this-year dates — <b>Jul 29, 2:49 PM</b> now, <b>Dec 14, 2025, 2:49 PM</b> once it rolls over.</p>
+    <div class="card" style="padding:0; overflow:hidden;">
+      <div style="overflow-x:auto;">
+      <table>
+        <thead><tr>
+          <th>Order #</th><th>Channel</th><th>Customer</th><th>Store</th><th>Ship to</th>
+          <th>Items</th><th class="num">Total</th><th>Status</th><th>Delivery</th><th>Placed</th>
+        </tr></thead>
+        <tbody>
+          <tr>
+            <td>TC000412</td><td>WeChat</td><td>Monika Jain</td><td>Tianhe</td><td>Zhujiang New Town</td>
+            <td>6</td><td class="num">¥348</td><td><span class="badge paid">Paid</span></td>
+            <td>Courier — ship when ready<span class="sub">placed Jul 29</span></td><td class="dt">Jul 29, 2:49 PM</td>
+          </tr>
+          <tr>
+            <td>TC000411</td><td>Meituan</td><td>Guest</td><td>Tianhe</td><td>Tianhe Bei</td>
+            <td>3</td><td class="num">¥126</td><td><span class="badge prep">Dispatched</span></td>
+            <td><span class="rider">2:26 PM</span><span class="sub">arrived</span></td><td class="dt">Jul 29, 1:37 PM</td>
+          </tr>
+          <tr>
+            <td>TC000410</td><td>WeChat</td><td>Li Wen</td><td>Yuexiu</td><td>Dongshankou</td>
+            <td>11</td><td class="num">¥892</td><td><span class="badge prep">Preparing</span></td>
+            <td><span class="eyebrow">DELIVER</span><span class="deliver-day">Jul 31</span><span class="sub">made fresh · ship Jul 30</span></td><td class="dt">Jul 29, 1:21 PM</td>
+          </tr>
+          <tr>
+            <td>TC000409</td><td>Meituan</td><td>Guest</td><td>Tianhe</td><td>Linhe Xi</td>
+            <td>2</td><td class="num">¥74</td><td><span class="badge prep">Dispatched</span></td>
+            <td><span class="rider">3:40 PM</span><span class="sub">arrived</span></td><td class="dt">Jul 29, 1:21 PM</td>
+          </tr>
+          <tr>
+            <td>TC000408</td><td>WeChat</td><td>Sarah Chen</td><td>Tianhe</td><td>Shipaiqiao</td>
+            <td>5</td><td class="num">¥263</td><td><span class="badge paid">Paid</span></td>
+            <td>Courier — ship when ready<span class="sub">placed Jul 29</span></td><td class="dt">Jul 29, 1:17 PM</td>
+          </tr>
+          <tr class="unseen">
+            <td>TC000407</td><td>gzgrocery</td><td>Guest</td><td>Tianhe</td><td>Collected in store</td>
+            <td>8</td><td class="num">¥431</td><td><span class="badge prep">Dispatched</span></td>
+            <td><span class="rider">3:30 PM</span><span class="sub">arrived</span></td><td class="dt">Jul 29, 12:03 PM</td>
+          </tr>
+          <tr>
+            <td>TC000406</td><td>WeChat</td><td>Zhao Min</td><td>Yuexiu</td><td>Beijing Lu</td>
+            <td>1</td><td class="num">¥38</td><td><span class="badge paid">Delivered</span></td>
+            <td><span class="dash">—</span></td><td class="dt">Jul 29, 11:37 AM</td>
+          </tr>
+          <tr>
+            <td>TC000405</td><td>WeChat</td><td>Emma Ortiz</td><td>Tianhe</td><td>Tiyu Xilu</td>
+            <td>4</td><td class="num">¥196</td><td><span class="badge paid">Paid</span></td>
+            <td>Courier — ship when ready<span class="sub">placed Jul 29</span></td><td class="dt">Jul 29, 9:40 AM</td>
+          </tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ 3. The eight formats ══ -->
+  <div class="region">
+    <h2>The eight named formats</h2>
+    <p class="lede">A caller asks for a <i>name</i>, never a format string. This is the whole vocabulary — nothing else may be rendered.</p>
+    <div class="card" style="padding:0; overflow:hidden;">
+      <table class="spec">
+        <thead><tr><th>Name</th><th>This year</th><th>Any other year</th><th>Where it is used</th></tr></thead>
+        <tbody>
+          <tr><td>dateTime</td><td>Jul 29, 2:49 PM</td><td>Dec 14, 2025, 2:49 PM</td><td>Orders Placed · drawer header · audit rows</td></tr>
+          <tr><td>date</td><td>Jul 29</td><td>Dec 14, 2025</td><td>Ship-by · deliver-on · coupon expiry</td></tr>
+          <tr><td>time</td><td>2:49 PM</td><td>2:49 PM</td><td>Rider ETA · arrival · pickup slot</td></tr>
+          <tr><td>weekday</td><td>Wednesday, July 29</td><td>Sunday, December 14, 2025</td><td>Dashboard greeting · Recap</td></tr>
+          <tr><td>month</td><td>July 2026</td><td>December 2025</td><td>Reports headers · billing periods</td></tr>
+          <tr><td>range</td><td>Jul 1 – 29</td><td>Dec 1 – 31, 2025</td><td>Report ranges · campaign windows</td></tr>
+          <tr><td>relative</td><td>2 min ago</td><td>8 months ago</td><td>Live nudges · save toasts · sync status</td></tr>
+          <tr><td>machine</td><td>2026-07-29</td><td>2025-12-14</td><td>Never localised — see below</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Year rule: the year is shown only when the date is <i>not</i> in the current year. Without it, every ops table grows a redundant “, 2026” on every row.</p>
+  </div>
+
+  <!-- ══ 4. What stays ISO ══ -->
+  <div class="region">
+    <h2>What never changes</h2>
+    <div class="card">
+      <ul class="rule-list">
+        <li><b>machine stays ISO forever.</b> Date inputs, CSV and XLSX exports, filenames, and every payload going to Meituan, Guanyi, JD or the API. Localising these breaks integrations silently.</li>
+        <li><b>Always the store’s wall clock.</b> Timestamps are stored UTC and rendered in the store’s own timezone — never the operator’s browser. This is the one thing the current code already gets right.</li>
+        <li><b>Never a locale-less call.</b> There are 71 <span style="color:var(--td-brick-ink)">toLocaleString()</span> calls today with no locale argument. Those render in the operator’s OS language, so the same screen looks different on two laptops in the same office. This becomes a grep in the audit.</li>
+        <li><b>Never a hard-coded locale string.</b> Four <span style="color:var(--td-brick-ink)">en-GB</span> calls ship on the Dashboard today. Nobody chose British — it was typed once and copied.</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ══ 5. Chinese reference ══ -->
+  <div class="region">
+    <h2>For reference — the Chinese rendering</h2>
+    <p class="lede">Not a toggle and not a second surface. One language is on screen at a time; when the operator switches the admin to Chinese, the same eight names render this way instead.</p>
+    <div class="card" style="padding:0; overflow:hidden;">
+      <table class="spec">
+        <thead><tr><th>Name</th><th>English</th><th>Chinese</th></tr></thead>
+        <tbody>
+          <tr><td>dateTime</td><td>Jul 29, 2:49 PM</td><td lang="zh">7月29日 14:49</td></tr>
+          <tr><td>date</td><td>Jul 29</td><td lang="zh">7月29日</td></tr>
+          <tr><td>time</td><td>2:49 PM</td><td lang="zh">14:49</td></tr>
+          <tr><td>weekday</td><td>Wednesday, July 29</td><td lang="zh">7月29日 周三</td></tr>
+          <tr><td>month</td><td>July 2026</td><td lang="zh">2026年7月</td></tr>
+          <tr><td>range</td><td>Jul 1 – 29</td><td lang="zh">7月1日–29日</td></tr>
+          <tr><td>relative</td><td>2 min ago</td><td lang="zh">2分钟前</td></tr>
+          <tr><td>machine</td><td>2026-07-29</td><td>2026-07-29</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="note">Chinese uses a 24-hour clock because that is the Chinese convention — not because we kept ours. Each language follows its own rules, which is the whole point of the rule.</p>
+  </div>
+
+</div>
+
+<script>
+  // Measure the real rendered width of the widest Placed cell in each variant,
+  // using the cell's own computed font. Honest numbers, not estimates.
+  (function () {
+    var canvas = document.createElement('canvas');
+    var ctx = canvas.getContext('2d');
+    ['a', 'b', 'c'].forEach(function (key) {
+      var cells = document.querySelectorAll('[data-m="' + key + '"]');
+      if (!cells.length) return;
+      var cs = getComputedStyle(cells[0]);
+      ctx.font = cs.fontWeight + ' ' + cs.fontSize + ' ' + cs.fontFamily;
+      var widest = 0, text = '';
+      cells.forEach(function (c) {
+        var w = ctx.measureText(c.textContent.trim()).width;
+        if (w > widest) { widest = w; text = c.textContent.trim(); }
+      });
+      var out = document.querySelector('[data-w="' + key + '"]');
+      if (out) out.textContent = Math.round(widest) + 'px  ·  widest: ' + text;
+    });
+    // Express B and C as a delta against A so the cost is explicit.
+    var read = function (k) {
+      var el = document.querySelector('[data-w="' + k + '"]');
+      return el ? parseInt(el.textContent, 10) : 0;
+    };
+    var base = read('a');
+    ['b', 'c'].forEach(function (k) {
+      var el = document.querySelector('[data-w="' + k + '"]');
+      if (!el || !base) return;
+      var d = read(k) - base;
+      var sign = d > 0 ? '+' : '';
+      el.textContent += '  ·  ' + sign + d + 'px vs A';
+    });
+  })();
+</script>
+</body>
+</html>
