@@ -41,6 +41,7 @@ try {
 
 const db = require('../database');
 const { getBrowser, closeAll } = require('../lib/meituan-browser');
+const { sweepStockDrift } = require('../lib/meituan-drift-sweep');
 const { sendOpsAlert } = require('../lib/ops-alert');
 // Ops-alert latches that survive a restart (see lib/alert-latch).
 const { latchStore } = require('../lib/alert-latch');
@@ -59,6 +60,13 @@ const ORDER_POLL_MS  = 300_000; // how often to check for new Meituan orders (ji
 // re-read a widened window and advance any still-non-terminal mirrored order.
 const ORDER_SWEEP_MS  = 1_800_000;                                   // 30 min
 const ORDER_SWEEP_DAYS = Number(process.env.MEITUAN_SWEEP_DAYS) || 3; // window back
+// Stock-drift backstop. The push queue is edge-triggered — one row per change — so
+// a push that dies terminally leaves that product frozen on Meituan with nothing
+// left to retry it. This sweep re-reads the actual stock against what Meituan last
+// accepted and re-enqueues the gap, no matter why the earlier push failed. Cheap
+// (a couple of indexed reads, no browser), and self-limiting: see the cool-down
+// and cap in lib/meituan-drift-sweep. 30 min is well inside a trading day.
+const DRIFT_SWEEP_MS = 1_800_000; // 30 min
 // Import-only by default: pull orders into roots (records + stock) but do NOT
 // click "accept" on Meituan. Set MEITUAN_AUTO_ACCEPT=1 in .env to re-enable.
 const AUTO_ACCEPT    = process.env.MEITUAN_AUTO_ACCEPT === '1';
@@ -723,10 +731,23 @@ async function processStockQueue() {
       }
     } catch (err) {
       log(storeCode, `processStockQueue error: ${err.message}`);
-      // Reset only the rows we marked processing back to error.
+      // The whole BATCH died — browser/page crash, navigation timeout, proxy blip.
+      // That says nothing about any individual product, so don't bury these rows as
+      // terminal 'error': most never reached Meituan at all. Marking them error is
+      // what froze 315 of 天河's stranded rows on 2026-07-29, several burned on their
+      // very first attempt by a `Target page … has been closed`.
+      //
+      // Requeue as pending so they actually get another go. The attempt is NOT
+      // refunded (unlike the challenged path): a browser that dies on every batch
+      // would otherwise retry these forever at 10s intervals, relaunching Chrome
+      // each time. Keeping the attempt lets attempts<3 bound it, and the 30-minute
+      // drift sweep is what picks the row back up if all three tries are eaten —
+      // stale for an hour or two instead of the five weeks this used to cost.
       for (const row of pushRows) {
-        db.prepare(`UPDATE meituan_sync_queue SET status='error', last_error=? WHERE id=? AND status='processing'`)
-          .run(err.message.slice(0, 200), row.id);
+        db.prepare(`UPDATE meituan_sync_queue
+                       SET status='pending', last_error=?
+                     WHERE id=? AND status='processing'`)
+          .run(`batch failed (${err.message.slice(0, 150)}) — will retry`, row.id);
       }
     }
   }
@@ -1030,6 +1051,9 @@ async function main() {
   let lastOrderPoll = 0;
   let orderPollGap  = jitter(ORDER_POLL_MS, 0.4);
   let lastOrderSweep = 0;
+  // 0 = run the drift sweep on the first cycle, so a deploy immediately re-queues
+  // whatever the previous build left stranded rather than waiting out the interval.
+  let lastDriftSweep = 0;
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
@@ -1100,6 +1124,18 @@ async function main() {
         await sweepStaleOrders(sweepStores[i]);
         if (i < sweepStores.length - 1) await sleep(jitter(8000, 0.5));
       }
+    }
+
+    // Level-triggered backstop for the edge-triggered queue: re-enqueue anything
+    // whose stock no longer matches what Meituan last accepted. Runs before the
+    // push so recovered rows go out in this same cycle. No browser, so it's safe
+    // to run while a store is closed — the push itself still waits for opening.
+    if (now - lastDriftSweep >= DRIFT_SWEEP_MS) {
+      lastDriftSweep = now;
+      sweepStockDrift(db, {
+        storeCodes: stores.map(s => s.storeCode), // getStoreConfigs already drops SKIP_STORES
+        channel: '外卖', log, logSync, sendOpsAlert, alerts,
+      });
     }
 
     // Always process stock queue
