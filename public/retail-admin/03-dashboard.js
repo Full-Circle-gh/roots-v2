@@ -659,8 +659,15 @@ function dashSetDelta(sel, base, cur, baseline, fmtAvg) {
     return;
   }
   const dow = dashWeekdayName(baseline.weekday, days);
-  el._tip = cuT(`vs the last ${days} ${dow.en} · ${fmtAvg(base.avg)} each`,
-                `较前 ${days} 个${dow.cn} · 平均 ${fmtAvg(base.avg)}`);
+  // When the server clipped the baseline days to the current time of day, the
+  // average behind this arrow means "by now", not "all day", and the tooltip has
+  // to say so — otherwise it reads as a full day's takings and the arrow looks
+  // far worse than it is every morning.
+  el._tip = baseline.clipped
+    ? cuT(`vs the last ${days} ${dow.en} at this time · ${fmtAvg(base.avg)} each by now`,
+          `较前 ${days} 个${dow.cn}同一时段 · 平均 ${fmtAvg(base.avg)}`)
+    : cuT(`vs the last ${days} ${dow.en} · ${fmtAvg(base.avg)} each`,
+          `较前 ${days} 个${dow.cn} · 平均 ${fmtAvg(base.avg)}`);
   const r = Math.round(base.delta);
   if (r > 0)      { el.classList.add('is-up');   el.textContent = '▲ ' + r + '%'; }
   else if (r < 0) { el.classList.add('is-down'); el.textContent = '▼ ' + Math.abs(r) + '%'; }
@@ -1597,12 +1604,17 @@ function tdObservationRender() {
   const dowCn = DASH_DOW_CN[b.weekday] || '';
   // Outright ahead of every same weekday behind it — the rarer, better fact,
   // so it wins when both are true.
-  if (b.best_in_weeks) return say(`Your best ${dowEn} in ${b.days} weeks.`,
-                                  `这是最近 ${b.days} 周里最好的${dowCn}。`);
+  // "So far" / "at this point" are load-bearing, not padding: the days behind
+  // today are cut at the current time of day, so this compares a morning with
+  // four mornings. Without those words the line would promise a whole day's
+  // record at 07:00 and quietly break it by lunch.
+  if (b.best_in_weeks) return say(`Best ${dowEn} in ${b.days} weeks so far.`,
+                                  `目前是最近 ${b.days} 周里最好的${dowCn}。`);
   // Clearly ahead of the average of them. The floor is 15% rather than 0 so
   // this stays a remark worth making instead of noise about a rounding win.
   const d = b.revenue && b.revenue.delta;
-  if (d != null && d >= 15) return say(`Ahead of a typical ${dowEn}.`, `比往常的${dowCn}要好。`);
+  if (d != null && d >= 15) return say(`Ahead of a typical ${dowEn} at this point.`,
+                                       `目前比往常的${dowCn}要好。`);
 }
 
 // ── Last-seen stamp — feeds The Recap's "while you were away" window. ──────
@@ -2062,9 +2074,21 @@ function tdSecPaint() {
       set('td-sec-conv', '—');
       if (convSub) convSub.textContent = cuT('no sessions yet', '暂无会话');
     } else if (sessions < CONV_MIN_SESSIONS) {
-      const conv = Number(k.orders || 0);
-      set('td-sec-conv', String(conv));
-      if (convSub) convSub.textContent = cuT(`orders from ${sessions} sessions`, `来自 ${sessions} 次会话`);
+      // Under the threshold there is no honest rate to quote, so the figure
+      // stays a dash and the raw counts move into the sub-line.
+      //
+      // It used to put the ORDER COUNT in the figure instead, which read
+      // "Conversion / 1" — a number that is not a conversion, standing under a
+      // label that says it is. At five sessions that is the worst of both: it
+      // looks like 1%, and the one reader who takes it at face value is misled
+      // by the cell that exists to stop exactly that.
+      const ord = Number(k.orders || 0);
+      set('td-sec-conv', '—');
+      if (convSub) {
+        convSub.textContent = cuT(
+          `${ord} ${ord === 1 ? 'order' : 'orders'} from ${sessions} ${sessions === 1 ? 'session' : 'sessions'}`,
+          `${sessions} 次会话中 ${ord} 单`);
+      }
     } else {
       set('td-sec-conv', k.conversion_rate == null ? '—' : Number(k.conversion_rate).toFixed(1) + '%');
       if (convSub) {

@@ -11835,6 +11835,38 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       const d = new Date(new Date(from).getTime() - w * 7 * 86400000).toISOString().slice(0, 10);
       if (!firstD || d >= firstD) cand.push(d);
     }
+    // ── Compare like for like: clip each baseline day to the time it is NOW ──
+    // Today is only ever as old as the clock. Measured against four COMPLETE
+    // same weekdays, a morning reads "▼94%" — which says nothing about the
+    // business and everything about it being 06:47. The arrow was reporting the
+    // time of day.
+    //
+    // So on a live view of today (and only then — a past day is already whole,
+    // and a multi-day window has no partial edge) every baseline day is cut at
+    // the same wall-clock time. Pro-rating by the fraction of the day elapsed
+    // would have been the cheaper fix and a wrong one: trade is not spread
+    // evenly, and a shop that opens at 11 would be judged against a quarter of
+    // its takings at 06:00.
+    //
+    // The two blended revenue sources are already bucketed by hour when asked
+    // (opts.hourly), so they are clipped by summing the buckets up to this hour
+    // rather than by a second query. That makes them coarser than the orders
+    // clip, which cuts at the exact minute: a baseline day keeps its whole
+    // current hour where today has only part of one. The residual is at most one
+    // hour of trade and it errs against today rather than flattering it, which
+    // is the right way round for a number an operator acts on. Worth knowing
+    // before anyone reads the arrow as precise to the minute.
+    const isToday = to === toDefault;
+    const clip    = isToday;
+    const nowHms  = nowGz.toISOString().slice(11, 19);   // GZ wall clock, HH:MM:SS
+    const nowHour = nowHms.slice(0, 2);
+    const kpiSqlClip     = `${kpiSql} AND time(COALESCE(paid_at, placed_at), '${TZ}') <= ?`;
+    const newCustSqlClip = `${newCustSql} AND time(created_at, '${TZ}') <= ?`;
+    // Hour keys are '00'..'23', so a plain string compare is the right one.
+    const revUpToNow = (byBucket) => Object.keys(byBucket || {})
+      .filter(h => h <= nowHour)
+      .reduce((s, h) => s + Number((byBucket[h] || {}).revenue || 0), 0);
+
     const days = cand.length;
     let sumRev = 0, sumOrd = 0, sumNew = 0;
     // Each same-weekday's own takings, not just their total. The loop already
@@ -11844,16 +11876,20 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
     // mean while still trailing three of the four days that made it.
     const dayRev = [];
     for (const d of cand) {
-      const k = tdb().prepare(kpiSql).get(d, d);
+      const k = clip ? tdb().prepare(kpiSqlClip).get(d, d, nowHms)
+                     : tdb().prepare(kpiSql).get(d, d);
       sumOrd += Number(k.orders || 0);
-      sumNew += tdb().prepare(newCustSql).get(d, d).n;
+      sumNew += clip ? tdb().prepare(newCustSqlClip).get(d, d, nowHms).n
+                     : tdb().prepare(newCustSql).get(d, d).n;
       // Blend gzgrocery pickup takings and top-up cash into each baseline day,
       // exactly as the headline blends them into today — otherwise the delta
       // would compare a blended today against a storefront-only past. Orders
       // stay storefront-only on both sides, as they are everywhere else here.
+      const gy = guanyiPickupSales(tdb(), d, d, { hourly: clip });
+      const tu = topupCashReceived(tdb(), d, d, { hourly: clip });
       const rev = Number(k.revenue || 0)
-                + guanyiPickupSales(tdb(), d, d, { hourly: false }).revenue
-                + topupCashReceived(tdb(), d, d, { hourly: false }).received;
+                + (clip ? revUpToNow(gy.byBucket) : gy.revenue)
+                + (clip ? revUpToNow(tu.byBucket) : tu.received);
       dayRev.push(rev);
       sumRev += rev;
     }
@@ -11869,6 +11905,10 @@ router.get('/api/retail-admin/dashboard', requireRetailAdmin, (req, res) => {
       // getUTCDay because `from` is a bare YYYY-MM-DD (parsed as UTC midnight),
       // so this is the calendar date's own weekday whatever the server's zone.
       weekday:       new Date(from).getUTCDay(),
+      // Whether the days behind this one were cut at the current time of day.
+      // The client says so in the delta's tooltip: an average that means "by
+      // 06:47" must not be read as a whole day's takings.
+      clipped:       clip,
       revenue:       mk(kpi.revenue, sumRev),
       orders:        mk(kpi.orders,  sumOrd),
       new_customers: mk(newCust,     sumNew),
