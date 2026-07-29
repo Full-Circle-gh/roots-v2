@@ -8,6 +8,7 @@
 // silently via wx.getUserInfo / wx.getUserProfile.
 
 const api = require('../../utils/api');
+const contentCheck = require('../../utils/content-check');
 
 Page({
   data: {
@@ -239,8 +240,9 @@ Page({
               : ext === 'gif'  ? 'image/gif'
               : 'image/jpeg';
     const dataUri = `data:${mime};base64,${base64}`;
-    const resp = await api.post('/api/retail/customer/avatar', { data: dataUri });
-    return resp.url;
+    // Answers { url, sec_status } — 'pending' means WeChat is still judging
+    // the picture and save() has to wait for the verdict before using it.
+    return api.post('/api/retail/customer/avatar', { data: dataUri });
   },
 
   async save() {
@@ -269,7 +271,18 @@ Page({
             });
           });
         }
-        avatar_url = await this.uploadAvatar(localPath);
+        const uploaded = await this.uploadAvatar(localPath);
+        // WeChat checks every picture a customer publishes. Hold the save for
+        // a couple of seconds so a refused picture is refused to their face.
+        if (uploaded.sec_status === 'pending') {
+          const verdict = await contentCheck.waitForImageVerdict(uploaded.url);
+          if (verdict === 'risky') {
+            this.setData({ saving: false, avatarPreview: '', avatarTempPath: '' });
+            contentCheck.showContentViolation(null, this.data.lang);
+            return;
+          }
+        }
+        avatar_url = uploaded.url;
       } catch (e) {
         this.setData({ saving: false });
         const msg = e.message || 'unknown';
@@ -316,6 +329,12 @@ Page({
       setTimeout(() => wx.navigateBack(), 600);
     } catch (e) {
       this.setData({ saving: false });
+      // A nickname WeChat won't publish gets its own explanation, not a
+      // bare error code in a toast.
+      if (contentCheck.isContentViolation(e)) {
+        contentCheck.showContentViolation(e, this.data.lang);
+        return;
+      }
       wx.showToast({ title: e.message || 'failed', icon: 'none' });
     }
   },

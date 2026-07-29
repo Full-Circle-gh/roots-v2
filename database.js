@@ -1446,6 +1446,11 @@ addColumn('retail_reviews', 'tags_json', 'TEXT');
 // the review on the storefront. Set/cleared by staff from the moderation list.
 addColumn('retail_reviews', 'reply',    'TEXT');
 addColumn('retail_reviews', 'reply_at', 'DATETIME');
+// 1 while the review is hidden ONLY because a photo is still waiting on
+// WeChat's content-safety verdict. Kept separate from is_visible so the
+// verdict callback can release its own holds without ever un-hiding a review
+// a human moderator deliberately hid.
+addColumn('retail_reviews', 'sec_hold', 'INTEGER DEFAULT 0');
 
 // Synthetic ("seeded") product reviews — social-proof copy written by staff,
 // NOT by a real buyer. Kept in their OWN table, fully decoupled from
@@ -1680,6 +1685,15 @@ db.exec(`CREATE TABLE IF NOT EXISTS retail_media (
 addColumn('retail_media', 'alt_text',  'TEXT');
 addColumn('retail_media', 'tags',      "TEXT DEFAULT '[]'");
 addColumn('retail_media', 'folder_id', 'INTEGER');
+// WeChat content-safety verdict for images a CUSTOMER uploaded (avatars,
+// review photos). NULL on staff uploads and on every row that predates the
+// check. 'pending' from the moment we submit it to mediaCheckAsync until the
+// wxa_media_check callback lands, then 'pass' / 'risky'; 'skipped' when the
+// check couldn't run at all (no AppID, non-WeChat login, WeChat unreachable).
+addColumn('retail_media', 'sec_status',     'TEXT');
+addColumn('retail_media', 'sec_trace_id',   'TEXT');
+addColumn('retail_media', 'sec_checked_at', 'DATETIME');
+try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_media_sec ON retail_media(sec_trace_id)'); } catch {}
 
 db.exec(`CREATE TABLE IF NOT EXISTS retail_media_folders (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,

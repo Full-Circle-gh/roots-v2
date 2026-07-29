@@ -3,10 +3,11 @@
 
 const api = require('../../utils/api');
 const config = require('../../utils/config');
+const contentCheck = require('../../utils/content-check');
 
 // Read a wx temp file as a base64 data URI, then POST it to the review-photo
-// endpoint and return the server URL. Errors propagate so the submit flow can
-// surface them via the existing toast handler.
+// endpoint and return { url, sec_status }. Errors propagate so the submit flow
+// can surface them via the existing toast handler.
 function uploadReviewPhoto(tempPath) {
   return new Promise((resolve, reject) => {
     wx.getFileSystemManager().readFile({
@@ -16,10 +17,9 @@ function uploadReviewPhoto(tempPath) {
         const ext = (tempPath.split('.').pop() || 'jpeg').toLowerCase();
         const mime = ext === 'png' ? 'image/png' : (ext === 'webp' ? 'image/webp' : 'image/jpeg');
         try {
-          const resp = await api.post('/api/retail/review-photos', {
+          resolve(await api.post('/api/retail/review-photos', {
             data: `data:${mime};base64,${res.data}`,
-          });
-          resolve(resp.url);
+          }));
         } catch (e) { reject(e); }
       },
       fail: (e) => reject(new Error(e.errMsg || 'read_failed')),
@@ -197,9 +197,24 @@ Page({
       // server-owned /api/retail/media/:id URLs. wx.uploadFile can't be
       // used on the preview AppID (separate whitelist) so we base64 each
       // file and POST through the normal wx.request channel.
-      const photoUrls = await Promise.all(
+      const uploaded = await Promise.all(
         (this.data.photos || []).map(p => uploadReviewPhoto(p))
       );
+
+      // WeChat judges each picture asynchronously. Wait for the verdicts so a
+      // refused photo is refused here, with the review still on screen to fix,
+      // rather than the review quietly never appearing.
+      const verdicts = await Promise.all(
+        uploaded.map(u => u.sec_status === 'pending'
+          ? contentCheck.waitForImageVerdict(u.url)
+          : Promise.resolve(u.sec_status))
+      );
+      if (verdicts.some(v => v === 'risky')) {
+        this.setData({ saving: false });
+        contentCheck.showContentViolation(null, this.data.lang);
+        return;
+      }
+      const photoUrls = uploaded.map(u => u.url);
 
       await api.post('/api/retail/products/' + this.data.productId + '/reviews', {
         order_id: this.data.orderId,
@@ -212,6 +227,10 @@ Page({
       setTimeout(() => wx.navigateBack(), 800);
     } catch (e) {
       this.setData({ saving: false });
+      if (contentCheck.isContentViolation(e)) {
+        contentCheck.showContentViolation(e, this.data.lang);
+        return;
+      }
       const msg = e.message === 'already_reviewed'
         ? (this.data.lang === 'cn' ? '已评价过' : 'You already reviewed this')
         : (e.message === 'too_large'

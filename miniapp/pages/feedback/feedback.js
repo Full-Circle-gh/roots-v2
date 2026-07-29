@@ -5,6 +5,7 @@
 // whitelisted on the preview AppID, so we base64 each file via wx.request).
 
 const api = require('../../utils/api');
+const contentCheck = require('../../utils/content-check');
 
 function uploadPhoto(tempPath) {
   return new Promise((resolve, reject) => {
@@ -156,6 +157,10 @@ Page({
       setTimeout(() => wx.navigateBack(), 900);
     } catch (e) {
       this.setData({ saving: false });
+      if (contentCheck.isContentViolation(e)) {
+        contentCheck.showContentViolation(e, this.data.lang);
+        return;
+      }
       const msg = e.message === 'too_large' ? this.data.copy.tooLarge : e.message;
       wx.showToast({ title: msg, icon: 'none' });
     }
