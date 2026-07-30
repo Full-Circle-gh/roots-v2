@@ -1,6 +1,10 @@
 const express = require('express');
 const db = require('../database');
 const inventory = require('../lib/inventory');
+// The connection inventory.adjustStock writes through. Outside a tenant scope
+// this IS `db`; taking it from here means the stock transfer's transaction
+// boundary is on the same handle as the writes it has to contain.
+const { tdb } = require('../lib/tenant-db');
 const { requireAuth, requirePermission, requireDelete, logActivity } = require('../middleware/auth');
 const router = express.Router();
 
@@ -203,55 +207,139 @@ function _resolveDestStoreId(order, warehouseStoreId) {
   return null;
 }
 
+// A restock line's product_id is a KITCHEN products.id, but every table this
+// transfer writes is keyed on store_products.id (the catalogue fork repointed
+// retail_store_stock's FK — database.js:3805-3823). The two tables are separate
+// AUTOINCREMENT counters over ONE integer space, so an id only means the same
+// thing on both sides for rows the fork seeded. For anything created since, the
+// same integer points at a different product on each side — and because the FK
+// is satisfied either way, nothing errors: the units simply land on the wrong
+// product's shelf.
+//
+// So check every line before moving anything. A line is safe when its id exists
+// in store_products AND, where both catalogues carry a SKU, the two SKUs match.
+// A SKU is the operator's own code for a thing, so two rows sharing an id and
+// disagreeing on the SKU are definitely not the same thing. Returns a list of
+// plain-English problems; empty means every line is safe to move.
+function _checkTransferIds(items) {
+  const kitchenRow = db.prepare('SELECT sku, name_en FROM products WHERE id = ?');
+  const storeRow   = db.prepare('SELECT sku, name_en FROM store_products WHERE id = ?');
+  const problems = [];
+  for (const it of items) {
+    const kitchen = kitchenRow.get(it.product_id);
+    const store   = storeRow.get(it.product_id);
+    const name = it.product_name || kitchen?.name_en || ('product ' + it.product_id);
+    if (!store) {
+      problems.push(`${name} is not in the store catalogue, so there is no shelf to move it to.`);
+      continue;
+    }
+    const kSku = kitchen?.sku == null ? '' : String(kitchen.sku).trim();
+    const sSku = store.sku   == null ? '' : String(store.sku).trim();
+    if (kSku && sSku && kSku !== sSku) {
+      problems.push(`${name} does not match the store catalogue: the kitchen has ${kSku} and the store has ${sSku} under the same reference. Moving it would change the wrong product's stock.`);
+    }
+  }
+  return problems;
+}
+
+// Apply a restock order's stock movement: OUT of the warehouse, IN to the
+// receiving store, for every line, through inventory.adjustStock so each half
+// is ledgered and every channel's availability re-syncs.
+//
+// All or nothing. Every line's decrement and increment, every ledger row, and
+// the stock_applied_at stamp share ONE transaction, opened on the same
+// connection adjustStock writes through. adjustStock opens its own transaction
+// per call; better-sqlite3 nests those as savepoints, so a throw anywhere —
+// including a ledger insert that cannot be written — unwinds the whole transfer.
+// It used to run each half as its own transaction and stamp stock_applied_at
+// regardless of what happened, so a failure between the two halves took units
+// out of the warehouse, never put them anywhere, marked the order complete, and
+// logged a warning nobody reads. That loss was permanent.
+//
+// Returns one of:
+//   { ok: true,  moved: n }            — applied and stamped
+//   { ok: true,  skipped: 'reason' }   — nothing to do, correctly
+//   { ok: false, error: 'message' }    — nothing moved, nothing stamped, retryable
+// Never throws. Idempotent via stock_applied_at, which is now only ever set on
+// a transfer that fully applied.
 function _applyRestockTransfer(orderId, actorUser) {
+  const o = db.prepare('SELECT * FROM restock_orders WHERE id = ?').get(orderId);
+  if (!o) return { ok: false, error: 'That restock order no longer exists. No stock was moved.' };
+  // Kitchen direction uses ingredient inventory, not per-store retail stock.
+  if (o.to_role === 'kitchen' || o.from_role === 'kitchen') return { ok: true, skipped: 'kitchen_direction' };
+  // Idempotency — never move stock twice for the same order.
+  if (o.stock_applied_at) return { ok: true, skipped: 'already_applied' };
+
+  const label = o.rs_number || ('RS#' + o.id);
+  const warehouseStoreId = _resolveWarehouseStoreId();
+  const destStoreId = _resolveDestStoreId(o, warehouseStoreId);
+  if (!warehouseStoreId || !destStoreId || warehouseStoreId === destStoreId) {
+    console.warn(`[restock-transfer] ${label}: cannot resolve source/dest ` +
+      `(warehouse=${warehouseStoreId}, dest=${destStoreId}) — stock not moved`);
+    return { ok: false, error: 'Could not work out which location the goods leave from and which they arrive at, so no stock was moved. Set the warehouse and the receiving store, then try again.' };
+  }
+
+  const items = db.prepare(`
+    SELECT product_id, product_name, qty_requested, qty_sent
+      FROM restock_items
+     WHERE restock_id = ?
+       AND product_id IS NOT NULL
+       AND COALESCE(qty_sent, qty_requested, 0) > 0
+  `).all(o.id);
+  const lines = items.filter(it => {
+    // Prefer qty_sent (what actually shipped); fall back to requested.
+    const qty = (it.qty_sent != null) ? Number(it.qty_sent) : Number(it.qty_requested);
+    return qty > 0;
+  });
+  if (!lines.length) return { ok: true, skipped: 'no_lines' };
+
+  // Refuse the whole transfer if any line's product cannot be matched across
+  // the two catalogues — same all-or-nothing rule as a mid-transfer failure.
+  const problems = _checkTransferIds(lines);
+  if (problems.length) {
+    console.warn(`[restock-transfer] ${label}: refused — ${problems.length} line(s) failed the catalogue check`);
+    return {
+      ok: false,
+      error: 'No stock was moved, because some lines could not be matched to the store catalogue. ' + problems.join(' '),
+    };
+  }
+
+  // One transaction on the connection adjustStock uses, so the outer boundary
+  // and the inner writes are on the same handle whatever scope we run in.
+  const conn = tdb();
   try {
-    const o = db.prepare('SELECT * FROM restock_orders WHERE id = ?').get(orderId);
-    if (!o) return;
-    // Kitchen direction uses ingredient inventory, not per-store retail stock.
-    if (o.to_role === 'kitchen' || o.from_role === 'kitchen') return;
-    // Idempotency — never move stock twice for the same order.
-    if (o.stock_applied_at) return;
-
-    const warehouseStoreId = _resolveWarehouseStoreId();
-    const destStoreId = _resolveDestStoreId(o, warehouseStoreId);
-    if (!warehouseStoreId || !destStoreId || warehouseStoreId === destStoreId) {
-      console.warn(`[restock-transfer] order ${o.id}: cannot resolve source/dest ` +
-        `(warehouse=${warehouseStoreId}, dest=${destStoreId}) — stock not moved`);
-      return;
-    }
-
-    const items = db.prepare(`
-      SELECT product_id, qty_requested, qty_sent
-        FROM restock_items
-       WHERE restock_id = ?
-         AND product_id IS NOT NULL
-         AND COALESCE(qty_sent, qty_requested, 0) > 0
-    `).all(o.id);
-    const label = o.rs_number || ('RS#' + o.id);
-    let moved = 0;
-    for (const it of items) {
-      // Prefer qty_sent (what actually shipped); fall back to requested.
-      const qty = (it.qty_sent != null) ? Number(it.qty_sent) : Number(it.qty_requested);
-      if (!(qty > 0)) continue;
-      // − out of the warehouse
-      inventory.adjustStock({
-        storeId: warehouseStoreId, productId: it.product_id, deltaQty: -qty,
-        actorUserId: actorUser?.id || null, actorLabel: 'restock',
-        reason: 'restock_transfer_out', note: label,
-      });
-      // + into the receiving store
-      inventory.adjustStock({
-        storeId: destStoreId, productId: it.product_id, deltaQty: qty,
-        actorUserId: actorUser?.id || null, actorLabel: 'restock',
-        reason: 'restock_transfer_in', note: label,
-      });
-      moved++;
-    }
-    // Stamp regardless of item count so we don't re-evaluate forever.
-    db.prepare('UPDATE restock_orders SET stock_applied_at = CURRENT_TIMESTAMP WHERE id = ?').run(o.id);
+    const moved = conn.transaction(() => {
+      let n = 0;
+      for (const it of lines) {
+        const qty = (it.qty_sent != null) ? Number(it.qty_sent) : Number(it.qty_requested);
+        // − out of the warehouse
+        inventory.adjustStock({
+          storeId: warehouseStoreId, productId: it.product_id, deltaQty: -qty,
+          actorUserId: actorUser?.id || null, actorLabel: 'restock',
+          reason: 'restock_transfer_out', note: label,
+        });
+        // + into the receiving store
+        inventory.adjustStock({
+          storeId: destStoreId, productId: it.product_id, deltaQty: qty,
+          actorUserId: actorUser?.id || null, actorLabel: 'restock',
+          reason: 'restock_transfer_in', note: label,
+        });
+        n++;
+      }
+      // Inside the transaction, and only reached when every line applied.
+      db.prepare('UPDATE restock_orders SET stock_applied_at = CURRENT_TIMESTAMP WHERE id = ?').run(o.id);
+      return n;
+    })();
     console.log(`[restock-transfer] ${label}: moved ${moved} line(s) store ${warehouseStoreId} → ${destStoreId}`);
+    return { ok: true, moved };
   } catch (e) {
-    console.warn('[restock-transfer] failed:', e.message);
+    // Rolled back: no stock moved, stock_applied_at still empty, so the
+    // transfer can be run again once the cause is fixed.
+    console.error(`[restock-transfer] ${label}: failed and rolled back —`, e.message);
+    return {
+      ok: false,
+      error: 'No stock was moved. The transfer was stopped and everything was put back, so nothing has changed. Try again, and if it keeps failing tell whoever looks after the system: ' + e.message,
+    };
   }
 }
 
@@ -581,14 +669,22 @@ router.put('/api/restock/:id/status', requireAuth, requireRestockOrInbox, (req, 
   // the real retail_store_stock. 'delivered' repeats the call as a safety
   // net; stock_applied_at makes the second call a no-op, so it can never
   // double-count.
+  let transfer = null;
   if (status === 'prepared' || status === 'delivered') {
-    _applyRestockTransfer(order.id, req.user);
+    transfer = _applyRestockTransfer(order.id, req.user);
   }
   // Push fan-out — only for the cross-side transitions the other party
   // actually needs to act on. `received` is internal warehouse state.
   if (status === 'sent' || status === 'prepared' || status === 'delivered') {
     _fireRestockPush(order.id, status);
     _broadcastRestock(order.id, status, req.user.id);
+  }
+  // The status change itself succeeded. When the stock movement did not, say so
+  // in the response so the screen can put it in front of the person who just
+  // pressed the button — it used to be a console warning only, which meant a
+  // failed transfer looked exactly like a successful one.
+  if (transfer && transfer.ok === false) {
+    return res.json({ success: true, stock_transfer: { ok: false, error: transfer.error } });
   }
   res.json({ success: true });
 });

@@ -1912,8 +1912,50 @@ if (!window._storeVisWired) {
     if (!document.hidden && _appMode === 'restock') refreshPendingDeliveries({ silent: true });
   });
 }
-async function _markDelivered(orderId, label) {
+// Marking an order prepared or delivered is what moves the real stock between
+// the warehouse and the store. When that movement fails, nothing moved — the
+// person needs to read that and act on it, so it goes inline above the buttons
+// and stays there. A toast would fade out of a message about lost units.
+// The open overlay owns the message when there is one; otherwise it belongs on
+// the banner the button was pressed from.
+function _rsXferEl() {
+  const ov = document.getElementById('moreOv');
+  if (ov && ov.classList.contains('visible')) return document.getElementById('rsXferMsg');
+  return document.getElementById('rsXferMsgBanner');
+}
+function _rsXferClear() {
+  ['rsXferMsg', 'rsXferMsgBanner'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.display = 'none';
+    el.textContent = '';
+  });
+}
+function _rsXferShow(msg) {
+  const el = _rsXferEl();
+  if (!el) return false;
+  el.textContent = msg;
+  el.setAttribute('style', 'display:block;background:rgba(220,38,38,.06);border:1px solid rgba(220,38,38,.35);border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:13px;line-height:1.5;color:#b91c1c;font-weight:600');
+  el.scrollIntoView({ block: 'nearest' });
+  return true;
+}
+// Disable every button in the open overlay's action row while a request is in
+// flight, so the movement can't be fired twice by an impatient second tap.
+function _rsActionsBusy(busy, btn) {
+  const row = document.getElementById('rsActionRow');
+  if (row) {
+    row.querySelectorAll('button').forEach(b => { b.disabled = !!busy; });
+    row.style.opacity = busy ? '.6' : '';
+  }
+  // The banner's own inline button, when that's what was pressed.
+  if (btn) { btn.disabled = !!busy; btn.style.opacity = busy ? '.6' : ''; }
+}
+async function _markDelivered(orderId, label, btn) {
+  if (_inboxBusy) return;
   if (!confirm(`Mark ${label} as delivered? · 确认 ${label} 已送达?`)) return;
+  _inboxBusy = true;
+  _rsXferClear();
+  _rsActionsBusy(true, btn);
   try {
     const r = await fetch('/api/restock/' + orderId + '/status', {
       method:'PUT', headers:{'Content-Type':'application/json'},
@@ -1921,6 +1963,19 @@ async function _markDelivered(orderId, label) {
     });
     const d = await r.json();
     if (!d?.success) throw new Error(d?.error || 'failed');
+    // Status changed, but the stock movement was rolled back. Say so inline and
+    // keep the overlay open — the order still needs someone to act on it. No
+    // refresh or re-render on this path: the banner repaints every 8 seconds and
+    // would wipe the message, so when it was pressed from the banner we open the
+    // order's own overlay and put the message there instead.
+    if (d.stock_transfer && d.stock_transfer.ok === false) {
+      const ovOpen = document.getElementById('moreOv')?.classList.contains('visible');
+      if (!ovOpen) {
+        try { await _openDeliveryDetail(orderId); } catch (e) { /* show it wherever we can */ }
+      }
+      if (!_rsXferShow(d.stock_transfer.error)) toast(d.stock_transfer.error, 'error');
+      return;
+    }
     toast(`✓ ${label} delivered · 已送达`, 'success');
     beep('done');
     // User just acted on a "ready to receive" notification — clear the
@@ -1930,7 +1985,10 @@ async function _markDelivered(orderId, label) {
     await refreshPendingDeliveries();
     if (_appMode === 'restock') render();
   } catch (e) {
-    toast('Failed: ' + (e.message || ''), 'error');
+    if (!_rsXferShow('Failed: ' + (e.message || ''))) toast('Failed: ' + (e.message || ''), 'error');
+  } finally {
+    _inboxBusy = false;
+    _rsActionsBusy(false, btn);
   }
 }
 
@@ -1995,7 +2053,8 @@ function _renderDeliveryDetail(order) {
       }).join('')}
     </div>
 
-    <div style="display:flex;gap:8px;align-items:stretch">
+    <div id="rsXferMsg" style="display:none"></div>
+    <div id="rsActionRow" style="display:flex;gap:8px;align-items:stretch">
       <button class="submit-btn draft" style="flex:1 1 0;min-width:0;font-size:13px;padding:14px 8px" onclick="closeAllOv()">Close · 关闭</button>
       <button class="submit-btn" style="flex:2 1 0;min-width:0;font-size:14px;padding:14px 10px;line-height:1.2;white-space:normal;background:var(--lime);color:var(--dk);border:none" onclick="_markDelivered(${order.id}, '${rsLabel}')">✓ Mark Delivered<br><span style="font-weight:700;opacity:.85">已收到</span></button>
     </div>`;
@@ -2041,6 +2100,7 @@ function _renderReadyBanner() {
         <span>📦 Ready to receive · 等待收货</span>
         <span style="margin-left:auto;font-weight:700;color:var(--muted)">${_pendingDeliveries.length} order${_pendingDeliveries.length===1?'':'s'} · 单</span>
       </div>
+      <div id="rsXferMsgBanner" style="display:none"></div>
       ${_pendingDeliveries.slice(0, 5).map(o => {
         const ago = _agoBilingual(o.prepared_at || o.sent_at || o.created_at);
         const rsLabel = esc(o.rs_number || ('#'+o.id));
@@ -2050,7 +2110,7 @@ function _renderReadyBanner() {
             <div style="font-family:ui-monospace,SFMono-Regular,monospace;font-size:13px;font-weight:800;color:var(--dk)">${rsLabel}</div>
             <div style="font-size:11px;color:var(--muted);margin-top:1px">Prepared · 已备货 ${ago} · ${o.item_count||0} item${(o.item_count||0)===1?'':'s'} 件 · tap to view 点击查看</div>
           </div>
-          <button onclick="event.stopPropagation();_markDelivered(${o.id}, '${rsLabel}')" style="background:var(--lime);color:var(--dk);border:none;border-radius:9px;padding:8px 14px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap;box-shadow:0 2px 6px rgba(204,217,0,.35);flex-shrink:0">✓ Delivered<br><span style="font-weight:700;opacity:.85;font-size:10px">已收到</span></button>
+          <button onclick="event.stopPropagation();_markDelivered(${o.id}, '${rsLabel}', this)" style="background:var(--lime);color:var(--dk);border:none;border-radius:9px;padding:8px 14px;font-size:12px;font-weight:800;cursor:pointer;font-family:inherit;white-space:nowrap;box-shadow:0 2px 6px rgba(204,217,0,.35);flex-shrink:0">✓ Delivered<br><span style="font-weight:700;opacity:.85;font-size:10px">已收到</span></button>
         </div>`;
       }).join('')}
     </div>`;
@@ -2536,7 +2596,8 @@ function _renderInboxDetail(order) {
       </div>` : (order.wh_notes ? `
       <div style="background:rgba(37,99,235,.06);border:1px solid rgba(37,99,235,.25);border-radius:10px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--text);line-height:1.5"><strong>🏭 Warehouse · 仓库:</strong> ${esc(order.wh_notes)}</div>` : '')}
 
-    <div style="display:flex;gap:8px;align-items:stretch">
+    <div id="rsXferMsg" style="display:none"></div>
+    <div id="rsActionRow" style="display:flex;gap:8px;align-items:stretch">
       <button class="submit-btn draft" style="flex:1 1 0;min-width:0;font-size:13px;padding:14px 8px" onclick="closeAllOv()">Close · 关闭</button>
       ${primaryAction}
     </div>`;
@@ -2625,6 +2686,8 @@ async function _inboxTransition(orderId, toStatus) {
   const [confirmMsg, successMsg] = labelMap[toStatus] || ['Update status?', '✓ Updated'];
   if (!confirm(confirmMsg)) return;
   _inboxBusy = true;
+  _rsXferClear();
+  _rsActionsBusy(true);
   try {
     const r = await fetch('/api/restock/' + orderId + '/status', {
       method: 'PUT', headers: { 'Content-Type': 'application/json' },
@@ -2632,6 +2695,12 @@ async function _inboxTransition(orderId, toStatus) {
     });
     const d = await r.json();
     if (!d?.success) throw new Error(d?.error || 'failed');
+    // The status moved but the stock did not. Show it inline and leave the
+    // order open — marking it prepared is what should have moved the goods.
+    if (d.stock_transfer && d.stock_transfer.ok === false) {
+      if (!_rsXferShow(d.stock_transfer.error)) toast(d.stock_transfer.error, 'error');
+      return;
+    }
     toast(successMsg, 'success');
     beep('done');
     closeAllOv();
@@ -2643,8 +2712,11 @@ async function _inboxTransition(orderId, toStatus) {
       if (_appMode === 'restock') render();
     });
   } catch (e) {
-    toast('Failed: ' + (e.message || ''), 'error');
-  } finally { _inboxBusy = false; }
+    if (!_rsXferShow('Failed: ' + (e.message || ''))) toast('Failed: ' + (e.message || ''), 'error');
+  } finally {
+    _inboxBusy = false;
+    _rsActionsBusy(false);
+  }
 }
 async function _inboxToggleItem(orderId, itemId, checked) {
   try {
