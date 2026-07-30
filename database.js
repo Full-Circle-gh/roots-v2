@@ -3107,6 +3107,43 @@ addColumn('retail_orders', 'balance_used', 'REAL DEFAULT 0');
 // fall back to refund_amount_approved (where cash == value).
 addColumn('retail_orders', 'refund_cash_amount', 'REAL');
 
+// ── Unfinished "New order" forms ───────────────────────────────────────────────
+// A SEPARATE TABLE, deliberately NOT a 'draft' value on retail_orders.status.
+// That column is read by the Orders filter chips, the KPI tiles, reports and
+// customer lifetime spend. Adding a status makes every one of those places
+// responsible for remembering to exclude it, and the first one that forgets
+// counts a half-typed order as revenue. A draft has no order number, no stock
+// implication and no customer-history effect — it is not an order in an early
+// state, it is not an order. A separate table cannot leak into a query written
+// before it existed. (The manual-create endpoint also collapses any non-'paid'
+// status to 'pending_payment', which a draft value would have to be special-cased
+// around.)
+//
+// payload is the FORM STATE, opaque to the server and stored as JSON rather than
+// normalised columns: a draft is allowed to be incomplete and invalid, which is
+// the entire point of it. Nothing here is validated order data.
+//
+// created_by carries NO FOREIGN KEY, and owner_realm exists because req.user.id
+// is TWO id spaces in one number: tenant_users(id) for a Mini App Backend
+// operator, kitchen users(id) for the legacy path. Within the Roots tenant both
+// realms share one database, so id 5 is two different people and scoping a
+// personal draft on created_by alone would hand one operator the other's form.
+// A hard FK to users(id) would also reject every operator-driven write — the
+// same trap already documented on retail_stock_ledger.actor and
+// retail_vouchers.created_by.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS retail_order_drafts (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_by   INTEGER NOT NULL,        -- audit integer, NOT an FK (see above)
+    owner_realm  TEXT    NOT NULL,        -- 'backend' | 'kitchen' — disambiguates created_by
+    payload      TEXT    NOT NULL,        -- opaque form state (JSON), never validated here
+    created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE INDEX IF NOT EXISTS idx_retail_order_drafts_owner
+    ON retail_order_drafts(owner_realm, created_by, updated_at);
+`);
+
 // Seed default GZ-express excluded districts (editable from Admin →
 // Integrations later). Customers in these districts get the simple
 // fallback-yes/no modal even on right-away slots — the 5-option flow

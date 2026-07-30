@@ -18991,6 +18991,109 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), (req
   res.json({ success: true, data: { id: orderId, order_no: orderNo, status, total, pay_token: payToken, pay_url: payUrl } });
 });
 
+// ── Unfinished New-order forms ─────────────────────────────────────────────────
+// Create, list, open, update, delete. Nothing else: no autosave, no expiry, no
+// sharing, no crash recovery, until the page exists and we know what it needs.
+// See the retail_order_drafts comment in database.js for why this is a table and
+// not a retail_orders.status value.
+//
+// Gating: requireRetailAdmin + the explicit '/order-drafts' → 'orders:edit'
+// mapping in lib/cap-routes.js, which is exactly what creating an order goes
+// through. requireCap() from lib/require-cap.js is deliberately NOT used — it
+// authenticates only via session.backendUserId/tenant_users, so it would 401
+// every legacy kitchen operator who comes in through requireAuth. Note the
+// enforcement itself is still dark: cap-routes only runs when tenant.rbac_enforce
+// is on, and owners bypass it. The mapping is what makes this correct on the day
+// that flips, rather than a fresh fail-open hole nobody remembers.
+const DRAFT_PAYLOAD_MAX = 64 * 1024;
+// req.user.id is two id spaces — tenant_users(id) on the backend path, kitchen
+// users(id) on the legacy one — and within Roots they share a database. The realm
+// is what stops id 5 in one from opening id 5's draft in the other.
+function draftOwner(req) {
+  return { id: req.user.id, realm: req.backendUser ? 'backend' : 'kitchen' };
+}
+// The payload is never inspected, only bounded. A draft is allowed to be
+// incomplete and invalid; validating it here would defeat the point.
+function draftPayloadJson(body) {
+  if (!body || typeof body !== 'object' || !('payload' in body)) return null;
+  let s;
+  try { s = JSON.stringify(body.payload); } catch (e) { return null; }
+  if (typeof s !== 'string' || s.length > DRAFT_PAYLOAD_MAX) return null;
+  return s;
+}
+
+router.post('/api/retail-admin/order-drafts', requireRetailAdmin, express.json(), (req, res) => {
+  const payload = draftPayloadJson(req.body);
+  if (payload == null) return res.status(400).json({ success: false, error: 'bad_payload', max_bytes: DRAFT_PAYLOAD_MAX });
+  const o = draftOwner(req);
+  const info = tdb().prepare(
+    'INSERT INTO retail_order_drafts (created_by, owner_realm, payload) VALUES (?, ?, ?)'
+  ).run(o.id, o.realm, payload);
+  res.json({ success: true, data: { id: info.lastInsertRowid } });
+});
+
+// Own drafts only. Metadata, not payloads — timestamps are what the UI tells them
+// apart by, and a list of full form states is a lot of bytes for a chooser. If the
+// page turns out to need a per-row preview, that is a change to make once we know
+// what the preview should say, not a guess now.
+router.get('/api/retail-admin/order-drafts', requireRetailAdmin, (req, res) => {
+  const o = draftOwner(req);
+  const rows = tdb().prepare(
+    `SELECT id, created_at, updated_at
+       FROM retail_order_drafts
+      WHERE created_by = ? AND owner_realm = ?
+      ORDER BY updated_at DESC, id DESC
+      LIMIT 50`
+  ).all(o.id, o.realm);
+  res.json({ success: true, data: rows });
+});
+
+// 404 rather than 403 on somebody else's draft — a 403 would confirm it exists.
+router.get('/api/retail-admin/order-drafts/:id', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ success: false, error: 'bad_id' });
+  const o = draftOwner(req);
+  const row = tdb().prepare(
+    `SELECT id, payload, created_at, updated_at
+       FROM retail_order_drafts
+      WHERE id = ? AND created_by = ? AND owner_realm = ?`
+  ).get(id, o.id, o.realm);
+  if (!row) return res.status(404).json({ success: false, error: 'not_found' });
+  // Hand back the parsed form state; the client stored an object, not a string.
+  let parsed = null;
+  try { parsed = JSON.parse(row.payload); } catch (e) { /* corrupt row → null */ }
+  res.json({ success: true, data: { id: row.id, payload: parsed, created_at: row.created_at, updated_at: row.updated_at } });
+});
+
+router.patch('/api/retail-admin/order-drafts/:id', requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ success: false, error: 'bad_id' });
+  const payload = draftPayloadJson(req.body);
+  if (payload == null) return res.status(400).json({ success: false, error: 'bad_payload', max_bytes: DRAFT_PAYLOAD_MAX });
+  const o = draftOwner(req);
+  const info = tdb().prepare(
+    `UPDATE retail_order_drafts
+        SET payload = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ? AND created_by = ? AND owner_realm = ?`
+  ).run(payload, id, o.id, o.realm);
+  if (!info.changes) return res.status(404).json({ success: false, error: 'not_found' });
+  res.json({ success: true });
+});
+
+// Called by the page once an order is created, and by an explicit discard. The
+// server keeps no link between a draft and the order it became — there is nothing
+// to reconcile, and nothing that can be left half-pointing at a deleted row.
+router.delete('/api/retail-admin/order-drafts/:id', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ success: false, error: 'bad_id' });
+  const o = draftOwner(req);
+  const info = tdb().prepare(
+    'DELETE FROM retail_order_drafts WHERE id = ? AND created_by = ? AND owner_realm = ?'
+  ).run(id, o.id, o.realm);
+  if (!info.changes) return res.status(404).json({ success: false, error: 'not_found' });
+  res.json({ success: true });
+});
+
 router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
   const { status, q, from, to, store_id, customer_id } = req.query;
   // Combined-channel view: an explicit ?channel filters to one channel; absent
