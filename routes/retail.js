@@ -18705,7 +18705,14 @@ router.get('/api/retail-admin/invoices/unseen-count', requireRetailAdmin, (req, 
 // POST /api/retail/orders but is deliberately simpler and staff-trusted: no
 // vouchers/points/stock-gate/live-payment machinery. It prices from the live
 // catalog by default, but staff may override any line price AND the grand total
-// (negotiated / wholesale). The order is tagged channel='manual' + source='manual'.
+// (negotiated / wholesale).
+//
+// channel / store_id / fulfillment_type come from the PAYLOAD. They used to be
+// hardcoded 'manual'/'manual'/'delivery' with store_id left out of the INSERT
+// entirely, so the operator's actual answer was thrown away and every manual
+// order claimed to be a delivery from no store. source stays 'manual' — it
+// records how the row was CREATED (keyed in by staff), which is not something
+// the client gets to claim.
 //
 // Customer is optional: pass customer_id to attach to a real account (the order
 // then shows in their app), or omit it for a GUEST walk-in (customer_id null —
@@ -18714,6 +18721,18 @@ router.get('/api/retail-admin/invoices/unseen-count', requireRetailAdmin, (req, 
 // Status defaults to 'pending_payment'. Staff may set 'paid' for money already
 // collected offline — we route that through the shared markOrderPaid() so the
 // payment row, points, and referral credit settle exactly like a real payment.
+
+// Channels a MANUAL order may claim. Deliberately narrower than the GET filter's
+// set below: meituan/gzgrocery/eleme rows are written by their own daemons and
+// are read-only in the combined list (ordIsReadonlyChannel) — the storefront
+// neither fulfils nor prints them. Letting staff hand-key one would mint an order
+// nobody can act on, and would collide with the daemon's own mirror row.
+// Inclusion list, never fall-through (§1.17 rule 2).
+const MANUAL_ORDER_CHANNELS = ['manual', 'wechat', 'web'];
+// delivery = ship/courier to an address · pickup = customer collects at a store
+// later · counter = handed over at the till now, nothing to ship or collect.
+const ORDER_FULFILLMENT_TYPES = ['delivery', 'pickup', 'counter'];
+
 router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), (req, res) => {
   const b = req.body || {};
 
@@ -18783,6 +18802,39 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), (req
   const staffNote    = b.staff_note    == null ? null : String(b.staff_note).slice(0, 2000);
   const customerNote = b.customer_note == null ? null : String(b.customer_note).slice(0, 2000);
 
+  // ── What the operator actually chose: channel, store, fulfilment ──────────
+  // Absent channel → 'manual', which is what every row got when this was
+  // hardcoded, so an existing caller's stored value does not move.
+  const channel = b.channel == null || b.channel === ''
+    ? 'manual'
+    : String(b.channel).toLowerCase();
+  if (!MANUAL_ORDER_CHANNELS.includes(channel)) {
+    return res.status(400).json({ success: false, error: 'bad_channel', allowed: MANUAL_ORDER_CHANNELS });
+  }
+
+  // store_id is optional (a phone order taken before routing is decided has no
+  // store yet), but an id that was SENT must resolve. Writing NULL for a store
+  // the operator picked would look like "no store" instead of "we lost it".
+  let storeId = null;
+  if (b.store_id != null && b.store_id !== '') {
+    storeId = parseInt(b.store_id, 10);
+    if (!storeId) return res.status(400).json({ success: false, error: 'bad_store_id' });
+    const store = tdb().prepare('SELECT id FROM retail_stores WHERE id = ?').get(storeId);
+    if (!store) return res.status(404).json({ success: false, error: 'store_not_found', store_id: storeId });
+  }
+
+  // Absent fulfillment_type → 'delivery', matching the value this endpoint used
+  // to force. declaredFt tracks whether the CLIENT said so; the address rule
+  // below binds only on a declared value, so the live modal — which sends no
+  // fulfillment_type and omits address when the operator leaves it blank — keeps
+  // working byte-for-byte. See the commit message: this seam is deliberate and
+  // closes when the rebuilt page always sends the field.
+  const declaredFt = b.fulfillment_type != null && b.fulfillment_type !== '';
+  const fulfillmentType = declaredFt ? String(b.fulfillment_type).toLowerCase() : 'delivery';
+  if (!ORDER_FULFILLMENT_TYPES.includes(fulfillmentType)) {
+    return res.status(400).json({ success: false, error: 'bad_fulfillment_type', allowed: ORDER_FULFILLMENT_TYPES });
+  }
+
   // Optional delivery address snapshot (else it's a counter order with just a
   // contact). Structured + one-line, mirroring the customer checkout snapshot.
   const addr = b.address && typeof b.address === 'object' ? b.address : null;
@@ -18794,6 +18846,24 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), (req
     province: addr.province || null, city: addr.city || null, district: addr.district || null,
     address: addr.address || null, detail: addr.detail || null, postal_code: addr.postal_code || null,
   }) : null;
+
+  // ── Conditional: address belongs to a delivery and to nothing else ─────────
+  // On the SERVER, not only in the form — §1.17 rule 7, a check that exists only
+  // in the UI is a bypass for anyone who notices. A counter sale or a store
+  // pickup arriving with a shipping address is a client bug; storing it quietly
+  // leaves a row that reads as deliverable to all 25 sites that ask "is it
+  // pickup?" and treat everything else as a delivery.
+  // An address object whose every field is blank counts as absent, not present —
+  // otherwise `address: {}` would satisfy a delivery.
+  const hasAddress = !!(addressFull && addressFull.trim());
+  if (declaredFt) {
+    if (fulfillmentType === 'delivery' && !hasAddress) {
+      return res.status(400).json({ success: false, error: 'address_required_for_delivery' });
+    }
+    if (fulfillmentType !== 'delivery' && hasAddress) {
+      return res.status(400).json({ success: false, error: 'address_not_allowed_for_' + fulfillmentType });
+    }
+  }
 
   // Guest-pay handle — lets a customer without an app account pay this one
   // order by QR at /pay/:token. Minted for every manual order (harmless on
@@ -18809,15 +18879,17 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), (req
          order_no, customer_id, status, payment_method,
          recipient_name, recipient_phone, address_full, address_json,
          subtotal, shipping_fee, total,
-         customer_note, staff_note, channel, source, created_by, fulfillment_type, pay_token
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+         customer_note, staff_note, channel, source, created_by, fulfillment_type, pay_token,
+         store_id
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).run(
       // Always inserted as pending_payment first; markOrderPaid() flips it below
       // when staff chose 'paid', keeping the settle logic in one place.
       orderNo, customer ? customer.id : null, 'pending_payment', paymentMethod,
       recipientName, recipientPhone || null, addressFull, addressJson,
       subtotal, shippingFee, total,
-      customerNote, staffNote, 'manual', 'manual', req.user.id, 'delivery', payToken
+      customerNote, staffNote, channel, 'manual', req.user.id, fulfillmentType, payToken,
+      storeId
     );
     orderId = info.lastInsertRowid;
     const insItem = tdb().prepare(
@@ -18844,7 +18916,8 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), (req
   }
 
   logActivity(req.user.id, req.user.username, 'create_manual', 'retail_order', orderId,
-              { order_no: orderNo, total, status, guest: !customer }, req.ip);
+              { order_no: orderNo, total, status, guest: !customer,
+                channel, store_id: storeId, fulfillment_type: fulfillmentType }, req.ip);
   // Pay link is only meaningful while unpaid. Built on this request's origin so
   // it works on whichever storefront host the operator is on (tenant-correct).
   const payUrl = (status === 'pending_payment' && total > 0)
