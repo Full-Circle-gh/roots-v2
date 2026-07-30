@@ -276,8 +276,8 @@ check('packing template on a counter sale renders a receipt, not a picking list'
 const CLIENT_SRC = fs.readFileSync(
   path.join(__dirname, '..', 'public', 'retail-admin', '04-orders.js'), 'utf8');
 
-function extractFn(name) {
-  const lines = CLIENT_SRC.split('\n');
+function extractFn(name, src) {
+  const lines = (src || CLIENT_SRC).split('\n');
   const start = lines.findIndex(l => l.startsWith(`function ${name}(`));
   if (start === -1) return null;
   for (let i = start + 1; i < lines.length; i++) {
@@ -370,6 +370,69 @@ check('an unpaid counter sale can still be marked paid or cancelled',
 check('counter transitions match delivery — the list is keyed on status, not type',
   nextOf({ status: 'delivered', fulfillment_type: 'counter' }),
   nextOf({ status: 'delivered', fulfillment_type: 'delivery' }));
+
+// ═══ 5d. What it SENDS to the WeCom group ═══════════════════════════════════
+// The alert stays for a counter sale (Ash's call), but it must read as a RECORD,
+// not a task. The delivery card is shaped like a job — recipient, address, slot —
+// and the same group carries real delivery jobs, so a walk-in wearing that shape
+// teaches staff to skim the channel.
+//
+// Same extraction technique as the client predicates, against routes/retail.js.
+const SERVER_SRC = fs.readFileSync(
+  path.join(__dirname, '..', 'routes', 'retail.js'), 'utf8');
+
+const CARD_FNS = ['buildWecomOrderCard', 'buildWecomCounterCard'];
+const cardSrc = {};
+for (const n of CARD_FNS) cardSrc[n] = extractFn(n, SERVER_SRC);
+const cardMissing = CARD_FNS.filter(n => !cardSrc[n]);
+check('both WeCom card builders were found in routes/retail.js', cardMissing, []);
+
+if (!cardMissing.length) {
+  const cards = new Function(
+    `${CARD_FNS.map(n => cardSrc[n]).join('\n')}
+     return { ${CARD_FNS.join(', ')} };`
+  )();
+
+  const counterOrder = {
+    order_no: 'R-CNTR', total: 100, paid_at: NOW, fulfillment_type: 'counter',
+    // Deliberately populated: a counter sale still has a recipient_name (the
+    // endpoint requires one), which is exactly why the delivery card would leak
+    // a "To:" line if the branch were removed.
+    recipient_name: 'Walk-in', address_full: null, delivery_slot_label: null,
+    store_name_cn: '天河', counter_items: '燕麦奶×2', counter_cashier: 'ash',
+  };
+  const counterCard = cards.buildWecomCounterCard(counterOrder);
+
+  // A record, not a task.
+  check('counter alert carries no recipient, address or slot',
+    [/收货人|To:/.test(counterCard), /地址|Address:/.test(counterCard), /Slot:/.test(counterCard)],
+    [false, false, false]);
+  check('counter alert carries store, order, items, total, cashier and the method line',
+    ['门店', 'R-CNTR', '燕麦奶×2', '¥100.00', 'ash', '前台 Counter'].map(t => counterCard.includes(t)),
+    [true, true, true, true, true, true]);
+  // Its own lead line — a completed sale, not a new order to fulfil.
+  check('counter alert does NOT use the new-order lead line',
+    /新订单|New order/.test(counterCard), false);
+  check('counter alert says it is already handed over',
+    /已交付/.test(counterCard) && /nothing to fulfil/.test(counterCard), true);
+  // §1.11 — the new lead lines are one language each, not glued with a middle dot.
+  check('counter lead lines are separate EN and 中文, not glued',
+    [counterCard.includes('**🌿 前台销售**'), counterCard.includes('**Counter sale**'),
+     /前台销售 ·|· Counter sale/.test(counterCard)],
+    [true, true, false]);
+
+  // THE PRE-FIX SHAPE, recorded permanently. Routing the SAME counter sale
+  // through the delivery card is what happened before this branch existed, and
+  // it produces the address-shaped message the branch exists to prevent.
+  const preFix = cards.buildWecomOrderCard(counterOrder, false);
+  check('the delivery card WOULD have made a counter sale look like a job',
+    [/新订单|New order/.test(preFix), /收货人|To:/.test(preFix)], [true, true]);
+
+  // Catches someone deleting the wiring rather than the card: the builders can
+  // both be perfect and never be reached.
+  check('sendWecomOrderAlert routes a counter sale to the counter card',
+    /isCounter\(o\)\s*\?\s*buildWecomCounterCard/.test(SERVER_SRC), true);
+}
 
 // ═══ 6. Money and paperwork still move — born fulfilled, NOT born closed ════
 db.prepare("UPDATE retail_orders SET needs_invoice = 1, invoice_status = 'requested' WHERE id = 3").run();

@@ -3980,6 +3980,36 @@ function buildWecomOrderCard(o, awaitingRestock) {
   return lines.filter(Boolean).join('\n');
 }
 
+// A counter sale's alert is a RECORD, not a task. The card above is shaped like
+// a job — recipient, address, slot — and this group also carries real delivery
+// jobs. A walk-in that already left with the goods, wearing the same shape,
+// teaches staff to skim the channel. So counter gets its own lead line and
+// carries only what makes it a record: store, order, what was sold, total, and
+// who rang it up. No recipient block, no address, no slot, nothing phrased as an
+// instruction.
+//
+// The two languages sit on their own lines rather than glued with a middle dot
+// (§1.11). The `标签 Label:` rows below reuse the card's existing idiom — those
+// pairs predate this branch and are not new glued nodes.
+function buildWecomCounterCard(o) {
+  const time = String(o.paid_at || '').replace('T', ' ').slice(0, 16);
+  const amount = '¥' + Number(o.total || 0).toFixed(2);
+  const store = o.store_name_cn || o.store_name_en || o.store_code || null;
+  return [
+    '**🌿 前台销售**',
+    '**Counter sale**',
+    store ? `> 门店 Store: ${store}` : null,
+    `> 订单号 Order: \`${o.order_no}\``,
+    o.counter_items ? `> 商品 Items: ${o.counter_items}` : null,
+    `> 金额 Amount: <font color="warning">${amount}</font>`,
+    time ? `> 时间 Time: ${time}` : null,
+    o.counter_cashier ? `> 收银 Cashier: ${o.counter_cashier}` : null,
+    '> 方式 Method: 前台 Counter',
+    '> 已交付，无需处理',
+    '> Handed over — nothing to fulfil',
+  ].filter(Boolean).join('\n');
+}
+
 // Fire the merchant new-order alert. App channel preferred; webhook fallback.
 // Fire-and-forget from markOrderPaid: reads the row synchronously (tenant scope
 // is live now) then sends async.
@@ -3989,12 +4019,41 @@ function sendWecomOrderAlert(orderId, { awaitingRestock = false } = {}) {
   if (!hasApp && !webhook) return;
   try {
     const o = tdb().prepare(
-      `SELECT order_no, total, paid_at, fulfillment_type, recipient_name,
-              address_full, delivery_slot_label, fulfillment_short_pids
-         FROM retail_orders WHERE id = ?`
+      `SELECT o.order_no, o.total, o.paid_at, o.fulfillment_type, o.recipient_name,
+              o.address_full, o.delivery_slot_label, o.fulfillment_short_pids,
+              o.created_by, s.code AS store_code,
+              s.name_en AS store_name_en, s.name_cn AS store_name_cn
+         FROM retail_orders o
+    LEFT JOIN retail_stores s ON s.id = o.store_id
+        WHERE o.id = ?`
     ).get(orderId);
     if (!o) return;
-    const content = buildWecomOrderCard(o, awaitingRestock);
+    // Counter sales need three things the delivery card never asked for. Fetched
+    // only on that branch so the normal path costs nothing extra.
+    if (isCounter(o)) {
+      try {
+        const items = tdb().prepare(
+          'SELECT name_en, name_cn, qty FROM retail_order_items WHERE order_id = ? ORDER BY id'
+        ).all(orderId);
+        o.counter_items = items
+          .map(it => `${it.name_cn || it.name_en || '?'}×${it.qty}`)
+          .join('、').slice(0, 200) || null;
+      } catch (e) { console.warn('[wecom counter items]', orderId, e.message); }
+      // created_by is a bare audit integer across TWO id spaces (tenant_users for
+      // a Mini App Backend operator, users for a kitchen login), so it cannot be
+      // joined safely. Look it up in the realm that actually creates manual
+      // orders and drop the line when it does not resolve — a wrong name on a
+      // till receipt is worse than no name.
+      try {
+        if (o.created_by) {
+          const u = db.prepare('SELECT username, display_name FROM tenant_users WHERE id = ?').get(o.created_by);
+          if (u) o.counter_cashier = u.display_name || u.username || null;
+        }
+      } catch (e) { console.warn('[wecom counter cashier]', orderId, e.message); }
+    }
+    const content = isCounter(o)
+      ? buildWecomCounterCard(o)
+      : buildWecomOrderCard(o, awaitingRestock);
     const send = hasApp ? sendWecomAppMessage(content) : postWecomMarkdown(webhook, content);
     send.then(r => { if (!r.ok) console.warn('[wecom alert]', orderId, r.msg); })
         .catch(e => console.warn('[wecom alert]', orderId, e.message));
