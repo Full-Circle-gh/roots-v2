@@ -7108,6 +7108,348 @@ document.addEventListener('click', (e) => {
   if (!_ORD_NEW_OPEN) return;
   if (e.target.closest && e.target.closest('.tabs [data-tab]')) _ordNewTeardown(false);
 }, true);
+// ── The form. State lives here; the static markup in retail-admin.html is
+// the switchable surface (glued EN·中文 pairs for the walker). Dynamic
+// regions hold outside-system text — names, phones, SKUs — so they carry
+// data-no-i18n in the markup and bake ONE language with cuT(); the
+// onLangChange hook at the bottom re-paints them on toggle.
+let ONW = null;
+let onwCustTimer = null, onwProdTimer = null;
+
+function onwIc(d, w) {
+  return `<svg class="onw-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${w || 1.7}" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+}
+const ONW_ICONS = {
+  x: '<path d="M18 6 6 18M6 6l12 12"/>',
+  warn: '<path d="M12 3.5 22 20H2L12 3.5Z"/><path d="M12 10v4M12 17h.01"/>',
+  block: '<circle cx="12" cy="12" r="9"/><path d="m6 6 12 12"/>',
+  people: '<circle cx="9" cy="8" r="3.2"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 5.3a3.2 3.2 0 0 1 0 5.4M17.5 20a6.5 6.5 0 0 0-2-4.7"/>',
+  trash: '<path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/>',
+};
+function onwMoney(n) {
+  const v = Number(n) || 0;
+  const s = Math.abs(v).toFixed(2).split('.');
+  return (v < 0 ? '-¥' : '¥') + s[0].replace(/\B(?=(\d{3})+$)/g, ',') + '.' + s[1];
+}
+
+// Reset to frame A — nothing entered — and paint every dynamic region.
+function ordNewRender() {
+  ONW = {
+    cust: 'rest',            // rest | linked | guest
+    customer: null,          // { id, nickname, phone } when linked
+    saveCust: true,          // "Also save as a customer" — on by default (frame C)
+    ful: 'delivery',
+    lines: [],               // [{ product_id, name_en, name_cn, sku, qty, unit_price }]
+    custResults: [], prodResults: [],
+    customersOnFile: null,   // from the roster response — tells (c) from (d)
+    custQuery: '',
+    phoneNote: null,         // { kind: match|blocked|shared, name, phone, count }
+  };
+  ['onw-cust-q', 'onw-guest-name', 'onw-guest-phone', 'onw-prod-q',
+   'onw-addr-name', 'onw-addr-phone', 'onw-addr-region', 'onw-addr-district',
+   'onw-addr-street', 'onw-addr-postal', 'onw-note-cust', 'onw-note-staff']
+    .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  const ship = document.getElementById('onw-ship'); if (ship) ship.value = '0';
+  const ovr = document.getElementById('onw-override'); if (ovr) ovr.value = '';
+  const ch = document.getElementById('onw-channel'); if (ch) ch.value = 'manual';
+  const ful = document.getElementById('onw-ful'); if (ful) ful.value = 'delivery';
+  const st = document.getElementById('onw-status'); if (st) st.value = 'pending_payment';
+  const pay = document.getElementById('onw-pay'); if (pay) pay.value = 'wechat';
+  ordNewLoadStores();
+  ordNewPaintCustState();
+  ordNewHideResults('onw-cust-results'); ordNewHideResults('onw-prod-results');
+  ordNewPaintPhoneNote();
+  ordNewFulChange();
+  ordNewRenderLines();
+  setTimeout(() => { const el = document.getElementById('onw-cust-q'); if (el) el.focus(); }, 60);
+}
+function ordNewHideResults(id) { const el = document.getElementById(id); if (el) { el.hidden = true; el.innerHTML = ''; } }
+
+// Stores fill once per open. The first store is preselected — the common case
+// is the operator's own store; a different routing is one change away.
+async function ordNewLoadStores() {
+  const sel = document.getElementById('onw-store');
+  if (!sel) return;
+  try {
+    const j = await api('/api/retail-admin/stores');
+    const stores = (j.data || []).filter(s => s.is_active !== 0);
+    sel.innerHTML = stores.map(s =>
+      `<option value="${s.id}">${escapeHtml(cuT(s.name_en || s.code || ('#' + s.id), s.name_cn || s.name_en || s.code || ('#' + s.id)))}</option>`).join('');
+    if (stores.length) sel.value = String(stores[0].id);
+  } catch { sel.innerHTML = ''; }
+}
+
+// ── Customer — five states (frames A/B) ────────────────────────────────
+function ordNewCustSearch() {
+  clearTimeout(onwCustTimer);
+  const q = (document.getElementById('onw-cust-q').value || '').trim();
+  ONW.custQuery = q;
+  if (!q) { ordNewHideResults('onw-cust-results'); return; }
+  onwCustTimer = setTimeout(async () => {
+    try {
+      const j = await api('/api/retail-admin/customers?pageSize=8&q=' + encodeURIComponent(q));
+      if (ONW.custQuery !== q) return;   // a newer keystroke superseded this
+      ONW.custResults = (j.data || []).slice(0, 8);
+      // The server now tells no-match from empty catalogue (§1.12's two most
+      // conflated states) — carry the count so the copy can differ.
+      ONW.customersOnFile = (j.customers_on_file != null) ? Number(j.customers_on_file) : null;
+      ordNewPaintCustResults();
+    } catch { ordNewHideResults('onw-cust-results'); }
+  }, 220);
+}
+function ordNewPaintCustResults() {
+  const box = document.getElementById('onw-cust-results');
+  if (!box) return;
+  const q = ONW.custQuery;
+  if (!q || ONW.cust !== 'rest') { box.hidden = true; box.innerHTML = ''; return; }
+  if (ONW.custResults.length) {
+    box.innerHTML = '<div class="onw-res">' + ONW.custResults.map((c, i) => {
+      const nm = escapeHtml(c.nickname || cuT('(no name)', '(未命名)'));
+      const ph = escapeHtml(c.phone || '');
+      const ct = (c.orders_count != null) ? escapeHtml(cuT(c.orders_count + ' orders', c.orders_count + ' 单')) : '';
+      return `<button type="button" onclick="ordNewPickCustomer(${i})"><span class="nm">${nm}</span><span class="ph">${ph}</span><span class="ct">${ct}</span></button>`;
+    }).join('') + '</div>';
+  } else if (ONW.customersOnFile === 0) {
+    // (d) no customers at all — a different sentence from (c). Not an error:
+    // the operator has not failed at anything.
+    box.innerHTML = `<div class="onw-offer"><p>${escapeHtml(cuT('No customers on this account yet — this order can be the first.', '此账户还没有顾客——这一单可以是第一位。'))}</p>
+      <div><button type="button" class="onw-btn onw-sec onw-sm" onclick="ordNewUseGuest()">${escapeHtml(cuT('Use "' + q + '" as a guest name', '将"' + q + '"用作访客姓名'))}</button></div></div>`;
+  } else {
+    // (c) customers exist; this text matched none of them.
+    box.innerHTML = `<div class="onw-offer"><p>${escapeHtml(cuT('No customer matches "' + q + '".', '没有顾客匹配"' + q + '"。'))}</p>
+      <div><button type="button" class="onw-btn onw-sec onw-sm" onclick="ordNewUseGuest()">${escapeHtml(cuT('Use "' + q + '" as a guest name', '将"' + q + '"用作访客姓名'))}</button></div></div>`;
+  }
+  box.hidden = false;
+}
+function ordNewPickCustomer(i) {
+  const c = ONW.custResults[i];
+  if (!c) return;
+  ONW.cust = 'linked';
+  ONW.customer = { id: c.id, nickname: c.nickname || '', phone: c.phone || '' };
+  ONW.phoneNote = null;
+  ordNewPaintCustState();
+  ordNewPaintPhoneNote();
+}
+function ordNewUseGuest() {
+  ONW.cust = 'guest';
+  ONW.customer = null;
+  ordNewPaintCustState();
+  const nm = document.getElementById('onw-guest-name');
+  if (nm && !nm.value) nm.value = ONW.custQuery || '';
+  const ph = document.getElementById('onw-guest-phone');
+  if (ph) ph.focus();
+}
+// The chip's ✕ — returns to the resting field (state a).
+function ordNewRemoveCust() {
+  ONW.cust = 'rest';
+  ONW.customer = null;
+  ONW.phoneNote = null;
+  ONW.custResults = []; ONW.custQuery = '';
+  const q = document.getElementById('onw-cust-q'); if (q) q.value = '';
+  const nm = document.getElementById('onw-guest-name'); if (nm) nm.value = '';
+  const ph = document.getElementById('onw-guest-phone'); if (ph) ph.value = '';
+  ordNewPaintCustState();
+  ordNewPaintPhoneNote();
+  if (q) q.focus();
+}
+// Show/hide the three customer sub-regions to match ONW.cust.
+function ordNewPaintCustState() {
+  const srch = document.getElementById('onw-cust-srchrow');
+  const chiprow = document.getElementById('onw-cust-chiprow');
+  const guest = document.getElementById('onw-guest-fields');
+  if (!srch || !chiprow || !guest) return;
+  const state = ONW.cust;
+  srch.hidden = state !== 'rest';
+  guest.hidden = state !== 'guest';
+  if (state === 'rest') { chiprow.hidden = true; chiprow.innerHTML = ''; ordNewPaintCustResults(); return; }
+  ordNewHideResults('onw-cust-results');
+  const label = state === 'linked'
+    ? escapeHtml(ONW.customer && (ONW.customer.nickname || ('#' + ONW.customer.id)) || '')
+    : escapeHtml(cuT('Guest', '访客'));
+  const sub = state === 'linked' && ONW.customer && ONW.customer.phone
+    ? ` <span class="ph">${escapeHtml(ONW.customer.phone)}</span>` : '';
+  chiprow.innerHTML = `<span class="onw-chip">${label}${sub}<button type="button" class="x" onclick="ordNewRemoveCust()" title="${escapeHtml(cuT('Remove', '移除'))}">${onwIc(ONW_ICONS.x, 2)}</button></span>`;
+  chiprow.hidden = false;
+  if (state === 'guest') ordNewSyncSaveCust();
+}
+function ordNewToggleSaveCust() {
+  ONW.saveCust = !ONW.saveCust;
+  ordNewSyncSaveCust();
+}
+function ordNewSyncSaveCust() {
+  const b = document.getElementById('onw-save-cust');
+  if (b) b.classList.toggle('on', !!ONW.saveCust);
+}
+
+// ── The phone-match warning (frame C) — three outcomes plus silence ────
+// Runs the by-phone lookup, the IDENTICAL equality the create path's
+// reuse-by-phone uses — never the roster search (substring, and it would
+// have to be filtered). The lookup answers the same for blocked and
+// unblocked; blocked is NEVER hidden, because the save attaches to that
+// record regardless and "no match" would be a lie.
+function ordNewPhoneBlur() {
+  const raw = (document.getElementById('onw-guest-phone').value || '').replace(/\s+/g, '');
+  if (!raw || !/^\+?[0-9]{7,15}$/.test(raw)) { ONW.phoneNote = null; ordNewPaintPhoneNote(); return; }
+  api('/api/retail-admin/customers/by-phone?phone=' + encodeURIComponent(raw))
+    .then(j => {
+      if (!j || !j.match) { ONW.phoneNote = null; }
+      else {
+        const kind = (Number(j.share_count) > 1) ? 'shared' : (j.match.is_blocked ? 'blocked' : 'match');
+        ONW.phoneNote = { kind, name: j.match.nickname || ('#' + j.match.id), phone: raw, count: Number(j.share_count) || 1 };
+      }
+      ordNewPaintPhoneNote();
+    })
+    .catch(() => { /* silence — the warning is best-effort; create re-checks */ });
+}
+function ordNewPaintPhoneNote() {
+  const box = document.getElementById('onw-phone-note');
+  if (!box) return;
+  const n = ONW && ONW.phoneNote;
+  if (!n) { box.innerHTML = ''; return; }
+  const nm = escapeHtml(n.name), ph = escapeHtml(n.phone);
+  let cls, ico, html;
+  if (n.kind === 'blocked') {
+    cls = 'brick'; ico = ONW_ICONS.block;
+    html = cuT(`<b>${ph} belongs to ${nm}, whose account is blocked.</b> The order will still be filed under that record.`,
+               `<b>${ph} 属于 ${nm},该账户已被拉黑。</b>订单仍会记入该档案。`);
+  } else if (n.kind === 'shared') {
+    cls = 'amber'; ico = ONW_ICONS.people;
+    html = cuT(`<b>${ph} is shared by ${n.count} customers.</b> The order will be filed under ${nm}, the oldest record.`,
+               `<b>${ph} 有 ${n.count} 位顾客共用。</b>订单将记入最早的档案:${nm}。`);
+  } else {
+    cls = 'amber'; ico = ONW_ICONS.warn;
+    html = cuT(`<b>${ph} belongs to ${nm}.</b> The order will be filed under that customer record, not a new one.`,
+               `<b>${ph} 属于 ${nm}。</b>订单将记入这位顾客的档案,不会新建。`);
+  }
+  box.innerHTML = `<div class="onw-note ${cls}">${onwIc(ico)}<span>${html}</span></div>`;
+}
+
+// ── Products — search, then a line table with a pinned band ────────────
+function ordNewProdSearch() {
+  clearTimeout(onwProdTimer);
+  const q = (document.getElementById('onw-prod-q').value || '').trim();
+  if (!q) { ordNewHideResults('onw-prod-results'); return; }
+  onwProdTimer = setTimeout(async () => {
+    try {
+      const j = await api('/api/retail-admin/products?limit=10&q=' + encodeURIComponent(q));
+      ONW.prodResults = (j.data || []).slice(0, 10);
+      const box = document.getElementById('onw-prod-results');
+      if (!box) return;
+      if (!ONW.prodResults.length) {
+        box.innerHTML = `<div class="onw-offer"><p>${escapeHtml(cuT('No product matches "' + q + '".', '没有商品匹配"' + q + '"。'))}</p></div>`;
+      } else {
+        box.innerHTML = '<div class="onw-res">' + ONW.prodResults.map((p, i) => {
+          const nm = escapeHtml(cuT(p.name_en || p.name_cn, p.name_cn || p.name_en) || ('#' + p.id));
+          const sku = escapeHtml(p.sku || '');
+          return `<button type="button" onclick="ordNewAddLine(${i})"><span class="nm">${nm}</span><span class="ph">${sku}</span><span class="ct">${onwMoney(p.sell_price)}</span></button>`;
+        }).join('') + '</div>';
+      }
+      box.hidden = false;
+    } catch { ordNewHideResults('onw-prod-results'); }
+  }, 220);
+}
+function ordNewAddLine(i) {
+  const p = ONW.prodResults[i];
+  if (!p) return;
+  const existing = ONW.lines.find(l => l.product_id === p.id);
+  if (existing) existing.qty += 1;
+  else ONW.lines.push({ product_id: p.id, name_en: p.name_en, name_cn: p.name_cn, sku: p.sku, qty: 1, unit_price: Number(p.sell_price) || 0 });
+  const q = document.getElementById('onw-prod-q'); if (q) q.value = '';
+  ordNewHideResults('onw-prod-results');
+  ordNewRenderLines();
+}
+function ordNewLineQty(i, d) {
+  const l = ONW.lines[i];
+  if (!l) return;
+  l.qty = Math.max(0, (Number(l.qty) || 0) + d);
+  ordNewRenderLines();
+}
+function ordNewRemoveLine(i) {
+  ONW.lines.splice(i, 1);
+  ordNewRenderLines();
+}
+function ordNewRenderLines() {
+  const wrap = document.getElementById('onw-lines-wrap');
+  if (!wrap) return;
+  if (!ONW.lines.length) {
+    // Empty names the first action rather than apologising (§1.12).
+    wrap.innerHTML = `<div class="onw-empty">${escapeHtml(cuT('No lines yet. Search above to add the first product.', '还没有商品行。在上方搜索,添加第一个商品。'))}</div>`;
+    ordNewRecalc(); return;
+  }
+  const rows = ONW.lines.map((l, i) => {
+    const bad = !(Number(l.qty) > 0);
+    const nm = escapeHtml(cuT(l.name_en || l.name_cn, l.name_cn || l.name_en) || ('#' + l.product_id));
+    const sku = l.sku ? `<span class="ps">SKU ${escapeHtml(l.sku)}</span>` : '';
+    // A failing line shows an em dash, never a false ¥0.00 (frame G).
+    const lineTotal = bad ? '—' : onwMoney((Number(l.qty) || 0) * (Number(l.unit_price) || 0));
+    const err = bad ? `<div class="onw-inerr">${onwIc(ONW_ICONS.warn, 2)}${escapeHtml(cuT('Enter 1 or more', '请输入 1 或以上'))}</div>` : '';
+    return `<tr>
+      <td class="pd"><span class="pn">${nm}</span>${sku}</td>
+      <td class="qt"><div class="onw-step${bad ? ' bad' : ''}"><button type="button" onclick="ordNewLineQty(${i},-1)">–</button><span>${Number(l.qty) || 0}</span><button type="button" onclick="ordNewLineQty(${i},1)">+</button></div>${err}</td>
+      <td class="mo">${onwMoney(l.unit_price)}</td>
+      <td class="mo">${lineTotal}</td>
+      <td class="rm"><button type="button" onclick="ordNewRemoveLine(${i})" title="${escapeHtml(cuT('Remove line', '移除此行'))}">${onwIc(ONW_ICONS.trash, 1.6)}</button></td></tr>`;
+  }).join('');
+  wrap.innerHTML = `<div class="onw-tw"><div class="onw-tscroll"><table class="onw-tbl"><thead><tr>
+    <th>${escapeHtml(cuT('Product', '商品'))}</th>
+    <th class="qt">${escapeHtml(cuT('Qty', '数量'))}</th>
+    <th class="mo p">${escapeHtml(cuT('Price', '单价'))}</th>
+    <th class="mo t">${escapeHtml(cuT('Line total', '小计'))}</th>
+    <th class="rm"></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+  ordNewRecalc();
+}
+
+// ── Fulfilment drives the address block and the counter defaults ───────
+// Delivery: six required fields. Pickup or counter: the block is ABSENT —
+// hidden, out of layout and the accessibility tree (frame E). A counter
+// sale opens on Paid · Cash: born fulfilled, not born closed.
+function ordNewFulChange() {
+  const sel = document.getElementById('onw-ful');
+  if (!sel || !ONW) return;
+  const ft = sel.value;
+  const addr = document.getElementById('onw-addr-blk');
+  if (addr) addr.hidden = ft !== 'delivery';
+  const st = document.getElementById('onw-status');
+  const pay = document.getElementById('onw-pay');
+  if (ft === 'counter') {
+    if (st) st.value = 'paid';
+    if (pay) pay.value = 'offline';
+  } else if (ONW.ful === 'counter') {
+    if (st) st.value = 'pending_payment';
+    if (pay) pay.value = 'wechat';
+  }
+  ONW.ful = ft;
+}
+
+// ── Money — the summary is a running total, nothing else ───────────────
+// Failing lines are excluded, so the page never pretends the order is
+// priced. The grand-total override wins over subtotal plus shipping.
+function ordNewSubtotal() {
+  return Math.round(ONW.lines.reduce((s, l) => {
+    const q = Number(l.qty) || 0;
+    return q > 0 ? s + q * (Number(l.unit_price) || 0) : s;
+  }, 0) * 100) / 100;
+}
+function ordNewRecalc() {
+  if (!ONW) return;
+  const sub = ordNewSubtotal();
+  const ship = Number(document.getElementById('onw-ship')?.value) || 0;
+  const ovrRaw = document.getElementById('onw-override')?.value;
+  const total = (ovrRaw != null && ovrRaw !== '') ? (Number(ovrRaw) || 0) : Math.round((sub + ship) * 100) / 100;
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+  set('onw-sum-items', onwMoney(sub));
+  set('onw-sum-ship', onwMoney(ship));
+  set('onw-sum-total', onwMoney(total));
+}
+
+// Dynamic regions bake one language — re-paint them when it changes.
+if (window.onLangChange) onLangChange(() => {
+  if (!_ORD_NEW_OPEN || !ONW) return;
+  ordNewPaintCustState();
+  ordNewPaintPhoneNote();
+  ordNewRenderLines();
+});
+
 // The two exits — wired in the create pass; the header ships with the
 // container so §1.7a's shape is testable from day one.
 function ordNewSaveDraft() {

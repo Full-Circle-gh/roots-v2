@@ -537,16 +537,262 @@ check('RAIL_STANDIN maps orders-new to its parent',
   /'orders-new': 'orders'/.test(extractConst('RAIL_STANDIN', CORE_SRC) || ''),
   true);
 
-// ── Report ──────────────────────────────────────────────────────────────────
-db.close();
-try { fs.unlinkSync(dbPath); } catch (e) { /* best effort */ }
-
-for (const r of results) {
-  console.log(`${r.ok ? 'PASS' : 'FAIL'}  ${r.name}`);
-  if (!r.ok) {
-    console.log(`      expected ${JSON.stringify(r.expected)}`);
-    console.log(`      actual   ${JSON.stringify(r.actual)}`);
-  }
+// ═══ 8. New order page — the form ═══════════════════════════════════════════
+// The CSS text belonging to the new page: the contiguous block between its own
+// banner comment and the next section's. Sliced, NOT grep-filtered by line — a
+// line filter keeps only the lines naming the id and silently drops the body of
+// every multi-line rule, which made four band assertions pass vacuously on a
+// stylesheet that did contain them. Loud when the anchors move: the slice comes
+// back empty and every assertion below fails.
+const ONW_CSS_START = CSS_SRC.indexOf('/* ── Orders · New order — page chrome');
+const ONW_CSS_END   = CSS_SRC.indexOf('/* The Orders drawer hosts the existing');
+const ONW_CSS = (ONW_CSS_START !== -1 && ONW_CSS_END > ONW_CSS_START)
+  ? CSS_SRC.slice(ONW_CSS_START, ONW_CSS_END) : '';
+check('the new page\'s CSS block was found (the slice anchors still match)',
+  ONW_CSS.length > 4000, true);
+const ONW_WANTED = ['ordNewFulChange', 'ordNewPhoneBlur', 'ordNewPaintPhoneNote',
+                    'ordNewPaintCustResults', 'ordNewRenderLines', 'ordNewSubtotal',
+                    'ordNewRecalc'];
+const onwSrc = {};
+for (const n of ONW_WANTED) onwSrc[n] = extractFn(n);
+const onwMissing = ONW_WANTED.filter(n => !onwSrc[n]);
+check('every new-order function was found in 04-orders.js (extraction is intact)',
+  onwMissing, []);
+// Same reason as §5c's guard: three of the assertions below EVALUATE these
+// sources, so a broken extraction throws a stack trace instead of naming what
+// went wrong. A failure has to be legible.
+if (onwMissing.length) {
+  console.log(`\nEXTRACTION BROKEN — could not find in 04-orders.js: ${onwMissing.join(', ')}`);
+  console.log('Pulled by name from a line starting `function NAME(` to the next line');
+  console.log('starting `}`. A reformat breaks that. Fix the extractor or restore the');
+  console.log('shape — do NOT mirror the logic here.');
+  report();
 }
-console.log(`\n${results.length - failures}/${results.length} passed`);
-process.exit(failures ? 1 : 0);
+const srcFulChange   = onwSrc.ordNewFulChange;
+const srcPhoneBlur   = onwSrc.ordNewPhoneBlur;
+const srcPhoneNote   = onwSrc.ordNewPaintPhoneNote;
+const srcCustResults = onwSrc.ordNewPaintCustResults;
+const srcRenderLines = onwSrc.ordNewRenderLines;
+const srcSubtotal    = onwSrc.ordNewSubtotal;
+
+// ADDRESS ABSENT ON COUNTER AND PICKUP (frame E). `hidden` on the block is
+// display:none — out of layout, out of the tab order, out of the accessibility
+// tree. Not disabled, not shown empty. Asserted as the real predicate: run the
+// extracted function against a stub DOM for all three types and read the flag.
+const addrHarness = new Function(`
+  ${srcFulChange}
+  return function (ft, prevFul) {
+    const nodes = {
+      'onw-ful':      { value: ft },
+      'onw-addr-blk': { hidden: false },
+      'onw-status':   { value: 'pending_payment' },
+      'onw-pay':      { value: 'wechat' },
+    };
+    globalThis.document = { getElementById: (id) => nodes[id] || null };
+    globalThis.ONW = { ful: prevFul || 'delivery' };
+    ordNewFulChange();
+    return { hidden: nodes['onw-addr-blk'].hidden,
+             status: nodes['onw-status'].value, pay: nodes['onw-pay'].value };
+  };
+`)();
+check('address block: present on delivery, ABSENT on pickup and counter',
+  ['delivery', 'pickup', 'counter'].map(t => addrHarness(t).hidden),
+  [false, true, true]);
+// "hidden", never a disabled-but-present block: a disabled field still reads as
+// a blank the operator failed to fill, and readonly reads as one they cannot.
+// The markup half only — the behavioural half is the assertion above, running
+// the real function. (A source-regex restating what that already proves adds a
+// line and no coverage.)
+const addrMarkup = newSection.slice(newSection.indexOf('onw-addr-blk'),
+                                   newSection.indexOf('onw-notes'));
+check('the address block carries no disabled or readonly idiom',
+  /disabled|readonly/.test(addrMarkup), false);
+// Born fulfilled, not born closed: a counter sale opens Paid + Cash, and
+// leaving counter restores the pending defaults rather than stranding them.
+check('counter opens Paid and Cash; leaving counter restores pending',
+  [addrHarness('counter').status, addrHarness('counter').pay,
+   addrHarness('delivery', 'counter').status, addrHarness('delivery', 'counter').pay],
+  ['paid', 'offline', 'pending_payment', 'wechat']);
+
+// THE BY-PHONE WARNING ON A BLOCKED MATCH (frame C). It must use the by-phone
+// endpoint — the identical equality the create path's reuse runs — never the
+// roster search, and it must never filter is_blocked out.
+check('the warning queries by-phone, not the roster search',
+  [/customers\/by-phone\?phone=/.test(srcPhoneBlur),
+   /customers\?pageSize/.test(srcPhoneBlur)],
+  [true, false]);
+// The classifier: blocked is its own outcome, shared wins over both, no match
+// renders nothing. Run the real branch, not a mirror.
+const noteHarness = new Function(`
+  ${srcPhoneBlur}
+  return function (resp) {
+    globalThis.ONW = { phoneNote: null };
+    globalThis.document = { getElementById: () => ({ value: '13800000001' }) };
+    globalThis.api = () => Promise.resolve(resp);
+    // Read the value the real function wrote, out of the same ONW it wrote to —
+    // captured here, at paint time, so a later case cannot overwrite it.
+    let out;
+    globalThis.ordNewPaintPhoneNote = () => { out = globalThis.ONW.phoneNote; };
+    ordNewPhoneBlur();
+    return new Promise(r => setTimeout(() => r(out === undefined ? null : out), 0));
+  };
+`)();
+const NOTE_CASES = [
+  [{ success: true, match: null, share_count: 0 }, null],
+  [{ success: true, match: { id: 1, nickname: 'Chen Jing', is_blocked: 0 }, share_count: 1 }, 'match'],
+  [{ success: true, match: { id: 1, nickname: 'Chen Jing', is_blocked: 1 }, share_count: 1 }, 'blocked'],
+  [{ success: true, match: { id: 1, nickname: 'Chen Jing', is_blocked: 0 }, share_count: 3 }, 'shared'],
+];
+// SEQUENTIALLY, one case at a time. Run concurrently, all four share the single
+// globalThis.ONW the stub DOM hangs off, every callback writes to whichever
+// object the LAST case installed, and three of the four read back null — which
+// is exactly what happened, and read as three broken outcomes rather than one
+// broken harness. A harness with shared mutable state does not test four cases.
+(async () => {
+  const got = [];
+  for (const [resp] of NOTE_CASES) got.push(await noteHarness(resp));
+  return got;
+})().then(got => {
+  check('by-phone outcomes: silence, match, BLOCKED, shared',
+    got.map(n => (n ? n.kind : null)), NOTE_CASES.map(([, want]) => want));
+  // A blocked owner is named on screen. Hiding them tells the operator "no
+  // match" while the save attaches to that very record.
+  check('the blocked note names the person and says blocked, in Brick',
+    [/is_blocked \?/.test(srcPhoneBlur),
+     /'brick'/.test(srcPhoneNote),
+     /whose account is blocked/.test(srcPhoneNote),
+     /已被拉黑/.test(srcPhoneNote)],
+    [true, true, true, true]);
+  report();
+}, (e) => { console.log('by-phone harness threw:', e && e.message); failures++; report(); });
+
+// §1.12's two most conflated states, kept apart: no-match reads differently
+// from an empty catalogue, and the page branches on the server's count.
+check('no-match and no-customers-at-all are different copy',
+  [/customersOnFile === 0/.test(srcCustResults),
+   /No customers on this account yet/.test(srcCustResults),
+   /No customer matches/.test(srcCustResults)],
+  [true, true, true]);
+
+// §1.13a rule 1 — the band pins, and the card clips with clip-path rather than
+// overflow (overflow makes the card the scrollport and parks the band on row
+// one). Band values are the product-wide table, Orders being the anchor.
+check('line-table band pins on a clip-path card, with the §1.13a values',
+  [/\.onw-tw \{[^}]*clip-path: inset\(0 round 12px\)/.test(ONW_CSS),
+   /\.onw-tw \{[^}]*overflow/.test(ONW_CSS),
+   /\.onw-tscroll \{ max-height: 344px; overflow: hidden auto; \}/.test(ONW_CSS),
+   /\.onw-tbl th \{[\s\S]*?position: sticky; top: 0; z-index: 5;/.test(ONW_CSS),
+   /background: var\(--td-header\)/.test(ONW_CSS),
+   /font-size: 13px; font-weight: 500; text-align: left;\s*\n\s*padding: 10px 12px;/.test(ONW_CSS)],
+  [true, false, true, true, true, true]);
+
+// A line with a bad qty shows an em dash rather than a false ¥0.00 (frame G).
+//
+// NOT asserted: "the failing line is excluded from the subtotal." A failing line
+// is one whose qty is ≤ 0, and Math.max(0, …) on the stepper means it is always
+// exactly 0 — so its contribution is 0 × price either way and the skip is
+// arithmetically invisible. The first version of this check compared two
+// fixtures that summed identically and passed with the skip removed. An
+// assertion that cannot fail is worse than no assertion, so it is gone rather
+// than dressed up; what makes the page honest here is the em dash, below.
+check('a failing line total renders an em dash, never a false zero',
+  [/bad \? '—'/.test(srcRenderLines), /Enter 1 or more/.test(srcRenderLines)],
+  [true, true]);
+
+// The grand-total override wins over subtotal plus shipping, and an UNSET
+// override falls back to the sum rather than to zero — the em-dash placeholder
+// must not read as a typed 0.
+const totalHarness = new Function(`
+  ${onwSrc.ordNewSubtotal}
+  ${onwSrc.ordNewRecalc}
+  return function (lines, ship, override) {
+    const out = {};
+    const nodes = { 'onw-ship': { value: String(ship) }, 'onw-override': { value: override } };
+    globalThis.ONW = { lines };
+    globalThis.document = { getElementById: (id) => nodes[id] || { set textContent(v) { out[id] = v; } } };
+    globalThis.onwMoney = (n) => Number(n).toFixed(2);
+    ordNewRecalc();
+    return out['onw-sum-total'];
+  };
+`)();
+check('the override wins when set, and an empty override falls back to the sum',
+  [totalHarness([{ qty: 2, unit_price: 62 }], 15, ''),
+   totalHarness([{ qty: 2, unit_price: 62 }], 15, '2400')],
+  ['139.00', '2400.00']);
+
+// The summary carries three rows and no explanatory prose — frame F's caption
+// is annotation, not content.
+// Exactly three rows. Matched with a boundary: a bare /onw-sr/ also counts
+// every onw-srch search row on the page and came back 5.
+check('summary is Items, Shipping, Total and nothing else',
+  [(newSection.match(/class="onw-sr[ "]/g) || []).length,
+   /onw-sum-items/.test(newSection) && /onw-sum-ship/.test(newSection) && /onw-sum-total/.test(newSection),
+   /onw-cap/.test(newSection.slice(newSection.indexOf('onw-sum')))],
+  [3, true, false]);
+
+// The two notes sit in visibly DIFFERENT containers — not the same field twice
+// with the word "staff" between them.
+check('the two notes are different containers, one dashed and recessed',
+  [/onw-cnote/.test(newSection), /onw-snote/.test(newSection),
+   /\.onw-cnote \{ background: var\(--td-paper\); \}/.test(ONW_CSS),
+   /\.onw-snote \{ background: var\(--td-raised\); border-style: dashed; \}/.test(ONW_CSS)],
+  [true, true, true, true]);
+
+// §1.6 — no uppercase anywhere on the new page, and none inherited: the page
+// uses none of the classes the two live uppercase rules select (label.stacked,
+// .om-sec-lbl), so there is nothing to override. The rule's job is stopping NEW
+// ones; this assertion is what stops one arriving here later.
+check('§1.6 — the new page ships no uppercase, and inherits none',
+  [/text-transform:\s*uppercase/.test(ONW_CSS),
+   /class="[^"]*\bstacked\b/.test(newSection),
+   /om-sec-lbl/.test(newSection)],
+  [false, false, false]);
+
+// §1.11 — every static label is an "EN · 中文" source pair the walker can split,
+// and NEITHER half may itself contain " · " (it splits on the first one). The
+// walker's own two gates decide what counts: left half Chinese-free, right half
+// containing Chinese.
+// Comments are stripped first: a comment is node type 8 and the walker's
+// TreeWalker is SHOW_TEXT, so prose in a comment is never split — but it is
+// prose written in " · " shorthand, and scanning it reported a false glue.
+const newSectionText = newSection.replace(/<!--[\s\S]*?-->/g, '');
+const onwPairs = (newSectionText.match(/[^<>\n]+ · [^<>\n]+/g) || [])
+  .map(s => s.trim()).filter(s => s && !s.startsWith('data-'));
+const badPairs = onwPairs.filter(s => {
+  const i = s.indexOf(' · ');
+  const en = s.slice(0, i), cn = s.slice(i + 3);
+  // Fails if: the walker would reject the pair, or either half is itself glued.
+  return !/[一-鿿]/.test(cn) || /[一-鿿]/.test(en) || cn.includes(' · ');
+});
+check('every new-order label is a splittable pair, neither half glued', badPairs, []);
+check('the page carries pairs at all (the scan is not vacuously empty)',
+  onwPairs.length > 30, true);
+
+// Regions holding outside-system text — customer names, phones, SKUs — carry
+// data-no-i18n, or the walker splits a name containing " · " and blanks half of
+// it in the other language.
+check('dynamic regions are shielded from the walker',
+  ['onw-cust-results', 'onw-cust-chiprow', 'onw-phone-note', 'onw-prod-results', 'onw-lines-wrap']
+    .map(id => new RegExp('id="' + id + '"[^>]*data-no-i18n').test(newSection)),
+  [true, true, true, true, true]);
+
+
+// ── Report ──────────────────────────────────────────────────────────────────
+// §8's by-phone classifier is asserted through the REAL async function, so the
+// report waits on it: report() is called from that promise's settle handlers,
+// never from here. Every synchronous check has already registered by then —
+// microtasks run only once this file's top-level code finishes.
+function report() {
+  db.close();
+  try { fs.unlinkSync(dbPath); } catch (e) { /* best effort */ }
+
+  for (const r of results) {
+    console.log(`${r.ok ? 'PASS' : 'FAIL'}  ${r.name}`);
+    if (!r.ok) {
+      console.log(`      expected ${JSON.stringify(r.expected)}`);
+      console.log(`      actual   ${JSON.stringify(r.actual)}`);
+    }
+  }
+  console.log(`\n${results.length - failures}/${results.length} passed`);
+  process.exit(failures ? 1 : 0);
+}

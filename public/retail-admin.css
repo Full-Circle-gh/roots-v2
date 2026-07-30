@@ -5406,6 +5406,145 @@
   #tab-orders-new .onw-ghost:hover { background: rgba(var(--td-heat-rgb), .05); color: var(--td-text); }
   #tab-orders-new .onw-btn:disabled { opacity: .5; cursor: default; }
   #tab-orders-new .onw-btn:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 2px; }
+  #tab-orders-new .onw-btn.onw-sm { height: 32px; padding: 0 12px; font-size: 13px; }
+
+  /* ── The form — two columns, cards left, sticky summary right ──────── */
+  #tab-orders-new .onw-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 26px; align-items: start; }
+  #tab-orders-new .onw-left { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+  #tab-orders-new .onw-blk { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px; padding: 18px 20px; }
+  #tab-orders-new .onw-blk[hidden] { display: none; }
+  #tab-orders-new .onw-blk-h { font-size: 13px; font-weight: 500; letter-spacing: .04em; color: var(--td-text2); margin: 0 0 12px; }
+  #tab-orders-new .onw-cap { font-size: 13px; color: var(--td-text2); margin: 10px 0 0; text-wrap: pretty; }
+
+  #tab-orders-new .onw-f { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  #tab-orders-new .onw-f > label { font-size: 13px; color: var(--td-text2); }
+  #tab-orders-new .onw-f.onw-wide { grid-column: 1 / -1; }
+  #tab-orders-new .onw-in {
+    height: 38px; width: 100%; border: 1px solid var(--td-border); border-radius: 8px;
+    background: var(--td-paper); padding: 0 12px; font-family: inherit; font-size: 14px; color: var(--td-text);
+  }
+  #tab-orders-new .onw-in::placeholder { color: var(--td-text2); }
+  #tab-orders-new .onw-num { font-variant-numeric: tabular-nums; }
+  #tab-orders-new .onw-in:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 1px; border-color: var(--td-dusk); }
+  #tab-orders-new .onw-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  #tab-orders-new .onw-row3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+  #tab-orders-new .onw-selw { position: relative; display: flex; }
+  /* background-image: none kills the BASE select's own chevron data-URI — the
+     wrapper draws a live-currentColor one, and without this every select on
+     the page carries two arrows (the base one is also a hardcoded grey that
+     ignores the theme). */
+  #tab-orders-new .onw-selw select { appearance: none; background-image: none; padding-right: 34px; cursor: pointer; }
+  #tab-orders-new .onw-selw .onw-ico { position: absolute; right: 11px; top: 50%; transform: translateY(-50%); color: var(--td-text2); pointer-events: none; }
+  #tab-orders-new .onw-srch { position: relative; display: flex; }
+  #tab-orders-new .onw-srch .onw-ico { position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--td-text2); }
+  #tab-orders-new .onw-srch .onw-in { padding-left: 36px; }
+
+  /* Customer — results list, the two no-match offers, guest chip + fields. */
+  #tab-orders-new .onw-res { margin-top: 8px; border: 1px solid var(--td-border); border-radius: 10px; overflow: hidden; background: var(--td-paper); }
+  #tab-orders-new .onw-res button {
+    display: flex; width: 100%; align-items: center; gap: 12px; padding: 10px 13px;
+    background: none; border: 0; border-bottom: 1px solid var(--td-border);
+    font-family: inherit; font-size: 14px; text-align: left; cursor: pointer; color: var(--td-text);
+  }
+  #tab-orders-new .onw-res button:last-child { border-bottom: 0; }
+  #tab-orders-new .onw-res button:hover { background: rgba(var(--td-heat-rgb), .04); }
+  #tab-orders-new .onw-res .nm { font-weight: 500; }
+  #tab-orders-new .onw-res .ph { font-size: 13px; color: var(--td-text2); font-variant-numeric: tabular-nums; }
+  #tab-orders-new .onw-res .ct { margin-left: auto; font-size: 13px; color: var(--td-text2); font-variant-numeric: tabular-nums; }
+  #tab-orders-new .onw-offer {
+    margin-top: 8px; border: 1px solid var(--td-border); border-radius: 10px; background: var(--td-raised);
+    padding: 13px 14px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start;
+  }
+  #tab-orders-new .onw-offer p { font-size: 13px; color: var(--td-text2); margin: 0; text-wrap: pretty; }
+  #tab-orders-new .onw-chiprow { margin-bottom: 14px; }
+  #tab-orders-new .onw-chip {
+    display: inline-flex; align-items: center; gap: 4px; height: 30px; padding: 0 4px 0 12px;
+    border: 1px solid var(--td-border); border-radius: 999px; background: var(--td-raised);
+    font-size: 13px; font-weight: 500;
+  }
+  #tab-orders-new .onw-chip .x { width: 22px; height: 22px; border: 0; border-radius: 999px; background: none; color: var(--td-text2); cursor: pointer; display: grid; place-items: center; padding: 0; }
+  #tab-orders-new .onw-chip .x:hover { background: rgba(var(--td-heat-rgb), .08); color: var(--td-text); }
+  #tab-orders-new .onw-chip .x .onw-ico { width: 13px; height: 13px; }
+  #tab-orders-new .onw-ig { display: flex; align-items: stretch; height: 38px; border: 1px solid var(--td-border); border-radius: 8px; background: var(--td-paper); overflow: hidden; }
+  #tab-orders-new .onw-ig > span { display: flex; align-items: center; padding: 0 11px; font-size: 14px; color: var(--td-text2); background: var(--td-raised); border-right: 1px solid var(--td-border); }
+  #tab-orders-new .onw-ig input { flex: 1; min-width: 0; border: 0; background: none; padding: 0 12px; font-family: inherit; font-size: 14px; color: var(--td-text); font-variant-numeric: tabular-nums; }
+  #tab-orders-new .onw-ig input:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: -2px; }
+
+  /* The phone-match note — amber for a match/shared number, Brick when the
+     owner is blocked. Never hidden: the save attaches to them regardless. */
+  #tab-orders-new .onw-note { display: flex; gap: 9px; align-items: flex-start; margin-top: 10px; padding: 10px 12px; border-radius: 9px; font-size: 13px; line-height: 1.5; text-wrap: pretty; }
+  #tab-orders-new .onw-note b { font-weight: 500; }
+  #tab-orders-new .onw-note .onw-ico { margin-top: 1px; }
+  #tab-orders-new .onw-note.amber { background: var(--td-amber-tint); color: var(--td-amber-ink); }
+  #tab-orders-new .onw-note.brick { background: var(--td-brick-tint); color: var(--td-brick-ink); }
+  #tab-orders-new .onw-cb { display: flex; align-items: center; gap: 9px; margin-top: 14px; font-family: inherit; font-size: 14px; color: var(--td-text); background: none; border: 0; padding: 0; cursor: pointer; }
+  #tab-orders-new .onw-cb i { width: 18px; height: 18px; border: 1.5px solid var(--td-border); border-radius: 5px; background: var(--td-paper); display: grid; place-items: center; color: transparent; flex: 0 0 auto; }
+  #tab-orders-new .onw-cb i .onw-ico { width: 12px; height: 12px; }
+  #tab-orders-new .onw-cb.on i { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
+
+  /* Products — §1.13a rule 1: the list scrolls, its header band pins to the
+     card's own scrollport. The card clips with clip-path, NOT overflow —
+     overflow would turn the card into the scrollport and park the band on
+     row one. Band values are the product-wide §1.13a table: --td-header,
+     13px Inter 500 Ink, 10px 12px padding, opaque, z-index 5. */
+  #tab-orders-new .onw-empty { margin-top: 12px; border: 1px solid var(--td-border); border-radius: 12px; background: var(--td-paper); padding: 22px; text-align: center; font-size: 14px; color: var(--td-text2); }
+  #tab-orders-new .onw-tw { margin-top: 12px; border: 1px solid var(--td-border); border-radius: 12px; background: var(--td-paper); clip-path: inset(0 round 12px); }
+  #tab-orders-new .onw-tscroll { max-height: 344px; overflow: hidden auto; }
+  #tab-orders-new .onw-tbl { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 14px; }
+  #tab-orders-new .onw-tbl th {
+    position: sticky; top: 0; z-index: 5;
+    background: var(--td-header); color: var(--td-text);
+    font-size: 13px; font-weight: 500; text-align: left;
+    padding: 10px 12px; border-bottom: 1px solid var(--td-border);
+  }
+  #tab-orders-new .onw-tbl td { padding: 10px 12px; border-bottom: 1px solid var(--td-border); vertical-align: middle; }
+  #tab-orders-new .onw-tbl tr:last-child td { border-bottom: 0; }
+  #tab-orders-new .onw-tbl th.mo, #tab-orders-new .onw-tbl td.mo { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #tab-orders-new .onw-tbl th.mo.p { width: 104px; }
+  #tab-orders-new .onw-tbl th.mo.t { width: 120px; }
+  #tab-orders-new .onw-tbl th.qt, #tab-orders-new .onw-tbl td.qt { width: 132px; }
+  #tab-orders-new .onw-tbl td.rm { width: 44px; text-align: right; }
+  #tab-orders-new .onw-tbl td.pd { min-width: 0; }
+  #tab-orders-new .onw-tbl .pn { display: block; font-weight: 500; line-height: 1.4; text-wrap: pretty; }
+  #tab-orders-new .onw-tbl .ps { display: block; font-size: 12px; color: var(--td-text2); font-variant-numeric: tabular-nums; margin-top: 1px; }
+  #tab-orders-new .onw-tbl td.rm button { width: 28px; height: 28px; border: 0; background: none; border-radius: 7px; color: var(--td-text2); cursor: pointer; display: grid; place-items: center; padding: 0; }
+  #tab-orders-new .onw-tbl td.rm button:hover { background: var(--td-brick-tint); color: var(--td-brick-ink); }
+  #tab-orders-new .onw-step { display: inline-flex; align-items: center; border: 1px solid var(--td-border); border-radius: 8px; background: var(--td-surface); overflow: hidden; }
+  #tab-orders-new .onw-step button { width: 28px; height: 32px; border: 0; background: none; font-family: inherit; font-size: 15px; color: var(--td-text2); cursor: pointer; padding: 0; }
+  #tab-orders-new .onw-step button:hover { background: rgba(var(--td-heat-rgb), .06); color: var(--td-text); }
+  #tab-orders-new .onw-step span { min-width: 30px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 500; }
+  #tab-orders-new .onw-step.bad { border-color: var(--td-brick); box-shadow: 0 0 0 1px var(--td-brick); }
+  /* Frame G: the error lands NEXT TO the control that failed and stays. */
+  #tab-orders-new .onw-inerr { display: flex; align-items: center; gap: 5px; margin-top: 6px; font-size: 12px; line-height: 1.35; color: var(--td-brick-ink); }
+  #tab-orders-new .onw-inerr .onw-ico { width: 13px; height: 13px; }
+
+  /* Notes — the two containers must not read as one pair of identical fields. */
+  #tab-orders-new .onw-notes { display: flex; flex-direction: column; gap: 14px; }
+  #tab-orders-new .onw-cnote, #tab-orders-new .onw-snote { border: 1px solid var(--td-border); border-radius: 12px; padding: 12px 13px; }
+  #tab-orders-new .onw-cnote { background: var(--td-paper); }
+  #tab-orders-new .onw-snote { background: var(--td-raised); border-style: dashed; }
+  #tab-orders-new .onw-nh { display: flex; align-items: center; gap: 8px; margin-bottom: 9px; }
+  #tab-orders-new .onw-nh .t { font-size: 14px; font-weight: 500; }
+  #tab-orders-new .onw-pill { margin-left: auto; font-size: 12px; font-weight: 500; background: var(--td-amber-tint); color: var(--td-amber-ink); border-radius: 999px; padding: 2px 9px; }
+  #tab-orders-new .onw-int { margin-left: auto; font-size: 12px; color: var(--td-text2); }
+  #tab-orders-new .onw-notes textarea { width: 100%; border: 1px solid var(--td-border); border-radius: 8px; background: var(--td-surface); padding: 9px 11px; font-family: inherit; font-size: 14px; line-height: 1.55; color: var(--td-text); resize: vertical; box-sizing: border-box; }
+  #tab-orders-new .onw-notes textarea::placeholder { color: var(--td-text2); }
+  #tab-orders-new .onw-notes textarea:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 1px; }
+
+  /* Summary — a running total, not a preview. Sticky against .onw-scroll
+     (no ancestor between takes an overflow, same §1.13a trap). */
+  #tab-orders-new .onw-right { position: sticky; top: 0; }
+  #tab-orders-new .onw-sum { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px; padding: 18px 20px; }
+  #tab-orders-new .onw-sr { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; font-size: 14px; padding: 7px 0; }
+  #tab-orders-new .onw-sr .v { font-variant-numeric: tabular-nums; }
+  #tab-orders-new .onw-sr.onw-tot { border-top: 1px solid var(--td-border); margin-top: 6px; padding-top: 12px; font-weight: 500; }
+  #tab-orders-new .onw-sr.onw-tot .v { font-size: 18px; }
+
+  /* Narrow windows: the summary drops below the form; nothing scrolls sideways. */
+  @media (max-width: 1100px) {
+    #tab-orders-new .onw-grid { display: block; }
+    #tab-orders-new .onw-right { position: static; margin-top: 20px; }
+  }
 
   /* The Orders drawer hosts the existing .order-card chrome unchanged
      — but reset the card's outer chrome since the drawer already

@@ -2769,8 +2769,146 @@
             <button type="button" class="onw-btn onw-dusk" id="onw-create" onclick="ordNewCreate(event)">Create order · 创建订单</button>
           </div>
         </div>
-        <!-- The form renders here (04-orders.js, ordNewRender). -->
-        <div id="onw-body"></div>
+        <!-- The one-page form (§1.13: form over wizard — everything visible,
+             tab-to-done). Static markup carries EN · 中文 source pairs for the
+             DOM-walker; dynamic regions (search results, the phone-match note,
+             the line table) are JS-rendered with cuT() and carry data-no-i18n
+             because they hold outside-system text — names, SKUs, phones.
+             Blocks are DIVs, never nested sections — the global
+             `section { display:none }` tab rule would hide a nested one. -->
+        <div id="onw-body">
+          <div class="onw-grid">
+            <div class="onw-left">
+
+              <!-- Customer — five states (frames A/B): resting search, matches,
+                   no-match-but-customers-exist, no-customers-at-all, guest. -->
+              <div class="onw-blk">
+                <h3 class="onw-blk-h">Customer · 顾客</h3>
+                <div class="onw-srch" id="onw-cust-srchrow">
+                  <svg class="onw-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/></svg>
+                  <input class="onw-in" type="text" id="onw-cust-q" autocomplete="off" oninput="ordNewCustSearch()" data-ph-en="Search name or phone, or leave as guest" data-ph-cn="搜索姓名或电话,或留空作为访客" placeholder="Search name or phone, or leave as guest">
+                </div>
+                <div id="onw-cust-results" data-no-i18n hidden></div>
+                <div class="onw-chiprow" id="onw-cust-chiprow" data-no-i18n hidden></div>
+                <div id="onw-guest-fields" hidden>
+                  <div class="onw-row2">
+                    <div class="onw-f"><label for="onw-guest-name">Name · 姓名</label><input class="onw-in" type="text" id="onw-guest-name" maxlength="80"></div>
+                    <div class="onw-f"><label for="onw-guest-phone">Phone · 电话</label><div class="onw-ig"><span>+86</span><input type="text" id="onw-guest-phone" maxlength="20" onblur="ordNewPhoneBlur()"></div></div>
+                  </div>
+                  <!-- Frame C: the phone-match warning renders here on blur.
+                       Silence is the common case; a blocked owner is NEVER
+                       hidden — the save would attach to them anyway. -->
+                  <div id="onw-phone-note" data-no-i18n></div>
+                  <button type="button" class="onw-cb on" id="onw-save-cust" onclick="ordNewToggleSaveCust()"><i><svg class="onw-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="m4 12 5 5L20 6"/></svg></i>Also save as a customer · 同时存为顾客</button>
+                </div>
+              </div>
+
+              <!-- Channel · store · fulfilment. Channel options are the server's
+                   inclusion list (MANUAL_ORDER_CHANNELS) — the mockup drew
+                   Meituan, but daemon-owned channels are read-only and a
+                   hand-keyed row would collide with the mirror. Stores fill
+                   from /stores at open. -->
+              <div class="onw-blk">
+                <h3 class="onw-blk-h">Channel, store and fulfilment · 渠道、门店与履约</h3>
+                <div class="onw-row3">
+                  <div class="onw-f"><label for="onw-channel">Channel · 渠道</label><div class="onw-selw"><svg class="onw-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg><select class="onw-in" id="onw-channel">
+                    <option value="manual">Manual · 手工</option>
+                    <option value="wechat">WeChat · 微信</option>
+                    <option value="web">Web · 网页</option>
+                  </select></div></div>
+                  <div class="onw-f"><label for="onw-store">Store · 门店</label><div class="onw-selw"><svg class="onw-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg><select class="onw-in" id="onw-store"></select></div></div>
+                  <div class="onw-f"><label for="onw-ful">Fulfilment · 履约方式</label><div class="onw-selw"><svg class="onw-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg><select class="onw-in" id="onw-ful" onchange="ordNewFulChange()">
+                    <option value="delivery">Delivery · 配送</option>
+                    <option value="pickup">Pickup · 自提</option>
+                    <option value="counter">Counter sale · 前台销售</option>
+                  </select></div></div>
+                </div>
+              </div>
+
+              <!-- Products — line table, header band pinned (§1.13a rule 1). -->
+              <div class="onw-blk">
+                <h3 class="onw-blk-h">Products · 商品</h3>
+                <div class="onw-srch">
+                  <svg class="onw-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/></svg>
+                  <input class="onw-in" type="text" id="onw-prod-q" autocomplete="off" oninput="ordNewProdSearch()" data-ph-en="Search products to add lines…" data-ph-cn="搜索商品以添加行…" placeholder="Search products to add lines…">
+                </div>
+                <div id="onw-prod-results" data-no-i18n hidden></div>
+                <div id="onw-lines-wrap" data-no-i18n></div>
+              </div>
+
+              <!-- Shipping and the grand-total override (em dash when unset). -->
+              <div class="onw-blk">
+                <h3 class="onw-blk-h">Shipping and total · 运费与合计</h3>
+                <div class="onw-row2">
+                  <div class="onw-f"><label for="onw-ship">Shipping · 运费</label><input class="onw-in onw-num" type="number" id="onw-ship" min="0" step="0.01" value="0" oninput="ordNewRecalc()"></div>
+                  <div class="onw-f"><label for="onw-override">Grand-total override · 自定义总额</label><input class="onw-in onw-num" type="number" id="onw-override" min="0" step="0.01" placeholder="—" oninput="ordNewRecalc()"></div>
+                </div>
+                <p class="onw-cap">Total auto-fills from subtotal plus shipping; edit to override. · 总额默认为小计加运费,修改即覆盖。</p>
+              </div>
+
+              <!-- Status and payment. A counter sale opens on Paid and Cash —
+                   born fulfilled, not born closed. -->
+              <div class="onw-blk">
+                <h3 class="onw-blk-h">Status and payment · 状态与付款</h3>
+                <div class="onw-row2">
+                  <div class="onw-f"><label for="onw-status">Status · 状态</label><div class="onw-selw"><svg class="onw-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg><select class="onw-in" id="onw-status">
+                    <option value="pending_payment">Pending payment · 待付款</option>
+                    <option value="paid">Paid · 已付款</option>
+                  </select></div></div>
+                  <div class="onw-f"><label for="onw-pay">Pay method · 付款方式</label><div class="onw-selw"><svg class="onw-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg><select class="onw-in" id="onw-pay">
+                    <option value="offline">Cash · 现金</option>
+                    <option value="wechat">WeChat Pay · 微信支付</option>
+                    <option value="alipay">Alipay · 支付宝</option>
+                    <option value="other">Bank transfer · 银行转账</option>
+                  </select></div></div>
+                </div>
+              </div>
+
+              <!-- Address — conditional. Delivery: six fields, all required.
+                   Pickup or counter: the block is ABSENT (hidden = display:none,
+                   out of layout and the accessibility tree), never disabled,
+                   never shown empty. Frame E is the proof. -->
+              <div class="onw-blk" id="onw-addr-blk">
+                <h3 class="onw-blk-h">Delivery address · 收货地址</h3>
+                <div class="onw-row2">
+                  <div class="onw-f"><label for="onw-addr-name">Recipient · 收件人</label><input class="onw-in" type="text" id="onw-addr-name" maxlength="80"></div>
+                  <div class="onw-f"><label for="onw-addr-phone">Phone · 电话</label><div class="onw-ig"><span>+86</span><input type="text" id="onw-addr-phone" maxlength="20"></div></div>
+                  <div class="onw-f"><label for="onw-addr-region">Province or city · 省市</label><input class="onw-in" type="text" id="onw-addr-region" maxlength="80"></div>
+                  <div class="onw-f"><label for="onw-addr-district">District · 区</label><input class="onw-in" type="text" id="onw-addr-district" maxlength="40"></div>
+                  <div class="onw-f onw-wide"><label for="onw-addr-street">Street address · 详细地址</label><input class="onw-in" type="text" id="onw-addr-street" maxlength="200"></div>
+                  <div class="onw-f"><label for="onw-addr-postal">Postal code · 邮编</label><input class="onw-in onw-num" type="text" id="onw-addr-postal" maxlength="12"></div>
+                </div>
+                <p class="onw-cap">All six are required for a delivery order. · 配送订单六项均为必填。</p>
+              </div>
+
+              <!-- Notes — two visibly different containers (frame G): the
+                   customer note on paper with an eye and an amber pill, the
+                   staff note on a dashed, recessed surface with a lock. -->
+              <div class="onw-blk onw-notes">
+                <h3 class="onw-blk-h">Notes · 备注</h3>
+                <div class="onw-cnote">
+                  <div class="onw-nh"><svg class="onw-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6-10-6-10-6Z"/><circle cx="12" cy="12" r="2.6"/></svg><span class="t">Customer note · 顾客备注</span><span class="onw-pill">The customer sees this · 顾客可见</span></div>
+                  <textarea id="onw-note-cust" rows="2" maxlength="2000" data-ph-en="Anything the customer should read on the receipt" data-ph-cn="顾客会在单据上读到的内容" placeholder="Anything the customer should read on the receipt"></textarea>
+                </div>
+                <div class="onw-snote">
+                  <div class="onw-nh"><svg class="onw-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg><span class="t">Staff note · 员工备注</span><span class="onw-int">Internal — never shown · 内部,不对外</span></div>
+                  <textarea id="onw-note-staff" rows="2" maxlength="2000" data-ph-en="Anything only the shop should read" data-ph-cn="仅店内可见的内容" placeholder="Anything only the shop should read"></textarea>
+                </div>
+              </div>
+
+            </div>
+
+            <!-- Summary — sticky, right. Items, Shipping, Total. Nothing else. -->
+            <aside class="onw-right">
+              <div class="onw-sum">
+                <h3 class="onw-blk-h">Order summary · 订单摘要</h3>
+                <div class="onw-sr"><span>Items · 商品</span><span class="v" id="onw-sum-items">¥0.00</span></div>
+                <div class="onw-sr"><span>Shipping · 运费</span><span class="v" id="onw-sum-ship">¥0.00</span></div>
+                <div class="onw-sr onw-tot"><span>Total · 合计</span><span class="v" id="onw-sum-total">¥0.00</span></div>
+              </div>
+            </aside>
+          </div>
+        </div>
       </div>
     </div>
   </section>
