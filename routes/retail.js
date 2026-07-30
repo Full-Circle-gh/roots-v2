@@ -14043,6 +14043,20 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
 
   const total = tdb().prepare(`SELECT COUNT(*) AS n FROM retail_customers ${whereSql}`).get(...params).n;
 
+  // ── "nothing matched" is not "you have no customers" (§1.12) ───────────────
+  // `total` is counted under the SAME whereSql as the rows, so total:0 says both
+  // of those things in one number and a client testing !length cannot tell them
+  // apart. This count drops every operator-chosen filter — q, tier, channel,
+  // segment, the is_blocked default — and keeps only the tenant scoping that
+  // tdb() itself applies. Between the two the client can distinguish three
+  // states: matches; no matches but customers exist; no customers at all.
+  //
+  // Named for what it counts, not as a second kind of total, because a
+  // `total_unfiltered` sitting beside `total` is one careless read away from
+  // being used as the pagination denominator. `total` is untouched — the roster
+  // pager, the stat strip and the voucher autocomplete all rely on it.
+  const customersOnFile = tdb().prepare('SELECT COUNT(*) AS n FROM retail_customers').get().n;
+
   const rows = tdb().prepare(
     `SELECT id, nickname, phone, openid, email, tier_key, lifetime_spend,
             points_balance, balance, is_blocked, created_at, last_login_at, seen_at,
@@ -14089,7 +14103,58 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
     segments = { all: seg.all_count, new_week: seg.new_week, sleeping: seg.sleeping, blocked: seg.blocked };
   }
 
-  res.json({ success: true, data: rows, page, pageSize, total, returning, segments });
+  res.json({ success: true, data: rows, page, pageSize, total, customers_on_file: customersOnFile, returning, segments });
+});
+
+// Would a "save as a customer" tick attach this order to somebody already on
+// file? Answers that BEFORE submit, so the form can warn while the operator is
+// still typing instead of reporting it after the order is filed.
+//
+// 🔴 The WHERE and the ORDER BY are copied verbatim from the reuse branch in
+// POST /api/retail-admin/customers. That is the whole point of this endpoint: it
+// must name the row the POST would actually pick, so the warning and the outcome
+// cannot disagree. If the reuse query ever changes, change it here in the same
+// commit.
+//
+// Why the roster search could not do this job:
+//   • it defaults to is_blocked = 0, while reuse matches a blocked record too —
+//     so it would go quiet on exactly the case worth warning about;
+//   • it is `phone LIKE '%…%'`, a substring superset, not the equality reuse uses;
+//   • it cannot say WHICH of several matches reuse lands on (lowest id wins), and
+//     sharing a number is the normal case here, not the edge.
+//
+// MUST stay registered above GET /customers/:id — otherwise Express reads
+// "by-phone" as an :id.
+router.get('/api/retail-admin/customers/by-phone', requireRetailAdmin, (req, res) => {
+  const phone = String(req.query.phone || '').replace(/\s+/g, '').slice(0, 20);
+  if (!phone) return res.status(400).json({ success: false, error: 'phone_required' });
+  // Same shape the POST enforces, so a number this endpoint calls malformed is a
+  // number the POST would also reject.
+  if (!/^\+?[0-9]{7,15}$/.test(phone)) {
+    return res.status(400).json({ success: false, error: 'bad_phone' });
+  }
+
+  // 🔴 The answer MUST NOT vary with is_blocked, and there is deliberately no
+  // is_blocked in this WHERE. A blocked customer still owns the number, and reuse
+  // will still attach to them. Filtering them out here would tell the operator
+  // "no match" and then quietly file the order under the blocked record — the
+  // same bug this endpoint exists to prevent, wearing a different costume.
+  // is_blocked is RETURNED so the form can say "found, and that one is blocked".
+  const match = tdb().prepare(
+    `SELECT id, nickname, phone, is_blocked,
+            (SELECT COUNT(*) FROM retail_orders WHERE customer_id = retail_customers.id) AS orders_count
+       FROM retail_customers
+      WHERE phone = ?
+      ORDER BY id LIMIT 1`
+  ).get(phone);
+
+  // How many records carry this number. >1 means the operator is choosing blind
+  // unless the form says so — reuse will silently take the lowest id.
+  const shareCount = tdb().prepare(
+    'SELECT COUNT(*) AS n FROM retail_customers WHERE phone = ?'
+  ).get(phone).n;
+
+  res.json({ success: true, match: match || null, share_count: shareCount });
 });
 
 // List grants for a voucher (who has it, who used it). `limit` trims the rows
