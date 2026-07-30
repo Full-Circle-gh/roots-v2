@@ -176,18 +176,22 @@ jobs:
           # 1.6s for the prebuild, on 4 cores. Node 20 is also what production
           # runs, so the test runs on the ABI the code actually ships to.
           #
-          # Installed into its OWN directory and reached via NODE_PATH, not into
-          # the workspace: the lint step above may already have run
-          # `npm ci --ignore-scripts`, which leaves an UNBUILT better-sqlite3 in
-          # node_modules that a plain `npm install` would consider satisfied and
-          # skip — giving a missing-bindings failure that looks like a test bug.
-          # Only better-sqlite3 is needed; lib/fulfilment.js and lib/feie.js have
-          # no dependencies of their own.
-          mkdir -p /tmp/ftdeps && cd /tmp/ftdeps
-          npm init -y >/dev/null 2>&1
-          npm install better-sqlite3@9.6.0 --no-audit --no-fund
-          cd "$GITHUB_WORKSPACE"
-          NODE_PATH=/tmp/ftdeps/node_modules node scripts/verify-fulfilment-types.js
+          # The lint step above may already have run `npm ci --ignore-scripts`,
+          # which leaves an UNBUILT better-sqlite3 in the workspace. That copy has
+          # to be REMOVED, not worked around: NODE_PATH is a fallback, not an
+          # override, so Node walks up from the script's own directory, finds the
+          # unbuilt package and never consults NODE_PATH. An earlier version of
+          # this step installed to /tmp and pointed NODE_PATH at it, and failed
+          # with missing bindings for exactly that reason.
+          #
+          # Removing it first also stops `npm install` treating the requirement as
+          # already satisfied and skipping the prebuild fetch.
+          rm -rf node_modules/better-sqlite3
+          npm install better-sqlite3@9.6.0 --no-save --no-audit --no-fund
+          # Preflight: prove the binding loads before blaming the assertions. A
+          # missing binding is an install problem and should say so.
+          node -e "const D=require('better-sqlite3'); new D(':memory:').exec('create table t(a)'); console.log('better-sqlite3 binding OK on', process.version);"
+          node scripts/verify-fulfilment-types.js
 
       - name: Verify connectivity (nothing to ship)
         if: steps.gate.outputs.skip == 'false' && steps.files.outputs.count == '0'

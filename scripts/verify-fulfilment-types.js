@@ -286,10 +286,24 @@ function extractFn(name) {
   return null;
 }
 
-const WANTED = ['ordIsCounter', 'ordShipsNothing', 'undoDispatchable', 'humanStatus'];
+// A top-level `const NAME = {` … `};` block, same dumb-but-loud rule.
+function extractConst(name) {
+  const lines = CLIENT_SRC.split('\n');
+  const start = lines.findIndex(l => l.startsWith(`const ${name} = {`));
+  if (start === -1) return null;
+  for (let i = start + 1; i < lines.length; i++) {
+    if (/^\};/.test(lines[i])) return lines.slice(start, i + 1).join('\n');
+  }
+  return null;
+}
+
+const WANTED = ['ordIsCounter', 'ordShipsNothing', 'undoDispatchable', 'humanStatus', 'nextStatusFor'];
+const WANTED_CONSTS = ['NEXT_STATUS', 'NEXT_STATUS_PICKUP_LABELS'];
 const sources = {};
 for (const n of WANTED) sources[n] = extractFn(n);
-const missing = WANTED.filter(n => !sources[n]);
+for (const n of WANTED_CONSTS) sources[n] = extractConst(n);
+const ALL_WANTED = WANTED.concat(WANTED_CONSTS);
+const missing = ALL_WANTED.filter(n => !sources[n]);
 check('every client predicate was found in 04-orders.js (extraction is intact)',
   missing, []);
 
@@ -309,10 +323,9 @@ if (missing.length) {
 }
 
 // Evaluate the extracted sources together, with cuT stubbed to the EN arm.
-// eslint-disable-next-line no-new-func
 const client = new Function(
   `const cuT = (en) => en;
-   ${WANTED.map(n => sources[n]).join('\n')}
+   ${ALL_WANTED.map(n => sources[n]).join('\n')}
    return { ${WANTED.join(', ')} };`
 )();
 
@@ -343,6 +356,20 @@ check('humanStatus leaves delivery and pickup alone',
 // above ARE glued; they are pre-existing and belong to the page rebuild.
 check('counter label is not a glued EN·CN string',
   /·|已完成/.test(client.humanStatus('delivered', 'counter')), false);
+
+// BORN FULFILLED, NOT BORN CLOSED — on the client too. nextStatusFor got NO
+// counter special case, and the first attempt at this work added one returning []
+// before anyone read NEXT_STATUS properly. That would have stripped Refund from a
+// completed walk-in and Mark paid from an unpaid one. These three assertions are
+// why it cannot come back: they fail the moment the shortcut is re-added.
+const nextOf = o => client.nextStatusFor(o).map(([next]) => next);
+check('a completed counter sale can still be refunded',
+  nextOf({ status: 'delivered', fulfillment_type: 'counter' }), ['refunded']);
+check('an unpaid counter sale can still be marked paid or cancelled',
+  nextOf({ status: 'pending_payment', fulfillment_type: 'counter' }), ['paid', 'cancelled']);
+check('counter transitions match delivery — the list is keyed on status, not type',
+  nextOf({ status: 'delivered', fulfillment_type: 'counter' }),
+  nextOf({ status: 'delivered', fulfillment_type: 'delivery' }));
 
 // ═══ 6. Money and paperwork still move — born fulfilled, NOT born closed ════
 db.prepare("UPDATE retail_orders SET needs_invoice = 1, invoice_status = 'requested' WHERE id = 3").run();
