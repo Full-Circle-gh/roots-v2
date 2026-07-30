@@ -1,4 +1,4 @@
-# Tacet desktop patterns — v3.3 · 2026-07-30
+# Tacet desktop patterns — v3.4 · 2026-07-30
 
 > The rulebook for every desktop admin surface. `tacet-design-system.md` governs how Tacet **looks**. `tacet-brand-concept.md` governs how it **sounds**. `tacet-ia-blueprint.md` governs what **exists**. This file governs **how a page is put together** — so that Orders and Pop-ups feel like the same product despite having different layouts.
 >
@@ -1380,6 +1380,8 @@ grep -rhoE "toLocale(Date|Time)?String\(\s*\)" \
   public/ miniapp/ --include=*.js --include=*.html | wc -l                # 73 → 0
 ```
 
+**A commit that changes the title-line version adds its changelog heading in the same commit.** *(Added 2026-07-30.)* Not the next commit, not a later sweep. This rule exists because `669b32e2` bumped the title to v3.2 and wrote no entry, and the gap was invisible until someone tried to write v3.2 a second time thirteen minutes later. A version that exists in the title and nowhere else is a version the next reader concludes never happened — and the rules it carried become re-inventable, which is §7's whole subject.
+
 **Per-page checklist**
 
 *Brand*
@@ -1487,6 +1489,20 @@ Small, non-blocking. Resolve during Batch 0.
 
 ---
 
+*v3.4 · 2026-07-30.*
+
+**v3.4 changes — the changelog block itself, and the §7 rule that stops it happening again. No page rule added, removed or altered.**
+
+**v3.1 and v3.2 now own heading lines.** The block read v3.3 → v3.0: §1.14a's entry sat under the *v3.0* heading rather than its own, and §1.19 shipped with a title bump and no entry at all. **A changelog that reads v3.3 → v3.0 tells a future reader that v3.1 and v3.2 never happened** — and the two rules those versions carried, §1.14a tooltips and §1.19 table column widths, are exactly the kind a later survey "discovers" as missing and re-invents differently. That is the §7 failure shape, sitting inside the rulebook's own changelog. The existing prose was not rewritten; v3.1 and v3.0 keep their text word for word, and v3.2 gains the one line it never had, dated to `669b32e2`.
+
+**§7 gained the rule that would have caught it:** a commit that changes the title-line version adds its changelog heading **in the same commit** — not the next one, not a later sweep. The v3.2 gap was invisible for thirteen minutes, until someone tried to write v3.2 a second time; had the two landed together it could not have opened at all.
+
+**This version is that rule applying to itself immediately, which is the point.** A rule about changelog headings that shipped without its own changelog heading would be self-refuting on the day it was written.
+
+Everything else unchanged from v3.3.
+
+---
+
 *v3.3 · 2026-07-30.*
 
 **v3.3 changes — both from the Orders New order round, both raised by Ash from the live screen.**
@@ -1495,19 +1511,29 @@ Small, non-blocking. Resolve during Batch 0.
 
 **§1.7a added — the sub-page header variant.** Back link replaces the eyebrow; up to two exits; the non-committing exit is **Secondary, not Ghost**, because §1.8's own table defines Ghost as tertiary and in-row and a header exit is neither. Record order's Ghost "Save as draft" is marked superseded rather than edited in place, so the conflict is visible to whoever builds Purchasing instead of being silently resolved by whichever line they read first.
 
-**This entry was written as v3.2 and renumbered on landing.** v3.2 was already taken by §1.19 (table column widths, `669b32e2`, same morning), which bumped the title line and shipped **without a changelog entry** — and the v3.1 entry below still sits under the *v3.0* date heading rather than owning one. Neither is fixed here; both are recorded so the next reader knows the block under-reports two versions rather than assuming they never existed.
+**This entry was written as v3.2 and renumbered on landing.** v3.2 was already taken by §1.19 (table column widths, `669b32e2`, same morning), which bumped the title line and shipped **without a changelog entry** — and the v3.1 entry below still sits under the *v3.0* date heading rather than owning one. Neither was fixed in this version; both were recorded so the next reader knew the block under-reported two versions rather than assuming they never existed. **Both were repaired in v3.4** — the headings exist now, and this paragraph is kept as the record of how the gap was found.
 
 Everything else unchanged from v3.2.
 
 ---
 
-*v3.0 · 2026-07-29.*
+*v3.2 · 2026-07-30.*
+
+**v3.2 changes: §1.19 added — table column widths.** One rule added, nothing removed or altered. `<col>` percentages sum to exactly 100 and are measured, never estimated; the expensive half is that `clamp()`/`calc()`/`min()`/`max()` on a `<col>` width are **ignored** under `table-layout: fixed` and the column silently falls back to `auto`. Shipped with the Customers rebalance in `669b32e2`, whose title bump is the reason §7 now requires a heading in the same commit.
+
+---
+
+*v3.1 · 2026-07-30.*
 
 **v3.1 changes: §1.14a added — tooltips.** One rule added, nothing removed or altered. Raised by Ash 2026-07-30: *"we already have tooltip in customers section and it built with certain rules. if we dont have this rules in desktop patterns we need to update this rule."* The rule is not new — the component has behaved this way since the Customers build. Only the writing-down is new.
 
 **Why it needed writing down, demonstrated the same day.** The Dashboard's delta badges had grown their **own** tooltip: a spark-tip bubble parked at `left:50%, top:0` with no viewport clamping and no flip. Both omissions were visible in one hover — the bubble hung off the left edge of the window with its opening words cut away, and what remained sat on top of the very figure it was explaining. The Orders KPI strip carried the identical defect through `ordSetDelta`, unhit. Neither author was ignoring a rule; **there was no rule to ignore**, because the working component documented itself only in a code comment. This is §1.4's "a shared component with an unwritten treatment is two components" happening to a component nobody had thought of as shared. Both surfaces now write `data-tt`; the bespoke bubble, its two `fcDelta*` aliases and the inline handlers on three Orders spans are deleted.
 
 **One trap the write-up surfaced that the code had not hit yet.** The old delta tip read `"vs the last 4 Thursdays at this time · ¥147 each by now"`. Moved to `data-tt` unchanged, the i18n splitter would have cut it at its own decorative `" · "` and thrown away the second half — §1.11's glue constraint, reaching an attribute for the first time. Recorded in §1.14a rather than left for whoever hit it.
+
+---
+
+*v3.0 · 2026-07-29.*
 
 **v3.0 changes: §1.18 added — dates and times.** One rule added, nothing removed or altered. **The surface's language picks the convention and then that convention is followed completely** — English renders US dates and times, Chinese renders Chinese ones. Decided by Ash 2026-07-29 from a measured three-variant mockup (`reference/datetime-format-mockup.html`).
 
