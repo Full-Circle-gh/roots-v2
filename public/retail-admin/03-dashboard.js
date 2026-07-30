@@ -1289,7 +1289,9 @@ function dbProdName(o) {
   return (cn ? (o.name_cn || o.name_en) : (o.name_en || o.name_cn)) || '—';
 }
 
-const TD = { recapSince: 0, recapEvents: null, stores: null, stockStore: '', stockOps: null,
+// workFromQuiet: the operator opened the day's log from the quiet line, so the
+// Recap card is up on purpose with an empty window (see tdRecapLineShowWork).
+const TD = { recapSince: 0, recapEvents: null, stores: null, stockStore: '', stockOps: null, workFromQuiet: false,
              lowRotAt: 0, _lowRotTimer: null, _lowRotPaused: false, _lowCnt: 0 };
 let TD_LOW_POOL = [];   // ordered out-then-low pool the Running-low card rolls through
 const TD_SEEN_KEY = 'retail-admin-last-seen';
@@ -1699,10 +1701,18 @@ function tdRecentLabel(ms) {
 function tdRecapHeadPaint() {
   if (!TD.recapSince) return;   // framing not computed yet (tdRecapLoad hasn't run)
   const title = document.getElementById('td-recap-title');
+  const meta = document.getElementById('td-recap-meta');
+  // Promoted from the quiet line: nothing happened in the recap window, so
+  // framing the card as "the last 30 minutes" would label a whole day's feed
+  // with a window it isn't. Say what the fold actually holds.
+  if (TD.workFromQuiet) {
+    if (title) title.textContent = cuT("Today's activity", '今日动态');
+    if (meta) meta.textContent = cuT('since midnight', '自午夜起');
+    return;
+  }
   if (title) title.textContent = TD.reallyAway
     ? cuT('While you were away', '您不在的这段时间')
     : cuT('Latest activity', '最新动态');
-  const meta = document.getElementById('td-recap-meta');
   if (meta) meta.textContent = TD.reallyAway ? tdSinceLabel(TD.recapSince) : tdRecentLabel(TD.recapSince);
 }
 
@@ -1779,7 +1789,10 @@ function tdRecapRender() {
   const close = document.getElementById('td-recap-close');
   const block = host.closest('.td-block');
   const line  = document.getElementById('td-recap-line');
-  if (!rows.length) {
+  // `workFromQuiet` means the operator opened the day's log FROM the quiet line,
+  // so the card is deliberately on the page with an empty recap window. Skipping
+  // the quiet branch keeps the 60s poll from yanking it back out from under them.
+  if (!rows.length && !TD.workFromQuiet) {
     // Nothing happened while they were away, so the Recap does not need a card
     // to say so. It leaves the grid entirely and becomes one line of quiet text
     // above the remaining cards — which also means a calm dashboard carries no
@@ -1793,10 +1806,16 @@ function tdRecapRender() {
     // products out of stock the two sat one line apart contradicting each
     // other, and the reassuring one was the bigger sentence. So the line now
     // says only what it can actually know: the feed was quiet.
-    if (line) {
-      line.textContent = TD.reallyAway
+    const lineTxt = document.getElementById('td-recap-line-txt');
+    const lineBtn = document.getElementById('td-recap-line-btn');
+    if (lineTxt) {
+      lineTxt.textContent = TD.reallyAway
         ? cuT('All quiet while you were away.', '您不在时一切平静。')
         : cuT('Nothing new just now.', '暂时没有新动静。');
+    }
+    // The card is gone, so this link is the only remaining way to the day's log.
+    if (lineBtn) lineBtn.textContent = cuT('Show the work', '查看明细');
+    if (line) {
       line.hidden = false;
     }
     if (block && !block.classList.contains('is-quiet')) {
@@ -1806,15 +1825,20 @@ function tdRecapRender() {
     if (close) close.hidden = true;
     return;
   }
-  if (line) { line.hidden = true; line.textContent = ''; }
+  // Hide the line, never empty it — it owns the span + the "Show the work"
+  // button now, and textContent='' would delete both.
+  if (line) line.hidden = true;
   if (block && block.classList.contains('is-quiet')) {
     block.classList.remove('is-quiet');
     if (typeof dashRender === 'function') dashRender();
   }
   host.innerHTML = rows.join('');
   if (close) {
-    close.textContent = cuT("Handled quietly. You're welcome.", '一切已悄然处理，不用谢。');
-    close.hidden = false;
+    // Reached with no rows only when the operator promoted the card from the
+    // quiet line. Nothing was handled in that window, so the closing line would
+    // be claiming credit for an empty digest — stay quiet and let the feed talk.
+    close.hidden = !rows.length;
+    if (rows.length) close.textContent = cuT("Handled quietly. You're welcome.", '一切已悄然处理，不用谢。');
   }
 }
 
@@ -1826,6 +1850,26 @@ function tdRecapRender() {
 // to disturb (see tdRecapToggleWork). Roughly eight feed rows.
 const TD_WORK_MIN_H = 360;
 
+// "Show the work" from the QUIET line. The recap window is empty so the card has
+// left the grid — but the fold behind it is the whole day since midnight, not
+// that window, and this link is the only remaining route to it. Promote the
+// block back to card form, then hand over to the normal open path so the height
+// pin, the fetch and the button label all behave exactly as they do on a busy
+// morning. TD.workFromQuiet holds the card up against the 60s poll until the
+// operator closes the fold again.
+async function tdRecapLineShowWork() {
+  const block = document.querySelector('.td-block[data-block="recap"]');
+  const line  = document.getElementById('td-recap-line');
+  const close = document.getElementById('td-recap-close');
+  TD.workFromQuiet = true;
+  if (line)  line.hidden = true;
+  if (close) close.hidden = true;                      // nothing was handled in an empty window
+  if (block) block.classList.remove('is-quiet');
+  tdRecapHeadPaint();                                  // reframe as the day, not the window
+  if (typeof dashRender === 'function') dashRender();  // card rejoins the grid and takes a column
+  await tdRecapToggleWork();
+}
+
 async function tdRecapToggleWork() {
   const fold = document.getElementById('td-recap-work'); if (!fold) return;
   const block = fold.closest('.td-block');
@@ -1833,6 +1877,14 @@ async function tdRecapToggleWork() {
     fold.hidden = true;
     if (block) block.style.height = '';   // back to content height
     tdRecapWorkBtnSync();
+    // Opened from the quiet line — closing puts the block back to one line of
+    // text rather than leaving an empty card sitting where the line was.
+    // tdRecapRender re-runs the quiet branch once the flag is down.
+    if (TD.workFromQuiet) {
+      TD.workFromQuiet = false;
+      tdRecapHeadPaint();
+      tdRecapRender();
+    }
     return;
   }
   // Opening the fold must not resize the card. Measure the card FIRST and pin it

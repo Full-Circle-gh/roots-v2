@@ -1627,7 +1627,12 @@
     <!-- The Recap's quiet state: one line of text where a 400px card would
          otherwise sit and say nothing. Painted by tdRecapRender, which hides the
          Recap card at the same moment. -->
-    <p class="td-recap-line" id="td-recap-line" data-no-i18n hidden></p>
+    <!-- The quiet state. One line of text where the card would be — plus the way
+         into the day's log, which is the ONLY way in once the card has left the
+         page: "Show the work" is the whole day, not just the recap window, so
+         losing the card must not lose the log. Promotes the block back to card
+         form (tdRecapLineShowWork). -->
+    <p class="td-recap-line" id="td-recap-line" data-no-i18n hidden><span id="td-recap-line-txt"></span><button type="button" class="td-recap-line-btn" id="td-recap-line-btn" onclick="tdRecapLineShowWork()"></button></p>
 
     <!-- ── The card grid ──────────────────────────────────────────────────
          One tile per surface. Columns come from a container query on .td-wrap

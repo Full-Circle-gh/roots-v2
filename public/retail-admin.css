@@ -8481,7 +8481,7 @@
      the slack collects ABOVE the footer and the row still ends on one flat line.
      margin-top:auto is the whole mechanism — remove it and short cards float
      their footers mid-card and the row edge goes ragged. */
-  .td-block .td-sec-foot { margin-top: auto; padding: 14px 24px; }
+  .td-block .td-sec-foot { margin: auto 24px 0; padding: 14px 0 22px; }
   .td-block .td-chan-foot { margin-top: auto; padding-top: 8px; padding-bottom: 2px; }
   .td-block .td-inv-low { margin-top: 8px; }
 
@@ -8510,10 +8510,20 @@
 
   /* The card's footer: its one attention line, and the way in. Amber dot = something waits, sage = all clear.
      Empty (no data yet) collapses so the card doesn't show a bare strip. */
+  /* One footer treatment for every card: a hairline inset to the card's own
+     text column, no fill. This used to be a full-bleed --td-raised band, which
+     made Today and Customers read as a different kind of card from the Recap,
+     Unhandled, On the road and Ready — all of which already ended on a plain
+     inset rule (.td-recap-close, .td-chan-foot). Four cards against two, and the
+     odd two sat either side of the Recap in the owner's row, so the mismatch was
+     the first thing the eye caught along that bottom edge. The signed-off
+     footer has no fill either. Horizontal inset matches .bn-inner's 24px and the
+     bottom padding matches its 22px, so the rule lines up with the content above
+     it rather than cutting the full width of the card. */
   .td-sec-foot {
     display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-    background: var(--td-raised); border-top: 1px solid var(--td-border);
-    padding: 13px 32px; font-size: 13.5px; color: var(--td-text2);
+    border-top: 1px solid var(--td-border);
+    font-size: 13.5px; color: var(--td-text2);
   }
   .td-sec-foot:empty { display: none; }
   .td-sec-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--td-amber); flex: none; }
@@ -8554,7 +8564,8 @@
   .td-sec-go .td-sec-chev { width: 16px; height: 16px; flex: none; }
 
   @media (max-width: 720px) {
-    .td-sec-foot { padding: 12px 22px; }
+    /* Same inset rule, tightened to the phone card's own padding. */
+    .td-block .td-sec-foot { margin: auto 20px 0; padding: 12px 0 18px; }
   }
 
   /* ── The Running-low list, inside the Inventory card ──
@@ -8588,6 +8599,19 @@
      carries no cream at all and reads as quiet rather than as empty furniture. */
   .td-recap-line { font-size: 15px; color: var(--td-text2); margin: 0 0 16px; }
   .td-recap-line[hidden] { display: none; }
+  /* The way into the day's log from the quiet state. Reads as a quiet link, not
+     a button — it sits inside a sentence. The gap is margin, never a " · ", so
+     the i18n walker can't mistake the line for an EN·CN pair and split it. */
+  .td-recap-line-btn {
+    margin-left: 10px; padding: 0; border: 0; background: none; cursor: pointer;
+    font-family: var(--f-sans); font-size: 15px; color: var(--td-text2);
+    text-decoration: underline;
+    text-decoration-color: color-mix(in srgb, var(--td-text2) 45%, transparent);
+    text-underline-offset: 3px;
+    transition: color .2s cubic-bezier(.16,1,.3,1);
+  }
+  .td-recap-line-btn:hover { color: var(--td-text); text-decoration-color: currentColor; }
+  .td-recap-line-btn:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 3px; border-radius: 4px; }
 
   /* Activity strip — clean prose rows: time · sentence · right-aligned amount,
      no icon, first-order pill only. Toggle reveals the full day (scrolls inside
