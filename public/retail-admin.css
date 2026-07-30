@@ -4589,8 +4589,11 @@
   }
   .ord-note-line svg { width: 11px; height: 11px; flex: none; }
   .ord-note-line.is-owed { color: var(--brass); font-weight: 600; }
-  /* Inline among the drawer's title-row pills — no top offset needed there,
-     the row's align-items:center already handles vertical placement. */
+  /* Inline among a row of pills — no top offset needed there, the row's
+     align-items:center already handles vertical placement. The order drawer
+     shows these on its .od-marks line now (the pinned header carries the ONE
+     status pill and nothing else); the list rows still stack them in
+     td.status-cell, and the readonly mirror still has a pill title-row. */
   .title-row .ord-note-line { margin-top: 0; }
   /* Refund-pending badge — shown alongside the status pill on any row
      where refund_status is in the open pipeline. Makes the queue visible
@@ -5287,13 +5290,12 @@
     border-top: 1px solid var(--line);
     flex-shrink: 0;
   }
-  /* Orders' print footer: buttons left, a quiet "Prints at <store>" hint pushed
-     right. Collapses entirely when orderDrawerFoot() returns '' (unpaid /
-     cancelled / refunded / view-only channels) so no empty bar lingers. */
+  /* Orders' print bar is retired (2026-07-30) — Print receipt rides the pinned
+     header instead, so this slot is always empty and always collapsed. The node
+     stays because the shared drawer shell owns it; only the layout rules for
+     its old contents (spacer + "Prints at <store>" hint) are gone. */
   #order-drawer .drawer-foot { justify-content: flex-start; flex-wrap: wrap; }
   #order-drawer .drawer-foot:empty { display: none; }
-  #order-drawer .drawer-foot .od-foot-spacer { flex: 1 1 auto; }
-  #order-drawer .drawer-foot .od-foot-hint { font-size: 12.5px; color: var(--text-3); }
 
   /* ── Orders · in-flow PAGE (desktop ≥721px, body.ord-viewing) ───────────
      Rebuilt from the floating drawer into a real page. #order-drawer now lives

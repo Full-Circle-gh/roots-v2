@@ -418,6 +418,8 @@ function refundBadge(o) {
 const ICON_INV_OWED = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3v18l2.5-1.5L9 21l3-1.5L15 21l2.5-1.5L20 21V3H4z"/><line x1="8" y1="9" x2="16" y2="9"/></svg>';
 const ICON_INV_DONE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 3v18l2.5-1.5L9 21l3-1.5L15 21l2.5-1.5L20 21V3H4z"/><polyline points="8 12 11 15 16 9"/></svg>';
 const ICON_STOCK_PENDING = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>';
+// A receipt the printer never produced — on the drawer's marks line, brick.
+const ICON_PRINT_FAILED = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 6 3 18 3 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2h-2"/><line x1="9" y1="15" x2="15" y2="21"/><line x1="15" y1="15" x2="9" y2="21"/></svg>';
 
 // Fapiao sub-line under the status pill. Brass while the invoice is still
 // owed, muted once it has been issued — so the list tells "never asked" apart
@@ -4218,6 +4220,10 @@ function renderReadonlyOrder(o) {
       </div>` : ''}
       ${o.needs_cutlery ? `<div style="margin-top: 10px;"><span style="display: inline-flex; align-items: center; gap: 6px; font-weight: 700; color: var(--text-1); background: var(--bg-elev-2); border: 1px solid var(--line); border-radius: 99px; padding: 4px 12px; font-size: 12px;"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 3v6a2 2 0 0 0 2 2 2 2 0 0 0 2-2V3"/><path d="M6 11v10"/><path d="M17 3c-1.7 0-3 2-3 5s1.3 4 3 4"/><path d="M17 3v18"/></svg> Cutlery requested · 需要餐具</span></div>` : ''}
     </div>`;
+  // The mirrored view pins its header too — the two drawers must read as
+  // siblings (§1.13). It has no action row, so its pinned block is the order
+  // no + pills line and nothing else.
+  ordBindHeadPin();
 }
 
 // Romanise a Chinese city name for the English view of the split note (the
@@ -4272,7 +4278,7 @@ function renderOpenOrder(o) {
   // into a single menu button so the header isn't a wall of red.
   const allTx = nextStatusFor(o);
   const dangerTx = allTx.filter(([next]) => next === 'cancelled' || next === 'refunded');
-  const transitions = allTx.filter(([next]) => next !== 'cancelled' && next !== 'refunded')
+  const forwardTx = allTx.filter(([next]) => next !== 'cancelled' && next !== 'refunded')
     .map(([next, label]) => {
       // With multiple parcels the whole-order dispatch acts as "ship all at
       // once" — relabel so it's distinct from each parcel's own button.
@@ -4282,34 +4288,34 @@ function renderOpenOrder(o) {
       // Tacet: forward actions read as calm bordered buttons (not a second Dusk
       // CTA) — the mockup keeps the drawer quiet; the one Dusk button is "New order".
       return `<button class="btn btn-sm" onclick="transition(${o.id}, '${next}', event)">${label}</button>`;
-    }).join('')
-    // A quiet "Undo" sits beside the forward actions when the order was
-    // dispatched/delivered but nothing has truly gone out — the reverse for a
-    // misclick. Label tracks which step is being undone.
-    + (undoDispatchable(o)
-        ? `<button class="btn btn-sm" onclick="undoDispatch(${o.id}, event)">${o.status === 'delivered' ? 'Undo delivery · 撤销送达' : 'Undo dispatch · 撤销发货'}</button>`
-        : '')
-    + (undoPreparable(o)
-        ? `<button class="btn btn-sm" onclick="undoPreparing(${o.id}, event)">Undo preparing · 撤销备货</button>`
-        : '')
-    + renderRefundMenu(o, dangerTx);
+    }).join('');
+  // The header PINS (§1.13a), so its height is fixed and its contents are
+  // rationed. Row 1 = order no + the ONE primary status pill; row 2 = the
+  // actions. Print receipt joins that row — pushed to the right edge so it sits
+  // in the same place on every order regardless of how many state buttons the
+  // order has (it used to live in a footer bar at the drawer's bottom). The
+  // secondary controls — Undo, Box label — fold into the ⋯ menu, which is what
+  // caps the row at four visible controls so it can never wrap to a second line
+  // and grow the pinned block. Everything else the title row used to carry
+  // (placed time, partial-shipped, add-ons, refund, stock-pending, a failed
+  // print) moves to the marks line below, in the scrolling body.
+  const refundMenu = renderRefundMenu(o, dangerTx);
+  const printBtn = orderHeadPrint(o);
+  const moreMenu = orderHeadMore(o);
+  const headActions = (forwardTx || refundMenu || printBtn || moreMenu)
+    ? forwardTx + refundMenu + '<span class="od-head-push"></span>' + printBtn + moreMenu
+    : '';
     mount.innerHTML = `
       <div class="order-card">
         ${_ORDER_BACK_CUSTOMER ? `<button class="btn btn-sm order-back-cust" style="margin-bottom: var(--s3);" onclick="cuBackToCustomer()">← Back to customer · 返回顾客</button>` : ''}
         <div class="order-head">
-          <div class="od-eyebrow"><span>Order placed · 下单于</span> ${formatDate(o.placed_at)}</div>
           <div class="title-row">
             <b>${escapeHtml(o.order_no)}</b>
             ${(() => { const p = orderStatusPill(o); return `<span class="pill ${p.cls}"><span class="dot"></span>${p.label}</span>`; })()}
-            ${o.fulfillment?.rollup === 'partial' ? `<span class="pill st-preparing"><span class="dot"></span>Partially shipped · 部分发货 (${o.fulfillment.dispatched}/${o.fulfillment.total})</span>` : ''}
-            ${(o.addons && o.addons.length) ? `<span class="pill st-paid" title="${escapeHtml((o.addons || []).flatMap(a => (a.items || []).map(it => `${it.name_en || it.name_cn} ×${it.qty}`)).join(', '))}"><span class="dot"></span>+ Items added · 加单 (+¥${Number(o.addon_total || 0).toFixed(2)})</span>` : ''}
-            ${refundBadge(o)}
-            ${stockPendingBadge(o)}
           </div>
-          <!-- Eyebrow → order no + status → actions on their OWN row below (calm,
-               per Tacet). Forward actions are bordered; Refund/Cancel is a menu. -->
-          ${transitions ? `<div class="transitions od-head-tx">${transitions}</div>` : ''}
+          ${headActions ? `<div class="transitions od-head-tx">${headActions}</div>` : ''}
         </div>
+        ${orderHeadMarks(o)}
 
         ${hoistedTracking(o)}
 
@@ -4466,14 +4472,16 @@ function renderOpenOrder(o) {
         })()}
 
       </div>`;
-  // Print controls live in a footer pinned to the bottom of the drawer (outside
-  // the scroll area) so a reprint is always one click, never buried mid-scroll.
+  // The bottom print bar is gone — Print receipt rides the pinned header now,
+  // and the bar held nothing else worth its own 61px. Clear the slot so no
+  // previous order's footer lingers; `.drawer-foot:empty` collapses it.
   const foot = $('#order-drawer-foot');
-  if (foot) foot.innerHTML = orderDrawerFoot(o);
+  if (foot) foot.innerHTML = '';
   // Drawer body manages its own scroll position; reset to top on each
   // render so re-renders after a transition don't leave it mid-scroll.
   const body = $('#order-drawer .drawer-body');
   if (body) body.scrollTop = 0;
+  ordBindHeadPin();
 }
 
 // Off-app tender options for the manual "Mark paid" button. value = what the
@@ -4539,30 +4547,126 @@ function askPayMethod() {
 // contract (titleEn/titleCn, bodyEn/bodyCn, confirmEn/confirmCn, etc.) so
 // every call site below is unchanged.
 
-// Print controls for the order drawer, rendered into the footer pinned at the
-// bottom of the drawer (#order-drawer-foot) rather than mid-scroll — so a
-// reprint is always one click, never hunted for in the items list. Returns ''
-// for orders that can't have a receipt (unpaid / cancelled / refunded); the
-// empty footer then collapses via `#order-drawer .drawer-foot:empty`.
-// Print receipt is the workhorse. Box label rides along only when Settings ·
-// Delivery turns it on (delivery.boxLabel → body.ord-box-label gates
-// .ord-boxlabel-ui). A FAILED auto-print is the one status still surfaced, and
-// a quiet "Prints at <store>" hint tells the operator which counter it goes to.
+// Print receipt is the workhorse, so it sits in the PINNED header's action row
+// (right edge — one fixed position on every order) rather than in a footer bar
+// at the bottom of the drawer, where it was a hunt on a long panel. Returns ''
+// for orders that can't have a receipt (unpaid / cancelled / refunded).
+// The quiet "Prints at <store>" line that used to sit beside it is now this
+// button's tooltip: it answers a question the operator asks once — which counter
+// does this come out of — so it belongs on hover, not parked on screen.
 // The per-MACHINE toggles (auto-print JD waybill, box-label-auto) live in
 // Settings · Delivery — they were never order-specific.
-function orderDrawerFoot(o) {
+function orderHeadPrint(o) {
   if (['pending_payment', 'cancelled', 'refunded'].includes(o.status)) return '';
-  const failed = o.print_status === 'failed'
-    ? `<span class="pill danger" title="${escapeAttr(o.print_error || '')}"><span class="dot"></span>Print failed · 打印失败</span>` : '';
-  const hint = o.store_code
-    ? `<span class="od-foot-hint">${cuT('Prints at ' + escapeHtml(o.store_name_en || o.store_code), '打印于 ' + escapeHtml(o.store_name_cn || o.store_code))}</span>`
-    : '';
+  const where = o.store_code
+    ? cuT('Prints at ' + (o.store_name_en || o.store_code), '打印于 ' + (o.store_name_cn || o.store_code))
+    : cuT('Print the receipt slip', '打印小票');
+  return `<button class="btn btn-sm" id="reprint-${o.id}" onclick="reprintOrder(${o.id})" title="${escapeAttr(where)}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>${cuT('Print receipt','打印小票')}</button>`;
+}
+
+// ⋯ overflow for the pinned action row. Everything here is real work, just not
+// THIS order's next step: the Undo reversals for a misclick, and the box-label
+// sticker (opt-in via Settings · Delivery → body.ord-box-label). Folding them
+// away is what keeps the row at four visible controls and the pinned header a
+// fixed height. Renders nothing when it would be empty — an empty kebab is a
+// dead end, not a menu. Read the body class in JS rather than leaving a
+// CSS-hidden item inside, or the ⋯ would appear with nothing under it.
+function orderHeadMore(o) {
+  const items = [];
+  if (undoDispatchable(o)) {
+    items.push(`<button class="odh-item" onclick="orderMoreClose(); undoDispatch(${o.id}, event)">${o.status === 'delivered' ? 'Undo delivery · 撤销送达' : 'Undo dispatch · 撤销发货'}</button>`);
+  }
+  if (undoPreparable(o)) {
+    items.push(`<button class="odh-item" onclick="orderMoreClose(); undoPreparing(${o.id}, event)">Undo preparing · 撤销备货</button>`);
+  }
+  if (document.body.classList.contains('ord-box-label')
+      && !['pending_payment', 'cancelled', 'refunded'].includes(o.status)) {
+    items.push(`<button class="odh-item" onclick="orderMoreClose(); printBoxLabel(${o.id})" title="${escapeAttr(cuT('Sticker for the parcel: order no, name, phone', '箱贴:订单号、姓名、电话'))}">${cuT('Box label', '打印箱贴')}</button>`);
+  }
+  if (!items.length) return '';
   return `
-    <button class="btn btn-sm" id="reprint-${o.id}" onclick="reprintOrder(${o.id})"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>${cuT('Print receipt','打印小票')}</button>
-    <button class="btn btn-sm ord-boxlabel-ui" id="boxlabel-${o.id}" onclick="printBoxLabel(${o.id})" title="${escapeAttr(cuT('Sticker for the parcel: order no, name, phone', '箱贴:订单号、姓名、电话'))}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:6px;"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>${cuT('Box label', '打印箱贴')}</button>
-    <span class="od-foot-spacer"></span>
-    ${failed}
-    ${hint}`;
+    <div class="ovp-wrap odh-wrap">
+      <button class="btn btn-sm odh-btn" id="odh-btn" onclick="orderMoreToggle()" aria-haspopup="true" title="${escapeAttr(cuT('More actions', '更多操作'))}" aria-label="${escapeAttr(cuT('More actions', '更多操作'))}">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none" aria-hidden="true"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
+      </button>
+      <div id="odh-pop" class="ovp odh-pop" hidden>
+        <div class="ovp-head">${cuT('More actions', '更多操作')}</div>
+        ${items.join('')}
+      </div>
+    </div>`;
+}
+let _ODH_OPEN = false;
+function orderMoreToggle() {
+  _ODH_OPEN = !_ODH_OPEN;
+  const pop = document.getElementById('odh-pop'); if (pop) pop.hidden = !_ODH_OPEN;
+  if (_ODH_OPEN) setTimeout(() => document.addEventListener('mousedown', orderMoreOutside), 0);
+  else document.removeEventListener('mousedown', orderMoreOutside);
+}
+function orderMoreOutside(e) {
+  if (e.target.closest && e.target.closest('.odh-wrap')) return;
+  orderMoreClose();
+}
+function orderMoreClose() {
+  _ODH_OPEN = false;
+  const pop = document.getElementById('odh-pop'); if (pop) pop.hidden = true;
+  document.removeEventListener('mousedown', orderMoreOutside);
+}
+
+// The marks line — the first line of the SCROLLING body, directly under the
+// pinned header. It carries everything the header can no longer hold without
+// growing: when the order was placed, plus every secondary mark (partially
+// shipped, items added after the slip printed, a refund in flight, stock not
+// yet deducted, a failed auto-print). §1.13a: the pinned block shows one pill,
+// additional marks live here.
+// The placed time keeps its ORIGINAL markup — an inner span holding the
+// `English · 中文` pair with the date outside it — because the live translator
+// glues that pair at runtime and cannot glue a string with a value in the
+// middle. Parts are separated by an empty <span class="od-mark-sep">, never a
+// " · " text node: the walker reads space-middot-space as a language pair.
+function orderHeadMarks(o) {
+  const marks = [];
+  if (o.fulfillment?.rollup === 'partial') {
+    marks.push(`<span class="pill st-preparing"><span class="dot"></span>Partially shipped · 部分发货 (${o.fulfillment.dispatched}/${o.fulfillment.total})</span>`);
+  }
+  if (o.addons && o.addons.length) {
+    marks.push(`<span class="pill st-paid" title="${escapeHtml((o.addons || []).flatMap(a => (a.items || []).map(it => `${it.name_en || it.name_cn} ×${it.qty}`)).join(', '))}"><span class="dot"></span>+ Items added · 加单 (+¥${Number(o.addon_total || 0).toFixed(2)})</span>`);
+  }
+  const refund = refundBadge(o);
+  if (refund) marks.push(refund);
+  const stock = stockPendingBadge(o);
+  if (stock) marks.push(stock);
+  // A failed auto-print used to show only in the footer bar that this change
+  // removes. It stays surfaced, in brick with the printer's own error on hover,
+  // above the fold where the operator is already looking — a failure the
+  // operator can miss is not an error state (§7).
+  if (o.print_status === 'failed' && !['pending_payment', 'cancelled', 'refunded'].includes(o.status)) {
+    marks.push(`<span class="ord-note-line is-failed" title="${escapeAttr(o.print_error || '')}">${ICON_PRINT_FAILED}${cuT('Print failed', '打印失败')}</span>`);
+  }
+  return `
+    <div class="od-marks">
+      <span class="od-placed"><span>Order placed · 下单于</span> ${formatDate(o.placed_at)}</span>
+      ${marks.length ? '<span class="od-mark-sep"></span>' : ''}
+      ${marks.join('')}
+    </div>`;
+}
+
+// Hairline + soft shadow under the pinned header, but only once content has
+// actually scrolled beneath it — an unscrolled order looks exactly as it did
+// before. Bound once to the mount (the scrollport, which persists across
+// renders); re-synced on every render because innerHTML resets scrollTop.
+let _OD_PIN_BOUND = false;
+function ordBindHeadPin() {
+  const sc = $('#order-detail-mount');
+  if (!sc) return;
+  if (!_OD_PIN_BOUND) {
+    _OD_PIN_BOUND = true;
+    sc.addEventListener('scroll', () => {
+      const h = sc.querySelector('.order-head');
+      if (h) h.classList.toggle('is-stuck', sc.scrollTop > 2);
+    }, { passive: true });
+  }
+  const h = sc.querySelector('.order-head');
+  if (h) h.classList.toggle('is-stuck', sc.scrollTop > 2);
 }
 
 async function reprintOrder(id) {

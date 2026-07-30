@@ -464,8 +464,10 @@
   .pm-pick-bg.tacet .pm-pick-opt:hover { background:var(--surface-raised, var(--bg-elev-1)); }
 
   /* Box-label printing is an opt-in Delivery setting (delivery.boxLabel →
-     body.ord-box-label) — same pattern as bulk tracking. Hidden by default. */
-  body:not(.ord-box-label) .ord-boxlabel-ui { display:none !important; }
+     body.ord-box-label). The CSS gate that used to hide `.ord-boxlabel-ui` is
+     gone with the drawer's print bar: Box label now lives in the header's ⋯
+     menu, and orderHeadMore() reads body.ord-box-label in JS instead — a
+     CSS-hidden item inside a menu would leave the ⋯ opening onto nothing. */
 
   /* Toolbar buttons pick up the calm secondary look via token remap already. */
 
@@ -479,6 +481,104 @@
   #order-drawer .od-eyebrow { font-size:14px; margin-bottom:7px; }
   #order-drawer .order-head .od-head-tx { margin-top:16px; padding-top:0; display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
   @media (max-width:720px){ #order-drawer .order-head { display:block; padding-right:40px; } }
+
+  /* ── Pinned order header (desktop, 2026-07-30) ───────────────────────────
+     §1.13a: the header stays on screen while the body scrolls, and a pinned
+     region is a FIXED HEIGHT regardless of content. Two rows that cannot grow:
+     order no + the ONE primary status pill, then the action row. Every other
+     mark moved to .od-marks, the first line of the scrolling body.
+     Mechanism, which has to travel with the rule:
+     · The band IS the panel's top edge, not a bar laid over it — it takes the
+       drawer's own paper ground, fully opaque (a tinted card sliding under a
+       translucent band looks broken), and draws no corner of its own.
+     · Sticky pins to the nearest SCROLLPORT. That is #order-detail-mount
+       (overflow-y:auto). Do not give .order-card or any ancestor an overflow in
+       either axis — overflow in one axis computes the other to `auto`, which
+       makes THAT element the scrollport and parks the band on row one.
+     · A sticky child pins to the scrollport's PADDING edge, so the mount's top
+       padding has to go to 0 or the ¥total banner peeks through the gap above
+       the band. The header carries that space itself instead.
+     · z-index 4 — above the rows, BELOW the floating ✕ (5). The ✕ is a sibling
+       of the scroll body, not inside it, so anything higher paints over it.
+     Phones (<721px) already pin this header via their own app-bar rules in
+     retail-admin.css and are untouched here. ── */
+  /* Default OFF, and declared before the media queries below so their override
+     wins on source order — media queries add no specificity. On a phone the
+     actions take their own full-width line, where a spacer would only push
+     Print receipt out to a lonely right edge. */
+  #order-drawer .od-head-push { display:none; }
+  @media (min-width:721px) {
+    #order-detail-mount { padding-top:0; }
+    #order-drawer .order-head {
+      position:sticky; top:0; z-index:4;
+      background:var(--bg-app);
+      margin:0 calc(-1 * var(--s5)) var(--s4);
+      padding:14px 56px 12px var(--s5);
+      border-bottom:1px solid transparent;
+      transition:border-color .18s var(--ease-out), box-shadow .18s var(--ease-out);
+    }
+    /* Hairline + soft shadow only once something has scrolled under the band
+       (JS toggles .is-stuck), so an unscrolled order looks as it did before. */
+    #order-drawer .order-head.is-stuck {
+      border-bottom-color:var(--line);
+      box-shadow:0 10px 16px -14px rgba(17,26,43,.45);
+    }
+    /* One line, always: the order no ellipsizes, the pills never wrap. */
+    #order-drawer .order-head .title-row { flex-wrap:nowrap; min-width:0; }
+    #order-drawer .order-head .title-row b {
+      font-size:22px; flex:0 1 auto; min-width:0;
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    }
+    #order-drawer .order-head .title-row .pill { flex:0 0 auto; }
+    #order-drawer .order-head .od-head-tx { margin-top:12px; }
+    /* Print receipt holds the row's right edge — one fixed position on every
+       order, whatever the state buttons are. Measured against the real CSS: at
+       a 760px drawer the row is 675px wide and the widest action set is 440px,
+       at 660px (a 1100px window) 575px wide and it still fits on one line — so
+       the pinned block is 94px on every order, messy or clean.
+       Below ~800px of window the drawer hits its 480px floor and the row can no
+       longer hold four controls. There it WRAPS (as it always did) rather than
+       overflow the panel into a horizontal scrollbar, which means the pinned
+       block is 94px or 130px depending on how many actions the order has. That
+       is the one place this trades §1.13a's fixed height away, and it buys the
+       panel not scrolling sideways. Do not "fix" it by removing the wrap. */
+    @media (min-width:1200px) {
+      #order-drawer .order-head .od-head-tx { flex-wrap:nowrap; }
+      #order-drawer .od-head-push { display:block; flex:1 1 auto; }
+    }
+  }
+
+  /* Marks line — first line of the scrolling body, under the pinned band.
+     Placed time plus every secondary mark (§1.10a treatment, unchanged). */
+  #order-drawer .od-marks {
+    display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px;
+    margin:0 0 var(--s5); font-size:13.5px; color:var(--text-3);
+  }
+  #order-drawer .od-marks .od-mark-sep { width:1px; height:12px; background:var(--line-strong); flex:none; }
+  #order-drawer .od-marks .ord-note-line { margin-top:0; font-size:12.5px; }
+  #order-drawer .od-marks .pill { flex:0 0 auto; }
+  /* A receipt the printer never produced. Brick, with the printer's own error
+     on hover — a failure the operator can miss is not an error state. */
+  .ord-note-line.is-failed { color:var(--danger); font-weight:600; }
+
+  /* ⋯ overflow menu in the pinned action row — the .ovp popover pattern with
+     neutral items (the refund menu's .odm-item is brick by design). */
+  /* The ⋯ must be EXACTLY as tall as a .btn-sm or the action row grows by a few
+     pixels on the orders that have one — and a pinned block that changes height
+     with content is the thing §1.13a forbids. A btn-sm's box is 26px (16px line
+     box + 4px padding + 1px border each side); 16px glyph + 4px padding matches
+     it. Verified against both frames: 95px pinned either way. */
+  #order-drawer .odh-btn { padding:4px 8px; }
+  #order-drawer .odh-btn svg { width:16px; height:16px; }
+  .odh-pop { width:230px; gap:6px; }
+  .odh-item {
+    display:block; width:100%; text-align:left;
+    padding:9px 12px; border:1px solid var(--line-soft); border-radius:var(--r-md);
+    background:var(--bg-input, var(--bg-app)); color:var(--text-1);
+    font:500 13px var(--f-sans); cursor:pointer;
+    transition:background var(--t-fast) ease, border-color var(--t-fast) ease;
+  }
+  .odh-item:hover { background:var(--bg-elev-1); border-color:var(--line-strong); }
 
   /* Order total — bigger amount. */
   #order-drawer .order-total-banner { padding:20px 22px; }
@@ -11220,9 +11320,10 @@
       <span class="opb-cur" id="ord-page-crumb" data-no-i18n></span>
     </div>
     <div class="drawer-body" id="order-detail-mount"></div>
-    <!-- Print controls. In the drawer they pin to the bottom; as an in-flow page
-         they sit at the end of the content. Populated by orderDrawerFoot();
-         collapses when empty via `#order-drawer .drawer-foot:empty`. -->
+    <!-- Footer slot, now always empty: Print receipt moved into the pinned
+         header (2026-07-30) and the bar held nothing else worth its height.
+         Kept so the shared drawer shell keeps its three-part structure;
+         collapses via `#order-drawer .drawer-foot:empty`. -->
     <div class="drawer-foot" id="order-drawer-foot"></div>
   </aside>
 

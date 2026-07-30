@@ -10,7 +10,7 @@
 //
 // Bump CACHE on every UI shape change to force every client to evict
 // its old shell on next load (activate handler deletes all old caches).
-const CACHE = 'roots-v2-shell-v689-delta-tips-use-house-tooltip';
+const CACHE = 'roots-v2-shell-v690-order-header-pins-print-moves-up';
 const SHELL = ['/', '/login'];
 
 // Heuristic — request that wants HTML?

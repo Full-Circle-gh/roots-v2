@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Order drawer — pinned header + print moved up</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ── Tacet tokens — copied VERBATIM from the live #tacet-orders-skin block
+     (retail-admin.html) so nothing here is an approximation. ── */
+  :root {
+    --tacet-ink:#111A2B; --tacet-paper:#FBF9F4; --tacet-graphite:#58606E;
+    --tacet-dusk:#6E67AF; --tacet-sage:#A3B49F; --tacet-amber:#C9954A; --tacet-brick:#B4533E;
+    --tacet-cream:#F6F3EC; --tacet-border:#E4E0D5;
+    --tacet-sage-tint:#EDF1EC; --tacet-amber-tint:#F7EEDE; --tacet-brick-tint:#F6E7E3; --tacet-dusk-tint:#EEEDF6;
+    --tacet-sage-ink:#4A6249; --tacet-amber-ink:#8A6425;
+
+    --bg-app:#FBF9F4; --bg-pane:#FFFFFF; --bg-elev-1:#F6F3EC; --bg-elev-2:#EFEBE1; --bg-input:#FFFFFF;
+    --bg-overlay:rgba(17,26,43,.32);
+    --line-soft:#ECE8DE; --line:#E4E0D5; --line-strong:#D9D4C7;
+    --text-1:#111A2B; --text-2:#58606E; --text-3:#8A8B8E; --text-4:#B4B3AC;
+    --brass:#58606E; --warn:#C9954A;
+    --danger:#B4533E; --danger-soft:rgba(180,83,62,.12); --success:#A3B49F;
+    --st-paid:#58606E; --st-preparing:#58606E;
+    --f-sans:'Inter','IBM Plex Sans SC','PingFang SC','Hiragino Sans GB',system-ui,sans-serif;
+    --r-sm:6px; --r-md:8px; --r-lg:12px; --r-xl:14px;
+    --ease-out:cubic-bezier(.16,1,.3,1);
+    --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:20px; --s6:24px; --s7:32px;
+  }
+  /* Dark theme — same Paper/Ink swap the live skin ships. */
+  html[data-theme="dark"] {
+    --bg-app:#111A2B; --bg-pane:#18233A; --bg-elev-1:#1E2A44; --bg-elev-2:#243150; --bg-input:#18233A;
+    --line-soft:#22304C; --line:#2A3550; --line-strong:#374267;
+    --text-1:#FBF9F4; --text-2:#9AA3B2; --text-3:#7E8798; --text-4:#5C6577;
+    --tacet-cream:#1E2A44; --tacet-border:#2A3550;
+    --tacet-sage-tint:#1E2C26; --tacet-amber-tint:#33290F; --tacet-brick-tint:#351B14;
+    --tacet-sage-ink:#A3B49F; --tacet-amber-ink:#C9954A;
+  }
+
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; background:var(--bg-app); color:var(--text-1);
+    font-family:var(--f-sans); font-size:15px; line-height:1.5;
+    -webkit-font-smoothing:antialiased; padding:28px 28px 96px;
+  }
+  .wrap{ max-width:1180px; margin:0 auto; }
+
+  .topbar{ display:flex; align-items:flex-start; justify-content:space-between; gap:24px; margin-bottom:28px; }
+  .eyebrow{ font:500 11px var(--f-sans); letter-spacing:.14em; text-transform:uppercase; color:var(--text-3); margin:0 0 6px; }
+  h1{ font:500 24px var(--f-sans); letter-spacing:-.01em; margin:0 0 8px; }
+  .lede{ margin:0; color:var(--text-2); font-size:13.5px; max-width:720px; }
+  .themebtn{
+    font:500 12.5px var(--f-sans); color:var(--text-2); background:var(--bg-pane);
+    border:1px solid var(--line); border-radius:999px; padding:7px 14px; cursor:pointer; white-space:nowrap;
+  }
+  .themebtn:hover{ color:var(--text-1); border-color:var(--line-strong); }
+
+  h2{ font:500 17px var(--f-sans); margin:40px 0 4px; letter-spacing:-.01em; }
+  h2 .tag{
+    font:500 10px var(--f-sans); letter-spacing:.1em; text-transform:uppercase;
+    border-radius:999px; padding:3px 9px; margin-left:9px; vertical-align:2px;
+    background:var(--bg-elev-1); color:var(--text-3);
+  }
+  h2 .tag.pick{ background:var(--tacet-dusk-tint); color:var(--tacet-dusk); }
+  .say{ margin:0 0 16px; color:var(--text-2); font-size:13.5px; max-width:760px; }
+
+  /* ── Drawer shell — the live .side-drawer at its real max width (760px),
+     paper ground, white cards inside, the floating bare-glyph close. ── */
+  .drawer{
+    position:relative; width:760px; max-width:100%; height:600px;
+    background:var(--bg-app); border:1px solid var(--line); border-radius:16px;
+    box-shadow:0 1px 2px rgba(17,26,43,.05), 0 4px 16px rgba(17,26,43,.06);
+    display:flex; flex-direction:column; overflow:hidden;
+  }
+  .close{
+    position:absolute; top:14px; right:14px; width:32px; height:32px; z-index:5;
+    display:inline-flex; align-items:center; justify-content:center;
+    border:0; background:transparent; color:var(--text-2); border-radius:999px; cursor:pointer;
+  }
+  .close:hover{ background:var(--bg-elev-1); color:var(--text-1); }
+  .close svg{ width:16px; height:16px; }
+
+  /* The scrollport. Live equivalent: #order-detail-mount / .drawer-body.
+     top padding is 0 on purpose — a pinned child sticks to the padding edge,
+     so 24px here would leave a gap for content to peek through. */
+  .dwbody{ flex:1; min-height:0; overflow-y:auto; overscroll-behavior:contain; padding:0 var(--s6) var(--s6); }
+
+  /* Footer bar — only frame A still has one. */
+  .dwfoot{
+    flex-shrink:0; display:flex; align-items:center; gap:8px;
+    padding:14px 18px; border-top:1px solid var(--line); background:var(--bg-app);
+  }
+  .dwfoot .spacer{ flex:1 1 auto; }
+  .foothint{ font-size:12.5px; color:var(--text-3); }
+
+  /* ── Header (three arrangements share these atoms) ── */
+  .ohead{ padding-right:46px; }
+  .ohead.pin{
+    position:sticky; top:0; z-index:4;             /* under the close's 5 */
+    background:var(--bg-app);                       /* fully opaque, never a tint */
+    margin:0 calc(-1 * var(--s6)) var(--s5);
+    padding-left:var(--s6); padding-right:56px;
+    transition:box-shadow .18s var(--ease-out), border-color .18s var(--ease-out);
+    border-bottom:1px solid transparent;
+  }
+  .ohead.pin.stuck{
+    border-bottom-color:var(--line);
+    box-shadow:0 10px 16px -14px rgba(17,26,43,.45);
+  }
+  .oplaced{ font-size:14px; color:var(--text-3); }
+  .titlerow{ display:flex; align-items:center; gap:var(--s2); min-width:0; }
+  .ono{ font:500 27px var(--f-sans); font-variant-numeric:tabular-nums; letter-spacing:.01em; }
+  .ono.sm{ font-size:22px; }
+  .actions{ display:flex; align-items:center; gap:10px; flex-wrap:nowrap; }
+  .actions .push{ flex:1 1 auto; }
+
+  .pill{
+    display:inline-flex; align-items:center; gap:5px; padding:2px 10px 2px 8px;
+    border-radius:999px; border:none; font:500 12.5px var(--f-sans); white-space:nowrap;
+    background:var(--bg-elev-1); color:var(--text-2);
+  }
+  .pill .dot{ width:7px; height:7px; border-radius:50%; background:var(--text-3); }
+  .pill.sage{ background:var(--tacet-sage-tint); color:var(--tacet-sage-ink); }
+  .pill.sage .dot{ background:var(--tacet-sage); }
+  .pill.amber{ background:var(--tacet-amber-tint); color:var(--tacet-amber-ink); }
+  .pill.amber .dot{ background:var(--tacet-amber); }
+  .pill.brick{ background:var(--tacet-brick-tint); color:var(--tacet-brick); }
+  .pill.brick .dot{ background:var(--tacet-brick); }
+
+  .btn{
+    display:inline-flex; align-items:center; gap:6px; font:500 13px var(--f-sans);
+    padding:7px 12px; border:1px solid var(--line); background:var(--bg-elev-1);
+    color:var(--text-1); border-radius:var(--r-md); cursor:pointer; white-space:nowrap;
+  }
+  .btn:hover{ background:var(--bg-elev-2); border-color:var(--line-strong); }
+  .btn svg{ width:14px; height:14px; flex-shrink:0; }
+  .btn.danger{ background:transparent; color:var(--tacet-brick); border-color:var(--tacet-brick); }
+  .btn.danger:hover{ background:var(--tacet-brick-tint); }
+  .btn.kebab{ padding:7px 9px; }
+
+  /* Marks line — everything the pinned block no longer carries. */
+  .marks{
+    display:flex; align-items:center; flex-wrap:wrap; gap:var(--s2) var(--s3);
+    margin:0 0 var(--s5); font-size:13px; color:var(--text-3);
+  }
+  .marks .sep{ width:1px; height:12px; background:var(--line-strong); }
+  .mark{ display:inline-flex; align-items:center; gap:5px; white-space:nowrap; }
+  .mark svg{ width:12px; height:12px; flex:none; }
+  .mark.owed{ color:var(--tacet-amber-ink); font-weight:500; }
+  .mark.fail{ color:var(--tacet-brick); font-weight:500; }
+
+  /* ── Body content, trimmed from the live drawer ── */
+  .totalbanner{
+    background:var(--tacet-cream); border-radius:var(--r-xl); padding:20px 22px;
+    display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:14px;
+  }
+  .otb-label{ font-size:13px; color:var(--text-2); }
+  .otb-sub{ font-size:13.5px; color:var(--text-3); margin-top:2px; }
+  .otb-amount{ font:500 40px var(--f-sans); font-variant-numeric:tabular-nums; letter-spacing:-.02em; }
+
+  .grid2{ display:grid; grid-template-columns:repeat(2,1fr); gap:14px; margin-bottom:14px; }
+  .card{
+    background:var(--bg-pane); border:1px solid var(--line); border-radius:var(--r-lg); padding:16px 18px;
+  }
+  .kicker{ font:500 14px var(--f-sans); color:var(--text-2); margin-bottom:9px; }
+  .val{ font-size:16px; }
+  .val b{ font-weight:600; }
+  .sub{ font-size:13.5px; color:var(--text-3); margin-top:3px; }
+  .frow{ display:grid; grid-template-columns:110px 1fr; gap:12px; padding:10px 0; border-top:1px solid var(--line-soft); align-items:baseline; }
+  .frow:first-child{ border-top:none; }
+  .frow .k{ font-size:13.5px; color:var(--text-2); }
+  .frow .v{ font-size:15px; font-weight:500; }
+  .sectionlabel{ font:500 11px var(--f-sans); letter-spacing:.12em; text-transform:uppercase; color:var(--text-3); margin:22px 0 10px; }
+  .items{ background:var(--bg-pane); border:1px solid var(--line); border-radius:var(--r-lg); padding:6px 18px 10px; }
+  .item{ display:flex; align-items:center; gap:14px; padding:13px 0; border-top:1px solid var(--line-soft); }
+  .item:first-child{ border-top:none; }
+  .item .idx{ font-size:13px; color:var(--text-4); font-variant-numeric:tabular-nums; width:18px; }
+  .item .thumb{ width:44px; height:44px; border-radius:var(--r-md); background:var(--bg-elev-2); flex:none; }
+  .item .nm{ flex:1 1 auto; min-width:0; }
+  .item .nm b{ font-weight:500; font-size:15px; }
+  .item .nm .sub{ margin-top:1px; font-size:13px; }
+  .item .amt{ font-weight:500; font-variant-numeric:tabular-nums; }
+
+  /* ── Notes ── */
+  .notes{ margin-top:44px; background:var(--bg-pane); border:1px solid var(--line); border-radius:var(--r-xl); padding:24px 26px; max-width:900px; }
+  .notes h3{ font:500 15px var(--f-sans); margin:0 0 12px; }
+  .notes h3 + p{ margin-top:0; }
+  .notes p{ font-size:13.5px; color:var(--text-2); margin:0 0 14px; }
+  .notes ul{ margin:0 0 18px; padding-left:20px; }
+  .notes li{ font-size:13.5px; color:var(--text-2); margin-bottom:7px; }
+  .notes li b, .notes p b{ color:var(--text-1); font-weight:600; }
+  .notes .divider{ height:1px; background:var(--line-soft); margin:6px 0 20px; }
+  code{ font-family:var(--f-sans); font-size:12.5px; background:var(--bg-elev-1); border-radius:4px; padding:1px 6px; color:var(--text-1); }
+  .hint{ font-size:12.5px; color:var(--text-3); margin:10px 0 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="topbar">
+    <div>
+      <p class="eyebrow">Orders · drawer</p>
+      <h1>Pin the order header, move Print receipt up</h1>
+      <p class="lede">Three arrangements of the same order. Scroll inside each frame — frame A is today (the header
+        scrolls away and printing lives in a bottom bar); B and C keep the header on screen and bring Print receipt
+        up beside Refund / Cancel, which lets the bottom bar go away entirely.</p>
+    </div>
+    <button class="themebtn" id="themebtn" type="button">Dark theme</button>
+  </div>
+
+  <!-- ══ A · TODAY ══ -->
+  <h2>A · Today<span class="tag">for reference</span></h2>
+  <p class="say">Scroll two lines and you lose the order number, the status and every action. Printing is parked in a
+    bar at the bottom, far from the buttons you actually came for.</p>
+
+  <div class="drawer">
+    <button class="close" type="button" aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <div class="dwbody" style="padding-top:var(--s6);">
+      <div class="ohead" style="margin-bottom:20px;">
+        <div class="oplaced" style="margin-bottom:7px;">Order placed Jul 30, 1:10 AM</div>
+        <div class="titlerow">
+          <span class="ono">TC000105</span>
+          <span class="pill"><span class="dot"></span>Paid</span>
+          <span class="mark owed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>Stock pending</span>
+        </div>
+        <div class="actions" style="margin-top:16px; flex-wrap:wrap;">
+          <button class="btn" type="button">Start preparing</button>
+          <button class="btn" type="button">Mark dispatched</button>
+          <button class="btn danger" type="button">Refund / Cancel
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+        </div>
+      </div>
+      <div id="bodyA"></div>
+    </div>
+    <div class="dwfoot">
+      <button class="btn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+        Print receipt
+      </button>
+      <span class="spacer"></span>
+      <span class="foothint">Prints at Tianhe</span>
+    </div>
+  </div>
+
+  <!-- ══ B · PIN EVERYTHING ══ -->
+  <h2>B · Pin the header exactly as it is</h2>
+  <p class="say">Nothing moves except the print button. The whole block — placed time, order number, status, actions —
+    stays put. Honest and zero relayout, but it holds 140px of the panel at all times, and the timestamp is the one
+    line in it you never need twice.</p>
+
+  <div class="drawer">
+    <button class="close" type="button" aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <div class="dwbody">
+      <div class="ohead pin" style="padding-top:16px; padding-bottom:14px;">
+        <div class="oplaced" style="margin-bottom:7px;">Order placed Jul 30, 1:10 AM</div>
+        <div class="titlerow">
+          <span class="ono">TC000105</span>
+          <span class="pill"><span class="dot"></span>Paid</span>
+        </div>
+        <div class="actions" style="margin-top:16px;">
+          <button class="btn" type="button">Start preparing</button>
+          <button class="btn" type="button">Mark dispatched</button>
+          <button class="btn danger" type="button">Refund / Cancel
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <span class="push"></span>
+          <button class="btn" type="button" title="Prints at Tianhe">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            Print receipt
+          </button>
+        </div>
+      </div>
+      <div class="marks">
+        <span class="mark owed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>Stock pending</span>
+      </div>
+      <div id="bodyB"></div>
+    </div>
+  </div>
+
+  <!-- ══ C · COMPACT PIN ══ -->
+  <h2>C · Compact pin<span class="tag pick">recommended</span></h2>
+  <p class="say">Two rows, 97px: which order and what state, then what you can do about it. The placed time drops one
+    line down into the scrolling body, where it sits with the other marks — it is a fact about the order, not a
+    control. Print receipt holds the right edge of the action row, so it is in the same place on every order no matter
+    how many state buttons that order has.</p>
+
+  <div class="drawer">
+    <button class="close" type="button" aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <div class="dwbody">
+      <div class="ohead pin" style="padding-top:14px; padding-bottom:12px;">
+        <div class="titlerow">
+          <span class="ono sm">TC000105</span>
+          <span class="pill"><span class="dot"></span>Paid</span>
+        </div>
+        <div class="actions" style="margin-top:12px;">
+          <button class="btn" type="button">Start preparing</button>
+          <button class="btn" type="button">Mark dispatched</button>
+          <button class="btn danger" type="button">Refund / Cancel
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <span class="push"></span>
+          <button class="btn" type="button" title="Prints at Tianhe">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            Print receipt
+          </button>
+        </div>
+      </div>
+      <div class="marks">
+        <span>Order placed Jul 30, 1:10 AM</span>
+        <span class="sep"></span>
+        <span class="mark owed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>Stock pending</span>
+      </div>
+      <div id="bodyC"></div>
+    </div>
+  </div>
+
+  <!-- ══ WORST CASE ══ -->
+  <h2>C · worst case — same 97px<span class="tag">proof</span></h2>
+  <p class="say">A messy order: part-refunded, items added after the slip printed, two parcels half shipped, stock not
+    yet deducted, and the auto-print failed. Five marks and five actions. The pinned block is pixel-identical to the
+    frame above — one pill, one action row — because every extra mark lands in the body line, and the actions that are
+    not the order's next step (Undo, Box label) fold into the ⋯ menu so the row can never wrap to two lines.</p>
+
+  <div class="drawer">
+    <button class="close" type="button" aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+    </button>
+    <div class="dwbody">
+      <div class="ohead pin" style="padding-top:14px; padding-bottom:12px;">
+        <div class="titlerow">
+          <span class="ono sm">TC000117</span>
+          <span class="pill amber"><span class="dot"></span>Preparing</span>
+        </div>
+        <div class="actions" style="margin-top:12px;">
+          <button class="btn" type="button">Mark all dispatched</button>
+          <button class="btn danger" type="button">Refund / Cancel
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <span class="push"></span>
+          <button class="btn" type="button" title="Prints at Yuexiu">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
+            Print receipt
+          </button>
+          <button class="btn kebab" type="button" title="More actions" aria-label="More actions">
+            <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="marks">
+        <span>Order placed Jul 29, 8:42 PM</span>
+        <span class="sep"></span>
+        <span class="pill amber"><span class="dot"></span>Partially shipped 1/2</span>
+        <span class="pill"><span class="dot"></span>+ Items added ¥48.00</span>
+        <span class="pill brick"><span class="dot"></span>Part refund ¥30.00</span>
+        <span class="mark owed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>Stock pending</span>
+        <span class="mark fail"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><line x1="12" y1="8" x2="12" y2="13"/><line x1="12" y1="16" x2="12" y2="16"/></svg>Print failed — printer offline</span>
+      </div>
+      <div id="bodyD"></div>
+    </div>
+  </div>
+
+  <!-- ══ NOTES ══ -->
+  <div class="notes">
+    <h3>What moves, and what happens to the bottom bar</h3>
+    <ul>
+      <li><b>Print receipt goes into the pinned action row</b>, pushed to the right edge so it holds one position on
+        every order. It stops being a hunt at the bottom of a long panel.</li>
+      <li><b>The bottom bar disappears.</b> It only ever held Print receipt, Box label, the failed-print pill and the
+        "Prints at Tianhe" hint. With print at the top there is nothing left worth a whole bar, and the panel gets
+        those 61px back. The bar already collapses when empty, so this needs no new plumbing.</li>
+      <li><b>"Prints at Tianhe" becomes the button's tooltip.</b> It answers a question you ask once — which counter
+        does this come out of — so it belongs on hover, not parked on screen forever.</li>
+      <li><b>Box label</b> (only on when Settings · Delivery turns it on) and any <b>Undo dispatch / Undo preparing</b>
+        move into the ⋯ menu at the end of the row. That caps the row at four visible controls, which is what keeps
+        the pinned height fixed.</li>
+      <li><b>A failed print moves to the marks line</b> under the header, in brick with the printer's own error on
+        hover — still above the fold, where the operator is already looking.</li>
+    </ul>
+
+    <div class="divider"></div>
+
+    <h3>Why C drops the timestamp out of the pinned block</h3>
+    <p>The rulebook (§1.13a) is blunt about this: a pinned region is a fixed height regardless of content, and the
+      pinned header carries <b>one</b> pill — the record's primary status. Extra marks go in the body below it. That
+      rule exists because an earlier attempt at this same header let three pills wrap to a second row, and the
+      "fixed" header doubled in height on exactly the messy orders where staying put matters most. Frame C obeys it
+      by keeping the pinned block to two rows that cannot grow, and giving the marks their own line just below.</p>
+    <p>The placed time follows the same logic. It is read once, on arrival, and the Ship-by card repeats it further
+      down. Keeping it pinned costs 21px of every screen for a line nobody looks at twice.</p>
+
+    <div class="divider"></div>
+
+    <h3>Build notes</h3>
+    <ul>
+      <li>The pinned block must be the panel's <b>top edge, not a band laid over it</b> — it takes the drawer's own
+        paper ground (<code>--bg-app</code>), fully opaque, and draws no corner of its own.</li>
+      <li>Pin with <code>position: sticky; top: 0</code> on <code>.order-head</code> inside
+        <code>#order-detail-mount</code>, plus negative side margins so the band is full-bleed. <b>Set the mount's
+        top padding to 0</b> — a sticky child pins to the padding edge, so 20px of padding leaves a gap for the ¥total
+        banner to peek through. The phone layout already does exactly this; desktop copies it.</li>
+      <li><code>z-index: 4</code> — above the rows, <b>below the floating ✕ at 5</b>. Any higher and the header paints
+        over the close button, which is a sibling of the scroll body rather than inside it.</li>
+      <li>Check every ancestor for an <code>overflow</code> in either axis before shipping. <code>overflow</code> in
+        one axis computes the other to <code>auto</code>, which turns that element into the scrollport and parks the
+        header on row one instead of the panel top.</li>
+      <li>The hairline + soft shadow appear only once content has scrolled under the band (the <code>stuck</code>
+        class here). At rest there is no line, so an unscrolled order looks exactly as it does today.</li>
+      <li>The marks line joins its parts with a styled separator element, never a <code>" · "</code> text node — the
+        live translator treats space-middot-space as an English/中文 pair and would split it.</li>
+    </ul>
+    <p class="hint">Both themes are here — toggle top right. The band has to be opaque in dark too, or a tinted card
+      sliding under it shows through.</p>
+  </div>
+
+</div>
+
+<script>
+  // Shared body content for every frame, so the four panels differ only in
+  // their header treatment.
+  var BODY = ''
+    + '<div class="totalbanner"><div><div class="otb-label">Order total</div>'
+    + '<div class="otb-sub">subtotal ¥125.00 · shipping ¥25.00 · packing ¥2.40</div></div>'
+    + '<div class="otb-amount">¥152.40</div></div>'
+    + '<div class="grid2">'
+    + '<div class="card"><div class="kicker">Ship to</div>'
+    + '<div class="val"><b>Kropf</b> · 13260192895</div>'
+    + '<div class="sub">18 Xinjin Road, Chaoyang, Beijing</div>'
+    + '<div style="margin-top:10px;"><button class="btn" type="button">Edit ship-to</button></div></div>'
+    + '<div class="card" style="padding:4px 18px;">'
+    + '<div class="frow"><span class="k">Customer</span><span class="v">Franci &nbsp;#831</span></div>'
+    + '<div class="frow"><span class="k">Payment</span><span class="v">WeChat · paid</span></div>'
+    + '<div class="frow"><span class="k">Ship by</span><span class="v">Courier — ship when ready</span></div>'
+    + '<div class="frow"><span class="k">Fulfilled by</span><span class="v">Tianhe</span></div></div>'
+    + '</div>'
+    + '<div class="sectionlabel">Items &amp; shipments</div>'
+    + '<div class="items">'
+    + '<div class="item"><span class="idx">01</span><span class="thumb"></span>'
+    + '<span class="nm"><b>Chickpea Salad</b><div class="sub">1-50 · ×1 · @ ¥38.00</div></span><span class="amt">¥38.00</span></div>'
+    + '<div class="item"><span class="idx">02</span><span class="thumb"></span>'
+    + '<span class="nm"><b>Classic Cashew Sour Cream</b><div class="sub">1-90 · ×1 · @ ¥38.00</div></span><span class="amt">¥38.00</span></div>'
+    + '<div class="item"><span class="idx">03</span><span class="thumb"></span>'
+    + '<span class="nm"><b>Buckwheat Bread (GF, Sliced &amp; Frozen)</b><div class="sub">2-14 · ×1 · @ ¥49.00</div></span><span class="amt">¥49.00</span></div>'
+    + '</div>'
+    + '<div class="sectionlabel">Timeline</div>'
+    + '<div class="card" style="padding:4px 18px;">'
+    + '<div class="frow"><span class="k">Paid</span><span class="v">Jul 30, 1:10 AM</span></div>'
+    + '<div class="frow"><span class="k">Slip printed</span><span class="v">Jul 30, 1:11 AM</span></div>'
+    + '<div class="frow"><span class="k">Stock reserved</span><span class="v">Jul 30, 1:11 AM</span></div>'
+    + '</div>';
+
+  ['bodyA', 'bodyB', 'bodyC', 'bodyD'].forEach(function (id) {
+    document.getElementById(id).innerHTML = BODY;
+  });
+
+  // Hairline + shadow only once something has scrolled under the band.
+  document.querySelectorAll('.dwbody').forEach(function (sc) {
+    var head = sc.querySelector('.ohead.pin');
+    if (!head) return;
+    sc.addEventListener('scroll', function () {
+      head.classList.toggle('stuck', sc.scrollTop > 2);
+    });
+  });
+
+  var btn = document.getElementById('themebtn');
+  btn.addEventListener('click', function () {
+    var dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    document.documentElement.setAttribute('data-theme', dark ? 'light' : 'dark');
+    btn.textContent = dark ? 'Dark theme' : 'Light theme';
+  });
+</script>
+</body>
+</html>
