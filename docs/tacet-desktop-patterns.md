@@ -1,4 +1,4 @@
-# Tacet desktop patterns — v3.6 · 2026-07-30
+# Tacet desktop patterns — v3.7 · 2026-07-30
 
 > The rulebook for every desktop admin surface. `tacet-design-system.md` governs how Tacet **looks**. `tacet-brand-concept.md` governs how it **sounds**. `tacet-ia-blueprint.md` governs what **exists**. This file governs **how a page is put together** — so that Orders and Pop-ups feel like the same product despite having different layouts.
 >
@@ -398,7 +398,27 @@ Two exits are permitted and at most one is Dusk. The commit takes the page's sin
 
 **Superseded, pick up at build time:** §1.13's 2026-07-19 Record order entry still specifies Ghost. Change it to Secondary when Purchasing is built. Do not resolve the conflict the other way — the reasoning is here and the 2026-07-19 line has none.
 
-§1.8 rule 5 still governs the container: a sub-page is a **route with a back link**, never a sheet laid over the list. If it is rendered as an overlay, the page behind it is unmounted or `inert`, or its Dusk CTA sits reachable in the DOM while invisible — and the DOM has stopped describing the page.
+**The container must be a takeover, not a sheet. It does not have to be a route.** *(Amended 2026-07-30 — the original wording named a mechanism when it meant an outcome. See below.)*
+
+Three conditions, all required:
+
+1. **Nothing overlays anything.** No scrim, no sheet edge, no shadow, no card floating above a dimmed list. The sub-page occupies the content area in normal flow. Overlay is what a modal does.
+2. **The page behind is gone, not hidden.** `display: none`, unmounted, or `inert` — the test is whether its Dusk CTA is reachable by tab and present in the accessibility tree. If it is, the DOM has stopped describing the page and there are two primaries where the operator can only see one.
+3. **Back returns to the list.** By router where one exists; by trapping the browser Back gesture where one does not. An operator who presses Back mid-order must land on the list they came from, never outside the section.
+
+**`display: none` satisfies condition 2 more completely than `inert`** — it removes the element from layout, tab order and the accessibility tree at once. Do not add `inert` on top of it believing it is owed.
+
+**Why the original wording was wrong.** *(This reasoning travels with the rule — §7.)*
+
+§1.7a was written on 2026-07-30 requiring "a route with a back link, never a sheet." The New order survey later the same day found the admin shell has **no router at all**: tab switching is class-toggling (`01-core.js:323`), and the only history use in the entire admin is one Back-trap on the product lightbox (`09-products.js:3809`) and a `replaceState` cleanup. A real route means a new standalone page on a different shell.
+
+So the rule as written demanded a rebuild of the shell to legitimise a layout the shell can already produce — and would have been read by the next builder as forbidding the correct answer.
+
+**The rule named a mechanism when it meant an outcome.** What it cares about is that a page is not an overlay pretending to be a page, and that the list's primary is not sitting live behind it. A route delivers both, which is why it got written down. It is not the only thing that does.
+
+**This is the third rule in this document corrected on the same axis**, and the pattern is now explicit enough to name: §1.8 rule 5 was drawn around *where an element sits* when it meant *who is acting*; §1.13 was drawn around *how many decisions fit* when it meant *does the operator author content*; §1.7a was drawn around *what the URL does* when it meant *what the container does*. **A rule that names an implementation will outlive the reason it named it.** When amending this document, state the outcome and let the mechanism be evidence.
+
+**The mechanism already exists and is proven.** `body.ord-viewing` (`retail-admin.css:5300`) is a complete full-bleed in-flow takeover — `main > section { display: none }`, main pinned below the topbar, content owning its scroll, rail and topbar untouched. It was built for the Orders **detail** view, tried, and reverted on operator feedback; the CSS and markup were deliberately left in place. **That reversion is not evidence against this rule.** It was reverted because an order detail is a glance-and-act task, which §1.13 correctly files as a drawer. It says nothing about an authoring page, which is a different row of the same table.
 
 ### 1.8 The one-Dusk rule, made operational
 
@@ -411,7 +431,7 @@ Dusk means exactly one thing: **tacet did this for you.** It is scarce by design
 5. **Neither a modal nor a drawer spends Dusk.** *(Corrected 2026-07-26 — the prior version gave a modal its own Dusk. See "Why this changed" below; do not restore it.)* The old test was *can the operator still act on what's behind it?* — a **budget** question. The test is now *who is acting?* — a **semantic** one.
    - **Drawer → inherits.** The list stays live behind it — rows visible, poller running, header CTA still clickable. Two surfaces, one budget, so the drawer's actions go Secondary.
    - **Modal → spends nothing.** Its primary is **Ink**. Destructive stays Brick outline (never a solid slab), and the focus ring stays Dusk — rule 3, and a focus ring is not an element making a claim. A modal confirm is the **operator committing to their own decision**, and Dusk means one thing only: *tacet did this for you.* Having an unspent budget does not make the merchant's action the AI's.
-   - **Full-screen page over a page → suppress the one behind it.** If a page is opened over another (New order over Orders), unmount or `inert` the underlying header. Two primaries in the DOM where one is unreachable means the DOM no longer describes the page. And reconsider the overlay itself — a page should be a route with a back link (§A3), not a sheet. Overlay is what a modal does.
+   - **Full-screen page over a page → suppress the one behind it.** If a page is opened over another (New order over Orders), unmount or `inert` the underlying header. Two primaries in the DOM where one is unreachable means the DOM no longer describes the page. And reconsider the overlay itself — **a page is a takeover, not a sheet.** Overlay is what a modal does. **§1.7a owns the three conditions** (nothing overlays, the page behind is gone from the tab order and accessibility tree, Back returns to the list); a route is one way to meet them and not the only one. Do not restate the conditions here — a rule stated in two places drifts in one.
 6. **A Console page spends nothing.** Config isn't the AI acting. Its Dusk budget stays unspent, and that is correct.
 
 If a page seems to need two Dusk CTAs, it is two pages, or one of them is not primary.
@@ -1506,6 +1526,20 @@ Small, non-blocking. Resolve during Batch 0.
    instinct" tidy §1.2 warns against. **What the brief still requires:** correct the
    orientation to match the shell (dark-first, `[data-theme="light"]` the opt-in — it is
    currently light-first) and clear the §1.6 uppercase + the `.acc-*`/`.who-role` rot.
+
+---
+
+*v3.7 · 2026-07-30.*
+
+**v3.7 changes — one correction, applied in two places because the wording lived in two places.**
+
+**§1.7a no longer requires a route.** It now requires a takeover, by three conditions: nothing overlays anything, the page behind is gone from the tab order and the accessibility tree, and Back returns to the list. A route meets all three; so does a full-bleed in-flow takeover, which is what this shell can actually build. The New order survey found the admin has no router — tab switching is class-toggling, and a real route means a new standalone page on a different shell. The rule as written on 2026-07-30 would have been read as forbidding the correct answer.
+
+**Named the axis, since this is the third time.** §1.8 rule 5 was drawn around where an element sits when it meant who is acting. §1.13 was drawn around how many decisions fit when it meant does the operator author content. §1.7a was drawn around what the URL does when it meant what the container does. **A rule that names an implementation will outlive the reason it named it.**
+
+**§1.8 rule 5 corrected in the same commit**, because it carried the same "route with a back link" phrase. Correcting one copy and leaving the other is how `.cs-modal` sat on the owed-Dusk list after the rule that put it there was retired. Rule 5 now points at §1.7a rather than restating the conditions.
+
+Everything else unchanged from v3.6.
 
 ---
 
