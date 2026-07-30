@@ -287,8 +287,8 @@ function extractFn(name, src) {
 }
 
 // A top-level `const NAME = {` … `};` block, same dumb-but-loud rule.
-function extractConst(name) {
-  const lines = CLIENT_SRC.split('\n');
+function extractConst(name, src) {
+  const lines = (src || CLIENT_SRC).split('\n');
   const start = lines.findIndex(l => l.startsWith(`const ${name} = {`));
   if (start === -1) return null;
   for (let i = start + 1; i < lines.length; i++) {
@@ -448,6 +448,94 @@ const refundWork = db.prepare(
   "SELECT order_no FROM retail_orders WHERE refund_status IN ('pending','reviewing','approved')"
 ).all().map(r => r.order_no);
 check('refund pipeline STILL counts a counter sale', refundWork, nos([3]));
+
+// ═══ 7. New order page — the container (§1.7a takeover) ═════════════════════
+// Static proofs against the shipped sources, same dumb-but-loud extraction as
+// §5c. Each check is a composite whose new-behaviour half fails on the pre-fix
+// tree — verified by running this script against origin/main's sources.
+const HTML_SRC = fs.readFileSync(
+  path.join(__dirname, '..', 'public', 'retail-admin.html'), 'utf8');
+const CSS_SRC = fs.readFileSync(
+  path.join(__dirname, '..', 'public', 'retail-admin.css'), 'utf8');
+const CORE_SRC = fs.readFileSync(
+  path.join(__dirname, '..', 'public', 'retail-admin', '01-core.js'), 'utf8');
+
+// The text of one top-level section — from its open tag to the next top-level
+// `<section id=` (two-space indent, matching the file's own layout).
+function sliceSection(src, id) {
+  const open = src.indexOf('<section id="' + id + '">');
+  if (open === -1) return '';
+  const next = src.indexOf('\n  <section id=', open + 10);
+  return next === -1 ? src.slice(open) : src.slice(open, next);
+}
+const ordersSection = sliceSection(HTML_SRC, 'tab-orders');
+const newSection    = sliceSection(HTML_SRC, 'tab-orders-new');
+const srcOrdNewOpen     = extractFn('ordNewOpen')      || '';
+const srcOrdNewBack     = extractFn('ordNewBack')      || '';
+const srcOrdNewOnPop    = extractFn('_ordNewOnPop')    || '';
+const srcOrdNewTeardown = extractFn('_ordNewTeardown') || '';
+
+// §1.7a condition 2 — while the page is open the Orders section (and with it
+// the Dusk "New order" CTA) must be display:none: out of the tab order, out of
+// the accessibility tree. The chain that makes that true, every link asserted:
+// the CTA sits inside #tab-orders; opening goes through goTab('orders-new'),
+// which leaves #tab-orders without .active; a section without .active is
+// display:none; and the revived takeover class hides sections wholesale, with
+// only the id-scoped new section opted back in.
+check('CTA unreachable while open: every link of the display:none chain',
+  [/ord-head-cta/.test(ordersSection),
+   /goTab\('orders-new'\)/.test(srcOrdNewOpen),
+   /^  section \{ display: none; \}$/m.test(CSS_SRC),
+   /classList\.add\('ord-viewing'\)/.test(srcOrdNewOpen),
+   /body\.ord-viewing main > section \{ display: none; \}/.test(CSS_SRC),
+   /body\.ord-viewing main > section#tab-orders-new\.active \{/.test(CSS_SRC)],
+  [true, true, true, true, true, true]);
+
+// The class goes on AFTER goTab — goTab closes open drawers, and
+// closeDrawer('#order-drawer') strips ord-viewing as a legacy cleanup. The
+// other order would open the page with no takeover on exactly the records an
+// operator was just looking at.
+check('ordNewOpen adds ord-viewing after goTab, never before',
+  srcOrdNewOpen.indexOf("goTab('orders-new')") !== -1
+    && srcOrdNewOpen.indexOf("goTab('orders-new')")
+       < srcOrdNewOpen.indexOf("classList.add('ord-viewing')"),
+  true);
+
+// §1.7a condition 3 + the back trap (09-products lightbox precedent): opening
+// pushes a throwaway entry; browser Back pops it and lands on Orders; every
+// other exit consumes the entry via history.back().
+check('Back trap: push on open, Orders on pop, entry consumed on other exits',
+  [/history\.pushState\(\{ ordNew: true \}/.test(srcOrdNewOpen),
+   /addEventListener\('popstate', _ordNewOnPop\)/.test(srcOrdNewOpen),
+   /goTab\('orders'\)/.test(srcOrdNewOnPop),
+   /goTab\('orders'\)/.test(srcOrdNewBack),
+   /history\.back\(\)/.test(srcOrdNewTeardown),
+   /removeEventListener\('popstate', _ordNewOnPop\)/.test(srcOrdNewTeardown)],
+  [true, true, true, true, true, true]);
+
+// A rail click while the page is open must tear the takeover down (capture
+// phase), or ord-viewing's section-hiding strands the newly picked tab blank.
+check('a rail click while open tears the takeover down',
+  /closest\('\.tabs \[data-tab\]'\)\) _ordNewTeardown\(false\);\s*\}, true\)/.test(CLIENT_SRC),
+  true);
+
+// §1.7a header shape: back link (the eyebrow) · title · two exits — the
+// non-committing one Secondary, the commit the page's ONE Dusk element. No
+// second primary idiom (btn-primary / t-cta) anywhere in the section.
+check('§1.7a header: back link, title, Secondary draft, exactly one Dusk',
+  [(newSection.match(/onw-dusk/g) || []).length,
+   /onw-sec/.test(newSection),
+   /onw-ghost/.test(newSection),
+   /onw-title/.test(newSection),
+   /btn-primary|t-cta/.test(newSection)],
+  [1, true, true, true, false]);
+
+// The rail keeps the parent lit via RAIL_STANDIN. (The page's doors — the
+// palette entry and the CTA repoint — land with the create pass; until then
+// nothing reaches the page and that is deliberate: no flag, no seam.)
+check('RAIL_STANDIN maps orders-new to its parent',
+  /'orders-new': 'orders'/.test(extractConst('RAIL_STANDIN', CORE_SRC) || ''),
+  true);
 
 // ── Report ──────────────────────────────────────────────────────────────────
 db.close();

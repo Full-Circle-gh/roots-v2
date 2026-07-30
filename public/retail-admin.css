@@ -5351,7 +5351,61 @@
       padding: var(--s3) var(--s6);
       border-top: 1px solid var(--line-soft);
     }
+
+    /* ── Orders · New order — the same takeover, revived (§1.7a) ─────────
+       body.ord-viewing is set while #tab-orders-new is the active section:
+       main pins below the topbar and clips (rules above), every other
+       section is display:none, and this one — out-specificity-ing the
+       generic `main > section { display:none }` via its id — owns the fixed
+       content height and scrolls INSIDE .onw-scroll. Rail + topbar stay. */
+    body.ord-viewing main > section#tab-orders-new.active {
+      display: flex; flex-direction: column;
+      height: calc(100vh - 56px); min-height: 0;
+      overflow: hidden;
+    }
+    body.ord-viewing #tab-orders-new .onw-scroll {
+      flex: 1; min-height: 0; overflow: auto;
+    }
   }
+
+  /* ── Orders · New order — page chrome (Tacet-native, onw-* only) ──────
+     All child classes are onw-* — the base css owns .opt/.dot/.k/.v/… and a
+     bare class here silently inherits another section's look. Colour comes
+     only from the shared --td-* tokens; no new palette, no hex. Below 721px
+     the section renders in normal flow (no takeover) and these still apply. */
+  #tab-orders-new {
+    font-family: 'Inter', 'IBM Plex Sans SC', 'PingFang SC', 'Hiragino Sans GB', system-ui, sans-serif;
+    font-size: 15px; line-height: 1.6; color: var(--td-text);
+  }
+  #tab-orders-new .onw-page { padding: 26px 34px 90px; max-width: 1240px; }
+  /* §1.7a header — back link (the eyebrow) · title · two exits, one Dusk. */
+  #tab-orders-new .onw-head {
+    display: flex; align-items: center; gap: 14px;
+    padding-bottom: 16px; border-bottom: 1px solid var(--td-border);
+    margin-bottom: 22px;
+  }
+  /* 24px Inter 500 — §1.7's page-title spec. The mockup drew 600; Tacet
+     forbids weights above 500, so the rulebook wins over the drawing. */
+  #tab-orders-new .onw-title { font-size: 24px; font-weight: 500; letter-spacing: -.01em; line-height: 1.3; margin: 0; }
+  #tab-orders-new .onw-acts { margin-left: auto; display: flex; gap: 10px; }
+  #tab-orders-new .onw-btn {
+    height: 38px; padding: 0 16px; border-radius: 8px;
+    font-family: inherit; font-size: 14px; font-weight: 500;
+    border: 1px solid transparent; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 7px;
+    white-space: nowrap; color: var(--td-text); background: none;
+  }
+  #tab-orders-new .onw-btn svg { width: 16px; height: 16px; flex: 0 0 auto; display: block; }
+  /* The page's ONE Dusk element (§1.8 rule 1 — the commit has first claim). */
+  #tab-orders-new .onw-dusk { background: var(--td-dusk); border-color: var(--td-dusk); color: #fff; }
+  #tab-orders-new .onw-dusk:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); }
+  /* The non-committing exit is Secondary, not Ghost (§1.7a, decided 07-30). */
+  #tab-orders-new .onw-sec { border-color: var(--td-border); background: transparent; }
+  #tab-orders-new .onw-sec:hover { background: rgba(var(--td-heat-rgb), .04); border-color: var(--td-text2); }
+  #tab-orders-new .onw-ghost { padding: 0 10px 0 6px; color: var(--td-text2); }
+  #tab-orders-new .onw-ghost:hover { background: rgba(var(--td-heat-rgb), .05); color: var(--td-text); }
+  #tab-orders-new .onw-btn:disabled { opacity: .5; cursor: default; }
+  #tab-orders-new .onw-btn:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 2px; }
 
   /* The Orders drawer hosts the existing .order-card chrome unchanged
      — but reset the card's outer chrome since the drawer already

@@ -845,6 +845,8 @@ const RAIL_PARENT = {
 const RAIL_STANDIN = {
   meituan: 'sales', guanyi: 'sales', gzgrocery: 'sales', eleme: 'sales',
   'product-editor': 'mini-app-editor',
+  // New order is a sub-page of Orders (§1.7a takeover) — the parent stays lit.
+  'orders-new': 'orders',
 };
 
 var _railAnimTimer = null;  // var: the helpers below are hoisted and may be

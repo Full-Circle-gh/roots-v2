@@ -7054,6 +7054,67 @@ function omDone() {
   if (id != null && typeof openOrder === 'function') openOrder(id);
 }
 
+// ═══ Orders · New order — full sub-page (§1.7a takeover) ═══════════════
+// The container only lives here; the form renders into #onw-body (ordNewRender).
+// Mechanism: goTab('orders-new') makes #tab-orders-new the ONE active section —
+// #tab-orders loses .active and is display:none, so its Dusk CTA leaves the tab
+// order and the accessibility tree (§1.7a condition 2). body.ord-viewing (the
+// detail-view takeover, revived) pins main below the topbar and hands the
+// section the full content height; the page scrolls inside .onw-scroll.
+//
+// Back-trap: same shape as the product lightbox (09-products.js) — opening
+// pushes a throwaway history entry so the operator's instinct to press browser
+// Back mid-order lands them on Orders, never outside the section. Closing any
+// other way consumes that entry via history.back().
+let _ORD_NEW_OPEN = false;
+function ordNewOpen() {
+  if (_ORD_NEW_OPEN) return;
+  _ORD_NEW_OPEN = true;
+  // goTab first: it closes any open side-drawers, and closeDrawer('#order-drawer')
+  // strips ord-viewing — so the class must be added AFTER, never before.
+  goTab('orders-new');
+  document.body.classList.add('ord-viewing');
+  history.pushState({ ordNew: true }, '');
+  window.addEventListener('popstate', _ordNewOnPop);
+  const sc = document.getElementById('onw-scroll');
+  if (sc) sc.scrollTop = 0;
+  if (typeof ordNewRender === 'function') ordNewRender();
+}
+// Browser Back → the trap entry pops → land on the Orders list (§1.7a cond 3).
+function _ordNewOnPop() {
+  _ordNewTeardown(true);
+  goTab('orders');
+}
+// Shared exit: drop the takeover + the popstate listener, and consume the trap
+// entry unless the pop itself is what got us here. Does NOT navigate — the
+// caller decides where to land (Back goes to Orders; a rail click is already
+// navigating somewhere else and must not be overridden).
+function _ordNewTeardown(viaPop) {
+  if (!_ORD_NEW_OPEN) return;
+  _ORD_NEW_OPEN = false;
+  document.body.classList.remove('ord-viewing');
+  window.removeEventListener('popstate', _ordNewOnPop);
+  if (!viaPop) history.back();
+}
+function ordNewBack() {
+  _ordNewTeardown(false);
+  goTab('orders');
+}
+// A rail click while the page is open navigates away without going through
+// ordNewBack — tear the takeover down first (capture phase, so ord-viewing is
+// gone before the tab switcher shows the next section, which ord-viewing's
+// `main > section { display:none }` would otherwise hide).
+document.addEventListener('click', (e) => {
+  if (!_ORD_NEW_OPEN) return;
+  if (e.target.closest && e.target.closest('.tabs [data-tab]')) _ordNewTeardown(false);
+}, true);
+// The two exits — wired in the create pass; the header ships with the
+// container so §1.7a's shape is testable from day one.
+function ordNewSaveDraft() {
+}
+function ordNewCreate() {
+}
+
 // Products are managed entirely from the main /products page on the
 // kitchen admin — name, price, description, image, and the new
 // "Show in mini-app shop" toggle all live there. No duplicate retail

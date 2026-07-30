@@ -2744,6 +2744,37 @@
     </div>
   </section>
 
+  <!-- ─── ORDERS · NEW ORDER (full sub-page, §1.7a takeover) ───
+       Reached from the Orders header CTA and ⌘K, never from the rail. Opening
+       goes through goTab('orders-new'), so #tab-orders loses .active and is
+       display:none — its Dusk CTA leaves the tab order and the accessibility
+       tree (§1.7a condition 2), and there is only ever one primary on screen.
+       body.ord-viewing (revived from the detail-view round — an authoring page
+       is the takeover row of §1.13's table) gives this section the full-bleed
+       layout: the header + form own their scroll below the fixed topbar.
+       Header per §1.7a: the back link IS the eyebrow · title · two exits, the
+       non-committing one Secondary (never Ghost), the commit the page's one
+       Dusk element. -->
+  <section id="tab-orders-new">
+    <div class="onw-scroll" id="onw-scroll">
+      <div class="onw-page">
+        <div class="onw-head">
+          <button type="button" class="onw-btn onw-ghost" id="onw-back" onclick="ordNewBack()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m14 18-6-6 6-6"/></svg>
+            Orders · 订单
+          </button>
+          <h1 class="onw-title">New order · 新建订单</h1>
+          <div class="onw-acts">
+            <button type="button" class="onw-btn onw-sec" id="onw-draft" onclick="ordNewSaveDraft(event)">Save draft · 存为草稿</button>
+            <button type="button" class="onw-btn onw-dusk" id="onw-create" onclick="ordNewCreate(event)">Create order · 创建订单</button>
+          </div>
+        </div>
+        <!-- The form renders here (04-orders.js, ordNewRender). -->
+        <div id="onw-body"></div>
+      </div>
+    </div>
+  </section>
+
   <!-- ─── CUSTOMERS ─── -->
   <section id="tab-customers">
     <style>
