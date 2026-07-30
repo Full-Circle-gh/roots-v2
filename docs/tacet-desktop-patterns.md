@@ -1,4 +1,4 @@
-# Tacet desktop patterns — v3.8 · 2026-07-30
+# Tacet desktop patterns — v3.9 · 2026-07-30
 
 > The rulebook for every desktop admin surface. `tacet-design-system.md` governs how Tacet **looks**. `tacet-brand-concept.md` governs how it **sounds**. `tacet-ia-blueprint.md` governs what **exists**. This file governs **how a page is put together** — so that Orders and Pop-ups feel like the same product despite having different layouts.
 >
@@ -23,6 +23,20 @@
 **So:** name the worst case and the variants **as rows inside one continuous table**, and put the states on **separate screens after it**. Never as panels inside the page. *(Cost a round on Customers, 2026-07-17.)*
 
 **And say what not to build.** Claude Design abandons whatever it was pointed at before (§8) — scope is still one thing, finished. But "one thing" is **one page**, not one component with commentary.
+
+**Chrome is quoted, never drawn.**
+
+A mockup renders the region being designed. Everything around it — rail, topbar, command palette, breadcrumbs, any shell furniture — is either captured from the live product or cropped out. It is never redrawn from memory.
+
+**Why.** *(Decided 2026-07-30, on the Orders New order frames.)* Those frames arrived with a fourteen-item rail, a search placeholder, a notification badge and an avatar, none of which were observed. There was no source to diff them against, so nothing about them could be checked — and a mockup is not a sketch, it is what the builder copies. Invented furniture does not read as a placeholder. It reads as a decision that has already been made.
+
+This is the stale-doc failure in a new medium: an artefact that looks like a record of the product but is a record of what someone assumed. It is worse than a stale doc, because a doc gets read and a mockup gets built.
+
+**Being accidentally right does not help.** A drawn rail that happens to match live is still unverifiable, and the next one will not match. The property that matters is that it *came from* somewhere, not that it looks correct.
+
+**The rule in practice:** if the shell matters to the frame, screenshot it. If it does not, crop to the content area and say so in one line. Never draw it.
+
+**Corollary, for whoever implements from a mockup:** a mockup is evidence about the region it designs and about nothing else. Never implement, infer or "restore" a shell element from one. Where a mockup and the live shell disagree, the live shell wins and the mockup is wrong — including when the mockup looks better.
 
 **In Claude Code** — this file is the styling contract. The live `--td-*` `:root` block is the source of truth for colour (§1.2). Never hard-code a hex. Never add a `:root` block to a page.
 
@@ -599,7 +613,7 @@ A merchant reading Chinese should see a Chinese screen. A merchant reading Engli
 
 **The one exception: the language toggle itself** renders `EN · 中文`, because it is the control for choosing, not a label.
 
-**In mockups: English only.** Never render both. A mockup with glued labels is designing a screen no operator will ever see.
+**In mockups: English only.** Never render both. A mockup with glued labels is designing a screen no operator will ever see. *(This is the only mockup rule that lives here. A mockup's other hard limit — **chrome is quoted, never drawn** — is in §0, with the rest of them.)*
 
 **But the winning direction is verified in 中文 before it ships.** This is the trap: 中文 is usually *shorter* than English — `订单` is two glyphs where `Orders` is six — so an English layout can look correct and leave Chinese columns swimming in space, or an English column sized to `Awaiting restock` wastes half its width on `待补货`. Column widths must work in both. **Design in English, verify in Chinese, ship both.**
 
@@ -1528,6 +1542,22 @@ Small, non-blocking. Resolve during Batch 0.
    instinct" tidy §1.2 warns against. **What the brief still requires:** correct the
    orientation to match the shell (dark-first, `[data-theme="light"]` the opt-in — it is
    currently light-first) and clear the §1.6 uppercase + the `.acc-*`/`.who-role` rot.
+
+---
+
+*v3.9 · 2026-07-30.*
+
+**v3.9 changes — one rule added, in §0. It governs what a mockup may assert, not how a page is built.**
+
+**Chrome is quoted, never drawn.** From the Orders New order frames, which arrived with a fourteen-item rail, a search placeholder, a notification badge and an avatar — none observed, and none diffable against a source, so nothing about them could be checked. A mockup renders the region being designed; the shell around it is screenshotted or cropped out, never redrawn from memory. Invented furniture does not read as a placeholder, it reads as a decision already made — the stale-doc failure in a medium that gets *built* rather than read. Being accidentally right does not rescue it: what matters is that the chrome came from somewhere, not that it looks correct.
+
+**The corollary is for the reader at the other end.** A mockup is evidence about the region it designs and about nothing else. Where it disagrees with the live shell, the live shell wins — including when the mockup looks better.
+
+**Filed in §0, not beside §1.11.** §1.11 carries *"In mockups: English only"*, but it carries it as a **language** rule that happens to mention mockups. A chrome rule filed under *Language — one at a time, never glued* is a rule nobody looking for it would find. The mockup rules that already exist are all in §0 — the brief template, *"Ask for a page, not a specimen sheet"*, *"And say what not to build."* This is the fourth of that set, and §0 is read **before** a mockup is briefed, which is the only moment the rule can prevent anything. §1.11 gains a one-line pointer so the reader who lands there still finds it.
+
+**Not filed as §1.20 either.** §1 opens *"These apply to every desktop surface without exception"* — and a mockup is not a surface. v3.8 existed to give §1.11 the scope it never had; adding a rule that quietly breaks §1's own scope line one version later would undo that.
+
+No page rule added, removed or altered. Everything else unchanged from v3.8.
 
 ---
 
