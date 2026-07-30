@@ -26407,6 +26407,40 @@ function sendWecomOrderAddonAlert(orderId, amount, items) {
   } catch (e) { console.warn('[wecom addon setup]', e.message); }
 }
 
+// The add-on was paid but the store could not cover all of it — the units are
+// on the kitchen ticket and were never on the shelf. addon/create gates stock
+// before charging, so this only fires when the shelf moved between the gate and
+// the WeChat callback. Nobody can refuse the sale at this point, so the only
+// useful response is to tell the store now, while they are still packing.
+function sendWecomOrderAddonShortAlert(orderId, storeId, shortages) {
+  const hasApp = !!wecomAppCreds();
+  const webhook = wecomWebhookUrl();
+  if (!hasApp && !webhook) return;
+  try {
+    const o = tdb().prepare('SELECT order_no FROM retail_orders WHERE id = ?').get(orderId);
+    if (!o) return;
+    const store = tdb().prepare('SELECT name_cn, name_en FROM retail_stores WHERE id = ?').get(storeId);
+    const ph = shortages.map(() => '?').join(',');
+    const names = new Map(
+      tdb().prepare(`SELECT id, name_en, name_cn FROM store_products WHERE id IN (${ph})`)
+        .all(...shortages.map(s => s.product_id))
+        .map(p => [p.id, p])
+    );
+    const lines = shortages.map(s => {
+      const p = names.get(s.product_id);
+      const nm = p?.name_cn || p?.name_en || `#${s.product_id}`;
+      return `> ${nm} — 需要 ${s.qty}, 可用 ${s.available} (缺 ${s.qty - s.available})`;
+    }).join('\n');
+    const content =
+      `### ⚠️ 加单缺货 · Add-on short on stock\n` +
+      `**${o.order_no}** · ${store?.name_cn || store?.name_en || `store #${storeId}`}\n${lines}\n` +
+      `<font color="warning">已收款,商品已在小票上 · paid + on the ticket. 请调货或联系客户</font>`;
+    const send = hasApp ? sendWecomAppMessage(content) : postWecomMarkdown(webhook, content);
+    send.then(r => { if (!r.ok) console.warn('[wecom addon short]', orderId, r.msg); })
+        .catch(e => console.warn('[wecom addon short]', orderId, e.message));
+  } catch (e) { console.warn('[wecom addon short setup]', e.message); }
+}
+
 // Settle a paid add-on: inject the staged items into the order, merge them
 // into its open (un-dispatched) parcel, bump the order total, deduct stock,
 // award earn-points, and ping the store. Idempotent (guarded by status), so
@@ -26611,18 +26645,35 @@ function finalizeOrderAddon(addonId) {
   // tracks stock (has committed reservations). Far-future / non-GZ orders that
   // skipped reservation at checkout keep that policy for the add-on too — so
   // we never strand a half-tracked order.
+  //
+  // allowPartial: the charge has already settled, so a shortfall can't refuse
+  // the sale — but it must not swallow the deduction either. Reserving
+  // all-or-nothing meant one short line rolled back the whole batch, leaving
+  // every OTHER line on the ticket and off the ledger: the shelf silently read
+  // high, with nothing but a console warning to show for it. Now each line
+  // deducts what the store can actually cover and only the true remainder is
+  // reported short. addon/create gates this upfront, so reaching here means
+  // stock moved between the gate and the WeChat callback — real, but rare.
   try {
-    const tracks = tdb().prepare(
-      "SELECT COUNT(*) AS n FROM retail_stock_reservations WHERE order_id = ? AND status = 'committed'"
-    ).get(order.id);
-    if (tracks && tracks.n > 0 && order.store_id) {
+    if (orderTracksStock(order.id) && order.store_id) {
       const stockLines = expandStockLines(items.map(it => ({
         product: { id: it.product_id, bundle_items: it.bundle_items || null },
         qty: it.qty,
         options: it.options || [],
       })));
-      inventory.reserveForOrder({ storeId: order.store_id, orderId: order.id, items: stockLines, channel: 'wechat' });
+      const { shortages } = inventory.reserveForOrder({
+        storeId: order.store_id, orderId: order.id, items: stockLines,
+        channel: 'wechat', allowPartial: true,
+      });
       inventory.commitOrderReservations(order.id, { actorLabel: 'order add-on' });
+      if (shortages && shortages.length) {
+        // Loud on purpose: these units are on the kitchen ticket but were never
+        // on the shelf, so someone has to reconcile them.
+        console.warn('[finalizeOrderAddon stock] short at store', order.store_id,
+                     'order', order.id, JSON.stringify(shortages));
+        try { sendWecomOrderAddonShortAlert(order.id, order.store_id, shortages); }
+        catch (e) { console.warn('[finalizeOrderAddon short alert]', e.message); }
+      }
     }
   } catch (e) {
     // Payment is already taken — NEVER fail the add-on on a stock shortfall.
@@ -26643,6 +26694,105 @@ function finalizeOrderAddon(addonId) {
   return true;
 }
 
+// True when an order's stock is actually tracked — i.e. it reserved+committed
+// at checkout. Out-of-GZ and scheduled-for-later orders run with stockGate off
+// (see the create-order path) and never reserve; an add-on to one of those must
+// inherit the same policy or we'd refuse a sale the original order was allowed
+// to make. The same test finalizeOrderAddon uses before deducting.
+function orderTracksStock(orderId) {
+  const r = tdb().prepare(
+    "SELECT COUNT(*) AS n FROM retail_stock_reservations WHERE order_id = ? AND status = 'committed'"
+  ).get(orderId);
+  return !!(r && r.n > 0);
+}
+
+// Availability gate for an add-on, run at the FULFILLING store BEFORE the
+// customer is charged.
+//
+// The add-on inherits order.store_id and never re-routes, so this is the only
+// thing standing between "the picker let me tap +" and a line the store cannot
+// fill. `resolvedLines` are checkout-shaped ({product, qty, options}) and go
+// through expandStockLines first, so bundles are judged on their components and
+// stock-backed paid extras carry their own demand — same expansion the reserve
+// path uses, so the gate and the later deduction agree.
+//
+// Returns [] when everything is coverable, else one row per short component
+// with the quantity that IS available (so the caller can tell the customer
+// "only N left" instead of a bare refusal).
+function addonStockShortages(storeId, resolvedLines) {
+  const lines = expandStockLines(resolvedLines);
+  if (!lines.length) return [];
+  const avail = inventory.getAvailableMap(storeId, lines.map(l => l.product_id), 'wechat');
+  const short = [];
+  for (const l of lines) {
+    const av = avail.get(l.product_id);
+    // Not stocked at this store at all → treat as zero, same as reserveForOrder.
+    const have = av && av.exists ? av.available : 0;
+    if (have < l.qty) short.push({ product_id: l.product_id, requested: l.qty, available: have });
+  }
+  if (!short.length) return [];
+  // Name the short SKUs so the mini-app can render a real sentence.
+  const ph = short.map(() => '?').join(',');
+  const names = new Map(
+    tdb().prepare(`SELECT id, name_en, name_cn FROM store_products WHERE id IN (${ph})`)
+      .all(...short.map(s => s.product_id))
+      .map(p => [p.id, p])
+  );
+  return short.map(s => ({
+    ...s,
+    name_en: names.get(s.product_id)?.name_en || null,
+    name_cn: names.get(s.product_id)?.name_cn || null,
+  }));
+}
+
+// GET /api/retail/orders/:id/addon/availability
+// Per-product availability at the order's OWN fulfilling store, for the
+// "Add to your order" picker's quantity cap. The catalog endpoint the picker
+// loads reports stock SUMMED across active stores, which is the right number
+// for the shop (any store may serve a new order) but the wrong one here: this
+// order is already pinned to one store, and a bowl sitting at the other store
+// cannot fill it. Returns { store_id, tracks_stock, available: {pid: n} };
+// tracks_stock=false means the order never reserved (out-of-GZ / scheduled) and
+// the picker should not cap at all.
+router.get('/api/retail/orders/:id/addon/availability', requireRetailAuth, (req, res) => {
+  const orderId = parseInt(req.params.id, 10);
+  if (!orderId) return res.status(400).json({ success: false, error: 'order_id_required' });
+  const order = tdb().prepare(
+    'SELECT id, store_id FROM retail_orders WHERE id = ? AND customer_id = ?'
+  ).get(orderId, req.customer.id);
+  if (!order) return res.status(404).json({ success: false, error: 'order_not_found' });
+
+  const tracks = !!order.store_id && orderTracksStock(orderId);
+  if (!tracks) {
+    return res.json({ success: true, data: { store_id: order.store_id || null, tracks_stock: false, available: {} } });
+  }
+
+  const avail = inventory.getAvailableMap(order.store_id, null, 'wechat');
+  const available = {};
+  for (const [pid, av] of avail) available[pid] = av.available;
+
+  // Bundles hold no shelf row of their own — how many we can build is the
+  // tightest component ratio, exactly as the shop grid computes it.
+  const bundles = tdb().prepare(
+    `SELECT id, bundle_items FROM store_products
+      WHERE bundle_items IS NOT NULL AND bundle_items != ''
+        AND is_published = 1 AND COALESCE(is_active, 1) = 1`
+  ).all();
+  for (const b of bundles) {
+    const comps = parseBundleItems(b.bundle_items);
+    if (!comps.length) continue;
+    let buildable = Infinity;
+    for (const c of comps) {
+      const per = Math.max(1, Number(c.qty) || 1);
+      buildable = Math.min(buildable, Math.floor((available[c.id] || 0) / per));
+    }
+    available[b.id] = Number.isFinite(buildable) ? Math.max(0, buildable) : 0;
+  }
+
+  res.set('Cache-Control', 'no-store');
+  res.json({ success: true, data: { store_id: order.store_id, tracks_stock: true, available } });
+});
+
 // POST /api/retail/orders/:id/addon/create
 // "Forgot something?" — stage items the customer wants to add to an EXISTING
 // order and charge ONLY the price difference. Allowed until the parcel ships
@@ -26656,7 +26806,7 @@ router.post('/api/retail/orders/:id/addon/create', requireRetailAuth, express.js
   if (!rawItems.length) return res.status(400).json({ success: false, error: 'no_items' });
 
   const order = tdb().prepare(
-    `SELECT id, order_no, status, customer_id, address_json, fulfillment_type,
+    `SELECT id, order_no, status, customer_id, store_id, address_json, fulfillment_type,
             subtotal, shipping_fee, same_day_surcharge_fee, delivery_zone_id, delivery_mode
        FROM retail_orders WHERE id = ? AND customer_id = ?`
   ).get(orderId, req.customer.id);
@@ -26739,6 +26889,19 @@ router.post('/api/retail/orders/:id/addon/create', requireRetailAuth, express.js
     const localOnly = filterLocalOnly(resolved.map(r => r.product));
     if (localOnly.length && !isGuangzhou(destCity)) {
       return res.status(400).json({ success: false, error: 'local_only_outside_gz' });
+    }
+  }
+
+  // ── Stock gate at the fulfilling store, BEFORE any money moves ────────
+  // Without this the add-on's only stock check ran inside finalizeOrderAddon —
+  // i.e. after the WeChat charge — where it can do nothing but warn, so a
+  // customer could add units the store did not have (and, before the partial
+  // reserve below, silently skip the deduction for the whole batch). Refusing
+  // here is the one point where refusing is still free.
+  if (order.store_id && orderTracksStock(orderId)) {
+    const short = addonStockShortages(order.store_id, resolved);
+    if (short.length) {
+      return res.status(409).json({ success: false, error: 'insufficient_stock', shortages: short });
     }
   }
 
