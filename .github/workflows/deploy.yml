@@ -138,6 +138,53 @@ jobs:
           echo "Linting:"; printf '%s\n' "$JS"
           printf '%s\n' "$JS" | xargs node_modules/.bin/eslint
 
+      - name: Does this change touch fulfilment logic?
+        id: ftcheck
+        if: steps.gate.outputs.skip == 'false' && steps.files.outputs.count != '0'
+        run: |
+          set -euo pipefail
+          # Mirrors the lint gate's read of /tmp/files.txt. These are the four
+          # files scripts/verify-fulfilment-types.js has assertions about; a
+          # change to any of them must re-prove the delivery/pickup/counter table
+          # before it ships. Gated rather than always-on so a native install
+          # doesn't sit in the path of every unrelated deploy.
+          if grep -qE '^(lib/fulfilment\.js|lib/feie\.js|routes/retail\.js|scripts/verify-fulfilment-types\.js)$' /tmp/files.txt; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            echo "Fulfilment logic touched — the test gate will run."
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No fulfilment-logic files in this change — gate skipped."
+          fi
+
+      - name: Set up Node 20 for the fulfilment test
+        if: steps.ftcheck.outputs.run == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Fulfilment types — delivery / pickup / counter must differ exactly as documented
+        if: steps.ftcheck.outputs.run == 'true'
+        run: |
+          set -euo pipefail
+          # Node 20, NOT the 24 the lint step above uses. better-sqlite3 9.6.0
+          # publishes a linux-x64 prebuild for ABI 115 (Node 20) but none for ABI
+          # 137 (Node 24), so 24 compiles from source: measured at 77s against
+          # 1.6s for the prebuild, on 4 cores. Node 20 is also what production
+          # runs, so the test runs on the ABI the code actually ships to.
+          #
+          # Installed into its OWN directory and reached via NODE_PATH, not into
+          # the workspace: the lint step above may already have run
+          # `npm ci --ignore-scripts`, which leaves an UNBUILT better-sqlite3 in
+          # node_modules that a plain `npm install` would consider satisfied and
+          # skip — giving a missing-bindings failure that looks like a test bug.
+          # Only better-sqlite3 is needed; lib/fulfilment.js and lib/feie.js have
+          # no dependencies of their own.
+          mkdir -p /tmp/ftdeps && cd /tmp/ftdeps
+          npm init -y >/dev/null 2>&1
+          npm install better-sqlite3@9.6.0 --no-audit --no-fund
+          cd "$GITHUB_WORKSPACE"
+          NODE_PATH=/tmp/ftdeps/node_modules node scripts/verify-fulfilment-types.js
+
       - name: Verify connectivity (nothing to ship)
         if: steps.gate.outputs.skip == 'false' && steps.files.outputs.count == '0'
         run: |
