@@ -1,4 +1,4 @@
-# Tacet desktop patterns — v3.2
+# Tacet desktop patterns — v3.3 · 2026-07-30
 
 > The rulebook for every desktop admin surface. `tacet-design-system.md` governs how Tacet **looks**. `tacet-brand-concept.md` governs how it **sounds**. `tacet-ia-blueprint.md` governs what **exists**. This file governs **how a page is put together** — so that Orders and Pop-ups feel like the same product despite having different layouts.
 >
@@ -382,6 +382,24 @@ The three tests, all required, and any one of them failing means no line:
 
 A sub-view strip appears **once**, directly under the header. **Resolved 2026-07-19: the in-page strip won — product-wide.** The topbar mirrors (`#tb-subviews`, `#tb-pu-subviews`) are the duplicates and retire as each section's rebuild ships (Purchasing first; Products at its rebuild). A nav that exists in two places drifts in one — this decision picks the one.
 
+**§1.7a Sub-page header variant** *(added 2026-07-30)*
+
+The three-element rule above describes a **rail page**. A sub-page reached from a section takes this shape:
+
+```
+back link (replaces the eyebrow) · title · up to two exits
+```
+
+**The back link IS the eyebrow** — it states where you are by stating where you came from. It is not a fourth element.
+
+Two exits are permitted and at most one is Dusk. The commit takes the page's single Dusk (§1.8 rule 1 — header CTA has first claim).
+
+**The non-committing exit is Secondary, not Ghost.** *(Decided by Ash 2026-07-30, from the New order round.)* This corrects Record order's locked line, which says Ghost "Save as draft". The reason is §1.8's own button table: **Ghost is "tertiary, in-row."** A page-header exit is neither tertiary nor in-row — it is one of the two ways to leave the page, and an operator who has half-filled a form and wants to walk away must be able to find it without hunting. Secondary is the default for everything that is not the single primary, and that is exactly what this is. The hierarchy still reads correctly: a Dusk fill beats a hairline border by a wide margin. Making the exit findable does not make it compete.
+
+**Superseded, pick up at build time:** §1.13's 2026-07-19 Record order entry still specifies Ghost. Change it to Secondary when Purchasing is built. Do not resolve the conflict the other way — the reasoning is here and the 2026-07-19 line has none.
+
+§1.8 rule 5 still governs the container: a sub-page is a **route with a back link**, never a sheet laid over the list. If it is rendered as an overlay, the page behind it is unmounted or `inert`, or its Dusk CTA sits reachable in the DOM while invisible — and the DOM has stopped describing the page.
+
 ### 1.8 The one-Dusk rule, made operational
 
 Dusk means exactly one thing: **tacet did this for you.** It is scarce by design. On a dense admin page the rule needs a tiebreaker:
@@ -617,10 +635,28 @@ Pick by *what the operator is doing*, not by how much fits.
 | Surface | Use when | Examples |
 |---|---|---|
 | **Drawer** (right, settles 350ms, ✕ + Esc) | Inspecting or acting on **one record** while keeping the list's context | Order detail, customer record, member edit |
-| **Modal** (centred, ≤560px) | **One bounded decision**, finish or abandon. Never scrolls past one screen. | Refund amount, new order, bulk tracking |
-| **Full page** | **Authoring** something with a draft state and a save | Pop-up editor, coupon editor, product page |
+| **Modal** (centred, ≤560px) | **One bounded decision**, finish or abandon. Never scrolls past one screen. | Refund amount, bulk tracking |
+| **Full page** | **Authoring OR recording — anything with a draft state, a save, or a line editor** | Pop-up editor, coupon editor, product page, Purchasing Record order, Orders New order |
 | **Hybrid** (drawer that expands to a full page) | One record that is *light to glance at* but *heavy to act on* — the quick look and the deep work are the same record at two zoom levels | Purchasing order detail + receiving · Products detail |
 | **Popover** | Options that change the operator's own view, never the data | Filter menus |
+
+**Three questions, in order. The first yes decides it.**
+
+1. **Can the operator abandon this half-done and want it back later?** → Full page, with a draft state.
+2. **Does the content grow by the operator's own actions** — add a line, add a row, add an item — so its height is unknown on open? → Full page.
+3. **Is every field visible on open, at a fixed height, ending in one commit?** → Modal.
+
+**A modal that scrolls is a page that has not been promoted yet.** That is the tell, and it is the only one you need.
+
+**Why "new order" left the Modal row — decided by Ash 2026-07-30, from the live screen. This reasoning travels with the rule (§7).**
+
+The live New order modal broke every clause of the row it sat in. It scrolled vertically *and* horizontally, two of its labels clipped mid-word ("Delivery address (optional", "STAFF NOTE (INTERNAL"), and its height was set by however many product lines the operator added — unbounded by definition. It was filed as a bounded decision and was never one.
+
+**The axis was wrong the same way §1.8 rule 5's axis was wrong.** "One decision vs many fields" is a *counting* question. The real question is **does the operator author content here.** Adding order lines is authoring. Choosing a refund amount is not.
+
+New order is Purchasing's Record order wearing a different noun: a repeat operator logging a sale that happened elsewhere — phone, walk-in, wholesale. Record order is already locked as a full-page one-page form (below, 2026-07-19). **Two names for one task shape getting two containers is the inconsistency this section exists to prevent.** Form-over-wizard applies unchanged: one page, everything visible, tab-to-done. Never a wizard.
+
+Do not "correct" New order back to a modal on the grounds that it is smaller than a coupon editor. Size was never the axis.
 
 A drawer never opens a drawer. A modal never opens a modal. If a flow needs that, it is a page.
 
@@ -1448,6 +1484,20 @@ Small, non-blocking. Resolve during Batch 0.
    instinct" tidy §1.2 warns against. **What the brief still requires:** correct the
    orientation to match the shell (dark-first, `[data-theme="light"]` the opt-in — it is
    currently light-first) and clear the §1.6 uppercase + the `.acc-*`/`.who-role` rot.
+
+---
+
+*v3.3 · 2026-07-30.*
+
+**v3.3 changes — both from the Orders New order round, both raised by Ash from the live screen.**
+
+**§1.13's modal/page axis was replaced.** The old test asked whether a surface held *one bounded decision*; the new one asks whether the operator *authors content* there. "New order" moved from the Modal row to Full page. The live modal had been failing its own row's stated conditions — it scrolled in both axes and its height grew with every product line — which is the same failure shape §1.8 rule 5 had: a rule drawn around the wrong axis holds internally and loses to the product. Added the one-line tell: *a modal that scrolls is a page that has not been promoted yet.*
+
+**§1.7a added — the sub-page header variant.** Back link replaces the eyebrow; up to two exits; the non-committing exit is **Secondary, not Ghost**, because §1.8's own table defines Ghost as tertiary and in-row and a header exit is neither. Record order's Ghost "Save as draft" is marked superseded rather than edited in place, so the conflict is visible to whoever builds Purchasing instead of being silently resolved by whichever line they read first.
+
+**This entry was written as v3.2 and renumbered on landing.** v3.2 was already taken by §1.19 (table column widths, `669b32e2`, same morning), which bumped the title line and shipped **without a changelog entry** — and the v3.1 entry below still sits under the *v3.0* date heading rather than owning one. Neither is fixed here; both are recorded so the next reader knows the block under-reports two versions rather than assuming they never existed.
+
+Everything else unchanged from v3.2.
 
 ---
 

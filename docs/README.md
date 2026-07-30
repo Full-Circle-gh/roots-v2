@@ -5,9 +5,11 @@
 > **Version numbers: trust each file's own title line, never this README's
 > read-order table.** As of 2026-07-26: rulebook `tacet-desktop-patterns.md`
 > **v2.6** · `tacet-design-system.md` **v1.3** · `tacet-ia-blueprint.md` v2.1 ·
-> `tacet-brand-concept.md` v1.2. The table below still says "v1.4" for the
-> rulebook. It has been wrong for weeks and is left as a reminder that a
-> version stated in two places drifts in one.
+> `tacet-brand-concept.md` v1.2 — and the rulebook figure here is itself now
+> several versions stale, which is the point. **The read-order table no longer
+> states a rulebook version at all** (2026-07-30); it said "v1.4" for weeks,
+> and a version stated in two places drifts in one. This snapshot is dated on
+> purpose — read it as a record, never as current.
 >
 > ### ✅ CUSTOMERS IS BUILT AND LIVE — 2026-07-26
 >
@@ -75,7 +77,7 @@ There were **7+ scattered copies** of these docs across `Desktop/`, `tacent/`, `
 | 2 | `tacet-session-addendum.md` | 2026-07-17 morning. Corrects the handoff's account of the working tree. |
 | 3 | `tacet-topbar-correction.md` | The verified eight-item topbar contract. **Already applied to rulebook §1.1** — kept as the record of how a stale code comment became a rule. |
 | 4 | `tacet-orders-specimens.md` | **v1.9.** Orders' status/refund matrices, the worst-case row, the 13-control disable audit, §8 Customers. Every cell cited. |
-| 5 | `tacet-desktop-patterns.md` | **v1.4. The rulebook.** Read **§1.1a first** — the page shell contract, new today. |
+| 5 | `tacet-desktop-patterns.md` | **The rulebook — version: see the file's title line.** Read **§1.1a first** — the page shell contract. |
 | 6 | `tacet-ia-blueprint.md` | The IA blueprint. §2 corrected 2026-07-17. |
 | 7 | `tacet-design-system.md` | Unchanged. How it looks. |
 | 8 | `tacet-brand-concept.md` | Unchanged. How it sounds. |
