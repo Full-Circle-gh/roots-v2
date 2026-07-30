@@ -263,6 +263,87 @@ check('packing template on a counter sale renders a receipt, not a picking list'
   [/PACKING 配货单/.test(slipFor(3, 'packing')), /PACKING 配货单/.test(slipFor(1, 'packing'))],
   [false, true]);
 
+// ═══ 5c. What the CLIENT decides ════════════════════════════════════════════
+// public/retail-admin/04-orders.js is a browser script, not a module, so it
+// cannot be required. Rather than MIRROR its predicates — a mirror that drifts
+// passes, which is worse than no test — we extract the real function source out
+// of the shipped file and evaluate it in isolation.
+//
+// The extraction is deliberately dumb: from `function NAME(` to the next line
+// that starts with `}` at column 0. If anyone reformats those functions the
+// extraction stops matching, and the assertion right below FAILS rather than
+// silently testing nothing. A regex that stops matching has to be loud.
+const CLIENT_SRC = fs.readFileSync(
+  path.join(__dirname, '..', 'public', 'retail-admin', '04-orders.js'), 'utf8');
+
+function extractFn(name) {
+  const lines = CLIENT_SRC.split('\n');
+  const start = lines.findIndex(l => l.startsWith(`function ${name}(`));
+  if (start === -1) return null;
+  for (let i = start + 1; i < lines.length; i++) {
+    if (/^\}/.test(lines[i])) return lines.slice(start, i + 1).join('\n');
+  }
+  return null;
+}
+
+const WANTED = ['ordIsCounter', 'ordShipsNothing', 'undoDispatchable', 'humanStatus'];
+const sources = {};
+for (const n of WANTED) sources[n] = extractFn(n);
+const missing = WANTED.filter(n => !sources[n]);
+check('every client predicate was found in 04-orders.js (extraction is intact)',
+  missing, []);
+
+// Stop here on a broken extraction rather than calling methods on an empty
+// object: an unhandled TypeError still fails the gate, but a stack trace is a
+// worse thing to hand the next person than a named failure. Verified by
+// indenting a function declaration and watching this path fire.
+if (missing.length) {
+  for (const r of results) console.log(`${r.ok ? 'PASS' : 'FAIL'}  ${r.name}`);
+  console.log(`\nEXTRACTION BROKEN — could not find in 04-orders.js: ${missing.join(', ')}`);
+  console.log('These are pulled from the shipped source by name, from a line starting');
+  console.log('`function NAME(` to the next line starting `}`. A reformat breaks that.');
+  console.log('Fix the extractor or restore the shape — do NOT mirror the logic here.');
+  db.close();
+  try { fs.unlinkSync(dbPath); } catch (e) { /* best effort */ }
+  process.exit(1);
+}
+
+// Evaluate the extracted sources together, with cuT stubbed to the EN arm.
+// eslint-disable-next-line no-new-func
+const client = new Function(
+  `const cuT = (en) => en;
+   ${WANTED.map(n => sources[n]).join('\n')}
+   return { ${WANTED.join(', ')} };`
+)();
+
+const ordersFor = t => ({ fulfillment_type: t });
+check('client ordIsCounter matches the server predicate',
+  ['delivery', 'pickup', 'counter'].map(t => client.ordIsCounter(ordersFor(t))),
+  ['delivery', 'pickup', 'counter'].map(t => F.isCounter(ordersFor(t))));
+check('client ordShipsNothing matches the server predicate',
+  ['delivery', 'pickup', 'counter'].map(t => client.ordShipsNothing(ordersFor(t))),
+  ['delivery', 'pickup', 'counter'].map(t => F.shipsNothing(ordersFor(t))));
+
+// THE ONE THIS PROJECT INTRODUCED. A counter sale sits at 'delivered' with no
+// parcel and no waybill — exactly the shape undoDispatchable was written to spot
+// as a misclick. Before counter existed nothing reached 'delivered' undispatched,
+// so this defect is ours, not inherited.
+const undoCase = t => ({ fulfillment_type: t, status: 'delivered', shipments: [] });
+check('undoDispatchable: offered on a delivery, NEVER on a pickup or a walk-in',
+  ['delivery', 'pickup', 'counter'].map(t => !!client.undoDispatchable(undoCase(t))),
+  [true, false, false]);
+
+// "Completed", not "Delivered" — and as one string, never joined to 已完成.
+check('humanStatus relabels a counter delivered to Completed',
+  client.humanStatus('delivered', 'counter'), 'Completed');
+check('humanStatus leaves delivery and pickup alone',
+  [client.humanStatus('delivered', 'delivery'), client.humanStatus('delivered', 'pickup')],
+  ['Delivered', 'Picked up · 已取货']);
+// §1.11 — the counter label must not be a glued EN·CN node. The pickup labels
+// above ARE glued; they are pre-existing and belong to the page rebuild.
+check('counter label is not a glued EN·CN string',
+  /·|已完成/.test(client.humanStatus('delivered', 'counter')), false);
+
 // ═══ 6. Money and paperwork still move — born fulfilled, NOT born closed ════
 db.prepare("UPDATE retail_orders SET needs_invoice = 1, invoice_status = 'requested' WHERE id = 3").run();
 const invoiceWork = db.prepare(

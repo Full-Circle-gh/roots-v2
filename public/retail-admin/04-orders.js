@@ -189,6 +189,25 @@ function chdClear(e) {
   const btn = document.getElementById('chd-btn');
   if (btn) btn.focus();
 }
+// ── Fulfilment types, client side ───────────────────────────────────────────
+// A counter sale is handed over at the till in the same moment it is paid: it
+// ships nothing, promises nothing, and has no forward state to advance to. It
+// lands on status 'delivered' the instant it is paid (see markOrderPaid), which
+// is why several guards below have to name it explicitly — without them a
+// walk-in is offered dispatch and undo-dispatch actions.
+//
+// Deliberate duplication of lib/fulfilment.js: this file is a browser script,
+// not a module, so it cannot require the server's definition. The two copies are
+// held together by scripts/verify-fulfilment-types.js, which EXTRACTS these
+// functions from this file by name and asserts them against the same table — so
+// a divergence fails the deploy gate instead of drifting quietly.
+function ordIsCounter(o) {
+  return String((o && o.fulfillment_type) || '').toLowerCase() === 'counter';
+}
+function ordShipsNothing(o) {
+  const t = String((o && o.fulfillment_type) || '').toLowerCase();
+  return t === 'pickup' || t === 'counter';
+}
 // Which non-storefront channels are shown read-only in the combined list — the
 // storefront doesn't fulfil/print them, so no drawer, NEW mark, or chime. For
 // now just Meituan (mirrored in to deduct stock); gzgrocery joins in phase 2.
@@ -1680,6 +1699,9 @@ function shipByPlan(o) {
   const done = (o.status === 'dispatched' || o.status === 'delivered'
     || o.status === 'cancelled' || o.status === 'refunded');
   const reqEn = 'Requested timing', reqCn = '原定时间';
+  // 0 — Counter: no plan at all. Paid and handed over in one moment, so there is
+  // no deadline, no window and no "requested timing" to show.
+  if (ordIsCounter(o)) return null;
   // 1 — Pickup: show the counter window, never a ship deadline.
   if (o.fulfillment_type === 'pickup') {
     const label = localizeSlotLabel(humanizeSlotLabel(absolutizeSlotLabel(o.delivery_slot_label, o.scheduled_for)))
@@ -2312,6 +2334,9 @@ function renderDeliveryCell(o) {
     }
     return '<span class="muted">—</span>';
   }
+  // A counter sale has no timing at all — nothing was promised and nothing is
+  // owed, so the cell stays empty rather than borrowing a deadline.
+  if (ordIsCounter(o)) return '<span class="muted">—</span>';
   // Pickup carries no parcel — the counter window IS the delivery fact.
   if (o.fulfillment_type === 'pickup') return renderShipByCell(o);
   // Once an order has left (or has a waybill / operator-set ETA), the tracking
@@ -2358,6 +2383,11 @@ function renderCourierListLine(o) {
 }
 
 function renderTrackingCell(o) {
+  // No parcel and no waybill on either, but they are not the same thing: a
+  // pickup is waiting to be collected, a counter sale is already gone.
+  if (ordIsCounter(o)) {
+    return `<span class="muted" style="font-size:11px;">${cuT('counter','前台')}</span>`;
+  }
   if (o.fulfillment_type === 'pickup') {
     return `<span class="muted" style="font-size:11px;">${pickupIcon(11)} ${cuT('pickup','自提')}</span>`;
   }
@@ -2466,6 +2496,12 @@ function shipToLangBlock(en, cn) {
        + `<span data-lang-block="cn">${escapeHtml(cn)}</span>`;
 }
 function renderShipToCell(o) {
+  // ship_counter is set by annotateShipTo server-side. Kept apart from
+  // ship_pickup on purpose: a list that calls a walk-in a pickup is a small lie
+  // that ends up in a report.
+  if (o.ship_counter || ordIsCounter(o)) {
+    return `<span class="muted" style="font-size:11px;">${shipToLangBlock('Counter','前台')}</span>`;
+  }
   if (o.ship_pickup || o.fulfillment_type === 'pickup') {
     return `<span class="muted" style="font-size:11px;">${pickupIcon(11)} ${shipToLangBlock('Pickup','自提')}</span>`;
   }
@@ -2495,6 +2531,13 @@ async function ensureOrdersStoreFilter() {
 }
 
 function humanStatus(s, fulfillmentType) {
+  // A counter sale reaches 'delivered' the moment it is paid, but nothing was
+  // delivered — it was handed over. "Completed" is the operator's word for it.
+  // Two separate strings, never joined (§1.11); the glued pickup labels below
+  // are pre-existing and belong to the page rebuild, not here.
+  if (fulfillmentType === 'counter') {
+    if (s === 'delivered') return cuT('Completed', '已完成');
+  }
   // Pickup reuses the dispatched/delivered statuses but they mean "ready at the
   // counter" and "collected by customer" (see retail.js progress tracker), so
   // relabel them for the operator instead of showing "Dispatched/Delivered".
@@ -2561,6 +2604,17 @@ const NEXT_STATUS_PICKUP_LABELS = {
 };
 function nextStatusFor(o) {
   const transitions = NEXT_STATUS[o.status] || [];
+  // Counter needs NO special case here, and adding one was a mistake worth
+  // recording. The transition list is keyed on STATUS, and the only statuses a
+  // counter sale can hold already offer the right things: 'pending_payment' →
+  // Mark paid / Cancel (an unpaid till sale awaiting a QR settle), 'delivered' →
+  // Refund, 'cancelled'/'refunded' → nothing. It never sits at paid, preparing or
+  // dispatched, because markOrderPaid flips it straight past them, so no
+  // forward-fulfilment button is reachable in the first place.
+  //
+  // Returning [] here — the original plan — would have stripped Refund from a
+  // completed walk-in and Mark paid from an unpaid one, which contradicts born
+  // fulfilled, NOT born closed: money still moves after the goods leave.
   if (o.fulfillment_type !== 'pickup') return transitions;
   return transitions.map(([next, label]) =>
     [next, NEXT_STATUS_PICKUP_LABELS[next] || label]);
@@ -2945,7 +2999,7 @@ function renderShipmentCard(o, s) {
   const canDispatch = state === 'pending' &&
     mode !== 'supplier' &&
     ['paid', 'preparing', 'dispatched'].includes(o.status) &&
-    o.fulfillment_type !== 'pickup';
+    !ordShipsNothing(o);
   // With a single parcel the per-parcel dispatch button just duplicates the
   // header "Mark dispatched" (which dispatches the whole order = this one
   // parcel). Only show the per-parcel button once the order actually has 2+
@@ -4332,7 +4386,12 @@ function renderOpenOrder(o) {
         ${renderOrderTotalBanner(o)}
 
         <div class="order-detail">
-          ${o.fulfillment_type === 'pickup' ? `
+          ${ordIsCounter(o) ? `
+          <div>
+            <div class="kicker">${cuT('Counter sale','前台销售')} ${copyChip([o.recipient_name, o.recipient_phone].filter(Boolean).join('\n'), 'Counter')}</div>
+            <div class="val" data-no-i18n><b>${escapeHtml(o.recipient_name || '')}</b>${o.recipient_phone ? ' · ' + escapeHtml(o.recipient_phone) : ''}</div>
+            <div class="sub">${cuT('Handed over at the till','已在前台交付')}</div>
+          </div>` : o.fulfillment_type === 'pickup' ? `
           <div>
             <div class="kicker">${pickupIcon(11)} Pickup · 到店自提 ${copyChip([o.recipient_name, o.recipient_phone, (o.address?.store_name_cn || o.store_name_cn || ''), (o.address?.address || '')].filter(Boolean).join('\n'), 'Pickup')}</div>
             <div class="val"><b>${escapeHtml(o.recipient_name || '')}</b> · ${escapeHtml(o.recipient_phone || '')}</div>
@@ -4866,7 +4925,7 @@ function daysBetweenISO(fromISO, toISO) {
 //      transit is fine, but shipping well ahead of that arrives early.
 // Pickup orders are out of scope (no shipping). Returns null when fine.
 function earlyDispatchWarning(o) {
-  if (!o || o.fulfillment_type === 'pickup') return null;
+  if (!o || ordShipsNothing(o)) return null;   // nothing to dispatch early
   const today = gzTodayISODate();
 
   const freshDay = gzDateOf(o.promised_ship_date);
@@ -4989,9 +5048,14 @@ async function undoDispatch(id, ev) {
 // server guard so the button only shows when the action will actually succeed.
 // (delivered_at is NOT checked — the deliver flip stamps it on every parcel, so
 // it can't tell a real delivery from this misclick; only a waybill can.)
+// A counter sale sits at 'delivered' with no parcel and no waybill, which is
+// exactly the shape this function was built to detect as a misclick — so without
+// naming it, every walk-in is offered "Undo dispatch" for a dispatch that never
+// happened. This is a defect the counter work INTRODUCED, not an inherited one:
+// before counter existed, nothing reached 'delivered' without being dispatched.
 function undoDispatchable(o) {
   return o && (o.status === 'dispatched' || o.status === 'delivered')
-    && o.fulfillment_type !== 'pickup'
+    && !ordShipsNothing(o)
     && !(o.shipments || []).some(s =>
       (s.tracking_number && String(s.tracking_number).trim()) ||
       (s.tracking && s.tracking.number));

@@ -143,12 +143,16 @@ jobs:
         if: steps.gate.outputs.skip == 'false' && steps.files.outputs.count != '0'
         run: |
           set -euo pipefail
-          # Mirrors the lint gate's read of /tmp/files.txt. These are the four
-          # files scripts/verify-fulfilment-types.js has assertions about; a
-          # change to any of them must re-prove the delivery/pickup/counter table
-          # before it ships. Gated rather than always-on so a native install
-          # doesn't sit in the path of every unrelated deploy.
-          if grep -qE '^(lib/fulfilment\.js|lib/feie\.js|routes/retail\.js|scripts/verify-fulfilment-types\.js)$' /tmp/files.txt; then
+          # Mirrors the lint gate's read of /tmp/files.txt. These are the files
+          # scripts/verify-fulfilment-types.js has assertions about; a change to
+          # any of them must re-prove the delivery/pickup/counter table before it
+          # ships. Gated rather than always-on so a native install doesn't sit in
+          # the path of every unrelated deploy.
+          #
+          # 04-orders.js is here because the test EXTRACTS its predicates from the
+          # shipped source and evaluates them. A gate that doesn't cover a file its
+          # assertions read is not covering the test.
+          if grep -qE '^(lib/fulfilment\.js|lib/feie\.js|routes/retail\.js|scripts/verify-fulfilment-types\.js|public/retail-admin/04-orders\.js)$' /tmp/files.txt; then
             echo "run=true" >> "$GITHUB_OUTPUT"
             echo "Fulfilment logic touched — the test gate will run."
           else
