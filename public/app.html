@@ -8948,7 +8948,10 @@ function _storeOpenForm(s) {
         <label>Street address 街道地址 <span style="font-weight:400;color:var(--muted);font-size:11px">— full address; auto-geocoded on save</span></label>
         <input id="sf_address" value="${esc(s?.address || '')}" placeholder="广州市越秀区东风中路303号">
       </div>
-      <div class="form-group"><label>Phone 电话</label><input id="sf_phone" value="${esc(s?.phone || '')}" placeholder="020-XXXXXXXX"></div>
+      <!-- Mobile, not a landline. This doubles as the delivery contact when Qingyun
+           refuses a customer's own number, and it only accepts mainland mobiles —
+           see the note on the same field in the store admin (Settings → Stores). -->
+      <div class="form-group"><label>Phone 电话 <span style="font-weight:400;color:var(--muted);font-size:11px">(mobile · 手机号)</span></label><input id="sf_phone" value="${esc(s?.phone || '')}" placeholder="13800001234"></div>
       <div class="form-group"><label>Sort priority 排序优先级 <span style="font-weight:400;color:var(--muted);font-size:11px">(lower = preferred)</span></label><input id="sf_sort" type="number" value="${s?.sort_order ?? 0}"></div>
       <div class="form-group form-col-2"><label>Meituan account id (optional)</label><input id="sf_meituan" value="${esc(s?.meituan_account_id || '')}" placeholder="美团商户号"></div>
 
