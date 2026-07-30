@@ -1,4 +1,4 @@
-# Tacet desktop patterns — v3.7 · 2026-07-30
+# Tacet desktop patterns — v3.8 · 2026-07-30
 
 > The rulebook for every desktop admin surface. `tacet-design-system.md` governs how Tacet **looks**. `tacet-brand-concept.md` governs how it **sounds**. `tacet-ia-blueprint.md` governs what **exists**. This file governs **how a page is put together** — so that Orders and Pop-ups feel like the same product despite having different layouts.
 >
@@ -586,6 +586,8 @@ RBAC is going live (`tm-enforce`, Team). Every page needs a designed gated state
 **The rule: the interface renders in exactly one language. English or 中文. Never both.**
 
 A merchant reading Chinese should see a Chinese screen. A merchant reading English should see an English screen. `Orders today · 今日订单` gives each of them a screen that is half noise — and a product that sells calm cannot hand you every label twice.
+
+**Scope: surfaces the reader can switch.** *(Clarified 2026-07-30.)* This rule exists because the admin shell has a language toggle and a live DOM-walker that splits `English · 中文` source pairs. Where neither exists — a WeCom card, an SMS, a printed receipt, anything leaving the shell — the reader cannot choose a language, so "one language on screen" has nothing to attach to. Those surfaces carry both languages in whatever idiom they already use, consistently. **Decided 2026-07-30**, on the counter-sale WeCom card: its existing rows are `订单号 Order:`, and inventing a split format for one branch would have made a single message inconsistent with itself to satisfy a rule that does not bind there. The test is not *are both languages present* — it is *can the reader pick one.* **A mockup is not one of these surfaces.** It is a drawing of a switchable one, so the scope note does not reach it and the English-only rule below stands unchanged. If you are deciding whether this paragraph applies, ask whether the thing you are building is the surface itself or a picture of it.
 
 **`English · 中文` is a source format, not a display format.** Two strings stored together, one rendered. The live code already does this: `cuT('WeChat','微信')` picks one; `onLangChange` re-renders the tree; `data-no-i18n` marks blocks the splitter must not touch. The comment at `01-core.js:191` states it plainly — the label shows one language, *"never a glued 'WeChat · 微信'."*
 
@@ -1526,6 +1528,22 @@ Small, non-blocking. Resolve during Batch 0.
    instinct" tidy §1.2 warns against. **What the brief still requires:** correct the
    orientation to match the shell (dark-first, `[data-theme="light"]` the opt-in — it is
    currently light-first) and clear the §1.6 uppercase + the `.acc-*`/`.who-role` rot.
+
+---
+
+*v3.8 · 2026-07-30.*
+
+**v3.8 changes — one clarification. §1.11 gained a scope, which it never had.**
+
+**§1.11 said what to do and never said where it applied.** It reads as a rule about language, so it was being carried to every surface the product writes — including ones with no toggle and no reader who can switch. It is now scoped to surfaces the reader can switch: the admin shell, which has a toggle and a live DOM-walker. A WeCom card, an SMS or a printed receipt has neither, so "one language on screen" has nothing to attach to, and those surfaces carry both languages in whatever idiom they already use.
+
+**Decided on the counter-sale WeCom card.** Its rows are already `订单号 Order:`. Splitting them for one branch would have made a single message inconsistent with itself to satisfy a rule that does not bind there — paying a real cost for a rule that was not being broken.
+
+**The test is not whether both languages are present. It is whether the reader can pick one.** Where they can, one shows. Where they cannot, both do.
+
+**Mockups are named in the paragraph, not left to be inferred.** A mockup has no toggle and no walker either, so read literally the new scope would hand it both languages — the opposite of the English-only rule eight lines below. They do not actually collide: a mockup is a *drawing of* a switchable surface, so "anything leaving the shell" never reaches it. But the next thing this project does is brief a mockup, which makes that the ambiguity the next reader is most likely to hit. Written down rather than reasoned out again.
+
+No page rule added, removed or altered. Everything else unchanged from v3.7.
 
 ---
 
