@@ -23,6 +23,9 @@ const tracking = require('../lib/tracking');
 const flashsales = require('../lib/flashsales');
 const { imageAspect } = require('../lib/image-dims');
 const { getCategoryTree, sanitizeTree, normalizeCategoryPair } = require('../lib/category-tree');
+// What delivery/pickup/counter each MEAN — see lib/fulfilment.js. Prefer these
+// over `=== 'pickup'`: a bare pickup test reads a counter sale as a delivery.
+const { isCounter, shipsNothing, isTerminalOnPaid } = require('../lib/fulfilment');
 const { requireAuth, requirePermission, logActivity } = require('../middleware/auth');
 const { getTenantDb, ROOTS_TENANT_ID, tenantAls, tdb, currentTenantId, DATA_ISOLATION_READY } = require('../lib/tenant-db');
 const { getTenantCreds, setTenantSecrets, KEYS: CRED_KEYS } = require('../lib/tenant-creds');
@@ -4173,7 +4176,7 @@ function maybeEnqueueQingyunPush(orderId) {
     const o = tdb().prepare(
       'SELECT id, fulfillment_type, store_id, channel, address_json, delivery_slot_kind, scheduled_for FROM retail_orders WHERE id = ?'
     ).get(orderId);
-    if (!o || o.fulfillment_type === 'pickup' || !o.store_id) return;
+    if (!o || shipsNothing(o) || !o.store_id) return;   // pickup + counter: no courier
     if (!inventory.isQingyunSameCityToday(o)) return;
     const store = tdb().prepare('SELECT code FROM retail_stores WHERE id = ?').get(o.store_id);
     if (!store || !store.code) return;
@@ -4208,6 +4211,39 @@ function markOrderPaid(orderId) {
   tdb().prepare(
     "UPDATE retail_payments SET status = 'success', completed_at = CURRENT_TIMESTAMP WHERE order_id = ? AND status = 'pending'"
   ).run(orderId);
+
+  // ── A counter sale is terminal the moment it is paid ───────────────────────
+  // The goods left the shop in the same instant the money arrived, so 'paid' —
+  // which in this system means "money in, work outstanding" and feeds the Paid
+  // chip and oldest_unfulfilled — is never true of a walk-in for any length of
+  // time. Flip it straight to the terminal state and stamp delivered_at as the
+  // moment of sale.
+  //
+  // Done HERE rather than at INSERT because staff can key a counter sale in as
+  // pending and let the customer settle it by QR at /pay/:token seconds later;
+  // that is a normal till flow, and the sale is complete when the money lands
+  // either way. Both paths run through markOrderPaid.
+  //
+  // No notifyOrderStatusChange() call, deliberately: that fires the delivered
+  // SMS and the WeChat upload for a hand-over the customer watched happen. The
+  // absence of an 'order_delivered' activity event is also deliberate — the
+  // dashboard Recap counts "N orders delivered" from those events, and a
+  // walk-in is not a delivery.
+  if (r.changes > 0 && !isWait) {
+    try {
+      const ft = tdb().prepare('SELECT fulfillment_type FROM retail_orders WHERE id = ?').get(orderId);
+      if (isTerminalOnPaid(ft)) {
+        tdb().prepare(
+          `UPDATE retail_orders
+              SET status = 'delivered',
+                  delivered_at = COALESCE(paid_at, CURRENT_TIMESTAMP),
+                  updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND status = 'paid'`
+        ).run(orderId);
+      }
+    } catch (e) { console.warn('[markOrderPaid counter-terminal]', orderId, e.message); }
+  }
+
   if (r.changes > 0) {
     // Re-anchor an Express ("ship ASAP / Earliest X") order's promised earliest
     // day to the PAYMENT date. That date is a relative promise — an order placed
@@ -5571,7 +5607,7 @@ function maybeSendDeliveredSms(orderId) {
          FROM retail_orders WHERE id = ?`
     ).get(orderId);
     if (!o || o.sms_delivered_sent_at) return;       // unknown or already sent
-    if (o.fulfillment_type === 'pickup') return;     // in-store pickup, nothing shipped
+    if (shipsNothing(o)) return;                     // pickup collected / counter handed over — nothing shipped
 
     // Out-of-Guangzhou gate. A same-city order carries a `local` shipment;
     // courier orders (land/air) to other cities do not. With no shipment rows
@@ -8115,10 +8151,11 @@ function mergeAddonItemsIntoShipments(orderId, newItemIds) {
     'SELECT id, address_json, delivery_slot_kind, fulfillment_type FROM retail_orders WHERE id = ?'
   ).get(orderId);
   if (!o) return;
-  // Pickup orders ship nothing (collected at the store), so they never get
-  // parcels — leave the add-on items with shipment_id NULL, same as the order's
-  // own lines. Only delivery orders bucket into shipments.
-  if (o.fulfillment_type === 'pickup') return;
+  // Pickup orders ship nothing (collected at the store) and neither do counter
+  // sales (handed over at the till), so they never get parcels — leave the
+  // add-on items with shipment_id NULL, same as the order's own lines. Only
+  // delivery orders bucket into shipments.
+  if (shipsNothing(o)) return;
   let destCity = '', destProvince = '', destDistrict = '';
   try {
     const a = JSON.parse(o.address_json || '{}');
@@ -9641,7 +9678,7 @@ function localizeOrderTimes(row) {
 // Mutates and returns the row; expects raw (un-localized) paid_at + zone_type.
 function annotateShipBy(r) {
   if (!r) return r;
-  if (r.fulfillment_type === 'pickup') return r;          // pickup window owns the cell
+  if (shipsNothing(r)) return r;   // pickup window owns the cell; a counter sale has no deadline at all
   // INNER GZ same-day districts (gz_district, day_only=0 AND no same-day
   // surcharge) deliver fresh same/next day — never a 48h ship deadline, leave
   // them untouched. But "Panyu-style" ship-districts (花都/番禺/南沙/从化/增城 —
@@ -9678,8 +9715,12 @@ function annotateShipBy(r) {
 // from the structured address_json (falling back to the leading tokens of the
 // concatenated address_full for legacy rows that predate the JSON column).
 // Pickup orders have no destination — they're flagged ship_pickup instead.
+// A counter sale has no destination either, but it gets its OWN flag: riding
+// ship_pickup would make the list call a walk-in a pickup, which is a small lie
+// that ends up in a report.
 function annotateShipTo(r) {
   if (!r) return r;
+  if (isCounter(r)) { r.ship_counter = true; return r; }
   if (r.fulfillment_type === 'pickup') { r.ship_pickup = true; return r; }
   let province = '', city = '', district = '';
   if (r.address_json) {
@@ -9903,9 +9944,14 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '') {
 //         BEFORE the currently-scheduled day. Config fresh.rescheduleCutoffHour.
 // `kind` is 'pickup' | 'delivery' so the client picks the right slot UI.
 function rescheduleEligibility(o, productIds, now = new Date()) {
-  const kind = (o && o.fulfillment_type === 'pickup') ? 'pickup' : 'delivery';
+  // `kind` is what the client renders a slot picker for, so it must not claim
+  // 'delivery' on a walk-in. A counter sale gets its own kind AND is blocked
+  // outright below — there is no future moment to move it to.
+  const kind = isCounter(o) ? 'counter' : ((o && o.fulfillment_type === 'pickup') ? 'pickup' : 'delivery');
   const block = (reason, fresh) => ({ allowed: false, reason, fresh: !!fresh, kind });
   if (!o) return block('not_found', false);
+  // Complete on payment — nothing to reschedule, and no slot UI to offer.
+  if (isCounter(o)) return block('counter', false);
   if (!['paid', 'preparing'].includes(o.status)) return block('status', false);
   if (o.dispatched_at) return block('departed', false);
   if (['pending', 'reviewing', 'approved'].includes(o.refund_status || '')) {
@@ -9968,6 +10014,9 @@ function rescheduleEligibility(o, productIds, now = new Date()) {
 function addressChangeEligibility(o) {
   const block = (reason) => ({ allowed: false, reason });
   if (!o) return block('not_found');
+  // No address to change. Distinct reason from 'pickup' so the client can say
+  // which it is rather than calling a walk-in a store collection.
+  if (isCounter(o)) return block('counter');
   if (o.fulfillment_type === 'pickup') return block('pickup');
   if (!['pending_payment', 'paid', 'preparing', 'awaiting_restock'].includes(o.status)) {
     return block('status');
@@ -10175,6 +10224,17 @@ function orderTimeline(o) {
     return [
       { key: 'placed',    label: 'Placed',    cn: '已下单',   at: o.placed_at },
       { key: 'cancelled', label: 'Cancelled', cn: '已取消', at: o.cancelled_at },
+    ];
+  }
+  // A counter sale has no journey — it was paid for and handed over in the same
+  // moment, so there is no waiting, no preparing and no collecting to show. Three
+  // steps on one timestamp, which is the truth rather than a progress bar that
+  // was already full when it was drawn.
+  if (isCounter(o)) {
+    return [
+      { key: 'placed',    label: 'Placed',    cn: '已下单', at: o.placed_at },
+      { key: 'paid',      label: 'Paid',      cn: '已支付', at: o.paid_at },
+      { key: 'completed', label: 'Completed', cn: '已完成', at: o.delivered_at || o.paid_at },
     ];
   }
   // Pickup orders never dispatch a courier — the same status columns are
@@ -19462,9 +19522,10 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
   try { backfillShipmentTrackingFromOrder(id); } catch {}
 
   // Lazy-fill shipments for orders predating the split-shipment feature.
-  // This is idempotent — if rows already exist, nothing changes. Pickup
-  // orders ship nothing (collected at the store), so never plan a shipment.
-  const shipmentRows = o.fulfillment_type === 'pickup' ? [] : ensureShipments(id);
+  // This is idempotent — if rows already exist, nothing changes. Pickup orders
+  // ship nothing (collected at the store) and neither do counter sales (handed
+  // over at the till), so never plan a shipment for either.
+  const shipmentRows = shipsNothing(o) ? [] : ensureShipments(id);
 
   // Back-fill per-shipment state for orders dispatched/delivered BEFORE the
   // partial-fulfillment feature existed: the old whole-order status flip never
@@ -26301,7 +26362,7 @@ function sendWecomOrderAddonAlert(orderId, amount, items) {
 // that don't get cheaper, or any recompute error (fail safe → charge full).
 function computeAddonFreedShipping(order, addonSubtotal, resolvedAddonItems) {
   try {
-    if (!order || order.fulfillment_type === 'pickup') return 0;
+    if (!order || shipsNothing(order)) return 0;   // no delivery fee was charged to waive
     const surcharge = Number(order.same_day_surcharge_fee) || 0;
     const oldBaseDelivery = Math.max(0, (Number(order.shipping_fee) || 0) - surcharge);
     if (oldBaseDelivery <= 0.005) return 0;            // nothing was charged to waive
@@ -26541,6 +26602,15 @@ router.post('/api/retail/orders/:id/addon/create', requireRetailAuth, express.js
        FROM retail_orders WHERE id = ? AND customer_id = ?`
   ).get(orderId, req.customer.id);
   if (!order) return res.status(404).json({ success: false, error: 'order_not_found' });
+
+  // A counter sale is closed the moment it is paid — the customer walked out
+  // with the goods. Buying more is a NEW sale; adding a line to this one would
+  // put a second transaction inside a completed one. Rejected explicitly rather
+  // than left to the status guard below, which would answer 'order_not_editable'
+  // with status 'delivered' — true, but not the reason.
+  if (isCounter(order)) {
+    return res.status(409).json({ success: false, error: 'counter_sale_complete' });
+  }
 
   // ── Edit window: until the parcel ships ───────────────────────────────
   if (!['paid', 'preparing'].includes(order.status)) {
