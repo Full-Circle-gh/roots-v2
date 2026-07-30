@@ -52,6 +52,24 @@ shipped) → `pm2 restart` → health-probe → **auto-rollback** on crash-loop.
   `schema.sql`, `package.json`, `package-lock.json`. **Non-deployable:** `*.md`, `*.csv`, `miniapp/`
   (WeChat build, shipped via DevTools per tenant).
 - Bypass with `[skip deploy]` / `[no deploy]` in the commit **subject**.
+- 🔴 **A gate-blocked commit does NOT re-ship on the next push.** The deploy computes its file list
+  from the diff `github.event.before → github.sha` of *that* push. If a gating step fails, the ship
+  step is skipped and those files stay stale on the box — and the next push's diff no longer contains
+  them, so a later green run will not pick them up. Pushing the fix is not enough. **Recovery: run the
+  workflow manually with `full_sync: true`** (Actions → Deploy to production → Run workflow, or
+  `gh workflow run "Deploy to production" --ref main -f full_sync=true`), which ships every deployable
+  file rather than the changed ones. Learnt 2026-07-30, when the fulfilment-test gate correctly blocked
+  a broken install step and left `04-orders.js` on `main` but not on the box.
+  - It ships ~400 files one at a time over the HK link: budget **~30 min**, versus ~1 min for a normal
+    deploy. It is not a thing to reach for casually.
+  - Its lint step lints **every tracked deployable `.js`**, not just the changed ones. That passes today
+    (0 errors across 223 files). Untracked scratch scripts in `scripts/` are never linted because the
+    file list is built from git.
+  - To verify a full sync afterwards, compare content rather than trusting it: `git ls-tree -r main`
+    for the deployable paths against `git hash-object` on the box (git is installed there). Expect
+    exactly two mismatches — `public/sw.js`, whose CACHE token the installer re-stamps with a
+    timestamp, and `package-lock.json`, which the box's older npm rewrites without the `libc` optional-
+    dependency hints. Anything else is real drift.
 - **Only `main` deploys.** Feature branches (and this repo's `claude/*` branches) are safe checkpoints.
 - After editing retail-admin JS, **bump `public/sw.js`** cache version or clients keep stale JS.
 - `.github/workflows/claude.yml` runs Claude on `@claude` mentions in issues/PRs.
