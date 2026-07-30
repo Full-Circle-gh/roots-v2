@@ -3509,7 +3509,14 @@ function renderQyDispatch(o) {
   // is genuinely on the way — re-comparing mid-run is pointless. When finding a
   // rider or recovering from a stall, the button offers to call another courier.
   const finding = c && c.stage === 'awaiting_dispatch';
-  const showCompare = !c || c.stage === 'scheduled' || finding || stale;
+  // Auto-send gave up on this one: there is no Qingyun delivery to quote against, so
+  // the compare button can only ever answer "not in Qingyun". Replace it with the
+  // failure and its retry — pressing Compare and reading a misleading reason is how
+  // this went unnoticed until the warehouse asked why they couldn't book a rider.
+  const pushFailed = o.qingyun_push_failed
+    ? renderQyPushFailed(o.id, o.qingyun_push_failed)
+    : '';
+  const showCompare = !pushFailed && (!c || c.stage === 'scheduled' || finding || stale);
   const relabel = finding || stale;
   const compareBtn = showCompare
     ? `<button class="btn btn-sm" id="qy-get-${o.id}" onclick="qyLoadCarriers(${o.id}, this)">${cuT(relabel ? 'Call another courier' : 'Compare couriers', relabel ? '再叫一家运力' : '查看运力比价')}</button>`
@@ -3518,6 +3525,7 @@ function renderQyDispatch(o) {
     <div style="margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft);">
       <div class="kicker" style="font-size:10px; font-weight:600; letter-spacing:.1em; text-transform:uppercase; color:var(--text-3); margin-bottom: var(--s2);">Same-city courier · 同城运力</div>
       ${card}
+      ${pushFailed}
       ${renderQyShipFrom(o)}
       ${compareBtn}
       <div id="qy-carriers-${o.id}" style="margin-top:8px;"></div>
@@ -3575,6 +3583,55 @@ function renderQyShipFrom(o) {
       ${movedNote}${blockedNote}${stale}
       <div id="qy-shipfrom-${o.id}" style="margin-top:8px;"></div>
     </div>`;
+}
+
+// Auto-send tried this order and gave up, so there is NO delivery in Qingyun — not a
+// 待配送 waiting to be dispatched, nothing at all. Every other Qingyun line in the
+// drawer renders blank in that state, which is how an order sits unsent while staff
+// read the block as "nothing to do yet". Say it in red, quote the courier's own
+// rejection (almost always the consignee phone or an address that wouldn't geocode),
+// and offer the one action that helps: fix the field above, then press Send again.
+function renderQyPushFailed(orderId, f) {
+  if (!f) return '';
+  const where = escapeHtml(cuT(f.name_en || f.store_code, f.name_cn || f.store_code));
+  const why = f.last_error
+    ? `<div class="muted" style="font-size:11px; margin-top:4px; font-family:ui-monospace,monospace; word-break:break-word;">${escapeHtml(f.last_error)}</div>`
+    : '';
+  return `
+    <div style="margin-top:6px;">
+      <div style="display:flex; align-items:flex-start; gap:5px; font-size:11px; font-weight:600; color:var(--danger); line-height:1.5;">
+        ${deliveryIcon('alert', 12)}
+        <span>${cuT(
+          `Never reached Qingyun — auto-send tried ${f.attempts}× from ${where} and gave up. No rider can be booked until it goes through.`,
+          `未进入青云 — 自动发送从 ${where} 尝试 ${f.attempts} 次后放弃。发送成功前无法呼叫骑手。`)}</span>
+      </div>
+      ${why}
+      <div class="muted" style="font-size:11px; margin-top:6px; line-height:1.5;">${cuT(
+        'Fix the recipient phone or address above, then send it again.',
+        '请先更正上方的收货人电话或地址,然后重新发送。')}</div>
+      <button class="btn btn-sm" style="margin-top:6px;" onclick="qyRetryPush(${orderId}, this)">${cuT('Send to Qingyun again', '重新发送至青云')}</button>
+    </div>`;
+}
+
+// Put the given-up push back in the queue. The daemon picks it up on its next drain
+// (within a poll cycle) — this button does NOT create the order itself, so it reports
+// "queued", not "sent". Saying "sent" would be a lie staff would act on.
+async function qyRetryPush(orderId, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = cuT('Queueing…', '排队中…'); }
+  try {
+    const r = await fetch(`/api/retail-admin/orders/${orderId}/qingyun/retry-push`, { method: 'POST' });
+    const j = await r.json();
+    if (j.success) {
+      toast(cuT('Queued — auto-send will try again shortly', '已排队 — 稍后将自动重新发送'), 'success');
+      openOrder(orderId, { instant: true });
+      return;
+    }
+    if (btn) { btn.disabled = false; btn.textContent = cuT('Send to Qingyun again', '重新发送至青云'); }
+    toast(cuT('Nothing to retry — reload the order', '无可重试的记录 — 请刷新订单'), 'err');
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = cuT('Send to Qingyun again', '重新发送至青云'); }
+    toast(cuT('Could not queue it — try again', '排队失败 — 请重试'), 'err');
+  }
 }
 
 // Retry the delete that failed during a move. No confirm: it removes a duplicate
@@ -3694,6 +3751,14 @@ async function qyLoadCarriers(orderId, btn) {
     const j = await r.json();
     if (btn) { btn.disabled = false; btn.textContent = cuT('Refresh prices', '刷新比价'); }
     if (!j.success) { box.innerHTML = `<div class="muted" style="font-size:12px;color:var(--danger)">${cuT('Could not load couriers — is the store connected to Qingyun?', '无法获取运力 — 门店是否已连接青云?')}</div>`; return; }
+    // Auto-send ran and gave up — the order was NEVER created in Qingyun, so there is
+    // nothing to quote. Show the courier's own words and a retry, rather than the
+    // generic "turn on auto-send" line, which points at a setting that was already on
+    // and leaves staff hunting for a delivery that doesn't exist.
+    if (!j.data.available && j.data.reason === 'push_failed') {
+      box.innerHTML = renderQyPushFailed(orderId, j.data.push_failed);
+      return;
+    }
     if (!j.data.available) { box.innerHTML = `<div class="muted" style="font-size:12px">${cuT("Not in Qingyun yet. Turn on auto-send, or this isn't a same-city order.", '订单尚未进入青云。请开启自动发送,或此单非同城配送。')}</div>`; return; }
     const carriers = (j.data.carriers || []).filter(c => c.enabled);
     if (!carriers.length) { box.innerHTML = `<div class="muted" style="font-size:12px">${cuT('No couriers available right now.', '当前暂无可用运力。')}</div>`; return; }

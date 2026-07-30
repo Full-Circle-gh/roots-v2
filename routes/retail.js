@@ -19770,6 +19770,13 @@ router.get('/api/retail-admin/orders/:id', requireRetailAdmin, async (req, res) 
   try { o.qingyun_ship_from = qingyunShipFromState(id); }
   catch (e) { o.qingyun_ship_from = null; }
 
+  // The opposite case: auto-push tried and gave up, so this order has NO delivery in
+  // Qingyun at all. Mutually exclusive with qingyun_ship_from above — one means the
+  // job exists, the other that it never got made — and the drawer must say the second
+  // out loud, because every other Qingyun line stays blank for a failed push.
+  try { o.qingyun_push_failed = qingyunPushFailure(id); }
+  catch (e) { o.qingyun_push_failed = null; }
+
   // Whether the daemon will actually execute a queued Meituan action. The drawer
   // hides the Accept button when this is off, so staff can't queue a click that
   // will never fire. A pending accept still lands in meituan_order_actions either way.
@@ -20708,7 +20715,20 @@ function _qingyunOrderRef(retailOrderId) {
 router.get('/api/retail-admin/orders/:id/qingyun/carriers', requireRetailAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const ref = _qingyunOrderRef(id);
-  if (!ref) return res.json({ success: true, data: { available: false, reason: 'not_in_qingyun' } });
+  if (!ref) {
+    // "Not in Qingyun" has two very different causes and staff can only act on one
+    // of them. The old blanket answer sent them to check the auto-send toggle and
+    // the same-city rule — useless when auto-push DID run, tried five times and gave
+    // up (a bad consignee phone, an address that wouldn't geocode). Say which it was,
+    // and hand back the real error so the drawer can offer a retry instead.
+    const failed = qingyunPushFailure(id);
+    return res.json({
+      success: true,
+      data: failed
+        ? { available: false, reason: 'push_failed', push_failed: failed }
+        : { available: false, reason: 'not_in_qingyun' },
+    });
+  }
   try {
     const { getQingyunBrowser } = require('../lib/qingyun-browser');
     const br = await getQingyunBrowser(ref.storeCode);
@@ -20806,6 +20826,41 @@ function _qingyunPushRow(retailOrderId) {
     return tdb().prepare(
       'SELECT * FROM qingyun_push_queue WHERE retail_order_id = ? AND qingyun_order_id IS NOT NULL'
     ).get(retailOrderId) || null;
+  } catch (_) { return null; }
+}
+
+// A store's own contact number — the stand-in consignee phone when Qingyun refuses
+// the customer's (see lib/qingyun-payload). '' when the store has none, which makes
+// the builder throw rather than create a delivery nobody can be reached on.
+function _storeContactPhone(storeCode) {
+  try {
+    const r = tdb().prepare('SELECT phone FROM retail_stores WHERE code = ?').get(storeCode);
+    return (r && r.phone) || '';
+  } catch (_) { return ''; }
+}
+
+// The push queue row for an order the daemon GAVE UP on — five failed attempts, so
+// nothing retries it and the delivery was never created. Deliberately the opposite
+// selector to _qingyunPushRow above (which wants a row that reached Qingyun): a dead
+// row has no qingyun_order_id, so every other Qingyun surface in the drawer treats
+// the order as "not in Qingyun" and says nothing at all. That silence is what let
+// #868 and #873 sit unnoticed — the only trace was one WeCom message hours earlier.
+function qingyunPushFailure(retailOrderId) {
+  try {
+    const q = tdb().prepare(
+      `SELECT store_code, attempts, last_error, updated_at FROM qingyun_push_queue
+        WHERE retail_order_id = ? AND status = 'error' AND qingyun_order_id IS NULL`
+    ).get(retailOrderId);
+    if (!q) return null;
+    const st = tdb().prepare('SELECT name_en, name_cn FROM retail_stores WHERE code = ?').get(q.store_code);
+    return {
+      store_code: q.store_code,
+      name_en: (st && st.name_en) || q.store_code,
+      name_cn: (st && st.name_cn) || q.store_code,
+      attempts: q.attempts,
+      last_error: q.last_error || null,
+      failed_at: q.updated_at || null,
+    };
   } catch (_) { return null; }
 }
 
@@ -20977,6 +21032,9 @@ router.post('/api/retail-admin/orders/:id/qingyun/ship-from', requireRetailAdmin
     const payload = await buildCreatePayload(order, shop, br, {
       geocode,
       goodsPicUrl: cfgValue('delivery.qingyunGoodsPicUrl', QY_GOODS_PIC_DEFAULT),
+      // The number the rider falls back to is the TARGET store's — that is where the
+      // order is now collected from, so that is who can relay to the customer.
+      storePhone: _storeContactPhone(target),
       onWarn: (m) => console.warn('[qingyun ship-from]', m),
     });
     const created = await br.createOrder(payload);
@@ -21047,6 +21105,43 @@ router.post('/api/retail-admin/orders/:id/qingyun/ship-from', requireRetailAdmin
     console.error('[qingyun ship-from]', e.message);
     res.json({ success: false, error: 'move_failed' });
   }
+});
+
+// Put a given-up push back in the queue. Until this existed a failed create was
+// terminal in the strictest sense: the queue row sat 'error' forever, and correcting
+// the thing that caused it (almost always the recipient phone or address) changed
+// nothing, because nothing ever looked at the row again. The only way back was an
+// UPDATE by hand on the box, so in practice the order got typed into the Qingyun app
+// manually and the row stayed dead.
+//
+// Resetting attempts to 0 is the point — the daemon gives up at MAX_PUSH_ATTEMPTS and
+// would otherwise re-fail on the same exhausted count. The eligibility gate and the
+// create still have to pass on the next drain; this only buys the row another look.
+router.post('/api/retail-admin/orders/:id/qingyun/retry-push', requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ success: false, error: 'bad_id' });
+  const fail = qingyunPushFailure(id);
+  if (!fail) return res.status(409).json({ success: false, error: 'nothing_to_retry' });
+
+  // Only a row that never reached Qingyun can be requeued. Guarded again here rather
+  // than trusted from qingyunPushFailure's selector, because a re-queue of an order
+  // that DID create would produce a second live 待配送 job — two riders, both billed.
+  const info = tdb().prepare(
+    `UPDATE qingyun_push_queue
+        SET status = 'pending', attempts = 0, last_error = NULL, updated_at = CURRENT_TIMESTAMP
+      WHERE retail_order_id = ? AND status = 'error' AND qingyun_order_id IS NULL`
+  ).run(id);
+  if (!info.changes) return res.status(409).json({ success: false, error: 'nothing_to_retry' });
+
+  const who = (req.backendUser && (req.backendUser.name || req.backendUser.username)) || 'admin';
+  try {
+    tdb().prepare(
+      `INSERT INTO qingyun_sync_log (store_code, event_type, status, detail)
+       VALUES (?, 'push_retry', 'ok', ?)`
+    ).run(fail.store_code, JSON.stringify({ retail_order_id: id, previous_error: fail.last_error, by: who }));
+  } catch (_) { /* logging must never sink the retry */ }
+
+  res.json({ success: true, store_code: fail.store_code });
 });
 
 // Retry deleting the leftover copy a move couldn't remove. Powers the drawer's

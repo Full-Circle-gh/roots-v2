@@ -247,6 +247,21 @@ function heartbeatTick(storeCode) {
   }
 }
 
+// Is this consignee number one of our own shop numbers? True when it is, which
+// disqualifies it from the phone fallback below. Read live rather than cached: the
+// daemon runs for days and a store's number can be edited in the admin meanwhile,
+// and retail_stores is a handful of rows. Never throws — an unreadable table just
+// means "not ours", which only restores the old, looser behaviour.
+function isOwnStorePhone(digits) {
+  const tail = String(digits || '').replace(/\D/g, '').slice(-8);
+  if (tail.length < 7) return false;
+  try {
+    return db.prepare("SELECT phone FROM retail_stores WHERE phone IS NOT NULL AND TRIM(phone) != ''")
+      .all()
+      .some((r) => String(r.phone).replace(/\D/g, '').endsWith(tail));
+  } catch { return false; }
+}
+
 // ── Match a Qingyun delivery to a roots order ──────────────────────────────────
 // Primary: the roots order_no (e.g. R2026...) stamped into the 备注/userRemark at
 // dispatch. Fallback: the recipient phone against a recent non-delivered roots order.
@@ -290,7 +305,16 @@ function matchRetailOrderId(d) {
       if (byNo) return byNo.id;
     }
     const phone = String(d.recipientPhone || '').replace(/\D/g, '');
-    if (phone.length >= 7) {
+    // 🔴 NEVER match on one of OUR OWN store numbers. buildCreatePayload substitutes
+    // the collecting store's phone whenever Qingyun rejects the customer's, so every
+    // substituted job across that store carries the SAME number — and this fallback
+    // takes `ORDER BY id DESC LIMIT 1`. It would hand each new job to whichever
+    // substituted order happened to be newest, i.e. a stranger's rider showing up on
+    // someone else's order card. The 备注 match above already links these exactly
+    // (we stamp order_no into it ourselves), so there is nothing to lose by stopping
+    // here — a substituted job that somehow lost its 备注 is better left unlinked
+    // than linked to the wrong customer.
+    if (phone.length >= 7 && !isOwnStorePhone(phone)) {
       const byPhone = db.prepare(`
         SELECT id FROM retail_orders
          WHERE REPLACE(REPLACE(recipient_phone,' ',''),'-','') LIKE ?
@@ -459,10 +483,21 @@ function cfg(key, fallback) {
 // The builder itself lives in lib/qingyun-payload so the ship-from override in
 // routes/retail.js (which re-creates the order under another store's account) builds
 // byte-identical fields — above all the 备注, which is how tracking finds its way back.
-function pushPayload(order, shop, br) {
+//
+// The collecting store's own contact number goes with it: that's the stand-in
+// consignee phone when Qingyun rejects the customer's. '' when the store has none
+// set, in which case the builder throws rather than create an unreachable job.
+function storeContactPhone(storeCode) {
+  try {
+    const r = db.prepare('SELECT phone FROM retail_stores WHERE code = ?').get(storeCode);
+    return (r && r.phone) || '';
+  } catch { return ''; }
+}
+function pushPayload(order, shop, br, storeCode) {
   return buildCreatePayload(order, shop, br, {
     geocode,
     goodsPicUrl: cfg('delivery.qingyunGoodsPicUrl', 'https://s3plus.meituan.net/dap-orderdetail/qy/1783175410205_goods.png'),
+    storePhone: storeContactPhone(storeCode),
     onWarn: (msg) => log('push', msg),
   });
 }
@@ -524,12 +559,20 @@ async function drainPushQueue(storeCode, br) {
         log(storeCode, `push: skipped order ${order.order_no} — not same-city same-day`);
         continue;
       }
-      const payload = await pushPayload(order, shop, br);
+      const payload = await pushPayload(order, shop, br, storeCode);
       const res = await br.createOrder(payload);
       if (res.ok) {
         db.prepare("UPDATE qingyun_push_queue SET status='done', qingyun_order_id=?, last_error=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(res.orderId, row.id);
         log(storeCode, `push: created Qingyun order ${res.orderId} for ${order.order_no}`);
-        logSync(storeCode, 'push', 'ok', { order_no: order.order_no, qy: res.orderId });
+        logSync(storeCode, 'push', 'ok', { order_no: order.order_no, qy: res.orderId, phone_substituted: payload.phoneSubstituted || undefined });
+        // Qingyun wouldn't take this customer's number, so the job went out on the
+        // SHOP's — meaning the rider rings the shop, not the buyer. Said now, once,
+        // because otherwise nobody learns it until a rider is standing at a door they
+        // can't find. Not gated on opening hours for the same reason the give-up
+        // alert isn't: the delivery is already live and someone has to own the call.
+        if (payload.phoneSubstituted) {
+          sendOpsAlert(`⚠️ 青云聚信 ${storeCode} 订单 ${order.order_no}：收货人电话 ${payload.phoneOriginal} 青云不接受，已改用门店电话下单 — 骑手会打给门店，请代为联系顾客\nQingyun ${storeCode} order ${order.order_no}: consignee phone ${payload.phoneOriginal} was rejected, sent with the store's number instead — the rider will call the shop, please relay to the customer`);
+        }
       } else {
         throw new Error(`create failed (code ${res.code}, ${res.msg})`);
       }
