@@ -1,4 +1,4 @@
-# Tacet desktop patterns — v3.4 · 2026-07-30
+# Tacet desktop patterns — v3.5 · 2026-07-30
 
 > The rulebook for every desktop admin surface. `tacet-design-system.md` governs how Tacet **looks**. `tacet-brand-concept.md` governs how it **sounds**. `tacet-ia-blueprint.md` governs what **exists**. This file governs **how a page is put together** — so that Orders and Pop-ups feel like the same product despite having different layouts.
 >
@@ -1382,6 +1382,14 @@ grep -rhoE "toLocale(Date|Time)?String\(\s*\)" \
 
 **A commit that changes the title-line version adds its changelog heading in the same commit.** *(Added 2026-07-30.)* Not the next commit, not a later sweep. This rule exists because `669b32e2` bumped the title to v3.2 and wrote no entry, and the gap was invisible until someone tried to write v3.2 a second time thirteen minutes later. A version that exists in the title and nowhere else is a version the next reader concludes never happened — and the rules it carried become re-inventable, which is §7's whole subject.
 
+**A commit that touches `docs/` is not finished until it is on `main`.** *(Added 2026-07-30.)* A worktree session commits to a `claude/*` branch and the mirror pushes that branch, not `main` — so the commit exists, CI is green, and the doc does not exist for anyone reading `main`. Before the session ends:
+
+```bash
+git log origin/main..HEAD -- docs/     # anything returned means it is not done
+```
+
+**The full rule and its reasoning are the operational note, not this line** — this document cannot be the only home for it, because a rule living solely in `docs/` is unreachable by exactly the reader it protects: the one whose `docs/` is stale. Found 2026-07-30, when v3.3 and v3.4 sat on a branch that nothing was promoting.
+
 **Per-page checklist**
 
 *Brand*
@@ -1486,6 +1494,20 @@ Small, non-blocking. Resolve during Batch 0.
    instinct" tidy §1.2 warns against. **What the brief still requires:** correct the
    orientation to match the shell (dark-first, `[data-theme="light"]` the opt-in — it is
    currently light-first) and clear the §1.6 uppercase + the `.acc-*`/`.who-role` rot.
+
+---
+
+*v3.5 · 2026-07-30.*
+
+**v3.5 changes — one §7 sibling, from the way v3.3 and v3.4 nearly failed to arrive. No page rule added, removed or altered.**
+
+**§7 gained: a commit that touches `docs/` is not finished until it is on `main`.** v3.3 and v3.4 were committed correctly and sat on `claude/tacet-patterns-v3-2-801b4b`, mirrored to GitHub, CI green — and invisible to anyone reading `main`. Worktree sessions branch by construction and the mirror pushes the branch it is on; both mechanisms are correct and the composition is not. **The failure is the stale-doc problem this whole effort exists to prevent, occurring *after* the doc is written correctly, which makes it harder to see rather than easier** — nothing is missing, the version is merely old. The check is one line and runs before the session ends: `git log origin/main..HEAD -- docs/`.
+
+**The rule's home is the operational note, and §7 only points at it.** A rule about docs reaching `main` cannot live only in `docs/` — it would be unreachable by exactly the reader it protects, the one whose copy is the stale one. Same shape as the two sentences corrected in v3.3 and v3.4: a line that describes a state its own existence contradicts.
+
+**Scope is `docs/` deliberately, and the wider version is explicitly not settled here.** "Every branch reaches `main`" is a live policy question with 31 unmerged code branches behind it. Nothing in this version speaks to those.
+
+Everything else unchanged from v3.4.
 
 ---
 
