@@ -1,4 +1,4 @@
-# Tacet desktop patterns — v3.5 · 2026-07-30
+# Tacet desktop patterns — v3.6 · 2026-07-30
 
 > The rulebook for every desktop admin surface. `tacet-design-system.md` governs how Tacet **looks**. `tacet-brand-concept.md` governs how it **sounds**. `tacet-ia-blueprint.md` governs what **exists**. This file governs **how a page is put together** — so that Orders and Pop-ups feel like the same product despite having different layouts.
 >
@@ -664,13 +664,15 @@ A drawer never opens a drawer. A modal never opens a modal. If a flow needs that
 
 **The hybrid, and why it isn't an inconsistency (decided 2026-07-19).** Purchasing's order detail and Products' detail both open as a **drawer** (the same slide-in gesture as the Orders anchor, ✕ + Esc, list live behind) with an **Expand** control to a full page. This is *not* a second pattern competing with the Orders drawer — it **contains** the drawer pattern and adds one door. The operator learns one gesture (row → panel) that works everywhere; only the sections whose work is genuinely heavy add "…and expand when you need room." The escalation is earned by the task, never decorative: a customer order is a glance-and-act (drawer, full stop); a **receiving** screen is an editable multi-column grid — quantity steppers per line, short/rejected reasons, backorder decisions, a running received tally — that a drawer physically crowds (Cost/Total columns get squeezed) and a page lets breathe. **Consistency is "the same kind of task gets the same container," not "every screen behaves identically."** Forcing receiving into a drawer-only shell *to match Orders* would honour surface sameness and break the deeper rule. **Sibling requirement:** the quick-panel drawer and the Orders drawer must read as siblings — same header treatment, same close (✕ + Esc), same 350ms settle. Do not let a later survey style one to differ from the other, or "correct" the hybrid down to drawer-only for the sake of matching.
 
-### 1.13a Pinned regions — sticky headers, and the two things that break them
+### 1.13a Pinned regions — sticky headers, and the things that break them
 
-*Added 2026-07-24, from the Orders pass. Two rules, both product-wide.*
+*Added 2026-07-24, from the Orders pass. Four rules, all product-wide — rule 3 added 2026-07-26, rule 4 (the drawer header, which this section once recorded as impossible) 2026-07-30.*
 
 **1. Every table with a scrolling list pins its column header row.** You scroll past two hundred orders and lose which column is Total and which is Placed. The header row sticks below the topbar; the KPI tiles, filter chips and the store/channel/search row scroll away above it normally. Applies to every A1 Worklist and A2 Library surface — Orders, Products, Customers, Purchasing, the Affiliate ledger, anything with a long table.
 
 **2. A pinned region is a FIXED HEIGHT regardless of content.** A pinned block that grows when a record is messy is not pinned — and messy records are exactly when the operator most needs the thing to stay put. This killed the first drawer-header option on Orders: three pills wrapped to two rows and the "fixed" header doubled in height. **The pinned header shows ONE pill — the record's primary status. Additional marks go in the body below the pinned block**, in their §1.10a treatment. Verify by building the single-mark and worst-case frames side by side; the pinned block must be pixel-identical in both.
+
+  *The drawer header was killed by this rule and then built under it — see rule 4. What failed in 2026-07 was pinning a header that still carried every mark; obeying the one-pill ration is what made it buildable. Read the two together: this is not a rule that was relaxed.*
 
 **The mechanism, which has to travel with the rule** *(§7's lesson — a rule that says what to do without why is one survey away from being "corrected" into a bug)*:
 
@@ -699,6 +701,16 @@ A drawer never opens a drawer. A modal never opens a modal. If a flow needs that
 **Do not re-decide these per page, and do not take them from a page's own mockup.** The Customers mockup had drifted to 12px labels with `5px 12px` padding, a hardcoded `#E4E0D5` bottom rule with **no dark-theme override** (a light hairline under a dark band, invisible in every light-mode screenshot), a hardcoded band colour, and `z-index: 3`. All four were followed for a round before the Orders values were checked. **Where a page's mockup and Orders disagree on this band, Orders wins.** 15px labels were tried on Orders and rejected — at that size the band reads as another row rather than a header.
 
 **A band belongs to a full-width table, not to a card with padding.** Inside a padded card (e.g. the Customers drawer's Top items) a `th`-level band can only ever be the wrong width, because the `th` boxes span the table while the card owns the padding. There the header carries **no background at all** — a hairline alone separates it. Removing the band makes the alignment question disappear rather than answering it.
+
+**4. A one-record drawer pins its header, and the header is rationed to two rows.** *(Added 2026-07-30, built on Orders, `03be567c`. Raised by Ash from the live screen: the header scrolled away with every action on it.)* Rule 1 pins the column band so the operator never loses which column is which; the same argument applies to a record — scroll two lines into a long order and you have lost the order number, its status and every control. **The pinned block is exactly two rows: the record's identifier plus the ONE primary status pill, then the action row.** Nothing else. It is 94px on Orders.
+
+- **The action row is a budget, not a list, because that is what makes rule 2 true.** Four visible controls: the state actions, the workhorse record action, and a `⋯` for everything else. Anything that is real work but not *this* record's next step — Undo reversals, the opt-in box label — goes in the `⋯`. Five wrapped to a second line and the "fixed" block grew, which is the same failure as the three pills, one layer out.
+- **The workhorse record action holds the row's right edge**, pushed there by a spacer, so it occupies one position on every record whatever the state buttons happen to be. On Orders that is Print receipt, moved up out of a footer bar that then had nothing left in it worth 61px. **A drawer that pins its header does not also need a footer bar** — check whether the bar still earns its height before keeping it.
+- **The `⋯` must be exactly as tall as the buttons beside it.** It shipped 4px taller than a `.btn-sm` and the block was 99px on the records that had one, 95px on those that did not — rule 2 broken by a glyph. A `.btn-sm` box is 26px: 16px line box, 4px padding, 1px border each side. Match the box, do not eyeball it.
+- **The mechanism differs from the table band in three ways.** The scrollport is the drawer's own scrolling body (`#order-detail-mount`), not the page — so *no ancestor inside the drawer* may take an `overflow` in either axis, same trap as rule 2's `clip-path` note. A sticky child pins to the scrollport's **padding** edge, so that body's top padding goes to `0` and the band carries the space itself, or content peeks through the gap above it. And the band sits **under** the drawer's floating ✕, which is a sibling of the scroll body rather than a child of it: `z-index: 4` against the ✕'s 5. The band is the drawer's own paper, fully opaque, no corner of its own.
+- **State the width at which the budget stops fitting.** Below roughly an 800px window the Orders drawer hits its 480px floor, four controls no longer fit on one line, and the row wraps — 94px or 130px depending on the record. That is a deliberate trade against turning the panel into a sideways scroller, and it is written into the CSS beside the rule so a later pass does not "fix" the wrap. **A pinned height that varies with window width is a breakpoint; one that varies with content is the bug.**
+
+Measure both frames, as rule 2 requires, **against the real stylesheets rather than the mockup** — the mockup's re-typed tokens cannot catch a specificity collision, and two of them were live here: a `margin-bottom` longhand beating a later shorthand, and an unconditional `display:none` written *after* the media query that was supposed to override it. Media queries add no specificity; source order decides.
 
 ### 1.14 Components that had no rule
 
@@ -1494,6 +1506,22 @@ Small, non-blocking. Resolve during Batch 0.
    instinct" tidy §1.2 warns against. **What the brief still requires:** correct the
    orientation to match the shell (dark-first, `[data-theme="light"]` the opt-in — it is
    currently light-first) and clear the §1.6 uppercase + the `.acc-*`/`.who-role` rot.
+
+---
+
+*v3.6 · 2026-07-30.*
+
+**v3.6 changes — §1.13a gained rule 4, from the Orders drawer round. One rule added; rule 2 is unchanged and now cites it.**
+
+**§1.13a rule 4 added: a one-record drawer pins its header, rationed to two rows.** Rule 1 pins a table's column band so the operator never loses which column is which; the same argument applies to a record, and Ash raised it from the live screen — the order header scrolled away with every action on it. The block is the identifier + the ONE status pill, then the action row, and nothing else: 94px on Orders. **The action row is a budget of four — state actions, the workhorse record action, and a `⋯` for everything that is real work but not this record's next step.** The workhorse holds the row's right edge so it occupies one position on every record; on Orders that is Print receipt, moved up out of a footer bar which then had nothing left worth 61px, so the bar is retired.
+
+**Rule 2 is not relaxed, and the entry says so where a reader will hit it.** This section recorded the drawer header as the thing rule 2 killed. What failed in 2026-07 was pinning a header that still carried every mark; obeying the one-pill ration is precisely what made it buildable. Rule 2 now carries that sentence inline, because a reader who finds only the "killed" note will read rule 4 as a contradiction and correct one of them away.
+
+**Three failures recorded, all of them rule 2 broken by something other than pills.** The `⋯` shipped 4px taller than a `.btn-sm`, so the block was 99px on records that had one and 95px on those that did not — a `.btn-sm` box is 26px and the number is derived, not eyeballed. A `margin-bottom` longhand beat a later shorthand. And an unconditional `display:none` written *after* the media query meant to override it won on source order, media queries adding no specificity. **The last two are why rule 2's "measure both frames" now says to measure against the real stylesheets rather than the mockup** — re-typed tokens cannot catch a specificity collision.
+
+**The one place the fixed height is traded away is stated with its width.** Below ~800px of window the drawer hits its 480px floor, four controls stop fitting, and the row wraps rather than turn the panel into a sideways scroller. Written into the CSS beside the rule so a later pass does not "fix" it. **A pinned height that varies with window width is a breakpoint; one that varies with content is the bug.**
+
+Everything else unchanged from v3.5.
 
 ---
 
