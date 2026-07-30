@@ -74,12 +74,23 @@ Page({
   // and qty survives across searches without a server round-trip.
   _all: [],
 
+  // Availability at THIS order's fulfilling store: { product_id: units }.
+  // _tracksStock false = the order never reserved (out-of-GZ / scheduled), so
+  // no cap applies and the map stays empty.
+  _avail: {},
+  _tracksStock: false,
+
   async onLoad(query) {
     const app = getApp();
     const L = app.globalData.lang;
     this.setData({ orderId: parseInt(query.order_id, 10) || null, lang: L });
     this.applyLangCopy();
     await this.loadOrder();
+    // Availability first: the catalog's own `stock` is a chain-wide sum, and
+    // this order is pinned to ONE store. Loading it before the catalog means
+    // the stepper is capped correctly from the first render rather than after
+    // a late correction.
+    await this.loadAvailability();
     await this.loadProducts();
   },
 
@@ -124,6 +135,58 @@ Page({
     }
   },
 
+  // "Sold out" when the store has none left, "Only N left" when it has some —
+  // a bare "Sold out" on a product the shop page still lists as in stock (the
+  // other store has plenty) reads as a bug to the customer.
+  soldOutMsg(room) {
+    const cn = this.data.lang === 'cn';
+    if (!room || room <= 0) return this.data.copy.soldOut;
+    return cn ? `仅剩 ${room} 份` : `Only ${room} left`;
+  },
+
+  // Per-product availability at the store THIS order is being fulfilled from.
+  // The catalog endpoint reports stock summed across active stores — correct
+  // for the shop (any store can serve a new order), wrong here: a bowl on the
+  // other store's shelf cannot go in this parcel. tracks_stock=false means the
+  // order never reserved (out-of-GZ / scheduled), so we don't cap at all and
+  // leave it to the server, exactly as checkout does for those orders.
+  async loadAvailability() {
+    if (!this.data.orderId) return;
+    try {
+      const resp = await api.get('/api/retail/orders/' + this.data.orderId + '/addon/availability');
+      const d = resp?.data || resp;
+      this._tracksStock = !!d?.tracks_stock;
+      this._avail = d?.available || {};
+    } catch (e) {
+      // Availability is a courtesy cap — the server gate is the real guard, so
+      // a failure here must not block the picker.
+      this._tracksStock = false;
+      this._avail = {};
+    }
+  },
+
+  // How many units of a product are already staged — the plain stepper plus
+  // every option line for it. Stock is per product, not per option combo, so
+  // "1 with tzatziki" and "1 plain" are two units off the same shelf.
+  stagedQtyFor(productId, exceptKey) {
+    const base = this._all.find(p => p.id === productId);
+    let n = base ? (base.qty || 0) : 0;
+    for (const l of this.data.optionLines) {
+      if (l.product_id === productId && l.key !== exceptKey) n += l.qty;
+    }
+    return n;
+  },
+
+  // Cap for a product, or null when nothing should cap it (untracked order,
+  // supplier-direct item, or a product the server didn't report on).
+  capFor(productId) {
+    if (!this._tracksStock) return null;
+    const p = this._all.find(x => x.id === productId);
+    if (p && p.ship_from_supplier) return null;   // supplier holds the stock, not us
+    const n = this._avail[productId];
+    return n == null ? null : Number(n);
+  },
+
   // Load the whole catalog ONCE, then filter client-side as the customer
   // types (instant, no per-keystroke server hit).
   async loadProducts() {
@@ -136,6 +199,11 @@ Page({
         const price = effPrice(p);
         const nameEn = p.name_en || '';
         const nameCn = p.name_cn || '';
+        // Prefer this order's store availability over the catalog's chain-wide
+        // sum; fall back to the catalog only when the order isn't stock-tracked
+        // or the store reported nothing for this product.
+        const chainStock = Number(p.stock != null ? p.stock : (p.stock_qty != null ? p.stock_qty : 999));
+        const atStore = this._tracksStock ? this._avail[p.id] : null;
         return {
           id: p.id,
           name: lang.pick(nameEn, nameCn, L),
@@ -143,7 +211,11 @@ Page({
           price,
           price_disp: '¥' + price.toFixed(2),
           image: absUrl(p.image_data || (`/api/retail/products/${p.id}/image`)),
-          stock: Number(p.stock != null ? p.stock : (p.stock_qty != null ? p.stock_qty : 999)),
+          stock: atStore != null ? Number(atStore) : chainStock,
+          // Carried so the stepper's supplier-direct exemption actually works —
+          // it was reading an undefined field, capping supplier items that hold
+          // no stock of ours.
+          ship_from_supplier: !!p.ship_from_supplier,
           has_options: !!p.has_options,
           qty: 0,
         };
@@ -182,9 +254,16 @@ Page({
     let q = (p.qty || 0) + dir;
     if (q < 0) q = 0;
     // Supplier-direct items hold no stock of ours — never cap their quantity.
-    if (!p.ship_from_supplier && p.stock != null && q > p.stock) {
-      wx.showToast({ title: this.data.copy.soldOut, icon: 'none' });
-      q = p.stock;
+    // Everything else is capped by what THIS order's store can still give,
+    // minus whatever option lines have already claimed off the same shelf.
+    const cap = this.capFor(id);
+    if (cap != null) {
+      const claimedByOptions = this.stagedQtyFor(id) - (p.qty || 0);
+      const room = Math.max(0, cap - claimedByOptions);
+      if (q > room) {
+        wx.showToast({ title: this.soldOutMsg(room), icon: 'none' });
+        q = room;
+      }
     }
     p.qty = q;            // mutate master so qty survives filtering
     this.applyFilter();   // re-render the visible slice from the master
@@ -301,10 +380,26 @@ Page({
     const sortedKey = choices.slice().sort((a, b) => a - b).join(',');
     const key = 'p:' + this.data.opProduct.id + '|c:' + sortedKey;
 
+    // Same shelf as the plain stepper — options change the recipe, not the
+    // inventory — so the option sheet has to respect the store's cap too. It
+    // had none at all, which is how an optioned item could be added past what
+    // the store held even once the stepper was capped.
+    const pid = this.data.opProduct.id;
+    const cap = this.capFor(pid);
+    let addQty = this.data.opQty;
+    if (cap != null) {
+      const room = Math.max(0, cap - this.stagedQtyFor(pid));
+      if (addQty > room) {
+        wx.showToast({ title: this.soldOutMsg(room), icon: 'none' });
+        addQty = room;
+        if (addQty <= 0) return;
+      }
+    }
+
     const lines = this.data.optionLines.map(l => ({ ...l }));
     const existing = lines.find(l => l.key === key);
     if (existing) {
-      existing.qty += this.data.opQty;
+      existing.qty += addQty;
       existing.line_disp = '¥' + (existing.unit_price * existing.qty).toFixed(2);
     } else {
       lines.push({
@@ -314,7 +409,7 @@ Page({
         options_label: labels.join(', '),
         unit_price: unit,
         unit_disp: '¥' + unit.toFixed(2),
-        qty: this.data.opQty,
+        qty: addQty,
         choices,
         line_disp: '¥' + (unit * this.data.opQty).toFixed(2),
       });
@@ -329,6 +424,14 @@ Page({
     let lines = this.data.optionLines.map(l => ({ ...l }));
     const l = lines.find(x => x.key === key);
     if (!l) return;
+    if (dir > 0) {
+      const cap = this.capFor(l.product_id);
+      if (cap != null && this.stagedQtyFor(l.product_id) + dir > cap) {
+        const room = Math.max(0, cap - this.stagedQtyFor(l.product_id, key));
+        wx.showToast({ title: this.soldOutMsg(room), icon: 'none' });
+        return;
+      }
+    }
     l.qty += dir;
     if (l.qty <= 0) lines = lines.filter(x => x.key !== key);
     else l.line_disp = '¥' + (l.unit_price * l.qty).toFixed(2);
@@ -385,8 +488,55 @@ Page({
       throw new Error(cn ? '支付方式暂不可用' : 'Payment unavailable');
     } catch (e) {
       this.setData({ submitting: false });
+      // The store ran short between the picker loading and this tap (or the
+      // cap was bypassed). Name the item and re-read availability so the
+      // steppers correct themselves instead of just refusing again.
+      if (e.body?.error === 'insufficient_stock') {
+        const s = (e.body.shortages || [])[0];
+        const nm = s ? (cn ? (s.name_cn || s.name_en) : (s.name_en || s.name_cn)) : '';
+        const msg = !s ? (cn ? '库存不足' : 'Not enough stock')
+          : s.available > 0
+            ? (cn ? `${nm} 仅剩 ${s.available} 份` : `Only ${s.available} ${nm} left`)
+            : (cn ? `${nm} 已售罄` : `${nm} is sold out`);
+        wx.showModal({ title: cn ? '库存不足' : 'Not enough stock', content: msg, showCancel: false });
+        await this.loadAvailability();
+        this.reapplyCaps();
+        return;
+      }
       wx.showToast({ title: e.message, icon: 'none' });
     }
+  },
+
+  // Re-clamp everything already staged to freshly-loaded availability, so a
+  // refused submit leaves the picker in a state that CAN be submitted.
+  reapplyCaps() {
+    for (const p of this._all) {
+      const n = this._tracksStock ? this._avail[p.id] : null;
+      if (n != null) p.stock = Number(n);
+    }
+    let lines = this.data.optionLines.map(l => ({ ...l }));
+    // Option lines first — they're the explicit choices; the plain stepper
+    // absorbs whatever room is left over.
+    const usedByOptions = {};
+    for (const l of lines) {
+      const cap = this.capFor(l.product_id);
+      if (cap != null) {
+        const room = Math.max(0, cap - (usedByOptions[l.product_id] || 0));
+        if (l.qty > room) l.qty = room;
+      }
+      usedByOptions[l.product_id] = (usedByOptions[l.product_id] || 0) + l.qty;
+      l.line_disp = '¥' + (l.unit_price * l.qty).toFixed(2);
+    }
+    lines = lines.filter(l => l.qty > 0);
+    for (const p of this._all) {
+      const cap = this.capFor(p.id);
+      if (cap == null || !p.qty) continue;
+      const room = Math.max(0, cap - (usedByOptions[p.id] || 0));
+      if (p.qty > room) p.qty = room;
+    }
+    this.setData({ optionLines: lines });
+    this.applyFilter();
+    this.recalc();
   },
 
   // Poll the add-on status after wx.requestPayment — the async WeChat callback
