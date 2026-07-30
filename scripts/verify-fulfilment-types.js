@@ -23,6 +23,9 @@ const path = require('path');
 const Database = require('better-sqlite3');
 
 const F = require('../lib/fulfilment');
+// renderOrder() is pure — no DB, no network — so the print assertions exercise
+// the real renderer instead of a mirror.
+const feie = require('../lib/feie');
 
 const dbPath = path.join(os.tmpdir(), `fulfilment-check-${process.pid}.sqlite`);
 const db = new Database(dbPath);
@@ -44,7 +47,9 @@ db.exec(`
   CREATE TABLE retail_orders (
     id INTEGER PRIMARY KEY, order_no TEXT, customer_id INTEGER,
     status TEXT, payment_method TEXT, fulfillment_type TEXT,
+    recipient_name TEXT, recipient_phone TEXT,
     address_full TEXT, address_json TEXT, scheduled_for DATETIME,
+    subtotal REAL,
     channel TEXT, store_id INTEGER, total REAL,
     placed_at DATETIME, paid_at DATETIME, delivered_at DATETIME, updated_at DATETIME,
     needs_invoice INTEGER DEFAULT 0, invoice_status TEXT,
@@ -76,20 +81,23 @@ const NOW = '2026-07-30 04:00:00';
 // markOrderPaid flips it terminal the instant the money lands.
 db.prepare(`INSERT INTO retail_orders
   (id, order_no, customer_id, status, payment_method, fulfillment_type, address_full,
+   recipient_name, recipient_phone, subtotal,
    scheduled_for, channel, store_id, total, placed_at, paid_at, delivered_at)
-  VALUES (1,'R-DEL',1,'paid','wechat','delivery','广州市天河区 1 号', ?, 'manual', 1, 100, ?, ?, NULL)`
+  VALUES (1,'R-DEL',1,'paid','wechat','delivery','广州市天河区 1 号','Chen','13800000001',100, ?, 'manual', 1, 100, ?, ?, NULL)`
 ).run(NOW, NOW, NOW);
 
 db.prepare(`INSERT INTO retail_orders
   (id, order_no, customer_id, status, payment_method, fulfillment_type, address_full,
+   recipient_name, recipient_phone, subtotal,
    scheduled_for, channel, store_id, total, placed_at, paid_at, delivered_at)
-  VALUES (2,'R-PICK',1,'paid','wechat','pickup', NULL, ?, 'manual', 1, 100, ?, ?, NULL)`
+  VALUES (2,'R-PICK',1,'paid','wechat','pickup', NULL,'Lam','13800000002',100, ?, 'manual', 1, 100, ?, ?, NULL)`
 ).run(NOW, NOW, NOW);
 
 db.prepare(`INSERT INTO retail_orders
   (id, order_no, customer_id, status, payment_method, fulfillment_type, address_full,
+   recipient_name, recipient_phone, subtotal,
    scheduled_for, channel, store_id, total, placed_at, paid_at, delivered_at)
-  VALUES (3,'R-CNTR',2,'delivered','wechat','counter', NULL, NULL, 'manual', 1, 100, ?, ?, ?)`
+  VALUES (3,'R-CNTR',2,'delivered','wechat','counter', NULL,'Walk-in','',100, NULL, 'manual', 1, 100, ?, ?, ?)`
 ).run(NOW, NOW, NOW);
 
 // Payment rows as each path actually leaves them. The manual/counter path never
@@ -213,6 +221,47 @@ const wxAfter = db.prepare(
 check('a JSAPI-paid counter sale DOES owe the upload', wxAfter, nos([3]));
 db.prepare("UPDATE retail_payments SET transaction_id = NULL WHERE order_id = 3").run();
 db.prepare('UPDATE retail_orders SET customer_id = 2 WHERE id = 3').run();
+
+// ═══ 5b. What it PRINTS ═════════════════════════════════════════════════════
+// lib/feie.js renderOrder() is pure (no DB, no network), so these assertions run
+// the real renderer rather than a mirror.
+const ITEMS = [{ name_en: 'Oat milk', name_cn: '燕麦奶', sku: 'OAT-1', qty: 2, unit_price: 50, line_total: 100 }];
+const slipFor = (id, tpl) => feie.renderOrder(tpl || 'receipt', ROWS.find(r => r.id === id), ITEMS, 'Tacet', []);
+
+const delSlip  = slipFor(1);
+const pickSlip = slipFor(2);
+const cntrSlip = slipFor(3);
+
+// A hand-over recipient is meaningless when the buyer is at the till holding it.
+check('receipt To/Tel: delivery yes, pickup yes, counter no',
+  [delSlip, pickSlip, cntrSlip].map(s => /^To {4}/m.test(s)), [true, true, false]);
+
+// Nothing was promised, so no promise prints — tested against a counter row that
+// DOES carry a slot. The natural fixture has no scheduled_for, so steps 2–4 of
+// shipByPrintParts would print nothing anyway and the assertion would pass with
+// or without the guard: decoration. This variant fails without it.
+const cntrWithSlot = {
+  ...ROWS.find(r => r.id === 3),
+  scheduled_for: NOW,
+  delivery_slot_label: 'Today 14:00–16:00',
+  delivery_slot_kind: 'today',
+};
+check('counter slip prints no promise even when the row carries a slot',
+  /Deliver 送达|Pickup 自提|Arrives 预计送达/.test(
+    feie.renderOrder('receipt', cntrWithSlot, ITEMS, 'Tacet', [])), false);
+check('pickup slip DOES carry its window label',
+  /Pickup 自提/.test(pickSlip), true);
+
+// It is still a real sale: order no, time, the item, and the money.
+check('counter slip still carries order no + item + TOTAL',
+  [cntrSlip.includes('R-CNTR'), /Oat milk|燕麦奶/.test(cntrSlip), cntrSlip.includes('TOTAL')],
+  [true, true, true]);
+
+// Nothing to pack. A store whose printer is set to 'packing' still gets a
+// receipt for a walk-in — never a picking list for goods already handed over.
+check('packing template on a counter sale renders a receipt, not a picking list',
+  [/PACKING 配货单/.test(slipFor(3, 'packing')), /PACKING 配货单/.test(slipFor(1, 'packing'))],
+  [false, true]);
 
 // ═══ 6. Money and paperwork still move — born fulfilled, NOT born closed ════
 db.prepare("UPDATE retail_orders SET needs_invoice = 1, invoice_status = 'requested' WHERE id = 3").run();
