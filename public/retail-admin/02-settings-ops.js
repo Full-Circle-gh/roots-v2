@@ -228,7 +228,15 @@ function _opsStoreForm(s) {
           <label class="field-label">Code · 短标识 ${isEdit ? '' : '<span style="color:var(--text-3);font-weight:400">— e.g. pudong</span>'}</label>
           <input type="text" id="osf_code" value="${val(s?.code)}" placeholder="pudong" ${isEdit ? 'disabled style="font-family:monospace;opacity:.6"' : 'style="font-family:monospace"'}>
         </div>
-        <div><label class="field-label">Phone · 电话</label><input type="text" id="osf_phone" value="${val(s?.phone)}" placeholder="020-XXXXXXXX"></div>
+        <!-- Prefer a MOBILE, and say why. This number is the stand-in consignee phone
+             when Qingyun refuses a customer's (an overseas or HK number, a landline):
+             the delivery goes out on the shop's number instead of failing outright,
+             and the rider rings here to be relayed. Qingyun only accepts a mainland
+             mobile, so a landline in this box leaves those orders failing. The old
+             placeholder actively asked for one. -->
+        <div><label class="field-label">Phone · 电话 <span style="color:var(--text-3);font-weight:400">— mobile preferred · 建议填手机号</span></label>
+          <input type="text" id="osf_phone" value="${val(s?.phone)}" placeholder="13800001234">
+          <div class="muted" style="font-size:11px;margin-top:3px;line-height:1.5">Used as the delivery contact when a customer's own number isn't one Qingyun accepts — a mainland mobile keeps those orders going out. · 当顾客电话不被青云接受时,用作配送联系电话 — 填手机号可让这些订单正常发出。</div></div>
         <div><label class="field-label">Name (EN)</label><input type="text" id="osf_name_en" value="${val(s?.name_en)}" placeholder="Roots — Tianhe"></div>
         <div><label class="field-label">名称 (CN)</label><input type="text" id="osf_name_cn" value="${val(s?.name_cn)}" placeholder="Roots · 天河店"></div>
         <div><label class="field-label">City · 城市</label><input type="text" id="osf_city" value="${val(s?.city)}" placeholder="广州"></div>

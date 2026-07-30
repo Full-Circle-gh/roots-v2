@@ -345,8 +345,11 @@ function suStoreWizStep(step) {
     skippable: true,
     q: cuT('A phone customers can call?', '顾客可以拨打的电话？'),
     html: `
-      <p class="su-mnote">${cuT('For questions about an order. You can add this later.', '方便顾客咨询订单。也可以以后再填。')}</p>
-      <input class="su-wiz-in" id="swz_phone" value="${A(d.phone)}" placeholder="020-XXXXXXXX">`,
+      <!-- A mobile does double duty: it's also the delivery contact we fall back to
+           when Qingyun rejects a customer's own number, and Qingyun takes mainland
+           mobiles only. Asking for a landline here quietly disables that. -->
+      <p class="su-mnote">${cuT('For questions about an order, and as the delivery contact if a customer\'s own number is rejected. A mobile works best. You can add this later.', '方便顾客咨询订单；顾客电话不被接受时也用作配送联系电话。建议填手机号。也可以以后再填。')}</p>
+      <input class="su-wiz-in" id="swz_phone" value="${A(d.phone)}" placeholder="13800001234">`,
   };
   return {
     skippable: true,

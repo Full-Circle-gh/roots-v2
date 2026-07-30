@@ -228,7 +228,9 @@
       <div class="ig-wiz-grid">
         <div><label class="field-label">Code · 短标识 <span style="color:var(--text-3);font-weight:400">— e.g. haizhu</span></label>
           <input type="text" id="igl_code" placeholder="haizhu" style="font-family:monospace"></div>
-        <div><label class="field-label">Phone · 电话</label><input type="text" id="igl_phone" placeholder="020-XXXXXXXX"></div>
+        <!-- Mobile, not a landline: doubles as the delivery contact when Qingyun
+             won't take a customer's number (see Settings → Stores for the long note). -->
+        <div><label class="field-label">Phone · 电话 <span style="color:var(--text-3);font-weight:400">— mobile · 手机号</span></label><input type="text" id="igl_phone" placeholder="13800001234"></div>
         <div><label class="field-label">Name (EN)</label><input type="text" id="igl_name_en" placeholder="Roots — Haizhu"></div>
         <div><label class="field-label">名称 (CN)</label><input type="text" id="igl_name_cn" placeholder="Roots · 海珠店"></div>
         <div><label class="field-label">City · 城市</label>
