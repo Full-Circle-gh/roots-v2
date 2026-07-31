@@ -1,8 +1,29 @@
-# Tacet shared-core merge — decisions record, v0.3
+# Tacet shared-core merge — decisions record, v0.4
 
-**2026-07-30 · A living record of what has been decided so far for the Tacet shared-core merge, so the decisions stop living in chat. Supersedes v0.1. The open questions in §20 are NOT decided and must not be treated as settled.**
+**2026-07-31 · A living record of what has been decided so far for the Tacet shared-core merge, so the decisions stop living in chat. Supersedes v0.1. The open questions in §20 are NOT decided and must not be treated as settled.**
 
 ---
+
+## 0. Governing rules — these override everything below
+
+These three rules govern every decision in this document and every decision made after it. Where anything in this document conflicts with them, these rules win and the conflicting decision is wrong.
+
+1. FULL CIRCLE NO LONGER EXISTS. The name is retired completely. The system is Tacet. Any remaining Full Circle naming in code, documentation, UI or configuration is a defect to be removed.
+
+2. TACET IS NOT BUILT FOR ROOTS. Roots is one customer that happens to be first. Nothing about Roots' business — its products, its city, its language, its currency, its sales channels, its suppliers, its way of working — may be assumed, hardcoded or treated as the default.
+
+3. TACET IS A MULTI-BUSINESS PRODUCT. Businesses of any kind, in any country, must be able to register and use it. Every feature, every setting and every proposal must be evaluated against a business that is nothing like Roots.
+
+### Consequences already identified
+These follow directly from the rules above and correct earlier decisions in this document:
+- SALES CHANNELS ARE NOT A FIXED LIST. The channel list recorded earlier (WeChat, Web, POS, Meituan, Eleme, GZ Grocery, Manual) is Roots' channel list, not Tacet's. Channels must be configured per business, with integrations offered as available options. GZ Grocery in particular is specific to one customer.
+- CURRENCY IS PER BUSINESS. The codebase currently hardcodes CNY and the ¥ symbol in hundreds of places. This is a defect.
+- UNITS OF MEASURE ARE PER BUSINESS. Grams and kilograms may not be assumed. A business using pounds and ounces must be equally well served.
+- LANGUAGE IS PER BUSINESS. English-plus-Chinese may not be assumed or required. A single-language business must not be forced to supply two names for everything, and a business using two other languages must be supported.
+- Already consistent with these rules, recorded for clarity: the business time zone is a per-business setting derived from the signup address, and the hardcoded category seed tree is being deleted rather than kept as a default.
+
+### Standing test
+Before any design decision is accepted, it must be checked against a business unlike Roots — for example a hardware shop in Ohio, or a bakery in Lisbon. If the decision only makes sense for a vegan food business in Guangzhou, it is wrong.
 
 ## 1. Architecture target
 
