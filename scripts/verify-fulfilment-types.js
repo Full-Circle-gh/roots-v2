@@ -788,11 +788,13 @@ check('the two notes are different containers, one dashed and recessed',
 // uses none of the classes the two live uppercase rules select (label.stacked,
 // .om-sec-lbl), so there is nothing to override. The rule's job is stopping NEW
 // ones; this assertion is what stops one arriving here later.
+// (The third arm — "no .om-sec-lbl" — went with the modal on 2026-07-31. The
+// class no longer exists anywhere, so asking the page not to use it stopped
+// being a check and became a tautology.)
 check('§1.6 — the new page ships no uppercase, and inherits none',
   [/text-transform:\s*uppercase/.test(ONW_CSS),
-   /class="[^"]*\bstacked\b/.test(newSection),
-   /om-sec-lbl/.test(newSection)],
-  [false, false, false]);
+   /class="[^"]*\bstacked\b/.test(newSection)],
+  [false, false]);
 
 // §1.11 — every static label is an "EN · 中文" source pair the walker can split,
 // and NEITHER half may itself contain " · " (it splits on the first one). The
@@ -887,6 +889,55 @@ check('the Orders CTA opens the page, and no live control still calls omOpen',
    /onclick="omOpen\(\)"/.test(HTML_SRC),
    /ordNew: true/.test(OPS_SRC) && /it\.ordNew/.test(OPS_SRC)],
   [true, false, true]);
+
+// ═══ 11. One way to create an order ═════════════════════════════════════════
+// The modal is GONE — markup, styles and every om* function. Comments are
+// stripped first, or the tombstone explaining the deletion reads as the thing
+// still being there.
+const HTML_CODE = HTML_SRC.replace(/<!--[\s\S]*?-->/g, '');
+const CLIENT_CODE = stripComments(CLIENT_SRC);
+check('the New-order modal is deleted: markup, styles and functions',
+  [/id="om-bg"/.test(HTML_CODE),
+   /id="om-done-bg"/.test(HTML_CODE),
+   /om-sec-lbl|om-dropdown/.test(HTML_CODE),
+   /function om[A-Z]/.test(CLIENT_CODE),
+   /OM_LINES|OM_CUSTOMER|OM_DONE/.test(CLIENT_CODE)],
+  [false, false, false, false, false]);
+// Nothing anywhere still calls into it — a dead onclick is a button that throws.
+check('no surviving caller references the deleted modal',
+  (HTML_CODE.match(/\bom(Open|Close|Submit|Done|ShowPayResult|CopyPayLink|OpenQr)\s*\(/g) || [])
+    .concat(CLIENT_CODE.match(/\bom(Open|Close|Submit|Done|ShowPayResult|CopyPayLink|OpenQr)\s*\(/g) || []),
+  []);
+
+// THE CAPABILITY THAT NEARLY WENT WITH IT. The deleted dialog was the only
+// place a guest pay link could be read, and only for the seconds it was on
+// screen — an operator who closed it, or who took the payment call an hour
+// later, had no way back to it. It is a drawer tile now, so it outlives the
+// moment of creation. Deleting a surface must not delete what it could do.
+const payTileSrc = extractFn('orderPayLinkTile') || '';
+check('the guest pay link survived the deletion, in the order drawer',
+  [payTileSrc.length > 100,
+   /orderPayLinkTile\(o\)/.test(extractFn('renderOpenOrder') || ''),
+   /pay_token/.test(payTileSrc)],
+  [true, true, true]);
+// The same two conditions the server applies when it mints the link: unpaid,
+// and something to pay. Run the real function.
+const payTileHarness = new Function(`
+  ${payTileSrc}
+  return function (o) {
+    globalThis.cuT = (en) => en;
+    globalThis.copyChip = () => '';
+    globalThis.escapeAttr = (s) => String(s);
+    globalThis.location = { origin: 'https://store.example' };
+    return orderPayLinkTile(o);
+  };
+`)();
+check('the pay link shows only while unpaid, with a total and a token',
+  [!!payTileHarness({ status: 'pending_payment', pay_token: 't', total: 100 }),
+   !!payTileHarness({ status: 'paid', pay_token: 't', total: 100 }),
+   !!payTileHarness({ status: 'pending_payment', pay_token: 't', total: 0 }),
+   !!payTileHarness({ status: 'pending_payment', pay_token: null, total: 100 })],
+  [true, false, false, false]);
 
 // The client sends fulfillment_type on every write and never POSTs the customer
 // separately — the two halves of the seam and the orphan, from the client side.
