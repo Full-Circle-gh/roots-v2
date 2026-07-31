@@ -1,4 +1,4 @@
-# Tacet desktop patterns — v4.0 · 2026-07-31
+# Tacet desktop patterns — v4.1 · 2026-07-31
 
 > The rulebook for every desktop admin surface. `tacet-design-system.md` governs how Tacet **looks**. `tacet-brand-concept.md` governs how it **sounds**. `tacet-ia-blueprint.md` governs what **exists**. This file governs **how a page is put together** — so that Orders and Pop-ups feel like the same product despite having different layouts.
 >
@@ -597,9 +597,11 @@ RBAC is going live (`tm-enforce`, Team). Every page needs a designed gated state
 
 ### 1.11 Language — one at a time, never glued
 
-**The rule: the interface renders in exactly one language. English or 中文. Never both.**
+**The rule: the interface renders in exactly one language — whichever the reader has chosen. Never two at once.**
 
 A merchant reading Chinese should see a Chinese screen. A merchant reading English should see an English screen. `Orders today · 今日订单` gives each of them a screen that is half noise — and a product that sells calm cannot hand you every label twice.
+
+**English and 中文 are Roots' two languages, not Tacet's.** Everything below is written against the EN+中文 pair because that is what the code implements today — one toggle, one ` · ` splitter, one `hasChinese` guard. `docs/tacet-consolidation-decisions.md` §0 makes language **per-business configuration that does not yet exist**: English-plus-Chinese may not be assumed or required, a single-language business must not be forced to supply two names for everything, and a business using two other languages must be supported. **The one-language-on-screen rule survives that unchanged** — it governs how many languages render at once, not which ones exist. **What does not survive is the assumption of exactly two, and that they are these two.** Do not cite this section to justify a second name field a business never asked for, or a splitter that can only recognise Chinese on the right-hand side. A plan for scaling languages is an open question in §0, not settled infrastructure — so treat the mechanism below as the current implementation, accurately described, and not as a decision already made.
 
 **Scope: surfaces the reader can switch.** *(Clarified 2026-07-30.)* This rule exists because the admin shell has a language toggle and a live DOM-walker that splits `English · 中文` source pairs. Where neither exists — a WeCom card, an SMS, a printed receipt, anything leaving the shell — the reader cannot choose a language, so "one language on screen" has nothing to attach to. Those surfaces carry both languages in whatever idiom they already use, consistently. **Decided 2026-07-30**, on the counter-sale WeCom card: its existing rows are `订单号 Order:`, and inventing a split format for one branch would have made a single message inconsistent with itself to satisfy a rule that does not bind there. The test is not *are both languages present* — it is *can the reader pick one.* **A mockup is not one of these surfaces.** It is a drawing of a switchable one, so the scope note does not reach it and the English-only rule below stands unchanged. If you are deciding whether this paragraph applies, ask whether the thing you are building is the surface itself or a picture of it.
 
@@ -615,10 +617,10 @@ A merchant reading Chinese should see a Chinese screen. A merchant reading Engli
 
 **In mockups: English only.** Never render both. A mockup with glued labels is designing a screen no operator will ever see. *(This is the only mockup rule that lives here. A mockup's other hard limit — **chrome is quoted, never drawn** — is in §0, with the rest of them.)*
 
-**But the winning direction is verified in 中文 before it ships.** This is the trap: 中文 is usually *shorter* than English — `订单` is two glyphs where `Orders` is six — so an English layout can look correct and leave Chinese columns swimming in space, or an English column sized to `Awaiting restock` wastes half its width on `待补货`. Column widths must work in both. **Design in English, verify in Chinese, ship both.**
+**But the winning direction is verified in the other language before it ships.** This is the trap: 中文 is usually *shorter* than English — `订单` is two glyphs where `Orders` is six — so an English layout can look correct and leave Chinese columns swimming in space, or an English column sized to `Awaiting restock` wastes half its width on `待补货`. Column widths must work in every language the business has configured. **Design in one, verify in the others, ship all of them** — today, on this tenant, that reads: design in English, verify in Chinese, ship both. The measurement trap generalises even when the pair does not: any two languages disagree about how much room a word takes.
 
-- CJK: **Source Han Sans** (Noto Sans SC) pairs with Inter. Line-height **1.7** for CJK runs — CJK glyphs need the air.
-- Every label needs both strings in the source. A screen that can only render English is not done.
+- CJK: **Source Han Sans** (Noto Sans SC) pairs with Inter. Line-height **1.7** for CJK runs — CJK glyphs need the air. *(Applies where CJK is configured; it is a typography rule for a script, not a claim that every business has one.)*
+- Every label needs a string in **each language the business has configured** — today both halves of the EN+中文 pair, and a screen that can render only one half of a configured pair is not done. **This is not a requirement for two names in the abstract:** per §0 a single-language business supplies one, and must not be made to invent a second.
 
 **The part that will bite you: there is a live DOM-walker.**
 
@@ -904,7 +906,7 @@ The rule is *don't create new collisions*, never *refuse to touch old ones*.
 
 *Added 2026-07-29, decided by Ash from a measured three-variant mockup (`reference/datetime-format-mockup.html`).*
 
-**The rule, in one line: the surface's language picks the convention, and then that convention is followed completely.** English renders US dates and times. Chinese renders Chinese dates and times. There is no third style, no house style, and no per-page exception.
+**The rule, in one line: the surface's language picks the convention, and then that convention is followed completely.** English renders US dates and times. Chinese renders Chinese dates and times. There is no third style, no house style, and no per-page exception. *(Scope, per `docs/tacet-consolidation-decisions.md` §0: English and 中文 are the two languages Tacet renders **today**, not the two it will only ever render. The rule itself is language-neutral — **each language follows its own actual rules** — so a third language arrives with its own convention and its own row in the table below. That is the rule applying, not an exception to it. What "no third style" forbids is an **invented house format**, not a third language.)*
 
 **Why this section exists.** This document legislated tabular numerals in six places and never once said what a date looks like. So eight formats shipped, none of them chosen:
 
@@ -1556,6 +1558,30 @@ Small, non-blocking. Resolve during Batch 0.
    published said these were unmade — that was wrong, and it was wrong because the amendment's
    own §7 reads as a to-do list and was taken at its word instead of checked against the
    blueprint. §7 of that document is a record of what was owed in July, not a live queue.)*
+
+---
+
+*v4.1 · 2026-07-31.*
+
+**v4.1 changes — §1.11 and §1.18 stop treating English-plus-Chinese as the world. No page rule added or removed; two rules had their scope corrected.**
+
+### §1.11 — the language rule is language-neutral now
+
+**v4.0 opened:** *"The rule: the interface renders in exactly one language. **English or 中文.** Never both."* — and further down: *"Every label needs both strings in the source. A screen that can only render English is not done."* and *"Design in English, verify in Chinese, ship both."*
+
+**v4.1 says one language renders at a time, whichever the reader chose**, and states plainly that **English and 中文 are Roots' two languages, not Tacet's.** A label needs a string in **each language the business has configured** — which for a single-language business is one, and §0 says that business must not be made to invent a second.
+
+**What did not change, and this matters:** the one-language-on-screen rule itself, the never-glued rule, the wrong/right table, the mockups-English-only rule, and the whole DOM-walker section — the ` · ` splitter, the two gates, the `hasChinese` guard, `data-no-i18n`, the over-shielding failure. That is an **accurate description of the code as it stands** and it is left exactly as it was. The section now says which parts are the rule and which are today's implementation, so a future reader cannot cite the mechanism as a decision.
+
+**Why:** `docs/tacet-consolidation-decisions.md` §0 governs and wins over anything here. Language is per business; English-plus-Chinese may not be assumed or required; a business using two other languages must be supported; and a plan for scaling languages is listed there as an **open question**, not settled infrastructure. This is the same correction §1.16 took at v4.0, applied to the rule that touches every string in the product. `tacet-multibusiness-audit.md` **J5** made it against the IA blueprint's copy of the claim and never reached the rulebook's own.
+
+### §1.18 — "no third style" does not mean "no third language"
+
+The dates rule listed English and Chinese and closed with *"There is no third style, no house style, and no per-page exception."* With exactly two languages that is exhaustive; with a third it reads as a ban. A scope clause now says what the clause always meant: **it forbids an invented house format, not a third language.** The rule's own principle — *each language follows its own actual rules* — already generalises, so a third language arrives with its own convention and its own row.
+
+**The table and the executable check are untouched.** `scripts/td-datetime-check.js` asserts every row in both languages; nothing in this bump changes a format, a row, or what the check tests.
+
+Everything else unchanged from v4.0.
 
 ---
 

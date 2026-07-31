@@ -1,6 +1,8 @@
-# Tacet brand concept — v1.2
+# Tacet brand concept — v1.3
 
 > Companion to `tacet-design-system.md`. That file governs how Tacet looks; this file governs what Tacet is, how it thinks, and how it sounds. Use both together when generating any Tacet asset — screens, decks, pages, or copy.
+>
+> **v1.3 (2026-07-31):** two China-first framings removed, both under `docs/tacet-consolidation-decisions.md` §0. *What Tacet is* defined the product as consolidating "**WeChat Mini-Programs**, custom websites, mobile apps" — naming one country's channel as the canonical first example in the sentence that says what the product *is*. It now reads "online marketplaces, custom websites, mobile apps, sales made in person." The *Language note* (was *Bilingual note*) already lost its "must work in English and Chinese (WeChat ecosystem)" framing as audit finding **J8**, which also fixed the elevator pitch; **J8 did not reach this line**, and the sweep that found it also found the same claim surviving in the rulebook's §1.11 and the IA blueprint's header. **Nothing about the brand itself changed** — not the name, the tagline, the enemy, the voice, the naming rule, or the Chinese companion-name candidates, which stay recorded for the first business's market.
 >
 > **v1.2 (2026-07-19):** one line added to *Audience* — Tacet is designed for its audience of merchants, never around its first tenant's habits. The enforceable version lives in `tacet-desktop-patterns.md` §1.1b (the usage axis, added the same day); this line makes it brand law too. Nothing else changed.
 >
@@ -8,7 +10,7 @@
 
 ## What Tacet is
 
-Tacet is a sophisticated, unified administrative dashboard with silent AI automations for digital merchants. It consolidates fragmented tools — WeChat Mini-Programs, custom websites, mobile apps — into a single point of control. The product is software; what it sells is **operational peace of mind** for business owners exhausted by daily platform jumping.
+Tacet is a sophisticated, unified administrative dashboard with silent AI automations for digital merchants. It consolidates fragmented tools — online marketplaces, custom websites, mobile apps, sales made in person — into a single point of control. The product is software; what it sells is **operational peace of mind** for business owners exhausted by daily platform jumping.
 
 **The name:** *tacet* is the musical notation that tells a musician: rest — the orchestra plays without you. That is the product promise in one word. The merchant rests. The system plays. Pronounced TAH-set, always written lowercase.
 

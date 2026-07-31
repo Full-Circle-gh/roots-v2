@@ -61,8 +61,13 @@ Media = immediate mutations (upload/delete fire on the spot; delete confirms).
    ⇄ "All changes saved · [time]" (Sage when clean); ghost "Discard changes"
    (dirty-only) → Brick-outline confirm with explicit no-undo wording; caption
    "Changes appear in your shop within a minute of saving." No autosave, no
-   publish, no per-section save. Bilingual CONTENT fields (each EN + 中文,
-   separate labelled inputs — NEVER glued); page chrome English-only.
+   publish, no per-section save. CONTENT fields carry **one input per language
+   the business has configured** — today EN + 中文 — separate and labelled,
+   NEVER glued; page chrome renders one language. *(Per
+   `docs/tacet-consolidation-decisions.md` §0 the language set is per business.
+   The never-glued rule and the separate-labelled-inputs pattern survive
+   unchanged; the assumption of exactly two languages, and that they are English
+   and Chinese, does not — a single-language business supplies one field.)*
 3. **Media is a library, not a form** — no Save button, no dirty state;
    uploads/edits/deletes are immediate and the design makes that honest.
 

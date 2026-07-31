@@ -69,8 +69,10 @@ case, 21 controls), Hero (the converted rebel). Locked rules:
 5. **Shared chrome:** icon + block name header · optional cream info-note ·
    sections · "Delete this block" (Brick outline). Section headers 13px
    Inter 500 sentence case — the live ALL-CAPS is CSS styling, retired.
-6. **Field components, one look each:** text · number · bilingual pair (EN
-   and 中文 stacked, separate labelled inputs, NEVER glued) · select ·
+6. **Field components, one look each:** text · number · language set (one
+   stacked, separate, labelled input per configured language — today EN and
+   中文 — NEVER glued; the set is per business, not fixed at two:
+   `docs/tacet-consolidation-decisions.md` §0) · select ·
    colour (swatch chip → 14-token grid, NO free hex) · toggle (Graphite
    "on", zero Dusk) · image (thumb + Upload/Library/Clear) · repeater
    (collapsible rows, drag handle, ×, ghost Add) · linked-item picker

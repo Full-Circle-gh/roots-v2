@@ -1,6 +1,18 @@
 # Tacet admin — IA blueprint
 
-**v2.4 · §§1, 3, 4, 7, 8, 9 amended 2026-07-29 (rail drill-down + Content rename). §2 amended 2026-07-25 (survey-corrected). Surveyed 2026-07-16 from `/root/roots-v2` (roots-v2-hk), not from v1 of this document.**
+**v2.5 · header line reversed 2026-07-31 (see below). §§1, 3, 4, 7, 8, 9 amended 2026-07-29 (rail drill-down + Content rename). §2 amended 2026-07-25 (survey-corrected). Surveyed 2026-07-16 from `/root/roots-v2` (roots-v2-hk), not from v1 of this document.**
+
+> ## 🔴 v2.5 changes, 2026-07-31 — the header line above reversed. Read this if you read v2.4.
+>
+> **v2.4's opening paragraph said:** *"`¥` and China channels are tenant configuration, not brand."*
+>
+> **v2.5 says the opposite.** They are **Roots'** currency and **Roots'** channel list, hardcoded today — **per-business configuration that does not yet exist**, not brand and **not settled**. `docs/tacet-consolidation-decisions.md` **§0 governs** and wins over anything in this document: currency is per business, the channel list is not a fixed set (GZ Grocery in particular is specific to one customer), and the hardcoding is a **defect to be removed**, not a decision already made.
+>
+> **Why this matters more than a wording tweak.** "Tenant configuration, not brand" is the exact claim the rulebook reversed at v4.0 as audit finding **J6**, where it had been predicted that the line would be cited as authority to leave the hardcoding alone. The same sentence was sitting in this document's **first paragraph** — the framing every reader of the IA passes through — and it survived **both** §J findings aimed at this file: **J4** fixed the `¥` annotations in §4's Skin column, **J5** fixed the "tenant configuration (per merchant), not brand" list in §9, and neither reached line 7. It was corrected in `b0c4f265` with no version bump; this is that bump.
+>
+> **Nothing else in this document changed at v2.5.** §4's Skin column and §9's per-business list already carry the corrected framing from J4 and J5. The `Skin?` annotations still read `money`, `China-only`, `WeChat framing` and so on — those are **accurate records of what a surface depends on today**, which is the point of the column.
+>
+> **The rail drill-down amendment is fully discharged** (`tacet-desktop-patterns.md` §10.7): every §7 item owed to this document landed at v2.4, and the last outstanding one — a header line on `tacet-editor-addendum.md` — landed 2026-07-31.
 
 > **v2.4 changes, all from `tacet-rail-drilldown-amendment.md` (2026-07-29):** rail groups stop flying out to the right and **drill down inside the rail** · the `Editor` group is renamed **`Content · 内容`** and its own page becomes an ordinary child row named **`Editor`** · a **child→parent map** is added so the rail resolves its own level · gate 1 gains a **flatten-at-one** rule · §8's "two editors" line is corrected — the Product Page Editor has **no independent route**.
 
