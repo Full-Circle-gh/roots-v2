@@ -1,9 +1,10 @@
 'use strict';
 
-// A closed shop must not be handed orders — not by routeOrder, not by
-// analyzeShortage (the checkout out-of-stock modal), not by the pickup list.
-// This walks all three with Yuexiu closed and asserts every one of them lands
-// on Tianhe instead, and that reopening puts Yuexiu straight back.
+// A closed shop must not be handed orders and must not be counted as stock —
+// not by routeOrder, not by analyzeShortage (the checkout out-of-stock modal),
+// not by the pickup list, and not by the catalog's sellable-stock expression.
+// This walks all four with Yuexiu closed and asserts every one of them lands on
+// Tianhe alone, and that reopening puts Yuexiu straight back.
 //
 //   node scripts/verify-closed-store-routing.js
 //
@@ -49,12 +50,19 @@ function check(name, actual, expected) {
   results.push({ ok, name, actual, expected });
 }
 
-// ── Fixture: two shops, one product, both shelves stocked ────────────────────
+// ── Fixture: two shops, three products ───────────────────────────────────────
+// 1 is on both shelves, 2 only ever sat at Yuexiu, 3 was never stocked per-store
+// and still carries only the legacy flat column.
 const PRODUCT_ID = 1;
-db.prepare(
-  `INSERT INTO store_products (id, name_en, name_cn, sku, sell_price, is_published, is_active)
-   VALUES (?, 'Mango Kombucha', '芒果康普茶', 'KMB-MNG', 29, 1, 1)`
-).run(PRODUCT_ID);
+const YUEXIU_ONLY_ID = 2;
+const NEVER_STOCKED_ID = 3;
+const addProduct = db.prepare(
+  `INSERT INTO store_products (id, name_en, name_cn, sku, sell_price, stock_qty, is_published, is_active)
+   VALUES (?, ?, ?, ?, 29, ?, 1, 1)`
+);
+addProduct.run(PRODUCT_ID, 'Mango Kombucha', '芒果康普茶', 'KMB-MNG', 0);
+addProduct.run(YUEXIU_ONLY_ID, 'Raisins', '加州大葡萄干', 'RSN-CA', 99);
+addProduct.run(NEVER_STOCKED_ID, 'Pumpkin Seeds', '生南瓜子', 'PMP-SD', 7);
 
 const addStore = db.prepare(
   `INSERT INTO retail_stores (code, name_en, name_cn, city, district, is_active, pickup_enabled, sort_order)
@@ -63,13 +71,21 @@ const addStore = db.prepare(
 const TIANHE_ID = addStore.run('tianhe', 'Roots Tianhe', '天河区', '天河区', 1).lastInsertRowid;
 const YUEXIU_ID = addStore.run('yuexiu', 'Roots Yuexiu', '越秀区', '越秀区', 2).lastInsertRowid;
 
-const setStock = (storeId, qty) => db.prepare(
+const setStockOf = (storeId, productId, qty) => db.prepare(
   `INSERT INTO retail_store_stock (store_id, product_id, physical_qty, safety_buffer)
    VALUES (?, ?, ?, 0)
    ON CONFLICT(store_id, product_id) DO UPDATE SET physical_qty = excluded.physical_qty`
-).run(storeId, PRODUCT_ID, qty);
-setStock(TIANHE_ID, 50);
-setStock(YUEXIU_ID, 50);
+).run(storeId, productId, qty);
+const setStock = (storeId, qty) => setStockOf(storeId, PRODUCT_ID, qty);
+setStock(TIANHE_ID, 30);
+setStock(YUEXIU_ID, 20);
+setStockOf(YUEXIU_ID, YUEXIU_ONLY_ID, 12);
+
+// The catalog's stock expression, run exactly as routes/retail.js builds it.
+const sellable = (productId) => db.prepare(
+  `SELECT ${inventory.sellableStockSql('p.id', 'p.stock_qty')} AS stock
+     FROM store_products p WHERE p.id = ?`
+).get(productId).stock;
 
 // Closure switches, each written the way its own admin endpoint writes it.
 const setShopOpen = (code, open) => db.prepare(
@@ -120,17 +136,24 @@ const analyze = () => inventory.analyzeShortage({ address: ADDRESS, items: ITEMS
     check('shop closed: dropped from pickup',         inventory.onlineFullyClosedStores().has('yuexiu'), true);
     check('shop closed: tianhe still takes pickups',  inventory.onlineFullyClosedStores().has('tianhe'), false);
 
-    // 3. Reopening restores it — the closure is a live read, nothing is stamped
+    // 3. The catalog stops counting the closed shelf. Yuexiu is still closed here.
+    check('shop closed: catalog counts open shelves only', sellable(PRODUCT_ID), 30);
+    check('shop closed: its own stock reads sold out',     sellable(YUEXIU_ONLY_ID), 0);
+    check('shop closed: never-stocked keeps legacy qty',   sellable(NEVER_STOCKED_ID), 7);
+
+    // 4. Reopening restores it — the closure is a live read, nothing is stamped
     //    on the customer or the address that would outlive it.
     openEverything();
+    check('reopened: catalog counts both shelves again', sellable(PRODUCT_ID), 50);
+    check('reopened: its own stock is buyable again',    sellable(YUEXIU_ONLY_ID), 12);
     check('reopened: routes to the district shop again', (await route()).store?.code, 'yuexiu');
 
-    // 4. Closed the other way (per-channel cells) behaves identically.
+    // 5. Closed the other way (per-channel cells) behaves identically.
     setChannelOpen('yuexiu', false);
     check('channels closed: reroutes to tianhe',      (await route()).store?.code, 'tianhe');
     check('channels closed: modal names tianhe',      (await analyze()).nearest?.store?.code, 'tianhe');
 
-    // 5. Regression guard: an OPEN shop that is merely out of stock still raises
+    // 6. Regression guard: an OPEN shop that is merely out of stock still raises
     //    the 5-option modal against itself. Closing must be the only thing that
     //    removes a shop from the pool — an empty shelf is a different question.
     openEverything();
@@ -141,7 +164,7 @@ const analyze = () => inventory.analyzeShortage({ address: ADDRESS, items: ITEMS
     check('open but empty: offers tianhe',            shortAnalysis.fallback?.store?.code, 'tianhe');
     setStock(YUEXIU_ID, 50);
 
-    // 6. Both shops closed — there is nowhere to send the order, and checkout
+    // 7. Both shops closed — there is nowhere to send the order, and checkout
     //    must hear that rather than silently pick a closed shop.
     setShopOpen('tianhe', false); setShopOpen('yuexiu', false);
     check('all closed: routing refuses',  (await route()).error, 'no_active_store');
