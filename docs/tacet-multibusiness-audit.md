@@ -48,6 +48,18 @@ The shortest honest statement: **Tacet today is a single-tenant Roots installati
 
 ---
 
+## How to work a finding — read this before section A
+
+1. **Every finding is filed as `file:line`. That is where it was *found*, not how far it *goes*.** A finding is usually a **claim** or a **pattern**, and a claim has more homes than the instance someone grepped.
+
+2. **Evidence.** J6 was filed as one line in the rulebook. Fixing it (`98efab92`) left the claim standing; `b0c4f265` hit another by accident; a sweep for the claim rather than its wording (`00cf8bb3`) found **five instances across six files**. Two sat in files **J4, J5 and J8 had already been through**.
+
+3. **Therefore:** treat a cited line as one instance, never the extent. Before closing any finding in A–I, **grep for the claim in its own words**, not the phrasing quoted here.
+
+4. **Highest risk: D, E, C and H** — currency, language, geography, channels. Already in the thousands of call sites, so a line number is the least useful thing about them.
+
+---
+
 ## A. Full Circle residue
 
 The name is retired by rule 1. It survives in 31 code files, plus docs and 3 PDFs. Most are comments; the ones below are live UI, live config, or live behaviour.

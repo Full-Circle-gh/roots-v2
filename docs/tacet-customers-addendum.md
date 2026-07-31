@@ -84,7 +84,10 @@ A denylist accepts everything invented after it was written.
   understated a genuine ¥1,000 top-up as ¥18.60** — off by ¥981.40. The
   negative looked wrong and got caught; the small positive never would have.
   Replaced with an allowlist (`IN ('wechat','alipay')`), matching a correct
-  precedent already in the file.
+  precedent already in the file — though the **pattern** is what is correct
+  here, not the pair: those two values are Roots' payment methods, and which
+  payment methods exist is per business under
+  `docs/tacet-consolidation-decisions.md` §0.
 - An unmatched value must render **unknown**, never fall through to a
   plausible default. Visibly odd beats plausibly wrong.
 
