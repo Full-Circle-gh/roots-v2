@@ -1,6 +1,10 @@
-# Tacet stock model — how the store side actually behaves
+# Tacet stock model — how the store side actually behaves — v1.1 · 2026-07-31
 
-**2026-07-30 · Read-only behavioural survey of `retail_store_stock`, `retail_stock_reservations`, `retail_stock_ledger` and `lib/inventory.js`, written before this model is adopted as the shared core. Every claim is cited to a file and line. Where the code does not settle a question the entry says UNVERIFIED and why. No row data was read. No file was changed except this one.**
+**Surveyed 2026-07-30 · Read-only behavioural survey of `retail_store_stock`, `retail_stock_reservations`, `retail_stock_ledger` and `lib/inventory.js`, written before this model is adopted as the shared core. Every claim is cited to a file and line. Where the code does not settle a question the entry says UNVERIFIED and why. No row data was read. No file was changed except this one.**
+
+> **⚠ Read §1's *The buffer is unbuilt* before designing anything in the Stock stage.** `safety_buffer` is a column with no way in: **no screen anywhere sets it**, so it is `0` on every row any live path can create, and the `− safety_buffer` term in the availability formula subtracts nothing. `docs/tacet-consolidation-decisions.md` §10 adopts the buffer as part of the core and says it is "Set by whoever runs production" — nobody can set it today. **It has to be built, not carried across.** Verified against the code 2026-07-31; see §1.
+>
+> **⚠ `lib/inventory.js` line citations below are stale.** The file has changed three times since this survey was written (`ca50abe6`, `1bcf7925`, `a2b92277`) and has grown by roughly 130 lines, so citations into it point ~55–130 lines short — `getAvailable` is now at `:221`, `adjustStock` at `:838`, `upsertStockLayer` at `:883`. Every *claim* was re-checked and still holds; only the line numbers drifted. Citations into `database.js`, `routes/` and `public/` were spot-checked and are still accurate. Re-anchoring the whole file was not done — it is a mechanical pass someone should run before the Stock stage starts.
 
 > **What this document is: a SURVEY, not a specification.** It records how the store-side stock model behaves today, as configured and exercised by **one business**. The store topology and the ¥ figures below are that business's, not the product's, and nothing here may be read as a Tacet default (`docs/tacet-consolidation-decisions.md` §0).
 
@@ -25,8 +29,8 @@ The single biggest issue: **there are two different answers to "how many can we 
 Every inconsistency found, most damaging first:
 
 1. **Two availability formulas.** The catalogue/storefront `stock` figure is a raw `SUM(physical_qty)` across active stores (`routes/retail.js:902-908`), while the checkout gate uses `physical − safety_buffer − active holds` (`lib/inventory.js:163-188`). A shopper can be shown stock the checkout will refuse. §3.
-2. **`safety_buffer` is applied to nothing except the mini-app/web availability check.** It is documented as "held back from any channel" (`database.js:2588`), but all three outbound channel queues push the raw `physical_qty` (`lib/meituan-bundles.js:76-82`, `lib/guanyi-sync.js:21-27`, `lib/eleme-sync.js:29-35`). Meituan/Eleme/Guanyi are told the un-buffered number. §1, §7.
-3. **`meituan_quota` is dead.** Every caller of `getAvailable` passes `'wechat'` (grep, §3), so the Meituan branch at `lib/inventory.js:176` never executes. The column is stored, editable in the admin UI (`routes/retail-inventory.js:342`), and read by no decision. §1.
+2. **`safety_buffer` is unbuilt, and applied to nothing except the mini-app/web availability check.** **No screen anywhere sets it** — added 2026-07-31, see §1 — so it is `0` on every row and subtracts nothing. Even if it were set, it is documented as "held back from any channel" (`database.js:2588`) but all three outbound channel queues push the raw `physical_qty` (`lib/meituan-bundles.js:76-82`, `lib/guanyi-sync.js:21-27`, `lib/eleme-sync.js:29-35`). Meituan/Eleme/Guanyi are told the un-buffered number. §1, §7.
+3. **`meituan_quota` is dead.** Every caller of `getAvailable` passes `'wechat'` (grep, §3), so the Meituan branch at `lib/inventory.js:176` never executes. The column is stored, accepted by the stock PATCH endpoint (`routes/retail-inventory.js:342`), and read by no decision. **Correction, 2026-07-31: it is not "editable in the admin UI" as this line previously claimed** — no screen sends it, exactly as with `safety_buffer` and `wechat_quota` (§1). §1.
 4. **Negative stock is handled three different ways.** Order commit has no floor and can drive a row below zero (`lib/inventory.js:476`, `523`); `adjustStock`'s delta path floors at 0 and silently loses the shortfall (`lib/inventory.js:712`); channel ingest clamps at 0 outside the transaction (`routes/meituan-internal.js:226`). §6.
 5. **Writes to stock that produce no ledger row.** `upsertStockLayer` changes the sellable quantity (buffer/quotas) and writes nothing to the ledger, and creates rows with no audit trail (`lib/inventory.js:751-775`). Two migrations insert physical counts directly (`database.js:3234`, `3284`). §4.
 6. **A committed order against a missing stock row writes a ledger entry for a movement that never happened** — the `UPDATE` matches no row, and `balance_after` is recorded as 0 (`lib/inventory.js:476-488`, `523-534`). §6.
@@ -34,7 +38,7 @@ Every inconsistency found, most damaging first:
 8. **A manual/walk-in order with no store attached never decrements stock, and nothing flags it.** `commitUnreservedOrder` returns `skipped: 'no_store'` (`lib/inventory.js:510`), and `isStockPending` ignores the `manual` channel (`lib/inventory.js:557`). Store is optional on that endpoint (`routes/retail.js:18999-19008`). §4.
 9. **Only Meituan has a backstop for a failed outbound sync.** `lib/meituan-drift-sweep.js` re-compares and re-queues; Guanyi and Eleme are edge-triggered only, so a terminal error freezes that channel's stock until a human notices. §7.
 10. **Read-then-write outside the transaction** in the channel ingest paths and the kitchen product page: the current quantity is read, then an absolute new value is written (`routes/meituan-internal.js:219-227`, `routes/eleme-internal.js:119-121`, `routes/products.js:579-604`). A concurrent order commit in between is overwritten. §5.
-11. **`safety_buffer` carries two unrelated meanings.** Availability holdback in `lib/inventory.js:173`, and reorder point in purchasing, where a zero buffer silently becomes 5 (`routes/retail-purchasing.js:628`, `public/retail-admin/16-purchasing.js:505`). §1.
+11. **`safety_buffer` carries two unrelated meanings, and purchasing invents a value for it.** Availability holdback in `lib/inventory.js:173`, and reorder point in purchasing, where a zero buffer silently becomes **5** (`routes/retail-purchasing.js:628`, mirrored client-side at `public/retail-admin/16-purchasing.js:505`). Because nothing sets the buffer (finding 2), the stored value is *always* zero — so **5 is not a fallback, it is the reorder point of every product in the system**, and it also drives the suggested order quantity (`retail-purchasing.js:634`). §1, §3 Variant D.
 12. **Reservation expiry is enforced only by a timer, never lazily on read.** `sumActiveReservations` filters on `status = 'active'` and ignores `expires_at` (`lib/inventory.js:146-158`), so an expired hold keeps blocking stock until the sweep runs. §2.
 13. **The `channel` recorded on holds and ledger rows is not the order's real channel.** Checkout hardcodes `'wechat'` even for web-shop orders (`routes/retail.js:9542`), and `commitUnreservedOrder` hardcodes `'wechat'` in the ledger (`lib/inventory.js:528`). §2, §4.
 14. **A kitchen-side id is used as a store-side id.** `routes/products.js:573` validates the product against the kitchen `products` table, then writes store stock keyed on `store_products` ids. Correct only for rows the original fork seeded. §8.
@@ -55,7 +59,7 @@ One row per (store, product). `UNIQUE(store_id, product_id)` at `database.js:259
 | `store_id` | `2585` | Which store's shelf. FK → `retail_stores(id)`, cascade delete. | inserts below |
 | `product_id` | `2586` | Which product. FK text says `products(id)` (`2594`) but the live constraint was repointed to `store_products(id)` by migration `store_products_seed_fk_v1` (`database.js:3805-3823`). Reading the schema here gives the wrong answer. | inserts below |
 | `physical_qty` | `2587` | Units believed to be on the shelf. The only quantity any decrement or increment touches. | `lib/inventory.js:476`, `523`, `603`, `647`, `716`, `720`, `758`, `1322`; migrations `database.js:3234`, `3284` |
-| `safety_buffer` | `2588` | Units held back from the availability calculation. Default 0. | `lib/inventory.js:772` via `upsertStockLayer` only |
+| `safety_buffer` | `2588` | Units held back from the availability calculation. Default 0 — **and 0 in practice on every row, because nothing sets it.** See *The buffer is unbuilt* below. | `lib/inventory.js:772` via `upsertStockLayer` only — reachable from no screen |
 | `wechat_quota` | `2589` | Optional per-channel cap for mini-app/web sales. `NULL` = no cap. | `lib/inventory.js:772` only |
 | `meituan_quota` | `2590` | Intended as the same cap for Meituan. Never read by any live path (see below). | `lib/inventory.js:772` only |
 | `updated_at` | `2591` | Touched by every physical write and every layer write. Not read by any decision; surfaced to the admin at `routes/retail-inventory.js:356`. | same writers |
@@ -82,7 +86,56 @@ Two things this means in practice:
 
 `ignoreOrderIds` (`lib/inventory.js:146-157`) drops one customer's own unpaid holds from both sums, so their abandoned pending order does not make their next attempt read as out of stock.
 
-`safety_buffer` also has a **second, unrelated meaning** in purchasing, where it is read as a reorder point and a zero is silently replaced by 5: `routes/retail-purchasing.js:628` and the same rule client-side at `public/retail-admin/16-purchasing.js:505`. Same column, two meanings, no shared constant.
+### The buffer is unbuilt — nothing sets it
+
+**Added 2026-07-31. Verified by repo-wide grep for `safety_buffer` over `routes/ lib/ scripts/ public/ miniapp/ server.js database.js`, then by reading every front-end caller of the endpoint that could write it.** This was not recorded anywhere before, in this document or any other, and it changes what the Stock stage is being asked to do.
+
+**There is exactly one writer.** `upsertStockLayer` (`lib/inventory.js:883-905` today; cited as `:751-775` elsewhere in this document, see the header note on line drift) filters against an allow-list of four columns — `safety_buffer`, `wechat_quota`, `meituan_quota`, `restock_target` (`lib/inventory.js:884`).
+
+**There is exactly one route into that writer.** `PATCH /api/retail-admin/stores/:storeId/stock/:productId`, which copies those same four keys out of the request body if present (`routes/retail-inventory.js:342-350`).
+
+**No screen sends `safety_buffer` to it.** Every front-end caller of that endpoint sends only `physical_qty`, `delta` or `restock_target`:
+
+| Caller | What it sends |
+|---|---|
+| `public/stock.html:608`, `:648` | `{ delta }` (kitchen add), `{ physical_qty }` (quick stock) |
+| `public/retail-admin/09-products.js:784`, `:2075`, `:2138`, `:6018` | `{ physical_qty }` |
+| `public/app.html:8885` (inline grid cell) | `{ [field] }`, where `field` is `physical_qty` or `restock_target` only (`:8822`, `:8774`) |
+| `public/app.html:12446` (product form, per-store card) | `{ [field] }`, where `field` is `physical_qty` or `restock_target` only (`:12411`, `:12418`) |
+| `public/app.html:9087`, `:17014` | a `patch` object built by the two callers above |
+
+`grep -rIn "safety_buffer\|wechat_quota\|meituan_quota" public/ miniapp/` returns **two hits in total**, both in `public/retail-admin/16-purchasing.js` (`:505`, `:515`) and both **read-only display**. There is no input, no form field, no settings screen. The one place a buffer control is drawn is a mockup that was never built — `design-handoff/15-channels-hub-mockups.html:519`, "Stock quotas · 渠道库存配额 — per-channel quotas & safety buffer".
+
+`GET /api/products/:id/store-stock` even hands the buffer to the product page (`routes/products.js:541`, `:553`) — and the page renders `physical_qty` and `restock_target` and drops it.
+
+**Three consequences, all of which the Stock stage inherits:**
+
+1. **`safety_buffer` is `0` on every row any live path can create.** The column default is `0` (`database.js:2588`), `upsertStockLayer` seeds new rows at `physical_qty = 0` with no layer values, and `adjustStock` creates rows without touching it. The only non-zero writes in the repo are a test fixture (`scripts/verify-closed-store-routing.js:75`) and direct SQL. **UNVERIFIED:** whether any production row carries a non-zero buffer set by hand against the database — that needs the production database, which is gitignored.
+2. **The `− safety_buffer` term in the availability formula subtracts nothing.** `globalRemaining = max(0, physical_qty − safety_buffer − allReserved)` (`lib/inventory.js:231`, and the batch variant at `:282`). Findings 1 and 2 in the summary — the shopper being shown a looser number than checkout will honour — are today caused by reservations alone, not by the buffer.
+3. **The one live consumer of a *non-zero* buffer never gets one, so it invents 5.** See below.
+
+`docs/tacet-consolidation-decisions.md` §10 adopts this model as the core — "physical quantity, safety buffer, per-channel caps, reservations, ledger. Do not design a replacement" — and states "The safety buffer holds stock back from sale. Set by whoever runs production." **That is a design intent, not a description of anything that exists.** The buffer needs building: a screen, a capability, and — per §4 finding 1 — a ledger row, because raising a buffer reduces what can be sold exactly as surely as removing units does.
+
+The same is true of `wechat_quota` and `meituan_quota`; `restock_target` is the only one of the four layer columns any operator can actually set.
+
+### Purchasing invents a buffer of 5
+
+**Added 2026-07-31, verified against the code.**
+
+`safety_buffer` has a **second, unrelated meaning** in purchasing, where it is read as a **reorder point** rather than a holdback, and a stored zero is silently replaced by **5**:
+
+```js
+const buffer = r.safety_buffer > 0 ? r.safety_buffer : 5;
+if (r.physical_qty < buffer) { … }
+```
+
+`routes/retail-purchasing.js:628-629`, inside `GET /api/retail-admin/reorder`. The same rule is duplicated client-side with no shared constant: `(p.safety_buffer > 0 ? p.safety_buffer : 5) - p.physical_qty` at `public/retail-admin/16-purchasing.js:505`.
+
+The 5 does not stop at the threshold. It is carried into the suggested order quantity on the same endpoint — `suggest: Math.max(1, Math.round(buffer * 2 - r.physical_qty))` (`routes/retail-purchasing.js:634`) — so the one-tap draft purchase order proposes topping every product up to **10 units**, and the screen labels the invented number to the operator as 安全库存 / "buffer" (`16-purchasing.js:515`, `:1325`).
+
+**Read together with the section above, this is worse than a fallback.** The stored value is always zero, so the `> 0` branch never runs: **5 is the reorder point of every product in the system, at every store, always.** It is not a default that a business can move off — there is no screen to move it with. A business selling anything that does not reorder in fives — a bakery, a hardware shop, anything sold by weight — gets a reorder list computed against a number nobody chose, which is `docs/tacet-consolidation-decisions.md` §0 rule 2 in miniature.
+
+Same column, two meanings, no shared constant, and a magic number in two files.
 
 ---
 
@@ -158,7 +211,7 @@ So a product with 10 physical, a safety buffer of 3, and 4 units held by unpaid 
 
 ### Variant D — purchasing's "running low"
 
-`routes/retail-purchasing.js:620-634`. Compares `physical_qty` against `safety_buffer`, substituting 5 when the buffer is 0 or unset. This is the only place `safety_buffer` is treated as a reorder point rather than a holdback.
+`routes/retail-purchasing.js:620-634`. Compares `physical_qty` against `safety_buffer`, substituting 5 when the buffer is 0 or unset. This is the only place `safety_buffer` is treated as a reorder point rather than a holdback. **Because no screen sets the buffer, the substitution always fires and 5 is the reorder point for everything** — §1, *Purchasing invents a buffer of 5*.
 
 ### Variant E — what the outbound channels are told
 
@@ -368,3 +421,25 @@ So the number only ever moves when an admin types into it. **UNVERIFIED:** how f
 - Read in part: `database.js` (2554-2660, 2890-2905, 3218-3300, 3800-3860, 3950-4005), `routes/retail.js` (888-920, 1276-1370, 4328-4360, 8700-8740, 9490-9570, 12690-12730, 13316-13400, 18888-19115, 22220-22240, 22860-22990), `routes/products.js` (525-655), `routes/restock.js` (200-262), `routes/retail-purchasing.js` (95-125, 615-640), `routes/meituan-internal.js` (210-400), `routes/eleme-internal.js` (115-125), `scripts/meituan-daemon.js` (555-760), `scripts/guanyi-daemon.js` (110-260, 420-470), `scripts/eleme-daemon.js` (300-400), `public/app.html` (8520-8550, 13300-13330, 18040-18200), `public/pos.html` (1360-1455).
 - Statements about "the only writer" / "every call site" come from repo-wide greps over `routes/ lib/ scripts/ public/ server.js database.js` for the table names, the exported function names, `getAvailable(`, `safety_buffer`, `stock_qty` and `market_stock`.
 - Not verifiable from the repo, and therefore not asserted: live quantities, how many rows carry a non-zero `safety_buffer` or a non-null quota, actual drift in `market_stock`, and how often the negative-stock or missing-row paths have fired in production. All of those need the production database, which is gitignored.
+
+**v1.1 additions, 2026-07-31.** For §1 *The buffer is unbuilt* and *Purchasing invents a buffer of 5*:
+
+- Grep for `safety_buffer` over `routes/ lib/ scripts/ public/ miniapp/ design-handoff/ server.js database.js` — every hit read. Grep for `wechat_quota` and `meituan_quota` over `public/ miniapp/` — zero hits.
+- Read in full: `lib/inventory.js:883-905` (`upsertStockLayer`), `routes/retail-inventory.js:278-360` (the stock PATCH), `routes/retail-purchasing.js:608-655` (the reorder endpoint), `routes/products.js:535-560` (the per-store stock read).
+- Every front-end caller of `PATCH /stores/:storeId/stock/:productId` was located by grep and its request body read: `public/stock.html:608, 648`; `public/retail-admin/09-products.js:784, 2075, 2138, 6018`; `public/app.html:8885, 9087, 12446, 17014`. For the two dynamic-field callers the permitted `field` values were read off the markup that populates them (`public/app.html:8774, 8822, 12411, 12418`). `public/app.html.bak` was ignored.
+- Line-number drift into `lib/inventory.js` was established from `git log --since=2026-07-25 -- lib/inventory.js` (three commits) and by re-locating the function definitions. Citations elsewhere in this document were not re-anchored.
+- Not asserted, for the same gitignored-database reason as above: whether any live row carries a non-zero buffer written directly against the database rather than through the application.
+
+---
+
+## Changelog
+
+**v1.1 · 2026-07-31**
+
+- Recorded two facts about `safety_buffer` that were not written down anywhere, both verified against the code and cited: **the buffer is unbuilt** — no screen sets it, so it is 0 on every row and subtracts nothing (§1, new subsection); and **purchasing invents a buffer of 5** when the stored value is zero, which, given the first fact, means 5 is the reorder point for every product in the system rather than a fallback (§1, new subsection).
+- Added a header warning pointing a Stock-stage reader at both.
+- Summary finding 2 rewritten to lead with the buffer being unbuilt. Finding 11 rewritten to say the invented 5 always fires and also drives the suggested order quantity. Finding 3 **corrected**: it claimed `meituan_quota` was "editable in the admin UI"; it is accepted by the PATCH endpoint but no screen sends it.
+- §1 column table: the `safety_buffer` row now says the writer is reachable from no screen. §3 Variant D cross-references the new subsection.
+- Added a header note that `lib/inventory.js` citations throughout this document are stale by ~55–130 lines after three commits since the survey (`ca50abe6`, `1bcf7925`, `a2b92277`). Claims re-checked and still hold; line numbers were not re-anchored.
+- Verification notes extended with what was read for the v1.1 additions.
+- The 2026-07-30 survey as originally written is **v1.0**; it carried no version number, and one is added here so later amendments have something to count from.

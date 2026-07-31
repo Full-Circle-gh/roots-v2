@@ -1,6 +1,8 @@
-# Tacet shared-core consolidation — decisions record, v0.7
+# Tacet shared-core consolidation — decisions record, v0.8
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The open questions in §23 are NOT decided and must not be treated as settled.**
+
+v0.8 · 2026-07-31 — §10 gains two lines: the safety buffer is being BUILT, not adopted (nothing sets it today), and the reorder point is a separate number from the buffer. Both follow from `docs/tacet-stock-model.md` v1.1.
 
 2026-07-30 · The app previously called the kitchen app is now the PRODUCTION APP. The KITCHEN flag on a location, kitchen locations and code identifiers keep their names.
 
@@ -158,6 +160,8 @@ This supersedes the alternative of assigning an owning side per shared field, an
 - RETIRED: `products.stock_qty` and `market_stock`. `market_stock` has not been maintained by any real process; its numbers are untrustworthy and MUST NOT be migrated. Kitchen and market locations require a physical count at cutover.
 - PHYSICAL and AVAILABLE are different numbers. Every screen must state which one it shows.
 - The safety buffer holds stock back from sale. Set by whoever runs production. The shop can only sell what is above the buffer.
+- 🔴 **THE BUFFER IS BEING BUILT, NOT ADOPTED. Recorded 2026-07-31.** The line above describes intent, not anything that exists. `safety_buffer` is a column with **no way in — no screen anywhere sets it** — so it is 0 on every row and the availability formula's `− safety_buffer` term subtracts nothing. Its only live consumer is purchasing, which reads it as a reorder point and, because it is always zero, **invents a buffer of 5 for every product in the system**. The Stock stage owes it a screen, a capability and a ledger row (raising a buffer reduces what can be sold exactly as removing units does, and today writes no ledger entry). `wechat_quota` and `meituan_quota` are unbuilt on the same terms; `restock_target` is the only layer column an operator can set. Full evidence and citations: `docs/tacet-stock-model.md` §1, *The buffer is unbuilt* and *Purchasing invents a buffer of 5*.
+- The reorder point is NOT the safety buffer. They are two different numbers sharing one column today. Whatever the Stock stage builds must separate them, and the reorder point is a per-business setting — 5 is one codebase's magic number, not a Tacet default (§0 rule 2).
 - NEGATIVE STOCK IS ALLOWED. A transfer always applies in full. If the origin holds less than the amount sent, it goes negative and the shortfall is recorded. Chosen over refusing the transfer, because goods have usually physically moved before anyone reaches the screen. SUBJECT TO §0 — this is a business policy and must become a setting, not a system law.
 - A negative balance is a SIGNAL, not an error: the count is wrong and a recount is due. It must appear on a list someone checks, not be buried.
 - Stock must never be silently clamped. Today `adjustStock`'s delta path quietly applies less than requested and discards the shortfall — withdrawn.
@@ -290,10 +294,10 @@ DO NOT ONBOARD A SECOND BUSINESS BEFORE STAGE 5 COMPLETES. Whatever is sold must
 
 ## 24. Related documents
 
-- docs/tacet-glossary.md — binding definitions, v1.0, 2026-07-31. The words in this document are used with the meanings defined there.
+- docs/tacet-glossary.md — binding definitions, v1.1, 2026-07-31. The words in this document are used with the meanings defined there. v1.1 adds CONSOLIDATION and the reserved uses of MERGE, and the APP / MODULE / FRONT END / domain vocabulary derived from §0.1 and §21 of this document.
 - docs/tacet-core-survey.md — verified current-state inventory, 2026-07-30
 - docs/tacet-product-fields.md — product field inventory, 2026-07-31. 78 columns; 41 contested writes.
-- docs/tacet-stock-model.md — stock and reservation behaviour, 2026-07-30. Records 14 inconsistencies in the store stock model; three were live bugs.
+- docs/tacet-stock-model.md — stock and reservation behaviour, v1.1, surveyed 2026-07-30. Records 14 inconsistencies in the store stock model; three were live bugs. v1.1 adds the two facts §10 above depends on: the safety buffer is unbuilt, and purchasing invents a value of 5 for it.
 - docs/tacet-locations-survey.md — locations current state, 2026-07-31. Records that `markets` and `retail_stores` are two complete competing models, and that `retail_stores` already holds everything operationally real.
 - docs/tacet-order-routing.md — how a fulfilment location is chosen (pending).
 - docs/tacet-multibusiness-audit.md — audit against §0, 2026-07-31. 121 findings, 26 blockers. Headline: Roots is the default database, not a row in it.
