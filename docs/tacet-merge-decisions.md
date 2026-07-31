@@ -1,6 +1,6 @@
-# Tacet shared-core merge — decisions record, v0.6
+# Tacet shared-core merge — decisions record, v0.7
 
-**2026-07-31 · A living record of what has been decided so far for the Tacet shared-core merge, so the decisions stop living in chat. Supersedes v0.1. The open questions in §22 are NOT decided and must not be treated as settled.**
+**2026-07-31 · A living record of what has been decided so far for the Tacet shared-core merge, so the decisions stop living in chat. Supersedes v0.1. The open questions in §23 are NOT decided and must not be treated as settled.**
 
 2026-07-30 · The app previously called the kitchen app is now the PRODUCTION APP. The KITCHEN flag on a location, kitchen locations and code identifiers keep their names.
 
@@ -83,6 +83,9 @@ Applies to the PRODUCT record only; items are kitchen-only and need no such spli
 - KITCHEN = production, recipes, costing. STORE = selling and presentation. BOTH = shared, e.g. nutritional facts.
 - Shared (BOTH) fields are editable from BOTH apps. There is no single owning side. DECIDED — do not reintroduce field ownership.
 - The classification itself is pending the tacet-product-fields.md inventory.
+- DIETARY INFORMATION IS CONSOLIDATED. DECIDED. It currently lives in four places — `nutrition`, `free_of`, `product_facts`, and blocks inside `description_blocks`. One dietary record per product; description blocks read from it rather than holding their own copy. Done as part of the Products stage; note it migrates content customers see.
+- NO COST COLUMN EXISTS on either product table. Cost reaches a product only through `recipe_id`, which is dead on the store side. No product has a cost and margin cannot be computed at all. The cost method question therefore has nothing to decide against until a cost field exists.
+- `needs_ice_pack` IS KNOWINGLY BROKEN. It is read live at checkout and decides the shipping label, but no screen can set it, so everything created since it was retired is permanently "no". DECIDED: not restored for now. Do not trust this field and do not build on it.
 
 ## 5. Concurrent edit safety
 
@@ -140,7 +143,9 @@ This supersedes the alternative of assigning an owning side per shared field, an
 - Migrating those twenty tables off the code was considered and REJECTED — more correct in principle, materially more risk, no visible benefit.
 - `markets.kind` carries no behaviour worth inheriting. PHYSICAL / TEMPORARY and the KITCHEN flag are new construction, not a migration.
 - SUBJECT TO §0: the KITCHEN flag needs a business-neutral name. A hardware shop has no kitchen. Rename pending.
-- A THIRD location table exists, out of scope for now: `meituan_stores` (database.js ~842), the finance-import dimension, with its own id space and a `store_id` meaning something different from `retail_store_stock.store_id`. Nothing joins it to `retail_stores`. Do not fold it in without a decision.
+- `meituan_stores` IS RETIRED, as part of the Orders stage. DECIDED — supersedes the earlier open question about folding it in or renaming it. It exists only so the Meituan tab can split takings by shop; that job is done properly by locations plus the Meituan channel plus one order record. It is read-only, populated solely by a manually run import script, and surfaces in exactly one place: the production app's Sales screen, Meituan tab.
+- CARRY OVER WHEN RETIRING IT: the data is Meituan SETTLEMENT data — what Meituan actually paid. The live Meituan connection does not handle settlement; it handles stock and orders. The settlement import must land against a real location and the Meituan channel, in the single order record.
+- Meanwhile the production app shows two lists both labelled "门店 Stores" — one editable (`retail_stores`), one not (`meituan_stores`) — with no visible link. Retiring this resolves it.
 - SAFE CLOSING DOES NOT EXIST TODAY. Both deactivation paths are a bare `is_active = 0` with no stock check and no move-out. Deactivating a retail store leaves stock present but invisible and leaves user bindings pointing at it. The move-out-and-confirm flow is new build.
 - Independent of the merge: the retail deactivation path should unassign its users, which the markets path already does.
 - ONE FORM. Five separate screens currently create or edit a location, each with a different field set, so what a location holds depends on where it was created. The module provides ONE form used everywhere; other screens link to it rather than carrying their own.
@@ -177,6 +182,9 @@ This supersedes the alternative of assigning an owning side per shared field, an
 - The kitchen's separate sales log is RETIRED, not merged. Confirmed: no kitchen-only sales exist.
 - POS is REMOVED from the production app and becomes a sales channel like any other. A POS sale creates an order, moves stock, and lands in the sales record.
 - Existing spreadsheet importers are repointed at the single record.
+- A staff-created order MUST have a location. DECIDED. Today the field is optional; when left blank the order saves with no location, nothing routes it afterwards, and no screen can fix it, so it is permanently unfulfillable. The field becomes required, and a way to change an order's location afterwards is added.
+- Fulfilment is by nearest location to the customer, computed from coordinates. Fulfilment priority survives only as a tiebreaker, not as the rule — confirmed by survey that it decides almost nothing once an address has coordinates.
+- `ORDER_FULFILLMENT_TYPES` carries a third value, `counter`, that never reaches the customer path. Dead; delete it.
 
 ## 14. Channels
 
@@ -241,40 +249,51 @@ ONE state with two positions:
 - SINGLE EXCEPTION: a record with no references anywhere may be hard-deleted — a mistake, a typo, a duplicate created minutes ago. The system must check for references before allowing it.
 - This replaces today's inconsistent behaviour, where categories and kitchen users are hard-deleted with no reference check.
 
-## 21. Rollout order and priority — REVISED
+## 21. Modules — the shared components
 
-PRIORITY: the store app is urgent. The production app is NOT. Production-side setup can be built later without redoing store work, because every decision the store app depends on is already settled.
+Eight modules, each built once and used by any app:
 
-1. LIVE BUGS — before any merge work. All store-side, all costing money now:
-   a. Restock transfer loses stock permanently. FIXED 2026-07-31 (commit ff4c049a), together with the R1 cross-catalogue id guard.
-   b. Safety buffer not applied to Meituan, Eleme or Guanyi — live overselling on three channels.
-   c. Catalogue shows a stock number checkout will not honour.
-2. STORE-SIDE MERGE STAGES: Locations, then Users, then Stock.
-3. Items and products.
-4. Purchasing.
-5. Sales record, channels, time zone.
-6. PRODUCTION APP — deferred. Units, cost method, recipes, yields, packaging and batch stock movement are specified but not scheduled.
+Locations · Products · Items · Stock · Users · Orders · Purchasing · Recipes
 
-NOT CONFIRMED: business blackout periods, and whether anything should jump the queue. Pending Ash.
+- PRODUCTS and ITEMS are SEPARATE modules, matching the two-list decision. They must never be presented, grouped or built as one.
+- ORDERS is a single module. An order is a sale; there is one record and reporting reads from it. There is no separate "sales" module.
+- Not every front end uses every module. Items and Recipes are Production-only until the apps merge. Locations, Products, Stock, Users and Orders are used by both.
+- FOUR front ends exist, not three: Tacet, Production, the customer storefront, and the Back Office. The storefront is not a separately maintained app — it reads the same Products, Stock and Locations modules. What a shopper sees is the same data staff edit, never a copy.
 
-ALSO PENDING: the multi-business audit may surface blockers that compete with this order. Sequence to be revisited once that report exists.
+## 22. Rollout order and priority — REVISED 2026-07-31
 
-## 22. Open questions — NOT DECIDED
+CONTEXT: a second business is a TARGET, months away. No specific customer is waiting. Confirmed: no blackout periods, and nothing needs to jump the queue.
 
-- COST METHOD — NOT DECIDED. Options: last price paid; weighted average of stock on hand; a manually set standard price. Recommendation was weighted average, so margins reflect what stock actually cost. Not chosen. If the store app is to show margin, this decision is pulled forward.
-- Final KITCHEN/STORE/BOTH classification of every product field — pending docs/tacet-product-fields.md.
-- Whether `low_stock_threshold` and `supplier_paused` are store fields or operational fields production also needs.
+1. LIVE BUGS. Restock stock loss and the R1 id guard — FIXED (commit ff4c049a). Safety buffer not reaching Meituan, Eleme and Guanyi — STILL OPEN, live overselling. Catalogue showing a stock number checkout will not honour — handled in the Stock stage.
+2. OPEN SIGNUP. The cheap multi-business blockers only: public signup, provisioning without a Roots admin, and removing Roots seed data so a fresh account starts empty. Contained, does not touch the consolidation.
+3. LOCATIONS.
+4. USERS.
+5. STOCK. The floating-point money defect is FOLDED IN HERE, not done separately — those tables are being rebuilt anyway and a standalone migration would touch everything twice.
+6. PRODUCTS AND ITEMS.
+7. PURCHASING.
+8. ORDERS. Includes retiring `meituan_stores` and the separate production sales log.
+9. DEFERRED, after all of the above: multi-currency, additional languages, and the Production app merging into Tacet. These are entangled with everything being rebuilt; doing them first means doing them twice.
+
+NEW ACCOUNTS START IN TACET. DECIDED, recorded as a decision rather than an assumption. To be revisited when Production can be sold on its own — a business that only manufactures would otherwise start in an app about selling to customers.
+
+DO NOT ONBOARD A SECOND BUSINESS BEFORE STAGE 5 COMPLETES. Whatever is sold must be supported. A business arriving on the current model inherits two user lists, a forked catalogue and drifting stock, and unpicking that for two businesses is far worse than for one.
+
+## 23. Open questions — NOT DECIDED
+
+- COST METHOD — still not decided, and now blocked: no cost field exists to decide against.
+- Final PRODUCTION/STORE/BOTH classification of every product field — docs/tacet-product-fields.md now exists; classification not yet done.
+- Whether `low_stock_threshold` and `supplier_paused` are store fields or operational fields Production also needs.
+- The `tags` field: documented as dietary, now used as a display badge. Which it is, and whether it splits.
+- Rules for the three worst contested writes identified in the product field inventory.
+- A plan for scaling languages on both the admin and customer surfaces.
 - A business-neutral name for the KITCHEN location flag.
-- `meituan_stores`: folded into locations, kept as a separate integration dimension, or retired.
-- Business blackout periods and queue-jumping.
-- Which §0 consequences (channels, currency, units, language) become blockers competing with the merge sequence.
 
-## 23. Related documents
+## 24. Related documents
 
 - docs/tacet-glossary.md — binding definitions, v1.0, 2026-07-31. The words in this document are used with the meanings defined there.
 - docs/tacet-core-survey.md — verified current-state inventory, 2026-07-30
-- docs/tacet-product-fields.md — field-level inventory (pending)
+- docs/tacet-product-fields.md — product field inventory, 2026-07-31. 78 columns; 41 contested writes.
 - docs/tacet-stock-model.md — stock and reservation behaviour, 2026-07-30. Records 14 inconsistencies in the store stock model; three were live bugs.
 - docs/tacet-locations-survey.md — locations current state, 2026-07-31. Records that `markets` and `retail_stores` are two complete competing models, and that `retail_stores` already holds everything operationally real.
 - docs/tacet-order-routing.md — how a fulfilment location is chosen (pending).
-- docs/tacet-multibusiness-audit.md — audit against the §0 governing rules (pending).
+- docs/tacet-multibusiness-audit.md — audit against §0, 2026-07-31. 121 findings, 26 blockers. Headline: Roots is the default database, not a row in it.
