@@ -1,4 +1,4 @@
-# Tacet shared-core merge — decisions record, v0.5
+# Tacet shared-core merge — decisions record, v0.6
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core merge, so the decisions stop living in chat. Supersedes v0.1. The open questions in §22 are NOT decided and must not be treated as settled.**
 
@@ -26,6 +26,30 @@ These follow directly from the rules above and correct earlier decisions in this
 
 ### Standing test
 Before any design decision is accepted, it must be checked against a business unlike Roots — for example a hardware shop in Ohio, or a bakery in Lisbon. If the decision only makes sense for a vegan food business in Guangzhou, it is wrong.
+
+## 0.1 Domains and app structure
+
+### Domains — DECIDED
+Everything lives under tacet.com as a subdomain.
+- `app.tacet.com` — where business users work. The Tacet app, Production, and Account settings all live here. ONE domain; moving between them never changes the domain.
+- `backoffice.tacet.com` — Tacet staff only. Separate login and a hard wall: nothing internal may leak into a customer-facing screen.
+- `shopname.tacet.com` — each account's storefront, issued automatically at signup. The account may attach its own domain later, at which point shoppers see that instead. Shoppers should not see Tacet's name on a storefront the account has branded.
+- `tacet.com` itself is reserved for the marketing site and is not an application host.
+
+Current state, for contrast: four separate hosts today — the store console, the production app, the internal console, and per-account storefronts — with the server deciding what to serve by Host header. This grew by accident, one host per app.
+
+### Sections are paths, not hosts — DECIDED
+Within `app.tacet.com`, everything is a path: `/orders`, `/products`, `/account/invoices`. One login, one session, no reload into a different application.
+
+### Iframes — DECIDED
+- NO NEW IFRAMES. New sections are built as paths within the app.
+- Existing frames (Account, the product editor, the CMS) are left alone until other work brings someone into those files. This is not a cleanup project.
+- Reasons: a framed section breaks the browser Back button, cannot be linked to directly, and forces a second copy of the styling and translation layer around it. Account demonstrates the cost — it is a standalone application with its own colour tokens and its own translation engine, which is why it looks like a different product.
+- This directly conflicts with the module principle: a module is built once and used everywhere, and an iframe forces duplication of everything surrounding it.
+- Most sections are NOT iframes today. Orders, Products and the rest are blocks within one page, shown and hidden. Only Account, the product editor and the CMS are genuinely framed.
+
+### Account folds in — DECIDED
+Account settings stop being a separate framed application and become part of the Tacet app, reachable the same way from any app. This is real work, not a configuration change: the current Account is a standalone four-pane application with its own token set and its own i18n engine.
 
 ## 1. Architecture target
 
