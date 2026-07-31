@@ -1,5 +1,18 @@
 # Tacet — Editor group session addendum, 2026-07-20
 
+> **The group is now surfaced as `Content · 内容`.** Renamed 2026-07-29 by
+> `tacet-rail-drilldown-amendment.md` §2.2, absorbed into `tacet-desktop-patterns.md`
+> §1.1 at v4.0. **The filename and every internal id in this document stay as they
+> are** — group id `editor`, tab id `mini-app-editor`, capability strings
+> `editor:view` / `content:view` are all unchanged and load-bearing; renaming this
+> file would break every citation pointing at it. Only the rail **label** changed,
+> and the group's own page became an ordinary child row named `Editor · 编辑器`.
+> Two consequences for reading what follows: **"rail accordion" below is stale** —
+> the groups drill down inside the rail now, they neither accordion nor fly out;
+> and the *"tabbed Content mega-page"* rejected in the structural decisions is a
+> **different thing** from the rail group now called Content — that rejection still
+> stands, the four content pages remain separate rail rows.
+
 > Slots into the canonical set next to the other handoffs/addendums. Method
 > unchanged (mockups-first, Ash-is-not-a-dev, briefs in their own code blocks,
 > one yes/no at a time, survey-first on every page). This records the Editor

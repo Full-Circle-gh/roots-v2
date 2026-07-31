@@ -20,10 +20,14 @@
 > **§6 is closed** — the build shipped in code, including the flyout's `mouseenter`/`focusin`
 > entry points being removed, which §6 did not name but which are destructive for drill-down.
 >
-> **§7 is NOT closed.** The amendments owed to `tacet-ia-blueprint.md` (§1, §3, §4, §7, §8 and
-> lines 84/140) and the header line owed to `tacet-editor-addendum.md` have **not** been made.
-> `tacet-ia-blueprint.md` still describes the flyout and still calls the group Editor. Tracked as
-> `tacet-desktop-patterns.md` §10.7.
+> **§7 is closed.** Every amendment it lists has been made. `tacet-ia-blueprint.md` made all of
+> them at **v2.4 on 2026-07-29** — §1, §3 (plus the map, now its §3.2), §4's CONTENT heading, §7's
+> flatten-at-one, §8's corrected "one editor with two faces", the SWAP-IN line, the
+> `product-editor` notes column, and §9 keeping rail-order under *Keep (structure)*.
+> `tacet-editor-addendum.md` gained its header line on **2026-07-31**.
+>
+> **Read §7 below as a record of what was owed in July, not as a live queue.** It reads like a
+> to-do list and has already been mistaken for one once.
 
 **v1.0 · decided 2026-07-29 · Batch 0 (global shell).**
 **Amends:** `tacet-ia-blueprint.md` §3 (navigation model — the rail) and §7 (gating), and the **Rail** row of `tacet-desktop-patterns.md` §1.1.

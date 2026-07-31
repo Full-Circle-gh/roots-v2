@@ -1519,7 +1519,7 @@ What that kills, with its Tacet replacement:
 | `tacet-tokens.css` | **Superseded** by the live `--td-*` block. Rewrite it to match the code, or delete it. Do not let it become a fourth scheme. |
 | `tacet-orders.md` | **Stale.** Documents the View popover (removed) and Invoices as a tab (retired). **Do not use as a parity baseline** — an audit against it would restore features you deliberately removed. Re-survey during Batch 0. |
 | `tacet-mobile-patterns.md` | **Stale.** Wrong bottom nav (spec: Home/Orders/Inbox/Sales/More; live: Dashboard/Orders/Customers/Products/More). Lists retired sections. Its anchor — "the desktop Orders screen already built" — is being demolished. **Needs v2. Its anchor is now stable** — Orders' design is final (2026-07-17), so mobile can be re-derived against it whenever it comes up. |
-| `tacet-rail-drilldown-amendment.md` | **Absorbed at v4.0.** Its Rail-row instruction now lives in §1.1. Kept as history and for its reasoning; **not a live instruction.** Its amendments to `tacet-ia-blueprint.md` (§1, §3, §4, §7, §8, §9 and lines 84/140) and to `tacet-editor-addendum.md` are **still owed** — see §10.7. |
+| `tacet-rail-drilldown-amendment.md` | **Absorbed at v4.0, fully discharged.** Its Rail-row instruction now lives in §1.1. Kept as history and for its reasoning; **not a live instruction.** Its §7 list of amendments owed to other documents is **closed** — `tacet-ia-blueprint.md` made them all at v2.4 (2026-07-29), `tacet-editor-addendum.md` on 2026-07-31. See §10.7. |
 | `full-circle-design-system.md` | **Retired.** See §8. |
 
 **Mobile alignment.** One archetype vocabulary across both devices. A Library is a Library: rows on desktop, cards on phone — same name, same job, different surface. Mobile v2 should be **re-derived from this document**, not patched. Two conflicts to resolve then: mobile puts Coupons/Flash/Broadcasts in its list→cards archetype (a queue) where desktop calls them Library (a shelf); and mobile's §7 anchors on an Orders page that no longer exists.
@@ -1543,14 +1543,19 @@ Small, non-blocking. Resolve during Batch 0.
    instinct" tidy §1.2 warns against. **What the brief still requires:** correct the
    orientation to match the shell (dark-first, `[data-theme="light"]` the opt-in — it is
    currently light-first) and clear the §1.6 uppercase + the `.acc-*`/`.who-role` rot.
-7. **The rail drill-down amendment's other documents are still owed.** v4.0 absorbed only the
-   Rail row, which is all that document asked of this file. Its §7 also owes edits to
-   `tacet-ia-blueprint.md` (§1 "three collapsible dropdown groups" is no longer accurate; §3
-   the flyout description and the child→parent map; §4 the **EDITOR** table heading becomes
-   **CONTENT**; §7 the flatten-at-one rule; §8 line 231 and line 84 on the `product-editor`
-   entrance; line 140's notes column; §9 keeps rail-order under *Keep (structure)*) and a
-   header line on `tacet-editor-addendum.md`. Until those land, `tacet-ia-blueprint.md` still
-   describes the flyout and still calls the group Editor.
+7. **RESOLVED 2026-07-31 — the rail drill-down amendment is fully discharged.** v4.0 absorbed
+   the Rail row, which is all that document asked of *this* file. Its §7 also listed edits owed
+   to two others; both are done. **`tacet-ia-blueprint.md` had already made every one of them
+   at v2.4 on 2026-07-29** — §1 calls them drill-down folders, §3 replaces the flyout and adds
+   the child→parent map as §3.2, rail entry 11 reads `Content · 内容` with `Editor · 编辑器` as
+   its first child, §4's table heading is **CONTENT**, §7's gate 1 carries flatten-at-one, §8's
+   "two editors" line is corrected to one editor with two faces, the SWAP-IN line and the
+   `product-editor` notes column both say the entrance is inside the Mini App Editor, and §9
+   keeps rail-order under *Keep (structure)*. Only `tacet-editor-addendum.md` was genuinely
+   outstanding; it gained its header line on 2026-07-31. **Nothing is owed.** *(v4.0 as first
+   published said these were unmade — that was wrong, and it was wrong because the amendment's
+   own §7 reads as a to-do list and was taken at its word instead of checked against the
+   blueprint. §7 of that document is a record of what was owed in July, not a live queue.)*
 
 ---
 

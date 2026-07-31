@@ -4,7 +4,7 @@
 
 > **v2.4 changes, all from `tacet-rail-drilldown-amendment.md` (2026-07-29):** rail groups stop flying out to the right and **drill down inside the rail** · the `Editor` group is renamed **`Content · 内容`** and its own page becomes an ordinary child row named **`Editor`** · a **child→parent map** is added so the rail resolves its own level · gate 1 gains a **flatten-at-one** rule · §8's "two editors" line is corrected — the Product Page Editor has **no independent route**.
 
-Every navigable surface of the **Tacet** desktop admin, how it's grouped, the order it appears in, and the rules that show or hide it. Brand skin is governed by `tacet-design-system.md` + `tacet-brand-concept.md`; page composition by `tacet-desktop-patterns.md`. `¥` and China channels are tenant configuration, not brand.
+Every navigable surface of the **Tacet** desktop admin, how it's grouped, the order it appears in, and the rules that show or hide it. Brand skin is governed by `tacet-design-system.md` + `tacet-brand-concept.md`; page composition by `tacet-desktop-patterns.md`. `¥` and the China channels are **Roots'** currency and channel list, hardcoded today — per-business configuration that does not yet exist, not brand and not settled (`docs/tacet-consolidation-decisions.md` §0; same correction as `tacet-desktop-patterns.md` §1.16, made 2026-07-31).
 
 > **Why v2 exists.** v1 was accurate when written and is no longer. Three sections retired into their parents, two shipped new, three rail groups flattened, two feature flags added. v1 described 35 sections; there are **34**, and 5 of them are different. Every line below is grounded in a grep against the live box — file and line cited where it matters. Where the code and v1 disagreed, the code won.
 
