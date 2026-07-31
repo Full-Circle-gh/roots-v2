@@ -1,4 +1,4 @@
-# Roots v2 / Full Circle — Complete Knowledge Handoff
+# Tacet — Complete Knowledge Handoff
 
 **Purpose.** A single, self-contained brain-dump of how this codebase works, written so a *fresh
 Claude* (any account) can absorb the whole system from this one file and be productive immediately.
@@ -12,8 +12,9 @@ kitchen/ERP app, the full schema, the scripts, and how to run it locally).
 
 ## 0. TL;DR — what this is
 
-**Roots** is tenant #1 of **Full Circle**, a **multi-tenant retail SaaS** for Chinese food/grocery
-merchants. One Node/Express + `better-sqlite3` service (`server.js`, port 4000) serves **five
+**Tacet** is a **multi-business retail SaaS**. Businesses of any kind, in any country, register
+and use it. Roots is the first business on it — one customer that happens to be first, not what
+the product is built for (`docs/tacet-consolidation-decisions.md` §0). One Node/Express + `better-sqlite3` service (`server.js`, port 4000) serves **five
 surfaces** off one codebase and one schema:
 
 | Surface | Users | Shell | Auth realm (session key / token) |

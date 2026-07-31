@@ -1,8 +1,10 @@
-# Roots Mini App — Shipping Rules
+# Shipping rules — Roots' current configuration
 
-**Last updated:** 2026-05-20 · **Status:** spec aligned with codebase
+**Last updated:** 2026-05-20 · **Status:** a record of one business's setup, verified against the codebase
 
-This is the canonical shipping spec for the Roots Mini App. The retail-admin Logistics tab is the source of truth for per-zone prices/thresholds; this doc describes the policy, the routing, and the customer-visible flows.
+> **This is NOT a Tacet specification.** It records how **one business** — Roots, in Guangzhou, pricing in ¥ — has its shipping configured today. The two store codes, the Guangzhou district exceptions, the zone/fee table and the currency are that business's settings, not product defaults, and nothing here may be treated as one (`docs/tacet-consolidation-decisions.md` §0). Zones, districts, carriers, currency and thresholds are all per-business configuration.
+
+The retail-admin Logistics tab is the source of truth for per-zone prices/thresholds; this doc describes the policy, the routing, and the customer-visible flows **as Roots configures them**.
 
 ---
 

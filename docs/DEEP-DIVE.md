@@ -23,8 +23,9 @@ off one codebase and one schema:
 | Platform Console | SaaS staff | `public/store-admin.html` | `session.platformAdminId` |
 | PWAs (POS/Kitchen/Restock/Quick-Stock) | Staff | own manifests + `sw.js` | shared with the above |
 
-**Roots is tenant #1 of "Full Circle."** The multi-tenant machinery is built and tested but
-**gated behind `TENANT_DATA_ISOLATION`** — today Roots is the only live tenant.
+**Tacet is a multi-business product; Roots is one business on it.** The multi-business machinery
+is built and tested but **gated behind `TENANT_DATA_ISOLATION`** — Roots being the only live
+business today is a fact about today, not a property of the system (`docs/tacet-consolidation-decisions.md` §0).
 
 **⚠️ Commit = production deploy.** As of 2026-07-17 (`ecbce2d`) **CI is the single deployer**:
 `.github/workflows/deploy.yml` ships changed `public/ routes/ lib/ middleware/ scripts/` +

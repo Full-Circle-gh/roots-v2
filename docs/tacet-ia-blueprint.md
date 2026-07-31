@@ -142,14 +142,14 @@ reviews feedback   →  root               (nothing)   ← Inbox lives in the to
 
 ## 4. Section inventory — 34
 
-Grouped by function. "Skin" flags surfaces that are China- or tenant-specific.
+Grouped by function. "Skin" flags surfaces carrying something that is **per-business configuration, not product structure** — currency, time zone, channels, carriers, payment methods, loyalty tier names, language pairs. **`money` means the surface renders amounts and therefore depends on the business's currency; it is not a claim that the currency is ¥** (`docs/tacet-consolidation-decisions.md` §0).
 
 ### RUN — daily operations
 | Section | tab id | line | Source | Skin? |
 |---|---|---|---|---|
-| Dashboard | `dashboard` | 1258 | `03-dashboard.js` | The Recap, ¥, tier names |
-| Reports **(new)** | `reports` | 1684 | `03-dashboard.js` | ¥ · cites `reference/reports-ai-mockup.html` (absent from box) |
-| Orders | `orders` | 1847 | `04-orders.js` | ¥, carriers, **fapiao (absorbed)** |
+| Dashboard | `dashboard` | 1258 | `03-dashboard.js` | The Recap, money, loyalty tier names |
+| Reports **(new)** | `reports` | 1684 | `03-dashboard.js` | money · cites `reference/reports-ai-mockup.html` (absent from box) |
+| Orders | `orders` | 1847 | `04-orders.js` | money, carriers, **fapiao (absorbed)** |
 | Delivery | `delivery` | 5246 | `06-delivery.js` | China carriers · `data-dlv="hub"` |
 | Purchasing | `purchasing` | 9653 | `16-purchasing.js` | shell only — hosts `#prod-view-purchasing` |
 
@@ -160,21 +160,21 @@ Grouped by function. "Skin" flags surfaces that are China- or tenant-specific.
 | Meituan | `meituan` | 9527 | `11-meituan.js` | **China-only** |
 | gzgrocery / Guanyi | `guanyi` | 9667 | `12-guanyi.js` | **China-only (tenant ERP)** |
 | Eleme | `eleme` | 9936 | `14-eleme.js` | **China-only** |
-| Products | `products` | 3156 | `09-products.js` | ¥ · hosts 3 sub-views |
-| Customers | `customers` | 2313 | `08-customers.js` | ¥, tier names |
+| Products | `products` | 3156 | `09-products.js` | money · hosts 3 sub-views |
+| Customers | `customers` | 2313 | `08-customers.js` | money, loyalty tier names |
 
 ### MARKET — promotion & retention
 | Section | tab id | line | Source | Skin? |
 |---|---|---|---|---|
-| Coupons | `vouchers` | 3906 | `05-marketing.js` | ¥ |
-| Flash sales | `flash` | 4136 | `05-marketing.js` | ¥ |
+| Coupons | `vouchers` | 3906 | `05-marketing.js` | money |
+| Flash sales | `flash` | 4136 | `05-marketing.js` | money |
 | Pop-ups | `popups` | 4393 | `05-marketing.js` | — |
 | Affiliate | `affiliate` | 6696 | `05-marketing.js` | feat `affiliate` |
 | Share cards | `sharing` | 6675 | `05-marketing.js` | WeChat framing · has `.sc-spreview` preview pane |
 | Broadcasts | `broadcasts` | 4912 | `05-marketing.js` | WeChat/SMS |
 | Social proof | `social` | 8893 | `05-marketing.js` | feat `socialProof` |
-| Membership & points | `membership` | 7362 | `05/10` | feat `membership`, ¥ |
-| Top-up (wallet) | `topup` | 6501 | `10-extras.js` | ¥, WeChat/Alipay |
+| Membership & points | `membership` | 7362 | `05/10` | feat `membership`, money |
+| Top-up (wallet) | `topup` | 6501 | `10-extras.js` | money, payment methods |
 | Leaderboard | `leaderboard` | 7084 | `10-extras.js` | — |
 | Voting | `voting` | 7427 | `10-extras.js` | — |
 
@@ -284,7 +284,9 @@ Feature on/off also lives on each feature's own page (an enable switch), with an
 
 **Keep (structure):** the rail-order + group model (**how a group *presents* — flyout vs drill-down — is skin; which children it *holds* is structure**), one-section-at-a-time, the bottom-nav mirror, the 3-axis gating model, the topbar pattern, section *functions*, the sub-view pattern, cross-section drill-through, the `/sales/summary` + `channel-status` card contract.
 
-**Tenant configuration (per merchant), not brand:** the `EN · 中文` label **pairs** in source and the " · " splitter that picks one at render (`data-no-i18n` opts out; one language on screen, never both — `tacet-desktop-patterns.md` §1.11) · currency `¥` · timezone UTC+8 (Guangzhou) · channels (WeChat mini-app, Meituan, Eleme, Guanyi) · payments (WeChat Pay / Alipay / fapiao) · carriers (JD, 快递100, GZ rider, Air/Land split) · store names · loyalty tier names.
+**Per-business configuration, not brand — and NOT settled infrastructure:** currency (`¥` is Roots' currency, hardcoded today) · time zone (UTC+8 is Roots' zone) · channels (WeChat mini-app, Meituan, Eleme, Guanyi are Roots' channels) · payments (WeChat Pay / Alipay / fapiao) · carriers (JD, 快递100, GZ rider, Air/Land split) · store names · loyalty tier names · **language**.
+
+**On language specifically:** the `EN · 中文` label **pairs** in source and the " · " splitter that picks one at render (`data-no-i18n` opts out; one language on screen, never both — `tacet-desktop-patterns.md` §1.11) are the *current mechanism*, not a settled contract. `docs/tacet-consolidation-decisions.md` §0 makes language per business: English-plus-Chinese may not be assumed, a single-language business must not be forced to supply two names for everything, and a business using two other languages must be supported. **A plan for scaling languages is an open question, not a solved one** — do not cite this line as evidence the two-language mechanism is finished.
 
 **Tacet skin (governed elsewhere):** all colour/type/motion/composition rules come from `tacet-design-system.md` + `tacet-desktop-patterns.md`. The live `--td-*` `:root` block (`retail-admin.css:7906–7942`) is the token contract. The dashboard's editorial slot is **The Recap**; the automation library is **Arrangements**; the AI's period analysis is **The read**.
 

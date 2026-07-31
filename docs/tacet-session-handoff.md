@@ -22,7 +22,7 @@
 
 ## 1. What this project is
 
-Ash runs **Tacet** — a B2B admin dashboard for e-commerce merchants (WeChat Mini-Programs, websites, apps), unified control plus silent AI automations. Also runs the store it was built for (GO VEGAN! 哈素萌, Guangzhou). Tacet is a **rebrand of an older internal build ("Full Circle")** and the rebrand is roughly 30% done.
+Ash runs **Tacet** — a B2B admin dashboard for businesses selling across more than one channel (online marketplaces, websites, apps, in person), unified control plus silent AI automations. Also runs the **first business on it** (GO VEGAN! 哈素萌, Guangzhou) — one customer that happens to be first, **not the business Tacet is built for** (`docs/tacet-consolidation-decisions.md` §0). Tacet is a rebrand of an older internal build whose name is now retired completely; the rebrand is roughly 30% done.
 
 **The job:** rebuild all 34 desktop admin pages against one written rulebook, so page 1 and page 34 feel like the same product. Batch 0 (Orders + the shell) is **complete**. Batch 1 is next.
 

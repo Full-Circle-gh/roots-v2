@@ -2,7 +2,7 @@
 
 **2026-07-31 · Read-only inventory. Every read/write claim below was checked by reading the file.
 Nothing here was inferred from a column's name. Where a purpose could not be read off a code
-comment it is marked INFERRED. Answers the open item in `docs/tacet-merge-decisions.md` §4 and §22.**
+comment it is marked INFERRED. Answers the open item in `docs/tacet-consolidation-decisions.md` §4 and §22.**
 
 ---
 
@@ -91,7 +91,7 @@ Twenty columns. The ten marked "store only" under **Tables** do not exist on `pr
 ## C. Used by both
 
 Forty-three columns. These are the ones that need a genuine BOTH classification and the concurrent-edit
-protection from `docs/tacet-merge-decisions.md` §5.
+protection from `docs/tacet-consolidation-decisions.md` §5.
 
 | Name | Type · default | Tables | Defined | Server writes | Server reads | Frontend | Purpose | Dead? |
 |---|---|---|---|---|---|---|---|---|
@@ -99,7 +99,7 @@ protection from `docs/tacet-merge-decisions.md` §5.
 | `name_en` | TEXT · none · **NOT NULL** | both | `schema.sql:138` | `routes/products.js:307, 435`; `routes/retail.js:17832`, `:18096, 18102` | everywhere | all surfaces | English product name | live |
 | `name_cn` | TEXT · none | both | `schema.sql:139` | `routes/products.js:307`; `routes/retail.js:17845` | everywhere | all surfaces | Chinese product name | live |
 | `sku` | TEXT · UNIQUE | both | `schema.sql:140` | `routes/products.js:307, 756-800`; `routes/retail.js:17841-17844`, `:18062, 18096` | everywhere | `app.html`, `pos.html`, `restock.html`, `retail-admin`, `product-editor.html`, `shop.html`, `miniapp` | Stock-keeping code. **Two independent namespaces today** — `store_products` has its own UNIQUE index (`database.js:3793`) | live |
-| `category` | TEXT · none | both | `schema.sql:141` | `routes/products.js:442, 502, 701` (auto-mirrored from `top_category`); `routes/retail.js:17932`, `:18567` | `routes/products.js:57, 70, 905`; `routes/ai.js`, `routes/alerts.js`, `routes/sales.js`, `routes/markets.js`; `lib/inventory.js:1379` (substitute suggestions) | `app.html`, `restock.html`, `retail-admin`, `shop.html`/`miniapp` | Legacy single-level category, now **written only as a mirror of `top_category`** — "the operator picker is gone (tree is the only category system), but colophon mapping + any legacy reader still read products.category" — `routes/products.js:439-441`. §19 of the merge decisions says delete it | live but derived |
+| `category` | TEXT · none | both | `schema.sql:141` | `routes/products.js:442, 502, 701` (auto-mirrored from `top_category`); `routes/retail.js:17932`, `:18567` | `routes/products.js:57, 70, 905`; `routes/ai.js`, `routes/alerts.js`, `routes/sales.js`, `routes/markets.js`; `lib/inventory.js:1379` (substitute suggestions) | `app.html`, `restock.html`, `retail-admin`, `shop.html`/`miniapp` | Legacy single-level category, now **written only as a mirror of `top_category`** — "the operator picker is gone (tree is the only category system), but colophon mapping + any legacy reader still read products.category" — `routes/products.js:439-441`. §19 of the consolidation decisions says delete it | live but derived |
 | `top_category` | TEXT · none | both | `database.js:1055` | `routes/products.js:437-438, 493-503, 701`; `routes/retail.js:17922-17932`, `:18096`; `:536-539` (category rename) | `routes/products.js:8, 33`; `routes/retail.js:890, 1472` | `app.html` (2-level picker `:10248`), `retail-admin`, `shop.html`/`miniapp` | "one of the storefront categories (Dry & Pantry, Fresh & Deli, …)" — `database.js:1050-1051` | live |
 | `subcategory` | TEXT · none | both | `database.js:1056` | as `top_category` | as `top_category` | as `top_category` | "the section heading within it (Nuts & Seeds, Legumes, …)" — `database.js:1051-1052` | live |
 | `status` | TEXT · `'Active'` | both | `schema.sql:143` | `routes/products.js:307, 691` (bulk `set_status`); `routes/retail.js:17915-17918`, `:18071-18072` | `routes/products.js:58, 71`; `routes/pos.js:309, 316`; `routes/retail.js:13390-13414`; `routes/admin.js` | `app.html` (inline edit), `pos.html`, `retail-admin` (`pd-status`) | "Active\|Inactive\|Seasonal\|Coming Soon" — `schema.sql:143`. See **the three live flags** below | live |
@@ -115,7 +115,7 @@ protection from `docs/tacet-merge-decisions.md` §5.
 | `notes` | TEXT · none | both | `schema.sql:154` | `routes/products.js:307, 774, 806`; `routes/retail.js:17845`, `:18096, 18111` | `routes/products.js:12`; `routes/retail.js:17977, 18022` | `app.html` (`data-field="notes"`), `restock.html`, `retail-admin` (8 references) | Free-text internal note (INFERRED — no code comment; both editors expose it as an untyped note box) | live |
 | `is_active` | INTEGER · 1 | both | `database.js:59` | `routes/products.js:114, 660, 720, 757`; `routes/retail.js:18283`, `:18099` | every product query on both sides gates on `COALESCE(is_active,1)=1` | `app.html` (Trash view), `pos.html`, `retail-admin` | "Switching products from hard-delete to soft-delete" — `database.js:57-58`. See **the three live flags** | live |
 | `sort_order` | INTEGER · 0 | both | `database.js:68` | `routes/products.js:308, 371`; `routes/retail.js:18535-18542` (drag reorder) | `routes/products.js:13, 36`; `routes/retail.js:903` (`AS display_order`), `:1480` (default shop sort) | `app.html`, `retail-admin`, `shop.html`/`miniapp` | "honours the upstream display priority (negatives sort first)" — `database.js:63`. Now the shop's curated "featured" order (`routes/retail.js:1476-1480`) | live |
-| `stock_qty` | INTEGER · 0 | both | `database.js:69` | `routes/products.js:308, 372, 642` (`/stock-adjust`); `routes/retail.js:17860`, `:18096, 18107` | `routes/products.js:13, 36, 625`; `routes/pos.js:309`; `routes/ai.js`, `routes/alerts.js`; `routes/retail.js:902` **as a fallback only** | `app.html`, `pos.html`, `retail-admin` | "a snapshot updated by sales/waste/restock movements" — `database.js:64`. On the store side it is the **last-resort fallback** behind per-store `retail_store_stock` (`lib/inventory.js:184-197`, comment `routes/retail.js:894-901`). §10 of the merge decisions retires it | live but being retired |
+| `stock_qty` | INTEGER · 0 | both | `database.js:69` | `routes/products.js:308, 372, 642` (`/stock-adjust`); `routes/retail.js:17860`, `:18096, 18107` | `routes/products.js:13, 36, 625`; `routes/pos.js:309`; `routes/ai.js`, `routes/alerts.js`; `routes/retail.js:902` **as a fallback only** | `app.html`, `pos.html`, `retail-admin` | "a snapshot updated by sales/waste/restock movements" — `database.js:64`. On the store side it is the **last-resort fallback** behind per-store `retail_store_stock` (`lib/inventory.js:184-197`, comment `routes/retail.js:894-901`). §10 of the consolidation decisions retires it | live but being retired |
 | `variant_group_id` | INTEGER · none | both | `database.js:77` | `routes/products.js:262, 281, 309`; `routes/retail.js:18320, 18848-18857` | `routes/products.js:14, 220-228`; `routes/retail.js:913`, `:8912, 26932` | `app.html` (variant chips), `product-editor.html`, `retail-admin`, `shop.html`/`miniapp` | "products that share `variant_group_id` are siblings of one another" — `database.js:72-73` | live |
 | `variant_label` | TEXT · none | both | `database.js:78` | `routes/products.js:262, 281, 309`; `routes/retail.js:18848-18857` | `routes/products.js:14, 222`; `routes/pos.js:309`; `routes/retail.js:913` | `app.html`, `pos.html`, `retail-admin`, `shop.html`/`miniapp` | "the axis-specific tag for THIS variant (e.g. 'Mint', '150g', 'Crunchy')" — `database.js:74-75` | live |
 | `variant_sort` | INTEGER · 0 | both | `database.js:81` | `routes/products.js:295` (`/variants/reorder`); `routes/retail.js:18857` | `routes/products.js:14, 227`; `routes/retail.js:913` | `app.html` (drag reorder), `retail-admin`, `shop.html`/`miniapp` | "Operator-chosen display order of siblings within a group … Lower = shown first" — `database.js:79-80` | live |
@@ -137,7 +137,7 @@ protection from `docs/tacet-merge-decisions.md` §5.
 | `ship_modes` | TEXT · `'air,land'` | both | `database.js:2743` | `routes/products.js:318, 359-368`; `public/app.html:11010`; `routes/retail.js:17869-17871`, `:18063, 18096` | `routes/products.js:16, 39`; `routes/retail.js:905`, `:8118, 8215, 8328, 8703, 8912`; snapshotted onto `retail_order_items:9466` | `app.html` (air/land chips), `retail-admin` | "a comma-separated subset of {'air','land'} … items rejected by airlines (liquids, lithium, frozen) should be set to 'land' only" — `database.js:2737-2740` | live |
 | `is_batch_made` | INTEGER · 0 | both | `database.js:2761` | `routes/products.js:322, 352`; `routes/retail.js:17897` | `routes/products.js:16, 39`; `routes/retail.js:916`, `effectiveOosPolicy():940`, `:8912, 26932` | `app.html` (checkbox `:10812`), `retail-admin`, `miniapp` | "short shelf-life items (fresh meals, wraps) the kitchen makes on a fixed every-N-days cadence. Outside-Guangzhou orders containing one must wait for the next production batch" — `database.js:2755-2760` | live |
 | `created_at` | DATETIME · `CURRENT_TIMESTAMP` | both | `schema.sql:155` | SQLite default; explicit `routes/retail.js:18099, 18326` | `routes/products.js:12`; `routes/ai.js` (`p.created_at`); `routes/retail.js:1479` (`sort=newest`), `:2078` | `app.html`, `pos.html`, `restock.html`, `retail-admin`, `shop.html`/`miniapp` | Row creation timestamp | live |
-| `updated_at` | DATETIME · `CURRENT_TIMESTAMP` | both | `schema.sql:156`, re-added `database.js:60` | Set on **every** write on both sides (`routes/products.js:114, 262, 506…`; `routes/retail.js:17942, 18099…`) | `routes/products.js:12, 80`; `routes/retail.js:920`, `lazifyProductImage` cache-buster | image cache-busting on all surfaces | Last-write timestamp. §5 of the merge decisions wants `updated_by` alongside it — **that column does not exist on either table today** | live |
+| `updated_at` | DATETIME · `CURRENT_TIMESTAMP` | both | `schema.sql:156`, re-added `database.js:60` | Set on **every** write on both sides (`routes/products.js:114, 262, 506…`; `routes/retail.js:17942, 18099…`) | `routes/products.js:12, 80`; `routes/retail.js:920`, `lazifyProductImage` cache-buster | image cache-busting on all surfaces | Last-write timestamp. §5 of the consolidation decisions wants `updated_by` alongside it — **that column does not exist on either table today** | live |
 
 ---
 
@@ -236,7 +236,7 @@ Five columns, plus one JSON structure inside a sixth.
 
 There is **no** kcal / macro / ingredient-list column of its own. Everything nutritional is inside
 `nutrition`, `product_facts` or `description_blocks` as JSON. That matches
-`docs/tacet-merge-decisions.md` §4, which names nutritional facts as the example of a BOTH field.
+`docs/tacet-consolidation-decisions.md` §4, which names nutritional facts as the example of a BOTH field.
 
 ### 3. The three overlapping 'live' flags
 
@@ -250,7 +250,7 @@ resolving correctly (`database.js:57-58`, `routes/products.js:654-663`).
 - Production write: `routes/products.js:660` (delete), `:114` (restore), `:720` (bulk delete), `:757` (re-import reactivates).
 - Store write: `routes/retail.js:18283` — and note the store delete does **more**: it sets
   `is_active = 0, is_published = 0, sku = NULL` in one statement. Blanking the SKU is what
-  `docs/tacet-merge-decisions.md` §18 overrides.
+  `docs/tacet-consolidation-decisions.md` §18 overrides.
 
 **`is_published` (INTEGER, default 0) — shop visibility. The customer gate.**
 `store_products.is_published = 1 AND COALESCE(is_active,1) = 1` is the **entire** WHERE clause of the
@@ -273,7 +273,7 @@ A product with `status = 'Inactive'`, `is_active = 1` and `is_published = 1` **i
 purchasable by customers.** Nothing in the checkout path reads `status`. `Seasonal` and
 `Coming Soon` are stored and displayed but drive no behaviour anywhere.
 
-That is the redundancy `docs/tacet-merge-decisions.md` §16 collapses into one three-position state.
+That is the redundancy `docs/tacet-consolidation-decisions.md` §16 collapses into one three-position state.
 The mapping the code supports today is: `is_active = 0` → ARCHIVED; `is_active = 1, is_published = 1`
 → IN SHOP; `is_active = 1, is_published = 0` → NOT IN SHOP; `status` carries no information that
 needs to survive except as an optional customer-facing tag.
@@ -300,7 +300,7 @@ in `store_products`, since `recipe_id` is dead there — **has no cost at all**.
 
 Margin is therefore not computable on the store side today. That is a hard blocker on the "if the
 store app is to show margin, this decision is pulled forward" line in
-`docs/tacet-merge-decisions.md` §22: the COST METHOD decision cannot be deferred by picking a
+`docs/tacet-consolidation-decisions.md` §22: the COST METHOD decision cannot be deferred by picking a
 different column, because no cost column exists to pick.
 
 ---
@@ -310,7 +310,7 @@ different column, because no cost column exists to pick.
 Columns that **both** a production file and a store file write. Today the two writes land on
 different tables, so nothing is being overwritten. **The moment the tables merge, every row below is
 a place where the two apps can silently overwrite each other**, unless the version stamp from
-`docs/tacet-merge-decisions.md` §5 is in place first.
+`docs/tacet-consolidation-decisions.md` §5 is in place first.
 
 Production writer is `routes/products.js` in every case (the only live writer of `products`;
 `scripts/import_*.js` also write, but only ad hoc). Store writer is `routes/retail.js` unless noted.
@@ -369,7 +369,7 @@ Three points worth pulling out of that list:
   (`routes/products.js:461-472, 510-515`). After the merge, one production save on a variant will
   overwrite the copy on every sibling, including copy authored per-variant in the store editor.
 - **`is_active = 0` means two different things.** Production keeps the SKU; the store blanks it
-  (`routes/retail.js:18283`). `docs/tacet-merge-decisions.md` §18 already resolves this in favour of
+  (`routes/retail.js:18283`). `docs/tacet-consolidation-decisions.md` §18 already resolves this in favour of
   keeping the SKU — worth doing before the tables merge, not after.
 - **`stock_qty` is the only contested column with an audit asymmetry.** The production path
   (`routes/products.js:623-651`) demands a reason and writes `activity_log`; the store path
@@ -380,7 +380,7 @@ Three points worth pulling out of that list:
 
 ## Related documents
 
-- `docs/tacet-merge-decisions.md` — §4 (this classification), §5 (concurrent edit safety), §10
+- `docs/tacet-consolidation-decisions.md` — §4 (this classification), §5 (concurrent edit safety), §10
   (stock), §16 (product state), §18 (SKU on archive), §19 (categories), §22 (open questions)
 - `docs/tacet-core-survey.md` — current-state inventory, 2026-07-30
 - `docs/tacet-stock-model.md` — stock and reservation behaviour, 2026-07-30

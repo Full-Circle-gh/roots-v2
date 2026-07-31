@@ -2,6 +2,8 @@
 
 **2026-07-31 · Read-only behavioural survey of `lib/inventory.js` (`routeOrder`, `analyzeShortage`, the reservation lifecycle) and the checkout paths in `routes/retail.js`, written before the locations module is redesigned so nothing that works today is lost. Every claim is cited to a file and line and was re-verified against the code at `1d8e95ad`. Where the code contradicts a comment, the entry says so and follows the code. Anything the code does not settle is marked UNVERIFIED with the reason. No row data was read. No file was changed except this one. `public/app.html.bak` was ignored throughout.**
 
+> **What this document is: a SURVEY, not a specification.** It describes how routing works today across **one business's** two-shop Guangzhou topology, with that business's districts, carriers and ¥ figures. Nothing below may be read as a Tacet product default or requirement (`docs/tacet-consolidation-decisions.md` §0). Where the current behaviour is Roots-shaped, that is a finding, not a design.
+
 Terms used below, one line each:
 
 - **Routing** — choosing which shop fulfils a customer's order.
@@ -404,7 +406,7 @@ Every column the routing and fulfilment logic actually reads. **Anything in the 
 
 ### 9.4 The one field the redesign is most likely to break
 
-**`code`.** It is the join key for every closure lookup, every channel mapping table and every daemon — all by string, none with a foreign key. It is also immutable today: it is not in the store update allowlist (`routes/retail-inventory.js:127`), so nothing can change it through the app. If a merged locations model regenerates or renames codes, routing will not error — it will simply stop finding the closure rows and start treating closed shops as open.
+**`code`.** It is the join key for every closure lookup, every channel mapping table and every daemon — all by string, none with a foreign key. It is also immutable today: it is not in the store update allowlist (`routes/retail-inventory.js:127`), so nothing can change it through the app. If a consolidated locations model regenerates or renames codes, routing will not error — it will simply stop finding the closure rows and start treating closed shops as open.
 
 ---
 

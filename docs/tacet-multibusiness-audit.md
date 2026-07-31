@@ -1,6 +1,6 @@
 # Tacet multi-business audit — where the system is still Roots
 
-**2026-07-31 · Read-only audit of the whole repository against the three governing rules in `docs/tacet-merge-decisions.md` §0. Nothing was changed. This document only makes the problem visible.**
+**2026-07-31 · Read-only audit of the whole repository against the three governing rules in `docs/tacet-consolidation-decisions.md` §0. Nothing was changed. This document only makes the problem visible.**
 
 Audited at `origin/main` = `1d8e95ad`. Scope: code, frontend, database schema, seed data, configuration, deployment, `docs/`. `public/app.html.bak` excluded as instructed.
 
@@ -252,7 +252,7 @@ These are one business's policy presented as system law. Each would need to beco
 
 ## J. Documentation
 
-`docs/` is 24 files, 8,374 lines. `tacet-merge-decisions.md` §0 is correct and current; several other files predate it and still describe Roots' console.
+`docs/` is 24 files, 8,374 lines. `tacet-consolidation-decisions.md` §0 is correct and current; several other files predate it and still describe Roots' console.
 
 | # | File and line | Issue | Severity |
 |---|---|---|---|
@@ -270,7 +270,38 @@ These are one business's policy presented as system law. Each would need to beco
 | J12 | [docs/tacet-order-routing.md](docs/tacet-order-routing.md), [docs/tacet-locations-survey.md](docs/tacet-locations-survey.md), [docs/tacet-stock-model.md](docs/tacet-stock-model.md) | These survey Roots' two-store Guangzhou topology and derive the model from it. Accurate as surveys; they should say so, because they read as product specification | COSMETIC |
 | J13 | [docs/tacet-session-handoff.md:25](docs/tacet-session-handoff.md:25) | Defines Tacet's audience as "e-commerce merchants (WeChat Mini-Programs, websites, apps)" — the WeChat-first framing survives in the handoff brief | COSMETIC |
 
-**Docs that are already clean against §0:** `tacet-merge-decisions.md` (§0 itself), `tacet-design-system.md`, `tacet-topbar-correction.md`, `tacet-rail-drilldown-amendment.md`, `tacet-sales-addendum.md`, `tacet-marketing-addendum.md`, `tacet-dashboard-spec.md` (three Roots mentions, all as data examples).
+**Docs that are already clean against §0:** `tacet-consolidation-decisions.md` (§0 itself), `tacet-design-system.md`, `tacet-topbar-correction.md`, `tacet-rail-drilldown-amendment.md`, `tacet-sales-addendum.md`, `tacet-marketing-addendum.md`, `tacet-dashboard-spec.md` (three Roots mentions, all as data examples).
+
+### J — cleanup pass, 2026-07-31
+
+**The 13 findings above were a record, not a fix. They have now been fixed.** The findings are left in place deliberately: they are the evidence of what was wrong and where, and deleting them would remove the only account of how these lines got there. Read them as history from here on, not as an open list.
+
+**All 13 fixed. None deferred, none skipped.**
+
+| # | What was done |
+|---|---|
+| J1 | `docs/PROJECT-KNOWLEDGE.md` — title is now "Tacet — Complete Knowledge Handoff"; the §0 TL;DR now opens "**Tacet** is a **multi-business retail SaaS**… Roots is the first business on it — one customer that happens to be first, not what the product is built for." All three violations (dead brand, Roots-as-definition, "Chinese food/grocery") gone from the line |
+| J2 | `docs/DEEP-DIVE.md` — "Roots is tenant #1 of 'Full Circle'" replaced by "Tacet is a multi-business product; Roots is one business on it", and the isolation gate now reads as a fact about today rather than a property of the system |
+| J3 | `docs/shipping-rules.md` — retitled "Shipping rules — Roots' current configuration" and demoted from "the canonical shipping spec" to a record of **one business's** setup, with an explicit banner that zones, districts, carriers, currency and thresholds are per-business configuration and nothing in the file is a product default. The tariff detail is kept as the record of what Roots runs |
+| J4 | `docs/tacet-ia-blueprint.md` §4 — the nine `¥` annotations in the Skin column are now `money`, the two `tier names` are `loyalty tier names`, and the table's preamble states that `money` means "this surface renders amounts and depends on the business's currency", explicitly **not** that the currency is ¥ |
+| J5 | `docs/tacet-ia-blueprint.md` §9 — the "tenant configuration (per merchant), not brand" list is now "per-business configuration, **and NOT settled infrastructure**", with language split out into its own paragraph: the `EN · 中文` pair mechanism is named as the *current mechanism*, not a settled contract, and the passage now says outright that a plan for scaling languages is an open question |
+| J6 | `docs/tacet-desktop-patterns.md` §1.16 — the line no longer says `¥`/UTC+8/WeChat-Alipay/JD-kd100 "stay, parameterised". It now names them as **Roots'** currency, time zone, payment methods and carriers, hardcoded today, calls the hardcoding a defect per §0, and says explicitly: **do not cite this line to justify leaving them in place.** This was the line the audit predicted would be used as a tiebreaker |
+| J7 | `docs/tacet-desktop-patterns.md` §8 — heading renamed "The reference-build test". The dead name no longer appears as a section heading of the rulebook. The `full-circle-design-system.md` rows in §8 and §9 are left as-is: they are the retirement record, and marking a retired file retired is not a §0 violation |
+| J8 | `docs/tacet-brand-concept.md` — the elevator pitch's "a WeChat Mini-Program here" is now "a marketplace here"; "## Bilingual note" is now "## Language note" and states that which languages the brand must work in depends on the business, with the Chinese companion name recorded for the first business's market rather than as a requirement of the brand |
+| J9 | `docs/README.md` and `docs/tacet-orders-specimens.md` §8 — the specimens now carry a banner saying they are **one business's live production rows used as evidence for a mechanism**, not Tacet reference data. Customer names removed ("Sarah", "Jay", "Samuel Keir" → ids 427, 104, 85); ids and amounts kept where they are the evidence. The `asher` note in `README.md` is marked as one business's live rows, not a product example |
+| J10 | `docs/README.md` — the recommendation no longer says rename the channel to "WeChat". It now says fix the label inconsistency at the data source and **do not harden "WeChat" into the shared UI**, because channel names are per-business and the channel list is not a fixed set |
+| J11 | `docs/tacet-core-survey.md` §4 — a §0 framing note added under the enum-collision list: reconciling the seven is a migration detail, not the task; both enums are Roots' channel list; the target is a configurable list with integrations offered as options, and `gzgrocery` is specific to one customer |
+| J12 | `docs/tacet-order-routing.md`, `docs/tacet-locations-survey.md`, `docs/tacet-stock-model.md` — each now opens with "**What this document is: a SURVEY, not a specification**", naming the one-business Guangzhou topology and the ¥ figures as that business's, not the product's. This is what the finding asked for: they should say so |
+| J13 | `docs/tacet-session-handoff.md` §1 — audience is now "businesses selling across more than one channel (online marketplaces, websites, apps, in person)". "the store it was built for" is now "the **first business on it** — one customer that happens to be first, **not the business Tacet is built for**", and the dead brand name is gone from the sentence |
+
+**Also done in the same pass, beyond §J:**
+
+- **`docs/tacet-merge-decisions.md` renamed to `docs/tacet-consolidation-decisions.md`.** Every reference updated — 12 in `docs/tacet-product-fields.md` (9 filename citations plus three "§N of the merge decisions" prose references) and 3 in this file. No code or non-`docs/` file referenced it.
+- **"Merge" replaced by "consolidation" throughout `docs/`** wherever it meant the general programme of work — 42 occurrences across `tacet-consolidation-decisions.md` (4), `tacet-core-survey.md` (12), `tacet-locations-survey.md` (21), `tacet-stock-model.md` (4) and `tacet-order-routing.md` (1), including section headings and the "shared-core merge" title phrase. **"Merge" was kept** where it correctly names the two product tables (`products` / `store_products`) becoming one, the two apps eventually becoming one interface, or a git branch merge.
+- **Four "merge" occurrences left alone as genuinely ambiguous**, listed here so the next pass does not have to re-derive them: `tacet-consolidation-decisions.md:275` ("the Production app merging into Tacet" — reads as the two-apps case, so kept); `tacet-locations-survey.md:540` (the Meituan daemon *merging* two hour maps at boot — a runtime data operation, not the programme); `tacet-editor-addendum.md:43` ("not merged into a tabbed Content mega-page" — combining screens); `tacet-dashboard-spec.md:158` ("New/merged cards" — combining dashboard cards).
+- **`Full Circle` swept from `docs/`.** Every remaining occurrence is deliberately recording the retirement — §0 rule 1 itself, the glossary's "Retired words" entry, the two `full-circle-design-system.md` status rows, `tacet-desktop-patterns.md` §8's retirement statement, `tacet-ia-blueprint.md`'s "Dead — never reintroduce", and section A of this audit. **One factual exception kept:** `tacet-locations-survey.md:523` cites `public/full-circle.html` as a file path — that file still exists in the repo (finding A1), so the citation is accurate and changing it would make the survey wrong. It stops being a doc problem when A1 is fixed in code.
+
+**Scope of this pass: `docs/` only. No code was changed.** Every finding outside section J — A through I, all 108 of them — remains open. `tacet-desktop-patterns.md` keeps its `v3.9` title line: J6 and J7 were fixed as documentation defects, and bumping the version would falsely signal that the separate rulebook revision has been done.
 
 ---
 

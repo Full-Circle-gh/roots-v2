@@ -2,6 +2,8 @@
 
 **2026-07-30 · Read-only survey of the two location tables, the free-text location fields, the user bindings, the channel attachments and every screen that touches a location. Written before Locations is designed as a shared Tacet core module. Every claim is cited to a file and line. Where the code does not settle a question the entry says UNVERIFIED and why. No row data was read. No file was changed except this one. `public/app.html.bak` was ignored throughout.**
 
+> **What this document is: a SURVEY, not a specification.** It describes the two location tables as they exist today, populated by **one business** with a warehouse and a shop in Guangzhou. The topology, the store codes and the market rows are that business's, not the product's, and nothing below may be read as a Tacet default (`docs/tacet-consolidation-decisions.md` §0).
+
 Terms used below, one line each:
 
 - **Location** — any place the business operates from: a market stall, a shop, a warehouse, a kitchen.
@@ -14,21 +16,21 @@ Terms used below, one line each:
 
 ---
 
-## Summary — the biggest obstacles to merging
+## Summary — the biggest obstacles to consolidation
 
-**The two tables are not two halves of one idea. They are two complete, independently-evolved location models, and the newer one has quietly taken over everything that matters.** `retail_stores` carries the real stock, the real orders, every channel integration and every per-location setting. `markets` carries a stall list, a manual stock table nothing else writes to, and a notification-routing role. Merging is less "join two lists" than "absorb an abandoned model into the live one without losing its two live behaviours".
+**The two tables are not two halves of one idea. They are two complete, independently-evolved location models, and the newer one has quietly taken over everything that matters.** `retail_stores` carries the real stock, the real orders, every channel integration and every per-location setting. `markets` carries a stall list, a manual stock table nothing else writes to, and a notification-routing role. Consolidation is less "join two lists" than "absorb an abandoned model into the live one without losing its two live behaviours".
 
 The obstacles, most damaging first:
 
-1. **The id spaces overlap by construction and nothing records which table an id came from.** Both are `INTEGER PRIMARY KEY AUTOINCREMENT` starting at 1 (`database.js:613`, `database.js:2566`). A user row carries `market_id` and `retail_store_id` as two separate plain integers (`database.js:637`, `database.js:640`) with no FK on either. If the tables merge and ids are reassigned, every one of those integers silently points at a different place — and because there is no FK, nothing errors. This repo has already been bitten by exactly this failure with products: `routes/restock.js:210-217` describes "two separate AUTOINCREMENT counters over ONE integer space… the units simply land on the wrong product's shelf". §5.
-2. **A location's real identity today is its `code` string, not its id, and that code is unvalidated operator-typed text.** `routes/retail-inventory.js:83-95` accepts any non-empty string. Around twenty tables key off `store_code` with **no FK** (§11 of the free-text findings, listed in §2 below), and `code` is not in the update allowlist (`routes/retail-inventory.js:127`) so it is immutable after creation. A merged table must decide whether `code` survives as the join key or every one of those tables is migrated. §2, §5, §6.
+1. **The id spaces overlap by construction and nothing records which table an id came from.** Both are `INTEGER PRIMARY KEY AUTOINCREMENT` starting at 1 (`database.js:613`, `database.js:2566`). A user row carries `market_id` and `retail_store_id` as two separate plain integers (`database.js:637`, `database.js:640`) with no FK on either. If the tables are consolidated and ids are reassigned, every one of those integers silently points at a different place — and because there is no FK, nothing errors. This repo has already been bitten by exactly this failure with products: `routes/restock.js:210-217` describes "two separate AUTOINCREMENT counters over ONE integer space… the units simply land on the wrong product's shelf". §5.
+2. **A location's real identity today is its `code` string, not its id, and that code is unvalidated operator-typed text.** `routes/retail-inventory.js:83-95` accepts any non-empty string. Around twenty tables key off `store_code` with **no FK** (§11 of the free-text findings, listed in §2 below), and `code` is not in the update allowlist (`routes/retail-inventory.js:127`) so it is immutable after creation. A consolidated table must decide whether `code` survives as the join key or every one of those tables is migrated. §2, §5, §6.
 3. **`markets.kind` is almost entirely decorative.** It has four values, but no server behaviour branches on it at all — the only consumers are cosmetic groupings in one admin screen (`public/app.html:15800-15811`, `:15905-15921`) and a `?kind=` API filter no frontend ever calls (`routes/markets.js:18-21`; grep for callers returns nothing). The target model's PHYSICAL/TEMPORARY/KITCHEN distinction therefore has no existing behaviour to inherit — it must be built, not migrated. §1.
-4. **`market_stock` is an orphan.** Its schema comment and its route comment both say it is auto-incremented when a restock order is delivered (`database.js:444-446`, `routes/markets.js:147-148`, naming a function `_applyDeliveryToStock`). **That function does not exist.** The only writer left is the manual admin adjust endpoint (`routes/markets.js:177-219`). POS sales do not decrement it either. So one of the two tables being merged has a stock model that no automated process has touched in a long time. §4, §9.
-5. **The one binding that a merge would most obviously unify is enforced in only one direction, and only when a flag nobody has turned on is on.** Backend operator store-scoping (`tenant_user_stores`) is resolved on every request (`lib/operator-caps.js:38-51`) but enforced only when `tenants.rbac_enforce = 1` — which defaults to 0 (`routes/backend-auth.js:253`) — and even then only on URLs matching `^/api/retail-admin/stores/(\d+)` (`lib/cap-routes.js:147-150`). Every other route family is unscoped. `lib/require-cap.js:18-19` computes the scope and then throws it away. §3.
+4. **`market_stock` is an orphan.** Its schema comment and its route comment both say it is auto-incremented when a restock order is delivered (`database.js:444-446`, `routes/markets.js:147-148`, naming a function `_applyDeliveryToStock`). **That function does not exist.** The only writer left is the manual admin adjust endpoint (`routes/markets.js:177-219`). POS sales do not decrement it either. So one of the two tables being consolidated has a stock model that no automated process has touched in a long time. §4, §9.
+5. **The one binding that consolidation would most obviously unify is enforced in only one direction, and only when a flag nobody has turned on is on.** Backend operator store-scoping (`tenant_user_stores`) is resolved on every request (`lib/operator-caps.js:38-51`) but enforced only when `tenants.rbac_enforce = 1` — which defaults to 0 (`routes/backend-auth.js:253`) — and even then only on URLs matching `^/api/retail-admin/stores/(\d+)` (`lib/cap-routes.js:147-150`). Every other route family is unscoped. `lib/require-cap.js:18-19` computes the scope and then throws it away. §3.
 6. **Free-text location routing can silently move real stock to the wrong shop.** `restock_orders.store_name` is matched against `markets` for notifications (`routes/restock.js:58-63`) and against `retail_stores` for the actual stock movement (`routes/restock.js:188-194`) — two different tables, two different column sets, from one string. When it fails to match, the stock transfer falls through to "the only other active store" (`routes/restock.js:203-206`) with no warning. §2.
 7. **Opening hours and time zone are half-wired, and one daemon ignores them entirely.** The columns exist and one thing reads them properly (pickup validation, `routes/retail.js:8664-8667`), but `lib/inventory.js:86-89` omits `timezone` from the store list every screen loads, `scripts/meituan-daemon.js` reads hours once at boot, and `scripts/shangou-daemon.js:68-70` hardcodes them with no database override at all. No date calculation anywhere uses a per-location time zone. §8.
 8. **There is no such thing as closing a location safely today.** Both deactivations are one `UPDATE … is_active = 0` with no stock check, no confirmation of what is left on the shelf, and no cleanup (`routes/markets.js:135`, `routes/retail-inventory.js:169`). The target model's "closing requires stock to be moved out and confirmed" has nothing to build on. §9.
-9. **Five separate screens create or edit a `retail_stores` row, each with a different subset of fields.** §7. Any merged editor has to replace all five or they will drift again.
+9. **Five separate screens create or edit a `retail_stores` row, each with a different subset of fields.** §7. Any consolidated editor has to replace all five or they will drift again.
 10. **A third location table exists that nobody mentioned.** `meituan_stores` (`database.js:842-848`) is the finance-import dimension, with its own id space and `meituan_orders.store_id` pointing at it — a column name identical to `retail_store_stock.store_id`, meaning something completely different. Nothing joins it to `retail_stores`. §5.
 
 ---
@@ -101,12 +103,12 @@ The form's own help text claims kind "drives notification routing · 决定通�
 
 | Idea | `markets` | `retail_stores` | The disagreement |
 |---|---|---|---|
-| Name | `name` `NOT NULL`, uniqueness enforced in the route (`routes/markets.js:54`) | `name_en` nullable, no uniqueness; `code` is the unique key instead | One table treats the display name as identity; the other treats it as a label. Merging must pick one, and the losing side's rows may violate the winner's rule. |
+| Name | `name` `NOT NULL`, uniqueness enforced in the route (`routes/markets.js:54`) | `name_en` nullable, no uniqueness; `code` is the unique key instead | One table treats the display name as identity; the other treats it as a label. Consolidation must pick one, and the losing side's rows may violate the winner's rule. |
 | Address | `location` — one free-text blob, never parsed | `address` + `city` + `district`, geocoded | Not a rename. A `markets.location` value cannot be split into the three columns without a human reading it. |
 | Coordinates | Captured by a person standing at the stall pressing a button (`database.js:629-631`) | Derived from the typed address by a geocoder (`routes/retail-inventory.js:27-41`) | Same columns, opposite provenance and opposite trust level. |
 | Deactivation | Also clears `users.market_id` for everyone assigned (`routes/markets.js:136`) | Leaves `users.retail_store_id` and `tenant_users.retail_store_id` untouched | Two different answers to "what happens to the people". §9. |
-| `updated_at` | No default; NULL until first edit | `DEFAULT CURRENT_TIMESTAMP` | A merged column cannot mean both. |
-| Who may create | Anyone with the `pos` permission (`routes/markets.js:36-38`) | `requireRetailAdmin` (`routes/retail-inventory.js:82`) | A merged create endpoint inherits the looser gate unless deliberately tightened. |
+| `updated_at` | No default; NULL until first edit | `DEFAULT CURRENT_TIMESTAMP` | A consolidated column cannot mean both. |
+| Who may create | Anyone with the `pos` permission (`routes/markets.js:36-38`) | `requireRetailAdmin` (`routes/retail-inventory.js:82`) | A consolidated create endpoint inherits the looser gate unless deliberately tightened. |
 | Stock | `market_stock` (`database.js:449-457`), `qty` as `REAL`, manual adjustment only | `retail_store_stock` (`database.js:2583-2595`), `physical_qty` as `INTEGER`, plus safety buffer and per-channel quotas | Two stock models with different types and different richness. §4. |
 
 **Columns with no counterpart at all.** On `markets` only: `kind`, `daily_target`. On `retail_stores` only: `code`, `phone`, `sort_order`, `pickup_enabled`, `open_time`, `close_time`, `timezone`, `low_stock_threshold`, `meituan_account_id`.
@@ -259,7 +261,7 @@ Roughly twenty tables key off `retail_stores.code` as text. Two also carry a rea
 - **The kitchen `permissions` table has no location column** — every column is a boolean feature flag (`database.js:395`, `:401`, `:405`, `:409`, `:415`, `:420`).
 - **No courier or rider accounts exist.** There is no such table; rider identity arrives only as Qingyun tracking payload on an order.
 - **No user↔Meituan-account binding exists.** Channel credentials are bound to *locations*, not people (`lib/tenant-creds.js:97-100`, `:113-116`).
-- `retail_stock_ledger.actor_user_id` records who moved stock (`routes/retail-inventory.js:403`) but is deliberately not an FK, because the actor may be a kitchen `users.id` **or** a backend `tenant_users.id` — two id spaces sharing one column (`database.js:2635-2639`). This is the same class of problem the merge will create for location ids, and the code's own note on it is worth reading before deciding.
+- `retail_stock_ledger.actor_user_id` records who moved stock (`routes/retail-inventory.js:403`) but is deliberately not an FK, because the actor may be a kitchen `users.id` **or** a backend `tenant_users.id` — two id spaces sharing one column (`database.js:2635-2639`). This is the same class of problem the consolidation will create for location ids, and the code's own note on it is worth reading before deciding.
 
 ---
 
@@ -269,14 +271,14 @@ Roughly twenty tables key off `retail_stores.code` as text. Two also carry a rea
 
 **To `markets(id)`:**
 
-| Table.column | Rule | What breaks on a merge with reassigned ids |
+| Table.column | Rule | What breaks on a consolidation with reassigned ids |
 |---|---|---|
 | `market_stock.market_id` (`database.js:450`, `:455`) | `ON DELETE CASCADE` | Points at the wrong location. This table is otherwise near-dead (§4.3), so the cheapest option may be to migrate the balances rather than the ids. |
 | `market_stock_ledger.market_id` (`database.js:466`, `:475`) | no cascade | Historic audit rows would be re-attributed to a different location. An audit log that quietly changes its mind is worse than one that is missing. |
 
 **To `retail_stores(id)`:**
 
-| Table.column | Rule | What breaks on a merge with reassigned ids |
+| Table.column | Rule | What breaks on a consolidation with reassigned ids |
 |---|---|---|
 | `retail_store_stock.store_id` (`database.js:2585`, `:2593`) | `ON DELETE CASCADE` | Every shelf balance lands at the wrong shop. |
 | `retail_stock_reservations.store_id` (`database.js:2601`, `:2612`) | — | In-flight holds released against the wrong shop. |
@@ -290,7 +292,7 @@ Roughly twenty tables key off `retail_stores.code` as text. Two also carry a rea
 | `guanyi_product_map.retail_store_id` (`database.js:4539`, `:4554`) | `CASCADE` | Guanyi stock reconciliation targets the wrong warehouse. |
 | `guanyi_sync_queue.retail_store_id` (`database.js:4566`, `:4575`) | — | Same, pending. |
 
-Foreign keys are enforced (`database.js:10`, `lib/tenant-db.js:126`), so a merge that leaves a dangling id will be *rejected* on these columns — which is the good case. The dangerous columns are the ones below.
+Foreign keys are enforced (`database.js:10`, `lib/tenant-db.js:126`), so a consolidation that leaves a dangling id will be *rejected* on these columns — which is the good case. The dangerous columns are the ones below.
 
 ### 4.2 Plain integer columns with **no** foreign key — these fail silently
 
@@ -323,14 +325,14 @@ The only writer of `market_stock` and `market_stock_ledger` left in the codebase
 
 ### 5.2 Columns holding a bare location id with no record of which table it came from
 
-- **`users.market_id` and `users.retail_store_id`** (`database.js:637`, `:640`) are two separate columns, so the *column name* disambiguates them today. But both are untyped integers with no FK, and the kitchen admin presents them as two dropdowns side by side on the same user row (`public/app.html:15799-15811` and `:15815-15822`). Merging the tables collapses two columns into one and removes the only thing currently distinguishing the two id spaces.
-- **`sales_entries.notes`** carries a bare market id inside the text tag `[markets:txn:N:M]` (`routes/pos.js:63`). The tag names `markets` in its prefix, so it is *self-describing* — but it is a string in a free-text column, parsed by regex (`routes/pos.js:127`), and a merge that reassigns market ids would need to rewrite historic notes text or leave every past POS sale pointing at the wrong location.
+- **`users.market_id` and `users.retail_store_id`** (`database.js:637`, `:640`) are two separate columns, so the *column name* disambiguates them today. But both are untyped integers with no FK, and the kitchen admin presents them as two dropdowns side by side on the same user row (`public/app.html:15799-15811` and `:15815-15822`). Consolidating the tables collapses two columns into one and removes the only thing currently distinguishing the two id spaces.
+- **`sales_entries.notes`** carries a bare market id inside the text tag `[markets:txn:N:M]` (`routes/pos.js:63`). The tag names `markets` in its prefix, so it is *self-describing* — but it is a string in a free-text column, parsed by regex (`routes/pos.js:127`), and a consolidation that reassigns market ids would need to rewrite historic notes text or leave every past POS sale pointing at the wrong location.
 - **`meituan_orders.store_id`** (`database.js:852`) is a **third** id space entirely — it references `meituan_stores(id)` (`database.js:881`), the finance-import dimension created at `database.js:842-848` from the Meituan export's own `门店id`. It has no `retail_store_id` column and nothing joins it to `retail_stores` (its only consumers are `routes/sales.js:831`, `:901`, `:911` and `scripts/import_meituan.js:38-40`). So the column name `store_id` already means two unrelated things in this schema, and Meituan per-location profit-and-loss lives in a namespace disconnected from the per-location inventory.
 - **`retail_stock_ledger.actor_user_id`** (`database.js:2629`) is the existing precedent for exactly this hazard — one integer column that may hold a `users.id` or a `tenant_users.id`, deliberately left without a foreign key because a hard one rejected every operator-driven write (`database.js:2635-2639`).
 
 ### 5.3 The repo has already been burned by this, on products
 
-`routes/restock.js:210-217` is worth quoting in full when the merge is designed. It describes `products` and `store_products` as "two separate AUTOINCREMENT counters over ONE integer space, so an id only means the same thing on both sides for rows the fork seeded. For anything created since, the same integer points at a different product on each side — and because the FK is satisfied either way, nothing errors: the units simply land on the wrong product's shelf." The mitigation built for it — a pre-flight check comparing ids and SKUs before moving anything (`routes/restock.js:224-243`) — is the shape of what a location merge will need.
+`routes/restock.js:210-217` is worth quoting in full when the consolidation is designed. It describes `products` and `store_products` as "two separate AUTOINCREMENT counters over ONE integer space, so an id only means the same thing on both sides for rows the fork seeded. For anything created since, the same integer points at a different product on each side — and because the FK is satisfied either way, nothing errors: the units simply land on the wrong product's shelf." The mitigation built for it — a pre-flight check comparing ids and SKUs before moving anything (`routes/restock.js:224-243`) — is the shape of what a location consolidation will need.
 
 ### 5.4 A structural mismatch that must be decided before ids are
 
@@ -338,7 +340,7 @@ The only writer of `market_stock` and `market_stock_ledger` left in the codebase
 
 `retail_stores` is reached through `tdb()` everywhere (`routes/retail-inventory.js:85`, `:142`, `:169`; `lib/inventory.js:86`), so it is genuinely per-business.
 
-Meanwhile `users` **is** control-plane (`lib/tenant-db.js:48`), so `users.retail_store_id` is a shared-database column pointing at a per-business table, and `tenant_users.retail_store_id` (`routes/backend-auth.js:240`) has the same shape. **The merged locations table has to pick a plane, and whichever it picks, one of these bindings crosses it.**
+Meanwhile `users` **is** control-plane (`lib/tenant-db.js:48`), so `users.retail_store_id` is a shared-database column pointing at a per-business table, and `tenant_users.retail_store_id` (`routes/backend-auth.js:240`) has the same shape. **The consolidated locations table has to pick a plane, and whichever it picks, one of these bindings crosses it.**
 
 ---
 
@@ -520,7 +522,7 @@ Delivery-only; there is no collection flow and therefore no location picker (`pu
 
 **Verified to have no location surface:** `public/product-editor.html`, `public/cms.html`, `public/cms-mobile.html`, `public/full-circle.html`, the `backend-*` pages, `public/brand-studio.html`, `public/storefront.html`, `public/shop/*`. **Out of scope:** `public/store-admin.html` and `public/saas-admin.html`, whose "store" means a customer business, not a place.
 
-### 7.7 The consequence for the merge
+### 7.7 The consequence for the consolidation
 
 **Five separate user interfaces create or edit a `retail_stores` row**, each with a different field set: the full form in the kitchen app (`public/app.html:8929`, the only one with a manual coordinate override), the inline add form in the same app (`:17030`), the Operations form (`…/02-settings-ops.js:215`, the only one with phone and hours), the Add-location wizard (`…/15-integrations.js:219`, create-only), and the setup-guide wizard (`…/17-setup-guide.js:203`, **the only one that captures a time zone**). Plus two more that manage `markets` (`public/app.html:17977`, `public/pos.html:1781`). Seven editors, two tables, one idea.
 
@@ -584,7 +586,7 @@ Delivery-only; there is no collection flow and therefore no location picker (`pu
 
 ### 9.3 What this means for the target model
 
-"Temporary locations can be closed but never deleted, and closing requires stock to be moved out and confirmed" has **no existing implementation to build on**. There is no stock check, no move-out flow, no confirmation step, and no distinction between the two kinds of closing. What does exist and is worth keeping is the shape of the markets path — deactivate and *unassign the people* in one transaction — which the retail-stores path lacks and should gain regardless of whether the tables merge.
+"Temporary locations can be closed but never deleted, and closing requires stock to be moved out and confirmed" has **no existing implementation to build on**. There is no stock check, no move-out flow, no confirmation step, and no distinction between the two kinds of closing. What does exist and is worth keeping is the shape of the markets path — deactivate and *unassign the people* in one transaction — which the retail-stores path lacks and should gain regardless of whether the tables are consolidated.
 
 ---
 
