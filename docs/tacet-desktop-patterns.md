@@ -1,4 +1,4 @@
-# Tacet desktop patterns — v4.1 · 2026-07-31
+# Tacet desktop patterns — v4.2 · 2026-07-31
 
 > The rulebook for every desktop admin surface. `tacet-design-system.md` governs how Tacet **looks**. `tacet-brand-concept.md` governs how it **sounds**. `tacet-ia-blueprint.md` governs what **exists**. This file governs **how a page is put together** — so that Orders and Pop-ups feel like the same product despite having different layouts.
 >
@@ -1054,6 +1054,20 @@ The corollary is that a generous share is not automatically safe. Customers ship
 #### Where this is written down
 
 Widths live in **CSS on classed cols** (`col.oc-c-*`, `col.cu-c-*`), never inline on the markup, and the measurement table lives in the comment beside them. Both files carry the numbers, the binding constraint per column, and the clamp finding — **a rule that says what to do without why is one survey away from being "corrected" into a bug** (§7's lesson, and this section is its most expensive example).
+
+---
+
+### 1.20 Answer before you draft
+
+No plan, spec, or design document is written before the open questions that could change it have been answered.
+
+Open questions are sorted first, by blast radius:
+
+- **Shape** — the answer moves, reorders, or restructures the plan itself. These are answered BEFORE anything is drafted.
+- **Content** — the answer changes what is inside one stage and never where that stage sits. These are answered INSIDE that stage, not in advance. Answering them early is work that gets redone.
+- **Fact** — not a decision at all. The code already knows the answer. These are surveyed, never asked. Never put a question to Ash that the code can answer.
+
+A document written before its Shape questions are answered is scaffolding, not a document. It is not committed, not versioned, and not cited by any other file.
 
 ---
 

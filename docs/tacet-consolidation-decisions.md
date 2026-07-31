@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v0.7
+# Tacet shared-core consolidation — decisions record, v0.8
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The open questions in §23 are NOT decided and must not be treated as settled.**
 
@@ -26,6 +26,8 @@ These follow directly from the rules above and correct earlier decisions in this
 
 ### Standing test
 Before any design decision is accepted, it must be checked against a business unlike Roots — for example a hardware shop in Ohio, or a bakery in Lisbon. If the decision only makes sense for a vegan food business in Guangzhou, it is wrong.
+
+See "Answer before you draft" in the rulebook (tacet-desktop-patterns.md).
 
 ## 0.1 Domains and app structure
 
