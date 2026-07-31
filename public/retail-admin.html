@@ -2176,7 +2176,10 @@
          claim). Moved here from the filter row 2026-07-27. Absolutely
          positioned so the h2 above stays a direct child; the section is
          position:relative only for this. -->
-    <button class="btn btn-primary t-cta ord-head-cta" onclick="omOpen()" title="Create an order on a customer's behalf · 代客下单">
+    <!-- Points at the full sub-page as of 2026-07-31 (§1.13: the operator
+         authors here). The old modal stays in the DOM, unreachable — see the
+         omOpen comment for why it cannot simply be repointed back. -->
+    <button class="btn btn-primary t-cta ord-head-cta" onclick="ordNewOpen()" title="Create an order on a customer's behalf · 代客下单">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       New order · 新建订单
     </button>
@@ -2790,6 +2793,7 @@
                 </div>
                 <div id="onw-cust-results" data-no-i18n hidden></div>
                 <div class="onw-chiprow" id="onw-cust-chiprow" data-no-i18n hidden></div>
+                <div class="onw-err" id="onw-err-cust" data-no-i18n hidden></div>
                 <div id="onw-guest-fields" hidden>
                   <div class="onw-row2">
                     <div class="onw-f"><label for="onw-guest-name">Name · 姓名</label><input class="onw-in" type="text" id="onw-guest-name" maxlength="80"></div>
@@ -2823,6 +2827,7 @@
                     <option value="counter">Counter sale · 前台销售</option>
                   </select></div></div>
                 </div>
+                <div class="onw-err" id="onw-err-route" data-no-i18n hidden></div>
               </div>
 
               <!-- Products — line table, header band pinned (§1.13a rule 1). -->
@@ -2834,6 +2839,7 @@
                 </div>
                 <div id="onw-prod-results" data-no-i18n hidden></div>
                 <div id="onw-lines-wrap" data-no-i18n></div>
+                <div class="onw-err" id="onw-err-prod" data-no-i18n hidden></div>
               </div>
 
               <!-- Shipping and the grand-total override (em dash when unset). -->
@@ -2844,6 +2850,7 @@
                   <div class="onw-f"><label for="onw-override">Grand-total override · 自定义总额</label><input class="onw-in onw-num" type="number" id="onw-override" min="0" step="0.01" placeholder="—" oninput="ordNewRecalc()"></div>
                 </div>
                 <p class="onw-cap">Total auto-fills from subtotal plus shipping; edit to override. · 总额默认为小计加运费,修改即覆盖。</p>
+                <div class="onw-err" id="onw-err-money" data-no-i18n hidden></div>
               </div>
 
               <!-- Status and payment. A counter sale opens on Paid and Cash —
@@ -2879,6 +2886,7 @@
                   <div class="onw-f"><label for="onw-addr-postal">Postal code · 邮编</label><input class="onw-in onw-num" type="text" id="onw-addr-postal" maxlength="12"></div>
                 </div>
                 <p class="onw-cap">All six are required for a delivery order. · 配送订单六项均为必填。</p>
+                <div class="onw-err" id="onw-err-addr" data-no-i18n hidden></div>
               </div>
 
               <!-- Notes — two visibly different containers (frame G): the

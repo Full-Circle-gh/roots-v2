@@ -5518,6 +5518,21 @@
   #tab-orders-new .onw-inerr { display: flex; align-items: center; gap: 5px; margin-top: 6px; font-size: 12px; line-height: 1.35; color: var(--td-brick-ink); }
   #tab-orders-new .onw-inerr .onw-ico { width: 13px; height: 13px; }
 
+  /* Inline errors (§1.12, frame G) — the message lands next to the control that
+     failed and STAYS until it is fixed. Never a toast: a toast confirms, and a
+     failure the operator can miss is not an error state. */
+  #tab-orders-new .onw-err {
+    display: flex; gap: 8px; align-items: flex-start;
+    margin-top: 12px; padding: 10px 12px; border-radius: 9px;
+    background: var(--td-brick-tint); color: var(--td-brick-ink);
+    font-size: 13px; line-height: 1.5; text-wrap: pretty;
+  }
+  #tab-orders-new .onw-err[hidden] { display: none; }
+  #tab-orders-new .onw-err .onw-ico { margin-top: 1px; color: var(--td-brick-ink); }
+  /* The block that owns a live error takes a Brick edge, so the card is findable
+     from a scroll away rather than only the message inside it. */
+  #tab-orders-new .onw-blk.onw-bad { border-color: var(--td-brick); }
+
   /* Notes — the two containers must not read as one pair of identical fields. */
   #tab-orders-new .onw-notes { display: flex; flex-direction: column; gap: 14px; }
   #tab-orders-new .onw-cnote, #tab-orders-new .onw-snote { border: 1px solid var(--td-border); border-radius: 12px; padding: 12px 13px; }

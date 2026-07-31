@@ -13947,24 +13947,47 @@ router.delete('/api/retail-admin/vouchers/:id', requireRetailAdmin, (req, res) =
 // backfill a blank name/email. This is also why a manual record unifies cleanly
 // later: the phone-OTP login (upsert unifies by phone) lands the person on this
 // same row when they first sign in themselves.
-router.post('/api/retail-admin/customers', requireRetailAdmin, express.json(), (req, res) => {
-  const b = req.body || {};
-  const nickname = b.nickname == null ? '' : String(b.nickname).trim().slice(0, 60);
-  const email    = normEmail(b.email);
-  const phone    = b.phone == null ? '' : String(b.phone).replace(/\s+/g, '').slice(0, 20);
+// The create-or-reuse itself, lifted out of the handler 2026-07-31 so the
+// ORDER-create path can run it inside its own transaction.
+//
+// Why it had to move: the old New-order modal POSTed this endpoint and then
+// POSTed the order. A failure between the two — an unavailable product, a bad
+// phone, a store that no longer resolves, a dropped connection — left a customer
+// nobody asked for, indistinguishable from a deliberate creation. And the row
+// was not the whole cost: create runs claimMigrationCredit and
+// reconcileSignupVouchers, so a failed order could move real balance and points
+// and grant vouchers onto it.
+//
+// ONE implementation, two callers, deliberately: this function's reuse query is
+// the same `phone = ?` equality the by-phone warning reads, so what the form
+// warns, what the order attaches to, and what the Customers page shows can never
+// disagree. A second copy inside the order handler would be a mirror, and a
+// mirror that has drifted is worse than none.
+//
+// It does NOT run the post-create hooks. They are best-effort, they touch money,
+// and they must run only once the caller's transaction has COMMITTED — the same
+// shape markOrderPaid() already has in the order handler. `created` tells the
+// caller whether it owes them.
+//
+// Returns { id, reused, created } or { error } — it never throws for a validation
+// problem, so a caller inside a transaction chooses whether to roll back.
+function createOrReuseManualCustomer({ nickname, email, phone, userId }) {
+  const nick = nickname == null ? '' : String(nickname).trim().slice(0, 60);
+  const mail = normEmail(email);
+  const tel  = phone == null ? '' : String(phone).replace(/\s+/g, '').slice(0, 20);
 
-  if (phone && !/^\+?[0-9]{7,15}$/.test(phone)) {
-    return res.status(400).json({ success: false, error: 'bad_phone' });
-  }
-  if (b.email && !email) return res.status(400).json({ success: false, error: 'bad_email' });
+  if (tel && !/^\+?[0-9]{7,15}$/.test(tel)) return { error: 'bad_phone' };
+  if (email && !mail) return { error: 'bad_email' };
   // Need at least one way to identify the person — a phone or a name.
-  if (!phone && !nickname) return res.status(400).json({ success: false, error: 'name_or_phone_required' });
+  if (!tel && !nick) return { error: 'name_or_phone_required' };
 
   // Reuse-by-phone — link to the existing record rather than duplicate it.
-  if (phone) {
+  // No is_blocked filter, matching the by-phone lookup: a blocked customer still
+  // owns the number, and the form has already said so in Brick.
+  if (tel) {
     const existing = tdb().prepare(
-      'SELECT * FROM retail_customers WHERE phone = ? ORDER BY id LIMIT 1'
-    ).get(phone);
+      'SELECT id FROM retail_customers WHERE phone = ? ORDER BY id LIMIT 1'
+    ).get(tel);
     if (existing) {
       // Backfill only blanks — never overwrite what the customer set themselves.
       tdb().prepare(
@@ -13972,10 +13995,8 @@ router.post('/api/retail-admin/customers', requireRetailAdmin, express.json(), (
             SET nickname = COALESCE(NULLIF(nickname, ''), ?),
                 email    = COALESCE(NULLIF(email, ''), ?)
           WHERE id = ?`
-      ).run(nickname || null, email || null, existing.id);
-      const fresh = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(existing.id);
-      logActivity(req.user.id, req.user.username, 'link_manual', 'retail_customer', existing.id, { phone }, req.ip);
-      return res.json({ success: true, reused: true, data: publicCustomer(fresh) });
+      ).run(nick || null, mail || null, existing.id);
+      return { id: existing.id, reused: true, created: false };
     }
   }
 
@@ -13983,8 +14004,25 @@ router.post('/api/retail-admin/customers', requireRetailAdmin, express.json(), (
   const info = tdb().prepare(
     `INSERT INTO retail_customers (openid, nickname, phone, email, source, created_by, last_login_at)
      VALUES (?, ?, ?, ?, 'manual', ?, NULL)`
-  ).run(synthetic, nickname || null, phone || null, email || null, req.user.id);
-  const id = info.lastInsertRowid;
+  ).run(synthetic, nick || null, tel || null, mail || null, userId);
+  return { id: info.lastInsertRowid, reused: false, created: true };
+}
+
+router.post('/api/retail-admin/customers', requireRetailAdmin, express.json(), (req, res) => {
+  const b = req.body || {};
+  const nickname = b.nickname == null ? '' : String(b.nickname).trim().slice(0, 60);
+  const phone    = b.phone == null ? '' : String(b.phone).replace(/\s+/g, '').slice(0, 20);
+
+  const made = createOrReuseManualCustomer({
+    nickname: b.nickname, email: b.email, phone: b.phone, userId: req.user.id,
+  });
+  if (made.error) return res.status(400).json({ success: false, error: made.error });
+  if (made.reused) {
+    const fresh = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(made.id);
+    logActivity(req.user.id, req.user.username, 'link_manual', 'retail_customer', made.id, { phone }, req.ip);
+    return res.json({ success: true, reused: true, data: publicCustomer(fresh) });
+  }
+  const id = made.id;
   // Same post-create hooks the self-service flows run — apply any migration
   // credit / signup vouchers keyed to this phone. Best-effort.
   // Capture what these two actually MOVED, so the drawer can name it. Both
@@ -18991,14 +19029,17 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), (req
     if (!store) return res.status(404).json({ success: false, error: 'store_not_found', store_id: storeId });
   }
 
-  // Absent fulfillment_type → 'delivery', matching the value this endpoint used
-  // to force. declaredFt tracks whether the CLIENT said so; the address rule
-  // below binds only on a declared value, so the live modal — which sends no
-  // fulfillment_type and omits address when the operator leaves it blank — keeps
-  // working byte-for-byte. See the commit message: this seam is deliberate and
-  // closes when the rebuilt page always sends the field.
-  const declaredFt = b.fulfillment_type != null && b.fulfillment_type !== '';
-  const fulfillmentType = declaredFt ? String(b.fulfillment_type).toLowerCase() : 'delivery';
+  // fulfillment_type is REQUIRED. The seam that let it be absent — declaredFt,
+  // which defaulted the value to 'delivery' and then switched the address rule
+  // OFF because the value had been guessed — is closed as of 2026-07-31. It
+  // existed for exactly one caller, the old New-order modal, which never asked
+  // the operator; the rebuilt page always sends the field, so the guess has no
+  // remaining client. Do not reintroduce it: a defaulted 'delivery' with the
+  // address rule disabled is how a counter sale acquires a shipping address.
+  if (b.fulfillment_type == null || b.fulfillment_type === '') {
+    return res.status(400).json({ success: false, error: 'fulfillment_type_required', allowed: ORDER_FULFILLMENT_TYPES });
+  }
+  const fulfillmentType = String(b.fulfillment_type).toLowerCase();
   if (!ORDER_FULFILLMENT_TYPES.includes(fulfillmentType)) {
     return res.status(400).json({ success: false, error: 'bad_fulfillment_type', allowed: ORDER_FULFILLMENT_TYPES });
   }
@@ -19023,14 +19064,15 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), (req
   // pickup?" and treat everything else as a delivery.
   // An address object whose every field is blank counts as absent, not present —
   // otherwise `address: {}` would satisfy a delivery.
+  // Unconditional since 2026-07-31 — it used to bind only when the client had
+  // DECLARED a fulfilment type, which meant the one caller that never declared
+  // one was also the one caller the rule never checked.
   const hasAddress = !!(addressFull && addressFull.trim());
-  if (declaredFt) {
-    if (fulfillmentType === 'delivery' && !hasAddress) {
-      return res.status(400).json({ success: false, error: 'address_required_for_delivery' });
-    }
-    if (fulfillmentType !== 'delivery' && hasAddress) {
-      return res.status(400).json({ success: false, error: 'address_not_allowed_for_' + fulfillmentType });
-    }
+  if (fulfillmentType === 'delivery' && !hasAddress) {
+    return res.status(400).json({ success: false, error: 'address_required_for_delivery' });
+  }
+  if (fulfillmentType !== 'delivery' && hasAddress) {
+    return res.status(400).json({ success: false, error: 'address_not_allowed_for_' + fulfillmentType });
   }
 
   // Guest-pay handle — lets a customer without an app account pay this one
@@ -19038,8 +19080,42 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), (req
   // ones staff mark paid straight away).
   const payToken = crypto.randomBytes(18).toString('hex');
 
+  // ── "Also save as a customer" — resolved INSIDE the order's transaction ────
+  // The client used to POST /customers itself and then POST the order, so a
+  // failure between the two left a customer nobody asked for, already carrying
+  // whatever migration credit and signup vouchers the create hooks moved onto
+  // it. One request, one transaction: either both rows exist or neither does.
+  //
+  // Only for a GUEST — an order already attached to an account has nothing to
+  // save. Silent no-op otherwise, so an accidental flag cannot fork a record.
+  const wantsCustomer = !customer && b.save_customer === true;
+  // Creating a customer requires the cap that creating a customer requires.
+  // Without this, an operator holding orders:edit but not customers:edit could
+  // mint one through this route. Gated on the same three conditions the
+  // middleware uses, so it changes nothing while rbac_enforce is dark and does
+  // not open a hole on the day it is switched on.
+  if (wantsCustomer && req.tenant && req.tenant.rbac_enforce
+      && req.user.role !== 'owner' && req.caps && !req.caps.has('customers:edit')) {
+    return res.status(403).json({ success: false, error: 'forbidden_capability', need: 'customers:edit' });
+  }
+
   let orderId, orderNo;
+  let customerId = customer ? customer.id : null;
+  let customerCreated = false, customerReused = false;
+  // A validation failure from the helper has to become a 400, not a 500, and it
+  // has to roll the order back. The throw unwinds the transaction; this carries
+  // the reason out past it.
+  let custError = null;
   const tx = tdb().transaction(() => {
+    if (wantsCustomer) {
+      const made = createOrReuseManualCustomer({
+        nickname: recipientName, phone: recipientPhone, userId: req.user.id,
+      });
+      if (made.error) { custError = made.error; throw new Error('customer_rejected'); }
+      customerId = made.id;
+      customerCreated = made.created;
+      customerReused = made.reused;
+    }
     // Order-no minted inside the tx so the uniqueness check + INSERT serialize.
     orderNo = nextOrderNo();
     const info = tdb().prepare(
@@ -19053,7 +19129,7 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), (req
     ).run(
       // Always inserted as pending_payment first; markOrderPaid() flips it below
       // when staff chose 'paid', keeping the settle logic in one place.
-      orderNo, customer ? customer.id : null, 'pending_payment', paymentMethod,
+      orderNo, customerId, 'pending_payment', paymentMethod,
       recipientName, recipientPhone || null, addressFull, addressJson,
       subtotal, shippingFee, total,
       customerNote, staffNote, channel, 'manual', req.user.id, fulfillmentType, payToken,
@@ -19072,7 +19148,32 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), (req
        VALUES (?, ?, ?, 'pending', ?)`
     ).run(orderId, paymentMethod, total, orderNo);
   });
-  tx();
+  try {
+    tx();
+  } catch (e) {
+    // A rejected customer rolls the whole write back — no order, no customer,
+    // nothing to clean up — and answers with the field that was wrong.
+    if (custError) return res.status(400).json({ success: false, error: custError });
+    throw e;
+  }
+
+  // Post-COMMIT, never inside the transaction: these two touch money, they are
+  // best-effort, and a failure here must not undo an order that is already
+  // real. Same placement and the same reasoning as markOrderPaid() below.
+  let carried = null;
+  if (customerCreated && recipientPhone) {
+    let credit = null, vouchers = 0;
+    try { credit = claimMigrationCredit(customerId); }
+    catch (e) { console.warn('[retail-admin/order create] migration claim failed:', e.message); }
+    try { vouchers = reconcileSignupVouchers(customerId) || 0; }
+    catch (e) { console.warn('[retail-admin/order create] voucher reconcile failed:', e.message); }
+    carried = { balance: Number(credit?.balance || 0), points: Number(credit?.points || 0), vouchers };
+  }
+  if (wantsCustomer) {
+    logActivity(req.user.id, req.user.username,
+                customerReused ? 'link_manual' : 'create_manual', 'retail_customer', customerId,
+                { phone: recipientPhone, nickname: recipientName, via: 'order_create' }, req.ip);
+  }
 
   // Money already collected offline → settle through the shared path (flips to
   // paid, completes the payment row, awards points, credits referral — all
@@ -19083,15 +19184,18 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), (req
     catch (e) { console.error('[retail-admin/order create markPaid]', e); }
   }
 
+  // `guest` reads the RESOLVED customer, not the one that arrived: an order that
+  // saved its customer in the same transaction is not a guest order.
   logActivity(req.user.id, req.user.username, 'create_manual', 'retail_order', orderId,
-              { order_no: orderNo, total, status, guest: !customer,
+              { order_no: orderNo, total, status, guest: !customerId,
                 channel, store_id: storeId, fulfillment_type: fulfillmentType }, req.ip);
   // Pay link is only meaningful while unpaid. Built on this request's origin so
   // it works on whichever storefront host the operator is on (tenant-correct).
   const payUrl = (status === 'pending_payment' && total > 0)
     ? `${req.protocol}://${req.get('host')}/pay/${payToken}`
     : null;
-  res.json({ success: true, data: { id: orderId, order_no: orderNo, status, total, pay_token: payToken, pay_url: payUrl } });
+  res.json({ success: true, data: { id: orderId, order_no: orderNo, status, total, pay_token: payToken, pay_url: payUrl,
+                                    customer_id: customerId, customer_reused: customerReused, carried } });
 });
 
 // ── Unfinished New-order forms ─────────────────────────────────────────────────

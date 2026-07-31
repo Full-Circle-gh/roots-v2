@@ -6823,6 +6823,16 @@ let omCustTimer = null, omProdTimer = null;
 let OM_CUST_RESULTS = [];     // last customer search hits (index-addressed by the dropdown)
 let OM_PROD_RESULTS = [];     // last product search hits
 
+// ⚠️ UNREACHABLE as of 2026-07-31 — the Orders header CTA points at
+// ordNewOpen() and the full sub-page. This modal and its om* functions are
+// deleted in the next pass; they are left here only so the diff that removes
+// them is a removal and nothing else.
+//
+// It cannot be brought back by repointing the CTA alone. The same commit made
+// fulfillment_type REQUIRED server-side and made the address rule
+// unconditional; this modal never asks for a fulfilment type and sends an
+// address only when the operator happens to fill one, so every order it submits
+// now 400s. Rolling back means reverting that commit, not re-editing a handler.
 function omOpen() {
   OM_LINES = [];
   OM_CUSTOMER = null;
@@ -7141,6 +7151,7 @@ function ordNewRender() {
     ful: 'delivery',
     lines: [],               // [{ product_id, name_en, name_cn, sku, qty, unit_price }]
     custResults: [], prodResults: [],
+    draftId: null,           // set once Save draft has written one (commit 4 opens them)
     customersOnFile: null,   // from the roster response — tells (c) from (d)
     custQuery: '',
     phoneNote: null,         // { kind: match|blocked|shared, name, phone, count }
@@ -7450,11 +7461,202 @@ if (window.onLangChange) onLangChange(() => {
   ordNewRenderLines();
 });
 
-// The two exits — wired in the create pass; the header ships with the
-// container so §1.7a's shape is testable from day one.
-function ordNewSaveDraft() {
+// ── Inline errors (§1.12, frame G) ─────────────────────────────────────
+// The message renders next to the control that failed and PERSISTS until the
+// next attempt clears it. Never a toast — a toast confirms, and a failure the
+// operator can miss is not an error state. Every slot is cleared before a
+// write, so a fixed field's message never outlives the fix.
+const ONW_ERR_SLOTS = ['cust', 'route', 'prod', 'money', 'addr'];
+// Server error code → the block whose control produced it. An unmapped code
+// lands on 'prod' only if it names a product; otherwise it goes to the top of
+// the form rather than nowhere — an error with no home is an error the
+// operator never sees.
+const ONW_ERR_WHERE = {
+  recipient_name_required: 'cust', bad_phone: 'cust', bad_customer_id: 'cust',
+  customer_not_found: 'cust', name_or_phone_required: 'cust', bad_email: 'cust',
+  forbidden_capability: 'cust',
+  no_items: 'prod', invalid_item: 'prod', product_unavailable: 'prod', bad_unit_price: 'prod',
+  bad_shipping_fee: 'money', bad_total: 'money',
+  bad_channel: 'route', bad_store_id: 'route', store_not_found: 'route',
+  bad_fulfillment_type: 'route', fulfillment_type_required: 'route',
+  address_required_for_delivery: 'addr',
+  address_not_allowed_for_pickup: 'addr', address_not_allowed_for_counter: 'addr',
+};
+function ordNewClearErrors() {
+  ONW_ERR_SLOTS.forEach(k => {
+    const el = document.getElementById('onw-err-' + k);
+    if (!el) return;
+    el.hidden = true; el.innerHTML = '';
+    const blk = el.closest('.onw-blk');
+    if (blk) blk.classList.remove('onw-bad');
+  });
 }
-function ordNewCreate() {
+function ordNewShowError(where, message) {
+  const el = document.getElementById('onw-err-' + (ONW_ERR_SLOTS.includes(where) ? where : 'cust'));
+  if (!el) return;
+  el.innerHTML = onwIc(ONW_ICONS.warn, 2) + '<span>' + escapeHtml(message) + '</span>';
+  el.hidden = false;
+  const blk = el.closest('.onw-blk');
+  if (blk) blk.classList.add('onw-bad');
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+// One sentence per code: what happened, and what to do about it.
+function ordNewErrText(code, detail) {
+  const M = {
+    recipient_name_required: cuT('Enter a name for the order.', '请填写订单姓名。'),
+    bad_phone: cuT('That phone number is not a valid number.', '电话号码格式不正确。'),
+    customer_not_found: cuT('That customer no longer exists. Search again.', '该顾客已不存在,请重新搜索。'),
+    bad_customer_id: cuT('That customer record could not be read. Search again.', '无法读取该顾客档案,请重新搜索。'),
+    name_or_phone_required: cuT('Saving a customer needs a name or a phone number.', '存为顾客需要姓名或电话。'),
+    bad_email: cuT('That email address is not valid.', '邮箱地址不正确。'),
+    forbidden_capability: cuT('Your account cannot create customers. Clear "Also save as a customer" to place the order.', '您的账户无权新建顾客。取消"同时存为顾客"即可下单。'),
+    no_items: cuT('Add at least one product.', '请至少添加一个商品。'),
+    invalid_item: cuT('Every line needs a quantity of 1 or more.', '每行数量需为 1 或以上。'),
+    product_unavailable: cuT('One product is no longer on sale. Remove that line.', '有商品已下架,请移除该行。'),
+    bad_unit_price: cuT('A line price is not a valid amount.', '某行单价金额不正确。'),
+    bad_shipping_fee: cuT('Shipping is not a valid amount.', '运费金额不正确。'),
+    bad_total: cuT('The total override is not a valid amount.', '自定义总额金额不正确。'),
+    bad_channel: cuT('Pick a channel this order can be created on.', '请选择可下单的渠道。'),
+    bad_store_id: cuT('Pick a store.', '请选择门店。'),
+    store_not_found: cuT('That store no longer exists. Pick another.', '该门店已不存在,请另选。'),
+    fulfillment_type_required: cuT('Pick how this order is fulfilled.', '请选择履约方式。'),
+    bad_fulfillment_type: cuT('Pick how this order is fulfilled.', '请选择履约方式。'),
+    address_required_for_delivery: cuT('A delivery order needs a full address.', '配送订单需要完整地址。'),
+    address_not_allowed_for_pickup: cuT('A pickup order cannot carry a delivery address.', '自提订单不能填写收货地址。'),
+    address_not_allowed_for_counter: cuT('A counter sale cannot carry a delivery address.', '前台销售不能填写收货地址。'),
+  };
+  return M[code] || (detail || cuT('That did not save. Nothing was created.', '未能保存,未创建任何内容。'));
+}
+
+// ── Gather the form ────────────────────────────────────────────────────
+// fulfillment_type is ALWAYS sent — the server requires it as of 2026-07-31,
+// and this page is the reason the guess could be deleted. Address travels only
+// on a delivery; on pickup or counter the block is not on screen and the
+// server rejects an address outright.
+function ordNewCollect() {
+  const val = id => (document.getElementById(id)?.value || '').trim();
+  const ft = val('onw-ful') || 'delivery';
+  const body = {
+    customer_id: ONW.customer ? ONW.customer.id : null,
+    recipient_name: ONW.cust === 'linked' ? (ONW.customer.nickname || val('onw-guest-name')) : val('onw-guest-name'),
+    recipient_phone: ONW.cust === 'linked' ? (ONW.customer.phone || '') : val('onw-guest-phone'),
+    items: ONW.lines.map(l => ({ product_id: l.product_id, qty: Number(l.qty), unit_price: Number(l.unit_price) })),
+    shipping_fee: Number(val('onw-ship')) || 0,
+    status: val('onw-status') || 'pending_payment',
+    payment_method: val('onw-pay') || 'offline',
+    channel: val('onw-channel') || 'manual',
+    fulfillment_type: ft,
+    customer_note: val('onw-note-cust') || null,
+    staff_note: val('onw-note-staff') || null,
+  };
+  const store = val('onw-store');
+  if (store) body.store_id = Number(store);
+  const ovr = val('onw-override');
+  if (ovr !== '') body.total_override = Number(ovr);
+  // The customer is created by the ORDER endpoint, inside the order's own
+  // transaction — never as a separate POST first. A failure between the two
+  // used to leave a customer nobody asked for, already carrying migration
+  // credit and signup vouchers.
+  if (ONW.cust === 'guest' && ONW.saveCust) body.save_customer = true;
+  if (ft === 'delivery') {
+    body.address = {
+      province: val('onw-addr-region'), city: '', district: val('onw-addr-district'),
+      address: val('onw-addr-street'), detail: '', postal_code: val('onw-addr-postal'),
+    };
+    body.recipient_name = val('onw-addr-name') || body.recipient_name;
+    body.recipient_phone = val('onw-addr-phone') || body.recipient_phone;
+  }
+  return body;
+}
+// Client-side checks, inline in the same slots the server's answers use, so a
+// local failure and a remote one read identically.
+function ordNewValidate(body) {
+  if (!body.recipient_name) return ['cust', ordNewErrText('recipient_name_required')];
+  if (!body.items.length) return ['prod', ordNewErrText('no_items')];
+  if (body.items.some(i => !(i.qty > 0))) return ['prod', ordNewErrText('invalid_item')];
+  if (body.fulfillment_type === 'delivery') {
+    const a = body.address || {};
+    if (!(a.province && a.district && a.address && a.postal_code)) {
+      return ['addr', ordNewErrText('address_required_for_delivery')];
+    }
+  }
+  return null;
+}
+
+// ── The two exits ──────────────────────────────────────────────────────
+// Both disable while the write is in flight and then KEEP their name: Saved,
+// Created (§1.12's in-flight rule — the control that writes says so).
+let _ORD_NEW_BUSY = false;
+function ordNewSetBusy(btn, on, label) {
+  _ORD_NEW_BUSY = on;
+  document.querySelectorAll('#tab-orders-new .onw-acts .onw-btn')
+    .forEach(b => { b.disabled = on; });
+  if (btn && label != null) btn.textContent = label;
+}
+async function ordNewCreate(ev) {
+  // Captured synchronously, before any await: event.currentTarget is null once
+  // dispatch ends, and this handler awaits (§1.12, failure shape C).
+  const btn = (ev && ev.currentTarget) || document.getElementById('onw-create');
+  if (_ORD_NEW_BUSY) return;
+  ordNewClearErrors();
+  const body = ordNewCollect();
+  const bad = ordNewValidate(body);
+  if (bad) { ordNewShowError(bad[0], bad[1]); return; }
+  ordNewSetBusy(btn, true, cuT('Creating…', '创建中…'));
+  try {
+    const r = await fetch('/api/retail-admin/orders', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) {
+      const code = j.error || 'unknown';
+      ordNewSetBusy(btn, false, cuT('Create order', '创建订单'));
+      ordNewShowError(ONW_ERR_WHERE[code] || 'cust', ordNewErrText(code, j.message));
+      return;
+    }
+    btn.textContent = cuT('Created', '已创建');
+    const d = j.data || {};
+    // Land the operator back on the list with the new order open — that is where
+    // the pay link, the receipt and every next action live.
+    setTimeout(() => {
+      _ordNewTeardown(false);
+      goTab('orders');
+      if (typeof loadOrders === 'function') loadOrders();
+      if (typeof refreshOrderChannelCounts === 'function') refreshOrderChannelCounts();
+      if (d.id != null && typeof openOrder === 'function') setTimeout(() => openOrder(d.id), 80);
+    }, 650);
+  } catch (e) {
+    ordNewSetBusy(btn, false, cuT('Create order', '创建订单'));
+    ordNewShowError('cust', cuT('That did not reach the server. Nothing was created.', '请求未送达服务器,未创建任何内容。'));
+  }
+}
+// Save draft — the payload is the form as it stands, valid or not. A draft is
+// an unfinished order by definition, so nothing is validated here.
+async function ordNewSaveDraft(ev) {
+  const btn = (ev && ev.currentTarget) || document.getElementById('onw-draft');
+  if (_ORD_NEW_BUSY) return;
+  ordNewClearErrors();
+  ordNewSetBusy(btn, true, cuT('Saving…', '保存中…'));
+  const payload = { form: ordNewCollect(), cust: ONW.cust, customer: ONW.customer, saveCust: ONW.saveCust };
+  try {
+    const url = '/api/retail-admin/order-drafts' + (ONW.draftId ? '/' + ONW.draftId : '');
+    const r = await fetch(url, {
+      method: ONW.draftId ? 'PATCH' : 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ payload }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.success) {
+      ordNewSetBusy(btn, false, cuT('Save draft', '存为草稿'));
+      ordNewShowError('cust', cuT('The draft did not save.', '草稿未能保存。'));
+      return;
+    }
+    if (j.data && j.data.id != null) ONW.draftId = j.data.id;
+    ordNewSetBusy(btn, false, cuT('Saved', '已保存'));
+  } catch (e) {
+    ordNewSetBusy(btn, false, cuT('Save draft', '存为草稿'));
+    ordNewShowError('cust', cuT('The draft did not reach the server.', '草稿未送达服务器。'));
+  }
 }
 
 // Products are managed entirely from the main /products page on the

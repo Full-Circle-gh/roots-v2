@@ -276,9 +276,13 @@ check('packing template on a counter sale renders a receipt, not a picking list'
 const CLIENT_SRC = fs.readFileSync(
   path.join(__dirname, '..', 'public', 'retail-admin', '04-orders.js'), 'utf8');
 
+// `async function NAME(` counts too — the write handlers are async, and a
+// matcher that only knew the plain form returned null for them, which read as
+// six broken assertions rather than one blind extractor.
 function extractFn(name, src) {
   const lines = (src || CLIENT_SRC).split('\n');
-  const start = lines.findIndex(l => l.startsWith(`function ${name}(`));
+  const start = lines.findIndex(l => l.startsWith(`function ${name}(`)
+                                  || l.startsWith(`async function ${name}(`));
   if (start === -1) return null;
   for (let i = start + 1; i < lines.length; i++) {
     if (/^\}/.test(lines[i])) return lines.slice(start, i + 1).join('\n');
@@ -771,6 +775,138 @@ check('the page carries pairs at all (the scan is not vacuously empty)',
 // Regions holding outside-system text — customer names, phones, SKUs — carry
 // data-no-i18n, or the walker splits a name containing " · " and blanks half of
 // it in the other language.
+// ═══ 9. Create — the seam, the orphan, and the doors ════════════════════════
+const OPS_SRC = fs.readFileSync(
+  path.join(__dirname, '..', 'public', 'retail-admin', '02-settings-ops.js'), 'utf8');
+const ordersPost = SERVER_SRC.slice(
+  SERVER_SRC.indexOf("router.post('/api/retail-admin/orders'"),
+  SERVER_SRC.indexOf('// ── Unfinished New-order forms'));
+check('the order-create handler was found (the §9 slice still matches)',
+  ordersPost.length > 3000, true);
+// Comments stripped for the "is it gone" checks below. The comments left behind
+// deliberately NAME what was removed and why not to bring it back, so a raw
+// search for the word finds the tombstone and calls it the body.
+const stripComments = s => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+const SERVER_CODE = stripComments(SERVER_SRC);
+
+// THE ADDRESS SEAM IS CLOSED. declaredFt is gone from the file entirely — not
+// renamed, not left unreferenced — and the address rule binds on every request
+// rather than only on ones that declared a type.
+// The GUARD, not the string: a first version grepped for
+// `error: 'fulfillment_type_required'` and passed happily with the `if` around
+// it neutered, because the string still sat in the dead branch. Match the
+// condition and its answer together.
+check('declaredFt is deleted and fulfillment_type is required',
+  [/declaredFt/.test(SERVER_CODE),
+   /if \(b\.fulfillment_type == null \|\| b\.fulfillment_type === ''\) \{[\s\S]{0,160}fulfillment_type_required/.test(ordersPost),
+   /if \(declaredFt\)/.test(ordersPost),
+   /if \(fulfillmentType === 'delivery' && !hasAddress\) \{[\s\S]{0,160}address_required_for_delivery/.test(ordersPost)],
+  [false, true, false, true]);
+
+// THE ORPHAN CUSTOMER. The customer is created INSIDE the order's transaction,
+// through the same helper the Customers endpoint uses, and the money-touching
+// hooks run only after it commits.
+const helperSrc = extractFn('createOrReuseManualCustomer', SERVER_SRC) || '';
+check('customer create happens inside the order transaction, via the shared helper',
+  [/createOrReuseManualCustomer/.test(helperSrc.slice(0, 80)),
+   // called from inside the tx callback, before the order INSERT
+   ordersPost.indexOf('createOrReuseManualCustomer(') > ordersPost.indexOf('tdb().transaction(()'),
+   ordersPost.indexOf('createOrReuseManualCustomer(') < ordersPost.indexOf('INSERT INTO retail_orders'),
+   // and the Customers endpoint runs the SAME helper, so there is one implementation
+   (SERVER_SRC.match(/createOrReuseManualCustomer\(\{/g) || []).length >= 2],
+  [true, true, true, true]);
+// The hooks that move money are outside the transaction, after commit.
+check('migration credit and signup vouchers run AFTER the commit, never inside',
+  [ordersPost.indexOf('claimMigrationCredit') > ordersPost.indexOf('tx();'),
+   /claimMigrationCredit/.test(helperSrc)],
+  [true, false]);
+// A rejected customer rolls the order back and answers 400 — never a 500, and
+// never an order that exists without the customer the operator asked for.
+check('a rejected customer rolls the order back and returns its own 400',
+  [/custError = made\.error; throw new Error/.test(ordersPost),
+   /if \(custError\) return res\.status\(400\)/.test(ordersPost)],
+  [true, true]);
+// Creating a customer through the order route needs the customers cap, gated on
+// the same three conditions the middleware uses so nothing changes while dark.
+check('the order route checks customers:edit before minting a customer',
+  /wantsCustomer && req\.tenant && req\.tenant\.rbac_enforce[\s\S]{0,120}customers:edit/.test(ordersPost),
+  true);
+// Reuse-by-phone must not filter blocked: the form promised, in Brick, that the
+// order files under that record.
+check('the helper reuses a blocked owner rather than skipping past them',
+  [/WHERE phone = \? ORDER BY id LIMIT 1/.test(helperSrc),
+   /is_blocked/.test(stripComments(helperSrc))],
+  [true, false]);
+
+// THE DOORS, both in this commit. The header CTA opens the page; the old modal
+// keeps its handler but nothing reaches it.
+check('the Orders CTA opens the page, and no live control still calls omOpen',
+  [/ord-head-cta[^>]*onclick="ordNewOpen\(\)"/.test(HTML_SRC),
+   /onclick="omOpen\(\)"/.test(HTML_SRC),
+   /ordNew: true/.test(OPS_SRC) && /it\.ordNew/.test(OPS_SRC)],
+  [true, false, true]);
+
+// The client sends fulfillment_type on every write and never POSTs the customer
+// separately — the two halves of the seam and the orphan, from the client side.
+const srcCollect = extractFn('ordNewCollect') || '';
+check('the page always sends fulfillment_type, and address only on delivery',
+  [/fulfillment_type: ft/.test(srcCollect),
+   /if \(ft === 'delivery'\) \{/.test(srcCollect),
+   /save_customer = true/.test(srcCollect)],
+  [true, true, true]);
+const srcCreate = extractFn('ordNewCreate') || '';
+check('the create path posts orders ONCE and never posts a customer first',
+  [(srcCreate.match(/fetch\(/g) || []).length,
+   /retail-admin\/customers/.test(srcCreate)],
+  [1, false]);
+
+// §1.12 in-flight, failure shape C: btn is captured synchronously, BEFORE the
+// first await, because event.currentTarget is null once dispatch ends.
+// Comments stripped: the comment explaining WHY sits above the line and says
+// "awaits", so an ordering check against the raw text found the explanation
+// before the code and called the capture late.
+const createCode = stripComments(srcCreate);
+check('the write captures its button before awaiting anything',
+  [/const btn = \(ev && ev\.currentTarget\)/.test(createCode),
+   createCode.indexOf('const btn =') < createCode.indexOf('await ')],
+  [true, true]);
+// Both exits disable together, then keep their names.
+const srcBusy = extractFn('ordNewSetBusy') || '';
+check('both exits disable while a write is in flight, then keep their names',
+  [/\.onw-acts \.onw-btn/.test(srcBusy),
+   /'Created'/.test(srcCreate),
+   /'Saved'/.test(extractFn('ordNewSaveDraft') || '')],
+  [true, true, true]);
+
+// Errors are inline and persist. No toast is reachable from either exit — a
+// toast confirms, and a failure the operator can miss is not an error state.
+check('failures render inline, and neither exit can toast',
+  [/ordNewShowError/.test(srcCreate),
+   /toast\(/.test(srcCreate),
+   /toast\(/.test(extractFn('ordNewSaveDraft') || '')],
+  [true, false, false]);
+// Every error code this endpoint can return needs BOTH a slot (which control it
+// lands beside) and a sentence (what to do about it). A code with neither shows
+// the operator a generic failure next to a field that may not be the wrong one.
+// Read off the handler itself, so a new error added to the server without a home
+// on the page fails here rather than in front of an operator.
+const errWhere = CLIENT_SRC.slice(CLIENT_SRC.indexOf('const ONW_ERR_WHERE = {'),
+                                  CLIENT_SRC.indexOf('function ordNewClearErrors'));
+const errText = extractFn('ordNewErrText') || '';
+// One code is BUILT, not written: `'address_not_allowed_for_' + fulfillmentType`.
+// The scrape sees the prefix; expand it to the two codes that can actually
+// reach a client, or the check asks the page for a slot no server ever sends.
+const SERVER_CODES = [...new Set(
+  (ordersPost.match(/error: '([a-z_]+)'/g) || []).map(m => m.slice(8, -1))
+)].flatMap(c => (c === 'address_not_allowed_for_'
+  ? ['address_not_allowed_for_pickup', 'address_not_allowed_for_counter'] : [c]));
+check('the error-code scrape found the handler\'s codes (not vacuously empty)',
+  SERVER_CODES.length >= 10, true);
+check('every error the order endpoint returns has a slot on the page',
+  SERVER_CODES.filter(c => !errWhere.includes(c + ':')), []);
+check('every error the order endpoint returns has a sentence',
+  SERVER_CODES.filter(c => !errText.includes(c + ':')), []);
+
 check('dynamic regions are shielded from the walker',
   ['onw-cust-results', 'onw-cust-chiprow', 'onw-phone-note', 'onw-prod-results', 'onw-lines-wrap']
     .map(id => new RegExp('id="' + id + '"[^>]*data-no-i18n').test(newSection)),

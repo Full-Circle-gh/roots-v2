@@ -1152,6 +1152,20 @@ async function loadIntegrationsStatus() {
     // 1d) Purchasing had a hand-indexed entry while it was folded into Products
     // (2026-07-11 – 2026-07-13); it's back on the rail now, so the generic
     // top-level-tab walk above already indexes it (title + ALIASES.purchasing).
+    // 1e) New order is a rail-less sub-page of Orders (§1.7a takeover) — the
+    // walk above only sees .tabs [data-tab] buttons, so index it by hand like
+    // Stock activity and Categories. It lands in the SAME commit as the header
+    // CTA on purpose: the palette entry IS the page being reachable, so it
+    // belongs with the other door rather than a commit or two ahead of it.
+    // Gated on the caps the page needs: seeing Orders, and the edit cap the
+    // create and draft endpoints enforce.
+    if (typeof ordNewOpen === 'function'
+        && (typeof can !== 'function' || (can('orders:view') && can('orders:edit')))) {
+      items.push({ type: 'page', title: cuT('New order', '新建订单'),
+                   crumb: cuT('Orders', '订单'), tab: null, sub: null, anchor: null,
+                   ordNew: true,
+                   kw: 'new order create order manual order counter sale walk-in draft 新建订单 手工下单 代客下单 前台' });
+    }
     // 2) External editor launchers in the Content group (open in a new tab)
     document.querySelectorAll('.tabs-popover button[onclick*="window.open"]').forEach(btn => {
       if (gatedOff(btn)) return;
@@ -1332,6 +1346,8 @@ async function loadIntegrationsStatus() {
     if (!it) return;
     close();
     if (it.openUrl) { window.open(it.openUrl, '_blank', 'noopener'); return; }
+    // Rail-less sub-page (1e above) — its opener owns the whole takeover dance.
+    if (it.ordNew) { if (typeof ordNewOpen === 'function') ordNewOpen(); return; }
     // Live records → open the matching editor / detail drawer.
     if (it.type === 'product') {
       // Go through the same tab-click + paOpenEdit(id) a normal product-row
