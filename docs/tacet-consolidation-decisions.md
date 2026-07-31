@@ -1,6 +1,8 @@
-# Tacet shared-core consolidation — decisions record, v0.8
+# Tacet shared-core consolidation — decisions record, v0.9
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The open questions in §23 are NOT decided and must not be treated as settled.**
+
+v0.9 · 2026-07-31 — §0.1 gains *Apps, modules and screens*, the governing home for a rule that until now existed only as definitions in the glossary: customers add apps and never see modules, a module is built once on one database, and a screen is assembled from several modules rather than being the face of one. Carries a NAMING TRAP warning — eight modules share their names with eight screens, deliberately, and a survey reading the bare noun can mistake one module seen through two screens for two systems. §21 stays the register of the eight and now points back at §0.1 for the rule.
 
 v0.8 · 2026-07-31 — §10 gains two lines: the safety buffer is being BUILT, not adopted (nothing sets it today), and the reorder point is a separate number from the buffer. Both follow from `docs/tacet-stock-model.md` v1.1.
 
@@ -30,6 +32,24 @@ These follow directly from the rules above and correct earlier decisions in this
 Before any design decision is accepted, it must be checked against a business unlike Roots — for example a hardware shop in Ohio, or a bakery in Lisbon. If the decision only makes sense for a vegan food business in Guangzhou, it is wrong.
 
 ## 0.1 Domains and app structure
+
+### Apps, modules and screens — DECIDED
+This is the governing statement of the apps/modules rule. `docs/tacet-glossary.md` defines these words; this section decides them.
+
+- CUSTOMERS ADD APPS. They never see, choose or buy MODULES. **The word "module" does not appear anywhere in the interface** — not in navigation, not in settings, not in billing, not in an upgrade prompt. It is an engineering word for an engineering audience.
+- A MODULE is built ONCE and used by any app, on ONE database. There is no second copy for a second app, and no sync job between copies.
+- A SCREEN IS NOT THE FACE OF ONE MODULE. A screen is a view assembled from several. Orders reads from Orders, Products, Locations, Stock and Users at once.
+- **This is why modules must be shared.** If a screen held its own private copy of product data, two screens would show different numbers for the same thing — which is the defect this consolidation exists to remove.
+- THE EIGHT SHARED MODULES are registered in §21, together with the rules about them (Products and Items are separate; Orders is single; not every front end uses every one). §21 is the one list — this rule governs it, it does not restate it.
+- THE FOUR FRONT ENDS are Tacet, Production, the customer storefront, and Back Office. They are the other face of the domain scheme below: Tacet and Production at `app.tacet.com`, the storefront at `shopname.tacet.com`, Back Office at `backoffice.tacet.com`. See §21 for what each reads.
+
+> ### ⚠ NAMING TRAP — read this before surveying anything
+>
+> **Eight modules carry the same names as eight screens** — Products, Locations, Stock, Orders and so on. This is deliberate and **the names are not being changed**: a screen called Products that reads from a module called Products is the least surprising thing for everyone who has to work with it.
+>
+> But the collision is a trap for anyone reading the system cold. A future survey can easily read "the Products screen" and "the Products module" as one thing — or, worse, read two apps showing product data as **two products systems**, and write that down as a finding.
+>
+> **They are one module seen through two screens. Do not rebuild them as two.** Where a document needs to be unambiguous, say "the Products *module*" or "the Products *screen*" and never the bare noun.
 
 ### Domains — DECIDED
 Everything lives under tacet.com as a subdomain.
@@ -255,6 +275,8 @@ ONE state with two positions:
 
 ## 21. Modules — the shared components
 
+**Governed by §0.1, *Apps, modules and screens*.** This section is the register of the eight; §0.1 holds the rule — customers add apps and never see modules, a screen is assembled from several modules, and the module/screen name collision is a trap for surveys.
+
 Eight modules, each built once and used by any app:
 
 Locations · Products · Items · Stock · Users · Orders · Purchasing · Recipes
@@ -294,7 +316,7 @@ DO NOT ONBOARD A SECOND BUSINESS BEFORE STAGE 5 COMPLETES. Whatever is sold must
 
 ## 24. Related documents
 
-- docs/tacet-glossary.md — binding definitions, v1.1, 2026-07-31. The words in this document are used with the meanings defined there. v1.1 adds CONSOLIDATION and the reserved uses of MERGE, and the APP / MODULE / FRONT END / domain vocabulary derived from §0.1 and §21 of this document.
+- docs/tacet-glossary.md — binding definitions, v1.2, 2026-07-31. The words in this document are used with the meanings defined there. v1.1 added CONSOLIDATION and the reserved uses of MERGE; v1.2 carries APP, MODULE, SCREEN and FRONT END, defined against §0.1 of this document, which governs them.
 - docs/tacet-core-survey.md — verified current-state inventory, 2026-07-30
 - docs/tacet-product-fields.md — product field inventory, 2026-07-31. 78 columns; 41 contested writes.
 - docs/tacet-stock-model.md — stock and reservation behaviour, v1.1, surveyed 2026-07-30. Records 14 inconsistencies in the store stock model; three were live bugs. v1.1 adds the two facts §10 above depends on: the safety buffer is unbuilt, and purchasing invents a value of 5 for it.

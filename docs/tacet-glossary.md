@@ -1,4 +1,4 @@
-# Tacet glossary — v1.1 · 2026-07-31
+# Tacet glossary — v1.2 · 2026-07-31
 
 **These are the binding definitions for Tacet. Every document, every UI string and every new identifier uses these words with these meanings. Where existing code or documentation uses a different word for the same thing, the code is what needs changing, not this list.**
 
@@ -14,14 +14,17 @@
 - STORE APP — selling, customers, orders. Surfaced as the Tacet app (see FRONT END).
 - PRODUCTION APP — making things. Formerly called the kitchen app; that name is retired.
 
-## Apps, modules and front ends
+## Apps, modules and screens
 
-Derived from `docs/tacet-consolidation-decisions.md` §0.1 (domains and app structure) and §21 (modules).
+**Governed by `docs/tacet-consolidation-decisions.md` §0.1, *Apps, modules and screens*, with the module register at §21.** These entries define the words; §0.1 decides them. Where the two ever disagree, §0.1 wins.
 
-- APP — what a business user works in, and the only unit a customer ever deals with. The Tacet app, Production and Account settings are apps. They all live at one domain and moving between them never changes it (§0.1). **A customer adds apps. A customer never sees, chooses or buys a module.** Decided 2026-07-31.
-- MODULE — a shared component, built once and used by any app (§0.1, §21). There are eight: Locations, Products, Items, Stock, Users, Orders, Purchasing, Recipes. Products and Items are separate modules and must never be presented, grouped or built as one. Orders is a single module; there is no separate "sales" module. Not every front end uses every module — Items and Recipes are Production-only until the apps merge. A module is an internal building block: it has no price, no name a customer reads, and no place in the interface as a thing to be turned on.
-- FRONT END — one of the four surfaces a module can be used from (§21): the Tacet app, Production, the customer storefront, and the Back Office. The storefront is not a separately maintained app — it reads the same Products, Stock and Locations modules, so what a shopper sees is the same data staff edit, never a copy.
+- APP — **a bundle of screens. This is what a customer chooses and pays for.** The Tacet app, Production and Account settings are apps. They all live at one domain and moving between them never changes it (§0.1).
+- MODULE — **shared machinery: built once, used by any app, on one database. Never seen, chosen or bought by a customer** — the word does not appear anywhere in the interface (§0.1). There are eight, registered at §21: Locations, Products, Items, Stock, Users, Orders, Purchasing, Recipes. Products and Items are separate modules and must never be presented, grouped or built as one. Orders is a single module; there is no separate "sales" module. Not every front end uses every module — Items and Recipes are Production-only until the apps merge.
+- SCREEN — **what a person looks at. Usually assembled from several modules, not one.** Orders reads from Orders, Products, Locations, Stock and Users at once. A screen is not the face of a module, and a module is not the back of a screen.
+- FRONT END — one of the four surfaces a module can be used from (§0.1, §21): the Tacet app, Production, the customer storefront, and the Back Office. The storefront is not a separately maintained app — it reads the same Products, Stock and Locations modules, so what a shopper sees is the same data staff edit, never a copy.
 - SECTION — a part of an app, reached as a path, not a host: `/orders`, `/products`, `/account/invoices`. One login, one session, no reload into a different application (§0.1).
+
+> **⚠ Eight modules share their names with eight screens** — Products, Locations, Stock, Orders and so on. Deliberate; not being changed. When it matters, write "the Products *module*" or "the Products *screen*" and never the bare noun. Full warning at §0.1.
 
 ## Domains
 
@@ -104,6 +107,13 @@ From `docs/tacet-consolidation-decisions.md` §0.1. Everything lives under `tace
 ---
 
 ## Changelog
+
+**v1.2 · 2026-07-31**
+
+- The apps/modules rule now has a governing home: `docs/tacet-consolidation-decisions.md` §0.1, *Apps, modules and screens*, added in decisions v0.9. v1.1 recorded it here and said it needed one — that is discharged. These entries now cite the decision instead of standing alone, and §0.1 wins if the two ever disagree.
+- `## Apps, modules and front ends` renamed `## Apps, modules and screens`.
+- APP rewritten: **a bundle of screens — what a customer chooses and pays for.** MODULE rewritten: **shared machinery, built once, used by any app, on one database, never seen, chosen or bought by a customer.** SCREEN added: **what a person looks at, usually assembled from several modules, not one.**
+- Added the module/screen naming-trap warning in short form, pointing at the full one in §0.1.
 
 **v1.1 · 2026-07-31**
 
