@@ -607,9 +607,16 @@ function csStores(db, channel) {
 }
 function csCellOpen(db, channel, storeCode) {
   if (channel === 'meituan') {
+    // The Meituan cell is the POI's own 营业/停业 state, read back off the merchant
+    // site — a shop-wide fulfilment close doesn't change what Meituan reports.
     const r = db.prepare('SELECT is_open FROM store_business_status WHERE store_code=?').get(storeCode);
     return r && r.is_open != null ? r.is_open === 1 : true; // unknown → assume open
   }
+  // Shop-wide close (fulfillment_open = 0) beats the per-channel cell: the routing
+  // in lib/inventory drops the store from every channel, so the grid says so too
+  // rather than showing cells "open" that can no longer receive an order.
+  const f = db.prepare('SELECT fulfillment_open FROM store_business_status WHERE store_code=?').get(storeCode);
+  if (f && f.fulfillment_open === 0) return false;
   const r = db.prepare('SELECT is_open FROM channel_status WHERE channel=? AND store_code=?').get(channel, storeCode);
   return r ? r.is_open === 1 : true; // absent = open
 }
@@ -674,7 +681,11 @@ router.post('/api/retail-admin/channel-status/channel', requireRetailAdmin, expr
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-// Location master: set EVERY channel for one location.
+// Location master: set EVERY channel for one location, plus the shop-wide
+// fulfilment switch. "Close this location" means the shop isn't operating, so it
+// must also stop being a routing/pickup candidate (fulfillment_open) — leaving
+// that at 1 while every channel cell reads closed is the state that let a closed
+// shop keep being named as the customer's nearest store at checkout.
 router.post('/api/retail-admin/channel-status/location', requireRetailAdmin, express.json(), (req, res) => {
   const db = tdb();
   const { storeCode, open } = req.body || {};
@@ -684,7 +695,15 @@ router.post('/api/retail-admin/channel-status/location', requireRetailAdmin, exp
     if (!st) return res.status(404).json({ success: false, error: 'unknown store' });
     const by = csBy(req);
     const applies = GRID_CHANNELS.filter((ch) => ch !== 'gzgrocery' || storeCode === 'tianhe');
-    db.transaction(() => { for (const ch of applies) csSetCell(db, ch, storeCode, open, by); })();
+    db.transaction(() => {
+      for (const ch of applies) csSetCell(db, ch, storeCode, open, by);
+      db.prepare(`
+        INSERT INTO store_business_status (store_code, fulfillment_open, updated_at)
+          VALUES (?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(store_code) DO UPDATE SET
+          fulfillment_open = excluded.fulfillment_open, updated_at = CURRENT_TIMESTAMP
+      `).run(storeCode, open ? 1 : 0);
+    })();
     res.json({ success: true, channels: applies });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });

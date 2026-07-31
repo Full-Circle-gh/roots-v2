@@ -4162,11 +4162,13 @@ db.exec(`
     updated_at   DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 `);
-// fulfillment_open (Phase 2): whether this store still FULFILLS online orders,
-// SEPARATE from the Meituan-POI sales close (target_open/is_open above). When 0,
-// the store is dropped from routeOrder's candidate pool + the pickup list + the
-// out-of-city shipper, so its online orders reroute to the other store (stock-only
-// model). Default 1 = fulfilling.
+// fulfillment_open: whether this store still FULFILLS online orders — the whole
+// shop, not one channel — SEPARATE from the Meituan-POI sales close
+// (target_open/is_open above). When 0, lib/inventory drops the store from
+// routeOrder's candidate pool, from analyzeShortage's (so a closed shop is never
+// named as the customer's nearest store in the out-of-stock modal), from the
+// pickup list and from the out-of-city shipper, so its online orders reroute to
+// the store that is still open. Default 1 = fulfilling.
 addColumn('store_business_status', 'fulfillment_open', 'INTEGER DEFAULT 1');
 try { db.prepare('UPDATE store_business_status SET fulfillment_open = 1 WHERE fulfillment_open IS NULL').run(); } catch {}
 
@@ -4178,7 +4180,9 @@ try { db.prepare('UPDATE store_business_status SET fulfillment_open = 1 WHERE fu
 // (placeholder until integrated), and gzgrocery (tianhe-only). Meituan is NOT here
 // — its per-POI 置休 lives in store_business_status (daemon-applied). A MISSING row
 // means OPEN (default): we only store closures / explicit sets, and routeOrder +
-// the admin matrix treat absent as open. Supersedes store_business_status.fulfillment_open.
+// the admin matrix treat absent as open. Composes with (does NOT supersede)
+// store_business_status.fulfillment_open: a store is closed for a channel when
+// its cell here is 0 OR the whole shop is closed there.
 db.exec(`
   CREATE TABLE IF NOT EXISTS channel_status (
     channel     TEXT NOT NULL,   -- 'mini_app' | 'web' | 'eleme' | 'gzgrocery'

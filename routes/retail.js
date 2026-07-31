@@ -818,16 +818,16 @@ router.get('/api/retail/maps-config', (req, res) => {
 // shows nothing (and falls back to delivery-only) when this is empty.
 router.get('/api/retail/pickup-stores', (req, res) => {
   try {
+    // Closed shops don't appear as collection points — one shared definition of
+    // "closed" (shop-wide, or both online channels) so this list and the routing
+    // that fulfils the order can never disagree about which shops are operating.
+    const closed = inventory.onlineFullyClosedStores();
     const stores = tdb().prepare(
       `SELECT id, code, name_en, name_cn, address, city, district, lat, lng, phone
          FROM retail_stores
         WHERE is_active = 1 AND pickup_enabled = 1
-          AND code NOT IN (
-            SELECT store_code FROM channel_status
-             WHERE channel IN ('mini_app','web') AND is_open = 0
-             GROUP BY store_code HAVING COUNT(DISTINCT channel) = 2)
         ORDER BY sort_order ASC, id ASC`
-    ).all();
+    ).all().filter(s => !closed.has(s.code));
     const window = cfgValue('pickup.window', { open: '10:00', close: '20:00' });
     const packingFee = Number(cfgValue('fees.pickupPackingFee', 0)) || 0;
     res.set('Cache-Control', 'public, max-age=60');
@@ -891,21 +891,15 @@ const RETAIL_PRODUCT_COLS = `
   p.weight AS size, p.barcode,
   p.sell_price AS price,
   p.compare_at_price,
-  -- Stock surfaced to the mini-app. Prefer the SUM of per-store physical_qty
-  -- across ACTIVE stores (Tianhe + Yuexiu today) — that's the inventory the
-  -- /retail-admin per-store grid actually edits. Fall back to the legacy
-  -- products.stock_qty column ONLY when no per-store rows exist yet, so
-  -- newly-added products that haven't been stocked per-store don't silently
-  -- flip to OOS. When BOTH stores show 0 in the grid, this returns 0 →
-  -- shop.js marks the row as outOfStock and the "in stock only" filter
-  -- hides it.
-  COALESCE(
-    (SELECT SUM(rss.physical_qty)
-       FROM retail_store_stock rss
-       JOIN retail_stores      rs ON rs.id = rss.store_id
-      WHERE rss.product_id = p.id AND rs.is_active = 1),
-    p.stock_qty
-  ) AS stock,
+  -- Stock surfaced to the mini-app: the SUM of per-store physical_qty across the
+  -- stores that are OPEN (inventory.sellableStockSql — closed shops are invisible
+  -- to a customer, so their shelves can't make a product look buyable). That's the
+  -- inventory the /retail-admin per-store grid edits; the legacy
+  -- products.stock_qty column is the fallback only for a product never stocked
+  -- per-store, so a newly-added one doesn't silently flip to OOS. When every open
+  -- store shows 0 this returns 0 → shop.js marks the row as outOfStock and the
+  -- "in stock only" filter hides it.
+  ${inventory.sellableStockSql('p.id', 'p.stock_qty')} AS stock,
   p.sort_order AS display_order,
   p.description_en, p.description_cn, p.description_format,
   p.free_of, p.tags, p.ship_modes, p.ship_from_supplier, p.image_data, p.image_url,
@@ -1282,9 +1276,7 @@ function resolveBundleComponents(v) {
   const ph  = ids.map(() => '?').join(',');
   const rows = tdb().prepare(
     `SELECT sp.id, sp.name_en, sp.name_cn, sp.sku, sp.weight AS size, sp.sell_price AS price,
-            COALESCE((SELECT SUM(rss.physical_qty) FROM retail_store_stock rss
-                        JOIN retail_stores rs ON rs.id = rss.store_id
-                       WHERE rss.product_id = sp.id AND rs.is_active = 1), sp.stock_qty, 0) AS stock,
+            COALESCE(${inventory.sellableStockSql('sp.id', 'sp.stock_qty')}, 0) AS stock,
             sp.is_published, sp.is_active, sp.updated_at,
             ${hasImageFallbackSql('sp')} AS has_image_data
        FROM store_products sp
@@ -2316,12 +2308,7 @@ router.get('/api/retail/products/:id', (req, res) => {
               p.flash_stock_limit, p.flash_sold,
               p.image_url, p.updated_at,
               ${hasImageFallbackSql('p')} AS has_image,
-              COALESCE(
-                (SELECT SUM(rss.physical_qty) FROM retail_store_stock rss
-                   JOIN retail_stores rs ON rs.id = rss.store_id
-                  WHERE rss.product_id = p.id AND rs.is_active = 1),
-                p.stock_qty
-              ) AS stock
+              ${inventory.sellableStockSql('p.id', 'p.stock_qty')} AS stock
          FROM store_products p
         WHERE p.variant_group_id = ? AND p.is_published = 1 AND COALESCE(p.is_active, 1) = 1
         ORDER BY COALESCE(p.variant_sort, 0), COALESCE(p.variant_label, p.name_en), p.id`
@@ -8652,12 +8639,12 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     if (!pickupStoreId)            return res.status(400).json({ success: false, error: 'pickup_store_required' });
     if (!pickupName || !pickupPhone) return res.status(400).json({ success: false, error: 'pickup_contact_required' });
     pickupStore = tdb().prepare(
-      `SELECT * FROM retail_stores WHERE id = ? AND is_active = 1 AND pickup_enabled = 1
-          AND code NOT IN (
-            SELECT store_code FROM channel_status
-             WHERE channel IN ('mini_app','web') AND is_open = 0
-             GROUP BY store_code HAVING COUNT(DISTINCT channel) = 2)`
+      'SELECT * FROM retail_stores WHERE id = ? AND is_active = 1 AND pickup_enabled = 1'
     ).get(pickupStoreId);
+    // Re-checked here and not only in /pickup-stores: a shop can close between
+    // the customer loading the list and pressing pay, and a pickup is the one
+    // fulfilment we can't reroute — the customer is walking to that door.
+    if (pickupStore && inventory.onlineFullyClosedStores().has(pickupStore.code)) pickupStore = null;
     if (!pickupStore) return res.status(400).json({ success: false, error: 'pickup_store_unavailable' });
     // Validate against THIS store's own hours + timezone, not one global window,
     // so two stores with different hours each enforce their own.
@@ -8715,13 +8702,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
               flash_stock_limit, flash_sold, no_coupon_on_flash,
               ship_modes, needs_ice_pack, ship_from_supplier, variant_group_id, bundle_items,
               is_batch_made, oos_policy, supplier_paused,
-              COALESCE(
-                (SELECT SUM(rss.physical_qty)
-                   FROM retail_store_stock rss
-                   JOIN retail_stores      rs ON rs.id = rss.store_id
-                  WHERE rss.product_id = store_products.id AND rs.is_active = 1),
-                stock_qty
-              ) AS real_stock
+              ${inventory.sellableStockSql('store_products.id', 'stock_qty')} AS real_stock
          FROM store_products
         WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
     ).get(pid);
@@ -9162,8 +9143,11 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   // its own pids, and gated orders (same-day GZ, pickup) hold real reservations.
   let fulfillmentShortPids = null;
   if (!isPickup && !isWaitFlow && !stockGate && fulfillingStore) {
+    // A closed shop is not somewhere stock can be transferred in FROM — nobody is
+    // there to hand it over — so it can't be what makes a line look coverable.
+    const _closed = inventory.channelClosedStores(inventory.orderChannelKey(orderChannel));
     const otherStores = inventory.listStores({ activeOnly: true })
-      .filter(s => s.id !== fulfillingStore.id);
+      .filter(s => s.id !== fulfillingStore.id && !_closed.has(s.code));
     const short = [];
     for (const ln of expandStockLines(mutatedItems)) {
       const here = inventory.getAvailable(fulfillingStore.id, ln.product_id, 'wechat');
@@ -24959,12 +24943,7 @@ function computePreorderNotice(zone, address, productIds, slotId) {
   const ph = ids.map(() => '?').join(',');
   const rows = tdb().prepare(
     `SELECT id, name_en, name_cn, is_batch_made, oos_policy,
-            COALESCE(
-              (SELECT SUM(rss.physical_qty) FROM retail_store_stock rss
-                 JOIN retail_stores rs ON rs.id = rss.store_id
-                WHERE rss.product_id = store_products.id AND rs.is_active = 1),
-              stock_qty
-            ) AS real_stock
+            ${inventory.sellableStockSql('store_products.id', 'stock_qty')} AS real_stock
        FROM store_products WHERE id IN (${ph})`
   ).all(...ids);
   const items = rows.filter((r) => {
