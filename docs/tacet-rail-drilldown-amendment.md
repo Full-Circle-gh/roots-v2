@@ -1,5 +1,30 @@
 # Tacet — rail drill-down amendment
 
+> ## ✅ ABSORBED — landed in the rulebook at v4.0, 2026-07-31
+>
+> **This is history, not a live instruction.** Everything this document asked of
+> `tacet-desktop-patterns.md` — §7's *"§1.1, Rail row: replace the group behaviour; cite this
+> document"* — now lives in the **Rail row of `tacet-desktop-patterns.md` §1.1**. That row is the
+> rule. **Cite it, not this file.**
+>
+> Kept because the reasoning is worth reading and is not repeated in full in the rulebook: why
+> drill-down and not an accordion (§0, a measurement not a taste call), why the parent had to be
+> renamed rather than re-pointed and why `Content` rather than `Editorial` (§2.2), and why
+> `product-editor` resolves to Content → Editor rather than root (§2.3). **Do not delete it** — the
+> rulebook's Rail row cites it by name.
+>
+> **§5 is closed.** It asked for the `#railSeamFold` filing discrepancy to be resolved. Verified on
+> the box 2026-07-31: it is **in the rail** (`.tabs` opens at `retail-admin.html:1249`, the button
+> is at `:1273`, `.topbar` closes before it). §2.4's assumption holds; nothing owed.
+>
+> **§6 is closed** — the build shipped in code, including the flyout's `mouseenter`/`focusin`
+> entry points being removed, which §6 did not name but which are destructive for drill-down.
+>
+> **§7 is NOT closed.** The amendments owed to `tacet-ia-blueprint.md` (§1, §3, §4, §7, §8 and
+> lines 84/140) and the header line owed to `tacet-editor-addendum.md` have **not** been made.
+> `tacet-ia-blueprint.md` still describes the flyout and still calls the group Editor. Tracked as
+> `tacet-desktop-patterns.md` §10.7.
+
 **v1.0 · decided 2026-07-29 · Batch 0 (global shell).**
 **Amends:** `tacet-ia-blueprint.md` §3 (navigation model — the rail) and §7 (gating), and the **Rail** row of `tacet-desktop-patterns.md` §1.1.
 
