@@ -5396,6 +5396,13 @@
     white-space: nowrap; color: var(--td-text); background: none;
   }
   #tab-orders-new .onw-btn svg { width: 16px; height: 16px; flex: 0 0 auto; display: block; }
+  /* 🔴 THE BASE SIZE. An inline <svg> with no width/height falls back to the
+     replaced-element default — 300×150 — so an unsized icon does not render
+     small and wrong, it renders as a glyph the height of the form. This rule
+     shipped missing on 2026-07-31: the mockup carried it as `.no-ico`, and it
+     was dropped in the rename to onw-*. Every rule below sets position or
+     colour and INHERITS this size; none of them can stand in for it. */
+  #tab-orders-new .onw-ico { width: 16px; height: 16px; flex: 0 0 auto; display: block; }
   /* The page's ONE Dusk element (§1.8 rule 1 — the commit has first claim). */
   #tab-orders-new .onw-dusk { background: var(--td-dusk); border-color: var(--td-dusk); color: #fff; }
   #tab-orders-new .onw-dusk:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); }

@@ -690,6 +690,48 @@ check('line-table band pins on a clip-path card, with the §1.13a values',
    /font-size: 13px; font-weight: 500; text-align: left;\s*\n\s*padding: 10px 12px;/.test(ONW_CSS)],
   [true, false, true, true, true, true]);
 
+// 🔴 EVERY ICON HAS A BASE SIZE. An inline <svg> with no width/height falls
+// back to the replaced-element default — 300×150 — so an unsized icon does not
+// render slightly wrong, it renders as a glyph the height of the form. That
+// shipped live on 2026-07-31: the mockup's `.no-ico` base rule was dropped in
+// the rename to onw-*, every other .onw-ico rule set only position or colour,
+// and 31 assertions about structure and behaviour had nothing to say about it.
+// A screenshot found it in seconds. This is that screenshot, in the gate.
+//
+// The class list is read out of the markup AND the JS icon helper, so a new
+// icon class arriving without a base rule fails here rather than on screen.
+// Scoped to the new-order region of 04-orders.js, not the whole file: the rest
+// of Orders draws its own icons (rf-ic, eta-clock) which are sized by their own
+// sections and must not be demanded of this page's stylesheet.
+const ONW_JS = CLIENT_SRC.slice(CLIENT_SRC.indexOf('// ═══ Orders · New order'));
+check('the new-order JS region was found (the icon scan is correctly scoped)',
+  ONW_JS.length > 2000 && !/eta-clock/.test(ONW_JS), true);
+const iconClasses = [...new Set(
+  [newSection, ONW_JS]
+    .flatMap(src => src.match(/<svg class="([a-z0-9 -]+)"/g) || [])
+    .flatMap(m => m.slice(12, -1).split(/\s+/))
+    .filter(Boolean)
+)];
+check('the icon-class scan found the page\'s icons (not vacuously empty)',
+  iconClasses.length >= 1 && iconClasses.includes('onw-ico'), true);
+// A rule counts only when the icon class is its WHOLE subject at base scope.
+// `.onw-cb i .onw-ico { width: 12px }` sizes one nested instance and says
+// nothing about the six unscoped ones — a looser check passes on the broken
+// stylesheet, which is exactly the trap that let this ship.
+const cssRules = ONW_CSS.split('}').map(chunk => {
+  const i = chunk.indexOf('{');
+  return i === -1 ? null : { sel: chunk.slice(0, i).trim().replace(/^[\s\S]*?\*\//, '').trim(),
+                             body: chunk.slice(i + 1) };
+}).filter(Boolean);
+const hasBaseSize = cls => cssRules.some(r =>
+  r.sel === '#tab-orders-new .' + cls && /width:/.test(r.body) && /height:/.test(r.body));
+check('every icon class has a base width and height, not only a scoped one',
+  iconClasses.filter(c => !hasBaseSize(c)), []);
+// The header's back chevron carries no class of its own and is sized by an
+// element rule instead — the other half of the same guarantee.
+check('the header button SVGs are sized too',
+  /#tab-orders-new \.onw-btn svg \{[^}]*width:[^}]*height:/.test(ONW_CSS), true);
+
 // A line with a bad qty shows an em dash rather than a false ¥0.00 (frame G).
 //
 // NOT asserted: "the failing line is excluded from the subtotal." A failing line
