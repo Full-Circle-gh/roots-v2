@@ -683,6 +683,11 @@
   #order-drawer .eta-seg { width:2.4ch; border:0; background:transparent; text-align:center; padding:2px 1px;
     font-weight:600; font-size:17px; color:var(--text-1); outline:none; font-variant-numeric:tabular-nums; }
   #order-drawer .eta-seg::placeholder { color:var(--text-4); font-weight:500; }
+  /* Out-of-range hour/minute. The field used to accept the keystrokes, look right,
+     and silently refuse to save — the rejection has to be visible ON the segment
+     that caused it, or Save's "pick an arrival time first" reads as a lie. Only set
+     once a segment is actually finished (see qyEtaSync), never mid-typing. */
+  #order-drawer .eta-seg.bad { color:var(--danger); box-shadow:inset 0 -2px 0 var(--danger); }
   #order-drawer .eta-colon { font-weight:600; font-size:17px; color:var(--text-3); }
   #order-drawer .eta-ampm { display:inline-flex; margin-left:8px; border:1px solid var(--line); border-radius:999px;
     background:var(--bg-pane); padding:2px; gap:2px; }

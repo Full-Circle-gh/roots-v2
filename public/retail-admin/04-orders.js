@@ -6028,19 +6028,50 @@ function qyEtaSync(sid) {
   const apEl = document.getElementById('eta-ampm-' + sid);
   const hidden = document.getElementById('eta-time-' + sid);
   if (!hEl || !mEl || !hidden) return;
-  const h = parseInt(hEl.value, 10);
-  const m = parseInt(mEl.value, 10);
+  const rawH = hEl.value.trim(), rawM = mEl.value.trim();
+  let h = parseInt(rawH, 10);
+  const m = parseInt(rawM, 10);
+
+  // 🔴 ACCEPT A 24-HOUR HOUR AND REWRITE IT, don't reject it. Staff type 21:00:
+  // the delivery slot labels, the orders list and the native <input type=time>
+  // this field replaced all read 24-hour under zh-CN, so the habit is correct and
+  // predates the widget. The old code just blanked the hidden value on anything
+  // over 12 — the field still showed "21:00 PM" as though it had taken it, and the
+  // only symptom was Save answering "pick an arrival time first" about a time that
+  // was plainly on screen. 13–23 (and 00/24) can't mean anything but a 24-hour
+  // clock, so convert in place and move the AM/PM toggle to match, which also
+  // teaches the field's actual format instead of hiding it.
+  //
+  // Gated on a COMPLETE two-digit hour: mid-typing, the '0' of '09' is a prefix,
+  // not midnight, and rewriting it to '12' under the caret would fight the typist.
+  if (rawH.length === 2) {
+    if (h >= 13 && h <= 23)   { _qyEtaSetAmpm(sid, 'PM'); h -= 12; hEl.value = String(h).padStart(2, '0'); }
+    else if (h === 0 || h === 24) { _qyEtaSetAmpm(sid, 'AM'); h = 12; hEl.value = '12'; }
+  }
+
   const ap = (apEl && apEl.dataset.v) || 'AM';
-  if (Number.isNaN(h) || Number.isNaN(m) || h < 1 || h > 12 || m < 0 || m > 59) { hidden.value = ''; return; }
+  const badH = Number.isNaN(h) || h < 1 || h > 12;
+  const badM = Number.isNaN(m) || m < 0 || m > 59;
+  // A half-typed field is unfinished, not wrong — flagging it red on every
+  // keystroke would cry wolf. '0' alone is the start of '09', same reasoning.
+  const incomplete = !rawH || !rawM || rawH === '0';
+  hEl.classList.toggle('bad', !incomplete && badH);
+  mEl.classList.toggle('bad', !incomplete && badM);
+
+  if (badH || badM) { hidden.value = ''; return; }
   const h24 = (h % 12) + (ap === 'PM' ? 12 : 0);   // 12AM→0, 12PM→12, 1PM→13…
   hidden.value = String(h24).padStart(2, '0') + ':' + String(m).padStart(2, '0');
 }
-function qyEtaAmpm(sid, v) {
+// Move the toggle WITHOUT re-running qyEtaSync — the 24-hour rewrite above calls
+// this from inside sync, and the public qyEtaAmpm below calls sync afterwards.
+function _qyEtaSetAmpm(sid, v) {
   const apEl = document.getElementById('eta-ampm-' + sid);
-  if (apEl) {
-    apEl.dataset.v = v;
-    apEl.querySelectorAll('button').forEach(bn => bn.classList.toggle('on', bn.textContent.trim() === v));
-  }
+  if (!apEl) return;
+  apEl.dataset.v = v;
+  apEl.querySelectorAll('button').forEach(bn => bn.classList.toggle('on', bn.textContent.trim() === v));
+}
+function qyEtaAmpm(sid, v) {
+  _qyEtaSetAmpm(sid, v);
   qyEtaSync(sid);
 }
 
