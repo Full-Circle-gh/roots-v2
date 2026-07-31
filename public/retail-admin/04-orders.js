@@ -128,6 +128,9 @@ function setOrderStatus(chip) {
   const value = chip.dataset.status || '';
   $('#orders-status').value = value;
   $$('#orders-status-chips .status-chip').forEach(el => el.classList.toggle('active', el === chip));
+  // Any status chip leaves the drafts view — one way back, the one the operator
+  // already knows. Drafts carries no data-status, so it can never arrive here.
+  if (typeof ordHideDrafts === 'function') ordHideDrafts();
   ordFilterChanged();
 }
 // Channel facet — orthogonal to status. Filters the combined list by origin
@@ -6786,6 +6789,11 @@ function ordRenderStatusLine() {
 
 async function refreshOrderStatusCounts() {
   if (!document.getElementById('orders-status-chips')) return;
+  // The Drafts count rides along on the same refresh, from its OWN endpoint —
+  // /order-status-counts counts retail_orders and cannot see a draft, which is
+  // the point. Fired and not awaited: a slow draft list must not hold up the
+  // status counts.
+  if (typeof ordRefreshDraftCount === 'function') ordRefreshDraftCount();
   const storeId = (document.getElementById('orders-store') || {}).value || '';
   try {
     const j = await api('/api/retail-admin/order-status-counts' + (storeId ? '?store_id=' + storeId : ''));
@@ -7076,8 +7084,11 @@ function omDone() {
 // pushes a throwaway history entry so the operator's instinct to press browser
 // Back mid-order lands them on Orders, never outside the section. Closing any
 // other way consumes that entry via history.back().
+// `draft` (optional) is a row from GET /order-drafts/:id — opening one restores
+// the form and keeps editing the same draft, so Save draft PATCHes rather than
+// piling up a second copy.
 let _ORD_NEW_OPEN = false;
-function ordNewOpen() {
+function ordNewOpen(draft) {
   if (_ORD_NEW_OPEN) return;
   _ORD_NEW_OPEN = true;
   // goTab first: it closes any open side-drawers, and closeDrawer('#order-drawer')
@@ -7089,6 +7100,9 @@ function ordNewOpen() {
   const sc = document.getElementById('onw-scroll');
   if (sc) sc.scrollTop = 0;
   if (typeof ordNewRender === 'function') ordNewRender();
+  // Restore AFTER the reset render, so a draft overwrites a clean form rather
+  // than being half-overwritten by one.
+  if (draft && typeof ordNewRestore === 'function') ordNewRestore(draft);
 }
 // Browser Back → the trap entry pops → land on the Orders list (§1.7a cond 3).
 function _ordNewOnPop() {
@@ -7461,6 +7475,134 @@ if (window.onLangChange) onLangChange(() => {
   ordNewRenderLines();
 });
 
+// ═══ Drafts — their own chip, their own row shape ══════════════════════
+// A draft is not an order. It lives in its own table, so it is absent from the
+// order list, from every KPI tile and from the status line by construction —
+// none of them can reach retail_order_drafts. This chip SWAPS what is on
+// screen; it carries no data-status, so setOrderStatus can never select it and
+// no order query is ever asked for status='drafts'.
+let ORD_DRAFTS = [];
+function ordDraftsOpen() {
+  const v = document.getElementById('ord-drafts-view');
+  return !!(v && !v.hidden);
+}
+function ordShowDrafts() {
+  const view = document.getElementById('ord-drafts-view');
+  const card = document.querySelector('#tab-orders .list-card');
+  const cust = document.getElementById('orders-cust-chip');
+  if (!view) return;
+  if (card) card.style.display = 'none';
+  if (cust) cust.style.display = 'none';
+  view.hidden = false;
+  $$('#orders-status-chips .status-chip')
+    .forEach(el => el.classList.toggle('active', el.id === 'ord-chip-drafts'));
+  ordLoadDrafts();
+}
+// Any status chip returns to the list. Called from setOrderStatus, so there is
+// one way back and it is the one the operator already knows.
+function ordHideDrafts() {
+  const view = document.getElementById('ord-drafts-view');
+  const card = document.querySelector('#tab-orders .list-card');
+  const cust = document.getElementById('orders-cust-chip');
+  if (view) view.hidden = true;
+  if (card) card.style.display = '';
+  if (cust) cust.style.display = '';
+}
+async function ordLoadDrafts() {
+  const view = document.getElementById('ord-drafts-view');
+  if (!view) return;
+  try {
+    const j = await api('/api/retail-admin/order-drafts');
+    ORD_DRAFTS = j.data || [];
+    ordSetDraftCount(j.total != null ? j.total : ORD_DRAFTS.length);
+  } catch (e) {
+    // A section with bad data SAYS it failed — absence must mean empty, never
+    // broken (§1.12).
+    view.innerHTML = `<div class="odr-empty"><h3>${escapeHtml(cuT('Drafts did not load', '草稿未能加载'))}</h3>
+      <p>${escapeHtml(cuT('The list could not be read just now. Try again in a moment.', '暂时无法读取列表,请稍后再试。'))}</p></div>`;
+    return;
+  }
+  ordRenderDrafts();
+}
+// The chip's count. Refreshed with the order counts, so the number is right
+// before the operator clicks rather than after.
+function ordSetDraftCount(n) {
+  const el = document.getElementById('oc-drafts');
+  if (el) el.textContent = n > 0 ? String(n) : '';
+}
+async function ordRefreshDraftCount() {
+  try {
+    const j = await api('/api/retail-admin/order-drafts');
+    ordSetDraftCount(j.total != null ? j.total : (j.data || []).length);
+  } catch (e) { /* the chip simply stays as it was */ }
+}
+// The best label available, in order: customer name, else guest name, else the
+// first product and how many more, else "Empty draft". The server sends a KIND
+// and the raw names; the sentences are built here, in one language.
+function ordDraftLabel(p) {
+  if (!p) return { text: cuT('Empty draft', '空草稿'), none: true };
+  if (p.kind === 'customer' || p.kind === 'guest') return { text: p.label || '', none: false };
+  if (p.kind === 'products') {
+    const nm = cuT(p.label || p.label_cn || '', p.label_cn || p.label || '');
+    const more = p.extra > 0 ? cuT(` +${p.extra} more`, ` +${p.extra} 项`) : '';
+    return { text: nm + more, none: false };
+  }
+  return { text: cuT('Empty draft', '空草稿'), none: true };
+}
+function ordRenderDrafts() {
+  const view = document.getElementById('ord-drafts-view');
+  if (!view) return;
+  if (!ORD_DRAFTS.length) {
+    // Normal, not a failure: no drafts is what a tidy Monday looks like.
+    view.innerHTML = `<div class="odr-empty">
+      <h3>${escapeHtml(cuT('No drafts', '没有草稿'))}</h3>
+      <p>${escapeHtml(cuT('Drafts are yours alone. A half-typed order waits here until you come back for it.', '草稿仅你可见。未填完的订单会留在这里,等你回来继续。'))}</p>
+    </div>`;
+    return;
+  }
+  view.innerHTML = '<div class="odr-card">' + ORD_DRAFTS.map(d => {
+    const lab = ordDraftLabel(d.preview);
+    const when = courierAgo(d.updated_at || d.created_at);
+    const total = (d.preview && d.preview.total) || 0;
+    return `<div class="odr-row">
+      <button type="button" class="odr-open" onclick="ordOpenDraft(${d.id})">
+        <span class="odr-t${lab.none ? ' odr-none' : ''}">${escapeHtml(lab.text)}</span>
+        <span class="odr-m">${escapeHtml(cuT('Saved', '保存于') + ' ' + when)}</span>
+      </button>
+      <span class="odr-v">${escapeHtml(ordMoney(total))}</span>
+      <button type="button" class="odr-x" onclick="ordDeleteDraft(event, ${d.id})" title="${escapeHtml(cuT('Delete draft', '删除草稿'))}">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5h6v2M6 7l1 13h10l1-13"/></svg>
+      </button>
+    </div>`;
+  }).join('') + '</div>';
+}
+function ordMoney(n) {
+  const v = Number(n) || 0;
+  const s = Math.abs(v).toFixed(2).split('.');
+  return (v < 0 ? '-¥' : '¥') + s[0].replace(/\B(?=(\d{3})+$)/g, ',') + '.' + s[1];
+}
+// Open restores everything — the header is identical and the commit is still
+// "Create order", because a draft becomes an order the same way any other
+// typing does.
+async function ordOpenDraft(id) {
+  try {
+    const j = await api('/api/retail-admin/order-drafts/' + id);
+    ordNewOpen(j.data || null);
+  } catch (e) {
+    const view = document.getElementById('ord-drafts-view');
+    if (view) ordLoadDrafts();
+  }
+}
+async function ordDeleteDraft(ev, id) {
+  if (ev) ev.stopPropagation();
+  const btn = ev && ev.currentTarget;   // captured before the await
+  if (btn) btn.disabled = true;
+  try {
+    await fetch('/api/retail-admin/order-drafts/' + id, { method: 'DELETE', credentials: 'same-origin' });
+  } catch (e) { /* the reload below tells the truth either way */ }
+  await ordLoadDrafts();
+}
+
 // ── Inline errors (§1.12, frame G) ─────────────────────────────────────
 // The message renders next to the control that failed and PERSISTS until the
 // next attempt clears it. Never a toast — a toast confirms, and a failure the
@@ -7583,6 +7725,55 @@ function ordNewValidate(body) {
   return null;
 }
 
+// ── Restoring a draft ──────────────────────────────────────────────────
+// Puts back everything the operator had typed: the customer state, the lines,
+// every select and every field, including the ones the fulfilment choice hides.
+// Runs after ordNewRender()'s reset, and remembers which draft this is so Save
+// draft updates it instead of leaving a second copy behind.
+function ordNewRestore(draft) {
+  const p = draft && draft.payload;
+  if (!p || typeof p !== 'object') return;
+  const f = (p.form && typeof p.form === 'object') ? p.form : {};
+  ONW.draftId = draft.id != null ? draft.id : null;
+  ONW.lines = Array.isArray(p.lines) ? p.lines : [];
+  ONW.cust = p.cust || 'rest';
+  ONW.customer = p.customer || null;
+  ONW.saveCust = p.saveCust !== false;
+
+  const set = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
+  set('onw-channel', f.channel);
+  set('onw-store', f.store_id != null ? String(f.store_id) : null);
+  set('onw-ful', f.fulfillment_type);
+  set('onw-status', f.status);
+  set('onw-pay', f.payment_method);
+  set('onw-ship', f.shipping_fee != null ? String(f.shipping_fee) : '0');
+  set('onw-override', f.total_override != null ? String(f.total_override) : '');
+  set('onw-note-cust', f.customer_note || '');
+  set('onw-note-staff', f.staff_note || '');
+  if (ONW.cust === 'guest') {
+    set('onw-guest-name', f.recipient_name || '');
+    set('onw-guest-phone', f.recipient_phone || '');
+  }
+  const a = (f.address && typeof f.address === 'object') ? f.address : {};
+  set('onw-addr-name', f.recipient_name || '');
+  set('onw-addr-phone', f.recipient_phone || '');
+  set('onw-addr-region', a.province || '');
+  set('onw-addr-district', a.district || '');
+  set('onw-addr-street', a.address || '');
+  set('onw-addr-postal', a.postal_code || '');
+
+  // ordNewFulChange reads the select and would treat a restored counter sale as
+  // a fresh switch INTO counter, overwriting the status and pay method the
+  // operator saved. Tell it the state it is already in first.
+  ONW.ful = f.fulfillment_type || 'delivery';
+  ordNewFulChange();
+  set('onw-status', f.status);
+  set('onw-pay', f.payment_method);
+
+  ordNewPaintCustState();
+  ordNewRenderLines();
+}
+
 // ── The two exits ──────────────────────────────────────────────────────
 // Both disable while the write is in flight and then KEEP their name: Saved,
 // Created (§1.12's in-flight rule — the control that writes says so).
@@ -7617,6 +7808,15 @@ async function ordNewCreate(ev) {
     }
     btn.textContent = cuT('Created', '已创建');
     const d = j.data || {};
+    // The draft became an order, so it stops being a draft. Best-effort: the
+    // order is already real, and a draft that outlives it is a duplicate the
+    // operator can delete, not a reason to report the create as failed.
+    if (ONW.draftId != null) {
+      const draftId = ONW.draftId;
+      ONW.draftId = null;
+      fetch('/api/retail-admin/order-drafts/' + draftId, { method: 'DELETE', credentials: 'same-origin' })
+        .catch(() => { /* leaves one stale draft, never a lost order */ });
+    }
     // Land the operator back on the list with the new order open — that is where
     // the pay link, the receipt and every next action live.
     setTimeout(() => {
@@ -7638,7 +7838,14 @@ async function ordNewSaveDraft(ev) {
   if (_ORD_NEW_BUSY) return;
   ordNewClearErrors();
   ordNewSetBusy(btn, true, cuT('Saving…', '保存中…'));
-  const payload = { form: ordNewCollect(), cust: ONW.cust, customer: ONW.customer, saveCust: ONW.saveCust };
+  // `lines` carries the product NAMES as well as the ids. The form body sends
+  // only product_id/qty/unit_price, which is all the order endpoint needs — but
+  // a draft row has to be able to say "Osmanthus oolong +2 more" without
+  // re-resolving every product, so the names travel with the draft.
+  const payload = {
+    form: ordNewCollect(), lines: ONW.lines,
+    cust: ONW.cust, customer: ONW.customer, saveCust: ONW.saveCust,
+  };
   try {
     const url = '/api/retail-admin/order-drafts' + (ONW.draftId ? '/' + ONW.draftId : '');
     const r = await fetch(url, {

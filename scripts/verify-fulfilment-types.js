@@ -897,10 +897,17 @@ check('the page always sends fulfillment_type, and address only on delivery',
    /save_customer = true/.test(srcCollect)],
   [true, true, true]);
 const srcCreate = extractFn('ordNewCreate') || '';
-check('the create path posts orders ONCE and never posts a customer first',
-  [(srcCreate.match(/fetch\(/g) || []).length,
-   /retail-admin\/customers/.test(srcCreate)],
-  [1, false]);
+// Named by endpoint, not counted: the handler legitimately makes a second call
+// once the order exists — it deletes the draft that became it. A bare count of
+// fetch( calls said "2" and could not tell that from the two-POST sequence this
+// assertion exists to forbid.
+const createFetches = (stripComments(srcCreate).match(/fetch\('([^']+)'/g) || [])
+  .map(m => m.slice(7, -1));
+check('the create path posts orders ONCE, clears its draft, and never posts a customer',
+  [createFetches.filter(u => u === '/api/retail-admin/orders').length,
+   createFetches.some(u => u.includes('/customers')),
+   createFetches.filter(u => u.includes('/order-drafts')).length],
+  [1, false, 1]);
 
 // §1.12 in-flight, failure shape C: btn is captured synchronously, BEFORE the
 // first await, because event.currentTarget is null once dispatch ends.
@@ -954,6 +961,155 @@ check('dynamic regions are shielded from the walker',
     .map(id => new RegExp('id="' + id + '"[^>]*data-no-i18n').test(newSection)),
   [true, true, true, true, true]);
 
+
+// ═══ 10. Drafts — a draft is not an order ═══════════════════════════════════
+// THE ASSERTION THIS SECTION EXISTS FOR: a draft is absent from the order list
+// and from every count. Proved against the real mirror queries — the same ones
+// §3 uses for the worklist, the open-work chips and the status line — by
+// running them before and after drafts exist.
+db.exec(`
+  CREATE TABLE retail_order_drafts (
+    id INTEGER PRIMARY KEY, created_by INTEGER, owner_realm TEXT, payload TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+const orderListQ = `SELECT order_no FROM retail_orders ORDER BY id`;
+const openWorkQ = `SELECT COUNT(*) AS n FROM retail_orders
+                    WHERE status IN ('pending_payment','paid','preparing','dispatched','awaiting_restock')
+                      AND COALESCE(channel,'') NOT IN ('meituan','gzgrocery')`;
+const kpiTodayQ = `SELECT COUNT(*) AS n, COALESCE(SUM(total),0) AS rev FROM retail_orders
+                    WHERE status NOT IN ('cancelled')`;
+const before = {
+  list: db.prepare(orderListQ).all().map(r => r.order_no),
+  open: db.prepare(openWorkQ).get().n,
+  kpi:  db.prepare(kpiTodayQ).get(),
+};
+const DRAFT_PAYLOAD = JSON.stringify({
+  form: { recipient_name: 'Half-typed', items: [{ product_id: 1, qty: 2, unit_price: 62 }], shipping_fee: 15 },
+  lines: [{ product_id: 1, name_en: 'Osmanthus oolong', name_cn: '桂花乌龙', qty: 2, unit_price: 62 }],
+  cust: 'guest', customer: null, saveCust: true,
+});
+db.prepare("INSERT INTO retail_order_drafts (id, created_by, owner_realm, payload) VALUES (1, 7, 'backend', ?)").run(DRAFT_PAYLOAD);
+db.prepare("INSERT INTO retail_order_drafts (id, created_by, owner_realm, payload) VALUES (2, 7, 'backend', '{}')").run();
+check('the draft fixture actually landed (the comparison is not vacuous)',
+  db.prepare('SELECT COUNT(*) AS n FROM retail_order_drafts').get().n, 2);
+const after = {
+  list: db.prepare(orderListQ).all().map(r => r.order_no),
+  open: db.prepare(openWorkQ).get().n,
+  kpi:  db.prepare(kpiTodayQ).get(),
+};
+check('two drafts exist and the order list is unchanged', after.list, before.list);
+check('two drafts exist and the open-work count is unchanged', after.open, before.open);
+check('two drafts exist and the KPI count and revenue are unchanged', after.kpi, before.kpi);
+// Those three are DESIGN guards: drafts live in their own table, so no order
+// query can reach one, and no edit to retail.js can make them fail. What CAN
+// fail — and what would break the guarantee — is an order query learning to
+// read the drafts table. That claim is checked against the source, below, and
+// it is the mutable half of this pair.
+// A bounded region, not "everything after the banner": the order LIST handler
+// sits below the draft endpoints in this file, so an open-ended region counted a
+// drafts read inside the order list as legitimately placed. The region ends
+// where that handler begins.
+const DRAFTS_REGION_START = SERVER_SRC.indexOf('// ── Unfinished New-order forms');
+const DRAFTS_REGION_END = SERVER_SRC.indexOf("router.get('/api/retail-admin/orders'", DRAFTS_REGION_START);
+check('the drafts region anchors were found and are in order',
+  DRAFTS_REGION_START !== -1 && DRAFTS_REGION_END > DRAFTS_REGION_START, true);
+const draftTableHits = [];
+for (let i = SERVER_SRC.indexOf('retail_order_drafts'); i !== -1;
+     i = SERVER_SRC.indexOf('retail_order_drafts', i + 1)) draftTableHits.push(i);
+check('the drafts table is read only by the draft endpoints, never by an order query',
+  [draftTableHits.length > 0,
+   draftTableHits.every(i => i > DRAFTS_REGION_START && i < DRAFTS_REGION_END)],
+  [true, true]);
+// Prove those three queries are not simply blind: an extra ORDER moves all of
+// them. Without this the section above passes on a broken query just as happily
+// as on a correct one.
+db.prepare(`INSERT INTO retail_orders (id, order_no, status, channel, total, fulfillment_type)
+            VALUES (99,'R-EXTRA','paid','manual',50,'delivery')`).run();
+const withOrder = {
+  list: db.prepare(orderListQ).all().map(r => r.order_no),
+  open: db.prepare(openWorkQ).get().n,
+  kpi:  db.prepare(kpiTodayQ).get(),
+};
+check('the same queries DO move for a real order — they are not blind',
+  [withOrder.list.length === before.list.length + 1,
+   withOrder.open === before.open + 1,
+   withOrder.kpi.n === before.kpi.n + 1],
+  [true, true, true]);
+db.prepare('DELETE FROM retail_orders WHERE id = 99').run();
+
+// The chip cannot become an order filter. It carries no data-status, so
+// setOrderStatus can never select it and no query is asked for status='drafts'.
+const chipMarkup = (ordersSection.match(/<div class="status-chip st-drafts"[^>]*>/) || [''])[0];
+check('the Drafts chip is a view switch, never a status filter',
+  [/id="ord-chip-drafts"/.test(chipMarkup),
+   /onclick="ordShowDrafts\(\)"/.test(chipMarkup),
+   /data-status/.test(chipMarkup)],
+  [true, true, false]);
+// And any status chip leaves the view, so there is one way back.
+check('a status chip returns from the drafts view',
+  /ordHideDrafts\(\)/.test(extractFn('setOrderStatus') || ''), true);
+
+// Its own row shape — NOT the order table's columns. Four empty cells would
+// read as a broken order.
+const draftsView = HTML_SRC.slice(HTML_SRC.indexOf('id="ord-drafts-view"') - 400,
+                                  HTML_SRC.indexOf('id="ord-drafts-view"') + 200);
+const srcRenderDrafts = extractFn('ordRenderDrafts') || '';
+check('drafts render their own rows, never the order table',
+  [/odr-row/.test(srcRenderDrafts),
+   /orders-table|order-row|oc-c-ord/.test(srcRenderDrafts),
+   /<td|<th/.test(srcRenderDrafts)],
+  [true, false, false]);
+check('the drafts view is shielded from the walker (it carries names)',
+  /id="ord-drafts-view"[^>]*data-no-i18n/.test(draftsView), true);
+
+// The label ladder, run through the real function: customer, else guest, else
+// first product plus how many more, else "Empty draft".
+const labelHarness = new Function(`
+  ${extractFn('ordDraftLabel')}
+  return function (preview) {
+    globalThis.cuT = (en) => en;
+    return ordDraftLabel(preview);
+  };
+`)();
+check('draft labels fall back in order: customer, guest, products, empty',
+  [labelHarness({ kind: 'customer', label: 'Chen Jing' }).text,
+   labelHarness({ kind: 'guest', label: 'Walk-in' }).text,
+   labelHarness({ kind: 'products', label: 'Osmanthus oolong', extra: 2 }).text,
+   labelHarness({ kind: 'products', label: 'Osmanthus oolong', extra: 0 }).text,
+   labelHarness({ kind: 'empty' }).text,
+   labelHarness(null).text],
+  ['Chen Jing', 'Walk-in', 'Osmanthus oolong +2 more', 'Osmanthus oolong',
+   'Empty draft', 'Empty draft']);
+// An unlabelled draft is DESCRIBED, not named — the copy is set apart so it
+// cannot be mistaken for a customer actually called "Empty draft".
+check('the empty label is marked as a description, not a name',
+  [labelHarness({ kind: 'empty' }).none, labelHarness({ kind: 'guest', label: 'Walk-in' }).none],
+  [true, false]);
+
+// The server preview: derived from whatever the payload happens to be, and
+// never a sentence — it returns a KIND and raw names, because "Empty draft" and
+// "+2 more" have to render in the operator's language.
+const previewSrc = extractFn('draftPreview', SERVER_SRC) || '';
+check('draftPreview was found in retail.js', previewSrc.length > 200, true);
+const previewFn = new Function(`${previewSrc}; return draftPreview;`)();
+check('the preview reads a real payload: kind, label, extra and total',
+  (() => { const p = previewFn(DRAFT_PAYLOAD);
+           return [p.kind, p.label, p.total]; })(),
+  ['guest', 'Half-typed', 139]);
+check('the preview survives an empty, a corrupt and a null payload',
+  ['{}', 'not json at all', null].map(s => previewFn(s).kind),
+  ['empty', 'empty', 'empty']);
+check('the preview names the first product and counts the rest when nobody is named',
+  (() => { const p = previewFn(JSON.stringify({
+             form: { items: [{ qty: 1, unit_price: 10 }] },
+             lines: [{ name_en: 'Osmanthus oolong', name_cn: '桂花乌龙' }, {}, {}],
+           }));
+           return [p.kind, p.label, p.label_cn, p.extra]; })(),
+  ['products', 'Osmanthus oolong', '桂花乌龙', 2]);
+// §1.11 — no English UI copy crosses the wire. The page builds the sentences.
+check('the preview returns no UI sentences for the page to display',
+  /Empty draft|more'|no drafts/i.test(previewSrc), false);
 
 // ── Report ──────────────────────────────────────────────────────────────────
 // §8's by-phone classifier is asserted through the REAL async function, so the

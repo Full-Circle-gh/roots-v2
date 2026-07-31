@@ -5368,6 +5368,52 @@
     }
   }
 
+  /* ── Orders · Drafts view (odr-*) ────────────────────────────────────
+     A draft's own row shape. Deliberately NOT #orders-table: no order number,
+     no channel badge, no status pill, no delivery cell. Prefixed odr-* like
+     every other retail-admin section, so nothing here collides with the base
+     layer's .dot / .v / .t / .k. */
+  #ord-drafts-view[hidden] { display: none; }
+  #ord-drafts-view .odr-card {
+    background: var(--td-surface); border: 1px solid var(--td-border);
+    border-radius: 14px; clip-path: inset(0 round 14px);
+  }
+  #ord-drafts-view .odr-row {
+    display: flex; align-items: center; gap: 16px;
+    padding: 14px 18px; border-bottom: 1px solid var(--td-border);
+  }
+  #ord-drafts-view .odr-row:last-child { border-bottom: 0; }
+  #ord-drafts-view .odr-open {
+    flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px;
+    background: none; border: 0; padding: 0; margin: 0;
+    font-family: inherit; text-align: left; cursor: pointer; color: var(--td-text);
+  }
+  #ord-drafts-view .odr-t {
+    font-size: 14px; font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  /* An unlabelled draft is described, not named — set apart from a real name. */
+  #ord-drafts-view .odr-t.odr-none { color: var(--td-text2); font-style: italic; }
+  #ord-drafts-view .odr-m { font-size: 13px; color: var(--td-text2); }
+  #ord-drafts-view .odr-v { font-size: 14px; font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #ord-drafts-view .odr-x {
+    width: 28px; height: 28px; flex: 0 0 auto; padding: 0;
+    border: 0; background: none; border-radius: 7px;
+    color: var(--td-text2); cursor: pointer; display: grid; place-items: center;
+  }
+  #ord-drafts-view .odr-x:hover { background: var(--td-brick-tint); color: var(--td-brick-ink); }
+  #ord-drafts-view .odr-x svg { width: 16px; height: 16px; display: block; }
+  #ord-drafts-view .odr-open:focus-visible,
+  #ord-drafts-view .odr-x:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 2px; }
+  /* No drafts is what a tidy Monday looks like — nothing here apologises. */
+  #ord-drafts-view .odr-empty {
+    background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px;
+    padding: 34px 24px; display: flex; flex-direction: column; align-items: center; gap: 10px;
+    text-align: center;
+  }
+  #ord-drafts-view .odr-empty h3 { font-size: 18px; font-weight: 500; margin: 0; }
+  #ord-drafts-view .odr-empty p { font-size: 14px; color: var(--td-text2); max-width: 46ch; margin: 0; text-wrap: pretty; }
+
   /* ── Orders · New order — page chrome (Tacet-native, onw-* only) ──────
      All child classes are onw-* — the base css owns .opt/.dot/.k/.v/… and a
      bare class here silently inherits another section's look. Colour comes

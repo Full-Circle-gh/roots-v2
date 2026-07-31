@@ -10,7 +10,7 @@
 //
 // Bump CACHE on every UI shape change to force every client to evict
 // its old shell on next load (activate handler deletes all old caches).
-const CACHE = 'roots-v2-shell-v696-orders-new-icon-size';
+const CACHE = 'roots-v2-shell-v697-order-drafts-ui';
 const SHELL = ['/', '/login'];
 
 // Heuristic — request that wants HTML?

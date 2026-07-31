@@ -2223,6 +2223,13 @@
       <div class="status-chip st-refunded"               data-status="refunded"         onclick="setOrderStatus(this)"><span class="dot"></span>Refunded</div>
       <div class="status-chip st-refunded"               data-status="refunds_open"     onclick="setOrderStatus(this)" title="Pending refund requests · 待处理退款"><span class="dot"></span>Refund queue<span class="chip-ct alert" id="refund-queue-count"></span></div>
       <div class="status-chip st-awaiting_restock"       data-status="needs_invoice"    onclick="setOrderStatus(this)" title="Orders with an invoice request — the count is the ones still to issue · 开票申请订单,计数为待开票"><span class="dot"></span>Invoice<span class="chip-ct alert" id="oc-needs_invoice"></span></div>
+      <!-- Drafts — deliberately NOT a data-status chip. A draft is not an order
+           in another state: it lives in its own table, it is never in the order
+           list, in a KPI tile or in the status line, and this chip swaps what
+           you are looking at rather than narrowing the same records. It carries
+           no data-status precisely so setOrderStatus can never reach it and no
+           order query can ever be asked for status='drafts'. -->
+      <div class="status-chip st-drafts" id="ord-chip-drafts" onclick="ordShowDrafts()" title="Unfinished orders you saved · 你保存的未完成订单"><span class="dot"></span>Drafts<span class="chip-ct" id="oc-drafts"></span></div>
     </div>
 
     <!-- Filter row — store · channel · search on ONE line, actions after it.
@@ -2745,6 +2752,18 @@
            default 100 rows with nothing on screen saying so. -->
       <div id="ord-pager"></div>
     </div>
+
+    <!-- ─── DRAFTS VIEW ───
+         Swapped in by the Drafts chip; the list card above is hidden while it
+         is open, and the KPI tiles and status line stay exactly as they are —
+         they are about orders, and a draft is not one.
+         Its own row shape, NOT the order table's columns: a draft has no order
+         number, no channel, no status and no delivery, and forcing it into
+         those columns produces four empty cells and a row that reads as a
+         broken order. Rendered by ordRenderDrafts(); data-no-i18n because the
+         rows carry customer and product names, and the copy inside is baked
+         one-language by cuT(). -->
+    <div id="ord-drafts-view" data-no-i18n hidden></div>
   </section>
 
   <!-- ─── ORDERS · NEW ORDER (full sub-page, §1.7a takeover) ───

@@ -19239,20 +19239,81 @@ router.post('/api/retail-admin/order-drafts', requireRetailAdmin, express.json()
   res.json({ success: true, data: { id: info.lastInsertRowid } });
 });
 
-// Own drafts only. Metadata, not payloads — timestamps are what the UI tells them
-// apart by, and a list of full form states is a lot of bytes for a chooser. If the
-// page turns out to need a per-row preview, that is a change to make once we know
-// what the preview should say, not a guess now.
+// The per-row preview the original comment here deferred: "a change to make once
+// we know what the preview should say, not a guess now." We know now — the page
+// shows the best label available, in order (customer, else guest, else first
+// product and how many more, else nothing), plus how long ago and the running
+// total. Enough to tell three drafts apart without opening them.
+//
+// Derived here rather than fetched per row: the list is capped at 50 and a
+// payload runs to 64KB, so the client asking each draft what it is would be up
+// to 3MB to draw one screen.
+//
+// Returns a KIND and the raw names, never a sentence. "Empty draft" and "+2
+// more" are UI copy and belong to the page, which renders them in the operator's
+// own language (§1.11). A server that returns English is a page that cannot
+// switch.
+//
+// Every field is read defensively. A draft is allowed to be incomplete and
+// invalid — that is the entire point of one — so this parses whatever is there
+// and falls back to 'empty' rather than throwing on a half-typed form.
+function draftPreview(payloadStr) {
+  const NONE = { kind: 'empty', label: null, label_cn: null, extra: 0, items: 0, total: 0 };
+  let p;
+  try { p = JSON.parse(payloadStr); } catch (e) { return NONE; }
+  if (!p || typeof p !== 'object') return NONE;
+  const form  = (p.form && typeof p.form === 'object') ? p.form : {};
+  const lines = Array.isArray(p.lines) ? p.lines : [];
+  const items = Array.isArray(form.items) ? form.items : [];
+
+  let subtotal = 0;
+  for (const it of items) {
+    const q = Number(it && it.qty), u = Number(it && it.unit_price);
+    if (Number.isFinite(q) && Number.isFinite(u)) subtotal += q * u;
+  }
+  const ship = Number(form.shipping_fee);
+  const hasOverride = form.total_override != null && form.total_override !== ''
+                      && Number.isFinite(Number(form.total_override));
+  const total = hasOverride ? Number(form.total_override)
+                            : subtotal + (Number.isFinite(ship) ? ship : 0);
+
+  const custName  = (p.customer && typeof p.customer === 'object')
+    ? String(p.customer.nickname || '').trim() : '';
+  const guestName = String(form.recipient_name || '').trim();
+  const first     = lines[0] && typeof lines[0] === 'object' ? lines[0] : null;
+  const firstEn   = first ? String(first.name_en || '').trim() : '';
+  const firstCn   = first ? String(first.name_cn || '').trim() : '';
+
+  let kind = 'empty', label = null, label_cn = null, extra = 0;
+  if (custName)                { kind = 'customer'; label = custName; }
+  else if (guestName)          { kind = 'guest';    label = guestName; }
+  else if (firstEn || firstCn) { kind = 'products'; label = firstEn || firstCn;
+                                 label_cn = firstCn || firstEn; extra = lines.length - 1; }
+  return { kind, label, label_cn, extra: extra > 0 ? extra : 0,
+           items: items.length, total: Math.round(total * 100) / 100 };
+}
+
+// Own drafts only. The payload is read to build the preview and is NOT returned —
+// opening a draft is still its own request.
 router.get('/api/retail-admin/order-drafts', requireRetailAdmin, (req, res) => {
   const o = draftOwner(req);
   const rows = tdb().prepare(
-    `SELECT id, created_at, updated_at
+    `SELECT id, created_at, updated_at, payload
        FROM retail_order_drafts
       WHERE created_by = ? AND owner_realm = ?
       ORDER BY updated_at DESC, id DESC
       LIMIT 50`
   ).all(o.id, o.realm);
-  res.json({ success: true, data: rows });
+  const total = tdb().prepare(
+    'SELECT COUNT(*) AS n FROM retail_order_drafts WHERE created_by = ? AND owner_realm = ?'
+  ).get(o.id, o.realm).n;
+  res.json({
+    success: true, total,
+    data: rows.map(r => ({
+      id: r.id, created_at: r.created_at, updated_at: r.updated_at,
+      preview: draftPreview(r.payload),
+    })),
+  });
 });
 
 // 404 rather than 403 on somebody else's draft — a 403 would confirm it exists.
