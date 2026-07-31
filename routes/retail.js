@@ -818,16 +818,16 @@ router.get('/api/retail/maps-config', (req, res) => {
 // shows nothing (and falls back to delivery-only) when this is empty.
 router.get('/api/retail/pickup-stores', (req, res) => {
   try {
+    // Closed shops don't appear as collection points — one shared definition of
+    // "closed" (shop-wide, or both online channels) so this list and the routing
+    // that fulfils the order can never disagree about which shops are operating.
+    const closed = inventory.onlineFullyClosedStores();
     const stores = tdb().prepare(
       `SELECT id, code, name_en, name_cn, address, city, district, lat, lng, phone
          FROM retail_stores
         WHERE is_active = 1 AND pickup_enabled = 1
-          AND code NOT IN (
-            SELECT store_code FROM channel_status
-             WHERE channel IN ('mini_app','web') AND is_open = 0
-             GROUP BY store_code HAVING COUNT(DISTINCT channel) = 2)
         ORDER BY sort_order ASC, id ASC`
-    ).all();
+    ).all().filter(s => !closed.has(s.code));
     const window = cfgValue('pickup.window', { open: '10:00', close: '20:00' });
     const packingFee = Number(cfgValue('fees.pickupPackingFee', 0)) || 0;
     res.set('Cache-Control', 'public, max-age=60');
@@ -8652,12 +8652,12 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     if (!pickupStoreId)            return res.status(400).json({ success: false, error: 'pickup_store_required' });
     if (!pickupName || !pickupPhone) return res.status(400).json({ success: false, error: 'pickup_contact_required' });
     pickupStore = tdb().prepare(
-      `SELECT * FROM retail_stores WHERE id = ? AND is_active = 1 AND pickup_enabled = 1
-          AND code NOT IN (
-            SELECT store_code FROM channel_status
-             WHERE channel IN ('mini_app','web') AND is_open = 0
-             GROUP BY store_code HAVING COUNT(DISTINCT channel) = 2)`
+      'SELECT * FROM retail_stores WHERE id = ? AND is_active = 1 AND pickup_enabled = 1'
     ).get(pickupStoreId);
+    // Re-checked here and not only in /pickup-stores: a shop can close between
+    // the customer loading the list and pressing pay, and a pickup is the one
+    // fulfilment we can't reroute — the customer is walking to that door.
+    if (pickupStore && inventory.onlineFullyClosedStores().has(pickupStore.code)) pickupStore = null;
     if (!pickupStore) return res.status(400).json({ success: false, error: 'pickup_store_unavailable' });
     // Validate against THIS store's own hours + timezone, not one global window,
     // so two stores with different hours each enforce their own.
