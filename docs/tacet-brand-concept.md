@@ -27,7 +27,7 @@ For e-commerce merchants exhausted by platform jumping, Tacet is the unified com
 
 **The enemy:** Tacet does not compete with any single tool. It competes with the noise itself — seventeen open tabs, notification anxiety, the daily chaos of checking five platforms. All marketing invokes that pain, then resolves it.
 
-**Elevator pitch:** "Merchants today run their business across five disconnected platforms — a WeChat Mini-Program here, a website there, an app somewhere else. They spend their day jumping between tabs just to keep up. Tacet consolidates all of it into one dashboard, and its AI quietly handles the routine work — inventory syncs, order routing, customer replies. In music, *tacet* means the player rests while the orchestra plays. That's the product."
+**Elevator pitch:** "Merchants today run their business across five disconnected platforms — a marketplace here, a website there, an app somewhere else. They spend their day jumping between tabs just to keep up. Tacet consolidates all of it into one dashboard, and its AI quietly handles the routine work — inventory syncs, order routing, customer replies. In music, *tacet* means the player rests while the orchestra plays. That's the product."
 
 ## Mission, vision, values
 
@@ -83,9 +83,9 @@ Product features use plain functional names: Dashboard, Orders, Reports, Channel
 
 This is a narrow door, not an open one. Four names carry the layer today; a fifth requires an AI surface **and** a deliberate decision. Anything more themed is too cute.
 
-## Bilingual note
+## Language note
 
-The brand must work in English and Chinese (WeChat ecosystem). Chinese companion name candidates, pending native validation: **默契 (mòqì)** — "tacit understanding," a direct bridge from tacet/tacit — or **泰晏 (tài yàn)** — both characters mean peace/calm. CJK typography: Source Han Serif pairs with Fraunces, Source Han Sans pairs with Inter.
+The brand must work in **more than one language, and which languages depends on the business** — `docs/tacet-consolidation-decisions.md` §0 makes language a per-business setting, so English-plus-Chinese may not be assumed or required. The Chinese companion name below is recorded **for the first business's market**, not as a requirement of the brand. Chinese companion name candidates, pending native validation: **默契 (mòqì)** — "tacit understanding," a direct bridge from tacet/tacit — or **泰晏 (tài yàn)** — both characters mean peace/calm. CJK typography: Source Han Serif pairs with Fraunces, Source Han Sans pairs with Inter.
 
 ## Story beats for marketing assets
 

@@ -2,6 +2,8 @@
 
 **2026-07-30 · Read-only behavioural survey of `retail_store_stock`, `retail_stock_reservations`, `retail_stock_ledger` and `lib/inventory.js`, written before this model is adopted as the shared core. Every claim is cited to a file and line. Where the code does not settle a question the entry says UNVERIFIED and why. No row data was read. No file was changed except this one.**
 
+> **What this document is: a SURVEY, not a specification.** It records how the store-side stock model behaves today, as configured and exercised by **one business**. The store topology and the ¥ figures below are that business's, not the product's, and nothing here may be read as a Tacet default (`docs/tacet-consolidation-decisions.md` §0).
+
 Terms used below, one line each:
 
 - **Physical** — the count of units believed to be on the shelf at one store.
@@ -37,7 +39,7 @@ Every inconsistency found, most damaging first:
 13. **The `channel` recorded on holds and ledger rows is not the order's real channel.** Checkout hardcodes `'wechat'` even for web-shop orders (`routes/retail.js:9542`), and `commitUnreservedOrder` hardcodes `'wechat'` in the ledger (`lib/inventory.js:528`). §2, §4.
 14. **A kitchen-side id is used as a store-side id.** `routes/products.js:573` validates the product against the kitchen `products` table, then writes store stock keyed on `store_products` ids. Correct only for rows the original fork seeded. §8.
 
-One stale comment worth deleting during the merge: `routes/markets.js:148` points readers to `restock.js _applyDeliveryToStock` for automatic market-stock increments. That function does not exist anywhere in the repo (grep). Nothing has ever auto-incremented `market_stock`.
+One stale comment worth deleting during the consolidation: `routes/markets.js:148` points readers to `restock.js _applyDeliveryToStock` for automatic market-stock increments. That function does not exist anywhere in the repo (grep). Nothing has ever auto-incremented `market_stock`.
 
 ---
 
@@ -266,7 +268,7 @@ In practice the commit paths are protected upstream: `reserveForOrder` refuses t
 
 One caller opts out of that refusal by design. `reserveForOrder({ allowPartial: true })` judges each line on its own, reserves what the store can cover, and returns the remainder in `shortages` instead of throwing. Only the paid add-on path (`finalizeOrderAddon`) uses it, because it runs *after* the WeChat charge and cannot refuse the sale — and the all-or-nothing throw was worse there than a partial: its transaction rolled back **every** line in the batch, so one short item silently skipped the deduction for all the others too. Availability for an add-on is gated before the charge instead, in `POST /orders/:id/addon/create`, which is the point where refusing is still free. `allowPartial` never floors a row below zero (it reserves at most what is available); the residual short is reported to WeCom and logged, not absorbed.
 
-So: three different policies (go negative, clamp and forget, clamp and report) in one model. Any merged core needs to pick one, and "clamp and report" is the only one that does not lose information.
+So: three different policies (go negative, clamp and forget, clamp and report) in one model. Any consolidated core needs to pick one, and "clamp and report" is the only one that does not lose information.
 
 ### Missing rows
 
@@ -354,9 +356,9 @@ So the number only ever moves when an admin types into it. **UNVERIFIED:** how f
 
 **Breakage if both are removed:** the market stock overlay and its three endpoints, plus everything listed in the `products.stock_qty` table above. Nothing in the store side, the storefront, the mini-app, or any channel daemon reads either one — the only cross-over is the historical migration seed that copied `products.stock_qty` into `retail_store_stock` once (`database.js:3229`, `3279`).
 
-### One id-space hazard to carry into the merge
+### One id-space hazard to carry into the consolidation
 
-`routes/products.js:569-604` — the kitchen product page's per-store stock adjuster — validates the product id against the **kitchen** `products` table (`:573`), then hands that id to `adjustStock`, which writes `retail_store_stock` keyed on **`store_products`** ids. It is correct only for rows the original fork seeded with matching ids (`database.js:3830-3843`). The same hazard exists in the restock transfer, which reads `restock_items.product_id` (pointing at `products`) and passes it to the same function (`routes/restock.js:237-247`). Collapsing the two product tables removes this hazard entirely, which is one more reason the merge is worth doing.
+`routes/products.js:569-604` — the kitchen product page's per-store stock adjuster — validates the product id against the **kitchen** `products` table (`:573`), then hands that id to `adjustStock`, which writes `retail_store_stock` keyed on **`store_products`** ids. It is correct only for rows the original fork seeded with matching ids (`database.js:3830-3843`). The same hazard exists in the restock transfer, which reads `restock_items.product_id` (pointing at `products`) and passes it to the same function (`routes/restock.js:237-247`). Collapsing the two product tables removes this hazard entirely, which is one more reason the consolidation is worth doing.
 
 ---
 

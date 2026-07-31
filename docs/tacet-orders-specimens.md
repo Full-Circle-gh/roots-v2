@@ -365,6 +365,8 @@ Fn `04:4568`, write `04:4602`. **The highest-traffic write in the product** — 
 
 ## 8. Customers — findings, 2026-07-17
 
+> **These specimens are one business's live production rows** (Roots), used as **evidence that a mechanism behaves a certain way** — not as Tacet reference data or product examples. Customer names are withheld; ids and amounts are kept only where they are the evidence. The ¥ figures are that business's currency, not the product's (`docs/tacet-consolidation-decisions.md` §0).
+
 Surveyed from the live box (`roots.db`, 626 customers / 469 orders). **Customers is Batch 1** and carries 7 of the 13 non-disabling write controls (§7).
 
 ### 🔴 Test data — ignore `asher` (customer 233)
@@ -380,14 +382,14 @@ Surveyed from the live box (`roots.db`, 626 customers / 469 orders). **Customers
 
 **145 of 626 diverge — and that is exactly the set of customers with any spend.** The 481 that agree are all zero-on-both-sides. So the two numbers disagree for **100% of customers where the number matters.**
 
-**Why — and it is not a bug.** Verified against customer 427 ("Sarah") on live data:
+**Why — and it is not a bug.** Verified against customer 427 on live data:
 
 | | Cached (list) | Live (drawer) |
 |---|---|---|
 | Migrated in from OUT1N with 1,155 points | — | — |
 | Order 322: ¥1,124 of goods, **paid with 1,134 points** | **¥1,124** | **¥0** |
 
-The points ledger says it plainly: `Order_redeem −1134` and `Order_earn +0 — "earn base ¥0.00, below earn threshold"`. Sarah received ¥1,124 of goods and paid no cash. **Both numbers are honest.** Same shape: id 104 (Jay, ¥709/¥0), id 85 (Samuel Keir, ¥414/¥0).
+The points ledger says it plainly: `Order_redeem −1134` and `Order_earn +0 — "earn base ¥0.00, below earn threshold"`. Customer 427 received ¥1,124 of goods and paid no cash. **Both numbers are honest.** Same shape: id 104 (¥709/¥0), id 85 (¥414/¥0).
 
 The other direction — **101 customers where live > cached** — is the cache lagging: orders paid/preparing/dispatched are counted live but not yet folded into `lifetime_spend`, which only increments at the award event (`retail.js:23922`).
 

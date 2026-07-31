@@ -801,7 +801,7 @@ Two gaps the rebrand left. Defined here from Tacet primitives.
 - **No page-scoped `:root` blocks.** Team carries one from `backend-team.html` (`html:10041`). There is exactly one token block.
 - **Retire a control, retire its storage key.** The Orders View popovers were removed from markup, but `04-orders.js` still loads `retail-admin-order-detail-tweaks` (`:3721–3724`) and branches on `ODV.itemsLayout` on every drawer open (`:2733–34`). **Any operator who chose "cards" before removal still renders cards, permanently, with no UI to undo it.** Delete the orphaned code (~120 lines) and ignore the key.
 - **Fix the dead link** — `html:1529` calls `goTab('activity')`; that tab no longer exists.
-- `¥`, UTC+8, WeChat/Alipay, JD/kd100 are **tenant configuration**, not brand — they stay, parameterised.
+- `¥`, UTC+8, WeChat/Alipay and JD/kd100 are **not brand — but they are not settled either.** They are **Roots'** currency, time zone, payment methods and carriers, hardcoded today in hundreds of places. `docs/tacet-consolidation-decisions.md` §0 makes every one of them **per-business configuration that does not yet exist**, and calls the hardcoding a defect. **Do not cite this line to justify leaving a hardcoded `¥`, `+08:00`, WeChat/Alipay or JD/kd100 in place** — they must become settings, and until they are, each one is work owed, not a decision made.
 - Wordmark always lowercase `tacet`. Never uppercase, never a serif substitute, never redrawn freehand.
 
 ### 1.17 Honesty — what a page is allowed to claim
@@ -1483,7 +1483,7 @@ git log origin/main..HEAD -- docs/     # anything returned means it is not done
 
 ---
 
-## 8. The Full Circle test
+## 8. The reference-build test
 
 The reference build's visual identity is **dead**. But some rules appear in both books — *one primary per screen*, *colour is status not decoration*, *hairlines not shadows*, *sentence case*. Those are **Tacet's own**, stated independently in `tacet-design-system.md`.
 

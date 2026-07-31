@@ -1,4 +1,4 @@
-# Tacet core survey — current state before the shared-core merge
+# Tacet core survey — current state before the shared-core consolidation
 
 Read-only inventory, 2026-07-30. Every claim below is cited to a file (and line where it
 helps). Where the code does not settle a question, the entry says **UNVERIFIED** and why.
@@ -24,7 +24,7 @@ No file in this repo was changed except this one.
    nothing since.
 6. **There is no product/catalogue sync between the two sides.** The only live cross-side data
    paths are the restock transfer and two kitchen-app screens that write Sales stock.
-7. Those paths are the sharpest merge risk: they take a **`products.id`** and use it as a
+7. Those paths are the sharpest consolidation risk: they take a **`products.id`** and use it as a
    **`store_products.id`** (`routes/restock.js:237-247`, `routes/products.js:569-614`). It
    works only because the fork preserved ids.
 8. **Two authorization models, two user tables**: Production is role + 18 boolean module
@@ -34,7 +34,7 @@ No file in this repo was changed except this one.
 9. Capability enforcement on the big Sales API is **still off by default**
    (`tenants.rbac_enforce DEFAULT 0`, `routes/backend-auth.js:253`); only `/api/backend/*`
    team routes enforce unconditionally.
-10. Other merge-blockers found: divergent "today" (Sales normalises to UTC+8, Production does
+10. Other consolidation blockers found: divergent "today" (Sales normalises to UTC+8, Production does
     not), divergent delete semantics, divergent channel enums, three co-existing category
     schemes, two location tables, four stock stores, and tenant scoping that is row-level on
     three tables and database-level everywhere else.
@@ -206,7 +206,7 @@ Classification: **(a)** single shared definition · **(b)** two independent defi
 | **Suppliers** | **(a) single shared definition**, with divergent read scoping | one `suppliers` table; Sales filters `tenant_id`, Production does not (see §6) |
 | **Purchase orders / bills** | **(c) partially shared** | one `purchase_orders`/`po_line_items`/`invoices` set, discriminated by `scope` ∈ `'kitchen'`/`'retail'` (`database.js:43`); a retail line uses `store_product_id`, a kitchen line uses `ingredient_id` — "one of the two is always NULL" (`database.js:40`) |
 | **Restock orders** | **(a) single shared definition** | one `restock_orders`/`restock_items` set; `routes/restock.js` serves both sides |
-| **Customers** | **(a) single definition** | `retail_customers`, Sales-only — nothing to merge |
+| **Customers** | **(a) single definition** | `retail_customers`, Sales-only — nothing to consolidate |
 | **Revenue / sales reporting** | **(b) two independent definitions** | `sales_entries` (per line) vs `retail_orders` (per order) — enum + period diff below |
 | **Sessions** | **(a) single store** | one `data/sessions.db` (`server.js:159`), three non-colliding keys |
 | **Activity log** | **(a) single table**, lossy for Sales | `activity_log.user_id` FK → `users(id)`; an operator's id is **stored as NULL** because it would violate the FK (`middleware/auth.js:41-47`) |
@@ -289,6 +289,12 @@ the finance ledger — those Production modules have no capability equivalent.
 
 Enum collisions to resolve: `miniapp` vs `wechat` for the same channel; `retail` vs `web`;
 `dinein` exists only on the Production side.
+
+**§0 framing, added 2026-07-31:** reconciling these seven is a migration detail, **not the task**.
+Both enums are **Roots' channel list**, not Tacet's. `docs/tacet-consolidation-decisions.md` §0 makes the channel
+list per-business configuration, with integrations offered as available options — so the target is
+a configurable list, not one agreed hardcoded set. `gzgrocery` in particular is specific to one
+customer.
 
 *(Correction to the docs: `docs/tacet-sales-addendum.md` states that
 `/api/retail-admin/sales/summary` "does not exist". It exists at `routes/retail.js:11610` and
@@ -498,7 +504,7 @@ Every string-literal role comparison in server code (`routes/`, `lib/`, `middlew
 `'store_stock'` ×4, `'super'` ×3, `'warehouse'` ×1, `'store_manager'` ×1, `'store'` ×1,
 `'staff'` ×1.
 
-The ones that will bite a merge:
+The ones that will bite the consolidation:
 
 | Location | Check | Why it is a risk |
 |---|---|---|
@@ -511,7 +517,7 @@ The ones that will bite a merge:
 | `routes/billing-pay.js:32` | `u.role !== 'admin'` | uses the **Production** `admin` string to gate a **SaaS billing** route |
 | `routes/backend-auth.js:684, 786, 831, 889`, `backend-team.js:122, 201-233, 301, 317` | `role === 'owner'` / `'admin'` | owner-singleton invariants (last-active-owner guards) written as string compares, not capability checks |
 | `public/retail-admin/03-dashboard.js` (via `body.pos-*`) | CSS role string | money-card *presence* gates on a role string, while *Needs-you* sub-cards gate on caps — two mechanisms on one page (`docs/PROJECT-KNOWLEDGE.md:320-324`) |
-| `routes/admin.js:17, 129` | custom roles read from `categories WHERE kind='role'` | roles are data in a table meant for categories; a merge that unifies categories will move the role list |
+| `routes/admin.js:17, 129` | custom roles read from `categories WHERE kind='role'` | roles are data in a table meant for categories; a consolidation that unifies categories will move the role list |
 
 Also: `lib/capabilities.js` marks `quickstock:add` / `quickstock:recount` with features
 `kitchenAdd` / `quickStock`, but neither key exists in `lib/features.js:15-51`. Because
@@ -574,7 +580,7 @@ entirely (`server.js:256-265`).
 
 ---
 
-## 6. Risk notes for the merge
+## 6. Risk notes for the consolidation
 
 Ordered by how much damage each can do silently.
 
@@ -602,7 +608,7 @@ reachable from the UI: its picker is `/api/products` (`:1149`, `:2825`).
 `market_stock` is written by exactly one endpoint, `routes/markets.js:203` (manual admin
 adjustment). POS checkout does not decrement it (`routes/pos.js` touches only `markets`,
 `products`, `sales_entries`, `users`), and no restock path increments it — contradicting the
-comment at `database.js:445-448`. Any merge that treats `market_stock` as a real ledger will
+comment at `database.js:445-448`. Any consolidation that treats `market_stock` as a real ledger will
 import numbers that have drifted for as long as the table has existed. **UNVERIFIED:** how far
 the live data has drifted — that needs the production DB, which is gitignored.
 
@@ -618,7 +624,7 @@ Production does **none** of it: a grep for `8 * 3600`, `Asia/Shanghai`, `+08:00`
 SQLite `CURRENT_TIMESTAMP` / `date('now')` (UTC) and JS `new Date().toISOString().slice(0,10)`
 (`routes/production.js:11`). Guangzhou is UTC+8, so a row created between 00:00 and 08:00
 local is dated to the previous day on the Production side and the correct day on the Sales
-side. Merging the two revenue models without picking one convention will produce daily
+side. Consolidating the two revenue models without picking one convention will produce daily
 totals that never reconcile.
 
 Display formatting is Sales-only too: `public/td-datetime.js` is loaded by
@@ -712,10 +718,10 @@ already unattributable by id.
 by dropping the FK entirely: "the actor can be a kitchen `users(id)` OR a Mini App Backend
 operator's `tenant_users(id)` — two id spaces" (`database.js:3918-3925`, migration
 `drop_ledger_actor_fk_v1`). `retail_vouchers.created_by` hit the same trap
-(`reference` in the same comment). **Any merged user table must reconcile two id spaces that
+(`reference` in the same comment). **Any consolidated user table must reconcile two id spaces that
 have already been written into audit columns as bare integers.**
 
-### R9 — Capability enforcement is off, so the merge cannot rely on it
+### R9 — Capability enforcement is off, so the consolidation cannot rely on it
 
 `tenants.rbac_enforce` is `NOT NULL DEFAULT 0` (`routes/backend-auth.js:253`). With it off,
 `/api/retail-admin/*` performs **no** server-side capability check
@@ -758,7 +764,7 @@ version or `updated_by`).
   older copy of the Production frontend, including its own `/api/sales/summary` calls
   (`:2973`, `:16317`). It will show up in any grep-driven migration.
 - Production and Sales each have their own SSE channel and their own push-subscription table
-  (§2); a merged notification layer has to reconcile permission-targeted broadcast
+  (§2); a consolidated notification layer has to reconcile permission-targeted broadcast
   (`routes/events.js:69-90`) with signature-poll nudging (`routes/retail.js:13115-13160`).
 - `routes/retail.js` is ~1.5 MB in one file; `public/app.html` is 28,218 lines with inline
   script. Mechanical refactors across the boundary will be hard to review.

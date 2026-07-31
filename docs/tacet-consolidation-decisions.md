@@ -1,6 +1,6 @@
-# Tacet shared-core merge — decisions record, v0.7
+# Tacet shared-core consolidation — decisions record, v0.7
 
-**2026-07-31 · A living record of what has been decided so far for the Tacet shared-core merge, so the decisions stop living in chat. Supersedes v0.1. The open questions in §23 are NOT decided and must not be treated as settled.**
+**2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The open questions in §23 are NOT decided and must not be treated as settled.**
 
 2026-07-30 · The app previously called the kitchen app is now the PRODUCTION APP. The KITCHEN flag on a location, kitchen locations and code identifiers keep their names.
 
@@ -147,7 +147,7 @@ This supersedes the alternative of assigning an owning side per shared field, an
 - CARRY OVER WHEN RETIRING IT: the data is Meituan SETTLEMENT data — what Meituan actually paid. The live Meituan connection does not handle settlement; it handles stock and orders. The settlement import must land against a real location and the Meituan channel, in the single order record.
 - Meanwhile the production app shows two lists both labelled "门店 Stores" — one editable (`retail_stores`), one not (`meituan_stores`) — with no visible link. Retiring this resolves it.
 - SAFE CLOSING DOES NOT EXIST TODAY. Both deactivation paths are a bare `is_active = 0` with no stock check and no move-out. Deactivating a retail store leaves stock present but invisible and leaves user bindings pointing at it. The move-out-and-confirm flow is new build.
-- Independent of the merge: the retail deactivation path should unassign its users, which the markets path already does.
+- Independent of the consolidation: the retail deactivation path should unassign its users, which the markets path already does.
 - ONE FORM. Five separate screens currently create or edit a location, each with a different field set, so what a location holds depends on where it was created. The module provides ONE form used everywhere; other screens link to it rather than carrying their own.
 
 ## 10. Stock
@@ -179,7 +179,7 @@ This supersedes the alternative of assigning an owning side per shared field, an
 ## 13. Sales record
 
 - ONE sales record for the whole business. Every sale from every channel, written once, one shape.
-- The kitchen's separate sales log is RETIRED, not merged. Confirmed: no kitchen-only sales exist.
+- The kitchen's separate sales log is RETIRED, not consolidated. Confirmed: no kitchen-only sales exist.
 - POS is REMOVED from the production app and becomes a sales channel like any other. A POS sale creates an order, moves stock, and lands in the sales record.
 - Existing spreadsheet importers are repointed at the single record.
 - A staff-created order MUST have a location. DECIDED. Today the field is optional; when left blank the order saves with no location, nothing routes it afterwards, and no screen can fix it, so it is permanently unfulfillable. The field becomes required, and a way to change an order's location afterwards is added.

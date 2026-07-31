@@ -35,8 +35,11 @@
 > 2. **Unopened rows** — `--td-unseen` + the inset Sage edge, which *replaces*
 >    Orders' Dusk "New" pill (a §1.8 violation). `retail_orders.seen_at`
 >    already exists.
-> 3. **"Mini app" → "WeChat"** in the channel dropdown and the mobile order
->    cards. Orders contradicts itself today: its row labels already say WeChat.
+> 3. **The channel label contradicts itself** — the dropdown and the mobile
+>    order cards say "Mini app" where the row labels already say "WeChat".
+>    Fix the inconsistency at the data source. **Do not harden "WeChat" into
+>    the shared UI:** channel names are per-business configuration and the
+>    channel list is not a fixed set (`docs/tacet-consolidation-decisions.md` §0).
 >
 > None of this is new design. It is application.
 >
@@ -121,7 +124,7 @@ There were **7+ scattered copies** of these docs across `Desktop/`, `tacent/`, `
 - **🟡 The lint gate is unexercised.** `ecbce2dd` was `[skip deploy]` with no `.js`. **The next real admin-JS commit is its live test.** It fails *closed* — deploy blocked, visible, fixable.
 - **The `--td-paper` fold-in** — optional tidy, safe, not a fix. Rulebook §1.2.
 - **3 customers can't reconcile** `lifetime_spend` against their own awarded subtotals (196: −314 · 264: −199 · 67: −188). Ash's call: not worth chasing. **Logged so the next survey doesn't chase it either.**
-- **`asher` (customer 233) is Ash's test account.** ¥1,430 cached vs ¥790 live across 53 orders. **Not data.** Any survey that finds this gap and chases it is chasing a test.
+- **`asher` (customer 233) is Ash's test account.** ¥1,430 cached vs ¥790 live across 53 orders. **Not data.** Any survey that finds this gap and chases it is chasing a test. (One business's live rows, logged so the next survey doesn't chase them — **not a Tacet reference example**.)
 
 ---
 
