@@ -2804,9 +2804,9 @@ router.post('/api/retail/auth', express.json(), async (req, res) => {
   // must never break the login itself: we just don't keep the name.
   let safeNickname = nickname;
   if (typeof safeNickname === 'string' && safeNickname.trim()) {
-    const v = await wxSec.checkText(await wxSecToken(), {
+    const v = await callWxSecWithTokenRetry((t) => wxSec.checkText(t, {
       text: safeNickname, openid, scene: wxSec.SCENE.PROFILE,
-    });
+    }));
     if (v.verdict === 'risky') {
       console.warn('[wx-sec] risky nickname dropped at login for', openid);
       safeNickname = null;
@@ -5314,11 +5314,24 @@ router.post('/api/retail/notifications/subscribe', requireRetailAuth, express.js
 // two tenants (or Roots + a tenant) never clobber each other's token. Roots'
 // AppID resolves from env exactly as before — same stable_token semantics.
 const _wxTokenCache = new Map();   // appId -> { token, expiresAt }
-async function getWeChatAccessToken() {
+// When we last asked WeChat to FORCE a new token, per AppID. Forced refresh is
+// rate-limited on WeChat's side, so it must stay an exception path — see
+// refreshWeChatAccessTokenAfter().
+const _wxTokenForcedAt = new Map();   // appId -> ms
+const WX_TOKEN_FORCE_COOLDOWN_MS = 5 * 60_000;
+
+// opts.forceRefresh — abandon the cached token and make WeChat mint a new one.
+// The flag has to reach stable_token too, not just our own Map: with
+// force_refresh=false WeChat answers from ITS cache and hands back the very
+// token that was just rejected, so a "refresh" that only clears our side would
+// loop on the same bad value.
+async function getWeChatAccessToken(opts = {}) {
   const { appId, appSecret } = getTenantCreds(currentTenantId()).wechat;
   if (!appId || !appSecret) return null;
+  if (opts.forceRefresh) _wxTokenCache.delete(appId);
   const hit = _wxTokenCache.get(appId);
   if (hit && Date.now() < hit.expiresAt - 60_000) return hit.token;
+  if (opts.forceRefresh) _wxTokenForcedAt.set(appId, Date.now());
   const resp = await fetch('https://api.weixin.qq.com/cgi-bin/stable_token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -5326,13 +5339,83 @@ async function getWeChatAccessToken() {
       grant_type: 'client_credential',
       appid:      appId,
       secret:     appSecret,
-      force_refresh: false,
+      force_refresh: !!opts.forceRefresh,
     }),
   });
   const j = await resp.json();
   if (!j.access_token) throw new Error('access_token_fetch_failed: ' + (j.errmsg || j.errcode));
   _wxTokenCache.set(appId, { token: j.access_token, expiresAt: Date.now() + (Number(j.expires_in) || 7200) * 1000 });
   return j.access_token;
+}
+
+// WeChat errcodes that all mean "the access_token you sent is no good" — the
+// token was invalidated early (another process forced a refresh, credentials
+// were rotated) rather than expiring on the clock we cache it against. Without
+// recovery every call keeps presenting the same dead token until our cache ages
+// out on its own, which for a 7200s token is up to two hours of hard failure.
+const WX_TOKEN_ERROR_CODES = new Set([
+  40001, // invalid credential / access_token isn't latest
+  40014, // invalid access_token
+  42001, // access_token expired
+]);
+const isWxTokenError = (code) => WX_TOKEN_ERROR_CODES.has(code);
+
+// Recover from one of the codes above. `staleToken` is the token that just got
+// rejected: if the cache no longer holds it, another caller already refreshed
+// and we simply take theirs — so a burst of concurrent 40001s costs ONE refresh,
+// not one per caller. The cooldown then bounds the pathological case (bad
+// AppSecret, revoked app) where every refresh produces another rejected token;
+// there we let calls keep failing rather than hammer a rate-limited endpoint.
+// Returns the token to retry with, or null when a retry isn't worth making.
+async function refreshWeChatAccessTokenAfter(staleToken) {
+  const { appId } = getTenantCreds(currentTenantId()).wechat;
+  if (!appId) return null;
+  const hit = _wxTokenCache.get(appId);
+  if (hit && hit.token && hit.token !== staleToken) return hit.token;   // someone beat us to it
+  const last = _wxTokenForcedAt.get(appId) || 0;
+  if (Date.now() - last < WX_TOKEN_FORCE_COOLDOWN_MS) {
+    console.warn('[wx-token] rejected token, but a forced refresh is on cooldown — not retrying');
+    return null;
+  }
+  try {
+    const fresh = await getWeChatAccessToken({ forceRefresh: true });
+    console.warn('[wx-token] access_token was rejected — forced a refresh');
+    return fresh && fresh !== staleToken ? fresh : null;
+  } catch (e) {
+    console.error('[wx-token] forced refresh failed:', e.message);
+    return null;
+  }
+}
+
+// Every mini-program API call goes through here so token recovery lives in ONE
+// place. POSTs `body` to api.weixin.qq.com`path` with the current token and, if
+// WeChat rejects the token, refreshes once and replays the SAME request.
+//
+// Returns { resp, json, token }. `json` is null when WeChat answered with
+// something other than JSON — getwxacodeunlimit returns raw image bytes on
+// success and JSON only on failure, so callers that want bytes read `resp`.
+// `token` is null when this tenant has no WeChat credentials (dev/unconfigured),
+// which is not an error and leaves resp/json null too.
+async function wxApiPost(path, body) {
+  const token = await getWeChatAccessToken();
+  if (!token) return { resp: null, json: null, token: null };
+  const send = async (t) => {
+    const resp = await fetch(
+      `https://api.weixin.qq.com${path}${path.includes('?') ? '&' : '?'}access_token=${t}`,
+      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+    );
+    const ct = resp.headers.get('content-type') || '';
+    // Only parse when WeChat says it's JSON — reading a binary body as JSON
+    // would consume it and leave the caller nothing to send on.
+    const json = ct.includes('application/json') ? await resp.json().catch(() => ({})) : null;
+    return { resp, json, token: t };
+  };
+  const out = await send(token);
+  if (out.json && isWxTokenError(out.json.errcode)) {
+    const fresh = await refreshWeChatAccessTokenAfter(token);
+    if (fresh) return send(fresh);
+  }
+  return out;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -5358,11 +5441,28 @@ async function wxSecToken() {
   catch (e) { console.warn('[wx-sec] access token unavailable:', e.message); return null; }
 }
 
+// wx-sec-check does its own fetching, so it can't go through wxApiPost — but it
+// reports the errcode back as reason 'api_error_<code>', which is enough to spot
+// a rejected token and replay the call once with a fresh one. Worth the retry
+// here specifically because BOTH checks fail open: a stale token would let text
+// and images publish unchecked for as long as the token stayed stale, which is
+// the exact exposure the content-safety gate exists to prevent.
+async function callWxSecWithTokenRetry(call) {
+  const token = await wxSecToken();
+  let r = await call(token);
+  const code = Number(String((r && r.reason) || '').replace('api_error_', ''));
+  if (token && isWxTokenError(code)) {
+    const fresh = await refreshWeChatAccessTokenAfter(token);
+    if (fresh) r = await call(fresh);
+  }
+  return r;
+}
+
 // Text gate. Returns true when the caller should refuse the content.
 async function isRiskyText(customer, text, scene) {
-  const r = await wxSec.checkText(await wxSecToken(), {
+  const r = await callWxSecWithTokenRetry((t) => wxSec.checkText(t, {
     text, openid: customer && customer.openid, scene,
-  });
+  }));
   if (r.verdict === 'risky') {
     console.warn('[wx-sec] risky text refused — customer', customer && customer.id, 'scene', scene, 'label', r.label);
     return true;
@@ -5389,9 +5489,9 @@ function refuseContent(res) {
 // image hostage to an outage would break uploads for everyone.
 async function submitImageSecCheck(mediaId, customer, scene) {
   const url = `${PAY_NOTIFY_ORIGIN}/api/retail/media/${mediaId}`;
-  const r = await wxSec.submitMediaCheck(await wxSecToken(), {
+  const r = await callWxSecWithTokenRetry((t) => wxSec.submitMediaCheck(t, {
     url, openid: customer && customer.openid, scene,
-  });
+  }));
   const status = r.ok ? 'pending' : 'skipped';
   try {
     tdb().prepare(
@@ -5599,7 +5699,6 @@ async function sendSubscribeMessage(customerId, templateId, data, page = 'pages/
   try {
     const token = await getWeChatAccessToken();
     if (!token) return { sent: false, reason: 'no_access_token' };   // transient → consent intact for retry
-    const url = `https://api.weixin.qq.com/cgi-bin/message/subscribe/send?access_token=${token}`;
     const body = {
       touser: cust.openid,
       template_id: templateId,
@@ -5608,8 +5707,7 @@ async function sendSubscribeMessage(customerId, templateId, data, page = 'pages/
       miniprogram_state: 'formal',
       lang: 'zh_CN',
     };
-    const resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-    const j = await resp.json();
+    const j = (await wxApiPost('/cgi-bin/message/subscribe/send', body)).json || {};
     if (j.errcode === 0) { markUsed(); return { sent: true, response: j }; }
     console.warn('[subscribe-message] send failed:', j);
     // 43101 = user has no / revoked subscription for this template — genuinely
@@ -5972,11 +6070,9 @@ async function sendWeChatShippingUpload(orderId, o, pay, opts = {}) {
 
   let j;
   try {
-    const resp = await fetch(
-      `https://api.weixin.qq.com/wxa/sec/order/upload_shipping_info?access_token=${token}`,
-      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
-    );
-    j = await resp.json().catch(() => ({}));
+    // wxApiPost re-uses the token fetched above (same cache) and replays the
+    // upload once on its own if WeChat rejects it as stale.
+    j = (await wxApiPost('/wxa/sec/order/upload_shipping_info', body)).json || {};
   } catch (e) {
     // Transient network error. Record + leave uploaded_at NULL so the sweeper retries.
     console.warn('[wx-shipping] fetch', orderId, e.message);
@@ -17064,11 +17160,7 @@ router.post('/api/retail/phone', requireRetailAuth, express.json(), async (req, 
 
   let phone;
   try {
-    const resp = await fetch(
-      `https://api.weixin.qq.com/wxa/business/getuserphonenumber?access_token=${token}`,
-      { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) }
-    );
-    const j = await resp.json();
+    const j = (await wxApiPost('/wxa/business/getuserphonenumber', { code })).json || {};
     if (j.errcode !== 0 || !j.phone_info) {
       console.warn('[retail/phone] exchange failed:', j.errcode, j.errmsg);
       return res.status(502).json({ success: false, error: 'phone_exchange_failed' });
@@ -24204,9 +24296,6 @@ router.get('/api/retail-admin/cms/preview-qr', requireRetailAdmin, async (req, r
   const page = (req.query.page || 'home').toString().slice(0, 32);
   const previewToken = mintPreviewToken();
   try {
-    const token = await getWeChatAccessToken();
-    if (!token) return res.status(503).json({ success: false, error: 'no_access_token' });
-    const url = `https://api.weixin.qq.com/wxa/getwxacodeunlimit?access_token=${token}`;
     const scene = `dp=1&t=${previewToken}&p=${page}`;       // ≤ 32 chars
     const body = {
       scene,
@@ -24218,16 +24307,10 @@ router.get('/api/retail-admin/cms/preview-qr', requireRetailAdmin, async (req, r
       env_version: 'trial',                 // 'release' once published
       width: 280,
     };
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const ct = resp.headers.get('content-type') || '';
-    if (ct.includes('application/json')) {
-      const j = await resp.json();
-      return res.status(502).json({ success: false, error: 'wxacode_failed', detail: j });
-    }
+    const { resp, json, token } = await wxApiPost('/wxa/getwxacodeunlimit', body);
+    if (!token) return res.status(503).json({ success: false, error: 'no_access_token' });
+    // A JSON reply is a failure — a successful call answers with image bytes.
+    if (json) return res.status(502).json({ success: false, error: 'wxacode_failed', detail: json });
     const buf = Buffer.from(await resp.arrayBuffer());
     res.setHeader('Content-Type', 'image/jpeg');
     res.setHeader('Cache-Control', 'no-store');
