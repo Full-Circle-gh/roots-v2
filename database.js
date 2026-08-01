@@ -1624,6 +1624,13 @@ addColumn('retail_orders', 'idempotency_key', 'TEXT');
 addColumn('retail_orders', 'wx_shipping_uploaded_at', 'DATETIME'); // set on a confirmed upload; NULL = not yet
 addColumn('retail_orders', 'wx_shipping_status',      'TEXT');     // last result, e.g. 'ok' | 'err:<code> <msg>' | 'perm:<code> <msg>' (won't retry)
 addColumn('retail_orders', 'wx_shipping_attempts',    'INTEGER DEFAULT 0'); // upload tries so far; the retry sweeper stops after a cap
+// Single-flight claim. uploaded_at can't serve as the in-flight guard: it's only
+// stamped AFTER WeChat replies, so for the whole round trip the row still reads
+// "delivered, never uploaded" and a second writer (the retry sweeper, a second
+// delivered transition) starts its own upload for the same 支付单. WeChat then
+// rejects the loser with 10060019 写冲突. Held for the duration of one attempt
+// and released in a finally; a stale lock (process died mid-flight) ages out.
+addColumn('retail_orders', 'wx_shipping_locked_at',   'DATETIME'); // NULL = free; set = an upload is in flight
 
 // Channel void bookkeeping: 1 once we've returned stock for a Meituan/channel
 // cancel|refund, 0 otherwise. Makes the restock idempotent under a repeating

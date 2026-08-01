@@ -5875,6 +5875,21 @@ function buildShippingItemDesc(orderId) {
 const WX_SHIPPING_PERMANENT_CODES = new Set([
   10060004, // 支付单处于不可发货的状态 — payment order not in a shippable state
 ]);
+// WeChat errcodes that mean "nothing is wrong with this order — try again in a
+// bit". Stamped 'retry:…' and left to the sweeper WITHOUT paging ops: sending
+// someone to ship by hand an order that fixes itself on the next tick is how a
+// self-healing hiccup ends up looking like an outage. If it never clears, the
+// sweeper's give-up alert still pages after WX_SHIPPING_MAX_ATTEMPTS.
+const WX_SHIPPING_TRANSIENT_CODES = new Set([
+  10060019, // 数据已发生变化，请重试（写冲突）— someone else wrote this 支付单 mid-flight
+  -1,       // 系统繁忙 — WeChat-side transient
+  45009,    // api freq out of limit — we're being rate-limited
+]);
+// How long a single-flight claim is honoured before another writer may steal it.
+// Only reached when a process dies mid-upload (the normal path releases in a
+// finally); generous because a duplicate upload costs more than a late retry.
+const WX_SHIPPING_LOCK_STALE_MIN = 10;
+
 async function uploadWeChatVirtualShipping(orderId, opts = {}) {
   // Tenant kill-switch (defaults on). Lets a tenant who doesn't want this opt out.
   if (cfgValue('wechat.autoVirtualShipping', true) !== true) return;
@@ -5900,6 +5915,37 @@ async function uploadWeChatVirtualShipping(orderId, opts = {}) {
   ).get(orderId);
   if (!pay || !pay.transaction_id) return;        // no WeChat txn id → nothing to attach to
 
+  // Single-flight claim. WeChat serialises writes per 支付单 and rejects the loser
+  // with 10060019 写冲突, so only one attempt per order may be in flight — the
+  // uploaded_at guard above can't do that job, it isn't stamped until the round
+  // trip returns. better-sqlite3 is synchronous, so this UPDATE is atomic against
+  // every other writer in the process; changes===0 means somebody else holds it.
+  let claimed;
+  try {
+    claimed = tdb().prepare(
+      `UPDATE retail_orders
+          SET wx_shipping_locked_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+          AND wx_shipping_uploaded_at IS NULL
+          AND (wx_shipping_locked_at IS NULL
+               OR wx_shipping_locked_at < datetime('now', '-${WX_SHIPPING_LOCK_STALE_MIN} minutes'))`
+    ).run(orderId);
+  } catch (e) {
+    if (/no such column/i.test(e.message)) return;   // tenant not migrated yet
+    throw e;
+  }
+  if (claimed.changes !== 1) return;                 // another attempt is already in flight
+
+  try {
+    await sendWeChatShippingUpload(orderId, o, pay, opts);
+  } finally {
+    try { tdb().prepare('UPDATE retail_orders SET wx_shipping_locked_at = NULL WHERE id = ?').run(orderId); } catch (_) {}
+  }
+}
+
+// The network half of the upload, split out so the claim above can wrap it in a
+// finally. Assumes its caller already vetted the order and holds the claim.
+async function sendWeChatShippingUpload(orderId, o, pay, opts = {}) {
   // Count this attempt so the retry sweeper can cap runaway loops.
   try { tdb().prepare('UPDATE retail_orders SET wx_shipping_attempts = COALESCE(wx_shipping_attempts,0) + 1 WHERE id = ?').run(orderId); } catch (_) {}
 
@@ -5952,12 +5998,17 @@ async function uploadWeChatVirtualShipping(orderId, opts = {}) {
   // stamped 'perm:…' so the sweeper never retries it; anything else keeps
   // 'err:…' and stays eligible for retry (uploaded_at left NULL either way).
   const permanent = WX_SHIPPING_PERMANENT_CODES.has(j.errcode);
-  const status = `${permanent ? 'perm' : 'err'}:${j.errcode || '?'} ${j.errmsg || ''}`.trim().slice(0, 200);
+  const transient = !permanent && WX_SHIPPING_TRANSIENT_CODES.has(j.errcode);
+  const kind = permanent ? 'perm' : transient ? 'retry' : 'err';
+  const status = `${kind}:${j.errcode || '?'} ${j.errmsg || ''}`.trim().slice(0, 200);
   tdb().prepare('UPDATE retail_orders SET wx_shipping_status = ? WHERE id = ?').run(status, orderId);
-  console.error('[wx-shipping] upload failed', o.order_no, status);
+  if (transient) console.warn('[wx-shipping] upload deferred', o.order_no, status);
+  else console.error('[wx-shipping] upload failed', o.order_no, status);
   // Page ops on the event-driven path; the sweeper (fromSweep) does its own
   // single rolled-up alert so a stuck order can't spam the group each tick.
-  if (!opts.fromSweep) {
+  // A transient code pages nobody — the sweeper retries it within minutes, and
+  // the give-up alert covers the case where it never comes good.
+  if (!opts.fromSweep && !transient) {
     try {
       await sendOpsAlert(`微信自动发货失败 订单 ${o.order_no}：${j.errcode || '?'} ${j.errmsg || ''}（请到小程序后台手动发货）`);
     } catch (_) { /* alerting never blocks */ }
@@ -6753,6 +6804,12 @@ async function retryWeChatShippingForTenant() {
           AND wx_shipping_uploaded_at IS NULL
           AND (wx_shipping_status IS NULL OR wx_shipping_status NOT LIKE 'perm:%')
           AND COALESCE(wx_shipping_attempts, 0) < ${WX_SHIPPING_MAX_ATTEMPTS}
+          -- Skip orders with an upload already in flight (the event-driven path
+          -- fires the instant an order is delivered, which is exactly when this
+          -- sweep first sees it). uploadWeChatVirtualShipping re-checks the claim
+          -- atomically; this just keeps them out of the batch.
+          AND (wx_shipping_locked_at IS NULL
+               OR wx_shipping_locked_at < datetime('now', '-${WX_SHIPPING_LOCK_STALE_MIN} minutes'))
           AND COALESCE(delivered_at, updated_at) >= datetime('now', '-${WX_SHIPPING_SWEEP_LOOKBACK_DAYS} days')
           -- Must have a real WeChat 支付订单号 to attach shipping to; orders with a
           -- blank transaction_id (balance/comp-paid, or txn never captured) can't
@@ -6798,17 +6855,27 @@ async function retryWeChatShippingForTenant() {
   return uploaded;
 }
 
+// Tenants with a sweep pass still running. A pass is up to WX_SHIPPING_SWEEP_BATCH
+// orders of sequential awaited HTTP calls, and setInterval doesn't wait for the
+// last one to finish — so a slow pass would otherwise overlap the next tick and
+// both would work the same rows.
+const _wxShippingSweepInFlight = new Set();
+
 // Every 5 min, walk each active tenant and retry its stuck WeChat shipments.
 function tickRetryWeChatShipping() {
   let tenants;
   try { tenants = db.prepare("SELECT id FROM tenants WHERE status = 'active'").all(); }
   catch { tenants = null; }   // tenants table not migrated yet → single-DB fallback
   const run = async (tid) => {
+    const key = tid ?? 'main';
+    if (_wxShippingSweepInFlight.has(key)) return;   // previous pass still running
+    _wxShippingSweepInFlight.add(key);
     try {
       const tdb_ = tid == null ? tdb() : getTenantDb(tid);
       const total = await tenantAls.run(tdb_, () => retryWeChatShippingForTenant());
       if (total > 0) console.log(`[wx-shipping-sweep] tenant=${tid ?? 'main'} uploaded=${total}`);
     } catch (e) { console.warn('[wx-shipping-sweep]', tid, e.message); }
+    finally { _wxShippingSweepInFlight.delete(key); }
   };
   if (!tenants) run(null);
   else for (const t of tenants) run(t.id);
