@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v0.7
+# Tacet shared-core consolidation — decisions record, v0.8
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The open questions in §23 are NOT decided and must not be treated as settled.**
 
@@ -51,12 +51,32 @@ Within `app.tacet.com`, everything is a path: `/orders`, `/products`, `/account/
 ### Account folds in — DECIDED
 Account settings stop being a separate framed application and become part of the Tacet app, reachable the same way from any app. This is real work, not a configuration change: the current Account is a standalone four-pane application with its own token set and its own i18n engine.
 
-## 1. Architecture target
+## 1. Architecture — LOCKED 2026-07-31
 
-- One backend, one database. VERIFIED ALREADY TRUE — single Express process, single SQLite file (database.js:8). The split was never at the database; it is at the table level.
-- Two frontends for now: Store and Kitchen. Each frontend is the only app-specific layer.
-- Every core entity exists exactly once. No duplicated tables, no sync jobs.
-- The end state is a single application with one interface. Every decision here is made to make that merge cheap.
+### Front end
+FOUR front ends. The front end is the ONLY app-specific layer; everything beneath is shared.
+- TACET — the main app. Staff.
+- PRODUCTION — staff. Merges into Tacet later, leaving three.
+- STOREFRONT — shoppers. Read-only. Part of the system, not a separate product.
+- BACK OFFICE — Tacet staff only.
+
+### Back end
+- ONE service, ONE API. Not one per app.
+- A set of SHARED MODULES, each built once. Eight named so far: Locations, Products, Items, Stock, Users, Orders, Purchasing, Recipes. MORE WILL BE NAMED — eight is not a ceiling. Already visible but not yet specified: suppliers, customers, marketing, content and media, integrations, reporting, billing.
+- Every module is available to any front end. Which modules a front end uses depends on what that front end is for, not on staging. Production uses Items and Recipes; Tacet does not, because selling does not involve them. The storefront reads Products, Stock and Locations and writes nothing. This does not change when the apps merge — the modules were always shared; the split was only ever in the interface.
+- Permissions are capability-based and enforced in the back end.
+- FRONT ENDS NEVER TOUCH THE DATABASE. A screen asks the back end; the back end reads the database.
+
+### Database
+- ONE database. Each thing exists in it exactly once. No duplicated tables, no sync jobs between them.
+- Money stored as whole cents, never as a decimal.
+
+### Technology decisions — LOCKED
+1. FRONT END IS EXTENDED, NOT REBUILT. Screens are rebuilt one at a time as each stage reaches them. No wholesale rewrite — it would stop everything for months. Current state: hand-written JavaScript in very large files, one of 28,000 lines.
+2. SQLITE STAYS through the consolidation. Revisit before a second business, not during. Changing the database engine and the data model at once doubles the risk. FLAG: SQLite permits one writer at a time. Adequate for one account; a genuine question for several. To be TESTED before onboarding a second business, not assumed either way.
+3. ONE SHARED DATABASE STAYS FOR NOW; per-account databases are not adopted. FLAG WITH A DEADLINE: the per-account isolation switch is currently what locks every non-Roots account out of the app. This decision holds only until the open-signup stage, where it must be resolved.
+4. THE STOREFRONT REMAINS PART OF THIS SYSTEM. Not split into a separate service. Separating it would require an API between them and a second deployment.
+5. THE BACK OFFICE IS BUILT PROPERLY AT THE OPEN-SIGNUP STAGE, not before. It half-exists today as a separate login and two consoles.
 
 ## 2. Permissions
 
@@ -162,6 +182,10 @@ This supersedes the alternative of assigning an owning side per shared field, an
 - A negative balance is a SIGNAL, not an error: the count is wrong and a recount is due. It must appear on a list someone checks, not be buried.
 - Stock must never be silently clamped. Today `adjustStock`'s delta path quietly applies less than requested and discards the shortfall — withdrawn.
 - The codebase currently has THREE rules for going below zero (order commit has no floor; the delta path clamps and discards; channel ingest clamps and records). All three are replaced by the single rule above, unified during the stock stage rather than piecemeal.
+- THE SAFETY BUFFER IS EFFECTIVELY UNBUILT. Verified in code 2026-07-31: no screen in any of the five surfaces exposes a control that writes it; the column defaults to 0 on every insert path; no migration or seed sets it. A non-zero value could only exist via a hand-crafted API call or direct SQL. The API accepts the field and `upsertStockLayer` writes it, but nothing in the shipped front end sends it.
+- CONSEQUENCE: the three channels not applying the buffer (Meituan, Eleme, Guanyi) are not overselling today, because nothing is being held back. That fix moves into the Stock stage rather than being urgent.
+- WHEN BUILT: the buffer needs a screen, and every channel must respect it from day one. Default zero. The control should be hidden unless an account turns it on — many businesses will never need it, and multi-marketplace sellers will.
+- HIDDEN RULE TO REMOVE: Purchasing substitutes 5 for a zero or unset buffer when computing its reorder point, server-side and again client-side. It never writes 5 back. So the Purchasing screen can display 5 while the stored value is 0. This is exactly the kind of baked-in business rule §0 forbids.
 
 ## 11. Users
 
