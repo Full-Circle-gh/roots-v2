@@ -1829,6 +1829,32 @@ try {
   }
 } catch (e) { console.error('[migration seed_brand_me_footer_roots_v1]', e); }
 
+// Seed the customer-facing text for the store-move notice — shown at checkout
+// when the location that WOULD have served an address is closed and a different
+// one is fulfilling the order (see computeStoreMoveNotice in routes/retail.js).
+//
+// Only the two message strings are seeded here. The notice renders ONLY when
+// every one of its six fields is set, so until an operator (or a later seed)
+// fills in kicker/title it stays dark — which is deliberate: a notice must never
+// appear half-written, and Chinese customer copy must never be machine-invented.
+//
+// INSERT OR IGNORE, so an operator's own wording is never overwritten. These
+// name the shops because they are the OPERATOR'S text; the trigger that decides
+// whether to show them names nothing and works for any pair of locations.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_notice_store_move_v1');
+  if (!ran) {
+    const put = db.prepare("INSERT OR IGNORE INTO storefront_config (key, value_json) VALUES (?, ?)");
+    put.run('notice.store_move.message_cn', JSON.stringify(
+      '越秀门店暂时停业，您的订单将由天河中央厨房发出，送达时间可能会比平时稍长，敬请谅解。'
+    ));
+    put.run('notice.store_move.message_en', JSON.stringify(
+      'Our Yuexiu store is temporarily closed. Your order will be sent from our Tianhe central kitchen, so delivery may take a little longer than usual.'
+    ));
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_notice_store_move_v1');
+  }
+} catch (e) { console.error('[migration seed_notice_store_move_v1]', e); }
+
 // v2 — self-heal pass. The v1 migration above uses INSERT OR IGNORE, which
 // is a no-op when a brand.me_footer row already exists. If the operator
 // clicked Save on an empty footer-settings card between the feature shipping

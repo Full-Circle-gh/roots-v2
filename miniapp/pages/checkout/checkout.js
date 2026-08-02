@@ -126,6 +126,13 @@ Page({
     preorderNoticeItems: [],      // [{ id, name, image }] matched to the cart for thumbnails
     preorderNoticePopup: false,   // true → the "Ships soon" modal is open
     preorderNoticeSeen: false,    // auto-shows once per visit; banner persists after
+    // "Sent from another shop" notice — the location that would normally have
+    // served this address is closed, so a different one is fulfilling and it may
+    // take longer. Same popup+banner UX as the two above, but the answer depends
+    // on the ADDRESS, so it re-shows when the customer switches address rather
+    // than once per visit (see _addressSignature).
+    storeMoveNotice: null,        // { kicker/title/message_en/cn } or null — all text is operator-authored
+    storeMoveNoticePopup: false,  // true → the "Sent from another shop" modal is open
     deliverySlotId: '',          // 'right_away' | 'YYYY-MM-DD' | 'YYYY-MM-DDTHH:MM' — required before placeOrder
     deliverySlotLabel: '',       // human-readable label for the picked slot (passed back to server)
     deliverySurcharge: 0,        // ¥ same-day surcharge for the picked slot
@@ -1447,6 +1454,7 @@ Page({
           batchNoticeItems: this.buildBatchNoticeItems(data.batch_notice),
           preorderNotice: data.preorder_notice || null,
           preorderNoticeItems: this.buildBatchNoticeItems(data.preorder_notice),
+          storeMoveNotice: data.store_move_notice || null,
           slotsByDay,
           deliverySlotId: nextSlotId,
           deliverySlotLabel: nextSlotLabel,
@@ -1481,6 +1489,21 @@ Page({
         if (data.preorder_notice && !this.data.preorderNoticeSeen && !this.data.localOnlyPopup && !batchAutoShowing) {
           this.setData({ preorderNoticePopup: true, preorderNoticeSeen: true });
         }
+        // "Sent from another shop" — auto-opens once PER ADDRESS, not once per
+        // visit: the answer is a property of where the order is going, so a
+        // customer who switches to an address served by a different shop has to
+        // be told again. Same anti-stacking rules as the two notices above; the
+        // banner stays put either way, so nothing is lost if we skip the pop.
+        const moveSig = this._addressSignature();
+        const preorderAutoShowing = data.preorder_notice && this.data.preorderNoticePopup;
+        if (data.store_move_notice && this._storeMoveSeenFor !== moveSig
+            && !this.data.localOnlyPopup && !batchAutoShowing && !preorderAutoShowing) {
+          this._storeMoveSeenFor = moveSig;
+          this.setData({ storeMoveNoticePopup: true });
+        }
+        // Forget the "already shown" mark when the notice stops applying, so it
+        // pops again if the customer returns to an address that does move.
+        if (!data.store_move_notice) this._storeMoveSeenFor = null;
         // Day-only mode: configure the three-option picker (Express / Today /
         // Schedule for later) and auto-select Express if there's no prior pick.
         if (sch?.mode === 'day_only') {
@@ -2029,6 +2052,24 @@ Page({
     this.setData({ preorderNoticePopup: false });
   },
 
+  // Identifies the address a quote was for, so the store-move notice can pop
+  // once per address instead of once per visit. A saved address is its id; an
+  // unsaved one is the city/district pair the server actually routes on.
+  _addressSignature() {
+    const a = this.data.address || {};
+    return a.id ? 'id:' + a.id : 'inline:' + (a.city || '') + '|' + (a.district || '');
+  },
+
+  // "Sent from another shop" modal. Purely informational — closing it changes
+  // nothing about the order and never blocks placing it; the banner stays
+  // behind as the persistent reminder.
+  openStoreMoveNotice() {
+    if (this.data.storeMoveNotice) this.setData({ storeMoveNoticePopup: true });
+  },
+  closeStoreMoveNotice() {
+    this.setData({ storeMoveNoticePopup: false });
+  },
+
   onVoucherInput(e) {
     this.setData({ voucherInput: (e.detail.value || '').toUpperCase() });
   },
@@ -2486,7 +2527,8 @@ Page({
     // Never stack the upsell on top of an open checkout notice (Made-fresh /
     // Ships-soon / Guangzhou-only). They're modal so this is defensive, but if
     // one is still showing, skip the upsell this round and go straight to pay.
-    if (this.data.batchNoticePopup || this.data.preorderNoticePopup || this.data.localOnlyPopup) {
+    if (this.data.batchNoticePopup || this.data.preorderNoticePopup || this.data.localOnlyPopup
+        || this.data.storeMoveNoticePopup) {
       this._offersDone = true;
       return this.submitOrder(this._pendingExtra);
     }
@@ -2647,10 +2689,12 @@ Page({
       localOnlyCta: cta,
       localOnlyBrowse: browse,
       localOnlyPopup: true,
-      // Never stack with the "Made fresh" / "Ships soon" popups — the local-only
-      // result takes priority; those notices stay available via their banners.
+      // Never stack with the "Made fresh" / "Ships soon" / "Sent from another
+      // shop" popups — the local-only result takes priority; those notices stay
+      // available via their banners.
       batchNoticePopup: false,
       preorderNoticePopup: false,
+      storeMoveNoticePopup: false,
     });
   },
 

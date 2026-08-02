@@ -280,6 +280,19 @@
         <view class="hb-more">{{lang === 'cn' ? '详情' : 'Details'}}</view>
       </view>
 
+      <!-- Sent-from-another-shop notice — the shop that would normally serve this
+           address is closed, so a different one is fulfilling and delivery may be
+           slower. Informational only: it never blocks placing the order. Tap to
+           re-open the full popup. -->
+      <view wx:if="{{storeMoveNotice}}" class="holiday-banner" bindtap="openStoreMoveNotice">
+        <view class="hb-icon">🚚</view>
+        <view class="hb-body">
+          <view class="hb-title f-bear">{{lang === 'cn' ? storeMoveNotice.title_cn : storeMoveNotice.title_en}}</view>
+          <view class="hb-msg">{{lang === 'cn' ? storeMoveNotice.message_cn : storeMoveNotice.message_en}}</view>
+        </view>
+        <view class="hb-more">{{lang === 'cn' ? '详情' : 'Details'}}</view>
+      </view>
+
       <!-- Right away — always visible in time-slot mode; greyed when kitchen closed
            or holiday mode is on. Disabled state shows a reason below the label. -->
       <view wx:if="{{scheduling.mode !== 'day_only'}}"
@@ -1068,6 +1081,25 @@
       <view class="bn-body">{{ lang === 'cn' ? preorderNotice.message_cn : preorderNotice.message_en }}</view>
 
       <view class="bn-cta f-toni" bindtap="closePreorderNotice">{{ lang === 'cn' ? '知道了' : 'Got it' }}</view>
+    </view>
+  </view>
+
+  <!-- "Sent from another shop" popup — auto-opens once per address when the shop
+       that would normally serve it is closed, re-opens from its banner. Same
+       shell as the pre-order modal, minus the item list (this is about where the
+       order ships FROM, not which items are affected). Closing it is purely a
+       dismissal — the order is placed exactly as it would have been. -->
+  <view wx:if="{{storeMoveNoticePopup && storeMoveNotice}}" class="bn-backdrop" bindtap="closeStoreMoveNotice" catchtouchmove="noop">
+    <view class="bn-card" catchtap="noop">
+      <view class="bn-hero">
+        <view class="bn-badge">🚚</view>
+      </view>
+      <view class="bn-kicker f-toni">{{ lang === 'cn' ? storeMoveNotice.kicker_cn : storeMoveNotice.kicker_en }}</view>
+      <view class="bn-title f-bear">{{ lang === 'cn' ? storeMoveNotice.title_cn : storeMoveNotice.title_en }}</view>
+
+      <view class="bn-body">{{ lang === 'cn' ? storeMoveNotice.message_cn : storeMoveNotice.message_en }}</view>
+
+      <view class="bn-cta f-toni" bindtap="closeStoreMoveNotice">{{ lang === 'cn' ? '知道了' : 'Got it' }}</view>
     </view>
   </view>
 

@@ -25305,6 +25305,67 @@ function computePreorderNotice(zone, address, productIds, slotId) {
   };
 }
 
+// ─── Store-move notice ───────────────────────────────────────────────────
+// A location can be closed from Sales → Locations while another keeps trading.
+// routeOrder drops a closed location BEFORE it ranks, so the order quietly
+// moves to whoever is left and the customer is never told why it might be
+// slower. This is that telling.
+//
+// The trigger is deliberately GENERIC and names no location: "the one that
+// would have served you is shut, a different one is sending it". It works for
+// any pair of locations, in any city, for any tenant. The only thing that ever
+// names a shop is the operator's own text.
+//
+// That text lives in storefront_config under `notice.store_move.*`, the same
+// operator-editable arrangement as the store_status closed message. If ANY of
+// the six fields is missing or blank the notice does not render at all — there
+// is deliberately NO composed and NO hardcoded fallback, so a tenant who has
+// not written the copy shows nothing rather than half a notice, or an English
+// string to a Chinese reader.
+const STORE_MOVE_NOTICE_FIELDS = ['kicker_en', 'kicker_cn', 'title_en', 'title_cn', 'message_en', 'message_cn'];
+function storeMoveNoticeText() {
+  try {
+    const out = {};
+    for (const f of STORE_MOVE_NOTICE_FIELDS) {
+      const row = tdb().prepare('SELECT value_json FROM storefront_config WHERE key = ?')
+        .get('notice.store_move.' + f);
+      if (!row) return null;
+      let v; try { v = JSON.parse(row.value_json); } catch { v = row.value_json; }
+      v = typeof v === 'string' ? v.trim() : '';
+      if (!v) return null;
+      out[f] = v;
+    }
+    return out;
+  } catch (e) { return null; }
+}
+
+// Did this order move because the location that would have served it is closed?
+// `resolvedStoreCode` is the location routing actually picked. Returns the
+// notice (preorder_notice's shape, minus the items array) or null.
+//
+// Fires only for a delivery inside main Guangzhou. Out-of-GZ addresses and the
+// opt-in same-day outer districts are pinned to the out-of-city location
+// whether or not anything is closed, so nothing changed for them and there is
+// nothing to say. Pickup never reaches here: this endpoint requires a delivery
+// address, and the mini app short-circuits pickup before it calls quote.
+//
+// Order of the tests is chosen so the cheap local ones reject first and the
+// counterfactual routing (which can hit the road-distance API) runs last.
+async function computeStoreMoveNotice(address, resolvedStoreCode, channel) {
+  if (!resolvedStoreCode) return null;
+  if (!inventory.isGuangzhouAddress(address)) return null;
+  if (inventory.isOptInSameDayDistrict(address)) return null;
+  const text = storeMoveNoticeText();
+  if (!text) return null;                                   // not configured → say nothing
+  const closed = inventory.channelClosedStores(inventory.orderChannelKey(channel));
+  if (!closed.size) return null;                            // nothing shut → nothing moved
+  const wouldBe = await inventory.routeIgnoringClosures(address);
+  if (!wouldBe || !wouldBe.code) return null;
+  if (wouldBe.code === resolvedStoreCode) return null;      // same shop → no move
+  if (!closed.has(wouldBe.code)) return null;               // moved, but not because of a closure
+  return { ...text };
+}
+
 // ─── Delivery-slot enumerator ────────────────────────────────────────────
 // Given a matched zone (or null) + the current server time, produce the
 // list of slots the customer can pick from on the checkout page.
@@ -26442,6 +26503,11 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
   // every other case the legacy yes/no fallback is what the mini-app
   // gets. `gate` tells the mini-app which modal to render.
   let routingPreview = null;
+  // The location routing actually settled on, when it settled cleanly. Only the
+  // happy path sets it: a cart with a shortage is already having a different
+  // conversation (the 5-option sheet), and stacking a "we moved shops" notice
+  // on top of that would be noise.
+  let resolvedStoreCode = null;
   try {
     const rawItems = (items || [])
       .map(i => ({ product_id: parseInt(i.product_id, 10), qty: Number(i.qty) }))
@@ -26486,6 +26552,7 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
       // Nearest can fulfill — happy path. Surface the chosen store.
       const r = analysis.resolved;
       if (r && !r.error) {
+        resolvedStoreCode = r.store.code;
         routingPreview = {
           ok: true,
           gate: 'none',
@@ -26532,6 +26599,18 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
     console.error('[checkout/quote routing]', e);
   }
 
+  // Did this order's location change because its usual one is closed? Computed
+  // separately from routing on purpose: routeOrder filters closed locations out
+  // BEFORE ranking, so its own result can never tell us what the closure did.
+  // Wrapped like the routing preview above — a failure here must never cost the
+  // customer their quote, so it degrades to no notice at all.
+  let storeMoveNotice = null;
+  try {
+    storeMoveNotice = await computeStoreMoveNotice(address, resolvedStoreCode, 'wechat');
+  } catch (e) {
+    console.error('[checkout/quote store-move]', e);
+  }
+
   res.json({
     success: true,
     data: {
@@ -26574,6 +26653,7 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
       scheduling: computeDeliverySlots(zone, new Date()),
       batch_notice: computeBatchNotice(zone, (items || []).map((i) => i.product_id), new Date(), body.delivery_slot_id, body.slot_kind),
       preorder_notice: computePreorderNotice(zone, address, (items || []).map((i) => i.product_id), body.delivery_slot_id),
+      store_move_notice: storeMoveNotice,
       routing: routingPreview,
     },
   });
