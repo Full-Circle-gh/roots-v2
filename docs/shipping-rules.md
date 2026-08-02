@@ -13,7 +13,7 @@ The retail-admin Logistics tab is the source of truth for per-zone prices/thresh
 | Code | Role | Ships to |
 |---|---|---|
 | `tianhe` (Warehouse) | Warehouse | GZ exceptions, all out-of-GZ, all nationwide. Also fulfills main GZ when GPS-nearer than yuexiu. |
-| `yuexiu` (Store) | Storefront | Main GZ only, when GPS-nearer than tianhe. Does NOT ship out of GZ. |
+| `yuexiu` (Store) | Shop | Main GZ only, when GPS-nearer than tianhe. Does NOT ship out of GZ. |
 
 Routing logic (`lib/inventory.js → routeOrder`):
 - Address geocoded to lat/lng (Tencent Maps), falls back to district-name matching if no geo.

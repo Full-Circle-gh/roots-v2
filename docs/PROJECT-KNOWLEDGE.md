@@ -215,7 +215,7 @@ draft→publish via preview tokens; media library (base64 blobs).
 ## 5. Fulfillment & shipping (`lib/inventory.js`, `docs/shipping-rules.md`)
 
 Two GZ stores: **tianhe** (warehouse: GZ exceptions / out-of-GZ / nationwide) and **yuexiu**
-(storefront: main-GZ when GPS-nearer). Zone groups: GZ-main (¥15 / free ¥199), GZ-exceptions (番禺/
+(shop: main-GZ when GPS-nearer). Zone groups: GZ-main (¥15 / free ¥199), GZ-exceptions (番禺/
 花都/南沙/从化/增城 with per-district same-day surcharges), other GD cities, other provinces, HK.
 **OOS pre-pay 5-option modal:** ship-from-other / replace / cancel-item / cancel-order /
 wait-for-restock. Reservation lifecycle: reserve → commit(ledger) → release/reverse.

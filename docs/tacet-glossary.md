@@ -1,13 +1,8 @@
 # Tacet glossary
 
-**These are the binding definitions for Tacet. Every document, every UI string and every new identifier uses these words with these meanings. Where existing code or documentation uses a different word for the same thing, the code is what needs changing, not this list. v1.3, 2026-07-31.**
+**These are the binding definitions for Tacet. Every document, every UI string and every new identifier uses these words with these meanings. Where existing code or documentation uses a different word for the same thing, the code is what needs changing, not this list. v1.4, 2026-07-31.**
 
 ---
-
-## The two apps
-
-- STORE APP — selling, customers, orders.
-- PRODUCTION APP — making things. Formerly called the kitchen app; that name is retired.
 
 ## The things you stock
 
@@ -69,8 +64,8 @@
 
 ## The system and its apps
 
-- TACET — the product itself, and the name of its main staff app. The STORE APP entry above is this same app.
-- PRODUCTION — the staff app for making things; the PRODUCTION APP entry above is this same app. Merges into Tacet later. Not to be confused with the PRODUCTION flag on a location.
+- TACET — the product itself, and the name of its main staff app: selling, customers, orders.
+- PRODUCTION — the staff app for making things. Merges into Tacet later. Not to be confused with the PRODUCTION flag on a location.
 - ONLINE STORE — customers. Defined in full under Selling.
 - BACK OFFICE — Tacet's own staff app, for running Tacet itself. Separate login. Nothing in it is ever shown to an account.
 - MODULE — one shared piece of the back end, built once and used by any front end. Locations, Products, Items, Stock, Users, Orders, Purchasing and Recipes are modules; more will be named.
@@ -92,6 +87,7 @@ Correct: "an account has customers." Wrong: "our customers" when an account is m
 
 - FULL CIRCLE — the system is Tacet.
 - STOREFRONT — it is the ONLINE STORE.
+- STORE APP — the main app is simply Tacet.
 - KITCHEN APP — now the production app.
 - KITCHEN, as a location type — now the production flag.
 - INGREDIENT, as a distinct entity from an item — ingredients are items.
