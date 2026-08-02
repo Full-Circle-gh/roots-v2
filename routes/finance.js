@@ -32,6 +32,42 @@ function mapExpense(row) {
   };
 }
 
+// An edit is only worth recording when a value genuinely moved. Compares the
+// stored row against the incoming values *by database column name* and returns
+// { col: { from, to } } for the ones that differ — that object is what lands in
+// activity_log.details, so the log reads as a diff rather than a full snapshot.
+//
+// The comparison is deliberately loose. amount comes back from SQLite as a REAL
+// but arrives from the client as a string, so "9273.36" and 9273.36 must not
+// register as a change; likewise NULL, undefined and '' all mean "empty" for the
+// free-text columns and are treated as equal to each other.
+function diffFields(before, after) {
+  const changes = {};
+  for (const col of Object.keys(after)) {
+    const a = before[col];
+    const b = after[col];
+    let same;
+    if (typeof a === 'number' || typeof b === 'number') {
+      const na = (a === null || a === undefined || a === '') ? null : Number(a);
+      const nb = (b === null || b === undefined || b === '') ? null : Number(b);
+      same = (na === null && nb === null) || (na !== null && nb !== null && Math.abs(na - nb) < 1e-9);
+    } else {
+      same = String(a ?? '') === String(b ?? '');
+    }
+    if (!same) changes[col] = { from: a === undefined ? null : a, to: b };
+  }
+  return changes;
+}
+
+// Optional-field resolution for the PUT handlers. A key the client didn't send
+// at all (undefined) keeps whatever is already stored — this is what stops the
+// income form, which never sends `channel`, from blanking a channel value that
+// was set elsewhere. An explicitly empty value clears the column, matching the
+// `x || null` shape the POST handlers use.
+function pickOptional(incoming, current) {
+  return incoming === undefined ? current : (incoming || null);
+}
+
 // Aggregate sales_entries into one synthetic income row per (date, channel).
 // This is the derive-only integration: sales remain the source of truth in
 // the Sales module, the Finance module just *displays* them as auto-rows so
@@ -101,11 +137,65 @@ router.post('/api/finance/income', requireAuth, requirePermission('finance'), (r
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// PUT /api/finance/income/:id — edit a manual income entry.
+//
+// Editing is a create-grade action, so this sits behind the same
+// requirePermission('finance') as the POST and deliberately NOT behind
+// requireDelete: a bookkeeper who may log income may also correct it.
+router.put('/api/finance/income/:id', requireAuth, requirePermission('finance'), (req, res) => {
+  // Sales rows are synthetic — getSalesAsIncomeRows() builds them by grouping
+  // sales_entries and hands out ids like 'sale-2026-04-12-Meituan'. There is no
+  // income_entries row behind them, so say so plainly instead of letting the
+  // lookup fall through to a misleading 404.
+  if (!/^\d+$/.test(String(req.params.id))) {
+    return res.status(400).json({ error: 'Sales-derived income cannot be edited · 销售自动汇总不能编辑' });
+  }
+  const row = db.prepare('SELECT * FROM income_entries WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Not found · 未找到' });
+
+  const { date, amount, category, notes, channel, payment_method } = req.body;
+  const amt = parseFloat(amount);
+  if (!date) return res.status(400).json({ error: 'date required · 日期必填' });
+  if (!amt || amt <= 0) return res.status(400).json({ error: 'amount must be positive · 金额必须大于零' });
+
+  // Amount stays positive in the table — the sign is a rendering decision.
+  const next = {
+    date,
+    amount: amt,
+    category:       pickOptional(category, row.category),
+    description:    pickOptional(notes, row.description),
+    channel:        pickOptional(channel, row.channel),
+    payment_method: pickOptional(payment_method, row.payment_method),
+  };
+  const changes = diffFields(row, next);
+
+  // A save that moved nothing is a no-op: skip the write so updated_at keeps
+  // meaning "someone actually changed this", and log nothing.
+  if (Object.keys(changes).length === 0) {
+    return res.json({ success: true, data: mapIncome(row) });
+  }
+  try {
+    db.prepare(
+      'UPDATE income_entries SET date=?, amount=?, category=?, description=?, channel=?, payment_method=?, updated_at=CURRENT_TIMESTAMP WHERE id=?'
+    ).run(next.date, next.amount, next.category, next.description, next.channel, next.payment_method, row.id);
+    logActivity(req.user.id, req.user.username, 'update', 'income', row.id, changes, req.ip);
+    const fresh = db.prepare('SELECT * FROM income_entries WHERE id = ?').get(row.id);
+    res.json({ success: true, data: mapIncome(fresh) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.delete('/api/finance/income/:id', requireAuth, requireDelete, requirePermission('finance'), (req, res) => {
   const row = db.prepare('SELECT * FROM income_entries WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Not found · 未找到' });
   db.prepare('DELETE FROM income_entries WHERE id = ?').run(req.params.id);
-  logActivity(req.user.id, req.user.username, 'delete', 'income', req.params.id, null, req.ip);
+  // Capture the row contents in the audit trail — a hard DELETE is the only
+  // thing that happens here, so if the details aren't recorded now the entry is
+  // gone for good with no way to see what was removed.
+  logActivity(req.user.id, req.user.username, 'delete', 'income', req.params.id, {
+    date: row.date, amount: row.amount, category: row.category,
+    description: row.description, payment_method: row.payment_method,
+    channel: row.channel,
+  }, req.ip);
   res.json({ success: true });
 });
 
@@ -137,12 +227,56 @@ router.post('/api/finance/expenses', requireAuth, requirePermission('finance'), 
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// PUT /api/finance/expenses/:id — edit a manual expense entry.
+// Same permission reasoning as the income PUT above: finance, not requireDelete.
+router.put('/api/finance/expenses/:id', requireAuth, requirePermission('finance'), (req, res) => {
+  const row = db.prepare('SELECT * FROM expense_entries WHERE id = ?').get(req.params.id);
+  if (!row) return res.status(404).json({ error: 'Not found · 未找到' });
+  // PO-linked rows are not editable for the same reason they're not deletable:
+  // postPOExpenses() / postRetailPOExpenses() wipe and re-post every row for a
+  // PO whenever its status moves, so an edit here would vanish without warning
+  // the next time the buying order is touched. Fix it on the PO instead.
+  if (row.po_id) return res.status(400).json({ error: 'PO-linked expenses cannot be edited directly · 关联采购单的支出不能直接编辑' });
+
+  const { date, amount, category, notes, payment_method } = req.body;
+  const amt = parseFloat(amount);
+  if (!date) return res.status(400).json({ error: 'date required · 日期必填' });
+  if (!amt || amt <= 0) return res.status(400).json({ error: 'amount must be positive · 金额必须大于零' });
+
+  // Stored positive — the leading minus on the Expenses list is render-only.
+  const next = {
+    date,
+    amount: amt,
+    category:       pickOptional(category, row.category),
+    description:    pickOptional(notes, row.description),
+    payment_method: pickOptional(payment_method, row.payment_method),
+  };
+  const changes = diffFields(row, next);
+
+  if (Object.keys(changes).length === 0) {
+    return res.json({ success: true, data: mapExpense(row) });
+  }
+  try {
+    db.prepare(
+      'UPDATE expense_entries SET date=?, amount=?, category=?, description=?, payment_method=?, updated_at=CURRENT_TIMESTAMP WHERE id=?'
+    ).run(next.date, next.amount, next.category, next.description, next.payment_method, row.id);
+    logActivity(req.user.id, req.user.username, 'update', 'expense', row.id, changes, req.ip);
+    const fresh = db.prepare('SELECT * FROM expense_entries WHERE id = ?').get(row.id);
+    res.json({ success: true, data: mapExpense(fresh) });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.delete('/api/finance/expenses/:id', requireAuth, requireDelete, requirePermission('finance'), (req, res) => {
   const row = db.prepare('SELECT * FROM expense_entries WHERE id = ?').get(req.params.id);
   if (!row) return res.status(404).json({ error: 'Not found · 未找到' });
   if (row.po_id) return res.status(400).json({ error: 'PO-linked expenses cannot be deleted directly · 关联采购单的支出不能直接删除' });
   db.prepare('DELETE FROM expense_entries WHERE id = ?').run(req.params.id);
-  logActivity(req.user.id, req.user.username, 'delete', 'expense', req.params.id, null, req.ip);
+  // Full row contents into the audit trail — see the income delete above.
+  logActivity(req.user.id, req.user.username, 'delete', 'expense', req.params.id, {
+    date: row.date, amount: row.amount, category: row.category,
+    description: row.description, payment_method: row.payment_method,
+    po_id: row.po_id,
+  }, req.ip);
   res.json({ success: true });
 });
 
