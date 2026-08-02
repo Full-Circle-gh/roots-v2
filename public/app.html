@@ -971,6 +971,11 @@ canvas.fin-canvas { width:100%!important; height:220px!important; display:block;
 .ledger-expense td:first-child { border-left:3px solid #e05252; }
 .ledger-amount-income { color:#2d7a2d; font-weight:700; }
 .ledger-amount-expense { color:#c0392b; font-weight:700; }
+/* The row currently loaded into the edit form above. Sits after the
+   income/expense border-left rules so it takes over the accent stripe, and
+   after tr:hover so the highlight doesn't disappear under the pointer. */
+.ledger-table tr.fin-row-editing td { background:var(--gray); }
+.ledger-table tr.fin-row-editing td:first-child { border-left:3px solid var(--lime); }
 .fin-filter-bar { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
 .fin-filter-bar select { padding:7px 12px; border:1.5px solid var(--border); border-radius:8px; font-family:inherit; font-size:13px; background:#fff; outline:none; }
 .donut-wrap { display:flex; gap:20px; align-items:center; }
@@ -23867,8 +23872,25 @@ function _finOnPaymentMethodChange(sel) {
   });
 }
 
+// Category <option> list for the Log forms. `selected` marks the current value.
+// If that value is no longer in the editable category list — the user deleted
+// the category after the entry was logged — it gets prepended, so opening an old
+// entry for edit doesn't silently re-file it under whichever category happens to
+// sort first.
+function _finCategoryOpts(kind, selected) {
+  const list = [..._finCats[kind]];
+  if (selected && !list.includes(selected)) list.unshift(selected);
+  return list.map(c => `<option value="${esc(c)}" ${c === selected ? 'selected' : ''}>${esc(c)}</option>`).join('');
+}
+
 let _income = [];
 let _expenses = [];
+// Id of the entry currently loaded into the Log form for editing, or null when
+// the form is in its normal "create" mode. Only one row at a time — starting a
+// second edit just replaces the first. Sales-derived income and PO-linked
+// expenses are never editable, so these only ever hold a manual row's id.
+let _finEditingExpenseId = null;
+let _finEditingIncomeId = null;
 let _financeTab = 'dashboard';
 let _finCats = (function loadFinCats() {
   try {
@@ -24341,7 +24363,12 @@ function _finDrawLine() {
 // ── Income tab ──────────────────────────────────────────────────────────────
 function _finRenderIncome(body) {
   const today = new Date().toISOString().slice(0,10);
-  const catOpts = _finCats.income.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  // Same dual-purpose form as the Expenses tab — see _finRenderExpenses.
+  const editing = _finEditingIncomeId != null
+    ? _income.find(x => String(x.id) === String(_finEditingIncomeId))
+    : null;
+  if (!editing) _finEditingIncomeId = null;
+  const catOpts = _finCategoryOpts('income', editing ? (editing.category || '') : '');
   // Counts for the header summary.
   const salesRows = _income.filter(e => e.source === 'sales');
   const manualRows = _income.filter(e => e.source !== 'sales');
@@ -24365,15 +24392,19 @@ function _finRenderIncome(body) {
         <span class="help-tip" data-help="Sales appear here automatically as one row per channel per day. To add, edit, or delete sales, use the <strong>Sales</strong> module — they update here on the next page load."></span>
       </div>
     </div>
-    <div class="card">
-      <div class="card-header"><div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" style="vertical-align:-3px;margin-right:8px;color:var(--text-3)"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>记录收入 Log Income <span style="font-size:11px;font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0;margin-left:6px">— for non-sales income only (refunds, investor capital, rent, etc.)</span></div></div>
+    <div class="card" id="inc_form_card">
+      <div class="card-header"><div class="card-title">${editing
+        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" style="vertical-align:-3px;margin-right:8px;color:var(--text-3)"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4z"/></svg>编辑收入 Edit income'
+        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" style="vertical-align:-3px;margin-right:8px;color:var(--text-3)"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>记录收入 Log Income <span style="font-size:11px;font-weight:400;color:var(--muted);text-transform:none;letter-spacing:0;margin-left:6px">— for non-sales income only (refunds, investor capital, rent, etc.)</span>'
+      }</div></div>
       <div class="fin-form-row">
-        <div class="fin-form-field"><label>日期 Date</label><input type="date" id="inc_date" value="${today}" style="width:160px"></div>
-        <div class="fin-form-field"><label>金额 Amount (¥)</label><input type="number" id="inc_amount" min="0" step="0.01" placeholder="0.00" style="width:140px"></div>
+        <div class="fin-form-field"><label>日期 Date</label><input type="date" id="inc_date" value="${editing ? esc(editing.date||'') : today}" style="width:160px"></div>
+        <div class="fin-form-field"><label>金额 Amount (¥)</label><input type="number" id="inc_amount" min="0" step="0.01" placeholder="0.00" value="${editing ? esc(String(editing.amount ?? '')) : ''}" style="width:140px"></div>
         <div class="fin-form-field"><label>分类 Category</label><select id="inc_cat">${catOpts}</select></div>
-        <div class="fin-form-field"><label>支付方式 Payment</label><select id="inc_pay" data-fin-pay onchange="_finOnPaymentMethodChange(this)">${_finPaymentMethodOpts('')}</select></div>
-        <div class="fin-form-field" style="flex:1"><label>备注 Notes</label><input type="text" id="inc_notes" placeholder="Optional notes(选填)"></div>
-        <div class="fin-form-field"><label>&nbsp;</label><button class="btn btn-primary" onclick="addIncomeEntry()">＋ 添加 Add</button></div>
+        <div class="fin-form-field"><label>支付方式 Payment</label><select id="inc_pay" data-fin-pay onchange="_finOnPaymentMethodChange(this)">${_finPaymentMethodOpts(editing ? (editing.payment_method || '') : '')}</select></div>
+        <div class="fin-form-field" style="flex:1"><label>备注 Notes</label><input type="text" id="inc_notes" placeholder="Optional notes(选填)" value="${editing ? esc(editing.notes||'') : ''}"></div>
+        <div class="fin-form-field"><label>&nbsp;</label><button class="btn btn-primary" id="inc_save_btn" onclick="addIncomeEntry()">${editing ? '保存修改 Save changes' : '＋ 添加 Add'}</button></div>
+        ${editing ? '<div class="fin-form-field"><label>&nbsp;</label><button class="btn btn-secondary" id="inc_cancel_btn" onclick="cancelEditIncome()">取消 Cancel</button></div>' : ''}
       </div>
     </div>
     <div class="card">
@@ -24399,15 +24430,42 @@ function _finRenderIncomeRows() {
       </tr>`;
     }
     const payChip = e.payment_method ? `<span style="display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:rgba(204,217,0,.18);color:var(--lime-text);margin-left:6px;white-space:nowrap">${esc(e.payment_method)}</span>` : '';
-    return `<tr class="ledger-income">
+    const editCls = (_finEditingIncomeId != null && String(e.id) === String(_finEditingIncomeId)) ? ' fin-row-editing' : '';
+    // Only real manual rows are editable. Keyed off source, not the id shape —
+    // sales rows carry string ids like 'sale-2026-04-12-Meituan' and are handled
+    // by the branch above, but source is the thing that actually decides this.
+    const editBtn = e.source === 'manual'
+      ? `<button class="btn-icon" title="编辑 Edit" onclick="editIncomeEntry(${e.id})">✎</button>`
+      : '';
+    return `<tr class="ledger-income${editCls}">
       <td>${esc(e.date||'—')}${tcell}</td>
       <td>${esc(e.category||'—')}${payChip}</td>
       <td style="color:var(--muted)">${esc(e.notes||'—')}</td>
       <td style="text-align:right" class="ledger-amount-income">+¥${_finFmt(e.amount||0)}</td>
-      <td><button class="btn-icon" style="color:#e74c3c" onclick="deleteIncomeEntry(${e.id})">✕</button></td>
+      <td>${editBtn}<button class="btn-icon" style="color:#e74c3c" onclick="deleteIncomeEntry(${e.id})">✕</button></td>
     </tr>`;
   }).join('');
 }
+// Load a manual income row into the form above — mirrors editExpenseEntry.
+function editIncomeEntry(id) {
+  const entry = _income.find(x => String(x.id) === String(id));
+  if (!entry) return toast('未找到该记录 Entry not found','error');
+  if (entry.source !== 'manual') return toast('销售自动汇总不能编辑 Sales-derived income cannot be edited','error');
+  _finEditingIncomeId = entry.id;
+  const body = document.getElementById('finBody');
+  if (body) _finRenderIncome(body);
+  const card = document.getElementById('inc_form_card');
+  if (card) card.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+function cancelEditIncome() {
+  _finEditingIncomeId = null;
+  const body = document.getElementById('finBody');
+  if (body) _finRenderIncome(body);
+}
+// Create + update, same as addExpenseEntry. Note the body deliberately omits
+// `channel`: the form has never exposed it, and the server preserves whatever
+// is stored for any field the client doesn't send, so an edit can't blank out a
+// channel value that was set elsewhere.
 async function addIncomeEntry() {
   const date = v('inc_date');
   const amount = parseFloat(v('inc_amount'))||0;
@@ -24416,17 +24474,46 @@ async function addIncomeEntry() {
   if (!date) return toast('请选择日期 Please select a date','error');
   if (!amount || amount<=0) return toast('请输入有效金额 Please enter a valid amount','error');
   const payment_method = v('inc_pay') || null;
-  const r = await fetch('/api/finance/income', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ date, amount, category, notes, payment_method })});
-  const d = await r.json();
-  if (!d.success) return toast(d.error||'Save failed · 保存失败','error');
-  await _finReload();
-  document.getElementById('inc_amount').value='';
-  document.getElementById('inc_notes').value='';
-  // Leave the payment dropdown selection alone — same payment method
-  // usually applies to a sequence of entries (a market shift's worth of
-  // WeChat sales, an expense run paid by company bank, etc.).
-  document.getElementById('income_tbody').innerHTML = _finRenderIncomeRows();
-  toast('✅ 收入已记录 Income logged');
+  const editingId = _finEditingIncomeId;
+  const btns = ['inc_save_btn','inc_cancel_btn'].map(i=>document.getElementById(i)).filter(Boolean);
+  btns.forEach(b=>b.disabled=true);
+  try {
+    const r = await fetch(editingId ? '/api/finance/income/'+editingId : '/api/finance/income', {
+      method: editingId ? 'PUT' : 'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ date, amount, category, notes, payment_method }),
+    });
+    const d = await r.json();
+    if (!d.success) {
+      toast(d.error||'Save failed · 保存失败','error');
+      if (r.status === 404 && editingId) {
+        _finEditingIncomeId = null;
+        await _finReload();
+        const b2 = document.getElementById('finBody');
+        if (b2) _finRenderIncome(b2);
+      }
+      return;
+    }
+    await _finReload();
+    if (editingId) {
+      _finEditingIncomeId = null;
+      const b2 = document.getElementById('finBody');
+      if (b2) _finRenderIncome(b2);
+      toast('✅ 收入已更新 Income updated');
+    } else {
+      document.getElementById('inc_amount').value='';
+      document.getElementById('inc_notes').value='';
+      // Leave the payment dropdown selection alone — same payment method
+      // usually applies to a sequence of entries (a market shift's worth of
+      // WeChat sales, an expense run paid by company bank, etc.).
+      document.getElementById('income_tbody').innerHTML = _finRenderIncomeRows();
+      toast('✅ 收入已记录 Income logged');
+    }
+  } catch (err) {
+    toast('Save failed · 保存失败: ' + err.message,'error');
+  } finally {
+    btns.forEach(b=>b.disabled=false);
+  }
 }
 async function deleteIncomeEntry(id) {
   if (!confirm('删除此收入记录？\nDelete this income entry?')) return;
@@ -24434,24 +24521,44 @@ async function deleteIncomeEntry(id) {
   const d = await r.json();
   if (!d.success) return toast(d.error||'Delete failed · 删除失败','error');
   await _finReload();
-  document.getElementById('income_tbody').innerHTML = _finRenderIncomeRows();
+  if (_finEditingIncomeId != null && String(_finEditingIncomeId) === String(id)) {
+    _finEditingIncomeId = null;
+    const body = document.getElementById('finBody');
+    if (body) _finRenderIncome(body);
+  } else {
+    document.getElementById('income_tbody').innerHTML = _finRenderIncomeRows();
+  }
   toast('🗑 收入已删除 Income deleted');
 }
 
 // ── Expenses tab ────────────────────────────────────────────────────────────
 function _finRenderExpenses(body) {
   const today = new Date().toISOString().slice(0,10);
-  const catOpts = _finCats.expense.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  // When an edit is in flight the same form doubles as the editor, pre-filled
+  // from the row. If the id no longer resolves (deleted in another tab) fall
+  // back to a blank create form rather than an editor pointing at nothing.
+  const editing = _finEditingExpenseId != null
+    ? _expenses.find(x => String(x.id) === String(_finEditingExpenseId))
+    : null;
+  if (!editing) _finEditingExpenseId = null;
+  const catOpts = _finCategoryOpts('expense', editing ? (editing.category || '') : '');
+  const title = editing
+    ? '编辑支出 Edit expense'
+    : '记录支出 Log Expense';
+  const titleIcon = editing
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" style="vertical-align:-3px;margin-right:8px;color:var(--text-3)"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 1 1 3 3L7 19l-4 1 1-4z"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" style="vertical-align:-3px;margin-right:8px;color:var(--text-3)"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
   body.innerHTML = `
-    <div class="card">
-      <div class="card-header"><div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" style="vertical-align:-3px;margin-right:8px;color:var(--text-3)"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>记录支出 Log Expense</div></div>
+    <div class="card" id="exp_form_card">
+      <div class="card-header"><div class="card-title">${titleIcon}${title}</div></div>
       <div class="fin-form-row">
-        <div class="fin-form-field"><label>日期 Date</label><input type="date" id="exp_date" value="${today}" style="width:160px"></div>
-        <div class="fin-form-field"><label>金额 Amount (¥)</label><input type="number" id="exp_amount" min="0" step="0.01" placeholder="0.00" style="width:140px"></div>
+        <div class="fin-form-field"><label>日期 Date</label><input type="date" id="exp_date" value="${editing ? esc(editing.date||'') : today}" style="width:160px"></div>
+        <div class="fin-form-field"><label>金额 Amount (¥)</label><input type="number" id="exp_amount" min="0" step="0.01" placeholder="0.00" value="${editing ? esc(String(editing.amount ?? '')) : ''}" style="width:140px"></div>
         <div class="fin-form-field"><label>分类 Category</label><select id="exp_cat">${catOpts}</select></div>
-        <div class="fin-form-field"><label>支付方式 Payment</label><select id="exp_pay" data-fin-pay onchange="_finOnPaymentMethodChange(this)">${_finPaymentMethodOpts('')}</select></div>
-        <div class="fin-form-field" style="flex:1"><label>备注 Notes</label><input type="text" id="exp_notes" placeholder="Optional notes(选填)"></div>
-        <div class="fin-form-field"><label>&nbsp;</label><button class="btn btn-primary" onclick="addExpenseEntry()">＋ 添加 Add</button></div>
+        <div class="fin-form-field"><label>支付方式 Payment</label><select id="exp_pay" data-fin-pay onchange="_finOnPaymentMethodChange(this)">${_finPaymentMethodOpts(editing ? (editing.payment_method || '') : '')}</select></div>
+        <div class="fin-form-field" style="flex:1"><label>备注 Notes</label><input type="text" id="exp_notes" placeholder="Optional notes(选填)" value="${editing ? esc(editing.notes||'') : ''}"></div>
+        <div class="fin-form-field"><label>&nbsp;</label><button class="btn btn-primary" id="exp_save_btn" onclick="addExpenseEntry()">${editing ? '保存修改 Save changes' : '＋ 添加 Add'}</button></div>
+        ${editing ? '<div class="fin-form-field"><label>&nbsp;</label><button class="btn btn-secondary" id="exp_cancel_btn" onclick="cancelEditExpense()">取消 Cancel</button></div>' : ''}
       </div>
     </div>
     <div class="card">
@@ -24472,12 +24579,19 @@ function _finRenderExpenseRows() {
     // Manual rows aren't clickable (nothing to drill into); the delete X
     // still works because we stop propagation on it.
     const rowClick = (isPo && e.po_id) ? `style="cursor:pointer" onclick="_navFromFinanceTab='expenses';navigate('purchases');setTimeout(()=>viewPO(${e.po_id}),200)" title="Open source PO · 打开采购单"` : '';
+    // Manual rows get pencil + ✕; PO rows keep the inert "PO" marker and neither
+    // control — they're rebuilt from the buying order on every status change.
+    // Both buttons stop propagation so they can't trigger the row's PO jump.
+    // The handler name matters: the can_delete gate at the top of this file
+    // hides .btn-icon[onclick*="delete" i], so the pencil must not say "delete".
     const delBtn = isPo
       ? '<span style="font-size:11px;color:var(--muted)">PO</span>'
-      : `<button class="btn-icon" style="color:#e74c3c" onclick="event.stopPropagation();deleteExpenseEntry(${e.id})">✕</button>`;
+      : `<button class="btn-icon" title="编辑 Edit" onclick="event.stopPropagation();editExpenseEntry(${e.id})">✎</button>`
+        + `<button class="btn-icon" style="color:#e74c3c" onclick="event.stopPropagation();deleteExpenseEntry(${e.id})">✕</button>`;
     const tcell = e.created_at ? `<div style="font-size:10px;color:var(--muted);font-weight:500;margin-top:2px;font-variant-numeric:tabular-nums">${esc(_fmtTime(e.created_at))}</div>` : '';
     const payChip = e.payment_method ? `<span style="display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:rgba(204,217,0,.18);color:var(--lime-text);margin-left:6px;white-space:nowrap">${esc(e.payment_method)}</span>` : '';
-    return `<tr class="ledger-expense" ${rowClick}>
+    const editCls = (_finEditingExpenseId != null && String(e.id) === String(_finEditingExpenseId)) ? ' fin-row-editing' : '';
+    return `<tr class="ledger-expense${editCls}" ${rowClick}>
       <td>${esc(e.date||'—')}${tcell}</td>
       <td>${esc(e.category||'—')}${payChip}</td>
       <td style="color:var(--muted);font-size:11px">${srcLabel}</td>
@@ -24487,6 +24601,26 @@ function _finRenderExpenseRows() {
     </tr>`;
   }).join('');
 }
+// Load a manual expense into the form above and switch it to edit mode.
+// Starting an edit while another is open just replaces it — one at a time.
+function editExpenseEntry(id) {
+  const entry = _expenses.find(x => String(x.id) === String(id));
+  if (!entry) return toast('未找到该记录 Entry not found','error');
+  _finEditingExpenseId = entry.id;
+  const body = document.getElementById('finBody');
+  if (body) _finRenderExpenses(body);
+  const card = document.getElementById('exp_form_card');
+  if (card) card.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+function cancelEditExpense() {
+  _finEditingExpenseId = null;
+  const body = document.getElementById('finBody');
+  if (body) _finRenderExpenses(body);
+}
+// Doubles as create and update — the form is the same either way, only the
+// target changes. Create keeps its original behaviour of leaving date/category/
+// payment alone so a run of similar entries can be typed quickly; an edit
+// finishes by dropping back to a clean create form.
 async function addExpenseEntry() {
   const date = v('exp_date');
   const amount = parseFloat(v('exp_amount'))||0;
@@ -24495,14 +24629,45 @@ async function addExpenseEntry() {
   if (!date) return toast('请选择日期 Please select a date','error');
   if (!amount || amount<=0) return toast('请输入有效金额 Please enter a valid amount','error');
   const payment_method = v('exp_pay') || null;
-  const r = await fetch('/api/finance/expenses', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ date, amount, category, notes, payment_method })});
-  const d = await r.json();
-  if (!d.success) return toast(d.error||'Save failed · 保存失败','error');
-  await _finReload();
-  document.getElementById('exp_amount').value='';
-  document.getElementById('exp_notes').value='';
-  document.getElementById('expense_tbody').innerHTML = _finRenderExpenseRows();
-  toast('✅ 支出已记录 Expense logged');
+  const editingId = _finEditingExpenseId;
+  const btns = ['exp_save_btn','exp_cancel_btn'].map(i=>document.getElementById(i)).filter(Boolean);
+  btns.forEach(b=>b.disabled=true);
+  try {
+    const r = await fetch(editingId ? '/api/finance/expenses/'+editingId : '/api/finance/expenses', {
+      method: editingId ? 'PUT' : 'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ date, amount, category, notes, payment_method }),
+    });
+    const d = await r.json();
+    if (!d.success) {
+      toast(d.error||'Save failed · 保存失败','error');
+      // 404 means the entry was deleted from somewhere else while it sat open
+      // in the form. Nothing to save into — drop edit mode and resync.
+      if (r.status === 404 && editingId) {
+        _finEditingExpenseId = null;
+        await _finReload();
+        const b2 = document.getElementById('finBody');
+        if (b2) _finRenderExpenses(b2);
+      }
+      return;
+    }
+    await _finReload();
+    if (editingId) {
+      _finEditingExpenseId = null;
+      const b2 = document.getElementById('finBody');
+      if (b2) _finRenderExpenses(b2);
+      toast('✅ 支出已更新 Expense updated');
+    } else {
+      document.getElementById('exp_amount').value='';
+      document.getElementById('exp_notes').value='';
+      document.getElementById('expense_tbody').innerHTML = _finRenderExpenseRows();
+      toast('✅ 支出已记录 Expense logged');
+    }
+  } catch (err) {
+    toast('Save failed · 保存失败: ' + err.message,'error');
+  } finally {
+    btns.forEach(b=>b.disabled=false);
+  }
 }
 async function deleteExpenseEntry(id) {
   if (!confirm('删除此支出记录？\nDelete this expense entry?')) return;
@@ -24510,7 +24675,15 @@ async function deleteExpenseEntry(id) {
   const d = await r.json();
   if (!d.success) return toast(d.error||'Delete failed · 删除失败','error');
   await _finReload();
-  document.getElementById('expense_tbody').innerHTML = _finRenderExpenseRows();
+  // Deleting the row that's open in the form leaves the editor pointing at
+  // nothing — drop back to create mode and repaint the whole tab instead.
+  if (_finEditingExpenseId != null && String(_finEditingExpenseId) === String(id)) {
+    _finEditingExpenseId = null;
+    const body = document.getElementById('finBody');
+    if (body) _finRenderExpenses(body);
+  } else {
+    document.getElementById('expense_tbody').innerHTML = _finRenderExpenseRows();
+  }
   toast('🗑 支出已删除 Expense deleted');
 }
 

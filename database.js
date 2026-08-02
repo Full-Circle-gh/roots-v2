@@ -489,6 +489,14 @@ try { db.prepare('CREATE INDEX IF NOT EXISTS idx_market_stock_ledger_ref    ON m
 // "Sales-derived channel" — meituan/eleme/etc.).
 addColumn('income_entries',  'payment_method', 'TEXT');
 addColumn('expense_entries', 'payment_method', 'TEXT');
+// Edit stamp on income/expense. Nullable with no default: NULL means the
+// entry has never been edited since it was logged, so the Finance list can
+// tell "created and left alone" from "touched later" without a backfill
+// inventing an edit that never happened. Set to CURRENT_TIMESTAMP by the
+// PUT handlers in routes/finance.js; the full before/after diff of each
+// edit lands in activity_log, not here.
+addColumn('income_entries',  'updated_at', 'DATETIME');
+addColumn('expense_entries', 'updated_at', 'DATETIME');
 // Suppliers — primary communication channel for the buyer to reach
 // this vendor. Type drives the UI (link vs QR vs plain text). Replaces
 // the loose "WeChat ID / phone" stuff with a structured field that
