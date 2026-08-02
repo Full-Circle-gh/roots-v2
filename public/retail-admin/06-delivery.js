@@ -235,6 +235,8 @@ async function loadDeliveryZones() {
     }
     if ($('#batch-anchor'))   $('#batch-anchor').value   = batch.anchor_date || '';
     if ($('#batch-interval')) $('#batch-interval').value = batch.interval_days || 2;
+    // Order-by hour. Blank in config = follow the reschedule cutoff (20:00).
+    if ($('#batch-cutoff')) $('#batch-cutoff').value = (batch.cutoff_hour != null ? batch.cutoff_hour : 20);
     if ($('#batch-skip'))     $('#batch-skip').value     = (Array.isArray(batch.skip_dates) ? batch.skip_dates : []).join('\n');
     if ($('#batch-kicker-en')) $('#batch-kicker-en').value = batch.kicker_en || '';
     if ($('#batch-kicker-cn')) $('#batch-kicker-cn').value = batch.kicker_cn || '';
@@ -352,12 +354,18 @@ async function saveBatchSchedule() {
     toast('Pick a batch day first · 请先选择一个制作日', 'err'); return;
   }
   const interval = Math.max(1, parseInt($('#batch-interval').value, 10) || 2);
+  const rawCut = parseInt(($('#batch-cutoff') && $('#batch-cutoff').value) || '', 10);
+  if (enabled && (!Number.isFinite(rawCut) || rawCut < 0 || rawCut > 23)) {
+    toast('Order-by hour must be 0–23 · 当日截单请输入 0–23 的小时', 'err'); return;
+  }
+  const cutoffHour = Number.isFinite(rawCut) ? rawCut : 20;
   const skip = ($('#batch-skip').value || '')
     .split(/[\s,]+/).map(s => s.trim()).filter(s => /^\d{4}-\d{2}-\d{2}$/.test(s));
   const val = (sel) => (($(sel) && $(sel).value) || '').trim();
   const body = {
     'batch.schedule': {
       enabled, anchor_date: anchor, interval_days: interval, skip_dates: skip,
+      cutoff_hour: cutoffHour,
       kicker_en: val('#batch-kicker-en'),
       kicker_cn: val('#batch-kicker-cn'),
       title_en:  val('#batch-title-en'),
@@ -1191,6 +1199,7 @@ const RM_DLV_EDITORS = {
       { id: 'batch-enabled', kind: 'toggle', label: 'Fresh batch schedule · 分批现做', hint: 'Affects orders with a batch-made item shipping outside Guangzhou OR to a far GZ district (Panyu, Huadu, Nansha, Conghua, Zengcheng). · 影响含「分批现做」商品且配送至广州以外或较远城区(番禺、花都、南沙、从化、增城)的订单。' },
       { id: 'batch-anchor', kind: 'date', label: 'A batch day · 某个制作日' },
       { id: 'batch-interval', kind: 'numsm', unit: 'days · 天', label: 'Make every · 每隔' },
+      { id: 'batch-cutoff', kind: 'numsm', unit: "o'clock — later orders wait for the next batch · 点,之后的订单等下一批", label: 'Order by · 当日截单' },
       { id: 'batch-skip', kind: 'textarea', mono: true, label: 'Skip these dates · 跳过这些日期', ph: '2026-07-14\n2026-07-16' },
       { id: 'batch-kicker-en', kind: 'text', label: 'Popup eyebrow — English · 弹窗小标题(英文)' },
       { id: 'batch-kicker-cn', kind: 'text', label: '弹窗小标题(中文)· Popup eyebrow — Chinese' },
@@ -1522,7 +1531,8 @@ function dlvHubRender() {
   // Fresh batches.
   const bOn = !!document.getElementById('batch-enabled')?.checked;
   const iv = Number(val('#batch-interval')) || 2;
-  if (bOn) _dlvStat('dlv-st-fresh', 'ok', cuT('Every ' + iv + ' day' + (iv === 1 ? '' : 's'), '每 ' + iv + ' 天制作一批'));
+  const bCut = val('#batch-cutoff') === '' ? 20 : Number(val('#batch-cutoff'));
+  if (bOn) _dlvStat('dlv-st-fresh', 'ok', cuT('Every ' + iv + ' day' + (iv === 1 ? '' : 's') + ', order by ' + bCut + ':00', '每 ' + iv + ' 天制作一批,' + bCut + ':00 截单'));
   else _dlvStat('dlv-st-fresh', 'off', cuT('Off', '关闭'));
 
   // Carriers — status stashed by loadShippingIntegrations / loadQingyunStores.

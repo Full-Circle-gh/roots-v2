@@ -25047,11 +25047,19 @@ function matchDeliveryZone(address) {
 // next batch day, promise an exact ship + arrival date, and tell the customer.
 //
 // Config (storefront_config['batch.schedule']):
-//   { enabled, anchor_date:'YYYY-MM-DD', interval_days:2, skip_dates:['YYYY-MM-DD'] }
+//   { enabled, anchor_date:'YYYY-MM-DD', interval_days:2, skip_dates:['YYYY-MM-DD'],
+//     cutoff_hour:20 }
 // anchor_date is any reference batch day; the rhythm steps out from it both
 // ways in interval_days jumps. skip_dates are one-off closures (vacations) the
-// cadence rolls past. There is no daily cutoff — an order on a batch day still
-// catches that day's batch.
+// cadence rolls past.
+//
+// cutoff_hour is the hour (local, 0-23) after which today's batch is already
+// made and shipped, so a batch day that is TODAY stops counting as available.
+// Without it the cadence was calendar-only and an order placed at 21:32 on a
+// batch day was promised that morning's batch — a ship date already in the
+// past. Blank falls back to fresh.rescheduleCutoffHour (the same 20:00 kitchen
+// close that locks a fresh order against rescheduling), so the two fresh-food
+// deadlines stay in step unless the operator deliberately splits them.
 function batchScheduleCfg() {
   const c = cfgValue('batch.schedule', null);
   if (!c || !c.enabled || !c.anchor_date) return null;
@@ -25061,10 +25069,18 @@ function batchScheduleCfg() {
     ? c.skip_dates.filter((s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s)))
     : [];
   const str = (v) => (typeof v === 'string' ? v : '');
+  const rawCut = parseInt(c.cutoff_hour, 10);
+  const cutoffHour = (Number.isFinite(rawCut) && rawCut >= 0 && rawCut <= 23)
+    ? rawCut
+    : (() => {
+      const f = parseInt(cfgValue('fresh.rescheduleCutoffHour', 20), 10);
+      return (Number.isFinite(f) && f >= 0 && f <= 23) ? f : 20;
+    })();
   return {
     anchor_date: c.anchor_date,
     interval_days: interval,
     skip_dates: skip,
+    cutoff_hour: cutoffHour,
     // Optional operator-authored popup copy. The body placeholders {ship_date}
     // and {delivery_date} are filled with the resolved YYYY-MM-DD dates. Title
     // and kicker are plain text. Any blank field falls back to a built-in
@@ -25166,7 +25182,14 @@ function computeBatchNotice(zone, productIds, now, slotId, slotKind) {
   const todayIso = toYmdLocal(new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate(), 12, 0, 0, 0));
 
   // Soonest we can make+ship a fresh batch, and when that would arrive.
-  const soonestShip = nextBatchShipDate(nowD, cfg);
+  // Past the day's cutoff the kitchen has finished and the parcel has gone, so
+  // today can no longer be the ship day — search from tomorrow instead. On a
+  // non-batch day this changes nothing (the next batch is still the next
+  // batch); on a batch day it correctly rolls to the following one.
+  const searchFrom = nowD.getHours() >= cfg.cutoff_hour
+    ? new Date(nowD.getTime() + 86400000)
+    : nowD;
+  const soonestShip = nextBatchShipDate(searchFrom, cfg);
   if (!soonestShip) return null;
   const soonestDelivery = toYmdLocal(new Date(parseYmdLocal(soonestShip).getTime() + 86400000));
 
@@ -25185,6 +25208,9 @@ function computeBatchNotice(zone, productIds, now, slotId, slotKind) {
     selectedDate = dateM[1];
     const earliestShip = toYmdLocal(new Date(parseYmdLocal(selectedDate).getTime() - 86400000));
     shipDate = nextBatchShipDate(parseYmdLocal(earliestShip), cfg) || soonestShip;
+    // Never promise a batch earlier than the soonest one we can still make —
+    // soonestShip already has the day's cutoff applied.
+    if (shipDate < soonestShip) shipDate = soonestShip;
     deliveryDate = toYmdLocal(new Date(parseYmdLocal(shipDate).getTime() + 86400000));
     kind = 'scheduled';
   } else {
@@ -25197,8 +25223,10 @@ function computeBatchNotice(zone, productIds, now, slotId, slotKind) {
     shipDate = soonestShip;
     deliveryDate = soonestDelivery;
     kind = 'asap';
-    // Panyu-style district + today is a batch day → made fresh today, no wait
-    // to explain. (Cities keep the notice — the shipping leg is still a wait.)
+    // Panyu-style district + today is still a live batch day → made fresh today,
+    // no wait to explain. Past the cutoff soonestShip is no longer today, so the
+    // notice correctly stays up and names the next batch instead of vanishing.
+    // (Cities keep the notice either way — the shipping leg is still a wait.)
     if (isShipDistrict && soonestShip === todayIso) return null;
   }
 
