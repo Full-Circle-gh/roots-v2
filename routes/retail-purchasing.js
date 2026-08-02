@@ -675,13 +675,13 @@ router.post('/api/retail-admin/purchases/:id/backorder', requireRetailAdmin, (re
       const newId = r.lastInsertRowid;
       const ins = db.prepare(`INSERT INTO po_line_items
         (po_id, store_product_id, name_en, name_cn, sku, qty, unit, cost_per_unit, total_cost,
-         expense_category, supplier_name, purchase_channel, sort_order)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+         expense_category, supplier_name, purchase_channel, note, sort_order)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
       lines.forEach((l, i) => {
         const outstanding = (parseFloat(l.qty) || 0) - (l.qty_received == null ? 0 : parseFloat(l.qty_received) || 0);
         ins.run(newId, l.store_product_id, l.name_en, l.name_cn, l.sku, outstanding, l.unit || 'pcs',
           l.cost_per_unit, outstanding * (parseFloat(l.cost_per_unit) || 0), l.expense_category,
-          l.supplier_name || null, l.purchase_channel || null, i);
+          l.supplier_name || null, l.purchase_channel || null, l.note || null, i);
       });
       return newId;
     });
@@ -711,8 +711,8 @@ router.put('/api/retail-admin/purchases/:id/landed', requireRetailAdmin, express
 function insertLineItems(poId, items, headerSupplier) {
   const insertItem = db.prepare(`INSERT INTO po_line_items
     (po_id, store_product_id, name_en, name_cn, sku, qty, unit, cost_per_unit, total_cost,
-     expense_category, supplier_name, purchase_channel, invoice_status, sort_order)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+     expense_category, supplier_name, purchase_channel, invoice_status, note, sort_order)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
   items.forEach((item, i) => {
     const qty = parseFloat(item.qty) || 0;
     const cpu = parseFloat(item.cost_per_unit) || 0;
@@ -720,7 +720,8 @@ function insertLineItems(poId, items, headerSupplier) {
     insertItem.run(
       poId, item.store_product_id || null, item.name_en || '', item.name_cn || null, item.sku || null,
       qty, item.unit || 'pcs', cpu, qty * cpu, item.expense_category || null,
-      item.supplier_name || headerSupplier || null, item.purchase_channel || null, status, i,
+      item.supplier_name || headerSupplier || null, item.purchase_channel || null, status,
+      (item.note || '').trim() || null, i,
     );
   });
 }

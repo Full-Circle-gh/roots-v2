@@ -187,6 +187,11 @@ addColumn('po_line_items', 'supplier_name',     'TEXT');
 addColumn('po_line_items', 'purchase_channel',  'TEXT');
 addColumn('po_line_items', 'invoice_received',  'INTEGER DEFAULT 0');           // legacy column, kept for compat
 addColumn('po_line_items', 'invoice_status',    "TEXT DEFAULT 'not_received'");
+// Free-text note on the LINE — the buyer's own remark about this one item
+// ("substitute brand", "call before delivery", "short-dated stock"). The
+// PO header already has `notes`, but a mixed shopping list needs the remark
+// attached to the item it belongs to, not buried in one box at the top.
+addColumn('po_line_items', 'note',              'TEXT');
 // One-shot backfill: anything that already had invoice_received=1 maps to
 // 'received'. Everything else keeps the default 'not_received'. Marker in
 // _migrations so it's idempotent.

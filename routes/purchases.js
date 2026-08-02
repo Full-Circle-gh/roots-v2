@@ -213,8 +213,8 @@ router.post('/api/purchases', requireAuth, requirePermission('purchases'), (req,
     if (items?.length) {
       const insertItem = db.prepare(`INSERT INTO po_line_items
         (po_id, ingredient_id, name_en, name_cn, sku, qty, unit, cost_per_unit, total_cost, expense_category,
-         supplier_name, purchase_channel, invoice_status, sort_order)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+         supplier_name, purchase_channel, invoice_status, note, sort_order)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
       const VALID_STATUS = new Set(['not_received','received','no_invoice']);
       // When a line is linked to an ingredient, fall back to that
       // ingredient's master supplier — so the canonical "we always buy
@@ -233,7 +233,7 @@ router.post('/api/purchases', requireAuth, requirePermission('purchases'), (req,
           poId, item.ingredient_id||null, item.name_en||'', item.name_cn||null, item.sku||null,
           item.qty||0, item.unit||'kg', item.cost_per_unit||0, total, item.expense_category||null,
           lineSupplier, item.purchase_channel || null,
-          status, i
+          status, (item.note||'').trim() || null, i
         );
       });
     }
@@ -255,8 +255,8 @@ router.put('/api/purchases/:id', requireAuth, requirePermission('purchases'), (r
     db.prepare('DELETE FROM po_line_items WHERE po_id = ?').run(req.params.id);
     const insertItem = db.prepare(`INSERT INTO po_line_items
       (po_id, ingredient_id, name_en, name_cn, sku, qty, unit, cost_per_unit, total_cost, expense_category,
-       supplier_name, purchase_channel, invoice_status, sort_order)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+       supplier_name, purchase_channel, invoice_status, note, sort_order)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
     const VALID_STATUS = new Set(['not_received','received','no_invoice']);
     const ingSupplierStmt = db.prepare('SELECT supplier FROM ingredients WHERE id = ?');
     items.forEach((item, i) => {
@@ -273,7 +273,7 @@ router.put('/api/purchases/:id', requireAuth, requirePermission('purchases'), (r
         req.params.id, item.ingredient_id||null, item.name_en||'', item.name_cn||null, item.sku||null,
         item.qty||0, item.unit||'kg', item.cost_per_unit||0, total, item.expense_category||null,
         lineSupplier, item.purchase_channel || null,
-        status, i
+        status, (item.note||'').trim() || null, i
       );
     });
     // Fire price-history records + alerts on Ordered/Delivered/Confirmed.
@@ -525,16 +525,16 @@ router.post('/api/purchases/:id/backorder', requireAuth, requirePermission('purc
     const newId = r.lastInsertRowid;
     const ins = db.prepare(`INSERT INTO po_line_items
       (po_id, ingredient_id, name_en, name_cn, sku, qty, unit, cost_per_unit, total_cost, expense_category,
-       supplier_name, purchase_channel, sort_order)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+       supplier_name, purchase_channel, note, sort_order)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
     lines.forEach((l, i) => {
       const outstanding = (parseFloat(l.qty) || 0) - (l.qty_received == null ? 0 : parseFloat(l.qty_received) || 0);
       const total = outstanding * (parseFloat(l.cost_per_unit) || 0);
-      // Carry supplier_name + purchase_channel forward; invoice_received
+      // Carry supplier_name + purchase_channel + note forward; invoice_received
       // resets to false on the back-order so the new line tracks its own
       // separate fulfilment.
       ins.run(newId, l.ingredient_id, l.name_en, l.name_cn, l.sku, outstanding, l.unit, l.cost_per_unit, total, l.expense_category,
-        l.supplier_name || null, l.purchase_channel || null, i);
+        l.supplier_name || null, l.purchase_channel || null, l.note || null, i);
     });
     return { newId, po_number };
   });
@@ -572,14 +572,14 @@ router.post('/api/purchases/:id/duplicate', requireAuth, requirePermission('purc
     const newId = r.lastInsertRowid;
     const ins = db.prepare(`INSERT INTO po_line_items
       (po_id, ingredient_id, name_en, name_cn, sku, qty, unit, cost_per_unit, total_cost, expense_category,
-       supplier_name, purchase_channel, lot_number, expiry_date, sort_order)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+       supplier_name, purchase_channel, note, lot_number, expiry_date, sort_order)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
     // Copy structure but DROP lot/expiry + invoice flag on duplicate —
     // those are per-delivery; a duplicate PO is a fresh order so blank-out
-    // makes sense. supplier_name + purchase_channel ARE carried forward
+    // makes sense. supplier_name + purchase_channel + note ARE carried forward
     // since the buyer is likely re-ordering from the same place.
     items.forEach(i => ins.run(newId, i.ingredient_id, i.name_en, i.name_cn, i.sku, i.qty, i.unit, i.cost_per_unit, i.total_cost, i.expense_category,
-      i.supplier_name || null, i.purchase_channel || null, null, null, i.sort_order));
+      i.supplier_name || null, i.purchase_channel || null, i.note || null, null, null, i.sort_order));
     return { newId, po_number };
   });
   const r = tx();
