@@ -1,6 +1,6 @@
 # Tacet glossary
 
-**These are the binding definitions for Tacet. Every document, every UI string and every new identifier uses these words with these meanings. Where existing code or documentation uses a different word for the same thing, the code is what needs changing, not this list. v1.4, 2026-07-31.**
+**These are the binding definitions for Tacet. Every document, every UI string and every new identifier uses these words with these meanings. Where existing code or documentation uses a different word for the same thing, the code is what needs changing, not this list. v1.5, 2026-08-02.**
 
 ---
 
@@ -93,3 +93,4 @@ Correct: "an account has customers." Wrong: "our customers" when an account is m
 - INGREDIENT, as a distinct entity from an item — ingredients are items.
 - MARKET / RETAIL STORE, as separate concepts — both are locations.
 - SHOPPER — the word is CUSTOMER.
+- TENANT — the word is ACCOUNT. It survives as a code identifier (`tenants`, `tenant_id`, `tenant_users`) and is renamed when those tables are rebuilt.

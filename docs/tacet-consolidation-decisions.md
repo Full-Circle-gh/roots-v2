@@ -324,7 +324,7 @@ DO NOT ONBOARD A SECOND BUSINESS BEFORE STAGE 5 COMPLETES. Whatever is sold must
 
 ## 24. Related documents
 
-- docs/tacet-glossary.md — binding definitions, v1.0, 2026-07-31. The words in this document are used with the meanings defined there.
+- docs/tacet-glossary.md — binding definitions, v1.5, 2026-08-02. The words in this document are used with the meanings defined there.
 - docs/tacet-core-survey.md — verified current-state inventory, 2026-07-30
 - docs/tacet-product-fields.md — product field inventory, 2026-07-31. 78 columns; 41 contested writes.
 - docs/tacet-stock-model.md — stock and reservation behaviour, 2026-07-30. Records 14 inconsistencies in the store stock model; three were live bugs.
