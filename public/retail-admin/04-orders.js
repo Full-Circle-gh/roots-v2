@@ -2328,11 +2328,13 @@ function pinIcon(size = 13) {
 // (split-parcel rollup, air-delay badge, missing-waybill warning, urgency tags).
 function renderDeliveryCell(o) {
   // Mirrored ledger rows (Meituan / gzgrocery): we don't fulfil them. Surface
-  // the platform's delivery time — the ETA while in flight, and the same time
-  // read back as the arrival once it lands, which is what the drawer shows.
+  // the platform's delivery time — the ETA while in flight, and the rider's real
+  // drop-off time once it lands, which is what the drawer shows.
   // Voided orders never arrived, so they keep the bare dash.
   if (typeof ordIsReadonlyChannel === 'function' && ordIsReadonlyChannel(o)) {
-    if (o.channel_eta && !['cancelled', 'refunded'].includes(o.status)) {
+    // delivered_at joins channel_eta as a reason to render: a delivered order
+    // whose ETA never came through still has a real arrival time to show.
+    if ((o.channel_eta || o.delivered_at) && !['cancelled', 'refunded'].includes(o.status)) {
       return renderTrackingCell(o);
     }
     return '<span class="muted">—</span>';
@@ -2396,24 +2398,35 @@ function renderTrackingCell(o) {
   }
   // Read-only channels (Meituan): Meituan owns the rider, so we have no waybill —
   // show the platform's delivery time instead, and never the "missing waybill"
-  // warning below (which doesn't apply). Once the order lands, the same time
-  // stays put as the arrival — quiet grey, since nothing is pending any more.
+  // warning below (which doesn't apply). Once the order lands, the ETA gives way
+  // to the real arrival — quiet grey, since nothing is pending any more.
   if (typeof ordIsReadonlyChannel === 'function' && ordIsReadonlyChannel(o)) {
     // Live Qingyun rider stage (Wave A): Meituan's delivery IS a Qingyun rider we
     // now track, so prefer the real stage + ETA over the platform's static ETA.
     const live = renderCourierListLine(o);
     if (live) return live;
-    if (o.channel_eta && !['cancelled', 'refunded'].includes(o.status)) {
-      const done = o.status === 'delivered';
+    const done = o.status === 'delivered';
+    // Once it lands, the fact worth showing is when it ACTUALLY arrived, not what
+    // was promised. This cell used to read the ETA back as the arrival, which on a
+    // Meituan order the rider drops off EARLY says "arrived 12:31 PM" at 11:54 —
+    // a future time labelled as a past event. delivered_at is the honest one: on a
+    // mirrored order it is stamped only by the Qingyun rider's real drop-off
+    // (autoDeliverQingyunForTenant). Meituan's own status poll and the past-ETA
+    // timer flip advance the status WITHOUT stamping it, so an order delivered on
+    // either of those has no arrival time we can truthfully print — it keeps the
+    // ETA, labelled as the ETA it always was rather than dressed up as an arrival.
+    const arrivedAt = done ? (o.delivered_at || null) : null;
+    if ((o.channel_eta || arrivedAt) && !['cancelled', 'refunded'].includes(o.status)) {
       // 预订单: a booked window, not a delivery in progress. Same time, different
       // meaning — green "arrival" on a 3-hour-out pre-order reads as an order
       // already on its way, so booked ones get their own amber "booked" line.
       const booked = !done && !!o.channel_preorder_at;
       const colour = done ? 'var(--text-3)' : booked ? '#8A6516' : '#5C7A4E';
-      const label = done ? cuT('arrived', '已送达')
+      const label = arrivedAt ? cuT('arrived', '已送达')
+                  : done ? cuT('ETA', '预计送达')
                   : booked ? cuT('booked', '顾客预约')
                   : cuT('arrival', '预计送达');
-      const when = booked ? o.channel_preorder_at : o.channel_eta;
+      const when = arrivedAt ? arrivedAt : booked ? o.channel_preorder_at : o.channel_eta;
       return `<div style="display:flex; align-items:center; gap:3px; font-size:11px; font-weight:600; color:${colour};">${deliveryIcon('scooter', 12)}<span>${escapeHtml(formatEtaClock(when))}</span></div>
               <div class="muted" style="font-size:10px; margin-top:2px;">${label}</div>`;
     }
@@ -4228,8 +4241,22 @@ function renderReadonlyOrder(o) {
           // staff trust the live rider (the ground truth) over Meituan's bookkeeping.
           const riderDone = !!(o.courier && (o.status === 'delivered' || o.courier.stage === 'delivered'));
           const platformAheadOfRider = meta.tone === 'delivered' && !!o.courier && !riderDone;
+          // The mirror lags in the OTHER direction too, and far more often: the
+          // rider drops the parcel (courier stage → delivered, which flips our own
+          // status), and Meituan's ~5-min status poll only catches up minutes later.
+          // In between, this field says "Rider en route" beside a Delivered pill, a
+          // Delivered rider card and a stamped arrival time — three rows of the same
+          // drawer contradicting each other, and the one that sounds live is the
+          // stale one. Only the rider's OWN drop-off earns this caveat (not the
+          // past-ETA timer flip, which is a guess), and only over a still-moving
+          // platform label — a 已取消/已退款 label is a real conflict, not a lag,
+          // and must never be waved away as one.
+          const platformBehindRider = !!(o.courier && o.courier.stage === 'delivered')
+            && ['pending_payment', 'paid', 'preparing', 'dispatched'].includes(meta.tone);
           const caveat = platformAheadOfRider
             ? `<div class="sub" style="color:#9A6E2A;">${cuT('Platform-reported · rider still on the way', '平台标记 · 骑手仍在配送')}</div>`
+            : platformBehindRider
+            ? `<div class="sub" style="color:#9A6E2A;">${cuT('Platform label lagging · rider has delivered', '平台状态滞后 · 骑手已送达')}</div>`
             : '';
           return `<div>
           <div class="kicker">${escapeHtml(chan)} status · 平台状态</div>
@@ -4242,10 +4269,16 @@ function renderReadonlyOrder(o) {
           // not an ETA we're racing — say which it is, so nobody reads a 15:30 on
           // a 12:03 order as a late delivery. Falls back to the plain ETA cell for
           // every normal order.
-          const when = preOrder ? (o.channel_preorder_at || o.channel_eta) : o.channel_eta;
+          // Landed orders show the real drop-off time instead of the promise —
+          // same rule as the list's delivery cell: delivered_at is stamped by the
+          // rider's actual drop-off, so it answers "when did it arrive"; the ETA
+          // can still be in the future while the pill already reads Delivered.
+          // No delivered_at (platform label / past-ETA timer flip) → keep the ETA.
+          const arrivedAt = o.status === 'delivered' ? (o.delivered_at || null) : null;
+          const when = arrivedAt || (preOrder ? (o.channel_preorder_at || o.channel_eta) : o.channel_eta);
           if (!when) return '';
           return `<div>
-          <div class="kicker">${preOrder ? 'Booked for · 顾客预约' : 'ETA · 预计送达'}</div>
+          <div class="kicker">${arrivedAt ? 'Arrived · 送达' : preOrder ? 'Booked for · 顾客预约' : 'ETA · 预计送达'}</div>
           <div class="val"><b>${escapeHtml(formatEtaClock(when))}</b></div>
           <div class="sub">${formatDate(when)}</div>
         </div>`;
