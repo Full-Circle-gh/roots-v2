@@ -1855,6 +1855,30 @@ try {
   }
 } catch (e) { console.error('[migration seed_notice_store_move_v1]', e); }
 
+// v2 — the remaining four fields, held back from v1 until the Chinese copy had
+// been read by someone who speaks it. v1 seeded only the two message strings, and
+// the notice renders only when all six are set, so it has been dark since it
+// shipped. This is what turns it on.
+//
+// The title says 中央厨房 rather than 门店 because the message body calls the
+// fulfilling location a 中央厨房, and a banner that called it a 门店 would
+// contradict the sentence directly beneath it. The text is per-business config,
+// so it is written to be ACCURATE for this business rather than reusable — the
+// generic part is the trigger in routes/retail.js, which names no location at all.
+//
+// INSERT OR IGNORE, so an operator's own wording is never overwritten.
+try {
+  const ran = db.prepare("SELECT 1 FROM _migrations WHERE name = ?").get('seed_notice_store_move_v2');
+  if (!ran) {
+    const put = db.prepare("INSERT OR IGNORE INTO storefront_config (key, value_json) VALUES (?, ?)");
+    put.run('notice.store_move.kicker_en', JSON.stringify('Delivery'));
+    put.run('notice.store_move.kicker_cn', JSON.stringify('配送'));
+    put.run('notice.store_move.title_en',  JSON.stringify('Sent from our central kitchen'));
+    put.run('notice.store_move.title_cn',  JSON.stringify('改由中央厨房发出'));
+    db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_notice_store_move_v2');
+  }
+} catch (e) { console.error('[migration seed_notice_store_move_v2]', e); }
+
 // v2 — self-heal pass. The v1 migration above uses INSERT OR IGNORE, which
 // is a no-op when a brand.me_footer row already exists. If the operator
 // clicked Save on an empty footer-settings card between the feature shipping
