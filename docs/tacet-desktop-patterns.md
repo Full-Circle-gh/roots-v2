@@ -1,4 +1,4 @@
-# Tacet desktop patterns — v4.1 · 2026-07-31
+# Tacet desktop patterns — v4.2 · 2026-08-02
 
 > The rulebook for every desktop admin surface. `tacet-design-system.md` governs how Tacet **looks**. `tacet-brand-concept.md` governs how it **sounds**. `tacet-ia-blueprint.md` governs what **exists**. This file governs **how a page is put together** — so that Orders and Pop-ups feel like the same product despite having different layouts.
 >
@@ -1057,6 +1057,21 @@ Widths live in **CSS on classed cols** (`col.oc-c-*`, `col.cu-c-*`), never inlin
 
 ---
 
+### 1.20 Estimate at machine speed
+
+Estimates are never given in human-team units. No person-days, no sprints, no "a team would take a quarter." Those numbers describe a way of working that is not how this project is built, and importing them produces plans that are wrong in both directions.
+
+Every estimate is given in two separate parts, never blended into one number:
+
+- **Build** — the work done by Claude Code. Measured in hours or days.
+- **Ash's time** — reviewing, deciding, and above all testing a live business's screens and flows. Measured separately and named for what it is.
+
+The second part is usually the larger one and is never omitted, softened, or folded into the first. A build that takes a day and needs two weeks of verification is reported as exactly that.
+
+Where a stage carries risk to live business data, the verification period is stated as a requirement of the stage, not as a caveat after it.
+
+---
+
 
 ## 2. The archetypes
 
@@ -1558,6 +1573,16 @@ Small, non-blocking. Resolve during Batch 0.
    published said these were unmade — that was wrong, and it was wrong because the amendment's
    own §7 reads as a to-do list and was taken at its word instead of checked against the
    blueprint. §7 of that document is a record of what was owed in July, not a live queue.)*
+
+---
+
+*v4.2 · 2026-08-02.*
+
+**v4.2 changes: §1.20 added — how an estimate is expressed.** One rule added, nothing removed or altered. Estimates are never given in human-team units — no person-days, no sprints, no "a team would take a quarter" — and every estimate splits into two parts that are never blended: **Build** (Claude Code, hours or days) and **Ash's time** (review, decision, and testing against a live business). The second part is usually the larger one and is never folded into the first; where a stage risks live business data, its verification period is a requirement of the stage rather than a caveat after it.
+
+**Placement note.** The brief asked for this section immediately after one titled *"Answer before you draft"*. **No such section exists in this file or anywhere in `docs/`** — checked 2026-08-02. It was placed at the end of the §1 cluster, which is where the next free number in that sequence lands. Move it if the intended anchor turns up.
+
+Everything else unchanged from v4.1.
 
 ---
 
