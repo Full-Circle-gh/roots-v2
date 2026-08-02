@@ -1,6 +1,6 @@
 # Tacet glossary
 
-**These are the binding definitions for Tacet. Every document, every UI string and every new identifier uses these words with these meanings. Where existing code or documentation uses a different word for the same thing, the code is what needs changing, not this list. v1.0, 2026-07-31.**
+**These are the binding definitions for Tacet. Every document, every UI string and every new identifier uses these words with these meanings. Where existing code or documentation uses a different word for the same thing, the code is what needs changing, not this list. v1.2, 2026-07-31.**
 
 ---
 
@@ -26,6 +26,7 @@
 ## Selling
 
 - ONLINE STORE — where customers browse and buy. ONE online store per account, appearing on more than one surface: the website and the WeChat mini-program today, others later. The surfaces are windows onto the same shop, not separate shops. An account sets its shop up ONCE; products, prices, stock and presentation are the same on every surface. Adding a future surface adds a window, not another shop to configure. Read-only with respect to the modules — it displays what staff maintain and never edits it.
+- CUSTOMER — a person who buys from an account's online store. The plain word ALWAYS means this. Never "shopper", and never "user" — a USER works for an account and logs into an app.
 - SALES CHANNEL — a way customers buy. Attached to a location. Configured per business; not a fixed list.
 - ORDER — one customer purchase. One record regardless of channel.
 
@@ -70,6 +71,17 @@
 
 - BUSINESS — one company using Tacet. Holds its own settings: language, currency, units of measure, time zone, sales channels.
 
+### Two levels of customer — do not confuse them
+There are two, one level apart:
+- Tacet's customer is an ACCOUNT — a business paying to use Tacet.
+- An account's customer is a CUSTOMER — a person buying from that account's online store.
+
+The plain word CUSTOMER is reserved for the lower level: the person shopping. When referring to Tacet's own customers, say ACCOUNT, never "our customers".
+
+Why this way round: the word appears constantly inside the product — customer list, customer orders, customer service — and in every case it means the person shopping. If CUSTOMER sometimes meant a business, every one of those would need qualifying.
+
+Correct: "an account has customers." Wrong: "our customers" when an account is meant.
+
 ## Retired words — do not use
 
 - FULL CIRCLE — the system is Tacet.
@@ -78,3 +90,4 @@
 - KITCHEN, as a location type — now the production flag.
 - INGREDIENT, as a distinct entity from an item — ingredients are items.
 - MARKET / RETAIL STORE, as separate concepts — both are locations.
+- SHOPPER — the word is CUSTOMER.
