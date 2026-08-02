@@ -126,6 +126,43 @@ function internalStatusForChannel(desc) {
   return null; // 待支付 / unknown → keep 'paid'
 }
 
+// Lifecycle order of the statuses a Meituan label can write, used only to stop a
+// STALE label from walking an order backwards. Meituan's poll runs ~5min and
+// trails the Qingyun rider who actually carries the order, so by the time a poll
+// reports 骑手已接单 the rider may already have collected it — and our own
+// auto-dispatch / auto-deliver sweeps (routes/retail.js) will have advanced the
+// mirror off the live courier feed. Letting the trailing label win drags the
+// order back and the two flap against each other every poll: dispatched →
+// rider_pickup → dispatched, minute after minute. Same shape as the placed_at
+// guard in the handler below, which only ever moves EARLIER; this one only ever
+// moves FORWARD.
+const CHANNEL_STATUS_RANK = {
+  pending_payment: 0, paid: 1, awaiting_restock: 1,
+  preparing: 2, rider_pickup: 3, dispatched: 4, delivered: 5,
+};
+// Should `next` be written over `current`?
+// cancelled/refunded are deliberately exempt in BOTH directions: a void is the
+// platform's own fact and can land at any point (including after delivery, as a
+// refund), and a void that flips back to a live label must be able to un-cancel —
+// the restock logic below is built on exactly that, so it can re-deduct stock it
+// returned when Meituan rejects a refund request.
+// An unranked status on either side keeps the old unconditional behaviour.
+//
+// Trade-off worth naming: a Qingyun rider who ACCEPTS then CANCELS reverts the
+// job, but our status stays on 'dispatched' and this guard won't let Meituan pull
+// it back to rider_pickup. That matches what already happens to our own mini-app
+// orders (nothing reverts the auto-dispatch sweep either), and the row's status
+// pill still reads the live courier stage — it shows "Finding a rider" over a
+// dispatched order rather than pretending one is on the way.
+function isForwardChannelStatus(current, next) {
+  if (!next || next === current) return true;                      // nothing to write
+  if (next === 'cancelled' || next === 'refunded') return true;    // a void always wins
+  const cur = CHANNEL_STATUS_RANK[current];
+  const nxt = CHANNEL_STATUS_RANK[next];
+  if (cur == null || nxt == null) return true;                     // not ours to rank
+  return nxt > cur;
+}
+
 // Whether a status label is a CONFIRMED, terminal void — the only thing that
 // should return stock. A bare 退款/退货/取消 is NOT enough: Meituan surfaces a
 // refund/cancel *request* with those words while the order is still live, and if
@@ -306,6 +343,12 @@ router.post('/update-order-status', (req, res) => {
     // A terminal label also advances the internal status so the order leaves the
     // Paid worklist for Delivered/Cancelled/Refunded; in-progress leaves it alone.
     const internal = internalStatusForChannel(desc);
+    // Forward-only (see isForwardChannelStatus): a poll that merely lags the live
+    // Qingyun rider must not undo a sweep that already advanced this order.
+    // `channel_status` itself is ALWAYS written — the drawer shows Meituan's exact
+    // label, and that stays true even when we decline to follow it with our own
+    // status. Only the internal status is held back.
+    const statusWrite = isForwardChannelStatus(prev && prev.status, internal) ? internal : null;
     const r = db.prepare(`
       UPDATE retail_orders
          SET channel_status = ?, channel_status_at = CURRENT_TIMESTAMP,
@@ -315,7 +358,7 @@ router.post('/update-order-status', (req, res) => {
          AND (COALESCE(channel_status,'') != ?
               OR status != COALESCE(?, status)
               OR (? IS NOT NULL AND COALESCE(channel_eta,'') != ?))
-    `).run(desc, internal, etaVal, imp.retail_order_id, desc, internal, etaVal, etaVal);
+    `).run(desc, statusWrite, etaVal, imp.retail_order_id, desc, statusWrite, etaVal, etaVal);
 
     // Backfill the platform-owned facts an older import didn't carry: the 预订单
     // window, the customer's note, their cutlery answer, and Meituan's own order

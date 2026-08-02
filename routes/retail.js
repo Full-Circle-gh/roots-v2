@@ -6727,10 +6727,27 @@ if (_autoDeliverSweep.unref) _autoDeliverSweep.unref();
 // delivery) OR order_status 30 (in-flight) WITH delivery_status >= 30 (前往取货/
 // 取货中). A rider who has only ACCEPTED (os 30 / ds 20) is deliberately NOT
 // dispatched — an accept→cancel reverts to 待配送 (20) before pickup, so gating on
-// pickup avoids a premature flip. Flip is preparing/paid → dispatched with the
-// SAME side effects as the manual dispatch (dispatched_at, per-parcel mirror,
-// customer "on the way" notification, cancel lockout). Toggle:
-// storefront_config `delivery.qingyunAutoDispatch` (default on).
+// pickup avoids a premature flip. Flip is preparing/paid/rider_pickup →
+// dispatched with the SAME side effects as the manual dispatch (dispatched_at,
+// per-parcel mirror, customer "on the way" notification, cancel lockout).
+// Toggle: storefront_config `delivery.qingyunAutoDispatch` (default on).
+//
+// rider_pickup is a Meituan-only mirror stage ("Rider coming"). It belongs here
+// for the same reason it belongs in the auto-deliver sweep above: Meituan's own
+// ~5min status poll TRAILS the Qingyun rider who is actually doing the delivery,
+// so without this the mirror stays stranded on "Rider coming" — and stays in the
+// Rider-coming TAB — while the rider is already 9km away with the bag. The row's
+// status pill reconciles itself against the live courier stage
+// (`orderStatusPill`, retail-admin/04-orders.js) and reads "On the way", so the
+// pill and the tab openly disagreed. Advancing the status is what makes them
+// agree, rather than teaching each read surface the same override.
+// Single source of truth for BOTH the SELECT and the atomic claim below — an
+// inline copy of the delivered sweep's list drifted once (see the note there).
+const AUTO_DISPATCH_FROM_STATUSES = ['paid', 'preparing', 'rider_pickup'];
+// SQL IN(...) list built from the constant above. Safe to interpolate — every
+// element is a hardcoded literal, never user input.
+const AUTO_DISPATCH_FROM_SQL = AUTO_DISPATCH_FROM_STATUSES.map(s => `'${s}'`).join(',');
+
 function autoDispatchQingyunForTenant() {
   if (cfgValue('delivery.qingyunAutoDispatch', true) !== true) return 0;   // disabled
   let rows;
@@ -6739,7 +6756,7 @@ function autoDispatchQingyunForTenant() {
       `SELECT o.id AS id, o.status AS status
          FROM retail_orders o
          JOIN delivery_jobs j ON j.retail_order_id = o.id
-        WHERE o.status IN ('paid','preparing')
+        WHERE o.status IN (${AUTO_DISPATCH_FROM_SQL})
           AND j.order_status IS NOT NULL
           AND j.order_status < 50
           AND ( j.order_status >= 40
@@ -6758,7 +6775,7 @@ function autoDispatchQingyunForTenant() {
           SET status = 'dispatched',
               dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP),
               updated_at    = CURRENT_TIMESTAMP
-        WHERE id = ? AND status IN ('paid','preparing')`
+        WHERE id = ? AND status IN (${AUTO_DISPATCH_FROM_SQL})`
     ).run(o.id);
     if (claim.changes === 0) continue;
     // Keep per-parcel state in lockstep with the whole-order flip (mirrors the
