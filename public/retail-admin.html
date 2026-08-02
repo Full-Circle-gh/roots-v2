@@ -2508,8 +2508,8 @@
                          than wrapping, silently, on every Gzgrocery row.
            Items    60 — its own header, not the digit (see the note below)
            Total    80 — "¥12,345.60" ≈ 72, numeric, must never wrap
-           Status  100 — what it already had; unchanged on purpose
-           Delivery 149 — what it already had; two lines by design
+           Status  149 — the widest pill, measured. See the block below.
+           Delivery 129 — "SF 12345678901234" mono 11px = 108 + 16 padding
            Placed  120 — the whole point of this change; ~79-88px of text
 
          What gave the room back: Customer 13→12, Ship to 11→9, Store 10→9.
@@ -2518,6 +2518,36 @@
          name in the live list clears that comfortably; a long one ellipses
          sooner than it used to. That is the trade, and it is the right way
          round: a name can ellipse, a timestamp cannot.
+
+         ── Status was 10%, and 10% never held a status pill ──
+         Sized "unchanged on purpose" above, which was the one column that
+         needed re-measuring: it holds a PILL, and a pill's width is its text
+         PLUS 31px of chrome (6px dot + 5px gap + 8/10px padding + 2px
+         border). 10% is 99.6px at 996px, 83.6px after the cell padding.
+         Measured in a browser at 11px/600 Inter with .04em tracking:
+           Paid 55.6 · Pending 77.2 · Delivered 84.8 · Refunded 85.4
+           Preparing 86.2 · Cancelled 87.5 · Dispatched 95.1
+           Rider coming 105.6 · Awaiting restock 125.3
+         SEVEN of the nine cleared 83.6px. Only the two-word ones showed it —
+         "Rider coming" broke at its space and rendered two lines on every
+         Meituan row. The single-word seven have no break opportunity, so
+         they did the silent thing instead and spilled under Delivery (§1.11
+         trap 3: a wrapping cell breaks visibly, a nowrap one just overflows).
+
+         `white-space: nowrap` on the pill is NOT the fix — it would convert
+         the one visible failure into a seventh silent one. The column has to
+         be wide enough for the widest pill, because a pill cannot ellipse
+         and cannot absorb slack. 15% = 149.4px, 133.4px inside the padding,
+         which clears "Awaiting restock" by 8px. 中文 is far shorter here
+         (骑手来取货 88.2 · 等待补货 76.8) and never binds.
+
+         Paid for by three columns that were measured to have it spare:
+           Customer 12→10 — 99.6px vs its own 13px header at 80.7px. Names
+                            ellipse by design and already did at 12%.
+           Store     9→8  — 79.7px vs "Tianhe" 43.4 + 16. The routing note
+                            ("out-of-city warehouse") wrapped at 9% too.
+           Delivery 15→13 — 129.5px vs the 124px waybill line above. Its 15%
+                            was never measured either, only carried forward.
 
          🔴 THE FLOORS ABOVE ARE A DESCRIPTION, NOT A MECHANISM. They are the
          numbers each column was CHECKED against; they are not expressed in
@@ -2550,13 +2580,13 @@
       #orders-table { table-layout: fixed; }
       #orders-table col.oc-c-ord      { width:  9%; }
       #orders-table col.oc-c-chan     { width: 10%; }
-      #orders-table col.oc-c-cust     { width: 12%; }
-      #orders-table col.oc-c-store    { width:  9%; }
+      #orders-table col.oc-c-cust     { width: 10%; }
+      #orders-table col.oc-c-store    { width:  8%; }
       #orders-table col.oc-c-shipto   { width:  9%; }
       #orders-table col.oc-c-items    { width:  6%; }
       #orders-table col.oc-c-total    { width:  8%; }
-      #orders-table col.oc-c-status   { width: 10%; }
-      #orders-table col.oc-c-delivery { width: 15%; }
+      #orders-table col.oc-c-status   { width: 15%; }
+      #orders-table col.oc-c-delivery { width: 13%; }
       #orders-table col.oc-c-placed   { width: 12%; }
       /* 6% is Items' floor, and the binding constraint is its own HEADER, not
          its data: "Items" needs ~58px, the digit needs ~45. At 5% the header
