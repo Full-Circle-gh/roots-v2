@@ -1,8 +1,10 @@
-# Tacet shared-core consolidation — decisions record, v0.8
+# Tacet shared-core consolidation — decisions record, v0.8.1
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The open questions in §23 are NOT decided and must not be treated as settled.**
 
 2026-07-30 · The app previously called the kitchen app is now the PRODUCTION APP. The KITCHEN flag on a location, kitchen locations and code identifiers keep their names.
+
+2026-07-31 · The front end previously called the STOREFRONT is now the ONLINE STORE. Code identifiers, filenames and directories — `shop.html`, `miniapp/` and the like — keep their names.
 
 ---
 
@@ -33,10 +35,10 @@ Before any design decision is accepted, it must be checked against a business un
 Everything lives under tacet.com as a subdomain.
 - `app.tacet.com` — where business users work. The Tacet app, Production, and Account settings all live here. ONE domain; moving between them never changes the domain.
 - `backoffice.tacet.com` — Tacet staff only. Separate login and a hard wall: nothing internal may leak into a customer-facing screen.
-- `shopname.tacet.com` — each account's storefront, issued automatically at signup. The account may attach its own domain later, at which point shoppers see that instead. Shoppers should not see Tacet's name on a storefront the account has branded.
+- `shopname.tacet.com` — the address of an account's ONLINE STORE, issued automatically at signup. The account may attach its own domain later, at which point shoppers see that instead. Shoppers should not see Tacet's name on an online store the account has branded.
 - `tacet.com` itself is reserved for the marketing site and is not an application host.
 
-Current state, for contrast: four separate hosts today — the store console, the production app, the internal console, and per-account storefronts — with the server deciding what to serve by Host header. This grew by accident, one host per app.
+Current state, for contrast: four separate hosts today — the store console, the production app, the internal console, and per-account online stores — with the server deciding what to serve by Host header. This grew by accident, one host per app.
 
 ### Sections are paths, not hosts — DECIDED
 Within `app.tacet.com`, everything is a path: `/orders`, `/products`, `/account/invoices`. One login, one session, no reload into a different application.
@@ -57,13 +59,13 @@ Account settings stop being a separate framed application and become part of the
 FOUR front ends. The front end is the ONLY app-specific layer; everything beneath is shared.
 - TACET — the main app. Staff.
 - PRODUCTION — staff. Merges into Tacet later, leaving three.
-- STOREFRONT — shoppers. Read-only. Part of the system, not a separate product.
+- ONLINE STORE — customers. One shop per account, appearing as a website and as a WeChat mini-program, with further surfaces possible later. All surfaces show the same shop; an account configures it once. Read-only with respect to the modules.
 - BACK OFFICE — Tacet staff only.
 
 ### Back end
 - ONE service, ONE API. Not one per app.
 - A set of SHARED MODULES, each built once. Eight named so far: Locations, Products, Items, Stock, Users, Orders, Purchasing, Recipes. MORE WILL BE NAMED — eight is not a ceiling. Already visible but not yet specified: suppliers, customers, marketing, content and media, integrations, reporting, billing.
-- Every module is available to any front end. Which modules a front end uses depends on what that front end is for, not on staging. Production uses Items and Recipes; Tacet does not, because selling does not involve them. The storefront reads Products, Stock and Locations and writes nothing. This does not change when the apps merge — the modules were always shared; the split was only ever in the interface.
+- Every module is available to any front end. Which modules a front end uses depends on what that front end is for, not on staging. Production uses Items and Recipes; Tacet does not, because selling does not involve them. The online store reads Products, Stock and Locations and writes nothing. This does not change when the apps merge — the modules were always shared; the split was only ever in the interface.
 - Permissions are capability-based and enforced in the back end.
 - FRONT ENDS NEVER TOUCH THE DATABASE. A screen asks the back end; the back end reads the database.
 
@@ -75,7 +77,7 @@ FOUR front ends. The front end is the ONLY app-specific layer; everything beneat
 1. FRONT END IS EXTENDED, NOT REBUILT. Screens are rebuilt one at a time as each stage reaches them. No wholesale rewrite — it would stop everything for months. Current state: hand-written JavaScript in very large files, one of 28,000 lines.
 2. SQLITE STAYS through the consolidation. Revisit before a second business, not during. Changing the database engine and the data model at once doubles the risk. FLAG: SQLite permits one writer at a time. Adequate for one account; a genuine question for several. To be TESTED before onboarding a second business, not assumed either way.
 3. ONE SHARED DATABASE STAYS FOR NOW; per-account databases are not adopted. FLAG WITH A DEADLINE: the per-account isolation switch is currently what locks every non-Roots account out of the app. This decision holds only until the open-signup stage, where it must be resolved.
-4. THE STOREFRONT REMAINS PART OF THIS SYSTEM. Not split into a separate service. Separating it would require an API between them and a second deployment.
+4. THE ONLINE STORE REMAINS PART OF THIS SYSTEM. Not split into a separate service. Separating it would require an API between them and a second deployment.
 5. THE BACK OFFICE IS BUILT PROPERLY AT THE OPEN-SIGNUP STAGE, not before. It half-exists today as a separate login and two consoles.
 
 ## 2. Permissions
@@ -282,7 +284,7 @@ Locations · Products · Items · Stock · Users · Orders · Purchasing · Reci
 - PRODUCTS and ITEMS are SEPARATE modules, matching the two-list decision. They must never be presented, grouped or built as one.
 - ORDERS is a single module. An order is a sale; there is one record and reporting reads from it. There is no separate "sales" module.
 - Not every front end uses every module. Items and Recipes are Production-only until the apps merge. Locations, Products, Stock, Users and Orders are used by both.
-- FOUR front ends exist, not three: Tacet, Production, the customer storefront, and the Back Office. The storefront is not a separately maintained app — it reads the same Products, Stock and Locations modules. What a shopper sees is the same data staff edit, never a copy.
+- FOUR front ends exist, not three: Tacet, Production, the customer-facing online store, and the Back Office. The online store is not a separately maintained app — it reads the same Products, Stock and Locations modules. What a shopper sees is the same data staff edit, never a copy.
 
 ## 22. Rollout order and priority — REVISED 2026-07-31
 

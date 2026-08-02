@@ -25,6 +25,7 @@
 
 ## Selling
 
+- ONLINE STORE — where customers browse and buy. ONE online store per account, appearing on more than one surface: the website and the WeChat mini-program today, others later. The surfaces are windows onto the same shop, not separate shops. An account sets its shop up ONCE; products, prices, stock and presentation are the same on every surface. Adding a future surface adds a window, not another shop to configure. Read-only with respect to the modules — it displays what staff maintain and never edits it.
 - SALES CHANNEL — a way customers buy. Attached to a location. Configured per business; not a fixed list.
 - ORDER — one customer purchase. One record regardless of channel.
 
@@ -72,6 +73,7 @@
 ## Retired words — do not use
 
 - FULL CIRCLE — the system is Tacet.
+- STOREFRONT — it is the ONLINE STORE.
 - KITCHEN APP — now the production app.
 - KITCHEN, as a location type — now the production flag.
 - INGREDIENT, as a distinct entity from an item — ingredients are items.
