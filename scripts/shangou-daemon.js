@@ -43,6 +43,9 @@ const { coldMsRemaining, isColdStartChallenge } = require('../lib/browser-warmup
 // the recovery message the group is waiting on.
 const { latchStore } = require('../lib/alert-latch');
 const { sweepStockDrift } = require('../lib/meituan-drift-sweep');
+// Opening hours off the store's own row, cached — so an admin edit takes effect
+// without a restart. Same module qingyun-daemon reads.
+const { storeHours, within } = require('../lib/store-hours');
 
 const SHANGOU_STORES = (process.env.SHANGOU_STORES || 'yuexiu')
   .split(',').map(s => s.trim()).filter(Boolean);
@@ -65,23 +68,34 @@ const INTERNAL_BASE  = `http://127.0.0.1:${INTERNAL_PORT}`;
 const OPEN_GRACE_MIN = 15;
 
 // Per-store opening hours (Asia/Shanghai); outside these we don't poll/push.
-const STORE_HOURS = {
+// The real hours live on the store's own row — retail_stores.open_time /
+// close_time, the "Opens · 开门 / Closes · 关门" fields in the admin's store editor
+// — and are read through lib/store-hours, whose 10-minute cache means an edit
+// takes effect on its own without restarting this daemon.
+//
+// The map below is only the FALLBACK for a store with no usable hours on file,
+// kept so existing behaviour is unchanged until someone fills the fields in. A
+// store in neither is treated as always-open, so a new store is never silently
+// muted.
+//
+// Scope, deliberately narrow: these hours gate order POLLING, stock PUSHES and
+// auto-mapping only. They do not touch routing (lib/inventory's routeOrder never
+// reads opening hours), and they do not gate the 置休 open/close command — see
+// syncBusinessStatus, which stays outside this check so an operator can close or
+// reopen the shop at any hour.
+const LEGACY_STORE_HOURS = {
   yuexiu: { open: 11 * 60 + 0, close: 20 * 60 + 15 },
 };
 
 const FORCE_OPEN_UNTIL = Number(process.env.SHANGOU_FORCE_OPEN_MINUTES) > 0
   ? Date.now() + Number(process.env.SHANGOU_FORCE_OPEN_MINUTES) * 60_000 : 0;
 
-function shanghaiMinutes(now = new Date()) {
-  const s = new Date(now.getTime() + 8 * 3600 * 1000);
-  return s.getUTCHours() * 60 + s.getUTCMinutes();
-}
 function isStoreOpen(storeCode, now = new Date()) {
   if (FORCE_OPEN_UNTIL && now.getTime() < FORCE_OPEN_UNTIL) return true;
-  const h = STORE_HOURS[storeCode];
-  if (!h) return true;
-  const m = shanghaiMinutes(now);
-  return m >= (h.open - OPEN_GRACE_MIN) && m < (h.close + OPEN_GRACE_MIN);
+  // Re-read every call: storeHours() serves its own cache, so this is cheap and
+  // picks up an admin edit within CACHE_MS without a restart.
+  const hours = storeHours(storeCode) || LEGACY_STORE_HOURS[storeCode] || null;
+  return within(hours, { openGraceMin: OPEN_GRACE_MIN, closeGraceMin: OPEN_GRACE_MIN, now });
 }
 function jitter(baseMs, frac = 0.3) {
   const spread = baseMs * frac;

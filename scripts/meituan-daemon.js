@@ -45,6 +45,9 @@ const { sweepStockDrift } = require('../lib/meituan-drift-sweep');
 const { sendOpsAlert } = require('../lib/ops-alert');
 // Ops-alert latches that survive a restart (see lib/alert-latch).
 const { latchStore } = require('../lib/alert-latch');
+// Opening hours off the store's own row, cached — so an admin edit takes effect
+// without a restart. Same module qingyun-daemon reads.
+const { storeHours, within } = require('../lib/store-hours');
 
 // Stores handled by a DIFFERENT channel daemon (e.g. yuexiu on 闪购/shangou-sync).
 // Listed here so THIS 外卖 daemon never polls their (logged-out) e.waimai session or
@@ -88,38 +91,30 @@ const INTERNAL_BASE  = `http://127.0.0.1:${INTERNAL_PORT}`;
 // (OPEN_GRACE_MIN) widens the window so trailing/pre-orders still import and the
 // on/off edge doesn't land exactly on the hour (also more human-looking).
 const OPEN_GRACE_MIN = 15;
-// Per-store opening hours (minutes since midnight, Asia/Shanghai). Seeded with
-// Roots' legacy defaults for backward compatibility, but any store that has
-// open_time/close_time set on its retail_stores row OVERRIDES these at boot
-// (see loadStoreHours) — so a new tenant's hours come from the Add-location
-// wizard, not this file. A store with neither is treated as always-open.
-const STORE_HOURS = {
+// Per-store opening hours (minutes since midnight, Asia/Shanghai). The real
+// hours live on the store's own row — retail_stores.open_time / close_time, the
+// "Opens · 开门 / Closes · 关门" fields in the admin's store editor — and are read
+// through lib/store-hours, whose 10-minute cache means an edit takes effect on
+// its own without restarting this daemon.
+//
+// This used to be merged in once at boot (loadStoreHours, called from
+// getStoreConfigs), so an hours edit sat unread until the next restart. It is
+// now resolved per call instead.
+//
+// The map below is only the FALLBACK for a store with no usable hours on file,
+// kept so existing behaviour is unchanged until someone fills the fields in. A
+// store in neither is treated as always-open, so a new store is never silently
+// muted.
+//
+// Scope, deliberately narrow: these hours gate order polling and the stock queue
+// only. They do not touch routing (lib/inventory's routeOrder never reads opening
+// hours), and they do not gate the 置休 open/close command — see
+// syncBusinessStatus, which stays outside this check so an operator can close or
+// reopen the shop at any hour.
+const LEGACY_STORE_HOURS = {
   yuexiu: { open: 11 * 60 + 0,  close: 20 * 60 + 15 }, // 11:00–20:15
   tianhe: { open: 10 * 60 + 0,  close: 20 * 60 + 0  }, // 10:00–20:00
 };
-
-// Parse 'HH:MM' → minutes since midnight, or null if malformed/blank.
-function parseHm(v) {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(String(v || '').trim());
-  if (!m) return null;
-  const mins = Number(m[1]) * 60 + Number(m[2]);
-  return mins >= 0 && mins < 24 * 60 ? mins : null;
-}
-
-// Merge per-store hours from retail_stores.open_time/close_time into STORE_HOURS.
-// Called at boot with the store rows; both columns must be set for an override.
-function loadStoreHours(rows) {
-  for (const s of rows || []) {
-    const open = parseHm(s.open_time), close = parseHm(s.close_time);
-    if (open != null && close != null && close > open) STORE_HOURS[s.code] = { open, close };
-  }
-}
-
-// Minutes-since-midnight in Asia/Shanghai (UTC+8), independent of server TZ.
-function shanghaiMinutes(now = new Date()) {
-  const shanghai = new Date(now.getTime() + 8 * 60 * 60 * 1000);
-  return shanghai.getUTCHours() * 60 + shanghai.getUTCMinutes();
-}
 
 // Self-expiring manual override (for testing a push outside opening hours):
 // set env MEITUAN_FORCE_OPEN_MINUTES=30 and restart — every store counts as open
@@ -135,10 +130,10 @@ const FORCE_OPEN_UNTIL = Number(process.env.MEITUAN_FORCE_OPEN_MINUTES) > 0
 // muted.
 function isStoreOpen(storeCode, now = new Date()) {
   if (FORCE_OPEN_UNTIL && now.getTime() < FORCE_OPEN_UNTIL) return true;
-  const h = STORE_HOURS[storeCode];
-  if (!h) return true;
-  const m = shanghaiMinutes(now);
-  return m >= (h.open - OPEN_GRACE_MIN) && m < (h.close + OPEN_GRACE_MIN);
+  // Re-read every call: storeHours() serves its own cache, so this is cheap and
+  // picks up an admin edit within CACHE_MS without a restart.
+  const hours = storeHours(storeCode) || LEGACY_STORE_HOURS[storeCode] || null;
+  return within(hours, { openGraceMin: OPEN_GRACE_MIN, closeGraceMin: OPEN_GRACE_MIN, now });
 }
 
 // Tier 1 fingerprint reduction: never act on an exact fixed cadence. Each
@@ -371,14 +366,13 @@ function heartbeatTick(storeCode) {
 // ── Store config ─────────────────────────────────────────────────────────────
 // Reads store codes from retail_stores table; maps code → Meituan credentials
 // from environment variables.
+// Opening hours are deliberately NOT read here any more: this runs once at boot,
+// so hours captured by the Add-location wizard (or edited later) sat unread until
+// the next restart. isStoreOpen resolves them per call via lib/store-hours instead.
 function getStoreConfigs() {
   const stores = db.prepare(`
-    SELECT id, code, name_en, open_time, close_time FROM retail_stores WHERE is_active = 1 ORDER BY sort_order
+    SELECT id, code, name_en FROM retail_stores WHERE is_active = 1 ORDER BY sort_order
   `).all();
-  // Adopt per-store opening hours captured by the Add-location wizard, overriding
-  // the hardcoded defaults for any store that has them set.
-  loadStoreHours(stores);
-
   return stores.map(s => ({
     storeId:   s.id,
     storeCode: s.code,
