@@ -3061,17 +3061,23 @@ function renderShipmentCard(o, s) {
 // Carrier parcels hoist their tracking card; local (Guangzhou same-city) parcels
 // hoist their ETA card. Multi-parcel orders stack one card per shipped parcel,
 // each labelled. Returns '' when nothing is shipped yet.
-// A rider booked on a same-city parcel — still being found, or already on the way
-// — is the live thing the operator watches, even while staff haven't marked the
-// parcel dispatched yet. In that state the courier card (rider, map, ETA) hoists
-// to the top of the drawer instead of sitting buried under the items table, and
-// the inline copy inside the shipment card is dropped so it isn't rendered twice.
+// A rider booked on a same-city parcel — still being found, on the way to collect,
+// or already carrying it — is the live thing the operator watches, even while
+// staff haven't marked the parcel dispatched yet. In that state the courier card
+// (rider, map, ETA) hoists to the top of the drawer instead of sitting buried
+// under the items table, and the inline copy inside the shipment card is dropped
+// so it isn't rendered twice.
+// All three in-flight stages hoist, heading_to_pickup ("Rider coming") included:
+// a rider riding to the store is the moment staff most need the card — that's
+// when the parcel has to be ready and the rider's phone number reachable. Leaving
+// it out made the card fall back down the drawer the instant a rider accepted,
+// then jump back up after pickup.
 // Only the FIRST local parcel takes it: o.courier is one job for the whole order
 // and its card carries order-scoped DOM ids (the map mount, the carrier list).
 function courierCardHoisted(o, s) {
   if ((s.mode || 'local') !== 'local') return false;
   if (['dispatched', 'delivered'].includes(s.state || 'pending')) return false;
-  if (!['awaiting_dispatch', 'in_transit'].includes(o.courier?.stage)) return false;
+  if (!['awaiting_dispatch', 'heading_to_pickup', 'in_transit'].includes(o.courier?.stage)) return false;
   const all = o.shipments || [];
   return all.findIndex(x => (x.mode || 'local') === 'local') === all.indexOf(s);
 }
