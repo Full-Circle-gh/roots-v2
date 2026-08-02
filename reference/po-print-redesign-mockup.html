@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PO PO-0049 — Roots</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Noto+Sans+SC:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  /* ------------------------------------------------------------------
+     MOCKUP — redesigned purchase-order print sheet for app.html printPO()
+     Same data as the live PO-0049 so the two can be compared side by side.
+
+     Typography follows docs/tacet-design-system.md §2:
+       Inter 400/500 only (nothing heavier), Noto Sans SC for CJK,
+       tabular figures on every number. No Fraunces in product UI.
+     Colours are the canon hexes: Ink #111A2B, Graphite #58606E,
+     border #E4E0D5.
+     ------------------------------------------------------------------ */
+
+  @page { size: A4; margin: 16mm; }
+
+  :root {
+    --ink:      #111A2B;
+    --graphite: #58606E;
+    --hair:     #E4E0D5;
+    --sans:     'Inter', 'Noto Sans SC', 'IBM Plex Sans', -apple-system, 'Segoe UI', sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: #F2F1EC;
+    font-family: var(--sans);
+    color: var(--ink);
+    font-weight: 400;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Every number in the document aligns in its column. */
+  .num { font-variant-numeric: tabular-nums; }
+
+  /* --- screen-only toolbar ------------------------------------------ */
+  .toolbar {
+    position: sticky; top: 0; z-index: 10;
+    background: var(--ink); color: #FBF9F4;
+    padding: 10px 18px;
+    display: flex; align-items: center; gap: 10px;
+    font-size: 13px;
+  }
+  .toolbar button {
+    font-family: var(--sans); font-size: 13px; font-weight: 500;
+    padding: 6px 16px; border-radius: 8px; cursor: pointer;
+    background: #FBF9F4; color: var(--ink); border: none;
+  }
+  .toolbar button.ghost { background: none; color: #FBF9F4; border: 1px solid #58606E; }
+
+  /* --- the sheet ----------------------------------------------------- */
+  .sheet {
+    background: #fff;
+    max-width: 210mm;
+    margin: 24px auto;
+    padding: 18mm 16mm;
+    box-shadow: 0 4px 16px rgba(17,26,43,0.04);
+  }
+
+  /* --- masthead ------------------------------------------------------ */
+  .masthead {
+    display: flex; justify-content: space-between; align-items: flex-end; gap: 40px;
+    padding-bottom: 18px;
+  }
+
+  .doc-title h1 {
+    margin: 0;
+    font-size: 27px; font-weight: 400; letter-spacing: -0.01em;
+    line-height: 1.1;
+  }
+  .doc-title .cn { font-size: 13px; color: var(--graphite); letter-spacing: .22em; margin-top: 8px; }
+
+  .meta { font-size: 12px; line-height: 1.5; flex: none; }
+  .meta dl { margin: 0; display: grid; grid-template-columns: auto auto; gap: 6px 22px; }
+  .meta dt { color: var(--graphite); }
+  .meta dd { margin: 0; text-align: right; font-weight: 500; }
+
+  /* --- line items ---------------------------------------------------- */
+  table.items { width: 100%; border-collapse: collapse; margin-top: 12px; }
+
+  table.items thead th {
+    background: var(--ink); color: #FBF9F4;
+    font-weight: 500; font-size: 11px; letter-spacing: .02em;
+    padding: 10px 12px; text-align: left; white-space: nowrap;
+  }
+  table.items thead th.r { text-align: right; }
+  table.items thead th .cn { color: #9AA1AC; margin-left: 5px; font-weight: 400; }
+
+  table.items tbody td {
+    border-bottom: 1px solid var(--hair);
+    padding: 13px 12px;
+    font-size: 12.5px; vertical-align: top;
+  }
+  table.items tbody tr:last-child td { border-bottom: none; }
+
+  td.idx  { color: var(--graphite); font-size: 11px; width: 26px; }
+  td.qty, td.rate, td.amt { text-align: right; white-space: nowrap; }
+  td.rate { width: 92px; }
+  td.amt  { width: 104px; }
+  td.amt  { font-weight: 500; }
+
+  .item-name { line-height: 1.45; font-weight: 500; }
+  .item-name .cn { color: var(--graphite); font-weight: 400; }
+  .item-sub { font-size: 10.5px; color: var(--graphite); margin-top: 3px; line-height: 1.5; }
+
+  /* Chinese unit sits under the quantity */
+  .unit { display: block; font-size: 10.5px; color: var(--graphite); margin-top: 3px; font-weight: 400; }
+
+  /* --- totals -------------------------------------------------------- */
+  .totals { margin-top: 4px; display: flex; justify-content: flex-end; }
+  .totals table { border-collapse: collapse; min-width: 300px; }
+  .totals td { padding: 8px 12px; font-size: 12.5px; text-align: right; }
+  .totals td.lbl { color: var(--graphite); }
+  .totals tr.grand td {
+    border-top: 1px solid var(--hair);
+    font-weight: 500; font-size: 14px;
+    padding-top: 11px;
+  }
+
+  /* --- notes --------------------------------------------------------- */
+  .notes {
+    margin-top: 26px; padding: 12px 14px;
+    border-left: 2px solid var(--hair);
+    font-size: 12px; line-height: 1.6; color: var(--graphite);
+  }
+  .notes b { color: var(--ink); font-weight: 500; }
+
+  /* --- footer -------------------------------------------------------- */
+  .foot {
+    margin-top: 40px; padding-top: 10px;
+    border-top: 1px solid var(--hair);
+    display: flex; justify-content: space-between;
+    font-size: 10px; color: var(--graphite);
+  }
+
+  @media print {
+    body { background: #fff; }
+    .toolbar { display: none; }
+    .sheet { box-shadow: none; margin: 0; padding: 0; max-width: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  Purchase order
+  <span style="flex:1"></span>
+  <button onclick="window.print()">Print / Save as PDF</button>
+  <button class="ghost" onclick="window.close()">Close 关闭</button>
+</div>
+
+<div class="sheet">
+
+  <!-- masthead -------------------------------------------------------- -->
+  <div class="masthead">
+    <div class="doc-title">
+      <h1>Purchase Order <span class="num">PO-0049</span></h1>
+      <div class="cn">采购单</div>
+    </div>
+
+    <div class="meta">
+      <dl>
+        <dt>Date 日期</dt><dd class="num">2026-08-02</dd>
+        <dt>Status 状态</dt><dd>Ordered 已下单</dd>
+        <dt>Items 项目</dt><dd class="num">5</dd>
+      </dl>
+    </div>
+  </div>
+
+  <!-- line items ------------------------------------------------------ -->
+  <table class="items">
+    <thead>
+      <tr>
+        <th style="width:26px">#</th>
+        <th>Item &amp; Description <span class="cn">品名</span></th>
+        <th class="r" style="width:86px">Qty <span class="cn">数量</span></th>
+        <th class="r" style="width:92px">Rate <span class="cn">单价</span></th>
+        <th class="r" style="width:104px">Amount <span class="cn">金额</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="idx num">1</td>
+        <td>
+          <div class="item-name">Roasted Hazelnut <span class="cn">烤榛子仁（土耳其）</span></div>
+          <div class="item-sub num">SKU C-44</div>
+        </td>
+        <td class="qty num">5.00<span class="unit">公斤</span></td>
+        <td class="rate num">169.60</td>
+        <td class="amt num">848.00</td>
+      </tr>
+      <tr>
+        <td class="idx num">2</td>
+        <td>
+          <div class="item-name">Kaboo Coconut Sugar <span class="cn">椰子花糖（印尼）</span></div>
+          <div class="item-sub num">SKU E-34</div>
+        </td>
+        <td class="qty num">6.00<span class="unit">包</span></td>
+        <td class="rate num">41.65</td>
+        <td class="amt num">249.92</td>
+      </tr>
+      <tr>
+        <td class="idx num">3</td>
+        <td>
+          <div class="item-name">Folding table <span class="cn">折叠桌</span></div>
+          <div class="item-sub num">SKU M-2</div>
+        </td>
+        <td class="qty num">1.00<span class="unit">件</span></td>
+        <td class="rate num">127.10</td>
+        <td class="amt num">127.10</td>
+      </tr>
+      <tr>
+        <td class="idx num">4</td>
+        <td>
+          <div class="item-name">Dehydrated Sweet Mango <span class="cn">红玉芒干</span></div>
+          <div class="item-sub num">SKU B-10</div>
+        </td>
+        <td class="qty num">5.00<span class="unit">公斤</span></td>
+        <td class="rate num">80.00</td>
+        <td class="amt num">400.00</td>
+      </tr>
+      <tr>
+        <td class="idx num">5</td>
+        <td>
+          <div class="item-name">Dehydrated Sour Mango <span class="cn">酸玉芒干</span></div>
+          <div class="item-sub num">SKU B-18</div>
+        </td>
+        <td class="qty num">5.00<span class="unit">公斤</span></td>
+        <td class="rate num">80.00</td>
+        <td class="amt num">400.00</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- totals ---------------------------------------------------------- -->
+  <div class="totals">
+    <table>
+      <tr><td class="lbl">Sub Total 小计</td><td class="num">2,025.02</td></tr>
+      <tr class="grand"><td class="lbl">Total 总计</td><td class="num">CNY 2,025.02</td></tr>
+    </table>
+  </div>
+
+  <!-- footer ---------------------------------------------------------- -->
+  <div class="foot">
+    <span>Roots Kitchen Management · 广州</span>
+    <span class="num">2026-08-02 14:51</span>
+  </div>
+
+</div>
+
+</body>
+</html>
