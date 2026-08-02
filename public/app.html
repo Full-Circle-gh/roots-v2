@@ -14935,7 +14935,7 @@ function renderPORows() {
         <input placeholder="SKU" value="${esc(row.sku||'')}" style="padding:7px 9px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit;width:100%;outline:none"
           oninput="onPOSkuInput(this,${row._rowId})" onfocus="onPOSkuInput(this,${row._rowId})" onblur="setTimeout(()=>closePOAC(),150)">
         <input placeholder="Ingredient name · 食材名称" value="${esc(row.name_en||'')}" style="padding:7px 9px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit;width:100%;outline:none"
-          oninput="updatePORow(${row._rowId},'name_en',this.value)">
+          oninput="onPONameInput(this,${row._rowId})" onfocus="onPONameInput(this,${row._rowId})" onblur="setTimeout(()=>closePOAC(),150)">
         <input type="number" placeholder="Qty" value="${row.qty||''}" style="padding:7px 9px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit;width:100%;outline:none"
           oninput="updatePORow(${row._rowId},'qty',this.value);calcPOTotal()">
         <select style="padding:7px 9px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit;width:100%;outline:none"
@@ -15001,12 +15001,19 @@ function updatePORow(rowId, field, value) {
   if (row) row[field] = value;
 }
 
-// SKU autocomplete for PO
+// SKU / name autocomplete for PO. Both boxes open the SAME picker and
+// search the same three columns (sku · name_en · name_cn), so a buyer can
+// find an item by typing English or Chinese into either one — 豆腐 in the
+// name box finds the same row as J-67 in the SKU box. The only difference
+// is which field the keystrokes write into while the user is still typing;
+// picking a suggestion fills the whole row through selectPOIng().
 let _poACActive = null;
-function onPOSkuInput(input, rowId) {
+function onPOSkuInput(input, rowId)  { poShowAC(input, rowId, 'sku'); }
+function onPONameInput(input, rowId) { poShowAC(input, rowId, 'name_en'); }
+function poShowAC(input, rowId, field) {
   _poACActive = rowId;
   const q = input.value.trim().toLowerCase();
-  updatePORow(rowId,'sku',input.value);
+  updatePORow(rowId,field,input.value);
   const ac = getOrCreateBodyAC();
   if (!q) { ac.style.display='none'; return; }
   const matches = _ingredients.filter(i=>
