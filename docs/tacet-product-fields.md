@@ -298,10 +298,10 @@ Cost reaches a product only **indirectly**, through `recipe_id` → `recipes` �
 (`SELECT sell_price, recipe_id …`) to value waste. A product with no `recipe_id` — which is every row
 in `store_products`, since `recipe_id` is dead there — **has no cost at all**.
 
-Margin is therefore not computable on the store side today. That is a hard blocker on the "if the
-store app is to show margin, this decision is pulled forward" line in
-`docs/tacet-consolidation-decisions.md` §22: the COST METHOD decision cannot be deferred by picking a
-different column, because no cost column exists to pick.
+Margin is therefore not computable on the store side today. `docs/tacet-consolidation-decisions.md`
+§23 records the COST METHOD decision as still open, and it would have to be settled before margin
+could be displayed. It cannot be deferred by picking a different column, because no cost column
+exists to pick.
 
 ---
 

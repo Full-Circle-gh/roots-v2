@@ -90,7 +90,7 @@ FOUR front ends. The front end is the ONLY app-specific layer; everything beneat
 v0.1 stated one table with a SELLABLE switch. WITHDRAWN. The correct model:
 
 - TWO separate lists. ITEMS and PRODUCTS are different entities with different tables and separate stock.
-- ITEMS: kitchen only. Raw materials and anything produced for use in further production. Never sold. Never visible to the store app.
+- ITEMS: kitchen only. Raw materials and anything produced for use in further production. Never sold. Never visible to Tacet.
 - PRODUCTS: sold to customers. Visible in both apps.
 - There is NO sellable switch and no shared table.
 - The bridge between the two is a RECIPE. Packing is production: bulk item in, product out.
