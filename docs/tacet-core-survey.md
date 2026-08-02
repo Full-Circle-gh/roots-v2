@@ -545,7 +545,7 @@ frontend you get is decided by **Host**, not by service (`server.js:606-641`):
 |---|---|
 | `system.rootskitchenchina.com` (`server.js:486`) | Platform console `store-admin.html` |
 | `store.rootskitchenchina.com` (`server.js:480`) | Sales console `retail-admin.html` |
-| a host in `tenant_domains` | customer storefront `shop.html` |
+| a host in `tenant_domains` | customer online store `shop.html` |
 | `food.rootskitchenchina.com` (`server.js:179`) / anything else | Production app `app.html`, auth-gated |
 
 `/retail-admin` is retired and 302s to the store host (`server.js:650-655`).

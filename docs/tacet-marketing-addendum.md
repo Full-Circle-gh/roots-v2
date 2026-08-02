@@ -13,7 +13,7 @@
 admin control room**, a 7-tab group for running promotions. The tabs:
 Coupons · Flash sales · Pop-ups · Affiliate · Share cards · Broadcasts ·
 Social proof. Several move real money or write live customer-facing state
-(coupon minting, flash prices hitting live shopper checkout, affiliate
+(coupon minting, flash prices hitting live customer checkout, affiliate
 payouts, channel open/close). Ash chose Marketing independently — it was
 never on a batch list (same as Sales).
 
@@ -93,7 +93,7 @@ Code surveys the real customer-side coupon card — otherwise Claude Design
 invents it and the invention becomes the spec.
 
 ### 2. Flash sales — DESIGNED, in revision
-Highest stakes in the group — touches LIVE shopper prices. Honesty +
+Highest stakes in the group — touches LIVE customer prices. Honesty +
 flow pass, shape kept. Decisions: header CTA Dusk; all-caps retired;
 composer replacement warning (a sale is written onto the product — one
 per product — so composing a new sale on a product that already has one
@@ -161,7 +161,7 @@ From the survey:
 - **Broadcasts:** has the group's ONLY disable-on-write button (Send);
   has its own draft concept — check it's real vs the Coupons "draft lie."
 - **Social proof:** ⚠️ lets merchants FABRICATE data (fake buyer names,
-  inflated view/sold counts) applied to the live storefront instantly —
+  inflated view/sold counts) applied to the live online store instantly —
   a BRAND-VALUES question ("Trust is earned invisibly. Silent, never
   secretive."), not just a design one. Discuss with Ash before design.
   Also: checkout upsell is hidden inside this tab (two unrelated features,

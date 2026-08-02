@@ -20,7 +20,7 @@ surfaces** off one codebase and one schema:
 | Surface | Users | Shell | Auth realm (session key / token) |
 |---|---|---|---|
 | WeChat Mini App | Customers | `miniapp/` | Bearer token (opaque hex) |
-| Web storefront | Customers | `public/shop.html` | Same Bearer token |
+| Online store (web) | Customers | `public/shop.html` | Same Bearer token |
 | Mini App Backend (operator console) | Tenant operators | `public/retail-admin.html` | `session.backendUserId` + `tenantId` |
 | Kitchen/ERP | Roots internal staff | `public/app.html` | `session.userId` |
 | Platform Console (SaaS admin) | Platform staff | `public/store-admin.html` | `session.platformAdminId` |
@@ -87,10 +87,10 @@ shipped) → `pm2 restart` → health-probe → **auto-rollback** on crash-loop.
 | `server.js` | App entry — sessions, host-based SPA routing, mounts all routes, boot hooks |
 | `database.js` | Loads `schema.sql` + ~85 idempotent `addColumn` migrations + one-shot seeds (runs on boot) |
 | `schema.sql` | Base kitchen/ERP tables (29 CREATE TABLEs) |
-| `routes/` | HTTP modules; `retail.js` is the storefront/mini-app API (huge) |
+| `routes/` | HTTP modules; `retail.js` is the online-store/mini-app API (huge) |
 | `lib/` | Domain logic (inventory, integrations, tenancy, secrets, AI gateway, brand, …) |
 | `middleware/` | `auth.js`, `public-tenant.js` |
-| `public/` | Browser apps: storefront, `retail-admin/` (split JS), `cms.html`, kitchen `app.html`, POS/kitchen/restock/stock PWAs |
+| `public/` | Browser apps: online store, `retail-admin/` (split JS), `cms.html`, kitchen `app.html`, POS/kitchen/restock/stock PWAs |
 | `miniapp/` | WeChat Mini App (pages, components, utils) |
 | `scripts/` | ~146 migrations, imports, daemons, deploy tooling, diagnostics (run on the server) |
 | `docs/`, `reference/`, `eval/`, `design-handoff/` | Docs, v1 reference, AI evals, design specs |
@@ -134,7 +134,7 @@ whitelist. **Impersonation:** `system.*` mints a one-time `platform_impersonatio
 entitledFeatures`**; **owner → ALL** is an absolute bypass (`lib/capabilities.js`).
 
 **Two enforcement realms — don't conflate them:**
-- **`/api/retail-admin/*`** (the big storefront API, `requireRetailAdmin`): central + mutation-only via
+- **`/api/retail-admin/*`** (the big online-store API, `requireRetailAdmin`): central + mutation-only via
   `lib/cap-routes.js` `requiredCapFor(method, path)` — a cap (or an **any-of** array) for
   POST/PUT/PATCH/DELETE, `null` (fail-open) for GET/unmapped. **Still ships dark** behind
   `tenant.rbac_enforce` (off everywhere). `041274e` fixed six path-shape misses (four fail-open) and

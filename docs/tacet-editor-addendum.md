@@ -290,7 +290,7 @@ flagged in survey as a duplicated-entry to reconcile.
 - `PUT /api/retail-admin/config` — unmapped/fail-open; fans out to Copy, About,
   Legal, FAQ (already listed as `/config` but not enumerated as four editors).
 - `POST /api/retail-admin/cms/media` — distinct unmapped prefix from `/media`.
-- `/api/retail-admin/cms/*` (incl. `/cms/publish`, goes live to both storefronts
+- `/api/retail-admin/cms/*` (incl. `/cms/publish`, goes live to both online store surfaces
   gated by nothing).
 - **NEW gap:** `POST` + `DELETE /api/retail-admin/page-templates` (Product Page
   Editor) — not listed anywhere in §11. Add it.

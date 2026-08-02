@@ -35,7 +35,7 @@ Before any design decision is accepted, it must be checked against a business un
 Everything lives under tacet.com as a subdomain.
 - `app.tacet.com` — where business users work. The Tacet app, Production, and Account settings all live here. ONE domain; moving between them never changes the domain.
 - `backoffice.tacet.com` — Tacet staff only. Separate login and a hard wall: nothing internal may leak into a customer-facing screen.
-- `shopname.tacet.com` — the address of an account's ONLINE STORE, issued automatically at signup. The account may attach its own domain later, at which point shoppers see that instead. Shoppers should not see Tacet's name on an online store the account has branded.
+- `shopname.tacet.com` — the address of an account's ONLINE STORE, issued automatically at signup. The account may attach its own domain later, at which point customers see that instead. Customers should not see Tacet's name on an online store the account has branded.
 - `tacet.com` itself is reserved for the marketing site and is not an application host.
 
 Current state, for contrast: four separate hosts today — the store console, the production app, the internal console, and per-account online stores — with the server deciding what to serve by Host header. This grew by accident, one host per app.
@@ -284,7 +284,7 @@ Locations · Products · Items · Stock · Users · Orders · Purchasing · Reci
 - PRODUCTS and ITEMS are SEPARATE modules, matching the two-list decision. They must never be presented, grouped or built as one.
 - ORDERS is a single module. An order is a sale; there is one record and reporting reads from it. There is no separate "sales" module.
 - Not every front end uses every module. Items and Recipes are Production-only until the apps merge. Locations, Products, Stock, Users and Orders are used by both.
-- FOUR front ends exist, not three: Tacet, Production, the customer-facing online store, and the Back Office. The online store is not a separately maintained app — it reads the same Products, Stock and Locations modules. What a shopper sees is the same data staff edit, never a copy.
+- FOUR front ends exist, not three: Tacet, Production, the customer-facing online store, and the Back Office. The online store is not a separately maintained app — it reads the same Products, Stock and Locations modules. What a customer sees is the same data staff edit, never a copy.
 
 ## 22. Rollout order and priority — REVISED 2026-07-31
 

@@ -17,7 +17,7 @@ off one codebase and one schema:
 | Surface | Users | Shell | Auth realm (session key) |
 |---|---|---|---|
 | WeChat Mini App | Customers | `miniapp/` | Bearer token (opaque hex) |
-| Web storefront | Customers | `public/shop.html` | Same Bearer token |
+| Online store (web) | Customers | `public/shop.html` | Same Bearer token |
 | Mini App Backend | Tenant operators | `public/retail-admin.html` | `session.backendUserId` + `tenantId` |
 | Kitchen/ERP | Roots staff | `public/app.html` | `session.userId` |
 | Platform Console | SaaS staff | `public/store-admin.html` | `session.platformAdminId` |

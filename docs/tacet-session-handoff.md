@@ -112,7 +112,7 @@ Its own `:root` tokens (a fifth palette), its own i18n engine, the entire auth s
 
 **`PERMISSIONS_PLAN.md` §11, three blockers, all must be answered first:**
 
-- **11.1 Fail-open on unmapped mutations.** Caps are matched by **URL pattern**, not declared per route. So `voucher-grants` ≠ `vouchers`, `category-tree` ≠ `categories`, `brand` ≠ `ai` — three fail-open holes found by reading. **`/brand/publish` goes live to shoppers and was ungated.** Still open today: `/cms/publish`, `/config`, `/printer`, `/topup-packages`, `/affiliate/*`, `/voting/config`, `/polls`, `/fapiao-settings`, `/alipay-manual`. *Approach decided (shadow-deny then per-route); not built.*
+- **11.1 Fail-open on unmapped mutations.** Caps are matched by **URL pattern**, not declared per route. So `voucher-grants` ≠ `vouchers`, `category-tree` ≠ `categories`, `brand` ≠ `ai` — three fail-open holes found by reading. **`/brand/publish` goes live to customers and was ungated.** Still open today: `/cms/publish`, `/config`, `/printer`, `/topup-packages`, `/affiliate/*`, `/voting/config`, `/polls`, `/fapiao-settings`, `/alipay-manual`. *Approach decided (shadow-deny then per-route); not built.*
 - **11.2 Reads open server-side.** `cap-routes.js:25` returns `null` for every GET, by design — "the client hides sections." The palette punches through: ⌘K returns customer nicknames and phone digits regardless of caps. `fetchData` is now client-gated, **which stops the palette asking, not anyone asking.**
 - **11.3 `/integrations/*`** — credential config, deliberately open. Needs to be a written decision, not a comment.
 

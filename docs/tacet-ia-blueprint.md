@@ -190,7 +190,7 @@ Grouped by function. "Skin" flags surfaces carrying something that is **per-busi
 | Leaderboard | `leaderboard` | 7084 | `10-extras.js` | — |
 | Voting | `voting` | 7427 | `10-extras.js` | — |
 
-### CONTENT — storefront editing
+### CONTENT — online store editing
 *Rail label since 2026-07-29: **`Content · 内容`**. The `Editor` row inside it is the Mini App Editor, promoted out of the old group row (§3.1).*
 | Section | tab id | line | Source | Skin? |
 |---|---|---|---|---|

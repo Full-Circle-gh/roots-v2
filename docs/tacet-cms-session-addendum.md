@@ -148,7 +148,7 @@ NOT seeing blank labels today — it's a correctness tidy-up, not urgent.
 
 ## §11 / PERMISSIONS_PLAN additions found this session (record, don't fix)
 `rbac_enforce` stays OFF. Add: `/api/retail-admin/cms/*` (incl.
-`/cms/publish` — goes live to both storefronts, gated by nothing);
+`/cms/publish` — goes live to both online store surfaces, gated by nothing);
 `/channel-status/*` and `/store-status/*` families (customer-facing
 open/close, fail-open); `page-templates` POST/DELETE.
 

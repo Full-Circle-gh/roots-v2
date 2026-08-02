@@ -7,7 +7,7 @@
 Terms used below, one line each:
 
 - **Physical** — the count of units believed to be on the shelf at one store.
-- **Available / sellable** — how many a shopper may buy right now, after holdbacks.
+- **Available / sellable** — how many a customer may buy right now, after holdbacks.
 - **Reservation (soft-reserve)** — a temporary hold on stock while an order waits to be paid. It does not change the physical count.
 - **Commit** — turning a hold into a real decrement of the physical count.
 - **Ledger** — an append-only history table; one row per movement, never updated.
@@ -20,11 +20,11 @@ Terms used below, one line each:
 
 **No.** The core is sound and worth adopting: one row per (store, product), one ledger, one availability function, and every multi-step movement runs inside a database transaction. But the *edges* disagree with the core in ways that matter, and several of them are silent.
 
-The single biggest issue: **there are two different answers to "how many can we sell", and the shopper sees the looser one.** The checkout gate subtracts the safety buffer and outstanding holds; the product list the shopper browses does not — it shows a raw sum of physical counts.
+The single biggest issue: **there are two different answers to "how many can we sell", and the customer sees the looser one.** The checkout gate subtracts the safety buffer and outstanding holds; the product list the customer browses does not — it shows a raw sum of physical counts.
 
 Every inconsistency found, most damaging first:
 
-1. **Two availability formulas.** The catalogue/storefront `stock` figure is a raw `SUM(physical_qty)` across active stores (`routes/retail.js:902-908`), while the checkout gate uses `physical − safety_buffer − active holds` (`lib/inventory.js:163-188`). A shopper can be shown stock the checkout will refuse. §3.
+1. **Two availability formulas.** The catalogue/online-store `stock` figure is a raw `SUM(physical_qty)` across active stores (`routes/retail.js:902-908`), while the checkout gate uses `physical − safety_buffer − active holds` (`lib/inventory.js:163-188`). A customer can be shown stock the checkout will refuse. §3.
 2. **`safety_buffer` is applied to nothing except the mini-app/web availability check.** It is documented as "held back from any channel" (`database.js:2588`), but all three outbound channel queues push the raw `physical_qty` (`lib/meituan-bundles.js:76-82`, `lib/guanyi-sync.js:21-27`, `lib/eleme-sync.js:29-35`). Meituan/Eleme/Guanyi are told the un-buffered number. §1, §7.
 3. **`meituan_quota` is dead.** Every caller of `getAvailable` passes `'wechat'` (grep, §3), so the Meituan branch at `lib/inventory.js:176` never executes. The column is stored, editable in the admin UI (`routes/retail-inventory.js:342`), and read by no decision. §1.
 4. **Negative stock is handled three different ways.** Order commit has no floor and can drive a row below zero (`lib/inventory.js:476`, `523`); `adjustStock`'s delta path floors at 0 and silently loses the shortfall (`lib/inventory.js:712`); channel ingest clamps at 0 outside the transaction (`routes/meituan-internal.js:226`). §6.
@@ -61,7 +61,7 @@ One row per (store, product). `UNIQUE(store_id, product_id)` at `database.js:259
 | `updated_at` | `2591` | Touched by every physical write and every layer write. Not read by any decision; surfaced to the admin at `routes/retail-inventory.js:356`. | same writers |
 | `restock_target` | `database.js:2894` (`addColumn`) | A target shelf level for restocking. Display and planning only — read at `routes/retail-inventory.js:197`, `211` and `routes/products.js:541`, written at `lib/inventory.js:772`. **It does not affect availability, alerts, or any automatic reorder.** | `lib/inventory.js:772` only |
 
-### The arithmetic that decides what a shopper may buy
+### The arithmetic that decides what a customer may buy
 
 One function: `getAvailable(storeId, productId, channel, ignoreOrderIds)` — `lib/inventory.js:163-188`.
 
@@ -77,7 +77,7 @@ Where `quota` is `meituan_quota` when the channel is `'meituan'`, `wechat_quota`
 
 Two things this means in practice:
 
-- **`safety_buffer` only bites here.** It is subtracted from the availability answer and from nothing else. It is not subtracted from the number pushed to Meituan, Eleme or Guanyi (§7), and not from the number the shopper sees in the product list (§3).
+- **`safety_buffer` only bites here.** It is subtracted from the availability answer and from nothing else. It is not subtracted from the number pushed to Meituan, Eleme or Guanyi (§7), and not from the number the customer sees in the product list (§3).
 - **`meituan_quota` never bites at all.** Every call site passes `'wechat'` — `routes/retail-inventory.js:207`, `269`; `routes/retail.js:8935`, `9169`, `9172`; and the internal calls at `lib/inventory.js:342`, `442`, `1141`, `1265`, `1306` inherit `'wechat'` from their callers or default to it (`lib/inventory.js:163`). The only order path that reserves passes `channel: 'wechat'` explicitly (`routes/retail.js:9542`), including for web-shop orders. Meituan orders never reserve at all — they decrement directly (§4) — so `chanReserved` for Meituan would be 0 even if someone did pass `'meituan'`.
 
 `ignoreOrderIds` (`lib/inventory.js:146-157`) drops one customer's own unpaid holds from both sums, so their abandoned pending order does not make their next attempt read as out of stock.
@@ -132,9 +132,9 @@ There are **two distinct formulas**, and they are used by different audiences.
 - The admin inventory grid and per-store stock list, as `available_wechat` (`routes/retail-inventory.js:207`, `269`).
 - The shortage and substitute endpoints (`routes/retail.js:8935`, `9169`, `9172`).
 
-### Variant B — what the shopper is shown (raw physical, nothing applied)
+### Variant B — what the customer is shown (raw physical, nothing applied)
 
-The `stock` value on every catalogue and storefront read is a plain sum:
+The `stock` value on every catalogue and online store read is a plain sum:
 
 ```sql
 COALESCE(
@@ -146,7 +146,7 @@ COALESCE(
 ) AS stock
 ```
 
-`routes/retail.js:902-908` (`RETAIL_PRODUCT_COLS`, the shared column list for shopper-facing product reads), and the same shape again at `routes/retail.js:1285`, `2320`, `8719`, `18609`.
+`routes/retail.js:902-908` (`RETAIL_PRODUCT_COLS`, the shared column list for customer-facing product reads), and the same shape again at `routes/retail.js:1285`, `2320`, `8719`, `18609`.
 
 No safety buffer. No reservations. No per-channel quota. It also falls back to the legacy `store_products.stock_qty` column when a product has no per-store rows at all.
 
@@ -276,7 +276,7 @@ A missing `(store, product)` row is **read as zero, not created on read**:
 
 - `getAvailable` returns `{ available: 0, exists: false, physical: 0 }` and does not insert (`lib/inventory.js:169`). The `exists` flag is what lets `reserveForOrder` say `product_not_stocked_here` (`:443`) rather than `insufficient_stock`.
 - The admin grid renders a missing row as an editable 0 (`routes/retail-inventory.js:206`, `214` — `stocked: !!row`), and the per-store list `LEFT JOIN`s with `COALESCE(..., 0)` (`:247`).
-- The storefront `stock` column falls back to the legacy `store_products.stock_qty` when *no* store has a row (`routes/retail.js:902-908`).
+- The online store `stock` column falls back to the legacy `store_products.stock_qty` when *no* store has a row (`routes/retail.js:902-908`).
 
 Rows are created on demand by exactly two functions: `adjustStock` (`lib/inventory.js:718-722`, with the real quantity) and `upsertStockLayer` (`:756-760`, at quantity 0). This was a deliberate choice — the Yuexiu store was added without pre-seeding 269 zero rows (`database.js:3247-3252`).
 
@@ -337,9 +337,9 @@ The daemons drain with retry and coalescing (Meituan shown; Eleme and Guanyi fol
 | POS product search + top-sellers | `public/pos.html:1366`, `1449` | per-line stock figure |
 | Alerts counts (out of stock, low stock) | `routes/alerts.js:48-49` | counts over the column |
 | AI assistant tools and prompts | `routes/ai.js:2196-2202`, `2255-2259`, `2516`, `2588-2593`, and the descriptive prompts at `955`, `981`, `1214`, `1292`, `1345-1346`, `1584` | lists and answers "what's out of stock" |
-| Storefront fallback | `routes/retail.js:907`, `13353`, `18609` | the `COALESCE` fallback when a product has **no** per-store rows — this reads `store_products.stock_qty`, not the kitchen column |
+| Online store fallback | `routes/retail.js:907`, `13353`, `18609` | the `COALESCE` fallback when a product has **no** per-store rows — this reads `store_products.stock_qty`, not the kitchen column |
 
-**Breakage if removed:** the kitchen Products list Stock column and its sort, the inline stock editor and its endpoint, the kitchen low-stock alert card, the POS stock display, both counts in `routes/alerts.js`, and roughly a dozen AI tool queries and prompt passages. The storefront fallback is a separate column on `store_products` and is unaffected by removing the kitchen one — but it is the same name, and a careless sweep would take both.
+**Breakage if removed:** the kitchen Products list Stock column and its sort, the inline stock editor and its endpoint, the kitchen low-stock alert card, the POS stock display, both counts in `routes/alerts.js`, and roughly a dozen AI tool queries and prompt passages. The online store fallback is a separate column on `store_products` and is unaffected by removing the kitchen one — but it is the same name, and a careless sweep would take both.
 
 ### `market_stock`
 
@@ -354,7 +354,7 @@ So the number only ever moves when an admin types into it. **UNVERIFIED:** how f
 
 **Is it still surfaced? Yes, one screen.** The per-market stock overlay in the kitchen app: list at `public/app.html:18098`, save at `:18178`, movement history at `:18193`. Server side, three endpoints: `GET /api/markets/:id/stock` (`routes/markets.js:149`), `POST /api/markets/:id/stock/adjust` (`:177`), `GET /api/markets/:id/stock/ledger` (`:223`). All three are admin-only.
 
-**Breakage if both are removed:** the market stock overlay and its three endpoints, plus everything listed in the `products.stock_qty` table above. Nothing in the store side, the storefront, the mini-app, or any channel daemon reads either one — the only cross-over is the historical migration seed that copied `products.stock_qty` into `retail_store_stock` once (`database.js:3229`, `3279`).
+**Breakage if both are removed:** the market stock overlay and its three endpoints, plus everything listed in the `products.stock_qty` table above. Nothing in the store side, the online store, the mini-app, or any channel daemon reads either one — the only cross-over is the historical migration seed that copied `products.stock_qty` into `retail_store_stock` once (`database.js:3229`, `3279`).
 
 ### One id-space hazard to carry into the consolidation
 
