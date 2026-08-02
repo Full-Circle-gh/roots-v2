@@ -14845,12 +14845,6 @@ async function showPOForm(id) {
       </div>
     </div>
 
-    <!-- Datalist suggestions for the per-line supplier + channel inputs.
-         Pulled from history (any non-empty value previously entered)
-         once on form open so the buyer doesn't have to retype common
-         values like "美团闪购" / "京东" every time. -->
-    <datalist id="poSupplierList"></datalist>
-    <datalist id="poChannelList"></datalist>
     <div style="background:var(--gray);border-radius:12px;padding:20px;margin-bottom:16px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
         <div style="font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)">📦 Line Items 采购明细</div>
@@ -14871,25 +14865,6 @@ async function showPOForm(id) {
     </div>`;
 
   renderPORows();
-  // Populate the supplier + channel suggestion lists from history. Cheap —
-  // a single fetch of the invoice summary with no filter gives us every
-  // supplier ever entered. If the request fails (perms / network) we just
-  // skip — the inputs are still free-text.
-  fetch('/api/finance/invoice-summary')
-    .then(r => r.ok ? r.json() : null)
-    .then(d => {
-      if (!d?.success) return;
-      const supList = document.getElementById('poSupplierList');
-      const chList  = document.getElementById('poChannelList');
-      const sups = new Set(), chs = new Set();
-      (d.data?.lines_payload || []).forEach(l => {
-        if (l.supplier_name && l.supplier_name !== '未指定 Unspecified') sups.add(l.supplier_name);
-        if (l.purchase_channel) chs.add(l.purchase_channel);
-      });
-      if (supList) supList.innerHTML = [...sups].sort().map(s => `<option value="${esc(s)}">`).join('');
-      if (chList)  chList.innerHTML  = [...chs].sort().map(s => `<option value="${esc(s)}">`).join('');
-    })
-    .catch(() => {});
 }
 
 function renderPORows() {
@@ -14958,15 +14933,13 @@ function renderPORows() {
            by supplier. Defaults to the PO header supplier on new lines
            but can be overridden per line. Linked to the master Suppliers
            list (admin → 🚚 Suppliers). -->
-      <div style="display:grid;grid-template-columns:24px minmax(220px,2fr) minmax(160px,1fr) 32px;gap:8px;align-items:center;margin-top:6px">
+      <div style="display:grid;grid-template-columns:24px minmax(220px,1fr) 32px;gap:8px;align-items:center;margin-top:6px">
         <span style="font-size:11px;color:var(--muted);text-align:center" title="Per-line supplier · 此行供应商">🏷</span>
         <select data-po-row-supplier="${row._rowId}" onchange="updatePORow(${row._rowId},'supplier_name',this.value)" style="padding:6px 9px;border:1px solid var(--border);border-radius:6px;font-size:11px;font-family:inherit;width:100%;outline:none;background:#fafaf7">
           <option value="">— inherit from PO header · 继承订单头 —</option>
           ${(_suppliersCache || []).map(s => `<option value="${esc(s.name)}" ${(row.supplier_name||'')===s.name?'selected':''}>${esc(s.name)}${s.name_cn?' · '+esc(s.name_cn):''}</option>`).join('')}
           ${row.supplier_name && !(_suppliersCache || []).some(s => s.name === row.supplier_name) ? `<option value="${esc(row.supplier_name)}" selected>${esc(row.supplier_name)} <em>(legacy 旧)</em></option>` : ''}
         </select>
-        <input placeholder="Channel 渠道 (e.g. 美团 / 京东 / market)" value="${esc(row.purchase_channel||'')}" style="padding:6px 9px;border:1px solid var(--border);border-radius:6px;font-size:11px;font-family:inherit;width:100%;outline:none;background:#fafaf7"
-          oninput="updatePORow(${row._rowId},'purchase_channel',this.value)" list="poChannelList">
         <span></span>
       </div>
     </div>`;
