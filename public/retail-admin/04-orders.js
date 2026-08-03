@@ -1645,9 +1645,12 @@ function gzParts(d) {
 function gzWall(y, mo, da, h, mi) {
   return new Date(Date.UTC(y, mo, da, h - 8, mi));
 }
-function slotEndAnchor(scheduledForIso, label) {
-  const start = parseSchedFor(scheduledForIso);
-  if (isNaN(start.getTime())) return scheduledForIso;
+// The window's END lives ONLY in the customer's free-text label — scheduled_for
+// holds the start. Parsed in one place so urgency (slotEndAnchor) and what the
+// operator reads (slotWindowText) can never disagree about when a slot closes.
+// Returns a Date in GZ wall-clock, or null when the label carries no window.
+function parseSlotEnd(start, label) {
+  if (isNaN(start.getTime())) return null;
   const g = gzParts(start);
   const lbl = String(label == null ? '' : label);
   const m = /(\d{1,2}):(\d{2})\s*(?:[-–—~]|to|至)\s*(\d{1,2}):(\d{2})/.exec(lbl);
@@ -1655,7 +1658,7 @@ function slotEndAnchor(scheduledForIso, label) {
     const endH = Number(m[3]), endM = Number(m[4]);
     if (endH <= 23 && endM <= 59) {
       const end = gzWall(g.y, g.mo, g.da, endH, endM);
-      if (end.getTime() >= start.getTime()) return end.toISOString(); // window END is the real deadline
+      if (end.getTime() >= start.getTime()) return end; // window END is the real deadline
     }
   }
   // AM/PM window without colons, e.g. "10AM–12PM" or "10:30 AM - 12 PM". The
@@ -1668,9 +1671,49 @@ function slotEndAnchor(scheduledForIso, label) {
     else if (mer === 'am' && endH === 12) endH = 0;
     if (endH <= 23 && endM <= 59) {
       const end = gzWall(g.y, g.mo, g.da, endH, endM);
-      if (end.getTime() >= start.getTime()) return end.toISOString(); // window END is the real deadline
+      if (end.getTime() >= start.getTime()) return end; // window END is the real deadline
     }
   }
+  return null;
+}
+// §1.18 — the operator's Delivery column, rendered from the ORDER's own data
+// instead of the customer's stored words.
+//
+// delivery_slot_label is free text frozen in whatever language the customer
+// checked out in: the server writes label_en "Today 4PM–6PM" OR label_cn
+// "今天 16:00–18:00", never both, and only the one is saved. Rendering it raw put
+// a Chinese 24-hour window on an English screen (`Aug 3 16:00–18:00` — the date
+// localised, the clock not), which is §1.18's glued-languages defect.
+//
+// scheduled_for already holds the window START as an absolute instant, and the
+// label's only unique fact is its END — so both languages can be built from the
+// order itself, each following its own convention. Returns null when there is
+// nothing to derive, and the caller falls back to the stored label as before.
+function slotWindowText(scheduledForIso, label) {
+  if (typeof tdWhen !== 'function') return null;
+  const start = parseSchedFor(scheduledForIso);
+  if (isNaN(start.getTime())) return null;
+  const g = gzParts(start);
+  if (g.h === 0 && g.mi === 0 && g.s === 0) {
+    // GZ midnight is the server's "a day, no hour" sentinel. If the label has no
+    // clock either, the DATE is the whole fact — render it so an English
+    // operator never reads a stored "8月4日". If the label DOES carry a time (a
+    // pickup slot keeps its hour there and nowhere else), leave it alone:
+    // deriving would silently drop the one fact scheduled_for doesn't hold.
+    const hasClock = /\d{1,2}\s*[:：]\s*\d{2}|\d{1,2}\s*(?:am|pm)/i.test(String(label == null ? '' : label));
+    return hasClock ? null : tdWhen(start, 'date');
+  }
+  // 'dateTime' carries the date+time separator each language actually uses
+  // ("Aug 3, 4:00 PM" vs "8月3日 16:00"), so no format is assembled out here.
+  const end = parseSlotEnd(start, label);
+  return tdWhen(start, 'dateTime') + (end ? '–' + tdWhen(end, 'time') : '');
+}
+function slotEndAnchor(scheduledForIso, label) {
+  const start = parseSchedFor(scheduledForIso);
+  if (isNaN(start.getTime())) return scheduledForIso;
+  const g = gzParts(start);
+  const end = parseSlotEnd(start, label);
+  if (end) return end.toISOString();
   // No usable time window. A DAY-ONLY pick — the same-day "Today" chip or a
   // schedule-for-later calendar date — is stored at GZ MIDNIGHT (the server's
   // sentinel for "a day, no hour"; see resolveDeliverySlot). Anchoring urgency on
@@ -1707,7 +1750,8 @@ function shipByPlan(o) {
   if (ordIsCounter(o)) return null;
   // 1 — Pickup: show the counter window, never a ship deadline.
   if (o.fulfillment_type === 'pickup') {
-    const label = localizeSlotLabel(humanizeSlotLabel(absolutizeSlotLabel(o.delivery_slot_label, o.scheduled_for)))
+    const label = slotWindowText(o.scheduled_for, o.delivery_slot_label)
+      || localizeSlotLabel(humanizeSlotLabel(absolutizeSlotLabel(o.delivery_slot_label, o.scheduled_for)))
       || (o.scheduled_for ? localizeSlotLabel(humanizeSlotLabel(o.scheduled_for)) : null);
     return {
       kind: 'pickup', icon: 'pickup',
@@ -1796,15 +1840,20 @@ function shipByPlan(o) {
   // operator never sees raw ISO.
   const dt = parseSchedFor(o.scheduled_for);
   const valid = !isNaN(dt.getTime());
-  const label = localizeSlotLabel(humanizeSlotLabel(absolutizeSlotLabel(o.delivery_slot_label, o.scheduled_for)))
+  // Our own render of the customer's window first (§1.18); the stored label is
+  // the fallback for orders it can't be derived from.
+  const win = slotWindowText(o.scheduled_for, o.delivery_slot_label);
+  const label = win
+    || localizeSlotLabel(humanizeSlotLabel(absolutizeSlotLabel(o.delivery_slot_label, o.scheduled_for)))
     || (valid ? fmtSlotShort(dt) : String(o.scheduled_for));
   // If the human label isn't itself the date, surface the date as a sub-line.
+  // A derived window already leads with the date, so it never needs one.
   const dateLine = valid ? fmtSlotShort(dt) : '';
   return {
     kind: 'scheduled',
     kickerEn: done ? reqEn : 'Booked', kickerCn: done ? reqCn : '顾客预约',
     headlineRaw: label,
-    cellSubRaw: (label !== dateLine && dateLine) ? dateLine : null,
+    cellSubRaw: (!win && label !== dateLine && dateLine) ? dateLine : null,
     urgencyDate: slotEndAnchor(o.scheduled_for, o.delivery_slot_label), urgencyBasis: 'arrival',
   };
 }
