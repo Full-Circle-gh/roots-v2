@@ -343,9 +343,10 @@ WHAT THIS SERVES: The two-week goal — a second account live on Tacet plus thei
 ## 25. Related documents
 
 - docs/tacet-glossary.md — binding definitions, v1.4, 2026-07-31. The words in this document are used with the meanings defined there.
+- docs/tacet-desktop-patterns.md — the rulebook for how a desktop admin page is put together, v4.2, 2026-08-03. Prescriptive except on Orders: when a rule and an unbuilt page disagree, that document wins.
 - docs/tacet-core-survey.md — verified current-state inventory, 2026-07-30
 - docs/tacet-product-fields.md — product field inventory, 2026-07-31. 78 columns; 41 contested writes.
 - docs/tacet-stock-model.md — stock and reservation behaviour, 2026-07-30. Records 14 inconsistencies in the store stock model; three were live bugs.
-- docs/tacet-locations-survey.md — locations current state, 2026-07-31. Records that `markets` and `retail_stores` are two complete competing models, and that `retail_stores` already holds everything operationally real.
-- docs/tacet-order-routing.md — how a fulfilment location is chosen (pending).
+- docs/tacet-locations-survey.md — locations current state, 2026-07-30. Records that `markets` and `retail_stores` are two complete competing models, and that `retail_stores` already holds everything operationally real.
+- docs/tacet-order-routing.md — how a fulfilment location is chosen, and what happens on stock shortage, 2026-07-31. Read-only behavioural survey.
 - docs/tacet-multibusiness-audit.md — audit against §0, 2026-07-31. 121 findings, 26 blockers. Headline: Roots is the default database, not a row in it.
