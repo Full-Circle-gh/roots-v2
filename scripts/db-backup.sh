@@ -11,7 +11,11 @@
 # used: roots.db and tenants/5.db both carry a live WAL, so a byte copy of the
 # main file alone would be torn/stale (5.db is 4KB on disk with ~2.8MB in WAL).
 #
-# Layout:  oss://tacet/daily/<YYYYmmdd-HHMMSS>/<name>.db
+# Snapshots are gzipped before upload. Order matters: integrity_check runs on
+# the UNCOMPRESSED copy and must return "ok" BEFORE gzip is allowed to run, so
+# a gzip is never made from a source that was not verified first.
+#
+# Layout:  oss://tacet/daily/<YYYYmmdd-HHMMSS>/<name>.db.gz
 # Retention: prefixes under daily/ older than RETAIN_DAYS are deleted (see below).
 
 set -euo pipefail
@@ -40,10 +44,11 @@ fi
 DATE=$(date +%Y%m%d-%H%M%S)
 FILES=()          # /tmp working copies created so far
 UPLOADED=0
-TOTAL_BYTES=0
+TOTAL_BYTES=0     # bytes actually uploaded, i.e. COMPRESSED size
+RAW_BYTES=0       # uncompressed size of the same snapshots, for the ratio
 
 log_line() {
-  # timestamp | status | object count | total bytes
+  # timestamp | status | object count | total bytes (compressed/uploaded)
   mkdir -p "$(dirname "$LOG")"
   echo "$(date -Iseconds) $1 objects=$2 bytes=$3 date=$DATE${4:+ reason=$4}" >> "$LOG"
 }
@@ -79,11 +84,15 @@ trap 'fail "unexpected error on line $LINENO"' ERR
 
 # --- preflight ---------------------------------------------------------------
 command -v sqlite3 >/dev/null 2>&1 || fail "sqlite3 CLI missing"
+command -v gzip >/dev/null 2>&1 || fail "gzip missing"
 [ -x "$OSS" ] || fail "ossutil missing at $OSS"
 
 # Sweep working copies abandoned by an earlier failed run. They are kept on
-# purpose for manual recovery, but must not accumulate: roots.db alone is ~500MB.
-find "$WORK" -maxdepth 1 -name '*-????????-??????.db' -mtime "+$STALE_TMP_DAYS" -delete 2>/dev/null || true
+# purpose for manual recovery, but must not accumulate: roots.db alone is ~500MB
+# raw. Both the plain and the gzipped working names are swept.
+find "$WORK" -maxdepth 1 \
+     \( -name '*-????????-??????.db' -o -name '*-????????-??????.db.gz' \) \
+     -mtime "+$STALE_TMP_DAYS" -delete 2>/dev/null || true
 
 FREE_MB=$(df -Pm "$WORK" | awk 'NR==2 {print $4}') || true
 [ -n "${FREE_MB:-}" ] || fail "could not determine free space on $WORK"
@@ -100,9 +109,10 @@ for i in "${!SRCS[@]}"; do
   [ -f "${SRCS[$i]}" ] || fail "source database missing: ${SRCS[$i]}"
 done
 
-# --- snapshot + verify -------------------------------------------------------
+# --- snapshot, verify, then compress -----------------------------------------
 # Note: sqlite3 .backup happily copies a corrupt source (it returns 0), so the
-# integrity_check below is the real gate, not a formality.
+# integrity_check below is the real gate, not a formality. Nothing is compressed
+# until its own snapshot has passed that gate.
 for i in "${!SRCS[@]}"; do
   src="${SRCS[$i]}"; name="${NAMES[$i]}"
   dst="$WORK/${name%.db}-$DATE.db"
@@ -117,24 +127,31 @@ for i in "${!SRCS[@]}"; do
     cleanup_tmp                       # nothing uploaded yet -> safe to clear
     fail "integrity_check failed for $name (from $src): $res"
   fi
-  echo "[db-backup] $name integrity=ok size=$(stat -c%s "$dst")"
+
+  # Verified ok -> now, and only now, compress it. gzip replaces $dst with $dst.gz.
+  raw=$(stat -c%s "$dst")
+  FILES+=("$dst.gz")
+  gzip -f "$dst" || { cleanup_tmp; fail "gzip failed for $name"; }
+  gz=$(stat -c%s "$dst.gz")
+  RAW_BYTES=$((RAW_BYTES + raw))
+  echo "[db-backup] $name integrity=ok raw=$raw gz=$gz"
 done
 
 # --- upload + verify ---------------------------------------------------------
 for i in "${!SRCS[@]}"; do
   name="${NAMES[$i]}"
-  dst="$WORK/${name%.db}-$DATE.db"
-  target="oss://$BUCKET/daily/$DATE/$name"
+  gzf="$WORK/${name%.db}-$DATE.db.gz"
+  target="oss://$BUCKET/daily/$DATE/$name.gz"
 
-  "$OSS" cp -f "$dst" "$target" >/dev/null 2>&1 || fail "upload failed for $name -> $target"
+  "$OSS" cp -f "$gzf" "$target" >/dev/null 2>&1 || fail "upload failed for $name.gz -> $target"
 
   # Confirm the object really landed before we are allowed to delete /tmp.
   # `|| true` for the same pipefail reason as above.
   remote_size=$("$OSS" stat "$target" 2>/dev/null | awk -F': *' '/^Content-Length/ {print $2}' | tr -d ' \r') || true
-  local_size=$(stat -c%s "$dst")
+  local_size=$(stat -c%s "$gzf")
   [ -n "${remote_size:-}" ] || fail "verify failed: $target not found in bucket after upload"
   [ "$remote_size" = "$local_size" ] \
-    || fail "verify failed: $name size mismatch (local=$local_size remote=$remote_size)"
+    || fail "verify failed: $name.gz size mismatch (local=$local_size remote=$remote_size)"
 
   UPLOADED=$((UPLOADED + 1))
   TOTAL_BYTES=$((TOTAL_BYTES + local_size))
@@ -148,9 +165,12 @@ FILES=()
 # --- retention ---------------------------------------------------------------
 # Script-side deletion (no bucket lifecycle rule). Age is derived from the
 # YYYYmmdd in each prefix name, not from OSS mtime, so a re-upload can never
-# make an old set look fresh. Only the daily/ prefix is ever touched.
+# make an old set look fresh. Only the daily/ prefix is ever touched. This keys
+# on the <DATE> prefix alone and never on a filename, so it is unaffected by the
+# switch from <name>.db to <name>.db.gz.
 # NOTE: versioning is enabled on this bucket, so these deletes add delete
 # markers; previous NONCURRENT VERSIONS are retained and are NOT pruned here.
+# Reclaiming those bytes is the job of the bucket lifecycle rule on daily/.
 CUTOFF=$(date -d "$RETAIN_DAYS days ago" +%Y%m%d)
 PRUNED=0
 PREFIXES=$("$OSS" ls "oss://$BUCKET/daily/" -d 2>/dev/null \
@@ -169,5 +189,5 @@ done
 
 trap - ERR
 log_line OK "$UPLOADED" "$TOTAL_BYTES"
-echo "[db-backup] OK $UPLOADED objects, $TOTAL_BYTES bytes, pruned=$PRUNED"
+echo "[db-backup] OK $UPLOADED objects, $TOTAL_BYTES bytes uploaded (raw $RAW_BYTES), pruned=$PRUNED"
 exit 0
