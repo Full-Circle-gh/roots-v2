@@ -3346,6 +3346,22 @@
       @media (prefers-reduced-motion: reduce) { #cu-table tbody td { transition: none; } }
       /* A blocked customer stays in the roster but stops competing for the eye. */
       #cu-table tbody tr.cul-row.is-blocked td { opacity: .62; }
+      /* Arrival flash — fires once on a row that appeared via live push, so the
+         operator sees WHICH customer is new rather than just that the table
+         moved. On the td, not the tr: every cell here paints its own
+         background (--bg-pane, and --td-unseen on the unseen rows a new
+         customer always is), which would cover a tr-level wash completely.
+         An animation outranks those plain declarations, so this reads through.
+         The generic tbody tr.row-flash in retail-admin.css cannot be reused for
+         the same reason — it washes the tr. */
+      @keyframes cu-row-flash {
+        0%   { background: rgba(163, 180, 159, .30); }
+        60%  { background: rgba(163, 180, 159, .16); }
+      }
+      #cu-table tbody tr.cul-row.is-fresh td { animation: cu-row-flash 4s ease-out 1; }
+      @media (prefers-reduced-motion: reduce) {
+        #cu-table tbody tr.cul-row.is-fresh td { animation: none; }
+      }
 
       /* Customer cell — monogram, channel icon, name, phone underneath.
          The old "#" id column and its own Phone column are gone: ids live in

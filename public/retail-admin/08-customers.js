@@ -554,7 +554,47 @@ function cuKpisNotLoaded() {
 // .is-pinned class on scroll; it worked, but it was a moving part standing in
 // for a static rule.)
 
-async function cuLoad() {
+// ── Background refresh state ───────────────────────────────────────────
+// A silent load is one nobody asked for: the live nudge, the backstop poll,
+// or coming back to the tab. It must be invisible when nothing moved — no
+// skeleton flash, no scroll jump, no rebuild of rows that are already right.
+// The fingerprint is what makes that possible: same roster in, no DOM out.
+let _CU_REQ_ID = 0;          // newest request wins; older responses are dropped
+let _CU_IN_FLIGHT = false;   // a load owns the table — silent ticks stand down
+let _CU_LAST_FP = null;      // fingerprint of the rows currently painted
+let _CU_LAST_FP_KEY = '';    // filter signature that fingerprint belongs to
+let _CU_SEEN_IDS = null;     // null = first paint; no flash for rows already there
+
+// Every value the row markup shows. If two loads fingerprint the same, the
+// rebuild would paint character-for-character what's already on screen.
+function _cuFp(rows) {
+  return CU_TOTAL + '~' + rows.map(r => [
+    r.id, r.nickname || '', r.phone || '', r.channel || '', r.tier_key || '',
+    r.orders_count || 0, r.lifetime_spend || 0, r.points_balance || 0,
+    r.balance || 0, r.last_login_at || '', r.is_blocked ? 1 : 0, r.seen_at ? 1 : 0,
+  ].join(',')).join(';');
+}
+
+// Which cut of the roster is on screen. A different filter (or page) is a
+// different baseline: reset the fingerprint so the next load rebuilds, and
+// the seen-ids so rows arriving from a filter switch don't fake-flash.
+function _cuFilterKey() {
+  return [$('#cu-q').value.trim(), [...CU_TIER_FILTERS].join(','), CU_CHAN_FILTER,
+          CU_SEGMENT, CU_PAGE, CU_PAGE_SIZE].join('|');
+}
+
+// opts.silent — see the note above. Split in two so the page-clamp below can
+// recurse without tripping the in-flight guard it is already holding.
+async function cuLoad(opts = {}) {
+  if (opts.silent && _CU_IN_FLIGHT) return;   // a real load owns the table
+  _CU_IN_FLIGHT = true;
+  try { return await _cuLoad(opts); }
+  finally { _CU_IN_FLIGHT = false; }
+}
+
+async function _cuLoad(opts) {
+  const silent = !!opts.silent;
+  const myReq = ++_CU_REQ_ID;
   const params = new URLSearchParams({
     q: $('#cu-q').value.trim(),
     tier: [...CU_TIER_FILTERS].join(','),
@@ -568,25 +608,60 @@ async function cuLoad() {
   const tbody = $('#cu-table tbody');
   // Loading — skeleton rows that settle, under the real column labels. No
   // spinner: the shape of what's coming is more use than a rotating disc.
-  tbody.innerHTML = cuSkeletonRows();
+  // A silent tick shows nothing: the rows on screen stay until better ones land.
+  if (!silent) tbody.innerHTML = cuSkeletonRows();
   let j;
   try {
     const res = await fetch('/api/retail-admin/customers?' + params);
     j = await res.json();
   } catch (e) {
+    // A failed background tick keeps quiet — the roster on screen is the last
+    // known-good one, and replacing it with an error is a worse answer than
+    // leaving it. The next tick tries again.
+    if (silent) return;
     tbody.innerHTML = cuErrorRow();
     cuKpisNotLoaded();
     if (window.rmRenderCustomerCards) rmRenderCustomerCards(null, 'Network error · 网络错误');
     return;
   }
   if (!j.success) {
+    if (silent) return;
     tbody.innerHTML = cuErrorRow();
     cuKpisNotLoaded();
     if (window.rmRenderCustomerCards) rmRenderCustomerCards(null, 'Failed to load · 加载失败');
     return;
   }
+  // A newer load started while this fetch was in the air — its result is the
+  // authoritative one. Ours would paint the previous filter's rows on top.
+  if (myReq !== _CU_REQ_ID) return;
   CU_TOTAL = j.total || 0;
   const rows = j.data || [];
+
+  // Clamp: blocking a customer (or a filter's cut draining) can shrink the
+  // roster under the operator's feet and leave CU_PAGE past the last page.
+  // Snap back and refetch once — checked BEFORE the render, so the page that
+  // no longer exists is never painted at all.
+  const pages = Math.max(1, Math.ceil(CU_TOTAL / CU_PAGE_SIZE));
+  if (CU_PAGE > pages) { CU_PAGE = pages; return _cuLoad(opts); }
+
+  // A different cut of the roster is a different baseline for both the
+  // fingerprint and the flash.
+  const fpKey = _cuFilterKey();
+  if (fpKey !== _CU_LAST_FP_KEY) {
+    _CU_LAST_FP_KEY = fpKey;
+    _CU_LAST_FP = null;
+    _CU_SEEN_IDS = null;
+  }
+  // Nothing moved since the last paint — leave the DOM alone, and with it the
+  // operator's scroll position and whatever row they're pointing at. The
+  // `.cul-mono` test asks for a REAL row: skeleton rows share .cul-row and
+  // would otherwise read as "already painted".
+  const fp = _cuFp(rows);
+  if (silent && fp === _CU_LAST_FP && tbody.querySelector('tr.cul-row .cul-mono, .cul-state')) return;
+  const prevSeen = _CU_SEEN_IDS;
+  _CU_LAST_FP = fp;
+  _CU_SEEN_IDS = new Set(rows.map(r => r.id));
+
   if (!rows.length) {
     // Two different empty states. Nothing to find at all is a compliment that
     // names what will arrive; a filter that matched nothing names the filter
@@ -620,7 +695,7 @@ async function cuLoad() {
       const points = Number(r.points_balance || 0);
       const wallet = Number(r.balance || 0);
       return `
-      <tr class="cul-row${r.is_blocked ? ' is-blocked' : ''}${r.seen_at ? '' : ' is-unseen'}" onclick="cuOpenDetail(${r.id})">
+      <tr class="cul-row${r.is_blocked ? ' is-blocked' : ''}${r.seen_at ? '' : ' is-unseen'}" data-cu-id="${r.id}" onclick="cuOpenDetail(${r.id})">
         <td>
           <div class="cul-who">
             <span class="cul-mono" data-no-i18n>${cuMonogram(r.nickname)}</span>
@@ -640,12 +715,25 @@ async function cuLoad() {
         <td class="cul-chev" data-no-i18n><span class="cul-chevg">›</span></td>
       </tr>`;
     }).join('');
+    // One soft wash over rows that weren't there a moment ago, so a customer
+    // who arrived while the operator was looking at the screen announces
+    // WHICH row is new — not just that the table moved. Never on the first
+    // paint (prevSeen === null): every row would flash and mean nothing.
+    if (prevSeen) {
+      let arrived = 0;
+      for (const r of rows) {
+        if (prevSeen.has(r.id)) continue;
+        arrived++;
+        tbody.querySelector(`tr[data-cu-id="${r.id}"]`)?.classList.add('is-fresh');
+      }
+      // Somebody genuinely new landed, so the tiles above the table are now
+      // wrong — "New today" most of all. Force past their 45s throttle: a
+      // count and the row it counts must never disagree on the same screen.
+      // Only on a real arrival, so a busy stretch of nudges can't turn this
+      // into a second poller.
+      if (arrived) cuLoadKpis(true);
+    }
   }
-  // Clamp: blocking a customer (or toggling "include blocked") can shrink the
-  // roster under the operator's feet and leave CU_PAGE past the last page.
-  // Snap back and refetch once rather than painting an empty table.
-  const pages = Math.max(1, Math.ceil(CU_TOTAL / CU_PAGE_SIZE));
-  if (CU_PAGE > pages) { CU_PAGE = pages; return cuLoad(); }
   rmRenderPager('cu-pager', {
     page: CU_PAGE, pageSize: CU_PAGE_SIZE, total: CU_TOTAL,
     sizes: [20, 50, 100],
@@ -2182,8 +2270,67 @@ function cuFmtDate(iso) {
   return tdWhen(iso, 'date');
 }
 
+// ── Live updates ───────────────────────────────────────────────────────
+// A new customer used to need a page refresh to show up: this tab loaded once
+// behind CUSTOMERS_LOADED and then never looked again for the life of the
+// session. It now follows the platform standard (reference/live-updates-spec.md)
+// — the admin-wide SSE hub nudges, we refetch silently, nobody clicks anything.
+//
+// No server change was needed: the watermark tick already samples
+// retail_customers (COUNT + MAX(created_at) in _dashActivitySignature,
+// routes/retail.js), so a signup from the mini-app, the web storefront, or one
+// of the separate daemon processes all land here. Worst-case latency is that
+// 5s tick plus the debounce below.
+const CUSTOMERS_POLL_MS = 60000;
+let _CU_AUTO_TIMER = null;
+
+// Refetch gate. Declines only where the work would be wasted or destructive:
+// the tab isn't on screen, the document is hidden, or the operator is mid-input
+// (a rebuild under a live search would fight what they're typing). Safe with
+// the detail drawer or a modal open — those render from CU_CURRENT, not from
+// the table, and an unchanged roster fingerprints identical and touches no DOM.
+function _cuAutoTick() {
+  if (document.hidden) return;
+  if (!document.getElementById('tab-customers')?.classList.contains('active')) return;
+  const ae = document.activeElement;
+  if (ae && ae !== document.body && ae.matches('input, select, textarea, [contenteditable="true"]')) return;
+  cuLoad({ silent: true });
+  cuLoadKpis();   // throttled (45s) — the strip follows the roster
+}
+
+// Coalesce a burst of nudges into one refetch: a batch of signups moves the
+// watermark several times over, and one fetch a moment later sees all of them.
+let _CU_LIVE_DEBOUNCE = null;
+function _cuLiveNudge() {
+  // _cuAutoTick already declines when hidden, off-tab, or mid-input.
+  clearTimeout(_CU_LIVE_DEBOUNCE);
+  _CU_LIVE_DEBOUNCE = setTimeout(_cuAutoTick, 400);
+}
+
+(function _startCustomersLive() {
+  if (window._customersLiveWired) return;
+  window._customersLiveWired = true;
+  // Live push — the primary path. New customers arrive on their own.
+  if (typeof retailLiveSubscribe === 'function') retailLiveSubscribe(_cuLiveNudge);
+  // Backstop, deliberately slow. It covers the stretch while that socket is
+  // down and reconnecting, and the one move the watermark can't see: "Last
+  // seen" changing when an EXISTING customer opens the app. The signature
+  // samples MAX(created_at), not last_login_at, and widening it would make
+  // every app-open refetch the whole admin for every operator — too chatty a
+  // price for a column that reorders the list.
+  if (_CU_AUTO_TIMER) clearInterval(_CU_AUTO_TIMER);
+  _CU_AUTO_TIMER = setInterval(_cuAutoTick, CUSTOMERS_POLL_MS);
+  // The gate declines while hidden or off-tab, so catch up on the way back in.
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) _cuAutoTick(); });
+  window.addEventListener('focus', _cuAutoTick);
+})();
+
 document.querySelector('[data-tab="customers"]').addEventListener('click', () => {
   if (!CUSTOMERS_LOADED) { CUSTOMERS_LOADED = true; cuLoad(); }
+  // Already loaded once — refresh rather than show the roster as it stood when
+  // the operator last left the tab. The 50ms lets the tab become .active
+  // first: the gate above reads that class and would otherwise decline.
+  else setTimeout(_cuAutoTick, 50);
   cuLoadKpis();   // throttled (45s) — keeps the New-today pulse fresh on open
 });
 
