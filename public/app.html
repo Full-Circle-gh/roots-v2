@@ -16523,12 +16523,12 @@ function _supplierChannelChip(s) {
   const type = (s.channel_type || '').toLowerCase();
   if (!type) return '<span style="color:var(--border);font-size:12px">—</span>';
   const meta = {
-    taobao:   { emoji:'🛒', label:'Taobao'  },
-    alibaba:  { emoji:'🅰', label:'Alibaba' },
-    website:  { emoji:'🌐', label:'Website' },
-    phone:    { emoji:'📞', label:'Phone'   },
-    wechat:   { emoji:'💚', label:'WeChat'  },
-    other:    { emoji:'📨', label:'Channel' },
+    taobao:   { emoji:'🛒', label:_supT('Taobao',  '淘宝')   },
+    alibaba:  { emoji:'🅰', label:_supT('Alibaba', '阿里巴巴') },
+    website:  { emoji:'🌐', label:_supT('Website', '网站')   },
+    phone:    { emoji:'📞', label:_supT('Phone',   '电话')   },
+    wechat:   { emoji:'💚', label:_supT('WeChat',  '微信')   },
+    other:    { emoji:'📨', label:_supT('Channel', '渠道')   },
   }[type] || { emoji:'📨', label:type };
   // Visual style — tappable button, not a tiny tag. Taller padding,
   // slightly larger type, hover lift so it reads as an action.
@@ -16542,9 +16542,9 @@ function _supplierChannelChip(s) {
     const hasQR = !!s.channel_qr_data;
     const tip = hasQR ? 'Click to view QR · 点击查看二维码' : 'WeChat — no QR yet · 微信(暂无二维码)';
     if (hasQR) {
-      return `<a href="javascript:void(0)" onclick="event.stopPropagation();_showSupplierQR(${s.id})" onmouseenter="${hoverScript}" onmouseleave="${leaveScript}" title="${esc(tip)}" style="${wechatStyle}cursor:pointer">${meta.emoji} WeChat QR →</a>`;
+      return `<a href="javascript:void(0)" onclick="event.stopPropagation();_showSupplierQR(${s.id})" onmouseenter="${hoverScript}" onmouseleave="${leaveScript}" title="${esc(tip)}" style="${wechatStyle}cursor:pointer">${meta.emoji} ${_supT('WeChat QR', '微信二维码')} →</a>`;
     }
-    return `<span title="${esc(tip)}" style="${ghostStyle}">${meta.emoji} WeChat</span>`;
+    return `<span title="${esc(tip)}" style="${ghostStyle}">${meta.emoji} ${meta.label}</span>`;
   }
   if (s.channel_link) {
     // Normalise: a saved value like "shop.taobao.com/abc" (no scheme)
@@ -17177,15 +17177,33 @@ async function _invRenderLedger() {
   }
 }
 
+// Strings this page builds in JS — a count, a pluralised noun — have no
+// " · " for the walker to split, so they pick their language at render time
+// and the page re-renders when the toggle flips (see _supLangHook).
+function _supT(en, cn) { return window.cuT ? window.cuT(en, cn) : en; }
+let _supLangHooked = false;
+function _supLangHook() {
+  if (_supLangHooked || !window.onLangChange) return;
+  _supLangHooked = true;
+  window.onLangChange(() => {
+    // Only when the suppliers page is the one on screen.
+    if (!document.getElementById('supSearch')) return;
+    const wrap = document.getElementById('supplierListWrap');
+    if (wrap) wrap.dataset.fp = '';   // defeat the anti-flicker fingerprint
+    loadSuppliers();
+  });
+}
+
 async function renderSuppliers() {
   const canManage = _user.role === 'admin' || !!_user.permissions?.suppliers;
+  _supLangHook();
   document.getElementById('main').innerHTML = `
     <div class="page-header">
       <div class="page-title">${navIconSvg('truck')}<span>SUPPLIERS · 供应商</span></div>
       <div style="display:flex;gap:10px">
         ${canManage
           ? `<button class="btn btn-primary" onclick="showSupplierForm(null)">+ 新建供应商 New Supplier</button>`
-          : `<span style="font-size:12px;color:var(--muted);align-self:center">Read-only · 只读 — request the Suppliers permission to add or edit</span>`}
+          : `<span style="font-size:12px;color:var(--muted);align-self:center">Read-only, ask for the Suppliers permission to add or edit · 只读，需要“供应商”权限才能添加或修改</span>`}
       </div>
     </div>
     <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center">
@@ -17193,8 +17211,8 @@ async function renderSuppliers() {
         style="padding:9px 14px;border:1.5px solid var(--border);border-radius:8px;font-size:13px;width:300px;max-width:100%;flex:1 1 220px;min-width:160px;outline:none">
       <!-- View toggle: cards (visual grid) / list (compact table). -->
       <div class="sup-view-toggle" role="tablist" aria-label="View mode">
-        <button data-sup-view="cards" class="${_supView==='cards'?'active':''}" onclick="_setSupView('cards')" title="Cards · 卡片视图">▦ Cards</button>
-        <button data-sup-view="list"  class="${_supView==='list' ?'active':''}" onclick="_setSupView('list')"  title="List · 列表视图">≡ List</button>
+        <button data-sup-view="cards" class="${_supView==='cards'?'active':''}" onclick="_setSupView('cards')" title="Cards · 卡片视图">▦ Cards · 卡片</button>
+        <button data-sup-view="list"  class="${_supView==='list' ?'active':''}" onclick="_setSupView('list')"  title="List · 列表视图">≡ List · 列表</button>
       </div>
       <span style="font-size:12px;color:var(--muted);margin-left:auto" id="supCount"></span>
       <span id="autoRefreshIndicator"></span>
@@ -17217,7 +17235,7 @@ function _supFilter() {
     if (show) visible++;
   });
   const cnt = document.getElementById('supCount');
-  if (cnt) cnt.textContent = `${visible} supplier${visible===1?'':'s'}`;
+  if (cnt) cnt.textContent = _supT(`${visible} supplier${visible===1?'':'s'}`, `${visible} 家供应商`);
 }
 
 async function loadSuppliers() {
@@ -17240,7 +17258,7 @@ async function loadSuppliers() {
         <div class="sup-empty">
           <div style="font-size:42px;margin-bottom:10px;opacity:.5">🚚</div>
           <div style="font-weight:700;font-size:14px;color:var(--text);margin-bottom:4px">No suppliers yet · 暂无供应商</div>
-          <div style="font-size:12px;margin-bottom:14px">Add your first supplier to start tracking purchases.</div>
+          <div style="font-size:12px;margin-bottom:14px">Add your first supplier to start tracking purchases · 添加第一家供应商，开始记录采购</div>
           <button class="btn btn-primary btn-sm" onclick="showSupplierForm(null)">+ New Supplier 新建供应商</button>
         </div>`;
       return;
@@ -17383,10 +17401,14 @@ async function loadSuppliers() {
       }
       return src.slice(0, 2);
     }
-    function docChip(present, emoji, label, tip) {
-      return present
-        ? `<span class="sup-doc-chip" title="${esc(tip)}: uploaded · 已上传">${emoji} ${label}</span>`
-        : `<span class="sup-doc-chip miss" title="${esc(tip)}: not uploaded · 未上传">${emoji} ${label}</span>`;
+    // The chip carries a short label; the full name of the document — and
+    // whether it is on file — lives in the tooltip, one language at a time.
+    function docChip(present, emoji, labelEn, labelCn, nameEn, nameCn) {
+      const label = _supT(labelEn, labelCn);
+      const tip = present
+        ? _supT(`${nameEn}: on file`, `${nameCn}：已上传`)
+        : _supT(`${nameEn}: not uploaded`, `${nameCn}：未上传`);
+      return `<span class="sup-doc-chip${present ? '' : ' miss'}" title="${esc(tip)}">${emoji} ${esc(label)}</span>`;
     }
     const channelChip = _supplierChannelChip;
     const methodChip  = _paymentMethodChip;
@@ -17428,11 +17450,11 @@ async function loadSuppliers() {
             : `<span style="color:var(--muted);font-style:italic;font-size:12px">—</span>`,
         },
         items: {
-          label: 'Items', th: 'text-align:center;width:70px',
+          label: 'Items 物料', th: 'text-align:center;width:70px',
           render: (s) => `<div style="text-align:center"><span class="sup-pill items">📦 ${s.ingredient_count}</span></div>`,
         },
         docs: {
-          label: 'Docs', th: 'width:200px',
+          label: 'Docs 证件', th: 'width:200px',
           render: (s) => {
             // Each tile is colour-coded by doc type (blue=license, amber=
             // permits, green=payment QR) and carries a short English label
@@ -17440,20 +17462,23 @@ async function loadSuppliers() {
             // the full bilingual name. Click on an uploaded tile opens a
             // fullsize preview; click on a missing tile jumps to the edit
             // form so the user can upload it.
-            const tile = (kind, count, emoji, label_short, label_en, label_cn, tone) => {
+            const tile = (kind, count, emoji, label_short, short_cn, label_en, label_cn, tone) => {
               const present = count > 0;
-              const tip = `${label_en} ${label_cn} · ${present?count+' file'+(count===1?'':'s')+' · 已上传 (click to view · 点击查看)':'missing · 未上传 (click to upload · 点击上传)'}`;
+              const short = _supT(label_short, short_cn);
+              const tip = present
+                ? _supT(`${label_en}: ${count} file${count===1?'':'s'} — click to view`, `${label_cn}：${count} 份文件 — 点击查看`)
+                : _supT(`${label_en}: not uploaded — click to upload`, `${label_cn}：未上传 — 点击上传`);
               const onClick = present
                 ? `_showSupplierDoc(${s.id},'${kind}')`
                 : `showSupplierForm(${s.id})`;
               return `<span class="doc-tile ${tone} ${present?'on':'off'}"
                 title="${esc(tip)}"
-                onclick="event.stopPropagation();${onClick}"><span class="emoji">${emoji}</span>${label_short}<span class="badge">${present?(count>1?count:'✓'):'✕'}</span></span>`;
+                onclick="event.stopPropagation();${onClick}"><span class="emoji">${emoji}</span>${esc(short)}<span class="badge">${present?(count>1?count:'✓'):'✕'}</span></span>`;
             };
             return `<div style="white-space:nowrap;display:inline-flex;gap:0;align-items:center">
-              ${tile('license',    s.has_license||0,    '🏢', 'Lic', 'Business License', '营业执照', 'lic')}
-              ${tile('permit',     s.has_permit||0,     '📜', 'Per', 'Permits',           '许可证', 'per')}
-              ${tile('payment_qr', s.has_payment_qr||0, '💰', 'QR',  'Payment QR',        '收款码', 'qr')}
+              ${tile('license',    s.has_license||0,    '🏢', 'Lic', '执照', 'Business License', '营业执照', 'lic')}
+              ${tile('permit',     s.has_permit||0,     '📜', 'Per', '许可', 'Permits',           '许可证', 'per')}
+              ${tile('payment_qr', s.has_payment_qr||0, '💰', 'QR',  '收款', 'Payment QR',        '收款码', 'qr')}
             </div>`;
           },
         },
@@ -17475,7 +17500,7 @@ async function loadSuppliers() {
       wrap.innerHTML = `
         <div style="font-size:11px;color:var(--muted);margin-bottom:8px;display:flex;align-items:center;gap:8px">
           <span>↔ Drag column headers to reorder · 拖动列标题排序</span>
-          <button onclick="_supResetColumns()" style="background:transparent;border:1px solid var(--border);border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer;font-family:inherit;color:var(--muted)" title="Reset column order · 重置列顺序">↺ Reset</button>
+          <button onclick="_supResetColumns()" style="background:transparent;border:1px solid var(--border);border-radius:6px;padding:2px 8px;font-size:11px;cursor:pointer;font-family:inherit;color:var(--muted)" title="Reset column order · 重置列顺序">↺ Reset · 重置</button>
         </div>
         <div class="sup-list-wrap">
           <div>
@@ -17501,7 +17526,7 @@ async function loadSuppliers() {
           </div>
         </div>`;
       const cnt = document.getElementById('supCount');
-      if (cnt) cnt.textContent = `${sups.length} supplier${sups.length===1?'':'s'}`;
+      if (cnt) cnt.textContent = _supT(`${sups.length} supplier${sups.length===1?'':'s'}`, `${sups.length} 家供应商`);
       if (document.getElementById('supSearch')?.value) _supFilter();
       return;
     }
@@ -17524,19 +17549,19 @@ async function loadSuppliers() {
             </div>
           </div>
           <div class="sup-meta-row">
-            <span class="sup-pill items" title="Items linked · 关联物料">📦 ${s.ingredient_count} item${s.ingredient_count===1?'':'s'}</span>
+            <span class="sup-pill items" title="Items linked · 关联物料">📦 ${s.ingredient_count} ${_supT(`item${s.ingredient_count===1?'':'s'}`, '件')}</span>
             ${s.payment_method ? methodChip(s) : ''}
             ${s.payment_terms ? `<span class="sup-pill terms">💵 ${esc(s.payment_terms)}</span>` : ''}
             <span style="flex:1"></span>
-            ${docChip((s.has_license||0)>0,    '🏢', 'Lic', 'Business License 营业执照')}
-            ${docChip((s.has_permit||0)>0,     '📜', 'Per', 'Permits 许可证')}
-            ${docChip((s.has_payment_qr||0)>0, '💰', 'QR',  'Payment QR 收款码')}
+            ${docChip((s.has_license||0)>0,    '🏢', 'Lic', '执照', 'Business License', '营业执照')}
+            ${docChip((s.has_permit||0)>0,     '📜', 'Per', '许可', 'Permits',          '许可证')}
+            ${docChip((s.has_payment_qr||0)>0, '💰', 'QR',  '收款', 'Payment QR',       '收款码')}
           </div>
         </div>`).join('')}</div>`;
     // Update supplier count + apply current filter (if user typed
     // before auto-refresh fired, the new rows respect the search box).
     const cnt = document.getElementById('supCount');
-    if (cnt) cnt.textContent = `${sups.length} supplier${sups.length===1?'':'s'}`;
+    if (cnt) cnt.textContent = _supT(`${sups.length} supplier${sups.length===1?'':'s'}`, `${sups.length} 家供应商`);
     if (document.getElementById('supSearch')?.value) _supFilter();
   } catch (e) { wrap.innerHTML = `<div style="padding:14px;color:#c0392b">${esc(String(e))}</div>`; }
 }
@@ -28137,11 +28162,12 @@ function sproutPageContext() {
   // Same idea for help tooltips: their text lives in the data-tip attribute,
   // not a text node, so it needs its own registry. { el, en, cn }.
   const _tipReg = [];
-  // And again for input placeholders. An <input> is deliberately skipped by the
-  // text walker (it must never touch what someone typed), so a placeholder
-  // written as "EN · CN" used to sit there in both languages — the supplier
-  // search box being the one people notice. { el, en, cn }.
-  const _phReg = [];
+  // And again for labels that live in an attribute rather than a text node:
+  // input placeholders (an <input> is deliberately skipped by the text walker,
+  // which must never touch what someone typed — the supplier search box is the
+  // one people notice) and hover tooltips. { el, attr, en, cn }.
+  const _attrReg = [];
+  const I18N_ATTRS = ['placeholder', 'title'];
 
   // Never touch text inside these — code, user input, or vector graphics
   // (chart labels). Translating them would corrupt rendering.
@@ -28290,31 +28316,36 @@ function sproutPageContext() {
     scope.querySelectorAll && scope.querySelectorAll('[data-tip]').forEach(processTip);
   }
 
-  // Placeholders sit on the very elements the text walker refuses to enter,
-  // so they get their own pass — same classifier, so "🔍 Search… · 搜索…"
-  // splits exactly the way the label next to it does. A single-language
-  // placeholder ("0.00", "中文名", a URL example) classifies as null and is
-  // left alone.
-  function phOptedOut(el) {
+  // Placeholders and tooltips are labels the text walker never sees — one sits
+  // on an element it refuses to enter, the other isn't a text node at all. They
+  // get their own pass through the same classifier, so "🔍 Search… · 搜索…"
+  // splits exactly the way the label next to it does. Single-language values
+  // ("0.00", "中文名", a URL, a phone number) classify as null and are left
+  // alone, which is what keeps this safe on a title that carries data.
+  function attrOptedOut(el) {
     for (let n = el; n; n = n.parentElement) {
       if (n.dataset && n.dataset.noI18n != null) return true;
     }
     return false;
   }
-  function processPh(el) {
-    if (el.__i18nPhDone) return;
-    const raw = el.getAttribute('placeholder') || '';
-    if (!raw || phOptedOut(el)) return;
+  function processAttr(el, attr) {
+    const done = el.__i18nAttrDone || (el.__i18nAttrDone = {});
+    if (done[attr]) return;
+    const raw = el.getAttribute(attr) || '';
+    if (!raw || attrOptedOut(el)) return;
     const res = classify(raw);
     if (!res) return;
-    el.__i18nPhDone = true;
-    el.setAttribute('placeholder', _lang === 'cn' ? res.cn : res.en);
-    _phReg.push({ el, en: res.en, cn: res.cn });
+    done[attr] = true;
+    el.setAttribute(attr, _lang === 'cn' ? res.cn : res.en);
+    _attrReg.push({ el, attr, en: res.en, cn: res.cn });
   }
-  function processPhs(root) {
+  function processAttrs(root) {
     const scope = (root && root.nodeType === 1) ? root : document.body;
-    if (scope.hasAttribute && scope.hasAttribute('placeholder')) processPh(scope);
-    scope.querySelectorAll && scope.querySelectorAll('[placeholder]').forEach(processPh);
+    for (const attr of I18N_ATTRS) {
+      if (scope.hasAttribute && scope.hasAttribute(attr)) processAttr(scope, attr);
+      scope.querySelectorAll && scope.querySelectorAll('[' + attr + ']')
+        .forEach(el => processAttr(el, attr));
+    }
   }
 
   function processSubtree(root) {
@@ -28322,8 +28353,8 @@ function sproutPageContext() {
     if (root.nodeType === 3) { processNode(root); return; }
     if (root.nodeType !== 1) return;
     // Before the skip check: an <input> IS a skipped context for text, but its
-    // placeholder is a label like any other.
-    processPhs(root);
+    // placeholder is a label like any other. Same for a tooltip on a chart.
+    processAttrs(root);
     if (inSkippedContext(root)) return;
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     const nodes = [];
@@ -28351,15 +28382,15 @@ function sproutPageContext() {
       if (!e.el.isConnected) { _tipReg.splice(i, 1); continue; }
       e.el.setAttribute('data-tip', lang === 'cn' ? e.cn : e.en);
     }
-    for (let i = _phReg.length - 1; i >= 0; i--) {
-      const e = _phReg[i];
-      if (!e.el.isConnected) { _phReg.splice(i, 1); continue; }
-      // Some forms rewrite a placeholder as the user picks an option (the
-      // supplier channel link swaps in a Taobao/1688 example). Once the hint
-      // is no longer ours, hand it over rather than stamping the old one back.
-      const now = e.el.getAttribute('placeholder');
-      if (now !== e.en && now !== e.cn) { _phReg.splice(i, 1); continue; }
-      e.el.setAttribute('placeholder', lang === 'cn' ? e.cn : e.en);
+    for (let i = _attrReg.length - 1; i >= 0; i--) {
+      const e = _attrReg[i];
+      if (!e.el.isConnected) { _attrReg.splice(i, 1); continue; }
+      // Some forms rewrite these as the user picks an option (the supplier
+      // channel link swaps in a Taobao/1688 example). Once the text is no
+      // longer ours, hand it over rather than stamping the old one back.
+      const now = e.el.getAttribute(e.attr);
+      if (now !== e.en && now !== e.cn) { _attrReg.splice(i, 1); continue; }
+      e.el.setAttribute(e.attr, lang === 'cn' ? e.cn : e.en);
     }
     processSubtree(document.body);  // pick up anything not yet registered
     try { localStorage.setItem(LANG_KEY, lang); } catch {}
