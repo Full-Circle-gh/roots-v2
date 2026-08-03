@@ -2232,7 +2232,18 @@ function renderShipByTile(o) {
   const p = shipByPlan(o);
   const u = shipByUrgency(p, actionable);
   const usingRaw = (p.headlineRaw != null && p.headlineRaw !== '');
-  const headline = usingRaw ? escapeHtml(p.headlineRaw) : cuT(p.headlineEn, p.headlineCn);
+  const headlineText = usingRaw ? String(p.headlineRaw) : cuT(p.headlineEn, p.headlineCn);
+  const headline = usingRaw ? escapeHtml(headlineText) : headlineText;
+  // A right-away order's kicker IS its headline — "Right away" over "Right away",
+  // 立即配送 over 立即配送 — the same word twice in a two-line tile. The list cell
+  // never had this (showKicker is false for kind 'asap'); the drawer renders its
+  // kicker unconditionally, so suppress the echo here. Compared on the RESOLVED
+  // strings, not the kind, so it holds in whichever language is on screen and
+  // catches any future kicker that lands on its own headline. A closed order
+  // relabels to "Requested timing", which no longer matches — and still shows.
+  const kickerText = cuT(p.kickerEn, p.kickerCn);
+  const kickerHtml = (kickerText && kickerText !== headlineText)
+    ? `<div class="kicker">${kickerText}</div>` : '';
   // Verbose urgency badge after the headline — gated on actionable for the same
   // reason as the list cell: a dispatched/closed order's deadline is always in
   // the past, so don't badge it OVERDUE.
@@ -2287,7 +2298,7 @@ function renderShipByTile(o) {
     : '';
   const modeLine = (mode || surcharge || asapStd) ? `<div class="sub">${mode}${surcharge}${asapStd}</div>` : '';
   return `<div>
-    <div class="kicker">${cuT(p.kickerEn, p.kickerCn)}</div>
+    ${kickerHtml}
     <div class="val"${usingRaw ? ' data-no-i18n' : ''}><b style="color: ${u.color};">${headline}</b>${badgeHtml}</div>
     ${subLine}
     ${modeLine}

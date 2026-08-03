@@ -1,4 +1,4 @@
-# Tacet desktop patterns — v4.1 · 2026-07-31
+# Tacet desktop patterns — v4.2 · 2026-08-03
 
 > The rulebook for every desktop admin surface. `tacet-design-system.md` governs how Tacet **looks**. `tacet-brand-concept.md` governs how it **sounds**. `tacet-ia-blueprint.md` governs what **exists**. This file governs **how a page is put together** — so that Orders and Pop-ups feel like the same product despite having different layouts.
 >
@@ -1440,6 +1440,16 @@ git log origin/main..HEAD -- docs/     # anything returned means it is not done
 
 **The full rule and its reasoning are the operational note, not this line** — this document cannot be the only home for it, because a rule living solely in `docs/` is unreachable by exactly the reader it protects: the one whose `docs/` is stale. Found 2026-07-30, when v3.3 and v3.4 sat on a branch that nothing was promoting.
 
+**A commit that changes a service-worker-cached asset bumps `sw.js` in the same commit.** *(Added 2026-08-03.)* Every non-HTML asset — `retail-admin/*.js`, `retail-admin.css`, `td-datetime.js` — is served **stale-while-revalidate**: the cached copy returns instantly and the new one is fetched behind it, so the first load after a deploy runs the *previous* build. Only a changed `CACHE` constant evicts it, and the deploy re-stamps that constant **only when `sw.js` is itself in the commit**. Never leave the bump to a later push — a stamp that lands because someone else shipped an hour after you is luck, not process, and it silently decides whether your commit was ever live.
+
+**Know which class the file is in before you assume.** Page shells are network-first and exempt — `app.html`, `pos.html` and the rest arrive fresh on their own, offline being the only case that reads cache. The check is `public/sw.js`'s own `fetch` handler, and it takes ten seconds:
+
+```bash
+grep -n 'isHTMLRequest\|stale-while-revalidate' public/sw.js   # which branch serves your file
+```
+
+*Recorded 2026-08-03: a suppliers commit shipped `public/app.html` with no bump and was called one push from invisible. It was not — HTML is network-first, so that one was always fine. The claim was wrong and the rule is right; what makes it right is the grep above, not the assumption that prompted it.*
+
 **Per-page checklist**
 
 *Brand*
@@ -1558,6 +1568,18 @@ Small, non-blocking. Resolve during Batch 0.
    published said these were unmade — that was wrong, and it was wrong because the amendment's
    own §7 reads as a to-do list and was taken at its word instead of checked against the
    blueprint. §7 of that document is a record of what was owed in July, not a live queue.)*
+
+---
+
+*v4.2 · 2026-08-03.*
+
+**v4.2 changes — one rule added, in §7. It governs what ships with a commit, not how a page is built. No page rule added, removed or altered.**
+
+### §7 — a cached asset ships with its cache bump
+
+`sw.js` serves every non-HTML asset stale-while-revalidate, so the first load after a deploy runs the *previous* build unless the `CACHE` constant changed — and the deploy re-stamps that constant only when `sw.js` is in the commit itself. The rule was already lore: it lived in two operator memory notes ("admin-JS needs sw.js in the same commit", "CSS ship needs sw.js bump") and nowhere a new reader would find it. §7 is where a commit-time rule belongs.
+
+**The rule ships with the check that scopes it.** Page shells are network-first and exempt, which is not guessable from the outside — so the rule names the `grep` against `public/sw.js`'s own `fetch` handler rather than leaving "any file the service worker caches" to intuition. That distinction is load-bearing in the wrong direction too: a rule that over-claims gets ignored the first time a reader finds a counter-example, and this one had one on the day it was written. See the dated note in §7.
 
 ---
 
