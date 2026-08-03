@@ -17217,6 +17217,7 @@ async function renderSuppliers() {
       <span style="font-size:12px;color:var(--muted);margin-left:auto" id="supCount"></span>
       <span id="autoRefreshIndicator"></span>
     </div>
+    <div id="supNote"></div>
     <div id="supplierListWrap"><div style="padding:14px;color:var(--muted);font-size:13px;text-align:center">Loading 加载中…</div></div>`;
   await loadSuppliers();
   registerAutoRefresh(loadSuppliers);
@@ -17238,14 +17239,40 @@ function _supFilter() {
   if (cnt) cnt.textContent = _supT(`${visible} supplier${visible===1?'':'s'}`, `${visible} 家供应商`);
 }
 
+// A quiet strip above the list, used when a refresh couldn't reach the
+// server: the rows already on screen stay, and this says they may be old.
+// Called with '' on every answer that comes back, so it clears itself.
+function _supNote(msg) {
+  const el = document.getElementById('supNote');
+  if (!el) return;
+  if (!msg) { el.innerHTML = ''; el.dataset.msg = ''; return; }
+  if (el.dataset.msg === msg) return;   // don't re-paint on every retry
+  el.dataset.msg = msg;
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:12px;padding:8px 12px;
+                background:rgba(234,179,8,.10);border:1px solid rgba(234,179,8,.35);border-radius:8px;
+                font-size:12px;color:var(--text)">
+      <span>⚠ ${esc(msg)}</span>
+      <button onclick="loadSuppliers()" style="background:transparent;border:1px solid var(--border);border-radius:6px;
+              padding:2px 10px;font-size:11px;font-family:inherit;cursor:pointer;color:var(--text)">${esc(_supT('Try again', '重试'))}</button>
+    </div>`;
+}
+
 async function loadSuppliers() {
   const wrap = document.getElementById('supplierListWrap');
   if (!wrap) return;
   try {
     const r = await fetch('/api/suppliers');
-    const d = await r.json();
+    // While the app restarts, nginx answers with its own HTML error page.
+    // Handing that to .json() throws a raw engine message ("SyntaxError: The
+    // string did not match the expected pattern") — check the response first
+    // so the catch below has something a person can act on.
+    if (!r.ok) throw new Error('server answered ' + r.status);
+    let d;
+    try { d = await r.json(); } catch { throw new Error('server sent no data'); }
     const sups = d.data || [];
     _suppliersCache = sups;
+    _supNote('');   // the server is answering again
     // Anti-flicker: skip the wrap.innerHTML rewrite when nothing visible
     // has changed since the last render. We fingerprint on the wrap
     // element itself (data attribute) so the check works regardless of
@@ -17563,7 +17590,24 @@ async function loadSuppliers() {
     const cnt = document.getElementById('supCount');
     if (cnt) cnt.textContent = _supT(`${sups.length} supplier${sups.length===1?'':'s'}`, `${sups.length} 家供应商`);
     if (document.getElementById('supSearch')?.value) _supFilter();
-  } catch (e) { wrap.innerHTML = `<div style="padding:14px;color:#c0392b">${esc(String(e))}</div>`; }
+  } catch (e) {
+    console.error('loadSuppliers:', e);
+    // A refresh that fails must not throw away a list that is already on
+    // screen — the rows are still true, they may just be a few minutes old.
+    // Only a first load, with nothing to keep, takes over the panel.
+    if (wrap.querySelector('[data-sup-row]')) {
+      _supNote(_supT("Couldn't reach the server — this list may be out of date",
+                     '无法连接服务器 — 列表可能不是最新的'));
+      return;
+    }
+    wrap.innerHTML = `
+      <div class="sup-empty">
+        <div style="font-size:38px;margin-bottom:10px;opacity:.5">📡</div>
+        <div style="font-weight:700;font-size:14px;color:var(--text);margin-bottom:4px">Couldn't load suppliers · 无法加载供应商</div>
+        <div style="font-size:12px;margin-bottom:14px">The server didn't answer. It may be restarting · 服务器没有响应，可能正在重启</div>
+        <button class="btn btn-secondary btn-sm" onclick="loadSuppliers()">Try again 重试</button>
+      </div>`;
+  }
 }
 
 async function showSupplierForm(id) {
