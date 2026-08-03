@@ -1735,7 +1735,7 @@ function shipByPlan(o) {
       // the Jun 20 ship is). A genuinely missed ship date still flags overdue.
       return {
         kind: 'batch', kickerShow: true,
-        kickerEn: done ? reqEn : 'Deliver', kickerCn: done ? reqCn : '送达时间',
+        kickerEn: done ? reqEn : 'Deliver by', kickerCn: done ? reqCn : '送达时间',
         headlineRaw: arr,
         subEn: `🥗 made fresh · ship ${ship}`,
         subCn: `🥗 现做 · ${ship}发货`,
@@ -1767,13 +1767,13 @@ function shipByPlan(o) {
     // wording read wrong on an in-city Right-away order. Say what the customer
     // actually chose so the floor isn't misled.
     if (o.delivery_slot_kind === 'right_away') {
-      // Kicker is "Requested", not "Ship by" — Right-away is what the CUSTOMER
+      // Kicker is "Right away", not "Ship by" — Right-away is what the CUSTOMER
       // asked for (as-soon-as-possible), not an operator dispatch deadline.
-      // "Ship by → Right away" read as a contradiction; "Requested → Right away"
-      // is what the customer actually chose.
+      // "Ship by → Right away" read as a contradiction. The CN is the live
+      // checkout string (立即配送), not a composed one — vocabulary v1.1.
       return {
         kind: 'asap',
-        kickerEn: done ? reqEn : 'Requested', kickerCn: done ? reqCn : '客户要求',
+        kickerEn: done ? reqEn : 'Right away', kickerCn: done ? reqCn : '立即配送',
         headlineEn: 'Right away', headlineCn: '立即配送',
         urgencyDate: o.placed_at || null, urgencyBasis: 'age',
       };
@@ -1802,7 +1802,7 @@ function shipByPlan(o) {
   const dateLine = valid ? fmtSlotShort(dt) : '';
   return {
     kind: 'scheduled',
-    kickerEn: done ? reqEn : 'Deliver', kickerCn: done ? reqCn : '送达时间',
+    kickerEn: done ? reqEn : 'Booked', kickerCn: done ? reqCn : '顾客预约',
     headlineRaw: label,
     cellSubRaw: (label !== dateLine && dateLine) ? dateLine : null,
     urgencyDate: slotEndAnchor(o.scheduled_for, o.delivery_slot_label), urgencyBasis: 'arrival',

@@ -1,6 +1,6 @@
 # Tacet delivery vocabulary — locked
 
-**v1.0 · 2026-08-02 · Locked by Ash. Derived from `docs/tacet-delivery-status-survey.md` (same date). This document is a SPECIFICATION: every delivery/fulfilment word on every surface must come from these tables. The survey records what existed; this records what is allowed.**
+**v1.1 · 2026-08-03 · adds the orders-list plan kickers. Locked by Ash. Derived from `docs/tacet-delivery-status-survey.md` (same date). This document is a SPECIFICATION: every delivery/fulfilment word on every surface must come from these tables. The survey records what existed; this records what is allowed.**
 
 ## Rules
 
@@ -72,6 +72,23 @@ Every customer-facing status map must cover all nine statuses. Printing a raw in
 | Rider minutes | ~N min · 约 N 分钟 | ~N min · 约 N 分钟 |
 
 Note: the drawer kicker for a recorded arrival currently reads `Arrived · 送达`; it aligns to `Arrived · 已送达`.
+
+## Plan kickers (orders list, Delivery column)
+
+| Condition | Kicker EN | Kicker CN | Kind |
+|---|---|---|---|
+| closed (dispatched/delivered/cancelled/refunded) | Requested timing | 原定时间 | historical |
+| pickup | Pickup time | 取货时间 | promised window |
+| batch with an arrival date | Deliver by | 送达时间 | commitment date |
+| batch without one | Ship by | 最迟发货 | deadline |
+| right-away | Right away | 立即配送 | — |
+| ASAP / nothing chosen | Ship by | 最迟发货 (headline: Courier — ship when ready · 快递 · 备好即发) | deadline |
+| customer-scheduled window | Booked | 顾客预约 | customer-chosen window |
+
+- Batch sub-line: `made fresh · ship <date>` / `现做 · <date>发货`.
+- Urgency tags: `OVERDUE · 已逾期`, `today · 今天`, `tomorrow · 明天` — suppressed once the order is closed.
+- `Booked` here is the same word as the `Booked · 顾客预约` time label; a customer-chosen window uses that word everywhere. `Deliver by` is our commitment; `Booked` is the customer's choice. The bare kicker `Deliver` is retired. `Requested` (bare) is retired; `Requested timing` remains the closed-order kicker only.
+- The right-away CN is `立即配送`, the live customer-facing string in the mini-app checkout slot picker (`miniapp/pages/checkout/checkout.wxml`). It is not `尽快`.
 
 ## Customer notifications (fulfilment-aware)
 
