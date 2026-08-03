@@ -28137,6 +28137,11 @@ function sproutPageContext() {
   // Same idea for help tooltips: their text lives in the data-tip attribute,
   // not a text node, so it needs its own registry. { el, en, cn }.
   const _tipReg = [];
+  // And again for input placeholders. An <input> is deliberately skipped by the
+  // text walker (it must never touch what someone typed), so a placeholder
+  // written as "EN · CN" used to sit there in both languages — the supplier
+  // search box being the one people notice. { el, en, cn }.
+  const _phReg = [];
 
   // Never touch text inside these — code, user input, or vector graphics
   // (chart labels). Translating them would corrupt rendering.
@@ -28285,10 +28290,41 @@ function sproutPageContext() {
     scope.querySelectorAll && scope.querySelectorAll('[data-tip]').forEach(processTip);
   }
 
+  // Placeholders sit on the very elements the text walker refuses to enter,
+  // so they get their own pass — same classifier, so "🔍 Search… · 搜索…"
+  // splits exactly the way the label next to it does. A single-language
+  // placeholder ("0.00", "中文名", a URL example) classifies as null and is
+  // left alone.
+  function phOptedOut(el) {
+    for (let n = el; n; n = n.parentElement) {
+      if (n.dataset && n.dataset.noI18n != null) return true;
+    }
+    return false;
+  }
+  function processPh(el) {
+    if (el.__i18nPhDone) return;
+    const raw = el.getAttribute('placeholder') || '';
+    if (!raw || phOptedOut(el)) return;
+    const res = classify(raw);
+    if (!res) return;
+    el.__i18nPhDone = true;
+    el.setAttribute('placeholder', _lang === 'cn' ? res.cn : res.en);
+    _phReg.push({ el, en: res.en, cn: res.cn });
+  }
+  function processPhs(root) {
+    const scope = (root && root.nodeType === 1) ? root : document.body;
+    if (scope.hasAttribute && scope.hasAttribute('placeholder')) processPh(scope);
+    scope.querySelectorAll && scope.querySelectorAll('[placeholder]').forEach(processPh);
+  }
+
   function processSubtree(root) {
     if (!root) return;
     if (root.nodeType === 3) { processNode(root); return; }
-    if (root.nodeType !== 1 || inSkippedContext(root)) return;
+    if (root.nodeType !== 1) return;
+    // Before the skip check: an <input> IS a skipped context for text, but its
+    // placeholder is a label like any other.
+    processPhs(root);
+    if (inSkippedContext(root)) return;
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     const nodes = [];
     let n;
@@ -28314,6 +28350,16 @@ function sproutPageContext() {
       const e = _tipReg[i];
       if (!e.el.isConnected) { _tipReg.splice(i, 1); continue; }
       e.el.setAttribute('data-tip', lang === 'cn' ? e.cn : e.en);
+    }
+    for (let i = _phReg.length - 1; i >= 0; i--) {
+      const e = _phReg[i];
+      if (!e.el.isConnected) { _phReg.splice(i, 1); continue; }
+      // Some forms rewrite a placeholder as the user picks an option (the
+      // supplier channel link swaps in a Taobao/1688 example). Once the hint
+      // is no longer ours, hand it over rather than stamping the old one back.
+      const now = e.el.getAttribute('placeholder');
+      if (now !== e.en && now !== e.cn) { _phReg.splice(i, 1); continue; }
+      e.el.setAttribute('placeholder', lang === 'cn' ? e.cn : e.en);
     }
     processSubtree(document.body);  // pick up anything not yet registered
     try { localStorage.setItem(LANG_KEY, lang); } catch {}
