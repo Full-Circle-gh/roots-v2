@@ -5,21 +5,23 @@
 -- ⚠️  THIS IS DESTRUCTIVE AND PERMANENT. There is no undo.
 --     BACK THE DATABASE UP FIRST. Do not skip this.
 --
---       cp /root/roots-v2/data/roots.db /root/roots-v2/data/roots.db.bak-$(date +%Y%m%d-%H%M%S)
+--       sqlite3 /root/roots-v2/data/roots.db \
+--         ".backup '/root/roots-v2/data/roots.db.bak-$(date +%Y%m%d-%H%M%S)'"
 --
 --     Check the backup is real before going further:
 --
 --       ls -lh /root/roots-v2/data/roots.db.bak-*
 --       sqlite3 /root/roots-v2/data/roots.db.bak-<stamp> "PRAGMA integrity_check;"
 --
---     One caveat on cp: the app is running and writing, so a plain copy can
---     catch the file mid-write and land a torn backup. The integrity_check
---     above is what tells you whether that happened — if it does not say "ok",
---     take it again. If you want a copy that cannot tear, use sqlite's own
---     hot backup instead, which reads through the same locks the app uses:
+--     It must say "ok". Anything else, take it again.
 --
---       sqlite3 /root/roots-v2/data/roots.db \
---         ".backup '/root/roots-v2/data/roots.db.bak-$(date +%Y%m%d-%H%M%S)'"
+--     DO NOT back this up with cp. This database runs in WAL mode, so recent
+--     committed transactions live in roots.db-wal, not in roots.db. Copying
+--     roots.db on its own leaves them behind — the copy opens fine and looks
+--     healthy, it is just silently missing the newest writes, which is the
+--     worst way for a backup to fail. `.backup` above reads through the same
+--     locks the app uses and folds the WAL in, so what you get is the whole
+--     database as of that moment.
 --
 -- WHAT THIS DOES
 --   Removes tenants 2, 4, 5, 6 and 7 and everything belonging to them, from
