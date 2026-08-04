@@ -126,25 +126,22 @@ function aNew(where, params) {
   return { rows, groups: [...bySup.values()].filter(g => g.outstanding > 0.01).sort((a, b) => b.outstanding - a.outstanding) };
 }
 
-// The shared helper both new forms use: allocations selected as a plain column
-// and summed in JavaScript, so the source column survives to the boundary.
+// Verbatim copies of the two helpers the shipped code now uses.
 function coveredByLine(lineIds) {
   const out = new Map();
-  if (!lineIds.length) return out;
-  const stmtCache = new Map();
   for (let i = 0; i < lineIds.length; i += 400) {
     const chunk = lineIds.slice(i, i + 400);
-    let stmt = stmtCache.get(chunk.length);
-    if (!stmt) {
-      stmt = db.prepare(`SELECT line_id, allocated_amount FROM invoice_lines
-                          WHERE line_id IN (${chunk.map(() => '?').join(',')}) ORDER BY id`);
-      stmtCache.set(chunk.length, stmt);
-    }
-    for (const a of stmt.all(...chunk)) {
-      out.set(a.line_id, (out.get(a.line_id) || 0) + (a.allocated_amount || 0));
-    }
+    const rows = db.prepare(`SELECT line_id, allocated_amount FROM invoice_lines
+                              WHERE line_id IN (${chunk.map(() => '?').join(',')})
+                              ORDER BY id`).all(...chunk);
+    for (const a of rows) out.set(a.line_id, (out.get(a.line_id) || 0) + (a.allocated_amount || 0));
   }
   return out;
+}
+function allocatedForLine(lineId) {
+  return db.prepare('SELECT allocated_amount FROM invoice_lines WHERE line_id = ? ORDER BY id')
+    .all(lineId)
+    .reduce((sum, r) => sum + (r.allocated_amount || 0), 0);
 }
 
 console.log('══ A · GET /api/retail-admin/bills/outstanding ══');
@@ -198,8 +195,6 @@ const clampOldCD = db.prepare(`
 const clampNew = db.prepare(`
     SELECT pli.id, pli.qty, pli.cost_per_unit
       FROM po_line_items pli WHERE pli.id=?`);
-const clampAlloc = db.prepare(`
-    SELECT allocated_amount FROM invoice_lines WHERE line_id=? ORDER BY id`);
 
 console.log('══ B, C/D · the two allocation clamps ══');
 const allLineIds = db.prepare('SELECT id FROM po_line_items ORDER BY id').all().map(r => r.id);
@@ -207,7 +202,7 @@ let clampCases = 0, clampLines = 0;
 for (const lineId of allLineIds) {
   const oB = clampOldB.get(lineId), oCD = clampOldCD.get(lineId), nR = clampNew.get(lineId);
   if (!eq(oB.already, oCD.already_allocated)) bad(`clamp line ${lineId}: B alias ${oB.already} vs C/D alias ${oCD.already_allocated}`);
-  const alreadyNew = clampAlloc.all(lineId).reduce((s, r) => s + (r.allocated_amount || 0), 0);
+  const alreadyNew = allocatedForLine(lineId);
   if (!eq(oB.already, alreadyNew)) bad(`clamp line ${lineId}: already ${oB.already} vs ${alreadyNew}`);
 
   const lineTotalOld = (oB.qty || 0) * (oB.cost_per_unit || 0);
@@ -315,6 +310,55 @@ for (const sc of E_SCOPES) {
   console.log(`  ${sc.name}: ${eOld(sc.where, []).length} lines, ${cases.length} filter cases`);
 }
 console.log(`  compared ${eRows} row readings`);
+console.log('');
+
+// ════════════════════════════════════════════════════════════════════════════
+// F — SQL SUM(...) vs JavaScript reduce, over MULTI-ROW groups
+// ════════════════════════════════════════════════════════════════════════════
+// Live invoice_lines carries at most one allocation per PO line, so sites A-E
+// never exercise the only new arithmetic the change introduces: adding several
+// REAL money values in JavaScript where SQLite added them. SQLite 3.43+ sums
+// floats with Kahan-Babuska compensation and a plain `reduce` does not, so the
+// two are not identical by construction and the question has to be asked of
+// real data. This runs it over every REAL money column in this database that
+// has multi-row groups, in the same id order the new helpers read.
+console.log('══ F · SQL SUM vs JS reduce over multi-row groups ══');
+const SUM_CASES = [
+  ['invoice_lines',     'allocated_amount', 'line_id'],
+  ['invoice_lines',     'allocated_amount', 'invoice_id'],
+  ['po_line_items',     'total_cost',       'po_id'],
+  ['po_line_items',     'cost_per_unit',    'po_id'],
+  ['retail_order_items', 'line_total',      'order_id'],
+  ['retail_order_items', 'unit_price',      'order_id'],
+  ['retail_payments',   'amount',           'order_id'],
+  ['expense_entries',   'amount',           'po_id'],
+  ['retail_order_addons', 'amount',         'order_id'],
+  ['sales_entries',     'total',            'date'],
+  ['retail_refund_events', 'amount',        'order_id'],
+];
+for (const [tbl, col, key] of SUM_CASES) {
+  let groups = 0, multi = 0, diff = 0, worst = 0, worstAt = null;
+  let sqlRows;
+  try {
+    sqlRows = db.prepare(`SELECT ${key} AS k, COALESCE(SUM(${col}),0) AS s, COUNT(*) AS n
+                            FROM ${tbl} WHERE ${key} IS NOT NULL GROUP BY ${key}`).all();
+  } catch (e) { console.log(`  ${tbl}.${col} by ${key}: skipped (${e.message})`); continue; }
+  const detail = db.prepare(`SELECT ${col} AS v FROM ${tbl} WHERE ${key} = ? ORDER BY id`);
+  for (const g of sqlRows) {
+    groups++;
+    if (g.n > 1) multi++;
+    const js = detail.all(g.k).reduce((s, r) => s + (r.v || 0), 0);
+    if (!eq(g.s, js)) {
+      diff++;
+      const d = Math.abs(g.s - js);
+      if (d > worst) { worst = d; worstAt = `${key}=${g.k} n=${g.n} sql=${g.s} js=${js}`; }
+    }
+  }
+  const note = diff ? `  DIFFERS in ${diff} (worst |delta| ${worst} at ${worstAt})` : '  identical';
+  console.log(`  ${tbl}.${col} by ${key}: ${groups} groups (${multi} multi-row) ->${note}`);
+  // A difference here is float summation order, not a unit error. It is
+  // reported, not counted as a mismatch of the five sites.
+}
 console.log('');
 
 // ── Non-zero coverage: prove the comparison ran over data that is not all 0 ──
