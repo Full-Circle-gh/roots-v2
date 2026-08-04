@@ -169,9 +169,19 @@ router.get('/api/retail-admin/suppliers/:id', requireRetailAdmin, (req, res) => 
            MAX(po.date) AS last_date
       FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
      WHERE COALESCE(po.scope,'kitchen')='retail' AND COALESCE(po.tenant_id,1) = ${tid} AND ${SUP_MATCH}`).get(s.name) || {};
-  const owed = db.prepare(
-    `SELECT COALESCE(SUM(amount),0) AS owed, COUNT(*) AS n FROM invoices WHERE scope='retail' AND COALESCE(tenant_id,1) = ${tid} AND supplier=? AND paid_at IS NULL`
-  ).get(s.name) || {};
+  // `spend` above and `owed` below come from columns that do not share a unit:
+  // po_line_items.total_cost stays a decimal amount, while invoices.amount is a
+  // whole-cent integer in Postgres. They are built by two statements, so no
+  // single row ever carries both — but the scorecard folds them into one payload
+  // and the supplier screen renders them as adjacent tiles, which puts them back
+  // together with nothing to tell them apart. Reading the bill amounts as a
+  // plain column and summing them here keeps invoices.amount identifiable all
+  // the way to the boundary. `spend` needs nothing; its column never changes
+  // unit. The bill count comes from the rows we already read.
+  const owedRows = db.prepare(
+    `SELECT amount FROM invoices WHERE scope='retail' AND COALESCE(tenant_id,1) = ${tid} AND supplier=? AND paid_at IS NULL ORDER BY id`
+  ).all(s.name);
+  const owed = owedRows.reduce((sum, r) => sum + (r.amount || 0), 0);
   const priceList = db.prepare(`
     SELECT pli.store_product_id,
            MAX(pli.name_en) AS name_en, MAX(pli.name_cn) AS name_cn, MAX(pli.sku) AS sku,
@@ -192,7 +202,7 @@ router.get('/api/retail-admin/suppliers/:id', requireRetailAdmin, (req, res) => 
   }
   const scorecard = {
     order_count: stat.order_count || 0, spend: stat.spend || 0, last_date: stat.last_date || null,
-    owed: owed.owed || 0, owed_count: owed.n || 0, product_count: priceList.length,
+    owed, owed_count: owedRows.length, product_count: priceList.length,
   };
   res.json({ success: true, data: { ...s, documents, recent_pos: recentPOs, scorecard, price_list: priceList } });
 });

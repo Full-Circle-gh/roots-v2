@@ -393,6 +393,29 @@ This is the case a result-row boundary layer misses completely, because the valu
 `retail.js:14352` (`SORT_COLS` map, `spend`/`wallet`). `×100` is monotonic, so ordering within one
 database is unchanged. **Except** `store-admin.js:524`, which sorts across databases — see §5.
 
+**(vi) Two aggregates in *separate* statements, combined by JavaScript into one payload.**
+The handler-level form of (ii). No single statement carries two units, so a statement-by-statement
+reading of the code passes it; the mixing happens where JavaScript assembles the response, and the
+screen renders the two side by side. `routes/finance.js:287-293` under (ii) is already this shape —
+three `SELECT COALESCE(SUM(...),0) AS s, COUNT(*) AS c` statements in three adjacent lines — and is
+resolved by §8 rather than by a code change.
+
+- `routes/retail-purchasing.js:166-174` — `GET /api/retail-admin/suppliers/:id`, the supplier
+  scorecard. `spend` is `COALESCE(SUM(pli.total_cost),0)`, and `po_line_items.total_cost` is
+  `numeric(14,6)` **yuan** on both engines — it never changes unit. `owed` is
+  `COALESCE(SUM(amount),0)` over `invoices`, and `invoices.amount` is **`bigint` cents**. Both are
+  folded into one `scorecard` object at `:193-196` and rendered as adjacent tiles by
+  `public/retail-admin/16-purchasing.js:1585-1586` — *Spend, all time* / 累计采购 beside
+  *Owed now* / 当前应付, both through the same yuan formatter, with `owed_count` as the "bills"
+  foot on the second tile.
+  **Correct on SQLite today** — `invoices.amount` is `REAL` yuan (`database.js:244`), so both tiles
+  are yuan and both are right. Wrong only after cutover, when "Owed now" reads exactly 100× too
+  high next to a correct "Spend, all time". Nothing errors: both arrive in JavaScript as `number`.
+  **Fixed** — `owed` now reads `amount` as a plain column and sums it in JavaScript, and the bill
+  count comes from the row count, so the source column survives to the boundary. `spend` is
+  untouched. Verified old-against-new on live SQLite before the change; comparison counts are in
+  the commit message.
+
 ---
 
 ## 3 — Where money is written

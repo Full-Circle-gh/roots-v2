@@ -550,6 +550,14 @@ const SOURCE_CHECKS = [
     s => (s.match(/remaining\s+= Math\.max\(0, lineTotal - allocatedForLine\(lineId\)\)/g) || []).length === 2],
   ['routes/finance.js',           'outstanding-lines takes coverage from the map',
     s => /const covered = round\(allocated\.get\(r\.line_id\) \|\| 0\);/.test(s)],
+  ['routes/retail-purchasing.js', 'no pre-summed invoice amount left',
+    s => !/SUM\(amount\)[\s\S]{0,80}?FROM invoices/.test(s)],
+  ['routes/retail-purchasing.js', 'the supplier scorecard reads bill amounts as a column and reduces',
+    s => /const owedRows = db\.prepare\([\s\S]{0,320}?SELECT amount FROM invoices[\s\S]{0,200}?const owed = owedRows\.reduce\(\(sum, r\) => sum \+ \(r\.amount \|\| 0\), 0\);/.test(s)],
+  ['routes/retail-purchasing.js', 'the bill count comes from the rows read, not COUNT(*)',
+    s => /owed, owed_count: owedRows\.length,/.test(s)],
+  ['routes/retail-purchasing.js', 'the supplier spend is still summed in SQL — its column never changes unit',
+    s => /COALESCE\(SUM\(pli\.total_cost\),0\) AS spend/.test(s)],
 ];
 for (const [rel, what, test] of SOURCE_CHECKS) {
   let src = '';
