@@ -372,6 +372,45 @@ const aAll = aOld(`1=1`, []);
 console.log(`  A groups with non-zero outstanding: ${aAll.groups.length}, largest = ${aAll.groups[0] ? aAll.groups[0].outstanding : 'n/a'}`);
 console.log('');
 
+// ════════════════════════════════════════════════════════════════════════════
+// G — the "new form" tested above is the one actually deployed
+// ════════════════════════════════════════════════════════════════════════════
+// Sections A-E compare against copies of the new form written into this file.
+// That proves nothing about the running code unless the copies match it, so
+// read the deployed sources off the box and assert the shapes are there.
+console.log('══ G · deployed source ══');
+const fs = require('fs');
+const APP = process.env.ROOTS_APP || '/root/roots-v2';
+const SOURCE_CHECKS = [
+  ['routes/retail-purchasing.js', 'no pre-summed allocation left', s => !/SUM\(allocated_amount\)/.test(s)],
+  ['routes/finance.js',           'no pre-summed allocation left', s => !/SUM\(allocated_amount\)/.test(s)],
+  ['routes/retail-purchasing.js', 'allocatedForLine reads the column and reduces',
+    s => /allocatedForLine[\s\S]{0,220}?SELECT allocated_amount FROM invoice_lines WHERE line_id=\? ORDER BY id[\s\S]{0,160}?reduce\(\(sum, r\) => sum \+ \(r\.allocated_amount \|\| 0\), 0\)/.test(s)],
+  ['routes/finance.js',           'allocatedForLine reads the column and reduces',
+    s => /allocatedForLine[\s\S]{0,220}?SELECT allocated_amount FROM invoice_lines WHERE line_id = \? ORDER BY id[\s\S]{0,160}?reduce\(\(sum, r\) => sum \+ \(r\.allocated_amount \|\| 0\), 0\)/.test(s)],
+  ['routes/retail-purchasing.js', 'allocatedByLine reads the column and sums per line',
+    s => /allocatedByLine[\s\S]{0,600}?SELECT line_id, allocated_amount FROM invoice_lines[\s\S]{0,300}?out\.set\(a\.line_id, \(out\.get\(a\.line_id\) \|\| 0\) \+ \(a\.allocated_amount \|\| 0\)\)/.test(s)],
+  ['routes/finance.js',           'allocatedByLine reads the column and sums per line',
+    s => /allocatedByLine[\s\S]{0,600}?SELECT line_id, allocated_amount FROM invoice_lines[\s\S]{0,300}?out\.set\(a\.line_id, \(out\.get\(a\.line_id\) \|\| 0\) \+ \(a\.allocated_amount \|\| 0\)\)/.test(s)],
+  ['routes/retail-purchasing.js', 'line_total multiplied in JavaScript',
+    s => /r\.line_total = \(r\.qty \|\| 0\) \* \(r\.cost_per_unit \|\| 0\);/.test(s)],
+  ['routes/retail-purchasing.js', 'the bills clamp subtracts the JS-summed allocation',
+    s => /remaining = Math\.max\(0, lineTotal - allocatedForLine\(lineId\)\)/.test(s)],
+  ['routes/finance.js',           'both invoice clamps subtract the JS-summed allocation',
+    s => (s.match(/remaining\s+= Math\.max\(0, lineTotal - allocatedForLine\(lineId\)\)/g) || []).length === 2],
+  ['routes/finance.js',           'outstanding-lines takes coverage from the map',
+    s => /const covered = round\(allocated\.get\(r\.line_id\) \|\| 0\);/.test(s)],
+];
+for (const [rel, what, test] of SOURCE_CHECKS) {
+  let src = '';
+  try { src = fs.readFileSync(`${APP}/${rel}`, 'utf8'); }
+  catch (e) { bad(`G ${rel}: unreadable (${e.message})`); continue; }
+  const ok = test(src);
+  if (!ok) bad(`G ${rel}: ${what}`);
+  console.log(`  ${ok ? 'ok  ' : 'FAIL'}  ${rel} — ${what}`);
+}
+console.log('');
+
 console.log(FAILURES === 0 ? 'RESULT=IDENTICAL (0 mismatches)' : `RESULT=MISMATCHES (${FAILURES})`);
 db.close();
 process.exit(FAILURES === 0 ? 0 : 1);
