@@ -9,3 +9,12 @@
 # stored on the server with CRLF endings. Keep its bytes verbatim so tracking
 # it never rewrites the file that is already on disk there.
 /scripts/_guanyi_pricing.json -text
+
+# The Postgres rehearsal scripts and the proposed schema are the verbatim
+# record of a run that already happened on the Linux box, and they checksum
+# against the copies still sitting there. They are stored LF, but a Windows
+# checkout was handing back CRLF — which inflates every file and, worse, turns
+# the shebang into "#!/usr/bin/env python3\r", an interpreter that does not
+# exist. Pin them so the working copy always matches the committed bytes.
+/scripts/postgres-migration/*.py text eol=lf
+/docs/tacet-postgres-schema-proposed.sql text eol=lf
