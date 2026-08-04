@@ -57,6 +57,7 @@ const BACKGROUND_DIRS = ['scripts'];
 // the output; nothing is dropped silently.
 const SKIP = new Set([
   'scripts/diagnose_store_hours_seam.js',   // the side-by-side harness: raw side is the point
+  'scripts/diagnose_seam_batch.js',         // the batch harness: holds a raw handle as the comparison's raw side
   'scripts/db-seam-coverage.js',            // this reader itself
 ]);
 
