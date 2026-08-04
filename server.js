@@ -720,28 +720,15 @@ app.get('/kitchen-manifest.webmanifest', (req, res) => {
   });
 });
 
-// Restock station shell. Same PWA pattern as /pos and /kitchen — public
-// route so the manifest validates; page self-auths against the `restock`
-// permission via /api/auth/me. Mobile-first restock-creation flow with
-// barcode-gun support, voice input, and search-everywhere-style UX.
-app.get('/restock', (req, res) => {
-  res.set('Cache-Control', 'no-cache');
-  res.sendFile(path.join(__dirname, 'public', 'restock.html'));
-});
-app.get('/restock-manifest.webmanifest', (req, res) => {
-  res.type('application/manifest+json').sendFile(path.join(__dirname, 'public', 'restock-manifest.webmanifest'));
-});
-['restock-icon-192.png','restock-icon-512.png','restock-icon-192-maskable.png','restock-icon-512-maskable.png'].forEach(name => {
-  app.get('/' + name, (req, res) => {
-    res.set('Cache-Control', 'public, max-age=86400');
-    res.sendFile(path.join(__dirname, 'public', name));
-  });
-});
+// The /restock station shell was removed on 2026-08-04 — the restock flow is
+// not used; warehouse staff do not raise restock orders anywhere. Gone with it:
+// its manifest and its four icons. The `/api/restock/*` API in routes/restock.js
+// stays — app.html and kitchen.html still drive restock orders through it.
 
 // Quick Stock — phone-first inventory PWA for shop staff. Per-tenant add-on
 // (toggled in the online-store backend under Settings → Quick Stock). Same
-// public-route PWA pattern as /pos, /kitchen and /restock so the manifest
-// start_url validates on install; the page self-authenticates against
+// public-route PWA pattern as /kitchen so the manifest start_url
+// validates on install; the page self-authenticates against
 // /api/auth/me and bounces unauthenticated visitors to /login. Editing is
 // gated server-side per store (users.retail_store_id) by the stock APIs.
 app.get('/stock', (req, res) => {
