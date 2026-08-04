@@ -1,0 +1,76 @@
+name: Read-only prod query
+
+# Runs ONE committed, reviewable read-only diagnostic against the live server
+# and prints its output to the Actions log. It ships nothing, restarts nothing,
+# and touches no pm2 process — it copies the named script into /tmp on the box,
+# runs it with node, and deletes it.
+#
+# It exists because verification work needs to read the live SQLite database
+# from an environment that has no direct SSH to the host, and the deploy key is
+# a repository secret rather than something a developer machine has to hold.
+# The script it runs opens SQLite with `readonly: true` and PROVES that on the
+# connection by attempting a write and aborting if the write is accepted.
+#
+# Manual dispatch only. Same DEPLOY_HOST / DEPLOY_SSH_KEY secrets as deploy.yml.
+
+on:
+  workflow_dispatch:
+    inputs:
+      script:
+        description: "Path (repo-relative) of the read-only diagnostic to run"
+        required: true
+        default: scripts/diagnose_money_unit_split.js
+
+concurrency:
+  group: ro-query
+  cancel-in-progress: false
+
+jobs:
+  query:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Refuse anything outside the diagnostic set
+        run: |
+          set -euo pipefail
+          S='${{ inputs.script }}'
+          case "$S" in
+            scripts/diagnose_*.js) ;;
+            *) echo "::error::Only scripts/diagnose_*.js may be run here (got '$S')."; exit 1 ;;
+          esac
+          [ -f "$S" ] || { echo "::error::$S is not in this checkout."; exit 1; }
+          echo "Will run $S"
+
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          cat > ~/.ssh/config <<EOF
+          Host prod
+            HostName $DEPLOY_HOST
+            User root
+            IdentityFile ~/.ssh/id_deploy
+            StrictHostKeyChecking accept-new
+            ConnectTimeout 20
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Run it
+        run: |
+          set -euo pipefail
+          S='${{ inputs.script }}'
+          REMOTE="/tmp/ro-query-$GITHUB_RUN_ID.js"
+          scp -q "$S" "prod:$REMOTE"
+          set +e
+          ssh prod "node '$REMOTE'"; RC=$?
+          set -e
+          ssh prod "rm -f '$REMOTE'"
+          echo "exit=$RC"
+          exit $RC
