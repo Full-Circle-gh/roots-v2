@@ -4,3 +4,8 @@
 # (the deploy hook + deploy scripts run under Git Bash / on the Linux server).
 *.sh text eol=lf
 *.hook text eol=lf
+
+# The gzgrocery price list was converted from a Windows spreadsheet and is
+# stored on the server with CRLF endings. Keep its bytes verbatim so tracking
+# it never rewrites the file that is already on disk there.
+/scripts/_guanyi_pricing.json -text

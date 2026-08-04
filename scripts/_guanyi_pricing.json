@@ -1,0 +1,1829 @@
+[
+{
+"sku": "1-10",
+"raw_sku": "GVF 1-10",
+"name_en": "Creamy Hummus Served",
+"name_cn": "GVF 1-10中东鹰嘴豆泥（冷藏）",
+"excel_retail": 38.0,
+"discount": 0.2,
+"excel_gz_price": 30.400000000000002
+},
+{
+"sku": "1-15",
+"raw_sku": "GVF 1-15",
+"name_en": "Govegan! Matbucha Salad",
+"name_cn": "GVF 1-15 沙拉250g,冷藏",
+"excel_retail": 38.0,
+"discount": 0.2,
+"excel_gz_price": 30.400000000000002
+},
+{
+"sku": "1-20",
+"raw_sku": "GVF 1-20",
+"name_en": "Arugula Basil Pesto",
+"name_cn": "GVF 1-20 阿古拉酱 150g （冷藏）",
+"excel_retail": 38.0,
+"discount": 0.2,
+"excel_gz_price": 30.400000000000002
+},
+{
+"sku": "1-30",
+"raw_sku": "GVF 1-30",
+"name_en": "Tzatziki",
+"name_cn": "GVF 1-30莳萝柠檬酸奶酱（冷藏）",
+"excel_retail": 43.0,
+"discount": 0.2,
+"excel_gz_price": 34.4
+},
+{
+"sku": "1-40",
+"raw_sku": "GVF 1-40",
+"name_en": "Labneh (Probiotic sour cream)",
+"name_cn": "GVF 1-40 拿芭纳酱220g（冷藏）",
+"excel_retail": 57.0,
+"discount": 0.2,
+"excel_gz_price": 45.6
+},
+{
+"sku": "1-50",
+"raw_sku": "GVF 1-50",
+"name_en": "Chickpeas Salad",
+"name_cn": "GVF 1-50 鹰嘴豆沙拉 230g （冷藏）",
+"excel_retail": 38.0,
+"discount": 0.2,
+"excel_gz_price": 30.400000000000002
+},
+{
+"sku": "1-70",
+"raw_sku": "GVF 1-70",
+"name_en": "GoVegan! Garlic Dill Sour Cream",
+"name_cn": "GVF 1-70 蒜香莳萝酸奶酪220g",
+"excel_retail": 42.0,
+"discount": 0.2,
+"excel_gz_price": 33.6
+},
+{
+"sku": "1-80",
+"raw_sku": "GVF 1-80",
+"name_en": "GoVegan! OliveN'Cream",
+"name_cn": "GVF 1-80 橄榄酸奶酪 220g",
+"excel_retail": 42.0,
+"discount": 0.2,
+"excel_gz_price": 33.6
+},
+{
+"sku": "1-90",
+"raw_sku": "GVF-1-90",
+"name_en": "Classic Sour Cream",
+"name_cn": "GVF-1-90经典酸奶油（冷藏）",
+"excel_retail": 38.0,
+"discount": 0.2,
+"excel_gz_price": 30.400000000000002
+},
+{
+"sku": "1-100",
+"raw_sku": "GVF 1-100",
+"name_en": "Blueberries Chia Jam",
+"name_cn": "GVF 1-100 蓝莓奇亚籽果酱 125g （冷藏）",
+"excel_retail": 39.0,
+"discount": 0.2,
+"excel_gz_price": 31.200000000000003
+},
+{
+"sku": "1-110",
+"raw_sku": "GV 1-110",
+"name_en": "GoVegan！Strawberry Lemon Jam",
+"name_cn": "GV 1-110  柠檬草莓酱 220g  （冷藏）",
+"excel_retail": 43.0,
+"discount": 0.2,
+"excel_gz_price": 34.4
+},
+{
+"sku": "1-120",
+"raw_sku": "GVF1-120",
+"name_en": "Apple Pie Overnight Oats",
+"name_cn": "GVF1-120 苹果绵绵燕麦 250g （冷藏）",
+"excel_retail": 27.0,
+"discount": 0.2,
+"excel_gz_price": 21.6
+},
+{
+"sku": "1-130",
+"raw_sku": "GVF 1-130",
+"name_en": "Medium Size Probiotic Coconut Yogurt - Plain Flavor",
+"name_cn": "GVF 1-130 大椰益生菌200ml（中） （冷藏）",
+"excel_retail": 44.0,
+"discount": 0.2,
+"excel_gz_price": 35.2
+},
+{
+"sku": "1-140",
+"raw_sku": "GVF 1-140",
+"name_en": "Big Size Probiotic Coconut Yogurt - Plain Flavor",
+"name_cn": "GVF 1-140 纯素椰子酸奶（大）500g （冷藏）",
+"excel_retail": 83.0,
+"discount": 0.2,
+"excel_gz_price": 66.4
+},
+{
+"sku": "1-150",
+"raw_sku": "GVF 1-150",
+"name_en": "Probiotic Coconut Yogurt - Vanilla Flavor",
+"name_cn": "GVF 1-150 纯素椰子酸奶-香草味100g （冷藏）",
+"excel_retail": 29.0,
+"discount": 0.2,
+"excel_gz_price": 23.200000000000003
+},
+{
+"sku": "1-160",
+"raw_sku": "GVF 1-160",
+"name_en": "Medium Size Probiotic Coconut Yogurt - Vanilla Flavor",
+"name_cn": "GVF 1-160 纯素椰子酸奶-香草味200g （冷藏）",
+"excel_retail": 48.0,
+"discount": 0.2,
+"excel_gz_price": 38.400000000000006
+},
+{
+"sku": "1-180",
+"raw_sku": "GVF 1-180",
+"name_en": "Probiotic Coconut Yogurt -Peach Flavor",
+"name_cn": "GVF 1-180 纯素椰子酸奶-桃子味（小）100g (冷藏）",
+"excel_retail": 29.0,
+"discount": 0.2,
+"excel_gz_price": 23.200000000000003
+},
+{
+"sku": "1-190",
+"raw_sku": "GVF 1-190",
+"name_en": "Medium Size Probiotic Coconut Yogurt - Peach Flavor",
+"name_cn": "GVF 1-190 纯素椰子酸奶-桃子味（中）200g (冷藏）",
+"excel_retail": 48.0,
+"discount": 0.2,
+"excel_gz_price": 38.400000000000006
+},
+{
+"sku": "1-210",
+"raw_sku": "GVF 1-210",
+"name_en": "GoVegan! Strawberry coco parfait",
+"name_cn": "GVF 1-210 草莓椰椰巴菲 100g",
+"excel_retail": 30.0,
+"discount": 0.2,
+"excel_gz_price": 24.0
+},
+{
+"sku": "1-211",
+"raw_sku": "GVF 1-211",
+"name_en": "MEDJOOL BOATS",
+"name_cn": "GVF 1-211 椰枣小船  (冷藏）",
+"excel_retail": 35.0,
+"discount": 0.2,
+"excel_gz_price": 28.0
+},
+{
+"sku": "1-220",
+"raw_sku": "GVF 1-220",
+"name_en": "Onion Pickles",
+"name_cn": "GVF 1-220 腌洋葱 （冷藏）",
+"excel_retail": 30.0,
+"discount": 0.2,
+"excel_gz_price": 24.0
+},
+{
+"sku": "1-225",
+"raw_sku": "GV 1-225",
+"name_en": "Spicy Green Chili Dip – Zhoug",
+"name_cn": "GV 1-225 辣味青椒酱",
+"excel_retail": 42.0,
+"discount": 0.2,
+"excel_gz_price": 33.6
+},
+{
+"sku": "1-240",
+"raw_sku": "GVF 1-240",
+"name_en": "Good Old Fashioned Harrisa Paste",
+"name_cn": "GVF 1-240 哈辣酱 235g （冷藏）",
+"excel_retail": 35.0,
+"discount": 0.2,
+"excel_gz_price": 28.0
+},
+{
+"sku": "1-250",
+"raw_sku": "GVF 1-250",
+"name_en": "Pitted Kalamata & Green Olives Mix",
+"name_cn": "GVF 1-250 去核混合橄榄300g (冷藏）",
+"excel_retail": 38.0,
+"discount": 0.2,
+"excel_gz_price": 30.400000000000002
+},
+{
+"sku": "1-260",
+"raw_sku": "GVF 1-260",
+"name_en": "Energy Cubes",
+"name_cn": "GVF 1-260能量棒（小）60g （冷藏）",
+"excel_retail": 20.0,
+"discount": 0.2,
+"excel_gz_price": 16.0
+},
+{
+"sku": "1-270",
+"raw_sku": "GVF 1-270",
+"name_en": "Energy Cubes Big Size",
+"name_cn": "GVF 1-270花生奇亚能量块（大）200g (冷藏）",
+"excel_retail": 62.0,
+"discount": 0.2,
+"excel_gz_price": 49.6
+},
+{
+"sku": "1-280",
+"raw_sku": "GVF 1-280",
+"name_en": "Cooked Brown Rice",
+"name_cn": "GVF 1-280 现食糙米饭（冷藏）",
+"excel_retail": 11.0,
+"discount": 0.3,
+"excel_gz_price": 7.699999999999999
+},
+{
+"sku": "1-290",
+"raw_sku": "GVF 1-290",
+"name_en": "Cooked Mix Color Quinoa",
+"name_cn": "GVF 1-290 现食藜麦 （冷藏）",
+"excel_retail": 13.0,
+"discount": 0.3,
+"excel_gz_price": 9.1
+},
+{
+"sku": "1-300",
+"raw_sku": "GVF 1-300",
+"name_en": "Quinoa Salad",
+"name_cn": "GVF 1-300 藜麦沙拉 300g （冷藏）",
+"excel_retail": 44.0,
+"discount": 0.2,
+"excel_gz_price": 35.2
+},
+{
+"sku": "1-310",
+"raw_sku": "GVF 1-310",
+"name_en": "Govegan! The Ultimate Beet Salad",
+"name_cn": "GVF 1-310 甜菜头沙拉+1-310D 酱（冷藏）",
+"excel_retail": 48.0,
+"discount": 0.2,
+"excel_gz_price": 38.400000000000006
+},
+{
+"sku": "1-320",
+"raw_sku": "GVF 1-320",
+"name_en": "Govegan! Thai Buckwheat Noodles",
+"name_cn": "GVF 1-320 泰式冷面沙拉 冷藏+1-320D 酱（冷藏）",
+"excel_retail": 44.0,
+"discount": 0.3,
+"excel_gz_price": 30.799999999999997
+},
+{
+"sku": "1-330",
+"raw_sku": "GVF 1-330",
+"name_en": "Tabbouleh Bowl",
+"name_cn": "GVF 1-330 甜宝绿盒 +1-330D酱(冷藏）",
+"excel_retail": 44.0,
+"discount": 0.2,
+"excel_gz_price": 35.2
+},
+{
+"sku": "1-360",
+"raw_sku": "GVF 1-360",
+"name_en": "Govegan! Chinese Herbal Soup",
+"name_cn": "GVF 1-360 药膳汤 （冷藏）",
+"excel_retail": 27.0,
+"discount": 0.2,
+"excel_gz_price": 21.6
+},
+{
+"sku": "1-370",
+"raw_sku": "GVF  1-370",
+"name_en": "Govegan! Roasted Pumpkin Soup",
+"name_cn": "GVF  1-370 香烤南瓜汤 330g (冷藏）",
+"excel_retail": 27.0,
+"discount": 0.2,
+"excel_gz_price": 21.6
+},
+{
+"sku": "1-380",
+"raw_sku": "GVF 1-380",
+"name_en": "Sweet Potato Cauliflower Curry",
+"name_cn": "GVF 1-380 花椰菜红薯红咖喱（冷藏）",
+"excel_retail": 44.0,
+"discount": 0.2,
+"excel_gz_price": 35.2
+},
+{
+"sku": "1-400",
+"raw_sku": "GVF 1-400",
+"name_en": "Govegan! Creamy White Bean Soup with Kale",
+"name_cn": "GVF 1-400 意式白豆甘蓝汤 冷藏+1-400D小香料（冷藏）",
+"excel_retail": 44.0,
+"discount": 0.2,
+"excel_gz_price": 35.2
+},
+{
+"sku": "1-410",
+"raw_sku": "GVF 1-410",
+"name_en": "Tofu Banh Mi Wrap",
+"name_cn": "GVF 1-410 越式豆腐卷（无五辛）（冷藏）",
+"excel_retail": 44.0,
+"discount": 0.2,
+"excel_gz_price": 35.2
+},
+{
+"sku": "1-420",
+"raw_sku": "GVF 1-420",
+"name_en": "Govegan! Falafel Wrap With Creamy Hummus",
+"name_cn": "GVF 1-420法拉飞卷（冷藏）",
+"excel_retail": 44.0,
+"discount": 0.2,
+"excel_gz_price": 35.2
+},
+{
+"sku": "1-430",
+"raw_sku": "GVF1-430",
+"name_en": "Govegan! Shawarma Wrap",
+"name_cn": "GVF1-430 沙瓦玛卷（冷藏）",
+"excel_retail": 49.0,
+"discount": 0.2,
+"excel_gz_price": 39.2
+},
+{
+"sku": "1-440",
+"raw_sku": "GVF 1-440",
+"name_en": "Govegan! Pesto Wrap",
+"name_cn": "GVF 1-440纯素罗勒鸡肉卷 （冷藏）",
+"excel_retail": 44.0,
+"discount": 0.2,
+"excel_gz_price": 35.2
+},
+{
+"sku": "1-460",
+"raw_sku": "GVF 1-460",
+"name_en": "Govegan! Red Lentil Soup",
+"name_cn": "GVF 1-460 红扁豆汤550g",
+"excel_retail": 44.0,
+"discount": 0.2,
+"excel_gz_price": 35.2
+},
+{
+"sku": "3-150",
+"raw_sku": "GVF 3-150",
+"name_en": "Frozen Chicken Strips",
+"name_cn": "GVF 3-150 趣肯百搭 （冷冻）",
+"excel_retail": 38.0,
+"discount": 0.25,
+"excel_gz_price": 28.5
+},
+{
+"sku": "2-40",
+"raw_sku": "GV 2-40",
+"name_en": "Govegan! Pineapple Mint Kombucha",
+"name_cn": "GV 2-40 菠萝薄荷康普茶（小）300ml（冷藏）",
+"excel_retail": 29.0,
+"discount": 0.2,
+"excel_gz_price": 23.200000000000003
+},
+{
+"sku": "2-50",
+"raw_sku": "GV 2-50",
+"name_en": "Govegan! Pineapple Mint Kombucha",
+"name_cn": "GV 2-50菠萝薄荷康普茶（大）1000ml（冷藏）（有另搭瓶塞）",
+"excel_retail": 87.0,
+"discount": 0.2,
+"excel_gz_price": 69.60000000000001
+},
+{
+"sku": "2-60",
+"raw_sku": "GVF 2-60",
+"name_en": "Kombucha (AKA Booch) - Lemongrass",
+"name_cn": "GVF 2-60 香柠草康普茶（小）300ml（冷藏）",
+"excel_retail": 29.0,
+"discount": 0.2,
+"excel_gz_price": 23.200000000000003
+},
+{
+"sku": "2-70",
+"raw_sku": "GVF 2-70",
+"name_en": "Kombucha (AKA Booch) - Lemongrass",
+"name_cn": "GVF 2-70香柠草康普茶（大）1000ml （冷藏）（有另搭瓶塞）",
+"excel_retail": 87.0,
+"discount": 0.2,
+"excel_gz_price": 69.60000000000001
+},
+{
+"sku": "2-80",
+"raw_sku": "GVF 2-80",
+"name_en": "Kombucha (AKA Booch) - Passion Fruit",
+"name_cn": "GVF 2-80 百香果康普茶（小）300ml （冷藏）",
+"excel_retail": 29.0,
+"discount": 0.2,
+"excel_gz_price": 23.200000000000003
+},
+{
+"sku": "2-90",
+"raw_sku": "GVF 2-90",
+"name_en": "Kombucha (AKA Booch) - Passion Fruit",
+"name_cn": "GVF 2-90 百香果康普茶（大）1000ml （冷藏）（有另搭瓶塞）",
+"excel_retail": 87.0,
+"discount": 0.2,
+"excel_gz_price": 69.60000000000001
+},
+{
+"sku": "2-100",
+"raw_sku": "GVF 2-100",
+"name_en": "Kombucha (AKA Booch) - Mix Berries",
+"name_cn": "GVF 2-100 混合莓康普茶（小）300ml （冷藏）",
+"excel_retail": 29.0,
+"discount": 0.2,
+"excel_gz_price": 23.200000000000003
+},
+{
+"sku": "2-110",
+"raw_sku": "GVF 2-110",
+"name_en": "Kombucha (AKA Booch) - Mix Berries",
+"name_cn": "GVF 2-110 混合莓康普茶（大）1000ml （冷藏）（有另搭瓶塞）",
+"excel_retail": 87.0,
+"discount": 0.2,
+"excel_gz_price": 69.60000000000001
+},
+{
+"sku": "2-120",
+"raw_sku": "GVF 2-120",
+"name_en": "Govegan！Kombucha (AKA Booch) -Mango Kombucha",
+"name_cn": "GVF 2-120 芒果味康普茶 300ml，（冷藏）",
+"excel_retail": 29.0,
+"discount": 0.2,
+"excel_gz_price": 23.200000000000003
+},
+{
+"sku": "2-130",
+"raw_sku": "GVF 2-130",
+"name_en": "Govegan！Kombucha (AKA Booch) -Mango Kombucha",
+"name_cn": "GVF 2-130 芒果味康普茶 1000ml，（冷藏）（有另搭瓶塞）",
+"excel_retail": 87.0,
+"discount": 0.2,
+"excel_gz_price": 69.60000000000001
+},
+{
+"sku": "2-140",
+"raw_sku": "GVF2-140",
+"name_en": "Govegan! Masala Tea (Chai Latte)",
+"name_cn": "GVF2-140 印度玛萨拉奶茶 （冷藏）",
+"excel_retail": 25.0,
+"discount": 0.2,
+"excel_gz_price": 20.0
+},
+{
+"sku": "2-160",
+"raw_sku": "GVF 2-160",
+"name_en": "Govegan! Fresh & Green",
+"name_cn": "GVF 2-160 青蔬果水（冷藏）",
+"excel_retail": 27.0,
+"discount": 0.2,
+"excel_gz_price": 21.6
+},
+{
+"sku": "2-170",
+"raw_sku": "GVF 2-170",
+"name_en": "Fresh Carrot Ginger Juice + Prebiotic Fibers (Inulin)",
+"name_cn": "GVF 2-170 姜红卜汁 (冷藏）",
+"excel_retail": 23.0,
+"discount": 0.2,
+"excel_gz_price": 18.400000000000002
+},
+{
+"sku": "2-180",
+"raw_sku": "GVF 2-180",
+"name_en": "Cleanse Up",
+"name_cn": "GVF 2-180 青力果汁（冷藏）",
+"excel_retail": 27.0,
+"discount": 0.2,
+"excel_gz_price": 21.6
+},
+{
+"sku": "3-10",
+"raw_sku": "GVF 3-10",
+"name_en": "Mango protein bites ( gluten free )",
+"name_cn": "GVF 3-10芒果球球 5个 (冷藏）",
+"excel_retail": 38.0,
+"discount": 0.2,
+"excel_gz_price": 30.400000000000002
+},
+{
+"sku": "3-20",
+"raw_sku": "GVF 3-20",
+"name_en": "Chocolate Hemp Protein Bites (gluten free)",
+"name_cn": "GVF 3-20可可球球 5个（冷藏）",
+"excel_retail": 38.0,
+"discount": 0.2,
+"excel_gz_price": 30.400000000000002
+},
+{
+"sku": "3-30",
+"raw_sku": "GVF 3-30",
+"name_en": "Premium Nutella Bars",
+"name_cn": "GVF 3-30 巧克力榛棒（冷藏）",
+"excel_retail": 47.0,
+"discount": 0.2,
+"excel_gz_price": 37.6
+},
+{
+"sku": "3-40",
+"raw_sku": "GVF 3-40",
+"name_en": "Baked Falafel (Fresh-Frozen)",
+"name_cn": "GVF 3-40 法拉飞小饼（非油炸版，6块) （冷冻）",
+"excel_retail": 53.0,
+"discount": 0.25,
+"excel_gz_price": 39.75
+},
+{
+"sku": "3-50",
+"raw_sku": "GVF 3-50",
+"name_en": "Quinoa Patties (Fresh Frozen)",
+"name_cn": "GVF 3-50 酱香藜麦排 (3块) （冷冻）",
+"excel_retail": 43.0,
+"discount": 0.2,
+"excel_gz_price": 34.4
+},
+{
+"sku": "3-60",
+"raw_sku": "GVF 3-60",
+"name_en": "Frozen Ground Meat",
+"name_cn": "GVF 3-60 素肉碎/素香百搭 （冷冻）",
+"excel_retail": 38.0,
+"discount": 0.2,
+"excel_gz_price": 30.400000000000002
+},
+{
+"sku": "3-70",
+"raw_sku": "GVF 3-70",
+"name_en": "Frozen Marinaded Tempeh",
+"name_cn": "GVF 3-70 酱香天贝 （冷冻）150g",
+"excel_retail": 43.0,
+"discount": 0.2,
+"excel_gz_price": 34.4
+},
+{
+"sku": "3-80",
+"raw_sku": "GVF 3-80",
+"name_en": "Tempeh (Frozen)",
+"name_cn": "GVF 3-80 纯味天贝（冷冻）",
+"excel_retail": 31.0,
+"discount": 0.2,
+"excel_gz_price": 24.8
+},
+{
+"sku": "3-100",
+"raw_sku": "GVF  3-100",
+"name_en": "Black Beans  Tempeh",
+"name_cn": "GVF  3-100 黑豆天贝（冷冻）",
+"excel_retail": 38.0,
+"discount": 0.2,
+"excel_gz_price": 30.400000000000002
+},
+{
+"sku": "3-110",
+"raw_sku": "GVF 3-110",
+"name_en": "Mix Beans Tempeh",
+"name_cn": "GVF 3-110 杂豆天贝（冷冻）",
+"excel_retail": 43.0,
+"discount": 0.2,
+"excel_gz_price": 34.4
+},
+{
+"sku": "3-120",
+"raw_sku": "GVF-3-120",
+"name_en": "GoVegan! Edamame Tempeh",
+"name_cn": "GVF-3-120毛豆天贝（冷冻）",
+"excel_retail": 43.0,
+"discount": 0.2,
+"excel_gz_price": 34.4
+},
+{
+"sku": "3-145",
+"raw_sku": "GVF 3-145",
+"name_en": "Seitan",
+"name_cn": "GVF 3-145 素肉排（冷冻）",
+"excel_retail": 35.0,
+"discount": 0.2,
+"excel_gz_price": 28.0
+},
+{
+"sku": "3-130",
+"raw_sku": "GVF 3-130",
+"name_en": "Frozen Bolognese",
+"name_cn": "GVF 3-130 素肉酱 （冷冻）",
+"excel_retail": 49.0,
+"discount": 0.2,
+"excel_gz_price": 39.2
+},
+{
+"sku": "3-140",
+"raw_sku": "GVF 3-140",
+"name_en": "Govegan! Shwarma Mix",
+"name_cn": "GVF 3-140 混合沙瓦玛 （冷冻）",
+"excel_retail": 49.0,
+"discount": 0.2,
+"excel_gz_price": 39.2
+},
+{
+"sku": "3-160",
+"raw_sku": "GVF 3-160",
+"name_en": "Frozen OMG mushroom burger pattie",
+"name_cn": "GVF 3-160 蘑菇汉堡肉饼450g（冷冻）",
+"excel_retail": 43.0,
+"discount": 0.2,
+"excel_gz_price": 34.4
+},
+{
+"sku": "3-170",
+"raw_sku": "GVF 3-170",
+"name_en": "Guacamole",
+"name_cn": "GVF 3-170 墨西哥牛油果泥 （冷冻）",
+"excel_retail": 49.0,
+"discount": 0.2,
+"excel_gz_price": 39.2
+},
+{
+"sku": "3-180",
+"raw_sku": "GVF 3-180",
+"name_en": "Antioxidant Bomb ！ 6 Types of  mix Berries ,frozen",
+"name_cn": "GVF 3-180 六六鲜果冻（冷冻）",
+"excel_retail": 35.0,
+"discount": 0.25,
+"excel_gz_price": 26.25
+},
+{
+"sku": "3-190",
+"raw_sku": "GVF 3-190",
+"name_en": "Frozen Cheese Cake (Gluten Free)",
+"name_cn": "GVF 3-190 素士力架 140g （冷冻）",
+"excel_retail": 38.0,
+"discount": 0.2,
+"excel_gz_price": 30.400000000000002
+},
+{
+"sku": "3-200",
+"raw_sku": "GVF 3-200",
+"name_en": "Frozen Lemon Bars",
+"name_cn": "GVF 3-200 清新夏日柠檬棒 120g（冷冻）",
+"excel_retail": 38.0,
+"discount": 0.2,
+"excel_gz_price": 30.400000000000002
+},
+{
+"sku": "3-210",
+"raw_sku": "GVF 3-210",
+"name_en": "Govegan! Raspberry Mango Sorbet",
+"name_cn": "GVF 3-210 树莓芒果冰淇淋 （冷冻）",
+"excel_retail": 33.0,
+"discount": 0.2,
+"excel_gz_price": 26.400000000000002
+},
+{
+"sku": "3-220",
+"raw_sku": "GVF 3-220",
+"name_en": "Govegan! Corn Bread (Gluten Free, Pack of 4pc)-Classic",
+"name_cn": "GVF 3-220 原味玉米饼 （冷冻）",
+"excel_retail": 32.0,
+"discount": 0.2,
+"excel_gz_price": 25.6
+},
+{
+"sku": "3-230",
+"raw_sku": "GVF 3-230",
+"name_en": "Nachos Dip",
+"name_cn": "GVF 3-230 纯素咸芝士酱",
+"excel_retail": 38.0,
+"discount": 0.2,
+"excel_gz_price": 30.400000000000002
+},
+{
+"sku": "3-240",
+"raw_sku": "GVF 3-240",
+"name_en": "Nuts & Seeds Bread (No Flour Gluten Free)",
+"name_cn": "GVF 3-240大口果仁包（无麸质） 440g冷冻",
+"excel_retail": 53.0,
+"discount": 0.2,
+"excel_gz_price": 42.400000000000006
+},
+{
+"sku": "3-250",
+"raw_sku": "GVF 3-250",
+"name_en": "Frozen Whole Wheat Bread",
+"name_cn": "GVF 3-250 冷冻全麦黑麦面包（冷冻）",
+"excel_retail": 38.0,
+"discount": 0.2,
+"excel_gz_price": 30.400000000000002
+},
+{
+"sku": "3-251",
+"raw_sku": "GVF 3-251",
+"name_en": "Frozen Whole Wheat Pita Bread",
+"name_cn": "GVF 3-251 全麦皮塔饼 冷冻",
+"excel_retail": 45.0,
+"discount": 0.2,
+"excel_gz_price": 36.0
+},
+{
+"sku": "3-252",
+"raw_sku": "GV3-252",
+"name_en": "GF Buckwheat Bread (Sliced & Frozen",
+"name_cn": "GV3-252 冷冻切片无麸质荞麦面包800g",
+"excel_retail": 49.0,
+"discount": 0.2,
+"excel_gz_price": 39.2
+},
+{
+"sku": "3-270",
+"raw_sku": "GVF 3-270",
+"name_en": "Whole Wheat Wrap 10 inch/12pc",
+"name_cn": "GVF 3-270 全麦墨西哥卷饼（10片）（冷冻）",
+"excel_retail": 44.0,
+"discount": 0.2,
+"excel_gz_price": 35.2
+},
+{
+"sku": "2-200",
+"raw_sku": "GV 2-200",
+"name_en": "USDA Organic Goji Berries",
+"name_cn": "GV 2-200 枸杞 200g",
+"excel_retail": 47.0,
+"discount": 0.2,
+"excel_gz_price": 37.6
+},
+{
+"sku": "2-210",
+"raw_sku": "GVF 2-210",
+"name_en": "Govegan! USDA Organic Crunchy Jujube(Chinese Dates)",
+"name_cn": "GVF 2-210 脆枣 冷藏",
+"excel_retail": 17.0,
+"discount": 0.2,
+"excel_gz_price": 13.600000000000001
+},
+{
+"sku": "2-220",
+"raw_sku": "GV 2-220",
+"name_en": "Sun-Dried Apricots",
+"name_cn": "GV 2-220 阳光晒干杏脯 250g",
+"excel_retail": 29.0,
+"discount": 0.2,
+"excel_gz_price": 23.200000000000003
+},
+{
+"sku": "2-230",
+"raw_sku": "GV 2-230",
+"name_en": "Dehydrated Dragon Fruit (Pitaya)",
+"name_cn": "GV 2-230 火龙果干 120g  （冷藏）",
+"excel_retail": 27.0,
+"discount": 0.2,
+"excel_gz_price": 21.6
+},
+{
+"sku": "2-240",
+"raw_sku": "GV 2-240",
+"name_en": "Dehydrated Mix Figs",
+"name_cn": "GV 2-240 混合无花果干120g （冷藏）",
+"excel_retail": 46.0,
+"discount": 0.2,
+"excel_gz_price": 36.800000000000004
+},
+{
+"sku": "2-250",
+"raw_sku": "GV 2-250",
+"name_en": "Dehydrated Chinese Banana",
+"name_cn": "GV 2-250 芭蕉干120g （冷藏）",
+"excel_retail": 22.0,
+"discount": 0.2,
+"excel_gz_price": 17.6
+},
+{
+"sku": "2-260",
+"raw_sku": "GVF2-260",
+"name_en": "Dehydrated Sweet Banana",
+"name_cn": "GVF2-260 香蕉干 150g （冷藏）",
+"excel_retail": 20.0,
+"discount": 0.2,
+"excel_gz_price": 16.0
+},
+{
+"sku": "2-270",
+"raw_sku": "GV 2-270",
+"name_en": "Dehydrated Pinapple",
+"name_cn": "GV 2-270菠萝干 120g  （冷藏）",
+"excel_retail": 25.0,
+"discount": 0.2,
+"excel_gz_price": 20.0
+},
+{
+"sku": "2-280",
+"raw_sku": "GVF 2-280",
+"name_en": "Nour Dates",
+"name_cn": "GVF 2-280 椰枣 240g（冷藏）",
+"excel_retail": 32.0,
+"discount": 0.2,
+"excel_gz_price": 25.6
+},
+{
+"sku": "2-290",
+"raw_sku": "GVF 2-290",
+"name_en": "Medjool Dates (Jumbo Size)",
+"name_cn": "GVF 2-290 帝王椰枣 430g（冷藏）",
+"excel_retail": 92.0,
+"discount": 0.2,
+"excel_gz_price": 73.60000000000001
+},
+{
+"sku": "2-310",
+"raw_sku": "GV 2-310",
+"name_en": "Organic Raw Cacao Nibs",
+"name_cn": "GV 2-310 有机可可粒 128g",
+"excel_retail": 85.0,
+"discount": 0.2,
+"excel_gz_price": 68.0
+},
+{
+"sku": "2-330",
+"raw_sku": "GV 2-330",
+"name_en": "Big Size Walnuts ( unsalted, raw )",
+"name_cn": "GV 2-330 核桃（大）280g",
+"excel_retail": 56.0,
+"discount": 0.2,
+"excel_gz_price": 44.800000000000004
+},
+{
+"sku": "2-320",
+"raw_sku": "GV2-320",
+"name_en": "Walnuts ( unsalted, raw )",
+"name_cn": "GV2-320 核桃（小） 160g",
+"excel_retail": 33.0,
+"discount": 0.2,
+"excel_gz_price": 26.400000000000002
+},
+{
+"sku": "2-340",
+"raw_sku": "GV 2-340",
+"name_en": "Almonds ( Unsalted , Raw )",
+"name_cn": "GV 2-340 杏仁（小） 265g",
+"excel_retail": 37.0,
+"discount": 0.2,
+"excel_gz_price": 29.6
+},
+{
+"sku": "2-350",
+"raw_sku": "GV2-350",
+"name_en": "Big Size Almonds ( Unsalted, Raw )",
+"name_cn": "GV2-350 杏仁（大） 460g",
+"excel_retail": 64.0,
+"discount": 0.2,
+"excel_gz_price": 51.2
+},
+{
+"sku": "2-360",
+"raw_sku": "GV 2-360",
+"name_en": "Govegan! Hazelnuts (Unroasted, Pilled)",
+"name_cn": "GV 2-360 榛子仁 260g",
+"excel_retail": 57.0,
+"discount": 0.2,
+"excel_gz_price": 45.6
+},
+{
+"sku": "2-370",
+"raw_sku": "GV2-370",
+"name_en": "Cashew (unsalted ,raw)",
+"name_cn": "GV2-370 腰果（小） 240g",
+"excel_retail": 39.0,
+"discount": 0.2,
+"excel_gz_price": 31.200000000000003
+},
+{
+"sku": "2-380",
+"raw_sku": "GV 2-380",
+"name_en": "Big Size Cashew (unsalted, raw)",
+"name_cn": "GV 2-380 腰果（大） 400g",
+"excel_retail": 65.0,
+"discount": 0.2,
+"excel_gz_price": 52.0
+},
+{
+"sku": "2-390",
+"raw_sku": "GV 2-390",
+"name_en": "Pumpkin Seeds (unsalted, raw)",
+"name_cn": "GV 2-390南瓜子（小） 280g",
+"excel_retail": 31.0,
+"discount": 0.2,
+"excel_gz_price": 24.8
+},
+{
+"sku": "2-400",
+"raw_sku": "GV 2-400",
+"name_en": "All Natural Almond Butter ( Classic )",
+"name_cn": "GV 2-400 杏仁酱 150g",
+"excel_retail": 50.0,
+"discount": 0.2,
+"excel_gz_price": 40.0
+},
+{
+"sku": "2-410",
+"raw_sku": "GV2-410",
+"name_en": "GoVegan!All Natural Almond Butter（Big）",
+"name_cn": "GV2-410 -杏仁酱 240g",
+"excel_retail": 76.0,
+"discount": 0.2,
+"excel_gz_price": 60.800000000000004
+},
+{
+"sku": "2-430",
+"raw_sku": "GV 2-430",
+"name_en": "Maple Cinnamon Almond Butter",
+"name_cn": "GV 2-430 肉桂杏仁酱",
+"excel_retail": 89.0,
+"discount": 0.2,
+"excel_gz_price": 71.2
+},
+{
+"sku": "2-440",
+"raw_sku": "GV 2-440",
+"name_en": "GoVegan! Roasted Hazelnut Butter",
+"name_cn": "GV 2-440 经典榛子酱 220g",
+"excel_retail": 74.0,
+"discount": 0.2,
+"excel_gz_price": 59.2
+},
+{
+"sku": "2-450",
+"raw_sku": "GV2-450",
+"name_en": "GoVegan! Premium Nutella",
+"name_cn": "GV2-450  -榛子酱 220g",
+"excel_retail": 89.0,
+"discount": 0.2,
+"excel_gz_price": 71.2
+},
+{
+"sku": "2-470",
+"raw_sku": "GV 2-470",
+"name_en": "Govegan! Cashew Butter",
+"name_cn": "GV 2-470 腰果酱 260g",
+"excel_retail": 85.0,
+"discount": 0.2,
+"excel_gz_price": 68.0
+},
+{
+"sku": "2-480",
+"raw_sku": "GV2-480",
+"name_en": "GoVegan! Jackfruit chips",
+"name_cn": "GV2-480 菠萝蜜干100g",
+"excel_retail": 24.0,
+"discount": 0.2,
+"excel_gz_price": 19.200000000000003
+},
+{
+"sku": "4-10",
+"raw_sku": "GV 4-10",
+"name_en": "GoVegan! Mix Colored Quinoa",
+"name_cn": "GV 4-10 混合藜麦 600g",
+"excel_retail": 71.0,
+"discount": 0.2,
+"excel_gz_price": 56.800000000000004
+},
+{
+"sku": "4-20",
+"raw_sku": "GV 4-20",
+"name_en": "Brown Rice (Long Grain)",
+"name_cn": "GV 4-20 糙米",
+"excel_retail": 23.0,
+"discount": 0.2,
+"excel_gz_price": 18.400000000000002
+},
+{
+"sku": "4-40",
+"raw_sku": "GV 4-40",
+"name_en": "Old Fashioned Oats",
+"name_cn": "GV 4-40 传统快熟燕麦",
+"excel_retail": 17.0,
+"discount": 0.2,
+"excel_gz_price": 13.600000000000001
+},
+{
+"sku": "4-50",
+"raw_sku": "GV 4-50",
+"name_en": "Green Lentil",
+"name_cn": "GV 4-50 绿扁豆 600g",
+"excel_retail": 29.0,
+"discount": 0.2,
+"excel_gz_price": 23.200000000000003
+},
+{
+"sku": "4-60",
+"raw_sku": "GV 4-60",
+"name_en": "Red Lentils",
+"name_cn": "GV 4-60 红扁豆 600g",
+"excel_retail": 26.0,
+"discount": 0.2,
+"excel_gz_price": 20.8
+},
+{
+"sku": "4-70",
+"raw_sku": "GV 4-70",
+"name_en": "Chickpeas",
+"name_cn": "GV 4-70 鹰嘴豆 590g",
+"excel_retail": 29.0,
+"discount": 0.2,
+"excel_gz_price": 23.200000000000003
+},
+{
+"sku": "4-80",
+"raw_sku": "GV 4-80",
+"name_en": "Black Beans",
+"name_cn": "GV 4-80 黑豆",
+"excel_retail": 21.0,
+"discount": 0.2,
+"excel_gz_price": 16.8
+},
+{
+"sku": "4-90",
+"raw_sku": "GV 4-90",
+"name_en": "Vital Wheat Gluten Flour",
+"name_cn": "GV 4-90 谷朊粉 680g",
+"excel_retail": 31.0,
+"discount": 0.2,
+"excel_gz_price": 24.8
+},
+{
+"sku": "4-100",
+"raw_sku": "GV 4-100",
+"name_en": "Govegan! Fermented Tofu (Oil Free)",
+"name_cn": "GV 4-100  素腐乳 260g （无油）",
+"excel_retail": 38.0,
+"discount": 0.25,
+"excel_gz_price": 28.5
+},
+{
+"sku": "4-110",
+"raw_sku": "GV 4-110",
+"name_en": "Chickpeas Flour (Gluten Free)",
+"name_cn": "GV 4-110 鹰嘴豆粉 500g",
+"excel_retail": 36.0,
+"discount": 0.2,
+"excel_gz_price": 28.8
+},
+{
+"sku": "4-120",
+"raw_sku": "GV 4-120",
+"name_en": "TVP ( Texture Vegetable Protein ) NON GMO",
+"name_cn": "GV 4-120 大豆组织蛋白",
+"excel_retail": 21.0,
+"discount": 0.2,
+"excel_gz_price": 16.8
+},
+{
+"sku": "4-130",
+"raw_sku": "GV 4-130",
+"name_en": "Whole Wheat Spaghetti",
+"name_cn": "GV 4-130 全麦意大利细面 500g",
+"excel_retail": 21.0,
+"discount": 0.2,
+"excel_gz_price": 16.8
+},
+{
+"sku": "4-140",
+"raw_sku": "GV 4-140",
+"name_en": "Whole Wheat Fusilli Pasta",
+"name_cn": "GV 4-140 全麦螺旋面 250g",
+"excel_retail": 17.0,
+"discount": 0.2,
+"excel_gz_price": 13.600000000000001
+},
+{
+"sku": "4-150",
+"raw_sku": "GV 4-150",
+"name_en": "Chopped Almonds ( Raw, Unsalted )",
+"name_cn": "GV 4-150 杏仁片（小） 170g",
+"excel_retail": 34.0,
+"discount": 0.2,
+"excel_gz_price": 27.200000000000003
+},
+{
+"sku": "4-160",
+"raw_sku": "GV 4-160",
+"name_en": "Organic Chia Seeds",
+"name_cn": "GV 4-160 奇亚籽（小） 290g",
+"excel_retail": 56.0,
+"discount": 0.2,
+"excel_gz_price": 44.800000000000004
+},
+{
+"sku": "4-170",
+"raw_sku": "GV 4-170",
+"name_en": "Big Size Organic Chia Seeds",
+"name_cn": "GV 4-170 奇亚籽（大）510g",
+"excel_retail": 95.0,
+"discount": 0.2,
+"excel_gz_price": 76.0
+},
+{
+"sku": "4-180",
+"raw_sku": "GV 4-180",
+"name_en": "Hemp Seed",
+"name_cn": "GV 4-180 火麻仁（小） 260g",
+"excel_retail": 40.0,
+"discount": 0.2,
+"excel_gz_price": 32.0
+},
+{
+"sku": "4-190",
+"raw_sku": "GV 4-190",
+"name_en": "Organic Sunflower Seed (unsalted, raw)",
+"name_cn": "GV 4-190 葵瓜子（小） 260g",
+"excel_retail": 29.0,
+"discount": 0.2,
+"excel_gz_price": 23.200000000000003
+},
+{
+"sku": "4-210",
+"raw_sku": "GV 4-210",
+"name_en": "Dehydrated Sweet Mango",
+"name_cn": "GV 4-210 芒果干 120g  （冷藏）",
+"excel_retail": 27.0,
+"discount": 0.2,
+"excel_gz_price": 21.6
+},
+{
+"sku": "4-220",
+"raw_sku": "GV 4-220",
+"name_en": "Organic Dry Cranberries Unsweetened",
+"name_cn": "GV 4-220 蔓越莓 150g",
+"excel_retail": 38.0,
+"discount": 0.2,
+"excel_gz_price": 30.400000000000002
+},
+{
+"sku": "4-230",
+"raw_sku": "GV 4-230",
+"name_en": "Unsweetened Organic Dry Raisins",
+"name_cn": "GV 4-230 葡萄干 280g",
+"excel_retail": 36.0,
+"discount": 0.2,
+"excel_gz_price": 28.8
+},
+{
+"sku": "4-240",
+"raw_sku": "GV 4-240",
+"name_en": "Chunky Granola",
+"name_cn": "GV 4-240 谷物脆 150g",
+"excel_retail": 43.0,
+"discount": 0.2,
+"excel_gz_price": 34.4
+},
+{
+"sku": "4-260",
+"raw_sku": "GV 4-260",
+"name_en": "Flaxseed",
+"name_cn": "GV 4-260 亚麻籽 500g",
+"excel_retail": 27.0,
+"discount": 0.2,
+"excel_gz_price": 21.6
+},
+{
+"sku": "4-270",
+"raw_sku": "GV 4-270",
+"name_en": "100% Whole Wheat Crackers",
+"name_cn": "GV 4-270 全麦饼干 90g",
+"excel_retail": 27.0,
+"discount": 0.2,
+"excel_gz_price": 21.6
+},
+{
+"sku": "4-271",
+"raw_sku": "GV 4-271",
+"name_en": "Superseed Crackers (Gluten Free)",
+"name_cn": "GV 4-271 超级种子饼干",
+"excel_retail": 33.0,
+"discount": 0.2,
+"excel_gz_price": 26.400000000000002
+},
+{
+"sku": "4-280",
+"raw_sku": "GV 4-280",
+"name_en": "USDA Organic Golden Flaxseed",
+"name_cn": "GV 4-280 有机金亚麻籽",
+"excel_retail": 44.0,
+"discount": 0.2,
+"excel_gz_price": 35.2
+},
+{
+"sku": "4-290",
+"raw_sku": "GV 4-290",
+"name_en": "Dehydrated Coconut Flakes",
+"name_cn": "GV 4-290 椰子片",
+"excel_retail": 23.0,
+"discount": 0.2,
+"excel_gz_price": 18.400000000000002
+},
+{
+"sku": "4-300",
+"raw_sku": "GV 4-300",
+"name_en": "Smokey Parmesan",
+"name_cn": "GV 4-300纯素奶酪粉 120g",
+"excel_retail": 35.0,
+"discount": 0.2,
+"excel_gz_price": 28.0
+},
+{
+"sku": "4-310",
+"raw_sku": "GV 4-310",
+"name_en": "Parmesnuts! (Vegan Parmesan Cheese)",
+"name_cn": "GV 4-310 纯素帕玛森芝士粉 120g",
+"excel_retail": 36.0,
+"discount": 0.25,
+"excel_gz_price": 27.0
+},
+{
+"sku": "4-320",
+"raw_sku": "GV 4-320",
+"name_en": "Unsweetened Dry Blueberries",
+"name_cn": "GV 4-320 无糖蓝莓干（小） 150g",
+"excel_retail": 38.0,
+"discount": 0.2,
+"excel_gz_price": 30.400000000000002
+},
+{
+"sku": "4-330",
+"raw_sku": "GV 4-330",
+"name_en": "Black Salt ( Kala namak )",
+"name_cn": "GV 4-330 喜马拉雅黑盐紫盐 300g",
+"excel_retail": 30.0,
+"discount": 0.2,
+"excel_gz_price": 24.0
+},
+{
+"sku": "4-340",
+"raw_sku": "GV 4-340",
+"name_en": "Himalaya Pink Salt",
+"name_cn": "GV 4-340 玫瑰盐 330g",
+"excel_retail": 30.0,
+"discount": 0.2,
+"excel_gz_price": 24.0
+},
+{
+"sku": "4-350",
+"raw_sku": "GV 4-350",
+"name_en": "Soft Dehydrated Apples",
+"name_cn": "GV 4-350 脱水苹果干 90g",
+"excel_retail": 18.0,
+"discount": 0.2,
+"excel_gz_price": 14.4
+},
+{
+"sku": "4-360",
+"raw_sku": "GV 4-360",
+"name_en": "Anti Inflammatory Granola (Gluten Free)",
+"name_cn": "GV 4-360 荞麦版格兰诺拉麦片 190g",
+"excel_retail": 43.0,
+"discount": 0.2,
+"excel_gz_price": 34.4
+},
+{
+"sku": "4-370",
+"raw_sku": "GV 4-370",
+"name_en": "USDA Organic All Natural Cacao Powder",
+"name_cn": "GV 4-370 可可粉",
+"excel_retail": 43.0,
+"discount": 0.2,
+"excel_gz_price": 34.4
+},
+{
+"sku": "4-380",
+"raw_sku": "GV 4-380",
+"name_en": "USDA Organic, Non GMO, Maca Powder",
+"name_cn": "GV 4-380  有机麦咖粉",
+"excel_retail": 43.0,
+"discount": 0.25,
+"excel_gz_price": 32.25
+},
+{
+"sku": "4-381",
+"raw_sku": "GV 4-381",
+"name_en": "Creatine Monohydrate",
+"name_cn": "GV 4-381 水肌酸",
+"excel_retail": 97.0,
+"discount": 0.2,
+"excel_gz_price": 77.60000000000001
+},
+{
+"sku": "4-382",
+"raw_sku": "GV 4-382",
+"name_en": "Reishi Powder Organic USDA",
+"name_cn": "GV 4-382 灵芝粉",
+"excel_retail": 130.0,
+"discount": 0.2,
+"excel_gz_price": 104.0
+},
+{
+"sku": "4-390",
+"raw_sku": "GV 4-390",
+"name_en": "USDA Organic, Raw, Non GMO Kale Powder",
+"name_cn": "GV 4-390 有机羽衣甘蓝粉 130g",
+"excel_retail": 60.0,
+"discount": 0.3,
+"excel_gz_price": 42.0
+},
+{
+"sku": "4-400",
+"raw_sku": "GV 4-400",
+"name_en": "USDA Organic, Non GMO Matcha Powder (32 servings)",
+"name_cn": "GV 4-400 抹茶粉 130g",
+"excel_retail": 78.0,
+"discount": 0.3,
+"excel_gz_price": 54.599999999999994
+},
+{
+"sku": "4-410",
+"raw_sku": "GV 4-410",
+"name_en": "USDA Organic, Non GMO Beetroot Powder (22 servings)",
+"name_cn": "GV 4-410 有机甜菜粉 150g",
+"excel_retail": 57.0,
+"discount": 0.3,
+"excel_gz_price": 39.9
+},
+{
+"sku": "4-420",
+"raw_sku": "GV 4-420",
+"name_en": "USDA Organic, Raw, Non GMO alfalfa Powder",
+"name_cn": "GV 4-420 有机生机紫花苜蓿粉130g",
+"excel_retail": 32.0,
+"discount": 0.3,
+"excel_gz_price": 22.4
+},
+{
+"sku": "4-430",
+"raw_sku": "GV 4-430",
+"name_en": "USDA Organic, Wheatgrass Powder",
+"name_cn": "GV 4-430 小麦草",
+"excel_retail": 32.0,
+"discount": 0.3,
+"excel_gz_price": 22.4
+},
+{
+"sku": "4-440",
+"raw_sku": "GV 4-440",
+"name_en": "USDA Organic, Raw, Non GMO Moringa Powder",
+"name_cn": "GV 4-440 生机辣木粉 100g",
+"excel_retail": 31.0,
+"discount": 0.3,
+"excel_gz_price": 21.7
+},
+{
+"sku": "4-450",
+"raw_sku": "GV 4-450",
+"name_en": "USDA Organic, Non GMO, Chlorella Powder",
+"name_cn": "GV 4-450 小球藻粉 100g",
+"excel_retail": 71.0,
+"discount": 0.3,
+"excel_gz_price": 49.699999999999996
+},
+{
+"sku": "4-460",
+"raw_sku": "GV 4-460",
+"name_en": "USDA Organic Turmeric",
+"name_cn": "GV 4-460 姜黄粉 120g",
+"excel_retail": 49.0,
+"discount": 0.3,
+"excel_gz_price": 34.3
+},
+{
+"sku": "4-470",
+"raw_sku": "GV 4-470",
+"name_en": "USDA Organic, Non GMO, Raw Spirulina Powder",
+"name_cn": "GV 4-470 螺旋藻粉 130g",
+"excel_retail": 49.0,
+"discount": 0.3,
+"excel_gz_price": 34.3
+},
+{
+"sku": "4-480",
+"raw_sku": "GV 4-480",
+"name_en": "USDA Organic, Non GMO, Hemp Protein Powder (16 Servings)",
+"name_cn": "GV 4-480 火麻蛋白粉 500g",
+"excel_retail": 163.0,
+"discount": 0.3,
+"excel_gz_price": 114.1
+},
+{
+"sku": "4-490",
+"raw_sku": "GV 4-490",
+"name_en": "USDA Organic, Non GMO, Pea Protein Powder (22 servings)",
+"name_cn": "GV 4-490 豌豆蛋白粉 680g",
+"excel_retail": 162.0,
+"discount": 0.3,
+"excel_gz_price": 113.39999999999999
+},
+{
+"sku": "4-500",
+"raw_sku": "GV 4-500",
+"name_en": "The Ultimate 5 Organic SuperGreens Package",
+"name_cn": "GV 4-500 超级绿 300g",
+"excel_retail": 107.0,
+"discount": 0.3,
+"excel_gz_price": 74.89999999999999
+},
+{
+"sku": "4-510",
+"raw_sku": "GV 4-510",
+"name_en": "USDA Organic Acai Powder",
+"name_cn": "GV 4-510 巴西莓粉 100g",
+"excel_retail": 88.0,
+"discount": 0.3,
+"excel_gz_price": 61.599999999999994
+},
+{
+"sku": "4-520",
+"raw_sku": "GV 4-520",
+"name_en": "Activated Charcoal",
+"name_cn": "GV 4-520 活性炭 100g",
+"excel_retail": 59.0,
+"discount": 0.3,
+"excel_gz_price": 41.3
+},
+{
+"sku": "4-530",
+"raw_sku": "GV 4-530",
+"name_en": "Prebiotic Fiber",
+"name_cn": "GV 4-530 益生元菊粉 100g",
+"excel_retail": 64.0,
+"discount": 0.3,
+"excel_gz_price": 44.8
+},
+{
+"sku": "4-545",
+"raw_sku": "GV 4-545",
+"name_en": "BioCurcumin+ （60 servings）",
+"name_cn": "GV 4-545 ,BioCurcumin+(60份）60g",
+"excel_retail": 164.0,
+"discount": 0.2,
+"excel_gz_price": 131.20000000000002
+},
+{
+"sku": "4-550",
+"raw_sku": "GV 4-550",
+"name_en": "Nutritional Yeast",
+"name_cn": "GV 4-550 营养酵母 65g",
+"excel_retail": 43.0,
+"discount": 0.2,
+"excel_gz_price": 34.4
+},
+{
+"sku": "4-560",
+"raw_sku": "GV 4-560",
+"name_en": "USDA Organic Hibiscus Flower (Herbal Tea)",
+"name_cn": "GV 4-560 玫瑰茄 50g",
+"excel_retail": 38.0,
+"discount": 0.3,
+"excel_gz_price": 26.599999999999998
+},
+{
+"sku": "4-570",
+"raw_sku": "GV 4-570",
+"name_en": "USDA Organic Mint Leaves (Herbal Tea)",
+"name_cn": "GV 4-570 青和-（薄荷叶草本茶）",
+"excel_retail": 38.0,
+"discount": 0.3,
+"excel_gz_price": 26.599999999999998
+},
+{
+"sku": "4-580",
+"raw_sku": "GV 4-580",
+"name_en": "SuperBerries 4 Package",
+"name_cn": "GV 4-580 超级莓粉4包装 一包",
+"excel_retail": 130.0,
+"discount": 0.3,
+"excel_gz_price": 91.0
+},
+{
+"sku": "4-590",
+"raw_sku": "GV 4-590",
+"name_en": "USDA Organic Garlic Powder",
+"name_cn": "GV 4-590 有机大蒜粉120g",
+"excel_retail": 31.0,
+"discount": 0.2,
+"excel_gz_price": 24.8
+},
+{
+"sku": "4-600",
+"raw_sku": "GV 4-600",
+"name_en": "USDA Organic Onion Powder",
+"name_cn": "GV 4-600 有机洋葱粉 120g",
+"excel_retail": 31.0,
+"discount": 0.2,
+"excel_gz_price": 24.8
+},
+{
+"sku": "4-610",
+"raw_sku": "GV 4-610",
+"name_en": "Sumac",
+"name_cn": "GV 4-610 漆树果粉 120g",
+"excel_retail": 72.0,
+"discount": 0.2,
+"excel_gz_price": 57.6
+},
+{
+"sku": "4-620",
+"raw_sku": "GV 4-620",
+"name_en": "UDSA Organic Non GMO Soy Powder",
+"name_cn": "GV 4-620有机非转基因大豆蛋白粉",
+"excel_retail": 86.0,
+"discount": 0.2,
+"excel_gz_price": 68.8
+},
+{
+"sku": "4-640",
+"raw_sku": "GV 4-640",
+"name_en": "Un-hulled Sesame Tahini",
+"name_cn": "GV 4-640 中东生芝麻酱（未去皮）",
+"excel_retail": 46.0,
+"discount": 0.2,
+"excel_gz_price": 36.800000000000004
+},
+{
+"sku": "4-650",
+"raw_sku": "GV 4-650",
+"name_en": "Hulled Sesame Tahini",
+"name_cn": "GV 4-650 中东芝麻酱（去皮）",
+"excel_retail": 38.0,
+"discount": 0.2,
+"excel_gz_price": 30.400000000000002
+},
+{
+"sku": "4-670",
+"raw_sku": "GV 4-670",
+"name_en": "All Natural Peanut Butter",
+"name_cn": "GV 4-670 花生酱（小）240g",
+"excel_retail": 42.0,
+"discount": 0.2,
+"excel_gz_price": 33.6
+},
+{
+"sku": "4-680",
+"raw_sku": "GV 4-680",
+"name_en": "All Natural Peanut Butter",
+"name_cn": "GV 4-680 花生酱 430g",
+"excel_retail": 65.0,
+"discount": 0.3,
+"excel_gz_price": 45.5
+},
+{
+"sku": "4-690",
+"raw_sku": "GV 4-690",
+"name_en": "Govegan! A Bit Salty Peanut Butter (With Crunchy Peanuts Inside)",
+"name_cn": "GV 4-690  咸味粗粒花生酱 430g",
+"excel_retail": 71.0,
+"discount": 0.2,
+"excel_gz_price": 56.800000000000004
+},
+{
+"sku": "4-700",
+"raw_sku": "GV 4-700",
+"name_en": "Refined coconut oil",
+"name_cn": "GV 4-700 精炼提取椰子油500ml",
+"excel_retail": 76.0,
+"discount": 0.25,
+"excel_gz_price": 57.0
+},
+{
+"sku": "4-720",
+"raw_sku": "GV 4-720",
+"name_en": "Govegan! Organic Extra Virgin Coconut Oil",
+"name_cn": "GV 4-720  椰子油 500ml （大瓶）",
+"excel_retail": 125.0,
+"discount": 0.2,
+"excel_gz_price": 100.0
+},
+{
+"sku": "4-750",
+"raw_sku": "GV 4-750",
+"name_en": "Govegan!Discover Yunnan Collection - Black Plum Roasted Coffee Beans",
+"name_cn": "GV 4-750发现云南 系列 - 西双版纳易武咖啡豆 227g",
+"excel_retail": 64.0,
+"discount": 0.25,
+"excel_gz_price": 48.0
+},
+{
+"sku": "4-820",
+"raw_sku": "GV 4-820",
+"name_en": "Yunnan Coffee Bundle (3 Types Of Coffee Beans)",
+"name_cn": "GV 4-820云南咖啡豆组合3包一组",
+"excel_retail": 75.0,
+"discount": 0.25,
+"excel_gz_price": 56.25
+},
+{
+"sku": "5-28",
+"raw_sku": "GV 5-28",
+"name_en": "USDA Organic Stevia Leaf Powder",
+"name_cn": "GV 5-28 甜叶菊甜味剂 100g",
+"excel_retail": 56.0,
+"discount": 0.3,
+"excel_gz_price": 39.199999999999996
+},
+{
+"sku": "5-29",
+"raw_sku": "GV 5-29",
+"name_en": "USDA Organic Pumpkin Seed Protein",
+"name_cn": "GV 5-29 有机南瓜子蛋白粉530g",
+"excel_retail": 195.0,
+"discount": 0.3,
+"excel_gz_price": 136.5
+},
+{
+"sku": "4-630",
+"raw_sku": "GV 4-630",
+"name_en": "GoVegan! Za＇atar",
+"name_cn": "GV 4-630 绿百里粉170g",
+"excel_retail": 31.0,
+"discount": 0.2,
+"excel_gz_price": 24.8
+},
+{
+"sku": "5-10",
+"raw_sku": "GV 5-10",
+"name_en": "Puretonique Body wash",
+"name_cn": "GV 5-10  Puretonique 沐浴露300ml",
+"excel_retail": 108.0,
+"discount": 0.25,
+"excel_gz_price": 81.0
+},
+{
+"sku": "5-20",
+"raw_sku": "GV 5-20",
+"name_en": "Puretonique shampoo",
+"name_cn": "GV 5-20 puretonique 洗发水300ml",
+"excel_retail": 118.0,
+"discount": 0.25,
+"excel_gz_price": 88.5
+},
+{
+"sku": "5-40",
+"raw_sku": "GV 5-40",
+"name_en": "Laundry Soaker",
+"name_cn": "GV 5-40洗涤浸泡粉 1kg",
+"excel_retail": 60.0,
+"discount": 0.25,
+"excel_gz_price": 45.0
+},
+{
+"sku": "5-50",
+"raw_sku": "GV 5-50",
+"name_en": "Laundry Powder",
+"name_cn": "GV 5-50植物矿物源洗衣粉 1kg",
+"excel_retail": 54.0,
+"discount": 0.25,
+"excel_gz_price": 40.5
+},
+{
+"sku": "5-60",
+"raw_sku": "GV 5-60",
+"name_en": "Floor Cleaner",
+"name_cn": "GV 5-60 地板清洁液 1L",
+"excel_retail": 78.0,
+"discount": 0.25,
+"excel_gz_price": 58.5
+},
+{
+"sku": "5-70",
+"raw_sku": "GV 5-70",
+"name_en": "Cream Cleanser",
+"name_cn": "GV 5-70强力清洁乳 500ml",
+"excel_retail": 52.0,
+"discount": 0.25,
+"excel_gz_price": 39.0
+},
+{
+"sku": "5-80",
+"raw_sku": "GV5-80",
+"name_en": "Toilet Cleaner",
+"name_cn": "GV5-80 洁厕液 500ml",
+"excel_retail": 57.0,
+"discount": 0.25,
+"excel_gz_price": 42.75
+},
+{
+"sku": "5-90",
+"raw_sku": "GV 5-90",
+"name_en": "Laundry Liquid",
+"name_cn": "GV 5-90 浓缩洗衣液 1L",
+"excel_retail": 87.0,
+"discount": 0.25,
+"excel_gz_price": 65.25
+},
+{
+"sku": "5-100",
+"raw_sku": "GV 5-100",
+"name_en": "Natural Stain Remover",
+"name_cn": "GV 5-100 强效污渍清洁液500ml",
+"excel_retail": 71.0,
+"discount": 0.25,
+"excel_gz_price": 53.25
+},
+{
+"sku": "5-110",
+"raw_sku": "GV 5-110",
+"name_en": "Multi Purpose Spray",
+"name_cn": "GV 5-110多功能喷雾清洁液 500ml",
+"excel_retail": 57.0,
+"discount": 0.25,
+"excel_gz_price": 42.75
+},
+{
+"sku": "5-120",
+"raw_sku": "GV5-120",
+"name_en": "Fruit & Vegetable Wash",
+"name_cn": "GV5-120 果蔬净 500ml",
+"excel_retail": 57.0,
+"discount": 0.25,
+"excel_gz_price": 42.75
+},
+{
+"sku": "5-130",
+"raw_sku": "GV 5-130",
+"name_en": "Dish Soap",
+"name_cn": "GV 5-130 西柚精油洗碗液 500ml",
+"excel_retail": 54.0,
+"discount": 0.25,
+"excel_gz_price": 40.5
+},
+{
+"sku": "5-140",
+"raw_sku": "GV 5-140",
+"name_en": "Bathroom & Shower Spray",
+"name_cn": "GV 5-140 浴室清洁液 500ml",
+"excel_retail": 57.0,
+"discount": 0.25,
+"excel_gz_price": 42.75
+},
+{
+"sku": "5-150",
+"raw_sku": "GV 5-150",
+"name_en": "Glass Cleaner",
+"name_cn": "GV 5-150 玻璃清洁剂 500ml",
+"excel_retail": 57.0,
+"discount": 0.25,
+"excel_gz_price": 42.75
+},
+{
+"sku": "5-160",
+"raw_sku": "GV 5-160",
+"name_en": "Foaming Hand Soap - Lemongrass",
+"name_cn": "GV 5-160 柠檬草精油泡沫洗手液 500ml",
+"excel_retail": 71.0,
+"discount": 0.25,
+"excel_gz_price": 53.25
+},
+{
+"sku": "5-170",
+"raw_sku": "GV 5-170",
+"name_en": "Foaming Hand Soap - Mint",
+"name_cn": "GV 5-170 薄荷精油泡沫洗手液 500ml",
+"excel_retail": 71.0,
+"discount": 0.25,
+"excel_gz_price": 53.25
+},
+{
+"sku": "5-180",
+"raw_sku": "GV 5-180",
+"name_en": "Foaming Hand Soap - Lavender",
+"name_cn": "GV 5-180 薰衣草精油泡沫洗手液 500ml",
+"excel_retail": 71.0,
+"discount": 0.25,
+"excel_gz_price": 53.25
+},
+{
+"sku": "6-7",
+"raw_sku": "GV 6-7",
+"name_en": "Organic Extra Virgin Coconut Oil (Cooking Oil / Moisturized) (100ml)",
+"name_cn": "GV 6-7 椰子油100g",
+"excel_retail": 26.0,
+"discount": 0.2,
+"excel_gz_price": 20.8
+},
+{
+"sku": "4-800",
+"raw_sku": "GV 4-800",
+"name_en": "Govegan! \"Discover Yunnan\" Collection -Yunnan Crisp Roasted Coffee Beans",
+"name_cn": "GV 4-800“发现云南”系列 - 云南孟连娜允咖啡豆 227g",
+"excel_retail": 51.0,
+"discount": 0.25,
+"excel_gz_price": 38.25
+},
+{
+"sku": "4-810",
+"raw_sku": "GV 4-810",
+"name_en": "Govegan!Discover Yunnan Collection - Sweat N Sour Roasted Coffee Beans",
+"name_cn": "GV 4-810\"发现云南\" 系列 - 云南炮仗山独水井咖啡豆 227g",
+"excel_retail": 43.0,
+"discount": 0.25,
+"excel_gz_price": 32.25
+}
+]

@@ -48,6 +48,10 @@ AGENTS.md
 /data/
 /meituan screenshots/
 /scripts/_*.json
+# Exception: the gzgrocery price list is the only input to
+# scripts/import_guanyi_pricing.js, which is the sole writer of the pricing
+# table. Tracked deliberately — it is permanent in history from here on.
+!/scripts/_guanyi_pricing.json
 /.mcp.json
 
 # Logs
