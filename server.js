@@ -211,13 +211,10 @@ app.get('/sw.js', (req, res) => {
 app.get('/manifest.webmanifest', (req, res) => {
   res.type('application/manifest+json').sendFile(path.join(__dirname, 'public', 'manifest.webmanifest'));
 });
-// Dedicated POS manifest — separate scope/start_url so installing the
-// home-screen icon launches straight into /pos for vendors.
-app.get('/pos-manifest.webmanifest', (req, res) => {
-  res.type('application/manifest+json').sendFile(path.join(__dirname, 'public', 'pos-manifest.webmanifest'));
-});
-// PNG icons for the POS PWA. Served from root so the manifest's bare
-// "/pos-icon-…" paths resolve regardless of scope.
+// "pos-icon-*" PNGs. The POS shell they were drawn for is gone, but these
+// are STILL LIVE — they are the Web Push notification icon and badge for
+// the kitchen SPA (public/app.html) and the service worker
+// (public/sw.js). Do not delete them with the POS page.
 ['pos-icon-192.png','pos-icon-512.png','pos-icon-192-maskable.png','pos-icon-512-maskable.png'].forEach(name => {
   app.get('/' + name, (req, res) => {
     res.set('Cache-Control', 'public, max-age=86400');
@@ -622,20 +619,6 @@ app.get('/', (req, res) => {
   }
   // Everything else (food.* / app.* / bare domain) → kitchen app, auth-gated.
   requireAuth(req, res, () => {
-    // Auto-route POS-only users to the cashier shell so they don't see a
-    // permission-empty admin SPA. Admins still go to the full app from /.
-    // (They can hit /pos directly to test the cashier flow.)
-    const db = require('./database');
-    const perms = db.prepare('SELECT * FROM permissions WHERE user_id = ?').get(req.user.id) || {};
-    const isAdmin = req.user.role === 'admin';
-    const hasPos  = !!perms.pos;
-    // Module flags that grant access to the main SPA. Mirrors the MODULES
-    // list in app.html; if any are true, give them the SPA.
-    const SPA_PERMS = ['dashboard','recipes','ingredients','products','purchases','finance','sales','kitchen','waste','restock','alerts','suppliers','retail'];
-    const hasAnySpa = SPA_PERMS.some(k => perms[k]);
-    if (!isAdmin && hasPos && !hasAnySpa) {
-      return res.redirect('/pos');
-    }
     res.set('Cache-Control', 'no-cache');
     res.sendFile(path.join(__dirname, 'public', 'app.html'));
   });
@@ -717,19 +700,12 @@ app.get('/full-circle', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'full-circle.html'));
 });
 
-// Tablet/phone POS shell. PUBLIC route (no requireAuth) so Chrome can
+// Kitchen station shell. PUBLIC route (no requireAuth) so Chrome can
 // validate the manifest's start_url during PWA install — otherwise it
 // silently fails when the route returns 302→/login. The page itself
-// authenticates via /api/auth/me on load and bounces unauthenticated
-// users to /login, so security is unchanged.
-app.get('/pos', (req, res) => {
-  res.set('Cache-Control', 'no-cache');
-  res.sendFile(path.join(__dirname, 'public', 'pos.html'));
-});
-
-// Kitchen station shell. Same PWA pattern as /pos — public route so the
-// manifest start_url validates, page itself self-authenticates against
-// the `kitchen` permission via /api/auth/me on load.
+// self-authenticates against the `kitchen` permission via /api/auth/me
+// on load and bounces unauthenticated users to /login, so security is
+// unchanged.
 app.get('/kitchen', (req, res) => {
   res.set('Cache-Control', 'no-cache');
   res.sendFile(path.join(__dirname, 'public', 'kitchen.html'));

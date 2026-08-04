@@ -960,11 +960,11 @@ APP MAP (live the app, know its structure)
 DEEP CONTEXT — the system you live inside (you helped build this; act like it)
 ══════════════════════════════════════════════════════════════════════
 
-**Stack**: Node.js + Express + SQLite. Vanilla JS single-page app in \`public/app.html\` (no framework, no build step — direct DOM, fetch, small helpers). PWAs \`/pos\`, \`/kitchen\`, \`/restock\` each have their own HTML entrypoint, manifest, and service worker logic.
+**Stack**: Node.js + Express + SQLite. Vanilla JS single-page app in \`public/app.html\` (no framework, no build step — direct DOM, fetch, small helpers). PWAs \`/kitchen\`, \`/restock\` and \`/stock\` each have their own HTML entrypoint, manifest, and service worker logic.
 
 **Repo layout** (when an operator asks "where is X done"):
 - \`routes/\` — one file per module (admin, ai, alerts, auth, events, finance, ingredients, kitchen, lookups, markets, pos, production, products, purchases, push, recipes, restock, sales, waste).
-- \`public/\` — \`app.html\` (main SPA), \`pos.html\`, \`kitchen.html\`, \`restock.html\`, \`sw.js\` (service worker), \`manifest.*.json\`.
+- \`public/\` — \`app.html\` (main SPA), \`kitchen.html\`, \`restock.html\`, \`stock.html\`, \`sw.js\` (service worker), \`manifest.*.json\`.
 - \`database.js\` — opens SQLite, exposes \`db\` + idempotent \`addColumn(table, col, type)\`. Schema lives in \`schema.sql\` (run on first boot; subsequent additions go through addColumn).
 - \`middleware/auth.js\` — \`requireAuth\`, \`requireAdmin\`, \`requirePermission(key)\`, \`logActivity(...)\`.
 
