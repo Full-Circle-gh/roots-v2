@@ -27,7 +27,7 @@ const { getCategoryTree, sanitizeTree, normalizeCategoryPair } = require('../lib
 // over `=== 'pickup'`: a bare pickup test reads a counter sale as a delivery.
 const { isCounter, shipsNothing, isTerminalOnPaid } = require('../lib/fulfilment');
 const { requireAuth, requirePermission, logActivity } = require('../middleware/auth');
-const { getTenantDb, ROOTS_TENANT_ID, tenantAls, tdb, currentTenantId, DATA_ISOLATION_READY } = require('../lib/tenant-db');
+const { getTenantDb, rawTenantDb, rawTdb, ROOTS_TENANT_ID, tenantAls, tdb, currentTenantId, DATA_ISOLATION_READY } = require('../lib/tenant-db');
 const { getTenantCreds, setTenantSecrets, KEYS: CRED_KEYS } = require('../lib/tenant-creds');
 // Web Push — optional; wrapped so a missing module never breaks order flow.
 let _push = null;
@@ -74,7 +74,7 @@ router.use((req, res, next) => {
   if (!tid || tid === ROOTS_TENANT_ID) return next();
   req.tenantId = tid;
   req.tenantDb = getTenantDb(tid);
-  return tenantAls.run(req.tenantDb, () => next());
+  return tenantAls.run(rawTenantDb(tid), () => next());
 });
 
 // Mini App Backend access gate. Two ways in during the single-tenant → SaaS
@@ -141,7 +141,7 @@ function requireRetailAdmin(req, res, next) {
           // ALS context so handlers reach the right connection via tdb();
           // control-plane reads above + logActivity stay on the global `db`.
           req.tenantDb = getTenantDb(tenant.id);
-          return tenantAls.run(req.tenantDb, () => next());
+          return tenantAls.run(rawTenantDb(tenant.id), () => next());
         }
       }
     } catch (e) { /* tables not ready — fall through to the kitchen path */ }
@@ -156,7 +156,7 @@ function requireRetailAdmin(req, res, next) {
       // full cap set so the (dark) RBAC layer never narrows their view.
       try { req.caps = new Set(require('../lib/capabilities').ALL_KEYS); req.scopeStores = null; }
       catch (e) { req.caps = null; req.scopeStores = null; }
-      tenantAls.run(req.tenantDb, () => next());
+      tenantAls.run(rawTenantDb(ROOTS_TENANT_ID), () => next());
     });
   });
 }
@@ -4194,7 +4194,7 @@ async function maybeAutoIssueInvoice(orderId) {
     const tid = currentTenantId();
     for (const delay of [5000, 20000, 60000]) {
       setTimeout(() => {
-        tenantAls.run(getTenantDb(tid), () => finalizeInvoiceResult(orderId).catch(() => {}));
+        tenantAls.run(rawTenantDb(tid), () => finalizeInvoiceResult(orderId).catch(() => {}));
       }, delay);
     }
   } catch (e) {
@@ -4852,7 +4852,7 @@ function handleWechatPayCallback(req, res, tid) {
     // scope so tdb()/markOrderPaid() hit the right DB.
     let amountMismatch = false;
     if (txn.trade_state === 'SUCCESS' && txn.out_trade_no) {
-      tenantAls.run(getTenantDb(tid), () => {
+      tenantAls.run(rawTenantDb(tid), () => {
         // Wallet top-up settlement ('FCTU…'). A top-up lives in its own table,
         // not retail_payments, so route it here BEFORE the order lookup.
         // finalizeTopup credits balance + bonus points + writes the ledger row
@@ -5208,7 +5208,7 @@ function handleWechatRefundCallback(req, res, tid) {
     // leaving it stale. Mapped via the original transaction's out_trade_no, in
     // the tenant's data scope so tdb() hits the right DB.
     if (info.out_trade_no && info.refund_id) {
-      tenantAls.run(getTenantDb(tid), () => {
+      tenantAls.run(rawTenantDb(tid), () => {
         try {
           const pay = tdb().prepare('SELECT order_id FROM retail_payments WHERE out_trade_no = ?').get(info.out_trade_no);
           if (pay?.order_id) {
@@ -5594,7 +5594,7 @@ function tickSweepStaleSecHolds() {
   catch { tenants = null; }   // tenants table not migrated yet → single-DB fallback
   const run = (tid) => {
     try {
-      const tdb_ = tid == null ? tdb() : getTenantDb(tid);
+      const tdb_ = tid == null ? rawTdb() : rawTenantDb(tid);
       tenantAls.run(tdb_, () => sweepStaleSecHolds());
     } catch (e) { console.warn('[wx-sec] sweep', tid, e.message); }
   };
@@ -5667,7 +5667,7 @@ router.get('/api/wx/callback/:tid', (req, res) => {
 router.post('/api/wx/callback/:tid', wxPushBody, (req, res) => {
   const tid = resolveCallbackTid(req.params.tid);
   if (!tid) return res.status(404).end();
-  tenantAls.run(getTenantDb(tid), () => handleWxPushEvent(req, res));
+  tenantAls.run(rawTenantDb(tid), () => handleWxPushEvent(req, res));
 });
 
 // Push a subscribeMessage to a customer if they have an unused consent for
@@ -5781,13 +5781,13 @@ function maybeSendDeliveredSms(orderId) {
         console.warn('[sms-delivered]', orderId, r.error || r.code);
         // Roll the stamp back so the next delivered tick (or a manual retry) can
         // try again. Re-establish the tenant ALS — the await unwound it.
-        tenantAls.run(getTenantDb(tid), () => {
+        tenantAls.run(rawTenantDb(tid), () => {
           try { tdb().prepare("UPDATE retail_orders SET sms_delivered_sent_at = NULL WHERE id = ?").run(orderId); } catch (e) { /* ignore */ }
         });
       })
       .catch((e) => {
         console.warn('[sms-delivered] send failed', orderId, e.message);
-        tenantAls.run(getTenantDb(tid), () => {
+        tenantAls.run(rawTenantDb(tid), () => {
           try { tdb().prepare("UPDATE retail_orders SET sms_delivered_sent_at = NULL WHERE id = ?").run(orderId); } catch (er) { /* ignore */ }
         });
       });
@@ -6569,7 +6569,7 @@ function tickBroadcastScheduler() {
   for (const t of tenants) {
     try {
       const tdb_ = getTenantDb(t.id);
-      tenantAls.run(tdb_, () => {
+      tenantAls.run(rawTenantDb(t.id), () => {
         const due = tdb_.prepare(
           `SELECT * FROM retail_broadcasts
             WHERE status = 'scheduled' AND scheduled_for <= CURRENT_TIMESTAMP`
@@ -6704,7 +6704,7 @@ function tickAutoDeliverLocalEta() {
   catch { tenants = null; }   // tenants table not migrated yet → single-DB fallback
   const run = (tid) => {
     try {
-      const tdb_ = tid == null ? tdb() : getTenantDb(tid);
+      const tdb_ = tid == null ? rawTdb() : rawTenantDb(tid);
       const total = tenantAls.run(tdb_, () => autoDeliverLocalEtaForTenant());
       if (total > 0) console.log(`[auto-deliver] tenant=${tid ?? 'main'} delivered=${total}`);
     } catch (e) { console.warn('[auto-deliver]', tid, e.message); }
@@ -6803,7 +6803,7 @@ function tickAutoDispatchQingyun() {
   catch { tenants = null; }   // tenants table not migrated yet → single-DB fallback
   const run = (tid) => {
     try {
-      const tdb_ = tid == null ? tdb() : getTenantDb(tid);
+      const tdb_ = tid == null ? rawTdb() : rawTenantDb(tid);
       const total = tenantAls.run(tdb_, () => autoDispatchQingyunForTenant());
       if (total > 0) console.log(`[auto-dispatch] tenant=${tid ?? 'main'} dispatched=${total}`);
     } catch (e) { console.warn('[auto-dispatch]', tid, e.message); }
@@ -6877,7 +6877,7 @@ function tickAutoDeliverQingyun() {
   catch { tenants = null; }   // tenants table not migrated yet → single-DB fallback
   const run = (tid) => {
     try {
-      const tdb_ = tid == null ? tdb() : getTenantDb(tid);
+      const tdb_ = tid == null ? rawTdb() : rawTenantDb(tid);
       const total = tenantAls.run(tdb_, () => autoDeliverQingyunForTenant());
       if (total > 0) console.log(`[auto-deliver-qy] tenant=${tid ?? 'main'} delivered=${total}`);
     } catch (e) { console.warn('[auto-deliver-qy]', tid, e.message); }
@@ -6984,7 +6984,7 @@ function tickRetryWeChatShipping() {
     if (_wxShippingSweepInFlight.has(key)) return;   // previous pass still running
     _wxShippingSweepInFlight.add(key);
     try {
-      const tdb_ = tid == null ? tdb() : getTenantDb(tid);
+      const tdb_ = tid == null ? rawTdb() : rawTenantDb(tid);
       const total = await tenantAls.run(tdb_, () => retryWeChatShippingForTenant());
       if (total > 0) console.log(`[wx-shipping-sweep] tenant=${tid ?? 'main'} uploaded=${total}`);
     } catch (e) { console.warn('[wx-shipping-sweep]', tid, e.message); }
@@ -7142,7 +7142,7 @@ function tickCancelStalePending() {
   catch { tenants = null; }   // tenants table not migrated yet → single-DB fallback
   const run = (tid) => {
     try {
-      const tdb_ = tid == null ? tdb() : getTenantDb(tid);
+      const tdb_ = tid == null ? rawTdb() : rawTenantDb(tid);
       const total = tenantAls.run(tdb_, () => cancelStalePendingOrdersForTenant());
       if (total > 0) console.log(`[auto-cancel] tenant=${tid ?? 'main'} cancelled=${total}`);
     } catch (e) { console.warn('[auto-cancel]', tid, e.message); }
@@ -10713,7 +10713,7 @@ async function tickJdTrackingSweep() {
   catch { tenants = null; }   // tenants table not migrated yet → single-DB fallback
   const run = async (tid) => {
     try {
-      const tdb_ = tid == null ? tdb() : getTenantDb(tid);
+      const tdb_ = tid == null ? rawTdb() : rawTenantDb(tid);
       const n = await tenantAls.run(tdb_, () => sweepJdTrackingForTenant());
       if (n > 0) console.log(`[jd.sweeper] tenant=${tid ?? 'main'} checked=${n}`);
     } catch (e) { console.warn('[jd.sweeper]', tid, e.message); }
@@ -22429,7 +22429,7 @@ router.get('/api/retail/orders/:orderNo/tracking/:trackingNumber', requireRetail
 // path (env creds, mainDb) — byte-for-byte unchanged (getTenantDb(1)===mainDb,
 // getTenantCreds(1)===env bundle, so the salt + DB are identical to before).
 function handleKd100Callback(req, res, tid) {
-  tenantAls.run(getTenantDb(tid), () => {
+  tenantAls.run(rawTenantDb(tid), () => {
     try {
       const parsed = tracking.parseKd100Callback(req.body?.param);
       if (!parsed || !parsed.number) {

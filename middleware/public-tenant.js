@@ -15,7 +15,7 @@
 // (auth tokens live in each tenant's own DB, so a mismatched token just fails).
 
 const db = require('../database');
-const { getTenantDb, tenantAls, ROOTS_TENANT_ID } = require('../lib/tenant-db');
+const { getTenantDb, rawTenantDb, tenantAls, ROOTS_TENANT_ID } = require('../lib/tenant-db');
 
 // Normalize a Host header to a bare lowercased hostname (strip any :port).
 function normalizeHost(host) {
@@ -69,7 +69,7 @@ function resolvePublicTenant(req) {
 function publicTenantScope(req, res, next) {
   const tid = resolvePublicTenant(req);
   if (!tid) return next();
-  return tenantAls.run(getTenantDb(tid), () => next());
+  return tenantAls.run(rawTenantDb(tid), () => next());
 }
 
 module.exports = {
