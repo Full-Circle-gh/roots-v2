@@ -24,6 +24,13 @@
 - CUSTOMER — a person who buys from an account's online store. The plain word ALWAYS means this. Never "shopper", and never "user" — a USER works for an account and logs into an app.
 - SALES CHANNEL — a way customers buy. Attached to a location. Configured per business; not a fixed list.
 - ORDER — one customer purchase. One record regardless of channel.
+- GZGROCERY — the sales channel operated with the Guangzhou grocery partner. It spans two distinct external systems: the partner's ERP (stock, product mapping, pricing, pickup drift detection) and the partner's OpenCart storefront (paid orders). Both belong to one channel and one commercial relationship.
+
+### gzgrocery — one channel, two external systems
+
+Tables and routes for this channel take the prefix `gzgrocery_erp_` for the partner's ERP system and `gzgrocery_shop_` for the partner's storefront. One prefix identifies the partner; the suffix identifies which external system the table mirrors.
+
+Both halves are required. The storefront order daemon resolves store and pricing from the ERP tables, so they are one system with a shared spine, not two independent integrations.
 
 ## Stock
 
@@ -93,3 +100,4 @@ Correct: "an account has customers." Wrong: "our customers" when an account is m
 - INGREDIENT, as a distinct entity from an item — ingredients are items.
 - MARKET / RETAIL STORE, as separate concepts — both are locations.
 - SHOPPER — the word is CUSTOMER.
+- GUANYI — the channel is GZGROCERY. Retired 2026-08-04. Do not use it in documentation, briefs, UI copy, API paths or new code. It survives in the live schema and in stored data values pending the rename described in the consolidation decisions record.
