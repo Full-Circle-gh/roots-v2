@@ -221,6 +221,37 @@ for (const [name, sql] of PROBES) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// Everything above tests the STAGED checkout, because ro-query stages lib/ into a
+// scratch tree. That is right for gating a change before it ships — but it says
+// nothing about what is actually running. Deploy 901 proved why that matters: it
+// carried the flip, failed at the lint gate before shipping, and the next deploy
+// diffed against the FAILED commit, so lib/tenant-db.js was skipped permanently
+// while main claimed otherwise. This section reads the DEPLOYED file.
+console.log('\n══ 4b · the DEPLOYED artifact, not just this checkout ══');
+{
+  const deployed = path.join(LIVE_APP, 'lib', 'tenant-db.js');
+  if (!fs.existsSync(deployed)) {
+    console.log(`   --    ${deployed} not present (not running on the live box) — skipped`);
+  } else {
+    const src = fs.readFileSync(deployed, 'utf8');
+    const tdbWrapped = /function\s+tdb\s*\([^)]*\)\s*\{[^}]*\breturn\s+seam\s*\(/.test(src);
+    const getWrapped = /function\s+getTenantDb\s*\([^)]*\)\s*\{[^}]*\breturn\s+seam\s*\(/.test(src);
+    const hasRawAccessors = /function\s+rawTenantDb\s*\(/.test(src) && /function\s+rawTdb\s*\(/.test(src);
+
+    if (hasRawAccessors) ok('deployed tenant-db.js has the raw accessors (Step A is live)');
+    else fail('deployed tenant-db.js has NO raw accessors — Step A did not reach production');
+
+    if (tdbWrapped && getWrapped) {
+      ok('deployed tenant-db.js has tdb() AND getTenantDb() seam-wrapped (Step B is live)');
+    } else {
+      fail(`deployed tenant-db.js is NOT the Step B version — tdb() wrapped: ${tdbWrapped}, ` +
+           `getTenantDb() wrapped: ${getWrapped}. The coverage figure describes the repository, ` +
+           'not what is running.');
+    }
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 console.log('\n══ 5 · no converter is installed ══');
 {
   delete require.cache[DB_SEAM_JS];
