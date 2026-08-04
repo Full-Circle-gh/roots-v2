@@ -579,6 +579,20 @@ A FINDING, PRE-EXISTING AND NOT CAUSED BY THIS WORK: on live, `retail_stores` ho
 
 The no-throw assertion is separate and explicit because `store-hours.js` catches its own read errors and keeps serving its last good cache. A seam that broke the read would therefore be invisible from outside — the daemons would still get hours and the app would still be up. So the harness asserts the absence of a throw at two levels: it issues store-hours' own statement through a seam-wrapped handle with no `try`/`catch` in the way, which catches a fault originating inside the seam; and it sits a probe underneath the seam that records every exception the handle raises whether or not the module swallows it. Both must be clean, and the read must be shown to have actually completed, since a swallowed failure leaves an empty map that otherwise compares equal to an empty database. The harness was verified against two deliberately broken seams — one that alters a value and one that throws — and fails on both, so a green result means something.
 
+### A FAILED DEPLOY SILENTLY SKIPS ITS CHANGES FOREVER — FINDING 2026-08-04
+
+Found the hard way while shipping Step B, and it is a property of the pipeline rather than of that change.
+
+`deploy.yml` computes what to ship as `git diff ${{ github.event.before }} ${{ github.sha }}` — the diff against the PREVIOUS PUSH, not against what was last successfully deployed. So when a run fails before its "Ship changed files" step, the files in that commit are never shipped, and the NEXT push diffs against the failed commit and does not include them either. They are skipped permanently, and every subsequent deploy reports success.
+
+WHAT HAPPENED. Deploy 901 carried the Step B flip (`lib/tenant-db.js`). It failed at the lint gate — correctly, on an error in a diagnostic file — and shipped nothing. Deploy 902 then diffed against 901's commit, found only the diagnostic, and shipped that. It reported `RESULT=SUCCESS`. Production kept running the Step A version of `tenant-db.js` while `main`, the merge commit, the coverage checker and the decisions record all said Step B was live. Recovered with a `workflow_dispatch` run using `full_sync: true`.
+
+WHY IT IS DANGEROUS BEYOND THIS INSTANCE. The failure mode is silent and the signal is inverted: the deploy that skips your change is the one that says SUCCESS. Nothing compares what is on the box against what is in the repository, so the drift persists until someone happens to look. Any failed deploy in this repository's history may have left files behind in the same way.
+
+WHAT WAS DONE ABOUT IT NOW. `scripts/diagnose_tenant_step_b.js` gained a check that reads the DEPLOYED `/root/roots-v2/lib/tenant-db.js` and asserts it is the version the repository claims — verifying the artifact rather than the checkout. That covers one file.
+
+WHAT IS STILL OWED, AND IS NOT DONE. The general fix belongs in the pipeline, not in a diagnostic: compute the diff against the last SUCCESSFULLY deployed commit rather than the previous push. That means recording the deployed SHA on the server after a successful install and reading it back on the next run, or falling back to `full_sync` when the previous run did not succeed. Not attempted here — it changes deployment behaviour, which is outside what this work was asked to touch.
+
 ### Postgres cutover checklist — items recorded as they are found
 
 Actionable items that must happen AT the cutover and cannot be solved by the code beforehand. This section exists because the first such item was found while drawing the seam's scope line, and there was nowhere to put it. `GO-LIVE-CUTOVER.md` is the WeChat mini-app runbook and is a different cutover; this list is the Postgres one.
