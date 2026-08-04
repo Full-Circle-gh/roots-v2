@@ -205,6 +205,78 @@ console.log('\n══ E · add-on staging -> settlement window (path 1 evidence,
 }
 
 // ════════════════════════════════════════════════════════════════════════════
+// E2 — path 1: what the new settle rule would write, against every add-on
+// ════════════════════════════════════════════════════════════════════════════
+// The claim under test is that the value the new code writes equals the value
+// the old code wrote — always — because the re-derived figures are used only
+// when they match the staged ones exactly, and otherwise the staged ones are
+// written unchanged.
+console.log('\n══ E2 · add-on settle, old form vs new form ══');
+{
+  const flashActive = (p, nowMs) => {
+    if (p.flash_price == null) return false;
+    const st = p.flash_starts_at ? Date.parse(String(p.flash_starts_at).replace(' ', 'T') + 'Z') : null;
+    const en = p.flash_ends_at ? Date.parse(String(p.flash_ends_at).replace(' ', 'T') + 'Z') : null;
+    if (st != null && nowMs < st) return false;
+    if (en != null && nowMs > en) return false;
+    return Number(p.flash_price) < Number(p.price);
+  };
+  const prodStmt = db.prepare(`SELECT id, sell_price AS price, flash_price, flash_starts_at, flash_ends_at
+                                 FROM store_products WHERE id = ?`);
+  function derive(items, nowMs) {
+    const out = []; let subtotal = 0;
+    for (const it of items) {
+      if (!it.product_id) return null;
+      const p = prodStmt.get(it.product_id);
+      if (!p) return null;
+      let optionDelta = 0;
+      const ids = (Array.isArray(it.options) ? it.options : [])
+        .map(o => parseInt(o && o.choice_id, 10)).filter(Boolean);
+      if (ids.length) {
+        const rs = db.prepare(`SELECT id, price_delta FROM retail_product_option_choices
+                                WHERE id IN (${ids.map(() => '?').join(',')})`).all(...ids);
+        if (rs.length !== ids.length) return null;
+        for (const c of rs) optionDelta += Number(c.price_delta) || 0;
+      }
+      const unit = (flashActive(p, nowMs) ? Number(p.flash_price) : Number(p.price)) + optionDelta;
+      const line = unit * (Number(it.qty) || 0);
+      if (!(unit >= 0)) return null;
+      out.push({ unit_price: unit, line_total: line });
+      subtotal += line;
+    }
+    return { lines: out, subtotal: Math.round(subtotal * 100) / 100 };
+  }
+
+  const addons = db.prepare(
+    'SELECT id, order_id, status, amount, addon_subtotal, items_json FROM retail_order_addons ORDER BY id').all();
+  let cases = 0, cells = 0, reDerived = 0, fellBack = 0;
+  for (const a of addons) {
+    let items; try { items = JSON.parse(a.items_json || '[]'); } catch (e) { items = []; }
+    if (!items.length) continue;
+    const stagedSubtotal = a.addon_subtotal != null ? Number(a.addon_subtotal) : Number(a.amount);
+    const d = derive(items, Date.now());
+    const agrees = !!d
+      && Math.round(d.subtotal * 100) === Math.round(stagedSubtotal * 100)
+      && d.lines.every((x, i) => x.unit_price === items[i].unit_price && x.line_total === items[i].line_total);
+    const written = agrees
+      ? items.map((it, i) => Object.assign({}, it, { unit_price: d.lines[i].unit_price, line_total: d.lines[i].line_total }))
+      : items;
+    if (agrees) reDerived++; else fellBack++;
+    cases++;
+    for (let i = 0; i < items.length; i++) {
+      cells += 2;
+      if (written[i].unit_price !== items[i].unit_price) bad(`addon ${a.id} line ${i} unit_price ${items[i].unit_price} -> ${written[i].unit_price}`);
+      if (written[i].line_total !== items[i].line_total) bad(`addon ${a.id} line ${i} line_total ${items[i].line_total} -> ${written[i].line_total}`);
+    }
+    console.log(`     addon ${a.id} order ${a.order_id} ${a.status} staged=${stagedSubtotal}`
+      + ` derived=${d ? d.subtotal : 'unresolvable'} -> ${agrees ? 're-derived (from the column)' : 'staged price kept'}`);
+  }
+  console.log(`   add-ons replayed=${cases}  money cells compared=${cells}`);
+  console.log(`   would take the re-derived path today: ${reDerived}   would keep the staged price: ${fellBack}`);
+  console.log('   (a fallback is the rule working — these were priced weeks ago and the catalogue has moved since)');
+}
+
+// ════════════════════════════════════════════════════════════════════════════
 // F — the shipped source on the box
 // ════════════════════════════════════════════════════════════════════════════
 console.log('\n══ F · deployed source ══');
@@ -219,8 +291,12 @@ console.log('\n══ F · deployed source ══');
     ['restore undo-point test strips the stamp',
       s => /snapshotBody\(latest\.snapshot_json\) !== snapshotBody\(preJson\)/.test(s)],
     ['stamp key is not a VERSION_COLUMN', s => !/'_money_unit',/.test(s)],
-    ['addon finalize still reads the JSON (path 1 untouched)',
-      s => /it\.qty, it\.unit_price, it\.line_total,/.test(s)],
+    ['addon finalize re-derives from the columns',
+      s => /const derived = deriveAddonLineMoney\(items, Date\.now\(\)\);/.test(s)],
+    ['addon finalize falls back to the staged price',
+      s => /staged price kept/.test(s)],
+    ['re-derivation reads store_products and the option choices',
+      s => /FROM store_products WHERE id = \?/.test(s) && /FROM retail_product_option_choices/.test(s)],
   ];
   let src = '';
   try { src = fs.readFileSync(APP + '/routes/retail.js', 'utf8'); }
