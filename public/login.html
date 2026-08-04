@@ -243,7 +243,6 @@ function _lastAppRedirect(user) {
   const p = user.permissions || {};
   if (last === '/'        ) return '/';
   if (last === '/restock' && (isAdmin || p.restock || p.warehouse_inbox)) return '/restock';
-  if (last === '/pos'     && (isAdmin || p.pos))      return '/pos';
   if (last === '/kitchen' && (isAdmin || p.kitchen))  return '/kitchen';
   return null;
 }
@@ -254,7 +253,6 @@ function _smartRedirect(user) {
   // Specific single-purpose flags first — these always route to their
   // app even if other perms are also granted.
   if (p.warehouse_inbox) return '/restock';
-  if (p.pos)             return '/pos';
   // Manager-level perms = a multi-tool operator → dashboard. We
   // intentionally exclude common warehouse / kitchen flags like
   // dashboard / ingredients / purchases / alerts / suppliers because
@@ -281,7 +279,7 @@ async function login() {
       //      bounced an unauthenticated user here).
       //   2. The PWA the user was last on, if they still have access.
       //   3. Smart routing based on permissions (warehouse → /restock,
-      //      pos → /pos, etc).
+      //      kitchen → /kitchen, etc).
       window.location.href =
         _safeRedirect() ||
         _lastAppRedirect(d.user) ||

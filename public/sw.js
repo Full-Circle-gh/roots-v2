@@ -1,9 +1,9 @@
 // Roots v2 — minimal service worker.
 // Strategy:
-//   • HTML pages (/, /pos, /kitchen, /login):  NETWORK-FIRST. Always try
-//     to get the freshest shell. Fall back to cache only when offline.
+//   • HTML pages (/, /kitchen, /restock, /login):  NETWORK-FIRST. Always
+//     try to get the freshest shell. Fall back to cache only when offline.
 //     This is what was missing in earlier versions — a stale cached
-//     /pos.html could outlive a route fix and silently break PWA install.
+//     shell could outlive a route fix and silently break PWA install.
 //   • Web manifests + icons + JS/CSS/etc.: stale-while-revalidate
 //     (instant from cache, refresh in background).
 //   • API requests: network-only, never cached.
@@ -33,7 +33,7 @@ self.addEventListener('activate', (e) => {
     await self.clients.claim();
     // Tell every connected page that a new shell is live so they reload
     // and pick up the latest HTML/JS without the user having to think
-    // about it. The page-side handler is in pos.html / kitchen.html.
+    // about it. The page-side handler is in kitchen.html / restock.html.
     const clients = await self.clients.matchAll({ includeUncontrolled: true });
     for (const c of clients) {
       try { c.postMessage({ type: 'sw-updated' }); } catch {}
@@ -52,6 +52,9 @@ self.addEventListener('push', (e) => {
   const body  = data.body  || '';
   const url   = data.url   || '/';
   const tag   = data.tag   || 'roots-' + Date.now();
+  // NOTE: "pos-icon-192" is the notification artwork, not a POS reference.
+  // The POS shell was removed but this icon is still the live push icon
+  // and badge for every notification (same asset used by app.html).
   e.waitUntil(self.registration.showNotification(title, {
     body, tag, icon: '/pos-icon-192.png', badge: '/pos-icon-192.png',
     // When a new push reuses an existing tag the browser replaces the tray
