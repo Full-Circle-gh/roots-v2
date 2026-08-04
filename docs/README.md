@@ -84,9 +84,8 @@ There were **7+ scattered copies** of these docs across `Desktop/`, `tacent/`, `
 | 6 | `tacet-ia-blueprint.md` | The IA blueprint. §2 corrected 2026-07-17. |
 | 7 | `tacet-design-system.md` | Unchanged. How it looks. |
 | 8 | `tacet-brand-concept.md` | Unchanged. How it sounds. |
-| 9 | `gzgrocery-findings.md` | gzgrocery channel findings — investigated issues and their disposition. |
 
-**Starting a fresh session:** upload all nine. Say *"read the handoff first, then the addendum and the topbar correction — they amend it. Then the rulebook's §1.1a."*
+**Starting a fresh session:** upload all eight. Say *"read the handoff first, then the addendum and the topbar correction — they amend it. Then the rulebook's §1.1a."*
 
 ---
 
