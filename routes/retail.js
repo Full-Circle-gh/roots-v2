@@ -844,11 +844,11 @@ router.get('/api/retail/pickup-stores', (req, res) => {
 // threshold for the customer's chosen address zone (address_id = whatever they
 // last selected at checkout; otherwise their default saved address), so the bar
 // matches what checkout will actually charge (e.g. a Tianhe address whose zone
-// Free-over is ¥199, not the global ¥399). Falls back to the global when there's
+// Free-over is ¥299, not the global one). Falls back to the global when there's
 // no saved address or the zone leaves Free-over blank.
 router.get('/api/retail/free-shipping-threshold', requireRetailAuth, (req, res) => {
   try {
-    const globalFree = Number(cfgValue('fees.freeShippingThreshold', 399)) || 0;
+    const globalFree = Number(cfgValue('fees.freeShippingThreshold', 199)) || 0;
     let threshold = globalFree, source = 'global';
     // Prefer an explicit address_id (the one the customer last selected at
     // checkout); ownership-scoped so a foreign id can't be probed. Falls back
@@ -7159,6 +7159,10 @@ if (_staleCancelSweep.unref) _staleCancelSweep.unref();
 // seed the editor on a fresh install and are the fallback if the config row is
 // missing or malformed. tier_key is auto-derived from lifetime_spend on every
 // award/reverse + self-healed in requireRetailAuth (no manual override).
+// The thresholds and multipliers below mirror the live stored ladder, so a
+// missing config row cannot silently move every customer onto a different
+// ladder. The perks copy is the product's own placeholder, not Roots' — it is
+// deliberately NOT mirrored.
 const DEFAULT_ROOTS_CLUB_TIERS = [
   {
     key: 'seed',   name_en: 'Seed',    name_cn: '种子',
@@ -7168,19 +7172,19 @@ const DEFAULT_ROOTS_CLUB_TIERS = [
   },
   {
     key: 'sprout', name_en: 'Sprout',  name_cn: '幼苗',
-    color: 'pea',    threshold: 500, points_mult: 1.2,
+    color: 'pea',    threshold: 4000, points_mult: 1.1,
     perks_en: ['10% off all orders', 'Early access to drops', 'Free shipping ¥299+'],
     perks_cn: ['全场 10% 折扣', '新品优先购', '满 ¥299 包邮'],
   },
   {
     key: 'root',   name_en: 'Root',    name_cn: '根',
-    color: 'forest', threshold: 2000, points_mult: 1.5,
+    color: 'forest', threshold: 6000, points_mult: 1.2,
     perks_en: ['15% off all orders', 'Early access to drops', 'Free shipping ¥199+', 'Birthday gift'],
     perks_cn: ['全场 15% 折扣', '新品优先购', '满 ¥199 包邮', '生日礼物'],
   },
   {
     key: 'tree',   name_en: 'Tree',    name_cn: '大树',
-    color: 'ink',    threshold: 5000, points_mult: 2.0,
+    color: 'ink',    threshold: 10000, points_mult: 1.3,
     perks_en: ['20% off all orders', 'Early access to drops', 'Free shipping (no minimum)', 'Birthday gift', 'Exclusive tasting events'],
     perks_cn: ['全场 20% 折扣', '新品优先购', '免邮 (无门槛)', '生日礼物', '专属品鉴活动'],
   },
@@ -9383,7 +9387,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   } else {
     // Backwards-compatible fallback while zones are still being configured:
     // legacy 'fees.standardShipping' / 'fees.sameDayDelivery' kick in.
-    const freeShipThreshold = Number(cfgValue('fees.freeShippingThreshold', 399));
+    const freeShipThreshold = Number(cfgValue('fees.freeShippingThreshold', 199));
     const standardShipping  = Number(cfgValue('fees.standardShipping', 12));
     const sameDayDelivery   = Number(cfgValue('fees.sameDayDelivery', 18));
     if (deliveryMode === 'sameday') shippingFee = sameDayDelivery;
@@ -15241,7 +15245,7 @@ router.delete('/api/retail-admin/customers/:id/addresses/:addrId', requireRetail
 //      referrer's wallet through the existing retail_topup_transactions
 //      ledger (payment_method='referral_reward'), updates cached balance.
 
-const AFFILIATE_REWARD_DEFAULT = 30;       // ¥ per first paid order
+const AFFILIATE_REWARD_DEFAULT = 20;       // ¥ per first paid order — mirrors the live stored value
 const REFERRAL_CODE_PREFIX     = 'ROOTS-';
 const REFERRAL_CODE_BODY_LEN   = 6;        // 6 alnum chars → ~36^6 ≈ 2B keyspace
 
@@ -25881,7 +25885,7 @@ function computeDeliveryAndPacking(zone, subtotal, deliveryMode, totalQty, cartG
     const freeThreshold = Number(zone.free_threshold);
     freeEligible = freeThreshold > 0 && subtotal >= freeThreshold;
   } else {
-    const globalFree = Number(cfgValue('fees.freeShippingThreshold', 399));
+    const globalFree = Number(cfgValue('fees.freeShippingThreshold', 199));
     freeEligible = globalFree <= 0 || subtotal >= globalFree;
   }
 
@@ -26105,10 +26109,12 @@ function sweepExpiredPoints(customerId) {
   return totalExpired;
 }
 
-// points.redeemRate = points needed per ¥1 of discount (default 100).
+// points.redeemRate = points needed per ¥1 of discount. The fallback mirrors the
+// live stored value (1 point = ¥1) so a missing config row cannot silently change
+// what a point is worth — a fallback of 100 would make every redemption 1/100th.
 function pointsRedeemRate() {
-  const r = Number(cfgValue('points.redeemRate', 100));
-  return r > 0 ? r : 100;
+  const r = Number(cfgValue('points.redeemRate', 1));
+  return r > 0 ? r : 1;
 }
 // Cash a customer must put on the table when redeeming N points.
 function pointsCashValue(pts) {
