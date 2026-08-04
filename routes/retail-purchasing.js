@@ -500,14 +500,28 @@ router.get('/api/retail-admin/bills/outstanding', requireRetailAdmin, (req, res)
 router.get('/api/retail-admin/bills/summary', requireRetailAdmin, (req, res) => {
   const month = (req.query.month || gzToday().slice(0, 7)).slice(0, 7);
   const tid = Number(currentTenantId()) || 1;
-  const cov = db.prepare(`
-    SELECT COALESCE(SUM(pli.qty*pli.cost_per_unit),0) AS purchased,
-           COALESCE(SUM((SELECT SUM(allocated_amount) FROM invoice_lines WHERE line_id=pli.id)),0) AS billed
-      FROM po_line_items pli JOIN purchase_orders po ON po.id=pli.po_id
-     WHERE COALESCE(po.scope,'kitchen')='retail' AND COALESCE(po.tenant_id,1) = ${tid} AND po.status IN ${BILL_PO_STATUSES}
+  // `purchased` and `billed` are read in two statements rather than one because
+  // they come from columns that do not share a unit: po_line_items.cost_per_unit
+  // is a decimal amount, while invoice_lines.allocated_amount is a whole-cent
+  // integer in Postgres. Summed together in one query they arrive as two scales
+  // in one row with nothing to tell them apart. Read separately — and with the
+  // allocation rows selected as a plain column rather than pre-summed in SQL —
+  // each side is a single identifiable unit before the two meet below.
+  const billScope = `COALESCE(po.scope,'kitchen')='retail' AND COALESCE(po.tenant_id,1) = ${tid}
+       AND po.status IN ${BILL_PO_STATUSES}
        AND COALESCE(po.no_invoice_expected,0)=0 AND COALESCE(pli.no_invoice_expected,0)=0
-       AND substr(po.date,1,7)=?`).get(month);
-  const purchased = cov.purchased || 0, billed = cov.billed || 0;
+       AND substr(po.date,1,7)=?`;
+  const purchased = (db.prepare(`
+    SELECT COALESCE(SUM(pli.qty*pli.cost_per_unit),0) AS purchased
+      FROM po_line_items pli JOIN purchase_orders po ON po.id=pli.po_id
+     WHERE ${billScope}`).get(month) || {}).purchased || 0;
+  const billed = db.prepare(`
+    SELECT il.allocated_amount AS allocated_amount
+      FROM invoice_lines il
+      JOIN po_line_items pli ON pli.id = il.line_id
+      JOIN purchase_orders po ON po.id = pli.po_id
+     WHERE ${billScope}`).all(month)
+    .reduce((sum, r) => sum + (r.allocated_amount || 0), 0);
   const awaiting = Math.max(0, purchased - billed);
   const today = gzToday();
   const soon = new Date(Date.now() + 8 * 3600 * 1000 + 7 * 86400 * 1000).toISOString().slice(0, 10);
