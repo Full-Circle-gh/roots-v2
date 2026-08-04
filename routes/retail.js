@@ -26928,11 +26928,63 @@ function sendWecomOrderAddonShortAlert(orderId, storeId, shortages) {
   } catch (e) { console.warn('[wecom addon short setup]', e.message); }
 }
 
+// Re-derive an add-on's line money from the columns it originally came from,
+// so the number that lands in retail_order_items has a column behind it rather
+// than a number parsed out of a text blob. Structural fields stay as staged;
+// only unit_price and line_total are recomputed, from store_products and
+// retail_product_option_choices, exactly as the staging endpoint computed them.
+//
+// Returns null when a line cannot be re-derived at all — a product or an option
+// choice deleted between staging and settlement — which the caller treats the
+// same as drift.
+function deriveAddonLineMoney(items, nowMs) {
+  const prodStmt = tdb().prepare(
+    `SELECT id, sell_price AS price, flash_price, flash_starts_at, flash_ends_at,
+            flash_stock_limit, flash_sold, no_coupon_on_flash
+       FROM store_products WHERE id = ?`);
+  const out = [];
+  let subtotal = 0;
+  for (const it of items) {
+    if (!it.product_id) return null;
+    const p = prodStmt.get(it.product_id);
+    if (!p) return null;
+    let optionDelta = 0;
+    const choiceIds = (Array.isArray(it.options) ? it.options : [])
+      .map(o => parseInt(o && o.choice_id, 10)).filter(Boolean);
+    if (choiceIds.length) {
+      const rows = tdb().prepare(
+        `SELECT id, price_delta FROM retail_product_option_choices
+          WHERE id IN (${choiceIds.map(() => '?').join(',')})`).all(...choiceIds);
+      if (rows.length !== choiceIds.length) return null;   // a choice went away
+      for (const c of rows) optionDelta += Number(c.price_delta) || 0;
+    }
+    const eff = flashsales.effectivePriceFor(p, p.price, nowMs);
+    const unit = eff.price + optionDelta;
+    const line = unit * (Number(it.qty) || 0);
+    if (!(unit >= 0)) return null;
+    out.push({ unit_price: unit, line_total: line });
+    subtotal += line;
+  }
+  return { lines: out, subtotal: Math.round(subtotal * 100) / 100 };
+}
+
 // Settle a paid add-on: inject the staged items into the order, merge them
 // into its open (un-dispatched) parcel, bump the order total, deduct stock,
 // award earn-points, and ping the store. Idempotent (guarded by status), so
 // safe to call from both DEV-mode auto-pay and the async WeChat callback.
-// NOTE: re-prices NOTHING — items_json was server-priced at create time.
+//
+// PRICING: the line money is re-derived from store_products at settlement, so
+// the value written into retail_order_items comes from a column rather than
+// verbatim out of items_json — see docs/tacet-consolidation-decisions.md §24 on
+// why JSON money must not be the thing that reaches a column. The re-derived
+// figures are used ONLY when they match what was staged exactly and their
+// subtotal matches the addon_subtotal column; anything else — a price edited, a
+// flash window opened or closed, a product or choice deleted — falls back to the
+// staged prices and logs it. The customer is charged retail_order_addons.amount,
+// fixed at staging, so the fallback is what keeps the order's lines summing to
+// what was actually paid, and keeps the refund ceiling in normalizeRefundLines
+// honest. Net effect: the value written is always the price the customer was
+// quoted; what changes is where it came from, and that drift is now visible.
 // How much of an order's already-paid base delivery fee is waived when
 // `addonSubtotal` of new items pushes the order over its free-shipping
 // threshold. Recomputes the zone delivery fee at the NEW subtotal (same rules
@@ -27014,6 +27066,31 @@ function finalizeOrderAddon(addonId) {
   const freedShipping     = Number(a.freed_shipping) || 0;
   const shippingReduction = Math.min(freedShipping, addonSubtotal);
   const remainderCredit   = Math.round((freedShipping - shippingReduction) * 100) / 100;
+
+  // Re-derive the line money from the columns, and accept it only if it agrees
+  // with what was staged. The comparison reads the staged figures but never
+  // writes them unless it has to, so the accepted path puts no JSON money into
+  // a column. Exact equality rather than a tolerance: it makes "no value the
+  // customer saw has moved" provable instead of merely likely, and any
+  // disagreement at all — including a last-bit float difference — simply lands
+  // on the staged price, which is the number the customer agreed to anyway.
+  const stagedSubtotal = a.addon_subtotal != null ? Number(a.addon_subtotal) : Number(a.amount);
+  const derived = deriveAddonLineMoney(items, Date.now());
+  const agrees = !!derived
+    && Math.round(derived.subtotal * 100) === Math.round(stagedSubtotal * 100)
+    && derived.lines.every((d, i) => d.unit_price === items[i].unit_price && d.line_total === items[i].line_total);
+  if (agrees) {
+    items = items.map((it, i) => Object.assign({}, it, {
+      unit_price: derived.lines[i].unit_price, line_total: derived.lines[i].line_total,
+    }));
+  } else {
+    console.warn('[addon settle] staged price kept — could not re-derive from columns', JSON.stringify({
+      addon_id: addonId, order_id: a.order_id,
+      staged_subtotal: stagedSubtotal,
+      derived_subtotal: derived ? derived.subtotal : null,
+      reason: derived ? 'price moved between staging and settlement' : 'a product or option choice is no longer resolvable',
+    }));
+  }
 
   const insItem = tdb().prepare(
     `INSERT INTO retail_order_items
