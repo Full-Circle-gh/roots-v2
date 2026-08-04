@@ -14,8 +14,11 @@
 // of four ways it was obtained instead, because they are not equally hard to fix:
 //
 //   SEAM     seam(...) — covered.
-//   TENANT   tdb() / getTenantDb() / req.tenantDb — routed through tenant-db.js
-//            but not yet through the seam. Cheapest to convert; one module.
+//   TENANT   tdb() / getTenantDb() / req.tenantDb — reached through tenant-db.js.
+//            Whether these count as COVERED is not assumed: lib/tenant-db.js is read
+//            and the answer depends on whether those accessors actually return
+//            seam(...). Since Step B they do, so they count. Unwrap them and this
+//            number falls on its own rather than lying.
 //   DIRECT   require('../database') — the raw shared handle, held module-level.
 //   RAW_OPEN new Database(...) — opens its own connection, bypassing everything.
 //            §24 names these as where the yuan-JSON rule is paid for: the
@@ -99,6 +102,24 @@ const SKIP = new Set([
   'scripts/diagnose_seam_batch.js',         // the batch harness: holds a raw handle as the comparison's raw side
   'scripts/db-seam-coverage.js',            // this reader itself
 ]);
+
+// ── Is the tenant router itself seam-wrapped? ───────────────────────────────
+// tdb() and getTenantDb() are indirections: a `tdb().prepare(...)` site is covered
+// if and only if tdb() returns a seam-wrapped handle. Rather than hard-code that
+// belief — which is how a coverage number turns back into a claim — read
+// lib/tenant-db.js and check. If the accessors are wrapped, sites reached through
+// them count as covered; if someone unwraps them later, the number falls on its own.
+function tenantAccessorsWrapped() {
+  const f = path.join(REPO, 'lib', 'tenant-db.js');
+  if (!fs.existsSync(f)) return { tdb: false, getTenantDb: false };
+  const src = fs.readFileSync(f, 'utf8');
+  return {
+    tdb: /function\s+tdb\s*\([^)]*\)\s*\{[^}]*\breturn\s+seam\s*\(/.test(src),
+    getTenantDb: /function\s+getTenantDb\s*\([^)]*\)\s*\{[^}]*\breturn\s+seam\s*\(/.test(src),
+  };
+}
+const TENANT_WRAPPED = tenantAccessorsWrapped();
+const TENANT_IS_COVERED = TENANT_WRAPPED.tdb && TENANT_WRAPPED.getTenantDb;
 
 function jsFilesIn(dir) {
   const abs = path.join(REPO, dir);
@@ -300,14 +321,18 @@ function report(label, files) {
   const by = {};
   for (const s of sites) by[s.category] = (by[s.category] || 0) + 1;
   const total = sites.length;
-  const covered = by.SEAM || 0;
+  const covered = (by.SEAM || 0) + (TENANT_IS_COVERED ? (by.TENANT || 0) : 0);
   const pct = total ? (covered * 100) / total : 0;
 
   console.log(`\n══ ${label} ══`);
   console.log(`  files: ${files.length}   statement sites: ${total}`);
   console.log(`  COVERAGE: ${covered}/${total} = ${pct.toFixed(2)}%  through the seam`);
   for (const cat of ['SEAM', 'TENANT', 'DIRECT', 'RAW_OPEN', 'UNRESOLVED']) {
-    if (by[cat]) console.log(`    ${cat.padEnd(11)} ${String(by[cat]).padStart(5)}`);
+    if (!by[cat]) continue;
+    const note = cat === 'TENANT'
+      ? (TENANT_IS_COVERED ? '  <- covered: tdb()/getTenantDb() return seam(...)' : '  <- NOT covered: accessors are raw')
+      : '';
+    console.log(`    ${cat.padEnd(11)} ${String(by[cat]).padStart(5)}${note}`);
   }
   if (gaps.length) {
     console.log(`  SCANNER GAPS — sites the reader could not see (denominator would be short):`);
@@ -323,6 +348,9 @@ const runtimeFiles = [
 const backgroundFiles = BACKGROUND_DIRS.flatMap(jsFilesIn);
 
 console.log('Database seam coverage — statement sites reached through lib/db-seam.js');
+console.log(`Tenant accessors: tdb() ${TENANT_WRAPPED.tdb ? 'IS' : 'is NOT'} seam-wrapped, ` +
+            `getTenantDb() ${TENANT_WRAPPED.getTenantDb ? 'IS' : 'is NOT'} seam-wrapped ` +
+            `-> TENANT sites count as ${TENANT_IS_COVERED ? 'COVERED' : 'UNCOVERED'} (read from lib/tenant-db.js)`);
 console.log('Excluded (the seam\'s own tooling, which holds raw handles by design):');
 for (const f of [...SKIP].sort()) console.log('  - ' + f);
 
