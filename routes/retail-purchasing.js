@@ -464,6 +464,19 @@ const BILL_PO_STATUSES = "('Ordered','Delivered','Confirmed')";
 const gzToday = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
 const gzNow   = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 19).replace('T', ' ');
 
+// How much of a PO line has already been billed.
+//
+// invoice_lines.allocated_amount is a whole-cent integer in Postgres, while a
+// line's own value is qty x po_line_items.cost_per_unit — a decimal amount that
+// stays decimal. The caller below puts one beside the other to decide how much
+// more may be allocated. Summed inside SQL the allocations arrive as a bare
+// scalar with no column left to say which unit built it; selected as a plain
+// column and summed here, each side is still identifiable when the two meet.
+const allocatedForLine = (lineId) => db
+  .prepare('SELECT allocated_amount FROM invoice_lines WHERE line_id=? ORDER BY id')
+  .all(lineId)
+  .reduce((sum, r) => sum + (r.allocated_amount || 0), 0);
+
 // Outstanding retail PO lines grouped by supplier — "who are we still awaiting
 // an invoice from, and for how much?"
 router.get('/api/retail-admin/bills/outstanding', requireRetailAdmin, (req, res) => {
@@ -568,8 +581,7 @@ router.post('/api/retail-admin/bills', requireRetailAdmin, express.json(), (req,
     VALUES (?,?,?,?,?,NULL,'retail',?,?,?)`);
   const insertLink = db.prepare('INSERT OR IGNORE INTO invoice_lines (invoice_id, line_id, allocated_amount) VALUES (?,?,?)');
   const lineInfo = db.prepare(`
-    SELECT pli.id, pli.qty, pli.cost_per_unit,
-           COALESCE((SELECT SUM(allocated_amount) FROM invoice_lines WHERE line_id=pli.id),0) AS already
+    SELECT pli.id, pli.qty, pli.cost_per_unit
       FROM po_line_items pli WHERE pli.id=?`);
   try {
     let id;
@@ -584,8 +596,11 @@ router.post('/api/retail-admin/bills', requireRetailAdmin, express.json(), (req,
           if (!(lineId > 0) || !(alloc > 0)) continue;
           const info = lineInfo.get(lineId);
           if (!info) throw new Error(`line ${lineId} not found`);
+          // Read inside the loop, so an earlier link to this same line in this
+          // same request is already counted — as it was when the sum was a
+          // correlated subquery on the row above.
           const lineTotal = (info.qty || 0) * (info.cost_per_unit || 0);
-          const remaining = Math.max(0, lineTotal - info.already);
+          const remaining = Math.max(0, lineTotal - allocatedForLine(lineId));
           if (alloc > remaining + 0.01) throw new Error(`line ${lineId} over-allocated`);
           insertLink.run(id, lineId, alloc);
         }

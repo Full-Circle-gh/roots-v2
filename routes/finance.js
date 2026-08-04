@@ -479,6 +479,19 @@ router.get('/api/finance/invoices/:id', requireAuth, requirePermission('finance'
   res.json({ success: true, data: { ...inv, lines } });
 });
 
+// How much of a PO line has already been billed.
+//
+// invoice_lines.allocated_amount is a whole-cent integer in Postgres, while a
+// line's own value is qty x po_line_items.cost_per_unit — a decimal amount that
+// stays decimal. The callers below put one beside the other to decide how much
+// more may be allocated. Summed inside SQL the allocations arrive as a bare
+// scalar with no column left to say which unit built it; selected as a plain
+// column and summed here, each side is still identifiable when the two meet.
+const allocatedForLine = (lineId) => db
+  .prepare('SELECT allocated_amount FROM invoice_lines WHERE line_id = ? ORDER BY id')
+  .all(lineId)
+  .reduce((sum, r) => sum + (r.allocated_amount || 0), 0);
+
 // POST /api/finance/invoices — create invoice + link lines.
 // Body: { supplier, invoice_number, amount, date, notes,
 //         links: [{line_id, allocated_amount}] }
@@ -494,8 +507,7 @@ router.post('/api/finance/invoices', requireAuth, requirePermission('finance'), 
   // line's actual outstanding amount. The frontend already clamps via
   // input max=, but a hand-crafted POST could bypass that.
   const lineInfo = db.prepare(`
-    SELECT pli.id, pli.qty, pli.cost_per_unit,
-           COALESCE((SELECT SUM(allocated_amount) FROM invoice_lines WHERE line_id = pli.id), 0) AS already_allocated
+    SELECT pli.id, pli.qty, pli.cost_per_unit
       FROM po_line_items pli
      WHERE pli.id = ?`);
   let id;
@@ -510,8 +522,11 @@ router.post('/api/finance/invoices', requireAuth, requirePermission('finance'), 
           if (!(lineId > 0) || !(alloc > 0)) continue;
           const info = lineInfo.get(lineId);
           if (!info) throw new Error(`Line ${lineId} not found`);
+          // Read inside the loop, so an earlier link to this same line in this
+          // same request is already counted — as it was when the sum was a
+          // correlated subquery on the row above.
           const lineTotal   = (info.qty || 0) * (info.cost_per_unit || 0);
-          const remaining   = Math.max(0, lineTotal - info.already_allocated);
+          const remaining   = Math.max(0, lineTotal - allocatedForLine(lineId));
           if (alloc > remaining + 0.01) {
             throw new Error(`Line ${lineId}: allocated ¥${alloc.toFixed(2)} exceeds outstanding ¥${remaining.toFixed(2)} · 行分配超额`);
           }
@@ -550,8 +565,7 @@ router.put('/api/finance/invoices/:id', requireAuth, requirePermission('finance'
         db.prepare('DELETE FROM invoice_lines WHERE invoice_id = ?').run(inv.id);
         const ins = db.prepare('INSERT OR IGNORE INTO invoice_lines (invoice_id, line_id, allocated_amount) VALUES (?,?,?)');
         const lineInfo = db.prepare(`
-          SELECT pli.id, pli.qty, pli.cost_per_unit,
-                 COALESCE((SELECT SUM(allocated_amount) FROM invoice_lines WHERE line_id = pli.id), 0) AS already_allocated
+          SELECT pli.id, pli.qty, pli.cost_per_unit
             FROM po_line_items pli
            WHERE pli.id = ?`);
         for (const l of links) {
@@ -560,8 +574,11 @@ router.put('/api/finance/invoices/:id', requireAuth, requirePermission('finance'
           if (!(lineId > 0) || !(alloc > 0)) continue;
           const info = lineInfo.get(lineId);
           if (!info) throw new Error(`Line ${lineId} not found`);
+          // Read inside the loop, after the DELETE above, so this invoice's own
+          // previous links stay excluded and an earlier link to the same line in
+          // this same request is counted — exactly as the subquery behaved.
           const lineTotal = (info.qty || 0) * (info.cost_per_unit || 0);
-          const remaining = Math.max(0, lineTotal - info.already_allocated);
+          const remaining = Math.max(0, lineTotal - allocatedForLine(lineId));
           if (alloc > remaining + 0.01) {
             throw new Error(`Line ${lineId}: allocated ¥${alloc.toFixed(2)} exceeds outstanding ¥${remaining.toFixed(2)} · 行分配超额`);
           }
