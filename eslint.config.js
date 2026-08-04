@@ -107,6 +107,34 @@ module.exports = [
     rules: BUG_RULES,
   },
 
+  // Channel probe / recon scripts: Node files that embed BROWSER-context code
+  // inside page.evaluate() callbacks. Same situation as the `/* global … */`
+  // header in lib/meituan-browser.js, but declared here because these files are
+  // byte-for-byte copies of what runs on the server and must not be edited.
+  // Only the three DOM globals they actually use are declared, so a real
+  // Node-side typo is still caught.
+  {
+    files: [
+      'scripts/guanyi-probe-orders.js',
+      'scripts/meituan-capture-stockwrite.js',
+      'scripts/meituan-dump-stockdom.js',
+      'scripts/meituan-dump-suggest.js',
+      'scripts/meituan-order-probe.js',
+      'scripts/meituan-order-probe3.js',
+      'scripts/meituan-status-recon2.js',
+      'scripts/meituan-status-recon3.js',
+      'scripts/meituan-status-recon4.js',
+      'scripts/meituan-status-recon5.js',
+      'scripts/meituan-test-apistock.js',
+      'scripts/meituan-test-combo.js',
+      'scripts/meituan-test-editstock.js',
+      'scripts/shangou-status-recon.js',
+    ],
+    languageOptions: {
+      globals: { document: 'readonly', window: 'readonly', location: 'readonly' },
+    },
+  },
+
   // Browser-served scripts (currently just the service worker).
   {
     files: ['public/**/*.js'],
