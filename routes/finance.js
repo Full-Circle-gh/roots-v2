@@ -483,14 +483,29 @@ router.get('/api/finance/invoices/:id', requireAuth, requirePermission('finance'
 //
 // invoice_lines.allocated_amount is a whole-cent integer in Postgres, while a
 // line's own value is qty x po_line_items.cost_per_unit — a decimal amount that
-// stays decimal. The callers below put one beside the other to decide how much
-// more may be allocated. Summed inside SQL the allocations arrive as a bare
-// scalar with no column left to say which unit built it; selected as a plain
-// column and summed here, each side is still identifiable when the two meet.
+// stays decimal. Every caller below puts one beside the other. Summed inside
+// SQL the allocations arrive as a bare scalar with no column left to say which
+// unit built it; selected as a plain column and summed here, each side is still
+// identifiable at the point the two meet.
 const allocatedForLine = (lineId) => db
   .prepare('SELECT allocated_amount FROM invoice_lines WHERE line_id = ? ORDER BY id')
   .all(lineId)
   .reduce((sum, r) => sum + (r.allocated_amount || 0), 0);
+
+// The same read for a whole page of lines, keyed by line_id. Lines with no
+// allocation are absent from the map rather than present as 0, so the caller
+// keeps the COALESCE it already had.
+const allocatedByLine = (lineIds) => {
+  const out = new Map();
+  for (let i = 0; i < lineIds.length; i += 400) {
+    const chunk = lineIds.slice(i, i + 400);
+    const rows = db.prepare(`SELECT line_id, allocated_amount FROM invoice_lines
+                              WHERE line_id IN (${chunk.map(() => '?').join(',')})
+                              ORDER BY id`).all(...chunk);
+    for (const a of rows) out.set(a.line_id, (out.get(a.line_id) || 0) + (a.allocated_amount || 0));
+  }
+  return out;
+};
 
 // POST /api/finance/invoices — create invoice + link lines.
 // Body: { supplier, invoice_number, amount, date, notes,
@@ -646,8 +661,7 @@ router.get('/api/finance/outstanding-lines', requireAuth, requirePermission('fin
              '未指定 Unspecified'
            ) AS supplier_name,
            pli.purchase_channel, pli.no_invoice_expected AS line_no_invoice,
-           po.po_number, po.date, po.status, po.no_invoice_expected AS po_no_invoice,
-           COALESCE((SELECT SUM(allocated_amount) FROM invoice_lines WHERE line_id = pli.id), 0) AS covered_amount
+           po.po_number, po.date, po.status, po.no_invoice_expected AS po_no_invoice
       FROM po_line_items pli
       JOIN purchase_orders po ON po.id = pli.po_id
       LEFT JOIN ingredients ing ON ing.id = pli.ingredient_id
@@ -692,11 +706,18 @@ router.get('/api/finance/outstanding-lines', requireAuth, requirePermission('fin
   }
   q += ' ORDER BY po.date DESC, pli.sort_order';
   const rows = db.prepare(q).all(...params);
+  // `covered_amount` is read in its own statement rather than as a SUM beside
+  // the line's qty and cost_per_unit. invoice_lines.allocated_amount is a
+  // whole-cent integer in Postgres and cost_per_unit is a decimal amount that
+  // stays decimal; pre-summed in SQL the allocation arrives as a bare scalar in
+  // the same row as the line's own value, in a different unit, with nothing to
+  // distinguish them before `amount - covered` runs below.
+  const allocated = allocatedByLine(rows.map(r => r.line_id));
 
   const round = n => Math.round(n * 100) / 100;
   const enriched = rows.map(r => {
     const amount = round((parseFloat(r.qty) || 0) * (parseFloat(r.cost_per_unit) || 0));
-    const covered = round(r.covered_amount);
+    const covered = round(allocated.get(r.line_id) || 0);
     const outstanding = round(Math.max(0, amount - covered));
     let status = 'awaiting';
     if (r.line_no_invoice || r.po_no_invoice) status = 'no_invoice_expected';

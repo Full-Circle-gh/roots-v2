@@ -468,14 +468,29 @@ const gzNow   = () => new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice
 //
 // invoice_lines.allocated_amount is a whole-cent integer in Postgres, while a
 // line's own value is qty x po_line_items.cost_per_unit — a decimal amount that
-// stays decimal. The caller below puts one beside the other to decide how much
-// more may be allocated. Summed inside SQL the allocations arrive as a bare
-// scalar with no column left to say which unit built it; selected as a plain
-// column and summed here, each side is still identifiable when the two meet.
+// stays decimal. Every caller below puts one beside the other. Summed inside
+// SQL the allocations arrive as a bare scalar with no column left to say which
+// unit built it; selected as a plain column and summed here, each side is still
+// identifiable at the point the two meet.
 const allocatedForLine = (lineId) => db
   .prepare('SELECT allocated_amount FROM invoice_lines WHERE line_id=? ORDER BY id')
   .all(lineId)
   .reduce((sum, r) => sum + (r.allocated_amount || 0), 0);
+
+// The same read for a whole page of lines, keyed by line_id. Lines with no
+// allocation are absent from the map rather than present as 0, so the caller
+// keeps the COALESCE it already had.
+const allocatedByLine = (lineIds) => {
+  const out = new Map();
+  for (let i = 0; i < lineIds.length; i += 400) {
+    const chunk = lineIds.slice(i, i + 400);
+    const rows = db.prepare(`SELECT line_id, allocated_amount FROM invoice_lines
+                              WHERE line_id IN (${chunk.map(() => '?').join(',')})
+                              ORDER BY id`).all(...chunk);
+    for (const a of rows) out.set(a.line_id, (out.get(a.line_id) || 0) + (a.allocated_amount || 0));
+  }
+  return out;
+};
 
 // Outstanding retail PO lines grouped by supplier — "who are we still awaiting
 // an invoice from, and for how much?"
@@ -488,17 +503,24 @@ router.get('/api/retail-admin/bills/outstanding', requireRetailAdmin, (req, res)
     AND COALESCE(po.no_invoice_expected,0)=0 AND COALESCE(pli.no_invoice_expected,0)=0`;
   if (month)    { where += ' AND substr(po.date,1,7)=?'; params.push(month.slice(0, 7)); }
   if (supplier) { where += " AND COALESCE(NULLIF(TRIM(COALESCE(pli.supplier_name,'')),''),po.supplier,'')=?"; params.push(supplier); }
+  // Neither money figure is built inside SQL. `line_total` was the product of
+  // two decimal columns and `covered` a SUM over a whole-cent column; computed
+  // in the database they came back as two scalars in one row, in two units,
+  // with nothing to tell them apart. qty and cost_per_unit are read as the plain
+  // columns they are and multiplied below, and the allocations are read and
+  // summed the same way.
   const rows = db.prepare(`
     SELECT pli.id AS line_id, pli.name_en, pli.name_cn, pli.sku, pli.qty, pli.cost_per_unit,
-           (pli.qty*pli.cost_per_unit) AS line_total,
-           COALESCE((SELECT SUM(allocated_amount) FROM invoice_lines WHERE line_id=pli.id),0) AS covered,
            po.id AS po_id, po.po_number, po.date,
            COALESCE(NULLIF(TRIM(COALESCE(pli.supplier_name,'')),''),po.supplier,'') AS supplier
       FROM po_line_items pli JOIN purchase_orders po ON po.id=pli.po_id
      WHERE ${where}
      ORDER BY supplier, po.date DESC, pli.id`).all(...params);
+  const allocated = allocatedByLine(rows.map(r => r.line_id));
   const bySup = new Map();
   for (const r of rows) {
+    r.line_total = (r.qty || 0) * (r.cost_per_unit || 0);
+    r.covered = allocated.get(r.line_id) || 0;
     r.outstanding = Math.max(0, r.line_total - r.covered);
     r.status = r.covered <= 0.01 ? 'awaiting' : (r.covered + 0.01 >= r.line_total ? 'fully' : 'partial');
     if (!bySup.has(r.supplier)) bySup.set(r.supplier, { supplier: r.supplier || null, total: 0, covered: 0, outstanding: 0, lines: [] });
