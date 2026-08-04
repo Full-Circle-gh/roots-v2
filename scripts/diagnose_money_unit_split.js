@@ -13,9 +13,15 @@
  *   C  finance.js:496-518            POST /api/finance/invoices        (clamp)
  *   D  finance.js:552-568            PUT  /api/finance/invoices/:id    (clamp)
  *   E  finance.js:633,680-688        GET  /api/finance/outstanding-lines
+ *   H  retail-purchasing.js:143-197  GET  /api/retail-admin/suppliers/:id
  *
  * C and D are the same statement text against the same table with the same
  * consumer arithmetic, so they are compared once under "C/D".
+ *
+ * H is the handler-level shape rather than the statement-level one: `spend`
+ * (SUM of po_line_items.total_cost, numeric(14,6) yuan) and `owed` (SUM of
+ * invoices.amount, bigint cents) are built by two separate statements and then
+ * rendered as adjacent tiles by one screen.
  */
 'use strict';
 
@@ -335,6 +341,8 @@ const SUM_CASES = [
   ['retail_order_addons', 'amount',         'order_id'],
   ['sales_entries',     'total',            'date'],
   ['retail_refund_events', 'amount',        'order_id'],
+  ['invoices',          'amount',           'supplier'],
+  ['invoices',          'amount',           'scope'],
 ];
 for (const [tbl, col, key] of SUM_CASES) {
   let groups = 0, multi = 0, diff = 0, worst = 0, worstAt = null;
@@ -359,6 +367,148 @@ for (const [tbl, col, key] of SUM_CASES) {
   // A difference here is float summation order, not a unit error. It is
   // reported, not counted as a mismatch of the five sites.
 }
+console.log('');
+
+// ════════════════════════════════════════════════════════════════════════════
+// H — GET /api/retail-admin/suppliers/:id   (the supplier scorecard)
+// ════════════════════════════════════════════════════════════════════════════
+// The handler-level shape. `spend` sums po_line_items.total_cost, which is
+// numeric(14,6) yuan on both engines; `owed` sums invoices.amount, which is
+// REAL yuan on SQLite and bigint cents in Postgres. Two statements, one
+// payload, two adjacent tiles. Only `owed` changes form: the amounts are read
+// as a plain column and summed in JavaScript, and the bill count comes from
+// the row count rather than COUNT(*).
+console.log('══ H · GET /api/retail-admin/suppliers/:id ══');
+
+const H_SUP_MATCH = "COALESCE(NULLIF(TRIM(COALESCE(pli.supplier_name,'')),''), po.supplier, '') = ?";
+const hStat = db.prepare(`
+    SELECT COUNT(DISTINCT po.id) AS order_count,
+           COALESCE(SUM(pli.total_cost),0) AS spend,
+           MAX(po.date) AS last_date
+      FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
+     WHERE COALESCE(po.scope,'kitchen')='retail' AND COALESCE(po.tenant_id,1) = 1 AND ${H_SUP_MATCH}`);
+const hPriceList = db.prepare(`
+    SELECT pli.store_product_id, COUNT(*) AS times, AVG(pli.cost_per_unit) AS avg_cost
+      FROM po_line_items pli JOIN purchase_orders po ON po.id = pli.po_id
+     WHERE COALESCE(po.scope,'kitchen')='retail' AND COALESCE(po.tenant_id,1) = 1 AND ${H_SUP_MATCH}
+       AND pli.store_product_id IS NOT NULL
+     GROUP BY pli.store_product_id ORDER BY times DESC LIMIT 50`);
+
+// The as-shipped filter matches retail-scope unpaid bills only, which on this
+// database may match nothing. The run widens through every scope and both paid
+// states so the comparison is proved on rows that exist.
+const H_SCOPES = [
+  { name: 'as-shipped (retail scope, tenant 1, unpaid)',
+    where: `scope='retail' AND COALESCE(tenant_id,1) = 1 AND paid_at IS NULL` },
+  { name: 'widened · kitchen scope, unpaid',
+    where: `COALESCE(scope,'kitchen')='kitchen' AND paid_at IS NULL` },
+  { name: 'widened · any scope, unpaid',
+    where: `paid_at IS NULL` },
+  { name: 'widened · any scope, paid too',
+    where: `1=1` },
+];
+
+function hOwedOld(where, name) {
+  return db.prepare(`SELECT COALESCE(SUM(amount),0) AS owed, COUNT(*) AS n
+                       FROM invoices WHERE ${where} AND supplier=?`).get(name) || {};
+}
+function hOwedNew(where, name) {
+  const rows = db.prepare(`SELECT amount FROM invoices WHERE ${where} AND supplier=? ORDER BY id`).all(name);
+  return { owed: rows.reduce((sum, r) => sum + (r.amount || 0), 0), n: rows.length };
+}
+function hScorecard(where, name, owedFn) {
+  const stat = hStat.get(name) || {};
+  const owed = owedFn(where, name);
+  return {
+    order_count: stat.order_count || 0, spend: stat.spend || 0, last_date: stat.last_date || null,
+    owed: owed.owed || 0, owed_count: owed.n || 0, product_count: hPriceList.all(name).length,
+  };
+}
+
+// Every name the handler can be reached with: suppliers rows, invoice
+// suppliers, PO header and line suppliers, plus the misses.
+const H_NAMES = [...new Set([
+  ...db.prepare('SELECT name FROM suppliers').all().map(r => r.name),
+  ...db.prepare('SELECT DISTINCT supplier FROM invoices').all().map(r => r.supplier),
+  ...db.prepare('SELECT DISTINCT supplier FROM purchase_orders WHERE supplier IS NOT NULL').all().map(r => r.supplier),
+  ...db.prepare('SELECT DISTINCT supplier_name FROM po_line_items WHERE supplier_name IS NOT NULL').all().map(r => r.supplier_name),
+  '', '   ', 'no such supplier 不存在', null,
+].map(v => (v === null ? null : v)))];
+
+let hCompared = 0, hNonZeroOwed = 0, hNonZeroSpend = 0, hBillRows = 0;
+for (const sc of H_SCOPES) {
+  let scopeNonZero = 0;
+  for (const name of H_NAMES) {
+    const o = hScorecard(sc.where, name, hOwedOld);
+    const n = hScorecard(sc.where, name, hOwedNew);
+    hCompared++;
+    for (const k of ['order_count', 'spend', 'last_date', 'owed', 'owed_count', 'product_count']) {
+      if (!eq(o[k], n[k])) {
+        const d = (typeof o[k] === 'number' && typeof n[k] === 'number') ? `  |delta| ${Math.abs(o[k] - n[k])}` : '';
+        bad(`H ${sc.name} supplier=${JSON.stringify(name)} ${k}: ${o[k]} vs ${n[k]}${d}`);
+      }
+    }
+    if (o.owed > 0) { scopeNonZero++; hNonZeroOwed++; hBillRows += o.owed_count; }
+    if (o.spend > 0) hNonZeroSpend++;
+  }
+  const tot = db.prepare(`SELECT COUNT(*) n, COALESCE(SUM(amount),0) s FROM invoices WHERE ${sc.where}`).get();
+  console.log(`  ${sc.name}: ${tot.n} invoice rows, total ${tot.s} · ${H_NAMES.length} supplier names, ${scopeNonZero} with owed > 0`);
+}
+console.log(`  compared ${hCompared} scorecard readings (6 fields each) across ${H_SCOPES.length} scopes`);
+console.log(`  readings with owed > 0: ${hNonZeroOwed} (covering ${hBillRows} bill rows) · with spend > 0: ${hNonZeroSpend}`);
+console.log('  invoices by supplier/scope/paid: ' + JSON.stringify(
+  db.prepare(`SELECT supplier, COALESCE(scope,'(null)') scope, CASE WHEN paid_at IS NULL THEN 'unpaid' ELSE 'paid' END st,
+                     COUNT(*) n, SUM(amount) s FROM invoices GROUP BY 1,2,3 ORDER BY n DESC`).all()));
+console.log('');
+
+// ════════════════════════════════════════════════════════════════════════════
+// H2 — the owed pair's exact arithmetic, over every money group in the database
+// ════════════════════════════════════════════════════════════════════════════
+// `invoices` holds a handful of rows, so H1 alone cannot answer whether
+// {SUM, COUNT(*)} and {reduce, rows.length} can ever part company. This runs
+// that exact pair — including the COALESCE-of-empty and the count — over every
+// REAL money column and grouping key in section F's list, which is thousands
+// of groups rather than a handful.
+//
+// A COUNT difference is a defect and is counted as a mismatch. A SUM
+// difference is float summation order — SQLite 3.43+ compensates, a plain
+// reduce does not — and is reported with its worst delta rather than failing
+// the run, exactly as section F does.
+console.log('══ H2 · {SUM, COUNT} vs {reduce, length} over every money group ══');
+let h2Groups = 0, h2Multi = 0, h2SumDiff = 0, h2Tables = 0, h2Worst = 0, h2WorstAt = null;
+for (const [tbl, col, key] of SUM_CASES) {
+  let sqlRows, detail;
+  try {
+    sqlRows = db.prepare(`SELECT ${key} AS k, COALESCE(SUM(${col}),0) AS s, COUNT(*) AS n
+                            FROM ${tbl} WHERE ${key} IS NOT NULL GROUP BY ${key}`).all();
+    detail = db.prepare(`SELECT ${col} AS v FROM ${tbl} WHERE ${key} = ? ORDER BY id`);
+    detail.get(sqlRows.length ? sqlRows[0].k : null);
+  } catch (e) { console.log(`  ${tbl}.${col} by ${key}: skipped (${e.message})`); continue; }
+  h2Tables++;
+  let diff = 0;
+  for (const g of sqlRows) {
+    const rows = detail.all(g.k);
+    h2Groups++;
+    if (g.n > 1) h2Multi++;
+    const js = rows.reduce((s, r) => s + (r.v || 0), 0);
+    if (g.n !== rows.length) bad(`H2 ${tbl}.${col} by ${key}=${g.k}: COUNT ${g.n} vs length ${rows.length}`);
+    if (!eq(g.s, js)) {
+      diff++; h2SumDiff++;
+      const d = Math.abs(g.s - js);
+      if (d > h2Worst) { h2Worst = d; h2WorstAt = `${tbl}.${col} ${key}=${g.k} n=${g.n} sql=${g.s} js=${js}`; }
+    }
+  }
+  // The empty case: no rows -> COALESCE(SUM,0) is 0 and COUNT is 0; reduce of
+  // [] is 0 and length is 0.
+  const empty = db.prepare(`SELECT COALESCE(SUM(${col}),0) AS s, COUNT(*) AS n FROM ${tbl} WHERE ${key} IS NOT NULL AND 1=0`).get();
+  const emptyRows = detail.all(' no such key ');
+  if (!eq(empty.s, emptyRows.reduce((s, r) => s + (r.v || 0), 0)) || empty.n !== emptyRows.length) {
+    bad(`H2 ${tbl}.${col} by ${key}: empty case ${JSON.stringify(empty)} vs {s:0,n:${emptyRows.length}}`);
+  }
+  console.log(`  ${tbl}.${col} by ${key}: ${sqlRows.length} groups -> ${diff ? diff + ' differ on SUM' : 'identical'}`);
+}
+console.log(`  ${h2Tables} column/key pairs · ${h2Groups} groups (${h2Multi} multi-row) · ${h2SumDiff} differing on SUM`);
+if (h2SumDiff) console.log(`  worst |delta| ${h2Worst} at ${h2WorstAt}  (float order, not a unit error)`);
 console.log('');
 
 // ── Non-zero coverage: prove the comparison ran over data that is not all 0 ──
