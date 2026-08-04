@@ -1,6 +1,6 @@
 // Roots v2 — minimal service worker.
 // Strategy:
-//   • HTML pages (/, /kitchen, /restock, /login):  NETWORK-FIRST. Always
+//   • HTML pages (/, /kitchen, /stock, /login):  NETWORK-FIRST. Always
 //     try to get the freshest shell. Fall back to cache only when offline.
 //     This is what was missing in earlier versions — a stale cached
 //     shell could outlive a route fix and silently break PWA install.
@@ -10,7 +10,7 @@
 //
 // Bump CACHE on every UI shape change to force every client to evict
 // its old shell on next load (activate handler deletes all old caches).
-const CACHE = 'roots-v2-shell-v708-the-drawer-stops-saying-it-twice';
+const CACHE = 'roots-v2-shell-v709-the-restock-shell-is-gone';
 const SHELL = ['/', '/login'];
 
 // Heuristic — request that wants HTML?
@@ -33,7 +33,7 @@ self.addEventListener('activate', (e) => {
     await self.clients.claim();
     // Tell every connected page that a new shell is live so they reload
     // and pick up the latest HTML/JS without the user having to think
-    // about it. The page-side handler is in kitchen.html / restock.html.
+    // about it. The page-side handler is in kitchen.html.
     const clients = await self.clients.matchAll({ includeUncontrolled: true });
     for (const c of clients) {
       try { c.postMessage({ type: 'sw-updated' }); } catch {}

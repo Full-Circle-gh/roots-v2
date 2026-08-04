@@ -3084,7 +3084,6 @@ function renderSidebar() {
     let badge = '';
     if (m.id === 'alerts')    badge = '<span class="nav-badge" id="alertBadge" style="display:none">0</span>';
     if (m.id === 'purchases') badge = '<span class="nav-badge" id="poBadge"    style="display:none">0</span>';
-    if (m.id === 'restock')   badge = '<span class="nav-badge" id="rsBadge"    style="display:none">0</span>';
     if (m.id === 'feedback')  badge = '<span class="nav-badge" id="fbBadge"    style="display:none">0</span>';
     const iconHtml = m.iconKey ? navIconSvg(m.iconKey) : (m.icon || '');
     // Collapsible group (e.g. Mini App) — a parent header that expands inline
@@ -3305,192 +3304,11 @@ function clearPOUnseen() {
   refreshPOBadge();
 }
 
-// ─── Restock notifications (mirrored on the dashboard) ──────────────
-// Warehouse / store users live on the dashboard a lot of the day, not
-// only the restock PWA. Without this the warehouse manager can sit on
-// `app.html` with the dashboard open and never know a store sent a
-// fresh request — only the in-PWA poller would have caught it. So we
-// also poll /api/restock here and surface the same yellow ribbon UX
-// stacked under the PO banner if both fire.
-let _rsUnseen = { new_sent: 0, prepared: 0, kitchen_done: 0, delivered: 0 };
-let _rsKnownActiveIds    = new Set();
-let _rsKnownPreparedIds  = new Set();
-let _rsKnownDeliveredIds = new Set();
-let _rsSeeded = false;
-let _rsPollTimer = null;
-// `kitchen_done` is a separate slot from generic `prepared` because the
-// semantics are different: warehouse receiving a kitchen-prepared
-// notification = closure, no delivery to confirm. The wording reflects
-// that — "已完成 Done" — and the user just needs to acknowledge it.
-const RS_KIND_META = {
-  new_sent:     { icon:'🔔', label_cn:'新补货请求 New from store',    perm:'warehouse_inbox' },
-  prepared:     { icon:'📦', label_cn:'已备货待收 Ready to receive',   perm:'restock' },
-  kitchen_done: { icon:'✅', label_cn:'厨房已备好 Kitchen prepared',   perm:'warehouse_inbox' },
-  delivered:    { icon:'✓',  label_cn:'已送达 Delivered confirmed',   perm:'warehouse_inbox' },
-};
-const _rsKey = () => 'rs_unseen_dash_' + (_user?.id || 'anon');
-function _loadRsUnseen() {
-  try {
-    const raw = localStorage.getItem(_rsKey());
-    if (raw) Object.assign(_rsUnseen, JSON.parse(raw));
-  } catch {}
-}
-function _saveRsUnseen() {
-  try { localStorage.setItem(_rsKey(), JSON.stringify(_rsUnseen)); } catch {}
-}
-function clearRsUnseen(kind) {
-  if (kind) _rsUnseen[kind] = 0;
-  else Object.keys(_rsUnseen).forEach(k => _rsUnseen[k] = 0);
-  _saveRsUnseen();
-  _renderRsUnseenBanner();
-}
-function _renderRsUnseenBanner() {
-  let bar = document.getElementById('rsUnseenBar');
-  const items = Object.entries(_rsUnseen).filter(([, n]) => n > 0);
-  // Paint the sidebar badge on the Restock nav item — same red dot as
-  // the Purchases / Alerts badges, so the user sees the count even
-  // when the top ribbon is dismissed or scrolled away.
-  const total = items.reduce((s, [, n]) => s + n, 0);
-  const rsBadge = document.getElementById('rsBadge');
-  if (rsBadge) {
-    if (total > 0) {
-      rsBadge.style.display = 'inline-flex';
-      rsBadge.textContent = total > 99 ? '99+' : String(total);
-      rsBadge.classList.add('pulsing');
-      setTimeout(() => rsBadge.classList.remove('pulsing'), 1700);
-    } else {
-      rsBadge.style.display = 'none';
-    }
-  }
-  if (items.length === 0) {
-    if (bar) bar.remove();
-    document.body.classList.remove('has-rs-unseen-bar');
-    _applyDashboardBarSpacing();
-    return;
-  }
-  if (!bar) {
-    bar = document.createElement('div');
-    bar.id = 'rsUnseenBar';
-    bar.style.cssText = `
-      position:fixed; left:0; right:0; z-index:2147483645;
-      background:linear-gradient(135deg,#5fb878,#a8d8b0);
-      color:#1a2314; font-weight:800; font-size:14px;
-      padding:11px 16px; cursor:pointer;
-      box-shadow:0 4px 16px rgba(0,0,0,.16);
-      display:flex; align-items:center; justify-content:center; gap:10px;
-      animation: poUnseenIn .35s ease-out;
-      font-family:inherit;
-    `;
-    bar.onclick = () => {
-      clearRsUnseen();
-      // Open the restock PWA — that's where the user can act. If they
-      // explicitly want to dismiss without opening, the ✕ button stops
-      // propagation below.
-      window.location.href = '/restock';
-    };
-    document.body.appendChild(bar);
-    document.body.classList.add('has-rs-unseen-bar');
-  }
-  const summary = items.map(([k, n]) => {
-    const m = RS_KIND_META[k] || {};
-    return `${m.icon || '🔔'} ${n} ${m.label_cn || k}`;
-  }).join(' · ');
-  bar.innerHTML = `
-    <span style="font-size:18px">📦</span>
-    <span>${summary}</span>
-    <span style="font-size:11px;opacity:.8;font-weight:600">— 打开 Restock · Tap to open</span>
-    <button id="rsUnseenClose" title="Mark seen · 标记已读" style="margin-left:8px;background:rgba(0,0,0,.14);border:none;color:#1a2314;border-radius:6px;width:24px;height:24px;font-weight:800;cursor:pointer;font-size:14px;line-height:1;font-family:inherit">✕</button>
-  `;
-  bar.querySelector('#rsUnseenClose').onclick = (e) => {
-    e.stopPropagation();
-    clearRsUnseen();
-  };
-  _applyDashboardBarSpacing();
-}
-// Bar stacking — when both PO + RS banners are visible, push the
-// topbar / sidebar / main padding down by ~84px instead of 42.
-function _applyDashboardBarSpacing() {
-  const hasPO = document.body.classList.contains('has-po-unseen-bar');
-  const hasRS = document.body.classList.contains('has-rs-unseen-bar');
-  const off = (hasPO && hasRS) ? 84 : (hasPO || hasRS) ? 42 : 0;
-  ['topbar','sidebar'].forEach(c => {
-    document.querySelectorAll('.' + c).forEach(el => { el.style.top = off ? off + 'px' : ''; });
-  });
-  const main = document.getElementById('main');
-  if (main) main.style.paddingTop = off ? off + 'px' : '';
-  // RS bar sits below PO bar when both present.
-  const rs = document.getElementById('rsUnseenBar');
-  if (rs) rs.style.top = hasPO ? '42px' : '0';
-}
-async function _pollRestockNotifications() {
-  if (!_user) return;
-  const perms = _user.permissions || {};
-  const isAdmin = _user.role === 'admin';
-  const isWarehouse = isAdmin || !!perms.warehouse_inbox;
-  const isStore     = isAdmin || !!perms.restock;
-  if (!isWarehouse && !isStore) return;
-  try {
-    const [aRes, hRes] = await Promise.all([
-      fetch('/api/restock?tab=active').then(r => r.ok ? r.json() : null).catch(() => null),
-      fetch('/api/restock?tab=history').then(r => r.ok ? r.json() : null).catch(() => null),
-    ]);
-    if (!aRes || !hRes) return;
-    const active  = (aRes.data || []).filter(o => o.status !== 'draft');
-    const history = (hRes.data || []);
-    const myId = _user.id;
-    const curActiveSent     = new Set(active.filter(o => o.status === 'sent').map(o => o.id));
-    const curActivePrepared = new Set(active.filter(o => o.status === 'prepared').map(o => o.id));
-    const curDelivered      = new Set(history.filter(o => o.status === 'delivered').map(o => o.id));
-    if (_rsSeeded) {
-      // Warehouse: new "sent" requests they didn't write themselves.
-      if (isWarehouse) {
-        const newSent = active.filter(o => o.status === 'sent'
-          && !_rsKnownActiveIds.has(o.id)
-          && o.created_by !== myId);
-        if (newSent.length > 0) {
-          _rsUnseen.new_sent += newSent.length;
-          _saveRsUnseen();
-          _chime();
-          _pushNotify(`🔔 ${newSent.length} new restock · 新补货`, {
-            body: 'From store · 来自门店\nClick to open · 点击打开',
-            tag: 'roots-rs-new-' + newSent[0].id,
-            onClick: () => { clearRsUnseen(); window.location.href = '/restock'; },
-          });
-        }
-      }
-      // Store: orders that flipped to "prepared" (warehouse marked
-      // ready). Skip ones I didn't create unless I'm an admin in which
-      // case I see all.
-      if (isStore) {
-        const newPrepared = active.filter(o => o.status === 'prepared'
-          && !_rsKnownPreparedIds.has(o.id)
-          && (isAdmin || o.created_by === myId));
-        if (newPrepared.length > 0) {
-          _rsUnseen.prepared += newPrepared.length;
-          _saveRsUnseen();
-          _chime();
-        }
-      }
-      // Warehouse close-out: store just confirmed delivery. Skip if I
-      // was the one who confirmed.
-      if (isWarehouse) {
-        const newDelivered = history.filter(o => o.status === 'delivered'
-          && !_rsKnownDeliveredIds.has(o.id)
-          && o.created_by !== myId);
-        if (newDelivered.length > 0) {
-          _rsUnseen.delivered += newDelivered.length;
-          _saveRsUnseen();
-          _chime();
-        }
-      }
-    }
-    _rsKnownActiveIds    = curActiveSent;
-    _rsKnownPreparedIds  = curActivePrepared;
-    _rsKnownDeliveredIds = curDelivered;
-    _rsSeeded = true;
-    _renderRsUnseenBanner();
-  } catch {}
-}
+// The bar-stacking helper that lived here existed only to offset the topbar
+// when the PO and restock ribbons were both up. The restock ribbon went with
+// the /restock page on 2026-08-04, and the PO banner does its own offset in
+// CSS (body.has-po-unseen-bar, injected above), so nothing called it.
+
 // ─── Server-Sent Events (instant push, replaces 20s polling lag) ───
 // Open one persistent connection to /api/events while the dashboard is
 // open. Server fires `po` and `restock` events the moment the database
@@ -3505,9 +3323,6 @@ function _connectEventStream() {
     _eventStream = new EventSource('/api/events');
     _eventStream.addEventListener('po', (e) => {
       try { _onPOEvent(JSON.parse(e.data)); } catch {}
-    });
-    _eventStream.addEventListener('restock', (e) => {
-      try { _onRestockEvent(JSON.parse(e.data)); } catch {}
     });
     _eventStream.addEventListener('feedback', (e) => {
       // Refresh badge + the open Feedback page (if any). The Sprout
@@ -3583,57 +3398,6 @@ function _onPOEvent(evt) {
   }
   // Keep the poller's local state in sync so it doesn't re-fire later.
   _knownPOs.set(evt.id, evt.status);
-}
-function _onRestockEvent(evt) {
-  if (!evt) return;
-  if (evt.kind === 'sent') {
-    _rsUnseen.new_sent += 1;
-    _saveRsUnseen();
-    _renderRsUnseenBanner();
-    _chime();
-    _pushNotify(`🔔 New restock · 新补货 ${evt.rs_number || ''}`.trim(), {
-      body: 'From ' + (evt.store_name || evt.store_cn || 'store · 门店'),
-      tag: 'roots-rs-new-' + evt.id,
-      onClick: () => { clearRsUnseen(); window.location.href = '/restock'; },
-    });
-    _rsKnownActiveIds.add(evt.id);
-  } else if (evt.kind === 'prepared') {
-    // Route to the right banner slot based on direction:
-    //   warehouse→kitchen prepared → "Kitchen prepared" (closure, no
-    //     action needed by warehouse user)
-    //   store→warehouse / warehouse→store prepared → "Ready to receive"
-    //     (action implied — receiver still confirms delivery)
-    const isFromKitchen = evt.from_role !== 'kitchen' && evt.to_role === 'kitchen';
-    const slot = isFromKitchen ? 'kitchen_done' : 'prepared';
-    _rsUnseen[slot] += 1;
-    _saveRsUnseen();
-    _renderRsUnseenBanner();
-    _chime();
-    _rsKnownPreparedIds.add(evt.id);
-  } else if (evt.kind === 'delivered') {
-    _rsUnseen.delivered += 1;
-    _saveRsUnseen();
-    _renderRsUnseenBanner();
-    _chime();
-    _rsKnownDeliveredIds.add(evt.id);
-  }
-}
-function _startRsPolling() {
-  if (_rsPollTimer) clearInterval(_rsPollTimer);
-  _rsSeeded = false;
-  _loadRsUnseen();
-  _renderRsUnseenBanner();
-  if (!document.hidden) _pollRestockNotifications();
-  _rsPollTimer = setInterval(() => {
-    if (document.hidden) return;
-    _pollRestockNotifications();
-  }, 20000);
-  if (!window._rsVisWired) {
-    window._rsVisWired = true;
-    document.addEventListener('visibilitychange', () => {
-      if (!document.hidden && _rsPollTimer) _pollRestockNotifications();
-    });
-  }
 }
 // Tiny WebAudio chime — works without an asset file. Two short tones.
 // Browser autoplay policy: AudioContext must be created OR resumed
@@ -3904,7 +3668,6 @@ function _initNotifications() {
   // the manager actually see new kitchen POs while running on plain HTTP
   // (where browsers block / silently ignore the Notification API).
   _startNotifPolling();
-  _startRsPolling();
   // Server-Sent Events — sub-second notifications on top of the 20s
   // poller fallback. SSE pushes the moment the server commits a state
   // change, so the warehouse tablet pings within ~100ms of "Send" not

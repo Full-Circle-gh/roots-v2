@@ -127,8 +127,11 @@ function _fireRestockPush(orderId, kind) {
       body  = compose(isToKitchen ? 'Confirmed by warehouse' : (store ? `Confirmed by ${store}` : 'Confirmed by store'));
       perm  = isToKitchen ? 'kitchen_inbox' : 'warehouse_inbox';
     } else { return; }
+    // Opens the kitchen SPA, which carries the restock module. This pointed at
+    // '/restock?order=N' until 2026-08-04; that page is gone, so the old URL
+    // would 404 on a staff phone the moment the notification was tapped.
     _push.sendPushByPermission(perm, {
-      title, body, url: '/restock?order=' + orderId, tag: 'rs-' + orderId + '-' + kind,
+      title, body, url: '/', tag: 'rs-' + orderId + '-' + kind,
     });
   } catch (e) { console.warn('[fireRestockPush]', e.message); }
 }

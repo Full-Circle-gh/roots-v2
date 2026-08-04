@@ -242,7 +242,9 @@ function _lastAppRedirect(user) {
   const isAdmin = user.role === 'admin';
   const p = user.permissions || {};
   if (last === '/'        ) return '/';
-  if (last === '/restock' && (isAdmin || p.restock || p.warehouse_inbox)) return '/restock';
+  // '/restock' is deliberately absent: the page was removed 2026-08-04 and the
+  // route is gone, but restock.html had written last_app='/restock' into every
+  // warehouse browser, so honouring a remembered value here would 404 them.
   if (last === '/kitchen' && (isAdmin || p.kitchen))  return '/kitchen';
   return null;
 }
@@ -250,16 +252,18 @@ function _smartRedirect(user) {
   if (!user) return '/';
   if (user.role === 'admin') return '/';
   const p = user.permissions || {};
-  // Specific single-purpose flags first — these always route to their
-  // app even if other perms are also granted.
-  if (p.warehouse_inbox) return '/restock';
+  // `warehouse_inbox` used to short-circuit to /restock here. That page is gone
+  // (2026-08-04) and its holders now fall through to the routing below, which
+  // lands each of them on a tool they already have: the dashboard for anyone
+  // with a manager-level perm, /kitchen for kitchen-only staff.
   // Manager-level perms = a multi-tool operator → dashboard. We
   // intentionally exclude common warehouse / kitchen flags like
   // dashboard / ingredients / purchases / alerts / suppliers because
   // those are part of the warehouse role's default kit.
   if (p.products || p.finance || p.sales) return '/';
-  // Otherwise route by single-app perm.
-  if (p.restock) return '/restock';
+  // Otherwise route by single-app perm. The `restock` perm no longer routes
+  // anywhere of its own — it still gates the /api/restock endpoints that
+  // app.html and kitchen.html use, but it has no page to open any more.
   if (p.kitchen) return '/kitchen';
   return '/';
 }
