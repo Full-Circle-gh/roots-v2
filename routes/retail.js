@@ -17816,11 +17816,61 @@ const VERSION_COLUMNS = [
 ];
 const VERSION_COLLAPSE_SECONDS = 120;  // autosaves within this window merge into one checkpoint
 const VERSION_KEEP = 25;               // newest non-baseline versions kept per product
+
+// ── The unit of the money inside a snapshot ────────────────────────────────
+// It is YUAN, and it stays yuan. The standing rule is recorded in
+// docs/tacet-consolidation-decisions.md §24: the application speaks yuan and the
+// boundary layer returns yuan, so a value snapshotted out of a column and later
+// restored into one needs no conversion at all. Converting the stored JSON
+// instead would put a second conversion boundary inside a text column, where no
+// column type and no per-column rule can see it.
+//
+// The unit is stamped so the vintage is legible rather than assumed. Rows
+// written before the stamp existed carry no key and are read as yuan: nothing
+// has ever written another unit into this column, and the full copy of
+// 2026-08-04 left every JSON value untouched.
+const SNAPSHOT_UNIT_KEY = '_money_unit';
+const SNAPSHOT_UNIT = 'yuan';
+const SNAPSHOT_MONEY_COLUMNS = ['sell_price', 'compare_at_price'];
+
+// Money out of a snapshot, in the unit the application uses. Called at the one
+// site that writes a snapshot back into a column, so the conversion is visible
+// there rather than left to an ambient rule a reader cannot check. An
+// unrecognised stamp is refused, not guessed — a wrong guess here is a price
+// wrong by a factor of a hundred, written into a live product, silently.
+function snapshotMoneyInAppUnit(snap) {
+  const unit = snap[SNAPSHOT_UNIT_KEY] || SNAPSHOT_UNIT;
+  if (unit !== SNAPSHOT_UNIT) {
+    throw new Error(`snapshot ${SNAPSHOT_UNIT_KEY}=${JSON.stringify(unit)} is not ${SNAPSHOT_UNIT}`);
+  }
+  for (const c of SNAPSHOT_MONEY_COLUMNS) {
+    const v = snap[c];
+    if (v != null && !(typeof v === 'number' && Number.isFinite(v))) {
+      throw new Error(`snapshot ${c} is not a finite number: ${JSON.stringify(v)}`);
+    }
+  }
+  return snap;   // yuan in, yuan out
+}
+
+// The snapshot minus its stamp, for the "has anything actually changed?" tests.
+// Without this the first save of every product after the stamp shipped would
+// write a version whose content is identical to the one before it, purely
+// because the newer string carries a key the older one does not.
+function snapshotBody(json) {
+  if (typeof json !== 'string' || !json.includes(SNAPSHOT_UNIT_KEY)) return json;
+  try {
+    const o = JSON.parse(json);
+    delete o[SNAPSHOT_UNIT_KEY];
+    return JSON.stringify(o);
+  } catch (e) { return json; }
+}
 function productContentSnapshot(db, id) {
   const row = db.prepare(`SELECT ${VERSION_COLUMNS.join(', ')} FROM store_products WHERE id = ?`).get(id);
   if (!row) return null;
   const snap = {};
   for (const c of VERSION_COLUMNS) snap[c] = row[c];
+  // Stamped last, so stripping it reproduces the pre-stamp string exactly.
+  snap[SNAPSHOT_UNIT_KEY] = SNAPSHOT_UNIT;
   return snap;
 }
 // Stow the "Original" pre-edit state once, before the first save of an editing
@@ -17846,7 +17896,7 @@ function recordProductVersion(db, id, operatorName) {
               CAST((julianday('now') - julianday(created_at)) * 86400 AS INTEGER) AS age_s
          FROM retail_product_versions WHERE product_id = ? ORDER BY id DESC LIMIT 1`
     ).get(id);
-    if (latest && latest.snapshot_json === json) return;   // nothing changed since last version
+    if (latest && snapshotBody(latest.snapshot_json) === snapshotBody(json)) return;   // nothing changed since last version
     if (latest && !latest.is_baseline && latest.age_s != null && latest.age_s < VERSION_COLLAPSE_SECONDS) {
       db.prepare('UPDATE retail_product_versions SET snapshot_json = ?, edited_by = ?, created_at = CURRENT_TIMESTAMP WHERE id = ?')
         .run(json, operatorName || null, latest.id);
@@ -17883,6 +17933,18 @@ router.post('/api/retail-admin/products/:id/restore-version', requireRetailAdmin
   const ver = db.prepare('SELECT snapshot_json FROM retail_product_versions WHERE id = ? AND product_id = ?').get(versionId, id);
   if (!ver) return res.status(404).json({ success: false, error: 'version_not_found' });
   let snap; try { snap = JSON.parse(ver.snapshot_json); } catch { return res.status(500).json({ success: false, error: 'bad_snapshot' }); }
+  // Convert the snapshot's money into the application's unit HERE, at the one
+  // site that writes it back into a column, rather than trusting an ambient
+  // rule. Today that conversion is the identity — both sides are yuan — and the
+  // value of doing it explicitly is that an unexpected vintage stops the restore
+  // instead of silently shifting a price by a factor of a hundred.
+  try { snap = snapshotMoneyInAppUnit(snap); }
+  catch (e) {
+    console.error('[restore-version]', e.message);
+    return res.status(500).json({ success: false, error: 'bad_snapshot_unit' });
+  }
+  // SNAPSHOT_UNIT_KEY is not a VERSION_COLUMN, so the stamp can never reach the
+  // SET clause below.
   const cols = VERSION_COLUMNS.filter(c => c in snap);
   if (!cols.length) return res.status(400).json({ success: false, error: 'empty_snapshot' });
   const operator = req.user && req.user.username;
@@ -17898,7 +17960,7 @@ router.post('/api/retail-admin/products/:id/restore-version', requireRetailAdmin
     // Keep the pre-restore state as an explicit (non-collapsing) undo point.
     const preJson = JSON.stringify(productContentSnapshot(db, id) || {});
     const latest = db.prepare('SELECT snapshot_json FROM retail_product_versions WHERE product_id = ? ORDER BY id DESC LIMIT 1').get(id);
-    if (!latest || latest.snapshot_json !== preJson) insertVersion(preJson);
+    if (!latest || snapshotBody(latest.snapshot_json) !== snapshotBody(preJson)) insertVersion(preJson);
     // Apply the chosen version (drop sku if it now clashes with another product).
     try { apply(cols); }
     catch (e) {
