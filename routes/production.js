@@ -1,5 +1,9 @@
 const express = require('express');
-const db = require('../database');
+// Routed through the database seam (lib/db-seam.js). No converter is installed,
+// so this is a zero-cost passthrough; the point is that this file is now on the
+// covered side of the boundary. Proven by scripts/diagnose_seam_batch.js.
+const { seam } = require('../lib/db-seam');
+const db = seam(require('../database'));
 const { requireAuth, requirePermission, requireDelete, logActivity } = require('../middleware/auth');
 const router = express.Router();
 

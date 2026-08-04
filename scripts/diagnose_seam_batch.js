@@ -62,6 +62,147 @@ const DB_SEAM_JS = path.join(HOME, 'lib', 'db-seam.js');
 // discovered — anything listed there is reported as NOT covered by the live run.
 const BATCH = [
   {
+    file: 'lib/require-cap.js',
+    why: 'two sites, and it hands the handle to lib/operator-caps.js, which fails open on capabilities',
+    reads: (mod, db) => {
+      const u = db.prepare('SELECT id, tenant_id FROM tenant_users WHERE is_active = 1 LIMIT 1').get();
+      const req = u
+        ? { session: { backendUserId: u.id, tenantId: u.tenant_id } }
+        : { session: { backendUserId: -1, tenantId: -1 } };
+      const caller = mod.loadCaller(req);
+      return {
+        loadCaller_real: caller && { role: caller.user.role, caps: [...caller.caps].sort(), scopeStores: caller.scopeStores },
+        loadCaller_noSession: mod.loadCaller({ session: {} }),
+        loadCaller_absent: mod.loadCaller({ session: { backendUserId: -1, tenantId: -1 } }),
+        roleAbove: mod.roleAboveCaps('owner', new Set()),
+      };
+    },
+    unexercised: [],
+  },
+  {
+    file: 'routes/production.js',
+    why: 'five sites, kitchen-only, and its three reads are plain parameterised SELECTs',
+    statements: [
+      {
+        name: 'batches for a period',
+        sql: `
+    SELECT pb.*, r.name_en AS recipe_name_current, r.name_cn AS recipe_name_cn,
+           r.batch_size AS recipe_batch_size, r.servings AS recipe_servings
+    FROM production_batches pb
+    LEFT JOIN recipes r ON r.id = pb.recipe_id
+    WHERE pb.date >= ?
+    ORDER BY pb.date DESC, pb.id DESC
+    LIMIT 500
+  `,
+        method: 'all',
+        params: () => ['0000-01-01'],
+      },
+      {
+        name: 'batches for the summary',
+        sql: `
+    SELECT pb.*, r.batch_size AS recipe_batch_size, r.servings AS recipe_servings
+    FROM production_batches pb
+    LEFT JOIN recipes r ON r.id = pb.recipe_id
+    WHERE pb.date >= ?
+  `,
+        method: 'all',
+        params: () => ['0000-01-01'],
+      },
+      {
+        name: 'recipe lookup',
+        sql: 'SELECT name_en, sku, servings FROM recipes WHERE id = ?',
+        method: 'get',
+        params: (db) => {
+          const r = db.prepare('SELECT id FROM recipes LIMIT 1').get();
+          return [r ? r.id : -1];
+        },
+      },
+    ],
+    unexercised: [
+      'POST /api/production (INSERT) and DELETE /api/production/:id — writes behind ' +
+      'express handlers. Their statements are covered on scratch databases in §5.',
+    ],
+    writeStatements: [
+      {
+        name: 'log a production batch (INSERT)',
+        schema: (h) => h.exec(`CREATE TABLE production_batches (
+          id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, recipe_id INTEGER, recipe_name TEXT,
+          recipe_sku TEXT, batches_made REAL, servings_made REAL, staff_name TEXT, shift TEXT,
+          notes TEXT, created_by INTEGER)`),
+        sql: `INSERT INTO production_batches
+      (date, recipe_id, recipe_name, recipe_sku, batches_made, servings_made, staff_name, shift, notes, created_by)
+      VALUES (?,?,?,?,?,?,?,?,?,?)`,
+        method: 'run',
+        params: () => ['2026-08-04', 7, 'Cashew cream', 'CC-1', 2.5, 30, 'Amy', 'am', null, 1],
+        dump: (h) => h.prepare('SELECT * FROM production_batches ORDER BY id').all(),
+      },
+      {
+        name: 'delete a production batch (DELETE)',
+        schema: (h) => {
+          h.exec('CREATE TABLE production_batches (id INTEGER PRIMARY KEY AUTOINCREMENT, date TEXT, recipe_name TEXT)');
+          h.prepare('INSERT INTO production_batches (id, date, recipe_name) VALUES (1, ?, ?)').run('2026-08-04', 'keep');
+          h.prepare('INSERT INTO production_batches (id, date, recipe_name) VALUES (2, ?, ?)').run('2026-08-04', 'drop');
+        },
+        sql: 'DELETE FROM production_batches WHERE id = ?',
+        method: 'run',
+        params: () => [2],
+        dump: (h) => h.prepare('SELECT * FROM production_batches ORDER BY id').all(),
+      },
+    ],
+  },
+  {
+    file: 'routes/backend-signup.js',
+    why: 'five sites, a signup-lead endpoint, and it issues DDL at load like session-relay',
+    statements: [
+      {
+        name: 'signup requests list',
+        sql: "SELECT * FROM tenant_signup_requests ORDER BY (status = 'new') DESC, created_at DESC",
+        method: 'all',
+        params: () => [],
+      },
+      {
+        name: 'active admins fan-out',
+        sql: "SELECT id FROM users WHERE is_active = 1 AND role = 'admin'",
+        method: 'all',
+        params: () => [],
+      },
+      {
+        name: 'role check',
+        sql: 'SELECT role FROM users WHERE id = ? AND is_active = 1',
+        method: 'get',
+        params: (db) => {
+          const u = db.prepare('SELECT id FROM users WHERE is_active = 1 LIMIT 1').get();
+          return [u ? u.id : -1];
+        },
+      },
+    ],
+    writeStatements: [
+      {
+        name: 'record a signup lead (INSERT)',
+        schema: (h) => h.exec(`CREATE TABLE tenant_signup_requests (
+          id INTEGER PRIMARY KEY AUTOINCREMENT, company TEXT, contact_name TEXT, contact TEXT,
+          note TEXT, ip TEXT, status TEXT DEFAULT 'new', created_at DATETIME)`),
+        sql: 'INSERT INTO tenant_signup_requests (company, contact_name, contact, note, ip) VALUES (?,?,?,?,?)',
+        method: 'run',
+        params: () => ['Acme Bakery', 'Sam', 'sam@example.com', null, '203.0.113.4'],
+        dump: (h) => h.prepare('SELECT id, company, contact_name, contact, note, ip, status FROM tenant_signup_requests ORDER BY id').all(),
+      },
+      {
+        name: 'set a lead status (UPDATE)',
+        schema: (h) => {
+          h.exec(`CREATE TABLE tenant_signup_requests (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, company TEXT, status TEXT DEFAULT 'new')`);
+          h.prepare('INSERT INTO tenant_signup_requests (id, company) VALUES (1, ?)').run('Acme Bakery');
+        },
+        sql: 'UPDATE tenant_signup_requests SET status = ? WHERE id = ?',
+        method: 'run',
+        params: () => ['contacted', 1],
+        dump: (h) => h.prepare('SELECT id, company, status FROM tenant_signup_requests ORDER BY id').all(),
+      },
+    ],
+    unexercised: [],
+  },
+  {
     file: 'lib/integrations/session-relay.js',
     why: 'three sites, lowest traffic, and the only one in this batch with a write',
     reads: (mod, db) => {
@@ -369,7 +510,11 @@ for (const item of BATCH) {
 
   for (const st of item.statements) {
     // Tie to source: the copy here must still be what the file runs.
-    const norm = (s) => s.replace(/\s+/g, ' ').trim();
+    // The source is JS, so a quote inside a single-quoted SQL string is escaped
+    // there (\'new\') while the copy below carries it bare. Compare with escapes
+    // removed, or every statement containing a quoted literal looks like a
+    // mismatch and the check cries wolf instead of catching drift.
+    const norm = (s) => s.replace(/\\(['"])/g, '$1').replace(/\s+/g, ' ').trim();
     if (!norm(src).includes(norm(st.sql))) {
       fail(`${item.file} · ${st.name}: this harness's copy no longer appears in the source — ` +
            'the statement changed and the comparison below would be stale');
@@ -448,6 +593,108 @@ for (const item of BATCH) {
   }
 }
 if (!anyWrite) console.log('   (no module in this batch writes)');
+
+// Write STATEMENTS — the same idea one level down. A statement that sits behind an
+// express handler cannot be driven without standing up the whole request path, so
+// the verbatim copy is executed against a scratch table instead, raw and wrapped,
+// and the resulting rows compared. Tied to the source like the read statements.
+for (const item of BATCH) {
+  if (!item.writeStatements) continue;
+  const src = fs.readFileSync(path.join(HOME, item.file), 'utf8');
+  const norm = (x) => x.replace(/\\(['"])/g, '$1').replace(/\s+/g, ' ').trim();
+  delete require.cache[DB_SEAM_JS];
+  const { seam } = require(DB_SEAM_JS);
+
+  for (const st of item.writeStatements) {
+    if (!norm(src).includes(norm(st.sql))) {
+      fail(`${item.file} · ${st.name}: this harness's copy no longer appears in the source`);
+      continue;
+    }
+    const made = [];
+    try {
+      const dumps = [];
+      for (const useSeam of [false, true]) {
+        const file = path.join(os.tmpdir(), `seam-stmt-${process.pid}-${useSeam ? 'w' : 'r'}.db`);
+        try { fs.unlinkSync(file); } catch (_) { /* fresh anyway */ }
+        const scratch = new Database(file);
+        made.push({ file, scratch });
+        st.schema(scratch);
+        const h = useSeam ? seam(scratch) : scratch;
+        h.prepare(st.sql)[st.method](...st.params(scratch));
+        dumps.push(st.dump(scratch));
+      }
+      if (JSON.stringify(dumps[0]) === JSON.stringify(dumps[1])) {
+        ok(`${item.file} · ${st.name}: identical (${dumps[0].length} row(s) after)`);
+      } else {
+        fail(`${item.file} · ${st.name}: rows differ after the write`);
+        console.log('         RAW     : ' + JSON.stringify(dumps[0]).slice(0, 250));
+        console.log('         WRAPPED : ' + JSON.stringify(dumps[1]).slice(0, 250));
+      }
+    } catch (e) {
+      fail(`${item.file} · ${st.name}: ${e.message}`);
+    } finally {
+      for (const m of made) { try { m.scratch.close(); } catch (_) {} try { fs.unlinkSync(m.file); } catch (_) {} }
+    }
+  }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// lib/operator-caps.js gets its own section because of HOW it fails. It resolves
+// an operator's capabilities and, on any database error, falls back to the role
+// alone — silently. A seam fault reaching it would therefore not raise anything;
+// it would hand out a different set of permissions. So it is not enough that
+// nothing threw: the read has to be shown to have actually HAPPENED, and to have
+// returned the same answer through both paths.
+console.log('\n══ 5b · operator-caps fails open — assert the read happened, not just that nothing threw ══');
+{
+  const OPERATOR_CAPS_JS = path.join(HOME, 'lib', 'operator-caps.js');
+  if (!fs.existsSync(OPERATOR_CAPS_JS)) {
+    fail('lib/operator-caps.js not found — the fail-open path is unchecked');
+  } else {
+    delete require.cache[DB_SEAM_JS];
+    const { seam } = require(DB_SEAM_JS);
+    delete require.cache[OPERATOR_CAPS_JS];
+    const { resolveOperator } = require(OPERATOR_CAPS_JS);
+
+    const user = db.prepare('SELECT id, role, retail_store_id, scope_all FROM tenant_users LIMIT 1').get()
+      || { id: -1, role: 'staff', retail_store_id: null, scope_all: 1 };
+    const tenant = db.prepare('SELECT features_json FROM tenants LIMIT 1').get() || null;
+
+    // Driven with NO try/catch of ours in the way, so a fault inside the seam
+    // surfaces here instead of being converted into quieter permissions.
+    const probe = probeHandle(db);
+    let threw = null, wrappedRes = null, rawRes = null;
+    try {
+      rawRes = resolveOperator(db, user, tenant);
+      wrappedRes = resolveOperator(seam(probe.handle), user, tenant);
+    } catch (e) { threw = e; }
+
+    if (threw) fail('resolveOperator threw through the seam: ' + threw.message);
+    else ok('resolveOperator did not throw through the seam');
+
+    if (probe.log.errors.length) {
+      fail(`resolveOperator raised ${probe.log.errors.length} exception(s) beneath the seam — ` +
+           'it would have swallowed these and resolved from the role alone');
+      for (const e of probe.log.errors) console.log(`         ${e.phase}: ${e.message}`);
+    } else {
+      ok('zero exceptions beneath the seam inside resolveOperator');
+    }
+
+    // The read must have HAPPENED. A swallowed failure leaves caps resolved from
+    // the role alone, which for owner/admin is still ALL caps and looks correct.
+    const sawCapsRead = probe.log.sql.some(q => /tenant_user_caps/.test(q));
+    if (sawCapsRead) ok('the tenant_user_caps read actually executed through the seam');
+    else fail('the tenant_user_caps read never executed — capabilities came from the fail-open path');
+
+    if (JSON.stringify(rawRes) === JSON.stringify(wrappedRes)) {
+      ok(`capabilities identical (${(wrappedRes.caps || []).length} cap(s), scope ${JSON.stringify(wrappedRes.scopeStores)})`);
+    } else {
+      fail('capabilities differ between the raw and wrapped paths');
+      console.log('         RAW     : ' + JSON.stringify(rawRes).slice(0, 300));
+      console.log('         WRAPPED : ' + JSON.stringify(wrappedRes).slice(0, 300));
+    }
+  }
+}
 
 // ════════════════════════════════════════════════════════════════════════════
 console.log('\n══ 6 · declared NOT covered by this run ══');
