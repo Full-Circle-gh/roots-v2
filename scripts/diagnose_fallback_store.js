@@ -34,7 +34,7 @@ process.chdir(path.join(__dirname, '..'));
 
 require('./../database'); // ensure the global db is initialised
 const inventory = require('./../lib/inventory');
-const { tenantAls, getTenantDb, tdb } = require('./../lib/tenant-db');
+const { tenantAls, getTenantDb, rawTenantDb, tdb } = require('./../lib/tenant-db');
 
 // ── arg parsing ────────────────────────────────────────────────────────────
 function arg(name, def = null) {
@@ -54,7 +54,7 @@ const LNG      = arg('lng', null) != null ? Number(arg('lng')) : null;
 function bar() { console.log('─'.repeat(74)); }
 function fmt(n) { return n === Infinity ? '∞' : String(n); }
 
-tenantAls.run(getTenantDb(TENANT), () => {
+tenantAls.run(rawTenantDb(TENANT), () => {
   const db = tdb();
 
   // ── resolve the product ──────────────────────────────────────────────────
