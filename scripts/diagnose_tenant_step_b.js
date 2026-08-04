@@ -110,17 +110,22 @@ else fail('rawTenantDb(1) is wrapped — the ALS accessor must never be');
 if (!isWrapped(T.rawTdb())) ok('rawTdb() is still RAW');
 else fail('rawTdb() is wrapped — the ALS accessor must never be');
 
-if (T.getTenantDb(1) === T.getTenantDb(1)) ok('getTenantDb(1) has a stable identity across calls');
+// Two separate calls, held in two variables: comparing the call expressions
+// inline reads as a self-comparison to eslint, and it is the two RESULTS that
+// must be identical — seam() caches one wrapper per raw handle, so a fresh
+// object each call would mean identity comparisons elsewhere silently stop working.
+const handleA = T.getTenantDb(1);
+const handleB = T.getTenantDb(1);
+if (handleA === handleB) ok('getTenantDb(1) has a stable identity across calls');
 else fail('getTenantDb(1) returns a different object each call — seam() is not caching');
 
 // ════════════════════════════════════════════════════════════════════════════
 console.log('\n══ 2 · the guard stayed quiet — no wrapper reached the ALS ══');
 
-let guardFired = false;
 try {
   T.tenantAls.run(T.rawTenantDb(1), () => T.currentTenantId());
   ok('entering a scope the way the application does raises nothing');
-} catch (e) { guardFired = true; fail('the guard fired on a normal scope entry: ' + e.message); }
+} catch (e) { fail('the guard fired on a normal scope entry: ' + e.message); }
 
 // And it must still bite when it should.
 let bit = false;
