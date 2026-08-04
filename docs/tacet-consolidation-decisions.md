@@ -627,6 +627,22 @@ WHAT CAN REACH THE THROW, CHECKED BEFORE SHIPPING. The branch needs an active sc
 
 PROVEN BY ENUMERATION, NOT BY MEMORY. `scripts/check-tenant-als.js` discovers every `tenantAls.run()` call site by scanning and fails unless each one's first argument provably produces a raw handle. A site added next month is caught by default. The gate found its own blind spots while being built: it initially missed `routes/retail.js:5670` because comment-stripping was not string-aware, so a `//` inside a URL string ate the rest of the line — the same class of bug as the coverage checker's regex-literal gap, and the reason it now reconciles what it classified against what is actually there.
 
+### Step B of the tenant step — the flip — DONE 2026-08-04
+
+Two lines. `tdb()` and `getTenantDb()` now return `seam(...)` instead of the raw handle. Seam coverage went from **18 of 2,799 in-scope statement sites (0.64%) to 1,351 of 2,799 (48.27%)** — 51.53% of the runtime surface alone. Including the excluded one-off scripts: 41.80%. Everything that made it safe was built in Step A, which is why the flip itself is two lines.
+
+THE ALS STILL HOLDS RAW HANDLES. The wrapping happens on read, in the accessor, not in the store. `rawTenantDb()` and `rawTdb()` are unchanged and still raw, `dbToId` is still keyed on raw identity, and `seam()` is idempotent and caches one wrapper per handle so `getTenantDb(1)` keeps a stable identity across calls.
+
+THE PROPERTY THE STEP TURNS ON, PROVEN FOR MORE THAN ONE TENANT. For every row in `tenants`, `tenantAls.run(rawTenantDb(id), () => currentTenantId()) === id`, asserted with the seam active and with it stubbed to the identity function. This matters because `currentTenantId()` selects a tenant's credentials: if the flip broke it, one account would act with another's WeChat and payment configuration.
+
+The check is run against a fixture carrying three tenants, not just Roots, and that is not a detail. Driven against a deliberately broken build — the ALS accepting wrappers, `rawTenantDb()` handing one out, and `currentTenantId()` falling back to Roots, i.e. exactly Step B without Step A — **tenant 1 still passes** while tenants 2 and 7 both silently report as Roots. On live there is only Roots, so the live run cannot see this failure mode at all. The fixture is what catches it.
+
+TENANT DATABASES ARE MATERIALISED IN A SCRATCH TREE, NOT THE LIVE ONE. `rawTenantDb(id)` for a non-Roots id creates `data/tenants/<id>.db` and writes schema into it. That path resolves relative to `tenant-db.js`'s own location, so under the `ro-query` staging directory it lands in scratch. The diagnostic asserts this before opening any non-Roots handle and refuses the sweep if the resolved directory is inside the live application — so a future change to how diagnostics are staged cannot quietly turn a read-only check into a writer.
+
+COVERAGE IS NOT SELF-CERTIFIED. `tdb()` and `getTenantDb()` are indirections, so whether a `tdb().prepare(...)` site counts as covered depends on what those functions return. Rather than hard-code that — which is how a measured number turns back into a claim — the coverage checker reads `lib/tenant-db.js` and tests whether the accessors actually return `seam(...)`. Unwrapping `tdb()` drops the reported figure from 51.53% to 0.69% on its own, with the basis printed on every run.
+
+WHAT THE STEP A DIAGNOSTIC NOW ASSERTS. Its §1 originally checked that nothing was wrapped, which was Step A's whole point and is deliberately false after Step B. Those assertions were retired and replaced with the invariants that survive — the raw accessors staying raw — rather than left to fail and be ignored. A check that is expected to fail teaches people to skip the output.
+
 ### Store opening hours are not configured — OPEN 2026-08-04
 
 Live `retail_stores` holds two rows, `tianhe` and `yuexiu`, and neither has a usable `open_time` / `close_time` pair. `storeHours()` therefore returns null for every store in production, and every consumer treats every store as always-open.

@@ -2,11 +2,15 @@
 /**
  * Step A of the tenant step, verified against live data.
  *
- * Step A introduces the raw accessors (rawTenantDb / rawTdb), a guarded ALS facade,
- * and makes currentTenantId() throw instead of guessing. It wraps NOTHING — tdb()
- * and getTenantDb() still return raw handles — so the only intended behaviour
- * change in the whole step is the currentTenantId() throw, and that branch is
- * unreachable in normal operation. This proves both halves of that claim.
+ * Step A introduced the raw accessors (rawTenantDb / rawTdb), a guarded ALS facade,
+ * and made currentTenantId() throw instead of guessing. Its only intended behaviour
+ * change was that throw, and that branch is unreachable in normal operation.
+ *
+ * STEP B HAS SINCE LANDED, so tdb() and getTenantDb() now return seam-wrapped
+ * handles. This file's §1 was updated to assert the invariants that survive that —
+ * the raw accessors staying raw — rather than the "nothing is wrapped" checks it
+ * originally carried. The wrapping itself is asserted by
+ * scripts/diagnose_tenant_step_b.js.
  *
  * WHAT CHANGED, EXACTLY
  * ---------------------
@@ -69,10 +73,12 @@ const T = require(TENANT_DB_JS);
 const { seam, isWrapped } = require(DB_SEAM_JS);
 
 // ════════════════════════════════════════════════════════════════════════════
-console.log('\n══ 1 · nothing is wrapped yet — Step A must be behaviour-neutral ══');
-
-if (T.getTenantDb(1) === db) ok('getTenantDb(1) is still the raw shared handle');
-else fail('getTenantDb(1) is no longer the raw shared handle — something got wrapped');
+console.log('\n══ 1 · Step A\'s durable invariants — still true after the Step B flip ══');
+// This section originally asserted that NOTHING was wrapped, which was Step A's
+// whole point. Step B has since wrapped tdb() and getTenantDb() deliberately, so
+// those assertions were retired rather than left to fail. What remains is what must
+// hold in every step: the raw accessors stay raw, and the ALS holds raw handles.
+// scripts/diagnose_tenant_step_b.js asserts the wrapping itself.
 
 if (typeof T.rawTenantDb === 'function') ok('rawTenantDb() is exported');
 else fail('rawTenantDb() is not exported');
@@ -80,14 +86,14 @@ else fail('rawTenantDb() is not exported');
 if (typeof T.rawTdb === 'function') ok('rawTdb() is exported');
 else fail('rawTdb() is not exported');
 
-if (T.rawTenantDb(1) === T.getTenantDb(1)) ok('rawTenantDb(1) === getTenantDb(1) — identical in Step A');
-else fail('rawTenantDb(1) and getTenantDb(1) differ; Step A should not have separated them yet');
+if (T.rawTenantDb(1) === db) ok('rawTenantDb(1) is the raw shared handle');
+else fail('rawTenantDb(1) is not the raw shared handle — the ALS accessor must never be wrapped');
 
-if (!isWrapped(T.getTenantDb(1))) ok('getTenantDb(1) is not seam-wrapped');
-else fail('getTenantDb(1) IS seam-wrapped — that is Step B, not Step A');
+if (!isWrapped(T.rawTenantDb(1))) ok('rawTenantDb(1) is not seam-wrapped');
+else fail('rawTenantDb(1) IS seam-wrapped — the ALS would receive a wrapper');
 
-if (T.tdb() === db && T.rawTdb() === db) ok('tdb() and rawTdb() both return the raw handle outside a scope');
-else fail('tdb()/rawTdb() disagree outside a scope');
+if (T.rawTdb() === db) ok('rawTdb() returns the raw handle outside a scope');
+else fail('rawTdb() is not the raw handle outside a scope');
 
 // ════════════════════════════════════════════════════════════════════════════
 console.log('\n══ 2 · the two legitimate routes to Roots still answer 1 ══');
@@ -177,8 +183,8 @@ if (strayProducers.length) {
 
 console.log('\n' + '═'.repeat(72));
 if (FAILURES === 0) {
-  console.log('RESULT: PASS — nothing is wrapped, Roots still resolves to 1 by both routes,');
-  console.log('        and an unidentifiable scope is refused instead of guessed.');
+  console.log('RESULT: PASS — the raw accessors are still raw, Roots resolves to 1 by both');
+  console.log('        routes, and an unidentifiable scope is refused instead of guessed.');
   process.exit(0);
 }
 console.log(`RESULT: FAIL — ${FAILURES} check(s) failed.`);

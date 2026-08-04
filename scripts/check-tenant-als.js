@@ -36,7 +36,9 @@ const FILES_EXTRA = ['server.js'];
 //   rawTenantDb(id) / rawTdb()  — the accessors that exist for exactly this purpose
 //   require('../database')      — the shared handle, raw in every step
 //   new Database(...)           — a connection opened directly (test scripts)
-const RAW_CALL = /^(rawTenantDb|rawTdb)\s*\(/;
+// A member prefix is fine — the diagnostics call these through the module object
+// (T.rawTenantDb(1)). What matters is which function is being called.
+const RAW_CALL = /^(?:[A-Za-z_$][\w$]*\s*\.\s*)?(rawTenantDb|rawTdb)\s*\(/;
 const RAW_PRODUCER = /\b(rawTenantDb|rawTdb)\s*\(|require\(\s*['"][^'"]*\/?database['"]\s*\)|new\s+Database\s*\(/;
 
 // Expressions known to be, or to become, WRAPPED. Named explicitly so the failure
@@ -107,6 +109,7 @@ for (const rel of files) {
   // a permanent violation that must never be fixed — the same reason the seam's
   // harnesses are excluded from the coverage checker's denominator.
   if (rel === path.join('scripts', 'diagnose_tenant_step_a.js')) continue;
+  if (rel === path.join('scripts', 'diagnose_tenant_step_b.js')) continue;   // same: proves the guard bites
   const raw = fs.readFileSync(path.join(REPO, rel), 'utf8');
   const src = stripComments(raw);
   // Two baselines. `inCode` is what the scanner must account for; `inRaw` includes
