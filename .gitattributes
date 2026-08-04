@@ -18,3 +18,18 @@
 # exist. Pin them so the working copy always matches the committed bytes.
 /scripts/postgres-migration/*.py text eol=lf
 /docs/tacet-postgres-schema-proposed.sql text eol=lf
+
+# The full-copy scripts are the verbatim record of the 2026-08-04 copy and
+# checksum against the copies still on the box. Unlike the rehearsal set they
+# are NOT uniformly LF — checks.py, gen.py, verify.py, plan.json and
+# copy_order.json were written with CRLF, the other sixteen files with LF.
+# A blanket eol=lf would rewrite five of them. Convert nothing in either
+# direction; keep the bytes exactly as they ran.
+/scripts/postgres-full-copy/*.py -text
+/scripts/postgres-full-copy/*.json -text
+/scripts/postgres-full-copy/*.sh -text
+/scripts/postgres-full-copy/survey_pg.sql -text
+
+# The as-built schema dump is pg_dump output and is LF on the box. Pin it so a
+# Windows checkout cannot hand back a CRLF copy that no longer matches.
+/docs/tacet-postgres-schema-as-built-2026-08-04.sql text eol=lf
