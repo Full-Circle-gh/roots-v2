@@ -66,11 +66,29 @@ jobs:
         run: |
           set -euo pipefail
           S='${{ inputs.script }}'
-          REMOTE="/tmp/ro-query-$GITHUB_RUN_ID.js"
+          STAGE="/tmp/ro-query-$GITHUB_RUN_ID"
+          REMOTE="$STAGE/$(basename "$S")"
+
+          # The diagnostic runs against the LIVE database but against THIS
+          # CHECKOUT's lib/, not the deployed one. That ordering is deliberate: a
+          # comparison that can only run after the code ships cannot gate the
+          # ship. So lib/ is staged in a scratch directory beside the script, and
+          # the app's node_modules is symlinked in rather than copied.
+          #
+          # data/ is NOT staged — the diagnostics open the live database by
+          # absolute path and prove read-only on the connection themselves. The
+          # stub database.js exists only so that a `require('../database')` in a
+          # staged module resolves to a real path; every diagnostic replaces it in
+          # the module cache and none of them execute it.
+          ssh prod "rm -rf '$STAGE' && mkdir -p '$STAGE'"
           scp -q "$S" "prod:$REMOTE"
+          scp -qr lib "prod:$STAGE/lib"
+          ssh prod "ln -s /root/roots-v2/node_modules '$STAGE/node_modules' && \
+                    printf 'module.exports = {};\n' > '$STAGE/database.js'"
+
           set +e
-          ssh prod "node '$REMOTE'"; RC=$?
+          ssh prod "ROOTS_HOME='$STAGE' ROOTS_DB=/root/roots-v2/data/roots.db node '$REMOTE'"; RC=$?
           set -e
-          ssh prod "rm -f '$REMOTE'"
+          ssh prod "rm -rf '$STAGE'"
           echo "exit=$RC"
           exit $RC
