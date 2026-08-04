@@ -36,7 +36,12 @@
 const fs = require('fs');
 const path = require('path');
 
-const REPO = process.argv[2] || path.join(__dirname, '..');
+// Flags may appear in any order; the first non-flag argument is the repo root.
+// (Taking argv[2] blindly makes `--by-file` the repo path and silently reports
+// zero sites for everything.)
+const ARGS = process.argv.slice(2);
+const BY_FILE = ARGS.includes('--by-file');
+const REPO = ARGS.find(a => !a.startsWith('--')) || path.join(__dirname, '..');
 
 // The deployed application, split the way deploy-changed.sh splits it. RUNTIME is
 // what serves requests; BACKGROUND is the daemons and the one-off scripts.
@@ -237,4 +242,40 @@ for (const s of unresolved) byFile[s.file] = (byFile[s.file] || 0) + 1;
 for (const [f, n] of Object.entries(byFile).sort((a, b) => b[1] - a[1]).slice(0, 12)) {
   console.log(`    ${String(n).padStart(4)}  ${f}`);
 }
+// ── --by-file ───────────────────────────────────────────────────────────────
+// Per-file breakdown, smallest first. This is how the next batch gets chosen:
+// a file whose sites are ALL one category, and few, is a clean candidate; a file
+// mixing DIRECT with TENANT cannot move until tdb()/getTenantDb() move, and a
+// file with UNRESOLVED sites needs its handle-passing read by eye first.
+if (BY_FILE) {
+  console.log('\n══ BY FILE — candidates for the next batch, smallest first ══');
+  const per = new Map();
+  for (const s of [...runtime.sites, ...background.sites]) {
+    if (!per.has(s.file)) per.set(s.file, {});
+    const c = per.get(s.file);
+    c[s.category] = (c[s.category] || 0) + 1;
+  }
+  const rows = [...per.entries()].map(([file, c]) => {
+    const total = Object.values(c).reduce((a, b) => a + b, 0);
+    const cats = Object.keys(c).sort();
+    return { file, c, total, cats, pure: cats.length === 1 };
+  }).sort((a, b) => a.total - b.total || a.file.localeCompare(b.file));
+
+  const fmt = (r) => `${String(r.total).padStart(4)}  ${r.file.padEnd(46)} ` +
+    ['SEAM', 'TENANT', 'DIRECT', 'RAW_OPEN', 'UNRESOLVED']
+      .filter(k => r.c[k]).map(k => `${k}:${r.c[k]}`).join(' ');
+
+  console.log('\n  MOVABLE NOW — every site is DIRECT (a module-level shared handle),');
+  console.log('  so routing the file means changing how it acquires that one handle:');
+  for (const r of rows.filter(r => r.pure && r.cats[0] === 'DIRECT')) console.log('   ' + fmt(r));
+
+  console.log('\n  BLOCKED — mixes DIRECT/RAW_OPEN with TENANT, so it cannot move until');
+  console.log('  tdb()/getTenantDb() are routed (their own step, needing a raw accessor):');
+  for (const r of rows.filter(r => r.cats.includes('TENANT') && r.cats.length > 1)) console.log('   ' + fmt(r));
+
+  console.log('\n  NEEDS A LOOK — carries UNRESOLVED receivers (a handle arriving as a');
+  console.log('  parameter), so what it is called with must be read before it moves:');
+  for (const r of rows.filter(r => r.c.UNRESOLVED)) console.log('   ' + fmt(r));
+}
+
 console.log('');
