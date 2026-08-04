@@ -44,10 +44,49 @@ const BY_FILE = ARGS.includes('--by-file');
 const REPO = ARGS.find(a => !a.startsWith('--')) || path.join(__dirname, '..');
 
 // The deployed application, split the way deploy-changed.sh splits it. RUNTIME is
-// what serves requests; BACKGROUND is the daemons and the one-off scripts.
+// what serves requests; BACKGROUND is the scripts directory.
 const RUNTIME_DIRS = ['routes', 'lib', 'middleware'];
 const RUNTIME_FILES = ['server.js', 'database.js'];
 const BACKGROUND_DIRS = ['scripts'];
+
+// ── SCOPE — which scripts the seam is responsible for ───────────────────────
+//
+// THE RULE: a script is IN SCOPE if it can reach the LIVE database on an ongoing,
+// unattended basis. That is the criterion because the converter exists to protect
+// live money values; a script that cannot reach live data cannot corrupt it, and a
+// script that ran once in the past and would have to be edited before it ran again
+// is not part of the system's steady state.
+//
+// Note that "recurring" is NOT the test. scripts/verify-fulfilment-types.js runs on
+// every deploy that touches fulfilment, but it builds a throwaway SQLite database in
+// the OS temp directory and never opens the live one — so it is out of scope despite
+// running constantly.
+//
+// IN  — the six channel daemons. They run continuously under pm2 and write live
+//       order, stock and sync data.
+// OUT — one-off backfills, fixups, imports, seeds and diagnostics that a person runs
+//       by hand for a specific purpose, and verifiers that only ever touch a temp
+//       database.
+//
+// THE HONEST CAVEAT, recorded rather than buried: ~80 of the excluded scripts open
+// the live database by path and would do so again tomorrow if someone ran them
+// unedited. Excluding them is a judgement that they will not be run AFTER the
+// Postgres cutover, not a claim that they cannot be. If the SQLite file is left in
+// place at cutover they will keep working against stale data, silently. Removing or
+// renaming data/roots.db at cutover is what actually makes this exclusion safe, and
+// that belongs on the cutover checklist rather than in the seam.
+const IN_SCOPE_SCRIPTS = new Set([
+  'scripts/guanyi-daemon.js',
+  'scripts/meituan-daemon.js',
+  'scripts/shangou-daemon.js',
+  'scripts/gzgrocery-order-daemon.js',
+  'scripts/qingyun-daemon.js',
+  'scripts/eleme-daemon.js',
+]);
+
+const inScope = (rel) => !rel.startsWith('scripts' + path.sep) && !rel.startsWith('scripts/')
+  ? true
+  : IN_SCOPE_SCRIPTS.has(rel.split(path.sep).join('/'));
 
 // The seam's own verification tooling is excluded, on the same precedent as the
 // SKIP set in diagnose_money_unit_mixing.py. These files hold a RAW handle by
@@ -82,9 +121,49 @@ function jsFilesIn(dir) {
 // inside a SQL literal would be a false positive. The BINDING pass needs them
 // intact, because `require('../database')` is identified by the path inside the
 // quotes: scrubbing it first is what makes every DIRECT site look UNRESOLVED.
+// Regex literals must be recognised, not treated as code. `.replace(/^['"]|['"]$/g, '')`
+// in scripts/guanyi-daemon.js contains both quote characters; without this the
+// scanner entered string mode inside the regex, desynchronised, and swallowed the
+// rest of the file — reporting 0 statement sites for a daemon that has 40. A blind
+// spot like that does not announce itself, which is why the reconciliation check
+// below exists as well.
+//
+// Regex-vs-division is decided the usual way: a `/` is a regex only where a value
+// cannot already have been produced — after an operator, an opening bracket, a
+// comma, a semicolon, or a keyword like return/typeof/case.
+const REGEX_OK_BEFORE = /[(,=:[!&|?{};+\-*%~^<>]$|\b(return|typeof|case|in|of|do|else|yield|await)$/;
+
 function scrub(src, { strings = true } = {}) {
   let out = '', i = 0;
   const n = src.length;
+  const prevSignificant = () => {
+    let j = out.length - 1;
+    while (j >= 0 && /\s/.test(out[j])) j--;
+    return out.slice(0, j + 1);
+  };
+  // Skip a quoted run starting at `from` (src[from] is the quote). Template
+  // literals may contain ${...} whose expression may itself contain strings and
+  // FURTHER templates — `${x ? `<div>${y}</div>` : ''}` appears throughout
+  // routes/retail.js. Skipping to the next backtick desynchronises there and the
+  // scanner then reads HTML as code; that hid 96 statement sites. Brace depth and
+  // recursion keep it in step.
+  const skipQuoted = (from) => {
+    const quote = src[from];
+    let k = from + 1;
+    while (k < n) {
+      const ch = src[k];
+      if (ch === '\\') { k += 2; continue; }
+      if (ch === quote) return k + 1;
+      if (quote !== '`' && ch === '\n') return k;        // unterminated ' or "
+      // NOTE — nested templates inside ${...} are NOT tracked. Attempting it made
+      // the measurement worse, not better (retail.js fell from 1124 attributed to
+      // 476), so this deliberately stops at the next backtick and lets the
+      // reconciliation check below report what it could not see. A loud, stated
+      // gap beats a clever scanner that is silently wrong.
+      k++;
+    }
+    return k;
+  };
   while (i < n) {
     const c = src[i], d = src[i + 1];
     if (c === '/' && d === '/') { while (i < n && src[i] !== '\n') { i++; } continue; }
@@ -93,18 +172,30 @@ function scrub(src, { strings = true } = {}) {
       while (i < n && !(src[i] === '*' && src[i + 1] === '/')) { if (src[i] === '\n') out += '\n'; i++; }
       i += 2; continue;
     }
-    if (c === '"' || c === "'" || c === '`') {
-      const quote = c;
-      if (!strings) { out += c; i++; }
-      else { out += ' '; i++; }
-      while (i < n && src[i] !== quote) {
-        if (src[i] === '\\') { if (!strings) out += src.slice(i, i + 2); i += 2; continue; }
-        if (src[i] === '\n') out += '\n';
-        else if (!strings) out += src[i];
+    if (c === '/' && REGEX_OK_BEFORE.test(prevSignificant())) {
+      out += ' '; i++;
+      let inClass = false;
+      while (i < n) {
+        const r = src[i];
+        if (r === '\\') { i += 2; continue; }
+        if (r === '\n') break;
+        if (r === '[') inClass = true;
+        else if (r === ']') inClass = false;
+        else if (r === '/' && !inClass) { i++; break; }
         i++;
       }
-      if (!strings && i < n) out += quote;
-      i++; continue;
+      while (i < n && /[a-z]/.test(src[i])) i++;
+      continue;
+    }
+    if (c === '"' || c === "'" || c === '`') {
+      const end = skipQuoted(i);
+      if (strings) {
+        out += ' ';
+        for (let k = i; k < end; k++) if (src[k] === '\n') out += '\n';
+      } else {
+        out += src.slice(i, end);
+      }
+      i = end; continue;
     }
     out += c; i++;
   }
@@ -162,7 +253,10 @@ function analyseFile(rel) {
     let idx = -1;
     while ((idx = line.indexOf('.prepare(', idx + 1)) !== -1) {
       const receiver = receiverBefore(line, idx);
-      if (!receiver) continue;
+      // A receiver we cannot recover is UNRESOLVED, never dropped. Dropping it
+      // would quietly shrink the denominator, which is the one number this whole
+      // exercise is judged on.
+      if (!receiver) { sites.push({ file: rel, line: i + 1, receiver: '<unrecoverable>', category: 'UNRESOLVED' }); continue; }
       let cat = classifyInlineReceiver(receiver);
       if (!cat) {
         const root = receiver.replace(/^this\./, '').match(/^([A-Za-z_$][\w$]*)/);
@@ -171,7 +265,12 @@ function analyseFile(rel) {
       sites.push({ file: rel, line: i + 1, receiver, category: cat || 'UNRESOLVED' });
     }
   }
-  return sites;
+  // RECONCILIATION. Count `.prepare(` in the comment-stripped source and compare
+  // with what was attributed. These must agree; a shortfall means the scanner lost
+  // sites somewhere, which is exactly the failure that hid 40 daemon statements
+  // behind a regex literal. Reported, not swallowed.
+  const naive = (scrub(src, { strings: false }).match(/\.prepare\(/g) || []).length;
+  return { sites, naive };
 }
 
 // Walk backwards from `.prepare(` to recover the receiver expression, balancing
@@ -195,7 +294,9 @@ function receiverBefore(line, dotIdx) {
 }
 
 function report(label, files) {
-  const sites = files.flatMap(analyseFile);
+  const analysed = files.map(f => ({ file: f, ...analyseFile(f) }));
+  const sites = analysed.flatMap(a => a.sites);
+  const gaps = analysed.filter(a => a.naive > a.sites.length);
   const by = {};
   for (const s of sites) by[s.category] = (by[s.category] || 0) + 1;
   const total = sites.length;
@@ -208,7 +309,11 @@ function report(label, files) {
   for (const cat of ['SEAM', 'TENANT', 'DIRECT', 'RAW_OPEN', 'UNRESOLVED']) {
     if (by[cat]) console.log(`    ${cat.padEnd(11)} ${String(by[cat]).padStart(5)}`);
   }
-  return { covered, total, sites };
+  if (gaps.length) {
+    console.log(`  SCANNER GAPS — sites the reader could not see (denominator would be short):`);
+    for (const g of gaps) console.log(`    ${g.file}: attributed ${g.sites.length}, found ${g.naive}`);
+  }
+  return { covered, total, sites, gaps };
 }
 
 const runtimeFiles = [
@@ -221,22 +326,35 @@ console.log('Database seam coverage — statement sites reached through lib/db-s
 console.log('Excluded (the seam\'s own tooling, which holds raw handles by design):');
 for (const f of [...SKIP].sort()) console.log('  - ' + f);
 
-const runtime = report('RUNTIME — routes/, lib/, middleware/, server.js, database.js', runtimeFiles);
-const background = report('BACKGROUND — scripts/ (daemons and one-off scripts)', backgroundFiles);
+const daemonFiles = backgroundFiles.filter(f => inScope(f));
+const excludedFiles = backgroundFiles.filter(f => !inScope(f));
 
-const covered = runtime.covered + background.covered;
-const total = runtime.total + background.total;
+const runtime = report('RUNTIME — routes/, lib/, middleware/, server.js, database.js', runtimeFiles);
+const daemons = report('DAEMONS — scripts/ that run continuously against live data (IN SCOPE)', daemonFiles);
+const excluded = report('EXCLUDED — one-off scripts and temp-database verifiers (OUT OF SCOPE)', excludedFiles);
+
+const covered = runtime.covered + daemons.covered;
+const total = runtime.total + daemons.total;
+const allCovered = covered + excluded.covered;
+const allTotal = total + excluded.total;
+
 console.log(`\n══ HEADLINE ══`);
-console.log(`  Whole deployed application: ${covered}/${total} = ${((covered * 100) / total).toFixed(2)}%`);
-console.log(`  Runtime surface only:       ${runtime.covered}/${runtime.total} = ` +
+console.log(`  IN SCOPE  (runtime + daemons):   ${covered}/${total} = ${((covered * 100) / total).toFixed(2)}%`);
+console.log(`  Runtime surface only:            ${runtime.covered}/${runtime.total} = ` +
             `${((runtime.covered * 100) / runtime.total).toFixed(2)}%`);
+console.log(`  Daemons only:                    ${daemons.covered}/${daemons.total} = ` +
+            `${daemons.total ? ((daemons.covered * 100) / daemons.total).toFixed(2) : '0.00'}%`);
+console.log(`\n  Both numbers, so the exclusion stays visible rather than flattering the figure:`);
+console.log(`    with the excluded scripts counted:    ${allCovered}/${allTotal} = ${((allCovered * 100) / allTotal).toFixed(2)}%`);
+console.log(`    without them (the number we track):   ${covered}/${total} = ${((covered * 100) / total).toFixed(2)}%`);
+console.log(`    excluded from the denominator:        ${excluded.total} site(s) across ${excludedFiles.length} file(s)`);
 
 console.log('\n  Covered sites:');
-for (const s of [...runtime.sites, ...background.sites].filter(s => s.category === 'SEAM')) {
+for (const s of [...runtime.sites, ...daemons.sites].filter(s => s.category === 'SEAM')) {
   console.log(`    ${s.file}:${s.line}  ${s.receiver}.prepare(`);
 }
 
-const unresolved = [...runtime.sites, ...background.sites].filter(s => s.category === 'UNRESOLVED');
+const unresolved = [...runtime.sites, ...daemons.sites].filter(s => s.category === 'UNRESOLVED');
 console.log(`\n  UNRESOLVED receivers (counted in the denominator, never as covered): ${unresolved.length}`);
 const byFile = {};
 for (const s of unresolved) byFile[s.file] = (byFile[s.file] || 0) + 1;
@@ -251,7 +369,7 @@ for (const [f, n] of Object.entries(byFile).sort((a, b) => b[1] - a[1]).slice(0,
 if (BY_FILE) {
   console.log('\n══ BY FILE — candidates for the next batch, smallest first ══');
   const per = new Map();
-  for (const s of [...runtime.sites, ...background.sites]) {
+  for (const s of [...runtime.sites, ...daemons.sites, ...excluded.sites]) {
     if (!per.has(s.file)) per.set(s.file, {});
     const c = per.get(s.file);
     c[s.category] = (c[s.category] || 0) + 1;
