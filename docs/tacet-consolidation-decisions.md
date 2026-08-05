@@ -485,6 +485,7 @@ Consequences to plan for:
 - pgroll is not installed. Installing packages on the box is not a free action — apt triggers needrestart, which can restart services under pm2. Installation must be planned, not done as a side effect.
 - The constraints in §4 of the survey still apply and are not solved by this choice: the health probe rolls back on 5xx from four endpoints; deploys complete in 20 to 55 seconds and a slower migration triggers auto-rollback; a migrations folder at the repo root would never ship, as the deploy allowlist does not cover it; and deletions never reach the box.
 - The five live tables with no CREATE TABLE anywhere in the repo remain unreconciled. pgroll does not require the repository to be the source of truth in the way a desired-state tool would, so this is no longer a blocker for the tooling choice, but it remains a real gap.
+- **Same knot as the pre-converter sequencing constraint** recorded below ("RAW_OPEN is closed, and the pre-converter sequencing constraint", 2026-08-05). The migrations that exist today run at `database.js` module load, before any converter could be installed; there is no migrations folder, and the allowlist would not ship one if there were. Whatever resolves the folder question has to resolve the ordering question with it.
 
 Parked items:
 
@@ -754,6 +755,41 @@ From the same sweep. These compile on SQLite and **error** on Postgres — they 
 **This is the first measured size of the SQL-dialect work, and it was not on the cutover checklist in any form.** The rehearsal migration proved the DATA converts; nothing had yet asked whether the QUERIES run.
 
 **It is a floor, not a total.** 371 statements are built dynamically — by template interpolation or string concatenation — and are unreachable by static preparation. That blind spot already conceals one known case: the `sqlite_sequence` reset in `routes/admin.js:238` is assembled by concatenation, so only its sibling in `routes/ingredients.js` appears in the count above. Whatever the true number is, it is larger than 96.
+
+### RAW_OPEN is closed, and the pre-converter sequencing constraint — 2026-08-05
+
+**CLOSED — RAW_OPEN is not a scattered-connections problem.** There are **four** raw `new Database(` opens in runtime scope, not 230. The 230 was a statement-site count, 226 of them inside `database.js`. All four opens are correctly raw and **none is reclassified**:
+
+- **`database.js`** — the shared handle and schema bootstrapper. Its statement sites are **17 DDL + 211 DML** (not 226 DDL, as earlier mis-stated). The DML is real outstanding work and stays in the coverage denominator.
+- **`lib/tenant-db.js`** — stays raw **by identity comparison**: `tenantAls` and `dbToId` compare handles by identity, and a wrapper changes behaviour. Structure-only replay against `sqlite_master`, 5 SELECT + 2 ALTER, zero DML, **no money writes by construction**. It has no `_migrations` table because it runs no migrations; the presence-check guard is stateless and self-correcting, which is stronger than a flag table.
+- **`lib/ops-alert.js`** and **`lib/gzgrocery-order-notify.js`** — stay raw: `readonly: true` opens on the health-watchdog path, deliberately avoiding the schema-migration load that `require('../database')` would pull into every tick. **This is the point of those files, not incidental.**
+
+**No reclassification of the coverage denominator.** An earlier proposal to exclude 226 sites as DDL was withdrawn: 211 are DML and four of them touch money columns — `database.js:731`, `:3398`, `:3419`, `:3545`, the last recomputing lifetime spend across the customer table. Coverage stays **75.28%** and is honest.
+
+**MEASURED THIS PASS** — live SQLite, read-only, `ro-query` run 32, head_sha `54188c0a`, `scripts/diagnose_migrations_ledger.js`:
+
+- All four money writes are one-time and migration-guarded: `lookups_seed_v1` (`:731`), `shipping_spec_alignment_v1` (`:3398`, `:3419`), `backfill_lifetime_spend_v1` (`:3545`).
+- **All three migration names are present in the live `_migrations` ledger** (144 rows). Therefore **on live SQLite these four bodies are dead code on every boot** — already applied, and they will not re-fire.
+
+**THE CONSTRAINT — a design requirement, not a defect.** No converter exists yet: the only `installConverter(` call in the codebase is in a discarded diagnostic instance. There is no converter and no install site, so the sequencing requirement can be **designed in rather than discovered wrong**:
+
+> **The converter must be installable BEFORE `database.js` executes its migration list — or migrations must be moved out of module load.**
+
+Rationale: `database.js` runs its migrations at module load. A converter installed later in startup cannot, by construction, reach a migration that runs at load; and on a database where a given migration has **not** yet been applied, that migration runs fresh at load. **The window is open now, and every money-writing migration authored before this constraint is satisfied lands in it.** That growing edge is stated here explicitly rather than left implied.
+
+This belongs next to the pgroll / no-migrations-folder item recorded above ("Schema changes are managed with pgroll", and the constraint that a migrations folder at the repo root would never ship because the deploy allowlist does not cover it). **Same knot.**
+
+**OPEN VERIFICATION GATES — none inferred into fact:**
+
+1. **POSTGRES-SIDE OF THE GUARD: NOT VERIFIED.** The three names are confirmed on live **SQLite only**. That the same three are in the Postgres copy is **inference from row-count equality** — 144 live, the copy established at 144 — which is suggestive, not a read. No Postgres connection was made; the no-pg-connection constraint holds. **Do not treat matched row counts as verification.** Closing this requires a Postgres read, which is a separate decision under a separate constraint.
+2. **THE GROWING EDGE.** Any migration authored after the copy cutover, or added between now and the converter's install point, is not covered by gate 1 **even once gate 1 closes**, and fires fresh in the pre-converter window.
+3. **THE 62 UNRESOLVED.** Separately open. This is where a tenant-side money write would hide if one exists outside `lib/tenant-db.js` — a backfill taking a tenant handle as a parameter. Survey briefed, not yet run.
+
+**HONEST LIMITS:**
+
+- The `readonly` watchdog reasoning is verified against code and comment, **not against runtime behaviour**.
+- The RAW_OPEN survey sees `new Database(` and the checker's attribution. A handle obtained another way lands in the 62 UNRESOLVED (gate 3), not here.
+- Two facts were corrected mid-investigation — "230 opens" → four, and "226 DDL" → 211 DML including four money writes. **Both were inferences presented as measurements.** The corrected picture is the one recorded above.
 
 ### Three deploy findings recorded, NOT fixed — 2026-08-05
 
