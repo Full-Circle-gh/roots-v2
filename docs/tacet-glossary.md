@@ -1,6 +1,6 @@
 # Tacet glossary
 
-**These are the binding definitions for Tacet. Every document, every UI string and every new identifier uses these words with these meanings. Where existing code or documentation uses a different word for the same thing, the code is what needs changing, not this list. v1.5, 2026-08-04.**
+**These are the binding definitions for Tacet. Every document, every UI string and every new identifier uses these words with these meanings. Where existing code or documentation uses a different word for the same thing, the code is what needs changing, not this list. v1.6, 2026-08-05.**
 
 ---
 
@@ -101,3 +101,4 @@ Correct: "an account has customers." Wrong: "our customers" when an account is m
 - MARKET / RETAIL STORE, as separate concepts — both are locations.
 - SHOPPER — the word is CUSTOMER.
 - GUANYI — the channel is GZGROCERY. Retired 2026-08-04. Do not use it in documentation, briefs, UI copy, API paths or new code. It survives in the live schema and in stored data values pending the rename described in the consolidation decisions record.
+- TENANT — the word is ACCOUNT. It survives as a code identifier (tenant_id, tenant_users, lib/tenant-db.js, and similar) and is renamed when those are rebuilt with the schema.
