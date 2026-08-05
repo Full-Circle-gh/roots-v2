@@ -157,16 +157,20 @@ function jitter(baseMs, frac = 0.3) {
 // pause. Uses curl (always on the box); no extra deps. Direct mode (no proxy
 // configured) is always "healthy". A real HTTP reply (even an error page) proves
 // the proxy→Meituan path works; only 000/timeout counts as down.
-function proxyHealthy(timeoutSec = 8) {
-  // Probe the ACTIVE proxy (the failover watchdog's live choice — the same one
-  // the browser uses), not a static env value. Otherwise the gate would pause the
-  // whole loop when the env's default proxy is down even though a healthy fallback
-  // is already in use. '' (direct) is always healthy.
+// The ACTIVE proxy (the failover watchdog's live choice — the same one the
+// browser uses), not a static env value. Otherwise the gate would pause the
+// whole loop when the env's default proxy is down even though a healthy fallback
+// is already in use. '' (direct) is always healthy.
+function activeProxy() {
   let proxy = process.env.MEITUAN_PROXY_URL || '';
   try {
     const a = require('../lib/proxy-manager').readActive('tianhe');
     if (a !== undefined) proxy = a;
   } catch (_) { /* manager optional — keep env value */ }
+  return proxy;
+}
+function proxyHealthy(timeoutSec = 8) {
+  const proxy = activeProxy();
   if (!proxy) return Promise.resolve(true);
   // curl wants socks5h:// for remote DNS through a SOCKS5 exit.
   const probeUrl = proxy.startsWith('socks5://') ? 'socks5h://' + proxy.slice(9) : proxy;
@@ -1065,7 +1069,7 @@ async function main() {
       proxyFailStreak++;
       if (!alerts['proxy_down'] && proxyFailStreak >= PROXY_DOWN_GRACE) {
         alerts['proxy_down'] = true;
-        console.log(`[meituan-daemon] ${new Date().toISOString()} PROXY UNREACHABLE (${maskProxy(process.env.MEITUAN_PROXY_URL)}) — pausing sync until it recovers (the session is NOT logged out)`);
+        console.log(`[meituan-daemon] ${new Date().toISOString()} PROXY UNREACHABLE (${maskProxy(activeProxy())}) — pausing sync until it recovers (the session is NOT logged out)`);
         for (const s of stores) logSync(s.storeCode, 'proxy_down', 'error', null, 'proxy cannot reach Meituan — sync paused');
         sendOpsAlert(`🔴 美团外卖 代理掉线，无法连接美团，同步已暂停（未掉登录）\nMeituan 外卖 proxy down — can't reach Meituan, sync paused (not logged out)`);
       }

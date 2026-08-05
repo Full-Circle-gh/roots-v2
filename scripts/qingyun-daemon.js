@@ -713,7 +713,9 @@ async function main() {
       }
       if (!alerts[PROXY_LATCH] && proxyFailStreak >= PROXY_DOWN_GRACE && anyStoreAlertsAllowed()) {
         alerts[PROXY_LATCH] = true;
-        for (const s of STORES) logSync(s, 'proxy_down', 'error', null, 'proxy cannot reach Meituan — tracking paused');
+        // The probe target is 青云聚信's own SaaS, not Meituan — say so, since this
+        // string is what the admin Delivery card shows the operator.
+        for (const s of STORES) logSync(s, 'proxy_down', 'error', null, 'proxy cannot reach 青云聚信 — tracking paused');
         sendOpsAlert(`🔴 青云聚信 代理掉线，无法连接，配送跟踪已暂停（未掉登录）\nQingyun proxy down — tracking paused (not logged out)`);
       }
       await sleep(jitter(POLL_MS));
