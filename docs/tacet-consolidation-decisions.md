@@ -1,8 +1,10 @@
-# Tacet shared-core consolidation — decisions record, v2.1
+# Tacet shared-core consolidation — decisions record, v2.2
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
+
+2026-08-05 · v2.2 — records the Language scaling decision (§25 Language scaling): six decisions, LOCKED. Related documents moves from §25 to §26. The §23 open question on scaling languages is resolved by it.
 
 2026-08-05 · v2.1 — vocabulary only: one line in §9 now says "the multi-business move" instead of "the multi-tenant move", per the retired "tenant" glossary term. §24 is untouched — its dated standing entries are not rewritten.
 
@@ -327,7 +329,7 @@ The PostgreSQL rebuild that stage 5 (Stock) depends on is specified in §24. The
 - Whether `low_stock_threshold` and `supplier_paused` are store fields or operational fields Production also needs.
 - The `tags` field: documented as dietary, now used as a display badge. Which it is, and whether it splits.
 - Rules for the three worst contested writes identified in the product field inventory.
-- A plan for scaling languages on both the admin and customer surfaces.
+- A plan for scaling languages on both the admin and customer surfaces — RESOLVED 2026-08-05, see §25 Language scaling. No longer open.
 - A business-neutral name for the KITCHEN location flag.
 
 ## 24. Database: PostgreSQL, one shared database, row-level account isolation — DECIDED 2026-08-03
@@ -989,7 +991,53 @@ A measurement pass on 2026-08-05 — read-only, static, no database opened, 185 
 
 **STATUS: a design decision, recorded. No code, no schema and no data is changed by this entry.** The build that follows from it — schema rebuild, currency column, scale decision, copy re-run — is separate and is not yet briefed.
 
-## 25. Related documents
+## 25. Language scaling — LOCKED 2026-08-05
+
+GOVERNING PRINCIPLE, restated from §0 Governing rules: Tacet assumes NO fixed language set. Language is per account. No mechanism below may hard-require English, Chinese, or any two-language pairing. Rulebook §1.11 (one language on screen at a time — tacet-desktop-patterns.md) continues to apply.
+
+### Decision 1 — Two separate systems for text
+
+- UI CHROME — Tacet's own text: buttons, labels, menus, errors, empty states — is Tacet-owned and lives in Tacet's translation files, shipped with the product.
+- MERCHANT CONTENT — product names, descriptions, storefront copy — is account-owned data stored in the account's database records, in whichever languages the merchant chooses to write. Never mixed with chrome.
+- Super-admin visibility is unaffected — this governs authorship, not access.
+
+### Decision 2 — UI strings move to one file per language
+
+- The hardcoded bilingual pair pattern — `cuT('en','中文')`, 2,510 call sites, roughly 3,300 string pairs per the audit's §E (docs/tacet-multibusiness-audit.md) — is REPLACED by key-based lookup into per-language files: one English file, one Chinese file, and so on.
+- Adding a language = adding one translated file. Zero code edits.
+- THE EXTRACTION/MIGRATION ITSELF IS A SEPARATE, DEFERRED BUILD STAGE. This entry decides the mechanism; it does not begin the work.
+- Bilingual database columns (e.g. `name_cn`) are merchant-content shape questions for the Postgres schema rebuild (§24 Database), governed by Decision 1, also deferred.
+
+### Decision 3 — Admin language: account default plus per-user override
+
+- Each account sets a default admin language.
+- Each user may override it for their own session/profile. The override affects only that user's screen, never account data.
+
+### Decision 4 — Missing-string fallback
+
+- A key missing in the chosen language displays the ENGLISH string. Never render blank/empty.
+- English is the REFERENCE FILE and must always be complete.
+
+### Decision 5 — Storefront language
+
+- Each account selects a LIST of storefront languages — one or many, from languages Tacet has files for — and designates one as the DEFAULT. Storefront language selection is independent of the account's admin language.
+- More than one language on the list → the storefront shows a language switcher offering exactly that list. One language → no switcher.
+- Chrome follows the selected storefront language. Merchant content displays as written by the merchant in that language where provided; otherwise it falls back to the account's storefront default language. NO AUTO/MACHINE TRANSLATION of merchant content, ever.
+- NO BROWSER-LANGUAGE AUTO-DETECTION. The merchant's configured default governs first load.
+
+### Decision 6 — Language roadmap and translation process
+
+- Ship with ENGLISH and CHINESE only — the current state. No pre-built language list.
+- New languages are added ON DEMAND when a real market appears: one file per language.
+- Translation process: AI-generated first draft, MANDATORY native-speaker review before ship.
+
+### Sequencing
+
+This proposal PRECEDES and is a DEPENDENCY OF the Products and Stock consolidation stages (§22 Rollout order and priority). Any schema or code touching bilingual text must conform to Decisions 1 and 2.
+
+Resolves the §23 open question "a plan for scaling languages on both the admin and customer surfaces."
+
+## 26. Related documents
 
 - docs/tacet-glossary.md — binding definitions, v1.4, 2026-07-31. The words in this document are used with the meanings defined there.
 - docs/tacet-desktop-patterns.md — the rulebook for how a desktop admin page is put together, v4.2, 2026-08-03. Prescriptive except on Orders: when a rule and an unbuilt page disagree, that document wins.
