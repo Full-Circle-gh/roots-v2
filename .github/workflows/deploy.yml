@@ -228,3 +228,50 @@ jobs:
             exit 1
           fi
           echo "Deployed successfully."
+
+      # ──────────────────────────────────────────────────────────────────────
+      # STAGE 1 of the diff-base fix: WRITE the record. Nothing reads it yet.
+      #
+      # The step above computes what to ship as a diff against the PREVIOUS PUSH
+      # (github.event.before), not against what production actually holds. So a
+      # run that fails before its ship step never ships its files, and the next
+      # push diffs against that failed commit and skips them too — permanently,
+      # while every later deploy reports SUCCESS. A replay of this repo's first
+      # 904 deploy runs found 197 such stranding episodes across 141 files; the
+      # longest ran 43 days, and they were cleared only by an unrelated
+      # full_sync on 2026-08-04.
+      #
+      # Fixing that needs a record of the last commit production genuinely has.
+      # It lives ON THE BOX, beside the artifact it describes, because a record
+      # kept in the repository or in Actions cache would describe what CI
+      # INTENDED — and CI's intent is exactly what has been wrong all along.
+      #
+      # THIS STEP IS THE ONLY WRITER, and it runs only after the installer
+      # printed RESULT=SUCCESS. That single property is what makes the record
+      # trustworthy: there is no path where the recorded sha advances without
+      # the files having been installed. A failed run never reaches here, so the
+      # record still names the last commit that actually landed.
+      #
+      # Deliberately NOT written when there was nothing deployable to ship: if a
+      # push changed no deployable file, the older record is still an accurate
+      # description of the box, and adding a second writer would add a second
+      # way for the record to move without files moving.
+      #
+      # A failure to write is a warning, never an error. A record that lags
+      # reality makes the next deploy ship MORE than it needs to; only a record
+      # that runs AHEAD of reality could skip files, and nothing here can
+      # produce one.
+      - name: Record the commit production now holds
+        if: steps.gate.outputs.skip == 'false' && steps.files.outputs.count != '0'
+        run: |
+          set -euo pipefail
+          STATE=/root/roots-v2/.deploy-state
+          SHA='${{ github.sha }}'
+          STAMP="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          if ssh prod "mkdir -p '$STATE' \
+                && printf '%s\n' '$SHA' > '$STATE/last-success-sha' \
+                && printf '%s %s run=%s files=%s\n' '$STAMP' '$SHA' '${{ github.run_id }}' '${{ steps.files.outputs.count }}' >> '$STATE/history.log'"; then
+            echo "Recorded last-success-sha = $SHA"
+          else
+            echo "::warning::Could not record last-success-sha on the server. Nothing reads it yet, so this run is unaffected; once the read lands, a missing or stale record makes the next deploy ship a WIDER set, never a narrower one."
+          fi
