@@ -63,7 +63,13 @@ function vchPillsHtml(v) {
   // on a coupon that was in fact discounting the whole store.
   if (v.auto_apply) {
     pills.push('<span class="vch-pill dusk"><span class="dot"></span>'
-      + (v.is_public ? cuT('Applied for everyone', '全场自动抵扣') : cuT('Applied for chosen customers', '指定顾客自动抵扣'))
+      // A signup coupon is grant-gated even when public — it lands only on the
+      // new signups who received it, never store-wide. Reading "Applied for
+      // everyone" on the welcome coupon is what made a missed grant look like a
+      // broken discount.
+      + (v.auto_grant_signup ? cuT('Applied for new signups', '新客自动抵扣')
+         : v.is_public ? cuT('Applied for everyone', '全场自动抵扣')
+         : cuT('Applied for chosen customers', '指定顾客自动抵扣'))
       + '</span>');
   }
   if (v.is_public) pills.push('<span class="vch-pill">' + cuT('In the app', '小程序可领') + '</span>');
@@ -204,7 +210,12 @@ function vchDrawerRender() {
     + '</select></span>';
   // "Apply it for them" follows the coupon's audience, so the description has to
   // as well — on a private coupon it reaches only the people it was handed to.
-  const autoDesc = v.is_public
+  // A signup coupon is grant-gated even when it's public, so it reaches new
+  // signups only — saying "every customer" there would promise a store-wide
+  // discount the backend will never give.
+  const autoDesc = v.auto_grant_signup
+    ? cuT('New signups who received it get it at checkout — no code, no tap.', '收到的新顾客结账时自动抵扣,无需输入或点选。')
+    : v.is_public
     ? cuT('Every customer gets it at checkout — no code, no tap.', '每位顾客结账时自动抵扣,无需输入或点选。')
     : cuT('Only the customers you give it to get it at checkout — no code, no tap.', '仅发放到的顾客结账时自动抵扣,无需输入或点选。');
   // A standing coupon is never "spent", so a used-count off the hand-outs would
@@ -996,7 +1007,10 @@ function vwHeadsUp() {
     }
   }
   if (flags.auto_apply) {
-    const others = active.filter(v => v.auto_apply && !v.auto_grant_signup && String(v.code).toUpperCase() !== code);
+    // Signup coupons used to be left out here because they could never actually
+    // auto-apply. They can now (for the new signups holding one), so they compete
+    // for "best one wins" like any other automatic deal and belong in this list.
+    const others = active.filter(v => v.auto_apply && String(v.code).toUpperCase() !== code);
     if (others.length) {
       const list = others.map(v => '<b>' + escapeHtml(v.code) + '</b>').join(', ');
       notes.push({ tone: '', icon: vwIcon('scale', 18), html: 'You already have automatic deal(s): ' + list + '. Customers get the single best one — these do not add together. · 你已有自动优惠:' + list + '。顾客只享最优的一张,不叠加。' });

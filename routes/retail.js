@@ -7723,6 +7723,13 @@ router.post('/api/retail/addresses', requireRetailAuth, express.json(), (req, re
     return info.lastInsertRowid;
   });
   const id = tx();
+  // A saved address is the first place a mini-app customer reliably hands over a
+  // phone — WeChat login gives us an openid and nothing else, so without this a
+  // customer who never taps "bind phone" stays permanently ineligible for the
+  // welcome coupon (they can order and pay and still never receive it). Decide
+  // eligibility off the recipient phone; it is NOT written to the account.
+  try { reconcileSignupVouchers(req.customer.id, a.phone); }
+  catch (e) { console.warn('[retail/addresses] signup voucher reconcile failed:', e.message); }
   // Fire-and-forget: geocode the new address so routing can use real
   // distance. Customer doesn't wait — we respond immediately and write
   // lat/lng back to the row when the API call returns.
@@ -7941,6 +7948,12 @@ router.put('/api/retail/addresses/:id', requireRetailAuth, express.json(), (req,
     );
   });
   tx();
+  // Same deferred-grant rescue as the create path — a customer who fixed a typo'd
+  // phone (or added one to an address that had none) should become eligible now.
+  if (a.phone) {
+    try { reconcileSignupVouchers(req.customer.id, a.phone); }
+    catch (e) { console.warn('[retail/addresses] signup voucher reconcile failed:', e.message); }
+  }
   // Re-geocode in the background using the row's merged values.
   const merged = tdb().prepare('SELECT province, city, district, address, detail FROM retail_customer_addresses WHERE id = ?').get(id);
   if (merged) geocodeAddressAsync(id, merged);
@@ -11260,10 +11273,20 @@ function grantSignupVouchers(customerId) {
 // Returns the number of signup vouchers GRANTED (0 when it pulled them back,
 // or when there was no phone to decide on yet) so a caller can tell the
 // operator what actually arrived. Callers that don't care can ignore it.
-function reconcileSignupVouchers(customerId) {
+//
+// phoneHint closes the mini-app hole: WeChat login yields only an openid, so a
+// customer who never taps "bind phone" had NO phone on the account and was
+// therefore never eligible — they could browse, order and pay and still never
+// receive the welcome coupon. A delivery address always carries a phone, so we
+// let the caller pass it in and decide off that. The hint is used ONLY for this
+// eligibility question: it is deliberately NOT written to retail_customers.phone,
+// because that field also keys claimMigrationCredit — adopting a recipient phone
+// (which may be a friend's or a colleague's) would hand this customer someone
+// else's OUT1N wallet balance. Read-only here, money-safe.
+function reconcileSignupVouchers(customerId, phoneHint) {
   if (!customerId) return 0;
   const c = tdb().prepare('SELECT id, phone FROM retail_customers WHERE id = ?').get(customerId);
-  const phone = normalizeMigrationPhone(c && c.phone);
+  const phone = normalizeMigrationPhone(c && c.phone) || normalizeMigrationPhone(phoneHint);
   if (!phone) return 0;                       // defer — phone not captured yet
   const returning = tdb().prepare(
     'SELECT 1 FROM retail_migration_credits WHERE phone = ? LIMIT 1'
@@ -11427,15 +11450,22 @@ function voucherCapReached(customerId, v) {
 // means "no code, no tap" — it does NOT mean store-wide. The coupon's own
 // audience decides who it reaches: a public promo applies to everyone, a PRIVATE
 // one only to the customers it was handed to. We still honour expiry / usage
-// pool / min-subtotal / per-customer cap. Signup-only vouchers
-// (auto_grant_signup) are NEVER auto-applied this way — they stay tap-to-use so
-// a returning/migrated customer can't silently redeem one. A free-shipping
-// voucher is valued at the live shipping fee so it can be compared like-for-like
-// against a ¥/% discount. Returns { voucher, discount, free_shipping } or null.
+// pool / min-subtotal / per-customer cap. A free-shipping voucher is valued at
+// the live shipping fee so it can be compared like-for-like against a ¥/%
+// discount. Returns { voucher, discount, free_shipping } or null.
+//
+// Signup vouchers used to be excluded here outright (auto_grant_signup = 0), so
+// a welcome coupon with "Apply it for them" switched ON silently never applied —
+// the admin toggle was dead and the customer had to find and tap the coupon. The
+// exclusion existed to stop a returning/migrated customer silently redeeming one,
+// but the GRANT already enforces exactly that: reconcileSignupVouchers withholds
+// (and revokes) the grant for any returning OUT1N phone, and the audience gate
+// below requires a held grant for every signup voucher — public or not, matching
+// the code-entry gate at order time. So honour the flag and let it apply itself.
 function bestAutoVoucher(customerId, subtotal, shippingFee, couponableSubtotal = subtotal) {
   const rows = tdb().prepare(
     `SELECT * FROM retail_vouchers
-      WHERE is_active = 1 AND auto_apply = 1 AND auto_grant_signup = 0
+      WHERE is_active = 1 AND auto_apply = 1
         AND (expires_at IS NULL OR datetime(expires_at) > CURRENT_TIMESTAMP)
         AND (max_uses IS NULL OR used_count < max_uses)`
   ).all();
@@ -11444,8 +11474,11 @@ function bestAutoVoucher(customerId, subtotal, shippingFee, couponableSubtotal =
     // Audience gate. A private coupon auto-applies ONLY for the customers it was
     // handed to. Without this the auto_apply flag was read on its own — blind to
     // is_public and to who actually held the coupon — so a private coupon granted
-    // to nobody still discounted every checkout in the store.
-    if (!v.is_public && !customerHoldsVoucher(customerId, v)) continue;
+    // to nobody still discounted every checkout in the store. A signup voucher is
+    // grant-gated even when public (same rule as the checkout code path), so a
+    // customer who was never granted one — or had it revoked as returning — can
+    // never have it applied for them.
+    if ((!v.is_public || v.auto_grant_signup) && !customerHoldsVoucher(customerId, v)) continue;
     if (voucherCapReached(customerId, v)) continue;
     const r = computeVoucherDiscount(v, subtotal, shippingFee, couponableSubtotal);
     if (!r.applied) continue;
@@ -11466,16 +11499,17 @@ function bestAutoVoucher(customerId, subtotal, shippingFee, couponableSubtotal =
 function nearMissAutoVoucher(customerId, subtotal, couponableSubtotal = subtotal) {
   const rows = tdb().prepare(
     `SELECT * FROM retail_vouchers
-      WHERE is_active = 1 AND auto_apply = 1 AND auto_grant_signup = 0
+      WHERE is_active = 1 AND auto_apply = 1
         AND min_subtotal > 0 AND ? < min_subtotal
         AND (expires_at IS NULL OR datetime(expires_at) > CURRENT_TIMESTAMP)
         AND (max_uses IS NULL OR used_count < max_uses)`
   ).all(subtotal);
   let best = null, bestGap = Infinity;
   for (const v of rows) {
-    // Same audience gate as bestAutoVoucher — never tease a private coupon to a
-    // customer who doesn't hold it (that would leak both its existence and code).
-    if (!v.is_public && !customerHoldsVoucher(customerId, v)) continue;
+    // Same audience gate as bestAutoVoucher — never tease a private or signup
+    // coupon to a customer who doesn't hold it (that would leak both its
+    // existence and its code).
+    if ((!v.is_public || v.auto_grant_signup) && !customerHoldsVoucher(customerId, v)) continue;
     if (voucherCapReached(customerId, v)) continue;
     const gap = Number(v.min_subtotal) - Number(subtotal);
     if (gap > 0 && gap < bestGap) {
