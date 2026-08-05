@@ -307,7 +307,54 @@ jobs:
           echo "Deployed successfully."
 
       # ──────────────────────────────────────────────────────────────────────
-      # STAGE 1 of the diff-base fix: WRITE the record. Nothing reads it yet.
+      # STAGE 3 of the diff-base fix: prove what landed.
+      #
+      # Stages 1 and 2 make the deploy correct by construction. This step is how
+      # you would KNOW. Until it existed, nothing in this project ever compared
+      # the box against the repository — which is exactly why a six-week backlog
+      # of skipped files went unnoticed while every deploy reported SUCCESS.
+      #
+      # It runs BEFORE the record is written, deliberately. A verification
+      # failure skips the record step, so the record stays behind, and the next
+      # deploy re-ships this range. The failure mode heals itself.
+      - name: Verify what landed — deployed bytes must be the committed bytes
+        if: steps.gate.outputs.skip == 'false' && steps.files.outputs.count != '0'
+        run: |
+          set -euo pipefail
+          # Two files the installer rewrites AFTER installing them, so neither
+          # can ever match its committed bytes on the box:
+          #   public/sw.js       deploy-apply.sh stamps the CACHE constant, by design
+          #   package-lock.json  npm install --omit=dev rewrites it in place
+          # Both are excluded here rather than papered over. Measured against the
+          # live box on 2026-08-05: with exactly these two set aside, all 479
+          # remaining deployable files matched the repository byte for byte.
+          : > /tmp/verify.sha1
+          while IFS= read -r f; do
+            case "$f" in public/sw.js|package-lock.json) continue ;; esac
+            sha1sum "$f" >> /tmp/verify.sha1
+          done < /tmp/files.txt
+          N=$(wc -l < /tmp/verify.sha1 | tr -d ' ')
+          if [ "$N" = "0" ]; then
+            echo "Nothing to verify — this ship carried only installer-rewritten files."
+            exit 0
+          fi
+          # sha1sum -c does the comparison on the server, against the installed
+          # copies, and exits non-zero on any mismatch. --quiet prints only failures.
+          scp -q /tmp/verify.sha1 prod:/tmp/roots-v2-verify.sha1
+          set +e
+          OUT="$(ssh prod "cd /root/roots-v2 && sha1sum -c --quiet /tmp/roots-v2-verify.sha1 2>&1")"; RC=$?
+          set -e
+          ssh prod "rm -f /tmp/roots-v2-verify.sha1" || true
+          if [ "$RC" = "0" ]; then
+            echo "Verified: all $N shipped file(s) are byte-identical on the server."
+          else
+            printf '%s\n' "$OUT"
+            echo "::error::The installer reported SUCCESS but the server's copies are not the files in this commit. The deploy record is deliberately NOT advanced, so the next deploy re-ships this range."
+            exit 1
+          fi
+
+      # ──────────────────────────────────────────────────────────────────────
+      # STAGE 1 of the diff-base fix: WRITE the record the compute step reads.
       #
       # The step above computes what to ship as a diff against the PREVIOUS PUSH
       # (github.event.before), not against what production actually holds. So a
@@ -350,5 +397,5 @@ jobs:
                 && printf '%s %s run=%s files=%s\n' '$STAMP' '$SHA' '${{ github.run_id }}' '${{ steps.files.outputs.count }}' >> '$STATE/history.log'"; then
             echo "Recorded last-success-sha = $SHA"
           else
-            echo "::warning::Could not record last-success-sha on the server. Nothing reads it yet, so this run is unaffected; once the read lands, a missing or stale record makes the next deploy ship a WIDER set, never a narrower one."
+            echo "::warning::Could not record last-success-sha on the server. This run is unaffected — the files are installed and verified. The next deploy will diff from an older record and ship a WIDER set, never a narrower one."
           fi
