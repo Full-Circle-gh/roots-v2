@@ -36,7 +36,7 @@ No file in this repo was changed except this one.
    team routes enforce unconditionally.
 10. Other consolidation blockers found: divergent "today" (Sales normalises to UTC+8, Production does
     not), divergent delete semantics, divergent channel enums, three co-existing category
-    schemes, two location tables, four stock stores, and tenant scoping that is row-level on
+    schemes, two location tables, four stock stores, and account scoping that is row-level on
     three tables and database-level everywhere else.
 
 ---
@@ -66,8 +66,8 @@ separates on (`docs/PROJECT-KNOWLEDGE.md:19-26`, verified against `server.js:158
 `public/restock.html:1454`.
 
 Term definitions used below, one line each:
-- **Data-plane table** — business data, cloned into each tenant's own DB file.
-- **Control-plane table** — shared across all tenants, never cloned (`lib/tenant-db.js:44-49`).
+- **Data-plane table** — business data, cloned into each account's own DB file.
+- **Control-plane table** — shared across all accounts, never cloned (`lib/tenant-db.js:44-49`).
 - **Capability** — a `section:action` permission string, e.g. `orders:refund`.
 - **Fork** — a copy of a table made once, then edited independently with no sync back.
 
@@ -146,10 +146,10 @@ restock is delivered. That auto-increment does not exist in current code.
 |---|---|---|---|
 | Table | `users` (`schema.sql:7-16`) | `tenant_users` (`routes/backend-auth.js:43-54`) | `platform_admins` (`lib/platform-admin.js:27-36`) |
 | Extra cols | `market_id`, `retail_store_id` (`database.js:637, 640`) | `scope_all`, `retail_store_id`, `avatar_url` (`routes/backend-auth.js:157`), recovery email | — |
-| Seeded | 4 users `admin`/`manager`/`warehouse`/`kitchen` (`routes/auth.js:23-42`) | 1 user `owner` per tenant (`routes/backend-auth.js:264-270`) | first-run seed in `lib/platform-admin.js` |
+| Seeded | 4 users `admin`/`manager`/`warehouse`/`kitchen` (`routes/auth.js:23-42`) | 1 user `owner` per account (`routes/backend-auth.js:264-270`) | first-run seed in `lib/platform-admin.js` |
 | Login | `routes/auth.js` | `routes/backend-auth.js` | `routes/store-admin.js` |
 | Session key | `session.userId` | `session.backendUserId` + `session.tenantId` | `session.platformAdminId` |
-| Plane | **control-plane** — never cloned per tenant (`lib/tenant-db.js:48`) | **control-plane** (`lib/tenant-db.js:45`) | control-plane |
+| Plane | **control-plane** — never cloned per account (`lib/tenant-db.js:48`) | **control-plane** (`lib/tenant-db.js:45`) | control-plane |
 
 Customers are a fourth, single-definition entity: `retail_customers`
 (`database.js:1074-1092`), Sales-only, bearer-token auth via `retail_auth_tokens`
@@ -251,7 +251,7 @@ column itself is still mirrored across.
 - `is_published`, `retail_price`, `retail_stock`, `retail_display_order`, `retail_tagline`,
   `retail_description_en/cn` — these were added to `products` **before** the fork
   (`database.js:996-1002`). They are dead on the Production side now that
-  `product_catalog_mode` for tenant 1 is `'self'` (`routes/backend-auth.js:287-299`).
+  `product_catalog_mode` for account 1 is `'self'` (`routes/backend-auth.js:287-299`).
 
 ### 2.2 `markets` vs `retail_stores` — field-level differences
 
@@ -329,13 +329,13 @@ The dormant mechanism that *would* have kept them aligned is `tenants.product_ca
   merchandising fields — enforced at `routes/retail.js:17553-17554` (field filter against
   `UPSTREAM_LOCKED_FIELDS`, `routes/retail.js:190-193`) and `17847`, `18068`, `18093`, `18615`
   (whole-product operations return HTTP 423).
-- Roots (tenant 1) was set to `'upstream'` by migration
+- Roots (account 1) was set to `'upstream'` by migration
   `tenant_catalog_mode_roots_upstream_v1` (`routes/backend-auth.js:282`), then **flipped to
   `'self'`** by `tenant_catalog_mode_roots_self_v1` — "the store catalog was forked into its
   own store_products table (the kitchen `products` table no longer drives the shop)"
   (`routes/backend-auth.js:287-299`).
 
-So the lock is live code, but off for the only live tenant.
+So the lock is live code, but off for the only live account.
 
 ### 3.2 The three live cross-side data paths
 
@@ -555,15 +555,15 @@ directory (`server.js:159`), one cookie for all three realms. A separate, unused
 table also exists in `schema.sql:18-24` — the only code touching it is a best-effort
 `DELETE FROM sessions WHERE user_id = ?` at `routes/admin.js:115`.
 
-**Per-tenant fan-out (built, gated off).** `lib/tenant-db.js` can give each tenant its own
+**Per-account fan-out (built, gated off).** `lib/tenant-db.js` can give each account its own
 file `data/tenants/<id>.db`, cloning only data-plane objects and skipping the 16
-`CONTROL_PLANE_TABLES` (lines 44-49). `getTenantDb(1) === mainDb`, so tenant 1 is a
+`CONTROL_PLANE_TABLES` (lines 44-49). `getTenantDb(1) === mainDb`, so account 1 is a
 zero-cost passthrough (line 143). The cut-over is behind `TENANT_DATA_ISOLATION === '1'`
 (`lib/tenant-db.js:41`); when off, non-Roots operators are held out of the Sales console
 entirely (`server.js:256-265`).
 
 **Connection / config locations** (no values read or reproduced):
-- DB path — `database.js:5-8` (`<repo>/data/roots.db`), tenant files `lib/tenant-db.js:40, 54`.
+- DB path — `database.js:5-8` (`<repo>/data/roots.db`), account files `lib/tenant-db.js:40, 54`.
 - Session store + secret — `server.js:146, 158-170`; `SESSION_SECRET` from env with a random
   fallback.
 - Env vars referenced: `PORT` (`server.js:853`), `SESSION_SECRET` (`146`),
@@ -572,7 +572,7 @@ entirely (`server.js:256-265`).
   `QINGYUN_ACTIVE_STATUSES` (`lib/qingyun-browser.js:72`), `MODEL_API_*` / `ANTHROPIC_*`
   (`lib/model-gateway.js`).
 - Secrets file — a gitignored `.env` (`.gitignore:2-3`); there is **no `.env.example`** in
-  the repo despite `.gitignore:4` allowing one. Per-tenant credentials are encrypted rows in
+  the repo despite `.gitignore:4` allowing one. Per-account credentials are encrypted rows in
   `tenant_secrets` (`lib/tenant-creds.js:31`), AES-256-GCM via `lib/secret-box.js`.
 - Mini-app API base is a hardcoded constant, not config: `miniapp/utils/api.js:8`.
 - Deploy target and host list — `.github/workflows/deploy.yml`; hosts in `server.js:179-186,
@@ -667,7 +667,7 @@ independent hard-delete endpoints, so deleting a category from the kitchen app c
 - **Refund status:** a 7th transient value `'paying'` exists in code only, no schema comment
   (`docs/PROJECT-KNOWLEDGE.md:329-331`).
 
-### R6 — Tenant scoping is inconsistent
+### R6 — Account scoping is inconsistent
 
 Exactly **three** data-plane tables carry a `tenant_id` column: `suppliers`,
 `purchase_orders`, `invoices` (`database.js:306-307, 326`), all `DEFAULT 1`. Everything else
@@ -678,13 +678,13 @@ Two concrete consequences in current code:
 
 1. **Production ignores `tenant_id` on `suppliers`.** `routes/retail-purchasing.js` filters
    (`:145, 228, 257`), `routes/lookups.js:121-228` does not. So the kitchen app's supplier
-   list shows every tenant's suppliers.
-2. **`suppliers.name` is globally UNIQUE** (`schema.sql:382`). Two tenants cannot both have a
+   list shows every account's suppliers.
+2. **`suppliers.name` is globally UNIQUE** (`schema.sql:382`). Two accounts cannot both have a
    supplier called "Taobao". The duplicate check at `routes/retail-purchasing.js:208` also
-   omits the tenant filter, so a second tenant gets "name already exists" for a supplier they
+   omits the account filter, so a second account gets "name already exists" for a supplier they
    cannot see.
 
-### R7 — FK repoint is incomplete for pre-fork tenant databases
+### R7 — FK repoint is incomplete for pre-fork account databases
 
 The mainDb migration repointed **8** store-owned tables from `products` to `store_products`
 (`database.js:3805-3809`: `retail_order_items`, `retail_product_options`, `retail_reviews`,
@@ -695,11 +695,11 @@ The mainDb migration repointed **8** store-owned tables from `products` to `stor
 (`lib/tenant-db.js:129-136`: `meituan_product_map`, `meituan_bundle_components`,
 `meituan_sync_queue`). `initTenantSchema` "only creates MISSING tables, never rebuilds an
 existing one's constraints" (its own comment, `lib/tenant-db.js:130-131`), and
-`reconcileTenantColumns` only adds columns. So a tenant DB created **before** the fork still
+`reconcileTenantColumns` only adds columns. So an account DB created **before** the fork still
 has `retail_store_stock.product_id → products(id)`.
 
-Fresh tenant DBs are fine (they clone the already-repointed `sqlite_master` SQL). **UNVERIFIED:**
-whether any pre-fork tenant DB exists on the box — `data/tenants/` is gitignored.
+Fresh account DBs are fine (they clone the already-repointed `sqlite_master` SQL). **UNVERIFIED:**
+whether any pre-fork account DB exists on the box — `data/tenants/` is gitignored.
 
 Related, and confusing for anyone reading the source: the `CREATE TABLE` text in
 `database.js:2583-2640` still says `REFERENCES products(id)` for `retail_store_stock`,
@@ -748,7 +748,7 @@ has **no** currency abstraction at all — the symbol is baked into markup: 209 
 ### R11 — Two live product-catalogue frontends, one dormant lock
 
 `tenants.product_catalog_mode` is the only mechanism designed to stop two apps editing one
-catalogue, and for the live tenant it is set to `'self'`, which disables it
+catalogue, and for the live account it is set to `'self'`, which disables it
 (`routes/backend-auth.js:296`). If a merge re-unifies `products` and `store_products` without
 re-enabling something like the `UPSTREAM_LOCKED_FIELDS` guard
 (`routes/retail.js:190-193, 17553`), both frontends become concurrent writers of the same
@@ -791,5 +791,5 @@ version or `updated_by`).
   role/literal counts, column diffs) come from repo-wide `grep`/`comm` over
   `routes/ lib/ middleware/ public/ scripts/ miniapp/ server.js database.js schema.sql`.
 - Not verifiable from the repo, and therefore not asserted anywhere above: live row counts,
-  actual id-collision incidence, whether any pre-fork tenant DB exists, and the contents of
+  actual id-collision incidence, whether any pre-fork account DB exists, and the contents of
   `.env` / `data/*.db` (all gitignored).

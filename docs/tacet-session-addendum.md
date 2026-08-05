@@ -37,7 +37,7 @@
 
 ## 3. What Bundle B did to live accounts
 
-Queried from `tenant_users` on the box before shipping. **Tenant 1 (Roots) has 7 operators; every other tenant is owner-only**, so Bundle B affects nobody outside Roots.
+Queried from `tenant_users` on the box before shipping. **Account 1 (Roots) has 7 operators; every other account is owner-only**, so Bundle B affects nobody outside Roots.
 
 | Role | Count | Who |
 |---|---|---|

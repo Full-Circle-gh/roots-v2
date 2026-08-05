@@ -6,6 +6,12 @@ separately. Written to be the "how it actually works" companion to `README.md`.
 
 > Convention: `file:line` anchors are approximate — line numbers drift. Search the named
 > symbol if an anchor is stale.
+>
+> Vocabulary: the word for a business using Tacet is **account** (`tacet-glossary.md`; "tenant" is
+> retired). Where this document still says *tenant* — the "Tenant resolution" heading, the tenant
+> handle, tenant routing, `tenant_domains`, `TENANT_DATA_ISOLATION` and the like — it is naming code
+> as the code names itself today. Those move to *account* with the tenant→account schema rebuild
+> (`tacet-consolidation-decisions.md` §24), not before.
 
 ---
 
@@ -18,7 +24,7 @@ off one codebase and one schema:
 |---|---|---|---|
 | WeChat Mini App | Customers | `miniapp/` | Bearer token (opaque hex) |
 | Online store (web) | Customers | `public/shop.html` | Same Bearer token |
-| Mini App Backend | Tenant operators | `public/retail-admin.html` | `session.backendUserId` + `tenantId` |
+| Mini App Backend | Account operators | `public/retail-admin.html` | `session.backendUserId` + `tenantId` |
 | Kitchen/ERP | Roots staff | `public/app.html` | `session.userId` |
 | Platform Console | SaaS staff | `public/store-admin.html` | `session.platformAdminId` |
 | PWAs (POS/Kitchen/Restock/Quick-Stock) | Staff | own manifests + `sw.js` | shared with the above |
@@ -34,7 +40,7 @@ pm2 restart → health-probe → **auto-rollback**). The local post-commit hook 
 GitHub** (that push is what triggers the workflow); the old second, local deploy was removed because
 it raced CI on a shared `__stage__`. `scripts/deploy-changed.sh` remains as the manual break-glass
 ship. Only `main` deploys; `.md/.csv/miniapp/` are non-deployable (miniapp ships via WeChat DevTools
-per tenant). `[skip deploy]` / `[no deploy]` in the subject bypasses.
+per account). `[skip deploy]` / `[no deploy]` in the subject bypasses.
 
 ---
 
@@ -43,11 +49,11 @@ per tenant). `[skip deploy]` / `[no deploy]` in the subject bypasses.
 ### Tenant resolution (per request, via AsyncLocalStorage)
 - `middleware/public-tenant.js` `resolvePublicTenant()` — reads `x-wx-appid` first, falls back to
   Host → `tenant_domains` lookup, returns `null` for anything unknown. **Fail-safe:** unknown/forged
-  appid lands on Roots' shared DB, never another tenant's data.
+  appid lands on Roots' shared DB, never another account's data.
 - `publicTenantScope` runs the request inside `tenantAls.run(getTenantDb(tid), next)`.
 - `lib/tenant-db.js` `tdb()` = `tenantAls.getStore() || mainDb`. `getTenantDb(1) === mainDb`, so
   Roots is a zero-cost passthrough and every call site is unchanged.
-- Per-tenant DBs are separate SQLite files `data/tenants/<id>.db` (WAL). `initTenantSchema` only
+- Per-account DBs are separate SQLite files `data/tenants/<id>.db` (WAL). `initTenantSchema` only
   creates **missing** tables and **never clones `CONTROL_PLANE_TABLES`** (`tenants`, `tenant_users`,
   `tenant_secrets`, `tenant_onboarding`, `billing_*`, `users`, `sessions`, `permissions`,
   `activity_log`). Everything else is data-plane and cloned.
@@ -87,7 +93,7 @@ per tenant). `[skip deploy]` / `[no deploy]` in the subject bypasses.
   fallback** (missing creds → devMode, never Roots' keys). Cached, invalidated on write.
 
 ### Provisioning
-- `lib/provision-tenant.js`: atomic control-plane tx (tenant + owner `tenant_user` + 14-day
+- `lib/provision-tenant.js`: atomic control-plane tx (account + owner `tenant_user` + 14-day
   `trialing` subscription) → best-effort data-plane DB create + `seedTenantDefaults` (~40
   storefront_config rows) → `autoAssignSubdomain` into `tenant_domains`. Catalog/zones/store are
   intentionally manual (business-specific).

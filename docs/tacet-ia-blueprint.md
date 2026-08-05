@@ -39,7 +39,7 @@ A single-page admin shell. One left **rail** of tabs (three **drill-down folders
 
 | Element | What it is | Notes |
 |---|---|---|
-| **Brand block** | Topbar, far left: `tacet` mark + wordmark · 1px hairline · **co-brand tenant logo** (`#brandLogoTop`, `applyBrand()`) | Lowercase `tacet` always. **Settled 2026-07-25** (`tacet-desktop-patterns.md` §1.1 / §1.1c). A 2026-07-24 amendment moved the brand to the rail; **that was reversed** — the rail's marks stay CSS-hidden and the topbar keeps the brand. Un-hiding the rail marks ships two wordmarks. Merchant logo box: max-height 24px, **min rendered height 14px, max width 210px**, scaled to fit, never cropped. No logo → no hairline, no placeholder. **Both marks show together — live `body.cobrand` (css:507–509) currently *swaps* them and that rule comes out at build.** Bar height **56px** (verified). |
+| **Brand block** | Topbar, far left: `tacet` mark + wordmark · 1px hairline · **co-brand account logo** (`#brandLogoTop`, `applyBrand()`) | Lowercase `tacet` always. **Settled 2026-07-25** (`tacet-desktop-patterns.md` §1.1 / §1.1c). A 2026-07-24 amendment moved the brand to the rail; **that was reversed** — the rail's marks stay CSS-hidden and the topbar keeps the brand. Un-hiding the rail marks ships two wordmarks. Merchant logo box: max-height 24px, **min rendered height 14px, max width 210px**, scaled to fit, never cropped. No logo → no hairline, no placeholder. **Both marks show together — live `body.cobrand` (css:507–509) currently *swaps* them and that rule comes out at build.** Bar height **56px** (verified). |
 | **Command palette** | `Ctrl/⌘+K` or the topbar **search field** (`#gsearch-trigger`) — keyword search over every page, panel, and individual setting | Built from the live DOM on open, so it self-syncs. `#gsearch-overlay`. The field is a **button shaped like an input** — it never takes a caret; the caret appears in the palette. Hint is platform-aware (⌘K / Ctrl K), never both. |
 | **Inbox dropdown** | Topbar menu → **Reviews** (feat `reviews`) and **Feedback** (feat `feedback`) | Not in the rail; reached via `goTab()`. Unseen = **one 6px Sage dot, never a count, never red** (2026-07-25) — an unread review is not an emergency. Chime unchanged. |
 | **Account menu** | Operator identity / sign-out | Team was promoted **out** of here into the rail on 2026-07-16. |
@@ -170,7 +170,7 @@ Grouped by function. "Skin" flags surfaces carrying something that is **per-busi
 |---|---|---|---|---|
 | Sales (channel overview) | `sales` | 9332 | `01-core.js` + `15-integrations.js` | China channels |
 | Meituan | `meituan` | 9527 | `11-meituan.js` | **China-only** |
-| gzgrocery / Guanyi | `guanyi` | 9667 | `12-guanyi.js` | **China-only (tenant ERP)** |
+| gzgrocery / Guanyi | `guanyi` | 9667 | `12-guanyi.js` | **China-only (account ERP)** |
 | Eleme | `eleme` | 9936 | `14-eleme.js` | **China-only** |
 | Products | `products` | 3156 | `09-products.js` | money · hosts 3 sub-views |
 | Customers | `customers` | 2313 | `08-customers.js` | money, loyalty tier names |
@@ -272,7 +272,7 @@ A section renders only if it passes **all** of:
 1. **Capability (RBAC)** — `TAB_CAP[tab]` → a capability string (or array = any-of). `applyCapGates()` hides the rail tab **and** the bottom-nav entry, then collapses a group whose children are all hidden. Generic hook: any control tagged `data-cap="x"` (or `"x y"` = any-of) hides for operators lacking it.
    **Status: `CAPS = null` ⇒ everything allowed (dark launch).** The Team page's `tm-enforce` switch is the intended off-ramp from dark launch. **Confirmed going live** — every page needs a designed gated state (`tacet-desktop-patterns.md` §1.9).
    **Folder counting — added 2026-07-29 (§3).** Count a group's visible children **after all three gates**, on every gate pass: **0 → the group row is absent entirely** (no chevron, no disabled row — already the live behaviour); **1 → the group flattens into a direct button to that child**, showing the *child's* label with the *parent's* icon, so the operator clicks once and the folder never existed for them; **2+ → folder, as designed.** A folder holding one item is two clicks to reach one page and advertises six things the operator may not have.
-2. **Feature flag (plan/tenant)** — `data-feat="X"` + `body.feat-X`; `body:not(.feat-X) [data-feat="X"]{display:none}`. A `.feat-off` styling state exists (`retail-admin.css:3265`).
+2. **Feature flag (plan/account)** — `data-feat="X"` + `body.feat-X`; `body:not(.feat-X) [data-feat="X"]{display:none}`. A `.feat-off` styling state exists (`retail-admin.css:3265`).
 3. **Data preconditions** — the store filter appears with 2+ stores; the store-printer picker with 2+ printers; the setup tab hides at 100%; alert tiles self-hide when their queue is empty.
 
 Feature on/off also lives on each feature's own page (an enable switch), with an Operations sub-panel in Settings.

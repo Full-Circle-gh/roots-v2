@@ -1,8 +1,10 @@
-# Tacet schema-change mechanism survey, v1.0
+# Tacet schema-change mechanism survey, v1.1
 
 **2026-08-04 · A read-only survey of how schema changes reach the database today, written before choosing a replacement. Nothing was changed and nothing was run against the databases: SQLite was opened `-readonly`, Postgres was read with `SELECT` only.**
 
 **This document recommends nothing. No option has been chosen. The decision is OUTSTANDING.**
+
+**v1.1 · 2026-08-05 — vocabulary only.** The retired word *tenant* becomes **account** in prose per `tacet-glossary.md`; no finding, count or recommendation changed. Code identifiers and paths (`lib/tenant-db.js`, `data/tenants/`, `tenants`) are untouched.
 
 The six options in §3 are set out with their honest trade-offs so the choice can be made from facts rather than from memory of how the code works. Whoever makes that choice should read §4 first — the constraints are not preferences, and several of them rule options in or out on their own.
 
@@ -31,7 +33,7 @@ There are **seven** distinct ways schema changes reach the database. Only the fi
 | 3 | `CREATE TABLE IF NOT EXISTS` | database.js + 12 route/lib files | **102 in database.js**, ~25 elsewhere | module load |
 | 4 | `_migrations`-guarded one-time blocks | database.js (51), backend-auth.js (2), releases.js (1) | **54** | module load |
 | 5 | Derived schema — shape read from another table at boot | [database.js:3772](database.js:3772) (`store_products`), [4410](database.js:4410) | 2 | module load |
-| 6 | Schema mirroring into per-tenant DB files | [lib/tenant-db.js:62](lib/tenant-db.js:62), [:90](lib/tenant-db.js:90) | 2 functions | every tenant-DB open |
+| 6 | Schema mirroring into per-account DB files | [lib/tenant-db.js:62](lib/tenant-db.js:62), [:90](lib/tenant-db.js:90) | 2 functions | every account-DB open |
 | 7 | **Lazy DDL from a `catch` block at runtime** | [lib/delivery-reminders.js:96](lib/delivery-reminders.js:96), [:136](lib/delivery-reminders.js:136) | 2 | inside a 60-second sweeper |
 
 `addColumn` is three lines: run the `ALTER`, swallow the error if the message matches `/duplicate column/i`, rethrow otherwise. That string match is the entire "already applied" test.
@@ -97,7 +99,7 @@ The 294 `addColumn` calls and the 102 `CREATE TABLE`s are **not tracked at all**
 
 `PRAGMA user_version` is **0**. `application_id` is **0**. There is no version number anywhere.
 
-**Undo**: nothing. No down-migrations, no reverse scripts, no concept of one. The only undo is restoring a backup — hourly local snapshots (24 kept), daily local (30 kept), and a nightly verified off-site copy to Aliyun OSS covering `roots.db` plus five tenant DBs ([scripts/db-backup.sh](scripts/db-backup.sh), which runs `PRAGMA integrity_check` before anything is uploaded). That backup story is genuinely good. It is also the entire rollback story for schema.
+**Undo**: nothing. No down-migrations, no reverse scripts, no concept of one. The only undo is restoring a backup — hourly local snapshots (24 kept), daily local (30 kept), and a nightly verified off-site copy to Aliyun OSS covering `roots.db` plus five account DBs ([scripts/db-backup.sh](scripts/db-backup.sh), which runs `PRAGMA integrity_check` before anything is uploaded). That backup story is genuinely good. It is also the entire rollback story for schema.
 
 ---
 
@@ -158,7 +160,7 @@ Every one of these is SQLite-only and would need replacing, not porting:
 | `REAL` yuan | 101 columns | `BIGINT` cents (§24). `*_cents` columns must **not** be rescaled. |
 | DDL is transactional-ish | — | Postgres DDL **is** transactional, which is a large improvement — but it means a failure mid-block rolls back the whole block, changing the "partly applied" semantics the current code assumes. |
 | `store_products` derivation | [database.js:3772](database.js:3772) | The storefront's main catalogue table (~140 columns) has **no schema text anywhere**. Postgres needs a written definition. |
-| `lib/tenant-db.js` entirely | — | Per-file tenant isolation. §24 retires it. |
+| `lib/tenant-db.js` entirely | — | Per-file account isolation. §24 retires it. |
 
 ---
 
@@ -302,7 +304,7 @@ Five live tables have no definition in the repo. `store_products` — the storef
 **9. Disk headroom is thin.**
 40 GB volume at **78 % used, 8.3 GB free**. `roots.db` is 510 MB. A table rebuild needs roughly double the table's size; the hourly backups already hold ~7.7 GB; Postgres will want its own space alongside. `db-backup.sh` already refuses to run below 2 GB free on `/tmp`.
 
-**10. There are five orphaned tenant database files.**
+**10. There are five orphaned account database files.**
 `data/tenants/{2,4,5,6,7}.db` still exist (one with a 2.8 MB uncommitted WAL) and are still in `db-backup.sh`'s `TENANTS="2 4 5 6 7"` list — even though those accounts were **deleted from the live database on 2026-08-04** and `tenants` now holds only Roots. Each file carries its own copy of ~150 tables. Whatever happens, these are schema surfaces nobody is planning to migrate.
 
 ---

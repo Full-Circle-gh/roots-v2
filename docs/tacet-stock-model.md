@@ -110,7 +110,7 @@ Reversal (refund, cancel after payment) does **not** re-activate holds. `reverse
 Expiry is enforced by a **timer**, in the main web process only. It is **not** enforced lazily on read, and not by any database mechanism.
 
 - `sweepExpiredReservations` (`lib/inventory.js:780-814`) selects `status='active' AND expires_at <= CURRENT_TIMESTAMP`, marks each `'expired'` with `released_at`, then auto-cancels any order still in `pending_payment` whose holds just expired — setting `cancelled_reason = 'reservation_expired'` and cancelling the pending payment row.
-- `startReservationSweeper` (`lib/inventory.js:832-862`) runs it 5 seconds after boot and then **every 60 seconds**, once for the main tenant and once inside each other active tenant's scope when data isolation is on.
+- `startReservationSweeper` (`lib/inventory.js:832-862`) runs it 5 seconds after boot and then **every 60 seconds**, once for the main account and once inside each other active account's scope when data isolation is on.
 - It is started from exactly one place: `server.js:863`. The Meituan, Eleme, Guanyi and gzgrocery daemon processes do not start it.
 
 The consequence: `sumActiveReservations` filters on `status = 'active'` only and never looks at `expires_at` (`lib/inventory.js:146-150`). **An expired-but-not-yet-swept hold still blocks stock** — for up to about a minute, longer if the sweep throws. Nothing anywhere treats an expired hold as free on read.
@@ -298,7 +298,7 @@ Each channel checks for an enabled mapping row for that (store, product), and if
 
 - Meituan — `lib/meituan-bundles.js:70-86`, into `meituan_sync_queue`, plus any bundle the product is a component of (`:84`).
 - Guanyi — `lib/guanyi-sync.js:15-29`, into `guanyi_sync_queue`.
-- Eleme — `lib/eleme-sync.js:22-37`, into `eleme_sync_queue`, gated on a tenant switch (`:24`).
+- Eleme — `lib/eleme-sync.js:22-37`, into `eleme_sync_queue`, gated on an account switch (`:24`).
 
 All three read `COALESCE(physical_qty, 0)`. **None subtracts `safety_buffer`, and none subtracts active reservations.** The marketplaces are told the raw shelf count, so the buffer that is supposed to protect against sync delay protects only the mini-app.
 

@@ -1,6 +1,8 @@
-# Tacet dashboard — simplification spec, v1.0
+# Tacet dashboard — simplification spec, v1.1
 
 **2026-07-17 · Decided with Ash. This is the product decision; the survey behind it is recorded in the session notes. Joins the canonical folder between the specimens doc and the rulebook.**
+
+**v1.1 · 2026-08-05 — vocabulary only, no product decision changed.** The retired word *tenant* becomes **account** per `tacet-glossary.md`. **"The tenant principle" is renamed "The account principle"**; it still cites rulebook §1.1b, itself renamed "Roots is one account" at rulebook v4.3.
 
 ---
 
@@ -133,13 +135,13 @@ Each row deep-links to the place the fire is put out. Rows are counts + one line
 
 ---
 
-## The tenant principle (rulebook §1.1b)
+## The account principle (rulebook §1.1b)
 
-**Roots is the reference tenant, not the specification.** Every card above must be right for a merchant with 10× Roots's volume and one with a tenth. Small merchants are the audience, so small numbers are the core case — metrics are designed to be honest at small denominators, never hidden because the reference tenant's numbers are small. Conversion's no-percentage-below-threshold rule is the worked example.
+**Roots is the reference account, not the specification.** Every card above must be right for a merchant with 10× Roots's volume and one with a tenth. Small merchants are the audience, so small numbers are the core case — metrics are designed to be honest at small denominators, never hidden because the reference account's numbers are small. Conversion's no-percentage-below-threshold rule is the worked example.
 
 ## Roles this spec does NOT address — deliberately
 
-**`store_manager` exists in code and this spec is silent on it. That silence is a decision, not a gap.** It currently shows `recap · needs · orders · customers · inventory · delivery`, and it keeps `reports:view` in its cap preset — so it keeps revenue, matching today. The migrated cards (movers/week) auto-die for it too, since those ids vanish tenant-wide. **It keeps working as an unaddressed 6-card leftover.** Redesign it as a proper role view in a later pass; do not silently break it now. **`delivery` block must NOT be deleted** — `store_manager` still uses it; dispatch/CS just add it to their CSS hide list.
+**`store_manager` exists in code and this spec is silent on it. That silence is a decision, not a gap.** It currently shows `recap · needs · orders · customers · inventory · delivery`, and it keeps `reports:view` in its cap preset — so it keeps revenue, matching today. The migrated cards (movers/week) auto-die for it too, since those ids vanish account-wide. **It keeps working as an unaddressed 6-card leftover.** Redesign it as a proper role view in a later pass; do not silently break it now. **`delivery` block must NOT be deleted** — `store_manager` still uses it; dispatch/CS just add it to their CSS hide list.
 
 ## The caps finding (settled 2026-07-17, corrects an earlier wrong claim)
 

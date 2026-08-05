@@ -1,6 +1,8 @@
-# Tacet brand concept — v1.3
+# Tacet brand concept — v1.4
 
 > Companion to `tacet-design-system.md`. That file governs how Tacet looks; this file governs what Tacet is, how it thinks, and how it sounds. Use both together when generating any Tacet asset — screens, decks, pages, or copy.
+>
+> **v1.4 (2026-08-05):** vocabulary only — the *Audience* line now reads "never around its first **account's** habits", the retired word *tenant* replaced per `tacet-glossary.md`. The v1.2 note below is left standing as written. Nothing about the brand itself changed.
 >
 > **v1.3 (2026-07-31):** two China-first framings removed, both under `docs/tacet-consolidation-decisions.md` §0. *What Tacet is* defined the product as consolidating "**WeChat Mini-Programs**, custom websites, mobile apps" — naming one country's channel as the canonical first example in the sentence that says what the product *is*. It now reads "online marketplaces, custom websites, mobile apps, sales made in person." The *Language note* (was *Bilingual note*) already lost its "must work in English and Chinese (WeChat ecosystem)" framing as audit finding **J8**, which also fixed the elevator pitch; **J8 did not reach this line**, and the sweep that found it also found the same claim surviving in the rulebook's §1.11 and the IA blueprint's header. **Nothing about the brand itself changed** — not the name, the tagline, the enemy, the voice, the naming rule, or the Chinese companion-name candidates, which stay recorded for the first business's market.
 >
@@ -21,7 +23,7 @@ Alternates: "Everything, quietly handled." / "The quiet behind your business." /
 
 Everyday e-commerce merchants and small business owners — not enterprise ops teams. They are competent but exhausted: they spend their day switching between disconnected tools just to keep their store running. They fear that something is going wrong on a platform they haven't checked today. They don't want more features; they want fewer worries.
 
-**Tacet is designed for this audience of merchants, never around its first tenant's habits.** What the reference shop happens to use or skip is a sample of one; the product ships what its market needs. (The working rule with teeth is `tacet-desktop-patterns.md` §1.1b.)
+**Tacet is designed for this audience of merchants, never around its first account's habits.** What the reference shop happens to use or skip is a sample of one; the product ships what its market needs. (The working rule with teeth is `tacet-desktop-patterns.md` §1.1b.)
 
 ## Positioning
 

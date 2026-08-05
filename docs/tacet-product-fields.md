@@ -191,7 +191,7 @@ hold **independent SKU namespaces** (`database.js:3791-3793`).
 
 ### 1. The pre-fork retail-ish columns on `products` (`database.js:996-1002`)
 
-Question: are they still read by any live path now that tenant 1 is `product_catalog_mode='self'`?
+Question: are they still read by any live path now that account 1 is `product_catalog_mode='self'`?
 
 Answer: **none of the seven is read from the `products` table by any live path**, in `self` mode or
 any other. Six are also unread from `store_products`; the seventh, `retail_price`, is read from
@@ -211,7 +211,7 @@ any other. Six are also unread from `store_products`; the seventh, `retail_price
 (`routes/retail.js:179-196, 17759-17763, 18053`): in `upstream` mode the store PATCH/POST handlers
 silently drop nine source-owned fields (`name_en`, `name_cn`, `sku`, `sell_price`,
 `compare_at_price`, `weight`, `category`, `top_category`, `subcategory`, `stock_qty`) and refuse
-product creation. In `self` mode — tenant 1 today — nothing is dropped. It never routes a read to
+product creation. In `self` mode — account 1 today — nothing is dropped. It never routes a read to
 `products`. **Every customer-facing read goes to `store_products` regardless of mode.**
 
 So `products.is_published` is now a **production-app-only display flag**: it still drives the

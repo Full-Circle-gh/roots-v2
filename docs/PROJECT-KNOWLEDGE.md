@@ -7,6 +7,12 @@ kitchen/ERP app, the full schema, the scripts, and how to run it locally).
 
 > How to use with a new Claude: paste this file (or say "read docs/PROJECT-KNOWLEDGE.md first").
 > `file:line` anchors drift over time — search the named symbol if an anchor is stale.
+>
+> Vocabulary: the word for a business using Tacet is **account** (`tacet-glossary.md`; "tenant" is
+> retired). Where this document still says *tenant* — the "Tenant resolution" heading, `tenant_users`,
+> `tenant_domains`, `TENANT_DATA_ISOLATION` and the like — it is naming code as the code names itself
+> today. Those move to *account* with the tenant→account schema rebuild
+> (`tacet-consolidation-decisions.md` §24), not before.
 
 ---
 
@@ -21,13 +27,13 @@ surfaces** off one codebase and one schema:
 |---|---|---|---|
 | WeChat Mini App | Customers | `miniapp/` | Bearer token (opaque hex) |
 | Online store (web) | Customers | `public/shop.html` | Same Bearer token |
-| Mini App Backend (operator console) | Tenant operators | `public/retail-admin.html` | `session.backendUserId` + `tenantId` |
+| Mini App Backend (operator console) | Account operators | `public/retail-admin.html` | `session.backendUserId` + `tenantId` |
 | Kitchen/ERP | Roots internal staff | `public/app.html` | `session.userId` |
 | Platform Console (SaaS admin) | Platform staff | `public/store-admin.html` | `session.platformAdminId` |
 | PWAs: POS / Kitchen / Restock / Quick-Stock | Staff | own manifests + `public/sw.js` | shared with the above |
 
-The multi-tenant machinery is **built and tested but gated** behind `TENANT_DATA_ISOLATION` — today
-Roots is the only live tenant. Server is HK-hosted (`47.239.89.63`), run under pm2.
+The multi-business machinery is **built and tested but gated** behind `TENANT_DATA_ISOLATION` — today
+Roots is the only live account. Server is HK-hosted (`47.239.89.63`), run under pm2.
 
 Scale markers: `routes/retail.js` ≈ 23k lines (the customer API), `routes/ai.js` ≈ 3.4k,
 `lib/inventory.js` ≈ 1.1k, ~36 route modules, ~47 `lib/` modules, ~230 miniapp files, ~146 scripts,
@@ -51,7 +57,7 @@ shipped) → `pm2 restart` → health-probe → **auto-rollback** on crash-loop.
   push-only.) Both paths still invoke the same `deploy-apply.sh` (backup / restart / probe / rollback).
 - **Deployable paths:** `public/ routes/ lib/ middleware/ scripts/` + `server.js`, `database.js`,
   `schema.sql`, `package.json`, `package-lock.json`. **Non-deployable:** `*.md`, `*.csv`, `miniapp/`
-  (WeChat build, shipped via DevTools per tenant).
+  (WeChat build, shipped via DevTools per account).
 - Bypass with `[skip deploy]` / `[no deploy]` in the commit **subject**.
 - 🔴 **A gate-blocked commit does NOT re-ship on the next push.** The deploy computes its file list
   from the diff `github.event.before → github.sha` of *that* push. If a gating step fails, the ship
@@ -107,17 +113,17 @@ shipped) → `pm2 restart` → health-probe → **auto-rollback** on crash-loop.
 ### Tenant resolution (per request, via AsyncLocalStorage)
 - `middleware/public-tenant.js` `resolvePublicTenant()` — reads `x-wx-appid` header first, falls back
   to Host → `tenant_domains` lookup, returns `null` for anything unknown. **Fail-safe:** unknown/forged
-  appid lands on Roots' shared DB, never another tenant's data. `publicTenantScope` runs the request
+  appid lands on Roots' shared DB, never another account's data. `publicTenantScope` runs the request
   inside `tenantAls.run(getTenantDb(tid), next)`.
 - `lib/tenant-db.js` `tdb()` = `tenantAls.getStore() || mainDb`. `getTenantDb(1) === mainDb`, so Roots
-  is a zero-cost passthrough and every call site is unchanged. Per-tenant DBs are separate SQLite files
+  is a zero-cost passthrough and every call site is unchanged. Per-account DBs are separate SQLite files
   `data/tenants/<id>.db` (WAL). `initTenantSchema` only creates **missing** tables and **never clones
-  `CONTROL_PLANE_TABLES`**. `reconcileLateColumns` self-heals columns added after a tenant DB existed.
+  `CONTROL_PLANE_TABLES`**. `reconcileLateColumns` self-heals columns added after an account DB existed.
 
 ### Data-plane vs control-plane
 `CONTROL_PLANE_TABLES` (shared `roots.db` only, never cloned): `tenants`, `tenant_users`,
 `tenant_secrets`, `tenant_onboarding`, `billing_plans/subscriptions/invoices/reminders`, `users`,
-`sessions`, `permissions`, `activity_log`. **Everything else is data-plane** and cloned per tenant.
+`sessions`, `permissions`, `activity_log`. **Everything else is data-plane** and cloned per account.
 Rule when editing: data-plane reads/writes must use `tdb()`; only control-plane `users`/`sessions`
 etc. may use the shared `db`.
 
@@ -160,7 +166,7 @@ GET endpoints stay open to any signed-in operator (reads-open is one of the bloc
   tamper/wrong key** (GCM tag is the gate). Key from `TENANT_SECRET_KEY` (hex/base64/scrypt).
 - `lib/tenant-creds.js`: Roots → `.env` bundle; non-Roots → decrypted `tenant_secrets`, **no env
   fallback** (missing creds → devMode). Cached, invalidated on write.
-- `lib/provision-tenant.js`: atomic control-plane tx (tenant + owner `tenant_user` + 14-day trial) →
+- `lib/provision-tenant.js`: atomic control-plane tx (account + owner `tenant_user` + 14-day trial) →
   best-effort data-plane DB create + `seedTenantDefaults` (~40 `storefront_config` rows) →
   `autoAssignSubdomain` into `tenant_domains`. Catalog/zones/stores are intentionally manual.
 
@@ -274,7 +280,7 @@ The Roots internal operation. Auth realm: `users` + `permissions` (27 boolean mo
 **Stock-sync spine:** `inventory.enqueueChannelSync` fans a stock delta to Meituan/Eleme/Guanyi queue
 tables **via `tdb()`** (canonical path is `meituan-bundles.enqueueProductStock(tdb(), …)`, covering
 the product + its bundles). Do enqueues **only** through `inventory.adjustStock` — never a direct
-`db.prepare('INSERT INTO *_sync_queue …')` in a route (duplicate row + cross-tenant leak). pm2
+`db.prepare('INSERT INTO *_sync_queue …')` in a route (duplicate row + cross-account leak). pm2
 daemons drain queues with transient-vs-terminal retry semantics + startup orphan-recovery + a
 proxy-health gate. `scripts/health-watchdog.js` + `scripts/proxy-watchdog.js` keep the box alive.
 
@@ -467,8 +473,8 @@ stay on your radar:
 
 - **i18n:** recipes-list Chinese name no longer hidden in EN mode (`public/app.html`, `<div>`→`<span>`).
 - **Inventory:** removed a duplicate Meituan enqueue on the shared `db` handle in
-  `routes/retail-inventory.js` (latent cross-tenant leak; the canonical `inventory.adjustStock` path
-  already enqueues tenant-correctly).
+  `routes/retail-inventory.js` (latent cross-account leak; the canonical `inventory.adjustStock` path
+  already enqueues account-correctly).
 - **DB cold-boot:** moved `markets.kind` addColumn to after the markets CREATE in `database.js` so a
   from-scratch boot on an empty DB works (verified serving).
 - **Docs:** added `docs/DEEP-DIVE.md` (mechanism-level, non-kitchen) and this file.
@@ -515,7 +521,7 @@ changes (deploy model, RBAC realms) are already folded into §1 and §3 above.
   through back-to-customer.
 - **Embedded Profile theme/language sync** (`12186ee`): origin-pinned two-way `postMessage`
   (`fc-theme`/`fc-lang`) between the shell and the `/backend/account` iframe. (Detail in §11.)
-- **Products** (`902cfe4`): low-stock threshold moved to Settings → Operations → Stores (tenant
+- **Products** (`902cfe4`): low-stock threshold moved to Settings → Operations → Stores (account
   default; per-store overrides already existed); the Bulk button became a permanent (greyed-until-
   selected) bulk-action bar.
 - **Qingyun** (`2e5bab7`): debounce the not-logged-in alert so a transient blip doesn't page ops.

@@ -133,7 +133,7 @@ NOT seeing blank labels today — it's a correctness tidy-up, not urgent.
   Confirmed hard: colours resolve through a hardcoded Roots token→hex map
   duplicated across FOUR sites (`lib/brand-tokens.js`,
   `miniapp/utils/brand-tokens.js`, block-renderer inline `COLOR_MAP`,
-  Design check `DC_HEX`) and consume NEITHER of the two existing per-tenant
+  Design check `DC_HEX`) and consume NEITHER of the two existing per-account
   theme systems. Product has THREE disjoint colour systems (CMS flat
   `theme.*`; `brand-theme.js` nested `theme.palette.*`; hardcoded block
   maps) — none wired together. Pick a source of truth, wire blocks (+ the 4

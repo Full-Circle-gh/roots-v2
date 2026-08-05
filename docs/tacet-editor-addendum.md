@@ -80,7 +80,7 @@ Media = immediate mutations (upload/delete fire on the spot; delete confirms).
 Fold into §1.8 at next rulebook edit.
 
 ## §1.1b amendment SHIPPED this session (rulebook → v2.0, brand → v1.2)
-The one-tenant trap has two axes; v1.5 named only scale. Added the **usage
+The one-account trap has two axes; v1.5 named only scale. Added the **usage
 axis**: "I don't use it, so cut it" is the same mistake as "my numbers are
 small, so cut it." Keep test: *would a plausible merchant segment need this
 within their first year?* Valid cut reasons unchanged (broken · dishonest ·
@@ -227,7 +227,7 @@ diff, usage evidence). **Bring the survey to the new chat.**
 4. **🔴 Block templates (new workstream):** block *functionality* is universal;
    block *visual design* is currently Roots-branded and leaks into the product
    as if it were the default. Tacet must ship a small set of NEUTRAL default
-   templates for new merchants; Roots's look becomes one tenant's theme, never
+   templates for new merchants; Roots's look becomes one account's theme, never
    the factory setting. This is a §1.1b trap in visual form. **Scope/mechanics/
    count decided AFTER the survey shows how block styling works today** — if
    styling is already separated from blocks it's a design task; if Roots's look
