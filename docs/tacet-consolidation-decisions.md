@@ -636,13 +636,25 @@ THE LESSON, WHICH IS THE SAME ONE AS THE MONEY RULE: the gap was in the tool's I
 
 ### Two statements will not survive the cutover — FINDING 2026-08-05
 
-Found while verifying seam batch 3, by preparing every statement against a schema built from the live census.
+Found while verifying seam batch 3, by preparing every statement in a file against a schema built from the live census. Both blocked their file from the batch, which is how they surfaced. Neither is fixed.
 
-1. **`sqlite_sequence` does not exist in Postgres.** `routes/ingredients.js:299` and `routes/admin.js:238` both run `DELETE FROM sqlite_sequence WHERE name IN (…)` to reset AUTOINCREMENT counters after a data wipe. `sqlite_sequence` is a SQLite internal table with no Postgres equivalent; identity sequences are reset with `setval` instead — the same mechanism the rehearsal migration already had to use after each table copy. Both sites are wrapped in `try {} catch {}`, so after cutover they will fail silently and the counters will simply not reset. Silent is the problem: the next insert continues from the old high-water mark rather than from 1, which is the opposite of what the surrounding code is trying to achieve.
+**1. `sqlite_sequence` has no Postgres equivalent — and the failure is SILENT.**
 
-2. **`routes/restock.js:167` reads a table that does not exist.** `SELECT value FROM settings WHERE key = 'restock.warehouseStoreId'` targets a `settings` table that is absent from the live census, absent from the as-built Postgres schema, and never created by `database.js`. Since the census was taken from the live database, this statement is already failing today, not merely after cutover. Either the path is dead or it is throwing into a catch somewhere; worth establishing which before the restock work is touched.
+`routes/ingredients.js:299` and `routes/admin.js:238` both run `DELETE FROM sqlite_sequence WHERE name IN (…)` to reset AUTOINCREMENT counters after a data wipe, so that ids start again at 1. `sqlite_sequence` is a SQLite internal table; Postgres has no such thing, and identity sequences are reset with `setval` — the same mechanism the rehearsal migration already needed after each table copy, and which is already recorded in this section as a rule ("Identity sequences do not advance on explicit-id inserts and require setval after each table copy, or the next application insert collides at id 1").
 
-Neither is fixed here. Both blocked their file from seam batch 3, which is how they were found.
+Both call sites are wrapped in `try {} catch {}`. So after cutover they do not raise — they fail silently and the counters are simply not reset. **The next insert then continues from the old high-water mark instead of from 1, which is the exact opposite of what the surrounding code is written to achieve.** A wipe-and-reset that leaves ids continuing from 4,000 looks like it worked and did not. This is on the cutover checklist because it must be converted to `setval` at the same time the application moves, not discovered afterwards from odd-looking ids.
+
+**2. `routes/restock.js:167` reads a `settings` table that does not exist — today, not after cutover.**
+
+`SELECT value FROM settings WHERE key = 'restock.warehouseStoreId'`. There is no `settings` table in the live census, none in the as-built Postgres schema, and none created by `database.js`. The census was taken from the live database, so this statement is failing **now**.
+
+WHAT IT IS FOR. `_resolveWarehouseStoreId()` decides which `retail_stores.id` is the warehouse — the location restock goods ship OUT of. It is a three-tier preference chain: (1) this explicit `settings` override, described in the code as "for a future multi-warehouse world"; (2) the store a `warehouse`-role user is bound to; (3) fallback — whichever active store currently carries the most on-hand stock.
+
+WHAT BREAKS. Tier 1 is unreachable. The throw is caught by `catch { /* no settings table / row — fall through */ }`, so the code is already written as though the table may be absent — but the consequence is that **there is no way to configure which store is the warehouse.** Setting `restock.warehouseStoreId` has no effect and never has. Resolution always falls to tier 2 or tier 3.
+
+That matters most at tier 3, which is data-dependent: the warehouse is whichever store happens to hold the most stock right now. **Without a `warehouse`-role user bound to a store, the identity of the warehouse can change by itself as stock moves between locations**, with no configuration change and no signal. Downstream, `_resolveDestStoreId(order, warehouseStoreId)` picks the destination by excluding the warehouse, and line 279 abandons the restock entirely when the two resolve equal — so a drifting tier-3 answer shows up as transfers between the wrong pair of locations, or as restocks that quietly do not happen.
+
+Not fixed here. Settling it is a decision about whether the override should exist at all: either create the `settings` table and honour it, or delete tier 1 and make tier 2 the documented mechanism. `routes/ingredients.js` and `routes/restock.js` are held out of the seam batches until it is settled.
 
 ### Three deploy findings recorded, NOT fixed — 2026-08-05
 
@@ -659,6 +671,8 @@ Also noticed, lower stakes: the ship step's `ssh … | tee … || true` discards
 ### Postgres cutover checklist — items recorded as they are found
 
 Actionable items that must happen AT the cutover and cannot be solved by the code beforehand. This section exists because the first such item was found while drawing the seam's scope line, and there was nowhere to put it. `GO-LIVE-CUTOVER.md` is the WeChat mini-app runbook and is a different cutover; this list is the Postgres one.
+
+- [ ] **REPLACE THE `sqlite_sequence` RESETS WITH `setval` AT CUTOVER.** `routes/ingredients.js:299` and `routes/admin.js:238` reset AUTOINCREMENT counters by deleting from `sqlite_sequence`, which does not exist in Postgres. Both are inside `try {} catch {}`, so after the switchover they fail silently and the counters do not reset — the next insert continues from the old high-water mark, the opposite of the intent, and nothing warns. Must be converted at the same time the application moves, not afterwards.
 
 - [ ] **DELETE RETIRED FILES ON THE BOX BY HAND — THE DEPLOY WILL NOT.** The pipeline never removes a file: `deploy.yml` skips deletions and `deploy-apply.sh` only copies, so anything dropped from `main` keeps running in production. Proven live on 2026-08-05: `public/retail-admin.js` was still on the server 54 days after being deleted from main. At the cutover this stops being housekeeping — `lib/tenant-db.js` and the file-per-account isolation it carries are deleted in a later phase per §24, and a file that is supposed to be gone but is still importable is exactly the kind of thing that gets loaded by something nobody remembered. Take a `diagnose_deployed_tree.js` reading first, then remove the EXTRA entries deliberately.
 

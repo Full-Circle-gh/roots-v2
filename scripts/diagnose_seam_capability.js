@@ -179,7 +179,11 @@ function auditFile(rel) {
     if (new RegExp(`(^|[,\\s])${handle}([,\\s]|$)`).test(args)) prop.push(`passed to ${callee}()`);
   }
   // attached to a request/context object
-  const attachRe = new RegExp(`\\.\\s*[\\w$]+\\s*=\\s*${handle}\\b`, 'g');
+  // `x.y = db` propagates the HANDLE. `x.y = db.prepare(...).get()` assigns a ROW
+  // and propagates nothing — the trailing \b matches before the dot, so without
+  // this the two are indistinguishable. middleware/auth.js:11 was reported as a
+  // propagation on exactly that basis and is not one.
+  const attachRe = new RegExp(`\\.\\s*[\\w$]+\\s*=\\s*${handle}\\s*(?![\\w$.(])`, 'g');
   while ((m = attachRe.exec(src)) !== null) prop.push(`assigned: ${m[0].trim()}`);
 
   const uniqProp = [...new Set(prop)];
