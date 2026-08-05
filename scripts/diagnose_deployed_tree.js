@@ -41,20 +41,26 @@
  * no port, writes no file and restarts nothing. There is no code path in here
  * that mutates the server.
  *
- * THREE ANSWERS, NOT ONE
- * ----------------------
- *   DIFFERS  the file is on the box but its bytes are not the committed bytes.
- *            This is the drift the diff-base bug produces.
- *   MISSING  the repository has it and the box does not — a file that never
- *            reached production at all.
- *   EXTRA    the box has a deployable-looking file the repository does not.
- *            A SEPARATE and un-fixed channel: deploy.yml skips deletions
- *            (`[ -f "$f" ] || continue`) and deploy-apply.sh only ever copies,
- *            so a file deleted from main stays live forever. Not every EXTRA is
- *            drift — public/ also holds uploads and scripts/_*.json is
- *            gitignored — so EXTRA is reported and never fails the run.
+ * FOUR ANSWERS, NOT ONE
+ * ---------------------
+ *   DIFFERS    the file is on the box but its bytes are not the committed bytes.
+ *              This is the drift the diff-base bug produces, and the only thing
+ *              here that is a defect.
+ *   MISSING    the repository has it and the box does not — a file that never
+ *              reached production at all.
+ *   REWRITTEN  the installer rewrites it AFTER installing it, so it can never
+ *              match its committed bytes. Reported in full, with both hashes,
+ *              and never counted as drift. See INSTALLER_REWRITTEN below.
+ *   EXTRA      the box has a deployable-looking file the repository does not.
+ *              A SEPARATE and un-fixed channel: deploy.yml skips deletions
+ *              (`[ -f "$f" ] || continue`) and deploy-apply.sh only ever copies,
+ *              so a file deleted from main stays live forever. Not every EXTRA is
+ *              drift — public/ also holds uploads and scripts/_*.json is
+ *              gitignored — so EXTRA is reported and never fails the run.
  *
- * Exit 0 only when DIFFERS and MISSING are both empty.
+ * Exit 0 only when DIFFERS and MISSING are both empty. REWRITTEN and EXTRA are
+ * shown but do not fail: a check that is permanently red is a check people learn
+ * to ignore, and then it stops catching the thing it exists for.
  *
  * Run: node scripts/diagnose_deployed_tree.js
  *      (or via .github/workflows/ro-query.yml, which is how it reaches the box)
@@ -80,6 +86,24 @@ const FILES = ['server.js', 'database.js', 'schema.sql', 'package.json', 'packag
 // Comparing it raw would report a permanent false difference on every run, so
 // both sides get the stamp neutralised and are compared normalised — which still
 // catches a real change to sw.js and forgives only the stamp.
+// Files the installer rewrites AFTER installing them. They cannot match their
+// committed bytes on the box, so counting them as drift would leave this check
+// permanently red — and a permanently red check is one people stop reading.
+// Kept VISIBLE rather than excluded: silenced is not the same as gone, and
+// someone should still be able to see that the deployed lockfile is not the
+// committed one. This list is the same pair deploy.yml's post-ship verification
+// sets aside, and the two must stay in step.
+const INSTALLER_REWRITTEN = {
+  // deploy-apply.sh stamps the service-worker CACHE constant at install time.
+  // Neutralising the stamp on both sides makes a real comparison possible, so
+  // this one is still compared properly and still counts as a match or a miss.
+  'public/sw.js': 'CACHE stamp rewritten by deploy-apply.sh — compared with the stamp neutralised',
+  // npm install --omit=dev rewrites the lockfile in place whenever package.json
+  // or package-lock.json ships. There is no normalisation that recovers the
+  // committed bytes, so this one is reported and never judged.
+  'package-lock.json': 'rewritten in place by npm install --omit=dev — cannot be compared',
+};
+
 const SW = 'public/sw.js';
 const SW_STAMP_RE = /(const CACHE = 'roots-v2-shell)[^']*(';)/;
 
@@ -154,17 +178,27 @@ function main() {
   // ══════════════════════════════════════════════════════════════════════════
   console.log('\n══ 2 · deployed bytes vs committed bytes ══');
 
-  const differs = [], missing = [], extra = [];
+  const differs = [], missing = [], extra = [], rewritten = [];
   for (const rel of Object.keys(MANIFEST).sort()) {
     const want = rel === SW ? MANIFEST_SW_NORMALIZED : MANIFEST[rel];
     const got = boxHash.get(rel);
     if (got === undefined) { if (!unreadable.has(rel)) missing.push(rel); }
-    else if (got !== want) differs.push({ rel, want, got });
+    else if (got !== want) {
+      // A mismatch on a file the installer rewrites is expected, not drift.
+      // It is still surfaced in full, with both hashes, in section 3.
+      (rel in INSTALLER_REWRITTEN ? rewritten : differs).push({ rel, want, got });
+    } else if (rel in INSTALLER_REWRITTEN) {
+      rewritten.push({ rel, want, got, matched: true });
+    }
   }
   for (const rel of onBox) if (!(rel in MANIFEST)) extra.push(rel);
 
+  // Only a rewritten file that actually MISmatched goes unjudged. One that
+  // matches was compared like any other and counts as a match.
+  const unjudged = rewritten.filter((r) => !r.matched).length;
+  const judged = Object.keys(MANIFEST).length - unjudged;
   if (differs.length === 0) {
-    ok(`every one of the ${Object.keys(MANIFEST).length} files matches the repository byte for byte`);
+    ok(`all ${judged} judged file(s) match the repository byte for byte`);
   } else {
     fail(`${differs.length} file(s) DIFFER — production is not running what main says:`);
     for (const d of differs) {
@@ -182,7 +216,29 @@ function main() {
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  console.log('\n══ 3 · files on the box the repository does not have ══');
+  console.log('\n══ 3 · files the installer rewrites after installing them ══');
+  console.log('   Shown, never failed — these cannot match their committed bytes, so');
+  console.log('   judging them would leave this check permanently red. Visible, not hidden:');
+  console.log('   the deployed lockfile really is not the committed one, and that is worth');
+  console.log('   being able to see. Same pair deploy.yml sets aside post-ship.');
+  for (const rel of Object.keys(INSTALLER_REWRITTEN)) {
+    const r = rewritten.find((x) => x.rel === rel);
+    console.log(`   ${rel} — ${INSTALLER_REWRITTEN[rel]}`);
+    if (!r) {
+      console.log('      not in this comparison (absent from the manifest or from the box)');
+    } else if (r.matched) {
+      // sw.js matching means the stamp normalisation worked. package-lock.json
+      // matching means npm has not rewritten it on this tree — worth saying
+      // plainly rather than implying a normalisation that does not exist for it.
+      console.log(`      matches ${rel === SW ? 'once normalised' : '— not rewritten on this tree'}: ${r.got}`);
+    } else {
+      console.log(`      main: ${r.want}`);
+      console.log(`      box : ${r.got}`);
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  console.log('\n══ 4 · files on the box the repository does not have ══');
   console.log('   Reported, never failed — deletions are a separate un-fixed channel, and');
   console.log('   public/ uploads plus gitignored scripts/_*.json land here legitimately.');
   if (extra.length === 0) {
@@ -194,10 +250,12 @@ function main() {
 
   // ══════════════════════════════════════════════════════════════════════════
   console.log('\n' + '═'.repeat(72));
-  console.log(`summary: ${Object.keys(MANIFEST).length - differs.length - missing.length} match, ` +
-              `${differs.length} differ, ${missing.length} missing, ${extra.length} extra`);
+  console.log(`summary: ${judged - differs.length - missing.length} match, ` +
+              `${differs.length} differ, ${missing.length} missing, ` +
+              `${unjudged} installer-rewritten, ${extra.length} extra`);
   if (FAILURES === 0) {
-    console.log('RESULT: PASS — the deployed tree is the repository at ' + MANIFEST_COMMIT.slice(0, 10) + '.');
+    console.log('RESULT: PASS — the deployed tree is the repository at ' + MANIFEST_COMMIT.slice(0, 10) +
+                (unjudged ? ', apart from the installer-rewritten file(s) above.' : '.'));
     process.exit(0);
   }
   console.log(`RESULT: FAIL — ${FAILURES} check(s) failed.`);
