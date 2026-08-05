@@ -485,7 +485,6 @@ Consequences to plan for:
 - pgroll is not installed. Installing packages on the box is not a free action — apt triggers needrestart, which can restart services under pm2. Installation must be planned, not done as a side effect.
 - The constraints in §4 of the survey still apply and are not solved by this choice: the health probe rolls back on 5xx from four endpoints; deploys complete in 20 to 55 seconds and a slower migration triggers auto-rollback; a migrations folder at the repo root would never ship, as the deploy allowlist does not cover it; and deletions never reach the box.
 - The five live tables with no CREATE TABLE anywhere in the repo remain unreconciled. pgroll does not require the repository to be the source of truth in the way a desired-state tool would, so this is no longer a blocker for the tooling choice, but it remains a real gap.
-- **Same knot as the pre-converter sequencing constraint** recorded below ("RAW_OPEN is closed, and the pre-converter sequencing constraint", 2026-08-05). The migrations that exist today run at `database.js` module load, before any converter could be installed; there is no migrations folder, and the allowlist would not ship one if there were. Whatever resolves the folder question has to resolve the ordering question with it.
 
 Parked items:
 
