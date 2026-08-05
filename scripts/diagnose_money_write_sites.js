@@ -281,13 +281,19 @@ function report(title, expect, rec, connName) {
   else fail('kind DIVERGES: census said ' + expect.kind + ', live is ' + st.kind);
   if (st.table === expect.table) ok('table matches the census claim (' + expect.table + ')');
   else fail('table DIVERGES: census said ' + expect.table + ', live is ' + st.table);
-  if (tr.site.endsWith(expect.line)) ok('the statement really is at ' + expect.line);
+  // V8 reports file:line:column; the claim is about the line.
+  if (tr.site.startsWith(expect.line + ':')) ok('the statement really is at ' + expect.line + ' (col ' + tr.site.split(':')[2] + ')');
   else fail('call site DIVERGES: expected ' + expect.line + ', live is ' + tr.site);
 
   // Every extracted column must exist on the table per the census, or the parse
   // is not trustworthy and nothing below it means anything.
   const known = tableCols.get(st.table) || new Map();
   const bad = st.cols.filter((c) => !known.has(c));
+  const distinct = [...new Set(st.cols)];
+  const dupes = [...new Set(st.cols.filter((c, i) => st.cols.indexOf(c) !== i))];
+  console.log('   assembled   : ' + st.cols.length + ' SET/column entries, ' + distinct.length + ' distinct' +
+              (dupes.length ? '  (written twice: ' + dupes.join(', ') + ')' : ''));
+  console.log('   columns     : ' + distinct.join(', '));
   if (!bad.length) ok('all ' + st.cols.length + ' assembled columns exist on ' + st.table + ' per plan.json');
   else fail('columns not on ' + st.table + ' in plan.json (parse suspect): ' + bad.join(', '));
 
@@ -424,7 +430,7 @@ const BODY3 = {
   description_blocks: [], use_block_design: 1,
   nutrition: { basis_en: 'per 100g', rows: [] },
   product_facts: { origin: 'x' },
-  name_en: 'ro-query probe', description_format: 'plain',
+  name_en: 'ro-query probe', description_format: 'plain', sku: 'RO-QUERY-PROBE-SKU',
   name_cn: 'n', category: 'c', weight: '1', description_en: 'd', description_cn: 'd',
   image_data: null, image_url: null, barcode: 'b', free_of: 'f', notes: 'n',
   sell_price: '1.23', compare_at_price: '4.56',
