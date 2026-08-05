@@ -34,7 +34,11 @@ try {
   }
 }
 
-const db = require('../database');
+// Routed through the database seam (lib/db-seam.js). No converter is installed,
+// so this is a zero-cost passthrough; the point is that this file is now on the
+// covered side of the boundary. Proven by scripts/diagnose_seam_statements.js.
+const { seam } = require('../lib/db-seam');
+const db = seam(require('../database'));
 const eleme = require('../lib/eleme-client');
 const { sendOpsAlert } = require('../lib/ops-alert');
 const { channelClosedStores } = require('../lib/inventory');

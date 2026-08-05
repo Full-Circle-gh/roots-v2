@@ -221,7 +221,10 @@ function extractStatements(rel) {
     while (k < src.length && /\s/.test(src[k])) k++;
     if (src[k] === '+') { dynamic++; continue; }
     const line = src.slice(0, m.index).split('\n').length;
-    out.push({ sql: buf.replace(/\s+/g, ' ').trim(), line });
+    // VERBATIM for prepare(); collapsed only for display. Collapsing newlines
+    // turns a `--` line comment into one that swallows the rest of the statement,
+    // which reports "incomplete input" and reads as a defect in the application.
+    out.push({ sql: buf, disp: buf.replace(/\s+/g, ' ').trim(), line });
   }
   return { statements: out, dynamic };
 }

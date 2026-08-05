@@ -678,6 +678,52 @@ It sits inside the `current_stock` tool handler of the AI assistant's function s
 
 Three findings of this shape now — `settings`, `sqlite_sequence`, `ingredient_price_history.created_at`. All three were invisible to the application because each sits behind a `catch` or inside a tool handler, and all three were found by preparing statements against the schema rather than by running the app. That is worth generalising: **preparing every statement in the application against the live schema would find the rest of them, and nothing currently does it.**
 
+### Statement-preparation sweep of the whole application — DONE 2026-08-05
+
+Three defects had been found as a SIDE EFFECT of routing seam batches. Finding the same shape of thing three times by accident is a signal to look on purpose. `scripts/diagnose_statement_sweep.js` prepares every statically-written statement in every in-scope file against a schema built from the live census. It compiles and resolves every table and column named; it executes nothing, so it cannot write.
+
+**2,524 statements across 109 files. 6 fail today. 96 fail at cutover. 371 are built dynamically and cannot be reached this way** — a blind spot stated rather than hidden, and it already conceals one known case: the `sqlite_sequence` reset in `routes/admin.js:238` is assembled by concatenation, so the sweep sees only its sibling in `routes/ingredients.js`.
+
+FAILING TODAY — throwing in production every time the path is reached:
+
+| site | fault |
+|---|---|
+| `routes/ai.js:2188` | `ingredient_price_history.created_at` — the column is `recorded_at` |
+| `routes/restock.js:167` | `settings` table does not exist |
+| `routes/store-admin.js:528` | `retail_orders.created_at` — no such column |
+| `routes/store-admin.js:551` | `retail_orders.created_at` — no such column |
+| `lib/brand-designer.js:61` | `store_products.is_on_flash` — no such column |
+| `scripts/gzgrocery-order-daemon.js:126` | `retail_stores.store_code` — no such column |
+
+Two were already recorded. Four are new, and the two `store-admin.js` sites are the most interesting: they are the operator's order search and a customer's recent-order list, so **order lookup by number and a customer's order history are both failing** wherever that route is reached.
+
+FAILS AT CUTOVER — compiles on SQLite, errors on Postgres, across 22 files:
+
+| construct | count | Postgres equivalent |
+|---|---|---|
+| `INSERT OR IGNORE/REPLACE` | 60 | `ON CONFLICT` |
+| `sqlite_master` | 21 | `information_schema` / `pg_catalog` |
+| `strftime()` | 5 | `to_char()` / `date_trunc()` |
+| `GROUP_CONCAT()` | 5 | `string_agg()` |
+| `julianday()` | 4 | date arithmetic |
+| `sqlite_sequence` | 1 (+1 hidden in a dynamic statement) | `setval()` |
+
+That is 96 statements needing rewriting before the switchover, and the count is a floor, not a total, because of the 371 dynamic statements. **This is the first measured size of the SQL-dialect work.** It was not previously on the cutover checklist in any form.
+
+NOTHING IS FIXED. Several are two-word changes and every one is a live behaviour change on a running business, so each is decided individually.
+
+WHAT IS GATED ON A DECISION RATHER THAN ON EFFORT. Of the six failing today, three block a file from the seam: `routes/ai.js` (72 sites), `routes/restock.js` (38) and `scripts/gzgrocery-order-daemon.js` (23) — 133 sites, plus `routes/ingredients.js` (29) held on `sqlite_sequence`. `routes/store-admin.js` and `lib/brand-designer.js` are not blocked by this pattern; they are in the mixed-TENANT and UNRESOLVED groups and were never movable. So **162 of the remaining sites are waiting on decisions, not on work.**
+
+### The daemons are through the seam — DONE 2026-08-05
+
+Five of the six: guanyi, meituan, shangou, qingyun, eleme. 154 of 177 daemon sites, 87.01%. `gzgrocery-order-daemon.js` is held on the `store_code` fault above.
+
+Their risk profile differs from a route file and the difference is worth stating. A route file fails in front of a person who retries; **a daemon runs unattended against live channel data on a timer**, so a fault surfaces as stock drifting out of sync with Meituan or Eleme, orders not being collected, or a sync loop erroring in a log nobody reads — hours later and attributed to the channel rather than to us. They also hold no HTTP request to fail; there is no 500 to notice.
+
+Two things made that acceptable rather than merely hoped for. First, the seam is a proven passthrough with no converter installed — 2,781 assertions across the whole better-sqlite3 surface — so there is no mechanism by which a value can change. Second, every one of the 150 statements in these five files was extracted and executed raw against wrapped before they shipped, and none touches a money column.
+
+`deploy-apply.sh` bounces each daemon whose files ship, so they picked the change up on the deploy rather than running stale — which is itself a thing that had to be true and is worth having checked.
+
 ### Three deploy findings recorded, NOT fixed — 2026-08-05
 
 Found while fixing the diff-base bug, deliberately left alone so the fix stayed one change. All three are live today.
