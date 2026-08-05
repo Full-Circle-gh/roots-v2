@@ -85,35 +85,112 @@ jobs:
               *) return 1 ;;
             esac
           }
+          # Reduce a raw file list to the deployable, still-present subset.
+          # Used twice: once for what we ship, once for what the OLD base would
+          # have shipped, so the two can be compared in the log.
+          filter() {   # $1 = raw list in, $2 = filtered list out
+            : > "$2"
+            while IFS= read -r f; do
+              [ -z "$f" ] && continue
+              deployable "$f" || continue
+              [ -f "$f" ] || continue   # skip deletions — the installer only adds files
+              echo "$f" >> "$2"
+            done < "$1"
+          }
+
           : > /tmp/changed.txt
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.full_sync }}" = "true" ]; then
             MODE=full
+            BASE_SRC="every tracked file (full_sync)"
             git ls-files > /tmp/changed.txt
           else
             MODE=changed
-            BEFORE="${{ github.event.before }}"
-            # First push / unknown base / force-push: fall back to HEAD~1, then to
-            # a full file list so we never silently ship nothing on a real change.
-            if [ -z "$BEFORE" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null; then
-              BEFORE="$(git rev-parse HEAD~1 2>/dev/null || true)"
-            fi
-            if [ -n "$BEFORE" ]; then
-              git diff --name-only "$BEFORE" "${{ github.sha }}" > /tmp/changed.txt
+
+            # STAGE 2 of the diff-base fix: READ the record Stage 1 writes.
+            #
+            # The base is what production ACTUALLY HOLDS, not what main held
+            # before this push. Those differ the moment a deploy fails: the old
+            # base excluded everything the failed run carried, so those files
+            # were skipped permanently while later deploys reported SUCCESS. A
+            # replay of the first 904 runs found 197 such episodes across 141
+            # files, the longest 43 days.
+            #
+            # Every rung of the ladder below errs toward shipping MORE. A base
+            # that is too old over-ships, which is slow but correct. A base that
+            # is too new skips files silently, which is the bug. So the record
+            # is never trusted enough to NARROW the set beyond what it can prove.
+            BASE=""
+            BASE_SRC=""
+            REC="$(ssh prod "cat /root/roots-v2/.deploy-state/last-success-sha 2>/dev/null" 2>/dev/null | tr -d '[:space:]' || true)"
+
+            if [ -z "$REC" ]; then
+              echo "::warning::No deploy record on the server — falling back to the previous-push base, which is the pre-fix behaviour. Expected only on the first deploy after Stage 1, or if the box was rebuilt."
+            elif ! printf '%s' "$REC" | grep -qE '^[0-9a-f]{40}$'; then
+              echo "::warning::Deploy record is not a 40-hex sha (got '$REC') — treating it as absent and falling back to the previous-push base."
+            elif ! git cat-file -e "${REC}^{commit}" 2>/dev/null; then
+              echo "::warning::Deploy record $REC is not a commit in this repository — treating it as absent and falling back to the previous-push base."
+            elif git merge-base --is-ancestor "$REC" "${{ github.sha }}" 2>/dev/null; then
+              BASE="$REC"
+              BASE_SRC="server deploy record ($REC)"
             else
+              # The record names a real commit that is not behind HEAD — history
+              # was rewritten, or the box holds a commit from another line. Their
+              # merge-base is the newest commit BOTH are known to contain, so
+              # diffing from it can only ship a superset of what is needed.
+              MB="$(git merge-base "$REC" "${{ github.sha }}" 2>/dev/null || true)"
+              if [ -n "$MB" ]; then
+                BASE="$MB"
+                BASE_SRC="merge-base $MB of HEAD and the deploy record $REC (histories diverged)"
+                echo "::warning::Deploy record $REC is not an ancestor of ${{ github.sha }} — using merge-base $MB, which ships a superset."
+              else
+                echo "::warning::No merge-base between the deploy record $REC and ${{ github.sha }} — falling back to the previous-push base."
+              fi
+            fi
+
+            # Unchanged fallback ladder, now the SECOND rung rather than the first.
+            if [ -z "$BASE" ]; then
+              BASE="${{ github.event.before }}"
+              BASE_SRC="previous push (github.event.before)"
+              # First push / unknown base / force-push: fall back to HEAD~1, then to
+              # a full file list so we never silently ship nothing on a real change.
+              if [ -z "$BASE" ] || [ "$BASE" = "0000000000000000000000000000000000000000" ] || ! git cat-file -e "${BASE}^{commit}" 2>/dev/null; then
+                BASE="$(git rev-parse HEAD~1 2>/dev/null || true)"
+                BASE_SRC="HEAD~1"
+              fi
+            fi
+
+            if [ -n "$BASE" ]; then
+              git diff --name-only "$BASE" "${{ github.sha }}" > /tmp/changed.txt
+            else
+              BASE_SRC="every tracked file (no usable base)"
               git ls-files > /tmp/changed.txt
             fi
           fi
-          : > /tmp/files.txt
-          while IFS= read -r f; do
-            [ -z "$f" ] && continue
-            deployable "$f" || continue
-            [ -f "$f" ] || continue   # skip deletions — the installer only adds files
-            echo "$f" >> /tmp/files.txt
-          done < /tmp/changed.txt
+
+          filter /tmp/changed.txt /tmp/files.txt
           COUNT=$(wc -l < /tmp/files.txt | tr -d ' ')
           echo "count=$COUNT" >> "$GITHUB_OUTPUT"
-          echo "Mode: $MODE — $COUNT deployable file(s):"
+          echo "Mode: $MODE — base: $BASE_SRC"
+          echo "$COUNT deployable file(s):"
           cat /tmp/files.txt || true
+
+          # Transitional visibility. Print what the OLD previous-push base would
+          # have shipped, so the difference this fix makes is legible in the log
+          # rather than inferred. Anything listed here is a file the pipeline
+          # would have skipped — silently, while reporting SUCCESS. Once the
+          # record has been trusted for a while this block can go.
+          OLD="${{ github.event.before }}"
+          if [ "$MODE" = "changed" ] && [ -n "$OLD" ] && git cat-file -e "${OLD}^{commit}" 2>/dev/null; then
+            git diff --name-only "$OLD" "${{ github.sha }}" > /tmp/old-changed.txt
+            filter /tmp/old-changed.txt /tmp/old-files.txt
+            RESCUED="$(comm -23 <(sort -u /tmp/files.txt) <(sort -u /tmp/old-files.txt) || true)"
+            if [ -n "$RESCUED" ]; then
+              echo "Files the previous-push base would have SKIPPED, and this base ships:"
+              printf '%s\n' "$RESCUED" | sed 's/^/  + /'
+            else
+              echo "(same set the previous-push base would have shipped)"
+            fi
+          fi
 
       - name: Set up Node for lint
         if: steps.gate.outputs.skip == 'false' && steps.files.outputs.count != '0'
