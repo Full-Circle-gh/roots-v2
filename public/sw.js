@@ -10,7 +10,7 @@
 //
 // Bump CACHE on every UI shape change to force every client to evict
 // its old shell on next load (activate handler deletes all old caches).
-const CACHE = 'roots-v2-shell-v709-the-restock-shell-is-gone';
+const CACHE = 'roots-v2-shell-v710-alipay-proof-reads-both-payee-names';
 const SHELL = ['/', '/login'];
 
 // Heuristic — request that wants HTML?
