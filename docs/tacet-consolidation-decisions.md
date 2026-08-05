@@ -783,12 +783,68 @@ This belongs next to the pgroll / no-migrations-folder item recorded above ("Sch
 1. **POSTGRES-SIDE OF THE GUARD: NOT VERIFIED.** The three names are confirmed on live **SQLite only**. That the same three are in the Postgres copy is **inference from row-count equality** — 144 live, the copy established at 144 — which is suggestive, not a read. No Postgres connection was made; the no-pg-connection constraint holds. **Do not treat matched row counts as verification.** Closing this requires a Postgres read, which is a separate decision under a separate constraint.
 2. **THE GROWING EDGE.** Any migration authored after the copy cutover, or added between now and the converter's install point, is not covered by gate 1 **even once gate 1 closes**, and fires fresh in the pre-converter window.
 3. **THE 62 UNRESOLVED.** Separately open. This is where a tenant-side money write would hide if one exists outside `lib/tenant-db.js` — a backfill taking a tenant handle as a parameter. Survey briefed, not yet run.
+   - **SUPERSEDED 2026-08-05 — the survey has now been run, and the gate's own premise was wrong twice.** "Not yet run" no longer holds; neither does "62". Money writes WERE hiding there, two of them tenant-side, and they were invisible to the instrument that was supposed to find them. The gate's text above is left standing as written rather than edited, because what it assumed is part of the finding. Read it with **"The money scanner was blind to every assembled statement — CORRECTED 2026-08-05"** below, which supersedes this line in full.
 
 **HONEST LIMITS:**
 
 - The `readonly` watchdog reasoning is verified against code and comment, **not against runtime behaviour**.
 - The RAW_OPEN survey sees `new Database(` and the checker's attribution. A handle obtained another way lands in the 62 UNRESOLVED (gate 3), not here.
 - Two facts were corrected mid-investigation — "230 opens" → four, and "226 DDL" → 211 DML including four money writes. **Both were inferences presented as measurements.** The corrected picture is the one recorded above.
+
+### The money scanner was blind to every assembled statement — CORRECTED 2026-08-05
+
+Gate 3 above is closed as an open survey and re-opened as a finding. The survey was run. It found money writes where the record said there would be reads, and it found them only after the instrument itself was fixed — the same shape as "The coverage checker was measuring less than it claimed", one blind spot down.
+
+**WHAT THE INSTRUMENT WAS DOING.** Money identification lives in `scripts/diagnose_seam_statements.js`, and its CLASSIFICATION is sound: it prepares each statement against a scratch schema built from the census and reads `statement.columns()`, which is a resolved answer from the schema rather than a guess about text. Its EXTRACTION is not. `extractStatements()` drops a `.prepare(` whose argument is not a plain literal: `:207` if the argument is a variable, `:216` if the template contains a `${…}`, `:222` if the literal is followed by `+`. The money column is never misread — the statement is never read at all. It says so on every run ("dynamically built and NOT executed"), and a statement that is never classified is a statement that is never counted, so **every money total the tool has produced was a floor presented as a count.**
+
+**HOW IT BIT US.** All four `routes/retail.js` money sites in the 62 survey were missed. In each one the money column arrives through `${owed}` — a plain string constant a dozen lines up:
+
+```js
+const owed = hasPricing ? 'COALESCE(pp.excel_gz_price, pp.excel_retail, sp.sell_price, 0)' : …
+… db.prepare(`SELECT ${bkL} AS bucket, -l.delta AS units, ${owed} AS owed …`)
+```
+
+The literal source text of that statement names no money column. The four were caught by hand-reading, which is not a method that scales to 2,799 statement sites.
+
+**THE HEADLINE: THREE MONEY WRITES THAT NO EXISTING TOOL COULD SEE. TWO ARE TENANT-SIDE — in the place gate 3 assumed was read-only.** All three hand-verified in source, not taken from the tool's word:
+
+| Site | Statement | Money column | Handle |
+| --- | --- | --- | --- |
+| `routes/products.js:454` | `INSERT INTO products (${FIELDS.join(',')}) VALUES (…)` | `products.sell_price` CENTS, written | SEAM |
+| `routes/retail.js:15899` | `UPDATE retail_referrals SET ${updates.join(', ')} WHERE id = ?` | `retail_referrals.reward_amount` CENTS, written | **TENANT** |
+| `routes/retail.js:18197` | `UPDATE store_products SET ${sets.join(', ')} WHERE id = ?` | `store_products.sell_price`, `store_products.compare_at_price` CENTS, both written | **TENANT** |
+
+None names a money column anywhere in its own source. `FIELDS` is a module-level array literal (`products.js:307`, `'sell_price'` on `:309`); `updates.push('reward_amount = ?')` is at `retail.js:15895`; `sets.push('sell_price = ?')` at `:18096` and `compare_at_price` at `:18100`. `retail.js:18197` is the product editor's save path. **These are recorded, not routed.** Routing them is a separate decision.
+
+**THE NEW INSTRUMENT.** `scripts/diagnose_money_sites.js` — a census over the whole in-scope surface that resolves the statement expression statically before classifying it: `${…}` placeholders including nested templates, concatenation and the `q += …` append form, ternaries as separate variants (never a spliced hybrid, which can invent an alias that never co-occurs with the column using it), column lists assembled from `sets.push('…')` and from array literals through `.filter()`/`.map()`/`.join()`, spread prefixes for the handle, and receivers broken across a line. It obeys the money rule recorded above — class from `plan.json`, `CENTS` or `NUM6`, never a column's name. It opens **no database** — not live SQLite, not scratch, not Postgres — and has no dependency outside Node's standard library. It is a static reader; `diagnose_seam_statements.js` asking SQLite via `statement.columns()` remains the stronger answer for the statements it can reach, and that harness is UNCHANGED and still carries the extraction blind spot described above.
+
+**VERIFIED AGAINST GROUND TRUTH BEFORE ANY NUMBER WAS BELIEVED.** It reports exactly four money writes in `database.js`, at `:731`, `:3398`, `:3419`, `:3545` — the same four, with the same kinds, that were established by hand in the RAW_OPEN work above. It reports 1,220 statement sites in `routes/retail.js`, which is the naive count, closing the 96-site nested-template SCANNER GAP that `db-seam-coverage.js` reports and states. Eleven sites were read in source by eye, including all three writes.
+
+**351 MONEY SITES IN SCOPE — AND THAT IS STILL A FLOOR, WITH THE GAP NOW MEASURED.** Against 246 under the old drop rule and 317 under a scan of the literal text: 116 writes, 235 reads, across 2,895 statement sites. **105 sites the old rule never classified; 34 of those are RESOLUTION-ONLY — the money column appears nowhere in the statement's source text and no scan of that text could ever have found it.** By handle: SEAM 78, TENANT 187, DIRECT 77, RAW_OPEN 4, UNRESOLVED 5. The excluded one-off scripts are reported separately and never folded in: 57 money sites of 482, 3 new.
+
+**WHAT REMAINS UNKNOWN, SPLIT INTO KNOWABLE AND PERMANENT.** 95 in-scope statements still carry an expression that cannot be reduced to text. **39 of them name a table that carries money columns — those are UNKNOWN, not clean — and 8 of the 39 are writes.** The classes:
+
+- **PERMANENT — no static tool reaches these.** Column names assembled from request keys: ``Object.keys(updates).map(k => `${k} = ?`)`` (`retail.js:14115`, `retail_vouchers`), ``useCols.map(c => `${c} = ?`)`` (`retail.js:17954`, `store_products`), `sets`/`def.col` built from caller data (`ingredients.js:230`, `retail.js:23237`). Column identity is a run-time fact there. Also the HANDLE at a site whose receiver is a function parameter: which database the value crosses is a caller fact, not a property of the file.
+- **PERMANENT-ISH — reachable only by reading the caller.** `products.js:511` and `:517` narrow a known array (`FIELDS.filter(f => f in req.body)`); the census over-approximates through `.filter()`, so the superset is seen, but where the source array is itself run-time it is not.
+- **KNOWABLE, NOT YET DONE — interprocedural, and a decision rather than a discovery.** Fragments returned by a function in the same file: `hasImageFallbackSql('p')` (12 sites), `AUTO_DELIVER_FROM_STATUSES.map(s => …)`. Predicate fragments — `where.join(' AND ')` (29 sites), `built.where` — where a money column can enter a WHERE clause the same way it enters a SET clause. These are counted as residual rather than assumed clean.
+
+The tool prints all of this on every run, so the floor is a stated limit and not a silent one.
+
+**THE 62 IS WRONG IN BOTH DIRECTIONS. THE HONEST NUMBER IS 83.** Measured, not estimated:
+
+- **12 of the 62 are not unresolved at all.** Six are `picks.push(...tdb().prepare(` in `retail.js` — the spread prefix defeats the coverage checker's receiver recovery, so plainly-TENANT sites land in UNRESOLVED. Four are `store-admin.js`'s `let tdb; try { tdb = getTenantDb(t.id); }` — a declaration with no initialiser plus a mid-line assignment, which its declaration and reassignment regexes both miss. Two are line-broken receivers, `db` on the line above `.prepare(`, at `finance.js:490` and `retail-purchasing.js:485`.
+- **33 sites it attributes confidently are function parameters.** Thirteen more in `retail.js`, `meituan-admin.js` 8, `retail-setup.js` 4, `guanyi-admin.js` 3, `tenant-db.js` 2, one each in `integrations-admin.js`, `eleme-admin.js`, `provision-tenant.js`. `routes/meituan-admin.js:470` is `function readOnlineStatus(db)`; that file holds ten separate `const db = tdb()` bindings, so the checker answers TENANT — and therefore counts it as COVERED.
+
+**Five of the 83 are money sites**, all in `retail.js`, all parameter receivers: `:11797` and `:11807` (`excel_gz_price`, `excel_retail`, `sell_price`), `:11855` (`retail_topup_transactions.amount`), `:11883` (`retail_orders.balance_used`), `:17868` (`sell_price`, `compare_at_price`).
+
+**COVERAGE STAYS 75.28%, AND ITS LEAN IS NOW WRITTEN DOWN RATHER THAN SILENTLY CARRIED.** `db-seam-coverage.js` is NOT changed by this pass: it produces the figure of record, and moving that figure is a decision, not a side effect of a survey. What must be recorded is the direction of its error. The 12 misfiled sites make the number too LOW; the 33 guessed parameters make it too HIGH, and some of those are counted as covered. **So the tracked 75.28% now carries a known optimistic lean.** Of the 351 money sites, 265 read as covered (SEAM 78 + TENANT 187) and 86 as not (DIRECT 77, RAW_OPEN 4, UNRESOLVED 5) — but that split rests on the same parameter guesses, so it is an estimate biased toward flattering itself, not a count. Closing it is hand work: read the callers of those 33 sites. The receiver fix in the checker is its own tracked change and is deliberately not made here.
+
+**HONEST LIMITS OF THIS ENTRY.**
+
+- The prior 62-survey's own record is not in the repository, so its "11 by hand / 5 by tool" could not be read. The population was reconstructed from the tools and re-measured. The numbers above are this pass's, not a reconciliation with that pass's.
+- The census resolves TEXT, not VALUES. It over-approximates deliberately — unioning ternary branches and `push` fragments that may never fire together — because a money column present in any branch means the statement can carry money. Every hit prints the statement it resolved to, so an over-approximation is visible rather than silent.
+- One SCANNER GAP remains open and stated by the tool: `scripts/diagnose_seam_mechanism.js`, 62 attributed against a naive 63. The extra is a `.prepare(` written inside a string literal at `:416`, not a real site. No gap anywhere in scope.
+- Nothing was routed, no application file was touched, and no database was opened in the pass that produced this.
 
 ### Three deploy findings recorded, NOT fixed — 2026-08-05
 
