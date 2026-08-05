@@ -909,6 +909,57 @@ The deployed production sha, read from `/root/roots-v2/.deploy-state/last-succes
 
 **THE META-FACT, PLAINLY.** This figure had been stated twice in prior passes and was read once here. Reading it dissolved a four-commit gap that would otherwise have been reasoned about — the gap was never there. The cost of reading the record was one line.
 
+### Ten money writes were hiding in the `routes/retail.js` scanner blind spot — FINDING 2026-08-05
+
+Read-only, static survey. No database was opened; the no-pg-connection constraint holds; nothing was routed, no scanner was changed and no coverage figure moved.
+
+**THE BLIND SPOT IS ONE CONTIGUOUS WINDOW, AND IT IS THE REFUND PATH.** The coverage scrubber desynchronises on a nested `${...}` template and cannot parse `routes/retail.js` lines **22368–24197** — the shipping, tracking and refund region. The **96** statement sites in that window were absent from BOTH the numerator and the denominator: neither counted covered nor counted uncovered, invisible to the measurement in either direction.
+
+**96 IS EXACT, NOT A FLOOR — ESTABLISHED TWICE, INDEPENDENTLY.** The scanner's own arithmetic (1220 naive − 1124 attributed) could not be trusted to give it, because the naive count is produced by the same desynchronising `scrub()` and can lose occurrences itself. So the set was established two other ways: a nested-template-aware lexer with full `${...}` recursion, which finds **1220** `.prepare(` occurrences and puts **all 1220 in genuine code positions** — none hidden inside emitted HTML; and lifting the scanner's own `scrub()` out of its source at runtime and diffing what survives it, which gives **1124 visible, 96 invisible, 0 false positives**. Both agree. The window is clean at both ends: all 96 true sites inside 22368–24197 are blind, and **0** of the 1,124 sites outside it are — 933 before, 191 after. One desync, one resync.
+
+**TEN OF THEM ARE MONEY WRITES.** All ten are on `tdb()`, which returns `seam(...)` — **on the seam, none raw**. All ten are on the refund path. All bind **fractional-yuan** values into CENTS columns: the surrounding code reads `+(priorApproved + amount).toFixed(2)`, `+(Number(_row.total) || 0).toFixed(2)` and the like. They are **distinct from the three characterised in run 35** — `retail.js:15899` and `:18197` are below 22368 and were always in the visible region. They sit in the **same untouched-passthrough / 100×-bigint condition** as those three, except that until now they were unrecorded AND invisible to coverage in both directions.
+
+Every column below is classified from `plan.json` `cls`, never from its name; every site was read in source and the parse confirmed verbatim.
+
+| site | kind | table | money columns (all CENTS) |
+|---|---|---|---|
+| `23102` | UPDATE | `retail_payments` | `refunded_amount` (SET), `amount` referenced |
+| `23289` | UPDATE | `retail_payments` | `amount` |
+| `23295` | INSERT | `retail_payments` | `amount` |
+| `23380` | UPDATE | `retail_orders` | `refund_amount_approved`, `refund_amount_paid` |
+| `23392` | UPDATE | `retail_payments` | `refunded_amount = amount` |
+| `23429` | UPDATE | `retail_orders` | `refund_amount_approved`, `refund_amount_paid`, `refund_cash_amount` |
+| `23451` | UPDATE | `retail_payments` | `refunded_amount = amount` |
+| `23784` | UPDATE | `retail_orders` | `refund_amount_approved`, `refund_cash_amount` |
+| `23936` | UPDATE | `retail_orders` | `refund_amount_paid` |
+| `24097` | UPDATE | `retail_orders` | `refund_amount_requested`, `refund_amount_approved`, `refund_amount_paid`, `refund_cash_amount` |
+
+**THE READS, RECORDED FOR COMPLETENESS AND NOT AS THE HEADLINE.** 16 money reads in the same window: 13 that name their columns, plus three `SELECT * FROM retail_orders` at `23474`, `23593` and `23629`, each returning all **12** CENTS columns of that table — a case column-name matching would have missed, stated because it is the false negative this method was prone to. One read is behaviourally load-bearing under conversion: **`23123` compares `COALESCE(refunded_amount, 0) + 0.005 < amount`** — a half-fen epsilon expressed in yuan and decided SQL-side. Under bigint cents that comparison stops meaning what it was written to mean.
+
+**THE TALLY, AND THE ZERO THAT WAS CHECKED RATHER THAN ASSUMED.** 96 = **10 money writes + 16 money reads + 70 non-money**, with **0 unresolved**. Every site resolved to a table present in the census. The one genuinely dynamic column list — `23237`, `UPDATE retail_orders SET ${sets.join(', ')}` — was hand-resolved by enumerating every `sets.push` in its handler and class-checking each candidate against `plan.json`: `status`, `updated_at`, `def.col` ∈ {`paid_at`, `preparing_at`, `dispatched_at`, `delivered_at`, `cancelled_at`, null}, `payment_method`, `cancelled_reason`, `staff_note`, `refund_status` — TEXT and TS only, **no money column can appear**. One raw handle is noted in the window and is not a money site: `22775` uses a bare `db`, which resolves to the module-level `require('../database')` (DIRECT, not seam) because its enclosing handler declares no local `db`; its table is `activity_log`, which carries no money columns.
+
+### A CONVERTER CANNOT REACH SQL-SIDE MONEY EXPRESSIONS — STRUCTURAL LIMIT 2026-08-05
+
+This is a limit on what the converter design can achieve, not a fact about any particular set of sites.
+
+**A JavaScript boundary converter fixes BOUND PARAMETERS — the `?` values the application hands the driver. It structurally CANNOT reach money that lives on the SQL right-hand side**: column-to-column assignments and arithmetic performed inside the statement. Those values never cross the JavaScript boundary, so there is no point at which a converter could see them.
+
+**THE DANGEROUS PART IS THAT IT LOOKS LIKE COVERAGE.** Seating a converter at such a site converts the bound parameter and leaves the column-side expression exactly as it was. The site is then reported as covered, the statement still carries an unconverted money value, and nothing anywhere announces the difference. **That is worse than an open gap: an open gap is counted, and this is not.**
+
+Five of the ten writes recorded in the blind-spot finding above are of this kind and are named here as **converter-unreachable**:
+
+| site | the expression a converter cannot reach |
+|---|---|
+| `23102` | `MIN(amount, COALESCE(refunded_amount, 0) + ?)` and `CASE WHEN amount <= COALESCE(refunded_amount, 0) + ?` |
+| `23392` | `refunded_amount = amount` — column to column |
+| `23429` | `COALESCE(refund_amount_approved, ?)` |
+| `23451` | `refunded_amount = amount` — column to column |
+| `24097` | `MAX(COALESCE(refund_amount_requested, 0), ?)` |
+
+At each of these, seating a converter fixes the bound `?` and leaves the column-side expression untouched.
+
+**THE DESIGN CONSEQUENCE, WHICH IS THE DURABLE POINT.** The converter-seating work **cannot be planned as though seating the converter closes the money risk on the refund path.** It closes the parameter half of it. SQL-side money expressions need a separate mechanism — rewriting the statements, or handling the schema and units so that the in-SQL arithmetic is correct under bigint cents. **Which mechanism is an OPEN DESIGN QUESTION and is deliberately not answered here.** It is recorded now so that the converter's scope is drawn with this limit already in it, rather than discovered after the converter is seated and believed to be sufficient.
+
 ## 25. Related documents
 
 - docs/tacet-glossary.md — binding definitions, v1.4, 2026-07-31. The words in this document are used with the meanings defined there.
