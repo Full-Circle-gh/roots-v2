@@ -8,7 +8,11 @@
 // operator signed in" — a logged-out request just gets empty results.
 
 const express = require('express');
-const db = require('../database');
+// Routed through the database seam (lib/db-seam.js). No converter is installed,
+// so this is a zero-cost passthrough; the point is that this file is now on the
+// covered side of the boundary. Proven by scripts/diagnose_seam_batch.js.
+const { seam } = require('../lib/db-seam');
+const db = seam(require('../database'));
 const { requireBackend } = require('../lib/require-cap');
 const router = express.Router();
 

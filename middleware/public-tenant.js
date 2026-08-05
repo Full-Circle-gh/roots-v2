@@ -14,7 +14,11 @@
 // land on Roots' own public catalogue — never another tenant's customer data
 // (auth tokens live in each tenant's own DB, so a mismatched token just fails).
 
-const db = require('../database');
+// Routed through the database seam (lib/db-seam.js). No converter is installed,
+// so this is a zero-cost passthrough; the point is that this file is now on the
+// covered side of the boundary. Proven by scripts/diagnose_seam_batch.js.
+const { seam } = require('../lib/db-seam');
+const db = seam(require('../database'));
 const { getTenantDb, rawTenantDb, tenantAls, ROOTS_TENANT_ID } = require('../lib/tenant-db');
 
 // Normalize a Host header to a bare lowercased hostname (strip any :port).
