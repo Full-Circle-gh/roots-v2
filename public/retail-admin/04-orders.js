@@ -523,7 +523,13 @@ function renderAlipayProof(o) {
   // What the AI read, one row each — only the fields it actually found.
   const facts = [];
   if (d.amount != null) facts.push(`<li><span class="k">${cuT('Amount', '金额')}</span><span class="v amt${v === 'mismatch' ? ' bad' : ''}">¥${Number(d.amount).toFixed(2)}</span></li>`);
-  if (d.payee) facts.push(`<li><span class="k">${cuT('Paid to', '收款方')}</span><span class="v" data-no-i18n>${escapeHtml(d.payee)}</span></li>`);
+  // Two names can come off one 收钱码: the shop's display name on the success
+  // screen and the registered 收款方全称 on the 账单详情 page. Show both when the
+  // screenshot carried both, so staff can see at a glance it's the same code.
+  const payeeShown = d.payee || d.payee_full || '';
+  const payeeAlt = d.payee && d.payee_full && d.payee_full !== d.payee ? d.payee_full : '';
+  if (payeeShown) facts.push(`<li><span class="k">${cuT('Paid to', '收款方')}</span><span class="v" data-no-i18n>${escapeHtml(payeeShown)}</span></li>`);
+  if (payeeAlt) facts.push(`<li><span class="k">${cuT('Account name', '收款方全称')}</span><span class="v" data-no-i18n>${escapeHtml(payeeAlt)}</span></li>`);
   if (paidAt) facts.push(`<li><span class="k">${cuT('Paid at', '付款时间')}</span><span class="v" data-no-i18n>${escapeHtml(paidAt)}</span></li>`);
   if (d.txn_id) facts.push(`<li><span class="k">${cuT('Txn', '流水号')}</span><span class="v">${copyChip(d.txn_id, 'Txn ID')}</span></li>`);
 

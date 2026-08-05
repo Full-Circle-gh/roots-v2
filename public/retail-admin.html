@@ -9394,12 +9394,19 @@
                       <input type="password" id="alipay-manual-key" autocomplete="off" placeholder="sk-ant-… · paste once, leave blank to keep · 留空则保持不变" style="width: 100%; font-family: monospace;">
                     </div>
                     <div class="field" style="margin: 0 0 8px;">
-                      <label class="stacked">Expected payee contains · 收款方应包含</label>
-                      <input type="text" id="alipay-manual-payee" placeholder="e.g. 哈素萌 或 玲 — must appear in the screenshot's 收款方" style="width: 100%;">
+                      <label class="stacked">Accepted payee names · 收款方名称(可多个)</label>
+                      <input type="text" id="alipay-manual-payee" placeholder="哈素萌, 玲 — separate with commas · 多个用逗号分隔" style="width: 100%;">
+                      <div class="muted" style="margin-top:4px; line-height:1.5;">List every name your 收钱码 can show and any one is enough to pass. The success screen shows the shop's display name (哈素萌); the 账单详情 page the customer opens later shows the registered name instead (*玲(个人)) — list both, or leave blank to skip this check. Stars, brackets and spaces are ignored. · 请列出收钱码可能显示的所有名称,命中任一即通过。支付成功页显示店铺名(哈素萌),顾客事后打开的账单详情页显示的是账户全称(*玲(个人)) — 两个都填,或留空则不检查。星号、括号、空格自动忽略。</div>
                     </div>
                     <div class="field" style="margin: 0 0 8px;">
-                      <label class="stacked">Accept payments within (minutes, 0 = no time check) · 付款时间不超过(分钟,0=不检查)</label>
-                      <input type="number" id="alipay-manual-window" min="0" max="1440" placeholder="60" style="width: 100%; font-family: monospace;">
+                      <label class="stacked">Pay within (minutes, 0 = no deadline) · 付款期限(分钟,0=不限)</label>
+                      <input type="number" id="alipay-manual-window" min="0" max="1440" placeholder="30" style="width: 100%; font-family: monospace;">
+                      <div class="muted" style="margin-top:4px; line-height:1.5;">The deadline shown to the customer: an Alipay order with no screenshot uploaded by then is auto-cancelled and its stock released. Keep it tight. · 顾客看到的付款期限:到期仍未上传截图的支付宝订单会自动取消并释放库存,建议设短一些。</div>
+                    </div>
+                    <div class="field" style="margin: 0 0 8px;">
+                      <label class="stacked">Screenshot may be up to (minutes old, 0 = same as above) · 截图最长可早于上传(分钟,0=同上)</label>
+                      <input type="number" id="alipay-manual-proof-age" min="0" max="1440" placeholder="120" style="width: 100%; font-family: monospace;">
+                      <div class="muted" style="margin-top:4px; line-height:1.5;">Only affects the AI check: the gap between the payment time printed on the screenshot and the moment the customer uploads it. Keep this generous (120 is a good start) even with a tight deadline above — paying, then digging the receipt out of the Alipay bill history a while later is normal, and a re-used screenshot is already blocked by the image/transaction check. · 仅影响 AI 核对:截图上的付款时间与上传时间之间的间隔。即使上面期限较短,这里也建议放宽(120 分钟起步) — 顾客付完款过一会儿再去账单里翻截图很常见;重复使用的截图已由图片/交易号去重拦截。</div>
                     </div>
                     <label style="display:flex; align-items:center; gap:8px; font-weight:700; color:#991b1b;">
                       <input type="checkbox" id="alipay-manual-autoflip"> ⚡ Auto-mark paid on full match (no human review) · 完全匹配时自动标记付款(无需人工)

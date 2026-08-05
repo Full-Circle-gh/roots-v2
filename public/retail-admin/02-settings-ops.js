@@ -48,11 +48,13 @@ async function loadAlipayManual() {
     const af  = document.getElementById('alipay-manual-autoflip');
     const pm  = document.getElementById('alipay-manual-payee');
     const win = document.getElementById('alipay-manual-window');
+    const age = document.getElementById('alipay-manual-proof-age');
     const key = document.getElementById('alipay-manual-key');
     if (ocr) ocr.checked = !!d.ocrEnabled;
     if (af)  af.checked = !!d.autoFlip;
     if (pm)  pm.value = d.payeeMatch || '';
     if (win) win.value = d.timeWindowMin || '';
+    if (age) age.value = d.proofAgeMin || '';
     if (key) {
       key.value = '';
       key.placeholder = d.hasKey ? (d.keyMasked + ' · leave blank to keep · 留空保持不变')
@@ -129,6 +131,7 @@ async function saveAlipayManualInline() {
     autoFlip: chk('alipay-manual-autoflip'),
     payeeMatch: val('alipay-manual-payee'),
     timeWindowMin: parseInt(val('alipay-manual-window'), 10) || 0,
+    proofAgeMin: parseInt(val('alipay-manual-proof-age'), 10) || 0,
   };
   // API key only when freshly typed (blank = keep existing server-side).
   const typedKey = val('alipay-manual-key');

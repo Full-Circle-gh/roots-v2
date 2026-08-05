@@ -3327,6 +3327,22 @@ function parseBeijingTime(s) {
   return null;
 }
 
+// One Alipay 收钱码 legitimately shows TWO different names depending on which
+// screen the customer screenshots: the shop's DISPLAY name on the success page
+// ("Govegan 哈素萌") and the account's registered 收款方全称 on the 账单详情 page
+// ("*玲(个人)") — same code, same money, two fields. So the operator's setting is
+// a LIST of acceptable names (comma / 、 / newline separated) and the check
+// passes when ANY configured name appears in ANY name the AI read.
+function payeeNames(spec) {
+  return String(spec || '').split(/[,，、;；\r\n]+/).map((s) => s.trim()).filter(Boolean);
+}
+// Compare on letters/digits only: Alipay decorates the registered name with a
+// masking star and bracketed account type ("*玲(个人)"), so a configured "玲"
+// must still match. Case-folded for the latin half of a mixed name.
+function normPayee(s) {
+  return String(s || '').replace(/[\s*·・.。,，、()（）【】\[\]]/g, '').toLowerCase();
+}
+
 // Validate a Vision-AI reading of an uploaded payment screenshot against the
 // order. Returns { verdict: 'match'|'mismatch', reasons: [...], checks: {...} }.
 // HARD checks (all must pass for 'match'): success screen, amount == order total,
@@ -3334,7 +3350,12 @@ function parseBeijingTime(s) {
 // the window (when set). The txn-id reuse check is applied by the caller (needs
 // a cross-order query). A screenshot is forgeable, so 'match' only *permits* an
 // auto-flip when the operator enabled it — it is never proof on its own.
-function validateAlipayProof(order, ocr, manual) {
+//
+// refMs is the instant the freshness window is measured against — the moment the
+// customer UPLOADED the proof, not "now". On the live upload path they're the
+// same; on the admin's "read it again" button they are not, and measuring from
+// now would fail every re-run on an older order for being hours stale.
+function validateAlipayProof(order, ocr, manual, refMs) {
   const reasons = [];
   const checks = {};
   // 1. success screen
@@ -3349,18 +3370,28 @@ function validateAlipayProof(order, ocr, manual) {
   const got = ocr.amount == null ? null : Number(ocr.amount).toFixed(2);
   checks.amount = got != null && Number(got) >= Number(want) - 0.005;
   if (!checks.amount) reasons.push(`amount ${got == null ? 'unreadable' : '¥' + got} < expected ¥${want}`);
-  // 3. payee contains the configured match text (skip if not configured)
-  const payeeMatch = (manual.payeeMatch || '').trim();
-  if (payeeMatch) {
-    const ok = !!ocr.payee && ocr.payee.replace(/\s+/g, '').toLowerCase().includes(payeeMatch.replace(/\s+/g, '').toLowerCase());
+  // 3. payee matches one of the configured names (skip if not configured). Both
+  // names the screenshot can carry are candidates — the display name and the
+  // registered 收款方全称 — so either screen passes on one setting.
+  const wants = payeeNames(manual.payeeMatch).filter((w) => normPayee(w));
+  if (wants.length) {
+    const got = [ocr.payee, ocr.payee_full].filter(Boolean);
+    const ok = got.some((g) => wants.some((w) => normPayee(g).includes(normPayee(w))));
     checks.payee = ok;
-    if (!ok) reasons.push(`payee ${ocr.payee ? '“' + ocr.payee + '”' : 'unreadable'} doesn’t match “${payeeMatch}”`);
+    if (!ok) {
+      reasons.push(`payee ${got.length ? got.map((g) => '“' + g + '”').join(' / ') : 'unreadable'} doesn’t match ${wants.map((w) => '“' + w + '”').join(' or ')}`);
+    }
   } else { checks.payee = null; }
   // 4. recent payment time (skip if window is 0/unset). An unreadable timestamp
   // is a "couldn't verify", not evidence the payment is wrong — so we only call
   // it out when it is the *deciding* factor (amount/payee/success all passed).
   // Otherwise it's just noise next to a concrete mismatch like a wrong amount.
-  const win = Number(manual.timeWindowMin || 0);
+  // How old the receipt may be is its OWN setting, because timeWindowMin does
+  // double duty as the auto-cancel deadline for Alipay orders nobody paid
+  // (cancelStalePendingOrdersForTenant) — stretching it to forgive a late
+  // screenshot would also make abandoned carts sit on stock for that long. Unset
+  // → fall back to timeWindowMin, so an existing install behaves as it always did.
+  const win = Number(manual.proofAgeMin || 0) || Number(manual.timeWindowMin || 0);
   if (win > 0) {
     // Prefer a printed transaction time; fall back to the phone's status-bar
     // clock (HH:MM) when the success screen shows no timestamp of its own. The
@@ -3371,7 +3402,7 @@ function validateAlipayProof(order, ocr, manual) {
       checks.time = false;
       if (checks.success && checks.amount && checks.payee !== false) reasons.push("couldn't read the payment time on the screenshot");
     } else {
-      const ageMin = (Date.now() - t) / 60000;
+      const ageMin = ((Number.isFinite(refMs) ? refMs : Date.now()) - t) / 60000;
       checks.time = ageMin >= -10 && ageMin <= win;   // allow 10min clock skew
       if (!checks.time) reasons.push(`payment time ${Math.round(ageMin)}min ago is outside the ${win}min window`);
     }
@@ -4715,15 +4746,16 @@ async function readAlipayProofWithRetry(img, manual) {
 
 // Read + verify an Alipay proof image and persist the verdict on the order.
 // Shared by the customer upload route and the admin "re-run OCR" action so both
-// apply the same reuse-guard, auto-flip rule and fail-soft behaviour. Returns
+// apply the same reuse-guard, auto-flip rule and fail-soft behaviour. refMs is
+// passed straight to the freshness check (see validateAlipayProof). Returns
 // { verdict, autoPaid }. Auto-flip ONLY fires for a clean match on a still-
 // pending order with the operator toggle on — re-running on an already-shipped
 // order can never re-flip it.
-async function ocrVerifyAlipayProof(order, img, imgHash, manual) {
+async function ocrVerifyAlipayProof(order, img, imgHash, manual, refMs) {
   let verdict = null, autoPaid = false;
   try {
     const ocr = await readAlipayProofWithRetry(img, manual);
-    const v = validateAlipayProof(order, ocr, manual);
+    const v = validateAlipayProof(order, ocr, manual, refMs);
     verdict = v.verdict;
     // Reuse guard — the real defense against "upload an old screenshot". The
     // primary key is the image itself (the same screenshot can't settle two
@@ -17417,6 +17449,7 @@ router.get('/api/retail-admin/alipay-manual', requireRetailAdmin, (req, res) => 
     enabled: !!v.enabled, account: v.account || '', qr: v.qr || '',
     ocrEnabled: !!v.ocrEnabled, autoFlip: !!v.autoFlip,
     payeeMatch: v.payeeMatch || '', timeWindowMin: Number(v.timeWindowMin || 0),
+    proofAgeMin: Number(v.proofAgeMin || 0),
     hasKey: !!key, keyMasked: key ? ('sk-…' + key.slice(-4)) : '',   // never return the raw key
     serverKeyAvailable: alipayOcr.ocrAvailable(''),   // shared model key present → no per-tenant key needed
   }});
@@ -17438,8 +17471,9 @@ router.put('/api/retail-admin/alipay-manual', requireRetailAdmin, express.json({
     qr,
     ocrEnabled: !!b.ocrEnabled,
     autoFlip: !!b.autoFlip,
-    payeeMatch: String(b.payeeMatch || '').slice(0, 80),
+    payeeMatch: String(b.payeeMatch || '').slice(0, 200),   // a LIST of accepted names, not one
     timeWindowMin: Math.max(0, Math.min(1440, parseInt(b.timeWindowMin, 10) || 0)),
+    proofAgeMin: Math.max(0, Math.min(1440, parseInt(b.proofAgeMin, 10) || 0)),   // 0 = follow timeWindowMin
     anthropicKey,
   };
   if (cfg.enabled && !cfg.qr) return res.status(400).json({ success: false, error: 'qr_required' });
@@ -23576,7 +23610,7 @@ router.get('/api/retail-admin/orders/:id/jd-waybill/print-data', requireRetailAd
 router.post('/api/retail-admin/orders/:id/alipay-ocr/rerun', requireRetailAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const order = tdb().prepare(
-    'SELECT id, status, payment_method, total, alipay_proof_image, alipay_proof_hash FROM retail_orders WHERE id = ?'
+    'SELECT id, status, payment_method, total, alipay_proof_image, alipay_proof_hash, alipay_proof_at FROM retail_orders WHERE id = ?'
   ).get(id);
   if (!order) return res.status(404).json({ success: false, error: 'not_found' });
   if (order.payment_method !== 'alipay' || !order.alipay_proof_image) {
@@ -23587,7 +23621,11 @@ router.post('/api/retail-admin/orders/:id/alipay-ocr/rerun', requireRetailAdmin,
     return res.status(400).json({ success: false, error: 'ocr_unavailable' });
   }
   const imgHash = order.alipay_proof_hash || crypto.createHash('sha256').update(order.alipay_proof_image).digest('hex');
-  const { verdict, autoPaid } = await ocrVerifyAlipayProof(order, order.alipay_proof_image, imgHash, manual);
+  // Re-read the SAME screenshot the customer uploaded, so the freshness window
+  // is measured from THAT upload — not from whenever staff tapped the button.
+  const uploadedMs = order.alipay_proof_at
+    ? Date.parse(String(order.alipay_proof_at).replace(' ', 'T') + 'Z') : NaN;
+  const { verdict, autoPaid } = await ocrVerifyAlipayProof(order, order.alipay_proof_image, imgHash, manual, uploadedMs);
   logActivity(req.user.id, req.user.username, 'rerun_ocr', 'retail_order', id, { verdict, auto_paid: autoPaid }, req.ip);
   res.json({ success: true, data: { verdict, auto_paid: autoPaid } });
 });
