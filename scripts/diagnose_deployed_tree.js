@@ -83,6 +83,14 @@ const FILES = ['server.js', 'database.js', 'schema.sql', 'package.json', 'packag
 const SW = 'public/sw.js';
 const SW_STAMP_RE = /(const CACHE = 'roots-v2-shell)[^']*(';)/;
 
+// This file cannot measure itself. Its own hash changes every time the manifest
+// below is regenerated, so an entry for it would be stale the moment it is
+// written — the manifest would have to contain the hash of a file that contains
+// that hash. Excluded from BOTH sides rather than left to surface as a false
+// DIFFERS or a misleading EXTRA. A measurement tool that cannot measure itself
+// should say so rather than report a number it knows is wrong.
+const SELF = 'scripts/diagnose_deployed_tree.js';
+
 let FAILURES = 0;
 const fail = (m) => { FAILURES++; console.log('   FAIL  ' + m); };
 const ok = (m) => console.log('   ok    ' + m);
@@ -125,6 +133,8 @@ function main() {
   for (const f of FILES) { if (fs.existsSync(path.join(APP, f))) onBox.push(f); }
   onBox.sort();
   console.log(`   ${onBox.length} deployable file(s) found under ${APP}`);
+  const selfIdx = onBox.indexOf(SELF);
+  if (selfIdx !== -1) { onBox.splice(selfIdx, 1); console.log(`   (excluding ${SELF} — see SELF above)`); }
 
   const boxHash = new Map();
   const unreadable = new Set();
@@ -199,13 +209,18 @@ function main() {
 // Regenerate against a newer commit with:
 //
 //   for f in $(git ls-tree -r --name-only HEAD | grep -E '^(public|routes|lib|middleware|scripts)/|^(server\.js|database\.js|schema\.sql|package(-lock)?\.json)$'); do
+//     [ "$f" = scripts/diagnose_deployed_tree.js ] && continue   # SELF — see above
 //     printf '  "%s": %s,\n' "$f" "'$(git rev-parse HEAD:"$f")'"
 //   done
+//
+// SELF is excluded, so the manifest is identical for MANIFEST_COMMIT and for the
+// commit that regenerates it — this file is the only thing that changes between
+// the two. That is what keeps the regeneration from chasing its own tail.
 //
 // MANIFEST_SW_NORMALIZED is public/sw.js hashed with its CACHE stamp replaced by
 // the literal <STAMP>, matching what SW_STAMP_RE does to the deployed copy.
 // ════════════════════════════════════════════════════════════════════════════
-const MANIFEST_COMMIT = '2e24221b3bcdb6ae1c2a434083669104a3c2d543';
+const MANIFEST_COMMIT = 'ad9451294281fce60520c5ee797126aafe3c6347';
 const MANIFEST_SW_NORMALIZED = '9199c16737e6d1c86d59fca5ab6e5a61b436f8e0';
 const MANIFEST = {
   "database.js": '85956ce91e13ec5bf04bf8c366d070385c1e9c50',
@@ -642,6 +657,7 @@ const MANIFEST = {
   "scripts/suggest_gzgrocery_aliases.js": '6015f9f851f58bed8a893a81726d1c5b619b8394',
   "scripts/sync_home_cn.js": 'ecb7c8e99cf5bad8caadf18f1df1b7ff4d28c63a',
   "scripts/td-datetime-check.js": 'e0119702d87670321829a322119dc72d8419cfdc',
+  "scripts/test-deploy-base.sh": 'ac2c6d66dd7fb909970e56ef52584e424b0baefc',
   "scripts/test-fulfillment-reroute.js": '1fc9b2856a22cf94e20759cf94e1fbf289bb9a1e',
   "scripts/test_brand.js": 'd69e937c60520f51c5a453c16cf5796ca58793ed',
   "scripts/test_retail_local.js": 'a7269dff23b862e65024a7df03208f122b04a04d',
@@ -687,7 +703,7 @@ const MANIFEST = {
   "scripts/wizard_ph_06_finish.png": '6def24f48b9e931cee350564f11ea930c3ed9db7',
   "scripts/wizard_ph_07_import.png": '8e73dbf225359305d2c69142305d28b04990d56e',
   "scripts/wizard_ph_manifest.json": 'f07fc89b1b97079d5d29b32df643f7d93d9f9aa0',
-  "server.js": 'd74029d6a90aa4c04d9ede530d85a922d0e0cd8f'
+  "server.js": 'd74029d6a90aa4c04d9ede530d85a922d0e0cd8f',
 };
 
 main();
