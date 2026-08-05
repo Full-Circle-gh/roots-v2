@@ -115,14 +115,30 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 // terminal errors and drifting stock. Gating the loop on a cheap curl probe turns
 // a proxy outage into a clean, logged pause instead. Direct mode (no proxy) is
 // always "healthy", so this is a no-op when 闪购 runs on the box's direct IP.
-const SHANGOU_PROXY = process.env.SHANGOU_PROXY_UPSTREAM != null
-  ? process.env.SHANGOU_PROXY_UPSTREAM
-  : (process.env.MEITUAN_PROXY_URL || '');
+//
+// Probe the ACTIVE proxy — the failover watchdog's live choice, which is what
+// shangou-chrome actually launched Chrome on (it reads the same 'yuexiu' key out
+// of data/proxy-active.json) — not a static env value. Probing the env default
+// instead pauses the whole loop and pages 代理掉线 while Chrome is happily
+// syncing over a healthy fallback path.
+function activeProxy() {
+  try {
+    const a = require('../lib/proxy-manager').readActive('yuexiu');
+    if (a !== undefined) return a;               // '' = direct, and that is a real answer
+  } catch (_) { /* manager optional — fall back to env */ }
+  return process.env.SHANGOU_PROXY_UPSTREAM != null
+    ? process.env.SHANGOU_PROXY_UPSTREAM
+    : (process.env.MEITUAN_PROXY_URL || '');
+}
 function proxyHealthy(timeoutSec = 8) {
-  if (!SHANGOU_PROXY) return Promise.resolve(true);
+  const proxy = activeProxy();
+  if (!proxy) return Promise.resolve(true);
+  // curl wants socks5h:// for remote DNS through a SOCKS5 exit — plain socks5://
+  // resolves locally, which fails on the residential path Chrome handles fine.
+  const probeUrl = proxy.startsWith('socks5://') ? 'socks5h://' + proxy.slice(9) : proxy;
   return new Promise((resolve) => {
     execFile('curl',
-      ['-s', '-o', '/dev/null', '-w', '%{http_code}', '-x', SHANGOU_PROXY,
+      ['-s', '-o', '/dev/null', '-w', '%{http_code}', '-x', probeUrl,
        '--max-time', String(timeoutSec), 'https://shangoue.meituan.com/'],
       { timeout: (timeoutSec + 4) * 1000 },
       (_err, stdout) => {
@@ -795,7 +811,7 @@ async function main() {
       proxyFailStreak++;
       if (!alerts['proxy_down'] && proxyFailStreak >= PROXY_DOWN_GRACE) {
         alerts['proxy_down'] = true;
-        console.log(`[shangou-daemon] ${new Date().toISOString()} PROXY UNREACHABLE (${maskProxy(SHANGOU_PROXY)}) — pausing sync until it recovers (the session is NOT logged out)`);
+        console.log(`[shangou-daemon] ${new Date().toISOString()} PROXY UNREACHABLE (${maskProxy(activeProxy())}) — pausing sync until it recovers (the session is NOT logged out)`);
         for (const s of SHANGOU_STORES) logSync(s, 'proxy_down', 'error', null, 'proxy cannot reach Meituan — sync paused');
         sendOpsAlert(`🔴 美团闪购 代理掉线，无法连接美团，同步已暂停（未掉登录）\nMeituan 闪购 proxy down — can't reach Meituan, sync paused (not logged out)`);
       }

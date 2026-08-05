@@ -130,14 +130,31 @@ function heartbeat(storeCode, loggedIn) {
 // TCP-accepts but can't complete upstream requests, every page fetch fails and the
 // daemon MISREADS it as "needs login". Gate the loop on a cheap curl probe. Direct
 // mode (no proxy) is always healthy → no-op.
-const PROXY = process.env.QINGYUN_PROXY_UPSTREAM != null
-  ? process.env.QINGYUN_PROXY_UPSTREAM
-  : (process.env.MEITUAN_PROXY_URL || '');
+//
+// Probe the ACTIVE proxy — the failover watchdog's live choice, which is what
+// qingyun-chrome actually launched Chrome on (it follows the same
+// data/proxy-active.json key, QINGYUN_PROXY_STORE) — not a static env value.
+// Probing the env default instead pauses the whole loop and pages 代理掉线 while
+// Chrome is happily tracking over a healthy fallback path.
+const PROXY_STORE = process.env.QINGYUN_PROXY_STORE || 'tianhe';
+function activeProxy() {
+  try {
+    const a = require('../lib/proxy-manager').readActive(PROXY_STORE);
+    if (a !== undefined) return a;               // '' = direct, and that is a real answer
+  } catch (_) { /* manager optional — fall back to env */ }
+  return process.env.QINGYUN_PROXY_UPSTREAM != null
+    ? process.env.QINGYUN_PROXY_UPSTREAM
+    : (process.env.MEITUAN_PROXY_URL || '');
+}
 function proxyHealthy(timeoutSec = 8) {
-  if (!PROXY) return Promise.resolve(true);
+  const proxy = activeProxy();
+  if (!proxy) return Promise.resolve(true);
+  // curl wants socks5h:// for remote DNS through a SOCKS5 exit — plain socks5://
+  // resolves locally, which fails on the residential path Chrome handles fine.
+  const probeUrl = proxy.startsWith('socks5://') ? 'socks5h://' + proxy.slice(9) : proxy;
   return new Promise((resolve) => {
     execFile('curl',
-      ['-s', '-o', '/dev/null', '-w', '%{http_code}', '-x', PROXY,
+      ['-s', '-o', '/dev/null', '-w', '%{http_code}', '-x', probeUrl,
        '--max-time', String(timeoutSec), 'https://saas.cyanclouds.com/'],
       { timeout: (timeoutSec + 4) * 1000 },
       (_err, stdout) => {
@@ -692,7 +709,7 @@ async function main() {
       // itself waits for a store to be open (see alertsAllowed), so the console is
       // the only trace of a night-time drop until then.
       if (proxyFailStreak === PROXY_DOWN_GRACE) {
-        console.log(`[qingyun-daemon] ${new Date().toISOString()} PROXY UNREACHABLE (${maskProxy(PROXY)}) — pausing (session NOT logged out)`);
+        console.log(`[qingyun-daemon] ${new Date().toISOString()} PROXY UNREACHABLE (${maskProxy(activeProxy())}) — pausing (session NOT logged out)`);
       }
       if (!alerts[PROXY_LATCH] && proxyFailStreak >= PROXY_DOWN_GRACE && anyStoreAlertsAllowed()) {
         alerts[PROXY_LATCH] = true;
