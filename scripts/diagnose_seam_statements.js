@@ -55,6 +55,8 @@ const Database = (() => {
 })();
 const { seam } = require(DB_SEAM_JS);
 
+const VERBOSE = process.env.SEAM_MONEY_DETAIL === '1';
+const MONEY_DETAIL = [];
 let FAILURES = 0, CHECKS = 0;
 const fail = (m) => { FAILURES++; console.log('   FAIL  ' + m); };
 const ok = (m) => { CHECKS++; console.log('   ok    ' + m); };
@@ -84,31 +86,75 @@ db.pragma('journal_mode = MEMORY');
 db.pragma('foreign_keys = OFF');
 
 const moneyCols = new Set();
-let nTables = 0;
+let nTables = 0, nCons = 0;
+
+// plan.json also carries the PRIMARY KEY and UNIQUE constraints, under their
+// POSTGRES names. Without them an `INSERT … ON CONFLICT(col)` cannot even be
+// prepared — SQLite requires a matching unique index — so three statements across
+// push.js and markets.js were unverifiable until these were built. Translating
+// them back to the SQLite names makes the scratch schema faithful enough to
+// prepare the statements the application actually runs.
+const pgToSq = new Map();                       // pg table -> [sq table, colmap]
+for (const [t, tv] of Object.entries(plan.tables)) {
+  const colmap = new Map();
+  for (const c of tv.cols) if (c.pg && c.sq) colmap.set(c.pg, c.sq);
+  if (tv.pg) pgToSq.set(tv.pg, [t, colmap]);
+}
+function constraintsFor(sqTable) {
+  const out = [];
+  for (const con of plan.cons || []) {
+    const mapped = pgToSq.get(con.table);
+    if (!mapped || mapped[0] !== sqTable) continue;
+    if (con.type !== 'p' && con.type !== 'u') continue;
+    const m = /\(([^)]*)\)/.exec(con.def || '');
+    if (!m) continue;
+    const cols = m[1].split(',').map((x) => x.trim().replace(/^"|"$/g, ''));
+    const sqCols = cols.map((c) => mapped[1].get(c) || c);
+    out.push(`${con.type === 'p' ? 'PRIMARY KEY' : 'UNIQUE'} (${sqCols.map(qi).join(', ')})`);
+  }
+  return out;
+}
+
 for (const [t, tv] of Object.entries(plan.tables)) {
   const cols = tv.cols.filter((c) => c.sq);
   if (!cols.length) continue;
-  db.exec(`CREATE TABLE ${qi(t)} (${cols.map((c) => `${qi(c.sq)} ${c.sqtype || ''}`.trim()).join(', ')})`);
+  const defs = cols.map((c) => `${qi(c.sq)} ${c.sqtype || ''}`.trim());
+  const cons = constraintsFor(t);
+  nCons += cons.length;
+  try {
+    db.exec(`CREATE TABLE ${qi(t)} (${defs.concat(cons).join(', ')})`);
+  } catch (e) {
+    // A constraint that will not build is reported, not dropped quietly.
+    fail(`scratch schema: ${t} would not build with its constraints (${e.message.slice(0, 60)})`);
+    db.exec(`CREATE TABLE ${qi(t)} (${defs.join(', ')})`);
+  }
   nTables++;
   for (const c of cols) if (c.cls === 'CENTS' || c.cls === 'NUM6') moneyCols.add(`${t}.${c.sq}`);
 }
 // One seed row per table, with money columns carrying real money values so a
 // statement that reads them is reading something a converter would have to act on.
-const seedFor = (c) => {
-  if (c.cls === 'CENTS') return 12345.67;
-  if (c.cls === 'NUM6') return 1.234567;
-  if (c.cls === 'INT') return 1;
-  if (c.cls === 'BOOL') return 1;
-  if (c.cls === 'REAL') return 1.5;
-  if (c.cls === 'TS') return '2026-08-05 01:00:00';
-  if (c.cls === 'DATE') return '2026-08-05';
-  return 'seed';
+// Row-varying so three seed rows cannot collide on a PRIMARY KEY or UNIQUE now
+// that those exist. The money values stay exact and distinct — they are what the
+// round-trip is measuring, so they must not be perturbed to dodge a constraint.
+const MONEY_SEED = { CENTS: [12345.67, 0.01, 99999999.99], NUM6: [1.234567, -1.234567, 0.000001] };
+const seedFor = (c, r) => {
+  if (c.cls === 'CENTS') return MONEY_SEED.CENTS[r];
+  if (c.cls === 'NUM6') return MONEY_SEED.NUM6[r];
+  if (c.cls === 'INT') return r + 1;
+  if (c.cls === 'BOOL') return r % 2;
+  if (c.cls === 'REAL') return 1.5 + r;
+  if (c.cls === 'TS') return `2026-08-0${5 + r} 01:00:00`;
+  if (c.cls === 'DATE') return `2026-08-0${5 + r}`;
+  return 'seed' + r;
 };
 for (const [t, tv] of Object.entries(plan.tables)) {
   const cols = tv.cols.filter((c) => c.sq);
   if (!cols.length) continue;
   const st = db.prepare(`INSERT INTO ${qi(t)} (${cols.map((c) => qi(c.sq)).join(',')}) VALUES (${cols.map(() => '?').join(',')})`);
-  for (let r = 0; r < 3; r++) st.run(...cols.map((c) => (c.sq === 'id' || c.sq.endsWith('_id') ? r + 1 : seedFor(c))));
+  for (let r = 0; r < 3; r++) {
+    try { st.run(...cols.map((c) => (c.sq === 'id' || c.sq.endsWith('_id') ? r + 1 : seedFor(c, r)))); }
+    catch (e) { if (r === 0) fail(`scratch seed: ${t} row 0 would not insert (${e.message.slice(0, 70)})`); }
+  }
 }
 const W = seam(db);
 
@@ -174,7 +220,7 @@ function runBoth(sql, params) {
 
 const files = process.argv.slice(2);
 console.log('every-statement execution, raw vs wrapped');
-console.log(`   scratch schema: ${nTables} tables from the live census, ${moneyCols.size} money columns`);
+console.log(`   scratch schema: ${nTables} tables, ${nCons} PK/UNIQUE constraints, ${moneyCols.size} money columns — all from the live census`);
 console.log(`   ${files.length} file(s)\n`);
 
 let totalStmts = 0, totalDynamic = 0, totalMoney = 0;
@@ -183,7 +229,7 @@ for (const rel of files) {
   totalStmts += statements.length; totalDynamic += dynamic;
   console.log(`   ${rel} — ${statements.length} statement(s) extracted from source` +
               (dynamic ? `, ${dynamic} dynamically built and NOT executed` : ''));
-  let bad = 0, money = 0;
+  let bad = 0, money = 0, raw0 = null;
   for (const s of statements) {
     let rawSt, wrapSt;
     try { rawSt = db.prepare(s.sql); wrapSt = W.prepare(s.sql); }
@@ -200,13 +246,28 @@ for (const rel of files) {
       // Does this statement touch a money column? Reported per file so the money
       // claim is a measured number rather than an assertion about the file.
       const cols = rawSt.columns();
-      if (cols.some((c) => c.table && c.column && moneyCols.has(`${c.table}.${c.column}`))) money++;
+      const hit = cols.filter((c) => c.table && c.column && moneyCols.has(`${c.table}.${c.column}`));
+      if (hit.length) {
+        money++;
+        if (VERBOSE) {
+          const names = [...new Set(hit.map((c) => `${c.table}.${c.column}`))];
+          const vals = [...new Set(hit.map((c) => JSON.stringify((raw0 && raw0[0]) ? raw0[0][c.name] : undefined)))];
+          MONEY_DETAIL.push({ file: rel, line: s.line, kind: 'read', cols: names, vals });
+        }
+      }
     } else if (/\b(?:INSERT|UPDATE)\b/i.test(s.sql)) {
       const tbl = (/(?:INTO|UPDATE)\s+([A-Za-z_][\w]*)/i.exec(s.sql) || [])[1];
       const colList = (/\(([^)]*)\)\s*VALUES/i.exec(s.sql) || [])[1];
-      if (tbl && colList && colList.split(',').some((c) => moneyCols.has(`${tbl}.${c.trim()}`))) money++;
+      const written = (tbl && colList)
+        ? colList.split(',').map((c) => c.trim()).filter((c) => moneyCols.has(`${tbl}.${c}`))
+        : [];
+      if (written.length) {
+        money++;
+        if (VERBOSE) MONEY_DETAIL.push({ file: rel, line: s.line, kind: 'write', cols: written.map((c) => `${tbl}.${c}`), vals: [] });
+      }
     }
     const { raw, wrapped } = runBoth(s.sql, bindingsFor(s.sql));
+    raw0 = raw && raw.value;
     if (!!raw.error !== !!wrapped.error) {
       fail(`${rel}:${s.line} one side threw and the other did not: raw=${raw.error && raw.error.message} wrapped=${wrapped.error && wrapped.error.message}`);
       bad++; continue;
@@ -228,6 +289,14 @@ for (const rel of files) {
 
 db.close();
 fs.rmSync(SCRATCH_DIR, { recursive: true, force: true });
+
+if (VERBOSE && MONEY_DETAIL.length) {
+  console.log('\n   money detail — every statement that touches a CENTS or NUM6 column:');
+  for (const d of MONEY_DETAIL) {
+    console.log(`      ${d.file}:${d.line}  ${d.kind}  ${d.cols.join(', ')}`);
+    if (d.vals.length && d.vals[0] !== undefined) console.log(`         round-tripped: ${d.vals.join(', ')}`);
+  }
+}
 
 console.log('\n' + '═'.repeat(72));
 console.log(`${totalStmts} statement(s) executed raw and wrapped across ${files.length} file(s); ` +

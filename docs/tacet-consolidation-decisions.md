@@ -607,6 +607,29 @@ HOW YOU WOULD KNOW. `deploy.yml` now hashes the files it just shipped on the ser
 
 TESTS. `scripts/test-deploy-base.sh` extracts the base-resolution step out of the workflow itself — so the test cannot drift from what it tests — stubs ssh for the deploy record, and drives ten cases including the headline failed-deploy case and a control that reproduces the old skip. `scripts/diagnose_deployed_tree.js` compares the whole deployed tree against the repository, read-only, via `ro-query.yml`. Run it whenever the box's fidelity is in question; regenerate its manifest first.
 
+### MONEY IS RESOLVED BY SCHEMA CLASS, NEVER BY COLUMN NAME — RULE 2026-08-05
+
+THE RULE: a column is money if and only if `scripts/postgres-full-copy/plan.json` gives it conversion class **CENTS** or **NUM6**. 92 columns are CENTS, 9 are NUM6, 101 in total. Nothing else counts, and no other test is permitted — not the column's name, not its SQLite type, not what it looks like it means. Any tool that needs to know whether something is money reads `cls` from the census.
+
+WHY THIS IS A RULE AND NOT A PREFERENCE: name-based classification has now been wrong twice, in both directions.
+
+- `display_min_total` reads like a money column and is not one.
+- On 2026-08-05 `routes/billing.js` was classified as money-touching from a file-level grep for money-ish column names. It touches no CENTS or NUM6 column at all. The `price` the grep matched is a **JavaScript object property** in a seed array, and the money it does handle lives in `price_cents` and `amount_cents` — integer-cents columns of class INT, the category the full copy deliberately copied verbatim rather than multiplying. The only schema column named `price` with a money class is `ingredient_price_history.price`, which that file never touches.
+
+Both directions matter. A false positive wastes a full every-statement verification pass on a file that needs none. A false negative is worse: it lets a file that really does carry money through on sampled verification, which is the failure the converter cannot afford.
+
+HOW TO DO IT CORRECTLY: resolve the statement, not the text. `scripts/diagnose_seam_statements.js` prepares each statement against a scratch database built from the census and reads `statement.columns()`, which returns the real table and column each output column comes from. That is a resolved answer from the schema; a grep over source text is a guess about it. For writes it parses the target table and column list and checks those against the census the same way.
+
+WHERE THIS BITES NEXT: the money-conversion work itself. A converter driven by a name pattern would convert `price_cents` twice and miss `display_min_total`'s neighbours. The converter must be driven by the same census `cls` field, from the same file.
+
+### The census records constraints but NOT indexes — FINDING 2026-08-05
+
+`plan.json` carries 215 PRIMARY KEY and UNIQUE constraints (types `p` and `u`) and no indexes. That gap is not cosmetic.
+
+`routes/push.js` upserts with `ON CONFLICT(endpoint) DO UPDATE` against `push_subscriptions`. In live SQLite that works because `database.js:125` creates a **`CREATE UNIQUE INDEX IF NOT EXISTS idx_push_endpoint`** — a unique INDEX, not a table constraint. The census records only `PRIMARY KEY (id)` for that table, so a schema rebuilt from the census alone would not carry the uniqueness, and SQLite (and Postgres) both refuse an `ON CONFLICT` target with no matching unique index.
+
+Two consequences. First, `routes/push.js` could not be verified by the every-statement harness and was **deferred from seam batch 2** for that reason rather than for anything wrong with the file. Second, and more important: **if the Postgres schema was built from this census, the uniqueness `routes/push.js` depends on may be missing there**, and the upsert will fail after cutover rather than at build time. Worth checking against the as-built Postgres schema before the switchover, and worth remembering that any other `ON CONFLICT` in the application has the same exposure.
+
 ### Three deploy findings recorded, NOT fixed — 2026-08-05
 
 Found while fixing the diff-base bug, deliberately left alone so the fix stayed one change. All three are live today.
