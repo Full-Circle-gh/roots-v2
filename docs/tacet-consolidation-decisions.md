@@ -1,8 +1,10 @@
-# Tacet shared-core consolidation — decisions record, v1.0
+# Tacet shared-core consolidation — decisions record, v2.0
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
+
+2026-08-05 · v2.0 — MONEY STORAGE IS REVERSED: money is stored as DECIMAL, not whole cents. A locked technology decision changes, hence a full revision rather than a patch. Recorded in §24; the superseded line is left standing.
 
 Cross-references in this document give both the section number and its name. If the two disagree, the NAME is correct — numbers shift when sections are inserted.
 
@@ -959,6 +961,31 @@ Five of the ten writes recorded in the blind-spot finding above are of this kind
 At each of these, seating a converter fixes the bound `?` and leaves the column-side expression untouched.
 
 **THE DESIGN CONSEQUENCE, WHICH IS THE DURABLE POINT.** The converter-seating work **cannot be planned as though seating the converter closes the money risk on the refund path.** It closes the parameter half of it. SQL-side money expressions need a separate mechanism — rewriting the statements, or handling the schema and units so that the in-SQL arithmetic is correct under bigint cents. **Which mechanism is an OPEN DESIGN QUESTION and is deliberately not answered here.** It is recorded now so that the converter's scope is drawn with this limit already in it, rather than discovered after the converter is seated and believed to be sufficient.
+
+### MONEY IS STORED AS DECIMAL, NOT WHOLE CENTS — DECIDED 2026-08-05
+
+**This supersedes the earlier decision that money is stored as whole cents, never as a decimal.** That line is left standing where it is and is superseded by this entry, not edited.
+
+**WHY THE EARLIER DECISION IS REVERSED.**
+
+Whole cents assume every currency has exactly two minor units. That is false — JPY has none, KWD has three. A fixed two-decimal model therefore hardcodes an assumption about the world, which **§0 Governing rules forbids**: accounts each set their own currency, and nothing may be built around one business's situation. The cents rule was adopted to kill a floating-point defect, and it does kill it; but it pays for that with a Roots-shaped assumption baked into the storage type itself.
+
+A measurement pass on 2026-08-05 — read-only, static, no database opened, 185 files, **3,785 statement sites**, **565 money-touching**, lexed with full nested-template awareness so it does not inherit the blind spot that hid the ten refund-path writes — established the rest of the case.
+
+- **The in-SQL problems that cents would force us to chase are small.** 7 hardcoded money constants (the `0.005` half-fen guard appears **3 times**, not once); **5** unit-sensitive expressions, all of them the same store-credit `ROUND(..., 2)` construct on `retail_customers.balance`; **24** money parameters buried inside expressions rather than bound as bare assignments.
+- **The two-decimal assumption, by contrast, is pervasive.** 51 round-to-two sites, 90 lines carrying `toFixed(2)`, 105 identifiers containing `cents` or `fen`. Under a cents model every one of those must be kept, and defended per currency, forever.
+- **Trading money carries no currency anywhere.** The only columns that store a currency at all are on the billing tables — `billing_invoices`, `billing_plans`, `plans` — and those are **already integer cents**. The currency lives exactly where multi-currency is not needed, and is absent from every column where it is.
+- **107 money statements are built by string interpolation and cannot be read by any static scan** — 49 in `routes/retail.js` alone. This is the decisive asymmetry. Under cents, a hidden constant in that set is a silent 100× bug. Under decimal, a hidden yuan constant like `0.005` remains correct. **Decimal is safe against the part we cannot see; cents is not.**
+
+**CONSEQUENCES — each is its own downstream decision and NONE is settled by this entry.**
+
+- Postgres money columns become decimal. The completed full data copy of 2026-08-04, which landed as bigint cents, must be rebuilt as decimal. Scripted work, not hand work.
+- Every money amount needs a currency stored beside it, and cross-currency arithmetic must be blocked or explicitly converted. **This requirement is independent of cents-versus-decimal** and would have been owed either way.
+- **The decimal SCALE is unsettled.** The nine columns already migrated are `numeric(14,6)`. Whether six fractional digits is the right scale for money, and whether a precision of 14 leaves enough headroom, is an open question and is **NOT decided here**.
+- **The seam still needs a read-side converter.** The Postgres driver returns both `bigint` and `numeric` as text. Decimal removes the RESCALING from the converter; it does not remove the converter.
+- **The `0.005` half-fen epsilon and the five `ROUND(..., 2)` sites are correct under decimal yuan and need no change.** They were only ever wrong under cents. **Do not "fix" them.**
+
+**STATUS: a design decision, recorded. No code, no schema and no data is changed by this entry.** The build that follows from it — schema rebuild, currency column, scale decision, copy re-run — is separate and is not yet briefed.
 
 ## 25. Related documents
 
