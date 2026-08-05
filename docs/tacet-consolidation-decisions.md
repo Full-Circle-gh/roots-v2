@@ -880,6 +880,35 @@ Pre-existing, unrelated to the Postgres migration, and not blocking. Found incid
 
 To resolve later: identify which screen sets `open_time` and `close_time`, name each consumer and what it would do differently if hours were set, and decide whether the windows should be configured or the feature removed.
 
+### The seam passes money through untouched — the converter seat is EMPTY — MEASURED 2026-08-05
+
+Measured on branch `claude/money-seam-conversion-verify`, commit `491af07`, `ro-query` run 35. Read-only throughout: `roots.db` opened `readonly: true`, the read-only property proven by a rejected write both before and after the run, and the 18 writes the real handlers attempted were suppressed — none executed.
+
+**THE SEAM DOES NOT TOUCH THE MONEY VALUE. IT IS A PURE PASSTHROUGH.** The three money writes verified last pass — `products.js:454` (`sell_price`), `retail.js:15899` (`reward_amount`), `retail.js:18197` (`sell_price` and `compare_at_price`), four columns, all class CENTS — were driven on the live production box and every one of them arrived at the connection exactly as it left the request.
+
+**`currentConverter() === null` ON THE LIVE CONFIGURATION, OBSERVED AT RUNTIME.** In `wrapStatement` the guard `if (!converter || !STMT_INTERCEPT.has(prop))` takes the raw path — `value.apply(target, args)`, verbatim. So the seam does not merely decline to convert: with no converter seated it never inspects the value at all.
+
+**PROVEN BY THE VALUE, NOT BY THE SOURCE LINE.** A known fractional-yuan amount went in the request body, the real handler ran, and what arrived at the connection was captured together with its JavaScript type. `12.34` in, `12.34` out — a fractional number, not an integer — at the connection, for all four columns. A converted value would have arrived as integer cents, `1234`. **10 money-parameter observations, 10 unchanged, 0 altered.** Reading the guard would have suggested this; the captured value is what establishes it.
+
+**AN EMPTY SEAT, NOT A COVERAGE GAP — the distinction is the point.** A recording identity converter installed in a throwaway child process received all four values, so **the seat REACHES all four**. The passthrough is therefore a configuration fact — no converter is installed — and not the seam failing to see these writes. When a real converter is seated, these four writes are already in its path and need no further routing work.
+
+**GENERAL, NOT ROOTS-ONLY.** Both retail sites were driven across three distinct wrappers — the live main handle plus two separate in-memory tenant handles, confirmed to be distinct objects each unwrapping to its own raw handle — and every money column arrived identically at all three. The structural reason: `converter` is a single module-level variable in `lib/db-seam.js`, consulted per call, with no per-handle, per-tenant or per-wrapper branch anywhere; the WeakMaps cache wrappers, not converter state. The prior pass's SEAM/TENANT same-wrapper collapse stays boxed as a Roots-only artefact of `getTenantDb(1) === mainDb` and was deliberately NOT allowed to carry this claim.
+
+**THE RISK, STATED AS THE MONEY BUG THE CONVERTER MUST FIX.** This is not a SQLite problem today. Those columns are REAL in SQLite, the application reads and writes yuan end to end, storing `12.34` is consistent with everything around it, and nothing is wrong on the live box. The risk is entirely Postgres-side: the target type is `bigint`, and `12.34` into `bigint` is either a rejection or a truncation to `12` — **a 100× understatement of every price and every reward**. A converter MUST be seated before these writes reach Postgres.
+
+### The deployed sha is `ffe232e`, READ rather than assumed — CORRECTION 2026-08-05
+
+The deployed production sha, read from `/root/roots-v2/.deploy-state/last-success-sha`, is **`ffe232e`** (`ffe232e62749df5ded998d54cd632a1831bb71d3`).
+
+**THIS CORRECTS TWO PRIOR ASSUMPTIONS.**
+
+1. **`54188c0a` is stale.** The box moved to HEAD roughly ninety minutes after that figure was recorded. Every standing line in this document that asserts `54188c0a` as production is left standing and is superseded by this entry — none of them is edited.
+2. **There is NO 4-commit gap.** `c9d896c`, `7c44a87` and `ccdf274` shipped no deployable file, so the deploy record never advanced for them. The record advances only when a push ships a deployable file; three docs-and-workflow commits leaving it unmoved is the record working, not the record lagging.
+
+**PROVENANCE AND CAVEAT, RECORDED HONESTLY.** This is the deploy's own record of itself. `/root/roots-v2/.git` is absent — the box is `scp`'d, not checked out — so there is no independent working-tree second opinion available from the box. `scripts/diagnose_deployed_tree.js` exists and would give a byte-level comparison against the repository if one is ever wanted; **it was NOT run this pass.** One line was requested and read; the read is not reconciled against the artefact.
+
+**THE META-FACT, PLAINLY.** This figure had been stated twice in prior passes and was read once here. Reading it dissolved a four-commit gap that would otherwise have been reasoned about — the gap was never there. The cost of reading the record was one line.
+
 ## 25. Related documents
 
 - docs/tacet-glossary.md — binding definitions, v1.4, 2026-07-31. The words in this document are used with the meanings defined there.
