@@ -58,9 +58,25 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+// The seam under test always comes from HOME — under ro-query that is the staged
+// checkout, which is the whole point: this checkout's seam, on production's Node
+// and production's better-sqlite3 build.
 const HOME = process.env.ROOTS_HOME || path.join(__dirname, '..');
 const DB_SEAM_JS = path.join(HOME, 'lib', 'db-seam.js');
-const PLAN_JSON = path.join(HOME, 'scripts', 'postgres-full-copy', 'plan.json');
+
+// The schema census and the source scan need a COMPLETE tree, and ro-query
+// stages only lib/, routes/ and middleware/. Resolving them separately from HOME
+// is what lets this run on the box at all. Falling back silently to a partial
+// tree would be worse than failing: the scan would cover fewer files and still
+// report success, which is exactly the quiet under-measurement the coverage
+// checker was corrected for on 2026-08-04. So a partial tree is refused, loudly.
+const LIVE_APP = '/root/roots-v2';
+const firstExisting = (cands) => cands.find((c) => fs.existsSync(c)) || null;
+
+const PLAN_JSON = firstExisting([
+  path.join(HOME, 'scripts', 'postgres-full-copy', 'plan.json'),
+  path.join(LIVE_APP, 'scripts', 'postgres-full-copy', 'plan.json'),
+]);
 
 function loadBetterSqlite3() {
   const local = path.join(HOME, 'node_modules', 'better-sqlite3');
@@ -125,25 +141,61 @@ const q = (id) => '"' + String(id).replace(/"/g, '""') + '"';
 const DAEMONS = ['guanyi-daemon.js', 'meituan-daemon.js', 'shangou-daemon.js',
   'gzgrocery-order-daemon.js', 'qingyun-daemon.js', 'eleme-daemon.js'];
 
+// A tree is only usable for the scan if it holds every in-scope surface. Partial
+// is refused rather than quietly scanned.
+function treeCompleteness(root) {
+  const missing = [];
+  for (const p of ['server.js', 'database.js', 'lib', 'routes', 'middleware']) {
+    if (!fs.existsSync(path.join(root, p))) missing.push(p);
+  }
+  if (!DAEMONS.some((d) => fs.existsSync(path.join(root, 'scripts', d)))) missing.push('scripts/<daemons>');
+  // ro-query writes a stub `module.exports = {}` database.js into the stage dir.
+  // A 30-byte database.js is not the real one and must not count as complete.
+  try {
+    if (fs.existsSync(path.join(root, 'database.js')) &&
+        fs.statSync(path.join(root, 'database.js')).size < 1024) missing.push('database.js (stub, not the real file)');
+  } catch (e) { /* counted as missing above */ }
+  return missing;
+}
+
+const SOURCE_ROOT = (() => {
+  for (const root of [HOME, LIVE_APP]) {
+    if (fs.existsSync(root) && treeCompleteness(root).length === 0) return root;
+  }
+  return null;
+})();
+
 function collectInScopeSources() {
   const files = [];
   const walk = (rel) => {
-    const abs = path.join(HOME, rel);
+    const abs = path.join(SOURCE_ROOT, rel);
     let entries;
     try { entries = fs.readdirSync(abs, { withFileTypes: true }); } catch (e) { return; }
     for (const e of entries) {
       const child = `${rel}/${e.name}`;
-      if (e.isDirectory()) walk(child);
-      else if (e.isFile() && e.name.endsWith('.js')) files.push(child);
+      // Dirent.isDirectory()/isFile() do NOT resolve symlinks, so a symlinked
+      // routes/ or a symlinked module would be skipped and the scan would quietly
+      // cover less. A symlinked source file is still in-scope code, so resolve it.
+      let isDir = e.isDirectory();
+      let isFile = e.isFile();
+      if (e.isSymbolicLink()) {
+        try {
+          const st = fs.statSync(path.join(SOURCE_ROOT, child));
+          isDir = st.isDirectory();
+          isFile = st.isFile();
+        } catch (err) { continue; }        // dangling link — nothing to scan
+      }
+      if (isDir) walk(child);
+      else if (isFile && e.name.endsWith('.js')) files.push(child);
     }
   };
   ['routes', 'lib', 'middleware'].forEach(walk);
   for (const f of ['server.js', 'database.js']) {
-    if (fs.existsSync(path.join(HOME, f))) files.push(f);
+    if (fs.existsSync(path.join(SOURCE_ROOT, f))) files.push(f);
   }
   for (const d of DAEMONS) {
     const rel = `scripts/${d}`;
-    if (fs.existsSync(path.join(HOME, rel))) files.push(rel);
+    if (fs.existsSync(path.join(SOURCE_ROOT, rel))) files.push(rel);
   }
   return files;
 }
@@ -156,7 +208,7 @@ function grepSources(files, re, where) {
   const hits = [];
   for (const f of files) {
     let src;
-    try { src = fs.readFileSync(path.join(HOME, f), 'utf8'); } catch (e) { continue; }
+    try { src = fs.readFileSync(path.join(SOURCE_ROOT, f), 'utf8'); } catch (e) { continue; }
     const lines = src.split('\n');
     for (let i = 0; i < lines.length; i++) {
       const rx = new RegExp(re.source, re.flags.includes('g') ? re.flags : re.flags + 'g');
@@ -295,8 +347,18 @@ console.log('\n══ 1 · surface parity — every member, enumerated not liste
   // Two real differences. Neither is a defect today, and both are only inert
   // because nothing in the codebase depends on them — so that is SCANNED below,
   // not asserted in prose. The scan is the part that keeps being true.
-  const inScope = collectInScopeSources();
-  console.log(`   scanning ${inScope.length} in-scope source file(s) for code that would notice these`);
+  if (!SOURCE_ROOT) {
+    fail('no COMPLETE in-scope source tree found — refusing to scan a partial one. ' +
+         `HOME (${HOME}) is missing: ${treeCompleteness(HOME).join(', ')}; ` +
+         `${LIVE_APP} is missing: ${fs.existsSync(LIVE_APP) ? treeCompleteness(LIVE_APP).join(', ') : 'the directory itself'}. ` +
+         'A partial scan would report success while covering fewer files, which is the exact ' +
+         'under-measurement the coverage checker was corrected for on 2026-08-04.');
+  }
+  const inScope = SOURCE_ROOT ? collectInScopeSources() : [];
+  console.log(`   scanning ${inScope.length} in-scope source file(s) under ${SOURCE_ROOT || '(none)'}`);
+  // A tree that suddenly scans far fewer files is a broken harness, not a clean result.
+  check(inScope.length >= 100,
+    `only ${inScope.length} in-scope source file(s) found — expected 100+; the scan is not covering the application`);
 
   if (identityDiff.length) {
     // `db.prepare === db.prepare` is true; `W.prepare === W.prepare` is not,
@@ -477,7 +539,10 @@ const EDGE = {
   CENTS: [0, -0, 0.01, -0.01, 0.1 + 0.2, 1 / 3, 12345.67, -12345.67, 99999999.99, 1e-7, 2.675, null],
   NUM6: [0, 0.000001, -0.000001, 1.234567, -1.234567, 1e6 + 0.5, null],
   REAL: [0, -0, Number.MIN_VALUE, 1.7976931348623157e308, -1.7976931348623157e308, 0.1, null],
-  TEXT: ['', ' ', 'plain', '中文字符', ' embedded', "quote'and\"double", '\\backslash', 'x'.repeat(4096), null],
+  // The fourth entry carries a NUL inside TEXT — SQLite truncates there, which
+  // is worth exercising. It is written as an ESCAPE deliberately: a raw NUL byte
+  // in the source makes the whole file read as binary to grep and diff tooling.
+  TEXT: ['', ' ', 'plain', '\u0000embedded', '中文字符', "quote'and\"double", '\\backslash', 'x'.repeat(4096), null],
   BOOL: [0, 1, null],
   TS: ['2026-08-05 01:23:45', '1970-01-01 00:00:00', null],
   DATE: ['2026-08-05', null],

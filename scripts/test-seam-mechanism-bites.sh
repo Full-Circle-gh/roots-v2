@@ -23,12 +23,26 @@ WORK="$(mktemp -d)"
 mkdir -p "$WORK/lib" "$WORK/scripts"
 ln -s "$REPO/node_modules" "$WORK/node_modules"
 ln -s "$REPO/scripts/postgres-full-copy" "$WORK/scripts/postgres-full-copy"
-# in-scope source dirs the scan walks
-ln -s "$REPO/routes" "$WORK/routes"
-ln -s "$REPO/middleware" "$WORK/middleware"
+# The proof refuses to scan a PARTIAL source tree. Without the daemons the scratch
+# tree is incomplete, every mutation "fails" on the missing tree instead of on the
+# sabotage, and the whole mutation test silently proves nothing. The control run at
+# the bottom is what catches that, and it did.
+for d in guanyi-daemon meituan-daemon shangou-daemon gzgrocery-order-daemon qingyun-daemon eleme-daemon; do
+  [ -f "$REPO/scripts/$d.js" ] && ln -s "$REPO/scripts/$d.js" "$WORK/scripts/$d.js"
+done
 ln -s "$REPO/server.js" "$WORK/server.js"
 ln -s "$REPO/database.js" "$WORK/database.js"
-for f in "$REPO"/lib/*.js; do ln -s "$f" "$WORK/lib/$(basename "$f")"; done
+# REAL directories with per-file symlinks, not symlinked directories. The proof's
+# walker uses Dirent.isDirectory(), which does NOT follow a symlink, so a symlinked
+# routes/ would be skipped entirely and the scan would silently cover 50 files
+# instead of 109. Mirroring the structure keeps the walker strict — which is what
+# we want against a real tree — while still costing nothing to build.
+for d in lib routes middleware; do
+  (cd "$REPO/$d" && find . -type d) | while read -r sub; do mkdir -p "$WORK/$d/$sub"; done
+  (cd "$REPO/$d" && find . -name '*.js' -type f) | while read -r f; do
+    ln -sf "$REPO/$d/${f#./}" "$WORK/$d/${f#./}"
+  done
+done
 
 run_mutation() {   # $1 = label, $2 = sed program
   rm -f "$WORK/lib/db-seam.js"
