@@ -724,6 +724,37 @@ Two things made that acceptable rather than merely hoped for. First, the seam is
 
 `deploy-apply.sh` bounces each daemon whose files ship, so they picked the change up on the deploy rather than running stale — which is itself a thing that had to be true and is worth having checked.
 
+### Six statements are failing in production today — OPEN 2026-08-05
+
+Found by preparing all 2,524 in-scope statements against the live schema on 2026-08-05 (`scripts/diagnose_statement_sweep.js`). Each fails every time its path is reached, and each is invisible because it sits behind a `catch` or inside a tool handler. None would ever surface by using the product.
+
+- **`routes/store-admin.js:528` and `:551`** — `retail_orders.created_at`, no such column. These are the operator's order search by number and a customer's recent-order list. Both fail wherever that route is reached. **The most consequential of the six.**
+- **`lib/brand-designer.js:61`** — `store_products.is_on_flash`, no such column. A flash-sale existence probe, so the designer behaves as though no flash sale is ever active.
+- **`scripts/gzgrocery-order-daemon.js:126`** — `retail_stores.store_code`, no such column. The daemon cannot resolve a store by code at all.
+- **`routes/ai.js:2188`** — `ingredient_price_history.created_at`, which is `recorded_at`. The AI assistant's `current_stock` tool throws every time, so the price-history question it exists to answer is never answered.
+- **`routes/restock.js:167`** — the `settings` table does not exist. Already recorded separately as "The restock warehouse override has never worked".
+
+**THESE ARE NOT TYPO FIXES.** Each is a code path that has never executed successfully, so downstream code has only ever seen the empty case — an empty result set, a caught exception, a falsy probe. Whoever fixes them must establish, per statement, whether making it work surfaces behaviour nobody has ever seen: a search that starts returning rows, a designer that starts believing a flash sale is active, a daemon that starts resolving stores it previously could not. The fix is one line; the change in behaviour may not be.
+
+Four of the six block a file from the database seam: `routes/ai.js` (72 sites), `routes/restock.js` (38), `routes/ingredients.js` (29, held on `sqlite_sequence`) and `scripts/gzgrocery-order-daemon.js` (23). `routes/store-admin.js` and `lib/brand-designer.js` are in the mixed-TENANT and UNRESOLVED groups and were never movable by that pattern.
+
+### 96 statements will not run on Postgres — FINDING 2026-08-05
+
+From the same sweep. These compile on SQLite and **error** on Postgres — they are not behavioural differences, they are statements that will not execute after the switchover. Across 22 files:
+
+| construct | count | Postgres equivalent |
+|---|---|---|
+| `INSERT OR IGNORE` / `OR REPLACE` | 60 | `ON CONFLICT` |
+| `sqlite_master` reads | 21 | `information_schema` / `pg_catalog` |
+| `strftime()` | 5 | `to_char()` / `date_trunc()` |
+| `GROUP_CONCAT()` | 5 | `string_agg()` |
+| `julianday()` | 4 | date arithmetic |
+| `sqlite_sequence` | 1 | `setval()` |
+
+**This is the first measured size of the SQL-dialect work, and it was not on the cutover checklist in any form.** The rehearsal migration proved the DATA converts; nothing had yet asked whether the QUERIES run.
+
+**It is a floor, not a total.** 371 statements are built dynamically — by template interpolation or string concatenation — and are unreachable by static preparation. That blind spot already conceals one known case: the `sqlite_sequence` reset in `routes/admin.js:238` is assembled by concatenation, so only its sibling in `routes/ingredients.js` appears in the count above. Whatever the true number is, it is larger than 96.
+
 ### Three deploy findings recorded, NOT fixed — 2026-08-05
 
 Found while fixing the diff-base bug, deliberately left alone so the fix stayed one change. All three are live today.
