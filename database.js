@@ -3235,6 +3235,15 @@ addColumn('retail_customer_addresses', 'lat',         'REAL');
 addColumn('retail_customer_addresses', 'lng',         'REAL');
 addColumn('retail_customer_addresses', 'geocoded_at', 'DATETIME');
 
+// WHERE those coordinates came from, and how exact they are. Without this a
+// pin the customer tapped on the map is indistinguishable from a district
+// centroid a geocoder returned because it couldn't find the street — and the
+// second kind must never be handed to a courier (lib/geocode PRECISION_RANK).
+//   geo_source    — 'customer_pin' | 'geocode:amap' | 'geocode:tencent'
+//   geo_precision — 'rooftop' | 'street' | 'coarse'
+addColumn('retail_customer_addresses', 'geo_source',    'TEXT');
+addColumn('retail_customer_addresses', 'geo_precision', 'TEXT');
+
 // English companions for the (canonical Chinese) province/city/district so a
 // saved address renders in whichever language the customer's app is set to,
 // instead of being frozen in the language it was entered in. Populated on

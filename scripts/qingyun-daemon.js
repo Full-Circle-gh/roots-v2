@@ -46,6 +46,7 @@ const { coldMsRemaining, isColdStartChallenge } = require('../lib/browser-warmup
 const { latchStore } = require('../lib/alert-latch');
 const geocode = require('../lib/geocode'); // Tencent/AMap — resolve English/pin-less addresses
 const { buildCreatePayload } = require('../lib/qingyun-payload'); // shared with the ship-from override
+const { translateToChinese } = require('../lib/address-cn'); // English/pinyin street → Chinese, before the rider sees it
 const inventory = require('../lib/inventory'); // isQingyunSameCityToday — same-city/same-day eligibility
 const { storeHours, within } = require('../lib/store-hours'); // opening hours, for the alert window
 
@@ -483,6 +484,7 @@ function cfg(key, fallback) {
 function pushPayload(order, shop, br) {
   return buildCreatePayload(order, shop, br, {
     geocode,
+    translateCn: translateToChinese,
     goodsPicUrl: cfg('delivery.qingyunGoodsPicUrl', 'https://s3plus.meituan.net/dap-orderdetail/qy/1783175410205_goods.png'),
     onWarn: (msg) => log('push', msg),
   });
@@ -549,8 +551,15 @@ async function drainPushQueue(storeCode, br) {
       const res = await br.createOrder(payload);
       if (res.ok) {
         db.prepare("UPDATE qingyun_push_queue SET status='done', qingyun_order_id=?, last_error=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(res.orderId, row.id);
-        log(storeCode, `push: created Qingyun order ${res.orderId} for ${order.order_no}`);
-        logSync(storeCode, 'push', 'ok', { order_no: order.order_no, qy: res.orderId });
+        // Log HOW the drop-off pin was obtained. When a delivery does go to the
+        // wrong place, this line is the difference between guessing and knowing:
+        // it says whether the customer picked the pin, which provider resolved it,
+        // how exact that provider claimed to be, and how far the rider had to go.
+        const geo = payload._geo || {};
+        log(storeCode, `push: created Qingyun order ${res.orderId} for ${order.order_no}`
+          + ` [pin ${geo.source || 'unknown'}${geo.precision ? '/' + geo.precision : ''}`
+          + `${geo.dropKm != null ? `, ${geo.dropKm}km` : ''}${geo.translated ? ', translated' : ''}]`);
+        logSync(storeCode, 'push', 'ok', { order_no: order.order_no, qy: res.orderId, geo });
       } else {
         throw new Error(`create failed (code ${res.code}, ${res.msg})`);
       }

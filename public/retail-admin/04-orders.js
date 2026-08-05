@@ -757,10 +757,25 @@ async function openAddressToChinese(orderId) {
   } catch (e) { toast(cuT('Network error', '网络错误'), 'error'); return; }
 
   const c = data.chinese || {};
+  // "The map returned coordinates" is not verification — a geocoder answers
+  // every query and falls back to a district or city centre when it can't find
+  // the street, which is how an order ends up pinned kilometres away. So the
+  // badge reports what was actually matched: green only for a building/road
+  // match in the right city, amber otherwise, with the matched place name
+  // underneath so the operator can judge it instead of trusting a tick.
+  const geoLevel = {
+    rooftop: cuT('matched the building', '匹配到楼栋门牌'),
+    street:  cuT('matched the street', '匹配到道路'),
+    coarse:  cuT('only matched the district centre', '仅匹配到区域中心'),
+  }[data.geocode_precision] || cuT('no map match', '地图无匹配');
   const geoBadge = !data.geocode_configured ? ''
     : data.geocode_ok
-      ? `<span style="margin-left:8px; font-size:11px; font-weight:600; color:#5fc28e;">✓ ${cuT('resolves on map', '地图可定位')}</span>`
-      : `<span style="margin-left:8px; font-size:11px; font-weight:600; color:var(--warn);">⚠ ${cuT('couldn’t verify on map', '无法在地图核验')}</span>`;
+      ? `<span style="margin-left:8px; font-size:11px; font-weight:600; color:#5fc28e;">✓ ${geoLevel}</span>`
+      : `<span style="margin-left:8px; font-size:11px; font-weight:600; color:var(--warn);">⚠ ${geoLevel}${
+          data.geocode_reason === 'city_mismatch' ? ` — ${cuT('different city!', '城市不符!')}` : ''}</span>`;
+  const geoMatched = data.geocode_matched
+    ? `<div class="muted" style="font-size:11px; margin:-4px 0 10px;" data-no-i18n>${cuT('Map reads this as', '地图识别为')}: ${escapeHtml(data.geocode_matched)}</div>`
+    : '';
   const field = (id, labelEn, labelCn, val) => `
     <div class="field" style="margin-bottom:10px;">
       <label class="stacked">${labelEn} · ${labelCn}</label>
@@ -785,6 +800,7 @@ async function openAddressToChinese(orderId) {
           <div style="font-size:12px; color:var(--text-2); line-height:1.5; margin-top:2px;" data-no-i18n>${escapeHtml(data.original_full || '')}</div>
         </div>
         <div style="font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--brass); margin-bottom:10px;">${cuT('Chinese address', '中文地址')}${geoBadge}</div>
+        ${geoMatched}
         ${field('gz-prov', 'Province', '省 / 市', c.province)}
         ${field('gz-city', 'City', '市', c.city)}
         ${field('gz-dist', 'District', '区 / 县', c.district)}
