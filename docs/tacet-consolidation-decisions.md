@@ -656,6 +656,28 @@ That matters most at tier 3, which is data-dependent: the warehouse is whichever
 
 Not fixed here. Settling it is a decision about whether the override should exist at all: either create the `settings` table and honour it, or delete tier 1 and make tier 2 the documented mechanism. `routes/ingredients.js` and `routes/restock.js` are held out of the seam batches until it is settled.
 
+### The restock warehouse override has never worked — OPEN 2026-08-05
+
+`routes/restock.js:167` reads a `settings` table that exists nowhere: not in the live census, not in the as-built Postgres schema, and not in `database.js`. It fails silently inside its own `catch { /* no settings table / row — fall through */ }` and has done since it was written.
+
+That statement is tier 1 of `_resolveWarehouseStoreId()` — the explicit override naming which store is the warehouse, the location restock goods ship OUT of. Because it has never returned anything, resolution always falls through to tier 2 (a `warehouse`-role user's bound store) or tier 3 (whichever active store currently holds the most on-hand stock).
+
+THE CONSEQUENCE: with no warehouse-role user, the warehouse's identity is data-dependent and can change by itself as stock moves, with no configuration change and no signal. `_resolveDestStoreId(order, warehouseStoreId)` picks the destination by excluding the warehouse, and line 279 abandons the restock entirely when the two resolve equal. So this surfaces as transfers between the wrong locations, or restocks that quietly do not happen.
+
+NOT A MIGRATION ISSUE — it is failing today. The restock station shell was removed on 2026-08-04 and `server.js:723` records that the flow is unused, but `routes/restock.js` is still mounted at `server.js:325` and `/api/restock` is still called from `public/app.html`, `public/kitchen.html` and `public/login.html`. Removed page, live route.
+
+TO SETTLE: either create the `settings` table and honour tier 1, or delete tier 1 and make tier 2 the documented mechanism. This is a decision, not a fix. `routes/restock.js` and `routes/ingredients.js` remain held from the seam batches until this and the `sqlite_sequence` finding are settled.
+
+### A third statement queries a column that does not exist — FINDING 2026-08-05
+
+Same class as the two above, found the same way — by preparing every statement in a file against a schema built from the live census, while verifying seam batch 5.
+
+`routes/ai.js:2188` runs `SELECT created_at, price, buy_unit, source FROM ingredient_price_history WHERE ingredient_id = ? AND created_at >= ?`. That table has **`recorded_at`**, not `created_at` — twice over, in the projection and in the WHERE. The statement cannot prepare, so it throws every time this AI tool is invoked, today, against live SQLite.
+
+It sits inside the `current_stock` tool handler of the AI assistant's function set, so the failure surfaces as that tool erroring rather than as a crash — the price-history question it exists to answer simply never gets answered. The fix is a two-word rename, and it is not made here: `routes/ai.js` is held from the seam batch alongside `ingredients.js` and `restock.js`, for the same reason. A file whose statements do not all prepare cannot be verified by the every-statement method, and routing an unverified file is exactly what these batches exist to avoid.
+
+Three findings of this shape now — `settings`, `sqlite_sequence`, `ingredient_price_history.created_at`. All three were invisible to the application because each sits behind a `catch` or inside a tool handler, and all three were found by preparing statements against the schema rather than by running the app. That is worth generalising: **preparing every statement in the application against the live schema would find the rest of them, and nothing currently does it.**
+
 ### Three deploy findings recorded, NOT fixed — 2026-08-05
 
 Found while fixing the diff-base bug, deliberately left alone so the fix stayed one change. All three are live today.
