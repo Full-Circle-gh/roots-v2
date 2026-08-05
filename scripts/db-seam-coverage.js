@@ -26,11 +26,19 @@
 //
 // HONEST LIMITS. This is a static reader, not a type checker. It resolves the
 // handle for a `.prepare(` call by tracking module-level and local `const/let`
-// bindings and the inline call forms; a handle passed as a function parameter or
-// stored on an object is attributed by name where the name is unambiguous and
-// counted as UNRESOLVED where it is not. UNRESOLVED sites are reported and are
-// counted in the denominator — never silently dropped, and never counted as
-// covered.
+// bindings, assignments to an already-declared name, and the inline call forms,
+// across a line break and through a spread prefix.
+//
+// A handle that arrives as a FUNCTION PARAMETER is not resolved and must not be.
+// `function gmvFor(tdb, ym) { tdb.prepare(` says nothing about what tdb is — that
+// is a fact about the callers, and the module-level binding of the same name is
+// not the answer, because the parameter shadows it. This reader used to attribute
+// those sites by name anyway; it was guessing, and it guessed some of them into
+// COVERED. They are UNRESOLVED, and that is the correct answer rather than a gap:
+// resolving them means reading every call site, which is not static-reader work.
+//
+// UNRESOLVED sites are reported and are counted in the denominator — never
+// silently dropped, and never counted as covered.
 //
 // Read-only. Touches no database. Run: node scripts/db-seam-coverage.js
 
@@ -254,18 +262,28 @@ function analyseFile(rel) {
   // Pass 1 — collect name -> category bindings from declarations and assignments.
   const bindings = new Map();
   const DECL = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([^;\n]+)/g;
-  const REASSIGN = /^\s*([A-Za-z_$][\w$]*)\s*=\s*([^;\n]+)/;
+  // Assignment to an already-declared name, wherever it sits on the line.
+  // routes/store-admin.js writes the tenant handle as
+  //     let tdb; try { tdb = getTenantDb(t.id); } catch (e) { continue; }
+  // — the declaration carries no initialiser, so DECL sees nothing, and the
+  // assignment is mid-line, so a start-of-line match saw nothing either. Four
+  // tenant sites were filed UNRESOLVED because of it. `=(?![=>])` keeps ==, ===,
+  // => and the compound operators out; the leading class keeps !=, <=, >= out.
+  const ASSIGN = /(?:^|[;{}()\s])([A-Za-z_$][\w$]*)\s*=(?![=>])\s*([^;\n]+)/g;
   let m;
   while ((m = DECL.exec(bindingCode))) {
     const cat = classifyBinding(m[2]);
     if (cat) bindings.set(m[1], cat);
   }
-  for (const line of bindingCode.split('\n')) {
-    const r = REASSIGN.exec(line);
-    if (!r) continue;
-    const cat = classifyBinding(r[2]);
-    if (cat && !bindings.has(r[1])) bindings.set(r[1], cat);
+  while ((m = ASSIGN.exec(bindingCode))) {
+    const cat = classifyBinding(m[2]);
+    if (cat && !bindings.has(m[1])) bindings.set(m[1], cat);
   }
+
+  // Where each line starts, so a site can be located inside a parameter scope.
+  const lineStart = [];
+  { let at = 0; for (const l of lines) { lineStart.push(at); at += l.length + 1; } }
+  const scopes = paramScopes(code);
 
   // Pass 2 — every `.prepare(` site, attributed to its receiver.
   const sites = [];
@@ -273,7 +291,7 @@ function analyseFile(rel) {
     const line = lines[i];
     let idx = -1;
     while ((idx = line.indexOf('.prepare(', idx + 1)) !== -1) {
-      const receiver = receiverBefore(line, idx);
+      const receiver = receiverBefore(lines, i, idx);
       // A receiver we cannot recover is UNRESOLVED, never dropped. Dropping it
       // would quietly shrink the denominator, which is the one number this whole
       // exercise is judged on.
@@ -281,7 +299,13 @@ function analyseFile(rel) {
       let cat = classifyInlineReceiver(receiver);
       if (!cat) {
         const root = receiver.replace(/^this\./, '').match(/^([A-Za-z_$][\w$]*)/);
-        if (root && bindings.has(root[1])) cat = bindings.get(root[1]);
+        // A name bound in this file resolves the site — UNLESS the name is a
+        // parameter of a function enclosing the site, in which case the binding
+        // is shadowed and what was passed in is a caller fact this reader
+        // cannot see. Not a guess: UNRESOLVED.
+        if (root && bindings.has(root[1]) && !shadowedByParam(scopes, lineStart[i] + idx, root[1])) {
+          cat = bindings.get(root[1]);
+        }
       }
       sites.push({ file: rel, line: i + 1, receiver, category: cat || 'UNRESOLVED' });
     }
@@ -296,7 +320,7 @@ function analyseFile(rel) {
 
 // Walk backwards from `.prepare(` to recover the receiver expression, balancing
 // brackets so that tdb().prepare( and getTenantDb(id).prepare( resolve whole.
-function receiverBefore(line, dotIdx) {
+function walkBack(line, dotIdx) {
   let i = dotIdx - 1, depth = 0;
   while (i >= 0) {
     const c = line[i];
@@ -308,10 +332,174 @@ function receiverBefore(line, dotIdx) {
     if (depth === 0 && !/[\w$.]/.test(c)) break;
     i--;
   }
-  const raw = line.slice(i + 1, dotIdx).trim();
+  return { start: i + 1, raw: line.slice(i + 1, dotIdx).trim() };
+}
+
+function receiverBefore(lines, lineNo, dotIdx) {
+  let host = lines[lineNo], hostEnd = dotIdx;
+  let { start, raw } = walkBack(host, dotIdx);
+
+  // A receiver broken across lines —
+  //     const allocatedForLine = (lineId) => db
+  //       .prepare('SELECT ...')
+  // — leaves nothing but whitespace before the dot, and reading only the dot's
+  // own line filed routes/finance.js:490 and routes/retail-purchasing.js:485
+  // UNRESOLVED. Continue onto the last non-blank line above, but only when it
+  // ends in something a receiver can end with, so a `.prepare(` that genuinely
+  // opens a statement is not handed the tail of an unrelated line.
+  if (!raw && host.slice(0, dotIdx).trim() === '') {
+    for (let k = lineNo - 1; k >= 0; k--) {
+      const prev = lines[k].replace(/\s+$/, '');
+      if (!prev.trim()) continue;
+      if (!/[\w$)\]]$/.test(prev)) break;
+      host = prev; hostEnd = prev.length;
+      ({ start, raw } = walkBack(host, hostEnd));
+      break;
+    }
+  }
   if (!raw) return null;
-  if (/^new\s/.test(line.slice(Math.max(0, i - 4), dotIdx).trim())) return 'new ' + raw;
+
+  if (/^new\s/.test(host.slice(Math.max(0, start - 5), hostEnd).trim())) return 'new ' + raw;
+
+  // A spread prefix is punctuation, not part of the handle: in
+  //     picks.push(...tdb().prepare(`SELECT ...`).all())
+  // the statement is prepared on tdb(), not on the uninterpretable `...tdb()`,
+  // and reading it as the latter filed six covered retail.js sites UNRESOLVED.
+  if (/^\.\.\./.test(raw)) return raw.slice(3).trim() || null;
   return raw;
+}
+
+// ── Function-parameter scopes ───────────────────────────────────────────────
+// Enough of a scope reader to answer one question: is this name a parameter of a
+// function enclosing this offset? Deliberately no more than that — it does not
+// try to say WHAT the parameter holds, because nothing in the file can.
+function splitTop(text) {
+  const parts = []; let d = 0, last = 0;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (c === '(' || c === '[' || c === '{') d++;
+    else if (c === ')' || c === ']' || c === '}') d--;
+    else if (c === ',' && d === 0) { parts.push(text.slice(last, i)); last = i + 1; }
+  }
+  parts.push(text.slice(last));
+  return parts;
+}
+
+// Names a parameter list binds. Destructured parameters count: lib/brand-designer.js
+// declares `function startJob({ db, inputs })`, and that db is every bit as much a
+// caller's handle as a positional one.
+function paramNames(text) {
+  const names = [];
+  for (let part of splitTop(text)) {
+    part = part.trim().replace(/^\.\.\./, '');
+    if (!part) continue;
+    if (part[0] === '{' || part[0] === '[') {
+      let d = 0, close = -1;
+      for (let i = 0; i < part.length; i++) {
+        const c = part[i];
+        if (c === '{' || c === '[') d++;
+        else if (c === '}' || c === ']') { d--; if (!d) { close = i; break; } }
+      }
+      if (close > 0) names.push(...paramNames(part.slice(1, close)));
+      continue;
+    }
+    const eq = part.search(/=(?!=)/);
+    if (eq !== -1) part = part.slice(0, eq);
+    const colon = part.indexOf(':');            // `key: alias` binds the alias
+    if (colon !== -1) part = part.slice(colon + 1);
+    const m = part.trim().match(/^([A-Za-z_$][\w$]*)/);
+    if (m) names.push(m[1]);
+  }
+  return names;
+}
+
+// `(` that opens a parameter list, not a call or a control-flow head.
+const NOT_A_FUNCTION = new Set([
+  'if', 'for', 'while', 'switch', 'catch', 'with', 'return', 'typeof',
+  'do', 'else', 'new', 'await', 'yield', 'delete', 'void', 'in', 'of', 'case',
+]);
+
+function paramScopes(code) {
+  const scopes = [];
+  const wordBefore = (pos) => {
+    let j = pos - 1;
+    while (j >= 0 && /\s/.test(code[j])) j--;
+    const end = j + 1;
+    while (j >= 0 && /[\w$]/.test(code[j])) j--;
+    return { word: code.slice(j + 1, end), start: j + 1 };
+  };
+  const matchParen = (open) => {
+    let d = 0;
+    for (let i = open; i < code.length; i++) {
+      if (code[i] === '(') d++;
+      else if (code[i] === ')' && --d === 0) return i;
+    }
+    return -1;
+  };
+  // End of the function body. A braced body is brace-matched; a concise arrow
+  // body runs to the end of its expression. An unbalanced body means the scrubber
+  // lost sync somewhere in the file (retail.js's nested templates do this, and it
+  // is already reported as a scanner gap) — that scope is dropped rather than
+  // allowed to swallow the rest of the file and suppress everything in it.
+  const bodyEnd = (from) => {
+    let i = from;
+    while (i < code.length && /\s/.test(code[i])) i++;
+    if (code[i] === '{') {
+      let d = 0;
+      for (let k = i; k < code.length; k++) {
+        if (code[k] === '{') d++;
+        else if (code[k] === '}' && --d === 0) return k;
+      }
+      return -1;
+    }
+    let d = 0;
+    for (let k = i; k < code.length; k++) {
+      const c = code[k];
+      if (c === '(' || c === '[' || c === '{') d++;
+      else if (c === ')' || c === ']' || c === '}') { if (d === 0) return k; d--; }
+      else if (d === 0 && (c === ';' || c === ',')) return k;
+    }
+    return -1;
+  };
+  const add = (start, bodyFrom, names) => {
+    if (!names.length) return;
+    const end = bodyEnd(bodyFrom);
+    if (end === -1) return;
+    scopes.push({ start, end, names: new Set(names) });
+  };
+
+  for (let i = 0; i < code.length; i++) {
+    if (code[i] !== '(') continue;
+    const close = matchParen(i);
+    if (close === -1) continue;
+    const before = wordBefore(i);
+    let isFn = before.word === 'function';
+    let after = close + 1;
+    while (after < code.length && /\s/.test(code[after])) after++;
+    if (!isFn && before.word && !NOT_A_FUNCTION.has(before.word)) {
+      // `function foo(` — or a method shorthand, whose parameter list is
+      // followed directly by its body.
+      if (wordBefore(before.start).word === 'function' || code[after] === '{') isFn = true;
+    }
+    if (code.startsWith('=>', after)) { isFn = true; after += 2; }   // (a, b) => …
+    if (isFn) add(i, after, paramNames(code.slice(i + 1, close)));
+  }
+
+  // A single parameter needs no parentheses: `db => db.prepare(`.
+  const BARE = /(^|[^\w$.)\]])([A-Za-z_$][\w$]*)\s*=>/g;
+  let m;
+  while ((m = BARE.exec(code))) {
+    if (NOT_A_FUNCTION.has(m[2])) continue;
+    add(m.index, m.index + m[0].length, [m[2]]);
+  }
+  return scopes;
+}
+
+function shadowedByParam(scopes, offset, name) {
+  for (const s of scopes) {
+    if (offset > s.start && offset < s.end && s.names.has(name)) return true;
+  }
+  return false;
 }
 
 function report(label, files) {
