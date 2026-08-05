@@ -622,13 +622,27 @@ HOW TO DO IT CORRECTLY: resolve the statement, not the text. `scripts/diagnose_s
 
 WHERE THIS BITES NEXT: the money-conversion work itself. A converter driven by a name pattern would convert `price_cents` twice and miss `display_min_total`'s neighbours. The converter must be driven by the same census `cls` field, from the same file.
 
-### The census records constraints but NOT indexes — FINDING 2026-08-05
+### ON CONFLICT after cutover — CHECKED AND CLEAN, 2026-08-05
 
-`plan.json` carries 215 PRIMARY KEY and UNIQUE constraints (types `p` and `u`) and no indexes. That gap is not cosmetic.
+Raised as a risk and then settled, so the scare does not outlive the check.
 
-`routes/push.js` upserts with `ON CONFLICT(endpoint) DO UPDATE` against `push_subscriptions`. In live SQLite that works because `database.js:125` creates a **`CREATE UNIQUE INDEX IF NOT EXISTS idx_push_endpoint`** — a unique INDEX, not a table constraint. The census records only `PRIMARY KEY (id)` for that table, so a schema rebuilt from the census alone would not carry the uniqueness, and SQLite (and Postgres) both refuse an `ON CONFLICT` target with no matching unique index.
+THE WORRY: `scripts/postgres-full-copy/plan.json` carries 215 PRIMARY KEY and UNIQUE constraints and **no indexes**. `routes/push.js` upserts with `ON CONFLICT(endpoint)` against `push_subscriptions`, whose uniqueness in live SQLite comes from `database.js:125` — a `CREATE UNIQUE INDEX`, not a constraint. If the Postgres schema had been built from that census alone, the uniqueness would be missing and the upsert would fail after cutover rather than at build time.
 
-Two consequences. First, `routes/push.js` could not be verified by the every-statement harness and was **deferred from seam batch 2** for that reason rather than for anything wrong with the file. Second, and more important: **if the Postgres schema was built from this census, the uniqueness `routes/push.js` depends on may be missing there**, and the upsert will fail after cutover rather than at build time. Worth checking against the as-built Postgres schema before the switchover, and worth remembering that any other `ON CONFLICT` in the application has the same exposure.
+THE ANSWER: it is fine. `docs/tacet-postgres-schema-as-built-2026-08-04.sql` is pg_dump output and **does** record indexes, including `CREATE UNIQUE INDEX idx_push_endpoint ON public.push_subscriptions USING btree (endpoint)`. The as-built schema carries 230 unique constraints and indexes across 162 tables.
+
+CHECKED EXHAUSTIVELY, NOT SPOT-CHECKED. All **62** `ON CONFLICT` sites in scope were enumerated, their target table and columns resolved, mapped from SQLite to Postgres names via the census, and matched against the as-built schema's constraints and unique indexes. **62 matched. 0 would fail after cutover.** That includes the renamed tables, where the SQLite and Postgres names differ: `tenant_user_sessions` to `account_user_sessions`, `tenant_secrets` to `account_secrets`, `tenant_integrations` to `account_integrations`, `tenant_onboarding` to `account_onboarding`.
+
+THE LESSON, WHICH IS THE SAME ONE AS THE MONEY RULE: the gap was in the tool's INPUT, not in the migration. The census is a column census; it is not a schema. Anything asking a question about schema shape — uniqueness, indexes, constraints — must read the as-built dump, not the census. The census answers questions about columns and their conversion classes, and nothing else.
+
+### Two statements will not survive the cutover — FINDING 2026-08-05
+
+Found while verifying seam batch 3, by preparing every statement against a schema built from the live census.
+
+1. **`sqlite_sequence` does not exist in Postgres.** `routes/ingredients.js:299` and `routes/admin.js:238` both run `DELETE FROM sqlite_sequence WHERE name IN (…)` to reset AUTOINCREMENT counters after a data wipe. `sqlite_sequence` is a SQLite internal table with no Postgres equivalent; identity sequences are reset with `setval` instead — the same mechanism the rehearsal migration already had to use after each table copy. Both sites are wrapped in `try {} catch {}`, so after cutover they will fail silently and the counters will simply not reset. Silent is the problem: the next insert continues from the old high-water mark rather than from 1, which is the opposite of what the surrounding code is trying to achieve.
+
+2. **`routes/restock.js:167` reads a table that does not exist.** `SELECT value FROM settings WHERE key = 'restock.warehouseStoreId'` targets a `settings` table that is absent from the live census, absent from the as-built Postgres schema, and never created by `database.js`. Since the census was taken from the live database, this statement is already failing today, not merely after cutover. Either the path is dead or it is throwing into a catch somewhere; worth establishing which before the restock work is touched.
+
+Neither is fixed here. Both blocked their file from seam batch 3, which is how they were found.
 
 ### Three deploy findings recorded, NOT fixed — 2026-08-05
 

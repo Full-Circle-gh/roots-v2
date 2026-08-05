@@ -6,7 +6,11 @@
 
 const express = require('express');
 const router  = express.Router();
-const db      = require('../database');
+// Routed through the database seam (lib/db-seam.js). No converter is installed,
+// so this is a zero-cost passthrough; the point is that this file is now on the
+// covered side of the boundary. Proven by scripts/diagnose_seam_statements.js.
+const { seam } = require('../lib/db-seam');
+const db      = seam(require('../database'));
 const inventory = require('../lib/inventory');
 
 const INTERNAL_SECRET = process.env.MEITUAN_INTERNAL_SECRET || 'meituan-daemon-internal';

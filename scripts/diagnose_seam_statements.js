@@ -100,6 +100,25 @@ for (const [t, tv] of Object.entries(plan.tables)) {
   for (const c of tv.cols) if (c.pg && c.sq) colmap.set(c.pg, c.sq);
   if (tv.pg) pgToSq.set(tv.pg, [t, colmap]);
 }
+// The census records CONSTRAINTS but not INDEXES, and `ON CONFLICT(col)` needs a
+// matching unique index either way. The as-built Postgres dump does record them —
+// it is pg_dump output — so unique indexes are read from there and translated back
+// to SQLite names. Without this, routes/push.js could not be verified at all: its
+// ON CONFLICT(endpoint) relies on a CREATE UNIQUE INDEX, not a constraint.
+const AS_BUILT = firstExisting([
+  path.join(HOME, 'docs', 'tacet-postgres-schema-as-built-2026-08-04.sql'),
+  path.join(LIVE_APP, 'docs', 'tacet-postgres-schema-as-built-2026-08-04.sql'),
+]);
+const pgUniqueIndexes = [];                     // {pgTable, pgCols[]}
+if (AS_BUILT) {
+  const dump = fs.readFileSync(AS_BUILT, 'utf8');
+  const re = /CREATE UNIQUE INDEX \w+ ON public\.(\w+) USING btree \(([^)]*)\)/g;
+  let mm;
+  while ((mm = re.exec(dump)) !== null) {
+    pgUniqueIndexes.push({ pgTable: mm[1], pgCols: mm[2].split(',').map((c) => c.trim().replace(/^"|"$/g, '')) });
+  }
+}
+
 function constraintsFor(sqTable) {
   const out = [];
   for (const con of plan.cons || []) {
@@ -111,6 +130,19 @@ function constraintsFor(sqTable) {
     const cols = m[1].split(',').map((x) => x.trim().replace(/^"|"$/g, ''));
     const sqCols = cols.map((c) => mapped[1].get(c) || c);
     out.push(`${con.type === 'p' ? 'PRIMARY KEY' : 'UNIQUE'} (${sqCols.map(qi).join(', ')})`);
+  }
+  // Unique INDEXES from the as-built dump, expressed as UNIQUE constraints here —
+  // for ON CONFLICT resolution the two are interchangeable.
+  const mapped = [...pgToSq.entries()].find(([, v]) => v[0] === sqTable);
+  if (mapped) {
+    const [pgName, [, colmap]] = mapped;
+    const seen = new Set(out.map((o) => o.replace(/^(PRIMARY KEY|UNIQUE)\s*/, '')));
+    for (const idx of pgUniqueIndexes) {
+      if (idx.pgTable !== pgName) continue;
+      const sqCols = idx.pgCols.map((c) => colmap.get(c) || c);
+      const clause = `(${sqCols.map(qi).join(', ')})`;
+      if (!seen.has(clause)) { out.push(`UNIQUE ${clause}`); seen.add(clause); }
+    }
   }
   return out;
 }
@@ -182,6 +214,12 @@ function extractStatements(rel) {
       buf += src[j]; j++;
     }
     if (interpolated) { dynamic++; continue; }
+    // SQL built by CONCATENATION is dynamic too. Taking only the first literal
+    // yields a truncated statement that fails to prepare and reads as a defect in
+    // the file — which is exactly how routes/admin.js:238 was first reported.
+    let k = j + 1;
+    while (k < src.length && /\s/.test(src[k])) k++;
+    if (src[k] === '+') { dynamic++; continue; }
     const line = src.slice(0, m.index).split('\n').length;
     out.push({ sql: buf.replace(/\s+/g, ' ').trim(), line });
   }
@@ -220,7 +258,8 @@ function runBoth(sql, params) {
 
 const files = process.argv.slice(2);
 console.log('every-statement execution, raw vs wrapped');
-console.log(`   scratch schema: ${nTables} tables, ${nCons} PK/UNIQUE constraints, ${moneyCols.size} money columns — all from the live census`);
+console.log(`   scratch schema: ${nTables} tables, ${nCons} PK/UNIQUE constraint(s) and unique index(es), ${moneyCols.size} money columns`);
+console.log(`   sources: plan.json census + ${pgUniqueIndexes.length} unique index(es) from the as-built Postgres dump`);
 console.log(`   ${files.length} file(s)\n`);
 
 let totalStmts = 0, totalDynamic = 0, totalMoney = 0;
