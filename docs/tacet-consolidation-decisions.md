@@ -838,6 +838,56 @@ THE FIX THAT MATTERS IS NOT ANY OF THOSE THREE. It is the reconciliation check n
 
 Coverage numbers quoted before 2026-08-04 were therefore measured against a denominator that was too small in `scripts/` and too large nowhere. The seam's covered count was never wrong; the total was.
 
+### Coverage of record moves 75.28% → 74.53%, and stops being a point estimate — RECORDED 2026-08-05
+
+Measured on branch `claude/db-seam-coverage-receiver-fix-rdw81d`, commit `c3c8aac`. Tooling only — `scripts/db-seam-coverage.js` and nothing else. This note supersedes the standing coverage figure recorded above ("Coverage stays **75.28%** and is honest"): that line stays exactly where it is and is not edited, and this note sits beneath it, which is how a figure is superseded here. **This note makes no routing decision, moves no file through the seam, and merges nothing.**
+
+**THE MOVEMENT. In-scope coverage is 2,086/2,799 = 74.53%**, from 2,107/2,799 = 75.28%. Runtime alone 1,932/2,622 = 73.68%, from 74.49%. Daemons 154/177 = 87.01%, untouched. **The denominator is unchanged at 2,799.** Every change is a re-attribution of a site that already existed — none gained, none lost, none dropped. All 3,314 attributed sites in the repository were diffed individually, before against after, rather than the totals being compared.
+
+**The number went down because it got honest.** This is the correction of a known optimistic lean in the reader, not a regression in the application. Nothing was un-routed, no seam was removed, and no application code changed.
+
+**THE DECOMPOSITION — recorded in both directions, because the net alone hides what happened.** Net −21 sites, as +10 / −31:
+
+| direction | sites | effect |
+|---|---|---|
+| corrected LOW → now covered | 10 | **+10** |
+| corrected LOW → correctly categorised, still uncovered | 2 | +0 |
+| no longer guessed → removed from the numerator | 31 | **−31** |
+| no longer guessed → were already uncovered | 2 | −0 |
+
+**+10 covered.** Six spread-prefix sites — `picks.push(...tdb().prepare(` at `routes/retail.js:13305`, `:13315`, `:24841`, `:24842`, `:24843`, `:24844` — now resolve to TENANT; the reader had been treating `...tdb()` as a receiver literally named that. Four declaration-then-assignment sites — `let tdb; try { tdb = getTenantDb(t.id); }` at `routes/store-admin.js:522`, `:528`, `:547`, `:551` — now resolve to TENANT; the declaration carries no initialiser and the assignment sits mid-line, so neither of the reader's two binding passes saw it. **All ten were always covered.** The seam reached them the whole time; the tool could not trace the handle and filed them UNRESOLVED.
+
+**+0, corrected but still uncovered.** Two line-broken receivers — `db` on its own line above the call — at `routes/finance.js:491` and `routes/retail-purchasing.js:486` now resolve to DIRECT, the raw shared handle. **Correctly categorised, not newly covered.** They move out of UNRESOLVED and into the uncovered class they belong to, which changes the shape of the report and not the figure.
+
+**−31 removed from the numerator.** Thirty-three sites the reader had attributed from a module-level binding of the same name are genuine **function-parameter receivers**, and now read UNRESOLVED. Thirty-one of them had been counted **COVERED**; the other two were RAW_OPEN and so cost the numerator nothing. `routes/retail.js` ×13, `routes/meituan-admin.js` ×8, `routes/retail-setup.js` ×4, `routes/guanyi-admin.js` ×3, plus `routes/eleme-admin.js:24`, `routes/integrations-admin.js:44`, `lib/provision-tenant.js:188`, and `lib/tenant-db.js:114`/`:147` (the two that were RAW_OPEN). Every one was checked against its enclosing signature, not inferred from the count.
+
+**A handle arriving as a parameter is a caller fact, and static analysis cannot answer it.** `function gmvFor(tdb, ym) { tdb.prepare(` says nothing about what `tdb` holds; the module-level binding of the same name is not the answer because the parameter shadows it. The reader was guessing, and it guessed in the flattering direction. No attempt is made to resolve these — the guess is the error being corrected, and answering them means reading every call site, which is not static-reader work.
+
+**THE LEAN FLIPPED. THIS IS THE HEADLINE.** Before: 31 sites sat in the numerator on a guess, an optimistic lean of roughly **0.75 points against truth** — 74.53% reported as 75.28%. After: **zero sites are counted covered on a guess.** 83 in-scope sites sit in the denominator and never in the numerator.
+
+> **74.53% is a HARD FLOOR, not a point estimate.** Floor 74.53% (2,086/2,799). Ceiling 77.49% (2,169/2,799, if every one of the 83 turned out to be seam-reached). 83 sites unattributable by static reading.
+
+**A floor cannot quietly erode; a point estimate can.** The worst case is now stated rather than discovered later. This is a categorically better epistemic position than 75.28% was, and it is a lower number — those two facts are not in tension, and the lower number must not be read as the work going backwards.
+
+**THE 83 UNRESOLVED, COMPOSED** — up from 62, which is retired as a number. The honest count is 83:
+
+| what | count | resolvable? |
+|---|---|---|
+| function-parameter receivers shadowing a module-level binding of the same name | 36 | no — caller fact |
+| function-parameter receivers with no such binding (already UNRESOLVED before this fix) | 43 | no — caller fact |
+| destructured from a caller-supplied context object — `const { mainDb } = ctx`, `lib/delivery-reminders.js:178`, `lib/tracking.js:553` | 2 | no — caller fact |
+| inline `require('./database').prepare(` — `server.js:287`, `:854` | 2 | **yes** — these are DIRECT |
+
+The last two are the only ones a static reader could answer. They were left alone as outside this fix's scope, and they cost the figure nothing: DIRECT and UNRESOLVED are both uncovered. Everything else in the 83 is a fact about callers that no amount of reading this file can supply.
+
+**THE LARGER UNKNOWN, RECORDED PLAINLY SO 74.53% IS NOT MISREAD AS COMPLETE.** The `routes/retail.js` scanner gap stands untouched by this fix: **1,124 of 1,220 sites attributed, 96 invisible** to the scrubber inside nested `${...}` template literals, and **missing from BOTH the numerator and the denominator**. That is 96 sites against 83 — **the single largest unknown in the measurement, larger than the UNRESOLVED count**, and it is a separate open item that this correction does not touch and does not close. **74.53% means "of the surface the scanner can see."** The 96-site hole is outside that surface, not inside the uncovered part of it.
+
+**WHAT THIS CLOSES.** The optimistic-lean item left pending on the money-scanner pass — that the reader was attributing parameter receivers by name and counting some of them covered — is **RESOLVED** by this correction, and this note is the resolver. Recorded here and only here; the pending item's own entry is not edited, because pointers run one way.
+
+**WHAT THIS DOES NOT CLOSE.** Coverage is a floor with two named residuals: the 83 unattributable sites and the 96-site `retail.js` gap. And TENANT still counts as covered only because `lib/tenant-db.js`'s accessors return `seam(...)` — the reader checks that on every run rather than assuming it, so the figure falls on its own if anyone unwraps them.
+
+**THE FIX IS NOT MERGED.** It lives on `claude/db-seam-coverage-receiver-fix-rdw81d` at `c3c8aac`, tooling only, not on `main`. Merging carries a deploy consequence — `scripts/*` is in the deploy allowlist, so shipping the file runs `deploy-apply.sh` in full including the pm2 restart, a production restart for a diagnostic the box does not run. **That is a separate deliberate decision and is not made here.** **74.53% is the figure of record regardless**: it is true on the branch, it is a property of the application as it stands today, and merging the reader changes nothing about the thing measured.
+
 ### Step A of the tenant step — raw accessors, a guard, and currentTenantId() stops guessing — DONE 2026-08-04
 
 The seam's next move is to route `tdb()` and `getTenantDb()` through it, which covers 1,333 statement sites — about half the in-scope application — in one change. That is the opposite of the incremental pattern that has worked, so it is split. Step A does everything except the wrapping; Step B is then a two-line flip whose entire risk surface has already been retired.
