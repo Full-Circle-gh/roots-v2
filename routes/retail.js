@@ -15362,11 +15362,7 @@ router.put('/api/retail-admin/customers/:id/addresses/:addrId', requireRetailAdm
   // Staff correcting an address must not leave the old coordinates behind. They
   // describe the place the correction is moving AWAY from, and the next order
   // from this row would snapshot them straight onto a waybill.
-  const adminTextChanged = ['province', 'city', 'district', 'address', 'detail'].some((k) => {
-    const v = a[k];
-    if (v == null) return false;
-    return String(v).trim() !== String(existing[k] == null ? '' : existing[k]).trim();
-  });
+  const adminTextChanged = addressPin.addressTextChanged(a, existing);
   // A map-picked pin is the exception — it is a location, not a description of
   // one, so a text fix doesn't invalidate it. Keep it, and mark the row so the
   // pin diagnostic surfaces it for a human to confirm.
@@ -21557,6 +21553,12 @@ function qingyunShipFromState(retailOrderId) {
       push_status: q.status,                       // pending | processing | error | skipped
       push_attempts: q.attempts,
       push_error: q.last_error || null,
+      // Held on a geocoder outage: still pending, still retrying, but stalled on
+      // something outside this order. Distinct from a plain queue wait, because
+      // "queued" would let an hours-long map-service outage look like normal
+      // latency right up until someone noticed 待配送 was empty.
+      push_held: !!q.geo_held_at,
+      push_held_since: q.geo_held_at || null,
       // Only an 'error' row is dead — a pending one is still being retried.
       needs_attention: q.status === 'error',
       blocked_by: null,
@@ -21728,12 +21730,21 @@ router.post('/api/retail-admin/orders/:id/qingyun/retry-push', requireRetailAdmi
   if (!qingyunQueue.manualRetryEligible(q)) {
     return res.json({ success: true, already_queued: true, push_status: q.status });
   }
-  tdb().prepare(
-    `UPDATE qingyun_push_queue
-        SET status = 'pending', attempts = 0, last_error = 'manual retry',
-            updated_at = CURRENT_TIMESTAMP
-      WHERE retail_order_id = ?`
-  ).run(id);
+  // The guard lives in the STATEMENT, not just in the check above. Between that
+  // read and this write the daemon can finish a push and stamp the row with a
+  // qingyun_order_id; an unguarded reset would then hand a row that already has
+  // a copy back to the drain, which would create a SECOND 待配送 order and a
+  // second rider to pay for. 0 rows affected means exactly that happened.
+  const done = tdb().prepare(qingyunQueue.MANUAL_RETRY_SQL).run(id);
+  if (!done.changes) {
+    const fresh = _qingyunPushRow(id) || {};
+    return res.json({
+      success: true, already_created: !!fresh.qingyun_order_id,
+      qingyun_order_id: fresh.qingyun_order_id ? String(fresh.qingyun_order_id) : null,
+      push_status: fresh.status || null,
+      note: fresh.qingyun_order_id ? 'the push completed while you were looking at it' : null,
+    });
+  }
   logActivity(req.user.id, req.user.username, 'qingyun_retry_push', 'retail_order', id,
     { from_status: q.status, prior_error: q.last_error || null }, req.ip);
   res.json({ success: true, push_status: 'pending' });

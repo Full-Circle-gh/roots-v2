@@ -19,6 +19,26 @@ const assert = require('assert');
 const { buildCreatePayload, joinStreetDetail } = require('../lib/qingyun-payload');
 const geocode = require('../lib/geocode');
 
+// The round-1 rule, kept verbatim as a reference so the de-duplication tests can
+// assert a real DIFFERENCE rather than a property both versions happen to share.
+// It stripped ANY shared head of two or more characters, which is how
+// '中山一路1号' + '1号楼2单元' lost building 1.
+function naiveJoinV1(street, detail) {
+  const s = String(street || '').trim(), d = String(detail || '').trim();
+  if (!s) return d;
+  if (!d) return s;
+  if (s.includes(d)) return s;
+  if (d.includes(s)) return d;
+  let rest = d;
+  for (let n = Math.min(s.length, d.length); n >= 2; n--) {
+    if (s.slice(-n) === d.slice(0, n)) {
+      rest = d.slice(n).replace(/^[\s,，、.。;；:：\-–—]+/u, '').trim();
+      break;
+    }
+  }
+  return rest ? `${s} ${rest}` : s;
+}
+
 let pass = 0, fail = 0;
 function it(name, fn) {
   try { fn(); console.log(`  ✓ ${name}`); pass++; }
@@ -45,7 +65,20 @@ it('takes the detail when it is the fuller of the two', () => {
   assert.strictEqual(joinStreetDetail('珠江西路15号', '珠江西路15号3层302室'), '珠江西路15号3层302室');
 });
 it('never trims on a single shared character', () => {
+  // '中山一路8号' ends in 号 and '号楼302室' begins with it — a ONE-character
+  // overlap. Asserted against a reference implementation of the naive rule so
+  // this can't quietly become vacuous: the two must AGREE here (neither strips a
+  // lone char) and DISAGREE on the two-character street-number case below, which
+  // is the defect that actually shipped.
   assert.strictEqual(joinStreetDetail('中山一路8号', '号楼302室'), '中山一路8号 号楼302室');
+  assert.strictEqual(naiveJoinV1('中山一路8号', '号楼302室'), '中山一路8号 号楼302室',
+    'the naive rule also leaves a single shared char alone — this case alone proves nothing');
+  assert.notStrictEqual(
+    joinStreetDetail('中山一路1号', '1号楼2单元'),
+    naiveJoinV1('中山一路1号', '1号楼2单元'),
+    'the current rule must differ from the naive one on a shared STREET NUMBER');
+  assert.strictEqual(naiveJoinV1('中山一路1号', '1号楼2单元'), '中山一路1号 楼2单元',
+    '…because the naive rule ate the building number');
 });
 it('survives an empty side', () => {
   assert.strictEqual(joinStreetDetail('', '302室'), '302室');
@@ -141,10 +174,11 @@ const noPoi = { geocode: async () => null };
   });
 
   await itAsync('allows a far delivery when the pin is precise, but warns', async () => {
+    // 30km: past MAX_DROP_KM (25) but inside the absolute ceiling (50).
     const warns = [];
     const p = await buildCreatePayload(
       ORDER({ province: '广东省', city: '广州市', district: '南沙区', address: '某某花园1栋',
-              lat: 22.6, lng: 113.5, geo_source: 'customer_pin' }),
+              lat: 22.86, lng: 113.33, geo_source: 'customer_pin' }),
       SHOP, noPoi, { geocode: stubGeo(null), onWarn: m => warns.push(m) });
     assert.ok(p.recipientLat, 'payload still built');
     assert.ok(warns.some(w => /sending anyway/.test(w)), 'operator is told');
@@ -198,6 +232,7 @@ const noPoi = { geocode: async () => null };
   });
 
   await extraSuites();
+  await roundThreeSuites();
 
   console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed\n`);
   process.exit(fail ? 1 : 0);
@@ -488,4 +523,280 @@ async function extraSuites() {
   it('"" → 25', () => assert.strictEqual(readMaxDropKm(''), 25));
   it('"-5" → 25', () => assert.strictEqual(readMaxDropKm('-5'), 25));
   it('a real value is honoured', () => assert.strictEqual(readMaxDropKm('12'), 12));
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Round-3 suites. Where a rule lives in a library but is USED by a route, the
+// library test is not enough — round 2 found four defects that library-only
+// tests would have missed entirely. Each block below therefore pairs the logic
+// test with a call-site guard, and the guards say in their name when they are
+// source checks rather than behaviour.
+// ─────────────────────────────────────────────────────────────────────────
+async function roundThreeSuites() {
+  const fs = require('fs');
+  const path = require('path');
+  const Database = require('better-sqlite3');
+  const qingyunQueue = require('../lib/qingyun-queue');
+  const addressPin = require('../lib/address-pin');
+  const payload = require('../lib/qingyun-payload');
+
+  const ROOT = path.join(__dirname, '..');
+  const src = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+
+  // ── G1 · the retry race, against a real database ────────────────────────
+  // Not a mock: an in-memory SQLite carrying the REAL table definition, lifted
+  // out of database.js so the two cannot drift, running the REAL statement the
+  // endpoint runs.
+  console.log('\nG1 · retry-push cannot resurrect a completed row (real sqlite)');
+  const makeQueueDb = () => {
+    const ddl = src('database.js').match(/CREATE TABLE IF NOT EXISTS qingyun_push_queue[\s\S]*?\n  \);/);
+    assert.ok(ddl, 'qingyun_push_queue DDL not found in database.js');
+    const db = new Database(':memory:');
+    db.exec(ddl[0].replace(/FOREIGN KEY[\s\S]*?ON DELETE CASCADE/, 'dummy_fk INTEGER'));
+    db.exec("ALTER TABLE qingyun_push_queue ADD COLUMN geo_held_at DATETIME");
+    return db;
+  };
+
+  it('resets an errored, copy-less row', () => {
+    const db = makeQueueDb();
+    db.prepare("INSERT INTO qingyun_push_queue (retail_order_id, store_code, status, attempts, last_error) VALUES (7,'tianhe','error',5,'refused')").run();
+    const r = db.prepare(qingyunQueue.MANUAL_RETRY_SQL).run(7);
+    assert.strictEqual(r.changes, 1);
+    const row = db.prepare('SELECT * FROM qingyun_push_queue WHERE retail_order_id = 7').get();
+    assert.strictEqual(row.status, 'pending');
+    assert.strictEqual(row.attempts, 0);
+  });
+
+  it('THE RACE: the daemon completes between the read and the write → 0 rows', () => {
+    const db = makeQueueDb();
+    db.prepare("INSERT INTO qingyun_push_queue (retail_order_id, store_code, status, attempts) VALUES (7,'tianhe','error',5)").run();
+    // …the endpoint reads the row here and sees no qingyun_order_id…
+    const seen = db.prepare('SELECT * FROM qingyun_push_queue WHERE retail_order_id = 7').get();
+    assert.strictEqual(seen.qingyun_order_id, null);
+    assert.strictEqual(qingyunQueue.manualRetryEligible(seen), true, 'JS check would have said yes');
+    // …the daemon finishes the push and stamps the copy…
+    db.prepare("UPDATE qingyun_push_queue SET status='done', qingyun_order_id='QY9001' WHERE retail_order_id = 7").run();
+    // …and only then does the endpoint's UPDATE land.
+    const r = db.prepare(qingyunQueue.MANUAL_RETRY_SQL).run(7);
+    assert.strictEqual(r.changes, 0, 'the statement must refuse — otherwise a SECOND rider is dispatched');
+    const row = db.prepare('SELECT * FROM qingyun_push_queue WHERE retail_order_id = 7').get();
+    assert.strictEqual(row.status, 'done');
+    assert.strictEqual(row.qingyun_order_id, 'QY9001');
+  });
+
+  it('a skipped row may be retried by hand; a pending one is left alone', () => {
+    const db = makeQueueDb();
+    db.prepare("INSERT INTO qingyun_push_queue (retail_order_id, store_code, status) VALUES (1,'tianhe','skipped'),(2,'tianhe','pending')").run();
+    assert.strictEqual(db.prepare(qingyunQueue.MANUAL_RETRY_SQL).run(1).changes, 1);
+    assert.strictEqual(db.prepare(qingyunQueue.MANUAL_RETRY_SQL).run(2).changes, 0);
+  });
+
+  it('call site (source check): the endpoint runs MANUAL_RETRY_SQL, not its own UPDATE', () => {
+    const retail = src('routes/retail.js');
+    const at = retail.indexOf("qingyun/retry-push");
+    assert.ok(at > -1, 'retry-push route not found');
+    const body = retail.slice(at, at + 1800);
+    assert.ok(/qingyunQueue\.MANUAL_RETRY_SQL/.test(body),
+      'the retry endpoint must use the guarded shared statement');
+    assert.ok(!/UPDATE qingyun_push_queue\s+SET status = 'pending'/.test(body),
+      'no hand-rolled unguarded reset in the endpoint');
+    assert.ok(/already_created/.test(body), 'a 0-row result must tell the operator the push already succeeded');
+  });
+
+  // ── G2 · a provider outage holds, it does not refuse ─────────────────────
+  console.log('\nG2 · geocoder failure holds the order; a coarse ANSWER still refuses');
+  const failGeo = (failure) => ({
+    configured: () => true,
+    isDeliverablePin: geocode.isDeliverablePin,
+    geocodeAddress: async () => null,
+    geocodeAddressResult: async () => ({ result: null, failure }),
+  });
+  const LEGACY_PIN = { province: '广东省', city: '广州市', district: '白云区', address: '品秀星越花园A栋',
+                       lat: 23.135, lng: 113.335 };
+
+  await itAsync('quota exhaustion HOLDS an unattributed-pin order', async () => {
+    let err = null;
+    try {
+      await buildCreatePayload(ORDER(LEGACY_PIN), SHOP, noPoi,
+        { geocode: failGeo({ code: '121', message: 'daily limit', quota: true }) });
+    } catch (e) { err = e; }
+    assert.ok(err, 'it did not ship');
+    assert.strictEqual(err.geoHold, true, 'and it is a HOLD, not a refusal');
+    assert.strictEqual(err._geo.held, true);
+  });
+
+  await itAsync('a timeout HOLDS an order with no pin at all', async () => {
+    let err = null;
+    try {
+      await buildCreatePayload(
+        ORDER({ province: '广东省', city: '广州市', district: '天河区', address: '珠江西路15号' }),
+        SHOP, noPoi, { geocode: failGeo({ code: 'network', message: 'timeout' }) });
+    } catch (e) { err = e; }
+    assert.strictEqual(err && err.geoHold, true);
+  });
+
+  await itAsync('a COARSE ANSWER still refuses — an outage and a bad address differ', async () => {
+    let err = null;
+    try {
+      await buildCreatePayload(ORDER(LEGACY_PIN), SHOP, noPoi,
+        { geocode: stubGeo({ lat: 23.39, lng: 113.21, precision: 'coarse', level: '区县', provider: 'amap', cityMatch: true }) });
+    } catch (e) { err = e; }
+    assert.ok(err);
+    assert.notStrictEqual(err.geoHold, true, 'a provider that answered is evidence — refuse, do not hold');
+    assert.strictEqual(err._geo.refused, true);
+  });
+
+  await itAsync('recovery: the same order ships once the provider answers again', async () => {
+    const p = await buildCreatePayload(ORDER(LEGACY_PIN), SHOP, noPoi,
+      { geocode: stubGeo({ lat: 23.1365, lng: 113.3365, precision: 'rooftop', provider: 'amap', cityMatch: true }) });
+    assert.match(p._geo.source, /\+verified$/);
+  });
+
+  it('shouldHoldForGeocoder only fires on the hold marker', () => {
+    assert.strictEqual(qingyunQueue.shouldHoldForGeocoder({ geoHold: true }), true);
+    assert.strictEqual(qingyunQueue.shouldHoldForGeocoder(new Error('bad address')), false);
+    assert.strictEqual(qingyunQueue.shouldHoldForGeocoder(null), false);
+  });
+
+  it('HOLD_SQL writes attempts back — a held push must not spend one', () => {
+    const db = makeQueueDb();
+    db.prepare("INSERT INTO qingyun_push_queue (retail_order_id, store_code, status, attempts) VALUES (7,'tianhe','processing',3)").run();
+    db.prepare(qingyunQueue.HOLD_SQL).run(2, 'held', 1);       // 2 = the value before the drain incremented it
+    const row = db.prepare('SELECT * FROM qingyun_push_queue WHERE id = 1').get();
+    assert.strictEqual(row.attempts, 2, 'the attempt is given back');
+    assert.strictEqual(row.status, 'pending');
+    assert.ok(row.geo_held_at, 'and the hold is stamped');
+  });
+
+  it('HOLD_SQL keeps the FIRST hold time, so the alert measures the outage', () => {
+    const db = makeQueueDb();
+    db.prepare("INSERT INTO qingyun_push_queue (retail_order_id, store_code, status, attempts, geo_held_at) VALUES (7,'tianhe','pending',0,'2026-08-06 09:00:00')").run();
+    db.prepare(qingyunQueue.HOLD_SQL).run(0, 'held again', 1);
+    assert.strictEqual(
+      db.prepare('SELECT geo_held_at FROM qingyun_push_queue WHERE id = 1').get().geo_held_at,
+      '2026-08-06 09:00:00');
+  });
+
+  console.log('\nG2 · the outage alert pages once, then clears');
+  const MIN = 60_000;
+  it('says nothing while the hold is young', () => {
+    assert.strictEqual(qingyunQueue.geoHoldAlertDecision({
+      heldCount: 3, oldestHeldMs: 0, now: 5 * MIN, thresholdMin: 10 }).alert, null);
+  });
+  it('pages once the outage outlasts the threshold', () => {
+    const d = qingyunQueue.geoHoldAlertDecision({ heldCount: 3, oldestHeldMs: 0, now: 12 * MIN, thresholdMin: 10 });
+    assert.strictEqual(d.alert, 'page');
+    assert.strictEqual(d.heldCount, 3);
+  });
+  it('does NOT page again inside the throttle window', () => {
+    assert.strictEqual(qingyunQueue.geoHoldAlertDecision({
+      heldCount: 3, oldestHeldMs: 0, now: 20 * MIN, thresholdMin: 10, everyMin: 15,
+      alerted: true, lastAlertMs: 12 * MIN }).alert, null);
+  });
+  it('pages again once the throttle window has passed', () => {
+    assert.strictEqual(qingyunQueue.geoHoldAlertDecision({
+      heldCount: 3, oldestHeldMs: 0, now: 30 * MIN, thresholdMin: 10, everyMin: 15,
+      alerted: true, lastAlertMs: 12 * MIN }).alert, 'page');
+  });
+  it('sends one all-clear when the held queue drains', () => {
+    assert.strictEqual(qingyunQueue.geoHoldAlertDecision({ heldCount: 0, alerted: true }).alert, 'clear');
+    assert.strictEqual(qingyunQueue.geoHoldAlertDecision({ heldCount: 0, alerted: false }).alert, null);
+  });
+  it('call site (source check): the daemon holds instead of counting an attempt', () => {
+    const daemon = src('scripts/qingyun-daemon.js');
+    assert.ok(/qingyunQueue\.shouldHoldForGeocoder\(e\)/.test(daemon), 'the catch must test for a hold');
+    assert.ok(/qingyunQueue\.HOLD_SQL/.test(daemon), 'and use the shared hold statement');
+    assert.ok(/checkGeoHoldAlert\(storeCode\)/.test(daemon), 'and run the outage check each drain');
+  });
+
+  // ── G3 · the absolute ceiling ────────────────────────────────────────────
+  console.log('\nG3 · nothing ships beyond the same-city ceiling');
+  assert.strictEqual(payload.ABS_MAX_KM, 50, 'default is 2 × MAX_DROP_KM');
+
+  await itAsync('a customer pin 30km out still ships (inside the ceiling)', async () => {
+    const p = await buildCreatePayload(
+      ORDER({ province: '广东省', city: '广州市', district: '南沙区', address: '某某花园1栋',
+              lat: 22.86, lng: 113.33, geo_source: 'customer_pin', geo_precision: 'rooftop' }),
+      SHOP, noPoi, { geocode: stubGeo(null) });
+    assert.ok(p.recipientLat);
+  });
+
+  await itAsync('a customer pin 66km out is REFUSED despite being "tapped"', async () => {
+    // The mitigation for a client-asserted customer_pin: past the ceiling the
+    // claim buys nothing, because the server cannot verify a tap.
+    await assert.rejects(
+      buildCreatePayload(
+        ORDER({ province: '广东省', city: '广州市', district: '南沙区', address: '某某花园1栋',
+                lat: 22.53, lng: 113.33, geo_source: 'customer_pin', geo_precision: 'rooftop' }),
+        SHOP, noPoi, { geocode: stubGeo(null) }),
+      /beyond the 50km same-city ceiling/);
+  });
+
+  it('the ceiling validates its env like MAX_DROP_KM does', () => {
+    const { execFileSync } = require('child_process');
+    const read = (value) => {
+      const env = { ...process.env, QINGYUN_ABS_MAX_KM: value };
+      return Number(execFileSync(process.execPath, ['-e',
+        "process.stdout.write(String(require(process.argv[1]).ABS_MAX_KM))",
+        path.join(ROOT, 'lib', 'qingyun-payload.js')], { env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }));
+    };
+    assert.strictEqual(read('0'), 50);
+    assert.strictEqual(read('abc'), 50);
+    assert.strictEqual(read('80'), 80);
+  });
+
+  // ── G6 · row 4 of the decidePinAction enumeration ────────────────────────
+  console.log('\nG6 · unflagged coordinates never displace a tapped pin');
+  const TAPPED = { province: '广东省', city: '广州市', district: '天河区', address: '珠江西路15号', detail: '302室',
+                   lat: 23.12, lng: 113.32, geo_source: 'customer_pin', geo_precision: 'rooftop' };
+  it('different coords with no pin_source are IGNORED on a customer_pin row', () => {
+    const d = addressPin.decidePinAction({
+      pin: { lat: 23.9, lng: 113.9, fresh: false }, existing: TAPPED, incoming: {} });
+    assert.strictEqual(d.action, 'keep', 'the tapped pin stands');
+    assert.strictEqual(d.regeocode, false, 'and is not re-derived behind the customer’s back');
+    assert.strictEqual(d.ignoredUnflaggedPin, true);
+  });
+  it('…but a FRESH pick does replace it', () => {
+    const d = addressPin.decidePinAction({
+      pin: { lat: 23.9, lng: 113.9, fresh: true }, existing: TAPPED, incoming: {} });
+    assert.deepStrictEqual([d.action, d.source], ['set', 'customer_pin']);
+  });
+  it('…and a street edit still clears it', () => {
+    const d = addressPin.decidePinAction({ pin: null, existing: TAPPED, incoming: { address: '别的路9号' } });
+    assert.strictEqual(d.action, 'clear');
+  });
+  it('a NON-tapped row still records unflagged coords as client_unverified', () => {
+    const d = addressPin.decidePinAction({
+      pin: { lat: 23.9, lng: 113.9, fresh: false },
+      existing: { ...TAPPED, geo_source: 'geocode:amap', geo_precision: 'coarse' }, incoming: {} });
+    assert.deepStrictEqual([d.action, d.source], ['set', 'client_unverified']);
+  });
+
+  // ── G5 · call-site guards for the round-2 finding ────────────────────────
+  console.log('\nG5 · the routes still go through the shared decisions (source checks)');
+  it('call site (source check): translation adoption goes through shouldAdoptTranslation', () => {
+    const retail = src('routes/retail.js');
+    assert.ok(/addressCn\.shouldAdoptTranslation\(\{\s*first,\s*retry,\s*mergedAddress/.test(retail),
+      'geocodeAddressAsync must call the shared adoption rule');
+    assert.ok(!/GEO_RANK\[retry\.precision\]/.test(retail),
+      'no inline rank comparison for the retry — that was the >= bug');
+  });
+  it('call site (source check): the address PUT goes through decidePinAction', () => {
+    const retail = src('routes/retail.js');
+    assert.ok(/addressPin\.decidePinAction\(\{ pin, existing, incoming: a \}\)/.test(retail));
+    assert.ok(!/pinSource = pin\.fresh \? 'customer_pin'/.test(retail),
+      'the PUT must not hand-roll provenance');
+  });
+  it('call site (source check): the backfill uses the shared pin-write statement', () => {
+    const inv = src('routes/retail-inventory.js');
+    assert.ok(/addressPin\.GEOCODED_PIN_SQL/.test(inv));
+    assert.ok(/addressPin\.geocodedPinFields\(c\)/.test(inv));
+    assert.ok(!/UPDATE retail_customer_addresses SET lat = \?, lng = \?, geocoded_at/.test(inv),
+      'no provenance-less UPDATE left behind');
+  });
+  it('call site (source check): the admin address PUT uses the shared text-changed rule', () => {
+    const retail = src('routes/retail.js');
+    assert.ok(/addressPin\.addressTextChanged\(a, existing\)/.test(retail));
+    assert.ok(!/const adminTextChanged = \['province'/.test(retail), 'the inline copy is gone');
+  });
 }

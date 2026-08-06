@@ -85,7 +85,7 @@ function rows() {
   console.log(`${pad('ROW', 12)} ${pad('SOURCE', 16)} ${pad('STORED', 9)} ${pad('RE-RESOLVED', 12)} ${pad('CITY', 6)} ${pad('LATIN', 6)} ${pad('DRIFT', 8)} ADDRESS`);
   console.log('-'.repeat(120));
 
-  const tally = { total: 0, noPin: 0, coarse: 0, latin: 0, cityMismatch: 0, drifted: 0, customerPin: 0, unknownProvenance: 0 };
+  const tally = { total: 0, noPin: 0, coarse: 0, latin: 0, cityMismatch: 0, drifted: 0, customerPin: 0, unknownProvenance: 0, review: 0 };
 
   for (const r of list) {
     tally.total++;
@@ -122,10 +122,16 @@ function rows() {
     // can't back them up — so they are worth fixing before an order rides on one.
     const unknownProvenance = hasPin && !r.geo_source;
     const clientUnverified  = r.geo_source === 'client_unverified';
+    // A tapped pin whose TEXT was later edited by staff. Nothing automatic can
+    // settle it: the coordinates are a real observation, but the address they
+    // were observed for has since been rewritten, so only a human can say
+    // whether they still describe the same door. Flagged, never auto-cleared.
+    const needsReview = r.geo_precision === 'review';
     const bad = !hasPin || r.geo_precision === 'coarse' || cityOk === false || latin
-             || unknownProvenance || clientUnverified
+             || unknownProvenance || clientUnverified || needsReview
              || (fresh && (fresh.precision === 'coarse')) || (drift != null && drift > 1);
     if (unknownProvenance) tally.unknownProvenance++;
+    if (needsReview) tally.review++;
     if (BAD_ONLY && !bad) continue;
 
     console.log(
@@ -135,13 +141,14 @@ function rows() {
       + `${pad(cityOk === false ? 'WRONG' : cityOk === true ? 'ok' : '—', 6)} `
       + `${pad(latin ? 'YES' : '—', 6)} `
       + `${pad(drift == null ? '—' : `${drift.toFixed(1)}km`, 8)} `
-      + `${bad ? '⚠ ' : '  '}${[r.city, r.district, r.address, r.detail].filter(Boolean).join(' ').slice(0, 46)}`
+      + `${needsReview ? '👁 ' : bad ? '⚠ ' : '  '}${[r.city, r.district, r.address, r.detail].filter(Boolean).join(' ').slice(0, 46)}`
     );
   }
 
   console.log('-'.repeat(120));
   console.log(`${tally.total} rows · ${tally.customerPin} map-picked · ${tally.noPin} with NO pin · `
     + `${tally.unknownProvenance} pinned but unattributed · `
+    + `${tally.review} 👁 tapped pin + staff-edited text · `
     + `${tally.coarse} stored coarse · ${tally.latin} still English`
     + (VERIFY ? ` · ${tally.cityMismatch} wrong city · ${tally.drifted} drifted >1km` : ''));
   console.log(
@@ -149,5 +156,8 @@ function rows() {
     + 'and lib/qingyun-payload refuses to send a rider to one. A row with coordinates but NO source is a\n'
     + 'pre-provenance leftover: the push re-resolves the address and ships the stored pin only if the two\n'
     + 'agree, so these are the rows most likely to be refused. Fix them with the admin "Make address\n'
-    + 'Chinese" tool, or by asking the customer to drop a pin on the map (which records provenance).\n');
+    + 'Chinese" tool, or by asking the customer to drop a pin on the map (which records provenance).\n'
+    + '👁 = the customer tapped this pin, then staff edited the address text. The coordinates are real but\n'
+    + 'may no longer describe the address written beside them — open the order and confirm, or ask the\n'
+    + 'customer to re-pick. Nothing clears this automatically, by design.\n');
 })().catch(e => { console.error(e.message); process.exit(1); });

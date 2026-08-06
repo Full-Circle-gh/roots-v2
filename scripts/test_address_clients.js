@@ -109,15 +109,21 @@ console.log('\nmini-app address book — onField (F1)');
       assert.strictEqual(ctx.data.form.lat, 23.12, `${f} must not touch the pin`);
     }
   });
-  it('no other handler on this page clears coordinates', () => {
-    // Guards against a future handler quietly reintroducing the regression.
+  it('no other handler on this page nulls coordinates (source check, exact count)', () => {
+    // A cap with slack is not a guard: the previous version allowed <= 3 while
+    // the pattern matched 2, so one new clearing site could be added for free —
+    // which is exactly the regression this is supposed to catch. Exact equality,
+    // and a pattern that also sees the ternary form ('form.lat': x ? y : null).
     const src = fs.readFileSync(path.join(ROOT, 'miniapp/pages/addresses/addresses.js'), 'utf8');
     const clearing = src.split('\n')
       .map((l, i) => [i + 1, l])
-      .filter(([, l]) => /'form\.lat'\s*\]?\s*[:=]\s*null/.test(l));
-    // Expected: onField (street), the WeChat address-book import, and the map
-    // handler's own no-pin branch. Anything beyond that is new and suspicious.
-    assert.ok(clearing.length <= 3, `unexpected pin-clearing sites: ${JSON.stringify(clearing)}`);
+      .filter(([, l]) => /'form\.lat'\s*\]?\s*[:=][^;]*\bnull\b/.test(l));
+    // The three legitimate sites, and only these:
+    //   onField          — the STREET input (never the detail box)
+    //   pickFromWechat   — an address-book entry carries no coordinates
+    //   pickOnMap        — the no-pin branch of the map result
+    assert.strictEqual(clearing.length, 3,
+      `pin-nulling sites changed — review each: ${JSON.stringify(clearing)}`);
   });
 }
 

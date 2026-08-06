@@ -3642,21 +3642,31 @@ function renderQyShipFrom(o) {
   // happened, and offer the retry that used to require hand-editing the DB.
   if (!sf.qingyun_order_id) {
     const refused = sf.needs_attention;
+    // A hold is nobody's fault and needs no action — but it must not read as a
+    // normal queue wait, or an outage looks like latency until 待配送 runs dry.
+    const held = !refused && sf.push_held;
     return `
       <div class="ord-drawer-row">
         <div class="ord-drawer-label">${cuT('Same-city courier', '同城配送')}</div>
         <div style="flex:1;">
           <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
-            <span style="font-size:12px; font-weight:600; color:${refused ? 'var(--warn)' : 'var(--text-2)'};">
+            <span style="font-size:12px; font-weight:600; color:${refused || held ? 'var(--warn)' : 'var(--text-2)'};">
               ${refused
                 ? `⚠ ${cuT('Push refused — nobody is collecting this', '发单被拒 — 无人接单')}`
-                : cuT('Queued for push…', '排队发单中…')}
+                : held
+                  ? `⏸ ${cuT('Held — map service unavailable, retrying', '已挂起 — 地图服务不可用,正在重试')}`
+                  : cuT('Queued for push…', '排队发单中…')}
             </span>
             ${refused
               ? `<button class="btn btn-sm" onclick="qyRetryPush(${o.id}, this)">${cuT('Retry push', '重新发单')}</button>`
               : ''}
           </div>
           ${sf.push_error ? `<div class="muted" style="font-size:11px; margin-top:4px; line-height:1.5;" data-no-i18n>${escapeHtml(sf.push_error)}</div>` : ''}
+          ${held
+            ? `<div class="muted" style="font-size:11px; margin-top:4px; line-height:1.5;">${cuT(
+                'Nothing is wrong with this address — the geocoder is down. It pushes itself once the service is back.',
+                '地址没有问题 — 地图服务暂时不可用,恢复后会自动发出。')}</div>`
+            : ''}
           ${refused
             ? `<div class="muted" style="font-size:11px; margin-top:4px; line-height:1.5;">${cuT(
                 'Fix the delivery address (Edit ship-to, or Make address Chinese) and it retries on its own — or press Retry.',

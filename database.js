@@ -4381,6 +4381,12 @@ try { db.exec("CREATE INDEX IF NOT EXISTS idx_qingyun_push_pending ON qingyun_pu
 // order drawer offers a Remove button until it's gone. Cleared on success.
 addColumn('qingyun_push_queue', 'stale_qingyun_order_id', 'TEXT');
 addColumn('qingyun_push_queue', 'stale_store_code', 'TEXT');
+// When a push was held because the GEOCODER was unreachable (quota, timeout,
+// network) rather than because anything was wrong with the address. Such a push
+// must not spend a retry attempt — nothing was learned — so the row stays
+// pending and this records when the hold began, which is what the daemon's
+// outage alert measures. NULL = not held. See lib/qingyun-queue HOLD_SQL.
+addColumn('qingyun_push_queue', 'geo_held_at', 'DATETIME');
 
 // Meituan-only bundles (套餐/combos) that have no single roots product. Each is
 // defined as a set of component products; its sellable stock is computed as the

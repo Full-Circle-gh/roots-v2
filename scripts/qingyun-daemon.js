@@ -48,6 +48,8 @@ const geocode = require('../lib/geocode'); // Tencent/AMap — resolve English/p
 const { buildCreatePayload } = require('../lib/qingyun-payload'); // shared with the ship-from override
 const { translateToChinese } = require('../lib/address-cn'); // English/pinyin street → Chinese, before the rider sees it
 const inventory = require('../lib/inventory'); // isQingyunSameCityToday — same-city/same-day eligibility
+// Hold-vs-refuse decision + the statements that implement it (see lib/qingyun-queue).
+const qingyunQueue = require('../lib/qingyun-queue');
 const { storeHours, within } = require('../lib/store-hours'); // opening hours, for the alert window
 
 const STORES = (process.env.QINGYUN_STORES || 'tianhe')
@@ -505,6 +507,47 @@ function pushPayload(order, shop, br, storeCode) {
     onWarn: (msg) => log(storeCode || 'push', `push: ${msg}`),
   });
 }
+// ── Geocoder-outage alert ─────────────────────────────────────────────────
+// One page per OUTAGE, not one per order per drain. A held push is invisible by
+// design — the row stays pending and keeps retrying — so without this an Amap
+// quota cap at 18:00 would quietly park every order until someone noticed the
+// 待配送 list was empty.
+const GEO_HOLD_ALERT_MIN   = Number(process.env.QINGYUN_GEO_HOLD_ALERT_MIN   || 10);
+const GEO_HOLD_ALERT_EVERY = Number(process.env.QINGYUN_GEO_HOLD_ALERT_EVERY_MIN || 15);
+// Per-process, deliberately: a restart re-pages, which is the safe direction for
+// an outage that is still going.
+let geoHoldAlerted = false, geoHoldLastAlertMs = null;
+
+function checkGeoHoldAlert(storeCode) {
+  let held;
+  try {
+    held = db.prepare(
+      `SELECT COUNT(*) AS n, MIN(geo_held_at) AS oldest
+         FROM qingyun_push_queue
+        WHERE geo_held_at IS NOT NULL AND status = 'pending' AND qingyun_order_id IS NULL`
+    ).get();
+  } catch { return; }                                  // column absent on an older DB
+  const heldCount = (held && held.n) || 0;
+  // SQLite CURRENT_TIMESTAMP is UTC 'YYYY-MM-DD HH:MM:SS' — parse it as such.
+  const oldestHeldMs = (held && held.oldest) ? Date.parse(String(held.oldest).replace(' ', 'T') + 'Z') : null;
+  const decision = qingyunQueue.geoHoldAlertDecision({
+    heldCount, oldestHeldMs: Number.isFinite(oldestHeldMs) ? oldestHeldMs : null,
+    alerted: geoHoldAlerted, lastAlertMs: geoHoldLastAlertMs, now: Date.now(),
+    thresholdMin: GEO_HOLD_ALERT_MIN, everyMin: GEO_HOLD_ALERT_EVERY,
+  });
+  if (decision.alert === 'page') {
+    geoHoldAlerted = true; geoHoldLastAlertMs = Date.now();
+    logSync(storeCode, 'push', 'error', { held: decision.heldCount }, 'pushes held — geocoder unavailable');
+    sendOpsAlert(`🟠 青云聚信 自动发单暂停：地图服务不可用（配额/超时），${decision.heldCount} 个订单已挂起约 ${decision.heldMin} 分钟，地址本身没有问题，服务恢复后会自动发出\n`
+      + `Qingyun auto-push HELD — the geocoder is unavailable (quota/timeout). ${decision.heldCount} order(s) held ~${decision.heldMin} min. `
+      + `Nothing is wrong with the addresses; they push themselves once it recovers. Check the Amap/Tencent key quota.`);
+  } else if (decision.alert === 'clear') {
+    geoHoldAlerted = false; geoHoldLastAlertMs = null;
+    logSync(storeCode, 'push', 'ok', null, 'geocoder recovered — held pushes drained');
+    sendOpsAlert('✅ 青云聚信 地图服务已恢复，挂起的订单已全部发出\nQingyun geocoder recovered — every held push has gone out');
+  }
+}
+
 async function drainPushQueue(storeCode, br) {
   if (cfg('delivery.qingyunAutoPush', false) !== true) return;
 
@@ -544,7 +587,8 @@ async function drainPushQueue(storeCode, br) {
       "SELECT * FROM qingyun_push_queue WHERE store_code = ? AND status IN ('pending') ORDER BY id LIMIT 3"
     ).all(storeCode);
   } catch { return; }
-  if (!rows.length) return;
+  // Runs even with nothing to drain — that is exactly when the all-clear is due.
+  if (!rows.length) { checkGeoHoldAlert(storeCode); return; }
   const shop = await br.getShop();
   if (!shop || !shop.shopId) { log(storeCode, 'push: shop lookup failed — will retry'); return; }
 
@@ -566,7 +610,7 @@ async function drainPushQueue(storeCode, br) {
       const payload = await pushPayload(order, shop, br, storeCode);
       const res = await br.createOrder(payload);
       if (res.ok) {
-        db.prepare("UPDATE qingyun_push_queue SET status='done', qingyun_order_id=?, last_error=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(res.orderId, row.id);
+        db.prepare("UPDATE qingyun_push_queue SET status='done', qingyun_order_id=?, last_error=NULL, geo_held_at=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(res.orderId, row.id);
         // Log HOW the drop-off pin was obtained. When a delivery does go to the
         // wrong place, this line is the difference between guessing and knowing:
         // it says whether the customer picked the pin, which provider resolved it,
@@ -578,9 +622,17 @@ async function drainPushQueue(storeCode, br) {
         throw new Error(`create failed (code ${res.code}, ${res.msg})`);
       }
     } catch (e) {
+      // A geocoder outage is not the order's fault. Hold it: keep it pending,
+      // give back the attempt the drain just spent, and stamp when the hold
+      // began so the alert below can measure the outage rather than the order.
+      if (qingyunQueue.shouldHoldForGeocoder(e)) {
+        db.prepare(qingyunQueue.HOLD_SQL).run(row.attempts, String(e.message).slice(0, 300), row.id);
+        log(storeCode, `push: order ${row.retail_order_id} HELD (attempt not counted, still ${row.attempts}/${MAX_PUSH_ATTEMPTS}): ${e.message}`);
+        continue;
+      }
       const attempts = row.attempts + 1;
       const done = attempts >= MAX_PUSH_ATTEMPTS;
-      db.prepare("UPDATE qingyun_push_queue SET status=?, last_error=?, updated_at=CURRENT_TIMESTAMP WHERE id=?")
+      db.prepare("UPDATE qingyun_push_queue SET status=?, last_error=?, geo_held_at=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?")
         .run(done ? 'error' : 'pending', String(e.message).slice(0, 300), row.id);
       // The same [pin …] provenance the success path prints. A refusal is when
       // you most need it: it says which of the three pin sources was in play and
@@ -597,6 +649,7 @@ async function drainPushQueue(storeCode, br) {
       }
     }
   }
+  checkGeoHoldAlert(storeCode);
 }
 
 async function pollStore(storeCode) {
