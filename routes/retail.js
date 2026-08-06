@@ -7560,6 +7560,21 @@ const ADDRESS_PUBLIC_COLS = `id, recipient_name, phone, province, city, district
                               address, detail, postal_code, is_default,
                               created_at, updated_at`;
 
+// Same-city verdict, stamped on every saved address we hand back to a customer.
+//
+// It exists for the BROWSE-time pre-order pill. A sold-out product on the
+// 'backorder_gz' policy is reservable only when the order isn't Guangzhou
+// same-day (inventory.requiresStockGate) — the local kitchen can't conjure a
+// batch for today's scooter run. The catalog used to advertise PRE-ORDER off
+// the product flag alone, so a Tianhe shopper was invited to reserve something
+// the checkout then refused. With this flag the mini app / web storefront read
+// those rows as a plain SOLD OUT for a same-city address, and the 广州 matcher
+// still lives in exactly one place (lib/inventory.js).
+function stampSameCity(rows) {
+  for (const r of rows) r.same_city = inventory.isGuangzhouAddress(r);
+  return rows;
+}
+
 // E-bike rider ETA from the nearest active store to a saved address.
 // Speed assumption: ~35 km/h average through GZ traffic (≈1.7 min/km).
 // We also add a flat 8 min pickup + handoff buffer so close-in deliveries
@@ -7616,7 +7631,7 @@ router.get('/api/retail/addresses', requireRetailAuth, (req, res) => {
   // unchanged when the edit only touched the name or phone. Without the
   // round-trip every edit silently dropped a map-picked pin and the address
   // fell back to a re-geocoded guess.
-  const data = rows.map(r => ({ ...r, delivery_eta: computeRiderEta(r, r.lat, r.lng) }));
+  const data = stampSameCity(rows.map(r => ({ ...r, delivery_eta: computeRiderEta(r, r.lat, r.lng) })));
   res.json({ success: true, data });
 });
 
@@ -17345,13 +17360,16 @@ router.get('/api/retail/customer', requireRetailAuth, (req, res) => {
   // nothing due, idempotent when called repeatedly.
   sweepExpiredPoints(req.customer.id);
   const fresh = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(req.customer.id);
-  const addresses = tdb().prepare(
+  // same_city rides along (see stampSameCity) — the web storefront reads its
+  // address book from this payload, and its shop grid needs the same pre-order
+  // verdict the mini app gets from GET /api/retail/addresses.
+  const addresses = stampSameCity(tdb().prepare(
     `SELECT id, recipient_name, phone, province, city, district, address, detail,
             postal_code, is_default, created_at, updated_at
        FROM retail_customer_addresses
       WHERE customer_id = ?
       ORDER BY is_default DESC, updated_at DESC`
-  ).all(req.customer.id);
+  ).all(req.customer.id));
   const favoriteCount = tdb().prepare(
     'SELECT COUNT(*) AS n FROM retail_customer_favorites WHERE customer_id = ?'
   ).get(req.customer.id).n;

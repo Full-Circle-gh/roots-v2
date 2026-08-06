@@ -186,7 +186,11 @@ credit restore:** binding a phone atomically claims a legacy OUT1N `retail_migra
    backstop (loser throws, caught, replays winner). Prevents points/wallet double-spend.
 2. Resolve items → snapshot price/options/flash; ring-fence flash lines from coupons.
 3. **Hard OOS gate** — `oos_policy='strict'` refuses 409 when per-store stock < qty; `backorder_gz` +
-   bundles exempt.
+   bundles exempt. **Browse-time mirror:** a `backorder_gz` row only advertises PRE-ORDER to an
+   out-of-city shopper — inside GZ the same-day gate below refuses it, so the catalog must show a
+   dead SOLD OUT instead. `stampSameCity()` puts `same_city` on every saved address the customer
+   reads (`/addresses`, `/customer`); `miniapp/utils/delivery.js` and `shopperSameCity()` in
+   `public/shop.html` turn that into the pill. Locked by `scripts/test_preorder_local.js`.
 4. **Routing** (`lib/inventory.routeOrder`) — GPS-nearest of the two GZ stores, or
    `out_of_city_store_id` (warehouse) for non-GZ / scheduled ship-districts. Stock gate ON only for
    pickup + GZ-same-day; OFF for out-of-GZ/scheduled. Fallback choices drive `analyzeShortage`.

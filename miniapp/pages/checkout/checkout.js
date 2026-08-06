@@ -9,6 +9,7 @@ const config = require('../../utils/config');
 const lang   = require('../../utils/lang');
 const notify = require('../../utils/notifications');
 const zones  = require('../../utils/zones');
+const delivery = require('../../utils/delivery');
 
 // Per-line "was / save ¥X" badge for the order summary. A line earns the badge
 // when it's on flash OR it's a bundle priced below its components' combined
@@ -715,6 +716,7 @@ Page({
     try {
       const addrs = await api.get('/api/retail/addresses');
       const list  = Array.isArray(addrs) ? addrs : addrs?.data || [];
+      delivery.prime(list);
       const patch = { savedAddresses: list };
       // /pages/addresses sets `_addressJustPicked` on us before navigating
       // back when the customer taps a card to switch addresses. That ID wins
@@ -796,6 +798,7 @@ Page({
     try {
       const addrs = await api.get('/api/retail/addresses');
       const list = Array.isArray(addrs) ? addrs : addrs?.data || [];
+      delivery.prime(list);
       const def = list.find(a => a.is_default) || list[0] || null;
       this.setData({
         savedAddresses: list,
@@ -2798,6 +2801,9 @@ Page({
           is_default: true,
         });
         addressId = saved?.id || saved?.data?.id;
+        // A brand-new default address may sit in a different city from the one
+        // the shop tab last badged against — drop the cached verdict.
+        delivery.invalidate();
       }
       if (!isPickup && !addressId) throw new Error(this.data.lang === 'cn' ? '地址保存失败' : 'Could not save address');
 
