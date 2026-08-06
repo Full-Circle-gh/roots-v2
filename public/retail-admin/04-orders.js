@@ -3858,29 +3858,34 @@ async function qpConfirmPoint(orderId, btn) {
 }
 
 // ── Reschedule an expired delivery ─────────────────────────────────────────
-// Three days from today. Today is offered first and is the only choice that
-// ships today — a later day is dated correctly on the order but waits for its
-// own morning, which the confirm line says out loud rather than implying.
+// TODAY ONLY, until stage 6. A future date writes and requeues cleanly and
+// then dies the next morning, and every morning after: nothing re-queues a
+// 'skipped' row on its own day, so the drain retires it again on each pass.
+// The operator would pick Friday, watch it be accepted, and find it gone with
+// no error and no trace — the same silent no-op this whole build exists to
+// remove, with a caption on it.
+//
+// Not offered-and-disabled either: an option you can see but not choose still
+// says it is coming. It is not coming until a skipped row can wait for its
+// day. For any other date the honest instruction is to build the delivery by
+// hand, which is what the copy says.
 function qpOpenReschedule(orderId, btn) {
   const box = document.getElementById('qp-resched-' + orderId);
   if (!box) return;
   const acts = document.getElementById('qp-actions-' + orderId);
   if (acts) acts.hidden = true;
-  const days = [];
-  for (let i = 0; i < 3; i++) {
-    const d = new Date(Date.now() + i * 86400000 + 8 * 3600000);   // Beijing day
-    const iso = d.toISOString().slice(0, 10);
-    days.push({ iso, label: i === 0 ? cuT('today', '今天') : i === 1 ? cuT('tomorrow', '明天') : '' });
-  }
+  const today = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);   // Beijing day
   box.innerHTML = `
     <div class="qp-dates">
-      ${days.map(d => `
-        <label class="qp-date">
-          <input type="radio" name="qp-date-${orderId}" value="${d.iso}" onchange="qpPickDate(${orderId}, '${d.iso}')">
-          <span class="d">${d.iso}</span>
-          <span class="muted" style="font-size:12.5px;">${escapeHtml(d.label)}</span>
-        </label>`).join('')}
+      <label class="qp-date">
+        <input type="radio" name="qp-date-${orderId}" value="${today}" onchange="qpPickDate(${orderId}, '${today}')">
+        <span class="d">${today}</span>
+        <span class="muted" style="font-size:12.5px;">${cuT('today', '今天')}</span>
+      </label>
     </div>
+    <div class="qp-hint" style="margin-top:8px;line-height:1.6;">${cuT(
+      'Only today can go back in the queue. For a later day, create the delivery by hand in the Qingyun app.',
+      '仅可改期至今天并重新排队。如需改到其他日期,请在青云 App 中手动建单。')}</div>
     <div id="qp-confirm-${orderId}"></div>`;
 }
 
@@ -3890,14 +3895,12 @@ function qpPickDate(orderId, iso) {
   const box = document.getElementById('qp-confirm-' + orderId);
   const o = _OPEN_ORDER || {};
   const from = (o.qingyun_ship_from && o.qingyun_ship_from.promised_date) || '';
-  const today = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
   if (!box) return;
   box.innerHTML = `
     <div class="qp-confirm">
       <div>${cuT(
         `Move this delivery from <span class="swap">${escapeHtml(from)}</span> to <span class="swap">${escapeHtml(iso)}</span>? The customer is told the new day.`,
         `将配送日期由 <span class="swap">${escapeHtml(from)}</span> 改为 <span class="swap">${escapeHtml(iso)}</span>？系统会告知顾客新的日期。`)}
-        ${iso === today ? '' : `<div style="margin-top:6px;">${cuT('It goes back in the queue and waits for that morning.', '将重新排队，等待当天再发出。')}</div>`}
       </div>
       <div style="display:flex;gap:10px;margin-top:11px;">
         <button class="btn btn-primary btn-sm" type="button" onclick="qpDoReschedule(${orderId}, '${iso}', this)">${cuT('Move the delivery', '确认改期')}</button>
@@ -3915,9 +3918,7 @@ async function qpDoReschedule(orderId, iso, btn) {
     });
     const j = await r.json();
     if (j.success) {
-      toast(j.ships_today
-        ? cuT('Moved to today — it goes back in the queue now', '已改期至今天 — 已重新排队')
-        : cuT('Moved. It waits for that morning to go out.', '已改期，将于当天发出'), 'success');
+      toast(cuT('Moved to today — it goes back in the queue now', '已改期至今天 — 已重新排队'), 'success');
       openOrder(orderId, { instant: true });
       return;
     }
