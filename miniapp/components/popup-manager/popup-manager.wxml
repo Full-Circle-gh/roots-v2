@@ -13,7 +13,10 @@
       style="{{imgStyle}}"
       bindload="onImgLoad"
       catchtap="onTapCta"></image>
-    <view class="pm-text">
+    <!-- A picture with no words is a whole pop-up on its own. Drop the text
+         block entirely when it has nothing in it — left in, its own padding
+         hangs an empty band under the picture. -->
+    <view wx:if="{{title || body || ctaLabel}}" class="pm-text">
       <view wx:if="{{title}}" class="pm-title f-bear">{{title}}</view>
       <view wx:if="{{body}}"  class="pm-body">{{body}}</view>
       <view wx:if="{{ctaLabel}}" class="pm-cta" catchtap="onTapCta">{{ctaLabel}}</view>

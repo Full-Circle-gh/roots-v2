@@ -3079,13 +3079,22 @@ function clearPopupImage() {
 }
 
 function updatePopupPreview() {
-  const title = $('#pu-title_en').value.trim() || $('#pu-title_cn').value.trim() || 'Pop-up title';
+  const title = $('#pu-title_en').value.trim() || $('#pu-title_cn').value.trim();
   const body  = $('#pu-body_en').value.trim()  || $('#pu-body_cn').value.trim()  || '';
   const cta   = $('#pu-cta_label_en').value.trim() || $('#pu-cta_label_cn').value.trim() || '';
   const img   = $('#pu-image_url').value;
   const dismissible = $('#pu-dismissible').checked;
-  $('#pu-preview-title').textContent = title;
-  $('#pu-preview-body').textContent  = body;
+  // A picture with no words is a whole pop-up, and that's what the customer
+  // sees — so don't invent a headline under it. The placeholder only stands
+  // in while the pop-up has nothing at all, to keep the frame from reading
+  // as broken on a fresh one.
+  const shownTitle = title || ((!body && !cta && !img) ? 'Pop-up title' : '');
+  const tEl = $('#pu-preview-title');
+  tEl.textContent = shownTitle;
+  tEl.style.display = shownTitle ? '' : 'none';
+  const bEl = $('#pu-preview-body');
+  bEl.textContent = body;
+  bEl.style.display = body ? '' : 'none';
   const cEl = $('#pu-preview-cta');
   cEl.textContent = cta;
   cEl.style.display = cta ? '' : 'none';
@@ -3095,6 +3104,9 @@ function updatePopupPreview() {
   const iEl = $('#pu-preview-img');
   if (img) { iEl.src = img; iEl.style.display = ''; }
   else     { iEl.removeAttribute('src'); iEl.style.display = 'none'; }
+  // Picture with nothing to say — let the card be the picture, the way the
+  // customer's pop-up renders it.
+  $('#pu-preview-modal').classList.toggle('pu-no-text', !!img && !shownTitle && !body && !cta);
   $('#pu-preview-close').style.display = dismissible ? '' : 'none';
 }
 

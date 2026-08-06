@@ -5671,6 +5671,12 @@
          headline + two body lines + the CTA — leaving ~275px for the picture.
          Cap at ~90% of that. */
       .pu-phone { --pu-img-cap: 240px; }
+      /* Picture-only pop-up: no words, so no text block, no padding around
+         the picture and nothing under it — the card is the picture, which is
+         exactly what the customer gets. With the text gone the cap rises to
+         ~90% of the bare 496px the frame allows. */
+      .pu-modal.pu-no-text { --pu-img-cap: 440px; min-height: 0; padding: 0; }
+      .pu-modal.pu-no-text .pu-modal-img { margin-bottom: 0; border-radius: 20px; }
       .pu-modal-img {
         display: block;
         width: auto; max-width: 100%;
