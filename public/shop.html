@@ -4475,7 +4475,7 @@ async function renderShop(params){
   // Mobile (<768px): faithful mini-app LIST layout (left rail + grouped list).
   // Desktop keeps its own PC-native responsive grid below.
   if(window.matchMedia('(max-width:767px)').matches) return renderShopList(params);
-  // The pre-order badges depend on where this shopper delivers (shopperSameCity),
+  // The pre-order badges depend on where this shopper delivers (shopperOnLocalRun),
   // so resolve the account before the first paint rather than badge and re-badge.
   if(state.token&&!state.customer){ try{ await loadCustomer(); }catch(e){} }
   const view=$('#view');
@@ -4569,12 +4569,12 @@ function slEff(p){const r=Number(p.price??p.sell_price)||0;const e=Number(p.effe
 //   soldOut  -> hard out: dimmed, dead row.
 // `oos_preorder` is the server's own verdict (shipped by the PDP and the list
 // endpoints); oosBackorder() is the client-side fallback for older payloads.
-// Nothing is reservable for a same-city shopper (see shopperSameCity) — their
+// Nothing is reservable for a shopper on the local run (see shopperOnLocalRun) — their
 // order goes out on today's local run, which needs the stock on the shelf.
 function slStock(m){
   const stock=m.stock==null?null:Number(m.stock);
   const out=m.ship_from_supplier?!!m.supplier_paused:(stock!=null&&stock<=0);
-  const pre=out&&!m.ship_from_supplier&&(m.oos_preorder!=null?!!m.oos_preorder:oosBackorder(m))&&!shopperSameCity();
+  const pre=out&&!m.ship_from_supplier&&(m.oos_preorder!=null?!!m.oos_preorder:oosBackorder(m))&&!shopperOnLocalRun();
   return {out,pre,soldOut:out&&!pre,stock};
 }
 // Card image. The slim list puts the streamed-image URL in image_data (not
@@ -4611,14 +4611,13 @@ function slCollapse(raw){
 
 // Product → display row. Browse-time stock verdict mirrors the existing web
 // stockState()/oosBackorder(): strict sold-out is a hard SOLD OUT; a backorder
-// (or batch-meal) item stays orderable as SHIPS SOON / NEXT BATCH — but only for
-// an out-of-city shopper. Inside Guangzhou the order rides today's local run,
-// which the checkout gates on real stock, so a same-city shopper reads the same
-// dead SOLD OUT the desktop card gives them (shopperSameCity, mirrored from
-// stockState/slStock).
+// (or batch-meal) item stays orderable as SHIPS SOON / NEXT BATCH — but not for
+// a shopper the same-day local run serves: their order rides that run, which
+// the checkout gates on real stock, so they read the same dead SOLD OUT the
+// desktop card gives them (shopperOnLocalRun, mirrored from stockState/slStock).
 function slToRows(products){
   const L=state.lang;
-  const sameCity=shopperSameCity();
+  const onLocalRun=shopperOnLocalRun();
   return products.map(p=>{
     const members=p._members||null;
     const regular=Number(p.price??p.sell_price)||0;
@@ -4633,12 +4632,12 @@ function slToRows(products){
       pricePrefix=(minP>0&&!allSame)?(L==='cn'?'起':'from'):'';
       const allOut=members.every(m=>m.stock!=null&&Number(m.stock)<=0);
       const anyBack=members.some(m=>oosBackorder(m));
-      nextBatch=allOut&&anyBack&&!sameCity;outOfStock=allOut&&!nextBatch;
+      nextBatch=allOut&&anyBack&&!onLocalRun;outOfStock=allOut&&!nextBatch;
       soldUnits=members.reduce((s,m)=>s+(Number(m.units_sold)||0),0);
     }else{
       const sn=p.stock==null?null:Number(p.stock);
       const out=sn!=null&&sn<=0;
-      nextBatch=out&&oosBackorder(p)&&!sameCity;outOfStock=out&&!nextBatch;
+      nextBatch=out&&oosBackorder(p)&&!onLocalRun;outOfStock=out&&!nextBatch;
       soldUnits=Number(p.units_sold||p.sold_count||0);
       price=eff>0?slMoney(eff):'—';
       const cmp=Number(p.compare_at_price)||0;
@@ -4701,7 +4700,7 @@ function slBuildSections(display,tree){
 
 async function renderShopList(params){
   // Same as the desktop grid: the stock pills need the shopper's own delivery
-  // city before they can promise a pre-order (shopperSameCity).
+  // city before they can promise a pre-order (shopperOnLocalRun).
   if(state.token&&!state.customer){ try{ await loadCustomer(); }catch(e){} }
   const view=$('#view');
   SL.q=params.get('q')||'';
@@ -5089,7 +5088,7 @@ function oosBackorder(p){
 // beside `same_city` on the addresses in GET /api/retail/customer), and the
 // address that counts is the default — the one checkout pre-selects. Signed
 // out / no saved address → false, the permissive default we've always had.
-function shopperSameCity(){
+function shopperOnLocalRun(){
   const addrs=(state.customer&&Array.isArray(state.customer.addresses))?state.customer.addresses:[];
   if(!addrs.length)return false;
   const a=addrs.find(x=>x.is_default)||addrs[0];
@@ -5112,7 +5111,7 @@ function stockState(p){
     ? vs.every(v=>v.stock!=null&&Number(v.stock)<=0)
     : (p.stock!=null&&Number(p.stock)<=0);
   if(!out) return {oos:false,soldOut:false,badge:''};
-  if(oosBackorder(p)&&!shopperSameCity()) return {oos:true,soldOut:false,
+  if(oosBackorder(p)&&!shopperOnLocalRun()) return {oos:true,soldOut:false,
     badge:p.is_batch_made?(state.lang==='cn'?'下批现做':'NEXT BATCH'):(state.lang==='cn'?'现订现发':'SHIPS SOON')};
   return {oos:true,soldOut:true,badge:state.lang==='cn'?'售罄':'SOLD OUT'};
 }

@@ -215,9 +215,9 @@ Page({
     // They may have switched delivery address (the address book is one tap
     // away) — a move into or out of Guangzhou changes whether this product can
     // be pre-ordered, so re-badge before they tap Add.
-    delivery.load().then((sameCity) => {
-      if (!!sameCity === !!this._sameCity) return;
-      this._sameCity = !!sameCity;
+    delivery.load().then((onLocalRun) => {
+      if (!!onLocalRun === !!this._onLocalRun) return;
+      this._onLocalRun = !!onLocalRun;
       if (this.data.product) this.recomputeDisplay();
     }).catch((e) => console.warn('[product] delivery sync failed:', e.message));
     this.startFlashTick();
@@ -330,7 +330,7 @@ Page({
       // delivery.load() is cached and never rejects.
       const [p] = await Promise.all([
         api.get('/api/retail/products/' + this.data.id),
-        delivery.load().then((sameCity) => { this._sameCity = !!sameCity; }),
+        delivery.load().then((onLocalRun) => { this._onLocalRun = !!onLocalRun; }),
       ]);
       this.setData({ product: p, loading: false });
       this.recomputeDisplay();
@@ -439,7 +439,7 @@ Page({
     // `reservable` folds in the shopper's own address: inside Guangzhou the
     // order rides today's local run, which the checkout gates on real stock —
     // so a sold-out row reads SOLD OUT there, never PRE-ORDER.
-    const reservable = m => !!(m && m.oos_preorder) && !this._sameCity;
+    const reservable = m => !!(m && m.oos_preorder) && !this._onLocalRun;
     let soldOut = false, preorder = false, stockTag = '', stockTagKind = '';
     if (p.ship_from_supplier) {
       // Supplier-direct: no stock of ours. Always available unless the operator
@@ -993,7 +993,7 @@ Page({
       // Out but pre-orderable (out-of-city) → keep it tappable with a Pre-order
       // badge; only a hard-out size shows the dead SOLD OUT pill. A same-city
       // shopper is never offered the reservation (see recomputeDisplay).
-      const preorder = out && !m.ship_from_supplier && !!m.oos_preorder && !this._sameCity;
+      const preorder = out && !m.ship_from_supplier && !!m.oos_preorder && !this._onLocalRun;
       const soldOut = out && !preorder;
       return {
         id: m.id,
@@ -1047,7 +1047,7 @@ Page({
     // A pre-orderable out-of-stock size stays orderable for an out-of-city
     // shopper; a same-city one can't reserve it (the checkout blocks same-day
     // Guangzhou on stock), so the row is dead for them.
-    const vPreorder = out && !m.ship_from_supplier && !!m.oos_preorder && !this._sameCity;
+    const vPreorder = out && !m.ship_from_supplier && !!m.oos_preorder && !this._onLocalRun;
     if (out && !vPreorder) {
       wx.showToast({ title: this.data.lang === 'cn' ? (m.ship_from_supplier ? '暂时缺货' : '已售罄') : (m.ship_from_supplier ? 'Unavailable' : 'Sold out'), icon: 'none' });
       return;

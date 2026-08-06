@@ -339,9 +339,9 @@ console.log('\nserver — the local pre-order gate (localPreorderLine)');
 console.log('\nmini-app shop — the PRE-ORDER pill (_toRows)');
 {
   const page = loadMiniPage('miniapp/pages/shop/shop.js');
-  const row = (product, sameCity) => {
+  const row = (product, onLocalRun) => {
     const ctx = makeCtx({ lang: 'en' });
-    ctx._sameCity = sameCity;
+    ctx._onLocalRun = onLocalRun;
     return page._toRows.call(ctx, [product], 'en')[0];
   };
 
@@ -356,24 +356,24 @@ console.log('\nmini-app shop — the PRE-ORDER pill (_toRows)');
     assert.strictEqual(r.outOfStock, true);
   });
   it('a strict sold-out row is dead for everyone', () => {
-    for (const sameCity of [false, true]) {
-      const r = row(SOLD_OUT_STRICT, sameCity);
+    for (const onLocalRun of [false, true]) {
+      const r = row(SOLD_OUT_STRICT, onLocalRun);
       assert.strictEqual(r.preorder, false);
       assert.strictEqual(r.outOfStock, true);
     }
   });
   it('an in-stock row is untouched by the shopper’s city', () => {
-    for (const sameCity of [false, true]) {
-      const r = row({ ...SOLD_OUT_RESERVABLE, stock: 6 }, sameCity);
+    for (const onLocalRun of [false, true]) {
+      const r = row({ ...SOLD_OUT_RESERVABLE, stock: 6 }, onLocalRun);
       assert.strictEqual(r.preorder, false);
       assert.strictEqual(r.outOfStock, false);
     }
   });
   it('a collapsed variant card reads its sizes the same way', () => {
     const members = [{ ...SOLD_OUT_RESERVABLE, id: 51 }, { ...SOLD_OUT_RESERVABLE, id: 52 }];
-    const card = (sameCity) => {
+    const card = (onLocalRun) => {
       const ctx = makeCtx({ lang: 'en' });
-      ctx._sameCity = sameCity;
+      ctx._onLocalRun = onLocalRun;
       ctx._collapseVariants = page._collapseVariants;
       return page._toRows.call(ctx, [{ ...members[0], _members: members }], 'en')[0];
     };
@@ -383,7 +383,7 @@ console.log('\nmini-app shop — the PRE-ORDER pill (_toRows)');
   });
   it('a quick-add on a stale card is refused for a same-city shopper', () => {
     const ctx = makeCtx({ lang: 'en', _raw: [SOLD_OUT_RESERVABLE] });
-    ctx._sameCity = true;
+    ctx._onLocalRun = true;
     let added = false;
     ctx._addRawToCart = () => { added = true; };
     withWx(() => page.addToCart.call(ctx, { currentTarget: { dataset: { id: SOLD_OUT_RESERVABLE.id } } }));
@@ -395,12 +395,12 @@ console.log('\nmini-app shop — the PRE-ORDER pill (_toRows)');
 console.log('\nmini-app favourites — same rule as the shop');
 {
   const page = loadMiniPage('miniapp/pages/favorites/favorites.js');
-  const tile = (sameCity) => {
+  const tile = (onLocalRun) => {
     const ctx = makeCtx({
       lang: 'en', all: [SOLD_OUT_RESERVABLE], activeCat: 'All',
       copy: { catAll: 'ALL' },
     });
-    ctx._sameCity = sameCity;
+    ctx._onLocalRun = onLocalRun;
     page.rebuildView.call(ctx);
     return ctx.data.visible[0];
   };
@@ -415,7 +415,7 @@ console.log('\nmini-app favourites — same rule as the shop');
   });
   it('a same-city quick-add is refused', () => {
     const ctx = makeCtx({ lang: 'en', all: [SOLD_OUT_RESERVABLE], copy: { soldOut: 'SOLD OUT' } });
-    ctx._sameCity = true;
+    ctx._onLocalRun = true;
     withWx(() => {
       const cart = require(path.join(ROOT, 'miniapp/utils/cart.js'));
       const before = cart.get().items.length;
@@ -502,7 +502,7 @@ console.log('\nweb storefront — stockState / slStock');
   const sandbox = { state: { lang: 'en', customer: null }, console };
   vm.createContext(sandbox);
   vm.runInContext(
-    [grab('oosBackorder'), grab('shopperSameCity'), grab('stockState'), grab('slStock')].join('\n'),
+    [grab('oosBackorder'), grab('shopperOnLocalRun'), grab('stockState'), grab('slStock')].join('\n'),
     sandbox,
   );
   // signIn(true) = an address on the same-day local run (core Guangzhou);
@@ -593,8 +593,8 @@ console.log('\nweb storefront — stockState / slStock');
     assert.strictEqual(row(card).outOfStock, true);
   });
   it('in-stock and strict sold-out rows read the same in both cities', () => {
-    for (const sameCity of [false, true]) {
-      signIn(sameCity);
+    for (const onLocalRun of [false, true]) {
+      signIn(onLocalRun);
       const live = row({ ...BACKORDER, stock: 4 });
       assert.strictEqual(live.outOfStock, false);
       assert.strictEqual(live.nextBatch, false);
