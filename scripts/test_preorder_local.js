@@ -318,6 +318,78 @@ console.log('\nweb storefront — stockState / slStock');
     assert.strictEqual(verdict({ ...BACKORDER, stock: 3 }).oos, false);
     assert.strictEqual(verdict({ ship_from_supplier: 1, stock: 0 }).soldOut, false);
   });
+
+  // ── The mobile list/grid (slToRows) ───────────────────────────────────────
+  // The mini-app-mirror layouts the web serves under 768px. They build their own
+  // row objects rather than going through stockState(), which is how they kept
+  // showing SHIPS SOON to a same-city shopper after the badge rule landed
+  // everywhere else.
+  console.log('\nweb storefront — mobile list/grid (slToRows)');
+  vm.runInContext(
+    [grab('pick'), grab('slMoney'), grab('slEff'), grab('slImg'), grab('slPickBadge'), grab('slToRows')].join('\n'),
+    sandbox,
+  );
+  const row = (p) => vm.runInContext('slToRows([' + JSON.stringify(p) + '])', sandbox)[0];
+
+  it('signed out → SHIPS SOON, exactly as before', () => {
+    sandbox.state.customer = null;
+    const r = row(BACKORDER);
+    assert.strictEqual(r.nextBatch, true);
+    assert.strictEqual(r.outOfStock, false, 'the + button still renders');
+    assert.strictEqual(r.batchTxt, 'SHIPS SOON');
+  });
+  it('out-of-city keeps SHIPS SOON, and a batch meal keeps NEXT BATCH', () => {
+    signIn(false);
+    assert.strictEqual(row(BACKORDER).nextBatch, true);
+    assert.strictEqual(row(BACKORDER).outOfStock, false);
+    const batch = row({ ...BACKORDER, is_batch_made: 1 });
+    assert.strictEqual(batch.nextBatch, true);
+    assert.strictEqual(batch.batchTxt, 'NEXT BATCH');
+  });
+  it('same-city gets the dead SOLD OUT row, no + button', () => {
+    signIn(true);
+    const r = row(BACKORDER);
+    assert.strictEqual(r.nextBatch, false, 'no SHIPS SOON badge');
+    assert.strictEqual(r.outOfStock, true);
+    assert.strictEqual(r.oosLabel, 'SOLD OUT', 'the page’s existing sold-out copy, not a new string');
+    // The + renders only when neither flag is set (slRowHtml / slCardHtml).
+    assert.strictEqual(!r.outOfStock && !r.nextBatch, false);
+  });
+  it('same-city: a batch meal goes dead too, no NEXT BATCH', () => {
+    signIn(true);
+    const r = row({ ...BACKORDER, is_batch_made: 1 });
+    assert.strictEqual(r.nextBatch, false);
+    assert.strictEqual(r.outOfStock, true);
+  });
+  it('a collapsed variant card follows its sizes', () => {
+    const members = [{ ...BACKORDER, id: 71 }, { ...BACKORDER, id: 72 }];
+    const card = { ...members[0], _members: members };
+    signIn(false);
+    assert.strictEqual(row(card).nextBatch, true);
+    signIn(true);
+    assert.strictEqual(row(card).nextBatch, false);
+    assert.strictEqual(row(card).outOfStock, true);
+  });
+  it('in-stock and strict sold-out rows read the same in both cities', () => {
+    for (const sameCity of [false, true]) {
+      signIn(sameCity);
+      const live = row({ ...BACKORDER, stock: 4 });
+      assert.strictEqual(live.outOfStock, false);
+      assert.strictEqual(live.nextBatch, false);
+      const strict = row({ id: 8, stock: 0, oos_policy: 'strict' });
+      assert.strictEqual(strict.outOfStock, true);
+      assert.strictEqual(strict.nextBatch, false);
+    }
+  });
+  it('the quick-add tap is refused for a same-city shopper', () => {
+    // slAdd's guard is slStock(raw).soldOut — the same verdict the row renders.
+    signIn(true);
+    assert.strictEqual(size(BACKORDER).soldOut, true, 'slAdd would refuse');
+    signIn(false);
+    assert.strictEqual(size(BACKORDER).soldOut, false, 'out-of-city still adds');
+    const src = fs.readFileSync(path.join(ROOT, 'public/shop.html'), 'utf8');
+    assert.ok(/if\(slStock\(raw\)\.soldOut\)\{toast\(/.test(src), 'the guard is wired into slAdd');
+  });
 }
 
 console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed\n`);

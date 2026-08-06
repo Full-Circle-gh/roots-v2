@@ -54,6 +54,13 @@ button. Tapping that `+` runs `slAddRaw` (`:4984-4996`), which *does* read
 the plain "已加入 🌱 / Added 🌱" toast rather than the pre-order one. Add succeeds either
 way; only the toast differs.
 
+> **Addendum, after this survey was written.** Surface 9 was fixed on this branch:
+> `slToRows` now takes the verdict once per call and folds it into both branches, so a
+> same-city shopper gets the layout's existing dead SOLD OUT row and no `+`; `slAdd` gained
+> a `slStock(raw).soldOut` guard for a stale card. Out-of-city, signed-out and in-stock
+> behaviour is unchanged. The paragraph above stands as the record of the pre-fix state;
+> line numbers in row 9 of the table have shifted by +5.
+
 Two other client-side details worth recording:
 
 - The mini-app never re-implements the policy: `oos_preorder` is server-truth on all three
@@ -230,7 +237,7 @@ Read on the clients:
 | Cache primed from an address list already fetched | `addresses.js:206`, `:721`; `checkout.js:719`, `:801` | |
 | Cache dropped after an inline new-address save | `checkout.js:2806` | |
 | Web — `shopperSameCity()` | `public/shop.html:5078-5083` | `is_default` row, else `addresses[0]` |
-| Web — verdict applied | `public/shop.html:5101` (`stockState`), `:4577` (`slStock`) | **Not** applied in `slToRows` — see §1.1 |
+| Web — verdict applied | `public/shop.html:5101` (`stockState`), `:4577` (`slStock`) | Not applied in `slToRows` at survey time — see the §1.1 addendum; fixed since |
 | Web — account resolved before first paint | `public/shop.html:4481-4483` (desktop shop), `:4695-4697` (mobile list), `:5127-5128` (PDP) | |
 
 ### 3.2 What "unknown" does, per surface
@@ -246,7 +253,7 @@ today's change. Confirmed:
 | PDP | Awaited alongside the product, so no permissive flash; on failure `_sameCity` stays `undefined` → false | `product.js:329-336` |
 | Favourites | Awaited alongside the list; same fallback | `favorites.js:103-107` |
 | Web storefront | `state.customer` null or `addresses` empty → false | `public/shop.html:5079-5080` |
-| Web mobile list/grid | Permissive **always**, verdict or not | `public/shop.html:4631, 4636` |
+| Web mobile list/grid | Permissive **always** at survey time, verdict or not; fixed since (see §1.1 addendum) | `public/shop.html:4631, 4636` |
 
 A signed-out visitor cannot reach `GET /api/retail/addresses` at all — it is behind
 `requireRetailAuth` (`routes/retail.js:7621`); the mini-app's `api.js` turns the 401 into a
@@ -306,7 +313,7 @@ is rendered dead before any slot is chosen — the shop has no slot concept at a
 | PDP size sheet | Row dead, tap refused | `product.js:996-997`, `:1050-1054` |
 | Favourites | Dead tile, `+` hidden, quick-add refused | `favorites.js:141`, `:223-226`; `favorites.wxml:61, 68, 87, 93` |
 | Web desktop card / PDP | SOLD OUT; PDP button disabled | `public/shop.html:5101`, `:5198` |
-| Web mobile list/grid | **Not hidden** — still SHIPS SOON / NEXT BATCH with a live `+` | `public/shop.html:4631, 4636, 4838, 4861` |
+| Web mobile list/grid | **Not hidden** at survey time — SHIPS SOON / NEXT BATCH with a live `+`; fixed since (see §1.1 addendum) | `public/shop.html:4631, 4636, 4838, 4861` |
 
 The scheduled-day route therefore remains open on the server and reachable through the web
 storefront's mobile layout, while every mini-app surface and the web desktop surfaces close
@@ -526,5 +533,5 @@ scope and differs).
 | Doc claim | Code | Verdict |
 |---|---|---|
 | `database.js:2833-2836` — the customer-facing badge is "现订现发 / SHIPS SOON, or 下批现做 / NEXT BATCH" | Mini app renders `可预订 / PRE-ORDER` on all three surfaces and ignores `is_batch_made` (`shop.js:266`, `product.js:462`, `favorites.js:21,38`); only `public/shop.html:5102` matches the comment | Comment describes the web storefront only; code wins |
-| `public/shop.html:5062-5065` — "The web storefront doesn't know the shopper's zone yet, so a backorder product is shown orderable" | Stale for `stockState`/`slStock` since `6632939`, which added `shopperSameCity()` (`:5078-5083`); still literally true for `slToRows` (`:4631, 4636`) | Comment half-stale; code wins |
+| `public/shop.html:5062-5065` — "The web storefront doesn't know the shopper's zone yet, so a backorder product is shown orderable" | Stale for `stockState`/`slStock` since `6632939`, which added `shopperSameCity()` (`:5078-5083`); was still literally true for `slToRows` (`:4631, 4636`) at survey time, no longer | Comment stale; code wins |
 | `docs/tacet-product-fields.md:76` — `oos_policy` "DEAD on `products`" | Confirmed: written and read only on `store_products` | Doc correct |
