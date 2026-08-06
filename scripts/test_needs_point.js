@@ -197,6 +197,59 @@ it('awaitingPoint is false once a copy exists on the courier platform', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────
+console.log('\nstage 2 · who needs a person, and who may be retried (spec §8.1)');
+
+it('a parked row needs attention — it used to read as a normal queue wait', () => {
+  assert.strictEqual(qingyunQueue.needsAttention({ status: 'needs_point' }), true);
+});
+
+it('a retired row needs attention — the one action that revives it was unreachable', () => {
+  assert.strictEqual(qingyunQueue.needsAttention({ status: 'skipped' }), true);
+});
+
+it('error keeps its existing behaviour', () => {
+  assert.strictEqual(qingyunQueue.needsAttention({ status: 'error' }), true);
+});
+
+it('a row the daemon still holds is not a call for help', () => {
+  assert.strictEqual(qingyunQueue.needsAttention({ status: 'pending' }), false);
+  assert.strictEqual(qingyunQueue.needsAttention({ status: 'processing' }), false);
+  assert.strictEqual(qingyunQueue.needsAttention({ status: 'done' }), false);
+  assert.strictEqual(qingyunQueue.needsAttention(null), false);
+});
+
+it('a row with a courier copy never asks for attention', () => {
+  for (const status of ['error', 'skipped', 'needs_point']) {
+    assert.strictEqual(qingyunQueue.needsAttention({ status, qingyun_order_id: 'QY1' }), false, status);
+  }
+});
+
+it('every row the drawer flags is a row the endpoint will accept', () => {
+  // The drawer draws the Retry button off needsAttention and the endpoint gates
+  // on manualRetryEligible. If those sets ever drift, the client toasts
+  // "Queued — the daemon will push it within a minute" on a press that did
+  // nothing: the operator is told it worked while the order stays stuck.
+  for (const status of ['pending', 'processing', 'done', 'error', 'skipped', 'needs_point']) {
+    for (const qy of [null, 'QY1']) {
+      const row = { status, qingyun_order_id: qy };
+      assert.strictEqual(qingyunQueue.needsAttention(row), qingyunQueue.manualRetryEligible(row),
+        `${status}/${qy || 'no copy'}`);
+    }
+  }
+});
+
+it('an address edit releases a parked row but never a retired one', () => {
+  // 'skipped' means cancelled/refunded/delivered, or not same-city same-day.
+  // An address edit is not evidence about either, and requeuing a closed
+  // order's row would hand the drain a push for an order nobody is delivering.
+  assert.strictEqual(qingyunQueue.requeueEligible({ status: 'needs_point' }), true);
+  assert.strictEqual(qingyunQueue.requeueEligible({ status: 'error' }), true);
+  assert.strictEqual(qingyunQueue.requeueEligible({ status: 'skipped' }), false);
+  assert.strictEqual(qingyunQueue.requeueEligible({ status: 'pending' }), false);
+  assert.strictEqual(qingyunQueue.requeueEligible({ status: 'needs_point', qingyun_order_id: 'QY1' }), false);
+});
+
+// ─────────────────────────────────────────────────────────────────────────
 console.log('\nstate transitions (in-memory SQLite, mirrors database.js)');
 
 // The app's driver when it's installed (the box), Node's built-in when it
@@ -249,7 +302,7 @@ const takeAttempt = (db, r) => {
 };
 const park = (db, r, pt = { lat: 23.1339, lng: 113.3603, precision: 'coarse' }) =>
   db.prepare(qingyunQueue.NEEDS_POINT_SQL)
-    .run(r.attempts, pt.lat, pt.lng, pt.precision, 'unverified stored pin could not be corroborated', r.id);
+    .run(r.attempts, pt.lat, pt.lng, pt.precision, require('../lib/qingyun-payload').NEEDS_POINT_MESSAGE, r.id);
 
 it('parking hands back the attempt the drain just spent', () => {
   const db = freshDb();
@@ -386,6 +439,55 @@ it('a parked row is not counted as a geocoder-outage hold', () => {
     `SELECT COUNT(*) AS n FROM qingyun_push_queue
       WHERE geo_held_at IS NOT NULL AND status = 'pending' AND qingyun_order_id IS NULL`).get();
   assert.strictEqual(held.n, 0);
+});
+
+it('an address edit re-runs the lookup on a parked row and clears the guess', () => {
+  const db = freshDb();
+  park(db, takeAttempt(db, seed(db)));
+  const r = db.prepare(qingyunQueue.REQUEUE_SQL).run('requeued after ship-to edit', 988);
+  assert.strictEqual(r.changes, 1, 'a corrected address is what might place this order');
+  const after = read(db);
+  assert.strictEqual(after.status, 'pending');
+  assert.strictEqual(after.attempts, 0);
+  assert.strictEqual(after.guessed_lat, null, 'the guess belonged to the address that was just replaced');
+  assert.strictEqual(after.needs_point_at, null);
+});
+
+it('an address edit does NOT revive a retired row', () => {
+  const db = freshDb();
+  seed(db, { status: 'skipped' });
+  assert.strictEqual(db.prepare(qingyunQueue.REQUEUE_SQL).run('requeued after ship-to edit', 988).changes, 0,
+    'a cancelled order must not walk back into the drain because someone fixed a typo');
+});
+
+it('a manual retry accepts a parked row and clears the guess with it', () => {
+  const db = freshDb();
+  park(db, takeAttempt(db, seed(db, { attempts: 3 })));
+  assert.strictEqual(db.prepare(qingyunQueue.MANUAL_RETRY_SQL).run(988).changes, 1);
+  const after = read(db);
+  assert.strictEqual(after.status, 'pending');
+  assert.strictEqual(after.attempts, 0);
+  assert.strictEqual(after.guessed_lng, null);
+  assert.strictEqual(after.needs_point_at, null);
+});
+
+it('neither requeue path can duplicate a live courier order', () => {
+  for (const sql of [qingyunQueue.REQUEUE_SQL, qingyunQueue.MANUAL_RETRY_SQL]) {
+    const db = freshDb();
+    park(db, takeAttempt(db, seed(db)));
+    db.prepare("UPDATE qingyun_push_queue SET qingyun_order_id = 'QY-9' WHERE retail_order_id = 988").run();
+    const args = sql === qingyunQueue.REQUEUE_SQL ? ['why', 988] : [988];
+    assert.strictEqual(db.prepare(sql).run(...args).changes, 0);
+  }
+});
+
+it('the operator-facing message names no code, grade or coordinate', () => {
+  const { NEEDS_POINT_MESSAGE } = require('../lib/qingyun-payload');
+  assert.doesNotMatch(NEEDS_POINT_MESSAGE, /geocode:|amap|tencent|coarse|rooftop|street|precision|lat|lng/i,
+    'an operator cannot act on a precision grade and should not have to read one');
+  assert.doesNotMatch(NEEDS_POINT_MESSAGE, /corroborat/i, 'the stale wording is gone');
+  assert.match(NEEDS_POINT_MESSAGE, /配送点/, 'staff read this in Chinese');
+  assert.ok(NEEDS_POINT_MESSAGE.length <= 300, 'stored in last_error, which the daemon slices at 300');
 });
 
 it('existing rows are untouched by the new columns (D12)', () => {
