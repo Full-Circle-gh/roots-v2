@@ -22074,12 +22074,27 @@ router.post('/api/retail-admin/orders/:id/qingyun/confirm-point', requireRetailA
 // Requeue runs through MANUAL_RETRY_SQL, the statement that already accepts
 // 'skipped', rather than a fourth statement: a retired row returns to the queue
 // only by a deliberate human act, and choosing a delivery date is one.
+//
+// TODAY ONLY, until stage 6. A future date would write and requeue perfectly
+// well and then be retired the next morning, and every morning after, because
+// nothing re-queues a 'skipped' row on its own day — the drain re-checks
+// isQingyunSameCityToday on every pass and a tomorrow-dated order fails it
+// today. That is a silent no-op wearing a success response, so the endpoint
+// refuses it rather than accepting a move it cannot honour. The gate lives
+// here and not only in the UI: an API caller gets the same answer as a button.
 router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmin, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
   const date = String(req.body?.date || '').trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ success: false, error: 'bad_date' });
   const today = inventory.gzDateStr(new Date().toISOString());
-  if (date < today) return res.status(400).json({ success: false, error: 'date_in_the_past' });
+  if (date !== today) {
+    return res.status(400).json({
+      success: false, error: 'today_only',
+      // Said plainly so the caller does not read this as a bug to retry: the
+      // delivery for another day has to be created by hand in Qingyun.
+      detail: 'Only today can be re-queued. A later day has to be dispatched by hand.',
+    });
+  }
 
   const q = _qingyunPushRow(id);
   if (!q) return res.status(404).json({ success: false, error: 'order_not_in_qingyun' });
@@ -22096,10 +22111,9 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
   }
   const wasDate = inventory.gzDateStr(o.scheduled_for) || null;
 
-  // A move to TODAY is same-day work, so it takes the slot kind that says so
-  // and the drain will take it on the next poll. A later day stays date-
-  // scheduled and waits for its own morning.
-  const kind = date === today ? 'today' : 'scheduled';
+  // Same-day work, so it takes the slot kind that says so — which is what
+  // makes isQingyunSameCityToday accept it unconditionally on the next poll.
+  const kind = 'today';
   let requeued = false;
   try {
     tdb().transaction(() => {
@@ -22118,13 +22132,7 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
 
   logActivity(req.user.id, req.user.username, 'qingyun_reschedule', 'retail_order', id,
     { from: wasDate, to: date, requeued }, req.ip);
-  res.json({
-    success: true, requeued, from: wasDate, to: date,
-    // Honest about what happens next. A later day goes back in the queue and
-    // the drain retires it again until its morning comes round — the order is
-    // correctly dated either way, but only a move to today ships today.
-    ships_today: date === today,
-  });
+  res.json({ success: true, requeued, from: wasDate, to: date });
 });
 
 // Retry deleting the leftover copy a move couldn't remove. Powers the drawer's
