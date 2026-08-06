@@ -21597,6 +21597,10 @@ function _qingyunPushRow(retailOrderId) {
 // there is no row, when the push already succeeded (qingyun_order_id set — that
 // copy exists and must not be duplicated), or when the row was deliberately
 // retired as 'skipped'.
+//
+// It also releases a row parked for want of a delivery point, because a corrected
+// address is exactly what might place one. The parked guess is cleared with the
+// status — it belonged to the address that has just been replaced.
 function qingyunRequeueOnAddressChange(retailOrderId, why) {
   try {
     const r = tdb().prepare(qingyunQueue.REQUEUE_SQL)
@@ -21732,8 +21736,14 @@ function qingyunShipFromState(retailOrderId) {
       // latency right up until someone noticed 待配送 was empty.
       push_held: !!q.geo_held_at,
       push_held_since: q.geo_held_at || null,
-      // Only an 'error' row is dead — a pending one is still being retried.
-      needs_attention: q.status === 'error',
+      // Does a person need to do something? Not "did it error" — that question
+      // left two states invisible. A row waiting for a delivery point is not an
+      // error and never becomes one, so keying off 'error' meant it rendered as
+      // a normal queue wait for ever; a 'skipped' row was accepted by the retry
+      // endpoint but never offered, so the one action that could revive it was
+      // unreachable. The predicate is shared with the endpoint's own guard so
+      // the button can never be offered on a row the endpoint would refuse.
+      needs_attention: qingyunQueue.needsAttention(q),
       blocked_by: null,
       stale: null,
     };
