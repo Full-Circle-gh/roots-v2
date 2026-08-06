@@ -85,7 +85,7 @@ function rows() {
   console.log(`${pad('ROW', 12)} ${pad('SOURCE', 16)} ${pad('STORED', 9)} ${pad('RE-RESOLVED', 12)} ${pad('CITY', 6)} ${pad('LATIN', 6)} ${pad('DRIFT', 8)} ADDRESS`);
   console.log('-'.repeat(120));
 
-  const tally = { total: 0, noPin: 0, coarse: 0, latin: 0, cityMismatch: 0, drifted: 0, customerPin: 0 };
+  const tally = { total: 0, noPin: 0, coarse: 0, latin: 0, cityMismatch: 0, drifted: 0, customerPin: 0, unknownProvenance: 0 };
 
   for (const r of list) {
     tally.total++;
@@ -114,9 +114,18 @@ function rows() {
 
     // "Needs attention" = anything a courier should not be sent to on trust:
     // no pin at all, a centroid-grade pin, a wrong-city match, English text, or
-    // a stored pin that no longer agrees with the address it belongs to.
+    // a stored pin that no longer agrees with the address it belongs to. Also the two provenance states the courier
+    // push will not take on trust: a pin with no recorded source at all (every
+    // pre-provenance row, plus anything the old geocode-backfill wrote), and a
+    // coordinate a client sent without saying it came from the map picker. Both
+    // are re-resolved and corroborated at push time, and REFUSED if the address
+    // can't back them up — so they are worth fixing before an order rides on one.
+    const unknownProvenance = hasPin && !r.geo_source;
+    const clientUnverified  = r.geo_source === 'client_unverified';
     const bad = !hasPin || r.geo_precision === 'coarse' || cityOk === false || latin
+             || unknownProvenance || clientUnverified
              || (fresh && (fresh.precision === 'coarse')) || (drift != null && drift > 1);
+    if (unknownProvenance) tally.unknownProvenance++;
     if (BAD_ONLY && !bad) continue;
 
     console.log(
@@ -132,10 +141,13 @@ function rows() {
 
   console.log('-'.repeat(120));
   console.log(`${tally.total} rows · ${tally.customerPin} map-picked · ${tally.noPin} with NO pin · `
+    + `${tally.unknownProvenance} pinned but unattributed · `
     + `${tally.coarse} stored coarse · ${tally.latin} still English`
     + (VERIFY ? ` · ${tally.cityMismatch} wrong city · ${tally.drifted} drifted >1km` : ''));
   console.log(
     '\nA "coarse" pin is a district or city centre the geocoder fell back to — it is NOT the address,\n'
-    + 'and lib/qingyun-payload now refuses to send a rider to one. Rows flagged ⚠ are worth fixing with\n'
-    + 'the admin "Make address Chinese" tool, or by asking the customer to drop a pin on the map.\n');
+    + 'and lib/qingyun-payload refuses to send a rider to one. A row with coordinates but NO source is a\n'
+    + 'pre-provenance leftover: the push re-resolves the address and ships the stored pin only if the two\n'
+    + 'agree, so these are the rows most likely to be refused. Fix them with the admin "Make address\n'
+    + 'Chinese" tool, or by asking the customer to drop a pin on the map (which records provenance).\n');
 })().catch(e => { console.error(e.message); process.exit(1); });

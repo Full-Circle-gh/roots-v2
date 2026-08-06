@@ -644,6 +644,7 @@ Page({
         'address.district': p.district || '',
         'address.lat': hasPin ? pLat : null,
         'address.lng': hasPin ? pLng : null,
+        'address.pinFresh': hasPin,     // a tap, not a round-trip — see addresses.js
         // Pin gives Chinese only — clear stale EN companions so the label
         // stays Chinese (what's stored + shipped) instead of half-translating.
         'address.province_en': '',
@@ -2139,9 +2140,10 @@ Page({
     const field = e.currentTarget.dataset.field;
     const value = e.detail.value;
     const patch = { ['address.' + field]: value };
-    // Typing over the street/detail invalidates a pin picked earlier — it now
-    // points at a place the text no longer describes.
-    if (field === 'address' || field === 'detail') { patch['address.lat'] = null; patch['address.lng'] = null; }
+    // Street only — see the note on addresses.js onField. Typing a floor or room
+    // number into the detail box must leave a map-picked pin alone; the building
+    // hasn't moved, and that sequence is how the form is normally filled in.
+    if (field === 'address') { patch['address.lat'] = null; patch['address.lng'] = null; patch['address.pinFresh'] = false; }
     this.setData(patch);
     // When the customer types the street address themselves (instead of using
     // the area picker or the map), lift the city/district out of what they
@@ -2792,6 +2794,7 @@ Page({
           // geocoding the text, and the courier gets the exact spot.
           lat: (a.lat != null && a.lng != null) ? a.lat : undefined,
           lng: (a.lat != null && a.lng != null) ? a.lng : undefined,
+          pin_source: (a.pinFresh && a.lat != null && a.lng != null) ? 'map' : undefined,
           is_default: true,
         });
         addressId = saved?.id || saved?.data?.id;

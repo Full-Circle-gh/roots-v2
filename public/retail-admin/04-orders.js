@@ -3635,6 +3635,36 @@ function renderQyShipFrom(o) {
   const sf = o.qingyun_ship_from;
   if (!sf) return '';
   const name = escapeHtml(cuT(sf.name_en || sf.store_code, sf.name_cn || sf.store_code));
+  // No copy on the courier platform. Either it hasn't been pushed yet, or the
+  // push was REFUSED — an address whose drop-off pin couldn't be trusted. That
+  // used to render as nothing at all, so an order nobody was coming for looked
+  // exactly like an order that was never meant to go to Qingyun. Say what
+  // happened, and offer the retry that used to require hand-editing the DB.
+  if (!sf.qingyun_order_id) {
+    const refused = sf.needs_attention;
+    return `
+      <div class="ord-drawer-row">
+        <div class="ord-drawer-label">${cuT('Same-city courier', '同城配送')}</div>
+        <div style="flex:1;">
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <span style="font-size:12px; font-weight:600; color:${refused ? 'var(--warn)' : 'var(--text-2)'};">
+              ${refused
+                ? `⚠ ${cuT('Push refused — nobody is collecting this', '发单被拒 — 无人接单')}`
+                : cuT('Queued for push…', '排队发单中…')}
+            </span>
+            ${refused
+              ? `<button class="btn btn-sm" onclick="qyRetryPush(${o.id}, this)">${cuT('Retry push', '重新发单')}</button>`
+              : ''}
+          </div>
+          ${sf.push_error ? `<div class="muted" style="font-size:11px; margin-top:4px; line-height:1.5;" data-no-i18n>${escapeHtml(sf.push_error)}</div>` : ''}
+          ${refused
+            ? `<div class="muted" style="font-size:11px; margin-top:4px; line-height:1.5;">${cuT(
+                'Fix the delivery address (Edit ship-to, or Make address Chinese) and it retries on its own — or press Retry.',
+                '修正收货地址(修改收货信息或转为中文地址)后会自动重试,也可点击重新发单。')}</div>`
+            : ''}
+        </div>
+      </div>`;
+  }
   // The order still belongs to its original store for stock, printing and reports —
   // only the collection point moved. Say so, or the numbers look wrong later.
   const moved = !!(o.store_code && sf.store_code !== o.store_code);
@@ -3677,6 +3707,29 @@ function renderQyShipFrom(o) {
 
 // Retry the delete that failed during a move. No confirm: it removes a duplicate
 // nobody has been sent for, which is the tidy-up the move already intended.
+// Put a refused push back in the queue. The daemon drains 'pending' rows every
+// ~25s, so this hands the order back to the SAME path — and the same address
+// checks — as the automatic push, rather than bypassing them.
+async function qyRetryPush(orderId, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = cuT('Queuing…', '排队中…'); }
+  try {
+    const r = await fetch(`/api/retail-admin/orders/${orderId}/qingyun/retry-push`, { method: 'POST' });
+    const j = await r.json();
+    if (j.success) {
+      toast(j.already_created
+        ? cuT('Already on the courier platform', '已在配送平台')
+        : cuT('Queued — the daemon will push it within a minute', '已排队 — 约一分钟内发单'), 'success');
+      openOrder(orderId, { instant: true });
+      return;
+    }
+    if (btn) { btn.disabled = false; btn.textContent = cuT('Retry push', '重新发单'); }
+    toast(cuT('Could not queue it', '排队失败'), 'err');
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = cuT('Retry push', '重新发单'); }
+    toast(cuT('Network error', '网络错误'), 'err');
+  }
+}
+
 async function qyRemoveStale(orderId, btn) {
   if (btn) { btn.disabled = true; btn.textContent = cuT('Removing…', '删除中…'); }
   try {

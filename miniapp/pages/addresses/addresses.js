@@ -18,6 +18,8 @@ const EMPTY_FORM = {
   // the server geocodes those instead.
   lat: null,
   lng: null,
+  // True only between a map tap and the save that follows it — see save().
+  pinFresh: false,
   is_default: false,
 };
 
@@ -259,6 +261,7 @@ Page({
         // that only changes the name/phone keeps the coordinates.
         lat: a.lat != null ? Number(a.lat) : null,
         lng: a.lng != null ? Number(a.lng) : null,
+        pinFresh: false,        // loaded from storage, not tapped just now
         is_default: !!a.is_default,
       },
     });
@@ -392,10 +395,13 @@ Page({
   onField(e) {
     const field = e.currentTarget.dataset.field;
     const patch = { ['form.' + field]: e.detail.value };
-    // Typing over the street/detail invalidates a pin picked earlier — it now
-    // points at a place the text no longer describes. Drop it and let the
-    // server re-resolve, rather than shipping to a stale spot.
-    if (field === 'address' || field === 'detail') { patch['form.lat'] = null; patch['form.lng'] = null; }
+    // Retyping the STREET invalidates a pin picked earlier — it now points at a
+    // place the text no longer describes, so drop it and let the server
+    // re-resolve. The floor/unit box does NOT: the building is the same
+    // building, and "pick on the map, then type your room number" is the normal
+    // way to fill this form. Clearing the pin there threw the customer's own tap
+    // away in the single most common flow there is.
+    if (field === 'address') { patch['form.lat'] = null; patch['form.lng'] = null; patch['form.pinFresh'] = false; }
     this.setData(patch);
   },
 
@@ -426,6 +432,7 @@ Page({
         // geocode this text instead.
         'form.lat': null,
         'form.lng': null,
+        'form.pinFresh': false,
         wxPicking: false,
       });
       // Snap the area selector to the imported region if it's a served zone;
@@ -512,6 +519,11 @@ Page({
         'form.district': p.district || '',
         'form.lat': hasPin ? pLat : null,
         'form.lng': hasPin ? pLng : null,
+        // Only a MAP pick is first-hand evidence of where the customer lives.
+        // The server will not record anything else as a customer pin, so the
+        // claim has to be made here, at the moment of the tap — coordinates
+        // round-tripped on a later edit carry no such claim.
+        'form.pinFresh': hasPin,
         // Label the picked region in CHINESE — it's exactly what's stored and
         // what JD prints on the waybill, so we don't half-translate it to a
         // mixed "Guangzhou · 天河区".
@@ -606,6 +618,7 @@ Page({
         // it (see onInput), so a pin can never outlive the address it belongs to.
         lat: (f.lat != null && f.lng != null) ? f.lat : undefined,
         lng: (f.lat != null && f.lng != null) ? f.lng : undefined,
+        pin_source: (f.pinFresh && f.lat != null && f.lng != null) ? 'map' : undefined,
         // A brand-new address is the one the customer wants to use — that's why
         // they just typed it. The list calls that flag SELECTED and checkout
         // reads the same flag, so adding and choosing are one step instead of

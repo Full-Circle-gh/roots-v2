@@ -38,7 +38,7 @@ catch {
 const { seam } = require('../lib/db-seam');
 const db = seam(require('../database'));
 const { getQingyunBrowser, closeAllQingyun, resolveCdpUrl } = require('../lib/qingyun-browser');
-const { sendOpsAlert } = require('../lib/ops-alert');
+const { sendOpsAlert, alertEnabled } = require('../lib/ops-alert');
 // Hold off on channel calls while a holder Chrome is freshly launched (mirrors
 // shangou-daemon) — a cold browser hit seconds after launch earns the 风控 403.
 const { coldMsRemaining, isColdStartChallenge } = require('../lib/browser-warmup');
@@ -471,6 +471,18 @@ function stampLocalEta(retailOrderId, d, track) {
 // The order lands 待配送 (no courier). We stamp order_no into 备注 so the existing
 // tracking match links the rider back. Idempotent per row; retries with backoff.
 const MAX_PUSH_ATTEMPTS = Number(process.env.QINGYUN_PUSH_MAX_ATTEMPTS || 5);
+
+// How the drop-off pin was obtained, rendered for the push log. Carries NO
+// customer identity — source, the provider's grade, the ride distance, whether
+// the address was translated. The recipient's name and phone never enter a log
+// line or an ops alert; the street does, because an operator cannot fix a
+// refused address without seeing it.
+function pinTag(geo) {
+  if (!geo) return '';
+  return ` [pin ${geo.source || 'unknown'}${geo.precision ? '/' + geo.precision : ''}`
+    + `${geo.dropKm != null ? `, ${geo.dropKm}km` : ''}${geo.translated ? ', translated' : ''}`
+    + `${geo.refused ? ', REFUSED' : ''}]`;
+}
 function cfg(key, fallback) {
   try { const r = db.prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(key);
     return r ? JSON.parse(r.value_json) : fallback; } catch { return fallback; }
@@ -481,12 +493,16 @@ function cfg(key, fallback) {
 // The builder itself lives in lib/qingyun-payload so the ship-from override in
 // routes/retail.js (which re-creates the order under another store's account) builds
 // byte-identical fields — above all the 备注, which is how tracking finds its way back.
-function pushPayload(order, shop, br) {
+// storeCode is threaded through so the builder's warnings (a rejected pin, a
+// translation, an over-distance drop) are logged against the store whose drain
+// produced them. They used to go out under the literal tag 'push', which made a
+// multi-store box's log unattributable exactly when it mattered.
+function pushPayload(order, shop, br, storeCode) {
   return buildCreatePayload(order, shop, br, {
     geocode,
     translateCn: translateToChinese,
     goodsPicUrl: cfg('delivery.qingyunGoodsPicUrl', 'https://s3plus.meituan.net/dap-orderdetail/qy/1783175410205_goods.png'),
-    onWarn: (msg) => log('push', msg),
+    onWarn: (msg) => log(storeCode || 'push', `push: ${msg}`),
   });
 }
 async function drainPushQueue(storeCode, br) {
@@ -547,7 +563,7 @@ async function drainPushQueue(storeCode, br) {
         log(storeCode, `push: skipped order ${order.order_no} — not same-city same-day`);
         continue;
       }
-      const payload = await pushPayload(order, shop, br);
+      const payload = await pushPayload(order, shop, br, storeCode);
       const res = await br.createOrder(payload);
       if (res.ok) {
         db.prepare("UPDATE qingyun_push_queue SET status='done', qingyun_order_id=?, last_error=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(res.orderId, row.id);
@@ -556,9 +572,7 @@ async function drainPushQueue(storeCode, br) {
         // it says whether the customer picked the pin, which provider resolved it,
         // how exact that provider claimed to be, and how far the rider had to go.
         const geo = payload._geo || {};
-        log(storeCode, `push: created Qingyun order ${res.orderId} for ${order.order_no}`
-          + ` [pin ${geo.source || 'unknown'}${geo.precision ? '/' + geo.precision : ''}`
-          + `${geo.dropKm != null ? `, ${geo.dropKm}km` : ''}${geo.translated ? ', translated' : ''}]`);
+        log(storeCode, `push: created Qingyun order ${res.orderId} for ${order.order_no}${pinTag(geo)}`);
         logSync(storeCode, 'push', 'ok', { order_no: order.order_no, qy: res.orderId, geo });
       } else {
         throw new Error(`create failed (code ${res.code}, ${res.msg})`);
@@ -568,7 +582,11 @@ async function drainPushQueue(storeCode, br) {
       const done = attempts >= MAX_PUSH_ATTEMPTS;
       db.prepare("UPDATE qingyun_push_queue SET status=?, last_error=?, updated_at=CURRENT_TIMESTAMP WHERE id=?")
         .run(done ? 'error' : 'pending', String(e.message).slice(0, 300), row.id);
-      log(storeCode, `push: order ${row.retail_order_id} failed (attempt ${attempts}${done ? ', giving up' : ''}): ${e.message}`);
+      // The same [pin …] provenance the success path prints. A refusal is when
+      // you most need it: it says which of the three pin sources was in play and
+      // how far off it landed, without anyone having to re-run the push to find out.
+      log(storeCode, `push: order ${row.retail_order_id} failed (attempt ${attempts}${done ? ', giving up' : ''})`
+        + `${pinTag(e._geo)}: ${e.message}`);
       if (done) {
         // Deliberately NOT gated on alertsAllowed: giving up is terminal (nothing
         // retries this row), so holding the page for opening hours would mean an
@@ -704,6 +722,18 @@ async function pollStore(storeCode) {
 
 async function main() {
   console.log(`[qingyun-daemon] starting — stores: ${STORES.join(', ')}`);
+  // Say it at boot, not at the moment it matters. When this daemon gives up on
+  // an order it pages ops — and if the System Alerts webhook is off, that page
+  // goes nowhere and the order simply never reaches the courier. Whoever is
+  // reading the startup log should know that in advance.
+  if (!alertEnabled()) {
+    console.error('[qingyun-daemon] ⚠️  System Alerts are DISABLED — a push this daemon gives up on '
+      + 'will page nobody. Turn them on in retail-admin → Settings → Push notifications.');
+  }
+  if (!geocode.configured()) {
+    console.error('[qingyun-daemon] ⚠️  No AMAP_MAPS_KEY / TENCENT_MAPS_KEY — drop-off pins cannot be '
+      + 'verified, and stored pins will be sent unchecked.');
+  }
   let gap = jitter(POLL_MS, 0.3);
   let last = 0;
   const warmupFlagged = {};  // store_code → log the cold-Chrome hold once per transition
