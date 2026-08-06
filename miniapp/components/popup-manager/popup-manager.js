@@ -22,6 +22,38 @@ function nowMs()    { return Date.now(); }
 
 function storageKey(id) { return 'popup_seen:' + id; }
 
+// ── Picture sizing ────────────────────────────────────────────────────────
+// The pop-up picture is never cropped. It fills the card's content width and
+// keeps its natural height; when that would push the pop-up off the screen the
+// whole image scales down (ratio kept, centred) instead of being trimmed.
+//
+// Every number below is read off the pop-up frame in popup-manager.wxss:
+//   .pm-card is width:100% capped at 600rpx, inside .pm-bg's 56rpx side
+//   padding. rpx is a fixed 750-wide grid, so 750 - 2x56 = 638rpx of room and
+//   the 600rpx cap always wins — the content width is a hard 600rpx.
+const PM_CARD_W_RPX = 600;
+// .pm-bg padding: 60rpx top + 60rpx bottom.
+const PM_BG_PAD_RPX = 120;
+// What's left of the screen after the padding and the text block, at 90%, is
+// the tallest a picture may be.
+const PM_CAP_RATIO = 0.9;
+// .pm-text when it can't be measured: 68rpx padding + headline + two body
+// lines + the CTA button.
+const PM_TEXT_FALLBACK_RPX = 300;
+// Never shrink a picture to nothing, however long the copy runs.
+const PM_CAP_FLOOR_RPX = 120;
+// Zero height until the natural size is known, so the pop-up never flashes at
+// the <image> component's 320x240 default before settling.
+const PM_IMG_UNSIZED = 'height:0;opacity:0;';
+
+function pmWindow() {
+  try {
+    const w = (typeof wx.getWindowInfo === 'function') ? wx.getWindowInfo() : wx.getSystemInfoSync();
+    if (w && w.windowWidth && w.windowHeight) return { W: w.windowWidth, H: w.windowHeight };
+  } catch {}
+  return { W: 375, H: 667 };
+}
+
 function shouldShowPerFrequency(popup) {
   let seen = null;
   try { seen = wx.getStorageSync(storageKey(popup.id)); } catch {}
@@ -66,6 +98,7 @@ Component({
     body: '',
     ctaLabel: '',
     imageUrl: '',
+    imgStyle: PM_IMG_UNSIZED,
     dismissible: true,
   },
 
@@ -133,6 +166,7 @@ Component({
 
     show(popup) {
       const L = getApp().globalData.lang || 'en';
+      this._natural = null;
       this.setData({
         open: true,
         popup,
@@ -140,9 +174,43 @@ Component({
         body:     lang.pick(popup.body_en,  popup.body_cn,  L),
         ctaLabel: lang.pick(popup.cta_label_en, popup.cta_label_cn, L),
         imageUrl: absUrl(popup.image_url || ''),
+        imgStyle: PM_IMG_UNSIZED,
         dismissible: popup.dismissible !== false,
       });
       markShown(popup);
+    },
+
+    // The <image> load event hands us the picture's real pixel size — no
+    // wx.getImageInfo, which would need the media host on the downloadFile
+    // domain allow-list. From there the box is pure arithmetic.
+    onImgLoad(e) {
+      const d = (e && e.detail) || {};
+      if (!d.width || !d.height) return;
+      this._natural = { w: d.width, h: d.height };
+      this.sizeImage();
+    },
+
+    sizeImage() {
+      const nat = this._natural;
+      if (!nat) return;
+      const win = pmWindow();
+      const toRpx = px => px * 750 / win.W;
+      // Measure the real text block rather than assuming one: a headline-only
+      // pop-up leaves far more room for the picture than one with body copy
+      // and a CTA, and hard-coding the tallest case would shrink every image.
+      this.createSelectorQuery().select('.pm-text').boundingClientRect(rect => {
+        const textRpx = (rect && rect.height) ? toRpx(rect.height) : PM_TEXT_FALLBACK_RPX;
+        const cap = Math.max(
+          PM_CAP_FLOOR_RPX,
+          (toRpx(win.H) - PM_BG_PAD_RPX - textRpx) * PM_CAP_RATIO,
+        );
+        let w = PM_CARD_W_RPX;
+        let h = w * nat.h / nat.w;            // natural shape across the card
+        if (h > cap) { h = cap; w = h * nat.w / nat.h; }  // too tall: scale it all down
+        this.setData({
+          imgStyle: `width:${Math.round(w)}rpx;height:${Math.round(h)}rpx;`,
+        });
+      }).exec();
     },
 
     onTapCta() {

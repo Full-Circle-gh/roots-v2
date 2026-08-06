@@ -5655,11 +5655,32 @@
         background: #fff; border-radius: 20px;
         padding: 34px 26px; text-align: center;
         box-shadow: 0 16px 50px rgba(0,0,0,.3);
+        /* Backstop: .pu-phone-screen clips, so the modal can never grow past
+           the frame. Only bites when the copy itself is unusually long — the
+           picture cap below already reserves room for ordinary text. */
+        max-height: calc(100% - 20px);
       }
+      /* The picture is never cropped. The slot takes the image's own shape:
+         it fills the card's content width and keeps its natural height. Past
+         the cap the WHOLE image scales down (ratio kept, centred) — the
+         browser does that for us from max-width + max-height on one <img>.
+
+         Cap derivation, from this frame: .pu-phone is 540px tall with 12px
+         padding, so the screen is 516px. The modal spends 68px on its own
+         vertical padding, 22px on this image's margin, and roughly 150px on a
+         headline + two body lines + the CTA — leaving ~275px for the picture.
+         Cap at ~90% of that. */
+      .pu-phone { --pu-img-cap: 240px; }
       .pu-modal-img {
-        width: 100%; aspect-ratio: 1.3; border-radius: 14px;
-        background: #f7f3ee no-repeat center/cover;
-        margin-bottom: 22px;
+        display: block;
+        width: auto; max-width: 100%;
+        height: auto; max-height: var(--pu-img-cap);
+        margin: 0 auto 22px;
+        border-radius: 14px;
+        /* Flex backstop, paired with .pu-modal's max-height: if long copy
+           squeezes the column, shrink the picture instead of clipping it.
+           contain — never cover — so a squeeze still shows the whole image. */
+        align-self: center; flex: 0 1 auto; min-height: 0; object-fit: contain;
       }
       .pu-modal-title { font-weight: 700; font-size: 19px; color: #1a1a17; line-height: 1.35; }
       .pu-modal-body  { font-size: 14px; color: #5a564f; margin-top: 12px; line-height: 1.6; }
@@ -5916,7 +5937,7 @@
                 <div class="pu-phone-bg"></div>
                 <div class="pu-modal" id="pu-preview-modal">
                   <div class="pu-modal-close" id="pu-preview-close">×</div>
-                  <div class="pu-modal-img" id="pu-preview-img"></div>
+                  <img class="pu-modal-img" id="pu-preview-img" alt="">
                   <div class="pu-modal-title" id="pu-preview-title">Welcome to Roots</div>
                   <div class="pu-modal-body" id="pu-preview-body">One or two short lines.</div>
                   <div class="pu-modal-cta" id="pu-preview-cta">Shop now</div>

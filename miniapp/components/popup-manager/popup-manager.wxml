@@ -1,11 +1,17 @@
 <view wx:if="{{open}}" class="pm-bg" bindtap="onClose" catchtouchmove="true">
   <view class="pm-card" catchtap="swallow">
     <view wx:if="{{dismissible}}" class="pm-close" catchtap="onClose">×</view>
+    <!-- The picture is never cropped. Its box is measured from the image's own
+         proportions in onImgLoad, so aspectFit lands it exactly — and if the
+         box is ever off, aspectFit still shows the whole image rather than
+         trimming it the way aspectFill did. -->
     <image
       wx:if="{{imageUrl}}"
       class="pm-img"
       src="{{imageUrl}}"
-      mode="aspectFill"
+      mode="aspectFit"
+      style="{{imgStyle}}"
+      bindload="onImgLoad"
       catchtap="onTapCta"></image>
     <view class="pm-text">
       <view wx:if="{{title}}" class="pm-title f-bear">{{title}}</view>

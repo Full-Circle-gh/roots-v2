@@ -3089,9 +3089,12 @@ function updatePopupPreview() {
   const cEl = $('#pu-preview-cta');
   cEl.textContent = cta;
   cEl.style.display = cta ? '' : 'none';
+  // A real <img>, not a background: the slot has to take the picture's own
+  // shape so nothing is cropped. CSS caps the height; the browser scales the
+  // whole image down from there.
   const iEl = $('#pu-preview-img');
-  if (img) { iEl.style.backgroundImage = `url(${JSON.stringify(img)})`; iEl.style.display = ''; }
-  else     { iEl.style.display = 'none'; }
+  if (img) { iEl.src = img; iEl.style.display = ''; }
+  else     { iEl.removeAttribute('src'); iEl.style.display = 'none'; }
   $('#pu-preview-close').style.display = dismissible ? '' : 'none';
 }
 
