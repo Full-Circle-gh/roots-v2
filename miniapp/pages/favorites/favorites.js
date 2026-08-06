@@ -2,9 +2,10 @@
 // Two views (grid / list), category chips that filter by product.category,
 // sticky bottom bar to add all in-stock items to the cart in one tap.
 
-const api  = require('../../utils/api');
-const cart = require('../../utils/cart');
-const lang = require('../../utils/lang');
+const api      = require('../../utils/api');
+const cart     = require('../../utils/cart');
+const lang     = require('../../utils/lang');
+const delivery = require('../../utils/delivery');
 
 const COPY_EN = {
   kicker: 'FAVORITES',
@@ -96,7 +97,13 @@ Page({
     }
     this.setData({ loading: true });
     try {
-      const rows = await api.get('/api/retail/favorites').catch(() => []);
+      // Pre-order is an out-of-city offer, so a saved favourite that's sold out
+      // reads PRE-ORDER or a dead SOLD OUT depending on where this shopper is
+      // delivering. Fetch that verdict alongside the list (cached, never throws).
+      const [rows] = await Promise.all([
+        api.get('/api/retail/favorites').catch(() => []),
+        delivery.load().then((sameCity) => { this._sameCity = !!sameCity; }),
+      ]);
       const list = Array.isArray(rows) ? rows : (rows?.data || []);
       this.setData({ all: list, totalCount: list.length, loading: false });
       this.rebuildView();
@@ -127,9 +134,11 @@ Page({
       const reg   = Number(p.price) || 0;
       const flash = !!p.is_on_flash && eff < reg;
       // Out of stock but pre-orderable (out-of-city) → stays quick-addable with
-      // a PRE-ORDER tag; only a hard-out favourite goes dead. Mirrors the shop.
+      // a PRE-ORDER tag; only a hard-out favourite goes dead. Mirrors the shop,
+      // including the same-city rule: nothing is reservable for an address
+      // inside Guangzhou, where the checkout gates today's run on real stock.
       const out = p.ship_from_supplier ? !!p.supplier_paused : (p.stock != null && Number(p.stock) <= 0);
-      const preorder = out && !p.ship_from_supplier && !!p.oos_preorder;
+      const preorder = out && !p.ship_from_supplier && !!p.oos_preorder && !this._sameCity;
       const soldOut = out && !preorder;
       const priceDrop = flash && reg > eff ? Math.round(reg - eff) : 0;
       const name = L === 'cn' ? (p.name_cn || p.name_en) : (p.name_en || p.name_cn);
@@ -211,7 +220,7 @@ Page({
     const p = (this.data.all || []).find(x => x.id === id);
     if (!p) return;
     const out = p.ship_from_supplier ? !!p.supplier_paused : (p.stock != null && Number(p.stock) <= 0);
-    const preorder = out && !p.ship_from_supplier && !!p.oos_preorder;
+    const preorder = out && !p.ship_from_supplier && !!p.oos_preorder && !this._sameCity;
     if (out && !preorder) {
       wx.showToast({ title: this.data.copy.soldOut, icon: 'none' });
       return;

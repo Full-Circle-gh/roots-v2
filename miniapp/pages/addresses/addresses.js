@@ -4,6 +4,7 @@
 
 const api = require('../../utils/api');
 const zones = require('../../utils/zones');
+const delivery = require('../../utils/delivery');
 
 const EMPTY_FORM = {
   id: null,
@@ -199,6 +200,10 @@ Page({
       const list = await api.get('/api/retail/addresses');
       const arr = Array.isArray(list) ? list : list?.data || [];
       this.setData({ addresses: arr, loading: false });
+      // Hand the same rows to utils/delivery so the shop tab re-badges its
+      // PRE-ORDER pills off this pick (a same-city address can't reserve a
+      // sold-out item) without paying for the fetch again.
+      delivery.prime(arr);
       return arr;
     } catch (e) {
       console.warn('[addresses] load failed:', e.message);
@@ -713,6 +718,7 @@ Page({
       // refresh() returns so the badge moves instantly.
       const next = this.data.addresses.map(a => ({ ...a, is_default: a.id === id }));
       this.setData({ addresses: next });
+      delivery.prime(next);
 
       const pages = getCurrentPages();
       if (pages.length > 1) {

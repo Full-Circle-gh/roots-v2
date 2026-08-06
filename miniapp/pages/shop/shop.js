@@ -12,10 +12,11 @@
 // chip for the section currently near the top of the viewport. Tapping
 // a sidebar entry / chip smooth-scrolls to that section.
 
-const api    = require('../../utils/api');
-const lang   = require('../../utils/lang');
-const cart   = require('../../utils/cart');
-const config = require('../../utils/config');
+const api      = require('../../utils/api');
+const lang     = require('../../utils/lang');
+const cart     = require('../../utils/cart');
+const config   = require('../../utils/config');
+const delivery = require('../../utils/delivery');
 
 function absUrl(u) {
   if (!u) return '';
@@ -39,10 +40,15 @@ function _effPrice(p) {
 //   preorder → out, but the operator lets out-of-city shoppers reserve it
 //              (oos_preorder from the server). Stays orderable + tappable.
 //   soldOut  → hard out: dead SOLD OUT pill, no + button, picker row disabled.
-function _stockState(p) {
+// `sameCity` is the shopper's own delivery context (utils/delivery): a pre-order
+// is an out-of-city offer, so for an address inside Guangzhou — where the order
+// rides today's scooter run and the checkout gates stock hard — a reservable
+// row is simply sold out. Nothing pre-orderable is ever offered to a same-city
+// shopper, so the pill can't promise what the checkout will refuse.
+function _stockState(p, sameCity) {
   const stock = p.stock == null ? null : Number(p.stock);
   const out = p.ship_from_supplier ? !!p.supplier_paused : (stock != null && stock <= 0);
-  const preorder = out && !p.ship_from_supplier && !!p.oos_preorder;
+  const preorder = out && !p.ship_from_supplier && !!p.oos_preorder && !sameCity;
   return { out, preorder, soldOut: out && !preorder, stock };
 }
 
@@ -181,6 +187,7 @@ Page({
     const app = getApp();
     this._applyLang(app.globalData.lang);
     this._syncConfig();
+    this._syncDelivery();
     this.refresh();
   },
 
@@ -191,12 +198,28 @@ Page({
       this.refresh();
     }
     this._syncConfig();
+    // The shopper may have switched to (or away from) a Guangzhou address on
+    // the address book since we last rendered — re-ask before they browse.
+    this._syncDelivery();
     const tb = this.getTabBar && this.getTabBar();
     if (tb && tb.setSelected) tb.setSelected('pages/shop/shop');
     // Honour a category deep-link handed off from the home page (a tapped
     // category tile). If sections are already loaded we apply it now;
     // otherwise refresh() applies it once they're built.
     this._applyPendingCategory();
+  },
+
+  // Is the shopper delivering inside Guangzhou? Drives whether a sold-out
+  // reservable row may show PRE-ORDER (see _stockState). The answer arrives one
+  // cached request after the first paint, so when it flips we re-render the
+  // rows we already hold — no second catalog fetch.
+  _syncDelivery() {
+    delivery.load().then((sameCity) => {
+      if (!!sameCity === !!this._sameCity) return;
+      this._sameCity = !!sameCity;
+      const raw = this.data._raw;
+      if (raw && raw.length) this._renderRows(raw);
+    }).catch((e) => console.warn('[shop] delivery sync failed:', e.message));
   },
 
   // Drill straight into the category the customer tapped on Home — the tile
@@ -356,57 +379,65 @@ Page({
         raw = raw.filter(p => p.stock == null || Number(p.stock) > 0);
       }
 
-      const L = this.data.lang;
-      const tree = (Array.isArray(treeResp) ? treeResp : treeResp?.data || []);
-
-      // Collapse variant siblings (same variant_group_id) into one
-      // representative card. Standalone products pass through untouched.
-      // _memberMap lets addToCart find a card's siblings for the size picker.
-      const display = this._collapseVariants(raw);
-      this._memberMap = {};
-      for (const p of display) if (p._members) this._memberMap[p.id] = p._members;
-
-      const sections = this._buildSections(display, tree, L);
-      const categories = sections.map(s => ({ id: s.id, name: s.name, label: s.label }));
-      const totalCount = sections.reduce(
-        (sum, s) => sum + s.groups.reduce((n, g) => n + g.items.length, 0), 0);
-
-      // Preserve an active drill across a refresh (e.g. a dietary filter
-      // applied while drilled in). Drop it if that category no longer has
-      // any products after the new filter.
-      let { drillTop, drillLabel, subTabs } = this.data;
-      let visibleSections = sections;
-      if (drillTop) {
-        const sec = sections.find(s => s.name === drillTop);
-        if (sec) {
-          visibleSections = [sec];
-          subTabs = sec.groups.map(g => ({ id: g.id, label: g.label }));
-          drillLabel = sec.label;
-        } else {
-          drillTop = ''; drillLabel = ''; subTabs = [];
-        }
-      }
-
-      this.setData({
-        _raw: raw,
-        sections,
-        visibleSections,
-        categories,
-        totalCount,
-        drillTop, drillLabel, subTabs,
-        loading: false,
-      });
-      // Measure offsets for the active mode (sub anchors when drilled, top
-      // sections otherwise) so onScroll can find the active one, then honour
-      // any pending category deep-link now that sections + offsets exist.
-      setTimeout(() => {
-        if (this.data.drillTop) this._measureGroups(); else this._measureSections();
-        this._applyPendingCategory();
-      }, 200);
+      this._tree = (Array.isArray(treeResp) ? treeResp : treeResp?.data || []);
+      this._renderRows(raw);
     } catch (e) {
       console.warn('[shop] refresh failed:', e.message);
       this.setData({ loading: false });
     }
+  },
+
+  // Turn the last-fetched rows into the rendered sections. Split out of
+  // refresh() so a late-arriving delivery verdict (_syncDelivery) can re-render
+  // the same rows — the PRE-ORDER pills depend on it — without a second fetch.
+  _renderRows(raw) {
+    const L = this.data.lang;
+    const tree = this._tree || [];
+
+    // Collapse variant siblings (same variant_group_id) into one
+    // representative card. Standalone products pass through untouched.
+    // _memberMap lets addToCart find a card's siblings for the size picker.
+    const display = this._collapseVariants(raw);
+    this._memberMap = {};
+    for (const p of display) if (p._members) this._memberMap[p.id] = p._members;
+
+    const sections = this._buildSections(display, tree, L);
+    const categories = sections.map(s => ({ id: s.id, name: s.name, label: s.label }));
+    const totalCount = sections.reduce(
+      (sum, s) => sum + s.groups.reduce((n, g) => n + g.items.length, 0), 0);
+
+    // Preserve an active drill across a refresh (e.g. a dietary filter
+    // applied while drilled in). Drop it if that category no longer has
+    // any products after the new filter.
+    let { drillTop, drillLabel, subTabs } = this.data;
+    let visibleSections = sections;
+    if (drillTop) {
+      const sec = sections.find(s => s.name === drillTop);
+      if (sec) {
+        visibleSections = [sec];
+        subTabs = sec.groups.map(g => ({ id: g.id, label: g.label }));
+        drillLabel = sec.label;
+      } else {
+        drillTop = ''; drillLabel = ''; subTabs = [];
+      }
+    }
+
+    this.setData({
+      _raw: raw,
+      sections,
+      visibleSections,
+      categories,
+      totalCount,
+      drillTop, drillLabel, subTabs,
+      loading: false,
+    });
+    // Measure offsets for the active mode (sub anchors when drilled, top
+    // sections otherwise) so onScroll can find the active one, then honour
+    // any pending category deep-link now that sections + offsets exist.
+    setTimeout(() => {
+      if (this.data.drillTop) this._measureGroups(); else this._measureSections();
+      this._applyPendingCategory();
+    }, 200);
   },
 
   // Build top-category sections from the category tree. Each section is a
@@ -488,6 +519,7 @@ Page({
 
   _toRows(products, L) {
     const money = v => '¥' + (Number.isInteger(v) ? v : v.toFixed(2));
+    const sameCity = !!this._sameCity;
     return products.map(p => {
       const members = p._members || null;
       const regular = Number(p.price ?? p.sell_price) || 0;
@@ -513,13 +545,13 @@ Page({
         // A size that's out but pre-orderable keeps the card orderable: the
         // group only goes dead when EVERY size is hard-out, and the card shows
         // PRE-ORDER when the only remaining sizes are reservable ones.
-        const states = members.map(_stockState);
+        const states = members.map(m => _stockState(m, sameCity));
         outOfStock = states.every(s => s.soldOut);
         preorder = !outOfStock && states.every(s => s.out) && states.some(s => s.preorder);
         soldUnits = members.reduce((s, m) => s + (Number(m.units_sold) || 0), 0);
         subline = '';
       } else {
-        const st = _stockState(p);
+        const st = _stockState(p, sameCity);
         outOfStock = st.soldOut;
         preorder = st.preorder;
         // All-time units sold (server min-gates this to 0 below the badge
@@ -965,7 +997,15 @@ Page({
       wx.navigateTo({ url: '/pages/product/product?id=' + id });
       return;
     }
-    this._addRawToCart(raw, id, _stockState(raw).preorder);
+    // Same-city shoppers never see the + on a sold-out reservable row (the card
+    // renders the dead SOLD OUT pill instead), but a stale page can still fire
+    // this — re-check rather than trusting the tap.
+    const { preorder, soldOut } = _stockState(raw, !!this._sameCity);
+    if (soldOut) {
+      wx.showToast({ title: this.data.lang === 'cn' ? '已售罄' : 'Sold out', icon: 'none' });
+      return;
+    }
+    this._addRawToCart(raw, id, preorder);
   },
 
   // Add one product row to the cart + run the fly-to-cart animation. originId
@@ -1031,8 +1071,9 @@ Page({
       const saveN = wasN > eff && eff > 0 ? Math.round((wasN - eff) * 100) / 100 : 0;
       // Out but pre-orderable (out-of-city) → keep the row tappable with a
       // PRE-ORDER badge; only a hard-out size shows the dead SOLD OUT pill.
-      // Mirrors the PDP's own size picker.
-      const { out, preorder, soldOut, stock } = _stockState(m);
+      // Mirrors the PDP's own size picker. For a same-city address every
+      // sold-out size is hard-out — pre-order isn't on offer for today's run.
+      const { out, preorder, soldOut, stock } = _stockState(m, !!this._sameCity);
       return {
         id: m.id,
         label: lang.pickVariantLabel(m.variant_label, m.variant_label_cn, L) || lang.pick(m.name_en, m.name_cn, L) || ('#' + m.id),
@@ -1070,9 +1111,9 @@ Page({
     const members = (this._memberMap && this._memberMap[this._vpRepId]) || [];
     const m = members.find(x => Number(x.id) === id);
     if (!m) return;
-    // A pre-orderable out-of-stock size stays orderable — the checkout gate
-    // re-checks the address and blocks only same-day Guangzhou.
-    const { preorder, soldOut } = _stockState(m);
+    // A pre-orderable out-of-stock size stays orderable for an out-of-city
+    // shopper; a same-city one gets the dead row (_stockState folds that in).
+    const { preorder, soldOut } = _stockState(m, !!this._sameCity);
     if (soldOut) {
       wx.showToast({ title: this.data.lang === 'cn' ? (m.ship_from_supplier ? '暂时缺货' : '已售罄') : (m.ship_from_supplier ? 'Unavailable' : 'Sold out'), icon: 'none' });
       return;

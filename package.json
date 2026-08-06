@@ -7,7 +7,8 @@
     "lint": "eslint routes lib middleware scripts server.js database.js public",
     "lint:fix": "eslint --fix routes lib middleware scripts server.js database.js public",
     "verify:fulfilment": "node scripts/verify-fulfilment-types.js",
-    "test:address": "node scripts/test_address_pin.js && node scripts/test_address_clients.js"
+    "test:address": "node scripts/test_address_pin.js && node scripts/test_address_clients.js",
+    "test:preorder": "node scripts/test_preorder_local.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
