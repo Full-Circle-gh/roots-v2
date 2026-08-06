@@ -1,0 +1,744 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   TACET ORDERS SKIN — verbatim copy of the <style id="tacet-orders-skin">
+   block in public/retail-admin.html (lines 48-778 at the time of copying).
+   MOCKUP ONLY. Nothing links this but tacet-delivery-point-mockup.html.
+
+   Not edited, not "cleaned up", not re-indented. The mockup has to be the
+   real surface or it is not evidence about the real surface. Re-sync with:
+
+     sed -n '48,778p' public/retail-admin.html > public/tacet-mockup-skin.css
+     (then paste this header back on top)
+
+   When this file and retail-admin.html disagree, retail-admin.html is right.
+   ═══════════════════════════════════════════════════════════════════════ */
+  :is(#tab-flash, #tab-products, #tab-orders, #tab-invoices, #tab-customers, #tab-membership, #tab-vouchers, #tab-broadcasts, #tab-sharing, #tab-popups, #pu-editor-bg, #order-drawer, #cu-drawer, #db-activity-drawer, #db-stock-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
+    --tacet-ink:#111A2B; --tacet-paper:#FBF9F4; --tacet-graphite:#58606E;
+    --tacet-dusk:#6E67AF; --tacet-sage:#A3B49F; --tacet-amber:#C9954A; --tacet-brick:#B4533E;
+    --tacet-cream:#F6F3EC; --tacet-border:#E4E0D5;
+    --tacet-sage-tint:#EDF1EC; --tacet-amber-tint:#F7EEDE; --tacet-brick-tint:#F6E7E3; --tacet-dusk-tint:#EEEDF6;
+    --tacet-sage-ink:#4A6249; --tacet-amber-ink:#8A6425;
+
+    /* Remap the tokens the existing templates + inline styles already read. */
+    --bg-app:#FBF9F4; --bg-pane:#FFFFFF; --bg-elev-1:#F6F3EC; --bg-elev-2:#EFEBE1; --bg-input:#FFFFFF;
+    --bg-overlay:rgba(17,26,43,.32);
+    --line-soft:#ECE8DE; --line:#E4E0D5; --line-strong:#D9D4C7;
+    --text-1:#111A2B; --text-2:#58606E; --text-3:#8A8B8E; --text-4:#B4B3AC;
+    --accent:#58606E; --accent-hi:#58606E; --accent-ink:#FBF9F4;
+    /* --brass drove decorative section labels / chips; Tacet keeps those calm
+       (graphite). Genuine attention comes from --warn (amber) + the st-* map. */
+    --brass:#58606E; --brass-hi:#58606E; --warn:#C9954A;
+    --danger:#B4533E; --danger-soft:rgba(180,83,62,.12); --success:#A3B49F;
+    --st-pending_payment:#58606E; --st-paid:#58606E; --st-preparing:#58606E; --st-dispatched:#58606E;
+    --st-delivered:#4A6249; --st-cancelled:#B4533E; --st-refunded:#B4533E; --st-awaiting_restock:#8A6425;
+    --f-sans:'Inter','IBM Plex Sans SC','PingFang SC','Hiragino Sans GB',system-ui,sans-serif;
+    --f-mono:'Inter','IBM Plex Sans SC',system-ui,sans-serif;
+    --r-sm:6px; --r-md:8px; --r-lg:12px; --r-xl:14px;
+    color:var(--text-1);
+    /* Set font-family on the scope root so EVERY descendant inherits Inter —
+       remapping --f-sans alone only reaches elements that literally write
+       font-family:var(--f-sans); inherited font-family carries the body's
+       computed (IBM Plex) value otherwise. */
+    font-family:var(--f-sans);
+  }
+  /* Dark theme: Paper↔Ink swap, other roles hold (mirrors tacet-tokens.css). */
+  [data-theme="dark"] :is(#tab-flash, #tab-products, #tab-orders, #tab-invoices, #tab-customers, #tab-membership, #tab-vouchers, #tab-broadcasts, #tab-sharing, #tab-popups, #pu-editor-bg, #order-drawer, #cu-drawer, #db-activity-drawer, #db-stock-drawer, .pu-editor-bg.tacet, .pm-pick-bg.tacet) {
+    --bg-app:#111A2B; --bg-pane:#18233A; --bg-elev-1:#1E2A44; --bg-elev-2:#243150; --bg-input:#18233A;
+    --line-soft:#22304C; --line:#2A3550; --line-strong:#374267;
+    --text-1:#FBF9F4; --text-2:#9AA3B2; --text-3:#7E8798; --text-4:#5C6577;
+    --tacet-cream:#1E2A44; --tacet-border:#2A3550;
+    --tacet-sage-tint:#1E2C26; --tacet-amber-tint:#33290F; --tacet-brick-tint:#351B14;
+    --tacet-sage-ink:#A3B49F; --tacet-amber-ink:#C9954A;
+    --st-delivered:#A3B49F; --st-awaiting_restock:#C9954A;
+  }
+
+  /* Page heading eyebrow (small, calm) + title. */
+  .t-ord-eyebrow { font-family:var(--f-sans); font-size:11px; font-weight:500; letter-spacing:.14em;
+    text-transform:uppercase; color:var(--text-3); margin:0 0 6px; }
+  :is(#tab-orders, #tab-invoices, #tab-products) > h2 { font-family:var(--f-sans); font-weight:500;
+    font-size:24px; letter-spacing:-.01em; color:var(--text-1); text-transform:none; }
+
+  /* ── §1.7 page header ──────────────────────────────────────────────────
+     Title + status line + one Dusk CTA. The section becomes the containing
+     block ONLY so the CTA can be positioned; nothing inside it was absolutely
+     positioned against a further ancestor (the popovers anchor to their own
+     .ovp-wrap, which is already position:relative), so this re-anchors nothing. */
+  #tab-orders { position: relative; }
+  /* Level with the title: --s6 matches the h2's own margin-top, so the button
+     sits on the title's line without either knowing the other's height. */
+  #tab-orders > .ord-head-cta { position: absolute; top: var(--s6); right: 0; z-index: 2; }
+  /* Reserve the CTA's lane so a long title or status line can never run under
+     it — both are short today, but neither should depend on staying short. */
+  #tab-orders > h2,
+  #tab-orders > .ord-status-line { padding-right: 190px; }
+  /* Status line — §1.7's values: 15px Inter 400, Graphite, sentence case,
+     tabular figures. Sits directly under the title. Zero Dusk: it is state,
+     not the AI acting. */
+  #tab-orders > .ord-status-line {
+    margin: -6px 0 var(--s4);
+    font: 400 15px var(--f-sans); color: var(--td-text2);
+    font-variant-numeric: tabular-nums;
+  }
+  #tab-orders > .ord-status-line[hidden] { display: none; }
+  /* Phones: retail-admin.css hides `#tab-orders > .row`, which is where this
+     button used to live — so it has never rendered on a phone. Keep it that
+     way; the title and status line are hidden there too. */
+  @media (max-width: 720px) {
+    #tab-orders > .ord-head-cta,
+    #tab-orders > .ord-status-line { display: none; }
+    #tab-orders > h2 { padding-right: 0; }
+  }
+  #tab-orders .t-ord-shown { font-size:12px; color:var(--text-2); margin-top:10px; }
+
+  /* Order drawer head — white pane, distinct from the paper body below. */
+  #order-drawer.side-drawer .drawer-head { background:var(--bg-pane); }
+
+  /* KPI tiles — plain paper card, no accent stripe (mockup). */
+  :is(#tab-orders, #tab-invoices) .fc-kpi { background:var(--bg-pane); border:1px solid var(--line);
+    border-radius:14px; box-shadow:none; }
+  :is(#tab-orders, #tab-invoices) .fc-kpi:hover { transform:none; box-shadow:none; border-color:var(--line); }
+  :is(#tab-orders, #tab-invoices) .fc-kpi .lbl { font-family:var(--f-sans); font-size:13px; font-weight:400;
+    letter-spacing:0; text-transform:none; color:var(--text-2); }
+  :is(#tab-orders, #tab-invoices) .fc-kpi .val { font-size:30px; font-weight:500; color:var(--text-1); }
+  :is(#tab-orders, #tab-invoices) .fc-kpi .sub { font-size:12px; color:var(--text-2); }
+  :is(#tab-orders, #tab-invoices) .fc-kpi.accent::before,
+  :is(#tab-orders, #tab-invoices) .fc-kpi.alert::before { display:none; }
+  :is(#tab-orders, #tab-invoices) .fc-kpi.accent .val { color:var(--text-1); }
+  :is(#tab-orders, #tab-invoices) .fc-kpi.alert { border-color:rgba(201,149,74,.5); }
+  :is(#tab-orders, #tab-invoices) .fc-kpi.alert .val { color:var(--tacet-amber-ink); }
+  /* Deltas: up = sage-ink, down/flat = graphite — never red. */
+  :is(#tab-orders, #tab-invoices) .fc-delta.is-up { color:var(--tacet-sage-ink); }
+  :is(#tab-orders, #tab-invoices) .fc-delta.is-down { color:var(--text-2); }
+  :is(#tab-orders, #tab-invoices) .fc-delta.is-flat { color:var(--text-2); opacity:.75; }
+
+  /* Filter chips — white pill w/ hairline; active = ink fill, paper text. */
+  #tab-orders .status-chip { background:var(--bg-pane); border:1px solid var(--line); color:var(--text-2);
+    border-radius:999px; padding:6px 14px; font-size:13px; font-weight:500; }
+  #tab-orders .status-chip:hover { background:var(--bg-pane); border-color:var(--text-3); color:var(--text-1); }
+  #tab-orders .status-chip .dot { display:none; }
+  #tab-orders .status-chip.active,
+  #tab-orders .status-chip.active[class*="st-"] { background:var(--tacet-ink); border-color:var(--tacet-ink);
+    color:var(--tacet-paper); }
+  [data-theme="dark"] #tab-orders .status-chip.active,
+  [data-theme="dark"] #tab-orders .status-chip.active[class*="st-"] { background:var(--tacet-paper);
+    border-color:var(--tacet-paper); color:var(--tacet-ink); }
+  /* Count badge — a rounded token rather than a bare number. The fill stays
+     NEUTRAL in every state: the badge is a shape, never a signal. Only the four
+     attention chips tint their number, and they alone carry the dot below.
+     `.status-chip` is already inline-flex with gap:6px, so the badge needs no
+     margin of its own — margin-left:0 cancels retail-admin.css:5064.
+     Height is 16px, matching the chip's own text line box (`body{font:13px …}`
+     resets line-height to `normal`, ≈16px at 13px Inter). Any taller and the
+     eight counted chips would stand proud of the four bare ones.
+     🔴 `:empty` must be re-stated here. retail-admin.css:5065 hides an empty
+     badge at (0,3,0); this ID-scoped block outranks it, so without this line a
+     cleared queue would draw an empty pill instead of nothing. Not redundant —
+     zero-hiding survives only because of it. */
+  #tab-orders .status-chip .chip-ct { display:inline-flex; align-items:center; justify-content:center;
+    gap:4px; margin-left:0; padding:0 6px; min-width:17px; height:16px; border-radius:999px;
+    background:var(--bg-elev-1); font-size:11.5px; font-weight:500; line-height:1;
+    color:var(--text-2); opacity:1; font-variant-numeric:tabular-nums; }
+  #tab-orders .status-chip .chip-ct:empty { display:none; }
+  #tab-orders .status-chip.active .chip-ct { background:rgba(251,249,244,.16); color:rgba(251,249,244,.82); }
+  [data-theme="dark"] #tab-orders .status-chip.active .chip-ct { background:rgba(17,26,43,.14); color:rgba(17,26,43,.62); }
+  #tab-orders .status-chip .chip-ct.alert { color:var(--tacet-amber-ink); }
+  #tab-orders .status-chip.active .chip-ct.alert { color:rgba(251,249,244,.9); }
+  /* An active attention chip in dark mode fills with PAPER, so the light-on-ink
+     rule above would paint cream on cream. Pre-existing: the old pair tied at
+     (1,4,0) and source order decided it. This override is (1,5,0) so it can't. */
+  [data-theme="dark"] #tab-orders .status-chip.active .chip-ct.alert { color:rgba(17,26,43,.8); }
+  /* The attention dot — punctuation, not an alarm. `currentColor` makes it the
+     same amber ink as the number beside it, so it introduces NO new colour to
+     the page and needs no dark-theme or active-state override of its own.
+     4px, flat fill, no animation. Generated content doesn't affect `:empty`,
+     so a zeroed chip still hides the badge and the dot with it. */
+  #tab-orders .status-chip .chip-ct.alert::before { content:''; width:4px; height:4px; flex:none;
+    border-radius:50%; background:currentColor; }
+  #chd-btn .chan-ico svg { width:15px; height:15px; }
+
+  /* Filter row — store · channel · search share ONE line. `.row` already gives
+     flex + gap + wrap; these two only stop the store select and the channel
+     trigger being squashed by the flex:1 search box, so "one line" holds.
+     🔴 Scoped by ID, never via `#tab-orders .ovp-wrap`. `.ovp-wrap` is shared
+     by three other popovers — #pv-btn (products View), #dzv-btn (delivery
+     zones) and .odm-wrap (refund / cancel, which renders INSIDE #tab-orders) —
+     and none of them may pick up filter-row layout. */
+  #tab-orders .ord-filterbar > #orders-store { flex:none; }
+  #tab-orders .ord-filterbar > #chd-wrap { flex:none; }
+
+  /* Data table — paper card, hairline rows, calm hover. */
+  #tab-orders .table-wrap { background:var(--bg-pane); border:1px solid var(--line); border-radius:14px;
+    overflow:hidden; overflow-x:auto; }
+
+  /* ── Preconditions for the pinned column-header band (§1.13a) ──────────
+     Nothing here is visible. These three changes only clear the obstacles
+     that stop a sticky th reaching the page scroller; the band itself is a
+     later commit. Copied from Customers, the one place this works today.
+
+     🔴 Every ancestor with an `overflow` in EITHER axis becomes the sticky
+     element's scrollport — and a visible axis paired with a non-visible one
+     computes BOTH to auto. So `overflow:visible; overflow-x:auto` is a
+     scroll container, and the band would pin 56px down from the card's own
+     top, landing on row one. That shipped once on Customers. */
+
+  /* The card must clip its corners WITHOUT becoming a scroll container, so
+     clip-path replaces overflow:hidden. What it clips: the pager's bottom
+     corners and the last row's td backgrounds (hover --bg-elev-1, and the
+     focus-visible inset edge marker). Radius is 14px taken from
+     `.list-card{border-radius:14px}` in retail-admin.css, not assumed. */
+  #tab-orders .list-card {                        /* (1,1,0) beats .list-card (0,1,0) */
+    overflow: visible;
+    clip-path: inset(0 round 14px);
+  }
+  /* ≤720px the shared .list-card drops to border-radius:0/overflow:visible —
+     no corners left to clip, and a 14px clip would round a square card. That
+     rule is (0,1,0) and would lose to the (1,1,0) above, so undo it here. */
+  @media (max-width: 720px) { #tab-orders .list-card { clip-path: none; } }
+
+  /* 🔴 MUST match retail-admin.css's `#tab-orders .list-card > .table-wrap`
+     selector, which sets overflow-x:auto at (1,2,0). A plain
+     `#tab-orders .table-wrap` here is (1,1,0) and LOSES. Equal specificity +
+     later source (this block opens after the stylesheet link) wins.
+     Losing overflow-x costs nothing: #orders-table is table-layout:fixed,
+     width:100%, with a colgroup summing to exactly 100% and no min-width,
+     so it is never wider than its container and the scroll never fired. */
+  #tab-orders .list-card > .table-wrap {          /* (1,2,0) */
+    overflow: visible; overflow-x: visible;
+  }
+
+  /* Under `collapse` a cell border belongs to the table's border grid, so a
+     sticky th scrolls away from its own border-bottom. `separate` gives the
+     th its border back. Safe here because every border on this table is a
+     `border-bottom` — no cell declares border-top/left/right, so each line
+     still has exactly one author and nothing doubles. border-spacing:0 keeps
+     the cells flush, so the table stays pixel-identical. */
+  #orders-table { border-collapse:separate; border-spacing:0; width:100%; }
+  /* 🔴 THE COLUMN-HEADER BAND — a PRODUCT-WIDE component, and Orders is its
+     anchor (§1.13a rule 3 + tacet-design-system "Table header surface").
+     Every value below is the spec's, not a per-page choice. It was invented
+     in the Orders mockup — that is where --td-header came from — and shipped
+     first on Customers; this makes Orders the second consumer. If any of it
+     needs to change it changes here first and every table follows.
+     13px, not 15px: 15 was tried and reads as another row, not a header.
+     --td-text (Ink), not --td-text2 (Graphite).
+
+     `top: 56px` is the ONLY local value. It is the height of .topbar, which
+     is position:fixed/top:0/z-index:12 — verified, not copied on faith.
+     Nothing inside #tab-orders is sticky or fixed, so the KPI tiles, status
+     chips and filter row scroll away above the band normally (§1.13a rule 1).
+     Orders has more above its table than Customers, but none of it pins, so
+     the offset is the same 56px.
+
+     z-index 5 sits under the topbar's 12 and above the rows, and the
+     background is fully opaque so a tinted row passing underneath cannot
+     bleed through it.
+
+     NO RADIUS on the cells: .list-card's clip-path (build 1) already rounds
+     the corners, so the band must not draw one of its own. One element owns
+     the shape — that is why there is no pinned-state class to keep in sync.
+
+     text-transform:none and the explicit colour/background are load-bearing:
+     the global `th` reset in retail-admin.css sets uppercase, 11px/600 and
+     --bg-app, and would otherwise leak through (uppercase would also breach
+     §1.6). text-align:left restates that same reset — a no-op here, kept so
+     the rule is self-contained rather than depending on a reset elsewhere. */
+  #orders-table thead th {
+    position: sticky; top: 56px; z-index: 5;
+    background: var(--td-header); color: var(--td-text);
+    font-family: var(--f-sans); font-weight: 500; font-size: 13px;
+    letter-spacing: 0; text-transform: none; text-align: left;
+    padding: 10px 12px; border-bottom: 1px solid var(--td-border); white-space: nowrap;
+  }
+  #orders-table thead th:first-child,
+  #orders-table thead th:last-child { border-radius: 0; }
+  /* The transparent inset shadow here is what makes the unseen edge SETTLE
+     rather than snap: the sage marker below animates against a same-geometry
+     shadow that already exists on every td. Without it the edge would appear
+     and vanish instantly. Same shape as #cu-table tbody td. */
+  #orders-table tbody td { border-bottom:1px solid var(--line); padding:13px 10px; color:var(--text-1);
+    font-size:13.5px; vertical-align:top;
+    box-shadow: inset 4px 0 0 transparent;
+    transition: background .6s cubic-bezier(.16,1,.3,1), box-shadow .6s cubic-bezier(.16,1,.3,1); }
+  @media (prefers-reduced-motion: reduce) { #orders-table tbody td { transition: none; } }
+  #orders-table tbody tr.order-row { cursor:pointer; }
+  /* :not(.is-unseen) — hover must not wipe the unseen surface. Copied from
+     #cu-table tbody tr.cul-row:not(.is-unseen):hover td. */
+  #orders-table tbody tr.order-row:not(.is-unseen):hover td { background:var(--bg-elev-1); }
+  /* 🔴 The focus ring moved OFF box-shadow and onto outline, and is now Dusk.
+     Two reasons, both rules: box-shadow does not stack across rules — last
+     declared wins — so an Ink ring on the td would erase the unseen row's
+     sage edge the moment the row took focus. And §1.8 rule 3: focus rings are
+     Dusk and exempt from the one-Dusk budget, so the old Ink ring was
+     off-spec regardless. outline-offset:-2px keeps it inside the row so it
+     cannot change row height or nudge the columns. */
+  #orders-table tbody tr.order-row:focus-visible { outline:2px solid var(--td-dusk); outline-offset:-2px; }
+  #orders-table tbody tr.order-row:focus-visible td { background:var(--bg-elev-1); }
+
+  /* ── Unopened rows — the product's ONE unseen treatment (design-system
+     "Unseen-row surface"; reference implementation is #cu-table). ───────────
+     Replaces three signals that all meant "nobody has opened this": the Ink
+     NEW chip, a sage wash, and bolded order#/customer. One meaning, one
+     treatment.
+     Named .is-unseen, matching Customers, so both pages call one thing by one
+     name. It also sidesteps retail-admin.css's `tr.order-row.is-unread`
+     rules, which stop matching entirely rather than needing to be fought.
+     The trigger is unchanged: !o.seen_at && isActionable(o).
+     Surface and edge always together, never one without the other. The edge
+     is an inset shadow, NOT a border, so an unseen row is the exact same
+     height as a seen one and the list never jumps as records are opened. */
+  #orders-table tbody tr.order-row.is-unseen td { background: var(--td-unseen); }
+  #orders-table tbody tr.order-row.is-unseen td:first-child { box-shadow: inset 4px 0 0 var(--td-sage); }
+  #orders-table tbody tr.order-row:last-child td { border-bottom:none; }
+
+  /* The NEW chip is gone — the unseen row surface + sage edge above carry that
+     meaning now, once instead of three times. It also rendered UPPERCASE: this
+     rule overrode colour, size, weight and radius but never reset
+     `text-transform: uppercase` from the .new-chip primitive in
+     retail-admin.css, so it was a live §1.6 breach. (That primitive is sage
+     and never painted here — the Ink override above always won. It was never
+     the Dusk pill several docs describe.) */
+
+  /* Status pills — tinted fill + matching text, small dot; health via colour. */
+  :is(#tab-orders, #order-drawer) .pill { border:none; font-weight:500; font-size:12.5px; letter-spacing:0;
+    padding:3px 11px; border-radius:999px; }
+  :is(#tab-orders, #order-drawer) .pill .dot { width:7px; height:7px; }
+  :is(#tab-orders, #order-drawer) :is(.pill.st-pending_payment, .pill.st-paid, .pill.st-preparing, .pill.st-dispatched) {
+    background:var(--tacet-cream); color:var(--text-1); border-color:transparent; }
+  :is(#tab-orders, #order-drawer) :is(.pill.st-pending_payment, .pill.st-paid, .pill.st-preparing, .pill.st-dispatched) .dot {
+    background:var(--tacet-graphite); }
+  :is(#tab-orders, #order-drawer) .pill.st-delivered { background:var(--tacet-sage-tint); color:var(--tacet-sage-ink); }
+  :is(#tab-orders, #order-drawer) .pill.st-delivered .dot { background:var(--tacet-sage); }
+  :is(#tab-orders, #order-drawer) .pill.st-awaiting_restock { background:var(--tacet-amber-tint); color:var(--tacet-amber-ink); }
+  :is(#tab-orders, #order-drawer) .pill.st-awaiting_restock .dot { background:var(--tacet-amber); }
+  :is(#tab-orders, #order-drawer) :is(.pill.st-cancelled, .pill.st-refunded) {
+    background:var(--tacet-brick-tint); color:var(--tacet-brick); border-color:transparent; }
+  :is(#tab-orders, #order-drawer) :is(.pill.st-cancelled, .pill.st-refunded) .dot { background:var(--tacet-brick); }
+  /* Refund badges → brick tint; add-on "Updated" → neutral cream. */
+  :is(#tab-orders, #order-drawer) :is(.pill.refund-pending, .pill.refund-partial) {
+    background:var(--tacet-brick-tint); color:var(--tacet-brick); border-color:transparent; }
+
+  /* Buttons — Dusk is SCARCE: only the "New order" CTA (.t-cta) is Dusk.
+     Every other primary (drawer/modal commit actions) is a calm ink-filled
+     button; secondary/ghost stay bordered; danger is brick. */
+  :is(#tab-orders, #tab-invoices, #tab-customers, #order-drawer) .btn-primary,
+  :is(#tab-orders, #tab-invoices, #order-drawer) .db-btn.primary {
+    background:var(--text-1); border-color:var(--text-1); color:var(--bg-pane); }
+  :is(#tab-orders, #tab-invoices, #tab-customers, #order-drawer) .btn-primary:hover,
+  :is(#tab-orders, #tab-invoices, #order-drawer) .db-btn.primary:hover {
+    background:var(--text-2); border-color:var(--text-2); color:var(--bg-pane); }
+  #tab-orders .btn-primary.t-cta { background:var(--tacet-dusk); border-color:var(--tacet-dusk); color:#fff; }
+  #tab-orders .btn-primary.t-cta:hover { background:#605AA0; border-color:#605AA0; color:#fff; }
+  :is(#tab-orders, #tab-invoices, #order-drawer) .btn-danger { background:transparent; color:var(--tacet-brick); border-color:var(--tacet-brick); }
+  :is(#tab-orders, #tab-invoices, #order-drawer) .btn-danger:hover { background:var(--tacet-brick-tint); }
+  /* Form controls take a calm ink accent (not Dusk — checkboxes aren't automation). */
+  :is(#tab-orders, #tab-invoices, #order-drawer) input[type="checkbox"],
+  :is(#tab-orders, #tab-invoices, #order-drawer) input[type="radio"] { accent-color:var(--text-1); }
+
+  /* Drawer — body on paper, individual Tacet cards; total on a raised card. */
+  #order-drawer .order-card { background:transparent; border:none; padding:0; margin:0; box-shadow:none; }
+  /* Reserve room for the floating close ✕ (top-right) so the header action
+     buttons never slide under it — the removed View button used to be this spacer. */
+  #order-drawer .order-head { padding-right:44px; }
+  #order-drawer .order-head .title-row b { font-family:var(--f-sans); font-variant-numeric:tabular-nums;
+    font-size:16px; letter-spacing:0; }
+  #order-drawer .od-eyebrow { font-family:var(--f-sans); font-size:12px; font-weight:400; letter-spacing:0;
+    text-transform:none; color:var(--text-2); }
+  /* Tiles stretch to the row height so each pair sits flush (aligned tops AND
+     bottoms) — content-sized tiles left ragged gaps in the second column. */
+  #order-drawer .order-detail { background:transparent; border:none; box-shadow:none; padding:0;
+    gap:12px; margin-bottom:12px; }
+  #order-drawer .order-detail > div { background:var(--bg-pane); border:1px solid var(--line);
+    border-radius:14px; padding:13px 16px; }
+  #order-drawer .order-detail .kicker { font-family:var(--f-sans); font-size:11.5px; font-weight:500;
+    letter-spacing:.02em; text-transform:none; color:var(--text-2); }
+  #order-drawer .order-total-banner { background:var(--tacet-cream); border:none; box-shadow:none;
+    border-radius:14px; }
+  #order-drawer .order-total-banner .otb-label { font-family:var(--f-sans); font-size:11.5px; font-weight:500;
+    letter-spacing:.02em; text-transform:none; color:var(--text-2); }
+  #order-drawer .order-total-banner .otb-sub { font-family:var(--f-sans); font-size:12.5px; color:var(--text-2);
+    letter-spacing:0; }
+  #order-drawer .order-total-banner .otb-amount { font-size:28px; }
+  #order-drawer .shipment-card { background:var(--bg-pane); border:1px solid var(--line); border-radius:14px; }
+  #order-drawer .copy-mini { border-radius:999px; }
+
+  /* Item manifest — calm Tacet reading. The boxed SKU / ×qty chips flatten
+     into ONE quiet graphite caption line (size · SKU · ×qty · @ unit) with
+     dot separators; the name and line total carry the weight (Inter 500),
+     everything else stays 400. */
+  :is(#order-drawer, .pu-editor-bg.tacet) .item-sku,
+  :is(#order-drawer, .pu-editor-bg.tacet) .item-qty,
+  :is(#order-drawer, .pu-editor-bg.tacet) .item-unit {
+    background:none; border:none; padding:0; border-radius:0; margin:0;
+    font-family:var(--f-sans); font-size:12.5px; font-weight:400;
+    color:var(--text-2); letter-spacing:0; font-variant-numeric:tabular-nums; }
+  :is(#order-drawer, .pu-editor-bg.tacet) .item-qty.qty-multi {
+    color:var(--text-1); font-weight:500; background:none; border:none; }
+  #order-drawer .manifest .mf-zh { font-family:var(--f-sans); font-size:12.5px; font-weight:400; color:var(--text-2); }
+  /* Dot separators between the caption pieces (skips the first piece). */
+  #order-drawer .mf-meta :is(.item-sku, .item-qty, .item-unit):not(:first-child)::before {
+    content:"·"; margin-right:8px; color:var(--text-4); }
+  #order-drawer .manifest .mf-meta { gap:8px; }
+  #order-drawer .manifest .mf-row { padding:12px 0; }
+  #order-drawer .manifest .mf-name { font-size:13.5px; font-weight:500; }
+  #order-drawer .manifest .mf-total { font-weight:500; font-variant-numeric:tabular-nums; }
+  #order-drawer .manifest .mf-num { font-family:var(--f-sans); font-size:11.5px; color:var(--text-3); font-variant-numeric:tabular-nums; }
+  #order-drawer .oi-thumb { border-radius:10px; }
+  /* Pack / refund badges stay pills but read calm (tinted, no border). */
+  #order-drawer .pack-badge { border:none; font-weight:500; letter-spacing:0; font-size:11.5px; padding:2px 10px; }
+  #order-drawer .pack-badge.air, #order-drawer .pack-badge.land {
+    background:var(--tacet-amber-tint); color:var(--tacet-amber-ink); }
+  #order-drawer .pack-badge.supplier { background:var(--tacet-cream); color:var(--text-1); }
+  #order-drawer .pack-badge.refunded { background:var(--tacet-brick-tint); color:var(--tacet-brick); }
+  /* Shipment-card header: cream mode pill, quiet counts. */
+  #order-drawer .shipment-head .mode-pill { background:var(--tacet-cream); border:none;
+    color:var(--text-1); font-weight:500; border-radius:999px; }
+  #order-drawer .shipment-head .count { color:var(--text-2); font-variant-numeric:tabular-nums; }
+  /* Neutralise stray tints: multi-qty chip + active sort chip read calm, not amber/green. */
+  #order-drawer .item-qty.qty-multi { color:var(--text-1); background:var(--tacet-cream); border-color:var(--line-strong); }
+  #order-drawer .sort-chip.active { background:var(--tacet-cream); color:var(--text-1); border-color:var(--line-strong); }
+
+  /* Invoices — cards match the Tacet radius. */
+  #tab-invoices .card { border-radius:14px; }
+  #tab-invoices .seg button.active { color:var(--tacet-ink); }
+
+  /* Phone order cards — Tacet paper card. */
+  #tab-orders #rm-orders-cards .rm-ocard { background:var(--bg-pane); border:1px solid var(--line);
+    border-radius:14px; }
+  #tab-orders #rm-orders-cards .rm-oc-new { background:var(--tacet-ink); color:var(--tacet-paper); }
+  [data-theme="dark"] #tab-orders #rm-orders-cards .rm-oc-new { background:var(--tacet-paper); color:var(--tacet-ink); }
+
+  /* Order-flow pop-up dialogs (refund / payout / JD-label / pay-method /
+     confirm). These attach to <body>, so they sit outside the containers above;
+     the `.tacet` marker (added only by 04-orders.js call sites) scopes the skin
+     to Orders' modals — other tabs' pop-ups are untouched. Token remap above
+     already recolours their innards; here we set the card shape, backdrop and
+     the calm ink primary (Dusk stays reserved for "New order"). */
+  :is(.pu-editor-bg.tacet, .pm-pick-bg.tacet) { background:rgba(17,26,43,.32); }
+  :is(.pu-editor-bg.tacet .pu-editor, .pm-pick-bg.tacet .pm-pick) {
+    background:var(--bg-pane); border:1px solid var(--line); border-radius:14px;
+    box-shadow:0 1px 2px rgba(17,26,43,.05), 0 4px 16px rgba(17,26,43,.08); }
+  :is(.pu-editor-bg.tacet, .pm-pick-bg.tacet) :is(.pu-editor-head, .pu-editor-foot, .pu-editor-body, .pm-pick-head) { border-color:var(--line); }
+  :is(.pu-editor-bg.tacet, .pm-pick-bg.tacet) .btn-primary {
+    background:var(--text-1); border-color:var(--text-1); color:var(--bg-pane); }
+  :is(.pu-editor-bg.tacet, .pm-pick-bg.tacet) .btn-primary:hover {
+    background:var(--text-2); border-color:var(--text-2); color:var(--bg-pane); }
+  :is(.pu-editor-bg.tacet, .pm-pick-bg.tacet) .btn-danger {
+    background:transparent; color:var(--tacet-brick); border-color:var(--tacet-brick); }
+  :is(.pu-editor-bg.tacet, .pm-pick-bg.tacet) .btn-danger:hover { background:var(--tacet-brick-tint); }
+  :is(.pu-editor-bg.tacet, .pm-pick-bg.tacet) input[type="checkbox"],
+  :is(.pu-editor-bg.tacet, .pm-pick-bg.tacet) input[type="radio"] { accent-color:var(--text-1); }
+  .pm-pick-bg.tacet .pm-pick-opt { border-radius:10px; }
+  .pm-pick-bg.tacet .pm-pick-opt:hover { background:var(--surface-raised, var(--bg-elev-1)); }
+
+  /* Box-label printing is an opt-in Delivery setting (delivery.boxLabel →
+     body.ord-box-label). The CSS gate that used to hide `.ord-boxlabel-ui` is
+     gone with the drawer's print bar: Box label now lives in the header's ⋯
+     menu, and orderHeadMore() reads body.ord-box-label in JS instead — a
+     CSS-hidden item inside a menu would leave the ⋯ opening onto nothing. */
+
+  /* Toolbar buttons pick up the calm secondary look via token remap already. */
+
+  /* ── Order-drawer restructure (2026-07-06) — larger "RT-…" type scale +
+     new facts-list / receipt-row / split-note layout. Appended last so these
+     win over the earlier tacet rules by source order. ── */
+  /* Header: eyebrow → order no + status → actions on their OWN row below. */
+  #order-drawer .order-head { display:block; padding-right:46px; margin-bottom:20px; }
+  #order-drawer .order-head .title-row { margin:0; }
+  #order-drawer .order-head .title-row b { font-size:27px; }
+  #order-drawer .od-eyebrow { font-size:14px; margin-bottom:7px; }
+  #order-drawer .order-head .od-head-tx { margin-top:16px; padding-top:0; display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  @media (max-width:720px){ #order-drawer .order-head { display:block; padding-right:40px; } }
+
+  /* ── Pinned order header (desktop, 2026-07-30) ───────────────────────────
+     §1.13a: the header stays on screen while the body scrolls, and a pinned
+     region is a FIXED HEIGHT regardless of content. Two rows that cannot grow:
+     order no + the ONE primary status pill, then the action row. Every other
+     mark moved to .od-marks, the first line of the scrolling body.
+     Mechanism, which has to travel with the rule:
+     · The band IS the panel's top edge, not a bar laid over it — it takes the
+       drawer's own paper ground, fully opaque (a tinted card sliding under a
+       translucent band looks broken), and draws no corner of its own.
+     · Sticky pins to the nearest SCROLLPORT. That is #order-detail-mount
+       (overflow-y:auto). Do not give .order-card or any ancestor an overflow in
+       either axis — overflow in one axis computes the other to `auto`, which
+       makes THAT element the scrollport and parks the band on row one.
+     · A sticky child pins to the scrollport's PADDING edge, so the mount's top
+       padding has to go to 0 or the ¥total banner peeks through the gap above
+       the band. The header carries that space itself instead.
+     · z-index 4 — above the rows, BELOW the floating ✕ (5). The ✕ is a sibling
+       of the scroll body, not inside it, so anything higher paints over it.
+     Phones (<721px) already pin this header via their own app-bar rules in
+     retail-admin.css and are untouched here. ── */
+  /* Default OFF, and declared before the media queries below so their override
+     wins on source order — media queries add no specificity. On a phone the
+     actions take their own full-width line, where a spacer would only push
+     Print receipt out to a lonely right edge. */
+  #order-drawer .od-head-push { display:none; }
+  @media (min-width:721px) {
+    #order-detail-mount { padding-top:0; }
+    #order-drawer .order-head {
+      position:sticky; top:0; z-index:4;
+      background:var(--bg-app);
+      margin:0 calc(-1 * var(--s5)) var(--s4);
+      padding:14px 56px 12px var(--s5);
+      border-bottom:1px solid transparent;
+      transition:border-color .18s var(--ease-out), box-shadow .18s var(--ease-out);
+    }
+    /* Hairline + soft shadow only once something has scrolled under the band
+       (JS toggles .is-stuck), so an unscrolled order looks as it did before. */
+    #order-drawer .order-head.is-stuck {
+      border-bottom-color:var(--line);
+      box-shadow:0 10px 16px -14px rgba(17,26,43,.45);
+    }
+    /* One line, always: the order no ellipsizes, the pills never wrap. */
+    #order-drawer .order-head .title-row { flex-wrap:nowrap; min-width:0; }
+    #order-drawer .order-head .title-row b {
+      font-size:22px; flex:0 1 auto; min-width:0;
+      overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    }
+    #order-drawer .order-head .title-row .pill { flex:0 0 auto; }
+    #order-drawer .order-head .od-head-tx { margin-top:12px; }
+    /* Print receipt holds the row's right edge — one fixed position on every
+       order, whatever the state buttons are. Measured against the real CSS: at
+       a 760px drawer the row is 675px wide and the widest action set is 440px,
+       at 660px (a 1100px window) 575px wide and it still fits on one line — so
+       the pinned block is 94px on every order, messy or clean.
+       Below ~800px of window the drawer hits its 480px floor and the row can no
+       longer hold four controls. There it WRAPS (as it always did) rather than
+       overflow the panel into a horizontal scrollbar, which means the pinned
+       block is 94px or 130px depending on how many actions the order has. That
+       is the one place this trades §1.13a's fixed height away, and it buys the
+       panel not scrolling sideways. Do not "fix" it by removing the wrap. */
+    @media (min-width:1200px) {
+      #order-drawer .order-head .od-head-tx { flex-wrap:nowrap; }
+      #order-drawer .od-head-push { display:block; flex:1 1 auto; }
+    }
+  }
+
+  /* Marks line — first line of the scrolling body, under the pinned band.
+     Placed time plus every secondary mark (§1.10a treatment, unchanged). */
+  #order-drawer .od-marks {
+    display:flex; align-items:center; flex-wrap:wrap; gap:8px 12px;
+    margin:0 0 var(--s5); font-size:13.5px; color:var(--text-3);
+  }
+  #order-drawer .od-marks .od-mark-sep { width:1px; height:12px; background:var(--line-strong); flex:none; }
+  #order-drawer .od-marks .ord-note-line { margin-top:0; font-size:12.5px; }
+  #order-drawer .od-marks .pill { flex:0 0 auto; }
+  /* A receipt the printer never produced. Brick, with the printer's own error
+     on hover — a failure the operator can miss is not an error state. */
+  .ord-note-line.is-failed { color:var(--danger); font-weight:600; }
+
+  /* ⋯ overflow menu in the pinned action row — the .ovp popover pattern with
+     neutral items (the refund menu's .odm-item is brick by design). */
+  /* The ⋯ must be EXACTLY as tall as a .btn-sm or the action row grows by a few
+     pixels on the orders that have one — and a pinned block that changes height
+     with content is the thing §1.13a forbids. A btn-sm's box is 26px (16px line
+     box + 4px padding + 1px border each side); 16px glyph + 4px padding matches
+     it. Verified against both frames: 95px pinned either way. */
+  #order-drawer .odh-btn { padding:4px 8px; }
+  #order-drawer .odh-btn svg { width:16px; height:16px; }
+  .odh-pop { width:230px; gap:6px; }
+  .odh-item {
+    display:block; width:100%; text-align:left;
+    padding:9px 12px; border:1px solid var(--line-soft); border-radius:var(--r-md);
+    background:var(--bg-input, var(--bg-app)); color:var(--text-1);
+    font:500 13px var(--f-sans); cursor:pointer;
+    transition:background var(--t-fast) ease, border-color var(--t-fast) ease;
+  }
+  .odh-item:hover { background:var(--bg-elev-1); border-color:var(--line-strong); }
+
+  /* Order total — bigger amount. */
+  #order-drawer .order-total-banner { padding:20px 22px; }
+  #order-drawer .order-total-banner .otb-amount { font-size:40px; }
+  #order-drawer .order-total-banner .otb-label { font-size:13px; }
+  #order-drawer .order-total-banner .otb-sub { font-size:13.5px; }
+
+  /* Info cards — roomier padding + larger labels/values. */
+  #order-drawer .order-detail { gap:14px; margin-bottom:14px; }
+  #order-drawer .order-detail > div { padding:16px 18px; }
+  #order-drawer .order-detail .kicker { font-size:14px; margin-bottom:9px; }
+  #order-drawer .order-detail .val { font-size:16px; }
+  #order-drawer .order-detail .sub { font-size:13.5px; }
+
+  /* Facts card — the four one-liners as label→value rows (was 4 empty boxes). */
+  #order-drawer .od-facts { padding:4px 18px; }
+  #order-drawer .od-facts > div { display:grid; grid-template-columns:120px 1fr; column-gap:12px;
+    align-items:baseline; padding:10px 0; border-top:1px solid var(--line-soft); }
+  #order-drawer .od-facts > div:first-child { border-top:none; }
+  #order-drawer .od-facts .kicker { grid-column:1; margin:0; color:var(--text-3); }
+  #order-drawer .od-facts .val { grid-column:2; }
+  #order-drawer .od-facts .sub { grid-column:2; margin-top:2px; }
+
+  /* "Address changed by the customer" — the ship-to above moved after this
+     order was placed, so anything already read or printed is stale. Borrows the
+     amber band above; only the spacing is its own. Amber attention, not an
+     error: nothing is wrong, it just needs a second look before it ships. */
+  #order-drawer .od-addr-moved { margin-top:10px; }
+  /* Already shipped — the instruction is spent, so this is just the trace. */
+  #order-drawer .od-addr-moved-past { margin-top:8px; font-size:13px; color:var(--text-3); }
+
+  /* Shipment cards + manifest — larger, calmer. */
+  #order-drawer .shipment-head .mode-pill { font-size:13.5px; padding:5px 14px; }
+  #order-drawer .shipment-head .count { font-size:13px; }
+  #order-drawer .manifest .mf-name { font-size:16px; }
+  #order-drawer .manifest .mf-total { font-size:16px; }
+  #order-drawer .manifest .mf-num { font-size:13px; }
+  #order-drawer .mf-meta :is(.item-sku, .item-qty, .item-unit) { font-size:13.5px; }
+
+  /* Split / combine note — amber attention band: icon chip + headline + sub. */
+  #order-drawer .outside-gz-note { display:flex; align-items:center; gap:13px; flex-wrap:wrap;
+    background:var(--tacet-amber-tint); color:var(--tacet-amber-ink); border:none; border-radius:12px;
+    padding:13px 16px; font-size:14px; }
+  #order-drawer .outside-gz-note .ogz-ico { flex:none; width:34px; height:34px; border-radius:999px;
+    background:rgba(201,149,74,.20); display:flex; align-items:center; justify-content:center; }
+  #order-drawer .outside-gz-note .ogz-text { flex:1 1 240px; min-width:0; }
+  #order-drawer .outside-gz-note .ogz-h { display:block; font-weight:500; line-height:1.35; }
+  #order-drawer .outside-gz-note .ogz-sub { display:block; font-size:12.5px; opacity:.82; margin-top:2px; line-height:1.35; }
+  #order-drawer .outside-gz-note .btn { background:transparent; border-color:rgba(138,100,37,.4); color:var(--tacet-amber-ink); }
+  #order-drawer .outside-gz-note .btn:hover { background:rgba(201,149,74,.14); }
+
+  /* Alipay payment proof (reference/payment-proof-mockup.html, option A):
+     the AI-read facts lead; the raw screenshot demotes to a small tap-to-
+     enlarge thumbnail; the verdict is one calm pill. */
+  #order-drawer .ap-proof .ap-card { border:1px solid var(--line); border-radius:var(--r-xl);
+    background:var(--bg-pane); padding:16px 18px; margin-top:6px; }
+  #order-drawer .ap-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; }
+  #order-drawer .ap-pill { display:inline-flex; align-items:center; gap:6px; font-size:12.5px; font-weight:500;
+    padding:4px 12px; border-radius:999px; line-height:1.3; }
+  #order-drawer .ap-pill svg { width:14px; height:14px; flex:none; }
+  #order-drawer .ap-pill.match    { background:var(--tacet-sage-tint);  color:var(--tacet-sage-ink); }
+  #order-drawer .ap-pill.mismatch { background:var(--tacet-brick-tint); color:var(--tacet-brick); }
+  #order-drawer .ap-pill.unread   { background:var(--tacet-amber-tint); color:var(--tacet-amber-ink); }
+  #order-drawer .ap-thumb { position:relative; width:52px; height:78px; border-radius:8px; overflow:hidden;
+    border:1px solid var(--line); cursor:pointer; flex:none; }
+  #order-drawer .ap-thumb img { width:100%; height:100%; object-fit:cover; object-position:top center; display:block; }
+  #order-drawer .ap-thumb .ap-exp { position:absolute; right:3px; bottom:3px; width:17px; height:17px;
+    background:rgba(17,26,43,.55); border-radius:5px; display:flex; align-items:center; justify-content:center; }
+  #order-drawer .ap-thumb .ap-exp svg { width:9px; height:9px; color:#fff; }
+  #order-drawer .ap-facts { list-style:none; margin:14px 0 0; padding:0; }
+  #order-drawer .ap-facts li { display:grid; grid-template-columns:110px 1fr; column-gap:12px; align-items:baseline;
+    padding:9px 0; border-top:1px solid var(--line-soft); }
+  #order-drawer .ap-facts li:first-child { border-top:none; }
+  #order-drawer .ap-facts .k { color:var(--text-3); font-size:13.5px; }
+  #order-drawer .ap-facts .v { font-size:15px; font-weight:500; }
+  #order-drawer .ap-facts .v.amt { font-size:19px; font-weight:600; letter-spacing:-.01em;
+    font-variant-numeric:tabular-nums; font-feature-settings:"tnum"; }
+  #order-drawer .ap-facts .v.amt.bad { color:var(--tacet-brick); }
+  #order-drawer .ap-note { display:flex; align-items:center; gap:8px; margin-top:14px; font-size:12.5px;
+    color:var(--tacet-dusk); }
+  #order-drawer .ap-note .ap-dot { width:7px; height:7px; border-radius:50%; background:var(--tacet-dusk);
+    box-shadow:0 0 0 3px var(--tacet-dusk-tint); flex:none; }
+  #order-drawer .ap-reasons { margin-top:12px; font-size:12.5px; color:var(--tacet-brick); line-height:1.5; }
+  #order-drawer .ap-hint { margin-top:12px; font-size:13px; color:var(--tacet-amber-ink); }
+  /* Tap-to-enlarge lightbox — floats the screenshot over everything so the
+     operator can read it against the order. Backdrop / ✕ / Esc dismiss it. */
+  #ap-lightbox { position:fixed; inset:0; z-index:2000; display:flex; align-items:center; justify-content:center;
+    padding:32px; background:rgba(17,26,43,.72); -webkit-backdrop-filter:blur(3px); backdrop-filter:blur(3px); }
+  #ap-lightbox .ap-lb-img { max-width:min(92vw, 440px); max-height:88vh; object-fit:contain;
+    border-radius:12px; box-shadow:0 24px 64px rgba(0,0,0,.5); background:#fff; }
+  #ap-lightbox .ap-lb-x { position:fixed; top:20px; right:24px; width:40px; height:40px; border:0; cursor:pointer;
+    border-radius:50%; background:rgba(255,255,255,.14); color:#fff; font-size:24px; line-height:1;
+    display:flex; align-items:center; justify-content:center; }
+  #ap-lightbox .ap-lb-x:hover { background:rgba(255,255,255,.26); }
+
+  /* Brand ETA time field — replaces the raw OS <input type=time>; segmented
+     HH:MM + AM/PM toggle (mockup: reference/courier-dispatch-mockup.html). */
+  #order-drawer .eta-timefield { display:inline-flex; align-items:center; gap:2px; background:var(--bg-app);
+    border:1px solid var(--line-strong); border-radius:var(--r-md); padding:8px 12px; }
+  #order-drawer .eta-timefield:focus-within { border-color:var(--tacet-ink); box-shadow:0 0 0 3px rgba(17,26,43,.08); }
+  #order-drawer .eta-timefield .eta-clock { width:16px; height:16px; color:var(--text-3); margin-right:8px; flex:none; }
+  #order-drawer .eta-seg { width:2.4ch; border:0; background:transparent; text-align:center; padding:2px 1px;
+    font-weight:600; font-size:17px; color:var(--text-1); outline:none; font-variant-numeric:tabular-nums; }
+  #order-drawer .eta-seg::placeholder { color:var(--text-4); font-weight:500; }
+  #order-drawer .eta-colon { font-weight:600; font-size:17px; color:var(--text-3); }
+  #order-drawer .eta-ampm { display:inline-flex; margin-left:8px; border:1px solid var(--line); border-radius:999px;
+    background:var(--bg-pane); padding:2px; gap:2px; }
+  #order-drawer .eta-ampm button { border:0; background:transparent; font-size:12px; font-weight:600;
+    color:var(--text-3); padding:4px 11px; border-radius:999px; cursor:pointer; }
+  #order-drawer .eta-ampm button.on { background:var(--tacet-ink); color:var(--tacet-paper); }
+  [data-theme="dark"] #order-drawer .eta-ampm button.on { background:var(--tacet-paper); color:var(--tacet-ink); }
+
+  /* Same-city courier pick list — clean rows, ink tick, selected row lifts. */
+  #order-drawer .qy-row { display:flex; align-items:center; gap:12px; padding:12px 14px; margin-bottom:8px;
+    border:1px solid var(--line); border-radius:var(--r-lg); background:var(--bg-pane); cursor:pointer;
+    transition:border-color .12s, background .12s; }
+  #order-drawer .qy-row:hover { border-color:var(--line-strong); }
+  #order-drawer .qy-row:has(input:checked) { border-color:var(--tacet-ink); background:var(--bg-app); }
+  #order-drawer .qy-row input[type=checkbox] { width:18px; height:18px; flex:none; cursor:pointer;
+    accent-color:var(--tacet-ink); }
+  #order-drawer .qy-row .qy-name { display:flex; align-items:center; gap:8px; font-size:15px; color:var(--text-1); }
+  #order-drawer .qy-row .qy-name b { font-weight:600; }
+  #order-drawer .qy-row .qy-meta { display:block; font-size:12.5px; color:var(--text-3); margin-top:2px; }
+  #order-drawer .qy-row .qy-fee { flex:none; font-weight:600; font-size:15px; color:var(--text-1);
+    font-variant-numeric:tabular-nums; white-space:nowrap; }
+  #order-drawer .qy-cheap { font-size:10.5px; font-weight:600; letter-spacing:.03em; text-transform:uppercase;
+    color:var(--tacet-sage-ink); background:var(--tacet-sage-tint); border-radius:999px; padding:2px 8px; }
+
+  /* ── Tracking card cleanup (2026-07-06) — the muddy grey toggle becomes a
+     segmented control, the crowded status box splits into two calm tiers, and
+     the waybill-editing controls tuck behind a disclosure once a number is on. ── */
+  /* Dispatch-method segmented control — one compact cream track, active = ink pill.
+     inline-flex (not full-width) so it reads as a tidy toggle, not two big buttons. */
+  #order-drawer .od-seg { display:inline-flex; max-width:100%; padding:3px; gap:2px; background:var(--tacet-cream);
+    border:1px solid var(--line); border-radius:999px; }
+  #order-drawer .od-seg-opt { display:inline-flex; align-items:center; justify-content:center; gap:7px;
+    padding:8px 20px; border:0; border-radius:999px; background:transparent; font-family:var(--f-sans);
+    font-size:13.5px; font-weight:500; color:var(--text-2); cursor:pointer; white-space:nowrap;
+    transition:color .14s, background .14s; }
+  #order-drawer .od-seg-opt svg { flex:none; }
+  #order-drawer .od-seg-opt:not(.on):hover { color:var(--text-1); }
+  #order-drawer .od-seg-opt.on,
+  #order-drawer .od-seg-opt.on:disabled { background:var(--tacet-ink); color:var(--tacet-paper);
+    box-shadow:0 1px 2px rgba(17,26,43,.14); opacity:1; cursor:default; }
+  [data-theme="dark"] #order-drawer .od-seg-opt.on,
+  [data-theme="dark"] #order-drawer .od-seg-opt.on:disabled { background:var(--tacet-paper); color:var(--tacet-ink); }
+
+  /* Two-tier tracking panel: number + status on top, quiet meta footer below. */
+  #order-drawer .od-trk-panel { border:1px solid var(--line); border-radius:12px; background:var(--bg-pane);
+    overflow:hidden; margin-bottom:10px; }
+  #order-drawer .od-trk-top { display:flex; align-items:center; justify-content:space-between; gap:14px;
+    padding:12px 15px; }
+  #order-drawer .od-trk-num { font-family:var(--f-mono); font-size:16px; font-weight:600;
+    font-variant-numeric:tabular-nums; letter-spacing:.01em; color:var(--text-1); }
+  #order-drawer .od-trk-carrier { font-size:11.5px; color:var(--text-3); margin-top:2px; }
+  #order-drawer .od-trk-foot { display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+    padding:9px 15px; border-top:1px solid var(--line-soft); background:var(--bg-app); }
+  #order-drawer .od-trk-updated { font-size:11.5px; color:var(--text-3); font-variant-numeric:tabular-nums; }
+  #order-drawer .od-trk-foot-actions { margin-left:auto; display:inline-flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  #order-drawer .od-trk-foot-actions .btn { padding:5px 11px; }
+
+  /* "In this parcel" strip — the contents of a multi-parcel shipment, listed
+     right under the waybill so ops can tell which parcel this card is. Sits
+     between the number row and the meta footer, shares the footer's inset look. */
+  #order-drawer .od-trk-contents { padding:11px 15px; border-top:1px solid var(--line-soft); background:var(--bg-app); }
+  #order-drawer .od-trk-contents .tc-head { display:flex; align-items:center; gap:7px; margin-bottom:8px;
+    font-size:10px; font-weight:600; letter-spacing:.08em; text-transform:uppercase; color:var(--text-3); }
+  #order-drawer .od-trk-contents .tc-head .cnt { font-family:var(--f-mono); letter-spacing:0; text-transform:none; color:var(--text-2); }
+  #order-drawer .od-trk-contents .tc-item { display:flex; align-items:center; gap:9px; padding:2px 0; font-size:12.5px; min-width:0; }
+  #order-drawer .od-trk-contents .tc-q { flex:none; min-width:24px;
+    font-family:var(--f-mono); font-size:12px; font-weight:600; color:var(--text-3); }
+  #order-drawer .od-trk-contents .tc-nm { min-width:0; color:var(--text-1); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #order-drawer .od-trk-items-more { margin-top:5px; }
+  #order-drawer .od-trk-items-more > summary { list-style:none; cursor:pointer; user-select:none;
+    display:inline-flex; align-items:center; gap:6px; font-size:11.5px; color:var(--text-3); }
+  #order-drawer .od-trk-items-more > summary::-webkit-details-marker { display:none; }
+  #order-drawer .od-trk-items-more > summary:hover { color:var(--text-1); }
+  #order-drawer .od-trk-items-more[open] > summary .od-trk-chev { transform:rotate(90deg); }
+  #order-drawer .od-trk-items-rest { margin-top:6px; display:flex; flex-direction:column; gap:2px; }
+
+  /* Change-waybill disclosure — closed by default when a waybill is attached. */
+  #order-drawer .od-trk-edit { border-top:1px dashed var(--line-soft); margin-top:14px; padding-top:12px; }
+  #order-drawer .od-trk-edit > summary { list-style:none; display:inline-flex; align-items:center; gap:7px;
+    cursor:pointer; font-size:12.5px; font-weight:500; color:var(--text-2); user-select:none; }
+  #order-drawer .od-trk-edit > summary::-webkit-details-marker { display:none; }
+  #order-drawer .od-trk-edit > summary:hover { color:var(--text-1); }
+  #order-drawer .od-trk-chev { color:var(--text-4); transition:transform .15s ease; }
+  #order-drawer .od-trk-edit[open] > summary .od-trk-chev { transform:rotate(90deg); }
+  #order-drawer .od-trk-events-more > summary::-webkit-details-marker { display:none; }
+  #order-drawer .od-trk-events-more > summary:hover { color:var(--text-1); }
+  #order-drawer .od-trk-events-more[open] > summary .od-trk-chev { transform:rotate(90deg); }
+  #order-drawer .od-trk-edit-body { margin-top:12px; }
+
+  /* Items & shipments — let the title + sort chips breathe above the parcel cards. */
+  #order-drawer .order-items > .oi-head { margin-bottom:15px; padding-bottom:13px;
+    border-bottom:1px solid var(--line-soft); }
+  #order-drawer .order-items .sort-chips { margin:0 0 16px; }
