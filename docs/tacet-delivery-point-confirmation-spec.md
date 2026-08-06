@@ -60,6 +60,20 @@ Exit:
 
 `needs_point` does not consume retry attempts. Nothing about it is flaky — the survey confirms the geocode result is memoised per call and cached seven days by address string, so retrying is pointless by construction. Attempts only start once a real point exists.
 
+### 4.1 Where the coarse point is recorded
+
+On the queue row, not in `address_json`.
+
+The payload builder is deliberately dependency-free and holds no db handle (`lib/qingyun-payload.js:14-16`), so it cannot persist anything itself. It signals the caller the way `geoHoldError` already does (`:149-155`), and the daemon and the ship-from route persist the result. Two new nullable columns on the queue table, added through the existing idempotent helper.
+
+`address_json` is the customer's address as given. A coarse point derived by the system is Tacet's working guess about that address, and a confirmed point is an operator's correction for one dispatch. Neither belongs in the customer's address record — that is D5 restated at the data layer. Keeping the guess on the queue row means a confirmation cannot leak into the saved address by accident.
+
+### 4.2 Stage 1 lands invisible
+
+`qingyunShipFromState` maps anything that is not `error` to `needs_attention: false` (`routes/retail.js:21728`), so after stage 1 a `needs_point` row still reads as "Queued for push…" in the drawer. That is expected and acceptable. Stage 1 changes behaviour, not appearance; the state becomes visible to staff in stage 2.
+
+Note that the drain (`scripts/qingyun-daemon.js:599`) and the held-order alert (`:527`) both filter on `status = 'pending'`, so `needs_point` rows drop out of the daemon's attention automatically. This is the intended outcome: it is what stops the paging.
+
 ## 5. Drawer
 
 Replaces the current dead-end block in the shipment section.
@@ -78,6 +92,37 @@ Below that:
 No separate confirmation dialog on Confirm and dispatch. The map *is* the confirmation step; a second modal would be asking the same question twice. This is a deliberate exception to the blast-radius-confirm rule for live-customer actions, and the reason is recorded here.
 
 For the D13 contradiction case, the same surface is used with a different heading — **Delivery point may be wrong** — and both candidate points shown, the stored one and the freshly geocoded one, either selectable.
+
+### 5.1 What a confirmed point records
+
+A confirmed point is written with `geo_source = 'staff_pin'`. Not `customer_pin`.
+
+`customer_pin` means the customer tapped this spot. `lib/address-pin.js` exists to prevent that claim being made on their behalf, and defeating it would also make a staff guess survive later address edits through `keepsPinThroughTextEdit` (`:98-100`) — a corrected street would keep a point chosen against the old one.
+
+Two trust checks must therefore learn about `staff_pin` explicitly:
+
+1. The accept rule at `lib/qingyun-payload.js:343-344` gains a third clause. Without it the drain re-geocodes, gets the same coarse answer, and re-parks the row — the operator confirms and watches it bounce back with no explanation.
+2. The distance predicate at `:446` names `staff_pin` directly. It is a different test from the accept rule and governs whether a drop beyond `MAX_DROP_KM` (25 km) warns or refuses.
+
+No precision grade is invented. A `staff_pin` is not recorded as rooftop to slip past the distance check; the check names the source instead. Nothing in the data should assert a confidence that was never measured.
+
+The `ABS_MAX_KM` ceiling (50 km, `:453`) still applies and is not overridden by confirmation. Past that there is no same-city rider trip whatever anyone confirmed.
+
+A `staff_pin` does not survive an address text edit. The point was chosen against the old text; if the text changes it is discarded and the order re-parks. This is D5 holding at the edges.
+
+**On D2.** This widens the accept rule, which D2 said not to touch. The widening is deliberate and consistent with D2's intent: the rule was written to stop the automatic path weakening itself, and a human deliberately pointing at a building is a stronger signal than anything already on the list. D2 is amended to: automatic sources are unchanged; a new explicitly-human source is added.
+
+### 5.2 Expiry for date-scheduled orders
+
+The drain re-checks `isQingyunSameCityToday` on every pass (`scripts/qingyun-daemon.js:629-633`). Slot kinds `right_away` and `today` never expire. A date-scheduled order compares its promised day against today, so one parked on Monday and confirmed on Wednesday is retired to `skipped` the moment it re-enters the queue.
+
+This is not recoverable by retry — a past date cannot become today.
+
+- **Warn before.** A date-scheduled order still awaiting a point on the day before its promised date is surfaced through the existing dashboard line and Orders chip. No ops page, no new alert channel.
+- **Distinguish after.** An expired order shows as **Delivery date passed**, not as a refusal. They are different problems and must not wear the same badge.
+- **Offer a way out.** The drawer offers **Reschedule delivery** on an expired order, which sets a new date and returns the row to the queue. Confirming the point and rescheduling are one flow when both are needed.
+
+Rescheduling changes what the customer was promised, so it takes a blast-radius confirm naming the old date and the new one. This is a live-customer action and the general rule applies; the confirm-the-point step does not, because there the map is itself the confirmation.
 
 ## 6. Orders list
 
@@ -113,7 +158,7 @@ Three narrow corrections, all inside the existing dispatch paths:
 
 1. State model and gate change — `needs_point` instead of refusal.
 2. Retry and requeue corrections (§8).
-3. Drawer confirm surface.
+3. Drawer confirm surface, including the `staff_pin` provenance and trust-check clauses (§5.1), the expired badge, and Reschedule delivery (§5.2). Designed as a mockup before it is built.
 4. Orders chip.
 5. Dashboard line.
 6. Auto-push fallback (D7), last, since it is the only part Roots does not use.
