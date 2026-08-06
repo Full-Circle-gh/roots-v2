@@ -11436,3 +11436,84 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
       width: max(100%, 44px); height: max(100%, 44px);
     }
   }
+
+  /* ══════════════════════════════════════════════════════════════════════
+     DELIVERY POINT — the confirm surface in the order drawer.
+     docs/tacet-delivery-point-confirmation-spec.md §5. Shown only on an
+     order whose push is parked in needs_point.
+
+     The governing idea is in the marker: a coarse match is an AREA, not a
+     point, so until an operator places one there is no pin on the map at
+     all — only the area — and there is nothing to confirm. That is why the
+     primary button starts disabled reading "Place the point" rather than
+     offering a one-tap confirm of a district centre.
+     ══════════════════════════════════════════════════════════════════════ */
+  #order-drawer .qp { margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft); }
+  #order-drawer .qp-h { font-size: 17px; font-weight: 600; letter-spacing: -.01em; margin: 0; color: var(--text-1); }
+  #order-drawer .qp-sub { font-size: 13.5px; line-height: 1.6; color: var(--text-2); margin: 6px 0 14px; }
+
+  /* Address ABOVE the map on a phone: the operator reads the words first and
+     then looks for them on the map, which is the order the task happens in.
+     On desktop the map takes the left column and the address sits beside it,
+     both in view at once, so neither has to come "first". */
+  #order-drawer .qp-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+  #order-drawer .qp-addr-col { order: 1; }
+  #order-drawer .qp-map-col  { order: 2; }
+  @media (min-width: 721px) {
+    #order-drawer .qp-grid { grid-template-columns: 1.35fr 1fr; align-items: start; }
+    #order-drawer .qp-map-col  { order: 1; }
+    #order-drawer .qp-addr-col { order: 2; }
+  }
+  #order-drawer .qp-grid > * { min-width: 0; }
+
+  #order-drawer .qp-addr {
+    font-size: 15px; line-height: 1.7; color: var(--text-1);
+    user-select: text; -webkit-user-select: text; overflow-wrap: anywhere;
+  }
+  #order-drawer .qp-grade { font-size: 12.5px; color: var(--text-3); margin-top: 10px; line-height: 1.6; }
+
+  #order-drawer .qp-map {
+    position: relative; height: 240px; border-radius: 10px; overflow: hidden;
+    border: 1px solid var(--line); background: var(--bg-elev-1);
+  }
+  #order-drawer .qp-map-fallback {
+    display: flex; align-items: center; justify-content: center; text-align: center;
+    padding: 18px; font-size: 13px; line-height: 1.6; color: var(--text-2);
+  }
+  /* Says what the point is, and changes when it becomes one. Sits under the
+     map so it reads as a caption on the state, not as a label on the pin. */
+  #order-drawer .qp-state { font-size: 12.5px; color: var(--tacet-graphite, var(--text-2)); margin-top: 8px; }
+
+  #order-drawer .qp-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
+  #order-drawer .qp-actions .btn[disabled] { opacity: .5; cursor: not-allowed; }
+  #order-drawer .qp-hint { font-size: 12px; color: var(--text-3); }
+
+  /* Expiring tomorrow — a deadline in a sentence. Amber, because it needs
+     attention; never brick, because nothing has failed yet. No countdown. */
+  #order-drawer .qp-urgent {
+    display: flex; align-items: flex-start; gap: 9px; margin-top: 12px;
+    padding: 10px 12px; border-radius: 8px;
+    background: var(--tacet-amber-tint, #F7EEDE); color: var(--tacet-amber-ink, #8A6425);
+    border-left: 3px solid var(--tacet-amber, #C9954A);
+    font-size: 13px; line-height: 1.55;
+  }
+  #order-drawer .qp-urgent svg { flex: none; margin-top: 1px; }
+
+  /* Reschedule: a plain radio list, not a new date-picker component. */
+  #order-drawer .qp-dates { display: flex; flex-direction: column; gap: 2px; margin: 12px 0 4px; }
+  #order-drawer .qp-date {
+    display: flex; align-items: center; gap: 10px; padding: 9px 11px;
+    border: 1px solid var(--line); border-radius: 8px; background: var(--bg-pane); cursor: pointer;
+  }
+  #order-drawer .qp-date:has(input:checked) { border-color: var(--text-1); }
+  #order-drawer .qp-date .d { font-weight: 700; font-variant-numeric: tabular-nums; }
+  /* The blast-radius confirm. Rescheduling changes what the customer was
+     promised, so it names both days before it happens — unlike confirming a
+     point, where the map itself is the confirmation. */
+  #order-drawer .qp-confirm {
+    margin-top: 12px; padding: 13px 14px; border-radius: 10px;
+    border: 1px solid var(--tacet-amber, #C9954A);
+    background: var(--tacet-amber-tint, #F7EEDE); color: var(--tacet-amber-ink, #8A6425);
+    font-size: 13.5px; line-height: 1.6;
+  }
+  #order-drawer .qp-confirm .swap { font-weight: 700; font-variant-numeric: tabular-nums; }

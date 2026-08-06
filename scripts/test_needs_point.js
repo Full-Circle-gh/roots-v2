@@ -179,6 +179,80 @@ await itAsync('a missing recipient is still a plain refusal', async () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────
+console.log('\nstage 3 · a confirmed point is trusted, and never given a grade (spec §5.1)');
+
+// What the confirm endpoint writes: the operator's point, source staff_pin,
+// and NO precision — nobody measured one.
+const STAFF = { geo_source: 'staff_pin', geo_precision: null };
+
+await itAsync('a confirmed point ships without being re-corroborated', async () => {
+  let asked = false;
+  const p = await buildCreatePayload(
+    ORDER({ ...VAGUE, lat: 23.12, lng: 113.32, ...STAFF }),
+    SHOP, noPoi,
+    { geocode: { configured: () => true, isDeliverablePin: geocode.isDeliverablePin,
+                 geocodeAddress: async () => { asked = true; return COARSE; } } });
+  assert.strictEqual(asked, false, 'the whole point of confirming is not to ask the text again');
+  assert.strictEqual(p.recipientLat, 23120000);
+  assert.strictEqual(p._geo.source, 'staff_pin');
+  assert.strictEqual(p._geo.precision, null, 'no grade may be invented for it');
+});
+
+await itAsync('a confirmed point does NOT bounce straight back into needs_point', async () => {
+  // The failure this clause exists to prevent: without it the drain re-geocodes,
+  // gets the same coarse answer, and re-parks the row — the operator confirms
+  // and watches it come back with no explanation.
+  const p = await buildCreatePayload(
+    ORDER({ ...VAGUE, lat: 23.12, lng: 113.32, ...STAFF }),
+    SHOP, noPoi, { geocode: stubGeo(COARSE) });
+  assert.ok(p.recipientLat, 'it built a payload rather than throwing');
+});
+
+await itAsync('a far confirmed point is sent, not refused for want of a grade', async () => {
+  // 30km: past MAX_DROP_KM (25) but inside the 50km absolute ceiling. A human
+  // has looked at the map and said that is the door, so it is a long same-city
+  // delivery — and it must not die because staff_pin carries no 'rooftop'.
+  const warns = [];
+  const p = await buildCreatePayload(
+    ORDER({ ...VAGUE, lat: 23.40, lng: 113.33, ...STAFF }),        // ~30km north of SHOP
+    SHOP, noPoi, { geocode: stubGeo(COARSE), onWarn: (m) => warns.push(m) });
+  assert.ok(p.recipientLat, 'sent');
+  assert.ok(warns.some(w => /sending anyway/.test(w)), 'and warned about the distance');
+});
+
+await itAsync('the absolute ceiling still refuses a confirmed point', async () => {
+  // Past ABS_MAX_KM nothing ships, whatever anyone confirmed — there is no
+  // same-city rider trip at that distance.
+  await assert.rejects(
+    buildCreatePayload(
+      ORDER({ ...VAGUE, lat: 23.90, lng: 113.33, ...STAFF }),      // ~85km
+      SHOP, noPoi, { geocode: stubGeo(COARSE) }),
+    (e) => {
+      assert.match(e.message, /same-city ceiling/);
+      assert.notStrictEqual(e.needsPoint, true, 'a ceiling breach is a refusal, not a re-park');
+      return true;
+    });
+});
+
+it('staff_pin does not survive an address text edit', () => {
+  // The point was chosen against text that has just been replaced, so it goes
+  // with it and the order re-parks. Only a customer tap outlives a rewrite.
+  const addressPin = require('../lib/address-pin');
+  assert.strictEqual(addressPin.keepsPinThroughTextEdit({ geo_source: 'staff_pin', lat: 23.1, lng: 113.3 }), false);
+  assert.strictEqual(addressPin.keepsPinThroughTextEdit({ geo_source: 'customer_pin', lat: 23.1, lng: 113.3 }), true);
+});
+
+it('an unflagged client coordinate cannot pass itself off as a confirmed point', () => {
+  // readClientPin is what the confirm endpoint validates with; it reports
+  // bounds and freshness, and the ENDPOINT decides the source. Nothing a
+  // client sends can name itself staff_pin.
+  const addressPin = require('../lib/address-pin');
+  assert.strictEqual(addressPin.readClientPin({ lat: 51.5, lng: -0.12 }), null, 'outside China is refused');
+  assert.strictEqual(addressPin.readClientPin({ lat: 0, lng: 0 }), null);
+  assert.deepStrictEqual(addressPin.readClientPin({ lat: 23.1, lng: 113.3 }), { lat: 23.1, lng: 113.3, fresh: false });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
 console.log('\npredicates');
 
 it('shouldMarkNeedsPoint fires only on the marker', () => {
@@ -488,6 +562,102 @@ it('the operator-facing message names no code, grade or coordinate', () => {
   assert.doesNotMatch(NEEDS_POINT_MESSAGE, /corroborat/i, 'the stale wording is gone');
   assert.match(NEEDS_POINT_MESSAGE, /配送点/, 'staff read this in Chinese');
   assert.ok(NEEDS_POINT_MESSAGE.length <= 300, 'stored in last_error, which the daemon slices at 300');
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// The two stage-3 writes. Each is a transaction across two tables, and each
+// has an order that matters — these replay the statements in both orders and
+// assert the failure the wrong one produces.
+console.log('\nstage 3 · confirm and reschedule, as the endpoints run them');
+
+/* The order table, cut down to the columns these two flows touch. */
+function ordersTable(db, row) {
+  db.exec(`CREATE TABLE retail_orders (
+    id INTEGER PRIMARY KEY, order_no TEXT, status TEXT,
+    address_json TEXT, scheduled_for TEXT, delivery_slot_kind TEXT, delivery_slot_label TEXT)`);
+  db.prepare(`INSERT INTO retail_orders (id, order_no, status, address_json, scheduled_for, delivery_slot_kind)
+              VALUES (988, 'R2608060988', 'paid', ?, ?, ?)`)
+    .run(row.address_json, row.scheduled_for, row.kind);
+  return db;
+}
+const ORDER_ADDR = JSON.stringify({
+  province: '广东省', city: '广州市', district: '海珠区', address: '芳园路1号',
+  lat: 23.1339, lng: 113.3603, geo_source: 'geocode:amap', geo_precision: 'coarse',
+});
+/* What the drain re-checks on every pass, in the one line that matters here. */
+const shipsToday = (o, today) => o.delivery_slot_kind === 'today' || o.scheduled_for === today;
+
+it('confirming writes staff_pin onto the ORDER snapshot, not the address book', () => {
+  const db = freshDb();
+  ordersTable(db, { address_json: ORDER_ADDR, scheduled_for: '2026-08-06', kind: 'today' });
+  park(db, takeAttempt(db, seed(db)));
+
+  const addr = JSON.parse(db.prepare('SELECT address_json FROM retail_orders WHERE id=988').get().address_json);
+  db.prepare('UPDATE retail_orders SET address_json = ? WHERE id = ?')
+    .run(JSON.stringify({ ...addr, lat: 23.0987, lng: 113.3712, geo_source: 'staff_pin', geo_precision: null }), 988);
+  db.prepare(qingyunQueue.CONFIRM_POINT_SQL).run(988);
+
+  const after = JSON.parse(db.prepare('SELECT address_json FROM retail_orders WHERE id=988').get().address_json);
+  assert.strictEqual(after.geo_source, 'staff_pin');
+  assert.strictEqual(after.geo_precision, null, 'no grade is invented');
+  assert.strictEqual(after.lat, 23.0987);
+  assert.strictEqual(after.district, '海珠区', 'the rest of the address is left alone');
+  assert.strictEqual(read(db).status, 'pending');
+  assert.strictEqual(read(db).attempts, 0);
+});
+
+it('confirming rolls back WHOLE when the drain got there first', () => {
+  // Both writes or neither: a staff point on an order that already has a rider
+  // coming to a different spot is worse than a confirm that failed loudly.
+  const db = freshDb();
+  ordersTable(db, { address_json: ORDER_ADDR, scheduled_for: '2026-08-06', kind: 'today' });
+  park(db, takeAttempt(db, seed(db)));
+  db.prepare("UPDATE qingyun_push_queue SET qingyun_order_id='QY-9', status='done' WHERE retail_order_id=988").run();
+
+  let rolledBack = false;
+  try {
+    db.prepare('BEGIN').run();
+    db.prepare('UPDATE retail_orders SET address_json = ? WHERE id = ?')
+      .run(JSON.stringify({ geo_source: 'staff_pin' }), 988);
+    if (!db.prepare(qingyunQueue.CONFIRM_POINT_SQL).run(988).changes) throw new Error('row_moved');
+    db.prepare('COMMIT').run();
+  } catch (e) { db.prepare('ROLLBACK').run(); rolledBack = true; }
+
+  assert.strictEqual(rolledBack, true);
+  const after = JSON.parse(db.prepare('SELECT address_json FROM retail_orders WHERE id=988').get().address_json);
+  assert.strictEqual(after.geo_source, 'geocode:amap', 'the point write went back too');
+});
+
+it('reschedule writes the DATE first, then requeues — the drain sees the new date', () => {
+  const db = freshDb();
+  ordersTable(db, { address_json: ORDER_ADDR, scheduled_for: '2026-08-04', kind: 'scheduled' });
+  seed(db, { status: 'skipped' });                       // retired when its day passed
+  const today = '2026-08-06';
+
+  db.prepare('BEGIN').run();
+  db.prepare('UPDATE retail_orders SET scheduled_for = ?, delivery_slot_kind = ? WHERE id = ?').run(today, 'today', 988);
+  db.prepare(qingyunQueue.MANUAL_RETRY_SQL).run(988);
+  db.prepare('COMMIT').run();
+
+  assert.strictEqual(read(db).status, 'pending', 'back in the queue');
+  const o = db.prepare('SELECT * FROM retail_orders WHERE id=988').get();
+  assert.strictEqual(shipsToday(o, today), true, 'and the drain will keep it');
+});
+
+it('the reversed order is what makes a reschedule silently do nothing', () => {
+  // Requeue first, and the drain — polling every ~25s — can read the row while
+  // the order still carries the passed date, and retire it again.
+  const db = freshDb();
+  ordersTable(db, { address_json: ORDER_ADDR, scheduled_for: '2026-08-04', kind: 'scheduled' });
+  seed(db, { status: 'skipped' });
+  const today = '2026-08-06';
+
+  db.prepare(qingyunQueue.MANUAL_RETRY_SQL).run(988);                   // ← wrong way round
+  const drainSees = db.prepare('SELECT * FROM retail_orders WHERE id=988').get();
+  assert.strictEqual(shipsToday(drainSees, today), false,
+    'the drain reads the OLD date and retires the row it was just handed');
+  db.prepare(qingyunQueue.RETIRE_CLOSED_SQL).run('not same-city same-day', 988);
+  assert.strictEqual(read(db).status, 'skipped', 'straight back where it started');
 });
 
 it('existing rows are untouched by the new columns (D12)', () => {

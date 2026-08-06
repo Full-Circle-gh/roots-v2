@@ -3637,6 +3637,298 @@ function renderQyDispatch(o) {
 // Once a courier has been called the line goes read-only: a rider already heading
 // for the old door can't be redirected from here, and we have no cancel API — that
 // has to happen in the Qingyun app first.
+// ── Confirm delivery point ──────────────────────────────────────────────────
+// docs/tacet-delivery-point-confirmation-spec.md §5. The push could not place
+// this address, so it parked instead of refusing, and an operator has to say
+// where the door is.
+//
+// THE RULE THIS SURFACE ENFORCES: there is no point yet, so there is nothing to
+// confirm. The map opens showing the AREA the address resolved to — a dashed
+// circle, no pin — and the primary button is disabled reading "Place the
+// point". Only once a point exists does it become "Confirm and dispatch".
+//
+// This is not a nudge gate. A gate that merely required interaction would be
+// satisfied by a 1px twitch on a marker sitting at the district centre, and
+// confirming that stamps staff_pin onto a centroid — which then passes both
+// the accept rule and the distance predicate in lib/qingyun-payload. That is
+// the laundering those checks exist to prevent, performed by a person instead
+// of by code. Nothing to twitch, nothing to launder.
+//
+// D1 is untouched: a trusted point never parks, so no order that was already
+// precise ever reaches this surface or pays for the extra tap.
+function renderQyPointSurface(o, sf) {
+  const expired  = sf.date_posture === 'passed';
+  const tomorrow = sf.date_posture === 'tomorrow';
+  const grade = sf.guess_grade || {};
+  const addrLines = escapeHtml(o.address_full || '').split(' ').filter(Boolean).join('<br>');
+
+  // An expired order cannot ship whatever point is placed, so it does not ask
+  // for one. Different problem, different badge, different action (§5.2).
+  if (expired) {
+    return `
+      <div class="qp" id="qp-${o.id}">
+        <h3 class="qp-h">${cuT('Delivery date passed', '配送日期已过')}</h3>
+        <p class="qp-sub">${cuT(
+          `Nobody was sent for this order and ${sf.promised_date || 'the day it was promised for'} has gone. `
+          + 'A same-day rider can no longer take it — pick a new day to put it back in the queue.',
+          `此订单无人接单，${sf.promised_date || '承诺配送日'} 已过。同城骑手已无法配送，请选择新的配送日期重新排队。`)}</p>
+        <div id="qp-resched-${o.id}"></div>
+        <div class="qp-actions" id="qp-actions-${o.id}">
+          <button class="btn btn-primary" type="button" onclick="qpOpenReschedule(${o.id}, this)">${cuT('Reschedule delivery', '改期配送')}</button>
+          <button class="btn" type="button" onclick="openEditShipTo(${o.id})">${cuT('Edit ship-to', '修改收货信息')}</button>
+        </div>
+      </div>`;
+  }
+
+  return `
+    <div class="qp" id="qp-${o.id}">
+      <h3 class="qp-h">${cuT('Confirm delivery point', '确认配送点')}</h3>
+      <p class="qp-sub">${cuT(
+        'We could not place this address precisely. Check the point and confirm.',
+        '无法精确定位该地址，请核对后确认配送点。')}</p>
+
+      <div class="qp-grid">
+        <div class="qp-map-col">
+          <div class="qp-map" id="qp-map-${o.id}"></div>
+          <!-- Describes the STATE, not the marker: before a placement there is
+               no point to have moved. -->
+          <div class="qp-state" id="qp-state-${o.id}">${cuT('No point placed yet', '尚未标记配送点')}</div>
+        </div>
+        <div class="qp-addr-col">
+          <div class="kicker" style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3);margin-bottom:6px;">${cuT('Ship to', '收货地址')}</div>
+          <div class="qp-addr" data-no-i18n>${addrLines}</div>
+          <div class="qp-grade">${escapeHtml(cuT(grade.en || '', grade.cn || ''))}</div>
+        </div>
+      </div>
+
+      ${tomorrow ? `
+      <div class="qp-urgent">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        <div>${cuT(
+          `<b style="font-weight:600;">Promised tomorrow, ${sf.promised_date || ''}.</b> Confirm the point today — after tonight this order can no longer go to a same-day rider.`,
+          `<b style="font-weight:600;">明天(${sf.promised_date || ''})送达。</b> 请今天确认配送点 — 过了今晚将无法安排同城骑手。`)}</div>
+      </div>` : ''}
+
+      <div class="qp-actions">
+        <button class="btn btn-primary" type="button" id="qp-go-${o.id}" disabled
+                onclick="qpConfirmPoint(${o.id}, this)">${cuT('Place the point', '请标记配送点')}</button>
+        <button class="btn" type="button" onclick="openEditShipTo(${o.id})">${cuT('Edit ship-to', '修改收货信息')}</button>
+        <span class="qp-hint" id="qp-hint-${o.id}">${cuT('Tap the map where the door is.', '在地图上点选收货位置。')}</span>
+      </div>
+    </div>`;
+}
+
+// The point the operator has placed, per order. Empty until they place one —
+// which is the whole state model, so it is deliberately not seeded from the
+// guess. Cleared when the drawer re-renders.
+const qpPlaced = {};
+
+// Boot the map for a parked order. Called after the drawer paints (the element
+// has to exist and have a width before any SDK will lay a map into it).
+// Degrades loudly: with no maps JS key there is no map to place a point on, and
+// saying so beats an empty grey box the operator waits on.
+async function qpInitMap(orderId, guess) {
+  const el = document.getElementById('qp-map-' + orderId);
+  if (!el || el.dataset.ready) return;
+  el.dataset.ready = '1';
+  let cfg = null;
+  try { const r = await fetch('/api/retail/maps-config'); const j = await r.json(); cfg = j && j.data; } catch (e) { cfg = null; }
+  if (!cfg || !cfg.provider) {
+    el.className = 'qp-map qp-map-fallback';
+    el.innerHTML = cuT(
+      'No map is configured, so a point cannot be placed here. Correct the address instead, or create the delivery by hand in the Qingyun app.',
+      '未配置地图服务，无法在此标记配送点。请改用修改地址，或在青云 App 中手动建单。');
+    const hint = document.getElementById('qp-hint-' + orderId);
+    if (hint) hint.textContent = '';
+    return;
+  }
+  try {
+    await qpLoadSdk(cfg);
+    qpDrawMap(cfg.provider, el, orderId, guess);
+  } catch (e) {
+    el.className = 'qp-map qp-map-fallback';
+    el.innerHTML = cuT('The map could not load. Try again, or correct the address.', '地图加载失败，请重试或修改地址。');
+  }
+}
+
+// One SDK load per page, shared with nothing else in the admin. Same two
+// providers and the same callback handshake the storefront picker uses.
+let _qpSdkP = null;
+function qpLoadSdk(cfg) {
+  if (_qpSdkP) return _qpSdkP;
+  _qpSdkP = new Promise((resolve, reject) => {
+    const cb = '__qpMapReady';
+    window[cb] = () => resolve(cfg.provider);
+    let src;
+    if (cfg.provider === 'amap') {
+      if (cfg.security) window._AMapSecurityConfig = { securityJsCode: cfg.security };
+      src = 'https://webapi.amap.com/maps?v=2.0&key=' + encodeURIComponent(cfg.key) + '&callback=' + cb;
+    } else {
+      src = 'https://map.qq.com/api/gljs?v=1.exp&key=' + encodeURIComponent(cfg.key) + '&callback=' + cb;
+    }
+    const s = document.createElement('script');
+    s.src = src; s.async = true;
+    s.onerror = () => { _qpSdkP = null; reject(new Error('sdk_load_failed')); };
+    document.head.appendChild(s);
+  });
+  return _qpSdkP;
+}
+
+// The area, then (only once placed) the point. The circle is the honest
+// picture of what the geocoder returned: somewhere in here. Radius is a
+// drawing, not a claim — wide enough to read as "a district", not a number
+// anyone should measure against.
+const QP_AREA_M = 700;
+function qpDrawMap(provider, el, orderId, guess) {
+  const c = guess && guess.lat != null ? guess : { lat: 23.1291, lng: 113.2644 };   // GZ, if we have nothing
+  const onPlace = (lat, lng) => {
+    qpPlaced[orderId] = { lat, lng };
+    const btn = document.getElementById('qp-go-' + orderId);
+    if (btn) { btn.disabled = false; btn.textContent = cuT('Confirm and dispatch', '确认并发单'); }
+    const st = document.getElementById('qp-state-' + orderId);
+    if (st) st.textContent = cuT('Point placed', '配送点已标记');
+    const hint = document.getElementById('qp-hint-' + orderId);
+    if (hint) hint.textContent = cuT('Tap again to move it.', '再次点选可调整位置。');
+  };
+
+  if (provider === 'amap') {
+    const map = new AMap.Map(el, { zoom: 15, center: [c.lng, c.lat], resizeEnable: true });
+    new AMap.Circle({
+      center: [c.lng, c.lat], radius: QP_AREA_M, map,
+      strokeColor: '#58606E', strokeWeight: 1.5, strokeStyle: 'dashed',
+      fillColor: '#58606E', fillOpacity: 0.07,
+    });
+    let pin = null;
+    map.on('click', (e) => {
+      const lat = e.lnglat.getLat(), lng = e.lnglat.getLng();
+      if (!pin) {
+        pin = new AMap.Marker({ position: [lng, lat], draggable: true, map, zIndex: 120 });
+        pin.on('dragend', () => { const p = pin.getPosition(); onPlace(p.getLat(), p.getLng()); });
+      } else { pin.setPosition([lng, lat]); }
+      onPlace(lat, lng);
+    });
+  } else {
+    const map = new TMap.Map(el, { zoom: 15, center: new TMap.LatLng(c.lat, c.lng) });
+    new TMap.MultiCircle({
+      map, styles: { a: new TMap.CircleStyle({ color: 'rgba(88,96,110,0.07)', showBorder: true, borderColor: '#58606E', borderWidth: 1 }) },
+      geometries: [{ id: 'a', styleId: 'a', center: new TMap.LatLng(c.lat, c.lng), radius: QP_AREA_M }],
+    });
+    // Tencent's gljs markers are not draggable, so placing IS the adjustment:
+    // every tap moves the point. Same model as Amap, one fewer gesture.
+    let pin = null;
+    map.on('click', (e) => {
+      const ll = e.latLng, pos = new TMap.LatLng(ll.getLat(), ll.getLng());
+      if (!pin) {
+        pin = new TMap.MultiMarker({ map, geometries: [{ id: 'p', position: pos }] });
+      } else { pin.updateGeometries([{ id: 'p', position: pos }]); }
+      onPlace(ll.getLat(), ll.getLng());
+    });
+  }
+}
+
+// Send the placed point. The server writes it onto the ORDER's snapshot as
+// staff_pin and requeues the push in one transaction; nothing here writes to
+// the customer's saved address, and nothing here invents a precision grade.
+async function qpConfirmPoint(orderId, btn) {
+  const p = qpPlaced[orderId];
+  if (!p) return;                                  // button is disabled without one
+  if (btn) { btn.disabled = true; btn.textContent = cuT('Sending…', '发送中…'); }
+  try {
+    const r = await fetch(`/api/retail-admin/orders/${orderId}/qingyun/confirm-point`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lat: p.lat, lng: p.lng }),
+    });
+    const j = await r.json();
+    if (j.success) {
+      toast(j.already_created
+        ? cuT('Already on the courier platform', '已在配送平台')
+        : cuT('Point confirmed — the daemon will push it within a minute', '配送点已确认 — 约一分钟内发单'), 'success');
+      delete qpPlaced[orderId];
+      openOrder(orderId, { instant: true });
+      return;
+    }
+    if (btn) { btn.disabled = false; btn.textContent = cuT('Confirm and dispatch', '确认并发单'); }
+    toast(j.error === 'order_closed' ? cuT('This order is closed', '该订单已关闭')
+        : j.error === 'row_moved'    ? cuT('It moved on while you were looking — reopen the order', '状态已变更，请重新打开订单')
+        : cuT('Could not confirm it', '确认失败'), 'err');
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = cuT('Confirm and dispatch', '确认并发单'); }
+    toast(cuT('Network error', '网络错误'), 'err');
+  }
+}
+
+// ── Reschedule an expired delivery ─────────────────────────────────────────
+// Three days from today. Today is offered first and is the only choice that
+// ships today — a later day is dated correctly on the order but waits for its
+// own morning, which the confirm line says out loud rather than implying.
+function qpOpenReschedule(orderId, btn) {
+  const box = document.getElementById('qp-resched-' + orderId);
+  if (!box) return;
+  const acts = document.getElementById('qp-actions-' + orderId);
+  if (acts) acts.hidden = true;
+  const days = [];
+  for (let i = 0; i < 3; i++) {
+    const d = new Date(Date.now() + i * 86400000 + 8 * 3600000);   // Beijing day
+    const iso = d.toISOString().slice(0, 10);
+    days.push({ iso, label: i === 0 ? cuT('today', '今天') : i === 1 ? cuT('tomorrow', '明天') : '' });
+  }
+  box.innerHTML = `
+    <div class="qp-dates">
+      ${days.map(d => `
+        <label class="qp-date">
+          <input type="radio" name="qp-date-${orderId}" value="${d.iso}" onchange="qpPickDate(${orderId}, '${d.iso}')">
+          <span class="d">${d.iso}</span>
+          <span class="muted" style="font-size:12.5px;">${escapeHtml(d.label)}</span>
+        </label>`).join('')}
+    </div>
+    <div id="qp-confirm-${orderId}"></div>`;
+}
+
+// Naming both days is the point: this changes what the customer was told, so
+// it takes a confirm — unlike placing a point, where the map IS the confirm.
+function qpPickDate(orderId, iso) {
+  const box = document.getElementById('qp-confirm-' + orderId);
+  const o = _OPEN_ORDER || {};
+  const from = (o.qingyun_ship_from && o.qingyun_ship_from.promised_date) || '';
+  const today = new Date(Date.now() + 8 * 3600000).toISOString().slice(0, 10);
+  if (!box) return;
+  box.innerHTML = `
+    <div class="qp-confirm">
+      <div>${cuT(
+        `Move this delivery from <span class="swap">${escapeHtml(from)}</span> to <span class="swap">${escapeHtml(iso)}</span>? The customer is told the new day.`,
+        `将配送日期由 <span class="swap">${escapeHtml(from)}</span> 改为 <span class="swap">${escapeHtml(iso)}</span>？系统会告知顾客新的日期。`)}
+        ${iso === today ? '' : `<div style="margin-top:6px;">${cuT('It goes back in the queue and waits for that morning.', '将重新排队，等待当天再发出。')}</div>`}
+      </div>
+      <div style="display:flex;gap:10px;margin-top:11px;">
+        <button class="btn btn-primary btn-sm" type="button" onclick="qpDoReschedule(${orderId}, '${iso}', this)">${cuT('Move the delivery', '确认改期')}</button>
+        <button class="btn btn-sm" type="button" onclick="openOrder(${orderId}, { instant: true })">${cuT('Keep the current date', '保持原日期')}</button>
+      </div>
+    </div>`;
+}
+
+async function qpDoReschedule(orderId, iso, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = cuT('Moving…', '处理中…'); }
+  try {
+    const r = await fetch(`/api/retail-admin/orders/${orderId}/qingyun/reschedule`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: iso }),
+    });
+    const j = await r.json();
+    if (j.success) {
+      toast(j.ships_today
+        ? cuT('Moved to today — it goes back in the queue now', '已改期至今天 — 已重新排队')
+        : cuT('Moved. It waits for that morning to go out.', '已改期，将于当天发出'), 'success');
+      openOrder(orderId, { instant: true });
+      return;
+    }
+    if (btn) { btn.disabled = false; btn.textContent = cuT('Move the delivery', '确认改期'); }
+    toast(cuT('Could not move it', '改期失败'), 'err');
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = cuT('Move the delivery', '确认改期'); }
+    toast(cuT('Network error', '网络错误'), 'err');
+  }
+}
+
 function renderQyShipFrom(o) {
   const sf = o.qingyun_ship_from;
   if (!sf) return '';
@@ -3647,6 +3939,10 @@ function renderQyShipFrom(o) {
   // exactly like an order that was never meant to go to Qingyun. Say what
   // happened, and offer the retry that used to require hand-editing the DB.
   if (!sf.qingyun_order_id) {
+    // Parked for want of a delivery point — its own surface, not a variant of
+    // "refused". Nothing failed and nothing is retrying: the order is waiting
+    // on a person, and the thing that person needs is a map.
+    if (sf.awaiting_point) return renderQyPointSurface(o, sf);
     const refused = sf.needs_attention;
     // A hold is nobody's fault and needs no action — but it must not read as a
     // normal queue wait, or an outage looks like latency until 待配送 runs dry.
@@ -4069,6 +4365,13 @@ async function openOrder(id, opts = {}) {
     // Live rider map — mounts only when the drawer rendered a courier-map
     // container (an on-the-way same-city order). Self-tears-down any prior map.
     try { mountCourierMap(o); } catch (e) { /* map is best-effort */ }
+    // Same contract for the delivery-point map: the element has to exist and
+    // have a width before any SDK will lay a map into it, so it mounts here
+    // rather than inside the template. Only a parked order renders the box.
+    try {
+      const _sf = o.qingyun_ship_from;
+      if (_sf && _sf.awaiting_point && _sf.date_posture !== 'passed') qpInitMap(o.id, _sf.guess);
+    } catch (e) { /* map is best-effort */ }
     // The GET above stamped seen_at server-side (shared across staff). Clear
     // this row's unread treatment immediately so it doesn't wait for the next
     // poll; a later list rebuild reflects the server seen_at and stays cleared.
