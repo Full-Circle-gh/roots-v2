@@ -142,7 +142,13 @@ Rescheduling changes what the customer was promised, so it takes a blast-radius 
 
 **Write order, which is the whole thing.** The new `scheduled_for` goes onto the order FIRST and the queue row is requeued SECOND, both inside one transaction across the two tables. Reversed, the drain polls every ~25s and re-reads `isQingyunSameCityToday` off the order: it would find the OLD passed date on a row that had just returned to `pending` and retire it again within the poll — a reschedule that silently did nothing.
 
-**Only a move to today ships today.** A later date is written correctly onto the order and the row does return to the queue, but the drain retires it again each day until its own morning comes round, because nothing re-queues a `skipped` row on a future date. The surface says so at the point of choosing rather than implying otherwise. Closing that gap — a row that waits for its day instead of being retired — belongs with the stage 6 queue work.
+**Today only, until stage 6.** The date list offers one option: today. Not today plus greyed-out future dates — an option you can see but not choose still says it is coming, and it is not.
+
+A future date would write onto the order and requeue cleanly, and then be retired the next morning, and every morning after: nothing re-queues a `skipped` row on its own day, so the drain re-checks `isQingyunSameCityToday` on each pass and a tomorrow-dated order fails it today. The operator would pick Friday, watch it be accepted, and find it gone with no error and no trace — the same silent no-op this build exists to remove, with a caption on it. A warning sentence does not make that acceptable, so the option is not offered.
+
+The gate is in the endpoint as well as the UI (`today_only`), so an API caller gets the same answer as a button. For any other day the copy says the delivery has to be created by hand in the Qingyun app; it never implies Tacet will pick it up later.
+
+**Stage 6 dependency.** Multi-day reschedule unlocks when a `skipped` row can be re-queued on its own morning — i.e. when the queue can hold a row that waits for its day instead of being retired on sight. That is the same missing capability D6/D9 need (§5.3), and both should be settled together.
 
 **Stage 3 ships with expiry visible only in the drawer.** The dashboard line and Orders chip it otherwise leans on do not exist until stages 4 and 5. Acceptable, since stages 1–3 deploy together and a parked order is still visible in the drawer with a Retry button from stage 2.
 
