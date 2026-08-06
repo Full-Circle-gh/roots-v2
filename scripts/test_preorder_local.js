@@ -130,6 +130,121 @@ console.log('\nserver — same_city on the addresses the customer reads');
   });
 }
 
+// ── The order path ──────────────────────────────────────────────────────────
+// The browse surfaces stopped offering a local shopper a pre-order; this is the
+// gate that stops the server accepting one however the request arrived. The
+// rule has no delivery-day term: requiresStockGate goes false for a scheduled
+// day and used to let the line through unreserved, which is the hole.
+console.log('\nserver — the local pre-order gate (localPreorderLine)');
+{
+  const inventory = require(path.join(ROOT, 'lib/inventory.js'));
+  const { localPreorderLine } = require(path.join(ROOT, 'routes/retail.js'));
+  const retailSrc = fs.readFileSync(path.join(ROOT, 'routes/retail.js'), 'utf8');
+
+  const GZ = { city: '广州市', district: '天河区', address: '新塘大街7号' };
+  const SH = { city: '上海市', district: '静安区', address: '南京西路1号' };
+  // Order lines as POST /api/retail/orders resolves them: the product row
+  // carries the policy columns and `real_stock`, the per-store sellable SUM.
+  const line = (over) => ({
+    qty: 1,
+    product: { id: 41, name_en: 'Beet Salad', oos_policy: 'backorder_gz', real_stock: 0, ...over },
+  });
+  // Both slot ids the gate must be blind to. 'right_away' is same-day;
+  // a dated slot far enough out is not.
+  const SAME_DAY = 'right_away';
+  const FUTURE   = '2099-01-01T10:00';
+
+  it('the two delivery days really do differ to requiresStockGate', () => {
+    // Guard on the premise: if this ever stops being true, the gate below is
+    // testing nothing (and the hole it plugs would have closed by itself).
+    assert.strictEqual(inventory.requiresStockGate({ address: GZ, deliverySlotId: SAME_DAY }), true);
+    assert.strictEqual(inventory.requiresStockGate({ address: GZ, deliverySlotId: FUTURE }), false);
+  });
+
+  it('local + sold out + same day → refused', () => {
+    const hit = localPreorderLine([line()], GZ);
+    assert.ok(hit, 'the line is blocked');
+    assert.strictEqual(hit.product.id, 41);
+  });
+  it('local + sold out + future day → refused just the same', () => {
+    // The gate takes no slot at all — that is the point. Same call, same
+    // verdict, whichever day the customer picked.
+    assert.ok(localPreorderLine([line()], GZ), 'a scheduled day buys no stock');
+  });
+  it('out-of-city + future day → still allowed, pre-order untouched', () => {
+    assert.strictEqual(localPreorderLine([line()], SH), null);
+  });
+  it('out-of-city + same day → also untouched (this gate is local-only)', () => {
+    assert.strictEqual(localPreorderLine([line()], SH), null);
+  });
+
+  it('a local shopper keeps buying what is in stock', () => {
+    assert.strictEqual(localPreorderLine([line({ real_stock: 5 })], GZ), null);
+    // Short by one still blocks — the test is availability vs qty, not zero.
+    assert.strictEqual(localPreorderLine([{ ...line({ real_stock: 1 }), qty: 2 }], GZ).product.id, 41);
+  });
+  it('untracked stock (null) is treated as available, as everywhere else', () => {
+    assert.strictEqual(localPreorderLine([line({ real_stock: null })], GZ), null);
+  });
+  it('strict and always are not this gate’s business', () => {
+    // 'strict' is already refused for everyone by the hard OOS gate above it;
+    // 'always' (supplier-direct) holds no stock of ours.
+    assert.strictEqual(localPreorderLine([line({ oos_policy: 'strict' })], GZ), null);
+    assert.strictEqual(localPreorderLine([line({ oos_policy: 'always' })], GZ), null);
+    assert.strictEqual(localPreorderLine([line({ oos_policy: null, ship_from_supplier: 1 })], GZ), null);
+  });
+  it('a legacy batch meal with no explicit policy is still caught', () => {
+    // Blank policy + is_batch_made=1 resolves to backorder_gz (effectiveOosPolicy).
+    assert.ok(localPreorderLine([line({ oos_policy: null, is_batch_made: 1 })], GZ));
+    // …and a blank policy without the flag resolves to strict, so not here.
+    assert.strictEqual(localPreorderLine([line({ oos_policy: null })], GZ), null);
+  });
+  it('one bad line in a full basket is enough, and it names that line', () => {
+    const basket = [line({ id: 10, real_stock: 9 }), line({ id: 11 }), line({ id: 12, real_stock: 3 })];
+    assert.strictEqual(localPreorderLine(basket, GZ).product.id, 11);
+  });
+  it('an empty or malformed line set never throws', () => {
+    assert.strictEqual(localPreorderLine([], GZ), null);
+    assert.strictEqual(localPreorderLine(null, GZ), null);
+    assert.strictEqual(localPreorderLine([{}, null], GZ), null);
+  });
+
+  it('the gate is wired into the order path, on the final line set', () => {
+    assert.ok(/const localPre = localPreorderLine\(mutatedItems, address\);/.test(retailSrc),
+      'runs on mutatedItems, so cancel_missing / replace_missing still work');
+    assert.ok(/if \(!isPickup && fallbackChoice !== 'wait_for_restock'\) \{/.test(retailSrc),
+      'pickup and the explicit wait-for-restock choice stay exempt');
+    // The error must be one the checkout UI already handles — the same code a
+    // sold-out 'strict' line returns today.
+    const block = retailSrc.slice(retailSrc.indexOf('const localPre = localPreorderLine'));
+    assert.ok(/error: 'insufficient_stock'/.test(block.slice(0, 400)), 'reuses insufficient_stock');
+  });
+  it('the gate reuses the one matcher, and adds no second one', () => {
+    assert.ok(/function localPreorderLine\(lines, address\) \{\s*\n\s*if \(!inventory\.isGuangzhouAddress\(address\)\) return null;/.test(retailSrc),
+      'same-city comes from lib/inventory, like stampSameCity');
+    // Every same-city verdict in this file defers to lib/inventory — no local
+    // copy of the 广州 matcher anywhere, including inside the new gate.
+    const all      = (retailSrc.match(/isGuangzhouAddress\(/g) || []).length;
+    const deferred = (retailSrc.match(/inventory\.isGuangzhouAddress\(/g) || []).length;
+    assert.strictEqual(all, deferred, 'no locally-defined isGuangzhouAddress');
+    const fn = retailSrc.slice(retailSrc.indexOf('function localPreorderLine'));
+    const body = fn.slice(0, fn.indexOf('\n}'));
+    assert.ok(!/广州/.test(body) && !/['"`]guangzhou['"`]/i.test(body),
+      'the gate compares no city string of its own — it just calls the matcher');
+  });
+  it('checkout stops promising "ships soon" to a local shopper', () => {
+    const fn = retailSrc.slice(retailSrc.indexOf('function computePreorderNotice'));
+    const body = fn.slice(0, fn.indexOf('\n}'));
+    assert.ok(/if \(inventory\.isGuangzhouAddress\(address\)\) return null;/.test(body),
+      'the banner would advertise a checkout that now refuses');
+    // The day term is gone: a Guangzhou customer on a future day used to get
+    // the notice, and that is exactly the shopper the gate turns away. Judge
+    // the code, not the comment that explains the removal.
+    const code = body.split('\n').filter(l => !/^\s*\/\//.test(l)).join('\n');
+    assert.ok(!/requiresStockGate/.test(code), 'no day-dependent escape hatch left');
+  });
+}
+
 // ── Mini-app shop grid ──────────────────────────────────────────────────────
 console.log('\nmini-app shop — the PRE-ORDER pill (_toRows)');
 {

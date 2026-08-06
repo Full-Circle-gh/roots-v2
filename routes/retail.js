@@ -948,6 +948,34 @@ function effectiveOosPolicy(p) {
   return (p && p.is_batch_made) ? 'backorder_gz' : 'strict';
 }
 
+// The one line a same-city shopper may not have: sold out, and orderable only
+// because the operator marked it 'backorder_gz'.
+//
+// That policy means "shoppers we SHIP to may reserve this" — their parcel
+// leaves after the next batch or restock, which is what makes selling at zero
+// stock honest. A Guangzhou order is served off the shelves the local run loads
+// from, on whatever day the customer picked, so there is nothing behind a
+// sold-out backorder line for them. requiresStockGate cannot express that: it
+// goes false the moment a Guangzhou customer picks a future day, and the order
+// then routes with ignoreStock and takes no reservation — which is exactly the
+// pre-order the browse surfaces stopped offering them.
+//
+// `lines` are resolved order lines ({ product, qty }) whose product carries
+// oos_policy / is_batch_made and the per-store `real_stock` SUM. Returns the
+// offending line, or null. Same-city is inventory.isGuangzhouAddress — the same
+// matcher stampSameCity puts on every saved address the shopper reads, so the
+// browse pill and this gate can never disagree. 'strict' (refused everywhere)
+// and 'always' (supplier-direct, no stock of ours) are not this rule's business.
+function localPreorderLine(lines, address) {
+  if (!inventory.isGuangzhouAddress(address)) return null;
+  return (lines || []).find(r => {
+    if (!r || !r.product) return false;
+    if (effectiveOosPolicy(r.product) !== 'backorder_gz') return false;
+    const avail = r.product.real_stock == null ? null : Number(r.product.real_stock);
+    return avail != null && avail < r.qty;
+  }) || null;
+}
+
 // List/grid variant of the column set: NEVER pull the heavy inline base64 photo.
 // A data: URI is collapsed to the tiny literal 'data:' marker INSIDE SQLite, so
 // the multi-MB blob never enters Node's heap or the JSON payload — the list
@@ -9324,6 +9352,38 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       // missing item is restocked. The customer pays normally; stock at
       // the store is checked + deducted by checkAwaitingRestockForRestock.
       awaitingRestockPids = a.missing_items.map(m => m.product_id);
+    }
+  }
+
+  // ── Local pre-order gate ─────────────────────────────────────────────
+  // A Guangzhou shopper may not pre-order a sold-out 'backorder_gz' line, on
+  // any delivery day — see localPreorderLine for why the day cannot buy the
+  // stock. This is the server half of the rule the shop grid, the size
+  // pickers, the PDP and the favourites already show; it catches every route
+  // that skips them (a stale card, an address switched after the item went in
+  // the basket, the verdict not yet landed on first paint, a direct API call).
+  //
+  // It runs on the FINAL line set, so the 5-option shortage modal is
+  // untouched: 'cancel_missing' has already dropped the line,
+  // 'replace_missing' swapped it for something in stock, and
+  // 'full_from_fallback' only arises when another shop HAS the stock (so the
+  // line isn't sold out at all). 'wait_for_restock' is deliberately exempt —
+  // analyzeShortage only ever offers it to a Guangzhou same-day order, making
+  // it the local shopper's own choice, taken in front of a modal that names
+  // the item, and it parks the order as 'awaiting_restock' where the operator
+  // can see it. Pickup is exempt too: it always reserves at the chosen store,
+  // so reserveForOrder below already refuses a sold-out collection.
+  //
+  // The error is the one this endpoint already returns for a sold-out 'strict'
+  // line, so every checkout surface handles it exactly as it does today.
+  if (!isPickup && fallbackChoice !== 'wait_for_restock') {
+    const localPre = localPreorderLine(mutatedItems, address);
+    if (localPre) {
+      return res.status(409).json({
+        success: false, error: 'insufficient_stock',
+        product_id: localPre.product.id,
+        available: Math.max(0, Number(localPre.product.real_stock) || 0),
+      });
     }
   }
 
@@ -25741,7 +25801,19 @@ function computeBatchNotice(zone, productIds, now, slotId, slotKind) {
 // the computeBatchNotice shape so the checkout can reuse its popup/banner.
 // Returns null when nothing qualifies.
 function computePreorderNotice(zone, address, productIds, slotId) {
-  if (inventory.requiresStockGate({ address, deliverySlotId: slotId })) return null;
+  // Never promise a same-city shopper that their order "ships soon": the local
+  // pre-order gate in POST /orders refuses that line whatever day they picked,
+  // so the banner would advertise a checkout that is about to say no.
+  //
+  // This replaces the requiresStockGate test that stood here. That test was
+  // "Guangzhou AND same-day", which let the notice through to a Guangzhou
+  // customer who picked a future day — precisely the shopper the gate now
+  // turns away. Dropping the day term makes it "Guangzhou", full stop, which
+  // is strictly stronger, so nothing that used to be suppressed now shows.
+  // Out-of-city is untouched: it never satisfied either test, and still gets
+  // the full notice. (slotId is retained in the signature, like zone, for the
+  // call site.)
+  if (inventory.isGuangzhouAddress(address)) return null;
   const ids = [...new Set((productIds || []).map((n) => parseInt(n, 10)).filter(Boolean))];
   if (!ids.length) return null;
   const ph = ids.map(() => '?').join(',');
@@ -29199,3 +29271,7 @@ module.exports.requireRetailAdmin = requireRetailAdmin;
 // route modules (e.g. backend-auth.js profile/avatar) call this to nudge a
 // tenant operator's open sessions after a committed mutation.
 module.exports.retailLiveBump = retailLiveBump;
+// The local pre-order rule, exported so scripts/test_preorder_local.js can hold
+// it to the same three cases the browse surfaces are held to (local + sold out
+// refused on any day; out-of-city on a future day still allowed).
+module.exports.localPreorderLine = localPreorderLine;
