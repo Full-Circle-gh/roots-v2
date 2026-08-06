@@ -4358,13 +4358,14 @@ db.exec(`
 // idempotent; never double-creates. Only first-party (mini-app/web) Guangzhou
 // same-city, same-day orders are eligible (inventory.isQingyunSameCityToday) —
 // out-of-city, later-day, and marketplace (Meituan/Eleme) orders are never queued.
-// status: pending → processing → done | error | skipped (ineligible at drain).
+// status: pending → processing → done | error | skipped (ineligible at drain)
+//                 | needs_point (waiting for a human to confirm the drop-off).
 db.exec(`
   CREATE TABLE IF NOT EXISTS qingyun_push_queue (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     retail_order_id  INTEGER NOT NULL UNIQUE,
     store_code       TEXT NOT NULL,
-    status           TEXT NOT NULL DEFAULT 'pending',  -- pending|processing|done|error
+    status           TEXT NOT NULL DEFAULT 'pending',  -- pending|processing|done|error|skipped|needs_point
     qingyun_order_id TEXT,                             -- the created Qingyun order id
     attempts         INTEGER NOT NULL DEFAULT 0,
     last_error       TEXT,
@@ -4387,6 +4388,27 @@ addColumn('qingyun_push_queue', 'stale_store_code', 'TEXT');
 // pending and this records when the hold began, which is what the daemon's
 // outage alert measures. NULL = not held. See lib/qingyun-queue HOLD_SQL.
 addColumn('qingyun_push_queue', 'geo_held_at', 'DATETIME');
+
+// ── Waiting for a human to say where the door is ──────────────────────────
+// The address only resolves to a coarse AREA (a district or city centre) and
+// the coordinates the order carries have no provenance — so nothing here knows
+// the door to within kilometres. We used to call that an error and give up
+// after five identical attempts, which was wrong twice over: the coordinate was
+// almost always minted by one of our OWN text geocodes (nobody did anything
+// wrong), and retrying re-asks a question whose answer cannot change. It is an
+// unfinished step, not a failure.
+//
+// So the row parks in status='needs_point', spends no attempt, and waits.
+//   needs_point_at    — when it started waiting (first entry wins, so the age
+//                       is the age of the wait, not of the last drain).
+//   guessed_*         — the point we WOULD have sent and how exact the provider
+//                       said it was. Kept so the confirm map opens on the best
+//                       guess we have instead of on an empty country.
+// NULL on every row that predates this — see lib/qingyun-queue NEEDS_POINT_SQL.
+addColumn('qingyun_push_queue', 'needs_point_at',    'DATETIME');
+addColumn('qingyun_push_queue', 'guessed_lat',       'REAL');
+addColumn('qingyun_push_queue', 'guessed_lng',       'REAL');
+addColumn('qingyun_push_queue', 'guessed_precision', 'TEXT');
 
 // Meituan-only bundles (套餐/combos) that have no single roots product. Each is
 // defined as a set of component products; its sellable stock is computed as the

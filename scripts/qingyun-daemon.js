@@ -654,6 +654,24 @@ async function drainPushQueue(storeCode, br) {
         log(storeCode, `push: order ${row.retail_order_id} HELD (attempt not counted, still ${row.attempts}/${MAX_PUSH_ATTEMPTS}): ${e.message}`);
         continue;
       }
+      // The address could not be placed and the order's coordinates say nothing
+      // about where they came from. Nobody's fault and nothing to retry — the
+      // provider returns the same area for the same text every time — so park
+      // the row with the guessed point attached, hand back the attempt this
+      // drain just spent, and wait for someone to confirm the spot. No ops
+      // alert: a page is for something that went wrong, and this is a step that
+      // simply hasn't been done yet.
+      if (qingyunQueue.shouldMarkNeedsPoint(e)) {
+        const pt = e.point || {};
+        db.prepare(qingyunQueue.NEEDS_POINT_SQL).run(
+          row.attempts,
+          pt.lat != null ? pt.lat : null, pt.lng != null ? pt.lng : null, pt.precision || null,
+          String(e.message).slice(0, 300), row.id);
+        log(storeCode, `push: order ${row.retail_order_id} NEEDS POINT (attempt not counted, still `
+          + `${row.attempts}/${MAX_PUSH_ATTEMPTS})${pinTag(e._geo)}: ${e.message}`);
+        logSync(storeCode, 'push', 'ok', { order: row.retail_order_id, needs_point: true }, null);
+        continue;
+      }
       const attempts = row.attempts + 1;
       const done = attempts >= MAX_PUSH_ATTEMPTS;
       db.prepare("UPDATE qingyun_push_queue SET status=?, last_error=?, geo_held_at=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?")
