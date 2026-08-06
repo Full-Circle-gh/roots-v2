@@ -9,7 +9,7 @@
 
 ## 1. The problem
 
-Three writers (background geocode, checkout fallback, admin snapshot) fill delivery coordinates from address text. None filters on precision, so they store `geocode:amap` at coarse grade. The payload builder at `lib/qingyun-payload.js:337` then refuses exactly that state.
+Three writers (background geocode, checkout fallback, admin snapshot) fill delivery coordinates from address text. None filters on precision, so they store `geocode:amap` at coarse grade. The payload builder then refuses exactly that state — originally at `lib/qingyun-payload.js:337`, now the `NEEDS_POINT_MESSAGE` throw around `:366` after stages 1 and 2.
 
 The system manufactures the condition it rejects. No customer or operator has to do anything wrong.
 
@@ -51,7 +51,7 @@ Precise is not the same as correct. A rooftop-grade match can still be the wrong
 
 Add `needs_point` alongside the existing queue states.
 
-Entry: the payload builder hits the coarse-precision refusal at `lib/qingyun-payload.js:337`. Instead of erroring, it sets `needs_point` and records the coarse point plus its grade.
+Entry: the payload builder hits the coarse-precision refusal (the `NEEDS_POINT_MESSAGE` throw, around `lib/qingyun-payload.js:366`). Instead of erroring, it sets `needs_point` and records the coarse point plus its grade.
 
 Exit:
 - Operator confirms a point → back to `pending`, normal push, attempts counter reset.
@@ -60,13 +60,15 @@ Exit:
 
 `needs_point` does not consume retry attempts. Nothing about it is flaky — the survey confirms the geocode result is memoised per call and cached seven days by address string, so retrying is pointless by construction. Attempts only start once a real point exists.
 
-### 4.1 Where the coarse point is recorded
+### 4.1 Where the point is recorded
 
-On the queue row, not in `address_json`.
+The coarse guess lives on the queue row. A confirmed point lives in the order's `address_json` snapshot (§5.1) — never in `retail_customer_addresses`.
 
-The payload builder is deliberately dependency-free and holds no db handle (`lib/qingyun-payload.js:14-16`), so it cannot persist anything itself. It signals the caller the way `geoHoldError` already does (`:149-155`), and the daemon and the ship-from route persist the result. Two new nullable columns on the queue table, added through the existing idempotent helper.
+The distinction matters because the accept rule reads `addr.geo_source` out of `order.address_json` (`lib/qingyun-payload.js:189`). A confirmed point recorded only on the queue row is invisible to the check that has to accept it, and the row will bounce.
 
-`address_json` is the customer's address as given. A coarse point derived by the system is Tacet's working guess about that address, and a confirmed point is an operator's correction for one dispatch. Neither belongs in the customer's address record — that is D5 restated at the data layer. Keeping the guess on the queue row means a confirmation cannot leak into the saved address by accident.
+The payload builder is deliberately dependency-free and holds no db handle (`lib/qingyun-payload.js:14-16`), so it cannot persist the guess itself. It signals the caller the way `geoHoldError` already does (`:149-155`), and the daemon and the ship-from route persist the result. Four nullable columns on the queue table, added through the existing idempotent helper: `needs_point_at`, `guessed_lat`, `guessed_lng`, `guessed_precision`.
+
+`retail_customer_addresses` is the customer's address as given. A coarse point derived by the system is Tacet's working guess; a confirmed point is an operator's correction for one dispatch. Neither belongs in the customer's saved record — that is D5 restated at the data layer. `retail_orders.address_json` is the order's own snapshot, which is exactly where a per-order correction belongs.
 
 ### 4.2 Stage 1 lands invisible
 
@@ -123,6 +125,16 @@ This is not recoverable by retry — a past date cannot become today.
 - **Offer a way out.** The drawer offers **Reschedule delivery** on an expired order, which sets a new date and returns the row to the queue. Confirming the point and rescheduling are one flow when both are needed.
 
 Rescheduling changes what the customer was promised, so it takes a blast-radius confirm naming the old date and the new one. This is a live-customer action and the general rule applies; the confirm-the-point step does not, because there the map is itself the confirmation.
+
+**How it re-enters the queue.** An expired row is `skipped`, which stage 2 deliberately excluded from the automatic requeue hook, and the customer reschedule endpoint (`routes/retail.js:17234`) makes no call into the queue at all. Reschedule routes through `MANUAL_RETRY_SQL`, which already accepts `skipped`, rather than adding a fourth statement. This is consistent with the stage 2 reasoning: a `skipped` row returns to the queue only by deliberate human action, and choosing a new delivery date is exactly that.
+
+**Stage 3 ships with expiry visible only in the drawer.** The dashboard line and Orders chip it otherwise leans on do not exist until stages 4 and 5. Acceptable, since stages 1–3 deploy together and a parked order is still visible in the drawer with a Retry button from stage 2.
+
+### 5.3 Open problem: D6 describes a state that cannot occur
+
+With auto-push off, `maybeEnqueueQingyunPush` never inserts a row (`routes/retail.js:4298`) and the drain returns immediately (`scripts/qingyun-daemon.js:552`). No row exists, so nothing can reach `needs_point`. The ship-from route cannot rescue it either, since it refuses any order without an existing Qingyun copy.
+
+This means D9 — hanging the hold-or-fallback choice off the auto-push setting — rests on a distinction that does not currently exist in the code. It does not bite until stage 6, and it is recorded here so it is not rediscovered then. Stage 6 must either give the manual path its own route into the queue, or D6 and D9 need rewriting.
 
 ## 6. Orders list
 
