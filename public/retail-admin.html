@@ -9388,7 +9388,10 @@
                     <input type="checkbox" id="alipay-manual-ocr" onchange="_alipayOcrToggle()"> 🔍 Auto-read payment screenshots (AI) · 自动识别付款截图
                   </label>
                   <div class="muted" style="margin-top:4px;">When a customer uploads their Alipay screenshot, AI reads the amount, payee and time and checks them against the order — shown as a green ✓ / red ⚠ on the order. ~¥0.03/order. · 顾客上传支付宝截图后,AI 自动读取金额、收款方、时间并与订单核对,在订单上显示 ✓/⚠。约¥0.03/单。</div>
-                  <div id="alipay-ocr-fields" style="display:none; margin-top:10px;">
+                  <!-- Always rendered. _alipayOcrToggle() only greys/disables it
+                       when auto-read is off — no display:none, so these settings
+                       stay visible even if that toggle never runs. -->
+                  <div id="alipay-ocr-fields" style="margin-top:10px;">
                     <div class="field" style="margin: 0 0 8px;">
                       <label class="stacked">Anthropic API key (sk-…) · 密钥</label>
                       <input type="password" id="alipay-manual-key" autocomplete="off" placeholder="sk-ant-… · paste once, leave blank to keep · 留空则保持不变" style="width: 100%; font-family: monospace;">

@@ -67,11 +67,19 @@ async function loadAlipayManual() {
   } catch (e) { console.warn('[alipay-manual] load failed', e); }
 }
 
-// Show/hide the OCR detail fields with the master OCR checkbox.
+// Grey the OCR detail fields with the master OCR checkbox — never hide them.
+// These fields (accepted payee names, pay window, screenshot age) are the only
+// place that configuration is visible, so hiding them behind a reveal made a
+// blank card look like a card with nothing to configure. The panel now ships
+// visible and enabled in the HTML: if this never runs — stale JS, a throw
+// earlier in the loader, a load-order change — the operator still sees the
+// settings and can still edit them. Failure leaves them visible, not gone.
 function _alipayOcrToggle() {
   const on = !!(document.getElementById('alipay-manual-ocr') || {}).checked;
   const box = document.getElementById('alipay-ocr-fields');
-  if (box) box.style.display = on ? 'block' : 'none';
+  if (!box) return;
+  box.style.opacity = on ? '' : '0.55';
+  for (const el of box.querySelectorAll('input')) el.disabled = !on;
 }
 
 function _alipayManualPickFile(event) {
