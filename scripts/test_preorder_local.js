@@ -101,12 +101,16 @@ function makeCtx(initial) {
   };
 }
 
-// ── The server's own verdict ────────────────────────────────────────────────
-// The clients never re-implement the 广州 matcher — they read `same_city`,
-// stamped on every saved address the customer gets back.
-console.log('\nserver — same_city on the addresses the customer reads');
+// ── The server's own verdicts ───────────────────────────────────────────────
+// The clients never re-implement either question — they read the two flags
+// stamped on every saved address the customer gets back: `same_city` (plain
+// geography) and `local_run` (would this order ride the same-day local run).
+// The pill wants the second one; reading the first is what took the pre-order
+// away from the outer ship-districts.
+console.log('\nserver — same_city / local_run on the addresses the customer reads');
 {
   const inventory = require(path.join(ROOT, 'lib/inventory.js'));
+  const { stampSameCity } = require(path.join(ROOT, 'routes/retail.js'));
   const retailSrc = fs.readFileSync(path.join(ROOT, 'routes/retail.js'), 'utf8');
 
   it('a Guangzhou address is same-city, whichever field carries the city', () => {
@@ -127,6 +131,35 @@ console.log('\nserver — same_city on the addresses the customer reads');
     // GET /api/retail/addresses (mini app) + GET /api/retail/customer (web).
     const stamped = retailSrc.match(/stampSameCity\(/g) || [];
     assert.strictEqual(stamped.length, 3, 'declaration + both address payloads');
+  });
+
+  it('local_run is stamped beside same_city, and answers a different question', () => {
+    const [core, ship, away] = stampSameCity([
+      { id: 1, city: '广州市', district: '天河区' },   // core GZ — on the run
+      { id: 2, city: '广州市', district: '花都区' },   // ship-district — not on it
+      { id: 3, city: '上海市', district: '静安区' },   // out-of-city
+    ]);
+    assert.deepStrictEqual(
+      { same_city: core.same_city, local_run: core.local_run }, { same_city: true, local_run: true });
+    assert.deepStrictEqual(
+      { same_city: ship.same_city, local_run: ship.local_run }, { same_city: true, local_run: false },
+      '花都 is same-city AND keeps its pre-order');
+    assert.deepStrictEqual(
+      { same_city: away.same_city, local_run: away.local_run }, { same_city: false, local_run: false });
+  });
+  it('the two flags come from lib/inventory, not from new matchers', () => {
+    const fn = retailSrc.slice(retailSrc.indexOf('function stampSameCity'));
+    const body = fn.slice(0, fn.indexOf('\n}'));
+    assert.ok(/r\.local_run = r\.same_city && !inventory\.isOptInSameDayDistrict\(r\)/.test(body),
+      'the run verdict is the zone question, asked only of Guangzhou addresses');
+    assert.ok(!/广州/.test(body), 'no city string of its own');
+  });
+  it('both clients read local_run for the pill', () => {
+    const util = fs.readFileSync(path.join(ROOT, 'miniapp/utils/delivery.js'), 'utf8');
+    assert.ok(/return !!\(r && r\.local_run\);/.test(util), 'mini app');
+    assert.ok(!/r\.same_city/.test(util), 'and no longer the city one');
+    const web = fs.readFileSync(path.join(ROOT, 'public/shop.html'), 'utf8');
+    assert.ok(/return !!\(a&&a\.local_run\);/.test(web), 'web storefront');
   });
 }
 
@@ -396,41 +429,55 @@ console.log('\nmini-app favourites — same rule as the shop');
 console.log('\nmini-app utils/delivery — the active address decides');
 {
   const delivery = require(path.join(ROOT, 'miniapp/utils/delivery.js'));
-  const GZ  = { id: 1, is_default: true,  same_city: true };
-  const SH  = { id: 2, is_default: false, same_city: false };
+  // The pill reads local_run, not same_city: a 花都 address is same-city and
+  // still ships on the batch cadence, so it keeps its pre-order.
+  const GZ  = { id: 1, is_default: true,  local_run: true,  same_city: true };
+  const SH  = { id: 2, is_default: false, local_run: false, same_city: false };
+  const HD  = { id: 3, is_default: true,  local_run: false, same_city: true };
 
-  it('unknown (nothing loaded) reads as out-of-city — the permissive default', () => {
+  it('unknown (nothing loaded) reads as off the run — the permissive default', () => {
     delivery.invalidate();
-    assert.strictEqual(delivery.sameCity(), false);
+    assert.strictEqual(delivery.onLocalRun(), false);
     assert.strictEqual(delivery.preorderAllowed(), true);
   });
   it('the default address is the one that counts', () => {
     delivery.prime([GZ, SH]);
-    assert.strictEqual(delivery.sameCity(), true);
+    assert.strictEqual(delivery.onLocalRun(), true);
     delivery.prime([{ ...GZ, is_default: false }, { ...SH, is_default: true }]);
-    assert.strictEqual(delivery.sameCity(), false);
+    assert.strictEqual(delivery.onLocalRun(), false);
   });
   it('a checkout pick (activeAddressId) overrides the default', () => {
     const saved = global.getApp;
     global.getApp = () => ({ globalData: { activeAddressId: 2 } });
     try {
       delivery.prime([GZ, SH]);
-      assert.strictEqual(delivery.sameCity(), false, 'the picked Shanghai address wins');
+      assert.strictEqual(delivery.onLocalRun(), false, 'the picked Shanghai address wins');
       global.getApp = () => ({ globalData: { activeAddressId: 1 } });
-      assert.strictEqual(delivery.sameCity(), true);
+      assert.strictEqual(delivery.onLocalRun(), true);
     } finally {
       if (saved === undefined) delete global.getApp; else global.getApp = saved;
     }
   });
   it('an address book with no saved rows never blocks a pre-order', () => {
     delivery.prime([]);
-    assert.strictEqual(delivery.sameCity(), false);
+    assert.strictEqual(delivery.onLocalRun(), false);
+  });
+  it('a ship-district address keeps its pre-order — same city, not the run', () => {
+    delivery.prime([HD]);
+    assert.strictEqual(delivery.onLocalRun(), false, '花都 ships on the batch cadence');
+    assert.strictEqual(delivery.preorderAllowed(), true);
+  });
+  it('the cache stores the run verdict, not the city one', () => {
+    // A row that is same_city but not local_run must NOT read as on the run —
+    // this is the over-restriction the ship-districts were under.
+    delivery.prime([{ id: 9, is_default: true, same_city: true, local_run: false }]);
+    assert.strictEqual(delivery.onLocalRun(), false);
   });
   it('invalidate() drops the cache so the next load re-asks', () => {
     delivery.prime([GZ]);
-    assert.strictEqual(delivery.sameCity(), true);
+    assert.strictEqual(delivery.onLocalRun(), true);
     delivery.invalidate();
-    assert.strictEqual(delivery.sameCity(), false);
+    assert.strictEqual(delivery.onLocalRun(), false);
   });
 }
 
@@ -458,8 +505,11 @@ console.log('\nweb storefront — stockState / slStock');
     [grab('oosBackorder'), grab('shopperSameCity'), grab('stockState'), grab('slStock')].join('\n'),
     sandbox,
   );
-  const signIn = (sameCity) => {
-    sandbox.state.customer = { addresses: [{ id: 1, is_default: true, same_city: sameCity }] };
+  // signIn(true) = an address on the same-day local run (core Guangzhou);
+  // signIn(false) = anything else — out-of-city, or a ship-district on the
+  // batch cadence. The page reads the server's local_run stamp.
+  const signIn = (onLocalRun) => {
+    sandbox.state.customer = { addresses: [{ id: 1, is_default: true, local_run: onLocalRun, same_city: true }] };
   };
   const verdict = (p) => vm.runInContext('stockState(' + JSON.stringify(p) + ')', sandbox);
   const size    = (m) => vm.runInContext('slStock(' + JSON.stringify(m) + ')', sandbox);

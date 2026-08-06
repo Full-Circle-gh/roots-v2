@@ -7598,18 +7598,38 @@ const ADDRESS_PUBLIC_COLS = `id, recipient_name, phone, province, city, district
                               address, detail, postal_code, is_default,
                               created_at, updated_at`;
 
-// Same-city verdict, stamped on every saved address we hand back to a customer.
+// Two verdicts about where an order to this address would go, stamped on every
+// saved address we hand back to a customer.
 //
-// It exists for the BROWSE-time pre-order pill. A sold-out product on the
-// 'backorder_gz' policy is reservable only when the order isn't Guangzhou
-// same-day (inventory.requiresStockGate) — the local kitchen can't conjure a
-// batch for today's scooter run. The catalog used to advertise PRE-ORDER off
-// the product flag alone, so a Tianhe shopper was invited to reserve something
-// the checkout then refused. With this flag the mini app / web storefront read
-// those rows as a plain SOLD OUT for a same-city address, and the 广州 matcher
-// still lives in exactly one place (lib/inventory.js).
+//   same_city — the address is in Guangzhou. Plain geography.
+//   local_run — the order would ride the same-day local run out of a shop.
+//
+// They are not the same question, and the BROWSE-time pre-order pill wants the
+// second one. A sold-out product on the 'backorder_gz' policy is reservable
+// because the parcel leaves after the next batch or restock; an order served
+// off the shelves the local run loads from has nothing behind it, so the
+// catalog must show a plain SOLD OUT instead of inviting a reservation the
+// checkout will refuse (localPreorderLine).
+//
+// Guangzhou's outer ship-districts (花都/番禺/南沙/从化/增城) are same_city and
+// NOT local_run: without the opt-in same-day extra their parcel leaves the
+// out-of-city warehouse on the batch cadence, exactly like an out-of-city
+// order, so a pre-order is as safe for them as it is for Shanghai. Reading
+// same_city for the pill is what took that away from them.
+//
+// Both answers come from lib/inventory (isGuangzhouAddress + the zone-backed
+// isOptInSameDayDistrict), so no client re-implements either question. The
+// zone lookup only runs for a Guangzhou address — everyone else short-circuits.
+//
+// A browse-time verdict cannot know the slot, so local_run reads a
+// ship-district as "not on the run"; a shopper who then buys the same-day
+// extra is put back on it and refused at checkout, which lands in the ordinary
+// insufficient_stock path.
 function stampSameCity(rows) {
-  for (const r of rows) r.same_city = inventory.isGuangzhouAddress(r);
+  for (const r of rows) {
+    r.same_city = inventory.isGuangzhouAddress(r);
+    r.local_run = r.same_city && !inventory.isOptInSameDayDistrict(r);
+  }
   return rows;
 }
 
@@ -17441,7 +17461,7 @@ router.get('/api/retail/customer', requireRetailAuth, (req, res) => {
   // nothing due, idempotent when called repeatedly.
   sweepExpiredPoints(req.customer.id);
   const fresh = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(req.customer.id);
-  // same_city rides along (see stampSameCity) — the web storefront reads its
+  // same_city + local_run ride along (see stampSameCity) — the web storefront reads its
   // address book from this payload, and its shop grid needs the same pre-order
   // verdict the mini app gets from GET /api/retail/addresses.
   const addresses = stampSameCity(tdb().prepare(
@@ -29302,3 +29322,7 @@ module.exports.retailLiveBump = retailLiveBump;
 // it to the same three cases the browse surfaces are held to (local + sold out
 // refused on any day; out-of-city on a future day still allowed).
 module.exports.localPreorderLine = localPreorderLine;
+// The browse-time half of the same rule: the same_city / local_run pair the
+// pill reads. Exported for the same test, so the two halves are held to one
+// answer about who the local run serves.
+module.exports.stampSameCity = stampSameCity;

@@ -5076,19 +5076,24 @@ function oosBackorder(p){
   if(pol==='strict')return false;
   return !!(p&&p.is_batch_made);
 }
-// Is this shopper delivering INSIDE Guangzhou? A pre-order ("SHIPS SOON" /
-// "NEXT BATCH") is an out-of-city offer: for a same-city address the order
-// rides today's local run, which the checkout gates on real stock — so a
-// sold-out backorder row must read a plain SOLD OUT here rather than invite a
-// reservation the checkout will refuse. `same_city` is the server's own verdict
-// (stamped on the addresses in GET /api/retail/customer), and the address that
-// counts is the default — the one checkout pre-selects. Signed out / no saved
-// address → false, i.e. the permissive out-of-city default we've always had.
+// Would this shopper's order ride the same-day local run? A pre-order
+// ("SHIPS SOON" / "NEXT BATCH") is for orders we SHIP: the parcel leaves after
+// the next batch or restock. An order served off the shelves that run loads
+// from has nothing behind it, so a sold-out backorder row must read a plain
+// SOLD OUT here rather than invite a reservation the checkout will refuse.
+//
+// Not the same question as "in Guangzhou": the outer ship-districts (花都/番禺/
+// 南沙/从化/增城) are same-city and still ship by courier on the batch cadence
+// unless the shopper buys the same-day extra, so a pre-order is as safe for
+// them as it is for Shanghai. `local_run` is the server's own verdict (stamped
+// beside `same_city` on the addresses in GET /api/retail/customer), and the
+// address that counts is the default — the one checkout pre-selects. Signed
+// out / no saved address → false, the permissive default we've always had.
 function shopperSameCity(){
   const addrs=(state.customer&&Array.isArray(state.customer.addresses))?state.customer.addresses:[];
   if(!addrs.length)return false;
   const a=addrs.find(x=>x.is_default)||addrs[0];
-  return !!(a&&a.same_city);
+  return !!(a&&a.local_run);
 }
 // Browse-time stock verdict. Backorder products stay orderable for an
 // out-of-city shopper (the server enforces the GZ same-day gate at checkout);
