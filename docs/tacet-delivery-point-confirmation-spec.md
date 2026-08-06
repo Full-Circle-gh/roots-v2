@@ -85,15 +85,27 @@ Replaces the current dead-end block in the shipment section.
 
 Below that:
 
-- A map, roughly 240px tall, with the guessed point already dropped and draggable.
-- The full Chinese address text beside or beneath the map, unchanged and selectable, so the operator can read it against the map.
-- The precision grade stated in plain words — "district level" or "block level", not `geocode:amap/coarse`.
-- Primary action: **Confirm and dispatch**.
+- A map, roughly 240px tall, showing the AREA the address resolved to — a dashed circle around a hollow centre, labelled *Approximate · 大致位置*. **No pin is dropped.**
+- The full Chinese address text above the map on a phone and beside it on desktop, unchanged and selectable, so the operator can read it against the map.
+- The precision grade stated in plain words — "Placed to district level" or "Placed to block level", not `geocode:amap/coarse`. A grade that was never recorded says so in words; it is never a dash.
+- Primary action: **Place the point** — *disabled*. It becomes **Confirm and dispatch**, enabled, once a point exists.
 - Secondary action: **Edit ship-to**, existing behaviour, which re-runs the lookup on save.
 
-No separate confirmation dialog on Confirm and dispatch. The map *is* the confirmation step; a second modal would be asking the same question twice. This is a deliberate exception to the blast-radius-confirm rule for live-customer actions, and the reason is recorded here.
+**There is no point yet, so there is nothing to confirm.** This is the rule the surface enforces, and it is stronger than "you must interact before confirming".
 
-For the D13 contradiction case, the same surface is used with a different heading — **Delivery point may be wrong** — and both candidate points shown, the stored one and the freshly geocoded one, either selectable.
+A coarse match is an area, not a point: the system does not know where the door is, it knows a region. So the map opens with the region drawn and nothing else. The operator taps where the door is; the circle collapses and a solid pin stands on that spot. Only then is there something to confirm.
+
+The weaker rule — require a gesture, then allow the confirm — is not enough. A gate satisfied by interaction is satisfied by a 1px nudge of a marker sitting on the district centre, and confirming that stamps `staff_pin` onto a centroid, which then passes both trust checks in §5.1. That is precisely the laundering those checks exist to prevent, performed by a person instead of by code. With no marker to nudge, there is nothing to launder.
+
+D1 is untouched. A trusted point never parks, so no order that was already precise ever reaches this surface, and no extra tap is added to any of them.
+
+Copy follows the same model: strings describe the STATE, not a marker. "No point placed yet · 尚未标记配送点" before placement, "Point placed · 配送点已标记" after. Nothing says "not moved yet", because before a placement there is no point to have moved.
+
+No separate confirmation dialog on Confirm and dispatch. The map *is* the confirmation step; a second modal would be asking the same question twice. This is a deliberate exception to the blast-radius-confirm rule for live-customer actions, and the reason is recorded here. Rescheduling (§5.2) is not an exception and keeps its confirm.
+
+For the D13 contradiction case, the same surface is used with a different heading — **Delivery point may be wrong** — and both candidate points shown, the stored one and the freshly geocoded one, either selectable. Distinguished by shape and number (square **1** / circle **2**, a dashed link between them, the existing `.od-seg` control below), never by colour alone.
+
+**Not reachable as built, and deliberately not wired.** When a stored pin disagrees with a precise text resolve, the builder does not park the order — it warns and ships the resolved point (`lib/qingyun-payload.js`, the `verdict.ok` branch above the `needs_point` throw). So no order can currently enter this state, and stage 3 does not build a surface nothing reaches. The design stands; making it reachable means giving that branch its own parked state, which is a separate decision.
 
 ### 5.1 What a confirmed point records
 
@@ -127,6 +139,10 @@ This is not recoverable by retry — a past date cannot become today.
 Rescheduling changes what the customer was promised, so it takes a blast-radius confirm naming the old date and the new one. This is a live-customer action and the general rule applies; the confirm-the-point step does not, because there the map is itself the confirmation.
 
 **How it re-enters the queue.** An expired row is `skipped`, which stage 2 deliberately excluded from the automatic requeue hook, and the customer reschedule endpoint (`routes/retail.js:17234`) makes no call into the queue at all. Reschedule routes through `MANUAL_RETRY_SQL`, which already accepts `skipped`, rather than adding a fourth statement. This is consistent with the stage 2 reasoning: a `skipped` row returns to the queue only by deliberate human action, and choosing a new delivery date is exactly that.
+
+**Write order, which is the whole thing.** The new `scheduled_for` goes onto the order FIRST and the queue row is requeued SECOND, both inside one transaction across the two tables. Reversed, the drain polls every ~25s and re-reads `isQingyunSameCityToday` off the order: it would find the OLD passed date on a row that had just returned to `pending` and retire it again within the poll — a reschedule that silently did nothing.
+
+**Only a move to today ships today.** A later date is written correctly onto the order and the row does return to the queue, but the drain retires it again each day until its own morning comes round, because nothing re-queues a `skipped` row on a future date. The surface says so at the point of choosing rather than implying otherwise. Closing that gap — a row that waits for its day instead of being retired — belongs with the stage 6 queue work.
 
 **Stage 3 ships with expiry visible only in the drawer.** The dashboard line and Orders chip it otherwise leans on do not exist until stages 4 and 5. Acceptable, since stages 1–3 deploy together and a parked order is still visible in the drawer with a Retry button from stage 2.
 
