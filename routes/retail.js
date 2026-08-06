@@ -948,6 +948,44 @@ function effectiveOosPolicy(p) {
   return (p && p.is_batch_made) ? 'backorder_gz' : 'strict';
 }
 
+// The one line a same-day local shopper may not have: sold out, and orderable
+// only because the operator marked it 'backorder_gz'.
+//
+// That policy means "shoppers we SHIP to may reserve this" — their parcel
+// leaves after the next batch or restock, which is what makes selling at zero
+// stock honest. An order on the local run is served off the shelves that run
+// loads from, on whatever day the customer picked, so there is nothing behind
+// a sold-out backorder line for them. requiresStockGate cannot express that:
+// it goes false the moment a Guangzhou customer picks a future day, and the
+// order then routes with ignoreStock and takes no reservation — which is
+// exactly the pre-order the browse surfaces stopped offering them.
+//
+// Being in Guangzhou is not by itself being on that run. The outer
+// ship-districts (花都/番禺/南沙/从化/增城) ship by courier from the out-of-city
+// warehouse on the batch cadence unless the shopper buys the same-day extra —
+// the same fulfilment an out-of-city order gets, so a pre-order is as safe for
+// them as it is for Shanghai. The caller passes that verdict in as
+// `scheduledShipDistrict` (inventory.isOptInSameDayDistrict + the slot kind),
+// resolved once in the order path so this gate and the out-of-city store pin
+// can never disagree about who is on the local run.
+//
+// `lines` are resolved order lines ({ product, qty }) whose product carries
+// oos_policy / is_batch_made and the per-store `real_stock` SUM. Returns the
+// offending line, or null. Guangzhou is inventory.isGuangzhouAddress — the same
+// matcher stampSameCity puts on every saved address the shopper reads.
+// 'strict' (refused everywhere) and 'always' (supplier-direct, no stock of
+// ours) are not this rule's business.
+function localPreorderLine(lines, address, { scheduledShipDistrict = false } = {}) {
+  if (!inventory.isGuangzhouAddress(address)) return null;
+  if (scheduledShipDistrict) return null;
+  return (lines || []).find(r => {
+    if (!r || !r.product) return false;
+    if (effectiveOosPolicy(r.product) !== 'backorder_gz') return false;
+    const avail = r.product.real_stock == null ? null : Number(r.product.real_stock);
+    return avail != null && avail < r.qty;
+  }) || null;
+}
+
 // List/grid variant of the column set: NEVER pull the heavy inline base64 photo.
 // A data: URI is collapsed to the tiny literal 'data:' marker INSIDE SQLite, so
 // the multi-MB blob never enters Node's heap or the JSON payload — the list
@@ -7560,18 +7598,38 @@ const ADDRESS_PUBLIC_COLS = `id, recipient_name, phone, province, city, district
                               address, detail, postal_code, is_default,
                               created_at, updated_at`;
 
-// Same-city verdict, stamped on every saved address we hand back to a customer.
+// Two verdicts about where an order to this address would go, stamped on every
+// saved address we hand back to a customer.
 //
-// It exists for the BROWSE-time pre-order pill. A sold-out product on the
-// 'backorder_gz' policy is reservable only when the order isn't Guangzhou
-// same-day (inventory.requiresStockGate) — the local kitchen can't conjure a
-// batch for today's scooter run. The catalog used to advertise PRE-ORDER off
-// the product flag alone, so a Tianhe shopper was invited to reserve something
-// the checkout then refused. With this flag the mini app / web storefront read
-// those rows as a plain SOLD OUT for a same-city address, and the 广州 matcher
-// still lives in exactly one place (lib/inventory.js).
+//   same_city — the address is in Guangzhou. Plain geography.
+//   local_run — the order would ride the same-day local run out of a shop.
+//
+// They are not the same question, and the BROWSE-time pre-order pill wants the
+// second one. A sold-out product on the 'backorder_gz' policy is reservable
+// because the parcel leaves after the next batch or restock; an order served
+// off the shelves the local run loads from has nothing behind it, so the
+// catalog must show a plain SOLD OUT instead of inviting a reservation the
+// checkout will refuse (localPreorderLine).
+//
+// Guangzhou's outer ship-districts (花都/番禺/南沙/从化/增城) are same_city and
+// NOT local_run: without the opt-in same-day extra their parcel leaves the
+// out-of-city warehouse on the batch cadence, exactly like an out-of-city
+// order, so a pre-order is as safe for them as it is for Shanghai. Reading
+// same_city for the pill is what took that away from them.
+//
+// Both answers come from lib/inventory (isGuangzhouAddress + the zone-backed
+// isOptInSameDayDistrict), so no client re-implements either question. The
+// zone lookup only runs for a Guangzhou address — everyone else short-circuits.
+//
+// A browse-time verdict cannot know the slot, so local_run reads a
+// ship-district as "not on the run"; a shopper who then buys the same-day
+// extra is put back on it and refused at checkout, which lands in the ordinary
+// insufficient_stock path.
 function stampSameCity(rows) {
-  for (const r of rows) r.same_city = inventory.isGuangzhouAddress(r);
+  for (const r of rows) {
+    r.same_city = inventory.isGuangzhouAddress(r);
+    r.local_run = r.same_city && !inventory.isOptInSameDayDistrict(r);
+  }
   return rows;
 }
 
@@ -9327,6 +9385,66 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     }
   }
 
+  // Which Guangzhou order is this? Two rules below turn on the answer — the
+  // local pre-order gate right here, and the out-of-city store pin further
+  // down — so it is resolved once, here, and both read the same expression.
+  //
+  // Guangzhou's outer "ship-districts" (花都/番禺/南沙/从化/增城) are Guangzhou
+  // addresses that do NOT get the local run by default: same-day there is an
+  // opt-in extra, and without it the order ships by courier on the batch
+  // cadence exactly like an out-of-city one. Inner districts are unaffected
+  // (isOptInSameDayDistrict is false for always-same-day zones).
+  //
+  // Same-day in a ship-district is the explicit "Today" pick (slot_kind
+  // 'today', the surcharge slot). The Express default ('express') and a future
+  // 'schedule' date are NOT same-day — they ship by courier from the
+  // out-of-city store. isSameDayDelivery(slotId) can't tell these apart
+  // (Express's slot date is often today at midnight, which it reads as
+  // same-day), so gate on the slot_kind the mini-app sends instead.
+  const inGz = inventory.isGuangzhouAddress(address);
+  const pickedSameDay = body.delivery_slot_kind === 'today';
+  const scheduledShipDistrict =
+        inGz &&
+        inventory.isOptInSameDayDistrict(address) &&
+        !pickedSameDay;
+
+  // ── Local pre-order gate ─────────────────────────────────────────────
+  // A same-day local shopper may not pre-order a sold-out 'backorder_gz' line,
+  // on any delivery day — see localPreorderLine for why the day cannot buy the
+  // stock. This is the server half of the rule the shop grid, the size
+  // pickers, the PDP and the favourites already show; it catches every route
+  // that skips them (a stale card, an address switched after the item went in
+  // the basket, the verdict not yet landed on first paint, a direct API call).
+  //
+  // A scheduled ship-district order is NOT that shopper: their parcel leaves
+  // the out-of-city warehouse on the batch cadence, which is the very
+  // fulfilment that makes a pre-order safe, so they keep it — unless they
+  // bought the same-day extra, which puts them back on the local run.
+  //
+  // It runs on the FINAL line set, so the 5-option shortage modal is
+  // untouched: 'cancel_missing' has already dropped the line,
+  // 'replace_missing' swapped it for something in stock, and
+  // 'full_from_fallback' only arises when another shop HAS the stock (so the
+  // line isn't sold out at all). 'wait_for_restock' is deliberately exempt —
+  // analyzeShortage only ever offers it to a Guangzhou same-day order, making
+  // it the local shopper's own choice, taken in front of a modal that names
+  // the item, and it parks the order as 'awaiting_restock' where the operator
+  // can see it. Pickup is exempt too: it always reserves at the chosen store,
+  // so reserveForOrder below already refuses a sold-out collection.
+  //
+  // The error is the one this endpoint already returns for a sold-out 'strict'
+  // line, so every checkout surface handles it exactly as it does today.
+  if (!isPickup && fallbackChoice !== 'wait_for_restock') {
+    const localPre = localPreorderLine(mutatedItems, address, { scheduledShipDistrict });
+    if (localPre) {
+      return res.status(409).json({
+        success: false, error: 'insufficient_stock',
+        product_id: localPre.product.id,
+        available: Math.max(0, Number(localPre.product.real_stock) || 0),
+      });
+    }
+  }
+
   // Geocode-on-checkout fallback. Address geocoding is normally a background
   // (fire-and-forget) job kicked off when the address is saved; a customer who
   // adds an address and checks out immediately can beat it, leaving lat/lng
@@ -9462,26 +9580,9 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   // out-of-city store so the two never diverge. Pickup is exempt (the customer
   // chose the store explicitly).
   //
-  // Same rule extends to Guangzhou's outer "ship-districts" (花都/番禺/南沙/从化/
-  // 增城) when the customer did NOT pick same-day. Same-day there is an opt-in
-  // extra; without it the order ships by courier on the batch cadence exactly
-  // like an out-of-city order, so it must print/ship from the out-of-city store
-  // too — otherwise the proximity router fulfils it from the nearest shop and
-  // "fulfilled by" diverges from where it actually ships. Picking same-day keeps
-  // the nearest-store routing the customer paid for. Inner GZ districts are
-  // unaffected (isOptInSameDayDistrict is false for always-same-day zones).
-  // Same-day in a ship-district is the explicit "Today" pick (slot_kind
-  // 'today', the surcharge slot). The Express default ('express') and a future
-  // 'schedule' date are NOT same-day — they ship by courier from the out-of-city
-  // store. isSameDayDelivery(slotId) can't tell these apart (Express's slot date
-  // is often today at midnight, which it reads as same-day), so gate on the
-  // slot_kind the mini-app sends instead.
-  const inGz = inventory.isGuangzhouAddress(address);
-  const pickedSameDay = body.delivery_slot_kind === 'today';
-  const scheduledShipDistrict =
-        inGz &&
-        inventory.isOptInSameDayDistrict(address) &&
-        !pickedSameDay;
+  // The same rule extends to a scheduled ship-district order — that's
+  // `scheduledShipDistrict`, resolved once above the local pre-order gate
+  // because both rules turn on it.
   if (!isPickup && (!inGz || scheduledShipDistrict)) {
     const oocId = loadPrinterPrefs().out_of_city_store_id;
     if (oocId != null && oocId !== fulfillingStore.id) {
@@ -17360,7 +17461,7 @@ router.get('/api/retail/customer', requireRetailAuth, (req, res) => {
   // nothing due, idempotent when called repeatedly.
   sweepExpiredPoints(req.customer.id);
   const fresh = tdb().prepare('SELECT * FROM retail_customers WHERE id = ?').get(req.customer.id);
-  // same_city rides along (see stampSameCity) — the web storefront reads its
+  // same_city + local_run ride along (see stampSameCity) — the web storefront reads its
   // address book from this payload, and its shop grid needs the same pre-order
   // verdict the mini app gets from GET /api/retail/addresses.
   const addresses = stampSameCity(tdb().prepare(
@@ -25740,8 +25841,26 @@ function computeBatchNotice(zone, productIds, now, slotId, slotKind) {
 // so a shortage there routes to the fallback modal, not a pre-order.) Mirrors
 // the computeBatchNotice shape so the checkout can reuse its popup/banner.
 // Returns null when nothing qualifies.
-function computePreorderNotice(zone, address, productIds, slotId) {
-  if (inventory.requiresStockGate({ address, deliverySlotId: slotId })) return null;
+function computePreorderNotice(zone, address, productIds, slotId, slotKind) {
+  // Never promise a shopper on the local run that their order "ships soon":
+  // the local pre-order gate in POST /orders refuses that line whatever day
+  // they picked, so the banner would advertise a checkout about to say no.
+  //
+  // This replaces the requiresStockGate test that stood here. That test was
+  // "Guangzhou AND same-day", which let the notice through to a core-Guangzhou
+  // customer who picked a future day — precisely the shopper the gate turns
+  // away. The test is now "on the local run", which is the gate's own
+  // condition, so the banner and the checkout always agree.
+  //
+  // A ship-district shopper who did not buy the same-day extra is NOT on that
+  // run — their parcel leaves the out-of-city warehouse on the batch cadence —
+  // so they keep the notice, exactly as they did before this gate existed.
+  // Out-of-city is untouched throughout. (slotId is retained in the signature,
+  // like zone, for the call site.)
+  if (inventory.isGuangzhouAddress(address)) {
+    const scheduledShipDistrict = inventory.isOptInSameDayDistrict(address) && slotKind !== 'today';
+    if (!scheduledShipDistrict) return null;
+  }
   const ids = [...new Set((productIds || []).map((n) => parseInt(n, 10)).filter(Boolean))];
   if (!ids.length) return null;
   const ph = ids.map(() => '?').join(',');
@@ -27115,7 +27234,7 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
       },
       scheduling: computeDeliverySlots(zone, new Date()),
       batch_notice: computeBatchNotice(zone, (items || []).map((i) => i.product_id), new Date(), body.delivery_slot_id, body.slot_kind),
-      preorder_notice: computePreorderNotice(zone, address, (items || []).map((i) => i.product_id), body.delivery_slot_id),
+      preorder_notice: computePreorderNotice(zone, address, (items || []).map((i) => i.product_id), body.delivery_slot_id, body.slot_kind),
       store_move_notice: storeMoveNotice,
       routing: routingPreview,
     },
@@ -29199,3 +29318,11 @@ module.exports.requireRetailAdmin = requireRetailAdmin;
 // route modules (e.g. backend-auth.js profile/avatar) call this to nudge a
 // tenant operator's open sessions after a committed mutation.
 module.exports.retailLiveBump = retailLiveBump;
+// The local pre-order rule, exported so scripts/test_preorder_local.js can hold
+// it to the same three cases the browse surfaces are held to (local + sold out
+// refused on any day; out-of-city on a future day still allowed).
+module.exports.localPreorderLine = localPreorderLine;
+// The browse-time half of the same rule: the same_city / local_run pair the
+// pill reads. Exported for the same test, so the two halves are held to one
+// answer about who the local run serves.
+module.exports.stampSameCity = stampSameCity;

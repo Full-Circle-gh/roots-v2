@@ -40,15 +40,15 @@ function _effPrice(p) {
 //   preorder → out, but the operator lets out-of-city shoppers reserve it
 //              (oos_preorder from the server). Stays orderable + tappable.
 //   soldOut  → hard out: dead SOLD OUT pill, no + button, picker row disabled.
-// `sameCity` is the shopper's own delivery context (utils/delivery): a pre-order
-// is an out-of-city offer, so for an address inside Guangzhou — where the order
-// rides today's scooter run and the checkout gates stock hard — a reservable
-// row is simply sold out. Nothing pre-orderable is ever offered to a same-city
-// shopper, so the pill can't promise what the checkout will refuse.
-function _stockState(p, sameCity) {
+// `onLocalRun` is the shopper's own delivery context (utils/delivery): a
+// pre-order is for orders we ship, so for an address the same-day local run
+// serves — where the checkout gates stock hard — a reservable row is simply
+// sold out. Nothing pre-orderable is ever offered to a shopper on that run,
+// so the pill can't promise what the checkout will refuse.
+function _stockState(p, onLocalRun) {
   const stock = p.stock == null ? null : Number(p.stock);
   const out = p.ship_from_supplier ? !!p.supplier_paused : (stock != null && stock <= 0);
-  const preorder = out && !p.ship_from_supplier && !!p.oos_preorder && !sameCity;
+  const preorder = out && !p.ship_from_supplier && !!p.oos_preorder && !onLocalRun;
   return { out, preorder, soldOut: out && !preorder, stock };
 }
 
@@ -214,9 +214,9 @@ Page({
   // cached request after the first paint, so when it flips we re-render the
   // rows we already hold — no second catalog fetch.
   _syncDelivery() {
-    delivery.load().then((sameCity) => {
-      if (!!sameCity === !!this._sameCity) return;
-      this._sameCity = !!sameCity;
+    delivery.load().then((onLocalRun) => {
+      if (!!onLocalRun === !!this._onLocalRun) return;
+      this._onLocalRun = !!onLocalRun;
       const raw = this.data._raw;
       if (raw && raw.length) this._renderRows(raw);
     }).catch((e) => console.warn('[shop] delivery sync failed:', e.message));
@@ -519,7 +519,7 @@ Page({
 
   _toRows(products, L) {
     const money = v => '¥' + (Number.isInteger(v) ? v : v.toFixed(2));
-    const sameCity = !!this._sameCity;
+    const onLocalRun = !!this._onLocalRun;
     return products.map(p => {
       const members = p._members || null;
       const regular = Number(p.price ?? p.sell_price) || 0;
@@ -545,13 +545,13 @@ Page({
         // A size that's out but pre-orderable keeps the card orderable: the
         // group only goes dead when EVERY size is hard-out, and the card shows
         // PRE-ORDER when the only remaining sizes are reservable ones.
-        const states = members.map(m => _stockState(m, sameCity));
+        const states = members.map(m => _stockState(m, onLocalRun));
         outOfStock = states.every(s => s.soldOut);
         preorder = !outOfStock && states.every(s => s.out) && states.some(s => s.preorder);
         soldUnits = members.reduce((s, m) => s + (Number(m.units_sold) || 0), 0);
         subline = '';
       } else {
-        const st = _stockState(p, sameCity);
+        const st = _stockState(p, onLocalRun);
         outOfStock = st.soldOut;
         preorder = st.preorder;
         // All-time units sold (server min-gates this to 0 below the badge
@@ -1000,7 +1000,7 @@ Page({
     // Same-city shoppers never see the + on a sold-out reservable row (the card
     // renders the dead SOLD OUT pill instead), but a stale page can still fire
     // this — re-check rather than trusting the tap.
-    const { preorder, soldOut } = _stockState(raw, !!this._sameCity);
+    const { preorder, soldOut } = _stockState(raw, !!this._onLocalRun);
     if (soldOut) {
       wx.showToast({ title: this.data.lang === 'cn' ? '已售罄' : 'Sold out', icon: 'none' });
       return;
@@ -1073,7 +1073,7 @@ Page({
       // PRE-ORDER badge; only a hard-out size shows the dead SOLD OUT pill.
       // Mirrors the PDP's own size picker. For a same-city address every
       // sold-out size is hard-out — pre-order isn't on offer for today's run.
-      const { out, preorder, soldOut, stock } = _stockState(m, !!this._sameCity);
+      const { out, preorder, soldOut, stock } = _stockState(m, !!this._onLocalRun);
       return {
         id: m.id,
         label: lang.pickVariantLabel(m.variant_label, m.variant_label_cn, L) || lang.pick(m.name_en, m.name_cn, L) || ('#' + m.id),
@@ -1113,7 +1113,7 @@ Page({
     if (!m) return;
     // A pre-orderable out-of-stock size stays orderable for an out-of-city
     // shopper; a same-city one gets the dead row (_stockState folds that in).
-    const { preorder, soldOut } = _stockState(m, !!this._sameCity);
+    const { preorder, soldOut } = _stockState(m, !!this._onLocalRun);
     if (soldOut) {
       wx.showToast({ title: this.data.lang === 'cn' ? (m.ship_from_supplier ? '暂时缺货' : '已售罄') : (m.ship_from_supplier ? 'Unavailable' : 'Sold out'), icon: 'none' });
       return;

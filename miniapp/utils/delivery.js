@@ -1,22 +1,27 @@
-// Delivery context for the shopper who is BROWSING — one question only:
-// is the address their order would go to inside Guangzhou (same-city, local
-// scooter delivery)?
+// Delivery context for the shopper who is BROWSING — one question only: would
+// the order to their address ride the same-day local run out of a shop?
 //
-// Why the catalog cares: PRE-ORDER is an out-of-city offer. A sold-out product
-// on the 'backorder_gz' policy stays orderable only when the order ISN'T
-// Guangzhou same-day — the local kitchen can't conjure a batch for today's run
-// (lib/inventory.js → requiresStockGate, enforced at checkout). The shop grid,
-// the PDP and the favourites page used to render the pill from the product flag
-// alone, so a Tianhe customer with a 2 km address was invited to reserve items
-// the checkout would then refuse. Those pages now ask this module and show the
-// honest dead SOLD OUT pill instead.
+// Why the catalog cares: PRE-ORDER is for orders we SHIP. A sold-out product on
+// the 'backorder_gz' policy stays orderable because the parcel leaves after the
+// next batch or restock; an order served off the shelves the local run loads
+// from has nothing behind it, so the checkout refuses it (localPreorderLine).
+// The shop grid, the PDP and the favourites page used to render the pill from
+// the product flag alone, so a Tianhe customer with a 2 km address was invited
+// to reserve items the checkout would then refuse. Those pages ask this module
+// instead and show the honest dead SOLD OUT pill.
 //
-// `same_city` is the server's own verdict, stamped on every saved address by
-// GET /api/retail/addresses, so the 广州 matcher is never re-implemented here.
+// Being IN Guangzhou is not the question. The outer ship-districts (花都/番禺/
+// 南沙/从化/增城) are same-city and still ship by courier from the out-of-city
+// warehouse on the batch cadence unless the shopper buys the same-day extra —
+// a pre-order is as safe for them as it is for Shanghai. So this reads
+// `local_run`, not `same_city`: both are stamped on every saved address by
+// GET /api/retail/addresses, and neither question is re-implemented here.
 //
-// Unknown — not signed in, no saved address, request failed — resolves to NOT
-// same-city: the catalog keeps its permissive out-of-city behaviour and the
-// checkout gate still has the last word.
+// Browsing precedes the slot pick, so a ship-district shopper reads as "not on
+// the run" and keeps the pill; if they later buy the same-day extra the
+// checkout refuses the line, which lands in the ordinary insufficient_stock
+// path. Unknown — not signed in, no saved address, request failed — resolves
+// the same permissive way, with the checkout gate having the last word.
 
 const api = require('./api');
 
@@ -25,7 +30,7 @@ const api = require('./api');
 // we make ourselves (add / edit / delete / tap-to-select).
 const TTL_MS = 2 * 60 * 1000;
 
-let _rows = null;      // [{ id, same_city, is_default }] — trimmed, never the PII
+let _rows = null;      // [{ id, local_run, is_default }] — trimmed, never the PII
 let _at = 0;
 let _inflight = null;
 
@@ -48,21 +53,21 @@ function _activeRow() {
 }
 
 // Synchronous verdict from whatever we last loaded. False until load() lands.
-function sameCity() {
+function onLocalRun() {
   const r = _activeRow();
-  return !!(r && r.same_city);
+  return !!(r && r.local_run);
 }
 
-// Pre-order may be offered to this shopper. The inverse of sameCity(), named
+// Pre-order may be offered to this shopper. The inverse of onLocalRun(), named
 // for what the caller is deciding.
 function preorderAllowed() {
-  return !sameCity();
+  return !onLocalRun();
 }
 
 // Refresh the address book (cached, deduped, never rejects). Resolves to the
-// current sameCity() so a page can compare it against what it rendered with.
+// current onLocalRun() so a page can compare it against what it rendered with.
 function load(force) {
-  if (!force && _rows && Date.now() - _at < TTL_MS) return Promise.resolve(sameCity());
+  if (!force && _rows && Date.now() - _at < TTL_MS) return Promise.resolve(onLocalRun());
   if (_inflight) return _inflight;
   const app = _app();
   // Wait out the silent wx.login so a cold start doesn't 401 and cache "no
@@ -76,13 +81,13 @@ function load(force) {
       const list = Array.isArray(resp) ? resp : (resp && resp.data) || [];
       _rows = list.map(a => ({
         id: a.id,
-        same_city: !!a.same_city,
+        local_run: !!a.local_run,
         is_default: !!a.is_default,
       }));
       _at = Date.now();
     })
     .catch(() => { /* signed out / offline — keep whatever we already knew */ })
-    .then(() => { _inflight = null; return sameCity(); });
+    .then(() => { _inflight = null; return onLocalRun(); });
   return _inflight;
 }
 
@@ -93,7 +98,7 @@ function prime(list) {
   if (!Array.isArray(list)) return;
   _rows = list.map(a => ({
     id: a.id,
-    same_city: !!a.same_city,
+    local_run: !!a.local_run,
     is_default: !!a.is_default,
   }));
   _at = Date.now();
@@ -102,4 +107,4 @@ function prime(list) {
 // Drop the cache after any address edit so the next load() sees the change.
 function invalidate() { _rows = null; _at = 0; }
 
-module.exports = { sameCity, preorderAllowed, load, prime, invalidate };
+module.exports = { onLocalRun, preorderAllowed, load, prime, invalidate };
