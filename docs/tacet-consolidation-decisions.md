@@ -1,8 +1,10 @@
-# Tacet shared-core consolidation — decisions record, v2.1
+# Tacet shared-core consolidation — decisions record, v3.0
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
+
+2026-08-06 · v3.0 — the money decimal SCALE is settled at `numeric(14,6)`, and `expense_entries.amount` is reversed back to decimal from whole cents. A scale decision plus a reversal, hence a full revision rather than a patch. Both recorded in §24; the superseded lines are left standing.
 
 2026-08-05 · v2.1 — vocabulary only: one line in §9 now says "the multi-business move" instead of "the multi-tenant move", per the retired "tenant" glossary term. §24 is untouched — its dated standing entries are not rewritten.
 
@@ -988,6 +990,25 @@ A measurement pass on 2026-08-05 — read-only, static, no database opened, 185 
 - **The `0.005` half-fen epsilon and the five `ROUND(..., 2)` sites are correct under decimal yuan and need no change.** They were only ever wrong under cents. **Do not "fix" them.**
 
 **STATUS: a design decision, recorded. No code, no schema and no data is changed by this entry.** The build that follows from it — schema rebuild, currency column, scale decision, copy re-run — is separate and is not yet briefed.
+
+### THE DECIMAL SCALE IS `numeric(14,6)` — DECIDED 2026-08-06
+
+**All money columns are `numeric(14,6)`: six fractional digits, eight integer digits of headroom.** One scale for all money, displayed and calculated alike — **not** a split. This settles the scale left open by the 2026-08-05 decimal decision.
+
+The evidence is the money-scale census, run read-only against the live databases on the box: `scripts/postgres-money-scale/money_scale_census.py`.
+
+- **Six is where the data stops needing more.** The deepest genuine fractional precision in real data is 6. `ingredients.cost_per_unit` holds **68 values at six decimal places**, and `ingredient_price_history`, `ingredients.buy_price` and `po_line_items.cost_per_unit` also reach 6. At scale 6, **zero** values are lost. At scale 2, **695** calculated values would be corrupted; at scale 4, **161**.
+- **The displayed side does not need the precision, and is not harmed by it.** All **89** DISPLAYED money columns hold zero values beyond two decimals — prices, totals and refunds are clean. They could be stored at scale 2, but one uniform scale is simpler than a split, and the extra precision is harmless headroom.
+- **Eight integer digits is roughly a thousandfold headroom.** The largest money value anywhere is **76,105.69** (`income_entries.amount`), five integer digits. `numeric(14,6)` admits eight, to a ceiling of ~99,999,999.999999.
+- **The one value that rounds is float residue, not precision.** A single value at eleven decimal places — `waste_entries.cost_lost` = 14.47993935862069 — is the result of a division, not money anyone recorded. It rounds cleanly at scale 6 and is the only value affected.
+
+### `expense_entries.amount` IS DECIMAL, NOT WHOLE CENTS — SUPERSEDED 2026-08-06
+
+**The earlier "expense_entries.amount becomes whole cents" decision is reversed.** That line is left standing where it is and is superseded by this entry, not edited.
+
+`expense_entries.amount` is `numeric(14,6)`, like the other calculated-money columns. Two things changed under it. The census found **seven non-null values with genuine sub-cent precision** — 187.13958 and 602.67992 among them, deepest scale 5 — so the precision is real in the data rather than an artefact of the column type. And money is now stored as decimal, not cents, so the reason the earlier entry gave for the change — that the expense side of the P&L must match the unit of the income side — is satisfied without rounding anything away.
+
+The disagreement between this document and `plan.json` noted earlier is resolved in favour of decimal.
 
 ## 25. Related documents
 
