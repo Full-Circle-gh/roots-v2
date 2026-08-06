@@ -198,8 +198,13 @@ Component({
       // Measure the real text block rather than assuming one: a headline-only
       // pop-up leaves far more room for the picture than one with body copy
       // and a CTA, and hard-coding the tallest case would shrink every image.
+      // A picture-only pop-up has no .pm-text to find, and reserving room for
+      // words it doesn't have would shrink the picture for nothing. Only fall
+      // back to the estimate when there IS text we simply couldn't measure.
+      const hasText = !!(this.data.title || this.data.body || this.data.ctaLabel);
       this.createSelectorQuery().select('.pm-text').boundingClientRect(rect => {
-        const textRpx = (rect && rect.height) ? toRpx(rect.height) : PM_TEXT_FALLBACK_RPX;
+        const textRpx = (rect && rect.height) ? toRpx(rect.height)
+                      : hasText ? PM_TEXT_FALLBACK_RPX : 0;
         const cap = Math.max(
           PM_CAP_FLOOR_RPX,
           (toRpx(win.H) - PM_BG_PAD_RPX - textRpx) * PM_CAP_RATIO,
