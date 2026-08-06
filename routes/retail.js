@@ -21709,6 +21709,47 @@ function qingyunDropCopyForClosedOrder(orderId, why) {
     .catch(() => markStale());
 }
 
+// How exact the guessed point is, in words an operator can act on. The stored
+// value is a provider's grade ('coarse' / 'street') or nothing at all; none of
+// those belong on a screen. A missing grade is said in words rather than left
+// as a dash — "we don't know how exact this is" is itself information.
+function _pointGradeWords(precision) {
+  const p = String(precision || '').trim();
+  if (p === 'coarse')  return { en: 'Placed to district level', cn: '仅定位到区级' };
+  if (p === 'street')  return { en: 'Placed to block level',    cn: '仅定位到街区' };
+  if (p === 'rooftop') return { en: 'Placed to building level', cn: '已定位到楼栋' };
+  return { en: 'How exact this is was never recorded', cn: '精度未知' };
+}
+
+// Is this order's promised day today, tomorrow, or gone? The drain retires a
+// date-scheduled order the moment its day passes (isQingyunSameCityToday), and
+// that cannot be retried back — a past date never becomes today. So the surface
+// has to say which of three postures an order is in BEFORE someone spends time
+// placing a point on one that can no longer ship.
+//
+// A same-day slot ('right_away' / 'today', and a date-less Express) never
+// expires, so it is never any of the three.
+function _orderDatePosture(retailOrderId) {
+  const OFF = { date_posture: null, promised_date: null };
+  let o;
+  try {
+    o = tdb().prepare(
+      'SELECT delivery_slot_kind, scheduled_for FROM retail_orders WHERE id = ?'
+    ).get(retailOrderId);
+  } catch (_) { return OFF; }
+  if (!o) return OFF;
+  const kind = o.delivery_slot_kind || null;
+  if (kind === 'right_away' || kind === 'today') return OFF;
+  const day = inventory.gzDateStr(o.scheduled_for);
+  if (!day) return OFF;                       // Express with no date — ASAP, never expires
+  const today = inventory.gzDateStr(new Date().toISOString());
+  const tomorrow = inventory.gzDateStr(new Date(Date.now() + 86400000).toISOString());
+  return {
+    date_posture: day < today ? 'passed' : (day === tomorrow ? 'tomorrow' : (day === today ? 'today' : 'later')),
+    promised_date: day,
+  };
+}
+
 // Where this order is set to be collected, and whether that can still be changed.
 // Attached to the drawer payload (o.qingyun_ship_from) — see the order detail route.
 function qingyunShipFromState(retailOrderId) {
@@ -21746,6 +21787,22 @@ function qingyunShipFromState(retailOrderId) {
       needs_attention: qingyunQueue.needsAttention(q),
       blocked_by: null,
       stale: null,
+      // ── Waiting for a delivery point ──────────────────────────────────
+      // Everything the confirm surface needs, so the drawer never has to
+      // guess at the queue's state. `guess` is where the push would have sent
+      // a rider; it opens the map, and it is NOT a point anyone has confirmed
+      // — the surface has to keep saying so until an operator places one.
+      awaiting_point: qingyunQueue.awaitingPoint(q),
+      needs_point_since: q.needs_point_at || null,
+      guess: (q.guessed_lat != null && q.guessed_lng != null)
+        ? { lat: q.guessed_lat, lng: q.guessed_lng, precision: q.guessed_precision || null }
+        : null,
+      // The grade in words. Never a code, and never a dash: an unrecorded
+      // grade is a fact about what we know, so it gets said in words too.
+      guess_grade: _pointGradeWords(q.guessed_precision),
+      // Expiry (spec §5.2). A same-day slot never expires; a date-scheduled
+      // order dies at midnight and cannot be retried back to life.
+      ..._orderDatePosture(retailOrderId),
     };
   }
   return {
@@ -21931,6 +21988,151 @@ router.post('/api/retail-admin/orders/:id/qingyun/retry-push', requireRetailAdmi
   logActivity(req.user.id, req.user.username, 'qingyun_retry_push', 'retail_order', id,
     { from_status: q.status, prior_error: q.last_error || null }, req.ip);
   res.json({ success: true, push_status: 'pending' });
+});
+
+// ── Confirm the delivery point ────────────────────────────────────────────
+// The operator has read the address against a map and put a point on the
+// building. Two writes, and they are one transaction or nothing:
+//
+//   1. the point onto the ORDER's address_json snapshot — never onto
+//      retail_customer_addresses (D5). The customer did not choose this spot;
+//      an operator did, for this one dispatch. Writing it back to the saved
+//      address would put a staff guess under every future order to that
+//      address, silently, and the customer would never see it to correct it.
+//   2. the queue row back to pending with a full attempt budget
+//      (CONFIRM_POINT_SQL), which is what puts it in front of the drain again.
+//
+// Split, either half is a trap: the point without the requeue is an order that
+// looks fixed and never ships, and the requeue without the point sends the
+// drain back to the same coarse address it already refused.
+//
+// geo_source is 'staff_pin' and geo_precision stays NULL. Not 'customer_pin' —
+// that means the customer tapped it, and lib/address-pin exists to stop us
+// claiming that on their behalf. No grade is invented either: nobody measured
+// how exact this is, so the two trust checks in lib/qingyun-payload name the
+// SOURCE instead (see the accept rule and the distance predicate there).
+router.post('/api/retail-admin/orders/:id/qingyun/confirm-point', requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  // Bounds-checked to mainland China by the same reader the customer address
+  // form uses — a point outside it is a client bug, and a delivery target is
+  // the last place to find out.
+  const pin = addressPin.readClientPin(req.body || {});
+  if (!pin) return res.status(400).json({ success: false, error: 'bad_point' });
+
+  const q = _qingyunPushRow(id);
+  if (!q) return res.status(404).json({ success: false, error: 'order_not_in_qingyun' });
+  if (q.qingyun_order_id) {
+    return res.json({ success: true, already_created: true, qingyun_order_id: String(q.qingyun_order_id) });
+  }
+  if (!qingyunQueue.awaitingPoint(q)) {
+    return res.status(409).json({ success: false, error: 'not_awaiting_point', push_status: q.status });
+  }
+
+  const o = tdb().prepare('SELECT id, order_no, status, address_json FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  if (qingyunQueue.isClosedOrderStatus(o.status)) {
+    return res.status(409).json({ success: false, error: 'order_closed', status: o.status });
+  }
+  let addr = {};
+  try { addr = JSON.parse(o.address_json || '{}') || {}; } catch { addr = {}; }
+  if (addr.pickup) return res.status(422).json({ success: false, error: 'pickup_order' });
+
+  let requeued = false;
+  try {
+    tdb().transaction(() => {
+      tdb().prepare('UPDATE retail_orders SET address_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
+        JSON.stringify({ ...addr, lat: pin.lat, lng: pin.lng, geo_source: 'staff_pin', geo_precision: null }), id);
+      // Guarded on status='needs_point' AND no copy, so a drain that completed
+      // while the operator was looking at the map wins and this rolls back
+      // whole — rather than leaving a staff point on an order that already has
+      // a rider coming to the address the push actually used.
+      const r = tdb().prepare(qingyunQueue.CONFIRM_POINT_SQL).run(id);
+      if (!r.changes) throw new Error('row_moved');
+      requeued = true;
+    })();
+  } catch (e) {
+    if (e.message === 'row_moved') {
+      const fresh = _qingyunPushRow(id) || {};
+      return res.status(409).json({
+        success: false, error: 'row_moved', push_status: fresh.status || null,
+        qingyun_order_id: fresh.qingyun_order_id ? String(fresh.qingyun_order_id) : null,
+      });
+    }
+    console.error('[qingyun confirm-point]', e.message);
+    return res.status(500).json({ success: false, error: 'confirm_failed' });
+  }
+
+  logActivity(req.user.id, req.user.username, 'qingyun_confirm_point', 'retail_order', id,
+    { lat: pin.lat, lng: pin.lng, source: 'staff_pin' }, req.ip);
+  res.json({ success: true, requeued, push_status: 'pending' });
+});
+
+// ── Reschedule an expired delivery ────────────────────────────────────────
+// A date-scheduled order whose day passed while it waited for a point is
+// retired to 'skipped' by the drain, and no retry brings it back — a past date
+// cannot become today. Choosing a new day is the way out (spec §5.2).
+//
+// ORDER OF WRITES IS THE WHOLE POINT. The new date goes onto the order FIRST,
+// the queue row is requeued SECOND, and both inside one transaction. Reversed,
+// the drain polls every ~25s, and it re-reads isQingyunSameCityToday off the
+// order: it would find the OLD passed date on a row that had just gone back to
+// pending and retire it again within the poll — a reschedule that silently did
+// nothing, which is the exact failure this flow exists to end.
+//
+// Requeue runs through MANUAL_RETRY_SQL, the statement that already accepts
+// 'skipped', rather than a fourth statement: a retired row returns to the queue
+// only by a deliberate human act, and choosing a delivery date is one.
+router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const date = String(req.body?.date || '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ success: false, error: 'bad_date' });
+  const today = inventory.gzDateStr(new Date().toISOString());
+  if (date < today) return res.status(400).json({ success: false, error: 'date_in_the_past' });
+
+  const q = _qingyunPushRow(id);
+  if (!q) return res.status(404).json({ success: false, error: 'order_not_in_qingyun' });
+  if (q.qingyun_order_id) {
+    return res.json({ success: true, already_created: true, qingyun_order_id: String(q.qingyun_order_id) });
+  }
+
+  const o = tdb().prepare(
+    'SELECT id, order_no, status, scheduled_for, delivery_slot_kind FROM retail_orders WHERE id = ?'
+  ).get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  if (qingyunQueue.isClosedOrderStatus(o.status)) {
+    return res.status(409).json({ success: false, error: 'order_closed', status: o.status });
+  }
+  const wasDate = inventory.gzDateStr(o.scheduled_for) || null;
+
+  // A move to TODAY is same-day work, so it takes the slot kind that says so
+  // and the drain will take it on the next poll. A later day stays date-
+  // scheduled and waits for its own morning.
+  const kind = date === today ? 'today' : 'scheduled';
+  let requeued = false;
+  try {
+    tdb().transaction(() => {
+      tdb().prepare(
+        `UPDATE retail_orders
+            SET scheduled_for = ?, delivery_slot_label = ?, delivery_slot_kind = ?,
+                seen_at = NULL, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?`
+      ).run(date, date, kind, id);                     // ← the date, FIRST
+      requeued = tdb().prepare(qingyunQueue.MANUAL_RETRY_SQL).run(id).changes > 0;   // ← then the queue
+    })();
+  } catch (e) {
+    console.error('[qingyun reschedule]', e.message);
+    return res.status(500).json({ success: false, error: 'reschedule_failed' });
+  }
+
+  logActivity(req.user.id, req.user.username, 'qingyun_reschedule', 'retail_order', id,
+    { from: wasDate, to: date, requeued }, req.ip);
+  res.json({
+    success: true, requeued, from: wasDate, to: date,
+    // Honest about what happens next. A later day goes back in the queue and
+    // the drain retires it again until its morning comes round — the order is
+    // correctly dated either way, but only a move to today ships today.
+    ships_today: date === today,
+  });
 });
 
 // Retry deleting the leftover copy a move couldn't remove. Powers the drawer's
