@@ -233,6 +233,7 @@ const noPoi = { geocode: async () => null };
 
   await extraSuites();
   await roundThreeSuites();
+  await roundFourSuites();
 
   console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed\n`);
   process.exit(fail ? 1 : 0);
@@ -798,5 +799,165 @@ async function roundThreeSuites() {
     const retail = src('routes/retail.js');
     assert.ok(/addressPin\.addressTextChanged\(a, existing\)/.test(retail));
     assert.ok(!/const adminTextChanged = \['province'/.test(retail), 'the inline copy is gone');
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Round-4 suites: no push for an order that is over, the all-clear latch, and
+// the classification the whole hold mechanism rests on.
+// ─────────────────────────────────────────────────────────────────────────
+async function roundFourSuites() {
+  const fs = require('fs');
+  const path = require('path');
+  const Database = require('better-sqlite3');
+  const qingyunQueue = require('../lib/qingyun-queue');
+  const ROOT = path.join(__dirname, '..');
+  const src = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
+
+  const makeQueueDb = () => {
+    const ddl = src('database.js').match(/CREATE TABLE IF NOT EXISTS qingyun_push_queue[\s\S]*?\n  \);/);
+    const db = new Database(':memory:');
+    db.exec(ddl[0].replace(/FOREIGN KEY[\s\S]*?ON DELETE CASCADE/, 'dummy_fk INTEGER'));
+    db.exec('ALTER TABLE qingyun_push_queue ADD COLUMN geo_held_at DATETIME');
+    return db;
+  };
+  // The drain's decision, exactly as scripts/qingyun-daemon.js sequences it: the
+  // closed-order gate first, then the same-city gate, then the push. Mirrors the
+  // real order of operations so the assertions below are about the RULE, not
+  // about this harness.
+  const drainDecision = (order) => {
+    if (qingyunQueue.isClosedOrderStatus(order.status)) return 'retire';
+    if (!order.sameCityToday) return 'skip';
+    return 'push';
+  };
+
+  console.log('\nH1 · an order that is over never gets a rider');
+  it('the closed set is the schema’s terminal statuses', () => {
+    for (const s of ['cancelled', 'refunded', 'delivered']) {
+      assert.strictEqual(qingyunQueue.isClosedOrderStatus(s), true, s);
+    }
+    for (const s of ['paid', 'preparing', 'dispatched', 'pending_payment', '', null, undefined]) {
+      assert.strictEqual(qingyunQueue.isClosedOrderStatus(s), false, String(s));
+    }
+  });
+
+  it('HELD row + order cancelled → the recovery drain retires it, does NOT push', () => {
+    const db = makeQueueDb();
+    // A row held through a geocoder outage: pending, stamped, attempts unspent.
+    db.prepare("INSERT INTO qingyun_push_queue (retail_order_id, store_code, status, attempts, geo_held_at) VALUES (7,'tianhe','pending',0,'2026-08-06 09:00:00')").run();
+    // The customer cancels while it is held. The geocoder then recovers, so the
+    // address WOULD now resolve — the only thing standing between this order and
+    // a dispatched rider is the closed-order gate.
+    const decision = drainDecision({ status: 'cancelled', sameCityToday: true });
+    assert.strictEqual(decision, 'retire', 'must not reach the push');
+    db.prepare(qingyunQueue.RETIRE_CLOSED_SQL).run('order cancelled', 7);
+    const row = db.prepare('SELECT * FROM qingyun_push_queue WHERE retail_order_id = 7').get();
+    assert.strictEqual(row.status, 'skipped');
+    assert.strictEqual(row.geo_held_at, null, 'and stops counting as held');
+    assert.strictEqual(row.qingyun_order_id, null, 'no courier job was created');
+  });
+
+  it('manual retry on a skipped-because-cancelled row → the drain re-retires it', () => {
+    const db = makeQueueDb();
+    db.prepare("INSERT INTO qingyun_push_queue (retail_order_id, store_code, status, last_error) VALUES (7,'tianhe','skipped','order cancelled')").run();
+    // The endpoint lets a 'skipped' row be retried — that is deliberate, because
+    // most skip reasons are fixable. The safety net is the drain, not the button.
+    assert.strictEqual(db.prepare(qingyunQueue.MANUAL_RETRY_SQL).run(7).changes, 1);
+    assert.strictEqual(db.prepare('SELECT status FROM qingyun_push_queue WHERE retail_order_id = 7').get().status, 'pending');
+    assert.strictEqual(drainDecision({ status: 'cancelled', sameCityToday: true }), 'retire',
+      'the drain must send it straight back to skipped — no Qingyun create');
+  });
+
+  it('a live order still pushes — the gate is not a blanket stop', () => {
+    assert.strictEqual(drainDecision({ status: 'paid', sameCityToday: true }), 'push');
+    assert.strictEqual(drainDecision({ status: 'preparing', sameCityToday: true }), 'push');
+    assert.strictEqual(drainDecision({ status: 'paid', sameCityToday: false }), 'skip');
+  });
+
+  it('cancel-side: a PENDING row is retired at once, not at next drain', () => {
+    const db = makeQueueDb();
+    db.prepare("INSERT INTO qingyun_push_queue (retail_order_id, store_code, status, geo_held_at) VALUES (7,'tianhe','pending','2026-08-06 09:00:00')").run();
+    db.prepare(qingyunQueue.RETIRE_CLOSED_SQL).run('order refunded', 7);
+    const held = db.prepare(
+      `SELECT COUNT(*) AS n FROM qingyun_push_queue
+        WHERE geo_held_at IS NOT NULL AND status = 'pending' AND qingyun_order_id IS NULL`).get();
+    assert.strictEqual(held.n, 0, 'excluded from the hold-alert count immediately');
+  });
+
+  it('cancel-side: a row that DID create a copy is left for the delete path', () => {
+    const db = makeQueueDb();
+    db.prepare("INSERT INTO qingyun_push_queue (retail_order_id, store_code, status, qingyun_order_id) VALUES (7,'tianhe','done','QY9001')").run();
+    assert.strictEqual(db.prepare(qingyunQueue.RETIRE_CLOSED_SQL).run('order cancelled', 7).changes, 0,
+      'retiring it here would orphan a live 待配送 order nobody deletes');
+  });
+
+  it('call site (source check): the drain checks order status before building a payload', () => {
+    const daemon = src('scripts/qingyun-daemon.js');
+    assert.ok(/SELECT id, order_no, status, channel/.test(daemon), 'status must be fetched');
+    const gateAt  = daemon.indexOf('qingyunQueue.isClosedOrderStatus(order.status)');
+    const buildAt = daemon.indexOf('await pushPayload(order, shop, br, storeCode)');
+    assert.ok(gateAt > -1 && buildAt > -1, 'both the gate and the build must exist');
+    assert.ok(gateAt < buildAt, 'the gate must come BEFORE the payload is built');
+    assert.ok(/qingyunQueue\.RETIRE_CLOSED_SQL/.test(daemon));
+  });
+
+  it('call site (source check): cancel retires a copy-less row instead of returning', () => {
+    const retail = src('routes/retail.js');
+    const at = retail.indexOf('function qingyunDropCopyForClosedOrder');
+    const body = retail.slice(at, at + 1400);
+    assert.ok(!/if \(!q \|\| !q\.qingyun_order_id\) return;/.test(body),
+      'the old early-return dropped pending and held rows on the floor');
+    assert.ok(/qingyunQueue\.RETIRE_CLOSED_SQL/.test(body));
+  });
+
+  // ── H2 · the latch when auto-push is switched off ────────────────────────
+  console.log('\nH2 · turning auto-push off resets the outage latch');
+  it('call site (source check): the disabled-exit clears the latch, and does not lie', () => {
+    const daemon = src('scripts/qingyun-daemon.js');
+    const at = daemon.indexOf("cfg('delivery.qingyunAutoPush', false) !== true");
+    const body = daemon.slice(at, at + 900);
+    assert.ok(/geoHoldAlerted = false/.test(body), 'the latch is reset');
+    assert.ok(/geoHoldLastAlertMs = null/.test(body), 'and so is the throttle');
+    assert.ok(!/sendOpsAlert/.test(body),
+      'no all-clear here — the held pushes have NOT gone out, nobody is draining them');
+  });
+  it('after the reset, the next outage pages immediately', () => {
+    // alerted:false + lastAlertMs:null is the state the reset leaves behind; a
+    // stale throttle would have swallowed the next outage's first page.
+    const d = qingyunQueue.geoHoldAlertDecision({
+      heldCount: 4, oldestHeldMs: 0, now: 11 * 60_000, thresholdMin: 10,
+      alerted: false, lastAlertMs: null });
+    assert.strictEqual(d.alert, 'page');
+  });
+
+  // ── H3 · the classification the hold rests on ────────────────────────────
+  console.log('\nH3 · an unfindable address is an ANSWER, never a hold');
+  it('empty geocodes[] with status 1 classifies as an answer, not a failure', () => {
+    // lib/geocode geocodeAmap returns exactly this shape when Amap replies OK
+    // with nothing in geocodes[]. Classing it as a failure would hold a
+    // genuinely unfindable address forever instead of refusing it once.
+    assert.strictEqual(geocode.isProviderFailure({ code: 'no_result', message: 'no geocode' }), false);
+    assert.strictEqual(geocode.isProviderFailure({ code: 'bad_coords', message: 'bad coords' }), false);
+  });
+  it('quota and network stay failures', () => {
+    assert.strictEqual(geocode.isProviderFailure({ code: 'network', message: 'timeout' }), true);
+    assert.strictEqual(geocode.isProviderFailure({ code: '121', message: '此key每日调用量已达到上限' }), true);
+    assert.strictEqual(geocode.isProviderFailure({ code: '10003', message: 'DAILY_QUERY_OVER_LIMIT' }), true);
+    assert.strictEqual(geocode.isProviderFailure({ code: '10004', message: 'ACCESS_TOO_FREQUENT' }), true);
+  });
+  await itAsync('a no_result reaches the REFUSE path, not the hold path', async () => {
+    // End to end through buildCreatePayload, not just the classifier.
+    let err = null;
+    try {
+      await buildCreatePayload(
+        ORDER({ province: '广东省', city: '广州市', district: '天河区', address: '不存在的路999号' }),
+        SHOP, noPoi,
+        { geocode: { configured: () => true, isDeliverablePin: geocode.isDeliverablePin,
+                     geocodeAddress: async () => null,
+                     geocodeAddressResult: async () => ({ result: null, failure: null }) } });
+    } catch (e) { err = e; }
+    assert.ok(err, 'it did not ship');
+    assert.notStrictEqual(err.geoHold, true, 'must REFUSE — holding would park it forever');
+    assert.strictEqual(err._geo.refused, true);
   });
 }

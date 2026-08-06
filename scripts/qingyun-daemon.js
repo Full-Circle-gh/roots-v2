@@ -549,7 +549,19 @@ function checkGeoHoldAlert(storeCode) {
 }
 
 async function drainPushQueue(storeCode, br) {
-  if (cfg('delivery.qingyunAutoPush', false) !== true) return;
+  if (cfg('delivery.qingyunAutoPush', false) !== true) {
+    // Auto-push just went off (or was never on). If an outage page is
+    // outstanding, RESET the latch rather than sending an all-clear: an
+    // all-clear says "the held pushes have gone out", and they haven't — nobody
+    // is draining the queue at all. Resetting keeps the message honest and means
+    // the next real outage pages immediately instead of being swallowed by a
+    // throttle window left over from this one.
+    if (geoHoldAlerted) {
+      geoHoldAlerted = false; geoHoldLastAlertMs = null;
+      log(storeCode, 'auto-push disabled — clearing the geocoder-hold alert latch (held orders are NOT resolved)');
+    }
+    return;
+  }
 
   // Reconcile: an order can reach 'paid' via several paths (online gateway, cash /
   // COD, admin "Mark paid") and only the gateway one runs the enqueue hook. So we
@@ -596,14 +608,26 @@ async function drainPushQueue(storeCode, br) {
     db.prepare("UPDATE qingyun_push_queue SET status='processing', attempts=attempts+1, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(row.id);
     try {
       const order = db.prepare(
-        'SELECT id, order_no, channel, recipient_name, recipient_phone, address_json, delivery_slot_kind, scheduled_for, delivery_slot_label FROM retail_orders WHERE id = ?'
+        'SELECT id, order_no, status, channel, recipient_name, recipient_phone, address_json, delivery_slot_kind, scheduled_for, delivery_slot_label FROM retail_orders WHERE id = ?'
       ).get(row.retail_order_id);
-      if (!order) { db.prepare("UPDATE qingyun_push_queue SET status='error', last_error='order gone', updated_at=CURRENT_TIMESTAMP WHERE id=?").run(row.id); continue; }
+      if (!order) { db.prepare("UPDATE qingyun_push_queue SET status='error', last_error='order gone', geo_held_at=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(row.id); continue; }
+      // The order itself is over — cancelled, refunded, or already delivered.
+      // Creating a courier job now means a rider sent for something that is not
+      // happening, and a delivery fee for it. Reachable three ways before this
+      // gate existed: a row that never produced a copy was never retired on
+      // cancel; a HELD row sat pending through a geocoder outage and pushed on
+      // recovery; and a manual Retry re-created the very job the cancel deleted.
+      // Checking it HERE covers all three, because every path ends up here.
+      if (qingyunQueue.isClosedOrderStatus(order.status)) {
+        db.prepare(qingyunQueue.RETIRE_CLOSED_SQL).run(`order ${order.status}`, row.retail_order_id);
+        log(storeCode, `push: skipped order ${order.order_no} — order is ${order.status}`);
+        continue;
+      }
       // Final eligibility guard — a row queued before this gate existed (a stray
       // out-of-city / later-day / marketplace order) must not create a Qingyun
       // job. Retire it as 'skipped' instead of pushing it to 待配送.
       if (!inventory.isQingyunSameCityToday(order)) {
-        db.prepare("UPDATE qingyun_push_queue SET status='skipped', last_error='not same-city same-day', updated_at=CURRENT_TIMESTAMP WHERE id=?").run(row.id);
+        db.prepare("UPDATE qingyun_push_queue SET status='skipped', last_error='not same-city same-day', geo_held_at=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(row.id);
         log(storeCode, `push: skipped order ${order.order_no} — not same-city same-day`);
         continue;
       }

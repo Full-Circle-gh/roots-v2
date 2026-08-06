@@ -3645,6 +3645,16 @@ function renderQyShipFrom(o) {
     // A hold is nobody's fault and needs no action — but it must not read as a
     // normal queue wait, or an outage looks like latency until 待配送 runs dry.
     const held = !refused && sf.push_held;
+    // "since 14:20" — the hold's age is the outage's age, and an operator
+    // deciding whether to chase it needs that more than the fact of the hold.
+    // Absent or unparseable timestamp just omits the clause.
+    const heldSince = (() => {
+      if (!held || !sf.push_held_since) return '';
+      // SQLite CURRENT_TIMESTAMP is UTC 'YYYY-MM-DD HH:MM:SS'.
+      const t = new Date(String(sf.push_held_since).replace(' ', 'T') + 'Z');
+      if (isNaN(t.getTime())) return '';
+      return ` · ${cuT('since', '自')} ${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
+    })();
     return `
       <div class="ord-drawer-row">
         <div class="ord-drawer-label">${cuT('Same-city courier', '同城配送')}</div>
@@ -3654,7 +3664,7 @@ function renderQyShipFrom(o) {
               ${refused
                 ? `⚠ ${cuT('Push refused — nobody is collecting this', '发单被拒 — 无人接单')}`
                 : held
-                  ? `⏸ ${cuT('Held — map service unavailable, retrying', '已挂起 — 地图服务不可用,正在重试')}`
+                  ? `⏸ ${cuT('Held — map service unavailable, retrying', '已挂起 — 地图服务不可用,正在重试')}${escapeHtml(heldSince)}`
                   : cuT('Queued for push…', '排队发单中…')}
             </span>
             ${refused

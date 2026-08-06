@@ -21501,7 +21501,19 @@ async function _qingyunDeleteCopy(storeCode, qyOrderId) {
 function qingyunDropCopyForClosedOrder(orderId, why) {
   let q;
   try { q = _qingyunPushRow(orderId); } catch (_) { return; }
-  if (!q || !q.qingyun_order_id) return;
+  if (!q) return;
+  // No copy on the courier platform yet — the row is still pending, or HELD on a
+  // geocoder outage. There is nothing to delete, but there IS something to stop:
+  // left pending it would be pushed on the next drain (or on the first drain
+  // after the outage clears), creating a delivery for an order that is over. The
+  // drain gate catches this too, but retiring it here means the hold-alert count
+  // stops including it the moment the order closes rather than at next drain.
+  if (!q.qingyun_order_id) {
+    try {
+      tdb().prepare(qingyunQueue.RETIRE_CLOSED_SQL).run('order ' + why, orderId);
+    } catch (_) { /* queue table optional on older DBs */ }
+    return;
+  }
   const markStale = () => {
     try {
       tdb().prepare(
