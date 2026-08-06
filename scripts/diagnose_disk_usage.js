@@ -586,7 +586,11 @@ if (pgAvailable() && probeReadOnly()) {
 
   sub('tacet: total size vs the sum of its relations (the gap is bloat/free space)');
   console.log(`  pg_database_size(tacet): ${psql("select pg_size_pretty(pg_database_size('tacet'))")}`);
-  console.log(`  sum of relations       : ${psql("select pg_size_pretty(coalesce(sum(pg_total_relation_size(c.oid)),0)) from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname not in ('pg_catalog','information_schema')", { db: 'tacet' })}`);
+  // relkind='r' matters. pg_total_relation_size(table) ALREADY includes that
+  // table's indexes and TOAST, so summing over every relation — indexes
+  // included, as the first version did — counts each index twice and reports a
+  // total larger than the database, which reads as bloat that is not there.
+  console.log(`  sum of relations       : ${psql("select pg_size_pretty(coalesce(sum(pg_total_relation_size(c.oid)),0)) from pg_class c join pg_namespace n on n.oid=c.relnamespace where c.relkind in ('r','p') and n.nspname not in ('pg_catalog','information_schema')", { db: 'tacet' })}`);
   console.log('  tables never vacuumed / with the most dead tuples:');
   console.log(psql(
     "select relname || ' dead=' || n_dead_tup || ' live=' || n_live_tup || " +
