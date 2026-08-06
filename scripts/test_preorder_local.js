@@ -141,7 +141,13 @@ console.log('\nserver — the local pre-order gate (localPreorderLine)');
   const { localPreorderLine } = require(path.join(ROOT, 'routes/retail.js'));
   const retailSrc = fs.readFileSync(path.join(ROOT, 'routes/retail.js'), 'utf8');
 
+  // Core Guangzhou: always on the local run, whatever day is picked.
   const GZ = { city: '广州市', district: '天河区', address: '新塘大街7号' };
+  // An outer "ship-district": a Guangzhou address that ships by courier from
+  // the out-of-city warehouse on the batch cadence unless the shopper buys the
+  // same-day extra. 花都区 is the zone the shipping_spec_alignment_v1 migration
+  // seeds (day_only=1, ¥30 same-day surcharge).
+  const HD = { city: '广州市', district: '花都区', address: '新华街道1号' };
   const SH = { city: '上海市', district: '静安区', address: '南京西路1号' };
   // Order lines as POST /api/retail/orders resolves them: the product row
   // carries the policy columns and `real_stock`, the per-store sellable SUM.
@@ -161,14 +167,14 @@ console.log('\nserver — the local pre-order gate (localPreorderLine)');
     assert.strictEqual(inventory.requiresStockGate({ address: GZ, deliverySlotId: FUTURE }), false);
   });
 
-  it('local + sold out + same day → refused', () => {
+  it('core Guangzhou + sold out + same day → refused', () => {
     const hit = localPreorderLine([line()], GZ);
     assert.ok(hit, 'the line is blocked');
     assert.strictEqual(hit.product.id, 41);
   });
-  it('local + sold out + future day → refused just the same', () => {
-    // The gate takes no slot at all — that is the point. Same call, same
-    // verdict, whichever day the customer picked.
+  it('core Guangzhou + sold out + future day → refused just the same', () => {
+    // The gate takes no slot at all for a core-GZ address — that is the point.
+    // Same call, same verdict, whichever day the customer picked.
     assert.ok(localPreorderLine([line()], GZ), 'a scheduled day buys no stock');
   });
   it('out-of-city + future day → still allowed, pre-order untouched', () => {
@@ -176,6 +182,51 @@ console.log('\nserver — the local pre-order gate (localPreorderLine)');
   });
   it('out-of-city + same day → also untouched (this gate is local-only)', () => {
     assert.strictEqual(localPreorderLine([line()], SH), null);
+  });
+
+  // ── Ship-districts (花都/番禺/南沙/从化/增城) ────────────────────────────────
+  // Guangzhou addresses that are NOT on the local run by default: without the
+  // same-day extra their parcel leaves the out-of-city warehouse on the batch
+  // cadence, the same fulfilment that makes a pre-order safe for Shanghai.
+  it('the zone data really does separate a ship-district from core GZ', () => {
+    // The input the whole narrowing rests on. 花都区 carries day_only=1 +
+    // a same-day surcharge; 天河区 is an always-same-day district (no opt-in
+    // row), so it reads false either way.
+    assert.strictEqual(inventory.isOptInSameDayDistrict(HD), true);
+    assert.strictEqual(inventory.isOptInSameDayDistrict(GZ), false);
+    // Both are still Guangzhou — the narrowing is not a second city matcher.
+    assert.strictEqual(inventory.isGuangzhouAddress(HD), true);
+  });
+  it('ship-district + sold out + future day → allowed', () => {
+    assert.strictEqual(localPreorderLine([line()], HD, { scheduledShipDistrict: true }), null,
+      'ships by courier on the batch cadence — a pre-order is safe');
+  });
+  it('ship-district + same-day extra + sold out → refused', () => {
+    // Buying the extra puts them back on the local run, so the rule applies.
+    const hit = localPreorderLine([line()], HD, { scheduledShipDistrict: false });
+    assert.ok(hit, 'same-day in a ship-district is still same-day local');
+    assert.strictEqual(hit.product.id, 41);
+  });
+  it('the flag alone never rescues an out-of-run shopper by accident', () => {
+    // Out-of-city is already allowed; the flag changes nothing there.
+    assert.strictEqual(localPreorderLine([line()], SH, { scheduledShipDistrict: true }), null);
+    // …and it cannot be used to wave through a core-GZ order, because the
+    // route only ever sets it when isOptInSameDayDistrict says so (asserted
+    // against the source below).
+    assert.ok(localPreorderLine([line()], GZ, {}), 'default is the strict answer');
+  });
+  it('the order path computes that flag from the zone and the slot kind', () => {
+    assert.ok(/const scheduledShipDistrict =\s*\n\s*inGz &&\s*\n\s*inventory\.isOptInSameDayDistrict\(address\) &&\s*\n\s*!pickedSameDay;/.test(retailSrc),
+      'Guangzhou AND an opt-in district AND they did not buy same-day');
+    assert.ok(/const pickedSameDay = body\.delivery_slot_kind === 'today';/.test(retailSrc),
+      'the same-day extra is the explicit "today" slot kind the client sends');
+    assert.ok(/localPreorderLine\(mutatedItems, address, \{ scheduledShipDistrict \}\)/.test(retailSrc),
+      'and the gate is handed that one verdict');
+    // One expression in the order path, two consumers: the pre-order gate and
+    // the out-of-city store pin (which also stamps the routing reason).
+    const orderPath = retailSrc.slice(retailSrc.indexOf('router.post(\'/api/retail/orders\''));
+    const uses = (orderPath.slice(0, orderPath.indexOf('\n  // Stock-shortage warning')).match(/scheduledShipDistrict/g) || []);
+    assert.strictEqual(uses.length, 5, 'one declaration, the gate, the pin, its routing reason, one pointer comment');
   });
 
   it('a local shopper keeps buying what is in stock', () => {
@@ -210,7 +261,7 @@ console.log('\nserver — the local pre-order gate (localPreorderLine)');
   });
 
   it('the gate is wired into the order path, on the final line set', () => {
-    assert.ok(/const localPre = localPreorderLine\(mutatedItems, address\);/.test(retailSrc),
+    assert.ok(/const localPre = localPreorderLine\(mutatedItems, address, \{ scheduledShipDistrict \}\);/.test(retailSrc),
       'runs on mutatedItems, so cancel_missing / replace_missing still work');
     assert.ok(/if \(!isPickup && fallbackChoice !== 'wait_for_restock'\) \{/.test(retailSrc),
       'pickup and the explicit wait-for-restock choice stay exempt');
@@ -220,8 +271,8 @@ console.log('\nserver — the local pre-order gate (localPreorderLine)');
     assert.ok(/error: 'insufficient_stock'/.test(block.slice(0, 400)), 'reuses insufficient_stock');
   });
   it('the gate reuses the one matcher, and adds no second one', () => {
-    assert.ok(/function localPreorderLine\(lines, address\) \{\s*\n\s*if \(!inventory\.isGuangzhouAddress\(address\)\) return null;/.test(retailSrc),
-      'same-city comes from lib/inventory, like stampSameCity');
+    assert.ok(/function localPreorderLine\(lines, address, \{ scheduledShipDistrict = false \} = \{\}\) \{\s*\n\s*if \(!inventory\.isGuangzhouAddress\(address\)\) return null;\s*\n\s*if \(scheduledShipDistrict\) return null;/.test(retailSrc),
+      'Guangzhou comes from lib/inventory, like stampSameCity, then the run narrows it');
     // Every same-city verdict in this file defers to lib/inventory — no local
     // copy of the 广州 matcher anywhere, including inside the new gate.
     const all      = (retailSrc.match(/isGuangzhouAddress\(/g) || []).length;
@@ -235,8 +286,14 @@ console.log('\nserver — the local pre-order gate (localPreorderLine)');
   it('checkout stops promising "ships soon" to a local shopper', () => {
     const fn = retailSrc.slice(retailSrc.indexOf('function computePreorderNotice'));
     const body = fn.slice(0, fn.indexOf('\n}'));
-    assert.ok(/if \(inventory\.isGuangzhouAddress\(address\)\) return null;/.test(body),
+    assert.ok(/if \(inventory\.isGuangzhouAddress\(address\)\) \{/.test(body),
       'the banner would advertise a checkout that now refuses');
+    // …but a ship-district shopper still gets it: same narrowing as the gate,
+    // so the banner and the checkout agree about who is on the local run.
+    assert.ok(/inventory\.isOptInSameDayDistrict\(address\) && slotKind !== 'today'/.test(body),
+      'the notice keeps its ship-district audience');
+    assert.ok(/computePreorderNotice\(zone, address, \(items \|\| \[\]\)\.map\(\(i\) => i\.product_id\), body\.delivery_slot_id, body\.slot_kind\)/.test(retailSrc),
+      'the quote passes the slot kind it already passes to computeBatchNotice');
     // The day term is gone: a Guangzhou customer on a future day used to get
     // the notice, and that is exactly the shopper the gate turns away. Judge
     // the code, not the comment that explains the removal.
