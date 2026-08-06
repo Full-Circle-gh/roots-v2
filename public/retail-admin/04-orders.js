@@ -763,10 +763,25 @@ async function openAddressToChinese(orderId) {
   } catch (e) { toast(cuT('Network error', '网络错误'), 'error'); return; }
 
   const c = data.chinese || {};
+  // "The map returned coordinates" is not verification — a geocoder answers
+  // every query and falls back to a district or city centre when it can't find
+  // the street, which is how an order ends up pinned kilometres away. So the
+  // badge reports what was actually matched: green only for a building/road
+  // match in the right city, amber otherwise, with the matched place name
+  // underneath so the operator can judge it instead of trusting a tick.
+  const geoLevel = {
+    rooftop: cuT('matched the building', '匹配到楼栋门牌'),
+    street:  cuT('matched the street', '匹配到道路'),
+    coarse:  cuT('only matched the district centre', '仅匹配到区域中心'),
+  }[data.geocode_precision] || cuT('no map match', '地图无匹配');
   const geoBadge = !data.geocode_configured ? ''
     : data.geocode_ok
-      ? `<span style="margin-left:8px; font-size:11px; font-weight:600; color:#5fc28e;">✓ ${cuT('resolves on map', '地图可定位')}</span>`
-      : `<span style="margin-left:8px; font-size:11px; font-weight:600; color:var(--warn);">⚠ ${cuT('couldn’t verify on map', '无法在地图核验')}</span>`;
+      ? `<span style="margin-left:8px; font-size:11px; font-weight:600; color:#5fc28e;">✓ ${geoLevel}</span>`
+      : `<span style="margin-left:8px; font-size:11px; font-weight:600; color:var(--warn);">⚠ ${geoLevel}${
+          data.geocode_reason === 'city_mismatch' ? ` — ${cuT('different city!', '城市不符!')}` : ''}</span>`;
+  const geoMatched = data.geocode_matched
+    ? `<div class="muted" style="font-size:11px; margin:-4px 0 10px;" data-no-i18n>${cuT('Map reads this as', '地图识别为')}: ${escapeHtml(data.geocode_matched)}</div>`
+    : '';
   const field = (id, labelEn, labelCn, val) => `
     <div class="field" style="margin-bottom:10px;">
       <label class="stacked">${labelEn} · ${labelCn}</label>
@@ -791,6 +806,7 @@ async function openAddressToChinese(orderId) {
           <div style="font-size:12px; color:var(--text-2); line-height:1.5; margin-top:2px;" data-no-i18n>${escapeHtml(data.original_full || '')}</div>
         </div>
         <div style="font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--brass); margin-bottom:10px;">${cuT('Chinese address', '中文地址')}${geoBadge}</div>
+        ${geoMatched}
         ${field('gz-prov', 'Province', '省 / 市', c.province)}
         ${field('gz-city', 'City', '市', c.city)}
         ${field('gz-dist', 'District', '区 / 县', c.district)}
@@ -3625,6 +3641,56 @@ function renderQyShipFrom(o) {
   const sf = o.qingyun_ship_from;
   if (!sf) return '';
   const name = escapeHtml(cuT(sf.name_en || sf.store_code, sf.name_cn || sf.store_code));
+  // No copy on the courier platform. Either it hasn't been pushed yet, or the
+  // push was REFUSED — an address whose drop-off pin couldn't be trusted. That
+  // used to render as nothing at all, so an order nobody was coming for looked
+  // exactly like an order that was never meant to go to Qingyun. Say what
+  // happened, and offer the retry that used to require hand-editing the DB.
+  if (!sf.qingyun_order_id) {
+    const refused = sf.needs_attention;
+    // A hold is nobody's fault and needs no action — but it must not read as a
+    // normal queue wait, or an outage looks like latency until 待配送 runs dry.
+    const held = !refused && sf.push_held;
+    // "since 14:20" — the hold's age is the outage's age, and an operator
+    // deciding whether to chase it needs that more than the fact of the hold.
+    // Absent or unparseable timestamp just omits the clause.
+    const heldSince = (() => {
+      if (!held || !sf.push_held_since) return '';
+      // SQLite CURRENT_TIMESTAMP is UTC 'YYYY-MM-DD HH:MM:SS'.
+      const t = new Date(String(sf.push_held_since).replace(' ', 'T') + 'Z');
+      if (isNaN(t.getTime())) return '';
+      return ` · ${cuT('since', '自')} ${String(t.getHours()).padStart(2, '0')}:${String(t.getMinutes()).padStart(2, '0')}`;
+    })();
+    return `
+      <div class="ord-drawer-row">
+        <div class="ord-drawer-label">${cuT('Same-city courier', '同城配送')}</div>
+        <div style="flex:1;">
+          <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <span style="font-size:12px; font-weight:600; color:${refused || held ? 'var(--warn)' : 'var(--text-2)'};">
+              ${refused
+                ? `⚠ ${cuT('Push refused — nobody is collecting this', '发单被拒 — 无人接单')}`
+                : held
+                  ? `⏸ ${cuT('Held — map service unavailable, retrying', '已挂起 — 地图服务不可用,正在重试')}${escapeHtml(heldSince)}`
+                  : cuT('Queued for push…', '排队发单中…')}
+            </span>
+            ${refused
+              ? `<button class="btn btn-sm" onclick="qyRetryPush(${o.id}, this)">${cuT('Retry push', '重新发单')}</button>`
+              : ''}
+          </div>
+          ${sf.push_error ? `<div class="muted" style="font-size:11px; margin-top:4px; line-height:1.5;" data-no-i18n>${escapeHtml(sf.push_error)}</div>` : ''}
+          ${held
+            ? `<div class="muted" style="font-size:11px; margin-top:4px; line-height:1.5;">${cuT(
+                'Nothing is wrong with this address — the geocoder is down. It pushes itself once the service is back.',
+                '地址没有问题 — 地图服务暂时不可用,恢复后会自动发出。')}</div>`
+            : ''}
+          ${refused
+            ? `<div class="muted" style="font-size:11px; margin-top:4px; line-height:1.5;">${cuT(
+                'Fix the delivery address (Edit ship-to, or Make address Chinese) and it retries on its own — or press Retry.',
+                '修正收货地址(修改收货信息或转为中文地址)后会自动重试,也可点击重新发单。')}</div>`
+            : ''}
+        </div>
+      </div>`;
+  }
   // The order still belongs to its original store for stock, printing and reports —
   // only the collection point moved. Say so, or the numbers look wrong later.
   const moved = !!(o.store_code && sf.store_code !== o.store_code);
@@ -3667,6 +3733,29 @@ function renderQyShipFrom(o) {
 
 // Retry the delete that failed during a move. No confirm: it removes a duplicate
 // nobody has been sent for, which is the tidy-up the move already intended.
+// Put a refused push back in the queue. The daemon drains 'pending' rows every
+// ~25s, so this hands the order back to the SAME path — and the same address
+// checks — as the automatic push, rather than bypassing them.
+async function qyRetryPush(orderId, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = cuT('Queuing…', '排队中…'); }
+  try {
+    const r = await fetch(`/api/retail-admin/orders/${orderId}/qingyun/retry-push`, { method: 'POST' });
+    const j = await r.json();
+    if (j.success) {
+      toast(j.already_created
+        ? cuT('Already on the courier platform', '已在配送平台')
+        : cuT('Queued — the daemon will push it within a minute', '已排队 — 约一分钟内发单'), 'success');
+      openOrder(orderId, { instant: true });
+      return;
+    }
+    if (btn) { btn.disabled = false; btn.textContent = cuT('Retry push', '重新发单'); }
+    toast(cuT('Could not queue it', '排队失败'), 'err');
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = cuT('Retry push', '重新发单'); }
+    toast(cuT('Network error', '网络错误'), 'err');
+  }
+}
+
 async function qyRemoveStale(orderId, btn) {
   if (btn) { btn.disabled = true; btn.textContent = cuT('Removing…', '删除中…'); }
   try {

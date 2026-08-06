@@ -19,6 +19,14 @@ const db = require('../database');
 const inventory = require('../lib/inventory');
 const geocode = require('../lib/geocode');
 const regionI18n = require('../lib/region-i18n');
+// English/pinyin address → simplified Chinese. Shared with the Qingyun push
+// (scripts/qingyun-daemon.js) so a rider never sees a half-converted address.
+const addressCn = require('../lib/address-cn');
+// What happens to an address's coordinates on save, and when a refused courier
+// push may be requeued. Both are pure decisions, kept out of here so they can be
+// tested directly (scripts/test_address_pin.js) instead of only through a route.
+const addressPin = require('../lib/address-pin');
+const qingyunQueue = require('../lib/qingyun-queue');
 const tracking = require('../lib/tracking');
 const flashsales = require('../lib/flashsales');
 const { imageAspect } = require('../lib/image-dims');
@@ -7602,12 +7610,13 @@ router.get('/api/retail/addresses', requireRetailAuth, (req, res) => {
   ).all(req.customer.id);
   // Stamp each row with the rider ETA from the nearest store. Pure read —
   // no writes — so it's safe to do inline.
-  const data = rows.map(r => {
-    const eta = computeRiderEta(r, r.lat, r.lng);
-    // Hide lat/lng from the client response — internal-only.
-    const { lat, lng, ...pub } = r;
-    return { ...pub, delivery_eta: eta };
-  });
+  //
+  // lat/lng go back to the client (it is the customer's own address): the
+  // address form re-opens the map picker on the saved pin, and sends it back
+  // unchanged when the edit only touched the name or phone. Without the
+  // round-trip every edit silently dropped a map-picked pin and the address
+  // fell back to a re-geocoded guess.
+  const data = rows.map(r => ({ ...r, delivery_eta: computeRiderEta(r, r.lat, r.lng) }));
   res.json({ success: true, data });
 });
 
@@ -7720,6 +7729,19 @@ function normalizeChinaAddress(a) {
   return out;
 }
 
+// Read a pin off an address request body. Returns { lat, lng, fresh } or null.
+// Bounds-checked to mainland China (plus a margin) — a pin outside it is a
+// client bug or a spoof, and either way must not become a delivery target.
+//
+// `fresh` is the whole point. The address form round-trips the SAVED
+// coordinates on every edit (so a name change doesn't drop them), which means
+// "the body carries lat/lng" says nothing about where they came from. Only the
+// map-pick handlers set pin_source='map', and only at the moment of the pick.
+// Without that flag a geocoded — possibly centroid — pin would be relabelled
+// customer_pin/rooftop by the mere act of editing a phone number, and would then
+// sail past the courier-side distance gate that exists to catch exactly it.
+const clientPin = addressPin.readClientPin;
+
 router.post('/api/retail/addresses', requireRetailAuth, express.json(), (req, res) => {
   const a = normalizeChinaAddress(req.body || {});
   // Resolve province/city/district into canonical Chinese + their English
@@ -7735,6 +7757,16 @@ router.post('/api/retail/addresses', requireRetailAuth, express.json(), (req, re
   if (!a.province || !a.city) {
     return res.status(400).json({ success: false, error: 'missing_region' });
   }
+  // A pin the customer tapped on the map picker. It outranks anything a
+  // geocoder can derive from the text — it IS the door, in the same GCJ-02
+  // datum every downstream consumer (routing, the Qingyun waybill) expects —
+  // so when one is present we store it and skip the background geocode.
+  // Coordinates WITHOUT pin_source='map' are recorded as client_unverified: we
+  // keep them (they're better than nothing for routing) but never claim they
+  // were picked, so the courier gate still corroborates them.
+  const pin = clientPin(req.body);
+  const pinSource = pin ? (pin.fresh ? 'customer_pin' : 'client_unverified') : null;
+  const pinPrecision = pin && pin.fresh ? 'rooftop' : null;   // see lib/address-pin
   const tx = tdb().transaction(() => {
     if (a.is_default) {
       tdb().prepare('UPDATE retail_customer_addresses SET is_default = 0 WHERE customer_id = ?').run(req.customer.id);
@@ -7743,14 +7775,17 @@ router.post('/api/retail/addresses', requireRetailAuth, express.json(), (req, re
       `INSERT INTO retail_customer_addresses
          (customer_id, recipient_name, phone, province, city, district,
           province_en, city_en, district_en,
-          address, detail, postal_code, is_default)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+          address, detail, postal_code, is_default,
+          lat, lng, geocoded_at, geo_source, geo_precision)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,${pin ? 'CURRENT_TIMESTAMP' : 'NULL'},?,?)`
     ).run(
       req.customer.id, a.recipient_name, a.phone,
       a.province || null, a.city || null, a.district || null,
       a.province_en || null, a.city_en || null, a.district_en || null,
       a.address, a.detail || null, a.postal_code || null,
-      a.is_default ? 1 : 0
+      a.is_default ? 1 : 0,
+      pin ? pin.lat : null, pin ? pin.lng : null,
+      pinSource, pinPrecision
     );
     return info.lastInsertRowid;
   });
@@ -7764,8 +7799,11 @@ router.post('/api/retail/addresses', requireRetailAuth, express.json(), (req, re
   catch (e) { console.warn('[retail/addresses] signup voucher reconcile failed:', e.message); }
   // Fire-and-forget: geocode the new address so routing can use real
   // distance. Customer doesn't wait — we respond immediately and write
-  // lat/lng back to the row when the API call returns.
-  geocodeAddressAsync(id, a);
+  // lat/lng back to the row when the API call returns. Skipped only for a
+  // genuine map pick: re-deriving coordinates from the text could only make
+  // those worse. An unflagged client pin still gets geocoded, because we have
+  // no idea what it is.
+  if (!pin || !pin.fresh) geocodeAddressAsync(id, a);
   res.json({ success: true, data: tdb().prepare(`SELECT ${ADDRESS_PUBLIC_COLS} FROM retail_customer_addresses WHERE id = ?`).get(id) });
 });
 
@@ -7773,50 +7811,119 @@ router.post('/api/retail/addresses', requireRetailAuth, express.json(), (req, re
 // when the Tencent Maps call resolves. Skipped silently if the key isn't
 // configured (TENCENT_MAPS_KEY in .env).
 //
-// English/pinyin street text (customers who type their address in English)
-// routinely gets rejected outright by Amap's mainland geocoder — the address
-// then never gets coordinates, routeOrder() can't rank stores by real
-// distance, and every future order from it silently falls back to whichever
-// store sorts first, flagged "verify store" for an ops person to notice and
-// fix by hand via the admin "Make address Chinese" tool. Self-heal instead:
-// on a failed geocode, if the street carries Latin letters, auto-translate it
-// to Chinese (same model + tool the admin flow uses) and retry once. Saving
-// the corrected text is what makes the FOLLOW-UP retry worthwhile — without
-// it we'd re-fail identically on every future save of the same bad text.
+// English/pinyin street text (customers who type their address in English) is
+// the problem case, and it fails in TWO ways, not one:
+//   • hard fail — Amap's mainland geocoder rejects the string outright, the
+//     address never gets coordinates, and routeOrder() falls back to coarse
+//     district-name matching;
+//   • soft fail — WORSE, and the one that reaches a customer: it matches only
+//     the administrative part and returns the district's centroid. That answer
+//     is indistinguishable from a real one (ok status, plausible lat/lng) but
+//     can sit tens of km from the door, and it is what a courier is then sent to.
+// So translation is not a last resort for the hard-fail case: ANY Latin street
+// text gets translated to Chinese (same model + tool the admin flow uses) and
+// re-geocoded, and we keep whichever attempt produced the more precise pin.
+// Saving the corrected text is what makes the follow-up worthwhile — without it
+// we'd re-fail identically on every future save of the same bad text.
+const GEO_RANK = { coarse: 0, street: 1, rooftop: 2 };
 function geocodeAddressAsync(addressId, a) {
   if (!geocode.configured()) return;
   setImmediate(async () => {
     try {
-      const coords = await geocode.geocodeAddress({
+      const first = await geocode.geocodeAddress({
         province: a.province, city: a.city, district: a.district,
         address: [a.address, a.detail].filter(Boolean).join(' '),
       });
-      if (coords) {
-        tdb().prepare(
-          'UPDATE retail_customer_addresses SET lat = ?, lng = ?, geocoded_at = CURRENT_TIMESTAMP WHERE id = ?'
-        ).run(coords.lat, coords.lng, addressId);
-        return;
+      // Never overwrite a pin the customer tapped. Callers are supposed to skip
+      // this helper for such rows, but the guard lives here too: this is a
+      // background write, and a single caller that forgets would silently
+      // downgrade a known-good door to a text match with nothing in the response
+      // to show for it. The `geo_source <> 'customer_pin'` predicate makes that
+      // impossible from any caller.
+      const savePin = (c, id) => {
+        const prov = addressPin.geocodedPinFields(c);
+        return tdb().prepare(addressPin.GEOCODED_PIN_SQL).run(c.lat, c.lng, prov.source, prov.precision, id);
+      };
+
+      // Same test the push path runs (lib/qingyun-payload) — the JOINED text, so
+      // a Chinese street with an English "Room 302" is caught here too instead of
+      // only being noticed later at waybill time.
+      const worthTranslating = addressHasLatin([a.address, a.detail].filter(Boolean).join(' '))
+        && modelGateway.isConfigured();
+      // A precise Chinese-text hit is the end of the story.
+      if (first && !worthTranslating) { savePin(first, addressId); return; }
+      if (first && (GEO_RANK[first.precision] ?? 0) >= GEO_RANK.rooftop && first.cityMatch !== false) {
+        savePin(first, addressId); return;
       }
-      if (!addressHasLatin(a.address) || !modelGateway.isConfigured()) return;
+      if (!worthTranslating) { if (first) savePin(first, addressId); return; }
+
       const merged = await autoTranslateAddressCn(a);
-      if (!merged) return;
-      const retryCoords = await geocode.geocodeAddress({
+      if (!merged) { if (first) savePin(first, addressId); return; }
+      const retry = await geocode.geocodeAddress({
         province: merged.province, city: merged.city, district: merged.district, address: merged.address,
       });
-      if (!retryCoords) return;
-      tdb().prepare(
+      // Adopting the translation REWRITES the customer's address, so it has to be
+      // strictly better on every axis, not merely not-worse:
+      //   • strictly higher precision (a tie means the rewrite bought us nothing,
+      //     and a wrong street that happens to match at the same grade would
+      //     otherwise replace a correct one);
+      //   • landed in the region the address claims — the same cross-check the
+      //     original result gets three lines above;
+      //   • actually Chinese. A half-converted street ("珠江West路") resolves no
+      //     better than what we started with and reads worse on the waybill.
+      if (!addressCn.shouldAdoptTranslation({ first, retry, mergedAddress: merged.address })) {
+        if (first) savePin(first, addressId);
+        return;
+      }
+      const adopted = tdb().prepare(
         `UPDATE retail_customer_addresses
             SET province = ?, city = ?, district = ?, address = ?,
                 province_en = ?, city_en = ?, district_en = ?,
-                lat = ?, lng = ?, geocoded_at = CURRENT_TIMESTAMP
-          WHERE id = ?`
+                lat = ?, lng = ?, geo_source = ?, geo_precision = ?, geocoded_at = CURRENT_TIMESTAMP
+          WHERE id = ? AND (geo_source IS NULL OR geo_source <> 'customer_pin' OR lat IS NULL)`
       ).run(
         merged.province || null, merged.city || null, merged.district || null, merged.address || '',
         merged.province_en || null, merged.city_en || null, merged.district_en || null,
-        retryCoords.lat, retryCoords.lng, addressId
+        retry.lat, retry.lng, `geocode:${retry.provider || 'maps'}`, retry.precision || null,
+        addressId
       );
-      console.log('[geocodeAddressAsync] auto-translated + resolved address', addressId);
+      if (adopted.changes) {
+        console.log('[geocodeAddressAsync] auto-translated + resolved address', addressId,
+          `(${retry.precision || 'unknown'} via ${retry.provider || 'maps'})`);
+      }
     } catch (e) { console.warn('[geocodeAddressAsync]', e.message); }
+  });
+}
+
+// The order-snapshot twin of geocodeAddressAsync, for an order created without a
+// saved address row behind it (the admin "new order" form takes the ship-to as
+// free text). Without this such an order reaches the courier push with no
+// coordinates and no provenance at all, so the push has to resolve it from
+// scratch every attempt — and a vague, staff-typed address is exactly the kind
+// that resolves to a district centroid. Resolving once, here, records the grade
+// with the order so the push can judge it instead of re-guessing.
+// Never throws; a miss simply leaves the snapshot as it was.
+function geocodeOrderSnapshotAsync(orderId, addr) {
+  if (!geocode.configured() || !addr) return;
+  setImmediate(async () => {
+    try {
+      const c = await geocode.geocodeAddress({
+        province: addr.province, city: addr.city, district: addr.district,
+        address: [addr.address, addr.detail].filter(Boolean).join(' '),
+      });
+      if (!c || c.lat == null) return;
+      const row = tdb().prepare('SELECT address_json FROM retail_orders WHERE id = ?').get(orderId);
+      if (!row) return;
+      let cur = {}; try { cur = JSON.parse(row.address_json || '{}') || {}; } catch { return; }
+      if (cur.pickup || cur.lat != null) return;      // pickup, or someone got there first
+      tdb().prepare('UPDATE retail_orders SET address_json = ? WHERE id = ?').run(
+        JSON.stringify({ ...cur,
+          lat: c.lat, lng: c.lng,
+          geo_source: `geocode:${c.provider || 'maps'}`,
+          geo_precision: c.precision || null,
+        }), orderId);
+      qingyunRequeueOnAddressChange(orderId, 'ship-to resolved on the map');
+    } catch (e) { console.warn('[geocodeOrderSnapshotAsync]', e.message); }
   });
 }
 
@@ -7825,31 +7932,19 @@ function geocodeAddressAsync(addressId, a) {
 // / translate failures return null — callers just skip the retry, same as any
 // other soft geocode miss.
 async function autoTranslateAddressCn(a) {
-  const system = 'You convert a Chinese-mainland shipping address that contains English or pinyin into a clean, fully simplified-Chinese mailing address, split into province / city / district / street. Use official administrative names. Never invent numbers that are not present. Always answer by calling the chinese_address tool.';
-  const userMsg =
-    `Current components:\n` +
-    `province: ${a.province || '(none)'}\n` +
-    `city: ${a.city || '(none)'}\n` +
-    `district: ${a.district || '(none)'}\n` +
-    `street: ${a.address || '(none)'}\n` +
-    `detail: ${a.detail || '(none)'}`;
-  try {
-    const out = await modelGateway.callModel({ system, tools: [ADDRESS_CN_TOOL], messages: [{ role: 'user', content: userMsg }], max_tokens: 500 });
-    const ai = modelGateway.extractToolUse(out.content_blocks, 'chinese_address') || {};
-    const pick = (s) => (s == null ? '' : String(s).trim().slice(0, 200));
-    let merged = normalizeChinaAddress({
-      province: pick(ai.province) || a.province || '',
-      city:     pick(ai.city)     || a.city     || '',
-      district: pick(ai.district) || a.district || '',
-      address:  pick(ai.street)   || a.address  || '',
-      detail:   a.detail || '',
-    });
-    merged = { ...merged, ...regionI18n.resolveRegion(merged) };
-    return merged;
-  } catch (e) {
-    console.warn('[autoTranslateAddressCn]', e && (e.message || e));
-    return null;
-  }
+  const ai = await addressCn.translateToChinese(a);
+  if (!ai) return null;
+  // Canonicalize through the same pipeline the customer address book uses:
+  // normalize suffixes + de-dupe prefix, then resolve the bilingual region.
+  let merged = normalizeChinaAddress({
+    province: ai.province || a.province || '',
+    city:     ai.city     || a.city     || '',
+    district: ai.district || a.district || '',
+    address:  ai.street   || a.address  || '',
+    detail:   a.detail || '',
+  });
+  merged = { ...merged, ...regionI18n.resolveRegion(merged) };
+  return merged;
 }
 
 // Reverse-geocode a map pin into a Chinese address. The mini-app "Choose on
@@ -7927,7 +8022,10 @@ router.post('/api/retail/poi-search', requireRetailAuth, express.json(), async (
 
 router.put('/api/retail/addresses/:id', requireRetailAuth, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const existing = tdb().prepare('SELECT id FROM retail_customer_addresses WHERE id = ? AND customer_id = ?').get(id, req.customer.id);
+  const existing = tdb().prepare(
+    `SELECT id, province, city, district, address, detail, lat, lng, geo_source, geo_precision
+       FROM retail_customer_addresses WHERE id = ? AND customer_id = ?`
+  ).get(id, req.customer.id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
   // Normalize only the fields actually present in the body — PUT is partial.
   const incoming = req.body || {};
@@ -7938,6 +8036,18 @@ router.put('/api/retail/addresses/:id', requireRetailAuth, express.json(), (req,
   // Re-resolve the bilingual region whenever the customer changed it, so the
   // English companions stay in lockstep with the (canonical Chinese) values.
   if (regionChanged) Object.assign(a, regionI18n.resolveRegion(a));
+  // ── What happens to the stored pin ────────────────────────────────────
+  // Decided here rather than in SQL, because it depends on comparing what
+  // arrived with what is already on the row:
+  //   fresh map pick            → customer_pin/rooftop, coordinates replaced
+  //   same coords, same text    → untouched (the form round-trips them so a
+  //                               name/phone edit doesn't drop the pin)
+  //   same coords, text changed → cleared; the pin describes the old place
+  //   different coords, no flag → kept but recorded client_unverified — we did
+  //                               not see where they came from
+  //   no coords, text changed   → cleared, re-geocode
+  const pin = clientPin(incoming);
+  const pinPlan = addressPin.decidePinAction({ pin, existing, incoming: a });
   const tx = tdb().transaction(() => {
     if (a.is_default) {
       tdb().prepare('UPDATE retail_customer_addresses SET is_default = 0 WHERE customer_id = ?').run(req.customer.id);
@@ -7962,9 +8072,6 @@ router.put('/api/retail/addresses/:id', requireRetailAuth, express.json(), (req,
               detail         = COALESCE(?, detail),
               postal_code    = COALESCE(?, postal_code),
               is_default     = COALESCE(?, is_default),
-              -- clear stale coordinates so the address gets re-geocoded
-              lat            = CASE WHEN ? IS NOT NULL OR ? IS NOT NULL OR ? IS NOT NULL OR ? IS NOT NULL OR ? IS NOT NULL THEN NULL ELSE lat END,
-              lng            = CASE WHEN ? IS NOT NULL OR ? IS NOT NULL OR ? IS NOT NULL OR ? IS NOT NULL OR ? IS NOT NULL THEN NULL ELSE lng END,
               updated_at     = CURRENT_TIMESTAMP
         WHERE id = ?`
     ).run(
@@ -7972,12 +8079,23 @@ router.put('/api/retail/addresses/:id', requireRetailAuth, express.json(), (req,
       a.province ?? null, a.city ?? null, a.district ?? null,
       a.address ?? null, a.detail ?? null, a.postal_code ?? null,
       a.is_default == null ? null : (a.is_default ? 1 : 0),
-      // CASE-WHEN params (lat) — clear coords when any address-y field changed
-      a.province ?? null, a.city ?? null, a.district ?? null, a.address ?? null, a.detail ?? null,
-      // CASE-WHEN params (lng) — same
-      a.province ?? null, a.city ?? null, a.district ?? null, a.address ?? null, a.detail ?? null,
       id
     );
+    // Coordinates are a separate write so the decision above reads as one rule
+    // instead of four parallel CASE ladders that have to be kept in lockstep.
+    if (pinPlan.action === 'set') {
+      tdb().prepare(
+        `UPDATE retail_customer_addresses
+            SET lat = ?, lng = ?, geo_source = ?, geo_precision = ?, geocoded_at = CURRENT_TIMESTAMP
+          WHERE id = ?`
+      ).run(pin.lat, pin.lng, pinPlan.source, pinPlan.precision, id);
+    } else if (pinPlan.action === 'clear') {
+      tdb().prepare(
+        `UPDATE retail_customer_addresses
+            SET lat = NULL, lng = NULL, geo_source = NULL, geo_precision = NULL, geocoded_at = NULL
+          WHERE id = ?`
+      ).run(id);
+    }
   });
   tx();
   // Same deferred-grant rescue as the create path — a customer who fixed a typo'd
@@ -7986,9 +8104,14 @@ router.put('/api/retail/addresses/:id', requireRetailAuth, express.json(), (req,
     try { reconcileSignupVouchers(req.customer.id, a.phone); }
     catch (e) { console.warn('[retail/addresses] signup voucher reconcile failed:', e.message); }
   }
-  // Re-geocode in the background using the row's merged values.
-  const merged = tdb().prepare('SELECT province, city, district, address, detail FROM retail_customer_addresses WHERE id = ?').get(id);
-  if (merged) geocodeAddressAsync(id, merged);
+  // Re-geocode in the background using the row's merged values — unless the
+  // customer just tapped a pin, which no text match can improve on. An
+  // unflagged client pin is geocoded too: it stays on the row for routing, but
+  // a real graded result is what we actually want there.
+  if (pinPlan.regeocode) {
+    const merged = tdb().prepare('SELECT province, city, district, address, detail FROM retail_customer_addresses WHERE id = ?').get(id);
+    if (merged) geocodeAddressAsync(id, merged);
+  }
   res.json({ success: true, data: tdb().prepare(`SELECT ${ADDRESS_PUBLIC_COLS} FROM retail_customer_addresses WHERE id = ?`).get(id) });
 });
 
@@ -9208,11 +9331,15 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       if (coords && coords.lat != null && coords.lng != null) {
         address.lat = coords.lat;
         address.lng = coords.lng;
+        address.geo_source = `geocode:${coords.provider || 'maps'}`;
+        address.geo_precision = coords.precision || null;
         if (address.id != null) {
           try {
             tdb().prepare(
-              'UPDATE retail_customer_addresses SET lat = ?, lng = ?, geocoded_at = CURRENT_TIMESTAMP WHERE id = ?'
-            ).run(coords.lat, coords.lng, address.id);
+              `UPDATE retail_customer_addresses
+                  SET lat = ?, lng = ?, geo_source = ?, geo_precision = ?, geocoded_at = CURRENT_TIMESTAMP
+                WHERE id = ?`
+            ).run(coords.lat, coords.lng, address.geo_source, address.geo_precision, address.id);
           } catch (_) { /* best-effort persist — routing still uses the in-memory coords */ }
         }
       }
@@ -9642,6 +9769,15 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
         : {
             province: address.province, city: address.city, district: address.district,
             address: address.address, detail: address.detail, postal_code: address.postal_code,
+            // Snapshot the resolved pin WITH the address. Without it the courier
+            // push (lib/qingyun-payload) had nothing but the text to work from and
+            // re-geocoded from scratch at push time — throwing away the coordinates
+            // the customer picked on the map and substituting a fresh guess, which
+            // is how an order ends up pinned kilometres from the door.
+            lat: address.lat != null ? Number(address.lat) : null,
+            lng: address.lng != null ? Number(address.lng) : null,
+            geo_source: address.geo_source || null,
+            geo_precision: address.geo_precision || null,
           }),
       subtotal, shippingFee, packingFee, resolvedMode, deliveryZoneId,
       scheduledFor, slotLabel, slotKind, sameDaySurcharge,
@@ -15233,6 +15369,11 @@ router.post('/api/retail-admin/customers/:id/addresses', requireRetailAdmin, exp
     return info.lastInsertRowid;
   });
   const newId = tx();
+  // Same pipeline the customer-facing POST runs. Without it a staff-entered
+  // address never got coordinates at all — so it could never be routed by real
+  // distance, and its English text was never converted, leaving the conversion
+  // to happen (or not) at waybill time.
+  geocodeAddressAsync(newId, a);
   logActivity(req.user.id, req.user.username, 'create', 'retail_customer_address', newId, { customer_id: id }, req.ip);
   const row = tdb().prepare(`SELECT ${ADDRESS_PUBLIC_COLS} FROM retail_customer_addresses WHERE id = ?`).get(newId);
   res.json({ success: true, data: row });
@@ -15241,12 +15382,23 @@ router.post('/api/retail-admin/customers/:id/addresses', requireRetailAdmin, exp
 router.put('/api/retail-admin/customers/:id/addresses/:addrId', requireRetailAdmin, express.json(), (req, res) => {
   const id     = parseInt(req.params.id, 10);
   const addrId = parseInt(req.params.addrId, 10);
-  const existing = tdb().prepare('SELECT id FROM retail_customer_addresses WHERE id = ? AND customer_id = ?').get(addrId, id);
+  const existing = tdb().prepare(
+    `SELECT id, province, city, district, address, detail, lat, lng, geo_source
+       FROM retail_customer_addresses WHERE id = ? AND customer_id = ?`
+  ).get(addrId, id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
   const incoming = req.body || {};
   const a = (incoming.province || incoming.city || incoming.district || incoming.address)
     ? normalizeChinaAddress(incoming)
     : incoming;
+  // Staff correcting an address must not leave the old coordinates behind. They
+  // describe the place the correction is moving AWAY from, and the next order
+  // from this row would snapshot them straight onto a waybill.
+  const adminTextChanged = addressPin.addressTextChanged(a, existing);
+  // A map-picked pin is the exception — it is a location, not a description of
+  // one, so a text fix doesn't invalidate it. Keep it, and mark the row so the
+  // pin diagnostic surfaces it for a human to confirm.
+  const adminKeepsPin = addressPin.keepsPinThroughTextEdit(existing);
   const tx = tdb().transaction(() => {
     if (a.is_default) {
       tdb().prepare('UPDATE retail_customer_addresses SET is_default = 0 WHERE customer_id = ?').run(id);
@@ -15276,8 +15428,25 @@ router.put('/api/retail-admin/customers/:id/addresses/:addrId', requireRetailAdm
       a.is_default     == null ? null : (a.is_default ? 1 : 0),
       addrId
     );
+    if (adminTextChanged && !adminKeepsPin) {
+      tdb().prepare(
+        `UPDATE retail_customer_addresses
+            SET lat = NULL, lng = NULL, geo_source = NULL, geo_precision = NULL, geocoded_at = NULL
+          WHERE id = ?`
+      ).run(addrId);
+    } else if (adminTextChanged && adminKeepsPin) {
+      tdb().prepare(
+        `UPDATE retail_customer_addresses SET geo_precision = 'review' WHERE id = ?`
+      ).run(addrId);
+    }
   });
   tx();
+  if (adminTextChanged && !adminKeepsPin) {
+    const merged = tdb().prepare(
+      'SELECT province, city, district, address, detail FROM retail_customer_addresses WHERE id = ?'
+    ).get(addrId);
+    if (merged) geocodeAddressAsync(addrId, merged);
+  }
   logActivity(req.user.id, req.user.username, 'update', 'retail_customer_address', addrId, { customer_id: id }, req.ip);
   const row = tdb().prepare(`SELECT ${ADDRESS_PUBLIC_COLS} FROM retail_customer_addresses WHERE id = ?`).get(addrId);
   res.json({ success: true, data: row });
@@ -17125,6 +17294,12 @@ router.post('/api/retail/orders/:id/address', requireRetailAuth, express.json(),
     province: addr.province || null, city: addr.city || null, district: addr.district || null,
     address: addr.address || null, detail: addr.detail || null,
     postal_code: addr.postal_code || null,
+    // Same pin snapshot the checkout takes — a moved ship-to must carry the new
+    // address's coordinates, or the courier push would re-guess them from text.
+    lat: row.lat != null ? Number(row.lat) : null,
+    lng: row.lng != null ? Number(row.lng) : null,
+    geo_source: row.geo_source || null,
+    geo_precision: row.geo_precision || null,
   });
 
   // Three ways staff find out, because a ship-to they've already read (or
@@ -17144,6 +17319,7 @@ router.post('/api/retail/orders/:id/address', requireRetailAuth, express.json(),
     id
   );
 
+  qingyunRequeueOnAddressChange(id, 'customer moved the ship-to');
   try {
     logActivity(null, 'customer', 'address_change', 'retail_order', id,
       { from: o.address_full || '', to: addressFull, address_id: addressId }, req.ip);
@@ -19467,6 +19643,13 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), (req
     throw e;
   }
 
+  // Resolve the staff-typed ship-to once, in the background, so the snapshot
+  // carries coordinates AND the provider's grade for them. A manual order can
+  // reach the same-city courier queue (channel 'wechat'/'web' are allowed here),
+  // and arriving there with a bare text address means the push resolves it from
+  // scratch on every attempt with nothing recorded about how good the answer was.
+  if (fulfillmentType === 'delivery' && addr) geocodeOrderSnapshotAsync(orderId, addr);
+
   // Post-COMMIT, never inside the transaction: these two touch money, they are
   // best-effort, and a failure here must not undo an order that is already
   // real. Same placement and the same reasoning as markOrderPaid() below.
@@ -20547,24 +20730,9 @@ router.post('/api/retail-admin/orders/:id/shipments/split',
 // result back to the order (so the JD label prints Chinese) and, best-effort,
 // to the customer's saved address (so future orders are already Chinese).
 
-// Forced tool: return the address as clean simplified-Chinese components.
-const ADDRESS_CN_TOOL = {
-  name: 'chinese_address',
-  description: 'Return the given Chinese-mainland shipping address as clean, fully simplified-Chinese mailing components. Translate any English or pinyin place and street names to their standard simplified-Chinese form (e.g. "Gongti North Rd" → "工体北路", "Sanlitun" → "三里屯", "Chaoyang District" → "朝阳区"). Use official administrative names. NEVER invent house, building, or unit numbers that are not present; keep any digits exactly as given. Leave a field empty only when it is genuinely absent.',
-  input_schema: {
-    type: 'object',
-    properties: {
-      province: { type: 'string', description: 'Province / municipality in Chinese, e.g. 北京 or 广东省' },
-      city:     { type: 'string', description: 'City in Chinese, e.g. 北京市 or 广州市' },
-      district: { type: 'string', description: 'District / county in Chinese, e.g. 朝阳区' },
-      street:   { type: 'string', description: 'Everything below district level — road, building, apartment — in Chinese' },
-    },
-    required: ['street'],
-  },
-};
-
-// Heuristic: does a string carry Latin letters (worth offering a translation)?
-function addressHasLatin(s) { return /[A-Za-z]/.test(String(s || '')); }
+// The forced tool + the Latin-letter heuristic both live in lib/address-cn now,
+// so the Qingyun push can run the identical conversion at waybill time.
+const addressHasLatin = addressCn.hasLatin;
 
 // Build a verified Chinese-address proposal for an order. Does NOT write.
 router.post('/api/retail-admin/orders/:id/address/to-chinese',
@@ -20577,54 +20745,40 @@ router.post('/api/retail-admin/orders/:id/address/to-chinese',
   try { cur = JSON.parse(o.address_json || '{}'); } catch {}
   if (cur.pickup) return res.status(422).json({ success: false, error: 'pickup_order' });
 
-  const system = 'You convert a Chinese-mainland shipping address that contains English or pinyin into a clean, fully simplified-Chinese mailing address, split into province / city / district / street. Use official administrative names. Never invent numbers that are not present. Always answer by calling the chinese_address tool.';
-  const userMsg =
-    `Current components:\n` +
-    `province: ${cur.province || '(none)'}\n` +
-    `city: ${cur.city || '(none)'}\n` +
-    `district: ${cur.district || '(none)'}\n` +
-    `street: ${cur.address || '(none)'}\n` +
-    `detail: ${cur.detail || '(none)'}\n\n` +
-    `Full one-line address as entered:\n${o.address_full || ''}`;
-
-  let ai = {};
-  try {
-    const out = await modelGateway.callModel({
-      system,
-      tools: [ADDRESS_CN_TOOL],
-      messages: [{ role: 'user', content: userMsg }],
-      max_tokens: 500,
-    });
-    ai = modelGateway.extractToolUse(out.content_blocks, 'chinese_address') || {};
-  } catch (e) {
-    if (e && e.code === 'not_configured') return res.status(503).json({ success: false, error: 'ai_not_configured' });
-    console.error('[address/to-chinese]', e && (e.message || e));
-    return res.status(502).json({ success: false, error: 'translate_failed' });
+  // Same conversion the customer-facing auto-heal runs (lib/address-cn), so the
+  // operator's manual fix and the automatic one can never disagree.
+  const merged = await autoTranslateAddressCn({ ...cur, full: o.address_full || '' });
+  if (!merged) {
+    return res.status(modelGateway.isConfigured() ? 502 : 503)
+      .json({ success: false, error: modelGateway.isConfigured() ? 'translate_failed' : 'ai_not_configured' });
   }
-
-  const pick = (s) => (s == null ? '' : String(s).trim().slice(0, 200));
-  // Canonicalize through the same pipeline the customer address book uses:
-  // normalize suffixes + de-dupe prefix, then resolve the bilingual region.
-  let merged = normalizeChinaAddress({
-    province: pick(ai.province) || cur.province || '',
-    city:     pick(ai.city)     || cur.city     || '',
-    district: pick(ai.district) || cur.district || '',
-    address:  pick(ai.street)   || cur.address  || '',
-    detail:   cur.detail || '',
-  });
-  merged = { ...merged, ...regionI18n.resolveRegion(merged) };
   const address_full = [merged.province, merged.city, merged.district, merged.address, merged.detail].filter(Boolean).join(' ');
 
-  // Verify the proposal actually resolves on the map (a sanity check the
-  // operator can trust). Soft — a miss just shows an amber "couldn't verify".
+  // Verify the proposal against the map before the operator commits to it.
+  // "It returned coordinates" is NOT verification: a geocoder answers every
+  // query, falling back to a district or city centroid when it can't find the
+  // street. So we report what it actually matched — the precision bucket, the
+  // formatted address it thinks this is, and whether that landed in the city we
+  // asked for — and only call it verified when the match is a building or road
+  // in the right city. Anything less shows the operator an amber warning.
   let geocode_ok = false, lat = null, lng = null;
+  let geocode_precision = null, geocode_matched = null, geocode_reason = null;
   if (geocode.configured()) {
     try {
       const coords = await geocode.geocodeAddress({
         province: merged.province, city: merged.city, district: merged.district, address: merged.address,
       });
-      if (coords && coords.lat && coords.lng) { geocode_ok = true; lat = coords.lat; lng = coords.lng; }
-    } catch (e) { /* soft — leave geocode_ok false */ }
+      if (coords && coords.lat && coords.lng) {
+        const verdict = geocode.isDeliverablePin(coords);
+        geocode_ok = verdict.ok;
+        geocode_reason = verdict.reason;
+        geocode_precision = coords.precision || null;
+        geocode_matched = (coords.matched && coords.matched.formatted) || null;
+        lat = coords.lat; lng = coords.lng;
+      } else {
+        geocode_reason = 'no_result';
+      }
+    } catch (e) { geocode_reason = 'lookup_failed'; }
   }
 
   res.json({
@@ -20638,6 +20792,10 @@ router.post('/api/retail-admin/orders/:id/address/to-chinese',
       original_full: o.address_full || '',
       still_has_latin: addressHasLatin(address_full),
       geocode_ok, geocode_configured: geocode.configured(), lat, lng,
+      // What the map actually matched, so the operator can judge it rather than
+      // trust a green tick: 'rooftop' | 'street' | 'coarse', the matched place
+      // name, and why it was rejected when it was.
+      geocode_precision, geocode_matched, geocode_reason,
     },
   });
 });
@@ -20680,9 +20838,20 @@ router.post('/api/retail-admin/orders/:id/address/apply-chinese',
     return res.status(400).json({ success: false, error: 'missing_recipient_name' });
   }
 
+  // What happens to the order's pin depends on where it came from.
+  //   customer_pin — the customer TAPPED this spot on a map. Translating the
+  //     text is a rewrite of the label, not of the location, so the pin stands.
+  //     Nulling it here would throw away the only non-guessed coordinate on the
+  //     order and replace it with a text match of the very text being corrected.
+  //   anything else — the pin was derived from the old text, so it goes, and its
+  //     provenance goes WITH it. Leaving geo_source behind on a row with no
+  //     coordinates is a phantom: the next thing to read it believes a pin was
+  //     verified when there is no pin at all.
+  const keepOrderPin = addressPin.keepsPinThroughTextEdit(curJson);
   const newJson = { ...curJson,
     province: merged.province || null, city: merged.city || null, district: merged.district || null,
     address: merged.address || '', detail: merged.detail || null,
+    ...(keepOrderPin ? {} : { lat: null, lng: null, geo_source: null, geo_precision: null }),
   };
 
   if (saveOrder) {
@@ -20692,6 +20861,9 @@ router.post('/api/retail-admin/orders/:id/address/apply-chinese',
     if (recipientName  !== null) tdb().prepare(`UPDATE retail_orders SET recipient_name = ?  WHERE id = ?`).run(recipientName, id);
     if (recipientPhone !== null) tdb().prepare(`UPDATE retail_orders SET recipient_phone = ? WHERE id = ?`).run(recipientPhone, id);
     saved_order = true;
+    // The address just changed — if the courier push had given up on the old
+    // one, this correction is exactly what it was waiting for.
+    qingyunRequeueOnAddressChange(id, 'address corrected to Chinese');
   }
 
   if (saveCustomer) {
@@ -20716,17 +20888,30 @@ router.post('/api/retail-admin/orders/:id/address/apply-chinese',
       if (!target) {
         customer_reason = 'no_match';
       } else {
+        // Same rule as the order snapshot above: a map-picked pin survives a
+        // text translation; a derived one is cleared together with the
+        // provenance that described it, so a failed re-geocode can't leave a
+        // row claiming a verification that no longer has coordinates behind it.
+        const row = tdb().prepare(
+          'SELECT lat, lng, geo_source FROM retail_customer_addresses WHERE id = ? AND customer_id = ?'
+        ).get(target, o.customer_id) || {};
+        const keepRowPin = addressPin.keepsPinThroughTextEdit(row);
         tdb().prepare(
           `UPDATE retail_customer_addresses
               SET province = ?, city = ?, district = ?, address = ?, detail = ?,
                   province_en = ?, city_en = ?, district_en = ?,
-                  lat = NULL, lng = NULL, geocoded_at = NULL,
+                  lat           = CASE WHEN ? THEN lat           ELSE NULL END,
+                  lng           = CASE WHEN ? THEN lng           ELSE NULL END,
+                  geo_source    = CASE WHEN ? THEN geo_source    ELSE NULL END,
+                  geo_precision = CASE WHEN ? THEN geo_precision ELSE NULL END,
+                  geocoded_at   = CASE WHEN ? THEN geocoded_at   ELSE NULL END,
                   updated_at = CURRENT_TIMESTAMP
             WHERE id = ? AND customer_id = ?`
         ).run(
           merged.province || null, merged.city || null, merged.district || null,
           merged.address || '', merged.detail || null,
           merged.province_en || null, merged.city_en || null, merged.district_en || null,
+          keepRowPin ? 1 : 0, keepRowPin ? 1 : 0, keepRowPin ? 1 : 0, keepRowPin ? 1 : 0, keepRowPin ? 1 : 0,
           target, o.customer_id
         );
         if (recipientName  !== null) tdb().prepare(`UPDATE retail_customer_addresses SET recipient_name = ? WHERE id = ? AND customer_id = ?`).run(recipientName, target, o.customer_id);
@@ -21260,12 +21445,38 @@ function _qingyunStoreStatus() {
 // so we can re-create it elsewhere". An order we merely TRACK (a Meituan delivery
 // Qingyun piped in) has no queue row — its pickup point belongs to the platform that
 // created it, and re-creating it here would just duplicate the delivery.
+// Returns the queue row whatever state it is in — INCLUDING one that has no
+// qingyun_order_id because the push was refused or hasn't run. It used to filter
+// those out, which meant a refused order looked, from the admin drawer, exactly
+// like an order that was never meant to go to Qingyun at all: no panel, no
+// error, nothing. Callers that act on the created copy must check
+// qingyun_order_id themselves (they all do).
 function _qingyunPushRow(retailOrderId) {
   try {
     return tdb().prepare(
-      'SELECT * FROM qingyun_push_queue WHERE retail_order_id = ? AND qingyun_order_id IS NOT NULL'
+      'SELECT * FROM qingyun_push_queue WHERE retail_order_id = ?'
     ).get(retailOrderId) || null;
   } catch (_) { return null; }
+}
+
+// Put a refused push back in the queue. The daemon drains `status='pending'`
+// only, and gives up after QINGYUN_PUSH_MAX_ATTEMPTS — so a row that hit 'error'
+// is inert FOREVER: the enqueue hook is INSERT OR IGNORE against a UNIQUE
+// retail_order_id, so it can never re-add one either. Which means correcting the
+// address that caused the refusal did nothing at all until someone re-created
+// the order by hand in Qingyun.
+//
+// Anything that changes where an order is going calls this. Safe and silent when
+// there is no row, when the push already succeeded (qingyun_order_id set — that
+// copy exists and must not be duplicated), or when the row was deliberately
+// retired as 'skipped'.
+function qingyunRequeueOnAddressChange(retailOrderId, why) {
+  try {
+    const r = tdb().prepare(qingyunQueue.REQUEUE_SQL)
+      .run(`requeued after ${String(why || 'address change').slice(0, 60)}`, retailOrderId);
+    if (r.changes) console.log(`[qingyun] order ${retailOrderId}: push requeued after ${why}`);
+    return r.changes > 0;
+  } catch (_) { return false; }   // queue table is optional on older DBs
 }
 
 // Is a courier already committed to the current copy? Returns the blocking stage, or
@@ -21324,7 +21535,19 @@ async function _qingyunDeleteCopy(storeCode, qyOrderId) {
 function qingyunDropCopyForClosedOrder(orderId, why) {
   let q;
   try { q = _qingyunPushRow(orderId); } catch (_) { return; }
-  if (!q || !q.qingyun_order_id) return;
+  if (!q) return;
+  // No copy on the courier platform yet — the row is still pending, or HELD on a
+  // geocoder outage. There is nothing to delete, but there IS something to stop:
+  // left pending it would be pushed on the next drain (or on the first drain
+  // after the outage clears), creating a delivery for an order that is over. The
+  // drain gate catches this too, but retiring it here means the hold-alert count
+  // stops including it the moment the order closes rather than at next drain.
+  if (!q.qingyun_order_id) {
+    try {
+      tdb().prepare(qingyunQueue.RETIRE_CLOSED_SQL).run('order ' + why, orderId);
+    } catch (_) { /* queue table optional on older DBs */ }
+    return;
+  }
   const markStale = () => {
     try {
       tdb().prepare(
@@ -21364,10 +21587,38 @@ function qingyunShipFromState(retailOrderId) {
     const st = tdb().prepare('SELECT name_en, name_cn FROM retail_stores WHERE code = ?').get(code);
     return { name_en: (st && st.name_en) || code, name_cn: (st && st.name_cn) || code };
   };
+  // No copy on the courier platform yet. Either the daemon hasn't drained the
+  // row, or it REFUSED to push it (an address it can't pin safely). Report that
+  // instead of returning null: a refused order is one nobody is coming for, and
+  // it stays that way until a human sees it.
+  if (!q.qingyun_order_id) {
+    return {
+      store_code: q.store_code,
+      ...nameOf(q.store_code),
+      qingyun_order_id: null,
+      push_status: q.status,                       // pending | processing | error | skipped
+      push_attempts: q.attempts,
+      push_error: q.last_error || null,
+      // Held on a geocoder outage: still pending, still retrying, but stalled on
+      // something outside this order. Distinct from a plain queue wait, because
+      // "queued" would let an hours-long map-service outage look like normal
+      // latency right up until someone noticed 待配送 was empty.
+      push_held: !!q.geo_held_at,
+      push_held_since: q.geo_held_at || null,
+      // Only an 'error' row is dead — a pending one is still being retried.
+      needs_attention: q.status === 'error',
+      blocked_by: null,
+      stale: null,
+    };
+  }
   return {
     store_code: q.store_code,
     ...nameOf(q.store_code),
     qingyun_order_id: String(q.qingyun_order_id),
+    push_status: q.status,
+    push_attempts: q.attempts,
+    push_error: null,
+    needs_attention: false,
     blocked_by: _qingyunMoveBlockedBy(q.qingyun_order_id),   // null = still movable
     // An old copy we failed to delete after a move — still dispatchable by whoever
     // is standing at that store, so the drawer surfaces it until it's gone.
@@ -21402,6 +21653,10 @@ router.post('/api/retail-admin/orders/:id/qingyun/ship-from', requireRetailAdmin
 
   const q = _qingyunPushRow(id);
   if (!q) return res.status(400).json({ success: false, error: 'order_not_in_qingyun' });
+  // Moving the collection point means re-creating an existing copy elsewhere.
+  // A row that never produced one (still pending, or refused) has nothing to
+  // move — the fix there is to correct the address and retry the push.
+  if (!q.qingyun_order_id) return res.status(409).json({ success: false, error: 'push_not_completed', push_status: q.status });
   if (q.store_code === target) return res.json({ success: true, unchanged: true, store_code: target });
 
   const store = _qingyunStoreStatus().find(s => s.code === target);
@@ -21435,6 +21690,7 @@ router.post('/api/retail-admin/orders/:id/qingyun/ship-from', requireRetailAdmin
     if (!shop || !shop.shopId) return res.json({ success: false, error: 'store_unavailable' });
     const payload = await buildCreatePayload(order, shop, br, {
       geocode,
+      translateCn: addressCn.translateToChinese,
       goodsPicUrl: cfgValue('delivery.qingyunGoodsPicUrl', QY_GOODS_PIC_DEFAULT),
       onWarn: (m) => console.warn('[qingyun ship-from]', m),
     });
@@ -21506,6 +21762,38 @@ router.post('/api/retail-admin/orders/:id/qingyun/ship-from', requireRetailAdmin
     console.error('[qingyun ship-from]', e.message);
     res.json({ success: false, error: 'move_failed' });
   }
+});
+
+// Push a refused order again, now that its address has been fixed. The drawer
+// offers this on a row the daemon gave up on; it just resets the row to pending
+// and the daemon picks it up on its next poll (~25s), so the operator gets the
+// same path — and the same safety checks — as the automatic push.
+router.post('/api/retail-admin/orders/:id/qingyun/retry-push', requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const q = _qingyunPushRow(id);
+  if (!q) return res.status(404).json({ success: false, error: 'order_not_in_qingyun' });
+  if (q.qingyun_order_id) return res.json({ success: true, already_created: true, qingyun_order_id: String(q.qingyun_order_id) });
+  if (!qingyunQueue.manualRetryEligible(q)) {
+    return res.json({ success: true, already_queued: true, push_status: q.status });
+  }
+  // The guard lives in the STATEMENT, not just in the check above. Between that
+  // read and this write the daemon can finish a push and stamp the row with a
+  // qingyun_order_id; an unguarded reset would then hand a row that already has
+  // a copy back to the drain, which would create a SECOND 待配送 order and a
+  // second rider to pay for. 0 rows affected means exactly that happened.
+  const done = tdb().prepare(qingyunQueue.MANUAL_RETRY_SQL).run(id);
+  if (!done.changes) {
+    const fresh = _qingyunPushRow(id) || {};
+    return res.json({
+      success: true, already_created: !!fresh.qingyun_order_id,
+      qingyun_order_id: fresh.qingyun_order_id ? String(fresh.qingyun_order_id) : null,
+      push_status: fresh.status || null,
+      note: fresh.qingyun_order_id ? 'the push completed while you were looking at it' : null,
+    });
+  }
+  logActivity(req.user.id, req.user.username, 'qingyun_retry_push', 'retail_order', id,
+    { from_status: q.status, prior_error: q.last_error || null }, req.ip);
+  res.json({ success: true, push_status: 'pending' });
 });
 
 // Retry deleting the leftover copy a move couldn't remove. Powers the drawer's

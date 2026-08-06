@@ -626,6 +626,13 @@ Page({
         wx.showToast({ title: this.data.lang === 'cn' ? '无法读取此处地址' : "Couldn't read that spot", icon: 'none' });
         return;
       }
+      // Keep the tapped coordinates — they are the only unambiguous part of the
+      // pick. The text has to be re-resolved by a geocoder, which will happily
+      // answer with a same-named estate in another city or the district centre;
+      // the pin is the door.
+      const pLat = Number(res && (res.latitude != null ? res.latitude : res.lat));
+      const pLng = Number(res && (res.longitude != null ? res.longitude : res.lng));
+      const hasPin = isFinite(pLat) && isFinite(pLng) && pLat !== 0 && pLng !== 0;
       this.setData({
         mapPicking: false,
         // Overwrite the street with the pick (never keep a stale street from a
@@ -635,6 +642,9 @@ Page({
         'address.province': p.province || '',
         'address.city': p.city || '',
         'address.district': p.district || '',
+        'address.lat': hasPin ? pLat : null,
+        'address.lng': hasPin ? pLng : null,
+        'address.pinFresh': hasPin,     // a tap, not a round-trip — see addresses.js
         // Pin gives Chinese only — clear stale EN companions so the label
         // stays Chinese (what's stored + shipped) instead of half-translating.
         'address.province_en': '',
@@ -2129,7 +2139,12 @@ Page({
   onAddrField(e) {
     const field = e.currentTarget.dataset.field;
     const value = e.detail.value;
-    this.setData({ ['address.' + field]: value });
+    const patch = { ['address.' + field]: value };
+    // Street only — see the note on addresses.js onField. Typing a floor or room
+    // number into the detail box must leave a map-picked pin alone; the building
+    // hasn't moved, and that sequence is how the form is normally filled in.
+    if (field === 'address') { patch['address.lat'] = null; patch['address.lng'] = null; patch['address.pinFresh'] = false; }
+    this.setData(patch);
     // When the customer types the street address themselves (instead of using
     // the area picker or the map), lift the city/district out of what they
     // typed — a full Chinese address like "广州市天河区珠江西路5号…" already names
@@ -2774,6 +2789,12 @@ Page({
           province: a.province || null,
           city: a.city || null,
           district: a.district || null,
+          // Only set when the customer used the map picker on this screen —
+          // the server then stores it as the authoritative pin rather than
+          // geocoding the text, and the courier gets the exact spot.
+          lat: (a.lat != null && a.lng != null) ? a.lat : undefined,
+          lng: (a.lat != null && a.lng != null) ? a.lng : undefined,
+          pin_source: (a.pinFresh && a.lat != null && a.lng != null) ? 'map' : undefined,
           is_default: true,
         });
         addressId = saved?.id || saved?.data?.id;

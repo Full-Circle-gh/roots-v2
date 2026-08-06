@@ -1972,19 +1972,24 @@ function renderCoAddrs(){
      <button class="co-place" id="afSave" style="margin-top:12px">${cn?'保存地址':'Save address'}</button>
      ${co.addrs.length?`<button class="co-addbtn" id="afCancel">${cn?'取消':'Cancel'}</button>`:''}`;
     $('#afArea').addEventListener('click',openAreaPicker);
+    coBindStreetClearsPin();
     coSetupMapButton();   // reveals #afMap once maps-config confirms a JS key
     const save=$('#afSave');
     save.addEventListener('click',async()=>{
       const body={recipient_name:$('#afName').value.trim(),phone:$('#afPhone').value.trim(),
         province:co.af.province,city:co.af.city,district:co.af.district,
-        address:$('#afAddr').value.trim(),detail:$('#afDetail').value.trim(),is_default:co.addrs.length===0};
+        address:$('#afAddr').value.trim(),detail:$('#afDetail').value.trim(),is_default:co.addrs.length===0,
+        // Only present when the spot came from the map picker — the server then
+        // stores it as the authoritative pin instead of geocoding the text.
+        ...(co.af.lat!=null&&co.af.lng!=null?{lat:co.af.lat,lng:co.af.lng}:{}),
+        ...(co.af.pinFresh?{pin_source:'map'}:{})};
       if(!body.recipient_name||!body.phone||!body.address){coMsg(cn?'请填写收货人、手机、地址':'Fill name, phone and address');return;}
       if(!body.city){coMsg(cn?'请选择配送区域':'Please choose your delivery area');return;}
       save.disabled=true; coMsg('');
-      try{ const a=await postJson('/api/retail/addresses',body); co.addrs.push(a); co.addrId=a.id; co.showAddForm=false; co.af={province:'',city:'',district:'',areaLabel:''}; renderCoAddrs(); coQuote(); }
+      try{ const a=await postJson('/api/retail/addresses',body); co.addrs.push(a); co.addrId=a.id; co.showAddForm=false; co.af={province:'',city:'',district:'',areaLabel:'',lat:null,lng:null,pinFresh:false}; renderCoAddrs(); coQuote(); }
       catch(e){ coMsg((cn?'地址保存失败':'Could not save address')+(e&&e.code?(' ['+e.code+']'):'')); save.disabled=false; }
     });
-    const c=$('#afCancel'); if(c)c.addEventListener('click',()=>{co.showAddForm=false;co.af={province:'',city:'',district:'',areaLabel:''};renderCoAddrs();});
+    const c=$('#afCancel'); if(c)c.addEventListener('click',()=>{co.showAddForm=false;co.af={province:'',city:'',district:'',areaLabel:'',lat:null,lng:null,pinFresh:false};renderCoAddrs();});
     return;
   }
   const cn=state.lang==='cn';
@@ -1999,7 +2004,7 @@ function renderCoAddrs(){
         </div></div>`).join('')
       +`<button class="cx-link" id="coAddNew">+ ${cn?'使用新地址':'USE A NEW ADDRESS'}</button>`;
     box.querySelectorAll('.cx-row[data-id]').forEach(r=>r.addEventListener('click',()=>{co.addrId=Number(r.dataset.id);co.addrPickerOpen=false;renderCoAddrs();coQuote();}));
-    $('#coAddNew').addEventListener('click',()=>{co.showAddForm=true;co.af={province:'',city:'',district:'',areaLabel:''};renderCoAddrs();});
+    $('#coAddNew').addEventListener('click',()=>{co.showAddForm=true;co.af={province:'',city:'',district:'',areaLabel:'',lat:null,lng:null,pinFresh:false};renderCoAddrs();});
     return;
   }
   // Collapsed (default) → just the selected address + a CHANGE link.
@@ -2052,11 +2057,32 @@ function coStripRegion(addr,province,city,district){
   });
   return s.trim();
 }
-function coApplyArea(province,city,district,label,street){
+// lat/lng are only passed by the MAP picker — it knows the exact spot the
+// customer pointed at. Keeping them is what stops every later step (store
+// routing, the courier waybill) from re-deriving a pin from the text, which is
+// how an order ends up at a same-named estate or a district centre kilometres
+// away. The city/district picker calls this without coordinates, which clears
+// any stale pin — correct, since only an area was chosen.
+function coApplyArea(province,city,district,label,street,lat,lng){
   co.af.province=province||''; co.af.city=city||''; co.af.district=district||'';
   co.af.areaLabel=label||[city,district].filter(Boolean).join(' · ');
+  co.af.lat=(lat!=null&&isFinite(lat))?Number(lat):null;
+  co.af.lng=(lng!=null&&isFinite(lng))?Number(lng):null;
+  // Only a MAP pick is a first-hand observation of where the customer lives.
+  // The server refuses to record anything else as a customer pin, so it has to
+  // be told, here, at the moment of the tap — a round-tripped coordinate on a
+  // later edit carries no such claim.
+  co.af.pinFresh=(co.af.lat!=null&&co.af.lng!=null);
   const t=$('#afArea'); if(t){ t.textContent=co.af.areaLabel; t.classList.remove('ph'); }
   if(street!=null){ const a=$('#afAddr'); if(a)a.value=street; }
+}
+// Retyping the STREET invalidates a pin picked earlier — it now points at a
+// place the text no longer describes. The floor/unit box is deliberately NOT
+// wired up: the building is unchanged, and "pick on the map, then type the room
+// number" is the normal order of doing this.
+function coBindStreetClearsPin(){
+  const a=$('#afAddr');
+  if(a)a.addEventListener('input',()=>{ co.af.lat=null; co.af.lng=null; co.af.pinFresh=false; });
 }
 function coInjectAddrStyle(){
   if($('#coAddrStyle'))return;
@@ -2249,8 +2275,10 @@ async function openMapPicker(){
       if(r&&r.success===false){ setSel(null); return; }
       const street=coStripRegion(r.address,r.province,r.city,r.district);
       if(!r.city&&!r.province){ setSel(null); return; }
+      // Keep the map centre itself — that's the spot the customer is pointing
+      // at, and it's more exact than anything the text can be re-resolved to.
       setSel({province:r.province||'',city:r.city||'',district:r.district||'',street,
-        label:[r.city,r.district].filter(Boolean).join(' · ')});
+        lat,lng,label:[r.city,r.district].filter(Boolean).join(' · ')});
     }catch(e){ setSel(null); }
   }
   async function runSearch(){
@@ -2266,7 +2294,7 @@ async function openMapPicker(){
       let street=coStripRegion(p.address,p.province,p.city,p.district);
       if(p.name&&street.indexOf(p.name)===-1)street=street?(p.name+' '+street):p.name;
       setSel({province:p.province||'',city:p.city||'',district:p.district||'',street,
-        label:[p.city,p.district].filter(Boolean).join(' · ')});
+        lat:p.lat,lng:p.lng,label:[p.city,p.district].filter(Boolean).join(' · ')});
       suppressUntil=Date.now()+1200;           // recenter shouldn't overwrite the POI pick
       if(adapter&&p.lat!=null&&p.lng!=null)adapter.setCenter(p.lat,p.lng);
     }));
@@ -2275,7 +2303,7 @@ async function openMapPicker(){
   searchEl.addEventListener('keydown',e=>{ if(e.key==='Enter'){e.preventDefault();runSearch();} });
   useBtn.addEventListener('click',()=>{
     if(!sel)return;
-    coApplyArea(sel.province,sel.city,sel.district,sel.label||[sel.city,sel.district].filter(Boolean).join(' · '),sel.street);
+    coApplyArea(sel.province,sel.city,sel.district,sel.label||[sel.city,sel.district].filter(Boolean).join(' · '),sel.street,sel.lat,sel.lng);
     close();
   });
 
@@ -3531,6 +3559,11 @@ async function renderAddressForm(edit){
   // single "delivery area" trigger shows the saved city/district on open —
   // matching the mini-app's region picker rather than two raw dropdowns.
   co.af={ province:a.province||'', city:a.city||'', district:a.district||'',
+          lat:a.lat!=null?Number(a.lat):null, lng:a.lng!=null?Number(a.lng):null,
+          // Seeded from storage, not tapped just now — so no pin_source claim.
+          // The server sees unchanged coordinates and leaves the row's existing
+          // provenance exactly as it found it.
+          pinFresh:false,
           areaLabel:[a.city,a.district].filter(Boolean).join(' · ') };
   const areaTxt=co.af.areaLabel||(cn?'点击选择配送区域':'Tap to choose your delivery area');
   v.innerHTML=`<div class="sp">${spBack()}${spHead(cn?'收货地址':'ADDRESSES',cn?'我的地址':'Saved spots.','')}
@@ -3547,6 +3580,7 @@ async function renderAddressForm(edit){
     </div>
     <div class="sp-foot" style="display:flex;gap:10px"><button class="sp-btn ghost" id="afCancel" style="flex:1">${cn?'取消':'Cancel'}</button><button class="sp-btn af2-save" id="afSave" style="flex:1">${cn?'保存':'Save'}</button></div></div>`;
   $('#afArea').addEventListener('click',openAreaPicker);
+  coBindStreetClearsPin();
   // "Choose on map" mirrors the mini-app and stays visible for visual parity.
   // It opens the real map picker when a maps JS key is configured, and falls
   // back to the city/district picker otherwise so it's never a dead button.
@@ -3561,7 +3595,12 @@ async function renderAddressForm(edit){
     const street=($('#afAddr').value||'').trim(), detail=($('#afDetail').value||'').trim(), isDef=$('#afDef').checked;
     if(!name||!phone||!co.af.city||!street){ $('#afErr').textContent=cn?'请填写姓名、手机、配送区域和详细地址':'Please fill name, phone, delivery area and street'; return; }
     const btn=$('#afSave'); btn.disabled=true; $('#afErr').textContent='';
-    const body={recipient_name:name,phone,province:co.af.province,city:co.af.city,district:co.af.district,address:street,detail,is_default:isDef};
+    const body={recipient_name:name,phone,province:co.af.province,city:co.af.city,district:co.af.district,address:street,detail,is_default:isDef,
+      // Round-trips the saved pin (see co.af seeding below), so an edit that
+      // only changes the name or phone keeps the coordinates instead of
+      // silently falling back to a re-geocoded guess.
+      ...(co.af.lat!=null&&co.af.lng!=null?{lat:co.af.lat,lng:co.af.lng}:{}),
+      ...(co.af.pinFresh?{pin_source:'map'}:{})};
     try{ if(isEdit) await apiSend('PUT','/api/retail/addresses/'+edit,body); else await postJson('/api/retail/addresses',body);
       toast(cn?'已保存':'Saved'); state.customer=null; renderAddresses(); }
     catch(e){ $('#afErr').textContent=cn?'保存失败，请检查信息':'Save failed — please check the details'; btn.disabled=false; }

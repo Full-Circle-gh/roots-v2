@@ -38,7 +38,7 @@ catch {
 const { seam } = require('../lib/db-seam');
 const db = seam(require('../database'));
 const { getQingyunBrowser, closeAllQingyun, resolveCdpUrl } = require('../lib/qingyun-browser');
-const { sendOpsAlert } = require('../lib/ops-alert');
+const { sendOpsAlert, alertEnabled } = require('../lib/ops-alert');
 // Hold off on channel calls while a holder Chrome is freshly launched (mirrors
 // shangou-daemon) — a cold browser hit seconds after launch earns the 风控 403.
 const { coldMsRemaining, isColdStartChallenge } = require('../lib/browser-warmup');
@@ -46,7 +46,10 @@ const { coldMsRemaining, isColdStartChallenge } = require('../lib/browser-warmup
 const { latchStore } = require('../lib/alert-latch');
 const geocode = require('../lib/geocode'); // Tencent/AMap — resolve English/pin-less addresses
 const { buildCreatePayload } = require('../lib/qingyun-payload'); // shared with the ship-from override
+const { translateToChinese } = require('../lib/address-cn'); // English/pinyin street → Chinese, before the rider sees it
 const inventory = require('../lib/inventory'); // isQingyunSameCityToday — same-city/same-day eligibility
+// Hold-vs-refuse decision + the statements that implement it (see lib/qingyun-queue).
+const qingyunQueue = require('../lib/qingyun-queue');
 const { storeHours, within } = require('../lib/store-hours'); // opening hours, for the alert window
 
 const STORES = (process.env.QINGYUN_STORES || 'tianhe')
@@ -470,6 +473,18 @@ function stampLocalEta(retailOrderId, d, track) {
 // The order lands 待配送 (no courier). We stamp order_no into 备注 so the existing
 // tracking match links the rider back. Idempotent per row; retries with backoff.
 const MAX_PUSH_ATTEMPTS = Number(process.env.QINGYUN_PUSH_MAX_ATTEMPTS || 5);
+
+// How the drop-off pin was obtained, rendered for the push log. Carries NO
+// customer identity — source, the provider's grade, the ride distance, whether
+// the address was translated. The recipient's name and phone never enter a log
+// line or an ops alert; the street does, because an operator cannot fix a
+// refused address without seeing it.
+function pinTag(geo) {
+  if (!geo) return '';
+  return ` [pin ${geo.source || 'unknown'}${geo.precision ? '/' + geo.precision : ''}`
+    + `${geo.dropKm != null ? `, ${geo.dropKm}km` : ''}${geo.translated ? ', translated' : ''}`
+    + `${geo.refused ? ', REFUSED' : ''}]`;
+}
 function cfg(key, fallback) {
   try { const r = db.prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(key);
     return r ? JSON.parse(r.value_json) : fallback; } catch { return fallback; }
@@ -480,15 +495,73 @@ function cfg(key, fallback) {
 // The builder itself lives in lib/qingyun-payload so the ship-from override in
 // routes/retail.js (which re-creates the order under another store's account) builds
 // byte-identical fields — above all the 备注, which is how tracking finds its way back.
-function pushPayload(order, shop, br) {
+// storeCode is threaded through so the builder's warnings (a rejected pin, a
+// translation, an over-distance drop) are logged against the store whose drain
+// produced them. They used to go out under the literal tag 'push', which made a
+// multi-store box's log unattributable exactly when it mattered.
+function pushPayload(order, shop, br, storeCode) {
   return buildCreatePayload(order, shop, br, {
     geocode,
+    translateCn: translateToChinese,
     goodsPicUrl: cfg('delivery.qingyunGoodsPicUrl', 'https://s3plus.meituan.net/dap-orderdetail/qy/1783175410205_goods.png'),
-    onWarn: (msg) => log('push', msg),
+    onWarn: (msg) => log(storeCode || 'push', `push: ${msg}`),
   });
 }
+// ── Geocoder-outage alert ─────────────────────────────────────────────────
+// One page per OUTAGE, not one per order per drain. A held push is invisible by
+// design — the row stays pending and keeps retrying — so without this an Amap
+// quota cap at 18:00 would quietly park every order until someone noticed the
+// 待配送 list was empty.
+const GEO_HOLD_ALERT_MIN   = Number(process.env.QINGYUN_GEO_HOLD_ALERT_MIN   || 10);
+const GEO_HOLD_ALERT_EVERY = Number(process.env.QINGYUN_GEO_HOLD_ALERT_EVERY_MIN || 15);
+// Per-process, deliberately: a restart re-pages, which is the safe direction for
+// an outage that is still going.
+let geoHoldAlerted = false, geoHoldLastAlertMs = null;
+
+function checkGeoHoldAlert(storeCode) {
+  let held;
+  try {
+    held = db.prepare(
+      `SELECT COUNT(*) AS n, MIN(geo_held_at) AS oldest
+         FROM qingyun_push_queue
+        WHERE geo_held_at IS NOT NULL AND status = 'pending' AND qingyun_order_id IS NULL`
+    ).get();
+  } catch { return; }                                  // column absent on an older DB
+  const heldCount = (held && held.n) || 0;
+  // SQLite CURRENT_TIMESTAMP is UTC 'YYYY-MM-DD HH:MM:SS' — parse it as such.
+  const oldestHeldMs = (held && held.oldest) ? Date.parse(String(held.oldest).replace(' ', 'T') + 'Z') : null;
+  const decision = qingyunQueue.geoHoldAlertDecision({
+    heldCount, oldestHeldMs: Number.isFinite(oldestHeldMs) ? oldestHeldMs : null,
+    alerted: geoHoldAlerted, lastAlertMs: geoHoldLastAlertMs, now: Date.now(),
+    thresholdMin: GEO_HOLD_ALERT_MIN, everyMin: GEO_HOLD_ALERT_EVERY,
+  });
+  if (decision.alert === 'page') {
+    geoHoldAlerted = true; geoHoldLastAlertMs = Date.now();
+    logSync(storeCode, 'push', 'error', { held: decision.heldCount }, 'pushes held — geocoder unavailable');
+    sendOpsAlert(`🟠 青云聚信 自动发单暂停：地图服务不可用（配额/超时），${decision.heldCount} 个订单已挂起约 ${decision.heldMin} 分钟，地址本身没有问题，服务恢复后会自动发出\n`
+      + `Qingyun auto-push HELD — the geocoder is unavailable (quota/timeout). ${decision.heldCount} order(s) held ~${decision.heldMin} min. `
+      + `Nothing is wrong with the addresses; they push themselves once it recovers. Check the Amap/Tencent key quota.`);
+  } else if (decision.alert === 'clear') {
+    geoHoldAlerted = false; geoHoldLastAlertMs = null;
+    logSync(storeCode, 'push', 'ok', null, 'geocoder recovered — held pushes drained');
+    sendOpsAlert('✅ 青云聚信 地图服务已恢复，挂起的订单已全部发出\nQingyun geocoder recovered — every held push has gone out');
+  }
+}
+
 async function drainPushQueue(storeCode, br) {
-  if (cfg('delivery.qingyunAutoPush', false) !== true) return;
+  if (cfg('delivery.qingyunAutoPush', false) !== true) {
+    // Auto-push just went off (or was never on). If an outage page is
+    // outstanding, RESET the latch rather than sending an all-clear: an
+    // all-clear says "the held pushes have gone out", and they haven't — nobody
+    // is draining the queue at all. Resetting keeps the message honest and means
+    // the next real outage pages immediately instead of being swallowed by a
+    // throttle window left over from this one.
+    if (geoHoldAlerted) {
+      geoHoldAlerted = false; geoHoldLastAlertMs = null;
+      log(storeCode, 'auto-push disabled — clearing the geocoder-hold alert latch (held orders are NOT resolved)');
+    }
+    return;
+  }
 
   // Reconcile: an order can reach 'paid' via several paths (online gateway, cash /
   // COD, admin "Mark paid") and only the gateway one runs the enqueue hook. So we
@@ -526,7 +599,8 @@ async function drainPushQueue(storeCode, br) {
       "SELECT * FROM qingyun_push_queue WHERE store_code = ? AND status IN ('pending') ORDER BY id LIMIT 3"
     ).all(storeCode);
   } catch { return; }
-  if (!rows.length) return;
+  // Runs even with nothing to drain — that is exactly when the all-clear is due.
+  if (!rows.length) { checkGeoHoldAlert(storeCode); return; }
   const shop = await br.getShop();
   if (!shop || !shop.shopId) { log(storeCode, 'push: shop lookup failed — will retry'); return; }
 
@@ -534,32 +608,61 @@ async function drainPushQueue(storeCode, br) {
     db.prepare("UPDATE qingyun_push_queue SET status='processing', attempts=attempts+1, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(row.id);
     try {
       const order = db.prepare(
-        'SELECT id, order_no, channel, recipient_name, recipient_phone, address_json, delivery_slot_kind, scheduled_for, delivery_slot_label FROM retail_orders WHERE id = ?'
+        'SELECT id, order_no, status, channel, recipient_name, recipient_phone, address_json, delivery_slot_kind, scheduled_for, delivery_slot_label FROM retail_orders WHERE id = ?'
       ).get(row.retail_order_id);
-      if (!order) { db.prepare("UPDATE qingyun_push_queue SET status='error', last_error='order gone', updated_at=CURRENT_TIMESTAMP WHERE id=?").run(row.id); continue; }
+      if (!order) { db.prepare("UPDATE qingyun_push_queue SET status='error', last_error='order gone', geo_held_at=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(row.id); continue; }
+      // The order itself is over — cancelled, refunded, or already delivered.
+      // Creating a courier job now means a rider sent for something that is not
+      // happening, and a delivery fee for it. Reachable three ways before this
+      // gate existed: a row that never produced a copy was never retired on
+      // cancel; a HELD row sat pending through a geocoder outage and pushed on
+      // recovery; and a manual Retry re-created the very job the cancel deleted.
+      // Checking it HERE covers all three, because every path ends up here.
+      if (qingyunQueue.isClosedOrderStatus(order.status)) {
+        db.prepare(qingyunQueue.RETIRE_CLOSED_SQL).run(`order ${order.status}`, row.retail_order_id);
+        log(storeCode, `push: skipped order ${order.order_no} — order is ${order.status}`);
+        continue;
+      }
       // Final eligibility guard — a row queued before this gate existed (a stray
       // out-of-city / later-day / marketplace order) must not create a Qingyun
       // job. Retire it as 'skipped' instead of pushing it to 待配送.
       if (!inventory.isQingyunSameCityToday(order)) {
-        db.prepare("UPDATE qingyun_push_queue SET status='skipped', last_error='not same-city same-day', updated_at=CURRENT_TIMESTAMP WHERE id=?").run(row.id);
+        db.prepare("UPDATE qingyun_push_queue SET status='skipped', last_error='not same-city same-day', geo_held_at=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(row.id);
         log(storeCode, `push: skipped order ${order.order_no} — not same-city same-day`);
         continue;
       }
-      const payload = await pushPayload(order, shop, br);
+      const payload = await pushPayload(order, shop, br, storeCode);
       const res = await br.createOrder(payload);
       if (res.ok) {
-        db.prepare("UPDATE qingyun_push_queue SET status='done', qingyun_order_id=?, last_error=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(res.orderId, row.id);
-        log(storeCode, `push: created Qingyun order ${res.orderId} for ${order.order_no}`);
-        logSync(storeCode, 'push', 'ok', { order_no: order.order_no, qy: res.orderId });
+        db.prepare("UPDATE qingyun_push_queue SET status='done', qingyun_order_id=?, last_error=NULL, geo_held_at=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(res.orderId, row.id);
+        // Log HOW the drop-off pin was obtained. When a delivery does go to the
+        // wrong place, this line is the difference between guessing and knowing:
+        // it says whether the customer picked the pin, which provider resolved it,
+        // how exact that provider claimed to be, and how far the rider had to go.
+        const geo = payload._geo || {};
+        log(storeCode, `push: created Qingyun order ${res.orderId} for ${order.order_no}${pinTag(geo)}`);
+        logSync(storeCode, 'push', 'ok', { order_no: order.order_no, qy: res.orderId, geo });
       } else {
         throw new Error(`create failed (code ${res.code}, ${res.msg})`);
       }
     } catch (e) {
+      // A geocoder outage is not the order's fault. Hold it: keep it pending,
+      // give back the attempt the drain just spent, and stamp when the hold
+      // began so the alert below can measure the outage rather than the order.
+      if (qingyunQueue.shouldHoldForGeocoder(e)) {
+        db.prepare(qingyunQueue.HOLD_SQL).run(row.attempts, String(e.message).slice(0, 300), row.id);
+        log(storeCode, `push: order ${row.retail_order_id} HELD (attempt not counted, still ${row.attempts}/${MAX_PUSH_ATTEMPTS}): ${e.message}`);
+        continue;
+      }
       const attempts = row.attempts + 1;
       const done = attempts >= MAX_PUSH_ATTEMPTS;
-      db.prepare("UPDATE qingyun_push_queue SET status=?, last_error=?, updated_at=CURRENT_TIMESTAMP WHERE id=?")
+      db.prepare("UPDATE qingyun_push_queue SET status=?, last_error=?, geo_held_at=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?")
         .run(done ? 'error' : 'pending', String(e.message).slice(0, 300), row.id);
-      log(storeCode, `push: order ${row.retail_order_id} failed (attempt ${attempts}${done ? ', giving up' : ''}): ${e.message}`);
+      // The same [pin …] provenance the success path prints. A refusal is when
+      // you most need it: it says which of the three pin sources was in play and
+      // how far off it landed, without anyone having to re-run the push to find out.
+      log(storeCode, `push: order ${row.retail_order_id} failed (attempt ${attempts}${done ? ', giving up' : ''})`
+        + `${pinTag(e._geo)}: ${e.message}`);
       if (done) {
         // Deliberately NOT gated on alertsAllowed: giving up is terminal (nothing
         // retries this row), so holding the page for opening hours would mean an
@@ -570,6 +673,7 @@ async function drainPushQueue(storeCode, br) {
       }
     }
   }
+  checkGeoHoldAlert(storeCode);
 }
 
 async function pollStore(storeCode) {
@@ -695,6 +799,18 @@ async function pollStore(storeCode) {
 
 async function main() {
   console.log(`[qingyun-daemon] starting — stores: ${STORES.join(', ')}`);
+  // Say it at boot, not at the moment it matters. When this daemon gives up on
+  // an order it pages ops — and if the System Alerts webhook is off, that page
+  // goes nowhere and the order simply never reaches the courier. Whoever is
+  // reading the startup log should know that in advance.
+  if (!alertEnabled()) {
+    console.error('[qingyun-daemon] ⚠️  System Alerts are DISABLED — a push this daemon gives up on '
+      + 'will page nobody. Turn them on in retail-admin → Settings → Push notifications.');
+  }
+  if (!geocode.configured()) {
+    console.error('[qingyun-daemon] ⚠️  No AMAP_MAPS_KEY / TENCENT_MAPS_KEY — drop-off pins cannot be '
+      + 'verified, and stored pins will be sent unchecked.');
+  }
   let gap = jitter(POLL_MS, 0.3);
   let last = 0;
   const warmupFlagged = {};  // store_code → log the cold-Chrome hold once per transition
