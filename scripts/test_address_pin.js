@@ -324,13 +324,23 @@ async function extraSuites() {
     assert.strictEqual(p.recipientLat, 23136500, 'uses the resolved address instead');
   });
 
-  await itAsync('a no-provenance pin the address cannot corroborate is REFUSED', async () => {
+  await itAsync('a no-provenance pin the address cannot place ASKS FOR A POINT', async () => {
+    // Was a flat refusal, which is what this test locked down: five identical
+    // retries, a page, and a row nobody could revive. The pin is still not
+    // trusted and still never sent — that part is unchanged and is what this
+    // suite exists to protect — but the outcome is now a parked row carrying
+    // the point it would have sent, for a person to confirm. The state model
+    // lives in scripts/test_needs_point.js.
     await assert.rejects(
       buildCreatePayload(
         ORDER({ ...LEGACY, lat: 23.40, lng: 113.20 }),
         SHOP, noPoi,
         { geocode: stubGeo({ lat: 23.39, lng: 113.21, precision: 'coarse', level: '区县', provider: 'amap', cityMatch: true }) }),
-      /could not be corroborated/);
+      (e) => {
+        assert.strictEqual(e.needsPoint, true, 'parked, not refused');
+        assert.deepStrictEqual(e.point, { lat: 23.40, lng: 113.20, precision: null });
+        return true;
+      });
   });
 
   await itAsync('a geocoded pin already graded rooftop is trusted without re-resolving', async () => {
@@ -482,9 +492,14 @@ async function extraSuites() {
     assert.strictEqual(qingyunQueue.manualRetryEligible({ status: 'skipped', qingyun_order_id: null }), true);
     assert.strictEqual(qingyunQueue.manualRetryEligible({ status: 'error', qingyun_order_id: '9001' }), false);
   });
-  it('the requeue SQL only ever touches an errored, copy-less row', () => {
+  it('the requeue SQL only ever touches a copy-less row an edit could fix', () => {
     assert.match(qingyunQueue.REQUEUE_SQL, /qingyun_order_id IS NULL/);
-    assert.match(qingyunQueue.REQUEUE_SQL, /status = 'error'/);
+    // 'needs_point' joined 'error' here: a corrected address is precisely what
+    // might place an order we could not place. 'skipped' deliberately did not —
+    // it means cancelled/refunded/delivered or not-same-city, and an edit is no
+    // evidence about either.
+    assert.match(qingyunQueue.REQUEUE_SQL, /status IN \('error', 'needs_point'\)/);
+    assert.doesNotMatch(qingyunQueue.REQUEUE_SQL, /'skipped'/);
     assert.match(qingyunQueue.REQUEUE_SQL, /attempts = 0/);
   });
 
