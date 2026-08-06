@@ -17,6 +17,9 @@ const db = require('../database');
 const { tdb } = require('../lib/tenant-db');
 const inventory = require('../lib/inventory');
 const geocode = require('../lib/geocode');
+// Shared pin-write statement + provenance mapping, so a geocoded pin is never
+// stored without a record of where it came from (see lib/address-pin).
+const addressPin = require('../lib/address-pin');
 const { requireAuth, logActivity } = require('../middleware/auth');
 
 // Background geocode for a store row. Called after create + update when
@@ -473,7 +476,13 @@ router.post('/api/retail-admin/inventory/geocode-backfill', requireRetailAdmin, 
       address: [a.address, a.detail].filter(Boolean).join(' '),
     });
     if (c) {
-      tdb().prepare('UPDATE retail_customer_addresses SET lat = ?, lng = ?, geocoded_at = CURRENT_TIMESTAMP WHERE id = ?').run(c.lat, c.lng, a.id);
+      // Record WHERE the pin came from and how exact the provider said it was.
+      // Without this the backfill minted coordinates with no provenance, which
+      // the courier push cannot take on trust — it has to re-resolve the address
+      // and corroborate them at waybill time, and refuses the order when it
+      // can't. Writing the grade here is what makes those rows usable.
+      const prov = addressPin.geocodedPinFields(c);
+      tdb().prepare(addressPin.GEOCODED_PIN_SQL).run(c.lat, c.lng, prov.source, prov.precision, a.id);
       addrsDone++;
     } else if (geocode.isQuotaError(geocode.lastError())) { aborted = true; break; }
   }

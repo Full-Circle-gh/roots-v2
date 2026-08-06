@@ -452,6 +452,26 @@ async function extraSuites() {
     assert.match(qingyunQueue.REQUEUE_SQL, /attempts = 0/);
   });
 
+  // ── Every geocoded pin is stored WITH its provenance ────────────────────
+  console.log('\ngeocodedPinFields / GEOCODED_PIN_SQL — no pin is stored anonymously');
+  it('a provider result maps to a source and a grade', () => {
+    assert.deepStrictEqual(
+      addressPin.geocodedPinFields({ provider: 'amap', precision: 'rooftop' }),
+      { source: 'geocode:amap', precision: 'rooftop' });
+  });
+  it('an unnamed provider still records that it was a geocode, not a tap', () => {
+    // The admin geocode-backfill used to store lat/lng with NO source, minting
+    // the unattributed rows the courier push then has to corroborate.
+    const f = addressPin.geocodedPinFields({ precision: 'street' });
+    assert.match(f.source, /^geocode:/);
+    assert.notStrictEqual(f.source, 'customer_pin');
+  });
+  it('the shared write statement records provenance and guards a tapped pin', () => {
+    assert.match(addressPin.GEOCODED_PIN_SQL, /geo_source = \?/);
+    assert.match(addressPin.GEOCODED_PIN_SQL, /geo_precision = \?/);
+    assert.match(addressPin.GEOCODED_PIN_SQL, /geo_source <> 'customer_pin'/);
+  });
+
   // ── F8 · a bad env value must not silently change the rule ──────────────
   console.log('\nQINGYUN_MAX_DROP_KM — bad values fall back, they do not disable (F8)');
   const readMaxDropKm = (value) => {

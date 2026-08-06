@@ -7808,11 +7808,10 @@ function geocodeAddressAsync(addressId, a) {
       // downgrade a known-good door to a text match with nothing in the response
       // to show for it. The `geo_source <> 'customer_pin'` predicate makes that
       // impossible from any caller.
-      const savePin = (c, id) => tdb().prepare(
-        `UPDATE retail_customer_addresses
-            SET lat = ?, lng = ?, geo_source = ?, geo_precision = ?, geocoded_at = CURRENT_TIMESTAMP
-          WHERE id = ? AND (geo_source IS NULL OR geo_source <> 'customer_pin' OR lat IS NULL)`
-      ).run(c.lat, c.lng, `geocode:${c.provider || 'maps'}`, c.precision || null, id);
+      const savePin = (c, id) => {
+        const prov = addressPin.geocodedPinFields(c);
+        return tdb().prepare(addressPin.GEOCODED_PIN_SQL).run(c.lat, c.lng, prov.source, prov.precision, id);
+      };
 
       // Same test the push path runs (lib/qingyun-payload) — the JOINED text, so
       // a Chinese street with an English "Room 302" is caught here too instead of
