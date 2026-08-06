@@ -30,12 +30,19 @@
  *      redirection (execFileSync with an argv array, never a shell string), and
  *      no code path in this file that opens a file for writing.
  *
- *   2. POSTGRES. psql is invoked with PGOPTIONS=-c default_transaction_read_only=on,
- *      which makes the SERVER reject any write on this connection rather than
- *      relying on the queries below being well behaved. That is then PROVEN on
- *      every connection the same way scripts/postgres-full-copy/ proves its
- *      SQLite reads: probeReadOnly() attempts a real CREATE TABLE first and
- *      aborts the whole run if the write is accepted.
+ *   2. POSTGRES. Every statement is wrapped in BEGIN TRANSACTION READ ONLY …
+ *      COMMIT, so the SERVER refuses any write with SQLSTATE 25006 rather than
+ *      the guarantee resting on the queries below being well behaved. That is
+ *      then PROVEN the same way scripts/postgres-full-copy/ proves its SQLite
+ *      reads: probeReadOnly() attempts a real CREATE TABLE through the same
+ *      wrapper and the Postgres section refuses to continue if it is accepted.
+ *
+ *      The first version of this file used PGOPTIONS instead, and that was a
+ *      real bug rather than a stylistic one: `sudo -u postgres` resets the
+ *      environment, PGOPTIONS never reached the server, and the probe's CREATE
+ *      TABLE succeeded on the live cluster. The guard did its job and stopped
+ *      the run, but the probe table was already created. Enforcement that
+ *      travels in the query text cannot be stripped in transit.
  *
  * The one thing it cannot promise is that `du` is free: walking /var/lib/postgresql
  * and /root costs I/O on a box that is already tight. Each command carries a
@@ -136,39 +143,76 @@ function exists(path) {
 // Postgres, read-only and proven
 // ---------------------------------------------------------------------------
 
-// default_transaction_read_only is set on the CONNECTION, server-side. A write
-// does not merely go unwritten — it is refused with 25006 before it touches
-// anything. This is the same posture the migration scripts take with SQLite's
-// mode=ro, and like those scripts it is proven rather than trusted.
-const PG_ENV = Object.assign({}, process.env, {
-  PGOPTIONS: '-c default_transaction_read_only=on',
-});
-
+// Read-only is enforced INSIDE the SQL, not through the environment.
+//
+// The first version of this script set PGOPTIONS=-c default_transaction_read_only=on
+// and trusted it. It does not survive `sudo -u postgres`: sudo's env_reset drops
+// every variable not in env_keep, and PGOPTIONS is not in it. So the setting
+// never reached the server, the connection was read-write, and the write probe
+// below was ACCEPTED — which is exactly what the probe is for, and it stopped
+// the run. See the header note in the report; that probe left a table behind.
+//
+// Wrapping the statement in an explicit read-only transaction cannot be stripped
+// on the way: it travels in the query text itself. Postgres refuses any write in
+// such a transaction with SQLSTATE 25006 before it touches anything.
 let PG_AVAILABLE = null;
 
-function psql(sql, { db = 'postgres', timeout = 60000 } = {}) {
-  return run('sudo', ['-u', 'postgres', 'psql', '-d', db, '-tAX', '-F', '|',
-    '-v', 'ON_ERROR_STOP=1', '-c', sql], { timeout, env: PG_ENV });
+function readOnlyWrap(sql) {
+  const trimmed = sql.replace(/;\s*$/, '');
+  return `BEGIN TRANSACTION READ ONLY; ${trimmed}; COMMIT;`;
+}
+
+// -q matters as well as the wrapper: without it psql echoes the BEGIN and COMMIT
+// command tags into stdout, and every caller that parses a single value back
+// (`show data_directory`, `select 1`, the oid list) would read "BEGIN" as data.
+function psql(sql, { db = 'postgres', timeout = 60000, raw = false } = {}) {
+  const text = raw ? sql : readOnlyWrap(sql);
+  return run('sudo', ['-u', 'postgres', 'psql', '-q', '-d', db, '-tAX', '-F', '|',
+    '-v', 'ON_ERROR_STOP=1', '-c', text], { timeout });
 }
 
 /**
- * Attempt a real write and demand that it be refused. If Postgres ACCEPTS the
- * CREATE TABLE then the read-only guarantee this script advertises is not in
- * force, and it must not go on to run anything else against the cluster.
+ * Attempt a real write inside the same wrapper every other query uses, and
+ * demand that it be refused. If Postgres ACCEPTS the CREATE TABLE then the
+ * read-only guarantee this script advertises is not in force, and it must not go
+ * on to query a cluster it cannot prove it is only reading.
+ *
+ * Returns true when the write was correctly refused. Never calls process.exit():
+ * doing that mid-run truncates buffered stdout on a pipe, which is how the first
+ * run lost its own abort message and reported nothing but an exit code.
  */
 function probeReadOnly() {
-  const probe = 'CREATE TABLE _diag_disk_usage_write_probe (x int)';
-  const out = psql(probe, { timeout: 30000 });
+  const out = psql('CREATE TABLE _diag_disk_usage_write_probe (x int)', { timeout: 30000 });
   if (!out.startsWith('!!')) {
     console.log('');
-    console.log('*** ABORTING: a write probe was ACCEPTED by Postgres. ***');
-    console.log('*** default_transaction_read_only is not in force; this script will not');
-    console.log('*** query a cluster it cannot prove it is only reading.');
+    console.log('*** POSTGRES SECTION ABORTED: a write probe was ACCEPTED. ***');
+    console.log('*** The read-only wrapper is not in force. No further queries will be run.');
     console.log(`*** probe output: ${out}`);
-    process.exit(2);
+    process.exitCode = 2;
+    return false;
   }
-  console.log(`write probe refused as required -> ${out.slice(0, 160)}`);
+  console.log(`write probe refused as required -> ${out.replace(/\s+/g, ' ').slice(0, 200)}`);
   return true;
+}
+
+/**
+ * The aborted first run (2026-08-06, workflow run 31131790202) created
+ * _diag_disk_usage_write_probe in the `postgres` maintenance database before the
+ * guard caught the problem. Report whether it is still there, so the cleanup
+ * list is based on the cluster's actual state rather than on that inference.
+ */
+function reportStrayProbeTable() {
+  const out = psql(
+    "select coalesce(string_agg(schemaname || '.' || tablename, ', '), 'ABSENT') " +
+    "from pg_tables where tablename = '_diag_disk_usage_write_probe'"
+  );
+  console.log(`  _diag_disk_usage_write_probe in "postgres": ${out}`);
+  const inTacet = psql(
+    "select coalesce(string_agg(schemaname || '.' || tablename, ', '), 'ABSENT') " +
+    "from pg_tables where tablename = '_diag_disk_usage_write_probe'",
+    { db: 'tacet' }
+  );
+  console.log(`  _diag_disk_usage_write_probe in "tacet"   : ${inTacet}`);
 }
 
 function pgAvailable() {
@@ -309,6 +353,28 @@ console.log(liveDbs.split('\n').map((l) => {
   return m ? `  ${(+m[1] / 1048576).toFixed(1).padStart(10)} MB  ${m[2]}  ${m[3]}` : `  ${l}`;
 }).join('\n'));
 
+// The first run showed data/ at 2.0GB while the databases and their sidecars
+// account for well under 600MB. Whatever holds the difference is sitting in the
+// live data directory without being a live database, so name it explicitly.
+sub(`${APP_DIR}/data — the largest files that are NOT a .db/.db-wal/.db-shm`);
+const dataStrays = run('find', [`${APP_DIR}/data`, '-xdev', '-type', 'f',
+  '-not', '-name', '*.db', '-not', '-name', '*.db-wal', '-not', '-name', '*.db-shm',
+  '-size', '+1M', '-printf', '%s %TY-%Tm-%Td_%TH:%TM %p\\n'], { timeout: 120000 });
+if (!dataStrays.startsWith('!!') && dataStrays.trim()) {
+  const rows = dataStrays.trim().split('\n')
+    .map((l) => { const m = l.match(/^(\d+) (\S+) (.*)$/); return m ? { b: +m[1], d: m[2], p: m[3] } : null; })
+    .filter(Boolean)
+    .sort((a, b) => b.b - a.b);
+  let sum = 0;
+  for (const r of rows) sum += r.b;
+  for (const r of rows.slice(0, 30)) {
+    console.log(`  ${(r.b / 1048576).toFixed(1).padStart(10)} MB  ${r.d}  ${r.p}`);
+  }
+  console.log(`  ---- ${rows.length} file(s) over 1MB, ${(sum / 1073741824).toFixed(2)} GB total`);
+} else {
+  console.log('  none over 1MB');
+}
+
 sub(`${APP_DIR} top level (app tree, node_modules, logs)`);
 console.log(run('du', ['-h', '--max-depth=1', '--one-file-system', APP_DIR], { timeout: 300000 }));
 
@@ -319,7 +385,101 @@ console.log(run('du', ['-h', '--max-depth=1', '--one-file-system', `${APP_DIR}/l
 
 section('5. BACKUPS AND STAGING  (db-backup.sh / roots-backup.sh)');
 
-for (const p of ['/root/backups', '/root/scripts', '/var/backups', '/root/db-backups']) {
+// /root/backups came back at 19GB in the first run — by far the largest single
+// consumer on the box, and more than half of everything in use. A depth-1 listing
+// of it is several hundred deploy-* lines of a megabyte each, which buries the
+// answer rather than giving it. Aggregate instead: group by name prefix, and
+// print the biggest entries in byte order rather than in readdir order.
+sub('/root/backups — grouped by prefix, largest groups first');
+if (exists('/root/backups')) {
+  const listing = run('du', ['-b', '--max-depth=1', '--one-file-system', '/root/backups'], { timeout: 300000 });
+  if (!listing.startsWith('!!')) {
+    const entries = listing.split('\n')
+      .map((l) => { const m = l.match(/^(\d+)\s+(.*)$/); return m ? { b: +m[1], p: m[2] } : null; })
+      .filter((e) => e && e.p !== '/root/backups');
+
+    const groups = new Map();
+    for (const e of entries) {
+      const base = e.p.slice('/root/backups/'.length);
+      // deploy-20260805-001613 -> "deploy-", roots-20260805.db.gz -> "roots-"
+      const key = (base.match(/^([A-Za-z_.-]+)/) || ['', base])[1] || base;
+      const g = groups.get(key) || { bytes: 0, count: 0, newest: '', largest: 0, largestName: '' };
+      g.bytes += e.b; g.count += 1;
+      if (e.b > g.largest) { g.largest = e.b; g.largestName = base; }
+      groups.set(key, g);
+    }
+    const sorted = [...groups.entries()].sort((a, b) => b[1].bytes - a[1].bytes);
+    console.log('    GROUP                     COUNT        TOTAL      LARGEST MEMBER');
+    for (const [k, g] of sorted) {
+      console.log(`    ${k.padEnd(24)} ${String(g.count).padStart(6)}  ${(g.bytes / 1073741824).toFixed(2).padStart(8)} GB  ${(g.largest / 1048576).toFixed(1)} MB ${g.largestName}`);
+    }
+    const total = entries.reduce((n, e) => n + e.b, 0);
+    console.log(`    ${'TOTAL'.padEnd(24)} ${String(entries.length).padStart(6)}  ${(total / 1073741824).toFixed(2).padStart(8)} GB`);
+  } else {
+    console.log(`  ${listing}`);
+  }
+
+  sub('/root/backups — the 30 largest individual entries, with age');
+  const bigBackups = run('find', ['/root/backups', '-xdev', '-maxdepth', '1',
+    '-printf', '%s %TY-%Tm-%Td_%TH:%TM %p\\n'], { timeout: 120000 });
+  const dirSizes = run('du', ['-b', '--max-depth=1', '--one-file-system', '/root/backups'], { timeout: 300000 });
+  if (!dirSizes.startsWith('!!')) {
+    const rows = dirSizes.split('\n')
+      .map((l) => { const m = l.match(/^(\d+)\s+(.*)$/); return m ? { b: +m[1], p: m[2] } : null; })
+      .filter((e) => e && e.p !== '/root/backups')
+      .sort((a, b) => b.b - a.b)
+      .slice(0, 30);
+    const mtimes = new Map();
+    if (!bigBackups.startsWith('!!')) {
+      for (const l of bigBackups.split('\n')) {
+        const m = l.match(/^(\d+) (\S+) (.*)$/);
+        if (m) mtimes.set(m[3], m[2]);
+      }
+    }
+    for (const r of rows) {
+      console.log(`  ${(r.b / 1073741824).toFixed(3).padStart(9)} GB  ${(mtimes.get(r.p) || '?').padEnd(17)}  ${r.p}`);
+    }
+  }
+
+  sub('/root/backups — oldest and newest entry, and how far back it goes');
+  const ages = run('find', ['/root/backups', '-xdev', '-maxdepth', '1', '-mindepth', '1',
+    '-printf', '%T+ %p\\n'], { timeout: 120000 });
+  if (!ages.startsWith('!!') && ages.trim()) {
+    const lines = ages.trim().split('\n').sort();
+    console.log(`  oldest: ${lines[0]}`);
+    console.log(`  newest: ${lines[lines.length - 1]}`);
+    console.log(`  entries: ${lines.length}`);
+  }
+
+  // The number the cleanup decision actually turns on: how many BYTES sit in
+  // entries older than each cutoff. Counts alone cannot answer "how much would
+  // this free", because the sizes are wildly uneven.
+  sub('/root/backups — bytes by age (this is the "how much would it free" figure)');
+  const sizes = run('du', ['-b', '--max-depth=1', '--one-file-system', '/root/backups'], { timeout: 300000 });
+  const stamps = run('find', ['/root/backups', '-xdev', '-maxdepth', '1', '-mindepth', '1',
+    '-printf', '%T+ %p\\n'], { timeout: 120000 });
+  if (!sizes.startsWith('!!') && !stamps.startsWith('!!')) {
+    const sizeOf = new Map();
+    for (const l of sizes.split('\n')) {
+      const m = l.match(/^(\d+)\s+(.*)$/);
+      if (m && m[2] !== '/root/backups') sizeOf.set(m[2], +m[1]);
+    }
+    const dated = [];
+    for (const l of stamps.split('\n')) {
+      const m = l.match(/^(\S+) (.*)$/);
+      if (m && sizeOf.has(m[2])) dated.push({ day: m[1].slice(0, 10), b: sizeOf.get(m[2]) });
+    }
+    const total = dated.reduce((n, e) => n + e.b, 0);
+    console.log(`    total measured: ${(total / 1073741824).toFixed(2)} GB across ${dated.length} entries`);
+    for (const cutoff of ['2026-08-06', '2026-08-01', '2026-07-23', '2026-07-07', '2026-06-07']) {
+      const older = dated.filter((e) => e.day < cutoff);
+      const bytes = older.reduce((n, e) => n + e.b, 0);
+      console.log(`    older than ${cutoff}: ${String(older.length).padStart(5)} entries, ${(bytes / 1073741824).toFixed(2).padStart(7)} GB`);
+    }
+  }
+}
+
+for (const p of ['/root/scripts', '/var/backups', '/root/db-backups']) {
   if (exists(p)) {
     sub(p);
     console.log(run('du', ['-h', '--max-depth=1', '--one-file-system', p], { timeout: 120000 }));
@@ -344,8 +504,9 @@ console.log(run('du', ['-h', '--max-depth=1', '--one-file-system', '/var/log'], 
 
 section('6. POSTGRES — is tacet itself the problem, and is WAL bloated?');
 
-if (pgAvailable()) {
-  probeReadOnly();
+if (pgAvailable() && probeReadOnly()) {
+  sub('the write probe the FIRST run left behind — is it still there?');
+  reportStrayProbeTable();
 
   sub('version and data directory');
   console.log(psql("select version()"));
@@ -437,7 +598,8 @@ if (pgAvailable()) {
   sub('/var/lib/postgresql on disk, by cluster subdirectory');
   console.log(run('du', ['-h', '--max-depth=3', '--one-file-system', '/var/lib/postgresql'], { timeout: 300000 }));
 } else {
-  console.log('SKIPPED — could not reach Postgres as the postgres role.');
+  console.log('SQL SKIPPED — Postgres was unreachable, or the write probe was accepted.');
+  console.log('The on-disk figures below are still valid; only the SQL answers are missing.');
   sub('/var/lib/postgresql on disk anyway');
   console.log(run('du', ['-h', '--max-depth=3', '--one-file-system', '/var/lib/postgresql'], { timeout: 300000 }));
 }
