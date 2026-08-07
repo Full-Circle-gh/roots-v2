@@ -840,3 +840,116 @@ config. §7.3 answered the template question from the paper itself, so those
 columns are no longer the discriminator — the timestamps are.
 
 No fix proposed here, per the task scope.
+
+---
+
+## 8. Width audit — OPEN
+
+Recorded so the next session does not re-derive it. **Nothing about this has
+shipped, and no width fix is in flight.** The audit that produced it was run
+2026-08-07 against `lib/feie.js` at `16c64164`.
+
+### 8.1 The corrected width rule
+
+**Limit is 31 display columns. Enlarged lines are NOT doubled.**
+
+`WIDTH = 31` (`lib/feie.js:101`) — 58mm is nominally 32 half-width columns but
+the FP-V58-D head does not print the 32nd (`lib/feie.js:97-100`). CJK counts as
+2 (`dispLen`, `:103-107`).
+
+The first audit assumed `<CB>` / `<B>` occupy **double** width, so an enlarged
+line had to satisfy `dispLen × 2 ≤ 31`. That model is contradicted by paper:
+
+> On TC000180, `Items 件数` prints on ONE line, enlarged, intact — label left,
+> `8` right-aligned at the paper edge, wide gap between, no truncation and no
+> wrap. (Ash, from the physical slip, 2026-08-07.)
+
+That line is `<B>${row('Items 件数', String(totalUnits))}</B>`
+(`lib/feie.js:543`). `row()` pads to exactly `WIDTH` (`:110-118`), so its output
+is 31 display columns. Under the doubling model it would need 62 columns on a
+31-column head, and the last character — the `8` — would be the first thing
+lost. **A doubled line cannot right-align at the paper edge.** The geometry
+forces the conclusion: `<B>` did not double the width of that line.
+
+Three of the candidate explanations are eliminated from code:
+
+- **`row()` padding is correct** — computed against 31 (`:113`), not against an
+  enlarged width, and it produced exactly 31.
+- **The preview legend is not authority.** `02-settings-ops.js:652-653` maps
+  `<CB>`→`tc tbig`, `<B>`→`tbig`, `<L>`→`ttall` — a CSS font-size in a *faux*
+  preview, explicitly "roughly how the slip prints". It was never a statement
+  about the head. The first audit treated it as one.
+- **The deployed path is the one we read.** `git log -L 543,543:lib/feie.js`
+  shows that line unchanged since the file entered the repo, and TC000180
+  printed at 09:17 on 2026-08-07 from that same source.
+
+### 8.2 The unresolved contradiction
+
+The comment at `lib/feie.js:471-478` records a firsthand observation going the
+other way: `<B>Deliver 送达  Aug 03</B>` "ran 60+ columns and the head simply
+dropped what didn't fit, which is the END of the line: the date itself."
+
+That string is **20** display columns — under 31 either way. So:
+
+- the **doubling** rule predicts TC000180's `Items` line truncating. It did not.
+- the **no-doubling** rule predicts that `Deliver` line surviving. It did not.
+
+**Neither rule explains both observations.** One of the two accounts is
+incomplete. §8.1 follows the firsthand slip currently in hand over a narrative
+recorded in a comment, but the disagreement is real and is why this section is
+open rather than closed.
+
+A second question is entirely unanswered by code: **when a line does exceed the
+head, does this printer TRUNCATE or WRAP?** The comment says dropped; nothing
+else in the repo tests it. It decides whether the survivors below lose text or
+merely look bad.
+
+### 8.3 Findings that survive the corrected rule
+
+| file:line | template | width | why it matters |
+|---|---|---|---|
+| **`:277`** | `itemLines` (receipt + packing) | **46** | **PRIORITY.** `** 供应商直发 SUPPLIER-DIRECT · do not pack **` — over the limit under *either* rule, so the model question does not protect it. It is a packer instruction; losing its tail loses "do not pack". |
+| `:577` | packing | **36** | `MAKE FRESH 当天现做 ‹timestamp›` — the timestamp is the part at risk. |
+| `:589` | packing | **32** | `** ‹n› refunded 已退款 · pack ‹q› **` — one column over. |
+| `:612` | packing | 6 + note | `Note: ‹customer_note›` — data-dependent; over at roughly 25 characters of note. |
+
+### 8.4 The eight false alarms — do not re-audit
+
+Each fits comfortably at its true (undoubled) width; they appeared in the first
+audit only because of the doubling assumption:
+
+`:520` (28) · `:543` (31) · `:733` (28) · `:734` (29) · `:765` (19) ·
+`:776` `PARTIAL refund 部分退款` (23) · `:776` `FULL refund 全额退款` (20) ·
+`:790` (31).
+
+Note `:543` and `:790` share the `<B>${row(...)}</B>` shape — `row()` pads to
+exactly 31, which is precisely at the limit and only fails under doubling.
+`:543` is the line the paper vindicated.
+
+### 8.5 The `改期` split was unnecessary
+
+The two-line head shipped in `794dc601`
+(`<CB>Date changed</CB>` + `<CB>改期</CB>`) was justified by measuring the glued
+`Date changed 改期` at 34 doubled columns. Its true width is **17** — it would
+have fit on one line. The split is **harmless** (both halves print, and an
+enlarged two-line head arguably reads louder), but it was added on a wrong
+measurement and should be recorded as such rather than cited as precedent.
+
+### 8.6 What will settle it — three observations on paper
+
+Every slip prints `rule()` — exactly 31 normal columns of `-`
+(`lib/feie.js:120-122`). **That divider is the ruler.** Hold any enlarged line
+against it.
+
+1. **Refund slip, `退款金额 Refund   ￥…`** (`:790`) — the identical
+   `<B>${row(...)}</B>` shape as `:543`. If the money right-aligns flush with
+   the divider's right end, §8.1 is confirmed and §8.4's eight are closed.
+2. **Refund slip, the `退款申请 REFUND REQ` header** (`:765`) — 19 undoubled,
+   38 doubled. Prints in full ⇒ no doubling. Prints as `退款申请 REFU…` ⇒
+   doubling is real and §8.1 is wrong.
+3. **Packing slip, `MAKE FRESH 当天现做 ‹date›`** (`:577`) — 36 columns, over
+   the limit under *both* rules. Whether it truncates or wraps answers §8.2's
+   second question, which no code reading can.
+
+Until those are read, no width fix should be written — eleven modelled defects
+were already reduced to four by one look at a slip.
