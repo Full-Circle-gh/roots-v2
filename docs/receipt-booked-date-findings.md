@@ -4,11 +4,18 @@
 drawer. The printed thermal slip for the same order shows no booked/reservation
 date at all. Why?
 
-> **READ §6 FIRST.** A later round established that TC000180 ships to 广东省
-> 东莞市 厚街镇 (Dongguan), not Guangzhou. That single fact withdraws the (d)
-> mirror-drift verdict reached in §Root cause and corrects one claim in §3.
-> §1, §2, §4 and §5 stand. Superseded passages are banner-marked in place rather
-> than deleted, so the reasoning that failed stays legible.
+> **READ §7 FIRST — it carries the answer.** The printed slip has been
+> transcribed and identifies the template from its own line inventory. Verdict:
+> **(d), but not the drift in §Root cause** — the `receipt` template ran,
+> `pushShipBy` was called and correctly printed nothing, because at print time
+> the order had no customer-scheduled date. The booking was written afterwards
+> by a path that never reprints.
+>
+> Reading order: **§7** (answer) → **§6** (why the earlier verdict fell) → §1-§5
+> (inventory and traces, all still valid). The §Root cause verdict and one claim
+> in §3 are withdrawn; superseded passages are banner-marked in place rather
+> than deleted, so the reasoning that failed stays legible next to what replaced
+> it.
 
 **Scope.** Survey only — no code changed. Line references in §1-§5 are against
 `origin/main` @ `7ff831b`; §6 against `3a86f955`. No line cited in §1-§5 moved
@@ -590,3 +597,246 @@ How to read it:
 No fix proposed here, per the task scope. No live data was available for this
 round either — §6 is derived from code alone, and §6.5 deliberately leaves three
 candidates open rather than picking one without evidence.
+
+> **§6.5 candidate 1 is now DISPROVEN by the printed artifact — see §7.**
+> The slip TC000180 produced carries twelve lines that the `compact` template
+> cannot emit. It was printed by the **full `receipt`** template, which means
+> `pushShipBy` *was* called and returned false. Candidate 3 is disproven too.
+> Candidate 2 survives in a refined form.
+
+---
+
+## 7. Template identified from the printed artifact
+
+**New evidence.** The physical slip TC000180 produced has been transcribed. It
+decides between §6.5's candidates without any database access, because the three
+templates have disjoint line inventories.
+
+### 7.1 What each template emits, in order
+
+`renderOrder` (`lib/feie.js:645-655`) dispatches to one of three; `TEMPLATE_IDS`
+is exactly `receipt`, `packing`, `compact` (`lib/feie.js:748`).
+
+| # | `receipt` (`lib/feie.js:494-563`) | line | `compact` (`lib/feie.js:623-638`) | line |
+|---|---|---|---|---|
+| 1 | `<CB>` shop name | `:496` | — *(no shop name)* | — |
+| 2 | `<CB>` order_no | `:497` | `<CB>` order_no | `:625` |
+| 3 | divider | `:498` | `<C>` time, **unlabelled + centered** | `:626` |
+| 4 | `Time  ` + `paid_at \|\| placed_at` | `:499` | divider | `:627` |
+| 5 | **ship-by block** (`pushShipBy`) | `:500` | — *(never called)* | — |
+| 6 | `To    ` recipient_name | `:506` | — | — |
+| 7 | `Tel   ` recipient_phone | `:507` | — | — |
+| 8 | divider | `:509` | — | — |
+| 9 | per item — name (bold) | `:514`→`:267` | per item — name (bold) | `:630` |
+| 10 | per item — `x{q}` + `SKU {sku}`, enlarged, one line, qty prefix only when `q > 1` | `:272-273` | per item — `x{q}` alone, **no SKU**, only when `q > 1` | `:631` |
+| 11 | per item — supplier-direct flag | `:277` | — | — |
+| 12 | per item — **size / weight**, 2-space indent | `:278` | — | — |
+| 13 | per item — bundle components | `:279` | bundle components | `:632` |
+| 14 | per item — **each option** `question: answer`, 2-space indent | `:282` | — | — |
+| 15 | per item — **`  {q} x ¥unit`  ⟶  `¥line_total`** | `:283` | — | — |
+| 16 | per item — refunded stamp (if any) | `:520` | — | — |
+| 17 | `PKG n/N` + mode label (split shipments only) | `:531-532` | — | — |
+| 18 | divider | `:539` | divider | `:634` |
+| 19 | **`Items 件数`** + unit count | `:543` | — | — |
+| 20 | **`Subtotal`** | `:544` | — | — |
+| 21 | `Shipping` (only if `> 0`) | `:545` | — | — |
+| 22 | **`Voucher`** (only if `> 0`) | `:546` | — | — |
+| 23 | `Points` (only if `> 0`) | `:547` | — | — |
+| 24 | `TOTAL` | `:548` | `TOTAL` | `:635` |
+| 25 | refund summary (if any) | `:551-555` | — | — |
+| 26 | **`Paid by`** | `:556` | — | — |
+| 27 | divider + **`address_full`** | `:557` | — | — |
+| 28 | `+ Cutlery 餐具` (if flagged) | `:558` | — | — |
+| 29 | `Note:` + customer_note (if any) | `:559` | — | — |
+| 30 | `=` divider | `:560` | — | — |
+| 31 | **`Thank you!`** | `:561` | — | — |
+
+The per-item lines (#9-#15) come from `itemLines(it, { price: true })`
+(`lib/feie.js:261-285`), which **only the `receipt` template calls**
+(`lib/feie.js:514`). `compact` hand-rolls its three item lines inline
+(`lib/feie.js:630-632`) and never touches `itemLines`.
+
+### 7.2 Diff against the actual slip
+
+Every content line on the slip maps to a `receipt` line, in order:
+
+| Slip line | Template | Source |
+|---|---|---|
+| `Roots` | receipt `:496` | `shopName` |
+| `TC000180` | receipt `:497` | `o.order_no` |
+| divider | receipt `:498` | `rule()` |
+| `Time   2026-08-07 09:17` | receipt `:499` | `fmtTime(o.paid_at)` |
+| *(ship-by line absent)* | receipt `:500` | `pushShipBy` returned **false** |
+| `To     王宇` | receipt `:506` | `o.recipient_name` |
+| `Tel    18928777635` | receipt `:507` | `o.recipient_phone` |
+| divider | receipt `:509` | `rule()` |
+| `中东鹰嘴豆泥 / Hummus Asli` | `:267` | `itemName(it)` |
+| `SKU 1-10` | `:272-273` | `big`, `q = 1` so no `x` prefix |
+| `  200g` | `:278` | `it.size` |
+| `  1 x ￥38.00      ￥38.00` | `:283` | `row(…)`, `price: true` |
+| `  需要加热吗? / heat up?: 不要 / No` | `:282` | `optLine(op)` |
+| `x4   SKU 3-251` | `:272-273` | `q = 4 > 1` → `x4` + 2-space sep + SKU |
+| `Items 件数                8` | receipt `:543` | `shipQty` sum = 1+1+1+4+1 = **8** ✓ |
+| `Subtotal            ￥323.00` | receipt `:544` | `o.subtotal` |
+| `Voucher              -￥25.84` | receipt `:546` | `o.voucher_amount > 0` |
+| `TOTAL               ￥303.56` | receipt `:548` | `o.total` |
+| `Paid by               wechat` | receipt `:556` | `o.payment_method` |
+| divider + `广东省 东莞市 …` | receipt `:557` | `o.address_full` |
+| `Thank you!` | receipt `:561` | literal |
+
+**Lines on the slip that the `receipt` template cannot produce: none.**
+
+**Lines the template would emit that the transcription does not show: two
+dividers** — `rule()` at `:539` (immediately before `Items 件数`) and
+`rule('=')` at `:560` (immediately before `Thank you!`). Called out as
+instructed. This is almost certainly transcription fidelity rather than a third
+path: a divider is visually the least salient line on a slip, the transcript
+does record the other three (`:498`, `:509`, `:557`), and no template in the
+repo emits the twelve receipt-only content lines while omitting exactly those
+two rules. `TEMPLATE_IDS` has only three entries (`lib/feie.js:748`), and the
+two non-selectable slips are excluded by their headers alone — `renderAddon`
+prints `+ ADD-ON 加单` (`lib/feie.js:668`) and `renderRefundRequest` prints
+`退款申请 REFUND REQ` (`lib/feie.js:704`). It is worth one glance at the photo
+to confirm, but nothing hangs on it.
+
+**Incidental, and unrelated to the booked date — the money column does not
+reconcile on paper.** ¥323.00 − ¥25.84 = ¥297.16, but the printed TOTAL is
+¥303.56, a gap of **¥6.40**. The receipt template prints `Subtotal`, `Shipping`,
+`Voucher`, `Points` and `TOTAL` (`lib/feie.js:544-548`) but has **no packing-fee
+line**, and `packing_fee` (`database.js:2474`, written at
+`routes/retail.js:9673`) appears nowhere in `lib/feie.js` at all. So a charged
+packing fee is invisible on every slip while still sitting inside TOTAL, which
+is what the ¥6.40 looks like. Noted for a separate ticket; it has no bearing on
+the booked-date question, and the check is the same one query — compare
+`packing_fee` against the gap.
+
+Absent lines that are correctly absent, each by its own guard: `Shipping`
+(`:545`, `shipping_fee = 0` — subtotal ¥323 clears the free-ship threshold),
+`Points` (`:547`), `PKG n/N` (`:531`, single shipment → `groupByShipment`
+returns null at `lib/feie.js:292`), refund lines (`:520`, `:551-555`), cutlery
+(`:558`), note (`:559`).
+
+### 7.3 The six discriminators
+
+Asked directly — does `compact` emit these?
+
+| Discriminator | On the slip | `compact` emits it? | Verdict |
+|---|---|---|---|
+| Per-item weight (`200g`, `330g`, `300ml`, `400g`, `600g`) | yes | **No** — `:278` lives in `itemLines`, which `compact` never calls | receipt only |
+| Per-item option (`需要加热吗? / heat up?: 不要 / No`) | yes | **No** — `:282`, same reason | receipt only |
+| `x4` qty prefix | yes | **Partially** — `:631` emits `x4`, but **never the `SKU 3-251` on the same line**. The slip's combined `x4   SKU 3-251` is `:272-273` | receipt only |
+| `Items 件数` count | yes | **No** — `:543` has no counterpart | receipt only |
+| `Voucher` line | yes | **No** — `:546` has no counterpart | receipt only |
+| Trailing delivery address | yes | **No** — `:557` has no counterpart | receipt only |
+
+Six for six. Adding the shop name (`:496`), `To`/`Tel` (`:506-507`), per-line
+prices (`:283`), `Subtotal` (`:544`), `Paid by` (`:556`) and `Thank you!`
+(`:561`), the slip carries **twelve** lines `compact` cannot emit.
+
+**The slip was printed by the full `receipt` template.** §6.5 candidate 1 is
+disproven.
+
+### 7.4 What that forces
+
+`receipt` calls `pushShipBy(L, o)` unconditionally at `lib/feie.js:500`. The
+slip has no ship-by line, so `pushShipBy` returned `false`, which happens only
+when `shipByPrintParts(o)` returned `null` (`lib/feie.js:480-481`). Working back
+through §1.2 with counter and pickup excluded (the slip prints `To`/`Tel`, which
+`:505` suppresses for a counter sale, and a pickup would have returned the
+`Pickup 自提` branch at `:415`), and `promised_ship_date` excluded (it would have
+returned `Arrives 预计送达` at `:422`), the only exit left is **`:447`** — the
+express / restock / nothing-scheduled fallthrough.
+
+**So at 09:17 on 2026-08-07, when this slip printed, the order had no
+customer-scheduled date.** Meanwhile the drawer now reads `Booked Aug 10`, and
+§6.3 established that *every* state producing a `Booked` kicker also produces a
+printed line. Both cannot be true of the same row at the same time.
+
+They are true of the same row at **different** times. The slip is a snapshot
+taken at payment; the booking was written afterwards.
+
+The code has exactly one post-print writer of these columns. Grepping every
+write of `scheduled_for` in `routes/retail.js` returns two sites:
+
+- `:4390-4392` — the Express "Earliest …" re-anchor inside `markOrderPaid`.
+  This runs **before** the print (`autoPrintOrder` is at `:4469`), so it cannot
+  create post-print drift. Note it writes a local-midnight ISO and leaves
+  `delivery_slot_kind` untouched.
+- `:17309-17314` — the customer self-service reschedule
+  (`POST /api/retail/orders/:id/reschedule`, `routes/retail.js:17234`), which
+  sets `scheduled_for`, `delivery_slot_label` **and** `delivery_slot_kind`
+  together, and clears `seen_at` to re-flag the order for staff (`:17312`).
+
+That endpoint **does not reprint**: there is no print call anywhere in
+`routes/retail.js:17234-17320`, and the only two `autoPrintOrder` call sites in
+the file are `:4469` (gateway payment) and `:23789` (admin "Mark paid", guarded
+to genuine pending→paid transitions). A customer who rebooks after paying
+changes the database and nothing on paper. The web date-picker sets
+`slotKind = 'schedule'` when it posts (`public/shop.html:3090`), and the
+mini-app reschedule does the same (`miniapp/pages/order/order.js:916`) — which
+is exactly the `kind` that makes `annotateShipBy` return early at
+`routes/retail.js:10218` and the drawer read `Booked`.
+
+### 7.5 Root cause
+
+**(d) — something else: the paper is older than the booking.**
+
+Not (a): the `receipt` template has the line and called it — proven by the
+artifact, not inferred. Not (b): it reads the right columns. Not (c): the full
+row reaches it via `SELECT *` (`routes/retail.js:22187`). And not the §4.1
+mirror drift, which §6 already retired.
+
+The template, the columns and the payload are all correct. At the instant
+`printOrderById` ran, the order genuinely had no customer-scheduled date, so
+`shipByPrintParts` correctly returned `null` and correctly printed nothing. The
+booked date the drawer shows was written **after** that, by a path that updates
+the row and never reprints (`routes/retail.js:17309-17314`). Nothing in the
+print stack is broken; the slip is simply a stale snapshot, and there is no
+mechanism that would ever refresh it.
+
+**§6's three candidates collapse to one.** Candidate 1 (compact template) is
+disproven by §7.3. Candidate 3 (printed but misread) is disproven by §7.2 —
+there is no ship-by line on the paper to misread. Candidate 2 survives, refined:
+the print did not fail, it succeeded against a row that had not yet been booked.
+
+### 7.6 Is it settled? — the one fact still missing
+
+**Settled from the artifact plus code, with no live data:** which template
+printed (§7.3), that `pushShipBy` ran and returned false (§7.4), that the order
+carried no customer date at print time (§7.4), and therefore that the slot
+columns changed after the slip was cut. That chain is closed.
+
+**Not settled:** that the change arrived via the reschedule endpoint. The code
+offers exactly one post-print writer, so that is where the evidence points, but
+a manual database edit or an admin action outside these two sites would look
+identical on paper. One query closes it — a timestamp comparison, not a
+column-value guess:
+
+```sql
+SELECT o.order_no, o.paid_at, o.printed_at, o.print_status, o.print_error,
+       o.updated_at, o.seen_at,
+       o.delivery_slot_kind, o.scheduled_for, o.delivery_slot_label,
+       o.promised_ship_date, o.promised_delivery_date
+  FROM retail_orders o
+ WHERE o.order_no = 'TC000180';
+```
+
+Reading it:
+
+- **`updated_at` later than `printed_at`**, with `delivery_slot_kind` now
+  `'schedule'` and `scheduled_for` on Aug 10 → **confirms §7.5 outright**. The
+  row was booked after the slip printed. `seen_at` NULL is corroborating: the
+  reschedule clears it (`routes/retail.js:17312`).
+- **`print_status = 'printed'` with a `printed_at` near 09:17** → confirms the
+  slip in hand is the one this order produced, and that the print itself
+  succeeded (`routes/retail.js:22219-22231`).
+- **`updated_at` at or before `printed_at`** → §7.5 is wrong. The row already
+  held its booking when the slip printed, and §6.3's proof that such a state
+  always prints a line would then be the thing to re-examine.
+- `promised_*` empty throughout, as §6.4 requires.
+
+Note this supersedes §6.6's query, which looked at printer routing and template
+config. §7.3 answered the template question from the paper itself, so those
+columns are no longer the discriminator — the timestamps are.
+
+No fix proposed here, per the task scope.
