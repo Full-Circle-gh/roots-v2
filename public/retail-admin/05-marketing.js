@@ -2631,6 +2631,18 @@ function uid() {
   return 'pu_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 }
 
+// "Show once" means once per VERSION, not once per pop-up forever. The mini-app
+// remembers a pop-up as seen under `popup_seen:<id>:<updated_at>`, so bumping
+// this stamp hands the pop-up a fresh identity and everyone gets to see it
+// again — which is what a merchant means when they edit one and expect the
+// change to land. Leave it alone and an untouched 'once' pop-up still shows
+// exactly once. Every write path that changes what a customer would see has to
+// call this, or the edit ships to a phone that will never display it.
+function puStamp(p) {
+  p.updated_at = Date.now();
+  return p;
+}
+
 async function loadPopups() {
   try {
     const { data: c } = await api('/api/retail-admin/config');
@@ -2769,6 +2781,9 @@ async function togglePopup(id, enabled) {
   const p = _popups.find(x => x.id === id);
   if (!p) return;
   p.enabled = !!enabled;
+  // Switching a pop-up back on is how a merchant re-runs one, so it counts as
+  // a new version and the people who already dismissed it see it again.
+  puStamp(p);
   try {
     await savePopupsArray();
     renderPopups();
@@ -2782,6 +2797,7 @@ async function duplicatePopup(id) {
   if (!src) return;
   const copy = JSON.parse(JSON.stringify(src));
   copy.id = uid();
+  puStamp(copy);
   copy.enabled = false;
   copy.name = (src.name || puT('Untitled', '未命名')) + puT(' (copy)', '(副本)');
   _popups.unshift(copy);
@@ -2832,7 +2848,7 @@ function refreshPopupStepSummaries() {
 }
 
 function blankPopup() {
-  return {
+  return puStamp({
     id: uid(),
     enabled: true,
     name: '',
@@ -2847,7 +2863,7 @@ function blankPopup() {
     body_en: '',  body_cn: '',
     cta_label_en: '', cta_label_cn: '', cta_target: '',
     dismissible: true,
-  };
+  });
 }
 
 function openPopupEditor(id) {
@@ -3142,6 +3158,7 @@ async function savePopup() {
     cta_target: $('#pu-cta_target').value.trim(),
     dismissible: $('#pu-dismissible').checked,
   };
+  puStamp(next);
   if (existingIdx === -1) _popups.unshift(next);
   else _popups[existingIdx] = next;
   try {

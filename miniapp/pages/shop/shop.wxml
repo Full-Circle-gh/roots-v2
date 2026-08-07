@@ -363,4 +363,6 @@
       </view>
     </view>
   </view>
+
+  <popup-manager page="shop"></popup-manager>
 </view>

@@ -20,7 +20,20 @@ function absUrl(u) {
 function todayKey() { return new Date().toISOString().slice(0, 10); }
 function nowMs()    { return Date.now(); }
 
-function storageKey(id) { return 'popup_seen:' + id; }
+// "Seen" is remembered per VERSION of a pop-up, not per pop-up. The key used to
+// hold the id alone, so the first render marked it seen forever: a merchant who
+// then edited it — most obviously re-pointing "Where" from Home to Shop — was
+// shipping a change to a phone that could never display it again. Every admin
+// save bumps updated_at, which makes the edited pop-up a new identity here and
+// lets it show once more. An untouched 'once' pop-up keeps the same key and
+// still shows exactly once.
+//
+// Pop-ups saved before updated_at existed fall back to 0. That is a different
+// string from the old id-only key, so each currently-live pop-up shows once
+// more to people who had dismissed it. One time, then it settles.
+function storageKey(popup) {
+  return 'popup_seen:' + popup.id + ':' + (popup.updated_at || 0);
+}
 
 // ── Picture sizing ────────────────────────────────────────────────────────
 // The pop-up picture is never cropped. It fills the card's content width and
@@ -56,7 +69,7 @@ function pmWindow() {
 
 function shouldShowPerFrequency(popup) {
   let seen = null;
-  try { seen = wx.getStorageSync(storageKey(popup.id)); } catch {}
+  try { seen = wx.getStorageSync(storageKey(popup)); } catch {}
   const freq = popup.frequency || 'once';
   if (freq === 'every_visit') return true;
   if (!seen) return true;
@@ -75,7 +88,7 @@ function shouldShowPerFrequency(popup) {
 
 function markShown(popup) {
   try {
-    wx.setStorageSync(storageKey(popup.id), { ts: nowMs(), day: todayKey() });
+    wx.setStorageSync(storageKey(popup), { ts: nowMs(), day: todayKey() });
   } catch {}
 }
 
