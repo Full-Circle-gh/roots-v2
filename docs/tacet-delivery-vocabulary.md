@@ -73,6 +73,20 @@ Every customer-facing status map must cover all nine statuses. Printing a raw in
 
 Note: the drawer kicker for a recorded arrival currently reads `Arrived · 送达`; it aligns to `Arrived · 已送达`.
 
+## Date changed after printing
+
+When a customer reschedules an order whose receipt has already printed, a short change slip is emitted. Three terms, two of them already locked elsewhere in this document and reused unchanged.
+
+| Role | EN | CN | Source |
+|---|---|---|---|
+| Slip header | Date changed | 改期 | minted 2026-08-07, Ash |
+| The new date | Booked | 顾客预约 | existing — Time labels, customer-booked window |
+| The superseded date | Previously | 原定时间 | existing — Plan kickers, closed-order kicker |
+
+`改期` is **fulfilment-neutral**: one term for delivery and pickup alike. The slip states that a date moved, which is equally true of both. Do not create a pickup variant — the three-way pickup relabelling recorded elsewhere in this document is a defect, not a pattern to extend.
+
+`原定时间` carries its existing meaning — the date that was originally set — and is reused rather than re-minted. Its EN partner on the slip is `Previously`, not the `Requested timing` used by the orders-list kicker; the kicker names a plan, the slip names a superseded value.
+
 ## Plan kickers (orders list, Delivery column)
 
 | Condition | Kicker EN | Kicker CN | Kind |
