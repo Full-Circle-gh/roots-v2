@@ -1823,6 +1823,7 @@ async function renderCheckout(){
     <section class="cx-sec cx-sec--addr">
       <div class="cx-sectitle">${cn?'配送至':'Deliver to'}</div>
       <div id="coAddr">…</div>
+      <div id="coRiderPhone"></div>
     </section>
     <section class="cx-sec cx-sec--when">
       <div class="cx-sectitle">${cn?'什么时候送':'When'}</div>
@@ -2365,9 +2366,90 @@ async function coQuote(){
   catch(e){ coMsg(state.lang==='cn'?'网络错误':'Network error'); return; }
   if(j&&j.success===false){ if(j.error==='no_zone_match'){renderNoZone(j.data);} else {coMsg(coErrMsg(j.error));} return; }
   const d=(j&&j.data)||j||{}; co.quote=d; coMsg('');
-  renderCoSlots(d); renderCoPoints(d); renderCoBalance(d); renderCoSummary(d); renderCoBatch(d); renderCoPreorder(d);
+  renderCoSlots(d); renderCoPoints(d); renderCoBalance(d); renderCoSummary(d); renderCoBatch(d); renderCoPreorder(d); renderCoRiderPhone(d);
   coLoadOffers();   // keep the pre-pay upsell warm for the current cart
 }
+/* ════════ Rider-phone notice (mirrors the mini-app) ════════
+   A same-city rider is going to carry this order and the number on it probably
+   can't take their call. Advisory ONLY: nothing here disables Place order, and
+   a customer with no mainland number checks out exactly as before — the copy
+   promises we'll ring them, and that is what the ops flag on the server is for.
+
+   `same_city_rider` comes from the quote, decided by the same server predicate
+   the courier push uses, so this can't claim a rider is coming when none is.
+   The number test is the mini-app's rule in miniapp/utils/phone.js and the
+   server's in lib/phone-cn.js — three copies of one regex, because three
+   bundles, kept deliberately trivial so they stay in step. */
+const CO_MAINLAND_MOBILE=/^1\d{10}$/;
+function coIsMainlandMobile(raw){
+  const digits=String(raw==null?'':raw).replace(/\D/g,'');
+  if(!digits)return false;
+  const un = digits.length===13&&digits.indexOf('86')===0   ? digits.slice(2)
+           : digits.length===14&&digits.indexOf('086')===0  ? digits.slice(3)
+           : digits.length===15&&digits.indexOf('0086')===0 ? digits.slice(4)
+           : null;
+  if(un!=null&&CO_MAINLAND_MOBILE.test(un))return true;
+  return CO_MAINLAND_MOBILE.test(digits);
+}
+function coInjectRiderPhoneStyle(){
+  if($('#corpStyle'))return;
+  const s=document.createElement('style'); s.id='corpStyle';
+  s.textContent=`
+  .corp-note{margin:12px 0 0;padding:13px 15px;border:1px solid var(--accent,#6d9c2a);background:rgba(109,156,42,.08);border-radius:14px;}
+  .corp-m{font-size:13px;line-height:1.5;color:var(--muted,#6b6358);}
+  .corp-act{margin-top:9px;font:inherit;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--accent,#6d9c2a);background:none;border:0;padding:0;cursor:pointer;text-decoration:underline;}
+  .corp-fix{display:flex;gap:8px;margin-top:9px;}
+  .corp-in{flex:1;min-width:0;font:inherit;font-size:14px;padding:9px 11px;border:1px solid var(--line,#e2ddd3);border-radius:10px;background:#fff;}
+  .corp-save{font:inherit;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:#fff;background:var(--accent,#6d9c2a);border:0;border-radius:10px;padding:0 16px;cursor:pointer;}
+  .corp-save[disabled]{opacity:.55;cursor:default;}`;
+  document.head.appendChild(s);
+}
+function renderCoRiderPhone(d){
+  const box=$('#coRiderPhone'); if(!box)return;
+  const sel=(co.addrs||[]).find(a=>a.id===co.addrId);
+  const typed=String((sel&&sel.phone)||'').trim();
+  // An empty phone is the address form's problem, not this notice's — saying it
+  // twice is nagging. Only a number that EXISTS and can't be rung gets a word.
+  if(!d||!d.same_city_rider||!typed||coIsMainlandMobile(typed)){ box.innerHTML=''; return; }
+  coInjectRiderPhoneStyle();
+  const cn=state.lang==='cn';
+  box.innerHTML=`<div class="corp-note">
+    <div class="corp-m">${cn
+      ?'骑手需要一个能接听的内地手机号。如有请填写，否则我们会联系您安排配送。'
+      :"A rider needs a mainland number they can call. Add one if you have it — otherwise we'll contact you to arrange delivery."}</div>
+    <div id="corpSlot"><button class="corp-act" id="corpOpen">${cn?'填写手机号':'Add a number'}</button></div>
+  </div>`;
+  $('#corpOpen').addEventListener('click',()=>{
+    $('#corpSlot').innerHTML=`<div class="corp-fix">
+      <input class="corp-in" id="corpIn" type="tel" inputmode="numeric" placeholder="${cn?'内地手机号':'Mainland mobile number'}">
+      <button class="corp-save" id="corpSave">${cn?'保存':'Save'}</button>
+    </div>`;
+    $('#corpIn').focus();
+    $('#corpSave').addEventListener('click',coSaveRiderPhone);
+  });
+}
+// Save the replacement number against the SAVED address, sending only `phone`.
+// A phone-only PUT is an edit in place; sending the whole address back would
+// look like a new one. Re-quotes afterwards so the notice clears itself.
+async function coSaveRiderPhone(){
+  const inp=$('#corpIn'), btn=$('#corpSave'); if(!inp||!btn)return;
+  const next=String(inp.value||'').trim(); if(!next)return;
+  const cn=state.lang==='cn';
+  btn.disabled=true; btn.textContent=cn?'保存中':'Saving';
+  try{
+    const r=await fetch('/api/retail/addresses/'+co.addrId,{method:'PUT',
+      headers:authHeaders({'Content-Type':'application/json','Accept':'application/json'}),
+      body:JSON.stringify({phone:next})});
+    const j=await r.json().catch(()=>({}));
+    if(!j||j.success===false)throw new Error(j&&j.error||'save_failed');
+    const sel=(co.addrs||[]).find(a=>a.id===co.addrId); if(sel)sel.phone=next;
+    renderCoAddrs(); coQuote();
+  }catch(e){
+    btn.disabled=false; btn.textContent=cn?'保存':'Save';
+    coMsg(cn?'保存失败，请重试':"Couldn't save — try again");
+  }
+}
+
 // "Ships soon" pre-order notice (server preorder_notice): a persistent banner in
 // the checkout panel + a one-time popup, so a customer pre-ordering a sold-out
 // backorder item knows it ships on the next restock — mirrors the mini-app.

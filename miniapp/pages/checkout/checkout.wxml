@@ -157,6 +157,21 @@
         </view>
         <view wx:if="{{savedAddresses.length}}" class="link-row f-toni" bindtap="cancelNew">← {{lang === 'cn' ? '使用已保存地址' : 'PICK A SAVED ADDRESS'}}</view>
       </block>
+
+      <!-- A rider is carrying this order, and the number on it probably can't
+           take their call. Advisory only — the order goes through either way,
+           which is what the last line promises. Sits under whichever address
+           view is open (collapsed or the inline form), because both can hold
+           the number this is about. -->
+      <view wx:if="{{riderPhoneWarn}}" class="rider-phone-note">
+        <view class="rpn-msg">{{lang === 'cn' ? '骑手需要一个能接听的内地手机号。如有请填写，否则我们会联系您安排配送。' : "A rider needs a mainland number they can call. Add one if you have it — otherwise we'll contact you to arrange delivery."}}</view>
+        <view wx:if="{{!riderPhoneFixOpen}}" class="rpn-action f-toni" bindtap="openRiderPhoneFix">{{lang === 'cn' ? '填写手机号' : 'ADD A NUMBER'}}</view>
+        <view wx:else class="rpn-fix">
+          <input class="input rpn-input" type="number" placeholder="{{lang === 'cn' ? '内地手机号' : 'Mainland mobile number'}}"
+                 value="{{riderPhoneDraft}}" bindinput="onRiderPhoneDraft"/>
+          <view class="rpn-save f-toni {{riderPhoneSaving ? 'is-saving' : ''}}" bindtap="saveRiderPhone">{{riderPhoneSaving ? (lang === 'cn' ? '保存中' : 'SAVING') : (lang === 'cn' ? '保存' : 'SAVE')}}</view>
+        </view>
+      </view>
       </block><!-- /delivery address -->
 
       <!-- ───── Pickup: store picker + contact ───── -->

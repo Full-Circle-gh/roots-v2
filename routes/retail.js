@@ -27,6 +27,10 @@ const addressCn = require('../lib/address-cn');
 // tested directly (scripts/test_address_pin.js) instead of only through a route.
 const addressPin = require('../lib/address-pin');
 const qingyunQueue = require('../lib/qingyun-queue');
+// One shared opinion about phone numbers. Used here to tidy what we STORE and to
+// warn/flag when a recipient number can't take a rider's call — never to reject
+// one. See the warning at the top of lib/phone-cn.js.
+const phoneCn = require('../lib/phone-cn');
 const tracking = require('../lib/tracking');
 const flashsales = require('../lib/flashsales');
 const { imageAspect } = require('../lib/image-dims');
@@ -4293,11 +4297,31 @@ async function maybeAutoIssueInvoice(orderId) {
 // orders (air/land waybill), later-day regular deliveries (incl. Panyu-style
 // ship-districts on their batch cadence), and marketplace orders (Meituan/Eleme
 // deliver themselves, and carry no recipient details) are all excluded.
+// Page ops when a courier-bound order carries a phone a rider probably can't
+// call. Advisory only — see lib/phone-cn.js: we are inferring Qingyun's rule
+// from the numbers it has refused, not reading it off a spec, so this never
+// gates anything. The push goes ahead; this only buys ops the minutes between
+// the order being placed and the courier refusing it.
+//
+// Fire-and-forget: sendOpsAlert is async and a webhook that is slow or down must
+// not hold up (or fail) the checkout that triggered it.
+function maybeFlagUncallablePhone(order, storeCode) {
+  try {
+    if (phoneCn.isMainlandMobile(order.recipient_phone)) return;
+    const shown = String(order.recipient_phone || '').trim() || '(空 / blank)';
+    Promise.resolve(sendOpsAlert(
+      `⚠️ 青云聚信 ${storeCode} 订单 ${order.order_no || '#' + order.id} 的收货电话可能无法接听：${shown}\n`
+      + `Qingyun ${storeCode}: order ${order.order_no || '#' + order.id} has a recipient phone a rider likely can't call `
+      + `(${shown}). The push still goes out — call the customer if it comes back refused.`
+    )).catch(e => console.warn('[qingyun phone flag]', e.message));
+  } catch (e) { console.warn('[qingyun phone flag]', e.message); }
+}
+
 function maybeEnqueueQingyunPush(orderId) {
   try {
     if (cfgValue('delivery.qingyunAutoPush', false) !== true) return;
     const o = tdb().prepare(
-      'SELECT id, fulfillment_type, store_id, channel, address_json, delivery_slot_kind, scheduled_for FROM retail_orders WHERE id = ?'
+      'SELECT id, order_no, recipient_phone, fulfillment_type, store_id, channel, address_json, delivery_slot_kind, scheduled_for FROM retail_orders WHERE id = ?'
     ).get(orderId);
     if (!o || shipsNothing(o) || !o.store_id) return;   // pickup + counter: no courier
     if (!inventory.isQingyunSameCityToday(o)) return;
@@ -4307,9 +4331,19 @@ function maybeEnqueueQingyunPush(orderId) {
     // daemon retries until that store's session is logged in, so a momentary blip
     // doesn't drop the order.
     if (!tdb().prepare('SELECT 1 FROM qingyun_status WHERE store_code = ?').get(store.code)) return;
-    tdb().prepare(
+    const ins = tdb().prepare(
       "INSERT OR IGNORE INTO qingyun_push_queue (retail_order_id, store_code, status) VALUES (?, ?, 'pending')"
     ).run(orderId, store.code);
+    // ── Advisory: this order's phone probably can't take a rider's call ──
+    // Fires ONCE per order, because the OR IGNORE above only reports a change
+    // the first time a row is created — a requeue (an UPDATE) and a re-run of
+    // this hook both leave changes at 0. That is the whole throttle: no counter,
+    // no state, nothing to get out of step with the queue.
+    //
+    // It does not stop anything. The push proceeds exactly as before; this just
+    // means someone can ring the customer while it happens, instead of finding
+    // out after the courier refuses it.
+    if (ins.changes === 1) maybeFlagUncallablePhone(o, store.code);
   } catch (e) { console.warn('[qingyun enqueue]', e.message); }
 }
 
@@ -7720,6 +7754,14 @@ function normalizeChinaAddress(a) {
   out.district = trim(out.district) || null;
   out.address  = trim(out.address)  || '';
   out.detail   = trim(out.detail)   || null;
+  // The phone used to be the one field this function passed through untouched,
+  // which is how a whitespace-only number satisfied every presence check below
+  // and reached the courier as an empty string. Tidy it (safely — see
+  // lib/phone-cn.normalizeForStorage, which hands back the original rather than
+  // mangle anything it doesn't understand) and let '' mean absent.
+  // Only when the key is actually present: these objects feed PARTIAL updates,
+  // where an absent phone means "leave it alone", not "blank it".
+  if ('phone' in out) out.phone = phoneCn.normalizeForStorage(out.phone);
 
   // Backfill the province from the city when the picker didn't supply one.
   // Plain 'city' served-zones store only the city; this gives every served
@@ -7821,7 +7863,10 @@ router.post('/api/retail/addresses', requireRetailAuth, express.json(), (req, re
   // companions so the address can be shown in whichever language the customer's
   // app is set to. Unknown places keep their stored value (English stays null).
   Object.assign(a, regionI18n.resolveRegion(a));
-  if (!a.recipient_name || !a.phone || !a.address) {
+  // Trimmed, so a field of spaces reads as the absence it is. `a.phone` and
+  // `a.address` are already trimmed by normalizeChinaAddress; the name was not,
+  // and a whitespace-only recipient reached the waybill the same way.
+  if (!String(a.recipient_name || '').trim() || !a.phone || !a.address) {
     return res.status(400).json({ success: false, error: 'missing_required' });
   }
   // Province is auto-derived from the city (normalizeChinaAddress), so a served
@@ -8169,6 +8214,12 @@ router.put('/api/retail/addresses/:id', requireRetailAuth, express.json(), (req,
   const a = (regionChanged || incoming.address)
     ? normalizeChinaAddress(incoming)
     : incoming;
+  // The branch above is the whole reason this line exists: an edit that changes
+  // ONLY the phone touches neither the region nor the street, so it takes the
+  // bare `incoming` and never meets normalizeChinaAddress. Correcting a bad
+  // number is exactly that edit — the one this feature asks customers to make —
+  // so normalize it here, where both branches land.
+  if ('phone' in incoming) a.phone = phoneCn.normalizeForStorage(incoming.phone);
   // Re-resolve the bilingual region whenever the customer changed it, so the
   // English companions stay in lockstep with the (canonical Chinese) values.
   if (regionChanged) Object.assign(a, regionI18n.resolveRegion(a));
@@ -15598,7 +15649,9 @@ router.post('/api/retail-admin/customers/:id/addresses', requireRetailAdmin, exp
   const c = tdb().prepare('SELECT id FROM retail_customers WHERE id = ?').get(id);
   if (!c) return res.status(404).json({ success: false, error: 'not_found' });
   const a = normalizeChinaAddress(req.body || {});
-  if (!a.recipient_name || !a.phone || !a.address) {
+  // Trimmed — see the customer-facing POST above; a whitespace-only field is an
+  // empty one, whichever side of the admin boundary it was typed on.
+  if (!String(a.recipient_name || '').trim() || !a.phone || !a.address) {
     return res.status(400).json({ success: false, error: 'missing_required' });
   }
   const tx = tdb().transaction(() => {
@@ -15647,6 +15700,9 @@ router.put('/api/retail-admin/customers/:id/addresses/:addrId', requireRetailAdm
   const a = (incoming.province || incoming.city || incoming.district || incoming.address)
     ? normalizeChinaAddress(incoming)
     : incoming;
+  // Same partial-update gap as the customer-facing PUT: a phone-only correction
+  // skips normalizeChinaAddress entirely, so normalize where both branches land.
+  if ('phone' in incoming) a.phone = phoneCn.normalizeForStorage(incoming.phone);
   // Staff correcting an address must not leave the old coordinates behind. They
   // describe the place the correction is moving AWAY from, and the next order
   // from this row would snapshot them straight onto a waybill.
@@ -21100,7 +21156,13 @@ router.post('/api/retail-admin/orders/:id/address/apply-chinese',
   // the AI "Make address Chinese" flow omits them so they stay untouched. A
   // present-but-blank name is rejected (a ship-to must have a recipient).
   const recipientName  = (body.recipient_name  != null) ? String(body.recipient_name).trim()  : null;
-  const recipientPhone = (body.recipient_phone != null) ? String(body.recipient_phone).trim() : null;
+  // This route sits OUTSIDE the address funnel — it writes retail_orders
+  // directly — so it needs the same normalization applied on its own. It is also
+  // the route staff use to CORRECT a number the courier refused, which makes it
+  // the one place where a tidy stored value matters most.
+  const recipientPhone = (body.recipient_phone != null)
+    ? phoneCn.normalizeForStorage(body.recipient_phone)
+    : null;
   if (recipientName !== null && !recipientName) {
     return res.status(400).json({ success: false, error: 'missing_recipient_name' });
   }
@@ -27653,6 +27715,28 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
       preorder_notice: computePreorderNotice(zone, address, (items || []).map((i) => i.product_id), body.delivery_slot_id, body.slot_kind),
       store_move_notice: storeMoveNotice,
       routing: routingPreview,
+      // Is this order heading for a same-city rider (Qingyun)? The client uses
+      // it to decide whether a recipient phone that can't take a rider's call
+      // is worth mentioning — see the notice in the mini-app checkout and
+      // shop.html. Computed with the SAME predicate the enqueue hook and the
+      // daemon use, rather than a client-side guess at the rules, so the three
+      // can't drift apart.
+      //
+      // Quote-time caveat, and it errs the harmless way: `scheduled_for` isn't
+      // resolved yet, so an Express/scheduled pick that will land today reads
+      // as not-eligible here and simply shows no notice. Under-showing an
+      // advisory costs nothing; over-showing it would nag people whose order a
+      // rider is never going to touch.
+      same_city_rider: inventory.isQingyunSameCityToday({
+        channel: 'wechat',                       // customer-facing route: always first-party
+        address_json: {
+          province: address.province || null,
+          city:     address.city     || null,
+          district: address.district || null,
+        },
+        delivery_slot_kind: body.slot_kind || null,
+        scheduled_for: null,
+      }),
     },
   });
 });

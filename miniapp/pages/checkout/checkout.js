@@ -8,6 +8,7 @@ const cart   = require('../../utils/cart');
 const config = require('../../utils/config');
 const lang   = require('../../utils/lang');
 const notify = require('../../utils/notifications');
+const phone  = require('../../utils/phone');
 const zones  = require('../../utils/zones');
 const delivery = require('../../utils/delivery');
 
@@ -188,6 +189,16 @@ Page({
     savedAddresses: [],          // [{id, recipient_name, phone, address, ...}]
     pickerOpen: false,           // true once user taps CHANGE; defaults closed so collapsed view shows
     showNewForm: false,          // true when user wants to type a fresh address
+    // ── "a rider needs a number they can call" ──────────────────────────────
+    // sameCityRider comes from the quote: is a Guangzhou rider going to be
+    // carrying this order? Only then does a non-mainland number matter, and
+    // only then do we say anything. riderPhoneWarn is that AND a phone the
+    // rider probably can't ring. It never blocks placing the order.
+    sameCityRider: false,
+    riderPhoneWarn: false,
+    riderPhoneFixOpen: false,    // the inline "put a different number here" input
+    riderPhoneDraft: '',
+    riderPhoneSaving: false,
     address: {
       id: null,
       recipient_name: '',
@@ -1468,6 +1479,10 @@ Page({
           preorderNotice: data.preorder_notice || null,
           preorderNoticeItems: this.buildBatchNoticeItems(data.preorder_notice),
           storeMoveNotice: data.store_move_notice || null,
+          // Whether a same-city rider is going to carry this. Decided by the
+          // server with the same predicate the courier push uses, so the notice
+          // can't disagree with what actually happens to the order.
+          sameCityRider: !!data.same_city_rider,
           slotsByDay,
           deliverySlotId: nextSlotId,
           deliverySlotLabel: nextSlotLabel,
@@ -1484,6 +1499,9 @@ Page({
           missingItems,
           acceptedFallback: keepAccepted,
         });
+        // Eligibility just changed, so the rider-phone notice may have to appear
+        // or disappear (switching to an out-of-city address retires it).
+        this.syncRiderPhoneWarn();
         // First time a fresh-batch notice appears for this checkout visit,
         // pop the modal once so it can't be missed. The inline banner stays
         // put afterwards as a persistent reminder, and re-quotes (slot
@@ -2155,6 +2173,10 @@ Page({
     // When section falsely reads "closed / no slots" (the dual-entry trap a
     // customer hit on 2026-06-15).
     if (field === 'address') this._deriveAreaFromTyped(value);
+    // Typing a good number should retire the notice as they finish it, not on
+    // the next re-quote — and typing a bad one into the inline form should
+    // raise it without waiting either.
+    if (field === 'phone') this.syncRiderPhoneWarn();
   },
 
   // Debounced: parse the typed street blob and, while the area is still ours to
@@ -2208,6 +2230,67 @@ Page({
     });
     this.syncAreaLabel();
     this.refreshQuote();
+  },
+  // ── Rider-phone notice ────────────────────────────────────────────────────
+  // Say something ONLY when all three hold: this is a delivery, a same-city
+  // rider is going to carry it (the server decided that, not us), and there is
+  // a number that a rider probably can't ring. An empty phone says nothing —
+  // the form's own "fill name, phone, address" check owns that case, and two
+  // complaints about one empty box is nagging.
+  //
+  // Nothing here can stop an order. If the customer ignores it, or has no
+  // mainland number at all, they place the order exactly as before and we ring
+  // them — which is what the notice promises.
+  syncRiderPhoneWarn() {
+    const a = this.data.address || {};
+    const typed = String(a.phone || '').trim();
+    const warn = this.data.fulfillment === 'delivery'
+      && !!this.data.sameCityRider
+      && !!typed
+      && !phone.isMainlandMobile(typed);
+    if (warn === this.data.riderPhoneWarn) return;
+    // Closing the fix box when the warning clears keeps a stale input from
+    // hanging around under an address it no longer applies to.
+    this.setData(warn
+      ? { riderPhoneWarn: true }
+      : { riderPhoneWarn: false, riderPhoneFixOpen: false, riderPhoneDraft: '' });
+  },
+  openRiderPhoneFix() {
+    this.setData({ riderPhoneFixOpen: true, riderPhoneDraft: '' });
+  },
+  onRiderPhoneDraft(e) {
+    this.setData({ riderPhoneDraft: e.detail.value });
+  },
+  // Save the replacement number. Two cases, and the difference matters:
+  //   • a SAVED address (has an id) → PUT just the phone, so the correction
+  //     updates the address in place. Sending only this field is what keeps it
+  //     an edit rather than a new address: the checkout's divergence check
+  //     would otherwise notice the local change at submit time and write a
+  //     duplicate row with the same street.
+  //   • the inline new-address form (no id yet) → nothing to PUT, so just keep
+  //     it locally; the normal submit path saves the address with it.
+  async saveRiderPhone() {
+    if (this.data.riderPhoneSaving) return;
+    const cn = this.data.lang === 'cn';
+    const next = String(this.data.riderPhoneDraft || '').trim();
+    if (!next) return;
+    const id = this.data.address && this.data.address.id;
+    this.setData({ riderPhoneSaving: true });
+    try {
+      if (id) await api.put(`/api/retail/addresses/${id}`, { phone: next });
+      const saved = (this.data.savedAddresses || []).map(x => (x.id === id ? { ...x, phone: next } : x));
+      this.setData({
+        'address.phone': next,
+        savedAddresses: saved,
+        riderPhoneFixOpen: false,
+        riderPhoneDraft: '',
+      });
+      this.syncRiderPhoneWarn();
+    } catch (err) {
+      wx.showToast({ title: cn ? '保存失败，请重试' : "Couldn't save — try again", icon: 'none' });
+    } finally {
+      this.setData({ riderPhoneSaving: false });
+    }
   },
   showAddNew() {
     // Clear the form so the user picks a fresh area + types the street.

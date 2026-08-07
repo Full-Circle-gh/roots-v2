@@ -48,6 +48,7 @@ const geocode = require('../lib/geocode'); // Tencent/AMap — resolve English/p
 const { buildCreatePayload } = require('../lib/qingyun-payload'); // shared with the ship-from override
 const { translateToChinese } = require('../lib/address-cn'); // English/pinyin street → Chinese, before the rider sees it
 const inventory = require('../lib/inventory'); // isQingyunSameCityToday — same-city/same-day eligibility
+const phoneCn = require('../lib/phone-cn'); // is this a number a rider can call? (advisory — see the file)
 // Hold-vs-refuse decision + the statements that implement it (see lib/qingyun-queue).
 const qingyunQueue = require('../lib/qingyun-queue');
 const { storeHours, within } = require('../lib/store-hours'); // opening hours, for the alert window
@@ -474,6 +475,24 @@ function stampLocalEta(retailOrderId, d, track) {
 // tracking match links the rider back. Idempotent per row; retries with backoff.
 const MAX_PUSH_ATTEMPTS = Number(process.env.QINGYUN_PUSH_MAX_ATTEMPTS || 5);
 
+// Advisory page for a courier-bound order whose phone a rider probably can't
+// call. The twin of maybeFlagUncallablePhone in routes/retail.js — that one
+// covers the app-side enqueue hook, this one the reconcile sweep. Both gate on
+// the INSERT having actually created the row, which is what keeps it to one
+// alert per order. Neither stops the push.
+function flagUncallablePhone(order, storeCode) {
+  try {
+    if (phoneCn.isMainlandMobile(order.recipient_phone)) return;
+    const shown = String(order.recipient_phone || '').trim() || '(空 / blank)';
+    const ref = order.order_no || `#${order.id}`;
+    Promise.resolve(sendOpsAlert(
+      `⚠️ 青云聚信 ${storeCode} 订单 ${ref} 的收货电话可能无法接听：${shown}\n`
+      + `Qingyun ${storeCode}: order ${ref} has a recipient phone a rider likely can't call `
+      + `(${shown}). The push still goes out — call the customer if it comes back refused.`
+    )).catch(e => log(storeCode, `phone flag failed: ${e.message}`));
+  } catch (e) { log(storeCode, `phone flag failed: ${e.message}`); }
+}
+
 // How the drop-off pin was obtained, rendered for the push log. Carries NO
 // customer identity — source, the provider's grade, the ride distance, whether
 // the address was translated. The recipient's name and phone never enter a log
@@ -580,7 +599,8 @@ async function drainPushQueue(storeCode, br) {
         "INSERT OR IGNORE INTO qingyun_push_queue (retail_order_id, store_code, status) VALUES (?, ?, 'pending')"
       );
       const candidates = db.prepare(`
-        SELECT o.id, o.channel, o.address_json, o.delivery_slot_kind, o.scheduled_for
+        SELECT o.id, o.order_no, o.recipient_phone, o.channel, o.address_json,
+               o.delivery_slot_kind, o.scheduled_for
           FROM retail_orders o JOIN retail_stores rs ON rs.id = o.store_id
          WHERE rs.code = @sc AND o.fulfillment_type = 'delivery'
            AND o.status IN ('paid','preparing','dispatched')
@@ -588,7 +608,14 @@ async function drainPushQueue(storeCode, br) {
            AND NOT EXISTS (SELECT 1 FROM qingyun_push_queue q WHERE q.retail_order_id = o.id)`)
         .all({ sc: storeCode, since });
       for (const o of candidates) {
-        if (inventory.isQingyunSameCityToday(o)) enq.run(o.id, storeCode);
+        if (!inventory.isQingyunSameCityToday(o)) continue;
+        // The app-side hook (routes/retail.js maybeEnqueueQingyunPush) is the
+        // normal enqueue path and flags an uncallable phone itself. This sweep
+        // is the other one — an order paid by cash, COD or "Mark paid" never
+        // touches that hook — so the same advisory belongs here, gated the same
+        // way: only when the INSERT actually created the row, so it stays one
+        // alert per order however many times the sweep runs.
+        if (enq.run(o.id, storeCode).changes === 1) flagUncallablePhone(o, storeCode);
       }
     } catch (e) { log(storeCode, `push reconcile error: ${e.message}`); }
   }
@@ -643,7 +670,14 @@ async function drainPushQueue(storeCode, br) {
         log(storeCode, `push: created Qingyun order ${res.orderId} for ${order.order_no}${pinTag(geo)}`);
         logSync(storeCode, 'push', 'ok', { order_no: order.order_no, qy: res.orderId, geo });
       } else {
-        throw new Error(`create failed (code ${res.code}, ${res.msg})`);
+        // Carry the structured answer on the error, not just its rendering.
+        // The classifier below has to tell "Qingyun refused this recipient
+        // phone" from "something went wrong and the text mentions a phone",
+        // and it cannot do that by regexing a message we flattened ourselves.
+        const err = new Error(`create failed (code ${res.code}, ${res.msg})`);
+        err.qyCode = res.code;
+        err.qyMsg = res.msg;
+        throw err;
       }
     } catch (e) {
       // A geocoder outage is not the order's fault. Hold it: keep it pending,
@@ -661,6 +695,16 @@ async function drainPushQueue(storeCode, br) {
       // drain just spent, and wait for someone to confirm the spot. No ops
       // alert: a page is for something that went wrong, and this is a step that
       // simply hasn't been done yet.
+      //
+      // ORDER MATTERS, and it is the whole of this catch block:
+      //   1. hold      — the geocoder is down; give the attempt back, retry later
+      //   2. needs_point — the address resolved, but only to an area; park it
+      //   3. outcome   — a real failure; decide one attempt or five
+      // Both 1 and 2 `continue`, so only a genuine push failure reaches the
+      // outcome. These two branches were written a fortnight apart and met for
+      // the first time in this rebase; a resolution that dropped either would
+      // fail silently — parked orders would burn attempts and page ops, or a
+      // refused phone would retry four more times.
       if (qingyunQueue.shouldMarkNeedsPoint(e)) {
         const pt = e.point || {};
         db.prepare(qingyunQueue.NEEDS_POINT_SQL).run(
@@ -672,14 +716,26 @@ async function drainPushQueue(storeCode, br) {
         logSync(storeCode, 'push', 'ok', { order: row.retail_order_id, needs_point: true }, null);
         continue;
       }
-      const attempts = row.attempts + 1;
-      const done = attempts >= MAX_PUSH_ATTEMPTS;
+      // What this failure means for the row — including whether Qingyun refused
+      // the recipient PHONE, which is the one refusal that four more attempts
+      // cannot fix. Decided in lib/qingyun-queue so the rule is testable without
+      // a courier account (scripts/test_recipient_phone.js).
+      //
+      // A needs_point error cannot arrive here — it `continue`d above — and in
+      // any case carries no qyCode, which the classifier requires, so the two
+      // could not be confused even if the order were reversed.
+      const outcome = qingyunQueue.pushFailureOutcome({
+        err: e, attemptsBefore: row.attempts, maxAttempts: MAX_PUSH_ATTEMPTS,
+      });
+      const { phoneRefused, attempts } = outcome;
+      const done = outcome.status === 'error';
       db.prepare("UPDATE qingyun_push_queue SET status=?, last_error=?, geo_held_at=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?")
-        .run(done ? 'error' : 'pending', String(e.message).slice(0, 300), row.id);
+        .run(outcome.status, outcome.lastError.slice(0, 300), row.id);
       // The same [pin …] provenance the success path prints. A refusal is when
       // you most need it: it says which of the three pin sources was in play and
       // how far off it landed, without anyone having to re-run the push to find out.
-      log(storeCode, `push: order ${row.retail_order_id} failed (attempt ${attempts}${done ? ', giving up' : ''})`
+      log(storeCode, `push: order ${row.retail_order_id} failed (attempt ${attempts}`
+        + `${phoneRefused ? ', giving up — recipient phone refused, retrying cannot fix it' : done ? ', giving up' : ''})`
         + `${pinTag(e._geo)}: ${e.message}`);
       if (done) {
         // Deliberately NOT gated on alertsAllowed: giving up is terminal (nothing
@@ -687,7 +743,16 @@ async function drainPushQueue(storeCode, br) {
         // order quietly never reaching Qingyun. It's one message that sits in the
         // group until morning, not a repeating page.
         logSync(storeCode, 'push', 'error', null, e.message);
-        sendOpsAlert(`🔴 青云聚信 ${storeCode} 自动发单失败（订单#${row.retail_order_id}）：${e.message}\nQingyun ${storeCode} auto-create failed for order #${row.retail_order_id} — push it by hand`);
+        // A phone refusal has a different remedy from every other refusal —
+        // correct the number, don't push it by hand — so it says so. Sent once,
+        // on the same terminal branch, because the row is now 'error' and
+        // nothing retries it until someone acts.
+        sendOpsAlert(phoneRefused
+          ? `🔴 青云聚信 ${storeCode} 收货电话被拒（订单#${row.retail_order_id}）：${e.qyMsg}\n`
+            + `Qingyun ${storeCode}: order #${row.retail_order_id} was refused because the recipient phone `
+            + `isn't one a rider can call. Fix the number on the order (Edit ship-to), then press Retry push. `
+            + `Pushing it by hand will be refused too.`
+          : `🔴 青云聚信 ${storeCode} 自动发单失败（订单#${row.retail_order_id}）：${e.message}\nQingyun ${storeCode} auto-create failed for order #${row.retail_order_id} — push it by hand`);
       }
     }
   }

@@ -1353,3 +1353,51 @@
 }
 .of-add:active { opacity: 0.85; }
 .of-empty { text-align: center; color: #6d7a2a; font-size: 26rpx; margin: 0 0 22rpx; }
+
+/* Rider-phone notice — the number on this order probably can't take a courier
+   rider's call. Advisory, never a blocker, so it borrows the soft tinted card
+   of .bind-empty rather than anything that reads as an error: nothing has gone
+   wrong, and the customer can place the order regardless. */
+.rider-phone-note {
+  background: rgba(204, 217, 0, 0.14);
+  border: 2rpx solid var(--ink);
+  padding: 24rpx 22rpx;
+  margin-top: 18rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 14rpx;
+}
+.rpn-msg {
+  font-size: calc(24rpx * var(--font-scale));
+  line-height: 1.5;
+  color: var(--ink);
+}
+.rpn-action {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink);
+  text-decoration: underline;
+}
+/* The input and its Save sit on one line; the input takes the slack so the
+   button stays put as the field grows. */
+.rpn-fix {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  width: 100%;
+}
+.rpn-input { flex: 1; min-width: 0; }
+.rpn-save {
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #FFFCF7;
+  background: var(--ink);
+  padding: 0 24rpx;
+  height: 72rpx;
+  line-height: 72rpx;
+  white-space: nowrap;
+}
+.rpn-save.is-saving { opacity: 0.55; }

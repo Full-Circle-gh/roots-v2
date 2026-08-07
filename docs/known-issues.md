@@ -107,9 +107,37 @@ checkout.**
 *Area:* same-city courier push × every recipient-phone capture path ·
 `lib/qingyun-payload.js`, `routes/retail.js`, `miniapp/pages/{addresses,checkout}`,
 `public/shop.html`, `public/retail-admin/{04-orders,08-customers}.js`
-*Status:* pre-existing; surveyed and characterised 2026-08-06. The address half
-of the same payload validates itself thoroughly (pin provenance, corroboration,
-distance ceilings); the phone half has no equivalent at any layer.
+*Status:* **FIXED, pending deploy** — built on `claude/recipient-phone-warn-flag`,
+not yet merged or shipped. Surveyed 2026-08-06; decided and built the same day.
+The address half of the same payload validates itself thoroughly (pin
+provenance, corroboration, distance ceilings); the phone half had no equivalent
+at any layer. Everything below the Mechanics heading describes the behaviour as
+it was, and stays for the record until this ships — then this entry moves out of
+known-issues, because it will no longer be one.
+
+### Decided (Ash, 2026-08-06)
+
+**Checkout never blocks on phone format.** Not for a foreign number, not for a
+malformed one, not for anything. Three changes instead, none of which can stop
+an order:
+
+1. **Warn the customer at checkout** — only when a same-city rider is actually
+   going to carry the order, and only when a number is present but can't be
+   rung. Inline, with a way to correct it on the spot, and the order proceeds
+   either way.
+2. **Flag ops at enqueue** — one alert per order, the moment it joins the push
+   queue, so someone can ring the customer while the push runs rather than after
+   it fails.
+3. **Stop retrying a rejection that can't improve** — a `40001` that clearly
+   names the recipient phone ends the row at the FIRST failure instead of the
+   fifth, with a reason the order drawer already renders and a Retry that works
+   once staff correct the number.
+
+The reason it warns rather than rejects is at the top of `lib/phone-cn.js`:
+Qingyun's accepted format is still not documented, so the `^1\d{10}$` rule is
+inferred from which numbers they refused. An inference is good enough to warn a
+customer and to stop wasting attempts; it is not good enough to turn a paying
+customer away.
 
 ### Mechanics
 
@@ -168,23 +196,54 @@ mis-delivered: the push refuses rather than sending a rider to a number that
 cannot be called, and ops is paged. The cost is 5 wasted attempts, an alert, and
 a delivery that stalls until someone intervenes.
 
-### Candidate fix
+### What was built
 
-Validate at capture, centralised the way the address pipeline centralised into
-`lib/`. The primitive already exists — `normalizeCnMobile` in `lib/aliyun-sms.js`
-strips non-digits, unwraps `86`/`086`, and tests `^1\d{10}$` — and wants lifting
-into a shared module so a client-side hint and a server-side check read the same
-rule. The single server choke point is the address write path
-(`POST`/`PUT /api/retail/addresses` plus the two admin equivalents); every
-storefront path funnels through it, and the admin order-patch path needs the
-same check added.
+`lib/phone-cn.js` — the rule, lifted out of `lib/aliyun-sms.js` (which now
+consumes it, contract unchanged). `normalize` for comparing, `isMainlandMobile`
+for the question, and `normalizeForStorage` for what gets written: deliberately
+timid, so a field holding a note keeps its words, a number it can't parse keeps
+its original, and only a mainland country code is ever dropped. The mini-app
+and `shop.html` carry their own copies of the same regex because they are
+separate bundles; a test asserts all three agree, shape by shape.
 
-Validation must be conditional, not global: pickup orders, marketplace channels
-and out-of-city deliveries never meet Qingyun, and a rule that blocks them would
-reject numbers that are perfectly fine for their order type. The gate is the
-same one the push uses — `inventory.isQingyunSameCityToday`.
+**Storage** — the five paths that write a phone all normalize now, including the
+admin order patch, which sits outside the address funnel and writes
+`retail_orders` directly. The whitespace-only hole is closed at its root:
+`normalizeChinaAddress` used to pass `phone` through untouched, so `'   '`
+satisfied every presence check; it now trims, and the presence checks test
+trimmed values. Both partial-update PUTs needed the normalization applied
+separately — an edit that changes only the phone skips `normalizeChinaAddress`
+entirely, and that is precisely the edit this feature asks customers to make.
 
-**Open decision (Ash):** what checkout does when a customer's number cannot take
-a rider's call — require a mainland contact number for same-city delivery,
-accept with a warning, or accept and flag for ops. Not decided; the fix is not
-started pending it.
+**Checkout notice** — `POST /api/retail/checkout/quote` returns
+`same_city_rider`, computed with `inventory.isQingyunSameCityToday`, the same
+predicate the enqueue hook and the daemon use. The clients never re-implement
+the gate, so the notice can't claim a rider is coming when none is. Quote-time
+caveat: `scheduled_for` isn't resolved yet, so an Express pick that will land
+today reads as not-eligible and shows nothing — under-showing an advisory is
+the harmless direction.
+
+**Ops flag** — one alert per order, gated on the enqueue `INSERT OR IGNORE`
+reporting `changes === 1`. That is the entire throttle: a requeue is an UPDATE
+and a re-run of the hook ignores, so neither can page twice. Both enqueue points
+carry it (the app hook, and the daemon's reconcile sweep, which is the only path
+a cash/COD/mark-paid order takes).
+
+**First-failure stop** — `qingyunQueue.pushFailureOutcome` decides what a failed
+attempt means, so the one-attempt-vs-five rule is testable without a courier
+account. Classification is conservative on purpose: Qingyun must have actually
+answered (a structured code came back), and the message must name both the
+recipient and a phone. The code is deliberately not part of the test — `40001`
+is the generic invalid-parameter code and identifies nothing on its own, while
+the message is the evidence. Anything unclear keeps all five attempts, because
+being wrong in that direction only wastes attempts, while being wrong the other
+way abandons a recoverable order after one try.
+
+Tests: `scripts/test_recipient_phone.js` (55 assertions), `npm run test:phone`.
+
+### Still true after the fix
+
+The numbers this warns about are still delivered — that is the decision, not an
+oversight. A customer with only a Hong Kong number places their order, ops is
+told at once, the push is refused once rather than five times, and someone rings
+them. What changed is that nobody finds out by accident.
