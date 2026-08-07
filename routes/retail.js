@@ -17313,6 +17313,14 @@ router.post('/api/retail/orders/:id/reschedule', requireRetailAuth, express.json
       WHERE id = ?`
   ).run(scheduledFor, slotLabel, slotKind, id);
 
+  // The receipt already in the store's pile still names the OLD day — it was cut
+  // at payment and nothing refreshes it. Print a short change slip so the paper
+  // catches up. `o` still holds the pre-UPDATE values (read at the top of this
+  // handler), which is the only place the superseded day survives. Fire-and-
+  // forget and fully guarded inside: the reschedule is already committed and
+  // must never fail on a printer.
+  autoPrintDateChange(id, { scheduled_for: o.scheduled_for, delivery_slot_label: o.delivery_slot_label });
+
   res.json({
     success: true,
     data: { scheduled_for: scheduledFor, slot_label: slotLabel, slot_kind: slotKind },
@@ -22326,6 +22334,54 @@ function autoPrintRefundRequest(orderId, lines) {
       .then(r => console.log('[feie refund]', orderId, r.ok ? 'ok' : r.msg))
       .catch(e => console.warn('[feie refund]', orderId, e.message));
   } catch (e) { console.warn('[feie refund setup]', e.message); }
+}
+
+// Print a short "date changed" slip when a customer reschedules an order whose
+// receipt ALREADY printed. The receipt is a snapshot cut at payment and nothing
+// refreshes it, so the paper in the pile keeps naming the old day
+// (docs/receipt-booked-date-findings.md §7). This prints the difference — not a
+// second full receipt, which would be indistinguishable from the slip it
+// replaces once it hit the pile.
+//
+// `prev` is { scheduled_for, delivery_slot_label } read BEFORE the reschedule
+// UPDATE overwrote them — the caller already has both in hand, so this costs no
+// extra query.
+//
+// GUARDS (both required):
+//   • printed_at set — the order actually produced a slip. A first-time booking
+//     on a never-printed order is already correct on paper and gets nothing.
+//   • the day genuinely moved — compared on the (label, scheduled_for) PAIR,
+//     which is exactly what the slip renders from. A reschedule that lands back
+//     on the same value would print a slip saying nothing changed.
+//
+// Best-effort + fire-and-forget, matching autoPrintAddon / autoPrintRefundRequest:
+// the reschedule has already been committed by the time this runs, and a dead or
+// offline printer must never fail or roll back the customer's change. Nothing
+// here touches print_status — that flag tracks the ORIGINAL order slip.
+function autoPrintDateChange(orderId, prev) {
+  try {
+    const pp = loadPrinterPrefs();
+    // Rides the main order auto-print toggle rather than minting a new config
+    // key: this slip is an amendment to the receipt that toggle produced, so a
+    // store that prints no receipts wants no corrections to them either.
+    if (!pp.auto_print || !_feie.feieEnabled(integ().feie)) return;
+    const order = tdb().prepare('SELECT * FROM retail_orders WHERE id = ?').get(orderId);
+    if (!order || !order.printed_at) return;
+    const p = prev || {};
+    const sameDay = String(p.scheduled_for || '') === String(order.scheduled_for || '')
+                 && String(p.delivery_slot_label || '') === String(order.delivery_slot_label || '');
+    if (sameDay) return;
+    // Same printer the original receipt went to — out-of-GZ orders print at the
+    // designated out-of-city store, everything else at the order's own store.
+    const printer = printerForOrder(order, pp);
+    if (!printer || !printer.sn) { console.warn('[feie datechange]', orderId, 'no_printer_for_store'); return; }
+    order.prev_scheduled_for  = p.scheduled_for || null;
+    order.prev_slot_label     = p.delivery_slot_label || null;
+    const content = _feie.renderOrder('datechange', order, [], pp.shop_name, []);
+    _feie.printContent(content, { sn: printer.sn, copies: printer.copies || 1 }, integ().feie)
+      .then(r => console.log('[feie datechange]', orderId, r.ok ? 'ok' : r.msg))
+      .catch(e => console.warn('[feie datechange]', orderId, e.message));
+  } catch (e) { console.warn('[feie datechange setup]', e.message); }
 }
 
 router.get('/api/retail-admin/printer', requireRetailAdmin, (req, res) => {
