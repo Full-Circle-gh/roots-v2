@@ -4,8 +4,15 @@
 drawer. The printed thermal slip for the same order shows no booked/reservation
 date at all. Why?
 
-**Scope.** Survey only — no code changed. All line references are against
-`origin/main` @ `7ff831b`.
+> **READ §6 FIRST.** A later round established that TC000180 ships to 广东省
+> 东莞市 厚街镇 (Dongguan), not Guangzhou. That single fact withdraws the (d)
+> mirror-drift verdict reached in §Root cause and corrects one claim in §3.
+> §1, §2, §4 and §5 stand. Superseded passages are banner-marked in place rather
+> than deleted, so the reasoning that failed stays legible.
+
+**Scope.** Survey only — no code changed. Line references in §1-§5 are against
+`origin/main` @ `7ff831b`; §6 against `3a86f955`. No line cited in §1-§5 moved
+between the two.
 
 **One caveat stated up front.** This checkout has no database file (no `*.db` /
 `*.sqlite*` anywhere in the tree), so TC000180's actual column values could not
@@ -187,6 +194,15 @@ intent outright: *"MIRRORS the admin's annotateShipBy() + shipByPlan() … keep
 the precedence in sync"*, and `public/retail-admin/04-orders.js:1754-1756` says
 the same from the other side.
 
+> **⚠ SUPERSEDED — this paragraph is wrong. See §6.** It claimed the `in 3d`
+> badge proves `scheduled_for` sits at GZ midnight. It does not: `in Nd` also
+> renders on the **hours** branch at `public/retail-admin/04-orders.js:2294`
+> (`u.level === 'later' && h != null && p.urgencyBasis === 'arrival'`), which
+> requires no bare date at all. The badge is therefore consistent with a
+> `scheduled_for` carrying a real time, and proves nothing about midnight. The
+> original text is kept below so the error is legible rather than quietly
+> rewritten.
+
 **One incidental confirmation about TC000180.** The `in 3d` badge only renders
 on the `u.dateOnly` branch (`public/retail-admin/04-orders.js:2280-2288`), and
 `dateOnly` is set only when `urgencyDate` is a bare `YYYY-MM-DD`
@@ -293,6 +309,15 @@ call the same `pushShipBy`.
 
 ## Root cause
 
+> **⚠ SUPERSEDED for TC000180 — this diagnosis does not hold. See §6.**
+> The confirming case below requires `zone_type = 'gz_district'`. TC000180 ships
+> to 广东省 东莞市 厚街镇 (Dongguan), which cannot resolve to a `gz_district`
+> zone by any path — see §6.1. With that guard unreachable, the two ship-by
+> copies agree on every branch that can produce a `Booked` kicker for this
+> order, and the mirror-drift explanation collapses. §6 works out what replaces
+> it. The section is kept in full because the mechanism it describes is real —
+> it is simply not what happened to this order.
+
 **(d) — something else: the print copy of the ship-by decision has drifted from
 the admin copy, and cannot be reconciled because the data the admin guard
 depends on is not in the print payload.**
@@ -328,25 +353,240 @@ branch (`public/retail-admin/04-orders.js:1876`), and an `in 3d` badge requires
 `slotEndAnchor` to have collapsed `scheduled_for` to a bare date, which happens
 only at GZ midnight (`public/retail-admin/04-orders.js:1747-1751`). Confirm with:
 
+*(The confirming SQL that stood here has been replaced — see §6.5. It queried
+`zone_type`, which §6 shows is the wrong thing to look at for this order.)*
+
+---
+
+## 6. Zone contradiction — Dongguan address
+
+**New fact.** TC000180 ships to **广东省 东莞市 厚街镇** — Dongguan, not
+Guangzhou — and is fulfilled by Tianhe. §4.1 hangs the whole (d) diagnosis on
+the inner-GZ-district early return at `routes/retail.js:10213-10215`, whose
+confirming case requires `zone_type = 'gz_district'`. This section resolves
+whether a Dongguan address can ever reach that branch, and what survives if it
+cannot.
+
+**Verdict up front: it cannot, and (d) does not survive.** The mechanism §4.1
+describes is real, but it is unreachable for this order, and every path that
+*can* produce a `Booked` kicker here is mirrored correctly on the print side.
+
+### 6.1 Zone assignment — how a delivery address gets a `delivery_zone_id`
+
+At checkout, `POST /api/retail/orders` resolves the zone from the normalized
+address:
+
+```js
+if (!isPickup) address = normalizeChinaAddress(address);          // :9655
+const zone = isPickup ? null : matchDeliveryZone(address);        // :9656
+…
+deliveryZoneId = zone.is_default ? null : zone.id;                // :9674
+```
+
+`matchDeliveryZone` (`routes/retail.js:25522-25602`) tries, in order:
+
+1. **Hong Kong** — blob contains 香港 → the single HK `city` row
+   (`routes/retail.js:25547-25553`).
+2. **Guangzhou districts** — *only* when
+   `isGuangzhou(address.city) || /广州/.test(blob) || /guangzhou/i.test(blob)`
+   (`routes/retail.js:25555`), and only when `gz_district` rows exist
+   (`routes/retail.js:25564-25579`). If districts are configured and none
+   matches, it returns **null** (`routes/retail.js:25576`).
+3. **Exact city** match against `zone_type='city'` rows
+   (`routes/retail.js:25585-25587`).
+4. **Province-level** — `match_city` equals the address's 省
+   (`routes/retail.js:25589-25591`).
+5. **Free-text blob** substring, full or suffix-stripped
+   (`routes/retail.js:25593-25598`).
+6. **National default** — `defaultDeliveryZone()`
+   (`routes/retail.js:25601`).
+
+### 6.2 What a Dongguan address resolves to
+
+`isGuangzhou` (`routes/retail.js:25458-25461`, and the identical earlier copy at
+`:8303-8307`) matches only the 广州 / guangzhou / gz aliases. **东莞市 is not
+Guangzhou**, and the blob test at `routes/retail.js:25555` scans for `广州` —
+which does *not* occur in `广东省 东莞市 厚街镇` (广东 ≠ 广州, different second
+character). So step 2 is skipped outright, and the gz_district table is never
+even read.
+
+The address therefore lands on one of:
+
+- a `zone_type='city'` row (an explicit 东莞市 zone, a 广东省 province-level
+  zone, or a blob hit), **or**
+- the **national default** (`routes/retail.js:25601`), which is a synthetic
+  object with `id: 'default'`, `is_default: 1`, **`zone_type: 'city'`**
+  (`routes/retail.js:25478-25480`).
+
+**There is a catch-all, and its `zone_type` is `'city'`** — never `gz_district`.
+And it has a second consequence that matters more than its type: because
+`is_default` is 1, `routes/retail.js:9674` stores **`delivery_zone_id = NULL`**.
+The drawer's `LEFT JOIN retail_delivery_zones z ON z.id = o.delivery_zone_id`
+(`routes/retail.js:20316`) then matches no row, so `zone_type`, `zone_day_only`
+and `zone_same_day_surcharge` all arrive at `annotateShipBy` as **NULL**. The
+same `NULL` outcome follows from the `else` branch at `routes/retail.js:9675`
+when `matchDeliveryZone` returns null altogether.
+
+**Can a non-Guangzhou address ever end up `zone_type='gz_district'`?** From the
+code, no. The only reads of `gz_district` rows are gated behind the
+`inGuangzhou` test (`routes/retail.js:25564-25567`). The one theoretical route
+is a mis-keyed zone row — a `gz_district` row whose `match_district` string
+happens to appear in a non-GZ blob — but that still requires `inGuangzhou` to be
+true first, which a Dongguan address cannot make true. **Not reachable.**
+
+### 6.3 Does the diagnosis survive? — every branch that yields `Booked`
+
+For the drawer to print the `Booked` kicker
+(`public/retail-admin/04-orders.js:1876`), `shipByPlan` must reach its scheduled
+branch, which requires all of:
+
+- not counter (`:1772`), not pickup (`:1774`);
+- **`promised_ship_date` NULL** — otherwise `:1791` returns the batch plan,
+  whose kicker is `Deliver by` / `Ship by`, not `Booked`;
+- `scheduled_for` set and `ship_by_mode !== 'asap'` (`:1829`).
+
+So the question reduces to: which `annotateShipBy` branches return **without**
+setting `ship_by_mode = 'asap'` (`routes/retail.js:10226`)?
+
+| # | Line | Branch | Reachable for Dongguan? |
+|---|---|---|---|
+| 1 | `:10205` | `shipsNothing(r)` — pickup / counter (`lib/fulfilment.js:42-45`) | **No** — this is a delivery order |
+| 2 | `:10213-10215` | inner-GZ district (`zone_type='gz_district'`, `day_only≠1`, no surcharge) | **No** — §6.1/6.2; `zone_type` is `'city'` or NULL |
+| 3 | `:10218` | `kind === 'schedule' \|\| kind === 'today'` | **Yes** |
+| 4 | `:10225` | `!isAsap` — `scheduled_for` set, `kind` not in {express, right_away, restock}, and not (`kind == null` && GZ-midnight) | **Yes** |
+
+Only branches **3** and **4** survive. Now re-check each against
+`shipByPrintParts` (`lib/feie.js:404-448`):
+
+- **Branch 3 — `kind = 'schedule'` or `'today'`.** `lib/feie.js:431` sets
+  `explicitDate = true`, so `:435` is entered regardless of the midnight test.
+  `slotValue(o.delivery_slot_label, o.scheduled_for)` (`lib/feie.js:466-469`)
+  falls back to `fmtSlotDate(scheduled_for)`, which is non-empty for any valid
+  timestamp — so `:437` returns `Deliver 送达`. **The print copy has this
+  branch. It prints.**
+- **Branch 4 — `kind == null`, `scheduled_for` not at GZ midnight.**
+  `lib/feie.js:432-434` computes `isAsap`: the `kind == null && isGzMidnight(…)`
+  clause is false precisely because the timestamp is not midnight, and the other
+  clauses need a non-null kind or an absent `scheduled_for`. So `isAsap` is
+  false, `!isAsap` is true, `:435` is entered, and `:437` returns
+  `Deliver 送达`. **The print copy has this branch too. It prints.**
+
+**The print copy lacks neither.** For a Dongguan address there is no state in
+which the drawer reads `Booked` and `shipByPrintParts` returns `null`. The
+divergence identified in §4.1 is real code, but it is dead code for this order.
+
+This also removes the last support for the midnight claim: with branch 2
+unreachable, branch 4 *requires* `scheduled_for` **not** to be at GZ midnight,
+and branch 3 is indifferent to it. Combined with the corrected badge reading in
+§3 (`in Nd` renders on the hours branch at
+`public/retail-admin/04-orders.js:2294`), nothing in the drawer's output implies
+a midnight timestamp.
+
+### 6.4 The out-of-GZ batch path — why `promised_*` is NULL
+
+§2.3 said `promised_ship_date` / `promised_delivery_date` are written only by
+the outside-GZ batch path (`routes/retail.js:10110-10112`). Dongguan **is**
+outside GZ, so the objection is fair. The resolution: being outside GZ is
+**necessary but not sufficient**. `computeBatchNotice`
+(`routes/retail.js:25732-25741`) returns `null` — writing nothing — on any of
+four gates, only the first of which Dongguan passes:
+
+| Gate | Line | Dongguan order |
+|---|---|---|
+| `if (!zone) return null` | `:25733` | passes (a zone object exists, even the default) |
+| `isCity \|\| isShipDistrict` | `:25734-25737` | **passes** — `zone_type='city'` |
+| `const cfg = batchScheduleCfg(); if (!cfg) return null` | `:25738-25739` | fails if `batch.schedule` is disabled/unset |
+| `if (!batchItems.length) return null` | `:25740-25741` | **fails if the cart holds no batch-made product** |
+
+A Dongguan order carrying no `is_batch_made` item (`database.js:2831`) writes
+neither column. That is the ordinary case, not an anomaly — most carts contain
+no fresh-batch item. And it is *forced* here: if `promised_ship_date` were set,
+`shipByPlan` would have returned the batch plan at
+`public/retail-admin/04-orders.js:1791-1821` and the drawer would read
+`Deliver by` / `Ship by`, **not** `Booked`. So the observed kicker itself proves
+both columns are NULL, and the `Arrives 预计送达` branch (`lib/feie.js:420-423`)
+could not have fired either.
+
+### 6.5 What replaces (d)
+
+With the mirror shown to be in sync on every reachable branch, the blank slip
+must come from somewhere other than the ship-by decision. Three candidates
+remain, all supported by code, none decidable without live data:
+
+1. **The template in use has no ship-by line at all — a genuine (a).** A
+   Dongguan destination routes to the *out-of-city* printer by rule:
+   `printerForOrder` (`routes/retail.js:22160-22178`) computes
+   `outOfGZ = !!city && !isGuangzhou(city)` (`:22164`) and returns
+   `outOfCityPrinter(prefs)` (`:22165-22168`) — the store named by
+   `printer.out_of_city_store_id` (`routes/retail.js:22110-22111, 22147-22151`),
+   whose own comment names Tianhe as that warehouse
+   (`routes/retail.js:22122-22124, 22154-22155`). The template is read **from
+   that printer's own config** — `printer.template`, resolved at
+   `routes/retail.js:22210`. If the out-of-city printer is set to **`compact`**,
+   no date can appear: `compact` (`lib/feie.js:623-638`) prints order no,
+   `paid_at/placed_at`, items and total, and **never calls `pushShipBy`** — by
+   design. This is the leading hypothesis: it explains "no booked date at all"
+   on an out-of-GZ order without requiring any bug.
+2. **The slip never printed, or printed stale.** `print_status`, `print_error`
+   and `printed_at` (`database.js:2885-2887`) are stamped by
+   `recordPrintResult` (`routes/retail.js:22219-22231`).
+3. **It printed and was not recognised.** No slip anywhere is labelled
+   "Booked" — the receipt says `Deliver 送达` (`lib/feie.js:437`). A line
+   reading `Deliver 送达 / Aug 10` is easy to read as a shipping note rather
+   than the reservation date. §1 already records that no "Booked" label exists
+   in `lib/feie.js`.
+
+### 6.6 Revised confirming SQL
+
+The zone columns are no longer the thing to look at; the printer routing and
+template are. Read-only:
+
 ```sql
-SELECT o.delivery_slot_kind, o.scheduled_for, o.delivery_slot_label,
-       o.promised_ship_date, o.promised_delivery_date, o.channel_preorder_at,
-       o.fulfillment_type, z.zone_type, z.day_only, z.same_day_surcharge
+SELECT o.order_no, o.delivery_slot_kind, o.scheduled_for, o.delivery_slot_label,
+       o.promised_ship_date, o.promised_delivery_date, o.fulfillment_type,
+       o.store_id, o.print_status, o.print_error, o.printed_at,
+       json_extract(o.address_json, '$.city') AS dest_city,
+       o.delivery_zone_id, z.zone_type,
+       (SELECT value_json FROM storefront_config
+         WHERE key = 'printer.out_of_city_store_id') AS ooc_store_id,
+       (SELECT value_json FROM storefront_config
+         WHERE key = 'printer.by_store')             AS printer_by_store
   FROM retail_orders o
   LEFT JOIN retail_delivery_zones z ON z.id = o.delivery_zone_id
  WHERE o.order_no = 'TC000180';
 ```
 
-Expected if the above is right: `delivery_slot_kind` NULL, `scheduled_for` at
-GZ midnight (`…T16:00:00.000Z` for the previous UTC day, or a local-midnight
-string), both `promised_*` NULL, `channel_preorder_at` NULL,
-`zone_type='gz_district'` with `day_only` not 1 and no same-day surcharge.
+How to read it:
 
-If instead `delivery_slot_kind` comes back as `'schedule'` or `'today'`, this
-diagnosis is wrong — those values make `explicitDate` true at
-`lib/feie.js:431` and the slip *would* print `Deliver 送达` — and the
-investigation should move to the print-time path (`print_status` /
-`print_error` on the row, and whether the slip that reached the counter was the
-`compact` template, which carries no ship-by line at all by design).
+- **`dest_city` = 东莞市 and `ooc_store_id` set** → the slip printed on the
+  out-of-city printer. Find that store's id inside `printer_by_store` and read
+  its `template`. **`template` = `compact` confirms candidate 1** and the answer
+  is (a): the template in use carries no ship-by line, and nothing is broken —
+  it is configured that way.
+- **`template` = `receipt` or `packing`, and `delivery_slot_kind` is
+  `schedule` / `today` / NULL with a non-midnight `scheduled_for`** → the slip
+  *should* have carried `Deliver 送达`. Then check `print_status` /
+  `print_error` (candidate 2), and if those are clean, candidate 3 — ask whether
+  the paper actually said `Deliver 送达` and was read as something else.
+- **`zone_type` NULL with `delivery_zone_id` NULL** → the national default zone
+  (`routes/retail.js:25478-25480, 9674`); expected for Dongguan, and further
+  confirmation that the §4.1 gz_district branch was never in play.
+- **`promised_ship_date` non-empty** → contradicts the `Booked` kicker (§6.4);
+  the drawer would have read `Deliver by`. Re-open §6.3 if so.
 
-No fix proposed here, per the task scope.
+### 6.7 Standing corrections to the earlier sections
+
+- **§3's "incidental confirmation" is wrong** and is banner-marked in place:
+  `in Nd` also renders on the hours branch
+  (`public/retail-admin/04-orders.js:2294`), so the badge never proved a
+  GZ-midnight `scheduled_for`.
+- **The §Root cause verdict (d) is withdrawn for TC000180** and banner-marked
+  in place. The drift it describes exists in the code, but requires
+  `zone_type='gz_district'`, which this order cannot have.
+- **§1, §2, §4 and §5 stand unchanged.** The template inventory, the write-path
+  trace, the `SELECT *` payload finding and the print-surface table were not
+  contingent on the zone.
+
+No fix proposed here, per the task scope. No live data was available for this
+round either — §6 is derived from code alone, and §6.5 deliberately leaves three
+candidates open rather than picking one without evidence.
