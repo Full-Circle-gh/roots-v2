@@ -1010,7 +1010,23 @@ The evidence is the money-scale census, run read-only against the live databases
 
 The disagreement between this document and `plan.json` noted earlier is resolved in favour of decimal.
 
-## 25. Related documents
+## 25. A printed slip that goes stale is corrected on paper, not reprinted — DECIDED 2026-08-07
+
+DECISION: When a customer reschedules an order whose receipt has already printed, the printer emits a short CHANGE SLIP naming the new day, the day it replaces, and enough identity to match it to the original. The original receipt is never reprinted.
+
+WHY THIS SHAPE: A printed slip is a snapshot of the order at the moment it was cut, and nothing in the system refreshes it. Order TC000180 printed at 09:17 carrying no date at all — correctly, because at that moment the customer had chosen none — and the customer then booked Aug 10. The kitchen was holding paper that said nothing about a day the order now had. This is a class of problem rather than one order: any field the receipt prints can be changed after the receipt exists, and the paper has no way to know.
+
+REJECTED — REPRINT THE FULL RECEIPT: Two near-identical slips for one order end up on the same spike, and nothing on either says which is current. Staff would have to read both in full to find the single line that differs, and the stale one stays in the pile because there is no reason to remove it. A short slip that carries only the change is physically unmistakable at arm's length — that is the whole reason it is short, not an aesthetic preference.
+
+REJECTED — MOVE THE PRINT TRIGGER TO PREPARATION TIME: Printing when the kitchen picks the order up, rather than when payment lands, would remove the staleness class outright instead of correcting it after the fact — a strictly better shape. It is not taken because it changes when every scheduled order reaches the kitchen, which is an operational change well beyond a printing defect. Recorded here so the option is not re-derived from scratch the next time a stale-paper problem appears.
+
+TOGGLE: The change slip rides the existing `pp.auto_print` rather than a switch of its own. A separate toggle was considered and rejected: an operator who wants receipts wants to know when a date moves, and the failure mode of an independent switch is a slip that silently does not print — which nobody notices until a parcel goes out on the wrong day.
+
+VOCABULARY: Locked in docs/tacet-delivery-vocabulary.md, "Date changed after printing" — `改期` for the head, `顾客预约` for the new day, `原定时间` for the superseded one. `改期` is fulfilment-neutral: one term for delivery and pickup alike, because a date moving is equally true of both. No pickup variant is to be added; the three-way pickup relabelling recorded elsewhere is a defect, not a pattern to extend.
+
+SHIPPED: 794dc601, PR #17. Findings that led here are in docs/receipt-booked-date-findings.md §§6-7.
+
+## 26. Related documents
 
 - docs/tacet-glossary.md — binding definitions, v1.4, 2026-07-31. The words in this document are used with the meanings defined there.
 - docs/tacet-desktop-patterns.md — the rulebook for how a desktop admin page is put together, v4.2, 2026-08-03. Prescriptive except on Orders: when a rule and an unbuilt page disagree, that document wins.
