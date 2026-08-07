@@ -1,0 +1,111 @@
+name: Production maintenance
+
+# Runs ONE committed, reviewable maintenance script against the live server.
+#
+# This is the mutating sibling of ro-query.yml. That workflow promises to ship
+# nothing and change nothing, and the scripts it accepts are named diagnose_*
+# precisely so that promise is checkable at a glance. A script that deletes files
+# must not travel down that path, and must not be named to slip through its
+# filename gate. So it gets its own workflow, which says plainly what it does.
+#
+# The safety story here is NOT this workflow — it is the script it runs. Each
+# scripts/cleanup-*.js carries its own literal list of what it may touch and its
+# own list of what it must never touch, checks the second immediately before
+# every unlink, and defaults to a dry run. This file only decides WHETHER to pass
+# --apply, and makes that decision deliberate:
+#
+#   * manual dispatch only — nothing here runs on a push
+#   * `apply` defaults to false, so the default outcome is a dry run
+#   * `confirm` must be typed as the exact word APPLY for --apply to be passed
+#
+# Same DEPLOY_HOST / DEPLOY_SSH_KEY secrets as deploy.yml and ro-query.yml.
+
+on:
+  workflow_dispatch:
+    inputs:
+      script:
+        description: "Path (repo-relative) of the maintenance script to run"
+        required: true
+        default: scripts/cleanup-disk-tier1.js
+      apply:
+        description: "Actually make changes (unchecked = dry run)"
+        type: boolean
+        default: false
+      confirm:
+        description: "Type APPLY to confirm. Anything else forces a dry run."
+        required: false
+        default: ""
+
+concurrency:
+  group: prod-maintenance
+  cancel-in-progress: false
+
+jobs:
+  maintain:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Refuse anything outside the maintenance set
+        run: |
+          set -euo pipefail
+          S='${{ inputs.script }}'
+          case "$S" in
+            scripts/cleanup-*.js) ;;
+            *) echo "::error::Only scripts/cleanup-*.js may be run here (got '$S')."; exit 1 ;;
+          esac
+          [ -f "$S" ] || { echo "::error::$S is not in this checkout."; exit 1; }
+          echo "Will run $S"
+
+      - name: Decide dry-run vs apply
+        id: mode
+        run: |
+          set -euo pipefail
+          # Both the checkbox AND the typed word are required. Either one alone
+          # leaves this a dry run, so a mis-click cannot delete anything.
+          if [ '${{ inputs.apply }}' = 'true' ] && [ '${{ inputs.confirm }}' = 'APPLY' ]; then
+            echo "flag=--apply" >> "$GITHUB_OUTPUT"
+            echo "::warning::APPLY mode — this run will modify the live server."
+          else
+            echo "flag=" >> "$GITHUB_OUTPUT"
+            echo "Dry run (apply='${{ inputs.apply }}', confirm matched=$([ '${{ inputs.confirm }}' = 'APPLY' ] && echo yes || echo no))."
+          fi
+
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          cat > ~/.ssh/config <<EOF
+          Host prod
+            HostName $DEPLOY_HOST
+            User root
+            IdentityFile ~/.ssh/id_deploy
+            StrictHostKeyChecking accept-new
+            ConnectTimeout 20
+          EOF
+          chmod 600 ~/.ssh/config
+
+      - name: Run it
+        run: |
+          set -euo pipefail
+          S='${{ inputs.script }}'
+          STAGE="/tmp/maintenance-$GITHUB_RUN_ID"
+          REMOTE="$STAGE/$(basename "$S")"
+
+          # The script is self-contained: no lib/, no node_modules, no database.js
+          # stub. It is copied in, run, and deleted again.
+          ssh prod "rm -rf '$STAGE' && mkdir -p '$STAGE'"
+          scp -q "$S" "prod:$REMOTE"
+
+          set +e
+          ssh prod "node '$REMOTE' ${{ steps.mode.outputs.flag }}"; RC=$?
+          set -e
+          ssh prod "rm -rf '$STAGE'"
+          echo "exit=$RC"
+          exit $RC
