@@ -11520,22 +11520,22 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 
 /* ===========================================================================
    ORDERS WAITING FOR A DELIVERY POINT — dashboard worklist (spec section 7)
-   Variant C: plain background, rules between rows, NO card box. Every other
-   block on this page is a .bn-card; this one deliberately is not, so it reads
-   as a list of work rather than another panel of figures.
+   A .bn-card at BLOCK level, Variant C at ROW level: plain rows, rules between
+   them, no box drawn around each row.
+   The first build left the block unboxed on a literal reading of "no card box"
+   in section 7. The survey that followed showed Variant C is this sheet's idiom
+   for ROWS (.bx-in-row, .td-attn-row both are it) and that every dashboard
+   block is a card, so an unboxed block read as broken rather than deliberate —
+   the opposite of what the rule was for. Overruled 2026-08-08. Do not strip the
+   card back off thinking you are restoring the original intent.
+   Spacing matches .td-needs, the other block that sits outside the grid.
    All classes are dp-work-* prefixed — the base sheet owns .opt/.k/.v/.n/.ico
    and a bare child class here would collide with them.
    No Dusk anywhere: Dusk means the system invoking itself, and nothing in this
    block is the system acting. The day-before warning is Amber, which is what
    this sheet reserves for status and attention.
    =========================================================================== */
-  .dp-work {
-    margin: 0 0 16px; padding: 16px 0 0;
-    border-top: 1px solid var(--td-border);
-  }
-  .dp-work-h {
-    margin: 0 0 4px; font: 600 17px var(--f-sans); color: var(--td-text);
-  }
+  .dp-work { margin-bottom: 16px; }
   .dp-work-list { display: grid; }
   /* The row is a button so it is reachable by keyboard and announces itself as
      activatable; stripped back to look like a line of text, because it is one. */

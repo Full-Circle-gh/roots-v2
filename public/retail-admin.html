@@ -1630,10 +1630,14 @@
          Painted by dashNeedsPointRender from the /dashboard/ops `needs_point`
          key.
 
-         DELIBERATELY NOT A CARD, and deliberately outside #td-blocks:
-           • No .bn-card. Variant C — plain background, rules between rows, no
-             box. It is the one block on this page that is not boxed.
-           • Outside the grid, like .td-needs above, so it cannot be dragged
+         A CARD like every other block, with Variant C ROWS inside:
+           • .bn-card at block level. The first build left it unboxed on a
+             literal reading of "no card box" in §7; the dashboard survey showed
+             Variant C is the house idiom for ROWS (.bx-in-row, .td-attn-row)
+             and that every block is a card, so an unboxed block read as broken
+             rather than deliberate. Overruled 2026-08-08 — see §7. Do NOT strip
+             the card back off thinking you are restoring the original intent.
+           • Outside #td-blocks, like .td-needs above, so it cannot be dragged
              elsewhere or hidden with the × the arrangeable cards carry. A list
              of deliveries nobody is coming for is not a matter of taste.
            • `hidden` by default and only revealed when a row exists. Every
@@ -1641,11 +1645,20 @@
              at zero (§7). Do not add a "nothing parked" line — the absence is
              the message, and a zero here would be a standing invitation to
              check something that is fine. -->
-    <section class="dp-work" id="td-needspoint" aria-labelledby="td-needspoint-h" hidden>
-      <h3 class="dp-work-h" id="td-needspoint-h">Orders waiting for a delivery point · 待确认配送点</h3>
-      <div class="dp-work-list" id="td-needspoint-list"></div>
-      <p class="dp-work-foot" id="td-needspoint-foot" data-no-i18n hidden></p>
-    </section>
+    <div class="td-block dp-work" id="td-needspoint" data-block="needspoint" hidden>
+      <div class="bn-card">
+        <div class="bn-inner">
+          <div class="bn-head">
+            <svg class="bn-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            <h3>Orders waiting for a delivery point · 待确认配送点</h3>
+          </div>
+          <div class="bn-body">
+            <div class="dp-work-list" id="td-needspoint-list"></div>
+            <p class="dp-work-foot" id="td-needspoint-foot" data-no-i18n hidden></p>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <!-- The Recap's quiet state: one line of text where a 400px card would
          otherwise sit and say nothing. Painted by tdRecapRender, which hides the

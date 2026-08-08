@@ -204,10 +204,43 @@ Rules:
   day-before warning, and with stage 4 declined this block is the only place it
   appears outside the drawer.
 
-Brand: Variant C — plain background, rule separator, no card box on the rows.
-Inter; headings 600; figures 700 and tabular. No Dusk: nothing here is the
-system acting on its own, it is a list of work a person must do. **Never a dash
-as a value** — a missing field is said in words.
+### Brand — and the one instruction that was overruled
+
+**`.bn-card` at block level. Variant C at row level.**
+
+- **Block:** a `.bn-card` like every other block on the dashboard, placed
+  outside `#td-blocks` so it cannot be dragged elsewhere or hidden with the ×
+  the arrangeable cards carry — the same treatment `.td-needs` gets, and for the
+  same reason. A list of deliveries nobody is coming for is not a matter of
+  taste.
+- **Rows:** Variant C — plain background, a rule between rows, no box drawn
+  around each row. Inter; heading 600; figures 700 and tabular.
+- **No Dusk.** This sheet reserves Dusk for the system invoking itself and Amber
+  for status; nothing in this block is the system acting, so the day-before
+  marker is Amber.
+- **Never a dash as a value.** A missing field is said in words, in whichever
+  language is showing.
+
+> **⚠️ "No card box" was overruled on 2026-08-08, after the dashboard was
+> surveyed. Do not strip the card back off believing you are restoring the
+> original intent — you would be reinstating a mistake.**
+>
+> This section originally read *"plain background, rule separator, no card box —
+> Variant C"*, and stage 5 was first built that way. The survey that followed
+> found two things the wording had not accounted for:
+>
+> 1. **Variant C is this sheet's idiom for ROWS, not blocks.** `.bx-in-row` and
+>    `.td-attn-row` are both already exactly it — plain, rule-separated, unboxed.
+>    "Variant C" appears nowhere else in the docs; it was named here and nowhere
+>    else, so it had no block-level meaning to inherit.
+> 2. **Every block on the dashboard is a `.bn-card`** — surface fill, 1px
+>    border, 14px radius, shadow. An unboxed block would have been the only one,
+>    and would have read as broken rather than deliberate.
+>
+> Which is the opposite of what the rule was for. The rule existed to stop this
+> block looking like another panel of figures; keeping the rows plain achieves
+> that, and dropping the card only made the page look damaged. Ash's call,
+> made against the surveyed page rather than against the wording.
 
 ## 8. Retry and requeue fixes
 
