@@ -3689,6 +3689,19 @@ function renderQyPointSurface(o, sf) {
 
       <div class="qp-grid">
         <div class="qp-map-col">
+          <!-- Search MOVES THE MAP. It never places a point: picking a result
+               recenters and zooms, and the operator still taps the door. The
+               handle it reaches (qpMap) exposes setCenter/setZoom and nothing
+               else, so this box is structurally unable to satisfy the confirm
+               gate — §5's rule expressed as an API rather than as a discipline. -->
+          <div class="qp-find" id="qp-find-wrap-${o.id}">
+            <input class="qp-find-in" id="qp-find-${o.id}" type="text" inputmode="search"
+                   autocomplete="off" spellcheck="false"
+                   placeholder="${escapeHtml(cuT('Search a place or road', '搜索地点或道路'))}"
+                   oninput="qpFindType(${o.id})"
+                   onkeydown="if(event.key==='Enter'){event.preventDefault();qpFindNow(${o.id});}">
+            <div class="qp-find-out" id="qp-find-out-${o.id}" hidden></div>
+          </div>
           <div class="qp-map" id="qp-map-${o.id}"></div>
           <!-- Describes the STATE, not the marker: before a placement there is
                no point to have moved. -->
@@ -3723,14 +3736,43 @@ function renderQyPointSurface(o, sf) {
 // guess. Cleared when the drawer re-renders.
 const qpPlaced = {};
 
+// ── What the search box is allowed to touch ────────────────────────────────
+// A handle on the map, per order, exposing recentre and zoom AND NOTHING ELSE.
+// There is deliberately no pin setter here: the search path cannot place a
+// point because it has no way to, rather than because it declines to.
+//
+// That is the same reasoning as the empty map itself (§5). A gate that merely
+// asks people not to confirm a geocoder's centroid is a gate satisfied by
+// forgetting; a handle with no pin on it cannot be misused by a future edit to
+// this file either. Everything else about the map — the marker, its drag
+// handler, the circle — stays closure-local in qpDrawMap where it was.
+const qpMap = {};
+// The search bias, per order: the coarse guess the push parked with, and the
+// city off the order's own address. Both are hints to the provider, never
+// filters — an order whose guess was never recorded still searches, just wider.
+const qpBias = {};
+// The last result set, per order. A click hands back an INDEX into this rather
+// than coordinates smuggled through a DOM attribute, so nothing a page inspector
+// types can inject a position.
+const qpFound = {};
+const qpFindTimer = {};
+// The query each pending request was fired for, so a slow answer to an old
+// keystroke can't paint over a newer one (same guard as the customer search).
+const qpFindQuery = {};
+
 // Boot the map for a parked order. Called after the drawer paints (the element
 // has to exist and have a width before any SDK will lay a map into it).
 // Degrades loudly: with no maps JS key there is no map to place a point on, and
 // saying so beats an empty grey box the operator waits on.
-async function qpInitMap(orderId, guess) {
+async function qpInitMap(orderId, guess, city) {
   const el = document.getElementById('qp-map-' + orderId);
   if (!el || el.dataset.ready) return;
   el.dataset.ready = '1';
+  qpBias[orderId] = {
+    city: city || '',
+    lat: (guess && guess.lat != null) ? guess.lat : null,
+    lng: (guess && guess.lng != null) ? guess.lng : null,
+  };
   let cfg = null;
   try { const r = await fetch('/api/retail/maps-config'); const j = await r.json(); cfg = j && j.data; } catch (e) { cfg = null; }
   if (!cfg || !cfg.provider) {
@@ -3740,6 +3782,7 @@ async function qpInitMap(orderId, guess) {
       '未配置地图服务，无法在此标记配送点。请改用修改地址，或在青云 App 中手动建单。');
     const hint = document.getElementById('qp-hint-' + orderId);
     if (hint) hint.textContent = '';
+    qpHideFind(orderId);
     return;
   }
   try {
@@ -3748,7 +3791,16 @@ async function qpInitMap(orderId, guess) {
   } catch (e) {
     el.className = 'qp-map qp-map-fallback';
     el.innerHTML = cuT('The map could not load. Try again, or correct the address.', '地图加载失败，请重试或修改地址。');
+    qpHideFind(orderId);
   }
+}
+
+// No map, no search. Searching exists to move the map, so without one the box
+// is a control that does nothing when pressed — worse than absent, because it
+// reads as a second way out of a surface that currently has none.
+function qpHideFind(orderId) {
+  const wrap = document.getElementById('qp-find-wrap-' + orderId);
+  if (wrap) wrap.hidden = true;
 }
 
 // One SDK load per page, shared with nothing else in the admin. Same two
@@ -3798,6 +3850,11 @@ function qpDrawMap(provider, el, orderId, guess) {
       strokeColor: '#58606E', strokeWeight: 1.5, strokeStyle: 'dashed',
       fillColor: '#58606E', fillOpacity: 0.07,
     });
+    // Recentre/zoom only — see qpMap. `pin` below stays out of it.
+    qpMap[orderId] = {
+      setCenter: (la, ln) => map.setCenter([ln, la]),
+      setZoom: (z) => map.setZoom(z),
+    };
     let pin = null;
     map.on('click', (e) => {
       const lat = e.lnglat.getLat(), lng = e.lnglat.getLng();
@@ -3813,6 +3870,11 @@ function qpDrawMap(provider, el, orderId, guess) {
       map, styles: { a: new TMap.CircleStyle({ color: 'rgba(88,96,110,0.07)', showBorder: true, borderColor: '#58606E', borderWidth: 1 }) },
       geometries: [{ id: 'a', styleId: 'a', center: new TMap.LatLng(c.lat, c.lng), radius: QP_AREA_M }],
     });
+    // Recentre/zoom only — see qpMap. `pin` below stays out of it.
+    qpMap[orderId] = {
+      setCenter: (la, ln) => map.setCenter(new TMap.LatLng(la, ln)),
+      setZoom: (z) => map.setZoom(z),
+    };
     // Tencent's gljs markers are not draggable, so placing IS the adjustment:
     // every tap moves the point. Same model as Amap, one fewer gesture.
     let pin = null;
@@ -3823,6 +3885,97 @@ function qpDrawMap(provider, el, orderId, guess) {
       } else { pin.updateGeometries([{ id: 'p', position: pos }]); }
       onPlace(ll.getLat(), ll.getLng());
     });
+  }
+}
+
+// ── Find the street ────────────────────────────────────────────────────────
+// A coarse match parks the order in a district, and the operator's first job is
+// to get the map to the right street — which, on an unfamiliar Chinese address,
+// is most of the work. Searching does that and stops there.
+//
+// It is not a shortcut past the tap. A result recentres the map and leaves the
+// surface exactly as it found it: no pin, "No point placed yet", the primary
+// button still disabled reading "Place the point". Searching gets you to the
+// building; a human still says which door, and that is the whole reason the
+// confirmed point is worth calling staff_pin (spec §5, §5.1).
+//
+// Debounced like the customer search above it — 350ms, and a superseded
+// keystroke discards its own answer rather than racing it onto the screen.
+function qpFindType(orderId) {
+  clearTimeout(qpFindTimer[orderId]);
+  qpFindTimer[orderId] = setTimeout(() => qpFindNow(orderId), 350);
+}
+
+async function qpFindNow(orderId) {
+  clearTimeout(qpFindTimer[orderId]);
+  const inp = document.getElementById('qp-find-' + orderId);
+  const box = document.getElementById('qp-find-out-' + orderId);
+  if (!inp || !box) return;
+  const q = (inp.value || '').trim();
+  qpFindQuery[orderId] = q;
+  if (!q) { box.hidden = true; box.innerHTML = ''; return; }
+
+  const note = (s) => `<div class="qp-find-note">${escapeHtml(s)}</div>`;
+  box.hidden = false;
+  box.innerHTML = note(cuT('Searching…', '搜索中…'));
+
+  const bias = qpBias[orderId] || {};
+  // Only send coordinates we actually have. A null crosses JSON intact and
+  // arrives at the server as 0 — a real, finite point in the Gulf of Guinea —
+  // so an order parked without a guess would be biased to the wrong hemisphere
+  // rather than simply searched wider. The server refuses 0 as well; this side
+  // just never asks it to.
+  const body = { keyword: q, city: bias.city || '' };
+  if (bias.lat != null && bias.lng != null) { body.lat = bias.lat; body.lng = bias.lng; }
+  let list = null;
+  try {
+    const j = await api('/api/retail-admin/poi-search', { method: 'POST', body });
+    if (qpFindQuery[orderId] !== q) return;          // a newer keystroke superseded this
+    list = Array.isArray(j.data) ? j.data : [];
+  } catch (e) {
+    if (qpFindQuery[orderId] !== q) return;
+    // Say which of the two it is. "No map service" is a configuration fact the
+    // operator can act on (correct the address instead); a failed lookup is
+    // worth pressing again. One message for both would strand them on the wrong
+    // one — and neither is a reason the order cannot still be placed by hand.
+    box.innerHTML = note((e && e.code === 'maps_key_missing')
+      ? cuT('Search needs a map service, and none is configured. Place the point on the map instead.',
+            '搜索需要地图服务，当前未配置。请直接在地图上标记配送点。')
+      : cuT('Could not search just now. Try again, or place the point on the map.',
+            '暂时无法搜索，请重试，或直接在地图上标记配送点。'));
+    return;
+  }
+
+  qpFound[orderId] = list.filter(p => p && p.lat != null && p.lng != null).slice(0, 8);
+  if (!qpFound[orderId].length) {
+    box.innerHTML = note(cuT(`No place matches "${q}".`, `没有地点匹配“${q}”。`));
+    return;
+  }
+  box.innerHTML = qpFound[orderId].map((p, i) =>
+    `<button type="button" onclick="qpFindPick(${orderId}, ${i})">`
+    + `<span class="n">${escapeHtml(p.name || '')}</span>`
+    + `<span class="a">${escapeHtml(p.address || '')}</span></button>`).join('');
+}
+
+// The one thing a search result does. Note what is NOT here: qpPlaced is not
+// written, the confirm button is not enabled, and no pin is drawn — qpMap has
+// no method that could draw one. A searched-then-tapped point is recorded by
+// exactly the path a hunted-and-tapped point is, because it IS that path.
+function qpFindPick(orderId, i) {
+  const p = (qpFound[orderId] || [])[i];
+  const m = qpMap[orderId];
+  if (!p || !m) return;
+  m.setCenter(p.lat, p.lng);
+  m.setZoom(17);                       // close enough to pick a building out
+  const box = document.getElementById('qp-find-out-' + orderId);
+  if (box) { box.hidden = true; box.innerHTML = ''; }
+  const inp = document.getElementById('qp-find-' + orderId);
+  if (inp) inp.value = p.name || '';
+  // The hint moves the operator on to the step that remains. Left alone once a
+  // point exists, where it already says how to adjust one.
+  const hint = document.getElementById('qp-hint-' + orderId);
+  if (hint && !qpPlaced[orderId]) {
+    hint.textContent = cuT('Map moved. Tap where the door is.', '地图已移动。请在地图上点选收货位置。');
   }
 }
 
@@ -3844,6 +3997,11 @@ async function qpConfirmPoint(orderId, btn) {
         ? cuT('Already on the courier platform', '已在配送平台')
         : cuT('Point confirmed — the daemon will push it within a minute', '配送点已确认 — 约一分钟内发单'), 'success');
       delete qpPlaced[orderId];
+      // The map and its search go with the point that has just been sent — the
+      // drawer re-renders below onto a fresh element, and a stale handle would
+      // outlive the map it points at.
+      delete qpMap[orderId]; delete qpBias[orderId]; delete qpFound[orderId];
+      delete qpFindQuery[orderId]; clearTimeout(qpFindTimer[orderId]);
       openOrder(orderId, { instant: true });
       return;
     }
@@ -4371,7 +4529,12 @@ async function openOrder(id, opts = {}) {
     // rather than inside the template. Only a parked order renders the box.
     try {
       const _sf = o.qingyun_ship_from;
-      if (_sf && _sf.awaiting_point && _sf.date_posture !== 'passed') qpInitMap(o.id, _sf.guess);
+      // The order's own city biases the address search — the same hint the
+      // storefront picker passes. Absent, the search is national, which is
+      // slower but never wrong.
+      if (_sf && _sf.awaiting_point && _sf.date_posture !== 'passed') {
+        qpInitMap(o.id, _sf.guess, (o.address && o.address.city) || '');
+      }
     } catch (e) { /* map is best-effort */ }
     // The GET above stamped seen_at server-side (shared across staff). Clear
     // this row's unread treatment immediately so it doesn't wait for the next

@@ -8093,6 +8093,57 @@ router.post('/api/retail/poi-search', requireRetailAuth, express.json(), async (
   }
 });
 
+// The same POI text search, for STAFF — the delivery-point picker in the order
+// drawer (docs/tacet-delivery-point-confirmation-spec.md §5.4).
+//
+// It has to be its own route rather than a second gate on the one above,
+// because `requireRetailAuth` reads a customer Bearer token off the
+// Authorization header and an operator's session carries none: a staff call to
+// the customer route is a guaranteed 401, not a permissions question.
+//
+// Same `geocode.searchPoi`, same clamps, same response shape, so the drawer
+// renders results the way the storefront picker does without a second format to
+// keep in step. Two differences, both deliberate:
+//
+//   • A keyword is REQUIRED. The customer route also serves the picker's
+//     keyword-less "places around the map centre" list; staff have no such
+//     surface, and leaving the branch reachable would widen this endpoint past
+//     the one thing it is for.
+//   • No customer data is read or written. This endpoint searches a map
+//     provider and returns what it says. It cannot move a pin, and neither can
+//     the surface that calls it — a result recenters the map, and only a tap
+//     places a point. That is the §5 anti-laundering rule, and it holds here by
+//     construction: there is nothing in this response a client could confirm.
+router.post('/api/retail-admin/poi-search', requireRetailAdmin, express.json(), async (req, res) => {
+  // The map centre is a BIAS, not a filter — absent or unparseable coordinates
+  // just widen the search rather than failing it, which is what a search on an
+  // order whose guess was never recorded has to do.
+  //
+  // Zero is absent, not a location. An order parked with no guess sends null,
+  // and `Number(null)` is 0, which is finite: taken at face value it biases
+  // every result towards 0°N 0°E in the Gulf of Guinea and silently ranks the
+  // right answer last. Same reasoning as readClientPin refusing lat === 0.
+  const rawLat = Number(req.body?.lat);
+  const rawLng = Number(req.body?.lng);
+  const biased = Number.isFinite(rawLat) && Number.isFinite(rawLng) && rawLat !== 0 && rawLng !== 0;
+  const lat = biased ? rawLat : undefined;
+  const lng = biased ? rawLng : undefined;
+  const keyword = typeof req.body?.keyword === 'string' ? req.body.keyword.slice(0, 60) : '';
+  const city = typeof req.body?.city === 'string' ? req.body.city.slice(0, 40) : '';
+  if (!keyword.trim()) return res.status(400).json({ success: false, error: 'bad_input' });
+  if (!geocode.configured()) {
+    return res.json({ success: false, error: 'maps_key_missing' });
+  }
+  try {
+    const list = await geocode.searchPoi({ lat, lng, keyword, city });
+    if (!list) return res.json({ success: false, error: 'no_result' });
+    return res.json({ success: true, data: list });
+  } catch (e) {
+    console.warn('[admin poi-search]', e.message);
+    return res.json({ success: false, error: 'lookup_failed' });
+  }
+});
+
 router.put('/api/retail/addresses/:id', requireRetailAuth, express.json(), (req, res) => {
   const id = parseInt(req.params.id, 10);
   const existing = tdb().prepare(

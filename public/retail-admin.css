@@ -11472,6 +11472,38 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   }
   #order-drawer .qp-grade { font-size: 12.5px; color: var(--text-3); margin-top: 10px; line-height: 1.6; }
 
+  /* Address search — it MOVES THE MAP and does nothing else.
+     Above the map, because finding the street is how you get to the point and
+     the map is where you finish. Picking a result recentres and zooms; it
+     draws no pin, leaves the state line reading "No point placed yet" and
+     leaves the primary button disabled. There is no styling here for a
+     selected state, because selecting a result is not a step that completes —
+     it is a step that repositions. */
+  #order-drawer .qp-find { position: relative; margin-bottom: 8px; }
+  #order-drawer .qp-find-in { width: 100%; }
+  /* Overlays the map rather than pushing it down: a list that reflowed the
+     surface would move the map out from under the operator mid-search. */
+  #order-drawer .qp-find-out {
+    position: absolute; z-index: 30; left: 0; right: 0; top: calc(100% + 4px);
+    max-height: 232px; overflow-y: auto;
+    background: var(--bg-pane); border: 1px solid var(--line);
+    border-radius: var(--r-lg); box-shadow: var(--sh-2);
+  }
+  #order-drawer .qp-find-out button {
+    display: block; width: 100%; text-align: left; cursor: pointer;
+    padding: 9px 11px; background: none; border: 0;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  #order-drawer .qp-find-out button:last-child { border-bottom: 0; }
+  #order-drawer .qp-find-out button:hover { background: var(--bg-elev-1); }
+  #order-drawer .qp-find-out .n { display: block; font-size: 13.5px; color: var(--text-1); }
+  #order-drawer .qp-find-out .a {
+    display: block; font-size: 12px; line-height: 1.5; color: var(--text-3);
+    margin-top: 2px; overflow-wrap: anywhere;
+  }
+  /* Searching / no match / unavailable — a sentence, never an icon state. */
+  #order-drawer .qp-find-note { padding: 10px 11px; font-size: 12.5px; line-height: 1.55; color: var(--text-3); }
+
   #order-drawer .qp-map {
     position: relative; height: 240px; border-radius: 10px; overflow: hidden;
     border: 1px solid var(--line); background: var(--bg-elev-1);
