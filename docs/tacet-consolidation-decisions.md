@@ -1,8 +1,10 @@
-# Tacet shared-core consolidation — decisions record, v3.0
+# Tacet shared-core consolidation — decisions record, v3.1
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
+
+2026-08-08 · v3.1 — two additive records in §24 Database: the converter install-point is resolved as a non-issue rather than an ordering problem, and the 2026-08-06 decimal data copy is written down. No decision is reversed, hence a patch rather than a full revision. The superseded row-count figure is left standing.
 
 2026-08-06 · v3.0 — the money decimal SCALE is settled at `numeric(14,6)`, and `expense_entries.amount` is reversed back to decimal from whole cents. A scale decision plus a reversal, hence a full revision rather than a patch. Both recorded in §24; the superseded lines are left standing.
 
@@ -1009,6 +1011,32 @@ The evidence is the money-scale census, run read-only against the live databases
 `expense_entries.amount` is `numeric(14,6)`, like the other calculated-money columns. Two things changed under it. The census found **seven non-null values with genuine sub-cent precision** — 187.13958 and 602.67992 among them, deepest scale 5 — so the precision is real in the data rather than an artefact of the column type. And money is now stored as decimal, not cents, so the reason the earlier entry gave for the change — that the expense side of the P&L must match the unit of the income side — is satisfied without rounding anything away.
 
 The disagreement between this document and `plan.json` noted earlier is resolved in favour of decimal.
+
+### CONVERTER INSTALL-POINT IS NOT AN ORDERING PROBLEM — RESOLVED 2026-08-08
+
+**The pre-converter sequencing constraint recorded above in "RAW_OPEN is closed, and the pre-converter sequencing constraint" is void as an ordering requirement.** Nothing about the startup order needs to change, and the converter does not need an install slot earlier in boot. That entry's line — "The converter must be installable BEFORE `database.js` executes its migration list" — is left standing and is superseded by this entry, not edited.
+
+**THE DECISIVE REASON: `database.js` never routes through the seam, so no install time could reach its migrations.** The handle is a raw `new Database(...)` at `database.js:8`, and every migration runs on that raw handle directly. `database.js` does not require `lib/db-seam.js` at all. Consumers instead write `seam(require('../database'))` — `middleware/auth.js:5` and `routes/admin.js:8` among them — so the require completes, migrations included, and only then is the returned handle wrapped for that caller's own use. A converter seated at the first line of `server.js` would still not intercept a migration. There is therefore no startup window to miss: the migrations do not consult the seam at any point, early or late. Moving the install point earlier closes nothing. Routing `database.js`'s own handle through the seam is a separate and larger change and is **not** proposed here.
+
+**The migrations are already applied and recorded, so on a live box their bodies are dead code on every boot.** The ledger table is `_migrations`, `(name TEXT PRIMARY KEY, applied_at)`; each migration reads its guard before doing work and writes its marker after. Measured statically at head `b8a774ea`: **51 marker-guarded migrations, every one with its guard earlier in the file than its marker, and zero unguarded money writes.** Three of the 51 write money, unchanged from the 2026-08-05 reading — `lookups_seed_v1` (`packaging_types.cost`), `shipping_spec_alignment_v1` (six `retail_delivery_zones` fee columns) and `backfill_lifetime_spend_v1` (`retail_customers.lifetime_spend`). All three names were confirmed present in the live 144-row ledger on 2026-08-05.
+
+**THE REAL REQUIREMENT — the converter's money-column list must be COMPLETE, and must be GENERATED.** There are **101** money columns: the `cls: "NUM6"` entries of `scripts/postgres-full-copy/plan.json`. The list must be generated from that file, which is already the roster the copy itself reads, so that the converter and the copy cannot disagree. A hand-maintained list is the failure mode to avoid — a column missing from it is silently not converted, and nothing announces the omission. This folds into seating the converter. It is not a separate ordering problem.
+
+**FIGURES THAT DID NOT SURVIVE CHECKING — corrected above, and named here so they are not re-derived.** The conclusion holds; four supporting figures did not. (a) The migration count is **51**, not 14. (b) They are not all structural — **three write money**, as listed above. (c) The ledger table is **`_migrations`**; **`schema_version` does not exist anywhere in the repository**. (d) The seam does **not** convert by column name and holds **no column list at all** — `converter` is `null` at `lib/db-seam.js:58`, the seat is still empty, and the only money-column constant in the application is `SNAPSHOT_MONEY_COLUMNS` at `routes/retail.js:18282`, which has two entries and is unrelated to the seam.
+
+### DECIMAL DATA COPY — RECORDED 2026-08-08
+
+**The full decimal copy was re-run on 2026-08-06 against the decimal schema: 129 tables, 364,666 rows in 83 seconds, zero aborts.** This **supersedes the 353,220-row figure** of the 2026-08-04 bigint-cents copy recorded above in §24 Database. That line is left standing and is superseded by this entry, not edited.
+
+Recorded here because it previously existed only in a commit message. Two commits carry it: `e0e391d5` "Copy roster: the 92 money columns go decimal", which moved `plan.json`'s 92 `cls=CENTS` columns to `NUM6` / `numeric(14,6)` and refuses to write unless the roster and `docs/tacet-postgres-schema-decimal.sql` name exactly the same 101 columns in both directions; and `588a9f08`, which fixed the runner and produced the figure.
+
+**What the fixed `run.py` changed.** The previous run read every table's source count once at the start, then compared each table's load against that number as much as 90 seconds later. The live app writes to SQLite throughout, so the number went stale mid-run and the copy aborted at table 34 of 129 on a table that had copied perfectly. Each table's count is now read immediately before that table is generated, and the abort keys off what `gen.py` actually emitted for the table, from the same connection and the same SELECT. A row landing in the remaining millisecond gap is reported as drift and does not abort.
+
+**Money verified correct on the 101 money columns: zero genuine mismatches.** The differences observed were proven to be live-SQLite drift during the copy window rather than errors. SQLite stayed read-only throughout — the same `mode=ro` URI, with `gen.py`'s write probe still running.
+
+**HONEST LIMIT — recorded from the run's own reporting, not from an independent Postgres read.** The no-Postgres-connection constraint held for this entry as it did for the ledger gate of 2026-08-05. `verify.py` renders `NUM6` identically on both sides and `final.py` compares Postgres against each table's count at its own copy moment; the zero-mismatch result is those tools' output, not a second independent verification.
+
+**`scripts/postgres-full-copy/README.md` is stale on this figure** — it still states 353,220 rows for 2026-08-04. It is deliberately NOT corrected here: `scripts/` is inside the deploy allowlist, so editing it would ship and restart the application, which a docs-only change must not do. Correcting it belongs in a change that intends a restart.
 
 ## 25. A printed slip that goes stale is corrected on paper, not reprinted — DECIDED 2026-08-07
 
