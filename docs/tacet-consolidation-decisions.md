@@ -1,8 +1,10 @@
-# Tacet shared-core consolidation — decisions record, v4.1
+# Tacet shared-core consolidation — decisions record, v4.2
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
+
+2026-08-08 · v4.2 — §24 Database: a requirement is recorded that NO account may be special-cased in the new shared-database scoping, including Roots. The existing id-based exception is left in place deliberately, because it lives in the file-per-account machinery being deleted. A forward requirement, not a decision reversal, hence a patch.
 
 2026-08-08 · v4.1 — RECORD CORRECTION in §24 Database: TENANT_DATA_ISOLATION is set to 1 on the live box, not off as stated above. It is set in the gitignored .env, which is why a repo-only reading missed it. The per-account isolation path is ARMED BUT UNUSED — zero active non-Roots accounts, zero open per-account files — so live behaviour is unchanged. A factual correction, not a decision, hence a patch. The superseded lines are left standing.
 
@@ -1175,6 +1177,20 @@ PostgreSQL returns `numeric` as **TEXT** (type OID 1700) and the application nee
 **A CITATION THAT HAS DRIFTED.** Several documents cite `lib/tenant-db.js:41` as the flag's declaration. At head `4f7305bf` line 41 is an unrelated comment; the declaration is **`lib/tenant-db.js:87`**.
 
 **WHAT THIS DOES NOT CHANGE.** The retirement of file-per-account isolation recorded above still stands — this entry corrects the record of what is switched on today, and takes no position on whether that machinery should live. The cutover sequencing decided above is likewise unaffected: it concerns the SQLite-to-Postgres driver gap, which is independent of per-account routing.
+
+### NO ACCOUNT IS SPECIAL-CASED, INCLUDING ROOTS — REQUIREMENT RECORDED 2026-08-08
+
+**The current code special-cases Roots by id.** `lib/tenant-db.js:192` reads `if (!id || id === ROOTS_TENANT_ID) return mainDb;`, so account 1 can never be routed to a per-account database regardless of configuration, and `routes/retail.js:82` short-circuits identically with `if (!tid || tid === ROOTS_TENANT_ID) return next();`.
+
+**This was a deliberate safety shortcut, and it is worth saying why rather than treating it as sloppiness.** Roots was live and trading while the isolation machinery was new and untrusted; making account 1 structurally unreachable by that machinery meant no bug in it could touch the only real business on the system. That was the right call at the time. It nevertheless conflicts with **§0 Governing rules, rule 2** — *"TACET IS NOT BUILT FOR ROOTS. Roots is one customer that happens to be first. Nothing about Roots' business ... may be assumed, hardcoded or treated as the default."* Rule 2 enumerates business attributes — products, city, language, currency, channels, suppliers, ways of working — and does not literally name an account id. Extending it to routing identity is the point of this entry: an id-shaped exception is the same defect in a different place, and "treated as the default" covers it.
+
+**NOT FIXED NOW, BY DESIGN.** The special case lives inside the file-per-account machinery in `lib/tenant-db.js`, which the PostgreSQL decision supersedes and which is deleted in a later phase — recorded above in this section. Fixing it separately means writing code for a system already scheduled for removal. Under one shared database with every row carrying its account, there is no "which file does this account use" question for the exception to attach to, so it disappears with the machinery rather than needing to be unpicked.
+
+**THE REQUIREMENT THIS PLACES ON THE NEW SYSTEM.** When shared-database account scoping is built, **no account may be special-cased** — not by id, not by name, not by a "first account" or "default account" shortcut, and not by a Roots-shaped fast path. Roots must be routed, scoped and enforced by exactly the same code as every other account. **If any part of the new implementation needs to know that an account is Roots in order to work, that is a defect, not an optimisation.** Recorded so the exception is not rebuilt out of habit when the machinery is replaced — the shortcut was reasonable once, which is precisely what makes it likely to be reintroduced.
+
+**`ROOTS_TENANT_ID` IS THE MARKER TO WATCH.** The constant is declared at `lib/tenant-db.js:78` (`const ROOTS_TENANT_ID = 1;`) and is retired with the machinery that needs it. **Any surviving reference to it in the new system is a signal that the special case has been carried forward.** That makes the check mechanical rather than a matter of judgement: grep for the identifier, and if it appears in shared-database scoping code, the requirement above has been violated.
+
+**A NOTE ON SCOPE.** This entry records a requirement on work not yet begun. It changes no code, reverses no decision, and takes no position on when the file-per-account machinery is removed — only on what must not reappear when it is.
 
 ## 25. A printed slip that goes stale is corrected on paper, not reprinted — DECIDED 2026-08-07
 
