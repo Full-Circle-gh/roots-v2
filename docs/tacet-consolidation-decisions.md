@@ -1,8 +1,10 @@
-# Tacet shared-core consolidation — decisions record, v3.1
+# Tacet shared-core consolidation — decisions record, v3.2
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
+
+2026-08-08 · v3.2 — §24 Database: the in-SQL arithmetic money writes are resolved as safe under decimal, closing the open mechanism question left by the 2026-08-05 structural limit. Eight distinct statements, none needing intervention. An open question closes and no decision is reversed, hence a patch. The superseded entry is left standing.
 
 2026-08-08 · v3.1 — two additive records in §24 Database: the converter install-point is resolved as a non-issue rather than an ordering problem, and the 2026-08-06 decimal data copy is written down. No decision is reversed, hence a patch rather than a full revision. The superseded row-count figure is left standing.
 
@@ -1037,6 +1039,33 @@ Recorded here because it previously existed only in a commit message. Two commit
 **HONEST LIMIT — recorded from the run's own reporting, not from an independent Postgres read.** The no-Postgres-connection constraint held for this entry as it did for the ledger gate of 2026-08-05. `verify.py` renders `NUM6` identically on both sides and `final.py` compares Postgres against each table's count at its own copy moment; the zero-mismatch result is those tools' output, not a second independent verification.
 
 **`scripts/postgres-full-copy/README.md` is stale on this figure** — it still states 353,220 rows for 2026-08-04. It is deliberately NOT corrected here: `scripts/` is inside the deploy allowlist, so editing it would ship and restart the application, which a docs-only change must not do. Correcting it belongs in a change that intends a restart.
+
+### IN-SQL ARITHMETIC MONEY WRITES ARE SAFE UNDER DECIMAL — RESOLVED 2026-08-08
+
+**The open design question left by "A CONVERTER CANNOT REACH SQL-SIDE MONEY EXPRESSIONS — STRUCTURAL LIMIT 2026-08-05" is closed.** That entry said the mechanism for SQL-side money expressions was open and deliberately unanswered. The answer is that **no mechanism is needed** while money is stored as decimal yuan. That entry is left standing and is superseded by this one, not edited.
+
+**THE REASON, AND IT IS NOT THAT THE CONVERTER HANDLES THEM.** The converter cannot reach these expressions and does not need to. Every operand in every one of them is `cls: NUM6` — `REAL` in SQLite, `numeric(14,6)` in Postgres — so both sides are already the same decimal-yuan unit. Yuan ± yuan = yuan. There is no rescaling to perform on the write side at all, which is the same point recorded above in the decimal decision: decimal removes the rescaling from the converter, leaving it a read-side type-coercion job because the Postgres driver returns `numeric` as text.
+
+**THE TWO SETS ARE DISTINCT AND MUST NOT BE MERGED — this is where earlier counts went wrong.** There are two separate groups of five in the entries above, with no overlap between them. Counted at head `fd907e09` by relocating every site by content, since the 2026-08-05 line numbers have drifted:
+
+| set | what | distinct statements | sites |
+|---|---|---|---|
+| A — refund path, converter-unreachable | the five named in the structural-limit table above | **5** | `routes/retail.js` 23930, 24220, 24257, 24280, 24929 |
+| B — store credit, unit-sensitive | the "five `ROUND(..., 2)` sites" on `retail_customers.balance` | **3** | `routes/retail.js` 10046, 15510, 27161 |
+
+**Eight distinct statements, not three.** Only set B was ever double-counted, and the reason is exact: `10046` and `15510` each carry the `ROUND` construct **twice** — once in `SET`, once in the `WHERE` floor-check — so 2 + 2 + 1 = five expressions across three statements. Set A's five are five genuinely distinct statements in five different code paths and were never over-counted.
+
+**SET A IS NOT ALL `balance ± amount`. The shapes differ, and only the classification is uniform.** `23930` is `MIN(amount, COALESCE(refunded_amount, 0) + ?)` with a `CASE WHEN amount <= COALESCE(refunded_amount, 0) + ?` status flip. `24220` and `24280` are `refunded_amount = amount` — a bare column-to-column copy with **no arithmetic at all**, in two different code paths. `24257` is `COALESCE(refund_amount_approved, ?)` and its siblings, a set-only-if-unset null-choice that never combines its two operands. `24932` is `MAX(COALESCE(refund_amount_requested, 0), ?)`, a high-water mark. All five use only `MIN`, `MAX`, `COALESCE`, `+`, `<=` or plain assignment, so all five are unit-safe — but none of them is the store-credit shape.
+
+**SET B WRITES STORED CUSTOMER MONEY. It is an `UPDATE ... SET`, not a filter.** All three are `UPDATE retail_customers SET balance = ROUND(COALESCE(balance, 0) ± ?, 2)`, writing the wallet balance a customer can spend: `10046` spends credit at checkout with an atomic overdraw floor-check in the `WHERE`, `15510` is the admin manual adjustment, `27161` returns credit on refund. There is **no `ROUND(SUM(...), 2)` construct and no `HAVING` clause anywhere in the application** — verified repo-wide, zero matches for either. Nothing in this family is a read-only filter, and treating it as one would be a serious misreading: these statements move customer money.
+
+**THE `ROUND(..., 2)` IS CORRECT AND DROPS NOTHING THAT EXISTS.** It rounds a yuan value to two decimals — one fen, the currency's own minor unit — so float residue cannot accumulate in a column customers read. `retail_customers.balance` is bucketed `["displayed", "store credit a customer can spend"]` in `scripts/postgres-money-scale/money_bucket.json`, and the scale census recorded above found that all **89** DISPLAYED money columns hold zero values beyond two decimals. There is no sub-fen store credit in the data to lose. This agrees with the standing instruction in the decimal-scale entry above: the `ROUND(..., 2)` sites are correct under decimal yuan and must not be "fixed".
+
+**VERDICT: zero of the eight statements need any intervention.** Five are unit-safe arithmetic or plain copies; three are unit-sensitive by classification but already correct on a displayed yuan column.
+
+**THE GUARANTEE IS CONDITIONAL, AND THIS IS THE PART THAT MATTERS LATER.** It holds only while every operand stays decimal yuan. If any of these columns' storage unit changes, all eight statements return to being live money defects and must be re-examined before that change ships. The 2026-08-05 structural limit was correct on the day it was written, when the target was bigint cents; the decimal reversal is what dissolved it, not any change to these statements.
+
+**ONE ITEM PARKED, AND IT IS DIALECT RATHER THAN UNITS.** PostgreSQL has `round(numeric, int)` but no `round(double precision, int)`. Set B should resolve to `numeric`, since `balance` is `numeric(14,6)` and `COALESCE(numeric, 0)` stays numeric, but if the driver types the bound parameter as `float8` the expression degrades to double precision and the statement errors. That belongs to the parked Postgres-dialect work, not to the converter, and its failure mode is a loud error rather than a silent miscalculation.
 
 ## 25. A printed slip that goes stale is corrected on paper, not reprinted — DECIDED 2026-08-07
 
