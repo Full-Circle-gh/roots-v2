@@ -1,8 +1,10 @@
-# Tacet shared-core consolidation — decisions record, v3.3
+# Tacet shared-core consolidation — decisions record, v4.0
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
+
+2026-08-08 · v4.0 — THE CUTOVER SEQUENCING IS REVERSED: the Postgres switch cannot be a config flag, because better-sqlite3 is synchronous and pg is not. The data layer converts to an async contract against SQLite FIRST, and the flag comes last. Recorded in §24. This corrects the order of the whole cutover — which every earlier entry assumed without stating — hence a full revision rather than a patch. No earlier entry is edited; the superseded sequencing is left standing.
 
 2026-08-08 · v3.3 — §24 Database: the read-side money converter is DECIDED — convert by driver-returned type (Postgres numeric, OID 1700) with a value-size guard, registered once globally at module load, and explicitly not a hand-maintained column list. A second entry records `retail_vouchers.value` as polymorphic money outside the money set, not fixed. A decision plus a recorded gap, neither reversing anything, hence a patch.
 
@@ -1102,6 +1104,45 @@ PostgreSQL returns `numeric` as **TEXT** (type OID 1700) and the application nee
 **The deeper reason it resists the general rule: no column-level unit rule can describe it.** Every mechanism recorded in this section — the money-column roster, type-based dispatch, the census `cls` field — assigns one unit per column. This column's unit depends on another column's *value*, per row. Whatever fixes it cannot be a column classification; it has to split the column, or carry the unit with the value.
 
 **Not fixed here because it is a schema and data change, not a documentation one**, and because the read-side decision above does not depend on it. Recorded so it is found deliberately rather than discovered by a wrong total.
+
+### CUTOVER SEQUENCING — THE SWITCH CANNOT BE A CONFIG FLAG — DECIDED 2026-08-08
+
+**The Postgres cutover CANNOT be delivered as a config-flag switch.** Every entry above that speaks of a cutover assumed, without stating it, that the application could be pointed at a different database by configuration. It cannot. **PATH A IS CHOSEN:** convert the data layer to an async contract **against SQLite first**, ship and stabilise, and only then add the database switch. **The flag is the LAST step, not the first.** No earlier entry is edited; this supersedes the sequencing implied by them.
+
+**THE BLOCKER.** `better-sqlite3` is synchronous and in-process; `pg` is asynchronous because PostgreSQL is a socket protocol. Node offers no way to satisfy a synchronous signature with an asynchronous driver — there is no blocking await. Measured at head `e76ba55b` across runtime code only (`routes/`, `lib/`, `middleware/`, `server.js`, `database.js`):
+
+| measure | count |
+|---|---|
+| `.prepare(` sites | **2,739** |
+| terminal calls (`1,603` `.get` + `637` `.all` + `1,070` `.run`) | **3,310** |
+| `.exec(` sites | **246** |
+| `db.transaction(` sites | **131** |
+| route handlers | **761**, of which **4** are `async` (0.5%) |
+
+`routes/retail.js` alone holds **1,241** `.prepare(` sites — **45.3%** of the runtime total — across **29,681** lines.
+
+**`lib/db-seam.js` IS THE PROOF OF THE LIMIT, NOT THE SOLUTION.** It already proxies every statement in the application and still cannot change what a call returns: `lib/db-seam.js:108` forwards `value.apply(target, args)` directly to the driver. A wrapper can change WHICH driver runs. It cannot make an asynchronous driver satisfy a synchronous call signature. That distinction is the whole of this entry.
+
+**THE FINDING THAT SHAPES THE WORK — VERIFIED BY EXECUTION, NOT BY REASONING.** `better-sqlite3`'s `transaction()` silently ACCEPTS an async function. It returns a Promise, commits the synchronous prefix immediately, and does NOT roll back when the async body throws. Run against a scratch in-memory database: a row inserted before an `await` **survived a transaction whose body then threw**, with no error raised anywhere.
+
+**CONSEQUENCE — the obvious incremental strategy is unsafe.** Converting call sites file by file would mean introducing `await` inside transaction wrappers one at a time, and any single such `await` silently voids that transaction's atomicity with nothing failing loudly. **A partial migration is more dangerous than no migration.** The **131** transactions must be redesigned deliberately AS ONE UNIT, not drifted through.
+
+**THE ORDER THAT WORKS:**
+
+1. Define an async data-access contract both drivers can satisfy.
+2. Convert the 131 transactions as a single deliberate unit.
+3. Convert call sites behind that contract **while still on SQLite** — where an async wrapper over a synchronous driver is trivially correct and provable.
+4. Only then add `TACET_DB` to select the driver, at which point cutover AND rollback are genuinely a setting plus a restart.
+
+**WHERE THE SWITCH WILL EVENTUALLY LIVE: the construction point.** Not `lib/db-seam.js`, which receives an already-built handle and can neither substitute a driver nor alter return types. Not `database.js` as it stands: it exports the live handle at `database.js:4742` (`module.exports = db`) after running 51 migrations against it at module load, so a branch there hands a different shape to every requiring file — **49** in runtime code, **96** including `scripts/`. The form the flag should take is `lib/tenant-db.js:87` — `const DATA_ISOLATION_READY = process.env.TENANT_DATA_ISOLATION === '1';` — read once at module load and exported as a constant, the same shape `lib/pg.js` already uses.
+
+**PATH B REJECTED — route-by-route migration.** Running new routes on Postgres while old routes stay on SQLite avoids the up-front rewrite, but it means two live databases during the transition: which database owns which table, and what happens to a write spanning both. That replaces a bounded one-time job with an ongoing consistency problem, against live money. Rejected on that trade, not on effort.
+
+**WHAT THIS DOES NOT INVALIDATE.** The decimal schema rebuild, the money conversion and its verification, the read-side type converter in `lib/pg.js`, and the `tacet_app` least-privilege login are prerequisites under either path. All remain correct and done. This entry changes the ORDER of what follows them, not their standing.
+
+**NEXT STEP RECORDED.** Scope `routes/retail.js` on its own before planning the rest. At 1,241 statement sites and 29,681 lines it is roughly half the conversion by itself, and any estimate made without understanding that file is a guess.
+
+**FIGURES CORRECTED WHILE WRITING THIS ENTRY, named so they are not re-derived from the draft.** Three did not survive checking against the code. (a) `routes/retail.js` is **29,681** lines, not ~19,000. (b) The files requiring `database.js` number **49** in runtime code and **96** including `scripts/`, not "100+". (c) **`TENANT_DATA_ISOLATION` is set to `1` in the production `.env`** — the precedent flag is ON, not "stayed at 0 since written". That inverts the point it was offered for: the precedent shows a flag of this shape DOES get flipped once the work behind it lands, which supports putting the switch last rather than arguing against it.
 
 ## 25. A printed slip that goes stale is corrected on paper, not reprinted — DECIDED 2026-08-07
 
