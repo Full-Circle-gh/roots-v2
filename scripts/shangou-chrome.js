@@ -50,6 +50,15 @@ const START_URL  = 'https://shangoue.meituan.com/';
 // that choice and relaunch Chrome whenever it switches. Falls back to the env
 // default when the manager / state file is absent. '' = direct.
 const pm = (() => { try { return require('../lib/proxy-manager'); } catch (_) { return null; } })();
+// Never print proxy credentials: these lines land in pm2 logs that get tailed and
+// pasted. (2026-08-08: the GZ proxy password was sitting in plain text in the
+// channel daemons' "proxy switch" lines.)
+function redactProxy(url) {
+  const s = String(url || '');
+  if (!s) return '(direct)';
+  return s.replace(/\/\/([^/@]*):([^/@]*)@/, '//$1:***@');
+}
+
 function desiredUpstream() {
   if (pm) { try { const a = pm.readActive('yuexiu'); if (a !== undefined) return a; } catch (_) { /* fall through */ } }
   return process.env.SHANGOU_PROXY_UPSTREAM != null
@@ -170,7 +179,7 @@ function startChrome(upstream) {
   if (process.platform !== 'win32') args.push('--no-sandbox', '--disable-gpu');
   if (chromeProxy) args.push(`--proxy-server=${chromeProxy}`);
 
-  console.log(`[shangou-chrome] launching ${exe}\n  port=${PORT} profile=${PROFILE} upstream=${upstream || '(direct)'} proxy=${chromeProxy || '(direct)'} display=${process.env.DISPLAY || '(none)'}`);
+  console.log(`[shangou-chrome] launching ${exe}\n  port=${PORT} profile=${PROFILE} upstream=${redactProxy(upstream)} proxy=${redactProxy(chromeProxy)} display=${process.env.DISPLAY || '(none)'}`);
   const child = spawn(exe, args, { stdio: 'inherit', env: process.env });
   currentChild = child;
   child.on('exit', (code) => {
@@ -183,7 +192,7 @@ function startChrome(upstream) {
 
 // Apply a new upstream by relaunching Chrome (and swapping/closing the forwarder).
 function relaunchWith(upstream) {
-  console.log(`[shangou-chrome] proxy switch (${currentUpstream || 'direct'} → ${upstream || 'direct'}) — relaunching Chrome`);
+  console.log(`[shangou-chrome] proxy switch (${redactProxy(currentUpstream)} → ${redactProxy(upstream)}) — relaunching Chrome`);
   intentionalKill = true;
   try { if (currentForwarder) currentForwarder.close(); } catch (_) {}
   currentForwarder = null;

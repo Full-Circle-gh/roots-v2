@@ -10,7 +10,8 @@
     "test:address": "node scripts/test_address_pin.js && node scripts/test_address_clients.js",
     "test:needs-point": "node scripts/test_needs_point.js",
     "test:preorder": "node scripts/test_preorder_local.js",
-    "test:meituan-binding": "node scripts/test_meituan_binding.js"
+    "test:meituan-binding": "node scripts/test_meituan_binding.js",
+    "test:proxy-routing": "node scripts/test_proxy_routing.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
