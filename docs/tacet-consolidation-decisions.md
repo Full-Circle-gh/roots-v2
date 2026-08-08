@@ -1,8 +1,10 @@
-# Tacet shared-core consolidation — decisions record, v4.4
+# Tacet shared-core consolidation — decisions record, v4.5
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
+
+2026-08-08 · v4.5 — §24 Database: Path A step 2 settled — all six dual-context helpers take the database handle as an argument, one rule with no exceptions, because the read-only-versus-writing grouping is a trap (productContentSnapshot must see uncommitted state). Also records an unwrapped multi-write CMS handler as a latent bug. A decision plus a finding, nothing reversed, hence a patch.
 
 2026-08-08 · v4.4 — §24 Database: two more grep-derived figures corrected — runtime `db.transaction()` blocks are 129 not 131 (two hits were comments), and the terminal-call counts were by-name totals that include `Map.get()`/`RegExp.exec()`, so database terminals are ~2,572 not 3,310. `scripts/diagnose_async_conversion_scope.js` is recorded as the authority for these counts. Corrections plus a tooling record, no decision reversed, hence a patch.
 
@@ -1272,6 +1274,26 @@ Both measures, so the difference is on the record rather than needing re-derivat
 **`scripts/diagnose_async_conversion_scope.js` IS THE AUTHORITY FOR THESE COUNTS FROM NOW ON.** It parses the AST with `espree` and regenerates every figure in the two entries above: prepare sites per file, terminal calls in both measures, transaction blocks with per-block statement counts and enclosing function, route handlers as both inline literals and registrations, handlers without `try`/`catch`, the six-way call-site classification with its evaluation order stated in the output, synchronous DB-touching helpers with caller counts, and the dual-context helper set. It is read-only, opens no database, and writes only its report. **§24 figures should cite it rather than a grep.** It found both errors above on its first run, which is the argument for having committed it.
 
 **ONE LIMIT OF THE SCRIPT, STATED SO IT IS NOT MISREAD AS AUTHORITY IT DOES NOT HAVE.** `espree` is not declared in `package.json`; it arrives transitively with the `eslint` devDependency. The require is guarded and exits with an explanation where it is absent, which includes the production box — the box installs production dependencies only, and `scripts/` ships there regardless. Nothing in the application calls it. Declaring `espree` was considered and rejected: `package.json` is in the deploy allowlist, so declaring it would ship and restart the application for the sake of a diagnostic.
+
+### DUAL-CONTEXT HELPERS — DECIDED 2026-08-08
+
+**Path A step 2 is settled.** Symbols are named rather than cited by line: `routes/retail.js` moved by 51 lines between the survey and this entry, and every line number in the survey went stale. Find these by name.
+
+**THE RULE: every one of the six helpers called both inside and outside a transaction takes the database handle AS AN ARGUMENT.** The caller passes the handle it is using — inside a transaction, the transaction's handle; outside, the ordinary one. No dual forms, no helper reaching for its own handle, no exceptions.
+
+**THE SIX:** `writeLayout`, `reconcileTier`, `productContentSnapshot`, `ensureShipments`, `generateRetailSku`, `createOrReuseManualCustomer`. (`productContentSnapshot` already takes its handle this way; the rule generalises what it does.)
+
+**WHY ONE RULE RATHER THAN THREE.** The survey grouped them by what each needs from the enclosing transaction: one needs to **SEE** uncommitted state (`productContentSnapshot`), three need their **WRITES** to roll back with the outer (`writeLayout`, `createOrReuseManualCustomer`, `ensureShipments`), and two need **NOTHING** (`reconcileTier`, `generateRetailSku`). The last two are exempt on their merits and were included anyway. **"All helpers take the handle" applies without judgement; "most do, except the two that don't need it" requires a per-helper judgement that is demonstrably easy to get wrong** — see the read-only trap below. Uniformity costs two unnecessary parameter changes and removes a class of future error.
+
+**THE READ-ONLY TRAP — recorded because it is counter-intuitive and it is the reason the rule has no exceptions.** Grouping these by read-only versus writing is **WRONG**. `productContentSnapshot` and `generateRetailSku` are both single-`SELECT` read-only helpers, and they sit at opposite ends of the risk ranking. `productContentSnapshot` is called twice inside `POST /api/retail-admin/products/:id/restore-version`: once before `apply()` and once **after**, and the second call must see the outer transaction's uncommitted `UPDATE`. On a separate connection it reads the pre-restore row, and the version recorded as "newest === live" is the **OLD** content. Nothing errors; the edit history is silently wrong. **Read-only is not a proxy for transaction-safe.**
+
+**WHY THIS IS NOT A BUG TODAY.** better-sqlite3 nests transactions as **SAVEPOINTs** — verified by execution on the box, twice, at two different heads: an inner transaction rolls back with a failing outer one and commits standalone. Current behaviour is therefore correct in both contexts for free. The problem is specific to PostgreSQL, which has no implicit nesting and where a separately-checked-out connection cannot see the outer transaction's uncommitted rows. **Current behaviour is the behaviour to PRESERVE, not to redesign.**
+
+**REQUIRED COMMENT.** Each of the six carries a comment stating WHY the handle is a parameter. Without it the parameter reads as redundant and will be refactored away by someone tidying — and the resulting failures are silent (wrong version history, orphan rows, a half-published storefront), not loud.
+
+**SEPARATE FINDING — A LATENT BUG, NOT A CONVERSION DECISION.** `PUT /api/retail-admin/cms/onboarding-settings` issues up to **three** `storefront_config` writes with no transaction: `onboarding.show_to`, then `onboarding.next_label.en` and `.cn`, each either an upsert or a `DELETE`. A failure partway leaves the mode changed and the labels not, or one language updated and the other not. Its sibling `POST /api/retail-admin/brand/apply` **is** wrapped, with two `writeLayout` calls inside one transaction — so the pattern is established and this handler simply misses it. A fix to schedule, independent of the async conversion. Re-verified at head `63f0f774`: the handler contains no `transaction(` call.
+
+**ALSO NOTED, NOT ACTED ON.** `reconcileTier` swallows its own errors in a `try`/`catch` that only `console.warn`s, so an outer transaction can never learn its write failed — including inside `awardOrderPoints`, which writes `lifetime_spend`, a money column. Harmless today because the tier self-heals on the customer's next authenticated request via `requireRetailAuth`. The swallow is the thing to revisit if that helper is ever made to matter more.
 
 ## 25. A printed slip that goes stale is corrected on paper, not reprinted — DECIDED 2026-08-07
 
