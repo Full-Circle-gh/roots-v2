@@ -1154,8 +1154,9 @@ tail loses "do not pack". With wrap confirmed, nothing is lost — the instructi
 prints in full across three lines. It is the ugliest of the eleven, not the most
 dangerous, and it ranks by ugliness alone.
 
-**Nine of the eleven stay untouched** — cosmetic backlog, Ash's call. Two were
-fixed and deployed on 2026-08-08; §8.8 records what shipped and what is left.
+**§8.9 is the live status of all eleven.** This table is the 2026-08-08 audit as
+first written; four findings have been actioned since and two are now closed as
+*deliberately unchanged*. Read §8.9 before treating any row here as open.
 
 ### 8.4 The eight "false alarms" — ⛔ WITHDRAWN 2026-08-08
 
@@ -1349,3 +1350,52 @@ truncation suggested: the head wraps and loses nothing, so a shortening rule
 would destroy information the current behaviour keeps. Recorded here only so the
 next reader who prints an itemised refund does not file it as a regression from
 `f459e3de`.
+
+### 8.9 The eleven — live status, and two closed as deliberately unchanged
+
+*Updated 2026-08-08. This supersedes §8.3's table as the status of record;
+§8.3 stays as the audit was first written.*
+
+| `:line` | width | status |
+|---|---|---|
+| `:792` → `:797` | 23 / 20 | ✅ **fixed, deployed** `f459e3de` — EN/CN split |
+| `:806` → `:822` | 31 | ✅ **fixed, deployed** `f459e3de` — label normal, amount enlarged |
+| `:781` → `:792` | 19 | ✅ **fixed, deployed** `118a141c` — `REFUND REQ` / `退款申请` |
+| `:628` → `:644` | 6 + note | ✅ **fixed, deployed** `b8a774ea` — `<B>` → `<BOLD>` (§1.21) |
+| `:605` | 32 | 🔵 **fix built, awaiting a print** — line removed; the pack count was already on the next line |
+| `:264` `:602` `:662` `:831` `:252` | data | 🔵 **fix built, awaiting a print** — names split at ` / ` |
+| **`:593`** | **36** | ⛔ **CLOSED — staying as it is** (Ash, 2026-08-08) |
+| **`:277`** | **46** | ⛔ **CLOSED — staying as it is** (Ash, 2026-08-08) |
+| `:520` | 28 | open, cosmetic |
+| `:543` | 31 | open, cosmetic |
+| `:749` `:750` | 28 / 29 | open, cosmetic |
+
+#### `:593` and `:277` are decided, not deferred — do not re-propose them
+
+**Both were triaged MISREADS in §8.8's terms and Ash has decided they stay as
+they are.** They are recorded here so a later reader does not find them on the
+MISREADS list, assume they were missed, and reopen them.
+
+- **`:593`** — `MAKE FRESH 当天现做 ‹timestamp›`, 36 columns, prints as
+  `MAKE FRESH 当天` / `现做 2026-08-10 ` / `10:00`. It splits 当天现做, and both
+  halves are real terms.
+- **`:277`** — `** 供应商直发 SUPPLIER-DIRECT · do not pack **`, 46 columns,
+  prints across three lines with `do not pack **` landing alone. 供应商直发
+  survives intact; the hazard is a bare imperative that has lost its subject.
+
+**Neither loses a character** — the head wraps (§8.0(b)) — so neither is a
+correctness defect. That is the distinction the decision turns on: the four
+already fixed each produced a *wrong number or an inverted instruction*; these
+two produce an *ugly* line whose meaning survives.
+
+**If either is reopened it should be for a new reason**, with new evidence —
+not as unfinished work from this audit.
+
+#### Also closed by decision, recorded in the rulebook
+
+**A generic `wrapText()` helper is declined**, not deferred — surveyed,
+prototyped, costed, and rejected because the hazard it was built for is closed
+by the width change and no break rule can make a wrapped Chinese clause safe.
+The reasoning lives in `docs/tacet-desktop-patterns.md` §1.21. The ` / ` name
+split above is **not** that helper: it is a semantic split at a separator the
+author supplied, and needs no column arithmetic beyond deciding whether to split.
