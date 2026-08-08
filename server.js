@@ -1,4 +1,11 @@
 const express = require('express');
+// STEP ZERO of the async conversion (decisions §24). Patches Express so a route
+// handler that returns a rejected promise reaches the global error handler at
+// the bottom of this file instead of hanging the request forever. MUST be
+// required before any routes/* module, because those register their handlers at
+// require time and the guard wraps handlers as they are registered. It is a
+// no-op while every handler is synchronous, which is the case today.
+require('./lib/express-async-guard');
 const session = require('express-session');
 const SQLiteStore = require('connect-sqlite3')(session);
 const helmet = require('helmet');
@@ -303,6 +310,15 @@ app.use((req, res, next) => {
 });
 
 // Routes
+//
+// HANDLERS IN THESE FILES ARE ALREADY PROTECTED AGAINST ASYNC REJECTIONS, even
+// though nothing here or in routes/* shows a wrapper. lib/express-async-guard,
+// required at the top of this file, patches Route.prototype so every handler —
+// and every per-route middleware — is wrapped as it is registered. That is
+// deliberate: a per-route wrapper can be forgotten on a new route, and the
+// failure it prevents (a request that never responds) is silent. The cost is
+// this note. Do NOT add per-route asyncHandler(...) calls; they are redundant
+// and the guard already skips anything it has wrapped.
 app.use(require('./routes/auth'));
 app.use(require('./routes/backend-auth'));   // Mini App Backend operator realm (separate from kitchen auth)
 app.use(require('./routes/backend-team'));   // Mini App Backend team management (operators within a tenant)
