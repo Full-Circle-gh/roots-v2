@@ -1,8 +1,10 @@
-# Tacet shared-core consolidation — decisions record, v3.2
+# Tacet shared-core consolidation — decisions record, v3.3
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
+
+2026-08-08 · v3.3 — §24 Database: the read-side money converter is DECIDED — convert by driver-returned type (Postgres numeric, OID 1700) with a value-size guard, registered once globally at module load, and explicitly not a hand-maintained column list. A second entry records `retail_vouchers.value` as polymorphic money outside the money set, not fixed. A decision plus a recorded gap, neither reversing anything, hence a patch.
 
 2026-08-08 · v3.2 — §24 Database: the in-SQL arithmetic money writes are resolved as safe under decimal, closing the open mechanism question left by the 2026-08-05 structural limit. Eight distinct statements, none needing intervention. An open question closes and no decision is reversed, hence a patch. The superseded entry is left standing.
 
@@ -1066,6 +1068,40 @@ Recorded here because it previously existed only in a commit message. Two commit
 **THE GUARANTEE IS CONDITIONAL, AND THIS IS THE PART THAT MATTERS LATER.** It holds only while every operand stays decimal yuan. If any of these columns' storage unit changes, all eight statements return to being live money defects and must be re-examined before that change ships. The 2026-08-05 structural limit was correct on the day it was written, when the target was bigint cents; the decimal reversal is what dissolved it, not any change to these statements.
 
 **ONE ITEM PARKED, AND IT IS DIALECT RATHER THAN UNITS.** PostgreSQL has `round(numeric, int)` but no `round(double precision, int)`. Set B should resolve to `numeric`, since `balance` is `numeric(14,6)` and `COALESCE(numeric, 0)` stays numeric, but if the driver types the bound parameter as `float8` the expression degrades to double precision and the statement errors. That belongs to the parked Postgres-dialect work, not to the converter, and its failure mode is a loud error rather than a silent miscalculation.
+
+### READ-SIDE MONEY CONVERTER — DECIDED 2026-08-08
+
+PostgreSQL returns `numeric` as **TEXT** (type OID 1700) and the application needs numbers. This settles how that conversion happens, and closes the read-side half of the converter left open by the decimal decision above.
+
+**DECIDED: convert by DRIVER-RETURNED TYPE, with a value-size guard.** A single global `pg` type parser is registered for OID 1700 at module load — not a per-query mechanism, not a per-column one, and not a hand-maintained money-column list. The parser turns numeric text into a JS number unless the value is too large to represent exactly as a JS number, in which case it is left as text.
+
+**WHY TYPE RATHER THAN A COLUMN LIST — the sets are identical, so type dispatch IS the money list.** Measured across all **162** tables of `scripts/postgres-full-copy/plan.json`: the `numeric(14,6)` set and the `cls: NUM6` money set are the same set, **101 both ways, with nothing on either side**. Every non-money float — quantities, weights, percentages, coordinates — is `double precision` (OID 701) and already arrives as a number, so a 1700 parser never sees one. The four surviving `*_cents` billing columns (`billing_invoices.amount_cents`, `billing_plans.price_cents`, `plans.price_cents`, `tenants.setup_fee_cents`) are `integer`, already numbers, and a 1700 parser cannot reach them, so they cannot be double-handled. There are **zero `bigint` columns anywhere**, so the driver's int8-as-text behaviour is moot here. Type dispatch therefore selects exactly the money set **by construction rather than by a list anyone has to maintain**, which is the property the column-list approach could not offer.
+
+**THE MECHANISM IS THE DRIVER'S OWN DEFAULT PATH, verified on the installed version.** `pg` **8.22.0** with `pg-types` **2.2.0**. `getTypeParser(1700)` resolves to `noParse` and returns the string — confirmed by probing the installed module, not inferred from documentation. `pg-protocol` reads a `dataTypeID` per field into `Field(name, tableID, columnID, dataTypeID, …)`, and `pg/lib/result.js` resolves `types.getTypeParser(desc.dataTypeID, desc.format)` once per column per query and applies it per value. A global `setTypeParser` is consulted on that path automatically. For the record, `Field` also carries `tableID` and `columnID`, so table-qualified dispatch stays available if this ever needs narrowing.
+
+**WHY THE SIZE GUARD — and the rationale is NOT what an earlier draft of this entry claimed.** No stored value can overflow: `numeric(14,6)` caps at 99,999,999.999999, roughly eight orders of magnitude below `2^53`. There is also **no numeric-typed identifier column in the database** — checked across all 162 tables, every `numeric` column is money, and there is no bare unbounded `numeric` column at all. The guard is kept for a narrower and genuinely open case: **`numeric` is unbounded as an EXPRESSION type even though every column is `numeric(14,6)`**, so an aggregate such as `SUM()` over money can return a value no column could hold, and a query the parser has never seen can therefore hand it something oversized. The guard covers that automatically, and covers future schema additions, which an explicit carve-out list of known columns would not. That is the same reasoning that rejected a money-column list, applied to the same failure shape. Note that `COUNT(*)` returns `bigint`, not `numeric`, so it arrives as text already and is unaffected.
+
+**PRECISION IS SAFE FOR MONEY.** Every value `numeric(14,6)` can hold round-trips through `Number` exactly: 14 significant digits sits inside float64's roughly 15.95, and the maximum expressed in micro-units is two orders of magnitude below `2^53`. Verified against the real extremes recorded in the scale census above — largest value **76,105.69**, deepest genuine precision **6** decimal places, and the type ceiling **99,999,999.999999**, all exact in both directions.
+
+**CONSEQUENCE, AND IT IS NOT SOLVED BY THIS DECISION. Parsing exactly is not computing exactly.** Once values are JS numbers, float arithmetic applies: `0.01` summed 1000 times yields 9.999999999999831. The float-money defect moves out of storage and into application arithmetic rather than disappearing. Whether exact money arithmetic is required — and therefore what the parser's output type should be — is a **SEPARATE open question, deliberately not settled here**. It is recorded so the parser is not mistaken for a fix to money arithmetic.
+
+**INSTALL POINT.** Registration lives in the module that owns the Postgres pool, at module load, so requiring the module arms the parser and no caller can obtain a connection without it. `setTypeParser` mutates the shared `pg-types` registry and is read per column on every query, so **one call covers every connection and every pool, process-wide**. The only ordering requirement is that it run before the first query, which module-load registration guarantees.
+
+**STATE AT DECISION TIME.** `pg` 8.22.0 is installed on the box and **entirely unused** — zero `require('pg')` in application code, no pool, no client, no connection string. The converter is **inert until the Postgres cutover**: against SQLite, better-sqlite3 already returns `REAL` as a number, so both directions are no-ops today. Seating it early is safe but proves nothing. **The test that matters is a run against the Postgres driver, not against the live box.**
+
+### `retail_vouchers.value` IS POLYMORPHIC MONEY OUTSIDE THE MONEY SET — GAP RECORDED 2026-08-08
+
+**Recorded, not fixed.** `retail_vouchers.value` is money for some rows and not others, and its unit is decided by a sibling column: `type = 'fixed_amount'` makes it **yuan**, `type = 'percent'` makes it a **percentage**. Both readings are live in `routes/retail.js` — rendered as `'¥' + value` and as `value + '%'` on adjacent lines, and applied as a discount amount in one branch and as a percentage clamped to 0–100 in the other.
+
+**It sits OUTSIDE the 101 money columns and is stored `double precision`, not `numeric(14,6)`.** Two consequences follow, and they point in opposite directions.
+
+**It is harmless to the read-side converter.** `double precision` is OID 701 and already arrives as a JS number, so there is no text to parse and the 1700 parser never touches it. The decision above is not weakened by it.
+
+**But it keeps the float storage the decimal rebuild removed everywhere else.** Every other money column moved to exact decimal; this one did not, because the census classified it by column type and it was never typed as money. So the float-money defect survives in this column specifically, on the yuan half of its rows.
+
+**The deeper reason it resists the general rule: no column-level unit rule can describe it.** Every mechanism recorded in this section — the money-column roster, type-based dispatch, the census `cls` field — assigns one unit per column. This column's unit depends on another column's *value*, per row. Whatever fixes it cannot be a column classification; it has to split the column, or carry the unit with the value.
+
+**Not fixed here because it is a schema and data change, not a documentation one**, and because the read-side decision above does not depend on it. Recorded so it is found deliberately rather than discovered by a wrong total.
 
 ## 25. A printed slip that goes stale is corrected on paper, not reprinted — DECIDED 2026-08-07
 
