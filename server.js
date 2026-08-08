@@ -817,13 +817,47 @@ app.use((req, res) => {
   res.redirect('/');
 });
 
+// Page ops when a route error reaches the handler below.
+//
+// WHY THIS EXISTS. Before lib/express-async-guard, an error escaping an async
+// handler became an unhandledRejection and paged ops through alertCrash at the
+// top of this file. The guard now catches those and turns them into a clean
+// 500 — better for the customer, but it also means that class of failure would
+// stop paging entirely. This restores the page, on the path the guard forwards
+// to, so the visibility survives the conversion.
+//
+// IT CANNOT DELAY OR BREAK THE RESPONSE. setImmediate defers it until after the
+// 500 has been written: sendOpsAlert's first call opens a read-only sqlite
+// handle to read the webhook config, and nothing on the response path should
+// wait on that. The try/catch and .catch() mean neither a throw nor a rejected
+// send can escape.
+//
+// RATE LIMITING IS THE ONE ALREADY IN lib/ops-alert.js — an identical message
+// inside 60s is dropped there (DEDUP_MS). That only works if the text is STABLE
+// across repeats, so it is built from the route PATTERN (/api/orders/:id) rather
+// than the URL (/api/orders/1837) and carries nothing per-request. A burst on
+// one broken endpoint therefore pages once a minute, not once a request.
+function pageRouteError(req, err) {
+  setImmediate(() => {
+    try {
+      // req.route holds the matched pattern; it is absent when the error came
+      // from middleware that ran before any route matched, so fall back.
+      const where = (req.route && ((req.baseUrl || '') + req.route.path)) || req.path || req.originalUrl;
+      require('./lib/ops-alert')
+        .sendOpsAlert(`🔴 roots-v2 route error: ${req.method} ${where} — ${(err && err.message) || err}. Returned 500; grep [route-error] for the stack.`)
+        .catch(() => {});
+    } catch (_) { /* alerting must never block or throw here */ }
+  });
+}
+
 // Global error handler (4-arg). Catches anything a route threw synchronously
 // or forwarded via next(err) so it becomes a clean 500 instead of an
 // unhandled error. Must be registered LAST, after all routes and the 404.
-// (Async rejections that never reach next() are caught by the
-// process-level unhandledRejection guard above.)
+// (Async rejections are routed here too, by lib/express-async-guard; without it
+// they would never reach next() and the request would hang.)
 app.use((err, req, res, next) => { // eslint-disable-line no-unused-vars
   console.error(`[route-error] ${req.method} ${req.originalUrl}:`, err && err.stack);
+  pageRouteError(req, err);
   if (res.headersSent) return next(err);
   if (req.path.startsWith('/api/')) return res.status(500).json({ error: 'server_error' });
   res.status(500).send('Server error');
