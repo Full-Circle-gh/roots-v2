@@ -218,6 +218,12 @@ bounce_daemon() {   # $1 = key (for the pm2-name match), $2 = repo path of its s
       const s = (p.pm2_env && p.pm2_env.pm_exec_path) || "";
       // Never match a browser holder — see the comment above bounce_daemon.
       if (/-chrome\.js$/.test(s) || /-chrome(-|$)/.test(p.name || "")) continue;
+      // Never match a STOPPED process: `pm2 restart` would START it. A stopped
+      // daemon is a deliberate act — a closed store parked by hand, a channel
+      // taken out of service — and a deploy that silently undoes it is a deploy
+      // that reopens a shop nobody is watching. Bounce what is running; leave
+      // what someone chose to stop.
+      if ((p.pm2_env && p.pm2_env.status) !== "online") continue;
       if (s.endsWith("/" + base) || re.test(p.name || "")) console.log(p.name);
     }' 2>/dev/null || true)
   if [ ${#procs[@]} -gt 0 ]; then
@@ -249,6 +255,7 @@ bounce_holder() {   # $1 = repo path of the holder script
     const base = process.env.PM_SCRIPT.split("/").pop();
     for (const p of d) {
       const s = (p.pm2_env && p.pm2_env.pm_exec_path) || "";
+      if ((p.pm2_env && p.pm2_env.status) !== "online") continue; // see bounce_daemon
       if (s.endsWith("/" + base)) console.log(p.name);
     }' 2>/dev/null || true)
   [ ${#procs[@]} -gt 0 ] || return 0
