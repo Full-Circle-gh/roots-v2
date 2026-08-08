@@ -859,6 +859,12 @@ shipped, and no width fix is in flight.** The audit that produced it was run
 > questions: **enlarged lines ARE doubled**, and the head **WRAPS, it does not
 > truncate**. Read §8.0 first; §8.1–§8.5 survive only as the record of a wrong
 > turn.
+>
+> **The rule this produced now lives in `docs/tacet-desktop-patterns.md` §1.20**
+> — cite that for the rule, this section for how it was arrived at. **Two of the
+> eleven findings were fixed and deployed on 2026-08-08 (`f459e3de`); the other
+> nine stand. §8.8 records what shipped, the one line still open on the refund
+> slip, and the CJK-compound hazard the fix uncovered.**
 
 ### 8.0 What the paper settled
 
@@ -1138,9 +1144,9 @@ second column (see §8.7).
 | `:628` | `:612` | packing | 6 + note | `Note: ‹customer_note›` — data-dependent, 2+ lines |
 | `:749` | `:733` | add-on | 28 | `ADD to this order 补入原订单` — 2 lines |
 | `:750` | `:734` | add-on | 29 | `Order already placed 此单已下` — 2 lines |
-| `:781` | `:765` | refund req | 19 | `退款申请 REFUND` / `REQ` — 2 lines, **confirmed on paper** |
-| `:792` | `:776` | refund req | 23 / 20 | `PARTIAL refund 部分退款` / `FULL refund 全额退款` — 2 lines, **confirmed on paper** |
-| `:806` | `:790` | refund req | 31 | `退款金额 Refund` / `￥‹amt›` right — 2 lines, **confirmed on paper** |
+| `:781` | `:765` | refund req | 19 | `退款申请 REFUND` / `REQ` — 2 lines, **confirmed on paper** · still open, see §8.8 |
+| ~~`:792`~~ | `:776` | refund req | 23 / 20 | ✅ **FIXED 2026-08-08** (`f459e3de`) — see §8.8 |
+| ~~`:806`~~ | `:790` | refund req | 31 | ✅ **FIXED 2026-08-08** (`f459e3de`) — see §8.8 |
 
 **`:277` is downgraded from PRIORITY.** The 2026-08-07 audit flagged it as the
 one finding that survived "under either rule", on the reasoning that losing its
@@ -1148,8 +1154,8 @@ tail loses "do not pack". With wrap confirmed, nothing is lost — the instructi
 prints in full across three lines. It is the ugliest of the eleven, not the most
 dangerous, and it ranks by ugliness alone.
 
-**Do not fix any of these.** Ash decides whether the cosmetic backlog is worth
-touching at all.
+**Nine of the eleven stay untouched** — cosmetic backlog, Ash's call. Two were
+fixed and deployed on 2026-08-08; §8.8 records what shipped and what is left.
 
 ### 8.4 The eight "false alarms" — ⛔ WITHDRAWN 2026-08-08
 
@@ -1239,3 +1245,107 @@ down by **+16**. Lines above that are unmoved.
 The `Deliver` comment moved from `:471-478` to **`:471-477`**; `pushShipBy`'s
 guard is at `:482`. The preview legend moved to
 `public/retail-admin/02-settings-ops.js:661` (was `:652-653`).
+
+### 8.8 The refund slip — what shipped, and what is still open
+
+*Merged and deployed 2026-08-08 as `f459e3de`. Scope was `renderRefundRequest`
+only; the other nine findings were not touched, and the five other slips
+(receipt, packing, compact, datechange, add-on) were proven byte-identical by
+rendering all 17 template/fulfilment combinations before and after, not by
+reading the diff. Line numbers below are against `main` after the merge.*
+
+**Two of the eleven are closed.** Both took the same shape — the one §1.20 of
+`tacet-desktop-patterns.md` now names: **label at normal size on its own line,
+value enlarged beneath it.**
+
+| was | now | shipped as |
+|---|---|---|
+| `<B>${row('退款金额 Refund', money(…))}</B>` — 31 cols, wrapped | `:822-823` | `<BOLD>退款金额 Refund</BOLD>` (15 of 31) + `<B>￥‹amt›</B>` (7 of 16) |
+| `<B>PARTIAL refund 部分退款</B>` / `<B>FULL refund 全额退款</B>` — 23 / 20 cols, wrapped | `:797-799` | EN and CN on separate enlarged lines — 14/8 and 11/8 |
+
+Wrapping lines on the slip went **3 → 1**, and the paper is the same length
+either way — 19 physical lines before and after. The amount reads *larger* than
+it did, not smaller: it was already being pushed onto its own line, just not on
+purpose.
+
+#### 🔴 A break inside a Chinese compound is worse than an English wrap
+
+**This is the finding worth carrying beyond the one case that produced it.**
+
+Glued at 20 columns, `FULL refund 全额退款` broke at 32 head columns — which
+lands **inside 全额退款**, leaving `全额` alone on the first line and `退款` on
+the second.
+
+An English wrap degrades gracefully. `Plant-based beef ba` / `lls` is ugly and
+unmistakably broken; nobody reads `ba` as a word. **A CJK compound does not
+degrade — it re-reads.** 全额 ("full amount") and 退款 ("refund") are both real
+words on their own, so the first line of a `FULL refund` slip said *full
+amount* and the second said *refund*, each looking like a complete, deliberate
+line. The slip did not look broken. It looked like it said something else.
+
+**The general hazard, for any enlarged CN line:** the failure mode of an
+over-width Chinese line is not illegibility, it is **a plausible wrong
+reading** — the same shape §1.17 rule 2 legislates against on screen (*visibly
+odd beats plausibly wrong*), arriving through a printer instead of a lookup
+table. English gives you a broken-looking fragment and therefore a bug report.
+Chinese gives you a different sentence and silence.
+
+*The test:* for an enlarged line containing CJK, do not only ask whether it
+fits — ask what the fragment on each side of the break would read as on its
+own. If either half is a word, the wrap is not cosmetic.
+
+#### Open — `退款申请 REFUND REQ` (`:781`), and why it was not fixed with the others
+
+**It is now the only wrapping line on the refund slip.** 19 display columns
+against the 16 an enlarged line holds; it prints as `退款申请 REFUND` / `REQ`.
+
+The same restructure would close it — and it is *not* being deferred because
+it is hard. It is deferred because **it is the slip's header, and changing a
+header's shape is a design decision, not a defect fix.**
+
+The distinction matters and is the reason this is recorded rather than done:
+
+- The two lines that shipped were **fixing an accident.** `row()` produced a
+  break nobody chose, in a place nobody chose, and the restructure put the
+  break where it belongs. Nothing about the slip's design changed.
+- The header is **three `<CB>` lines that read as one block** — shop name,
+  slip name, order number. Splitting `退款申请 REFUND REQ` into a label line
+  and a value line would make it four, and would impose a
+  label/value relationship on a phrase that is not one: `REQ` is not the value
+  of `退款申请 REFUND`. Every option — drop `REQ`, split EN from CN as the
+  `改期` head does, shrink it to normal size — changes how loud the slip's
+  identity is, which is the one thing this slip was built to control
+  (`lib/feie.js:769-775`: *"Headed loudly so it can't be mistaken for a packing
+  slip"*).
+
+So it stays as it is until someone decides what the header should say. **It
+loses no text** — `REQ` prints, centred, on the second line — so there is no
+correctness argument for touching it. Do not "fix" it as a wrap; it is a
+wording question wearing a width question's clothes.
+
+#### Recorded so it is not rediscovered — the itemised branch wraps on long names
+
+When a refund is itemised, `renderRefundRequest` prints each item's name at
+`:803` as `<BOLD>${itemName(it)}</BOLD>` — **normal size, limit 31**. A long
+bilingual name overruns it: `素食牛肉丸 / Plant-based beef balls` is **35**
+display columns and wraps to `素食牛肉丸 / Plant-based beef ba` / `lls`.
+
+**This is not one of the eleven** and it is not a new defect:
+
+- The eleven are **template strings** — fixed text whose width is knowable from
+  the source. This is **data**, and its width is a property of the product
+  catalogue, not of the slip.
+- It is not enlarged, so §1.20's 16-column limit does not reach it. It is a
+  normal-size line that a long enough value overruns, the same shape as `:628`
+  (`Note: ‹customer_note›`) which *is* on the list only because its prefix is a
+  template string.
+- `itemName()` (`:185`) glues CN and EN with ` / ` (`bilingual()`, `:146-151`),
+  so the combined width is roughly the sum of both names. Any catalogue with
+  descriptive English names will exceed 31 routinely.
+
+The same construct is on the packing slip (`:602`) and the receipt (`:646`), so
+this is not specific to refunds. **No fix proposed**, and deliberately no
+truncation suggested: the head wraps and loses nothing, so a shortening rule
+would destroy information the current behaviour keeps. Recorded here only so the
+next reader who prints an itemised refund does not file it as a regression from
+`f459e3de`.
