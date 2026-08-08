@@ -330,35 +330,21 @@ console.log('\nstate transitions (in-memory SQLite, mirrors database.js)');
 // isn't (a bare checkout) — same prepare/run/get/all surface either way, so the
 // statements under test run verbatim in both. Keeps this file to the house rule
 // for tests: no install, no network, safe to run anywhere.
-const openMemoryDb = (() => {
-  try {
-    const BetterSqlite = require('better-sqlite3');
-    return () => new BetterSqlite(':memory:');
-  } catch {
-    const quiet = () => {};                       // node:sqlite is experimental and says so
-    process.on('warning', quiet);
-    const { DatabaseSync } = require('node:sqlite');
-    process.off('warning', quiet);
-    return () => new DatabaseSync(':memory:');
-  }
-})();
+//
+// The choice lives in scripts/test-support/memory-db.js because the version
+// that lived here was wrong: it wrapped only the require(), which succeeds
+// without the native binding, so the fallback never engaged and every test
+// below failed on any machine that had not rebuilt better-sqlite3.
+const { openQueueTableDb, driver } = require('./test-support/memory-db');
+console.log(`  (sqlite driver: ${driver})`);
 
 // Not a mock: the REAL table definition, lifted out of database.js — both the
 // CREATE and every addColumn() that has since been bolted onto it — so a column
 // added there and forgotten here cannot make this file quietly pass. Same
 // technique as the G1 suite in scripts/test_address_pin.js.
 function freshDb() {
-  const src = require('fs').readFileSync(
-    require('path').join(__dirname, '..', 'database.js'), 'utf8');
-  const ddl = src.match(/CREATE TABLE IF NOT EXISTS qingyun_push_queue[\s\S]*?\n {2}\);/);
-  assert.ok(ddl, 'qingyun_push_queue DDL not found in database.js');
-  const db = openMemoryDb();
-  // The FK points at a table this in-memory DB doesn't carry.
-  db.exec(ddl[0].replace(/FOREIGN KEY[\s\S]*?ON DELETE CASCADE/, 'dummy_fk INTEGER'));
-  const added = [...src.matchAll(/addColumn\('qingyun_push_queue',\s*'(\w+)',\s*'(\w+)'\)/g)];
-  assert.ok(added.length >= 4, 'expected the bolted-on columns to be found');
-  for (const [, col, type] of added) db.exec(`ALTER TABLE qingyun_push_queue ADD COLUMN ${col} ${type}`);
-  return db;
+  return openQueueTableDb(require('fs').readFileSync(
+    require('path').join(__dirname, '..', 'database.js'), 'utf8'));
 }
 // One queue row, and the drain's own view of it.
 const seed = (db, row = {}) => {

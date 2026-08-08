@@ -18,6 +18,12 @@
 const assert = require('assert');
 const { buildCreatePayload, joinStreetDetail } = require('../lib/qingyun-payload');
 const geocode = require('../lib/geocode');
+// Shared with scripts/test_needs_point.js. This file used to require
+// better-sqlite3 directly with no fallback, so the G1/round-4 suites below
+// failed outright on any machine where the native binding had not been built —
+// reported as if the statements under test were broken.
+const { openQueueTableDb, driver } = require('./test-support/memory-db');
+console.log(`  (sqlite driver: ${driver})`);
 
 // The round-1 rule, kept verbatim as a reference so the de-duplication tests can
 // assert a real DIFFERENCE rather than a property both versions happen to share.
@@ -551,7 +557,6 @@ async function extraSuites() {
 async function roundThreeSuites() {
   const fs = require('fs');
   const path = require('path');
-  const Database = require('better-sqlite3');
   const qingyunQueue = require('../lib/qingyun-queue');
   const addressPin = require('../lib/address-pin');
   const payload = require('../lib/qingyun-payload');
@@ -564,14 +569,10 @@ async function roundThreeSuites() {
   // out of database.js so the two cannot drift, running the REAL statement the
   // endpoint runs.
   console.log('\nG1 · retry-push cannot resurrect a completed row (real sqlite)');
-  const makeQueueDb = () => {
-    const ddl = src('database.js').match(/CREATE TABLE IF NOT EXISTS qingyun_push_queue[\s\S]*?\n  \);/);
-    assert.ok(ddl, 'qingyun_push_queue DDL not found in database.js');
-    const db = new Database(':memory:');
-    db.exec(ddl[0].replace(/FOREIGN KEY[\s\S]*?ON DELETE CASCADE/, 'dummy_fk INTEGER'));
-    db.exec("ALTER TABLE qingyun_push_queue ADD COLUMN geo_held_at DATETIME");
-    return db;
-  };
+  // Real DDL + every addColumn() bolted onto it since. This used to hardcode a
+  // single bolt-on (geo_held_at), which went stale the moment the
+  // delivery-point build added needs_point_at / guessed_*.
+  const makeQueueDb = () => openQueueTableDb(src('database.js'));
 
   it('resets an errored, copy-less row', () => {
     const db = makeQueueDb();
@@ -824,18 +825,12 @@ async function roundThreeSuites() {
 async function roundFourSuites() {
   const fs = require('fs');
   const path = require('path');
-  const Database = require('better-sqlite3');
   const qingyunQueue = require('../lib/qingyun-queue');
   const ROOT = path.join(__dirname, '..');
   const src = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 
-  const makeQueueDb = () => {
-    const ddl = src('database.js').match(/CREATE TABLE IF NOT EXISTS qingyun_push_queue[\s\S]*?\n  \);/);
-    const db = new Database(':memory:');
-    db.exec(ddl[0].replace(/FOREIGN KEY[\s\S]*?ON DELETE CASCADE/, 'dummy_fk INTEGER'));
-    db.exec('ALTER TABLE qingyun_push_queue ADD COLUMN geo_held_at DATETIME');
-    return db;
-  };
+  // Same builder as G1 above — see the note there.
+  const makeQueueDb = () => openQueueTableDb(src('database.js'));
   // The drain's decision, exactly as scripts/qingyun-daemon.js sequences it: the
   // closed-order gate first, then the same-city gate, then the push. Mirrors the
   // real order of operations so the assertions below are about the RULE, not
