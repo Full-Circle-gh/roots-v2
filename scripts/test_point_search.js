@@ -686,13 +686,75 @@ it('no map means no search box', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 console.log('\nSDK loading is untouched (R5)');
 
-it('the provider switch and the loader are unchanged', () => {
+it('the provider switch and the SDK URLs are unchanged', () => {
   assert.match(RETAIL, /if \(amapJs\) \{\n\s*return res\.json\(\{ success: true, data: \{ provider: 'amap'/,
     '/api/retail/maps-config must still choose the provider the same way');
   const loader = grab(ORDERS, 'qpLoadSdk', '04-orders.js');
   assert.match(loader, /webapi\.amap\.com\/maps\?v=2\.0/);
   assert.match(loader, /map\.qq\.com\/api\/gljs/);
   assert.doesNotMatch(loader, /plugin=/, 'search goes through the server — no JS-API service plugin is loaded');
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+console.log('\nqpLoadSdk never injects an SDK the page already has (vm)');
+
+// Run the real loader against a stub window/document. Returns what it resolved
+// to and every script element it tried to append.
+async function loadSdk({ provider, already }) {
+  const appended = [];
+  const sandbox = {
+    console,
+    document: { head: { appendChild: (s) => { appended.push(s); s.onload && s.onload(); } },
+                createElement: () => ({ set src(v) { this._src = v; }, get src() { return this._src; } }) },
+    window: {},
+  };
+  if (already) sandbox.window[provider === 'amap' ? 'AMap' : 'TMap'] = {};
+  vm.createContext(sandbox);
+  vm.runInContext('let _qpSdkP = null;\n' + grab(ORDERS, 'qpLoadSdk', '04-orders.js'), sandbox);
+  sandbox.__cfg = { provider, key: 'K', security: 'S' };
+  const p = vm.runInContext('qpLoadSdk(__cfg)', sandbox);
+  // The injecting path resolves through the SDK's callback; fire it as the real
+  // SDK would once the script has run.
+  if (!already) vm.runInContext('window.__qpMapReady && window.__qpMapReady()', sandbox);
+  return { resolved: await p, appended, sandbox };
+}
+
+for (const provider of ['amap', 'tencent']) {
+  const host = provider === 'amap' ? 'webapi.amap.com' : 'map.qq.com';
+
+  await itAsync(`${provider}: with the SDK already on the page, nothing is injected`, async () => {
+    // The regression: opening an in-transit order (which loads the SDK through
+    // _adminLoadAmapOnce) and then a parked one used to append a second copy.
+    const r = await loadSdk({ provider, already: true });
+    assert.strictEqual(r.appended.length, 0, 'a second SDK script must not be appended');
+    assert.strictEqual(r.resolved, provider, 'and it still resolves, so the map still draws');
+  });
+
+  await itAsync(`${provider}: with no SDK on the page, it loads from ${host}`, async () => {
+    const r = await loadSdk({ provider, already: false });
+    assert.strictEqual(r.appended.length, 1, 'the first load must still happen');
+    assert.match(r.appended[0].src, new RegExp(host.replace('.', '\\.')));
+    assert.strictEqual(r.resolved, provider);
+  });
+}
+
+await itAsync('the guard is per provider — an Amap global does not satisfy Tencent', async () => {
+  // The two globals are different objects and the loaders can only agree on the
+  // one /api/retail/maps-config named. A guard that tested either would skip a
+  // load the page genuinely needs, and the map would never draw.
+  const sandbox = { console, window: { AMap: {} },
+    document: { head: { appendChild() {} }, createElement: () => ({}) } };
+  vm.createContext(sandbox);
+  vm.runInContext('let _qpSdkP = null;\n' + grab(ORDERS, 'qpLoadSdk', '04-orders.js'), sandbox);
+  assert.strictEqual(vm.runInContext('(function(){ const c = { provider: "tencent", key: "K" };'
+    + ' const g = c.provider === "amap" ? window.AMap : window.TMap; return !!g; })()', sandbox), false,
+    'window.AMap must not count as the Tencent SDK');
+});
+
+it('the guard reads the global, not the memo — the memo alone never proved a load', () => {
+  const loader = grab(ORDERS, 'qpLoadSdk', '04-orders.js');
+  assert.match(loader, /cfg\.provider === 'amap' \? window\.AMap : window\.TMap/);
+  assert.match(loader, /if \(_qpSdkP\) return _qpSdkP;/, 'the existing memo stays as the first check');
 });
 
 it('the search needs no browser maps key of its own', () => {

@@ -3808,6 +3808,21 @@ function qpHideFind(orderId) {
 let _qpSdkP = null;
 function qpLoadSdk(cfg) {
   if (_qpSdkP) return _qpSdkP;
+  // …but "shared with nothing else" is about this memo, not about the page. The
+  // live rider map has its own loader (_adminLoadAmapOnce) and its own memo, and
+  // the two never see each other: open an on-the-way order and then a parked one
+  // in the same session and this injected a SECOND webapi.amap.com script over
+  // an SDK that was already there. _adminLoadAmapOnce has guarded against the
+  // mirror-image case since it was written (`if (window.AMap) return`); this is
+  // the same guard, from the other side.
+  //
+  // Checked per provider, because the global differs and the two loaders can
+  // only ever agree on one — /api/retail/maps-config answers both.
+  const already = cfg.provider === 'amap' ? window.AMap : window.TMap;
+  if (already) {
+    _qpSdkP = Promise.resolve(cfg.provider);
+    return _qpSdkP;
+  }
   _qpSdkP = new Promise((resolve, reject) => {
     const cb = '__qpMapReady';
     window[cb] = () => resolve(cfg.provider);
