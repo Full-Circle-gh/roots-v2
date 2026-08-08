@@ -1,8 +1,10 @@
-# Tacet shared-core consolidation — decisions record, v4.2
+# Tacet shared-core consolidation — decisions record, v4.3
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
+
+2026-08-08 · v4.3 — §24 Database: the v4.0 route-handler async figure is corrected (756 handlers, 72 async — not 761/4), and `routes/retail.js` is surveyed for the Path A conversion, including a STEP ZERO prerequisite: Express 4 does not catch async-handler rejections and 207 handlers have no try/catch, so an asyncHandler wrapper must be adopted before any call site moves. Corrections and a survey, no decision reversed, hence a patch.
 
 2026-08-08 · v4.2 — §24 Database: a requirement is recorded that NO account may be special-cased in the new shared-database scoping, including Roots. The existing id-based exception is left in place deliberately, because it lives in the file-per-account machinery being deleted. A forward requirement, not a decision reversal, hence a patch.
 
@@ -1191,6 +1193,51 @@ PostgreSQL returns `numeric` as **TEXT** (type OID 1700) and the application nee
 **`ROOTS_TENANT_ID` IS THE MARKER TO WATCH.** The constant is declared at `lib/tenant-db.js:78` (`const ROOTS_TENANT_ID = 1;`) and is retired with the machinery that needs it. **Any surviving reference to it in the new system is a signal that the special case has been carried forward.** That makes the check mechanical rather than a matter of judgement: grep for the identifier, and if it appears in shared-database scoping code, the requirement above has been violated.
 
 **A NOTE ON SCOPE.** This entry records a requirement on work not yet begun. It changes no code, reverses no decision, and takes no position on when the file-per-account machinery is removed — only on what must not reappear when it is.
+
+### ROUTE HANDLER ASYNC COUNT — CORRECTED 2026-08-08
+
+**The handler figures in the cutover-sequencing table above are wrong and are superseded here, not edited.** That table records **"761, of which 4 are `async` (0.5%)"**. The 4 came from a grep that matched `async` only where it followed the first comma, so it missed every handler carrying middleware — `router.post('/x', requireAuth, async (req, res) => …)` — which is the common form.
+
+**Measured by AST across `routes/`: 756 handlers, 72 already async (9.5%).**
+
+**The conclusion of that entry is unaffected — 684 handlers remain synchronous** — but existing async adoption was understated roughly twentyfold, and a plan sized on "0.5% done" would have been sized against a false baseline.
+
+**On the two totals, because they measure slightly different things and both are defensible.** 756 counts inline handler *function literals*. 761 counted `router.<method>(` *registrations*, some of which pass a named function reference rather than a literal — `routes/ai.js:747` registers `composeBlocksHandler` that way. Neither number is wrong for what it counts; the async proportion is the part that was.
+
+**METHOD NOTE, AND IT IS THE DURABLE POINT.** Grep is not a reliable instrument for structural questions about a 29,681-line file. It cannot see nesting, argument position, or whether a match sits inside a function, a callback or a transaction. Where a figure in this section describes code *structure* rather than a plain text occurrence, it should be derived from a parsed AST. Three separate figures in this section have now been corrected after being taken from greps.
+
+### `routes/retail.js` CONVERSION SCOPE — SURVEYED 2026-08-08
+
+**29,682 lines, flat, with no feature grouping.** 327 route handlers (276 of them synchronous), 974 top-level statements, 394 named top-level functions. It holds **1,241 of the 2,739 runtime `.prepare()` sites** — 45.3%, so roughly half the Path A conversion sits in this one file.
+
+**CALL SITES BY CONVERSION DIFFICULTY** — AST-derived, hardest class wins, totals reconcile exactly to 1,241:
+
+| class | count |
+|---|---|
+| simple | **623** |
+| inline-dereferenced | **129** |
+| inside a synchronous helper | **349** |
+| inside a transaction | **137** |
+| inside a sync array callback (`.map`/`.forEach`) | **2** |
+| module-level | **1** |
+
+**The 349 and 137 are FLOORS, not totals.** Classification was by *nearest* enclosing function, not by transitive reachability, so a site counted "simple" may still be reachable only through a synchronous helper further up the chain. The true cost of both classes is higher than stated.
+
+**STEP ZERO — BEFORE ANY CALL SITE MOVES.** Express is **4.22.1** and does **not** catch rejections from async handlers, and there is **no async-error wrapper anywhere in the repository** — no `express-async-errors`, no `asyncHandler`, no `catchAsync`. **207 of the 327 handlers contain no `try`/`catch` at all.** Making those async without a wrapper turns any database error into an unhandled rejection and a request that **never responds** — the client hangs until timeout. The crash guards in `server.js` log and page, but the request is already lost. This failure surfaces only under load or on an error path nobody exercised, so spot-checking after a conversion will not find it. **An `asyncHandler` wrapper, adopted across all 327 handlers while they are still synchronous, is a safe no-op change and the prerequisite for everything after it.**
+
+**THE IRREDUCIBLE CORE — small, and everything else follows mechanically once it is settled:**
+
+- **Six helpers called BOTH inside and outside a transaction** — `writeLayout` (3 in / 6 out), `reconcileTier` (3/1), `productContentSnapshot` (2/2), `ensureShipments` (1/10), `generateRetailSku` (1/1), `createOrReuseManualCustomer` (1/1). Inside a transaction they must participate in it; outside they stand alone. Each needs a dual form or a moved transaction boundary. **Six design decisions with no mechanical answer, and the wrong answer voids atomicity silently.**
+- **`cfgValue` (`routes/retail.js:8206`)** — one `.prepare()`, **57 call sites**. Converting it cascades through most of the file.
+- **`requireRetailAdmin` (`routes/retail.js:98`)** — DB-touching middleware imported by **nine** other route files: `ai.js`, `eleme-admin.js`, `guanyi-admin.js`, `integrations-admin.js`, `meituan-admin.js`, `retail-inventory.js`, `retail-page-templates.js`, `retail-purchasing.js`, `retail-setup.js`. Its blast radius leaves this file.
+
+**TRANSACTIONS: 56 blocks here, of the 131 runtime-wide.** Thirty-six hold 1–4 statements; fourteen hold no direct statement at all; the densest are `L9853` (11), `finalizeOrderAddon` (10), `L29583` (9) and `L29329` (6). The named-function transactions cluster on money and stock — `creditWallet`/`debitWallet`, `awardOrderPoints`/`reverseOrderPoints`, `finalizeTopup`, `finalizeOrderAddon`, the reversal family, `sweepExpiredPoints`, `claimMigrationCredit`. **Two of the fourteen empty-looking blocks (`L18133`, `L18163`) contain no direct `.prepare()` but still do database work through `writeLayout`** — a statement-level grep would report them as empty.
+
+**CROSS-FILE REACH is small but real.** `requireRetailAdmin` reaches nine files, above. `retailLiveBump` is called fire-and-forget inside `try {}` from `lib/inventory.js:869` and `routes/backend-auth.js:600` — if it becomes async those `try` blocks stop catching and the rejection escapes.
+
+**CONVERSION ORDER — LEAVES-FIRST IS WRONG HERE AND MUST NOT BE USED.** Converting the cheap leaves first leaves the transaction redesign to be done against a half-converted codebase, which is precisely the partial state recorded above as voiding atomicity without erroring. The order that works: **(0)** `asyncHandler` adopted across all handlers while still synchronous; **(1)** settle the six dual-context helpers on paper, since they determine transaction boundaries; **(2)** convert all 56 transactions as ONE unit, money cluster included; **(3)** convert `cfgValue` and the other high-fan-in helpers; **(4)** grind the ~750 mechanical sites; **(5)** `requireRetailAdmin` and `retailLiveBump` last, as they reach outside the file.
+
+**RISK CONCENTRATES IN THREE PLACES, none of them volume:** the six dual-context helpers, where there is no correct mechanical answer; the money/points/wallet transaction cluster, where a silently voided transaction costs real money rather than a broken page; and Express 4 with 207 unguarded handlers, where a database error becomes a hung request.
 
 ## 25. A printed slip that goes stale is corrected on paper, not reprinted — DECIDED 2026-08-07
 
