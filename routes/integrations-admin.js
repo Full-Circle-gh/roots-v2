@@ -308,6 +308,16 @@ router.get('/api/retail-admin/channel-hub/meituan/stores', requireRetailAdmin, (
       const lastPush = get1("SELECT created_at FROM meituan_sync_log WHERE store_code = ? AND event_type = 'stock_push' AND status = 'ok' ORDER BY id DESC LIMIT 1", code);
       const lastOkAny = get1("SELECT created_at FROM meituan_sync_log WHERE store_code = ? AND status = 'ok' ORDER BY id DESC LIMIT 1", code);
       const lastLoginErr = get1("SELECT event_type, created_at FROM meituan_sync_log WHERE store_code = ? AND status = 'error' AND event_type IN ('needs_login','verify_required') ORDER BY id DESC LIMIT 1", code);
+      // A lost store binding (authed, but no acctId/region → stock + order sync
+      // dead) is read as a LATCH, not by timestamp race: the daemon writes
+      // binding_lost when it goes and binding_cleared when it comes back, so the
+      // newer of the two is the current state. Timestamps can't decide this one —
+      // the business-status endpoint answers off the wmPoiId cookie and keeps
+      // refreshing store_business_status.read_at all through the outage, which is
+      // exactly how a dead store used to render here as "Signed in".
+      const bindLost  = get1("SELECT created_at FROM meituan_sync_log WHERE store_code = ? AND event_type = 'binding_lost' ORDER BY id DESC LIMIT 1", code);
+      const bindClear = get1("SELECT created_at FROM meituan_sync_log WHERE store_code = ? AND event_type = 'binding_cleared' ORDER BY id DESC LIMIT 1", code);
+      const unbound = !!bindLost && utc(bindLost.created_at) > (bindClear ? utc(bindClear.created_at) : 0);
       const lastOrder = get1('SELECT imported_at FROM meituan_order_import WHERE store_code = ? ORDER BY id DESC LIMIT 1', code);
       const ordersToday = get1("SELECT COUNT(*) AS n FROM meituan_order_import WHERE store_code = ? AND date(imported_at) = date('now')", code);
       // "Live" = matched to a real Meituan listing (meituan_name present) AND
@@ -330,6 +340,11 @@ router.get('/api/retail-admin/channel-hub/meituan/stores', requireRetailAdmin, (
         if (errAt && errAt > okAt) signedIn = false;
         else if (okAt) signedIn = true;
       }
+      // The live daemon evidence beats everything above, including a relay row
+      // that says 'ok': that row records how the LOGIN went, and this failure
+      // happens to sessions that logged in perfectly well. Nothing syncs while a
+      // store is unbound, so the page must not call it connected.
+      if (unbound) signedIn = false;
       const creds = mtCreds[code] || {};
       return {
         code,
@@ -337,7 +352,7 @@ router.get('/api/retail-admin/channel-hub/meituan/stores', requireRetailAdmin, (
         nameCn: s.nameCn || s.name || code,
         account: mask(creds.user),
         signedIn,
-        issue: signedIn === false && lastLoginErr ? lastLoginErr.event_type : null,
+        issue: unbound ? 'binding_lost' : (signedIn === false && lastLoginErr ? lastLoginErr.event_type : null),
         checkedAt: (biz && biz.read_at) || null,
         open: biz && biz.read_ok ? biz.is_open === 1 : null,
         statusDesc: biz ? biz.status_desc : null,

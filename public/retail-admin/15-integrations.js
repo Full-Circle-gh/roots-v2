@@ -544,7 +544,14 @@
   function igMtStoreRow(s) {
     const name = esc(cuT(s.name, s.nameCn || s.name));
     let chip;
-    if (s.signedIn === true) {
+    // A lost store binding is its own state, not a plain sign-out: the account is
+    // signed in, it just isn't pointing at this store, so signing in again without
+    // re-selecting the store fixes nothing. Name it, so the person acting on it
+    // knows the extra step exists.
+    const unbound = s.issue === 'binding_lost';
+    if (unbound) {
+      chip = `<span class="mc-chip" style="color:var(--danger,#e8556a)">${MC_SVG.circle}<span>${cuT('Store not linked', '门店未绑定')}</span></span>`;
+    } else if (s.signedIn === true) {
       chip = `<span class="mc-chip on">${MC_SVG.check}<span>${cuT('Signed in', '已登录')}</span></span>`;
     } else if (s.signedIn === false) {
       chip = `<span class="mc-chip" style="color:var(--danger,#e8556a)">${MC_SVG.circle}<span>${cuT('Needs sign-in', '需重新登录')}</span></span>`;
@@ -555,6 +562,7 @@
       ? `<button class="btn btn-sm btn-primary" onclick="igRelayWizard('meituan',{step:'creds',store:'${escJs(s.code)}'})">${cuT('Sign in again', '重新登录')}</button>`
       : '';
     const facts = [];
+    if (unbound) facts.push(`<span style="color:var(--danger,#e8556a)">${cuT('Stock and orders are not syncing — sign in again and re-select this store', '库存和订单已停止同步 — 请重新登录并在门店切换里选回本店')}</span>`);
     if (s.account) facts.push(`${cuT('Account', '账号')} <span style="font-family:var(--f-mono,monospace)">${esc(s.account)}</span>`);
     // "Live" = matched + pushing stock (same meaning as the Meituan tab's "N
     // live"). Unmatched rows are frozen, so call them out separately, never as

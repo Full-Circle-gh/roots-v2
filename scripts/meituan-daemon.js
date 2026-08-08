@@ -302,7 +302,13 @@ function noteVerifyResult(storeCode, challenged) {
 // succeeds. Time-latched (not first-blip) so a one-off transient 10002 never pages.
 // See reference_meituan_tianhe_session_binding_loss.
 const BINDING_ALERT_AFTER_MS = 5 * 60_000; // must persist this long before paging
-const bindingDown = {}; // storeCode -> { since: epochMs|null } (the alerted latch is on disk)
+// One page and then silence is how this failure mode actually hurts: the 14:16
+// message scrolls past, nobody re-logs in, and the store sells stock it doesn't
+// have until someone happens to look. While the latch is on AND the store is open
+// (nagging a closed store just teaches people to mute the group), re-page on this
+// interval with the elapsed time. 0 disables.
+const BINDING_RENAG_MS = Math.max(0, Number(process.env.MEITUAN_BINDING_RENAG_MIN || 120)) * 60_000;
+const bindingDown = {}; // storeCode -> { since: epochMs|null, lastPaged: epochMs|null }
 
 // True while a store is currently suspected of having lost its binding — the
 // daemon skips pushing to it (pointless + burns nothing useful); the ~5 min order
@@ -316,23 +322,35 @@ function bindingSuspected(storeCode) {
 // latch and pages once it has persisted past the threshold; lost=false clears it
 // (and pages a recovery if we'd alerted).
 function noteBindingResult(storeCode, lost) {
-  const s = bindingDown[storeCode] || (bindingDown[storeCode] = { since: null });
+  const s = bindingDown[storeCode] || (bindingDown[storeCode] = { since: null, lastPaged: null });
   const latch = 'binding_lost:' + storeCode;   // on disk: survives a daemon restart
   if (!lost) {
     if (alerts[latch]) {
       logSync(storeCode, 'binding_cleared', 'ok', null, 'store binding restored — sync resumed');
       sendOpsAlert(`✅ 美团外卖 ${storeCode} 门店绑定已恢复，库存/订单同步继续\nMeituan 外卖 ${storeCode} store binding restored — stock/order sync resumed`);
     }
-    s.since = null; alerts[latch] = false;
+    s.since = null; s.lastPaged = null; alerts[latch] = false;
     return;
   }
   const now = Date.now();
   if (s.since == null) s.since = now;
   if (!alerts[latch] && now - s.since >= BINDING_ALERT_AFTER_MS) {
     alerts[latch] = true;
+    s.lastPaged = now;
     logSync(storeCode, 'binding_lost', 'error', null,
       'session authed but lost store binding (acctId/region) — needs re-login');
-    sendOpsAlert(`🔴 美团外卖 ${storeCode} 掉了门店绑定（acctId/区域丢失），库存和订单同步已停，需要重新登录（ops-screen 扫码后选回门店）\nMeituan 外卖 ${storeCode} lost its store binding (acctId/region) — stock + order sync DOWN, needs a re-login (ops-screen QR, then re-select the store).`);
+    sendOpsAlert(`🔴 美团外卖 ${storeCode} 掉了门店绑定（acctId/区域丢失），库存和订单同步已停，需要重新登录（扫码登录后必须在门店切换里选回本店）\nMeituan 外卖 ${storeCode} lost its store binding (acctId/region) — stock + order sync DOWN, needs a re-login (QR, then re-select the store in 门店切换).`);
+    return;
+  }
+  // Still down. Keep saying so on an interval while the store is open. (Elapsed
+  // is measured from when THIS process first saw it: the latch survives a restart
+  // but the clock doesn't, so a restart mid-incident understates the age rather
+  // than inventing one.)
+  if (alerts[latch] && BINDING_RENAG_MS > 0 && isStoreOpen(storeCode)
+      && now - (s.lastPaged || s.since) >= BINDING_RENAG_MS) {
+    s.lastPaged = now;
+    const mins = Math.round((now - s.since) / 60000);
+    sendOpsAlert(`🔴 美团外卖 ${storeCode} 门店绑定仍未恢复（约 ${mins} 分钟），库存/订单同步持续停摆，请重新登录并在门店切换里选回本店\nMeituan 外卖 ${storeCode} STILL unbound after ~${mins} min — stock + order sync is still down; please re-login and re-select the store.`);
   }
 }
 
@@ -1003,6 +1021,11 @@ async function syncBusinessStatus(storeCode) {
       const targetOpen = cmd.target_open === 1;
       const r = await browser.setBusinessStatus(targetOpen);
       noteVerifyResult(storeCode, !!browser.verificationRequired);
+      // Only ever report a POSITIVE binding failure from this path. A clean
+      // open/close reply does not prove the binding (both endpoints are scoped by
+      // the wmPoiId cookie, which an unbound session still carries), so passing
+      // `false` here could clear a latch the order read had rightly set.
+      if (browser.bindingLost) noteBindingResult(storeCode, true);
       if (r.loggedIn === false || r.verify) {
         // Not logged in / risk-control — leave the command pending to retry later.
         markStatusReadFailed(storeCode);
@@ -1019,6 +1042,7 @@ async function syncBusinessStatus(storeCode) {
     const s = await browser.getBusinessStatus();
     lastStatusRead[storeCode] = Date.now();
     noteVerifyResult(storeCode, !!browser.verificationRequired);
+    if (browser.bindingLost) noteBindingResult(storeCode, true); // positive-only, as above
     if (s.ok) {
       if (appliedTarget !== null && s.open !== appliedTarget) {
         // Read replica still trailing the just-applied flip — keep the applied state
