@@ -11517,3 +11517,55 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
     font-size: 13.5px; line-height: 1.6;
   }
   #order-drawer .qp-confirm .swap { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+/* ===========================================================================
+   ORDERS WAITING FOR A DELIVERY POINT — dashboard worklist (spec section 7)
+   Variant C: plain background, rules between rows, NO card box. Every other
+   block on this page is a .bn-card; this one deliberately is not, so it reads
+   as a list of work rather than another panel of figures.
+   All classes are dp-work-* prefixed — the base sheet owns .opt/.k/.v/.n/.ico
+   and a bare child class here would collide with them.
+   No Dusk anywhere: Dusk means the system invoking itself, and nothing in this
+   block is the system acting. The day-before warning is Amber, which is what
+   this sheet reserves for status and attention.
+   =========================================================================== */
+  .dp-work {
+    margin: 0 0 16px; padding: 16px 0 0;
+    border-top: 1px solid var(--td-border);
+  }
+  .dp-work-h {
+    margin: 0 0 4px; font: 600 17px var(--f-sans); color: var(--td-text);
+  }
+  .dp-work-list { display: grid; }
+  /* The row is a button so it is reachable by keyboard and announces itself as
+     activatable; stripped back to look like a line of text, because it is one. */
+  .dp-work-row {
+    display: flex; align-items: baseline; gap: 12px; width: 100%;
+    padding: 10px 0; border: 0; background: none; text-align: left;
+    font: 400 13.5px var(--f-sans); color: var(--td-text); cursor: pointer;
+  }
+  .dp-work-row + .dp-work-row { border-top: 1px solid var(--td-border); }
+  .dp-work-row:hover .dp-work-no { text-decoration: underline; }
+  .dp-work-row:focus-visible { outline: 2px solid var(--td-amber-ink); outline-offset: 2px; }
+  /* Figures are 700 and tabular so a column of order numbers lines up. */
+  .dp-work-no {
+    font-weight: 700; font-variant-numeric: tabular-nums; color: var(--td-text);
+    flex: none;
+  }
+  .dp-work-who {
+    min-width: 0; flex: 1 1 auto; color: var(--td-text2); font-size: 13px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .dp-work-when {
+    margin-left: auto; flex: none; font-size: 12.5px; color: var(--td-text2);
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  /* Promised tomorrow. The only marked state, and the only place the section 5.2
+     day-before warning appears outside the drawer now that stage 4 is declined. */
+  .dp-work-when.is-tomorrow {
+    color: var(--td-amber-ink); font-weight: 600;
+    background: var(--td-amber-tint); border-radius: 999px; padding: 2px 9px;
+  }
+  .dp-work-foot {
+    margin: 10px 0 0; font-size: 13px; color: var(--td-text2);
+  }

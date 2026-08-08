@@ -42,8 +42,8 @@ Precise is not the same as correct. A rooftop-grade match can still be the wrong
 | D7 | With auto-push on, the tenant chooses: hold indefinitely, or push the guessed point after a fixed delay. |
 | D8 | The fallback delay is fixed in code, not configurable. |
 | D9 | This is not a separate setting. It hangs off the existing auto-push setting. |
-| D10 | Orders list gets a filter chip: **Needs delivery point · N**. |
-| D11 | Dashboard gets an attention worklist line that opens Orders filtered to that chip. |
+| ~~D10~~ | ~~Orders list gets a filter chip: **Needs delivery point · N**.~~ **DROPPED 2026-08-08 — stage 4 DECLINED, not deferred. See §6.** |
+| D11 | Dashboard gets a worklist block listing the parked orders **themselves** — not a count, and not a link into a filtered Orders list. Amended 2026-08-08; see §7. |
 | D12 | New orders only. Existing stuck `pending`, `error` and `skipped` rows are not migrated. |
 | D13 | A genuine contradiction (stored pin conflicts with address text) stays a warning, but resolves through the same map. It never dead-ends. |
 
@@ -158,19 +158,56 @@ With auto-push off, `maybeEnqueueQingyunPush` never inserts a row (`routes/retai
 
 This means D9 — hanging the hold-or-fallback choice off the auto-push setting — rests on a distinction that does not currently exist in the code. It does not bite until stage 6, and it is recorded here so it is not rediscovered then. Stage 6 must either give the manual path its own route into the queue, or D6 and D9 need rewriting.
 
-## 6. Orders list
+## 6. Orders list — ⛔ DECLINED 2026-08-08
 
-Filter chip **Needs delivery point** with a Graphite-filled count pill, matching existing chip pattern. No new pattern.
+> **Stage 4 was declined, not deferred.** There is no Orders filter chip and none
+> is planned. D10 is dropped. This section is kept, struck through, so the idea
+> is not rediscovered and built later as an oversight.
 
-Rows in this state use the existing unseen/attention row treatment. They do not get a new colour.
+~~Filter chip **Needs delivery point** with a Graphite-filled count pill,
+matching existing chip pattern. No new pattern.~~
+
+~~Rows in this state use the existing unseen/attention row treatment. They do
+not get a new colour.~~
+
+**Why it was declined.** The chip was only ever a way to *reach* the parked
+orders, and §7 now reaches them directly: the dashboard block lists the orders
+themselves and each row opens its own drawer. A chip would be a second route to
+the same place, and a filter that exists to be a shortcut to a list of five is a
+list of five wearing a filter's clothes. Ash's call.
+
+The consequence to know: **the dashboard block is now the only surface that
+gathers parked orders.** Nothing else counts them, and nothing else warns about
+a promised day (§5.2). If that block is ever removed, the warning goes with it.
 
 ## 7. Dashboard
 
-One worklist line in the attention area:
+A **worklist block** listing the parked orders themselves — one row per order,
+not a count and not a link to a filtered list.
 
-> 3 orders need a delivery point
+Each row: order number, customer name, store, and the promised day when the
+order is date-scheduled. Clicking a row opens that order's drawer, straight to
+the confirm surface (§5).
 
-Plain background, rule separator, no card box — Variant C. Inter, tabular figures on the count. Clicking opens Orders with the chip applied. Line is absent entirely at zero, never rendered as an empty or dashed value.
+Rules:
+
+- **Absent entirely when nothing is parked.** Not an empty state, not a zero.
+  Every other dashboard block renders a "nothing waiting" line; this one does
+  not exist at all, because a delivery point is either owed or it is not.
+- **`needs_point` only.** `error` and `skipped` rows are the untouched backlog
+  (D12) and would fill this with noise it cannot resolve.
+- **Capped at five**, with a line saying how many more. No pagination on a
+  dashboard.
+- **Sorted by urgency:** date-scheduled orders promised soonest first, then
+  everything else oldest-parked first.
+- **An order promised tomorrow is marked on its row.** This is the §5.2
+  day-before warning, and with stage 4 declined this block is the only place it
+  appears outside the drawer.
+
+Brand: Variant C — plain background, rule separator, no card box on the rows.
+Inter; headings 600; figures 700 and tabular. No Dusk: nothing here is the
+system acting on its own, it is a list of work a person must do. **Never a dash
+as a value** — a missing field is said in words.
 
 ## 8. Retry and requeue fixes
 
@@ -190,11 +227,17 @@ Three narrow corrections, all inside the existing dispatch paths:
 
 ## 10. Build order
 
-1. State model and gate change — `needs_point` instead of refusal.
-2. Retry and requeue corrections (§8).
-3. Drawer confirm surface, including the `staff_pin` provenance and trust-check clauses (§5.1), the expired badge, and Reschedule delivery (§5.2). Designed as a mockup before it is built.
-4. Orders chip.
-5. Dashboard line.
+1. ✅ State model and gate change — `needs_point` instead of refusal.
+2. ✅ Retry and requeue corrections (§8).
+3. ✅ Drawer confirm surface, including the `staff_pin` provenance and trust-check clauses (§5.1), the expired badge, and Reschedule delivery (§5.2). Designed as a mockup before it is built.
+4. ⛔ ~~Orders chip.~~ **DECLINED 2026-08-08 — see §6. Not deferred. Do not build it.**
+5. Dashboard worklist block (§7). Numbered 5 for continuity; it is now the stage that follows 3.
 6. Auto-push fallback (D7), last, since it is the only part Roots does not use.
 
 Each stage ships and is verified before the next begins.
+
+**Stage numbering is deliberately not compacted.** Renumbering 5 → 4 would make
+every earlier reference to "stage 4" — in this document, in commit messages, and
+in `docs/qingyun-push-gate-survey.md` — point at the wrong thing, and the one
+fact worth preserving is that stage 4 was considered and declined rather than
+skipped. A gap in the numbering is the record.

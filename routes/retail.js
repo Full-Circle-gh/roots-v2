@@ -13819,6 +13819,11 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
   let invoices = { count: 0, items: [] };
   let unhandled = { count: 0, items: [] };
   let awaiting_restock = { count: 0, items: [] };
+  // Orders parked for a delivery point (§7). Zero-count default like its
+  // siblings, so a query failure renders an ABSENT block rather than a broken
+  // one — which for this block is the correct degradation: it is absent at zero
+  // by design, so a failure looks exactly like "nothing is parked".
+  let needs_point = { count: 0, items: [] };
 
   // Optional per-store scope (mirrors the dashboard's store picker). When a
   // store_id is supplied we count that store's own shelf (its retail_store_stock
@@ -14283,12 +14288,84 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
         buyer:         o.buyer,
       })),
     };
+
+    // ── Orders waiting for a delivery point (spec §7) ────────────────────
+    // A same-city courier push that could only place the address to a coarse
+    // AREA parks in `needs_point` and waits for a person to say where the door
+    // is. Nothing retries it and nothing times out — it sits until someone
+    // opens it, which is why it needs a surface that gathers the parked orders
+    // rather than a counter.
+    //
+    // ONLY 'needs_point'. 'error' and 'skipped' are the pre-existing backlog
+    // that D12 deliberately did not migrate; they are not resolvable from this
+    // block and would bury the rows that are.
+    //
+    // Store-scoped on o.store_id like every sibling here, NOT on the queue
+    // row's store_code: store_code is where the RIDER collects, which a
+    // ship-from override can move independently of the order's own store, and
+    // a store-locked operator's worklist should follow the order.
+    const npWhere = "q.status = 'needs_point' AND q.qingyun_order_id IS NULL"
+      + " AND o.status NOT IN ('cancelled', 'refunded', 'delivered')"
+      + (storeId ? ' AND o.store_id = @store_id' : '');
+    const npCount = tdb().prepare(
+      `SELECT COUNT(*) AS n FROM qingyun_push_queue q
+         JOIN retail_orders o ON o.id = q.retail_order_id
+        WHERE ${npWhere}`
+    ).get(storeBind).n;
+    // promised_day is NULL for a same-day slot, which is the signal the row is
+    // not date-scheduled and therefore cannot expire (§5.2). The sort puts every
+    // dated order first, soonest promised at the top, then the undated ones by
+    // how long they have been waiting. One ORDER BY, because "urgent" here means
+    // "runs out of road first", and only a dated order has road to run out of.
+    const npItems = tdb().prepare(`
+      SELECT o.id, o.order_no, o.delivery_slot_kind, o.scheduled_for,
+             q.needs_point_at,
+             CASE WHEN COALESCE(o.delivery_slot_kind, '') IN ('right_away', 'today')
+                  THEN NULL ELSE DATE(o.scheduled_for) END AS promised_day,
+             q.store_code,
+             s.name_en AS store_en, s.name_cn AS store_cn,
+             COALESCE(NULLIF(TRIM(c.nickname), ''), NULLIF(TRIM(o.recipient_name), ''), NULLIF(TRIM(o.recipient_phone), ''), NULLIF(TRIM(c.phone), '')) AS buyer
+        FROM qingyun_push_queue q
+        JOIN retail_orders o ON o.id = q.retail_order_id
+        LEFT JOIN retail_customers c ON c.id = o.customer_id
+        LEFT JOIN retail_stores s ON s.code = q.store_code
+       WHERE ${npWhere}
+       ORDER BY (promised_day IS NULL), promised_day ASC,
+                COALESCE(q.needs_point_at, o.placed_at) ASC
+       LIMIT @preview
+    `).all({ ...storeBind, preview: previewLimit });
+    const npToday = inventory.gzDateStr(new Date().toISOString());
+    const npTomorrow = inventory.gzDateStr(new Date(Date.now() + 86400000).toISOString());
+    needs_point = {
+      count: npCount,
+      items: npItems.map(o => ({
+        id:         o.id,
+        order_no:   o.order_no,
+        // Every one of these can be null in the data, and the block says so in
+        // words rather than printing a dash (§7). The words are chosen on the
+        // client, where the language is; the API stays honest and sends null.
+        buyer:      o.buyer || null,
+        store_en:   o.store_en || null,
+        store_cn:   o.store_cn || null,
+        store_code: o.store_code || null,
+        // Null = same-day, i.e. no promised day to miss.
+        promised_day: o.promised_day || null,
+        // Precomputed here so the row's warning cannot disagree with the
+        // drawer's: both read one definition of "tomorrow" in Guangzhou time,
+        // rather than the client re-deriving it from its own clock.
+        date_posture: !o.promised_day ? null
+          : (o.promised_day < npToday ? 'passed'
+            : o.promised_day === npToday ? 'today'
+              : o.promised_day === npTomorrow ? 'tomorrow' : 'later'),
+        parked_since: o.needs_point_at || null,
+      })),
+    };
   } catch (e) {
     console.error('[dashboard/ops]', e.message);
   }
 
   res.set('Cache-Control', 'no-store');
-  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, awaiting_restock, server_now: Date.now() } });
+  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, awaiting_restock, needs_point, server_now: Date.now() } });
 });
 
 // Admin CRUD for vouchers.

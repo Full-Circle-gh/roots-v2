@@ -1624,6 +1624,29 @@
       </div>
     </div>
 
+    <!-- ── Orders waiting for a delivery point ────────────────────────────
+         docs/tacet-delivery-point-confirmation-spec.md §7. One row per parked
+         order; clicking a row opens that order's drawer on the confirm surface.
+         Painted by dashNeedsPointRender from the /dashboard/ops `needs_point`
+         key.
+
+         DELIBERATELY NOT A CARD, and deliberately outside #td-blocks:
+           • No .bn-card. Variant C — plain background, rules between rows, no
+             box. It is the one block on this page that is not boxed.
+           • Outside the grid, like .td-needs above, so it cannot be dragged
+             elsewhere or hidden with the × the arrangeable cards carry. A list
+             of deliveries nobody is coming for is not a matter of taste.
+           • `hidden` by default and only revealed when a row exists. Every
+             other block on this page renders an empty state; this one is ABSENT
+             at zero (§7). Do not add a "nothing parked" line — the absence is
+             the message, and a zero here would be a standing invitation to
+             check something that is fine. -->
+    <section class="dp-work" id="td-needspoint" aria-labelledby="td-needspoint-h" hidden>
+      <h3 class="dp-work-h" id="td-needspoint-h">Orders waiting for a delivery point · 待确认配送点</h3>
+      <div class="dp-work-list" id="td-needspoint-list"></div>
+      <p class="dp-work-foot" id="td-needspoint-foot" data-no-i18n hidden></p>
+    </section>
+
     <!-- The Recap's quiet state: one line of text where a 400px card would
          otherwise sit and say nothing. Painted by tdRecapRender, which hides the
          Recap card at the same moment. -->

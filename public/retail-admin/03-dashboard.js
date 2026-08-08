@@ -1156,6 +1156,97 @@ function dashOpenFeedbackFromFeed(feedbackId) {
   setTimeout(tick, 150);
 }
 
+// ── Orders waiting for a delivery point ─────────────────────────────────────
+// docs/tacet-delivery-point-confirmation-spec.md §7. A same-city push that
+// could only place the address to a coarse area parks and waits for a person to
+// point at the door. Nothing retries it and nothing times out, so unless
+// something gathers these they sit unseen until a customer calls.
+//
+// ABSENT AT ZERO, not empty. Every sibling block on this page renders a
+// "nothing waiting" line; this one removes itself. That is the spec, and the
+// reason is that a standing "0 orders need a delivery point" trains people to
+// stop reading the one line that only ever appears when it matters.
+//
+// Stage 4 (the Orders filter chip) was DECLINED, not deferred — see §6. So this
+// block is the only surface that gathers parked orders, and its tomorrow marker
+// is the only place the §5.2 day-before warning appears outside the drawer. If
+// it is ever removed, that warning goes with it.
+const DP_WORK_SHOWN = 5;
+function dashNeedsPointRender() {
+  const host = document.getElementById('td-needspoint-list');
+  const sec  = document.getElementById('td-needspoint');
+  const foot = document.getElementById('td-needspoint-foot');
+  if (!host || !sec) return;
+  const np = (DASH_OPS && DASH_OPS.needs_point) || null;
+  // No payload yet is not the same as nothing parked, but both render as
+  // absent — there is no "Loading…" state for a block whose resting state is
+  // to not exist.
+  if (!np || !np.count) { sec.hidden = true; host.innerHTML = ''; if (foot) foot.hidden = true; return; }
+
+  // Never a dash. A field we do not have is said in words, because "—" on a
+  // worklist reads as "nothing to do here" when it means "we don't know".
+  const who = (it) => it.buyer || cuT('No name on the order', '订单未留姓名');
+  // Fall back across the languages before falling back to the code: a store
+  // named in only one language should print that name, not its slug.
+  const where = (it) => cuT(it.store_en || it.store_cn, it.store_cn || it.store_en)
+    || it.store_code || cuT('Store not recorded', '未记录门店');
+
+  // The right-hand cell always answers "when does this run out of road?".
+  // A date-scheduled order has a day it dies on (§5.2); a same-day one does
+  // not, so it shows how long it has been parked instead — which is also what
+  // the server sorted those rows by. Different words, so the two readings of
+  // the column can never be confused for one another.
+  const dayTxt = (iso) => {
+    const d = new Date(iso + 'T00:00:00+08:00');
+    if (isNaN(d.getTime())) return iso;
+    const mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getMonth()];
+    return cuT(`${mon} ${d.getDate()}`, `${d.getMonth() + 1}月${d.getDate()}日`);
+  };
+  const parkedTxt = (since) => {
+    const mins = dashAgeMins(since);
+    if (mins == null) return cuT('Parked', '已挂起');   // never "NaN", never a dash
+    if (mins < 60) return cuT(`parked ${mins}m`, `已挂起 ${mins} 分钟`);
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return cuT(`parked ${hrs}h`, `已挂起 ${hrs} 小时`);
+    return cuT(`parked ${Math.floor(hrs / 24)}d`, `已挂起 ${Math.floor(hrs / 24)} 天`);
+  };
+
+  host.innerHTML = (np.items || []).slice(0, DP_WORK_SHOWN).map((it) => {
+    const tomorrow = it.date_posture === 'tomorrow';
+    const when = it.promised_day
+      ? (tomorrow
+        ? cuT(`Tomorrow · ${dayTxt(it.promised_day)}`, `明天 · ${dayTxt(it.promised_day)}`)
+        : dayTxt(it.promised_day))
+      : parkedTxt(it.parked_since);
+    return `
+    <button type="button" class="dp-work-row" onclick="dashOpenNeedsPoint(${Number(it.id)})">
+      <span class="dp-work-no" data-no-i18n>${escapeHtml(it.order_no || '')}</span>
+      <span class="dp-work-who">${escapeHtml(who(it))} · ${escapeHtml(where(it))}</span>
+      <span class="dp-work-when${tomorrow ? ' is-tomorrow' : ''}">${escapeHtml(when)}</span>
+    </button>`;
+  }).join('');
+
+  // Capped, not paginated. The overflow line states the number and stops —
+  // there is nowhere to send them now that the Orders chip is declined, and a
+  // link that filtered nothing would be worse than a plain count.
+  const rest = np.count - Math.min(np.count, DP_WORK_SHOWN);
+  if (foot) {
+    foot.hidden = rest <= 0;
+    foot.textContent = rest > 0
+      ? cuT(`and ${rest} more waiting for a delivery point`, `另有 ${rest} 单待确认配送点`)
+      : '';
+  }
+  sec.hidden = false;
+}
+
+// Open the parked order's drawer over the dashboard. No tab change, same as
+// dashOpenOrderFromFeed: openOrder() fetches by id on its own. The confirm
+// surface is what the drawer renders for a row in needs_point, so this lands on
+// it without asking for it by name.
+function dashOpenNeedsPoint(orderId) {
+  if (orderId !== null && orderId !== undefined && orderId !== '') openOrder(orderId);
+}
+
 // Jump from an activity-feed event straight to its order, opened in the
 // global order drawer. The main screen STAYS on the Dashboard tab — we do
 // NOT switch to Orders. openOrder() fetches the order by id independently of
@@ -1302,7 +1393,7 @@ function tdInit() {
   tdObservationRender();   // no-op until the Today payload lands; hides itself
   tdEnsureStores();   // populate the Running-low store dropdown (multi-store only)
   // Language toggle repaints the JS-built strings (greeting, date, recap, attention).
-  if (window.onLangChange) onLangChange(() => { tdGreetRender(); tdDateRender(); tdObservationRender(); tdRecapHeadPaint(); tdRecapRender(); tdRecapWorkRender(); tdRecapWorkBtnSync(); tdAttnRender(); tdSecPaint(); dashUnhandledRender(); dashStockDrawerRender(); });
+  if (window.onLangChange) onLangChange(() => { tdGreetRender(); tdDateRender(); tdObservationRender(); tdRecapHeadPaint(); tdRecapRender(); tdRecapWorkRender(); tdRecapWorkBtnSync(); tdAttnRender(); tdSecPaint(); dashUnhandledRender(); dashNeedsPointRender(); dashStockDrawerRender(); });
   tdRecapLoad();     // reads the last-seen stamp BEFORE tdSeenInit overwrites it
   tdSeenInit();
   tdOpsLoad();
@@ -2033,6 +2124,7 @@ async function tdOpsLoad() {
     tdAttnRender();
     tdSecPaint();
     dashUnhandledRender();   // the Unhandled-orders card reads the same ops payload
+    dashNeedsPointRender();  // and so does the delivery-point worklist
   } catch (e) {
     if (!DASH_OPS) dashBootRetry('ops', tdOpsLoad);   // else next 60s tick retries
   }
