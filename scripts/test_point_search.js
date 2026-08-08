@@ -50,6 +50,7 @@ const read = (rel) => fs.readFileSync(path.join(ROOT, rel), 'utf8').replace(/\r\
 const RETAIL = read('routes/retail.js');
 const ORDERS = read('public/retail-admin/04-orders.js');
 const CSS = read('public/retail-admin.css');
+const GEOCODE = read('lib/geocode.js');
 
 // Lift a function out of a source file by walking braces from its opening {.
 // Keeps an `async` prefix, which the shop.html version in test_address_clients
@@ -57,9 +58,19 @@ const CSS = read('public/retail-admin.css');
 function grab(src, name, label) {
   const at = src.search(new RegExp(`(async\\s+)?function\\s+${name}\\s*\\(`));
   assert.ok(at > -1, `${name} not found in ${label}`);
-  const open = src.indexOf('{', at);
-  let depth = 0, i = open;
+  // Walk the PARAMETER list to its closing paren first. A destructured
+  // parameter — `function poiTencent({ lat, lng, kw })` — opens a brace before
+  // the body does, and taking the first `{` after the name counted that one
+  // instead: the walk then "closed" at `})` and returned the signature alone,
+  // which parses as an unterminated function.
+  let i = src.indexOf('(', at), depth = 0;
   for (; i < src.length; i++) {
+    if (src[i] === '(') depth++;
+    else if (src[i] === ')') { depth--; if (depth === 0) break; }
+  }
+  const open = src.indexOf('{', i);
+  depth = 0;
+  for (i = open; i < src.length; i++) {
     if (src[i] === '{') depth++;
     else if (src[i] === '}') { depth--; if (depth === 0) break; }
   }
@@ -763,6 +774,120 @@ it('the search needs no browser maps key of its own', () => {
   // no second key to whitelist.
   const now = grab(ORDERS, 'qpFindNow', '04-orders.js');
   assert.doesNotMatch(now, /AMap|TMap|maps-config/);
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Two hazards the staff route was built around, latched shut on the paths that
+// merely happen not to hit them today.
+console.log('\nthe customer route carries the same zero guard (vm)');
+
+const CUSTOMER_HANDLER = (() => {
+  const at = RETAIL.indexOf("router.post('/api/retail/poi-search'");
+  assert.ok(at > -1, 'the customer poi-search route is gone');
+  const arrow = RETAIL.indexOf('async (req, res) => {', at);
+  const open = RETAIL.indexOf('{', arrow + 'async (req, res) =>'.length);
+  let depth = 0, i = open;
+  for (; i < RETAIL.length; i++) {
+    if (RETAIL[i] === '{') depth++;
+    else if (RETAIL[i] === '}') { depth--; if (depth === 0) break; }
+  }
+  return 'async function __customer(req, res) ' + RETAIL.slice(open, i + 1);
+})();
+
+async function callCustomer(body) {
+  const out = { status: 200, body: null, called: null };
+  const res = { status(c) { out.status = c; return res; }, json(b) { out.body = b; return res; } };
+  const sandbox = {
+    console: { warn() {} },
+    geocode: { configured: () => true, searchPoi: async (a) => { out.called = a; return [{ name: 'A', lat: 23.1, lng: 113.3 }]; } },
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(CUSTOMER_HANDLER, sandbox);
+  sandbox.__req = { body }; sandbox.__res = res;
+  await vm.runInContext('__customer(__req, __res)', sandbox);
+  return out;
+}
+
+await itAsync('a null/zero centre is dropped rather than searched around', async () => {
+  for (const body of [{ keyword: '天河路', lat: null, lng: null },
+                      { keyword: '天河路', lat: 0, lng: 0 },
+                      { keyword: '天河路', lat: 23.13, lng: 0 }]) {
+    const r = await callCustomer(body);
+    assert.strictEqual(r.body.success, true, 'the keyword still searches');
+    assert.strictEqual(r.called.lat, undefined, JSON.stringify(body));
+    assert.strictEqual(r.called.lng, undefined, JSON.stringify(body));
+  }
+});
+
+await itAsync('a keyword-less request at 0,0 is bad input, not a search of the Atlantic', async () => {
+  // The nearby branch is the dangerous one: no keyword means "the places
+  // NEAREST this point", so a bogus centre returns confident, useless results.
+  const r = await callCustomer({ lat: 0, lng: 0 });
+  assert.strictEqual(r.status, 400);
+  assert.strictEqual(r.body.error, 'bad_input');
+});
+
+await itAsync('the storefront and mini-app calls are unaffected', async () => {
+  // The three shapes the live clients actually send.
+  const keywordOnly = await callCustomer({ keyword: '品秀星越花园', city: '广州市' });
+  assert.strictEqual(keywordOnly.body.success, true);
+  const nearby = await callCustomer({ lat: 23.1291, lng: 113.2644 });
+  assert.strictEqual(nearby.called.lat, 23.1291, 'the keyword-less nearby list still works');
+  const both = await callCustomer({ keyword: '天河路', city: '广州市', lat: 23.1291, lng: 113.2644 });
+  assert.strictEqual(both.called.lng, 113.2644);
+});
+
+await itAsync('a small but real coordinate still biases', async () => {
+  const r = await callCustomer({ keyword: 'x', lat: 0.0001, lng: 0.0001 });
+  assert.strictEqual(r.called.lat, 0.0001, 'only the exact value 0 is refused');
+});
+
+console.log('\npoiTencent never sends a malformed boundary (vm)');
+
+// The real function, against a stubbed fetchJson that captures the URL.
+async function tencentUrl(args) {
+  let seen = null;
+  const sandbox = {
+    console,
+    TENCENT_KEY: 'TKEY',
+    encodeURIComponent,
+    isFinite,
+    Array,
+    fetchJson: async (u) => { seen = u; return { status: 0, data: [] }; },
+  };
+  vm.createContext(sandbox);
+  vm.runInContext(grab(GEOCODE, 'poiTencent', 'lib/geocode.js'), sandbox);
+  sandbox.__a = args;
+  await vm.runInContext('poiTencent(__a)', sandbox);
+  return seen;
+}
+
+await itAsync('keyword + city → a region boundary, unchanged', async () => {
+  const u = await tencentUrl({ kw: '天河路', city: '广州市' });
+  assert.match(u, /boundary=region\(/);
+  assert.doesNotMatch(u, /undefined/);
+});
+
+await itAsync('no keyword + a centre → a nearby boundary, unchanged', async () => {
+  const u = await tencentUrl({ lat: 23.1291, lng: 113.2644, radius: 1500 });
+  assert.match(u, /boundary=nearby\(23\.1291,113\.2644,1500\)/);
+});
+
+await itAsync('keyword + a centre but no city → still nearby, unchanged', async () => {
+  const u = await tencentUrl({ kw: '天河路', lat: 23.1291, lng: 113.2644 });
+  assert.match(u, /boundary=nearby\(23\.1291,113\.2644,1500\)/);
+});
+
+await itAsync('THE BUG: keyword, no city, no centre → no boundary, never undefined', async () => {
+  const u = await tencentUrl({ kw: '天河路' });
+  assert.doesNotMatch(u, /undefined/, 'nearby(undefined,undefined,1500) must not be sent');
+  assert.doesNotMatch(u, /boundary=/, 'omit the parameter rather than send a malformed one');
+  assert.match(u, /keyword=/, 'and the keyword still goes');
+});
+
+await itAsync('a partial centre counts as no centre', async () => {
+  const u = await tencentUrl({ kw: '天河路', lat: 23.1291 });
+  assert.doesNotMatch(u, /undefined/);
 });
 
 console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed\n`);

@@ -8073,11 +8073,23 @@ router.get('/api/retail/ip-locate', requireRetailAuth, async (req, res) => {
 // { success:false } with no key or on failure, so the picker just shows an
 // empty list and the pan-to-confirm flow still works.
 router.post('/api/retail/poi-search', requireRetailAuth, express.json(), async (req, res) => {
-  const lat = Number(req.body?.lat);
-  const lng = Number(req.body?.lng);
+  // Zero is absent, not a location. `Number(null)` is 0 and 0 is finite, so a
+  // client sending null for "I have no coordinates" would search around 0°N 0°E
+  // in the Gulf of Guinea — and with no keyword it would ask for the places
+  // NEAREST that spot. Same guard the staff route below carries.
+  //
+  // A latch, not a fix for a live symptom: today shop.html omits the keys
+  // entirely and the mini-app picker always carries a real map centre. It is
+  // here so the next client to send the field cannot reintroduce it.
+  const rawLat = Number(req.body?.lat);
+  const rawLng = Number(req.body?.lng);
+  const hasCentre = Number.isFinite(rawLat) && Number.isFinite(rawLng) && rawLat !== 0 && rawLng !== 0;
+  const lat = hasCentre ? rawLat : undefined;
+  const lng = hasCentre ? rawLng : undefined;
   const keyword = typeof req.body?.keyword === 'string' ? req.body.keyword.slice(0, 60) : '';
   const city = typeof req.body?.city === 'string' ? req.body.city.slice(0, 40) : '';
-  if (!keyword && (!isFinite(lat) || !isFinite(lng))) {
+  // Unchanged in meaning: no keyword and no usable centre is nothing to search.
+  if (!keyword && !hasCentre) {
     return res.status(400).json({ success: false, error: 'bad_input' });
   }
   if (!geocode.configured()) {
