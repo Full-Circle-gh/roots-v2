@@ -158,6 +158,62 @@ With auto-push off, `maybeEnqueueQingyunPush` never inserts a row (`routes/retai
 
 This means D9 — hanging the hold-or-fallback choice off the auto-push setting — rests on a distinction that does not currently exist in the code. It does not bite until stage 6, and it is recorded here so it is not rediscovered then. Stage 6 must either give the manual path its own route into the queue, or D6 and D9 need rewriting.
 
+### 5.4 Address search — recenter only. Added 2026-08-08
+
+A search box above the map. Staff type a place or a road, pick a result, and the
+map flies there. **The result drops no pin.** The operator still taps the door.
+
+Numbered 5.4 because it is a property of the drawer surface (§5), not of what a
+confirmed point records (§5.1) or of expiry (§5.2). Nothing renumbers.
+
+**Why it exists.** A coarse match parks the order in a district. On an
+unfamiliar Chinese address, getting the map to the right street is most of the
+work, and doing it by panning a 240px box from a district centre is the slowest
+part of the whole flow. Search removes that, and only that.
+
+**Why it does not place the point.** This is the §5 invariant, and the box is
+the first thing built that could plausibly break it. A result that dropped a
+confirmable pin would let one tap stamp `staff_pin` onto a geocoder's POI
+centroid — the exact laundering the pinless map exists to prevent, performed by
+a person instead of by code, and then trusted by both checks in §5.1 precisely
+because a human appeared to place it. A searched result is still a guess; it is
+just a better-aimed one.
+
+So the rule is unchanged and unweakened: **there is no point until someone taps
+the map.** After picking a result the surface reads exactly as it did before —
+no pin, *No point placed yet*, primary button disabled reading *Place the
+point*. Only the map has moved, and the hint says so.
+
+**Held structurally, not by discipline.** The search path holds a handle on the
+map (`qpMap`) exposing `setCenter` and `setZoom` **and nothing else**. There is
+no pin setter on it to misuse. A rule that says "the search must not place a
+point" is a rule a later edit forgets; a handle with no such method is one it
+cannot reach. `scripts/test_point_search.js` asserts the SHAPE of that handle,
+so adding a method to it fails the suite rather than a customer's delivery.
+
+**Provenance is untouched.** A searched-then-tapped point is recorded by the
+same path as a hunted-and-tapped one, because it *is* that path: the client
+posts bare coordinates and the server names the source (§5.1). Nothing about
+this build can be seen in the data, which is the correct outcome — the operator
+put the point on the building either way.
+
+**Server-side, on the key we already have.** Search goes to
+`POST /api/retail-admin/poi-search`, gated by `requireRetailAdmin`, which calls
+the same `geocode.searchPoi` the storefront picker uses. It runs on the server
+WebService key (`AMAP_MAPS_KEY`), already live in production for the customer
+pickers — so no provider-console change, no second browser key to whitelist, and
+it works identically on a Tencent tenant. The browser JS key still only renders
+the map, exactly as §9 assumed.
+
+**Degradation.** No map, no search box: without a map there is nothing to
+recenter, and a control that does nothing when pressed reads as a second way out
+of a surface that has none. A failed lookup and an unconfigured map service say
+different things, and both end by pointing back at the map.
+
+**Not for customers.** Staff-only, drawer-only. The storefront and mini-app
+pickers have their own search and are untouched. The expired-order branch (§5.2)
+gets no search box either — it renders no map, so there would be nothing to move.
+
 ## 6. Orders list — ⛔ DECLINED 2026-08-08
 
 > **Stage 4 was declined, not deferred.** There is no Orders filter chip and none
@@ -263,6 +319,7 @@ Three narrow corrections, all inside the existing dispatch paths:
 1. ✅ State model and gate change — `needs_point` instead of refusal.
 2. ✅ Retry and requeue corrections (§8).
 3. ✅ Drawer confirm surface, including the `staff_pin` provenance and trust-check clauses (§5.1), the expired badge, and Reschedule delivery (§5.2). Designed as a mockup before it is built.
+   - ✅ Address search added 2026-08-08 (§5.4). An addition to this surface, not a stage: it changes how fast the operator reaches the street and changes nothing about what a confirmed point is or records.
 4. ⛔ ~~Orders chip.~~ **DECLINED 2026-08-08 — see §6. Not deferred. Do not build it.**
 5. Dashboard worklist block (§7). Numbered 5 for continuity; it is now the stage that follows 3.
 6. Auto-push fallback (D7), last, since it is the only part Roots does not use.

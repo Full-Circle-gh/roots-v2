@@ -330,6 +330,17 @@ Not dormant. Live call sites:
   (`lib/geocode.js:12-16, 543-626`)
 - **Map picker support** — `searchPoi`, `ipLocate` (`lib/geocode.js:347-511`), exposed at
   `/api/retail/ip-locate` (`routes/retail.js:8055+`)
+- **POI text search**, the same `searchPoi`, behind two gates for two audiences:
+  - `POST /api/retail/poi-search` (`routes/retail.js:8075`), `requireRetailAuth` — the
+    storefront and mini-app pickers. Also serves the keyword-less "places around
+    the map centre" list.
+  - `POST /api/retail-admin/poi-search` (`routes/retail.js:8096`), `requireRetailAdmin`
+    — the staff delivery-point picker in the order drawer. Keyword required; there
+    is no staff "nearby" surface, so that branch is deliberately unreachable here.
+    A second route rather than a second gate: `requireRetailAuth` reads a customer
+    Bearer token, which an operator's session does not carry, so a staff call to
+    the customer route is a guaranteed 401 rather than a permissions question.
+    Both use the SERVER WebService key, never the browser JS key.
 
 A third geocoder exists as a last-resort fallback inside the push: Qingyun's own POI search,
 `br.geocode(text, shop.cityId)` (`lib/qingyun-payload.js:354-359`), tried only when there is no
