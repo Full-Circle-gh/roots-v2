@@ -1,8 +1,10 @@
-# Tacet shared-core consolidation — decisions record, v4.0
+# Tacet shared-core consolidation — decisions record, v4.1
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
+
+2026-08-08 · v4.1 — RECORD CORRECTION in §24 Database: TENANT_DATA_ISOLATION is set to 1 on the live box, not off as stated above. It is set in the gitignored .env, which is why a repo-only reading missed it. The per-account isolation path is ARMED BUT UNUSED — zero active non-Roots accounts, zero open per-account files — so live behaviour is unchanged. A factual correction, not a decision, hence a patch. The superseded lines are left standing.
 
 2026-08-08 · v4.0 — THE CUTOVER SEQUENCING IS REVERSED: the Postgres switch cannot be a config flag, because better-sqlite3 is synchronous and pg is not. The data layer converts to an async contract against SQLite FIRST, and the flag comes last. Recorded in §24. This corrects the order of the whole cutover — which every earlier entry assumed without stating — hence a full revision rather than a patch. No earlier entry is edited; the superseded sequencing is left standing.
 
@@ -1143,6 +1145,36 @@ PostgreSQL returns `numeric` as **TEXT** (type OID 1700) and the application nee
 **NEXT STEP RECORDED.** Scope `routes/retail.js` on its own before planning the rest. At 1,241 statement sites and 29,681 lines it is roughly half the conversion by itself, and any estimate made without understanding that file is a guess.
 
 **FIGURES CORRECTED WHILE WRITING THIS ENTRY, named so they are not re-derived from the draft.** Three did not survive checking against the code. (a) `routes/retail.js` is **29,681** lines, not ~19,000. (b) The files requiring `database.js` number **49** in runtime code and **96** including `scripts/`, not "100+". (c) **`TENANT_DATA_ISOLATION` is set to `1` in the production `.env`** — the precedent flag is ON, not "stayed at 0 since written". That inverts the point it was offered for: the precedent shows a flag of this shape DOES get flipped once the work behind it lands, which supports putting the switch last rather than arguing against it.
+
+### `TENANT_DATA_ISOLATION` IS ON IN PRODUCTION — RECORD CORRECTED 2026-08-08
+
+**The flag is `1` on the live box.** Read from the production `.env`: `TENANT_DATA_ISOLATION=1`, so `DATA_ISOLATION_READY` (`lib/tenant-db.js:87`) resolves **true** at runtime. Several lines above and in other documents state or imply it is off. Those lines are left standing and are superseded by this entry, not edited.
+
+**WHY THE RECORD DRIFTED, AND IT IS NOT CARELESSNESS.** The flag is set in the box's `.env`, which is gitignored and therefore invisible to any survey of the repository. Statements elsewhere that it is "set nowhere in the repo or the deploy workflow" are **literally true and remain true** — and were still misleading about production, because the repo is not the whole configuration. Any future claim about a runtime flag's value has to be read from the box, not inferred from the tree.
+
+**WHAT THE FLAG ACTUALLY GATES — three sites, no others.**
+
+- `server.js:253-262` — a safety gate. With the flag **off** it redirects non-Roots backend accounts away from `/retail-admin`, `/product-editor` and `/cms` and 403s their API calls. With it **on**, `if (tenantDb.DATA_ISOLATION_READY) return next();` fires first and the lockout is **lifted**. Counter-intuitively, ON means *less* restriction here, because the gate exists only to hold accounts out until isolation is trusted.
+- `routes/retail.js:72-86` — customer storefront scoping. With the flag on, this middleware maps the mini-app's `x-wx-appid` header to a tenant and runs the request inside that account's DB scope. Line 82 short-circuits for Roots: `if (!tid || tid === ROOTS_TENANT_ID) return next();`.
+- `lib/inventory.js:1021-1025` — the reservation sweeper. With the flag on, the boot+interval timer additionally iterates `activeNonRootsTenantIds()` and runs the sweep inside each account's scope. This is the one path that would open a per-account file with **no HTTP traffic at all**.
+
+**THE LIVE STATE: ARMED BUT UNUSED. The isolation path is NOT serving traffic.** Measured read-only on the box:
+
+- The `tenants` table holds **exactly one row** — id 1, Roots, `active`, with **no `wx_appid` set**.
+- **Active non-Roots accounts: 0.** So `activeNonRootsTenantIds()` returns empty and the sweeper loop body never executes; and `routes/retail.js:79`'s lookup can never match, so line 82 always short-circuits to unscoped.
+- The running process holds **0 open file descriptors under `data/tenants/`** and **3 on `data/roots.db`**.
+
+`lib/tenant-db.js:190-198` is why this is structural rather than coincidental: `rawTenantDb()` returns the shared `mainDb` for id 1 and only reaches `openTenantDb()` for an id that is not Roots. **Roots can never open a per-account file, flag or no flag.** With one account and that account being Roots, every code path the flag unlocks resolves to the shared `roots.db`.
+
+**SO THE PRACTICAL EFFECT OF THE FLAG BEING ON IS EXACTLY ONE THING:** the `server.js` lockout is lifted. There are currently no non-Roots accounts for it to lock out, so even that is latent. Nothing else about live behaviour differs from the flag being off.
+
+**ORPHANED FILES ON DISK — recorded, not cleaned up here.** `data/tenants/` still contains `2.db`, `4.db`, `5.db`, `6.db`, `7.db` (roughly 1.5–1.7 MB each, mtimes from 2026-07-05 to 2026-08-05) plus a zero-byte `roots.db`. The test-account **rows** were deleted from `tenants`; the **files** were not. None is open by the running process, and with no matching rows nothing can route to them. They are inert, and they hold test-account data rather than live data. Removing them is a filesystem change and is deliberately not made by this documentation entry.
+
+**THE VERDICT THIS OVERTURNS.** `docs/tacet-multibusiness-audit.md` records finding **B2 as a BLOCKER** on the grounds that the flag defaults off and is set nowhere, so a second business would log in and see only a billing page. **On the live box that is no longer the case** — the flag is on and the lockout is lifted. The B2 finding is not restated correctly here beyond this: it is superseded as to the live box, and the audit's own line is left standing. What has NOT been verified is whether a non-Roots account would actually *work* end to end with the gate lifted; nothing has ever exercised that path in production, because no such account exists.
+
+**A CITATION THAT HAS DRIFTED.** Several documents cite `lib/tenant-db.js:41` as the flag's declaration. At head `4f7305bf` line 41 is an unrelated comment; the declaration is **`lib/tenant-db.js:87`**.
+
+**WHAT THIS DOES NOT CHANGE.** The retirement of file-per-account isolation recorded above still stands — this entry corrects the record of what is switched on today, and takes no position on whether that machinery should live. The cutover sequencing decided above is likewise unaffected: it concerns the SQLite-to-Postgres driver gap, which is independent of per-account routing.
 
 ## 25. A printed slip that goes stale is corrected on paper, not reprinted — DECIDED 2026-08-07
 
