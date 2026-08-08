@@ -1,4 +1,4 @@
-# Tacet desktop patterns — v4.4 · 2026-08-08
+# Tacet desktop patterns — v4.5 · 2026-08-08
 
 > The rulebook for every desktop admin surface. `tacet-design-system.md` governs how Tacet **looks**. `tacet-brand-concept.md` governs how it **sounds**. `tacet-ia-blueprint.md` governs what **exists**. This file governs **how a page is put together** — so that Orders and Pop-ups feel like the same product despite having different layouts.
 >
@@ -1114,6 +1114,72 @@ Two shipped splits are the reference implementations, and both are correct: `pus
 
 ---
 
+### 1.21 A wrapped Chinese instruction cannot be made safe by any break rule *(DID · MEASURED)*
+
+*Added 2026-08-08, from the packing-slip note. A punctuation-aware wrapper and a keep-with-next rescue were both built and measured against nine real delivery notes; the rescue made things worse. Full trail in `docs/receipt-booked-date-findings.md` §8.8.*
+
+**The rule, in one line: when a Chinese instruction is too wide for its container, widen the container — do not write a better break rule, because there is no break rule that works.**
+
+**Scope: any constrained width, not only print.** A 58mm slip is where this was measured, but nothing in it is about thermal printers. It binds a narrow table cell, a truncating badge, a phone-width label — anywhere a Chinese sentence is broken by something that counts columns and cannot read.
+
+#### 🔴 The tension — the two hazards are mutually exclusive, not jointly solvable
+
+A Chinese negation (`不要`, `不能`, `别`, `勿`, `请勿`, `禁止`) governs the verb that follows it. A line break can fall on either side of that pair, and **both sides fail:**
+
+- **Break late** — fill the line, and the negation strands at the end. The verb and its object start the next line and read as a **positive command.** `如果家里没人不要` / `放门口，` — line two says *leave it at the door.*
+- **Break early** — keep the negation with its verb, and the *object* strands on the line before. That line names the thing and reads as a **positive command.** `楼下保安室` / `不要放，一定要上` — line one says *the downstairs security desk.*
+
+**These are the same defect approached from opposite ends, and moving the break trades one for the other.** English does not have this property: a broken English fragment (`beef ba` / `lls`) is unmistakably broken and produces a bug report. A broken Chinese clause produces a **different, grammatical, plausible sentence** — §1.17 rule 2's *visibly odd beats plausibly wrong*, arriving through a line-breaking algorithm.
+
+#### The rescue that was built, measured, and rejected — do not rebuild it
+
+The obvious answer is a **keep-with-next** rule: never break between a negation token and the characters that follow it. It was implemented and run against the nine notes.
+
+**It fixed the three stranded-negation cases and broke a case the punctuation rule had already fixed.** Forcing `不要放` onto line two left `楼下保安室` alone on line one — the exact inversion the whole exercise was trying to remove. It does not reduce the failure count; it relocates it.
+
+**Recorded here so the next reader does not spend the afternoon rediscovering it.** Any rule that guarantees the negation stays with its verb thereby guarantees something else can strand before it. The guarantee is not available at the level of line breaking.
+
+#### The consequence: fit the clause, don't wrap it better
+
+**Width is the lever. The algorithm is polish.**
+
+Measured on nine real delivery notes, at the two widths a 58mm head offers:
+
+| | notes that wrap | physical lines | negation intact on line 1 |
+|---|---|---|---|
+| enlarged — **16** columns (8 Chinese characters) | **9 of 9** | 25 | 3 of 9 |
+| normal — **31** columns (15 characters) | 7 of 9 | 16 | **9 of 9** |
+
+**Eight characters cannot hold a Chinese instruction clause.** Real ones run ten to sixteen, so at 16 columns the break lands mid-clause *every time* — and there is no punctuation inside the first eight characters for a rule to prefer. The rule has nothing to work with. At 31, line one holds a whole negated predicate, so what spills is the tail of the sentence, which is inert: `楼`, `电话联系`, `一起`, `子坏了`, `走`. Not one of those is a command.
+
+**Two figures, and they are not interchangeable.** With the label moved to its own line (which needs a wrapping helper), only **3 of 9** wrap at all. With the label inline — which is what shipped — **7 of 9** still wrap. *The wrapping count is not the safety count.* Seven notes still break and all nine are safe, because safety comes from the clause fitting, not from the line fitting.
+
+#### `<BOLD>` is normal width — confirmed on paper
+
+The fix depends on it, so it was checked rather than assumed. On receipt TC000180 (2026-08-07, photographed) a `<BOLD>` product name at `lib/feie.js:264` printed as:
+
+```
+无麸 荇麦面包（切片·冷冻）/ Bu
+ckwheat Bread (GF, Sliced & Froz
+en)
+```
+
+That break is at **~32 columns.** Doubled, the limit would be 16 and line one would have ended at `无麸 荇麦面包（` — seven characters in. **`<B>` and `<CB>` double; `<BOLD>` does not.** *(The harness reproduces this with a consistent one-character offset, from the invisible space in `itemName()`'s ` / ` separator that a photograph cannot show. One systematic slip across both boundaries, not two independent errors.)*
+
+#### The test
+
+**Before putting Chinese into any width-constrained container, ask how many characters fit, not whether the string fits.** If the answer is fewer than about sixteen, no instruction sentence will survive it and no algorithm will save you — the container is wrong.
+
+*And when it does break anyway:* read each fragment aloud on its own. If any of them is a grammatical command, the break is not cosmetic (§1.20's test, sharpened — there the question was whether a fragment is a *word*; here it is whether a fragment is an *order*).
+
+#### How this rule is known
+
+**DID** — this session wrote the fix (the packing note dropped from `<B>` to `<BOLD>`) *and* built the keep-with-next rescue and measured it worse. Both directions were executed, not reasoned about. **MEASURED** — nine real notes, counted at both widths, every fragment read by hand.
+
+*One honest limit:* nine notes is a sample, not a proof. The tension itself is structural and does not depend on the sample; the counts do.
+
+---
+
 
 ## 2. The archetypes
 
@@ -1625,6 +1691,30 @@ Small, non-blocking. Resolve during Batch 0.
    published said these were unmade — that was wrong, and it was wrong because the amendment's
    own §7 reads as a to-do list and was taken at its word instead of checked against the
    blueprint. §7 of that document is a record of what was owed in July, not a live queue.)*
+
+---
+
+*v4.5 · 2026-08-08.*
+
+**v4.5 changes — one rule added, §1.21. It governs Chinese text in any width-constrained container. No page rule added, removed or altered.**
+
+### §1.21 — a wrapped Chinese instruction cannot be made safe by any break rule
+
+A Chinese negation governs the verb after it, and a line break can fall on either side. **Both sides fail, and they are mutually exclusive.** Break late and the negation strands — the verb and object start the next line as a positive command. Break early and the object strands — that line names the thing and reads as a positive command. Moving the break trades one for the other.
+
+**A keep-with-next rescue was built, measured, and rejected.** It fixed the three stranded-negation cases and broke a case the punctuation rule had already fixed. It relocates the failure rather than reducing it. **Recorded so nobody rebuilds it.**
+
+**The consequence is the rule: fit the clause, don't wrap it better. Width is the lever; the algorithm is polish.** Measured on nine real delivery notes — at 16 columns (8 Chinese characters) 9 of 9 wrap and only 3 keep the negation intact; at 31 (15 characters) 7 still wrap but **9 of 9 are safe**, because what spills is the inert tail of the sentence. Eight characters cannot hold an instruction clause, and there is no punctuation inside them for a rule to prefer.
+
+**The wrapping count is not the safety count**, and the two figures in §1.21 are not interchangeable — 3-of-9 is with the label on its own line, 7-of-9 with it inline. Safety comes from the clause fitting, not the line.
+
+**Scope is broader than §1.20's.** §1.20 is about a thermal head; this is about Chinese in any constrained width — a narrow table cell, a truncating badge, a phone-width label. It reaches the screen rules in §1.19 and §1.10a, not only print.
+
+**§1.20's `<BOLD>` question is closed on paper.** TC000180 shows a `<BOLD>` product name breaking at ~32 columns; doubled it would have broken at 16. `<B>` and `<CB>` double, `<BOLD>` does not.
+
+**Graded DID · MEASURED** — this session wrote the fix *and* built the failed rescue; nine notes counted at both widths with every fragment read by hand. The one stated limit: nine notes is a sample. The tension is structural and does not depend on it; the counts do.
+
+**No code ships with this version.** The packing-note fix is a separate branch awaiting a test print.
 
 ---
 
