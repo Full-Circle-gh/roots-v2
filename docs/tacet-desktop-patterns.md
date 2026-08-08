@@ -1,4 +1,4 @@
-# Tacet desktop patterns — v4.3 · 2026-08-05
+# Tacet desktop patterns — v4.4 · 2026-08-08
 
 > The rulebook for every desktop admin surface. `tacet-design-system.md` governs how Tacet **looks**. `tacet-brand-concept.md` governs how it **sounds**. `tacet-ia-blueprint.md` governs what **exists**. This file governs **how a page is put together** — so that Orders and Pop-ups feel like the same product despite having different layouts.
 >
@@ -1057,6 +1057,63 @@ Widths live in **CSS on classed cols** (`col.oc-c-*`, `col.cu-c-*`), never inlin
 
 ---
 
+### 1.20 Enlarged print lines — 16 columns, not 31 *(MEASURED · CONFIRMED ×2)*
+
+*Added 2026-08-08, from two thermal slips read off paper a day apart: receipt TC000180 (2026-08-07) and refund slip TC000193 (2026-08-08). Full trail in `docs/receipt-booked-date-findings.md` §8.*
+
+**The rule, in one line: an enlarged thermal line holds 16 display columns, not 31.** `<B>` and `<CB>` are double-width on the 58mm head. CJK counts as 2 columns, so `退款金额 Refund` is **15** and fits; `Date changed 改期` is **17** and does not.
+
+**Scope: printed output, not screens.** This governs what `lib/feie.js` emits to a thermal head. Nothing in it binds a desktop page, and §1.19's column percentages have nothing to do with it. It is filed here because **§1.11's scope clause already reaches a printed receipt from inside §1** — §1 legislates for surfaces the product emits, and a slip is one. (Contrast v3.9's refusal to file the mockup rule as §1.20: a mockup is a *picture of* a surface. A slip is not a picture of anything.)
+
+**Why this section exists.** The number was worked out, written into a code comment, acted on twice in shipped code — and then **rediscovered twice in one day, once in each direction.** A width audit on 2026-08-07 assumed doubling and read a slip as proof of it. A correction on 2026-08-08 assumed no doubling and read the *same line on the same slip* as proof of the opposite. Neither reading was checked against the other. A rule that lives only in a comment beside the code that obeys it is not written down; it is remembered.
+
+#### 🔴 `WIDTH = 31` is the software margin. The head wraps at 32. They are different numbers
+
+**This is the trap, and conflating the two produced an entire wrong audit.**
+
+`WIDTH = 31` (`lib/feie.js:101`) is a **software** constant for normal-size lines — 58mm is nominally 32 half-width columns and the FP-V58-D head prints the 32nd poorly, so the helpers pad to 31 to keep a right-aligned value inside the printable area. The **head's own wrap point is 32 columns**, and it applies to whatever it is given after doubling.
+
+So an enlarged line survives at `32 ÷ 2 = 16` source columns. `31` is not the enlarged limit, `15.5` is not either, and neither number appears anywhere on the paper.
+
+The specific failure: `row()` (`lib/feie.js:110-118`) pads a label/value pair to **exactly 31** and is correct at doing so. A reader who knows `WIDTH = 31`, sees `row()` return 31, and stops there concludes the line fits. Enlarged, that same 31-column string is 62 on a 32-column head — **the widest possible line the helper can produce is guaranteed to wrap.** A correct measurement of the wrong quantity reads exactly like a correct answer.
+
+The rule is already enforced once in code, at `lib/feie.js:482`: `dispLen(sb.value) * 2 <= WIDTH`. That guards the delivery day — the one value that must survive a slip — and it is conservative by one column (`≤ 15` where `≤ 16` is safe). Left alone deliberately; being one column tight is not a defect.
+
+#### The head wraps. It does not truncate
+
+**Nothing is lost. An over-width line looks broken; it does not go missing.** On TC000193 every character of all three over-width lines was present, carried onto a continuation line.
+
+This is why both earlier readings failed: **both assumed truncation**, and both then had to explain away a line that contradicted them. `<CB>退款申请 REFUND REQ</CB>` is 19 columns; `REQ` was reported as lost. It was on the next line. The `Deliver 送达  Aug 03` comment at `lib/feie.js:471-477` records the same mistake in the same words — a wrapped tail read as a dropped one.
+
+**Character-granular, not word-aware.** A doubled glyph is atomic (2 head columns for ASCII, 4 for CJK), so a break never lands mid-character — but it does not seek a space either. Two of the three observed breaks fell mid-run-of-spaces; the third fell on a space only because the space happened to occupy columns 31-32.
+
+*Honest residual:* all three observed breaks fell inside whitespace, so **word-wrapping is not strictly excluded** by the paper. A hard column limit fits every observation and is the simpler model. One enlarged line with a long unbroken token would decide it; nothing currently shipping depends on the difference.
+
+#### A continuation inherits centre — it does not inherit right
+
+Two different mechanisms, and reading them as one will produce a wrong fix.
+
+- **Centre is inherited.** `<C>` / `<CB>` set justification as printer state, and the head re-applies it to **every physical line**, continuations included. That is why `REQ` printed centred rather than at the left margin.
+- **Right is not inherited, because there is no right-align tag.** The right-hand column exists only as the pad spaces `row()` inserts (`:114`). `￥20.00` printed hard against the right edge because **those spaces survived the wrap** and were carried onto the continuation. Had the head stripped leading whitespace, the amount would have landed at the left margin.
+
+The consequence: a `row()` placed inside `<C>` behaves like neither example. Do not reason from one to the other.
+
+#### The test, before enlarging any line
+
+**Measure it at 16, counting CJK as 2. If it does not fit, split it deliberately.** Never let the head choose the break — it will choose by column arithmetic, and the piece that lands on the second line is whatever happened to be there, which on a money row is the number.
+
+Two shipped splits are the reference implementations, and both are correct: `pushShipBy` puts the label at normal size and the day enlarged on its own line (`lib/feie.js:478-484`), and the change-slip head splits `Date changed` (12) from `改期` (4) rather than glue them at 17 (`lib/feie.js:686-687`, `794dc601`).
+
+*The test:* for every `<B>` or `<CB>` you are about to write, state its display width as a number. If you cannot, you are not ready to enlarge it. If the number is over 16, the line already has a break in it — you are only choosing whether you or the printer picks where.
+
+#### How this rule is known
+
+**MEASURED** — two slips, read against `rule()`, the 31-column divider every slip prints (`lib/feie.js:120-122`). **CONFIRMED ×2** — TC000180 and TC000193 are independent artefacts a day apart, and the second settled a question the first was misread on.
+
+**DID is withheld, and the reason is the point.** The rule *is* implemented in shipped code, twice. But both of those sessions acted on the right number for the **wrong mechanism** — they believed the head truncates, and wrote comments saying so. A fix that works for a misunderstood reason is not the same evidence as a fix that works. It is exactly what let the number be argued away a day later.
+
+---
+
 
 ## 2. The archetypes
 
@@ -1568,6 +1625,26 @@ Small, non-blocking. Resolve during Batch 0.
    published said these were unmade — that was wrong, and it was wrong because the amendment's
    own §7 reads as a to-do list and was taken at its word instead of checked against the
    blueprint. §7 of that document is a record of what was owed in July, not a live queue.)*
+
+---
+
+*v4.4 · 2026-08-08.*
+
+**v4.4 changes — one rule added, §1.20. It governs printed thermal output, not how a page is built. No page rule added, removed or altered.**
+
+### §1.20 — an enlarged print line has 16 columns, not 31
+
+`<B>` / `<CB>` are double-width on the 58mm head, so an enlarged line holds **16** display columns with CJK counting as 2. The number had been worked out before, written into a code comment, and acted on twice in shipped code — and was still **rediscovered twice in one day, once in each direction.** A width audit on 2026-08-07 assumed doubling; a correction on 2026-08-08 assumed none, reading the same line on the same slip as proof of the opposite. That is the definition of a rule that is remembered rather than written down.
+
+**The trap the rule exists to name:** `WIDTH = 31` is the *software* margin for normal-size lines; the head's own wrap point is **32**. Different numbers, and conflating them produced the whole wrong audit. `row()` pads to exactly 31 and is correct at it — enlarged, the widest string that helper can produce is guaranteed to wrap. A correct measurement of the wrong quantity reads exactly like a correct answer.
+
+**Also recorded:** the head **wraps, it does not truncate** (nothing is lost; both earlier readings failed because both assumed truncation), the break is character-granular rather than word-aware, and a continuation **inherits centre but not right** — `row()` output only appears right-aligned because its pad spaces survive the wrap.
+
+**Graded MEASURED · CONFIRMED ×2, and DID is withheld deliberately.** The rule is enforced in shipped code at `lib/feie.js:482`, but the sessions that wrote that guard and the `改期` split acted on the right number for the *wrong mechanism* — they believed the head truncates. Per §1.17's convention, a fix that works for a misunderstood reason is weaker evidence than one that works, and that gap is precisely what let the number be argued away a day later.
+
+**Placement, stated because v3.9 refused this exact section number.** v3.9 declined to file the mockup rule as §1.20 on the grounds that §1 reads *"every desktop surface without exception"* and a mockup is not a surface. That reasoning does not reach this rule: **a printed slip is a surface the product emits, not a picture of one**, and §1.11's scope clause already legislates for printed receipts from inside §1. §1.20 carries an explicit scope line saying it binds print and not screens, so it cannot be carried onto a page by a reader who finds it there. This is the same shape as v4.2, which put a commit-time rule in §7 because that is where the reader looks.
+
+**No code changed in this version.** The refund slip's own wrapped money line is a separate, unmerged branch; §1.20 describes the constraint, not a fix.
 
 ---
 
