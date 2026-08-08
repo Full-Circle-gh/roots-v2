@@ -1,4 +1,4 @@
-# Tacet desktop patterns — v4.5 · 2026-08-08
+# Tacet desktop patterns — v4.6 · 2026-08-08
 
 > The rulebook for every desktop admin surface. `tacet-design-system.md` governs how Tacet **looks**. `tacet-brand-concept.md` governs how it **sounds**. `tacet-ia-blueprint.md` governs what **exists**. This file governs **how a page is put together** — so that Orders and Pop-ups feel like the same product despite having different layouts.
 >
@@ -1150,9 +1150,21 @@ Measured on nine real delivery notes, at the two widths a 58mm head offers:
 | enlarged — **16** columns (8 Chinese characters) | **9 of 9** | 25 | 3 of 9 |
 | normal — **31** columns (15 characters) | 7 of 9 | 16 | **9 of 9** |
 
-**Eight characters cannot hold a Chinese instruction clause.** Real ones run ten to sixteen, so at 16 columns the break lands mid-clause *every time* — and there is no punctuation inside the first eight characters for a rule to prefer. The rule has nothing to work with. At 31, line one holds a whole negated predicate, so what spills is the tail of the sentence, which is inert: `楼`, `电话联系`, `一起`, `子坏了`, `走`. Not one of those is a command.
+**Eight characters cannot hold a Chinese instruction clause.** Real ones run ten to sixteen, so at 16 columns the break lands mid-clause *every time* — and there is no punctuation inside the first eight characters for a rule to prefer. The rule has nothing to work with.
 
-**Two figures, and they are not interchangeable.** With the label moved to its own line (which needs a wrapping helper), only **3 of 9** wrap at all. With the label inline — which is what shipped — **7 of 9** still wrap. *The wrapping count is not the safety count.* Seven notes still break and all nine are safe, because safety comes from the clause fitting, not from the line fitting.
+##### Two claims, and only the first is a property
+
+The rule earns its grade on the first. The second is evidence and must not be read as a guarantee.
+
+**① Structural — holds generally.** A negated Chinese predicate fits within about 15 display columns. At a 31-column limit, line one therefore holds the negation *and* the verb it governs, so the pair cannot be separated by the break. **This is why the inversion disappears**, and it follows from the shape of the grammar, not from which notes were tested.
+
+**② Observed — a sample of nine.** The tails that did spill were all inert: `楼`, `电话联系`, `一起`, `子坏了`, `走`. Not one is a command. **Nothing guarantees that.** A longer note, or one whose second clause opens with an imperative, can spill a tail that reads as an order on its own — `请电话联系` is already close, and a note ending `…，直接放前台` would spill *"put it at the front desk"* as a standalone line.
+
+**So: 31 columns removes the inversion; it does not make every fragment safe.** ① is the reason the fix works. ② is nine data points about what happened to spill, and a tenth note is not bound by them. When a break does occur, §1.21's test still has to be applied to the tail by hand.
+
+*(This is the same distinction that withheld DID from §1.20 — an outcome that came out right is not the same evidence as a mechanism that must come out right.)*
+
+**Two figures, and they are not interchangeable.** With the label moved to its own line (which needs a wrapping helper), only **3 of 9** wrap at all. With the label inline — which is what shipped — **7 of 9** still wrap. *The wrapping count is not the safety count.* Seven notes still break and all nine keep their negation intact, because safety comes from the clause fitting, not from the line fitting.
 
 #### `<BOLD>` is normal width — confirmed on paper
 
@@ -1176,7 +1188,13 @@ That break is at **~32 columns.** Doubled, the limit would be 16 and line one wo
 
 **DID** — this session wrote the fix (the packing note dropped from `<B>` to `<BOLD>`) *and* built the keep-with-next rescue and measured it worse. Both directions were executed, not reasoned about. **MEASURED** — nine real notes, counted at both widths, every fragment read by hand.
 
-*One honest limit:* nine notes is a sample, not a proof. The tension itself is structural and does not depend on the sample; the counts do.
+**The grade is earned by claim ① above, not by the counts.** The tension and the ~15-column predicate width are structural. Everything else in this section — 9 of 9, 7 of 9, the inert tails — is a sample of nine, and is marked as such where it appears. *A rule that quietly promotes its evidence to a property is one survey away from being corrected into a bug.*
+
+#### What was decided against, and why — so it is not re-proposed
+
+**A generic `wrapText()` helper: declined, deliberately.** *(Ash, 2026-08-08.)* It was surveyed, prototyped and costed at roughly two hours across six call sites. It is not being built, and this is **not an oversight or a deferral for capacity**: the hazard it was designed for — the inverted instruction — **is closed by the width change**, which is claim ① and costs one tag. What a wrapper would add is prettier breaks on the tails, and by ② those tails are the part no algorithm can guarantee anyway. **Do not re-propose it as unfinished work.** If it returns, it should return for a new reason, with new evidence.
+
+**The one wrapping that IS wanted is not generic.** Item names break at their existing ` / ` CN/EN separator (`itemName()`, `lib/feie.js:185-190`) — one language per line, the shape already shipped on the refund header and the PARTIAL/FULL block. That is a semantic split at an author-supplied boundary, not a column-counting wrapper, and it is the next thing queued.
 
 ---
 
@@ -1691,6 +1709,26 @@ Small, non-blocking. Resolve during Batch 0.
    published said these were unmade — that was wrong, and it was wrong because the amendment's
    own §7 reads as a to-do list and was taken at its word instead of checked against the
    blueprint. §7 of that document is a record of what was owed in July, not a live queue.)*
+
+---
+
+*v4.6 · 2026-08-08.*
+
+**v4.6 changes — §1.21 only. One claim in it was doing work it had not earned; no rule added, removed or altered.**
+
+### §1.21 — its structural claim and its sample are now separated
+
+v4.5 said that at 31 columns "what spills is the tail of the sentence, which is inert". That is true of the nine notes measured and **is not a property.** A reader could take it as a guarantee, which it is not. The section now splits the two:
+
+**① Structural, holds generally** — a negated Chinese predicate fits within ~15 display columns, so at a 31-column limit line one carries the negation *and* the verb it governs and the break cannot separate them. **This is why the inversion disappears**, and it follows from the grammar, not from the sample.
+
+**② Observed, sample of nine** — the tails that spilled happened to be inert. Nothing guarantees it: a note ending `…，直接放前台` would spill *"put it at the front desk"* as a standalone line.
+
+**31 columns removes the inversion; it does not make every fragment safe.** ① is why the fix works; ② is nine data points, and a tenth note is not bound by them. **The grade is earned by ① alone** — the same distinction that withheld DID from §1.20: an outcome that came out right is not the evidence a mechanism that must come out right is.
+
+**Also recorded: the generic `wrapText()` helper is declined, not deferred.** *(Ash, 2026-08-08.)* Surveyed, prototyped, costed at ~2h over six call sites, and not being built — because the hazard it was for is closed by the width change, and what it would add is prettier breaks on exactly the tails ② says no algorithm can guarantee. Written down so it is not re-proposed as unfinished work. The one split still wanted is **not** generic: item names break at their existing ` / ` CN/EN separator, a semantic boundary the author supplied, not a column count.
+
+No code ships with this version.
 
 ---
 
