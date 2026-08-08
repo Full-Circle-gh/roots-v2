@@ -1362,8 +1362,8 @@ next reader who prints an itemised refund does not file it as a regression from
 | `:806` → `:822` | 31 | ✅ **fixed, deployed** `f459e3de` — label normal, amount enlarged |
 | `:781` → `:792` | 19 | ✅ **fixed, deployed** `118a141c` — `REFUND REQ` / `退款申请` |
 | `:628` → `:644` | 6 + note | ✅ **fixed, deployed** `b8a774ea` — `<B>` → `<BOLD>` (§1.21) |
-| `:605` | 32 | 🔵 **fix built, awaiting a print** — line removed; the pack count was already on the next line |
-| `:264` `:602` `:662` `:831` `:252` | data | 🔵 **fix built, awaiting a print** — names split at ` / ` |
+| `:605` | 32 | ✅ **fixed, deployed** `57906719` — line removed; the pack count was already on the next line |
+| `:264` `:602` `:662` `:831` `:252` | data | ✅ **fixed, deployed** `c3b09f7f` — names split at ` / `, one language per line |
 | **`:593`** | **36** | ⛔ **CLOSED — staying as it is** (Ash, 2026-08-08) |
 | **`:277`** | **46** | ⛔ **CLOSED — staying as it is** (Ash, 2026-08-08) |
 | `:520` | 28 | open, cosmetic |
@@ -1390,6 +1390,51 @@ two produce an *ugly* line whose meaning survives.
 
 **If either is reopened it should be for a new reason**, with new evidence —
 not as unfinished work from this audit.
+
+#### The consequence of the `:605` removal — an accepted trade, not an open defect
+
+**The packing slip now carries no trace that anything was refunded.** That is
+deliberate. The packer needs one number, `x‹q›` at `:617` is that number, and
+`q` is `shipQty()` — ordered minus refunded — so it is already the count to
+pack. Nothing else on the slip states a different one. *(Ash, 2026-08-08,
+deployed `57906719`.)*
+
+**The consequence, stated so it is not later mistaken for a bug:** the packing
+slip **alone can no longer be reconciled against the receipt.** The receipt says
+`x3`, the packing slip says `x2`, and **nothing on either paper explains the
+difference.** Anyone reconciling the two has to open the order in admin.
+
+That cost was known and accepted when the line was removed. The line it replaced
+was not paying for itself: at 32 display columns it printed as
+`** 1 refunded 已` / `退款 · pack 2 **` — two lines carrying two different
+numbers, with `退款` opening line two as a standalone "refund". **It was more
+likely to make a packer act on the wrong number than to help anyone reconcile.**
+
+**If the discrepancy needs explaining on paper, that is a new requirement**, and
+it should be designed as one — not treated as restoring something that was
+removed by mistake. The obvious candidate is a line on the **receipt**, which
+has 31 columns to work with and already carries `已退款 REFUNDED x‹n›` at
+`:520`.
+
+##### The principle underneath it — the two slips are supposed to disagree
+
+**The receipt states what the customer ordered. The packing slip states what
+goes in the bag.** Two different questions, two correct answers, and on a
+partly-refunded order they *must* differ.
+
+This is worth writing down before someone "fixes" the receipt to match:
+
+- **The receipt showing `x3` is not stale.** It is the record of the order the
+  customer placed and paid for. Changing it to `x2` would misdescribe what was
+  bought and break the money block, which is arithmetic on the original line.
+- **The packing slip showing `x2` is not a subtraction error.** It is an
+  instruction, and an instruction about three units would be wrong.
+- **Neither is derived from the other.** They read the same row and ask
+  different questions of it — `qty` versus `shipQty()`.
+
+*The test:* before making two printed surfaces agree on a number, name the
+question each one answers. If the questions differ, so may the answers, and
+forcing agreement makes one of them lie.
 
 #### Also closed by decision, recorded in the rulebook
 
