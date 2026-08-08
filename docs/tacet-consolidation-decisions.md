@@ -1,8 +1,10 @@
-# Tacet shared-core consolidation — decisions record, v4.3
+# Tacet shared-core consolidation — decisions record, v4.4
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
+
+2026-08-08 · v4.4 — §24 Database: two more grep-derived figures corrected — runtime `db.transaction()` blocks are 129 not 131 (two hits were comments), and the terminal-call counts were by-name totals that include `Map.get()`/`RegExp.exec()`, so database terminals are ~2,572 not 3,310. `scripts/diagnose_async_conversion_scope.js` is recorded as the authority for these counts. Corrections plus a tooling record, no decision reversed, hence a patch.
 
 2026-08-08 · v4.3 — §24 Database: the v4.0 route-handler async figure is corrected (756 handlers, 72 async — not 761/4), and `routes/retail.js` is surveyed for the Path A conversion, including a STEP ZERO prerequisite: Express 4 does not catch async-handler rejections and 207 handlers have no try/catch, so an asyncHandler wrapper must be adopted before any call site moves. Corrections and a survey, no decision reversed, hence a patch.
 
@@ -1238,6 +1240,38 @@ PostgreSQL returns `numeric` as **TEXT** (type OID 1700) and the application nee
 **CONVERSION ORDER — LEAVES-FIRST IS WRONG HERE AND MUST NOT BE USED.** Converting the cheap leaves first leaves the transaction redesign to be done against a half-converted codebase, which is precisely the partial state recorded above as voiding atomicity without erroring. The order that works: **(0)** `asyncHandler` adopted across all handlers while still synchronous; **(1)** settle the six dual-context helpers on paper, since they determine transaction boundaries; **(2)** convert all 56 transactions as ONE unit, money cluster included; **(3)** convert `cfgValue` and the other high-fan-in helpers; **(4)** grind the ~750 mechanical sites; **(5)** `requireRetailAdmin` and `retailLiveBump` last, as they reach outside the file.
 
 **RISK CONCENTRATES IN THREE PLACES, none of them volume:** the six dual-context helpers, where there is no correct mechanical answer; the money/points/wallet transaction cluster, where a silently voided transaction costs real money rather than a broken page; and Express 4 with 207 unguarded handlers, where a database error becomes a hung request.
+
+### TRANSACTION AND TERMINAL-CALL COUNTS — CORRECTED 2026-08-08
+
+**Two more figures above are wrong. Both are superseded here, not edited.** Both came from grep, and both were found by `scripts/diagnose_async_conversion_scope.js` on its first run.
+
+**1. RUNTIME `db.transaction()` BLOCKS: 129, not 131.** The table above records 131, and the `routes/retail.js` survey repeats it as "56 blocks here, of the 131 runtime-wide". Measured by AST the runtime total is **129**. The two extra grep hits are **comments** — prose mentioning the construct, not calls:
+
+- `lib/inventory.js:18` — *"All multi-step operations use a `tdb().transaction()` so concurrent order…"*
+- `routes/retail.js:8977` — *"Callers always run this inside an (immediate) `tdb().transaction()` so the…"*
+
+**The `routes/retail.js` figure of 56 is CORRECT** — the 57th grep hit there is the comment above. Only the runtime total was wrong, so the retail.js share of the transaction work is larger than recorded, not smaller: 56 of 129.
+
+**2. TERMINAL CALL COUNTS ARE BY-NAME AND SUBSTANTIALLY OVERSTATE DATABASE TERMINALS.** The table above records "1,603 `.get` + 637 `.all` + 1,070 `.run` = **3,310**" and "246 `.exec()`". Those count **every member call with that name anywhere in the runtime code**, which includes `Map.get()`, `req.get()`, `RegExp.exec()` and similar — none of which is a database call or has anything to do with the async conversion.
+
+Both measures, so the difference is on the record rather than needing re-derivation:
+
+| terminal | chained off a `.prepare()` (database, unambiguous) | by name anywhere (what the grep counted) |
+|---|---|---|
+| `.get` | **1,061** | 1,602 |
+| `.all` | **631** | 637 |
+| `.run` | **880** | 1,061 |
+| **total** | **2,572** | 3,300 |
+
+`.exec()` by name is 246 and includes `RegExp.exec`; there is no meaningful "chained" measure for it, since `exec` takes no prepared statement.
+
+**The by-name AST totals (3,300) also differ slightly from the recorded grep totals (3,310)** because grep counts occurrences inside comments and strings that are not calls at all. **The conversion job is therefore somewhat SMALLER than the recorded figure implies** — roughly 2,572 database terminals rather than 3,310, about 22% fewer.
+
+**METHOD NOTE — THIS IS THE FIFTH GREP-DERIVED ERROR IN THIS SECTION.** The earlier four were the `routes/retail.js` line count, the route-handler async proportion, the 1–4-statement transaction distribution, and the `requireRetailAdmin` importer count. These two make five and six. Every one of them was a **structural** question — does this match sit inside a function, a comment, a transaction, a particular argument position — and grep cannot see any of that.
+
+**`scripts/diagnose_async_conversion_scope.js` IS THE AUTHORITY FOR THESE COUNTS FROM NOW ON.** It parses the AST with `espree` and regenerates every figure in the two entries above: prepare sites per file, terminal calls in both measures, transaction blocks with per-block statement counts and enclosing function, route handlers as both inline literals and registrations, handlers without `try`/`catch`, the six-way call-site classification with its evaluation order stated in the output, synchronous DB-touching helpers with caller counts, and the dual-context helper set. It is read-only, opens no database, and writes only its report. **§24 figures should cite it rather than a grep.** It found both errors above on its first run, which is the argument for having committed it.
+
+**ONE LIMIT OF THE SCRIPT, STATED SO IT IS NOT MISREAD AS AUTHORITY IT DOES NOT HAVE.** `espree` is not declared in `package.json`; it arrives transitively with the `eslint` devDependency. The require is guarded and exits with an explanation where it is absent, which includes the production box — the box installs production dependencies only, and `scripts/` ships there regardless. Nothing in the application calls it. Declaring `espree` was considered and rejected: `package.json` is in the deploy allowlist, so declaring it would ship and restart the application for the sake of a diagnostic.
 
 ## 25. A printed slip that goes stale is corrected on paper, not reprinted — DECIDED 2026-08-07
 
