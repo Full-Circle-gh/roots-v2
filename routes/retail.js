@@ -17504,7 +17504,7 @@ router.post('/api/retail/orders/:id/reschedule', requireRetailAuth, express.json
   const o = tdb().prepare(
     `SELECT id, status, fulfillment_type, scheduled_for, delivery_slot_kind,
             delivery_slot_label, delivery_zone_id, address_json, refund_status,
-            dispatched_at, same_day_surcharge_fee
+            dispatched_at, same_day_surcharge_fee, store_id
        FROM retail_orders WHERE id = ? AND customer_id = ?`
   ).get(id, req.customer.id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
@@ -17526,8 +17526,31 @@ router.post('/api/retail/orders/:id/reschedule', requireRetailAuth, express.json
 
   if (eligibility.kind === 'pickup') {
     // Collection orders carry their window in the same scheduled_for + label
-    // columns; resolvePickupTime re-validates against the pickup hours.
-    const r = resolvePickupTime(body.pickup_time, now);
+    // columns; resolvePickupTime re-validates against the pickup hours — but it
+    // only knows WHICH hours, and which clock, from the store passed in. Called
+    // without one it reads the host system clock and the single global
+    // pickup.window, so this has to hand it the same shape the checkout call
+    // site does, resolved from the store this order was placed at.
+    //
+    // Selected by id alone, deliberately: checkout filters on is_active and
+    // pickup_enabled because it is choosing a store, whereas this order is
+    // already placed at one and we are only reading its hours. Re-applying
+    // those filters here would silently drop a paused store back onto the host
+    // clock, which is the defect being fixed.
+    //
+    // store_id is NULL on pickup orders staff created without picking a store
+    // (POST /api/retail-admin/orders leaves it null). Those keep today's exact
+    // behaviour — a null storeHours is what resolvePickupTime already defaults
+    // to — rather than being given a store they were never placed at.
+    const store = o.store_id != null
+      ? tdb().prepare(
+        'SELECT open_time, close_time, timezone FROM retail_stores WHERE id = ?'
+      ).get(o.store_id)
+      : null;
+    const storeHours = store
+      ? { open: store.open_time, close: store.close_time, timezone: store.timezone }
+      : null;
+    const r = resolvePickupTime(body.pickup_time, now, storeHours);
     if (r.error) return res.status(400).json({ success: false, error: r.error });
     scheduledFor = r.scheduled_for;
     slotLabel    = r.label;
