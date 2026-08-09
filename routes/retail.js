@@ -38,6 +38,11 @@ const { getCategoryTree, sanitizeTree, normalizeCategoryPair } = require('../lib
 // What delivery/pickup/counter each MEAN — see lib/fulfilment.js. Prefer these
 // over `=== 'pickup'`: a bare pickup test reads a counter sale as a delivery.
 const { isCounter, shipsNothing, isTerminalOnPaid } = require('../lib/fulfilment');
+// delivery_slot_label is a SNAPSHOT — its leading "Today"/"Tomorrow" was true
+// when the customer picked, not when they read it. attachSlotDisplay() derives a
+// fresh `delivery_slot_display` from scheduled_for at read time; the column is
+// never touched. See lib/slot-label.js.
+const { attachSlotDisplay, deliverySlotDisplay } = require('../lib/slot-label');
 const { requireAuth, requirePermission, logActivity } = require('../middleware/auth');
 const { getTenantDb, rawTenantDb, rawTdb, ROOTS_TENANT_ID, tenantAls, tdb, currentTenantId, DATA_ISOLATION_READY } = require('../lib/tenant-db');
 // The transaction helper (decisions §24, Path A step 3). Takes the handle as an
@@ -4774,6 +4779,7 @@ router.get('/api/retail/payment/status/:orderId', requireRetailAuth, async (req,
   }
   delete order.address_json;
   localizeOrderTimes(order);
+  attachSlotDisplay(order, undefined, viewerLang(req));
   res.json({ success: true, data: order });
 });
 
@@ -9244,7 +9250,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
       'SELECT id FROM retail_orders WHERE customer_id = ? AND idempotency_key = ?'
     ).get(req.customer.id, idempotencyKey);
     if (dup) {
-      const existing = loadOrderForCustomer(dup.id, req.customer.id, `${req.protocol}://${req.get('host')}`);
+      const existing = loadOrderForCustomer(dup.id, req.customer.id, `${req.protocol}://${req.get('host')}`, viewerLang(req));
       return res.json({ success: true, data: existing, idempotent_replay: true });
     }
   }
@@ -10230,7 +10236,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
         'SELECT id FROM retail_orders WHERE customer_id = ? AND idempotency_key = ?'
       ).get(req.customer.id, idempotencyKey);
       if (dup) {
-        const existing = loadOrderForCustomer(dup.id, req.customer.id, `${req.protocol}://${req.get('host')}`);
+        const existing = loadOrderForCustomer(dup.id, req.customer.id, `${req.protocol}://${req.get('host')}`, viewerLang(req));
         return res.json({ success: true, data: existing, idempotent_replay: true });
       }
     }
@@ -10281,7 +10287,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     } catch (e) { console.warn('[checkout supersede]', e.message); }
   }
 
-  const order = loadOrderForCustomer(orderId, req.customer.id, `${req.protocol}://${req.get('host')}`);
+  const order = loadOrderForCustomer(orderId, req.customer.id, `${req.protocol}://${req.get('host')}`, viewerLang(req));
   res.json({ success: true, data: order });
   } catch (err) {
     // Async handler: Express 4 won't catch a rejected promise, so forward to
@@ -10323,6 +10329,27 @@ function localizeTimes(row, fields) {
 }
 function localizeOrderTimes(row) {
   return localizeTimes(row, GZ_LOCAL_TS_FIELDS);
+}
+
+// The VIEWER's language, for the few payload fields the server renders rather
+// than the client. Both storefronts keep language client-side — the mini app in
+// globalData/wx storage, the web store in `state.lang` — and neither is
+// persisted: there is no `lang` column on retail_customers and no merchant
+// language key in storefront_config. So the client has to say, and the header
+// is the one place it can say it once for every call (its api layer already
+// sets `x-wx-appid` the same way).
+//
+// `?lang=` is honoured as a second source because that is the existing house
+// mechanism — /track/:orderNo/:trackingNumber and the tracking JSON endpoint
+// both read it, and two mini-app pages already send it.
+//
+// English on absence, deliberately: it is what every stored pickup label
+// already says, so an older client that sends nothing sees exactly what it
+// sees today.
+function viewerLang(req) {
+  const h = req && req.headers && req.headers['x-lang'];
+  if (h) return String(h).toLowerCase() === 'cn' ? 'cn' : 'en';
+  return (req && req.query && req.query.lang === 'cn') ? 'cn' : 'en';
 }
 
 // Shipped-out orders (anything that leaves on a courier — out-of-GZ "city"
@@ -10442,7 +10469,7 @@ function formatLocalEta(hhmm) {
   };
 }
 
-function loadOrderForCustomer(orderId, customerId, baseUrl = '') {
+function loadOrderForCustomer(orderId, customerId, baseUrl = '', lang = 'en') {
   const o = tdb().prepare(
     `SELECT id, order_no, status, payment_method,
             recipient_name, recipient_phone, address_full, address_json,
@@ -10469,6 +10496,7 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '') {
   ).get(orderId, customerId);
   if (!o) return null;
   localizeOrderTimes(o);
+  attachSlotDisplay(o, undefined, lang);
   if (o.address_json) { try { o.address = JSON.parse(o.address_json); } catch {} }
   delete o.address_json;
   if (o.refund_lines_json) {
@@ -11255,6 +11283,10 @@ router.get('/api/retail/orders', requireRetailAuth, (req, res) => {
 
   const rows = tdb().prepare(sql).all(...params);
   rows.forEach(localizeOrderTimes);
+  // One `now` for the whole page, so two orders on the same screen can never
+  // straddle midnight and disagree about which day "today" is.
+  const slotNow = new Date();
+  rows.forEach(r => attachSlotDisplay(r, slotNow, viewerLang(req)));
 
   // Attach a tiny preview of items + item_count so the list can render
   // thumbs without N+1 follow-ups. Batched into two queries regardless of
@@ -11381,7 +11413,7 @@ router.get('/api/retail/orders/:id', requireRetailAuth, async (req, res) => {
   // mini app shows live events instead of "waiting for the first update".
   try { await syncJdTrackingForCustomer(id, req.customer.id); }
   catch (e) { console.error('[jd.trace] sync failed', e); }
-  const order = loadOrderForCustomer(id, req.customer.id, `${req.protocol}://${req.get('host')}`);
+  const order = loadOrderForCustomer(id, req.customer.id, `${req.protocol}://${req.get('host')}`, viewerLang(req));
   if (!order) return res.status(404).json({ success: false, error: 'not_found' });
   res.json({ success: true, data: order });
 });
@@ -11485,7 +11517,7 @@ function findDeliveryJobForOrder(orderId, recipientPhone) {
 
 // Build the track payload (stage, rider, positions, route, ETA) from a job row.
 // Coordinates are stored GCJ-02 ×1e6; we divide by 1e6 on the way out.
-function buildDeliveryTrackData(job, slotLabel) {
+function buildDeliveryTrackData(job, slotLabel, scheduledFor, lang) {
   // Coarse stage from the delivery_jobs row — see deliveryJobStage (shared with
   // the admin drawer so staff + customer always read the same stage).
   const stage = deliveryJobStage(job);
@@ -11533,6 +11565,10 @@ function buildDeliveryTrackData(job, slotLabel) {
     rider_to_cust_m: stage === 'scheduled' ? null : (job.rider_to_cust_m ?? distFromTrack),
     expected_delivery_at: job.expected_delivery_at || null,
     slot_label: slotLabel || null,   // human slot for the 'scheduled' sub-line
+    // Same slot with its leading relative day word re-derived from
+    // scheduled_for. Kept beside slot_label rather than replacing it so the
+    // admin twin of this endpoint keeps reading exactly what it read before.
+    slot_display: deliverySlotDisplay(slotLabel, scheduledFor, undefined, lang) || null,
     updated_at: job.updated_at,
   };
 }
@@ -11540,12 +11576,12 @@ function buildDeliveryTrackData(job, slotLabel) {
 router.get('/api/retail/orders/:id/delivery-track', requireRetailAuth, (req, res) => {
   const id = parseInt(req.params.id, 10);
   const order = tdb().prepare(
-    'SELECT id, recipient_phone, delivery_slot_label FROM retail_orders WHERE id = ? AND customer_id = ?'
+    'SELECT id, recipient_phone, delivery_slot_label, scheduled_for FROM retail_orders WHERE id = ? AND customer_id = ?'
   ).get(id, req.customer.id);
   if (!order) return res.status(404).json({ success: false, error: 'not_found' });
   const job = findDeliveryJobForOrder(id, order.recipient_phone);
   if (!job) return res.json({ success: true, data: { tracking: false } });
-  res.json({ success: true, data: buildDeliveryTrackData(job, order.delivery_slot_label) });
+  res.json({ success: true, data: buildDeliveryTrackData(job, order.delivery_slot_label, order.scheduled_for, viewerLang(req)) });
 });
 
 // Admin twin of the track endpoint — identical payload, admin auth, no
@@ -11555,12 +11591,12 @@ router.get('/api/retail/orders/:id/delivery-track', requireRetailAuth, (req, res
 router.get('/api/retail-admin/orders/:id/delivery-track', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
   const order = tdb().prepare(
-    'SELECT id, recipient_phone, delivery_slot_label FROM retail_orders WHERE id = ?'
+    'SELECT id, recipient_phone, delivery_slot_label, scheduled_for FROM retail_orders WHERE id = ?'
   ).get(id);
   if (!order) return res.status(404).json({ success: false, error: 'not_found' });
   const job = findDeliveryJobForOrder(id, order.recipient_phone);
   if (!job) return res.json({ success: true, data: { tracking: false } });
-  res.json({ success: true, data: buildDeliveryTrackData(job, order.delivery_slot_label) });
+  res.json({ success: true, data: buildDeliveryTrackData(job, order.delivery_slot_label, order.scheduled_for, viewerLang(req)) });
 });
 
 // Request a fapiao (发票) for an existing PAID order — for shoppers who didn't
@@ -17434,6 +17470,11 @@ router.get('/api/retail/orders/:id/reschedule-options', requireRetailAuth, (req,
     current: {
       scheduled_for: o.scheduled_for,
       slot_label:    o.delivery_slot_label,
+      // Fresh day word for the "Current: …" line in the reschedule sheet. The
+      // customer is being asked to compare their existing slot against a list of
+      // new ones — a stale "Tomorrow" beside a live picker is the worst place
+      // for it.
+      slot_display:  deliverySlotDisplay(o.delivery_slot_label, o.scheduled_for, undefined, viewerLang(req)),
       slot_kind:     o.delivery_slot_kind,
     },
   };

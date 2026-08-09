@@ -1289,7 +1289,11 @@ function wasPrice(p){return isFlash(p)&&Number(p.price)>Number(p.flash.price)?Nu
 function catLabel(c){return pick(c.name,c.name_cn);}
 function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(toast._h);toast._h=setTimeout(()=>t.classList.remove('show'),2400);}
 
-function authHeaders(h){h=h||{};if(state.token)h['Authorization']='Bearer '+state.token;return h;}
+// Twin of miniapp/utils/api.js — x-lang carries the viewer's language for the
+// few payload fields the SERVER renders (the pickup slot line). Language lives
+// only in state.lang here, so the server cannot know it unless we say. Absent →
+// the server falls back to English.
+function authHeaders(h){h=h||{};if(state.token)h['Authorization']='Bearer '+state.token;h['x-lang']=state.lang==='cn'?'cn':'en';return h;}
 async function api(path){
   const r=await fetch(path,{headers:authHeaders({'Accept':'application/json'})});
   if(r.status===401) clearAuth();   // token expired/invalid → drop it silently
@@ -3067,7 +3071,7 @@ async function renderOrderDetail(id){
   const where=isPickup
     ? [pick(o.pickup_store_name_en,o.pickup_store_name_cn),o.pickup_store_address].filter(Boolean).map(esc).join('<br>')
     : esc(o.address_full||'');
-  const slot=esc(o.delivery_slot_label||'');
+  const slot=esc(o.delivery_slot_display||o.delivery_slot_label||'');
   const track=(o.tracking_carrier||o.tracking_number)?`${esc(o.tracking_carrier||'')} ${esc(o.tracking_number||'')}`.trim():'';
   // Self-service reschedule control (change delivery/pickup time before departure).
   const rs=o.reschedule||{};
@@ -3153,7 +3157,7 @@ async function openReschedule(o){
   if(!opt.eligibility||!opt.eligibility.allowed){ $('#rsSub').textContent=rsReasonText(opt.eligibility&&opt.eligibility.reason,cn); return; }
 
   const sel={slotId:null,slotKind:null,label:null,pickup:null};
-  $('#rsSub').textContent=(cn?'当前：':'Current: ')+(o.delivery_slot_label||'—');
+  $('#rsSub').textContent=(cn?'当前：':'Current: ')+(o.delivery_slot_display||o.delivery_slot_label||'—');
   const body=$('#rsBody'); body.hidden=false;
   const save=$('#rsSave'); save.hidden=false;
 
