@@ -1,5 +1,5 @@
 {
-  "description": "Roots official mini app — drag-drop CMS driven storefront. Powered by Roots v2 backend at rootskitchenchina.com.",
+  "description": "Roots official mini app — drag-drop CMS driven storefront. Powered by Roots v2 backend at rootskitchenchina.com. — DO NOT TURN ignoreUploadUnusedFiles BACK ON (nor ignoreDevUnusedFiles in project.private.config.json). Both drop files the uploader's dependency graph thinks nothing needs. A stale graph omits recently added modules, the upload reports no error, and the page is blank on the device. This cost a live blank checkout on 2026-08-09 when utils/phone.js was left out of the published bundle. See docs/tacet-consolidation-decisions.md, the section on the mini app publish pipeline not excluding files by dependency graph.",
   "packOptions": {
     "ignore": [],
     "include": []
@@ -26,7 +26,7 @@
     "disableUseStrict": false,
     "showES6CompileOption": false,
     "useCompilerPlugins": false,
-    "ignoreUploadUnusedFiles": true,
+    "ignoreUploadUnusedFiles": false,
     "compileWorklet": false,
     "uglifyFileName": false,
     "uploadWithSourceMap": true,
