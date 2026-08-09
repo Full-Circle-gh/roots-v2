@@ -52,6 +52,54 @@ const nameSel  = listArg('--names').map(s => s.toLowerCase());
 const phoneSel = listArg('--phones');
 const hasSelector = idSel.length || nameSel.length || phoneSel.length;
 
+// ── Guards (decisions §24, DESTRUCTIVE SCRIPTS SHIP TO PRODUCTION) ──────────
+// This script ships to the production box on every deploy — scripts/ is in the
+// deploy allowlist — and it deletes customers, orders, payments, points
+// transactions and wallet top-ups. Its only safety was a dry-run default that
+// nothing forced you through. These three guards close that.
+
+// 1. MINIMUM SELECTOR LENGTH. --names and --phones are unbounded substring
+//    matches: `--names a` matches almost every account with an "a" in the
+//    nickname, and `--phones 1` matches essentially every Chinese mobile
+//    number. Nothing about the old code noticed.
+const MIN_SELECTOR = 3;
+const tooShort = [
+  ...nameSel.filter(s => s.length < MIN_SELECTOR).map(s => `--names "${s}"`),
+  ...phoneSel.filter(s => s.length < MIN_SELECTOR).map(s => `--phones "${s}"`),
+];
+if (tooShort.length) {
+  console.error(`\n[reset] REFUSED — selector too short: ${tooShort.join(', ')}`);
+  console.error(`  --names and --phones are SUBSTRING matches, so a short one sweeps`);
+  console.error(`  most of the customer base. Use at least ${MIN_SELECTOR} characters, or --ids for`);
+  console.error(`  an exact list.\n`);
+  process.exit(1);
+}
+
+// 2. PREVIEW BEFORE APPLY, ENFORCED. --apply used to be honoured on the FIRST
+//    invocation, so the preview that makes this safe could be skipped silently
+//    in one command. It now requires a token printed by a preview of the SAME
+//    selectors, so the operator has necessarily seen the counts.
+const CONFIRM_FLAG = '--confirm';
+const confirmTok = (() => {
+  const i = argv.indexOf(CONFIRM_FLAG);
+  return (i === -1 || !argv[i + 1]) ? null : argv[i + 1].trim();
+})();
+// Derived from the selectors alone: a token from one preview cannot authorise a
+// different, wider deletion.
+function selectorToken() {
+  const canon = JSON.stringify({
+    ids: [...idSel].sort((a, b) => a - b),
+    names: [...nameSel].sort(),
+    phones: [...phoneSel].sort(),
+  });
+  return require('crypto').createHash('sha256').update(canon).digest('hex').slice(0, 8);
+}
+
+// 3. A CAP AND A PROPORTION CHECK on how many accounts may match — applied
+//    after resolution, below, where the numbers are known.
+const MAX_ACCOUNTS = 25;
+const MAX_SHARE = 0.25;
+
 const DB_PATH = path.join(__dirname, '..', 'data', 'roots.db');
 if (!fs.existsSync(DB_PATH)) {
   console.error(`[reset] DB not found: ${DB_PATH}`);
@@ -109,6 +157,19 @@ if (!picked.length) {
   process.exit(0);
 }
 
+// ── Cap + proportion check (guard 3) ───────────────────────────────────────
+// A selector that sweeps most of the customer base is a mistake, not an
+// intention. Checked BEFORE the preview prints, so a runaway selector is
+// refused rather than merely displayed and scrolled past.
+if (picked.length > MAX_ACCOUNTS || picked.length > all.length * MAX_SHARE) {
+  const pct = ((picked.length / all.length) * 100).toFixed(1);
+  console.error(`\n[reset] REFUSED — the selectors matched ${picked.length} of ${all.length} accounts (${pct}%).`);
+  console.error(`  Ceiling is ${MAX_ACCOUNTS} accounts or ${(MAX_SHARE * 100).toFixed(0)}% of the base, whichever is lower.`);
+  console.error(`  This is what an over-broad substring match looks like. Narrow the`);
+  console.error(`  selectors, or use --ids with an explicit list.\n`);
+  process.exit(1);
+}
+
 const cIds = picked.map(c => c.id);
 const cList = cIds.join(',');
 const orderIds = db.prepare(`SELECT id FROM retail_orders WHERE customer_id IN (${cList})`).all().map(r => r.id);
@@ -162,9 +223,24 @@ console.log(`\n  Inventory NOT changed. These orders consumed ${fmt(stockHit.uni
 console.log(`  (retail_store_stock / retail_stock_ledger left intact — re-count by hand if needed.)`);
 
 if (!APPLY) {
-  console.log(`\nPREVIEW only — nothing written. Re-run with --apply to delete.\n`);
+  console.log(`\nPREVIEW only — nothing written.`);
+  console.log(`To delete exactly this set, re-run with BOTH flags:`);
+  console.log(`  --apply ${CONFIRM_FLAG} ${selectorToken()}\n`);
   db.close();
   process.exit(0);
+}
+
+// Preview-before-apply, enforced (guard 2). The token is derived from the
+// selectors, so it authorises THIS set and no other: widening the selectors
+// invalidates it and sends the operator back through a preview.
+if (confirmTok !== selectorToken()) {
+  console.error(`\n[reset] REFUSED — --apply needs ${CONFIRM_FLAG} <token> from a preview of these same selectors.`);
+  console.error(confirmTok
+    ? `  The token given does not match these selectors. It belongs to a different\n  set, so it cannot authorise this one — re-run the preview.`
+    : `  No token given. Run without --apply first and read what it would delete.`);
+  console.error(`\n  Preview:  ${process.argv.slice(0, 2).map(p => path.basename(p)).join(' ')} ${argv.filter(a => a !== '--apply').join(' ')}\n`);
+  db.close();
+  process.exit(1);
 }
 
 // ── APPLY: back up, then delete in one transaction ───────────────────────────
