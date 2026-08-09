@@ -10,7 +10,8 @@
     "test:address": "node scripts/test_address_pin.js && node scripts/test_address_clients.js",
     "test:needs-point": "node scripts/test_needs_point.js",
     "test:point-search": "node scripts/test_point_search.js",
-    "test:preorder": "node scripts/test_preorder_local.js"
+    "test:preorder": "node scripts/test_preorder_local.js",
+    "test:transaction": "node scripts/test_db_transaction.js"
   },
   "dependencies": {
     "bcrypt": "^5.1.1",
