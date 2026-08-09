@@ -1,8 +1,10 @@
-# Tacet shared-core consolidation — decisions record, v4.17
+# Tacet shared-core consolidation — decisions record, v4.18
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
+
+2026-08-09 · v4.18 — §24 Database: **the phase numbering is defined in the record for the first time, and this entry is the authority for it.** Records that Phase 1 was defined once, Phase 2 appeared once and only as a negative, and Phase 3 appeared nowhere — so the numbering everything has been planned against existed only in conversation. Phase 1 is quoted unchanged. **Phase 2 is the async conversion against SQLite PLUS every operational prerequisite, and it ends only when the code runs on either driver AND backups, rollback and the runbook exist.** Phase 3 is the switch alone. **States explicitly that backups, the rollback plan and the cutover runbook are Phase 2 and not Phase 3, because they must exist before the flip and everything in Phase 3 happens on the day.** Maps the Path A steps onto the phases — steps 1–3 and step zero inside Phase 2, step 4 is Phase 3 — and states that the numbering does not replace them. Earlier unnumbered "later phase" text is superseded by this entry rather than edited. **Also a RECORD CORRECTION: batch 1's commit message `d7515a36` claims Path A step 2 is already on main, and it is not** — five of six dual-context helpers plus `reserveForOrder` still take no handle, and `tacet-checkout-transaction-design.md` v2.0 has it right; git history is not rewritten. **And three pieces of owed Phase 2 work recorded nowhere else:** 73 of the 103 runtime transactions live outside `routes/retail.js`, including two money helpers in `lib/inventory.js`; there are FIVE step-2 routes, not four, because `POST /api/retail-admin/orders` mints an order number and has never been classified; and `POST /polls/:id/vote` is classified safe inline while writing `points_balance` and the points ledger, so it must be reclassified before conversion. Definitions, a correction and owed work; nothing reversed, hence a patch.
 
 2026-08-09 · v4.17 — §24 Database: **the PostgreSQL database is backed up for the first time, merged at `7b3ce893`.** Records that until this merge Postgres had NO backup of any kind — both cron jobs were SQLite-only while the verified 364,666-row copy sat on the box unprotected — and that the cluster-level roles file, 795 bytes, is what makes the dump restorable rather than 310MB that errors 304 times. Records the restore rehearsal and what it proved, including that it restored from objects downloaded back out of OSS rather than from the local originals. **Records the limitation plainly: the rehearsal ran in the SAME cluster, so `roles.sql` applied `ALTER ROLE` and never created `tacet_app` from nothing — fresh-cluster role creation is UNPROVEN, and the new-box case is precisely the disaster case.** Also corrects the recorded size of `/root/backups` from 15G to **19G measured**, and records that ~1.57G of it is under no retention policy at all, with `deploy-*` accumulation having no pruner. A build, a proof, a named gap and a record correction; nothing reversed, hence a patch.
 
@@ -1575,6 +1577,58 @@ while the server had **deleted every parcel on the order and re-planned from scr
 - **Four June one-off snapshots — 630,808,576 bytes, 602M**: `roots-pre-expiry-1781222526711.db`, `pre-orphanfix-2026-06-09T0229.db`, `pre-store-fork-2026-06-09T0140.db` and `pre-brand-restore-20260606.db`. Each was taken by hand before a specific risky change, and each has outlived the change it was insurance for.
 
 **Recorded, not acted on.** Nothing is pruned here and nothing should be pruned as a side effect of a backup change — the point of writing it down is that `deploy-*` accumulation is a standing condition with no owner, and the next person to look at free space on this box should find it already explained rather than rediscover it.
+
+### THE PHASE NUMBERS — DEFINED HERE, AND THIS ENTRY IS THE AUTHORITY — DECIDED 2026-08-09
+
+**The numbering has been in use in conversation and is almost absent from the record.** Read against this file as it stood before this entry: **Phase 1 is defined once**, in the ROLLED OUT IN PHASES paragraph at the head of §24. **Phase 2 appears exactly once, and only as a negative** — "It belongs to the Products stage of the consolidation sequence, not to Phase 2" — which tells a reader what Phase 2 excludes and never what it is. **Phase 3 appears nowhere at all.** Everything else in this section says "a later phase" or "later phases" with no number attached. So work has been planned, argued and merged against a numbering the record cannot be used to check. This entry defines the three, and from here it is the authority for what they mean.
+
+**PHASE 1 — ALREADY DEFINED, AND THE DEFINITION DOES NOT CHANGE.** Quoted from the ROLLED OUT IN PHASES paragraph above rather than restated:
+
+> Phase 1 installs PostgreSQL alongside the running SQLite app; nothing points at it yet.
+
+The schema translation and the data copy are Phase 1 work and are recorded above under their own dates. Postgres installed alongside the running SQLite application, the schema translated, the data copied, nothing pointing at it. That is the whole of Phase 1 and it is done.
+
+**PHASE 2 — THE ASYNC CONVERSION OF THE DATA LAYER AGAINST SQLite, PLUS EVERY FIX AND OPERATIONAL PREREQUISITE THAT MUST BE TRUE BEFORE A FLIP IS SURVIVABLE.** Both halves are Phase 2, not just the first. The conversion half is the work recorded above under CUTOVER SEQUENCING and the batches that followed it: the async-handler guard, the dual-context helper rule, the transaction helper, and the call sites moved onto it while still on SQLite, where an async wrapper over a synchronous driver is provable. The operational half is everything the flip depends on and none of it is code in `routes/`: backups that have been taken and restored, a rollback plan, a cutover runbook, and the standing hazards this section already records as pre-cutover work — the SQLite-path scripts audit, the retired files the deploy will never delete, `data/roots.db` removed or renamed.
+
+**PHASE 2 ENDS WHEN TWO THINGS ARE TRUE AT ONCE: the code can run on either driver, AND backups, rollback and the runbook exist.** Not one or the other. Either condition alone leaves a flip that can be started and not finished.
+
+**PHASE 3 — THE SWITCH, AND NOTHING ELSE.** `TACET_DB` selects the driver. A fresh data copy replaces the stale rehearsal copy — the 08-04 copy is a rehearsal, and the delta since it was taken is a Phase 3 input, not a Phase 2 one. Then cutover, with rollback available. Phase 3 is short by construction, and it is short because Phase 2 was long.
+
+**BACKUPS, THE ROLLBACK PLAN AND THE CUTOVER RUNBOOK BELONG TO PHASE 2, NOT PHASE 3 — STATED EXPLICITLY BECAUSE THE OPPOSITE READING IS THE NATURAL ONE.** All three are about the flip, so they sound like flip-day work. They are not. **They must EXIST before the flip, and everything in Phase 3 happens on the day.** A backup first taken on cutover day has never been restored. A rollback plan written on cutover day is written by someone who has already decided to go forward. A runbook written on cutover day is a description of what is being improvised. Put them in Phase 3 and the flip becomes the test of the safety net, which is the one arrangement the whole phased rollout exists to avoid. This is not a preference about ordering; it is the difference between a reversible day and an irreversible one.
+
+**RELATIONSHIP TO PATH A — TWO SEQUENCES, AND THEY MUST NOT BE CONFLATED.** Path A's four steps, recorded above under CUTOVER SEQUENCING, are a technical order for converting the data layer. The phases are a rollout order for the business. They answer different questions and neither replaces the other. Mapped once, plainly:
+
+- **Path A step 1** — define an async data-access contract both drivers can satisfy — **inside Phase 2.**
+- **Path A step 2** — convert the transactions as a single deliberate unit — **inside Phase 2.**
+- **Path A step 3** — convert call sites behind that contract while still on SQLite — **inside Phase 2.**
+- **Path A step 4** — add `TACET_DB` to select the driver — **is Phase 3.** It is the only one of the four that is.
+- The **STEP ZERO** prerequisite recorded above, the `asyncHandler` wrapper, is **inside Phase 2** as well.
+
+**THE NUMBERING DOES NOT REPLACE THE PATH A STEPS.** Saying "we are in Phase 2" does not say which step is in hand, and finishing step 3 does not finish Phase 2 — the operational half is still owed. Both sequences stay live and both must be cited by name when it matters.
+
+**A WARNING ABOUT STEP NUMBERS, RECORDED BECAUSE IT IS THE SAME DISEASE.** This section carries more than one numbered step list: the four under CUTOVER SEQUENCING, and the six-item `routes/retail.js` CONVERSION ORDER numbered (0) to (5). Commit messages have used step numbers matching neither exactly. **A bare step number is therefore not a reference.** Cite the list as well as the number, or name the work.
+
+**THIS ENTRY IS THE AUTHORITY FOR THE NUMBERING, AND EARLIER TEXT IS SUPERSEDED BY IT RATHER THAN EDITED.** Every earlier line in this section that says "a later phase" or "later phases" without a number — the retirement of `lib/tenant-db.js`, the `retail_vouchers.value` split, the account column, the enforcement gate, the data copy, the switchover, backups — keeps its wording and is read against the definitions here. Nothing above is rewritten. The record shows how the thinking moved; this entry is what a reader resolves an unnumbered phrase against.
+
+### RECORD CORRECTION — PATH A STEP 2 IS NOT "ALREADY ON MAIN" — 2026-08-09
+
+**Batch 1's commit message `d7515a36` states that the dual-context helper rule is already on main. It is not.** The message reads: "Steps 0 (async guard) and 2 (dual-context helpers take the handle as an argument) are already on main." The helper rule is settled on paper — the DUAL-CONTEXT HELPERS entry above decided it — but it is not in the code.
+
+**Measured at this head, not inferred.** Of the six helpers named in that entry, **five still take no handle parameter**: `writeLayout(key, json, by)`, `reconcileTier(customerId, spend, storedTier)`, `ensureShipments(orderId)`, `generateRetailSku()`, `createOrReuseManualCustomer({ nickname, email, phone, userId })`. Only `productContentSnapshot(db, id)` takes one, and it did so before the rule existed — it is the helper the rule was generalised **from**, not evidence the rule was applied. **`reserveForOrder` in `lib/inventory.js` takes no handle either**, and it is dual-context in exactly the same way.
+
+**`tacet-checkout-transaction-design.md` v2.0 has this right and is the document to trust here.** Its conversion steps list "Convert `reserveForOrder` and `ensureShipments` to take the handle — the §24 step-2 rule" and marks it **"Still outstanding, and still the next thing."** Two records disagreed; the design document is the correct one.
+
+**Recorded in §24 so the commit message cannot be cited as authority. Git history is not rewritten** — the message stays as it is, and this is the correction a reader finds when they check it. The general point is the one already made about grep-derived figures: **a claim in a commit message is a claim, and the code is the authority.**
+
+### PHASE 2 OWED WORK THAT APPEARS NOWHERE ELSE — RECORDED 2026-08-09
+
+Three items from the Phase 2 status review that are real work, are not written down anywhere in this section, and would otherwise be found at the flip.
+
+**1. SEVENTY-THREE TRANSACTIONS LIVE OUTSIDE `routes/retail.js`, AND NOTHING SAYS WHAT HAPPENS TO THEM.** By AST at this head: **103 `db.transaction()` blocks in runtime code, 30 of them in `routes/retail.js`, so 73 elsewhere**, spread across 29 other files. **Two of them are money and sit in `lib/inventory.js`: `commitOrderReservations` and `reverseCommittedOrder`.** Every conversion batch so far has scoped itself to one file and reported its progress as that file's count falling, which reads as progress against a whole and is progress against 30 of 103. The 73 are not excluded, not deferred and not scheduled — they are simply unmentioned. **Phase 2 does not end while an unconverted `db.transaction()` block is reachable from a converted async caller**, and these are.
+
+**2. THERE ARE FIVE STEP-2 ROUTES, NOT FOUR.** The working set has been counted as four. **`POST /api/retail-admin/orders` calls `nextOrderNo()` at `routes/retail.js:20065`** — the same function the customer checkout calls at `routes/retail.js:10039` — so it mints an order number and straddles the money cluster. It has never been classified either way: not named in the money cluster, not named in the safe inline pool. **A route that mints order numbers cannot be left unclassified into the conversion**, because the classification is what decides whether it is converted with the checkout or apart from it.
+
+**3. `POST /api/retail/polls/:id/vote` IS CLASSIFIED SAFE INLINE AND IT IS NOT.** Its transaction body — still on `db.transaction()`, at `routes/retail.js:29669` — updates `retail_customers.points_balance` and inserts a matching row into `retail_points_transactions`. Points are a customer liability with a ledger, and this route writes both the balance and the ledger in one block. **It must be reclassified before it is converted, not after.** The order matters: reclassifying afterwards means the standard applied to it was the wrong standard, and the conversion has to be redone to be trusted rather than reviewed and kept.
 
 ## 25. A printed slip that goes stale is corrected on paper, not reprinted — DECIDED 2026-08-07
 
