@@ -321,13 +321,38 @@ it('a geocoder hold is never mistaken for a phone refusal', () => {
   assert.strictEqual(qingyunQueue.isRecipientPhoneRejection(held), false);
   assert.strictEqual(qingyunQueue.shouldHoldForGeocoder(held), true);
 });
-it('the daemon uses the shared outcome and checks the hold FIRST', () => {
+it('the daemon uses the shared outcome, and the catch block is in the right ORDER', () => {
   assert.ok(/qingyunQueue\.pushFailureOutcome\(\{[\s\S]{0,120}attemptsBefore: row\.attempts/.test(daemonSrc),
     'daemon must not re-implement the decision');
-  const holdAt = daemonSrc.indexOf('shouldHoldForGeocoder');
+
+  // Three branches, three different meanings, and each of the first two exits
+  // with `continue`. They must appear in this order:
+  //
+  //   1. shouldHoldForGeocoder  — the provider is down. Give the attempt back.
+  //   2. shouldMarkNeedsPoint   — the address resolved to an area, not a point.
+  //                               Park it; no attempt, no page.
+  //   3. pushFailureOutcome     — a real failure. One attempt, or five.
+  //
+  // This is asserted because branches 2 and 3 were written a fortnight apart, on
+  // separate branches, and first met in a rebase — the conflict landed exactly
+  // here. A resolution that dropped either would fail silently: parked orders
+  // would burn attempts and page ops, or a refused phone would retry four more
+  // times. Positions, not just presence, because "both are in the file" was
+  // already true of the broken resolutions.
+  const holdAt    = daemonSrc.indexOf('shouldHoldForGeocoder');
+  const pointAt   = daemonSrc.indexOf('shouldMarkNeedsPoint');
   const outcomeAt = daemonSrc.indexOf('pushFailureOutcome');
-  assert.ok(holdAt > -1 && outcomeAt > holdAt,
-    'a held row gives its attempt back and must never reach the outcome');
+  assert.ok(holdAt > -1, 'the geocoder hold branch is missing');
+  assert.ok(pointAt > -1, 'the needs_point branch is missing — a rebase dropped it');
+  assert.ok(outcomeAt > -1, 'the failure outcome is missing');
+  assert.ok(holdAt < pointAt, 'a held row must not be parked as needs_point');
+  assert.ok(pointAt < outcomeAt,
+    'a parked row must never reach the outcome — it would spend an attempt and page ops');
+
+  // …and both early branches really do exit, or the order above buys nothing.
+  const between = daemonSrc.slice(holdAt, outcomeAt);
+  assert.strictEqual((between.match(/\n\s*continue;/g) || []).length, 2,
+    'the hold and needs_point branches must each continue, not fall through');
 });
 it('createOrder failures carry the structured code the classifier needs', () => {
   assert.ok(/err\.qyCode = res\.code;/.test(daemonSrc) && /err\.qyMsg = res\.msg;/.test(daemonSrc),
