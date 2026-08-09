@@ -17948,23 +17948,25 @@ router.get('/api/retail-admin/tier-counts', requireRetailAdmin, (req, res) => {
 // Body: { 'fees.freeShippingThreshold': 449, 'theme.accent': 'forest-kale', … }
 // Each entry is a dotted key; value is anything JSON-serialisable. Whole
 // thing applied in one txn so partial failures roll back.
-router.put('/api/retail-admin/config', requireRetailAdmin, express.json(), (req, res) => {
+router.put('/api/retail-admin/config', requireRetailAdmin, express.json(), async (req, res) => {
   const body = req.body || {};
   const entries = Object.entries(body);
   if (!entries.length) return res.status(400).json({ success: false, error: 'no_updates' });
 
-  const upsert = tdb().prepare(
-    `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
-     VALUES (?, ?, CURRENT_TIMESTAMP, ?)
-     ON CONFLICT(key) DO UPDATE SET
-       value_json = excluded.value_json,
-       updated_at = CURRENT_TIMESTAMP,
-       updated_by = excluded.updated_by`
-  );
-  const tx = tdb().transaction(() => {
-    for (const [k, v] of entries) upsert.run(k, JSON.stringify(v), req.user.id);
-  });
-  try { tx(); }
+  // Await inside the try — the update_failed 500 below is only reachable there.
+  try {
+    await withTransaction(tdb(), (tx) => {
+      const upsert = tx.prepare(
+        `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
+         VALUES (?, ?, CURRENT_TIMESTAMP, ?)
+         ON CONFLICT(key) DO UPDATE SET
+           value_json = excluded.value_json,
+           updated_at = CURRENT_TIMESTAMP,
+           updated_by = excluded.updated_by`
+      );
+      for (const [k, v] of entries) upsert.run(k, JSON.stringify(v), req.user.id);
+    });
+  }
   catch (e) { console.error('[retail-admin/config PUT]', e); return res.status(500).json({ success: false, error: 'update_failed' }); }
   logActivity(req.user.id, req.user.username, 'update', 'storefront_config', null, { keys: entries.map(e => e[0]) }, req.ip);
   res.json({ success: true, data: loadConfig() });
@@ -19372,15 +19374,20 @@ router.get('/api/retail-admin/categories', requireRetailAdmin, (req, res) => {
 // Reorder by passing an array of category IDs in the desired order. We
 // assign sort_order = index + 1 in a transaction so a half-failed write
 // can't leave the list in a bogus state.
-router.post('/api/retail-admin/categories/reorder', requireRetailAdmin, express.json(), (req, res) => {
+router.post('/api/retail-admin/categories/reorder', requireRetailAdmin, express.json(), async (req, res) => {
   const ids = Array.isArray(req.body?.ids) ? req.body.ids : null;
   if (!ids || !ids.length) return res.status(400).json({ success: false, error: 'ids_required' });
-  const stmt = tdb().prepare("UPDATE categories SET sort_order = ? WHERE id = ? AND kind = 'product'");
-  const tx = tdb().transaction((ordered) => {
-    ordered.forEach((id, i) => stmt.run(i + 1, id));
-  });
   try {
-    tx(ids.map(n => parseInt(n, 10)).filter(Number.isFinite));
+    // The old form passed `ordered` as a transaction argument; withTransaction's
+    // body takes only the handle, so it is computed here and closed over. Still
+    // INSIDE the try, where it was — a bad id list must reach the 500 below.
+    // And the await is inside the try for the same reason: outside it, a failed
+    // reorder would skip this catch entirely and answer with the generic 500.
+    const ordered = ids.map(n => parseInt(n, 10)).filter(Number.isFinite);
+    await withTransaction(tdb(), (tx) => {
+      const stmt = tx.prepare("UPDATE categories SET sort_order = ? WHERE id = ? AND kind = 'product'");
+      ordered.forEach((id, i) => stmt.run(i + 1, id));
+    });
     logActivity(req.user.id, req.user.username, 'update', 'category_order', null,
                 { kind: 'product', count: ids.length }, req.ip);
     res.json({ success: true });
@@ -19401,7 +19408,7 @@ router.post('/api/retail-admin/categories/reorder', requireRetailAdmin, express.
 // sits among every other product) are preserved, so arranging one category never
 // shuffles another. (If the set was never sorted — all slots equal/zero — fall
 // back to a 1..n ramp so a virgin catalogue still gets a stable order.)
-router.post('/api/retail-admin/products/reorder', requireRetailAdmin, express.json(), (req, res) => {
+router.post('/api/retail-admin/products/reorder', requireRetailAdmin, express.json(), async (req, res) => {
   const ids = Array.isArray(req.body?.ids)
     ? req.body.ids.map(n => parseInt(n, 10)).filter(Number.isFinite)
     : null;
@@ -19414,9 +19421,13 @@ router.post('/api/retail-admin/products/reorder', requireRetailAdmin, express.js
     if (rows.length !== ids.length) return res.status(400).json({ success: false, error: 'unknown_ids' });
     let slots = rows.map(r => Number(r.sort_order) || 0).sort((a, b) => a - b);
     if (slots[0] === slots[slots.length - 1]) slots = ids.map((_, i) => i + 1);
-    const stmt = tdb().prepare('UPDATE store_products SET sort_order = ? WHERE id = ?');
-    const tx = tdb().transaction(() => { ids.forEach((id, i) => stmt.run(slots[i], id)); });
-    tx();
+    // Await inside the try — outside it the reorder_failed 500 below would never
+    // be reached. The slot SELECT above stays OUTSIDE the transaction, where it
+    // was; widening it is a behaviour change, not a conversion.
+    await withTransaction(tdb(), (tx) => {
+      const stmt = tx.prepare('UPDATE store_products SET sort_order = ? WHERE id = ?');
+      ids.forEach((id, i) => stmt.run(slots[i], id));
+    });
     logActivity(req.user.id, req.user.username, 'update', 'product_order', null, { count: ids.length }, req.ip);
     res.json({ success: true });
   } catch (e) {
@@ -19425,7 +19436,7 @@ router.post('/api/retail-admin/products/reorder', requireRetailAdmin, express.js
   }
 });
 
-router.patch('/api/retail-admin/categories/:id', requireRetailAdmin, express.json(), (req, res) => {
+router.patch('/api/retail-admin/categories/:id', requireRetailAdmin, express.json(), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const existing = tdb().prepare("SELECT id, name FROM categories WHERE id = ? AND kind = 'product'").get(id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
@@ -19436,11 +19447,14 @@ router.patch('/api/retail-admin/categories/:id', requireRetailAdmin, express.jso
     // Atomic: the category rename and the product back-propagation must both
     // land or neither — otherwise a mid-flight failure leaves products pointing
     // at a category name that no longer exists.
-    tdb().transaction(() => {
-      tdb().prepare("UPDATE categories SET name = ? WHERE id = ?").run(name, id);
+    // The await stays INSIDE the try: the catch below turns a UNIQUE violation
+    // into a 400 duplicate_name, and an await outside it would make every
+    // duplicate rename a generic 500 instead.
+    await withTransaction(tdb(), (tx) => {
+      tx.prepare("UPDATE categories SET name = ? WHERE id = ?").run(name, id);
       // Propagate the rename to products that referenced the old name.
-      tdb().prepare("UPDATE store_products SET category = ? WHERE category = ?").run(name, existing.name);
-    })();
+      tx.prepare("UPDATE store_products SET category = ? WHERE category = ?").run(name, existing.name);
+    });
     logActivity(req.user.id, req.user.username, 'update', 'category', id,
                 { kind: 'product', from: existing.name, to: name }, req.ip);
     res.json({ success: true, data: { id, name } });
@@ -25819,17 +25833,17 @@ router.patch('/api/retail-admin/media/folders/:id', requireRetailAdmin, express.
 // Deleting a folder unsorts its media (folder_id → NULL) — never deletes
 // images. Nested children become top-level (parent_id → NULL via ON DELETE
 // SET NULL).
-router.delete('/api/retail-admin/media/folders/:id', requireRetailAdmin, (req, res) => {
+router.delete('/api/retail-admin/media/folders/:id', requireRetailAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
-  const tx = tdb().transaction(() => {
-    tdb().prepare('UPDATE retail_media SET folder_id = NULL WHERE folder_id = ?').run(id);
-    tdb().prepare('DELETE FROM retail_media_folders WHERE id = ?').run(id);
+  // Every statement runs on `tx`, the handle withTransaction hands in — §24.
+  await withTransaction(tdb(), (tx) => {
+    tx.prepare('UPDATE retail_media SET folder_id = NULL WHERE folder_id = ?').run(id);
+    tx.prepare('DELETE FROM retail_media_folders WHERE id = ?').run(id);
   });
-  tx();
   res.json({ success: true });
 });
 
-router.post('/api/retail-admin/media/bulk-move', requireRetailAdmin, express.json(), (req, res) => {
+router.post('/api/retail-admin/media/bulk-move', requireRetailAdmin, express.json(), async (req, res) => {
   const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(x => parseInt(x, 10)).filter(Boolean) : [];
   if (!ids.length) return res.status(400).json({ success: false, error: 'no_ids' });
   const folder_id = req.body?.folder_id == null ? null : parseInt(req.body.folder_id, 10);
@@ -25837,10 +25851,13 @@ router.post('/api/retail-admin/media/bulk-move', requireRetailAdmin, express.jso
     const ok = tdb().prepare('SELECT 1 FROM retail_media_folders WHERE id = ?').get(folder_id);
     if (!ok) return res.status(400).json({ success: false, error: 'folder_not_found' });
   }
-  const stmt = tdb().prepare('UPDATE retail_media SET folder_id = ? WHERE id = ?');
+  // `moved` is counted in the closure, exactly as before: a rollback leaves the
+  // count non-zero, but the throw means it is never read.
   let moved = 0;
-  const tx = tdb().transaction(() => { for (const id of ids) moved += stmt.run(folder_id, id).changes; });
-  tx();
+  await withTransaction(tdb(), (tx) => {
+    const stmt = tx.prepare('UPDATE retail_media SET folder_id = ? WHERE id = ?');
+    for (const id of ids) moved += stmt.run(folder_id, id).changes;
+  });
   res.json({ success: true, data: { moved } });
 });
 
@@ -25891,25 +25908,28 @@ router.patch('/api/retail-admin/media/:id', requireRetailAdmin, express.json(), 
   res.json({ success: true });
 });
 
-router.post('/api/retail-admin/media/bulk-delete', requireRetailAdmin, express.json(), (req, res) => {
+router.post('/api/retail-admin/media/bulk-delete', requireRetailAdmin, express.json(), async (req, res) => {
   const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(x => parseInt(x, 10)).filter(Boolean) : [];
   if (!ids.length) return res.status(400).json({ success: false, error: 'no_ids' });
-  const stmt = tdb().prepare('DELETE FROM retail_media WHERE id = ?');
   let deleted = 0;
-  const tx = tdb().transaction(() => { for (const id of ids) deleted += stmt.run(id).changes; });
-  tx();
+  await withTransaction(tdb(), (tx) => {
+    const stmt = tx.prepare('DELETE FROM retail_media WHERE id = ?');
+    for (const id of ids) deleted += stmt.run(id).changes;
+  });
   res.json({ success: true, data: { deleted } });
 });
 
-router.post('/api/retail-admin/media/bulk-tag', requireRetailAdmin, express.json(), (req, res) => {
+router.post('/api/retail-admin/media/bulk-tag', requireRetailAdmin, express.json(), async (req, res) => {
   const ids    = Array.isArray(req.body?.ids) ? req.body.ids.map(x => parseInt(x, 10)).filter(Boolean) : [];
   const add    = normalizeTagList(req.body?.add || []);
   const remove = normalizeTagList(req.body?.remove || []);
   if (!ids.length) return res.status(400).json({ success: false, error: 'no_ids' });
   if (!add.length && !remove.length) return res.status(400).json({ success: false, error: 'no_changes' });
-  const get = tdb().prepare('SELECT tags FROM retail_media WHERE id = ?');
-  const upd = tdb().prepare('UPDATE retail_media SET tags = ? WHERE id = ?');
-  const tx = tdb().transaction(() => {
+  // The read moves inside too: it decides what the UPDATE writes, so it must see
+  // the transaction's own view. parseTags/normalizeTagList are pure — no handle.
+  await withTransaction(tdb(), (tx) => {
+    const get = tx.prepare('SELECT tags FROM retail_media WHERE id = ?');
+    const upd = tx.prepare('UPDATE retail_media SET tags = ? WHERE id = ?');
     for (const id of ids) {
       const row = get.get(id); if (!row) continue;
       const cur = new Set(parseTags(row.tags));
@@ -25918,7 +25938,6 @@ router.post('/api/retail-admin/media/bulk-tag', requireRetailAdmin, express.json
       upd.run(JSON.stringify(normalizeTagList([...cur])), id);
     }
   });
-  tx();
   res.json({ success: true });
 });
 
@@ -29709,7 +29728,7 @@ function normalizePollOptions(rawOpts) {
   return out;
 }
 
-router.post('/api/retail-admin/polls', requireRetailAdmin, express.json(), (req, res) => {
+router.post('/api/retail-admin/polls', requireRetailAdmin, express.json(), async (req, res) => {
   const b = req.body || {};
   const question_en = String(b.question_en || '').trim();
   if (!question_en) return res.status(400).json({ success: false, error: 'question_required' });
@@ -29717,8 +29736,10 @@ router.post('/api/retail-admin/polls', requireRetailAdmin, express.json(), (req,
   const options = normalizePollOptions(b.options);
   if (options.length < 2) return res.status(400).json({ success: false, error: 'need_at_least_two_options' });
 
-  const tx = tdb().transaction(() => {
-    const r = tdb().prepare(
+  // Returns the new poll id out of the transaction — the response and the
+  // activity log both need it, and it is only valid once the INSERT committed.
+  const pollId = await withTransaction(tdb(), (tx) => {
+    const r = tx.prepare(
       `INSERT INTO retail_polls
         (question_en, question_cn, explainer_en, explainer_cn, category_en, category_cn,
          status, closes_at, reward_points, is_featured, sort_order, display_min_total)
@@ -29737,23 +29758,22 @@ router.post('/api/retail-admin/polls', requireRetailAdmin, express.json(), (req,
       parseInt(b.sort_order, 10) || 0,
       Math.max(0, parseInt(b.display_min_total, 10) || 0),
     );
-    const pollId = r.lastInsertRowid;
-    const insOpt = tdb().prepare(
+    const newPollId = r.lastInsertRowid;
+    const insOpt = tx.prepare(
       `INSERT INTO retail_poll_options (poll_id, label_en, label_cn, color_hex, image_url, sort_order)
        VALUES (?,?,?,?,?,?)`
     );
     for (const o of options) {
-      insOpt.run(pollId, o.label_en, o.label_cn || null, o.color_hex || null, o.image_url || null, o.sort_order);
+      insOpt.run(newPollId, o.label_en, o.label_cn || null, o.color_hex || null, o.image_url || null, o.sort_order);
     }
-    return pollId;
+    return newPollId;
   });
-  const pollId = tx();
   logActivity(req.user.id, req.user.username, 'create', 'retail_poll', pollId, { question_en, status }, req.ip);
   const poll = tdb().prepare('SELECT * FROM retail_polls WHERE id = ?').get(pollId);
   res.json({ success: true, data: { ...poll, options: loadPollOptions(pollId) } });
 });
 
-router.put('/api/retail-admin/polls/:id', requireRetailAdmin, express.json(), (req, res) => {
+router.put('/api/retail-admin/polls/:id', requireRetailAdmin, express.json(), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const poll = tdb().prepare('SELECT * FROM retail_polls WHERE id = ?').get(id);
   if (!poll) return res.status(404).json({ success: false, error: 'not_found' });
@@ -29793,19 +29813,21 @@ router.put('/api/retail-admin/polls/:id', requireRetailAdmin, express.json(), (r
   // colors / order on the existing rows by id.
   const incomingOptions = Array.isArray(b.options) ? b.options : null;
 
-  const tx = tdb().transaction(() => {
+  // Defined here and run below, keeping the shape the old `const tx = ...` had.
+  // Every statement takes the handle it is given, never tdb() — §24.
+  const applyPollUpdate = (tx) => {
     if (Object.keys(updates).length) {
       const sets = Object.keys(updates).map(k => `${k} = ?`).join(', ');
-      tdb().prepare(`UPDATE retail_polls SET ${sets}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+      tx.prepare(`UPDATE retail_polls SET ${sets}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
         .run(...Object.values(updates), id);
     }
     if (incomingOptions) {
       if (b.replace_options) {
         // Hard reset — clears votes! Confirms required from the UI.
-        tdb().prepare('DELETE FROM retail_poll_options WHERE poll_id = ?').run(id);
-        tdb().prepare('UPDATE retail_polls SET total_votes = 0 WHERE id = ?').run(id);
+        tx.prepare('DELETE FROM retail_poll_options WHERE poll_id = ?').run(id);
+        tx.prepare('UPDATE retail_polls SET total_votes = 0 WHERE id = ?').run(id);
         const normalized = normalizePollOptions(incomingOptions);
-        const insOpt = tdb().prepare(
+        const insOpt = tx.prepare(
           `INSERT INTO retail_poll_options (poll_id, label_en, label_cn, color_hex, image_url, sort_order)
            VALUES (?,?,?,?,?,?)`
         );
@@ -29814,14 +29836,14 @@ router.put('/api/retail-admin/polls/:id', requireRetailAdmin, express.json(), (r
         }
       } else {
         // In-place edit / add — preserve vote counts on existing rows.
-        const existingIds = new Set(tdb().prepare('SELECT id FROM retail_poll_options WHERE poll_id = ?').all(id).map(r => r.id));
+        const existingIds = new Set(tx.prepare('SELECT id FROM retail_poll_options WHERE poll_id = ?').all(id).map(r => r.id));
         const seenIds = new Set();
-        const upd = tdb().prepare(
+        const upd = tx.prepare(
           `UPDATE retail_poll_options SET
              label_en = ?, label_cn = ?, color_hex = ?, image_url = ?, sort_order = ?
            WHERE id = ? AND poll_id = ?`
         );
-        const ins = tdb().prepare(
+        const ins = tx.prepare(
           `INSERT INTO retail_poll_options (poll_id, label_en, label_cn, color_hex, image_url, sort_order)
            VALUES (?,?,?,?,?,?)`
         );
@@ -29845,15 +29867,17 @@ router.put('/api/retail-admin/polls/:id', requireRetailAdmin, express.json(), (r
           if (!seenIds.has(oldId)) {
             // Refuse to delete an option that has votes — admin must
             // either close the poll (winner pick) or hard-reset.
-            const votes = tdb().prepare('SELECT votes FROM retail_poll_options WHERE id = ?').get(oldId)?.votes || 0;
+            const votes = tx.prepare('SELECT votes FROM retail_poll_options WHERE id = ?').get(oldId)?.votes || 0;
             if (votes > 0) continue;
-            tdb().prepare('DELETE FROM retail_poll_options WHERE id = ?').run(oldId);
+            tx.prepare('DELETE FROM retail_poll_options WHERE id = ?').run(oldId);
           }
         }
       }
     }
-  });
-  try { tx(); }
+  };
+  // Await inside the try: the catch below is what keeps raw SQLite text out of
+  // the response, and an await outside it would bypass the catch entirely.
+  try { await withTransaction(tdb(), applyPollUpdate); }
   catch (e) {
     // Don't leak raw SQLite text to the client — log it, return a stable code.
     console.error('[poll update]', id, e);

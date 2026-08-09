@@ -114,28 +114,103 @@ function extractCreateTable(source, table) {
 }
 
 /**
- * An in-memory database carrying the REAL definitions of `tables`, each with
- * every addColumn() database.js has bolted onto it since.
+ * Create `tables` on an existing handle: the REAL CREATE out of `ddlSource`,
+ * then every addColumn() `alterSource` has bolted onto each one since.
+ *
+ * The two sources are separate arguments because they are not always the same
+ * file. Most tables are created in database.js, but some — `categories`, for one
+ * — are created by schema.sql and only ALTERed by database.js. Reading the
+ * CREATE from the wrong file throws "DDL not found" rather than silently
+ * producing a thinner table, which is the intended failure.
  *
  * Foreign keys are stripped: these are single-table extracts, and the targets
  * (products, retail_customers, users) are not necessarily present.
+ *
+ * ── THE TYPE PATTERN, AND THE COLUMNS IT USED TO LOSE ─────────────────────
+ * The scan originally read the type as `'(\w+)'` — a single-quoted single word.
+ * database.js does not write them all that way, and the ones it writes
+ * differently were dropped SILENTLY, which is the exact failure mode the header
+ * above describes: the table is created, the suite is green, and a column the
+ * code under test writes is simply not there. Three that the transaction
+ * conversion needs were being lost:
+ *
+ *     addColumn('products',     'sort_order',        'INTEGER DEFAULT 0')
+ *     addColumn('retail_polls', 'display_min_total', 'INTEGER NOT NULL DEFAULT 0')
+ *     addColumn('retail_media', 'tags',              "TEXT DEFAULT '[]'")
+ *
+ * So the type is now "everything up to the matching quote", in EITHER quote
+ * style — a DEFAULT clause routinely contains a space, and a default that is
+ * itself a string forces the outer quotes to be double.
  */
-function openTablesDb(databaseJsSource, tables) {
-  const db = picked.open();
+function addTables(db, ddlSource, alterSource, tables) {
   for (const t of tables) {
-    const ddl = extractCreateTable(databaseJsSource, t)
+    const ddl = extractCreateTable(ddlSource, t)
       .replace(/,\s*FOREIGN KEY[\s\S]*?(?=,\s*\w+\s|\s*\)$)/g, '')
       .replace(/,?\s*FOREIGN KEY[^,)]*\([^)]*\)[^,)]*(?:REFERENCES[^,)]*\([^)]*\)[^,)]*)?/g, '');
     db.exec(ddl);
-    const added = [...databaseJsSource.matchAll(
-      new RegExp(`addColumn\\('${t}',\\s*'(\\w+)',\\s*'(\\w+)'\\)`, 'g')
-    )];
-    for (const [, col, type] of added) db.exec(`ALTER TABLE ${t} ADD COLUMN ${col} ${type}`);
+    const added = [...alterSource.matchAll(
+      new RegExp(`addColumn\\('${t}',\\s*'(\\w+)',\\s*(?:'([^']*)'|"([^"]*)")\\s*\\)`, 'g')
+    )].map(([, col, sq, dq]) => [null, col, sq !== undefined ? sq : dq]);
+    for (const [, col, type] of added) {
+      // Swallowing duplicates is not leniency, it is the rule addColumn() itself
+      // follows (database.js:20) — and it is load-bearing here: schema.sql's
+      // `products` already declares description_en, which database.js re-adds
+      // idempotently. Only "duplicate column" is swallowed, exactly as there, so
+      // a genuinely bad ALTER still fails loudly.
+      try { db.exec(`ALTER TABLE ${t} ADD COLUMN ${col} ${type}`); }
+      catch (e) { if (!/duplicate column/i.test(e.message)) throw e; }
+    }
   }
+  return db;
+}
+
+/**
+ * An in-memory database carrying the REAL definitions of `tables`, each with
+ * every addColumn() database.js has bolted onto it since.
+ */
+function openTablesDb(databaseJsSource, tables) {
+  return addTables(picked.open(), databaseJsSource, databaseJsSource, tables);
+}
+
+/**
+ * `store_products`, built the way the application builds it.
+ *
+ * There is no CREATE TABLE for it to extract ANYWHERE — database.js derives its
+ * shape at boot by reading PRAGMA table_info(products) and mirroring every
+ * column, then appending four store-only link columns (see the STORE_PRODUCTS
+ * block in database.js). So the honest way to get it into a test database is to
+ * run that same rule, not to hand-write the two or three columns a given suite
+ * happens to touch: a hand-written copy is the drift this whole file exists to
+ * end, and `products` gains columns regularly.
+ *
+ * `products` itself is created here as the source of that mirror and left in
+ * place — it is what the rule reads, and the fork is only meaningful next to it.
+ *
+ * PRAGMA is issued through prepare().all() rather than better-sqlite3's
+ * .pragma(), which node:sqlite does not have; the row shape is identical on
+ * both (cid/name/type/notnull/dflt_value/pk), verified on each.
+ */
+function addForkedStoreProducts(db, schemaSqlSource, databaseJsSource) {
+  addTables(db, schemaSqlSource, databaseJsSource, ['products']);
+  const pcols = db.prepare('PRAGMA table_info(products)').all();
+  if (!pcols.length) throw new Error('products has no columns — the fork rule has nothing to mirror');
+  const defs = pcols.map(c => {
+    if (c.pk) return `${c.name} INTEGER PRIMARY KEY AUTOINCREMENT`;
+    let d = `${c.name} ${c.type || 'TEXT'}`;
+    if (c.notnull) d += ' NOT NULL';
+    if (c.dflt_value !== null && c.dflt_value !== undefined) d += ` DEFAULT ${c.dflt_value}`;
+    return d;
+  });
+  defs.push('kitchen_product_id INTEGER', 'source_sku TEXT', 'synced_at DATETIME',
+            "source TEXT DEFAULT 'fork'");
+  db.exec(`CREATE TABLE store_products (\n  ${defs.join(',\n  ')}\n)`);
   return db;
 }
 
 // `driver` is printed by the suites so a run's results can be read against the
 // engine that produced them — and so a silent fall back to the built-in is
 // visible rather than inferred.
-module.exports = { openMemoryDb: picked.open, openQueueTableDb, openTablesDb, driver: picked.name };
+module.exports = {
+  openMemoryDb: picked.open, openQueueTableDb, openTablesDb,
+  addTables, addForkedStoreProducts, driver: picked.name,
+};
