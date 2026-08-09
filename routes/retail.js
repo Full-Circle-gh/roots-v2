@@ -8408,6 +8408,40 @@ function localPartsInTz(date, tz) {
   }
 }
 
+// The store a collection order was placed at, shaped the way resolvePickupTime
+// wants it, or null when the order carries no resolvable store.
+//
+// Selected by id alone, deliberately: checkout filters on is_active and
+// pickup_enabled because it is CHOOSING a store, whereas this order is already
+// placed at one and we are only reading its hours. Re-applying those filters
+// would silently drop a paused store back onto the host clock.
+//
+// store_id is NULL on collection orders staff created without picking a store
+// (POST /api/retail-admin/orders leaves it null). Those return null, which is
+// resolvePickupTime's own default — not a fallback invented here.
+function pickupStoreHoursForOrder(o) {
+  if (!o || o.store_id == null) return null;
+  const s = tdb().prepare(
+    'SELECT open_time, close_time, timezone FROM retail_stores WHERE id = ?'
+  ).get(o.store_id);
+  return s ? { open: s.open_time, close: s.close_time, timezone: s.timezone } : null;
+}
+
+// The window a given store actually enforces: its OWN hours when it carries
+// BOTH ends, else the single global window. Both ends are required together —
+// a store with an opening time and no closing time falls back whole, because
+// half a window is not a window.
+//
+// Read from HERE by both the validator (resolvePickupTime) and the reschedule
+// picker, rather than each deciding for itself. A picker that offers a time the
+// validator then refuses is precisely the defect this shape exists to prevent,
+// and two copies of this predicate is how that defect comes back.
+function pickupWindowFor(storeHours) {
+  return (storeHours && storeHours.open && storeHours.close)
+    ? { open: storeHours.open, close: storeHours.close }
+    : cfgValue('pickup.window', { open: '10:00', close: '20:00' });
+}
+
 // Validate a customer-chosen pickup time. Uses the chosen store's OWN hours +
 // timezone when given (storeHours = { open, close, timezone }); otherwise the
 // single global pickup window (storefront_config 'pickup.window'). Returns
@@ -8427,9 +8461,7 @@ function resolvePickupTime(raw, now = new Date(), storeHours = null) {
   if (leadMin > 0 && when.getTime() < now.getTime() + leadMin * 60_000) return { error: 'pickup_too_soon' };
 
   const tz = storeHours && storeHours.timezone ? storeHours.timezone : null;
-  const win = (storeHours && storeHours.open && storeHours.close)
-    ? { open: storeHours.open, close: storeHours.close }
-    : cfgValue('pickup.window', { open: '10:00', close: '20:00' });
+  const win = pickupWindowFor(storeHours);
   const open  = hhmmToMinutes(win.open);
   const close = hhmmToMinutes(win.close);
   const parts = localPartsInTz(when, tz);
@@ -17464,7 +17496,7 @@ router.get('/api/retail/orders/:id/reschedule-options', requireRetailAuth, (req,
   const o = tdb().prepare(
     `SELECT id, status, fulfillment_type, scheduled_for, delivery_slot_kind,
             delivery_slot_label, delivery_zone_id, address_json, refund_status,
-            dispatched_at, same_day_surcharge_fee
+            dispatched_at, same_day_surcharge_fee, store_id
        FROM retail_orders WHERE id = ? AND customer_id = ?`
   ).get(id, req.customer.id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
@@ -17487,7 +17519,13 @@ router.get('/api/retail/orders/:id/reschedule-options', requireRetailAuth, (req,
     },
   };
   if (eligibility.kind === 'pickup') {
-    data.pickup_window = cfgValue('pickup.window', { open: '10:00', close: '20:00' });
+    // The window the POST will actually enforce for THIS order, not the global
+    // one. Same two helpers, same order, so the picker cannot offer a time the
+    // POST refuses — including when the store is unresolvable, where both land
+    // on cfgValue('pickup.window') because pickupStoreHoursForOrder returns
+    // null for both. Shape is unchanged: { open, close }, the two keys the
+    // clients read (miniapp order.js, shop.html).
+    data.pickup_window = pickupWindowFor(pickupStoreHoursForOrder(o));
   } else {
     const zone = zoneForOrder(o);
     data.scheduling = computeDeliverySlots(zone, new Date());
@@ -17504,7 +17542,7 @@ router.post('/api/retail/orders/:id/reschedule', requireRetailAuth, express.json
   const o = tdb().prepare(
     `SELECT id, status, fulfillment_type, scheduled_for, delivery_slot_kind,
             delivery_slot_label, delivery_zone_id, address_json, refund_status,
-            dispatched_at, same_day_surcharge_fee
+            dispatched_at, same_day_surcharge_fee, store_id
        FROM retail_orders WHERE id = ? AND customer_id = ?`
   ).get(id, req.customer.id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
@@ -17526,8 +17564,13 @@ router.post('/api/retail/orders/:id/reschedule', requireRetailAuth, express.json
 
   if (eligibility.kind === 'pickup') {
     // Collection orders carry their window in the same scheduled_for + label
-    // columns; resolvePickupTime re-validates against the pickup hours.
-    const r = resolvePickupTime(body.pickup_time, now);
+    // columns; resolvePickupTime re-validates against the pickup hours — but it
+    // only knows WHICH hours, and which clock, from the store passed in. Called
+    // without one it reads the host system clock and the single global
+    // pickup.window, so this has to hand it the store this order was placed at.
+    // The GET above resolves the picker's window through the SAME two helpers,
+    // so what the customer is offered and what this accepts cannot diverge.
+    const r = resolvePickupTime(body.pickup_time, now, pickupStoreHoursForOrder(o));
     if (r.error) return res.status(400).json({ success: false, error: r.error });
     scheduledFor = r.scheduled_for;
     slotLabel    = r.label;
