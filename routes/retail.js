@@ -496,7 +496,7 @@ function _slugId(name, used) {
 // editor offers no cross-parent move), so sub migration is scoped by the new
 // top name. Removing a node leaves its products' stale name untouched (they
 // drop into the shop's "Other" band and reappear if the node is re-added).
-router.put('/api/retail-admin/category-tree', requireRetailAdmin, express.json({ limit: '256kb' }), (req, res) => {
+router.put('/api/retail-admin/category-tree', requireRetailAdmin, express.json({ limit: '256kb' }), async (req, res) => {
   const incoming = sanitizeTree(req.body && req.body.tree);
   if (!incoming || !incoming.length) {
     return res.status(400).json({ success: false, error: 'empty_tree', message: 'At least one top category is required · 至少需要一个主分类' });
@@ -544,33 +544,36 @@ router.put('/api/retail-admin/category-tree', requireRetailAdmin, express.json({
   }
 
   try {
-    const upsert = db.prepare(
-      `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
-         VALUES ('category.tree', ?, CURRENT_TIMESTAMP, ?)
-       ON CONFLICT(key) DO UPDATE SET
-         value_json = excluded.value_json, updated_at = CURRENT_TIMESTAMP, updated_by = excluded.updated_by`
-    );
-    let migrated = 0;
-    const tx = db.transaction(() => {
+    // Returns the migrated-row count out of the transaction — the response
+    // reports it, and it is only true once the renames committed. Every
+    // statement runs on `tx`, the handle withTransaction hands in — §24.
+    const migrated = await withTransaction(db, (tx) => {
+      const upsert = tx.prepare(
+        `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
+           VALUES ('category.tree', ?, CURRENT_TIMESTAMP, ?)
+         ON CONFLICT(key) DO UPDATE SET
+           value_json = excluded.value_json, updated_at = CURRENT_TIMESTAMP, updated_by = excluded.updated_by`
+      );
+      let migrated = 0;
       // Top renames via a per-id sentinel so chained/swapped names can't collide.
       for (const r of topRenames) {
-        db.prepare("UPDATE store_products SET top_category = ? WHERE top_category = ?").run('\u0000T' + r.id, r.oldName);
+        tx.prepare("UPDATE store_products SET top_category = ? WHERE top_category = ?").run('\u0000T' + r.id, r.oldName);
       }
       for (const r of topRenames) {
-        const info = db.prepare("UPDATE store_products SET top_category = ? WHERE top_category = ?").run(r.newName, '\u0000T' + r.id);
+        const info = tx.prepare("UPDATE store_products SET top_category = ? WHERE top_category = ?").run(r.newName, '\u0000T' + r.id);
         migrated += info.changes;
       }
       // Sub renames scoped by the (now-new) parent top name, same sentinel trick.
       for (const r of subRenames) {
-        db.prepare("UPDATE store_products SET subcategory = ? WHERE top_category = ? AND subcategory = ?").run('\u0000S' + r.id, r.parentNewName, r.oldName);
+        tx.prepare("UPDATE store_products SET subcategory = ? WHERE top_category = ? AND subcategory = ?").run('\u0000S' + r.id, r.parentNewName, r.oldName);
       }
       for (const r of subRenames) {
-        const info = db.prepare("UPDATE store_products SET subcategory = ? WHERE top_category = ? AND subcategory = ?").run(r.newName, r.parentNewName, '\u0000S' + r.id);
+        const info = tx.prepare("UPDATE store_products SET subcategory = ? WHERE top_category = ? AND subcategory = ?").run(r.newName, r.parentNewName, '\u0000S' + r.id);
         migrated += info.changes;
       }
       upsert.run(JSON.stringify(incoming), (req.user && req.user.id) || null);
+      return migrated;
     });
-    tx();
     res.json({ success: true, data: incoming, migrated });
   } catch (e) {
     res.status(500).json({ success: false, error: 'save_failed', message: e.message });
@@ -7886,7 +7889,7 @@ function normalizeChinaAddress(a) {
 // sail past the courier-side distance gate that exists to catch exactly it.
 const clientPin = addressPin.readClientPin;
 
-router.post('/api/retail/addresses', requireRetailAuth, express.json(), (req, res) => {
+router.post('/api/retail/addresses', requireRetailAuth, express.json(), async (req, res) => {
   const a = normalizeChinaAddress(req.body || {});
   // Resolve province/city/district into canonical Chinese + their English
   // companions so the address can be shown in whichever language the customer's
@@ -7914,11 +7917,15 @@ router.post('/api/retail/addresses', requireRetailAuth, express.json(), (req, re
   const pin = clientPin(req.body);
   const pinSource = pin ? (pin.fresh ? 'customer_pin' : 'client_unverified') : null;
   const pinPrecision = pin && pin.fresh ? 'rooftop' : null;   // see lib/address-pin
-  const tx = tdb().transaction(() => {
+  // Returns the new address id out of the transaction — the geocode kick-off
+  // and the response both need it, and it is only real once the INSERT
+  // committed. Every statement runs on `tx`, the handle withTransaction hands
+  // in — see decisions §24.
+  const id = await withTransaction(tdb(), (tx) => {
     if (a.is_default) {
-      tdb().prepare('UPDATE retail_customer_addresses SET is_default = 0 WHERE customer_id = ?').run(req.customer.id);
+      tx.prepare('UPDATE retail_customer_addresses SET is_default = 0 WHERE customer_id = ?').run(req.customer.id);
     }
-    const info = tdb().prepare(
+    const info = tx.prepare(
       `INSERT INTO retail_customer_addresses
          (customer_id, recipient_name, phone, province, city, district,
           province_en, city_en, district_en,
@@ -7936,7 +7943,6 @@ router.post('/api/retail/addresses', requireRetailAuth, express.json(), (req, re
     );
     return info.lastInsertRowid;
   });
-  const id = tx();
   // A saved address is the first place a mini-app customer reliably hands over a
   // phone — WeChat login gives us an openid and nothing else, so without this a
   // customer who never taps "bind phone" stays permanently ineligible for the
@@ -8230,7 +8236,7 @@ router.post('/api/retail-admin/poi-search', requireRetailAdmin, express.json(), 
   }
 });
 
-router.put('/api/retail/addresses/:id', requireRetailAuth, express.json(), (req, res) => {
+router.put('/api/retail/addresses/:id', requireRetailAuth, express.json(), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const existing = tdb().prepare(
     `SELECT id, province, city, district, address, detail, lat, lng, geo_source, geo_precision
@@ -8264,20 +8270,21 @@ router.put('/api/retail/addresses/:id', requireRetailAuth, express.json(), (req,
   //   no coords, text changed   → cleared, re-geocode
   const pin = clientPin(incoming);
   const pinPlan = addressPin.decidePinAction({ pin, existing, incoming: a });
-  const tx = tdb().transaction(() => {
+  // Every statement runs on `tx`, the handle withTransaction hands in — §24.
+  await withTransaction(tdb(), (tx) => {
     if (a.is_default) {
-      tdb().prepare('UPDATE retail_customer_addresses SET is_default = 0 WHERE customer_id = ?').run(req.customer.id);
+      tx.prepare('UPDATE retail_customer_addresses SET is_default = 0 WHERE customer_id = ?').run(req.customer.id);
     }
     if (regionChanged) {
       // Set the *_en companions directly (not COALESCE) so an unresolvable
       // new region clears a stale English name instead of keeping it.
-      tdb().prepare(
+      tx.prepare(
         `UPDATE retail_customer_addresses
             SET province_en = ?, city_en = ?, district_en = ?
           WHERE id = ?`
       ).run(a.province_en || null, a.city_en || null, a.district_en || null, id);
     }
-    tdb().prepare(
+    tx.prepare(
       `UPDATE retail_customer_addresses
           SET recipient_name = COALESCE(?, recipient_name),
               phone          = COALESCE(?, phone),
@@ -8300,20 +8307,19 @@ router.put('/api/retail/addresses/:id', requireRetailAuth, express.json(), (req,
     // Coordinates are a separate write so the decision above reads as one rule
     // instead of four parallel CASE ladders that have to be kept in lockstep.
     if (pinPlan.action === 'set') {
-      tdb().prepare(
+      tx.prepare(
         `UPDATE retail_customer_addresses
             SET lat = ?, lng = ?, geo_source = ?, geo_precision = ?, geocoded_at = CURRENT_TIMESTAMP
           WHERE id = ?`
       ).run(pin.lat, pin.lng, pinPlan.source, pinPlan.precision, id);
     } else if (pinPlan.action === 'clear') {
-      tdb().prepare(
+      tx.prepare(
         `UPDATE retail_customer_addresses
             SET lat = NULL, lng = NULL, geo_source = NULL, geo_precision = NULL, geocoded_at = NULL
           WHERE id = ?`
       ).run(id);
     }
   });
-  tx();
   // Same deferred-grant rescue as the create path — a customer who fixed a typo'd
   // phone (or added one to an address that had none) should become eligible now.
   if (a.phone) {
@@ -19707,7 +19713,7 @@ router.get('/api/retail-admin/products/:id/variants', requireRetailAdmin, (req, 
 // `members` is the FULL desired set; the edited product always belongs and owns
 // the group_id. Reconciles: relabel/add listed members, drop any current member
 // not listed, and disband (clear all) when fewer than 2 remain.
-router.put('/api/retail-admin/products/:id/variants', requireRetailAdmin, express.json(), (req, res) => {
+router.put('/api/retail-admin/products/:id/variants', requireRetailAdmin, express.json(), async (req, res) => {
   // Variant grouping is product structure — mastered upstream, not editable here.
   if (catalogMode(req) === 'upstream') return res.status(423).json({ success: false, error: 'catalog_locked' });
   const id = parseInt(req.params.id, 10);
@@ -19733,22 +19739,27 @@ router.put('/api/retail-admin/products/:id/variants', requireRetailAdmin, expres
   const prevGid = self.variant_group_id;
   const groupId = id;   // edited product owns the group id
   try {
-    const count = tdb().transaction(() => {
+    // Returns the member count out of the transaction — the response derives
+    // group_id from it, and the disband branch's 0 is what tells the client the
+    // group is gone. Every statement runs on `tx`, the handle withTransaction
+    // hands in — see decisions §24. The early `return 0` is an ordinary
+    // resolution and commits like any other.
+    const count = await withTransaction(tdb(), (tx) => {
       if (desired.length < 2) {
         // Disbanding the group — also clear the axis noun (no group, no heading).
-        if (prevGid) tdb().prepare('UPDATE store_products SET variant_group_id=NULL, variant_label=NULL, variant_label_cn=NULL, variant_noun_en=NULL, variant_noun_cn=NULL, updated_at=CURRENT_TIMESTAMP WHERE variant_group_id=?').run(prevGid);
-        tdb().prepare('UPDATE store_products SET variant_group_id=NULL, variant_label=NULL, variant_label_cn=NULL, variant_noun_en=NULL, variant_noun_cn=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(id);
+        if (prevGid) tx.prepare('UPDATE store_products SET variant_group_id=NULL, variant_label=NULL, variant_label_cn=NULL, variant_noun_en=NULL, variant_noun_cn=NULL, updated_at=CURRENT_TIMESTAMP WHERE variant_group_id=?').run(prevGid);
+        tx.prepare('UPDATE store_products SET variant_group_id=NULL, variant_label=NULL, variant_label_cn=NULL, variant_noun_en=NULL, variant_noun_cn=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(id);
         return 0;
       }
       if (prevGid) {
         const keep = desired.map(([mid]) => mid);
         const ph = keep.map(() => '?').join(',');
-        tdb().prepare(`UPDATE store_products SET variant_group_id=NULL, variant_label=NULL, variant_label_cn=NULL, updated_at=CURRENT_TIMESTAMP WHERE variant_group_id=? AND id NOT IN (${ph})`).run(prevGid, ...keep);
+        tx.prepare(`UPDATE store_products SET variant_group_id=NULL, variant_label=NULL, variant_label_cn=NULL, updated_at=CURRENT_TIMESTAMP WHERE variant_group_id=? AND id NOT IN (${ph})`).run(prevGid, ...keep);
       }
-      const upd = tdb().prepare('UPDATE store_products SET variant_group_id=?, variant_label=?, variant_label_cn=?, variant_noun_en=?, variant_noun_cn=?, variant_sort=?, updated_at=CURRENT_TIMESTAMP WHERE id=?');
+      const upd = tx.prepare('UPDATE store_products SET variant_group_id=?, variant_label=?, variant_label_cn=?, variant_noun_en=?, variant_noun_cn=?, variant_sort=?, updated_at=CURRENT_TIMESTAMP WHERE id=?');
       desired.forEach(([mid, lbl], idx) => upd.run(groupId, lbl.label, lbl.label_cn, nounEn, nounCn, idx, mid));
       return desired.length;
-    })();
+    });
     res.json({ success: true, group_id: count >= 2 ? groupId : null, count });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
@@ -21012,7 +21023,7 @@ router.get('/api/retail-admin/invoices', requireRetailAdmin, (req, res) => {
 // creating a missing shipment if the order currently has only one bucket.
 // 422 if the order is no longer eligible (admin clicked an outdated banner).
 router.post('/api/retail-admin/orders/:id/shipment-suggestion/apply',
-  requireRetailAdmin, express.json(), (req, res) => {
+  requireRetailAdmin, express.json(), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const sug = buildShipmentSuggestion(id);
   if (!sug || !sug.eligible) {
@@ -21023,10 +21034,13 @@ router.post('/api/retail-admin/orders/:id/shipment-suggestion/apply',
   ).all(id);
   const byMode = new Map(shipments.map(s => [s.mode, s.id]));
 
-  const ensureShipmentRow = (mode) => {
+  // Takes the handle as an argument rather than closing over tdb(), the same
+  // rule §24 settled for the dual-context helpers: inside the transaction it
+  // must insert on `tx` or its row is not part of the block it appears in.
+  const ensureShipmentRow = (h, mode) => {
     if (byMode.has(mode)) return byMode.get(mode);
     const label = mode === 'air' ? 'Air shipment · 空运' : 'Land shipment · 陆运';
-    const r = tdb().prepare(
+    const r = h.prepare(
       `INSERT INTO retail_shipments (order_id, mode, label, created_at, updated_at)
        VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
     ).run(id, mode, label);
@@ -21034,17 +21048,18 @@ router.post('/api/retail-admin/orders/:id/shipment-suggestion/apply',
     return r.lastInsertRowid;
   };
 
-  const reassign = tdb().prepare(
-    `UPDATE retail_order_items SET shipment_id = ? WHERE id = ? AND order_id = ?`
-  );
-  const tx = tdb().transaction(() => {
+  // Every statement runs on `tx`, the handle withTransaction hands in — §24.
+  await withTransaction(tdb(), (tx) => {
+    const reassign = tx.prepare(
+      `UPDATE retail_order_items SET shipment_id = ? WHERE id = ? AND order_id = ?`
+    );
     for (const bk of sug.suggested.plan) {
-      const sid = ensureShipmentRow(bk.mode);
+      const sid = ensureShipmentRow(tx, bk.mode);
       for (const itemId of bk.item_ids) reassign.run(sid, itemId, id);
     }
     // Delete now-empty shipments (only when the new plan collapses to one
     // bucket — rare here, but covers the land-floor fold-back path).
-    const emptyIds = tdb().prepare(
+    const emptyIds = tx.prepare(
       `SELECT s.id FROM retail_shipments s
         WHERE s.order_id = ?
           AND NOT EXISTS (SELECT 1 FROM retail_order_items i WHERE i.shipment_id = s.id)`
@@ -21054,10 +21069,9 @@ router.post('/api/retail-admin/orders/:id/shipment-suggestion/apply',
       // edited it manually after the suggestion was built.
       const s = shipments.find(x => x.id === row.id);
       if (s && (s.tracking_number || s.tracking_carrier)) continue;
-      tdb().prepare(`DELETE FROM retail_shipments WHERE id = ?`).run(row.id);
+      tx.prepare(`DELETE FROM retail_shipments WHERE id = ?`).run(row.id);
     }
   });
-  tx();
   res.json({ success: true });
 });
 
@@ -21069,7 +21083,7 @@ router.post('/api/retail-admin/orders/:id/shipment-suggestion/apply',
 // would orphan a created label (clear the tracking first). Reversible via the
 // /split endpoint below.
 router.post('/api/retail-admin/orders/:id/shipments/combine',
-  requireRetailAdmin, express.json(), (req, res) => {
+  requireRetailAdmin, express.json(), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const o = tdb().prepare('SELECT id FROM retail_orders WHERE id = ?').get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
@@ -21088,16 +21102,18 @@ router.post('/api/retail-admin/orders/:id/shipments/combine',
   const mode  = shipments.some(s => s.mode === 'air') ? 'air' : 'land';
   const label = 'Combined shipment · 合并发货';
   const keep  = shipments[0].id;
-  const tx = tdb().transaction(() => {
-    tdb().prepare(`UPDATE retail_order_items SET shipment_id = ? WHERE order_id = ?`).run(keep, id);
-    tdb().prepare(
+  // Every statement runs on `tx`, the handle withTransaction hands in — §24.
+  // The re-point and the deletes must land together: a partial run would strand
+  // items on a shipment row that no longer exists.
+  await withTransaction(tdb(), (tx) => {
+    tx.prepare(`UPDATE retail_order_items SET shipment_id = ? WHERE order_id = ?`).run(keep, id);
+    tx.prepare(
       `UPDATE retail_shipments SET mode = ?, label = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
     ).run(mode, label, keep);
     for (const s of shipments) {
-      if (s.id !== keep) tdb().prepare(`DELETE FROM retail_shipments WHERE id = ?`).run(s.id);
+      if (s.id !== keep) tx.prepare(`DELETE FROM retail_shipments WHERE id = ?`).run(s.id);
     }
   });
-  tx();
   logActivity(req.user.id, req.user.username, 'shipments_combine', 'retail_order', id, { mode }, req.ip);
   res.json({ success: true, combined: true, shipments: 1 });
 });
@@ -21536,7 +21552,7 @@ router.post('/api/retail-admin/orders/:id/shipments/:sid/deliver',
 // (no partial-quantity split yet). Items already in a dispatched parcel can't
 // be moved.
 router.post('/api/retail-admin/orders/:id/shipments/split',
-  requireRetailAdmin, express.json(), (req, res) => {
+  requireRetailAdmin, express.json(), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const itemIds = Array.isArray(req.body?.item_ids)
     ? req.body.item_ids.map(n => parseInt(n, 10)).filter(Number.isInteger)
@@ -21585,17 +21601,20 @@ router.post('/api/retail-admin/orders/:id/shipments/split',
               : mode === 'local' ? 'Local delivery · 同城配送'
               : 'Land shipment · 陆运') + ' (to follow · 后补)';
 
-  const tx = tdb().transaction(() => {
-    const r = tdb().prepare(
+  // Returns the new shipment id out of the transaction — the activity log and
+  // the response both report it, and it is only real once the items were moved
+  // onto it. Every statement runs on `tx`, the handle withTransaction hands in
+  // — see decisions §24.
+  const newShipmentId = await withTransaction(tdb(), (tx) => {
+    const r = tx.prepare(
       `INSERT INTO retail_shipments (order_id, mode, label, created_at, updated_at)
        VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
     ).run(id, mode, label);
     const newId = r.lastInsertRowid;
-    const reassign = tdb().prepare('UPDATE retail_order_items SET shipment_id = ? WHERE id = ? AND order_id = ?');
+    const reassign = tx.prepare('UPDATE retail_order_items SET shipment_id = ? WHERE id = ? AND order_id = ?');
     for (const it of items) reassign.run(newId, it.id, id);
     return newId;
   });
-  const newShipmentId = tx();
 
   logActivity(req.user.id, req.user.username, 'shipment_split', 'retail_order', id,
     { new_shipment_id: newShipmentId, item_ids: itemIds, mode }, req.ip);
@@ -22295,7 +22314,7 @@ router.post('/api/retail-admin/orders/:id/qingyun/retry-push', requireRetailAdmi
 // claiming that on their behalf. No grade is invented either: nobody measured
 // how exact this is, so the two trust checks in lib/qingyun-payload name the
 // SOURCE instead (see the accept rule and the distance predicate there).
-router.post('/api/retail-admin/orders/:id/qingyun/confirm-point', requireRetailAdmin, express.json(), (req, res) => {
+router.post('/api/retail-admin/orders/:id/qingyun/confirm-point', requireRetailAdmin, express.json(), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   // Bounds-checked to mainland China by the same reader the customer address
   // form uses — a point outside it is a client bug, and a delivery target is
@@ -22321,19 +22340,26 @@ router.post('/api/retail-admin/orders/:id/qingyun/confirm-point', requireRetailA
   try { addr = JSON.parse(o.address_json || '{}') || {}; } catch { addr = {}; }
   if (addr.pickup) return res.status(422).json({ success: false, error: 'pickup_order' });
 
+  // NO NETWORK CALL IS MADE HERE, and that is load-bearing rather than
+  // incidental: the push to Qingyun is the drain's job, and an await on a remote
+  // call inside this block would hold the shared handle open and queue every
+  // other writer behind it (see the serialiser in lib/db-transaction). Both
+  // statements are local SQL. Every one runs on `tx` — decisions §24.
   let requeued = false;
   try {
-    tdb().transaction(() => {
-      tdb().prepare('UPDATE retail_orders SET address_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
+    requeued = await withTransaction(tdb(), (tx) => {
+      tx.prepare('UPDATE retail_orders SET address_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
         JSON.stringify({ ...addr, lat: pin.lat, lng: pin.lng, geo_source: 'staff_pin', geo_precision: null }), id);
       // Guarded on status='needs_point' AND no copy, so a drain that completed
       // while the operator was looking at the map wins and this rolls back
       // whole — rather than leaving a staff point on an order that already has
       // a rider coming to the address the push actually used.
-      const r = tdb().prepare(qingyunQueue.CONFIRM_POINT_SQL).run(id);
+      const r = tx.prepare(qingyunQueue.CONFIRM_POINT_SQL).run(id);
+      // Thrown to unwind the block; withTransaction rethrows the ORIGINAL error
+      // object, so the `row_moved` test below still reads its message.
       if (!r.changes) throw new Error('row_moved');
-      requeued = true;
-    })();
+      return true;
+    });
   } catch (e) {
     if (e.message === 'row_moved') {
       const fresh = _qingyunPushRow(id) || {};
@@ -22374,7 +22400,7 @@ router.post('/api/retail-admin/orders/:id/qingyun/confirm-point', requireRetailA
 // today. That is a silent no-op wearing a success response, so the endpoint
 // refuses it rather than accepting a move it cannot honour. The gate lives
 // here and not only in the UI: an API caller gets the same answer as a button.
-router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmin, express.json(), (req, res) => {
+router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmin, express.json(), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const date = String(req.body?.date || '').trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ success: false, error: 'bad_date' });
@@ -22406,17 +22432,21 @@ router.post('/api/retail-admin/orders/:id/qingyun/reschedule', requireRetailAdmi
   // Same-day work, so it takes the slot kind that says so — which is what
   // makes isQingyunSameCityToday accept it unconditionally on the next poll.
   const kind = 'today';
+  // NO NETWORK CALL HERE EITHER, for the same reason as confirm-point above:
+  // the requeue only marks the row, and the drain does the remote work on its
+  // own poll. An await on Qingyun inside this block would hold the shared handle
+  // and stall every other writer. Every statement runs on `tx` — §24.
   let requeued = false;
   try {
-    tdb().transaction(() => {
-      tdb().prepare(
+    requeued = await withTransaction(tdb(), (tx) => {
+      tx.prepare(
         `UPDATE retail_orders
             SET scheduled_for = ?, delivery_slot_label = ?, delivery_slot_kind = ?,
                 seen_at = NULL, updated_at = CURRENT_TIMESTAMP
           WHERE id = ?`
       ).run(date, date, kind, id);                     // ← the date, FIRST
-      requeued = tdb().prepare(qingyunQueue.MANUAL_RETRY_SQL).run(id).changes > 0;   // ← then the queue
-    })();
+      return tx.prepare(qingyunQueue.MANUAL_RETRY_SQL).run(id).changes > 0;   // ← then the queue
+    });
   } catch (e) {
     console.error('[qingyun reschedule]', e.message);
     return res.status(500).json({ success: false, error: 'reschedule_failed' });
