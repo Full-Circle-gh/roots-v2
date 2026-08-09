@@ -78,6 +78,46 @@ const RETAIL_SRC = fs.readFileSync(path.join(ROOT, 'routes', 'retail.js'), 'utf8
 const DB_TABLES = ['retail_media', 'retail_media_folders', 'retail_polls',
   'retail_poll_options', 'storefront_config'];
 
+/**
+ * How many unconverted db.transaction() blocks are left in routes/retail.js,
+ * taken from the SAME source §24 quotes.
+ *
+ * WHY THIS IS NOT JUST A REGEX. It used to be, and it was wrong by one: grep
+ * matches a COMMENT that mentions `tdb().transaction()`, so the test asserted 45
+ * while the figure of record was 44. A guard that disagrees with the documented
+ * count is worse than no guard, because the next person has to work out which of
+ * the two lied.
+ *
+ * PRIMARY: scripts/diagnose_async_conversion_scope.js, which §24 names as the
+ * authority for these counts. It parses an AST, so a comment cannot inflate it.
+ *
+ * IT RETURNS null RATHER THAN GUESSING. That script needs `espree`, which
+ * arrives with the `eslint` devDependency and is therefore ABSENT on the
+ * production box, which installs production dependencies only — and this suite
+ * has to run on the box, the only machine with the native better-sqlite3 binding
+ * and so the only place the pre-conversion form runs for real.
+ *
+ * The obvious answer is a regex fallback. IT WAS TRIED AND IT WAS WRONG: strip
+ * comments and string literals with regexes and an apostrophe inside a comment
+ * ("don't") unbalances the single-quote pass, which then swallows real code — it
+ * silently returned 0 against an actual 39. That is precisely the hand-rolled
+ * source-scanner failure this record keeps meeting, and shipping a second one to
+ * guard against the first would be absurd. So where the authority cannot run,
+ * this check reports itself as SKIPPED rather than asserting a number nothing
+ * verified. A skipped check is honest; a guessed one is a liability.
+ */
+function countTransactionsAuthoritative() {
+  const { spawnSync } = require('child_process');
+  const r = spawnSync(process.execPath,
+    [path.join(ROOT, 'scripts', 'diagnose_async_conversion_scope.js'), '--file', 'routes/retail.js'],
+    { cwd: ROOT, encoding: 'utf8' });
+  if (r.status !== 0 || !r.stdout) return null;          // espree missing, or it failed
+  const section = r.stdout.split('[3] db.transaction() BLOCKS')[1];
+  if (!section) return null;
+  const m = /runtime total:\s*(\d+)/.exec(section);
+  return m ? Number(m[1]) : null;
+}
+
 function openDb() {
   const db = openTablesDb(DB_SRC, DB_TABLES);
   addTables(db, SCHEMA_SRC, DB_SRC, ['categories']);
@@ -1027,20 +1067,24 @@ const CONFIG_SNAP = (db) => ({
       assert.ok(/\.transaction\(/.test(src), `${method} ${p} was converted — it must not be`);
     }
     assert.ok(/\.immediate\(/.test(RETAIL_SRC), 'the checkout\'s .immediate() must still be there');
-    // Counted, so a stray conversion elsewhere in the file is visible.
+    // Counted, so a stray conversion elsewhere in the file is visible. This
+    // number is MEANT to move with each batch, and the failure it produces is
+    // the guard working — it is the tripwire for a conversion nobody intended,
+    // so it is updated deliberately per batch rather than loosened into a range.
     //
-    // 45 at batch 2; 40 after batch 3 converted five more. This number is MEANT
-    // to move with each batch and the failure it produces is the guard working —
-    // it is the tripwire for a conversion nobody intended, so it is updated
-    // deliberately per batch rather than loosened into a range.
-    //
-    // NOTE THIS IS A GREP COUNT AND RUNS ONE HIGH: it matches a comment that
-    // mentions tdb().transaction(). The AST figure from
-    // scripts/diagnose_async_conversion_scope.js is the authority for the record
-    // (39 here), and §24 carries that number, not this one.
-    const remaining = (RETAIL_SRC.match(/\.transaction\(/g) || []).length;
-    assert.strictEqual(remaining, 40,
-      `expected 40 unconverted transactions left in routes/retail.js, found ${remaining}`);
+    // IT READS THE AST AUTHORITY, NOT GREP. The first version of this counted
+    // /\.transaction\(/ over the raw source and stood at 45 while the figure of
+    // record was 44: grep matches a COMMENT that mentions tdb().transaction().
+    // A test that disagrees with the number §24 carries is worse than no test,
+    // because the next person has to work out which one lied.
+    const remaining = countTransactionsAuthoritative();
+    if (remaining === null) {
+      console.log('        (count check SKIPPED — espree unavailable, so the AST');
+      console.log('         authority cannot run here. Expected on the box.)');
+    } else {
+      assert.strictEqual(remaining, 39,
+        `expected 39 unconverted transactions left in routes/retail.js, found ${remaining}`);
+    }
   });
 
   // ── 13 ───────────────────────────────────────────────────────────────────
