@@ -7,7 +7,7 @@
    If a row here and the §1.18 table disagree, ONE of them is wrong and
    the answer is not "adjust the test" — a formatting contract nobody can
    run is how eight formats shipped in the first place. */
-const { tdWhen, tdRange } = require('../public/td-datetime.js');
+const { tdWhen, tdRange, tdTimeWindow } = require('../public/td-datetime.js');
 
 let pass = 0, fail = 0;
 function is(got, want, label) {
@@ -91,6 +91,18 @@ is(tdRange('2026-07-01', '2026-08-03', { lang: 'en' }), 'Jul 1 – Aug 3', 'en �
 is(tdRange('2025-12-01', '2026-01-03', { lang: 'en' }), 'Dec 1, 2025 – Jan 3, 2026', 'en · crosses year');
 is(tdRange('2025-12-01', '2025-12-31', { lang: 'en' }), 'Dec 1 – 31, 2025', 'en · year at the END');
 is(tdRange('2026-07-01', '2026-08-03', { lang: 'cn' }), '7月1日–8月3日', 'cn · same year');
+
+console.log('\nDelivery windows — two clocks on one day');
+// The real TC000138 case: a customer booked 16:00–18:00 and the EN admin
+// rendered the raw 24-hour label back at them.
+is(tdTimeWindow('2026-08-02 08:00:00', '2026-08-02 10:00:00', { lang: 'en' }), '4:00 – 6:00 PM', 'en · shared meridiem collapses');
+is(tdTimeWindow('2026-08-02 08:00:00', '2026-08-02 10:00:00', { lang: 'cn' }), '16:00–18:00', 'cn · 24-hour');
+is(tdTimeWindow('2026-08-02 03:00:00', '2026-08-02 05:00:00', { lang: 'en' }), '11:00 AM – 1:00 PM', 'en · crossing noon keeps both');
+// Noon is PM, so a 10:30–12:00 window CROSSES the meridiem and must keep both —
+// "10:30 – 12:00 PM" would read as a 90-minute afternoon window.
+is(tdTimeWindow('2026-08-02 02:30:00', '2026-08-02 04:00:00', { lang: 'en' }), '10:30 AM – 12:00 PM', 'en · half-hour start, noon end');
+is(tdTimeWindow('2026-08-02 08:00:00', null, { lang: 'en' }), '4:00 PM', 'one end only → a single time');
+is(tdTimeWindow(null, null, { lang: 'en' }), '', 'no window at all');
 
 console.log('\nThe eight names are a closed set');
 try { tdWhen(T, 'shortDate'); is('no throw', 'throw', 'unknown name rejected'); }
