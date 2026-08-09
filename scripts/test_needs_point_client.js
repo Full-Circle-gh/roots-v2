@@ -207,10 +207,15 @@ const PARKED = (id) => ({
 
 // Returns what the run did, so a test can assert on the scroll AND on whether
 // openOrder's own catch swallowed a throw (it renders "Failed" into the mount).
-async function runOpenOrder(order, opts, { qpNodeExists = true } = {}) {
-  const seen = { scrolls: [], qpInit: 0, rendered: 0, drawerOpened: 0 };
+// `threw` is the error that escaped openOrder, if any — the distinction the
+// move-out-of-the-try hardening exists to make.
+async function runOpenOrder(order, opts, { qpNodeExists = true, scrollThrows = false, apiFails = false } = {}) {
+  const seen = { scrolls: [], qpInit: 0, rendered: 0, drawerOpened: 0, threw: null };
   const mount = { innerHTML: '', children: [], classList: { add() {}, remove() {}, contains: () => false } };
-  const qpNode = { scrollIntoView: (arg) => seen.scrolls.push(arg) };
+  const qpNode = { scrollIntoView: (arg) => {
+    seen.scrolls.push(arg);
+    if (scrollThrows) throw new Error('scroll blew up');
+  } };
   const ctx = {
     console,
     setTimeout,
@@ -228,7 +233,7 @@ async function runOpenOrder(order, opts, { qpNodeExists = true } = {}) {
     },
     window: { scrollTo() {} },
     $: () => mount,
-    api: async () => ({ data: order }),
+    api: async () => { if (apiFails) throw new Error('network down'); return { data: order }; },
     ensureTrackingCarriers: async () => {},
     openDrawer: () => { seen.drawerOpened++; },
     renderOpenOrder: () => { seen.rendered++; },
@@ -238,7 +243,7 @@ async function runOpenOrder(order, opts, { qpNodeExists = true } = {}) {
   };
   vm.createContext(ctx);
   new vm.Script(`${FOCUS_FN}\n${OPEN_ORDER}`).runInContext(ctx);
-  await ctx.openOrder(order.id, opts);
+  try { await ctx.openOrder(order.id, opts); } catch (e) { seen.threw = e; }
   seen.mount = mount.innerHTML;
   return seen;
 }
@@ -262,10 +267,12 @@ await itAsync('a missing .qp node degrades to "the drawer just opened" — no th
   assert.strictEqual(seen.scrolls.length, 0);
   assert.strictEqual(seen.drawerOpened, 1, 'the drawer still opened');
   assert.strictEqual(seen.rendered, 1, 'and still rendered the order');
-  // openOrder wraps its body in try/catch, so a throw would be SWALLOWED and
-  // only visible as the failure card. Assert on that, or "does not throw" is
-  // satisfied by an openOrder that blew up and hid it.
-  assert.doesNotMatch(seen.mount, /Failed/, 'openOrder caught a throw instead of skipping the scroll');
+  // Both failure shapes, because the focus call moved OUT of openOrder's
+  // try/catch. Before the move a null-guard slip was swallowed and showed up
+  // only as the failure card; now it escapes as a rejection. Assert on each,
+  // or dropping `if (!el) return false` stops being caught by anything.
+  assert.strictEqual(seen.threw, null, 'the guard must skip the scroll, not throw past it');
+  assert.doesNotMatch(seen.mount, /Failed/, 'and must not be swallowed into a failure card either');
 });
 
 await itAsync('the default path does not scroll — every existing caller is untouched', async () => {
@@ -279,6 +286,38 @@ await itAsync('the default path does not scroll — every existing caller is unt
 await itAsync('an unrelated focus value is inert', async () => {
   const seen = await runOpenOrder(PARKED(988), { focus: 'items' });
   assert.strictEqual(seen.scrolls.length, 0);
+});
+
+await itAsync('a throwing scroll surfaces as a real error, NOT a swallowed "Failed" card', async () => {
+  // The hardening this asserts: the focus call sits OUTSIDE openOrder's
+  // try/catch. Inside it, this throw was caught and painted as
+  // "Failed · 失败: …" OVER a drawer that had already rendered correctly — a
+  // scroll bug wearing the costume of a load failure, and the order the
+  // operator asked for destroyed on screen. Out here it escapes as a rejection.
+  const seen = await runOpenOrder(PARKED(988), { focus: 'point' }, { scrollThrows: true });
+  assert.ok(seen.threw, 'the error must escape openOrder');
+  assert.match(seen.threw.message, /scroll blew up/);
+  assert.strictEqual(seen.rendered, 1, 'and the drawer still rendered');
+  assert.doesNotMatch(seen.mount, /Failed/, 'the rendered drawer must not be replaced by a failure card');
+});
+
+it('the focus call is positioned after the catch block, not inside the try', () => {
+  // Positional, so a future edit that drags it back into the try is caught
+  // even if no test happens to throw from the scroll.
+  const fn = slice(ORDERS_JS, 'async function openOrder(id, opts = {})');
+  const catchAt = fn.indexOf('} catch (e) {');
+  const failCard = fn.indexOf('order-card err">Failed');
+  const call = fn.indexOf("if (opts.focus === 'point'");
+  assert.ok(catchAt > -1 && failCard > catchAt, 'could not locate openOrder\'s catch');
+  assert.ok(call > -1, 'the focus call is gone');
+  assert.ok(call > failCard, 'the focus call must come AFTER the catch that paints the Failed card');
+});
+
+await itAsync('a failed fetch never scrolls — there is nothing rendered to scroll to', async () => {
+  const seen = await runOpenOrder(PARKED(988), { focus: 'point' }, { apiFails: true });
+  assert.strictEqual(seen.scrolls.length, 0);
+  assert.strictEqual(seen.threw, null, 'a load failure is still handled, not thrown');
+  assert.match(seen.mount, /Failed/, 'and still reported as one');
 });
 
 await itAsync('an order with no delivery-point surface never scrolls, opt or not', async () => {

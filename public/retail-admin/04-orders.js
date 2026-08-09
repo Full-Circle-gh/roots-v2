@@ -4573,15 +4573,6 @@ async function openOrder(id, opts = {}) {
         qpInitMap(o.id, _sf.guess, (o.address && o.address.city) || '');
       }
     } catch (e) { /* map is best-effort */ }
-    // Opened from a surface whose entire subject is the point — today only the
-    // dashboard's "Orders waiting for a delivery point" card. Land on the map
-    // rather than at the top of a drawer the operator would have to scroll.
-    // Opt-gated: with no `focus` every existing caller behaves exactly as before.
-    // Runs after both render paths above (fresh and cross-fade), because the
-    // node it looks for is written by renderOpenOrder. An expired parked order
-    // renders the reschedule variant under the SAME #qp-<id> wrapper, which is
-    // still that order's one action, so it is scrolled to as well.
-    if (opts.focus === 'point') odFocusPointSection(o.id);
     // The GET above stamped seen_at server-side (shared across staff). Clear
     // this row's unread treatment immediately so it doesn't wait for the next
     // poll; a later list rebuild reflects the server seen_at and stays cleared.
@@ -4597,6 +4588,28 @@ async function openOrder(id, opts = {}) {
     mount.innerHTML = `<div class="order-card err">Failed · 失败: ${escapeHtml(e.message)}</div>`;
     mount.classList.remove('od-swapping');
   }
+  // Opened from a surface whose entire subject is the point — today only the
+  // dashboard's "Orders waiting for a delivery point" card. Land on the map
+  // rather than at the top of a drawer the operator would have to scroll.
+  // Opt-gated: with no `focus` every existing caller behaves exactly as before.
+  // Runs after both render paths above (fresh and cross-fade), because the node
+  // it looks for is written by renderOpenOrder. An expired parked order renders
+  // the reschedule variant under the SAME #qp-<id> wrapper, which is still that
+  // order's one action, so it is scrolled to as well.
+  //
+  // OUTSIDE the try, deliberately. Inside it, a throw on this line would be
+  // caught above and painted as a "Failed ·" card OVER a drawer that had just
+  // rendered correctly — a scroll that fails is not a reason to destroy the
+  // order the operator asked for. Out here a real bug surfaces as a real error
+  // rather than wearing the costume of a load failure. Do not move it back in.
+  //
+  // Reads _OPEN_ORDER instead of introducing a local, so the path every other
+  // caller takes keeps exactly the statements it had. It is null when the fetch
+  // failed (nulled at the top of this function, assigned only on success), so
+  // the error path never scrolls; nothing async runs between the catch and here
+  // for a concurrent open to race with; and a missing #qp-<id> is still a clean
+  // no-op inside odFocusPointSection.
+  if (opts.focus === 'point' && _OPEN_ORDER) odFocusPointSection(_OPEN_ORDER.id);
 }
 
 // Generic side-drawer open/close. Shared across Orders, Customers,
