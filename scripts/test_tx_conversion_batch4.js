@@ -752,13 +752,26 @@ async function main() {
     return all[0];
   };
 
+  /** Every `withTransaction(…)` body inside one handler's source. */
+  function txBodies(src) {
+    const out = [];
+    for (const m of src.matchAll(/withTransaction\(/g)) {
+      let i = src.indexOf('{', src.indexOf('=>', m.index)), depth = 0, end = i;
+      for (; i < src.length; i++) {
+        if (src[i] === '{') depth++;
+        else if (src[i] === '}') { depth--; if (depth === 0) { end = i; break; } }
+      }
+      out.push(src.slice(src.indexOf('{', src.indexOf('=>', m.index)), end + 1));
+    }
+    return out;
+  }
+
   await it('no CONVERTED shipments route calls ensureShipments or mergeAddonItemsIntoShipments', () => {
     // Both are blocked behind the checkout. A converted route that called one
     // would drag an unconverted dual-context helper across the boundary.
     for (const src of [
       only('post', '/api/retail-admin/orders/:id/shipment-suggestion/apply'),
       only('post', '/api/retail-admin/orders/:id/shipments/combine'),
-      handlerSources('post', '/api/retail-admin/orders/:id/shipments/split')[1],
     ]) {
       assert.ok(/withTransaction\(/.test(src), 'expected a converted handler here');
       assert.ok(!/\bensureShipments\s*\(/.test(src), 'a converted route calls ensureShipments');
@@ -767,10 +780,22 @@ async function main() {
     }
   });
 
-  await it('the split that DOES call ensureShipments is still excluded, on the old form', () => {
-    const first = handlerSources('post', '/api/retail-admin/orders/:id/shipments/split')[0];
-    assert.ok(/\bensureShipments\s*\(/.test(first), 'this is the wrong registration');
-    assert.ok(/\.transaction\(/.test(first), 'it was converted — it must not be');
+  // /shipments/split is now ONE handler with two branches — the shadowing
+  // regression was fixed after this batch. Its converted branch must still keep
+  // clear of the blocked helpers; its unconverted branch is where they live.
+  // The merge itself is proven in scripts/test_shipments_split_merge.js.
+  await it('the split route\'s CONVERTED branch keeps clear of ensureShipments', () => {
+    const src = only('post', '/api/retail-admin/orders/:id/shipments/split');
+    const bodies = txBodies(src);
+    assert.strictEqual(bodies.length, 1, 'expected exactly one converted body in the split handler');
+    assert.ok(!/\bensureShipments\s*\(/.test(bodies[0]), 'the converted branch calls ensureShipments');
+    assert.ok(!/\bmergeAddonItemsIntoShipments\s*\(/.test(bodies[0]));
+  });
+
+  await it('the branch that DOES call ensureShipments is still excluded, on the old form', () => {
+    const src = only('post', '/api/retail-admin/orders/:id/shipments/split');
+    assert.ok(/\bensureShipments\s*\(/.test(src), 'the undo-combine branch is missing');
+    assert.ok(/\.transaction\(/.test(src), 'it was converted — it must not be');
   });
 
   await it('PUT /integrations is still excluded — its env write must move out first', () => {
@@ -799,7 +824,7 @@ async function main() {
   });
 
   await it('all nine are async handlers whose transaction bodies never await', () => {
-    const NINE = [
+    const EIGHT_SINGLE_PURPOSE = [
       ['put', '/api/retail-admin/category-tree'],
       ['post', '/api/retail/addresses'],
       ['put', '/api/retail/addresses/:id'],
@@ -809,15 +834,20 @@ async function main() {
       ['post', '/api/retail-admin/orders/:id/qingyun/confirm-point'],
       ['post', '/api/retail-admin/orders/:id/qingyun/reschedule'],
     ];
-    const sources = NINE.map(([m, p]) => [`${m} ${p}`, only(m, p)]);
-    sources.push(['post /shipments/split (to-follow)',
-      handlerSources('post', '/api/retail-admin/orders/:id/shipments/split')[1]]);
+    const sources = EIGHT_SINGLE_PURPOSE.map(([m, p]) => [`${m} ${p}`, only(m, p)]);
     for (const [label, src] of sources) {
       assert.ok(/async\s*\(req, res\)/.test(src), `${label} is not an async handler`);
       assert.ok(/await withTransaction\(/.test(src), `${label} does not await withTransaction`);
       assert.ok(!/\.transaction\(/.test(src), `${label} still has an old-form transaction`);
     }
-    assert.strictEqual(sources.length, 9);
+    assert.strictEqual(sources.length, 8);
+
+    // The ninth is /shipments/split, which is exempt from the last check only:
+    // it is now one handler holding a converted branch AND the deliberately
+    // unconverted undo-combine branch, so an old-form transaction is expected.
+    const split = only('post', '/api/retail-admin/orders/:id/shipments/split');
+    assert.ok(/async\s*\(req, res\)/.test(split), 'the split handler is not async');
+    assert.ok(/await withTransaction\(/.test(split), 'the split handler does not await withTransaction');
   });
 
   console.log('');

@@ -21118,13 +21118,121 @@ router.post('/api/retail-admin/orders/:id/shipments/combine',
   res.json({ success: true, combined: true, shipments: 1 });
 });
 
-// Undo a combine: drop the (waybill-free) shipments and re-materialize the
-// planned Air/Land split via the same planner used at order creation. If the
-// destination doesn't actually split (e.g. within Guangdong) this just rebuilds
-// the single planned parcel — harmless. Blocked if a waybill exists.
+// TWO OPERATIONS SHARE THIS PATH, AND THE BODY DECIDES WHICH ONE RUNS.
+//
+// They were two separate registrations until 2026-08-09, and that was a live
+// regression rather than tidy-up debt. "Ship part later" shipped first, on
+// 2026-06-06 (546457c3), and worked: nine real splits by the owner on orders
+// 130, 141-146 and 158 between 06-06 and 06-08. On 2026-06-14, f30691bb added
+// the undo-combine endpoint on the SAME path, higher up the file — inside a
+// commit whose subject is an Orders-list "Ship to" column and which never
+// mentions shipments. Express matches the first registration and this one always
+// responds, so from that moment "Ship part later" could not be reached.
+//
+// It did not fail loudly. The undo-combine handler ignores the body, so a
+// to-follow request was answered by DELETING EVERY PARCEL ON THE ORDER and
+// re-planning from scratch — discarding exactly the arrangement the operator was
+// building — and then returned success, while the admin UI reported success too:
+//   Moved to follow-up parcel · 已移入后补包裹
+// Nothing has called either action since 2026-06-19, so no operator reached that
+// path in production.
+//
+// Hence one handler and one branch point. `item_ids` PRESENT means the caller
+// asked for a to-follow split, and such a request must never fall through to the
+// re-plan — that fall-through IS the bug. A malformed or empty `item_ids` is
+// therefore a 400, not a silent rebuild. `item_ids` absent means the undo-combine
+// button, which sends no body at all.
 router.post('/api/retail-admin/orders/:id/shipments/split',
-  requireRetailAdmin, express.json(), (req, res) => {
+  requireRetailAdmin, express.json(), async (req, res) => {
   const id = parseInt(req.params.id, 10);
+  // Presence, not length: `{ item_ids: [] }` is a to-follow request that lost its
+  // items, and answering it with the destructive branch is the regression again.
+  const askedToFollow = Object.prototype.hasOwnProperty.call(req.body || {}, 'item_ids');
+  const itemIds = Array.isArray(req.body?.item_ids)
+    ? req.body.item_ids.map(n => parseInt(n, 10)).filter(Number.isInteger)
+    : [];
+
+  // ── BRANCH A — "Ship part later": pull selected line items out into a NEW
+  // "to follow" shipment so the rest of the order can ship now and the held
+  // items ship later. Whole-line moves only (no partial-quantity split yet).
+  // Items already in a dispatched parcel can't be moved.
+  if (askedToFollow) {
+    if (!itemIds.length) return res.status(400).json({ success: false, error: 'no_items' });
+
+    const o = tdb().prepare('SELECT id, status FROM retail_orders WHERE id = ?').get(id);
+    if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+
+    // Resolve the items + their current shipment. All must belong to this order.
+    const placeholders = itemIds.map(() => '?').join(',');
+    const items = tdb().prepare(
+      `SELECT i.id, i.shipment_id, s.mode AS ship_mode, s.dispatched_at AS ship_dispatched
+         FROM retail_order_items i
+         LEFT JOIN retail_shipments s ON s.id = i.shipment_id
+        WHERE i.order_id = ? AND i.id IN (${placeholders})`
+    ).all(id, ...itemIds);
+    if (items.length !== itemIds.length) {
+      return res.status(400).json({ success: false, error: 'invalid_items' });
+    }
+    if (items.some(it => it.ship_dispatched)) {
+      return res.status(409).json({ success: false, error: 'item_already_dispatched' });
+    }
+
+    // Refuse to empty a source parcel — splitting means leaving something behind
+    // to ship now. Group the move by source shipment and require each source to
+    // retain at least one non-moved item.
+    const movingBySource = new Map();
+    for (const it of items) {
+      movingBySource.set(it.shipment_id, (movingBySource.get(it.shipment_id) || 0) + 1);
+    }
+    for (const [shipId, moving] of movingBySource) {
+      if (!shipId) continue;
+      const total = tdb().prepare(
+        'SELECT COUNT(*) AS n FROM retail_order_items WHERE shipment_id = ?'
+      ).get(shipId).n;
+      if (moving >= total) {
+        return res.status(422).json({ success: false, error: 'would_empty_shipment', shipment_id: shipId });
+      }
+    }
+
+    // Inherit the mode from the moved items' source (so freight routing is sane);
+    // default to 'land' when items had no shipment yet.
+    const mode = items[0].ship_mode || 'land';
+    const label = (mode === 'air' ? 'Air shipment · 空运'
+                : mode === 'local' ? 'Local delivery · 同城配送'
+                : 'Land shipment · 陆运') + ' (to follow · 后补)';
+
+    // Returns the new shipment id out of the transaction — the activity log and
+    // the response both report it, and it is only real once the items were moved
+    // onto it. Every statement runs on `tx`, the handle withTransaction hands in
+    // — see decisions §24. Already converted in batch 4; carried across unchanged.
+    const newShipmentId = await withTransaction(tdb(), (tx) => {
+      const r = tx.prepare(
+        `INSERT INTO retail_shipments (order_id, mode, label, created_at, updated_at)
+         VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+      ).run(id, mode, label);
+      const newId = r.lastInsertRowid;
+      const reassign = tx.prepare('UPDATE retail_order_items SET shipment_id = ? WHERE id = ? AND order_id = ?');
+      for (const it of items) reassign.run(newId, it.id, id);
+      return newId;
+    });
+
+    logActivity(req.user.id, req.user.username, 'shipment_split', 'retail_order', id,
+      { new_shipment_id: newShipmentId, item_ids: itemIds, mode }, req.ip);
+
+    return res.json({ success: true, data: { new_shipment_id: newShipmentId } });
+  }
+
+  // ── BRANCH B — undo a combine: drop the (waybill-free) shipments and
+  // re-materialize the planned Air/Land split via the same planner used at order
+  // creation. If the destination doesn't actually split (e.g. within Guangdong)
+  // this just rebuilds the single planned parcel — harmless. Blocked if a waybill
+  // exists.
+  //
+  // DELIBERATELY STILL ON db.transaction(). This branch calls ensureShipments,
+  // which is blocked behind the checkout, so converting it here would drag an
+  // unconverted dual-context helper across the boundary — the reason batch 4
+  // excluded this route. Nothing before this point awaits, so the branch runs
+  // start to finish synchronously exactly as it does today.
   const o = tdb().prepare('SELECT id FROM retail_orders WHERE id = ?').get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
   const shipments = tdb().prepare(
@@ -21545,81 +21653,6 @@ router.post('/api/retail-admin/orders/:id/shipments/:sid/deliver',
   logActivity(req.user.id, req.user.username, 'shipment_delivered', 'retail_order', id,
     { shipment_id: sid, mode: ship.mode }, req.ip);
   res.json({ success: true, data: { fulfillment: buildOrderFulfillment(id), order_status: orderStatus } });
-});
-
-// Pull selected line items out into a NEW "to follow" shipment so the rest of
-// the order can ship now and the held items ship later. Whole-line moves only
-// (no partial-quantity split yet). Items already in a dispatched parcel can't
-// be moved.
-router.post('/api/retail-admin/orders/:id/shipments/split',
-  requireRetailAdmin, express.json(), async (req, res) => {
-  const id = parseInt(req.params.id, 10);
-  const itemIds = Array.isArray(req.body?.item_ids)
-    ? req.body.item_ids.map(n => parseInt(n, 10)).filter(Number.isInteger)
-    : [];
-  if (!itemIds.length) return res.status(400).json({ success: false, error: 'no_items' });
-
-  const o = tdb().prepare('SELECT id, status FROM retail_orders WHERE id = ?').get(id);
-  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
-
-  // Resolve the items + their current shipment. All must belong to this order.
-  const placeholders = itemIds.map(() => '?').join(',');
-  const items = tdb().prepare(
-    `SELECT i.id, i.shipment_id, s.mode AS ship_mode, s.dispatched_at AS ship_dispatched
-       FROM retail_order_items i
-       LEFT JOIN retail_shipments s ON s.id = i.shipment_id
-      WHERE i.order_id = ? AND i.id IN (${placeholders})`
-  ).all(id, ...itemIds);
-  if (items.length !== itemIds.length) {
-    return res.status(400).json({ success: false, error: 'invalid_items' });
-  }
-  if (items.some(it => it.ship_dispatched)) {
-    return res.status(409).json({ success: false, error: 'item_already_dispatched' });
-  }
-
-  // Refuse to empty a source parcel — splitting means leaving something behind
-  // to ship now. Group the move by source shipment and require each source to
-  // retain at least one non-moved item.
-  const movingBySource = new Map();
-  for (const it of items) {
-    movingBySource.set(it.shipment_id, (movingBySource.get(it.shipment_id) || 0) + 1);
-  }
-  for (const [shipId, moving] of movingBySource) {
-    if (!shipId) continue;
-    const total = tdb().prepare(
-      'SELECT COUNT(*) AS n FROM retail_order_items WHERE shipment_id = ?'
-    ).get(shipId).n;
-    if (moving >= total) {
-      return res.status(422).json({ success: false, error: 'would_empty_shipment', shipment_id: shipId });
-    }
-  }
-
-  // Inherit the mode from the moved items' source (so freight routing is sane);
-  // default to 'land' when items had no shipment yet.
-  const mode = items[0].ship_mode || 'land';
-  const label = (mode === 'air' ? 'Air shipment · 空运'
-              : mode === 'local' ? 'Local delivery · 同城配送'
-              : 'Land shipment · 陆运') + ' (to follow · 后补)';
-
-  // Returns the new shipment id out of the transaction — the activity log and
-  // the response both report it, and it is only real once the items were moved
-  // onto it. Every statement runs on `tx`, the handle withTransaction hands in
-  // — see decisions §24.
-  const newShipmentId = await withTransaction(tdb(), (tx) => {
-    const r = tx.prepare(
-      `INSERT INTO retail_shipments (order_id, mode, label, created_at, updated_at)
-       VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
-    ).run(id, mode, label);
-    const newId = r.lastInsertRowid;
-    const reassign = tx.prepare('UPDATE retail_order_items SET shipment_id = ? WHERE id = ? AND order_id = ?');
-    for (const it of items) reassign.run(newId, it.id, id);
-    return newId;
-  });
-
-  logActivity(req.user.id, req.user.username, 'shipment_split', 'retail_order', id,
-    { new_shipment_id: newShipmentId, item_ids: itemIds, mode }, req.ip);
-
-  res.json({ success: true, data: { new_shipment_id: newShipmentId } });
 });
 
 // ─── Integrations admin (kd100 + JD LOP + Feie credentials) ────────────
