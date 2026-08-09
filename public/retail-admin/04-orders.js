@@ -4482,6 +4482,28 @@ function renderSplitPanel(o, s) {
     </div>`;
 }
 
+// Put the delivery-point confirm surface under the operator's eyes inside an
+// already-rendered order drawer. Only ever reached through openOrder's
+// `focus: 'point'` opt, so no other caller's scroll position moves.
+//
+// It has to scroll at all because a PARKED order's confirm box is not hoisted:
+// hoistedTracking() only lifts a local parcel once there's a courier copy or a
+// live rider stage, and an order waiting for a point has neither by definition
+// — so renderQyPointSurface lands inline under the items, below the fold.
+//
+// A miss is ordinary, not an error. The point can be confirmed by someone else
+// between the dashboard's poll and this click, and the drawer then renders no
+// .qp box at all; the same is true of an order that was never parked. Degrade
+// to "the drawer just opened" rather than throwing out of a click handler.
+// (scrollIntoView on a display:none node is a no-op anyway — same caveat the
+// pager scroll above carries.)
+function odFocusPointSection(orderId) {
+  const el = document.getElementById('qp-' + orderId);
+  if (!el) return false;
+  el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  return true;
+}
+
 async function openOrder(id, opts = {}) {
   _OPEN_ORDER = null;
   _ORDER_BACK_CUSTOMER = null;
@@ -4551,6 +4573,15 @@ async function openOrder(id, opts = {}) {
         qpInitMap(o.id, _sf.guess, (o.address && o.address.city) || '');
       }
     } catch (e) { /* map is best-effort */ }
+    // Opened from a surface whose entire subject is the point — today only the
+    // dashboard's "Orders waiting for a delivery point" card. Land on the map
+    // rather than at the top of a drawer the operator would have to scroll.
+    // Opt-gated: with no `focus` every existing caller behaves exactly as before.
+    // Runs after both render paths above (fresh and cross-fade), because the
+    // node it looks for is written by renderOpenOrder. An expired parked order
+    // renders the reschedule variant under the SAME #qp-<id> wrapper, which is
+    // still that order's one action, so it is scrolled to as well.
+    if (opts.focus === 'point') odFocusPointSection(o.id);
     // The GET above stamped seen_at server-side (shared across staff). Clear
     // this row's unread treatment immediately so it doesn't wait for the next
     // poll; a later list rebuild reflects the server seen_at and stays cleared.
@@ -4684,7 +4715,12 @@ document.addEventListener('click', (e) => {
   // drawer. .td-attn-row = the Inventory card's running-low rows, which open the
   // product. Both would otherwise close the very drawer their click opened.
   // tr.vch-row = the Coupons table rows, which open the coupon drawer on click.
-  if (e.target.closest('tr.order-row, tr.cul-row, tr.vch-row, .db-feed-row, .td-nrow, .td-attn-row, .rm-ocard, .rm-cucard, .rm-sheet')) return;
+  // .dp-work-row = the "Orders waiting for a delivery point" rows, which open
+  // the parked order (dashOpenNeedsPoint). The row was wired from its first
+  // build and still did nothing: openOrder() adds .open synchronously, this
+  // listener then ran on the SAME click and closed it again before paint — so
+  // it read as a dead link rather than as a drawer that flashed.
+  if (e.target.closest('tr.order-row, tr.cul-row, tr.vch-row, .db-feed-row, .dp-work-row, .td-nrow, .td-attn-row, .rm-ocard, .rm-cucard, .rm-sheet')) return;
   const sel = window.getSelection && window.getSelection();
   if (sel && sel.toString().length > 0) return;
   // Same topmost + back-to-customer semantics as Esc, over the dw-dismiss set,

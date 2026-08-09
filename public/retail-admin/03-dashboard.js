@@ -1243,8 +1243,18 @@ function dashNeedsPointRender() {
 // dashOpenOrderFromFeed: openOrder() fetches by id on its own. The confirm
 // surface is what the drawer renders for a row in needs_point, so this lands on
 // it without asking for it by name.
+//
+// `focus: 'point'` scrolls that surface into view. Without it the drawer opens
+// at the order header and the map sits below the items — the first build read
+// as a dead link for a different reason (the outside-click dismisser ate the
+// opening click; .dp-work-row is now exempt in 04-orders.js), and landing the
+// operator at the top of a long drawer would have been the second.
+//
+// The argument is retail_orders.id — the internal numeric id, which is what
+// /dashboard/ops sends as `id` and what openOrder fetches by. The row shows
+// order_no (TC000218) and never passes it; the two must not be swapped.
 function dashOpenNeedsPoint(orderId) {
-  if (orderId !== null && orderId !== undefined && orderId !== '') openOrder(orderId);
+  if (orderId !== null && orderId !== undefined && orderId !== '') openOrder(orderId, { focus: 'point' });
 }
 
 // Jump from an activity-feed event straight to its order, opened in the
