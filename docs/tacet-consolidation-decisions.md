@@ -1,8 +1,10 @@
-# Tacet shared-core consolidation — decisions record, v4.15
+# Tacet shared-core consolidation — decisions record, v4.16
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
+
+2026-08-09 · v4.16 — §24 Database: **`withTransaction` misread an unrelated concurrent caller as nested, and it is FIXED and deployed at `dc91e62f`.** The helper set nesting depth on the SHARED HANDLE before awaiting the body, so a request arriving while another's body was suspended read that flag and was folded into the in-flight transaction: two independent requests, one `BEGIN`. Records both corruption modes as reproduced — a correct request handed `no such savepoint: tacet_sp_1` and losing its write, and a rolled-back write committed by an unrelated transaction's `COMMIT`. Records why it survived four conversion batches: the existing concurrency test made both calls **in one synchronous block**, where neither body had started, so both were correctly outermost — it pinned a real property but not this one. States the general lesson as a rule: **a concurrency test whose calls originate in the same synchronous block is not testing concurrency.** Records why it never bit — every converted body is synchronous, held there by a TEST rather than by the helper — and that the checkout could not have stayed synchronous, so this would have gone live with the money cluster. The fix moves nesting into the async context and removes per-handle depth entirely; the serialiser is byte-identical. **Carries forward one unresolved half of the design finding: `acquire()` still keys its queue on the handle, so at the PostgreSQL flip the queue must be scoped to the checked-out connection.** A repair, a rule and a carried-forward requirement; nothing reversed, hence a patch.
 
 2026-08-09 · v4.15 — §24 Database: the shadowed `/shipments/split` route is FIXED and deployed at `85f5bffa`. Records that "Ship part later · 分批发货" worked from 2026-06-06, was used nine times, and was silently shadowed on 2026-06-14 by a commit whose message was entirely about an Orders-list column — leaving it **live and destructive-on-success for eight weeks**, reporting a follow-up parcel while deleting every parcel on the order. Records the general lesson as a rule rather than an anecdote: **a duplicate route registration silently wins or silently loses, and Express reports neither**, at startup or at runtime — with the split-merge suite's no-duplicate-path assertion named as the tripwire for the next one. Also records the harness thinning as a **THIRD occurrence across three consecutive batches**, and makes the written-column assertion **non-optional** for every batch from here. A fix, a rule and a standing requirement; nothing reversed, hence a patch.
 
@@ -1420,6 +1422,48 @@ Both measures, so the difference is on the record rather than needing re-derivat
 - **None of the nine parcels created in June survive**: zero rows in `retail_shipments` carry the `(to follow · 后补)` label, and none of the nine recorded ids still exist. They were removed by later parcel rebuilds or the order lifecycle.
 
 **FIXING IT IS NOT A DELETION, AND NOT A REORDER.** Deleting the reachable one breaks undo-combine, which is live and paired with a combine used 24 times. Deleting the dead one throws away a working feature whose UI is already built and shipped. **Reordering only moves the failure**: the to-follow handler 400s `no_items` on an empty body, so undo-combine would start failing visibly instead. **The smallest correct fix is one handler that branches on the presence of `item_ids`** — to-follow when the body carries them, rebuild when it does not — each branch keeping its own guards and its own response shape, which needs no client change and no `sw.js` bump. Giving the to-follow feature its own path is cleaner and costs an admin-JS change plus the service-worker bump. **Either way it needs its own proof: the to-follow branch has not executed since 2026-06-08, and `retail_shipments` has gained columns since, so its first run back would be a first run.** Not fixed here — recorded so it is a known defect rather than a surprise.
+
+### THE TRANSACTION HELPER FOLDED CONCURRENT REQUESTS INTO ONE TRANSACTION — FIXED 2026-08-09 AT `dc91e62f`
+
+**All conversion work stopped for this. `routes/retail.js` stays at 30, no new batches, `POST /polls/:id/vote` waits.** The helper every future money transaction runs through had a defect that only appears once a transaction body actually yields — which is to say, once the checkout is converted, and universally after the PostgreSQL flip.
+
+**THE DEFECT.** `withTransaction` set `depth = 1` on **per-handle state, before awaiting the body**. Any outermost call arriving while that body was suspended read `depth > 0` off the shared handle, concluded it was nested, and took the `SAVEPOINT` path inside someone else's transaction. **Two independent requests produced ONE `BEGIN`**, and the first `COMMIT`ted while the second was still running:
+
+```
+A sees depth=0        BEGIN
+A body in             SAVEPOINT tacet_sp_1
+B sees depth=1        COMMIT                 <- fires while B is still running
+B body in             RELEASE SAVEPOINT tacet_sp_1
+A body out
+B body out
+```
+
+**Both corruption modes, quoted from the test output against the unfixed helper on a real handle:**
+
+> `✗ B commits even though A, arriving first, rolls back`
+> `    B did nothing wrong and must not fail — it got: no such savepoint: tacet_sp_1`
+
+> `✗ B's write is gone after B fails, even though A commits`
+> `    B rolled back — its row must NOT have been committed by A`
+> `    actual ['A','B'] — expected ['A']`
+
+**In checkout terms those are an order vanishing because an unrelated customer's checkout failed, and a `409 insufficient_stock` that leaves its order and its stock reservation committed anyway — an oversell produced by the code that exists to prevent one.**
+
+**WHY IT SURVIVED FOUR CONVERSION BATCHES.** `scripts/test_db_transaction.js` section 8 has claimed since the helper was built that "concurrent transactions on one handle do not interleave", and it passes. **It passes because it calls `withTransaction` twice in ONE SYNCHRONOUS BLOCK**, where neither body has started and both are therefore correctly seen as outermost. It pinned a real property — the queue does work for that shape — but it never touched this one, and its name implied coverage it did not have.
+
+**THE RULE, because this will recur elsewhere: a concurrency test whose calls originate in the same synchronous block is not testing concurrency.** Real requests arrive in **separate macrotasks**, dispatched off separate socket reads, and the test has to arrive that way too. The replacement (`scripts/test_db_transaction_nesting.js`) starts each transaction from its own `setImmediate` for exactly this reason. Written red first: **4 passed, 10 failed** against the unfixed helper, and the run aborted on a live `no such savepoint` escaping from inside the helper.
+
+**WHY IT NEVER BIT IN PRODUCTION.** Every converted body in batches 1–4 is **fully synchronous**, so a transaction completes inside one microtask drain and no second request can arrive mid-flight. What kept it that way is **batch 2's "no await in a converted body" assertion — a TEST, not the helper.** That assertion stays in place after the fix; it costs nothing and it is a second line.
+
+**AND IT WOULD NOT HAVE HELD.** The checkout cannot be synchronous under PostgreSQL, where every statement is a round trip. **Converting the checkout before this repair would have put the money cluster — order, items, reservations, voucher pool, points and wallet — into the two modes above on live traffic.** That is the argument for having designed the checkout on paper before touching it, and it is the same argument that put the helper on `main` unused in the first place.
+
+**THE FIX.** Nesting is decided by the **async context**, not by state on the shared handle. An `AsyncLocalStorage` store holds `Map(handle → depth)` for the duration of a body, so "nested" means what it actually means — *this call was made from within another transaction's body* — and a caller who merely shares the handle cannot read it. The map is copied per level rather than mutated, so unwinding is automatic and no counter can be left wrong after a throw. **There is now no depth on the per-handle state at all**, because anything stored there is readable by every later caller, which is precisely how this happened.
+
+**THE SERIALISER IS BYTE-IDENTICAL AND STILL LOAD-BEARING.** `acquire()` and the per-handle `tail` are untouched. The fix does not weaken the queue or trade it for concurrency — **it makes the queue reachable**, which it was not once a body had started. A request arriving mid-await now waits instead of joining, and that is asserted rather than assumed.
+
+**PROVEN ON THE PRODUCTION DRIVER, not only the fallback.** 14 assertions green and 5 of 5 headline assertions red under `TX_NEST_SABOTAGE=1`. Run on the box against **better-sqlite3**: 14/14 nesting, 28/28 helper. **No existing batch changed behaviour** — batch 1 (11), batch 2 (32), batch 3 (13), batch 4 (32) and `test_db_transaction` (28) all report exactly what they reported before the fix, which is the evidence that nothing shipped was relying on the broken path.
+
+**CARRIED FORWARD, UNRESOLVED.** `acquire()` still keys its queue on the **handle**. Under PostgreSQL the handle a caller passes is the pool, so a queue keyed on it would serialise every transaction in the application behind one promise — measured during the design pass: three concurrent transactions on one shared handle ran strictly sequentially. **At the flip the queue must be scoped to the checked-out connection, not the pool.** This half of the design finding in `docs/tacet-checkout-transaction-design.md` stands and is not addressed here.
 
 ### THE SPLIT ROUTE IS FIXED — DEPLOYED 2026-08-09 AT `85f5bffa`
 
