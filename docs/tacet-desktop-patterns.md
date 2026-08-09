@@ -1,4 +1,4 @@
-# Tacet desktop patterns — v4.1 · 2026-07-31
+# Tacet desktop patterns — v4.2 · 2026-08-02
 
 > The rulebook for every desktop admin surface. `tacet-design-system.md` governs how Tacet **looks**. `tacet-brand-concept.md` governs how it **sounds**. `tacet-ia-blueprint.md` governs what **exists**. This file governs **how a page is put together** — so that Orders and Pop-ups feel like the same product despite having different layouts.
 >
@@ -989,6 +989,12 @@ Three variants were built on twelve real Orders rows and measured in-browser at 
 
 #### Implementation
 
+#### A delivery window is two clocks, and it renders here too
+
+A booked delivery/pickup window (`16:00–18:00`) is not one of the eight names, and it does not become one. It is `tdTimeWindow(from, to)`, exported beside `tdRange` — **the same idiom as the date range: collapse whatever the two ends share and put it at the end in English.** `4:00 – 6:00 PM` when both ends share a meridiem, `11:00 AM – 1:00 PM` when they cross noon, `16:00–18:00` in Chinese.
+
+**Why it belongs in the module and not at the call site.** The window arrives as free text frozen in the *customer's* language — a Chinese checkout stores `今天 16:00–18:00` — so the surfaces that show it (Orders list cell, the drawer's requested-timing tile, the printed slip) were each rendering a customer's clock convention under an operator's date. §1.18 governs the clock as much as the date: **a slot label's times are re-rendered in the reader's convention, exactly as its day word already is.**
+
 **One module, `public/td-datetime.js`, is the only place any of this is written.** It is a standalone file rather than part of `01-core.js` because the standalone pages — `backend-account`, `backend-billing`, `pos`, `cms`, `app.html` — never load the retail-admin parts and have the same drift.
 
 Callers read `tdWhen(value, 'dateTime')`. Nothing else. A page that needs a format the eight names don't cover is a conversation, not a local helper — the same gate as §6 for archetypes. Passing a name outside the eight throws rather than falling back, so the closed set is enforced at runtime and not only on trust.
@@ -1558,6 +1564,16 @@ Small, non-blocking. Resolve during Batch 0.
    published said these were unmade — that was wrong, and it was wrong because the amendment's
    own §7 reads as a to-do list and was taken at its word instead of checked against the
    blueprint. §7 of that document is a record of what was owed in July, not a live queue.)*
+
+---
+
+*v4.2 · 2026-08-02.*
+
+**v4.2 changes — §1.18 gains `tdTimeWindow`. One export added; no name added to the eight, no format changed.**
+
+Found on a live order: TC000138's booked window rendered `Aug 2 16:00–18:00` in the English admin — an English date with a Chinese clock, because `absolutizeSlotLabel` translated the customer's day word (`今天`) and nothing translated the customer's times. The rule already covered this (*the surface's language picks the convention and then that convention is followed completely*); the module simply had no way to say a window, so the raw label went through untouched.
+
+`tdTimeWindow(from, to)` now renders it, `scripts/td-datetime-check.js` asserts it in both languages including the noon-crossing case, and Orders runs every slot label through it. **The eight names are still eight** — this is an export beside `tdRange`, which is what §1.18 always said a not-covered case should become: a conversation and a module change, never a page-local helper.
 
 ---
 

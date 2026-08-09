@@ -1707,7 +1707,7 @@ function shipByPlan(o) {
   if (ordIsCounter(o)) return null;
   // 1 — Pickup: show the counter window, never a ship deadline.
   if (o.fulfillment_type === 'pickup') {
-    const label = localizeSlotLabel(humanizeSlotLabel(absolutizeSlotLabel(o.delivery_slot_label, o.scheduled_for)))
+    const label = localizeSlotLabel(retimeSlotLabel(humanizeSlotLabel(absolutizeSlotLabel(o.delivery_slot_label, o.scheduled_for)), o.scheduled_for))
       || (o.scheduled_for ? localizeSlotLabel(humanizeSlotLabel(o.scheduled_for)) : null);
     return {
       kind: 'pickup', icon: 'pickup',
@@ -1796,7 +1796,7 @@ function shipByPlan(o) {
   // operator never sees raw ISO.
   const dt = parseSchedFor(o.scheduled_for);
   const valid = !isNaN(dt.getTime());
-  const label = localizeSlotLabel(humanizeSlotLabel(absolutizeSlotLabel(o.delivery_slot_label, o.scheduled_for)))
+  const label = localizeSlotLabel(retimeSlotLabel(humanizeSlotLabel(absolutizeSlotLabel(o.delivery_slot_label, o.scheduled_for)), o.scheduled_for))
     || (valid ? fmtSlotShort(dt) : String(o.scheduled_for));
   // If the human label isn't itself the date, surface the date as a sub-line.
   const dateLine = valid ? fmtSlotShort(dt) : '';
@@ -1970,6 +1970,41 @@ function absolutizeSlotLabel(label, scheduledForIso) {
   const datePart = fmtDateShort(dt);           // "Jun 19" / "6月19日" — operator-language
   return s.replace(m[1], datePart);            // swap the word in place, keep "Pickup …"/time tail
 }
+// The clock inside a slot label is frozen in the CUSTOMER's convention: a CN
+// checkout stores "今天 16:00–18:00", so the English admin was rendering a 24-hour
+// window under an English date ("Aug 2 16:00–18:00") — half-converted, and against
+// §1.18 (the surface's language picks the convention and follows it completely).
+// absolutizeSlotLabel already does this for the DAY word; this does it for the
+// clock. Both edges go through tdTimeWindow, so neither language is composed here.
+// The label carries wall-clock times with no date, so they're anchored on the
+// scheduled day in GZ wall-clock (same basis as slotEndAnchor).
+function retimeSlotLabel(label, scheduledForIso) {
+  if (label == null || label === '') return label;
+  if (typeof tdTimeWindow !== 'function') return label;   // module not loaded yet
+  const s = String(label);
+  const anchor = parseSchedFor(scheduledForIso);
+  const g = gzParts(isNaN(anchor.getTime()) ? new Date() : anchor);
+  const swap = (sh, sm, eh, em, matched) => {
+    if (sh > 23 || eh > 23 || sm > 59 || em > 59) return s;
+    const out = tdTimeWindow(gzWall(g.y, g.mo, g.da, sh, sm).toISOString(),
+                             gzWall(g.y, g.mo, g.da, eh, em).toISOString());
+    return out ? s.replace(matched, out) : s;
+  };
+  // 24-hour window — "16:00–18:00" (a CN checkout, or an EN one before this rule).
+  const m = /(\d{1,2}):(\d{2})\s*(?:[-–—~]|to|至)\s*(\d{1,2}):(\d{2})/.exec(s);
+  if (m) return swap(Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4]), m[0]);
+  // 12-hour window — "10AM–12PM" / "10:30 AM - 12 PM" (an older EN checkout).
+  const ap = /(\d{1,2})(?::(\d{2}))?\s*(am|pm)\s*(?:[-–—~]|to|至)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)/i.exec(s);
+  if (ap) {
+    const to24 = (h, mer) => {
+      h = Number(h);
+      if (/p/i.test(mer)) { if (h < 12) h += 12; } else if (h === 12) h = 0;
+      return h;
+    };
+    return swap(to24(ap[1], ap[3]), Number(ap[2] || 0), to24(ap[4], ap[6]), Number(ap[5] || 0), ap[0]);
+  }
+  return s;
+}
 // The customer's delivery_slot_label is stored as free text in WHATEVER language
 // they checked out in (e.g. "Today 10AM–12PM", "Thu Jun 25 2026", "ASAP") — the
 // server keeps only that one string, so the operator's EN/CN toggle can't swap
@@ -2020,14 +2055,9 @@ function humanizeSlotLabel(label) {
   // Date-only "YYYY-MM-DD" — a schedule-for-later calendar pick or a day-only
   // zone chip stores just the date. Show "Jun 12" (no fake 00:00 time) rather
   // than leaking the raw ISO date to the operator.
-  const mDay = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
-  if (mDay) {
-    const d = new Date(Number(mDay[1]), Number(mDay[2]) - 1, Number(mDay[3]));
-    if (!isNaN(d.getTime())) {
-      const M = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()];
-      return M + ' ' + String(d.getDate()).padStart(2, '0');
-    }
-  }
+  // Through tdWhen('date'), not a hand-rolled month table: the local one printed
+  // a zero-padded "Aug 05" and never spoke Chinese (§1.18).
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return tdWhen(s, 'date') || s;
   return s;
 }
 // Operator tiles show only what staff act on. The default delivery mode
@@ -5010,7 +5040,7 @@ function earlyDispatchWarning(o) {
   if (target) {
     const daysOut = daysBetweenISO(today, target);
     if (daysOut > 2) {
-      const label = humanizeSlotLabel(o.delivery_slot_label) || target;
+      const label = retimeSlotLabel(humanizeSlotLabel(o.delivery_slot_label), o.scheduled_for) || target;
       return {
         titleEn: 'Delivery requested later', titleCn: '要求稍后送达',
         bodyEn: `The customer requested delivery around <b>${escapeHtml(label)}</b> — about ${daysOut} days from now. Shipping today will likely arrive early. Mark dispatched anyway?`,
