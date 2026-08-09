@@ -215,7 +215,11 @@
   from { opacity: 0; transform: translateX(-18rpx); }
   to   { opacity: 1; transform: translateX(0); }
 }
-.chip { animation: chipIn 0.28s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+/* Drill transition only — see _pulsePaneAnim in shop.js. `both` holds the
+   from-frame (opacity 0) before the animation starts, so an unconditional
+   version of this rule leaves a full-size invisible element whenever the
+   animation does not start. First paint must never depend on it. */
+.pane-anim .chip { animation: chipIn 0.28s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
 .chip-pane > .chip:nth-child(1)  { animation-delay: 0s; }
 .chip-pane > .chip:nth-child(2)  { animation-delay: 0.03s; }
 .chip-pane > .chip:nth-child(3)  { animation-delay: 0.06s; }
@@ -432,6 +436,11 @@
 }
 .side-back, .side-parent, .side-tab {
   transform-origin: top center;
+}
+/* Drill transition only — see the note on .pane-anim .chip above. */
+.pane-anim .side-back,
+.pane-anim .side-parent,
+.pane-anim .side-tab {
   animation: railFold 0.3s cubic-bezier(0.34, 0.8, 0.4, 1) both;
 }
 .rail-pane > view:nth-child(1)  { animation-delay: 0s; }
@@ -452,7 +461,9 @@
 
 /* The right pane swaps contents on drill too — fade it to match the rail. */
 @keyframes shopPaneFade { from { opacity: 0; } to { opacity: 1; } }
-.list-main .cat-section {
+/* Drill transition only — see the note on .pane-anim .chip above. This rule
+   covers ALL shop content, so an unconditional version blanks the page. */
+.pane-anim .list-main .cat-section {
   animation: shopPaneFade 0.34s cubic-bezier(0.22, 0.61, 0.36, 1) both;
 }
 

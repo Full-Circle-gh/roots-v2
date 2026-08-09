@@ -4205,19 +4205,26 @@ button.cp-cta::after { border: none; }
 /* corner-subtle = legacy default, no override. */
 
 /* Entrance animations — keep them subtle. The class is applied on the
-   block root from JS via the `entrance_anim` CMS field. */
+   block root from JS via the `entrance_anim` CMS field.
+   fill-mode is `forwards`, never `both`. `both` holds the from-frame
+   (opacity 0) before the animation starts, so a block whose animation never
+   starts keeps its full layout box and paints nothing — an invisible hero
+   with no error anywhere. The shop page shipped that bug and went blank on
+   real devices. `forwards` costs at most a frame at full opacity before the
+   fade begins, and fails visible. These have no animation-delay, so that
+   window is one frame. */
 @keyframes blk-fade-in    { from { opacity: 0; } to { opacity: 1; } }
 @keyframes blk-slide-up   { from { opacity: 0; transform: translateY(20rpx); } to { opacity: 1; transform: translateY(0); } }
 .hero.enter-fade,
 .featured.enter-fade,
 .cattabs.enter-fade,
 .greet-blk.enter-fade,
-.bun-blk.enter-fade        { animation: blk-fade-in   .4s ease-out both; }
+.bun-blk.enter-fade        { animation: blk-fade-in   .4s ease-out forwards; }
 .hero.enter-slide_up,
 .featured.enter-slide_up,
 .cattabs.enter-slide_up,
 .greet-blk.enter-slide_up,
-.bun-blk.enter-slide_up    { animation: blk-slide-up .45s ease-out both; }
+.bun-blk.enter-slide_up    { animation: blk-slide-up .45s ease-out forwards; }
 /* `enter-none` is the legacy instant render. */
 
 /* Hero scrim — dims the bottom half of the image so floating CTAs read
