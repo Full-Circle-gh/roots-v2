@@ -38,6 +38,11 @@ const { getCategoryTree, sanitizeTree, normalizeCategoryPair } = require('../lib
 // What delivery/pickup/counter each MEAN — see lib/fulfilment.js. Prefer these
 // over `=== 'pickup'`: a bare pickup test reads a counter sale as a delivery.
 const { isCounter, shipsNothing, isTerminalOnPaid } = require('../lib/fulfilment');
+// delivery_slot_label is a SNAPSHOT — its leading "Today"/"Tomorrow" was true
+// when the customer picked, not when they read it. attachSlotDisplay() derives a
+// fresh `delivery_slot_display` from scheduled_for at read time; the column is
+// never touched. See lib/slot-label.js.
+const { attachSlotDisplay, deliverySlotDisplay } = require('../lib/slot-label');
 const { requireAuth, requirePermission, logActivity } = require('../middleware/auth');
 const { getTenantDb, rawTenantDb, rawTdb, ROOTS_TENANT_ID, tenantAls, tdb, currentTenantId, DATA_ISOLATION_READY } = require('../lib/tenant-db');
 const { getTenantCreds, setTenantSecrets, KEYS: CRED_KEYS } = require('../lib/tenant-creds');
@@ -4768,6 +4773,7 @@ router.get('/api/retail/payment/status/:orderId', requireRetailAuth, async (req,
   }
   delete order.address_json;
   localizeOrderTimes(order);
+  attachSlotDisplay(order);
   res.json({ success: true, data: order });
 });
 
@@ -10446,6 +10452,7 @@ function loadOrderForCustomer(orderId, customerId, baseUrl = '') {
   ).get(orderId, customerId);
   if (!o) return null;
   localizeOrderTimes(o);
+  attachSlotDisplay(o);
   if (o.address_json) { try { o.address = JSON.parse(o.address_json); } catch {} }
   delete o.address_json;
   if (o.refund_lines_json) {
@@ -11232,6 +11239,10 @@ router.get('/api/retail/orders', requireRetailAuth, (req, res) => {
 
   const rows = tdb().prepare(sql).all(...params);
   rows.forEach(localizeOrderTimes);
+  // One `now` for the whole page, so two orders on the same screen can never
+  // straddle midnight and disagree about which day "today" is.
+  const slotNow = new Date();
+  rows.forEach(r => attachSlotDisplay(r, slotNow));
 
   // Attach a tiny preview of items + item_count so the list can render
   // thumbs without N+1 follow-ups. Batched into two queries regardless of
@@ -11462,7 +11473,7 @@ function findDeliveryJobForOrder(orderId, recipientPhone) {
 
 // Build the track payload (stage, rider, positions, route, ETA) from a job row.
 // Coordinates are stored GCJ-02 ×1e6; we divide by 1e6 on the way out.
-function buildDeliveryTrackData(job, slotLabel) {
+function buildDeliveryTrackData(job, slotLabel, scheduledFor) {
   // Coarse stage from the delivery_jobs row — see deliveryJobStage (shared with
   // the admin drawer so staff + customer always read the same stage).
   const stage = deliveryJobStage(job);
@@ -11510,6 +11521,10 @@ function buildDeliveryTrackData(job, slotLabel) {
     rider_to_cust_m: stage === 'scheduled' ? null : (job.rider_to_cust_m ?? distFromTrack),
     expected_delivery_at: job.expected_delivery_at || null,
     slot_label: slotLabel || null,   // human slot for the 'scheduled' sub-line
+    // Same slot with its leading relative day word re-derived from
+    // scheduled_for. Kept beside slot_label rather than replacing it so the
+    // admin twin of this endpoint keeps reading exactly what it read before.
+    slot_display: deliverySlotDisplay(slotLabel, scheduledFor) || null,
     updated_at: job.updated_at,
   };
 }
@@ -11517,12 +11532,12 @@ function buildDeliveryTrackData(job, slotLabel) {
 router.get('/api/retail/orders/:id/delivery-track', requireRetailAuth, (req, res) => {
   const id = parseInt(req.params.id, 10);
   const order = tdb().prepare(
-    'SELECT id, recipient_phone, delivery_slot_label FROM retail_orders WHERE id = ? AND customer_id = ?'
+    'SELECT id, recipient_phone, delivery_slot_label, scheduled_for FROM retail_orders WHERE id = ? AND customer_id = ?'
   ).get(id, req.customer.id);
   if (!order) return res.status(404).json({ success: false, error: 'not_found' });
   const job = findDeliveryJobForOrder(id, order.recipient_phone);
   if (!job) return res.json({ success: true, data: { tracking: false } });
-  res.json({ success: true, data: buildDeliveryTrackData(job, order.delivery_slot_label) });
+  res.json({ success: true, data: buildDeliveryTrackData(job, order.delivery_slot_label, order.scheduled_for) });
 });
 
 // Admin twin of the track endpoint — identical payload, admin auth, no
@@ -11532,12 +11547,12 @@ router.get('/api/retail/orders/:id/delivery-track', requireRetailAuth, (req, res
 router.get('/api/retail-admin/orders/:id/delivery-track', requireRetailAdmin, (req, res) => {
   const id = parseInt(req.params.id, 10);
   const order = tdb().prepare(
-    'SELECT id, recipient_phone, delivery_slot_label FROM retail_orders WHERE id = ?'
+    'SELECT id, recipient_phone, delivery_slot_label, scheduled_for FROM retail_orders WHERE id = ?'
   ).get(id);
   if (!order) return res.status(404).json({ success: false, error: 'not_found' });
   const job = findDeliveryJobForOrder(id, order.recipient_phone);
   if (!job) return res.json({ success: true, data: { tracking: false } });
-  res.json({ success: true, data: buildDeliveryTrackData(job, order.delivery_slot_label) });
+  res.json({ success: true, data: buildDeliveryTrackData(job, order.delivery_slot_label, order.scheduled_for) });
 });
 
 // Request a fapiao (发票) for an existing PAID order — for shoppers who didn't
@@ -17411,6 +17426,11 @@ router.get('/api/retail/orders/:id/reschedule-options', requireRetailAuth, (req,
     current: {
       scheduled_for: o.scheduled_for,
       slot_label:    o.delivery_slot_label,
+      // Fresh day word for the "Current: …" line in the reschedule sheet. The
+      // customer is being asked to compare their existing slot against a list of
+      // new ones — a stale "Tomorrow" beside a live picker is the worst place
+      // for it.
+      slot_display:  deliverySlotDisplay(o.delivery_slot_label, o.scheduled_for),
       slot_kind:     o.delivery_slot_kind,
     },
   };

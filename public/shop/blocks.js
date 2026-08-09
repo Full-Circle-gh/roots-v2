@@ -406,7 +406,11 @@
     var preview = Array.isArray(o.items_preview) ? o.items_preview : [];
     var thumbs = (preview.length ? preview.slice(0, 3) : [{}]).map(function (p) { return absUrl(p.image_url) || ''; });
     var count = o.item_count || preview.length || 0;
-    var eta = o.delivery_slot_label || '';
+    // Twin of block-renderer.js — prefer the server's derived slot (its leading
+    // "Today"/"Tomorrow" is re-computed against the Guangzhou calendar on every
+    // fetch), then the stored snapshot, then the scheduled date. Keep the two
+    // files behaviourally identical.
+    var eta = o.delivery_slot_display || o.delivery_slot_label || '';
     if (!eta && o.scheduled_for) eta = String(o.scheduled_for).slice(0, 16).replace('T', ' ');
     var accent = color(b.accent_color || 'forest-kale');
     var cardBg = b.card_bg_color ? color(b.card_bg_color) : '#fff';
