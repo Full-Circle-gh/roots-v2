@@ -684,8 +684,12 @@ Component({
             const thumbs = (preview.length ? preview.slice(0, 3) : [{}])
               .map(p => absUrl(p.image_url) || p.image_url || '');
             const count = o.item_count || preview.length || 0;
-            // ETA line — prefer the human delivery slot, else the scheduled date.
-            let eta = o.delivery_slot_label || '';
+            // ETA line — prefer the server's derived slot (its leading
+            // "Today"/"Tomorrow" is re-computed against the Guangzhou calendar on
+            // every fetch), then the stored snapshot, then the scheduled date.
+            // The derived field is server-side on purpose: the day word must not
+            // depend on the device clock.
+            let eta = o.delivery_slot_display || o.delivery_slot_label || '';
             if (!eta && o.scheduled_for) eta = String(o.scheduled_for).slice(0, 16).replace('T', ' ');
             // Colour controls — '' falls back to the design default. These ride
             // on the wrapper as CSS vars so every layout inherits them.
