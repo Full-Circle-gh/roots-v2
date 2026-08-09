@@ -1,22 +1,60 @@
 #!/bin/bash
-# Nightly off-site backup of the live SQLite databases to Aliyun OSS.
+# Nightly off-site backup of the live databases to Aliyun OSS — SQLite AND
+# PostgreSQL.
 #
 # Complements (does NOT replace) /root/scripts/roots-backup.sh, which keeps
 # LOCAL hourly/daily gzipped snapshots of roots.db only. This one is the
-# OFF-SITE tier: it also covers the per-tenant databases, verifies every
-# snapshot with PRAGMA integrity_check before anything leaves the box, and
-# pages ops through the app's existing System Alerts webhook on any failure.
+# OFF-SITE tier: it also covers the per-tenant databases and the `tacet`
+# PostgreSQL database, verifies every snapshot before anything leaves the box,
+# and pages ops through the app's existing System Alerts webhook on any failure.
 #
-# Snapshots are taken with sqlite3's online .backup API. A plain cp is NEVER
-# used: roots.db and tenants/5.db both carry a live WAL, so a byte copy of the
-# main file alone would be torn/stale (5.db is 4KB on disk with ~2.8MB in WAL).
+# SQLite snapshots are taken with sqlite3's online .backup API. A plain cp is
+# NEVER used: roots.db and tenants/5.db both carry a live WAL, so a byte copy of
+# the main file alone would be torn/stale (5.db is 4KB on disk with ~2.8MB in
+# WAL).
 #
-# Snapshots are gzipped before upload. Order matters: integrity_check runs on
-# the UNCOMPRESSED copy and must return "ok" BEFORE gzip is allowed to run, so
+# SQLite snapshots are gzipped before upload. Order matters: integrity_check runs
+# on the UNCOMPRESSED copy and must return "ok" BEFORE gzip is allowed to run, so
 # a gzip is never made from a source that was not verified first.
 #
-# Layout:  oss://tacet/daily/<YYYYmmdd-HHMMSS>/<name>.db.gz
+# Layout:  oss://tacet/daily/<YYYYmmdd-HHMMSS>/<name>.db.gz      (SQLite)
+#          oss://tacet/daily/<YYYYmmdd-HHMMSS>/tacet.dump        (PostgreSQL)
+#          oss://tacet/daily/<YYYYmmdd-HHMMSS>/roles.sql         (PostgreSQL)
 # Retention: prefixes under daily/ older than RETAIN_DAYS are deleted (see below).
+#
+#
+# THE POSTGRES TIER — WHY IT LIVES IN THIS SCRIPT AND NOT ITS OWN
+# ---------------------------------------------------------------
+# Everything that makes the SQLite tier trustworthy is generic: the flock guard,
+# the free-space preflight, the stale-/tmp sweep, the ops alert, the
+# upload-then-verify-size loop, the delete-tmp-only-after-everything-verified
+# rule, and the prefix-keyed retention pruner. A second script would have to
+# reproduce all of it, and the copy would drift — which is the lesson the test
+# harness has already had to learn twice. So Postgres is a third source KIND
+# here, not a second program.
+#
+# ROLES ARE PART OF THE BACKUP, NOT AN EXTRA. `pg_dump` is per-database and does
+# NOT carry roles; they are cluster-level. The `tacet` dump references the
+# `tacet_app` role 304 times in GRANT statements, so restoring it into a cluster
+# where that role does not exist produces 304 errors and a database the
+# application cannot log into. roles.sql is ~1KB and is uploaded in the same
+# prefix, in the same run, so a restore never has to go looking for it.
+#
+# THE INTEGRITY GATE IS `pg_restore --list`, and it must find a NON-EMPTY table
+# of contents. Exit status alone is not enough: pg_restore --list succeeds on a
+# valid-but-empty archive, so a dump that produced nothing would sail through a
+# status-only check. That is the Postgres equivalent of accepting a torn SQLite
+# copy because .backup returned 0.
+#
+# NO PASSWORD IS USED OR NEEDED. pg_hba.conf grants `local all all peer`, so
+# running as the postgres system user authenticates by OS identity over the Unix
+# socket. There is deliberately no password in this script, in the repo, in .env
+# or in a .pgpass — adding one would be a downgrade, not a convenience.
+#
+# ORDERING IS DELIBERATE: the SQLite objects are snapshotted, verified AND
+# UPLOADED before Postgres is touched at all. Grouping every snapshot first would
+# mean a Postgres failure aborts the run before anything reaches the bucket,
+# costing the SQLite backup as well. A Postgres failure must never do that.
 
 set -euo pipefail
 
@@ -32,6 +70,18 @@ WORK=/tmp
 RETAIN_DAYS=14
 MIN_FREE_MB=2048
 STALE_TMP_DAYS=2
+
+# --- PostgreSQL --------------------------------------------------------------
+# PG_DB empty disables the Postgres tier entirely, so this script stays correct
+# on a box where Postgres is not installed.
+PG_DB=tacet
+PG_SUPERUSER=postgres      # peer-auth identity; see the header — no password
+PG_DUMP_NAME=tacet.dump    # custom format (-Fc): compressed internally, and
+                           # pg_restore can list it, restore selectively, and
+                           # restore in parallel. gzip would add nothing —
+                           # measured 325,633,343 B for -Fc vs 324,394,798 B
+                           # for plain|gzip -9, a 0.4% difference.
+PG_ROLES_NAME=roles.sql
 
 # --- overlap guard -----------------------------------------------------------
 # Re-exec under flock so two runs (cron + a manual run) can never collide.
@@ -86,6 +136,19 @@ trap 'fail "unexpected error on line $LINENO"' ERR
 command -v sqlite3 >/dev/null 2>&1 || fail "sqlite3 CLI missing"
 command -v gzip >/dev/null 2>&1 || fail "gzip missing"
 [ -x "$OSS" ] || fail "ossutil missing at $OSS"
+
+# Postgres preflight. Checked BEFORE any SQLite work so a missing tool is
+# reported immediately rather than after eleven minutes of snapshotting — but it
+# only fails the run when PG_DB is set, so this script still works unchanged on a
+# box without Postgres.
+if [ -n "${PG_DB:-}" ]; then
+  command -v pg_dump >/dev/null 2>&1     || fail "pg_dump missing but PG_DB=$PG_DB is set"
+  command -v pg_dumpall >/dev/null 2>&1  || fail "pg_dumpall missing but PG_DB=$PG_DB is set"
+  command -v pg_restore >/dev/null 2>&1  || fail "pg_restore missing (needed for the integrity gate)"
+  id -u "$PG_SUPERUSER" >/dev/null 2>&1  || fail "system user $PG_SUPERUSER missing (peer auth needs it)"
+  sudo -u "$PG_SUPERUSER" psql -Atc "SELECT 1" -d "$PG_DB" >/dev/null 2>&1 \
+    || fail "cannot reach PostgreSQL database $PG_DB as $PG_SUPERUSER over the socket"
+fi
 
 # Sweep working copies abandoned by an earlier failed run. They are kept on
 # purpose for manual recovery, but must not accumulate: roots.db alone is ~500MB
@@ -161,6 +224,66 @@ done
 # --- all verified: only now remove the working copies ------------------------
 cleanup_tmp
 FILES=()
+
+# --- PostgreSQL tier ---------------------------------------------------------
+# Reached only once every SQLite object is in the bucket and verified, so a
+# failure from here on cannot cost the SQLite backup. Same /tmp discipline, same
+# upload-then-verify, same alert path.
+if [ -n "${PG_DB:-}" ]; then
+  pg_dump_file="$WORK/${PG_DB}-$DATE.dump"
+  pg_roles_file="$WORK/${PG_DB}-roles-$DATE.sql"
+  FILES+=("$pg_dump_file" "$pg_roles_file")
+
+  # -Fc: custom format. Compressed internally, so no gzip step.
+  sudo -u "$PG_SUPERUSER" pg_dump -Fc -f "$pg_dump_file" "$PG_DB" \
+    || { cleanup_tmp; fail "pg_dump failed for $PG_DB"; }
+
+  # Cluster-level and not carried by pg_dump. Without this the restore errors on
+  # every GRANT to tacet_app — see the header.
+  sudo -u "$PG_SUPERUSER" pg_dumpall --roles-only -f "$pg_roles_file" \
+    || { cleanup_tmp; fail "pg_dumpall --roles-only failed"; }
+
+  # THE INTEGRITY GATE. Two conditions, both required: pg_restore --list must
+  # succeed, AND the table of contents must be non-empty. A valid archive that
+  # contains nothing passes the first check and fails the second, which is the
+  # case a status-only check would wave through.
+  # `|| true` so a non-zero exit becomes the precise message below rather than
+  # tripping the ERR trap with "unexpected error on line N".
+  toc=$(pg_restore --list "$pg_dump_file" 2>&1) || toc=""
+  toc_entries=$(printf '%s\n' "$toc" | grep -cvE '^\s*(;|$)' || true)
+  if [ -z "$toc" ] || [ "${toc_entries:-0}" -eq 0 ]; then
+    cleanup_tmp
+    fail "pg_restore --list found no restorable objects in $PG_DUMP_NAME (entries=${toc_entries:-0})"
+  fi
+
+  # The roles file must actually carry the application role, for the same reason:
+  # a 0-byte or role-less roles.sql would upload happily and be useless.
+  grep -q "CREATE ROLE" "$pg_roles_file" \
+    || { cleanup_tmp; fail "roles dump contains no CREATE ROLE statements"; }
+
+  pg_raw=$(sudo -u "$PG_SUPERUSER" psql -Atc "SELECT pg_database_size('$PG_DB')" 2>/dev/null || echo 0)
+  RAW_BYTES=$((RAW_BYTES + pg_raw))
+  echo "[db-backup] $PG_DB toc_entries=$toc_entries dump=$(stat -c%s "$pg_dump_file") roles=$(stat -c%s "$pg_roles_file")"
+
+  for pair in "$pg_dump_file:$PG_DUMP_NAME" "$pg_roles_file:$PG_ROLES_NAME"; do
+    src_f="${pair%%:*}"; obj="${pair##*:}"
+    target="oss://$BUCKET/daily/$DATE/$obj"
+    "$OSS" cp -f "$src_f" "$target" >/dev/null 2>&1 || fail "upload failed for $obj -> $target"
+
+    remote_size=$("$OSS" stat "$target" 2>/dev/null | awk -F': *' '/^Content-Length/ {print $2}' | tr -d ' \r') || true
+    local_size=$(stat -c%s "$src_f")
+    [ -n "${remote_size:-}" ] || fail "verify failed: $target not found in bucket after upload"
+    [ "$remote_size" = "$local_size" ] \
+      || fail "verify failed: $obj size mismatch (local=$local_size remote=$remote_size)"
+
+    UPLOADED=$((UPLOADED + 1))
+    TOTAL_BYTES=$((TOTAL_BYTES + local_size))
+    echo "[db-backup] uploaded $target ($local_size bytes, verified)"
+  done
+
+  cleanup_tmp
+  FILES=()
+fi
 
 # --- retention ---------------------------------------------------------------
 # Script-side deletion (no bucket lifecycle rule). Age is derived from the
