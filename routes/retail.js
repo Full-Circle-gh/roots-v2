@@ -15595,7 +15595,7 @@ router.post('/api/retail-admin/customers/:id/force-logout', requireRetailAdmin, 
 // falls through to the INSERT path in POST /api/retail/auth → a fresh customer
 // is created with the real openid again. Tokens are revoked too so the cached
 // session on the device dies and re-login fires immediately.
-router.post('/api/retail-admin/customers/:id/reset-test', requireRetailAdmin, (req, res) => {
+router.post('/api/retail-admin/customers/:id/reset-test', requireRetailAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const c  = tdb().prepare('SELECT id, openid FROM retail_customers WHERE id = ?').get(id);
   if (!c) return res.status(404).json({ success: false, error: 'not_found' });
@@ -15603,12 +15603,13 @@ router.post('/api/retail-admin/customers/:id/reset-test', requireRetailAdmin, (r
     return res.status(409).json({ success: false, error: 'already_reset' });
   }
   const archived = `_reset_${Date.now()}_${c.openid}`.slice(0, 256);
-  const tx = tdb().transaction(() => {
-    tdb().prepare('UPDATE retail_customers SET openid = ? WHERE id = ?').run(archived, id);
-    const r = tdb().prepare('DELETE FROM retail_auth_tokens WHERE customer_id = ?').run(id);
+  // Returns the revoked-token count out of the transaction — the response
+  // reports it, and it is only true once the DELETE committed.
+  const revoked = await withTransaction(tdb(), (tx) => {
+    tx.prepare('UPDATE retail_customers SET openid = ? WHERE id = ?').run(archived, id);
+    const r = tx.prepare('DELETE FROM retail_auth_tokens WHERE customer_id = ?').run(id);
     return r.changes;
   });
-  const revoked = tx();
   logActivity(req.user.id, req.user.username, 'reset_test_customer', 'retail_customer', id, { archived_openid: archived, revoked }, req.ip);
   res.json({ success: true, revoked });
 });
@@ -15702,7 +15703,7 @@ router.post('/api/retail-admin/customers/:id/wallet-adjust', requireRetailAdmin,
 // Address admin — create / edit / delete a customer's saved addresses.
 // Mirrors the customer-side routes at /api/retail/addresses but scoped by
 // path-param customer_id and gated by retail-admin auth.
-router.post('/api/retail-admin/customers/:id/addresses', requireRetailAdmin, express.json(), (req, res) => {
+router.post('/api/retail-admin/customers/:id/addresses', requireRetailAdmin, express.json(), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!id) return res.status(400).json({ success: false, error: 'bad_id' });
   const c = tdb().prepare('SELECT id FROM retail_customers WHERE id = ?').get(id);
@@ -15713,11 +15714,13 @@ router.post('/api/retail-admin/customers/:id/addresses', requireRetailAdmin, exp
   if (!String(a.recipient_name || '').trim() || !a.phone || !a.address) {
     return res.status(400).json({ success: false, error: 'missing_required' });
   }
-  const tx = tdb().transaction(() => {
+  // Returns the new address id out of the transaction — the geocode kick-off,
+  // the activity log and the response row all need it committed first.
+  const newId = await withTransaction(tdb(), (tx) => {
     if (a.is_default) {
-      tdb().prepare('UPDATE retail_customer_addresses SET is_default = 0 WHERE customer_id = ?').run(id);
+      tx.prepare('UPDATE retail_customer_addresses SET is_default = 0 WHERE customer_id = ?').run(id);
     }
-    const info = tdb().prepare(
+    const info = tx.prepare(
       `INSERT INTO retail_customer_addresses
          (customer_id, recipient_name, phone, province, city, district,
           address, detail, postal_code, is_default)
@@ -15736,7 +15739,6 @@ router.post('/api/retail-admin/customers/:id/addresses', requireRetailAdmin, exp
     );
     return info.lastInsertRowid;
   });
-  const newId = tx();
   // Same pipeline the customer-facing POST runs. Without it a staff-entered
   // address never got coordinates at all — so it could never be routed by real
   // distance, and its English text was never converted, leaving the conversion
@@ -15747,7 +15749,7 @@ router.post('/api/retail-admin/customers/:id/addresses', requireRetailAdmin, exp
   res.json({ success: true, data: row });
 });
 
-router.put('/api/retail-admin/customers/:id/addresses/:addrId', requireRetailAdmin, express.json(), (req, res) => {
+router.put('/api/retail-admin/customers/:id/addresses/:addrId', requireRetailAdmin, express.json(), async (req, res) => {
   const id     = parseInt(req.params.id, 10);
   const addrId = parseInt(req.params.addrId, 10);
   const existing = tdb().prepare(
@@ -15770,11 +15772,12 @@ router.put('/api/retail-admin/customers/:id/addresses/:addrId', requireRetailAdm
   // one, so a text fix doesn't invalidate it. Keep it, and mark the row so the
   // pin diagnostic surfaces it for a human to confirm.
   const adminKeepsPin = addressPin.keepsPinThroughTextEdit(existing);
-  const tx = tdb().transaction(() => {
+  // Every statement runs on `tx`, the handle withTransaction hands in — §24.
+  await withTransaction(tdb(), (tx) => {
     if (a.is_default) {
-      tdb().prepare('UPDATE retail_customer_addresses SET is_default = 0 WHERE customer_id = ?').run(id);
+      tx.prepare('UPDATE retail_customer_addresses SET is_default = 0 WHERE customer_id = ?').run(id);
     }
-    tdb().prepare(
+    tx.prepare(
       `UPDATE retail_customer_addresses
           SET recipient_name = COALESCE(?, recipient_name),
               phone          = COALESCE(?, phone),
@@ -15800,18 +15803,17 @@ router.put('/api/retail-admin/customers/:id/addresses/:addrId', requireRetailAdm
       addrId
     );
     if (adminTextChanged && !adminKeepsPin) {
-      tdb().prepare(
+      tx.prepare(
         `UPDATE retail_customer_addresses
             SET lat = NULL, lng = NULL, geo_source = NULL, geo_precision = NULL, geocoded_at = NULL
           WHERE id = ?`
       ).run(addrId);
     } else if (adminTextChanged && adminKeepsPin) {
-      tdb().prepare(
+      tx.prepare(
         `UPDATE retail_customer_addresses SET geo_precision = 'review' WHERE id = ?`
       ).run(addrId);
     }
   });
-  tx();
   if (adminTextChanged && !adminKeepsPin) {
     const merged = tdb().prepare(
       'SELECT province, city, district, address, detail FROM retail_customer_addresses WHERE id = ?'
@@ -20898,15 +20900,16 @@ router.get('/api/retail-admin/fapiao-settings', requireRetailAdmin, (req, res) =
   res.json({ success: true, data: { ...s, credsReady: _nuonuo.nuonuoEnabled(integ().nuonuo) } });
 });
 
-router.put('/api/retail-admin/fapiao-settings', requireRetailAdmin, express.json(), (req, res) => {
+router.put('/api/retail-admin/fapiao-settings', requireRetailAdmin, express.json(), async (req, res) => {
   const b = req.body || {};
-  const upsert = tdb().prepare(
-    `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
-       VALUES (?, ?, CURRENT_TIMESTAMP, ?)
-     ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = CURRENT_TIMESTAMP, updated_by = excluded.updated_by`
-  );
-  const set = (key, val) => upsert.run(key, JSON.stringify(val), req.user.id);
-  const tx = tdb().transaction(() => {
+  // Every statement runs on `tx`, the handle withTransaction hands in — §24.
+  await withTransaction(tdb(), (tx) => {
+    const upsert = tx.prepare(
+      `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
+         VALUES (?, ?, CURRENT_TIMESTAMP, ?)
+       ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = CURRENT_TIMESTAMP, updated_by = excluded.updated_by`
+    );
+    const set = (key, val) => upsert.run(key, JSON.stringify(val), req.user.id);
     if ('autoIssue'   in b) set('fapiao.autoIssue', !!b.autoIssue);
     if ('invoiceLine' in b) set('fapiao.invoiceLine', String(b.invoiceLine || 'pc'));
     if ('taxRate'     in b) set('fapiao.taxRate', String(b.taxRate || '0.06'));
@@ -20921,7 +20924,6 @@ router.put('/api/retail-admin/fapiao-settings', requireRetailAdmin, express.json
       });
     }
   });
-  tx();
   res.json({ success: true });
 });
 
@@ -22919,15 +22921,16 @@ router.get('/api/retail-admin/printer', requireRetailAdmin, (req, res) => {
   }});
 });
 
-router.put('/api/retail-admin/printer', requireRetailAdmin, express.json(), (req, res) => {
+router.put('/api/retail-admin/printer', requireRetailAdmin, express.json(), async (req, res) => {
   const b = req.body || {};
-  const upsert = tdb().prepare(
-    `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
-       VALUES (?, ?, CURRENT_TIMESTAMP, ?)
-     ON CONFLICT(key) DO UPDATE SET
-       value_json = excluded.value_json, updated_at = CURRENT_TIMESTAMP, updated_by = excluded.updated_by`
-  );
-  const tx = tdb().transaction(() => {
+  // Every statement runs on `tx`, the handle withTransaction hands in — §24.
+  await withTransaction(tdb(), (tx) => {
+    const upsert = tx.prepare(
+      `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
+         VALUES (?, ?, CURRENT_TIMESTAMP, ?)
+       ON CONFLICT(key) DO UPDATE SET
+         value_json = excluded.value_json, updated_at = CURRENT_TIMESTAMP, updated_by = excluded.updated_by`
+    );
     if (b.auto_print !== undefined) upsert.run('printer.auto_print', JSON.stringify(!!b.auto_print), req.user.id);
     if (b.auto_print_addon !== undefined) upsert.run('printer.auto_print_addon', JSON.stringify(!!b.auto_print_addon), req.user.id);
     if (b.auto_print_refund !== undefined) upsert.run('printer.auto_print_refund', JSON.stringify(!!b.auto_print_refund), req.user.id);
@@ -22954,7 +22957,6 @@ router.put('/api/retail-admin/printer', requireRetailAdmin, express.json(), (req
       upsert.run('printer.out_of_city_store_id', JSON.stringify(ooc), req.user.id);
     }
   });
-  tx();
   logActivity(req.user.id, req.user.username, 'printer_settings_update', 'storefront_config', null, {}, req.ip);
   res.json({ success: true, data: loadPrinterPrefs() });
 });

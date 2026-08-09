@@ -1028,9 +1028,19 @@ const CONFIG_SNAP = (db) => ({
     }
     assert.ok(/\.immediate\(/.test(RETAIL_SRC), 'the checkout\'s .immediate() must still be there');
     // Counted, so a stray conversion elsewhere in the file is visible.
+    //
+    // 45 at batch 2; 40 after batch 3 converted five more. This number is MEANT
+    // to move with each batch and the failure it produces is the guard working —
+    // it is the tripwire for a conversion nobody intended, so it is updated
+    // deliberately per batch rather than loosened into a range.
+    //
+    // NOTE THIS IS A GREP COUNT AND RUNS ONE HIGH: it matches a comment that
+    // mentions tdb().transaction(). The AST figure from
+    // scripts/diagnose_async_conversion_scope.js is the authority for the record
+    // (39 here), and §24 carries that number, not this one.
     const remaining = (RETAIL_SRC.match(/\.transaction\(/g) || []).length;
-    assert.strictEqual(remaining, 45,
-      `expected 45 unconverted transactions left in routes/retail.js, found ${remaining}`);
+    assert.strictEqual(remaining, 40,
+      `expected 40 unconverted transactions left in routes/retail.js, found ${remaining}`);
   });
 
   // ── 13 ───────────────────────────────────────────────────────────────────
