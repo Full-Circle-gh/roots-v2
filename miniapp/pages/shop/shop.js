@@ -118,6 +118,9 @@ Page({
     // Drill-in sidebar state (list layout). Tapping a top category with ≥2
     // subs flips the rail from top categories to that category's subs and
     // focuses the right pane on it; the back bar returns to all categories.
+    // paneAnim arms the rail/chip/pane fold animations for the length of one
+    // drill. It is FALSE on first render on purpose — see _pulsePaneAnim.
+    paneAnim: false,
     drillTop: '',            // '' = top level; else name of the drilled top
     drillLabel: '',          // its display label (header under the back bar)
     subTabs: [],             // [{ id, label }] subcategory groups of the drill
@@ -791,6 +794,35 @@ Page({
     else this.setCategory(e);
   },
 
+  // Arm the fold/fade animations for exactly one drill, then take them away.
+  //
+  // chipIn, railFold and shopPaneFade were all written for the drill swap — they
+  // make moving between a category and its subs read as one continuous fold.
+  // All three use fill-mode `both`, which holds the from-frame (opacity 0)
+  // BEFORE the animation starts. That is correct for a transition and wrong for
+  // a first paint: an animation that never starts leaves the element with its
+  // full layout box painting nothing — a blank page with no error anywhere.
+  //
+  // That is what shipped. The selectors were unconditional, so every first
+  // render ran a transition animation it never needed, and on a real handset
+  // (where the animation did not start) it left the whole catalogue invisible
+  // while every box measured correctly.
+  //
+  // Gating on this flag means first paint runs no animation at all and cannot
+  // fail that way. A drill still animates; if one ever fails to start there,
+  // the flag clears and the rows snap visible rather than staying lost.
+  _pulsePaneAnim() {
+    if (this._paneAnimT) clearTimeout(this._paneAnimT);
+    // Longest stagger (0.49s) + duration (0.3s) = 0.79s. Held to 1s so a slow
+    // device can't get the class pulled out from under a still-running fold and
+    // snap the rows to their end state. Overshooting is free — a highlight
+    // change doesn't re-mount the rows, so the animation never replays.
+    this._paneAnimT = setTimeout(() => {
+      this._paneAnimT = null;
+      this.setData({ paneAnim: false });
+    }, 1000);
+  },
+
   // Flip the rail from top categories → this category's subcategories and
   // focus the right pane on it. The right pane filters to just this section
   // so the sub-rail maps 1:1 to what's on screen (no cross-category scroll).
@@ -800,7 +832,11 @@ Page({
     const isList = LIST_LAYOUTS.includes(this.data.layout);
     const subTabs = section.groups.map(g => ({ id: g.id, label: g.label }));
     this._suppressScrollUntil = Date.now() + 600;
+    // paneAnim rides in the SAME setData as the new content so the class and
+    // the nodes it animates mount in one render pass — arming it separately
+    // would land after the rows already exist and never play.
     this.setData({
+      paneAnim: true,
       drillTop: name,
       drillLabel: section.label,
       subTabs,
@@ -810,6 +846,7 @@ Page({
       sidebarScrollId: 'sub-top',   // list rail → top (back bar)
       activeChipId: 'chip-back',    // grid chips → start (back chip)
     });
+    this._pulsePaneAnim();
     // Once the filtered view has rendered: jump it to the top + measure the
     // sub anchors so scroll-sync works.
     setTimeout(() => {
@@ -833,10 +870,12 @@ Page({
     const isList = LIST_LAYOUTS.includes(this.data.layout);
     this._suppressScrollUntil = Date.now() + 700;
     this.setData({
+      paneAnim: true,
       drillTop: '', drillLabel: '', subTabs: [], activeSub: '',
       visibleSections: this.data.sections,
       activeCategory: prev,
     });
+    this._pulsePaneAnim();
     setTimeout(() => {
       this._measureSections();
       const sec = this.data.sections.find(s => s.name === prev);
