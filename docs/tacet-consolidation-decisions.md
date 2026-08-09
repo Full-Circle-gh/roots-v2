@@ -1,8 +1,12 @@
-# Tacet shared-core consolidation — decisions record, v4.6
+# Tacet shared-core consolidation — decisions record, v4.8
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
+
+2026-08-09 · v4.8 — RECORD CORRECTION in §26 Language: the mechanism is MERGED, not pending merge. It merged hours after the section was written, so the clause was true when written and false the same day. Corrected in place rather than left standing: a stale merge status misinforms every later reader, where a superseded decision at least records how the thinking moved. The replacement also says what a merge does NOT do — the mini app reaches customers only on a republish. A factual correction, not a decision, hence a patch.
+
+2026-08-09 · v4.7 — LANGUAGE is recorded as §26: the customer's own language choice governs every customer surface, per viewer and not per merchant, carried by an `x-lang` header with `?lang=` as a fallback and English on absence, with no auto-detection. §23 loses the customer half of its open languages question and keeps the admin half. §0's LANGUAGE IS PER BUSINESS becomes LANGUAGE IS PER BUSINESS TO OFFER, PER VIEWER TO READ — the original sentence is kept intact as the middle clause, so nothing already decided is rewritten and only the headline stops claiming more than the bullet says. Related documents moves from §26 to §27; nothing cross-references either number. Records one known gap against the new rule — frozen delivery slot labels — as a gap rather than an exception. A new decision, nothing reversed, hence a patch.
 
 2026-08-09 · v4.6 — §24 Database: Path A step 3 — the transaction helper is built, proven on both SQLite drivers and committed UNUSED, so that a flaw cannot propagate into all 56 `routes/retail.js` transactions at once. Records why it issues BEGIN/COMMIT/ROLLBACK itself rather than using `db.transaction()` (which commits and does not roll back after an `await`, measured on the real driver), why per-handle serialisation is load-bearing rather than an optimisation, and two things it does not cover: `.immediate()` and the PostgreSQL backend. Corrects the entry's own draft date from 08-08 to 08-09. A decision plus a build, nothing reversed, hence a patch.
 
@@ -53,7 +57,7 @@ These follow directly from the rules above and correct earlier decisions in this
 - SALES CHANNELS ARE NOT A FIXED LIST. The channel list recorded earlier (WeChat, Web, POS, Meituan, Eleme, GZ Grocery, Manual) is Roots' channel list, not Tacet's. Channels must be configured per business, with integrations offered as available options. GZ Grocery in particular is specific to one customer.
 - CURRENCY IS PER BUSINESS. The codebase currently hardcodes CNY and the ¥ symbol in hundreds of places. This is a defect.
 - UNITS OF MEASURE ARE PER BUSINESS. Grams and kilograms may not be assumed. A business using pounds and ounces must be equally well served.
-- LANGUAGE IS PER BUSINESS. English-plus-Chinese may not be assumed or required. A single-language business must not be forced to supply two names for everything, and a business using two other languages must be supported.
+- LANGUAGE IS PER BUSINESS TO OFFER, PER VIEWER TO READ. A business decides which languages it supplies content in: English-plus-Chinese may not be assumed or required, a single-language business must not be forced to supply two names for everything, and a business using two other languages must be supported. Which of the offered languages a given person is SHOWN is a separate question, answered per viewer and not per business — on the customer surfaces that is settled in §26 The customer's own language choice governs every customer surface. The admin surface is still open, in §23 Open questions.
 - Already consistent with these rules, recorded for clarity: the business time zone is a per-business setting derived from the signup address, and the hardcoded category seed tree is being deleted rather than kept as a default.
 
 ### Standing test
@@ -349,7 +353,7 @@ The PostgreSQL rebuild that stage 5 (Stock) depends on is specified in §24. The
 - Whether `low_stock_threshold` and `supplier_paused` are store fields or operational fields Production also needs.
 - The `tags` field: documented as dietary, now used as a display badge. Which it is, and whether it splits.
 - Rules for the three worst contested writes identified in the product field inventory.
-- A plan for scaling languages on both the admin and customer surfaces.
+- A plan for scaling languages on the ADMIN surface. The customer surface is no longer open — see §26 The customer's own language choice governs every customer surface, which settles it per viewer and does not cover admin.
 - A business-neutral name for the KITCHEN location flag.
 
 ## 24. Database: PostgreSQL, one shared database, row-level account isolation — DECIDED 2026-08-03
@@ -1331,7 +1335,23 @@ VOCABULARY: Locked in docs/tacet-delivery-vocabulary.md, "Date changed after pri
 
 SHIPPED: 794dc601, PR #17. Findings that led here are in docs/receipt-booked-date-findings.md §§6-7.
 
-## 26. Related documents
+## 26. The customer's own language choice governs every customer surface — DECIDED 2026-08-09
+
+DECISION: The language a customer selects in the mini app governs everything that customer sees, across the online store and the mini app alike. A customer who selects Chinese sees Chinese — every screen, every label, every server-rendered line. This is PER VIEWER, not per merchant. Two customers of the same business, on the same screen, at the same moment, read it in two different languages, and neither of them is reading "the business's language".
+
+WHY THIS SHAPE: A merchant decides which languages are on OFFER; a viewer decides which one they READ. Those are two different settings and collapsing them into one is what produces a half-translated page — a Chinese customer given an English button because the shop is filed as English, or an English customer given a Chinese one because the merchant is in Guangzhou. The merchant-side half — which languages a business supplies content in — is §0's LANGUAGE IS PER BUSINESS TO OFFER, PER VIEWER TO READ, and is untouched by this. This section settles only the viewer-side half, which that rule names but does not answer.
+
+MECHANISM, AS BUILT: The client says which language it is in, on every call. Each client's api layer sets an `x-lang` request header — `cn` or `en` — the same way it already attaches `x-wx-appid`, so the language is stated once for the whole surface rather than per call site. `?lang=` is honoured as a second source, because it is the existing house mechanism: the tracking page and the tracking JSON endpoint already read it and two mini-app pages already send it. Absence means ENGLISH, deliberately — an older client that sends nothing sees exactly what it sees today, so nothing shifts under a customer who has not updated. This mechanism is BUILT AND MERGED. That is a statement about the code, not about what a customer is served: the mini app reaches customers only on a republish, which no merge performs.
+
+NO AUTO-DETECTION. `Accept-Language` is never read. Nothing infers the language from the browser, the device, the phone number, the delivery address or the account. The viewer's stated choice is the only input. A guess that is right nine times in ten is still a screen the customer did not ask for, and there is no way for them to tell the system it guessed wrong other than the selector they already used.
+
+WHERE THE LANGUAGE IS NOT STORED, AND WHY THE CLIENT HAS TO SAY: There is no `lang` column on `retail_customers` and no merchant language key in `storefront_config`. Both storefronts hold the choice client-side — the mini app in `globalData` and wx storage, the web store in `state.lang` — and neither persists it. The header is therefore not a convenience over a stored value; it is the only place the choice exists at request time.
+
+REFERENCE IMPLEMENTATION: `viewerLang()` in `routes/retail.js`, and `lib/slot-label.js` for a renderer that takes the viewer's language as an input rather than assuming one. New server-rendered payload fields follow those two rather than inventing a third way to decide.
+
+KNOWN GAP — DELIVERY SLOT LABELS ARE STILL FROZEN IN THE LANGUAGE THE ORDER WAS PLACED IN: `retail_orders.delivery_slot_label` is a SNAPSHOT of a merchant's slot wording, taken at checkout and echoed by every customer surface afterwards. A customer who ordered in Chinese and later switches to English still reads that label in Chinese. This is recorded as a GAP AGAINST THIS RULE, NOT AN EXCEPTION TO IT — the rule above is what the label should do and does not yet do. It is not fixed by translating the stored string, because the string is a merchant's own wording rather than a known phrase, and half-translating a label whose time window stays Chinese is the glued-language defect. Closing it properly means the order storing WHICH slot was chosen and the label being rendered per viewer at read time, which belongs with the Orders stage rather than here.
+
+## 27. Related documents
 
 - docs/tacet-glossary.md — binding definitions, v1.4, 2026-07-31. The words in this document are used with the meanings defined there.
 - docs/tacet-desktop-patterns.md — the rulebook for how a desktop admin page is put together, v4.2, 2026-08-03. Prescriptive except on Orders: when a rule and an unbuilt page disagree, that document wins.
