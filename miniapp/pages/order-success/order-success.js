@@ -62,7 +62,8 @@ Page({
         const store = cn
           ? (data.pickup_store_name_cn || data.pickup_store_name_en || '')
           : (data.pickup_store_name_en || data.pickup_store_name_cn || '');
-        const time = data.delivery_slot_label
+        // Same three-step fallback as the order page and the tracker twins.
+        const time = data.delivery_slot_display || data.delivery_slot_label
           || (data.scheduled_for ? String(data.scheduled_for).slice(0, 16) : '');
         const at = cn ? '取货时间' : 'at';
         patch.pickupLine = cn

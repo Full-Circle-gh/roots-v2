@@ -532,8 +532,12 @@ Page({
         : '';
       const pickupAddress = isPickup ? (pa.address || data.address_full || '') : '';
       const pickupPhone = isPickup ? (pa.store_phone || '') : '';
+      // Prefer the server's rebuilt pickup line — it is derived from
+      // scheduled_for on every fetch, in this viewer's language, so an
+      // uncollected order stops saying "Today" the morning after.
       const pickupTime = isPickup
-        ? (data.delivery_slot_label || (data.scheduled_for ? String(data.scheduled_for).slice(0, 16) : ''))
+        ? (data.delivery_slot_display || data.delivery_slot_label
+           || (data.scheduled_for ? String(data.scheduled_for).slice(0, 16) : ''))
         : '';
 
       this.setData({
@@ -845,7 +849,9 @@ Page({
         this.setData({ rscLoading: false, rscErr: this.data.copy.rescheduleFreshHint });
         return;
       }
-      const cur = (d.current && d.current.slot_label) || '';
+      // slot_display first: a stale "Today" sitting beside a live picker is
+      // the worst place for it.
+      const cur = (d.current && (d.current.slot_display || d.current.slot_label)) || '';
       if (d.fulfillment_type === 'pickup') {
         this.setData({
           rscLoading: false,

@@ -24,6 +24,13 @@ function request(path, opts = {}, _retried = false) {
   const headers = { 'Content-Type': 'application/json', ...(opts.header || {}) };
   if (token) headers.Authorization = 'Bearer ' + token;
   if (_wxAppId) headers['x-wx-appid'] = _wxAppId;
+  // The viewer's language, for the few payload fields the SERVER renders — the
+  // pickup slot line is the first. Language lives only on the client (globalData
+  // + wx storage), so nothing on the server can know it unless we say. Sent on
+  // every call for the same reason the AppID is: one place, no call site has to
+  // remember. Absent → the server falls back to English.
+  const _lang = app?.globalData?.lang;
+  if (_lang) headers['x-lang'] = _lang === 'cn' ? 'cn' : 'en';
 
   return new Promise((resolve, reject) => {
     wx.request({

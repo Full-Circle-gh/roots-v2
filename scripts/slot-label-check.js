@@ -83,8 +83,14 @@ is(deliverySlotDisplay('Ships when restocked', null, NOW), 'Ships when restocked
 is(deliverySlotDisplay('Earliest 2026-08-12', AUG12, NOW), 'Earliest 2026-08-12', 'express');
 is(deliverySlotDisplay('2026-08-12T10:00', AUG12, NOW), '2026-08-12T10:00', 'raw calendar slot id');
 is(deliverySlotDisplay('Deliver 2026-08-12', AUG12, NOW), 'Deliver 2026-08-12', 'mini-app reschedule');
+/* This row asserted the gap, and the gap is now closed. Until the pickup
+   work it read 'Pickup Today 14:30' unchanged — the relative word is not at
+   position 0, so the delivery path's anchored guard skipped it. It is the
+   ONE pre-existing assertion this pass changes, and changing it is the
+   ticket. Kept here, rewritten, rather than deleted: the old expectation is
+   the bug and the new one is the fix, on the same line. */
 is(deliverySlotDisplay('Pickup Today 14:30', '2026-08-08T06:30:00.000Z', NOW),
-  'Pickup Today 14:30', 'pickup · word not leading — known gap, see lib/feie.js absolutizeSlot');
+  'Pickup Aug 8 2:30 PM', 'pickup · rebuilt (was: passed through — see the pickup section)');
 
 console.log('\nNothing to work with → the stored label, unchanged');
 is(deliverySlotDisplay('Tomorrow 10AM–12PM', null, NOW), 'Tomorrow 10AM–12PM', 'no scheduled_for');
@@ -110,6 +116,78 @@ is(deliverySlotDisplay('Tomorrow 10AM–12PM', AUG10, new Date('2026-08-09T15:59
   'Tomorrow 10AM–12PM', '15:59Z = 23:59 GZ · a UTC-reading host flips 8h early');
 is(deliverySlotDisplay('Tomorrow 10AM–12PM', AUG10, new Date('2026-08-09T16:01:00Z')),
   'Today 10AM–12PM', '16:01Z = 00:01 GZ · the real boundary');
+
+/* ── Pickup: rebuilt from scheduled_for, not patched ───────────────────
+   resolvePickupTime mints exactly two shapes and both are rebuilt here:
+   'Pickup Today 14:30' (booked for the same day) and
+   'Pickup Thu 12/8 14:30' (booked ahead — an absolute date that cannot
+   rot, but is still rebuilt so the line is one format, one language and
+   one clock convention). The stored label is English on a 24-hour clock
+   whatever the customer speaks; the rebuilt line follows the VIEWER. */
+const PU_1430 = '2026-08-09T06:30:00.000Z';   // 14:30 GZ, Sun 9 Aug
+const PU_1800 = '2026-08-08T10:00:00.000Z';   // 18:00 GZ, Sat 8 Aug
+
+console.log('\nPickup · English — rebuilt, and the EN clock becomes 12-hour');
+is(deliverySlotDisplay('Pickup Today 14:30', PU_1430, NOW, 'en'),
+  'Pickup Today 2:30 PM', 'same day · the live case');
+is(deliverySlotDisplay('Pickup Today 18:00', PU_1800, gz('2026-08-09T09:00:00'), 'en'),
+  'Pickup Aug 8 6:00 PM', 'UNCOLLECTED across midnight — the real bug');
+is(deliverySlotDisplay('Pickup Thu 12/8 14:30', '2026-08-12T06:30:00.000Z', NOW, 'en'),
+  'Pickup Wednesday, August 12 2:30 PM', 'booked ahead 3 days · rebuilt, not passed through');
+is(deliverySlotDisplay('Pickup Today 14:30', '2026-08-10T06:30:00.000Z', NOW, 'en'),
+  'Pickup Tomorrow 2:30 PM', 'tomorrow');
+is(deliverySlotDisplay('Pickup Today 14:30', '2025-12-14T06:30:00.000Z', NOW, 'en'),
+  'Pickup Dec 14, 2025 2:30 PM', 'year boundary · past');
+is(deliverySlotDisplay('Pickup Today 14:30', '2027-01-05T06:30:00.000Z', NOW, 'en'),
+  'Pickup Tuesday, January 5, 2027 2:30 PM', 'year boundary · ahead');
+
+console.log('\nPickup · Chinese — the viewer decides, and the stored label is always English');
+is(deliverySlotDisplay('Pickup Today 14:30', PU_1430, NOW, 'cn'),
+  '自提 今天 14:30', 'same day · the live case');
+is(deliverySlotDisplay('Pickup Today 18:00', PU_1800, gz('2026-08-09T09:00:00'), 'cn'),
+  '自提 8月8日 18:00', 'UNCOLLECTED across midnight — the real bug');
+is(deliverySlotDisplay('Pickup Thu 12/8 14:30', '2026-08-12T06:30:00.000Z', NOW, 'cn'),
+  '自提 8月12日 周三 14:30', 'booked ahead 3 days · rebuilt, not passed through');
+is(deliverySlotDisplay('Pickup Today 14:30', '2026-08-10T06:30:00.000Z', NOW, 'cn'),
+  '自提 明天 14:30', 'tomorrow');
+is(deliverySlotDisplay('Pickup Today 14:30', '2025-12-14T06:30:00.000Z', NOW, 'cn'),
+  '自提 2025年12月14日 14:30', 'year boundary · past');
+is(deliverySlotDisplay('Pickup Today 14:30', '2027-01-05T06:30:00.000Z', NOW, 'cn'),
+  '自提 2027年1月5日 周二 14:30', 'year boundary · ahead');
+
+console.log('\nPickup · midnight in Asia/Shanghai');
+is(deliverySlotDisplay('Pickup Today 14:30', '2026-08-10T06:30:00.000Z', gz('2026-08-09T23:59:00'), 'en'),
+  'Pickup Tomorrow 2:30 PM', '23:59 GZ · still Tomorrow');
+is(deliverySlotDisplay('Pickup Today 14:30', '2026-08-10T06:30:00.000Z', gz('2026-08-10T00:01:00'), 'en'),
+  'Pickup Today 2:30 PM', '00:01 GZ · flipped to Today');
+is(deliverySlotDisplay('Pickup Today 14:30', '2026-08-10T06:30:00.000Z', gz('2026-08-09T23:59:00'), 'cn'),
+  '自提 明天 14:30', 'cn · 23:59 GZ');
+is(deliverySlotDisplay('Pickup Today 14:30', '2026-08-10T06:30:00.000Z', gz('2026-08-10T00:01:00'), 'cn'),
+  '自提 今天 14:30', 'cn · 00:01 GZ');
+
+console.log('\nPickup · the two clock cases a 12-hour EN render always gets wrong');
+is(deliverySlotDisplay('Pickup Today 00:00', '2026-08-08T16:00:00.000Z', NOW, 'en'),
+  'Pickup Today 12:00 AM', 'GZ midnight → 12:00 AM, and 16:00Z belongs to the NEXT GZ day');
+is(deliverySlotDisplay('Pickup Today 00:00', '2026-08-07T16:00:00.000Z', NOW, 'en'),
+  'Pickup Aug 8 12:00 AM', 'the midnight before · past branch, still 12:00 AM');
+is(deliverySlotDisplay('Pickup Today 00:00', '2026-08-08T16:00:00.000Z', NOW, 'cn'),
+  '自提 今天 00:00', 'cn · midnight stays 00:00');
+is(deliverySlotDisplay('Pickup Today 12:00', '2026-08-09T04:00:00.000Z', NOW, 'en'),
+  'Pickup Today 12:00 PM', 'GZ noon → 12:00 PM');
+
+console.log('\nPickup · degrades to the stored label rather than a partial line');
+is(deliverySlotDisplay('Pickup Today 14:30', null, NOW, 'cn'),
+  'Pickup Today 14:30', 'no scheduled_for');
+is(deliverySlotDisplay('Pickup Today 14:30', 'not-a-date', NOW, 'cn'),
+  'Pickup Today 14:30', 'junk scheduled_for');
+is(deliverySlotDisplay('Pickup Today 14:30', PU_1430, NOW),
+  'Pickup Today 2:30 PM', 'no lang argument → English');
+
+console.log('\nPickup · the guard is anchored, not a contains-test');
+is(deliverySlotDisplay('Pickuptoday 14:30', PU_1430, NOW, 'en'),
+  'Pickuptoday 14:30', 'no word boundary after the lead word');
+is(deliverySlotDisplay('Ships when restocked', PU_1430, NOW, 'cn'),
+  'Ships when restocked', 'a label merely containing no lead word');
 
 /* ── The host clock must not be able to reach any of this ──────────────
    Re-runs this file under four host zones spanning UTC-5 to UTC+14. The
