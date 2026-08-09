@@ -11,6 +11,7 @@
        tdWhen(job.eta,          'time')       → "3:40 PM"         / "15:40"
        tdWhen(row.ship_by,      'date')       → "Jul 29"          / "7月29日"
        tdRange(from, to)                      → "Jul 1 – 29"      / "7月1日–29日"
+       tdTimeWindow(from, to)                 → "4:00 – 6:00 PM"  / "16:00–18:00"
 
    Never pass a locale, a format string, an Intl options object, or a
    .slice() index at a call site. If the eight names don't cover a case,
@@ -286,8 +287,39 @@
       MONTHS_EN[pb.mo] + ' ' + pb.da + ', ' + pb.y;
   }
 
+  /* ── tdTimeWindow ───────────────────────────────────────────────────
+     A delivery/pickup WINDOW — two clocks on one day, not two dates.
+     `tdRange` is its date twin and this follows the same idiom: collapse
+     whatever the two ends share and put it at the END in English.
+
+       same meridiem →  "4:00 – 6:00 PM"    / "16:00–18:00"
+       crossing noon →  "11:00 AM – 1:00 PM" / "11:00–13:00"
+
+     Written HERE rather than at a call site because the surfaces that
+     show a window (Orders list cell, the drawer's requested-timing tile,
+     the printed slip) would otherwise each invent it — which is the
+     exact drift §1.18 exists to stop. The eight NAMES stay closed: this
+     is an export alongside tdRange, not a ninth name. */
+  function tdTimeWindow(from, to, opts) {
+    var a = parse(from), b = parse(to);
+    if (!a && !b) return '';
+    if (!a) return tdWhen(to, 'time', opts);
+    if (!b) return tdWhen(from, 'time', opts);
+
+    var cn = (opts && opts.lang ? opts.lang : lang()) === 'cn';
+    var pa = parts(a.d, a.dayOnly), pb = parts(b.d, b.dayOnly);
+
+    if (cn) return pad(pa.h) + ':' + pad(pa.mi) + '–' + pad(pb.h) + ':' + pad(pb.mi);
+
+    var h12 = function (p) { var h = p.h % 12; return (h === 0 ? 12 : h) + ':' + pad(p.mi); };
+    var mer = function (p) { return p.h < 12 ? 'AM' : 'PM'; };
+    if (mer(pa) === mer(pb)) return h12(pa) + ' – ' + h12(pb) + ' ' + mer(pb);
+    return h12(pa) + ' ' + mer(pa) + ' – ' + h12(pb) + ' ' + mer(pb);
+  }
+
   root.tdWhen = tdWhen;
   root.tdRange = tdRange;
+  root.tdTimeWindow = tdTimeWindow;
   root.TD_DATETIME_NAMES = NAMES;
 
   /* Also exported for Node so the §1.18 format table can be asserted
@@ -295,6 +327,6 @@
      the narrow declaration rather than a blanket eslint-disable header. */
   /* global module */
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { tdWhen: tdWhen, tdRange: tdRange, NAMES: NAMES };
+    module.exports = { tdWhen: tdWhen, tdRange: tdRange, tdTimeWindow: tdTimeWindow, NAMES: NAMES };
   }
 })(typeof window !== 'undefined' ? window : globalThis);
