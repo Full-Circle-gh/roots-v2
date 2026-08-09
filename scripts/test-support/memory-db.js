@@ -76,7 +76,66 @@ function openQueueTableDb(databaseJsSource) {
   return db;
 }
 
+// ── The same trick, for any table ─────────────────────────────────────────
+// openQueueTableDb above rebuilds ONE table from database.js. The transaction
+// conversion (decisions §24) needs four others, and hand-writing them in the
+// suite would recreate precisely the drift this file was created to end — two of
+// the four carry bolted-on columns the converted code writes
+// (retail_product_option_choices.stock_product_id,
+// retail_notifications.broadcast_id), so a hardcoded CREATE would go stale the
+// same way scripts/test_address_pin.js's copies did.
+//
+// Parentheses are BALANCED rather than matched by indentation, because the two
+// DDL styles in database.js close differently: tables inside a shared db.exec()
+// block end on `  );`, while retail_broadcasts has its own db.exec(`…`) and ends
+// on `)` at column 0. An indent-based regex silently truncates one of them.
+// Line comments are skipped while balancing — the DDL is full of `-- single |
+// multi | text` and one of those could otherwise unbalance the scan.
+function extractCreateTable(source, table) {
+  const head = new RegExp(`CREATE TABLE IF NOT EXISTS ${table}\\s*\\(`).exec(source);
+  if (!head) throw new Error(`DDL for ${table} not found in database.js`);
+  let i = head.index + head[0].length - 1;      // sit on the opening paren
+  let depth = 0;
+  for (; i < source.length; i++) {
+    const c = source[i];
+    if (c === '-' && source[i + 1] === '-') {   // line comment — skip to newline
+      while (i < source.length && source[i] !== '\n') i++;
+      continue;
+    }
+    if (c === "'") {                            // string literal — skip it
+      for (i++; i < source.length && source[i] !== "'"; i++);
+      continue;
+    }
+    if (c === '(') depth++;
+    else if (c === ')') { depth--; if (depth === 0) break; }
+  }
+  if (depth !== 0) throw new Error(`unbalanced DDL for ${table} in database.js`);
+  return source.slice(head.index, i + 1);
+}
+
+/**
+ * An in-memory database carrying the REAL definitions of `tables`, each with
+ * every addColumn() database.js has bolted onto it since.
+ *
+ * Foreign keys are stripped: these are single-table extracts, and the targets
+ * (products, retail_customers, users) are not necessarily present.
+ */
+function openTablesDb(databaseJsSource, tables) {
+  const db = picked.open();
+  for (const t of tables) {
+    const ddl = extractCreateTable(databaseJsSource, t)
+      .replace(/,\s*FOREIGN KEY[\s\S]*?(?=,\s*\w+\s|\s*\)$)/g, '')
+      .replace(/,?\s*FOREIGN KEY[^,)]*\([^)]*\)[^,)]*(?:REFERENCES[^,)]*\([^)]*\)[^,)]*)?/g, '');
+    db.exec(ddl);
+    const added = [...databaseJsSource.matchAll(
+      new RegExp(`addColumn\\('${t}',\\s*'(\\w+)',\\s*'(\\w+)'\\)`, 'g')
+    )];
+    for (const [, col, type] of added) db.exec(`ALTER TABLE ${t} ADD COLUMN ${col} ${type}`);
+  }
+  return db;
+}
+
 // `driver` is printed by the suites so a run's results can be read against the
 // engine that produced them — and so a silent fall back to the built-in is
 // visible rather than inferred.
-module.exports = { openMemoryDb: picked.open, openQueueTableDb, driver: picked.name };
+module.exports = { openMemoryDb: picked.open, openQueueTableDb, openTablesDb, driver: picked.name };

@@ -40,6 +40,10 @@ const { getCategoryTree, sanitizeTree, normalizeCategoryPair } = require('../lib
 const { isCounter, shipsNothing, isTerminalOnPaid } = require('../lib/fulfilment');
 const { requireAuth, requirePermission, logActivity } = require('../middleware/auth');
 const { getTenantDb, rawTenantDb, rawTdb, ROOTS_TENANT_ID, tenantAls, tdb, currentTenantId, DATA_ISOLATION_READY } = require('../lib/tenant-db');
+// The transaction helper (decisions §24, Path A step 3). Takes the handle as an
+// argument and hands it to the body, so every statement inside runs on the
+// transaction's own handle — the shape that survives the PostgreSQL cutover.
+const { withTransaction } = require('../lib/db-transaction');
 const { getTenantCreds, setTenantSecrets, KEYS: CRED_KEYS } = require('../lib/tenant-creds');
 // Web Push — optional; wrapped so a missing module never breaks order flow.
 let _push = null;
@@ -1269,7 +1273,7 @@ function backfillOptionQuestions(items) {
 // one transaction). Editor sends the full list every save, so this is the whole
 // truth — an empty/missing array clears them. Choice price_delta is the only way
 // an option touches the bill; stock is never involved.
-function saveProductOptions(productId, input) {
+async function saveProductOptions(productId, input) {
   const TYPES = ['single', 'multi', 'text'];
   const clean = (Array.isArray(input) ? input : []).slice(0, 12).map(o => {
     const type = TYPES.includes(o && o.type) ? o.type : 'single';
@@ -1292,17 +1296,20 @@ function saveProductOptions(productId, input) {
     return { question_en, question_cn, type, is_required: o && o.is_required ? 1 : 0, choices };
   }).filter(o => (o.question_en || o.question_cn) && (o.type === 'text' || o.choices.length));
 
-  const tx = tdb().transaction(() => {
-    tdb().prepare(
+  // Replace-all, so the DELETEs and the re-INSERTs must be one unit: a failure
+  // between them would leave the product with NO options at all. Every statement
+  // runs on `tx`, the handle withTransaction hands in — see decisions §24.
+  await withTransaction(tdb(), (tx) => {
+    tx.prepare(
       `DELETE FROM retail_product_option_choices
         WHERE option_id IN (SELECT id FROM retail_product_options WHERE product_id = ?)`
     ).run(productId);
-    tdb().prepare('DELETE FROM retail_product_options WHERE product_id = ?').run(productId);
-    const insOpt = tdb().prepare(
+    tx.prepare('DELETE FROM retail_product_options WHERE product_id = ?').run(productId);
+    const insOpt = tx.prepare(
       `INSERT INTO retail_product_options (product_id, question_en, question_cn, type, is_required, sort_order)
        VALUES (?,?,?,?,?,?)`
     );
-    const insChoice = tdb().prepare(
+    const insChoice = tx.prepare(
       `INSERT INTO retail_product_option_choices (option_id, label_en, label_cn, price_delta, is_default, stock_product_id, sort_order)
        VALUES (?,?,?,?,?,?,?)`
     );
@@ -1311,7 +1318,6 @@ function saveProductOptions(productId, input) {
       o.choices.forEach((c, ci) => insChoice.run(optId, c.label_en, c.label_cn || null, c.price_delta, c.is_default, c.stock_product_id, ci));
     });
   });
-  tx();
 }
 
 // resolveBundleComponents → customer/operator display shape: each component
@@ -6513,22 +6519,26 @@ function broadcastCityEn(cityCn) {
   return _bcCityEnMap.get(s) || _bcCityEnMap.get(s.replace(/[市省]$/, '')) || null;
 }
 
-function fanOutBroadcast(brd) {
+async function fanOutBroadcast(brd) {
   const db_ = tdb();
   const { where, params } = audienceWhere(brd.audience);
   const customers = db_.prepare(
     `SELECT c.id FROM retail_customers c WHERE ${where}`
   ).all(...params);
-  const insert = db_.prepare(
-    `INSERT INTO retail_notifications
-       (customer_id, category, type, title_en, title_cn, body_en, body_cn,
-        ref_type, ref_id, broadcast_id)
-     VALUES (?, 'broadcast', 'announcement', ?, ?, ?, ?, ?, ?, ?)`
-  );
   const refType = brd.deeplink ? 'deeplink' : null;
   const refId   = brd.deeplink || null;
-  const txn = db_.transaction((rows) => {
-    for (const c of rows) {
+  // The per-customer inserts are the transaction; the audience SELECT above and
+  // the status UPDATE below stay outside it, exactly as before. The INSERT is
+  // prepared on `tx` rather than on db_ so every statement in the body runs on
+  // the handle withTransaction hands in — see decisions §24.
+  await withTransaction(db_, (tx) => {
+    const insert = tx.prepare(
+      `INSERT INTO retail_notifications
+         (customer_id, category, type, title_en, title_cn, body_en, body_cn,
+          ref_type, ref_id, broadcast_id)
+       VALUES (?, 'broadcast', 'announcement', ?, ?, ?, ?, ?, ?, ?)`
+    );
+    for (const c of customers) {
       insert.run(
         c.id,
         brd.title_en || '', brd.title_cn || '',
@@ -6538,7 +6548,6 @@ function fanOutBroadcast(brd) {
       );
     }
   });
-  txn(customers);
   db_.prepare(
     `UPDATE retail_broadcasts
         SET status = 'sent', sent_at = CURRENT_TIMESTAMP, recipient_count = ?
@@ -6596,7 +6605,7 @@ router.get('/api/retail-admin/broadcasts/regions', requireRetailAdmin, (req, res
 });
 
 // POST /api/retail-admin/broadcasts — create + send-now OR schedule.
-router.post('/api/retail-admin/broadcasts', requireRetailAdmin, express.json(), (req, res) => {
+router.post('/api/retail-admin/broadcasts', requireRetailAdmin, express.json(), async (req, res) => {
   const b = req.body || {};
   const title_en = (b.title_en || '').trim();
   const title_cn = (b.title_cn || '').trim();
@@ -6638,7 +6647,7 @@ router.post('/api/retail-admin/broadcasts', requireRetailAdmin, express.json(), 
   let recipient_count = 0;
   if (sendNow) {
     const row = tdb().prepare('SELECT * FROM retail_broadcasts WHERE id = ?').get(id);
-    recipient_count = fanOutBroadcast(row);
+    recipient_count = await fanOutBroadcast(row);
   }
   res.json({ success: true, data: { id, status: initialStatus, recipient_count } });
 });
@@ -6674,27 +6683,41 @@ router.post('/api/retail-admin/broadcasts/:id/recall', requireRetailAdmin, (req,
 
 // Scheduler — every 60s, walk every tenant's DB and fire any 'scheduled'
 // broadcasts whose scheduled_for has arrived. Best-effort: never throws.
-function tickBroadcastScheduler() {
+// Async since fanOutBroadcast became async (decisions §24, Path A step 3). Three
+// things had to hold, and each is a way this could have broken silently:
+//   * the tenantAls.run() callback is awaited, so the loop still finishes one
+//     tenant before starting the next. AsyncLocalStorage carries its store
+//     across an await, so tdb() inside still resolves to the right tenant.
+//   * the inner try/catch awaits, or a rejected fanout would sail past it and
+//     become an unhandled rejection instead of the warn it has always been.
+//   * setInterval does not await its callback and nothing else will, so the
+//     promise is terminated at the boundary below. This function still never
+//     throws, which is what "best-effort" meant before.
+async function tickBroadcastScheduler() {
   let tenants;
   try { tenants = db.prepare("SELECT id FROM tenants WHERE status = 'active'").all(); }
   catch { return; }   // tenants table not migrated yet
   for (const t of tenants) {
     try {
       const tdb_ = getTenantDb(t.id);
-      tenantAls.run(rawTenantDb(t.id), () => {
+      await tenantAls.run(rawTenantDb(t.id), async () => {
         const due = tdb_.prepare(
           `SELECT * FROM retail_broadcasts
             WHERE status = 'scheduled' AND scheduled_for <= CURRENT_TIMESTAMP`
         ).all();
         for (const brd of due) {
-          try { fanOutBroadcast(brd); }
+          try { await fanOutBroadcast(brd); }
           catch (e) { console.warn('[broadcast scheduler] fanout', brd.id, e.message); }
         }
       });
     } catch (e) { console.warn('[broadcast scheduler]', t.id, e.message); }
   }
 }
-const _bcSweep = setInterval(tickBroadcastScheduler, 60 * 1000);
+// The promise ends here: setInterval ignores a returned promise, so without this
+// catch a rejection would be unhandled rather than logged.
+const _bcSweep = setInterval(() => {
+  tickBroadcastScheduler().catch(e => console.warn('[broadcast scheduler]', e && e.message));
+}, 60 * 1000);
 if (_bcSweep.unref) _bcSweep.unref();
 
 // ─── Auto-deliver local-ETA orders ─────────────────────────────────────────
@@ -18548,7 +18571,7 @@ router.post('/api/retail-admin/products/:id/restore-version', requireRetailAdmin
   res.json({ success: true });
 });
 
-router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(), (req, res) => {
+router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(), async (req, res) => {
   const id = parseInt(req.params.id, 10);
   const existing = tdb().prepare('SELECT id, name_en FROM store_products WHERE id = ? AND COALESCE(is_active,1) = 1').get(id);
   if (!existing) return res.status(404).json({ success: false, error: 'not_found' });
@@ -18770,7 +18793,7 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
 
   // Persist customer-choice options (replace-all). Retail-owned like price/photos,
   // so allowed even when core catalog fields are locked.
-  if (hasOptions) saveProductOptions(id, body.options);
+  if (hasOptions) await saveProductOptions(id, body.options);
 
   // Checkpoint the saved state into version history (best-effort, post-save).
   recordProductVersion(tdb(), id, req.user && req.user.username);
@@ -18857,7 +18880,7 @@ router.get('/api/retail-admin/products/:id', requireRetailAdmin, (req, res) => {
 
 // Create a product straight from the Mini App Backend product page. Standalone
 // path (no kitchen needed): name + the basic commercial fields, is_active=1.
-router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (req, res) => {
+router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), async (req, res) => {
   // upstream tenants don't author products here — they arrive from the master.
   if (catalogMode(req) === 'upstream') return res.status(423).json({ success: false, error: 'catalog_locked' });
   const b = req.body || {};
@@ -18931,7 +18954,9 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), (r
   // Customer-choice options (dressing / spice / paid extras). Same replace-all
   // path the PATCH handler uses — without this the create silently drops every
   // option the wizard/editor sent (they only landed on a later manual save).
-  if ('options' in b) { try { saveProductOptions(id, b.options); } catch (e) {} }
+  // `await` INSIDE the try — without it the rejection would escape this catch
+  // and become an unhandled rejection, silently ending the best-effort swallow.
+  if ('options' in b) { try { await saveProductOptions(id, b.options); } catch (e) {} }
   logActivity(req.user.id, req.user.username, 'create', 'product_retail', id, { name: name_en || name_cn }, req.ip);
   if (freedOnCreate.length) {
     logActivity(req.user.id, req.user.username, 'sku_release', 'product_retail', id,
