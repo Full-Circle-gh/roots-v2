@@ -139,6 +139,44 @@ inferred from which numbers they refused. An inference is good enough to warn a
 customer and to stop wasting attempts; it is not good enough to turn a paying
 customer away.
 
+### Decided during verification (2026-08-09)
+
+Four things the review settled, recorded here because none is obvious from the
+diff.
+
+**A leading `+` is decisive, and this fixed a worse bug than the one it targeted.**
+`^1\d{10}$` matches every US and Canadian number in E.164 form — `+1 415 555
+2671` is eleven digits beginning 1 once the `+` is stripped. The first version
+tested the digits and ignored the `+`, so a foreign number was called mainland,
+stored as `14155552671`, and never warned about. Worse, the same rule sits under
+`normalizeCnMobile`: `+13800138000` (country code 1) was rewritten to the
+mainland number `13800138000` — **a real, different subscriber** — so an SMS or
+a login OTP would have gone to a stranger. A `+` now means international unless
+it is `+86` wrapping an actual mobile, and such a value is stored exactly as
+typed. This deliberately NARROWS what SMS accepts, which the first review
+certified as widening-only; the narrowing is exactly the `+`-prefixed non-`+86`
+set, verified over a 441-input corpus, and every mainland form still passes.
+
+**A bare `14155552671` is read as mainland.** Without the `+` the two are the
+same eleven digits and nothing in the value says which was meant. For a
+Guangzhou grocery the mainland reading is overwhelmingly the likelier one, and
+being wrong costs a warning that doesn't appear — never a rejected order.
+
+**The `recipient_name` trim is intentional and kept.** The two POST address
+routes also tightened the name to a trimmed presence check. That is scope beyond
+"phone", and it stays: it is the same whitespace hole in the same funnel — a
+field of spaces satisfying a truthiness check and reaching the waybill as blank
+— and fixing one while leaving its neighbour would be odd. Presence only; no
+name format is judged.
+
+**Two limitations accepted, not fixed.** A separator-only extension with no
+words (`13800138000-8001`) keeps every digit but loses the hyphen; and
+`HAS_WORDS` recognises Latin and CJK, so a note in kana or Cyrillic would be
+reformatted rather than preserved. Both are vanishingly rare for a Guangzhou
+delivery address, neither can drop a digit or fail a presence check, and
+`转8001` / `ext 8001` are preserved verbatim. Recorded at the top of
+`lib/phone-cn.js` so the next reader does not rediscover them as bugs.
+
 ### Mechanics
 
 The phone is carried end to end untouched. Every capture path checks that the

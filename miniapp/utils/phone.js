@@ -20,9 +20,15 @@ const MAINLAND_MOBILE = /^1\d{10}$/;
 
 // Digits only, unwrapping a mainland country code only when what's left is
 // actually a mainland mobile (so a foreign number starting 86 keeps its digits).
+//
+// A leading '+' is KEPT unless the value turns out to be a wrapped mainland
+// mobile, because '+1 415 555 2671' reduces to eleven digits beginning 1 and is
+// otherwise indistinguishable from a mainland number — the customer would see
+// no notice for a phone no rider can ring. Same rule as lib/phone-cn.js.
 function normalize(raw) {
   const t = String(raw == null ? '' : raw).trim();
   if (!t) return '';
+  const plus = t.charAt(0) === '+';
   const digits = t.replace(/\D/g, '');
   if (!digits) return '';
   const unwrapped =
@@ -31,7 +37,7 @@ function normalize(raw) {
     : (digits.length === 15 && digits.indexOf('0086') === 0) ? digits.slice(4)
     : null;
   if (unwrapped != null && MAINLAND_MOBILE.test(unwrapped)) return unwrapped;
-  return digits;
+  return plus ? '+' + digits : digits;
 }
 
 function isMainlandMobile(raw) {

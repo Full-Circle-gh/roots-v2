@@ -2381,15 +2381,21 @@ async function coQuote(){
    server's in lib/phone-cn.js — three copies of one regex, because three
    bundles, kept deliberately trivial so they stay in step. */
 const CO_MAINLAND_MOBILE=/^1\d{10}$/;
+// A leading '+' means international unless it unwraps to a mainland mobile:
+// '+1 415 555 2671' is eleven digits beginning 1 once the '+' is dropped, so
+// without this the customer sees no notice for a phone no rider can ring.
+// Same rule as lib/phone-cn.js and miniapp/utils/phone.js — keep the three in step.
 function coIsMainlandMobile(raw){
-  const digits=String(raw==null?'':raw).replace(/\D/g,'');
+  const t=String(raw==null?'':raw).trim();
+  const plus=t.charAt(0)==='+';
+  const digits=t.replace(/\D/g,'');
   if(!digits)return false;
   const un = digits.length===13&&digits.indexOf('86')===0   ? digits.slice(2)
            : digits.length===14&&digits.indexOf('086')===0  ? digits.slice(3)
            : digits.length===15&&digits.indexOf('0086')===0 ? digits.slice(4)
            : null;
   if(un!=null&&CO_MAINLAND_MOBILE.test(un))return true;
-  return CO_MAINLAND_MOBILE.test(digits);
+  return !plus&&CO_MAINLAND_MOBILE.test(digits);
 }
 function coInjectRiderPhoneStyle(){
   if($('#corpStyle'))return;

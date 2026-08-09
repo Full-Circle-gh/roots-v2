@@ -89,9 +89,46 @@ it('whitespace-only becomes empty, so presence checks can be honest', () => {
 it('tidies a mainland mobile to its canonical 11 digits', () => {
   assert.strictEqual(phoneCn.normalizeForStorage('+86 138-0013 8000'), GOOD);
 });
-it('keeps a foreign number, minus the separators', () => {
-  assert.strictEqual(phoneCn.normalizeForStorage('+852 6611 2233'), '+85266112233');
-  assert.strictEqual(phoneCn.normalizeForStorage(' 6611 2233 '), '66112233');
+it('stores an INTERNATIONAL number exactly as typed', () => {
+  // Changed deliberately: this used to strip the separators ('+85266112233').
+  // We do not know how other countries group their digits, so reformatting one
+  // is guessing at a convention we have no source for. A value that announces
+  // itself with a '+' is left alone.
+  assert.strictEqual(phoneCn.normalizeForStorage('+852 6611 2233'), '+852 6611 2233');
+  assert.strictEqual(phoneCn.normalizeForStorage(' 6611 2233 '), '66112233', 'no + → still tidied');
+});
+
+// ── A leading '+' is decisive (the NANP hole) ────────────────────────────
+// '+1 415 555 2671' is eleven digits beginning 1 once the '+' is dropped, which
+// is exactly the shape of a mainland mobile. The first version tested the digits
+// and ignored the '+', so a US number was called mainland, stored as
+// '14155552671', and never warned about — a number staff would then dial as if
+// it were domestic.
+it('a NANP number is not mainland, and keeps its + and its spacing', () => {
+  assert.strictEqual(phoneCn.isMainlandMobile('+1 415 555 2671'), false);
+  assert.strictEqual(phoneCn.normalizeForStorage('+1 415 555 2671'), '+1 415 555 2671');
+  assert.strictEqual(phoneCn.isMainlandMobile('+14155552671'), false);
+  assert.strictEqual(phoneCn.normalizeForStorage('+14155552671'), '+14155552671');
+});
+it('…but +86 wrapping a real mobile still unwraps', () => {
+  assert.strictEqual(phoneCn.isMainlandMobile('+8613800138000'), true);
+  assert.strictEqual(phoneCn.normalizeForStorage('+8613800138000'), GOOD);
+  assert.strictEqual(phoneCn.isMainlandMobile('+86 138 0013 8000'), true);
+  assert.strictEqual(phoneCn.normalizeForStorage('+86 138 0013 8000'), GOOD);
+});
+it('a + that is NOT +86 never loses a digit, whatever country it is', () => {
+  for (const v of ['+1 415 555 2671', '+44 20 7946 0958', '+852 6611 2233', '+8612345678']) {
+    assert.strictEqual(phoneCn.normalizeForStorage(v), v, v);
+    assert.strictEqual(phoneCn.isMainlandMobile(v), false, v);
+  }
+});
+it('a BARE 11-digit NANP number is read as mainland — documented, not accidental', () => {
+  // Without the '+' the two are the same eleven digits and nothing in the value
+  // says which was meant. For a Guangzhou grocery the mainland reading is the
+  // likelier one, and the cost of being wrong is a warning that doesn't appear,
+  // never a rejected order. Asserted so the choice is visible if it is revisited.
+  assert.strictEqual(phoneCn.isMainlandMobile('14155552671'), true);
+  assert.strictEqual(phoneCn.normalizeForStorage('14155552671'), '14155552671');
 });
 it('leaves a field containing WORDS exactly as typed (it is a note)', () => {
   assert.strictEqual(phoneCn.normalizeForStorage('13800138000 (work)'), '13800138000 (work)');
@@ -262,6 +299,15 @@ it('classifies conservatively — anything unclear keeps retrying', () => {
     [Object.assign(new Error('x'), { qyCode: 40001, qyMsg: '收货地址不合法' }), 'recipient but not phone'],
     [Object.assign(new Error('x'), { qyCode: 40001, qyMsg: '发货人电话有误' }), 'a phone, but not the RECIPIENT’s'],
     [new Error('create failed 请输入合法的收货人电话'), 'no structured code — Qingyun never answered'],
+    // The case that actually exercises the qyCode guard. The line above cannot:
+    // its text is on `.message`, and the classifier reads `.qyMsg`, so it is
+    // already refused for having no message at all — deleting the qyCode check
+    // left the whole suite green. Here the message IS the refusal text and only
+    // the code is missing, which is what a transport failure carrying unlucky
+    // text looks like. Misreading it terminal would give up after ONE attempt on
+    // an order Qingyun never even saw.
+    [Object.assign(new Error('x'), { qyMsg: '请输入合法的收货人电话' }),
+      'refusal text but NO code — nothing proves Qingyun answered'],
     [Object.assign(new Error('x'), { qyCode: 40001, qyMsg: '' }), 'empty message'],
     [Object.assign(new Error('x'), { qyCode: 40001 }), 'no message at all'],
     [null, 'no error object'],
