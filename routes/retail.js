@@ -22635,19 +22635,35 @@ router.put('/api/retail-admin/integrations', requireRetailAdmin, express.json(),
          updated_at = CURRENT_TIMESTAMP,
          updated_by = excluded.updated_by`
     );
+    // The transaction is PURE DATABASE WORK. process.env must not be written
+    // inside it: a ROLLBACK cannot undo an environment assignment, so a failed
+    // save would discard the row and keep the env value — and for Roots env is
+    // the runtime source of truth, not a cache (getTenantCreds reads it live,
+    // storefront_config is only what database.js hydrates back at boot). The
+    // process would then serve a credential that was never stored, work
+    // perfectly, and lose it silently at the next restart. Keep these two
+    // concerns in this order. Covered by scripts/test_integrations_env_atomicity.js.
     const tx = tdb().transaction(() => {
-      for (const { svc, field, meta, val } of edits) {
+      for (const { svc, field, val } of edits) {
         const cfgKey = `integrations.${svc}.${field}`;
         if (val === null || val === '') {
           tdb().prepare('DELETE FROM storefront_config WHERE key = ?').run(cfgKey);
-          delete process.env[meta.env];
         } else {
           upsert.run(cfgKey, JSON.stringify(String(val)), req.user.id);
-          process.env[meta.env] = String(val);
         }
       }
     });
     tx();
+    // Mirror to env only once the write is durable. RESIDUAL RISK, stated
+    // rather than left implied: a crash between the COMMIT above and this loop
+    // leaves env stale until the next restart — at which point boot hydration
+    // loads the newly committed value and it self-heals. That is strictly
+    // better than the previous arrangement, where the divergence was permanent
+    // and healed to the WRONG value.
+    for (const { meta, val } of edits) {
+      if (val === null || val === '') delete process.env[meta.env];
+      else process.env[meta.env] = String(val);
+    }
   } else {
     // ── Per-tenant path: encrypted tenant_secrets only. No storefront_config
     // row, no process.env touch (that env belongs to Roots). setTenantSecrets
