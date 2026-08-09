@@ -126,6 +126,23 @@ function extractCreateTable(source, table) {
  * Foreign keys are stripped: these are single-table extracts, and the targets
  * (products, retail_customers, users) are not necessarily present.
  *
+ * ── HOW THE FK STRIP BROKE, AND WHY IT IS LINE-BASED NOW ──────────────────
+ * It used to be two regexes run over the raw DDL. They are comment-blind, and
+ * `retail_order_items` has BOTH a trailing `-- …, for the receipt` comment and
+ * TWO consecutive FOREIGN KEY lines. The first regex's lookahead matched inside
+ * that comment, so the strip ate the FK keyword and left `) ON DELETE CASCADE`
+ * dangling: every table built through here came out as `near ")": syntax error`.
+ * The batch 4 conversion suite is what hit it — the first suite to need that
+ * table — and it failed loudly, which is the only reason this is a fix rather
+ * than a silently thinner table.
+ *
+ * So the clause is removed by LINE: comments off first, then any line that is a
+ * FOREIGN KEY clause, then the comma the last removed line left behind. And if
+ * a FOREIGN KEY survives that — an inline one, which this DDL corpus does not
+ * currently contain — it THROWS rather than handing back a CREATE that will not
+ * parse, because "the table is subtly wrong" is the failure this whole file
+ * exists to prevent.
+ *
  * ── THE TYPE PATTERN, AND THE COLUMNS IT USED TO LOSE ─────────────────────
  * The scan originally read the type as `'(\w+)'` — a single-quoted single word.
  * database.js does not write them all that way, and the ones it writes
@@ -142,24 +159,62 @@ function extractCreateTable(source, table) {
  * style — a DEFAULT clause routinely contains a space, and a default that is
  * itself a string forces the outer quotes to be double.
  */
+/**
+ * Remove the FOREIGN KEY clauses from one extracted CREATE — see the note in
+ * addTables' header for why this is done by line rather than by regex over the
+ * whole statement.
+ *
+ * `--` is treated as a comment start only outside a quoted literal, the same
+ * rule extractCreateTable balances parentheses under, so a DEFAULT whose value
+ * happens to contain two dashes is not truncated.
+ */
+function stripForeignKeys(ddl, table) {
+  const uncommented = ddl.split('\n').map((line) => {
+    let quote = null;
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i];
+      if (quote) { if (c === quote) quote = null; continue; }
+      if (c === "'" || c === '"') { quote = c; continue; }
+      if (c === '-' && line[i + 1] === '-') return line.slice(0, i);
+    }
+    return line;
+  });
+  const kept = uncommented.filter((line) => !/^\s*FOREIGN KEY\b/i.test(line));
+  const out = kept.join('\n').replace(/,(\s*)\)(\s*)$/, '$1)$2');
+  if (/FOREIGN KEY/i.test(out)) {
+    throw new Error(
+      `${table}: a FOREIGN KEY clause shares a line with a column definition; ` +
+      'the line-based strip cannot remove it without breaking the CREATE'
+    );
+  }
+  return out;
+}
+
+/**
+ * Replay every addColumn() `alterSource` has bolted onto `table` since its
+ * CREATE. Separate from addTables because a table that has no CREATE to extract
+ * still has ALTERs — see addForkedStoreProducts, which is where that mattered.
+ */
+function applyAddColumns(db, alterSource, table) {
+  const added = [...alterSource.matchAll(
+    new RegExp(`addColumn\\('${table}',\\s*'(\\w+)',\\s*(?:'([^']*)'|"([^"]*)")\\s*\\)`, 'g')
+  )].map(([, col, sq, dq]) => [col, sq !== undefined ? sq : dq]);
+  for (const [col, type] of added) {
+    // Swallowing duplicates is not leniency, it is the rule addColumn() itself
+    // follows (database.js:20) — and it is load-bearing here: schema.sql's
+    // `products` already declares description_en, which database.js re-adds
+    // idempotently. Only "duplicate column" is swallowed, exactly as there, so
+    // a genuinely bad ALTER still fails loudly.
+    try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`); }
+    catch (e) { if (!/duplicate column/i.test(e.message)) throw e; }
+  }
+  return added.length;
+}
+
 function addTables(db, ddlSource, alterSource, tables) {
   for (const t of tables) {
-    const ddl = extractCreateTable(ddlSource, t)
-      .replace(/,\s*FOREIGN KEY[\s\S]*?(?=,\s*\w+\s|\s*\)$)/g, '')
-      .replace(/,?\s*FOREIGN KEY[^,)]*\([^)]*\)[^,)]*(?:REFERENCES[^,)]*\([^)]*\)[^,)]*)?/g, '');
-    db.exec(ddl);
-    const added = [...alterSource.matchAll(
-      new RegExp(`addColumn\\('${t}',\\s*'(\\w+)',\\s*(?:'([^']*)'|"([^"]*)")\\s*\\)`, 'g')
-    )].map(([, col, sq, dq]) => [null, col, sq !== undefined ? sq : dq]);
-    for (const [, col, type] of added) {
-      // Swallowing duplicates is not leniency, it is the rule addColumn() itself
-      // follows (database.js:20) — and it is load-bearing here: schema.sql's
-      // `products` already declares description_en, which database.js re-adds
-      // idempotently. Only "duplicate column" is swallowed, exactly as there, so
-      // a genuinely bad ALTER still fails loudly.
-      try { db.exec(`ALTER TABLE ${t} ADD COLUMN ${col} ${type}`); }
-      catch (e) { if (!/duplicate column/i.test(e.message)) throw e; }
-    }
+    db.exec(stripForeignKeys(extractCreateTable(ddlSource, t), t));
+    applyAddColumns(db, alterSource, t);
   }
   return db;
 }
@@ -189,6 +244,16 @@ function openTablesDb(databaseJsSource, tables) {
  * PRAGMA is issued through prepare().all() rather than better-sqlite3's
  * .pragma(), which node:sqlite does not have; the row shape is identical on
  * both (cid/name/type/notnull/dflt_value/pk), verified on each.
+ *
+ * ── THE MIRROR IS NOT THE WHOLE TABLE ─────────────────────────────────────
+ * `store_products` also has TWELVE addColumn() calls of its OWN in database.js —
+ * columns that exist on the fork and NOT on `products`, so mirroring plus the
+ * four link columns does not produce them. This function used to stop at the
+ * mirror, and the table it handed back was missing variant_label_cn,
+ * variant_noun_en and variant_noun_cn among others. That is precisely the batch
+ * 2 defect wearing different clothes: a suite green against a table thinner than
+ * the one the code writes to. Found by the batch 4 conversion suite's
+ * written-column assertion, which is the argument for having that assertion.
  */
 function addForkedStoreProducts(db, schemaSqlSource, databaseJsSource) {
   addTables(db, schemaSqlSource, databaseJsSource, ['products']);
@@ -204,6 +269,7 @@ function addForkedStoreProducts(db, schemaSqlSource, databaseJsSource) {
   defs.push('kitchen_product_id INTEGER', 'source_sku TEXT', 'synced_at DATETIME',
             "source TEXT DEFAULT 'fork'");
   db.exec(`CREATE TABLE store_products (\n  ${defs.join(',\n  ')}\n)`);
+  applyAddColumns(db, databaseJsSource, 'store_products');
   return db;
 }
 

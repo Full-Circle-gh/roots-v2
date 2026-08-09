@@ -1082,8 +1082,8 @@ const CONFIG_SNAP = (db) => ({
       console.log('        (count check SKIPPED — espree unavailable, so the AST');
       console.log('         authority cannot run here. Expected on the box.)');
     } else {
-      assert.strictEqual(remaining, 39,
-        `expected 39 unconverted transactions left in routes/retail.js, found ${remaining}`);
+      assert.strictEqual(remaining, 30,
+        `expected 30 unconverted transactions left in routes/retail.js, found ${remaining}`);
     }
   });
 
