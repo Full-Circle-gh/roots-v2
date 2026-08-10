@@ -80,7 +80,7 @@ By day: 18 · 51 · 32 · 33 · 18 · 47 · 59 · 8.
 - **`PUT /integrations` made atomic** (`e46e61ce`). **The shadowed split route fixed** (`5a75ad64`), with a tripwire against the next duplicate registration.
 - **PATH A STEP 2 — four helpers threaded** (`3d9091dc`): `generateRetailSku`, `writeLayout`, `ensureShipments`, `reserveForOrder`, each on an optional trailing handle evaluated per call, **no call site edited**. Mutation red-proof, real functions under test, and the handle pointed at a different database than `tdb()` so an ignored parameter cannot pass.
 - **Postgres backed up** (`7b3ce893`) — `pg_dump -Fc` plus `roles.sql`, which is load-bearing because roles are cluster-level and the archive holds 927 grants naming `tacet_app`.
-- **The phase numbers defined** (`ec537133`), with backups, rollback and the runbook placed inside Phase 2 rather than Phase 3.
+- **The phase numbers defined** (`ec537133`), with backups, rollback and the runbook placed inside Phase 2 rather than Phase 3. **SETTLED 2026-08-10: there are THREE phases and the five-phase reading is retired** — under it the switch is 4 and backups are 5, which puts the safety net after the flip and inverts the one sequencing decision the phases exist to protect. No longer an open question; §24 THREE PHASES, AND WHY THE FIVE-PHASE READING IS WRONG owns the reasoning.
 - **Three harness defects fixed** across three consecutive batches, each of which would have made a suite green and wrong, and the written-column assertion made non-optional.
 
 ---
