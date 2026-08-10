@@ -1,4 +1,4 @@
-# Tacet shared-core consolidation — decisions record, v4.22
+# Tacet shared-core consolidation — decisions record, v4.23
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
@@ -1734,6 +1734,54 @@ Three items from the Phase 2 status review that are real work, are not written d
 **5. `generateRetailSku` OPENS WITH `const t = tdb();` AND READS EXACTLY LIKE AN ALREADY-THREADED HELPER.** A local alias, not a parameter. **This is the precise shape that produced the batch-1 false claim** — a handle-looking identifier at the top of a function, three lines above a `.prepare()`. Two other converted blocks alias the same way, `const db = tdb()` at `routes/retail.js:518` and `const db_ = tdb()` at `:6532`; both are correct and both would read as a raw-handle bug to anyone scanning for one. **The alias is not the error. Reading the alias as evidence is.**
 
 **GREP AND AST DISAGREE, AND THE AST IS THE ONE TO TRUST. Both counts are given rather than reconciled quietly.** A word-boundary grep across the whole tree, all file types, finds **137 matching lines** for the six names — 17, 16, 47, 8, 12, 37, counted before this entry was written. **The AST finds 6 definitions and 30 real call sites.** The gap is not noise and it is worth naming, because every class in it has already misled this record once: **68 of the 137 are in `docs/*.md`**, the rest are code comments, one `console.warn` string literal, one `module.exports` entry, and **source-scanning test assertions that match the helper's name as a string or a regex** — `test_tx_conversion_batch4.js` and `verify-fulfilment-types.js` read `routes/retail.js` as text and assert about it, so grepping for call sites finds their assertions. **One occurrence is a function parameter that shadows the helper's name**: `scripts/test_shipments_split_merge.js` declares `branchUndoCombine(h, id, res, ensureShipments)` and calls `ensureShipments(id)` inside it. That is the injected test double, **not the helper**, and a grep reports it as a twelfth call site. It is not one.
+
+### PATH A STEP 2 — FOUR HELPERS THREADED, MERGED AND DEPLOYED 2026-08-10 AT `3d9091dc`
+
+**`generateRetailSku`, `writeLayout`, `ensureShipments` and `reserveForOrder` now take the handle.** Each takes an OPTIONAL TRAILING handle parameter defaulting to `tdb()`, and the default is evaluated PER CALL, so a caller that omits it still binds to the request's tenant connection at call time exactly as before. **No call site was edited** — all twenty-four keep their existing arity and take the default path. The diff's only lines mentioning these four names are the four function definitions.
+
+**Two of the six from the RECORD CORRECTION entry above were deliberately excluded and remain untouched:** `reconcileTier`, which is money-adjacent and travels with the loyalty cluster, and `createOrReuseManualCustomer`, whose only in-transaction caller is `POST /api/retail-admin/orders` — a route out of step 2 for minting order numbers. Both are asserted unchanged by the suites, so a later batch cannot quietly take them.
+
+**THE EVIDENCE STANDARD THAT WAS ACTUALLY MET, stated because this is the exact work `d7515a36` already claimed falsely.** A signature is not evidence, and a suite that reads only the signature would have passed on the false claim too:
+
+* **The REAL functions are under test, not reproduced copies.** Both suites extract each helper from `routes/retail.js` / `lib/inventory.js` and EXECUTE it with `tdb` injected as a scope variable. A copy can be threaded in the test while the shipped function is not — which is the same species of mistake as trusting the commit message.
+* **The handle and `tdb()` point at DIFFERENT DATABASES in every behavioural test.** A parameter that is accepted and then ignored fails, because the rows land in the wrong database. There is no way to pass by adding a parameter alone.
+* **MUTATION RED-PROOF, not merely a sabotage flag.** Reverting all four to the accepted-but-unused shape turns **batch 1 red on 6 of 13** and **batch 2 red on 8 of 19**, both headline assertions failing in each. Re-run on the merged tree before the push and both numbers held exactly.
+* **Comment-stripped source for every source-level assertion**, using the string-aware stripper from `scripts/check-tenant-als.js`. Twice a comment has answered for the code in this section; it cannot here.
+* **Written-column assertions against the REAL schema** — `retail_shipments` (23 columns), `retail_orders` (111), `retail_stock_reservations`, `store_products` (78, forked the way the application forks it). **Two of the suite's own fixtures failed first against the real schema and were FIXED RATHER THAN THE TABLE THINNED**: `store_products.name_en` is NOT NULL with no default, and a pinned `Math.random` of 0 produced a degenerate `DRAFT-` with an empty tail rather than a code the helper would really generate.
+* **No local alias is allowed to stand as evidence.** `generateRetailSku`'s `const t = tdb()` is deleted, and both suites assert that no helper keeps an alias of `tdb()` or reaches it anywhere but its own parameter default.
+* **No concurrency is claimed.** All four helpers are synchronous, and a concurrency test whose calls originate in one synchronous block tests nothing — the mistake `lib/db-transaction.js` already records. Nesting and outer-rollback are tested instead, which is the property this work changes.
+
+**`ensureShipments`' READS ARE LOAD-BEARING, NOT ONLY ITS WRITES — this is the finding that most justified threading it.** The checkout INSERTs `retail_orders` and `retail_order_items` and then calls it from inside that same transaction. A read on the wrong connection finds no order, takes the `if (!o) return []` arm, and **creates no parcels at all — silently, behind a 200.** All seven of its statements moved onto the parameter for that reason, not just the three that write. A test seeds the order into the `tdb()` database only, passes a handle, and requires the empty answer.
+
+**DEPLOY.** Merged to `main` at `3d9091dc` (force-with-lease pinned to `95f86a33`), workflow run `31344769502`, 1m44s, success. `roots-v2` restarts **1304 → 1305**, one restart, online. The error log gained **238 bytes since boot and they are exactly the routine ALIPAY warning pair** — nothing else. All suites green before and after on the merged tree; lint unchanged at 0 errors / 628 warnings.
+
+**THE AST COUNT IS UNCHANGED AT 103 RUNTIME BLOCKS, 30 IN `routes/retail.js`, AND THAT IS CORRECT RATHER THAN A NULL RESULT.** Threading a handle converts no transaction. The `[8]` dual-context table is unchanged for the same reason: it measures call-site context, not whether a handle is threaded.
+
+#### OPEN — THREE THINGS THIS WORK DID NOT CLOSE
+
+**1. THE INTERNAL NESTING IS SQLite-SHAPED, AND THESE TWO HELPERS ARE THREADED BUT NOT PORTABLE.** `ensureShipments` and `reserveForOrder` keep `h.transaction()`, which better-sqlite3 maps to a SAVEPOINT for free. **There is no equivalent on a pg client.** So taking the handle has made them correct on one driver, not on both, and **this blocks conversion of their enclosing routes** — the checkout above all. It must be solved before the flip, and it is not a detail of these two helpers: every unconverted `.transaction()` reachable from a converted async caller has the same shape.
+
+**2. `withTransaction` CANNOT BE NESTED INSIDE A `tdb().transaction()` BODY — RECORD THIS AS A PROPERTY OF THE HELPER SO IT IS NOT INSTRUCTED AGAIN.** The brief for this work asked for exactly that conversion. It was measured before it was written and it breaks the checkout, twice over:
+
+  * **Depth lives in `withTransaction`'s OWN AsyncLocalStorage**, which only a `withTransaction` body populates. Called from inside the checkout's better-sqlite3 `tdb().transaction(...).immediate()`, `transactionDepth()` reads **0**, so it takes the outermost path and issues a literal `BEGIN`. SQLite answers **"cannot start a transaction within a transaction"**.
+  * **It is async, and the checkout's transaction body is synchronous.** The body would return — and better-sqlite3 would COMMIT — before any awaited inner work ran. The parcels would be written after the commit meant to contain them, or not at all.
+
+  **Reproduced by execution, not argued from the source**, and pinned as a test in `scripts/test_handle_threading_batch2.js` so the justification cannot rot into a comment nobody re-checks. It is consistent with `lib/db-transaction.js`, which already records that the checkout cannot be converted with that helper as it stands because `BEGIN IMMEDIATE` has no equivalent there and is deliberately not implemented.
+
+**3. `getAvailable` AND `ttlMinutes` REMAIN ON `tdb()` INSIDE `reserveForOrder`, AND THE SAFETY IS CONDITIONAL.** They were left deliberately rather than smuggled into a batch that did not name them. **What makes it safe today is not "SQLite makes it fine" — it is two facts, and they are CONDITIONS, not properties:**
+
+  * **Both callers pass items through `expandStockLines`, which AGGREGATES BY PRODUCT ID**, so no product is ever checked twice in one call and the loop never needs to see a reservation it just inserted.
+  * **The enclosing checkout transaction writes neither table `getAvailable` reads** before `reserveForOrder` runs — it writes `retail_orders`, `retail_order_items`, `retail_customer_vouchers`, `retail_vouchers` and `store_products`, and `getAvailable` reads `retail_store_stock` and `retail_stock_reservations`.
+
+  **If either fact stops being true this becomes a live escape**, silently and under load rather than in a test. `ttlMinutes` is a `storefront_config` read that happens BEFORE the transaction opens, so the handle changes nothing about its atomicity. **`getAvailable` is its own step-2 item** — dual-context at `inTx=2 outTx=3`, `lib/inventory.js`.
+
+#### QUEUED — NOT STARTED, IN THIS ORDER
+
+Recorded so the order is the record's rather than the next session's, and so none of the three is rediscovered as new.
+
+1. **`scripts/diagnose_async_conversion_scope.js` is blind to `withTransaction`.** It matches `.transaction` as a member property; `withTransaction(h, fn)` is an `Identifier` callee and matches nothing. **26 converted blocks in `routes/retail.js` appear in no figure it prints, and every count this section has quoted is therefore the unconverted form only** — not a total.
+2. **`reconcileTier` swallows its own write failure inside three money transactions.** Its `UPDATE` sits in a `try`/`catch` that only warns, so inside `awardOrderPoints`, `reverseOrderPoints` and `finalizeOrderAddon` the points balance and ledger row commit with a **stale tier and a console line** to show for it. Not an escape — an atomicity defeat, and threading a handle does not touch it.
+3. **The undo-combine branch of `POST /orders/:id/shipments/split` clears and COMMITS, then rebuilds in a second transaction.** Between the two the order has no parcels and no item is assigned to one; a crash there leaves it that way. It survived the `85f5bffa` fix untouched because that fix deliberately changed no transaction.
 
 ## 25. A printed slip that goes stale is corrected on paper, not reprinted — DECIDED 2026-08-07
 
