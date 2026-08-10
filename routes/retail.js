@@ -8697,13 +8697,46 @@ function planShipments(items, destCity, destProvince, opts = {}) {
 // items + address city, inserts the rows, and assigns retail_order_items
 // .shipment_id. Used both at order-creation time (fresh rows) and when
 // loading an old order in the office UI (lazy-fill).
-function ensureShipments(orderId) {
-  const existing = tdb().prepare(
+//
+// TAKES THE HANDLE — the §24 step-2 rule. Optional and trailing, defaulting to
+// tdb() per call, so all eleven existing callers are unchanged.
+//
+// THE READS ARE AS LOAD-BEARING AS THE WRITES HERE, which is why every one of
+// the seven statements below moved onto the parameter and not just the three
+// that write. The checkout calls this from inside its own transaction, having
+// INSERTed retail_orders and retail_order_items moments earlier in that same
+// transaction. A read that ran outside it would find no order, fall into the
+// `if (!o) return []` arm, and create no parcels at all — silently, with a 200.
+// On SQLite that cannot happen because tdb() is the same connection; the whole
+// point of taking the handle is that it stays true when it is not.
+//
+// THE INTERNAL TRANSACTION IS DELIBERATELY STILL `h.transaction()` AND NOT
+// `withTransaction`. Converting it is not a shape change, it is a breakage, and
+// it was measured rather than assumed:
+//
+//   * withTransaction tracks nesting in its OWN AsyncLocalStorage, which only a
+//     withTransaction body populates. Called from inside the checkout's
+//     better-sqlite3 tdb().transaction(...).immediate(), transactionDepth() is
+//     0 — so it takes the OUTERMOST path and issues a literal BEGIN. Against an
+//     already-open transaction SQLite answers "cannot start a transaction
+//     within a transaction", and the checkout dies.
+//   * withTransaction is async. The checkout's transaction body is synchronous,
+//     so it would return — and better-sqlite3 would COMMIT — before any awaited
+//     inner work ran. The parcels would be written after the commit that was
+//     supposed to contain them, or not at all.
+//
+// better-sqlite3 maps a nested .transaction() to a SAVEPOINT for free, so the
+// form below already nests correctly today and keeps doing exactly what it does
+// now. This becomes a withTransaction only when the CHECKOUT itself is
+// converted, and lib/db-transaction.js records why that cannot happen yet:
+// BEGIN IMMEDIATE has no equivalent there and is deliberately not implemented.
+function ensureShipments(orderId, h = tdb()) {
+  const existing = h.prepare(
     `SELECT * FROM retail_shipments WHERE order_id = ? ORDER BY id ASC`
   ).all(orderId);
   if (existing.length) return existing;
 
-  const o = tdb().prepare(
+  const o = h.prepare(
     `SELECT id, address_json, delivery_slot_kind,
             tracking_carrier, tracking_number, tracking_status,
             tracking_events_json, tracking_synced_at, tracking_last_error,
@@ -8718,7 +8751,7 @@ function ensureShipments(orderId) {
     destCity = a.city || ''; destProvince = a.province || ''; destDistrict = a.district || '';
   } catch {}
 
-  const items = tdb().prepare(
+  const items = h.prepare(
     `SELECT id,
             COALESCE(ship_modes, 'air,land')    AS ship_modes,
             COALESCE(needs_ice_pack, 0)         AS needs_ice_pack,
@@ -8737,14 +8770,14 @@ function ensureShipments(orderId) {
     plan.push({ mode: 'supplier', label: supplierShipmentLabel(), item_ids: [it.id] });
   }
 
-  const ins = tdb().prepare(
+  const ins = h.prepare(
     `INSERT INTO retail_shipments (order_id, mode, label, created_at, updated_at)
      VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
   );
-  const assignItem = tdb().prepare(`UPDATE retail_order_items SET shipment_id = ? WHERE id = ?`);
+  const assignItem = h.prepare(`UPDATE retail_order_items SET shipment_id = ? WHERE id = ?`);
   const created = [];
   let firstRegularId = null;   // legacy tracking mirrors here, never onto a supplier parcel
-  const tx = tdb().transaction(() => {
+  const tx = h.transaction(() => {
     for (const seg of plan) {
       const r = ins.run(orderId, seg.mode, seg.label);
       const shipmentId = r.lastInsertRowid;
@@ -8757,7 +8790,7 @@ function ensureShipments(orderId) {
     // Only if the legacy fields have data; falls back to created[0] if the order
     // is somehow supplier-only.
     if (o.tracking_number && o.tracking_carrier && created.length) {
-      tdb().prepare(
+      h.prepare(
         `UPDATE retail_shipments
             SET tracking_carrier = ?, tracking_number = ?, tracking_status = ?,
                 tracking_events_json = ?, tracking_synced_at = ?,
@@ -8779,7 +8812,7 @@ function ensureShipments(orderId) {
     }
   });
   tx();
-  return tdb().prepare(
+  return h.prepare(
     `SELECT * FROM retail_shipments WHERE order_id = ? ORDER BY id ASC`
   ).all(orderId);
 }
