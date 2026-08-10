@@ -1,10 +1,12 @@
-# The Postgres migration — status, v2.0
+# The Postgres migration — status, v2.1
 
 **2026-08-10 · A LIVING DOCUMENT. Both halves, in one place: what is built, and what is left.**
 Covers 2026-08-03 onwards. Read-only in itself — no code change ever accompanies it.
 
-**LAST UPDATED: 2026-08-10, against `main` at `674efa56`, decisions record v4.23, AST authority reporting 103 runtime transaction blocks / 30 in `routes/retail.js`.**
+**LAST UPDATED: 2026-08-10, against `main` at `f386ced5`, decisions record v4.25, AST authority reporting 103 UNCONVERTED runtime transaction blocks / 30 UNCONVERTED in `routes/retail.js` — and, newly visible, 26 CONVERTED, all in `routes/retail.js`.**
 Those four values are the head this file is true at. **If any of them has moved, this file is stale until someone re-runs PART 4.**
+
+**READ THE WORD "UNCONVERTED" IN THAT LINE AS LOAD-BEARING.** Until 2026-08-10 the AST authority could see only one of the two transaction forms, so every count in this file and in §24 means `<handle>.transaction(fn)` and never `withTransaction(handle, fn)`. The script now reports both, separately and never summed. **103 and 30 have not moved and are not a total** — see §24 and the mapping in the script's own header.
 
 ---
 
@@ -22,19 +24,21 @@ Those four values are the head this file is true at. **If any of them has moved,
 
 ## PART 1 — THE MEASURE
 
-From `17cf8228` (2026-08-03, "The database decision is written down") to `674efa56` (2026-08-10), on `main`:
+From `17cf8228` (2026-08-03, "The database decision is written down") to `f386ced5` (2026-08-10), on `main`:
 
 | | |
 |---|---|
-| commits | **258** (217 excluding merges) |
-| files changed | **266** |
-| lines | **+95,106 / −7,531** |
-| new scripts | **115**, of which **17** are test suites |
+| commits | **264** (214 excluding merges) |
+| files changed | **267** |
+| lines | **+95,824 / −7,531** |
+| new scripts | **116**, of which **17** are test suites |
 | new documents | **16** |
 
-By day: 18 · 51 · 32 · 33 · 18 · 47 · 59 · 8.
+By day: 10 · 51 · 32 · 33 · 18 · 47 · 59 · 14.
 
-**Roughly two fifths of it is the database.** Of the 217 non-merge commits, **87** are Postgres, seam, money-model, transaction, handle-threading or deploy-pipeline work. The other **130** are unrelated work that shipped in the same window — the qingyun delivery-point stages, the pickup-window and reschedule clock defects, the receipt and slip corrections, the per-viewer language decision, the POS and restock shell removals, the international-phone defect, the welcome-coupon grant leak, the mini-app publish rule. **The migration did not have the week to itself, and any reading of the pace has to account for that.**
+> **TWO FIGURES CORRECTED, NOT JUST ADVANCED — 2026-08-10, per rule 5 below.** Re-running PART 4's block against the OLD head `674efa56` reproduces this table exactly except in two places, so these were wrong when written rather than made wrong by the six commits since. **Non-merge commits at that head were 209, not 217.** **The first by-day value was 10, not 18.** Both are out by exactly 8, which is the value in the last by-day slot at that head — consistent with one figure being added into the wrong column twice. The totals, files, lines, new-scripts and new-documents figures all reproduce to the digit. **The "17 test suites" classification does not reproduce from file names** — `test_`/`test-` prefixed additions alone give 20 at that same head — so it is left as written and treated as approximate, per rule 6.
+
+**Roughly two fifths of it is the database.** Of the 214 non-merge commits, **87** are Postgres, seam, money-model, transaction, handle-threading or deploy-pipeline work. **That 87 was classified against the 217 figure now corrected to 209, so it is carried forward unverified rather than restated** — the split is a keyword classification and approximate by nature, and re-deriving it is its own pass. The remainder is unrelated work that shipped in the same window — the qingyun delivery-point stages, the pickup-window and reschedule clock defects, the receipt and slip corrections, the per-viewer language decision, the POS and restock shell removals, the international-phone defect, the welcome-coupon grant leak, the mini-app publish rule. **The migration did not have the week to itself, and any reading of the pace has to account for that.**
 
 ---
 
@@ -82,6 +86,7 @@ By day: 18 · 51 · 32 · 33 · 18 · 47 · 59 · 8.
 - **Postgres backed up** (`7b3ce893`) — `pg_dump -Fc` plus `roles.sql`, which is load-bearing because roles are cluster-level and the archive holds 927 grants naming `tacet_app`.
 - **The phase numbers defined** (`ec537133`), with backups, rollback and the runbook placed inside Phase 2 rather than Phase 3. **SETTLED 2026-08-10: there are THREE phases and the five-phase reading is retired** — under it the switch is 4 and backups are 5, which puts the safety net after the flip and inverts the one sequencing decision the phases exist to protect. No longer an open question; §24 THREE PHASES, AND WHY THE FIVE-PHASE READING IS WRONG owns the reasoning.
 - **Three harness defects fixed** across three consecutive batches, each of which would have made a suite green and wrong, and the written-column assertion made non-optional.
+- **The AST authority made able to see BOTH transaction forms** (`62ae872a`). It matched `.transaction` as a member property, so `withTransaction(h, fn)` — an `Identifier` callee — matched nothing, and **26 converted blocks appeared in no figure it printed, through four conversion batches.** The tree was enumerated first and opens a transaction in exactly two ways, no third. Every figure is now labelled with its form and **no blended total is printed anywhere**, because a combined number would change what every count in §24 means without changing a word of them. 103 and 30 are unchanged, verified by diffing the two scripts' output over the same tree. Red-proofed by a fixture with declared counts plus three mutations.
 
 ---
 
@@ -94,7 +99,7 @@ Type: **C** conversion · **F** fix · **D** design question · **O** operationa
 
 | # | Item | T | Blocks | Owned by |
 |---|---|---|---|---|
-| 1 | **Step 2's last three helpers** — `reconcileTier`, `createOrReuseManualCustomer`, `mergeAddonItemsIntoShipments` still take no handle | C | the loyalty cluster, `POST /api/retail-admin/orders`, `finalizeOrderAddon` | §24 PATH A STEP 2 — FOUR HELPERS THREADED |
+| 1 | **Step 2's last three helpers** — `reconcileTier`, `createOrReuseManualCustomer`, `mergeAddonItemsIntoShipments` still take no handle. **A fourth, `ensureShipmentRow`, was found by the 08-10 detector audit and is ALREADY THREADED — see the note below the table** | C | the loyalty cluster, `POST /api/retail-admin/orders`, `finalizeOrderAddon` | §24 PATH A STEP 2 — FOUR HELPERS THREADED |
 | 2 | **`ensureShipments` and `reserveForOrder` keep `h.transaction()`** — SQLite maps it to a SAVEPOINT free, pg has no equivalent. Threaded but **not portable** | D | the checkout, and every unconverted `.transaction()` reachable from a converted async caller | §24 same entry, OPEN item 1 |
 | 3 | **`getAvailable` and `ttlMinutes` still on `tdb()` inside `reserveForOrder`** — safe today on conditions, not properties | F | correctness of the stock gate after the flip | §24 same entry, OPEN item 3 |
 | 4 | **`BEGIN IMMEDIATE` unimplemented in `withTransaction`** | D | **the checkout** | `lib/db-transaction.js` header; design doc §What replaces `.immediate()` |
@@ -109,6 +114,10 @@ Type: **C** conversion · **F** fix · **D** design question · **O** operationa
 | 13 | **Checkout contention unmeasured** — cheapest of the three uncertainties, still unsettled | D | nothing; sizes the work | design doc, uncertainty 3 |
 | 14 | **`PUT /cms/onboarding-settings`** unwrapped multi-write · **`reconcileTier`** swallows its errors · **`categories` `UNIQUE(kind,name)`** has no `COLLATE NOCASE` | F | nothing today | §24 DUAL-CONTEXT HELPERS; TWO CATEGORY SYSTEMS |
 | 15 | **Six statements failing in production today** — and per §24 these are **not typo fixes**: each path has never executed, so fixing one surfaces behaviour nobody has seen | F | 162 seam sites waiting on decisions | §24 Six statements are failing |
+
+**`ensureShipmentRow` — FOUND 2026-08-10, PREVIOUSLY UNCOUNTED, AND NOT OWED WORK.** Surfaced by the detector audit that taught the AST authority to see `withTransaction`. It had appeared on no step-2 list because **its only transaction context is a CONVERTED block**, and the old detector could not see those — so the dual-context table had no row for it at all.
+
+**Checked in the code rather than taken from the audit, per rule 3: it already takes the handle.** `const ensureShipmentRow = (h, mode) => …` in `routes/retail.js`, a local closure inside `POST /api/retail-admin/orders/:id/shipment-suggestion/apply`, with a comment citing the §24 dual-context rule by name. Its single call site passes `tx`, the handle `withTransaction` hands in. **Nothing to thread.** Recorded here so it is not rediscovered as owed work, and as the concrete instance of what the blind detector cost: not a wrong number, a helper that was never in the population being counted.
 
 ### Phase 2 — the operational half
 
@@ -185,7 +194,7 @@ Then update, in this order: **the LAST UPDATED line first** — head sha, decisi
 
 ## METHOD
 
-Commit, file and line counts are from `git log` and `git diff --shortstat` against `17cf8228..674efa56` on `main`, and are regenerable by the block above. **The Postgres-versus-other split is a keyword classification of commit subjects and is approximate by nature** — offered as a proportion, and the only inexact number in this file.
+Commit, file and line counts are from `git log` and `git diff --shortstat` against `17cf8228..f386ced5` on `main`, and are regenerable by the block above. **By-day counts are AUTHOR date (`%ad`); committer date gives a different distribution because of rebases, and the two must not be mixed.** **The Postgres-versus-other split is a keyword classification of commit subjects and is approximate by nature** — offered as a proportion, and the only inexact number in this file.
 
 Every other figure is quoted from §24, from a design document, or from the AST authority. **No figure here is grep-derived.**
 
