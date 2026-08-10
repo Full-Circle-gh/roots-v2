@@ -1,8 +1,10 @@
-# Tacet shared-core consolidation — decisions record, v4.23
+# Tacet shared-core consolidation — decisions record, v4.24
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
+
+2026-08-10 · v4.24 — §24 Database: a RULE is recorded — **a lease computed at push time is not a lease.** A safety check on a shared branch must compare against a state somebody actually looked at; a check that re-reads the remote at the moment it fires compares the remote against itself and agrees with whatever is there, including work that arrived while this work was being written. Stated as the property rather than as a command, so it survives the tooling changing: **the value being protected has to be captured before the work starts and then quoted literally.** Records the occurrence it comes from — three commits from a concurrent session were discarded by a forced push and recovered from their own branch, nothing lost, the recovery merge touching `docs/` only and causing no restart — and records that the recovery was possible only because the discarded commits were still on a branch, which is a property of that day rather than of the method. A rule; nothing reversed, hence a patch.
 
 2026-08-09 · v4.21 — §24 Database: **integration credentials — the DATABASE WINS, on absence as well as presence.** The clear path was reversible by `.env`: hydration's `if (!r) continue` treats a cleared credential's missing row as nothing to say, so a revoked credential came back at the next restart. **Fixed by commenting out four `.env` lines, not by changing hydration** — exactly coextensive with the defect, reversible, and no behaviour change today because those rows already win at boot. **Records why the hydration change was REJECTED, and the reason is about the flip: after the cutover an empty `SELECT` can mean "a row exists and this account cannot see it" under row-level security, so clearing-on-absence would silently delete a live credential on a policy mismatch** — and would also destroy the fresh-box bootstrap path. **Corrects the premise this started from: FOUR of the 23, not all** (`JD_API_ENV` is not in `.env` either, so four of JD's own five; the other five services have none). Records the `JD_JDL_*` footgun — a different system, three lines below, caught by any edit that matches "JD" by pattern. **OPEN: `nuonuo` is missing from the hydration map entirely** — 19 of 23 covered, same silent-vanish shape, latent only because the service has never been configured; its own commit. **CARRY TO PATH A: hydration is synchronous work at module load and cannot survive `pg`** — it becomes async work that must complete before the first request, a window that does not exist today. A decision, a correction and two carried items; nothing reversed, hence a patch.
 
@@ -1782,6 +1784,23 @@ Recorded so the order is the record's rather than the next session's, and so non
 1. **`scripts/diagnose_async_conversion_scope.js` is blind to `withTransaction`.** It matches `.transaction` as a member property; `withTransaction(h, fn)` is an `Identifier` callee and matches nothing. **26 converted blocks in `routes/retail.js` appear in no figure it prints, and every count this section has quoted is therefore the unconverted form only** — not a total.
 2. **`reconcileTier` swallows its own write failure inside three money transactions.** Its `UPDATE` sits in a `try`/`catch` that only warns, so inside `awardOrderPoints`, `reverseOrderPoints` and `finalizeOrderAddon` the points balance and ledger row commit with a **stale tier and a console line** to show for it. Not an escape — an atomicity defeat, and threading a handle does not touch it.
 3. **The undo-combine branch of `POST /orders/:id/shipments/split` clears and COMMITS, then rebuilds in a second transaction.** Between the two the order has no parcels and no item is assigned to one; a crash there leaves it that way. It survived the `85f5bffa` fix untouched because that fix deliberately changed no transaction.
+
+### A LEASE COMPUTED AT PUSH TIME IS NOT A LEASE — RULE RECORDED 2026-08-10
+
+**THE PROPERTY FIRST, THE COMMAND SECOND, because the property is what has to survive the tooling changing.** A safety check that guards a shared branch is answering one question: *has anything arrived since the state I based my work on?* It can only answer that if it holds **the state the work was based on**. A check that fetches the current remote head at the moment it fires is comparing the remote against itself. It agrees every time, including with work that landed while this work was being written — which is the only case it existed to catch.
+
+**So the value being protected must be captured BEFORE the work starts, and then quoted literally.** Not looked up again, not derived, not recomputed inside the same command that consumes it. If the guard's input can change between when the work was checked and when the guard runs, it is not a guard; it is a formality that passes.
+
+**IN TODAY'S TOOLING that reads:**
+
+* `git push --force-with-lease=main:$(git rev-parse origin/main)` **is not protected.** The `$(…)` runs at push time, so `origin/main` is re-read at push time and the lease approves whatever it finds. The command completes, the flag is present, and the check has approved a branch head it never verified against.
+* `git push --force-with-lease=main:95f86a33` **is protected** — a literal forty-hex sha, read and checked before the work began. If main has moved, the push is refused, which is the whole point.
+
+**The bare `--force-with-lease` with no value is not a substitute.** It leases against the local remote-tracking ref, which any intervening `git fetch` — including one a tool ran on its own — silently advances to the new head. Same failure, one step further from view.
+
+**WHAT HAPPENED.** Three commits from a concurrent session were discarded from `main` by a forced push. They were recovered from their own branch and merged back; **nothing was lost.** The recovery merge touched `docs/` only, so it shipped nothing and the app did not restart.
+
+**AND THE RECOVERY IS NOT THE REASSURANCE IT LOOKS LIKE.** It worked because the discarded commits still existed on a branch somebody could name. That is a fact about that day, not a property of the method — the same push against commits that lived only on `main` would have left nothing to merge back. **The rule is not "recovery is available"; the rule is that the lease has to hold a value that was verified first.**
 
 ## 25. A printed slip that goes stale is corrected on paper, not reprinted — DECIDED 2026-08-07
 
