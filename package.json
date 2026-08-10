@@ -13,6 +13,7 @@
     "test:point-search": "node scripts/test_point_search.js",
     "test:preorder": "node scripts/test_preorder_local.js",
     "test:split-merge": "node scripts/test_shipments_split_merge.js",
+    "test:handle-threading": "node scripts/test_handle_threading_batch1.js",
     "test:transaction": "node scripts/test_db_transaction.js && node scripts/test_db_transaction_nesting.js",
     "test:tx-conversion": "node scripts/test_tx_conversion_batch1.js && node scripts/test_tx_conversion_batch2.js && node scripts/test_tx_conversion_batch3.js && node scripts/test_tx_conversion_batch4.js"
   },

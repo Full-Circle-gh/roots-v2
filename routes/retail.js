@@ -18441,11 +18441,25 @@ function findSkuConflict(sku, excludeId) {
 // editor auto-saves off the name alone). Format DRAFT-XXXXX so it's obviously a
 // stand-in the operator can overwrite later. Collision-checks against the UNIQUE
 // sku column; the timestamp tail is a last-resort guarantee of uniqueness.
-function generateRetailSku() {
-  const t = tdb();
+//
+// TAKES THE HANDLE — the §24 step-2 rule. Optional and defaulting to tdb(), so
+// the two existing callers are unchanged; a caller inside a transaction passes
+// its own handle and the collision probe then reads that transaction's own
+// uncommitted rows rather than the state outside it.
+//
+// THE DEFAULT IS EVALUATED PER CALL, which is what keeps the old behaviour: a
+// default parameter runs on every invocation that omits it, so an omitting
+// caller still binds to the request's tenant connection at call time, exactly as
+// the removed `const t = tdb()` did.
+//
+// THAT ALIAS IS GONE ON PURPOSE. `const t = tdb()` read exactly like a threaded
+// handle and was not one — it is the shape §24 records as the reason a commit
+// message claimed this work was already done. There is now no local alias here
+// to mistake for the parameter.
+function generateRetailSku(h = tdb()) {
   for (let i = 0; i < 25; i++) {
     const code = 'DRAFT-' + Math.random().toString(36).slice(2, 7).toUpperCase();
-    if (!t.prepare('SELECT 1 FROM store_products WHERE sku = ?').get(code)) return code;
+    if (!h.prepare('SELECT 1 FROM store_products WHERE sku = ?').get(code)) return code;
   }
   return 'DRAFT-' + Date.now().toString(36).toUpperCase();
 }
@@ -25471,9 +25485,19 @@ function readLayout(key) {
   catch { return []; }
 }
 // Per-call (not a module-level prepared statement) so it binds to the
-// request's tenant connection via tdb(), not whatever db existed at load.
-function writeLayout(key, json, by) {
-  tdb().prepare(
+// request's tenant connection, not whatever db existed at load.
+//
+// TAKES THE HANDLE — the §24 step-2 rule. Optional and trailing, so all nine
+// existing callers are unchanged; the three that sit inside a transaction can
+// pass its handle once that transaction is converted, and the write then lands
+// inside it on any driver rather than only on SQLite's single connection.
+//
+// THE DEFAULT IS EVALUATED PER CALL. A default parameter runs on each
+// invocation that omits it, so an omitting caller resolves tdb() at call time —
+// the per-call binding this comment has always been about is preserved exactly,
+// not moved to load time.
+function writeLayout(key, json, by, h = tdb()) {
+  h.prepare(
     `INSERT INTO storefront_config (key, value_json, updated_at, updated_by)
      VALUES (?, ?, CURRENT_TIMESTAMP, ?)
      ON CONFLICT(key) DO UPDATE SET
