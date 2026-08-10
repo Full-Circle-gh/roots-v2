@@ -17,19 +17,19 @@ It is not a defence of the pace and it is not a claim that the migration is clos
 
 ## THE MEASURE
 
-From `17cf8228` (2026-08-03, "The database decision is written down") to `95f86a33` (2026-08-10), on `main`:
+From `17cf8228` (2026-08-03, "The database decision is written down") to `3d9091dc` (2026-08-10), on `main`. **A snapshot, and it moved twice while this file was being written** — regenerate it rather than citing it as of a later date:
 
 | | |
 |---|---|
-| commits | **251** (212 excluding merges) |
-| files changed | **263** |
-| lines | **+93,950 / −7,513** |
-| new scripts | **113**, of which **15** are test suites |
+| commits | **253** (214 excluding merges) |
+| files changed | **265** |
+| lines | **+94,916 / −7,531** |
+| new scripts | **115**, of which **17** are test suites |
 | new documents | **15** |
 
-By day: 18 · 51 · 32 · 33 · 18 · 47 · 59 · 1.
+By day: 18 · 51 · 32 · 33 · 18 · 47 · 59 · 3.
 
-**Roughly a third of it is the database.** Of the 212 non-merge commits, **81** are Postgres, seam, money-model, transaction or deploy-pipeline work. The remaining **131** are unrelated work that shipped in the same window — the qingyun delivery-point stages, the pickup-window and reschedule clock defects, the receipt and slip corrections, the per-viewer language decision, the POS and restock shell removals, the international-phone defect, the welcome-coupon grant leak, the mini-app publish rule. **The migration did not have the week to itself, and any reading of the pace has to account for that.**
+**Roughly two fifths of it is the database.** Of the 214 non-merge commits, **85** are Postgres, seam, money-model, transaction or deploy-pipeline work. The remaining **129** are unrelated work that shipped in the same window — the qingyun delivery-point stages, the pickup-window and reschedule clock defects, the receipt and slip corrections, the per-viewer language decision, the POS and restock shell removals, the international-phone defect, the welcome-coupon grant leak, the mini-app publish rule. **The migration did not have the week to itself, and any reading of the pace has to account for that.**
 
 ---
 
@@ -102,6 +102,7 @@ The half of Phase 2 that is code. Path A steps are cited by list, not by bare nu
 - **`PUT /integrations` made atomic** (`e46e61ce`) — the `process.env` mirror ran inside a transaction a rollback could not reach.
 - **The shadowed split route fixed** (`5a75ad64`) — "Ship part later" had been live and destructive-on-success for eight weeks, and the fix came with a tripwire asserting no admin route in the file is registered twice.
 - **The checkout designed on paper, twice** — `docs/tacet-checkout-transaction-design.md` v1.0 and v2.0, the second revised against the repaired helper.
+- **PATH A STEP 2 STARTED BUILDING, 2026-08-10.** Decided on 2026-08-08 and unbuilt for two days; batches 1 (`e16e94cc`) and 2 (`3d9091dc`) took **five of the seven** dual-context helpers onto a handle parameter: `generateRetailSku`, `writeLayout`, `ensureShipments`, `reserveForOrder`, and `productContentSnapshot`, which already had one. **`reconcileTier`, `createOrReuseManualCustomer` and `mergeAddonItemsIntoShipments` still do not**, so the step is in progress rather than done. This entry is dated because it landed while this file was being written, which is itself worth recording: a delivery record goes stale the same way a deficit record does.
 - **Postgres backed up at last** (`7b3ce893`) — `pg_dump -Fc` of `tacet` plus `roles.sql` nightly. **`roles.sql` is load-bearing, not an extra:** roles are cluster-level so `pg_dump` never carries them, and the archive holds 927 grants naming `tacet_app`.
 - **Three harness defects fixed** across three consecutive batches, each of which would have made a suite green and wrong, and the written-column assertion made non-optional as a result.
 - **The phase numbers defined in the record for the first time** (`ec537133`), with backups, rollback and the runbook placed inside Phase 2 rather than Phase 3.
@@ -114,7 +115,7 @@ The half of Phase 2 that is code. Path A steps are cited by list, not by bare nu
 
 - The remaining 30 transactions in `routes/retail.js` are the hard ones by design — 19 are money or vouchers, one is the checkout, and the batches said so in their own subject lines.
 - **73 of the 103 runtime transactions live outside `routes/retail.js`** and are not scheduled.
-- **Path A step 2 is decided and not built** — five of six dual-context helpers still take no handle.
+- **Path A step 2 is in progress, not finished** — `reconcileTier`, `createOrReuseManualCustomer` and `mergeAddonItemsIntoShipments` still take no handle.
 - Backups exist but **the fresh-cluster restore is unproven**, which is the case that matters.
 - The rollback plan and the cutover runbook do not exist.
 
@@ -124,7 +125,7 @@ For all of that, read §24 and `docs/tacet-checkout-transaction-design.md`. **Th
 
 ## METHOD
 
-Commit counts, file counts and line counts are from `git log` and `git diff --shortstat` against `17cf8228..95f86a33` on `main`, and can be regenerated. The Postgres-versus-other split is a keyword classification of commit subjects and is **approximate by nature** — it is offered as a proportion, not as a precise figure, and it is the only number in this document that is not exact.
+Commit counts, file counts and line counts are from `git log` and `git diff --shortstat` against `17cf8228..3d9091dc` on `main`, and can be regenerated. The Postgres-versus-other split is a keyword classification of commit subjects and is **approximate by nature** — it is offered as a proportion, not as a precise figure, and it is the only number in this document that is not exact.
 
 Every other figure is quoted from `docs/tacet-consolidation-decisions.md` §24 or from the AST authority, `scripts/diagnose_async_conversion_scope.js`. **No figure here is grep-derived**, per the method note §24 records after six grep errors.
 
