@@ -7800,6 +7800,16 @@ function savePackTypesFromDOM() {
     sel.innerHTML = '<option value="">— Custom / None 自定义 / 无 —</option>'
       + types.map(pt => `<option value="${pt.id}" ${cur === pt.id ? 'selected' : ''}>${pt.name}${pt.name_cn ? ' · ' + pt.name_cn : ''} — ¥${parseFloat(pt.cost).toFixed(2)}</option>`).join('')
       + '<option value="__manage__">⚙️ Manage types...</option>';
+    // The dropdown label was the only thing that re-read the new price — the
+    // Packaging Cost/Serving box below it mirrors the selected type, so it kept
+    // the old figure and every total was computed from it. Re-mirror, then
+    // recalculate.
+    const pt = findPackType(sel.value);
+    const pkgInput = document.getElementById('cs_packaging');
+    if (pt && pkgInput) pkgInput.value = pt.cost;
+    const thumb = document.getElementById('cs_pack_thumb');
+    if (thumb) thumb.innerHTML = pt?.image_data ? `<img src="${esc(pt.image_data)}" style="width:100%;height:100%;object-fit:cover">` : '📦';
+    csUpdate();
   }
 }
 
@@ -7851,8 +7861,14 @@ async function saveCostSheet(recipeId) {
   };
   const r = await fetch('/api/recipes/'+recipeId+'/cost', {method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
   const res = await r.json();
-  if (res.success) toast('✅ Cost data saved · 成本数据已保存','success');
-  else toast('Error · 错误: '+res.error,'error');
+  if (!res.success) { toast('Error · 错误: '+res.error,'error'); return; }
+  toast('✅ Cost data saved · 成本数据已保存','success');
+  // The cost card on the recipe page behind this overlay was painted from the
+  // costData snapshot taken when that page opened, so a saved packaging /
+  // labour / sell price left it showing the old numbers until the user went
+  // back and in again. Repaint it now — the overlay lives on <body>, so
+  // re-rendering #main underneath leaves the open cost sheet untouched.
+  await viewRecipe(recipeId);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
