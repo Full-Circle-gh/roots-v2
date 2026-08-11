@@ -1,8 +1,10 @@
-# Tacet shared-core consolidation — decisions record, v4.29
+# Tacet shared-core consolidation — decisions record, v4.30
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
+
+2026-08-11 · v4.30 — §24 Database: **helper nesting is an ORDERING CONSTRAINT, not a missing primitive — DECIDED, and nothing is built.** Surveyed by AST: **eight helpers open a transaction on a passed handle, only TWO genuinely nest** — the other six take an outermost handle, or a different database, or are SQLite table-rebuild migrations that Postgres does not need and that die at the cutover. **Option A is unavailable and that is a measured result**: both helpers are dual-context, `ensureShipments` 2 nested / 9 standalone and `reserveForOrder` 1 nested / 1 standalone, so neither internal transaction can be removed. **THE RULE: a helper may go async only when every one of its callers is async** — convert the enclosing route first, and `h.transaction()` becomes `await withTransaction(h, …)` in the SAME commit. **The earlier objection was to converting a helper BEFORE its caller, not to `withTransaction` itself**, and both directions are already pinned in `test_handle_threading_batch2.js`: the failing case against a raw `BEGIN IMMEDIATE` (depth reads 0) and the passing control inside its own kind (depth 1 then 2). Nothing changes in `lib/db-transaction.js`. **Recorded as UNVERIFIED pending a box check** — the transition shape, a converted route calling a helper that still holds `h.transaction()`, has never run, and `check-nesting.js` probes it against a throwaway `/tmp` database. **B and C rejected**: B collapses into the conversion because a pg primitive must be async and cannot be awaited inside a `db.transaction()` body; **C is refused hardest** because reading `db.inTransaction` works on one of three backends and re-introduces the `dc91e62f` defect that folded two concurrent requests into one transaction. Records the savepoint naming scheme for whoever writes the pg side. **Plus a second OPEN item: `BEGIN IMMEDIATE` is what actually blocks the checkout** — `nextOrderNo` does SELECT MAX then INSERT, and BEGIN IMMEDIATE is a LOCKING MODE with no pg translation, not an isolation level. Three candidates recorded with their costs — sequence, `pg_advisory_xact_lock`, serializable-with-retry — **as Ash's decision, not yet made and deliberately not designed.** A decision, a reframing and two open items; nothing reversed, hence a patch.
 
 2026-08-11 · v4.29 — §24 Database: **the backup's prune step can now report its own failure — FIXED and deployed at `c5a2eb11`, closing the 2026-08-18 deadline item seven days early.** The pruning always worked; what did not was the step's ability to say so when it stopped. **Four states, not one** — `ok`, `failed_listing`, `failed_parse`, `failed_delete` — with `eligible=`, `removed=`, `failed=` and `cutoff=` now in the log line. **`failed_parse` is deliberately separate from `failed_listing`**: a listing that SUCCEEDS and no longer parses is an ossutil upgrade, and it is the case that would otherwise be indistinguishable from an empty bucket. **THE DECIDING ARGUMENT, recorded: a failed listing alerts loudly and does NOT fail the run**, because by then the backup has succeeded and been verified, and `fail()` would write FAIL to `db-backup.log` — the line a later reader uses to decide whether a restore is even available. **Marking a good backup FAIL answers that wrongly, in the direction where a restore is not attempted.** `trap - ERR` moves BEFORE the block so that invariant is **structural rather than statement-by-statement** — recorded as the pattern: an invariant enforced at a boundary survives edits, one enforced per statement does not. One alert per non-`ok` state, never one per object, on the same dedup reasoning as `reconcileTier`'s customer-free alert text. **Deployed rather than `[skip deploy]`, deliberately: a skip defers rather than exempts**, which would have made arrival depend on unrelated work landing before the deadline; hand-copying was rejected because it breaks the pipeline's guarantee that deployed bytes are committed bytes. Verified on the box by sha1 of the shipped file, not by the merge. **The 2026-08-18 check is written down in the entry rather than left to be reconstructed.** **Plus three rules:** a harness whose shell options differ from the real script's is testing a different program — the driver ran `set -uo pipefail` against a script that runs `set -euo pipefail`, and would have hidden the exact class of defect it exists to catch; a fixture pinned to real-world dates goes stale silently, caught here loudly but dangerous in the version that passes; and `scripts/test-deploy-base.sh` needs python3 + PyYAML and reports 2/8 on Windows, environmental and pre-existing, recorded so nobody chases it. A fix, a deploy, a closed deadline item and three rules; nothing reversed, hence a patch.
 
@@ -1783,6 +1785,8 @@ Three items from the Phase 2 status review that are real work, are not written d
 
 **1. THE INTERNAL NESTING IS SQLite-SHAPED, AND THESE TWO HELPERS ARE THREADED BUT NOT PORTABLE.** `ensureShipments` and `reserveForOrder` keep `h.transaction()`, which better-sqlite3 maps to a SAVEPOINT for free. **There is no equivalent on a pg client.** So taking the handle has made them correct on one driver, not on both, and **this blocks conversion of their enclosing routes** — the checkout above all. It must be solved before the flip, and it is not a detail of these two helpers: every unconverted `.transaction()` reachable from a converted async caller has the same shape.
 
+> **REFRAMED 2026-08-11 — THE PARAGRAPH ABOVE MISDESCRIBES THE PROBLEM, AND THE ERROR IS THE WORD "BLOCKS".** It reads as a missing capability. It is an **ordering constraint**: nothing needs to be built. Convert the enclosing route to `withTransaction` first, and the helper's `h.transaction()` then becomes `await withTransaction(h, …)` in the same commit, nesting correctly through the async context that is already there. **And it does NOT unblock the checkout** — `BEGIN IMMEDIATE` is a second, independent blocker with its own entry below. See NESTING IS AN ORDERING CONSTRAINT, NOT A MISSING PRIMITIVE at the end of this section. The wording above is left standing as the reading that was superseded.
+
 **2. `withTransaction` CANNOT BE NESTED INSIDE A `tdb().transaction()` BODY — RECORD THIS AS A PROPERTY OF THE HELPER SO IT IS NOT INSTRUCTED AGAIN.** The brief for this work asked for exactly that conversion. It was measured before it was written and it breaks the checkout, twice over:
 
   * **Depth lives in `withTransaction`'s OWN AsyncLocalStorage**, which only a `withTransaction` body populates. Called from inside the checkout's better-sqlite3 `tdb().transaction(...).immediate()`, `transactionDepth()` reads **0**, so it takes the outermost path and issues a literal `BEGIN`. SQLite answers **"cannot start a transaction within a transaction"**.
@@ -2045,6 +2049,80 @@ They failed loudly, so this cost minutes. **The dangerous version of the same mi
 It reports **2 passed / 8 failed** on the Windows development machine. **That is environmental and pre-existing, not a regression.** The suite extracts the "Compute deployable files" step out of `deploy.yml` with `python3 -` and PyYAML, and **python3 is not installed there** — Windows answers the call with its Microsoft Store shim, the extraction produces nothing, and every case that needs the step fails with an empty file list.
 
 Confirmed by running it against an unmodified tree: same 2 / 8. **It runs correctly on Linux and in CI.** Anyone seeing those eight failures on Windows should stop there rather than debugging the deploy-base logic, which is fine.
+
+### NESTING IS AN ORDERING CONSTRAINT, NOT A MISSING PRIMITIVE — DECIDED 2026-08-11
+
+**Nothing is built. That is the decision.** Surveyed at this head; supersedes the framing in the OPEN item above, which called the SQLite-shaped nesting a blocker as though a capability were missing.
+
+#### THE POPULATION — EIGHT BY THE MECHANICAL TEST, TWO THAT ACTUALLY NEST
+
+Counted by AST rather than by grep, on the lesson the `withTransaction` blind spot taught: **eight helpers open a transaction on a handle that was PASSED IN.** Only **two** are genuinely nested inside a caller's transaction on the same handle. The other six are not, and each for its own reason — written out so nobody re-counts to eight and re-opens this:
+
+| helper | why it is NOT a nesting case |
+|---|---|
+| `enqueueAll` — `lib/eleme-sync.js:54` | its only caller is a route handler doing `const db = tdb()`; the handle is **outermost** |
+| `sweepStockDrift` — `lib/meituan-drift-sweep.js:170` | called only from `meituan-daemon.js` and `shangou-daemon.js`, each passing its own **top-level** handle |
+| `seedTenantDefaults` — `lib/provision-tenant.js:196` | receives `tenantDb` — a **different database** from the caller's `mainDb` transaction, so there is no nesting to resolve |
+| `initTenantSchema` — `lib/tenant-db.js:116` | file-per-account machinery, and §24 **deletes this file** in a later phase; it never reaches pg |
+| `repointMeituanProductFk` — `database.js:4471` | a **SQLite table-rebuild migration** (`RENAME TO …__fkmig`, `pragma foreign_keys=OFF`) |
+| `dropMeituanQueueProductNotNull` — `database.js:4507` | same class |
+
+**The last two deserve the emphasis: Postgres does not need them at all.** They exist because SQLite cannot ALTER a constraint and the table must be rebuilt around it. Postgres drops a constraint directly, and its schema is built from translated DDL rather than migrated from SQLite. **They die at the cutover rather than porting.**
+
+So the real population is the two already known: **`ensureShipments` and `reserveForOrder`.**
+
+#### OPTION A IS UNAVAILABLE, AND THAT IS A MEASURED RESULT
+
+The cheapest possible fix — delete the internal transaction because the caller always has one — **does not apply to either helper.** Both are dual-context, counted at this head:
+
+* **`ensureShipments` — 2 nested** (the checkout at L10310, undo-combine at L21523) **and 9 standalone** admin routes: order detail, tracking save, tracking resubscribe, JD waybill, tracking delete, ETA set, ETA clear, waybill cancel, print-data.
+* **`reserveForOrder` — 1 nested** (the checkout at L10347) **and 1 standalone**, `POST /api/retail/topup/create`.
+
+A standalone caller needs the helper's own transaction, so it cannot be removed. **Recorded as a result rather than a dead end**: ruling it out is what makes the rest of the reasoning necessary.
+
+#### THE RULE — A HELPER MAY GO ASYNC ONLY WHEN EVERY ONE OF ITS CALLERS IS ASYNC
+
+**Convert the enclosing route first. The helper's `h.transaction()` becomes `await withTransaction(h, …)` in the SAME commit.** Never the other way round, and never in separate commits.
+
+**THE EARLIER OBJECTION WAS TO CONVERTING A HELPER BEFORE ITS CALLER — NOT TO `withTransaction` ITSELF.** That distinction is the whole finding. Both directions are already pinned as tests in `scripts/test_handle_threading_batch2.js`, and they say opposite things about opposite situations:
+
+* **`withTransaction CANNOT be nested inside a non-withTransaction transaction`** (L369). Against a raw `BEGIN IMMEDIATE`, `transactionDepth` reads **0** — the depth lives in `withTransaction`'s own AsyncLocalStorage, which only a `withTransaction` body populates — so it takes the outermost path, issues a literal `BEGIN`, and SQLite answers *"cannot start a transaction within a transaction"*. **This is a statement about an UNCONVERTED caller.**
+* **`withTransaction DOES nest correctly inside its own kind — the control`** (L383). Depth reads 1 then 2 and the inner call takes the savepoint path. **This is the same helper, inside a CONVERTED caller, working.**
+
+Once the route is a `withTransaction` body the async context exists, `depthFor` returns greater than zero, `runNested` issues the savepoint, and the body may be async because its caller's is. **Nothing changes in `lib/db-transaction.js`.** The handle-threading merged at `3d9091dc` is what makes this work under pg, where `tx` is a checked-out client rather than the same object — so that work was the right prerequisite, done in the right order.
+
+**UNVERIFIED, AND THE DECISION DEPENDS ON IT.** There is one commit in every conversion where the route is already a `withTransaction` body and the helper still holds `h.transaction()`. **That shape has never run** — no converted route calls either helper today, which is exactly why batch 4 excluded those routes. It *should* work, because better-sqlite3 chooses BEGIN-versus-SAVEPOINT from `db.inTransaction`, which reflects real connection state, and `withTransaction` opens with a plain `exec('BEGIN')`. **But it is not proven, and it is not recorded here as proven.** A standalone probe — `check-nesting.js`, run against a throwaway `/tmp` database, never `data/roots.db` — checks four properties: that the inner transaction commits with the outer, that an inner failure rewinds only the inner write while the outer still commits, that the shape expected to fail still fails, and the depth-2 control. **If any comes back FAIL, this decision is wrong and must be re-derived before it is treated as settled.**
+
+#### WHY OPTIONS B AND C WERE REJECTED
+
+**B — a seam-level nesting primitive — collapses into the conversion.** A primitive that works under pg must be async, because pg is async; an async primitive makes the helper async; an async helper cannot be called from inside a `db.transaction()` body, which is where the checkout calls both of these. So the "portability fix" turns out to be the conversion wearing a different name. It would also put transaction semantics into `lib/db-seam.js`, whose scope is money conversion and which **deliberately passes `transaction()` straight through** — its own comment at line 137 lists it among the methods that fall through untouched.
+
+**C — change `withTransaction`'s depth tracking to detect a foreign transaction — is the one to refuse hardest.** It would mean reading `db.inTransaction`, which **exists on better-sqlite3, is `undefined` on `node:sqlite`, and is absent on a pg client**: correct on one of three backends, and silently wrong on the two that matter next. Worse, **it re-introduces the defect repaired at `dc91e62f`.** Reading transaction state OFF THE HANDLE rather than out of the calling async context is exactly what folded two independent concurrent requests into one transaction — one `BEGIN` for two requests, one committing while the other was still running, either destroying the other's write or committing a rolled-back one. Both modes were reproduced on a real handle. **The handle cannot answer "am I inside a transaction" for a caller; only the caller's own context can.** That is settled and must not be undone to make nesting easier.
+
+#### FOR WHOEVER WRITES THE pg SIDE — THE SAVEPOINT DETAIL
+
+Recorded now because it is where this usually goes wrong, even though nothing is being built:
+
+* **Name a savepoint by the DEPTH it opens at** — `tacet_sp_${depth}` — because only one savepoint can be live at any given depth, so siblings and re-entered blocks cannot collide. Postgres permits duplicate names and silently shadows the older one, which destroys the wrong rewind point rather than erroring. The scheme in `runNested` is already correct; reuse it rather than inventing a counter.
+* **BOTH statements on the failure path.** `ROLLBACK TO SAVEPOINT x` rewinds but **leaves the savepoint on the stack**; without `RELEASE SAVEPOINT x` the nesting level never closes. `runNested` already issues both.
+
+### `BEGIN IMMEDIATE` IS WHAT ACTUALLY BLOCKS THE CHECKOUT — OPEN, DECISION NOT MADE — RECORDED 2026-08-11
+
+**Solving the nesting does NOT unblock the checkout.** Stated plainly because the opposite was assumed, and because it makes the nesting work worth less than it looked.
+
+The checkout runs `tx.immediate()` → `BEGIN IMMEDIATE`, and the comment at `routes/retail.js:10408` says what for: the write lock is taken at transaction start, **making `nextOrderNo()`'s read-then-insert atomic even across processes.**
+
+`nextOrderNo()` does `SELECT MAX(CAST(SUBSTR(order_no, 3) AS INTEGER)) …` and the caller then INSERTs. **Under Postgres's MVCC that is not safe by default**: two concurrent checkouts under READ COMMITTED both read the same maximum, both compute `TC000123`, and both insert.
+
+**`BEGIN IMMEDIATE` HAS NO pg TRANSLATION BECAUSE IT IS A LOCKING MODE, NOT AN ISOLATION LEVEL.** There is nothing to map it onto; the concurrency control has to be replaced with a different mechanism, which is a design decision rather than a porting exercise.
+
+**Three candidate answers, with what each costs. This is Ash's decision and it is not yet made:**
+
+1. **A sequence** — `nextval('retail_order_no_seq')`. Atomic by construction, no lock, no retry, and the migration tooling already understands sequences. **Cost: numbering semantics change.** A rolled-back order burns its number permanently, where the current `MAX + 1` scheme reuses gaps. Customer-visible order numbers would develop holes.
+2. **`pg_advisory_xact_lock(key)`** — the closest behavioural match. Keeps `MAX + 1` exactly as written and serialises the critical section across processes for the transaction's duration. **Cost: a hand-held lock is a hand-held deadlock risk**, and it scopes the serialisation to one named key rather than to the whole transaction, so every future writer of order numbers has to know to take it.
+3. **`SERIALIZABLE` isolation with retry** — correct by the database's own definition. **Cost is the largest**: `40001` serialization failures become an ordinary outcome the checkout must catch and retry, which changes error handling well beyond this one function.
+
+**Not designed here, deliberately.** The options are recorded so the decision is made from a written list rather than reconstructed at the flip.
 
 ## 25. A printed slip that goes stale is corrected on paper, not reprinted — DECIDED 2026-08-07
 
