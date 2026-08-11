@@ -1,8 +1,10 @@
-# Tacet shared-core consolidation — decisions record, v4.31
+# Tacet shared-core consolidation — decisions record, v4.32
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
+
+2026-08-11 · v4.32 — §24 Database: **ORDER NUMBERING IS A COUNTER ROW, NOT A SEQUENCE — DECIDED, and Piece 1 is BUILT.** Settles candidate 1 of the three v4.30 left open, by rejecting it before anything was built. **The deciding reason is not cost — the two are the same amount of work, which is why cost cannot be the argument.** It is that **a counter row survives the Orders stage by gaining a column where a sequence has to be torn out**, which would migrate `nextOrderNo` a second time on the checkout, the most expensive place in the system to change twice; that **row-level security covers rows and does not cover sequences**, so per-account sequences would need `GRANT` as a second hand-maintained wall, the exact shape this section already rejected; and that **one global sequence lets an account read platform-wide order volume off the gaps between its own numbers**, an inference leak no row policy can close. Gaps are accepted and not re-litigated; one global counter row serialises checkouts exactly as `BEGIN IMMEDIATE` does today, so it is **not a regression**, and it stops serialising across accounts the moment the account column lands. **THE ENTRY THAT MATTERS MOST IS THE ONE ABOUT NEITHER OPTION: per-account numbering becomes GLOBAL at the flip regardless of this work** — the `MAX` read carries no account predicate, the scoping is purely which SQLite file `tdb()` resolved to, and one shared database with `order_no` globally `UNIQUE` and no account column until the Orders stage produces the same global space either way. **The risk is not that it changes, it is that it changes without being written down and is rediscovered when a second account is already trading and neither can be renumbered.** Records that **nothing parses the format** — `SUBSTR(order_no, 3)` appears once in all of `*.js`, no `ORDER BY order_no` exists, every other consumer displays, `LIKE`-searches, sanitises or uses it whole — so a gap breaks nothing because there is no parser to break. Records that **past 1,000,000 the format outgrows its own eight-character `LIKE` filter**, not pressing at 247 orders in fourteen months, recorded because the fix removes it and because that same width-locked filter would have mis-seeded the counter had it been used for the seed. **Piece 1 built: the table, the row at 0, and a seeding step with a receipt** — `series` is a key rather than decoration because an unkeyed counter table's second row is a silent duplicate-number generator, `last_no` is the last number ISSUED so the seed is the measured maximum with no arithmetic and nowhere for an off-by-one to hide, and the row exists at 0 so an unseeded counter fails visibly on `UNIQUE` rather than handing a caller an absent order number. **Seeding is LAST, after the fresh copy AND after the delta pass** — measured 2026-08-11, Postgres holds 168 `TC` orders against SQLite's 247, so a counter seeded from the 2026-08-04 copy would be 79 short and the first 79 checkouts would collide. **`setseq.py` will never reach it, and not for the reason first written down**: not an empty `pg_get_serial_sequence` but that a counter row is not a sequence at all and is absent from `plan.json` entirely. **Proven on the box and then torn down** — DDL and seed run inside a rolled-back transaction, then all four seeding paths exercised for real, then the table dropped and the cluster verified back at 162 tables; **it does not exist on the box and creating it is a deliberate step, not a side effect.** **One defect found by running it rather than reading it**: the script parsed `UPDATE … RETURNING`'s output and received `"168\nUPDATE 1"`, because `psql -tA` prints the command tag — the fourth instance here of a step that read correctly and did not run. **Piece 2 designed and NOT built**, with the single most important line recorded as such: **the probe loop must not survive onto the pg path**, or a mis-seeded counter is hidden forever behind hundreds of wasted round trips per order instead of failing loudly on the constraint. Blocked behind both call sites; caller 2 is the cheaper. **Three items explicitly NOT covered**: `po_number` and `rs_number` carry the identical read-MAX defect, `lib/qingyun-payload.js` hardcodes the first business's name onto every parcel, and two comments still claim order numbers start with 'R'. A decision, a build and a settled open item; nothing reversed, hence a patch.
 
 2026-08-11 · v4.31 — §24 Database: **the nesting property is VERIFIED ON THE BOX — all four properties passed**, so v4.30's UNVERIFIED marker is replaced by the result rather than left to go stale. An inner `db.transaction()` nests and commits with the outer; an inner failure rewinds only the inner write while the outer still commits; **the negative still fails**, which is what makes the other three discriminating rather than agreeable; and the depth-2 control holds. **The mechanism was observed, not inferred: `db.inTransaction` reads `true` inside the `withTransaction` body**, which is what routes the inner call to a SAVEPOINT instead of a second `BEGIN`. **The driver pairing is part of the result — better-sqlite3 `^9.4.3` on Node `v20.20.2`, production's own — because the property is driver behaviour and a pass on a different ABI would prove less**; a driver or Node upgrade invalidates the measurement and it must be re-run. Records that the probe lives at `/root/check-nesting.js`, is NOT in git and is lost on a rebuild, so the evidence is reproducible only while that box exists. Option D is now settled rather than provisional. A verification; nothing reversed, hence a patch.
 
@@ -883,6 +885,8 @@ Actionable items that must happen AT the cutover and cannot be solved by the cod
 - [ ] **REPLACE THE `sqlite_sequence` RESETS WITH `setval` AT CUTOVER.** `routes/ingredients.js:299` and `routes/admin.js:238` reset AUTOINCREMENT counters by deleting from `sqlite_sequence`, which does not exist in Postgres. Both are inside `try {} catch {}`, so after the switchover they fail silently and the counters do not reset — the next insert continues from the old high-water mark, the opposite of the intent, and nothing warns. Must be converted at the same time the application moves, not afterwards.
 
 - [ ] **DELETE RETIRED FILES ON THE BOX BY HAND — THE DEPLOY WILL NOT.** The pipeline never removes a file: `deploy.yml` skips deletions and `deploy-apply.sh` only copies, so anything dropped from `main` keeps running in production. Proven live on 2026-08-05: `public/retail-admin.js` was still on the server 54 days after being deleted from main. At the cutover this stops being housekeeping — `lib/tenant-db.js` and the file-per-account isolation it carries are deleted in a later phase per §24, and a file that is supposed to be gone but is still importable is exactly the kind of thing that gets loaded by something nobody remembered. Take a `diagnose_deployed_tree.js` reading first, then remove the EXTRA entries deliberately.
+
+- [ ] **SEED `retail_order_counters` LAST — AFTER THE FRESH COPY AND AFTER THE DELTA PASS, IMMEDIATELY BEFORE TRAFFIC MOVES.** Run `scripts/postgres-full-copy/seed_order_counter.py`. Seeding is not a step of the schema build, and the ordering is the whole of its value: the counter must sit above the highest order number that exists at the moment traffic arrives, not above the one that existed when the copy was taken. **Measured 2026-08-11 — Postgres holds 168 `TC` orders, SQLite holds 247.** A counter seeded from the 2026-08-04 copy would be 79 short, and the first 79 checkouts after the flip would collide one after another on `retail_orders_order_no_key`. Re-running after a second delta pass is safe and expected: the seed is `GREATEST`-guarded and can only raise the value. The script refuses to create the table — `docs/tacet-postgres-order-counter.sql` does that, by hand, and the as-built schema record is regenerated with a fresh `pg_dump -s` in the same pass. **`setseq.py` does not do this and never will**: it walks `plan.json` for identity columns, and a counter row is not a sequence. Reasoning in §24 ORDER NUMBERING IS A COUNTER ROW.
 
 - [ ] **REMOVE OR RENAME `data/roots.db` AT CUTOVER.** About 80 one-off scripts in `scripts/` open the live SQLite database by path and would run unedited tomorrow. They are deliberately out of scope for the database seam — see the scope decision below — and that exclusion is only safe if the file they reach for is gone. Left in place, every one of them keeps working against a stale database after the application has moved to Postgres: reads return figures that look right and are months old, and writes land somewhere nothing reads. Nothing warns. The notable ones a person might actually reach for: `reset_test_orders.js`, `restore_recipe_data.js`, `seed_missing_store_stock.js`, `guanyi-pickup-report.js`, `meituan-queue-status.js`. Renaming is preferable to deleting — it keeps the rollback path and still breaks the scripts loudly with "unable to open database file".
 
@@ -2136,6 +2140,105 @@ The checkout runs `tx.immediate()` → `BEGIN IMMEDIATE`, and the comment at `ro
 3. **`SERIALIZABLE` isolation with retry** — correct by the database's own definition. **Cost is the largest**: `40001` serialization failures become an ordinary outcome the checkout must catch and retry, which changes error handling well beyond this one function.
 
 **Not designed here, deliberately.** The options are recorded so the decision is made from a written list rather than reconstructed at the flip.
+
+> **SETTLED 2026-08-11 — see ORDER NUMBERING IS A COUNTER ROW, NOT A SEQUENCE, immediately below.** None of the three candidates above was taken as written. The entry is left standing because the list is where the decision was made from, and because the reasoning that rejected two of them is only legible against it.
+
+### ORDER NUMBERING IS A COUNTER ROW, NOT A SEQUENCE — DECIDED 2026-08-11
+
+**DECISION: `nextOrderNo`'s read-MAX-then-INSERT is replaced on Postgres by one `UPDATE … RETURNING` against a single counter row in a new table, `retail_order_counters`. Not a sequence, not an advisory lock, not serializable-with-retry.**
+
+A sequence was chosen first and reconsidered before anything was built. **The reconsideration is the substance of this entry**, because the two options are close enough in effort that the effort is not what decides between them.
+
+**THE FOUR REASONS, IN THE ORDER THEY MATTER.**
+
+1. **It is the same amount of work either way.** A table plus `UPDATE … RETURNING` against a sequence object plus `nextval`. Nothing in the cost of building it distinguishes them, so cost cannot be the argument, and an argument from cost would have been the wrong one to accept.
+
+2. **A COUNTER ROW SURVIVES THE ORDERS STAGE; A SEQUENCE HAS TO BE TORN OUT.** This is the decisive one. When the account column lands on `retail_orders`, a counter row gains an `account` column and its `WHERE` gains a term. A sequence cannot be made per-account at all — sequences are schema objects, so per-account numbering would mean one sequence per account, created by DDL at account provisioning, resolved at mint time through dynamic SQL. **That is a second migration of the same function, on the checkout, which is the single most expensive place in the system to change twice.**
+
+3. **ROW-LEVEL SECURITY COVERS ROWS. IT DOES NOT COVER SEQUENCES.** §24 decided that the database is the enforcer precisely so that a missed filter in application code cannot leak another account's data. Access to a sequence is governed by `GRANT`, not by a row policy — so per-account sequences would need a second, hand-maintained wall alongside the one being built. **That is the shape this section already rejected once**, and rebuilding it under a different name would be the same defect in a different place.
+
+4. **ONE GLOBAL SEQUENCE CREATES AN INFERENCE LEAK THAT RLS CANNOT CLOSE.** Under a single shared number space, an account reads platform-wide order volume off the gaps between its own consecutive order numbers. Every value involved is one the account is entitled to see, so no row policy can prevent it. **A per-account counter never creates the condition.**
+
+**ACCEPTED COST, AND IT IS NOT A REGRESSION.** One global counter row serialises every checkout until the account column lands, because the row lock is held to commit. `BEGIN IMMEDIATE` does exactly that today, across processes, for the whole transaction. The counter is therefore not slower than what it replaces; it stops serialising across accounts the moment the account column exists, which `BEGIN IMMEDIATE` never would have. **Gaps are accepted and are not to be re-litigated**: a rolled-back order burning a number was weighed against the alternatives and is the smaller cost.
+
+#### PER-ACCOUNT NUMBERING BECOMES GLOBAL AT THE FLIP REGARDLESS OF THIS WORK
+
+**This is the most important paragraph in the entry, and it describes something none of the options above causes.**
+
+**Today order numbering is per-account, but only by file separation.** `nextOrderNo`'s `MAX` read carries no account predicate — `routes/retail.js:9324` reads `FROM retail_orders` unqualified. The scoping is entirely a property of which SQLite file `tdb()` resolved to. Two trading accounts would each hold their own `retail_orders` and each would start at `TC000001`, and both would be valid.
+
+**At the flip that property disappears on its own.** One shared database; the account column comes AFTER the flip, staged; and `retail_orders.order_no` is globally `UNIQUE` in the proposed schema and in the database as built (`retail_orders_order_no_key`, verified on the box 2026-08-11). Carrying `SELECT MAX` across unchanged would produce exactly the same global number space, plus the MVCC race. **Nothing about choosing a counter row causes this and nothing about choosing a sequence would have avoided it.**
+
+**THE RISK IS NOT THAT IT CHANGES. THE RISK IS THAT IT CHANGES WITHOUT BEING WRITTEN DOWN**, and is then rediscovered when a second account is already trading — which is the expensive moment to discover it, because by then both accounts have numbers and neither can be renumbered. It is written down here so that the Orders stage inherits a decision to make rather than a surprise to absorb.
+
+**The property has never been exercised.** All five `data/tenants/*.db` on the box hold zero rows in `retail_orders` (measured 2026-08-11); the accounts that owned them were deleted 2026-08-04. There has only ever been one account, so no second number space has ever existed to collide.
+
+#### NOTHING PARSES THE FORMAT — SURVEYED 2026-08-11
+
+**Measured across the tree, because a gap is acceptable and a parser that breaks on one is a different question.**
+
+**`nextOrderNo` is the only thing that derives the number back out of the string.** `SUBSTR(order_no, 3)` appears exactly once in all of `*.js`, at `routes/retail.js:9324`. There is no JS-side `.slice(2)`, `.substring(2)`, `parseInt(order_no…)`, `/^TC/` or `startsWith('TC')` anywhere.
+
+**No `ORDER BY order_no` exists in the codebase.** Every order list sorts by `placed_at` or `id`. Nothing assumes order numbers sort in creation order.
+
+**Every other consumer displays it, `LIKE '%…%'`-searches it, sanitises it, or uses it whole as an opaque key.** The printer (`lib/feie.js`, six sites) prints it double-width and depends only on length. Qingyun trims it into a remark. Nuonuo dedupes e-invoices on it and needs uniqueness, not contiguity. The tracking pages sanitise it to `[A-Za-z0-9_-]`. Guanyi does not touch it at all. The payment path builds `out_trade_no` as `'FC' + order_no` and dispatches the async callback on `startsWith('FCTU')` / `startsWith('FCAO')`, neither of which a `TC` number can match — a format-preserving change leaves it untouched.
+
+**Conclusion: a gap breaks nothing, because there is no parser to break.**
+
+#### PAST 1,000,000 THE FORMAT OUTGROWS ITS OWN FILTER — RECORDED, NOT PRESSING
+
+`nextOrderNo` formats with `padStart(6,'0')` but filters with `LIKE 'TC______'`, which is exactly eight characters. **At 1,000,000 the function stops being able to see its own output**: the `MAX` read regresses to the highest six-digit value, the `exists` probe walks forward one row at a time, and past fifty collisions it falls through to `'TC' + next + oneRandomDigit`, which is not unique by construction.
+
+**Not pressing — 247 orders in fourteen months.** Recorded because the counter removes the condition rather than because it is near, and because the same width-locked filter would have silently mis-seeded the counter if it had been used for the seed. It is not.
+
+#### PIECE 1 — BUILT 2026-08-11. SCHEMA AND SEEDING ONLY
+
+**No JavaScript. Nothing on the SQLite side. Nothing requires any of it.**
+
+- **`docs/tacet-postgres-order-counter.sql`** — the table, the row, and the seed statement, with the shape reasoning inline.
+- **`scripts/postgres-full-copy/seed_order_counter.py`** — the seeding step, with a receipt.
+
+**THE SHAPE: `retail_order_counters (series text PRIMARY KEY, last_no bigint, updated_at timestamptz)`, one row, `('TC', 0)`.**
+
+**`series` is a key, not decoration.** Without it the table has no primary key and "there is exactly one row" is an invariant enforced by nothing — and a second row in an unkeyed counter table is a silent duplicate-order-number generator.
+
+**`last_no` is the last number ISSUED, not the next one to issue.** Chosen so the seed value is the measured maximum with no arithmetic applied to it. There is no `+1` anywhere in the seeding path, so there is nowhere for an off-by-one to hide.
+
+**The row is created at 0 by the DDL, deliberately.** If the row were absent, the mint's `UPDATE` would match nothing, `RETURNING` would yield nothing, and the caller would receive an absent value where an order number belongs — which is how `TCundefined` reaches a customer-facing column. With the row present at 0, an unseeded counter instead fails on the `UNIQUE` constraint at `TC000001`, loudly, on the first checkout. **Both are failures; only one of them is visible.**
+
+**The format stays in the application.** No `prefix` or `width` column. Putting the format in the table would create a second source of truth for it. (When the prefix eventually has to become per-account — `TC` is a constant inherited from the first business — this table is its natural home and `series` is what makes that additive too. A note, not a plan.)
+
+**HOW IT BECOMES PER-ACCOUNT, STATED HONESTLY.** The column add is additive; the key change is one constraint swap on a table holding one row per account. `ADD COLUMN account integer REFERENCES accounts (id)`, backfill, `DROP CONSTRAINT … _pkey`, `ADD PRIMARY KEY (account, series)`, enable RLS, add the policy — and the application's `WHERE` gains a term. **The backfill is written as a lookup, never as a literal account id**, per NO ACCOUNT IS SPECIAL-CASED, INCLUDING ROOTS. No account number appears anywhere in the file as built.
+
+**THE SEED, AND WHY IT USES A REGEX.** `order_no ~ '^TC[0-9]+$'` with `substring(order_no from 3)::bigint`. `LIKE 'TC______'` is width-locked to eight characters and would silently exclude a seven-digit number, seeding BELOW the true maximum — the precise failure the step exists to prevent. `GREATEST` makes it idempotent and one-directional: a re-run can only raise the counter, never lower it into numbers that already exist.
+
+**WHERE IT SITS: LAST, AFTER THE FRESH COPY AND AFTER THE DELTA PASS, IMMEDIATELY BEFORE TRAFFIC MOVES.** Seeding is not a step of the schema build. **Measured 2026-08-11: Postgres holds 168 `TC` orders while SQLite holds 247** — a counter seeded from the 2026-08-04 copy would sit 79 short, and the first 79 checkouts after the flip would collide one after another. On the whole table the drift is +121 rows. Added to the cutover checklist above.
+
+**`setseq.py` will never reach this, and not for the reason first written down.** The first account of this said `pg_get_serial_sequence` would return empty. That is true and irrelevant: **a counter row is not a sequence at all.** `setseq.py` walks `plan.json` for `identity` columns; `retail_order_counters` has none, owns no sequence, and is absent from `plan.json` entirely, because `plan.json` describes the 162 tables copied from SQLite and this table exists only in Postgres. There is no path through that script that reaches this row. It needs its own named step, which is what was built.
+
+**PROVEN ON THE BOX, THEN TORN DOWN.** The DDL and the seed were run against the live `tacet` database inside a transaction that rolled back, then the whole seeding path was exercised for real: the missing-table guard fired, the seed raised 0 → 168, a second run was correctly idempotent, and a counter deliberately set ahead of the data warned and exited non-zero without being lowered. The table was then dropped and the cluster verified back at 162 tables. **The table does not exist on the box. Creating it is a deliberate step, not a side effect of this commit.**
+
+**ONE DEFECT FOUND BY RUNNING IT RATHER THAN READING IT.** The seeding script first parsed the value out of `UPDATE … RETURNING`'s output. `psql -tA` prints the command tag after the returned row, so it received `"168\nUPDATE 1"` and died. `setseq.py` never met this because it only ever issues `SELECT`s. The script now ignores the write's output and reads the value back with a separate `SELECT`, with a comment recording that the two statements are two connections and why that is acceptable here and nowhere else. **Recorded because it is the fourth instance in this section of a step that read correctly and did not run.**
+
+#### PIECE 2 — DESIGNED, NOT BUILT
+
+**Blocked, and the blocking is the point of writing it down now.**
+
+**`nextOrderNo` takes an optional trailing handle**, evaluated per call, no call site edited — PATH A STEP 2's rule, applied one level up. **It was never on that list and should have been.** Today it reads `tdb()` twice from ambient scope, which is why no test can hand it a Postgres-shaped handle, which is why the pg path cannot be proven before the flip.
+
+**A duck-typed branch that THROWS on an unrecognised handle**, copying `control()`'s third branch in `lib/db-transaction.js`. **The stakes are higher here than there.** A silent fallback to the SQLite path on a pg handle does not fail — it mints duplicate order numbers under load.
+
+**THE PROBE LOOP MUST NOT SURVIVE ONTO THE PG PATH. This is the single most important line in the design.** The loop exists on SQLite to walk past collisions. Carried onto Postgres it would walk past the collisions of a mis-seeded counter too — silently, forever, at hundreds of wasted round trips per order, with the misconfiguration hidden behind a function that appears to work. Without it, the first checkout fails loudly on `retail_orders_order_no_key`. **That constraint is the backstop and it stays.** The mint must also throw when the `UPDATE` returns no row rather than formatting whatever it received.
+
+**BLOCKED BEHIND BOTH CALL SITES, because `nextval`-shaped work is awaited and an `await` needs an async body.** Caller 2, `POST /api/retail-admin/orders` (`routes/retail.js:20064`), is a synchronous handler with a synchronous transaction body — PHASE 2 OWED WORK item 2, in neither conversion pool — **and it is the cheaper of the two.** Caller 1, the checkout, is the larger one. Piece 1 is deliberately independent of both and can land first, which it has.
+
+#### EXPLICITLY NOT COVERED BY THIS WORK
+
+**`po_number` and `rs_number` have the identical defect and are not fixed here.** `routes/retail-purchasing.js:39` reads `MAX(CAST(SUBSTR(po_number, 5) AS INTEGER))` for `RPO-%`, and `routes/restock.js:468` counts on `substr(rs_number,4,6)`. Both are read-MAX-then-insert and both inherit the same MVCC unsafety at the flip. **Recorded so they are not assumed covered by an order-numbering decision that names only orders.**
+
+**`lib/qingyun-payload.js:585` hardcodes `Roots ${order_no}` as the goods name on every delivery push.** A second account's parcels would ship labelled with the first account's business name. §0 governing rule 2. Its own item; not now.
+
+**`routes/retail.js:3315` and `:3320` both say "Order numbers start with 'R'".** True of the 232 legacy `R*` orders on the box and false of everything minted since. The reasoning those comments support is still correct — `FCTU` and `FCAO` cannot collide with `FCTC` either way — but the fact they cite is not. **Not fixed in this commit**, which touches no JavaScript by design; recorded so the next reader does not trust it.
 
 ## 25. A printed slip that goes stale is corrected on paper, not reprinted — DECIDED 2026-08-07
 

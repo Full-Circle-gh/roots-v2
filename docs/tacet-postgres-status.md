@@ -3,7 +3,8 @@
 **2026-08-10 · A LIVING DOCUMENT. Both halves, in one place: what is built, and what is left.**
 Covers 2026-08-03 onwards. Read-only in itself — no code change ever accompanies it.
 
-**LAST UPDATED: 2026-08-10, against `main` at `f386ced5`, decisions record v4.25, AST authority reporting 103 UNCONVERTED runtime transaction blocks / 30 UNCONVERTED in `routes/retail.js` — and, newly visible, 26 CONVERTED, all in `routes/retail.js`.**
+**LAST UPDATED: 2026-08-11, against `main` at `809e370e` plus this commit, decisions record v4.32, AST authority reporting 103 UNCONVERTED runtime transaction blocks / 30 UNCONVERTED in `routes/retail.js` — and 26 CONVERTED, all in `routes/retail.js`.**
+**All four figures were RE-DERIVED at `809e370e`, not carried forward, and all four are unchanged.** They stay true across this commit because it touches only `docs/` and one new `scripts/*.py` — no runtime JavaScript, so nothing the AST authority counts has moved.
 Those four values are the head this file is true at. **If any of them has moved, this file is stale until someone re-runs PART 4.**
 
 **READ THE WORD "UNCONVERTED" IN THAT LINE AS LOAD-BEARING.** Until 2026-08-10 the AST authority could see only one of the two transaction forms, so every count in this file and in §24 means `<handle>.transaction(fn)` and never `withTransaction(handle, fn)`. The script now reports both, separately and never summed. **103 and 30 have not moved and are not a total** — see §24 and the mapping in the script's own header.
@@ -86,6 +87,7 @@ By day: 10 · 51 · 32 · 33 · 18 · 47 · 59 · 14.
 - **Postgres backed up** (`7b3ce893`) — `pg_dump -Fc` plus `roles.sql`, which is load-bearing because roles are cluster-level and the archive holds 927 grants naming `tacet_app`.
 - **The phase numbers defined** (`ec537133`), with backups, rollback and the runbook placed inside Phase 2 rather than Phase 3. **SETTLED 2026-08-10: there are THREE phases and the five-phase reading is retired** — under it the switch is 4 and backups are 5, which puts the safety net after the flip and inverts the one sequencing decision the phases exist to protect. No longer an open question; §24 THREE PHASES, AND WHY THE FIVE-PHASE READING IS WRONG owns the reasoning.
 - **Three harness defects fixed** across three consecutive batches, each of which would have made a suite green and wrong, and the written-column assertion made non-optional.
+- **ORDER NUMBERING SETTLED AS A COUNTER ROW, AND PIECE 1 BUILT** (2026-08-11) — `docs/tacet-postgres-order-counter.sql` and `scripts/postgres-full-copy/seed_order_counter.py`. Schema and seeding only; no JavaScript, nothing on the SQLite side, nothing requires either file. **Proven against the live `tacet` database and then torn down**: DDL and seed run inside a rolled-back transaction, all four seeding paths exercised for real (missing-table guard, raise 0 → 168, idempotent re-run, counter-ahead warning at a non-zero exit without lowering the value), table dropped, cluster verified back at 162 tables. **It does not exist on the box.** One defect found by running it — the script parsed `UPDATE … RETURNING`'s stdout and got `"168\nUPDATE 1"`, because `psql -tA` prints the command tag. Reasoning in §24; the remaining code is item 12.
 - **The AST authority made able to see BOTH transaction forms** (`62ae872a`). It matched `.transaction` as a member property, so `withTransaction(h, fn)` — an `Identifier` callee — matched nothing, and **26 converted blocks appeared in no figure it printed, through four conversion batches.** The tree was enumerated first and opens a transaction in exactly two ways, no third. Every figure is now labelled with its form and **no blended total is printed anywhere**, because a combined number would change what every count in §24 means without changing a word of them. 103 and 30 are unchanged, verified by diffing the two scripts' output over the same tree. Red-proofed by a fixture with declared counts plus three mutations.
 
 ---
@@ -110,7 +112,7 @@ Type: **C** conversion · **F** fix · **D** design question · **O** operationa
 | 9 | **`POST /api/retail-admin/orders` unclassified** — mints an order number, in neither pool | D | its own conversion | §24 PHASE 2 OWED WORK, item 2 |
 | 10 | **`POST /polls/:id/vote` misclassified** — "safe inline" while writing `points_balance` and the points ledger | D | its own conversion | §24 PHASE 2 OWED WORK, item 3 |
 | 11 | **`FOR UPDATE` sufficiency on the stock row** — the invariant holds by convention, not construction | D | the checkout on pg | design doc, uncertainty 1 |
-| 12 | **`nextOrderNo` on Postgres** — wants a sequence; `order_no` is `TEXT UNIQUE` `TC%06d` with live values. **Not costed** | D | the checkout on pg | design doc, uncertainty 2 |
+| 12 | **`nextOrderNo` on Postgres — the DESIGN QUESTION IS SETTLED; the code is not.** A COUNTER ROW, not a sequence. Schema and seeding **built 2026-08-11** (PART 2). What remains is Piece 2: thread the handle, duck-typed branch that throws, **and the probe loop must not survive onto the pg path** | C | the checkout on pg, and blocked behind #9 and #6 | §24 ORDER NUMBERING IS A COUNTER ROW |
 | 13 | **Checkout contention unmeasured** — cheapest of the three uncertainties, still unsettled | D | nothing; sizes the work | design doc, uncertainty 3 |
 | 14 | **`PUT /cms/onboarding-settings`** unwrapped multi-write · **`reconcileTier`** swallows its errors · **`categories` `UNIQUE(kind,name)`** has no `COLLATE NOCASE` | F | nothing today | §24 DUAL-CONTEXT HELPERS; TWO CATEGORY SYSTEMS |
 | 15 | **Six statements failing in production today** — and per §24 these are **not typo fixes**: each path has never executed, so fixing one surfaces behaviour nobody has seen | F | 162 seam sites waiting on decisions | §24 Six statements are failing |
@@ -146,6 +148,7 @@ Type: **C** conversion · **F** fix · **D** design question · **O** operationa
 | 31 | **A fresh data copy + delta pass.** Drift measured 2026-08-09: checkout_quotes +23,829, guanyi_sync_log +4,788, customers +222, orders +87 | O | §24 Full data copy, findings |
 | 32 | **The directory rename**, bundled here deliberately — standalone it breaks the SQLite path, pm2, Actions, `deploy-apply.sh` and probably nginx at once | O | §24 line 537 |
 | 33 | **The gzgrocery table rename** | O | §24 gzgrocery rename |
+| 40 | **Create `retail_order_counters` on the box, then seed it LAST** — after the fresh copy AND after the delta pass. DDL is `docs/tacet-postgres-order-counter.sql`, run by hand; regenerate the as-built record in the same pass. Seeding is `scripts/postgres-full-copy/seed_order_counter.py`. **Measured 2026-08-11: pg holds 168 `TC` orders, SQLite 247** | O | §24 ORDER NUMBERING IS A COUNTER ROW; cutover checklist |
 
 ### After the flip — explicitly not preconditions
 
@@ -163,6 +166,8 @@ Type: **C** conversion · **F** fix · **D** design question · **O** operationa
 ### The three with silent, money-costing failure modes
 
 Called out because they sit in the least-documented stages and none of them fails loudly: **#20 the idempotency regex**, **#12 `nextOrderNo` on Postgres**, **#30 the queue keyed on the pool**. And the one that is not a code problem at all: **#16, the unproven restore.**
+
+> **#12's silent mode is now NAMED AND DEFUSED BY DESIGN, but the code is unwritten, so it stays on this list — 2026-08-11.** The silence had a specific mechanism: carrying the probe loop onto Postgres would walk past a mis-seeded counter's collisions forever, at hundreds of wasted round trips per order, behind a function that appears to work. §24 records dropping the loop as the single most important line of the design, leaving `retail_orders_order_no_key` to fail the first checkout loudly instead. **A design that names the failure is not a fix; #12 comes off this list when Piece 2 lands, not before.**
 
 ---
 
