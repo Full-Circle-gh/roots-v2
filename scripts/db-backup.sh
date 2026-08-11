@@ -96,11 +96,18 @@ FILES=()          # /tmp working copies created so far
 UPLOADED=0
 TOTAL_BYTES=0     # bytes actually uploaded, i.e. COMPRESSED size
 RAW_BYTES=0       # uncompressed size of the same snapshots, for the ratio
+PRUNE_SUMMARY=''  # set by the retention block; empty on every path that fails first
 
 log_line() {
   # timestamp | status | object count | total bytes (compressed/uploaded)
+  #
+  # PRUNE_SUMMARY is appended when the retention block has run. Until 2026-08-11
+  # this line carried no prune information at all, so there was no durable record
+  # of whether retention had worked — a zero that is printed is a measurement, a
+  # zero that is never written down is not. It is empty on every path that fails
+  # before retention, so a FAIL line is unchanged.
   mkdir -p "$(dirname "$LOG")"
-  echo "$(date -Iseconds) $1 objects=$2 bytes=$3 date=$DATE${4:+ reason=$4}" >> "$LOG"
+  echo "$(date -Iseconds) $1 objects=$2 bytes=$3 date=$DATE${4:+ reason=$4}${PRUNE_SUMMARY:+ $PRUNE_SUMMARY}" >> "$LOG"
 }
 
 # Reuse the app's existing operator-alert channel (Settings -> Push notifications
@@ -294,23 +301,79 @@ fi
 # NOTE: versioning is enabled on this bucket, so these deletes add delete
 # markers; previous NONCURRENT VERSIONS are retained and are NOT pruned here.
 # Reclaiming those bytes is the job of the bucket lifecycle rule on daily/.
+#
+# THIS STEP COULD NOT REPORT ITS OWN FAILURE UNTIL 2026-08-11, and that — not
+# the pruning, which works — was the defect. Three ways, all now closed:
+#   * `|| true` on the listing swallowed its exit status, so a failed or
+#     reformatted listing produced an empty PREFIXES, an unexecuted loop and
+#     `pruned=0` — output byte-identical to a healthy run.
+#   * A failed delete printed a WARNING to stderr, incremented nothing, set no
+#     status and paged nobody, while every other failure here calls fail().
+#   * PRUNED never reached db-backup.log, so nothing could be audited after.
+#
+# THE ERR TRAP IS RELEASED BEFORE THIS BLOCK, DELIBERATELY, and it is the design
+# decision rather than a tidy-up. By this point every object is uploaded and
+# verified and /tmp is clean: THE BACKUP HAS SUCCEEDED. Nothing retention does
+# may change that verdict, because the OK line in db-backup.log is what a later
+# reader uses to answer "did we have a backup that night" — and marking a good,
+# verified backup FAIL because a listing timed out would answer it wrongly, in
+# the direction that causes a restore not to be attempted. A prune problem is
+# reported on its OWN terms: its own status field, its own counters, its own ops
+# alert on the same channel every other failure uses. Releasing the trap here
+# makes that structural rather than dependent on getting every `|| true` right.
+trap - ERR
+
 CUTOFF=$(date -d "$RETAIN_DAYS days ago" +%Y%m%d)
 PRUNED=0
-PREFIXES=$("$OSS" ls "oss://$BUCKET/daily/" -d 2>/dev/null \
-           | sed -n "s#^oss://$BUCKET/daily/\([0-9]\{8\}-[0-9]\{6\}\)/\$#\1#p" || true)
-for p in $PREFIXES; do
-  day="${p%%-*}"
-  if [ "$day" -lt "$CUTOFF" ]; then
-    if "$OSS" rm "oss://$BUCKET/daily/$p/" -r -f >/dev/null 2>&1; then
-      PRUNED=$((PRUNED + 1))
-      echo "[db-backup] pruned oss://$BUCKET/daily/$p/ (older than $RETAIN_DAYS days)"
-    else
-      echo "[db-backup] WARNING: prune failed for $p" >&2
-    fi
-  fi
-done
+PRUNE_ELIGIBLE=0
+PRUNE_FAILED=0
+PRUNE_STATUS=ok
 
-trap - ERR
+# A LISTING THAT FAILED AND A PREFIX THAT IS LEGITIMATELY EMPTY ARE DIFFERENT
+# STATES. Tested rather than swallowed: the status of the listing decides.
+if LISTING=$("$OSS" ls "oss://$BUCKET/daily/" -d 2>&1); then
+  PREFIXES=$(printf '%s\n' "$LISTING" \
+             | sed -n "s#^oss://$BUCKET/daily/\([0-9]\{8\}-[0-9]\{6\}\)/\$#\1#p")
+  # AND A THIRD STATE: the command SUCCEEDED and its output no longer parses.
+  # That is a format change — an ossutil upgrade, a different listing shape — not
+  # an empty bucket, and it must not read as "nothing to do". Discriminated by
+  # the listing still containing lines under our own prefix while none of them
+  # matched the pattern.
+  SEEN=$(printf '%s\n' "$LISTING" | grep -c "^oss://$BUCKET/daily/." || true)
+  if [ "$SEEN" -gt 0 ] && [ -z "$PREFIXES" ]; then
+    PRUNE_STATUS=failed_parse
+  fi
+else
+  PRUNE_STATUS=failed_listing
+  PREFIXES=""
+fi
+
+if [ "$PRUNE_STATUS" = ok ]; then
+  for p in $PREFIXES; do
+    day="${p%%-*}"
+    if [ "$day" -lt "$CUTOFF" ]; then
+      PRUNE_ELIGIBLE=$((PRUNE_ELIGIBLE + 1))
+      if "$OSS" rm "oss://$BUCKET/daily/$p/" -r -f >/dev/null 2>&1; then
+        PRUNED=$((PRUNED + 1))
+        echo "[db-backup] pruned oss://$BUCKET/daily/$p/ (older than $RETAIN_DAYS days)"
+      else
+        PRUNE_FAILED=$((PRUNE_FAILED + 1))
+        echo "[db-backup] WARNING: prune failed for $p" >&2
+      fi
+    fi
+  done
+  if [ "$PRUNE_FAILED" -gt 0 ]; then PRUNE_STATUS=failed_delete; fi
+fi
+
+# ONE alert, never one per failed object — the same reason reconcileTier's alert
+# carries no customer id: a per-item message would page the group once per
+# object and defeat sendOpsAlert's exact-text dedup.
+if [ "$PRUNE_STATUS" != ok ]; then
+  send_alert "Tacet DB backup $DATE — THE BACKUP SUCCEEDED but RETENTION did not: prune=$PRUNE_STATUS eligible=$PRUNE_ELIGIBLE removed=$PRUNED failed=$PRUNE_FAILED cutoff=$CUTOFF. Old backup sets are NOT being deleted. Check ossutil and the daily/ prefix."
+fi
+
+PRUNE_SUMMARY="prune=$PRUNE_STATUS eligible=$PRUNE_ELIGIBLE removed=$PRUNED failed=$PRUNE_FAILED cutoff=$CUTOFF"
+
 log_line OK "$UPLOADED" "$TOTAL_BYTES"
-echo "[db-backup] OK $UPLOADED objects, $TOTAL_BYTES bytes uploaded (raw $RAW_BYTES), pruned=$PRUNED"
+echo "[db-backup] OK $UPLOADED objects, $TOTAL_BYTES bytes uploaded (raw $RAW_BYTES), $PRUNE_SUMMARY"
 exit 0
