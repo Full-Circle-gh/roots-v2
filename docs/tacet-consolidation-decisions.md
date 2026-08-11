@@ -1,8 +1,10 @@
-# Tacet shared-core consolidation — decisions record, v4.27
+# Tacet shared-core consolidation — decisions record, v4.28
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
+
+2026-08-11 · v4.28 — §24 Database: **undo-combine's missing guard and its two-transaction window — both FIXED and deployed at `12c92ae4`**, in two separate commits so the guard stays separable from the atomicity change. Branch B called `ensureShipments` unconditionally, and that helper never reads `fulfillment_type`, so undo-combine on a pickup or counter order **created parcels for an order collected at the store — and unlike every other shipment defect here it does NOT self-heal**, because the order-detail read's own guard returns `[]` for those orders instead of reconciling them. **409 `ships_nothing` rather than a silent no-op**, on this route's own conventions and its own history: answering an impossible request "with success rather than a rejection" is exactly what let the shadowed split run destructive for eight weeks. **THE FINDING, recorded as such: the branch read `SELECT id` only**, so `shipsNothing(o)` would have seen `undefined` forever — **a guard that would have passed review, read correctly in the diff, and protected nobody.** A test now asserts the column is selected. **Reachability MEASURED: latent, not live** — three gates recorded individually because a future UI change could remove any one (the button needs an existing `合并` shipment, a pickup order's shipments array is empty, the combine route cannot create one), plus `fulfillment_type` is never `UPDATE`d anywhere. Commit 2 merges the delete and the rebuild into one transaction — **EXTENT, not form: still `db.transaction()`, conversion boundary untouched, batch 4's exclusion holds** — with nesting and read-own-writes both re-proved on the branch. Records two test decisions: the rollback assertion checks the ORIGINAL count AND the same row ids because a partial rebuild is also non-zero and also data loss, and read-own-writes is asserted on a planner spy because a row count cannot tell a rebuild from an early-return over stale rows. **OPEN: Branch A validates outside its transaction and that window IS awaited** — `item_already_dispatched` and `would_empty_shipment` run before `await withTransaction`, and `acquire`'s `st.tail.then` is a microtask only while the handle is idle; under contention it spans real I/O. **Plus: the v4.27 mutation rule's first use HELD** — a mutation aimed at a non-matching pattern refused to count instead of producing a meaningless red — and the rule is sharpened: **an anchor must contain no line ending at all**, after a literal `\r\n` anchor was written and replaced while building the very suite that guards against it. Two fixes, a finding, a deploy and an open item; nothing reversed, hence a patch.
 
 2026-08-11 · v4.27 — §24 Database: **`reconcileTier` fails loudly and names its victim — FIXED and deployed at `b7c70d39`.** The catch stays non-fatal and now logs at ERROR level carrying `customerId`, `want`, `storedTier` and the driver message, then fires a best-effort `sendOpsAlert`, double-wrapped against both a synchronous throw and a rejected promise so the alert can neither mask nor replace the log. **Records WHY non-fatal beat rollback as REASONING, not preference:** every caller already swallows, so throwing would not fail an order — it would silently drop points and `lifetime_spend` with nothing to retry, and the understated spend would then make the self-heal persist a WRONG tier; **`finalizeOrderAddon` is decisive, because the customer pays for an add-on and does not receive it.** Records that **`requireRetailAuth` reconciles on EVERY authenticated request and that self-heal is load-bearing** — it is why the defect never bit, and removing it inverts the reasoning. Records the alert text as **deliberately customer-free**, because `sendOpsAlert` dedups on exact text and a per-customer message would defeat it entirely while growing an unbounded per-customer map; attribution lives in the log, and the residual is ~60 alerts/hour in a sustained outage, the platform default. **Measured baseline: zero occurrences across 1,091 boots since 2026-05-11**, with the capture path proven by `[wx-sec]` appearing in the same file. **Plus two RULES:** a mutation must assert it actually modified the source before its red counts as evidence — the CRLF anchor matched nothing and produced ten red lines that proved nothing, the THIRD occurrence of "a run that looks like proof and is not", alongside the two comment-blind matching entries; and an assertion that counts occurrences file-wide is a global assertion wearing a local name, which unrelated correct work will break. A fix, a deploy and two rules; nothing reversed, hence a patch.
 
@@ -1910,6 +1912,72 @@ Seen on this change. The sabotage spliced the live source using an anchor contai
 **Rescoped to assert each helper BY NAME** (`maybeFlagUncallablePhone`, `flagUncallablePhone`), which is what it always meant, and verified still to catch a real regression: removing `Promise.resolve(` from one helper turns it red again. Bumping 2 to 3 was rejected — it would have preserved the census and broken on the next correct alert anywhere in either file.
 
 **The general shape, so it is recognised next time: a whole-file count is a global assertion wearing a local name.** It passes for as long as nothing else in the file does the same right thing.
+
+### UNDO-COMBINE: THE MISSING GUARD AND THE TWO-TRANSACTION WINDOW — FIXED AND DEPLOYED 2026-08-11 AT `12c92ae4`
+
+Two defects in Branch B of `POST /api/retail-admin/orders/:id/shipments/split`, three lines apart, fixed in **two separate commits** so the guard stays separable in history from the atomicity change.
+
+#### COMMIT 1 — `c8ca79de` — THE MISSING `shipsNothing` GUARD
+
+**Branch B called `ensureShipments` unconditionally.** `ensureShipments` does not guard on fulfilment type — **it never reads the column** — so undo-combine on a pickup or counter order **created Air/Land parcels for an order collected at the store.** Every other consumer already checked: the checkout (`if (!isPickup) ensureShipments(...)`), the order-detail read (`shipsNothing(o) ? [] : ensureShipments(id)`) and `mergeAddonItemsIntoShipments`. This branch was the only one that did not.
+
+**AND IT DOES NOT SELF-HEAL, which is what separates it from every other shipment defect in this route.** The order-detail read's own guard returns `[]` for these orders rather than reconciling them, so nothing would ever remove the phantom parcels — `feie` would simply start printing parcel blocks for a counter sale.
+
+**409 `ships_nothing`, NOT A SILENT NO-OP.** Recorded as reasoning because the opposite reading is available and wrong. **Every impossible request on this route is REFUSED** — `400 no_items`, `400 invalid_items`, `409 item_already_dispatched`, `422 would_empty_shipment`, `409 has_tracking` immediately below the new guard. The silent-return precedents that might be cited — `mergeAddonItemsIntoShipments`, the order-detail read — are **internal helpers, not endpoints**; a helper returning early is not an endpoint claiming success. And **this route's own history is the argument**: see "SHIP PART LATER" WAS LIVE AND DESTRUCTIVE-ON-SUCCESS FOR EIGHT WEEKS and `POST /orders/:id/shipments/split` IS REGISTERED TWICE, both 2026-08-09 — the defect there was precisely **answering an impossible request with success rather than a rejection**. `409` for consistency with `has_tracking`, the other order-level blocker in the same branch.
+
+#### THE FINDING: THE READ SELECTED ONLY `id`, AND THE GUARD WOULD HAVE BEEN SILENTLY WORTHLESS
+
+**This is the finding, not a footnote.** The branch opened with:
+
+```js
+const o = tdb().prepare('SELECT id FROM retail_orders WHERE id = ?').get(id);
+```
+
+`shipsNothing(o)` reads `o.fulfillment_type`. Against that row it would have seen **`undefined` forever**, resolved to "not pickup, not counter", and let every order through. **The guard would have looked correct in review, read correctly in the diff, and done nothing at all** — a fix that ships, passes, and protects nobody.
+
+The read now selects `fulfillment_type`, and **a test asserts that it does**, because the failure mode is invisible: nothing throws, nothing logs, and the only symptom is the absence of a refusal nobody was watching for. **A guard whose input is not in the query is not a guard.** This belongs beside the comment-blind matching entries and the mutation rule — the same family: something that looks like protection and is not.
+
+#### REACHABILITY — MEASURED, NOT ASSUMED: LATENT, NOT LIVE
+
+**Not reachable from the UI.** Three gates, each verified, and all three must hold for that to remain true — which is why they are written down rather than summarised as "not reachable":
+
+1. **`shipmentMergeControls` only draws the "Split into separate parcels" button when the order has exactly one shipment whose label contains `合并`.** A pickup order's `o.shipments` is `[]`, because the admin read guards, so the button never renders.
+2. **The combine route cannot create that `合并` shipment either** — it returns early unless `shipments.length > 1`, and a pickup order has none. The hole is bootstrap-proof: you would need the button to create the shipments the button requires.
+3. **`fulfillment_type` is never `UPDATE`d anywhere in the repository.** Checked across every file. So a delivery order that legitimately has parcels can never become a pickup order that is then split.
+
+Reachable only by a direct `POST`, or by a future UI change that removes any one of those gates. **A change to the button's render condition is enough to make this live**, which is the reason the gates are recorded individually.
+
+#### COMMIT 2 — `12c92ae4` — ONE TRANSACTION
+
+The branch deleted every shipment and nulled every `shipment_id`, **COMMITTED**, then rebuilt inside `ensureShipments`' own transaction. A process death between the two left the order with no parcels at all.
+
+**The window was SYNCHRONOUS** — nothing awaits anywhere in Branch B — so no other request could interleave and only a hard kill could land in it. Small is not closed, and the repair is three lines.
+
+**This changes the transaction's EXTENT, not its FORM.** It stays on `db.transaction()`. Converting to `withTransaction` would drag `ensureShipments` — blocked behind the checkout — across the conversion boundary, which is exactly why batch 4 excluded this route. **That exclusion still holds.** `logActivity` and the response stay outside, because an audit write must not be able to roll back the operation it describes.
+
+Two properties make it safe, both re-proved on the branch rather than carried over from the survey:
+
+* **NESTING** — `ensureShipments` issues its own `h.transaction()`, which better-sqlite3 maps to a SAVEPOINT when one is already open. Not a new reliance: the checkout opens its transaction at L10197, calls `ensureShipments` at L10310 **inside** that body, and invokes via `.immediate()` at L10410. Every non-pickup order already nests exactly this way.
+* **READ-OWN-WRITES** — `ensureShipments` early-returns if any shipment exists, so inside the merged transaction its `SELECT` must see the **uncommitted** delete and proceed. If it did not, the rebuild would silently not happen, which is the failure mode the merge itself could introduce.
+
+#### TWO TEST DECISIONS WORTH KEEPING
+
+* **The rollback test asserts the ORIGINAL count AND the same row ids**, not merely that the count is non-zero. **A partial rebuild is also non-zero and is also data loss**, and identical ids are what prove the delete was rolled back rather than the rows re-created.
+* **Read-own-writes is asserted on a PLANNER SPY, not on a row count.** A row count cannot distinguish a real rebuild from an early-return over stale rows — both leave parcels on the order. Only "did the planner run" separates them.
+
+**DEPLOY.** Fast-forward to `main` at `12c92ae4`, lease pinned to the literal `d92de092`, workflow run `31466524800`, 1m21s, 2 files, `RESULT=SUCCESS`, both verified byte-identical on the box. `roots-v2` restarts **1310 → 1311**, one restart, online. The error log gained **238 bytes since boot and they are exactly the routine ALIPAY warning pair** — nothing else.
+
+#### OPEN — BRANCH A VALIDATES OUTSIDE ITS TRANSACTION, AND THAT WINDOW IS AWAITED
+
+Now the largest gap left in this handler. In **Branch A** of the same route, the `item_already_dispatched` check and the `would_empty_shipment` count both run on `tdb()` **before** `await withTransaction(tdb(), …)`. `acquire` in `lib/db-transaction.js` schedules the body via `st.tail.then(run, run)` — **a microtask when the handle is idle**, so nothing interleaves in the common case. **But when another transaction is already in flight on that handle, that wait spans real I/O**, and a concurrent request can move the same items between the check and the write.
+
+So the guards can pass and then be false by the time the transaction runs: a source parcel emptied despite `would_empty_shipment`, or items moved out of a parcel that dispatched in between. Bounded and rare — it needs two operators on one order, or a converted route holding the handle. **Not fixed here, deliberately: this brief was Branch B, and Branch A was explicitly out of scope.**
+
+### THE MUTATION RULE'S FIRST USE HELD — RECORDED 2026-08-11
+
+The rule from v4.27 — **any mutation must assert it actually modified the source before its red counts as evidence** — was used for the first time in `scripts/test_shipments_split_undo.js`, and it worked. Verified by pointing a mutation at a pattern that cannot match: instead of a tidy red that would look like a successful red-proof, **every test reported "matched NOTHING — it changed no source, so every failure below would be meaningless."** The assertion is per PART rather than once at the end, because a multi-part mutation can have one part land and another silently miss.
+
+**And the fragility recurred while writing the very suite that guards against it.** An anchor containing a literal `\r\n` was written first — on a CRLF tree, that is exactly the shape that matches nothing — and was replaced with newline-agnostic regexes using `\s*`. **The rule is therefore sharpened: a mutation anchor must not contain a line ending at all.** Match around whitespace, never through it. The replacement side may contain newlines; it is building source, not matching it.
 
 ## 25. A printed slip that goes stale is corrected on paper, not reprinted — DECIDED 2026-08-07
 
