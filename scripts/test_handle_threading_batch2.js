@@ -455,8 +455,13 @@ async function main() {
   await it('reconcileTier and createOrReuseManualCustomer are untouched — out of scope', () => {
     assert.ok(/^function reconcileTier\(customerId, spend, storedTier\) \{$/m.test(RETAIL),
       'reconcileTier changed shape — it is money-adjacent and out of this batch');
-    assert.ok(/^function createOrReuseManualCustomer\(\{ nickname, email, phone, userId \}\) \{$/m.test(RETAIL),
-      'createOrReuseManualCustomer changed shape — it travels with POST /api/retail-admin/orders');
+    // createOrReuseManualCustomer HAS NOW TRAVELLED, and this assertion is
+    // updated rather than deleted. It said the helper must not move until its
+    // route was classified; the route was classified and converted, so the
+    // pin moves to the threaded signature instead of disappearing. Its own
+    // suite is scripts/test_handle_threading_manual_customer.js.
+    assert.ok(/^function createOrReuseManualCustomer\(\{ nickname, email, phone, userId \}, h = tdb\(\)\) \{$/m.test(RETAIL),
+      'createOrReuseManualCustomer changed shape — it is threaded now; see test_handle_threading_manual_customer.js');
   });
 
   console.log('');
