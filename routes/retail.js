@@ -6972,6 +6972,9 @@ if (_autoDispatchSweep.unref) _autoDispatchSweep.unref();
 // Same side effects as the manual "Mark delivered" (delivered_at, per-parcel
 // mirror, customer notification / review prompt). Toggle:
 // storefront_config `delivery.qingyunAutoDeliver` (default on).
+// Ends by backfilling the arrival time on orders another writer delivered first
+// without stamping one — see backfillQingyunArrivalTimes below. It sits inside
+// this function so the same toggle governs both: they read the same signal.
 function autoDeliverQingyunForTenant() {
   if (cfgValue('delivery.qingyunAutoDeliver', true) !== true) return 0;   // disabled
   let rows;
@@ -7012,7 +7015,72 @@ function autoDeliverQingyunForTenant() {
     try { notifyOrderStatusChange(o.id, 'delivered'); } catch (e) { console.warn('[auto-deliver-qy] notify', o.id, e.message); }
     fired++;
   }
+  backfillQingyunArrivalTimes();
   return fired;
+}
+
+// ─── Arrival-time backfill (the loser of the race above) ────────────────────
+// The sweep above can only claim an order still in AUTO_DELIVER_FROM_STATUSES.
+// On a Meituan mirror another writer usually gets there first — the status poll
+// (routes/meituan-internal.js, `status = COALESCE(?, status)`) or the past-ETA
+// timer (`SET status = 'delivered'`) — and NEITHER stamps delivered_at. The
+// order then reads Delivered with no arrival time at all, so the Orders list
+// falls back to printing channel_eta under the honest label "ETA" instead of
+// "arrived" (public/retail-admin/04-orders.js, `arrivedAt`), even though the
+// rider's real drop-off is sitting right there in delivery_jobs.
+//
+// So: for an order already delivered but never stamped, take the arrival time
+// off the completed Qingyun job. delivery_jobs has no drop-off column — its
+// updated_at is the daemon's last write, which freezes when the job completes
+// (order_status 50 is terminal; nothing touches the row after), so it is the
+// closest thing to a real drop-off time we hold. CURRENT_TIMESTAMP is NOT used
+// as a fallback: on a sweep running long after the fact it would print a plainly
+// false arrival clock, and no stamp (keep showing the ETA) is the honest answer.
+//
+// Timestamp only — no status change, no notification, no activity row. The
+// order was already delivered by whoever won the race; they own those effects,
+// and re-firing them here would double-notify the customer. Idempotent via the
+// `delivered_at IS NULL` guard, so each order is stamped at most once.
+function backfillQingyunArrivalTimes() {
+  let rows;
+  try {
+    rows = tdb().prepare(
+      `SELECT o.id AS id, j.updated_at AS dropped_at
+         FROM retail_orders o
+         JOIN delivery_jobs j ON j.retail_order_id = o.id
+        WHERE o.status = 'delivered'
+          AND o.delivered_at IS NULL
+          AND j.order_status >= 50
+          AND j.updated_at IS NOT NULL
+          -- An arrival before the order existed is a broken clock, not a
+          -- delivery: skip it and let the row keep showing its ETA.
+          AND j.updated_at >= o.placed_at`
+    ).all();
+  } catch (e) {
+    if (/no such column|no such table/i.test(e.message)) return 0;   // tenant not migrated yet
+    throw e;
+  }
+  let stamped = 0;
+  for (const o of rows) {
+    try {
+      const r = tdb().prepare(
+        `UPDATE retail_orders
+            SET delivered_at = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ? AND status = 'delivered' AND delivered_at IS NULL`
+      ).run(o.dropped_at, o.id);
+      if (r.changes === 0) continue;
+      // Keep per-parcel state in lockstep, same as the sweep above. A mirrored
+      // platform order has no shipment rows, so this is usually a no-op.
+      tdb().prepare(
+        `UPDATE retail_shipments
+            SET delivered_at = COALESCE(delivered_at, ?), updated_at = CURRENT_TIMESTAMP
+          WHERE order_id = ? AND COALESCE(mode,'') != 'supplier'`
+      ).run(o.dropped_at, o.id);
+      stamped++;
+    } catch (e) { console.warn('[auto-deliver-qy] arrival backfill', o.id, e.message); }
+  }
+  if (stamped > 0) console.log(`[auto-deliver-qy] backfilled arrival time on ${stamped} order(s)`);
+  return stamped;
 }
 
 function tickAutoDeliverQingyun() {
