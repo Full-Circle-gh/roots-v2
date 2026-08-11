@@ -111,9 +111,21 @@ const ROUTE_PATH = '/api/retail-admin/orders/:id/shipments/split';
 const MUTATIONS = {
   // Remove the guard added in commit 1 — the pickup tests must go red.
   guard: {
-    find: 'if (shipsNothing(o)) {',
-    replace: 'if (false) {',
     why: 'reverts the shipsNothing guard',
+    parts: [{ find: /if \(shipsNothing\(o\)\) \{/, replace: 'if (false) {' }],
+  },
+  // Put the rebuild back OUTSIDE the transaction — the pre-fix shape, where the
+  // delete commits on its own and ensureShipments rebuilds in a second one.
+  //
+  // `\s*` rather than a literal line ending: the tree is CRLF, and an anchor
+  // that hard-codes one is the fragility v4.27 is about. The REPLACEMENT may
+  // contain newlines — it is building source, not matching it.
+  split: {
+    why: 'reverts the single transaction to delete-commit-then-rebuild',
+    parts: [
+      { find: /const rebuilt = tdb\(\)\.transaction\(\(\) => \{/, replace: 'const __tx = tdb().transaction(() => {' },
+      { find: /return ensureShipments\(id\);\s*\}\)\(\);/, replace: '})();\n  const rebuilt = ensureShipments(id);' },
+    ],
   },
 };
 
@@ -124,15 +136,17 @@ function sources() {
     const m = MUTATIONS[SABOTAGE];
     if (!m) throw new Error(`unknown SU_SABOTAGE=${SABOTAGE}`);
     const before = route;
-    if (!route.includes(m.find)) {
-      throw new Error(`SABOTAGE '${SABOTAGE}' anchor not present — it would have changed NOTHING and every red below would be meaningless`);
+    // THE v4.27 RULE, applied per PART rather than once at the end: a mutation
+    // that silently matches nothing still turns every test red, and that red
+    // looks exactly like a successful red-proof. Each part must be shown to have
+    // changed the source, or the run is not evidence of anything.
+    for (const [i, p] of m.parts.entries()) {
+      const prev = route;
+      route = route.replace(p.find, p.replace);
+      assert.notStrictEqual(route, prev,
+        `SABOTAGE '${SABOTAGE}' part ${i + 1}/${m.parts.length} (${p.find}) matched NOTHING — `
+        + 'it changed no source, so every failure below would be meaningless');
     }
-    route = route.replace(m.find, m.replace);
-    if (m.tail) {
-      if (!route.includes(m.tail.find)) throw new Error(`SABOTAGE '${SABOTAGE}' tail anchor not present`);
-      route = route.replace(m.tail.find, m.tail.replace);
-    }
-    // THE v4.27 ASSERTION: prove the mutation actually landed.
     assert.notStrictEqual(route, before, `SABOTAGE '${SABOTAGE}' produced identical source`);
   }
   return { route, ensure };
@@ -297,7 +311,55 @@ const assignedCount = (db, id) => Number(db.prepare('SELECT COUNT(*) n FROM reta
     assert.strictEqual(shipCount(db, 1), 1, 'the guarded order lost its parcel anyway');
   });
 
+  // ── COMMIT 2 — one transaction ──────────────────────────────────────────
+  await it('THE REBUILD RUNS INSIDE THE TRANSACTION — the early-return does NOT fire', async () => {
+    // ensureShipments returns early if any shipment already exists. Inside the
+    // merged transaction its SELECT must see the UNCOMMITTED delete (zero rows)
+    // and proceed. If read-own-writes did not hold, it would early-return with
+    // the rows this block just deleted and the rebuild would silently not happen
+    // — which is the failure mode the merge itself could introduce.
+    //
+    // Asserted on the PLANNER SPY, not on a row count: a row count cannot tell a
+    // real rebuild apart from an early-return over stale rows.
+    const { db, handler, planCalls } = build();
+    seedOrder(db, { id: 1, ft: 'delivery', items: 2, shipments: 1 });
+    await call(handler, 1);
+    assert.strictEqual(planCalls.length, 1,
+      'the planner never ran — ensureShipments early-returned, so it did not see the uncommitted DELETE');
+    assert.strictEqual(planCalls[0].n, 2, 'the planner did not see the order\'s items');
+  });
+
+  await it('A FAILURE DURING THE REBUILD ROLLS THE DELETE BACK — order not left parcel-less', async () => {
+    const original = 2;
+    const { db, handler } = build({ planImpl: () => { throw new Error('simulated crash during rebuild'); } });
+    const ids = seedOrder(db, { id: 1, ft: 'delivery', items: 2, shipments: original });
+    assert.strictEqual(shipCount(db, 1), original, 'fixture did not seed the expected parcels');
+    let threw = null;
+    try { await call(handler, 1); } catch (e) { threw = e; }
+    assert.ok(threw, 'the rebuild failure did not surface — it was swallowed');
+    // The ORIGINAL count, not merely non-zero: a partial rebuild would also be
+    // non-zero and would still be data loss.
+    assert.strictEqual(shipCount(db, 1), original,
+      `expected the original ${original} parcels restored, found ${shipCount(db, 1)}`);
+    const surviving = db.prepare('SELECT id FROM retail_shipments WHERE order_id = 1 ORDER BY id').all().map(r => Number(r.id));
+    assert.deepStrictEqual(surviving, ids, 'the parcels came back as DIFFERENT rows — the delete was not rolled back');
+    assert.strictEqual(assignedCount(db, 1), 2, 'items were left unassigned — the shipment_id NULLing was not rolled back');
+  });
+
   // ── Source-level, comment-stripped ──────────────────────────────────────
+  await it('the delete and the rebuild are in ONE transaction — asserted on source', () => {
+    const { route } = sources();
+    const open = route.indexOf('tdb().transaction(');
+    const del = route.indexOf('DELETE FROM retail_shipments');
+    const ens = route.indexOf('return ensureShipments(id)');
+    assert.notStrictEqual(open, -1, 'the transaction is gone');
+    assert.notStrictEqual(del, -1, 'the delete is gone');
+    assert.notStrictEqual(ens, -1,
+      'ensureShipments is not RETURNED from inside the transaction — it is back outside it');
+    assert.ok(open < del && del < ens,
+      'the rebuild is not inside the transaction that performs the delete');
+  });
+
   await it('the guard sits BEFORE the destructive transaction', () => {
     const { route } = sources();
     const guard = route.indexOf('shipsNothing(o)');

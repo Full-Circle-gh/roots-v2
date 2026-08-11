@@ -21488,12 +21488,40 @@ router.post('/api/retail-admin/orders/:id/shipments/split',
   if (shipments.some(s => s.tracking_number || s.tracking_carrier)) {
     return res.status(409).json({ success: false, error: 'has_tracking' });
   }
-  const tx = tdb().transaction(() => {
+  // ONE TRANSACTION — the clear and the rebuild are the same operation.
+  //
+  // This used to COMMIT the delete and only then call ensureShipments, which
+  // opens its own transaction. A process death between the two left the order
+  // with NO parcels at all: every shipment gone and every shipment_id NULL. The
+  // window was synchronous — nothing awaits in this branch — so only a hard kill
+  // could land in it, but "small" is not "closed", and the repair for the
+  // remaining ~one in a million is three lines.
+  //
+  // TWO PROPERTIES MAKE THIS SAFE, and both are already load-bearing elsewhere:
+  //
+  //   * NESTING. ensureShipments issues its own h.transaction(), which
+  //     better-sqlite3 maps to a SAVEPOINT when one is already open. That is not
+  //     a new reliance — it is the checkout's hot path, which calls
+  //     ensureShipments from inside its own tdb().transaction() on every
+  //     non-pickup order.
+  //   * READ-OWN-WRITES. ensureShipments early-returns if any shipment already
+  //     exists. Inside this transaction its SELECT sees the uncommitted DELETE
+  //     and returns zero rows, so it proceeds to rebuild rather than handing
+  //     back the rows this block just deleted.
+  //
+  // STILL ON db.transaction(), DELIBERATELY. Converting to withTransaction would
+  // drag ensureShipments — an unconverted helper blocked behind the checkout —
+  // across the conversion boundary, which is exactly why batch 4 excluded this
+  // route. That exclusion still holds; this changes the transaction's EXTENT,
+  // not its form.
+  //
+  // logActivity and the response stay outside: an audit write must not be able
+  // to roll back the operation it describes.
+  const rebuilt = tdb().transaction(() => {
     tdb().prepare(`UPDATE retail_order_items SET shipment_id = NULL WHERE order_id = ?`).run(id);
     tdb().prepare(`DELETE FROM retail_shipments WHERE order_id = ?`).run(id);
-  });
-  tx();
-  const rebuilt = ensureShipments(id);   // re-plan fresh from items + address
+    return ensureShipments(id);          // re-plan fresh from items + address
+  })();
   logActivity(req.user.id, req.user.username, 'shipments_split', 'retail_order', id, { count: rebuilt.length }, req.ip);
   res.json({ success: true, shipments: rebuilt.length });
 });
