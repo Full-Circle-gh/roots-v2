@@ -123,32 +123,41 @@ VALUES ('TC', 0)
 ON CONFLICT (series) DO NOTHING;
 
 
--- ── 3. The seed ────────────────────────────────────────────────────────────
+-- ── 3. The seed — DELIBERATELY NOT EXECUTABLE FROM THIS FILE ───────────────
 --
--- RUN THIS LAST, AFTER THE FRESH COPY AND AFTER THE DELTA PASS, IMMEDIATELY
--- BEFORE TRAFFIC MOVES. Seeding is not a step of the schema build. Measured
--- 2026-08-11: Postgres holds 168 TC orders (max 168) from the 2026-08-04 copy
--- while SQLite holds 247 (max 247) — the counter would be seeded 79 short, and
--- the first 79 checkouts after the flip would collide one after another.
+-- THIS FILE ENDS ABOVE. Applying it creates the table and the row at 0 and
+-- does NOT seed. That is the point.
 --
--- The regex form is load-bearing. `LIKE 'TC______'` is width-locked to exactly
+-- The first draft of this file ran the seed as its third statement, which
+-- contradicted the rule written twenty lines further up in the same file:
+-- SEEDING IS NOT A STEP OF THE SCHEMA BUILD. A file that states an ordering
+-- rule and then violates it on apply is worse than one that never stated it,
+-- because the rule reads as satisfied. Left as a comment so the statement is
+-- readable next to the table it writes, and so nobody reconstructs it by hand.
+--
+-- THE SEEDING STEP IS scripts/postgres-full-copy/seed_order_counter.py.
+-- It runs LAST, after the fresh copy AND after the delta pass, immediately
+-- before traffic moves. It adds a receipt, two fatal preconditions, and a
+-- non-zero exit when the counter is already ahead of the data — none of which
+-- a bare UPDATE in a DDL file can give you.
+--
+-- What it runs, for reference only:
+--
+--   UPDATE retail_order_counters c
+--      SET last_no = GREATEST(c.last_no, COALESCE((
+--              SELECT MAX(substring(o.order_no from 3)::bigint)
+--                FROM retail_orders o
+--               WHERE o.order_no ~ '^TC[0-9]+$'
+--          ), 0)),
+--          updated_at = now()
+--    WHERE c.series = 'TC';
+--
+-- The regex is load-bearing. `LIKE 'TC______'` is width-locked to exactly
 -- eight characters and would silently exclude a 7-digit number, seeding BELOW
--- the true maximum — the precise failure this step exists to prevent. Cast to
--- bigint so the comparison is numeric and no text collation is involved.
---
--- GREATEST makes it idempotent and one-directional: re-running after a second
--- delta pass can only raise the counter, never lower it. A blind assignment
--- could move it backwards and mint numbers that already exist.
-
-UPDATE retail_order_counters c
-   SET last_no = GREATEST(c.last_no, COALESCE((
-           SELECT MAX(substring(o.order_no from 3)::bigint)
-             FROM retail_orders o
-            WHERE o.order_no ~ '^TC[0-9]+$'
-       ), 0)),
-       updated_at = now()
- WHERE c.series = 'TC'
-RETURNING c.series, c.last_no;
+-- the true maximum — the precise failure the step exists to prevent. The cast
+-- to bigint keeps the comparison numeric, so no text collation is involved.
+-- GREATEST makes it idempotent and one-directional: a re-run can only raise
+-- the counter, never lower it into numbers that already exist.
 
 
 -- ── 4. What the application will run (PIECE 2 — NOT BUILT) ─────────────────
