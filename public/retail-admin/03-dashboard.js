@@ -1400,6 +1400,7 @@ const TD_SEEN_KEY = 'retail-admin-last-seen';
 function tdInit() {
   tdGreetRender();
   tdDateRender();
+  TD_CLOCK_KEY = tdClockKey();
   tdObservationRender();   // no-op until the Today payload lands; hides itself
   tdEnsureStores();   // populate the Running-low store dropdown (multi-store only)
   // Language toggle repaints the JS-built strings (greeting, date, recap, attention).
@@ -1409,7 +1410,12 @@ function tdInit() {
   tdOpsLoad();
   tdSecCountsLoad();
   if (!TD._opsTimer) {
-    TD._opsTimer = setInterval(() => { if (!document.hidden) { tdOpsLoad(); tdSecCountsLoad(); } }, 60000);
+    TD._opsTimer = setInterval(() => { if (!document.hidden) { tdClockTick(); tdOpsLoad(); tdSecCountsLoad(); } }, 60000);
+    // A hidden tab doesn't tick — a laptop shut on Sunday and opened on Tuesday
+    // would show the stale header for up to a minute before the interval caught
+    // it, which is exactly the moment someone is reading it. Inside the same
+    // guard as the timer so a second tdInit can't stack a second listener.
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) tdClockTick(); });
   }
   // Restore the operator's saved card order, then watch the grid's width so the
   // lone-card span follows the column count.
@@ -1684,6 +1690,31 @@ function tdGreetRender() {
 function tdDateRender() {
   const el = document.getElementById('td-date'); if (!el) return;
   el.textContent = (typeof tdWhen === 'function') ? tdWhen(new Date(), 'weekday') : '';
+}
+
+// ── Keeping those two honest over a long-lived tab ──────────────────────────
+// Both lines above are painted once at boot and then never again, and an admin
+// tab is routinely left open for days — so a tab opened on Sunday evening was
+// still greeting "Good evening" over "Sunday, August 9" on Tuesday. Every
+// number on the page had refreshed underneath it; only the header was lying.
+//
+// The two lines roll at different moments, on different clocks: the greeting
+// band turns on the BROWSER's hour (it greets the person at the keyboard,
+// tdGreetLine), and the date turns on the STORE's day (tdWhen renders in the
+// store timezone). One key covers both, and repainting only when that key
+// changes keeps the common tick free of DOM writes.
+let TD_CLOCK_KEY = '';
+function tdClockKey() {
+  const now = new Date();
+  const day = (typeof tdWhen === 'function') ? tdWhen(now, 'machine') : '';
+  return day + '|' + now.getHours();
+}
+function tdClockTick() {
+  const k = tdClockKey();
+  if (k === TD_CLOCK_KEY) return;
+  TD_CLOCK_KEY = k;
+  tdGreetRender();
+  tdDateRender();
 }
 
 // ── The day's one observation ───────────────────────────────────────────────
