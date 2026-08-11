@@ -9313,18 +9313,31 @@ function backfillShipmentTrackingFromOrder(orderId) {
   } catch (e) { console.error('[tracking.backfill] failed for order=' + orderId, e); return 0; }
 }
 
-function nextOrderNo() {
+function nextOrderNo(h = tdb()) {
   // TC{6-digit sequential}, e.g. TC000001, TC000002, ... — every order this
   // system creates itself (mini-app, web storefront, manual admin order) goes
   // through this one function. External-channel mirrors (Meituan MT, Eleme
   // EL, Gzgrocery GZ) mint their own order_no separately and never call this.
-  // Callers always run this inside an (immediate) tdb().transaction() so the
-  // read-max + INSERT serialize — see call sites for why that matters.
-  const row = tdb().prepare(
+  //
+  // TAKES THE HANDLE (Path A step 2). Trailing optional, evaluated per call, so
+  // the unconverted checkout call site keeps passing nothing and keeps binding
+  // to tdb(). The READ is the reason it matters: this must see rows the
+  // caller's open transaction has inserted but not committed, or two orders in
+  // one transaction would be handed the same number.
+  //
+  // THE DRIVER BRANCH IS DELIBERATELY NOT HERE. §24 ORDER NUMBERING IS A
+  // COUNTER ROW replaces this whole read-max-then-probe shape on Postgres with
+  // one UPDATE ... RETURNING against retail_order_counters, and records that
+  // THE PROBE LOOP MUST NOT SURVIVE ONTO THE pg PATH. That branch cannot be
+  // exercised until lib/pg.js is wired and withTransaction has a pg backend, so
+  // adding it now would put untestable code on the order-minting path — which
+  // is precisely what that design says must not happen. Handle now, branch when
+  // the pg side can be run.
+  const row = h.prepare(
     `SELECT MAX(CAST(SUBSTR(order_no, 3) AS INTEGER)) AS n FROM retail_orders WHERE order_no LIKE 'TC______'`
   ).get();
   let next = (row && row.n ? row.n : 0) + 1;
-  const exists = tdb().prepare(`SELECT 1 FROM retail_orders WHERE order_no = ? LIMIT 1`);
+  const exists = h.prepare(`SELECT 1 FROM retail_orders WHERE order_no = ? LIMIT 1`);
   for (let attempt = 0; attempt < 50; attempt++) {
     const candidate = 'TC' + String(next).padStart(6, '0');
     if (!exists.get(candidate)) return candidate;
@@ -20075,7 +20088,7 @@ const MANUAL_ORDER_CHANNELS = ['manual', 'wechat', 'web'];
 // later · counter = handed over at the till now, nothing to ship or collect.
 const ORDER_FULFILLMENT_TYPES = ['delivery', 'pickup', 'counter'];
 
-router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), (req, res) => {
+router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), async (req, res) => {
   const b = req.body || {};
 
   // ── Customer: an existing account, or a guest walk-in (customer_id null) ──
@@ -20242,54 +20255,77 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), (req
   // has to roll the order back. The throw unwinds the transaction; this carries
   // the reason out past it.
   let custError = null;
-  const tx = tdb().transaction(() => {
-    if (wantsCustomer) {
-      const made = createOrReuseManualCustomer({
-        nickname: recipientName, phone: recipientPhone, userId: req.user.id,
-      });
-      if (made.error) { custError = made.error; throw new Error('customer_rejected'); }
-      customerId = made.id;
-      customerCreated = made.created;
-      customerReused = made.reused;
-    }
-    // Order-no minted inside the tx so the uniqueness check + INSERT serialize.
-    orderNo = nextOrderNo();
-    const info = tdb().prepare(
-      `INSERT INTO retail_orders (
-         order_no, customer_id, status, payment_method,
-         recipient_name, recipient_phone, address_full, address_json,
-         subtotal, shipping_fee, total,
-         customer_note, staff_note, channel, source, created_by, fulfillment_type, pay_token,
-         store_id
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
-    ).run(
-      // Always inserted as pending_payment first; markOrderPaid() flips it below
-      // when staff chose 'paid', keeping the settle logic in one place.
-      orderNo, customerId, 'pending_payment', paymentMethod,
-      recipientName, recipientPhone || null, addressFull, addressJson,
-      subtotal, shippingFee, total,
-      customerNote, staffNote, channel, 'manual', req.user.id, fulfillmentType, payToken,
-      storeId
-    );
-    orderId = info.lastInsertRowid;
-    const insItem = tdb().prepare(
-      `INSERT INTO retail_order_items (order_id, product_id, name_en, name_cn, sku, size, qty, unit_price, line_total)
-       VALUES (?,?,?,?,?,?,?,?,?)`
-    );
-    for (const r of resolved) {
-      insItem.run(orderId, r.p.id, r.p.name_en, r.p.name_cn, r.p.sku, r.p.size, r.qty, r.unitPrice, r.lineTotal);
-    }
-    tdb().prepare(
-      `INSERT INTO retail_payments (order_id, method, amount, status, out_trade_no)
-       VALUES (?, ?, ?, 'pending', ?)`
-    ).run(orderId, paymentMethod, total, orderNo);
-  });
   try {
-    tx();
+    await withTransaction(tdb(), async (tx) => {
+      if (wantsCustomer) {
+        const made = createOrReuseManualCustomer({
+          nickname: recipientName, phone: recipientPhone, userId: req.user.id,
+        }, tx);
+        if (made.error) { custError = made.error; throw new Error('customer_rejected'); }
+        customerId = made.id;
+        customerCreated = made.created;
+        customerReused = made.reused;
+      }
+      // Order-no minted inside the tx so the mint reads this transaction's own
+      // uncommitted rows.
+      //
+      // WHAT THIS DOES *NOT* GIVE YOU, stated because the previous comment here
+      // claimed it did: a plain transaction is DEFERRED, and a deferred BEGIN
+      // does not serialize the read-max against the later INSERT. The checkout
+      // takes BEGIN IMMEDIATE for that; this route never has.
+      //
+      // It is safe today for reasons that are all topology, not design. The app
+      // runs pm2 fork mode, single instance, so one process serves every minting
+      // route; better-sqlite3 is synchronous, so a transaction body runs to
+      // completion without yielding and two operators cannot interleave; and
+      // order_no is TEXT UNIQUE NOT NULL as a hard backstop. The residual is a
+      // rare spurious failure, not a duplicate: another process committing inside
+      // the read-to-write window makes SQLite refuse the write on a stale
+      // snapshot, which busy_timeout cannot wait out.
+      //
+      // ALL THREE OF THOSE INVERT AT THE POSTGRES FLIP — async handler, every
+      // statement a round trip, genuine interleaving — and read-max-then-INSERT
+      // becomes a real duplicate race. §24 ORDER NUMBERING IS A COUNTER ROW is
+      // what closes it, for this route and the checkout alike.
+      orderNo = nextOrderNo(tx);
+      const info = tx.prepare(
+        `INSERT INTO retail_orders (
+           order_no, customer_id, status, payment_method,
+           recipient_name, recipient_phone, address_full, address_json,
+           subtotal, shipping_fee, total,
+           customer_note, staff_note, channel, source, created_by, fulfillment_type, pay_token,
+           store_id
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      ).run(
+        // Always inserted as pending_payment first; markOrderPaid() flips it below
+        // when staff chose 'paid', keeping the settle logic in one place.
+        orderNo, customerId, 'pending_payment', paymentMethod,
+        recipientName, recipientPhone || null, addressFull, addressJson,
+        subtotal, shippingFee, total,
+        customerNote, staffNote, channel, 'manual', req.user.id, fulfillmentType, payToken,
+        storeId
+      );
+      orderId = info.lastInsertRowid;
+      const insItem = tx.prepare(
+        `INSERT INTO retail_order_items (order_id, product_id, name_en, name_cn, sku, size, qty, unit_price, line_total)
+         VALUES (?,?,?,?,?,?,?,?,?)`
+      );
+      for (const r of resolved) {
+        insItem.run(orderId, r.p.id, r.p.name_en, r.p.name_cn, r.p.sku, r.p.size, r.qty, r.unitPrice, r.lineTotal);
+      }
+      tx.prepare(
+        `INSERT INTO retail_payments (order_id, method, amount, status, out_trade_no)
+         VALUES (?, ?, ?, 'pending', ?)`
+      ).run(orderId, paymentMethod, total, orderNo);
+    });
   } catch (e) {
     // A rejected customer rolls the whole write back — no order, no customer,
     // nothing to clean up — and answers with the field that was wrong.
     if (custError) return res.status(400).json({ success: false, error: custError });
+    // Rethrowing from an async handler produces a REJECTED PROMISE rather than
+    // a synchronous throw. It reaches the same error handler by a different
+    // road: lib/express-async-guard patches Route.prototype and does
+    // out.catch(next). Nothing per-route is needed — server.js says so.
     throw e;
   }
 
