@@ -1,8 +1,10 @@
-# Tacet shared-core consolidation — decisions record, v4.25
+# Tacet shared-core consolidation — decisions record, v4.26
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
+
+2026-08-11 · v4.26 — §24 Database: **local backup retention — HOURLY 24 to 12, DAILY STAYS 30**, reclaiming a measured 5,107,765,248 bytes. Records WHY the hourly tier rather than the larger daily one: **the off-site OSS tier also retains 14 days, so cutting local daily to 14 would leave no recovery point beyond a fortnight anywhere**, on the box or off it — depth of history and density of history are not interchangeable and only one of them has a second copy. **Records the trend finding that makes cleanup insufficient: 16 of the 30 daily slots still hold July files 100-220 MB smaller than today's, so with the database FROZEN the disk still reaches 90% in 20 days.** That growth is already committed. The ~776 MiB of reclaimable junk buys about three days. **Records that `/root/scripts` is NOT in git and is lost on a box rebuild**, with an inventory of what now lives there, and the same for the journald cap. **Separates the two backups, which both fired at 03:00** with a combined ~2.07 GiB transient on one filesystem while `db-backup.sh` read free space before the other job had taken its share. Records how this fails FIRST — at 94.6% the off-site backup refuses to start and pages, so backups stop a day before anything else breaks. **OPEN with a deadline: `db-backup.sh`'s prune step cannot report its own failure** — `|| true` on the listing, a failed delete that only warns, and `PRUNED` never written to the log, so a healthy run and a broken one are byte-identical. Today it is genuinely healthy, verified by evaluating the expression rather than reading the log line. **The first real prune falls due 2026-08-18 and the fix must land before then**, or its first live execution is also its first untested one. A decision, a measurement and a dated open item; nothing reversed, hence a patch.
 
 2026-08-10 · v4.25 — §24 Database: **THREE PHASES, and the five-phase reading is RETIRED.** Records where the five came from — not from conversation but from this section's own ROLLED OUT IN PHASES list, under which the switch is 4 and backups are 5 — and why that is WRONG rather than merely not-preferred: **it places backups after the flip, and Phase 2 exists precisely to hold what must be true before a flip is survivable, so the ordering inverts the one sequencing decision the phases were created to protect.** Names the single thing the two readings disagree about — which side of the switch the safety net sits on. **Also AMENDS the 2026-08-09 authority entry in place, on the v4.11 precedent**: it claimed the numbering "existed only in conversation" and took ground it described as empty, when a derivable five-phase reading was already there in its own cited source; a superseded decision is worth leaving visible, a false account of what a decision replaced is not. The three definitions are unchanged and were never in doubt. Five carriers of the old reading are marked superseded and left readable with a pointer — two in this record, one version-history line, and both memory blocks, which had it filed as an open question. A decision plus an in-place correction; the definitions are not reversed, hence a patch.
 
@@ -1796,6 +1798,43 @@ Recorded so the order is the record's rather than the next session's, and so non
 1. **`scripts/diagnose_async_conversion_scope.js` is blind to `withTransaction`.** It matches `.transaction` as a member property; `withTransaction(h, fn)` is an `Identifier` callee and matches nothing. **26 converted blocks in `routes/retail.js` appear in no figure it prints, and every count this section has quoted is therefore the unconverted form only** — not a total.
 2. **`reconcileTier` swallows its own write failure inside three money transactions.** Its `UPDATE` sits in a `try`/`catch` that only warns, so inside `awardOrderPoints`, `reverseOrderPoints` and `finalizeOrderAddon` the points balance and ledger row commit with a **stale tier and a console line** to show for it. Not an escape — an atomicity defeat, and threading a handle does not touch it.
 3. **The undo-combine branch of `POST /orders/:id/shipments/split` clears and COMMITS, then rebuilds in a second transaction.** Between the two the order has no parcels and no item is assigned to one; a crash there leaves it that way. It survived the `85f5bffa` fix untouched because that fix deliberately changed no transaction.
+
+### LOCAL BACKUP RETENTION — HOURLY 24 → 12, DAILY STAYS 30 — DECIDED 2026-08-11
+
+**THE DISK IS THE CONSTRAINT AND CLEANUP DOES NOT SOLVE IT.** `/` is 40G, 81% used, 7.3G free, one filesystem for `/`, `/tmp`, `/var` and `/root`. Measured against the v4.17 reading two days earlier: free fell from 7.8G to 7.3G, **279 MB/day.**
+
+**THE GROWTH IS ALREADY COMMITTED, AND THAT IS THE FINDING.** The local `daily/` tier holds 30 slots. **Sixteen of them still hold July files of 206–330 MB, and each will be replaced by one about 426 MB** — 100 to 220 MB larger. That replacement is scheduled by the calendar and owes nothing to future writes. **Projected with the database FROZEN — no new rows at all — `/` still reaches 90% in 20 days.** At the measured rate it is 11–13 days to 90% and 17–20 days to 95%. **The reclaimable junk is ~776 MiB, about three days.** Deleting it is worth doing and does not change the trajectory.
+
+**HOURLY 24 → 12. DAILY STAYS 30.** Reclaims ~4.76 GiB, measured at 5,107,765,248 bytes for the twelve oldest hourly snapshots. The accepted cost is that intra-day recovery reaches back 12 hours instead of 24.
+
+**WHY THE HOURLY TIER AND NOT THE DAILY ONE — the reason is the recovery horizon, not the size.** Cutting `daily/` to 14 would reclaim more (3.55 GiB) and is the tempting choice. It is the wrong one: **the off-site OSS tier also retains 14 days**, so a 14-day local daily tier would leave **no recovery point beyond 14 days anywhere at all**, on the box or off it. The 30-day local tier is the only thing that reaches further back than a fortnight. Hourly granularity is the cheaper thing to lose, because **a same-day mistake is noticed the same day** — the case hourly snapshots exist for is bounded in hours, and 12 of them still covers it. Depth of history and density of history are not interchangeable, and only one of them has a second copy.
+
+**`/root/scripts` IS NOT IN GIT, AND WHAT IS PUT THERE IS LOST ON A BOX REBUILD.** It is a plain directory on the box under no version control — `git rev-parse` in it returns "not a repository". It is used deliberately, because `scripts/` in the repository is deploy-allowlisted and shipping a diagnostic or a pruner there restarts the application for no runtime reason. That trade is worth making and its cost must be written down. **What lives there after this change:**
+
+- `roots-backup.sh` — the hourly/daily LOCAL snapshot tier, cron `0 * * * *`. The file this retention decision edits.
+- `roots-backup.sh.bak-lowio` — an older copy kept beside it.
+- `restore-test.sh` — the restore rehearsal.
+- `prune-deploy-backups.sh` — NEW. Retains 14 days of `/root/backups/deploy-*`, cron `30 4 * * *`.
+
+**Also box-only and outside git:** `/etc/systemd/journald.conf.d/99-cap.conf`, capping the journal at 200M against an uncapped default of 10% of the filesystem. **A box rebuild restores none of the above.**
+
+**THE TWO BACKUPS BOTH FIRED AT 03:00, AND THEY ARE SEPARATED.** `roots-backup.sh` runs `0 * * * *`, which includes 03:00; `db-backup.sh` ran `0 3 * * *`. `flock` guards `db-backup.sh` against itself only, not against the other program. Their transients add: `db-backup.sh` peaks at **1.00 GiB** in `/tmp` — the raw 647 MB `roots.db` snapshot and its 426 MB gzip existing together during `gzip -f` — and `roots-backup.sh` peaks at about the same in `/root/backups`, for the same reason. **Combined, ~2.07 GiB above baseline, on one filesystem.** Worse, `db-backup.sh`'s preflight reads free space **once, at the start**, and therefore measures it before the other job has taken its share. `db-backup.sh` moves to `03:30`.
+
+**HOW THIS FAILS FIRST, RECORDED BECAUSE IT IS NOT THE OBVIOUS ANSWER.** The disk does not fill and crash the application. `db-backup.sh` requires `MIN_FREE_MB=2048` before it will start, so **at 94.6% full the off-site backup refuses to run** and pages ops. **Backups stop about a day before anything else breaks.** That is the correct order to fail in, and it means 95% is the wall rather than 100%.
+
+#### OPEN — `db-backup.sh`'s PRUNE STEP CANNOT REPORT ITS OWN FAILURE. FIX BEFORE 2026-08-18
+
+**Today the prune is healthy and `pruned=0` is correct**, verified by evaluating the script's own expression on the box rather than reading the log line: the listing parses 12 prefixes, the oldest is `20260803-225106`, the cutoff is `20260728`, and nothing is eligible. That is case (a), not a silent failure.
+
+**The defect is that nothing in the code could tell you otherwise.** Three ways, all in `scripts/db-backup.sh`:
+
+1. **`|| true` on the listing.** If `ossutil ls` fails or its output format changes, `PREFIXES` is empty, the loop body never runs, `PRUNED` stays 0 and the script exits 0. **The output is byte-identical to a healthy run.**
+2. **A failed delete only warns.** `WARNING: prune failed for $p` goes to stderr, increments no counter, sets no exit status and fires no alert — while every other failure in that file calls `fail()` and pages ops.
+3. **`PRUNED` is never written to the log.** `log_line` records `objects=`, `bytes=` and `date=` only, so there is no durable record of pruning to audit afterwards.
+
+**This is the same class as the two comment-blind source guards already recorded in this section: a check that cannot fail is not a check.** It is listed as OPEN rather than fixed because the fix is a code change to a deploy-allowlisted path and belongs in its own commit.
+
+**THE DATE IS NOT DECORATIVE. The first real prune falls due 2026-08-18**, when `20260803` first drops outside the 14-day window. Until that day the step has never deleted anything, so it has never been observed doing its job. **The fix must land before then**, or its first live execution is also its first untested one.
 
 ### THREE PHASES, AND WHY THE FIVE-PHASE READING IS WRONG — DECIDED 2026-08-10
 
