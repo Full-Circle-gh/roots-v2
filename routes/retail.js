@@ -7453,12 +7453,74 @@ function tierFromSpend(spend) {
 }
 // Idempotent — only writes when the stored tier differs from the derived one.
 // Returns the derived tier (post-reconcile), so callers can use it directly.
+//
+// THE CATCH IS DELIBERATE AND STAYS NON-FATAL. Three of the four call sites are
+// inside a money transaction, and letting this throw would roll that whole
+// transaction back with nothing anywhere to retry it:
+//
+//   * awardOrderPoints    — the order's points AND its lifetime_spend are lost.
+//     The `order_earn` row is the idempotency marker and it is written AFTER
+//     this call, so nothing re-attempts the award. The customer is permanently
+//     short, and the understated lifetime_spend then makes the self-heal below
+//     compute and persist the WRONG tier — a permanent wrong answer replacing a
+//     temporary one.
+//   * reverseOrderPoints  — a refund's points reversal and spend reduction never
+//     happen; the customer keeps points from an order they were refunded for.
+//   * finalizeOrderAddon  — worst of the three: the add-on's item injection and
+//     its `retail_payments` row are in the same transaction, so the customer
+//     pays for an add-on and does not receive it.
+//
+// Against that, a stale tier_key is cosmetic. Its only functional effect is the
+// points-earn multiplier on FUTURE orders; the tier perks are display copy and
+// are enforced nowhere in pricing or shipping. And it self-heals — requireRetailAuth
+// calls this again on every authenticated request, against the committed
+// lifetime_spend. Permanent silent loss is worse than self-healing staleness.
+//
+// WHAT CHANGED 2026-08-11, AND IT IS NOT A LOG LEVEL. The old line was
+// `console.warn('[reconcileTier]', e.message)`, which named NO customer. A
+// failure you cannot attribute is a failure you cannot repair — that was the
+// defect that mattered, not the severity of the word "warn".
+//
+// ORDER INSIDE THE CATCH IS LOAD-BEARING: log first, alert second. The log is
+// the durable record on local disk; the alert is best-effort delivery over a
+// network to a WeCom group. The unreliable one never runs before the reliable
+// one, and it can neither mask nor replace it.
 function reconcileTier(customerId, spend, storedTier) {
   const want = tierFromSpend(spend);
   if (want !== storedTier) {
     try {
       tdb().prepare('UPDATE retail_customers SET tier_key = ? WHERE id = ?').run(want, customerId);
-    } catch (e) { console.warn('[reconcileTier]', e.message); }
+    } catch (e) {
+      // 1. DURABLE AND ATTRIBUTABLE, FIRST. Names the customer and both tiers,
+      //    so an occurrence can be repaired rather than merely noticed.
+      console.error(`[reconcileTier] customer=${customerId} want=${want} stored=${storedTier} failed: ${e.message}`);
+      // 2. BEST-EFFORT DELIVERY, SECOND.
+      //
+      //    THE ALERT TEXT IS DELIBERATELY CUSTOMER-FREE, and that is a flood
+      //    guard rather than an oversight. sendOpsAlert de-duplicates on EXACT
+      //    message text for 60s; a per-customer message would defeat that dedup
+      //    completely, and this runs on every authenticated request via
+      //    requireRetailAuth — so a broken column would page the group once per
+      //    request, and grow ops-alert's `lastSent` map without bound. Coarse
+      //    text collapses to one alert per minute and one map key. The log
+      //    names the victims; the alert only says to go and read it.
+      //
+      //    Wrapped both ways on the file's existing idiom (see
+      //    maybeFlagUncallablePhone): the try/catch takes a synchronous throw,
+      //    the .catch takes a rejected promise. Either way the console.error
+      //    above has already happened and `want` is still returned.
+      try {
+        Promise.resolve(sendOpsAlert(
+          '⚠️ Roots Club 会员等级写入失败 — 积分与消费额记录正常，仅等级暂时未更新，会员下次登录时会自动修正。\n'
+          + '受影响的会员 ID 见 roots-v2 错误日志中的 [reconcileTier] 行。\n'
+          + 'Tacet: the Roots Club tier UPDATE is failing. Points and lifetime spend are still recorded correctly; '
+          + 'only tier_key is stale, and it self-heals at the next customer sign-in. '
+          + 'Affected customer ids are on the [reconcileTier] lines in roots-v2-error.log.'
+        )).catch(err => console.warn('[reconcileTier] ops alert failed:', err && err.message));
+      } catch (err) {
+        console.warn('[reconcileTier] ops alert failed:', err && err.message);
+      }
+    }
   }
   return want;
 }

@@ -252,8 +252,25 @@ it('the flag returns early for a number a rider CAN call', () => {
 it('flagging never blocks the push', () => {
   // Both flag helpers are fire-and-forget: an ops webhook that is slow or down
   // must not fail the checkout that triggered it.
-  const hits = (retailSrc + daemonSrc).match(/Promise\.resolve\(sendOpsAlert\(/g) || [];
-  assert.strictEqual(hits.length, 2, 'both call sites detached from the request');
+  //
+  // SCOPED TO THE TWO HELPERS BY NAME, not counted file-wide. This used to
+  // assert that `Promise.resolve(sendOpsAlert(` appeared exactly twice across
+  // both files, which made it a census of every detached alert in the codebase
+  // rather than a statement about these two. It went red on 2026-08-11 when
+  // reconcileTier legitimately adopted the same idiom — a true assertion about
+  // the wrong thing. What matters is that EACH of these helpers is detached;
+  // how many other places also do it correctly is not this test's business.
+  const bodyOf = (src, name) => {
+    const i = src.indexOf(`function ${name}(`);
+    assert.notStrictEqual(i, -1, `${name} not found — it was renamed or removed`);
+    const end = src.indexOf('\n}', i);
+    assert.notStrictEqual(end, -1, `${name} is unterminated`);
+    return src.slice(i, end + 2);
+  };
+  for (const [src, name] of [[retailSrc, 'maybeFlagUncallablePhone'], [daemonSrc, 'flagUncallablePhone']]) {
+    assert.ok(/Promise\.resolve\(sendOpsAlert\(/.test(bodyOf(src, name)),
+      `${name} is not detached from the request — a slow webhook would hold up the push`);
+  }
 });
 
 // ─────────────────────────────────────────────────────────────────────────
