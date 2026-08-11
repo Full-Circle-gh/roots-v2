@@ -1,8 +1,10 @@
-# Tacet shared-core consolidation — decisions record, v4.28
+# Tacet shared-core consolidation — decisions record, v4.29
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
+
+2026-08-11 · v4.29 — §24 Database: **the backup's prune step can now report its own failure — FIXED and deployed at `c5a2eb11`, closing the 2026-08-18 deadline item seven days early.** The pruning always worked; what did not was the step's ability to say so when it stopped. **Four states, not one** — `ok`, `failed_listing`, `failed_parse`, `failed_delete` — with `eligible=`, `removed=`, `failed=` and `cutoff=` now in the log line. **`failed_parse` is deliberately separate from `failed_listing`**: a listing that SUCCEEDS and no longer parses is an ossutil upgrade, and it is the case that would otherwise be indistinguishable from an empty bucket. **THE DECIDING ARGUMENT, recorded: a failed listing alerts loudly and does NOT fail the run**, because by then the backup has succeeded and been verified, and `fail()` would write FAIL to `db-backup.log` — the line a later reader uses to decide whether a restore is even available. **Marking a good backup FAIL answers that wrongly, in the direction where a restore is not attempted.** `trap - ERR` moves BEFORE the block so that invariant is **structural rather than statement-by-statement** — recorded as the pattern: an invariant enforced at a boundary survives edits, one enforced per statement does not. One alert per non-`ok` state, never one per object, on the same dedup reasoning as `reconcileTier`'s customer-free alert text. **Deployed rather than `[skip deploy]`, deliberately: a skip defers rather than exempts**, which would have made arrival depend on unrelated work landing before the deadline; hand-copying was rejected because it breaks the pipeline's guarantee that deployed bytes are committed bytes. Verified on the box by sha1 of the shipped file, not by the merge. **The 2026-08-18 check is written down in the entry rather than left to be reconstructed.** **Plus three rules:** a harness whose shell options differ from the real script's is testing a different program — the driver ran `set -uo pipefail` against a script that runs `set -euo pipefail`, and would have hidden the exact class of defect it exists to catch; a fixture pinned to real-world dates goes stale silently, caught here loudly but dangerous in the version that passes; and `scripts/test-deploy-base.sh` needs python3 + PyYAML and reports 2/8 on Windows, environmental and pre-existing, recorded so nobody chases it. A fix, a deploy, a closed deadline item and three rules; nothing reversed, hence a patch.
 
 2026-08-11 · v4.28 — §24 Database: **undo-combine's missing guard and its two-transaction window — both FIXED and deployed at `12c92ae4`**, in two separate commits so the guard stays separable from the atomicity change. Branch B called `ensureShipments` unconditionally, and that helper never reads `fulfillment_type`, so undo-combine on a pickup or counter order **created parcels for an order collected at the store — and unlike every other shipment defect here it does NOT self-heal**, because the order-detail read's own guard returns `[]` for those orders instead of reconciling them. **409 `ships_nothing` rather than a silent no-op**, on this route's own conventions and its own history: answering an impossible request "with success rather than a rejection" is exactly what let the shadowed split run destructive for eight weeks. **THE FINDING, recorded as such: the branch read `SELECT id` only**, so `shipsNothing(o)` would have seen `undefined` forever — **a guard that would have passed review, read correctly in the diff, and protected nobody.** A test now asserts the column is selected. **Reachability MEASURED: latent, not live** — three gates recorded individually because a future UI change could remove any one (the button needs an existing `合并` shipment, a pickup order's shipments array is empty, the combine route cannot create one), plus `fulfillment_type` is never `UPDATE`d anywhere. Commit 2 merges the delete and the rebuild into one transaction — **EXTENT, not form: still `db.transaction()`, conversion boundary untouched, batch 4's exclusion holds** — with nesting and read-own-writes both re-proved on the branch. Records two test decisions: the rollback assertion checks the ORIGINAL count AND the same row ids because a partial rebuild is also non-zero and also data loss, and read-own-writes is asserted on a planner spy because a row count cannot tell a rebuild from an early-return over stale rows. **OPEN: Branch A validates outside its transaction and that window IS awaited** — `item_already_dispatched` and `would_empty_shipment` run before `await withTransaction`, and `acquire`'s `st.tail.then` is a microtask only while the handle is idle; under contention it spans real I/O. **Plus: the v4.27 mutation rule's first use HELD** — a mutation aimed at a non-matching pattern refused to count instead of producing a meaningless red — and the rule is sharpened: **an anchor must contain no line ending at all**, after a literal `\r\n` anchor was written and replaced while building the very suite that guards against it. Two fixes, a finding, a deploy and an open item; nothing reversed, hence a patch.
 
@@ -1828,6 +1830,8 @@ Recorded so the order is the record's rather than the next session's, and so non
 
 #### OPEN — `db-backup.sh`'s PRUNE STEP CANNOT REPORT ITS OWN FAILURE. FIX BEFORE 2026-08-18
 
+> **CLOSED 2026-08-11 at `c5a2eb11`, with a week to spare.** See THE PRUNE STEP CAN NOW REPORT ITS OWN FAILURE at the end of this section. The deadline below stands as written — it is what the fix was scheduled against, and the check to run on the day is recorded in that entry.
+
 **Today the prune is healthy and `pruned=0` is correct**, verified by evaluating the script's own expression on the box rather than reading the log line: the listing parses 12 prefixes, the oldest is `20260803-225106`, the cutoff is `20260728`, and nothing is eligible. That is case (a), not a silent failure.
 
 **The defect is that nothing in the code could tell you otherwise.** Three ways, all in `scripts/db-backup.sh`:
@@ -1978,6 +1982,69 @@ So the guards can pass and then be false by the time the transaction runs: a sou
 The rule from v4.27 — **any mutation must assert it actually modified the source before its red counts as evidence** — was used for the first time in `scripts/test_shipments_split_undo.js`, and it worked. Verified by pointing a mutation at a pattern that cannot match: instead of a tidy red that would look like a successful red-proof, **every test reported "matched NOTHING — it changed no source, so every failure below would be meaningless."** The assertion is per PART rather than once at the end, because a multi-part mutation can have one part land and another silently miss.
 
 **And the fragility recurred while writing the very suite that guards against it.** An anchor containing a literal `\r\n` was written first — on a CRLF tree, that is exactly the shape that matches nothing — and was replaced with newline-agnostic regexes using `\s*`. **The rule is therefore sharpened: a mutation anchor must not contain a line ending at all.** Match around whitespace, never through it. The replacement side may contain newlines; it is building source, not matching it.
+
+### THE PRUNE STEP CAN NOW REPORT ITS OWN FAILURE — FIXED AND DEPLOYED 2026-08-11 AT `c5a2eb11`
+
+Closes the OPEN item recorded above on 2026-08-11, seven days before its deadline. **The pruning always worked. What did not work was the step's ability to say so when it stopped working** — and the first prune with anything actually eligible falls due **2026-08-18**, so until now the loop body had never executed in production and the step had never had a chance to fail.
+
+**FOUR STATES, NOT ONE.** The retention block now reports `prune=<status>` with `eligible=`, `removed=`, `failed=` and `cutoff=`:
+
+| state | meaning |
+|---|---|
+| `ok` | listing parsed, eligible set processed, every delete succeeded |
+| `failed_listing` | `ossutil ls` exited non-zero |
+| `failed_parse` | the listing **succeeded** and its output no longer parses |
+| `failed_delete` | listing fine, at least one delete failed |
+
+**`failed_listing` AND `failed_parse` ARE DELIBERATELY SEPARATE, and the distinction is the interesting one.** A listing that *fails* is an outage. A listing that *succeeds and no longer parses* is an **ossutil upgrade** — a different output shape, a changed prefix format — and it is the case that would otherwise be **indistinguishable from an empty bucket**, because both yield zero parsed prefixes from a command that exited 0. It is discriminated by the output still containing lines under our own prefix while none of them matched the pattern. Collapsing the two would leave the most likely future failure reading as "nothing to do".
+
+**THE FAILED LISTING ALERTS LOUDLY AND DOES NOT FAIL THE RUN. This is the deciding argument and it belongs in the record.** By the time retention runs, every object is uploaded and verified and `/tmp` is clean: **the backup has SUCCEEDED**. Calling `fail()` would write `FAIL` to `db-backup.log` — **and that line is what a later reader uses to decide whether a restore is even available.** Marking a good, verified backup `FAIL` because a listing timed out answers that question **wrongly, and in the direction where a restore is not attempted**. The one thing worse than a broken prune is a working backup that nobody believes in. So the prune reports on its own terms — its own status field, its own counters, its own ops alert — and the backup's verdict stays truthful.
+
+**`trap - ERR` MOVED BEFORE THE BLOCK, AND THIS IS THE PATTERN RATHER THAN THE INSTANCE.** The decision above is only as good as every `|| true` in the block being right; one unguarded command and the ERR trap fires `fail()` anyway, silently undoing it. Moving the trap release to the top of the retention block makes the invariant **structural**: nothing after that point *can* rewrite the backup's verdict, whatever anyone adds later. **Where a section of a script must not be able to change an already-earned verdict, release the trap at its boundary rather than defending every statement inside it.** The general form: an invariant enforced at a boundary survives edits; an invariant enforced statement-by-statement does not.
+
+**ONE ALERT PER NON-`ok` STATE, NEVER ONE PER OBJECT** — the same dedup reasoning recorded in `reconcileTier` FAILS LOUDLY AND NAMES ITS VICTIM (2026-08-11): `sendOpsAlert` de-duplicates on exact message text, so a per-object message would defeat it entirely and page the group once per failed prefix. The summary carries the counts; the log carries the detail.
+
+**THE LOG LINE NOW CARRIES THE OUTCOME.** `log_line` appends `PRUNE_SUMMARY` when retention has run, and it is empty on every path that fails earlier, so a `FAIL` line is unchanged. A zero that is printed is a measurement; a zero that is never written down is not.
+
+**DEPLOYED RATHER THAN `[skip deploy]`, DELIBERATELY.** This only affects a cron job, so the restart buys nothing on its own merits — but **`[skip deploy]` defers rather than exempts**, and a skip would have made the fix's arrival on the box depend on unrelated work landing before 2026-08-18. Likely is not certain, and the fix is worthless until it is on the box. Hand-copying was rejected for a stronger reason: it breaks the pipeline's guarantee that **deployed bytes are committed bytes**, which is the property the verification step exists to hold. One restart, 1312 → 1313.
+
+**Verified on the box by CONTENT, not by the merge**: `sha1sum /root/roots-v2/scripts/db-backup.sh` = `b6d31d5d…`, identical to the committed file, where it was `d59c4eaf…` before. Workflow `31470203715`, 2 files, `RESULT=SUCCESS`, both byte-identical. Error log +238 bytes, exactly the routine ALIPAY pair.
+
+#### WHAT TO CHECK ON 2026-08-18 — WRITTEN DOWN NOW, NOT RECONSTRUCTED THEN
+
+That is the first run with anything eligible: `20260803` drops outside the 14-day window, so three prefixes become prunable. **Run this after 03:30 China time:**
+
+```bash
+ssh root@47.239.89.63 "tail -3 /root/roots-v2/logs/db-backup.log; echo '--- remaining prefixes ---'; /usr/local/bin/ossutil ls oss://tacet/daily/ -d 2>&1 | tail -5"
+```
+
+**Expected:** the newest log line reads `prune=ok eligible=3 removed=3 failed=0 cutoff=20260804`, and the `20260803-*` prefixes are gone from the listing. **`eligible=3 removed=3` is the whole point** — it is the first time this step has ever done real work, and the first time the log has been able to say it did.
+
+**Anything else is a finding, and each shape means something different:** `prune=failed_listing` is an outage or a credentials problem; `prune=failed_parse` means ossutil changed its output and the `sed` pattern needs updating; `prune=failed_delete` with `eligible=3 removed=0` means a permissions or bucket-policy change. **`eligible=0` would mean the cutoff arithmetic is wrong**, since three sets are provably older than fourteen days by then. Any non-`ok` state also pages the System Alerts group, so silence plus `prune=ok` is the pass condition.
+
+### A HARNESS WHOSE SHELL OPTIONS DIFFER FROM THE REAL SCRIPT'S IS TESTING A DIFFERENT PROGRAM — RULE RECORDED 2026-08-11
+
+The prune test drives the block extracted from `db-backup.sh` through a generated driver. The driver was written `set -uo pipefail`. **The real script runs `set -euo pipefail`.**
+
+Under `-e`, a single failing command anywhere in the new block exits the script — **which is exactly the class of defect the test exists to catch**, and the harness as first written would have hidden it: every case would have passed while the shipped script aborted mid-retention. Caught before merge and corrected; the driver now declares the same options as the file it stands in for.
+
+**The rule generalises past `set -e`.** A harness that reproduces the environment of the code under test approximately is testing a program that does not exist. Shell options, `PATH`, locale, and the shell itself (`sh` is not `bash`) all belong to the program's behaviour, not to its surroundings. **Where a harness must restate something the real script declares, that restatement is a place drift lives** — the same hazard as a fixture table thinner than the schema, one layer down.
+
+**Its own sibling is the counter-example, and deliberately so:** the test harness itself stays `set -uo pipefail` **without** `-e`, because a harness that aborts on its first failing assertion reports one failure instead of all of them. The two files differ on purpose, which is why both now say so in a comment.
+
+### A FIXTURE PINNED TO REAL-WORLD DATES GOES STALE SILENTLY — RECORDED 2026-08-11
+
+The prune test's first draft seeded the stub listing with **the real prefixes that were in the bucket on 2026-08-11**. Every one of them is *inside* the 14-day retention window — which is precisely why production reports `pruned=0` — so **nothing was ever eligible, the loop body never ran, and four cases failed**.
+
+They failed loudly, so this cost minutes. **The dangerous version of the same mistake passes**: had the fixture been seeded a month earlier, those prefixes would have been eligible on the day it was written and would have silently stopped being eligible later, turning a real test into a green one that exercises nothing. Fixture dates are now computed relative to today — `60 days ago` for the eligible set, today for the retained one — so the fixture cannot age out of its own meaning.
+
+**Same family as the AST-authority blindness and the file-wide census: something that reports success while measuring nothing.**
+
+### `scripts/test-deploy-base.sh` CANNOT RUN ON THE WINDOWS BOX — RECORDED 2026-08-11 SO NOBODY CHASES IT AGAIN
+
+It reports **2 passed / 8 failed** on the Windows development machine. **That is environmental and pre-existing, not a regression.** The suite extracts the "Compute deployable files" step out of `deploy.yml` with `python3 -` and PyYAML, and **python3 is not installed there** — Windows answers the call with its Microsoft Store shim, the extraction produces nothing, and every case that needs the step fails with an empty file list.
+
+Confirmed by running it against an unmodified tree: same 2 / 8. **It runs correctly on Linux and in CI.** Anyone seeing those eight failures on Windows should stop there rather than debugging the deploy-base logic, which is fine.
 
 ## 25. A printed slip that goes stale is corrected on paper, not reprinted — DECIDED 2026-08-07
 
