@@ -14924,7 +14924,21 @@ router.delete('/api/retail-admin/vouchers/:id', requireRetailAdmin, (req, res) =
 //
 // Returns { id, reused, created } or { error } — it never throws for a validation
 // problem, so a caller inside a transaction chooses whether to roll back.
-function createOrReuseManualCustomer({ nickname, email, phone, userId }) {
+//
+// TAKES THE HANDLE (Path A step 2, decisions §24). The trailing `h = tdb()` is a
+// DEFAULT PARAMETER, evaluated on every call that omits it, so a caller that
+// passes nothing still binds to the request's tenant connection at call time —
+// exactly as the ambient tdb() calls it replaces did. That is what lets the
+// other call site, POST /api/retail-admin/customers, stay unedited and
+// synchronous while POST /api/retail-admin/orders passes its transaction handle.
+//
+// IT STAYS SYNCHRONOUS. Taking a handle is not going async, so §24's rule that a
+// helper may go async only when every caller is async does not bind here — and
+// must not be read as satisfied by this change. Its READS matter as much as its
+// writes: the reuse-by-phone SELECT has to see rows the caller's open
+// transaction has written but not yet committed, and on the wrong handle it
+// would miss them and create a duplicate customer instead of reusing one.
+function createOrReuseManualCustomer({ nickname, email, phone, userId }, h = tdb()) {
   const nick = nickname == null ? '' : String(nickname).trim().slice(0, 60);
   const mail = normEmail(email);
   const tel  = phone == null ? '' : String(phone).replace(/\s+/g, '').slice(0, 20);
@@ -14938,12 +14952,12 @@ function createOrReuseManualCustomer({ nickname, email, phone, userId }) {
   // No is_blocked filter, matching the by-phone lookup: a blocked customer still
   // owns the number, and the form has already said so in Brick.
   if (tel) {
-    const existing = tdb().prepare(
+    const existing = h.prepare(
       'SELECT id FROM retail_customers WHERE phone = ? ORDER BY id LIMIT 1'
     ).get(tel);
     if (existing) {
       // Backfill only blanks — never overwrite what the customer set themselves.
-      tdb().prepare(
+      h.prepare(
         `UPDATE retail_customers
             SET nickname = COALESCE(NULLIF(nickname, ''), ?),
                 email    = COALESCE(NULLIF(email, ''), ?)
@@ -14954,7 +14968,7 @@ function createOrReuseManualCustomer({ nickname, email, phone, userId }) {
   }
 
   const synthetic = 'manual:' + crypto.randomBytes(12).toString('hex');
-  const info = tdb().prepare(
+  const info = h.prepare(
     `INSERT INTO retail_customers (openid, nickname, phone, email, source, created_by, last_login_at)
      VALUES (?, ?, ?, ?, 'manual', ?, NULL)`
   ).run(synthetic, nick || null, tel || null, mail || null, userId);
