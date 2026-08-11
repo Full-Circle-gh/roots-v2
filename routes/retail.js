@@ -21453,8 +21453,35 @@ router.post('/api/retail-admin/orders/:id/shipments/split',
   // unconverted dual-context helper across the boundary — the reason batch 4
   // excluded this route. Nothing before this point awaits, so the branch runs
   // start to finish synchronously exactly as it does today.
-  const o = tdb().prepare('SELECT id FROM retail_orders WHERE id = ?').get(id);
+  const o = tdb().prepare('SELECT id, fulfillment_type FROM retail_orders WHERE id = ?').get(id);
   if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  // PICKUP AND COUNTER ORDERS SHIP NOTHING, so there is no split to undo and
+  // nothing to rebuild. Without this the branch falls through to
+  // ensureShipments, which does NOT guard on fulfilment type — it never reads
+  // the column — and would CREATE Air/Land parcels for an order collected at
+  // the store. Every other consumer already checks: the checkout
+  // (`if (!isPickup) ensureShipments(...)`), the order-detail read
+  // (`shipsNothing(o) ? [] : ensureShipments(id)`) and
+  // mergeAddonItemsIntoShipments. This branch was the only one that did not.
+  //
+  // AND THE DAMAGE WOULD HAVE PERSISTED. The order-detail read's own guard
+  // returns [] for these orders rather than reconciling them, so the phantom
+  // parcels would never be cleaned up by the self-heal that covers every other
+  // shipment defect — feie would simply start printing parcel blocks for a
+  // counter sale.
+  //
+  // 409 RATHER THAN A SILENT NO-OP, matching this handler's own conventions:
+  // every impossible request here is REFUSED (400 no_items, 400 invalid_items,
+  // 409 item_already_dispatched, 422 would_empty_shipment, 409 has_tracking
+  // immediately below). The silent-return precedents — mergeAddonItemsIntoShipments,
+  // the order-detail read — are internal helpers, not endpoints. And §24 records
+  // that answering an impossible request on THIS route "with success rather than
+  // a rejection" is exactly the shape that let the shadowed split run destructive
+  // for eight weeks. 409 for consistency with has_tracking, the other order-level
+  // blocker in this same branch.
+  if (shipsNothing(o)) {
+    return res.status(409).json({ success: false, error: 'ships_nothing' });
+  }
   const shipments = tdb().prepare(
     `SELECT * FROM retail_shipments WHERE order_id = ? ORDER BY id ASC`
   ).all(id);
