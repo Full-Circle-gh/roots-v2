@@ -240,6 +240,7 @@ const noPoi = { geocode: async () => null };
   await extraSuites();
   await roundThreeSuites();
   await roundFourSuites();
+  await coarseNearSuite();
 
   console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed\n`);
   process.exit(fail ? 1 : 0);
@@ -652,13 +653,18 @@ async function roundThreeSuites() {
     assert.strictEqual(err && err.geoHold, true);
   });
 
+  // ~17km east of SHOP: past COARSE_OK_KM (12.5) so the coarse-near rule
+  // cannot vouch for it, but inside MAX_DROP_KM (25) so it is THIS gate
+  // refusing and not the distance ceiling.
+  const LEGACY_PIN_FAR = { ...LEGACY_PIN, lat: 23.13, lng: 113.50 };
+
   await itAsync('a COARSE ANSWER still refuses — an outage and a bad address differ', async () => {
     let err = null;
     try {
-      await buildCreatePayload(ORDER(LEGACY_PIN), SHOP, noPoi,
+      await buildCreatePayload(ORDER(LEGACY_PIN_FAR), SHOP, noPoi,
         { geocode: stubGeo({ lat: 23.39, lng: 113.21, precision: 'coarse', level: '区县', provider: 'amap', cityMatch: true }) });
     } catch (e) { err = e; }
-    assert.ok(err);
+    assert.ok(err, 'a pin too far from the store to vouch for still parks');
     assert.notStrictEqual(err.geoHold, true, 'a provider that answered is evidence — refuse, do not hold');
     assert.strictEqual(err._geo.refused, true);
   });
@@ -969,5 +975,81 @@ async function roundFourSuites() {
     assert.ok(err, 'it did not ship');
     assert.notStrictEqual(err.geoHold, true, 'must REFUSE — holding would park it forever');
     assert.strictEqual(err._geo.refused, true);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Coarse, but close. A vague point near the collecting store ships instead of
+// parking: its error is bounded by its distance, and the rider finishes the
+// job from the address text. Everything that made the gate worth having —
+// the far pin, the wrong city, the address with no street — still refuses.
+// ─────────────────────────────────────────────────────────────────────────
+async function coarseNearSuite() {
+  const { COARSE_OK_KM } = require('../lib/qingyun-payload');
+  console.log('\ncoarse but close — a nearby vague pin ships unconfirmed');
+
+  // SHOP sits at 23.13/113.33. The real order this was built for (TC000208,
+  // 岭南山畔 in 黄埔区) had a provenance-less pin ~5.6km from the Tianhe store
+  // and an address the map has no house number for.
+  const NEAR = { province: '广东省', city: '广州市', district: '黄埔区',
+                 address: '联和街道科翔路104号岭南山畔11栋2805房', lat: 23.155, lng: 113.375 };
+  const coarseGeo = stubGeo({ lat: 23.18, lng: 113.45, precision: 'coarse', level: '区县', provider: 'amap', cityMatch: true });
+
+  it('the threshold is half the refusal limit', () => {
+    assert.strictEqual(COARSE_OK_KM, 12.5);
+  });
+
+  await itAsync('a provenance-less pin close to the store ships, unconfirmed', async () => {
+    const p = await buildCreatePayload(ORDER(NEAR), SHOP, noPoi, { geocode: coarseGeo });
+    assert.match(p._geo.source, /\+coarse_near$/, 'the source says how it got out');
+    assert.strictEqual(p._geo.unconfirmed, true);
+    assert.strictEqual(p.recipientLat, Math.round(23.155 * 1e6), 'it ships the pin it had, not the centroid');
+  });
+
+  await itAsync('no precision grade is invented on the way through', async () => {
+    const p = await buildCreatePayload(ORDER(NEAR), SHOP, noPoi, { geocode: coarseGeo });
+    assert.notStrictEqual(p._geo.precision, 'rooftop');
+    assert.notStrictEqual(p._geo.source, 'customer_pin');
+    assert.notStrictEqual(p._geo.source, 'staff_pin');
+  });
+
+  await itAsync('with NO stored pin, a coarse resolve near the store ships too', async () => {
+    const { lat, lng, ...noPin } = NEAR;                                    // eslint-disable-line no-unused-vars
+    const near = stubGeo({ lat: 23.15, lng: 113.37, precision: 'coarse', level: '区县', provider: 'amap', cityMatch: true });
+    const p = await buildCreatePayload(ORDER(noPin), SHOP, noPoi, { geocode: near });
+    assert.strictEqual(p._geo.source, 'geocode:amap+coarse_near');
+    assert.strictEqual(p._geo.unconfirmed, true);
+  });
+
+  await itAsync('a WRONG-CITY match is never admitted, however close it lands', async () => {
+    const { lat, lng, ...noPin } = NEAR;                                    // eslint-disable-line no-unused-vars
+    const wrongCity = stubGeo({ lat: 23.15, lng: 113.37, precision: 'street', provider: 'amap', cityMatch: false });
+    let err = null;
+    try { await buildCreatePayload(ORDER(noPin), SHOP, noPoi, { geocode: wrongCity }); } catch (e) { err = e; }
+    assert.ok(err, 'a confident answer in the wrong city is not a vague answer nearby');
+  });
+
+  await itAsync('a store with no coordinates cannot vouch for anything', async () => {
+    const blindShop = { shopId: 'S1', cityId: 20, name: '测试门店' };
+    let err = null;
+    try { await buildCreatePayload(ORDER(NEAR), blindShop, noPoi, { geocode: coarseGeo }); } catch (e) { err = e; }
+    assert.ok(err, 'with nothing to measure against, the order parks');
+    assert.strictEqual(err.needsPoint, true);
+  });
+
+  await itAsync('an address with no street line still refuses, close or not', async () => {
+    let err = null;
+    try {
+      await buildCreatePayload(ORDER({ province: '广东省', city: '广州市', lat: 23.135, lng: 113.335 }), SHOP, noPoi,
+        { geocode: stubGeo({ lat: 23.13, lng: 113.26, precision: 'coarse', level: '市', provider: 'amap', cityMatch: true }) });
+    } catch (e) { err = e; }
+    assert.ok(err, 'being near the store does not conjure a door for the rider');
+  });
+
+  await itAsync('the ceiling is untouched — a near-but-absurd pin is still refused', async () => {
+    const farShop = { shopId: 'S1', cityId: 20, name: '测试门店', lat: 23.13, lng: 114.20 };
+    let err = null;
+    try { await buildCreatePayload(ORDER(NEAR), farShop, noPoi, { geocode: coarseGeo }); } catch (e) { err = e; }
+    assert.ok(err, 'past ABS_MAX_KM nothing ships whatever the pin claims');
   });
 }

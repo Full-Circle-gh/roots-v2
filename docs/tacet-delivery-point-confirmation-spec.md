@@ -35,7 +35,7 @@ Precise is not the same as correct. A rooftop-grade match can still be the wrong
 |---|---|
 | D1 | Trustworthy points dispatch untouched. No map, no confirm, no extra tap. |
 | D2 | "Trustworthy" is exactly what the gate already accepts: `geo_source = customer_pin`, or `geocode:*` at rooftop or street grade. |
-| D3 | Coarse points enter a new state, `needs_point`. It is not an error state. |
+| D3 | Coarse points enter a new state, `needs_point`. It is not an error state. **Narrowed 2026-08-11: only coarse points we cannot vouch for. A coarse point close to the collecting store dispatches. See §4.3.** |
 | D4 | Operator confirms the point on a map inside the order drawer. |
 | D5 | A confirmed point applies to that order only. It never writes back to the customer's saved address. |
 | D6 | With auto-push off, a `needs_point` order holds indefinitely. Dispatch is attended; someone opens every order. |
@@ -75,6 +75,29 @@ The payload builder is deliberately dependency-free and holds no db handle (`lib
 `qingyunShipFromState` maps anything that is not `error` to `needs_attention: false` (`routes/retail.js:21728`), so after stage 1 a `needs_point` row still reads as "Queued for push…" in the drawer. That is expected and acceptable. Stage 1 changes behaviour, not appearance; the state becomes visible to staff in stage 2.
 
 Note that the drain (`scripts/qingyun-daemon.js:599`) and the held-order alert (`:527`) both filter on `status = 'pending'`, so `needs_point` rows drop out of the daemon's attention automatically. This is the intended outcome: it is what stops the paging.
+
+### 4.3 Coarse, but close — D3 narrowed 2026-08-11
+
+**A coarse point within `COARSE_OK_KM` of the collecting store dispatches instead of parking.** Default is half `MAX_DROP_KM`, so 12.5km, `QINGYUN_COARSE_OK_KM` to override.
+
+**Why.** A coarse grade says the provider matched an area rather than a door. That is a reason to distrust a point, but not on its own a reason to refuse one, because how wrong a centroid can be is bounded by how far away it sits. A district centroid 5km from the store is not a same-named estate in the next city — there is nowhere wrong for it to be that close. The rider carries the full address text and phones on arrival, which is how every delivery worked before the precision gate landed on 2026-08-05.
+
+**The evidence that moved it.** The gate was introduced by `33acce33` with one incident behind it: Qingyun order #4, pinned 28.1km out. That same commit added the `MAX_DROP_KM` distance check, and a coarse pin is not `trusted`, so **order #4 is refused by the distance check alone**. Refusing a coarse point that is close to the store never protected against the case the gate was built for.
+
+What it does do is park correct addresses. Order TC000208 — 黄埔区联和街道科翔路104号岭南山畔11栋2805房 — sat in `needs_point` from 2026-08-08 carrying a provenance-less pin 5.6km from the Tianhe store. The address is right; Amap simply has no house number 104 for that road, and lists the estate as 越秀·岭南山畔. §1 already conceded the system manufactures this condition. This is the other half of that concession.
+
+**Two conditions, both load-bearing.**
+
+1. **There is an address line** (`addr.address` non-empty). The case for shipping a vague point is that the rider finishes from the text. An address of `广东省广州市` gives them nothing to finish with, and proximity does not conjure a door. Tested against the line the customer typed, not the derived `street`, which falls back to joining the region and would therefore always pass.
+2. **It is close, measured.** No store coordinates → it parks. The argument is that the error is *bounded by a measured distance*; with no measurement there is no argument, and shipping anyway would turn one missing store record into every coarse address dispatching blind.
+
+**What is unchanged.** Nothing is laundered. The source keeps its own name with `+coarse_near` appended, no precision grade is invented, and `trusted` in the distance predicate still excludes it — so `ABS_MAX_KM` and every other check apply exactly as before. `_geo.unconfirmed` is derived from the source rather than tracked separately, so the two cannot disagree.
+
+A **wrong-city** match is never admitted, however close it lands. `isDeliverablePin` fails for two different reasons and only one has a bounded error: `precision_*` is a vague answer, `city_mismatch` is a confident answer somewhere else, and a boundary case could put the latter inside `COARSE_OK_KM`. Only the precision verdict is admitted.
+
+**Consequence for §5.** The confirm surface is unchanged but fires less often — it now sees only the addresses nobody can vouch for, which is the population it was designed for. D5 still holds: nothing writes back to `retail_customer_addresses`.
+
+Tests: the `coarse but close` suite in `scripts/test_address_pin.js`. The parking tests in `scripts/test_needs_point.js` previously sat ~3km from the store, which is now a shipping case; they were moved to ~17km so they still assert what they were written for.
 
 ## 5. Drawer
 

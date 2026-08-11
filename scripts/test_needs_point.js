@@ -53,6 +53,19 @@ const VAGUE = { province: '广东省', city: '广州市', district: '天河区',
 // A district-centroid answer — precise-looking, useless to a rider.
 const COARSE = { lat: 23.1339, lng: 113.3603, precision: 'coarse', level: '区县', provider: 'amap', cityMatch: true };
 
+// ~17km east of SHOP: past COARSE_OK_KM (12.5km), so the coarse-but-close rule
+// cannot vouch for it, and inside MAX_DROP_KM (25km), so what refuses it is the
+// precision gate under test rather than the distance ceiling.
+//
+// The parking tests below all used to sit ~3km out, which is now a SHIPPING
+// case — a vague point that near the store has nowhere wrong to be, so it goes
+// with the address text and the rider phones on arrival. That rule has its own
+// suite in scripts/test_address_pin.js ('coarse but close'). These tests keep
+// asserting what they were written for: an unplaceable address that we cannot
+// vouch for parks for a human, rather than erroring or dispatching blind.
+const FAR = { lat: 23.13, lng: 113.50 };
+const COARSE_FAR = { ...COARSE, ...FAR };
+
 // Node's CommonJS has no top-level await — everything runs inside one async
 // pass so the async gate tests and the synchronous SQL tests share a tally.
 (async () => {
@@ -61,13 +74,12 @@ const COARSE = { lat: 23.1339, lng: 113.3603, precision: 'coarse', level: '区�
 console.log('\nthe gate — an unplaceable address parks instead of refusing');
 
 // The exact shape the three text geocoders write (background save, checkout
-// fallback, admin snapshot): coordinates present, graded coarse. This is the
-// common path, not an edge case.
+// fallback, admin snapshot): coordinates present, graded coarse.
 await itAsync('a coarse geocoded pin asks for a point instead of erroring', async () => {
   await assert.rejects(
     buildCreatePayload(
-      ORDER({ ...VAGUE, lat: 23.1339, lng: 113.3603, geo_source: 'geocode:amap', geo_precision: 'coarse' }),
-      SHOP, noPoi, { geocode: stubGeo(COARSE) }),
+      ORDER({ ...VAGUE, ...FAR, geo_source: 'geocode:amap', geo_precision: 'coarse' }),
+      SHOP, noPoi, { geocode: stubGeo(COARSE_FAR) }),
     (e) => {
       assert.strictEqual(e.needsPoint, true, 'must be flagged needs_point, not a plain refusal');
       assert.strictEqual(e.geoHold, undefined, 'must not be confused with a geocoder outage');
@@ -78,10 +90,10 @@ await itAsync('a coarse geocoded pin asks for a point instead of erroring', asyn
 await itAsync('parks with the point the ORDER was carrying, and its grade', async () => {
   await assert.rejects(
     buildCreatePayload(
-      ORDER({ ...VAGUE, lat: 23.1339, lng: 113.3603, geo_source: 'geocode:amap', geo_precision: 'coarse' }),
-      SHOP, noPoi, { geocode: stubGeo(COARSE) }),
+      ORDER({ ...VAGUE, ...FAR, geo_source: 'geocode:amap', geo_precision: 'coarse' }),
+      SHOP, noPoi, { geocode: stubGeo(COARSE_FAR) }),
     (e) => {
-      assert.deepStrictEqual(e.point, { lat: 23.1339, lng: 113.3603, precision: 'coarse' });
+      assert.deepStrictEqual(e.point, { lat: FAR.lat, lng: FAR.lng, precision: 'coarse' });
       return true;
     });
 });
@@ -92,11 +104,11 @@ await itAsync('a client coordinate with no provenance parks with a null grade', 
   // borrowing the grade of a different point.
   await assert.rejects(
     buildCreatePayload(
-      ORDER({ ...VAGUE, lat: 23.14, lng: 113.36, geo_source: 'client_unverified' }),
-      SHOP, noPoi, { geocode: stubGeo(COARSE) }),
+      ORDER({ ...VAGUE, ...FAR, geo_source: 'client_unverified' }),
+      SHOP, noPoi, { geocode: stubGeo(COARSE_FAR) }),
     (e) => {
       assert.strictEqual(e.needsPoint, true);
-      assert.deepStrictEqual(e.point, { lat: 23.14, lng: 113.36, precision: null });
+      assert.deepStrictEqual(e.point, { lat: FAR.lat, lng: FAR.lng, precision: null });
       return true;
     });
 });
@@ -104,8 +116,8 @@ await itAsync('a client coordinate with no provenance parks with a null grade', 
 await itAsync('a legacy row with no provenance at all still parks', async () => {
   await assert.rejects(
     buildCreatePayload(
-      ORDER({ ...VAGUE, lat: 23.14, lng: 113.36 }),
-      SHOP, noPoi, { geocode: stubGeo(COARSE) }),
+      ORDER({ ...VAGUE, ...FAR }),
+      SHOP, noPoi, { geocode: stubGeo(COARSE_FAR) }),
     (e) => e.needsPoint === true);
 });
 
@@ -158,7 +170,7 @@ await itAsync('an order with NO coordinates at all is still a plain refusal', as
   // Out of stage-1 scope on purpose: there is no guessed point to drop on a
   // map, so the map surface would open on nothing.
   await assert.rejects(
-    buildCreatePayload(ORDER(VAGUE), SHOP, noPoi, { geocode: stubGeo(COARSE) }),
+    buildCreatePayload(ORDER(VAGUE), SHOP, noPoi, { geocode: stubGeo(COARSE_FAR) }),
     (e) => {
       assert.notStrictEqual(e.needsPoint, true);
       assert.match(e.message, /geocode failed/);
