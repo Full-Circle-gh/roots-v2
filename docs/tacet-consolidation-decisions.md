@@ -1,8 +1,10 @@
-# Tacet shared-core consolidation — decisions record, v4.33
+# Tacet shared-core consolidation — decisions record, v4.34
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
+
+2026-08-12 · v4.34 — §24 Database: **`POST /api/retail-admin/orders` is NOT the money cluster — CLASSIFIED, CONVERTED and DEPLOYED at `61007342`**, closing PHASE 2 OWED WORK item 2. **The discriminator is recorded as a METHOD, not a verdict**: read the write sets against each other, and **the pending `retail_payments` row appears in BOTH this transaction and the checkout's, so it cannot be what makes something money** — the points ledger, the topup ledger and the balance write are, and this transaction has none of the three. **The original "straddles the money cluster" was inferred from the `nextOrderNo` CALL rather than from reading the write set**, which is a signal about order numbering and none at all about money; recorded because the same wrong inference is available on the next route. **The interleaving analysis in full, because it is why this was safe:** the conversion's one real behaviour change is an `await` in front of the post-commit money work, so **whole blocks can now reorder — but no block can split**, measured rather than assumed (the post-commit block has no `await`, and `markOrderPaid` has none either; its only async call is fire-and-forget). **THE INVARIANT: every post-commit path is keyed on an identifier exclusive to its own request, and every cross-order write is additive SQL rather than a JS read-modify-write** — named guards: `markOrderPaid`'s compare-and-set on `status = 'pending_payment'`, `awardOrderPoints`' `order_earn` idempotency row plus additive `+ ?` customer writes, and `creditLifetimeCommission`'s `UNIQUE (order_id)` **verified on both engines rather than taken from the comment claiming it**. **A FINDING OF ITS OWN — THE MUTANT THAT SURVIVED.** Rewriting `tx.prepare(` to `tdb().prepare(` changed nothing, because on SQLite `tx` IS the handle passed in. **A mutation that cannot change behaviour cannot be caught by behaviour**, even when it is well-formed and satisfies v4.27's must-assert-it-mutated rule. **So the `tx`-versus-`tdb()` discipline is SOURCE-enforced, not behaviour-enforced, and becomes behavioural only at the flip** — with the rule that **a suite must say which of its assertions are source-level and which are behavioural rather than letting both read as proof.** This is the **FOURTH** member of the "a run that looks like proof and is not" family, after the two comment-blind source guards and the CRLF anchor. The mutant that does mean something drops the `await` and takes **8 of 9** behavioural tests red. **The post-commit boundary is load-bearing and must not be moved**: `geocodeOrderSnapshotAsync`, `claimMigrationCredit`, `reconcileSignupVouchers`, `logActivity` and `markOrderPaid` stay outside, and moving any one inside makes this a money-cluster change. **The `:20241` comment was FALSE and is corrected** — a deferred `BEGIN` does not serialize the mint against the INSERT; what makes it safe today is topology alone (fork mode, single instance, synchronous driver, `UNIQUE` as backstop) and **all of it inverts at the flip**. Counts, labelled by form and never blended: **UNCONVERTED 30 → 29 in `routes/retail.js`, 103 → 102 runtime-wide; CONVERTED 26 → 27.** Green on **both drivers**, including better-sqlite3 on the box against the shipped tree; one pm2 restart, zero unstable, 238 log bytes all routine; shipped bytes confirmed by content and a normalised sha1, not by the merge. **Two harness defects found by running rather than reading** — a `\n` anchor against a CRLF file, and an assertion matching `markOrderPaid()` inside a comment, **the comment-stripping class again**. **Plus one OPEN item for the money cluster design doc that still does not exist:** every guard here was measured against a synchronous driver, and at the flip the post-commit block becomes genuinely interruptible rather than merely reorderable — true of the money cluster whether or not this route converted. A classification, a conversion, a deploy, a finding and an open item; nothing reversed, hence a patch.
 
 2026-08-11 · v4.33 — §24 Database: **`retail_order_counters` EXISTS ON THE CLUSTER — 162 tables to 163**, row at `('TC', 0)` and **deliberately UNSEEDED** (`last_no` 0 against a measured maximum of 168); seeding belongs to the cutover and was not run. v4.32's "it does not exist on the box" is **superseded rather than edited**, because it records why the create was held back. **The DDL file had to be fixed before it could be applied, and that is the interesting part: as written it ran the seed as its third statement, contradicting the rule stated twenty lines above it in the same file** — a file that states an ordering rule and then violates it on apply is worse than one that never stated it, because the rule reads as satisfied. Found by asking what applying it would do rather than by reading it. **As-built regenerated as `docs/tacet-postgres-schema-as-built-2026-08-11.sql`, with the body PROVEN verbatim rather than asserted** — strip the 44-line hand-written header and the remainder hashes to the raw `pg_dump -s --no-owner` output, `61f77078…b7bf`. The 2026-08-04 file is retained byte-for-byte and carries no banner, following the phase-1 precedent that the superseding file carries the note. **AND THE REGENERATION FOUND SOMETHING THIS WORK DID NOT CAUSE: the new dump is 2,145 lines longer, and the difference is 303 `GRANT … TO tacet_app` statements the 2026-08-04 record does not contain at all — it names `tacet_app` zero times.** The grants postdate it, so **the as-built record has been silent on the entire permissions layer ever since, and nothing noticed** — this file has exactly two consumers and both parse it for `CREATE UNIQUE INDEX` lines and nothing else. **A record can go stale on 303 statements without a single reader being affected, which is how it stays stale.** Unique indexes measured unchanged at 15 across both files, so both consumers are provably unaffected today and were deliberately not repointed; they open the dated name and will need repointing the first time an index changes. An application, a regeneration and a finding; nothing reversed, hence a patch.
 
@@ -2257,6 +2259,92 @@ A sequence was chosen first and reconsidered before anything was built. **The re
 **`lib/qingyun-payload.js:585` hardcodes `Roots ${order_no}` as the goods name on every delivery push.** A second account's parcels would ship labelled with the first account's business name. §0 governing rule 2. Its own item; not now.
 
 **`routes/retail.js:3315` and `:3320` both say "Order numbers start with 'R'".** True of the 232 legacy `R*` orders on the box and false of everything minted since. The reasoning those comments support is still correct — `FCTU` and `FCAO` cannot collide with `FCTC` either way — but the fact they cite is not. **Not fixed in this commit**, which touches no JavaScript by design; recorded so the next reader does not trust it.
+
+### `POST /api/retail-admin/orders` IS NOT THE MONEY CLUSTER — CLASSIFIED AND CONVERTED 2026-08-12
+
+**PHASE 2 OWED WORK item 2 is closed.** The route was found as a fifth step-2 route nobody had counted, flagged as straddling the money cluster, and left in neither pool. It is now classified, converted and deployed at `61007342`.
+
+#### THE DISCRIMINATOR IS A METHOD, NOT A VERDICT
+
+**Read the write sets against each other. That is the whole technique, and it is reusable on the next route that looks money-adjacent.**
+
+| | this route's tx | the checkout's tx |
+|---|---|---|
+| `retail_orders`, `retail_order_items` | ✓ | ✓ |
+| `retail_payments` (pending intent) | ✓ | ✓ |
+| **`retail_points_transactions`** | — | ✓ |
+| **`retail_topup_transactions`** | — | ✓ |
+| **`UPDATE retail_customers SET`** (points / balance) | — | ✓ |
+
+**The pending `retail_payments` row appears in BOTH, so it cannot be what makes something money.** What makes the checkout money is the points ledger, the topup ledger and the balance write. This transaction has none of the three. It writes an order, its lines, a payment intent, and — only when `save_customer` is set — one identity row.
+
+**THE ORIGINAL CLASSIFICATION WAS INFERRED FROM A CALL, NOT FROM A WRITE SET.** "Straddles the money cluster" came from noticing that the route calls `nextOrderNo()`, the same function the checkout calls. That is a real signal about *order numbering* and no signal at all about *money*. **A route is in the money cluster because of what its transaction writes, not because of who else calls the helpers it calls.** Recorded as the correction, because the same inference will be available on the next route and will be wrong there too.
+
+**WHAT WOULD HAVE MADE IT MONEY, STATED SO THE LINE IS TESTABLE.** The route DOES reach money — `claimMigrationCredit`, `reconcileSignupVouchers`, and `markOrderPaid` (which reaches `awardOrderPoints`, `creditReferralReward`, `creditLifetimeCommission`). All of it is post-COMMIT, outside the transaction, each call in its own `try`/`catch`, two of them opening their own transactions. **Moving any one of them inside the block makes this a money-cluster change.** That boundary is load-bearing and the suite asserts it in both directions.
+
+#### THE INTERLEAVING ANALYSIS — THE REASON THIS WAS SAFE TO CONVERT
+
+**The conversion has exactly one real behaviour change, and it is not in the transaction.** Today the handler is fully synchronous, so nothing yields between COMMIT and the post-commit money work. After conversion there is an `await` in front of it.
+
+**WHAT CAN NOW REORDER.** Order A's entire post-commit block can run during order B's transaction statements, and between B's COMMIT and B's own post-commit block. That is impossible today.
+
+**WHAT CANNOT SPLIT, AND THIS IS THE PART THAT MAKES IT SAFE.** Measured, not assumed: the post-commit block contains **no `await`, no `.then`, no yield**, and `markOrderPaid` contains none either — its only async call, `maybeAutoIssueInvoice(...).catch(...)`, is fire-and-forget. **Once a continuation starts it runs to completion.** A's `awardOrderPoints` cannot be interrupted by B's. Whole blocks reorder; no block is ever split.
+
+**THE INVARIANT: every post-commit path is keyed on an identifier exclusive to its own request, and every cross-order write is additive SQL rather than a JS read-modify-write.** Reordering whole blocks cannot change an additive result. The specific guards, because "they each open their own transaction" is true and insufficient:
+
+- **`markOrderPaid` — a COMPARE-AND-SET on status.** Every money call sits behind `if (r.changes > 0)`, where `r` is `UPDATE retail_orders SET status='paid' … WHERE id = ? AND status = 'pending_payment'`. A second fire changes 0 rows and does nothing. A SQL-level single-fire guard, not a JS flag.
+- **`awardOrderPoints` — an explicit IDEMPOTENCY ROW.** `retail_points_transactions WHERE order_id = ? AND source = 'order_earn'`, which its own comment calls the single marker for both the points award and the `lifetime_spend` bump. Its customer writes are additive SQL — `lifetime_spend = COALESCE(lifetime_spend,0) + ?`, `points_balance = points_balance + ?` — so two orders for one customer give the same total in either order, and `balance_after` and `reconcileTier`'s input are both read INSIDE the same transaction after the update, so each ledger row is self-consistent for its position.
+- **`creditLifetimeCommission` — `UNIQUE (order_id)`, VERIFIED ON BOTH ENGINES** rather than taken from the comment claiming it: `sqlite_autoindex_retail_lifetime_commissions_1` on the live SQLite database and `retail_lifetime_commissions_order_id_key` in Postgres.
+- **`creditReferralReward`** — a compare-and-set state transition, `WHERE id = ? AND status = 'joined'`.
+- **`claimMigrationCredit` / `reconcileSignupVouchers`** — gated on `customerCreated`, true only when this request's own transaction INSERTed the row, so concurrent requests hold disjoint customer ids by construction. `withTransaction`'s per-handle queue serialises the transactions, so a second request's reuse-by-phone lookup sees the first's committed customer — the protection the synchronous version had, preserved.
+- **stock** — the only genuinely cross-order state, reachable via `prepareCommitUnreservedOrder` on a Guangzhou delivery. This route's transaction touches no stock at all, and the checkout is still fully synchronous, so neither can be interleaved into.
+
+#### THE MUTANT THAT SURVIVED — FOURTH IN THE "LOOKS LIKE PROOF AND IS NOT" FAMILY
+
+**The first mutation written for the conversion suite rewrote `tx.prepare(` back to `tdb().prepare(` — writes escaping the transaction — and EVERY TEST STAYED GREEN.**
+
+**That is not a hole in the suite. On SQLite `tx` IS the object passed in**, so `tdb()` and `tx` are the same connection and both statements join the same transaction. `lib/db-transaction.js` says so in its own header: *"On SQLite `tx` is the same object that was passed in, so it looks redundant. On pg it will NOT be."*
+
+**THE GENERAL SHAPE, WHICH IS THE POINT: A MUTATION THAT CANNOT CHANGE BEHAVIOUR CANNOT BE CAUGHT BY BEHAVIOUR.** The mutation was well-formed, it modified the source, and the v4.27 rule (a mutation must assert it mutated) was satisfied — and it still proved nothing, because on this driver the two forms are the same program.
+
+**THE RULE THAT FOLLOWS: a suite must say which of its assertions are SOURCE-level and which are BEHAVIOURAL, rather than letting both read as proof.** Here the `tx`-versus-`tdb()` discipline is **source-enforced only** — one assertion that no ambient `tdb()` survives inside the transaction body — and the suite says so in a comment at the mutation block instead of implying it demonstrated both. It becomes a behavioural property at the flip, where `tx` is a checked-out client and `tdb()` is the pool. **Until then, that discipline rests on a source match, and a reader is entitled to know that.**
+
+**This is the FOURTH occurrence of the class recorded at THREE HARNESS DEFECTS and extended at v4.27.** The first two were comment-blind source matching — the harness's `FOREIGN KEY` strip, and the `PUT /integrations` guard matching `process.env` inside the comment saying it must not be touched. The third was the CRLF anchor that matched nothing and produced ten red lines proving nothing. **The family now has four members and one requirement: a test harness must be able to fail for the reason it claims.** The mutation that does mean something here drops the `await` — the classic failure of this exact conversion, the handler racing past an unresolved transaction — and takes **8 of 9** behavioural tests red.
+
+#### THE `:20241` COMMENT WAS FALSE AND IS CORRECTED
+
+It read *"Order-no minted inside the tx so the uniqueness check + INSERT serialize."* **A deferred `BEGIN` does not serialize a read against a later write.** The checkout takes `BEGIN IMMEDIATE` for that; this route never has.
+
+**What is actually true today, and all of it is topology rather than design:** the app runs pm2 **fork mode, single instance**, so one process serves every minting route; better-sqlite3 is synchronous, so a transaction body runs to completion without yielding and two operators cannot interleave; and `order_no` is `TEXT UNIQUE NOT NULL` as a hard backstop. The residual is a rare spurious failure rather than a duplicate — another process committing inside the read-to-write window makes SQLite refuse the write on a stale snapshot, which `busy_timeout` cannot wait out.
+
+**ALL THREE INVERT AT THE FLIP** — async handler, every statement a round trip, genuine interleaving — and read-max-then-INSERT becomes a real duplicate race. ORDER NUMBERING IS A COUNTER ROW is what closes it, for this route and the checkout alike.
+
+#### COUNTS, LABELLED BY FORM
+
+**UNCONVERTED `<handle>.transaction(fn)`: `routes/retail.js` 30 → 29, runtime-wide 103 → 102.**
+**CONVERTED `withTransaction(handle, fn)`: `routes/retail.js` 26 → 27.**
+From `scripts/diagnose_async_conversion_scope.js`, never from a grep. **No blended total is printed, here or anywhere.**
+
+#### WHAT LANDED, AND WHAT PROVED IT
+
+Two commits, fast-forward, no merge commit. **`a94a19e7`** threads `createOrReuseManualCustomer` on a trailing optional handle — it stays SYNCHRONOUS, so v4.30's rule that a helper may go async only when every caller is async does not bind and must not be read as satisfied. Its other caller, `POST /api/retail-admin/customers`, is unedited. **`61007342`** converts the route.
+
+**The real handler is EXTRACTED FROM `routes/retail.js` AND EXECUTED, not reproduced.** Rollback is asserted on **exact row sets** — a forced failure at the last write leaves no order, no items and no customer — because a partial rollback is also non-zero and also data loss. The post-commit boundary is proven **positively**: each spy queries the database as it runs and must SEE the committed order, so a spy that merely counted calls could not pass. Both halves are covered: a throw in `markOrderPaid` or `claimMigrationCredit` does not undo the committed order and still answers 200.
+
+**Green on BOTH drivers** — `node:sqlite` locally and **better-sqlite3 on the box against the shipped tree**, where the mutant also takes 8 of 9. Deploy: one pm2 restart (1314 → 1315), zero unstable, and **238 bytes appended to the error log, all of it the routine ALIPAY-not-configured boot banner**. Shipped bytes confirmed by content and by a line-ending-normalised sha1 identical on both sides, not by the merge.
+
+**NO CONCURRENCY IS CLAIMED.** Fork mode plus a synchronous driver means a converted handler still cannot interleave with itself, so a suite spawning two calls in one synchronous block would be green and prove nothing — the mistake recorded in `lib/db-transaction.js`.
+
+#### TWO HARNESS DEFECTS, FOUND BY RUNNING RATHER THAN READING
+
+1. **A `\n` anchor matched nothing against a CRLF file.** `routes/retail.js` is CRLF in a Windows checkout, so a source assertion written with `\n` silently never ran — a green assertion, not an error. Line endings are now normalised at read.
+2. **An assertion matched `markOrderPaid()` inside a COMMENT** — "markOrderPaid() flips it below", which sits INSIDE the transaction block — and reported the call as having moved into the transaction. **This is the comment-stripping class again**, the one with a standing rule since `PUT /integrations`: any source-level assertion must strip comments before matching. It did not, and it was caught only because the suite failed on its own assertion. Comments are now stripped before that match.
+
+#### OPEN — FOR THE MONEY CLUSTER DESIGN DOC, WHICH STILL DOES NOT EXIST
+
+**Every guard above was measured against a SYNCHRONOUS driver.** At the Postgres flip each statement is a round trip and the post-commit block becomes **genuinely interruptible** — not merely reorderable. The compare-and-set, the idempotency row and the `UNIQUE` constraint all still hold as constraints, but the reasoning that "a continuation runs to completion" does not, and the analysis has to be redone against a driver that yields mid-block.
+
+**This is true of the money cluster whether or not this route was converted**, so it is not a debt this conversion created and not one it can discharge. It belongs to the money cluster's design document — PHASE 2 OWED WORK still records that no such document exists.
 
 ## 25. A printed slip that goes stale is corrected on paper, not reprinted — DECIDED 2026-08-07
 
