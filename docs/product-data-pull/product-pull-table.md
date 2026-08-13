@@ -1,6 +1,49 @@
 | SKU | Name (EN) | Name (CN) | ¥ | Net wt | Storage | Ingredients | Desc | 6mo units |
 |---|---|---|---|---|---|---|---|---|
+| 1-130 | Medium Size Probiotic Coconut Yogurt - Pl… | 大椰益生菌200ml（中） （冷藏） | 31.2 | — | — | — | — | 17 |
+| 1-140 | Big Size Probiotic Coconut Yogurt - Plain… | 纯素椰子酸奶（大）500g （冷藏） | 64 | — | — | — | — | 26 |
+| 1-150 | Probiotic Coconut Yogurt - Vanilla Flavor | 纯素椰子酸奶-香草味100g （冷… | 23.2 | — | — | — | — | 23 |
+| 1-160 | Medium Size Probiotic Coconut Yogurt - Va… | 纯素椰子酸奶-香草味200g （冷… | 38.4 | — | — | — | — | 23 |
+| 1-180 | Probiotic Coconut Yogurt -Peach Flavor | 纯素椰子酸奶-桃子味（小）100g… | 23.2 | — | — | — | — | 11 |
+| 1-190 | Medium Size Probiotic Coconut Yogurt - Pe… | 纯素椰子酸奶-桃子味（中）200g… | 38.4 | — | — | — | — | 11 |
+| 1-260 | Energy Cubes | 能量棒（小）60g （冷藏） | 16 | — | — | — | — | 8 |
+| 1-270 | Energy Cubes Big Size | 花生奇亚能量块（大）200g (冷… | 49.6 | 60g / 200g | Best kept refrigerate… | Quinoa, chia seeds, flaxseeds… | 197w | 4 |
 | 1-350 | Quinoa Green Lentil Buddha Bowl | 藜麦扁豆杂蔬碗 | 40 | — | — | — | — | 0 |
+| 1-504 | Govegan! Pineapple Mint Kombucha | 菠萝薄荷康普茶（小）300ml（冷… | 29 | — | — | — | — | 0 |
+| 1-66 | Govegan! Creamy White Bean Soup with Kale | 意式白豆甘蓝汤 冷藏+166D小香… | 40 | — | — | — | — | 0 |
+| 2-100 | Kombucha (AKA Booch) - Mix Berries | 混合莓康普茶（小）300ml （冷… | 23.2 | — | — | — | — | 6 |
+| 2-110 | Kombucha (AKA Booch) - Mix Berries | 混合莓康普茶（大）1000ml （… | 69.6 | — | — | — | — | 2 |
+| 2-120 | Govegan！Kombucha (AKA Booch) -Mango Kombu… | 芒果味康普茶 300ml，（冷藏） | 23.2 | — | — | — | — | 6 |
+| 2-130 | Govegan！Kombucha (AKA Booch) -Mango Kombu… | 芒果味康普茶 1000ml，（冷藏… | 69.6 | — | — | — | — | 2 |
+| 2-320 | Walnuts ( unsalted, raw ) | 核桃（小） 160g | 24 | — | — | — | — | 0 |
+| 2-330 | Big Size Walnuts ( unsalted, raw ) | 核桃（大）280g | 41.6 | — | — | — | — | 23 |
+| 2-340 | Almonds ( Unsalted , Raw ) | 杏仁（小） 265g | 27.2 | — | — | — | — | 9 |
+| 2-350 | Big Size Almonds ( Unsalted, Raw ) | 杏仁（大） 460g | 51.2 | — | — | — | — | 0 |
+| 2-36 | Frozen Whole Wheat Bread | 冷冻全麦黑麦面包（冷冻） | 25 | — | — | — | — | 0 |
+| 2-370 | Cashew (unsalted ,raw) | 腰果（小） 240g | 28.8 | — | — | — | — | 0 |
+| 2-380 | Big Size Cashew (unsalted, raw) | 腰果（大） 400g | 48 | — | — | — | — | 14 |
+| 2-40 | Govegan! Pineapple Mint Kombucha | 菠萝薄荷康普茶（小）300ml（冷… | 29 | — | — | — | — | 0 |
+| 2-400 | All Natural Almond Butter ( Classic ) | 杏仁酱 150g | 40 | — | — | — | — | 12 |
+| 2-410 | GoVegan!All Natural Almond Butter（Big） | -杏仁酱 240g | 60.8 | — | — | — | — | 0 |
+| 2-430 | Maple Cinnamon Almond Butter | 肉桂杏仁酱 | 66.4 | — | — | — | — | 9 |
+| 2-50 | Govegan! Pineapple Mint Kombucha | 菠萝薄荷康普茶（大）1000ml（… | 87 | — | — | — | — | 0 |
+| 2-60 | Kombucha (AKA Booch) - Lemongrass | 香柠草康普茶（小）300ml（冷藏） | 29 | 300ml | Keep refrigerated at … | Filtered water, black tea, ko… | 285w | 1 |
+| 2-70 | Kombucha (AKA Booch) - Lemongrass | 香柠草康普茶（大）1000ml （… | 87 | — | — | — | — | 3 |
+| 2-80 | Kombucha (AKA Booch) - Passion Fruit | 百香果康普茶（小）300ml （冷… | 23.2 | — | — | — | — | 4 |
+| 2-9 | Frozen Cheese Cake (Gluten Free) | 素士力架 140g （冷冻） | 35 | — | — | — | — | 0 |
+| 2-90 | Kombucha (AKA Booch) - Passion Fruit | 百香果康普茶（大）1000ml （… | 69.6 | — | — | — | — | 3 |
+| 3-170 | Guacamole | 墨西哥牛油果泥 （冷冻） | 46 | — | — | — | — | 18 |
+| 4-160 | Organic Chia Seeds | 奇亚籽（小） 290g | 40.8 | — | — | — | — | 13 |
+| 4-170 | Big Size Organic Chia Seeds | 奇亚籽（大）510g | 76 | — | — | — | — | 0 |
+| 4-3 | Chopped Almonds ( Raw, Unsalted ) | 杏仁片（小） 170g | 31 | — | — | — | — | 0 |
+| 4-33 | Chunky Granola | 谷物脆 150g | 35 | — | — | — | — | 0 |
+| 4-340 | Himalaya Pink Salt | 玫瑰盐 330g | 30 | — | — | — | — | 0 |
+| 4-520 | Activated Charcoal | 活性炭 100g | 59 | — | — | — | — | 0 |
+| 4-670 | All Natural Peanut Butter | 花生酱（小）240g | 30.4 | — | — | — | — | 7 |
+| 4-680 | All Natural Peanut Butter | 花生酱 430g | 45.5 | — | — | — | — | 22 |
+| 4-690 | Govegan! A Bit Salty Peanut Butter (With … | 咸味粗粒花生酱 430g | 56.8 | — | — | — | — | 24 |
+| 6-8 | All Natural Peanut Butter | 花生酱（小）240g | 38 | — | — | — | — | 0 |
+| 7-600 | LUÜNA Organic Cotton Day Pads，10pcs | LUÜNA日用卫生棉 | 28 | — | — | — | — | 0 |
 | 4-375 | Organic Instant Soy Milk Powder | 有机即溶豆奶粉 | 74 | — | — | Organic soybeans | 170w | 5 |
 | 1-211 | Medjool Boat | 椰枣小船 | 35 | — | — | — | — | 90 |
 | 3-10 | Mango Protein Bites | 芒果蛋白球 | 38 | — | — | — | — | 108 |
@@ -155,9 +198,9 @@
 | 4-720 | Extra Virgin Coconut Oil | 初榨椰子油 | 125 | — | — | — | — | 4 |
 | 2-140 | Masala Tea （Chai Latte） | 香料柴茶拿铁 | 23 | — | — | — | — | 48 |
 | 4-381 | Pure Creatine Monohydrate, Unflavored | 无香精肌酸一水合物 | 97 | — | — | — | — | 23 |
+| 4-530 | Prebiotic Fiber USDA Organic | 益生元菊粉 | 64 | 200g | Store in a cool, dry … | Prebiotic Fiber | 271w | 14 |
 | 4-540 | B12 Capsules | B12 素食胶囊 | 86 | — | — | — | — | 11 |
 | 5-30 | Iron, Double Strength, NOW Food | 铁, 双倍功效,  NOW Foo… | 160 | — | — | — | — | 4 |
-| （4-530） | Prebiotic Fiber USDA Organic | 益生元菊粉 | 64 | — | — | — | — | 7 |
 | 1-120 | Apple Pie Overnight Oats | 苹果绵绵燕麦 | 27 | 250g | Keep refrigerated at … | Apple, classic oats, oat milk… | 195w | 43 |
 | 3-220 | Fire Spice Cake （frozen） | Fire Spice Cake | 53 | — | — | — | — | 23 |
 | 3-270 | 12pc Whole Wheat Wrap（XL - 10 inch） | 全麦墨西哥卷饼皮 | 44 | — | — | — | — | 20 |
@@ -192,7 +235,7 @@
 | 4-620 | Soy Protein Powder USDA Organic | 大豆蛋白粉 | 86 | 500g | — | Soy Protein (from soybeans) | 228w | 65 |
 | 5-29 | Pumpkin Seed Protein Powder | 南瓜籽蛋白粉 | 211 | — | — | — | — | 0 |
 | 5-38 | Brown Rice Protein Powder | 糙米蛋白粉 | 141 | — | — | — | — | 0 |
-| 2-2 | Quinoa Patties | 酱香藜麦排 | 43 | — | — | — | — | 23 |
+| 2-2 | Quinoa Patties | 酱香藜麦排 | 43 | 300g g | Keep refrigerated at … | Quinoa, carrot, black sesame,… | 186w | 23 |
 | 3-100 | Black Soy Beans Tempeh | 黑豆天贝 | 38 | — | — | — | — | 23 |
 | 3-110 | Trio Bean Tempeh | 杂豆天贝 | 43 | — | — | — | — | 21 |
 | 3-120 | Edamame Tempeh | 青豆天贝 | 43 | — | — | — | — | 16 |

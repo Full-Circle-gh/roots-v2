@@ -1,4 +1,4 @@
-﻿sku,barcode,category,name_en,name_cn,retail_price_cny,pack_size_net_weight,storage_temp,ingredients,description_en,description_cn,free_of,tags,stock_qty,sales_units_gzgrocery,sales_units_miniapp,gaps,unfilled_placeholders,external_id,full_description_text
+﻿sku,barcode,category,name_en,name_cn,retail_price_cny,pack_size_net_weight,storage_temp,ingredients,description_en,description_cn,free_of,tags,stock_qty,sales_units_gzgrocery,sales_units_miniapp,gaps,unfilled_placeholders,source,parent_sku,variant_label,external_id,full_description_text
 4-545,4-545,Plants Powders,BioCurcumin+ USDA Organic,Bio姜黄素（60份）,164.0,,,"Turmeric Extract (from turmeric root, standardized to 95% curcumin) Black Pepper Extract (standardized to 98% piperine)","This is not regular turmeric powder. BioCurcumin+ is a concentrated blend of high-purity curcumin extract paired with piperine from black pepper — designed for absorption, not decoration. Whole turmeric root contains only a small percentage of curcumin. Most of it passes through the body with limited uptake. We don’t play that game. This formula uses standardized extracts and a precise ratio, so what you consume actually matters.","BioCurcumin+ ✨
 姜黄素 + 胡椒碱复合配方
 
@@ -57,7 +57,7 @@
 可加入饮品、植物奶、汤品或其他食物中食用。
 
 建议与含脂肪类食物一同食用。
-本产品通过美国 USDA 有机认证（USDA Organic）。",,,34,1.0,14.0,no pack size; no storage temp,,2130495,"BIOCURCUMIN+ ✨
+本产品通过美国 USDA 有机认证（USDA Organic）。",,,34,1.0,14.0,no pack size; no storage temp,,products_import.json,,,2130495,"BIOCURCUMIN+ ✨
 Curcumin + Piperine Blend
 
  
@@ -200,7 +200,7 @@ g ⚖️
 植物性绿色粉末 🌿
 口味清淡
 适合日常搭配使用
-本产品通过美国 USDA 有机认证（USDA Organic）。","gluten, animal products","gluten free, vegan, buddhist friendly",63,1.0,10.0,no pack size; unfilled template slot ([fill]),[fill],1229946,"Green Power Blend 🌱
+本产品通过美国 USDA 有机认证（USDA Organic）。","gluten, animal products","gluten free, vegan, buddhist friendly",63,1.0,10.0,no pack size; unfilled template slot ([fill]),[fill],products_import.json,,,1229946,"Green Power Blend 🌱
 
  
 
@@ -299,32 +299,32 @@ NOTES 📌
 Plant-based greens blend 🌿
 Mild, fresh taste
 Designed for daily use"
-2-480,2-480,Fruits,Jackfruit Chips,菠萝蜜干,24.0,,,,,,,,0,0,7.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1730979,
-2-270,2-270,Fruits,Dehydrated Pineapple,菠萝干,25.0,,,,,,gluten,"gluten free, buddhist friendly",32,3.0,20.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230080,
-1-225,1-225,Spreads ＆ Dips,Green Chili Dip - Zhoug,麻辣青辣椒酱,42.0,,,,,,,,0,6.0,38.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,2370799,
-1-99,1-99,Spreads ＆ Dips,Blue Cheese （Limited Stock）,,107.0,,,,,,"gluten, animal products","gluten free, buddhist friendly, vegan",7,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,2106635,
-1-16,1-16,Spreads ＆ Dips,Fricassa Fiesta,Fricassa 风味盛宴,43.0,,,,,,"gluten, animal products","gluten free, vegan",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,2082864,
-EXT-2048052,,GrassRoots Cheese Alternatives,Mozarella Style Shred,马苏里拉素奶酪碎,49.0,,,,,,,,198,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,2048052,
-3-230,3-230,Creamery,Nachos Dip,纯素咸芝士酱,38.0,,,,,,"gluten, animal products","gluten free, vegan",50,0,14.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1260743,
-1-80,1-80,Sour Creams,OliveN‘Cream,地中海橄榄酱,42.0,,,,,,,,31,11.0,17.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1727085,
-1-226,1-226,Sour Creams,Camembert Walnut Spread,卡门贝尔核桃酱,75.0,,,,,,"gluten, animal products","gluten free, buddhist friendly, vegan",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1913983,
-1-70,1-70,Sour Creams,Garlic Dill Sour Cream,蒜香莳萝酸奶酪,42.0,,,,,,"gluten, animal products","gluten free, vegan",47,17.0,28.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1710811,
-2-291,2-291,Fruits,Deri Dates,椰枣 （Deri）,26.0,,,,,,,,47,0,2.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1995885,
-1-402,1-402,Soups ＆ Stews,Mushroom Soup,蘑菇汤,27.0,,,,,,"gluten, animal products","gluten free, vegan",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1978661,
-1-99-d2,1-99,Creamery,Cashew Camembert,卡门贝尔,107.0,,,,,,"gluten, animal products","gluten free, buddhist friendly, vegan",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,2404018,
-1-15,1-15,Spreads ＆ Dips,Turkish Salad,土耳其沙拉,38.0,,,,,,,,59,0,8.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,2405167,
-1-10,1-10,Spreads ＆ Dips,Hummus Asli,中东鹰嘴豆泥,38.0,,,,,,"gluten, animal products","gluten free, buddhist friendly, vegan",237,51.0,104.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1760007,
-1-210,1-210,Yogurts,Strawberry Coco Parfait,草莓椰椰芭菲,30.0,,,,,,"gluten, animal products","gluten free, buddhist friendly, vegan",37,5.0,16.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1756074,
-EXT-2047986,,GrassRoots Cheese Alternatives,Colby Jack Style Shreds,混合素奶酪碎,60.0,,,,,,,,197,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,2047986,
-EXT-2048100,,GrassRoots Cheese Alternatives,Cheddar-Style Shreds,车达素奶酪碎,71.0,,,,,,,,198,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,2048100,
-EXT-1229703,,Yogurts,Vanilla Yogurt Coconut Probiotic,纯素椰子酸奶 - 香草味,29.0,,,,,,"gluten, animal products","vegan, gluten free, buddhist friendly, fermented",123,0,65.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229703,
-EXT-1259338,,Yogurts,Peach Yogurt Coconut Probiotic,纯素椰子酸奶-桃子味,29.0,,,,,,"gluten, animal products","gluten free, buddhist friendly, vegan",169,0,26.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1259338,
-2-450,2-450,Nut Butters,81° Hazel Chocolate Spread,可可榛子酱,89.0,,,,,,"gluten, animal products","gluten free, vegan, buddhist friendly",55,0,35.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230066,
-EXT-1229548,,Nut Butters,Almond Butter Maple Cinnamon,肉桂枫糖杏仁酱,57.0,,,,,,"gluten, animal products","vegan, buddhist friendly, gluten free",63,0,34.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229548,
-（4-680）+（4-690）,（4-680）+（4-690）,Nut Butters,Peanut Butter Bundle,花生酱套装,119.0,,,,,,"gluten, animal products","gluten free, vegan, buddhist friendly, hot",41,0,14.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230058,
-EXT-1229669,,Nut Butters,Peanut Butter （Classic）,哈素萌原味花生酱,42.0,,,,,,"gluten, animal products","vegan, buddhist friendly, gluten free",149,0,46.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229669,
-EXT-1229660,,Nut Butters,Almond Butter,哈素萌杏仁酱,50.0,,,,,,"gluten, animal products","vegan, gluten free, buddhist friendly",138,0,42.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229660,
-4-460,4-460,Plants Powders,Turmeric Organic USDA,姜黄粉,49.0,,"Store in a cool, dry place away from sunlight.Keep lid tightly sealed to lock in freshness.Use within 60 days of opening for maximum punch — after that, still good but potency dips.",,,本产品通过美国 USDA 有机认证（USDA Organic）。,gluten,"gluten free, buddhist friendly",66,4.0,11.0,no ingredients; no pack size,,1229545,"ORGANIC TURMERIC POWDER
+2-480,2-480,Fruits,Jackfruit Chips,菠萝蜜干,24.0,,,,,,,,0,0,7.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1730979,
+2-270,2-270,Fruits,Dehydrated Pineapple,菠萝干,25.0,,,,,,gluten,"gluten free, buddhist friendly",32,3.0,20.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230080,
+1-225,1-225,Spreads ＆ Dips,Green Chili Dip - Zhoug,麻辣青辣椒酱,42.0,,,,,,,,0,6.0,38.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,2370799,
+1-99,1-99,Spreads ＆ Dips,Blue Cheese （Limited Stock）,,107.0,,,,,,"gluten, animal products","gluten free, buddhist friendly, vegan",7,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,2106635,
+1-16,1-16,Spreads ＆ Dips,Fricassa Fiesta,Fricassa 风味盛宴,43.0,,,,,,"gluten, animal products","gluten free, vegan",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,2082864,
+EXT-2048052,,GrassRoots Cheese Alternatives,Mozarella Style Shred,马苏里拉素奶酪碎,49.0,,,,,,,,198,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,2048052,
+3-230,3-230,Creamery,Nachos Dip,纯素咸芝士酱,38.0,,,,,,"gluten, animal products","gluten free, vegan",50,0,14.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1260743,
+1-80,1-80,Sour Creams,OliveN‘Cream,地中海橄榄酱,42.0,,,,,,,,31,11.0,17.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1727085,
+1-226,1-226,Sour Creams,Camembert Walnut Spread,卡门贝尔核桃酱,75.0,,,,,,"gluten, animal products","gluten free, buddhist friendly, vegan",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1913983,
+1-70,1-70,Sour Creams,Garlic Dill Sour Cream,蒜香莳萝酸奶酪,42.0,,,,,,"gluten, animal products","gluten free, vegan",47,17.0,28.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1710811,
+2-291,2-291,Fruits,Deri Dates,椰枣 （Deri）,26.0,,,,,,,,47,0,2.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1995885,
+1-402,1-402,Soups ＆ Stews,Mushroom Soup,蘑菇汤,27.0,,,,,,"gluten, animal products","gluten free, vegan",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1978661,
+1-99-d2,1-99,Creamery,Cashew Camembert,卡门贝尔,107.0,,,,,,"gluten, animal products","gluten free, buddhist friendly, vegan",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,2404018,
+1-15,1-15,Spreads ＆ Dips,Turkish Salad,土耳其沙拉,38.0,,,,,,,,59,0,8.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,2405167,
+1-10,1-10,Spreads ＆ Dips,Hummus Asli,中东鹰嘴豆泥,38.0,,,,,,"gluten, animal products","gluten free, buddhist friendly, vegan",237,51.0,104.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1760007,
+1-210,1-210,Yogurts,Strawberry Coco Parfait,草莓椰椰芭菲,30.0,,,,,,"gluten, animal products","gluten free, buddhist friendly, vegan",37,5.0,16.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1756074,
+EXT-2047986,,GrassRoots Cheese Alternatives,Colby Jack Style Shreds,混合素奶酪碎,60.0,,,,,,,,197,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,2047986,
+EXT-2048100,,GrassRoots Cheese Alternatives,Cheddar-Style Shreds,车达素奶酪碎,71.0,,,,,,,,198,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,2048100,
+EXT-1229703,,Yogurts,Vanilla Yogurt Coconut Probiotic,纯素椰子酸奶 - 香草味,29.0,,,,,,"gluten, animal products","vegan, gluten free, buddhist friendly, fermented",123,0,65.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229703,
+EXT-1259338,,Yogurts,Peach Yogurt Coconut Probiotic,纯素椰子酸奶-桃子味,29.0,,,,,,"gluten, animal products","gluten free, buddhist friendly, vegan",169,0,26.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1259338,
+2-450,2-450,Nut Butters,81° Hazel Chocolate Spread,可可榛子酱,89.0,,,,,,"gluten, animal products","gluten free, vegan, buddhist friendly",55,0,35.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230066,
+EXT-1229548,,Nut Butters,Almond Butter Maple Cinnamon,肉桂枫糖杏仁酱,57.0,,,,,,"gluten, animal products","vegan, buddhist friendly, gluten free",63,0,34.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229548,
+（4-680）+（4-690）,（4-680）+（4-690）,Nut Butters,Peanut Butter Bundle,花生酱套装,119.0,,,,,,"gluten, animal products","gluten free, vegan, buddhist friendly, hot",41,0,14.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230058,
+EXT-1229669,,Nut Butters,Peanut Butter （Classic）,哈素萌原味花生酱,42.0,,,,,,"gluten, animal products","vegan, buddhist friendly, gluten free",149,0,46.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229669,
+EXT-1229660,,Nut Butters,Almond Butter,哈素萌杏仁酱,50.0,,,,,,"gluten, animal products","vegan, gluten free, buddhist friendly",138,0,42.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229660,
+4-460,4-460,Plants Powders,Turmeric Organic USDA,姜黄粉,49.0,,"Store in a cool, dry place away from sunlight.Keep lid tightly sealed to lock in freshness.Use within 60 days of opening for maximum punch — after that, still good but potency dips.",,,本产品通过美国 USDA 有机认证（USDA Organic）。,gluten,"gluten free, buddhist friendly",66,4.0,11.0,no ingredients; no pack size,,products_import.json,,,1229545,"ORGANIC TURMERIC POWDER
 
  
 
@@ -421,14 +421,14 @@ Percent Daily Values based on a 2,000 calorie diet.
  
 
 📦 INGREDIENTSJust one: 100% USDA Organic Turmeric Powder"
-5-22,5-22,Others,Carob Powder （Medium Roasted）,角豆粉（中度烘焙）,37.0,,,,,,gluten,"gluten free, buddhist friendly",62,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1647860,
-5-38,5-38,Protein Powders,Brown Rice Protein Powder,糙米蛋白粉,141.0,,,,,,gluten,"gluten free, buddhist friendly",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1647855,
-4-830,4-830,Dairy Alternatives,Oatly Strawberry Flavor,燕麦露草莓味,10.0,,,,,,,buddhist friendly,0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1603362,
-12-13,12-13,Cosmetics,Cloudy Puff Applicator,迷你美妆蛋,53.0,,,,,,,,92,0,1.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230114,
-EXT-1541948,,Cosmetics,The Standard Natural Foudation,光感植物粉底液,205.0,,,,,,,,287,0,1.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1541948,
-5-10,5-10,Personal Care,Puretonique Body Wash,香氛精油保湿沐浴露,117.0,,,,,,,,1,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230029,
-CHECKOUT,CHECKOUT,Others,Checkout requirements,下单选择,0.0,,,,,,,,0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1257670,
-5-20,5-20,Personal Care,Puretonique Shampoo,香氛精油柔亮洗发露,128.0,,,,,,,,0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230030,
+5-22,5-22,Others,Carob Powder （Medium Roasted）,角豆粉（中度烘焙）,37.0,,,,,,gluten,"gluten free, buddhist friendly",62,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1647860,
+5-38,5-38,Protein Powders,Brown Rice Protein Powder,糙米蛋白粉,141.0,,,,,,gluten,"gluten free, buddhist friendly",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1647855,
+4-830,4-830,Dairy Alternatives,Oatly Strawberry Flavor,燕麦露草莓味,10.0,,,,,,,buddhist friendly,0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1603362,
+12-13,12-13,Cosmetics,Cloudy Puff Applicator,迷你美妆蛋,53.0,,,,,,,,92,0,1.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230114,
+EXT-1541948,,Cosmetics,The Standard Natural Foudation,光感植物粉底液,205.0,,,,,,,,287,0,1.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1541948,
+5-10,5-10,Personal Care,Puretonique Body Wash,香氛精油保湿沐浴露,117.0,,,,,,,,1,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230029,
+CHECKOUT,CHECKOUT,Others,Checkout requirements,下单选择,0.0,,,,,,,,0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1257670,
+5-20,5-20,Personal Care,Puretonique Shampoo,香氛精油柔亮洗发露,128.0,,,,,,,,0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230030,
 4-440,4-440,Plants Powders,Moringa Powder USDA Organic,辣木粉,31.0,130g,"Store in a cool, dry place away from direct sunlight",Moringa Leaf Powder,"This is moringa leaf powder. Made from dried moringa leaves, gently processed and finely ground. Moringa has long been consumed as a leafy plant ingredient in everyday diets, valued for its naturally dense nutrient profile. We keep it whole and simple — no extracts, no isolates, nothing added. An easy way to add plant-based nutrition to daily meals, without changing how you eat.","辣木叶粉 🌿
 
  
@@ -541,7 +541,7 @@ CHECKOUT,CHECKOUT,Others,Checkout requirements,下单选择,0.0,,,,,,,,0,0,0,NO 
 适合日常人群食用
 适合植物性饮食人群 🌿
 对辣木过敏者不适合食用
-本产品通过美国 USDA 有机认证（USDA Organic）。",gluten,"gluten free, buddhist friendly",65,1.0,14.0,,,1229907,"MORINGA POWDER 🌿
+本产品通过美国 USDA 有机认证（USDA Organic）。",gluten,"gluten free, buddhist friendly",65,1.0,14.0,,,products_import.json,,,1229907,"MORINGA POWDER 🌿
 
  
 
@@ -769,7 +769,7 @@ Vitamin and mineral values are based on generic food composition data for whole 
 适合日常人群食用
 适合植物性饮食人群 🌿
 对羽衣甘蓝过敏者不适合食用
-本产品通过美国 USDA 有机认证（USDA Organic）。",gluten,"buddhist friendly, gluten free",15,1.0,1.0,,,1229546,"KALE POWDER 🥬
+本产品通过美国 USDA 有机认证（USDA Organic）。",gluten,"buddhist friendly, gluten free",15,1.0,1.0,,,products_import.json,,,1229546,"KALE POWDER 🥬
 
  
 
@@ -886,9 +886,9 @@ Not suitable for individuals allergic to kale
  
 
 Vitamin and mineral values are based on generic food composition data for whole kale and are provided for reference only."
-EXT-1229700,,Nut Butters,Peanut Butter （Crunchy）,有点咸花生酱（内含花生碎）,71.0,,,,,,"gluten, animal products","vegan, buddhist friendly, gluten free",32,0,20.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229700,
-4-420,4-420,Plants Powders,Alfalfa Powder USDA Organic,有机紫花苜蓿粉,35.0,,,,,,gluten,"gluten free, buddhist friendly",14,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229904,
-4-580,4-580,Plants Powders,Berry Intelligence House Blend,超级莓粉,130.0,,,,,,"gluten, animal products","gluten free, vegan, buddhist friendly",20,1.0,13.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1647837,
+EXT-1229700,,Nut Butters,Peanut Butter （Crunchy）,有点咸花生酱（内含花生碎）,71.0,,,,,,"gluten, animal products","vegan, buddhist friendly, gluten free",32,0,20.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229700,
+4-420,4-420,Plants Powders,Alfalfa Powder USDA Organic,有机紫花苜蓿粉,35.0,,,,,,gluten,"gluten free, buddhist friendly",14,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229904,
+4-580,4-580,Plants Powders,Berry Intelligence House Blend,超级莓粉,130.0,,,,,,"gluten, animal products","gluten free, vegan, buddhist friendly",20,1.0,13.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1647837,
 1-410,1-410,Wraps ＆ Sandwiches,Tofu Banh Mi Wrap,越式豆腐卷（无五辛）,44.0,320g,Keep refrigerated at 0–4°C at all times,"Romaine lettuce, cucumber, tomato, mushrooms, tofu, pickled carrot, basil leaves, mint leaves, cilantro, crushed peanuts, fermented cashew sour cream, whole wheat tortilla","This wrap doesn’t try to be polite. Crisp romaine lettuce, tomato, cucumber, mushrooms, and pan-seared tofu are packed into a sturdy whole wheat tortilla. Pickled carrot brings acidity, basil and mint lift the aroma, and crushed peanuts add crunch. Everything lands where it should.","产品类型：即食冷藏食品 ❄️
 净含量：320g ⚖️
 产地：中国广州 🌍
@@ -987,7 +987,7 @@ EXT-1229700,,Nut Butters,Peanut Butter （Crunchy）,有点咸花生酱（内含
 食用提示 📌
 
 植物性食品 🌿
-适合作为完整一餐食用",,,81,10.0,28.0,,,1318966,"Product type: Ready-to-eat refrigerated food ❄️
+适合作为完整一餐食用",,,81,10.0,28.0,,,products_import.json,,,1318966,"Product type: Ready-to-eat refrigerated food ❄️
 Net weight: 320g ⚖️
 Origin: Guangzhou, China 🌍
 
@@ -1086,9 +1086,9 @@ INTENDED USE / NOTES 📌
 
 Plant-based product 🌿
 Built as a full meal"
-3-30,3-30,Bites,Premium Nutella Bars,巧克力榛棒,47.0,,,,,,animal products,"buddhist friendly, vegan",36,21.0,103.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1310568,
-EXT-1261354,,Spreads ＆ Dips,Guacamole,墨西哥牛油果泥,49.0,,,,,,"gluten, animal products, nuts","nut free, gluten free, vegan",165,0,36.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1261354,
-4-380,4-380,Plants Powders,Maca Powder USDA Organic,云南有机玛卡粉玛咖粉,43.0,,"Store in a cool, dry place away from sunlight.Keep lid tightly sealed to lock in freshness.Use within 60 days of opening for maximum potency — after that, it’s still good but might lose some punch.",,,本产品通过美国 USDA 有机认证（USDA Organic）。,gluten,"buddhist friendly, gluten free",28,1.0,6.0,no ingredients; no pack size,,1229608,"🟤 ORGANIC MACA POWDER
+3-30,3-30,Bites,Premium Nutella Bars,巧克力榛棒,47.0,,,,,,animal products,"buddhist friendly, vegan",36,21.0,103.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1310568,
+EXT-1261354,,Spreads ＆ Dips,Guacamole,墨西哥牛油果泥,49.0,,,,,,"gluten, animal products, nuts","nut free, gluten free, vegan",165,0,36.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1261354,
+4-380,4-380,Plants Powders,Maca Powder USDA Organic,云南有机玛卡粉玛咖粉,43.0,,"Store in a cool, dry place away from sunlight.Keep lid tightly sealed to lock in freshness.Use within 60 days of opening for maximum potency — after that, it’s still good but might lose some punch.",,,本产品通过美国 USDA 有机认证（USDA Organic）。,gluten,"buddhist friendly, gluten free",28,1.0,6.0,no ingredients; no pack size,,products_import.json,,,1229608,"🟤 ORGANIC MACA POWDER
 
  
 
@@ -1283,7 +1283,7 @@ ROOTS
 我们减少不必要的成分，只保留真正有用的部分。
 
 让食物回归本质，是 Roots 一直在做的事。
-本产品通过美国 USDA 有机认证（USDA Organic）。",gluten,"gluten free, buddhist friendly",7,7.0,38.0,no storage temp,,1428150,"PEA PROTEIN POWDER 🌱
+本产品通过美国 USDA 有机认证（USDA Organic）。",gluten,"gluten free, buddhist friendly",7,7.0,38.0,no storage temp,,products_import.json,,,1428150,"PEA PROTEIN POWDER 🌱
 Plant-based protein from yellow peas
 
  
@@ -1392,20 +1392,20 @@ ROOTS NOTE
 We remove the noise so the food can do its job.
 
 No tricks. No filler culture. Just plants, processed with intent."
-2-35,2-35,Jams,Apple Sauce,苹果酱,21.0,,,,,,,,7,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1259384,
-P-7,P-7,House Care,Essentials Bundle,天然精油系列套装,361.0,,,,,,,hot,50,0,2.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229807,
-2-440,2-440,Nut Butters,Roasted Hazelnut Butter,经典榛子酱,74.0,,,,,,"gluten, animal products","vegan, gluten free, buddhist friendly",14,1.0,19.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229637,
-1-30,1-30,Yogurts,Tzatziki,莳萝柠檬酸奶酱,43.0,,,,,,"gluten, animal products","gluten free, vegan, hot",67,21.0,31.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229558,
-1-90,1-90,Sour Creams,Classic Sour Cream,纯腰果发酵奶酪,38.0,,,,,,"gluten, animal products","vegan, buddhist friendly, gluten free",61,14.0,48.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229633,
-5-60,5-60,House Care,Floor Cleaner,地板清洁液,78.0,,,,,,,,99,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229964,
-P-6,P-6,House Care,Kitchen Bundle,厨房清洁系列套装,333.0,,,,,,,,55,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229842,
-P-1,P-1,House Care,Complete Range Bundle,全套系列,759.0,,,,,,,hot,54,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229745,
-（7-500）+（7-501）+（7-505）+（7-506）,（7-500）+（7-501）+（7-505）+（7-506）,House Care,Laundry Bundle,衣物洗护系列套装,238.0,,,,,,,,51,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229873,
-P-3,P-3,House Care,Baby Bundle,婴幼儿套装,312.0,,,,,,,,54,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229863,
-P-5,P-5,House Care,Bathroom Bundle,浴室清洁系列套装,281.0,,,,,,,hot,99,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229720,
-6-32,6-32,Dairy Alternatives,Oatly Barista,Oatly 咖啡大师,40.0,,,,,,,buddhist friendly,18,0,2.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1233352,
-2-140,2-140,Other Beverages,Masala Tea （Chai Latte）,香料柴茶拿铁,23.0,,,,,,animal products,"vegan, buddhist friendly",50,0,48.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230101,
-4-430,4-430,Plants Powders,Wheatgrass Powder USDA Organic,小麦苗粉,32.0,,"Store in a cool, dry place away from sunlight.Keep lid tightly sealed to preserve freshness.Use within 60 days of opening for peak potency — nutrients may slowly decline after, but still safe.",,,本产品通过美国 USDA 有机认证（USDA Organic）。,,,24,1.0,0,no ingredients; no pack size,,1259456,"🟢 ORGANIC WHEATGRASS POWDER
+2-35,2-35,Jams,Apple Sauce,苹果酱,21.0,,,,,,,,7,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1259384,
+P-7,P-7,House Care,Essentials Bundle,天然精油系列套装,361.0,,,,,,,hot,50,0,2.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229807,
+2-440,2-440,Nut Butters,Roasted Hazelnut Butter,经典榛子酱,74.0,,,,,,"gluten, animal products","vegan, gluten free, buddhist friendly",14,1.0,19.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229637,
+1-30,1-30,Yogurts,Tzatziki,莳萝柠檬酸奶酱,43.0,,,,,,"gluten, animal products","gluten free, vegan, hot",67,21.0,31.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229558,
+1-90,1-90,Sour Creams,Classic Sour Cream,纯腰果发酵奶酪,38.0,,,,,,"gluten, animal products","vegan, buddhist friendly, gluten free",61,14.0,48.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229633,
+5-60,5-60,House Care,Floor Cleaner,地板清洁液,78.0,,,,,,,,99,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229964,
+P-6,P-6,House Care,Kitchen Bundle,厨房清洁系列套装,333.0,,,,,,,,55,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229842,
+P-1,P-1,House Care,Complete Range Bundle,全套系列,759.0,,,,,,,hot,54,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229745,
+（7-500）+（7-501）+（7-505）+（7-506）,（7-500）+（7-501）+（7-505）+（7-506）,House Care,Laundry Bundle,衣物洗护系列套装,238.0,,,,,,,,51,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229873,
+P-3,P-3,House Care,Baby Bundle,婴幼儿套装,312.0,,,,,,,,54,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229863,
+P-5,P-5,House Care,Bathroom Bundle,浴室清洁系列套装,281.0,,,,,,,hot,99,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229720,
+6-32,6-32,Dairy Alternatives,Oatly Barista,Oatly 咖啡大师,40.0,,,,,,,buddhist friendly,18,0,2.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1233352,
+2-140,2-140,Other Beverages,Masala Tea （Chai Latte）,香料柴茶拿铁,23.0,,,,,,animal products,"vegan, buddhist friendly",50,0,48.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230101,
+4-430,4-430,Plants Powders,Wheatgrass Powder USDA Organic,小麦苗粉,32.0,,"Store in a cool, dry place away from sunlight.Keep lid tightly sealed to preserve freshness.Use within 60 days of opening for peak potency — nutrients may slowly decline after, but still safe.",,,本产品通过美国 USDA 有机认证（USDA Organic）。,,,24,1.0,0,no ingredients; no pack size,,products_import.json,,,1259456,"🟢 ORGANIC WHEATGRASS POWDER
 
  
 
@@ -1504,11 +1504,11 @@ Percent Daily Values based on a 2,000 calorie diet.
  
 
 📦 INGREDIENTSJust one: 100% USDA Organic Wheatgrass Powder"
-12-12,12-12,Cosmetics,Reusable Natural Cleansing Pads,环保水洗双面卸妆巾,69.0,,,,,,,,89,0,1.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230113,
-EXT-1229649,,Yogurts,Coconut Yogurt Probiotic,纯素椰子酸奶,44.0,,,,,,"gluten, animal products","gluten free, fermented, vegan, buddhist friendly",62,0,85.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229649,
-3-220,3-220,Others,Fire Spice Cake （frozen）,Fire Spice Cake,53.0,,,,,,,,0,0,23.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,2495136,
-3-270,3-270,Others,12pc Whole Wheat Wrap（XL - 10 inch）,全麦墨西哥卷饼皮,44.0,,,,,,,buddhist friendly,33,0,20.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1231939,
-3-220-d2,3-220,Bread,Corn Bread,玉米饼子,27.0,,,,,,gluten,"gluten free, buddhist friendly",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1231885,
+12-12,12-12,Cosmetics,Reusable Natural Cleansing Pads,环保水洗双面卸妆巾,69.0,,,,,,,,89,0,1.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230113,
+EXT-1229649,,Yogurts,Coconut Yogurt Probiotic,纯素椰子酸奶,44.0,,,,,,"gluten, animal products","gluten free, fermented, vegan, buddhist friendly",62,0,85.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229649,
+3-220,3-220,Others,Fire Spice Cake （frozen）,Fire Spice Cake,53.0,,,,,,,,0,0,23.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,2495136,
+3-270,3-270,Others,12pc Whole Wheat Wrap（XL - 10 inch）,全麦墨西哥卷饼皮,44.0,,,,,,,buddhist friendly,33,0,20.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1231939,
+3-220-d2,3-220,Bread,Corn Bread,玉米饼子,27.0,,,,,,gluten,"gluten free, buddhist friendly",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1231885,
 1-320,1-320,Salads ＆ Bowls,Thai Buckwheat Noodles,泰式冷面沙拉,44.0,350g,Keep refrigerated at 0–4°C at all times,,"This bowl doesn’t do subtle. Colorful vegetables are tossed with buckwheat noodles and finished with a bold Thai-style peanut dressing. Crunchy, creamy, tangy, and nutty — everything hits at once. Built for heat, built for appetite, built to disappear.","产品类型：即食冷藏食品 ❄️
 净含量：350g ⚖️
 产地：中国广州 🌍
@@ -1613,7 +1613,7 @@ EXT-1229649,,Yogurts,Coconut Yogurt Probiotic,纯素椰子酸奶,44.0,,,,,,"glut
 食用提示 📌
 
 植物性食品 🌿
-花生酱风味突出",animal products,vegan,1,12.0,36.0,no ingredients,,1231419,"Product type: Ready-to-eat refrigerated food ❄️
+花生酱风味突出",animal products,vegan,1,12.0,36.0,no ingredients,,products_import.json,,,1231419,"Product type: Ready-to-eat refrigerated food ❄️
 Net weight: 350g ⚖️
 Origin: Guangzhou, China 🌍
 
@@ -1717,7 +1717,7 @@ INTENDED USE / NOTES 📌
 
 Plant-based product 🌿
 Bold peanut dressing"
-4-375,4-375,Beverages,Organic Instant Soy Milk Powder,有机即溶豆奶粉,74.0,,,Organic soybeans,"Clean protein. Instant comfort. This is instant organic soy milk powder made from carefully selected organic soybeans, gently processed to preserve natural flavor and nutrition. No dairy. No sweeteners. No additives. Just pure plant-based soy in its most functional form—designed to dissolve instantly into a smooth, naturally creamy drink. Simple input. Clean output.",,,,66,0,5.0,no pack size; no storage temp,,2399484,"Got it — corrected usage + no assumption of spoons, and clearer formulation.
+4-375,4-375,Beverages,Organic Instant Soy Milk Powder,有机即溶豆奶粉,74.0,,,Organic soybeans,"Clean protein. Instant comfort. This is instant organic soy milk powder made from carefully selected organic soybeans, gently processed to preserve natural flavor and nutrition. No dairy. No sweeteners. No additives. Just pure plant-based soy in its most functional form—designed to dissolve instantly into a smooth, naturally creamy drink. Simple input. Clean output.",,,,66,0,5.0,no pack size; no storage temp,,products_import.json,,,2399484,"Got it — corrected usage + no assumption of spoons, and clearer formulation.
 PRODUCT DESCRIPTION
 Clean protein. Instant comfort.
 This is instant organic soy milk powder made from carefully selected organic soybeans, gently processed to preserve natural flavor and nutrition.
@@ -1749,39 +1749,39 @@ NOTES
 Instant plant-based drink powder
 Certified organic ingredients
 No sweeteners, no dairy, no additives"
-2-150,2-150,Juices,Cashew Strawberry Milk,草莓腰果奶,27.0,,,,,,"gluten, animal products","vegan, gluten free, buddhist friendly",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230116,
-2-160,2-160,Juices,Green Glow Juice,绿焕汁,27.0,,,,,,"gluten, animal products","vegan, gluten free, buddhist friendly",91,7.0,58.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230117,
-2-240,2-240,Fruits,Dehydrated Figs,芭劳奈无花果干,46.0,,,,,,gluten,"gluten free, buddhist friendly",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230078,
-1-310,1-310,Salads ＆ Bowls,Beet Salad,甜菜根沙拉,48.0,,,,,,"gluten, animal products","gluten free, guangdong only, vegan",125,40.0,29.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230099,
-1-430,1-430,Wraps ＆ Sandwiches,Shawarma Wrap,沙瓦玛卷,49.0,,,,,,animal products,vegan,64,0,30.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230098,
-2-260,2-260,Fruits,Dehydrated Sweet Banana,香蕉干,22.0,,,,,,gluten,"buddhist friendly, gluten free",46,0,11.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230083,
-1-400,1-400,Soups ＆ Stews,Nourish Beans ＆ Veggie Soup,意式白豆甘蓝汤,44.0,,,,,,animal products,vegan,1040,27.0,85.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230107,
-2-230,2-230,Fruits,Dehydrated Dragon Fruit,火龙果干,27.0,,,,,,gluten,"gluten free, buddhist friendly",90,8.0,10.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230081,
-4-610,4-610,Spices,Sumac,苏模粉/漆树果粉,72.0,,,,,,gluten,"5 spice, gluten free",39,3.0,5.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230053,
-2-250,2-250,Fruits,Dehydrated Chinese Banana,芭蕉干,20.0,,,,,,gluten,"buddhist friendly, gluten free, hot",29,3.0,43.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230079,
-1-220,1-220,Pickles,Onion Pickles,腌洋葱,30.0,,,,,,"gluten, animal products","vegan, gluten free, buddhist friendly",79,18.0,13.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230018,
-4-630,4-630,Spices,Za‘atar,绿百里香粉,31.0,,,,,,,buddhist friendly,39,0,9.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230077,
-4-200,4-200,Fruits,Dehydrated Yu Mango,云南玉芒干,27.0,,,,,,gluten,"gluten free, buddhist friendly",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230082,
-4-800,4-800,Coffee ＆ Tea,Yunnan Crisp,云南孟连娜允咖啡豆,51.0,,,,,,gluten,"gluten free, buddhist friendly",0,1.0,6.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230065,
-4-750,4-750,Coffee ＆ Tea,Black Plum,西双版纳易武咖啡豆,64.0,,,,,,gluten,"gluten free, buddhist friendly",16,0,2.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230063,
-1-460,1-460,Soups ＆ Stews,Red Lentils Soup,红扁豆汤,44.0,,,,,,,,77,19.0,49.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,2399666,
-1-450,1-450,Wraps ＆ Sandwiches,Chickpeas Salad Sandwich,鹰嘴豆泥三文治,38.0,,,,,,animal products,vegan,81,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230055,
-2-220,2-220,Fruits,Sun-Dried Apricots,阳光晒干杏脯,29.0,,,,,,gluten,"buddhist friendly, gluten free",18,3.0,13.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229984,
-2-360,2-360,Nuts ＆ Seeds,Roasted Hazelnuts,烤榛子,57.0,,,,,,gluten,"gluten free, buddhist friendly",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230076,
-4-820,4-820,Coffee ＆ Tea,Yunnan Bundle,云南咖啡套装,81.0,,,,,,gluten,"gluten free, buddhist friendly, hot",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230047,
-4-350,4-350,Fruits,Soft Dehydrated Apples,脱水苹果干,18.0,,,,,,gluten,"gluten free, buddhist friendly",43,29.0,27.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229983,
-4-710,4-710,Others,Organic Soy Sauce,有机酱油,49.0,,,,,,,buddhist friendly,0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230038,
-EXT-1230035,,Kombucha,Lemongrass Kombucha,香柠草康普茶,29.0,,,,,,"gluten, animal products","vegan, gluten free, fermented, buddhist friendly, hot",2,0,40.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230035,
-1-250,1-250,Pickles,Kalamata ＆ Green olives mix,希腊混合橄榄,38.0,,,,,,"gluten, animal products","gluten free, vegan, buddhist friendly",55,35.0,24.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230025,
-3-120,3-120,Protein Rich,Edamame Tempeh,青豆天贝,43.0,,,,,,gluten,"frozen, gluten free, buddhist friendly",6,3.0,13.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230023,
-5-70,5-70,House Care,Cream Cleaner,柑橘精油强力清洁乳,39.0,,,,,,,,0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229937,
-1-230,1-230,Pickles,Jalapeño Pickles,腌墨西哥辣椒,38.0,,,,,,"gluten, animal products","vegan, gluten free",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230017,
-3-100,3-100,Protein Rich,Black Soy Beans Tempeh,黑豆天贝,38.0,,,,,,gluten,"frozen, gluten free, buddhist friendly",7,4.0,19.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230012,
-4-270,4-270,Crackers,Whole Wheat Crackers,哈素萌全麦薄脆,27.0,,,,,,animal products,"vegan, buddhist friendly",29,70.0,107.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229986,
-3-110,3-110,Protein Rich,Trio Bean Tempeh,杂豆天贝,43.0,,,,,,gluten,"frozen, gluten free, buddhist friendly",7,3.0,18.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230013,
-4-320,4-320,Fruits,Whole Unsweetened Dry Blueberries,蓝莓干,38.0,,,,,,gluten,"gluten free, buddhist friendly",22,9.0,6.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229975,
-5-160,5-160,House Care,Foaming Hand Soap （Lemongrass）,柠檬草精油泡沫洗手液,71.0,,,,,,,,1,5.0,5.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229875,
-3-40,3-40,Protein Rich,Baked Falafel,法拉费小饼,53.0,,,,,,animal products,vegan,155,14.0,40.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229665,
+2-150,2-150,Juices,Cashew Strawberry Milk,草莓腰果奶,27.0,,,,,,"gluten, animal products","vegan, gluten free, buddhist friendly",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230116,
+2-160,2-160,Juices,Green Glow Juice,绿焕汁,27.0,,,,,,"gluten, animal products","vegan, gluten free, buddhist friendly",91,7.0,58.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230117,
+2-240,2-240,Fruits,Dehydrated Figs,芭劳奈无花果干,46.0,,,,,,gluten,"gluten free, buddhist friendly",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230078,
+1-310,1-310,Salads ＆ Bowls,Beet Salad,甜菜根沙拉,48.0,,,,,,"gluten, animal products","gluten free, guangdong only, vegan",125,40.0,29.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230099,
+1-430,1-430,Wraps ＆ Sandwiches,Shawarma Wrap,沙瓦玛卷,49.0,,,,,,animal products,vegan,64,0,30.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230098,
+2-260,2-260,Fruits,Dehydrated Sweet Banana,香蕉干,22.0,,,,,,gluten,"buddhist friendly, gluten free",46,0,11.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230083,
+1-400,1-400,Soups ＆ Stews,Nourish Beans ＆ Veggie Soup,意式白豆甘蓝汤,44.0,,,,,,animal products,vegan,1040,27.0,85.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230107,
+2-230,2-230,Fruits,Dehydrated Dragon Fruit,火龙果干,27.0,,,,,,gluten,"gluten free, buddhist friendly",90,8.0,10.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230081,
+4-610,4-610,Spices,Sumac,苏模粉/漆树果粉,72.0,,,,,,gluten,"5 spice, gluten free",39,3.0,5.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230053,
+2-250,2-250,Fruits,Dehydrated Chinese Banana,芭蕉干,20.0,,,,,,gluten,"buddhist friendly, gluten free, hot",29,3.0,43.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230079,
+1-220,1-220,Pickles,Onion Pickles,腌洋葱,30.0,,,,,,"gluten, animal products","vegan, gluten free, buddhist friendly",79,18.0,13.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230018,
+4-630,4-630,Spices,Za‘atar,绿百里香粉,31.0,,,,,,,buddhist friendly,39,0,9.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230077,
+4-200,4-200,Fruits,Dehydrated Yu Mango,云南玉芒干,27.0,,,,,,gluten,"gluten free, buddhist friendly",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230082,
+4-800,4-800,Coffee ＆ Tea,Yunnan Crisp,云南孟连娜允咖啡豆,51.0,,,,,,gluten,"gluten free, buddhist friendly",0,1.0,6.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230065,
+4-750,4-750,Coffee ＆ Tea,Black Plum,西双版纳易武咖啡豆,64.0,,,,,,gluten,"gluten free, buddhist friendly",16,0,2.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230063,
+1-460,1-460,Soups ＆ Stews,Red Lentils Soup,红扁豆汤,44.0,,,,,,,,77,19.0,49.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,2399666,
+1-450,1-450,Wraps ＆ Sandwiches,Chickpeas Salad Sandwich,鹰嘴豆泥三文治,38.0,,,,,,animal products,vegan,81,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230055,
+2-220,2-220,Fruits,Sun-Dried Apricots,阳光晒干杏脯,29.0,,,,,,gluten,"buddhist friendly, gluten free",18,3.0,13.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229984,
+2-360,2-360,Nuts ＆ Seeds,Roasted Hazelnuts,烤榛子,57.0,,,,,,gluten,"gluten free, buddhist friendly",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230076,
+4-820,4-820,Coffee ＆ Tea,Yunnan Bundle,云南咖啡套装,81.0,,,,,,gluten,"gluten free, buddhist friendly, hot",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230047,
+4-350,4-350,Fruits,Soft Dehydrated Apples,脱水苹果干,18.0,,,,,,gluten,"gluten free, buddhist friendly",43,29.0,27.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229983,
+4-710,4-710,Others,Organic Soy Sauce,有机酱油,49.0,,,,,,,buddhist friendly,0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230038,
+EXT-1230035,,Kombucha,Lemongrass Kombucha,香柠草康普茶,29.0,,,,,,"gluten, animal products","vegan, gluten free, fermented, buddhist friendly, hot",2,0,40.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230035,
+1-250,1-250,Pickles,Kalamata ＆ Green olives mix,希腊混合橄榄,38.0,,,,,,"gluten, animal products","gluten free, vegan, buddhist friendly",55,35.0,24.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230025,
+3-120,3-120,Protein Rich,Edamame Tempeh,青豆天贝,43.0,,,,,,gluten,"frozen, gluten free, buddhist friendly",6,3.0,13.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230023,
+5-70,5-70,House Care,Cream Cleaner,柑橘精油强力清洁乳,39.0,,,,,,,,0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229937,
+1-230,1-230,Pickles,Jalapeño Pickles,腌墨西哥辣椒,38.0,,,,,,"gluten, animal products","vegan, gluten free",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230017,
+3-100,3-100,Protein Rich,Black Soy Beans Tempeh,黑豆天贝,38.0,,,,,,gluten,"frozen, gluten free, buddhist friendly",7,4.0,19.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230012,
+4-270,4-270,Crackers,Whole Wheat Crackers,哈素萌全麦薄脆,27.0,,,,,,animal products,"vegan, buddhist friendly",29,70.0,107.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229986,
+3-110,3-110,Protein Rich,Trio Bean Tempeh,杂豆天贝,43.0,,,,,,gluten,"frozen, gluten free, buddhist friendly",7,3.0,18.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230013,
+4-320,4-320,Fruits,Whole Unsweetened Dry Blueberries,蓝莓干,38.0,,,,,,gluten,"gluten free, buddhist friendly",22,9.0,6.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229975,
+5-160,5-160,House Care,Foaming Hand Soap （Lemongrass）,柠檬草精油泡沫洗手液,71.0,,,,,,,,1,5.0,5.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229875,
+3-40,3-40,Protein Rich,Baked Falafel,法拉费小饼,53.0,,,,,,animal products,vegan,155,14.0,40.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229665,
 3-145,3-145,Protein Rich,Seitan,素肉排,35.0,200g,Keep refrigerated at 0–4°C. Shelf life: See packaging.,"Wheat gluten, chickpea flour, nutritional yeast, tomato paste, organic soy sauce, chili vinegar soy sauce, natural spices (contains garlic and onion)","This is a protein-focused plant-based bite. Made from wheat gluten and chickpea flour, with a savory, slightly smoky profile. Soft with a chew — similar to jerky, but cleaner. Seasoned and ready to eat, with a natural saltiness built in.","产品类型：即食植物性蛋白食品 ❄️
 净含量：200g ⚖️
 产地：中国广州 🌍
@@ -1814,7 +1814,7 @@ EXT-1230035,,Kombucha,Lemongrass Kombucha,香柠草康普茶,29.0,,,,,,"gluten, 
 食用提示 📌
 植物性蛋白食品 🌿
 咸香风味
-口感有嚼劲",animal products,vegan,73,14.0,80.0,,,1229813,"Product type: Ready-to-eat plant-based protein snack ❄️
+口感有嚼劲",animal products,vegan,73,14.0,80.0,,,products_import.json,,,1229813,"Product type: Ready-to-eat plant-based protein snack ❄️
 Net weight: 200g ⚖️
 Origin: Guangzhou, China 🌍
 PRODUCT DESCRIPTION 🧾
@@ -1847,12 +1847,12 @@ NOTES 📌
 Plant-based protein bites 🌿
 Savory and lightly seasoned
 Chewy texture with structure"
-3-25,3-25,Flours,Almond Flour,杏仁面粉,86.0,,,,,,gluten,"gluten free, buddhist friendly",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229989,
-2-300,2-300,Cacao,Cacao Mass,可可液块,86.0,,,,,,gluten,"gluten free, buddhist friendly",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229988,
-1-211,1-211,Bites,Medjool Boat,椰枣小船,35.0,,,,,,"gluten, animal products","gluten free, vegan, buddhist friendly, hot",45,52.0,38.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230045,
-4-51,4-51,Fruits,Turkish Figs,土耳其无花果干,44.0,,,,,,gluten,"gluten free, buddhist friendly",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229982,
-3-125,3-125,Protein Rich,Chickpeas Tempeh,鹰嘴豆天贝,43.0,,,,,,,,7,0,7.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,2423536,
-4-130,4-130,Grains ＆ Pasta,Whole Wheat Spaghetti,全麦意大利面,21.0,,,,,,,buddhist friendly,0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229980,
+3-25,3-25,Flours,Almond Flour,杏仁面粉,86.0,,,,,,gluten,"gluten free, buddhist friendly",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229989,
+2-300,2-300,Cacao,Cacao Mass,可可液块,86.0,,,,,,gluten,"gluten free, buddhist friendly",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229988,
+1-211,1-211,Bites,Medjool Boat,椰枣小船,35.0,,,,,,"gluten, animal products","gluten free, vegan, buddhist friendly, hot",45,52.0,38.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230045,
+4-51,4-51,Fruits,Turkish Figs,土耳其无花果干,44.0,,,,,,gluten,"gluten free, buddhist friendly",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229982,
+3-125,3-125,Protein Rich,Chickpeas Tempeh,鹰嘴豆天贝,43.0,,,,,,,,7,0,7.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,2423536,
+4-130,4-130,Grains ＆ Pasta,Whole Wheat Spaghetti,全麦意大利面,21.0,,,,,,,buddhist friendly,0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229980,
 3-200,3-200,Bites,Lemon Bars,清新夏日柠檬棒,38.0,120g (4 bars),,"Oats, lemon juice, organic agave syrup, coconut milk, vanilla extract, organic coconut oil, salt","This is our lemon bar. Bright. Cold. Sharp in the best way. Tart lemon meets just enough sweetness, built on a chewy oat base and finished with a creamy lemon layer that hits fast and clean. Think lemon pie energy — minus the heaviness, minus the nonsense. Frozen, it’s crisp and refreshing. Let it soften, and it melts right into dessert mode.","产品类型：即食冷冻甜点棒 ❄️
 净含量：120g（4 条）⚖️
 产地：中国广州 🌍
@@ -1942,7 +1942,7 @@ Chewy texture with structure"
 
 植物性冷冻甜点 🌿
 建议冷冻保存与食用
-回温后口感会发生变化，两种吃法都适合",animal products,"vegan, buddhist friendly",1,12.0,64.0,no storage temp,,1229976,"Product type: Ready-to-eat frozen dessert bar ❄️
+回温后口感会发生变化，两种吃法都适合",animal products,"vegan, buddhist friendly",1,12.0,64.0,no storage temp,,products_import.json,,,1229976,"Product type: Ready-to-eat frozen dessert bar ❄️
 Net weight: 120g (4 bars) ⚖️
 Origin: Guangzhou, China 🌍
 
@@ -2032,27 +2032,27 @@ INTENDED USE / NOTES 📌
 Plant-based frozen dessert 🌿
 Designed to be stored and eaten cold
 Texture changes slightly as it warms — both ways work"
-5-170,5-170,House Care,Foaming Hand Soap （Mint）,薄荷精油泡沫洗手液,71.0,,,,,,,,30,9.0,1.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229804,
-4-790,4-790,Dairy Alternatives,Oatly Chocolate Flavor,Oatly 燕麦露巧克力味,10.0,,,,,,,buddhist friendly,4,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229972,
-4-780,4-780,Dairy Alternatives,Oatly Classic,Oatly 燕麦露原味,10.0,,,,,,,buddhist friendly,285,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229971,
-4-140,4-140,Grains ＆ Pasta,Whole Wheat Fusilli Pasta,螺旋意大利面,17.0,,,,,,,buddhist friendly,6,0,34.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229981,
-7-516,7-516,House Care,Foaming Hand Soap 5L（Lemongrass）,柠檬草精油泡沫洗手液 5L,702.0,,,,,,,,96,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229874,
-5-110,5-110,House Care,Multi Purpose Spray,多用途喷雾,57.0,,,,,,,,60,3.0,4.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229855,
-5-50,5-50,House Care,Laundry Powder,洗衣粉,54.0,,,,,,,,968,5.0,7.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229822,
-7-520,7-520,House Care,Glass Cleaner 5L,玻璃清洁液 5L,562.0,,,,,,,,98,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229977,
-7-515,7-515,House Care,SoapNut Republic Dish Soap 5L,西柚精油洗碗液 5L,540.0,,,,,,,,97,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229751,
-4-50,4-50,Legumes,Green Lentil,绿扁豆,29.0,,,,,,gluten,"gluten free, buddhist friendly",40,3.0,16.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229951,
-5-120,5-120,House Care,Fruit ＆ Vegetable Wash,果蔬清洗液,57.0,,,,,,,,16,0,9.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229942,
-5-180,5-180,House Care,Foaming Hand Soap （Lavender）,薰衣草精油泡沫洗手液,71.0,,,,,,,,2,7.0,2.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229966,
-1-330,1-330,Salads ＆ Bowls,Tabbouleh Bowl,甜宝绿盒,44.0,,,,,,animal products,vegan,25,28.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229943,
-7-518,7-518,House Care,SoapNut Republic Laundry Liquid 5L,柠檬草精油洗衣液 5L,432.0,,,,,,,,93,0,2.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229814,
-2-390,2-390,Nuts ＆ Seeds,"Pumpkin Seeds （Raw, Unsalted）",南瓜子（无盐，生）,31.0,,,,,,gluten,"gluten free, buddhist friendly",38,31.0,37.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229934,
-4-540,4-540,Other Supplements,B12 Capsules,B12 素食胶囊,86.0,,,,,,gluten,"gluten free, buddhist friendly",0,0,11.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229932,
-4-150,4-150,Nuts ＆ Seeds,"Sliced Almonds （Raw, Unsalted）",杏仁片（生，无盐）,34.0,,,,,,gluten,"gluten free, buddhist friendly",70,4.0,7.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229950,
-5-140,5-140,House Care,Bathroom ＆ Shower Spray,柑橘精油浴室清洁液,57.0,,,,,,,,33,1.0,2.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229901,
-4-10,4-10,Grains ＆ Pasta,Mix Colored Quinoa,混合藜麦,71.0,,,,,,gluten,"gluten free, buddhist friendly",28,1.0,9.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229945,
-5-100,5-100,House Care,Natural Stain Remover,天然强效污渍清洁液,71.0,,,,,,,,49,3.0,1.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229739,
-（5-160）+（5-170）+（5-180）,（5-160）+（5-170）+（5-180）,House Care,Hand Soap Trio,洗手液三件套,200.0,,,,,,,,31,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229747,
+5-170,5-170,House Care,Foaming Hand Soap （Mint）,薄荷精油泡沫洗手液,71.0,,,,,,,,30,9.0,1.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229804,
+4-790,4-790,Dairy Alternatives,Oatly Chocolate Flavor,Oatly 燕麦露巧克力味,10.0,,,,,,,buddhist friendly,4,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229972,
+4-780,4-780,Dairy Alternatives,Oatly Classic,Oatly 燕麦露原味,10.0,,,,,,,buddhist friendly,285,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229971,
+4-140,4-140,Grains ＆ Pasta,Whole Wheat Fusilli Pasta,螺旋意大利面,17.0,,,,,,,buddhist friendly,6,0,34.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229981,
+7-516,7-516,House Care,Foaming Hand Soap 5L（Lemongrass）,柠檬草精油泡沫洗手液 5L,702.0,,,,,,,,96,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229874,
+5-110,5-110,House Care,Multi Purpose Spray,多用途喷雾,57.0,,,,,,,,60,3.0,4.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229855,
+5-50,5-50,House Care,Laundry Powder,洗衣粉,54.0,,,,,,,,968,5.0,7.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229822,
+7-520,7-520,House Care,Glass Cleaner 5L,玻璃清洁液 5L,562.0,,,,,,,,98,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229977,
+7-515,7-515,House Care,SoapNut Republic Dish Soap 5L,西柚精油洗碗液 5L,540.0,,,,,,,,97,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229751,
+4-50,4-50,Legumes,Green Lentil,绿扁豆,29.0,,,,,,gluten,"gluten free, buddhist friendly",40,3.0,16.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229951,
+5-120,5-120,House Care,Fruit ＆ Vegetable Wash,果蔬清洗液,57.0,,,,,,,,16,0,9.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229942,
+5-180,5-180,House Care,Foaming Hand Soap （Lavender）,薰衣草精油泡沫洗手液,71.0,,,,,,,,2,7.0,2.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229966,
+1-330,1-330,Salads ＆ Bowls,Tabbouleh Bowl,甜宝绿盒,44.0,,,,,,animal products,vegan,25,28.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229943,
+7-518,7-518,House Care,SoapNut Republic Laundry Liquid 5L,柠檬草精油洗衣液 5L,432.0,,,,,,,,93,0,2.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229814,
+2-390,2-390,Nuts ＆ Seeds,"Pumpkin Seeds （Raw, Unsalted）",南瓜子（无盐，生）,31.0,,,,,,gluten,"gluten free, buddhist friendly",38,31.0,37.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229934,
+4-540,4-540,Other Supplements,B12 Capsules,B12 素食胶囊,86.0,,,,,,gluten,"gluten free, buddhist friendly",0,0,11.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229932,
+4-150,4-150,Nuts ＆ Seeds,"Sliced Almonds （Raw, Unsalted）",杏仁片（生，无盐）,34.0,,,,,,gluten,"gluten free, buddhist friendly",70,4.0,7.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229950,
+5-140,5-140,House Care,Bathroom ＆ Shower Spray,柑橘精油浴室清洁液,57.0,,,,,,,,33,1.0,2.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229901,
+4-10,4-10,Grains ＆ Pasta,Mix Colored Quinoa,混合藜麦,71.0,,,,,,gluten,"gluten free, buddhist friendly",28,1.0,9.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229945,
+5-100,5-100,House Care,Natural Stain Remover,天然强效污渍清洁液,71.0,,,,,,,,49,3.0,1.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229739,
+（5-160）+（5-170）+（5-180）,（5-160）+（5-170）+（5-180）,House Care,Hand Soap Trio,洗手液三件套,200.0,,,,,,,,31,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229747,
 4-470,4-470,Plants Powders,Spirulina Powder USDA Organic,螺旋藻粉,49.0,130g,"Store in a cool, dry place away from direct sunlight",Spirulina Powder,"This is spirulina powder. Made from dried spirulina, a naturally occurring microalgae, gently processed and finely ground. Spirulina has long been consumed as a food ingredient, valued for its concentrated plant protein and naturally occurring micronutrients. We keep it simple — whole ingredient, minimal processing, nothing added. An easy way to add a nutrient-dense plant ingredient to everyday meals.","螺旋藻粉 💚
 
  
@@ -2165,7 +2165,7 @@ Texture changes slightly as it warms — both ways work"
 适合日常人群食用
 适合植物性饮食人群 🌿
 对藻类过敏者不适合食用
-本产品通过美国 USDA 有机认证（USDA Organic）。",gluten,"gluten free, buddhist friendly",31,3.0,17.0,,,1229885,"SPIRULINA POWDER 💚
+本产品通过美国 USDA 有机认证（USDA Organic）。",gluten,"gluten free, buddhist friendly",31,3.0,17.0,,,products_import.json,,,1229885,"SPIRULINA POWDER 💚
 
  
 
@@ -2280,7 +2280,7 @@ Not suitable for individuals allergic to algae
  
 
 Vitamin and mineral values are based on generic food composition data for spirulina and are provided for reference only."
-4-740,4-740,Dairy Alternatives,Kara Coconut Cream,佳乐高浓度椰浆,49.0,,,,,,gluten,"buddhist friendly, gluten free",58,0,1.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229952,
+4-740,4-740,Dairy Alternatives,Kara Coconut Cream,佳乐高浓度椰浆,49.0,,,,,,gluten,"buddhist friendly, gluten free",58,0,1.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229952,
 4-410,4-410,Plants Powders,Beetroot Powder USDA Organic,甜菜根粉,57.0,130g,"Store in a cool, dry place away from direct sunlight",Beetroot Powder,"This is beetroot powder. Made from whole beetroot, gently dried and finely ground. Beetroot has long been consumed as a root vegetable, known for its naturally occurring plant compounds and minerals. We keep it whole and straightforward — no extracts, no concentrates, nothing added. A simple way to bring a familiar root vegetable into everyday meals.","<p><strong>甜菜根粉 ❤️</strong><br>
 </p>
 <p>&nbsp;</p>
@@ -2386,7 +2386,7 @@ Vitamin and mineral values are based on generic food composition data for spirul
 适合植物性饮食人群 🌿<br>
 对甜菜根过敏者不适合食用
 </p>
-本产品通过美国 USDA 有机认证（USDA Organic）。",gluten,"buddhist friendly, gluten free",62,1.0,20.0,,,1229598,"BEETROOT POWDER ❤️
+本产品通过美国 USDA 有机认证（USDA Organic）。",gluten,"buddhist friendly, gluten free",62,1.0,20.0,,,products_import.json,,,1229598,"BEETROOT POWDER ❤️
 
  
 
@@ -2501,16 +2501,99 @@ Not suitable for individuals allergic to beetroot
  
 
 Vitamin and mineral values are based on generic food composition data for whole beetroot and are provided for reference only."
-（4-530）,（4-530）,Other Supplements,Prebiotic Fiber USDA Organic,益生元菊粉,64.0,,,,,,gluten,"gluten free, buddhist friendly",69,0,7.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229616,
-5-30,5-30,Other Supplements,"Iron, Double Strength, NOW Food","铁, 双倍功效,  NOW Foods",160.0,,,,,,gluten,"buddhist friendly, gluten free",1,0,4.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1260737,
-4-510,4-510,Plants Powders,Acai Powder USDA Organic,巴西莓粉,96.0,,,,,,gluten,"gluten free, buddhist friendly",12,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229862,
-1-500,1-500,Juices,Cashews Chocolate M*LK,可可腰果奶,26.0,,,,,,"gluten, animal products","gluten free, vegan, buddhist friendly",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229927,
-4-90,4-90,Flours,Vital Wheat Gluten Flour,谷朊粉,31.0,,,,,,,5 spice,53,0,5.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229926,
-2-150-d2,2-150,Juices,Nutty L - GoVegan! Almond M!LK,清甜杏奶,23.0,,,,,,"gluten, animal products","gluten free, vegan, buddhist friendly",38,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229919,
-2-310,2-310,Cacao,Cacao Nibs,可可粒,85.0,,,,,,gluten,"hot, gluten free",48,3.0,5.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229880,
-EXT-1229905,,Fruits,Medjool Dates （Misfits）,丑丑帝王椰枣,215.0,,,,,,,,0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229905,
-4-381,4-381,Other Supplements,"Pure Creatine Monohydrate, Unflavored",无香精肌酸一水合物,97.0,,,,,,,,7,5.0,18.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,2370230,
-4-370,4-370,Cacao,Organic Cacao Powder,有机可可粉,43.0,,,100% cacao powder,"Pure. Unsweetened. Intense. Our cacao powder is made from 100% finely ground cacao beans, delivering a deep, rich chocolate flavor with no added sugar, no fillers, and no shortcuts. It’s bold, slightly bitter, and naturally complex—exactly how real cacao should taste. Use it as a base, not an imitation. Perfect for baking, drinks, and everyday recipes where you want real chocolate depth without sweetness getting in the way.",,gluten,"gluten free, buddhist friendly",12,9.0,24.0,no pack size; no storage temp,,1229897,"PRODUCT DESCRIPTION
+4-530,（4-530）,Other Supplements,Prebiotic Fiber USDA Organic,益生元菊粉,64.0,200g,"Store in a cool, dry place away from direct sunlight",Prebiotic Fiber,"This is prebiotic fiber. Made from plant-derived dietary fiber, processed to remain neutral in taste and easy to use. Prebiotic fiber is commonly consumed as part of everyday diets that emphasize whole foods and fiber intake. We keep it simple — no flavors, no sweeteners, nothing added. An easy way to increase fiber intake without changing how your food tastes.","益生元膳食纤维 🌾
+净含量：200g
+原料产地：中国 🌍
+产品介绍
+这是益生元膳食纤维。
+选用植物来源的膳食纤维原料，经处理后制成细粉。
+膳食纤维是日常饮食中的常见组成部分，来源于植物原料本身。
+本产品不添加香料、甜味剂或其他成分，保持配料简单。
+适合希望在不明显改变饮食口感的情况下，增加膳食纤维摄入的人群。
+为什么有人选择它
+膳食纤维是日常饮食结构中的重要组成部分。
+益生元纤维作为植物来源原料，被广泛用于日常饮食中。
+质地细腻、味道中性，便于融入多种食品和饮品。
+适合偏好配料简单、长期可持续饮食方式的人群。 🌱
+配料
+益生元膳食纤维 🌾
+致敏原信息
+本产品不含已知致敏原
+生产环境可能接触：坚果、大豆、含麸质谷物
+食用方式
+建议食用量：5–10克（约1–2茶匙）
+食用频率：每日1次
+可加入水、饮品、酸奶或食物中食用。
+建议逐步增加食用量，并注意补充水分。
+储存方式与保质期
+储存方式：置于阴凉、干燥处，避免阳光直射 ❄️
+保质期：见包装标示
+开封后请密封保存，并尽快食用
+营养成分表（每100克）
+能量 800kJ (10%)
+蛋白质 0g (0%)
+脂肪 0g (0%)
+碳水化合物 90g (30%)
+钠 0mg (0%)
+规格与包装
+净含量：200g
+包装形式：可重复使用铝制容器
+食用提示
+适合日常人群食用
+适合植物性饮食人群 🌿
+对高纤维饮食敏感者请谨慎食用
+本产品通过美国 USDA 有机认证（USDA Organic）。",gluten,"gluten free, buddhist friendly",69,7.0,7.0,,,products_import.json,,,1229616,"PREBIOTIC FIBER 🌾
+Net weight: 200g
+Origin: China 🌍
+PRODUCT DESCRIPTION
+This is prebiotic fiber.
+Made from plant-derived dietary fiber, processed to remain neutral in taste and easy to use.
+Prebiotic fiber is commonly consumed as part of everyday diets that emphasize whole foods and fiber intake.
+We keep it simple — no flavors, no sweeteners, nothing added.
+An easy way to increase fiber intake without changing how your food tastes.
+WHY PEOPLE CONSUME IT
+Dietary fiber — contributes to normal digestive function.
+Prebiotic fibers — are selectively used by gut bacteria as part of a balanced diet.
+Low calorie — commonly used in diets focused on fiber intake without added sugars.
+Neutral taste — easy to add to daily food and drinks without affecting flavor.
+INGREDIENTS
+Prebiotic Fiber 🌾
+CONTAINS / MAY CONTAIN
+Contains: None
+May contain traces of: Nuts, Soy, Gluten
+HOW TO USE
+Serving size: 5–10g (about 1–2 teaspoons)
+How often: Once per day
+Mix into water, smoothies, yogurt, or food.
+Increase intake gradually and drink enough water.
+STORAGE & SHELF LIFE
+Storage: Store in a cool, dry place away from direct sunlight ❄️
+Shelf life: See packaging
+After opening: Keep sealed and use regularly
+NUTRITION FACTS (PER 100G)
+Energy 800kJ (10%)
+Protein 0g (0%)
+Fat 0g (0%)
+Carbohydrate 90g (30%)
+Sodium 0mg (0%)
+Dietary Fiber 90g (360%)
+NET CONTENT & PACKAGING
+Net weight: 200g
+Packaging: Reusable aluminum container
+INTENDED USE / NOTES
+For general consumption
+Suitable for plant-based diets 🌿
+Not suitable for individuals sensitive to high fiber intake
+Nutrition values are based on generic food composition data for dietary fiber and are provided for reference only."
+5-30,5-30,Other Supplements,"Iron, Double Strength, NOW Food","铁, 双倍功效,  NOW Foods",160.0,,,,,,gluten,"buddhist friendly, gluten free",1,0,4.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1260737,
+4-510,4-510,Plants Powders,Acai Powder USDA Organic,巴西莓粉,96.0,,,,,,gluten,"gluten free, buddhist friendly",12,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229862,
+1-500,1-500,Juices,Cashews Chocolate M*LK,可可腰果奶,26.0,,,,,,"gluten, animal products","gluten free, vegan, buddhist friendly",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229927,
+4-90,4-90,Flours,Vital Wheat Gluten Flour,谷朊粉,31.0,,,,,,,5 spice,53,0,5.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229926,
+2-150-d2,2-150,Juices,Nutty L - GoVegan! Almond M!LK,清甜杏奶,23.0,,,,,,"gluten, animal products","gluten free, vegan, buddhist friendly",38,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229919,
+2-310,2-310,Cacao,Cacao Nibs,可可粒,85.0,,,,,,gluten,"hot, gluten free",48,3.0,5.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229880,
+EXT-1229905,,Fruits,Medjool Dates （Misfits）,丑丑帝王椰枣,215.0,,,,,,,,0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229905,
+4-381,4-381,Other Supplements,"Pure Creatine Monohydrate, Unflavored",无香精肌酸一水合物,97.0,,,,,,,,7,5.0,18.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,2370230,
+4-370,4-370,Cacao,Organic Cacao Powder,有机可可粉,43.0,,,100% cacao powder,"Pure. Unsweetened. Intense. Our cacao powder is made from 100% finely ground cacao beans, delivering a deep, rich chocolate flavor with no added sugar, no fillers, and no shortcuts. It’s bold, slightly bitter, and naturally complex—exactly how real cacao should taste. Use it as a base, not an imitation. Perfect for baking, drinks, and everyday recipes where you want real chocolate depth without sweetness getting in the way.",,gluten,"gluten free, buddhist friendly",12,9.0,24.0,no pack size; no storage temp,,products_import.json,,,1229897,"PRODUCT DESCRIPTION
 Pure. Unsweetened. Intense.
 Our cacao powder is made from 100% finely ground cacao beans, delivering a deep, rich chocolate flavor with no added sugar, no fillers, and no shortcuts.
 It’s bold, slightly bitter, and naturally complex—exactly how real cacao should taste.
@@ -2537,9 +2620,9 @@ NOTES
 Unsweetened and minimally processed
 Made from cold-pressed cacao beans
 Naturally high in cacao polyphenols"
-EXT-1229624,,Kombucha,Mango Kombucha,芒果康普茶,29.0,,,,,,"gluten, animal products","fermented, vegan, buddhist friendly, gluten free, hot",93,0,26.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229624,
-4-250,4-250,Others,Tortilla Chips,玉米片,61.0,,,,,,gluten,"gluten free, buddhist friendly",16,0,42.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229893,
-5-130,5-130,House Care,Dish Soap,西柚精油洗碗液,54.0,,,,,,,,14,3.0,4.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229965,
+EXT-1229624,,Kombucha,Mango Kombucha,芒果康普茶,29.0,,,,,,"gluten, animal products","fermented, vegan, buddhist friendly, gluten free, hot",93,0,26.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229624,
+4-250,4-250,Others,Tortilla Chips,玉米片,61.0,,,,,,gluten,"gluten free, buddhist friendly",16,0,42.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229893,
+5-130,5-130,House Care,Dish Soap,西柚精油洗碗液,54.0,,,,,,,,14,3.0,4.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229965,
 4-450,4-450,Plants Powders,Chlorella Powder USDA Organic,小球藻粉,71.0,,"Store in a cool, dry place away from sunlight.Seal the lid tightly to keep it fresh.Use within 60 days of opening for max potency — still good after, but power fades.",,,"极具营养的小球藻产品，富含必需营养素，如叶绿素、纤维、维生素C和D、抗氧化剂、类黄酮、多酚、酶、GLA和矿物质等纯素蛋白。作为整个身体的整体适应源，对免疫支持、自然能量、控制体味、帮助消化、结肠健康等都有好处!
  
 非转基因小球藻粉
@@ -2549,7 +2632,7 @@ EXT-1229624,,Kombucha,Mango Kombucha,芒果康普茶,29.0,,,,,,"gluten, animal p
 【Fat脂肪】0克
 【Carbs碳水】<1克
 【Protein蛋白质】2克
-本产品通过美国 USDA 有机认证（USDA Organic）。",gluten,"buddhist friendly, gluten free",88,0,5.0,no ingredients; no pack size,,1229778,"🟢 USDA ORGANIC CHLORELLA POWDER (100g)
+本产品通过美国 USDA 有机认证（USDA Organic）。",gluten,"buddhist friendly, gluten free",88,0,5.0,no ingredients; no pack size,,products_import.json,,,1229778,"🟢 USDA ORGANIC CHLORELLA POWDER (100g)
 Tiny but mighty. The freshwater algae that packs a mega nutrient punch.No nonsense — just 100% USDA Organic chlorella, gently dried at low temps to keep its detox power and vibrant nutrients alive. Your green warrior for cleansing, energy, and all-day vitality.
 Packed in a fully recyclable aluminum container that locks in freshness and blocks light, heat, and humidity — because your chlorella deserves the royal treatment.
  
@@ -2577,10 +2660,10 @@ Serving Size: 5g (1 tsp) | Servings per Container: ~20Calories: 15 kcal (1% DV)P
  
  
 📦 INGREDIENTSJust one: 100% USDA Organic Chlorella Powder"
-4-190,4-190,Nuts ＆ Seeds,"Sunflower Seeds （Raw, Unsalted）",葵花籽、瓜子仁（无盐，生）,29.0,,,,,,gluten,"gluten free, buddhist friendly",38,14.0,13.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229900,
-2-290,2-290,Fruits,Medjool Dates （Jumbo Size）,以色列帝王椰枣,92.0,,,,,,gluten,"gluten free, buddhist friendly",55,12.0,65.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229886,
-4-70,4-70,Legumes,Chickpeas,鹰嘴豆,29.0,,,,,,gluten,"gluten free, buddhist friendly",62,3.0,32.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229850,
-4-30,4-30,Grains ＆ Pasta,Organic Quick Cooking Oats,即食燕麦,17.0,,,,,,,hot,31,0,2.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229869,
+4-190,4-190,Nuts ＆ Seeds,"Sunflower Seeds （Raw, Unsalted）",葵花籽、瓜子仁（无盐，生）,29.0,,,,,,gluten,"gluten free, buddhist friendly",38,14.0,13.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229900,
+2-290,2-290,Fruits,Medjool Dates （Jumbo Size）,以色列帝王椰枣,92.0,,,,,,gluten,"gluten free, buddhist friendly",55,12.0,65.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229886,
+4-70,4-70,Legumes,Chickpeas,鹰嘴豆,29.0,,,,,,gluten,"gluten free, buddhist friendly",62,3.0,32.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229850,
+4-30,4-30,Grains ＆ Pasta,Organic Quick Cooking Oats,即食燕麦,17.0,,,,,,,hot,31,0,2.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229869,
 4-400,4-400,Plants Powders,Matcha Powder USDA Organic,抹茶粉,78.0,,"Store in a cool, dry place away from sunlight. Keep lid sealed tight — matcha hates moisture. Best used within 60 days of opening for peak flavor + power.",Just one: 100% USDA Organic Ceremonial-Grade Matcha Powder,,"130g
 几个世纪以来，抹茶绿茶一直被传统的治疗方法所认可，因为它能够提供健康补充。现代研究已经在抹茶中发现了许多促进健康的化合物，包括植物营养素，如儿茶素和氨基酸茶氨酸。*由于这些自然产生的化合物，抹茶对健康和积极的生活方式是一个极好的补充。*用它来制作美味多彩的抹茶饮料，添加到你的冰沙和奶昔中，撒在燕麦片上，或烘焙到你最喜欢的食谱中。抹茶醇厚的青草味与苹果、香蕉、胡萝卜、椰子、绿色蔬菜和菠萝等多种口味搭配得很好。
 非转基因抹茶粉
@@ -2590,7 +2673,7 @@ Serving Size: 5g (1 tsp) | Servings per Container: ~20Calories: 15 kcal (1% DV)P
 【Carbs碳水】70.7g
 【Protein蛋白质】18.2g
 【Sodium钠】30mg
-本产品通过美国 USDA 有机认证（USDA Organic）。",gluten,"buddhist friendly, gluten free",53,5.0,10.0,no pack size,,1229825,"130g
+本产品通过美国 USDA 有机认证（USDA Organic）。",gluten,"buddhist friendly, gluten free",53,5.0,10.0,no pack size,,products_import.json,,,1229825,"130g
 💚 USDA ORGANIC MATCHA POWDER 
 Calm energy. Clean focus. That smooth green fire.
 This is 100% USDA Organic ceremonial-grade matcha, stone-ground from young shade-grown tea leaves — no sugar, no junk, just the real deal. L-theanine meets natural caffeine for a jitter-free lift that hits calm and clear.
@@ -2675,7 +2758,7 @@ Just one: 100% USDA Organic Ceremonial-Grade Matcha Powder"
 适合日常人群食用
 适合植物性饮食人群 🌿
 对菌类过敏者不适合食用
-本产品通过美国 USDA 有机认证（USDA Organic）。",,,82,0,5.0,,,2370228,"REISHI POWDER 🍄
+本产品通过美国 USDA 有机认证（USDA Organic）。",,,82,0,5.0,,,products_import.json,,,2370228,"REISHI POWDER 🍄
 USDA Organic · Non-GMO
 Net weight: 120g
 Origin: China 🌍
@@ -2718,8 +2801,8 @@ INTENDED USE / NOTES
 For general consumption
 Suitable for plant-based diets 🌿
 Not suitable for individuals allergic to mushrooms"
-7-517,7-517,House Care,SoapNut Republic Floor Cleaner 5L,桉树精油地板清洁液 5L,389.0,,,,,,,,46,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229774,
-4-180,4-180,Nuts ＆ Seeds,Hemp Seeds,脱壳火麻仁,40.0,,,,,,gluten,gluten free,16,7.0,31.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229854,
+7-517,7-517,House Care,SoapNut Republic Floor Cleaner 5L,桉树精油地板清洁液 5L,389.0,,,,,,,,46,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229774,
+4-180,4-180,Nuts ＆ Seeds,Hemp Seeds,脱壳火麻仁,40.0,,,,,,gluten,gluten free,16,7.0,31.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229854,
 3-20,3-20,Bites,Chocolate Hemp Protein Bites,巧克力蛋白球,38.0,105g (5 balls),,"Hemp seeds, walnuts, dates, salt, almond butter, organic pea protein, organic coconut oil, organic cocoa powder","Deep cocoa. Clean energy. Instant good mood. Meet our Chocolate Hemp Protein Balls. Rich, soft, and deeply satisfying — packed with feel-good plant energy. Organic cocoa, creamy nuts, and the earthy bite of hemp seeds come together for bold flavor without heavy sweetness. Naturally sweetened with dates and boosted with plant protein, built for people who love chocolate and still care what they eat.","产品类型：即食植物性能量球 ❄️
 净含量：105g（5 颗）⚖️
 产地：中国广州 🌍
@@ -2804,7 +2887,7 @@ Not suitable for individuals allergic to mushrooms"
 
 植物性巧克力能量球 🌿
 不添加糖，不走捷径
-冷冻保存，回温后口感更佳","gluten, animal products","vegan, buddhist friendly, gluten free",15,32.0,58.0,no storage temp,,1229816,"Product type: Ready-to-eat plant-based energy balls ❄️
+冷冻保存，回温后口感更佳","gluten, animal products","vegan, buddhist friendly, gluten free",15,32.0,58.0,no storage temp,,products_import.json,,,1229816,"Product type: Ready-to-eat plant-based energy balls ❄️
 Net weight: 105g (5 balls) ⚖️
 Origin: Guangzhou, China 🌍
 
@@ -2885,10 +2968,10 @@ INTENDED USE / NOTES 📌
 Plant-based chocolate energy balls 🌿
 No added sugar
 Designed to be stored frozen and enjoyed slightly softened"
-4-550,4-550,Others,Nutritional Yeast,营养酵母,43.0,,,,,,gluten,"gluten free, buddhist friendly",9,6.0,45.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229848,
-4-230,4-230,Fruits,Dry Raisins （Unsweetened）,加州大葡萄干,36.0,,,,,,gluten,"gluten free, buddhist friendly",50,22.0,11.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229846,
-4-80,4-80,Legumes,Black Beans,黑芸豆,21.0,,,,,,gluten,"5 spice, gluten free",19,11.0,12.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229845,
-4-60,4-60,Legumes,Red Lentil,红扁豆,26.0,,,,,,gluten,"gluten free, buddhist friendly",56,11.0,8.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229844,
+4-550,4-550,Others,Nutritional Yeast,营养酵母,43.0,,,,,,gluten,"gluten free, buddhist friendly",9,6.0,45.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229848,
+4-230,4-230,Fruits,Dry Raisins （Unsweetened）,加州大葡萄干,36.0,,,,,,gluten,"gluten free, buddhist friendly",50,22.0,11.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229846,
+4-80,4-80,Legumes,Black Beans,黑芸豆,21.0,,,,,,gluten,"5 spice, gluten free",19,11.0,12.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229845,
+4-60,4-60,Legumes,Red Lentil,红扁豆,26.0,,,,,,gluten,"gluten free, buddhist friendly",56,11.0,8.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229844,
 3-190,3-190,Bites,Snickers,素士力架,38.0,140g (4 Bars),,"Dates, almonds, cashews, coconut milk, organic agave syrup, vanilla extract, organic coconut oil, lemon juice, salt, organic salted peanuts, unsweetened cocoa mass, organic coconut sugar","This is not a subtle dessert. Three layers. Zero compromise. The top layer brings crunchy peanuts and chocolate. The middle layer is smooth, creamy, and rich. The base is built from nuts and dates, delivering natural sweetness and satisfying texture. No dairy. No gluten. No refined sugar. Frozen, it eats like ice cream. As it softens, it becomes even richer and more indulgent.","产品类型：即食冷冻甜点棒 ❄️
 
 净含量：140g（4 条）⚖️
@@ -2989,7 +3072,7 @@ Designed to be stored frozen and enjoyed slightly softened"
 
 不含乳制品、不含麸质、不使用精制糖
 
-不同回温程度，对应不同口感","gluten, animal products","vegan, gluten free, buddhist friendly",0,15.0,23.0,no storage temp,,1229831,"Product Type: Ready-to-Eat Frozen Dessert Bars ❄️
+不同回温程度，对应不同口感","gluten, animal products","vegan, gluten free, buddhist friendly",0,15.0,23.0,no storage temp,,products_import.json,,,1229831,"Product Type: Ready-to-Eat Frozen Dessert Bars ❄️
 Net Weight: 140g (4 Bars) ⚖️
 Origin: Guangzhou, China 🌍
 PRODUCT DESCRIPTION 🧾
@@ -3027,8 +3110,8 @@ NOTES 📌
 Plant-based frozen dessert 🌿
 Dairy-free, gluten-free, and made without refined sugar
 Different levels of thawing create different eating experiences"
-1-290,1-290,Cooked Grains,Cooked Mix Color Quinoa,现食藜麦,13.0,,,,,,"gluten, animal products","gluten free, vegan, buddhist friendly",72,22.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229834,
-4-220,4-220,Fruits,Whole Unsweetened Dry Cranberries,无糖大兴安岭蔓越莓干,38.0,,,,,,gluten,"gluten free, hot",14,16.0,15.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229810,
+1-290,1-290,Cooked Grains,Cooked Mix Color Quinoa,现食藜麦,13.0,,,,,,"gluten, animal products","gluten free, vegan, buddhist friendly",72,22.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229834,
+4-220,4-220,Fruits,Whole Unsweetened Dry Cranberries,无糖大兴安岭蔓越莓干,38.0,,,,,,gluten,"gluten free, hot",14,16.0,15.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229810,
 1-100,1-100,Jams,Blueberries Chia Jam,蓝莓奇亚籽果酱,39.0,130g,Keep refrigerated at 0–4°C at all times,"Blueberries, lemon juice, chia seeds, lemon zest, vanilla extract, organic agave syrup","This is jam, without the sugar overload. Juicy blueberries are gently cooked and set with chia seeds, finished with lemon and a touch of agave. Thick, spoonable, and balanced — sweet enough to work, restrained enough to keep eating. No gloss. No candy tricks.","蓝莓奇亚籽果酱 🫐
 
  
@@ -3136,7 +3219,7 @@ Different levels of thawing create different eating experiences"
 食用提示 📌
 
 植物性食品 🌿
-果味明显，甜度恰好","gluten, animal products","gluten free, vegan, buddhist friendly",18,9.0,23.0,,,1229827,"BLUEBERRY CHIA JAM 🫐
+果味明显，甜度恰好","gluten, animal products","gluten free, vegan, buddhist friendly",18,9.0,23.0,,,products_import.json,,,1229827,"BLUEBERRY CHIA JAM 🫐
 
  
 
@@ -3354,7 +3437,7 @@ Fruit-forward, lightly sweet"
 
 纯植物性饮品 🌿
 
-新鲜果蔬混合饮品","gluten, animal products","vegan, gluten free, buddhist friendly",25,22.0,7.0,,,1229802,"Product type: Fresh juice ❄️
+新鲜果蔬混合饮品","gluten, animal products","vegan, gluten free, buddhist friendly",25,22.0,7.0,,,products_import.json,,,1229802,"Product type: Fresh juice ❄️
 Net volume: 350ml ⚖️
 Origin: Guangzhou, China 🌍
 
@@ -3452,19 +3535,19 @@ INTENDED USE / NOTES 📌
 
 100% plant-based 🌿
 Fresh vegetable & fruit juice"
-4-110,4-110,Flours,Chickpeas Flour,鹰嘴豆粉,36.0,,,,,,gluten,"gluten free, buddhist friendly",29,4.0,5.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229815,
-5-150,5-150,House Care,Glass Cleaner,玻璃清洁液,57.0,,,,,,,,58,1.0,2.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229733,
-4-730,4-730,Dairy Alternatives,"Coconut Milk （ No Xanthan Gum, No Guar Gum）",丽尔泰椰浆1L,49.0,,,,,,gluten,"gluten free, buddhist friendly",70,0,6.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229811,
-4-330,4-330,Spices,Black Salt （ Kala namak ）,印度喜马拉雅黑盐紫盐,33.0,,,,,,gluten,"buddhist friendly, gluten free",67,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229770,
-4-210,4-210,Fruits,Dehydrated Sweet Mango,凯特芒果干,27.0,,,,,,gluten,"gluten free, buddhist friendly",16,14.0,77.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229839,
-3-80,3-80,Protein Rich,White Beans Tempeh,黄豆天贝,31.0,,,,,,gluten,"frozen, gluten free, 5 spice",8,16.0,24.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229769,
-3-140,3-140,Protein Rich,Shawarma Mix,沙瓦玛素肉,49.0,,,,,,"gluten, animal products","gluten free, vegan",18,0,64.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1230097,
+4-110,4-110,Flours,Chickpeas Flour,鹰嘴豆粉,36.0,,,,,,gluten,"gluten free, buddhist friendly",29,4.0,5.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229815,
+5-150,5-150,House Care,Glass Cleaner,玻璃清洁液,57.0,,,,,,,,58,1.0,2.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229733,
+4-730,4-730,Dairy Alternatives,"Coconut Milk （ No Xanthan Gum, No Guar Gum）",丽尔泰椰浆1L,49.0,,,,,,gluten,"gluten free, buddhist friendly",70,0,6.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229811,
+4-330,4-330,Spices,Black Salt （ Kala namak ）,印度喜马拉雅黑盐紫盐,33.0,,,,,,gluten,"buddhist friendly, gluten free",67,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229770,
+4-210,4-210,Fruits,Dehydrated Sweet Mango,凯特芒果干,27.0,,,,,,gluten,"gluten free, buddhist friendly",16,14.0,77.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229839,
+3-80,3-80,Protein Rich,White Beans Tempeh,黄豆天贝,31.0,,,,,,gluten,"frozen, gluten free, 5 spice",8,16.0,24.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229769,
+3-140,3-140,Protein Rich,Shawarma Mix,沙瓦玛素肉,49.0,,,,,,"gluten, animal products","gluten free, vegan",18,0,64.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1230097,
 3-70,3-70,Protein Rich,Marinaded Tempeh,酱香天贝,43.0,,,"white beans tempeh, organic soy sauce, organic agave syrup, liquid smoke, salt, sriracha sauce, spices.",,"配料：天贝、橄榄油、龙舌兰蜜、酱油、烟熏汁、盐、是拉差辣椒酱、天然香料
 每50g
 【Calories卡路里】150kcal
 【Fat脂肪】10g
 【Carbs碳水】9g
-【Protein蛋白质】9g","gluten, animal products","vegan, buddhist friendly, gluten free",36,6.0,64.0,no pack size; no storage temp,,1229909,"Discover our unique take on tempeh, crafted with white beans for a delightful twist. Enhanced with organic soy sauce, organic agave syrup, and a hint of liquid smoke for depth, this tempeh is seasoned with salt, sriracha sauce, and a blend of spices for a flavorful kick. Whether you're looking to add protein to your meals or enjoy a tasty vegan snack, this tempeh is versatile and satisfying.
+【Protein蛋白质】9g","gluten, animal products","vegan, buddhist friendly, gluten free",36,6.0,64.0,no pack size; no storage temp,,products_import.json,,,1229909,"Discover our unique take on tempeh, crafted with white beans for a delightful twist. Enhanced with organic soy sauce, organic agave syrup, and a hint of liquid smoke for depth, this tempeh is seasoned with salt, sriracha sauce, and a blend of spices for a flavorful kick. Whether you're looking to add protein to your meals or enjoy a tasty vegan snack, this tempeh is versatile and satisfying.
 How to eat: this tempeh needs to be baked or fried before eating. Simply cook it in the oven or fry it in a pan until it's crispy and golden.
 Ingredients: white beans tempeh, organic soy sauce, organic agave syrup, liquid smoke, salt, sriracha sauce, spices.
 Free of:, nuts
@@ -3473,7 +3556,7 @@ Serving size: 50g
 【Fat脂肪】10g
 【Carbs碳水】9g
 【Protein蛋白质】9g"
-4-120,4-120,Protein Rich,TVP （ Texture Vegetable Protein ）,大豆组织蛋白,21.0,,,,,,gluten,"gluten free, buddhist friendly",35,1.0,17.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229798,
+4-120,4-120,Protein Rich,TVP （ Texture Vegetable Protein ）,大豆组织蛋白,21.0,,,,,,gluten,"gluten free, buddhist friendly",35,1.0,17.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229798,
 4-360,4-360,Granola,Anti Inflammatory Granola,无糖格兰诺拉荞麦片,43.0,190g,"Store in a cool, dry place away from direct sunlight. After opening, reseal tightly to maintain crunch. Shelf life: See packaging.","Buckwheat, almonds, walnuts, ground flaxseed, organic coconut flakes, pumpkin seeds, organic cold-pressed coconut oil, spices","This isn’t sweet granola pretending to be food. This is crunchy, savory, and unapologetically spiced. Built on buckwheat, nuts, seeds, and warming curry spices, this granola eats more like a snack or topping than a breakfast dessert. No sugar. No sweetness. Just deep, toasty crunch with real flavor.","产品类型：即食咸味格兰诺拉麦片 🥣
 净含量：190g ⚖️
 产地：中国广州 🌍
@@ -3558,7 +3641,7 @@ Serving size: 50g
 
 植物性咸味格兰诺拉 🌿
 不添加糖
-适合作为配料、零食或正餐升级","gluten, animal products","gluten free, vegan, buddhist friendly",77,27.0,60.0,,,1229790,"Product type: Ready-to-eat savory granola 🥣
+适合作为配料、零食或正餐升级","gluten, animal products","gluten free, vegan, buddhist friendly",77,27.0,60.0,,,products_import.json,,,1229790,"Product type: Ready-to-eat savory granola 🥣
 Net weight: 190g ⚖️
 Origin: Guangzhou, China 🌍
 
@@ -3645,10 +3728,76 @@ No added sugar
 Designed as a topping, snack, or meal booster
 
 v"
-2-2,2-2,Protein Rich,Quinoa Patties,酱香藜麦排,43.0,,,,,,animal products,vegan,116,2.0,21.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229785,
-EXT-1229602,,Nuts ＆ Seeds,"Walnuts （unsalted ,raw）",核桃（无盐，生）,33.0,,,,,,gluten,"gluten free, buddhist friendly",96,0,33.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229602,
-1-280,1-280,Cooked Grains,Cooked Brown Rice,现食糙米饭,11.0,,,,,,"gluten, animal products","gluten free, vegan, buddhist friendly",78,35.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229783,
-5-40,5-40,House Care,Laundry Soaker,浸泡粉,60.0,,,,,,,,81,0,1.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229742,
+2-2,2-2,Protein Rich,Quinoa Patties,酱香藜麦排,43.0,300g g,Keep refrigerated at 0–4°C. Shelf life: See packaging.,"Quinoa, carrot, black sesame, organic sunflower seeds, red onion, whole wheat breadcrumbs, whole wheat flour, cilantro, parsley, ginger, organic camellia oil, natural spices","This is a vegetable patty built on real structure. Quinoa forms the base, supported by vegetables, seeds, and herbs. Lightly crisp on the outside, soft and balanced inside. Clean flavor, no heaviness.","藜麦蔬菜饼 🌾
+产品类型：即食植物性蔬菜饼 ❄️
+净含量 300g g ⚖️
+产地：中国广州 🌍
+产品描述 🧾
+这是一款有结构的蔬菜饼。
+以藜麦为基础，搭配蔬菜、种子与香草。
+外层微微酥脆，内部柔软平衡。
+风味干净，不厚重。
+为什么人们会选它 ⚡
+谷物、蔬菜与种子的组合。
+口感平衡，软中带一点酥。
+可作为主食、配菜或夹入面包食用。
+配料表 🌱
+藜麦、胡萝卜、黑芝麻、葵花籽、紫洋葱、全麦面包碎、全麦面粉、香菜、欧芹、姜、山茶油、天然香料
+致敏原信息 ⚠️
+含有：麸质（小麦）、芝麻
+可能含有微量：坚果、大豆
+食用方式 🍽️
+建议加热后食用。
+可平底锅或烤箱加热至完全热透。
+可单独食用或搭配面包、沙拉。
+贮存与保质期 ❄️
+全程 0–4°C 冷藏保存。
+保质期：见包装标示。
+营养信息（每块 100g）🧮
+能量 168kcal
+脂肪 9.7g
+碳水化合物 16.7g
+蛋白质 4.9g
+食用提示 📌
+植物性藜麦蔬菜饼 🌿
+口感平衡，有结构
+建议加热食用",animal products,vegan,116,2.0,21.0,,,products_import.json,,,1229785,"Quinoa Veggie Patty 🌾
+Product type: Ready-to-eat plant-based patty ❄️
+Net weight: 300g g ⚖️
+Origin: Guangzhou, China 🌍
+PRODUCT DESCRIPTION 🧾
+This is a vegetable patty built on real structure.
+Quinoa forms the base, supported by vegetables, seeds, and herbs.
+Lightly crisp on the outside, soft and balanced inside.
+Clean flavor, no heaviness.
+WHY PEOPLE CHOOSE IT ⚡
+Grains, vegetables, and seeds in one bite.
+Balanced texture — soft with a slight crisp.
+Works as a main, a side, or inside a sandwich.
+INGREDIENTS 🌱
+Quinoa, carrot, black sesame, organic sunflower seeds, red onion, whole wheat breadcrumbs, whole wheat flour, cilantro, parsley, ginger, organic camellia oil, natural spices
+CONTAINS / MAY CONTAIN ⚠️
+Contains: Gluten (wheat), sesame
+May contain traces of: Nuts, soy
+HOW TO EAT 🍽️
+Heat before serving for best texture.
+Pan-fry or oven-heat until warmed through.
+Serve on its own or inside a sandwich or bowl.
+STORAGE ❄️
+Keep refrigerated at 0–4°C.
+Shelf life: See packaging.
+NUTRITION (Per patty 100g) 🧮
+Energy 168kcal
+Fat 9.7g
+Carbohydrate 16.7g
+Protein 4.9g
+NOTES 📌
+Plant-based quinoa patty 🌿
+Balanced texture and structure
+Best served warm"
+EXT-1229602,,Nuts ＆ Seeds,"Walnuts （unsalted ,raw）",核桃（无盐，生）,33.0,,,,,,gluten,"gluten free, buddhist friendly",96,0,33.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229602,
+1-280,1-280,Cooked Grains,Cooked Brown Rice,现食糙米饭,11.0,,,,,,"gluten, animal products","gluten free, vegan, buddhist friendly",78,35.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229783,
+5-40,5-40,House Care,Laundry Soaker,浸泡粉,60.0,,,,,,,,81,0,1.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229742,
 2-200,2-200,Fruits,USDA Organic Goji Berries,枸杞,47.0,150g,"Store in a cool, dry place.",,,"枸杞 🍒
 产品类型：果干 ❄️
 净含量：150g ⚖️
@@ -3693,7 +3842,7 @@ EXT-1229602,,Nuts ＆ Seeds,"Walnuts （unsalted ,raw）",核桃（无盐，生�
 天然果干 🌿
 不含添加剂与防腐剂
 天然含糖
-本产品通过美国 USDA 有机认证（USDA Organic）。",gluten,"buddhist friendly, gluten free, hot",49,11.0,14.0,no ingredients,,1229768,"USDA Organic Goji Berries 🍒
+本产品通过美国 USDA 有机认证（USDA Organic）。",gluten,"buddhist friendly, gluten free, hot",49,11.0,14.0,no ingredients,,products_import.json,,,1229768,"USDA Organic Goji Berries 🍒
 Product Type: Dried Fruit ❄️
 Net Content: 150g ⚖️
 Origin: China 🌍
@@ -3737,11 +3886,11 @@ Consumption Notes 📌
 Whole dried fruit 🌿
 No additives or preservatives
 Naturally contains fruit sugars"
-4-20,4-20,Grains ＆ Pasta,Brown Rice  （Long Grain）,糙米,23.0,,,,,,gluten,"buddhist friendly, gluten free",11,9.0,33.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229758,
-4-40,4-40,Grains ＆ Pasta,Old Fashioned Oats,传统快熟燕麦,17.0,,,,,,,hot,28,9.0,11.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229755,
-EXT-1229708,,Cosmetics,Essential Natural Lipstick,植萃天然唇膏,118.0,,,,,,,,390,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229708,
-5-80,5-80,House Care,Toilet Cleaner,洗手间清洁液,57.0,,,,,,,,29,0,5.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229836,
-4-260,4-260,Nuts ＆ Seeds,Flaxseed,亚麻籽,27.0,,,,,,gluten,"gluten free, hot",1,7.0,5.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229750,
+4-20,4-20,Grains ＆ Pasta,Brown Rice  （Long Grain）,糙米,23.0,,,,,,gluten,"buddhist friendly, gluten free",11,9.0,33.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229758,
+4-40,4-40,Grains ＆ Pasta,Old Fashioned Oats,传统快熟燕麦,17.0,,,,,,,hot,28,9.0,11.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229755,
+EXT-1229708,,Cosmetics,Essential Natural Lipstick,植萃天然唇膏,118.0,,,,,,,,390,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229708,
+5-80,5-80,House Care,Toilet Cleaner,洗手间清洁液,57.0,,,,,,,,29,0,5.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229836,
+4-260,4-260,Nuts ＆ Seeds,Flaxseed,亚麻籽,27.0,,,,,,gluten,"gluten free, hot",1,7.0,5.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229750,
 3-240,3-240,Bread,GF Nuts＆Seeds Bread （Frozen）,无麸燕麦种子面包,53.0,440g,Slice the entire loaf upon receiving and store frozen. Remove a slice and heat when ready to eat.,"Organic sunflower seeds, almonds, pumpkin seeds, flax seeds, chia seeds, traditional oats, rolled oats, psyllium husk, maple syrup, organic coconut oil, salt, purified water","This is not your typical bread. No wheat. No fluff. Just oats, nuts, and seeds pressed into a dense, chewy, functional loaf. Rich in natural fats and fiber, with real texture and real structure. Solid. Nourishing. Built to work — not to impress.","种子能量面包 🌾
 产品类型：冷冻植物性面包 ❄️
 净含量：440g ⚖️
@@ -3776,7 +3925,7 @@ EXT-1229708,,Cosmetics,Essential Natural Lipstick,植萃天然唇膏,118.0,,,,,,
 食用提示 📌
 植物性功能型面包 🌿
 建议冷冻保存
-适合加热后食用","gluten, animal products","vegan, gluten free, buddhist friendly",22,6.0,63.0,,,1229743,"Seed Power Bread 🌾
+适合加热后食用","gluten, animal products","vegan, gluten free, buddhist friendly",22,6.0,63.0,,,products_import.json,,,1229743,"Seed Power Bread 🌾
 Product type: Frozen plant-based bread ❄️
 Net weight: 440g ⚖️
 Origin: Guangzhou, China 🌍
@@ -3811,20 +3960,20 @@ INTENDED USE / NOTES 📌
 Plant-based functional bread 🌿
 Best stored frozen
 Designed for toasting"
-EXT-2140073,,Cosmetics,Balmy Stick,,118.0,,,,,,,,385,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,2140073,
-5-90,5-90,House Care,Laundry Liquid,柠檬草精油洗衣液,87.0,,,,,,,,14,2.0,7.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229727,
-3-180,3-180,Frozen,"Frozen Mix Berries, Antioxidant Bomb !",混合莓果,38.0,,,,,,"gluten, animal products","frozen, vegan, buddhist friendly, gluten free",1,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229735,
-4-640,4-640,Nut Butters,Unhulled Sesame Tahini,中东生芝麻酱（未去皮）,46.0,,,,,,"gluten, animal products","vegan, gluten free, buddhist friendly",54,1.0,2.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229596,
-EXT-1229710,,Cosmetics,The O.N.E Tinted Lip Oil,润色护唇油,118.0,,,,,,,,486,0,5.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229710,
-4-810,4-810,Coffee ＆ Tea,Sweat N Sour,云南炮仗山独水井咖啡豆,43.0,,,,,,gluten,"buddhist friendly, gluten free",30,0,2.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229723,
-4-280,4-280,Nuts ＆ Seeds,Golden Flaxseed,黄金亚麻籽,44.0,,,,,,gluten,"gluten free, buddhist friendly",56,5.0,8.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229719,
-1-350,1-350,,Quinoa Green Lentil Buddha Bowl,藜麦扁豆杂蔬碗,40.0,,,,,,gluten,gluten free,0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229715,
-1-40,1-40,Sour Creams,Labneh Za‘atar,中东香料酸奶油,57.0,,,,,,"gluten, animal products","vegan, buddhist friendly, gluten free",5,4.0,52.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229658,
-4-650,4-650,Nut Butters,Hulled Sesame Tahini,中东生芝麻酱（去皮）,38.0,,,,,,gluten,"gluten free, buddhist friendly",54,4.0,14.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229618,
-1-300,1-300,Salads ＆ Bowls,Quinoa Salad,藜麦沙拉,44.0,,,,,,animal products,"hot, vegan, buddhist friendly",55,40.0,67.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229686,
-1-390,1-390,Meals,Tom Yum,泰式冬阴功汤,44.0,,,,,,animal products,vegan,0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229712,
-3-210,3-210,Gelato,Raspberry Mango Sorbet,树莓芒果冰淇淋,33.0,,,,,,"gluten, animal products","vegan, gluten free, buddhist friendly",105,4.0,4.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229711,
-2-470,2-470,Nut Butters,Cashew Butter,腰果酱,85.0,,,,,,"gluten, animal products","vegan, buddhist friendly, gluten free",51,1.0,12.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229709,
+EXT-2140073,,Cosmetics,Balmy Stick,,118.0,,,,,,,,385,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,2140073,
+5-90,5-90,House Care,Laundry Liquid,柠檬草精油洗衣液,87.0,,,,,,,,14,2.0,7.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229727,
+3-180,3-180,Frozen,"Frozen Mix Berries, Antioxidant Bomb !",混合莓果,38.0,,,,,,"gluten, animal products","frozen, vegan, buddhist friendly, gluten free",1,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229735,
+4-640,4-640,Nut Butters,Unhulled Sesame Tahini,中东生芝麻酱（未去皮）,46.0,,,,,,"gluten, animal products","vegan, gluten free, buddhist friendly",54,1.0,2.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229596,
+EXT-1229710,,Cosmetics,The O.N.E Tinted Lip Oil,润色护唇油,118.0,,,,,,,,486,0,5.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229710,
+4-810,4-810,Coffee ＆ Tea,Sweat N Sour,云南炮仗山独水井咖啡豆,43.0,,,,,,gluten,"buddhist friendly, gluten free",30,0,2.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229723,
+4-280,4-280,Nuts ＆ Seeds,Golden Flaxseed,黄金亚麻籽,44.0,,,,,,gluten,"gluten free, buddhist friendly",56,5.0,8.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229719,
+1-350,1-350,,Quinoa Green Lentil Buddha Bowl,藜麦扁豆杂蔬碗,40.0,,,,,,gluten,gluten free,0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229715,
+1-40,1-40,Sour Creams,Labneh Za‘atar,中东香料酸奶油,57.0,,,,,,"gluten, animal products","vegan, buddhist friendly, gluten free",5,4.0,52.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229658,
+4-650,4-650,Nut Butters,Hulled Sesame Tahini,中东生芝麻酱（去皮）,38.0,,,,,,gluten,"gluten free, buddhist friendly",54,4.0,14.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229618,
+1-300,1-300,Salads ＆ Bowls,Quinoa Salad,藜麦沙拉,44.0,,,,,,animal products,"hot, vegan, buddhist friendly",55,40.0,67.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229686,
+1-390,1-390,Meals,Tom Yum,泰式冬阴功汤,44.0,,,,,,animal products,vegan,0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229712,
+3-210,3-210,Gelato,Raspberry Mango Sorbet,树莓芒果冰淇淋,33.0,,,,,,"gluten, animal products","vegan, gluten free, buddhist friendly",105,4.0,4.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229711,
+2-470,2-470,Nut Butters,Cashew Butter,腰果酱,85.0,,,,,,"gluten, animal products","vegan, buddhist friendly, gluten free",51,1.0,12.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229709,
 1-120,1-120,Others,Apple Pie Overnight Oats,苹果绵绵燕麦,27.0,250g,Keep refrigerated at 0–4°C. Shelf life: See packaging.,"Apple, classic oats, oat milk, organic agave syrup, chia seeds, cinnamon, vanilla extract, spices","This is our housemade overnight oats. Rolled oats and chia seeds are soaked overnight in our own oat milk to create a soft, creamy base. Finished with apple purée on top. Before eating, give it a good stir to fully blend the apple into the oats. The result is smooth, naturally sweet, with warm notes of apple and cinnamon.","苹果肉桂隔夜燕麦 🍎🥣
 
  
@@ -3920,7 +4069,7 @@ EXT-1229710,,Cosmetics,The O.N.E Tinted Lip Oil,润色护唇油,118.0,,,,,,,,486
 
 植物性早餐 🌿
 含奇亚籽与燕麦
-建议冷藏食用",animal products,"vegan, buddhist friendly",104,0,43.0,,,1229705,"Apple Cinnamon Overnight Oats 🍎🥣
+建议冷藏食用",animal products,"vegan, buddhist friendly",104,0,43.0,,,products_import.json,,,1229705,"Apple Cinnamon Overnight Oats 🍎🥣
 
  
 
@@ -4016,9 +4165,9 @@ INTENDED USE / NOTES 📌
 Plant-based breakfast 🌿
 Contains chia seeds and oats
 Best consumed chilled"
-1-60,1-60,Spreads ＆ Dips,Epic Baba Ganoush,（全新）以色列茄子泥,38.0,,,,,,"gluten, animal products","vegan, gluten free",169,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229695,
-EXT-1229694,,Kombucha,Passion Fruit Kombucha,百香果康普茶,29.0,,,,,,"gluten, animal products","gluten free, fermented, vegan, buddhist friendly, hot",153,0,25.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229694,
-1-50,1-50,Spreads ＆ Dips,Chickpeas Salad,美式豆泥蔬沙拉,38.0,,,,,,"gluten, animal products","vegan, gluten free",134,12.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229687,
+1-60,1-60,Spreads ＆ Dips,Epic Baba Ganoush,（全新）以色列茄子泥,38.0,,,,,,"gluten, animal products","vegan, gluten free",169,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229695,
+EXT-1229694,,Kombucha,Passion Fruit Kombucha,百香果康普茶,29.0,,,,,,"gluten, animal products","gluten free, fermented, vegan, buddhist friendly, hot",153,0,25.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229694,
+1-50,1-50,Spreads ＆ Dips,Chickpeas Salad,美式豆泥蔬沙拉,38.0,,,,,,"gluten, animal products","vegan, gluten free",134,12.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229687,
 1-360,1-360,Soups ＆ Stews,Chinese Herbal Soup,药膳汤,27.0,600g,Keep refrigerated at 0–4°C at all times,,"This is a classic Chinese-style vegetable soup, built slow and steady. A deep, savory broth layered with mushrooms, vegetables, and traditional aromatics. Earthy, warming, and balanced — designed to be comforting without feeling heavy. Simple, honest, and meant to be eaten as a bowl, not a statement.","产品类型：即食冷藏食品 ❄️
 净含量：600g ⚖️
 产地：中国广州 🌍
@@ -4114,7 +4263,7 @@ EXT-1229694,,Kombucha,Passion Fruit Kombucha,百香果康普茶,29.0,,,,,,"glute
 食用提示 📌
 
 植物性食品 🌿
-中式菌菇蔬菜汤",animal products,"vegan, buddhist friendly",182,3.0,24.0,no ingredients,,1230115,"Product type: Ready-to-eat refrigerated food ❄️
+中式菌菇蔬菜汤",animal products,"vegan, buddhist friendly",182,3.0,24.0,no ingredients,,products_import.json,,,1230115,"Product type: Ready-to-eat refrigerated food ❄️
 Net weight: 600g ⚖️
 Origin: Guangzhou, China 🌍
 
@@ -4240,7 +4389,7 @@ Chinese-style mushroom and vegetable soup"
 天然无咖啡因
 无添加剂、无防腐剂
 植物性天然原料
-本产品通过美国 USDA 有机认证（USDA Organic）。",gluten,"buddhist friendly, gluten free",32,0,12.0,no pack size; no storage temp,,1229677,"PRODUCT DESCRIPTION
+本产品通过美国 USDA 有机认证（USDA Organic）。",gluten,"buddhist friendly, gluten free",32,0,12.0,no pack size; no storage temp,,products_import.json,,,1229677,"PRODUCT DESCRIPTION
 Deep red, tart, and naturally floral.
 Hibiscus flower tea is made from dried hibiscus petals, brewed into a vibrant infusion with a bold ruby color and a naturally tangy profile.
 The flavor is bright, slightly sour, and fruit-like—reminiscent of cranberries with a clean floral finish.
@@ -4270,11 +4419,11 @@ NOTES
 Naturally caffeine-free
 No additives or preservatives
 Plant-based botanical ingredient"
-6-31,6-31,Dairy Alternatives,Oatly Chocolate Flavor,Oatly 燕麦露巧克力味,38.0,,,,,,,buddhist friendly,0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229675,
-EXT-1229673,,Bites,Energy Cubes,花生奇亚能量块,20.0,,,,,,animal products,"vegan, buddhist friendly",240,0,30.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229673,
-6-30,6-30,Dairy Alternatives,Oatly Classic,Oatly 燕麦露原味,39.0,,,,,,,buddhist friendly,0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229670,
-4-720,4-720,Oils,Extra Virgin Coconut Oil,初榨椰子油,125.0,,,,,,gluten,"gluten free, buddhist friendly",31,0,4.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229668,
-1-420,1-420,Wraps ＆ Sandwiches,Falafel Wrap,法拉费卷,44.0,,,,,,animal products,vegan,209,37.0,36.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229666,
+6-31,6-31,Dairy Alternatives,Oatly Chocolate Flavor,Oatly 燕麦露巧克力味,38.0,,,,,,,buddhist friendly,0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229675,
+EXT-1229673,,Bites,Energy Cubes,花生奇亚能量块,20.0,,,,,,animal products,"vegan, buddhist friendly",240,0,30.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229673,
+6-30,6-30,Dairy Alternatives,Oatly Classic,Oatly 燕麦露原味,39.0,,,,,,,buddhist friendly,0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229670,
+4-720,4-720,Oils,Extra Virgin Coconut Oil,初榨椰子油,125.0,,,,,,gluten,"gluten free, buddhist friendly",31,0,4.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229668,
+1-420,1-420,Wraps ＆ Sandwiches,Falafel Wrap,法拉费卷,44.0,,,,,,animal products,vegan,209,37.0,36.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229666,
 4-620,4-620,Protein Powders,Soy Protein Powder USDA Organic,大豆蛋白粉,86.0,500g,,Soy Protein (from soybeans),"This is soy protein powder. Made from soybeans and processed into a high-protein, neutral powder. No sweeteners. No flavors. No fillers. Just one ingredient, refined for function — protein that works in real food. Built for daily use, not hype.","大豆蛋白粉 🌱
 来源于大豆的植物蛋白
 产品介绍
@@ -4315,7 +4464,7 @@ EXT-1229673,,Bites,Energy Cubes,花生奇亚能量块,20.0,,,,,,animal products,
 ROOTS 提示
 我们更在意原料是否值得，而不是故事是否好听。
 简单，是经过选择后的结果。
-本产品通过美国 USDA 有机认证（USDA Organic）。",gluten,"gluten free, buddhist friendly",42,11.0,54.0,no storage temp,,1229634,"SOY PROTEIN POWDER 🌱
+本产品通过美国 USDA 有机认证（USDA Organic）。",gluten,"gluten free, buddhist friendly",42,11.0,54.0,no storage temp,,products_import.json,,,1229634,"SOY PROTEIN POWDER 🌱
 Plant-based protein from soybeans
 PRODUCT DESCRIPTION
 This is soy protein powder.
@@ -4376,7 +4525,7 @@ If it doesn’t do the job, it doesn’t make the cut."
 食用提示
 植物性高蛋白肉感替代品
 低脂结构设计
-适用于多种咸味料理场景",animal products,"vegan, freezer friendly",77,2.0,38.0,no pack size; no storage temp,,1229652,"PRODUCT DESCRIPTION
+适用于多种咸味料理场景",animal products,"vegan, freezer friendly",77,2.0,38.0,no pack size; no storage temp,,products_import.json,,,1229652,"PRODUCT DESCRIPTION
 Chicken-style strips. Fully plant-based.
 These tofu-based strips are designed to deliver a fibrous, chewy, “meaty” texture without any meat. Built from tofu and wheat gluten, they hold structure, absorb flavor well, and deliver a satisfying bite similar to traditional chicken strips.
 Seasoned with soy sauce and spices, they are savory, balanced, and ready to cook into any dish that needs protein and texture.
@@ -4486,9 +4635,9 @@ Designed for savory cooking applications
 植物性高蛋白肉感替代品
 低脂结构设计
 适用于多种咸味料理场景"
-4-570,4-570,Coffee ＆ Tea,Mint Leaves （Herbal Tea）,薄荷茶,38.0,,,,,,gluten,"gluten free, buddhist friendly",77,4.0,5.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229646,
-EXT-1229640,,Kombucha,Pineapple Mint Kombucha,菠萝薄荷康普茶,32.0,,,,,,"gluten, animal products","gluten free, fermented, vegan, buddhist friendly",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229640,
-2-210,2-210,Fruits,Crunchy Jujubes （Chinese Dates）,红枣片,17.0,,,,,,gluten,"gluten free, buddhist friendly",55,0,18.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229639,
+4-570,4-570,Coffee ＆ Tea,Mint Leaves （Herbal Tea）,薄荷茶,38.0,,,,,,gluten,"gluten free, buddhist friendly",77,4.0,5.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229646,
+EXT-1229640,,Kombucha,Pineapple Mint Kombucha,菠萝薄荷康普茶,32.0,,,,,,"gluten, animal products","gluten free, fermented, vegan, buddhist friendly",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229640,
+2-210,2-210,Fruits,Crunchy Jujubes （Chinese Dates）,红枣片,17.0,,,,,,gluten,"gluten free, buddhist friendly",55,0,18.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229639,
 1-110,1-110,Jams,Strawberry Lemon Jam,草莓奇亚籽果酱,43.0,220g,Keep refrigerated at 0–4°C at all times,"Strawberries, chia seeds, lemon juice, lemon zest, organic agave syrup, salt","This is strawberry chia jam, done clean and simple. Ripe strawberries meet chia seeds for natural thickness, with lemon juice and zest to keep things bright. Lightly sweetened with organic agave syrup — just enough to lift the fruit, never overpower it. Fresh, balanced, and easy to love.","产品类型：即食冷藏食品 ❄️
 净含量：220g ⚖️
 产地：中国广州 🌍
@@ -4588,7 +4737,7 @@ EXT-1229640,,Kombucha,Pineapple Mint Kombucha,菠萝薄荷康普茶,32.0,,,,,,"g
 食用提示 📌
 
 纯植物性果酱 🌿
-奇亚籽自然增稠","gluten, animal products","vegan, gluten free, buddhist friendly",42,6.0,21.0,,,1229635,"Product type: Ready-to-eat refrigerated food ❄️
+奇亚籽自然增稠","gluten, animal products","vegan, gluten free, buddhist friendly",42,6.0,21.0,,,products_import.json,,,1229635,"Product type: Ready-to-eat refrigerated food ❄️
 Net weight: 220g ⚖️
 Origin: Guangzhou, China 🌍
 
@@ -4688,19 +4837,19 @@ INTENDED USE / NOTES 📌
 
 Plant-based fruit spread 🌿
 Naturally thickened with chia seeds"
-4-600,4-600,Spices,Onion Powder Organic USDA,洋葱粉,31.0,,,,,本产品通过美国 USDA 有机认证（USDA Organic）。,gluten,gluten free,75,2.0,3.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229623,
-4-100,4-100,Spicy,Fermented Tofu （Oil Free）,素腐乳（无油）,38.0,,,,,,gluten,"fermented, buddhist friendly, gluten free",75,3.0,16.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229632,
-4-700,4-700,Oils,Refined Coconut Oil （Cooking Oil）,精制椰子油（推荐烹饪使用）,76.0,,,,,,gluten,"buddhist friendly, gluten free",74,1.0,5.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229628,
-1-440,1-440,Wraps ＆ Sandwiches,Pesto Wrap,纯素罗勒鸡肉卷,44.0,,,,,,animal products,vegan,55,21.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229627,
-1-75,1-75,Kombucha,DIY Kombucha Scooby + Starter Liquid,康普茶DIY套装（菌母 +菌液）,76.0,,,,,,,,74,0,8.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229895,
-4-310,4-310,Flavor Topping,Parmesnuts! （Parmesan）,纯素帕玛森芝士粉,36.0,,,,,,"gluten, animal products","vegan, gluten free",7,6.0,28.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229612,
-4-590,4-590,Spices,Garlic Powder Organic USDA,大蒜粉,31.0,,,,,本产品通过美国 USDA 有机认证（USDA Organic）。,gluten,gluten free,47,5.0,4.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229622,
+4-600,4-600,Spices,Onion Powder Organic USDA,洋葱粉,31.0,,,,,本产品通过美国 USDA 有机认证（USDA Organic）。,gluten,gluten free,75,2.0,3.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229623,
+4-100,4-100,Spicy,Fermented Tofu （Oil Free）,素腐乳（无油）,38.0,,,,,,gluten,"fermented, buddhist friendly, gluten free",75,3.0,16.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229632,
+4-700,4-700,Oils,Refined Coconut Oil （Cooking Oil）,精制椰子油（推荐烹饪使用）,76.0,,,,,,gluten,"buddhist friendly, gluten free",74,1.0,5.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229628,
+1-440,1-440,Wraps ＆ Sandwiches,Pesto Wrap,纯素罗勒鸡肉卷,44.0,,,,,,animal products,vegan,55,21.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229627,
+1-75,1-75,Kombucha,DIY Kombucha Scooby + Starter Liquid,康普茶DIY套装（菌母 +菌液）,76.0,,,,,,,,74,0,8.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229895,
+4-310,4-310,Flavor Topping,Parmesnuts! （Parmesan）,纯素帕玛森芝士粉,36.0,,,,,,"gluten, animal products","vegan, gluten free",7,6.0,28.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229612,
+4-590,4-590,Spices,Garlic Powder Organic USDA,大蒜粉,31.0,,,,,本产品通过美国 USDA 有机认证（USDA Organic）。,gluten,gluten free,47,5.0,4.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229622,
 3-160,3-160,Protein Rich,Mushroom Burger Pattie,香菇汉堡饼,43.0,,,"mushrooms, onions, parsley, brown rice, tomato paste, organic soy sauce, miso paste, wheat gluten, spices.",,"配料：蘑菇，洋葱，香菜，糙米，番茄膏，酱油，味噌酱，小麦面筋，香料
 每150g
 【Calories卡路里】199kcal
 【Fat脂肪】0.9g
 【Carbs碳水】23.8g
-【Protein蛋白质】24.7g",animal products,"frozen, vegan",92,8.0,45.0,no pack size; no storage temp,,1229621,"Delve into the rich flavors of our mushroom pattie, a gourmet blend that marries the earthy essence of mushrooms with the freshness of onions and parsley. Bound together with wholesome brown rice and enriched with tomato paste, organic soy sauce, miso paste, wheat gluten, and a select mix of spices, this pattie is a culinary delight.
+【Protein蛋白质】24.7g",animal products,"frozen, vegan",92,8.0,45.0,no pack size; no storage temp,,products_import.json,,,1229621,"Delve into the rich flavors of our mushroom pattie, a gourmet blend that marries the earthy essence of mushrooms with the freshness of onions and parsley. Bound together with wholesome brown rice and enriched with tomato paste, organic soy sauce, miso paste, wheat gluten, and a select mix of spices, this pattie is a culinary delight.
 How to eat: This pattie is versatile and ready to be heated in a pan or oven until warm and slightly crispy on the outside. It’s perfect as the star of your burger, chopped up in salads, or enjoyed alongside your favorite sides.
 Ingredients: mushrooms, onions, parsley, brown rice, tomato paste, organic soy sauce, miso paste, wheat gluten, spices.
 Free of: nuts
@@ -4709,7 +4858,7 @@ Serving size: 150g
 【Fat脂肪】0.9g
 【Carbs碳水】23.8g
 【Protein蛋白质】24.7g"
-5-29,5-29,Protein Powders,Pumpkin Seed Protein Powder,南瓜籽蛋白粉,211.0,,,,,,gluten,"buddhist friendly, gluten free",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229617,
+5-29,5-29,Protein Powders,Pumpkin Seed Protein Powder,南瓜籽蛋白粉,211.0,,,,,,gluten,"buddhist friendly, gluten free",0,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229617,
 4-240,4-240,Granola,Crunchy Granola,格兰诺拉脆麦片,43.0,150g,"Store in a cool, dry place away from direct sunlight. After opening, reseal tightly to maintain crunch. Shelf life: See packaging.","Old-fashioned oats, almonds, pecans, coconut flakes, organic coconut sugar, organic coconut oil, maple syrup, vanilla extract, unsweetened dried blueberries, spices","Most granola is dessert in disguise. This isn’t. This is the crunch that hits back. No sticky sugar glue. No fake health halos. Just toasted oats, coconut, nuts, and real plant-fueled energy that won’t spike, crash, or lie.","产品类型：即食烘焙格兰诺拉麦片 🥣
 净含量：150g ⚖️
 产地：中国广州 🌍
@@ -4744,7 +4893,7 @@ Serving size: 150g
 食用提示 📌
 植物性烘焙格兰诺拉 🌿
 不含精制糖
-为真正的一餐而做，不是甜点替身",animal products,"vegan, buddhist friendly",68,39.0,77.0,,,1229614,"Product type: Ready-to-eat baked granola 🥣
+为真正的一餐而做，不是甜点替身",animal products,"vegan, buddhist friendly",68,39.0,77.0,,,products_import.json,,,1229614,"Product type: Ready-to-eat baked granola 🥣
 Net weight: 150g ⚖️
 Origin: Guangzhou, China 🌍
 PRODUCT DESCRIPTION 🧾
@@ -4819,7 +4968,7 @@ Built for real meals, not sugar crashes"
 ROOTS 提示
 不是所有蛋白都追求极限。
 有些选择，是为了长期。
-本产品通过美国 USDA 有机认证（USDA Organic）。",gluten,"buddhist friendly, gluten free",86,6.0,35.0,no storage temp,,1229610,"HEMP PROTEIN POWDER 🌿
+本产品通过美国 USDA 有机认证（USDA Organic）。",gluten,"buddhist friendly, gluten free",86,6.0,35.0,no storage temp,,products_import.json,,,1229610,"HEMP PROTEIN POWDER 🌿
 Plant-based protein from hemp seeds
 PRODUCT DESCRIPTION
 This is hemp protein powder.
@@ -4860,13 +5009,13 @@ Not suitable for individuals allergic to hemp
 ROOTS NOTE
 Hemp isn’t about extremes.
 It’s about steady fuel, real texture, and food that behaves like food."
-3-250,3-250,Bread,Whole Wheat Rye Bread,全麦黑麦面包,38.0,,,,,,animal products,"vegan, buddhist friendly",33,9.0,65.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229603,
+3-250,3-250,Bread,Whole Wheat Rye Bread,全麦黑麦面包,38.0,,,,,,animal products,"vegan, buddhist friendly",33,9.0,65.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229603,
 3-130,3-130,Protein Rich,Bolognese,意式番茄素肉酱,49.0,,,"Italian tomatoes, onion, carrot, garlic, agave, extra virgin olive oil, organic soy sauce, textured vegetable protein, chickpeas flour, wheat gluten, filtered water, nutritional yeast, tomato paste, our Worcestershire sauce, vegetable broth, spices.",,"配料：意大利番茄，洋葱，胡萝卜，大蒜，龙舌兰，特级初榨橄榄油，酱油，大豆组织蛋白，鹰嘴豆粉，小麦面筋，过滤水，营养酵母，番茄膏，伍斯特酱油，蔬菜高汤，香料。
 每250g
 【Calories卡路里】190kcal
 【Fat脂肪】4.5g
 【Carbs碳水】26g
-【Protein蛋白质】16g","gluten, animal products","vegan, gluten free, freezer friendly",85,1.0,29.0,no pack size; no storage temp,,1229653,"Discover the rich and comforting taste of our plant-based bolognese, a hearty sauce that blends Italian tomatoes, onion, carrot, and garlic with a hint of agave for a balanced flavor and the richness of extra virgin olive oil. This robust sauce is further enhanced with organic soy sauce, textured vegetable protein, chickpeas flour, wheat gluten, and filtered water, then seasoned with nutritional yeast, tomato paste, our own Worcestershire sauce, vegetable broth, and a carefully selected blend of spices.
+【Protein蛋白质】16g","gluten, animal products","vegan, gluten free, freezer friendly",85,1.0,29.0,no pack size; no storage temp,,products_import.json,,,1229653,"Discover the rich and comforting taste of our plant-based bolognese, a hearty sauce that blends Italian tomatoes, onion, carrot, and garlic with a hint of agave for a balanced flavor and the richness of extra virgin olive oil. This robust sauce is further enhanced with organic soy sauce, textured vegetable protein, chickpeas flour, wheat gluten, and filtered water, then seasoned with nutritional yeast, tomato paste, our own Worcestershire sauce, vegetable broth, and a carefully selected blend of spices.
 How to eat: Our bolognese sauce is ready to warm and serve, making it an easy addition to your pasta, a base for lasagna, or a rich topping for baked potatoes. Simply heat in a saucepan over medium heat until hot, then mix with your favorite dishes for an instant flavor boost.
 Ingredients: Italian tomatoes, onion, carrot, garlic, agave, extra virgin olive oil, organic soy sauce, textured vegetable protein, chickpeas flour, wheat gluten, filtered water, nutritional yeast, tomato paste, our Worcestershire sauce, vegetable broth, spices.
 Free of: nuts
@@ -4875,11 +5024,11 @@ Serving size: 250g
 【Fat脂肪】4.5g
 【Carbs碳水】26g
 【Protein蛋白质】16g"
-3-60,3-60,Protein Rich,Ground Meat,素肉碎,38.0,,,,,,animal products,"frozen, vegan",50,5.0,81.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229609,
-1-240,1-240,Spicy,Harissa Paste,哈辣酱（北非辣椒酱）,35.0,,,,,,"gluten, animal products","gluten free, hot, vegan",56,3.0,26.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229607,
-EXT-2398096,,Others,The Last Batch – GoVegan Stickers,,5.0,,,,,,,,197,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,2398096,
-EXT-1229601,,Nuts ＆ Seeds,"Cashews （Unsalted, Raw）",生腰果,39.0,,,,,,gluten,"buddhist friendly, gluten free",119,0,17.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229601,
-1-20,1-20,Spreads ＆ Dips,Arugula Basil Pesto,阿古罗勒青酱,38.0,,,,,,animal products,vegan,103,5.0,31.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229600,
+3-60,3-60,Protein Rich,Ground Meat,素肉碎,38.0,,,,,,animal products,"frozen, vegan",50,5.0,81.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229609,
+1-240,1-240,Spicy,Harissa Paste,哈辣酱（北非辣椒酱）,35.0,,,,,,"gluten, animal products","gluten free, hot, vegan",56,3.0,26.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229607,
+EXT-2398096,,Others,The Last Batch – GoVegan Stickers,,5.0,,,,,,,,197,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,2398096,
+EXT-1229601,,Nuts ＆ Seeds,"Cashews （Unsalted, Raw）",生腰果,39.0,,,,,,gluten,"buddhist friendly, gluten free",119,0,17.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229601,
+1-20,1-20,Spreads ＆ Dips,Arugula Basil Pesto,阿古罗勒青酱,38.0,,,,,,animal products,vegan,103,5.0,31.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229600,
 2-170,2-170,Juices,Carrot Ginger Juice,姜红卜汁,23.0,350ml,Keep refrigerated at 0–4°C at all times,"Carrot, ginger, organic prebiotic fiber","This is carrot juice, done clean. Fresh carrots with just a hint of ginger — nothing fake, nothing added. Naturally sweet, bright, and seriously refreshing. No sugar. No water. Just the good stuff.","产品类型：新鲜果蔬汁 ❄️
 净含量：350ml ⚖️
 产地：中国广州 🌍
@@ -4965,7 +5114,7 @@ EXT-1229601,,Nuts ＆ Seeds,"Cashews （Unsalted, Raw）",生腰果,39.0,,,,,,gl
 食用提示 📌
 
 纯植物性饮品 🌿
-胡萝卜生姜风味","gluten, animal products","gluten free, vegan, buddhist friendly",44,22.0,22.0,,,1229595,"Product type: Fresh juice ❄️
+胡萝卜生姜风味","gluten, animal products","gluten free, vegan, buddhist friendly",44,22.0,22.0,,,products_import.json,,,1229595,"Product type: Fresh juice ❄️
 Net volume: 350ml ⚖️
 Origin: Guangzhou, China 🌍
 
@@ -5051,28 +5200,28 @@ INTENDED USE / NOTES 📌
 
 100% plant-based 🌿
 Fresh carrot & ginger juice"
-4-300,4-300,Flavor Topping,Smokey Parmesan,烟熏版素芝士粉,35.0,,,,,,"gluten, animal products","gluten free, vegan",41,6.0,14.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229567,
-EXT-1229565,,Kombucha,Mix Berries Kombucha,莓果康普茶,29.0,,,,,,"gluten, animal products","vegan, gluten free, buddhist friendly, hot",46,0,20.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229565,
-3-10,3-10,Bites,Mango Protein Bites,芒果蛋白球,38.0,,,,,,"gluten, animal products","gluten free, vegan, buddhist friendly",97,24.0,84.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229564,
-4-290,4-290,Fruits,Dehydrated Coconut Flakes,脱水椰子片,23.0,,,,,,gluten,"gluten free, buddhist friendly",58,4.0,10.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229560,
-EXT-1229557,,Nuts ＆ Seeds,Chia Seeds,奇亚籽,56.0,,,,,,gluten,"buddhist friendly, gluten free",126,0,16.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229557,
-EXT-1229551,,Nuts ＆ Seeds,"Almonds （unsalted, raw）",美国巴旦木大杏仁（无盐，生）,37.0,,,,,,gluten,"buddhist friendly, gluten free",80,0,25.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229551,
-2-280,2-280,Fruits,Nour Dates,诺意椰枣,32.0,,,,,,gluten,"gluten free, buddhist friendly",9,18.0,37.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229550,
-EXT-2488822,,Jams,Cherry Ginger Jam,,42.0,,,,,,,,0,0,18.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,2488822,
-EXT-2488576,,Wines （Vegan Certified）,Upper Galilee Cabernet - 2020,,249.0,,,,,,,,99,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,2488576,
-EXT-2488521,,Wines （Vegan Certified）,Upper Galilee Merlot - 2020,,249.0,,,,,,,,99,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,2488521,
-EXT-2488515,,Wines （Vegan Certified）,Upper Galilee Syrah -  2020,,249.0,,,,,,,,99,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,2488515,
-EXT-2488463,,Wines （Vegan Certified）,Special Reserve Red - 2020,,692.0,,,,,,,,99,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,2488463,
-EXT-2488458,,Wines （Vegan Certified）,Reserve Carignan Wild Old Vines - 2021,,702.0,,,,,,,,99,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,2488458,
-EXT-2488449,,Wines （Vegan Certified）,Reserve Cabernet Sauvignon 2018,,454.0,,,,,,,,99,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,2488449,
-EXT-2488448,,Wines （Vegan Certified）,Petit Sirah Reserve  Jezreel Valley - 2021,,530.0,,,,,,,,98,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,2488448,
-EXT-2488445,,Wines （Vegan Certified）,Galilee Sauvignon Blanc - 2023,,270.0,,,,,,,,99,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,2488445,
-EXT-2488433,,Wines （Vegan Certified）,Fresh ＆ Young French Blend - 2023,,335.0,,,,,,,,99,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,2488433,
-EXT-2488428,,Wines （Vegan Certified）,Upper Galilee Chardonnay - 2022,,270.0,,,,,,,,99,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,2488428,
-EXT-2487842,,Wines （Vegan Certified）,Yasmin White - 2023,Recanati Winery Yasmin White - 2023,200.0,,,,,,,,99,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,2487842,
-3-252,3-252,Bread,GF Buckwheat Bread （Sliced＆Frozen）,荞麦面包,49.0,,,,,,,,0,0,23.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,2405170,
-3-251,3-251,Bread,Whole Wheat Pita Bread （Frozen）,全麦皮塔面包,45.0,,,,,,,,0,15.0,36.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,2391250,
-4-271,4-271,Crackers,SuperSeed Crackers,SuperSeed Crackers,33.0,,,,,,,,0,5.0,16.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,2380932,
+4-300,4-300,Flavor Topping,Smokey Parmesan,烟熏版素芝士粉,35.0,,,,,,"gluten, animal products","gluten free, vegan",41,6.0,14.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229567,
+EXT-1229565,,Kombucha,Mix Berries Kombucha,莓果康普茶,29.0,,,,,,"gluten, animal products","vegan, gluten free, buddhist friendly, hot",46,0,20.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229565,
+3-10,3-10,Bites,Mango Protein Bites,芒果蛋白球,38.0,,,,,,"gluten, animal products","gluten free, vegan, buddhist friendly",97,24.0,84.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229564,
+4-290,4-290,Fruits,Dehydrated Coconut Flakes,脱水椰子片,23.0,,,,,,gluten,"gluten free, buddhist friendly",58,4.0,10.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229560,
+EXT-1229557,,Nuts ＆ Seeds,Chia Seeds,奇亚籽,56.0,,,,,,gluten,"buddhist friendly, gluten free",126,0,16.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229557,
+EXT-1229551,,Nuts ＆ Seeds,"Almonds （unsalted, raw）",美国巴旦木大杏仁（无盐，生）,37.0,,,,,,gluten,"buddhist friendly, gluten free",80,0,25.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229551,
+2-280,2-280,Fruits,Nour Dates,诺意椰枣,32.0,,,,,,gluten,"gluten free, buddhist friendly",9,18.0,37.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229550,
+EXT-2488822,,Jams,Cherry Ginger Jam,,42.0,,,,,,,,0,0,18.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,2488822,
+EXT-2488576,,Wines （Vegan Certified）,Upper Galilee Cabernet - 2020,,249.0,,,,,,,,99,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,2488576,
+EXT-2488521,,Wines （Vegan Certified）,Upper Galilee Merlot - 2020,,249.0,,,,,,,,99,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,2488521,
+EXT-2488515,,Wines （Vegan Certified）,Upper Galilee Syrah -  2020,,249.0,,,,,,,,99,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,2488515,
+EXT-2488463,,Wines （Vegan Certified）,Special Reserve Red - 2020,,692.0,,,,,,,,99,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,2488463,
+EXT-2488458,,Wines （Vegan Certified）,Reserve Carignan Wild Old Vines - 2021,,702.0,,,,,,,,99,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,2488458,
+EXT-2488449,,Wines （Vegan Certified）,Reserve Cabernet Sauvignon 2018,,454.0,,,,,,,,99,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,2488449,
+EXT-2488448,,Wines （Vegan Certified）,Petit Sirah Reserve  Jezreel Valley - 2021,,530.0,,,,,,,,98,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,2488448,
+EXT-2488445,,Wines （Vegan Certified）,Galilee Sauvignon Blanc - 2023,,270.0,,,,,,,,99,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,2488445,
+EXT-2488433,,Wines （Vegan Certified）,Fresh ＆ Young French Blend - 2023,,335.0,,,,,,,,99,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,2488433,
+EXT-2488428,,Wines （Vegan Certified）,Upper Galilee Chardonnay - 2022,,270.0,,,,,,,,99,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,2488428,
+EXT-2487842,,Wines （Vegan Certified）,Yasmin White - 2023,Recanati Winery Yasmin White - 2023,200.0,,,,,,,,99,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,2487842,
+3-252,3-252,Bread,GF Buckwheat Bread （Sliced＆Frozen）,荞麦面包,49.0,,,,,,,,0,0,23.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,2405170,
+3-251,3-251,Bread,Whole Wheat Pita Bread （Frozen）,全麦皮塔面包,45.0,,,,,,,,0,15.0,36.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,2391250,
+4-271,4-271,Crackers,SuperSeed Crackers,SuperSeed Crackers,33.0,,,,,,,,0,5.0,16.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,2380932,
 1-370,1-370,Soups ＆ Stews,Pumpkin Soup,香烤南瓜汤,27.0,330g,Keep refrigerated at 0–4°C at all times,"Roasted pumpkin, scallions, garlic, vegetable broth, coconut milk, organic agave syrup, extra virgin olive oil, spices","This soup starts with roasted pumpkin. Slow-roasted until naturally sweet, then blended with coconut milk, garlic, scallions, and warm spices. The texture is thick and comforting, the flavor lands between savory and gently sweet. Simple, cozy, and built to show up.","产品类型：即食冷藏食品 ❄️
 净含量：330g ⚖️
 产地：中国广州 🌍
@@ -5168,7 +5317,7 @@ EXT-2487842,,Wines （Vegan Certified）,Yasmin White - 2023,Recanati Winery Yas
 食用提示 📌
 
 植物性食品 🌿
-烤南瓜椰奶浓汤","gluten, animal products","gluten free, vegan",44,38.0,0,,,1230056,"Product type: Ready-to-eat refrigerated food ❄️
+烤南瓜椰奶浓汤","gluten, animal products","gluten free, vegan",44,38.0,0,,,products_import.json,,,1230056,"Product type: Ready-to-eat refrigerated food ❄️
 Net weight: 330g ⚖️
 Origin: Guangzhou, China 🌍
 
@@ -5264,4 +5413,279 @@ INTENDED USE / NOTES 📌
 
 Plant-based product 🌿
 Roasted pumpkin & coconut soup"
-1-380,1-380,Soups ＆ Stews,Sweet Potato Cauliflower Curry,红薯菜花咖喱,44.0,,,,,,"gluten, animal products","vegan, gluten free",216,30.0,98.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,1229678,
+1-380,1-380,Soups ＆ Stews,Sweet Potato Cauliflower Curry,红薯菜花咖喱,44.0,,,,,,"gluten, animal products","vegan, gluten free",216,30.0,98.0,NO DESCRIPTION; no ingredients; no pack size; no storage temp,,products_import.json,,,1229678,
+1-130,,,Medium Size Probiotic Coconut Yogurt - Plain Flavor,大椰益生菌200ml（中） （冷藏）,31.200000000000003,,,,,,,,,17.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery new_variants + gzgrocery sales,EXT-1229649,Plain 200ml 原味（中）,,
+1-140,,,Big Size Probiotic Coconut Yogurt - Plain Flavor,纯素椰子酸奶（大）500g （冷藏）,64,,,,,,,,,26.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery new_variants + gzgrocery sales,EXT-1229649,Plain 500g 原味（大）,,
+1-150,,,Probiotic Coconut Yogurt - Vanilla Flavor,纯素椰子酸奶-香草味100g （冷藏）,23.200000000000003,,,,,,,,,23.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery new_variants + gzgrocery sales,EXT-1229703,Vanilla 100g 香草（小）,,
+1-160,,,Medium Size Probiotic Coconut Yogurt - Vanilla Flavor,纯素椰子酸奶-香草味200g （冷藏）,38.400000000000006,,,,,,,,,23.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery new_variants + gzgrocery sales,EXT-1229703,Vanilla 200g 香草（中）,,
+1-180,,,Probiotic Coconut Yogurt -Peach Flavor,纯素椰子酸奶-桃子味（小）100g (冷藏）,23.200000000000003,,,,,,,,,11.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery new_variants + gzgrocery sales,EXT-1259338,Peach 100g 桃子（小）,,
+1-190,,,Medium Size Probiotic Coconut Yogurt - Peach Flavor,纯素椰子酸奶-桃子味（中）200g (冷藏）,38.400000000000006,,,,,,,,,11.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery new_variants + gzgrocery sales,EXT-1259338,Peach 200g 桃子（中）,,
+1-260,,,Energy Cubes,能量棒（小）60g （冷藏）,16,,,,,,,,,8.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery new_variants + gzgrocery sales,EXT-1229673,Small 60g 小,,
+1-270,,,Energy Cubes Big Size,花生奇亚能量块（大）200g (冷藏）,49.6,60g / 200g,Best kept refrigerated to maintain freshness and texture. Shelf life: See packaging.,"Quinoa, chia seeds, flaxseeds, coconut floss, oats, almonds, organic cranberries, peanut butter, organic agave","Sweet. Nutty. Crunchy. These energy cubes are built for real hunger. Quinoa, seeds, oats, nuts, and cranberries come together in a peanut butter base that’s chewy, crunchy, and deeply satisfying. No fake energy. No sugar rush. Just steady fuel that holds.","产品类型：即食植物性能量块 🧊
+净含量：60g / 200g ⚖️
+产地：中国广州 🌍
+
+ 
+
+ 
+
+产品描述 🧾
+
+香甜、坚果、酥脆。
+
+这是为真正的饥饿准备的能量块。
+
+藜麦、种子、燕麦、坚果和蔓越莓，全部包裹在浓郁的花生酱里，口感有嚼劲，也有层次。
+
+不靠刺激，不玩糖分套路，能量稳定而扎实。
+
+ 
+
+ 
+
+为什么人们会选它 ⚡
+
+每一种原料都吃得出来。
+
+碳水、脂肪、蛋白质比例合理。
+
+软中带脆，每一口都有存在感。
+
+ 
+
+ 
+
+配料表 🌱
+
+藜麦、奇亚籽、亚麻籽、椰蓉、燕麦、杏仁、蔓越莓、花生酱、龙舌兰糖浆
+
+ 
+
+ 
+
+致敏原信息 ⚠️
+
+含有：花生、坚果（杏仁）、麸质（燕麦）
+可能含有微量：其他坚果、大豆
+
+ 
+
+ 
+
+食用方式 🍽️
+
+开袋即食。
+适合随手补能、运动前，或下午能量下滑时食用。
+
+ 
+
+ 
+
+储存方式 ❄️
+
+建议冷藏保存，以保持新鲜度与口感稳定。
+保质期：见包装标注。
+
+ 
+
+ 
+
+营养成分（每 60g）🧮
+
+能量 250kcal
+脂肪 16g
+碳水化合物 23g
+蛋白质 7g
+
+ 
+
+ 
+
+食用提示 📌
+
+植物性能量零食 🌿
+由全谷物、种子与坚果制成
+提供稳定能量，不追求刺激",,,,4.0,0,ABSENT FROM CATALOGUE FILE,,gzgrocery new_variants + gzgrocery sales + catalog_text_dump,EXT-1229673,Big 200g 大,,"Product type: Ready-to-eat plant-based energy cubes 🧊
+Net weight: 60g / 200g ⚖️
+Origin: Guangzhou, China 🌍
+
+ 
+
+ 
+
+PRODUCT DESCRIPTION 🧾
+
+Sweet. Nutty. Crunchy.
+
+These energy cubes are built for real hunger.
+
+Quinoa, seeds, oats, nuts, and cranberries come together in a peanut butter base that’s chewy, crunchy, and deeply satisfying.
+
+No fake energy. No sugar rush. Just steady fuel that holds.
+
+ 
+
+ 
+
+WHY PEOPLE CHOOSE IT ⚡
+
+Whole ingredients you can taste.
+
+Balanced carbs, fats, and protein — no shortcuts.
+
+Chewy and crunchy texture that keeps every bite interesting.
+
+ 
+
+ 
+
+INGREDIENTS 🌱
+
+Quinoa, chia seeds, flaxseeds, coconut floss, oats, almonds, organic cranberries, peanut butter, organic agave
+
+ 
+
+ 
+
+CONTAINS / MAY CONTAIN ⚠️
+
+Contains: Peanuts, Tree nuts (almond), Gluten (oats)
+May contain traces of: Other nuts, Soy
+
+ 
+
+ 
+
+HOW TO EAT 🍽️
+
+Eat straight out of the pack.
+Perfect for on-the-go snacking, pre-workout fuel, or a solid midday bite.
+
+ 
+
+ 
+
+STORAGE & SHELF LIFE ❄️
+
+Best kept refrigerated to maintain freshness and texture.
+Shelf life: See packaging.
+
+ 
+
+ 
+
+NUTRITION (PER 60G SERVING) 🧮
+
+Energy 250kcal
+Fat 16g
+Carbohydrate 23g
+Protein 7g
+
+ 
+
+ 
+
+INTENDED USE / NOTES 📌
+
+Plant-based energy snack 🌿
+Made from whole grains, seeds, and nuts
+Designed for steady energy, not sugar spikes"
+1-504,,,Govegan! Pineapple Mint Kombucha,菠萝薄荷康普茶（小）300ml（冷藏）,29,,,,,,,,,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery sales,,,,
+1-66,,,Govegan! Creamy White Bean Soup with Kale,意式白豆甘蓝汤 冷藏+166D小香料（冷藏）,40,,,,,,,,,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery sales,,,,
+2-100,,,Kombucha (AKA Booch) - Mix Berries,混合莓康普茶（小）300ml （冷藏）,23.200000000000003,,,,,,,,,6.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery new_variants + gzgrocery sales,EXT-1229565,Small 300ml 小,,
+2-110,,,Kombucha (AKA Booch) - Mix Berries,混合莓康普茶（大）1000ml （冷藏）（有另搭瓶塞）,69.60000000000001,,,,,,,,,2.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery new_variants + gzgrocery sales,EXT-1229565,Big 1L 大,,
+2-120,,,Govegan！Kombucha (AKA Booch) -Mango Kombucha,芒果味康普茶 300ml，（冷藏）,23.200000000000003,,,,,,,,,6.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery new_variants + gzgrocery sales,EXT-1229624,Small 300ml 小,,
+2-130,,,Govegan！Kombucha (AKA Booch) -Mango Kombucha,芒果味康普茶 1000ml，（冷藏）（有另搭瓶塞）,69.60000000000001,,,,,,,,,2.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery new_variants + gzgrocery sales,EXT-1229624,Big 1L 大,,
+2-320,,,"Walnuts ( unsalted, raw )",核桃（小） 160g,24,,,,,,,,,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery new_variants + gzgrocery sales,EXT-1229602,Small 160g 小,,
+2-330,,,"Big Size Walnuts ( unsalted, raw )",核桃（大）280g,41.6,,,,,,,,,23.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery new_variants + gzgrocery sales,EXT-1229602,Big 280g 大,,
+2-340,,,"Almonds ( Unsalted , Raw )",杏仁（小） 265g,27.200000000000003,,,,,,,,,9.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery new_variants + gzgrocery sales,EXT-1229551,Small 265g 小,,
+2-350,,,"Big Size Almonds ( Unsalted, Raw )",杏仁（大） 460g,51.2,,,,,,,,,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery new_variants + gzgrocery sales,EXT-1229551,Big 460g 大,,
+2-36,,,Frozen Whole Wheat Bread,冷冻全麦黑麦面包（冷冻）,25,,,,,,,,,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery sales,,,,
+2-370,,,"Cashew (unsalted ,raw)",腰果（小） 240g,28.8,,,,,,,,,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery new_variants + gzgrocery sales,EXT-1229601,Small 240g 小,,
+2-380,,,"Big Size Cashew (unsalted, raw)",腰果（大） 400g,48,,,,,,,,,14.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery new_variants + gzgrocery sales,EXT-1229601,Big 400g 大,,
+2-40,,,Govegan! Pineapple Mint Kombucha,菠萝薄荷康普茶（小）300ml（冷藏）,29,,,,,,,,,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery sales,,,,
+2-400,,,All Natural Almond Butter ( Classic ),杏仁酱 150g,40,,,,,,,,,12.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery new_variants + gzgrocery sales,EXT-1229660,Classic 150g 经典,,
+2-410,,,GoVegan!All Natural Almond Butter（Big）,-杏仁酱 240g,60.800000000000004,,,,,,,,,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery new_variants,EXT-1229660,Big 240g 大装,,
+2-430,,,Maple Cinnamon Almond Butter,肉桂杏仁酱,66.4,,,,,,,,,9.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery new_variants + gzgrocery sales,EXT-1229548,Maple Cinnamon (gzgrocery),,
+2-50,,,Govegan! Pineapple Mint Kombucha,菠萝薄荷康普茶（大）1000ml（冷藏）（有另搭瓶塞）,87,,,,,,,,,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery sales,,,,
+2-60,,,Kombucha (AKA Booch) - Lemongrass,香柠草康普茶（小）300ml（冷藏）,29,300ml,Keep refrigerated at 0–4°C. Shelf life: See packaging.,"Filtered water, black tea, kombucha culture, sugar (<5%), fresh lemongrass","This is citrus brightness in a bottle. Clean. Sparkling. Refreshing. This lemongrass kombucha is traditionally fermented and infused with whole fresh lemongrass during the second fermentation. The result is crisp, lightly tart, and refreshing — never overly sweet.",,,,,1.0,0,ABSENT FROM CATALOGUE FILE,,gzgrocery sales + catalog_text_dump,,,,"Lemongrass Kombucha 🍋
+ 
+Product type: Fermented tea beverage ❄️
+Net weight: 300ml ⚖️
+Origin: Guangzhou, China 🌍
+ 
+ 
+IMPORTANT NOTICE ⚠️
+For orders delivered outside Guangzhou, please refrigerate the bottle until fully chilled before opening.
+Lower temperatures help slow the release of natural carbonation.
+Pressure may build up during fermentation, so open carefully.
+We recommend pouring into a glass before drinking.
+ 
+ 
+PRODUCT DESCRIPTION 🧾
+This is citrus brightness in a bottle.
+Clean. Sparkling. Refreshing.
+This lemongrass kombucha is traditionally fermented and infused with whole fresh lemongrass during the second fermentation.
+The result is crisp, lightly tart, and refreshing — never overly sweet.
+ 
+ 
+WHAT MAKES IT DIFFERENT 🌾
+We stick to traditional fermentation.
+Time, temperature, and real ingredients shape the final flavor.
+The result is clean, citrus-forward, and naturally carbonated.
+ 
+ 
+WHY SUGAR IS USED 🧪
+Sugar is used only to support fermentation.
+It serves as food for the kombucha culture, allowing fermentation to take place.
+During the process, most of the sugar is consumed by the culture and converted into organic acids, carbonation, and flavor compounds.
+Only a small amount of residual sugar remains in the final drink.
+ 
+ 
+BRAND NOTE ✨
+This product was previously sold under the GoVegan label.
+The recipe has not changed.
+The process has not changed.
+It now carries the Roots name — and a clearer attitude.
+ 
+ 
+INGREDIENTS 🌱
+Filtered water, black tea, kombucha culture, sugar (<5%), fresh lemongrass
+ 
+ 
+HOW TO DRINK 🥤
+Serve chilled.
+Open carefully due to natural carbonation.
+Best poured into a glass before drinking.
+ 
+ 
+STORAGE ❄️
+Keep refrigerated at 0–4°C.
+Shelf life: See packaging.
+ 
+ 
+NUTRITION (Per bottle 300ml) 🧮
+Energy 21kcal
+Carbohydrate 5.0g
+Sugars 5.0g (naturally occurring from fermentation)
+ 
+ 
+INTENDED USE / NOTES 📌
+Fermented tea beverage
+Naturally carbonated"
+2-70,,,Kombucha (AKA Booch) - Lemongrass,香柠草康普茶（大）1000ml （冷藏）（有另搭瓶塞）,87,,,,,,,,,3.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery sales,,,,
+2-80,,,Kombucha (AKA Booch) - Passion Fruit,百香果康普茶（小）300ml （冷藏）,23.200000000000003,,,,,,,,,4.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery new_variants + gzgrocery sales,EXT-1229694,Small 300ml 小,,
+2-9,,,Frozen Cheese Cake (Gluten Free),素士力架 140g （冷冻）,35,,,,,,,,,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery sales,,,,
+2-90,,,Kombucha (AKA Booch) - Passion Fruit,百香果康普茶（大）1000ml （冷藏）（有另搭瓶塞）,69.60000000000001,,,,,,,,,3.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery new_variants + gzgrocery sales,EXT-1229694,Big 1L 大,,
+3-170,,,Guacamole,墨西哥牛油果泥 （冷冻）,46,,,,,,,,,18.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery sales,,,,
+4-160,,,Organic Chia Seeds,奇亚籽（小） 290g,40.800000000000004,,,,,,,,,13.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery new_variants + gzgrocery sales,EXT-1229557,Small 290g 小,,
+4-170,,,Big Size Organic Chia Seeds,奇亚籽（大）510g,76,,,,,,,,,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery new_variants + gzgrocery sales,EXT-1229557,Big 510g 大,,
+4-3,,,"Chopped Almonds ( Raw, Unsalted )",杏仁片（小） 170g,31,,,,,,,,,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery sales,,,,
+4-33,,,Chunky Granola,谷物脆 150g,35,,,,,,,,,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery sales,,,,
+4-340,,,Himalaya Pink Salt,玫瑰盐 330g,30,,,,,,,,,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery sales,,,,
+4-520,,,Activated Charcoal,活性炭 100g,59,,,,,,,,,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery sales,,,,
+4-670,,,All Natural Peanut Butter,花生酱（小）240g,30.400000000000002,,,,,,,,,7.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery new_variants + gzgrocery sales,EXT-1229669,Small 240g 小,,
+4-680,,,All Natural Peanut Butter,花生酱 430g,45.5,,,,,,,,,22.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery new_variants + gzgrocery sales,EXT-1229669,Classic 430g 经典,,
+4-690,,,Govegan! A Bit Salty Peanut Butter (With Crunchy Peanuts Inside),咸味粗粒花生酱 430g,56.800000000000004,,,,,,,,,24.0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery new_variants + gzgrocery sales,EXT-1229700,Salty Crunchy 430g 咸味颗粒,,
+6-8,,,All Natural Peanut Butter,花生酱（小）240g,38,,,,,,,,,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery sales,,,,
+7-600,,,LUÜNA Organic Cotton Day Pads，10pcs,LUÜNA日用卫生棉,28,,,,,,,,,0,0,NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE,,gzgrocery sales,,,,

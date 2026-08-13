@@ -88,24 +88,35 @@ def real(v):
     v = (v or '').strip()
     return '' if (not v or PLACEHOLDER.search(v)) else v
 
-text_by_sku, desc_by_sku = {}, {}
+TEXT_RAW = {}                        # keyed on raw sku; re-keyed to canonical below
 for row in textdump:
-    t = to_text(row.get('description_en'))
     if row.get('sku'):
-        text_by_sku.setdefault(row['sku'], t)
+        TEXT_RAW.setdefault(row['sku'], to_text(row.get('description_en')))
 cn_by_id = {c['id']: to_text(c.get('description_cn')) for c in compliance}
-cn_by_sku = {}
+CN_RAW = {}
 for row in textdump:
     if row.get('sku') and row['id'] in cn_by_id:
-        cn_by_sku.setdefault(row['sku'], cn_by_id[row['id']])
+        CN_RAW.setdefault(row['sku'], cn_by_id[row['id']])
 
 # ── sales, per SKU ─────────────────────────────────────────────────────────
 # Requested window: the 6 months ending today.
 TODAY = date(2026, 8, 13)
 WIN_FROM, WIN_TO = date(2026, 2, 13), TODAY
 
-alias = gz['sku_aliases']            # source sku -> catalogue sku
-ext_to_sku = {p['external_id']: p['sku'] for p in catalogue if p.get('sku')}
+alias = gz['sku_aliases']            # source sku -> canonical sku
+
+def norm_sku(s):
+    """One catalogue row wraps its single SKU in fullwidth parens: （4-530）.
+    Bundle SKUs like （5-160）+（5-170） are left alone — they are genuinely
+    several SKUs and must not collapse to one."""
+    s = (s or '').strip()
+    m = re.fullmatch(r'（([^（）+]+)）', s)
+    return m.group(1) if m else s
+
+def canon(s):
+    return alias.get(norm_sku(s), norm_sku(s))
+
+ext_to_sku = {p['external_id']: norm_sku(p['sku']) for p in catalogue if p.get('sku')}
 
 gz_units = defaultdict(float)
 gz_dates = []
@@ -115,7 +126,7 @@ for per in gz['periods']:
     if not (WIN_FROM <= mid <= WIN_TO):
         continue
     for s in per['sales']:
-        gz_units[alias.get(s['sku'], s['sku'])] += float(s.get('qty') or 0)
+        gz_units[canon(s['sku'])] += float(s.get('qty') or 0)
 
 mini_units = defaultdict(float)
 mini_dates = []
@@ -135,9 +146,56 @@ for src in (mini25, mini26):
                 mini_units[sku] += float(ln.get('units') or 0)
 
 # ── assemble ───────────────────────────────────────────────────────────────
+# The catalogue file is the spine, but it is not the whole catalogue: SKUs that
+# only ever show up in sales data or in the variant list are real products too,
+# and are appended below rather than dropped.
+text_by_sku = {canon(k): v for k, v in TEXT_RAW.items()}
+cn_by_sku   = {canon(k): v for k, v in CN_RAW.items()}
+
+spine_skus = {norm_sku(p['sku']) for p in catalogue if p.get('sku')}
+new_variants = {v['sku']: v for v in gz['new_variants']}
+gz_seen = {}
+for per in gz['periods']:
+    for s in per['sales']:
+        gz_seen.setdefault(canon(s['sku']), s)
+
+extra_skus = sorted((set(gz_seen) | {canon(k) for k in new_variants} |
+                     set(text_by_sku)) - spine_skus)
+
+def as_catalogue_row(sku):
+    """Build a catalogue-shaped record for a SKU the catalogue file omits.
+    Name and price are copied from whichever source carries them; nothing is
+    invented, and a SKU with no name anywhere keeps an empty name."""
+    v, g = new_variants.get(sku), gz_seen.get(sku)
+    price = (v or {}).get('sell_price')
+    if price is None and g:
+        price = g.get('price_orig') if g.get('price_orig') is not None else g.get('price')
+    src = []
+    if v: src.append('gzgrocery new_variants')
+    if g: src.append('gzgrocery sales')
+    if sku in text_by_sku: src.append('catalog_text_dump')
+    return {
+        'external_id': None,
+        'sku': sku,
+        'barcode': None,
+        'category': (v or {}).get('parent_label') or None,
+        'name_en': (v or {}).get('name_en') or (g or {}).get('name_en') or '',
+        'name_cn': (v or {}).get('name_cn') or (g or {}).get('name_cn') or '',
+        'sell_price': price,
+        'stock_qty': None,
+        'tags': None,
+        'free_of': None,
+        '_source': ' + '.join(src) or 'unknown',
+        '_parent_sku': (v or {}).get('parent_sku') or '',
+        '_variant_label': (v or {}).get('variant_label') or '',
+    }
+
+records = [dict(p, _source='products_import.json', _parent_sku='', _variant_label='')
+           for p in catalogue] + [as_catalogue_row(s) for s in extra_skus]
+
 rows = []
-for p in catalogue:
-    sku = p.get('sku') or ''
+for p in records:
+    sku = norm_sku(p.get('sku') or '')
     t   = text_by_sku.get(sku, '')
     ing = real(section(t, 'INGREDIENTS')) or real(labelled(t, 'Ingredients'))
     net = real(labelled(t, 'Net weight', 'Net volume', 'Net content', 'Net Content')) \
@@ -165,6 +223,9 @@ for p in catalogue:
         'full_description_text': t,
         'external_id': p.get('external_id'),
         'unfilled_placeholders': ', '.join(placeholders),
+        'source': p['_source'],
+        'parent_sku': p['_parent_sku'],
+        'variant_label': p['_variant_label'],
     })
 
 # ── gap flags ──────────────────────────────────────────────────────────────
@@ -182,6 +243,10 @@ def flag(r):
         f.append('no storage temp')
     if r['unfilled_placeholders']:
         f.append(f"unfilled template slot ({r['unfilled_placeholders']})")
+    if r['source'] != 'products_import.json':
+        f.append('ABSENT FROM CATALOGUE FILE')
+    if not r['name_en']:
+        f.append('NO NAME IN ANY SOURCE')
     return '; '.join(f)
 
 for r in rows:
@@ -190,7 +255,7 @@ for r in rows:
 cols = ['sku','barcode','category','name_en','name_cn','retail_price_cny','pack_size_net_weight',
         'storage_temp','ingredients','description_en','description_cn','free_of','tags','stock_qty',
         'sales_units_gzgrocery','sales_units_miniapp','gaps','unfilled_placeholders',
-        'external_id','full_description_text']
+        'source','parent_sku','variant_label','external_id','full_description_text']
 with open(os.path.join(OUT, 'product-pull-raw.csv'), 'w', newline='', encoding='utf-8-sig') as f:
     w = csv.DictWriter(f, fieldnames=cols)
     w.writeheader()

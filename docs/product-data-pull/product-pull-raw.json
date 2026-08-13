@@ -19,6 +19,9 @@
   "full_description_text": "BIOCURCUMIN+ ✨\nCurcumin + Piperine Blend\n\n \n\n \n\nPRODUCT DESCRIPTION\n\nThis is not regular turmeric powder.\n\nBioCurcumin+ is a concentrated blend of high-purity curcumin extract paired with piperine from black pepper — designed for absorption, not decoration.\n\nWhole turmeric root contains only a small percentage of curcumin. Most of it passes through the body with limited uptake.\n\nWe don’t play that game.\n\nThis formula uses standardized extracts and a precise ratio, so what you consume actually matters.\n\n \n\n \n\nWHY PEOPLE CONSUME IT\n\nCurcumin concentration — curcumin is the primary active compound found in turmeric, commonly consumed to support normal inflammatory balance.\nAbsorption support — piperine is widely used to improve curcumin bioavailability.\nJoint & mobility support — often chosen by people with physically active lifestyles.\nAntioxidant support — helps protect cells from oxidative stress as part of a balanced diet.\nDaily resilience — commonly included in long-term wellness routines.\n\n \n\n \n\nINGREDIENTS\n\nTurmeric Extract (from turmeric root, standardized to 95% curcumin)\nBlack Pepper Extract (standardized to 98% piperine)\n\n \n\n \n\nCERTIFICATION NOTE\n\nMade with ingredients certified USDA Organic and verified Non-GMO.\n\n \n\n \n\nHOW TO USE\n\nServing size: 500–1000mg per day\n\n500mg — daily maintenance\n1000mg — increased support when needed\n\nMix into smoothies, golden lattes, plant milk, soups, or food.\n\nFor better absorption, consume with a source of healthy fat.",
   "external_id": 2130495,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "no pack size; no storage temp"
  },
  {
@@ -41,6 +44,9 @@
   "full_description_text": "Green Power Blend 🌱\n\n \n\nProduct type: Plant-based green powder\n\nNet weight: [fill] g ⚖️\n\nOrigin: [fill] 🌍\n\n \n\n \n\nPRODUCT DESCRIPTION 🧾\n\nThis is your daily greens — simplified.\n\nA blend of concentrated plant powders built from leafy greens, algae, and functional fibers.\n\nClean, balanced, and easy to take.\n\nNo unnecessary extras — just plants, processed into a form that fits your routine.\n\n \n\n \n\nWHY PEOPLE USE IT ⚡\n\nA simple way to add greens into daily intake.\n\nLight, clean taste — easy to mix.\n\nWorks across drinks, bowls, and everyday meals.\n\n \n\n \n\nINGREDIENTS 🌱\n\nKale powder, alfalfa powder, moringa powder, wheatgrass powder, spirulina powder, inulin (from chicory), lemon juice powder\n\n \n\n \n\nHOW TO USE 🥤\n\nAdd 1 tablespoon (~10g) to 250–300ml of water, juice, or plant-based milk.\n\nStir or blend until smooth.\n\nCan also be mixed into yogurt, smoothies, or grain bowls.\n\n \n\n \n\nSTORAGE 📌\n\nStore in a cool, dry place.\nKeep sealed after opening.\n\n \n\n \n\nNUTRITION (Per 10g serving) 🧮\n\nEnergy 6kcal\nFat 0.2g\nCarbohydrate 0.9g\nProtein 0.3g\nDietary fiber 0.2g\nSodium 13mg\n\n \n\nVitamins & Minerals\n\nVitamin A 1500 IU (30% DV)\nVitamin C 18mg (20% DV)\nVitamin K 10mcg (8% DV)\nVitamin B6 0.1mg (5% DV)\nCalcium 45mg (4% DV)\nIron 2.2mg (12% DV)\nMagnesium 40mg (10% DV)\nPotassium 140mg (4% DV)\nZinc 0.6mg (5% DV)\n\n \n\nNOTES 📌\n\nPlant-based greens blend 🌿\nMild, fresh taste\nDesigned for daily use",
   "external_id": 1229946,
   "unfilled_placeholders": "[fill]",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "no pack size; unfilled template slot ([fill])"
  },
  {
@@ -63,6 +69,9 @@
   "full_description_text": "",
   "external_id": 1730979,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -85,6 +94,9 @@
   "full_description_text": "",
   "external_id": 1230080,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -107,6 +119,9 @@
   "full_description_text": "",
   "external_id": 2370799,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -129,6 +144,9 @@
   "full_description_text": "",
   "external_id": 2106635,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -151,6 +169,9 @@
   "full_description_text": "",
   "external_id": 2082864,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -173,6 +194,9 @@
   "full_description_text": "",
   "external_id": 2048052,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -195,6 +219,9 @@
   "full_description_text": "",
   "external_id": 1260743,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -217,6 +244,9 @@
   "full_description_text": "",
   "external_id": 1727085,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -239,6 +269,9 @@
   "full_description_text": "",
   "external_id": 1913983,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -261,6 +294,9 @@
   "full_description_text": "",
   "external_id": 1710811,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -283,6 +319,9 @@
   "full_description_text": "",
   "external_id": 1995885,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -305,6 +344,9 @@
   "full_description_text": "",
   "external_id": 1978661,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -327,6 +369,9 @@
   "full_description_text": "",
   "external_id": 2404018,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -349,6 +394,9 @@
   "full_description_text": "",
   "external_id": 2405167,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -371,6 +419,9 @@
   "full_description_text": "",
   "external_id": 1760007,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -393,6 +444,9 @@
   "full_description_text": "",
   "external_id": 1756074,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -415,6 +469,9 @@
   "full_description_text": "",
   "external_id": 2047986,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -437,6 +494,9 @@
   "full_description_text": "",
   "external_id": 2048100,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -459,6 +519,9 @@
   "full_description_text": "",
   "external_id": 1229703,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -481,6 +544,9 @@
   "full_description_text": "",
   "external_id": 1259338,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -503,6 +569,9 @@
   "full_description_text": "",
   "external_id": 1230066,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -525,6 +594,9 @@
   "full_description_text": "",
   "external_id": 1229548,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -547,6 +619,9 @@
   "full_description_text": "",
   "external_id": 1230058,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -569,6 +644,9 @@
   "full_description_text": "",
   "external_id": 1229669,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -591,6 +669,9 @@
   "full_description_text": "",
   "external_id": 1229660,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -613,6 +694,9 @@
   "full_description_text": "ORGANIC TURMERIC POWDER\n\n \n\n \n\nGolden. Powerful. Pure fire from the earth.100% pure USDA Organic turmeric root, finely ground and slow-dried to preserve its vibrant color and potent curcumin magic. From inflammation defense to glowing skin and brain boost, this is your daily dose of sunshine and strength.\n\nPackaged in a fully recyclable aluminum container that locks in freshness while blocking light, heat, and humidity — because turmeric deserves to stay as powerful as the day it was harvested.\n\n \n\n \n\n🔍 PRODUCT HIGHLIGHTS\n\n100% Pure Organic Turmeric Powder\n\nNo preservatives, fillers, or nonsense\n\nRaw, slow-dried to keep curcumin alive + nutrients potent\n\nNon-GMO, Vegan, Whole Food Plant-Based\n\nGluten-free, soy-free, dairy-free\n\n \n\n🧠 WHY IT’S GOOD FOR YOU\n\nCurcumin Powerhouse — natural anti-inflammatory and antioxidant warrior.\n\nImmune Booster — keeps your defenses strong and ready.\n\nBrain & Mood Support — sharp focus and calm vibes, naturally.\n\nSupports Digestion & Liver Health — cleanses and fuels your body’s detox.\n\nRich in Iron & Manganese — plant-based minerals that energize and strengthen.\n\n \n\n \n\n🥄 HOW TO USESuggested Serving: 1 tsp (5g) daily — start here, then adjust to your power level!\n\n✅ Blend into smoothies, golden lattes, or protein shakes for a spicy nutrient kick\n\n✅ Stir into soups, curries, sauces, or savory oats for rich color and flavor\n\n✅ Bake into crackers or energy balls — turmeric’s secret weapon in every bite\n\n✅ Mix with warm water + lemon + black pepper for a bioavailable golden tonic\n\n❗️Important: Don’t boil — keep the turmeric raw or gently warmed to protect its magic!\n\n \n\n \n\n🧊 STORAGE\n\nStore in a cool, dry place away from sunlight.Keep lid tightly sealed to lock in freshness.Use within 60 days of opening for maximum punch — after that, still good but potency dips.\n\n \n\n \n\n⚡️ NUTRITION FACTS\n\nServing Size: 5g (1 tsp) | Servings per Container: ~24\n\nCalories: 15 kcal (1% DV)\n\nProtein: 0.4 g (1% DV)\n\nTotal Carbohydrate: 3.5 g (1% DV)\n\nDietary Fiber: 2 g (7% DV)\n\nTotal Fat: 0.2 g (0% DV)\n\nIron: 1.5 mg (8% DV) — plant-powered energy boost\n\nManganese: 0.4 mg (18% DV) — supports metabolism and bone health\n\nCalcium: 20 mg (2% DV) — bone and muscle helper\n\nVitamin C: 0.7 mg (1% DV) — antioxidant support\n\nPercent Daily Values based on a 2,000 calorie diet.\n\n \n\n \n\n📦 INGREDIENTSJust one: 100% USDA Organic Turmeric Powder",
   "external_id": 1229545,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "no ingredients; no pack size"
  },
  {
@@ -635,6 +719,9 @@
   "full_description_text": "",
   "external_id": 1647860,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -657,6 +744,9 @@
   "full_description_text": "",
   "external_id": 1647855,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -679,6 +769,9 @@
   "full_description_text": "",
   "external_id": 1603362,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -701,6 +794,9 @@
   "full_description_text": "",
   "external_id": 1230114,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -723,6 +819,9 @@
   "full_description_text": "",
   "external_id": 1541948,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -745,6 +844,9 @@
   "full_description_text": "",
   "external_id": 1230029,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -767,6 +869,9 @@
   "full_description_text": "",
   "external_id": 1257670,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -789,6 +894,9 @@
   "full_description_text": "",
   "external_id": 1230030,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -811,6 +919,9 @@
   "full_description_text": "MORINGA POWDER 🌿\n\n \n\nUSDA Organic · Non-GMO\nNet weight: 130g\nOrigin: India 🌍\n\n \n\n \n\nPRODUCT DESCRIPTION\n\nThis is moringa leaf powder.\n\nMade from dried moringa leaves, gently processed and finely ground.\n\nMoringa has long been consumed as a leafy plant ingredient in everyday diets, valued for its naturally dense nutrient profile.\n\nWe keep it whole and simple — no extracts, no isolates, nothing added.\n\nAn easy way to add plant-based nutrition to daily meals, without changing how you eat.\n\n \n\n \n\nWHY PEOPLE CONSUME IT\n\nVitamin A (beta-carotene) — contributes to normal vision, skin health, and immune system function.\nVitamin C — involved in immune system function and helps protect cells from oxidative stress.\nCalcium — needed for the maintenance of normal bones and teeth.\nIron — contributes to normal oxygen transport and energy metabolism.\nPlant protein — contributes to the maintenance of muscle mass.\n\n \n\n \n\nINGREDIENTS\n\nMoringa Leaf Powder 🌿\n\n \n\n \n\nCONTAINS / MAY CONTAIN\n\nContains: None\nMay contain traces of: Nuts, Soy, Gluten\n\n \n\n \n\nHOW TO USE\n\nServing size: 2–3g (about 1 teaspoon)\nHow often: Once per day\n\nMix into water, smoothies, soups, or food.\n\nStart small and adjust based on taste and routine.\n\n \n\n \n\nSTORAGE & SHELF LIFE\n\nStorage: Store in a cool, dry place away from direct sunlight ❄️\nShelf life: See packaging\nAfter opening: Keep sealed and use regularly\n\n \n\n \n\nNUTRITION FACTS (PER 100G)\n\nEnergy 1250kJ (15%)\nProtein 27g (45%)\nFat 6.0g (10%)\nCarbohydrate 38g (13%)\nSodium 90mg (5%)\nVitamin A 850µg RAE (94%)\nVitamin C 160mg (178%)\nCalcium 2000mg (154%)\nIron 28mg (156%)\n\n \n\n \n\nNET CONTENT & PACKAGING\n\nNet weight: 130g\nPackaging: Reusable aluminum container\n\n \n\n \n\nINTENDED USE / NOTES\n\nFor general consumption\nSuitable for plant-based diets 🌿\nNot suitable for individuals allergic to moringa\n\n \n\n \n\nVitamin and mineral values are based on generic food composition data for whole moringa leaves and are provided for reference only",
   "external_id": 1229907,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": ""
  },
  {
@@ -833,6 +944,9 @@
   "full_description_text": "KALE POWDER 🥬\n\n \n\nUSDA Organic · Non-GMO\nNet weight: 130g\nOrigin: Shandong, China 🌍\n\n \n\n \n\nPRODUCT DESCRIPTION\n\nThis is kale leaf powder.\n\nMade from whole kale leaves, dried and finely ground.\n\nKale has been part of everyday diets for a long time, valued as a nutrient-dense leafy green.\n\nWe keep it exactly that — whole leaf, minimal processing, nothing added.\n\nAn easy way to bring more greens into daily meals, without changing how you eat.\n\n \n\n \n\nWHY PEOPLE CONSUME IT\n\nVitamin K — involved in normal blood clotting and bone metabolism.\nVitamin A (beta-carotene) — contributes to normal vision, skin health, and immune system function.\nVitamin C — supports normal immune function and helps protect cells from oxidative stress.\nCalcium — needed for the maintenance of normal bones and teeth.\nIron — contributes to normal oxygen transport and energy metabolism.\n\n \n\n \n\nINGREDIENTS\n\nKale Leaf Powder 🥬\n\n \n\n \n\nCONTAINS / MAY CONTAIN\n\nContains: None\nMay contain traces of: Nuts, Soy, Gluten\n\n \n\n \n\nHOW TO USE\n\nServing size: 2–3g (about 1 teaspoon)\nHow often: Once per day\n\nMix into water, smoothies, soups, or food.\n\nStart small and adjust based on taste and routine.\n\n \n\n \n\nSTORAGE & SHELF LIFE\n\nStorage: Store in a cool, dry place away from direct sunlight ❄️\nShelf life: See packaging\nAfter opening: Keep sealed and use regularly\n\n \n\n \n\nNUTRITION FACTS (PER 100G)\n\nEnergy 1200kJ (14%)\nProtein 25g (42%)\nFat 4.5g (8%)\nCarbohydrate 38g (13%)\nSodium 120mg (6%)\nVitamin K 700µg (583%)\nVitamin A 950µg RAE (106%)\nVitamin C 120mg (133%)\nCalcium 250mg (19%)\nIron 4.0mg (22%)\n\n \n\n \n\nNET CONTENT & PACKAGING\n\nNet weight: 130g\nPackaging: Reusable aluminum container\n\n \n\n \n\nINTENDED USE / NOTES\n\nFor general consumption\nSuitable for plant-based diets 🌿\nNot suitable for individuals allergic to kale\n\n \n\n \n\nVitamin and mineral values are based on generic food composition data for whole kale and are provided for reference only.",
   "external_id": 1229546,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": ""
  },
  {
@@ -855,6 +969,9 @@
   "full_description_text": "",
   "external_id": 1229700,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -877,6 +994,9 @@
   "full_description_text": "",
   "external_id": 1229904,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -899,6 +1019,9 @@
   "full_description_text": "",
   "external_id": 1647837,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -921,6 +1044,9 @@
   "full_description_text": "Product type: Ready-to-eat refrigerated food ❄️\nNet weight: 320g ⚖️\nOrigin: Guangzhou, China 🌍\n\n \n\n \n\nPRODUCT DESCRIPTION 🧾\n\nThis wrap doesn’t try to be polite.\n\nCrisp romaine lettuce, tomato, cucumber, mushrooms, and pan-seared tofu are packed into a sturdy whole wheat tortilla.\n\nPickled carrot brings acidity, basil and mint lift the aroma, and crushed peanuts add crunch.\n\nEverything lands where it should.\n\n \n\n \n\nWHY PEOPLE CHOOSE IT 🌾\n\nIt eats like a proper meal, not a snack pretending to be one.\n\nFresh vegetables, solid protein, and real texture in every bite.\n\nBalanced, filling, and built to hold up.\n\n \n\n \n\nSAUCE NOTE 🥣\n\nThe sauce is the backbone.\n\nMade with organic soy sauce, sesame oil, pineapple juice, lemon juice, peanut butter, fresh ginger, and spices.\n\nSavory, lightly acidic, and a little wild — it pulls the whole wrap together.\n\n \n\n \n\nINGREDIENTS 🌱\n\nRomaine lettuce, cucumber, tomato, mushrooms, tofu, pickled carrot, basil leaves, mint leaves, cilantro, crushed peanuts, fermented cashew sour cream, whole wheat tortilla\n\n \n\n \n\nCONTAINS / MAY CONTAIN ⚠️\n\nContains: Peanuts, Soy, Tree nuts (cashew)\nMay contain traces of: Gluten\n\n \n\n \n\nHOW TO EAT 🍽️\n\nThe best way to eat this wrap is heated.\n\nWarm it in an oven, pan, or air fryer until the outside turns lightly crisp.\n\nA microwave works if needed, but the crisp won’t be there.\n\n \n\n \n\nSTORAGE & SHELF LIFE ❄️\n\nStorage: Keep refrigerated at 0–4°C at all times\nShelf life: See packaging\n\n \n\n \n\nNUTRITION (PER SERVING) 🧮\n\nEnergy 345kcal\nProtein 18.3g\nFat 15.5g\nCarbohydrate 37.1g\n\n \n\n \n\nINTENDED USE / NOTES 📌\n\nPlant-based product 🌿\nBuilt as a full meal",
   "external_id": 1318966,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": ""
  },
  {
@@ -943,6 +1069,9 @@
   "full_description_text": "",
   "external_id": 1310568,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -965,6 +1094,9 @@
   "full_description_text": "",
   "external_id": 1261354,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -987,6 +1119,9 @@
   "full_description_text": "🟤 ORGANIC MACA POWDER\n\n \n\nEarthy. Energizing. Ancient superfood power.100% pure USDA Organic maca root, carefully dried and finely ground to preserve its natural adaptogens and nutrients. From stamina to mood to hormone balance, this is your daily ritual for natural vitality.\n\nPackaged in a fully recyclable aluminum container that locks in freshness while blocking light, heat, and humidity — keeping your maca as potent as the day it was harvested.\n\n \n\n🔍 PRODUCT HIGHLIGHTS\n\n100% Pure Organic Maca Powder\n\nNo preservatives, fillers, or additives\n\nRaw, slow-dried to preserve natural enzymes + nutrients\n\nNon-GMO, Vegan, Whole Food Plant-Based\n\nGluten-free, soy-free, dairy-free\n\n \n\n🧠 WHY IT’S GOOD FOR YOU\n\nAdaptogen Power: Helps your body manage stress and boost endurance naturally.\n\nHormonal Harmony: Supports balanced energy, mood, and reproductive health.\n\nRich in Vitamins & Minerals: B vitamins, vitamin C, iron, and calcium to fuel your day.\n\nMood & Memory Support: Traditionally used to sharpen focus and emotional balance.\n\nEnergy & Stamina Boost: Keeps you going strong without the jitters.\n\n \n\n🥄 HOW TO USESuggested Serving: 1 tsp (5g) daily — your daily dose of grounded energy!\n\n✅ Blend into smoothies, protein shakes, or morning bowls for a natural lift\n\n✅ Stir into oatmeal, yogurt alternatives, or baking recipes for earthy flavor\n\n✅ Mix with warm water + plant milk + a touch of cinnamon for a comforting tonic\n\n❗️Important: Avoid cooking at high heat — preserve those precious nutrients and adaptogens!\n\n \n\n🧊 STORAGE\n\nStore in a cool, dry place away from sunlight.Keep lid tightly sealed to lock in freshness.Use within 60 days of opening for maximum potency — after that, it’s still good but might lose some punch.\n\n \n\n⚡️ NUTRITION FACTS\n\nServing Size: 5g (1 tsp) | Servings per Container: ~30\n\nCalories: 20 kcal (1% DV)\n\nProtein: 1 g (2% DV)\n\nTotal Carbohydrate: 4 g (1% DV)\n\nDietary Fiber: 1 g (4% DV)\n\nTotal Fat: 0.1 g (0% DV)\n\nVitamin C: 1.5 mg (2% DV)\n\nCalcium: 15 mg (1% DV)\n\nIron: 0.7 mg (4% DV)\n\nVitamin B6: 0.1 mg (6% DV)\n\nPotassium: 80 mg (2% DV)\n\nMagnesium: 10 mg (2% DV)\n\n \n\nPercent Daily Values based on a 2,000 calorie diet.\n\n \n\n📦 INGREDIENTSJust one: 100% USDA Organic Maca Powder",
   "external_id": 1229608,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "no ingredients; no pack size"
  },
  {
@@ -1009,6 +1144,9 @@
   "full_description_text": "PEA PROTEIN POWDER 🌱\nPlant-based protein from yellow peas\n\n \n\n \n\nPRODUCT DESCRIPTION\n\nThis is pea protein.\n\nMade from yellow peas and processed into a clean, neutral protein powder.\n\nNo dairy. No soy. No unnecessary ingredients.\n\nJust plant protein, built for everyday use — from smoothies to cooking.\n\nSimple input. Serious output.\n\n \n\n \n\nWHY PEOPLE CONSUME IT\n\nHigh protein content — contributes to daily protein intake from plant sources.\nMuscle support — commonly used as part of strength and training routines.\nDigestive-friendly — dairy-free and naturally low in common irritants.\nSatiety support — protein helps you feel fuller for longer.\nNeutral flavor — easy to mix without overpowering taste.\n\n \n\n \n\nINGREDIENTS\n\nPea Protein (from yellow peas)\n\n \n\n \n\nCERTIFICATION NOTE\n\nMade with ingredients certified USDA Organic and verified Non-GMO.\n\n \n\n \n\nCONTAINS / MAY CONTAIN\n\nContains: Peas (legumes)\nMay contain traces of: Nuts, Soy, Gluten\n\n \n\n \n\nHOW TO USE\n\nServing size: 28g (1 scoop)\n\nMix with water, plant milk, or smoothies.\n\nCan also be used in pancakes, baking, soups, or savory recipes.\n\nSuitable for use before or after exercise.\n\n \n\n \n\nNUTRITION FACTS (PER 28G SERVING)\n\nEnergy 374kJ (4%)\nProtein 23.2g (46%)\nFat 0.6g (1%)\nCarbohydrate 4.1g (1%)\nSodium 0mg (0%)\n\n \n\n \n\nNET CONTENT & PACKAGING\n\nNet weight: 680g\n\n \n\n \n\nINTENDED USE / NOTES\n\nFor general adult consumption\nSuitable for plant-based diets 🌿\nNot suitable for individuals allergic to peas\n\n \n\n \n\nROOTS NOTE\n\nWe remove the noise so the food can do its job.\n\nNo tricks. No filler culture. Just plants, processed with intent.",
   "external_id": 1428150,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "no storage temp"
  },
  {
@@ -1031,6 +1169,9 @@
   "full_description_text": "",
   "external_id": 1259384,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1053,6 +1194,9 @@
   "full_description_text": "",
   "external_id": 1229807,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1075,6 +1219,9 @@
   "full_description_text": "",
   "external_id": 1229637,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1097,6 +1244,9 @@
   "full_description_text": "",
   "external_id": 1229558,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1119,6 +1269,9 @@
   "full_description_text": "",
   "external_id": 1229633,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1141,6 +1294,9 @@
   "full_description_text": "",
   "external_id": 1229964,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1163,6 +1319,9 @@
   "full_description_text": "",
   "external_id": 1229842,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1185,6 +1344,9 @@
   "full_description_text": "",
   "external_id": 1229745,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1207,6 +1369,9 @@
   "full_description_text": "",
   "external_id": 1229873,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1229,6 +1394,9 @@
   "full_description_text": "",
   "external_id": 1229863,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1251,6 +1419,9 @@
   "full_description_text": "",
   "external_id": 1229720,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1273,6 +1444,9 @@
   "full_description_text": "",
   "external_id": 1233352,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1295,6 +1469,9 @@
   "full_description_text": "",
   "external_id": 1230101,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1317,6 +1494,9 @@
   "full_description_text": "🟢 ORGANIC WHEATGRASS POWDER\n\n \n\nFresh. Vibrant. Pure green energy in a scoop.100% pure USDA Organic wheatgrass, carefully dried at low temperatures to preserve all the enzymes, vitamins, and chlorophyll that power your body and mind. From detox to energy to glowing skin, wheatgrass is your daily green boost.\n\nPackaged in a fully recyclable aluminum container that locks in freshness while blocking light, heat, and humidity — keeping your wheatgrass as potent as the day it was harvested.\n\n \n\n \n\n🔍 PRODUCT HIGHLIGHTS\n\n100% Pure Organic Wheatgrass Powder\n\nNo preservatives, fillers, or additives\n\nRaw, slow-dried to preserve living enzymes + nutrients\n\nNon-GMO, Vegan, Whole Food Plant-Based\n\nGluten-free, soy-free, dairy-free\n\n \n\n \n\n🧠 WHY IT’S GOOD FOR YOU\n\nChlorophyll Rich: Supports detox, oxygen transport, and blood health.\n\nVitamins A, C, & E: Boost immunity, skin radiance, and antioxidant defense.\n\nPlant-Based Protein & Fiber: Keeps digestion smooth and energy steady.\n\nAlkalizing Effect: Helps balance your body’s pH for optimal wellness.\n\nNatural Antioxidants: Fights oxidative stress for youthful vitality.\n\n \n\n \n\n🥄 HOW TO USESuggested Serving: 1 tsp (5g) daily — your daily green supercharge!\n\n✅ Blend into smoothies, juices, or protein shakes for instant vitality\n\n✅ Stir into soups, dips, or savory oats for a subtle fresh green flavor\n\n✅ Mix with warm water + lemon for a cleansing tonic\n\n❗️Important: Don’t cook or boil — this is a raw powder, keep those enzymes alive!\n\n \n\n \n\n🧊 STORAGE\n\nStore in a cool, dry place away from sunlight.Keep lid tightly sealed to preserve freshness.Use within 60 days of opening for peak potency — nutrients may slowly decline after, but still safe.\n\n \n\n \n\n⚡️ NUTRITION FACTS\n\nServing Size: 5g (1 tsp) | Servings per Container: ~18\n\nCalories: 20 kcal (1% DV)\n\nProtein: 1.5 g (3% DV)\n\nTotal Carbohydrate: 3 g (1% DV)\n\nDietary Fiber: 1 g (4% DV)\n\nTotal Fat: 0.1 g (0% DV)\n\nVitamin A: 250 mcg RAE (28% DV)\n\nVitamin C: 30 mg (33% DV)\n\nCalcium: 70 mg (7% DV)\n\nIron: 1.5 mg (8% DV)\n\nPotassium: 100 mg (2% DV)\n\nMagnesium: 15 mg (4% DV)\n\nPercent Daily Values based on a 2,000 calorie diet.\n\n \n\n \n\n📦 INGREDIENTSJust one: 100% USDA Organic Wheatgrass Powder",
   "external_id": 1259456,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "no ingredients; no pack size"
  },
  {
@@ -1339,6 +1519,9 @@
   "full_description_text": "",
   "external_id": 1230113,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1361,6 +1544,9 @@
   "full_description_text": "",
   "external_id": 1229649,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1383,6 +1569,9 @@
   "full_description_text": "",
   "external_id": 2495136,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1405,6 +1594,9 @@
   "full_description_text": "",
   "external_id": 1231939,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1427,6 +1619,9 @@
   "full_description_text": "",
   "external_id": 1231885,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1449,6 +1644,9 @@
   "full_description_text": "Product type: Ready-to-eat refrigerated food ❄️\nNet weight: 350g ⚖️\nOrigin: Guangzhou, China 🌍\n\n \n\n \n\nPRODUCT DESCRIPTION 🧾\n\nThis bowl doesn’t do subtle.\n\nColorful vegetables are tossed with buckwheat noodles and finished with a bold Thai-style peanut dressing.\n\nCrunchy, creamy, tangy, and nutty — everything hits at once.\n\nBuilt for heat, built for appetite, built to disappear.\n\n \n\n \n\nWHY PEOPLE CHOOSE IT 🌾\n\nIt’s a full bowl with real bite, not a light salad pretending to be lunch.\n\nThe noodles carry weight, the vegetables stay sharp, the dressing does the heavy lifting.\n\nCold, bold, and straight to the point.\n\n \n\n \n\nINGREDIENTS – SALAD 🌱\n\nBuckwheat noodles, tomatoes, yellow bell pepper, cucumber, purple cabbage, mung bean sprouts, tofu skin, oyster mushrooms\n\n \n\n \n\nINGREDIENTS – DRESSING 🥜\n\nPeanut butter, ginger, lemon juice, pineapple juice, organic soy sauce, coconut sugar, sesame oil, chili flakes, salt\n\n \n\n \n\nCONTAINS / MAY CONTAIN ⚠️\n\nContains: Wheat, Peanuts, Soy, Sesame\nMay contain traces of: Tree nuts\n\n \n\n \n\nHOW TO EAT 🍽️\n\nReady to eat.\n\nBest enjoyed chilled. Mix well before eating.\n\n \n\n \n\nSTORAGE & SHELF LIFE ❄️\n\nStorage: Keep refrigerated at 0–4°C at all times\nShelf life: See packaging\n\n \n\n \n\nNUTRITION – SALAD 🧮\n\nEnergy 358kcal\nFat 6.0g\nCarbohydrate 57.3g\nProtein 19.7g\n\n \n\n \n\nNUTRITION – DRESSING 🧮\n\nEnergy 211kcal\nFat 16.2g\nCarbohydrate 14.5g\nProtein 3.8g\n\n \n\n \n\nINTENDED USE / NOTES 📌\n\nPlant-based product 🌿\nBold peanut dressing",
   "external_id": 1231419,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "no ingredients"
  },
  {
@@ -1471,6 +1669,9 @@
   "full_description_text": "Got it — corrected usage + no assumption of spoons, and clearer formulation.\nPRODUCT DESCRIPTION\nClean protein. Instant comfort.\nThis is instant organic soy milk powder made from carefully selected organic soybeans, gently processed to preserve natural flavor and nutrition.\nNo dairy. No sweeteners. No additives.\nJust pure plant-based soy in its most functional form—designed to dissolve instantly into a smooth, naturally creamy drink.\nSimple input. Clean output.\nWHY PEOPLE CHOOSE IT\nMade from organic soybeans\n100% plant-based dairy alternative\nInstantly dissolves in water\nNaturally creamy, clean soy taste\nNo added sugar, no sweeteners, no artificial flavors\nINGREDIENTS\nOrganic soybeans\nHOW TO USE\nAdd 1 scoop into approximately 250ml of water (hot or cold).\nStir or shake well until fully dissolved.\nAdjust water level depending on preferred strength and creaminess.\nUse in coffee, tea, smoothies, or cooking.\nNUTRITION FACTS (per 100g)\nEnergy: 420 kcal\nProtein: 36g\nFat: 20g\nCarbohydrates: 30g\nSugars: 7g\nFiber: 9g\nSodium: 5mg\nNOTES\nInstant plant-based drink powder\nCertified organic ingredients\nNo sweeteners, no dairy, no additives",
   "external_id": 2399484,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "no pack size; no storage temp"
  },
  {
@@ -1493,6 +1694,9 @@
   "full_description_text": "",
   "external_id": 1230116,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1515,6 +1719,9 @@
   "full_description_text": "",
   "external_id": 1230117,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1537,6 +1744,9 @@
   "full_description_text": "",
   "external_id": 1230078,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1559,6 +1769,9 @@
   "full_description_text": "",
   "external_id": 1230099,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1581,6 +1794,9 @@
   "full_description_text": "",
   "external_id": 1230098,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1603,6 +1819,9 @@
   "full_description_text": "",
   "external_id": 1230083,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1625,6 +1844,9 @@
   "full_description_text": "",
   "external_id": 1230107,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1647,6 +1869,9 @@
   "full_description_text": "",
   "external_id": 1230081,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1669,6 +1894,9 @@
   "full_description_text": "",
   "external_id": 1230053,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1691,6 +1919,9 @@
   "full_description_text": "",
   "external_id": 1230079,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1713,6 +1944,9 @@
   "full_description_text": "",
   "external_id": 1230018,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1735,6 +1969,9 @@
   "full_description_text": "",
   "external_id": 1230077,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1757,6 +1994,9 @@
   "full_description_text": "",
   "external_id": 1230082,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1779,6 +2019,9 @@
   "full_description_text": "",
   "external_id": 1230065,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1801,6 +2044,9 @@
   "full_description_text": "",
   "external_id": 1230063,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1823,6 +2069,9 @@
   "full_description_text": "",
   "external_id": 2399666,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1845,6 +2094,9 @@
   "full_description_text": "",
   "external_id": 1230055,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1867,6 +2119,9 @@
   "full_description_text": "",
   "external_id": 1229984,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1889,6 +2144,9 @@
   "full_description_text": "",
   "external_id": 1230076,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1911,6 +2169,9 @@
   "full_description_text": "",
   "external_id": 1230047,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1933,6 +2194,9 @@
   "full_description_text": "",
   "external_id": 1229983,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1955,6 +2219,9 @@
   "full_description_text": "",
   "external_id": 1230038,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1977,6 +2244,9 @@
   "full_description_text": "",
   "external_id": 1230035,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -1999,6 +2269,9 @@
   "full_description_text": "",
   "external_id": 1230025,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2021,6 +2294,9 @@
   "full_description_text": "",
   "external_id": 1230023,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2043,6 +2319,9 @@
   "full_description_text": "",
   "external_id": 1229937,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2065,6 +2344,9 @@
   "full_description_text": "",
   "external_id": 1230017,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2087,6 +2369,9 @@
   "full_description_text": "",
   "external_id": 1230012,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2109,6 +2394,9 @@
   "full_description_text": "",
   "external_id": 1229986,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2131,6 +2419,9 @@
   "full_description_text": "",
   "external_id": 1230013,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2153,6 +2444,9 @@
   "full_description_text": "",
   "external_id": 1229975,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2175,6 +2469,9 @@
   "full_description_text": "",
   "external_id": 1229875,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2197,6 +2494,9 @@
   "full_description_text": "",
   "external_id": 1229665,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2219,6 +2519,9 @@
   "full_description_text": "Product type: Ready-to-eat plant-based protein snack ❄️\nNet weight: 200g ⚖️\nOrigin: Guangzhou, China 🌍\nPRODUCT DESCRIPTION 🧾\nThis is a protein-focused plant-based bite.\nMade from wheat gluten and chickpea flour, with a savory, slightly smoky profile.\nSoft with a chew — similar to jerky, but cleaner.\nSeasoned and ready to eat, with a natural saltiness built in.\nWHY PEOPLE CHOOSE IT ⚡\nHigh in plant-based protein.\nChewy texture with real bite.\nWorks as a snack or an add-on to meals.\nINGREDIENTS 🌱\nWheat gluten, chickpea flour, nutritional yeast, tomato paste, organic soy sauce, chili vinegar soy sauce, natural spices (contains garlic and onion)\nCONTAINS / MAY CONTAIN ⚠️\nContains: Gluten (wheat), soy\nMay contain traces of: Nuts\nHOW TO EAT 🍽️\nReady to eat.\nAdd to salads, soups, or bowls.\nAlso works well as a quick snack.\nSTORAGE ❄️\nKeep refrigerated at 0–4°C.\nShelf life: See packaging.\nNUTRITION (Per 100g) 🧮\nEnergy 110kcal\nFat 1g\nCarbohydrate 9g\nProtein 16g\nNOTES 📌\nPlant-based protein bites 🌿\nSavory and lightly seasoned\nChewy texture with structure",
   "external_id": 1229813,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": ""
  },
  {
@@ -2241,6 +2544,9 @@
   "full_description_text": "",
   "external_id": 1229989,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2263,6 +2569,9 @@
   "full_description_text": "",
   "external_id": 1229988,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2285,6 +2594,9 @@
   "full_description_text": "",
   "external_id": 1230045,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2307,6 +2619,9 @@
   "full_description_text": "",
   "external_id": 1229982,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2329,6 +2644,9 @@
   "full_description_text": "",
   "external_id": 2423536,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2351,6 +2669,9 @@
   "full_description_text": "",
   "external_id": 1229980,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2373,6 +2694,9 @@
   "full_description_text": "Product type: Ready-to-eat frozen dessert bar ❄️\nNet weight: 120g (4 bars) ⚖️\nOrigin: Guangzhou, China 🌍\n\n \n\n \n\nPRODUCT DESCRIPTION 🧾\n\nThis is our lemon bar.\n\nBright. Cold. Sharp in the best way.\n\nTart lemon meets just enough sweetness, built on a chewy oat base and finished with a creamy lemon layer that hits fast and clean.\n\nThink lemon pie energy — minus the heaviness, minus the nonsense.\n\nFrozen, it’s crisp and refreshing. Let it soften, and it melts right into dessert mode.\n\n \n\n \n\nWHY PEOPLE CHOOSE IT ⚡\n\nSweet–tart balance that actually wakes you up.\n\nReal lemon flavor, not candy lemon.\n\nStored frozen for texture, structure, and freshness.\n\n \n\n \n\nINGREDIENTS 🌱\n\nOats, lemon juice, organic agave syrup, coconut milk, vanilla extract, organic coconut oil, salt\n\n \n\n \n\nCONTAINS / MAY CONTAIN ⚠️\n\nContains: Gluten (oats)\nMay contain traces of: Nuts, Soy\n\n \n\n \n\nFREEZER STORAGE & DELIVERY NOTE ❄️\n\nThis product is designed to be kept frozen.\nOrders shipped outside Guangzhou are sealed and sent frozen, typically arriving within 24 hours of leaving our kitchen.\nDuring delivery, the bars may arrive frozen, partially thawed, or well-chilled — all of this is normal and safe.\n\nStore in the freezer until ready to eat.\n\n \n\n \n\nHOW TO EAT 🍽️\n\nEnjoy straight from the freezer for a firm, refreshing bite,\nor let it sit at room temperature for 5–10 minutes for a softer, creamier texture.\n\n \n\n \n\nNUTRITION (PER BAR) 🧮\n\nEnergy 120kcal\nFat 9g\nCarbohydrate 9g\nProtein 3g\n\n \n\n \n\nINTENDED USE / NOTES 📌\n\nPlant-based frozen dessert 🌿\nDesigned to be stored and eaten cold\nTexture changes slightly as it warms — both ways work",
   "external_id": 1229976,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "no storage temp"
  },
  {
@@ -2395,6 +2719,9 @@
   "full_description_text": "",
   "external_id": 1229804,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2417,6 +2744,9 @@
   "full_description_text": "",
   "external_id": 1229972,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2439,6 +2769,9 @@
   "full_description_text": "",
   "external_id": 1229971,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2461,6 +2794,9 @@
   "full_description_text": "",
   "external_id": 1229981,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2483,6 +2819,9 @@
   "full_description_text": "",
   "external_id": 1229874,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2505,6 +2844,9 @@
   "full_description_text": "",
   "external_id": 1229855,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2527,6 +2869,9 @@
   "full_description_text": "",
   "external_id": 1229822,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2549,6 +2894,9 @@
   "full_description_text": "",
   "external_id": 1229977,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2571,6 +2919,9 @@
   "full_description_text": "",
   "external_id": 1229751,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2593,6 +2944,9 @@
   "full_description_text": "",
   "external_id": 1229951,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2615,6 +2969,9 @@
   "full_description_text": "",
   "external_id": 1229942,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2637,6 +2994,9 @@
   "full_description_text": "",
   "external_id": 1229966,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2659,6 +3019,9 @@
   "full_description_text": "",
   "external_id": 1229943,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2681,6 +3044,9 @@
   "full_description_text": "",
   "external_id": 1229814,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2703,6 +3069,9 @@
   "full_description_text": "",
   "external_id": 1229934,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2725,6 +3094,9 @@
   "full_description_text": "",
   "external_id": 1229932,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2747,6 +3119,9 @@
   "full_description_text": "",
   "external_id": 1229950,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2769,6 +3144,9 @@
   "full_description_text": "",
   "external_id": 1229901,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2791,6 +3169,9 @@
   "full_description_text": "",
   "external_id": 1229945,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2813,6 +3194,9 @@
   "full_description_text": "",
   "external_id": 1229739,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2835,6 +3219,9 @@
   "full_description_text": "",
   "external_id": 1229747,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2857,6 +3244,9 @@
   "full_description_text": "SPIRULINA POWDER 💚\n\n \n\nUSDA Organic · Non-GMO\nNet weight: 130g\nOrigin: China 🌍\n\n \n\n \n\nPRODUCT DESCRIPTION\n\nThis is spirulina powder.\n\nMade from dried spirulina, a naturally occurring microalgae, gently processed and finely ground.\n\nSpirulina has long been consumed as a food ingredient, valued for its concentrated plant protein and naturally occurring micronutrients.\n\nWe keep it simple — whole ingredient, minimal processing, nothing added.\n\nAn easy way to add a nutrient-dense plant ingredient to everyday meals.\n\n \n\n \n\nWHY PEOPLE CONSUME IT\n\nPlant protein — contributes to the maintenance of muscle mass and normal body tissues.\nIron — contributes to normal oxygen transport and energy metabolism.\nVitamin B12 (analogues) — involved in normal energy metabolism and nervous system function.\nIodine — contributes to normal thyroid function and energy metabolism.\nChlorophyll & phycocyanin — naturally occurring pigments commonly associated with antioxidant activity.\n\n \n\n \n\nINGREDIENTS\n\nSpirulina Powder 💚\n\n \n\n \n\nCONTAINS / MAY CONTAIN\n\nContains: None\nMay contain traces of: Nuts, Soy, Gluten\n\n \n\n \n\nHOW TO USE\n\nServing size: 2–3g (about 1 teaspoon)\nHow often: Once per day\n\nMix into water, smoothies, juices, or food.\n\nStart small and adjust based on taste and routine.\n\n \n\n \n\nSTORAGE & SHELF LIFE\n\nStorage: Store in a cool, dry place away from direct sunlight ❄️\nShelf life: See packaging\nAfter opening: Keep sealed and use regularly\n\n \n\n \n\nNUTRITION FACTS (PER 100G)\n\nEnergy 1450kJ (17%)\nProtein 60g (100%)\nFat 7.5g (13%)\nCarbohydrate 23g (8%)\nSodium 1000mg (50%)\nIron 28mg (156%)\nIodine 180µg (120%)\nVitamin B12 5.0µg (208%)\n\n \n\n \n\nNET CONTENT & PACKAGING\n\nNet weight: 130g\nPackaging: Reusable aluminum container\n\n \n\n \n\nINTENDED USE / NOTES\n\nFor general consumption\nSuitable for plant-based diets 🌿\nNot suitable for individuals allergic to algae\n\n \n\n \n\nVitamin and mineral values are based on generic food composition data for spirulina and are provided for reference only.",
   "external_id": 1229885,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": ""
  },
  {
@@ -2879,6 +3269,9 @@
   "full_description_text": "",
   "external_id": 1229952,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2901,29 +3294,35 @@
   "full_description_text": "BEETROOT POWDER ❤️\n\n \n\nUSDA Organic · Non-GMO\nNet weight: 130g\nOrigin: China 🌍\n\n \n\n \n\nPRODUCT DESCRIPTION\n\nThis is beetroot powder.\n\nMade from whole beetroot, gently dried and finely ground.\n\nBeetroot has long been consumed as a root vegetable, known for its naturally occurring plant compounds and minerals.\n\nWe keep it whole and straightforward — no extracts, no concentrates, nothing added.\n\nA simple way to bring a familiar root vegetable into everyday meals.\n\n \n\n \n\nWHY PEOPLE CONSUME IT\n\nFolate — contributes to normal blood formation and cell division.\nPotassium — contributes to normal muscle function and electrolyte balance.\nIron — contributes to normal oxygen transport and energy metabolism.\nDietary nitrates — naturally occurring compounds commonly associated with circulation and physical performance.\nBetalains — naturally occurring pigments commonly associated with antioxidant activity.\n\n \n\n \n\nINGREDIENTS\n\nBeetroot Powder ❤️\n\n \n\n \n\nCONTAINS / MAY CONTAIN\n\nContains: None\nMay contain traces of: Nuts, Soy, Gluten\n\n \n\n \n\nHOW TO USE\n\nServing size: 3–5g (about 1–2 teaspoons)\nHow often: Once per day\n\nMix into water, smoothies, juices, or food.\n\nStart small and adjust based on taste and routine.\n\n \n\n \n\nSTORAGE & SHELF LIFE\n\nStorage: Store in a cool, dry place away from direct sunlight ❄️\nShelf life: See packaging\nAfter opening: Keep sealed and use regularly\n\n \n\n \n\nNUTRITION FACTS (PER 100G)\n\nEnergy 1300kJ (16%)\nProtein 10g (17%)\nFat 1.5g (3%)\nCarbohydrate 75g (25%)\nSodium 120mg (6%)\nFolate 300µg (75%)\nPotassium 3250mg (69%)\nIron 7.5mg (42%)\n\n \n\n \n\nNET CONTENT & PACKAGING\n\nNet weight: 130g\nPackaging: Reusable aluminum container\n\n \n\n \n\nINTENDED USE / NOTES\n\nFor general consumption\nSuitable for plant-based diets 🌿\nNot suitable for individuals allergic to beetroot\n\n \n\n \n\nVitamin and mineral values are based on generic food composition data for whole beetroot and are provided for reference only.",
   "external_id": 1229598,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": ""
  },
  {
-  "sku": "（4-530）",
+  "sku": "4-530",
   "barcode": "（4-530）",
   "category": "Other Supplements",
   "name_en": "Prebiotic Fiber USDA Organic",
   "name_cn": "益生元菊粉",
   "retail_price_cny": 64.0,
-  "description_en": "",
-  "description_cn": "",
-  "ingredients": "",
-  "pack_size_net_weight": "",
-  "storage_temp": "",
+  "description_en": "This is prebiotic fiber. Made from plant-derived dietary fiber, processed to remain neutral in taste and easy to use. Prebiotic fiber is commonly consumed as part of everyday diets that emphasize whole foods and fiber intake. We keep it simple — no flavors, no sweeteners, nothing added. An easy way to increase fiber intake without changing how your food tastes.",
+  "description_cn": "益生元膳食纤维 🌾\n净含量：200g\n原料产地：中国 🌍\n产品介绍\n这是益生元膳食纤维。\n选用植物来源的膳食纤维原料，经处理后制成细粉。\n膳食纤维是日常饮食中的常见组成部分，来源于植物原料本身。\n本产品不添加香料、甜味剂或其他成分，保持配料简单。\n适合希望在不明显改变饮食口感的情况下，增加膳食纤维摄入的人群。\n为什么有人选择它\n膳食纤维是日常饮食结构中的重要组成部分。\n益生元纤维作为植物来源原料，被广泛用于日常饮食中。\n质地细腻、味道中性，便于融入多种食品和饮品。\n适合偏好配料简单、长期可持续饮食方式的人群。 🌱\n配料\n益生元膳食纤维 🌾\n致敏原信息\n本产品不含已知致敏原\n生产环境可能接触：坚果、大豆、含麸质谷物\n食用方式\n建议食用量：5–10克（约1–2茶匙）\n食用频率：每日1次\n可加入水、饮品、酸奶或食物中食用。\n建议逐步增加食用量，并注意补充水分。\n储存方式与保质期\n储存方式：置于阴凉、干燥处，避免阳光直射 ❄️\n保质期：见包装标示\n开封后请密封保存，并尽快食用\n营养成分表（每100克）\n能量 800kJ (10%)\n蛋白质 0g (0%)\n脂肪 0g (0%)\n碳水化合物 90g (30%)\n钠 0mg (0%)\n规格与包装\n净含量：200g\n包装形式：可重复使用铝制容器\n食用提示\n适合日常人群食用\n适合植物性饮食人群 🌿\n对高纤维饮食敏感者请谨慎食用\n本产品通过美国 USDA 有机认证（USDA Organic）。",
+  "ingredients": "Prebiotic Fiber",
+  "pack_size_net_weight": "200g",
+  "storage_temp": "Store in a cool, dry place away from direct sunlight",
   "free_of": "gluten",
   "tags": "gluten free, buddhist friendly",
   "stock_qty": 69,
-  "sales_units_gzgrocery": 0,
+  "sales_units_gzgrocery": 7.0,
   "sales_units_miniapp": 7.0,
-  "full_description_text": "",
+  "full_description_text": "PREBIOTIC FIBER 🌾\nNet weight: 200g\nOrigin: China 🌍\nPRODUCT DESCRIPTION\nThis is prebiotic fiber.\nMade from plant-derived dietary fiber, processed to remain neutral in taste and easy to use.\nPrebiotic fiber is commonly consumed as part of everyday diets that emphasize whole foods and fiber intake.\nWe keep it simple — no flavors, no sweeteners, nothing added.\nAn easy way to increase fiber intake without changing how your food tastes.\nWHY PEOPLE CONSUME IT\nDietary fiber — contributes to normal digestive function.\nPrebiotic fibers — are selectively used by gut bacteria as part of a balanced diet.\nLow calorie — commonly used in diets focused on fiber intake without added sugars.\nNeutral taste — easy to add to daily food and drinks without affecting flavor.\nINGREDIENTS\nPrebiotic Fiber 🌾\nCONTAINS / MAY CONTAIN\nContains: None\nMay contain traces of: Nuts, Soy, Gluten\nHOW TO USE\nServing size: 5–10g (about 1–2 teaspoons)\nHow often: Once per day\nMix into water, smoothies, yogurt, or food.\nIncrease intake gradually and drink enough water.\nSTORAGE & SHELF LIFE\nStorage: Store in a cool, dry place away from direct sunlight ❄️\nShelf life: See packaging\nAfter opening: Keep sealed and use regularly\nNUTRITION FACTS (PER 100G)\nEnergy 800kJ (10%)\nProtein 0g (0%)\nFat 0g (0%)\nCarbohydrate 90g (30%)\nSodium 0mg (0%)\nDietary Fiber 90g (360%)\nNET CONTENT & PACKAGING\nNet weight: 200g\nPackaging: Reusable aluminum container\nINTENDED USE / NOTES\nFor general consumption\nSuitable for plant-based diets 🌿\nNot suitable for individuals sensitive to high fiber intake\nNutrition values are based on generic food composition data for dietary fiber and are provided for reference only.",
   "external_id": 1229616,
   "unfilled_placeholders": "",
-  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
+  "gaps": ""
  },
  {
   "sku": "5-30",
@@ -2945,6 +3344,9 @@
   "full_description_text": "",
   "external_id": 1260737,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2967,6 +3369,9 @@
   "full_description_text": "",
   "external_id": 1229862,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -2989,6 +3394,9 @@
   "full_description_text": "",
   "external_id": 1229927,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3011,6 +3419,9 @@
   "full_description_text": "",
   "external_id": 1229926,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3033,6 +3444,9 @@
   "full_description_text": "",
   "external_id": 1229919,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3055,6 +3469,9 @@
   "full_description_text": "",
   "external_id": 1229880,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3077,6 +3494,9 @@
   "full_description_text": "",
   "external_id": 1229905,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3099,6 +3519,9 @@
   "full_description_text": "",
   "external_id": 2370230,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3121,6 +3544,9 @@
   "full_description_text": "PRODUCT DESCRIPTION\nPure. Unsweetened. Intense.\nOur cacao powder is made from 100% finely ground cacao beans, delivering a deep, rich chocolate flavor with no added sugar, no fillers, and no shortcuts.\nIt’s bold, slightly bitter, and naturally complex—exactly how real cacao should taste.\nUse it as a base, not an imitation.\nPerfect for baking, drinks, and everyday recipes where you want real chocolate depth without sweetness getting in the way.\nWHY PEOPLE CHOOSE IT\n100% pure cacao, no additives or sweeteners\nDeep, intense chocolate flavor with natural bitterness\nVersatile for baking, drinks, and breakfast recipes\nNaturally rich in nutrients and antioxidants\nINGREDIENTS\n100% cacao powder\nHOW TO USE\nMix into hot milk or plant-based drinks for rich hot chocolate.\nAdd to coffee for a deeper chocolate note.\nUse in baking cakes, brownies, cookies, and desserts.\nStir into yogurt, oats, or smoothie bowls.\nNUTRITION FACTS (per serving 15g)\nEnergy: 54 kcal\nFat: 3g\nCarbohydrates: 9g\nProtein: 3g\nNOTES\nUnsweetened and minimally processed\nMade from cold-pressed cacao beans\nNaturally high in cacao polyphenols",
   "external_id": 1229897,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "no pack size; no storage temp"
  },
  {
@@ -3143,6 +3569,9 @@
   "full_description_text": "",
   "external_id": 1229624,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3165,6 +3594,9 @@
   "full_description_text": "",
   "external_id": 1229893,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3187,6 +3619,9 @@
   "full_description_text": "",
   "external_id": 1229965,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3209,6 +3644,9 @@
   "full_description_text": "🟢 USDA ORGANIC CHLORELLA POWDER (100g)\nTiny but mighty. The freshwater algae that packs a mega nutrient punch.No nonsense — just 100% USDA Organic chlorella, gently dried at low temps to keep its detox power and vibrant nutrients alive. Your green warrior for cleansing, energy, and all-day vitality.\nPacked in a fully recyclable aluminum container that locks in freshness and blocks light, heat, and humidity — because your chlorella deserves the royal treatment.\n \n \n🔍 PRODUCT HIGHLIGHTS\n100% Pure Organic Chlorella PowderNo preservatives, fillers, or additivesRaw, slow-dried to preserve living enzymes + nutrientsNon-GMO, Vegan, Whole Food Plant-BasedGluten-free, soy-free, dairy-free\n \n \n \n🧠 WHY IT’S GOOD FOR YOU\nHeavy Metal Detox Hero — binds toxins and flushes them out naturally.Complete Plant Protein — all essential amino acids to fuel your body and brain.Chlorophyll Overload — oxygenates, energizes, and supports healthy digestion.Vitamin B12 & Iron — great plant-based boosts for energy and blood health.Immune Support & Antioxidants — keep your defenses strong and inflammation low.\n \n \n🥄 HOW TO USESuggested Serving: 1 tsp (5g) daily — a small scoop for big impact.\n✅ Blend into smoothies, green juices, or protein shakes for a clean energy boost✅ Stir into soups, sauces, or dips to level up your savory dishes✅ Mix with warm water + lemon for a refreshing detox tonic\n❗️Heads up: Don’t cook or boil! This is raw chlorella — keep those nutrients alive and thriving.\n \n \n🧊 STORAGE\nStore in a cool, dry place away from sunlight.Seal the lid tightly to keep it fresh.Use within 60 days of opening for max potency — still good after, but power fades.\n \n \n⚡️ NUTRITION FACTS\nServing Size: 5g (1 tsp) | Servings per Container: ~20Calories: 15 kcal (1% DV)Protein: 3 g (6% DV)Total Carbohydrate: 1 g (0% DV)Dietary Fiber: 0.3 g (1% DV)Total Fat: 0.5 g (1% DV)Vitamin B12: 2.0 mcg (83% DV)Iron: 2 mg (11% DV)Vitamin A: 200 mcg RAE (22% DV)Chlorophyll: High natural levels for detox & energy\n \n \n📦 INGREDIENTSJust one: 100% USDA Organic Chlorella Powder",
   "external_id": 1229778,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "no ingredients; no pack size"
  },
  {
@@ -3231,6 +3669,9 @@
   "full_description_text": "",
   "external_id": 1229900,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3253,6 +3694,9 @@
   "full_description_text": "",
   "external_id": 1229886,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3275,6 +3719,9 @@
   "full_description_text": "",
   "external_id": 1229850,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3297,6 +3744,9 @@
   "full_description_text": "",
   "external_id": 1229869,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3319,6 +3769,9 @@
   "full_description_text": "130g\n💚 USDA ORGANIC MATCHA POWDER \nCalm energy. Clean focus. That smooth green fire.\nThis is 100% USDA Organic ceremonial-grade matcha, stone-ground from young shade-grown tea leaves — no sugar, no junk, just the real deal. L-theanine meets natural caffeine for a jitter-free lift that hits calm and clear.\nPacked in a fully recyclable aluminum container to protect its vibrant color, delicate aroma, and powerful antioxidants from light, heat, and humidity.\n🔍 PRODUCT HIGHLIGHTS\n100% Pure Organic Ceremonial Matcha\nStone-ground for ultra-fine texture + max absorption\nNo preservatives, fillers, or flavorings\nNaturally rich in L-theanine + gentle caffeine\nNon-GMO, Vegan, Whole Food Plant-Based\nGluten-free, soy-free, dairy-free\n🧠 WHY IT’S GOOD FOR YOU\nCalm, Clean Energy — L-theanine + caffeine = focus without the crash\nAntioxidant Heavyweight — packed with EGCG to fight stress + aging\nBoosts Metabolism — helps burn fat while keeping you zen\nChlorophyll-Rich — gently detoxifies the body\nSupports Brain, Skin, and Heart — full-body benefits in every scoop\n🥄 HOW TO USE\nSuggested Serving: 1 tsp (2g) daily — but hey, you do you.\n✅ Whisk with warm water for a classic matcha shot or latte\n✅ Blend into smoothies, protein shakes, or energy balls\n✅ Stir into oats, vegan yogurt, or coconut milk for a creamy treat\n✅ Bake into cookies or power bars for a green twist\n❗️Don’t boil it! Matcha is delicate — use warm, not hot water (70–80°C) to keep those nutrients alive.\n🧊 STORAGE\nStore in a cool, dry place away from sunlight.\nKeep lid sealed tight — matcha hates moisture.\nBest used within 60 days of opening for peak flavor + power.\n⚡️ NUTRITION FACTS\nServing Size: 2g (1 tsp) | Servings per Container: ~65\nCalories: 6 kcal (0% DV)\nProtein: 0.3 g (1% DV)\nTotal Carbohydrate: 1 g (0% DV)\nDietary Fiber: 0.3 g (1% DV)\nTotal Fat: 0 g (0% DV)\nVitamin C: 1.75 mg (2% DV)\nIron: 0.2 mg (1% DV)\nEGCG: ~61 mg per serving — nature’s antioxidant beast\nCaffeine: ~35 mg — clean, focused buzz without the burnout\n📦 INGREDIENTS\nJust one: 100% USDA Organic Ceremonial-Grade Matcha Powder",
   "external_id": 1229825,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "no pack size"
  },
  {
@@ -3341,6 +3794,9 @@
   "full_description_text": "REISHI POWDER 🍄\nUSDA Organic · Non-GMO\nNet weight: 120g\nOrigin: China 🌍\nPRODUCT DESCRIPTION\nThis is reishi powder.\nMade from whole reishi mushroom, gently dried and finely ground.\nReishi has been used as a food ingredient for a long time. We keep it whole, unextracted, and untouched.\nNo concentrates. No shortcuts. No exaggerated promises.\nJust mushroom — prepared with intention.\nWHY PEOPLE CONSUME IT\nImmune system support — commonly consumed to help support normal immune function as part of a balanced diet.\nStress & balance — often chosen to help the body adapt to daily stress without stimulation or energy spikes.\nDigestive support — contains dietary fiber that contributes to normal digestion.\nNon-stimulating profile — suitable for daily use, including evening routines.\nWhole-mushroom compounds — naturally occurring polysaccharides found in mushrooms.\nINGREDIENTS\nReishi Mushroom Powder 🍄\nCONTAINS / MAY CONTAIN\nContains: None\nMay contain traces of: Nuts, Soy, Gluten\nHOW TO USE\nServing size: 1–2g (about ½–1 teaspoon)\nHow often: Once per day\nMix into warm water, tea, soups, or food.\nTaste is naturally bitter — that’s normal.\nSTORAGE & SHELF LIFE\nStorage: Store in a cool, dry place away from direct sunlight ❄️\nShelf life: See packaging\nAfter opening: Keep sealed and use regularly\nNUTRITION FACTS (PER 100G)\nEnergy 1100kJ (13%)\nProtein 7.5g (13%)\nFat 1.8g (3%)\nCarbohydrate 70g (23%)\nSodium 20mg (1%)\nNET CONTENT & PACKAGING\nNet weight: 120g\nPackaging: Reusable aluminum container\nINTENDED USE / NOTES\nFor general consumption\nSuitable for plant-based diets 🌿\nNot suitable for individuals allergic to mushrooms",
   "external_id": 2370228,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": ""
  },
  {
@@ -3363,6 +3819,9 @@
   "full_description_text": "",
   "external_id": 1229774,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3385,6 +3844,9 @@
   "full_description_text": "",
   "external_id": 1229854,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3407,6 +3869,9 @@
   "full_description_text": "Product type: Ready-to-eat plant-based energy balls ❄️\nNet weight: 105g (5 balls) ⚖️\nOrigin: Guangzhou, China 🌍\n\n \n\n \n\nPRODUCT DESCRIPTION 🧾\n\nDeep cocoa. Clean energy. Instant good mood.\n\nMeet our Chocolate Hemp Protein Balls.\n\nRich, soft, and deeply satisfying — packed with feel-good plant energy.\n\nOrganic cocoa, creamy nuts, and the earthy bite of hemp seeds come together for bold flavor without heavy sweetness.\n\nNaturally sweetened with dates and boosted with plant protein, built for people who love chocolate and still care what they eat.\n\n \n\n \n\nWHY PEOPLE CHOOSE IT ⚡\n\nDessert-level comfort with real substance.\n\nNo added sugar — sweetness comes from fruit.\n\nOne ball actually fills you up.\n\n \n\n \n\nINGREDIENTS 🌱\n\nHemp seeds, walnuts, dates, salt, almond butter, organic pea protein, organic coconut oil, organic cocoa powder\n\n \n\n \n\nCONTAINS / MAY CONTAIN ⚠️\n\nContains: Tree nuts (walnut, almond)\nMay contain traces of: Other nuts, Soy\n\n \n\n \n\nFREEZER STORAGE & HOW TO ENJOY ❄️\n\nBest kept frozen to maintain optimal texture and freshness.\nBefore eating, take out from the freezer and let sit for about 5 minutes until slightly softened.\n\n \n\n \n\nNUTRITION (PER BALL ~21G) 🧮\n\nEnergy 119.29 kcal\nCarbohydrate 9.11 g\nNatural sugars (from fruit) 5.94 g\nAdded sugars 0 g\nDietary fiber 2.05 g\nProtein 3.97 g\nFat 9.16 g\n\n \n\n \n\nINTENDED USE / NOTES 📌\n\nPlant-based chocolate energy balls 🌿\nNo added sugar\nDesigned to be stored frozen and enjoyed slightly softened",
   "external_id": 1229816,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "no storage temp"
  },
  {
@@ -3429,6 +3894,9 @@
   "full_description_text": "",
   "external_id": 1229848,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3451,6 +3919,9 @@
   "full_description_text": "",
   "external_id": 1229846,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3473,6 +3944,9 @@
   "full_description_text": "",
   "external_id": 1229845,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3495,6 +3969,9 @@
   "full_description_text": "",
   "external_id": 1229844,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3517,6 +3994,9 @@
   "full_description_text": "Product Type: Ready-to-Eat Frozen Dessert Bars ❄️\nNet Weight: 140g (4 Bars) ⚖️\nOrigin: Guangzhou, China 🌍\nPRODUCT DESCRIPTION 🧾\nThis is not a subtle dessert.\nThree layers. Zero compromise.\nThe top layer brings crunchy peanuts and chocolate.\nThe middle layer is smooth, creamy, and rich.\nThe base is built from nuts and dates, delivering natural sweetness and satisfying texture.\nNo dairy. No gluten. No refined sugar.\nFrozen, it eats like ice cream.\nAs it softens, it becomes even richer and more indulgent.\nWHY PEOPLE CHOOSE IT ⚡\nFeels like a real dessert, without the junk.\nNatural sweetness, layered flavors, and satisfying texture.\nDesigned for the freezer, with structure and flavor that holds up beautifully.\nINGREDIENTS 🌱\nDates, almonds, cashews, coconut milk, organic agave syrup, vanilla extract, organic coconut oil, lemon juice, salt, organic salted peanuts, unsweetened cocoa mass, organic coconut sugar\nALLERGEN INFORMATION ⚠️\nContains: Peanuts, Tree Nuts (Almonds, Cashews)\nMay contain traces of: Other tree nuts, Soy\nFROZEN STORAGE & DELIVERY ❄️\nThis product must be kept frozen.\nOrders outside Guangzhou are shipped frozen and sealed, typically arriving within 24 hours after production.\nDuring transit, the product may arrive frozen, partially thawed, or chilled. This is normal.\nUpon receipt, store in the freezer until ready to enjoy.\nHOW TO ENJOY 🍽️\nEnjoy straight from the freezer for an ice cream-like texture.\nOr leave at room temperature for approximately 10 minutes for a softer, creamier experience.\nNUTRITION INFORMATION (Per Bar) 🧮\nEnergy 120kcal\nFat 12g\nCarbohydrates 11g\nProtein 4g\nNOTES 📌\nPlant-based frozen dessert 🌿\nDairy-free, gluten-free, and made without refined sugar\nDifferent levels of thawing create different eating experiences",
   "external_id": 1229831,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "no storage temp"
  },
  {
@@ -3539,6 +4019,9 @@
   "full_description_text": "",
   "external_id": 1229834,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3561,6 +4044,9 @@
   "full_description_text": "",
   "external_id": 1229810,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3583,6 +4069,9 @@
   "full_description_text": "BLUEBERRY CHIA JAM 🫐\n\n \n\nProduct type: Ready-to-eat refrigerated food ❄️\nNet weight: 130g ⚖️\nOrigin: Guangzhou, China 🌍\n\n \n\n \n\nPRODUCT DESCRIPTION 🧾\n\nThis is jam, without the sugar overload.\n\nJuicy blueberries are gently cooked and set with chia seeds, finished with lemon and a touch of agave.\n\nThick, spoonable, and balanced — sweet enough to work, restrained enough to keep eating.\n\nNo gloss. No candy tricks.\n\n \n\n \n\nWHY PEOPLE ENJOY IT 🌾\n\nIt delivers fruit flavor without tipping into dessert territory.\n\nThe texture stays natural, not jelly-tight.\n\nEasy to spread, easy to pair, easy to finish.\n\n \n\n \n\nINGREDIENTS 🌱\n\nBlueberries, lemon juice, chia seeds, lemon zest, vanilla extract, organic agave syrup\n\n \n\n \n\nCONTAINS / MAY CONTAIN ⚠️\n\nContains: None declared\nMay contain traces of: Nuts, Soy, Gluten\n\n \n\n \n\nHOW TO EAT 🍽️\n\nReady to eat.\n\nSpread on toast, stir into yogurt, or use in simple recipes.\n\n \n\n \n\nSTORAGE & SHELF LIFE ❄️\n\nStorage: Keep refrigerated at 0–4°C at all times\nShelf life: See packaging\n\n \n\n \n\nFREEZING OPTION ❄️\n\nThis product can be frozen if you’d like to enjoy it later.\nWhen frozen, it can be kept for up to 2 months.\nDefrost slowly in the refrigerator and stir well before use.\n\n \n\n \n\nDELIVERY NOTE 🚚\n\nDuring delivery, this product may arrive frozen or partially frozen due to temperature control.\nIf so, allow it to defrost naturally in the refrigerator and stir well before serving.\n\n \n\n \n\nNUTRITION (PER SERVING 25G) 🧮\n\nEnergy 49kcal\nFat 0.9g\nCarbohydrate 10.3g\nProtein 0.5g\n\n \n\n \n\nINTENDED USE / NOTES 📌\n\nPlant-based product 🌿\nFruit-forward, lightly sweet",
   "external_id": 1229827,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": ""
  },
  {
@@ -3605,6 +4094,9 @@
   "full_description_text": "Product type: Fresh juice ❄️\nNet volume: 350ml ⚖️\nOrigin: Guangzhou, China 🌍\n\n \n\n \n\nPRODUCT DESCRIPTION 🧾\n\nThis one’s for people who don’t usually like green juice.\n\nBold celery meets crisp apple, sharpened with lime and finished with a touch of organic spirulina.\n\nLight, slightly tart, naturally sweet, and genuinely easy to drink.\n\nGreen, but not aggressive.\n\n \n\n \n\nWHY PEOPLE CHOOSE IT 🌾\n\nClean flavor without the punishment.\n\nBalanced, refreshing, and straight to the point.\n\nWorks cold. Better shaken.\n\n \n\n \n\nINGREDIENTS 🌱\n\nApple, celery, lime, organic spirulina powder\n\n \n\n \n\nFREE FROM 🚫\n\nNo added sugar\nGluten-free\nSoy-free\nNut-free\n\n \n\n \n\nHOW TO DRINK 🥤\n\nBest served chilled.\n\nShake well before drinking.\n\n \n\n \n\nSTORAGE & SHELF LIFE ❄️\n\nStorage: Keep refrigerated at 0–4°C at all times\nShelf life: See packaging\n\n \n\n \n\nFREEZING & DELIVERY NOTE ❄️\n\nFor orders outside Guangzhou, this product may arrive frozen or partially frozen due to cold-chain delivery.\nIf frozen, allow it to defrost naturally in the refrigerator.\nShake well before drinking to restore the natural texture.\n\n \n\n \n\nNUTRITION (PER BOTTLE / 350ML) 🧮\n\nEnergy 133kcal\nFat 0.9g\nCarbohydrate 35.9g\nSugars ~25g (from fruit only)\nProtein 1.6g\n\n \n\n \n\nINTENDED USE / NOTES 📌\n\n100% plant-based 🌿\nFresh vegetable & fruit juice",
   "external_id": 1229802,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": ""
  },
  {
@@ -3627,6 +4119,9 @@
   "full_description_text": "",
   "external_id": 1229815,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3649,6 +4144,9 @@
   "full_description_text": "",
   "external_id": 1229733,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3671,6 +4169,9 @@
   "full_description_text": "",
   "external_id": 1229811,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3693,6 +4194,9 @@
   "full_description_text": "",
   "external_id": 1229770,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3715,6 +4219,9 @@
   "full_description_text": "",
   "external_id": 1229839,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3737,6 +4244,9 @@
   "full_description_text": "",
   "external_id": 1229769,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3759,6 +4269,9 @@
   "full_description_text": "",
   "external_id": 1230097,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3781,6 +4294,9 @@
   "full_description_text": "Discover our unique take on tempeh, crafted with white beans for a delightful twist. Enhanced with organic soy sauce, organic agave syrup, and a hint of liquid smoke for depth, this tempeh is seasoned with salt, sriracha sauce, and a blend of spices for a flavorful kick. Whether you're looking to add protein to your meals or enjoy a tasty vegan snack, this tempeh is versatile and satisfying.\nHow to eat: this tempeh needs to be baked or fried before eating. Simply cook it in the oven or fry it in a pan until it's crispy and golden.\nIngredients: white beans tempeh, organic soy sauce, organic agave syrup, liquid smoke, salt, sriracha sauce, spices.\nFree of:, nuts\nServing size: 50g\n【Calories卡路里】150kcal\n【Fat脂肪】10g\n【Carbs碳水】9g\n【Protein蛋白质】9g",
   "external_id": 1229909,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "no pack size; no storage temp"
  },
  {
@@ -3803,6 +4319,9 @@
   "full_description_text": "",
   "external_id": 1229798,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3825,6 +4344,9 @@
   "full_description_text": "Product type: Ready-to-eat savory granola 🥣\nNet weight: 190g ⚖️\nOrigin: Guangzhou, China 🌍\n\n \n\n \n\nPRODUCT DESCRIPTION 🧾\n\nThis isn’t sweet granola pretending to be food.\n\nThis is crunchy, savory, and unapologetically spiced.\n\nBuilt on buckwheat, nuts, seeds, and warming curry spices, this granola eats more like a snack or topping than a breakfast dessert.\n\nNo sugar. No sweetness. Just deep, toasty crunch with real flavor.\n\n \n\n \n\nWHY PEOPLE CHOOSE IT ⚡\n\nSavory and spice-forward — not sweet.\n\nMade with anti-inflammatory spices and whole ingredients.\n\nAdds serious texture and flavor to real meals.\n\n \n\n \n\nINGREDIENTS 🌱\n\nBuckwheat, almonds, walnuts, ground flaxseed, organic coconut flakes, pumpkin seeds, organic cold-pressed coconut oil, spices\n\n \n\n \n\nFREE OF ✅\n\nGluten-free\nSoy-free\n\n \n\n \n\nCONTAINS / MAY CONTAIN ⚠️\n\nContains: Tree nuts (almond, walnut)\nMay contain traces of: Other nuts\n\n \n\n \n\nHOW TO EAT 🍽️\n\nSprinkle over yogurt or savory overnight oats.\nMix into rice, curry, or grain bowls.\nToss into salads for extra crunch and spice.\n\n \n\n \n\nSTORAGE & SHELF LIFE ❄️\n\nStore in a cool, dry place away from direct sunlight.\nAfter opening, reseal tightly to maintain crunch.\nShelf life: See packaging.\n\n \n\n \n\nINTENDED USE / NOTES 📌\n\nPlant-based savory granola 🌿\nNo added sugar\nDesigned as a topping, snack, or meal booster\n\nv",
   "external_id": 1229790,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": ""
  },
  {
@@ -3834,20 +4356,23 @@
   "name_en": "Quinoa Patties",
   "name_cn": "酱香藜麦排",
   "retail_price_cny": 43.0,
-  "description_en": "",
-  "description_cn": "",
-  "ingredients": "",
-  "pack_size_net_weight": "",
-  "storage_temp": "",
+  "description_en": "This is a vegetable patty built on real structure. Quinoa forms the base, supported by vegetables, seeds, and herbs. Lightly crisp on the outside, soft and balanced inside. Clean flavor, no heaviness.",
+  "description_cn": "藜麦蔬菜饼 🌾\n产品类型：即食植物性蔬菜饼 ❄️\n净含量 300g g ⚖️\n产地：中国广州 🌍\n产品描述 🧾\n这是一款有结构的蔬菜饼。\n以藜麦为基础，搭配蔬菜、种子与香草。\n外层微微酥脆，内部柔软平衡。\n风味干净，不厚重。\n为什么人们会选它 ⚡\n谷物、蔬菜与种子的组合。\n口感平衡，软中带一点酥。\n可作为主食、配菜或夹入面包食用。\n配料表 🌱\n藜麦、胡萝卜、黑芝麻、葵花籽、紫洋葱、全麦面包碎、全麦面粉、香菜、欧芹、姜、山茶油、天然香料\n致敏原信息 ⚠️\n含有：麸质（小麦）、芝麻\n可能含有微量：坚果、大豆\n食用方式 🍽️\n建议加热后食用。\n可平底锅或烤箱加热至完全热透。\n可单独食用或搭配面包、沙拉。\n贮存与保质期 ❄️\n全程 0–4°C 冷藏保存。\n保质期：见包装标示。\n营养信息（每块 100g）🧮\n能量 168kcal\n脂肪 9.7g\n碳水化合物 16.7g\n蛋白质 4.9g\n食用提示 📌\n植物性藜麦蔬菜饼 🌿\n口感平衡，有结构\n建议加热食用",
+  "ingredients": "Quinoa, carrot, black sesame, organic sunflower seeds, red onion, whole wheat breadcrumbs, whole wheat flour, cilantro, parsley, ginger, organic camellia oil, natural spices",
+  "pack_size_net_weight": "300g g",
+  "storage_temp": "Keep refrigerated at 0–4°C. Shelf life: See packaging.",
   "free_of": "animal products",
   "tags": "vegan",
   "stock_qty": 116,
   "sales_units_gzgrocery": 2.0,
   "sales_units_miniapp": 21.0,
-  "full_description_text": "",
+  "full_description_text": "Quinoa Veggie Patty 🌾\nProduct type: Ready-to-eat plant-based patty ❄️\nNet weight: 300g g ⚖️\nOrigin: Guangzhou, China 🌍\nPRODUCT DESCRIPTION 🧾\nThis is a vegetable patty built on real structure.\nQuinoa forms the base, supported by vegetables, seeds, and herbs.\nLightly crisp on the outside, soft and balanced inside.\nClean flavor, no heaviness.\nWHY PEOPLE CHOOSE IT ⚡\nGrains, vegetables, and seeds in one bite.\nBalanced texture — soft with a slight crisp.\nWorks as a main, a side, or inside a sandwich.\nINGREDIENTS 🌱\nQuinoa, carrot, black sesame, organic sunflower seeds, red onion, whole wheat breadcrumbs, whole wheat flour, cilantro, parsley, ginger, organic camellia oil, natural spices\nCONTAINS / MAY CONTAIN ⚠️\nContains: Gluten (wheat), sesame\nMay contain traces of: Nuts, soy\nHOW TO EAT 🍽️\nHeat before serving for best texture.\nPan-fry or oven-heat until warmed through.\nServe on its own or inside a sandwich or bowl.\nSTORAGE ❄️\nKeep refrigerated at 0–4°C.\nShelf life: See packaging.\nNUTRITION (Per patty 100g) 🧮\nEnergy 168kcal\nFat 9.7g\nCarbohydrate 16.7g\nProtein 4.9g\nNOTES 📌\nPlant-based quinoa patty 🌿\nBalanced texture and structure\nBest served warm",
   "external_id": 1229785,
   "unfilled_placeholders": "",
-  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
+  "gaps": ""
  },
  {
   "sku": "EXT-1229602",
@@ -3869,6 +4394,9 @@
   "full_description_text": "",
   "external_id": 1229602,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3891,6 +4419,9 @@
   "full_description_text": "",
   "external_id": 1229783,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3913,6 +4444,9 @@
   "full_description_text": "",
   "external_id": 1229742,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3935,6 +4469,9 @@
   "full_description_text": "USDA Organic Goji Berries 🍒\nProduct Type: Dried Fruit ❄️\nNet Content: 150g ⚖️\nOrigin: China 🌍\nProduct Description 🧾\nBright, naturally dried goji berries with a balanced sweet-tart flavor.\nNo added sugar. No additives. No preservatives.\nGrown on certified organic farms and gently dried to preserve their natural character.\nChewy, slightly floral, and easy to enjoy every day.\nWhat Makes It Different 🌾\nMade from whole goji berries, carefully dried to maintain flavor and texture.\nCertified USDA Organic and processed without unnecessary additions.\nClean, simple, and consistent quality.\nWhy People Choose It ⚡\nNo added sugar\nSweet-tart natural flavor\nSoft, chewy texture\nEasy to use across snacks and meals\nIngredients 🌱\nOrganic Goji Berries 🍒\nAllergen Information ⚠️\nContains: No known allergens\nProduced in a facility that may also handle: Nuts, Soy, Gluten-containing cereals\nHow to Eat 🍽️\nEnjoy directly as a snack.\nAdd to trail mixes, yogurt, or cereal.\nBlend into smoothies or use in cooking.\nStorage & Shelf Life ❄️\nStorage: Store in a cool, dry place.\nAfter opening, keep sealed and consume soon.\nShelf Life: See packaging\nNutrition Information (Per 100g) 🧮\nEnergy 349kcal\nProtein 14.3g\nFat 0.4g\nSaturated Fat 0.1g\nCarbohydrates 77.1g\nSugars 45.6g\nDietary Fiber 13.0g\nSodium 5mg\nConsumption Notes 📌\nWhole dried fruit 🌿\nNo additives or preservatives\nNaturally contains fruit sugars",
   "external_id": 1229768,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "no ingredients"
  },
  {
@@ -3957,6 +4494,9 @@
   "full_description_text": "",
   "external_id": 1229758,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -3979,6 +4519,9 @@
   "full_description_text": "",
   "external_id": 1229755,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4001,6 +4544,9 @@
   "full_description_text": "",
   "external_id": 1229708,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4023,6 +4569,9 @@
   "full_description_text": "",
   "external_id": 1229836,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4045,6 +4594,9 @@
   "full_description_text": "",
   "external_id": 1229750,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4067,6 +4619,9 @@
   "full_description_text": "Seed Power Bread 🌾\nProduct type: Frozen plant-based bread ❄️\nNet weight: 440g ⚖️\nOrigin: Guangzhou, China 🌍\nPRODUCT DESCRIPTION 🧾\nThis is not your typical bread.\nNo wheat. No fluff. Just oats, nuts, and seeds pressed into a dense, chewy, functional loaf.\nRich in natural fats and fiber, with real texture and real structure.\nSolid. Nourishing. Built to work — not to impress.\nWHY PEOPLE CHOOSE IT ⚡\nSeed-forward, nutrient-dense composition.\nFirm structure with satisfying chew.\nNo fillers. No empty softness.\nHOW TO EAT 🍽️\nSlice it thin — thinner is better.\nToast until crisp on the outside and warm inside.\nEnjoy plain, or top with avocado, almond butter, or anything you like.\nYou control the rest.\nSTORAGE ❄️\nSlice the entire loaf upon receiving and store frozen.\nRemove a slice and heat when ready to eat.\nINGREDIENTS 🌱\nOrganic sunflower seeds, almonds, pumpkin seeds, flax seeds, chia seeds, traditional oats, rolled oats, psyllium husk, maple syrup, organic coconut oil, salt, purified water\nCONTAINS / MAY CONTAIN ⚠️\nContains: Tree nuts (almonds), gluten (oats)\nMay contain traces of: Other nuts, soy\nNUTRITION (Per 34g serving) 🧮\nEnergy 119 kcal\nFat 8g\nCarbohydrate 9g\nProtein 4g\nINTENDED USE / NOTES 📌\nPlant-based functional bread 🌿\nBest stored frozen\nDesigned for toasting",
   "external_id": 1229743,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": ""
  },
  {
@@ -4089,6 +4644,9 @@
   "full_description_text": "",
   "external_id": 2140073,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4111,6 +4669,9 @@
   "full_description_text": "",
   "external_id": 1229727,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4133,6 +4694,9 @@
   "full_description_text": "",
   "external_id": 1229735,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4155,6 +4719,9 @@
   "full_description_text": "",
   "external_id": 1229596,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4177,6 +4744,9 @@
   "full_description_text": "",
   "external_id": 1229710,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4199,6 +4769,9 @@
   "full_description_text": "",
   "external_id": 1229723,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4221,6 +4794,9 @@
   "full_description_text": "",
   "external_id": 1229719,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4243,6 +4819,9 @@
   "full_description_text": "",
   "external_id": 1229715,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4265,6 +4844,9 @@
   "full_description_text": "",
   "external_id": 1229658,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4287,6 +4869,9 @@
   "full_description_text": "",
   "external_id": 1229618,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4309,6 +4894,9 @@
   "full_description_text": "",
   "external_id": 1229686,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4331,6 +4919,9 @@
   "full_description_text": "",
   "external_id": 1229712,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4353,6 +4944,9 @@
   "full_description_text": "",
   "external_id": 1229711,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4375,6 +4969,9 @@
   "full_description_text": "",
   "external_id": 1229709,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4397,6 +4994,9 @@
   "full_description_text": "Apple Cinnamon Overnight Oats 🍎🥣\n\n \n\nProduct type: Ready-to-eat refrigerated breakfast ❄️\n\nNet weight: 250g ⚖️\n\nOrigin: Guangzhou, China 🌍\n\n \n\n \n\nPRODUCT DESCRIPTION 🧾\n\nThis is our housemade overnight oats.\n\nRolled oats and chia seeds are soaked overnight in our own oat milk to create a soft, creamy base.\n\nFinished with apple purée on top.\n\nBefore eating, give it a good stir to fully blend the apple into the oats.\n\nThe result is smooth, naturally sweet, with warm notes of apple and cinnamon.\n\n \n\n \n\nWHY PEOPLE CHOOSE IT 🌾\n\nSoft and satisfying without being heavy.\n\nBalanced sweetness from fruit — not overloaded with sugar.\n\nA practical breakfast, snack, or mid-day energy option.\n\n \n\n \n\nINGREDIENTS 🌱\n\nApple, classic oats, oat milk, organic agave syrup, chia seeds, cinnamon, vanilla extract, spices\n\n \n\n \n\nCONTAINS / MAY CONTAIN ⚠️\n\nContains: Gluten (oats)\nMay contain traces of: Nuts, soy\n\n \n\n \n\nHOW TO EAT 🍽️\n\nStir well before eating.\n\nEnjoy chilled.\n\nPairs well with crunchy granola for added texture.\n\n \n\n \n\nSTORAGE ❄️\n\nKeep refrigerated at 0–4°C.\nShelf life: See packaging.\n\n \n\n \n\nNUTRITION (Per serving) 🧮\n\nEnergy 81kcal\nFat 4.3g\nCarbohydrate 6.5g\nProtein 4.1g\n\n \n\n \n\nINTENDED USE / NOTES 📌\n\nPlant-based breakfast 🌿\nContains chia seeds and oats\nBest consumed chilled",
   "external_id": 1229705,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": ""
  },
  {
@@ -4419,6 +5019,9 @@
   "full_description_text": "",
   "external_id": 1229695,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4441,6 +5044,9 @@
   "full_description_text": "",
   "external_id": 1229694,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4463,6 +5069,9 @@
   "full_description_text": "",
   "external_id": 1229687,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4485,6 +5094,9 @@
   "full_description_text": "Product type: Ready-to-eat refrigerated food ❄️\nNet weight: 600g ⚖️\nOrigin: Guangzhou, China 🌍\n\n \n\n \n\nPRODUCT DESCRIPTION 🧾\n\nThis is a classic Chinese-style vegetable soup, built slow and steady.\n\nA deep, savory broth layered with mushrooms, vegetables, and traditional aromatics.\n\nEarthy, warming, and balanced — designed to be comforting without feeling heavy.\n\nSimple, honest, and meant to be eaten as a bowl, not a statement.\n\n \n\n \n\nWHY PEOPLE CHOOSE IT 🌾\n\nIt’s light, but still grounding.\n\nMushrooms bring depth, vegetables keep it clean.\n\nA soup that works any time you want something warm and steady.\n\n \n\n \n\nINGREDIENTS – SOUP 🌱\n\nDry seaweed, black fungus, dried longan, dried jujube, asiabell root, Chinese angelica, lotus seed, mushroom powder, organic goji berries, deep-fried tofu, oyster mushrooms, shimeji mushrooms, shiitake mushrooms, tomato, soybean sprouts, napa cabbage, ginger, salt\n\n \n\n \n\nCONTAINS / MAY CONTAIN ⚠️\n\nContains: Soy\nMay contain traces of: Gluten, Nuts\n\n \n\n \n\nHOW TO EAT 🍽️\n\nHeat until hot.\n\nStir gently and serve.\n\n \n\n \n\nSTORAGE & SHELF LIFE ❄️\n\nStorage: Keep refrigerated at 0–4°C at all times\nShelf life: See packaging\n\n \n\n \n\nFREEZING & DELIVERY NOTE ❄️\n\nThis product can be frozen if you plan to enjoy it later.\nWhen frozen, it can be kept for up to 2 months.\nDuring delivery, the soup may arrive frozen or partially frozen due to temperature control.\nIf so, allow it to defrost naturally in the refrigerator, then heat thoroughly before eating.\n\n \n\n \n\nNUTRITION (PER SERVING) 🧮\n\nEnergy 90kcal\nFat 2.9g\nCarbohydrate 12.7g\nProtein 5.4g\n\n \n\n \n\nINTENDED USE / NOTES 📌\n\nPlant-based product 🌿\nChinese-style mushroom and vegetable soup",
   "external_id": 1230115,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "no ingredients"
  },
  {
@@ -4507,6 +5119,9 @@
   "full_description_text": "PRODUCT DESCRIPTION\nDeep red, tart, and naturally floral.\nHibiscus flower tea is made from dried hibiscus petals, brewed into a vibrant infusion with a bold ruby color and a naturally tangy profile.\nThe flavor is bright, slightly sour, and fruit-like—reminiscent of cranberries with a clean floral finish.\nNo caffeine-heavy bitterness, no artificial fruiting—just pure botanical acidity and aroma.\nSimple flower. Powerful presence.\nPerfect as a standalone tea or blended into cold brews, kombucha bases, and refreshing drinks.\nWHY PEOPLE CHOOSE IT\nNaturally caffeine-free botanical infusion\nBright tartness with fruity, cranberry-like notes\nDeep color and clean floral aroma\nWorks hot or cold, and blends well with fermentation\nINGREDIENTS\n100% dried hibiscus flowers\nHOW TO USE\nSteep in hot water for 5–10 minutes for a bold tea.\nCold brew for a refreshing tart drink.\nMix into kombucha or herbal blends for added acidity and color.\nServe chilled as a natural iced tea.\nNUTRITION FACTS (per 100g dried flowers)\nEnergy: 37 kcal\nProtein: 0.4g\nCarbohydrates: 7.4g\nFat: 0.6g\nFiber: 3.0g\nSugar: 0g\nNOTES\nNaturally caffeine-free\nNo additives or preservatives\nPlant-based botanical ingredient",
   "external_id": 1229677,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "no pack size; no storage temp"
  },
  {
@@ -4529,6 +5144,9 @@
   "full_description_text": "",
   "external_id": 1229675,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4551,6 +5169,9 @@
   "full_description_text": "",
   "external_id": 1229673,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4573,6 +5194,9 @@
   "full_description_text": "",
   "external_id": 1229670,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4595,6 +5219,9 @@
   "full_description_text": "",
   "external_id": 1229668,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4617,6 +5244,9 @@
   "full_description_text": "",
   "external_id": 1229666,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4639,6 +5269,9 @@
   "full_description_text": "SOY PROTEIN POWDER 🌱\nPlant-based protein from soybeans\nPRODUCT DESCRIPTION\nThis is soy protein powder.\nMade from soybeans and processed into a high-protein, neutral powder.\nNo sweeteners. No flavors. No fillers.\nJust one ingredient, refined for function — protein that works in real food.\nBuilt for daily use, not hype.\nWHY PEOPLE CONSUME IT\nComplete plant protein — contains all essential amino acids.\nMuscle support — commonly used in strength and training routines.\nHigh satiety — protein helps support fullness between meals.\nDairy-free — suitable for those avoiding milk-based proteins.\nNeutral taste — easy to blend into sweet or savory recipes.\nINGREDIENTS\nSoy Protein (from soybeans)\nCERTIFICATION NOTE\nMade with ingredients certified USDA Organic and verified Non-GMO.\nCONTAINS / MAY CONTAIN\nContains: Soy\nMay contain traces of: Nuts, Gluten\nHOW TO USE\nServing size: 28g (1 scoop)\nMix with water, plant milk, or smoothies.\nCan also be used in baking, soups, or savory cooking.\nSuitable for use before or after exercise.\nNUTRITION FACTS (PER 28G SERVING)\nEnergy 452kJ (5%)\nProtein 25.2g (50%)\nFat 0.1g (0%)\nCarbohydrate 0.1g (0%)\nSodium 336mg (17%)\nNET CONTENT & PACKAGING\nNet weight: 500g\n\nINTENDED USE / NOTES\nFor general adult consumption\nSuitable for plant-based diets 🀀𐀀󟰼𨡲>Not suitable for individuals allergic to soy\nROOTS NOTE\nWe focus on ingredients that earn their place.\nIf it doesn’t do the job, it doesn’t make the cut.",
   "external_id": 1229634,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "no storage temp"
  },
  {
@@ -4661,6 +5294,9 @@
   "full_description_text": "PRODUCT DESCRIPTION\nChicken-style strips. Fully plant-based.\nThese tofu-based strips are designed to deliver a fibrous, chewy, “meaty” texture without any meat. Built from tofu and wheat gluten, they hold structure, absorb flavor well, and deliver a satisfying bite similar to traditional chicken strips.\nSeasoned with soy sauce and spices, they are savory, balanced, and ready to cook into any dish that needs protein and texture.\nSimple ingredients. Strong texture. No meat.\nWHY PEOPLE CHOOSE IT\nChicken-style texture, completely plant-based\nHigh protein content for functional meals\nAbsorbs sauces and marinades easily\nReady to pan-fry, stir-fry, or bake\nINGREDIENTS\nTofu, filtered water, vital wheat gluten, organic soy sauce, spices\nHOW TO USE\nPan-fry until golden for a crispy exterior.\nAdd to stir-fries, rice bowls, wraps, or salads.\nMarinate for extra flavor before cooking.\nBake or air-fry for a firmer texture.\nNUTRITION FACTS (per 50g)\nEnergy: 93 kcal\nFat: 1.1g\nCarbohydrates: 4.2g\nProtein: 16.6g\nNOTES\nPlant-based protein strips\nHigh-protein, low-fat structure\nDesigned for savory cooking applications\n\nChicken-style strips. Fully plant-based.\n\nThese tofu-based strips are designed to deliver a fibrous, chewy, “meaty” texture without any meat. Built from tofu and wheat gluten, they hold structure, absorb flavor well, and deliver a satisfying bite similar to traditional chicken strips.\n\nSeasoned with soy sauce and spices, they are savory, balanced, and ready to cook into any dish that needs protein and texture.\n\nSimple ingredients. Strong texture. No meat.\n\nWHY PEOPLE CHOOSE IT\n\nChicken-style texture, completely plant-based\n\nHigh protein content for functional meals\n\nAbsorbs sauces and marinades easily\n\nReady to pan-fry, stir-fry, or bake\n\nINGREDIENTS\n\nTofu, filtered water, vital wheat gluten, organic soy sauce, spices\n\nHOW TO USE\n\nPan-fry until golden for a crispy exterior.\n\nAdd to stir-fries, rice bowls, wraps, or salads.\n\nMarinate for extra flavor before cooking.\n\nBake or air-fry for a firmer texture.\n\nNUTRITION FACTS (per 50g)\n\nEnergy: 93 kcal\nFat: 1.1g\nCarbohydrates: 4.2g\nProtein: 16.6g\n\nNOTES\n\nPlant-based protein strips\n\nHigh-protein, low-fat structure\n\nDesigned for savory cooking applications\n\n产品描述\n\n鸡肉口感植物蛋白条。\n\n这是一款以豆腐为基础的植物性“鸡肉风味”蛋白条，通过小麦面筋与豆腐的结构组合，打造出类似鸡肉的纤维感与咀嚼感。\n\n能够吸收酱汁，保持结构，同时提供扎实的蛋白质来源。\n\n不含肉类，但保留类似肉的口感体验。\n\n为什么人们会选它\n\n植物基鸡肉口感替代品\n\n高蛋白结构，适合正餐使用\n\n易吸收酱汁与调味\n\n适合煎、炒、烤等多种烹饪方式\n\n配料表\n\n豆腐、过滤水、小麦面筋、有机酱油、香料\n\n营养信息（每50g）\n\n能量：93 千卡\n脂肪：1.1g\n碳水化合物：4.2g\n蛋白质：16.6g\n\n食用提示\n\n植物性高蛋白肉感替代品\n低脂结构设计\n适用于多种咸味料理场景",
   "external_id": 1229652,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "no pack size; no storage temp"
  },
  {
@@ -4683,6 +5319,9 @@
   "full_description_text": "",
   "external_id": 1229646,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4705,6 +5344,9 @@
   "full_description_text": "",
   "external_id": 1229640,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4727,6 +5369,9 @@
   "full_description_text": "",
   "external_id": 1229639,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4749,6 +5394,9 @@
   "full_description_text": "Product type: Ready-to-eat refrigerated food ❄️\nNet weight: 220g ⚖️\nOrigin: Guangzhou, China 🌍\n\n \n\n \n\nPRODUCT DESCRIPTION 🧾\n\nThis is strawberry chia jam, done clean and simple.\n\nRipe strawberries meet chia seeds for natural thickness, with lemon juice and zest to keep things bright.\n\nLightly sweetened with organic agave syrup — just enough to lift the fruit, never overpower it.\n\nFresh, balanced, and easy to love.\n\n \n\n \n\nWHY PEOPLE CHOOSE IT 🌾\n\nFruit-forward flavor without the sugar overload.\n\nChia seeds bring texture and body, not heaviness.\n\nWorks for breakfast, snacks, and desserts.\n\n \n\n \n\nINGREDIENTS 🌱\n\nStrawberries, chia seeds, lemon juice, lemon zest, organic agave syrup, salt\n\n \n\n \n\nFREE FROM 🚫\n\nNut-free\nSoy-free\nGluten-free\n\n \n\n \n\nHOW TO EAT 🍽️\n\nSpread on toast.\n\nStir into yogurt or oatmeal.\n\nUse as a fruity finish for desserts.\n\n \n\n \n\nSTORAGE & SHELF LIFE ❄️\n\nStorage: Keep refrigerated at 0–4°C at all times\nShelf life: See packaging\n\n \n\n \n\nFREEZING & DELIVERY NOTE ❄️\n\nThis product can be frozen for extended storage if you plan to enjoy it later.\nWhen frozen, it can be kept for up to 2 months.\n\nDuring delivery, it may arrive frozen or partially frozen due to temperature control.\nIf frozen, allow it to defrost naturally in the refrigerator and stir well before use.\n\n \n\n \n\nNUTRITION (PER 20G SERVING) 🧮\n\nEnergy 23kcal\nFat 0.4g\nCarbohydrate 4.9g\nProtein 0.3g\n\n \n\n \n\nINTENDED USE / NOTES 📌\n\nPlant-based fruit spread 🌿\nNaturally thickened with chia seeds",
   "external_id": 1229635,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": ""
  },
  {
@@ -4771,6 +5419,9 @@
   "full_description_text": "",
   "external_id": 1229623,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4793,6 +5444,9 @@
   "full_description_text": "",
   "external_id": 1229632,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4815,6 +5469,9 @@
   "full_description_text": "",
   "external_id": 1229628,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4837,6 +5494,9 @@
   "full_description_text": "",
   "external_id": 1229627,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4859,6 +5519,9 @@
   "full_description_text": "",
   "external_id": 1229895,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4881,6 +5544,9 @@
   "full_description_text": "",
   "external_id": 1229612,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4903,6 +5569,9 @@
   "full_description_text": "",
   "external_id": 1229622,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4925,6 +5594,9 @@
   "full_description_text": "Delve into the rich flavors of our mushroom pattie, a gourmet blend that marries the earthy essence of mushrooms with the freshness of onions and parsley. Bound together with wholesome brown rice and enriched with tomato paste, organic soy sauce, miso paste, wheat gluten, and a select mix of spices, this pattie is a culinary delight.\nHow to eat: This pattie is versatile and ready to be heated in a pan or oven until warm and slightly crispy on the outside. It’s perfect as the star of your burger, chopped up in salads, or enjoyed alongside your favorite sides.\nIngredients: mushrooms, onions, parsley, brown rice, tomato paste, organic soy sauce, miso paste, wheat gluten, spices.\nFree of: nuts\nServing size: 150g\n【Calories卡路里】199kcal\n【Fat脂肪】0.9g\n【Carbs碳水】23.8g\n【Protein蛋白质】24.7g",
   "external_id": 1229621,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "no pack size; no storage temp"
  },
  {
@@ -4947,6 +5619,9 @@
   "full_description_text": "",
   "external_id": 1229617,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -4969,6 +5644,9 @@
   "full_description_text": "Product type: Ready-to-eat baked granola 🥣\nNet weight: 150g ⚖️\nOrigin: Guangzhou, China 🌍\nPRODUCT DESCRIPTION 🧾\nMost granola is dessert in disguise.\nThis isn’t.\nThis is the crunch that hits back.\nNo sticky sugar glue. No fake health halos.\nJust toasted oats, coconut, nuts, and real plant-fueled energy that won’t spike, crash, or lie.\nWHY PEOPLE CHOOSE IT ⚡\nSweetened with coconut sugar and maple — real sweetness, not junk.\nNo refined sugar. No fillers.\nCrunchy, clustery, and actually satisfying.\nINGREDIENTS 🌱\nOld-fashioned oats, almonds, pecans, coconut flakes, organic coconut sugar, organic coconut oil, maple syrup, vanilla extract, unsweetened dried blueberries, spices\nCONTAINS / MAY CONTAIN ⚠️\nContains: Gluten (oats), Tree nuts (almond, pecan)\nMay contain traces of: Other nuts, Soy\nHOW TO EAT 🍽️\nSpoon it over yogurt.\nStir it into overnight oats.\nOr eat it straight from the bag — no judgment here.\nSTORAGE & SHELF LIFE ❄️\nStore in a cool, dry place away from direct sunlight.\nAfter opening, reseal tightly to maintain crunch.\nShelf life: See packaging.\nNUTRITION (PER 47G SERVING) 🧮\nEnergy 177 kcal\nFat 11.1 g\nCarbohydrate 15.9 g\nProtein 3.1 g\nINTENDED USE / NOTES 📌\nPlant-based baked granola 🌿\nNo refined sugar\nBuilt for real meals, not sugar crashes",
   "external_id": 1229614,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": ""
  },
  {
@@ -4991,6 +5669,9 @@
   "full_description_text": "HEMP PROTEIN POWDER 🌿\nPlant-based protein from hemp seeds\nPRODUCT DESCRIPTION\nThis is hemp protein powder.\nMade from cold-pressed hemp seeds and milled into a natural protein powder.\nNo sugar. No fillers. No added flavors.\nHemp keeps its character — earthy, fiber-rich, and functional.\nThis one’s about balance, not extremes.\nWHY PEOPLE CONSUME IT\nPlant protein source — contributes to daily protein intake.\nFiber content — supports normal digestion and gut regularity.\nNatural fats — contains naturally occurring omega fatty acids from hemp seeds.\nGentle digestion — commonly chosen by people sensitive to heavier proteins.\nWhole-food profile — less processed, closer to the original seed.\nINGREDIENTS\nHemp Protein (from hemp seeds)\nCERTIFICATION NOTE\nMade with ingredients certified USDA Organic and verified Non-GMO.\nCONTAINS / MAY CONTAIN\nContains: Hemp seeds\nMay contain traces of: Nuts, Soy, Gluten\nHOW TO USE\nServing size: 25g (1 scoop)\nMix with water, plant milk, or smoothies.\nAlso works well in oatmeal, baking, or savory recipes.\nSuitable for daily use.\nNUTRITION FACTS (PER 25G SERVING)\nEnergy 418kJ (5%)\nProtein 16g (32%)\nFat 3.5g (6%)\nCarbohydrate 0.3g (0%)\nSodium 5mg (0%)\nNET CONTENT & PACKAGING\nNet weight: 500g\nINTENDED USE / NOTES\nFor general adult consumption\nSuitable for plant-based diets 🌿\nNot suitable for individuals allergic to hemp\nROOTS NOTE\nHemp isn’t about extremes.\nIt’s about steady fuel, real texture, and food that behaves like food.",
   "external_id": 1229610,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "no storage temp"
  },
  {
@@ -5013,6 +5694,9 @@
   "full_description_text": "",
   "external_id": 1229603,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -5035,6 +5719,9 @@
   "full_description_text": "Discover the rich and comforting taste of our plant-based bolognese, a hearty sauce that blends Italian tomatoes, onion, carrot, and garlic with a hint of agave for a balanced flavor and the richness of extra virgin olive oil. This robust sauce is further enhanced with organic soy sauce, textured vegetable protein, chickpeas flour, wheat gluten, and filtered water, then seasoned with nutritional yeast, tomato paste, our own Worcestershire sauce, vegetable broth, and a carefully selected blend of spices.\nHow to eat: Our bolognese sauce is ready to warm and serve, making it an easy addition to your pasta, a base for lasagna, or a rich topping for baked potatoes. Simply heat in a saucepan over medium heat until hot, then mix with your favorite dishes for an instant flavor boost.\nIngredients: Italian tomatoes, onion, carrot, garlic, agave, extra virgin olive oil, organic soy sauce, textured vegetable protein, chickpeas flour, wheat gluten, filtered water, nutritional yeast, tomato paste, our Worcestershire sauce, vegetable broth, spices.\nFree of: nuts\nServing size: 250g\n【Calories卡路里】190kcal\n【Fat脂肪】4.5g\n【Carbs碳水】26g\n【Protein蛋白质】16g",
   "external_id": 1229653,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "no pack size; no storage temp"
  },
  {
@@ -5057,6 +5744,9 @@
   "full_description_text": "",
   "external_id": 1229609,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -5079,6 +5769,9 @@
   "full_description_text": "",
   "external_id": 1229607,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -5101,6 +5794,9 @@
   "full_description_text": "",
   "external_id": 2398096,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -5123,6 +5819,9 @@
   "full_description_text": "",
   "external_id": 1229601,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -5145,6 +5844,9 @@
   "full_description_text": "",
   "external_id": 1229600,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -5167,6 +5869,9 @@
   "full_description_text": "Product type: Fresh juice ❄️\nNet volume: 350ml ⚖️\nOrigin: Guangzhou, China 🌍\n\n \n\n \n\nPRODUCT DESCRIPTION 🧾\n\nThis is carrot juice, done clean.\n\nFresh carrots with just a hint of ginger — nothing fake, nothing added.\n\nNaturally sweet, bright, and seriously refreshing.\n\nNo sugar. No water. Just the good stuff.\n\n \n\n \n\nWHAT MAKES IT DIFFERENT 🌾\n\nWe keep it simple, then give it a little edge.\n\nA small amount of organic prebiotic fiber adds body and balance without changing the flavor.\n\nClean, smooth, and easy to finish.\n\n \n\n \n\nINGREDIENTS 🌱\n\nCarrot, ginger, organic prebiotic fiber\n\n \n\n \n\nFREE FROM 🚫\n\nNo added sugar\nNo added water\nNo sweeteners\n\n \n\n \n\nHOW TO DRINK 🥤\n\nBest served cold.\n\nShake well before drinking.\n\n \n\n \n\nSTORAGE & SHELF LIFE ❄️\n\nStorage: Keep refrigerated at 0–4°C at all times\nShelf life: See packaging\n\n \n\n \n\nNUTRITION (PER BOTTLE / 350ML) 🧮\n\nEnergy 126kcal\nFat 0.5g\nCarbohydrate 29.2g\nProtein 3g\n\n \n\n \n\nINTENDED USE / NOTES 📌\n\n100% plant-based 🌿\nFresh carrot & ginger juice",
   "external_id": 1229595,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": ""
  },
  {
@@ -5189,6 +5894,9 @@
   "full_description_text": "",
   "external_id": 1229567,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -5211,6 +5919,9 @@
   "full_description_text": "",
   "external_id": 1229565,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -5233,6 +5944,9 @@
   "full_description_text": "",
   "external_id": 1229564,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -5255,6 +5969,9 @@
   "full_description_text": "",
   "external_id": 1229560,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -5277,6 +5994,9 @@
   "full_description_text": "",
   "external_id": 1229557,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -5299,6 +6019,9 @@
   "full_description_text": "",
   "external_id": 1229551,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -5321,6 +6044,9 @@
   "full_description_text": "",
   "external_id": 1229550,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -5343,6 +6069,9 @@
   "full_description_text": "",
   "external_id": 2488822,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -5365,6 +6094,9 @@
   "full_description_text": "",
   "external_id": 2488576,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -5387,6 +6119,9 @@
   "full_description_text": "",
   "external_id": 2488521,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -5409,6 +6144,9 @@
   "full_description_text": "",
   "external_id": 2488515,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -5431,6 +6169,9 @@
   "full_description_text": "",
   "external_id": 2488463,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -5453,6 +6194,9 @@
   "full_description_text": "",
   "external_id": 2488458,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -5475,6 +6219,9 @@
   "full_description_text": "",
   "external_id": 2488449,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -5497,6 +6244,9 @@
   "full_description_text": "",
   "external_id": 2488448,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -5519,6 +6269,9 @@
   "full_description_text": "",
   "external_id": 2488445,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -5541,6 +6294,9 @@
   "full_description_text": "",
   "external_id": 2488433,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -5563,6 +6319,9 @@
   "full_description_text": "",
   "external_id": 2488428,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -5585,6 +6344,9 @@
   "full_description_text": "",
   "external_id": 2487842,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -5607,6 +6369,9 @@
   "full_description_text": "",
   "external_id": 2405170,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -5629,6 +6394,9 @@
   "full_description_text": "",
   "external_id": 2391250,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -5651,6 +6419,9 @@
   "full_description_text": "",
   "external_id": 2380932,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
  },
  {
@@ -5673,6 +6444,9 @@
   "full_description_text": "Product type: Ready-to-eat refrigerated food ❄️\nNet weight: 330g ⚖️\nOrigin: Guangzhou, China 🌍\n\n \n\n \n\nPRODUCT DESCRIPTION 🧾\n\nThis soup starts with roasted pumpkin.\n\nSlow-roasted until naturally sweet, then blended with coconut milk, garlic, scallions, and warm spices.\n\nThe texture is thick and comforting, the flavor lands between savory and gently sweet.\n\nSimple, cozy, and built to show up.\n\n \n\n \n\nWHY PEOPLE CHOOSE IT 🌾\n\nIt’s rich without feeling heavy.\n\nRoasting brings depth, coconut keeps it smooth.\n\nWorks hot or cold, on its own or with bread.\n\n \n\n \n\nINGREDIENTS 🌱\n\nRoasted pumpkin, scallions, garlic, vegetable broth, coconut milk, organic agave syrup, extra virgin olive oil, spices\n\n \n\n \n\nCONTAINS / MAY CONTAIN ⚠️\n\nContains: Coconut\nMay contain traces of: Soy, Nuts, Gluten\n\n \n\n \n\nHOW TO EAT 🍽️\n\nHeat until fully hot, or enjoy chilled.\n\nStir well before serving.\n\n \n\n \n\nSTORAGE & SHELF LIFE ❄️\n\nStorage: Keep refrigerated at 0–4°C at all times\nShelf life: See packaging\n\n \n\n \n\nFREEZING & DELIVERY NOTE ❄️\n\nThis product can be frozen for later use.\nWhen frozen, it can be kept for up to 2 months.\nDuring delivery, the soup may arrive frozen or partially frozen due to temperature control.\nIf so, store it in the freezer or allow it to defrost naturally in the refrigerator before heating.\n\n \n\n \n\nNUTRITION (PER SERVING) 🧮\n\nEnergy 218kcal\nFat 16.5g\nCarbohydrate 17.5g\nProtein 2.7g\n\n \n\n \n\nINTENDED USE / NOTES 📌\n\nPlant-based product 🌿\nRoasted pumpkin & coconut soup",
   "external_id": 1230056,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": ""
  },
  {
@@ -5695,6 +6469,1084 @@
   "full_description_text": "",
   "external_id": 1229678,
   "unfilled_placeholders": "",
+  "source": "products_import.json",
+  "parent_sku": "",
+  "variant_label": "",
   "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp"
+ },
+ {
+  "sku": "1-130",
+  "barcode": "",
+  "category": "",
+  "name_en": "Medium Size Probiotic Coconut Yogurt - Plain Flavor",
+  "name_cn": "大椰益生菌200ml（中） （冷藏）",
+  "retail_price_cny": 31.200000000000003,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 17.0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery new_variants + gzgrocery sales",
+  "parent_sku": "EXT-1229649",
+  "variant_label": "Plain 200ml 原味（中）",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "1-140",
+  "barcode": "",
+  "category": "",
+  "name_en": "Big Size Probiotic Coconut Yogurt - Plain Flavor",
+  "name_cn": "纯素椰子酸奶（大）500g （冷藏）",
+  "retail_price_cny": 64,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 26.0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery new_variants + gzgrocery sales",
+  "parent_sku": "EXT-1229649",
+  "variant_label": "Plain 500g 原味（大）",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "1-150",
+  "barcode": "",
+  "category": "",
+  "name_en": "Probiotic Coconut Yogurt - Vanilla Flavor",
+  "name_cn": "纯素椰子酸奶-香草味100g （冷藏）",
+  "retail_price_cny": 23.200000000000003,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 23.0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery new_variants + gzgrocery sales",
+  "parent_sku": "EXT-1229703",
+  "variant_label": "Vanilla 100g 香草（小）",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "1-160",
+  "barcode": "",
+  "category": "",
+  "name_en": "Medium Size Probiotic Coconut Yogurt - Vanilla Flavor",
+  "name_cn": "纯素椰子酸奶-香草味200g （冷藏）",
+  "retail_price_cny": 38.400000000000006,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 23.0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery new_variants + gzgrocery sales",
+  "parent_sku": "EXT-1229703",
+  "variant_label": "Vanilla 200g 香草（中）",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "1-180",
+  "barcode": "",
+  "category": "",
+  "name_en": "Probiotic Coconut Yogurt -Peach Flavor",
+  "name_cn": "纯素椰子酸奶-桃子味（小）100g (冷藏）",
+  "retail_price_cny": 23.200000000000003,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 11.0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery new_variants + gzgrocery sales",
+  "parent_sku": "EXT-1259338",
+  "variant_label": "Peach 100g 桃子（小）",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "1-190",
+  "barcode": "",
+  "category": "",
+  "name_en": "Medium Size Probiotic Coconut Yogurt - Peach Flavor",
+  "name_cn": "纯素椰子酸奶-桃子味（中）200g (冷藏）",
+  "retail_price_cny": 38.400000000000006,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 11.0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery new_variants + gzgrocery sales",
+  "parent_sku": "EXT-1259338",
+  "variant_label": "Peach 200g 桃子（中）",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "1-260",
+  "barcode": "",
+  "category": "",
+  "name_en": "Energy Cubes",
+  "name_cn": "能量棒（小）60g （冷藏）",
+  "retail_price_cny": 16,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 8.0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery new_variants + gzgrocery sales",
+  "parent_sku": "EXT-1229673",
+  "variant_label": "Small 60g 小",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "1-270",
+  "barcode": "",
+  "category": "",
+  "name_en": "Energy Cubes Big Size",
+  "name_cn": "花生奇亚能量块（大）200g (冷藏）",
+  "retail_price_cny": 49.6,
+  "description_en": "Sweet. Nutty. Crunchy. These energy cubes are built for real hunger. Quinoa, seeds, oats, nuts, and cranberries come together in a peanut butter base that’s chewy, crunchy, and deeply satisfying. No fake energy. No sugar rush. Just steady fuel that holds.",
+  "description_cn": "产品类型：即食植物性能量块 🧊\n净含量：60g / 200g ⚖️\n产地：中国广州 🌍\n\n \n\n \n\n产品描述 🧾\n\n香甜、坚果、酥脆。\n\n这是为真正的饥饿准备的能量块。\n\n藜麦、种子、燕麦、坚果和蔓越莓，全部包裹在浓郁的花生酱里，口感有嚼劲，也有层次。\n\n不靠刺激，不玩糖分套路，能量稳定而扎实。\n\n \n\n \n\n为什么人们会选它 ⚡\n\n每一种原料都吃得出来。\n\n碳水、脂肪、蛋白质比例合理。\n\n软中带脆，每一口都有存在感。\n\n \n\n \n\n配料表 🌱\n\n藜麦、奇亚籽、亚麻籽、椰蓉、燕麦、杏仁、蔓越莓、花生酱、龙舌兰糖浆\n\n \n\n \n\n致敏原信息 ⚠️\n\n含有：花生、坚果（杏仁）、麸质（燕麦）\n可能含有微量：其他坚果、大豆\n\n \n\n \n\n食用方式 🍽️\n\n开袋即食。\n适合随手补能、运动前，或下午能量下滑时食用。\n\n \n\n \n\n储存方式 ❄️\n\n建议冷藏保存，以保持新鲜度与口感稳定。\n保质期：见包装标注。\n\n \n\n \n\n营养成分（每 60g）🧮\n\n能量 250kcal\n脂肪 16g\n碳水化合物 23g\n蛋白质 7g\n\n \n\n \n\n食用提示 📌\n\n植物性能量零食 🌿\n由全谷物、种子与坚果制成\n提供稳定能量，不追求刺激",
+  "ingredients": "Quinoa, chia seeds, flaxseeds, coconut floss, oats, almonds, organic cranberries, peanut butter, organic agave",
+  "pack_size_net_weight": "60g / 200g",
+  "storage_temp": "Best kept refrigerated to maintain freshness and texture. Shelf life: See packaging.",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 4.0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "Product type: Ready-to-eat plant-based energy cubes 🧊\nNet weight: 60g / 200g ⚖️\nOrigin: Guangzhou, China 🌍\n\n \n\n \n\nPRODUCT DESCRIPTION 🧾\n\nSweet. Nutty. Crunchy.\n\nThese energy cubes are built for real hunger.\n\nQuinoa, seeds, oats, nuts, and cranberries come together in a peanut butter base that’s chewy, crunchy, and deeply satisfying.\n\nNo fake energy. No sugar rush. Just steady fuel that holds.\n\n \n\n \n\nWHY PEOPLE CHOOSE IT ⚡\n\nWhole ingredients you can taste.\n\nBalanced carbs, fats, and protein — no shortcuts.\n\nChewy and crunchy texture that keeps every bite interesting.\n\n \n\n \n\nINGREDIENTS 🌱\n\nQuinoa, chia seeds, flaxseeds, coconut floss, oats, almonds, organic cranberries, peanut butter, organic agave\n\n \n\n \n\nCONTAINS / MAY CONTAIN ⚠️\n\nContains: Peanuts, Tree nuts (almond), Gluten (oats)\nMay contain traces of: Other nuts, Soy\n\n \n\n \n\nHOW TO EAT 🍽️\n\nEat straight out of the pack.\nPerfect for on-the-go snacking, pre-workout fuel, or a solid midday bite.\n\n \n\n \n\nSTORAGE & SHELF LIFE ❄️\n\nBest kept refrigerated to maintain freshness and texture.\nShelf life: See packaging.\n\n \n\n \n\nNUTRITION (PER 60G SERVING) 🧮\n\nEnergy 250kcal\nFat 16g\nCarbohydrate 23g\nProtein 7g\n\n \n\n \n\nINTENDED USE / NOTES 📌\n\nPlant-based energy snack 🌿\nMade from whole grains, seeds, and nuts\nDesigned for steady energy, not sugar spikes",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery new_variants + gzgrocery sales + catalog_text_dump",
+  "parent_sku": "EXT-1229673",
+  "variant_label": "Big 200g 大",
+  "gaps": "ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "1-504",
+  "barcode": "",
+  "category": "",
+  "name_en": "Govegan! Pineapple Mint Kombucha",
+  "name_cn": "菠萝薄荷康普茶（小）300ml（冷藏）",
+  "retail_price_cny": 29,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery sales",
+  "parent_sku": "",
+  "variant_label": "",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "1-66",
+  "barcode": "",
+  "category": "",
+  "name_en": "Govegan! Creamy White Bean Soup with Kale",
+  "name_cn": "意式白豆甘蓝汤 冷藏+166D小香料（冷藏）",
+  "retail_price_cny": 40,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery sales",
+  "parent_sku": "",
+  "variant_label": "",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "2-100",
+  "barcode": "",
+  "category": "",
+  "name_en": "Kombucha (AKA Booch) - Mix Berries",
+  "name_cn": "混合莓康普茶（小）300ml （冷藏）",
+  "retail_price_cny": 23.200000000000003,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 6.0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery new_variants + gzgrocery sales",
+  "parent_sku": "EXT-1229565",
+  "variant_label": "Small 300ml 小",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "2-110",
+  "barcode": "",
+  "category": "",
+  "name_en": "Kombucha (AKA Booch) - Mix Berries",
+  "name_cn": "混合莓康普茶（大）1000ml （冷藏）（有另搭瓶塞）",
+  "retail_price_cny": 69.60000000000001,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 2.0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery new_variants + gzgrocery sales",
+  "parent_sku": "EXT-1229565",
+  "variant_label": "Big 1L 大",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "2-120",
+  "barcode": "",
+  "category": "",
+  "name_en": "Govegan！Kombucha (AKA Booch) -Mango Kombucha",
+  "name_cn": "芒果味康普茶 300ml，（冷藏）",
+  "retail_price_cny": 23.200000000000003,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 6.0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery new_variants + gzgrocery sales",
+  "parent_sku": "EXT-1229624",
+  "variant_label": "Small 300ml 小",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "2-130",
+  "barcode": "",
+  "category": "",
+  "name_en": "Govegan！Kombucha (AKA Booch) -Mango Kombucha",
+  "name_cn": "芒果味康普茶 1000ml，（冷藏）（有另搭瓶塞）",
+  "retail_price_cny": 69.60000000000001,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 2.0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery new_variants + gzgrocery sales",
+  "parent_sku": "EXT-1229624",
+  "variant_label": "Big 1L 大",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "2-320",
+  "barcode": "",
+  "category": "",
+  "name_en": "Walnuts ( unsalted, raw )",
+  "name_cn": "核桃（小） 160g",
+  "retail_price_cny": 24,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery new_variants + gzgrocery sales",
+  "parent_sku": "EXT-1229602",
+  "variant_label": "Small 160g 小",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "2-330",
+  "barcode": "",
+  "category": "",
+  "name_en": "Big Size Walnuts ( unsalted, raw )",
+  "name_cn": "核桃（大）280g",
+  "retail_price_cny": 41.6,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 23.0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery new_variants + gzgrocery sales",
+  "parent_sku": "EXT-1229602",
+  "variant_label": "Big 280g 大",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "2-340",
+  "barcode": "",
+  "category": "",
+  "name_en": "Almonds ( Unsalted , Raw )",
+  "name_cn": "杏仁（小） 265g",
+  "retail_price_cny": 27.200000000000003,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 9.0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery new_variants + gzgrocery sales",
+  "parent_sku": "EXT-1229551",
+  "variant_label": "Small 265g 小",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "2-350",
+  "barcode": "",
+  "category": "",
+  "name_en": "Big Size Almonds ( Unsalted, Raw )",
+  "name_cn": "杏仁（大） 460g",
+  "retail_price_cny": 51.2,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery new_variants + gzgrocery sales",
+  "parent_sku": "EXT-1229551",
+  "variant_label": "Big 460g 大",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "2-36",
+  "barcode": "",
+  "category": "",
+  "name_en": "Frozen Whole Wheat Bread",
+  "name_cn": "冷冻全麦黑麦面包（冷冻）",
+  "retail_price_cny": 25,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery sales",
+  "parent_sku": "",
+  "variant_label": "",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "2-370",
+  "barcode": "",
+  "category": "",
+  "name_en": "Cashew (unsalted ,raw)",
+  "name_cn": "腰果（小） 240g",
+  "retail_price_cny": 28.8,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery new_variants + gzgrocery sales",
+  "parent_sku": "EXT-1229601",
+  "variant_label": "Small 240g 小",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "2-380",
+  "barcode": "",
+  "category": "",
+  "name_en": "Big Size Cashew (unsalted, raw)",
+  "name_cn": "腰果（大） 400g",
+  "retail_price_cny": 48,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 14.0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery new_variants + gzgrocery sales",
+  "parent_sku": "EXT-1229601",
+  "variant_label": "Big 400g 大",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "2-40",
+  "barcode": "",
+  "category": "",
+  "name_en": "Govegan! Pineapple Mint Kombucha",
+  "name_cn": "菠萝薄荷康普茶（小）300ml（冷藏）",
+  "retail_price_cny": 29,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery sales",
+  "parent_sku": "",
+  "variant_label": "",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "2-400",
+  "barcode": "",
+  "category": "",
+  "name_en": "All Natural Almond Butter ( Classic )",
+  "name_cn": "杏仁酱 150g",
+  "retail_price_cny": 40,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 12.0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery new_variants + gzgrocery sales",
+  "parent_sku": "EXT-1229660",
+  "variant_label": "Classic 150g 经典",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "2-410",
+  "barcode": "",
+  "category": "",
+  "name_en": "GoVegan!All Natural Almond Butter（Big）",
+  "name_cn": "-杏仁酱 240g",
+  "retail_price_cny": 60.800000000000004,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery new_variants",
+  "parent_sku": "EXT-1229660",
+  "variant_label": "Big 240g 大装",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "2-430",
+  "barcode": "",
+  "category": "",
+  "name_en": "Maple Cinnamon Almond Butter",
+  "name_cn": "肉桂杏仁酱",
+  "retail_price_cny": 66.4,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 9.0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery new_variants + gzgrocery sales",
+  "parent_sku": "EXT-1229548",
+  "variant_label": "Maple Cinnamon (gzgrocery)",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "2-50",
+  "barcode": "",
+  "category": "",
+  "name_en": "Govegan! Pineapple Mint Kombucha",
+  "name_cn": "菠萝薄荷康普茶（大）1000ml（冷藏）（有另搭瓶塞）",
+  "retail_price_cny": 87,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery sales",
+  "parent_sku": "",
+  "variant_label": "",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "2-60",
+  "barcode": "",
+  "category": "",
+  "name_en": "Kombucha (AKA Booch) - Lemongrass",
+  "name_cn": "香柠草康普茶（小）300ml（冷藏）",
+  "retail_price_cny": 29,
+  "description_en": "This is citrus brightness in a bottle. Clean. Sparkling. Refreshing. This lemongrass kombucha is traditionally fermented and infused with whole fresh lemongrass during the second fermentation. The result is crisp, lightly tart, and refreshing — never overly sweet.",
+  "description_cn": "",
+  "ingredients": "Filtered water, black tea, kombucha culture, sugar (<5%), fresh lemongrass",
+  "pack_size_net_weight": "300ml",
+  "storage_temp": "Keep refrigerated at 0–4°C. Shelf life: See packaging.",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 1.0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "Lemongrass Kombucha 🍋\n \nProduct type: Fermented tea beverage ❄️\nNet weight: 300ml ⚖️\nOrigin: Guangzhou, China 🌍\n \n \nIMPORTANT NOTICE ⚠️\nFor orders delivered outside Guangzhou, please refrigerate the bottle until fully chilled before opening.\nLower temperatures help slow the release of natural carbonation.\nPressure may build up during fermentation, so open carefully.\nWe recommend pouring into a glass before drinking.\n \n \nPRODUCT DESCRIPTION 🧾\nThis is citrus brightness in a bottle.\nClean. Sparkling. Refreshing.\nThis lemongrass kombucha is traditionally fermented and infused with whole fresh lemongrass during the second fermentation.\nThe result is crisp, lightly tart, and refreshing — never overly sweet.\n \n \nWHAT MAKES IT DIFFERENT 🌾\nWe stick to traditional fermentation.\nTime, temperature, and real ingredients shape the final flavor.\nThe result is clean, citrus-forward, and naturally carbonated.\n \n \nWHY SUGAR IS USED 🧪\nSugar is used only to support fermentation.\nIt serves as food for the kombucha culture, allowing fermentation to take place.\nDuring the process, most of the sugar is consumed by the culture and converted into organic acids, carbonation, and flavor compounds.\nOnly a small amount of residual sugar remains in the final drink.\n \n \nBRAND NOTE ✨\nThis product was previously sold under the GoVegan label.\nThe recipe has not changed.\nThe process has not changed.\nIt now carries the Roots name — and a clearer attitude.\n \n \nINGREDIENTS 🌱\nFiltered water, black tea, kombucha culture, sugar (<5%), fresh lemongrass\n \n \nHOW TO DRINK 🥤\nServe chilled.\nOpen carefully due to natural carbonation.\nBest poured into a glass before drinking.\n \n \nSTORAGE ❄️\nKeep refrigerated at 0–4°C.\nShelf life: See packaging.\n \n \nNUTRITION (Per bottle 300ml) 🧮\nEnergy 21kcal\nCarbohydrate 5.0g\nSugars 5.0g (naturally occurring from fermentation)\n \n \nINTENDED USE / NOTES 📌\nFermented tea beverage\nNaturally carbonated",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery sales + catalog_text_dump",
+  "parent_sku": "",
+  "variant_label": "",
+  "gaps": "ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "2-70",
+  "barcode": "",
+  "category": "",
+  "name_en": "Kombucha (AKA Booch) - Lemongrass",
+  "name_cn": "香柠草康普茶（大）1000ml （冷藏）（有另搭瓶塞）",
+  "retail_price_cny": 87,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 3.0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery sales",
+  "parent_sku": "",
+  "variant_label": "",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "2-80",
+  "barcode": "",
+  "category": "",
+  "name_en": "Kombucha (AKA Booch) - Passion Fruit",
+  "name_cn": "百香果康普茶（小）300ml （冷藏）",
+  "retail_price_cny": 23.200000000000003,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 4.0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery new_variants + gzgrocery sales",
+  "parent_sku": "EXT-1229694",
+  "variant_label": "Small 300ml 小",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "2-9",
+  "barcode": "",
+  "category": "",
+  "name_en": "Frozen Cheese Cake (Gluten Free)",
+  "name_cn": "素士力架 140g （冷冻）",
+  "retail_price_cny": 35,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery sales",
+  "parent_sku": "",
+  "variant_label": "",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "2-90",
+  "barcode": "",
+  "category": "",
+  "name_en": "Kombucha (AKA Booch) - Passion Fruit",
+  "name_cn": "百香果康普茶（大）1000ml （冷藏）（有另搭瓶塞）",
+  "retail_price_cny": 69.60000000000001,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 3.0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery new_variants + gzgrocery sales",
+  "parent_sku": "EXT-1229694",
+  "variant_label": "Big 1L 大",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "3-170",
+  "barcode": "",
+  "category": "",
+  "name_en": "Guacamole",
+  "name_cn": "墨西哥牛油果泥 （冷冻）",
+  "retail_price_cny": 46,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 18.0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery sales",
+  "parent_sku": "",
+  "variant_label": "",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "4-160",
+  "barcode": "",
+  "category": "",
+  "name_en": "Organic Chia Seeds",
+  "name_cn": "奇亚籽（小） 290g",
+  "retail_price_cny": 40.800000000000004,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 13.0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery new_variants + gzgrocery sales",
+  "parent_sku": "EXT-1229557",
+  "variant_label": "Small 290g 小",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "4-170",
+  "barcode": "",
+  "category": "",
+  "name_en": "Big Size Organic Chia Seeds",
+  "name_cn": "奇亚籽（大）510g",
+  "retail_price_cny": 76,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery new_variants + gzgrocery sales",
+  "parent_sku": "EXT-1229557",
+  "variant_label": "Big 510g 大",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "4-3",
+  "barcode": "",
+  "category": "",
+  "name_en": "Chopped Almonds ( Raw, Unsalted )",
+  "name_cn": "杏仁片（小） 170g",
+  "retail_price_cny": 31,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery sales",
+  "parent_sku": "",
+  "variant_label": "",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "4-33",
+  "barcode": "",
+  "category": "",
+  "name_en": "Chunky Granola",
+  "name_cn": "谷物脆 150g",
+  "retail_price_cny": 35,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery sales",
+  "parent_sku": "",
+  "variant_label": "",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "4-340",
+  "barcode": "",
+  "category": "",
+  "name_en": "Himalaya Pink Salt",
+  "name_cn": "玫瑰盐 330g",
+  "retail_price_cny": 30,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery sales",
+  "parent_sku": "",
+  "variant_label": "",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "4-520",
+  "barcode": "",
+  "category": "",
+  "name_en": "Activated Charcoal",
+  "name_cn": "活性炭 100g",
+  "retail_price_cny": 59,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery sales",
+  "parent_sku": "",
+  "variant_label": "",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "4-670",
+  "barcode": "",
+  "category": "",
+  "name_en": "All Natural Peanut Butter",
+  "name_cn": "花生酱（小）240g",
+  "retail_price_cny": 30.400000000000002,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 7.0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery new_variants + gzgrocery sales",
+  "parent_sku": "EXT-1229669",
+  "variant_label": "Small 240g 小",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "4-680",
+  "barcode": "",
+  "category": "",
+  "name_en": "All Natural Peanut Butter",
+  "name_cn": "花生酱 430g",
+  "retail_price_cny": 45.5,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 22.0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery new_variants + gzgrocery sales",
+  "parent_sku": "EXT-1229669",
+  "variant_label": "Classic 430g 经典",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "4-690",
+  "barcode": "",
+  "category": "",
+  "name_en": "Govegan! A Bit Salty Peanut Butter (With Crunchy Peanuts Inside)",
+  "name_cn": "咸味粗粒花生酱 430g",
+  "retail_price_cny": 56.800000000000004,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 24.0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery new_variants + gzgrocery sales",
+  "parent_sku": "EXT-1229700",
+  "variant_label": "Salty Crunchy 430g 咸味颗粒",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "6-8",
+  "barcode": "",
+  "category": "",
+  "name_en": "All Natural Peanut Butter",
+  "name_cn": "花生酱（小）240g",
+  "retail_price_cny": 38,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery sales",
+  "parent_sku": "",
+  "variant_label": "",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
+ },
+ {
+  "sku": "7-600",
+  "barcode": "",
+  "category": "",
+  "name_en": "LUÜNA Organic Cotton Day Pads，10pcs",
+  "name_cn": "LUÜNA日用卫生棉",
+  "retail_price_cny": 28,
+  "description_en": "",
+  "description_cn": "",
+  "ingredients": "",
+  "pack_size_net_weight": "",
+  "storage_temp": "",
+  "free_of": "",
+  "tags": "",
+  "stock_qty": null,
+  "sales_units_gzgrocery": 0,
+  "sales_units_miniapp": 0,
+  "full_description_text": "",
+  "external_id": null,
+  "unfilled_placeholders": "",
+  "source": "gzgrocery sales",
+  "parent_sku": "",
+  "variant_label": "",
+  "gaps": "NO DESCRIPTION; no ingredients; no pack size; no storage temp; ABSENT FROM CATALOGUE FILE"
  }
 ]
