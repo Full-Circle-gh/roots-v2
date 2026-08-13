@@ -451,9 +451,35 @@ main{flex:1;padding:12px 12px calc(var(--sa-bot) + 28px);}
     if (!window.confirm(t('Sign out?', '退出登录?'))) return;
     var opts = { method: 'POST', credentials: 'same-origin' };
     var done = function () { location.href = '/stock-login'; };
-    fetch('/api/auth/logout', opts).catch(function () {})
+    dropDevicePush()
+      .then(function () { return fetch('/api/auth/logout', opts).catch(function () {}); })
       .then(function () { return fetch('/api/backend/logout', opts).catch(function () {}); })
       .then(done, done);
+  }
+
+  // A Web Push subscription belongs to the browser + service worker, not to
+  // the session, so clearing the session alone leaves new-order alerts landing
+  // on a signed-out device. Drop it first, while the session that authorises
+  // the unsubscribe still exists — both realms, same as the logouts above;
+  // whichever isn't active 401s harmlessly. Then drop the local subscription
+  // so the "Push to this device" toggle doesn't read back as on.
+  function dropDevicePush() {
+    if (!('serviceWorker' in navigator)) return Promise.resolve();
+    return navigator.serviceWorker.getRegistration().then(function (reg) {
+      return (reg && reg.pushManager) ? reg.pushManager.getSubscription() : null;
+    }).then(function (sub) {
+      if (!sub) return null;
+      var body = JSON.stringify({ endpoint: sub.endpoint });
+      var post = function (url) {
+        return fetch(url, {
+          method: 'POST', credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json' }, body: body
+        }).catch(function () {});
+      };
+      return post('/api/push/unsubscribe')
+        .then(function () { return post('/api/backend/push/unsubscribe'); })
+        .then(function () { return sub.unsubscribe().catch(function () {}); });
+    }).catch(function () {});
   }
 
   function toggleLang() {

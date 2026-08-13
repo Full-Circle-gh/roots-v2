@@ -1815,13 +1815,47 @@ function initAcctMenu(u) {
   // New-order sound now lives in Profile → Notifications (not the avatar menu).
 
   const signout = $('#acctSignout');
-  if (signout) signout.addEventListener('click', () => {
-    fetch('/api/backend/logout', { method: 'POST', credentials: 'same-origin' })
-      .finally(() => { location.href = '/backend/login'; });
+  if (signout) signout.addEventListener('click', async () => {
+    // Take the push subscription out with the session. A PushSubscription
+    // belongs to the browser + service worker, not to the login, so without
+    // this the device keeps getting new-order alerts long after the operator
+    // signed out. Must run BEFORE the logout call — /api/backend/push/
+    // unsubscribe needs the session it is about to destroy.
+    await acctDropDevicePush();
+    try { await fetch('/api/backend/logout', { method: 'POST', credentials: 'same-origin' }); } catch (_) {}
+    location.href = '/backend/login';
   });
 
   const profileBtn = $('#acctProfileBtn');
   if (profileBtn) profileBtn.addEventListener('click', () => { close(); openProfileModal(); });
+}
+
+// Forget this device's Web Push subscription (Profile → Notifications →
+// "Push to this device"). Two halves, both needed: the server row in
+// tenant_operator_push_subs is what the new-order fan-out reads, and the
+// local subscription is what Profile → Notifications reads back to decide
+// whether the toggle shows on. Dropping only the row would leave the toggle
+// lying about a device that no longer gets anything.
+//
+// Best-effort throughout — if the server call fails, the browser endpoint is
+// already dead and the first send prunes it on a 410 (routes/push.js).
+async function acctDropDevicePush() {
+  try {
+    if (!('serviceWorker' in navigator)) return;
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (!reg || !reg.pushManager) return;
+    const sub = await reg.pushManager.getSubscription();
+    if (!sub) return;
+    try {
+      await fetch('/api/backend/push/unsubscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ endpoint: sub.endpoint }),
+      });
+    } catch (_) {}
+    try { await sub.unsubscribe(); } catch (_) {}
+  } catch (_) {}
 }
 
 // ── Profile pop-up — hosts /backend/account in an iframe so it opens as a

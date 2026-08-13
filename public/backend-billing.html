@@ -133,9 +133,32 @@
 <script>
 (function () {
   const $ = s => document.querySelector(s);
+  // Sign-out has to drop this device's Web Push subscription too — it belongs
+  // to the browser, not the session, so without this the device keeps getting
+  // new-order alerts after the operator signs out. Runs first: the unsubscribe
+  // route needs the session logout is about to destroy.
+  async function dropDevicePush() {
+    try {
+      if (!('serviceWorker' in navigator)) return;
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (!reg || !reg.pushManager) return;
+      const sub = await reg.pushManager.getSubscription();
+      if (!sub) return;
+      try {
+        await fetch('/api/backend/push/unsubscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'same-origin',
+          body: JSON.stringify({ endpoint: sub.endpoint }),
+        });
+      } catch (_) {}
+      try { await sub.unsubscribe(); } catch (_) {}
+    } catch (_) {}
+  }
   const signoutLink = document.getElementById('signoutLink');
   if (signoutLink) signoutLink.addEventListener('click', async (e) => {
     e.preventDefault();
+    await dropDevicePush();
     try { await fetch('/api/backend/logout', { method: 'POST', credentials: 'same-origin' }); } catch (_) {}
     location.href = '/backend/login';
   });
