@@ -12017,6 +12017,44 @@ function claimMigrationCredit(customerId) {
       if (credit.balance && credit.balance > 0) {
         tdb().prepare('UPDATE retail_customers SET balance = COALESCE(balance, 0) + ? WHERE id = ?')
           .run(credit.balance, customerId);
+        // THE LEDGER ROW. Added 2026-08-13; its absence was the first live money
+        // inconsistency this project found by measurement (§24, check F). The
+        // points branch below has always written its row — this branch credited
+        // real money and explained it nowhere, eleven lines apart in one
+        // function. Seven customers and ¥3,669.64 got here that way, and 53
+        // unclaimed credits carrying ¥17,362.32 were queued to do it again.
+        //
+        // status = 'success' is load-bearing, not decoration: check F sums only
+        // successful rows, so any other value writes a row that exists and still
+        // does not explain the balance — the same defect wearing a row.
+        //
+        // out_trade_no CARRIES THE CLAIMANT, NOT JUST THE CREDIT. Keyed on
+        // credit.id alone it would collide the moment a re-imported row is
+        // re-armed and claimed by a second customer, which has already happened
+        // once (§24, the staging table is not append-only) and which check J
+        // would then report as a duplicate when both credits were legitimate.
+        // With the claimant in the key the legitimate re-claim is distinct — and
+        // the ONE case that does collide, the same customer credited twice from
+        // one credit row, is a real double credit that J should report. The key
+        // is chosen so J stays quiet on the honest case and loud on the other.
+        //
+        // bonus_points stays 0 deliberately. The points half is already a row in
+        // retail_points_transactions and check E sums that; recording the same
+        // points here as well would be inert against every current check and a
+        // second record of one event with nothing tying the two together. The
+        // count rides in the payload instead, where it explains without counting.
+        tdb().prepare(
+          `INSERT INTO retail_topup_transactions
+             (customer_id, amount, bonus_points, payment_method, status, paid_at, out_trade_no, raw_callback_json)
+           VALUES (?, ?, 0, 'migration', 'success', CURRENT_TIMESTAMP, ?, ?)`
+        ).run(
+          customerId, credit.balance, `migration:${credit.id}:${customerId}`,
+          JSON.stringify({
+            migration_credit_id: credit.id,
+            source_uid: credit.source_uid || null,
+            points: credit.points || 0,
+          })
+        );
       }
       if (credit.points && credit.points > 0) {
         tdb().prepare('UPDATE retail_customers SET points_balance = COALESCE(points_balance, 0) + ? WHERE id = ?')
