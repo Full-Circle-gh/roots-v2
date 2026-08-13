@@ -268,6 +268,21 @@ for (const id of ['M', 'P']) {
     c.notes ? c.notes.length : 0, '>= 3 note lines');
 }
 
+// M shipped 2026-08-13 asserting that stored could never exceed derived, and the
+// first live run met a customer at +899.00. Reason 4 is pinned here so a later
+// tidy-up of the note cannot quietly restore the false claim — the assertion is
+// about the TEXT because the text is what the operator acts on.
+console.log('\nSOURCE — M names the fourth reason, and no longer claims positive drift is impossible');
+{
+  const m = byId('M').notes.join('\n');
+  ok('[M] names reason 4 (the no-gateway-refund cancel)',
+    /^\s*4\./m.test(m) && m.includes('24839'), 'missing', 'a numbered reason 4 citing :24839');
+  ok('[M] says reason 4 is a defect, not legitimate',
+    /NOT LEGITIMATE/.test(m), 'missing', 'reason 4 marked NOT LEGITIMATE');
+  ok('[M] no longer asserts stored-above-derived is impossible',
+    !/none of the (three|four) can produce that/.test(m), 'the false claim is back', 'claim absent');
+}
+
 console.log(failed === 0
   ? `\nPASSED — ${CHECKS.length} checks, ${MUTATIONS.length} mutations, every assertion held.\n`
   : `\n${failed} ASSERTION(S) FAILED.\n`);
