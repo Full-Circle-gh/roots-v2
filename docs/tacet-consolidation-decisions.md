@@ -1,8 +1,10 @@
-# Tacet shared-core consolidation — decisions record, v4.35
+# Tacet shared-core consolidation — decisions record, v4.36
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
+
+2026-08-13 · v4.36 — §24 Database: **CHECK F FAILED ON LIVE DATA — the first money inconsistency this project has found by MEASUREMENT rather than by accident.** `scripts/check_ledger_invariants.js` run against a copy of the 10:00 hourly, read-only at the driver, live file never opened. **Nine of ten invariants passed; F failed on seven customers holding ¥3,669.64 of wallet balance that no ledger row explains.** **THE CAUSE IS AN ASYMMETRY INSIDE ONE FUNCTION**, and it is recorded as such because it is the evidence this was an oversight and not a decision: `claimMigrationCredit` credits `retail_customers.balance` at `:12017` with no ledger row, and **eleven lines later at `:12021` writes the `retail_points_transactions` row for the points half** — same function, same transaction, one half audited and one not. Seven customers, claims dated **2026-06-13 to 2026-07-28**; six reconcile to the fen against `retail_migration_credits.balance` (¥3,659.65), and **two have NEGATIVE ledger sums** (161, 416) because they were credited silently and then spent with only the spend recorded — 416 checks out exactly at ¥396.00 credited, ¥199.50 spent and logged, ¥196.50 left. **LIVE, NOT HISTORICAL: 53 unclaimed credits carrying ¥17,362.32 will each do this again on claim.** **No customer is short** — the money is there and ¥594.45 of it is already spent — **but the missing explanation costs three things**: invisible in wallet history, permanently flagged by every reconciliation, and **lost entirely if a balance is ever rebuilt from the ledger, which is exactly what a cutover verification does.** **THE PASSES ARE RECORDED TOO AND THEY ARE WHAT MAKE THE FAILURE TRUSTWORTHY** — **E passed across all 1,177 customers** and **G across all 696 points rows**, plus H I J K L N O at zero; nine clean invariants over the same tables on the same read are why F's seven are a measurement rather than a suspicion. **TWO MORE FINDINGS, RECORDED SEPARATELY.** **(1) `retail_migration_credits` IS NOT APPEND-ONLY** — a re-import replaced row 1516's values and reset `claimed_at` on an ALREADY-CLAIMED row, re-arming it, and a second customer claimed the refreshed credit; exactly one `migration` points row in the database has no credit row pointing back, and it is the victim's. **Nothing prevents this recurring**, and the reason is structural rather than accidental: **`UNIQUE (phone)` is what forces an import to UPDATE in place instead of inserting, so the constraint that keeps the roster clean is the one that makes a re-import destructive.** It also constrains the fix — any `out_trade_no` keyed on the credit row id alone collides the moment a re-armed row is claimed twice, which is not hypothetical. **(2) OPEN — A PAID ORDER CANCELLED WITH NO GATEWAY REFUND REVERSES NOTHING.** The `:24839` branch — the order was paid off-app cash/manual, or DEV — closes a stuck refund request and calls **none** of the six reversal helpers. Measured across every order: 20 orders, 1 customer, **¥899.00 of `lifetime_spend` retained** and **¥38.80 of wallet balance never returned**. **This is M's FOURTH structural reason and the only one that produces stored ABOVE derived**, which the shipped note asserted was impossible; the note is corrected in the same pass. Tier consequence is real but **not yet realised** — the ladder is 0/4,000/6,000/10,000 and the one affected customer sits at 1,679 against a real 780, both below the first threshold. **AND THE PART TO REMEMBER: THAT CUSTOMER PASSES CHECK F.** The spend was logged, the balance matches the ledger, the books are internally consistent, and the customer is still ¥38.80 short — **a reconciliation that passes is not a proof of correctness.** Both affected accounts are internal, which bounds today's customer impact at zero and says nothing about the paths, which are live for everyone. One measured failure, two findings, one open item; nothing reversed, hence a patch.
 
 2026-08-13 · v4.35 — §24 Database: **two findings from the ledger-writer survey, both about a guard that is weaker than the thing asserting it.** First, **THE DIALECT SWEEP'S INCOMPATIBILITY TABLE IS SHORT, AND THE MISSING RULES LAND INSIDE MONEY WRITERS.** `PG_INCOMPATIBLE` in `scripts/diagnose_statement_sweep.js` carries twelve rules and has none for **two-argument `MAX()`/`MIN()`** — a SQLite scalar function that Postgres does not have at all, where `max` is only an aggregate. Four real instances in static SQL and **two of them are inside ledger writers**: `reverseOrderPoints` at `routes/retail.js:27910` (`lifetime_spend = MAX(0, COALESCE(lifetime_spend,0) - ?)`) and `finalizeOrderAddon` at `:28639` (`shipping_fee = MAX(0, …)`); the other two are the refund paths at `:17539` and `:24542`. **These do not degrade, they ERROR**, and each one aborts the whole enclosing money transaction. There is no rule for **`datetime()`** either — **up to 64** static SQL literals, stated as "up to" because the sweep `break`s on its first matching rule, so an unknown share of the 64 is already counted under `julianday` or another entry; `sweepExpiredPoints:27614` is one of them. **THE POINT IS NOT THE TWO CONSTRUCTS, IT IS THAT THE 96 IS A FLOOR FOR A SECOND REASON NOBODY HAD NAMED.** §24 already records the 371 dynamic statements as the blind spot; this is a different one — **the table is short, not the technique**, and that is the fixable half. A rule added to `PG_INCOMPATIBLE` finds every instance forever; a statement missed because it was assembled at runtime never will be. Second, **`retail_topup_transactions.out_trade_no` IS NOT UNIQUE ON EITHER ENGINE, AND FIVE WRITERS KEY IDEMPOTENCY ON IT** — `creditWallet`, `debitWallet`, `creditLifetimeCommission`, `reverseLifetimeCommission`, `reverseOrderBalance`. A plain non-unique index on SQLite (`idx_retail_topup_outtrade`) and **no constraint of any kind on the cluster**, verified against `docs/tacet-postgres-schema-as-built-2026-08-11.sql` rather than inferred from `database.js`. **The code says both things about itself in two places.** `creditReferralReward:16310` states it correctly and warns against relying on the column; `finalizeOrderAddon:28669` asserts the opposite — "Unique out_trade_no makes the credit idempotent across retry callbacks" — and then relies on it with an `INSERT OR IGNORE` that has no constraint to conflict against and will simply insert a second row. **The credit is nonetheless safe today, and NOT for the reason the comment gives**: the outer claim at `:28604` — `UPDATE retail_order_addons SET status='success' WHERE id=? AND status='pending'` — returns `changes === 0` on a re-fire and bails the whole body before the credit is reached. **THE GENERAL SHAPE, WHICH IS THE PART WORTH KEEPING: a guard that works for a reason its comment does not give is a guard nobody can safely move.** The next person to refactor `finalizeOrderAddon` will preserve the `INSERT OR IGNORE` and drop the claim, because the comment told them where the safety was. Same family as the `:20241` comment corrected in v4.34 — a comment that answers for the code — and the third instance recorded. Two findings, nothing reversed, hence a patch.
 
@@ -2389,6 +2391,94 @@ Both money instances sit **inside** a transaction, so the failure is not one bad
 **This is the THIRD member of that family in this section**, after the `:20241` comment corrected in v4.34 (which claimed a deferred `BEGIN` serialized the order-number mint, when only topology did) and `reconcileTier`'s catch, which read as belt-and-braces and was an atomicity defeat. The pattern each time is the same: **the comment names a mechanism that sounds stronger than the one actually holding, so the real guard is invisible and the fake one is protected.**
 
 **A NOTE ON WHAT WOULD AND WOULD NOT FIX IT.** Adding `UNIQUE(out_trade_no)` to `retail_topup_transactions` would make five writers' beliefs true at once — but the column is NULL on some rows and carries operator-facing values like `admin_adjust` paths elsewhere, so it needs the partial-index treatment `retail_payments` already has, and it must be measured against live data for existing duplicates before it can be added at all. Not proposed here; recorded so the option is on the table with its precondition attached.
+
+### THE FIRST LIVE MONEY INCONSISTENCY FOUND BY MEASUREMENT RATHER THAN BY ACCIDENT — FOUND 2026-08-13
+
+`scripts/check_ledger_invariants.js` was run against a copy of the 10:00 hourly backup, `better-sqlite3` opened read-only, the live file never touched. **Nine of ten invariants passed. Check F failed on seven customers holding ¥3,669.64 of wallet balance that no ledger row explains.**
+
+This is worth marking as a first. Every previous money defect in this record was found because something visibly broke — an order stuck, a coupon leaking, a log line read by hand. **This one was found by a check written before anyone knew whether it would return zero.** The 2026-08-08 points loss (order 1013 / TC000195) was found by reading a log; `check_points_invariants.js` was built afterwards so it would not happen again. This is that discipline paying out on the wallet side, on its first run.
+
+**THE CAUSE, AND THE ASYMMETRY THAT PROVES IT WAS NOT DELIBERATE.** `claimMigrationCredit` at `routes/retail.js:11998` credits the wallet and writes no ledger row:
+
+```
+if (credit.balance && credit.balance > 0) {          // :12017
+  UPDATE retail_customers SET balance = COALESCE(balance,0) + ?      <-- no ledger row
+}
+if (credit.points && credit.points > 0) {            // :12021
+  UPDATE retail_customers SET points_balance = COALESCE(points_balance,0) + ?
+  INSERT INTO retail_points_transactions (... 'migration' ...)       <-- ledger row written
+}
+```
+
+**Eleven lines apart, in one function, inside one transaction: the points half writes its ledger row and the money half does not.** That asymmetry is the whole argument that this is an oversight rather than a decision, and it is recorded explicitly because a later reader looking only at the balance branch has no way to tell. Nobody designs a system where points are audited and money is not; somebody writes the points branch, writes the balance branch, and does not notice the two came out different.
+
+**THE SEVEN.** ¥3,669.64 total, claims dated **2026-06-13 to 2026-07-28**.
+
+| customer | balance | ledger sum | unexplained | matching credit |
+|---|---:|---:|---:|---:|
+| 57 | 9.99 | 0 | 9.99 | *staging row overwritten — see the next entry* |
+| 92 | 885.00 | 0 | 885.00 | 885.00 |
+| 161 | 0.00 | −394.95 | 394.95 | 394.95 |
+| 306 | 98.40 | 0 | 98.40 | 98.40 |
+| 416 | 196.50 | −199.50 | 396.00 | 396.00 |
+| 693 | 143.80 | 0 | 143.80 | 143.80 |
+| 814 | 1741.50 | 0 | 1741.50 | 1741.50 |
+
+**Six reconcile to the fen against `retail_migration_credits.balance`** — ¥3,659.65 across those six, matching the staging table exactly. **Two of the seven have a NEGATIVE ledger sum** (161, 416): they were credited silently and then *spent*, and only the spend was recorded. 416 checks out exactly — ¥396.00 credited with no row, ¥199.50 spent and logged, ¥196.50 remaining. 161 spent the lot and sits at zero against a ledger reading −¥394.95.
+
+**LIVE, NOT HISTORICAL.** The most recent claim is 2026-07-28, sixteen days before the run. The path fires on every login and every phone change. **53 unclaimed credits carrying ¥17,362.32 are still queued, and every one of them will do this again on claim.**
+
+**NO CUSTOMER IS SHORT — AND THAT IS NOT THE SAME AS NO HARM.** The money is in the balance and it is spendable; ¥594.45 of it already has been spent. What is missing is the row that explains it, and the cost of that lands in three places:
+
+1. **Invisible in wallet history.** The customer sees a balance with nothing behind it.
+2. **Permanently flagged.** Every future reconciliation reports these seven until a row exists.
+3. **Lost entirely if a balance is ever rebuilt from the ledger — which is exactly what a cutover verification does.** A verification pass that recomputes balances from `retail_topup_transactions` and compares would silently zero ¥3,669.64 and report the copy as correct.
+
+**THE PASSES ARE RECORDED TOO, AND THEY ARE WHAT MAKES THE FAILURE TRUSTWORTHY.** **E passed across all 1,177 customers** — the points ledger sums to `points_balance` exactly, zero drift, nothing rounded away. **G passed across all 696 points rows** — every `balance_after` equals the running sum of deltas before it. H, I, J, K, L, N and O all returned zero.
+
+That matters more than it looks. A checker that reports one failure among ten passes on its first run is reporting a *finding*; one that lights up everywhere is reporting a *bug in itself*. Nine clean invariants over the same tables, on the same read, are the evidence that F's seven are real. **Record the pass, not just the fail** — the next person to run this needs to know the baseline was clean, or they will treat the seven as a suspicion rather than a measurement.
+
+### THE MIGRATION CREDITS STAGING TABLE IS NOT APPEND-ONLY, AND A RE-IMPORT REWRITES A COMPLETED CLAIM — FOUND 2026-08-13
+
+**The finding is the mechanism, not the ¥9.99 it was found through.**
+
+`retail_migration_credits` is the OUT1N staging roster, keyed by phone, with `claimed_at` / `claimed_customer_id` recording who took each credit. `claimMigrationCredit` is race-safe *within one generation of that table*: it claims with `UPDATE … WHERE id = ? AND claimed_at IS NULL` and proceeds only if it won the row.
+
+**What was observed:** row `1516` (`source_uid` 31741870, phone 18613159912). Customer 57 claimed it on 2026-06-13 09:09:55 and received 99 points and ¥9.99. The row now reads `balance = 0`, `points = 228`, `claimed_customer_id = 64` — and customer 64 claimed it on 2026-06-14 09:13:54, receiving 228 points. **Between the two claims the row was re-imported: its values were replaced and `claimed_at` was reset to NULL, which re-armed a credit that had already been taken.**
+
+**Exactly one `migration` points row in the entire database has no credit row pointing back at its customer, and it is 57's.** That is the measurable residue: the ledger remembers the claim, the staging table no longer does.
+
+**WHAT PREVENTS THIS RECURRING: NOTHING.** Stated plainly because the compare-and-set makes the function *look* protected and it is not — the guard covers concurrency, not re-import. And the reason is worth naming, because it is not an accident of the importer:
+
+**`retail_migration_credits` carries `UNIQUE (phone)`. That constraint is what forces a re-import to UPDATE the existing row instead of inserting a new one — so the same constraint that keeps the roster clean is the one that makes a re-import destructive.** An importer that wanted to preserve history could not simply insert; the schema refuses it. There is no `claimed_at IS NULL` guard on the import side, no generation or import-batch column, and no history table. A second import of the same export would re-arm every claimed row it touches.
+
+**THE COST IS THE AUDIT TRAIL, AND IT IS ALREADY PAID.** Customer 57's credit can no longer be derived from the staging table at all — its amount survives only as an observed balance and its date only as the `created_at` of a points row. Any repair of the entry above must therefore read 57 out of the points ledger rather than the roster, which is a direct, concrete consequence of this finding rather than a hypothetical one.
+
+**IT ALSO CONSTRAINS THE FIX.** Any `out_trade_no` scheme for a migration wallet row that is keyed on the credit row id alone will collide the moment a re-imported row is claimed a second time — which is not hypothetical, it is the case above. The two findings are coupled and neither should be closed as if it stood alone.
+
+### OPEN — A PAID ORDER CANCELLED WITH NO GATEWAY REFUND REVERSES NOTHING — FOUND 2026-08-13
+
+`PATCH /api/retail-admin/orders/:id/status`, the `status === 'cancelled'` handler. Three paths, and the third is empty of reversals:
+
+| the order was | branch | what it reverses |
+|---|---|---|
+| `pending_payment` | `:24779` | redeem, balance, voucher — correct; no `order_earn` row exists yet |
+| paid, gateway refund fired | `:24833` | points, redeem, balance, referral, lifetime commission — complete |
+| **paid, NO gateway refund** | **`:24839`–`:24856`** | **nothing** |
+
+The third branch's own comment says when it runs: *"the order was paid off-app (cash/manual, no refundable gateway row), already refunded, or this is DEV mode."* Its entire body closes a stuck refund request. **It calls none of `reverseOrderPoints`, `reverseOrderRedeem`, `reverseOrderBalance`, `reverseOrderVoucher`, `reverseOrderReferral`, `reverseLifetimeCommission`** — so earned points stay, redeemed points are not returned, spent wallet balance is not returned, the voucher stays consumed, and `lifetime_spend` keeps the cancelled order's subtotal.
+
+**MEASURED, 2026-08-13, across every order in the database:** 20 orders, **1 customer** (233), **¥899.00 of `lifetime_spend` retained** on cancelled orders, and **¥38.80 of wallet balance spent on order 324 and never returned**. Oldest 2026-06-15, newest 2026-08-08.
+
+**THIS IS M's FOURTH STRUCTURAL REASON, AND IT IS THE ONE THAT PRODUCES stored ABOVE derived.** `check_ledger_invariants.js` shipped naming three reasons `lifetime_spend` legitimately diverges from the boot-migration formula and asserting that none of them could put stored above derived. That assertion was true of the three and wrong as a general claim: this branch is a fourth reason and it produces exactly that sign. Customer 233's M drift of +899.00 equals the 20 retained subtotals to the fen. The script's note is corrected in the same pass.
+
+**THE TIER CONSEQUENCE IS REAL BUT NOT YET REALISED.** `lifetime_spend` is the sole input to `tierFromSpend`, and the ladder is seed 0 / sprout 4,000 / root 6,000 / tree 10,000 with points multipliers 1 / 1.1 / 1.2 / 1.3. Customer 233 carries 1,679 against a real 780 — **both below the first threshold, so no tier has actually been inflated today.** The mechanism is what matters: a customer at ¥3,200 of real spend carrying ¥900 of phantom would sit in Sprout and earn a 10% points acceleration they did not buy, and every order after that compounds it.
+
+**WHY CHECK F CANNOT SEE THIS, WHICH IS THE PART TO REMEMBER.** Customer 233 passes F. The ¥38.80 was spent, a ledger row was written for the spend, and the balance matches the ledger — **the books are internally consistent and the customer is still ¥38.80 short.** F tests whether the ledger explains the balance. It does not and cannot test whether the balance is *right*. A reconciliation that passes is not a proof of correctness, and this is the concrete instance to cite the next time one is mistaken for one.
+
+**Both affected accounts here are internal** — 233 is `asher` on 18613159900, and the ¥9.99 in the entry above belongs to `asher` on 18613159912. That bounds today's customer impact at zero and says nothing at all about the paths, which are live for everyone. **The off-app cash/manual cancel is a normal counter-sale flow, not an edge case.**
+
+**OPEN.** No fix designed. The obvious shape — hoist the five reversal calls out of the gateway-refund branch so both paid paths share them — is not obviously right, because the off-app case has no gateway refund to reconcile against and a blanket reversal there may double-return money the operator already handed back by hand. That is a decision, not a patch.
 
 ## 25. A printed slip that goes stale is corrected on paper, not reprinted — DECIDED 2026-08-07
 
