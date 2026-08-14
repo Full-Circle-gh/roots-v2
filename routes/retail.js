@@ -15065,6 +15065,109 @@ router.post('/api/retail-admin/customers', requireRetailAdmin, express.json(), (
   });
 });
 
+// ─── Roster search ────────────────────────────────────────────────────────
+// Lifted out of the handler below so scripts/test_customer_search.js can run
+// the REAL predicate against a real (in-memory) database. A suite that rebuilds
+// the WHERE clause is testing a different program.
+//
+// ── WHY A PHONE NUMBER COULD BE TYPED IN FULL AND STILL NOT FOUND ─────────
+// The search was `phone LIKE '%<what you typed>%'` — one literal substring, run
+// against one column. Three ways that misses a customer who is right there:
+//
+//   1. THE STORED NUMBER CARRIES SEPARATORS. '18327117510' is not a substring of
+//      '183 2711 7510' or '183-2711-7510'. Five write paths normalize now
+//      (docs/known-issues.md, RECIPIENT-PHONE-UNVALIDATED) — but normalizing on
+//      write only tidies what was written after it shipped. Every row stored
+//      before that, and every number that arrived by import, is still in
+//      whatever shape a human typed it.
+//   2. THE TYPED NUMBER CARRIES THEM. '+86 183 2711 7510' fails `^\d+$`, so it
+//      took the non-numeric branch — which searched neither order ids nor saved
+//      addresses — and then matched nothing anyway, because the '+86 ' is not in
+//      the stored value either.
+//   3. THE NUMBER IS ONLY ON THE ORDER. `retail_orders.recipient_phone` is an
+//      order-time snapshot; a customer can have one there and a blank profile
+//      phone with no saved address (a manual/POS order, or an address since
+//      edited or deleted). Orders admin search already matches recipient_phone,
+//      so the same number found the ORDER and not the PERSON.
+//
+// The raw LIKE is kept on every field it already covered — this only ADDS
+// clauses, so nothing that matched before stops matching.
+//
+// Separators are stripped from the STORED value, not just from the query,
+// because the mismatch can be on either side. ASCII shapes only: a number
+// written with full-width punctuation would still be missed, which is recorded
+// rather than fixed — no such value has been seen, and each extra REPLACE is
+// paid on every row of a full-table scan.
+const SEARCH_PHONE_DIGITS = (col) =>
+  `REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(${col}, ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '+', '')`;
+
+// The digits to hunt for, or '' when the query isn't a phone number at all.
+//
+// 🔴 A QUERY IS ONLY TREATED AS A PHONE WHEN IT CONTAINS NOTHING BUT DIGITS AND
+// PHONE PUNCTUATION. Matching a name's digits against phone columns would make
+// "Wang 8" return everyone whose number contains an 8 — the digit clauses are
+// substring matches and would swamp the real answer.
+//
+// Four digits is the floor because the last four is how staff actually search
+// ("the 7510 one"), and it is short enough to be worth the noise. A country-code
+// wrapper is unwrapped exactly as normalizeMigrationPhone does it, so a number
+// typed as '+86 183…' finds a row stored bare.
+function searchPhoneDigits(q) {
+  const raw = String(q || '').trim();
+  if (!raw || !/^[\d\s\-+().]+$/.test(raw)) return '';
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length < 4) return '';
+  if (digits.length === 13 && digits.startsWith('86'))   return digits.slice(2);
+  if (digits.length === 14 && digits.startsWith('086'))  return digits.slice(3);
+  if (digits.length === 15 && digits.startsWith('0086')) return digits.slice(4);
+  return digits;
+}
+
+// { sql, params } for one search term, or null when there's nothing to search.
+// The SQL is a single parenthesised OR-group, safe to AND into any WHERE built
+// against retail_customers unaliased.
+function customerSearchWhere(q) {
+  const term = String(q || '').trim();
+  if (!term) return null;
+
+  const like = '%' + term + '%';
+  const ors = ['nickname LIKE ?', 'phone LIKE ?', 'openid LIKE ?'];
+  const params = [like, like, like];
+
+  if (/^\d+$/.test(term)) {
+    // numeric → also an order id or order number
+    ors.push('id IN (SELECT customer_id FROM retail_orders WHERE id = ? OR order_no LIKE ?)');
+    params.push(parseInt(term, 10), like);
+    // …and a saved delivery-address phone (the recipient number can differ from
+    // the customer's own profile phone, e.g. gifting/family orders)
+    ors.push('id IN (SELECT customer_id FROM retail_customer_addresses WHERE phone LIKE ?)');
+    params.push(like);
+  } else {
+    // non-numeric → order number too (e.g. "R26…")
+    ors.push('id IN (SELECT customer_id FROM retail_orders WHERE order_no LIKE ?)');
+    params.push(like);
+  }
+
+  const digits = searchPhoneDigits(term);
+  if (digits) {
+    const dlike = '%' + digits + '%';
+    ors.push(`${SEARCH_PHONE_DIGITS('phone')} LIKE ?`);
+    params.push(dlike);
+    ors.push(`id IN (SELECT customer_id FROM retail_customer_addresses
+                      WHERE ${SEARCH_PHONE_DIGITS('phone')} LIKE ?)`);
+    params.push(dlike);
+    // customer_id IS NULL on every Meituan / Gzgrocery / guest order, and those
+    // rows can't name a customer — excluded so the IN list stays small rather
+    // than for correctness (`id IN (…, NULL, …)` matches no id either way).
+    ors.push(`id IN (SELECT customer_id FROM retail_orders
+                      WHERE customer_id IS NOT NULL
+                        AND ${SEARCH_PHONE_DIGITS('recipient_phone')} LIKE ?)`);
+    params.push(dlike);
+  }
+
+  return { sql: '(' + ors.join(' OR ') + ')', params };
+}
+
 // Customer search — used by the voucher-grant modal in /retail-admin.
 // Matches name, phone, or openid prefix. Returns 20 most recent matches.
 // Customers list — used by both the voucher autocomplete (simple ?q) and the
@@ -15162,20 +15265,10 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
     params.push(...BC_PAID_STATUSES);
   }
 
-  if (q) {
-    const like = '%' + q + '%';
-    if (/^\d+$/.test(q)) {
-      // numeric → also match as order id or order number, or a saved
-      // delivery-address phone (recipient number can differ from the
-      // customer's own profile phone, e.g. gifting/family orders)
-      where.push('(nickname LIKE ? OR phone LIKE ? OR openid LIKE ? OR id IN (SELECT customer_id FROM retail_orders WHERE id = ? OR order_no LIKE ?) OR id IN (SELECT customer_id FROM retail_customer_addresses WHERE phone LIKE ?))');
-      params.push(like, like, like, parseInt(q, 10), like, like);
-    } else {
-      // non-numeric → match profile fields, plus order number (e.g. "R26...")
-      where.push('(nickname LIKE ? OR phone LIKE ? OR openid LIKE ? OR id IN (SELECT customer_id FROM retail_orders WHERE order_no LIKE ?))');
-      params.push(like, like, like, like);
-    }
-  }
+  // See customerSearchWhere above — name, phone (in whatever shape either side
+  // wrote it), openid, order id / number, address phone, order recipient phone.
+  const search = customerSearchWhere(q);
+  if (search) { where.push(search.sql); params.push(...search.params); }
   const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
 
   // Column-header sort: one column at a time, either direction. `orders_count`
@@ -15215,6 +15308,26 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
   // being used as the pagination denominator. `total` is untouched — the roster
   // pager, the stat strip and the voucher autocomplete all rely on it.
   const customersOnFile = tdb().prepare('SELECT COUNT(*) AS n FROM retail_customers').get().n;
+
+  // ── A match the operator's own filters are hiding ──────────────────────────
+  // Every segment except Blocked carries `is_blocked = 0`, so searching a
+  // blocked customer's phone from the default view returns nothing and the empty
+  // state says "nothing matches" — about a record that is on file, holds that
+  // number, and is the one thing worth knowing. Same for a match sitting outside
+  // the chosen tier / channel / segment.
+  //
+  // Only computed when a SEARCH found nothing: an empty tier filter isn't a
+  // failed lookup, and this is a second full scan we shouldn't pay on every
+  // page. Counted under the search term ALONE, which is exactly what makes the
+  // client's sentence true — "your filters are hiding N".
+  let hidden = null;
+  if (search && total === 0) {
+    const h = tdb().prepare(
+      `SELECT COUNT(*) AS n, COALESCE(SUM(is_blocked), 0) AS blocked
+         FROM retail_customers WHERE ${search.sql}`
+    ).get(...search.params);
+    if (h.n) hidden = { total: h.n, blocked: h.blocked };
+  }
 
   const rows = tdb().prepare(
     `SELECT id, nickname, phone, openid, email, tier_key, lifetime_spend,
@@ -15262,7 +15375,8 @@ router.get('/api/retail-admin/customers', requireRetailAdmin, (req, res) => {
     segments = { all: seg.all_count, new_week: seg.new_week, sleeping: seg.sleeping, blocked: seg.blocked };
   }
 
-  res.json({ success: true, data: rows, page, pageSize, total, customers_on_file: customersOnFile, returning, segments });
+  res.json({ success: true, data: rows, page, pageSize, total, customers_on_file: customersOnFile,
+             hidden_by_filters: hidden, returning, segments });
 });
 
 // Would a "save as a customer" tick attach this order to somebody already on

@@ -27,6 +27,8 @@ let cuSearchTimer = null;
 // operator actually reaches for, one tap each. 'blocked' replaces the old
 // "Include blocked" checkbox: the chip only exists when someone IS blocked.
 let CU_SEGMENT = '';
+// Set from the server's `hidden_by_filters` on every load — see cuLoad.
+let CU_HIDDEN = null;
 
 // Sorting is no longer an operator control — the column headers carry no
 // carets. These two are kept only because the endpoint takes them, and they
@@ -522,6 +524,50 @@ function cuFilterSummary() {
   if (term) return cuT(`“${escapeHtml(term)}”`, `“${escapeHtml(term)}”`);
   return cuT('these filters', '当前筛选');
 }
+// The search matched, and every match is behind a filter the operator set.
+//
+// This state exists because of one number that could not be found: the customer
+// was blocked, every segment but Blocked carries `is_blocked = 0`, and the
+// roster answered "nothing matches" about a record holding exactly that phone.
+// So it says which filter is in the way, how many rows are behind it, and offers
+// to go there — the search term is always kept, because that is what the
+// operator is actually doing.
+function cuHiddenMatchState() {
+  const n = Number(CU_HIDDEN && CU_HIDDEN.total || 0);
+  const blocked = Number(CU_HIDDEN && CU_HIDDEN.blocked || 0);
+  const allBlocked = blocked >= n;
+  const who = n === 1 ? cuT('1 customer', '1 位顾客') : cuT(`${cuNum(n)} customers`, `${cuNum(n)} 位顾客`);
+  const body = allBlocked
+    ? cuT(`${who} matching ${cuFilterSummary()} is blocked, and blocked accounts show up nowhere but the Blocked list.`,
+          `有${who}匹配${cuFilterSummary()},但已被封禁 — 封禁的账号只出现在“已封禁”名单中。`)
+    : cuT(`${who} matching ${cuFilterSummary()} ${n === 1 ? 'is' : 'are'} outside the filters you've set.`,
+          `有${who}匹配${cuFilterSummary()},但不在当前筛选范围内。`);
+  const label = allBlocked
+    ? (n === 1 ? cuT('Show the blocked match', '查看该封禁顾客') : cuT('Show the blocked matches', '查看这些封禁顾客'))
+    : cuT('Show them', '查看');
+  return cuStateRow(
+    cuT(`Found — but your filters are hiding ${n === 1 ? 'it' : 'them'}`, '找到了 — 但被当前筛选隐藏'),
+    body,
+    `<button type="button" class="btn cul-statebtn" onclick="cuRevealHiddenMatches()">${label}</button>`);
+}
+
+// Drop the filters standing between the operator and their match, and KEEP the
+// search box exactly as typed — unlike cuFilterClearAll, which clears it too and
+// would answer a lookup by showing all 1,202 rows.
+function cuRevealHiddenMatches() {
+  const allBlocked = CU_HIDDEN && Number(CU_HIDDEN.blocked || 0) >= Number(CU_HIDDEN.total || 0);
+  CU_TIER_FILTERS.clear();
+  CU_CHAN_FILTER = '';
+  const seg = allBlocked ? 'blocked' : '';
+  const btn = document.querySelector(`#cu-segs .cul-seg[data-seg="${seg}"]`);
+  cuPaintTierFilterUI();
+  // cuSegment repaints the chip strip and reloads; without the chip in the DOM
+  // (the Blocked chip is conditional) set the state and reload directly.
+  if (btn) return cuSegment(btn, seg);
+  CU_SEGMENT = seg;
+  cuFilterChanged();
+}
+
 function cuSkeletonRows() {
   const w = [62, 44, 58, 38, 52, 46];
   const bar = (width, extra) => `<span class="cul-sk" style="width:${width}${extra || ''}"></span>`;
@@ -635,6 +681,11 @@ async function _cuLoad(opts) {
   // authoritative one. Ours would paint the previous filter's rows on top.
   if (myReq !== _CU_REQ_ID) return;
   CU_TOTAL = j.total || 0;
+  // { total, blocked } when the search matched customers the CURRENT filters are
+  // hiding — most often a blocked record, which every segment but Blocked drops.
+  // Null whenever the search genuinely found nothing, so the empty state can
+  // only make this claim when the server actually counted the rows.
+  CU_HIDDEN = j.hidden_by_filters || null;
   const rows = j.data || [];
 
   // Clamp: blocking a customer (or a filter's cut draining) can shrink the
@@ -663,14 +714,18 @@ async function _cuLoad(opts) {
   _CU_SEEN_IDS = new Set(rows.map(r => r.id));
 
   if (!rows.length) {
-    // Two different empty states. Nothing to find at all is a compliment that
-    // names what will arrive; a filter that matched nothing names the filter
-    // and offers to clear it — never a compliment, the operator asked for
-    // something specific and didn't get it.
+    // Three empty states. Nothing to find at all is a compliment that names what
+    // will arrive; a filter that matched nothing names the filter and offers to
+    // clear it — never a compliment, the operator asked for something specific
+    // and didn't get it; and a search whose matches are all HIDDEN says so and
+    // goes and gets them, because "no customers match" about a customer who is
+    // on file and holds that number is simply false.
     const looked = CU_TOTAL_ALL
       ? cuT(`${cuNum(CU_TOTAL_ALL)} customers`, `${cuNum(CU_TOTAL_ALL)} 位顾客`)
       : cuT('your customers', '你的顾客');
-    tbody.innerHTML = cuAnyFilter()
+    tbody.innerHTML = CU_HIDDEN
+      ? cuHiddenMatchState()
+      : cuAnyFilter()
       ? cuStateRow(
           cuT('No customers match this search', '没有符合条件的顾客'),
           cuT(`Nothing in ${looked} matches ${cuFilterSummary()}. Clear it and the whole list comes back.`,
