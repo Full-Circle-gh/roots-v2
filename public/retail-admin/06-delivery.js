@@ -784,8 +784,12 @@ async function saveZoneDrawer() {
     // either blank → the server stores NULL and the zone falls back to flat.
     weight_first_kg_fee: numOrNull($('#dz-gz-w1').value),
     weight_extra_kg_fee: numOrNull($('#dz-gz-wx').value),
-    packing_fee_per_item: isGz ? 0 : (Number($('#dz-city-pack').value) || 0),
-    packing_fee_cap:      isGz ? null : numOrNull($('#dz-city-pack-cap').value),
+    // Packing applies to a Guangzhou district exactly as it does to any other
+    // zone — the shop boxes a Tianhe order too. This used to write 0/NULL over
+    // whatever a GZ zone held, which meant the fee could not be set from here
+    // AND was silently wiped on the next save of an unrelated field.
+    packing_fee_per_item: Number($('#dz-city-pack').value) || 0,
+    packing_fee_cap:      numOrNull($('#dz-city-pack-cap').value),
     min_lead_days:  numOrNull($('#dz-edit-lead').value) ?? (isGz ? 0 : 3),
     max_lead_days:  numOrNull($('#dz-edit-maxlead').value) ?? 14,
     slot_start_hour: numOrNull($('#dz-edit-hours-start').value) ?? 10,
@@ -1007,9 +1011,9 @@ function setApplyTargets(mode) {
 }
 
 // Build the patch body for a single target. We DON'T blanket-copy every
-// field — type-incompatible ones get skipped (a GZ-only field like
-// same_day_surcharge is silently dropped when targeting a city zone, and
-// vice-versa for packing_fee_*).
+// field — type-incompatible ones get skipped (GZ-only fields like max_fee and
+// same_day_surcharge are silently dropped when targeting a city zone).
+// packing_fee_* is NOT one of those: every zone type can carry a packing fee.
 function buildApplyBody(target) {
   const isGzTarget = target.zone_type === 'gz_district';
   const numOrNull = v => v === '' || v == null ? null : Number(v);
@@ -1018,12 +1022,11 @@ function buildApplyBody(target) {
   if (_applyBundles.has('pricing')) {
     body.base_fee       = Number($('#dz-gz-base').value) || 0;
     body.free_threshold = numOrNull($('#dz-gz-free').value);
-    if (isGzTarget) {
-      body.max_fee = numOrNull($('#dz-gz-max').value);
-    } else {
-      body.packing_fee_per_item = Number($('#dz-city-pack').value) || 0;
-      body.packing_fee_cap      = numOrNull($('#dz-city-pack-cap').value);
-    }
+    // max_fee stays GZ-only (a MAX flat is a Guangzhou any-distance option).
+    // Packing is not: it applies to every zone type, so it copies to both.
+    if (isGzTarget) body.max_fee = numOrNull($('#dz-gz-max').value);
+    body.packing_fee_per_item = Number($('#dz-city-pack').value) || 0;
+    body.packing_fee_cap      = numOrNull($('#dz-city-pack-cap').value);
   }
 
   if (_applyBundles.has('scheduling')) {

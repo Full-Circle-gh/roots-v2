@@ -20352,6 +20352,119 @@ const MANUAL_ORDER_CHANNELS = ['manual', 'wechat', 'web'];
 // later · counter = handed over at the till now, nothing to ship or collect.
 const ORDER_FULFILLMENT_TYPES = ['delivery', 'pickup', 'counter'];
 
+// ─── What a manual order's delivery and packing fees WOULD be ─────────────
+//
+// A manual order used to price neither. `shipping_fee` was whatever the operator
+// typed (the box defaults to 0) and `packing_fee` was never computed, never
+// posted and not even in the INSERT's column list — so a phone order for the
+// same cart, to the same address, cost less than the customer would have paid
+// for it in the app, and the packing the shop actually does was never charged.
+//
+// This is the SAME engine the customer checkout runs — matchDeliveryZone +
+// computeDeliveryAndPacking for a delivery, `fees.pickupPackingFee` for a
+// collection — so the two surfaces cannot quote different money for one cart.
+// It is a QUOTE, not a rule: the endpoint below prefills the operator's two
+// fields with it and they may type over either, because a hand-keyed order is
+// where a waived fee or a negotiated rate legitimately happens.
+//
+// `error` is returned rather than thrown, and the caller treats it as "no
+// opinion". An address in a district nobody has configured refuses the CUSTOMER
+// (they can't be charged a fee that doesn't exist), but it must never refuse
+// STAFF: the shop still takes the order and someone works the zone out later.
+function manualOrderFees({ fulfillmentType, address, subtotal, totalQty, lines, deliveryMode }) {
+  const none = { shippingFee: 0, packingFee: 0, freeShipping: false, zone: null };
+  if (fulfillmentType === 'pickup') {
+    // Collected at the store: nothing to ship, but the boxing is still done and
+    // still costs. Same flat per-order fee the mini-app charges (retail.js:10018).
+    return { ...none, packingFee: Number(cfgValue('fees.pickupPackingFee', 0)) || 0 };
+  }
+  // Handed over at the till — no delivery, no box, nothing to quote.
+  if (fulfillmentType !== 'delivery') return none;
+
+  const zone = matchDeliveryZone(normalizeChinaAddress(address || {}));
+  if (!zone) return { ...none, error: 'no_zone_match' };
+
+  // Weight only matters to a weight-priced zone; an unparseable size contributes
+  // 0 and the fee degrades to the zone's flat base_fee, exactly as at checkout.
+  const cartGrams = (lines || []).reduce((s, l) => {
+    const g = parseWeightToGrams(l.size);
+    return s + (g ? g * (Number(l.qty) || 0) : 0);
+  }, 0);
+  const fees = computeDeliveryAndPacking(zone, subtotal, deliveryMode || 'standard', totalQty, cartGrams);
+  if (fees.error) return { ...none, error: fees.error };
+  return {
+    shippingFee: fees.deliveryFee,
+    packingFee: fees.packingFee,
+    freeShipping: fees.freeShipping,
+    zone: { id: zone.id, name_en: zone.name_en || null, name_cn: zone.name_cn || null },
+  };
+}
+
+// Resolve the wizard's item rows against the live catalog — shared by the create
+// route and the fee preview below, so a fee quoted for a cart is a fee quoted
+// for the SAME cart the order would be priced from. Returns { error } instead of
+// throwing; every caller answers 400 with it.
+function resolveManualOrderLines(items) {
+  const resolved = [];
+  for (const it of (Array.isArray(items) ? items : [])) {
+    const pid = parseInt(it.product_id, 10);
+    const qty = Number(it.qty);
+    if (!pid || !(qty > 0)) return { error: 'invalid_item' };
+    const p = tdb().prepare(
+      `SELECT id, name_en, name_cn, sku, weight AS size, sell_price
+         FROM store_products WHERE id = ? AND COALESCE(is_active, 1) = 1`
+    ).get(pid);
+    if (!p) return { error: 'product_unavailable', product_id: pid };
+    let unitPrice = Number(p.sell_price) || 0;
+    if (it.unit_price != null && it.unit_price !== '') {
+      const up = Number(it.unit_price);
+      if (!Number.isFinite(up) || up < 0) return { error: 'bad_unit_price', product_id: pid };
+      unitPrice = up;
+    }
+    unitPrice = Math.round(unitPrice * 100) / 100;
+    resolved.push({ p, qty, unitPrice, lineTotal: Math.round(unitPrice * qty * 100) / 100 });
+  }
+  return { resolved };
+}
+
+// The two fees the New-order wizard prefills, for the cart and destination the
+// operator has filled in so far. Read-only: it writes nothing and mints nothing,
+// so it is safe to call on every keystroke-debounced change.
+//
+// A cart that doesn't resolve yet (no lines, a product just deactivated) is not
+// an error here — the operator is mid-build. It answers with zeros and says why,
+// where the create route would refuse.
+router.post('/api/retail-admin/order-fees', requireRetailAdmin, express.json(), (req, res) => {
+  const b = req.body || {};
+  const fulfillmentType = String(b.fulfillment_type || '').toLowerCase();
+  if (!ORDER_FULFILLMENT_TYPES.includes(fulfillmentType)) {
+    return res.status(400).json({ success: false, error: 'bad_fulfillment_type', allowed: ORDER_FULFILLMENT_TYPES });
+  }
+  const { resolved, error } = resolveManualOrderLines(b.items);
+  if (error) return res.json({ success: true, data: { subtotal: 0, total_qty: 0, shipping_fee: 0, packing_fee: 0, error } });
+
+  const subtotal = Math.round(resolved.reduce((s, r) => s + r.lineTotal, 0) * 100) / 100;
+  const totalQty = resolved.reduce((s, r) => s + (Number(r.qty) || 0), 0);
+  const fees = manualOrderFees({
+    fulfillmentType,
+    address: b.address && typeof b.address === 'object' ? b.address : null,
+    subtotal, totalQty,
+    lines: resolved.map(r => ({ size: r.p.size, qty: r.qty })),
+    deliveryMode: b.delivery_mode,
+  });
+  res.json({
+    success: true,
+    data: {
+      subtotal, total_qty: totalQty,
+      shipping_fee: fees.shippingFee,
+      packing_fee: fees.packingFee,
+      free_shipping: !!fees.freeShipping,
+      zone: fees.zone || null,
+      error: fees.error || null,
+    },
+  });
+});
+
 router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), async (req, res) => {
   const b = req.body || {};
 
@@ -20377,26 +20490,15 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
   // catalog sell_price; staff may override per line (negotiated/wholesale). ──
   const items = Array.isArray(b.items) ? b.items : [];
   if (!items.length) return res.status(400).json({ success: false, error: 'no_items' });
-  const resolved = [];
-  for (const it of items) {
-    const pid = parseInt(it.product_id, 10);
-    const qty = Number(it.qty);
-    if (!pid || !(qty > 0)) return res.status(400).json({ success: false, error: 'invalid_item' });
-    const p = tdb().prepare(
-      `SELECT id, name_en, name_cn, sku, weight AS size, sell_price
-         FROM store_products WHERE id = ? AND COALESCE(is_active, 1) = 1`
-    ).get(pid);
-    if (!p) return res.status(400).json({ success: false, error: 'product_unavailable', product_id: pid });
-    let unitPrice = Number(p.sell_price) || 0;
-    if (it.unit_price != null && it.unit_price !== '') {
-      const up = Number(it.unit_price);
-      if (!Number.isFinite(up) || up < 0) return res.status(400).json({ success: false, error: 'bad_unit_price', product_id: pid });
-      unitPrice = up;
-    }
-    unitPrice = Math.round(unitPrice * 100) / 100;
-    const lineTotal = Math.round(unitPrice * qty * 100) / 100;
-    resolved.push({ p, qty, unitPrice, lineTotal });
+  // Shared with the fee preview above, so the cart a fee was quoted for and the
+  // cart the order is priced from are resolved by one piece of code.
+  const lineResult = resolveManualOrderLines(items);
+  if (lineResult.error) {
+    const out = { success: false, error: lineResult.error };
+    if (lineResult.product_id) out.product_id = lineResult.product_id;
+    return res.status(400).json(out);
   }
+  const resolved = lineResult.resolved;
 
   // ── Money. Subtotal = Σ line totals; shipping optional; total defaults to
   // subtotal + shipping but staff may override the grand total outright. ──
@@ -20407,7 +20509,18 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
     if (!Number.isFinite(sf) || sf < 0) return res.status(400).json({ success: false, error: 'bad_shipping_fee' });
     shippingFee = Math.round(sf * 100) / 100;
   }
-  let total = Math.round((subtotal + shippingFee) * 100) / 100;
+  // Packing. Posted by the wizard, which prefills it from the fee engine and
+  // lets the operator type over it — so what arrives here is what the operator
+  // saw in the summary, and an absent field means a caller that doesn't know
+  // about packing at all (an older cached page) rather than "charge nothing on
+  // purpose". Both land on 0, which is exactly what this route did before.
+  let packingFee = 0;
+  if (b.packing_fee != null && b.packing_fee !== '') {
+    const pf = Number(b.packing_fee);
+    if (!Number.isFinite(pf) || pf < 0) return res.status(400).json({ success: false, error: 'bad_packing_fee' });
+    packingFee = Math.round(pf * 100) / 100;
+  }
+  let total = Math.round((subtotal + shippingFee + packingFee) * 100) / 100;
   if (b.total_override != null && b.total_override !== '') {
     const to = Number(b.total_override);
     if (!Number.isFinite(to) || to < 0) return res.status(400).json({ success: false, error: 'bad_total' });
@@ -20556,16 +20669,16 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
         `INSERT INTO retail_orders (
            order_no, customer_id, status, payment_method,
            recipient_name, recipient_phone, address_full, address_json,
-           subtotal, shipping_fee, total,
+           subtotal, shipping_fee, packing_fee, total,
            customer_note, staff_note, channel, source, created_by, fulfillment_type, pay_token,
            store_id
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
       ).run(
         // Always inserted as pending_payment first; markOrderPaid() flips it below
         // when staff chose 'paid', keeping the settle logic in one place.
         orderNo, customerId, 'pending_payment', paymentMethod,
         recipientName, recipientPhone || null, addressFull, addressJson,
-        subtotal, shippingFee, total,
+        subtotal, shippingFee, packingFee, total,
         customerNote, staffNote, channel, 'manual', req.user.id, fulfillmentType, payToken,
         storeId
       );

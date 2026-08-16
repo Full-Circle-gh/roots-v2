@@ -2800,14 +2800,20 @@
                 <div class="onw-err" id="onw-err-prod" data-no-i18n hidden></div>
               </div>
 
-              <!-- Shipping and the grand-total override (em dash when unset). -->
+              <!-- Fees and the grand-total override (em dash when unset).
+                   Shipping and packing PREFILL from the same fee engine the
+                   customer checkout runs — the zone for this address, or the
+                   pickup packing fee — and stay editable: a hand-keyed order is
+                   where a waived fee or a negotiated rate legitimately happens.
+                   Typing in either field stops it being refilled (ordNewFees). -->
               <div class="onw-blk">
-                <h3 class="onw-blk-h">Shipping and total · 运费与合计</h3>
+                <h3 class="onw-blk-h">Fees and total · 费用与合计</h3>
                 <div class="onw-row2">
-                  <div class="onw-f"><label for="onw-ship">Shipping · 运费</label><input class="onw-in onw-num" type="number" id="onw-ship" min="0" step="0.01" value="0" oninput="ordNewRecalc()"></div>
-                  <div class="onw-f"><label for="onw-override">Grand-total override · 自定义总额</label><input class="onw-in onw-num" type="number" id="onw-override" min="0" step="0.01" placeholder="—" oninput="ordNewRecalc()"></div>
+                  <div class="onw-f"><label for="onw-ship">Shipping · 运费</label><input class="onw-in onw-num" type="number" id="onw-ship" min="0" step="0.01" value="0" oninput="ordNewFeeTyped('ship')"></div>
+                  <div class="onw-f"><label for="onw-pack">Packing · 包装费</label><input class="onw-in onw-num" type="number" id="onw-pack" min="0" step="0.01" value="0" oninput="ordNewFeeTyped('pack')"></div>
+                  <div class="onw-f onw-wide"><label for="onw-override">Grand-total override · 自定义总额</label><input class="onw-in onw-num" type="number" id="onw-override" min="0" step="0.01" placeholder="—" oninput="ordNewRecalc()"></div>
                 </div>
-                <p class="onw-cap">Total auto-fills from subtotal plus shipping; edit to override. · 总额默认为小计加运费,修改即覆盖。</p>
+                <p class="onw-cap" id="onw-fee-note">Shipping and packing fill in from this order's delivery zone; edit either to override. · 运费与包装费按本单配送区自动填入,可直接修改。</p>
                 <div class="onw-err" id="onw-err-money" data-no-i18n hidden></div>
               </div>
 
@@ -2838,9 +2844,11 @@
                 <div class="onw-row2">
                   <div class="onw-f"><label for="onw-addr-name">Recipient · 收件人</label><input class="onw-in" type="text" id="onw-addr-name" maxlength="80"></div>
                   <div class="onw-f"><label for="onw-addr-phone">Phone · 电话</label><div class="onw-ig"><span>+86</span><input type="text" id="onw-addr-phone" maxlength="20"></div></div>
-                  <div class="onw-f"><label for="onw-addr-region">Province or city · 省市</label><input class="onw-in" type="text" id="onw-addr-region" maxlength="80"></div>
-                  <div class="onw-f"><label for="onw-addr-district">District · 区</label><input class="onw-in" type="text" id="onw-addr-district" maxlength="40"></div>
-                  <div class="onw-f onw-wide"><label for="onw-addr-street">Street address · 详细地址</label><input class="onw-in" type="text" id="onw-addr-street" maxlength="200"></div>
+                  <!-- These three decide the delivery zone, and the zone decides
+                       both fees — so each one re-quotes (debounced) as it's typed. -->
+                  <div class="onw-f"><label for="onw-addr-region">Province or city · 省市</label><input class="onw-in" type="text" id="onw-addr-region" maxlength="80" oninput="ordNewAddrChanged()"></div>
+                  <div class="onw-f"><label for="onw-addr-district">District · 区</label><input class="onw-in" type="text" id="onw-addr-district" maxlength="40" oninput="ordNewAddrChanged()"></div>
+                  <div class="onw-f onw-wide"><label for="onw-addr-street">Street address · 详细地址</label><input class="onw-in" type="text" id="onw-addr-street" maxlength="200" oninput="ordNewAddrChanged()"></div>
                   <div class="onw-f"><label for="onw-addr-postal">Postal code · 邮编</label><input class="onw-in onw-num" type="text" id="onw-addr-postal" maxlength="12"></div>
                 </div>
                 <p class="onw-cap">All six are required for a delivery order. · 配送订单六项均为必填。</p>
@@ -2864,12 +2872,16 @@
 
             </div>
 
-            <!-- Summary — sticky, right. Items, Shipping, Total. Nothing else. -->
+            <!-- Summary — sticky, right. Items, Shipping, Packing, Total.
+                 Packing hides itself at ¥0 rather than sitting there as a zero:
+                 a collection or a counter sale has nothing to box, and a line
+                 that is always present but usually zero stops being read. -->
             <aside class="onw-right">
               <div class="onw-sum">
                 <h3 class="onw-blk-h">Order summary · 订单摘要</h3>
                 <div class="onw-sr"><span>Items · 商品</span><span class="v" id="onw-sum-items">¥0.00</span></div>
                 <div class="onw-sr"><span>Shipping · 运费</span><span class="v" id="onw-sum-ship">¥0.00</span></div>
+                <div class="onw-sr" id="onw-sum-pack-row" hidden><span>Packing · 包装费</span><span class="v" id="onw-sum-pack">¥0.00</span></div>
                 <div class="onw-sr onw-tot"><span>Total · 合计</span><span class="v" id="onw-sum-total">¥0.00</span></div>
               </div>
             </aside>
@@ -7431,11 +7443,18 @@
               <label class="stacked">MAX flat ¥ · 任意距离封顶</label>
               <input type="number" id="dz-gz-max" placeholder="(no MAX)">
             </div>
-            <div class="field dz-only-city" style="margin: 0; display: none;">
+            <!-- Packing is NOT a city-zone-only fee. These two carried
+                 `dz-only-city` and were hidden for every Guangzhou district,
+                 while saveZoneDrawer wrote 0/NULL over whatever a GZ zone held —
+                 so a shop that packs GZ orders (¥1.5/item here) had nowhere to
+                 say so, and both the mini-app and a hand-keyed order charged
+                 nothing for it. Visible for both zone types now; the id keeps
+                 its `dz-city-` prefix so every reference to it still resolves. -->
+            <div class="field" style="margin: 0;">
               <label class="stacked">Packing ¥/item · 每件包装费</label>
-              <input type="number" id="dz-city-pack" placeholder="1">
+              <input type="number" id="dz-city-pack" placeholder="1.5">
             </div>
-            <div class="field dz-only-city" style="margin: 0; display: none;">
+            <div class="field" style="margin: 0;">
               <label class="stacked">Packing cap ¥ · 包装费上限</label>
               <input type="number" id="dz-city-pack-cap" placeholder="20">
             </div>

@@ -583,8 +583,14 @@ const srcSubtotal    = onwSrc.ordNewSubtotal;
 // display:none — out of layout, out of the tab order, out of the accessibility
 // tree. Not disabled, not shown empty. Asserted as the real predicate: run the
 // extracted function against a stub DOM for all three types and read the flag.
+// ordNewFees is a stub here, not the real thing: switching fulfilment re-quotes
+// the delivery and packing fees (a different fulfilment is a different fee), and
+// that call reaches the network. This harness is about ONE question — does the
+// address block disappear — so the quote is stubbed to nothing. Fee behaviour is
+// proven in scripts/test_manual_order_fees.js against a real database.
 const addrHarness = new Function(`
   ${srcFulChange}
+  function ordNewFees() {}
   return function (ft, prevFul) {
     const nodes = {
       'onw-ful':      { value: ft },
@@ -766,15 +772,24 @@ check('the override wins when set, and an empty override falls back to the sum',
    totalHarness([{ qty: 2, unit_price: 62 }], 15, '2400')],
   ['139.00', '2400.00']);
 
-// The summary carries three rows and no explanatory prose — frame F's caption
+// The summary carries four rows and no explanatory prose — frame F's caption
 // is annotation, not content.
-// Exactly three rows. Matched with a boundary: a bare /onw-sr/ also counts
+// Exactly four rows. Matched with a boundary: a bare /onw-sr/ also counts
 // every onw-srch search row on the page and came back 5.
-check('summary is Items, Shipping, Total and nothing else',
+//
+// PACKING IS THE FOURTH, AND IT IS BORN `hidden`. It was added when manual
+// orders started pricing packing at all (they used to charge none, ever, on any
+// order); the rule this check has always enforced — three rows on screen, no
+// prose — is unchanged, because a packing row only appears when there is a fee
+// to explain. `hidden` in the markup is what makes that true on first paint,
+// before ordNewRecalc has run; the toggle itself is ordNewRecalc's.
+check('summary is Items, Shipping, Packing, Total and nothing else',
   [(newSection.match(/class="onw-sr[ "]/g) || []).length,
-   /onw-sum-items/.test(newSection) && /onw-sum-ship/.test(newSection) && /onw-sum-total/.test(newSection),
+   /onw-sum-items/.test(newSection) && /onw-sum-ship/.test(newSection)
+     && /onw-sum-pack/.test(newSection) && /onw-sum-total/.test(newSection),
+   /id="onw-sum-pack-row" hidden/.test(newSection),
    /onw-cap/.test(newSection.slice(newSection.indexOf('onw-sum')))],
-  [3, true, false]);
+  [4, true, true, false]);
 
 // The two notes sit in visibly DIFFERENT containers — not the same field twice
 // with the word "staff" between them.

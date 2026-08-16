@@ -7676,12 +7676,16 @@ function ordNewRender() {
     customersOnFile: null,   // from the roster response — tells (c) from (d)
     custQuery: '',
     phoneNote: null,         // { kind: match|blocked|shared, name, phone, count }
+    // Which of the two fee fields the operator has typed in. A touched field is
+    // never refilled from the zone quote again — see ordNewFeeTyped.
+    feeTouched: { ship: false, pack: false },
   };
   ['onw-cust-q', 'onw-guest-name', 'onw-guest-phone', 'onw-prod-q',
    'onw-addr-name', 'onw-addr-phone', 'onw-addr-region', 'onw-addr-district',
    'onw-addr-street', 'onw-addr-postal', 'onw-note-cust', 'onw-note-staff']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   const ship = document.getElementById('onw-ship'); if (ship) ship.value = '0';
+  const pack = document.getElementById('onw-pack'); if (pack) pack.value = '0';
   const ovr = document.getElementById('onw-override'); if (ovr) ovr.value = '';
   const ch = document.getElementById('onw-channel'); if (ch) ch.value = 'manual';
   const ful = document.getElementById('onw-ful'); if (ful) ful.value = 'delivery';
@@ -7906,7 +7910,7 @@ function ordNewRenderLines() {
   if (!ONW.lines.length) {
     // Empty names the first action rather than apologising (§1.12).
     wrap.innerHTML = `<div class="onw-empty">${escapeHtml(cuT('No lines yet. Search above to add the first product.', '还没有商品行。在上方搜索,添加第一个商品。'))}</div>`;
-    ordNewRecalc(); return;
+    ordNewRecalc(); ordNewFeesDebounced(); return;
   }
   const rows = ONW.lines.map((l, i) => {
     const bad = !(Number(l.qty) > 0);
@@ -7929,6 +7933,9 @@ function ordNewRenderLines() {
     <th class="mo t">${escapeHtml(cuT('Line total', '小计'))}</th>
     <th class="rm"></th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
   ordNewRecalc();
+  // Both fees move with the cart: packing is per item, and the subtotal decides
+  // whether the zone's free-shipping threshold is met.
+  ordNewFeesDebounced();
 }
 
 // ── Fulfilment drives the address block and the counter defaults ───────
@@ -7951,6 +7958,9 @@ function ordNewFulChange() {
     if (pay) pay.value = 'wechat';
   }
   ONW.ful = ft;
+  // Delivery, collection and counter are three different fee answers — re-quote
+  // rather than carrying the previous choice's numbers into this one.
+  ordNewFees();
 }
 
 // ── Money — the summary is a running total, nothing else ───────────────
@@ -7966,12 +7976,115 @@ function ordNewRecalc() {
   if (!ONW) return;
   const sub = ordNewSubtotal();
   const ship = Number(document.getElementById('onw-ship')?.value) || 0;
+  const pack = Number(document.getElementById('onw-pack')?.value) || 0;
   const ovrRaw = document.getElementById('onw-override')?.value;
-  const total = (ovrRaw != null && ovrRaw !== '') ? (Number(ovrRaw) || 0) : Math.round((sub + ship) * 100) / 100;
+  const total = (ovrRaw != null && ovrRaw !== '') ? (Number(ovrRaw) || 0) : Math.round((sub + ship + pack) * 100) / 100;
   const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
   set('onw-sum-items', onwMoney(sub));
   set('onw-sum-ship', onwMoney(ship));
+  set('onw-sum-pack', onwMoney(pack));
+  // A zero packing line is not news — a collection or a counter sale has nothing
+  // to box. The row appears the moment there is a fee to explain.
+  const packRow = document.getElementById('onw-sum-pack-row');
+  if (packRow) packRow.hidden = !(pack > 0);
   set('onw-sum-total', onwMoney(total));
+}
+
+// ── The two fees, prefilled from the same engine the customer pays ─────────
+// A manual order used to charge whatever the operator typed into Shipping
+// (default 0) and never charged packing at all — it wasn't computed, wasn't
+// posted, and wasn't a column in the INSERT. So a phone order for the same cart
+// to the same address cost less than the app would have charged for it.
+//
+// TYPING IN A FIELD ENDS THE PREFILL FOR THAT FIELD, and only that field. The
+// quote is an opening bid, not a rule: hand-keyed orders are where a waived fee
+// or a negotiated rate legitimately happens, and a refill that overwrote the
+// number an operator just typed — because they then corrected a postcode — would
+// be the page arguing with them.
+function ordNewFeeTyped(which) {
+  if (ONW && ONW.feeTouched) ONW.feeTouched[which] = true;
+  ordNewRecalc();
+}
+
+// Address edits re-quote: the zone, and therefore both fees, is a property of
+// where this order is going.
+function ordNewAddrChanged() { ordNewFeesDebounced(); }
+
+let onwFeeTimer = null;
+function ordNewFeesDebounced() {
+  clearTimeout(onwFeeTimer);
+  onwFeeTimer = setTimeout(ordNewFees, 300);
+}
+
+// Ask the server what this order's zone charges, and fill in whichever of the
+// two fields the operator hasn't taken over. Read-only endpoint — safe to call
+// on every debounced change.
+let _ONW_FEE_REQ = 0;
+async function ordNewFees() {
+  if (!ONW || !_ORD_NEW_OPEN) return;
+  const val = id => (document.getElementById(id)?.value || '').trim();
+  const ft = val('onw-ful') || 'delivery';
+  const body = {
+    fulfillment_type: ft,
+    items: ONW.lines.filter(l => Number(l.qty) > 0)
+      .map(l => ({ product_id: l.product_id, qty: Number(l.qty), unit_price: Number(l.unit_price) })),
+  };
+  if (ft === 'delivery') {
+    body.address = {
+      province: val('onw-addr-region'), city: '', district: val('onw-addr-district'),
+      address: val('onw-addr-street'), detail: '', postal_code: val('onw-addr-postal'),
+    };
+    // Nothing to match a zone against yet — leave the fields alone rather than
+    // zeroing them, which would look like an answer.
+    if (!body.address.province && !body.address.district && !body.address.address) return;
+  }
+  const mine = ++_ONW_FEE_REQ;
+  let j;
+  // Object body, not a string — api() sets Content-Type only when it does the
+  // stringifying itself, and express.json() ignores a body without it.
+  try { j = await api('/api/retail-admin/order-fees', { method: 'POST', body }); }
+  catch { return; }                      // a failed quote leaves the typed numbers standing
+  if (mine !== _ONW_FEE_REQ || !ONW || !_ORD_NEW_OPEN) return;   // a newer quote owns the fields
+  const d = j.data || {};
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = String(v); };
+  // 🔴 An unmatched zone is NOT a quote of zero. The customer checkout refuses
+  // such an address outright; staff must still be able to take the order, so the
+  // fields keep whatever is in them and the caption says why.
+  if (!d.error) {
+    if (!ONW.feeTouched.ship) set('onw-ship', Number(d.shipping_fee || 0));
+    if (!ONW.feeTouched.pack) set('onw-pack', Number(d.packing_fee || 0));
+  }
+  ordNewPaintFeeNote(ft, d);
+  ordNewRecalc();
+}
+
+// One line under the two fields saying where the numbers came from — a fee that
+// appears with no explanation is a fee the operator can't defend to a customer.
+function ordNewPaintFeeNote(ft, d) {
+  const el = document.getElementById('onw-fee-note');
+  if (!el) return;
+  let txt;
+  if (d && d.error === 'no_zone_match') {
+    txt = cuT('No delivery zone matches this address — type both fees yourself, then set the zone up under Delivery.',
+              '没有匹配这个地址的配送区 — 请手动填写两项费用,并在“配送”中配置该区域。');
+  } else if (d && d.error) {
+    txt = cuT('Fees could not be worked out for this order — type them yourself.',
+              '无法自动计算本单费用 — 请手动填写。');
+  } else if (ft === 'pickup') {
+    txt = cuT('Packing fills in from the store-pickup fee; there is no delivery to charge. Edit either to override.',
+              '包装费按自提包装费填入,自提无运费。可直接修改。');
+  } else if (ft === 'counter') {
+    txt = cuT('A counter sale has nothing to ship or box. Edit either fee if this one does.',
+              '前台销售无需配送或打包。如有需要可自行填写。');
+  } else {
+    const zone = d && d.zone ? cuT(d.zone.name_en || d.zone.name_cn || '', d.zone.name_cn || d.zone.name_en || '') : '';
+    txt = zone
+      ? cuT(`Shipping and packing fill in from ${zone}; edit either to override.`,
+            `运费与包装费按「${zone}」配送区填入,可直接修改。`)
+      : cuT("Shipping and packing fill in from this order's delivery zone; edit either to override.",
+            '运费与包装费按本单配送区自动填入,可直接修改。');
+  }
+  el.textContent = txt;
 }
 
 // Dynamic regions bake one language — re-paint them when it changes.
@@ -8125,7 +8238,7 @@ const ONW_ERR_WHERE = {
   customer_not_found: 'cust', name_or_phone_required: 'cust', bad_email: 'cust',
   forbidden_capability: 'cust',
   no_items: 'prod', invalid_item: 'prod', product_unavailable: 'prod', bad_unit_price: 'prod',
-  bad_shipping_fee: 'money', bad_total: 'money',
+  bad_shipping_fee: 'money', bad_packing_fee: 'money', bad_total: 'money',
   bad_channel: 'route', bad_store_id: 'route', store_not_found: 'route',
   bad_fulfillment_type: 'route', fulfillment_type_required: 'route',
   address_required_for_delivery: 'addr',
@@ -8164,6 +8277,7 @@ function ordNewErrText(code, detail) {
     product_unavailable: cuT('One product is no longer on sale. Remove that line.', '有商品已下架,请移除该行。'),
     bad_unit_price: cuT('A line price is not a valid amount.', '某行单价金额不正确。'),
     bad_shipping_fee: cuT('Shipping is not a valid amount.', '运费金额不正确。'),
+    bad_packing_fee: cuT('Packing is not a valid amount.', '包装费金额不正确。'),
     bad_total: cuT('The total override is not a valid amount.', '自定义总额金额不正确。'),
     bad_channel: cuT('Pick a channel this order can be created on.', '请选择可下单的渠道。'),
     bad_store_id: cuT('Pick a store.', '请选择门店。'),
@@ -8191,6 +8305,7 @@ function ordNewCollect() {
     recipient_phone: ONW.cust === 'linked' ? (ONW.customer.phone || '') : val('onw-guest-phone'),
     items: ONW.lines.map(l => ({ product_id: l.product_id, qty: Number(l.qty), unit_price: Number(l.unit_price) })),
     shipping_fee: Number(val('onw-ship')) || 0,
+    packing_fee: Number(val('onw-pack')) || 0,
     status: val('onw-status') || 'pending_payment',
     payment_method: val('onw-pay') || 'offline',
     channel: val('onw-channel') || 'manual',
@@ -8254,6 +8369,10 @@ function ordNewRestore(draft) {
   set('onw-status', f.status);
   set('onw-pay', f.payment_method);
   set('onw-ship', f.shipping_fee != null ? String(f.shipping_fee) : '0');
+  set('onw-pack', f.packing_fee != null ? String(f.packing_fee) : '0');
+  // A draft's fees are what the operator decided last time, quote or override.
+  // Re-quoting over them would silently undo a waiver they saved on purpose.
+  ONW.feeTouched = { ship: true, pack: true };
   set('onw-override', f.total_override != null ? String(f.total_override) : '');
   set('onw-note-cust', f.customer_note || '');
   set('onw-note-staff', f.staff_note || '');
