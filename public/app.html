@@ -6288,9 +6288,10 @@ async function printRecipe(id) {
   window.REC = ${JSON.stringify(rec)};
   function fmtQty(n) {
     if (n == null || isNaN(n)) return '';
-    if (n >= 100) return Math.round(n).toString();
-    if (n >= 10)  return n.toFixed(1).replace(/\\.0$/, '');
-    return n.toFixed(2).replace(/\\.?0+$/, '');
+    // One decimal for every quantity, large or small, so the sheet rounds the
+    // same way everywhere. Below 0.05 keep two, or a scaled-down amount prints as 0.
+    if (n > 0 && n < 0.05) return n.toFixed(2);
+    return n.toFixed(1).replace(/\\.0$/, '');
   }
   function escHtml(s) {
     return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
