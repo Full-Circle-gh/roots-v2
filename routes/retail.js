@@ -19289,6 +19289,118 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   res.json({ success: true, data: row });
 });
 
+// CSV: the whole catalogue, one row per product, every field an operator can
+// edit — no pagination and no 500-row cap, so this is the "give me everything
+// in a spreadsheet" door. Registered ABOVE /:id on purpose: Express matches in
+// order and `export.csv` would otherwise be parsed as a product id.
+// BOM-prefixed UTF-8 so Excel renders the Chinese names correctly (same as the
+// activity export).
+router.get('/api/retail-admin/products/export.csv', requireRetailAdmin, (req, res) => {
+  try {
+    // Active (non-archived) rows only — archived products are deleted as far as
+    // the operator is concerned. Disabled/unpublished ones ARE included: they
+    // are still part of the catalogue and the grid counts them.
+    const rows = tdb().prepare(
+      `SELECT id, sku, barcode, name_en, name_cn, status, is_published,
+              top_category, subcategory, category, weight, sell_price, compare_at_price,
+              stock_qty, low_stock_threshold,
+              variant_group_id, variant_label, variant_label_cn, variant_sort,
+              variant_noun_en, variant_noun_cn,
+              tagline_en, tagline_cn, keywords_en, keywords_cn,
+              description_en, description_cn, description_format,
+              free_of, nutrition, product_facts, tags, notes,
+              ship_modes, ship_from_supplier, supplier_paused, is_batch_made, oos_policy,
+              is_market, is_restock_only, sort_order, image_url,
+              datetime(created_at,'+8 hours') AS created_local,
+              datetime(updated_at,'+8 hours') AS updated_local
+         FROM store_products
+        WHERE COALESCE(is_active, 1) = 1
+        ORDER BY is_published DESC, sort_order ASC, name_en ASC`
+    ).all();
+    // Per-store stock gets one column per open store (Tianhe, Yuexiu, …), which
+    // is what the grid shows. Pulled in ONE query keyed by store, not a
+    // correlated subquery per product per store.
+    const stores = tdb().prepare(
+      `SELECT id, COALESCE(NULLIF(TRIM(name_en),''), NULLIF(TRIM(name_cn),''), code) AS label
+         FROM retail_stores WHERE is_active = 1 ORDER BY sort_order ASC, id ASC`
+    ).all();
+    const stockRows = tdb().prepare(
+      `SELECT product_id, store_id, physical_qty FROM retail_store_stock`
+    ).all();
+    const stockBy = new Map();                       // `${product_id}:${store_id}` → qty
+    for (const s of stockRows) stockBy.set(`${s.product_id}:${s.store_id}`, s.physical_qty);
+
+    // Flatten the two JSON columns into something a spreadsheet can read:
+    // "Protein: 5g; Fat: 2g" rather than a wall of JSON.
+    const flatNutrition = v => {
+      let n = null;
+      try { n = typeof v === 'string' && v.trim() ? JSON.parse(v) : null; } catch { n = null; }
+      if (!n) return '';
+      const basis = n.basis_en || n.basis_cn || '';
+      const pairs = (n.rows || [])
+        .map(r => `${r.label_en || r.label_cn || ''}: ${r.value == null ? '' : r.value}`.trim())
+        .filter(s => s !== ':');
+      return [basis, pairs.join('; ')].filter(Boolean).join(' — ');
+    };
+    const flatFacts = v => {
+      const o = parseFactsCol(v);
+      return o ? Object.entries(o).map(([k, val]) => `${k}: ${val}`).join('; ') : '';
+    };
+    const yn = v => (Number(v) ? 'Yes' : 'No');
+
+    const head = [
+      'ID', 'SKU', 'Barcode', 'Name (EN)', 'Name (CN)', 'Status', 'In shop',
+      'Top category', 'Subcategory', 'Legacy category',
+      'Weight / size', 'Price', 'Compare-at price',
+      'Stock (all stores)', ...stores.map(s => `Stock — ${s.label}`),
+      'Fallback stock_qty', 'Low-stock threshold',
+      'Variant group', 'Variant (EN)', 'Variant (CN)', 'Variant order',
+      'Variant axis (EN)', 'Variant axis (CN)',
+      'Tagline (EN)', 'Tagline (CN)', 'Keywords (EN)', 'Keywords (CN)',
+      'Description (EN)', 'Description (CN)', 'Description format',
+      'Free of', 'Nutrition', 'Product facts', 'Badge', 'Notes',
+      'Ship modes', 'Ships from supplier', 'Supplier paused', 'Batch made', 'Out-of-stock policy',
+      'At markets', 'Restock only', 'Sort order', 'Image URL',
+      'Created (UTC+8)', 'Updated (UTC+8)',
+    ];
+    const cell = v => { const s = v == null ? '' : String(v); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+    const lines = [head.join(',')];
+    for (const r of rows) {
+      const perStore = stores.map(s => {
+        const q = stockBy.get(`${r.id}:${s.id}`);
+        return q == null ? '' : q;
+      });
+      // Total = the sum of the per-store shelves, falling back to the legacy
+      // stock_qty only when the product has no per-store rows at all — the same
+      // rule the grid's stock column and the shop use.
+      const counted = perStore.filter(q => q !== '');
+      const total = counted.length ? counted.reduce((a, b) => a + Number(b), 0) : r.stock_qty;
+      lines.push([
+        r.id, r.sku, r.barcode, r.name_en, r.name_cn, r.status, yn(r.is_published),
+        r.top_category, r.subcategory, r.category,
+        r.weight, r.sell_price, r.compare_at_price,
+        total, ...perStore,
+        r.stock_qty, r.low_stock_threshold,
+        r.variant_group_id, r.variant_label, r.variant_label_cn, r.variant_sort,
+        r.variant_noun_en, r.variant_noun_cn,
+        r.tagline_en, r.tagline_cn, r.keywords_en, r.keywords_cn,
+        r.description_en, r.description_cn, r.description_format,
+        r.free_of, flatNutrition(r.nutrition), flatFacts(r.product_facts), r.tags, r.notes,
+        r.ship_modes, yn(r.ship_from_supplier), yn(r.supplier_paused), yn(r.is_batch_made), r.oos_policy,
+        yn(r.is_market), yn(r.is_restock_only), r.sort_order, r.image_url,
+        r.created_local, r.updated_local,
+      ].map(cell).join(','));
+    }
+    const day = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="products_${day}.csv"`);
+    res.send('﻿' + lines.join('\r\n'));
+  } catch (e) {
+    console.error('[products csv]', e);
+    res.status(500).json({ success: false, error: 'products_csv_failed', message: e.message });
+  }
+});
+
 // GET /api/retail-admin/products/:id — FULL single product, including the
 // heavy description_blocks JSON the LIST endpoint deliberately omits. The
 // product-page editor MUST hydrate from this (not the list): the list only

@@ -1243,6 +1243,14 @@ function pvToggle() { const pop = document.getElementById('pv-pop'); if (!pop) r
 function pvClose() { const pop = document.getElementById('pv-pop'); if (pop) pop.hidden = true; document.removeEventListener('mousedown', pvOutside); }
 function pvOutside(e) { if (!(e.target.closest && e.target.closest('.ovp-wrap'))) pvClose(); }
 
+// Export the WHOLE catalogue as a spreadsheet — deliberately not the filtered
+// view. The button sits next to a search box, so "download" scoped to whatever
+// was typed would quietly hand over a partial file; the operator asking for a
+// product export wants every product. Filtering happens in Excel afterwards.
+function paExportCsv() {
+  window.location.href = '/api/retail-admin/products/export.csv';
+}
+
 // Catalogue-health KPIs (shared fc-* strip). Computed from the full in-memory
 // catalogue, so they're catalogue-wide (independent of the search/filter that
 // narrows the grid below). `animate` count-ups only on a fresh load — plain
