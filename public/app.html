@@ -23462,6 +23462,7 @@ async function renderAlerts() {
   data.expired      = (data.expired      || []).filter(e => { const k=`exp:${e.id}`;          allLiveKeys.add(k); return true; });
   data.expiringSoon = (data.expiringSoon || []).filter(e => { const k=`expsoon:${e.id}`;      allLiveKeys.add(k); return true; });
   data.staleKitchen = (data.staleKitchen || []).filter(k => { const ky=`kit:${k.id}`;         allLiveKeys.add(ky);return true; });
+  data.costSkips    = (data.costSkips    || []).filter(s => { const k=`costskip:${s.id}`;     allLiveKeys.add(k); return true; });
   // Cleanup: drop any dismissed key that no longer exists
   let cleaned = false;
   for (const k of [..._alertDismissed]) if (!allLiveKeys.has(k)) { _alertDismissed.delete(k); cleaned = true; }
@@ -23475,6 +23476,7 @@ async function renderAlerts() {
   data.expired      = filt(data.expired,      e => `exp:${e.id}`);
   data.expiringSoon = filt(data.expiringSoon, e => `expsoon:${e.id}`);
   data.staleKitchen = filt(data.staleKitchen, k => `kit:${k.id}`);
+  data.costSkips    = filt(data.costSkips,    s => `costskip:${s.id}`);
 
   // Recompute counts after filter
   const c = {
@@ -23484,8 +23486,9 @@ async function renderAlerts() {
     expired:     data.expired.length,
     expiringSoon:data.expiringSoon.length,
     staleKitchen:data.staleKitchen.length,
+    costSkips:   data.costSkips.length,
   };
-  c.total = c.priceAlerts + c.outOfStock + c.lowStock + c.expired + c.expiringSoon + c.staleKitchen;
+  c.total = c.priceAlerts + c.outOfStock + c.lowStock + c.expired + c.expiringSoon + c.staleKitchen + c.costSkips;
   const total = c.total;
   const dismissedCount = _alertDismissed.size;
 
@@ -23512,6 +23515,7 @@ async function renderAlerts() {
       ${_alertCategoryTile('⏰', 'Expiring ≤7d', '即将过期', c.expiringSoon, '#b85c00', '#fef3c7', 'expiringSoon')}
       ${_alertCategoryTile('🛒', 'Stale Kitchen Orders', '滞留厨房订单', c.staleKitchen, '#3730a3', '#e0e7ff', 'staleKitchen')}
       ${_alertCategoryTile('📈', 'Price Changes', '价格预警', c.priceAlerts, '#9d174d', '#fce7f3', 'priceAlerts')}
+      ${_alertCategoryTile('🧮', 'Cost Not Updated', '成本未更新', c.costSkips, '#0f766e', '#ccfbf1', 'costSkips')}
     </div>
 
     ${total === 0 ? `
@@ -23527,6 +23531,7 @@ async function renderAlerts() {
       ${c.expiringSoon > 0 ? _alertSection('⏰ Expiring within 7 days · 即将过期', '#b85c00', _alertExpiryRows(data.expiringSoon, false), 'expiringSoon') : ''}
       ${c.staleKitchen > 0 ? _alertSection('🛒 Stale Kitchen Orders (>3 days) · 滞留', '#3730a3', _alertKitchenRows(data.staleKitchen), 'staleKitchen') : ''}
       ${c.priceAlerts  > 0 ? _alertSection('📈 Price Changes · 价格变动', '#9d174d', _renderAlertCards(data.price), 'priceAlerts') : ''}
+      ${c.costSkips    > 0 ? _alertSection('🧮 Cost Not Updated · 成本未更新', '#0f766e', _alertCostSkipRows(data.costSkips), 'costSkips') : ''}
     `}
   `;
 }
@@ -23632,6 +23637,51 @@ function _alertKitchenRows(rows) {
       <td>${esc(r.created_by_name||'—')}</td>
       <td style="text-align:right">${r.line_count}</td>
       <td style="text-align:right;font-weight:700;color:#3730a3">${days} days ago · ${days}天前</td>
+      <td style="text-align:right"><span style="font-size:11px;color:var(--muted)">→</span></td>
+    </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+// Cost write-backs purchasing refused. Each row says which item kept its old
+// cost, what the order said, and what has to change before the price can flow
+// again — clicking opens the item form, which is where the fix lives.
+function _alertCostSkipRows(rows) {
+  const REASON = {
+    no_pack_contents:        { en: 'Pack contents not filled in',     cn: '未填写每包含量' },
+    unit_mismatch:           { en: 'Order unit ≠ item buy unit',      cn: '采购单位与物料单位不一致' },
+    unsupported_recipe_unit: { en: 'Recipe unit is not g / ml / pcs', cn: '配方单位不是 克/毫升/件' },
+    no_pack_size:            { en: 'Pack size missing',               cn: '缺少包装数量' },
+    no_price:                { en: 'No price on the order line',      cn: '采购行没有价格' },
+  };
+  return `<table class="data-table" style="margin:0">
+    <thead><tr>
+      <th>SKU</th>
+      <th>Item · 物料</th>
+      <th>Why · 原因</th>
+      <th>PO</th>
+      <th style="text-align:right">Order price · 采购价</th>
+      <th style="text-align:right">Cost kept · 保留成本</th>
+      <th></th>
+    </tr></thead>
+    <tbody>${rows.map(r => {
+      const why = REASON[r.reason] || { en: r.reason, cn: '' };
+      const units = r.reason === 'unit_mismatch'
+        ? `<div style="font-size:11px;color:var(--muted)">order ${esc(r.line_unit||'—')} · item ${esc(r.buy_unit||'—')}</div>` : '';
+      return `<tr style="cursor:pointer" onclick="navigate('ingredients');setTimeout(()=>showIngForm(${r.ingredient_id}),200)">
+      <td style="font-family:monospace;font-size:11px">${esc(r.ingredient_sku||'—')}</td>
+      <td>
+        <div style="font-weight:600">${esc(r.ingredient_name||'—')}</div>
+        ${r.ingredient_name_cn?`<span style="display:block;font-size:11px;color:var(--muted)">${esc(r.ingredient_name_cn)}</span>`:''}
+      </td>
+      <td>
+        <div style="font-weight:600;color:#0f766e">${why.en}</div>
+        <div style="font-size:11px;color:var(--muted)">${why.cn}</div>
+        ${units}
+      </td>
+      <td style="font-family:monospace;font-size:11px">${esc(r.po_number||'—')}</td>
+      <td style="text-align:right">${r.line_price!=null?'¥'+parseFloat(r.line_price).toFixed(2):'—'}${r.line_unit?`<span style="font-size:11px;color:var(--muted)"> / ${esc(r.line_unit)}</span>`:''}</td>
+      <td style="text-align:right">${r.cost_per_unit!=null?'¥'+parseFloat(r.cost_per_unit).toFixed(4):'—'}${r.recipe_unit?`<span style="font-size:11px;color:var(--muted)"> / ${esc(r.recipe_unit)}</span>`:''}</td>
       <td style="text-align:right"><span style="font-size:11px;color:var(--muted)">→</span></td>
     </tr>`;
     }).join('')}</tbody>
@@ -26519,6 +26569,7 @@ async function _clearAllAlerts() {
       (d.data.expired      || []).forEach(e => _alertDismissed.add(`exp:${e.id}`));
       (d.data.expiringSoon || []).forEach(e => _alertDismissed.add(`expsoon:${e.id}`));
       (d.data.staleKitchen || []).forEach(k => _alertDismissed.add(`kit:${k.id}`));
+      (d.data.costSkips    || []).forEach(s => _alertDismissed.add(`costskip:${s.id}`));
       _alertDismissedSave();
     }
   } catch {}
@@ -26629,6 +26680,22 @@ async function _alertPushPollInner() {
       title: `Price change · 价格变动${pct}`,
       body: `${a.ingredient_name || 'Ingredient'} — ¥${Number(a.old_price||0).toFixed(2)} → ¥${Number(a.new_price||0).toFixed(2)}`,
       onClick: () => navigate('alerts'),
+    })});
+  }
+  for (const s of (data.costSkips || [])) {
+    const k = `costskip:${s.id}`;
+    keysNow.add(k);
+    items.push({ key: k, fire: () => notifyToast({
+      icon: '🧮', color: '#0f766e',
+      title: 'Cost not updated · 成本未更新',
+      body: `${s.ingredient_name || 'Item'} — ${s.ingredient_sku ? '['+s.ingredient_sku+'] ' : ''}${({
+        unit_mismatch:           'order unit ≠ item buy unit',
+        no_pack_contents:        'pack contents not filled in',
+        unsupported_recipe_unit: 'recipe unit is not g / ml / pcs',
+        no_pack_size:            'pack size missing',
+        no_price:                'no price on the order line',
+      })[s.reason] || s.reason}`,
+      onClick: () => { navigate('ingredients'); setTimeout(() => showIngForm(s.ingredient_id), 250); },
     })});
   }
   for (const p of (data.outOfStock || [])) {

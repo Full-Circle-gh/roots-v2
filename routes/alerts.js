@@ -24,6 +24,18 @@ const ALERT_COLS = `
   ) AS affected_recipes
 `;
 
+// Cost write-backs the purchasing route refused (routes/purchases.js
+// firePriceAlertsForPO). One item can be skipped on many POs for the same
+// reason, which would bury the page in duplicates, so only the newest row per
+// (ingredient, reason) inside the window is shown. The window and the dedup
+// live here as one string so the badge count and the feed cannot disagree.
+const COST_SKIP_WINDOW = "s.created_at >= datetime('now','-30 days')";
+const COST_SKIP_LATEST = `s.id IN (
+  SELECT MAX(id) FROM ingredient_cost_skips
+   WHERE created_at >= datetime('now','-30 days')
+   GROUP BY ingredient_id, reason
+)`;
+
 // GET list (optional ?unread=1)
 router.get('/api/alerts', requireAuth, requirePermission('alerts'), (req, res) => {
   let q = `SELECT ${ALERT_COLS} FROM price_alerts a
@@ -57,8 +69,10 @@ function computeAlertCounts() {
     WHERE pli.expiry_date IS NOT NULL AND pli.expiry_date >= date('now') AND pli.expiry_date <= date('now','+7 days') AND po.status IN ('Delivered','Confirmed')`).get().c;
   const staleKitchen = db.prepare(`SELECT COUNT(*) AS c FROM purchase_orders
     WHERE source = 'kitchenOrder' AND status = 'Requested' AND created_at < datetime('now','-3 days')`).get().c;
-  const total = priceAlerts + outOfStock + lowStock + expired + expiringSoon + staleKitchen;
-  return { priceAlerts, outOfStock, lowStock, expired, expiringSoon, staleKitchen, total };
+  const costSkips = db.prepare(`SELECT COUNT(*) AS c FROM ingredient_cost_skips s
+    WHERE ${COST_SKIP_WINDOW} AND ${COST_SKIP_LATEST}`).get().c;
+  const total = priceAlerts + outOfStock + lowStock + expired + expiringSoon + staleKitchen + costSkips;
+  return { priceAlerts, outOfStock, lowStock, expired, expiringSoon, staleKitchen, costSkips, total };
 }
 
 // GET combined alerts feed — categorized live data. The Alerts page
@@ -108,7 +122,21 @@ router.get('/api/alerts/feed', requireAuth, requirePermission('alerts'), (req, r
       AND po.created_at < datetime('now','-3 days')
     ORDER BY po.created_at ASC LIMIT 100`).all();
 
-  res.json({ success: true, data: { counts, price, outOfStock, lowStock, expired, expiringSoon, staleKitchen } });
+  // Cost write-backs that were refused — the item kept its old cost_per_unit
+  // and needs a human to fill in what a pack holds, or to fix the PO line's
+  // unit, before purchasing can price it again.
+  const costSkips = db.prepare(`
+    SELECT s.id, s.ingredient_id, s.po_id, s.reason, s.line_unit, s.line_price, s.created_at,
+           i.name_en AS ingredient_name, i.name_cn AS ingredient_name_cn, i.sku AS ingredient_sku,
+           i.unit AS recipe_unit, i.buy_unit, i.cost_per_unit,
+           po.po_number
+      FROM ingredient_cost_skips s
+      LEFT JOIN ingredients i      ON i.id  = s.ingredient_id
+      LEFT JOIN purchase_orders po ON po.id = s.po_id
+     WHERE ${COST_SKIP_WINDOW} AND ${COST_SKIP_LATEST}
+     ORDER BY s.created_at DESC LIMIT 100`).all();
+
+  res.json({ success: true, data: { counts, price, outOfStock, lowStock, expired, expiringSoon, staleKitchen, costSkips } });
 });
 
 // PUT mark single as read

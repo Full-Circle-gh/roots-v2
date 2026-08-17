@@ -102,9 +102,15 @@ function _firePOPush(poId, kind) {
 function firePriceAlertsForPO(poId, source) {
   const items = db.prepare('SELECT ingredient_id, unit, cost_per_unit FROM po_line_items WHERE po_id = ?').all(poId);
   const skips = [];
-  const skip = (ing, reason) => {
+  const insSkip = db.prepare(`INSERT INTO ingredient_cost_skips
+    (ingredient_id, po_id, reason, line_unit, line_price) VALUES (?,?,?,?,?)`);
+  const skip = (ing, item, reason) => {
     skips.push({ ingredient_id: ing.id, sku: ing.sku || null, name_en: ing.name_en || '', name_cn: ing.name_cn || null, reason });
     console.warn(`[price write-back] skipped ${ing.sku || 'id ' + ing.id} ${ing.name_en || ''} — ${reason}`);
+    // Recorded so the refusal reaches the Alerts page. A skip that only ever
+    // reached the server log would leave the item's cost stale in silence.
+    try { insSkip.run(ing.id, poId, reason, item.unit || null, item.cost_per_unit); }
+    catch (e) { console.warn('[price write-back] could not record skip:', e.message); }
   };
   for (const item of items) {
     if (!item.ingredient_id || !item.cost_per_unit) continue;
@@ -118,10 +124,10 @@ function firePriceAlertsForPO(poId, source) {
 
     const lineUnit = String(item.unit || '').trim().toLowerCase();
     const itemUnit = String(ing.buy_unit || '').trim().toLowerCase();
-    if (lineUnit !== itemUnit) { skip(ing, 'unit_mismatch'); continue; }
+    if (lineUnit !== itemUnit) { skip(ing, item, 'unit_mismatch'); continue; }
 
     const { cpu, reason } = deriveCostPerUnit(ing, item.cost_per_unit);
-    if (cpu === null) { skip(ing, reason); continue; }
+    if (cpu === null) { skip(ing, item, reason); continue; }
 
     db.prepare('UPDATE ingredients SET buy_price=?,cost_per_unit=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(item.cost_per_unit, cpu, item.ingredient_id);
     if (ing.buy_price > 0 && item.cost_per_unit !== ing.buy_price) {

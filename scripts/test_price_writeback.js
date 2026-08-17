@@ -31,6 +31,18 @@ try { fs.unlinkSync(dbFile); } catch {}
 const fixture = new Database(dbFile);
 fixture.exec(fs.readFileSync(path.join(ROOT, 'schema.sql'), 'utf8'));
 
+// schema.sql is only half the story — database.js adds later columns by
+// ALTER TABLE at boot, and the alerts feed reads some of them. Mirror just
+// those five (database.js:29, 35, 36, 59, 69) so the fixture matches a real
+// database. Anything else missing will show up as a loud SqliteError.
+for (const sql of [
+  "ALTER TABLE purchase_orders ADD COLUMN source TEXT DEFAULT 'manual'",
+  'ALTER TABLE po_line_items ADD COLUMN lot_number TEXT',
+  'ALTER TABLE po_line_items ADD COLUMN expiry_date DATE',
+  'ALTER TABLE products ADD COLUMN is_active INTEGER DEFAULT 1',
+  'ALTER TABLE products ADD COLUMN stock_qty INTEGER DEFAULT 0',
+]) { try { fixture.exec(sql); } catch {} }
+
 // Prime the module cache so `require('../database')` inside the route hands
 // back the fixture. Must happen BEFORE routes/purchases.js is required.
 const dbModulePath = require.resolve(path.join(ROOT, 'database.js'));
@@ -119,8 +131,47 @@ for (const h of fixture.prepare('SELECT ingredient_id,price,buy_unit,source FROM
   console.log(`  ingredient ${h.ingredient_id}  ¥${h.price} / ${h.buy_unit}  (${h.source})`);
 }
 
-fixture.close();
-try { fs.unlinkSync(dbFile); } catch {}
+console.log('\n── Skip rows recorded in ingredient_cost_skips ──────────────────');
+const skipRows = fixture.prepare('SELECT id,ingredient_id,po_id,reason,line_unit,line_price FROM ingredient_cost_skips ORDER BY id').all();
+for (const s of skipRows) console.log(`  id=${s.id} ingredient=${s.ingredient_id} po=${s.po_id} ${s.reason} (line ¥${s.line_price} / ${s.line_unit})`);
+check('skip rows stored', skipRows.length, 2);
 
-console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : failures + ' CHECK(S) FAILED'}\n`);
-process.exit(failures === 0 ? 0 : 1);
+// ── Does a skip actually reach the Alerts feed? ─────────────────────────────
+// Mount routes/alerts.js on a throwaway express app with auth stubbed out and
+// call the real endpoint over HTTP. Requires the stub to land in the module
+// cache AFTER routes/purchases.js loaded the real middleware and BEFORE
+// routes/alerts.js is required.
+(async () => {
+  const authPath = require.resolve(path.join(ROOT, 'middleware', 'auth.js'));
+  require.cache[authPath] = {
+    id: authPath, filename: authPath, path: path.dirname(authPath), loaded: true, children: [], paths: [],
+    exports: {
+      requireAuth: (req, _res, next) => { req.user = { id: 1, username: 'test', role: 'admin' }; req.permissions = { alerts: 1 }; next(); },
+      requirePermission: () => (_req, _res, next) => next(),
+      requireDelete: (_req, _res, next) => next(),
+      logActivity: () => {},
+    },
+  };
+  const express = require('express');
+  const app = express();
+  app.use(require(path.join(ROOT, 'routes', 'alerts.js')));
+  const server = app.listen(0);
+  const port = server.address().port;
+
+  const feed = await (await fetch(`http://127.0.0.1:${port}/api/alerts/feed`)).json();
+  const badge = await (await fetch(`http://127.0.0.1:${port}/api/alerts/unread-count`)).json();
+
+  console.log('\n── GET /api/alerts/feed → costSkips section ─────────────────────');
+  for (const s of (feed.data.costSkips || [])) {
+    console.log(`  ${s.ingredient_sku} ${s.ingredient_name} — ${s.reason}  (PO ${s.po_number}, line ¥${s.line_price}/${s.line_unit}, cost kept ${s.cost_per_unit}/${s.recipe_unit})`);
+  }
+  check('feed returns both skips',      (feed.data.costSkips || []).length, 2);
+  check('feed count agrees',            feed.data.counts.costSkips,        2);
+  check('badge count includes skips',   badge.breakdown.costSkips,         2);
+
+  server.close();
+  fixture.close();
+  try { fs.unlinkSync(dbFile); } catch {}
+  console.log(`\n${failures === 0 ? 'ALL CHECKS PASSED' : failures + ' CHECK(S) FAILED'}\n`);
+  process.exit(failures === 0 ? 0 : 1);
+})();
