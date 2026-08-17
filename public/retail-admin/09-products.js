@@ -3246,10 +3246,18 @@ function optRender() {
     `<span class="pd-var-head" style="margin:0">${cuT('Options (customer chooses)', '选项(顾客选择)')}</span>` +
     `<span class="pd-var-summary">${summary}</span></button>`;
   if (!OPT_OPEN) { box.innerHTML = toggle; return; }
+  // 'text' is NOT offered — neither storefront can render a free-text answer
+  // (the mini-app sheet and the web sheet both loop over choices only), so a
+  // text option collects nothing, and a REQUIRED one can never be satisfied,
+  // which blocks add-to-cart entirely. It stays in the list, disabled, only
+  // when the row is already type=text, so an existing option keeps its true
+  // label instead of silently reading as "Pick one" — and can be moved off
+  // text, but never back onto it.
   const typeSel = (oi, t) => {
-    const opt = (v, lbl) => `<option value="${v}"${t === v ? ' selected' : ''}>${lbl}</option>`;
+    const opt = (v, lbl, dis) => `<option value="${v}"${t === v ? ' selected' : ''}${dis ? ' disabled' : ''}>${lbl}</option>`;
     return `<select class="opt-type" onchange="optType(${oi}, this.value)" title="${cuT('How the customer answers', '顾客如何选择')}">` +
-      opt('single', cuT('Pick one', '单选')) + opt('multi', cuT('Pick any', '多选')) + opt('text', cuT('Type an answer', '填写')) + `</select>`;
+      opt('single', cuT('Pick one', '单选')) + opt('multi', cuT('Pick any', '多选')) +
+      (t === 'text' ? opt('text', cuT('Type an answer (unsupported)', '填写(暂不支持)'), true) : '') + `</select>`;
   };
   const blocks = OPT.map((o, oi) => {
     const choices = o.type === 'text' ? '' : (o.choices.length

@@ -1302,7 +1302,20 @@ async function saveProductOptions(productId, input) {
       }))
       .filter(c => c.label_en || c.label_cn);
     return { question_en, question_cn, type, is_required: o && o.is_required ? 1 : 0, choices };
-  }).filter(o => (o.question_en || o.question_cn) && (o.type === 'text' || o.choices.length));
+  })
+    // The `o.type === 'text'` arm keeps a choice-less text option from being
+    // dropped on save — but it is NOT an endorsement. 'text' is half-built and
+    // UNSUPPORTED on both clients: neither renders an input for it (the mini-app
+    // sheet loops over opt.choices, product.wxml:332-345; the web sheet does the
+    // same, shop.html buildSheet), and selection state is choice-id keyed, so
+    // _selIds (product.js:844-847) can only ever return [] for a text option.
+    // Consequences: a non-required text option silently collects nothing, and a
+    // REQUIRED one can never be satisfied — add-to-cart toasts forever and the
+    // product is unbuyable on both storefronts. The admin no longer offers the
+    // type (09-products.js typeSel); this arm exists purely so any row already
+    // in the DB survives an unrelated save instead of being silently deleted.
+    // Build the input on both clients before offering it again.
+    .filter(o => (o.question_en || o.question_cn) && (o.type === 'text' || o.choices.length));
 
   // Replace-all, so the DELETEs and the re-INSERTs must be one unit: a failure
   // between them would leave the product with NO options at all. Every statement
