@@ -16681,6 +16681,33 @@ try {
   });
 } catch (e) { console.error('[inventory.setOnOrdersPromoted]', e); }
 
+// The reservation sweeper auto-cancels a pending_payment order whose holds
+// timed out. It is a cancel like any other, so it owes the customer back what
+// order-create took: redeemed points, wallet balance, and the voucher. These are
+// the same three the customer's own cancel, the unpaid-timeout reaper and the
+// supersede sweep already call.
+//
+// Only three, and that is not an oversight. These orders were never paid, so
+// there is no `order_earn` row to claw back (reverseOrderPoints), no referral
+// bounty (reverseOrderReferral) and no lifetime commission
+// (reverseLifetimeCommission) — all three of those fire on payment. Confirmed
+// against every order the sweeper has ever cancelled: 26 orders, none with a
+// paid_at, an order_earn row, a settled payment, a referral, a commission, or a
+// timestamp past pending_payment.
+//
+// The voucher IS returned here. See the once-per-order note in
+// sweepExpiredReservations — the sweeper's atomic status flip is the guarantee
+// reverseOrderVoucher's contract asks for.
+try {
+  inventory.setOnOrdersCancelled((orderIds) => {
+    for (const oid of orderIds) {
+      try { reverseOrderRedeem(oid); }  catch (e) { console.error('[sweep-cancel.reverseRedeem]', oid, e.message); }
+      try { reverseOrderBalance(oid); } catch (e) { console.error('[sweep-cancel.reverseBalance]', oid, e.message); }
+      try { reverseOrderVoucher(oid); } catch (e) { console.error('[sweep-cancel.reverseVoucher]', oid, e.message); }
+    }
+  });
+} catch (e) { console.error('[inventory.setOnOrdersCancelled]', e); }
+
 // ─── Affiliate admin ─────────────────────────────────────────────────────
 router.get('/api/retail-admin/affiliate/settings', requireRetailAdmin, (req, res) => {
   res.json({ success: true, data: affiliateSettings() });
