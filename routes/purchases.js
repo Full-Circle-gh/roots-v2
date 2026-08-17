@@ -5,6 +5,9 @@ const express = require('express');
 const { seam } = require('../lib/db-seam');
 const db = seam(require('../database'));
 const { requireAuth, requirePermission, requireDelete, logActivity } = require('../middleware/auth');
+// The one cost-per-recipe-unit derivation — shared so purchasing cannot drift
+// from what the ingredient form computes. See lib/ingredient-cost.js.
+const { deriveCostPerUnit } = require('../lib/ingredient-cost');
 const router = express.Router();
 
 // Web Push helpers — fan-out to subscribed devices when a PO event
@@ -71,17 +74,56 @@ function _firePOPush(poId, kind) {
 // `source` is 'po_ordered' or 'po_delivery' for the price-history row.
 // Price alerts (≥5% delta vs current buy_price) are inserted into price_alerts
 // — the front-end push poller picks them up and surfaces a toast.
+//
+// LAST ORDER WINS. The most recent PO price becomes the item's cost, however
+// high. No confirmation, no outlier check — that is the decision, not an
+// oversight.
+//
+// The divisor comes from the INGREDIENT row via lib/ingredient-cost.js, never
+// from the PO line's unit. The old code looked `item.unit` up in a local
+// unit→grams table that held no container units, so a bag / bottle / pcs line
+// fell through to `|| 1` and stored the PACK price as the per-gram cost — a
+// ¥15.80 500 g bag of sesame seeds became ¥15.80/g, 500× too high, and every
+// recipe using it costed 500× too high with it.
+//
+// Two guards make the function write NOTHING rather than write something wrong:
+//   * unit mismatch — the line's unit must equal the item's buy_unit. buy_price
+//     is a price per package; a price recorded against some other unit cannot
+//     be compared to it or divided by this item's pack size.
+//   * no derivable divisor — a container item with no recorded contents, or a
+//     recipe unit outside g / ml / pcs. Dividing by 1 or storing 0 would both
+//     destroy a good cost.
+// Skips are returned to the caller and logged; surfacing them in the Alerts
+// feed is a separate change.
+//
+// buy_unit is NOT written any more. It is a property of the item as the
+// supplier sells it, and overwriting it from a PO line silently re-based every
+// future division.
 function firePriceAlertsForPO(poId, source) {
   const items = db.prepare('SELECT ingredient_id, unit, cost_per_unit FROM po_line_items WHERE po_id = ?').all(poId);
-  const unitToG = {g:1,kg:1000,ml:1,l:1000,liter:1000,oz:28.35,lb:453.6};
+  const skips = [];
+  const skip = (ing, reason) => {
+    skips.push({ ingredient_id: ing.id, sku: ing.sku || null, name_en: ing.name_en || '', name_cn: ing.name_cn || null, reason });
+    console.warn(`[price write-back] skipped ${ing.sku || 'id ' + ing.id} ${ing.name_en || ''} — ${reason}`);
+  };
   for (const item of items) {
     if (!item.ingredient_id || !item.cost_per_unit) continue;
     const ing = db.prepare('SELECT * FROM ingredients WHERE id = ?').get(item.ingredient_id);
     if (!ing) continue;
-    const packSize = unitToG[(item.unit||'kg').toLowerCase()] || 1;
-    const newCpu = item.cost_per_unit / packSize;
-    db.prepare('UPDATE ingredients SET buy_price=?,cost_per_unit=?,buy_unit=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(item.cost_per_unit, newCpu, item.unit, item.ingredient_id);
+
+    // Price history is append-only and carries its own buy_unit column, so it
+    // stays honest even for lines we refuse to write back. Recorded first, and
+    // for every priced line, exactly as before.
     db.prepare('INSERT INTO ingredient_price_history (ingredient_id,price,buy_unit,source) VALUES (?,?,?,?)').run(item.ingredient_id, item.cost_per_unit, item.unit, source);
+
+    const lineUnit = String(item.unit || '').trim().toLowerCase();
+    const itemUnit = String(ing.buy_unit || '').trim().toLowerCase();
+    if (lineUnit !== itemUnit) { skip(ing, 'unit_mismatch'); continue; }
+
+    const { cpu, reason } = deriveCostPerUnit(ing, item.cost_per_unit);
+    if (cpu === null) { skip(ing, reason); continue; }
+
+    db.prepare('UPDATE ingredients SET buy_price=?,cost_per_unit=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(item.cost_per_unit, cpu, item.ingredient_id);
     if (ing.buy_price > 0 && item.cost_per_unit !== ing.buy_price) {
       const changePct = ((item.cost_per_unit - ing.buy_price) / ing.buy_price) * 100;
       if (Math.abs(changePct) >= 5) {
@@ -89,6 +131,7 @@ function firePriceAlertsForPO(poId, source) {
       }
     }
   }
+  return { skips };
 }
 
 // ── Auto-post PO line items into expense_entries by category ────────────────
@@ -770,4 +813,8 @@ setTimeout(backfillOrderedExpenses, 2000);
 
 module.exports = router;
 module.exports.postPOExpenses = postPOExpenses;
+// Exported for scripts/test_price_writeback.js — the price write-back is money
+// maths and needs to be exercisable against a fixture DB, not only through a
+// live PO status flip.
+module.exports.firePriceAlertsForPO = firePriceAlertsForPO;
 module.exports.backfillOrderedExpenses = backfillOrderedExpenses;
