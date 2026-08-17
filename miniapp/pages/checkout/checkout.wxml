@@ -373,6 +373,13 @@
             <view class="opt-check"><view class="opt-check-dot"></view></view>
           </view>
         </picker>
+        <!-- No bookable window at all (no Express, no Today chip, no calendar).
+             The row used to just vanish, leaving a blank space with nothing to
+             read; say what happened instead. -->
+        <view wx:if="{{!expressLabel && !hasTodayOption && !(scheduleMinDate && scheduleMaxDate && scheduleMinDate <= scheduleMaxDate)}}" class="slot-none">
+          <view class="slot-none__title f-bear">{{lang === 'cn' ? '暂无可选配送日期' : 'No delivery dates available'}}</view>
+          <view class="slot-none__sub">{{lang === 'cn' ? '此地址目前没有可安排的配送日期。请稍后再试或联系我们。' : 'We can’t schedule a delivery to this address right now. Please try again later or contact us.'}}</view>
+        </view>
       </block>
 
       <!-- Time-slot mode: today's 2-hour windows as chips + schedule-for-later picker -->
@@ -414,6 +421,12 @@
             <view class="opt-check"><view class="opt-check-dot"></view></view>
           </view>
         </picker>
+        <!-- Neither today/tomorrow chips nor a calendar window — nothing to pick.
+             Same copy as the day-only branch above. -->
+        <view wx:if="{{!(scheduling.today_slots && scheduling.today_slots.length) && !(scheduleMinDate && scheduleMaxDate && scheduleMinDate <= scheduleMaxDate)}}" class="slot-none">
+          <view class="slot-none__title f-bear">{{lang === 'cn' ? '暂无可选配送日期' : 'No delivery dates available'}}</view>
+          <view class="slot-none__sub">{{lang === 'cn' ? '此地址目前没有可安排的配送日期。请稍后再试或联系我们。' : 'We can’t schedule a delivery to this address right now. Please try again later or contact us.'}}</view>
+        </view>
 
         <!-- Hour windows for the scheduled-for-later day — same 2-hour chips as
              today/tomorrow, shown once the customer picks a future date. -->
