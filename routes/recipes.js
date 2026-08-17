@@ -5,6 +5,7 @@ const express = require('express');
 const { seam } = require('../lib/db-seam');
 const db = seam(require('../database'));
 const { requireAuth, requirePermission, requireDelete, logActivity } = require('../middleware/auth');
+const { computeRecipeCost } = require('../lib/recipe-cost');
 const router = express.Router();
 
 // GET all recipes (favorites first, then alphabetical)
@@ -50,6 +51,214 @@ router.get('/api/recipes/trash', requireAuth, requirePermission('recipes'), (req
      ORDER BY r.updated_at DESC, r.id DESC
   `).all();
   res.json({ success: true, data: rows });
+});
+
+// GET Excel export of the whole recipe cost book. MUST be defined before
+// `/api/recipes/:id` for the same reason /trash is — otherwise Express matches
+// "export" as an id and returns 404.
+//
+// READ-ONLY, and deliberately so: `recipe_cost_data` holds only the manual
+// inputs, and every cost figure in this workbook is derived at read time by
+// lib/recipe-cost.js. Nothing here writes, and nothing here caches a computed
+// cost back into the database. Four SELECTs, one workbook, no mutation.
+//
+// Three sheets:
+//   Recipes           one row per ACTIVE recipe, including recipes that have
+//                     no cost row and recipes with no ingredient lines
+//   Ingredient Lines  one row per recipe_ingredients line on an active recipe
+//   Ingredient Prices one row per ingredient, with how many recipes use it
+router.get('/api/recipes/export', requireAuth, requirePermission('recipes'), async (req, res) => {
+  try {
+    // Same order the list route paints, so the workbook matches the screen.
+    const recipes = db.prepare(
+      'SELECT * FROM recipes WHERE is_active = 1 ORDER BY is_favorite DESC, name_en'
+    ).all();
+
+    // All ingredient lines for active recipes in ONE query. Same columns and
+    // same LEFT JOIN as GET /api/recipes/:id above, so the export is fed
+    // exactly what the Cost Sheet is fed.
+    const allLines = db.prepare(`
+      SELECT ri.*, i.cost_per_unit AS master_cost, i.unit AS master_unit,
+             i.name_en AS master_name_en
+        FROM recipe_ingredients ri
+        LEFT JOIN ingredients i ON ri.ingredient_id = i.id
+        JOIN recipes r ON r.id = ri.recipe_id AND r.is_active = 1
+       ORDER BY ri.recipe_id, ri.sort_order
+    `).all();
+
+    const allCost = db.prepare('SELECT * FROM recipe_cost_data').all();
+
+    const linesByRecipe = new Map();
+    for (const l of allLines) {
+      if (!linesByRecipe.has(l.recipe_id)) linesByRecipe.set(l.recipe_id, []);
+      linesByRecipe.get(l.recipe_id).push(l);
+    }
+    const costByRecipe = new Map(allCost.map(c => [c.recipe_id, c]));
+
+    // One breakdown per recipe. A recipe with no lines gets an empty array,
+    // not a skip — an ingredient-less recipe is exactly the kind of gap this
+    // export is meant to surface.
+    const breakdowns = recipes.map(recipe => computeRecipeCost({
+      recipe,
+      ingredients: linesByRecipe.get(recipe.id) || [],
+      costData: costByRecipe.get(recipe.id),
+    }));
+
+    // Required lazily, inside the handler. exceljs is a heavy dependency that
+    // only this one route needs, and if it is ever missing from node_modules
+    // the failure lands here as a 500 on the export instead of taking the
+    // whole server down at boot.
+    const ExcelJS = require('exceljs');
+    const wb = new ExcelJS.Workbook();
+    wb.created = new Date();
+
+    // Number formats. Values stay real numbers so Excel can SUM them; these
+    // only govern display. MONEY is 2dp, but the two genuinely sub-cent
+    // columns — cost per GRAM, and an ingredient's ¥-per-recipe-unit — would
+    // round to 0.00 and read as free, so they get a finer format instead.
+    const MONEY = '0.00';
+    const UNIT_MONEY = '0.000000';
+    const PCT = '0.00';          // a plain number: 30 means 30%, as the app stores it
+    const QTY = '0.####';
+
+    const styleHeader = (ws) => {
+      const h = ws.getRow(1);
+      h.font = { bold: true };
+      h.alignment = { vertical: 'middle' };
+      ws.views = [{ state: 'frozen', ySplit: 1 }];
+      ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: ws.columnCount } };
+    };
+
+    // ── Sheet 1 — Recipes ──────────────────────────────────────────────────
+    const s1 = wb.addWorksheet('Recipes');
+    s1.columns = [
+      { header: 'SKU',                       key: 'sku',        width: 14 },
+      { header: 'English Name',              key: 'nameEn',     width: 30 },
+      { header: 'Chinese Name',              key: 'nameCn',     width: 20 },
+      { header: 'Category',                  key: 'category',   width: 16 },
+      { header: 'Batch Size',                key: 'batch',      width: 11, style: { numFmt: QTY } },
+      { header: 'Servings',                  key: 'servings',   width: 10, style: { numFmt: QTY } },
+      { header: 'Ingredient Cost',           key: 'ingCost',    width: 15, style: { numFmt: MONEY } },
+      { header: 'Labour',                    key: 'labour',     width: 11, style: { numFmt: MONEY } },
+      { header: 'Packaging Total',           key: 'packTotal',  width: 15, style: { numFmt: MONEY } },
+      { header: 'Overhead %',                key: 'overPct',    width: 11, style: { numFmt: PCT } },
+      { header: 'Overhead Amount',           key: 'overAmt',    width: 15, style: { numFmt: MONEY } },
+      { header: 'Batch Cost',                key: 'batchCost',  width: 13, style: { numFmt: MONEY } },
+      { header: 'Cost per Serving',          key: 'cpServ',     width: 15, style: { numFmt: MONEY } },
+      { header: 'Cost per Gram',             key: 'cpGram',     width: 14, style: { numFmt: UNIT_MONEY } },
+      { header: 'Sell Price',                key: 'sell',       width: 12, style: { numFmt: MONEY } },
+      { header: 'Margin per Serving',        key: 'margin',     width: 17, style: { numFmt: MONEY } },
+      { header: 'Food Cost %',               key: 'fcPct',      width: 12, style: { numFmt: PCT } },
+      { header: 'Target Food Cost',          key: 'targetFc',   width: 16, style: { numFmt: PCT } },
+      { header: 'Suggested Sell Price',      key: 'suggest',    width: 19, style: { numFmt: MONEY } },
+      { header: 'Has Cost Row',              key: 'hasCost',    width: 13 },
+      { header: 'Ingredient Lines',          key: 'lineCount',  width: 16 },
+      { header: 'Zero-Cost Ingredient Lines', key: 'zeroLines', width: 24 },
+      { header: 'Cost Data Updated',         key: 'updated',    width: 20 },
+    ];
+    for (const b of breakdowns) {
+      s1.addRow({
+        sku: b.sku,
+        nameEn: b.name_en,
+        nameCn: b.name_cn,
+        category: b.category,
+        batch: b.batchSize || null,
+        servings: b.servings || null,
+        ingCost: b.ingredientCost,
+        labour: b.labour,
+        packTotal: b.packagingTotal,
+        overPct: b.overheadPct,
+        overAmt: b.overheadAmount,
+        batchCost: b.batchCost,
+        cpServ: b.costPerServing,
+        cpGram: b.costPerGram,
+        sell: b.sellPrice,
+        margin: b.marginPerServing,
+        fcPct: b.foodCostPct,
+        targetFc: b.targetFoodCost,
+        suggest: b.suggestedSellPrice,
+        hasCost: b.hasCostRow ? 'Yes' : 'No',
+        lineCount: b.ingredientLines,
+        zeroLines: b.zeroCostIngredientLines,
+        updated: b.costDataUpdatedAt,
+      });
+    }
+    styleHeader(s1);
+
+    // ── Sheet 2 — Ingredient Lines ─────────────────────────────────────────
+    const s2 = wb.addWorksheet('Ingredient Lines');
+    s2.columns = [
+      { header: 'Recipe SKU',                    key: 'rSku',   width: 14 },
+      { header: 'Recipe English Name',           key: 'rName',  width: 30 },
+      { header: 'Ingredient Name',               key: 'iName',  width: 30 },
+      { header: 'Qty',                           key: 'qty',    width: 10, style: { numFmt: QTY } },
+      { header: 'Unit',                          key: 'unit',   width: 8 },
+      { header: 'Cost per Unit',                 key: 'cpu',    width: 14, style: { numFmt: UNIT_MONEY } },
+      { header: 'Line Cost',                     key: 'line',   width: 12, style: { numFmt: MONEY } },
+      { header: '% of Recipe Ingredient Cost',   key: 'pct',    width: 26, style: { numFmt: PCT } },
+    ];
+    for (const b of breakdowns) {
+      for (const l of b.lines) {
+        s2.addRow({
+          rSku: b.sku,
+          rName: b.name_en,
+          iName: l.name,
+          qty: l.qty,
+          unit: l.unit,
+          cpu: l.costPerUnit,
+          line: l.lineCost,
+          // Null rather than 0 when the recipe has no ingredient cost at all —
+          // a share of nothing is undefined, not zero.
+          pct: (l.lineCost !== null && b.ingredientCost > 0)
+            ? l.lineCost / b.ingredientCost * 100
+            : null,
+        });
+      }
+    }
+    styleHeader(s2);
+
+    // ── Sheet 3 — Ingredient Prices ────────────────────────────────────────
+    // Usage counts DISTINCT active recipes, so a line listed twice in one
+    // recipe counts once.
+    const ingredients = db.prepare(`
+      SELECT i.name_en, i.unit, i.cost_per_unit, i.updated_at,
+             (SELECT COUNT(DISTINCT ri.recipe_id)
+                FROM recipe_ingredients ri
+                JOIN recipes r ON r.id = ri.recipe_id AND r.is_active = 1
+               WHERE ri.ingredient_id = i.id) AS used_in
+        FROM ingredients i
+       ORDER BY i.name_en
+    `).all();
+
+    const s3 = wb.addWorksheet('Ingredient Prices');
+    s3.columns = [
+      { header: 'Ingredient Name', key: 'name',    width: 32 },
+      { header: 'Stocking Unit',   key: 'unit',    width: 14 },
+      { header: 'Cost per Unit',   key: 'cpu',     width: 14, style: { numFmt: UNIT_MONEY } },
+      { header: 'Used in N Recipes', key: 'used',  width: 18 },
+      { header: 'Last Updated',    key: 'updated', width: 20 },
+    ];
+    for (const i of ingredients) {
+      s3.addRow({
+        name: i.name_en || '',
+        unit: i.unit || '',
+        cpu: i.cost_per_unit == null ? 0 : i.cost_per_unit,
+        used: i.used_in,
+        updated: i.updated_at || null,
+      });
+    }
+    styleHeader(s3);
+
+    const buf = await wb.xlsx.writeBuffer();
+    const stamp = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="recipe-costs-${stamp}.xlsx"`);
+    res.setHeader('Content-Length', buf.byteLength);
+    res.setHeader('Cache-Control', 'no-store');
+    res.send(Buffer.from(buf));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // GET single recipe with ingredients and steps
