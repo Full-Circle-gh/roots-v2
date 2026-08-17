@@ -39,20 +39,8 @@
 }
 .progress-text { font-family: var(--f-aleo); font-size: calc(26rpx * var(--font-scale)); }
 .progress-text .strong { font-family: var(--f-bear); }
-/* The area the figure applies to. Quieter than the promise it qualifies, but
-   present — it is what lets the customer catch a bar answering for the wrong
-   address. */
-.progress-text .ship-zone { opacity: 0.62; }
-.progress-bar {
-  margin-top: 16rpx;
-  height: 16rpx;
-  background: rgba(0, 0, 0, 0.08);
-}
-.progress-fill {
-  height: 100%;
-  background: var(--lime);
-  transition: width 0.3s ease;
-}
+/* .progress-bar / .progress-fill removed with the markup: the line states
+   policy and has no progress to show. */
 
 .items { margin: 0; }
 .row {

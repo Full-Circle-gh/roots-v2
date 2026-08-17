@@ -865,24 +865,25 @@ router.get('/api/retail/pickup-stores', (req, res) => {
 // GET /api/retail/free-shipping-threshold?address_id=
 // Feeds the cart tab's free-shipping bar. The cart has no address of its own,
 // so this resolves one — the id the customer last selected at checkout, else
-// their default saved address — and answers for THAT zone.
+// their default saved address.
 //
-// Two things it must not do, both learned from an order that promised free
-// shipping in the cart and charged ¥25 at checkout:
+// That resolution is a GUESS, and the mini-app cart no longer prices against
+// it. There is no address step anywhere at or before the cart: the id is
+// written merely by opening checkout, an address-book pick reaches this query
+// only through the same is_default flag a years-old default carries, and an
+// address typed at checkout but not yet saved leaves the id pointing at a row
+// the order won't use. The states are indistinguishable from here, so a
+// zone-derived figure — named or not — lends the guess an authority it hasn't
+// got. The cart states store policy instead: `policy_threshold`, the global
+// figure, true for the store regardless of which address wins.
 //
-//   1. Guess silently. The default-address fallback is kept (a named figure
-//      beats no figure), but the zone's own name now rides along so the bar
-//      can show which area the number is for. A customer shopping to Shanghai
-//      who sees "天河区" can tell the bar is answering for the wrong place.
-//      When nothing resolves, `zone` is null and the bar must state the
-//      threshold as store policy rather than claim anything is unlocked.
-//   2. Read `free_threshold` directly. freeShippingTargetFor asks the pricing
-//      engine what it would actually charge at the target, so a zone whose
-//      free state the engine ignores comes back reachable:false and the bar
-//      advertises nothing instead of an unreachable number.
+// The guess still earns one job, and only in the conservative direction:
+// `reachable` (via freeShippingTargetFor, which asks the pricing engine rather
+// than reading a column the engine sometimes ignores) can WITHHOLD the line
+// when the resolved zone has no free-shipping state at all. It never asserts.
 //
-// `threshold` stays a plain number at the top of the payload for older
-// clients (public/shop.html reads d.threshold and nothing else).
+// `threshold` stays zone-derived and first in the payload for the web store,
+// which reads d.threshold and nothing else (public/shop.html:3459).
 router.get('/api/retail/free-shipping-threshold', requireRetailAuth, (req, res) => {
   try {
     // Prefer an explicit address_id (the one the customer last selected at
@@ -906,9 +907,9 @@ router.get('/api/retail/free-shipping-threshold', requireRetailAuth, (req, res) 
       ? freeShippingTargetFor(zone, 'standard')
       : { threshold: null, reachable: false };
 
-    // No zone → the global figure, offered as policy, not as a promise for
-    // her address. The bar renders it as a condition and suppresses its
-    // progress fill, so it can never read as "unlocked".
+    // The store-wide figure. Not derived from the guessed zone, so it stays
+    // true whichever address the order finally goes to — which is what lets
+    // the cart state it as policy rather than as a promise.
     const globalFree = Number(cfgValue('fees.freeShippingThreshold', db.FREE_SHIPPING_THRESHOLD_DEFAULT)) || 0;
 
     res.set('Cache-Control', 'no-store');
@@ -917,10 +918,14 @@ router.get('/api/retail/free-shipping-threshold', requireRetailAuth, (req, res) 
       data: {
         threshold: zone && target.reachable ? target.threshold : globalFree,
         source: zone ? 'zone' : 'global',
-        // Null when no address resolved — the bar keys its unknown state off
-        // this, not off the threshold (which is always a number).
+        // What the mini-app cart states. Always the store figure.
+        policy_threshold: globalFree,
+        // Present when an address resolved. The cart uses it only to know a
+        // zone WAS resolved (so `reachable` means something); it no longer
+        // renders the name.
         zone: zone ? { name_en: zone.name_en || '', name_cn: zone.name_cn || '' } : null,
         // False when the engine won't ever hand this zone a ¥0 delivery line.
+        // The cart's one use of the guess: withhold the line, never make one.
         reachable: !!(zone && target.reachable),
       },
     });

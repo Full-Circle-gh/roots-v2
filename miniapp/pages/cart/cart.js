@@ -1,7 +1,10 @@
 // Cart tab — reads local cart state. Editable qty steppers + delete.
-// Free-shipping bar is served by /api/retail/free-shipping-threshold, which
-// names the zone its figure applies to and says whether that zone has a free
-// state at all. The bar never asserts free shipping it can't guarantee.
+// The free-shipping bar states store policy — "满 ¥399 包邮" — and makes no
+// claim about this cart. It can't: nothing at or before the cart asks the
+// customer where the order is going, so any zone the server resolves for us is
+// a guess we have no way to qualify. /api/retail/free-shipping-threshold is
+// still called, but only so a zone with no free-shipping state at all can
+// suppress the line.
 
 const cart   = require('../../utils/cart');
 const config = require('../../utils/config');
@@ -15,17 +18,12 @@ Page({
     subtotal: 0,
     savedTotal: '',
     threshold: 0,
-    remaining: 0,
-    unlocked: false,
-    pct: 0,
-    // Which of the three bar states to render:
-    //   'zone'    — we know the area; name it and promise against its target
-    //   'policy'  — no address resolved; state the store threshold, promise
-    //               nothing, never show "unlocked"
-    //   'none'    — the engine gives this zone no free-shipping state, or we
-    //               have no figure at all; the bar doesn't render
+    // Two states only:
+    //   'policy' — state the store threshold as a condition. No progress, no
+    //              "unlocked", nothing that reads as a promise about this cart.
+    //   'none'   — the resolved zone has no free-shipping state, or we have no
+    //              figure yet; the bar doesn't render.
     shipState: 'none',
-    shipZoneName: '',
     lang: 'en',
     showBindModal: false,
     copy: { title: 'Almost yours.', kicker: 'YOUR BASKET', empty: 'Your basket is empty — shop the garden →', checkout: 'CHECK OUT' },
@@ -64,32 +62,17 @@ Page({
     const L = this.data.lang;
     const state = cart.get();
     const subtotal = cart.subtotal();
-    // Free-shipping figure + which state the bar is in. Both come from the
-    // server (loadZoneThreshold), because only the server can match the zone
-    // and ask the pricing engine whether a free state exists at all. No local
-    // default: with nothing fetched we say nothing rather than guess a number
-    // checkout won't honour — the cart promising free shipping the zone then
-    // refuses is the whole defect this closes.
+    // The store's free-shipping figure, from the server (loadZoneThreshold).
+    // Deliberately NOT the resolved zone's number: the zone is a guess the cart
+    // can't qualify, so a figure derived from it would read as a promise about
+    // this order. The store figure is true whichever address wins.
     const known = this._ship || null;
     const t = known ? Number(known.threshold) || 0 : 0;
-    // An unnamed zone can't be named, so it can't carry a promise — it falls
-    // back to the policy line like any other unknown address.
-    const zoneName = !known || !known.zone ? ''
-      : (L === 'cn' ? (known.zone.name_cn || known.zone.name_en || '')
-                    : (known.zone.name_en || known.zone.name_cn || ''));
     let shipState;
-    if (!known)                shipState = 'none';    // nothing fetched yet
-    else if (known.zone)       shipState = known.reachable && zoneName ? 'zone' : 'none';
-    else if (t > 0)            shipState = 'policy';  // no address → store line
-    else                       shipState = 'none';    // no address, no figure
-    // Only a named zone may report "unlocked" — the policy line is a statement
-    // about the store, not about her address, so it never fills or completes.
-    const alwaysFree = shipState === 'zone' && t <= 0;
-    // Round UP to the next whole ¥ so the displayed gap never *understates*
-    // what's needed (¥146.39999… → ¥147). Subtotal can be fractional from
-    // discounts, but the cart bar reads cleaner as a round number.
-    const remainingRaw = alwaysFree ? 0 : Math.max(0, t - subtotal);
-    const remaining = Math.ceil(remainingRaw);
+    if (!known)                          shipState = 'none';    // nothing fetched
+    else if (known.zone && !known.reachable) shipState = 'none'; // no free state here
+    else if (t > 0)                      shipState = 'policy';
+    else                                 shipState = 'none';    // no figure to state
     // A line shows a strikethrough "was" price + feeds the "You saved" tally
     // when it's on flash OR it's a bundle priced below its components' combined
     // worth (bundle_worth, server-computed, frozen on the cart item at add-time).
@@ -137,16 +120,7 @@ Page({
       subtotal: subtotal.toFixed(2),
       savedTotal: savedTotal > 0 ? savedTotal.toFixed(2) : '',
       threshold: t,
-      remaining,
       shipState,
-      shipZoneName: shipState === 'zone' ? zoneName : '',
-      // "Unlocked" is a promise, so only the named-zone state may make it.
-      unlocked: shipState === 'zone' && remainingRaw <= 0,
-      // The policy line carries no progress — it isn't measuring her cart
-      // against her zone, so a filling bar would imply a promise it can't keep.
-      pct: shipState !== 'zone' ? 0
-         : alwaysFree ? 100
-         : Math.min(100, (subtotal / t) * 100),
       copy: {
         kicker:    this.tx('copy.cart.kicker',       L === 'cn' ? '购物车'                   : 'YOUR BASKET'),
         title:     this.tx('copy.cart.title',        L === 'cn' ? '即将拥有。'                : 'Almost yours.'),
@@ -156,12 +130,18 @@ Page({
     });
   },
 
-  // Resolve the free-shipping figure for the address the order would actually
-  // go to, plus the name of the zone it belongs to and whether that zone has a
-  // free-shipping state at all (the server asks the pricing engine, so the bar
-  // and the charge can't drift). Best-effort: on any failure `_ship` stays
-  // unset and the bar renders nothing rather than a number checkout won't
-  // honour — silence is the only honest fallback here.
+  // Fetch the store's free-shipping figure, plus whether the zone the server
+  // resolved has any free-shipping state at all.
+  //
+  // We still send activeAddressId, but only so the server resolves the same
+  // zone checkout would — the answer we keep from it is `reachable`, and it can
+  // only take the line away, never put a number on it. The figure we display
+  // (`policy_threshold`) is the store's, not that zone's, precisely because the
+  // zone is a guess: the customer is never asked for an address at or before
+  // the cart, so a per-zone number here would be a promise made on their behalf.
+  //
+  // Best-effort: on any failure `_ship` stays unset and the bar renders nothing.
+  // Silence is the only honest fallback — there is no local default to fall to.
   loadZoneThreshold() {
     let path = '/api/retail/free-shipping-threshold';
     try {
@@ -170,9 +150,9 @@ Page({
     } catch {}
     api.get(path)
       .then((d) => {
-        if (!d || !Number.isFinite(Number(d.threshold))) return;
+        if (!d || !Number.isFinite(Number(d.policy_threshold))) return;
         this._ship = {
-          threshold: Number(d.threshold),
+          threshold: Number(d.policy_threshold),
           zone: d.zone || null,
           reachable: !!d.reachable,
         };
