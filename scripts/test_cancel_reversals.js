@@ -42,6 +42,7 @@ const INVENTORY_SRC = fs.readFileSync(INVENTORY_PATH, 'utf8');
 const RETAIL_SRC = fs.readFileSync(RETAIL_PATH, 'utf8');
 
 let fails = 0;
+let skipped = 0;
 const ok = (kind, name, cond, got) => {
   if (cond) console.log(`  PASS  [${kind}] ${name}`);
   else { fails++; console.log(`  FAIL  [${kind}] ${name}${got === undefined ? '' : ' — got ' + JSON.stringify(got)}`); }
@@ -340,5 +341,123 @@ const third = inventory.sweepExpiredReservations();
 ok('BEHAVIOURAL', 'a re-armed hold on an ALREADY-cancelled order does not re-fire the hook (the changes>0 guard)',
   third.expired === 1 && third.cancelledOrders === 0 && fired.length === 1, { third, fired: fired.length });
 
-console.log(fails ? `\n${fails} ASSERTION(S) FAILED\n` : `\nALL ASSERTIONS HELD\n`);
+// ── BEHAVIOURAL: the repair script, against a FIXTURE ────────────────────
+// Never production. The fixture carries the two real customers' rows exactly as
+// the 2026-08-17 hourly holds them, plus one order that must be REFUSED.
+console.log('\n── BEHAVIOURAL: repair_sweep_cancel_reversals.js (fixture db) ──');
+{
+  const { execFileSync } = require('child_process');
+  const os = require('os');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'repairfix-'));
+  const dbFile = path.join(dir, 'fixture.db');
+  const SCRIPT = path.join(ROOT, 'scripts', 'repair_sweep_cancel_reversals.js');
+
+  // CONSTRUCT, DON'T JUST REQUIRE. better-sqlite3 requires cleanly with no
+  // native binding built and throws only when a database is opened — which is
+  // the case on a Windows checkout. The repair script requires it directly (the
+  // house idiom for every backfill in this directory), so on a box without the
+  // binding this section cannot run at all. It reports SKIPPED, never PASS: a
+  // suite that quietly downgrades an unrun test to a green line is the exact
+  // failure this file's header warns about.
+  let Better = null;
+  try {
+    const B = require('better-sqlite3');
+    const probe = new B(':memory:'); probe.close();
+    Better = B;
+  } catch { /* reported below */ }
+  if (!Better) {
+    console.log('  SKIP  [BEHAVIOURAL] repair script — better-sqlite3 has no native binding here.');
+    console.log('        The script requires it directly. Exercise it where the binding exists:');
+    console.log('        node scripts/test_cancel_reversals.js on the server, or against a fixture copy.');
+    skipped += 1;
+  } else {
+    const f = new Better(dbFile);
+    f.exec(`
+CREATE TABLE retail_customers (id INTEGER PRIMARY KEY, points_balance INTEGER DEFAULT 0);
+CREATE TABLE retail_orders (id INTEGER PRIMARY KEY, customer_id INTEGER, status TEXT,
+  cancelled_reason TEXT, voucher_code TEXT);
+CREATE TABLE retail_points_transactions (id INTEGER PRIMARY KEY AUTOINCREMENT, customer_id INTEGER,
+  delta INTEGER, balance_after INTEGER, source TEXT, order_id INTEGER, note TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE retail_customer_vouchers (id INTEGER PRIMARY KEY, customer_id INTEGER, voucher_id INTEGER,
+  used_at TEXT, used_order_id INTEGER);
+CREATE TABLE retail_vouchers (id INTEGER PRIMARY KEY, code TEXT, used_count INTEGER DEFAULT 0, max_uses INTEGER);
+INSERT INTO retail_customers (id, points_balance) VALUES (302, 4), (506, 0);
+INSERT INTO retail_orders (id, customer_id, status, cancelled_reason, voucher_code) VALUES
+ (363, 302, 'cancelled', 'reservation_expired', NULL),
+ (571, 302, 'cancelled', 'reservation_expired', NULL),
+ (397, 506, 'cancelled', 'reservation_expired', 'SPROUT');
+INSERT INTO retail_points_transactions (id, customer_id, delta, balance_after, source, order_id, note) VALUES
+ (410, 302, -2, 0, 'order_redeem', 363, 'Order 363 redeemed 2 pts'),
+ (489, 302, -4, 0, 'order_redeem', 571, 'Order 571 redeemed 4 pts');
+INSERT INTO retail_customer_vouchers (id, customer_id, voucher_id, used_at, used_order_id) VALUES
+ (87, 506, 6, '2026-07-01 05:39:51', 397);
+INSERT INTO retail_vouchers (id, code, used_count, max_uses) VALUES (6, 'SPROUT', 23, NULL);
+`);
+    f.close();
+    const run = (...args) => execFileSync(process.execPath, [SCRIPT, '--db', dbFile, ...args], { encoding: 'utf8' });
+    const read = () => {
+      const d = new Better(dbFile, { readonly: true });
+      const r = {
+        bal302: d.prepare('SELECT points_balance FROM retail_customers WHERE id = 302').get().points_balance,
+        refundRows: d.prepare("SELECT COUNT(*) AS n FROM retail_points_transactions WHERE source = 'refund_redeem'").get().n,
+        grant: d.prepare('SELECT used_at, used_order_id FROM retail_customer_vouchers WHERE id = 87').get(),
+        usedCount: d.prepare('SELECT used_count FROM retail_vouchers WHERE id = 6').get().used_count,
+      };
+      d.close(); return r;
+    };
+
+    const dry = run();
+    const afterDry = read();
+    ok('BEHAVIOURAL', 'dry run is the default and writes nothing',
+      afterDry.bal302 === 4 && afterDry.refundRows === 0 && afterDry.grant.used_at !== null && afterDry.usedCount === 23, afterDry);
+    ok('BEHAVIOURAL', 'dry run names both customers and says it wrote nothing',
+      dry.includes('customer 302') && dry.includes('customer 506') && dry.includes('DRY RUN'));
+    ok('BEHAVIOURAL', 'dry run prints checksums before', dry.includes('CHECKSUMS BEFORE'));
+
+    const applied = run('--apply');
+    const afterApply = read();
+    ok('BEHAVIOURAL', '302 gets 6 points back (4 -> 10)', afterApply.bal302 === 10, afterApply.bal302);
+    ok('BEHAVIOURAL', 'one refund_redeem ledger row per order — the cap marker reverseOrderRedeem reads',
+      afterApply.refundRows === 2, afterApply.refundRows);
+    ok('BEHAVIOURAL', "506's grant is returned (used_at cleared)",
+      afterApply.grant.used_at === null && afterApply.grant.used_order_id === null, afterApply.grant);
+    ok('BEHAVIOURAL', 'global pool decremented 23 -> 22', afterApply.usedCount === 22, afterApply.usedCount);
+    ok('BEHAVIOURAL', 'an undo file was written', /UNDO FILE: .+\.json/.test(applied) &&
+      fs.readdirSync(dir).some((n) => n.startsWith('undo-repair-sweep-cancel-')));
+    ok('BEHAVIOURAL', 'the undo file carries the prior values', (() => {
+      const u = JSON.parse(fs.readFileSync(path.join(dir, fs.readdirSync(dir).find((n) => n.startsWith('undo-'))), 'utf8'));
+      return u.prior_state.customers.find((c) => c.id === 302).points_balance === 4
+          && u.prior_state.vouchers[0].used_count === 23
+          && u.prior_state.grants[0].used_order_id === 397
+          && !!u.checksums_before.ledger;
+    })());
+    ok('BEHAVIOURAL', 'checksums after are printed and differ from before', applied.includes('CHECKSUMS AFTER') && applied.includes('(was '));
+
+    const again = run('--apply');
+    const afterAgain = read();
+    ok('BEHAVIOURAL', 'a SECOND --apply returns nothing more — no double credit',
+      afterAgain.bal302 === 10 && afterAgain.refundRows === 2 && afterAgain.usedCount === 22, afterAgain);
+    ok('BEHAVIOURAL', 'the second run says there is nothing to do', again.includes('Nothing to apply') || again.includes('already returned'));
+
+    // REFUSAL: a target whose order was not a sweeper cancel must be skipped,
+    // not repaired. Otherwise the fixed list is doing the thinking, not the check.
+    const g = new Better(dbFile);
+    g.exec("DELETE FROM retail_points_transactions WHERE source = 'refund_redeem'");
+    g.exec('UPDATE retail_customers SET points_balance = 4 WHERE id = 302');
+    g.exec("UPDATE retail_orders SET cancelled_reason = 'customer_cancelled' WHERE id = 363");
+    g.close();
+    const refused = run('--apply');
+    const afterRefusal = read();
+    ok('BEHAVIOURAL', 'refuses order 363 once it is no longer a sweeper cancel',
+      refused.includes("not the sweeper") && afterRefusal.bal302 === 8, { bal: afterRefusal.bal302 });
+    ok('BEHAVIOURAL', 'and still repairs the untouched one (order 571, +4)', afterRefusal.refundRows === 1, afterRefusal.refundRows);
+
+    try { fs.rmSync(dir, { recursive: true, force: true }); } catch {}
+  }
+}
+
+if (fails) console.log(`\n${fails} ASSERTION(S) FAILED\n`);
+else if (skipped) console.log(`\nALL ASSERTIONS HELD — but ${skipped} SECTION(S) SKIPPED, see above. Not a full pass.\n`);
+else console.log('\nALL ASSERTIONS HELD\n');
 process.exit(fails ? 1 : 0);
