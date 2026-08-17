@@ -14,6 +14,8 @@
 //   2. pcs item                      → pack price stored as-is, no division
 //   3. container, no pack contents   → SKIP, old cost left intact
 //   4. PO line unit ≠ item buy_unit  → SKIP, old cost left intact
+//   5. recipe unit 'bag'             → pack price stored as-is (per-piece rule,
+//                                      extended to bag/bottle/box 2026-08-17)
 
 'use strict';
 
@@ -46,6 +48,7 @@ insIng.run(66,  'Black Sesame Seeds', '黑芝麻', 'C-40', 'g',   'bag',    1, 5
 insIng.run(601, 'Meat Grinder RY-22S', null,   'M-99', 'pcs', 'pcs',    1, null, null, 120, 120);
 insIng.run(234, 'Dry Mint Leaves',    null,    'E-40', 'g',   'bottle', 1, null, null, 0.42, 40);
 insIng.run(139, 'Red Lentils',        null,    'C-5',  'g',   'bag',    1, 500,  'g', 0.0204, 10.21);
+insIng.run(64,  'Cutlery Set',        null,    'H-26', 'bag', 'bag',    1, null, null, 24.63, 24.63);
 
 fixture.prepare(`INSERT INTO purchase_orders (id,po_number,date,status) VALUES (1,'PO-TEST-1',date('now'),'Ordered')`).run();
 const insLine = fixture.prepare(`INSERT INTO po_line_items
@@ -54,6 +57,7 @@ insLine.run(1, 66,  'Black Sesame Seeds',  'C-40', 2, 'bag',    26,  52);   // c
 insLine.run(1, 601, 'Meat Grinder RY-22S', 'M-99', 1, 'pcs',    135, 135);  // case 2
 insLine.run(1, 234, 'Dry Mint Leaves',     'E-40', 1, 'bottle', 45,  45);   // case 3
 insLine.run(1, 139, 'Red Lentils',         'C-5',  1, 'kg',     52,  52);   // case 4 — line says kg, item is bag
+insLine.run(1, 64,  'Cutlery Set',         'H-26', 3, 'bag',    27,  81);   // case 5
 
 const before = fixture.prepare('SELECT id,sku,unit,buy_unit,cost_per_unit,buy_price FROM ingredients ORDER BY id').all();
 
@@ -104,6 +108,11 @@ const mismatch = byId(after, 139);
 check('C-5 cost_per_unit unchanged', mismatch.cost_per_unit, 0.0204);
 check('C-5 buy_price unchanged',     mismatch.buy_price,     10.21);
 check('C-5 skip reason', (result.skips.find(s => s.sku === 'C-5') || {}).reason, 'unit_mismatch');
+
+console.log('\n── Case 5: recipe unit bag, ¥27 per bag — no division ───────────');
+const bagUnit = byId(after, 64);
+check('H-26 cost_per_unit', bagUnit.cost_per_unit, 27);
+check('H-26 buy_price',     bagUnit.buy_price,     27);
 
 console.log('\n── Price history (append-only, one row per priced line) ─────────');
 for (const h of fixture.prepare('SELECT ingredient_id,price,buy_unit,source FROM ingredient_price_history ORDER BY id').all()) {
