@@ -3,6 +3,7 @@
 
 const api  = require('../../utils/api');
 const lang = require('../../utils/lang');
+const optionText = require('../../utils/options');
 const { createPoller } = require('../../utils/livepoll');
 
 // Statuses past which the order no longer changes on its own — stop polling.
@@ -342,7 +343,10 @@ Page({
           display_name: lang.pick(it.name_en, it.name_cn, L),
           line_total_display: '¥' + Number(it.line_total || 0).toFixed(2),
           image: absUrl(it.image_url) || '',
-          options_str: opts.length ? opts.map(o => o.label).join(', ') : '',
+          // Order lines snapshot question_en/cn alongside the answer (and the
+          // server backfills it for older orders), so show "Question: Answer"
+          // — same separator as the cart and checkout receipt.
+          options_str: optionText.format(opts, L),
         };
       });
       // Timeline — render each step with done / active / future state

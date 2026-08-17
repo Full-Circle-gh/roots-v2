@@ -5,6 +5,7 @@ const cart   = require('../../utils/cart');
 const config = require('../../utils/config');
 const lang   = require('../../utils/lang');
 const api    = require('../../utils/api');
+const optionText = require('../../utils/options');
 
 Page({
   data: {
@@ -95,8 +96,10 @@ Page({
         ...it,
         display_name: lang.pick(it.name_en, it.name_cn, L),
         display_size: lang.pickLabel(it.size, L),
-        // Chosen options (e.g. dressing). Labels were localised at add-time.
-        display_options: (it.options || []).map(o => o.label).filter(Boolean).join(' · '),
+        // Chosen options (e.g. dressing), each as "Question: Answer". Names and
+        // labels were localised at add-time; rows added before the name was
+        // carried fall back to the bare answer.
+        display_options: optionText.format(it.options, L),
         line_total: (unit * qty).toFixed(2),
         regular_total: (onFlash || onBundle || onMarkdown) ? wasN.toFixed(2) : '',
         // Per-line "save ¥X" tag — mirrors the checkout receipt so the saving is

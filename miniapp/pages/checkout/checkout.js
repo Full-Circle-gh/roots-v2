@@ -11,6 +11,7 @@ const notify = require('../../utils/notifications');
 const phone  = require('../../utils/phone');
 const zones  = require('../../utils/zones');
 const delivery = require('../../utils/delivery');
+const optionText = require('../../utils/options');
 
 // Per-line "was / save ¥X" badge for the order summary. A line earns the badge
 // when it's on flash OR it's a bundle priced below its components' combined
@@ -1115,7 +1116,7 @@ Page({
       return {
         ...it,
         display_name: lang.pick(it.name_en, it.name_cn, L),
-        display_options: (it.options || []).map(o => o.label).filter(Boolean).join(' · '),
+        display_options: optionText.format(it.options, L),
         line_total: '¥' + (it.unit_price * it.qty).toFixed(2),
         ...sf,
       };
@@ -1271,7 +1272,7 @@ Page({
     const items = state.items.map(it => ({
       ...it,
       display_name: lang.pick(it.name_en, it.name_cn, L),
-      display_options: (it.options || []).map(o => o.label).filter(Boolean).join(' · '),
+      display_options: optionText.format(it.options, L),
       line_total: '¥' + (it.unit_price * it.qty).toFixed(2),
       ...lineSaveFields(it, L),
     }));
@@ -1357,7 +1358,7 @@ Page({
           return {
             ...it,
             display_name: lang.pick(it.name_en, it.name_cn, L),
-            display_options: (it.options || []).map(o => o.label).filter(Boolean).join(' · '),
+            display_options: optionText.format(it.options, L),
             line_total: '¥' + (it.unit_price * it.qty).toFixed(2),
             ...sf,
           };

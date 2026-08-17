@@ -5371,10 +5371,13 @@ async function renderProduct(id){
       for(const o of popts){ if(o.is_required && !selIds(o).length){
         toast(state.lang==='cn'?('请选择 '+pick(o.question_en,o.question_cn)):('Please choose: '+pick(o.question_en,o.question_cn))); return false; } }
       const chosen=[];
-      popts.forEach(o=>selIds(o).forEach(cid=>{const c=findChoice(o,cid); if(c) chosen.push(c);}));
+      // Keep the group's QUESTION beside each picked answer so the cart + checkout
+      // receipt read "Heat up?: Yes", not a bare, ambiguous "Yes". Spread onto the
+      // choice so `c.id` below still resolves.
+      popts.forEach(o=>selIds(o).forEach(cid=>{const c=findChoice(o,cid); if(c) chosen.push({...c,question:pick(o.question_en,o.question_cn)});}));
       cartAdd({product_id:p.id,qty,choices:chosen.map(c=>Number(c.id)),
         name:pick(p.name_en,p.name_cn),price:unit(),image:thumb(p),
-        optLabel:chosen.map(c=>pick(c.label_en,c.label_cn)).filter(Boolean).join(' · '),ship_from_supplier:!!p.ship_from_supplier});
+        optLabel:chosen.map(c=>{const v=pick(c.label_en,c.label_cn); if(!v)return''; return c.question?c.question+': '+v:v;}).filter(Boolean).join(' · '),ship_from_supplier:!!p.ship_from_supplier});
       toast(state.lang==='cn'?'已加入购物车 🌱':'Added to cart 🌱');
       return true;
     }

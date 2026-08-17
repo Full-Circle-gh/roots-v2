@@ -12576,8 +12576,18 @@
         var sku = it.sku ? '<span class="sku">' + esc(it.sku) + '</span>' : '';
         // Chosen customer options (dressing, paid extras) — parsed server-side
         // into it.options=[{label}]; shown so the packer sees which dressing.
+        // Mirrors itemOptionsHtml in retail-admin/04-orders.js: prefix the
+        // QUESTION so "Yes" reads as "Heat up?: Yes". Older orders or deleted
+        // options may lack it — then just show the bare value.
+        var isCn = typeof window !== 'undefined' && window.cuLang && window.cuLang() === 'cn';
         var opts = (Array.isArray(it.options) ? it.options : [])
-          .map(function (op) { return op && op.label ? esc(op.label) : ''; })
+          .map(function (op) {
+            if (!op) return '';
+            var val = (isCn && op.label_cn) ? op.label_cn : (op.label || op.label_cn || '');
+            if (!val) return '';
+            var q = (isCn && op.question_cn) ? op.question_cn : (op.question_en || '');
+            return q ? esc(q) + ': ' + esc(val) : esc(val);
+          })
           .filter(Boolean).join(' · ');
         var optsHTML = opts ? '<span class="opts">&#9656; ' + opts + '</span>' : '';
         var multi = Number(it.qty) > 1 ? ' qty-multi' : '';
