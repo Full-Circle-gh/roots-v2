@@ -272,15 +272,36 @@ for (const id of ['M', 'P']) {
 // first live run met a customer at +899.00. Reason 4 is pinned here so a later
 // tidy-up of the note cannot quietly restore the false claim — the assertion is
 // about the TEXT because the text is what the operator acts on.
-console.log('\nSOURCE — M names the fourth reason, and no longer claims positive drift is impossible');
+//
+// REPINNED 2026-08-17, AND THE OLD PIN IS THE LESSON. This asserted that reason 4
+// cited `:24839`. A LINE NUMBER IS NOT AN ANCHOR: the reference had already
+// drifted off the branch it named — at the 08-17 head, 24839 lands inside an
+// unrelated comment about offline payment methods — so the assertion was
+// guarding a string that no longer pointed at anything, and it went red for
+// the fix that made it obsolete rather than for a regression. §24's own rule is
+// to cite by symbol; the pin now does. Deliberately NOT weakened to make the fix
+// pass: it gained the two facts a later tidy-up is most likely to lose.
+console.log('\nSOURCE — M names the fourth reason, records its fix, and no longer claims positive drift is impossible');
 {
   const m = byId('M').notes.join('\n');
-  ok('[M] names reason 4 (the no-gateway-refund cancel)',
-    /^\s*4\./m.test(m) && m.includes('24839'), 'missing', 'a numbered reason 4 citing :24839');
+  ok('[M] names reason 4 (the no-gateway-refund cancel), by symbol not line number',
+    /^\s*4\./m.test(m) && /reversal helpers/.test(m) && /awardOrderPoints/.test(m),
+    'missing', 'a numbered reason 4 naming the reversal helpers');
   ok('[M] says reason 4 is a defect, not legitimate',
     /NOT LEGITIMATE/.test(m), 'missing', 'reason 4 marked NOT LEGITIMATE');
   ok('[M] no longer asserts stored-above-derived is impossible',
     !/none of the (three|four) can produce that/.test(m), 'the false claim is back', 'claim absent');
+  // Fixed 2026-08-17. Reason 4 stays on the list because the 20 orders it already
+  // produced are still in the data, but the note must say it no longer accrues —
+  // otherwise the next reader chases a live defect that is closed.
+  ok('[M] records that reason 4 is FIXED and no longer accrues',
+    /FIXED AND DEPLOYED 2026-08-17/.test(m) && /NO LONGER ACCRUES/.test(m),
+    'missing', 'reason 4 marked fixed');
+  // The two facts most likely to be lost in a tidy-up, pinned for that reason.
+  ok('[M] records that reason 4 touched ZERO real customers',
+    /REAL CUSTOMERS AFFECTED: ZERO/.test(m), 'missing', 'the zero-real-customers finding');
+  ok('[M] carries the ¥38.80 -> ¥0.49 correction rather than the original figure',
+    /outstanding figure is ¥0\.49/.test(m), 'missing', 'the corrected balance figure');
 }
 
 console.log(failed === 0
