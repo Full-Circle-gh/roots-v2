@@ -2927,6 +2927,14 @@ Page({
         // Wallet balance opt-in — server spends min(balance, non-shipping
         // remainder after points) and ledgers it.
         use_balance:    !!this.data.useBalance,
+        // The figure on the PAY button, exactly as the customer sees it
+        // (checkout.wxml sticky footer). The server compares it against its
+        // own total and refuses the order if they disagree, rather than
+        // clamping the points and charging the difference — a client that
+        // showed ¥0.00 on a stale affordability flag can no longer bill
+        // someone a residual they never saw. Declaration only: the server
+        // discards it after the comparison, so it can never move the price.
+        client_total:   Number(this.data.total),
       };
       const orderPayload = isPickup
         ? {
@@ -3157,13 +3165,27 @@ Page({
         insufficient_balance: this.data.lang === 'cn' ? '余额不足' : 'Not enough balance',
         no_zone_match:        this.data.lang === 'cn' ? '该地址无法配送' : 'Address not in delivery range',
       };
+      // The server refused rather than charge a residual the customer wasn't
+      // shown — so say what is actually due. Same words the points row already
+      // uses for a partial cover (checkout.wxml), reused verbatim rather than
+      // minted; `shipping_due` carries the true cash amount. Distinct from
+      // insufficient_points (积分不足), which means the balance itself fell
+      // short — these two must stay tellable apart.
+      const due = Number(e?.body?.shipping_due);
+      if (Number.isFinite(due)) {
+        friendly.points_cannot_cover_shipping = this.data.lang === 'cn'
+          ? '还需支付 ¥' + due.toFixed(2)
+          : '¥' + due.toFixed(2) + ' left to pay';
+      }
       wx.showToast({
         title: friendly[e.message] || ((this.data.lang === 'cn' ? '出错：' : 'Error: ') + e.message),
         icon: 'none',
         duration: 2400,
       });
-      // If points came up short, re-quote so the UI updates with the gap.
-      if (e.message === 'insufficient_points') this.refreshQuote();
+      // If points came up short — or covered less than the client thought —
+      // re-quote so the corrected total renders behind the toast.
+      if (e.message === 'insufficient_points'
+       || e.message === 'points_cannot_cover_shipping') this.refreshQuote();
       this.setData({ placing: false });
     }
   },

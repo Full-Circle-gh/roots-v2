@@ -10185,6 +10185,25 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
         available: have,
       });
     }
+    // Policy residual on a maxed-out redemption. When the customer has spent
+    // every point this order allows (pointsUsed hit maxByOrder) and cash is
+    // STILL due, the gap isn't a balance shortfall — it's the redeemable base
+    // excluding shipping, i.e. exactly the condition the full-redeem path
+    // refuses above. It matters because /quote decides `points_affordable`
+    // off the same base (pointsBalance >= pointsRequiredFor(redeemBase)), so
+    // in this state the client was told the points cover the bill and shows
+    // PAY ¥0.00 — then this path would clamp and silently charge the residual.
+    // Refuse instead, with the same error the full-redeem path returns, so a
+    // client has one condition to handle rather than two. A customer whose
+    // balance is simply too small never reaches here (pointsUsed < maxByOrder)
+    // and keeps the honest partial stack with its "¥X left to pay" line.
+    if (redeemBase < grossTotal && pointsUsed >= maxByOrder) {
+      return res.status(400).json({
+        success: false,
+        error: 'points_cannot_cover_shipping',
+        shipping_due: +(grossTotal - redeemBase).toFixed(2),
+      });
+    }
   }
   // ── Wallet balance redemption (stacks AFTER points) ─────────────────
   // Opt-in via body.use_balance. Points apply first (operator choice — they
@@ -10202,6 +10221,39 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     balanceUsed = walletSpendForOrder(have, subtotal, packingFee, voucherDiscount, pointsAmount);
   }
   const total = Math.max(0, grossTotal - pointsAmount - balanceUsed);
+
+  // ── Client-declared total: an assertion, never an input ──────────────
+  // The mini-app sends the figure it actually rendered on the PAY button.
+  // We compare it to what we just computed and refuse to commit if they
+  // disagree — the only way to tell "points cover the bill" apart from
+  // "¥24.40 still due", since both submit an identical payload (points_to_use
+  // = full balance). It closes the case where the client's affordability flag
+  // went stale against a cheaper zone: it showed ¥0.00, we'd have charged the
+  // difference. `declaredTotal` is read here, compared, and discarded — it
+  // never reaches pricing, the points clamp, or the INSERT.
+  //
+  // Scope and limits, both deliberate:
+  //   • Points paths only. The error code names points; firing it on voucher
+  //     or price drift would make it lie. Those need their own code.
+  //   • Absent field → no assertion. The web store and older mini-app builds
+  //     don't send one and must keep working, so this is an honesty check for
+  //     cooperating clients, not something a client can't opt out of. The
+  //     guard above holds regardless of what the client sends.
+  const declaresTotal = body.client_total !== undefined && body.client_total !== null;
+  const carriesPoints = paymentMethod === 'points' || Number(body.points_to_use) > 0;
+  if (declaresTotal && carriesPoints) {
+    const declaredTotal = Number(body.client_total);
+    // Same money class as `total` — ¥ at 2dp, no conversion. Half-cent
+    // tolerance absorbs float dust on either side; a real disagreement is
+    // never smaller than a fen.
+    if (!Number.isFinite(declaredTotal) || Math.abs(declaredTotal - total) > 0.005) {
+      return res.status(400).json({
+        success: false,
+        error: 'points_cannot_cover_shipping',
+        shipping_due: +total.toFixed(2),
+      });
+    }
+  }
 
   // ── Atomic write: order, items, payment intent, stock reservations ───
   // Reservations replace the old "decrement stock_qty on order create"
