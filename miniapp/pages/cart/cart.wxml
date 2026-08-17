@@ -8,12 +8,26 @@
   </view>
 
   <block wx:if="{{items.length}}">
-    <view class="progress-card">
+    <!-- Free-shipping bar. Three states, set by the server (shipState):
+         'zone'   — the area is named, so the promise is checkable by eye:
+                    "天河区 · 再差 ¥14 即可免运费。" A customer shipping to
+                    Shanghai can see the figure is for the wrong place.
+         'policy' — no address resolved. States the store threshold as a
+                    condition, never as an achievement, and shows no progress.
+         'none'   — nothing to promise (zone has no free state, or nothing
+                    fetched yet). The bar doesn't render at all. -->
+    <view wx:if="{{shipState !== 'none'}}" class="progress-card">
       <view class="progress-text">
-        <text wx:if="{{!unlocked}}"><block wx:if="{{lang === 'cn'}}">再差 <text class="f-bear strong">¥{{remaining}}</text> 即可<text class="f-bear strong">免运费</text>。</block><block wx:else>You're <text class="f-bear strong">¥{{remaining}}</text> away from <text class="f-bear strong">free shipping.</text></block></text>
-        <text wx:else><text class="f-bear strong">{{lang === 'cn' ? '已享免运费。' : 'Free shipping unlocked.'}}</text></text>
+        <block wx:if="{{shipState === 'zone'}}">
+          <text class="ship-zone">{{shipZoneName}} · </text>
+          <text wx:if="{{!unlocked}}"><block wx:if="{{lang === 'cn'}}">再差 <text class="f-bear strong">¥{{remaining}}</text> 即可<text class="f-bear strong">免运费</text>。</block><block wx:else>You're <text class="f-bear strong">¥{{remaining}}</text> away from <text class="f-bear strong">free shipping.</text></block></text>
+          <text wx:else><text class="f-bear strong">{{lang === 'cn' ? '已享免运费。' : 'Free shipping unlocked.'}}</text></text>
+        </block>
+        <block wx:else>
+          <text class="f-bear strong">{{lang === 'cn' ? '满 ¥' + threshold + ' 包邮' : 'Free shipping ¥' + threshold + '+'}}</text>
+        </block>
       </view>
-      <view class="progress-bar">
+      <view wx:if="{{shipState === 'zone'}}" class="progress-bar">
         <view class="progress-fill" style="width: {{pct}}%;"></view>
       </view>
     </view>

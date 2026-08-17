@@ -39,6 +39,10 @@
 }
 .progress-text { font-family: var(--f-aleo); font-size: calc(26rpx * var(--font-scale)); }
 .progress-text .strong { font-family: var(--f-bear); }
+/* The area the figure applies to. Quieter than the promise it qualifies, but
+   present — it is what lets the customer catch a bar answering for the wrong
+   address. */
+.progress-text .ship-zone { opacity: 0.62; }
 .progress-bar {
   margin-top: 16rpx;
   height: 16rpx;

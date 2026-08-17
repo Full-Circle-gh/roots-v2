@@ -863,17 +863,28 @@ router.get('/api/retail/pickup-stores', (req, res) => {
 });
 
 // GET /api/retail/free-shipping-threshold?address_id=
-// The cart tab's "¥XX more for free shipping" bar runs before an address is
-// picked, so on its own it can only show the global default. This resolves the
-// threshold for the customer's chosen address zone (address_id = whatever they
-// last selected at checkout; otherwise their default saved address), so the bar
-// matches what checkout will actually charge (e.g. a Tianhe address whose zone
-// Free-over is ¥299, not the global one). Falls back to the global when there's
-// no saved address or the zone leaves Free-over blank.
+// Feeds the cart tab's free-shipping bar. The cart has no address of its own,
+// so this resolves one — the id the customer last selected at checkout, else
+// their default saved address — and answers for THAT zone.
+//
+// Two things it must not do, both learned from an order that promised free
+// shipping in the cart and charged ¥25 at checkout:
+//
+//   1. Guess silently. The default-address fallback is kept (a named figure
+//      beats no figure), but the zone's own name now rides along so the bar
+//      can show which area the number is for. A customer shopping to Shanghai
+//      who sees "天河区" can tell the bar is answering for the wrong place.
+//      When nothing resolves, `zone` is null and the bar must state the
+//      threshold as store policy rather than claim anything is unlocked.
+//   2. Read `free_threshold` directly. freeShippingTargetFor asks the pricing
+//      engine what it would actually charge at the target, so a zone whose
+//      free state the engine ignores comes back reachable:false and the bar
+//      advertises nothing instead of an unreachable number.
+//
+// `threshold` stays a plain number at the top of the payload for older
+// clients (public/shop.html reads d.threshold and nothing else).
 router.get('/api/retail/free-shipping-threshold', requireRetailAuth, (req, res) => {
   try {
-    const globalFree = Number(cfgValue('fees.freeShippingThreshold', 199)) || 0;
-    let threshold = globalFree, source = 'global';
     // Prefer an explicit address_id (the one the customer last selected at
     // checkout); ownership-scoped so a foreign id can't be probed. Falls back
     // to the default/first saved address when omitted or not found.
@@ -890,15 +901,29 @@ router.get('/api/retail/free-shipping-threshold', requireRetailAuth, (req, res) 
           WHERE customer_id = ? ORDER BY is_default DESC, id ASC LIMIT 1`
       ).get(req.customer.id);
     }
-    if (addr) {
-      const zone = matchDeliveryZone(normalizeChinaAddress(addr));
-      if (zone && zone.free_threshold != null) {
-        threshold = Number(zone.free_threshold);
-        source = 'zone';
-      }
-    }
+    const zone = addr ? matchDeliveryZone(normalizeChinaAddress(addr)) : null;
+    const target = zone
+      ? freeShippingTargetFor(zone, 'standard')
+      : { threshold: null, reachable: false };
+
+    // No zone → the global figure, offered as policy, not as a promise for
+    // her address. The bar renders it as a condition and suppresses its
+    // progress fill, so it can never read as "unlocked".
+    const globalFree = Number(cfgValue('fees.freeShippingThreshold', db.FREE_SHIPPING_THRESHOLD_DEFAULT)) || 0;
+
     res.set('Cache-Control', 'no-store');
-    res.json({ success: true, data: { threshold, source } });
+    res.json({
+      success: true,
+      data: {
+        threshold: zone && target.reachable ? target.threshold : globalFree,
+        source: zone ? 'zone' : 'global',
+        // Null when no address resolved — the bar keys its unknown state off
+        // this, not off the threshold (which is always a number).
+        zone: zone ? { name_en: zone.name_en || '', name_cn: zone.name_cn || '' } : null,
+        // False when the engine won't ever hand this zone a ¥0 delivery line.
+        reachable: !!(zone && target.reachable),
+      },
+    });
   } catch (e) {
     console.error('[retail/free-shipping-threshold]', e);
     res.status(500).json({ success: false, error: 'threshold_failed' });
@@ -10045,7 +10070,7 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   } else {
     // Backwards-compatible fallback while zones are still being configured:
     // legacy 'fees.standardShipping' / 'fees.sameDayDelivery' kick in.
-    const freeShipThreshold = Number(cfgValue('fees.freeShippingThreshold', 199));
+    const freeShipThreshold = Number(cfgValue('fees.freeShippingThreshold', db.FREE_SHIPPING_THRESHOLD_DEFAULT));
     const standardShipping  = Number(cfgValue('fees.standardShipping', 12));
     const sameDayDelivery   = Number(cfgValue('fees.sameDayDelivery', 18));
     if (deliveryMode === 'sameday') shippingFee = sameDayDelivery;
@@ -27880,7 +27905,7 @@ function computeDeliveryAndPacking(zone, subtotal, deliveryMode, totalQty, cartG
     const freeThreshold = Number(zone.free_threshold);
     freeEligible = freeThreshold > 0 && subtotal >= freeThreshold;
   } else {
-    const globalFree = Number(cfgValue('fees.freeShippingThreshold', 199));
+    const globalFree = Number(cfgValue('fees.freeShippingThreshold', db.FREE_SHIPPING_THRESHOLD_DEFAULT));
     freeEligible = globalFree <= 0 || subtotal >= globalFree;
   }
 
@@ -27926,6 +27951,36 @@ function computeDeliveryAndPacking(zone, subtotal, deliveryMode, totalQty, cartG
     // threshold, free mode, or a zone-waived weight fee) reads as free, except
     // the GZ any-distance MAX flat which is never "free".
     freeShipping: deliveryFee === 0 && !isGzMax,
+  };
+}
+
+// What the cart's free-shipping bar may promise for a zone — derived by ASKING
+// the engine above, not by re-reading `free_threshold`. The column alone is a
+// lie in two configurations the engine handles differently: a weight-priced
+// zone ignores it when blank (the global fallback deliberately doesn't reach
+// courier rates), and GZ MAX charges its flat fee whatever the subtotal. A bar
+// that reads the column shows an unreachable target in both.
+//
+// So: work out the candidate target the same way the customer would hit it,
+// then price a cart sitting exactly ON that target and see whether delivery
+// actually comes out at ¥0. Whatever the engine says, the bar says.
+//   { threshold, reachable }
+//     reachable false → this zone has no free-shipping state to advertise.
+//     threshold 0 + reachable true → free at any subtotal (global "0 = always
+//     free"); a per-zone 0 keeps its "no free option" meaning and prices as
+//     unreachable, which is exactly what the engine does with it.
+// qty/grams are 0 because both waiver branches key off subtotal alone — the
+// bar can answer without knowing the cart, which is what lets a GET serve it.
+function freeShippingTargetFor(zone, deliveryMode = 'standard') {
+  if (!zone) return { threshold: null, reachable: false };
+  const target = zone.free_threshold != null
+    ? Number(zone.free_threshold)
+    : Number(cfgValue('fees.freeShippingThreshold', db.FREE_SHIPPING_THRESHOLD_DEFAULT));
+  if (!Number.isFinite(target)) return { threshold: null, reachable: false };
+  const probe = computeDeliveryAndPacking(zone, Math.max(0, target), deliveryMode, 0, 0);
+  return {
+    threshold: target,
+    reachable: !probe.error && Number(probe.deliveryFee) === 0,
   };
 }
 
