@@ -25215,8 +25215,9 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
         }
       } catch (e) { console.error('[inventory.reverse (cancel)]', e); }
     }
-    // Cancelling a paid order issues a full refund — record the payout +
-    // reverse points/redeem so the cancelled order reflects the money returned.
+    // Cancelling a paid order issues a full refund — record the payout so the
+    // cancelled order reflects the money returned. The ledger reversals used to
+    // live inside this branch; they are now shared by both, below.
     if (wechatRefundRef) {
       try {
         const fullTotal = +(tdb().prepare('SELECT total FROM retail_orders WHERE id = ?').get(id)?.total || 0);
@@ -25234,11 +25235,6 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
         ).run(fullTotal, fullTotal, wechatRefundRef, req.user.id, id);
         tdb().prepare("UPDATE retail_payments SET refunded_amount = amount, status = 'refunded' WHERE order_id = ? AND status = 'success'").run(id);
         logRefundEvent({ orderId: id, event: 'paid', amount: fullTotal, note: 'auto-refund on cancel', userId: req.user.id, meta: { method: 'wechat', reference: wechatRefundRef } });
-        try { reverseOrderPoints(id); } catch (e) { console.error('[reverseOrderPoints cancel]', e); }
-        try { reverseOrderRedeem(id); } catch (e) { console.error('[reverseOrderRedeem cancel]', e); }
-        try { reverseOrderBalance(id); } catch (e) { console.error('[reverseOrderBalance cancel]', e); }
-        try { reverseOrderReferral(id); } catch (e) { console.error('[reverseOrderReferral cancel]', e); }
-        try { reverseLifetimeCommission(id); } catch (e) { console.error('[reverseLifetimeCommission cancel]', e); }
       } catch (e) { console.error('[cancel refund bookkeeping]', e); }
     } else {
       // No gateway refund fired — the order was paid off-app (cash/manual, no
@@ -25257,6 +25253,50 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
             WHERE id = ? AND refund_status IN ('pending', 'reviewing', 'approved')`
         ).run(req.user.id, id);
       } catch (e) { console.error('[cancel close-stuck-refund]', e); }
+    }
+    // THE LEDGER REVERSALS BELONG TO THE CANCEL, NOT TO THE GATEWAY.
+    //
+    // These five used to sit inside the `wechatRefundRef` branch above, so a
+    // paid order cancelled with no gateway refund — an off-app cash or bank
+    // order, an already-refunded one, or DEV — reversed NOTHING. awardOrderPoints
+    // added the subtotal to lifetime_spend at payment and nothing took it back;
+    // redeemed points, wallet balance, the referral bounty and the lifetime
+    // commission all stayed as if the order had happened. Measured across every
+    // order in the database: 20 orders took that branch against 2 that took the
+    // gateway one, so it was the common case, not the edge.
+    //
+    // The branch condition asks whether the GATEWAY moved money. None of these
+    // five touches the gateway — they move points, store credit and referral
+    // rows in our own ledgers. The gateway's money is returned by
+    // settleOrderRefundAcrossTenders, which is a different thing entirely and
+    // still runs where it always did. Coupling the two was the defect.
+    //
+    // Running them twice is not a risk. reverseOrderPoints is marked by its
+    // 'refund_reverse' row; reverseOrderRedeem and reverseOrderBalance are
+    // cumulative-capped against what earlier partial refunds already returned;
+    // reverseOrderReferral and reverseLifetimeCommission each win a status flip
+    // or do nothing. An operator who already handed the cash back by hand
+    // therefore cannot be double-returned by this — order 324 is the live proof:
+    // ¥38.80 of wallet balance spent, ¥38.31 already returned through the payout
+    // flow, so a call today returns the remaining ¥0.49 and stops.
+    //
+    // NO reverseOrderVoucher. It has no ledger row to key idempotency on and its
+    // contract puts once-per-order on the caller, and no paid path returns the
+    // voucher today — not this branch, not /refund/approve, not /refund/payout.
+    // Adding it here alone would make the paid paths disagree. The reservation
+    // sweeper DOES return it, because its atomic pending_payment flip is exactly
+    // the once-per-order guarantee this site lacks.
+    //
+    // Placed after the if/else so the gateway path's observable order is what it
+    // always was: refund bookkeeping first, then the reversals. They are also no
+    // longer inside that branch's try, so a failed bookkeeping write can no
+    // longer silently skip them.
+    if (o.status !== 'pending_payment') {
+      try { reverseOrderPoints(id); } catch (e) { console.error('[reverseOrderPoints cancel]', e); }
+      try { reverseOrderRedeem(id); } catch (e) { console.error('[reverseOrderRedeem cancel]', e); }
+      try { reverseOrderBalance(id); } catch (e) { console.error('[reverseOrderBalance cancel]', e); }
+      try { reverseOrderReferral(id); } catch (e) { console.error('[reverseOrderReferral cancel]', e); }
+      try { reverseLifetimeCommission(id); } catch (e) { console.error('[reverseLifetimeCommission cancel]', e); }
     }
   }
   if (status === 'refunded') {

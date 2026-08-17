@@ -126,7 +126,45 @@ const SOURCE_CHECKS = [
     anchor: '[sweep-cancel.reversePoints]',
     present: false,
   },
+
+  // ── item 44: the five, hoisted so both paid-cancel branches share them ──
+  {
+    file: 'routes/retail.js', src: () => RETAIL_SRC,
+    name: 'the five run for every paid cancel, guarded on the status not being pending_payment',
+    anchor: "    if (o.status !== 'pending_payment') {",
+    present: true,
+    extra: (src) => {
+      const shared = sliceBetween(sliceBetween(src, "  if (status === 'cancelled') {", "  if (status === 'refunded') {"),
+        "    if (o.status !== 'pending_payment') {", '\n  }');
+      return ['reverseOrderPoints', 'reverseOrderRedeem', 'reverseOrderBalance', 'reverseOrderReferral', 'reverseLifetimeCommission']
+        .every((fn) => shared.includes(fn + '(id)'));
+    },
+  },
+  {
+    file: 'routes/retail.js', src: () => RETAIL_SRC,
+    name: 'the hoisted site sits AFTER the wechatRefundRef if/else, so the gateway path keeps its order',
+    anchor: 'THE LEDGER REVERSALS BELONG TO THE CANCEL, NOT TO THE GATEWAY.',
+    present: true,
+    extra: (src) => {
+      const cancelBlock = sliceBetween(src, "  if (status === 'cancelled') {", "  if (status === 'refunded') {");
+      return cancelBlock.indexOf('THE LEDGER REVERSALS BELONG TO THE CANCEL')
+           > cancelBlock.indexOf('[cancel close-stuck-refund]');
+    },
+  },
 ];
+
+// Region helpers. Absence checks MUST be scoped — reverseOrderVoucher is called
+// legitimately elsewhere in this file (the pending_payment branch, the sweep
+// handler), so an unscoped "not present" check would be vacuous.
+function sliceBetween(src, from, to) {
+  const a = src.indexOf(from);
+  const b = src.indexOf(to, a + 1);
+  if (a < 0 || b < 0) return '';
+  return src.slice(a, b);
+}
+const cancelBlock   = () => sliceBetween(RETAIL_SRC, "  if (status === 'cancelled') {", "  if (status === 'refunded') {");
+const gatewayBranch = () => sliceBetween(cancelBlock(), '    if (wechatRefundRef) {', '    } else {');
+const sharedRegion  = () => sliceBetween(cancelBlock(), '      } catch (e) { console.error(\'[cancel close-stuck-refund]\', e); }', '\n  }');
 
 // ── run the source checks ─────────────────────────────────────────────────
 const evalCheck = (c, src) => {
@@ -136,6 +174,14 @@ const evalCheck = (c, src) => {
 };
 
 console.log('\n── SOURCE ──');
+// NO ANCHOR MAY CARRY A LINE ENDING. Both source files are CRLF on this
+// checkout; an anchor spanning two lines with a bare \n matches nothing, and the
+// failure is silent — the check passes as a vacuous absence, or fails for a
+// reason that reads like a real defect. Asserted rather than merely intended,
+// because it already happened once while writing this suite.
+for (const c of SOURCE_CHECKS) {
+  ok('SOURCE', `anchor carries no line ending (${c.name})`, !/[\r\n]/.test(c.anchor), c.anchor);
+}
 for (const c of SOURCE_CHECKS) {
   ok('SOURCE', `${c.file}: ${c.name}`, evalCheck(c, c.src()), c.anchor);
 }
@@ -147,6 +193,94 @@ for (const c of SOURCE_CHECKS) {
   const mutated = c.present ? src.split(c.anchor).join('') : src + '\n' + c.anchor + '\n';
   ok('SOURCE', `mutation actually changed the source (${c.name})`, mutated !== src);
   ok('SOURCE', `check goes red when mutated (${c.name})`, !evalCheck(c, mutated));
+}
+
+// ── SOURCE: branch 3 unchanged, and the voucher's deliberate absence ──────
+// Branch 3 is the regression risk: the gateway path already worked, and the
+// hoist must not change what it does. What it OWNS is the refund bookkeeping;
+// what it no longer holds is the five, which now run for it from the shared
+// site below it.
+console.log('\n── SOURCE: branch 3 (gateway) and the scoped absences ──');
+{
+  const gw = gatewayBranch();
+  ok('SOURCE', 'branch 3 was found at all', gw.length > 0, gw.length);
+  for (const [what, needle] of [
+    ['refund_status = paid',          "refund_status = 'paid'"],
+    ['approved + paid amounts',       'refund_amount_approved = ?'],
+    ['wechat payout method + ref',    "refund_payout_method   = 'wechat'"],
+    ['retail_payments mirror',        "UPDATE retail_payments SET refunded_amount = amount, status = 'refunded'"],
+    ['the paid refund event',         "note: 'auto-refund on cancel'"],
+  ]) ok('SOURCE', `branch 3 keeps its ${what}`, gw.includes(needle), what);
+
+  for (const fn of ['reverseOrderPoints', 'reverseOrderRedeem', 'reverseOrderBalance', 'reverseOrderReferral', 'reverseLifetimeCommission']) {
+    ok('SOURCE', `branch 3 no longer calls ${fn} itself — it runs from the shared site`, !gw.includes(fn + '(id)'), fn);
+  }
+
+  const shared = sharedRegion();
+  ok('SOURCE', 'the shared region was found at all', shared.includes('reverseOrderPoints(id)'), shared.length);
+  for (const fn of ['reverseOrderPoints', 'reverseOrderRedeem', 'reverseOrderBalance', 'reverseOrderReferral', 'reverseLifetimeCommission']) {
+    ok('SOURCE', `the shared site calls ${fn} — so the gateway path still reverses it`, shared.includes(fn + '(id)'), fn);
+  }
+  // THE ABSENCE THAT SOMEONE WILL LATER "FIX" FOR SYMMETRY.
+  // Matched on the CALL, not the bare name — the comment above the shared site
+  // explains at length why the voucher is not returned here, and a name-only
+  // check would trip on its own explanation.
+  ok('SOURCE', 'reverseOrderVoucher is NOT called from the no-gateway branch or the shared site',
+    !shared.includes('reverseOrderVoucher(id)'), shared.match(/reverseOrderVoucher\(id\)/g));
+  ok('SOURCE', 'reverseOrderVoucher is NOT called from branch 3 either (the paid paths agree)',
+    !gw.includes('reverseOrderVoucher(id)'));
+  // ...and it is still called where it IS safe, or the check above is vacuous.
+  ok('SOURCE', 'reverseOrderVoucher IS still called from the pending_payment branch',
+    cancelBlock().includes("reverseOrderVoucher(id); } catch (e) { console.error('[admin-cancel.reverseVoucher]'"));
+}
+
+console.log('\n── SOURCE: branch-3 / absence mutation red-proof ──');
+{
+  const gw = gatewayBranch();
+  const reAdded = gw + "\n      try { reverseOrderVoucher(id); } catch (e) {}";
+  ok('SOURCE', 'mutation actually changed branch 3', reAdded !== gw);
+  ok('SOURCE', 'the voucher-absence check goes red when someone adds it back for symmetry',
+    reAdded.includes('reverseOrderVoucher'));
+  const stripped = gw.split("refund_status = 'paid'").join('');
+  ok('SOURCE', 'mutation actually stripped the bookkeeping', stripped !== gw);
+  ok('SOURCE', 'the branch-3-unchanged check goes red when its bookkeeping is stripped',
+    !stripped.includes("refund_status = 'paid'"));
+}
+
+// ── BEHAVIOURAL: the cumulative cap, running the SHIPPED function ─────────
+// reverseOrderBalance is not exported, so it is materialised FROM THE SOURCE
+// TEXT and executed. An edit to the shipped function changes what runs here.
+console.log('\n── BEHAVIOURAL: cumulative cap on order 324\'s shape ──');
+{
+  const capDb = openDb();
+  capDb.exec(`
+CREATE TABLE retail_customers (id INTEGER PRIMARY KEY, balance REAL DEFAULT 0);
+CREATE TABLE retail_topup_transactions (id INTEGER PRIMARY KEY, customer_id INTEGER, amount REAL,
+  bonus_points INTEGER DEFAULT 0, payment_method TEXT, status TEXT, paid_at TEXT, out_trade_no TEXT,
+  raw_callback_json TEXT);
+INSERT INTO retail_customers (id, balance) VALUES (233, 99.51);
+-- Order 324 as it stands in production: ¥38.80 of wallet balance spent, and
+-- ¥23.11 + ¥15.20 already returned through the refund-payout flow twenty
+-- seconds before the cancel.
+INSERT INTO retail_topup_transactions (customer_id, amount, payment_method, status, out_trade_no) VALUES
+ (233, -38.80, 'order_redeem',   'success', 'orderspend:324'),
+ (233,  23.11, 'refund_reverse', 'success', 'orderrefund:324:1'),
+ (233,  15.20, 'refund_reverse', 'success', 'orderrefund:324:2');
+`);
+  const body = RETAIL_SRC.match(/function reverseOrderBalance\(orderId, maxAmount\) \{[\s\S]*?\n\}/);
+  ok('BEHAVIOURAL', 'reverseOrderBalance was extracted from the shipped source', !!body, body && body[0].length);
+  if (body) {
+    const reverseOrderBalance = new Function('tdb', 'console', `${body[0]}\nreturn reverseOrderBalance;`)(() => capDb, console);
+    const gave = reverseOrderBalance(324);
+    ok('BEHAVIOURAL', 'a call today returns ¥0.49 — not the ¥38.80 already largely returned', gave === 0.49, gave);
+    ok('BEHAVIOURAL', 'the wallet moved by exactly ¥0.49',
+      capDb.prepare('SELECT balance FROM retail_customers WHERE id = 233').get().balance === 100.00,
+      capDb.prepare('SELECT balance FROM retail_customers WHERE id = 233').get().balance);
+    const again = reverseOrderBalance(324);
+    ok('BEHAVIOURAL', 'and stops — a second call returns ¥0.00', again === 0, again);
+    ok('BEHAVIOURAL', 'the wallet did not move again',
+      capDb.prepare('SELECT balance FROM retail_customers WHERE id = 233').get().balance === 100.00);
+  }
 }
 
 // ── BEHAVIOURAL: the sweeper, required with stubs ─────────────────────────
