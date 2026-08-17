@@ -6187,6 +6187,7 @@ async function renderRecipes() {
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn btn-secondary" onclick="showRecipeTrash()" title="View deleted recipes · 查看已删除食谱"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="vertical-align:-3px;margin-right:6px"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1.5 14a2 2 0 0 1-2 1.8H8.5a2 2 0 0 1-2-1.8L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>Trash 回收站</button>
         <button class="btn btn-secondary" onclick="showRecipeImport()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="vertical-align:-3px;margin-right:6px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Import CSV 导入</button>
+        <button class="btn btn-secondary" id="recipeExportBtn" onclick="exportRecipeCostsXlsx()" title="Download every recipe's cost breakdown as a spreadsheet · 下载全部食谱成本明细"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="vertical-align:-3px;margin-right:6px"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Export Excel 导出</button>
         <button class="btn btn-primary" onclick="showRecipeForm(null)">+ 新建食谱 New Recipe</button>
       </div>
     </div>
@@ -6886,6 +6887,37 @@ HUM-01,,,,,,,,,,,STEP,,,,Blend with tahini lemon and garlic until smooth
   a.href = url; a.download = 'roots_recipe_import_template.csv';
   document.body.appendChild(a); a.click();
   setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+}
+
+// Recipe cost export. The server builds the .xlsx (routes/recipes.js
+// GET /api/recipes/export) — fetched rather than opened via location.href so a
+// 403 or a 500 surfaces as a toast instead of dumping raw JSON over the page.
+async function exportRecipeCostsXlsx() {
+  const btn = document.getElementById('recipeExportBtn');
+  const label = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Working 处理中'; }
+  try {
+    const r = await fetch('/api/recipes/export');
+    if (!r.ok) {
+      let msg = 'HTTP ' + r.status;
+      try { const j = await r.json(); if (j && j.error) msg = j.error; } catch {}
+      toast('Export failed · 导出失败: ' + msg, 'error');
+      return;
+    }
+    const blob = await r.blob();
+    const name = (r.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/)?.[1]
+      || 'recipe-costs.xlsx';
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 100);
+    toast('📥 已导出 Exported');
+  } catch (e) {
+    toast('Export failed · 导出失败: ' + e.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = label; }
+  }
 }
 
 async function showRecipeForm(id) {
