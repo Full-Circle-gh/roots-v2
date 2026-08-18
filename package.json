@@ -14,6 +14,7 @@
     "test:needs-point": "node scripts/test_needs_point.js && node scripts/test_needs_point_client.js",
     "test:phone": "node scripts/test_recipient_phone.js",
     "test:point-search": "node scripts/test_point_search.js",
+    "test:addon-stock": "node scripts/test_addon_stock_gate.js",
     "test:preorder": "node scripts/test_preorder_local.js",
     "test:split-merge": "node scripts/test_shipments_split_merge.js",
     "test:handle-threading": "node scripts/test_handle_threading_batch1.js && node scripts/test_handle_threading_batch2.js",

@@ -29469,9 +29469,15 @@ function finalizeOrderAddon(addonId) {
 
 // True when an order's stock is actually tracked — i.e. it reserved+committed
 // at checkout. Out-of-GZ and scheduled-for-later orders run with stockGate off
-// (see the create-order path) and never reserve; an add-on to one of those must
-// inherit the same policy or we'd refuse a sale the original order was allowed
-// to make. The same test finalizeOrderAddon uses before deducting.
+// (see the create-order path) and never reserve, so this is false for them
+// forever, even after their stock IS decremented (markOrderPaid /
+// prepareCommitUnreservedOrder write the ledger, not reservations).
+//
+// It answers one question — does this order hold reservations — and so it
+// belongs to reservation handling: finalizeOrderAddon reads it before
+// reserving+committing an add-on's lines. It is NOT a stock check and must not
+// gate one; whether the items a customer is adding NOW exist is answered by
+// addonStockRefusal, off the order's own fulfilment.
 function orderTracksStock(orderId) {
   const r = tdb().prepare(
     "SELECT COUNT(*) AS n FROM retail_stock_reservations WHERE order_id = ? AND status = 'committed'"
@@ -29516,6 +29522,107 @@ function addonStockShortages(storeId, resolvedLines) {
     name_en: names.get(s.product_id)?.name_en || null,
     name_cn: names.get(s.product_id)?.name_cn || null,
   }));
+}
+
+// Is this order served off the shelf as it stands today — the case checkout
+// gates per-store stock for?
+//
+// Pickup always is: the customer comes to collect it, so the units have to be
+// there. A delivery is when the address is Guangzhou AND the promised day has
+// arrived — an ASAP pick, or a scheduled day that is today or already past.
+//
+// Everything else is not, and that is deliberate rather than an oversight:
+// checkout routes an out-of-city order, and a Guangzhou one still waiting for a
+// later day, with ignoreStock and no reservation, because the kitchen restocks
+// before either is fulfilled. An add-on inherits the parent order's fulfilment
+// date, so holding it to today's shelf would refuse a line the identical fresh
+// order is allowed to pre-order.
+//
+// Read off the ORDER — its address, its slot kind, its promised day — not off
+// its reservations. Whether an order reserved is a fact about how it was
+// created; it is a proxy for this question, not the question.
+function addonServedFromShelfNow(order, address) {
+  if (order.fulfillment_type === 'pickup') return true;
+  if (!inventory.isGuangzhouAddress(address)) return false;
+  const kind = order.delivery_slot_kind || null;
+  if (kind === 'right_away' || kind === 'today') return true;
+  // No promised day at all is "as soon as possible" — the same promise as
+  // right_away, and read that way everywhere else (see isQingyunSameCityToday).
+  const due = inventory.gzDateStr(order.scheduled_for);
+  if (due === '') return true;
+  return due <= inventory.gzDateStr(new Date().toISOString());
+}
+
+// Every out-of-stock rule an add-on must clear BEFORE the customer is charged.
+//
+// This used to be one check — the per-store availability gate — hung on
+// orderTracksStock, i.e. "did this order reserve at checkout?". Orders created
+// with the stock gate off reserve nothing, and that is every out-of-city order,
+// every far-district scheduled order and every core-GZ scheduled one. For all
+// of them the gate was skipped whole, and the first stock check on the path ran
+// inside finalizeOrderAddon — after the charge. A customer could add a sold-out
+// batch-made item to one of those orders and be charged for it.
+//
+// So the rules run on every add-on now, and they are the rules a fresh order
+// clears at checkout, resolved from the PARENT order — its address, its zone,
+// its slot kind — because that is the fulfilment the addition inherits.
+//
+// Returns a ready-to-send 409 body, or null when every line is coverable. The
+// shape is the one the picker already renders (`shortages`, named), with
+// checkout's product_id / available alongside it so both readings agree.
+function addonStockRefusal(order, resolved) {
+  let address = null;
+  try { address = JSON.parse(order.address_json || 'null'); } catch { address = null; }
+
+  const refuse = (r, available) => {
+    const have = Math.max(0, Number(available) || 0);
+    return {
+      success: false, error: 'insufficient_stock',
+      product_id: r.product.id, available: have,
+      shortages: [{
+        product_id: r.product.id, requested: r.qty, available: have,
+        name_en: r.product.name_en || null, name_cn: r.product.name_cn || null,
+      }],
+    };
+  };
+
+  // 1. Hard out-of-stock. A 'strict' line (the default policy) is never
+  //    orderable at zero stock, in ANY region — checkout enforces that before
+  //    it looks at routing or reservations, and so does this. real_stock is the
+  //    per-store SUM the shop grid shows; NULL (untracked / bundles) is
+  //    available, same as checkout.
+  const hardOos = resolved.find(r => {
+    if (effectiveOosPolicy(r.product) !== 'strict') return false;
+    const avail = r.product.real_stock == null ? null : Number(r.product.real_stock);
+    return avail != null && avail < r.qty;
+  });
+  if (hardOos) return refuse(hardOos, hardOos.product.real_stock);
+
+  // 2. Local pre-order gate. A Guangzhou shopper on the local run may not
+  //    pre-order a sold-out 'backorder_gz' line, on any delivery day — there is
+  //    nothing behind it for them. The ship-district carve-out is checkout's,
+  //    resolved from the order's own slot kind: those parcels leave the
+  //    out-of-city warehouse on the batch cadence unless the shopper bought the
+  //    same-day extra, and a pre-order is as safe for them as it is for
+  //    Shanghai. Pickup is exempt here because rule 3 refuses it outright.
+  if (order.fulfillment_type !== 'pickup') {
+    const scheduledShipDistrict =
+          inventory.isGuangzhouAddress(address) &&
+          inventory.isOptInSameDayDistrict(address) &&
+          order.delivery_slot_kind !== 'today';
+    const localPre = localPreorderLine(resolved, address, { scheduledShipDistrict });
+    if (localPre) return refuse(localPre, localPre.product.real_stock);
+  }
+
+  // 3. Per-store availability at the fulfilling store. The add-on inherits
+  //    order.store_id and never re-routes, so this is the only thing standing
+  //    between "the picker let me tap +" and a line that store cannot fill.
+  if (order.store_id && addonServedFromShelfNow(order, address)) {
+    const shortages = addonStockShortages(order.store_id, resolved);
+    if (shortages.length) return { success: false, error: 'insufficient_stock', shortages };
+  }
+
+  return null;
 }
 
 // GET /api/retail/orders/:id/addon/availability
@@ -29580,7 +29687,8 @@ router.post('/api/retail/orders/:id/addon/create', requireRetailAuth, express.js
 
   const order = tdb().prepare(
     `SELECT id, order_no, status, customer_id, store_id, address_json, fulfillment_type,
-            subtotal, shipping_fee, same_day_surcharge_fee, delivery_zone_id, delivery_mode
+            subtotal, shipping_fee, same_day_surcharge_fee, delivery_zone_id, delivery_mode,
+            delivery_slot_kind, scheduled_for
        FROM retail_orders WHERE id = ? AND customer_id = ?`
   ).get(orderId, req.customer.id);
   if (!order) return res.status(404).json({ success: false, error: 'order_not_found' });
@@ -29619,7 +29727,9 @@ router.post('/api/retail/orders/:id/addon/create', requireRetailAuth, express.js
     const p = tdb().prepare(
       `SELECT id, name_en, name_cn, sku, weight AS size, sell_price AS price, stock_qty AS stock,
               flash_price, flash_starts_at, flash_ends_at, flash_stock_limit, flash_sold, no_coupon_on_flash,
-              ship_modes, needs_ice_pack, ship_from_supplier, variant_group_id, bundle_items
+              ship_modes, needs_ice_pack, ship_from_supplier, variant_group_id, bundle_items,
+              is_batch_made, oos_policy,
+              ${inventory.sellableStockSql('store_products.id', 'stock_qty')} AS real_stock
          FROM store_products WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
     ).get(pid);
     if (!p) return res.status(400).json({ success: false, error: 'product_unavailable', product_id: pid });
@@ -29665,18 +29775,12 @@ router.post('/api/retail/orders/:id/addon/create', requireRetailAuth, express.js
     }
   }
 
-  // ── Stock gate at the fulfilling store, BEFORE any money moves ────────
-  // Without this the add-on's only stock check ran inside finalizeOrderAddon —
-  // i.e. after the WeChat charge — where it can do nothing but warn, so a
-  // customer could add units the store did not have (and, before the partial
-  // reserve below, silently skip the deduction for the whole batch). Refusing
-  // here is the one point where refusing is still free.
-  if (order.store_id && orderTracksStock(orderId)) {
-    const short = addonStockShortages(order.store_id, resolved);
-    if (short.length) {
-      return res.status(409).json({ success: false, error: 'insufficient_stock', shortages: short });
-    }
-  }
+  // ── Out-of-stock gates, BEFORE any money moves ────────────────────────
+  // Refusing here is the one point where refusing is still free: the only other
+  // stock check on this path runs inside finalizeOrderAddon, after the WeChat
+  // charge, where it can do nothing but warn.
+  const refusal = addonStockRefusal(order, resolved);
+  if (refusal) return res.status(409).json(refusal);
 
   const addonSubtotal = Math.round(resolved.reduce((s, r) => s + r.lineTotal, 0) * 100) / 100;
   if (!(addonSubtotal > 0)) return res.status(400).json({ success: false, error: 'zero_amount' });
