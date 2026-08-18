@@ -151,9 +151,26 @@ for (const [k, v] of Object.entries(stamp(before))) console.log(`  ${k.padEnd(10
 
 console.log('\nPLAN');
 if (!plan.points.length && !plan.vouchers.length) console.log('  (nothing to do)');
+// Two repairs can land on the same customer (302 has both), and each write is a
+// relative increment — points_balance = points_balance + N. So the plan carries a
+// running balance. Reading the stored balance fresh per line would print every
+// repair starting from the same figure, which reads as if the last one wins.
+const running = new Map();
 for (const p of plan.points) {
-  const bal = db.prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(p.customerId).points_balance;
-  console.log(`  customer ${p.customerId}: +${p.owed} pts for order ${p.orderId} (balance ${bal} -> ${bal + p.owed}), plus a refund_redeem ledger row`);
+  const from = running.has(p.customerId)
+    ? running.get(p.customerId)
+    : db.prepare('SELECT points_balance FROM retail_customers WHERE id = ?').get(p.customerId).points_balance;
+  const to = from + p.owed;
+  running.set(p.customerId, to);
+  console.log(`  customer ${p.customerId}: +${p.owed} pts for order ${p.orderId} (balance ${from} -> ${to}), plus a refund_redeem ledger row`);
+}
+// State the end figure for anyone getting more than one repair, so the total is
+// read off the plan rather than added up by hand.
+for (const [cid, end] of running) {
+  const rows = plan.points.filter((p) => p.customerId === cid);
+  if (rows.length < 2) continue;
+  const owed = rows.reduce((s, p) => s + p.owed, 0);
+  console.log(`    = customer ${cid} ends at ${end} pts (${end - owed} + ${owed} across ${rows.length} orders)`);
 }
 for (const v of plan.vouchers) {
   console.log(`  customer ${v.customerId}: return voucher ${v.code} (grant ${v.grantId}, order ${v.orderId}); global used_count ${v.usedCount} -> ${Math.max(0, v.usedCount - 1)}`);
