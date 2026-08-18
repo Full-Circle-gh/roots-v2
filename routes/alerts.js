@@ -29,10 +29,13 @@ const ALERT_COLS = `
 // reason, which would bury the page in duplicates, so only the newest row per
 // (ingredient, reason) inside the window is shown. The window and the dedup
 // live here as one string so the badge count and the feed cannot disagree.
-const COST_SKIP_WINDOW = "s.created_at >= datetime('now','-30 days')";
+// A skip is OPEN until a later PO prices the item cleanly, which stamps
+// resolved_at (routes/purchases.js). Resolved rows stay in the table but never
+// alert again — the alert should not outlive the problem.
+const COST_SKIP_WINDOW = "s.resolved_at IS NULL AND s.created_at >= datetime('now','-30 days')";
 const COST_SKIP_LATEST = `s.id IN (
   SELECT MAX(id) FROM ingredient_cost_skips
-   WHERE created_at >= datetime('now','-30 days')
+   WHERE resolved_at IS NULL AND created_at >= datetime('now','-30 days')
    GROUP BY ingredient_id, reason
 )`;
 
@@ -136,7 +139,15 @@ router.get('/api/alerts/feed', requireAuth, requirePermission('alerts'), (req, r
      WHERE ${COST_SKIP_WINDOW} AND ${COST_SKIP_LATEST}
      ORDER BY s.created_at DESC LIMIT 100`).all();
 
-  res.json({ success: true, data: { counts, price, outOfStock, lowStock, expired, expiringSoon, staleKitchen, costSkips } });
+  // Split by reason as well as counted together — "9 items never recorded what
+  // a pack holds" and "2 order lines used the wrong unit" are different jobs
+  // for different people.
+  const costSkipsByReason = db.prepare(`
+    SELECT s.reason, COUNT(*) AS c FROM ingredient_cost_skips s
+     WHERE ${COST_SKIP_WINDOW} AND ${COST_SKIP_LATEST}
+     GROUP BY s.reason ORDER BY c DESC`).all();
+
+  res.json({ success: true, data: { counts, price, outOfStock, lowStock, expired, expiringSoon, staleKitchen, costSkips, costSkipsByReason } });
 });
 
 // PUT mark single as read

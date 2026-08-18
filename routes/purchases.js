@@ -7,7 +7,7 @@ const db = seam(require('../database'));
 const { requireAuth, requirePermission, requireDelete, logActivity } = require('../middleware/auth');
 // The one cost-per-recipe-unit derivation — shared so purchasing cannot drift
 // from what the ingredient form computes. See lib/ingredient-cost.js.
-const { deriveCostPerUnit } = require('../lib/ingredient-cost');
+const { deriveCostPerUnit, normaliseUnit } = require('../lib/ingredient-cost');
 const router = express.Router();
 
 // Web Push helpers — fan-out to subscribed devices when a PO event
@@ -93,8 +93,9 @@ function _firePOPush(poId, kind) {
 //   * no derivable divisor — a container item with no recorded contents, or a
 //     recipe unit outside g / ml / pcs. Dividing by 1 or storing 0 would both
 //     destroy a good cost.
-// Skips are returned to the caller and logged; surfacing them in the Alerts
-// feed is a separate change.
+// Skips are returned to the caller, logged, and recorded in
+// ingredient_cost_skips, which the Alerts page reads. A later PO that prices
+// the item cleanly closes them again.
 //
 // buy_unit is NOT written any more. It is a property of the item as the
 // supplier sells it, and overwriting it from a PO line silently re-based every
@@ -102,14 +103,23 @@ function _firePOPush(poId, kind) {
 function firePriceAlertsForPO(poId, source) {
   const items = db.prepare('SELECT ingredient_id, unit, cost_per_unit FROM po_line_items WHERE po_id = ?').all(poId);
   const skips = [];
-  const insSkip = db.prepare(`INSERT INTO ingredient_cost_skips
-    (ingredient_id, po_id, reason, line_unit, line_price) VALUES (?,?,?,?,?)`);
+  // Prepared behind a guard: a database restored from before this table
+  // existed must not take the whole PO status flip down with it. Prices still
+  // write; only the record of skips is lost, and loudly.
+  let insSkip = null, resolveSkips = null;
+  try {
+    insSkip = db.prepare(`INSERT INTO ingredient_cost_skips
+      (ingredient_id, po_id, reason, line_unit, line_price) VALUES (?,?,?,?,?)`);
+    resolveSkips = db.prepare(`UPDATE ingredient_cost_skips
+         SET resolved_at = CURRENT_TIMESTAMP
+       WHERE ingredient_id = ? AND resolved_at IS NULL`);
+  } catch (e) { console.warn('[price write-back] ingredient_cost_skips unavailable:', e.message); }
   const skip = (ing, item, reason) => {
     skips.push({ ingredient_id: ing.id, sku: ing.sku || null, name_en: ing.name_en || '', name_cn: ing.name_cn || null, reason });
     console.warn(`[price write-back] skipped ${ing.sku || 'id ' + ing.id} ${ing.name_en || ''} — ${reason}`);
     // Recorded so the refusal reaches the Alerts page. A skip that only ever
     // reached the server log would leave the item's cost stale in silence.
-    try { insSkip.run(ing.id, poId, reason, item.unit || null, item.cost_per_unit); }
+    try { if (insSkip) insSkip.run(ing.id, poId, reason, item.unit || null, item.cost_per_unit); }
     catch (e) { console.warn('[price write-back] could not record skip:', e.message); }
   };
   for (const item of items) {
@@ -122,14 +132,19 @@ function firePriceAlertsForPO(poId, source) {
     // for every priced line, exactly as before.
     db.prepare('INSERT INTO ingredient_price_history (ingredient_id,price,buy_unit,source) VALUES (?,?,?,?)').run(item.ingredient_id, item.cost_per_unit, item.unit, source);
 
-    const lineUnit = String(item.unit || '').trim().toLowerCase();
-    const itemUnit = String(ing.buy_unit || '').trim().toLowerCase();
-    if (lineUnit !== itemUnit) { skip(ing, item, 'unit_mismatch'); continue; }
+    // Through normaliseUnit, so 'pc' on the line and 'pcs' on the item are the
+    // same unit and the price flows.
+    if (normaliseUnit(item.unit) !== normaliseUnit(ing.buy_unit)) { skip(ing, item, 'unit_mismatch'); continue; }
 
     const { cpu, reason } = deriveCostPerUnit(ing, item.cost_per_unit);
     if (cpu === null) { skip(ing, item, reason); continue; }
 
     db.prepare('UPDATE ingredients SET buy_price=?,cost_per_unit=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(item.cost_per_unit, cpu, item.ingredient_id);
+    // The item just priced cleanly, so whatever blocked it before is no longer
+    // true — close its open skips. They stay in the table with resolved_at set,
+    // because the history of what went unpriced is worth keeping. Without this
+    // the alert would outlive the problem and have to be dismissed by hand.
+    if (resolveSkips) resolveSkips.run(item.ingredient_id);
     if (ing.buy_price > 0 && item.cost_per_unit !== ing.buy_price) {
       const changePct = ((item.cost_per_unit - ing.buy_price) / ing.buy_price) * 100;
       if (Math.abs(changePct) >= 5) {

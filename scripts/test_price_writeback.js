@@ -16,6 +16,9 @@
 //   4. PO line unit ≠ item buy_unit  → SKIP, old cost left intact
 //   5. recipe unit 'bag'             → pack price stored as-is (per-piece rule,
 //                                      extended to bag/bottle/box 2026-08-17)
+//   6. line unit 'pc' vs item 'pcs'  → same unit, price flows (synonym rule)
+//   7. a later PO that prices case 3 cleanly → its open skip auto-resolves and
+//                                      leaves the Alerts feed
 
 'use strict';
 
@@ -61,6 +64,7 @@ insIng.run(601, 'Meat Grinder RY-22S', null,   'M-99', 'pcs', 'pcs',    1, null,
 insIng.run(234, 'Dry Mint Leaves',    null,    'E-40', 'g',   'bottle', 1, null, null, 0.42, 40);
 insIng.run(139, 'Red Lentils',        null,    'C-5',  'g',   'bag',    1, 500,  'g', 0.0204, 10.21);
 insIng.run(64,  'Cutlery Set',        null,    'H-26', 'bag', 'bag',    1, null, null, 24.63, 24.63);
+insIng.run(700, 'Kitchen Hat',        null,    'J-59', 'pcs', 'pcs',    1, null, null, 12, 12);
 
 fixture.prepare(`INSERT INTO purchase_orders (id,po_number,date,status) VALUES (1,'PO-TEST-1',date('now'),'Ordered')`).run();
 const insLine = fixture.prepare(`INSERT INTO po_line_items
@@ -70,6 +74,7 @@ insLine.run(1, 601, 'Meat Grinder RY-22S', 'M-99', 1, 'pcs',    135, 135);  // c
 insLine.run(1, 234, 'Dry Mint Leaves',     'E-40', 1, 'bottle', 45,  45);   // case 3
 insLine.run(1, 139, 'Red Lentils',         'C-5',  1, 'kg',     52,  52);   // case 4 — line says kg, item is bag
 insLine.run(1, 64,  'Cutlery Set',         'H-26', 3, 'bag',    27,  81);   // case 5
+insLine.run(1, 700, 'Kitchen Hat',         'J-59', 4, 'pc',     14,  56);   // case 6 — 'pc' vs 'pcs'
 
 const before = fixture.prepare('SELECT id,sku,unit,buy_unit,cost_per_unit,buy_price FROM ingredients ORDER BY id').all();
 
@@ -126,6 +131,26 @@ const bagUnit = byId(after, 64);
 check('H-26 cost_per_unit', bagUnit.cost_per_unit, 27);
 check('H-26 buy_price',     bagUnit.buy_price,     27);
 
+console.log('\n── Case 6: line says pc, item says pcs — same unit ──────────────');
+const hat = byId(after, 700);
+check('J-59 cost_per_unit', hat.cost_per_unit, 14);
+check('J-59 not skipped',   result.skips.some(s => s.sku === 'J-59'), false);
+
+console.log('\n── Case 7: a later PO fixes case 3 — the skip auto-resolves ─────');
+// Someone fills in what a bottle of mint holds, then the next order arrives.
+fixture.prepare("UPDATE ingredients SET pack_contents_qty = 95, pack_contents_unit = 'g' WHERE id = 234").run();
+fixture.prepare("INSERT INTO purchase_orders (id,po_number,date,status) VALUES (2,'PO-TEST-2',date('now'),'Ordered')").run();
+insLine.run(2, 234, 'Dry Mint Leaves', 'E-40', 1, 'bottle', 50, 50);
+purchases.firePriceAlertsForPO(2, 'po_ordered');
+
+const mintNow  = fixture.prepare('SELECT cost_per_unit, buy_price FROM ingredients WHERE id = 234').get();
+const mintSkip = fixture.prepare('SELECT reason, resolved_at FROM ingredient_cost_skips WHERE ingredient_id = 234').get();
+console.log(`  E-40 cost_per_unit → ${mintNow.cost_per_unit}   buy_price → ${mintNow.buy_price}`);
+console.log(`  E-40 skip row: ${mintSkip.reason}, resolved_at=${mintSkip.resolved_at}`);
+check('E-40 now prices',            +mintNow.cost_per_unit.toFixed(6), +(50 / 95).toFixed(6));
+check('E-40 skip resolved',         mintSkip.resolved_at !== null,     true);
+check('skip row kept, not deleted', fixture.prepare('SELECT COUNT(*) AS c FROM ingredient_cost_skips').get().c, 2);
+
 console.log('\n── Price history (append-only, one row per priced line) ─────────');
 for (const h of fixture.prepare('SELECT ingredient_id,price,buy_unit,source FROM ingredient_price_history ORDER BY id').all()) {
   console.log(`  ingredient ${h.ingredient_id}  ¥${h.price} / ${h.buy_unit}  (${h.source})`);
@@ -165,9 +190,13 @@ check('skip rows stored', skipRows.length, 2);
   for (const s of (feed.data.costSkips || [])) {
     console.log(`  ${s.ingredient_sku} ${s.ingredient_name} — ${s.reason}  (PO ${s.po_number}, line ¥${s.line_price}/${s.line_unit}, cost kept ${s.cost_per_unit}/${s.recipe_unit})`);
   }
-  check('feed returns both skips',      (feed.data.costSkips || []).length, 2);
-  check('feed count agrees',            feed.data.counts.costSkips,        2);
-  check('badge count includes skips',   badge.breakdown.costSkips,         2);
+  console.log('  by reason:', JSON.stringify(feed.data.costSkipsByReason));
+  // Only C-5 is still open — E-40 resolved itself in case 7.
+  check('feed returns the open skip only', (feed.data.costSkips || []).length,    1);
+  check('feed shows C-5',                  (feed.data.costSkips || [])[0].ingredient_sku, 'C-5');
+  check('feed count agrees',               feed.data.counts.costSkips,            1);
+  check('badge count includes skips',      badge.breakdown.costSkips,             1);
+  check('by-reason breakdown split',       feed.data.costSkipsByReason.length,    1);
 
   server.close();
   fixture.close();

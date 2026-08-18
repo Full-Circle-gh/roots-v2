@@ -441,10 +441,16 @@ CREATE TABLE IF NOT EXISTS ingredient_cost_skips (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   ingredient_id INTEGER NOT NULL,
   po_id         INTEGER,
-  reason        TEXT NOT NULL,   -- no_pack_contents | unit_mismatch | …
+  -- One of a fixed set, stored raw so each can be counted on its own:
+  -- no_pack_contents | unit_mismatch | unsupported_recipe_unit |
+  -- no_pack_size | no_price. Display text lives in the Alerts page.
+  reason        TEXT NOT NULL,
   line_unit     TEXT,            -- the unit written on the PO line
   line_price    REAL,            -- the price we declined to write
   created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+  -- Set when a later PO priced this item cleanly. The row stays as a record of
+  -- what once went unpriced; only open rows (resolved_at IS NULL) alert.
+  resolved_at   DATETIME,
   FOREIGN KEY (ingredient_id) REFERENCES ingredients(id)
 );
 
