@@ -6,6 +6,9 @@ const path = require('path');
 // covered side of the boundary. Proven by scripts/diagnose_seam_statements.js.
 const { seam } = require('../lib/db-seam');
 const db = seam(require('../database'));
+// The one cost-per-recipe-unit derivation, shared with the PO price write-back
+// and mirroring the ingredient form. See lib/ingredient-cost.js.
+const { deriveCostPerUnit } = require('../lib/ingredient-cost');
 const { requireAuth, requireAdmin, logActivity } = require('../middleware/auth');
 const router = express.Router();
 
@@ -259,8 +262,10 @@ router.post('/api/admin/factory-reset', requireAuth, requireAdmin, (req, res) =>
 //      up with both halves stuck in name_cn. Re-runs the splitter on the
 //      combined name and updates name_en + name_cn when the split improves.
 //   2. recipe_unit + cost_per_unit not matching the new item_kind rules:
-//      non-food rows are forced to recipe_unit='pcs' with cost = price
-//      divided by pack_contents_qty (when packed in pcs) or 1.
+//      non-food rows are forced to recipe_unit='pcs'. The cost comes from
+//      lib/ingredient-cost.js — the same derivation the ingredient form and
+//      the PO price write-back use — and a row the helper cannot price keeps
+//      the cost it already has.
 // Returns counts so the user can see what changed.
 router.post('/api/admin/repair-items', requireAuth, requireAdmin, (req, res) => {
   // Mirrors the client splitCN — keep this in sync with public/app.html.
@@ -298,16 +303,21 @@ router.post('/api/admin/repair-items', requireAuth, requireAdmin, (req, res) => 
     }
     return 'pcs';
   }
-  function deriveCpu(price, ru, packQty, packUnit, buyUnit) {
-    if (!(price > 0)) return 0;
-    const u2g = { g:1, kg:1000, ml:1, l:1000, liter:1000, litre:1000, oz:28.35, lb:453.6 };
-    if (ru === 'g' || ru === 'ml') {
-      const total = (packQty && packUnit) ? packQty * (u2g[packUnit.toLowerCase()] || 1) : (u2g[(buyUnit||'').toLowerCase()] || 1);
-      return total > 0 ? Math.round((price / total) * 1000000) / 1000000 : price;
-    }
-    const pcs = (packUnit && packUnit.toLowerCase() === 'pcs' && packQty > 0) ? packQty : 1;
-    return Math.round((price / pcs) * 1000000) / 1000000;
-  }
+  // The cost is no longer derived here. deriveCpu() used to divide by the pack
+  // contents whenever they were recorded, even for an item bought by the kilo,
+  // where the schema says contents has no meaning (schema.sql:52-54). That read
+  // priced an apple at ¥11.60 per GRAM and a 12.5 kg sack of almonds at ¥6/kg,
+  // and it disagreed with the ingredient form on 29 live rows — all 29 of which
+  // stored the form's answer, so this endpoint would have overwritten correct
+  // costs with wrong ones the moment anyone ran it. lib/ingredient-cost.js is
+  // now the only derivation, shared with the form and the PO write-back.
+  //
+  // It is keyed on the row's STORED recipe unit, not on the unit this endpoint
+  // is about to write. That matters for the 14 equipment/packaging rows that
+  // carry unit='g' on a per-piece item with no pack contents: the helper
+  // declines them, and a decline means LEAVE THE COST ALONE. Feeding it the
+  // reclassified 'pcs' instead would quietly turn those declines into
+  // per-piece writes, which is exactly the fallback we are removing.
 
   // Hostname → platform classifier — must mirror client parseZohoCSV.
   // Tmall, JD, Pinduoduo, iHerb get their own platforms now (were lumped
@@ -327,7 +337,7 @@ router.post('/api/admin/repair-items', requireAuth, requireAdmin, (req, res) => 
   }
 
   const rows = db.prepare('SELECT * FROM ingredients WHERE is_active = 1').all();
-  let nameFixed = 0, unitFixed = 0, cpuFixed = 0, platformFixed = 0;
+  let nameFixed = 0, unitFixed = 0, cpuFixed = 0, platformFixed = 0, cpuDeclined = 0;
   const upd = db.prepare('UPDATE ingredients SET name_en = ?, name_cn = ?, unit = ?, cost_per_unit = ?, supplier_platform = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?');
   const tx = db.transaction(() => {
     for (const r of rows) {
@@ -347,7 +357,15 @@ router.post('/api/admin/repair-items', requireAuth, requireAdmin, (req, res) => 
 
       // 2. Recipe unit + cost re-derive
       const newUnit = recipeUnitFor(r.buy_unit, r.item_kind, r.pack_contents_unit);
-      const newCpu  = deriveCpu(r.buy_price, newUnit, r.pack_contents_qty, r.pack_contents_unit, r.buy_unit);
+      const derived = deriveCostPerUnit(r, r.buy_price);
+      // A declined derivation keeps the stored cost. Writing 0 (what the old
+      // code did for a priceless row) is not a cost — the Cost Sheet already
+      // reads 0 as "Missing", so a hard 0 only destroys whatever was there.
+      // Rounded to 6dp exactly as deriveCpu() did. Without this the switch
+      // would rewrite ~168 rows purely to lengthen their decimals
+      // (0.030482 -> 0.030481818181818183), which is churn, not a repair.
+      const newCpu  = derived.cpu === null ? (+r.cost_per_unit || 0) : Math.round(derived.cpu * 1e6) / 1e6;
+      if (derived.cpu === null) cpuDeclined++;
       const unitChanged = newUnit !== r.unit;
       const cpuChanged  = Math.abs((+newCpu) - (+r.cost_per_unit || 0)) > 0.0000001;
 
@@ -373,8 +391,8 @@ router.post('/api/admin/repair-items', requireAuth, requireAdmin, (req, res) => 
     }
   });
   tx();
-  logActivity(req.user.id, req.user.username, 'repair_items', 'system', null, { nameFixed, unitFixed, cpuFixed, platformFixed }, req.ip);
-  res.json({ success: true, scanned: rows.length, nameFixed, unitFixed, cpuFixed, platformFixed });
+  logActivity(req.user.id, req.user.username, 'repair_items', 'system', null, { nameFixed, unitFixed, cpuFixed, platformFixed, cpuDeclined }, req.ip);
+  res.json({ success: true, scanned: rows.length, nameFixed, unitFixed, cpuFixed, platformFixed, cpuDeclined });
 });
 
 // POST restore — admin uploads a base64-encoded .db file. The current db is
