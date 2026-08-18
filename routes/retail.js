@@ -9950,23 +9950,28 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   // out-of-city store so the two never diverge. Pickup is exempt (the customer
   // chose the store explicitly).
   //
-  // The same rule extends to a scheduled ship-district order — that's
-  // `scheduledShipDistrict`, resolved once above the local pre-order gate
-  // because both rules turn on it.
-  if (!isPickup && (!inGz || scheduledShipDistrict)) {
-    const oocId = loadPrinterPrefs().out_of_city_store_id;
-    if (oocId != null && oocId !== fulfillingStore.id) {
-      // Don't pin to the out-of-city shipper if it's closed for THIS channel —
-      // keep the open store routeOrder already picked so the parcel ships from somewhere.
-      const oocClosed = inventory.channelClosedStores(inventory.orderChannelKey(orderChannel));
-      const oocStore = inventory.listStores({ activeOnly: true }).find(s => s.id === oocId && !oocClosed.has(s.code));
-      if (oocStore) {
-        fulfillingStore = oocStore;
-        routingReason   = scheduledShipDistrict ? 'scheduled_ship_district' : 'out_of_city';
-        // Deliberately pinned to the out-of-city shipper — distance is moot, so
-        // the distance/fallback flag no longer applies to this order.
-        routedByDistance = null;
-      }
+  // The same rule extends to a scheduled ship-district order. That verdict used
+  // to be the local `scheduledShipDistrict` above; it now lives inside
+  // fulfillingStoreFor(), re-derived there from the address and the slot kind —
+  // the same two inputs, so the pin and the pre-order gate still turn on one
+  // rule. The gate keeps its own copy because it runs before routing.
+  //
+  // The pin itself lives in fulfillingStoreFor() so the checkout quote and the
+  // reschedule picker resolve the SAME store this handler ships from; the
+  // conditions it folds in (pickup, in-GZ, unset id, already-that-store, closed
+  // for this channel) are the ones this block used to spell out inline.
+  {
+    const pinned = fulfillingStoreFor({
+      address, channel: orderChannel, isPickup,
+      slotKind: body.delivery_slot_kind,
+      baseStoreId: fulfillingStore ? fulfillingStore.id : null,
+    });
+    if (pinned) {
+      fulfillingStore = pinned.store;
+      routingReason   = pinned.reason;
+      // Deliberately pinned to the out-of-city shipper — distance is moot, so
+      // the distance/fallback flag no longer applies to this order.
+      routedByDistance = null;
     }
   }
 
@@ -10052,6 +10057,28 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     else                            shippingFee = subtotal >= freeShipThreshold ? 0 : standardShipping;
   }
 
+  // ── The fresh-batch decision, computed ONCE ──────────────────────────────
+  // Everything downstream that needs to know when this order can be made reads
+  // THIS object: the slot validator just below, and the promised dates stamped
+  // after commit. They used to be independent — the slot was validated here and
+  // the promise computed ~400 lines later, post-commit, from a second reading of
+  // the cadence — which is how an order could be accepted for a day the promise
+  // then contradicted. One call, one answer, both consumers.
+  // `orderNow` is shared for the same reason: two `new Date()` calls either side
+  // of a cutoff hour could otherwise disagree about what day it is.
+  const orderNow = new Date();
+  const batchDecision = earliestBatchMakeDate({
+    zone,
+    productIds: resolved.map((r) => r.product.id),
+    storeId: fulfillingStore ? fulfillingStore.id : null,
+    now: orderNow,
+    // 'wechat' is the STOCK channel (getAvailable's quota/reservation vocabulary),
+    // not the channel_status key — the same literal routeOrder and the
+    // fulfilment-shortage sweep pass on this path, web orders included.
+    channel: 'wechat',
+    ignoreOrderIds: ownPendingOrderIds,   // their own unpaid hold isn't a shortage
+  });
+
   // Pickup carries the customer-chosen pickup window in the same scheduled_for
   // + delivery_slot_label columns; no zone slot resolution and no surcharge.
   let scheduledFor, sameDaySurcharge = 0, slotLabel;
@@ -10060,8 +10087,10 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
     slotLabel    = pickupSlotLabel;
   } else {
     // Resolve & validate the delivery slot AFTER zone lookup so we can enforce
-    // the slot's same-day surcharge, expiry, and zone-allowed rules.
-    const slotResolved = resolveDeliverySlot(zone, deliverySlotId, new Date());
+    // the slot's same-day surcharge, expiry, and zone-allowed rules — and
+    // against the batch-floored window, so a stale picker can't book a day the
+    // kitchen cannot reach.
+    const slotResolved = resolveDeliverySlot(zone, deliverySlotId, orderNow, { batch: batchDecision });
     if (slotResolved.error) {
       return res.status(400).json({ success: false, error: slotResolved.error });
     }
@@ -10475,7 +10504,13 @@ router.post('/api/retail/orders', requireRetailAuth, express.json(), async (req,
   // + arrival dates and drop the customer a heads-up that we'll make the next
   // batch before it ships. Best-effort — never fails the placed order.
   try {
-    const notice = computeBatchNotice(zone, resolved.map((r) => r.product.id), new Date(), deliverySlotId, body.delivery_slot_kind);
+    // Same `batchDecision` the slot validator enforced above — not a second
+    // reading of the cadence — so the accepted date and the promised date are
+    // one decision, not two that happen to agree.
+    const notice = computeBatchNotice(
+      zone, resolved.map((r) => r.product.id), orderNow, deliverySlotId, body.delivery_slot_kind,
+      { decision: batchDecision },
+    );
     if (notice) {
       tdb().prepare(
         'UPDATE retail_orders SET promised_ship_date = ?, promised_delivery_date = ? WHERE id = ?'
@@ -17910,7 +17945,16 @@ router.get('/api/retail/orders/:id/reschedule-options', requireRetailAuth, (req,
     data.pickup_window = pickupWindowFor(pickupStoreHoursForOrder(o));
   } else {
     const zone = zoneForOrder(o);
-    data.scheduling = computeDeliverySlots(zone, new Date());
+    // Same batch floor the checkout calendar applies, against the store this
+    // order is already pinned to (o.store_id) — otherwise the reschedule sheet
+    // would offer days the order's own fresh item cannot reach, re-opening the
+    // contradiction from the other end.
+    data.scheduling = computeDeliverySlots(zone, new Date(), {
+      batch: earliestBatchMakeDate({
+        zone, productIds, storeId: o.store_id ?? null, now: new Date(),
+        channel: 'wechat',
+      }),
+    });
     data.zone = zone ? {
       id: zone.id, zone_type: zone.zone_type,
       name_en: zone.name_en, name_cn: zone.name_cn,
@@ -17961,7 +18005,12 @@ router.post('/api/retail/orders/:id/reschedule', requireRetailAuth, express.json
     const slotId = body.delivery_slot_id;
     if (!slotId) return res.status(400).json({ success: false, error: 'slot_required' });
     const zone = zoneForOrder(o);
-    const resolved = resolveDeliverySlot(zone, slotId, now);
+    // Validated against the same batch-floored window the GET above offered.
+    const resolved = resolveDeliverySlot(zone, slotId, now, {
+      batch: earliestBatchMakeDate({
+        zone, productIds, storeId: o.store_id ?? null, now, channel: 'wechat',
+      }),
+    });
     if (resolved.error) return res.status(400).json({ success: false, error: resolved.error });
 
     // Phase 1 is price-neutral. A slot that adds (or drops) a same-day surcharge
@@ -27037,6 +27086,50 @@ function matchDeliveryZone(address) {
   return defaultDeliveryZone();
 }
 
+// ─── Out-of-city fulfilment pin (shared) ───────────────────────────────────
+// Orders shipping OUTSIDE Guangzhou all leave the single out-of-city warehouse
+// (printer.out_of_city_store_id), whatever the proximity router says — see the
+// long note at the POST /orders call site. That rule used to live only inside
+// the order-create handler, so the checkout QUOTE happily named the nearest
+// location while creation shipped from the warehouse, and anything asking "which
+// store fulfils this?" before the order existed got the wrong answer.
+//
+// Extracted verbatim so the quote, the order create and the reschedule picker
+// resolve ONE store. It answers only "does the pin apply, and to what?" — the
+// caller keeps whatever routeOrder picked when this returns null, which is what
+// makes in-city and pickup carts byte-identical to the pre-extraction path:
+//   • pickup, or an address that isn't out-of-city / a scheduled ship-district
+//   • no out_of_city_store_id configured
+//   • the pin resolves to the store the caller already has (baseStoreId) — the
+//     original code skipped the whole block in that case, leaving routeOrder's
+//     own `reason` on the order, so returning null here preserves that reason
+//   • the pinned store is closed for THIS channel (keep the open store the
+//     router picked, so the parcel still ships from somewhere)
+//
+// `slotKind` is needed because a Guangzhou ship-district (花都/番禺/南沙/从化/增城)
+// is pinned only when the customer did NOT buy the same-day extra — the same
+// `scheduledShipDistrict` expression the order path computes.
+function fulfillingStoreFor({ address, channel = 'wechat', isPickup = false, slotKind = null, baseStoreId = null }) {
+  if (isPickup) return null;
+  const inGz = inventory.isGuangzhouAddress(address);
+  const scheduledShipDistrict =
+        inGz &&
+        inventory.isOptInSameDayDistrict(address) &&
+        slotKind !== 'today';
+  if (inGz && !scheduledShipDistrict) return null;
+  const oocId = loadPrinterPrefs().out_of_city_store_id;
+  if (oocId == null) return null;
+  if (baseStoreId != null && oocId === baseStoreId) return null;
+  const oocClosed = inventory.channelClosedStores(inventory.orderChannelKey(channel));
+  const oocStore = inventory.listStores({ activeOnly: true })
+    .find((s) => s.id === oocId && !oocClosed.has(s.code));
+  if (!oocStore) return null;
+  return {
+    store: oocStore,
+    reason: scheduledShipDistrict ? 'scheduled_ship_district' : 'out_of_city',
+  };
+}
+
 // ─── Batch-made (fresh) production cadence ─────────────────────────────────
 // Certain short-shelf-life products (fresh meals, wraps) are cooked on a fixed
 // every-N-days cadence rather than held in stock. An outside-Guangzhou order
@@ -27145,8 +27238,105 @@ function batchItemsInCart(productIds) {
   ).all(...ids);
 }
 
+// ─── The earliest day this order can be MADE ───────────────────────────────
+// One answer, shared by the customer promise (computeBatchNotice), the delivery
+// calendar (computeDeliverySlots) and the slot validator (resolveDeliverySlot),
+// so those three can never contradict each other about which day a fresh order
+// is made on. Before this existed the promise was computed alone, AFTER the
+// order committed, and it read the production cadence without ever asking
+// whether there was any stock to sell — TC000306 promised a batch that had sold
+// out at 11:58 the same morning.
+//
+// The rule, in the order the checks apply:
+//   1. the zone gate — out-of-city cities and the Panyu-style ship districts
+//      only, exactly the gate computeBatchNotice has always used
+//   2. which cart lines are batch-made (is_batch_made)
+//   3. whether any of those is at ZERO SELLABLE stock at the fulfilling store.
+//      Sellable is inventory.getAvailable's three-term figure (physical −
+//      safety buffer − active reservations), not physical_qty: it is what a
+//      shopper can actually buy. A fresh item is never restocked same day, so
+//      zero means today cannot be a make day.
+//   4. the day's cutoff hour — today's batch is already made and gone
+//   5. skip_dates, via nextBatchShipDate
+//
+// Stock, cutoff and an unresolvable store all feed the SAME roll-forward (they
+// only move `searchFrom` to tomorrow) rather than each bolting on its own
+// mechanism, so a batch day that is skipped for one reason is skipped
+// identically for the others.
+//
+// Returns, always (never null — callers branch on `applies`):
+//   { applies, reason, make_date, items, cfg }
+// `reason` names WHY the date is what it is:
+//   'out_of_scope'          — zone isn't a shipping zone (or no zone)
+//   'no_schedule'           — batch.schedule disabled / unset
+//   'no_fresh_items'        — nothing in the cart is batch-made
+//   'reachable_today'       — today is a live batch day and stock allows it
+//   'next_cadence'          — today simply isn't a batch day; nothing blocked
+//   'rolled_cutoff'         — today WAS a batch day, but we're past the cutoff
+//   'rolled_stock'          — today WAS a batch day, but a fresh line is at zero
+//   'rolled_store_unknown'  — no fulfilling store to check stock at; see below
+//
+// On an unresolvable store (no out-of-city pin configured, or every candidate
+// closed for the channel) we deliberately treat today as UNREACHABLE rather
+// than falling back to the cutoff-only behaviour. That fallback is precisely
+// the defect this function removes: an under-promise costs a day, an
+// over-promise is the bug. Checkout still completes; the date just rolls, and
+// the distinct reason keeps it separable from a genuine stock roll-forward.
+function earliestBatchMakeDate({ zone, productIds, storeId, now, channel = 'wechat', ignoreOrderIds = null }) {
+  const none = (reason) => ({ applies: false, reason, make_date: null, items: [], cfg: null });
+  if (!zone) return none('out_of_scope');
+  const isCity = zone.zone_type === 'city';
+  const isShipDistrict = zone.zone_type === 'gz_district' &&
+        (Number(zone.day_only) === 1 || Number(zone.same_day_surcharge) > 0);
+  if (!isCity && !isShipDistrict) return none('out_of_scope');
+  const cfg = batchScheduleCfg();
+  if (!cfg) return none('no_schedule');
+  const items = batchItemsInCart(productIds);
+  if (!items.length) return none('no_fresh_items');
+
+  const nowD = now || new Date();
+  const todayIso = toYmdLocal(new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate(), 12, 0, 0, 0));
+
+  // No store to ask → we cannot prove today's batch exists, so we don't promise it.
+  const storeUnknown = storeId == null;
+  // Zero sellable on ANY fresh line blocks the whole order: one promised date
+  // per order, so the cart moves together to the next batch it can all make.
+  // `exists: false` (no stock row at this store at all) counts as zero for the
+  // same reason — there is nothing there to ship today.
+  let stockBlocked = false;
+  if (!storeUnknown) {
+    for (const it of items) {
+      const av = inventory.getAvailable(storeId, it.id, channel, ignoreOrderIds);
+      if (!(Number(av.available) > 0)) { stockBlocked = true; break; }
+    }
+  }
+  const pastCutoff = nowD.getHours() >= cfg.cutoff_hour;
+
+  // ONE roll-forward. Whatever ruled today out, the effect is identical: start
+  // the cadence search at tomorrow instead of today. On a non-batch day this
+  // changes nothing (the next batch is still the next batch).
+  const blockedToday = stockBlocked || storeUnknown || pastCutoff;
+  const searchFrom = blockedToday
+    ? new Date(nowD.getTime() + 86400000)
+    : nowD;
+  const makeDate = nextBatchShipDate(searchFrom, cfg);
+  if (!makeDate) return none('no_schedule');
+
+  // Name the binding constraint. Stock first: it is the one an operator can act
+  // on, and it outranks a cutoff we would have hit anyway.
+  let reason;
+  if (stockBlocked)          reason = 'rolled_stock';
+  else if (storeUnknown)     reason = 'rolled_store_unknown';
+  else if (pastCutoff)       reason = 'rolled_cutoff';
+  else if (makeDate === todayIso) reason = 'reachable_today';
+  else                       reason = 'next_cadence';
+
+  return { applies: true, reason, make_date: makeDate, items, cfg };
+}
+
 // The customer-facing "made fresh for you" notice for an order holding a
-// batch-made item, or null when it doesn't apply. Two zone families get it:
+// batch-made item, or null when it doesn't apply. Two zone families get it —
+// the gate lives in earliestBatchMakeDate above and is shared with the calendar:
 //   • Outside-GZ cities (zone_type 'city') — the shipping leg is always a real
 //     wait, so the notice always shows.
 //   • "Panyu-style" GZ districts (番禺/花都/南沙/从化/增城 …) — gz_district zones
@@ -27165,30 +27355,33 @@ function batchItemsInCart(productIds) {
 //     it: if a fresh batch lands on their date we send it, otherwise they wait
 //     for the next fresh batch (never an older one held back). This keeps
 //     ship_date and delivery_date exactly one transit-day apart.
-function computeBatchNotice(zone, productIds, now, slotId, slotKind) {
-  if (!zone) return null;
-  const isCity = zone.zone_type === 'city';
-  const isShipDistrict = zone.zone_type === 'gz_district' &&
+//
+// `decision` is earliestBatchMakeDate's answer. The order-create path computes
+// it ONCE before validating the slot and hands the same object here, so
+// the date the validator enforced and the date we persist cannot drift apart.
+// Callers with nothing to reuse may omit it and we compute it — but then we have
+// no fulfilling store to check stock at, which earliestBatchMakeDate treats as
+// "today unproven" rather than "today fine".
+function computeBatchNotice(zone, productIds, now, slotId, slotKind, opts = {}) {
+  const isShipDistrict = !!zone && zone.zone_type === 'gz_district' &&
         (Number(zone.day_only) === 1 || Number(zone.same_day_surcharge) > 0);
-  if (!isCity && !isShipDistrict) return null;
-  const cfg = batchScheduleCfg();
-  if (!cfg) return null;
-  const batchItems = batchItemsInCart(productIds);
-  if (!batchItems.length) return null;
+  const decision = opts.decision || earliestBatchMakeDate({
+    zone, productIds, now,
+    storeId: opts.storeId ?? null,
+    channel: opts.channel || 'wechat',
+    ignoreOrderIds: opts.ignoreOrderIds || null,
+  });
+  if (!decision.applies) return null;
+  const cfg = decision.cfg;
+  const batchItems = decision.items;
 
   const nowD = now || new Date();
   const todayIso = toYmdLocal(new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate(), 12, 0, 0, 0));
 
-  // Soonest we can make+ship a fresh batch, and when that would arrive.
-  // Past the day's cutoff the kitchen has finished and the parcel has gone, so
-  // today can no longer be the ship day — search from tomorrow instead. On a
-  // non-batch day this changes nothing (the next batch is still the next
-  // batch); on a batch day it correctly rolls to the following one.
-  const searchFrom = nowD.getHours() >= cfg.cutoff_hour
-    ? new Date(nowD.getTime() + 86400000)
-    : nowD;
-  const soonestShip = nextBatchShipDate(searchFrom, cfg);
-  if (!soonestShip) return null;
+  // Soonest we can make+ship a fresh batch, and when that would arrive. The
+  // cadence, the day's cutoff, skip_dates AND the zero-stock roll-forward all
+  // live in earliestBatchMakeDate now — this is simply its answer.
+  const soonestShip = decision.make_date;
   const soonestDelivery = toYmdLocal(new Date(parseYmdLocal(soonestShip).getTime() + 86400000));
 
   // A schedule-for-later pick carries a real chosen delivery date; express
@@ -27207,7 +27400,9 @@ function computeBatchNotice(zone, productIds, now, slotId, slotKind) {
     const earliestShip = toYmdLocal(new Date(parseYmdLocal(selectedDate).getTime() - 86400000));
     shipDate = nextBatchShipDate(parseYmdLocal(earliestShip), cfg) || soonestShip;
     // Never promise a batch earlier than the soonest one we can still make —
-    // soonestShip already has the day's cutoff applied.
+    // soonestShip already has the day's cutoff AND the zero-stock roll-forward
+    // applied, so a customer who booked a near date can't be handed a batch we
+    // have already established cannot be produced.
     if (shipDate < soonestShip) shipDate = soonestShip;
     deliveryDate = toYmdLocal(new Date(parseYmdLocal(shipDate).getTime() + 86400000));
     kind = 'scheduled';
@@ -27430,7 +27625,21 @@ function expressEarliestIso(zone, now) {
   return `${y}-${m}-${day}`;
 }
 
-function computeDeliverySlots(zone, now) {
+// `opts.batch` is earliestBatchMakeDate's answer. When the cart holds a
+// fresh item, the calendar must not offer a day the batch cannot reach — before
+// this, a customer could book a date the "made fresh · ship X" banner then
+// contradicted. Because the calendar is an open {min_date, max_date} RANGE and
+// not a day list, that constraint is a FLOOR on min_date, not a per-day filter.
+// The caller passes the decision; this function never re-derives the cart or the
+// store (it is handed neither, deliberately — one decision, computed once).
+function computeDeliverySlots(zone, now, opts = {}) {
+  // Earliest day a batch order can ARRIVE = make date + the same one-day transit
+  // the promise uses (computeBatchNotice's soonestDelivery). Null when no fresh
+  // item is involved, which leaves every date rule below exactly as it was.
+  const batchDecision = opts.batch || null;
+  const batchFloorIso = (batchDecision && batchDecision.applies && batchDecision.make_date)
+    ? toYmdLocal(new Date(parseYmdLocal(batchDecision.make_date).getTime() + 86400000))
+    : null;
   const cfg = {
     same_day_allowed:      1,
     same_day_surcharge:    0,
@@ -27633,17 +27842,27 @@ function computeDeliverySlots(zone, now) {
   // ── Schedule-for-later (calendar) ───────────────────────────────────
   // Earliest selectable day = max(SCHEDULE_MIN_LEAD, zone.min_lead_days).
   // Latest = today + max_lead_days. If max < min, the calendar is empty.
+  // A fresh cart raises the floor to the first day its batch can arrive
+  // (batchFloorIso) — never lowers it, so a zone whose own lead is already later
+  // keeps its lead. If the floor runs past max_date there is no bookable day at
+  // all: schedule stays null rather than becoming a backwards range that would
+  // make every date "valid" against an inverted comparison.
   const scheduleStartDays = Math.max(SCHEDULE_MIN_LEAD, cfg.min_lead_days);
   const scheduleEndDays   = cfg.max_lead_days;
   let schedule = null;
   if (scheduleEndDays >= scheduleStartDays) {
     const startDate = new Date(startOfDay.getTime() + scheduleStartDays * 86400000);
     const endDate   = new Date(startOfDay.getTime() + scheduleEndDays   * 86400000);
-    schedule = {
-      min_date: fmtDateIso(startDate),
-      max_date: fmtDateIso(endDate),
-      surcharge: 0,
-    };
+    let minIso = fmtDateIso(startDate);
+    const maxIso = fmtDateIso(endDate);
+    if (batchFloorIso && batchFloorIso > minIso) minIso = batchFloorIso;
+    if (minIso <= maxIso) {
+      schedule = {
+        min_date: minIso,
+        max_date: maxIso,
+        surcharge: 0,
+      };
+    }
   }
 
   // Day-only "Express / ship ASAP" date — the zone's TRUE earliest fulfillable
@@ -27652,7 +27871,14 @@ function computeDeliverySlots(zone, now) {
   // Express slot must NOT inherit it, or it reads "Earliest +3 days" even for
   // zones that ship in 1–2 days. Floor at 1 (tomorrow) because a day-only
   // Express slot is never "today" — today is the separate same-day day chip.
-  const expressDateIso = expressEarliestIso(zone, tzNow);
+  // Express deliberately ignores SCHEDULE_MIN_LEAD, which makes it a SECOND date
+  // channel — and one resolveDeliverySlot matches before the schedule-window
+  // check (:express_slot branch), so a floor applied only to the calendar would
+  // leave Express as an open door onto an unreachable day. Apply the same batch
+  // floor here. It can only push the date later, so non-fresh carts are
+  // untouched.
+  let expressDateIso = expressEarliestIso(zone, tzNow);
+  if (batchFloorIso && batchFloorIso > expressDateIso) expressDateIso = batchFloorIso;
 
   // Explicit Express ("ship ASAP") slot for day-only zones — the zone's true
   // earliest fulfillable day at NO surcharge. Exposed as its own field so the
@@ -27788,14 +28014,19 @@ function matchScheduledTimeSlot(enumed, mTime) {
 // Resolve a slot_id back into a Date + validated metadata. Used by the
 // orders POST to confirm the customer's pick before persisting.
 // Returns { scheduled_for: ISO string, slot, surcharge } or { error }.
-function resolveDeliverySlot(zone, slotId, now) {
+// `opts` is forwarded to computeDeliverySlots — in practice { batch } carrying
+// earliestBatchMakeDate's decision, so the window this validates against is the SAME window the
+// customer was offered. A stale picker holding a date below the batch floor now
+// falls outside min_date and is refused with the existing slot_unavailable, with
+// no new failure shape for clients to learn.
+function resolveDeliverySlot(zone, slotId, now, opts = {}) {
   if (!slotId) return { scheduled_for: null, slot: null, surcharge: 0 };
   if (slotId === 'right_away') {
-    const enumed = computeDeliverySlots(zone, now);
+    const enumed = computeDeliverySlots(zone, now, opts);
     if (!enumed.right_away_available) return { error: 'right_away_unavailable' };
     return { scheduled_for: null, slot: { slot_id: 'right_away' }, surcharge: 0 };
   }
-  const enumed = computeDeliverySlots(zone, now);
+  const enumed = computeDeliverySlots(zone, now, opts);
   // Two slot-id shapes: 'YYYY-MM-DDTHH:MM' (today's time-slot pick) or
   // 'YYYY-MM-DD' (today's day-only chip OR any schedule-for-later calendar
   // pick). For the latter, the day need not be in `slots` (the calendar
@@ -28526,6 +28757,11 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
   // conversation (the 5-option sheet), and stacking a "we moved shops" notice
   // on top of that would be noise.
   let resolvedStoreCode = null;
+  // The store the order would actually ship from — the pin applied, unlike
+  // `resolvedStoreCode`, which stays the proximity answer because that is what
+  // the store-move notice below is a counterfactual about. Null when routing
+  // couldn't settle; earliestBatchMakeDate reads that as "today unproven" and rolls forward.
+  let quoteStore = null;
   try {
     const rawItems = (items || [])
       .map(i => ({ product_id: parseInt(i.product_id, 10), qty: Number(i.qty) }))
@@ -28571,16 +28807,31 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
       const r = analysis.resolved;
       if (r && !r.error) {
         resolvedStoreCode = r.store.code;
+        // analyzeShortage answers by PROXIMITY. For an out-of-city address (and a
+        // scheduled ship-district) the order is pinned to the out-of-city
+        // warehouse at creation, so quoting the nearest location named a store
+        // the parcel never leaves from — and any stock question asked of it was
+        // asked at the wrong shelves. Apply the same pin the order path applies.
+        // Returns null for in-city/pickup, leaving those quotes untouched.
+        const pinned = fulfillingStoreFor({
+          address, channel: 'wechat', isPickup: false,
+          slotKind: body.slot_kind, baseStoreId: r.store.id,
+        });
+        const store  = pinned ? pinned.store  : r.store;
+        const reason = pinned ? pinned.reason : r.reason;
+        quoteStore = store;
         routingPreview = {
           ok: true,
           gate: 'none',
-          store_id:        r.store.id,
-          store_code:      r.store.code,
-          store_name_en:   r.store.name_en,
-          store_name_cn:   r.store.name_cn,
-          store_district:  r.store.district,
-          routing_reason:  r.reason,
-          distance_km:     analysis.nearest?.distance_km ?? null,
+          store_id:        store.id,
+          store_code:      store.code,
+          store_name_en:   store.name_en,
+          store_name_cn:   store.name_cn,
+          store_district:  store.district,
+          routing_reason:  reason,
+          // Distance is meaningless once the order is pinned to the warehouse —
+          // the same reason the order path nulls routed_by_distance on a pin.
+          distance_km:     pinned ? null : (analysis.nearest?.distance_km ?? null),
           items:           r.items,
         };
       } else if (r?.error === 'no_stock') {
@@ -28629,6 +28880,19 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
     console.error('[checkout/quote store-move]', e);
   }
 
+  // The fresh-batch decision for THIS quote, computed once and shared by the
+  // calendar and the banner below — the same discipline the order path uses, so
+  // the dates a customer is offered and the dates they are promised come from
+  // one answer rather than two independent readings of the cadence.
+  const quoteNow = new Date();
+  const quoteBatchDecision = earliestBatchMakeDate({
+    zone,
+    productIds: (items || []).map((i) => i.product_id),
+    storeId: quoteStore ? quoteStore.id : null,
+    now: quoteNow,
+    channel: 'wechat',
+  });
+
   res.json({
     success: true,
     data: {
@@ -28668,8 +28932,11 @@ router.post('/api/retail/checkout/quote', requireRetailAuth, express.json(), asy
         max_fee: zone.max_fee,
         free_threshold: zone.free_threshold,
       },
-      scheduling: computeDeliverySlots(zone, new Date()),
-      batch_notice: computeBatchNotice(zone, (items || []).map((i) => i.product_id), new Date(), body.delivery_slot_id, body.slot_kind),
+      scheduling: computeDeliverySlots(zone, quoteNow, { batch: quoteBatchDecision }),
+      batch_notice: computeBatchNotice(
+        zone, (items || []).map((i) => i.product_id), quoteNow, body.delivery_slot_id, body.slot_kind,
+        { decision: quoteBatchDecision },
+      ),
       preorder_notice: computePreorderNotice(zone, address, (items || []).map((i) => i.product_id), body.delivery_slot_id, body.slot_kind),
       store_move_notice: storeMoveNotice,
       routing: routingPreview,
@@ -29215,9 +29482,15 @@ function finalizeOrderAddon(addonId) {
 
 // True when an order's stock is actually tracked — i.e. it reserved+committed
 // at checkout. Out-of-GZ and scheduled-for-later orders run with stockGate off
-// (see the create-order path) and never reserve; an add-on to one of those must
-// inherit the same policy or we'd refuse a sale the original order was allowed
-// to make. The same test finalizeOrderAddon uses before deducting.
+// (see the create-order path) and never reserve, so this is false for them
+// forever, even after their stock IS decremented (markOrderPaid /
+// prepareCommitUnreservedOrder write the ledger, not reservations).
+//
+// It answers one question — does this order hold reservations — and so it
+// belongs to reservation handling: finalizeOrderAddon reads it before
+// reserving+committing an add-on's lines. It is NOT a stock check and must not
+// gate one; whether the items a customer is adding NOW exist is answered by
+// addonStockRefusal, off the order's own fulfilment.
 function orderTracksStock(orderId) {
   const r = tdb().prepare(
     "SELECT COUNT(*) AS n FROM retail_stock_reservations WHERE order_id = ? AND status = 'committed'"
@@ -29262,6 +29535,107 @@ function addonStockShortages(storeId, resolvedLines) {
     name_en: names.get(s.product_id)?.name_en || null,
     name_cn: names.get(s.product_id)?.name_cn || null,
   }));
+}
+
+// Is this order served off the shelf as it stands today — the case checkout
+// gates per-store stock for?
+//
+// Pickup always is: the customer comes to collect it, so the units have to be
+// there. A delivery is when the address is Guangzhou AND the promised day has
+// arrived — an ASAP pick, or a scheduled day that is today or already past.
+//
+// Everything else is not, and that is deliberate rather than an oversight:
+// checkout routes an out-of-city order, and a Guangzhou one still waiting for a
+// later day, with ignoreStock and no reservation, because the kitchen restocks
+// before either is fulfilled. An add-on inherits the parent order's fulfilment
+// date, so holding it to today's shelf would refuse a line the identical fresh
+// order is allowed to pre-order.
+//
+// Read off the ORDER — its address, its slot kind, its promised day — not off
+// its reservations. Whether an order reserved is a fact about how it was
+// created; it is a proxy for this question, not the question.
+function addonServedFromShelfNow(order, address) {
+  if (order.fulfillment_type === 'pickup') return true;
+  if (!inventory.isGuangzhouAddress(address)) return false;
+  const kind = order.delivery_slot_kind || null;
+  if (kind === 'right_away' || kind === 'today') return true;
+  // No promised day at all is "as soon as possible" — the same promise as
+  // right_away, and read that way everywhere else (see isQingyunSameCityToday).
+  const due = inventory.gzDateStr(order.scheduled_for);
+  if (due === '') return true;
+  return due <= inventory.gzDateStr(new Date().toISOString());
+}
+
+// Every out-of-stock rule an add-on must clear BEFORE the customer is charged.
+//
+// This used to be one check — the per-store availability gate — hung on
+// orderTracksStock, i.e. "did this order reserve at checkout?". Orders created
+// with the stock gate off reserve nothing, and that is every out-of-city order,
+// every far-district scheduled order and every core-GZ scheduled one. For all
+// of them the gate was skipped whole, and the first stock check on the path ran
+// inside finalizeOrderAddon — after the charge. A customer could add a sold-out
+// batch-made item to one of those orders and be charged for it.
+//
+// So the rules run on every add-on now, and they are the rules a fresh order
+// clears at checkout, resolved from the PARENT order — its address, its zone,
+// its slot kind — because that is the fulfilment the addition inherits.
+//
+// Returns a ready-to-send 409 body, or null when every line is coverable. The
+// shape is the one the picker already renders (`shortages`, named), with
+// checkout's product_id / available alongside it so both readings agree.
+function addonStockRefusal(order, resolved) {
+  let address = null;
+  try { address = JSON.parse(order.address_json || 'null'); } catch { address = null; }
+
+  const refuse = (r, available) => {
+    const have = Math.max(0, Number(available) || 0);
+    return {
+      success: false, error: 'insufficient_stock',
+      product_id: r.product.id, available: have,
+      shortages: [{
+        product_id: r.product.id, requested: r.qty, available: have,
+        name_en: r.product.name_en || null, name_cn: r.product.name_cn || null,
+      }],
+    };
+  };
+
+  // 1. Hard out-of-stock. A 'strict' line (the default policy) is never
+  //    orderable at zero stock, in ANY region — checkout enforces that before
+  //    it looks at routing or reservations, and so does this. real_stock is the
+  //    per-store SUM the shop grid shows; NULL (untracked / bundles) is
+  //    available, same as checkout.
+  const hardOos = resolved.find(r => {
+    if (effectiveOosPolicy(r.product) !== 'strict') return false;
+    const avail = r.product.real_stock == null ? null : Number(r.product.real_stock);
+    return avail != null && avail < r.qty;
+  });
+  if (hardOos) return refuse(hardOos, hardOos.product.real_stock);
+
+  // 2. Local pre-order gate. A Guangzhou shopper on the local run may not
+  //    pre-order a sold-out 'backorder_gz' line, on any delivery day — there is
+  //    nothing behind it for them. The ship-district carve-out is checkout's,
+  //    resolved from the order's own slot kind: those parcels leave the
+  //    out-of-city warehouse on the batch cadence unless the shopper bought the
+  //    same-day extra, and a pre-order is as safe for them as it is for
+  //    Shanghai. Pickup is exempt here because rule 3 refuses it outright.
+  if (order.fulfillment_type !== 'pickup') {
+    const scheduledShipDistrict =
+          inventory.isGuangzhouAddress(address) &&
+          inventory.isOptInSameDayDistrict(address) &&
+          order.delivery_slot_kind !== 'today';
+    const localPre = localPreorderLine(resolved, address, { scheduledShipDistrict });
+    if (localPre) return refuse(localPre, localPre.product.real_stock);
+  }
+
+  // 3. Per-store availability at the fulfilling store. The add-on inherits
+  //    order.store_id and never re-routes, so this is the only thing standing
+  //    between "the picker let me tap +" and a line that store cannot fill.
+  if (order.store_id && addonServedFromShelfNow(order, address)) {
+    const shortages = addonStockShortages(order.store_id, resolved);
+    if (shortages.length) return { success: false, error: 'insufficient_stock', shortages };
+  }
+
+  return null;
 }
 
 // GET /api/retail/orders/:id/addon/availability
@@ -29326,7 +29700,8 @@ router.post('/api/retail/orders/:id/addon/create', requireRetailAuth, express.js
 
   const order = tdb().prepare(
     `SELECT id, order_no, status, customer_id, store_id, address_json, fulfillment_type,
-            subtotal, shipping_fee, same_day_surcharge_fee, delivery_zone_id, delivery_mode
+            subtotal, shipping_fee, same_day_surcharge_fee, delivery_zone_id, delivery_mode,
+            delivery_slot_kind, scheduled_for
        FROM retail_orders WHERE id = ? AND customer_id = ?`
   ).get(orderId, req.customer.id);
   if (!order) return res.status(404).json({ success: false, error: 'order_not_found' });
@@ -29365,7 +29740,9 @@ router.post('/api/retail/orders/:id/addon/create', requireRetailAuth, express.js
     const p = tdb().prepare(
       `SELECT id, name_en, name_cn, sku, weight AS size, sell_price AS price, stock_qty AS stock,
               flash_price, flash_starts_at, flash_ends_at, flash_stock_limit, flash_sold, no_coupon_on_flash,
-              ship_modes, needs_ice_pack, ship_from_supplier, variant_group_id, bundle_items
+              ship_modes, needs_ice_pack, ship_from_supplier, variant_group_id, bundle_items,
+              is_batch_made, oos_policy,
+              ${inventory.sellableStockSql('store_products.id', 'stock_qty')} AS real_stock
          FROM store_products WHERE id = ? AND is_published = 1 AND COALESCE(is_active, 1) = 1`
     ).get(pid);
     if (!p) return res.status(400).json({ success: false, error: 'product_unavailable', product_id: pid });
@@ -29411,18 +29788,12 @@ router.post('/api/retail/orders/:id/addon/create', requireRetailAuth, express.js
     }
   }
 
-  // ── Stock gate at the fulfilling store, BEFORE any money moves ────────
-  // Without this the add-on's only stock check ran inside finalizeOrderAddon —
-  // i.e. after the WeChat charge — where it can do nothing but warn, so a
-  // customer could add units the store did not have (and, before the partial
-  // reserve below, silently skip the deduction for the whole batch). Refusing
-  // here is the one point where refusing is still free.
-  if (order.store_id && orderTracksStock(orderId)) {
-    const short = addonStockShortages(order.store_id, resolved);
-    if (short.length) {
-      return res.status(409).json({ success: false, error: 'insufficient_stock', shortages: short });
-    }
-  }
+  // ── Out-of-stock gates, BEFORE any money moves ────────────────────────
+  // Refusing here is the one point where refusing is still free: the only other
+  // stock check on this path runs inside finalizeOrderAddon, after the WeChat
+  // charge, where it can do nothing but warn.
+  const refusal = addonStockRefusal(order, resolved);
+  if (refusal) return res.status(409).json(refusal);
 
   const addonSubtotal = Math.round(resolved.reduce((s, r) => s + r.lineTotal, 0) * 100) / 100;
   if (!(addonSubtotal > 0)) return res.status(400).json({ success: false, error: 'zero_amount' });
@@ -30789,3 +31160,11 @@ module.exports.localPreorderLine = localPreorderLine;
 // pill reads. Exported for the same test, so the two halves are held to one
 // answer about who the local run serves.
 module.exports.stampSameCity = stampSameCity;
+// The fresh-batch trio, exported so scripts/test_batch_timing.js can hold the
+// promise, the calendar and the slot validator to ONE answer about which day a
+// fresh order is made on — the property this whole seam exists to guarantee.
+module.exports.earliestBatchMakeDate = earliestBatchMakeDate;
+module.exports.computeBatchNotice    = computeBatchNotice;
+module.exports.computeDeliverySlots  = computeDeliverySlots;
+module.exports.resolveDeliverySlot   = resolveDeliverySlot;
+module.exports.fulfillingStoreFor    = fulfillingStoreFor;

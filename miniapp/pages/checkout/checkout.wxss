@@ -494,6 +494,22 @@
   color: var(--ink);
   opacity: 0.8;
 }
+/* "No delivery dates available" — the When section with nothing pickable in it.
+   Dashed rather than solid so it reads as an absence, not another option. */
+.slot-none {
+  border: 2rpx dashed var(--ink);
+  padding: 20rpx 24rpx;
+  margin-top: 14rpx;
+  opacity: 0.85;
+}
+.slot-none__title { font-size: calc(26rpx * var(--font-scale)); line-height: 1.25; color: var(--ink); }
+.slot-none__sub {
+  font-size: calc(22rpx * var(--font-scale));
+  line-height: 1.4;
+  margin-top: 6rpx;
+  color: var(--ink);
+  opacity: 0.8;
+}
 .slot-option .opt-body { flex: 1; min-width: 0; }
 .slot-option .opt-label { font-size: calc(28rpx * var(--font-scale)); line-height: 1.25; }
 .slot-option .opt-sub { font-size: calc(22rpx * var(--font-scale)); margin-top: 4rpx; line-height: 1.35; }
