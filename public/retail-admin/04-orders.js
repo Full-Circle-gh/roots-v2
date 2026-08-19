@@ -7681,9 +7681,16 @@ function ordNewRender() {
     feeTouched: { ship: false, pack: false },
   };
   ['onw-cust-q', 'onw-guest-name', 'onw-guest-phone', 'onw-prod-q',
-   'onw-addr-name', 'onw-addr-phone', 'onw-addr-region', 'onw-addr-district',
+   'onw-addr-name', 'onw-addr-phone',
    'onw-addr-street', 'onw-addr-postal', 'onw-note-cust', 'onw-note-staff']
     .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  // The two region selects are rebuilt, not blanked — a <select> with no options
+  // cannot hold the empty value the rest of the reset assumes. Fire-and-forget:
+  // the catalogue fetch is cached after the first open and the operator reaches
+  // the address block long after it lands.
+  ordNewFillCities('');
+  ordNewFillDistricts('', '');
+  const provCap = document.getElementById('onw-addr-prov'); if (provCap) provCap.hidden = true;
   const ship = document.getElementById('onw-ship'); if (ship) ship.value = '0';
   const pack = document.getElementById('onw-pack'); if (pack) pack.value = '0';
   const ovr = document.getElementById('onw-override'); if (ovr) ovr.value = '';
@@ -8010,6 +8017,146 @@ function ordNewFeeTyped(which) {
 // where this order is going.
 function ordNewAddrChanged() { ordNewFeesDebounced(); }
 
+// ── City → district cascade ────────────────────────────────────────────
+// WHY THIS IS A CASCADE AND NOT TWO TEXT BOXES. The two fields it replaces were
+// free text, and the create payload hardcoded `city: ''` on top of that — so no
+// manual order has ever carried a city. Three things downstream read
+// address_json.city and ONLY that: planShipments (routes/retail.js), which
+// therefore could never see a Guangzhou order and dropped every manual parcel
+// into the 'land' fall-through; printerForOrder, which routes an out-of-city
+// order to the out-of-city printer; and the zone matcher, which compares
+// match_city / match_district by EXACT EQUALITY against the catalogue values
+// (retail_delivery_zones — see database.js). "广州" and "Guangzhou" are both
+// wrong for all three. A select is what makes the stored value canonical by
+// construction rather than by hoping.
+//
+// PROVINCE IS DERIVED, NEVER TYPED. Each catalogue city row carries its own
+// province_cn, so picking 广州市 IS picking 广东省. A separate province field
+// could only ever be a way for the two to disagree — and isGuangdong() reads
+// the province, so a disagreement re-opens the bug from the other side.
+//
+// Options are labelled "广州市 · Guangzhou" — CN first, matching the admin's
+// existing city catalogue datalist (06-delivery.js) rather than the wizard's
+// fixed-enum selects. Native select type-ahead then answers to the Chinese a
+// Guangzhou operator actually types. Both halves are always present, so the
+// language toggle has nothing to swap and the selects carry data-no-i18n.
+
+// Districts per city, fetched once each. GET /api/retail/districts is public
+// and Cache-Control: public, max-age=3600 (routes/retail.js) — it reads the
+// static china_districts reference file, touches no tenant DB and carries no
+// customer scope, so the admin page may call it directly. Fetching per city
+// rather than shipping the whole map: the file is ~140KB, which is not a thing
+// to put on every admin page load for a field most orders never open.
+const ONW_DISTRICT_CACHE = {};
+async function ordNewLoadDistricts(cityCn) {
+  if (!cityCn) return [];
+  if (ONW_DISTRICT_CACHE[cityCn]) return ONW_DISTRICT_CACHE[cityCn];
+  let list = [];
+  try { list = (await api('/api/retail/districts?city=' + encodeURIComponent(cityCn)))?.data || []; }
+  catch (e) { list = []; }   // offline / 500 → city-wide, same as a city with no districts
+  ONW_DISTRICT_CACHE[cityCn] = list;
+  return list;
+}
+
+// loadChinaRegions + _regions live in 06-delivery.js. All 17 parts share one
+// global scope and this runs on operator interaction, long after every part has
+// executed — but guard anyway, so a future split of the bundle degrades to an
+// empty picker rather than a thrown handler.
+async function ordNewLoadRegions() {
+  if (typeof loadChinaRegions !== 'function') return { cities: [] };
+  try { return await loadChinaRegions(); } catch (e) { return { cities: [] }; }
+}
+
+// The province the catalogue says this city belongs to. '' when the city isn't
+// in the catalogue, which for a <select> means only "nothing picked yet".
+function ordNewProvinceForCity(cityCn) {
+  if (!cityCn || typeof _regions === 'undefined') return '';
+  const row = _regions.byCn && _regions.byCn.get(cityCn);
+  return (row && row.province_cn) || '';
+}
+
+// Say which province the picked city commits the order to. The operator never
+// types it, so it has to be visible somewhere — a stored 广东省 they never saw
+// is what routing decisions get made on.
+function ordNewPaintProvince() {
+  const el = document.getElementById('onw-addr-prov');
+  if (!el) return;
+  const city = (document.getElementById('onw-addr-city')?.value || '').trim();
+  const prov = ordNewProvinceForCity(city);
+  const row  = (typeof _regions !== 'undefined' && _regions.byCn) ? _regions.byCn.get(city) : null;
+  if (!prov) { el.hidden = true; el.textContent = ''; return; }
+  el.hidden = false;
+  // Glued EN·中文 label with a bilingual value after it, so this line reads the
+  // same in either language and does not go stale when the toggle is flipped
+  // after a city was picked (it is repainted only on a city change).
+  el.textContent = 'Province · 省: ' + prov + (row && row.province_en ? ' · ' + row.province_en : '');
+}
+
+// ordNewRender fires a blank fill and ordNewRestore immediately fires another
+// with the draft's city; both await the same catalogue fetch, so without a token
+// the blank one can land last and wipe the restored pick.
+let _ONW_CITY_FILL = 0;
+async function ordNewFillCities(selectedCn) {
+  const sel = document.getElementById('onw-addr-city');
+  if (!sel) return;
+  const mine = ++_ONW_CITY_FILL;
+  const regions = await ordNewLoadRegions();
+  if (mine !== _ONW_CITY_FILL) return;
+  const cities = (regions.cities || []).slice()
+    .sort((a, b) => String(a.name_cn || '').localeCompare(String(b.name_cn || ''), 'zh-Hans-CN'));
+  sel.innerHTML = `<option value="">${escapeHtml(cuT('Select a city…', '请选择城市…'))}</option>`
+    + cities.map(c => `<option value="${escapeAttr(c.name_cn)}">${escapeHtml(c.name_cn)}${c.name_en ? ' · ' + escapeHtml(c.name_en) : ''}</option>`).join('');
+  if (selectedCn) sel.value = selectedCn;
+  ordNewPaintProvince();
+}
+
+// Repopulate the district select for whichever city is picked. `selectedCn`
+// re-selects a district when restoring a draft; a fresh pick passes nothing and
+// lands on "City-wide".
+//
+// CITY-WIDE IS REFUSED FOR GUANGZHOU, deliberately. Everywhere else a blank
+// district is honest — plenty of cities are one delivery area. In Guangzhou it
+// is not: planShipments reads the district to tell an inner district (a
+// same-city rider drop) from an outer ship-district (花都/番禺/南沙/从化/增城,
+// which go out by courier on the batch cadence), and a blank district makes
+// every Guangzhou order look inner. That would replace today's "everything is
+// Land" with "every Panyu order is a rider job" — the same bug pointing the
+// other way. So for 广州市 the empty option is dropped and validation demands a
+// real district.
+async function ordNewFillDistricts(cityCn, selectedCn) {
+  const sel = document.getElementById('onw-addr-district');
+  if (!sel) return;
+  if (!cityCn) {
+    sel.innerHTML = `<option value="">${escapeHtml(cuT('Pick a city first', '请先选择城市'))}</option>`;
+    return;
+  }
+  sel.innerHTML = `<option value="">${escapeHtml(cuT('Loading…', '加载中…'))}</option>`;
+  const dists = await ordNewLoadDistricts(cityCn);
+  // The city may have changed again while this was in flight.
+  const live = (document.getElementById('onw-addr-city')?.value || '').trim();
+  if (live !== cityCn) return;
+  const head = ordNewDistrictRequired(cityCn)
+    ? `<option value="">${escapeHtml(cuT('Select a district…', '请选择区/县…'))}</option>`
+    : `<option value="">${escapeHtml(cuT('City-wide · no district', '全城 · 不分区'))}</option>`;
+  sel.innerHTML = head
+    + dists.map(d => `<option value="${escapeAttr(d.name_cn)}">${escapeHtml(d.name_cn)}${d.name_en ? ' · ' + escapeHtml(d.name_en) : ''}</option>`).join('');
+  if (selectedCn) sel.value = selectedCn;
+}
+
+// Guangzhou is the one city whose district changes how the parcel ships, not
+// just what it costs. Keyed off the catalogue city name, which is the only form
+// the select can produce.
+function ordNewDistrictRequired(cityCn) {
+  return String(cityCn || '').trim() === '广州市';
+}
+
+async function ordNewCityChanged() {
+  const city = (document.getElementById('onw-addr-city')?.value || '').trim();
+  ordNewPaintProvince();
+  await ordNewFillDistricts(city, '');
+  ordNewAddrChanged();
+}
+
 let onwFeeTimer = null;
 function ordNewFeesDebounced() {
   clearTimeout(onwFeeTimer);
@@ -8030,13 +8177,13 @@ async function ordNewFees() {
       .map(l => ({ product_id: l.product_id, qty: Number(l.qty), unit_price: Number(l.unit_price) })),
   };
   if (ft === 'delivery') {
-    body.address = {
-      province: val('onw-addr-region'), city: '', district: val('onw-addr-district'),
-      address: val('onw-addr-street'), detail: '', postal_code: val('onw-addr-postal'),
-    };
+    // Identical shape to ordNewCollect's — the cart a fee is quoted for must be
+    // quoted against the SAME destination the order is then created with, or the
+    // summary the operator approved is not the order they made.
+    body.address = ordNewAddress();
     // Nothing to match a zone against yet — leave the fields alone rather than
     // zeroing them, which would look like an answer.
-    if (!body.address.province && !body.address.district && !body.address.address) return;
+    if (!body.address.city && !body.address.district && !body.address.address) return;
   }
   const mine = ++_ONW_FEE_REQ;
   let j;
@@ -8287,6 +8434,10 @@ function ordNewErrText(code, detail) {
     address_required_for_delivery: cuT('A delivery order needs a full address.', '配送订单需要完整地址。'),
     address_not_allowed_for_pickup: cuT('A pickup order cannot carry a delivery address.', '自提订单不能填写收货地址。'),
     address_not_allowed_for_counter: cuT('A counter sale cannot carry a delivery address.', '前台销售不能填写收货地址。'),
+    // Client-only — the server has no such rule. A Guangzhou order's district is
+    // what decides rider vs courier, so "city-wide" is not an answer here.
+    district_required_for_gz: cuT('Pick the Guangzhou district — it decides whether this goes by rider or by courier.',
+                                  '请选择广州的区 — 该选择决定走同城骑手还是快递。'),
   };
   return M[code] || (detail || cuT('That did not save. Nothing was created.', '未能保存,未创建任何内容。'));
 }
@@ -8323,14 +8474,30 @@ function ordNewCollect() {
   // credit and signup vouchers.
   if (ONW.cust === 'guest' && ONW.saveCust) body.save_customer = true;
   if (ft === 'delivery') {
-    body.address = {
-      province: val('onw-addr-region'), city: '', district: val('onw-addr-district'),
-      address: val('onw-addr-street'), detail: '', postal_code: val('onw-addr-postal'),
-    };
+    body.address = ordNewAddress();
     body.recipient_name = val('onw-addr-name') || body.recipient_name;
     body.recipient_phone = val('onw-addr-phone') || body.recipient_phone;
   }
   return body;
+}
+
+// The address snapshot, built in ONE place because two callers send it — the
+// create POST and the fee quote — and they used to carry two copies of the same
+// literal. When that literal was wrong (`city: ''`) it was wrong in both, and a
+// fix applied to one would have quoted a fee for a destination the order did not
+// have. Province is read off the picked city rather than a field of its own, so
+// the pair cannot drift; detail is not collected by this form.
+function ordNewAddress() {
+  const val = id => (document.getElementById(id)?.value || '').trim();
+  const city = val('onw-addr-city');
+  return {
+    province: ordNewProvinceForCity(city),
+    city,
+    district: val('onw-addr-district'),
+    address: val('onw-addr-street'),
+    detail: '',
+    postal_code: val('onw-addr-postal'),
+  };
 }
 // Client-side checks, inline in the same slots the server's answers use, so a
 // local failure and a remote one read identically.
@@ -8340,8 +8507,19 @@ function ordNewValidate(body) {
   if (body.items.some(i => !(i.qty > 0))) return ['prod', ordNewErrText('invalid_item')];
   if (body.fulfillment_type === 'delivery') {
     const a = body.address || {};
-    if (!(a.province && a.district && a.address && a.postal_code)) {
+    // CITY IS THE ONE THAT MATTERS MOST and was the one not checked — the server
+    // only insists on a non-empty address_full (any single line satisfies it), so
+    // until now nothing anywhere refused an order with no city. Province is
+    // derived from the city, so requiring it is really a second assertion that
+    // the picked city was a catalogue city.
+    if (!(a.city && a.province && a.address && a.postal_code)) {
       return ['addr', ordNewErrText('address_required_for_delivery')];
+    }
+    // District is optional for a city that delivers city-wide, and REQUIRED for
+    // Guangzhou, where it decides whether the parcel goes out on a same-city
+    // rider or a courier waybill — see ordNewFillDistricts.
+    if (ordNewDistrictRequired(a.city) && !a.district) {
+      return ['addr', ordNewErrText('district_required_for_gz')];
     }
   }
   return null;
@@ -8383,10 +8561,18 @@ function ordNewRestore(draft) {
   const a = (f.address && typeof f.address === 'object') ? f.address : {};
   set('onw-addr-name', f.recipient_name || '');
   set('onw-addr-phone', f.recipient_phone || '');
-  set('onw-addr-region', a.province || '');
-  set('onw-addr-district', a.district || '');
   set('onw-addr-street', a.address || '');
   set('onw-addr-postal', a.postal_code || '');
+  // The two selects can only hold a value once their options exist, and the
+  // district list depends on the city — so restore them in order, asynchronously,
+  // rather than through `set` alongside the plain inputs. Province is NOT
+  // restored: it is re-derived from the city, so a draft saved before this change
+  // (province typed by hand, no city) comes back with an empty city and an empty
+  // province rather than a province the picker can no longer justify. That is the
+  // honest outcome — the draft genuinely never held a usable destination.
+  ordNewFillCities(a.city || '')
+    .then(() => ordNewFillDistricts(a.city || '', a.district || ''))
+    .catch(() => { /* leaves the picker empty; the operator re-picks */ });
 
   // ordNewFulChange reads the select and would treat a restored counter sale as
   // a fresh switch INTO counter, overwriting the status and pay method the

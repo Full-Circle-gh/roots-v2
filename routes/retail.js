@@ -20581,8 +20581,14 @@ function resolveManualOrderLines(items) {
     const pid = parseInt(it.product_id, 10);
     const qty = Number(it.qty);
     if (!pid || !(qty > 0)) return { error: 'invalid_item' };
+    // ship_modes / needs_ice_pack / ship_from_supplier are selected because the
+    // INSERT below snapshots them, exactly as the customer checkout does. They
+    // were missing from both, so every hand-keyed line reached ensureShipments
+    // with a NULL ship_modes, COALESCEd to 'air,land', which bucketForItem reads
+    // as "Any" and sends by land — an "Air only" product included.
     const p = tdb().prepare(
-      `SELECT id, name_en, name_cn, sku, weight AS size, sell_price
+      `SELECT id, name_en, name_cn, sku, weight AS size, sell_price,
+              ship_modes, needs_ice_pack, ship_from_supplier
          FROM store_products WHERE id = ? AND COALESCE(is_active, 1) = 1`
     ).get(pid);
     if (!p) return { error: 'product_unavailable', product_id: pid };
@@ -20854,12 +20860,26 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
         storeId
       );
       orderId = info.lastInsertRowid;
+      // ship_modes / needs_ice_pack / ship_from_supplier are SNAPSHOTTED here, the
+      // same three the checkout snapshots (see the insertItem above at the
+      // customer /orders route) with the same 'air,land' fallback. They are not
+      // decoration: ensureShipments plans the parcels off them, the packer's slip
+      // prints the supplier-direct flag off ship_from_supplier, and a later edit
+      // to the product must not rewrite how a past order was fulfilled — which is
+      // the whole reason they are snapshot columns rather than a join.
       const insItem = tx.prepare(
-        `INSERT INTO retail_order_items (order_id, product_id, name_en, name_cn, sku, size, qty, unit_price, line_total)
-         VALUES (?,?,?,?,?,?,?,?,?)`
+        `INSERT INTO retail_order_items
+           (order_id, product_id, name_en, name_cn, sku, size, qty, unit_price, line_total,
+            ship_modes, needs_ice_pack, ship_from_supplier)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
       );
       for (const r of resolved) {
-        insItem.run(orderId, r.p.id, r.p.name_en, r.p.name_cn, r.p.sku, r.p.size, r.qty, r.unitPrice, r.lineTotal);
+        insItem.run(
+          orderId, r.p.id, r.p.name_en, r.p.name_cn, r.p.sku, r.p.size, r.qty, r.unitPrice, r.lineTotal,
+          r.p.ship_modes || 'air,land',
+          r.p.needs_ice_pack ? 1 : 0,
+          r.p.ship_from_supplier ? 1 : 0
+        );
       }
       tx.prepare(
         `INSERT INTO retail_payments (order_id, method, amount, status, out_trade_no)

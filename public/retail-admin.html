@@ -2844,14 +2844,25 @@
                 <div class="onw-row2">
                   <div class="onw-f"><label for="onw-addr-name">Recipient · 收件人</label><input class="onw-in" type="text" id="onw-addr-name" maxlength="80"></div>
                   <div class="onw-f"><label for="onw-addr-phone">Phone · 电话</label><div class="onw-ig"><span>+86</span><input type="text" id="onw-addr-phone" maxlength="20"></div></div>
-                  <!-- These three decide the delivery zone, and the zone decides
-                       both fees — so each one re-quotes (debounced) as it's typed. -->
-                  <div class="onw-f"><label for="onw-addr-region">Province or city · 省市</label><input class="onw-in" type="text" id="onw-addr-region" maxlength="80" oninput="ordNewAddrChanged()"></div>
-                  <div class="onw-f"><label for="onw-addr-district">District · 区</label><input class="onw-in" type="text" id="onw-addr-district" maxlength="40" oninput="ordNewAddrChanged()"></div>
+                  <!-- City and district decide the delivery zone, and the zone
+                       decides both fees — so each one re-quotes (debounced) on
+                       change. They are SELECTS, not free text: the zone matcher
+                       compares match_city / match_district by exact equality
+                       (database.js), and planShipments reads address.city and
+                       nothing else, so a hand-typed "广州" or "Guangzhou" never
+                       resolves. Options are the canonical catalogue values
+                       (广州市 / 番禺区) served from the same china_regions +
+                       china_districts reference data the customer picker uses.
+                       PROVINCE IS NOT A FIELD — it is derived from the chosen
+                       city (ordNewProvinceForCity) so the two can never
+                       disagree, and shown read-only in the caption below. -->
+                  <div class="onw-f"><label for="onw-addr-city">City · 城市</label><div class="onw-selw"><svg class="onw-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg><select class="onw-in" id="onw-addr-city" data-no-i18n onchange="ordNewCityChanged()"></select></div></div>
+                  <div class="onw-f"><label for="onw-addr-district">District · 区</label><div class="onw-selw"><svg class="onw-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg><select class="onw-in" id="onw-addr-district" data-no-i18n onchange="ordNewAddrChanged()"></select></div></div>
                   <div class="onw-f onw-wide"><label for="onw-addr-street">Street address · 详细地址</label><input class="onw-in" type="text" id="onw-addr-street" maxlength="200" oninput="ordNewAddrChanged()"></div>
                   <div class="onw-f"><label for="onw-addr-postal">Postal code · 邮编</label><input class="onw-in onw-num" type="text" id="onw-addr-postal" maxlength="12"></div>
                 </div>
                 <p class="onw-cap">All six are required for a delivery order. · 配送订单六项均为必填。</p>
+                <p class="onw-cap" id="onw-addr-prov" data-no-i18n hidden></p>
                 <div class="onw-err" id="onw-err-addr" data-no-i18n hidden></div>
               </div>
 
