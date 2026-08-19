@@ -30,6 +30,10 @@ Every gap has four different parts:
 
 **Every command in this document runs on the production box over SSH** unless it says otherwise. The box is `root@47.239.89.63`. Commands are written with the `ssh` prefix already in them so they can be pasted from a laptop without thinking about which machine you are on.
 
+> **`/root/roots-v2` ON THE BOX IS NOT A GIT CHECKOUT. NO `git` COMMAND WORKS THERE.** The deploy pipeline **ships files** — it stages them under `__stage__/` and installs them; it has never cloned, pulled or fetched, and there is no `.git` directory to act on. Two steps in v0.1 of this document opened with `git fetch` and `git rev-parse` against that path and **would have failed on the first line an operator typed**; both are corrected below, 2026-08-19. Anything you want to know about *what code is on the box* comes from `/root/roots-v2/.deploy-state/last-success-sha` — the record the pipeline writes — or from an `md5sum` of the file itself, **never from git.** This is also why the deploy never removes a file: there is no working tree to reconcile against.
+>
+> **A second consequence, and it bites the same way:** the box installs **production dependencies only**, so any script needing a devDependency cannot run there at all. `scripts/diagnose_async_conversion_scope.js` needs `espree`, which arrives with `eslint`; its own header says *"On the production box this will never work, by design."* **Analysis runs on a developer checkout. The box answers questions about state, not about source.**
+
 ---
 
 ## WHAT THIS DOCUMENT IS NOT
@@ -95,13 +99,13 @@ There are **three** phases, settled 2026-08-10 (§24 *THREE PHASES, AND WHY THE 
 
 ## B0 — Confirm the record is current before trusting any number in it
 
-**RUN**
+**RUN — ON YOUR OWN MACHINE, IN A CHECKOUT. NOT ON THE BOX.** (Corrected 2026-08-19: v0.1 ran this over SSH against `/root/roots-v2`, where neither half of it can work — see the note in HOW TO READ A STEP.)
 
 ```bash
-ssh root@47.239.89.63 "cd /root/roots-v2 && git fetch origin -q && node scripts/diagnose_async_conversion_scope.js | grep -E 'runtime total|blocks|CONVERTED'"
+git fetch origin -q && git checkout origin/main -q && npm install --no-audit --no-fund && node scripts/diagnose_async_conversion_scope.js | grep -E '^\[3[ab]\]|routes/retail\.js — [0-9]+ (un)?converted blocks|runtime total: [0-9]+ +<-'
 ```
 
-**GOOD** — the counts printed match the `LAST UPDATED` line at the top of `docs/tacet-postgres-status.md`.
+**GOOD** — the counts printed match the `LAST UPDATED` line at the top of `docs/tacet-postgres-status.md`. **Read the two forms separately; they are never summed.**
 
 **BAD** — any count differs, or the script errors.
 
@@ -392,10 +396,14 @@ ssh root@47.239.89.63 "bash /root/roots-v2/scripts/db-backup.sh; echo EXIT=\$?"
 **RUN**
 
 ```bash
-ssh root@47.239.89.63 "cd /root/roots-v2 && git rev-parse HEAD && pm2 jlist | node -e 'const d=JSON.parse(require(\"fs\").readFileSync(0));for(const p of d)console.log(p.name, p.pm2_env.status, p.pm2_env.restart_time)'"
+ssh root@47.239.89.63 "cat /root/roots-v2/.deploy-state/last-success-sha 2>/dev/null || echo 'NO DEPLOY RECORD'; pm2 jlist | node -e 'const d=JSON.parse(require(\"fs\").readFileSync(0));for(const p of d)console.log(p.name, p.pm2_env.status, p.pm2_env.restart_time)'"
 ```
 
+**Corrected 2026-08-19: v0.1 read the SHA with `git rev-parse HEAD` on the box, which cannot work — the box is not a checkout.** The deploy record is the pipeline's own file and is the only SHA on that machine.
+
 **GOOD** — you have written down, on paper or in a note you can reach without the box: the deployed commit SHA, every pm2 process name, its status, and its restart count.
+
+**If the SHA line reads `NO DEPLOY RECORD`**, do not treat that as fatal — the record is written by the deploy and is absent on a rebuilt box. It does mean you cannot say which commit is live, so **confirm the files you care about by `md5sum` against the merged blob instead**, which is what §24 does rather than trusting a deploy reported as successful.
 
 **BAD** — any process is not `online`, or a restart count is climbing between two runs of this command.
 
