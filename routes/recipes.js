@@ -79,6 +79,7 @@ router.get('/api/recipes/export', requireAuth, requirePermission('recipes'), asy
     // exactly what the Cost Sheet is fed.
     const allLines = db.prepare(`
       SELECT ri.*, i.cost_per_unit AS master_cost, i.unit AS master_unit,
+             i.free_by_design AS master_free,
              i.name_en AS master_name_en
         FROM recipe_ingredients ri
         LEFT JOIN ingredients i ON ri.ingredient_id = i.id
@@ -265,7 +266,7 @@ router.get('/api/recipes/export', requireAuth, requirePermission('recipes'), asy
 router.get('/api/recipes/:id', requireAuth, requirePermission('recipes'), (req, res) => {
   const recipe = db.prepare('SELECT * FROM recipes WHERE id = ? AND is_active = 1').get(req.params.id);
   if (!recipe) return res.status(404).json({ error: 'Not found · 未找到' });
-  const ingredients = db.prepare('SELECT ri.*, i.cost_per_unit as master_cost, i.unit as master_unit FROM recipe_ingredients ri LEFT JOIN ingredients i ON ri.ingredient_id = i.id WHERE ri.recipe_id = ? ORDER BY ri.sort_order').all(recipe.id);
+  const ingredients = db.prepare('SELECT ri.*, i.cost_per_unit as master_cost, i.unit as master_unit, i.free_by_design as master_free FROM recipe_ingredients ri LEFT JOIN ingredients i ON ri.ingredient_id = i.id WHERE ri.recipe_id = ? ORDER BY ri.sort_order').all(recipe.id);
   const steps = db.prepare('SELECT * FROM recipe_steps WHERE recipe_id = ? ORDER BY step_number').all(recipe.id);
   const costData = db.prepare('SELECT * FROM recipe_cost_data WHERE recipe_id = ?').get(recipe.id);
   res.json({ success: true, data: { ...recipe, ingredients, steps, costData } });

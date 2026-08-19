@@ -53,6 +53,11 @@ CREATE TABLE IF NOT EXISTS ingredients (
   pack_contents_qty  REAL,             -- contents qty inside one buy_unit (e.g. 1.0 for a 1 kg bottle)
   pack_contents_unit TEXT,             -- contents unit (g/kg/ml/L) — required when buy_unit is bottle/bag/box/can/pcs
   cost_per_unit REAL DEFAULT 0,        -- cost per recipe unit (¥/g)
+  -- Deliberately free: water, peel, anything the kitchen does not cost. It is
+  -- NOT the same as "nobody typed a price" — a flagged item never counts as a
+  -- missing cost and never takes a price from a PO. Without the distinction a
+  -- warning fires on 26 recipes for tap water and gets trained away.
+  free_by_design INTEGER DEFAULT 0,
   buy_price     REAL DEFAULT 0,        -- purchase price per package
   supplier      TEXT,                  -- free-text supplier name
   supplier_platform TEXT,              -- alibaba | taobao | wechat | other

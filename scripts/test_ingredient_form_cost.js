@@ -36,7 +36,7 @@ function extract(name) {
   throw new Error(`${name}() has unbalanced braces`);
 }
 
-const source = [extract('calcCPU'), extract('cpuForSave')].join('\n\n');
+const source = [extract('calcCPU'), extract('cpuForSave'), extract('poUnitOptions')].join('\n\n');
 
 // A DOM just big enough for the two functions: id → { value } plus the two
 // display nodes they write into.
@@ -51,6 +51,7 @@ function makeDom(fields) {
     fi_unit:      el(fields.unit),
     fi_cpu:       el(fields.stored),          // seeded with the stored value, as the form does
     fi_cpu_stored: el(fields.stored),
+    fi_free:      Object.assign(el(''), { checked: !!fields.free_by_design }),
     fi_cpu_hint:  el(''),
     fi_cpu_label: el(''),
   };
@@ -118,6 +119,27 @@ console.log('\n── 4. helper missing (blocked request) — nothing is written
   vm.runInContext(source + '\ncalcCPU(); globalThis.__saved = cpuForSave();', ctx);
   console.log(`     field shows "${dom.nodes.fi_cpu.value}" · hint: ${dom.nodes.fi_cpu_hint.textContent}`);
   check('stored cost preserved with no helper', ctx.__saved, 0.0316);
+}
+
+console.log('\n── 4b. marked free by design — a real zero, and locked ─────────────');
+{
+  const dom = makeDom({ unit: 'g', buy_unit: 'g', buy_pack_size: 1, pack_contents_qty: '', pack_contents_unit: '', buy_price: 0, stored: 0, free_by_design: 1 });
+  const ctx = vm.createContext({ document: dom.document, window: { RootsIngredientCost: lib }, console });
+  vm.runInContext(source + '\ncalcCPU(); globalThis.__saved = cpuForSave();', ctx);
+  console.log(`     field shows "${dom.nodes.fi_cpu.value}" · disabled=${dom.nodes.fi_cpu.disabled} · hint: ${dom.nodes.fi_cpu_hint.textContent}`);
+  check('cost is zero', ctx.__saved, 0);
+  check('field locked', dom.nodes.fi_cpu.disabled, true);
+}
+
+console.log('\n── 4c. the PO row reads its units from the helper ──────────────────');
+{
+  const ctx = vm.createContext({ document: makeDom({}).document, window: { RootsIngredientCost: lib }, console });
+  vm.runInContext(source + '\nglobalThis.__m = poUnitOptions("measure"); globalThis.__c = poUnitOptions("container");', ctx);
+  console.log(`     measures: ${ctx.__m.join(', ')}`);
+  console.log(`     containers: ${ctx.__c.join(', ')}`);
+  check('measures come from the helper',   ctx.__m === lib.MEASURE_BUY_UNITS,   true);
+  check('containers come from the helper', ctx.__c === lib.CONTAINER_BUY_UNITS, true);
+  check('pcs is offered on a purchase line', ctx.__c.includes('pcs'), true);
 }
 
 console.log('\n── 5. the helper file itself loads in a browser ────────────────────');

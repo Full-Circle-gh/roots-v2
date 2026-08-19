@@ -68,6 +68,11 @@ function _firePOPush(poId, kind) {
   } catch (e) { console.warn('[firePOPush]', e.message); }
 }
 
+// A line's unit is stored exactly as it arrives, blank included. The old
+// `|| 'kg'` here re-instated the very default the PO form stopped setting, so
+// the write-back's mismatch guard could never see that nobody had chosen a
+// unit. "Nobody said" has to stay "nobody said" the whole way down.
+
 // ── Fire price-history rows + alerts for every line in a PO ────────────────
 // Called whenever a PO transitions to Ordered or Delivered (including the
 // split-order path which previously skipped this and was the last gap).
@@ -134,6 +139,11 @@ function firePriceAlertsForPO(poId, source) {
 
     // Through normaliseUnit, so 'pc' on the line and 'pcs' on the item are the
     // same unit and the price flows.
+    // Marked free by hand. A supplier price on a PO line does not get to start
+    // costing something someone deliberately said is free — the flag is a
+    // decision, the invoice is just data.
+    if (ing.free_by_design) { skip(ing, item, 'marked_free'); continue; }
+
     if (normaliseUnit(item.unit) !== normaliseUnit(ing.buy_unit)) { skip(ing, item, 'unit_mismatch'); continue; }
 
     const { cpu, reason } = deriveCostPerUnit(ing, item.cost_per_unit);
@@ -299,7 +309,7 @@ router.post('/api/purchases', requireAuth, requirePermission('purchases'), (req,
         }
         insertItem.run(
           poId, item.ingredient_id||null, item.name_en||'', item.name_cn||null, item.sku||null,
-          item.qty||0, item.unit||'kg', item.cost_per_unit||0, total, item.expense_category||null,
+          item.qty||0, item.unit || null, item.cost_per_unit||0, total, item.expense_category||null,
           lineSupplier, item.purchase_channel || null,
           status, (item.note||'').trim() || null, i
         );
@@ -339,7 +349,7 @@ router.put('/api/purchases/:id', requireAuth, requirePermission('purchases'), (r
       }
       insertItem.run(
         req.params.id, item.ingredient_id||null, item.name_en||'', item.name_cn||null, item.sku||null,
-        item.qty||0, item.unit||'kg', item.cost_per_unit||0, total, item.expense_category||null,
+        item.qty||0, item.unit || null, item.cost_per_unit||0, total, item.expense_category||null,
         lineSupplier, item.purchase_channel || null,
         status, (item.note||'').trim() || null, i
       );
