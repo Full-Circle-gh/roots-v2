@@ -36,7 +36,7 @@ function extract(name) {
   throw new Error(`${name}() has unbalanced braces`);
 }
 
-const source = [extract('calcCPU'), extract('cpuForSave')].join('\n\n');
+const source = [extract('calcCPU'), extract('cpuForSave'), extract('poUnitOptions')].join('\n\n');
 
 // A DOM just big enough for the two functions: id → { value } plus the two
 // display nodes they write into.
@@ -129,6 +129,17 @@ console.log('\n── 4b. marked free by design — a real zero, and locked ─�
   console.log(`     field shows "${dom.nodes.fi_cpu.value}" · disabled=${dom.nodes.fi_cpu.disabled} · hint: ${dom.nodes.fi_cpu_hint.textContent}`);
   check('cost is zero', ctx.__saved, 0);
   check('field locked', dom.nodes.fi_cpu.disabled, true);
+}
+
+console.log('\n── 4c. the PO row reads its units from the helper ──────────────────');
+{
+  const ctx = vm.createContext({ document: makeDom({}).document, window: { RootsIngredientCost: lib }, console });
+  vm.runInContext(source + '\nglobalThis.__m = poUnitOptions("measure"); globalThis.__c = poUnitOptions("container");', ctx);
+  console.log(`     measures: ${ctx.__m.join(', ')}`);
+  console.log(`     containers: ${ctx.__c.join(', ')}`);
+  check('measures come from the helper',   ctx.__m === lib.MEASURE_BUY_UNITS,   true);
+  check('containers come from the helper', ctx.__c === lib.CONTAINER_BUY_UNITS, true);
+  check('pcs is offered on a purchase line', ctx.__c.includes('pcs'), true);
 }
 
 console.log('\n── 5. the helper file itself loads in a browser ────────────────────');

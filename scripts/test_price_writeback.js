@@ -78,6 +78,8 @@ insLine.run(1, 139, 'Red Lentils',         'C-5',  1, 'kg',     52,  52);   // c
 insLine.run(1, 64,  'Cutlery Set',         'H-26', 3, 'bag',    27,  81);   // case 5
 insLine.run(1, 700, 'Kitchen Hat',         'J-59', 4, 'pc',     14,  56);   // case 6 — 'pc' vs 'pcs'
 insLine.run(1, 571, 'Drinking Water',      'F-26', 5, 'g',      2,   10);   // case 8 — someone invoiced the water
+insIng.run(801, 'Chickpeas',          null,    'C-90', 'g',   'kg',     1, null, null, 0.012, 12);
+insLine.run(1, 801, 'Chickpeas',           'C-90', 3, '',       14,  42);   // case 9 — unit left blank
 
 const before = fixture.prepare('SELECT id,sku,unit,buy_unit,cost_per_unit,buy_price FROM ingredients ORDER BY id').all();
 
@@ -152,7 +154,7 @@ console.log(`  E-40 cost_per_unit → ${mintNow.cost_per_unit}   buy_price → $
 console.log(`  E-40 skip row: ${mintSkip.reason}, resolved_at=${mintSkip.resolved_at}`);
 check('E-40 now prices',            +mintNow.cost_per_unit.toFixed(6), +(50 / 95).toFixed(6));
 check('E-40 skip resolved',         mintSkip.resolved_at !== null,     true);
-check('skip row kept, not deleted', fixture.prepare('SELECT COUNT(*) AS c FROM ingredient_cost_skips').get().c, 3);
+check('skip row kept, not deleted', fixture.prepare('SELECT COUNT(*) AS c FROM ingredient_cost_skips').get().c, 4);
 
 console.log('\n── Case 8: an item marked free by design, invoiced anyway ──────');
 // The flag is a decision; a supplier price does not get to overrule it.
@@ -162,6 +164,15 @@ check('water still costs nothing', water.cost_per_unit, 0);
 check('buy_price untouched',       water.buy_price,     0);
 check('skip reason', (result.skips.find(s => s.sku === 'F-26') || {}).reason, 'marked_free');
 
+console.log('\n── Case 9: nobody chose a unit — skipped, not guessed ──────────');
+// The PO row template no longer preselects kg, so an untouched line arrives
+// blank. That must reach the guard and be reported, never quietly priced.
+const chick = byId(after, 801);
+console.log(`  C-90 cost_per_unit → ${chick.cost_per_unit}   buy_price → ${chick.buy_price}`);
+check('cost untouched',  chick.cost_per_unit, 0.012);
+check('price untouched', chick.buy_price,     12);
+check('skip reason', (result.skips.find(s => s.sku === 'C-90') || {}).reason, 'unit_mismatch');
+
 console.log('\n── Price history (append-only, one row per priced line) ─────────');
 for (const h of fixture.prepare('SELECT ingredient_id,price,buy_unit,source FROM ingredient_price_history ORDER BY id').all()) {
   console.log(`  ingredient ${h.ingredient_id}  ¥${h.price} / ${h.buy_unit}  (${h.source})`);
@@ -170,7 +181,7 @@ for (const h of fixture.prepare('SELECT ingredient_id,price,buy_unit,source FROM
 console.log('\n── Skip rows recorded in ingredient_cost_skips ──────────────────');
 const skipRows = fixture.prepare('SELECT id,ingredient_id,po_id,reason,line_unit,line_price FROM ingredient_cost_skips ORDER BY id').all();
 for (const s of skipRows) console.log(`  id=${s.id} ingredient=${s.ingredient_id} po=${s.po_id} ${s.reason} (line ¥${s.line_price} / ${s.line_unit})`);
-check('skip rows stored', skipRows.length, 3);
+check('skip rows stored', skipRows.length, 4);
 
 // ── Does a skip actually reach the Alerts feed? ─────────────────────────────
 // Mount routes/alerts.js on a throwaway express app with auth stubbed out and
@@ -203,9 +214,9 @@ check('skip rows stored', skipRows.length, 3);
   }
   console.log('  by reason:', JSON.stringify(feed.data.costSkipsByReason));
   // Only C-5 is still open — E-40 resolved itself in case 7.
-  check('feed returns the open skips', (feed.data.costSkips || []).length,        2);
-  check('feed count agrees',               feed.data.counts.costSkips,            2);
-  check('badge count includes skips',      badge.breakdown.costSkips,             2);
+  check('feed returns the open skips', (feed.data.costSkips || []).length,        3);
+  check('feed count agrees',               feed.data.counts.costSkips,            3);
+  check('badge count includes skips',      badge.breakdown.costSkips,             3);
   check('by-reason breakdown split',       feed.data.costSkipsByReason.length,    2);
 
   server.close();

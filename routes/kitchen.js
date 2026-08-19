@@ -13,16 +13,21 @@ const router = express.Router();
 // non-kitchen PO so newly-imported ingredients still get a sane default.
 router.get('/api/kitchen/last-qty', requireAuth, requirePermission('kitchen'), (req, res) => {
   const rows = db.prepare(`
-    SELECT pli.ingredient_id, pli.qty, pli.unit, po.source, po.created_at, po.date AS po_date
+    SELECT pli.ingredient_id, pli.qty, pli.unit, po.source, po.created_at, po.date AS po_date,
+           i.buy_unit AS item_buy_unit
     FROM po_line_items pli
     JOIN purchase_orders po ON po.id = pli.po_id
+    LEFT JOIN ingredients i ON i.id = pli.ingredient_id
     WHERE pli.ingredient_id IS NOT NULL
     ORDER BY po.created_at DESC, pli.id DESC
   `).all();
   const out = {};
   for (const r of rows) {
     if (out[r.ingredient_id]) continue; // first hit wins (most recent)
-    out[r.ingredient_id] = { qty: r.qty, unit: r.unit, source: r.source || 'manual', last_date: r.po_date || (r.created_at ? r.created_at.slice(0,10) : null) };
+    // A PO line may now carry no unit at all — the row template stopped
+    // guessing kg. Fall back to the item's own buy_unit so a blank is not
+    // handed forward to the next order as a blank.
+    out[r.ingredient_id] = { qty: r.qty, unit: r.unit || r.item_buy_unit || null, source: r.source || 'manual', last_date: r.po_date || (r.created_at ? r.created_at.slice(0,10) : null) };
   }
   // Prefer kitchenOrder qty when both exist for an ingredient.
   const kitchenOnly = {};
@@ -33,7 +38,7 @@ router.get('/api/kitchen/last-qty', requireAuth, requirePermission('kitchen'), (
   }
   for (const id of Object.keys(kitchenOnly)) {
     const r = kitchenOnly[id];
-    out[id] = { qty: r.qty, unit: r.unit, source: 'kitchenOrder', last_date: r.po_date || (r.created_at ? r.created_at.slice(0,10) : null) };
+    out[id] = { qty: r.qty, unit: r.unit || r.item_buy_unit || null, source: 'kitchenOrder', last_date: r.po_date || (r.created_at ? r.created_at.slice(0,10) : null) };
   }
   res.json({ success: true, data: out });
 });

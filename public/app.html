@@ -5510,6 +5510,16 @@ function drawIngPriceSparkline(history) {
 // user has to say what one holds. Asking the helper keeps that list in one
 // place; with the helper missing we show the contents fields, which is the
 // harmless side to be wrong on.
+// The PO row's unit options, from lib/ingredient-cost.js so the purchase line
+// and the cost maths share one definition. With the helper missing we offer
+// nothing rather than a wrong six: an empty unit is caught downstream, a
+// confidently wrong one is not.
+function poUnitOptions(kind) {
+  const lib = window.RootsIngredientCost;
+  if (!lib) return [];
+  return kind === 'container' ? lib.CONTAINER_BUY_UNITS : lib.MEASURE_BUY_UNITS;
+}
+
 function isContainerBuyUnit(u) {
   const lib = window.RootsIngredientCost;
   if (!lib) return true;
@@ -14722,7 +14732,7 @@ async function showPOForm(id) {
       _poIngRows = (po.items||[]).map((item,i)=>({...item,_rowId:i}));
     }
   }
-  if (_poIngRows.length===0) _poIngRows = [{_rowId:0,sku:'',name_en:'',name_cn:'',qty:'',unit:'kg',cost_per_unit:'',expense_category:'',note:'',ingredient_id:null}];
+  if (_poIngRows.length===0) _poIngRows = [{_rowId:0,sku:'',name_en:'',name_cn:'',qty:'',unit:'',cost_per_unit:'',expense_category:'',note:'',ingredient_id:null}];
   if (_ingredients.length===0) await loadIngredientsCache();
   // Refresh suppliers cache so the picker sees anything added since the
   // app loaded (admin, or via the "+ New supplier" route from another form).
@@ -14853,11 +14863,18 @@ function renderPORows() {
           oninput="updatePORow(${row._rowId},'qty',this.value);calcPOTotal()">
         <select style="padding:7px 9px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit;width:100%;outline:none"
           onchange="updatePORow(${row._rowId},'unit',this.value)">
-          <optgroup label="Weight / Volume">
-            ${['kg','g','L','ml','lb','oz'].map(u=>`<option value="${u}" ${(row.unit||'kg')===u?'selected':''}>${u}</option>`).join('')}
+          <!-- Blank, and selected until someone chooses. kg used to be
+               preselected here, so a line nobody touched shipped as kilos —
+               which is how glass jars and foam wrap came to be ordered by
+               weight. A blank unit now reaches the write-back's mismatch guard
+               and raises a visible "Cost Not Updated" alert, which is a better
+               outcome than a confident wrong unit. -->
+          <option value="" ${row.unit?'':'selected'}>— unit 单位 —</option>
+          <optgroup label="Weight / Volume 重量·体积">
+            ${poUnitOptions('measure').map(u=>`<option value="${u}" ${row.unit===u?'selected':''}>${u}</option>`).join('')}
           </optgroup>
-          <optgroup label="Package">
-            ${['bottle','bag','box','can','jar','case','pack','tub','pcs'].map(u=>`<option value="${u}" ${(row.unit||'')===u?'selected':''}>${u}</option>`).join('')}
+          <optgroup label="Package 包装">
+            ${poUnitOptions('container').map(u=>`<option value="${u}" ${row.unit===u?'selected':''}>${u}</option>`).join('')}
           </optgroup>
         </select>
         <input type="number" placeholder="¥" value="${row.cost_per_unit||''}" style="padding:7px 9px;border:1.5px solid var(--border);border-radius:6px;font-size:12px;font-family:inherit;width:100%;outline:none"
@@ -14905,7 +14922,7 @@ function calcPOTotal() {
 }
 
 function addPORow() {
-  _poIngRows.push({_rowId:Date.now(),sku:'',name_en:'',name_cn:'',qty:'',unit:'kg',cost_per_unit:'',expense_category:'',note:'',ingredient_id:null});
+  _poIngRows.push({_rowId:Date.now(),sku:'',name_en:'',name_cn:'',qty:'',unit:'',cost_per_unit:'',expense_category:'',note:'',ingredient_id:null});
   renderPORows();
 }
 
@@ -14965,7 +14982,7 @@ function selectPOIng(rowId, ingId) {
     row.sku = ing.sku||'';
     row.name_en = ing.name_en;
     row.name_cn = ing.name_cn||'';
-    row.unit = ing.buy_unit||'kg';
+    row.unit = ing.buy_unit || '';
     row.cost_per_unit = ing.buy_price||'';
     // Auto-fill the line's expense bucket from the ingredient's accounting
     // category — only when this row's expense_category is still blank, so we
@@ -14990,7 +15007,7 @@ function selectPOIng(rowId, ingId) {
   const isLastRow = _poIngRows.length > 0 && _poIngRows[_poIngRows.length - 1]._rowId === rowId;
   if (isLastRow) {
     appendedId = Date.now();
-    _poIngRows.push({_rowId:appendedId,sku:'',name_en:'',name_cn:'',qty:'',unit:'kg',cost_per_unit:'',expense_category:'',ingredient_id:null});
+    _poIngRows.push({_rowId:appendedId,sku:'',name_en:'',name_cn:'',qty:'',unit:'',cost_per_unit:'',expense_category:'',ingredient_id:null});
     // Mark the row so renderPORows() can apply the slide-in animation.
     window._poFreshRowId = appendedId;
   }
