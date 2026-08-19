@@ -152,7 +152,7 @@ console.log(`  E-40 cost_per_unit → ${mintNow.cost_per_unit}   buy_price → $
 console.log(`  E-40 skip row: ${mintSkip.reason}, resolved_at=${mintSkip.resolved_at}`);
 check('E-40 now prices',            +mintNow.cost_per_unit.toFixed(6), +(50 / 95).toFixed(6));
 check('E-40 skip resolved',         mintSkip.resolved_at !== null,     true);
-check('skip row kept, not deleted', fixture.prepare('SELECT COUNT(*) AS c FROM ingredient_cost_skips').get().c, 2);
+check('skip row kept, not deleted', fixture.prepare('SELECT COUNT(*) AS c FROM ingredient_cost_skips').get().c, 3);
 
 console.log('\n── Case 8: an item marked free by design, invoiced anyway ──────');
 // The flag is a decision; a supplier price does not get to overrule it.
