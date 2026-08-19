@@ -1,10 +1,14 @@
-# The Postgres cutover runbook — v0.2, FIRST DRAFT, NOT EXECUTABLE
+# The Postgres cutover runbook — v0.3, FIRST DRAFT, NOT EXECUTABLE
 
 **A procedure, not a summary.** Written to be followed literally, at 3am, by one person who is not a developer, with the shop trading and no ability to improvise.
 
-> **CORRECTED BEFORE MERGE, 2026-08-19 — v0.1 → v0.2, and the correction is recorded rather than tidied away.** The draft was written against a reading of `claimMigrationCredit` that had been out of date for six days. **G11 said both of its pieces were unbuilt; the writer fix landed at `225aa13` on 2026-08-13** and is on `main`. Two forward-looking claims that rested on it were false when this file was written and are struck below. **The gap does not close** — the backfill for the seven pre-fix customers is still unbuilt, check F still fails on ¥3,669.64, and Part G still needs its baseline. **Still 23 gaps.** Line-number cites for `reverseOrderBalance` and the `sqlite_sequence` reset were re-derived at this head in the same pass; both had drifted. See §24 and the re-derivation inside G11.
+> **G11 IS CLOSED — v0.3, 2026-08-19. THE BACKFILL RAN ON 2026-08-17 AND NOBODY WROTE IT DOWN.** `retail_topup_transactions` rows **226–232** carry the seven missing ledger rows; undo file at `/root/roots-v2/data/backfill_migration_credit_ledger.undo.json`. **Check F is ZERO. All ten invariants pass.** Everything below that treated F as failing — the D3 baseline, the G6 diff, the whole apparatus for telling a flip failure from a pre-existing one — was **describing a defect that had already been repaired two days before this document was first drafted.** It is removed, not amended. **Step G6 now expects ALL 10 INVARIANTS PASSED outright.**
+>
+> **THE FAILURE THAT MATTERS IS NOT THE STALE TEXT, IT IS WHY IT WAS STALE.** The run left no trace in the repository: no committed script, no §24 entry, no status-doc change. Three separate readers — this runbook's first draft, §24 v4.42 and v4.43, and status item 42 — each independently concluded "not built, not run" from a record that was complete and current except for this. **A production money write that is not written down is invisible to every check this project has**, and it stayed invisible through a survey, a re-derivation and a re-verification. **Twenty-two gaps remain of the twenty-three identified; the numbering is NOT reused, so G11 stays as a closed entry rather than becoming somebody else's gap.**
+>
+> **CORRECTED BEFORE MERGE, 2026-08-19 — v0.1 → v0.2, and the correction is recorded rather than tidied away.** The draft was written against a reading of `claimMigrationCredit` that had been out of date for six days. **G11 said both of its pieces were unbuilt; the writer fix landed at `225aa13` on 2026-08-13** and is on `main`. Two forward-looking claims that rested on it were false when this file was written and are struck below. **That pass concluded the gap did not close** — the backfill unbuilt, F still failing, Part G still needing its baseline. **All three were wrong, and v0.3 above says why: the backfill had already run on 2026-08-17 and the run was never recorded anywhere this pass could see.** The v0.2 reasoning is left standing rather than rewritten, because it is the clearest evidence of what an unrecorded production write costs: a careful re-derivation against a current record reached a confident and false conclusion. Line-number cites for `reverseOrderBalance` and the `sqlite_sequence` reset were re-derived at this head in the same pass; both had drifted. See §24 and the re-derivation inside G11.
 
-**READ THIS BEFORE ANYTHING ELSE. THIS RUNBOOK CANNOT BE FOLLOWED TODAY.** It is a first draft written to find out what is missing, and the missing parts are marked in it rather than papered over. **Twenty-three steps of this procedure have no command to run, because the thing they depend on has not been built.** They are marked 🔴 **GAP** and numbered `G1`–`G23`. The index is in PART A.
+**READ THIS BEFORE ANYTHING ELSE. THIS RUNBOOK CANNOT BE FOLLOWED TODAY.** It is a first draft written to find out what is missing, and the missing parts are marked in it rather than papered over. **Twenty-two steps of this procedure have no command to run, because the thing they depend on has not been built.** They are marked 🔴 **GAP** and numbered `G1`–`G23`, of which **G11 is CLOSED** — twenty-three were identified, one has since been repaired, and the numbers are not reused. The index is in PART A.
 
 **A runbook that reads as complete when it is not is worse than no runbook**, because it gets trusted on the night. So where a step could not be written honestly, it is left as a hole with a name, and the hole says what has to exist before it can be filled.
 
@@ -75,7 +79,7 @@ There are **three** phases, settled 2026-08-10 (§24 *THREE PHASES, AND WHY THE 
 | **G8** | B8 | The `sqlite_sequence` resets have no `setval` replacement, and both sit inside silent `try{}catch{}` | status doc item 23 |
 | **G9** | B9 | 96 dialect statements will not run on Postgres, plus 371 dynamic statements no static pass can reach | status doc item 19 |
 | **G10** | B10 | Six statements are failing in production today, on paths that have never executed | status doc item 15 |
-| **G11** | B11 | **Writer FIXED `225aa13`; the backfill for the seven pre-fix customers is NOT built.** Check F still fails on ¥3,669.64, so the flip's own verification still cannot be read against zero | status doc item 42 |
+| ~~**G11**~~ | ~~B11~~ | ✅ **CLOSED 2026-08-17.** Writer fixed `225aa13`; backfill RUN, rows 226–232. **Check F is zero and Part G reads it against zero.** Row kept, not deleted | status doc item 42, now in PART 2 |
 | **G12** | B12 | `reverseOrderBalance` reads its sequence number outside the transaction it writes in | §24, found 2026-08-19 |
 | **G13** | B13 | No audit of the ~80 `scripts/` files that assume a SQLite path. A destructive script's backup step would silently back up nothing | status doc items 21, 22 |
 | **G14** | B14 | Fresh-cluster restore is unproven. The rehearsal ran where `tacet_app` already existed, so `CREATE ROLE` never executed. **The new-box case is the disaster case** | status doc item 16 |
@@ -89,7 +93,7 @@ There are **three** phases, settled 2026-08-10 (§24 *THREE PHASES, AND WHY THE 
 | **G22** | H2 | **No reverse copy from Postgres back to SQLite.** The rollback's central action has no tool | status doc item 17 |
 | **G23** | H1 | No rollback trigger criteria, no named decision-maker, no rollback window | status doc item 17 |
 
-**Read the shape of that list, not just its length.** Fifteen of the twenty-three sit in Part B, before the day starts. Two of them — **G2 and G22** — are the two ends of the same missing thing: there is no built way to move onto Postgres, and no built way to move back off it.
+**Read the shape of that list, not just its length.** Fourteen of the twenty-two open gaps sit in Part B, before the day starts. Two of them — **G2 and G22** — are the two ends of the same missing thing: there is no built way to move onto Postgres, and no built way to move back off it.
 
 ---
 
@@ -235,23 +239,22 @@ git fetch origin -q && git checkout origin/main -q && npm install --no-audit --n
 
 ---
 
-## B11 🔴 GAP G11 — the seven customers check F cannot explain
+## B11 ✅ CLOSED — GAP G11, the seven customers check F could not explain
 
-**RE-DERIVED 2026-08-19 AGAINST THE CODE AND THE RECORD, NOT CARRIED FORWARD.** v0.1 of this section described both halves of the fix as unbuilt. One of them had been on `main` for six days. What follows is what is true at this head.
+**THIS GAP IS CLOSED. IT IS KEPT RATHER THAN DELETED, because a step that vanishes teaches nobody why it was there.**
 
-**WHAT THIS STEP WOULD DO** — make the post-flip money check readable against zero, so Part G does not need a baseline at all.
+**WHAT WAS WRONG** — `claimMigrationCredit` credited a customer's wallet and wrote no ledger row. Measured 2026-08-13: **7 customers, ¥3,669.64 of balance that no ledger row explained**, claims dated 2026-06-13 to 2026-07-28. Check F reported those seven whether or not anything else was wrong, which is what made the flip's own verification unreadable against zero.
 
-**WHY THERE IS NO COMMAND — one half of two.**
+**BOTH HALVES ARE DONE.**
 
-**The writer is FIXED.** `claimMigrationCredit` now writes its `retail_topup_transactions` row inside the same transaction as the balance credit — `225aa13`, 2026-08-13, on `main`, with `scripts/test_migration_credit_ledger.js` behind it and a mutant that restores the original defect to prove the suite can go red. **Two claims v0.1 made on the strength of the old reading are struck:** *"writes no ledger row"* is false in the present tense, and *"53 unclaimed credits carrying ¥17,362.32 will each repeat it"* is false — a claim made today writes its row and adds nobody to F's list.
+- **The writer** — fixed at `225aa13`, 2026-08-13, on `main`, with `scripts/test_migration_credit_ledger.js` and a mutant behind it. No claim since has repeated the defect, so the 53 unclaimed credits carrying ¥17,362.32 are no longer a queue of future failures.
+- **The backfill** — **RUN against production 2026-08-17.** `retail_topup_transactions` rows **226–232**; undo file `/root/roots-v2/data/backfill_migration_credit_ledger.undo.json`. **Check F now returns zero and all ten invariants pass.**
 
-**The backfill is NOT built.** Nothing in `scripts/` writes the missing rows for the customers who claimed before 2026-08-13, no §24 entry records one running, and status doc item 42 still carries it. **So the measured failure stands exactly as measured: 7 customers, ¥3,669.64 of balance that no ledger row explains, claims dated 2026-06-13 to 2026-07-28.**
+**ONE THING ABOUT THOSE ROWS THAT MUST NOT BE LOST, BECAUSE IT WILL LOOK LIKE A MISTAKE TO THE NEXT READER.** Six of the seven carry `out_trade_no` in the live writer's own scheme, `migration:<creditId>:<customerId>`. **Customer 57 carries `migration:unknown:57`** — a backfill-only key, and correct: 57 is the tester's archived `_reset_` row, and the staging row that would have supplied a credit id had its values overwritten by the re-import recorded in §24 (*the migration credits staging table is not append-only*). **There is no credit id to put in that key, so the key says so.** Do not "normalise" it; the difference is the finding.
 
-**WHAT THE FIX CHANGED FOR PART G, WHICH IS THE PART WORTH READING.** It did not remove the baseline. **It made the baseline sound.** Before `225aa13` the set of customers failing F could grow between the moment you captured the baseline in D3 and the moment you compared it in G6 — any of the 53 claiming in that window would have added themselves, and a baseline that grows underneath you is not a baseline. **The set is now closed.** No new customer can enter it, and each of the seven has a fixed per-customer drift: check F compares `balance` against `SUM(amount)` over successful rows, and every audited movement since moves both sides by the same amount, so the *difference* is frozen even while the two figures themselves keep moving with trading. **The seven are history now, and history is what a baseline is supposed to be made of.** See G6 for what this means you actually compare.
+**IF YOU REACH HERE ON THE NIGHT** — nothing. This is not a stop. It is here so that a reader who finds the D3 and G6 steps referring to a money defect in older copies of this document knows it was repaired, when, and by what.
 
-**WHAT MUST EXIST FIRST** — status doc item 42's remaining half, and item 43 (`retail_migration_credits` is not append-only, which constrained the key scheme — the shipped fix answers it by putting the claimant in `out_trade_no`, not the credit row id alone).
-
-**IF YOU REACH HERE ON THE NIGHT** — stop, **and understand what you are stopping for, because it is smaller than it was.** The live defect is closed; what remains is seven rows of history that were never written. **Until they are, Part G cannot read check F against zero and must read it against D3.** If the backfill is ever waived rather than run, that is a permanent condition and Part G's baseline is permanent with it.
+**WHAT IT COST TO NOT WRITE IT DOWN, RECORDED AS ITS OWN LESSON.** The 2026-08-17 run left no committed script, no §24 entry and no status-doc change. **Three independent readings afterwards — this document's first draft, §24 v4.42 and v4.43, and status item 42 — all concluded "not built, not run", correctly, from a record that was complete except for this.** A second implementation of the backfill was then written, tested and merged before the run was discovered. **Nothing in this project can see a production write that nobody records**, and that is a gap in the process, not in anyone's reading.
 
 ---
 
@@ -411,19 +414,26 @@ ssh root@47.239.89.63 "cat /root/roots-v2/.deploy-state/last-success-sha 2>/dev/
 
 ---
 
-## D3 — Capture the money baseline BEFORE anything moves
+## D3 — Confirm the books are clean before you start, and record P
+
+**SIMPLIFIED 2026-08-19, WHEN G11 CLOSED.** This step used to capture a baseline for Part G to diff against, because check F failed on seven customers whatever the flip did. **It does not any more — F is zero.** What remains is smaller and does a different job: a go/no-go gate, plus the one figure Part G still genuinely has to compare.
 
 **RUN**
 
 ```bash
-ssh root@47.239.89.63 "cd /root/roots-v2 && gunzip -c \$(ls -1t /root/backups/hourly/roots-*.db.gz | head -1) > /tmp/pre-cutover.db && node scripts/check_ledger_invariants.js --db /tmp/pre-cutover.db > /tmp/pre-cutover-ledger.txt 2>&1; echo LEDGER_EXIT=\$?; node scripts/check_points_invariants.js --db /tmp/pre-cutover.db > /tmp/pre-cutover-points.txt 2>&1; echo POINTS_EXIT=\$?"
+ssh root@47.239.89.63 "cd /root/roots-v2 && gunzip -c \$(ls -1t /root/backups/hourly/roots-*.db.gz | head -1) > /tmp/pre-cutover.db && node scripts/check_ledger_invariants.js --db /tmp/pre-cutover.db > /tmp/pre-cutover-ledger.txt 2>&1; echo LEDGER_EXIT=\$?; node scripts/check_points_invariants.js --db /tmp/pre-cutover.db > /tmp/pre-cutover-points.txt 2>&1; echo POINTS_EXIT=\$?; grep -A6 'ids_missing' /tmp/pre-cutover-ledger.txt"
 ```
 
-**GOOD** — both files are written. **Whatever they say is now your baseline.** Read them and keep them. Note in particular what check F reports: **today it is expected to fail on seven customers holding ¥3,669.64 (see G11), and that set cannot grow while you work** — the writer that created it was fixed on 2026-08-13, so no eighth customer can appear between this step and G6. **Write down the seven customer ids and the `drift` column beside each one.** That column, not the amounts next to it, is what G6 compares.
+**GOOD** — `LEDGER_EXIT=0`, `POINTS_EXIT=0`, and the ledger file says **`ALL 10 INVARIANTS PASSED`**.
 
-**BAD** — either script exits 2, meaning the checks could not run at all.
+**Write down one number: check P's `ids_missing`.** That is the only figure from this step Part G compares, and the reason is in G6 — P is a pure function of the id column, so a faithful copy leaves it unchanged and any movement means ids did not survive. **Nothing else here needs to be kept.**
 
-**IF BAD** — stop. Exit 2 means "no driver, no database, or bad arguments", not a data problem. Fix the invocation. **Do not proceed without a baseline**, because Part G compares against it, and a missing baseline means you cannot tell a flip failure from something that was already broken.
+**BAD** — either script exits 2 (the checks could not run at all), or **exit 1 — any invariant failing.**
+
+**IF BAD**
+
+- **Exit 2** means "no driver, no database, or bad arguments", not a data problem. Fix the invocation and run it again.
+- **Exit 1 is a stop, and it is a harder stop than it used to be.** Before 2026-08-17 a failing F was expected and had to be worked around. **It is not expected now.** A failing invariant here means the books disagree with themselves *before you have touched anything*, and a cutover is not the time to find out why. Go and understand it first. **Do not start a flip on a database that cannot pass its own checks** — you will spend the night unable to tell what you caused.
 
 **Why a copy and not the live file:** read-only is not the same as zero-impact. A long scan against the live database competes with the application for page cache and locks. The hourly snapshot is taken through SQLite's online backup API and is the right thing to point at. **There is no reason to touch `data/roots.db`.**
 
@@ -652,44 +662,26 @@ ssh root@47.239.89.63 "pm2 jlist | node -e 'const d=JSON.parse(require(\"fs\").r
 
 ---
 
-## G6 — Run the money checks against Postgres and compare to the baseline
+## G6 — Run the money checks against Postgres
 
 **RUN**
 
 ```bash
-ssh root@47.239.89.63 "cd /root/roots-v2 && node scripts/check_ledger_invariants.js --pg > /tmp/post-cutover-ledger.txt 2>&1; echo LEDGER_EXIT=\$?; node scripts/check_points_invariants.js --pg > /tmp/post-cutover-points.txt 2>&1; echo POINTS_EXIT=\$?; diff /tmp/pre-cutover-ledger.txt /tmp/post-cutover-ledger.txt; diff /tmp/pre-cutover-points.txt /tmp/post-cutover-points.txt"
+ssh root@47.239.89.63 "cd /root/roots-v2 && node scripts/check_ledger_invariants.js --pg; echo LEDGER_EXIT=\$?; node scripts/check_points_invariants.js --pg; echo POINTS_EXIT=\$?"
 ```
 
-**RE-DERIVED 2026-08-19. THE QUESTION WAS ASKED DIRECTLY AND THE ANSWER IS NO: this step cannot expect ALL 10 INVARIANTS PASSED, and the baseline is not machinery to be simplified away.** Check F still fails, for the reason and only the reason set out in G11 — the writer was fixed, the seven historical rows were never backfilled. **The day the backfill runs, delete this whole apparatus and expect zero.** Until then, read the output as follows. Each of the fourteen checks gets one line, because "diff it and see" is not an instruction anyone can follow at 3am.
+**GOOD — `ALL 10 INVARIANTS PASSED`, and `LEDGER_EXIT=0`.** That is the whole pass condition. Read the exit code, not the prose.
 
-**THE NINE THAT EXPECT ZERO — E, G, H, I, J, K, L, N, O.** Zero before, zero after, no interpretation. **Any non-zero here is a defect and Part H is the answer**, whatever the diff says.
+**SIMPLIFIED 2026-08-19, AND THE HISTORY IS WORTH ONE LINE.** Until G11 closed, this step could not expect zero: check F failed on seven customers and ¥3,669.64 regardless of the flip, so D3 captured a baseline and this step diffed against it — an operator at 3am comparing two text files and deciding which differences were the old defect and which were tonight's. **That machinery existed only to tolerate one repaired defect, and it is gone.** If you are reading a copy of this document that tells you to diff against a baseline, it predates 2026-08-17.
 
-**CHECK F — EXPECTS THE SEVEN, AND EXPECTS THEM BY `drift`.**
+**BAD — and these must not be read the same way:**
 
-**Do not compare F's text.** F reports `balance`, `ledger_sum`, `ledger_rows`, `first_row` and `last_row` per customer, and every one of those moves if that customer trades between D3 and this step — F is even `ORDER BY last_row`, so the lines can change places. A textual `diff` will show noise that means nothing, and a step whose pass condition is buried in noise is a step that gets waved through.
+- **Any INVARIANT non-zero — E, F, G, H, I, J, K, L, N, O.** A defect. There is no "expected failure" on this list any more, which is exactly what makes the step usable: **anything at all is something you caused.**
+- **Exit 2** — the checks could not run. Infrastructure, not a data verdict. **Do not read a missing answer as a passing one.**
+- **Check M is a RECONCILIATION and cannot set the exit code.** Non-zero is expected and is not a failure. Three of its four reasons accrue with ordinary trading — freed shipping netting off an add-on charge, the lossy `MAX(0, …)` clamp in `reverseOrderPoints`, and `awaiting_restock` orders the formula counts before points are credited. **The fourth was a defect and was closed 2026-08-17 (`f4a689e4`); it was the only one that put stored ABOVE derived.** So: a negative drift is ordinary; a positive drift on customer 233 is the tester account and known history; **a positive drift on anyone else, or on an order cancelled after 2026-08-17, is new and is worth stopping for.** That rule is absolute and needs no baseline.
+- **Check P is FORENSIC and cannot set the exit code — but across THIS step it is tighter than that, and it is the one figure D3 asked you to write down.** P counts id gaps in `retail_points_transactions`. New trading does not move it: a new row raises `MAX` and `COUNT` together. The copy is supposed to preserve ids exactly. **So P must read the SAME number it read in D3, and a P that moved means the ids did not come across intact** — a copy-fidelity failure, and a defect notwithstanding that P is forensic everywhere else. **G7 proves the cells; P proves the keys.**
 
-**Compare two things, both frozen:**
-
-1. **The count is 7.** Not 8. A new customer in F's list is a defect — nothing can add one any more (G11), so anything that did came from the flip.
-2. **Each of the seven `drift` values is unchanged from what you wrote down in D3.** `drift` is `balance − ledger_sum`, and every audited movement changes both sides equally, so it does not move with trading. **A `drift` that changed is money and ledger disagreeing by a new amount — a defect, even on a customer who was already failing.**
-
-**Anything else about F is noise. These two are the check.**
-
-**CHECK M — RECONCILIATION. Non-zero is expected, it moves with normal trading, and it needs the diff. But the diff alone is no longer the whole reading.**
-
-M compares `lifetime_spend` against the boot-migration formula. **Three of its four reasons are legitimate and accrue continuously** — freed shipping netting off an add-on charge, the lossy `MAX(0, …)` clamp in `reverseOrderPoints`, and `awaiting_restock` orders the formula counts before points are credited. So **M's number will differ between D3 and here, for reasons that have nothing to do with the flip, and a non-empty diff on M is not a finding.**
-
-**The fourth reason was a defect and it was closed on 2026-08-17 (`f4a689e4`) — which sharpens what M means here.** It was the only reason that put stored **above** derived. It no longer accrues, but the 20 orders it already produced are still in the data. So: **a negative drift is ordinary. A positive drift on customer 233 is the tester account and the known history — do not chase it. A positive drift on anyone else, or on an order cancelled after 2026-08-17, is new, is not on the legitimate list, and is worth stopping for.** The script's own notes carry this; read them rather than the number.
-
-**CHECK P — FORENSIC IN NORMAL OPERATION, BUT ACROSS THIS FLIP IT IS TIGHTER THAN THAT, AND THIS IS THE ONE PLACE THE DRAFT UNDERSOLD A CHECK.**
-
-P counts id gaps in `retail_points_transactions` — `MAX(id) − MIN(id) + 1 − COUNT(*)`. In ordinary use it is a measurement of one 2026-06-09 migration and nothing else, and it cannot set the exit code. **Across a database copy it is something better: a pure function of the id column, and the copy is supposed to preserve ids exactly.** New trading does not move it — a new row raises `MAX` and `COUNT` together — and the only ordinary thing that does is a rolled-back INSERT burning an id, which is rare on a synchronous driver.
-
-**So expect P to be IDENTICAL across the flip, and treat a P that moved as evidence the ids did not come across intact.** That is a copy-fidelity failure, and it is a defect, notwithstanding that P is forensic everywhere else. **It is also the cheapest instrument you have for that failure** — G7 proves the cells, P proves the keys.
-
-**Exit 2 on either script** — the checks could not run at all. That is an infrastructure failure, not a data verdict. Fix the invocation and run it again; **do not read a missing answer as a passing one.**
-
-**IF BAD** — a new invariant failure after the flip means money and the ledger have stopped agreeing. **Go to Part H.** Do not attempt to repair data on a database you are still deciding whether to keep.
+**IF BAD** — a failing invariant after the flip means money and the ledger have stopped agreeing. **Go to Part H.** Do not attempt to repair data on a database you are still deciding whether to keep.
 
 **One thing to know before you read any of it.** Nothing in the schema holds these invariants: `retail_points_transactions`, `retail_topup_transactions`, `retail_order_addons` and `retail_refund_events` carry **no unique constraint of any kind.** A break here does not announce itself, because there is no constraint to violate. **These two files are the only things that would notice.**
 
