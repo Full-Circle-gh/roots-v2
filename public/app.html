@@ -5170,6 +5170,11 @@ async function showIngForm(id) {
              visible field on every change; when it cannot derive a cost this is
              what the save writes back, so opening a form never destroys a cost
              the form is not able to work out. -->
+        <label style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:12px;margin-bottom:6px;cursor:pointer">
+          <input type="checkbox" id="fi_free" ${ing?.free_by_design ? 'checked' : ''} onchange="calcCPU()" style="width:16px;height:16px;cursor:pointer;accent-color:var(--lime)">
+          <span>No cost — this ingredient is free by design 无需成本：此物料按设计不计成本</span>
+        </label>
+        <div class="form-hint" style="margin:-2px 0 8px 24px">Water, peel, anything you don't cost. It stops counting as a missing price. 例如水、果皮等不计成本的物料，不再算作缺少价格。</div>
         <input type="hidden" id="fi_cpu_stored" value="${ing?.cost_per_unit ?? ''}">
         <input type="number" id="fi_cpu" value="${ing?.cost_per_unit||''}" placeholder="—" step="0.000001" readonly style="background:var(--gray);cursor:not-allowed;color:var(--lime-text);font-weight:700">
         <div class="form-hint" id="fi_cpu_hint"></div></div>
@@ -5550,12 +5555,14 @@ function calcCPU() {
   // No helper (request blocked, first paint offline) → touch nothing. The field
   // keeps the stored value and the save preserves it.
   if (!lib) {
+    el.disabled = false;
     el.value = stored;
     setHint('Cost formula not loaded — the saved cost will be kept as it is. 成本公式未加载，将保留原成本。');
     return;
   }
 
   const { cpu, reason } = lib.deriveCostPerUnit({
+    free_by_design:     document.getElementById('fi_free')?.checked ? 1 : 0,
     unit:               recipeUnit,
     buy_unit:           document.getElementById('fi_buy_unit')?.value || 'kg',
     buy_pack_size:      parseFloat(document.getElementById('fi_pack')?.value) || 0,
@@ -5565,6 +5572,7 @@ function calcCPU() {
 
   if (cpu === null) {
     // Not derivable. Show what is stored — that is what will be saved.
+    el.disabled = false;
     el.value = stored;
     setHint(stored === ''
       ? 'Not enough information to work out a cost yet. 信息不足，暂无法计算成本。'
@@ -5572,9 +5580,15 @@ function calcCPU() {
     return;
   }
   el.value = String(+cpu.toFixed(6));
-  setHint(reason === 'per_piece'
-    ? `Counted whole, so the pack price is the cost per ${recipeUnit}. 按件计价，采购价即为单位成本。`
-    : '');
+  // Disabled rather than hidden when the item is free by design: a hidden field
+  // makes a deliberate zero look identical to a form that never had one, and
+  // the next person to open the row cannot tell which they are looking at.
+  el.disabled = reason === 'free_by_design';
+  setHint(reason === 'free_by_design'
+    ? 'Free by design — no cost is counted. 按设计免费,不计成本。'
+    : reason === 'per_piece'
+      ? `Counted whole, so the pack price is the cost per ${recipeUnit}. 按件计价，采购价即为单位成本。`
+      : '');
 }
 
 // What the save posts for cost_per_unit. A blank field means the form could not
@@ -6174,6 +6188,7 @@ async function saveIng(id) {
     pack_contents_qty:  parseFloat(v('fi_pack_qty'))||null,
     pack_contents_unit: v('fi_pack_cu')||null,
     cost_per_unit: cpuForSave(),
+    free_by_design: document.getElementById('fi_free')?.checked ? 1 : 0,
     supplier: v('fi_sup') === '__new__' ? null : v('fi_sup'),
     supplier_platform: platform || null,
     // Only persist link/qr that match the chosen platform — keeps DB tidy.
@@ -6437,11 +6452,13 @@ async function viewRecipe(id) {
   // Calculate costs
   let ingTotal=0, missingCount=0;
   const ingRows = ings.map(i=>{
+    // Free by design is a real zero: it adds nothing and is NOT missing.
+    const free = !!i.master_free;
     const cpu = i.master_cost||0;
-    const line = cpu>0 ? i.qty*cpu : null;
+    const line = free ? 0 : (cpu>0 ? i.qty*cpu : null);
     if (line===null) missingCount++;
     else ingTotal += line;
-    return {...i, cpu, line};
+    return {...i, cpu, line, free};
   });
 
   const costData = rec.costData||{};
@@ -6621,7 +6638,7 @@ async function viewRecipe(id) {
             <td class="ing-orig-qty" data-qty="${i.qty}" style="text-align:right;font-weight:600">${i.qty}</td>
             <td data-scaled-col class="ing-scaled-qty" data-qty="${i.qty}" style="text-align:right;color:var(--lime-text);font-weight:700;display:none"></td>
             <td>${i.unit}</td>
-            <td style="text-align:right;color:var(--muted)">${i.cpu?'¥'+i.cpu.toFixed(4):'<span style="color:#e07b50">Missing</span>'}</td>
+            <td style="text-align:right;color:var(--muted)">${i.free?'<span style="color:var(--lime-text)">Free 免费</span>':i.cpu?'¥'+i.cpu.toFixed(4):'<span style="color:#e07b50">Missing</span>'}</td>
             <td class="ing-orig-line" data-line="${i.line==null?'':i.line}" style="text-align:right;font-weight:600">${i.line!==null?'¥'+i.line.toFixed(2):'—'}</td>
             <td data-scaled-col class="ing-scaled-line" data-line="${i.line==null?'':i.line}" style="text-align:right;color:var(--lime-text);font-weight:700;display:none"></td>
           </tr>`).join('')}
@@ -7598,10 +7615,12 @@ async function showCostSheet(id) {
 
   let ingTotal=0, missingCount=0;
   const ingRows = ings.map(i=>{
+    // Same rule as the recipe card: free by design costs zero and is not missing.
+    const free=!!i.master_free;
     const cpu=i.master_cost||0;
-    const line=cpu>0?i.qty*cpu:null;
+    const line=free?0:(cpu>0?i.qty*cpu:null);
     if(line===null) missingCount++; else ingTotal+=line;
-    return{...i,cpu,line};
+    return{...i,cpu,line,free};
   });
 
   const overlay = mkOverlay('costSheetOverlay');
@@ -9610,7 +9629,12 @@ async function _loadProductCtx(id) {
       }
       if (rec) {
         let ingTotal = 0;
-        (rec.ingredients||[]).forEach(i => { if(i.master_cost&&i.qty) ingTotal += i.qty*i.master_cost; });
+        let prodMissing = 0;
+        (rec.ingredients||[]).forEach(i => {
+          if (i.master_free) return;                     // free by design — costs nothing, missing nothing
+          if (i.master_cost && i.qty) ingTotal += i.qty*i.master_cost;
+          else if (i.qty) prodMissing++;                  // no cost and not marked free
+        });
         const cd = rec.costData||{};
         const servings = parseFloat(rec.servings)||0;
         const labourBatch    = parseFloat(cd.labour||0);
@@ -23705,6 +23729,7 @@ function _alertKitchenRows(rows) {
 // again — clicking opens the item form, which is where the fix lives.
 function _alertCostSkipRows(rows) {
   const REASON = {
+    marked_free:             { en: 'Marked free by design — price not written', cn: '已标记无需成本：未写入价格' },
     no_pack_contents:        { en: 'Pack contents not filled in',     cn: '未填写每包含量' },
     unit_mismatch:           { en: 'Order unit ≠ item buy unit',      cn: '采购单位与物料单位不一致' },
     unsupported_recipe_unit: { en: 'Recipe unit is not g / ml / pcs', cn: '配方单位不是 克/毫升/件' },
@@ -26747,6 +26772,7 @@ async function _alertPushPollInner() {
       title: 'Cost not updated · 成本未更新',
       body: `${s.ingredient_name || 'Item'} — ${s.ingredient_sku ? '['+s.ingredient_sku+'] ' : ''}${({
         unit_mismatch:           'order unit ≠ item buy unit',
+        marked_free:             'marked free by design — price not written',
         no_pack_contents:        'pack contents not filled in',
         unsupported_recipe_unit: 'recipe unit is not g / ml / pcs',
         no_pack_size:            'pack size missing',

@@ -134,6 +134,11 @@ function firePriceAlertsForPO(poId, source) {
 
     // Through normaliseUnit, so 'pc' on the line and 'pcs' on the item are the
     // same unit and the price flows.
+    // Marked free by hand. A supplier price on a PO line does not get to start
+    // costing something someone deliberately said is free — the flag is a
+    // decision, the invoice is just data.
+    if (ing.free_by_design) { skip(ing, item, 'marked_free'); continue; }
+
     if (normaliseUnit(item.unit) !== normaliseUnit(ing.buy_unit)) { skip(ing, item, 'unit_mismatch'); continue; }
 
     const { cpu, reason } = deriveCostPerUnit(ing, item.cost_per_unit);

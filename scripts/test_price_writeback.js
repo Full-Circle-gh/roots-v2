@@ -65,6 +65,8 @@ insIng.run(234, 'Dry Mint Leaves',    null,    'E-40', 'g',   'bottle', 1, null,
 insIng.run(139, 'Red Lentils',        null,    'C-5',  'g',   'bag',    1, 500,  'g', 0.0204, 10.21);
 insIng.run(64,  'Cutlery Set',        null,    'H-26', 'bag', 'bag',    1, null, null, 24.63, 24.63);
 insIng.run(700, 'Kitchen Hat',        null,    'J-59', 'pcs', 'pcs',    1, null, null, 12, 12);
+insIng.run(571, 'Drinking Water',     '饮用水',  'F-26', 'g',   'g',      1, null, null, 0, 0);
+fixture.prepare('UPDATE ingredients SET free_by_design = 1 WHERE id = 571').run();
 
 fixture.prepare(`INSERT INTO purchase_orders (id,po_number,date,status) VALUES (1,'PO-TEST-1',date('now'),'Ordered')`).run();
 const insLine = fixture.prepare(`INSERT INTO po_line_items
@@ -75,6 +77,7 @@ insLine.run(1, 234, 'Dry Mint Leaves',     'E-40', 1, 'bottle', 45,  45);   // c
 insLine.run(1, 139, 'Red Lentils',         'C-5',  1, 'kg',     52,  52);   // case 4 — line says kg, item is bag
 insLine.run(1, 64,  'Cutlery Set',         'H-26', 3, 'bag',    27,  81);   // case 5
 insLine.run(1, 700, 'Kitchen Hat',         'J-59', 4, 'pc',     14,  56);   // case 6 — 'pc' vs 'pcs'
+insLine.run(1, 571, 'Drinking Water',      'F-26', 5, 'g',      2,   10);   // case 8 — someone invoiced the water
 
 const before = fixture.prepare('SELECT id,sku,unit,buy_unit,cost_per_unit,buy_price FROM ingredients ORDER BY id').all();
 
@@ -151,6 +154,14 @@ check('E-40 now prices',            +mintNow.cost_per_unit.toFixed(6), +(50 / 95
 check('E-40 skip resolved',         mintSkip.resolved_at !== null,     true);
 check('skip row kept, not deleted', fixture.prepare('SELECT COUNT(*) AS c FROM ingredient_cost_skips').get().c, 2);
 
+console.log('\n── Case 8: an item marked free by design, invoiced anyway ──────');
+// The flag is a decision; a supplier price does not get to overrule it.
+const water = byId(after, 571);
+console.log(`  F-26 cost_per_unit → ${water.cost_per_unit}   buy_price → ${water.buy_price}`);
+check('water still costs nothing', water.cost_per_unit, 0);
+check('buy_price untouched',       water.buy_price,     0);
+check('skip reason', (result.skips.find(s => s.sku === 'F-26') || {}).reason, 'marked_free');
+
 console.log('\n── Price history (append-only, one row per priced line) ─────────');
 for (const h of fixture.prepare('SELECT ingredient_id,price,buy_unit,source FROM ingredient_price_history ORDER BY id').all()) {
   console.log(`  ingredient ${h.ingredient_id}  ¥${h.price} / ${h.buy_unit}  (${h.source})`);
@@ -159,7 +170,7 @@ for (const h of fixture.prepare('SELECT ingredient_id,price,buy_unit,source FROM
 console.log('\n── Skip rows recorded in ingredient_cost_skips ──────────────────');
 const skipRows = fixture.prepare('SELECT id,ingredient_id,po_id,reason,line_unit,line_price FROM ingredient_cost_skips ORDER BY id').all();
 for (const s of skipRows) console.log(`  id=${s.id} ingredient=${s.ingredient_id} po=${s.po_id} ${s.reason} (line ¥${s.line_price} / ${s.line_unit})`);
-check('skip rows stored', skipRows.length, 2);
+check('skip rows stored', skipRows.length, 3);
 
 // ── Does a skip actually reach the Alerts feed? ─────────────────────────────
 // Mount routes/alerts.js on a throwaway express app with auth stubbed out and
@@ -192,11 +203,10 @@ check('skip rows stored', skipRows.length, 2);
   }
   console.log('  by reason:', JSON.stringify(feed.data.costSkipsByReason));
   // Only C-5 is still open — E-40 resolved itself in case 7.
-  check('feed returns the open skip only', (feed.data.costSkips || []).length,    1);
-  check('feed shows C-5',                  (feed.data.costSkips || [])[0].ingredient_sku, 'C-5');
-  check('feed count agrees',               feed.data.counts.costSkips,            1);
-  check('badge count includes skips',      badge.breakdown.costSkips,             1);
-  check('by-reason breakdown split',       feed.data.costSkipsByReason.length,    1);
+  check('feed returns the open skips', (feed.data.costSkips || []).length,        2);
+  check('feed count agrees',               feed.data.counts.costSkips,            2);
+  check('badge count includes skips',      badge.breakdown.costSkips,             2);
+  check('by-reason breakdown split',       feed.data.costSkipsByReason.length,    2);
 
   server.close();
   fixture.close();

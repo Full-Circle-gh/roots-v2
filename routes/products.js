@@ -184,7 +184,7 @@ router.get('/api/products/:id', requireAuth, requirePermission('products'), (req
     const ings = db.prepare(`
       SELECT ing.name_en, ing.name_cn, ing.allergens,
              ri.ingredient_id, ri.sku, ri.qty, ri.unit,
-             ing.cost_per_unit AS master_cost
+             ing.cost_per_unit AS master_cost, ing.free_by_design AS master_free
         FROM recipe_ingredients ri
         LEFT JOIN ingredients ing ON ing.id = ri.ingredient_id
        WHERE ri.recipe_id = ?

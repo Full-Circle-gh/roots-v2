@@ -14,7 +14,7 @@ const router = express.Router();
 const INGREDIENT_LIST_COLS = `
   id, name_en, name_cn, sku, category,
   unit, buy_unit, buy_pack_size, pack_contents_qty, pack_contents_unit,
-  cost_per_unit, buy_price,
+  cost_per_unit, buy_price, free_by_design,
   supplier, supplier_platform, supplier_link,
   allergens, notes,
   is_active, created_at, updated_at,
@@ -68,18 +68,18 @@ router.get('/api/ingredients/:id', requireAuth, requirePermission('ingredients')
 router.post('/api/ingredients', requireAuth, requirePermission('ingredients'), (req, res) => {
   const { name_en, name_cn, sku, category, unit, buy_unit, buy_pack_size, pack_contents_qty, pack_contents_unit, cost_per_unit, buy_price,
           supplier, supplier_platform, supplier_link, supplier_qr_data, image_data, allergens, notes,
-          accounting_category, item_kind } = req.body;
+          accounting_category, item_kind, free_by_design } = req.body;
   if (!name_en) return res.status(400).json({ error: 'name_en required · 英文名称必填' });
   try {
     const result = db.prepare(`INSERT INTO ingredients
-      (name_en,name_cn,sku,category,unit,buy_unit,buy_pack_size,pack_contents_qty,pack_contents_unit,cost_per_unit,buy_price,supplier,supplier_platform,supplier_link,supplier_qr_data,image_data,allergens,notes,accounting_category,item_kind)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      (name_en,name_cn,sku,category,unit,buy_unit,buy_pack_size,pack_contents_qty,pack_contents_unit,cost_per_unit,buy_price,supplier,supplier_platform,supplier_link,supplier_qr_data,image_data,allergens,notes,accounting_category,item_kind,free_by_design)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(name_en, name_cn||null, sku||null, category||null, unit||'g', buy_unit||'kg', buy_pack_size||1,
            pack_contents_qty||null, pack_contents_unit||null,
            cost_per_unit||0, buy_price||0,
            supplier||null, supplier_platform||null, supplier_link||null, supplier_qr_data||null, image_data||null,
            allergens ? (Array.isArray(allergens) ? allergens.join(', ') : String(allergens)) : null, notes||null,
-           accounting_category || null, item_kind || 'food');
+           accounting_category || null, item_kind || 'food', free_by_design ? 1 : 0);
     if (buy_price > 0) {
       db.prepare('INSERT INTO ingredient_price_history (ingredient_id,price,buy_unit,source,recorded_by) VALUES (?,?,?,?,?)').run(result.lastInsertRowid, buy_price, buy_unit||'kg', 'manual', req.user.username);
     }
@@ -95,20 +95,21 @@ router.post('/api/ingredients', requireAuth, requirePermission('ingredients'), (
 router.put('/api/ingredients/:id', requireAuth, requirePermission('ingredients'), (req, res) => {
   const { name_en, name_cn, sku, category, unit, buy_unit, buy_pack_size, pack_contents_qty, pack_contents_unit, cost_per_unit, buy_price,
           supplier, supplier_platform, supplier_link, supplier_qr_data, image_data, allergens, notes,
-          accounting_category, item_kind } = req.body;
+          accounting_category, item_kind, free_by_design } = req.body;
   const existing = db.prepare('SELECT * FROM ingredients WHERE id = ?').get(req.params.id);
   if (!existing) return res.status(404).json({ error: 'Not found · 未找到' });
   try {
     db.prepare(`UPDATE ingredients SET
       name_en=?,name_cn=?,sku=?,category=?,unit=?,buy_unit=?,buy_pack_size=?,pack_contents_qty=?,pack_contents_unit=?,cost_per_unit=?,buy_price=?,
-      supplier=?,supplier_platform=?,supplier_link=?,supplier_qr_data=?,image_data=?,allergens=?,notes=?,accounting_category=?,item_kind=?,updated_at=CURRENT_TIMESTAMP
+      supplier=?,supplier_platform=?,supplier_link=?,supplier_qr_data=?,image_data=?,allergens=?,notes=?,accounting_category=?,item_kind=?,free_by_design=?,updated_at=CURRENT_TIMESTAMP
       WHERE id=?`)
       .run(name_en||existing.name_en, name_cn||null, sku||null, category||null, unit||'g', buy_unit||'kg', buy_pack_size||1,
            pack_contents_qty||null, pack_contents_unit||null,
            cost_per_unit||0, buy_price||0,
            supplier||null, supplier_platform||null, supplier_link||null, supplier_qr_data||null, image_data||null,
            allergens ? (Array.isArray(allergens) ? allergens.join(', ') : String(allergens)) : null, notes||null,
-           accounting_category || null, item_kind || existing.item_kind || 'food', req.params.id);
+           accounting_category || null, item_kind || existing.item_kind || 'food',
+           free_by_design ? 1 : 0, req.params.id);
     // Record price change
     if (buy_price && buy_price !== existing.buy_price) {
       db.prepare('INSERT INTO ingredient_price_history (ingredient_id,price,buy_unit,source,recorded_by) VALUES (?,?,?,?,?)').run(req.params.id, buy_price, buy_unit||'kg', 'manual', req.user.username);
