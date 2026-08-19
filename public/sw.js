@@ -10,7 +10,7 @@
 //
 // Bump CACHE on every UI shape change to force every client to evict
 // its old shell on next load (activate handler deletes all old caches).
-const CACHE = 'roots-v2-shell-v723-cost-not-updated';
+const CACHE = 'roots-v2-shell-v724-form-cost-helper';
 const SHELL = ['/', '/login'];
 
 // Heuristic — request that wants HTML?
@@ -93,6 +93,10 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   // API: always network, never cached.
   if (url.pathname.startsWith('/api/')) return;
+  // The shared cost formula: network only. The server sends it no-store; this
+  // is the belt to that pair of braces. A cached money formula would go on
+  // disagreeing with the server until the cache was evicted.
+  if (url.pathname === '/lib/ingredient-cost.js') return;
   // Only handle GETs.
   if (e.request.method !== 'GET') return;
   // Same-origin only — third-party CDNs (polyfill, fonts) bypass us.
