@@ -110,7 +110,7 @@ Page({
     qty: 0,
     orderNo: '',
     deliveredLabel: '',
-    rating: 4,
+    rating: 5,
     tags: [],
     comment: '',
     photos: [],
