@@ -8,16 +8,17 @@
   </view>
 
   <block wx:if="{{items.length}}">
-    <view class="progress-card">
+    <!-- Free-shipping line. Store policy, not a promise about this cart: the
+         customer is never asked for an address at or before the cart, so any
+         zone the server resolves is a guess and a per-zone figure would claim
+         more than we know. No progress fill, no "unlocked" — there is nothing
+         here to complete. `shipState` is 'none' when the resolved zone has no
+         free-shipping state at all, or when nothing has been fetched; then the
+         line doesn't render. The per-zone sentences still live at checkout,
+         where the address is real. -->
+    <view wx:if="{{shipState === 'policy'}}" class="progress-card">
       <view class="progress-text">
-        <!-- The gaps around the bold runs are interpolated, not literal
-             spaces: WXML trims whitespace at element boundaries.
-             CN needs no gaps between its segments — don't match it to EN. -->
-        <text wx:if="{{!unlocked}}"><block wx:if="{{lang === 'cn'}}">再差 <text class="f-bear strong">¥{{remaining}}</text> 即可<text class="f-bear strong">免运费</text>。</block><block wx:else>You're{{' '}}<text class="f-bear strong">¥{{remaining}}</text>{{' '}}away from{{' '}}<text class="f-bear strong">free shipping.</text></block></text>
-        <text wx:else><text class="f-bear strong">{{lang === 'cn' ? '已享免运费。' : 'Free shipping unlocked.'}}</text></text>
-      </view>
-      <view class="progress-bar">
-        <view class="progress-fill" style="width: {{pct}}%;"></view>
+        <text class="f-bear strong">{{lang === 'cn' ? '满 ¥' + threshold + ' 包邮' : 'Free shipping ¥' + threshold + '+'}}</text>
       </view>
     </view>
 
