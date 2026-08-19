@@ -8,6 +8,7 @@
 
 const api  = require('../../utils/api');
 const lang = require('../../utils/lang');
+const optionText = require('../../utils/options');
 
 function absUrl(u) {
   if (!u) return '';
@@ -369,11 +370,13 @@ Page({
     }
     const base = this.data.opProduct.base_price;
     const choices = [];
-    const labels = [];
+    // Keep the group's question beside each picked answer so the staged line
+    // reads "Heat up?: Yes" rather than a bare "Yes" (both already localised).
+    const picked = [];
     let delta = 0;
     for (const g of this.data.opGroups) {
       for (const c of g.choices) {
-        if (c.picked) { choices.push(c.id); labels.push(c.label); delta += c.delta; }
+        if (c.picked) { choices.push(c.id); picked.push({ question: g.question, label: c.label }); delta += c.delta; }
       }
     }
     const unit = Math.max(0, base + delta);
@@ -406,7 +409,7 @@ Page({
         key,
         product_id: this.data.opProduct.id,
         name: this.data.opProduct.name,
-        options_label: labels.join(', '),
+        options_label: optionText.format(picked, this.data.lang),
         unit_price: unit,
         unit_disp: '¥' + unit.toFixed(2),
         qty: addQty,

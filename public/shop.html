@@ -1734,6 +1734,9 @@ function coInjectCheckoutStyle(){
   .cx-opt-body{flex:1;min-width:0;}
   .cx-opt-label{font-family:var(--bf-bear);font-size:15px;line-height:1.25;}
   .cx-opt-sub{font-size:12px;color:var(--muted);margin-top:3px;line-height:1.35;}
+  /* No bookable delivery date. Not a choice, so it drops the pointer cursor and
+     the selection border the pickable rows carry. */
+  .cx-opt--none{cursor:default;border-style:dashed;border-color:var(--muted);}
   /* payment + points */
   .cx-pts{display:flex;align-items:center;gap:12px;padding:12px 14px;margin-bottom:12px;background:rgba(204,217,0,.10);border:1.5px solid rgba(26,26,23,.10);border-radius:8px;}
   .cx-pts-body{flex:1;min-width:0;}
@@ -2652,9 +2655,17 @@ function renderCoSlots(d){
     const today=sc.today_day_chip||slots.find(s=>s.is_same_day)||null;
     slots=today?[sc.express_slot,today]:[sc.express_slot];
   }
+  /* No option at all. This used to force-select 'right_away' and print a
+     reassuring "As soon as possible" — an option the customer could not decline
+     and the server then refused with right_away_unavailable (right_away needs
+     the kitchen open, zero lead and no surcharge, which is exactly the state
+     that produced no slots). Say plainly that there is no date, and let the
+     summary keep the place button disabled rather than send them into a
+     rejection. */
+  co.noDates=!slots.length;
   if(!slots.length){
-    if(!co.slotId){co.slotId='right_away';co.slotKind='right_away';}
-    box.innerHTML=`<div class="cx-opt on"><div class="cx-opt-body"><div class="cx-opt-label">${cn?'尽快送达':'As soon as possible'}</div><div class="cx-opt-sub">${cn?'我们会尽快为你发货':'we ship on the earliest available day'}</div></div><span class="cx-check"><span class="cx-check-dot"></span></span></div>`;
+    co.slotId='';co.slotKind='';
+    box.innerHTML=`<div class="cx-opt cx-opt--none"><div class="cx-opt-body"><div class="cx-opt-label">${cn?'暂无可选配送日期':'No delivery dates available'}</div><div class="cx-opt-sub">${cn?'此地址目前没有可安排的配送日期。请稍后再试或联系我们。':'We can’t schedule a delivery to this address right now. Please try again later or contact us.'}</div></div></div>`;
     return;
   }
   if(!co.slotId||!slots.find(s=>s.slot_id===co.slotId)){ co.slotId=slots[0].slot_id; co.slotKind=coSlotKind(slots[0]); }
@@ -2677,7 +2688,9 @@ function renderCoSummary(d){
     (Number(d.balance_discount)>0?`<div class="cx-bd"><span class="cx-bd-l">${cn?'余额抵扣':'Balance'}</span><span class="cx-bd-v">−${money(Number(d.balance_discount))}</span></div>`:'')+
     (earn>0?`<div class="cx-bd earn"><span class="cx-bd-l">${cn?'本单获得':"You'll earn"}</span><span class="cx-bd-v">+${earn} ${cn?'积分':'pts'}</span></div>`:'');
   const t=$('#coStickyTotal'); if(t)t.textContent=money(tot);
-  const place=$('#coPlace'); if(place)place.disabled=false;
+  /* renderCoSlots runs before this one, so an unconditional enable here would
+     undo its no-dates state and re-arm a checkout with no slot to send. */
+  const place=$('#coPlace'); if(place)place.disabled=!!co.noDates;
 }
 function renderNoZone(d){
   const s=$('#coSummary'); if(s)s.innerHTML='<div class="cx-zone">'+(state.lang==='cn'?'抱歉，该地址暂不支持配送。':'Sorry, we don’t deliver to this address yet.')+(d&&d.kitchen_address?'<br>'+esc(d.kitchen_address):'')+'</div>';
@@ -5371,10 +5384,13 @@ async function renderProduct(id){
       for(const o of popts){ if(o.is_required && !selIds(o).length){
         toast(state.lang==='cn'?('请选择 '+pick(o.question_en,o.question_cn)):('Please choose: '+pick(o.question_en,o.question_cn))); return false; } }
       const chosen=[];
-      popts.forEach(o=>selIds(o).forEach(cid=>{const c=findChoice(o,cid); if(c) chosen.push(c);}));
+      // Keep the group's QUESTION beside each picked answer so the cart + checkout
+      // receipt read "Heat up?: Yes", not a bare, ambiguous "Yes". Spread onto the
+      // choice so `c.id` below still resolves.
+      popts.forEach(o=>selIds(o).forEach(cid=>{const c=findChoice(o,cid); if(c) chosen.push({...c,question:pick(o.question_en,o.question_cn)});}));
       cartAdd({product_id:p.id,qty,choices:chosen.map(c=>Number(c.id)),
         name:pick(p.name_en,p.name_cn),price:unit(),image:thumb(p),
-        optLabel:chosen.map(c=>pick(c.label_en,c.label_cn)).filter(Boolean).join(' · '),ship_from_supplier:!!p.ship_from_supplier});
+        optLabel:chosen.map(c=>{const v=pick(c.label_en,c.label_cn); if(!v)return''; return c.question?c.question+': '+v:v;}).filter(Boolean).join(' · '),ship_from_supplier:!!p.ship_from_supplier});
       toast(state.lang==='cn'?'已加入购物车 🌱':'Added to cart 🌱');
       return true;
     }

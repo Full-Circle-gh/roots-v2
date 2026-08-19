@@ -255,11 +255,26 @@ console.log('\nserver — the local pre-order gate (localPreorderLine)');
       'the same-day extra is the explicit "today" slot kind the client sends');
     assert.ok(/localPreorderLine\(mutatedItems, address, \{ scheduledShipDistrict \}\)/.test(retailSrc),
       'and the gate is handed that one verdict');
-    // One expression in the order path, two consumers: the pre-order gate and
-    // the out-of-city store pin (which also stamps the routing reason).
+    // The out-of-city store pin was the second consumer of that local flag. It
+    // moved into fulfillingStoreFor() so the checkout quote and the reschedule
+    // picker resolve the same store the order ships from — so the rule is now
+    // asserted where it lives, rather than by counting mentions in the handler.
+    // What must hold either way: BOTH halves decide "is this a ship-district
+    // that did not buy same-day" from the same two inputs, so they cannot drift.
+    const pin = retailSrc.slice(retailSrc.indexOf('function fulfillingStoreFor('));
+    const pinBody = pin.slice(0, pin.indexOf('\n}\n'));
+    assert.ok(/const scheduledShipDistrict =\s*\n\s*inGz &&\s*\n\s*inventory\.isOptInSameDayDistrict\(address\) &&\s*\n\s*slotKind !== 'today';/.test(pinBody),
+      'the pin re-derives the same verdict from the address and the slot kind');
+    assert.ok(/if \(inGz && !scheduledShipDistrict\) return null;/.test(pinBody),
+      'and pins only an out-of-city address or a scheduled ship-district');
+    assert.ok(/reason: scheduledShipDistrict \? 'scheduled_ship_district' : 'out_of_city'/.test(pinBody),
+      'stamping the routing reason off that same verdict');
+    // The handler must hand the pin the slot kind, or it would silently answer
+    // for every ship-district order as though same-day had never been bought.
     const orderPath = retailSrc.slice(retailSrc.indexOf('router.post(\'/api/retail/orders\''));
-    const uses = (orderPath.slice(0, orderPath.indexOf('\n  // Stock-shortage warning')).match(/scheduledShipDistrict/g) || []);
-    assert.strictEqual(uses.length, 5, 'one declaration, the gate, the pin, its routing reason, one pointer comment');
+    assert.ok(/slotKind: body\.delivery_slot_kind,/.test(
+      orderPath.slice(0, orderPath.indexOf('\n  // Stock-shortage warning'))),
+    'the order path passes the slot kind through to the pin');
   });
 
   it('a local shopper keeps buying what is in stock', () => {

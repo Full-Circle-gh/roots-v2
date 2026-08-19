@@ -27,6 +27,10 @@
      it doesn't delay first paint; importers fall back to "Save as CSV" hint
      if the lib hasn't arrived yet (very rare on second visit due to caching). -->
 <script src="https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js" defer></script>
+<!-- The one cost derivation, shared with the server (lib/ingredient-cost.js).
+     Served no-store and skipped by the service worker: a stale money formula
+     is worse than none. Loads before any form can call it. -->
+<script src="/lib/ingredient-cost.js"></script>
 <!-- Full Circle chrome type — IBM Plex Sans / Mono (+ SC for 中文), mirroring
      /retail-admin. Falls back to system fonts if the CDN is unreachable. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -5126,7 +5130,7 @@ async function showIngForm(id) {
         <span id="fi_cat_wrap"></span>
       </div>
       <div class="form-group"><label>Recipe Unit 食谱单位</label>
-        <select id="fi_unit">${[
+        <select id="fi_unit" onchange="calcCPU()">${[
           ['g','克 g'],['ml','毫升 ml'],['pcs','件 pcs'],
           ['bag','包 bag'],['bottle','瓶 bottle'],['box','盒 box'],
         ].map(([v,lbl])=>`<option value="${v}" ${(ing?.unit||'g')===v?'selected':''}>${lbl}</option>`).join('')}</select></div>
@@ -5161,8 +5165,14 @@ async function showIngForm(id) {
         </div>
         <div class="form-hint">e.g. 1 bottle of lemon juice = 1 kg → enter <strong>1</strong> + <strong>kg</strong>. A 500 g jar → <strong>500</strong> + <strong>g</strong>.</div>
       </div>
-      <div class="form-group form-col-2"><label>Cost per g 每克成本 <span style="font-weight:400;color:var(--muted)">(auto)</span></label>
-        <input type="number" id="fi_cpu" value="${ing?.cost_per_unit||''}" placeholder="—" step="0.000001" readonly style="background:var(--gray);cursor:not-allowed;color:var(--lime-text);font-weight:700"></div>
+      <div class="form-group form-col-2"><label id="fi_cpu_label">Cost 成本 <span style="font-weight:400;color:var(--muted)">(auto)</span></label>
+        <!-- The cost as it stands in the database. calcCPU() recomputes the
+             visible field on every change; when it cannot derive a cost this is
+             what the save writes back, so opening a form never destroys a cost
+             the form is not able to work out. -->
+        <input type="hidden" id="fi_cpu_stored" value="${ing?.cost_per_unit ?? ''}">
+        <input type="number" id="fi_cpu" value="${ing?.cost_per_unit||''}" placeholder="—" step="0.000001" readonly style="background:var(--gray);cursor:not-allowed;color:var(--lime-text);font-weight:700">
+        <div class="form-hint" id="fi_cpu_hint"></div></div>
       <!-- Supplier picker — restored. Linked to the Suppliers master list
            (Admin → 🚚 Suppliers). Picking "+ New supplier…" opens the full
            supplier form so the buyer can onboard a new vendor without
@@ -5271,7 +5281,7 @@ async function showIngForm(id) {
   // intuitively. Save persists the corrected value to the DB.
   if (ing) {
     const u = ing.buy_unit || 'kg';
-    const gpu = UNIT_TO_GRAMS[u];
+    const gpu = window.RootsIngredientCost ? window.RootsIngredientCost.gramsFor(u) : 0;
     const cur = parseFloat(ing.buy_pack_size) || 0;
     if (gpu && gpu !== 1 && cur === gpu) {
       const pkEl = document.getElementById('fi_pack');
@@ -5481,29 +5491,32 @@ function drawIngPriceSparkline(history) {
   canvas.onmouseleave = () => { tip.style.display = 'none'; draw(-1); };
 }
 
-// Grams of recipe-unit material in ONE of each common buy-unit.
-// kg = 1000g, L/liter = 1000ml, lb = 453.6g, oz = 28.35g. For
-// bag / box / bottle / pcs there's no universal conversion — treat as 1.
-const UNIT_TO_GRAMS = {
-  kg: 1000, g: 1, L: 1000, liter: 1000, ml: 1, lb: 453.6, oz: 28.35,
-};
-
-// pack_size is now "how many buy_units in the package you're pricing".
+// pack_size is "how many buy_units in the package you're pricing".
 // 1 kg bag → pack=1. 2.5 kg bag → pack=2.5. 6-pack of 500ml bottles → pack=6
 // only if buy_unit='bottle' and you treat each bottle as 500ml separately;
-// or pack=3 if buy_unit='L' (3 L total). The math is unit-aware:
-//   cost_per_g = buy_price / (pack_size × grams_per_buy_unit)
+// or pack=3 if buy_unit='L' (3 L total).
+//
+// The grams-per-unit table that used to live here is gone. It is
+// lib/ingredient-cost.js now, loaded over HTTP, and this file asks it questions
+// instead of holding its own answers.
 
-// Buy units that are containers, not direct measures. For these the user must
-// tell us what's inside one (e.g. "1 bottle = 1 kg") — we can't guess.
-const CONTAINER_BUY_UNITS = ['bottle','bag','box','can','jar','case','pack','tub','pcs'];
+// Is this buy unit a container rather than a measure? A container is exactly a
+// unit the shared table has no grams for — bottle, bag, pcs — which is why the
+// user has to say what one holds. Asking the helper keeps that list in one
+// place; with the helper missing we show the contents fields, which is the
+// harmless side to be wrong on.
+function isContainerBuyUnit(u) {
+  const lib = window.RootsIngredientCost;
+  if (!lib) return true;
+  return !(lib.gramsFor(u) > 0);
+}
 
 // Recompute on any change to price / pack size / buy unit.
 function onBuyUnitChange() {
   const u = document.getElementById('fi_buy_unit')?.value || 'kg';
   const wrap = document.getElementById('fi_pack_contents_wrap');
   if (wrap) {
-    const isContainer = CONTAINER_BUY_UNITS.includes(u);
+    const isContainer = isContainerBuyUnit(u);
     wrap.style.display = isContainer ? 'block' : 'none';
     // Refresh the dynamic unit name in the label so it reads
     // "Each bottle contains 每bottle含量" or similar.
@@ -5512,25 +5525,66 @@ function onBuyUnitChange() {
   calcCPU();
 }
 
+// The cost shown by the form, derived by lib/ingredient-cost.js — the same
+// function the PO price write-back and repair-items use. It used to be a second
+// copy of the maths here, and that copy divided everything: a per-piece item
+// with pack contents (¥28 for a 300 g bag of tortilla chips) came out as ¥0.093
+// per gram, and a per-piece item without contents blanked the field, which the
+// save then stored as 0. Both destroyed a correct cost on open-and-save.
+//
+// The rule now, in one place: pcs/bag/bottle/box keep the pack price, g/ml
+// divide by the pack size, and anything that cannot be derived is LEFT ALONE.
 function calcCPU() {
-  const p   = parseFloat(document.getElementById('fi_buy_price')?.value) || 0;
-  const pk  = parseFloat(document.getElementById('fi_pack')?.value)      || 0;
-  const u   = document.getElementById('fi_buy_unit')?.value || 'kg';
-  const cq  = parseFloat(document.getElementById('fi_pack_qty')?.value)  || 0;
-  const cu  = document.getElementById('fi_pack_cu')?.value || '';
   const el = document.getElementById('fi_cpu');
   if (!el) return;
-  // Two paths to grams-per-buy-unit:
-  //   1) buy_unit IS a measure (kg, L, etc) → grams_per_buy_unit known
-  //   2) buy_unit is a container (bottle/bag/…) → user supplies contents qty + unit
-  let gramsPerBuyUnit = UNIT_TO_GRAMS[u];
-  if (!gramsPerBuyUnit) {
-    if (cq > 0 && UNIT_TO_GRAMS[cu]) gramsPerBuyUnit = cq * UNIT_TO_GRAMS[cu];
-    else gramsPerBuyUnit = 0;
+  const hint   = document.getElementById('fi_cpu_hint');
+  const label  = document.getElementById('fi_cpu_label');
+  const stored = document.getElementById('fi_cpu_stored')?.value ?? '';
+  const lib    = window.RootsIngredientCost;
+  const price  = parseFloat(document.getElementById('fi_buy_price')?.value) || 0;
+  const recipeUnit = document.getElementById('fi_unit')?.value || 'g';
+
+  const setHint = (txt) => { if (hint) hint.textContent = txt; };
+  if (label) label.innerHTML = `Cost per ${recipeUnit} 每${recipeUnit}成本 <span style="font-weight:400;color:var(--muted)">(auto)</span>`;
+
+  // No helper (request blocked, first paint offline) → touch nothing. The field
+  // keeps the stored value and the save preserves it.
+  if (!lib) {
+    el.value = stored;
+    setHint('Cost formula not loaded — the saved cost will be kept as it is. 成本公式未加载，将保留原成本。');
+    return;
   }
-  el.value = (p > 0 && pk > 0 && gramsPerBuyUnit > 0)
-    ? (p / (pk * gramsPerBuyUnit)).toFixed(6)
-    : '';
+
+  const { cpu, reason } = lib.deriveCostPerUnit({
+    unit:               recipeUnit,
+    buy_unit:           document.getElementById('fi_buy_unit')?.value || 'kg',
+    buy_pack_size:      parseFloat(document.getElementById('fi_pack')?.value) || 0,
+    pack_contents_qty:  parseFloat(document.getElementById('fi_pack_qty')?.value) || 0,
+    pack_contents_unit: document.getElementById('fi_pack_cu')?.value || '',
+  }, price);
+
+  if (cpu === null) {
+    // Not derivable. Show what is stored — that is what will be saved.
+    el.value = stored;
+    setHint(stored === ''
+      ? 'Not enough information to work out a cost yet. 信息不足，暂无法计算成本。'
+      : 'Cannot work out a cost from these fields — keeping the saved ¥' + stored + '. 无法计算，保留已存成本。');
+    return;
+  }
+  el.value = String(+cpu.toFixed(6));
+  setHint(reason === 'per_piece'
+    ? `Counted whole, so the pack price is the cost per ${recipeUnit}. 按件计价，采购价即为单位成本。`
+    : '');
+}
+
+// What the save posts for cost_per_unit. A blank field means the form could not
+// derive a cost, and that must never post a zero over a real one — blank means
+// keep what is stored.
+function cpuForSave() {
+  const shown  = String(document.getElementById('fi_cpu')?.value ?? '').trim();
+  const stored = String(document.getElementById('fi_cpu_stored')?.value ?? '').trim();
+  const n = parseFloat(shown !== '' ? shown : stored);
+  return Number.isFinite(n) ? n : 0;
 }
 
 // Supplier platform → conditional input visibility.
@@ -6119,7 +6173,7 @@ async function saveIng(id) {
     buy_pack_size: parseFloat(v('fi_pack'))||1,
     pack_contents_qty:  parseFloat(v('fi_pack_qty'))||null,
     pack_contents_unit: v('fi_pack_cu')||null,
-    cost_per_unit: parseFloat(v('fi_cpu'))||0,
+    cost_per_unit: cpuForSave(),
     supplier: v('fi_sup') === '__new__' ? null : v('fi_sup'),
     supplier_platform: platform || null,
     // Only persist link/qr that match the chosen platform — keeps DB tidy.
@@ -7271,7 +7325,10 @@ let _batchManualOverride = false;
 function rfAutoCalcBatch() {
   if (_batchManualOverride) return;
   const rows = _recipeIngRows;
-  const weightUnits = {kg:1000,liter:1000,l:1000,ml:1,g:1,oz:28.35,lb:453.6};
+  // Grams per unit comes from the shared table (lib/ingredient-cost.js). This
+  // is batch WEIGHT, not cost, but it is the same table and a second copy of it
+  // is how the cost formulas drifted apart in the first place.
+  const gramsFor = (u) => (window.RootsIngredientCost ? window.RootsIngredientCost.gramsFor(u) : 0);
   let total = 0, nonWeight = 0;
   rows.forEach(row => {
     // Get latest qty and unit from DOM
@@ -7282,9 +7339,9 @@ function rfAutoCalcBatch() {
       row.unit = inputs[3]?.value||row.unit||'g';
     }
     const qty = parseFloat(row.qty)||0;
-    const unit = (row.unit||'g').toLowerCase();
-    if (weightUnits[unit] !== undefined) {
-      total += qty * weightUnits[unit];
+    const grams = gramsFor(row.unit || 'g');
+    if (grams > 0) {
+      total += qty * grams;
     } else if (qty > 0) {
       nonWeight++;
     }
@@ -23462,6 +23519,7 @@ async function renderAlerts() {
   data.expired      = (data.expired      || []).filter(e => { const k=`exp:${e.id}`;          allLiveKeys.add(k); return true; });
   data.expiringSoon = (data.expiringSoon || []).filter(e => { const k=`expsoon:${e.id}`;      allLiveKeys.add(k); return true; });
   data.staleKitchen = (data.staleKitchen || []).filter(k => { const ky=`kit:${k.id}`;         allLiveKeys.add(ky);return true; });
+  data.costSkips    = (data.costSkips    || []).filter(s => { const k=`costskip:${s.id}`;     allLiveKeys.add(k); return true; });
   // Cleanup: drop any dismissed key that no longer exists
   let cleaned = false;
   for (const k of [..._alertDismissed]) if (!allLiveKeys.has(k)) { _alertDismissed.delete(k); cleaned = true; }
@@ -23475,6 +23533,7 @@ async function renderAlerts() {
   data.expired      = filt(data.expired,      e => `exp:${e.id}`);
   data.expiringSoon = filt(data.expiringSoon, e => `expsoon:${e.id}`);
   data.staleKitchen = filt(data.staleKitchen, k => `kit:${k.id}`);
+  data.costSkips    = filt(data.costSkips,    s => `costskip:${s.id}`);
 
   // Recompute counts after filter
   const c = {
@@ -23484,8 +23543,9 @@ async function renderAlerts() {
     expired:     data.expired.length,
     expiringSoon:data.expiringSoon.length,
     staleKitchen:data.staleKitchen.length,
+    costSkips:   data.costSkips.length,
   };
-  c.total = c.priceAlerts + c.outOfStock + c.lowStock + c.expired + c.expiringSoon + c.staleKitchen;
+  c.total = c.priceAlerts + c.outOfStock + c.lowStock + c.expired + c.expiringSoon + c.staleKitchen + c.costSkips;
   const total = c.total;
   const dismissedCount = _alertDismissed.size;
 
@@ -23512,6 +23572,7 @@ async function renderAlerts() {
       ${_alertCategoryTile('⏰', 'Expiring ≤7d', '即将过期', c.expiringSoon, '#b85c00', '#fef3c7', 'expiringSoon')}
       ${_alertCategoryTile('🛒', 'Stale Kitchen Orders', '滞留厨房订单', c.staleKitchen, '#3730a3', '#e0e7ff', 'staleKitchen')}
       ${_alertCategoryTile('📈', 'Price Changes', '价格预警', c.priceAlerts, '#9d174d', '#fce7f3', 'priceAlerts')}
+      ${_alertCategoryTile('🧮', 'Cost Not Updated', '成本未更新', c.costSkips, '#0f766e', '#ccfbf1', 'costSkips')}
     </div>
 
     ${total === 0 ? `
@@ -23527,6 +23588,7 @@ async function renderAlerts() {
       ${c.expiringSoon > 0 ? _alertSection('⏰ Expiring within 7 days · 即将过期', '#b85c00', _alertExpiryRows(data.expiringSoon, false), 'expiringSoon') : ''}
       ${c.staleKitchen > 0 ? _alertSection('🛒 Stale Kitchen Orders (>3 days) · 滞留', '#3730a3', _alertKitchenRows(data.staleKitchen), 'staleKitchen') : ''}
       ${c.priceAlerts  > 0 ? _alertSection('📈 Price Changes · 价格变动', '#9d174d', _renderAlertCards(data.price), 'priceAlerts') : ''}
+      ${c.costSkips    > 0 ? _alertSection('🧮 Cost Not Updated · 成本未更新', '#0f766e', _alertCostSkipRows(data.costSkips), 'costSkips') : ''}
     `}
   `;
 }
@@ -23632,6 +23694,51 @@ function _alertKitchenRows(rows) {
       <td>${esc(r.created_by_name||'—')}</td>
       <td style="text-align:right">${r.line_count}</td>
       <td style="text-align:right;font-weight:700;color:#3730a3">${days} days ago · ${days}天前</td>
+      <td style="text-align:right"><span style="font-size:11px;color:var(--muted)">→</span></td>
+    </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+// Cost write-backs purchasing refused. Each row says which item kept its old
+// cost, what the order said, and what has to change before the price can flow
+// again — clicking opens the item form, which is where the fix lives.
+function _alertCostSkipRows(rows) {
+  const REASON = {
+    no_pack_contents:        { en: 'Pack contents not filled in',     cn: '未填写每包含量' },
+    unit_mismatch:           { en: 'Order unit ≠ item buy unit',      cn: '采购单位与物料单位不一致' },
+    unsupported_recipe_unit: { en: 'Recipe unit is not g / ml / pcs', cn: '配方单位不是 克/毫升/件' },
+    no_pack_size:            { en: 'Pack size missing',               cn: '缺少包装数量' },
+    no_price:                { en: 'No price on the order line',      cn: '采购行没有价格' },
+  };
+  return `<table class="data-table" style="margin:0">
+    <thead><tr>
+      <th>SKU</th>
+      <th>Item · 物料</th>
+      <th>Why · 原因</th>
+      <th>PO</th>
+      <th style="text-align:right">Order price · 采购价</th>
+      <th style="text-align:right">Cost kept · 保留成本</th>
+      <th></th>
+    </tr></thead>
+    <tbody>${rows.map(r => {
+      const why = REASON[r.reason] || { en: r.reason, cn: '' };
+      const units = r.reason === 'unit_mismatch'
+        ? `<div style="font-size:11px;color:var(--muted)">order ${esc(r.line_unit||'—')} · item ${esc(r.buy_unit||'—')}</div>` : '';
+      return `<tr style="cursor:pointer" onclick="navigate('ingredients');setTimeout(()=>showIngForm(${r.ingredient_id}),200)">
+      <td style="font-family:monospace;font-size:11px">${esc(r.ingredient_sku||'—')}</td>
+      <td>
+        <div style="font-weight:600">${esc(r.ingredient_name||'—')}</div>
+        ${r.ingredient_name_cn?`<span style="display:block;font-size:11px;color:var(--muted)">${esc(r.ingredient_name_cn)}</span>`:''}
+      </td>
+      <td>
+        <div style="font-weight:600;color:#0f766e">${why.en}</div>
+        <div style="font-size:11px;color:var(--muted)">${why.cn}</div>
+        ${units}
+      </td>
+      <td style="font-family:monospace;font-size:11px">${esc(r.po_number||'—')}</td>
+      <td style="text-align:right">${r.line_price!=null?'¥'+parseFloat(r.line_price).toFixed(2):'—'}${r.line_unit?`<span style="font-size:11px;color:var(--muted)"> / ${esc(r.line_unit)}</span>`:''}</td>
+      <td style="text-align:right">${r.cost_per_unit!=null?'¥'+parseFloat(r.cost_per_unit).toFixed(4):'—'}${r.recipe_unit?`<span style="font-size:11px;color:var(--muted)"> / ${esc(r.recipe_unit)}</span>`:''}</td>
       <td style="text-align:right"><span style="font-size:11px;color:var(--muted)">→</span></td>
     </tr>`;
     }).join('')}</tbody>
@@ -26519,6 +26626,7 @@ async function _clearAllAlerts() {
       (d.data.expired      || []).forEach(e => _alertDismissed.add(`exp:${e.id}`));
       (d.data.expiringSoon || []).forEach(e => _alertDismissed.add(`expsoon:${e.id}`));
       (d.data.staleKitchen || []).forEach(k => _alertDismissed.add(`kit:${k.id}`));
+      (d.data.costSkips    || []).forEach(s => _alertDismissed.add(`costskip:${s.id}`));
       _alertDismissedSave();
     }
   } catch {}
@@ -26629,6 +26737,22 @@ async function _alertPushPollInner() {
       title: `Price change · 价格变动${pct}`,
       body: `${a.ingredient_name || 'Ingredient'} — ¥${Number(a.old_price||0).toFixed(2)} → ¥${Number(a.new_price||0).toFixed(2)}`,
       onClick: () => navigate('alerts'),
+    })});
+  }
+  for (const s of (data.costSkips || [])) {
+    const k = `costskip:${s.id}`;
+    keysNow.add(k);
+    items.push({ key: k, fire: () => notifyToast({
+      icon: '🧮', color: '#0f766e',
+      title: 'Cost not updated · 成本未更新',
+      body: `${s.ingredient_name || 'Item'} — ${s.ingredient_sku ? '['+s.ingredient_sku+'] ' : ''}${({
+        unit_mismatch:           'order unit ≠ item buy unit',
+        no_pack_contents:        'pack contents not filled in',
+        unsupported_recipe_unit: 'recipe unit is not g / ml / pcs',
+        no_pack_size:            'pack size missing',
+        no_price:                'no price on the order line',
+      })[s.reason] || s.reason}`,
+      onClick: () => { navigate('ingredients'); setTimeout(() => showIngForm(s.ingredient_id), 250); },
     })});
   }
   for (const p of (data.outOfStock || [])) {

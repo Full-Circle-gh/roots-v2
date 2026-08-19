@@ -865,7 +865,10 @@ Page({
         const c = o.choices.find(x => x.id === cid);
         if (!c || c.sold_out) return;   // never bill/add a sold-out extra
         delta += Number(c.price_delta) || 0;
-        chosen.push({ option_id: o.id, choice_id: c.id, label: c.label, delta: Number(c.price_delta) || 0 });
+        // `question` rides along with the answer so the cart/checkout line can
+        // read "Heat up?: Yes" instead of a bare, ambiguous "Yes". Same
+        // already-localised string the picker sheet shows (see :403).
+        chosen.push({ option_id: o.id, choice_id: c.id, question: o.question, label: c.label, delta: Number(c.price_delta) || 0 });
       });
     });
     cart.add({

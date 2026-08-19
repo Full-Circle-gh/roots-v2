@@ -431,6 +431,29 @@ CREATE TABLE IF NOT EXISTS price_alerts (
   FOREIGN KEY (ingredient_id) REFERENCES ingredients(id)
 );
 
+-- ── Cost write-back skips ─────────────────────────────────────────
+-- One row each time a PO price was NOT written into an ingredient's
+-- cost_per_unit, and why. The write-back refuses rather than store a
+-- number it cannot defend (routes/purchases.js firePriceAlertsForPO),
+-- so without this the refusal would be invisible and the item's cost
+-- would quietly go stale. Surfaced in the Alerts page.
+CREATE TABLE IF NOT EXISTS ingredient_cost_skips (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  ingredient_id INTEGER NOT NULL,
+  po_id         INTEGER,
+  -- One of a fixed set, stored raw so each can be counted on its own:
+  -- no_pack_contents | unit_mismatch | unsupported_recipe_unit |
+  -- no_pack_size | no_price. Display text lives in the Alerts page.
+  reason        TEXT NOT NULL,
+  line_unit     TEXT,            -- the unit written on the PO line
+  line_price    REAL,            -- the price we declined to write
+  created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
+  -- Set when a later PO priced this item cleanly. The row stays as a record of
+  -- what once went unpriced; only open rows (resolved_at IS NULL) alert.
+  resolved_at   DATETIME,
+  FOREIGN KEY (ingredient_id) REFERENCES ingredients(id)
+);
+
 -- ── Activity Log ──────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS activity_log (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -27,6 +27,7 @@ addColumn('products', 'free_of',        'TEXT');
 addColumn('products', 'image_data',     'TEXT');
 addColumn('products', 'label_data',     'TEXT');
 addColumn('purchase_orders', 'source',  "TEXT DEFAULT 'manual'");
+addColumn('ingredient_cost_skips', 'resolved_at', 'DATETIME');
 addColumn('ingredients', 'supplier_platform', 'TEXT');
 addColumn('ingredients', 'supplier_link',     'TEXT');
 addColumn('ingredients', 'supplier_qr_data',  'TEXT');
