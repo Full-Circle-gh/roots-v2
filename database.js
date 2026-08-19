@@ -2269,6 +2269,15 @@ try {
   }
 } catch (e) { console.error('[migration seed_standard_shipping_v1]', e); }
 
+// The free-shipping threshold a store falls back to when
+// storefront_config['fees.freeShippingThreshold'] is missing entirely. It is
+// seeded below, so a DB built through this file always has the row — but the
+// readers need the same answer when it isn't there, and they used to disagree
+// (399 seeded here, 199 assumed in two places in routes/retail.js, 399 again
+// hardcoded in the mini-app cart). One definition, exported, so a store with
+// no row can't be quoted one threshold and charged against another.
+const FREE_SHIPPING_THRESHOLD_DEFAULT = 399;
+
 // One-shot seed of storefront_config so a fresh DB has sensible defaults.
 // Subsequent runs are no-ops via the _migrations marker — once admin edits
 // land via the admin UI, seeding never overwrites them.
@@ -2282,7 +2291,7 @@ try {
       ['theme.ipIntensity',           JSON.stringify('soft')],
       ['theme.language',              JSON.stringify('bilingual')],
       // Fees / thresholds
-      ['fees.freeShippingThreshold',  JSON.stringify(399)],
+      ['fees.freeShippingThreshold',  JSON.stringify(FREE_SHIPPING_THRESHOLD_DEFAULT)],
       ['fees.standardShipping',       JSON.stringify(12)],
       ['fees.sameDayDelivery',        JSON.stringify(18)],
       ['fees.minOrder',               JSON.stringify(0)],
@@ -4742,3 +4751,4 @@ db.exec(`
 
 module.exports = db;
 module.exports.repointMeituanProductFk = repointMeituanProductFk;
+module.exports.FREE_SHIPPING_THRESHOLD_DEFAULT = FREE_SHIPPING_THRESHOLD_DEFAULT;
