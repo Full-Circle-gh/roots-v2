@@ -5530,6 +5530,31 @@ function onBuyUnitChange() {
   calcCPU();
 }
 
+// Every surface that shows a cost built from an incomplete ingredient total
+// says the same thing, in the same words. The number is not withheld — Ash
+// needs rough figures while building a recipe — but it is never presented as
+// if it were finished. "Understated" is the meaning to convey: a missing
+// ingredient can only make a cost too LOW, and the suggested sell price is the
+// number decisions get made on.
+function missingCostText(n) {
+  if (!n) return { en: '', cn: '', short: '' };
+  const en = n === 1 ? '1 ingredient has no cost' : `${n} ingredients have no cost`;
+  const cn = `${n} 项食材没有成本`;
+  return { en, cn, short: 'understated 偏低' };
+}
+function missingCostBanner(n) {
+  if (!n) return '';
+  const t = missingCostText(n);
+  return `<div style="background:#fff4ed;border:1px solid #f0c9ae;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#a4501f">
+    <strong>⚠️ ${t.en} — every figure below is too low</strong>
+    <div style="margin-top:2px">${t.cn} —— 以下所有数字都偏低</div>
+  </div>`;
+}
+// A small marker to sit beside an individual figure.
+function missingCostTag(n) {
+  return n ? `<span style="font-size:10px;font-weight:700;color:#a4501f;background:#fff4ed;border-radius:4px;padding:1px 5px;margin-left:6px;white-space:nowrap">understated 偏低</span>` : '';
+}
+
 // The cost shown by the form, derived by lib/ingredient-cost.js — the same
 // function the PO price write-back and repair-items use. It used to be a second
 // copy of the maths here, and that copy divided everything: a per-piece item
@@ -6616,7 +6641,7 @@ async function viewRecipe(id) {
     <div class="card" style="padding:0;overflow:hidden;margin-bottom:20px">
       <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
         <div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" style="vertical-align:-3px;margin-right:8px;color:var(--text-3)"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>Ingredients 食材</div>
-        ${missingCount>0?`<span style="font-size:12px;color:#e07b50">⚠️ ${missingCount} missing costs</span>`:''}
+        ${missingCount>0?`<span style="font-size:12px;color:#a4501f">⚠️ ${missingCostText(missingCount).en} — costs shown are too low<br>${missingCostText(missingCount).cn}，显示成本偏低</span>`:''}
       </div>
       <table class="data-table" id="recipeIngTable">
         <thead><tr>
@@ -7654,7 +7679,7 @@ async function showCostSheet(id) {
       <!-- Ingredients subtotal -->
       <div style="text-align:right;font-size:13px;color:var(--muted);margin-bottom:16px">
         食材小计 Ingredients Subtotal: <strong style="font-size:16px;color:var(--dk)">¥${ingTotal.toFixed(2)}</strong>
-        ${missingCount?` <span style="color:#e07b50">(${missingCount} missing costs)</span>`:''}
+        ${missingCount?` <span style="color:#a4501f">(${missingCostText(missingCount).en} · ${missingCostText(missingCount).cn})</span>`:''}
       </div>
 
       <!-- Additional costs -->
@@ -7683,24 +7708,25 @@ async function showCostSheet(id) {
         </div>
       </div>
 
+      ${missingCostBanner(missingCount)}
       <!-- Batch summary -->
       <div class="cost-summary" style="margin-bottom:20px">
         <div class="cost-box dark">
-          <div class="cost-label">批次总成本 Total Batch Cost</div>
+          <div class="cost-label">批次总成本 Total Batch Cost${missingCostTag(missingCount)}</div>
           <div class="cost-value" id="cs_batch_display">¥${batchCost.toFixed(2)}</div>
           <div class="cost-sub">${batch?batch+'g batch':''}</div>
         </div>
         <div class="cost-box dark">
-          <div class="cost-label">每份成本 Cost Per Serving</div>
+          <div class="cost-label">每份成本 Cost Per Serving${missingCostTag(missingCount)}</div>
           <div class="cost-value" id="cs_serv_display">${cpServ!==null?'¥'+cpServ.toFixed(2):'—'}</div>
           <div class="cost-sub">${servings?servings+' servings':''}</div>
         </div>
         <div class="cost-box">
-          <div class="cost-label">每克成本 Cost Per Gram</div>
+          <div class="cost-label">每克成本 Cost Per Gram${missingCostTag(missingCount)}</div>
           <div class="cost-value" style="font-size:20px;color:var(--dk)" id="cs_gram_display">${cpGram?'¥'+cpGram.toFixed(4):'—'}</div>
         </div>
         <div class="cost-box">
-          <div class="cost-label">售价毛利 Margin at Sell Price</div>
+          <div class="cost-label">售价毛利 Margin at Sell Price${missingCostTag(missingCount)}</div>
           <div class="cost-value" style="font-size:20px;color:${margin!==null&&margin>0?'#6db33f':'#e05252'}" id="cs_margin_display">${margin!==null?'¥'+margin.toFixed(2):'—'}</div>
           <div class="cost-sub">per serving</div>
         </div>
@@ -7712,7 +7738,8 @@ async function showCostSheet(id) {
         <div class="form-grid-3">
           <div class="form-group"><label>Sell Price/Serving ¥ 每份售价</label><input type="number" id="cs_sell" value="${cd.sell_price||''}" placeholder="0.00" step="0.01" oninput="csUpdate()"></div>
           <div class="form-group"><label>Target Food Cost % 目标成本率</label><input type="number" id="cs_target" value="${cd.target_food_cost||30}" placeholder="30" step="1" oninput="csUpdate()"></div>
-          <div class="form-group"><label>Suggested Sell Price 建议售价</label><input type="number" id="cs_suggest" value="${suggestSell?suggestSell.toFixed(2):''}" placeholder="—" readonly style="background:var(--gray)"></div>
+          <div class="form-group"><label>Suggested Sell Price 建议售价</label><input type="number" id="cs_suggest" value="${suggestSell?suggestSell.toFixed(2):''}" placeholder="—" readonly style="background:var(--gray)">
+            ${missingCount?`<div class="form-hint" style="color:#a4501f;font-weight:600">Too low — ${missingCostText(missingCount).en}<br>偏低：${missingCostText(missingCount).cn}</div>`:''}</div>
         </div>
         <div style="margin-top:12px">
           <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--muted);margin-bottom:6px">
