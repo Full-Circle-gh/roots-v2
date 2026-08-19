@@ -69,3 +69,7 @@ DEPLOY.md
 /migration_roster.json
 /scratch_*
 C:/Users/Asher/Downloads/migration_phoneless.json
+
+# Baseline copy of routes/retail.js taken from HEAD, written on demand for the
+# --baseline mode of scripts/test_batch_timing.js and test_addon_stock_gate.js.
+routes/_baseline_retail.js

@@ -210,6 +210,28 @@ app.use('/assets', express.static(path.join(__dirname, 'public'), {
   },
 }));
 
+// The shared cost derivation (lib/ingredient-cost.js), served to the ingredient
+// form so the browser and the server compute a cost the same way.
+//
+// NOT under /assets on purpose: that path is stale-while-revalidate in the
+// service worker, so a phone could keep running an old copy of the formula for
+// days after a deploy. Money maths must never be stale, so this is sent
+// no-store and sw.js skips it too. Read per request rather than at boot so the
+// bytes always match the file on disk.
+app.get('/lib/ingredient-cost.js', (req, res) => {
+  fs.readFile(path.join(__dirname, 'lib', 'ingredient-cost.js'), 'utf8', (err, src) => {
+    if (err) {
+      console.error('[cost helper] could not be read:', err.message);
+      return res.status(500).type('text/plain').send('/* cost helper unavailable */');
+    }
+    res.set('Content-Type', 'application/javascript; charset=utf-8');
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    res.send(src);
+  });
+});
+
 // PWA assets — must be served from root for the service worker to claim "/" scope
 app.get('/sw.js', (req, res) => {
   res.set('Service-Worker-Allowed', '/');
