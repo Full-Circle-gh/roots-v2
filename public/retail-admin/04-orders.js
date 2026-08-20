@@ -8664,6 +8664,7 @@ const ONW_ERR_WHERE = {
   store_required_for_counter: 'route',
   bad_fulfillment_type: 'route', fulfillment_type_required: 'route',
   payment_method_required_for_counter: 'route',
+  pos_closed_for_store: 'route',
   address_required_for_delivery: 'addr',
   address_not_allowed_for_pickup: 'addr', address_not_allowed_for_counter: 'addr',
 };
@@ -8724,6 +8725,17 @@ function ordNewErrText(code, detail) {
     // sits in, so the pairing reads. Replace with a full sentence the moment
     // one is locked.
     payment_method_required_for_counter: cuT('Pay method', '付款方式'),
+    // POS was closed at this store on the Sales page, so the counter is shut
+    // and the server refuses the sale (retail.js posClosedForStore).
+    //
+    // THE MESSAGE IS THE GRID'S OWN STATE LABEL, verbatim, for the same reason
+    // the line above uses a field label: the locked-vocabulary rule forbids
+    // composing Chinese, and no locked SENTENCE exists for "the counter is
+    // closed here". 'Closed · 已关闭' is the exact pair the Sales grid prints
+    // on a closed channel × location cell (01-core.js:647), so an operator who
+    // just closed it there reads the same two words back. Replace with a full
+    // sentence the moment one is locked.
+    pos_closed_for_store: cuT('Closed', '已关闭'),
     address_required_for_delivery: cuT('A delivery order needs a full address.', '配送订单需要完整地址。'),
     address_not_allowed_for_pickup: cuT('A pickup order cannot carry a delivery address.', '自提订单不能填写收货地址。'),
     address_not_allowed_for_counter: cuT('A counter sale cannot carry a delivery address.', '前台销售不能填写收货地址。'),

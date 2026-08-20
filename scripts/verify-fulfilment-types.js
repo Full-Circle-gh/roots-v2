@@ -1946,6 +1946,110 @@ check('the settle screen still has a Back control at all',
 check('the product grid adapts its column count for narrow tablets',
   (TILL.match(/@media \(max-width:\d+px\)\{ ?\.grid\{grid-template-columns/g) || []).length >= 2, true);
 
+// ═══ 16. POS is a sales channel, and closing it closes something ═══════════
+// THE ASSERTION THIS SECTION EXISTS FOR: a channel toggle that changes nothing
+// is worse than no toggle. An operator who closes POS at a store believes the
+// counter is shut; if the till kept selling, it would also keep taking stock off
+// that store's shelf, and the belief would be discovered wrong by a stock count
+// rather than by a screen. So "the card exists" is not what is checked here —
+// what is checked is that the switch reaches the sale.
+
+const POS_MA = fs.readFileSync(path.join(__dirname, '..', 'routes', 'meituan-admin.js'), 'utf8');
+const POS_RT = fs.readFileSync(path.join(__dirname, '..', 'routes', 'retail.js'), 'utf8');
+const POS_CORE = fs.readFileSync(path.join(__dirname, '..', 'public', 'retail-admin', '01-core.js'), 'utf8');
+const POS_HTML = fs.readFileSync(path.join(__dirname, '..', 'public', 'retail-admin.html'), 'utf8');
+const POS_CSS = fs.readFileSync(path.join(__dirname, '..', 'public', 'retail-admin.css'), 'utf8');
+const POS_TILL = fs.readFileSync(path.join(__dirname, '..', 'public', 'till.html'), 'utf8');
+
+// ── It is a channel in the grid, on the same terms as the rest ───────────
+const posGridLine = /const GRID_CHANNELS = \[([^\]]+)\]/.exec(POS_MA);
+check('the sales grid declares its channels', !!posGridLine, true);
+if (posGridLine) {
+  const list = posGridLine[1].split(',').map((s) => s.trim().replace(/'/g, ''));
+  check('pos is one of them', list.includes('pos'), true);
+  // Everything downstream in that file is generic over GRID_CHANNELS: the cell
+  // read/write, the "close all" for a channel, and the location master. pos must
+  // NOT be special-cased the way gzgrocery is (tianhe-only), or a two-store shop
+  // gets one row.
+  check('pos is not restricted to a single store the way gzgrocery is',
+    /channel === 'gzgrocery' \? all\.filter/.test(POS_MA) && !/'pos'\s*\?/.test(POS_MA), true);
+  // The location master closes every applicable channel; pos riding in
+  // GRID_CHANNELS is what makes "close this location" also shut its till.
+  check('closing a whole location covers pos, because it iterates GRID_CHANNELS',
+    /const applies = GRID_CHANNELS\.filter/.test(POS_MA), true);
+}
+
+// ── Closing it actually refuses the sale ─────────────────────────────────
+const posOrdersStart = POS_RT.indexOf("router.post('/api/retail-admin/orders', requireRetailAdmin");
+const posOrdersEnd = POS_RT.indexOf('\nrouter.', posOrdersStart + 10);
+const posOrdersSrc = POS_RT.slice(posOrdersStart, posOrdersEnd === -1 ? undefined : posOrdersEnd);
+check('the create-order handler was located', posOrdersSrc.length > 2000, true);
+check('a counter sale is refused when the counter is closed',
+  // ANCHORED ON THE `if (` so the guard's real form is pinned. Without that
+  // anchor a short-circuit prefix — `false && fulfillmentType === ...` — still
+  // satisfies the match while disabling the check entirely, and that exact
+  // mutation escaped the first version of this assertion.
+  /if \(fulfillmentType === 'counter' && posClosedForStore\(storeId\)\) \{/.test(posOrdersSrc), true);
+// 409, not 400: the request is well-formed and would succeed once reopened.
+check('the refusal is a conflict, not a validation error',
+  /status\(409\)[\s\S]{0,120}pos_closed_for_store/.test(posOrdersSrc), true);
+// COUNTER ONLY — closing the counter must not stop a delivery.
+check('no other fulfilment type is gated on the pos channel',
+  (posOrdersSrc.match(/posClosedForStore\(/g) || []).length, 1);
+
+const posHelperSrc = (() => {
+  const i = POS_RT.indexOf('function posClosedForStore');
+  return i === -1 ? '' : POS_RT.slice(i, POS_RT.indexOf('\n}\n', i) + 3);
+})();
+check('the reader exists at module scope', posHelperSrc.length > 100, true);
+// ABSENT ROW = OPEN. Every tenant that has never touched the toggle has no
+// channel_status row at all; a check written as `is_open !== 1` would read that
+// absence as closed and shut every counter on the platform the day this ships.
+check('an absent channel_status row means OPEN, not closed',
+  /cell && cell\.is_open === 0/.test(posHelperSrc), true);
+check('a shop-wide fulfilment close also closes the counter',
+  /fulfillment_open === 0/.test(posHelperSrc), true);
+// FAILS OPEN. A status lookup that throws must not stop a shop selling.
+check('the reader fails open on any error',
+  /catch \(e\) \{ return false; \}/.test(posHelperSrc), true);
+check('the reader asks for the pos channel specifically',
+  /channel = 'pos'/.test(posHelperSrc), true);
+
+// ── The card, wired the same way the other five are ──────────────────────
+check('the channel key map knows pos', /ps: 'pos'/.test(POS_CORE), true);
+// csRender finds a card by the id of its revenue metric; without this element
+// the toggle silently stays locked and the operator can never close POS.
+check('the Sales page has a POS card csRender can find',
+  /id="sales-ps-rev"/.test(POS_HTML), true);
+check('all four POS metrics have somewhere to land',
+  ['rev', 'orders', 'aov', 'extra'].filter((k) => !POS_HTML.includes('id="sales-ps-' + k + '"')), []);
+check('the summary fills them', /fill\('ps', c\.pos\)/.test(POS_CORE), true);
+check('the card icon has a style of its own', /\.sales-ch-ico\.ps \{/.test(POS_CSS), true);
+// The channel name is a LOCKED pair, not composed: 'Counter sale · 前台销售'
+// is what the order drawer already prints (04-orders.js:5334).
+check('the channel name reuses the locked Counter sale pair',
+  /pos: cuT\('Counter sale', '前台销售'\)/.test(POS_CORE), true);
+
+// ── The money actually counts ────────────────────────────────────────────
+// KEYED BY FULFILMENT TYPE. A counter sale carries channel='manual' exactly like
+// a phone order an operator typed in, so a channel-based query would sweep both
+// into the POS card and overstate the till.
+check('POS revenue is keyed on fulfillment_type, not on channel',
+  /const ps = storeAgg\("fulfillment_type='counter'"\)/.test(POS_RT), true);
+check('POS appears in the sales summary payload', /^\s*pos:\s*\{ connected: true/m.test(POS_RT), true);
+
+// ── The till respects it before the cashier builds a basket ──────────────
+check('the till reads the channel grid', /channel-status/.test(POS_TILL), true);
+check('the till keeps only stores whose counter is open',
+  /posOpen\[st\.code\] !== false/.test(POS_TILL), true);
+// Same fail-open contract as the server: a status read that dies must not shut
+// a shop's till. `.catch(function () { return null; })` is what guarantees it.
+check('the till fails open when the channel grid cannot be read',
+  /api\('\/api\/retail-admin\/channel-status'\)\.catch\(function \(\) \{ return null; \}\)/.test(POS_TILL), true);
+// Every counter closed is a STATE, said in the grid's own locked words.
+check('the till has a locked string for the closed state',
+  /closed:\s*\['Closed', '已关闭'\]/.test(POS_TILL), true);
+
 // ── Report ──────────────────────────────────────────────────────────────────
 // §8's by-phone classifier is asserted through the REAL async function, so the
 // report waits on it: report() is called from that promise's settle handlers,

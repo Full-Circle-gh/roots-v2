@@ -12926,12 +12926,29 @@ router.get('/api/retail-admin/sales/summary', requireRetailAdmin, (req, res) => 
     const gy = guanyiPickupSales(tdb(), today, today);
     const gyAov = gy.orders ? +(gy.revenue / gy.orders).toFixed(2) : 0;
 
+    // POS — sales rung up at the counter till (/till).
+    //
+    // KEYED BY FULFILMENT TYPE, NOT BY CHANNEL, and that is the whole subtlety.
+    // A counter sale is written through the ordinary manual-order endpoint, so
+    // it carries channel='manual' exactly like a phone order an operator typed
+    // in — channel cannot tell the two apart. fulfillment_type='counter' is the
+    // till's real signature, and it is the same column the stock decrement and
+    // the drawer already branch on.
+    //
+    // Until now these landed in NO card: 'manual' is not 'wechat', 'web' or
+    // 'meituan', so every counter sale was missing from the Sales page while
+    // sitting in the orders list. The row is new revenue on the page, not
+    // double-counted revenue.
+    const ps = storeAgg("fulfillment_type='counter'");
+    const psItems = storeItems("o.fulfillment_type='counter'");
+
     const channels = {
       wechat:    { connected: true,  revenue: +Number(wc.revenue || 0).toFixed(2), orders: wc.orders || 0, aov: +Number(wc.aov || 0).toFixed(2), extra: wcItems },
       web:       { connected: true,  revenue: +Number(wb.revenue || 0).toFixed(2), orders: wb.orders || 0, aov: +Number(wb.aov || 0).toFixed(2), extra: wbItems },
       meituan:   { connected: true,  revenue: +Number(mt.revenue || 0).toFixed(2), orders: mt.orders || 0, aov: +Number(mt.aov || 0).toFixed(2), extra: mtPushes },
       gzgrocery: { connected: true,  revenue: gy.revenue || 0, orders: gy.orders || 0, aov: gyAov, extra: gy.orders || 0 },
       eleme:     { connected: false, revenue: 0, orders: 0, aov: 0, extra: 0 },
+      pos:       { connected: true,  revenue: +Number(ps.revenue || 0).toFixed(2), orders: ps.orders || 0, aov: +Number(ps.aov || 0).toFixed(2), extra: psItems },
     };
     let revenue = 0, orders = 0, active = 0;
     for (const k of Object.keys(channels)) {
@@ -20783,6 +20800,28 @@ router.post('/api/retail-admin/order-fees', requireRetailAdmin, express.json(), 
   });
 });
 
+// Is the counter closed at this store? Reads the same two tables the Sales
+// grid writes (routes/meituan-admin.js csCellOpen), with the same conventions:
+// an ABSENT channel_status row means OPEN, so a tenant that has never touched
+// the toggle is unaffected, and a shop-wide fulfilment close outranks the
+// per-channel cell because that store has stopped operating entirely.
+//
+// FAILS OPEN. Any read error returns false — not closed. A till that refuses
+// to sell because a status lookup threw is a worse outcome than one that sells
+// during the seconds a database is unhappy; the shop is standing there with a
+// customer either way.
+function posClosedForStore(storeId) {
+  try {
+    if (!storeId) return false;
+    const st = tdb().prepare('SELECT code FROM retail_stores WHERE id = ?').get(storeId);
+    if (!st) return false;
+    const shop = tdb().prepare('SELECT fulfillment_open FROM store_business_status WHERE store_code = ?').get(st.code);
+    if (shop && shop.fulfillment_open === 0) return true;
+    const cell = tdb().prepare("SELECT is_open FROM channel_status WHERE channel = 'pos' AND store_code = ?").get(st.code);
+    return !!(cell && cell.is_open === 0);
+  } catch (e) { return false; }
+}
+
 router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), async (req, res) => {
   const b = req.body || {};
 
@@ -20978,6 +21017,23 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
     if (!ALLOWED_PAY.includes(sentPay)) {
       return res.status(400).json({ success: false, error: 'payment_method_required_for_counter', allowed: ALLOWED_PAY });
     }
+  }
+
+  // ── A closed counter does not take money ─────────────────────────────────
+  // The Sales page can close POS at one store the same way it closes Meituan
+  // there, and the location master closes every channel at once. A toggle that
+  // changed nothing would be worse than no toggle: the operator would believe
+  // the counter was shut while it kept selling and kept taking stock off that
+  // store's shelf.
+  //
+  // 409, not 400: nothing about the request is malformed. The same order would
+  // be accepted a second after someone reopens the channel, which is what a
+  // conflict means and what a 400 would misreport to the till.
+  //
+  // COUNTER ONLY. Every other fulfilment type routes through its own channel's
+  // cell and is unaffected — closing POS must not stop a delivery.
+  if (fulfillmentType === 'counter' && posClosedForStore(storeId)) {
+    return res.status(409).json({ success: false, error: 'pos_closed_for_store' });
   }
 
   // Guest-pay handle — lets a customer without an app account pay this one

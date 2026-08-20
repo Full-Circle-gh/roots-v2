@@ -473,6 +473,7 @@ button{font:inherit;color:inherit;margin:0}
     payMethod:    ['Pay method', '付款方式'],          // admin: retail-admin.html:2829
     markPaid:     ['Mark paid', '标记已付款'],         // admin: 04-orders.js NEXT_STATUS:2677
     back:         ['Back', '返回'],                    // admin
+    closed:       ['Closed', '已关闭'],                // admin: 01-core.js:647 (sales grid cell)
     cancel:       ['Cancel', '取消'],                  // admin
     other:        ['Other', '其他'],                   // admin: PAY_METHOD_CHOICES
     // done
@@ -571,9 +572,40 @@ button{font:inherit;color:inherit;margin:0}
     document.documentElement.setAttribute('data-theme', 'light');
     document.documentElement.lang = _lang === 'cn' ? 'zh-CN' : 'en';
     $('boot-msg').textContent = '·';
-    api('/api/retail-admin/stores')
-      .then(function (j) {
+    // TWO READS, because a till may only open where the counter is OPEN.
+    // POS is a sales channel on the Sales page exactly like Meituan, and the
+    // location master closes every channel at a store at once — so a shop that
+    // has been marked shut must not have a till that still rings up sales and
+    // still takes stock off that shelf. The server refuses those sales anyway
+    // (retail.js posClosedForStore), so without this the cashier would meet a
+    // rejection at Mark paid, with a basket already built. Filtering the picker
+    // is the same rule stated a step earlier, where it costs nothing.
+    //
+    // FAILS OPEN, matching the server helper: if channel-status cannot be read
+    // the till behaves exactly as it did before this existed. A status endpoint
+    // having a bad minute must not shut a shop's counter.
+    Promise.all([
+      api('/api/retail-admin/stores'),
+      api('/api/retail-admin/channel-status').catch(function () { return null; })
+    ])
+      .then(function (r) {
+        var j = r[0], cs = r[1];
         var list = (j.data || []).filter(function (s) { return s.is_active !== 0; });
+        var posOpen = null;
+        if (cs && cs.channels) {
+          var row = cs.channels.filter(function (c) { return c.channel === 'pos'; })[0];
+          if (row && row.cells) {
+            posOpen = {};
+            row.cells.forEach(function (c) { posOpen[c.storeCode] = !!c.open; });
+          }
+        }
+        if (posOpen) {
+          var openList = list.filter(function (st) { return posOpen[st.code] !== false; });
+          // Every counter closed is a real state, not an error: say so with the
+          // grid's own words rather than a sentence composed for this screen.
+          if (!openList.length) { boot(esc(T('closed'))); return; }
+          list = openList;
+        }
         if (!list.length) {
           // Honest and specific: the till cannot open without a location,
           // because a counter sale is refused without one server-side.

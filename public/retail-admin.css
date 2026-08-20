@@ -1164,6 +1164,9 @@
   .sales-ch-ico.mt { background: #FBE7D6; color: #C2410C; }
   .sales-ch-ico.gy { background: #E2EBDA; color: #3B6D11; }
   .sales-ch-ico.el { background: #E4ECF5; color: #185FA5; }
+  /* A quiet violet: the five above already take green, slate, orange, olive
+     and blue, and a channel card is identified at a glance by this chip. */
+  .sales-ch-ico.ps { background: #ECE7F2; color: #5C4A75; }
   .sales-ch-name { font-size: 14px; font-weight: 500; color: var(--text-1); line-height: 1.2; }
   .sales-ch-stat { font-size: 11px; color: var(--text-3); margin-top: 1px; display: flex; align-items: center; gap: 5px; }
   .sales-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; display: inline-block; }

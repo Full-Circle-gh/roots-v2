@@ -441,6 +441,7 @@ async function salesInit() {
     fill('mt', c.meituan);
     fill('gy', c.gzgrocery);
     fill('el', c.eleme);
+    fill('ps', c.pos);
   } catch (e) { /* keep placeholders on error */ }
   csLoad();  // unlock + wire the channel-close toggles (channel × location)
   salesWireSetup();  // merge: Set up / Configure per card from the integrations hub
@@ -466,6 +467,11 @@ async function salesWireSetup() {
     mt: { kind: 'meituan',        overlay: true, open: () => (window.igMeituanConfig ? igMeituanConfig() : salesGo('meituan')) },  // Configure = clean Meituan page (summary when connected, box-first setup when new)
     gy: { kind: 'gzgrocery',      open: () => salesGo('guanyi'), alwaysConfigure: true },
     el: { kind: 'eleme',          open: () => salesGo('eleme') },
+    // POS is ours and has no hub plugin to be "connected" to, so it is always
+    // Configure — the same treatment gzgrocery gets. Configure opens the till
+    // itself, because that IS the channel: there is nothing else to point an
+    // operator at.
+    ps: { kind: 'pos',            open: () => window.open('/till', '_blank', 'noopener'), alwaysConfigure: true },
     // jd / qy cards moved to the Delivery tab's card hub (2026-07-03).
   };
   const cardByKey = (key) => {
@@ -582,10 +588,11 @@ document.addEventListener('keydown', (e) => {
 //   • gzgrocery (tianhe-only) toggles directly, no popup
 //   • two injected location-master buttons close every channel of a location
 // Backend: /api/retail-admin/channel-status (+ /cell, /channel, /location).
-const CS_KEY2CH = { wc: 'mini_app', wb: 'web', mt: 'meituan', gy: 'gzgrocery', el: 'eleme' };
+const CS_KEY2CH = { wc: 'mini_app', wb: 'web', mt: 'meituan', gy: 'gzgrocery', el: 'eleme', ps: 'pos' };
 function csName(ch) {
   return ({ mini_app: cuT('WeChat', '微信'), web: cuT('Web shop', '网页商店'),
-            meituan: cuT('Meituan', '美团'), eleme: cuT('Eleme', '饿了么'), gzgrocery: 'Gzgrocery' })[ch] || ch;
+            meituan: cuT('Meituan', '美团'), eleme: cuT('Eleme', '饿了么'), gzgrocery: 'Gzgrocery',
+            pos: cuT('Counter sale', '前台销售') })[ch] || ch;
 }
 let _csData = null;
 function csChannel(key) { return ((_csData && _csData.channels) || []).find(c => c.channel === key); }

@@ -600,7 +600,15 @@ router.post('/api/retail-admin/store-status/store/:code', requireRetailAdmin, ex
 // channel_status (absent row = open); meituan uses store_business_status (the
 // daemon applies 置休). gzgrocery is tianhe-only. This drives the Sales-page cards:
 // per-channel popup (Yuexiu/Tianhe/close-all) + the two location masters.
-const GRID_CHANNELS = ['mini_app', 'web', 'meituan', 'eleme', 'gzgrocery'];
+// 'pos' is the counter till (/till). It joins the grid rather than getting a
+// switch of its own because a shop closing its counter is the same KIND of
+// act as closing Meituan — and the location master, which closes every
+// channel at a store, would otherwise leave the till selling from a shop the
+// operator had just marked shut. It needs no special-casing anywhere below:
+// it stores in channel_status like mini_app/web/eleme, serves every active
+// store (unlike gzgrocery, which is tianhe-only), and is integrated (unlike
+// eleme) because it is ours.
+const GRID_CHANNELS = ['mini_app', 'web', 'meituan', 'eleme', 'gzgrocery', 'pos'];
 function csStores(db, channel) {
   const all = db.prepare("SELECT code, name_en, name_cn, COALESCE(name_cn,name_en,code) AS name FROM retail_stores WHERE is_active=1 ORDER BY sort_order,id").all();
   return channel === 'gzgrocery' ? all.filter(s => s.code === 'tianhe') : all;
