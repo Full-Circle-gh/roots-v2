@@ -1,8 +1,14 @@
-# The Postgres cutover runbook — v0.5, FIRST DRAFT, NOT EXECUTABLE
+# The Postgres cutover runbook — v0.6, FIRST DRAFT, NOT EXECUTABLE
 
 **A procedure, not a summary.** Written to be followed literally, at 3am, by one person who is not a developer, with the shop trading and no ability to improvise.
 
-> **G22 AND G23 ARE CLOSED — v0.5, 2026-08-20. THE FLIP NOW HAS A WAY BACK, AND SOMEBODY AUTHORISED TO TAKE IT.** `scripts/rollback-to-sqlite.sh` and `scripts/rollback-delta-report.js` merged at `7483cb91`; **PART H is rewritten from a list of holes into a procedure.** The decision-maker is **Ash, alone, with no escalation**; the triggers are four observables with stated thresholds; the window default is **ONE HOUR**. **Nineteen gaps remain of the twenty-five identified** — two of them, G24 and G25, found by writing PART H itself.
+> **SOMETHING RAN — v0.6, 2026-08-20. APPLICATION CODE HAS EXECUTED AGAINST POSTGRES FOR THE FIRST TIME, AND FOUR STEPS OF THIS DOCUMENT ARE NOW MARKED AS NOT RUNNING AS WRITTEN.** `eval/pg-probe/g20-categories.js` runs the body of `GET /api/retail/categories` through the real chain and returns **1381 bytes, `sha256 24c690d3…` — byte-identical to what the live SQLite application serves.** G20 is instrumented, not closed: **one statement is not a smoke test.**
+>
+> **BUILDING IT FOUND TWO GAPS, AND THE FIRST CHANGES THE SHAPE OF G1.** **G26 (B19): the application cannot BOOT on Postgres, and the obstacle is not the 800 unconverted call sites** — it is **eleven `.exec()` calls at module load across ten files**, the first at `lib/tenant-creds.js:34` from `server.js:281`, **631 lines before `app.listen()`**. **Eleven is not 102**: clearing it turns "the app cannot start" into "the app starts and routes fail one at a time", which is the only state in which G1 can be worked incrementally. **G27 (B20): `.env` is parsed by an IIFE inside `server.js` and by nothing else**, so every `--pg` script exits 2.
+>
+> **READ THE FOUR CORRECTIONS BEFORE FOLLOWING ANY OF THOSE STEPS.** **Step G2's GOOD condition is unreachable** — the `[db-driver]` line prints and the process dies before listening (G26). **Step G6, PART H trigger T1, the H4 slow watch loop and H6 step 2 all exit 2** on the environment, not on the data (G27) — and **T1's exit-2 rule escalates to RED, so the panel would order a rollback within two minutes of the flip for a configuration reason.** Each step now carries its correction inline. **Twenty-one gaps remain of twenty-seven identified.**
+
+> **G22 AND G23 ARE CLOSED — v0.5, 2026-08-20. THE FLIP NOW HAS A WAY BACK, AND SOMEBODY AUTHORISED TO TAKE IT.** `scripts/rollback-to-sqlite.sh` and `scripts/rollback-delta-report.js` merged at `7483cb91`; **PART H is rewritten from a list of holes into a procedure.** The decision-maker is **Ash, alone, with no escalation**; the triggers are four observables with stated thresholds; the window default is **ONE HOUR**. **Twenty-one gaps remain of the twenty-seven identified** — G24 and G25 found by writing PART H, G26 and G27 by building the G20 probe and running it.
 >
 > **READ WHAT THAT DOES AND DOES NOT CHANGE, BECAUSE THE ASYMMETRY v0.4 NAMED IS THE THING THAT MOVED.** v0.4 said there was a way onto Postgres and no way off it, so the flip was irreversible from its first second. **That sentence is now retired.** The way off is a **rename**, not a merge: it restores the pre-flip file and carries nothing back, and a reverse copy is recorded as a **REJECTED option rather than unbuilt work** (§24 v4.46, four reasons). **So the flip is reversible WITH LOSS, for as long as exactly one database is moving** — which is why the daemons stop for the flip and why refusals R1 and R4 exist. PART I is rewritten around that. **Nothing else moved: no call site is converted (G1), nothing has ever executed against Postgres (G20), nothing stops trading (G16), and G5 still serialises transactions application-wide. A rollback that exists is not permission to flip; it is permission to stop.**
 >
@@ -20,7 +26,7 @@
 >
 > **CORRECTED BEFORE MERGE, 2026-08-19 — v0.1 → v0.2, and the correction is recorded rather than tidied away.** The draft was written against a reading of `claimMigrationCredit` that had been out of date for six days. **G11 said both of its pieces were unbuilt; the writer fix landed at `225aa13` on 2026-08-13** and is on `main`. Two forward-looking claims that rested on it were false when this file was written and are struck below. **That pass concluded the gap did not close** — the backfill unbuilt, F still failing, Part G still needing its baseline. **All three were wrong, and v0.3 above says why: the backfill had already run on 2026-08-17 and the run was never recorded anywhere this pass could see.** The v0.2 reasoning is left standing rather than rewritten, because it is the clearest evidence of what an unrecorded production write costs: a careful re-derivation against a current record reached a confident and false conclusion. Line-number cites for `reverseOrderBalance` and the `sqlite_sequence` reset were re-derived at this head in the same pass; both had drifted. See §24 and the re-derivation inside G11.
 
-**READ THIS BEFORE ANYTHING ELSE. THIS RUNBOOK CANNOT BE FOLLOWED TODAY.** It is a first draft written to find out what is missing, and the missing parts are marked in it rather than papered over. **Nineteen steps of this procedure have no command to run, because the thing they depend on has not been built.** They are marked 🔴 **GAP** and numbered `G1`–`G25`, of which **G2, G3, G4, G11, G22 and G23 are CLOSED** — **twenty-five have now been identified**, six have since been built, repaired or decided, and the numbers are not reused. **G24 and G25 were found on 2026-08-20 while writing PART H, which is what a procedure is for: walking it turns up holes a survey does not.** The index is in PART A.
+**READ THIS BEFORE ANYTHING ELSE. THIS RUNBOOK CANNOT BE FOLLOWED TODAY.** It is a first draft written to find out what is missing, and the missing parts are marked in it rather than papered over. **Twenty-one steps of this procedure have no command to run, because the thing they depend on has not been built.** They are marked 🔴 **GAP** and numbered `G1`–`G27`, of which **G2, G3, G4, G11, G22 and G23 are CLOSED** — **twenty-seven have now been identified**, six have since been built, repaired or decided, and the numbers are not reused. **G24 and G25 were found writing PART H; G26 and G27 were found building the first thing that actually ran.** Walking a procedure turns up holes a survey does not, and running one turns up holes walking it does not. The index is in PART A.
 
 **A runbook that reads as complete when it is not is worse than no runbook**, because it gets trusted on the night. So where a step could not be written honestly, it is left as a hole with a name, and the hole says what has to exist before it can be filled.
 
@@ -105,9 +111,11 @@ There are **three** phases, settled 2026-08-10 (§24 *THREE PHASES, AND WHY THE 
 | ~~**G22**~~ | ~~H2~~ | ✅ **CLOSED `7483cb91`.** `scripts/rollback-to-sqlite.sh` + `scripts/rollback-delta-report.js`, 23 assertions, mutation red-proven. **Restore-and-lose: a reverse copy is a REJECTED option, not unbuilt work.** Row kept, not deleted | status doc item 17, §24 v4.46 |
 | **G24** | B17 | **The fidelity instrument does not exist as written.** `checks.py` reads a gitignored, never-deployed `wide_cols.json` at import, and its `SRC` points at the file F1 renames away. **Step G7 has a command that looks runnable and is not** | §24 v4.50, found writing PART H |
 | **G25** | B18 | **No alerting substitute for the window.** F1 silences every alert including the watchdog's own. The stopgap loop **must run off-box** — a loop on a wedged box dies with it and its silence reads as green | §24 v4.46 finding (1), v4.50 |
+| **G26** | B19 | **The application cannot BOOT on Postgres** — 11 `.exec()` calls at module load across 10 files, first `lib/tenant-creds.js:34` from `server.js:281`, 631 lines before `app.listen()`. **Not the call sites; the boot** | §24 v4.52, found building the G20 probe |
+| **G27** | B20 | **`.env` is parsed by an IIFE inside `server.js` and by nothing else**, so every `--pg` script exits 2 — G6, PART H's T1, the H4 slow loop and the H6 delta report all unusable as written | §24 v4.52 |
 | ~~**G23**~~ | ~~H1~~ | ✅ **CLOSED 2026-08-20.** Decision-maker **Ash, alone**; four triggers with thresholds (H2); window default **ONE HOUR** (H3); watch loop (H4); refusal procedure R0–R4 (H7). Row kept, not deleted | §24 v4.46, PART H |
 
-**Read the shape of that list, not just its length.** **Thirteen of the nineteen open gaps sit in PART B, before the day starts** — which is the same sentence it has always been and is still the most useful thing on this page. **What changed on 2026-08-20 is the pair that used to sit at the two ends of it.** G2 and G22 were the same missing thing seen from both sides — no built way onto Postgres, no built way back off it. **Both are now closed, and G23 with them, so the flip has a mechanism, a way back, a trigger list and a named decision-maker.** It does not have converted call sites (G1), a smoke test (G20), a freeze (G16) or a delta pass (G18), **and those four are what still make this document unusable as a checklist.** The rollback is not permission to flip. It is permission to stop.
+**Read the shape of that list, not just its length.** **Fifteen of the twenty-one open gaps sit in PART B, before the day starts** — which is the same sentence it has always been and is still the most useful thing on this page. **What changed on 2026-08-20 is the pair that used to sit at the two ends of it.** G2 and G22 were the same missing thing seen from both sides — no built way onto Postgres, no built way back off it. **Both are now closed, and G23 with them, so the flip has a mechanism, a way back, a trigger list and a named decision-maker.** It does not have converted call sites (G1), a smoke test (G20), a freeze (G16) or a delta pass (G18), **and those four are what still make this document unusable as a checklist.** The rollback is not permission to flip. It is permission to stop.
 
 ---
 
@@ -392,6 +400,71 @@ ssh root@47.239.89.63 "cd /root/roots-v2 && node scripts/diagnose_deployed_tree.
 
 ---
 
+## B19 🔴 GAP G26 — The application cannot BOOT on Postgres. Eleven statements, ten files.
+
+**WHAT THIS STEP WOULD DO** — let the process come up on the new driver at all, so that the unconverted call sites (G1) get the chance to fail one route at a time instead of the whole boot failing at once.
+
+**WHY THERE IS NO COMMAND — AND READ THIS ONE CAREFULLY, BECAUSE IT IS NOT WHAT THE GAP LIST IMPLIES.** The obstacle is **not** the 800-odd unconverted call sites throwing per request. It is that **eleven `.exec()` calls run at MODULE LOAD, in ten files**, each one an idempotent `CREATE TABLE IF NOT EXISTS … INTEGER PRIMARY KEY AUTOINCREMENT` block. Under Postgres the handle is deliberately alien and carries no `.exec`, so the **require** throws before any handler exists:
+
+| File | Line |
+|---|---|
+| `lib/tenant-creds.js` | 34 |
+| `lib/billing-lifecycle.js` | 44 |
+| `lib/integrations/registry.js` | 29 |
+| `lib/integrations/session-relay.js` | 32 |
+| `lib/platform-admin.js` | 30 |
+| `routes/backend-auth.js` | 32, 207 |
+| `routes/backend-signup.js` | 27 |
+| `routes/billing.js` | 30 |
+| `routes/saas-admin.js` | 33 |
+| `routes/store-admin.js` | 36 |
+
+**The first to fire is `lib/tenant-creds.js:34`, reached from `server.js:281` — 631 lines before `app.listen()`.** So the process prints the `[db-driver]` line and then dies. **It never listens.**
+
+**TWO FAILURES ARE STACKED HERE AND BOTH HAVE TO BE ANSWERED**, which is why this is not a one-line fix: `.exec` does not exist on the handle, **and** `INTEGER PRIMARY KEY AUTOINCREMENT` is SQLite-only DDL that Postgres would reject even if it did.
+
+**THE ENCOURAGING HALF, STATED PLAINLY BECAUSE IT IS EASY TO MISS: ELEVEN IS A MUCH SMALLER NUMBER THAN 102.** This is not the async conversion. It is ten files of boot-time schema management, and clearing it is what turns "the app cannot start" into "the app starts and individual routes fail", which is the only state in which G1 can be worked incrementally at all.
+
+**IT ALSO BLOCKS THE OBVIOUS HARNESS.** `routes/retail.js` requires `lib/tenant-creds` at load, so a bare express app mounting just that router fails on the same line. Its load-time closure is 40 modules and contains **exactly one** blocker. By contrast `routes/lookups.js` (5 modules), `lib/tenant-db.js` (4) and `database.js` (2) are **blocker-free** — which is what made the G20 probe possible without touching any of this.
+
+**WHAT MUST EXIST FIRST** — a decision about what those ten boot-time schema blocks do under Postgres (skip, translate, or move out of module load), then the change.
+
+**IF YOU REACH HERE ON THE NIGHT** — stop. **And do not read step G2's GOOD condition as reachable until this is closed** — see the correction recorded on that step.
+
+---
+
+## B20 🔴 GAP G27 — `.env` reaches the server and nothing else, so every `--pg` script exits 2
+
+**WHAT THIS STEP WOULD DO** — let the money checks, the delta report and the PART H watch loop actually run against Postgres, which is what all three are for.
+
+**WHY THERE IS NO COMMAND — THE VARIABLES EXIST AND ARE CORRECT, AND THE SCRIPTS CANNOT SEE THEM.** `TACET_PG_HOST`, `TACET_PG_DATABASE`, `TACET_PG_USER` and `TACET_PG_PASSWORD` are all present in `/root/roots-v2/.env` and the values are right. **But the `.env` parser is an IIFE inside `server.js` (line 21).** It runs for the server and for nothing else. A plain `node` process — cron, an ssh command, any script — sees none of them, and `lib/pg.js` throws at load rather than connecting to a guess, exactly as its header says it should.
+
+**MEASURED ON THE BOX, 2026-08-20, running the command this document already tells you to run:**
+
+```
+$ node scripts/check_ledger_invariants.js --pg
+LEDGER_EXIT=2
+[check_ledger_invariants] could not open the PostgreSQL pool.
+  [lib/pg] refusing to build a pool: missing TACET_PG_HOST, TACET_PG_DATABASE, TACET_PG_USER.
+```
+
+**WHAT IT BREAKS, AND THE LIST IS LONGER THAN IT LOOKS.** All four of these are written in this document and none of them works as written:
+
+- **Step G6** — the money checks after the flip. Exit 2, always.
+- **PART H trigger T1** — same command. **Exit 2 is AMBER once and RED on the second reading, so the panel would order a rollback within two minutes of the flip, for an environment reason.**
+- **The H4 slow watch loop** — same command, every ten minutes, red forever.
+- **H6 step 2, the delta report** — `rollback-delta-report.js` requires `lib/pg` the same way and dies the same way. **That is the step that captures what the window left behind, run at the moment you have decided to roll back.**
+
+**WHAT IS NOT BROKEN, AND THE DISTINCTION MATTERS ON THE NIGHT:** `scripts/rollback-to-sqlite.sh` shells out to `sudo -u postgres psql` rather than going through `lib/pg`, so **the rollback tool itself is unaffected.** So is the application, which parses `.env` itself before requiring `database.js` — verified: nothing pulls in `database.js` before that IIFE runs.
+
+**THE WORKAROUND IS ONE LINE AND IS NOT A FIX.** Prefixing the three variables inline works. So does the loader the G20 probe carries (`eval/pg-probe/g20-categories.js`), which follows `scripts/health-watchdog.js`'s `envVal()` — existing `process.env` wins, otherwise read the key out of `.env`. **`health-watchdog.js` needing its own loader for the same reason, and `lib/ops-alert.js` never consulting `process.env` at all, make this the third sighting of the same shape: the environment is assumed and is not there.**
+
+**WHAT MUST EXIST FIRST** — either the loader extracted from `server.js` into something requirable, or the three `--pg`-capable scripts carrying their own. Until then **every trigger in PART H that reads Postgres is unusable**, and the ones that matter are the money ones.
+
+**IF YOU REACH HERE ON THE NIGHT** — prefix the variables by hand and write down that you did.
+
+---
+
 # PART C — THE FREEZE QUESTION
 
 **This part has no steps, because the decision it depends on has not been made.** It sits before the copy because the copy's correctness depends on the answer.
@@ -651,7 +724,15 @@ Then remove the EXTRA entries **deliberately, one at a time, by name.**
 
 **WHAT THIS STEP WOULD DO** — prove, before customers arrive, that the application actually works on the new driver: place an order, take a payment, award points, move stock.
 
-**WHY THERE IS NO COMMAND** — **no checkout has ever executed against Postgres, anywhere.** Not in production, not in a test, not on a laptop. The checkout is unconverted (G1), `lib/pg.js` is wired to nothing (G3), the pg transaction backend is unwritten (G4), and `nextOrderNo` cannot be handed a pg handle (G6). There is nothing to smoke-test yet.
+> ✅ **PARTIALLY INSTRUMENTED, 2026-08-20 — AND THE SENTENCE BELOW IS NO LONGER TRUE AS WRITTEN.** Application code has now executed against the Postgres cluster for the first time. `eval/pg-probe/g20-categories.js` runs the body of `GET /api/retail/categories` through the real chain — `lib/db-driver` selects the driver, `database.js` returns the alien pooled handle, `tdb()` hands it back, `lib/db-seam` passes it through — and the statement executes on the cluster.
+>
+> **44 rows, 21 ms, 1381 bytes, `sha256 24c690d353f09cd7d20e698eafe279bf90a5369deca16fefd6ad1f2d52f0b4ce` — BYTE-IDENTICAL to what the live SQLite application serves.** Three consecutive runs, same hash. `.env` untouched, no `pm2` restart, no leaked pool connections.
+>
+> **DO NOT READ THAT AS G20 CLOSED. IT IS ONE STATEMENT.** It proves driver selection, the pool, authentication as `tacet_app`, the alien handle, `tdb()` identity, seam pass-through, and one statement shape — a literal SELECT with no parameters returning many rows, over `integer`, `text` and UTF-8. **It proves no write, no transaction, no savepoint, no parameter binding, no single-row `.get`, no `.changes`, no money through the numeric parser, no timestamp, and none of the 371 dynamic statements.** The checkout half of this gap is untouched, which is why the gap stays open and why the text below stands.
+>
+> **The probe lives outside the deploy allowlist on purpose** — a file under `scripts/` ships and bounces pm2, and a production restart to install a diagnostic is the wrong trade. It is committed and never deployed; copy it to the box by hand to run it.
+
+**WHY THERE IS NO COMMAND** — **no checkout has ever executed against Postgres** — see the note above for what has. Not in production, not in a test, not on a laptop. The checkout is unconverted (G1), `lib/pg.js` is wired to nothing (G3), the pg transaction backend is unwritten (G4), and `nextOrderNo` cannot be handed a pg handle (G6). There is nothing to smoke-test yet.
 
 **This is the gap that matters most against G9.** 96 dialect statements are known and can be fixed by reading. **371 dynamic statements cannot be reached by any static pass** — the only thing that finds those is executing the code. A smoke test is not a nicety here; it is the only instrument that can see that class of failure before a customer does.
 
@@ -669,7 +750,13 @@ Then remove the EXTRA entries **deliberately, one at a time, by name.**
 ssh root@47.239.89.63 "cd /root/roots-v2 && cp .env .env.pre-cutover && printf 'TACET_DB=postgres\n' >> .env && pm2 restart roots-v2 --update-env && sleep 3 && pm2 logs roots-v2 --lines 40 --nostream | grep -E '\\[db-driver\\]|running on port'"
 ```
 
-**GOOD** — the log shows **`[db-driver] TACET_DB=postgres — driver: postgres`** and the process reports it is running on port **4000**.
+> 🔴 **CORRECTION, 2026-08-20 — THIS STEP'S GOOD CONDITION CANNOT BE REACHED TODAY. GAP G26, B19.** The second half of it is unreachable: **the process does not get as far as listening.** Eleven `.exec()` calls run at module load across ten files, and the first — `lib/tenant-creds.js:34`, reached from `server.js:281` — throws `TypeError: mainDb.exec is not a function` **631 lines before `app.listen()`**, because the Postgres handle is deliberately alien and has no `.exec`.
+>
+> **So what this step actually produces today is the first half and then a dead process:** the `[db-driver]` line prints, and nothing reports a port because nothing is listening. **An operator following this step would read the driver line, see it was right, and then be looking for a port message that is never coming.** Read the whole GOOD condition, not the first clause.
+>
+> **The two halves are now independent and should be read that way.** The `[db-driver]` line proves the flag was read — that half is real and was verified by the G20 probe. **"Running on port 4000" proves the boot survived, and that half is gated on G26.**
+
+**GOOD** — the log shows **`[db-driver] TACET_DB=postgres — driver: postgres`** and the process reports it is running on port **4000**. ⚠️ **See the correction above: the second half is unreachable until G26 is closed.**
 
 **BAD** — the log still says `TACET_DB is not set`, or names a different port, or the `[db-driver]` line is absent entirely.
 
@@ -738,6 +825,8 @@ ssh root@47.239.89.63 "pm2 jlist | node -e 'const d=JSON.parse(require(\"fs\").r
 ```bash
 ssh root@47.239.89.63 "cd /root/roots-v2 && node scripts/check_ledger_invariants.js --pg; echo LEDGER_EXIT=\$?; node scripts/check_points_invariants.js --pg; echo POINTS_EXIT=\$?"
 ```
+
+> 🔴 **THIS COMMAND EXITS 2 ON THE BOX TODAY, AND IT IS THE ENVIRONMENT, NOT THE DATA. GAP G27, B20.** `.env` is parsed by an IIFE inside `server.js` and by nothing else, so a plain `node` process sees no `TACET_PG_*` and `lib/pg` refuses to build a pool. Measured 2026-08-20, running exactly the command above: `LEDGER_EXIT=2`, `refusing to build a pool: missing TACET_PG_HOST, TACET_PG_DATABASE, TACET_PG_USER`. **Prefix the three variables inline, or the step reports nothing and the BAD branch below reads it as "the checks could not run" — which is true, and tells you nothing about the flip.**
 
 **GOOD — `ALL 10 INVARIANTS PASSED`, and `LEDGER_EXIT=0`.** That is the whole pass condition. Read the exit code, not the prose.
 
@@ -859,6 +948,8 @@ ssh root@47.239.89.63 "cd /root/roots-v2 && node scripts/check_ledger_invariants
 ```
 
 **Note the redirect, it is not stylistic.** `node … | tail -6` reports `tail`'s exit code, not the checker's. Read the exit code from a command that is not in a pipeline.
+
+> 🔴 **AS WRITTEN THIS TRIGGER FIRES RED FOR THE WRONG REASON. GAP G27, B20.** The command exits **2** on the box today — not because the money is wrong but because `.env` is parsed only by `server.js`, so a plain `node` process has no `TACET_PG_*` and `lib/pg` refuses to build a pool. **Exit 2 is amber once and RED on the re-read, so this panel would order a rollback within two minutes of the flip, for an environment reason.** Prefix the three variables inline before the flip, and confirm you get a real verdict rather than a 2 — **an instrument that cannot run is not a red, and the panel cannot tell the difference.**
 
 | Reading | Colour | Why |
 |---|---|---|
@@ -1088,6 +1179,8 @@ ssh root@47.239.89.63 "cd /root/roots-v2 && node scripts/check_ledger_invariants
 printf '\a'; sleep 600; done
 ```
 
+> 🔴 **SAME DEFECT AS T1 — this loop runs the same command and will print `LEDGER_EXIT=2` every ten minutes until the variables are supplied. GAP G27, B20.**
+
 **Ten minutes, not one.** These are full scans across the money tables. On Postgres they run inside a `READ ONLY` transaction so nothing can be written, but they still compete for the same server, and hammering the database you are deciding whether to trust is not a neutral act. **Six readings an hour is enough to catch a break early and light enough to be free.**
 
 **Every reading is one comparison:** `LEDGER_EXIT=0`, `POINTS_EXIT=0`, `ALL 10 INVARIANTS PASSED`, and `ids_missing` equal to D3's number. Anything else is T1.
@@ -1158,6 +1251,8 @@ A crash leaves a stack. A watchdog bounce leaves the ordinary shutdown/startup s
 ```bash
 ssh root@47.239.89.63 "cd /root/roots-v2 && node scripts/rollback-delta-report.js" > rollback-delta-$(date +%Y%m%d-%H%M).txt
 ```
+
+> 🔴 **AND IT DOES NOT RUN AS WRITTEN EITHER. GAP G27, B20.** `rollback-delta-report.js` requires `lib/pg` the same way the checkers do, so it exits 1 with the same missing-config error. **This is the step that captures what the window left behind, executed at the moment you have already decided to roll back** — the worst possible place to meet a configuration error. Prefix the variables.
 
 **THIS STEP IS NOT OPTIONAL AND IT CANNOT BE DONE PROPERLY LATER — two independent reasons, both recorded in H10.**
 
@@ -1381,8 +1476,10 @@ ssh root@47.239.89.63 "bash /root/roots-v2/scripts/rollback.sh --list"
 3. **`rollback-delta-report.js` must be run BEFORE the rollback, and nothing in the tool says so.** Its default `--since-db` is the pre-cutover file, which the rollback renames away; and pointing it at the restored `data/roots.db` afterwards **silently omits exactly one window order**, because the reservation marker raises `retail_orders`' watermark by one. **A wrong answer, not an error.**
 4. **A T2 threshold of one is unusable without excluding `[ops-alert] SUPPRESSED`** — and the flip itself *guarantees* those lines, in the same log, from the same `console.error`. **The trigger and its own noise source are created by the same step.**
 5. **`docs/tacet-postgres-status.md` item 17 is stale.** It says the tool is *"BUILT ON `claude/survey-land-shipment-default-vw1hcn`, NOT MERGED"*. It merged at **`7483cb91`** and all three files are on `main`. Same class as G11 — the record lagging the world rather than the code.
-6. **There is no alerting substitute for the window, and it cannot live on the box. GAP G25, B18.** F1 silences every alert including the watchdog's own; the H4 loops are a hand-pasted stopgap, not a mechanism. **They must run off-box: a loop on a wedged box dies with it and its silence reads as green.**
-7. **The health watchdog does not restart every four minutes; it latches** (`!state.down`). Repeated ~4-minute restarts mean a **flap**, not a loop, and the runbook should not describe them as the same thing. See H5.
+6. **The application cannot BOOT on Postgres — 11 module-load `.exec()` calls in 10 files. GAP G26, B19.** Not the unconverted call sites; the boot. First is `lib/tenant-creds.js:34` from `server.js:281`, **631 lines before `app.listen()`**. **Step G2's GOOD condition is unreachable until this closes**, and the correction is recorded on that step.
+7. **`.env` is parsed only by `server.js`, so every `--pg` script exits 2. GAP G27, B20.** Measured on the box. Breaks step G6, PART H's **T1**, the **H4 slow loop** and **H6 step 2** — four things this document tells you to run. The rollback tool is unaffected (it shells to `psql`).
+8. **There is no alerting substitute for the window, and it cannot live on the box. GAP G25, B18.** F1 silences every alert including the watchdog's own; the H4 loops are a hand-pasted stopgap, not a mechanism. **They must run off-box: a loop on a wedged box dies with it and its silence reads as green.**
+9. **The health watchdog does not restart every four minutes; it latches** (`!state.down`). Repeated ~4-minute restarts mean a **flap**, not a loop, and the runbook should not describe them as the same thing. See H5.
 
 ---
 
