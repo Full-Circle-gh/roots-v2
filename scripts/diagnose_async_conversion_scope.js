@@ -196,9 +196,28 @@ const FN = new Set(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionE
 const ROUTER_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'use', 'all']);
 const ARRAY_CBS = new Set(['map', 'forEach', 'filter', 'sort', 'reduce', 'find', 'findIndex', 'some', 'every', 'flatMap']);
 
+// globalReturn — REQUIRED, NOT A CONVENIENCE. CommonJS wraps every module body
+// in a function, so a top-level `return` is legal and this tree uses one:
+// database.js branches on the driver at its construction point and returns early
+// under TACET_DB=postgres (G2). Without this flag espree rejects that file with
+// `'return' outside of function`, the file is dropped, and THE RUNTIME-WIDE
+// UNCONVERTED TOTAL SILENTLY FALLS BY database.js's OWN 10 BLOCKS — 102 reported
+// as 92, with nothing converted.
+//
+// That happened. It is recorded in §24 v4.46, and it is the reason this comment
+// is longer than the option: a diagnostic that loses a file loses a number, and
+// the number is what the record is built on. The run does print
+// `PARSE FAILURES: 1` and name the file — but a reader who takes the total and
+// not the header gets a figure that is wrong by ten and looks like progress.
+//
+// `sourceType: 'script'` stays: this tree is CommonJS, and parsing it as a
+// module would reject `return` again for a different reason.
 function parseFile(full) {
   const src = fs.readFileSync(full, 'utf8');
-  const ast = espree.parse(src, { ecmaVersion: 'latest', sourceType: 'script', loc: true, range: true });
+  const ast = espree.parse(src, {
+    ecmaVersion: 'latest', sourceType: 'script', loc: true, range: true,
+    ecmaFeatures: { globalReturn: true },
+  });
   const parent = new Map();
   const all = [];
   (function visit(n, p) {
@@ -713,6 +732,16 @@ console.log('    .exec()   ', totals.execByName, '(includes RegExp.exec — not 
 function printBlocks(tag, form, pick, total) {
   console.log(`\n[${tag}] TRANSACTION BLOCKS — ${form.label}`);
   console.log('  runtime total:', total, `  <- ${form.key.toUpperCase()} FORM ONLY, not a total of both`);
+  // THE TOTAL CARRIES ITS OWN CAVEAT, next to the number rather than in a header
+  // forty lines up. A file that failed to parse contributes zero blocks, so the
+  // total is an UNDERCOUNT and looks exactly like progress — 102 read as 92 when
+  // database.js stopped parsing (§24 v4.46). Whoever quotes this figure must see
+  // the doubt in the same breath as the figure.
+  if (failed.length) {
+    console.log(`  *** UNDERCOUNT: ${failed.length} file(s) did not parse and contributed 0 blocks each.`);
+    for (const f of failed) console.log(`  *** ${f.rel} — ${f.parseError}`);
+    console.log('  *** DO NOT QUOTE THIS TOTAL until they parse. It is a floor, not a count.');
+  }
   for (const r of ok) {
     const list = pick(r);
     if (!list.length) continue;
