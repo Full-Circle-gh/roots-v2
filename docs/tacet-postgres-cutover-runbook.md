@@ -1,6 +1,12 @@
-# The Postgres cutover runbook — v0.3, FIRST DRAFT, NOT EXECUTABLE
+# The Postgres cutover runbook — v0.4, FIRST DRAFT, NOT EXECUTABLE
 
 **A procedure, not a summary.** Written to be followed literally, at 3am, by one person who is not a developer, with the shop trading and no ability to improvise.
+
+> **G2, G3 AND G4 ARE CLOSED — v0.4, 2026-08-19. THE FLIP HAS A MECHANISM FOR THE FIRST TIME.** `TACET_DB` exists (`lib/db-driver.js`), `lib/pg.js` is wired to the application, and `withTransaction` leases one connection per transaction. Merged at `2961d3d`. **Three of the four critical gaps remain — G16, G20, G22 — and G2 is no longer one of them.**
+>
+> **READ WHAT THAT DOES AND DOES NOT CHANGE, BECAUSE THE TEMPTATION IS TO READ IT AS READINESS.** G2 and G22 were recorded here as the two ends of one missing thing: no built way on, no built way off. **The way ON is now built. The way OFF is not.** So the sentence at the end of PART I is unchanged and now holds for one reason instead of two: **the flip is still irreversible from its first second.** Nothing else moved — no call site is converted (G1), nothing has ever executed against Postgres (G20), nothing stops trading (G16), and the transaction queue is still keyed on the pool rather than the client (G5), which leaves transactions correct but serialised application-wide.
+>
+> **NINETEEN GAPS REMAIN OF THE TWENTY-THREE IDENTIFIED.** Numbers are not reused; G2, G3, G4 and G11 stay as closed entries.
 
 > **G11 IS CLOSED — v0.3, 2026-08-19. THE BACKFILL RAN ON 2026-08-17 AND NOBODY WROTE IT DOWN.** `retail_topup_transactions` rows **226–232** carry the seven missing ledger rows; undo file at `/root/roots-v2/data/backfill_migration_credit_ledger.undo.json`. **Check F is ZERO. All ten invariants pass.** Everything below that treated F as failing — the D3 baseline, the G6 diff, the whole apparatus for telling a flip failure from a pre-existing one — was **describing a defect that had already been repaired two days before this document was first drafted.** It is removed, not amended. **Step G6 now expects ALL 10 INVARIANTS PASSED outright.**
 >
@@ -8,7 +14,7 @@
 >
 > **CORRECTED BEFORE MERGE, 2026-08-19 — v0.1 → v0.2, and the correction is recorded rather than tidied away.** The draft was written against a reading of `claimMigrationCredit` that had been out of date for six days. **G11 said both of its pieces were unbuilt; the writer fix landed at `225aa13` on 2026-08-13** and is on `main`. Two forward-looking claims that rested on it were false when this file was written and are struck below. **That pass concluded the gap did not close** — the backfill unbuilt, F still failing, Part G still needing its baseline. **All three were wrong, and v0.3 above says why: the backfill had already run on 2026-08-17 and the run was never recorded anywhere this pass could see.** The v0.2 reasoning is left standing rather than rewritten, because it is the clearest evidence of what an unrecorded production write costs: a careful re-derivation against a current record reached a confident and false conclusion. Line-number cites for `reverseOrderBalance` and the `sqlite_sequence` reset were re-derived at this head in the same pass; both had drifted. See §24 and the re-derivation inside G11.
 
-**READ THIS BEFORE ANYTHING ELSE. THIS RUNBOOK CANNOT BE FOLLOWED TODAY.** It is a first draft written to find out what is missing, and the missing parts are marked in it rather than papered over. **Twenty-two steps of this procedure have no command to run, because the thing they depend on has not been built.** They are marked 🔴 **GAP** and numbered `G1`–`G23`, of which **G11 is CLOSED** — twenty-three were identified, one has since been repaired, and the numbers are not reused. The index is in PART A.
+**READ THIS BEFORE ANYTHING ELSE. THIS RUNBOOK CANNOT BE FOLLOWED TODAY.** It is a first draft written to find out what is missing, and the missing parts are marked in it rather than papered over. **Nineteen steps of this procedure have no command to run, because the thing they depend on has not been built.** They are marked 🔴 **GAP** and numbered `G1`–`G23`, of which **G2, G3, G4 and G11 are CLOSED** — twenty-three were identified, four have since been built or repaired, and the numbers are not reused. The index is in PART A.
 
 **A runbook that reads as complete when it is not is worse than no runbook**, because it gets trusted on the night. So where a step could not be written honestly, it is left as a hole with a name, and the hole says what has to exist before it can be filled.
 
@@ -70,9 +76,9 @@ There are **three** phases, settled 2026-08-10 (§24 *THREE PHASES, AND WHY THE 
 | Gap | Step | What is missing | Owned by |
 |---|---|---|---|
 | **G1** | B1 | The code cannot run on Postgres at all — 102 unconverted transaction blocks runtime-wide, 29 in `routes/retail.js` | status doc items 6, 7, 8 |
-| **G2** | B2 | `TACET_DB` does not exist anywhere in the repository. **The central action of this runbook has no mechanism** | status doc item 27 |
-| **G3** | B3 | `lib/pg.js` is wired to nothing. Nothing in the application requires it | status doc item 28 |
-| **G4** | B4 | The Postgres backend of `withTransaction` is not written and not tested | status doc item 29 |
+| ~~**G2**~~ | ~~B2~~ | ✅ **CLOSED `2961d3d`.** `TACET_DB` exists — `lib/db-driver.js`. **The central action of this runbook has a mechanism.** Row kept, not deleted | status doc item 27, now in PART 2 |
+| ~~**G3**~~ | ~~B3~~ | ✅ **CLOSED `2961d3d`.** `database.js` requires `lib/pg.js` under `TACET_DB=postgres`, which also arms the numeric parser | status doc item 28, now in PART 2 |
+| ~~**G4**~~ | ~~B4~~ | ✅ **CLOSED `2961d3d`.** The lease is taken before BEGIN and handed to the body, so `tx` is a distinct client | status doc item 29, now in PART 2 |
 | **G5** | B5 | The pooled-client scoping for the transaction queue is not written | status doc item 30 |
 | **G6** | B6 | `nextOrderNo` Piece 2 — nothing in the application reads the counter row that was created for it | status doc item 12 |
 | **G7** | B7 | The idempotency regex matches better-sqlite3's message text. **Failure mode is a customer charged twice, and nothing fails until money moves** | status doc item 20 |
@@ -93,7 +99,7 @@ There are **three** phases, settled 2026-08-10 (§24 *THREE PHASES, AND WHY THE 
 | **G22** | H2 | **No reverse copy from Postgres back to SQLite.** The rollback's central action has no tool | status doc item 17 |
 | **G23** | H1 | No rollback trigger criteria, no named decision-maker, no rollback window | status doc item 17 |
 
-**Read the shape of that list, not just its length.** Fourteen of the twenty-two open gaps sit in Part B, before the day starts. Two of them — **G2 and G22** — are the two ends of the same missing thing: there is no built way to move onto Postgres, and no built way to move back off it.
+**Read the shape of that list, not just its length.** Eleven of the nineteen open gaps sit in Part B, before the day starts. **G2 and G22 were the two ends of the same missing thing — no built way onto Postgres, and no built way back off it. G2 closed on 2026-08-19 and G22 did not.** The asymmetry is now the point: there is a way on and no way off, so the flip is irreversible from its first second for one reason rather than two.
 
 ---
 
@@ -129,39 +135,35 @@ git fetch origin -q && git checkout origin/main -q && npm install --no-audit --n
 
 ---
 
-## B2 🔴 GAP G2 — `TACET_DB` does not exist
+## B2 ✅ CLOSED — GAP G2, the switch exists
 
-**WHAT THIS STEP WOULD DO** — this is the action the entire runbook is built around: set one value, restart, and the application is on Postgres.
+**CLOSED `2961d3d`, 2026-08-19.** `lib/db-driver.js` reads `TACET_DB` once at module load and exports a constant; `database.js` branches on it at the construction point and nowhere else.
 
-**WHY THERE IS NO COMMAND** — `TACET_DB` appears **nowhere in the repository**. Its form and location are specified in §24 *CUTOVER SEQUENCING* — read once at module load and exported as a constant, the shape `lib/tenant-db.js:87` already uses — and nothing has been built. There is no setting to set.
+**Three things about it that the flip step depends on:**
 
-**WHAT MUST EXIST FIRST** — status doc item 27.
+- **Missing selects SQLite and says so. An unrecognised value refuses to boot.** `postgresql`, `pg`, `postgre` are near-misses for what someone meant, and a near-miss silently treated as a default is indistinguishable from the flag never being set — the operator believes the flip happened while the application keeps writing to SQLite.
+- **The boot line names the driver, so step G2 can ASSERT rather than assume.** `[db-driver] TACET_DB=postgres — driver: postgres`, or `[db-driver] TACET_DB is not set — driver: sqlite (default)`. Read it; do not infer it from the fact that you edited `.env`.
+- **The handle it selects shares NO method name with better-sqlite3** — no `.prepare`, `.exec`, `.transaction`, `.pragma`. Deliberate: an adapter would hand 3,339 synchronous call sites a Promise where they expect a row and none of them would throw. See §24 v4.45.
 
-**IF YOU REACH HERE ON THE NIGHT** — stop. **This is the single gap that makes the whole document inert.** Every step after it assumes a switch that has not been made.
-
----
-
-## B3 🔴 GAP G3 — `lib/pg.js` is wired to nothing
-
-**WHAT THIS STEP WOULD DO** — give the application a live Postgres connection with the read-side money converter already armed.
-
-**WHY THERE IS NO COMMAND** — the file exists and is deliberately inert. Its own header says so: *"THIS MODULE IS NOT WIRED INTO THE APPLICATION. Nothing requires it yet."* Requiring the module is what arms the numeric parser, so until something requires it, money read back from Postgres arrives as text.
-
-**WHAT MUST EXIST FIRST** — status doc item 28.
-
-**IF YOU REACH HERE ON THE NIGHT** — stop.
+**IF YOU REACH HERE ON THE NIGHT** — nothing. This is not a stop. **But selecting the driver is not the same as being able to run on it**, and the rest of Part B still applies.
 
 ---
 
-## B4 🔴 GAP G4 — The Postgres backend of `withTransaction` is not written
+## B3 ✅ CLOSED — GAP G3, `lib/pg.js` is wired
 
-**WHAT THIS STEP WOULD DO** — make a transaction on Postgres behave the way the converted call sites already assume it does.
+**CLOSED `2961d3d`, 2026-08-19.** `database.js` requires it under `TACET_DB=postgres` — the only place in the application that does. **Requiring it is also what arms the global numeric type parser**, without which money read back from Postgres arrives as text. Its load-time throw on missing `TACET_PG_*` is kept: selecting Postgres without saying where Postgres is stops the boot rather than connecting to a guess.
 
-**WHY THERE IS NO COMMAND** — the pg backend, in which a pool checkout makes `tx` a distinct client, is **not written and not tested**. Every one of the 27 already-converted blocks is running against the SQLite backend only.
+**IF YOU REACH HERE ON THE NIGHT** — nothing.
 
-**WHAT MUST EXIST FIRST** — status doc item 29.
+---
 
-**IF YOU REACH HERE ON THE NIGHT** — stop.
+## B4 ✅ CLOSED — GAP G4, the pg transaction backend exists
+
+**CLOSED `2961d3d`, 2026-08-19.** `withTransaction` leases one connection before `BEGIN` and hands it to the body, so `tx` is a distinct client. On a pool, consecutive statements can land on different connections — `BEGIN` comes apart from its body and `COMMIT` may reach a connection that never began anything. The savepoint scheme was already designed and is followed, not re-derived: named by the depth it opens at, both statements on the failure path.
+
+**WHAT IT DOES NOT CLOSE, AND THIS MATTERS ON THE NIGHT.** The queue is still keyed on the pool rather than on the checked-out client — **G5**. Transactions are correct and **serialised application-wide**: they do not fail, they take turns. And a nested call made on the pool handle rather than on `tx` is **refused by name rather than deadlocking**, which is a guard, not a fix.
+
+**IF YOU REACH HERE ON THE NIGHT** — nothing, but read B5.
 
 ---
 
@@ -601,16 +603,25 @@ Then remove the EXTRA entries **deliberately, one at a time, by name.**
 
 ---
 
-## G2 🔴 (depends on GAP G2) — Set `TACET_DB` and restart
+## G2 — Set `TACET_DB` and restart (mechanism exists; the flip itself is still gated)
 
-**WHAT THIS STEP WOULD DO** — the flip.
+**RUN** — only after every item in PART B is green:
 
-**WHY THERE IS NO COMMAND** — see B2. The setting does not exist. When it does, this step is an edit to the untracked `.env` on the box followed by a restart, and **two things about that must be written into the step at the time:**
+```bash
+ssh root@47.239.89.63 "cd /root/roots-v2 && cp .env .env.pre-cutover && printf 'TACET_DB=postgres\n' >> .env && pm2 restart roots-v2 --update-env && sleep 3 && pm2 logs roots-v2 --lines 40 --nostream | grep -E '\\[db-driver\\]|running on port'"
+```
 
-- **`.env` is untracked and is not part of the deploy.** No git operation puts `TACET_DB` on the box and no git operation takes it off. Changing it is a manual edit, and it is the only record that the flip happened.
-- **`pm2 restart … --update-env` is what re-reads `.env`, and it has bitten before** — it wiped `PORT` on a previous occasion and the process came up on the wrong port. Whatever this step ends up being, it must **assert** the process came back on `:4000` rather than assume it.
+**GOOD** — the log shows **`[db-driver] TACET_DB=postgres — driver: postgres`** and the process reports it is running on port **4000**.
 
-**IF YOU REACH HERE ON THE NIGHT** — stop.
+**BAD** — the log still says `TACET_DB is not set`, or names a different port, or the `[db-driver]` line is absent entirely.
+
+**IF BAD**
+
+- **`TACET_DB is not set` after you set it** means the process did not re-read `.env`. That is `--update-env` not doing what you assumed, which has happened before — it wiped `PORT` on a previous occasion and the process came up on the wrong port. **Do not assume; the line is there to be read.**
+- **A wrong port** means the same thing with a different symptom. Restore `.env.pre-cutover` and start again.
+- **No `[db-driver]` line at all** means the process is running code older than `2961d3d`. Check what is actually deployed before touching anything else.
+
+**Two things about this step that do not change.** `.env` is untracked and is not part of the deploy — no git operation puts `TACET_DB` on the box and none takes it off, so this edit is manual and **it is the only record that the flip happened**. And this restarts `roots-v2` ALONE: the six channel daemons keep their SQLite handles until they are bounced separately (**G21**), which is the two-databases-diverging default described in PART I.
 
 ---
 
@@ -807,7 +818,7 @@ The point of no return is **the first write that lands in Postgres and does not 
 
 Every one of these. This list is the shortest honest form of the whole document:
 
-1. **The code runs on both drivers** — G1, and the four pieces under it: G2, G3, G4, G5.
+1. **The code runs on both drivers** — G1, and the four pieces under it: ~~G2~~, ~~G3~~, ~~G4~~ (all closed `2961d3d`) and **G5, which is not.** The switch, the pool and the transaction backend exist; **the call sites do not**, so G1 is untouched and is still the largest single item on this list.
 2. **The order counter is read by the application and seeded from live data** — G6, then step F2 in its correct position.
 3. **The money guards survive the driver change** — G7 the idempotency regex, G12 the refund race.
 4. **A backup exists that has been restored onto hardware where `tacet_app` does not exist** — G14.
@@ -815,7 +826,7 @@ Every one of these. This list is the shortest honest form of the whole document:
 6. **The application has been exercised end to end on Postgres by something other than a customer** — G20.
 7. **A rollback exists** — G22 and G23.
 
-**Say the last one plainly, because it is the reason this draft exists:** with no reverse copy and no `TACET_DB`, the flip is currently **irreversible from its first second.** Everything else on this list is work. That one is the difference between a reversible night and an irreversible one.
+**Say the last one plainly, because it is the reason this draft exists:** with no reverse copy, the flip is **irreversible from its first second.** **That sentence has NOT changed with `TACET_DB`, and the change makes it sharper rather than weaker.** G2 and G22 were the two ends of one missing thing; **one end is now built and the other is not**, so the asymmetry is the whole finding: there is a way onto Postgres and no way back off it. Everything else on this list is work. That one is the difference between a reversible night and an irreversible one, and it did not move. Everything else on this list is work. That one is the difference between a reversible night and an irreversible one.
 
 ---
 
