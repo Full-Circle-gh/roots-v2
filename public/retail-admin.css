@@ -11516,6 +11516,54 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
      map so it reads as a caption on the state, not as a label on the pin. */
   #order-drawer .qp-state { font-size: 12.5px; color: var(--tacet-graphite, var(--text-2)); margin-top: 8px; }
 
+  /* ── PICK A PLACE — the sibling surface ──────────────────────────────────
+     Shown when the name search found several places and could not choose. It
+     borrows the point surface's frame (.qp, .qp-h, .qp-sub, .qp-grid) on
+     purpose: same question shape, same place in the drawer, so an operator who
+     has seen one reads the other without relearning it. The list simply takes
+     the column the map takes there.
+
+     NOTHING IS PRE-SELECTED, and there is no styling here for a selected
+     state — because there is no selected state. Each row IS the action; a
+     highlighted default with a Confirm under it would be a guess wearing a
+     decision's clothes, which is what the pinless map next door exists to
+     prevent. Whatever is styled here has to be reachable by choosing, and
+     choosing ends the surface. */
+  #order-drawer .qpc-list { display: flex; flex-direction: column; gap: 8px; }
+  #order-drawer .qpc-opt {
+    display: flex; align-items: flex-start; gap: 10px; width: 100%; text-align: left;
+    padding: 11px 12px; cursor: pointer;
+    background: var(--bg-pane); border: 1px solid var(--line); border-radius: var(--r-lg);
+    transition: background .15s ease, border-color .15s ease;
+  }
+  #order-drawer .qpc-opt:hover { background: var(--bg-elev-1); border-color: var(--line-strong, var(--line)); }
+  #order-drawer .qpc-opt:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+  #order-drawer .qpc-opt[disabled] { opacity: .5; cursor: progress; }
+  #order-drawer .qpc-opt-main { flex: 1; min-width: 0; }
+  #order-drawer .qpc-name {
+    display: block; font-size: 14.5px; font-weight: 600; color: var(--text-1);
+    line-height: 1.4; overflow-wrap: anywhere;
+  }
+  #order-drawer .qpc-addr {
+    display: block; font-size: 12px; line-height: 1.5; color: var(--text-3);
+    margin-top: 3px; overflow-wrap: anywhere;
+  }
+  /* How far the rider goes. Tabular so three rows compare down the column at a
+     glance — the wrong-district hit is spotted by the number being unlike the
+     others, which only works if they line up. Never coloured by threshold: the
+     server refuses past the limit, and an amber number here would imply this
+     surface enforces something it does not. */
+  #order-drawer .qpc-km {
+    flex: none; font-size: 12.5px; color: var(--text-2);
+    font-variant-numeric: tabular-nums; padding-top: 1px;
+  }
+  #order-drawer .qpc-none { font-size: 12.5px; color: var(--text-3); margin-top: 10px; line-height: 1.6; }
+  #order-drawer .qpc-link {
+    background: none; border: 0; padding: 0; cursor: pointer;
+    font: inherit; color: var(--brand); text-decoration: underline;
+  }
+  #order-drawer .qpc-link[disabled] { opacity: .5; cursor: progress; }
+
   #order-drawer .qp-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
   #order-drawer .qp-actions .btn[disabled] { opacity: .5; cursor: not-allowed; }
   #order-drawer .qp-hint { font-size: 12px; color: var(--text-3); }

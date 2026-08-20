@@ -4410,7 +4410,9 @@ db.exec(`
 // same-city, same-day orders are eligible (inventory.isQingyunSameCityToday) —
 // out-of-city, later-day, and marketplace (Meituan/Eleme) orders are never queued.
 // status: pending → processing → done | error | skipped (ineligible at drain)
-//                 | needs_point (waiting for a human to confirm the drop-off).
+//                 | needs_point (waiting for a human to confirm the drop-off)
+//                 | awaiting_choice (the name search found several places and
+//                   could not choose — waiting for a human to pick one).
 db.exec(`
   CREATE TABLE IF NOT EXISTS qingyun_push_queue (
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -4460,6 +4462,30 @@ addColumn('qingyun_push_queue', 'needs_point_at',    'DATETIME');
 addColumn('qingyun_push_queue', 'guessed_lat',       'REAL');
 addColumn('qingyun_push_queue', 'guessed_lng',       'REAL');
 addColumn('qingyun_push_queue', 'guessed_precision', 'TEXT');
+
+// ── Waiting for a human to say WHICH PLACE ────────────────────────────────
+// The other half of the same idea, and a different question. A Chinese
+// residential address is a named place plus a last-mile tail
+// (祈福新村倚湖湾 · 5座1106); the named half is looked up by NAME SEARCH, because
+// geocoding indexes streets and house numbers and has no 小区 index at all.
+// When that search comes back with several places and none is obviously the
+// one (lib/qingyun-payload POI_AUTO_SCORE), the row parks here instead — with
+// the candidates, because they are what the operator answers with.
+//
+//   candidates_json — the ranked top few, as stored by AWAITING_CHOICE_SQL:
+//                     [{ lat, lng, name, address, score, shared, dropKm,
+//                        provider, rank }] with lat/lng as GCJ-02 ×1e6 ints,
+//                     matching what order/create takes. Read through
+//                     lib/qingyun-queue readCandidates(), which treats absent
+//                     or unparseable JSON as "no candidates" — that degrades
+//                     to the map surface rather than to an empty question.
+//
+// needs_point_at is REUSED as the parked-at stamp for both states rather than
+// growing a second timestamp: every reader wants "how long has this been
+// waiting", the two states are mutually exclusive on a row, and a second column
+// would be null in exactly the cases the first one is set. The status says
+// which kind of wait it is.
+addColumn('qingyun_push_queue', 'candidates_json',   'TEXT');
 
 // Meituan-only bundles (套餐/combos) that have no single roots product. Each is
 // defined as a set of component products; its sellable stock is computed as the

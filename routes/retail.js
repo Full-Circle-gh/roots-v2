@@ -14956,15 +14956,24 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     // opens it, which is why it needs a surface that gathers the parked orders
     // rather than a counter.
     //
-    // ONLY 'needs_point'. 'error' and 'skipped' are the pre-existing backlog
-    // that D12 deliberately did not migrate; they are not resolvable from this
-    // block and would bury the rows that are.
+    // BOTH parked states, and only those two. 'error' and 'skipped' are the
+    // pre-existing backlog that D12 deliberately did not migrate; they are not
+    // resolvable from this block and would bury the rows that are.
+    //
+    // 'awaiting_choice' belongs here for exactly the reason 'needs_point' does,
+    // and leaving it out would have been the worse bug of the two. Nothing
+    // retries a parked row and nothing times it out — the drain filters on
+    // 'pending', so both states are invisible to it by design. A row that is
+    // also invisible HERE waits until somebody happens to open that order,
+    // which for a same-day delivery means until the customer asks where it is.
+    // The block gathers orders nobody is coming for; which question they are
+    // parked on is the drawer's business, not this list's.
     //
     // Store-scoped on o.store_id like every sibling here, NOT on the queue
     // row's store_code: store_code is where the RIDER collects, which a
     // ship-from override can move independently of the order's own store, and
     // a store-locked operator's worklist should follow the order.
-    const npWhere = "q.status = 'needs_point' AND q.qingyun_order_id IS NULL"
+    const npWhere = "q.status IN ('needs_point', 'awaiting_choice') AND q.qingyun_order_id IS NULL"
       + " AND o.status NOT IN ('cancelled', 'refunded', 'delivered')"
       + (storeId ? ' AND o.store_id = @store_id' : '');
     const npCount = tdb().prepare(
@@ -23219,6 +23228,31 @@ function qingyunShipFromState(retailOrderId) {
       guess: (q.guessed_lat != null && q.guessed_lng != null)
         ? { lat: q.guessed_lat, lng: q.guessed_lng, precision: q.guessed_precision || null }
         : null,
+      // ── Waiting for a person to pick a place ──────────────────────────
+      // The sibling state. The name search found several places and could not
+      // choose between them, so the answer is already on the screen and the
+      // operator picks rather than taps a map.
+      //
+      // `awaiting_choice` is reported separately from `awaiting_point` and NOT
+      // folded into it, because the drawer draws a different surface for each
+      // and the two questions are opposites — "which of these" versus "where is
+      // it". Both can be false; neither implies the other.
+      //
+      // Coordinates go out in DEGREES. They are stored ×1e6 because that is
+      // what order/create takes, and every client-side reader here (the map, the
+      // pin bounds-check, the confirm endpoint) works in degrees — converting at
+      // the boundary keeps the ×1e6 representation where it belongs, which is
+      // the wire format and nowhere else.
+      awaiting_choice: qingyunQueue.awaitingChoice(q),
+      candidates: qingyunQueue.readCandidates(q).map((c, i) => ({
+        idx: i,
+        name: c.name || '',
+        address: c.address || '',
+        lat: c.lat != null ? c.lat / 1e6 : null,
+        lng: c.lng != null ? c.lng / 1e6 : null,
+        drop_km: c.dropKm != null ? c.dropKm : null,
+        score: c.score != null ? c.score : null,
+      })).filter(c => c.lat != null && c.lng != null),
       // The grade in words. Never a code, and never a dash: an unrecorded
       // grade is a fact about what we know, so it gets said in words too.
       guess_grade: _pointGradeWords(q.guessed_precision),
@@ -23494,6 +23528,143 @@ router.post('/api/retail-admin/orders/:id/qingyun/confirm-point', requireRetailA
   logActivity(req.user.id, req.user.username, 'qingyun_confirm_point', 'retail_order', id,
     { lat: pin.lat, lng: pin.lng, source: 'staff_pin' }, req.ip);
   res.json({ success: true, requeued, push_status: 'pending' });
+});
+
+// ── Pick which place, when the name search found several ──────────────────
+// A SIBLING of confirm-point above, not an extension of it, and the reason is
+// the provenance rather than tidiness.
+//
+// The two endpoints leave different states ('awaiting_choice' vs 'needs_point')
+// and stamp different sources ('poi_picked' vs 'staff_pin'), and those pairings
+// have to be fixed by the ROUTE. One endpoint serving both would have to read
+// the body shape to decide which state it may leave and which source to write —
+// which hands the client the choice of provenance. A stale drawer posting
+// {lat,lng} could then stamp 'staff_pin', the strongest source in the system,
+// onto a row nobody ever opened a map for. Two routes, each with exactly one
+// state it accepts and one source it writes, cannot be talked into that.
+//
+// The second reason is the payload. This takes an INDEX into the candidates the
+// server itself stored, never coordinates: the operator is choosing between
+// things this server produced, so nothing a page inspector types can introduce
+// a position that was never in the list. confirm-point necessarily accepts
+// coordinates, because a map tap IS a coordinate. An endpoint that sometimes
+// takes a point and sometimes refuses one is a worse contract than two that
+// each take one thing.
+//
+// Guards are otherwise identical to confirm-point, deliberately: same order in
+// the same sequence, same compare-and-swap on the row not having moved, same
+// 409 vocabulary, so the two read as a pair.
+router.post('/api/retail-admin/orders/:id/qingyun/confirm-place', requireRetailAdmin, express.json(), async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const idx = Number(req.body && req.body.idx);
+  if (!Number.isInteger(idx) || idx < 0) return res.status(400).json({ success: false, error: 'bad_choice' });
+
+  const q = _qingyunPushRow(id);
+  if (!q) return res.status(404).json({ success: false, error: 'order_not_in_qingyun' });
+  if (q.qingyun_order_id) {
+    return res.json({ success: true, already_created: true, qingyun_order_id: String(q.qingyun_order_id) });
+  }
+  if (!qingyunQueue.awaitingChoice(q)) {
+    return res.status(409).json({ success: false, error: 'not_awaiting_choice', push_status: q.status });
+  }
+
+  // The candidate is read from the ROW, not from the request. The index is the
+  // only thing the client gets to say.
+  const candidates = qingyunQueue.readCandidates(q);
+  const pick = candidates[idx];
+  if (!pick) return res.status(409).json({ success: false, error: 'choice_gone', count: candidates.length });
+
+  // Stored ×1e6 (the wire format), applied in degrees (every reader's format).
+  // Bounds-checked by the same reader the customer address form uses, so a
+  // corrupt stored candidate is caught here rather than at a rider's phone.
+  const pin = addressPin.readClientPin({ lat: pick.lat / 1e6, lng: pick.lng / 1e6 });
+  if (!pin) return res.status(422).json({ success: false, error: 'bad_candidate' });
+
+  const o = tdb().prepare('SELECT id, order_no, status, address_json FROM retail_orders WHERE id = ?').get(id);
+  if (!o) return res.status(404).json({ success: false, error: 'not_found' });
+  if (qingyunQueue.isClosedOrderStatus(o.status)) {
+    return res.status(409).json({ success: false, error: 'order_closed', status: o.status });
+  }
+  let addr = {};
+  try { addr = JSON.parse(o.address_json || '{}') || {}; } catch { addr = {}; }
+  if (addr.pickup) return res.status(422).json({ success: false, error: 'pickup_order' });
+
+  // NO NETWORK CALL HERE, same as confirm-point and for the same reason: the
+  // push is the drain's job, and an await on a remote call inside this block
+  // would hold the shared handle open and queue every other writer behind it.
+  let requeued = false;
+  try {
+    requeued = await withTransaction(tdb(), (tx) => {
+      // 'poi_picked', never 'customer_pin' and never 'staff_pin'. The operator
+      // chose a name off a list; they did not tap a building. The source has to
+      // say which of those happened, because lib/qingyun-payload's distance
+      // predicate reads it: 'staff_pin' is exempt from MAX_DROP_KM and this is
+      // deliberately not, so a picked place that lands 30km out is still
+      // refused. No precision grade is invented either — nobody measured one.
+      tx.prepare('UPDATE retail_orders SET address_json = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(
+        JSON.stringify({ ...addr, lat: pin.lat, lng: pin.lng, geo_source: 'poi_picked', geo_precision: null }), id);
+      const r = tx.prepare(qingyunQueue.CONFIRM_CHOICE_SQL).run(id);
+      if (!r.changes) throw new Error('row_moved');
+      return true;
+    });
+  } catch (e) {
+    if (e.message === 'row_moved') {
+      const fresh = _qingyunPushRow(id) || {};
+      return res.status(409).json({
+        success: false, error: 'row_moved', push_status: fresh.status || null,
+        qingyun_order_id: fresh.qingyun_order_id ? String(fresh.qingyun_order_id) : null,
+      });
+    }
+    console.error('[qingyun confirm-place]', e.message);
+    return res.status(500).json({ success: false, error: 'confirm_failed' });
+  }
+
+  // The NAME goes in the activity log, not just the coordinate. When a delivery
+  // turns out to have gone to the wrong 小区, the question asked afterwards is
+  // "which one did they pick", and a pair of decimals does not answer it.
+  logActivity(req.user.id, req.user.username, 'qingyun_confirm_place', 'retail_order', id,
+    { lat: pin.lat, lng: pin.lng, source: 'poi_picked', name: pick.name || '', idx }, req.ip);
+  res.json({ success: true, requeued, push_status: 'pending', name: pick.name || '' });
+});
+
+// ── None of these is the place — give me a map instead ────────────────────
+// Moves the row from 'awaiting_choice' to 'needs_point' so the existing confirm
+// surface renders. A STATE change and nothing else: no pin, no source, no
+// attempt spent.
+//
+// It is a route rather than a client-side re-render because the two surfaces
+// are bound to two server states, and confirm-point's SQL is pinned to
+// 'needs_point'. A drawer that merely drew the map over an 'awaiting_choice'
+// row would let the operator tap a point, press confirm, and be told the row
+// moved — the work discarded with an error that describes none of it.
+//
+// It is also not a Retry. Retry re-runs the push, which re-runs the same name
+// search against the same unchanged address and parks it back in
+// 'awaiting_choice' about a minute later; the operator would ask for a map and
+// be handed the same list. See REJECT_CHOICE_SQL.
+router.post('/api/retail-admin/orders/:id/qingyun/reject-places', requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const q = _qingyunPushRow(id);
+  if (!q) return res.status(404).json({ success: false, error: 'order_not_in_qingyun' });
+  if (q.qingyun_order_id) {
+    return res.json({ success: true, already_created: true, qingyun_order_id: String(q.qingyun_order_id) });
+  }
+  if (!qingyunQueue.awaitingChoice(q)) {
+    return res.status(409).json({ success: false, error: 'not_awaiting_choice', push_status: q.status });
+  }
+  // The SAME message the payload builder writes when it parks a row for a
+  // point, taken from the module rather than retyped: the drawer renders
+  // last_error raw, and a row that arrives at the map surface by this route
+  // must read identically to one that arrived there by the ordinary path.
+  const { NEEDS_POINT_MESSAGE } = require('../lib/qingyun-payload');
+  const r = tdb().prepare(qingyunQueue.REJECT_CHOICE_SQL).run(NEEDS_POINT_MESSAGE, id);
+  if (!r.changes) {
+    const fresh = _qingyunPushRow(id) || {};
+    return res.status(409).json({ success: false, error: 'row_moved', push_status: fresh.status || null });
+  }
+  logActivity(req.user.id, req.user.username, 'qingyun_reject_places', 'retail_order', id,
+    { candidates: qingyunQueue.readCandidates(q).map(c => c.name || '') }, req.ip);
+  res.json({ success: true, push_status: 'needs_point' });
 });
 
 // ── Reschedule an expired delivery ────────────────────────────────────────

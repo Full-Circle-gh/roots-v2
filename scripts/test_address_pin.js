@@ -501,11 +501,17 @@ async function extraSuites() {
   });
   it('the requeue SQL only ever touches a copy-less row an edit could fix', () => {
     assert.match(qingyunQueue.REQUEUE_SQL, /qingyun_order_id IS NULL/);
-    // 'needs_point' joined 'error' here: a corrected address is precisely what
-    // might place an order we could not place. 'skipped' deliberately did not —
-    // it means cancelled/refunded/delivered or not-same-city, and an edit is no
-    // evidence about either.
-    assert.match(qingyunQueue.REQUEUE_SQL, /status IN \('error', 'needs_point'\)/);
+    // 'needs_point' joined 'error' here, and 'awaiting_choice' joined both: a
+    // corrected address is precisely what might place an order we could not
+    // place, and it is equally what changes the text the name search runs on —
+    // a candidate list built from an address that no longer exists is worse
+    // than none, because it still looks answerable.
+    //
+    // 'skipped' deliberately did NOT join them — it means cancelled / refunded
+    // / delivered or not-same-city, and an edit is no evidence about either.
+    // That exclusion is the invariant this test exists for; the membership list
+    // grows as parked states are added.
+    assert.match(qingyunQueue.REQUEUE_SQL, /status IN \('error', 'needs_point', 'awaiting_choice'\)/);
     assert.doesNotMatch(qingyunQueue.REQUEUE_SQL, /'skipped'/);
     assert.match(qingyunQueue.REQUEUE_SQL, /attempts = 0/);
   });

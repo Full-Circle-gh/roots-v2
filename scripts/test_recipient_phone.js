@@ -342,34 +342,45 @@ it('the daemon uses the shared outcome, and the catch block is in the right ORDE
   assert.ok(/qingyunQueue\.pushFailureOutcome\(\{[\s\S]{0,120}attemptsBefore: row\.attempts/.test(daemonSrc),
     'daemon must not re-implement the decision');
 
-  // Three branches, three different meanings, and each of the first two exits
+  // Four branches, four different meanings, and each of the first three exits
   // with `continue`. They must appear in this order:
   //
-  //   1. shouldHoldForGeocoder  — the provider is down. Give the attempt back.
-  //   2. shouldMarkNeedsPoint   — the address resolved to an area, not a point.
-  //                               Park it; no attempt, no page.
-  //   3. pushFailureOutcome     — a real failure. One attempt, or five.
+  //   1. shouldHoldForGeocoder    — the provider is down. Give the attempt back.
+  //   2. shouldMarkAwaitingChoice — the NAME search found several places and
+  //                                 could not choose. Park it with the list.
+  //   3. shouldMarkNeedsPoint     — nothing could be placed at all. Park it
+  //                                 with a map; no attempt, no page.
+  //   4. pushFailureOutcome       — a real failure. One attempt, or five.
   //
-  // This is asserted because branches 2 and 3 were written a fortnight apart, on
+  // This is asserted because branches 3 and 4 were written a fortnight apart, on
   // separate branches, and first met in a rebase — the conflict landed exactly
-  // here. A resolution that dropped either would fail silently: parked orders
+  // here. A resolution that dropped any would fail silently: parked orders
   // would burn attempts and page ops, or a refused phone would retry four more
   // times. Positions, not just presence, because "both are in the file" was
   // already true of the broken resolutions.
+  //
+  // Branch 2 joined later, with POI-first resolution. Its marker is mutually
+  // exclusive with branch 3's, so the order between those two cannot change
+  // behaviour today — it is pinned anyway, because that exclusivity is a
+  // property of the thrower and this file cannot see it.
   const holdAt    = daemonSrc.indexOf('shouldHoldForGeocoder');
+  const choiceAt  = daemonSrc.indexOf('shouldMarkAwaitingChoice');
   const pointAt   = daemonSrc.indexOf('shouldMarkNeedsPoint');
   const outcomeAt = daemonSrc.indexOf('pushFailureOutcome');
   assert.ok(holdAt > -1, 'the geocoder hold branch is missing');
+  assert.ok(choiceAt > -1, 'the awaiting_choice branch is missing');
   assert.ok(pointAt > -1, 'the needs_point branch is missing — a rebase dropped it');
   assert.ok(outcomeAt > -1, 'the failure outcome is missing');
-  assert.ok(holdAt < pointAt, 'a held row must not be parked as needs_point');
+  assert.ok(holdAt < choiceAt, 'a held row must not be parked for a choice');
+  assert.ok(choiceAt < pointAt, 'when there is a list to pick from, the pick state wins');
   assert.ok(pointAt < outcomeAt,
     'a parked row must never reach the outcome — it would spend an attempt and page ops');
 
-  // …and both early branches really do exit, or the order above buys nothing.
+  // …and all three early branches really do exit, or the order above buys
+  // nothing.
   const between = daemonSrc.slice(holdAt, outcomeAt);
-  assert.strictEqual((between.match(/\n\s*continue;/g) || []).length, 2,
-    'the hold and needs_point branches must each continue, not fall through');
+  assert.strictEqual((between.match(/\n\s*continue;/g) || []).length, 3,
+    'the hold, awaiting_choice and needs_point branches must each continue, not fall through');
 });
 it('createOrder failures carry the structured code the classifier needs', () => {
   assert.ok(/err\.qyCode = res\.code;/.test(daemonSrc) && /err\.qyMsg = res\.msg;/.test(daemonSrc),
