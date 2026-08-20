@@ -2,6 +2,38 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
+// ═══ THE DRIVER BRANCH (G2) — THE ONLY EDIT THIS FILE CARRIES ════════════
+//
+// This file is the construction point: it builds the handle at `new Database(...)`
+// below and exports it at the bottom, and 94 files require it — 47 in runtime
+// code, 47 in scripts/, including all six channel daemons. Most bind it at
+// require time rather than per call, so this is the one place a single decision
+// reaches all of them. Decisions §24 (CUTOVER SEQUENCING) settled that the switch
+// lives here and not in lib/db-seam.js, which receives an already-built handle
+// and can neither substitute a driver nor alter return types.
+//
+// THE BRANCH IS AN EARLY RETURN, NOT AN `if/else` AROUND THE FILE, AND THAT IS
+// THE POINT. Everything below this block is byte-for-byte what it was before —
+// the diff that introduced this branch inserts lines and modifies none. That is
+// the proof that the SQLite path is unchanged, and it is a stronger proof than
+// any test could give: there is no altered line for a behaviour change to hide in.
+// A top-level `return` is valid in CommonJS (the module body is a function), and
+// it is what keeps that property. Do not restructure this into an if/else.
+//
+// UNDER POSTGRES NOTHING BELOW RUNS, WHICH IS DELIBERATE AND LOAD-BEARING. The
+// rest of this file is a schema manager, not a connection module: it opens the
+// SQLite file, sets two SQLite pragmas, execs schema.sql, and runs 305
+// `addColumn()` calls whose "already migrated" case is a catch on
+// /duplicate column/i — better-sqlite3's message text. None of that is valid or
+// wanted against Postgres, whose duplicate-column message does not match that
+// regex and would therefore throw rather than skip.
+const { IS_POSTGRES } = require('./lib/db-driver');
+if (IS_POSTGRES) {
+  const { makeUnwiredPgHandle } = require('./lib/pg-handle');
+  module.exports = makeUnwiredPgHandle();
+  return;
+}
+
 const DATA_DIR = path.join(__dirname, 'data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
