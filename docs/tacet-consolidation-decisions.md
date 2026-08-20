@@ -2627,6 +2627,18 @@ The money cluster's population was drawn from `INSERT` sites into the eight ledg
 
 **WHAT ALL THREE SHARE: a count that was correct about its own criterion and silent about the criterion's edge.** Not one of them was wrong. Each was read as complete because nothing next to it said what it had matched on. **The remedy is the same in every case and it is nearly free — state the criterion beside the count** — and it is why the design document's population section names its derivation (`INSERT` sites, eight ledger tables, 31 sites, 25 owners, six excluded) instead of asserting a total and leaving the technique implicit.
 
+**The deploy pipeline re-stamps `sw.js`, so the CACHE string in a commit never ships.**
+
+The installer rewrites the `CACHE` constant in `public/sw.js` to a deploy timestamp after installing it — for example `roots-v2-shell-20260820-170427`. Whatever value is written into the commit is discarded.
+
+What this means in practice:
+
+- Including `sw.js` in a commit is the *trigger* for a cache re-stamp. The string chosen in the commit is not the mechanism and is not what lands.
+- Any admin or storefront asset change needs `sw.js` touched in the same commit, or warm browsers keep serving the old bundle. Commit `4d5bf7d3` changed the New-order wizard without touching `sw.js`, and operators continued seeing the pre-fix address fields until the next commit that did.
+- Never write a deploy verification step that greps the server for the literal CACHE string from the commit. It will always fail. Verify the timestamp format instead, or verify that the deploy log contains a `stamped sw.js CACHE ->` line.
+
+Established 2026-08-20, commit `163a723b`.
+
 ## 25. A printed slip that goes stale is corrected on paper, not reprinted — DECIDED 2026-08-07
 
 DECISION: When a customer reschedules an order whose receipt has already printed, the printer emits a short CHANGE SLIP naming the new day, the day it replaces, and enough identity to match it to the original. The original receipt is never reprinted.
