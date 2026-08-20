@@ -20811,7 +20811,21 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
 
   // ── Status + payment method. Default pending; staff may mark paid offline. ──
   const status = b.status === 'paid' ? 'paid' : 'pending_payment';
-  const ALLOWED_PAY = ['offline', 'wechat', 'alipay', 'points', 'balance', 'other'];
+  // The off-app tenders are here because the counter till settles by HAND: the
+  // cashier reads the total off the screen, keys it into a separate payment
+  // terminal, and records which wallet took it. Without them a walk-in could
+  // only be stored as the generic 'offline' and nothing could be reconciled
+  // against that terminal's daily statement — which wallet took the money is
+  // the one fact the reconciliation needs and the one this route used to throw
+  // away.
+  //
+  // These five are NOT a new vocabulary. They are exactly OFFLINE_PAY_METHODS,
+  // the set the admin's own Mark-paid control has always written through
+  // PATCH /orders/:id/status, and the labels are the locked pairs in
+  // PAY_METHOD_CHOICES (04-orders.js). The two lists were the same idea under
+  // two spellings; this route simply stops being the narrower of the two.
+  const ALLOWED_PAY = ['offline', 'wechat', 'alipay', 'points', 'balance', 'other',
+                       'cash', 'bank_transfer', 'wechat_offline', 'alipay_offline'];
   const paymentMethod = ALLOWED_PAY.includes(String(b.payment_method)) ? String(b.payment_method) : 'offline';
   const staffNote    = b.staff_note    == null ? null : String(b.staff_note).slice(0, 2000);
   const customerNote = b.customer_note == null ? null : String(b.customer_note).slice(0, 2000);
@@ -20904,6 +20918,30 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
   // / ordNewCollect), so an empty select is the one way to get here.
   if (fulfillmentType === 'counter' && !storeId) {
     return res.status(400).json({ success: false, error: 'store_required_for_counter' });
+  }
+
+  // ── A counter sale must name the wallet that took the money ───────────────
+  // Third rule of the same family, and the one with a money consequence rather
+  // than a stock one. The counter settles by hand — the cashier keys the total
+  // into a payment terminal — so the ONLY record of which wallet took it is
+  // what the till sends here. `payment_method` is otherwise soft: an absent or
+  // unrecognised value silently becomes 'offline' (the ALLOWED_PAY fallback
+  // above), which reads as "settled somehow" and reconciles against nothing.
+  //
+  // On a walk-in that fallback is not a default, it is a loss. Refuse instead:
+  // an operator told at create can pick the right wallet, where a statement
+  // that will not balance at the end of the day cannot be repaired at all —
+  // by then nobody remembers which of the two terminals rang up which sale.
+  //
+  // The check is on what ARRIVED, not on the resolved value, or the fallback
+  // would satisfy the rule it exists to close. Every other fulfilment type is
+  // untouched: a delivery legitimately has no tender yet at create, because
+  // nobody has paid.
+  if (fulfillmentType === 'counter') {
+    const sentPay = b.payment_method == null ? '' : String(b.payment_method);
+    if (!ALLOWED_PAY.includes(sentPay)) {
+      return res.status(400).json({ success: false, error: 'payment_method_required_for_counter', allowed: ALLOWED_PAY });
+    }
   }
 
   // Guest-pay handle — lets a customer without an app account pay this one

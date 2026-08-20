@@ -1,0 +1,881 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Counter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ==========================================================================
+   COUNTER TILL — the cashier-facing screen on a shop tablet.
+
+   Device: Android tablet, 9.7", 2048x1280 landscape, touch only. No mouse and
+   no keyboard beyond the on-screen one. Every target here is >= 44px; the
+   working ones are 52-76px.
+
+   WHAT THIS IS NOT. It is not the removed /pos shell (deleted 2026-08-04,
+   388c7e57) and it is not a second order path. It writes counter sales through
+   the ordinary manual-order endpoint, POST /api/retail-admin/orders, with
+   fulfillment_type 'counter' — the same path whose stock decrement and
+   store_id rule landed in d0e21fe0. There is one path and this uses it.
+
+   PAYMENT IS MANUAL, DELIBERATELY. Production has no Alipay credentials, so a
+   one-QR settle cannot work — and the two wallets' payment codes are mutually
+   unreadable anyway, so one QR could never have served both. The cashier reads
+   the total aloud, keys it into a separate terminal, records WHICH wallet took
+   it, and confirms. Legibility of that number is the whole job of the settle
+   screen. See SETTLE_MODES: a scan mode slots in beside the manual one without
+   touching anything else, and manual stays permanently as the fallback.
+
+   COLOUR is the live --td-* block, copied verbatim from retail-admin.css
+   (:8205-8254) — dark first, exactly as live, with light as the opt-in
+   override. The till runs light: a counter is a bright room.
+
+   TYPE is Inter, 400/500 only. No monospace exists in Tacet; money and
+   quantities are Inter with tabular-nums.
+
+   LANGUAGE: one at a time, never glued. cuT(en, cn) picks one, and every CN
+   half is COPIED from a locked source — the live admin's own pairs or
+   docs/tacet-delivery-vocabulary.md. Nothing here is composed. See STRINGS.
+   ========================================================================== */
+
+:root {
+  /* verbatim, retail-admin.css :8205-8237 — dark, the cascade default */
+  --td-surface:#18233A; --td-raised:#1E2A44; --td-border:#2A3550;
+  --td-header:#364058;  --td-unseen:#182329;
+  --td-text:#FBF9F4;    --td-text2:#9AA3B2;
+  --td-dusk:#6E67AF;    --td-dusk-hi:#7E77BF; --td-dusk-tint:#262A4A;
+  --td-sage:#A3B49F;    --td-sage-tint:#1E2C26; --td-sage-ink:#A3B49F;
+  --td-amber:#C9954A;   --td-amber-tint:#33290F; --td-amber-ink:#C9954A;
+  --td-brick:#B4533E;   --td-brick-tint:#351B14; --td-brick-ink:#D07A66;
+  --td-paper:#111A2B;
+
+  --f-sans:"Inter",-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",Arial,sans-serif;
+  --r-control:8px; --r-card:14px; --r-pill:999px;
+  --ease-settle:cubic-bezier(0.16,1,0.3,1);
+}
+:root[data-theme="light"] {
+  /* verbatim, retail-admin.css :8238-8254 */
+  --td-surface:#FFFFFF; --td-raised:#F6F3EC; --td-border:#E4E0D5;
+  --td-header:#DAD5C6;  --td-unseen:#F4F5F0;
+  --td-text:#111A2B;    --td-text2:#58606E;
+  --td-dusk-tint:#EEEDF6;
+  --td-sage-tint:#EDF1EC; --td-sage-ink:#4A6249;
+  --td-amber-tint:#F7EEDE; --td-amber-ink:#8A6425;
+  --td-brick-tint:#F6E7E3; --td-brick-ink:#B4533E;
+  --td-paper:#FBF9F4;
+}
+
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;margin:0;overflow:hidden}
+body{
+  font-family:var(--f-sans);font-size:15px;line-height:1.5;
+  background:var(--td-paper);color:var(--td-text);
+  -webkit-font-smoothing:antialiased;
+  touch-action:manipulation;
+  -webkit-user-select:none;user-select:none;
+}
+button{font:inherit;color:inherit;margin:0}
+:focus-visible{outline:2px solid var(--td-dusk);outline-offset:2px}
+
+/* ---- shell ---- */
+.till{height:100%;display:flex;flex-direction:column;position:relative}
+.t-head{
+  height:56px;flex:none;display:flex;align-items:center;gap:12px;padding:0 16px;
+  background:var(--td-surface);border-bottom:1px solid var(--td-border);
+}
+.t-brand{font-size:15px;font-weight:500;letter-spacing:-.01em}
+.t-dot{width:4px;height:4px;border-radius:50%;background:var(--td-border);flex:none}
+.t-store{font-size:13px;color:var(--td-text2)}
+.t-sp{flex:1}
+.hbtn{
+  min-width:44px;height:44px;padding:0 12px;border-radius:var(--r-control);
+  border:1px solid var(--td-border);background:transparent;color:var(--td-text2);
+  font-size:13px;font-weight:500;
+}
+.t-body{flex:1;display:flex;min-height:0}
+
+/* ---- left: entry ---- */
+.t-entry{flex:1;min-width:0;display:flex;flex-direction:column;padding:16px;gap:12px}
+/* Search is ABOVE the grid: tapping it raises the on-screen keyboard, which
+   covers the lower half of the screen. A field below the grid would be hidden
+   by the very keyboard it summons. */
+.srch{
+  height:52px;flex:none;display:flex;align-items:center;gap:10px;padding:0 14px;
+  background:var(--td-surface);border:1px solid var(--td-border);
+  border-radius:var(--r-control);
+}
+.srch svg{width:18px;height:18px;flex:none;color:var(--td-text2)}
+.srch input{
+  /* Fills the bar's full 52px. Without the height the input is its own ~25px
+     content box inside a 52px row, so the actual tap target is half the
+     control the cashier can see — and the half that misses just focuses
+     nothing. */
+  flex:1;min-width:0;height:100%;border:0;background:transparent;font:inherit;font-size:15px;
+  color:var(--td-text);-webkit-user-select:text;user-select:text;
+}
+.srch input:focus{outline:none}
+.srch input::placeholder{color:var(--td-text2)}
+.srch .clr{
+  width:44px;height:44px;flex:none;border:0;background:transparent;
+  color:var(--td-text2);border-radius:var(--r-control);font-size:20px;
+}
+.cats{display:flex;gap:8px;flex:none;overflow-x:auto;padding-bottom:2px}
+.cats::-webkit-scrollbar{display:none}
+.cat{
+  height:44px;padding:0 16px;flex:none;display:inline-flex;align-items:center;
+  border-radius:var(--r-pill);border:1px solid var(--td-border);
+  background:var(--td-surface);color:var(--td-text2);font-size:14px;font-weight:500;
+  white-space:nowrap;
+}
+.cat.on{background:var(--td-text);border-color:var(--td-text);color:var(--td-paper)}
+.grid{
+  flex:1;min-height:0;display:grid;grid-template-columns:repeat(4,1fr);
+  grid-auto-rows:100px;gap:12px;align-content:start;overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+}
+.tile{
+  border-radius:var(--r-card);border:1px solid var(--td-border);
+  background:var(--td-surface);padding:12px;display:flex;flex-direction:column;
+  justify-content:space-between;text-align:left;overflow:hidden;
+}
+.tile:active{background:var(--td-raised)}
+.tile .nm{
+  font-size:14px;font-weight:500;line-height:1.3;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+}
+.tile .ft{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.tile .pr{font-size:15px;font-variant-numeric:tabular-nums}
+.tile .lo{
+  font-size:12px;font-weight:500;border-radius:var(--r-pill);padding:2px 8px;
+  font-variant-numeric:tabular-nums;color:var(--td-amber-ink);background:var(--td-amber-tint);
+}
+/* Out of stock keeps its slot. Muscle memory is the point of a tile grid, so a
+   sold-out line stays where the thumb expects it — struck through and not
+   tappable — rather than vanishing and reshuffling every tile after it. */
+.tile.out{background:var(--td-raised);border-style:dashed}
+.tile.out .nm,.tile.out .pr{color:var(--td-text2)}
+.tile.out .pr{text-decoration:line-through}
+.tile.out .lo{color:var(--td-brick-ink);background:var(--td-brick-tint)}
+.gempty{
+  grid-column:1/-1;padding:32px;text-align:center;color:var(--td-text2);font-size:14px;
+}
+
+/* ---- right: the order ---- */
+.t-order{
+  width:380px;flex:none;background:var(--td-surface);
+  border-left:1px solid var(--td-border);display:flex;flex-direction:column;min-height:0;
+}
+.cust{
+  flex:none;min-height:56px;display:flex;align-items:center;gap:10px;
+  padding:6px 16px;border-bottom:1px solid var(--td-border);
+}
+.cust .who{flex:1;min-width:0;font-size:14px;color:var(--td-text2)}
+.cust.on .who{color:var(--td-text)}
+.cust .sub{font-size:12px;color:var(--td-text2);font-variant-numeric:tabular-nums}
+.cbtn{
+  min-height:44px;padding:0 14px;border-radius:var(--r-control);
+  border:1px solid var(--td-border);background:transparent;color:var(--td-text);
+  font-size:14px;font-weight:500;display:inline-flex;align-items:center;gap:6px;flex:none;
+}
+.lines{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
+.ln{
+  width:100%;text-align:left;background:transparent;border:0;
+  border-bottom:1px solid var(--td-border);padding:12px 16px;min-height:64px;
+  display:flex;gap:12px;align-items:baseline;
+}
+.ln .nm{flex:1;min-width:0;font-size:15px}
+.ln .sb{font-size:13px;color:var(--td-text2);font-variant-numeric:tabular-nums;margin-top:2px}
+.ln .tt{font-size:15px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ln .q{
+  font-size:13px;font-weight:500;color:var(--td-text2);background:var(--td-raised);
+  border-radius:var(--r-pill);padding:1px 8px;margin-right:6px;font-variant-numeric:tabular-nums;
+}
+.ln.sel{background:var(--td-raised);border-left:3px solid var(--td-text);padding-left:13px}
+/* Controls open INSIDE the line. A modal would cover the order the cashier is
+   reading aloud from and charge a dismiss tap for every quantity fix. */
+.lctl{
+  display:flex;align-items:center;gap:10px;padding:0 16px 12px 13px;
+  background:var(--td-raised);border-bottom:1px solid var(--td-border);
+  border-left:3px solid var(--td-text);
+}
+.step{
+  width:52px;height:52px;flex:none;border-radius:var(--r-control);
+  border:1px solid var(--td-border);background:var(--td-surface);
+  font-size:22px;display:grid;place-items:center;
+}
+.step[disabled]{color:var(--td-text2);background:var(--td-raised)}
+.stepn{min-width:56px;height:52px;display:grid;place-items:center;font-size:18px;font-variant-numeric:tabular-nums}
+.lsp{flex:1}
+.rm{
+  height:52px;padding:0 16px;border-radius:var(--r-control);
+  border:1px solid var(--td-brick);background:transparent;color:var(--td-brick-ink);
+  font-size:14px;font-weight:500;
+}
+.empty{
+  height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:8px;padding:32px;text-align:center;
+}
+.empty p{margin:0;font-size:14px;color:var(--td-text2);max-width:28ch}
+.foot{flex:none;border-top:1px solid var(--td-border);padding:16px;background:var(--td-surface)}
+.sums{font-size:13px;color:var(--td-text2)}
+.sums div{display:flex;justify-content:space-between;font-variant-numeric:tabular-nums}
+.tot{display:flex;align-items:baseline;justify-content:space-between;margin:8px 0 14px}
+.tot .lb{font-size:15px}
+/* The number the cashier reads aloud. Nothing else on the screen is this size. */
+.tot .amt{font-size:34px;font-variant-numeric:tabular-nums;letter-spacing:-.02em;line-height:1}
+/* INK, not Dusk. Dusk means "tacet did this for you"; taking money at a counter
+   is the cashier acting (patterns S1.8 rule 5, corrected axis). The till spends
+   no Dusk budget at all — Dusk appears here only as a focus ring. */
+.pay{
+  width:100%;height:76px;border-radius:var(--r-control);
+  border:1px solid var(--td-text);background:var(--td-text);color:var(--td-paper);
+  font-size:19px;font-weight:500;display:flex;align-items:center;justify-content:center;
+  gap:12px;font-variant-numeric:tabular-nums;
+}
+.pay[disabled]{background:var(--td-raised);border-color:var(--td-border);color:var(--td-text2)}
+
+/* ---- settle: a takeover, not a sheet ----
+   The cashier turns the tablet round or leans over it; nothing of the till
+   should stay readable behind. A page is a takeover, not an overlay. */
+.settle{position:absolute;inset:0;background:var(--td-paper);display:flex;flex-direction:column;padding:20px 28px 24px}
+.stop{display:flex;align-items:center;gap:12px;flex:none}
+.back{
+  height:44px;padding:0 14px;display:inline-flex;align-items:center;gap:8px;
+  border-radius:var(--r-control);border:1px solid var(--td-border);
+  background:var(--td-surface);font-size:14px;font-weight:500;
+}
+.smain{flex:1;display:flex;align-items:center;justify-content:center;gap:56px;min-height:0}
+.samt{text-align:right;flex:none}
+.samt .lb{font-size:15px;color:var(--td-text2);margin-bottom:6px}
+/* Legibility is the whole job here: the cashier reads this and keys it into a
+   separate terminal by hand. */
+.samt .amt{font-size:64px;font-variant-numeric:tabular-nums;letter-spacing:-.03em;line-height:1}
+.samt .sb{font-size:14px;color:var(--td-text2);margin-top:10px;font-variant-numeric:tabular-nums}
+.spick{flex:none;width:340px}
+.spick .lb{font-size:13px;color:var(--td-text2);margin-bottom:8px}
+.wal{
+  width:100%;min-height:60px;padding:0 16px;margin-bottom:8px;
+  border-radius:var(--r-control);border:1px solid var(--td-border);
+  background:var(--td-surface);display:flex;align-items:center;gap:12px;
+  font-size:16px;text-align:left;
+}
+.wal .rad{
+  width:22px;height:22px;flex:none;border-radius:50%;
+  border:1.5px solid var(--td-border);display:grid;place-items:center;
+}
+.wal.on{border-color:var(--td-text);background:var(--td-raised)}
+.wal.on .rad{border-color:var(--td-text)}
+.wal.on .rad::after{content:"";width:11px;height:11px;border-radius:50%;background:var(--td-text)}
+.more{
+  width:100%;min-height:44px;border:0;background:transparent;color:var(--td-text2);
+  font-size:13px;font-weight:500;text-align:left;padding:4px 0;
+}
+.sfoot{flex:none;display:flex;flex-direction:column;align-items:center;gap:8px}
+.sconf{
+  width:340px;height:72px;border-radius:var(--r-control);
+  border:1px solid var(--td-text);background:var(--td-text);color:var(--td-paper);
+  font-size:18px;font-weight:500;
+}
+.sconf[disabled]{background:var(--td-raised);border-color:var(--td-border);color:var(--td-text2)}
+.shint{font-size:13px;color:var(--td-text2);min-height:20px;text-align:center}
+.serr{
+  font-size:14px;color:var(--td-brick-ink);background:var(--td-brick-tint);
+  border-radius:var(--r-control);padding:10px 14px;max-width:520px;text-align:center;
+}
+
+/* ---- done ---- */
+.done{display:flex;flex-direction:column;align-items:center;gap:16px}
+.mark{
+  width:104px;height:104px;border-radius:50%;background:var(--td-sage-tint);
+  display:grid;place-items:center;color:var(--td-sage-ink);
+}
+.mark svg{width:50px;height:50px}
+.done h2{margin:0;font-size:24px;font-weight:500}
+.done .meta{font-size:14px;color:var(--td-text2);font-variant-numeric:tabular-nums;text-align:center}
+.drow{display:flex;gap:12px;align-items:center}
+.dprim{
+  min-height:60px;padding:0 28px;border-radius:var(--r-control);
+  border:1px solid var(--td-text);background:var(--td-text);color:var(--td-paper);
+  font-size:16px;font-weight:500;
+}
+/* Reprint is secondary by construction: printing already happened, automatically
+   and fire-and-forget, the moment the sale settled. This is the second copy. */
+.dsec{
+  min-height:60px;padding:0 20px;border-radius:var(--r-control);
+  border:1px solid var(--td-border);background:transparent;color:var(--td-text);
+  font-size:15px;font-weight:500;
+}
+.dsec[disabled]{color:var(--td-text2)}
+
+/* ---- boot / signed out ---- */
+.boot{
+  position:absolute;inset:0;background:var(--td-paper);display:flex;
+  flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:32px;text-align:center;
+}
+.boot p{margin:0;color:var(--td-text2);font-size:15px;max-width:44ch}
+.boot a{color:var(--td-text);text-underline-offset:3px}
+[hidden]{display:none !important}
+</style>
+</head>
+<body>
+<div class="till" id="app" hidden>
+  <div class="t-head">
+    <span class="t-brand" id="hd-title"></span>
+    <span class="t-dot"></span>
+    <span class="t-store" id="hd-store"></span>
+    <span class="t-sp"></span>
+    <button class="hbtn" id="hd-lang" type="button"></button>
+  </div>
+  <div class="t-body">
+    <div class="t-entry">
+      <div class="srch">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/></svg>
+        <input id="q" type="search" autocomplete="off" autocorrect="off" spellcheck="false">
+        <button class="clr" id="q-clr" type="button" hidden aria-label="clear">&times;</button>
+      </div>
+      <div class="cats" id="cats"></div>
+      <div class="grid" id="grid"></div>
+    </div>
+    <div class="t-order">
+      <div class="cust" id="cust"></div>
+      <div class="lines" id="lines"></div>
+      <div class="foot">
+        <div class="sums" id="sums"></div>
+        <div class="tot"><span class="lb" id="tot-lb"></span><span class="amt" id="tot-amt">&yen;0.00</span></div>
+        <button class="pay" id="pay" type="button" disabled></button>
+      </div>
+    </div>
+  </div>
+  <div class="settle" id="settle" hidden></div>
+</div>
+<div class="boot" id="boot"><p id="boot-msg"></p></div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ====================================================================
+     LANGUAGE — one on screen, never glued.
+
+     cuT(en, cn) picks one, exactly as the admin does. LANG_KEY is the same
+     'roots-admin-lang' the rest of the suite uses, so the language an
+     operator picks anywhere follows them onto the till.
+
+     EVERY CN HALF BELOW IS COPIED FROM A LOCKED SOURCE. Nothing is composed.
+     The sources are the live admin's own cuT pairs and the locked tables in
+     docs/tacet-delivery-vocabulary.md; each is named in STRINGS so the next
+     person can check one rather than trust all of them.
+     ==================================================================== */
+  var LANG_KEY = 'roots-admin-lang';
+  var _lang = 'en';
+  try { var s = localStorage.getItem(LANG_KEY); if (s === 'en' || s === 'cn') _lang = s; } catch (e) {}
+  function cuT(en, cn) { return _lang === 'cn' ? cn : en; }
+  function setLang(l) {
+    _lang = l;
+    try { localStorage.setItem(LANG_KEY, l); } catch (e) {}
+    document.documentElement.lang = l === 'cn' ? 'zh-CN' : 'en';
+    render();
+  }
+
+  /* Locked source for every string on this screen.
+     admin  = an existing cuT()/glued pair in the live admin (file named)
+     vocab  = docs/tacet-delivery-vocabulary.md, the locked table
+     Adding a row means finding a locked source first — never writing Chinese. */
+  var STRINGS = {
+    // header + chrome
+    counterSale:  ['Counter sale', '前台销售'],        // admin: retail-admin.html:2785
+    // entry
+    searchAdd:    ['Search a product to add…', '搜索商品以添加…'], // admin: 04-orders/products picker
+    all:          ['All', '全部'],                     // admin: i18n EN_ONLY_MAP
+    outOfStock:   ['Out of stock', '缺货'],            // admin: products grid
+    noItems:      ['No items', '无商品'],              // admin
+    // order rail
+    guest:        ['Guest', '访客'],                   // admin: 04-orders.js customer state
+    customer:     ['Customer', '顾客'],                // admin
+    points:       ['Points', '积分'],                  // admin
+    wallet:       ['Wallet', '钱包'],                  // admin
+    remove:       ['Remove', '删除'],                  // admin: 04-orders.js line controls
+    noLines:      ['No lines yet. Search above to add the first product.',
+                   '还没有商品行。在上方搜索,添加第一个商品。'], // admin: 04-orders.js
+    subtotal:     ['subtotal', '小计'],                // admin
+    total:        ['Total', '合计'],                   // admin: 04-orders.js summary
+    // settle
+    amount:       ['Amount', '金额'],                  // admin: refund payout dialog
+    payMethod:    ['Pay method', '付款方式'],          // admin: retail-admin.html:2829
+    markPaid:     ['Mark paid', '标记已付款'],         // admin: 04-orders.js NEXT_STATUS:2677
+    back:         ['Back', '返回'],                    // admin
+    cancel:       ['Cancel', '取消'],                  // admin
+    other:        ['Other', '其他'],                   // admin: PAY_METHOD_CHOICES
+    // done
+    completed:    ['Completed', '已完成'],             // vocab: delivered + counter
+    paid:         ['Paid', '已付款'],                  // vocab: paid, all
+    printReceipt: ['Print receipt', '打印小票'],       // admin: 04-orders.js
+    newOrder:     ['New order', '新建订单'],           // admin: retail-admin.html:2218
+    // failure — the generic locked sentence, reused rather than re-minted
+    didNotSave:   ['That did not save. Nothing was created.', '未能保存,未创建任何内容。'] // admin: 04-orders.js
+  };
+  function T(k) { var p = STRINGS[k]; return cuT(p[0], p[1]); }
+
+  /* Tender options, values AND labels copied whole from PAY_METHOD_CHOICES in
+     public/retail-admin/04-orders.js:5302-5308. The values are exactly
+     OFFLINE_PAY_METHODS server-side, so what the till writes is what the
+     admin's own Mark-paid control has always written.
+
+     WeChat and Alipay lead because they are what a counter actually takes; the
+     other three are real tenders that must stay reachable, folded behind one
+     tap so they do not compete with the two. */
+  var WALLETS = [
+    { v: 'wechat_offline', en: 'WeChat (off-app)',  cn: '微信(线下)',  lead: true },
+    { v: 'alipay_offline', en: 'Alipay (off-app)',  cn: '支付宝(线下)', lead: true },
+    { v: 'cash',           en: 'Cash',              cn: '现金' },
+    { v: 'bank_transfer',  en: 'Bank transfer',     cn: '银行转账' },
+    { v: 'other',          en: 'Other',             cn: '其他' }
+  ];
+
+  /* ====================================================================
+     SETTLE MODES — the extension seam.
+
+     Today there is one: 'manual', where the cashier keys the amount into a
+     separate terminal and records the wallet. A scan mode slots in beside it
+     as a second entry with its own render() and its own settle payload; the
+     picker, the confirm and the paid state below are already written against
+     the mode rather than against manual. Manual stays permanently, because a
+     terminal that is offline or a wallet that will not scan is a normal
+     Tuesday and the till must still be able to take the money.
+     ==================================================================== */
+  var SETTLE_MODES = {
+    manual: {
+      id: 'manual',
+      // What this mode contributes to POST /orders. The chosen wallet IS the
+      // payment_method; nothing else differs from any other counter sale.
+      payload: function (st) { return { payment_method: st.wallet }; },
+      // Ready to confirm? The wallet is REQUIRED — without it the sale records
+      // as generic 'offline' and cannot be reconciled against the terminal's
+      // daily statement, which is the one thing this screen exists to prevent.
+      ready: function (st) { return !!st.wallet; }
+    }
+  };
+
+  /* ==================================================================== */
+  var S = {
+    stores: [], storeId: null, storeName: '',
+    products: [], stock: {}, cats: [], cat: '', q: '',
+    lines: [], sel: null,
+    customer: null, custBusy: false,
+    view: 'till',              // till | settle | done
+    mode: 'manual',
+    wallet: null, moreOpen: false, busy: false, err: '',
+    done: null, printState: 'idle'
+  };
+
+  var $ = function (id) { return document.getElementById(id); };
+  function esc(v) { var d = document.createElement('div'); d.textContent = v == null ? '' : String(v); return d.innerHTML; }
+  function yuan(n) {
+    var v = Number(n) || 0;
+    var p = Math.abs(v).toFixed(2).split('.');
+    return (v < 0 ? '-¥' : '¥') + p[0].replace(/\B(?=(\d{3})+$)/g, ',') + '.' + p[1];
+  }
+  function api(path, opts) {
+    return fetch(path, Object.assign({ credentials: 'same-origin' }, opts || {}))
+      .then(function (r) {
+        if (r.status === 401 || r.status === 403) { var e = new Error('unauthorised'); e.auth = true; throw e; }
+        return r.json().catch(function () { return { success: false }; });
+      });
+  }
+  function pname(p) { return cuT(p.name_en || p.name_cn || '', p.name_cn || p.name_en || ''); }
+
+  // ---- money. One place, so the rail and the settle screen cannot disagree.
+  function subtotal() {
+    return Math.round(S.lines.reduce(function (a, l) { return a + l.qty * l.price; }, 0) * 100) / 100;
+  }
+
+  // ---- stock. Per STORE, not the catalogue's cross-store sum: a till may only
+  // sell what is on ITS shelf, and effective_stock adds up every store's.
+  function stockOf(id) { var v = S.stock[id]; return v == null ? null : v; }
+  function inCart(id) { var l = findLine(id); return l ? l.qty : 0; }
+  function findLine(id) { for (var i = 0; i < S.lines.length; i++) if (S.lines[i].id === id) return S.lines[i]; return null; }
+
+  /* ---- boot ------------------------------------------------------------ */
+  function boot(msg) { $('boot').hidden = false; $('app').hidden = true; $('boot-msg').innerHTML = msg; }
+
+  function start() {
+    document.documentElement.setAttribute('data-theme', 'light');
+    document.documentElement.lang = _lang === 'cn' ? 'zh-CN' : 'en';
+    $('boot-msg').textContent = '·';
+    api('/api/retail-admin/stores')
+      .then(function (j) {
+        var list = (j.data || []).filter(function (s) { return s.is_active !== 0; });
+        if (!list.length) {
+          // Honest and specific: the till cannot open without a location,
+          // because a counter sale is refused without one server-side.
+          boot(esc(T('didNotSave')));
+          return;
+        }
+        S.stores = list;
+        var saved = null;
+        try { saved = localStorage.getItem('tacet-till-store'); } catch (e) {}
+        var pick = list.filter(function (s) { return String(s.id) === String(saved); })[0] || list[0];
+        S.storeId = pick.id;
+        S.storeName = cuT(pick.name_en || pick.code || ('#' + pick.id), pick.name_cn || pick.name_en || pick.code || ('#' + pick.id));
+        return loadCatalogue();
+      })
+      .then(function () {
+        if (!S.storeId) return;
+        $('boot').hidden = true; $('app').hidden = false;
+        wire();
+        render();
+      })
+      .catch(function (e) {
+        if (e && e.auth) {
+          boot('<p>' + esc(cuT('Sign in on the backend, then reload this page.',
+                               '请先在后台登录,然后刷新此页面。')) + '</p>');
+        } else {
+          boot('<p>' + esc(T('didNotSave')) + '</p>');
+        }
+      });
+  }
+
+  // Two reads, joined on product_id: the catalogue for names and the price the
+  // ORDER path will charge (sell_price — resolveManualOrderLines reads that
+  // column, so a till showing anything else would quote a price the order does
+  // not use), and the store's own shelf for quantities.
+  function loadCatalogue() {
+    return Promise.all([
+      api('/api/retail-admin/products?published=1'),
+      api('/api/retail-admin/stores/' + S.storeId + '/stock?published=1')
+    ]).then(function (r) {
+      var prods = (r[0] && r[0].data) || [];
+      var stk = (r[1] && r[1].data) || [];
+      S.stock = {};
+      stk.forEach(function (row) {
+        // available_wechat already nets off the safety buffer and live holds —
+        // the same number the shop shows a customer. Fall back to the raw
+        // shelf count only when the decorated field is absent.
+        var n = row.available_wechat != null ? row.available_wechat : row.physical_qty;
+        S.stock[row.product_id] = Number(n) || 0;
+      });
+      S.products = prods.filter(function (p) {
+        return !p.is_restock_only && Number(p.sell_price) > 0;
+      });
+      var seen = {}; var cats = [];
+      S.products.forEach(function (p) {
+        var c = p.top_category || '';
+        if (c && !seen[c]) { seen[c] = 1; cats.push(c); }
+      });
+      S.cats = cats;
+    });
+  }
+
+  /* ---- render ---------------------------------------------------------- */
+  function render() {
+    if (!S.storeId) return;
+    $('hd-title').textContent = T('counterSale');
+    $('hd-store').textContent = S.storeName;
+    $('hd-lang').textContent = _lang === 'cn' ? 'EN' : '中文';
+    var qi = $('q');
+    qi.placeholder = T('searchAdd');
+    $('q-clr').hidden = !S.q;
+    renderCats(); renderGrid(); renderCust(); renderLines(); renderFoot();
+    $('settle').hidden = (S.view === 'till');
+    if (S.view !== 'till') renderSettle();
+  }
+
+  function renderCats() {
+    var h = '<button class="cat' + (S.cat ? '' : ' on') + '" type="button" data-cat="">' + esc(T('all')) + '</button>';
+    S.cats.forEach(function (c) {
+      h += '<button class="cat' + (S.cat === c ? ' on' : '') + '" type="button" data-cat="' + esc(c) + '">' + esc(c) + '</button>';
+    });
+    $('cats').innerHTML = h;
+  }
+
+  function visibleProducts() {
+    var q = S.q.trim().toLowerCase();
+    return S.products.filter(function (p) {
+      if (S.cat && (p.top_category || '') !== S.cat) return false;
+      if (!q) return true;
+      return (p.name_en || '').toLowerCase().indexOf(q) >= 0
+          || (p.name_cn || '').indexOf(S.q.trim()) >= 0
+          || (p.sku || '').toLowerCase().indexOf(q) >= 0;
+    });
+  }
+
+  function renderGrid() {
+    var list = visibleProducts();
+    if (!list.length) { $('grid').innerHTML = '<div class="gempty">' + esc(T('noItems')) + '</div>'; return; }
+    var h = '';
+    list.forEach(function (p) {
+      var st = stockOf(p.id);
+      var left = st == null ? null : st - inCart(p.id);
+      var out = left != null && left <= 0;
+      h += '<button class="tile' + (out ? ' out' : '') + '" type="button" data-add="' + p.id + '"' + (out ? ' disabled' : '') + '>'
+         + '<span class="nm">' + esc(pname(p)) + '</span>'
+         + '<span class="ft"><span class="pr">' + yuan(p.sell_price) + '</span>'
+         + (out ? '<span class="lo">' + esc(T('outOfStock')) + '</span>'
+                : (left != null && left <= 5 ? '<span class="lo">' + left + '</span>' : ''))
+         + '</span></button>';
+    });
+    $('grid').innerHTML = h;
+  }
+
+  // Walk-ins are anonymous. Attaching a customer is optional and never blocks
+  // the sale; when one is attached the row shows the two things that change
+  // what the cashier can offer — points and wallet.
+  function renderCust() {
+    var el = $('cust');
+    if (S.customer) {
+      el.className = 'cust on';
+      el.innerHTML = '<span class="who">' + esc(S.customer.nickname || ('#' + S.customer.id))
+        + '<div class="sub">' + esc(T('points')) + ' ' + (Number(S.customer.points) || 0)
+        + ' · ' + esc(T('wallet')) + ' ' + yuan(S.customer.balance) + '</div></span>'
+        + '<button class="cbtn" type="button" data-cust="clear">' + esc(T('remove')) + '</button>';
+    } else {
+      el.className = 'cust';
+      el.innerHTML = '<span class="who">' + esc(T('guest')) + '</span>'
+        + '<button class="cbtn" type="button" data-cust="pick">'
+        + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>'
+        + esc(T('customer')) + '</button>';
+    }
+  }
+
+  function renderLines() {
+    if (!S.lines.length) {
+      $('lines').innerHTML = '<div class="empty"><p>' + esc(T('noLines')) + '</p></div>';
+      return;
+    }
+    var h = '';
+    S.lines.forEach(function (l, i) {
+      var sel = S.sel === i;
+      h += '<button class="ln' + (sel ? ' sel' : '') + '" type="button" data-line="' + i + '">'
+         + '<span class="nm">' + (l.qty > 1 ? '<span class="q">×' + l.qty + '</span>' : '') + esc(l.name)
+         + '<div class="sb">' + yuan(l.price) + '</div></span>'
+         + '<span class="tt">' + yuan(l.qty * l.price) + '</span></button>';
+      if (sel) {
+        var st = stockOf(l.id);
+        var capped = st != null && l.qty >= st;
+        h += '<div class="lctl">'
+           + '<button class="step" type="button" data-q="-1">&minus;</button>'
+           + '<span class="stepn">' + l.qty + '</span>'
+           + '<button class="step" type="button" data-q="1"' + (capped ? ' disabled' : '') + '>+</button>'
+           + '<span class="lsp"></span>'
+           + '<button class="rm" type="button" data-q="x">' + esc(T('remove')) + '</button>'
+           + '</div>';
+      }
+    });
+    $('lines').innerHTML = h;
+  }
+
+  function renderFoot() {
+    var sub = subtotal();
+    // NO summary row. On a counter sale the subtotal IS the total — nothing
+    // ships, nothing is boxed, nothing is discounted — so a subtotal line would
+    // print the same figure twice, one line apart. That is noise, not a
+    // reconciliation. The row returns the moment something can make the two
+    // differ.
+    $('sums').innerHTML = '';
+    $('tot-lb').textContent = T('total');
+    $('tot-amt').textContent = yuan(sub);
+    var b = $('pay');
+    b.disabled = !S.lines.length;
+    b.textContent = S.lines.length ? T('markPaid') + '  ' + yuan(sub) : T('markPaid');
+  }
+
+  /* ---- settle ---------------------------------------------------------- */
+  function renderSettle() {
+    var el = $('settle');
+    if (S.view === 'done') { el.innerHTML = doneHtml(); return; }
+    var sub = subtotal();
+    var lead = WALLETS.filter(function (w) { return w.lead; });
+    var rest = WALLETS.filter(function (w) { return !w.lead; });
+    var walletBtn = function (w) {
+      return '<button class="wal' + (S.wallet === w.v ? ' on' : '') + '" type="button" data-wal="' + w.v + '">'
+           + '<span class="rad"></span><span>' + esc(cuT(w.en, w.cn)) + '</span></button>';
+    };
+    el.innerHTML =
+      '<div class="stop"><button class="back" type="button" data-go="till">'
+      + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>'
+      + esc(T('back')) + '</button></div>'
+      + '<div class="smain">'
+      +   '<div class="samt"><div class="lb">' + esc(T('amount')) + '</div>'
+      +     '<div class="amt">' + yuan(sub) + '</div>'
+      +     '<div class="sb">' + esc(T('counterSale')) + '</div></div>'
+      +   '<div class="spick"><div class="lb">' + esc(T('payMethod')) + '</div>'
+      +     lead.map(walletBtn).join('')
+      +     (S.moreOpen ? rest.map(walletBtn).join('')
+                        : '<button class="more" type="button" data-more="1">' + esc(T('other')) + ' ›</button>')
+      +   '</div>'
+      + '</div>'
+      + '<div class="sfoot">'
+      +   (S.err ? '<div class="serr">' + esc(S.err) + '</div>' : '')
+      +   '<button class="sconf" type="button" data-confirm="1"' + (canConfirm() ? '' : ' disabled') + '>'
+      +     esc(S.busy ? T('markPaid') + '…' : T('markPaid')) + '</button>'
+      +   '<div class="shint">' + esc(canConfirm() || S.busy ? '' : T('payMethod')) + '</div>'
+      + '</div>';
+  }
+
+  function canConfirm() {
+    var m = SETTLE_MODES[S.mode];
+    return !S.busy && S.lines.length > 0 && m && m.ready(S);
+  }
+
+  function doneHtml() {
+    var d = S.done || {};
+    var w = WALLETS.filter(function (x) { return x.v === d.wallet; })[0];
+    var printLabel = S.printState === 'sent' ? T('printReceipt') + ' ✓'
+                   : S.printState === 'busy' ? T('printReceipt') + '…'
+                   : T('printReceipt');
+    return '<div class="stop"></div>'
+      + '<div class="smain"><div class="done">'
+      +   '<span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 12.5 5.5 5.5L20 7"/></svg></span>'
+      +   '<h2>' + esc(T('completed')) + ' ' + yuan(d.total) + '</h2>'
+      +   '<div class="meta">' + esc(w ? cuT(w.en, w.cn) : '') + ' · ' + esc(d.order_no || '') + '</div>'
+      +   '<div class="drow">'
+      +     '<button class="dsec" type="button" data-print="1"' + (S.printState === 'busy' ? ' disabled' : '') + '>' + esc(printLabel) + '</button>'
+      +     '<button class="dprim" type="button" data-go="reset">' + esc(T('newOrder')) + '</button>'
+      +   '</div>'
+      + '</div></div><div class="sfoot"></div>';
+  }
+
+  /* ---- actions --------------------------------------------------------- */
+  function addLine(id) {
+    var p = S.products.filter(function (x) { return x.id === id; })[0];
+    if (!p) return;
+    var st = stockOf(id);
+    var l = findLine(id);
+    var have = l ? l.qty : 0;
+    if (st != null && have >= st) return;          // never sell past the shelf
+    if (l) l.qty += 1;
+    else S.lines.push({ id: id, name: pname(p), price: Number(p.sell_price) || 0, qty: 1 });
+    render();
+  }
+  function bumpQty(d) {
+    var l = S.lines[S.sel]; if (!l) return;
+    if (d === 'x') { S.lines.splice(S.sel, 1); S.sel = null; render(); return; }
+    var st = stockOf(l.id);
+    var next = l.qty + Number(d);
+    if (next <= 0) { S.lines.splice(S.sel, 1); S.sel = null; render(); return; }
+    if (st != null && next > st) return;
+    l.qty = next; render();
+  }
+
+  // Confirm. ONE request: the order is created already paid, with the chosen
+  // wallet, through POST /api/retail-admin/orders. That is the path whose
+  // markOrderPaid → isTerminalOnPaid branch flips a counter sale to its
+  // terminal state, decrements the shelf and fires the automatic receipt. The
+  // order does not exist until this moment, so a customer who walks away
+  // leaves nothing behind to reconcile.
+  function confirm() {
+    if (!canConfirm()) return;
+    S.busy = true; S.err = ''; render();
+    var mode = SETTLE_MODES[S.mode];
+    var body = Object.assign({
+      fulfillment_type: 'counter',
+      store_id: S.storeId,
+      channel: 'manual',
+      status: 'paid',
+      customer_id: S.customer ? S.customer.id : null,
+      // The server requires a recipient name on every manual order. A walk-in
+      // has none, so the sale records the word the admin already uses for
+      // exactly this state. It is stored data, not a rendered label — and the
+      // receipt suppresses the hand-over block on a counter sale anyway.
+      recipient_name: S.customer ? (S.customer.nickname || 'Guest') : 'Guest',
+      items: S.lines.map(function (l) { return { product_id: l.id, qty: l.qty }; })
+    }, mode.payload(S));
+
+    api('/api/retail-admin/orders', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+    }).then(function (j) {
+      S.busy = false;
+      if (!j || !j.success) { S.err = T('didNotSave'); render(); return; }
+      S.done = { id: j.data.id, order_no: j.data.order_no, total: j.data.total, wallet: S.wallet };
+      S.view = 'done'; S.printState = 'idle';
+      // The shelf moved server-side; mirror it locally so the next sale's
+      // tiles are honest without a full reload.
+      S.lines.forEach(function (l) {
+        if (S.stock[l.id] != null) S.stock[l.id] = Math.max(0, S.stock[l.id] - l.qty);
+      });
+      render();
+    }).catch(function (e) {
+      S.busy = false;
+      S.err = e && e.auth ? cuT('Sign in on the backend, then reload this page.', '请先在后台登录,然后刷新此页面。')
+                          : T('didNotSave');
+      render();
+    });
+  }
+
+  function reset() {
+    S.lines = []; S.sel = null; S.customer = null;
+    S.wallet = null; S.moreOpen = false; S.err = ''; S.done = null;
+    S.view = 'till'; S.printState = 'idle';
+    S.q = ''; $('q').value = '';
+    render();
+  }
+
+  // Reprint. Printing already happened automatically when the sale settled, so
+  // this is the second copy and is styled as such. Fire-and-forget: the button
+  // reports that it sent, never that the paper came out, because the printer
+  // is a network device and the till cannot know.
+  function reprint() {
+    if (!S.done || S.printState === 'busy') return;
+    S.printState = 'busy'; render();
+    api('/api/retail-admin/orders/' + S.done.id + '/print', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ store_id: S.storeId })
+    }).then(function () { S.printState = 'sent'; render(); })
+      .catch(function () { S.printState = 'idle'; render(); });
+  }
+
+  // Attaching a customer. Uses the browser prompt deliberately: a full search
+  // panel is its own screen and this is an optional, uncommon step at a till.
+  // It stays one tap from the rail and never blocks the sale.
+  function pickCustomer() {
+    if (S.custBusy) return;
+    var term = window.prompt(T('customer'));
+    if (!term) return;
+    S.custBusy = true;
+    api('/api/retail-admin/customers?pageSize=1&q=' + encodeURIComponent(term.trim()))
+      .then(function (j) {
+        S.custBusy = false;
+        var c = (j.data || [])[0];
+        if (c) { S.customer = c; render(); }
+      })
+      .catch(function () { S.custBusy = false; });
+  }
+
+  /* ---- wiring. Delegated: the grid and the rail re-render constantly. ---- */
+  function wire() {
+    document.addEventListener('click', function (ev) {
+      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-more],[data-confirm],[data-go],[data-print]');
+      if (!t) return;
+      if (t.hasAttribute('data-add'))   return addLine(Number(t.getAttribute('data-add')));
+      if (t.hasAttribute('data-cat'))   { S.cat = t.getAttribute('data-cat'); return render(); }
+      if (t.hasAttribute('data-line'))  { var i = Number(t.getAttribute('data-line')); S.sel = (S.sel === i ? null : i); return render(); }
+      if (t.hasAttribute('data-q'))     return bumpQty(t.getAttribute('data-q'));
+      if (t.hasAttribute('data-cust'))  { if (t.getAttribute('data-cust') === 'clear') { S.customer = null; return render(); } return pickCustomer(); }
+      if (t.hasAttribute('data-wal'))   { S.wallet = t.getAttribute('data-wal'); S.err = ''; return render(); }
+      if (t.hasAttribute('data-more'))  { S.moreOpen = true; return render(); }
+      if (t.hasAttribute('data-confirm')) return confirm();
+      if (t.hasAttribute('data-print')) return reprint();
+      if (t.hasAttribute('data-go'))    {
+        var g = t.getAttribute('data-go');
+        if (g === 'reset') return reset();
+        S.view = 'till'; S.err = ''; return render();
+      }
+    });
+    $('pay').addEventListener('click', function () {
+      if (!S.lines.length) return;
+      S.view = 'settle'; S.err = ''; S.sel = null; render();
+    });
+    $('hd-lang').addEventListener('click', function () { setLang(_lang === 'cn' ? 'en' : 'cn'); });
+    $('q').addEventListener('input', function (e) { S.q = e.target.value || ''; $('q-clr').hidden = !S.q; renderGrid(); });
+    $('q-clr').addEventListener('click', function () { S.q = ''; $('q').value = ''; $('q-clr').hidden = true; renderGrid(); });
+  }
+
+  start();
+})();
+</script>
+</body>
+</html>

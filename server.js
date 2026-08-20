@@ -674,6 +674,29 @@ app.get('/retail-admin', (req, res) => {
   res.redirect(302, 'https://' + STORE_HOST + '/' + qs);
 });
 
+// Counter till — the cashier-facing screen on a shop tablet. Same self-auth
+// pattern as /product-editor below: the shell loads, then its own
+// fetch('/api/retail-admin/stores') enforces auth and the page renders a
+// signed-out state on 401/403. It deliberately does NOT redirect on 401 —
+// /retail-admin bounces to the store host, and a till that redirects itself
+// mid-shift is the redirect loop this product has already been bitten by.
+//
+// NOT the removed /pos. That shell was deleted 2026-08-04 (388c7e57) and its
+// path still 302s away; §13 of the decisions doc retires POS as an app and
+// keeps it as a sales CHANNEL. This is a different thing: a device screen for
+// the `counter` FULFILMENT type, writing through the ordinary manual-order
+// endpoint. New path, new file, no revival of either.
+//
+// no-store, not no-cache: the same reasoning as the backend shell. A till
+// pinned to old JavaScript by an intermediary cache would keep charging with
+// last week's prices, and it is a low-traffic page that can afford to be
+// fetched fresh every time.
+app.get('/till', (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.sendFile(path.join(__dirname, 'public', 'till.html'));
+});
+
 // Full-page product block editor — opened in a new tab from the
 // retail-admin Products grid (window.open('/product-editor?id=…')). Same
 // self-auth pattern as /retail-admin: the shell loads, then the page's own

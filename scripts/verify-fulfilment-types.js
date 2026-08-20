@@ -1329,6 +1329,187 @@ check('the create route refuses a counter sale with no store',
 check('the counter decrement goes through prepareCommitUnreservedOrder, not adjustStock',
   /prepareCommitUnreservedOrder\(orderId, \{ actorLabel: 'Auto · counter sale \(paid\)' \}\)/.test(SERVER_SRC), true);
 
+
+// ═══ 12. The counter till's manual settle ═══════════════════════════════════
+// THE ASSERTION THIS SECTION EXISTS FOR: a walk-in settles by HAND. The cashier
+// reads the total off the tablet, keys it into a separate payment terminal, and
+// records which wallet took it. That wallet is the ONLY link between the sale
+// and the terminal's daily statement — there is no gateway callback to fall
+// back on, because there is no gateway. If it is absent, or silently defaulted,
+// the day does not reconcile and nothing on any screen says so.
+//
+// Three things are pinned here: the tender the till sends is stored, the shelf
+// moves, and a counter sale cannot be created without naming a wallet.
+//
+// Production has no Alipay credentials, so the QR settle a one-code design
+// would need cannot work at all — and WeChat and Alipay payment codes are
+// mutually unreadable, so one code could never have served both. Manual is not
+// a stopgap here; it is the permanent floor a scan mode would sit beside.
+
+const TILL_SRC = fs.readFileSync(path.join(__dirname, '..', 'public', 'till.html'), 'utf8');
+const ORDERS_SRC = fs.readFileSync(
+  path.join(__dirname, '..', 'public', 'retail-admin', '04-orders.js'), 'utf8');
+
+// ── The three vocabularies must be ONE ────────────────────────────────────
+// The server's create allowlist, the server's Mark-paid set, and the till's
+// wallet picker are three lists of the same thing in three files. They were two
+// different sets before the till existed (create knew 'offline', Mark-paid knew
+// 'wechat_offline'), which is exactly how a walk-in used to record as a tender
+// nobody could reconcile. Drift between them is silent — a value the till can
+// send but the route rejects is a 400 at the counter, in front of a customer.
+function listFrom(src, re) {
+  const m = re.exec(src);
+  if (!m) return null;
+  return (m[1].match(/'([a-z_]+)'/g) || []).map(s => s.replace(/'/g, '')).sort();
+}
+const allowedPay = listFrom(SERVER_SRC, /const ALLOWED_PAY = \[([\s\S]*?)\];/);
+const offlineSet = listFrom(SERVER_SRC, /const OFFLINE_PAY_METHODS = new Set\(\[([\s\S]*?)\]\)/);
+const tillWallets = (TILL_SRC.match(/\{ v: '([a-z_]+)'/g) || [])
+  .map(s => s.replace(/.*'([a-z_]+)'.*/, '$1')).sort();
+const adminChoices = listFrom(ORDERS_SRC, /const PAY_METHOD_CHOICES = \[([\s\S]*?)\];/);
+
+check('the create route accepts every off-app tender the Mark-paid set knows',
+  offlineSet && allowedPay ? offlineSet.filter(m => !allowedPay.includes(m)) : 'EXTRACTION FAILED',
+  []);
+check('the till offers exactly the admin\'s own tender list — no private vocabulary',
+  tillWallets, adminChoices);
+check('the till\'s tenders are all values the create route will accept',
+  allowedPay && tillWallets ? tillWallets.filter(w => !allowedPay.includes(w)) : 'EXTRACTION FAILED',
+  []);
+
+// ── The wallet is NOT nullable on a counter sale ──────────────────────────
+// The rule has to read what ARRIVED, not the resolved value: `paymentMethod`
+// has already collapsed an absent or unknown tender to 'offline' by the time
+// the guard runs, so a check on it would pass on exactly the input it exists to
+// refuse. This asserts the guard reads `b.payment_method`.
+const counterPayRule = /if \(fulfillmentType === 'counter'\) \{[\s\S]{0,320}?payment_method_required_for_counter/;
+check('a counter sale is refused when no wallet is named',
+  counterPayRule.test(SERVER_SRC), true);
+check('the wallet guard reads what ARRIVED, not the defaulted value',
+  /const sentPay = b\.payment_method == null \? '' : String\(b\.payment_method\);/.test(SERVER_SRC), true);
+// Only counter. A delivery legitimately has no tender at create — nobody has
+// paid yet — and requiring one there would refuse every phone order.
+check('the wallet rule binds to counter alone, not to every manual order',
+  (SERVER_SRC.match(/payment_method_required_for_counter/g) || []).length, 1);
+
+// Behavioural mirror of the two lines above, so the RULE is tested and not just
+// its spelling. Mirrored from routes/retail.js (the ALLOWED_PAY fallback and
+// the counter guard); if either moves, the assertions above fail first and name
+// which.
+function createGuardMirror(body) {
+  const allowed = allowedPay || [];
+  const sentPay = body.payment_method == null ? '' : String(body.payment_method);
+  if (body.fulfillment_type === 'counter' && !body.store_id) return 'store_required_for_counter';
+  if (body.fulfillment_type === 'counter' && !allowed.includes(sentPay)) return 'payment_method_required_for_counter';
+  return allowed.includes(sentPay) ? sentPay : 'offline';
+}
+check('a counter sale with no wallet, an unknown wallet, or no store is refused',
+  [createGuardMirror({ fulfillment_type: 'counter', store_id: 1 }),
+   createGuardMirror({ fulfillment_type: 'counter', store_id: 1, payment_method: '' }),
+   createGuardMirror({ fulfillment_type: 'counter', store_id: 1, payment_method: 'venmo' }),
+   createGuardMirror({ fulfillment_type: 'counter', payment_method: 'cash' })],
+  ['payment_method_required_for_counter', 'payment_method_required_for_counter',
+   'payment_method_required_for_counter', 'store_required_for_counter']);
+check('a named wallet is stored as sent, and a delivery still needs no tender',
+  [createGuardMirror({ fulfillment_type: 'counter', store_id: 1, payment_method: 'wechat_offline' }),
+   createGuardMirror({ fulfillment_type: 'counter', store_id: 1, payment_method: 'alipay_offline' }),
+   createGuardMirror({ fulfillment_type: 'delivery' })],
+  ['wechat_offline', 'alipay_offline', 'offline']);
+
+// ── Marked paid: the wallet is recorded AND the shelf moves ───────────────
+// One sale, end to end, against the real decrement. The order row carries the
+// tender the till chose; retail_payments carries the same value; physical_qty
+// drops by what was rung up. All three or the day does not reconcile.
+if (!stockMissing) {
+  const syncCalls2 = [];
+  const stock2 = new Function('db', 'syncCalls', `
+    const tdb = () => db;
+    const enqueueChannelSync = (storeId, productId) => syncCalls.push(storeId + ':' + productId);
+    const _bumpStockLive = () => {};
+    ${STOCK_FNS.map((n) => stockSrc[n]).join('\n')}
+    return { ${STOCK_FNS.join(', ')} };
+  `)(db, syncCalls2);
+
+  db.exec(`CREATE TABLE retail_payments_t12 (
+    id INTEGER PRIMARY KEY, order_id INTEGER, method TEXT, amount REAL, status TEXT
+  );`);
+  const TEA = 912;
+  db.prepare('INSERT INTO retail_store_stock (store_id, product_id, physical_qty) VALUES (?,?,?)').run(1, TEA, 20);
+
+  // What POST /orders writes for a till sale: the order with the chosen wallet,
+  // a payment row with the same method, then markOrderPaid's decrement.
+  db.prepare(
+    "INSERT INTO retail_orders (id, order_no, status, fulfillment_type, store_id, channel, payment_method) VALUES (9101,'TC-9101','delivered','counter',1,'manual','wechat_offline')"
+  ).run();
+  db.prepare(
+    "INSERT INTO retail_payments_t12 (order_id, method, amount, status) VALUES (9101,'wechat_offline',96,'success')"
+  ).run();
+  stock2.commitUnreservedOrder(9101, [{ product_id: TEA, qty: 4 }], { actorLabel: 'Auto · counter sale (paid)' });
+
+  const row = db.prepare('SELECT payment_method FROM retail_orders WHERE id = 9101').get();
+  const payRow = db.prepare('SELECT method FROM retail_payments_t12 WHERE order_id = 9101').get();
+  const left = db.prepare('SELECT physical_qty AS q FROM retail_store_stock WHERE store_id = 1 AND product_id = ?').get(TEA).q;
+  check('a settled counter sale records the chosen wallet on the order AND the payment',
+    [row.payment_method, payRow.method], ['wechat_offline', 'wechat_offline']);
+  check('a settled counter sale takes its units off the shelf', left, 16);
+  check('the settle enqueues the channel sync, so the marketplaces hear about it',
+    syncCalls2.includes('1:' + TEA), true);
+  // The wallet is not merely present — it is a value the reconciliation can use.
+  check('the recorded wallet is one the daily statement can be matched against',
+    (allowedPay || []).includes(row.payment_method) && row.payment_method !== 'offline', true);
+}
+
+// ── The till sends the counter path, and only that path ──────────────────
+check('the till creates a counter sale, already paid, at a named store',
+  [/fulfillment_type: 'counter'/.test(TILL_SRC),
+   /status: 'paid'/.test(TILL_SRC),
+   /store_id: S\.storeId/.test(TILL_SRC)],
+  [true, true, true]);
+check('the till posts to the ordinary manual-order endpoint, not a private one',
+  (TILL_SRC.match(/api\('\/api\/retail-admin\/orders'/g) || []).length, 1);
+// The wallet reaches the body through the settle MODE, which is the seam a scan
+// mode would slot into. If someone inlines the tender instead, the seam is gone
+// and the next payment method is a rewrite rather than an entry.
+check('the wallet reaches the request through the settle-mode seam',
+  /payload: function \(st\) \{ return \{ payment_method: st\.wallet \}; \}/.test(TILL_SRC), true);
+check('the manual mode refuses to confirm without a wallet',
+  /ready: function \(st\) \{ return !!st\.wallet; \}/.test(TILL_SRC), true);
+// Receipt printing is automatic on settle (markOrderPaid → autoPrintOrder). The
+// till's own print control is therefore a SECOND copy, and must not present
+// itself as the primary action.
+check('the till offers reprint as a secondary control, not a primary one',
+  [/data-print="1"[^>]*>' \+ esc\(printLabel\)/.test(TILL_SRC) || /class="dsec" type="button" data-print/.test(TILL_SRC),
+   /class="dprim" type="button" data-go="reset"/.test(TILL_SRC)],
+  [true, true]);
+
+// ── Every Chinese string on the till is copied, never composed ────────────
+// The locked-vocabulary rule (docs/tacet-delivery-vocabulary.md rule 4) says CN
+// strings are copied from a locked source. The till declares its sources in a
+// STRINGS table; this asserts the table is the ONLY place Chinese enters the
+// page, so a stray composed label cannot slip in beside it.
+const tillCn = (TILL_SRC.match(/[一-鿿]+/g) || []);
+const stringsBlock = (/var STRINGS = \{[\s\S]*?\n  \};/.exec(TILL_SRC) || [''])[0];
+const walletsBlock = (/var WALLETS = \[[\s\S]*?\n  \];/.exec(TILL_SRC) || [''])[0];
+const authCn = (/请先在后台登录[^']*/g);
+const declared = new Set(
+  ((stringsBlock + walletsBlock).match(/[一-鿿]+/g) || [])
+);
+// The one CN string outside those two blocks is the signed-out line, which is
+// reused verbatim in two places; it is listed here rather than left unexplained.
+((TILL_SRC.match(authCn) || []).join('').match(/[一-鿿]+/g) || []).forEach(x => declared.add(x));
+// Two more that are not translatable copy and are declared rather than ignored:
+//   微软雅黑  — a CJK fallback FACE in the font stack, a font name.
+//   中文      — the language toggle's own label. It always renders in the
+//             language it switches TO, so it is never translated. The
+//             expression is byte-identical to the live admin's
+//             (retail-admin.html:11878, 10-extras.js:903).
+['微软雅黑', '中文'].forEach(x => declared.add(x));
+const stray = [...new Set(tillCn)].filter(x => !declared.has(x));
+check('no Chinese on the till outside its declared string table', stray, []);
+check('the till declares a locked source for every string it renders',
+  /admin: |vocab: |admin$/m.test(stringsBlock) && stringsBlock.split('\n').filter(l => /\/\/ admin|\/\/ vocab/.test(l)).length >= 10,
+  true);
+
 // ── Report ──────────────────────────────────────────────────────────────────
 // §8's by-phone classifier is asserted through the REAL async function, so the
 // report waits on it: report() is called from that promise's settle handlers,
