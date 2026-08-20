@@ -3731,6 +3731,154 @@ function renderQyPointSurface(o, sf) {
     </div>`;
 }
 
+// ── Pick a place ────────────────────────────────────────────────────────────
+// The sibling of renderQyPointSurface above, for the other parked state. The
+// name search found real places and could not choose between them, so the
+// answer is already on the screen.
+//
+// THE RULE THIS SURFACE ENFORCES is the same one, arrived at from the other
+// side: nothing is pre-selected. There is no default radio, no cheapest-style
+// pre-tick, and no "confirm" button sitting under a highlighted row — because a
+// pre-selection is a guess wearing a decision's clothes, and confirming one is
+// exactly the laundering the pinless map exists to prevent, performed with a
+// list instead of a marker. Each candidate carries its own action; choosing IS
+// the confirm.
+//
+// No separate confirmation dialog, for the same reason the map surface has
+// none: reading three places and picking one IS the deliberation, and a second
+// modal asks the same question twice.
+//
+// What each row shows, and why all three earn their place:
+//   name     — what the operator recognises. The whole point of a name search.
+//   address  — how they tell two similarly-named estates apart; the names alone
+//              often differ by one character.
+//   distance — from the COLLECTING store, which is what catches the
+//              right-name-wrong-district hit before a rider is paid for it. The
+//              server's distance check will refuse it past 25km anyway, but by
+//              then the operator has been told nothing; here they can see it.
+function renderQyCandidateSurface(o, sf) {
+  const expired = sf.date_posture === 'passed';
+  // An expired order cannot ship whatever is picked, so it asks nothing and
+  // reuses the reschedule surface verbatim (spec §5.2). Same reasoning as the
+  // map surface: different problem, different badge, different action.
+  if (expired) return renderQyPointSurface(o, sf);
+
+  const tomorrow = sf.date_posture === 'tomorrow';
+  const addrLines = escapeHtml(o.address_full || '').split(' ').filter(Boolean).join('<br>');
+  const rows = (sf.candidates || []).map((c) => `
+    <button class="qpc-opt" type="button" onclick="qpPickPlace(${o.id}, ${c.idx}, this)">
+      <span class="qpc-opt-main">
+        <span class="qpc-name" data-no-i18n>${escapeHtml(c.name || '')}</span>
+        <span class="qpc-addr" data-no-i18n>${escapeHtml(c.address || '')}</span>
+      </span>
+      ${c.drop_km != null
+        ? `<span class="qpc-km">${escapeHtml(String(c.drop_km))}km</span>`
+        : ''}
+    </button>`).join('');
+
+  return `
+    <div class="qp qpc" id="qp-${o.id}">
+      <h3 class="qp-h">${cuT('Pick the delivery point', '选择配送点')}</h3>
+      <p class="qp-sub">${cuT(
+        'This address matches more than one place. Pick the right one.',
+        '该地址匹配到多个地点，请选择正确的一个。')}</p>
+
+      <div class="qp-grid">
+        <div class="qp-map-col">
+          <div class="qpc-list">${rows}</div>
+          <div class="qpc-none">${cuT(
+            'None of these is right?', '都不是?')}
+            <button class="qpc-link" type="button" onclick="qpFallBackToMap(${o.id}, this)">${cuT(
+              'Place the point on a map', '在地图上标记')}</button>
+          </div>
+        </div>
+        <div class="qp-addr-col">
+          <div class="kicker" style="font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--text-3);margin-bottom:6px;">${cuT('Ship to', '收货地址')}</div>
+          <div class="qp-addr" data-no-i18n>${addrLines}</div>
+          <div class="qp-grade">${cuT(
+            'Distances are from the store the rider collects from.',
+            '距离为骑手取货门店到该地点的距离。')}</div>
+        </div>
+      </div>
+
+      ${tomorrow ? `
+      <div class="qp-urgent">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+        <div>${cuT(
+          `<b style="font-weight:600;">Promised tomorrow, ${sf.promised_date || ''}.</b> Pick the place today — after tonight this order can no longer go to a same-day rider.`,
+          `<b style="font-weight:600;">明天(${sf.promised_date || ''})送达。</b> 请今天选择配送点 — 过了今晚将无法安排同城骑手。`)}</div>
+      </div>` : ''}
+
+      <div class="qp-actions">
+        <button class="btn" type="button" onclick="openEditShipTo(${o.id})">${cuT('Edit ship-to', '修改收货信息')}</button>
+      </div>
+    </div>`;
+}
+
+// Send the chosen candidate. The server reads the place out of the row it stored
+// and writes it as poi_picked; only the INDEX travels, so nothing here can
+// introduce a position that was never in the list.
+async function qpPickPlace(orderId, idx, btn) {
+  const label = btn && btn.querySelector('.qpc-name') ? btn.querySelector('.qpc-name').textContent : '';
+  if (btn) { btn.disabled = true; btn.classList.add('is-sending'); }
+  try {
+    const r = await fetch(`/api/retail-admin/orders/${orderId}/qingyun/confirm-place`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idx }),
+    });
+    const j = await r.json();
+    if (j.success) {
+      toast(j.already_created
+        ? cuT('Already on the courier platform', '已在配送平台')
+        : cuT(`Picked ${j.name || label} — the daemon will push it within a minute`,
+              `已选择 ${j.name || label} — 约一分钟内发单`), 'success');
+      openOrder(orderId, { instant: true });
+      return;
+    }
+    if (btn) { btn.disabled = false; btn.classList.remove('is-sending'); }
+    toast(j.error === 'order_closed'   ? cuT('This order is closed', '该订单已关闭')
+        : j.error === 'choice_gone'    ? cuT('That option is gone — reopen the order', '该选项已失效，请重新打开订单')
+        : j.error === 'row_moved'      ? cuT('It moved on while you were looking — reopen the order', '状态已变更，请重新打开订单')
+        : cuT('Could not pick it', '选择失败'), 'err');
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.classList.remove('is-sending'); }
+    toast(cuT('Network error', '网络错误'), 'err');
+  }
+}
+
+// "None of these is right" — hand the operator the map instead.
+//
+// Goes through a ROUTE rather than swapping the surface locally, because the
+// two surfaces are bound to two server states: confirm-point's SQL is pinned to
+// 'needs_point', so a map drawn over an 'awaiting_choice' row would take a tap,
+// take a confirm, and answer row_moved — the work thrown away with an error
+// that describes none of it. The route moves the row, then this reopens the
+// drawer onto the surface that state renders.
+//
+// It is NOT a Retry. Retry re-runs the push, which re-runs the same name search
+// against the same unchanged address and parks it right back here about a
+// minute later — the operator would ask for a map and be handed the same list.
+//
+// No confirm dialog: nothing is dispatched, nothing is charged, and the only
+// effect is which surface the drawer draws. Coming back is one press of the
+// list again — the candidates are gone, but Retry re-runs the search that
+// produced them.
+async function qpFallBackToMap(orderId, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = cuT('Opening…', '打开中…'); }
+  try {
+    const r = await fetch(`/api/retail-admin/orders/${orderId}/qingyun/reject-places`, { method: 'POST' });
+    const j = await r.json();
+    if (j.success) { openOrder(orderId, { instant: true }); return; }
+    if (btn) { btn.disabled = false; btn.textContent = cuT('Place the point on a map', '在地图上标记'); }
+    toast(j.error === 'row_moved'
+      ? cuT('It moved on while you were looking — reopen the order', '状态已变更，请重新打开订单')
+      : cuT('Could not do that', '操作失败'), 'err');
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = cuT('Place the point on a map', '在地图上标记'); }
+    toast(cuT('Network error', '网络错误'), 'err');
+  }
+}
+
 // The point the operator has placed, per order. Empty until they place one —
 // which is the whole state model, so it is deliberately not seeded from the
 // guess. Cleared when the drawer re-renders.
@@ -4117,6 +4265,13 @@ function renderQyShipFrom(o) {
     // "refused". Nothing failed and nothing is retrying: the order is waiting
     // on a person, and the thing that person needs is a map.
     if (sf.awaiting_point) return renderQyPointSurface(o, sf);
+    // Parked because the name search found SEVERAL places. A different question
+    // from the one above and so a different surface: the answer is already on
+    // the screen and the operator picks it, rather than supplying one by hand.
+    // Guarded on there actually being candidates — a row whose stored list is
+    // unreadable falls through to the ordinary parked treatment rather than
+    // rendering an empty question.
+    if (sf.awaiting_choice && (sf.candidates || []).length) return renderQyCandidateSurface(o, sf);
     const refused = sf.needs_attention;
     // A hold is nobody's fault and needs no action — but it must not read as a
     // normal queue wait, or an outage looks like latency until 待配送 runs dry.

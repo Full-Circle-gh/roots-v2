@@ -501,6 +501,11 @@ function flagUncallablePhone(order, storeCode) {
 function pinTag(geo) {
   if (!geo) return '';
   return ` [pin ${geo.source || 'unknown'}${geo.precision ? '/' + geo.precision : ''}`
+    // The place a name search matched, when that is what resolved the order.
+    // 'poi_auto' says a scorer chose; without the name, the line records that a
+    // decision was made and nothing about what it decided — and a wrong
+    // auto-take is only ever noticed days later, from the log.
+    + `${geo.poi ? `, "${geo.poi.name}" ← "${geo.poi.query}" @${geo.poi.score}` : ''}`
     + `${geo.dropKm != null ? `, ${geo.dropKm}km` : ''}${geo.translated ? ', translated' : ''}`
     + `${geo.refused ? ', REFUSED' : ''}]`;
 }
@@ -697,14 +702,38 @@ async function drainPushQueue(storeCode, br) {
       // simply hasn't been done yet.
       //
       // ORDER MATTERS, and it is the whole of this catch block:
-      //   1. hold      — the geocoder is down; give the attempt back, retry later
-      //   2. needs_point — the address resolved, but only to an area; park it
-      //   3. outcome   — a real failure; decide one attempt or five
-      // Both 1 and 2 `continue`, so only a genuine push failure reaches the
-      // outcome. These two branches were written a fortnight apart and met for
-      // the first time in this rebase; a resolution that dropped either would
-      // fail silently — parked orders would burn attempts and page ops, or a
-      // refused phone would retry four more times.
+      //   1. hold            — the geocoder is down; give the attempt back, retry later
+      //   2. awaiting_choice — the NAME search found several places and could
+      //                        not choose; park it with the candidates
+      //   3. needs_point     — nothing could be placed at all; park it with a map
+      //   4. outcome         — a real failure; decide one attempt or five
+      // 1, 2 and 3 all `continue`, so only a genuine push failure reaches the
+      // outcome. These branches were written weeks apart and meet here; a
+      // resolution that dropped any of them would fail silently — parked orders
+      // would burn attempts and page ops, or a refused phone would retry four
+      // more times.
+      //
+      // 2 before 3 because the two markers are mutually exclusive on one error
+      // (lib/qingyun-payload throws one or the other, never both) but the order
+      // still documents the intent: when there is something to pick from, the
+      // pick state wins. They are separate `if`s rather than an else-chain for
+      // the same reason every other branch here is — each one `continue`s, and
+      // a future marker added to the wrong end of an else-chain is a bug that
+      // does not announce itself.
+      if (qingyunQueue.shouldMarkAwaitingChoice(e)) {
+        const pt = e.point || {};
+        db.prepare(qingyunQueue.AWAITING_CHOICE_SQL).run(
+          row.attempts,
+          JSON.stringify(e.candidates || []),
+          pt.lat != null ? pt.lat : null, pt.lng != null ? pt.lng : null, pt.precision || null,
+          String(e.message).slice(0, 300), row.id);
+        log(storeCode, `push: order ${row.retail_order_id} AWAITING CHOICE — `
+          + `${(e.candidates || []).length} candidates (attempt not counted, still `
+          + `${row.attempts}/${MAX_PUSH_ATTEMPTS})${pinTag(e._geo)}: ${e.message}`);
+        logSync(storeCode, 'push', 'ok',
+          { order: row.retail_order_id, awaiting_choice: true, candidates: e.candidates || [] }, null);
+        continue;
+      }
       if (qingyunQueue.shouldMarkNeedsPoint(e)) {
         const pt = e.point || {};
         db.prepare(qingyunQueue.NEEDS_POINT_SQL).run(
@@ -721,9 +750,10 @@ async function drainPushQueue(storeCode, br) {
       // cannot fix. Decided in lib/qingyun-queue so the rule is testable without
       // a courier account (scripts/test_recipient_phone.js).
       //
-      // A needs_point error cannot arrive here — it `continue`d above — and in
-      // any case carries no qyCode, which the classifier requires, so the two
-      // could not be confused even if the order were reversed.
+      // A needs_point or awaiting_choice error cannot arrive here — both
+      // `continue`d above — and in any case neither carries a qyCode, which the
+      // classifier requires, so they could not be confused even if the order
+      // were reversed.
       const outcome = qingyunQueue.pushFailureOutcome({
         err: e, attemptsBefore: row.attempts, maxAttempts: MAX_PUSH_ATTEMPTS,
       });

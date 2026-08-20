@@ -354,3 +354,112 @@ every earlier reference to "stage 4" — in this document, in commit messages, a
 in `docs/qingyun-push-gate-survey.md` — point at the wrong thing, and the one
 fact worth preserving is that stage 4 was considered and declined rather than
 skipped. A gap in the numbering is the record.
+
+---
+
+## 11. POI-first resolution — addendum, 20 August 2026
+
+**Status:** built. Adds a SECOND parked state alongside `needs_point`; changes
+nothing about what a confirmed point is or records.
+
+### 11.1 What was wrong with the lookup
+
+§1 says the system manufactures the condition it rejects. This is the mechanism,
+and it is narrower than "the geocoder is imprecise".
+
+A Chinese residential address is two strings glued together — a named place and
+a last-mile tail (`祈福新村倚湖湾` · `5座1106`). The whole thing was being sent to
+Amap's **geocoding** endpoint (`/v3/geocode/geo`), which matches street and
+house-number data and **has no 小区 index at all**. A named estate could
+therefore never resolve, however precise the provider was feeling, and the
+unmatchable tail made it worse — an unresolvable suffix is exactly what pushes a
+provider onto a district centroid.
+
+Qingyun's own create form never geocoded. It searches place NAMES
+(`dap/lbs/keyWordSearch`) and posts the coordinate of the picked POI. That call
+was already implemented as `br.geocode()` and wired as fallback #3, reachable
+only after the geocoder had already failed — i.e. the one index that could
+answer was asked last, and then asked with the tail still attached.
+
+### 11.2 The chain now
+
+1. **Trusted stored pin** — `customer_pin` / `staff_pin`. Unchanged (D1).
+2. **POI name search** on the findable half only, Qingyun's index first, Amap's
+   `place/text` second. Taken silently only if it clears the confidence test.
+3. **Amap `geocode/geo`** on the full string. Demoted, and otherwise identical —
+   same trust grading, same `coarse_near` rule.
+4. **Park for a person** — with candidates if the name search found any
+   (`awaiting_choice`), otherwise with a map (`needs_point`, unchanged).
+
+**A road-shaped address skips step 2 entirely.** Geocoding indexes roads and
+house numbers and already resolves `中山一路1号` to street grade; a name search
+on the same text returns the road centroid or a shop fronting it. Each index
+keeps the addresses it actually covers.
+
+**An unconvincing name hit does not park on its own.** It remembers its
+candidates and falls through to step 3. This is what makes the change strictly
+additive: no address that dispatches today starts asking a question tomorrow.
+
+### 11.3 The confidence test
+
+**Neither provider returns a relevance score.** Amap's `place/text` returns
+name / address / location / region and a `distance` only when given a centre;
+Qingyun's `keyWordSearch` returns the same POI shape proxied. The only relevance
+signal either gives is the ORDER of the list.
+
+So the score is computed locally from the one piece of evidence that arrives —
+the name strings — as the longest common substring over the longer of the two.
+Auto-take needs all of: `score ≥ 0.67`, `shared ≥ 3` characters, a clear margin
+(`≥ 0.20`) over the runner-up or no runner-up, and a non-road, non-region shape.
+Reasoning for each constant is at `lib/qingyun-payload.js`, beside the constants.
+
+The list is **never re-sorted by this score.** The providers rank by their own
+relevance, which knows things a string ratio cannot; the score only decides
+whether to ASK.
+
+### 11.4 `awaiting_choice` is a sibling of `needs_point`, not a variant
+
+They describe opposite situations and want opposite surfaces:
+
+| | `needs_point` | `awaiting_choice` |
+|---|---|---|
+| what happened | nothing could be placed | several places matched |
+| the operator | supplies the answer, by tapping a map | picks the answer, from a list |
+| pre-selection | **none** — no marker to nudge (§5) | **none** — no default row, no Confirm button |
+
+The §5 invariant holds in both, arrived at from opposite sides: **a
+pre-selection is a guess wearing a decision's clothes.** A pre-ticked candidate
+with a Confirm under it is the same laundering as a marker sitting on a
+centroid, performed with a list. Each candidate carries its own action, and
+choosing IS the confirm.
+
+*None of these is right* moves the row to `needs_point` through its own route
+(`reject-places`). It is deliberately **not** a Retry: a Retry re-runs the same
+search on the same unchanged address and parks it right back, so the operator
+would ask for a map and be handed the same list a minute later.
+
+### 11.5 Provenance — two new sources, and where they stop
+
+`poi_auto` (a scorer chose) and `poi_picked` (a person chose from the list) both
+count as **resolved** — `pinIsTrusted` accepts them, so a payload builds.
+
+**Neither is added to the `trusted` predicate**, so both remain subject to
+`MAX_DROP_KM` (25km) and `ABS_MAX_KM` (50km). That gap is the point. A name
+search fails characteristically by returning the right-sounding name in the
+wrong district, which is invisible to a scorer that only ever saw two strings
+and obvious to a check that measures kilometres.
+
+`poi_picked` is not promoted either, though a person chose it. They chose from a
+list reading names; they did not put a point on a building the way `staff_pin`
+does. Same evidence, better filter — not different evidence.
+
+No precision grade is invented for either. A name search says *which place*, not
+how exactly it pinned the door.
+
+### 11.6 The hard constraint
+
+`recipientAddress` on the wire is byte-identical to what it was — full string,
+`5座1106` and all. The split is a **lookup** concern and never reaches the
+waybill; `recipientDoorInfo` is untouched too. Locked by a corpus test in
+`scripts/test_poi_first.js` §3 that asserts the field equals `joinStreetDetail`'s
+output for every shape.
