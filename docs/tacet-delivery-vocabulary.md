@@ -1,6 +1,6 @@
 # Tacet delivery vocabulary — locked
 
-**v1.1 · 2026-08-03 · adds the orders-list plan kickers. Locked by Ash. Derived from `docs/tacet-delivery-status-survey.md` (same date). This document is a SPECIFICATION: every delivery/fulfilment word on every surface must come from these tables. The survey records what existed; this records what is allowed.**
+**v1.2 · 2026-08-20 · adds the admin form-caption table. Locked by Ash. Derived from `docs/tacet-delivery-status-survey.md` (2026-08-03). This document is a SPECIFICATION: every delivery/fulfilment word on every surface must come from these tables. The survey records what existed; this records what is allowed.**
 
 ## Rules
 
@@ -115,6 +115,16 @@ When a customer reschedules an order whose receipt has already printed, a short 
 | `delivered` | counter | (no notification) | — |
 
 Other statuses keep their existing lines unchanged.
+
+## Admin form captions — operator register
+
+Captions on admin forms that state a delivery rule. The one string here predates this document — it was written into the New-order wizard before the vocabulary existed and was never covered by the tables above — and is brought under lock on 2026-08-20, after the postal-code field was made optional and the count it names changed from six to five.
+
+| Caption | EN | CN | Where |
+|---|---|---|---|
+| Required fields, delivery address | All five are required for a delivery order. | 配送订单五项均为必填。 | `public/retail-admin.html`, New-order wizard address block |
+
+The numeral is part of the string, so it is only correct while the block asks for exactly five. Adding or removing a required field means amending this row, in both languages, in the same commit as the field — a caption that counts is a caption that goes stale silently.
 
 ## Tracking codes and scenarios
 
