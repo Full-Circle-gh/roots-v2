@@ -8471,6 +8471,7 @@ const ONW_ERR_WHERE = {
   bad_channel: 'route', bad_store_id: 'route', store_not_found: 'route',
   store_required_for_counter: 'route',
   bad_fulfillment_type: 'route', fulfillment_type_required: 'route',
+  payment_method_required_for_counter: 'route',
   address_required_for_delivery: 'addr',
   address_not_allowed_for_pickup: 'addr', address_not_allowed_for_counter: 'addr',
 };
@@ -8521,6 +8522,16 @@ function ordNewErrText(code, detail) {
                                     '前台销售必须选择门店(即收银所在门店)。目前还没有设置门店。'),
     fulfillment_type_required: cuT('Pick how this order is fulfilled.', '请选择履约方式。'),
     bad_fulfillment_type: cuT('Pick how this order is fulfilled.', '请选择履约方式。'),
+    // A counter sale must name the wallet that took the money, or the sale
+    // reconciles against nothing (retail.js, beside the counter store rule).
+    // THE MESSAGE IS THE FIELD'S OWN LABEL, verbatim, and that is deliberate:
+    // the locked-vocabulary rule forbids composing Chinese, and no locked
+    // SENTENCE exists for this. '付款方式' is the exact pair the field
+    // carries (retail-admin.html), so naming the field is the most this may
+    // say without inventing. It renders in the same 'route' slot the field
+    // sits in, so the pairing reads. Replace with a full sentence the moment
+    // one is locked.
+    payment_method_required_for_counter: cuT('Pay method', '付款方式'),
     address_required_for_delivery: cuT('A delivery order needs a full address.', '配送订单需要完整地址。'),
     address_not_allowed_for_pickup: cuT('A pickup order cannot carry a delivery address.', '自提订单不能填写收货地址。'),
     address_not_allowed_for_counter: cuT('A counter sale cannot carry a delivery address.', '前台销售不能填写收货地址。'),
