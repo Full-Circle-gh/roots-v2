@@ -243,7 +243,10 @@ app.get('/manifest.webmanifest', (req, res) => {
 // "pos-icon-*" PNGs. The POS shell they were drawn for is gone, but these
 // are STILL LIVE — they are the Web Push notification icon and badge for
 // the kitchen SPA (public/app.html) and the service worker
-// (public/sw.js). Do not delete them with the POS page.
+// (public/sw.js), and the installed-app icons the counter till's manifest
+// points at (public/till-manifest.webmanifest). Do not delete them with the
+// POS page. They are generic Tacet artwork despite the name, which is what
+// makes them reusable — sw.js:55 says so too.
 ['pos-icon-192.png','pos-icon-512.png','pos-icon-192-maskable.png','pos-icon-512-maskable.png'].forEach(name => {
   app.get('/' + name, (req, res) => {
     res.set('Cache-Control', 'public, max-age=86400');
@@ -795,6 +798,9 @@ app.get('/kitchen-manifest.webmanifest', (req, res) => {
 app.get('/stock', (req, res) => {
   res.set('Cache-Control', 'no-cache');
   res.sendFile(path.join(__dirname, 'public', 'stock.html'));
+});
+app.get('/till-manifest.webmanifest', (req, res) => {
+  res.type('application/manifest+json').sendFile(path.join(__dirname, 'public', 'till-manifest.webmanifest'));
 });
 app.get('/stock-manifest.webmanifest', (req, res) => {
   res.type('application/manifest+json').sendFile(path.join(__dirname, 'public', 'stock-manifest.webmanifest'));

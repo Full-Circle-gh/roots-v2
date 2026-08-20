@@ -1845,6 +1845,107 @@ check('refund_printed_at is a real column',
   /addColumn\('retail_orders', 'refund_printed_at'/.test(
     fs.readFileSync(path.join(__dirname, '..', 'database.js'), 'utf8')), true);
 
+// ═══ 15. The till installs on both platforms ═══════════════════════════════
+// A till that installs on one hardware family dictates the shop's hardware,
+// which for a product sold to any business is the same as not shipping it.
+//
+// THE RULE THIS SECTION EXISTS FOR: the two install paths are SEPARATE and
+// neither substitutes for the other. Android Chrome installs from the manifest;
+// iOS Safari ignores nearly all of it and reads the apple-* meta tags instead
+// (and Safari is the only iOS browser that can install a PWA at all, so there
+// is no second chance there). Every assertion below is paired for that reason —
+// deleting either half must fail, not quietly halve the supported devices.
+
+const TILL = fs.readFileSync(path.join(__dirname, '..', 'public', 'till.html'), 'utf8');
+const TILL_HEAD = TILL.slice(0, TILL.indexOf('</head>'));
+check('till.html has a head to read', TILL_HEAD.length > 200, true);
+
+// ── Android / Chrome half ────────────────────────────────────────────────
+check('the till links a manifest (Android Chrome installs from this)',
+  /<link[^>]+rel="manifest"[^>]+href="\/till-manifest\.webmanifest"/.test(TILL_HEAD), true);
+const MANI_PATH = path.join(__dirname, '..', 'public', 'till-manifest.webmanifest');
+check('the manifest file exists', fs.existsSync(MANI_PATH), true);
+let MANI = null;
+try { MANI = JSON.parse(fs.readFileSync(MANI_PATH, 'utf8')); } catch (e) { MANI = null; }
+check('the manifest is valid JSON', !!MANI, true);
+if (MANI) {
+  check('the manifest installs standalone rather than as a tab', MANI.display, 'standalone');
+  check('the manifest scope and start_url point at the till',
+    [MANI.start_url, MANI.scope], ['/till', '/till']);
+  // Android needs a maskable icon or it puts the square artwork in a circle
+  // and crops the corners off.
+  check('the manifest ships both an "any" and a "maskable" icon purpose',
+    ['any', 'maskable'].filter((p) => (MANI.icons || []).some((i) => i.purpose === p)),
+    ['any', 'maskable']);
+  // RASTER ONLY. stock-manifest.webmanifest ships SVG, which Android tolerates
+  // and iOS ignores outright — sharing raster icons across both paths is what
+  // lets one set of files serve both.
+  const svgIcons = (MANI.icons || []).filter((i) => /svg/i.test(i.type || '') || /\.svg$/i.test(i.src));
+  check('no manifest icon is an SVG (iOS will not use one)', svgIcons, []);
+  // Every icon has to be on disk at the size it claims, or the install silently
+  // falls back to a letter tile.
+  const badIcons = [];
+  for (const ic of MANI.icons || []) {
+    const f = path.join(__dirname, '..', 'public', ic.src.replace(/^\//, ''));
+    if (!fs.existsSync(f)) { badIcons.push(ic.src + ' missing'); continue; }
+    const b = fs.readFileSync(f);
+    if (b.slice(1, 4).toString() !== 'PNG') { badIcons.push(ic.src + ' not a PNG'); continue; }
+    const dim = b.readUInt32BE(16) + 'x' + b.readUInt32BE(20);
+    if (dim !== ic.sizes) badIcons.push(ic.src + ' is ' + dim + ', manifest claims ' + ic.sizes);
+  }
+  check('every manifest icon exists at the size it declares', badIcons, []);
+}
+// The manifest is useless if nothing serves it.
+const SRV = fs.readFileSync(path.join(__dirname, '..', 'server.js'), 'utf8');
+check('server.js serves the till manifest',
+  /app\.get\('\/till-manifest\.webmanifest'/.test(SRV), true);
+
+// ── iOS / Safari half ────────────────────────────────────────────────────
+check('the till declares apple-mobile-web-app-capable (iOS standalone)',
+  /<meta[^>]+name="apple-mobile-web-app-capable"[^>]+content="yes"/.test(TILL_HEAD), true);
+check('the till names itself for the iOS home screen',
+  /<meta[^>]+name="apple-mobile-web-app-title"/.test(TILL_HEAD), true);
+// WITHOUT THIS iOS PUTS A SCREENSHOT OF THE PAGE ON THE HOME SCREEN.
+const appleIcon = /<link[^>]+rel="apple-touch-icon"[^>]+href="([^"]+)"/.exec(TILL_HEAD);
+check('the till declares an apple-touch-icon', !!appleIcon, true);
+if (appleIcon) {
+  const f = path.join(__dirname, '..', 'public', appleIcon[1].replace(/^\//, ''));
+  check('the apple-touch-icon file exists', fs.existsSync(f), true);
+  if (fs.existsSync(f)) {
+    const b = fs.readFileSync(f);
+    check('the apple-touch-icon is a PNG (iOS ignores SVG here)', b.slice(1, 4).toString(), 'PNG');
+    // iPadOS asks for 152 (iPad) and 167 (iPad Pro) and downsamples the largest
+    // declared icon. 180 is the largest iOS requests, so one 180 covers every
+    // iPad size — but anything SMALLER than 180 gets upscaled and looks it.
+    const w = b.readUInt32BE(16), h = b.readUInt32BE(20);
+    check('the apple-touch-icon is at least 180x180, so iPadOS downsamples rather than upscales',
+      [w >= 180, h >= 180], [true, true]);
+    check('the apple-touch-icon is square', w, h);
+  }
+}
+
+// ── The escape from the payment takeover ─────────────────────────────────
+// iOS standalone has NO swipe-back gesture, so the Back control is the only way
+// out of the settle screen. It sits in .stop, a flex:none sibling — but that
+// alone did not protect it: with the middle unable to scroll, a tall wallet list
+// drew straight over the top of it (measured at 1024x480: Back on screen and
+// untappable). The scroll is what makes the guarantee hold at any height.
+const smain = /\.smain\{[^}]*\}/.exec(TILL.replace(/\s+/g, ' ').replace(/\/\*.*?\*\//g, ''));
+check('the settle body is scrollable, so nothing can overlay the way out',
+  !!(smain && /overflow-y:\s*auto/.test(smain[0])), true);
+check('the settle body centres safely, so tall content is not centred out of reach',
+  !!(smain && /align-items:\s*safe center/.test(smain[0])), true);
+check('the settle screen still has a Back control at all',
+  /class="back"/.test(TILL), true);
+
+// ── Both aspect ratios ───────────────────────────────────────────────────
+// iPad is 4:3, most Android tablets are 16:10, and the rail is flex:none — so
+// the entry side absorbs every pixel of the difference and the column count is
+// the thing that has to give. Without these the grid stays at 4 columns and
+// .tile's overflow:hidden clips product names with no visible sign it did.
+check('the product grid adapts its column count for narrow tablets',
+  (TILL.match(/@media \(max-width:\d+px\)\{ ?\.grid\{grid-template-columns/g) || []).length >= 2, true);
+
 // ── Report ──────────────────────────────────────────────────────────────────
 // §8's by-phone classifier is asserted through the REAL async function, so the
 // report waits on it: report() is called from that promise's settle handlers,

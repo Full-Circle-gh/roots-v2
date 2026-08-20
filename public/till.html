@@ -1,9 +1,35 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="robots" content="noindex">
+
+<!-- ANDROID / CHROME reads the manifest: name, icons, standalone display and
+     the landscape lock all come from there. -->
+<link rel="manifest" href="/till-manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+
+<!-- iOS / SAFARI ignores nearly all of that and reads these. Safari is also
+     the ONLY iOS browser that can install a PWA — Chrome on iOS cannot — so
+     Add to Home Screen from Safari is the whole install path on an iPad.
+     apple-mobile-web-app-capable is what makes it open standalone rather than
+     as a Safari tab. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Counter">
+<!-- "default", not "black-translucent": the till runs LIGHT. Translucent puts
+     white status text over the page, which on #FBF9F4 paper is an invisible
+     clock and battery. -->
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<!-- Without an apple-touch-icon iOS puts a SCREENSHOT of the page on the home
+     screen. 180x180 is the largest size iOS asks for; iPadOS wants 152 (iPad)
+     and 167 (iPad Pro) and downsamples this one for both, which is why a single
+     180 is sufficient and why it must not be smaller than 180. Note iOS does
+     not accept SVG here — the manifest's raster icons are shared deliberately. -->
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+
+<meta name="theme-color" content="#FBF9F4">
 <title>Counter</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -12,9 +38,17 @@
 /* ==========================================================================
    COUNTER TILL — the cashier-facing screen on a shop tablet.
 
-   Device: Android tablet, 9.7", 2048x1280 landscape, touch only. No mouse and
-   no keyboard beyond the on-screen one. Every target here is >= 44px; the
-   working ones are 52-76px.
+   Device: a shop tablet in landscape, touch only — no mouse and no keyboard
+   beyond the on-screen one. Every target here is >= 44px; the working ones are
+   52-76px.
+
+   BOTH PLATFORMS, because Tacet does not get to dictate a customer's hardware.
+   The two install paths are separate and neither substitutes for the other:
+   Android Chrome installs from /till-manifest.webmanifest, iOS Safari reads the
+   apple-* meta tags in the head and ignores most of the manifest. The two
+   aspect ratios differ too — iPad is 4:3 (1024x768 CSS landscape), most Android
+   tablets are 16:10 (1280x800) — so the layout is tested at both rather than at
+   one. See the breakpoint note on .t-body.
 
    WHAT THIS IS NOT. It is not the removed /pos shell (deleted 2026-08-04,
    388c7e57) and it is not a second order path. It writes counter sales through
@@ -137,6 +171,21 @@ button{font:inherit;color:inherit;margin:0}
   grid-auto-rows:100px;gap:12px;align-content:start;overflow-y:auto;
   -webkit-overflow-scrolling:touch;
 }
+/* THE COLUMN COUNT IS THE ONLY THING HERE THAT HAS TO ADAPT.
+   The rail is `flex:none` at 380px, so it never gives ground — at every
+   viewport the entry side absorbs the whole difference (entry = vw - 380 - 32),
+   which makes viewport width a direct proxy for column width and a plain media
+   query the right tool.
+   Measured, four fixed columns give: 204px cells at 1280 (16:10 Android
+   tablet), 140px at 1024 (4:3 iPad landscape), and 76px on a portrait iPad at
+   768 — where .tile's overflow:hidden clips the product name with no visible
+   sign that it did. Portrait is reachable on iOS no matter what the manifest
+   says, because iOS ignores the orientation lock that Android honours, so the
+   narrow case is a real device state rather than a hypothetical one.
+   Both breakpoints keep cells >= ~110px, which is the width at which a name
+   and a price still read. */
+@media (max-width:900px){ .grid{grid-template-columns:repeat(3,1fr)} }
+@media (max-width:700px){ .grid{grid-template-columns:repeat(2,1fr)} }
 .tile{
   border-radius:var(--r-card);border:1px solid var(--td-border);
   background:var(--td-surface);padding:12px;display:flex;flex-direction:column;
@@ -248,7 +297,23 @@ button{font:inherit;color:inherit;margin:0}
   border-radius:var(--r-control);border:1px solid var(--td-border);
   background:var(--td-surface);font-size:14px;font-weight:500;
 }
-.smain{flex:1;display:flex;align-items:center;justify-content:center;gap:56px;min-height:0}
+/* THE ESCAPE MUST SURVIVE A SHORT SCREEN.
+   .stop (which holds Back) and .sfoot (which holds Confirm) are both
+   flex:none, so they always get their space — but without overflow here the
+   middle simply grew past its box and drew ON TOP of them. Measured at
+   1024x480 with all five wallets open: the picker ran y=26 to y=394, covering
+   the Back button at y=20-64 and the Confirm at y=356. Back was still "on
+   screen" and still untappable, which is the worst version of the bug.
+   That matters more on iOS than the height alone suggests: a standalone PWA
+   has no swipe-back gesture, so this button is the ONLY way out of the
+   takeover. It cannot be allowed to sit underneath something.
+   "safe" centring keeps the centred look but degrades to flex-start once the
+   content is taller than the box, rather than centring it and pushing the top
+   out of reach of the scroll. */
+.smain{
+  flex:1;display:flex;align-items:safe center;justify-content:center;
+  gap:56px;min-height:0;overflow-y:auto;
+}
 .samt{text-align:right;flex:none}
 .samt .lb{font-size:15px;color:var(--td-text2);margin-bottom:6px}
 /* Legibility is the whole job here: the cashier reads this and keys it into a
