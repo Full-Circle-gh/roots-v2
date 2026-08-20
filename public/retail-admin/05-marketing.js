@@ -434,7 +434,7 @@ function searchGrantCustomers() {
           <button class="btn btn-sm btn-primary" onclick="grantToCustomer(${c.id})">Grant · 发放</button>
         </div>`).join('');
     } catch (e) {
-      mount.innerHTML = `<div class="err" style="padding: 12px; font-size: 12px;">Failed · 失败: ${escapeHtml(e.message)}</div>`;
+      mount.innerHTML = `<div class="err" style="padding: 12px; font-size: 12px;">${cuT('Failed', '失败')}: <span data-no-i18n>${escapeHtml(e.message)}</span></div>`;
     }
   }, 200);
 }
@@ -452,7 +452,7 @@ async function grantToCustomer(customerId) {
     await loadGrantedList();
     await loadVouchers();
   } catch (e) {
-    toast('Failed · 失败: ' + e.message, 'err');
+    toast(cuT('Failed', '失败') + ': ' + e.message, 'err');
   }
 }
 
@@ -470,7 +470,7 @@ async function grantToAll() {
     await loadGrantedList();
     await loadVouchers();
   } catch (e) {
-    toast('Failed · 失败: ' + e.message, 'err');
+    toast(cuT('Failed', '失败') + ': ' + e.message, 'err');
   }
 }
 
@@ -508,7 +508,7 @@ async function loadGrantedList() {
           : `<button class="btn btn-sm" onclick="revokeGrant(${g.id})">${cuT('Revoke', '撤销')}</button>`}
       </div>`).join('');
   } catch (e) {
-    mount.innerHTML = `<div class="err" style="padding: 8px 0; font-size: 12px;">Failed · 失败: ${escapeHtml(e.message)}</div>`;
+    mount.innerHTML = `<div class="err" style="padding: 8px 0; font-size: 12px;">${cuT('Failed', '失败')}: <span data-no-i18n>${escapeHtml(e.message)}</span></div>`;
   }
 }
 
@@ -519,7 +519,7 @@ async function revokeGrant(grantId) {
     await loadGrantedList();
     await loadVouchers();
   } catch (e) {
-    toast('Failed · 失败: ' + (e.message === 'already_used_or_missing' ? 'Already used or missing · 已使用或不存在' : e.message), 'err');
+    toast(cuT('Failed', '失败') + ': ' + (e.message === 'already_used_or_missing' ? cuT('Already used or missing', '已使用或不存在') : e.message), 'err');
   }
 }
 
@@ -1082,7 +1082,7 @@ async function vwSave(activate) {
   } catch (e) {
     const msg = e.message === 'code_active' ? 'A live coupon already uses this code · 已有生效中的优惠券使用此编码'
       : e.message === 'code_exists' ? 'Code already exists · 编码已存在' : e.message;
-    toast('Failed · 失败: ' + msg, 'err');
+    toast(cuT('Failed', '失败') + ': ' + msg, 'err');
   }
 }
 
@@ -1198,7 +1198,7 @@ async function saveSnippets() {
       }
     }
   } catch (e) {
-    $('#snip-status').innerHTML = '<span class="err">Failed · 失败: ' + escapeHtml(e.message) + '</span>';
+    $('#snip-status').innerHTML = '<span class="err">' + cuT('Failed', '失败') + ': <span data-no-i18n>' + escapeHtml(e.message) + '</span></span>';
   }
 }
 
@@ -1750,7 +1750,7 @@ async function saveConfig() {
     status.innerHTML = '<span class="ok">Saved ✓</span>';
     toast('Settings saved · 设置已保存');
   } catch (e) {
-    status.innerHTML = '<span class="err">Failed · 失败: ' + e.message + '</span>';
+    status.innerHTML = '<span class="err">' + cuT('Failed', '失败') + ': <span data-no-i18n>' + escapeHtml(e.message) + '</span></span>';
     toast('Save failed · 保存失败: ' + e.message, 'err');
   }
 }
@@ -1933,7 +1933,7 @@ async function loadCategories() {
     _cats = data || [];
     renderCategories();
   } catch (e) {
-    $('#cats-status').innerHTML = '<span class="err">Load failed · 加载失败: ' + escapeHtml(e.message) + '</span>';
+    $('#cats-status').innerHTML = '<span class="err">' + cuT('Load failed', '加载失败') + ': <span data-no-i18n>' + escapeHtml(e.message) + '</span></span>';
   }
 }
 
@@ -2014,7 +2014,7 @@ async function saveCategoryOrder() {
     status.innerHTML = '<span class="ok">Order saved ✓</span>';
     setTimeout(() => { status.innerHTML = ''; }, 1500);
   } catch (e) {
-    status.innerHTML = '<span class="err">Save failed · 保存失败: ' + escapeHtml(e.message) + '</span>';
+    status.innerHTML = '<span class="err">' + cuT('Save failed', '保存失败') + ': <span data-no-i18n>' + escapeHtml(e.message) + '</span></span>';
     // Reload to recover from a partial state
     loadCategories();
   }
@@ -2035,7 +2035,7 @@ async function renameCategory(id, input) {
     setTimeout(() => { status.innerHTML = ''; }, 1500);
   } catch (e) {
     input.value = oldName;
-    status.innerHTML = '<span class="err">Rename failed · 重命名失败: ' + escapeHtml(e.message) + '</span>';
+    status.innerHTML = '<span class="err">' + cuT('Rename failed', '重命名失败') + ': <span data-no-i18n>' + escapeHtml(e.message) + '</span></span>';
   }
 }
 
@@ -2053,7 +2053,7 @@ async function addCategory() {
     status.innerHTML = '<span class="ok">Added ✓</span>';
     setTimeout(() => { status.innerHTML = ''; }, 1500);
   } catch (e) {
-    status.innerHTML = '<span class="err">Add failed · 添加失败: ' + escapeHtml(e.message) + '</span>';
+    status.innerHTML = '<span class="err">' + cuT('Add failed', '添加失败') + ': <span data-no-i18n>' + escapeHtml(e.message) + '</span></span>';
   }
 }
 
@@ -2072,7 +2072,7 @@ async function deleteCategory(id, name, usage) {
     status.innerHTML = '<span class="ok">Deleted ✓</span>';
     setTimeout(() => { status.innerHTML = ''; }, 1500);
   } catch (e) {
-    status.innerHTML = '<span class="err">Delete failed · 删除失败: ' + escapeHtml(e.message) + '</span>';
+    status.innerHTML = '<span class="err">' + cuT('Delete failed', '删除失败') + ': <span data-no-i18n>' + escapeHtml(e.message) + '</span></span>';
   }
 }
 
@@ -2428,7 +2428,7 @@ async function loadBroadcasts() {
     });
     wrap.innerHTML = html;
   } catch (e) {
-    wrap.innerHTML = `<div style="font-size:13px;color:var(--tacet-brick);">Failed · 失败: ${escapeHtml(e.message)}</div>`;
+    wrap.innerHTML = `<div style="font-size:13px;color:var(--tacet-brick);">${cuT('Failed', '失败')}: <span data-no-i18n>${escapeHtml(e.message)}</span></div>`;
   }
 }
 function bxFeedRow(b) {
@@ -2570,7 +2570,7 @@ async function sendBroadcast() {
     bxCloseCompose();
     loadBroadcasts();
   } catch (e) {
-    status.innerHTML = `<span class="err">Failed · 失败: ${escapeHtml(e.message)}</span>`;
+    status.innerHTML = `<span class="err">${cuT('Failed', '失败')}: <span data-no-i18n>${escapeHtml(e.message)}</span></span>`;
   } finally {
     btn.disabled = false;
   }
@@ -2584,7 +2584,7 @@ async function recallBroadcast(id, currentStatus) {
     await api('/api/retail-admin/broadcasts/' + id + '/recall', { method: 'POST' });
     loadBroadcasts();
   } catch (e) {
-    toast('Failed · 失败: ' + e.message, 'err');
+    toast(cuT('Failed', '失败') + ': ' + e.message, 'err');
   }
 }
 // Lazy-load when the operator first opens the tab.
@@ -2650,7 +2650,7 @@ async function loadPopups() {
     _popups = list;
     renderPopups();
   } catch (e) {
-    $('#popups-list').innerHTML = `<div class="err">Load failed · 加载失败: ${escapeHtml(e.message)}</div>`;
+    $('#popups-list').innerHTML = `<div class="err">${cuT('Load failed', '加载失败')}: <span data-no-i18n>${escapeHtml(e.message)}</span></div>`;
   }
 }
 

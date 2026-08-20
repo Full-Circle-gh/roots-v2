@@ -29046,6 +29046,13 @@ function awardOrderPoints(orderId) {
     'SELECT id, customer_id, subtotal, total, points_earned FROM retail_orders WHERE id = ?'
   ).get(orderId);
   if (!o) return 0;
+  // A guest order has nobody to award to. The same guard sweepExpiredPoints
+  // carries one line below (:28647) — without it the transaction reads
+  // retail_customers WHERE id = NULL, gets undefined back, and throws on
+  // `fresh.lifetime_spend`. That throw was caught and logged on every walk-in
+  // sale: harmless, but an exception on a normal path is noise that hides the
+  // next real one.
+  if (!o.customer_id) return 0;
   // Sweep first so the awarded balance is based on a clean (post-expiry) state.
   sweepExpiredPoints(o.customer_id);
   const already = tdb().prepare(

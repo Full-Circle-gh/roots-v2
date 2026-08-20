@@ -688,7 +688,7 @@ async function submitBulkTag() {
     closeBulkTagModal();
     _mlSel.clear();
     loadMedia();
-  } catch (e) { toast('Failed · 失败: '+e.message, 'err'); }
+  } catch (e) { toast(cuT('Failed', '失败') + ': '+e.message, 'err'); }
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -1195,7 +1195,7 @@ async function finalizeTopupTx(id) {
     await api(`/api/retail-admin/topup-transactions/${id}/finalize`, { method: 'POST' });
     toast('Top-up finalized · 充值已确认');
     loadTopupTransactions();
-  } catch (e) { toast('Failed · 失败: '+e.message, 'err'); }
+  } catch (e) { toast(cuT('Failed', '失败') + ': '+e.message, 'err'); }
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -1228,7 +1228,7 @@ async function loadReviewTags() {
     syncReviewTagLabels();
     renderReviewTagsTable();
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="5" class="err">Failed · 失败: ${escapeHtml(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="5" class="err">${cuT('Failed', '失败')}: <span data-no-i18n>${escapeHtml(e.message)}</span></td></tr>`;
   }
 }
 
@@ -1353,8 +1353,8 @@ async function loadFaq() {
     renderFaqCatsTable();
     renderFaqQs();
   } catch (e) {
-    if (catBody) catBody.innerHTML = `<tr><td colspan="5" class="err">Failed · 失败: ${escapeHtml(e.message)}</td></tr>`;
-    if (qsList)  qsList.innerHTML  = `<div class="err">Failed · 失败: ${escapeHtml(e.message)}</div>`;
+    if (catBody) catBody.innerHTML = `<tr><td colspan="5" class="err">${cuT('Failed', '失败')}: <span data-no-i18n>${escapeHtml(e.message)}</span></td></tr>`;
+    if (qsList)  qsList.innerHTML  = `<div class="err">${cuT('Failed', '失败')}: <span data-no-i18n>${escapeHtml(e.message)}</span></div>`;
   }
 }
 
@@ -1561,7 +1561,7 @@ async function saveFaq() {
     status.innerHTML = '<span class="ok">Saved ✓ · 已保存</span>';
     toast('FAQ saved · 常见问题已保存');
   } catch (e) {
-    status.innerHTML = '<span class="err">Failed · 失败: ' + escapeHtml(e.message) + '</span>';
+    status.innerHTML = '<span class="err">' + cuT('Failed', '失败') + ': <span data-no-i18n>' + escapeHtml(e.message) + '</span></span>';
   }
 }
 
@@ -1595,7 +1595,7 @@ async function loadReviews() {
     for (const r of data) REVIEWS_BY_KEY[`${r.source || 'real'}:${r.id}`] = r;
     tbody.innerHTML = data.map(renderReviewRow).join('');
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="7" class="err">Failed · 失败: ${escapeHtml(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="7" class="err">${cuT('Failed', '失败')}: <span data-no-i18n>${escapeHtml(e.message)}</span></td></tr>`;
   }
 }
 
@@ -1675,7 +1675,7 @@ async function toggleReview(id, visible, source) {
     toast(visible ? 'Restored · 已恢复' : 'Hidden · 已隐藏');
     await loadReviews();
   } catch (e) {
-    toast('Failed · 失败: ' + e.message, 'err');
+    toast(cuT('Failed', '失败') + ': ' + e.message, 'err');
   }
 }
 
@@ -1689,7 +1689,7 @@ async function deleteReview(id) {
     toast(cuT('Removed', '已删除'));
     await loadReviews();
   } catch (e) {
-    toast('Failed · 失败: ' + e.message, 'err');
+    toast(cuT('Failed', '失败') + ': ' + e.message, 'err');
   }
 }
 
@@ -1715,7 +1715,7 @@ async function replyReview(id, source) {
     toast(reply ? cuT('Reply saved', '回复已保存') : cuT('Reply removed', '回复已删除'));
     await loadReviews();
   } catch (e) {
-    toast('Failed · 失败: ' + e.message, 'err');
+    toast(cuT('Failed', '失败') + ': ' + e.message, 'err');
   }
 }
 
@@ -1754,7 +1754,7 @@ async function loadFeedback() {
     }
     tbody.innerHTML = data.map(renderFeedbackRow).join('');
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="4" class="err">Failed · 失败: ${escapeHtml(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="4" class="err">${cuT('Failed', '失败')}: <span data-no-i18n>${escapeHtml(e.message)}</span></td></tr>`;
   }
 }
 

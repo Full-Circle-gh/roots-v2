@@ -138,7 +138,21 @@ function updateMultiCount() {
   const n = _zoneEditType === 'gz_district' ? _pickedDistricts.size : _pickedCities.length;
   if (!n) { el.style.display = 'none'; return; }
   el.style.display = '';
-  el.innerHTML = `<b>${n}</b> selected · 已选 <b>${n}</b> · Save will create ${n === 1 ? 'one zone' : `${n} zones`} with the settings below. · 保存将以下方设置创建 ${n} 个配送区。`;
+  // Two clauses, each resolved to ONE language before it reaches the DOM.
+  //
+  // This line used to carry three ' · ' separators in one run, and only the
+  // first behaved: the walker splits on the FIRST separator in a text node, so
+  // `selected · 已选` resolved correctly while the sentence after it began with
+  // a separator, hit the empty-left-hand guard, and returned untouched —
+  // rendering BOTH languages glued, permanently. The opposite failure to the
+  // error banners, from the same cause.
+  //
+  // The number stays INSIDE each half because the two languages put it in
+  // different places: "3 selected" against "已选 3".
+  const sel  = cuT(`<b>${n}</b> selected`, `已选 <b>${n}</b>`);
+  const note = cuT(`Save will create ${n === 1 ? 'one zone' : `${n} zones`} with the settings below.`,
+                   `保存将以下方设置创建 ${n} 个配送区。`);
+  el.innerHTML = `${sel} · ${note}`;
 }
 
 let _zones = [];

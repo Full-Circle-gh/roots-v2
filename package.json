@@ -7,6 +7,7 @@
     "lint": "eslint routes lib middleware scripts server.js database.js public",
     "lint:fix": "eslint --fix routes lib middleware scripts server.js database.js public",
     "verify:fulfilment": "node scripts/verify-fulfilment-types.js",
+    "verify:i18n-banners": "node scripts/check-i18n-banners.js",
     "test:address": "node scripts/test_address_pin.js && node scripts/test_address_clients.js",
     "test:batch-timing": "node scripts/test_batch_timing.js",
     "test:customer-search": "node scripts/test_customer_search.js",

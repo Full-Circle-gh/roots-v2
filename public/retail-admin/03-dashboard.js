@@ -2841,7 +2841,7 @@ async function dashLoad() {
     else dashSwapWithFade(dashRenderAll);
   } catch (e) {
     if (!DASH_DATA && dashBootRetry('dash', dashLoad)) return;
-    $('#db-kpis').innerHTML = `<div class="db-muted">Failed to load · 加载失败: ${escapeHtml(e.message)}</div>`;
+    $('#db-kpis').innerHTML = `<div class="db-muted">${cuT('Failed to load', '加载失败')}: <span data-no-i18n>${escapeHtml(e.message)}</span></div>`;
   }
 }
 

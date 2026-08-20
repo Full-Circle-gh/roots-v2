@@ -1300,7 +1300,7 @@ async function loadPolls() {
     votUpdateNavState();
     renderPollList();
   } catch (e) {
-    $('#vot-list').innerHTML = `<div class="muted" style="color: #c64242;">Failed to load · 加载失败: ${escapeHtml(e.message)}</div>`;
+    $('#vot-list').innerHTML = `<div class="muted" style="color: #c64242;">${cuT('Failed to load', '加载失败')}: <span data-no-i18n>${escapeHtml(e.message)}</span></div>`;
   }
 }
 
@@ -1645,7 +1645,7 @@ async function quickPollStatus(id, status) {
     await api('/api/retail-admin/polls/' + id, { method: 'PUT', body: { status } });
     toast('Poll → · 投票状态 → ' + status);
     await loadPolls();
-  } catch (e) { toast('Failed · 失败: ' + e.message, 'err'); }
+  } catch (e) { toast(cuT('Failed', '失败') + ': ' + e.message, 'err'); }
 }
 
 async function deletePoll(id) {

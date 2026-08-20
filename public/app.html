@@ -13168,7 +13168,7 @@ async function loadProdStoreStocks(productId) {
     if (!d.success) throw new Error(d.error || 'load failed');
     rows = d.data || [];
   } catch (e) {
-    card.innerHTML = `<div style="color:#dc2626;font-size:12px">📦 Stock load failed · 库存加载失败: ${esc(e.message)}</div>`;
+    card.innerHTML = `<div style="color:#dc2626;font-size:12px">📦 ${cuT('Stock load failed', '库存加载失败')}: <span data-no-i18n>${esc(e.message)}</span></div>`;
     return;
   }
   if (rows.length === 0) {
@@ -18117,7 +18117,7 @@ async function _loadMarketStock() {
     _paintMarketStockTable();
   } catch (e) {
     const body = document.getElementById('msBody');
-    if (body) body.innerHTML = `<div style="padding:40px;text-align:center;color:var(--danger);font-size:13px">Failed to load · 加载失败: ${esc(e.message||'')}</div>`;
+    if (body) body.innerHTML = `<div style="padding:40px;text-align:center;color:var(--danger);font-size:13px">${cuT('Failed to load', '加载失败')}: <span data-no-i18n>${esc(e.message||'')}</span></div>`;
   }
 }
 function _paintMarketStockTable() {
@@ -23573,7 +23573,7 @@ async function renderAlerts() {
     if (!d.success) throw new Error(d.error || 'load failed');
     data = d.data;
   } catch (e) {
-    document.getElementById('main').innerHTML = `<div style="padding:24px;color:#c0392b">Failed to load alerts · 加载预警失败: ${esc(String(e))}</div>`;
+    document.getElementById('main').innerHTML = `<div style="padding:24px;color:#c0392b">${cuT('Failed to load alerts', '加载预警失败')}: <span data-no-i18n>${esc(String(e))}</span></div>`;
     return;
   }
 
@@ -25054,7 +25054,7 @@ function _finRedrawInvoiceLists() {
   const listHeader = document.getElementById('finInvListHeader');
   const listBody   = document.getElementById('finInvListBody');
   if (listHeader) {
-    listHeader.innerHTML = `<div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" style="vertical-align:-3px;margin-right:8px;color:var(--text-3)"><path d="M20 21v-15.5a2.5 2.5 0 0 0-2.5-2.5h-11A2.5 2.5 0 0 0 4 5.5V21l3-2 3 2 3-2 3 2 4-2z"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="16" y2="13"/></svg>Invoices Received · 已收发票 ${filtered.invoices.length ? `<span style="font-size:13px;font-weight:500;color:var(--muted);margin-left:8px">${filtered.invoices.length} invoice${filtered.invoices.length===1?'':'s'}</span>` : ''}</div>`;
+    listHeader.innerHTML = `<div class="card-title"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="15" height="15" style="vertical-align:-3px;margin-right:8px;color:var(--text-3)"><path d="M20 21v-15.5a2.5 2.5 0 0 0-2.5-2.5h-11A2.5 2.5 0 0 0 4 5.5V21l3-2 3 2 3-2 3 2 4-2z"/><line x1="8" y1="9" x2="16" y2="9"/><line x1="8" y1="13" x2="16" y2="13"/></svg>${cuT('Invoices Received', '已收发票')} ${filtered.invoices.length ? `<span style="font-size:13px;font-weight:500;color:var(--muted);margin-left:8px">${filtered.invoices.length} invoice${filtered.invoices.length===1?'':'s'}</span>` : ''}</div>`;
   }
   if (listBody) {
     if (filtered.invoices.length === 0) {

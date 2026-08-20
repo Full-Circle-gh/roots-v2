@@ -214,7 +214,7 @@ async function loadOpsStores() {
       </div>`;
     }).join('');
   } catch (e) {
-    box.innerHTML = `<span style="color:var(--danger)">Failed to load stores · 加载失败: ${escapeHtml(e.message)}</span>`;
+    box.innerHTML = `<span style="color:var(--danger)">${cuT('Failed to load stores', '加载失败')}: <span data-no-i18n>${escapeHtml(e.message)}</span></span>`;
   }
 }
 
@@ -333,7 +333,7 @@ async function _opsStoreStaff(storeId) {
     const j = await api(`/api/backend/stores/${storeId}/staff`);
     _opsStoreStaffRender(store, j.staff || []);
   } catch (e) {
-    box.innerHTML = `<div style="margin-top:14px;color:var(--danger)">Failed to load staff · 加载失败: ${escapeHtml(e.message)}</div>`;
+    box.innerHTML = `<div style="margin-top:14px;color:var(--danger)">${cuT('Failed to load staff', '加载失败')}: <span data-no-i18n>${escapeHtml(e.message)}</span></div>`;
   }
 }
 
@@ -926,7 +926,7 @@ async function loadIntegrationsStatus() {
       ${errBox}
     `;
   } catch (e) {
-    box.innerHTML = `<span style="color:var(--danger)">Failed to load status · 加载状态失败: ${escapeHtml(e.message)}</span>`;
+    box.innerHTML = `<span style="color:var(--danger)">${cuT('Failed to load status', '加载状态失败')}: <span data-no-i18n>${escapeHtml(e.message)}</span></span>`;
   }
 }
 

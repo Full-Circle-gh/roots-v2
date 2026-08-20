@@ -4597,7 +4597,7 @@ async function markParcelDelivered(id, sid, ev) {
     openOrder(id, { instant: true });
     loadOrders();
   } catch (e) {
-    toast('Failed · 失败: ' + e.message, 'err');
+    toast(cuT('Failed', '失败') + ': ' + e.message, 'err');
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -4740,7 +4740,7 @@ async function openOrder(id, opts = {}) {
     const _crumb = document.getElementById('ord-page-crumb');
     if (_crumb) _crumb.textContent = o.order_no || '';
   } catch (e) {
-    mount.innerHTML = `<div class="order-card err">Failed · 失败: ${escapeHtml(e.message)}</div>`;
+    mount.innerHTML = `<div class="order-card err">${cuT('Failed', '失败')}: <span data-no-i18n>${escapeHtml(e.message)}</span></div>`;
     mount.classList.remove('od-swapping');
   }
   // Opened from a surface whose entire subject is the point — today only the
@@ -5909,7 +5909,7 @@ async function transition(id, status, ev) {
     openOrder(id, { instant: true });
     loadOrders();
   } catch (e) {
-    toast('Failed · 失败: ' + e.message, 'err');
+    toast(cuT('Failed', '失败') + ': ' + e.message, 'err');
   } finally {
     if (btn) btn.disabled = false;
   }
@@ -5943,7 +5943,7 @@ async function undoDispatch(id, ev) {
   } catch (e) {
     const msg = e.code === 'already_shipped'
       ? cuT('A parcel already has a waybill — cancel it first.', '已有包裹生成运单 — 请先取消运单。')
-      : 'Failed · 失败: ' + e.message;
+      : cuT('Failed', '失败') + ': ' + e.message;
     toast(msg, 'err');
   } finally {
     if (btn) btn.disabled = false;
@@ -5992,7 +5992,7 @@ async function undoPreparing(id, ev) {
   } catch (e) {
     const msg = e.code === 'already_shipped'
       ? cuT('A parcel already has a waybill — cancel it first.', '已有包裹生成运单 — 请先取消运单。')
-      : 'Failed · 失败: ' + e.message;
+      : cuT('Failed', '失败') + ': ' + e.message;
     toast(msg, 'err');
   } finally {
     if (btn) btn.disabled = false;
@@ -6369,7 +6369,7 @@ async function submitBulkTracking() {
     toast(`Bulk: ${ok}/${r.results.length} saved · 批量: ${ok}/${r.results.length} 已保存`, ok ? 'ok' : 'err');
     loadOrders();
   } catch (e) {
-    toast('Failed · 失败: ' + e.message, 'err');
+    toast(cuT('Failed', '失败') + ': ' + e.message, 'err');
     document.getElementById('bulk-trk-results').innerHTML =
       `<div class="err" style="padding:10px 14px; background: rgba(232,85,106,.08); border-radius:6px;">
          Request failed · 请求失败: ${escapeHtml(e.message || 'network')}
@@ -7643,7 +7643,7 @@ async function openRefundEvents(orderId) {
         </div>
       </div>`).join('');
   } catch (e) {
-    bg.querySelector('#rfe-body').innerHTML = `<div class="err">Failed · 加载失败: ${escapeHtml(e.message)}</div>`;
+    bg.querySelector('#rfe-body').innerHTML = `<div class="err">${cuT('Failed', '加载失败')}: <span data-no-i18n>${escapeHtml(e.message)}</span></div>`;
   }
 }
 

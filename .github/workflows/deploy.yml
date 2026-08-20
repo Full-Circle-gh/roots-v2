@@ -215,6 +215,34 @@ jobs:
           echo "Linting:"; printf '%s\n' "$JS"
           printf '%s\n' "$JS" | xargs node_modules/.bin/eslint
 
+      - name: Bilingual banners — a label must not swallow the message after it
+        if: steps.gate.outputs.skip == 'false' && steps.files.outputs.count != '0'
+        run: |
+          set -euo pipefail
+          # Runs whenever this ship carries an admin surface file. No native
+          # deps and no install — a pure string scan on the Node already set up
+          # for lint above, so it costs a second and can sit in front of every
+          # deploy that touches the admin.
+          #
+          # Why it is a GATE and not a note: the failure it catches is invisible
+          # in the language most of the people reading the screen use. The
+          # walker eats the error message for English readers and keeps it for
+          # Chinese ones, so a broken banner looks correct to whoever happens to
+          # be in the other language. It shipped in 29 places and was found only
+          # because a till sale could not be opened and the drawer had nothing
+          # to say.
+          # Keep this list in step with TARGETS in the script. Every surface
+          # here carries its own copy of the walker: the admin, the till, the
+          # kitchen SPA and the product editor. cms.html and shop.html are
+          # absent because neither defines processNode — a file with no walker
+          # cannot have this bug, and gating it would claim coverage that
+          # is not real.
+          if ! grep -qE '^public/(retail-admin|retail-admin\.html|till\.html|app\.html|product-editor\.html)' /tmp/files.txt; then
+            echo "No surface carrying the i18n walker in this change — banner gate skipped."
+            exit 0
+          fi
+          node scripts/check-i18n-banners.js
+
       - name: Does this change touch fulfilment logic?
         id: ftcheck
         if: steps.gate.outputs.skip == 'false' && steps.files.outputs.count != '0'
