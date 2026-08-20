@@ -977,9 +977,15 @@ button{font:inherit;color:inherit;margin:0}
     var el = $('cust');
     // On a phone .cust IS the order sheet's header, so it carries the sheet's
     // title and count. On a tablet the rail has no header and CSS hides both.
-    // NO TITLE WORD. The only locked pair is 'Orders 订单' (plural), and
-    // 'Order' singular has no locked Chinese half — so it is not written. The
-    // grab handle and a sheet full of line items already say what this is.
+    // NO TITLE WORD. The only locked pair for this noun is the PLURAL one the
+    // admin uses for its order lists; the singular has no locked Chinese half,
+    // so it is not written. The grab handle and a sheet full of line items
+    // already say what this is.
+    //
+    // The pair is not quoted here on purpose: the gate forbids Chinese anywhere
+    // in this file outside STRINGS, comments included, and it is right to — a
+    // character that never renders is still one nobody checked against a
+    // source. This comment tripped that rule on its first push.
     var head = '<span class="sheet-ttl">'
       + (S.lines.length ? '<span class="ct">' + itemCount() + '</span>' : '') + '</span>';
     if (S.customer) {
