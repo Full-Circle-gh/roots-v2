@@ -4,7 +4,7 @@
 
 > Line numbers are from `f2241022`. Where an existing document's citation has drifted, the drift is recorded rather than silently corrected.
 >
-> **AMENDED 2026-08-20.** Two findings in this survey — the stock gap (§1.5, §1.5a) and the two capability holes (§1.8) — have since been fixed, and §6 files a third bug found while fixing them. The §1–§5 text is left as surveyed, with dated status notes added where it would otherwise read as still-true. **Every `routes/retail.js` pin in §1–§5 predates the fix**, which added ~160 lines to that file; §1.5, §1.5a and §6 cite the current tree and say so.
+> **AMENDED 2026-08-20.** Two findings in this survey — the stock gap (§1.5, §1.5a) and the two capability holes (§1.8) — have since been fixed, §6 files a third bug found while fixing them, and §7 answers a separate question asked later the same day — whether one https QR can serve both wallets. The §1–§5 text is left as surveyed, with dated status notes added where it would otherwise read as still-true. **Every `routes/retail.js` pin in §1–§5 predates the fix**, which added ~160 lines to that file; §1.5, §1.5a and §6 cite the current tree and say so.
 
 Terms used below, one line each:
 
@@ -475,3 +475,141 @@ The stock decrement added on 2026-08-20 is keyed on *the sale being paid*, not o
 ### 6.5 Not fixed here, deliberately
 
 A fix has to decide whether the status route calls `isTerminalOnPaid` itself (a third inline mirror of `markOrderPaid`, on a route that already carries seven) or whether the two paths are collapsed onto one function — which is the larger and better change, and is not a stock fix. Recorded rather than guessed at.
+
+---
+
+## 7. THE ONE-QR PAY LINK — WHAT EXISTS AND WHAT IS MISSING
+
+**Surveyed 2026-08-20 against `origin/main` = `a608fd2e`. Read-only; no code was changed. Line numbers are from that head — `routes/retail.js` is unchanged by the three commits since `3c4fc204`, but it did move under the stock fix, so pins here differ from §1–§5 and agree with §6.**
+
+> **The question.** The counter design assumes one QR holding a plain `https` link to `/pay/:token`, scannable by both WeChat and Alipay, each of which then invokes its own in-app payment. This section establishes, with citations, whether that works today.
+
+### 7.0 The short answer
+
+**No, and the reason is not a bug — it is that the QR does not exist.** Nothing anywhere in the repository QR-encodes the `/pay/:token` link. The five QR images the product generates all encode a **gateway string**, never a link to our own page (§7.3). The pay page itself has **no user-agent detection**, **no JSAPI branch**, **no H5 branch**, and can render exactly one kind of payment artifact — an image (§7.1). A customer who scanned an https QR with WeChat and landed on that page would be shown a **WeChat Pay Native QR inside WeChat**, which is a QR asking to be scanned by the app already displaying it.
+
+### 7.1 The pay page
+
+**What `/pay/:token` serves.** One route, one constant: `router.get('/pay/:token')` (`routes/retail.js:5443`) sends `GUEST_PAY_PAGE` (`:5331`) — a self-contained HTML string, no app bundle. It is served for **any** token; a bad or spent token surfaces in-page rather than as a 404 (`:5329-5330`). The page reads its token from the URL (`:5367`) and drives three JSON endpoints: `/api/pay/:token` (`:5226`), `/api/pay/:token/create` (`:5244`), `/api/pay/:token/status` (`:5301`).
+
+**Does it detect which app opened it? No.** The page's script contains no `navigator.userAgent` read of any kind — no `MicroMessenger` test, no `AlipayClient` test, no device sniff. It renders up to two buttons from a server flag and nothing else (`:5382-5385`). The POST it sends carries **only** `{ method }` (`:5418`) — there is no `channel` field, so the server could not act on a detection even if the page made one.
+
+**This is a capability the product has and this page does not use.** `public/shop.html:1899-1902` does exactly the detection in question — `payEnv()` reads the UA, `wxChannel()` returns `'jsapi' | 'h5' | 'native'`, `aliChannel()` returns `'wap' | 'page'` — and posts that channel to `/api/retail/payment/create`. The guest pay page predates none of it and uses none of it.
+
+**Confirmed: the WeChat branch is ALWAYS Native.** `routes/retail.js:5260-5273`. There is no `channel` read and no conditional: the branch calls `wechatNativePrepare` (`:5264`, function at `:3845`) unconditionally, renders the returned `code_url` to a PNG (`:5270`), and returns `mode: 'native'` (`:5272`). The endpoint's own header comment states the design intent (`:5241-5243`):
+
+> Mirrors `/api/retail/payment/create`'s Native-QR (WeChat) and precreate/manual (Alipay) branches — **the only ones a guest (no openid, no in-WeChat context) can use.**
+
+**Is there a JSAPI branch on this path? There is not.** `wechatJsapiPrepare` exists (`:3753`) and is called from three places — the in-app order checkout (via `wechatPayCreate`, `:3787`, called `:4789`), the wallet top-up (`:29335`) and the order add-on (`:30131`) — **none of them the guest path**. `wechatH5Prepare` exists (`:3809`) and is called from exactly one place, `/api/retail/payment/create` when `channel === 'h5'` (`:4744`, call at `:4746`) — again not the guest path.
+
+**What happens when the page is opened inside WeChat's browser.** Everything above still runs, unchanged, because nothing detects the context. The chain is:
+
+1. The customer's WeChat scanner opens the `https` URL in WeChat's built-in browser.
+2. The page renders "Pay with WeChat · 微信支付" (`:5383`).
+3. The tap POSTs `{method:'wechat'}`; the server returns a Native `code_url` as `qr_png` (`:5270-5272`).
+4. The page takes the **only** success path it has — `if (d.qr_png)` (`:5423`) — and paints the QR as an `<img>` with the caption *"Scan with WeChat · 微信 to pay"* (`:5425-5429`).
+
+So the terminal state is a `weixin://wxpay/bizpayurl` QR displayed inside the app that would have to scan it. **The page has no other branch to fall to**: a server response carrying `h5_url` or `pay_url` instead of `qr_png` would land in the else at `:5432-5433` and render *"Payment could not be prepared. Please ask the staff."* The page cannot follow a redirect-style payment even if the server offered one.
+
+> **UNVERIFIED, and deliberately left so.** Whether WeChat's in-app browser will *long-press-recognise* (长按识别) a `weixin://` payment QR is client behaviour I cannot establish from this repository, and it is not the flow the code was written for either way. What is established from the code is narrower and sufficient: there is no branch, no detection, and one possible artifact.
+
+**Is there a WeChat OAuth flow reachable from this page? No — and there is no in-browser OAuth flow anywhere in the product.** A grep for `oauth2/authorize`, `snsapi_base`, `snsapi_userinfo`, `sns/oauth2`, `jscode2session`, `code2Session` and `connect/oauth2` across the repository returns **three** hits, and none of them can serve this page:
+
+| Hit | What it is | Why it cannot mint an openid here |
+|---|---|---|
+| `routes/retail.js:2953` | `sns/jscode2session` inside `exchangeCodeForOpenid` | **Mini-program login.** Consumes a `wx.login` code, which only a mini-program can produce. Reached by `POST /api/retail/auth` (`:2974`), which the pay page never calls. |
+| `lib/social-auth.js:89-95` | `authorizeUrl('wechat')` | Builds **`open.weixin.qq.com/connect/qrconnect`** with **`scope: 'snsapi_login'`** — Open Platform *desktop scan-to-log-in*, not the in-WeChat `connect/oauth2/authorize` + `snsapi_base` flow. It is a customer **account** sign-in, reached at `routes/retail.js:3312` (`/api/retail/auth/oauth/:provider/start`). |
+| `lib/social-auth.js:151` | `sns/oauth2/access_token` | The token exchange for the row above. Same flow, same limitation. |
+
+The pay page's script makes exactly three network calls (`:5406`, `:5418`, `:5438`), all to `/api/pay/*`. It never touches an auth route.
+
+**Two further absences that bear on JSAPI specifically:**
+
+- **No JS-SDK anywhere.** A grep for `WeixinJSBridge`, `chooseWXPay`, `jsapi_ticket`, `wx.config(` and `js_api_list` across `routes/`, `public/`, `lib/` and `miniapp/` returns **nothing**. The in-browser payment invocation has no code at all.
+- **There is one appid field, and it is the mini-program's.** `tenants.wx_appid` (`routes/saas-admin.js:26`) is read into the pay context at `lib/tenant-creds.js:246-247` and is the value matched against the `x-wx-appid` header a mini-program sends (`routes/retail.js:92`). No official-account (服务号) appid is stored anywhere. `buildWxRequestPaymentParams` (`:3721`) signs a `wx.requestPayment` parameter set with that appid — the mini-program shape, not the JS-SDK `chooseWXPay` shape.
+
+### 7.2 The Alipay side
+
+**Can `/pay/:token` invoke the real Alipay wap gateway? No — that branch does not exist on this path.** The guest endpoint's Alipay half is `routes/retail.js:5276-5296` and has exactly two outcomes, in this order:
+
+1. **Manual 收款码 first**, whenever the account has one configured (`:5277-5285`, config read at `getAlipayManual`, `:3486`). Returns `mode: 'manual'` with the operator's uploaded static QR image (read at `:5278`, returned at `:5281`) and an optional pay window. Settlement is a customer-uploaded screenshot graded by a Haiku vision call, then a human — the machinery surveyed at §2.3.
+2. **Otherwise Roots-only 当面付 precreate** (`:5290`, `alipayPrecreate` at `:3988`), which returns a `qr_code` string rendered to a PNG (`:5293`).
+
+`alipayPageRedirectUrl` — the function that builds the signed `alipay.trade.wap.pay` / `alipay.trade.page.pay` redirect (`:4007`) — is called from **one** place in the repository: `/api/retail/payment/create` at `:4839`, gated on `channel === 'wap' || channel === 'page'`. The guest path never calls it, and the guest page never sends a channel. So on `/pay/:token` **the wap gateway is unreachable, for every account including Roots.**
+
+**Where Alipay credentials are read from.** Module-level `process.env` constants, resolved once at file load: `ALIPAY_APP_ID` (`:3464`), `ALIPAY_GATEWAY` (`:3465`), `ALIPAY_NOTIFY_URL` (`:3466`), `ALIPAY_PRIVATE_KEY` (`:3467`), `ALIPAY_PUBLIC_KEY` (`:3468`), and the derived `ALIPAY_DEV_MODE = !ALIPAY_APP_ID || !ALIPAY_PRIVATE_KEY` (`:3469`). **These are global — there is no per-account Alipay credential anywhere.** Contrast WeChat Pay, which resolves per account on every call through `payContext()` → `getTenantCreds()` (§4.1).
+
+**What the refusal does for a non-Roots account.** The gate now sits at `routes/retail.js:4832` (it was `:4727` in §2.2, before the stock fix moved it):
+
+```js
+if (currentTenantId() !== ROOTS_TENANT_ID || ALIPAY_DEV_MODE) {
+  return res.status(501).json({ success: false, error: 'alipay_not_configured' });
+}
+```
+
+It returns **HTTP 501 `alipay_not_configured`** and stops. The comment above it (`:4827-4831`) records why: the constants are Roots' env, so a tenant's Alipay charge would settle to **Roots' merchant** — "a money leak". The identical gate is repeated on the guest path at `:5286`.
+
+**Its practical effect is narrower than it looks, because of ordering.** On both paths the manual 收款码 is checked *first* (`:4812` / `:5278`). So a non-Roots account with a 收款码 configured never reaches the refusal — it gets the static-QR-plus-screenshot flow. The 501 fires only for a non-Roots account with **no** 收款码, and for Roots itself whenever the env vars are unset. Availability is advertised to the client accordingly: `/api/pay/:token` reports `alipay: !!getAlipayManual() || (currentTenantId() === ROOTS_TENANT_ID && !ALIPAY_DEV_MODE)` (`:5233`), so an account with neither simply never sees an Alipay button (`:5384`).
+
+### 7.3 What the QR actually contains today — the central finding
+
+**There is no QR of the pay link. Anywhere.**
+
+`lib/qrpng.js` is the only QR encoder in the product, and it is server-side (`qrPngDataUrl`, `lib/qrpng.js:323`). A grep for its call sites returns **five**, and every single input is a **gateway string**:
+
+| # | Call site | String encoded | What that string is |
+|---|---|---|---|
+| 1 | `routes/retail.js:4771` | `codeUrl` | WeChat Native — `weixin://wxpay/bizpayurl?pr=…` |
+| 2 | `routes/retail.js:4857` | `qrCode` | Alipay `trade.precreate` `qr_code` |
+| 3 | `routes/retail.js:5270` | `codeUrl` | WeChat Native — **guest pay page** |
+| 4 | `routes/retail.js:5293` | `qrCode` | Alipay precreate — **guest pay page** |
+| 5 | `lib/billing-providers.js:137` | `j.code_url` | WeChat Native, subscription invoices |
+
+A sixth QR reaches customers without being generated at all: the **manual Alipay 收款码**, an operator-uploaded image served straight through as `manual.qr` (`:5281`). Its contents are whatever Alipay put in the merchant's own static collection code.
+
+**There is no client-side QR encoder either.** A grep across `public/` and `miniapp/` for `qrcode`, `qrious`, `easyqrcode` and QR `toDataURL` patterns returns nothing.
+
+**What happens to the `/pay/:token` URL instead.** It is built once, server-side, and returned as a **string**:
+
+- Minted at order create: `payToken = crypto.randomBytes(18).toString('hex')` (`:20912`) — 36 hex characters, validated on read by `/^[a-f0-9]{16,64}$/i` (`:5219`).
+- Assembled into `pay_url` on the create response, on the request's own origin so it is tenant-correct (`:21070`).
+- Rendered by the admin as a **copyable link and an anchor — not a QR** (`public/retail-admin/04-orders.js:5063-5072`). Its own sub-caption is the tell: *"Send this to the customer, or show the page for them to scan."* That is an instruction to **open the page** so the customer can scan the QR the page then generates — not to scan the link.
+
+**So the honest description of today's flow is:** the operator sends or opens an https link; the customer's browser loads our page; the customer taps a rail; the **server** mints a gateway QR; the customer scans **that** with a second device or a second app. The one-QR premise inverts this — it asks the QR to be the entry point rather than the exit.
+
+**One thing that would not need changing.** `publicTenantScope` is mounted on `/pay` and `/api/pay` (`server.js:379-380`) and resolves the account from the **Host** header when no appid header is present (`middleware/public-tenant.js:49-54`). A scanned https link carries no appid, so host resolution is exactly the right mechanism and already works. And capacity is not a constraint: `lib/qrpng.js` covers versions 1–6, "~106 bytes of payload" (`lib/qrpng.js:3-6`), against a link of roughly 70 characters (`https://<host>/pay/` + 36 hex).
+
+### 7.4 The gap, in three buckets
+
+**EXISTS AND WORKS — reusable as-is**
+
+- `GET /pay/:token` serving a public, un-authed, self-contained page (`:5443`, `:5331`); the unguessable token is the capability (`:5211-5215`).
+- Account resolution by Host for a scanned link (`server.js:379-380`; `middleware/public-tenant.js:49-54`).
+- A QR encoder with ample capacity for the link (`lib/qrpng.js:3-6`, `:323`).
+- Settlement, for every mode: one async WeChat callback keyed on `out_trade_no` (`:5449` for Roots, `…/callback/:tid` at `:5450` per-account) plus a trade-state poll fallback (`:5301-5320`). **Any** new WeChat mode would settle through the machinery already there — the code comment at `:3803-3804` states this explicitly.
+- Per-account WeChat Pay credentials, already threaded (`payContext()` `:3620`).
+- The device-detection logic itself, already written and working — on a different page (`public/shop.html:1899-1902`).
+
+**EXISTS BUT IN THE WRONG MODE**
+
+- **WeChat on the guest path is hard-wired to Native** (`:5260-5273`). `wechatH5Prepare` (`:3809`) and `wechatJsapiPrepare` (`:3753`) are both built, tested by use elsewhere, and simply not reachable from `/pay/:token`.
+- **The guest page cannot render anything but an image.** Its single success branch is `if (d.qr_png)` (`:5423`); an `h5_url` or a redirect `pay_url` falls to the failure copy (`:5432-5433`).
+- **The guest POST carries no channel** (`:5418`), so the server has nothing to branch on.
+- **Alipay wap/page exists but is unreachable here** — built at `:4007`, called only at `:4839` on the in-app endpoint, and sitting *below* the Roots-only gate (`:4832`) even there.
+- **The admin surfaces the pay link as text, not as a QR** (`04-orders.js:5063-5072`).
+
+**DOES NOT EXIST**
+
+- **Any QR containing an https link to our own page** — the five encoder call sites all take gateway strings (§7.3).
+- **Any user-agent / in-app detection on the pay page** — no UA read at all.
+- **A WeChat in-browser OAuth flow.** No `connect/oauth2/authorize`, no `snsapi_base`, anywhere. The only WeChat web OAuth is `qrconnect` + `snsapi_login` (`lib/social-auth.js:89-95`), a desktop scan-to-log-in for account sign-in, which yields an Open-Platform-scoped openid — not one usable for a JSAPI charge on the payment merchant's bound appid.
+- **Any JS-SDK integration** — no `WeixinJSBridge`, no `chooseWXPay`, no `wx.config`, no `jsapi_ticket`, product-wide.
+- **An official-account (服务号) appid.** One appid field exists (`tenants.wx_appid`, `saas-admin.js:26`) and it is the mini-program's, used for mini-app routing (`retail.js:92`) and signed into `wx.requestPayment` params (`:3721`).
+- **Per-account Alipay gateway credentials.** Global env only (`:3464-3469`); the refusal at `:4832` exists precisely because of that.
+- **Any Alipay in-app detection or invocation** on the pay page.
+
+### 7.5 Open / unverified
+
+- **Whether Alipay's scanner opens arbitrary https URLs in its in-app browser**, and whether WeChat's does so for a link it did not itself generate, are **client behaviours no file in this repository establishes.** The one-QR premise depends on both. Nothing here confirms or refutes them.
+- **Whether WeChat long-press-recognises a `weixin://` payment QR shown inside its own browser** — same class, same status (§7.1).
+- **No live database was queried and no payment was attempted.** Every statement above is read from code.
