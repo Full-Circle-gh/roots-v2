@@ -1961,13 +1961,24 @@ const phoneBlock = (() => {
   return POS_TILL_SRC.slice(k, POS_TILL_SRC.indexOf('\n}', k) + 2);
 })();
 check('the till stacks its rail under the products on a phone', phoneBlock.length > 100, true);
-// NOT SHRINKABLE. .t-entry above it is flex:1 and its grid wants every pixel,
-// so a shrinkable rail gets squeezed below its own content height and pushes the
-// pay button off the bottom of the screen — which is what it did.
-check('the stacked rail cannot be squeezed below its own content',
-  /\.t-order\{[\s\S]*?flex:0 0 auto/.test(phoneBlock), true);
-check('the stacked rail is capped so it cannot swallow the product grid',
-  /max-height:\d+%/.test(phoneBlock), true);
+// OUT OF FLOW. The rail became a bottom SHEET rather than a stacked strip: in
+// flow it competed with the product grid for the same column and lost, ending
+// as a two-line list nobody could read. Absolute positioning is what lets the
+// grid keep the whole screen while the order keeps a full-height home.
+check('the sheet is out of flow, so the product grid keeps the screen',
+  // [^}]* — bounded to .t-order's OWN body. With [\s\S]*? this reached
+  // .sheet-scrim's position:absolute further down and passed while .t-order had
+  // none, which is a green light for the exact bug it exists to catch.
+  /\.t-order\{[^}]*position:absolute/.test(phoneBlock), true);
+// A DEFINITE height, not a cap on content: .lines flexes and scrolls inside it,
+// which is what keeps the total and the pay button pinned at every basket size.
+check('the sheet has a definite height, so its list can scroll inside it',
+  /\.t-order\{[^}]*height:86%/.test(phoneBlock), true);
+// Closed by default and translated away — the products are the working surface.
+check('the sheet is closed until it is asked for',
+  /\.t-order\{[^}]*transform:translateY\(101%\)/.test(phoneBlock), true);
+check('and opens on a class the render pass owns',
+  /\.till\.sheet-open \.t-order\{transform:translateY\(0\)\}/.test(phoneBlock), true);
 // THE OVERRIDE BLOCK MUST COME LAST. .t-order, .lines, .smain, .samt, .spick and
 // .sconf are all declared further up at the SAME specificity; written any
 // earlier the base rules win and the whole media query silently does nothing.
@@ -1993,13 +2004,79 @@ check('the preference is still read at boot, so the write has a reader',
 // Switching shelf means switching stock; the catalogue must be re-read rather
 // than left showing the previous store's.
 check('switching store re-reads the catalogue', /function switchStore[\s\S]{0,600}loadCatalogue\(\)/.test(POS_TILL_SRC), true);
-check('switching store drops the previous shelf', /function switchStore[\s\S]{0,400}S\.stock = \{\}/.test(POS_TILL_SRC), true);
+check('switching store drops the previous shelf', /function switchStore[\s\S]{0,900}S\.stock = \{\}/.test(POS_TILL_SRC), true);
 // A basket is priced and stock-checked against ONE store.
 check('the store cannot change under a basket', /canSwitch = S\.stores\.length > 1 && !S\.lines\.length/.test(POS_TILL_SRC), true);
 // The picker's id must not sit one character from the settle screen's .spick
 // wallet list — this file already carries a note about that class of collision.
 check('the store picker does not collide with the settle wallet list',
   [/id="storepick"/.test(POS_TILL_SRC), /id="spick"/.test(POS_TILL_SRC)], [true, false]);
+
+// ── The order sheet ──────────────────────────────────────────────────────
+// The first phone layout stacked the rail under the products and capped it, so
+// the order list was a two-line strip and the customer control owned a full row
+// of the most valuable space on the screen. The order is now a BAR that opens a
+// full-height sheet; the rail element itself becomes that sheet, so there is one
+// order list in the DOM rather than two that can disagree.
+check('the phone bar exists, carrying the count and the total',
+  [/id="tbar"/.test(POS_TILL_SRC), /id="bar-ct"/.test(POS_TILL_SRC),
+   /id="bar-amt"/.test(POS_TILL_SRC), /id="bar-pay"/.test(POS_TILL_SRC)],
+  [true, true, true, true]);
+// THE BUG THIS ROW EXISTS FOR: the handler was written and the control was
+// drawn, but [data-sheet] was never added to the delegated selector, so the bar
+// did nothing at all. Handler and selector have to move together.
+check('the order sheet is reachable — data-sheet is in the click delegation',
+  /closest\('\[data-add\][^']*\[data-sheet\]'\)/.test(POS_TILL_SRC), true);
+check('opening and closing the sheet are both wired',
+  [/data-sheet="open"/.test(POS_TILL_SRC), /data-sheet="close"/.test(POS_TILL_SRC)], [true, true]);
+// The sheet must not survive into the settle takeover, whose whole point is
+// that nothing of the till stays readable behind it.
+check('the sheet is forced shut when the till leaves its own view',
+  /if \(S\.view !== 'till'\) S\.sheetOpen = false;/.test(POS_TILL_SRC), true);
+// Every phone-only element must be inert on a tablet, and — the trap that has
+// now caught this file twice — those defaults must be declared ABOVE the
+// override block or they win and the phone layout silently does nothing.
+// COMMENTS STRIPPED FIRST. The comment above these defaults quotes the very
+// rule it is describing, so a plain indexOf found the prose — the real rule
+// could then be moved below the override block and this still passed.
+const tillNoComments = POS_TILL_SRC.replace(/\/\*[\s\S]*?\*\//g, '');
+const defaultsAt = tillNoComments.indexOf('.t-bar{display:none}');
+const overrideAt = tillNoComments.indexOf('.smain{flex-direction:column');
+check('the phone-only furniture is inert on a tablet',
+  [defaultsAt !== -1, /\.sheet-grab\{display:none\}/.test(tillNoComments),
+   /\.tile \.incart\{display:none\}/.test(tillNoComments)], [true, true, true]);
+check('those defaults are declared ABOVE the override block, or they would win',
+  defaultsAt !== -1 && overrideAt !== -1 && defaultsAt < overrideAt, true);
+// The tablet's stepper behaviour is unchanged: the strip is emitted for every
+// line now, and CSS shows it only for the selected one.
+check('the tablet still reveals a stepper only on the selected line',
+  /\.ln\.sel \+ \.lctl\{display:flex\}/.test(POS_TILL_SRC), true);
+// A stepper on every row cannot key off S.sel — it would bump whichever line
+// happened to be selected, or none.
+check('quantity changes name the line they act on',
+  /function bumpQty\(d, idx\)/.test(POS_TILL_SRC), true);
+check('removing a line clears the selection, because indexes shift under it',
+  /S\.lines\.splice\(i, 1\);[\s\S]{0,300}S\.sel = null;/.test(POS_TILL_SRC), true);
+// With the sheet closed by default the tile badge is the ONLY confirmation a
+// tap landed, which makes it load-bearing rather than decorative.
+check('a product tile shows how many of it are in the basket',
+  /inc > 0 \? '<span class="incart">' \+ inc/.test(POS_TILL_SRC), true);
+
+// ── A closed counter is shown, not hidden ────────────────────────────────
+// Filtering closed stores out of the picker was the first shape of this, and it
+// read as a broken button: a store that vanishes and a control that does
+// nothing are indistinguishable from behind a counter.
+check('every active store reaches the picker, closed counters included',
+  /S\.stores = list;/.test(POS_TILL_SRC) && !/list = openList;/.test(POS_TILL_SRC), true);
+check('only the OPENING pick is restricted to a counter that is open',
+  /var pick = openList\.filter/.test(POS_TILL_SRC), true);
+check('a closed counter is labelled in the picker rather than dropped',
+  /shutlb[\s\S]{0,80}T\('closed'\)/.test(POS_TILL_SRC), true);
+check('a closed counter cannot be selected',
+  /if \(st && !storeOpen\(st\)\) return render\(\);/.test(POS_TILL_SRC), true);
+// Unknown status counts as OPEN, matching the server's own fail-open rule.
+check('an unread channel status leaves every counter open',
+  /function storeOpen\(st\) \{ return !S\.posOpen \|\| S\.posOpen\[st\.code\] !== false; \}/.test(POS_TILL_SRC), true);
 
 // ═══ 16. POS is a sales channel, and closing it closes something ═══════════
 // THE ASSERTION THIS SECTION EXISTS FOR: a channel toggle that changes nothing

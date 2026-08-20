@@ -413,6 +413,21 @@ button{font:inherit;color:inherit;margin:0}
 }
 .boot p{margin:0;color:var(--td-text2);font-size:15px;max-width:44ch}
 .boot a{color:var(--td-text);text-underline-offset:3px}
+/* The phone-only furniture, inert on a tablet. Declared HERE, above the
+   override block, because equal-specificity rules are decided by source order
+   — written below it, these would win and the phone layout would silently do
+   nothing. That is exactly what happened on the first pass: .t-bar{display:none}
+   sat after the media query and the bar never appeared.
+   The stepper strip keeps its old tablet behaviour exactly: hidden unless its
+   line is the selected one. */
+.sheet-grab{display:none}
+.sheet-scrim{display:none}
+.t-bar{display:none}
+.cust .sheet-ttl{display:none}
+.tile .incart{display:none}
+.lctl{display:none}
+.ln.sel + .lctl{display:flex}
+
 /* ══ OVERRIDES LAST ══════════════════════════════════════════════════════
    This block must stay at the END of the sheet. It targets .t-order, .lines,
    .smain, .samt, .spick and .sconf, all of which are declared further up at
@@ -420,35 +435,105 @@ button{font:inherit;color:inherit;margin:0}
    media query silently does nothing. It was written earlier the first time,
    and the rail kept computing to width:380px inside a 375px phone. */
 /* ── PHONE ────────────────────────────────────────────────────────────────
-   Below the two-column floor the rail STOPS BEING A COLUMN and becomes a
-   section under the products.
+   THE ORDER STOPS BEING A COLUMN AND BECOMES A BAR.
 
-   It has to. .t-order is `flex:none; width:380px`, so on a 412px phone it
-   claimed 380 of them and the grid's own min-content pushed the document
-   wider than the screen: the rail, the running total and Mark paid all sat
-   off the right edge, reachable only by horizontal scrolling, and the page
-   gave no sign that a whole half of the till was over there.
+   A phone has one column of room and two things competing for it. The
+   products are touched dozens of times a sale; the order is checked two or
+   three. The first attempt split the screen between them, which served the
+   rare job at the cost of the constant one and left the order list a
+   two-line strip the eye reads as a footer — present, but not readable.
 
-   The rail is content-sized and capped rather than given a fixed share: an
-   empty basket must not eat half a phone screen, and a long one must not
-   push the products off it. .lines drops to flex:0 1 auto so the rail can
-   shrink to nothing when the basket is empty, and shrink-and-scroll once the
-   cap is hit — which keeps .foot, and therefore the total and the pay
-   button, pinned to the bottom of the rail at every basket length. */
+   So: the grid gets the screen. The bar keeps the only part of the order
+   that must always be true, the total, and opens the rest at full height —
+   ~465px of list rather than ~150. The rail element itself becomes that
+   sheet, so there is one order list in the DOM, not two.
+
+   Specified in reference/counter-till-mobile-mockup.html. */
 @media (max-width:700px){
   .t-body{flex-direction:column}
   .t-entry{flex:1 1 auto;min-height:0}
+
+  /* The rail, restyled into a bottom sheet. */
   .t-order{
-    /* 0 0 auto, NOT 0 1 auto: the entry above is flex:1 and its grid wants
-       every pixel, so a shrinkable rail gets squeezed below its own content
-       height and pushes the pay button off the bottom of the screen. The rail
-       sizes to content, capped; .lines is the only thing that gives. */
-    width:100%;flex:0 0 auto;max-height:46%;
+    position:absolute;left:0;right:0;bottom:0;top:auto;
+    width:100%;height:86%;max-height:none;flex:0 0 auto;z-index:12;
     border-left:0;border-top:1px solid var(--td-border);
+    border-radius:18px 18px 0 0;
+    box-shadow:0 -2px 6px rgba(17,26,43,.06), 0 -12px 32px rgba(17,26,43,.10);
+    transform:translateY(101%);
+    transition:transform .28s var(--ease-settle);
   }
-  .lines{flex:0 1 auto}
+  .till.sheet-open .t-order{transform:translateY(0)}
+  @media (prefers-reduced-motion:reduce){ .t-order{transition:none} }
+  .lines{flex:1 1 auto}
+  .sheet-grab{
+    display:block;flex:none;width:36px;height:4px;margin:8px auto 0;
+    border-radius:2px;background:var(--td-border);
+  }
+  .sheet-scrim{
+    display:block;position:absolute;inset:0;z-index:11;
+    background:rgba(17,26,43,.34);
+  }
+
+  /* .cust IS the sheet header here: count on the left, customer on the right.
+     It was a full-width row of its own on the products screen, which is the
+     single most expensive place it could have been for a control a walk-in
+     never touches. */
+  .cust{min-height:56px;padding:10px 14px 12px;gap:10px}
+  .cust .sheet-ttl{display:inline-flex;align-items:center;gap:8px;order:-1}
+  .cust .sheet-ttl .ct{
+    min-width:26px;height:26px;padding:0 8px;border-radius:999px;
+    background:var(--td-raised);color:var(--td-text2);
+    font-size:13px;font-weight:500;font-variant-numeric:tabular-nums;
+    display:inline-flex;align-items:center;justify-content:center;
+  }
+  .cust .who{flex:1;min-width:0;text-align:right}
+
+  /* Every line carries its stepper: the sheet was opened on purpose and has
+     the room, so a correction is one tap instead of select-then-tap. */
+  .lctl{display:flex}
+
+  /* The bar. Two rows: the order folded, and the thing the thumb is going for. */
+  .t-bar{
+    display:block;flex:none;z-index:10;
+    background:var(--td-surface);border-top:1px solid var(--td-border);
+    padding:8px 14px 14px;
+  }
+  .bar-sum{
+    height:44px;width:100%;display:flex;align-items:center;gap:8px;
+    background:transparent;border:0;padding:0;color:var(--td-text);font:inherit;
+  }
+  .bar-sum[hidden]{display:none}
+  .bar-sum .chev{width:18px;height:18px;flex:none;color:var(--td-text2)}
+  .bar-sum .ct{
+    min-width:26px;height:26px;padding:0 8px;border-radius:999px;
+    background:var(--td-raised);color:var(--td-text2);
+    font-size:13px;font-weight:500;font-variant-numeric:tabular-nums;
+    display:inline-flex;align-items:center;justify-content:center;
+  }
+  .bar-sum .sp{flex:1}
+  .bar-sum .amt{font-size:20px;font-weight:500;font-variant-numeric:tabular-nums}
+  #bar-pay{width:100%;height:60px}
+
+  /* The basket count, on the tile. Solid ink, not the amber tint the low-stock
+     pill uses — one is what is in the basket, the other is what is on the
+     shelf, and reading one as the other would be a miscount at the counter. */
+  .tile{position:relative}
+  .tile .incart{
+    display:inline-flex;align-items:center;justify-content:center;
+    position:absolute;top:8px;right:8px;
+    min-width:24px;height:24px;padding:0 7px;border-radius:999px;
+    background:var(--td-text);color:var(--td-paper);
+    font-size:13px;font-weight:500;font-variant-numeric:tabular-nums;
+  }
+
   /* The head must not wrap: the store control is the only way to change shop. */
   .t-brand{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  /* Above the sheet, always — the takeover's whole point is that nothing of
+     the till stays readable behind it. */
+  .settle{z-index:30}
+  #storepick{z-index:40}
 
   /* The settle takeover is amount-beside-wallets at 56px apart, which does not
      fit a phone either. Stack it, and let the two fixed 340px blocks be as wide
@@ -482,6 +567,7 @@ button{font:inherit;color:inherit;margin:0}
       <div class="grid" id="grid"></div>
     </div>
     <div class="t-order">
+      <div class="sheet-grab"></div>
       <div class="cust" id="cust"></div>
       <div class="lines" id="lines"></div>
       <div class="foot">
@@ -490,6 +576,16 @@ button{font:inherit;color:inherit;margin:0}
         <button class="pay" id="pay" type="button" disabled></button>
       </div>
     </div>
+  </div>
+  <div class="sheet-scrim" id="sheet-scrim" data-sheet="close"></div>
+  <div class="t-bar" id="tbar">
+    <button class="bar-sum" type="button" data-sheet="open">
+      <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+      <span class="ct" id="bar-ct"></span>
+      <span class="sp"></span>
+      <span class="amt" id="bar-amt"></span>
+    </button>
+    <button class="pay" id="bar-pay" type="button"></button>
   </div>
   <div class="settle" id="settle" hidden></div>
   <div class="sscrim" id="storepick" hidden></div>
@@ -607,6 +703,8 @@ button{font:inherit;color:inherit;margin:0}
   /* ==================================================================== */
   var S = {
     stores: [], storeId: null, storeName: '', pickOpen: false,
+    posOpen: null,             // storeCode -> bool, or null when unknown
+    sheetOpen: false,          // phone only: is the order sheet up?
     products: [], stock: {}, cats: [], cat: '', q: '',
     lines: [], sel: null,
     customer: null, custBusy: false,
@@ -677,13 +775,18 @@ button{font:inherit;color:inherit;margin:0}
             row.cells.forEach(function (c) { posOpen[c.storeCode] = !!c.open; });
           }
         }
-        if (posOpen) {
-          var openList = list.filter(function (st) { return posOpen[st.code] !== false; });
-          // Every counter closed is a real state, not an error: say so with the
-          // grid's own words rather than a sentence composed for this screen.
-          if (!openList.length) { boot(esc(T('closed'))); return; }
-          list = openList;
-        }
+        S.posOpen = posOpen;
+        // EVERY active store is kept, closed counters included. Filtering them
+        // out was the first shape of this and it read as a broken control: a
+        // store that vanishes and a button that does nothing look identical
+        // from behind a counter. They are listed and labelled instead, and
+        // only the OPENING pick is restricted to a counter that is open.
+        var openList = posOpen
+          ? list.filter(function (st) { return posOpen[st.code] !== false; })
+          : list;
+        // Every counter closed is a real state, not an error: say so with the
+        // grid's own words rather than a sentence composed for this screen.
+        if (posOpen && !openList.length) { boot(esc(T('closed'))); return; }
         if (!list.length) {
           // Honest and specific: the till cannot open without a location,
           // because a counter sale is refused without one server-side.
@@ -693,7 +796,7 @@ button{font:inherit;color:inherit;margin:0}
         S.stores = list;
         var saved = null;
         try { saved = localStorage.getItem('tacet-till-store'); } catch (e) {}
-        var pick = list.filter(function (s) { return String(s.id) === String(saved); })[0] || list[0];
+        var pick = openList.filter(function (s) { return String(s.id) === String(saved); })[0] || openList[0];
         setStore(pick);
         return loadCatalogue();
       })
@@ -759,9 +862,16 @@ button{font:inherit;color:inherit;margin:0}
   // Switching shelf means switching stock, so the catalogue is re-read rather
   // than reused. Guarded by the caller: a basket built against one store's shelf
   // is not carried to another.
+  // Unknown (no channel-status read) counts as open, matching the server's
+  // own fail-open rule in retail.js posClosedForStore.
+  function storeOpen(st) { return !S.posOpen || S.posOpen[st.code] !== false; }
+
   function switchStore(id) {
     var st = S.stores.filter(function (x) { return String(x.id) === String(id); })[0];
     S.pickOpen = false;
+    // A closed counter is selectable-looking but not selectable: the server
+    // refuses those sales, so offering one would only move the refusal later.
+    if (st && !storeOpen(st)) return render();
     if (!st || String(st.id) === String(S.storeId)) return render();
     setStore(st);
     S.stock = {}; S.products = []; S.cats = []; S.cat = ''; S.q = '';
@@ -776,10 +886,14 @@ button{font:inherit;color:inherit;margin:0}
     var h = '<div class="ssheet"><div class="hd">' + esc(T('store')) + '</div>';
     S.stores.forEach(function (st) {
       var on = String(st.id) === String(S.storeId);
+      var open = storeOpen(st);
       var nm = cuT(st.name_en || st.code || ('#' + st.id), st.name_cn || st.name_en || st.code || ('#' + st.id));
-      h += '<button class="srow' + (on ? ' on' : '') + '" type="button" data-pick="' + esc(String(st.id)) + '">'
+      h += '<button class="srow' + (on ? ' on' : '') + (open ? '' : ' shut') + '" type="button"'
+        + (open ? ' data-pick="' + esc(String(st.id)) + '"' : ' disabled') + '>'
         + '<svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 13 4 4L19 7"/></svg>'
-        + '<span>' + esc(nm) + '</span></button>';
+        + '<span>' + esc(nm) + '</span>'
+        + (open ? '' : '<span class="sp"></span><span class="shutlb">' + esc(T('closed')) + '</span>')
+        + '</button>';
     });
     h += '</div>';
     el.innerHTML = h;
@@ -807,6 +921,12 @@ button{font:inherit;color:inherit;margin:0}
     qi.placeholder = T('searchAdd');
     $('q-clr').hidden = !S.q;
     renderCats(); renderGrid(); renderCust(); renderLines(); renderFoot();
+    // The sheet belongs to the till view only. Leaving it open behind the
+    // settle takeover would put a scrim and a second pay button under a screen
+    // whose whole point is that nothing of the till stays readable.
+    if (S.view !== 'till') S.sheetOpen = false;
+    document.getElementById('app').classList.toggle('sheet-open', S.sheetOpen);
+    $('sheet-scrim').hidden = !S.sheetOpen;
     $('settle').hidden = (S.view === 'till');
     if (S.view !== 'till') renderSettle();
   }
@@ -838,7 +958,9 @@ button{font:inherit;color:inherit;margin:0}
       var st = stockOf(p.id);
       var left = st == null ? null : st - inCart(p.id);
       var out = left != null && left <= 0;
+      var inc = inCart(p.id);
       h += '<button class="tile' + (out ? ' out' : '') + '" type="button" data-add="' + p.id + '"' + (out ? ' disabled' : '') + '>'
+         + (inc > 0 ? '<span class="incart">' + inc + '</span>' : '')
          + '<span class="nm">' + esc(pname(p)) + '</span>'
          + '<span class="ft"><span class="pr">' + yuan(p.sell_price) + '</span>'
          + (out ? '<span class="lo">' + esc(T('outOfStock')) + '</span>'
@@ -853,15 +975,22 @@ button{font:inherit;color:inherit;margin:0}
   // what the cashier can offer — points and wallet.
   function renderCust() {
     var el = $('cust');
+    // On a phone .cust IS the order sheet's header, so it carries the sheet's
+    // title and count. On a tablet the rail has no header and CSS hides both.
+    // NO TITLE WORD. The only locked pair is 'Orders 订单' (plural), and
+    // 'Order' singular has no locked Chinese half — so it is not written. The
+    // grab handle and a sheet full of line items already say what this is.
+    var head = '<span class="sheet-ttl">'
+      + (S.lines.length ? '<span class="ct">' + itemCount() + '</span>' : '') + '</span>';
     if (S.customer) {
       el.className = 'cust on';
-      el.innerHTML = '<span class="who">' + esc(S.customer.nickname || ('#' + S.customer.id))
+      el.innerHTML = head + '<span class="who">' + esc(S.customer.nickname || ('#' + S.customer.id))
         + '<div class="sub">' + esc(T('points')) + ' ' + (Number(S.customer.points) || 0)
         + ' · ' + esc(T('wallet')) + ' ' + yuan(S.customer.balance) + '</div></span>'
         + '<button class="cbtn" type="button" data-cust="clear">' + esc(T('remove')) + '</button>';
     } else {
       el.className = 'cust';
-      el.innerHTML = '<span class="who">' + esc(T('guest')) + '</span>'
+      el.innerHTML = head + '<span class="who">' + esc(T('guest')) + '</span>'
         + '<button class="cbtn" type="button" data-cust="pick">'
         + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>'
         + esc(T('customer')) + '</button>';
@@ -880,15 +1009,23 @@ button{font:inherit;color:inherit;margin:0}
          + '<span class="nm">' + (l.qty > 1 ? '<span class="q">×' + l.qty + '</span>' : '') + esc(l.name)
          + '<div class="sb">' + yuan(l.price) + '</div></span>'
          + '<span class="tt">' + yuan(l.qty * l.price) + '</span></button>';
-      if (sel) {
+      // ALWAYS EMITTED, never conditional. On a tablet CSS shows this only for
+      // the selected line, which is exactly the old behaviour; on a phone the
+      // sheet is opened on purpose and has the room, so every line carries its
+      // own stepper and a correction is one tap instead of three.
+      //
+      // It is a SIBLING of .ln rather than a child because .ln is a <button>,
+      // and a button cannot contain buttons. That is why the phone layout puts
+      // the stepper under its line instead of inline as the mockup drew it.
+      {
         var st = stockOf(l.id);
         var capped = st != null && l.qty >= st;
-        h += '<div class="lctl">'
-           + '<button class="step" type="button" data-q="-1">&minus;</button>'
+        h += '<div class="lctl' + (sel ? ' sel' : '') + '" data-for="' + i + '">'
+           + '<button class="step" type="button" data-q="-1" data-i="' + i + '">&minus;</button>'
            + '<span class="stepn">' + l.qty + '</span>'
-           + '<button class="step" type="button" data-q="1"' + (capped ? ' disabled' : '') + '>+</button>'
+           + '<button class="step" type="button" data-q="1" data-i="' + i + '"' + (capped ? ' disabled' : '') + '>+</button>'
            + '<span class="lsp"></span>'
-           + '<button class="rm" type="button" data-q="x">' + esc(T('remove')) + '</button>'
+           + '<button class="rm" type="button" data-q="x" data-i="' + i + '">' + esc(T('remove')) + '</button>'
            + '</div>';
       }
     });
@@ -908,6 +1045,27 @@ button{font:inherit;color:inherit;margin:0}
     var b = $('pay');
     b.disabled = !S.lines.length;
     b.textContent = S.lines.length ? T('markPaid') + '  ' + yuan(sub) : T('markPaid');
+
+    // THE BAR IS THE ORDER, FOLDED. On a phone the sheet is closed by default,
+    // so this is the only always-true statement of what the customer owes.
+    // A BARE NUMBER for the count, deliberately: "4 items" would be an English
+    // string with no locked Chinese half, and a pill beside a total needs no
+    // unit to be read. The product tiles already count the same way.
+    var any = S.lines.length > 0;
+    $('bar-ct').textContent = any ? String(itemCount()) : '';
+    $('bar-amt').textContent = yuan(sub);
+    var bb = $('bar-pay');
+    bb.disabled = !any;
+    bb.textContent = any ? T('markPaid') + '  ' + yuan(sub) : T('markPaid');
+    // With nothing rung up there is no order to open, so the summary row goes
+    // rather than sitting there inert.
+    document.querySelector('.bar-sum').hidden = !any;
+  }
+
+  // Units, not lines: three lines at quantity two are six items, and six is
+  // what a cashier counts against the goods on the counter.
+  function itemCount() {
+    return S.lines.reduce(function (n, l) { return n + (Number(l.qty) || 0); }, 0);
   }
 
   /* ---- settle ---------------------------------------------------------- */
@@ -978,12 +1136,20 @@ button{font:inherit;color:inherit;margin:0}
     else S.lines.push({ id: id, name: pname(p), price: Number(p.sell_price) || 0, qty: 1 });
     render();
   }
-  function bumpQty(d) {
-    var l = S.lines[S.sel]; if (!l) return;
-    if (d === 'x') { S.lines.splice(S.sel, 1); S.sel = null; render(); return; }
+  function bumpQty(d, idx) {
+    var i = (idx == null || idx === '') ? S.sel : Number(idx);
+    var l = S.lines[i]; if (!l) return;
+    var drop = function () {
+      S.lines.splice(i, 1);
+      // The selection is an INDEX, so every line after the removed one shifts.
+      // Clearing it is the only safe answer: keeping it would leave the tablet
+      // strip attached to whichever line slid into that slot.
+      S.sel = null; render();
+    };
+    if (d === 'x') return drop();
     var st = stockOf(l.id);
     var next = l.qty + Number(d);
-    if (next <= 0) { S.lines.splice(S.sel, 1); S.sel = null; render(); return; }
+    if (next <= 0) return drop();
     if (st != null && next > st) return;
     l.qty = next; render();
   }
@@ -1078,14 +1244,18 @@ button{font:inherit;color:inherit;margin:0}
       // The scrim closes the picker: tapping away from a short list is the
       // expected way out, and it is the only dismissal this pop-up needs.
       if (S.pickOpen && ev.target.id === 'storepick') { S.pickOpen = false; return render(); }
-      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick]');
+      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet]');
       if (!t) return;
       if (t.hasAttribute('data-store')) { S.pickOpen = !S.pickOpen; return render(); }
+      if (t.hasAttribute('data-sheet'))  {
+        S.sheetOpen = t.getAttribute('data-sheet') === 'open';
+        return render();
+      }
       if (t.hasAttribute('data-pick'))  return switchStore(t.getAttribute('data-pick'));
       if (t.hasAttribute('data-add'))   return addLine(Number(t.getAttribute('data-add')));
       if (t.hasAttribute('data-cat'))   { S.cat = t.getAttribute('data-cat'); return render(); }
       if (t.hasAttribute('data-line'))  { var i = Number(t.getAttribute('data-line')); S.sel = (S.sel === i ? null : i); return render(); }
-      if (t.hasAttribute('data-q'))     return bumpQty(t.getAttribute('data-q'));
+      if (t.hasAttribute('data-q'))     return bumpQty(t.getAttribute('data-q'), t.getAttribute('data-i'));
       if (t.hasAttribute('data-cust'))  { if (t.getAttribute('data-cust') === 'clear') { S.customer = null; return render(); } return pickCustomer(); }
       if (t.hasAttribute('data-wal'))   { S.wallet = t.getAttribute('data-wal'); S.err = ''; return render(); }
       if (t.hasAttribute('data-more'))  { S.moreOpen = true; return render(); }
