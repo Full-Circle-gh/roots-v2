@@ -27,10 +27,18 @@ const fs = require('fs');
 // /duplicate column/i — better-sqlite3's message text. None of that is valid or
 // wanted against Postgres, whose duplicate-column message does not match that
 // regex and would therefore throw rather than skip.
+// lib/pg.js is required HERE and nowhere else in the application (G3). It was
+// built 2026-08-08 and wired to nothing until now; requiring it is also what arms
+// the global numeric type parser, without which money read back from Postgres
+// arrives as text. Its own load-time throw on missing TACET_PG_* config is kept
+// deliberately — see its header: "a missing or stray variable would then connect
+// somewhere unintended rather than failing". Selecting Postgres without telling
+// the process where Postgres is should stop the boot, not connect to a guess.
 const { IS_POSTGRES } = require('./lib/db-driver');
 if (IS_POSTGRES) {
-  const { makeUnwiredPgHandle } = require('./lib/pg-handle');
-  module.exports = makeUnwiredPgHandle();
+  const { pool } = require('./lib/pg');
+  const { makePooledPgHandle } = require('./lib/pg-handle');
+  module.exports = makePooledPgHandle(pool);
   return;
 }
 

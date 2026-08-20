@@ -82,8 +82,8 @@ if (MUTANT) {
 }
 
 /** Boot `node -e <src>` with TACET_DB set (or deliberately absent). */
-function boot(tacetDb, src) {
-  const env = { ...process.env };
+function boot(tacetDb, src, extraEnv = {}) {
+  const env = { ...process.env, ...extraEnv };
   if (tacetDb === undefined) delete env.TACET_DB; else env.TACET_DB = tacetDb;
   try {
     const out = execFileSync(process.execPath, ['-e', src], { cwd: ROOT, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
@@ -92,6 +92,10 @@ function boot(tacetDb, src) {
     return { ok: false, out: String(e.stdout || ''), err: String(e.stderr || '') };
   }
 }
+const PG_ENV = Object.freeze({
+  TACET_PG_HOST: '127.0.0.1', TACET_PG_PORT: '1',
+  TACET_PG_DATABASE: 'tacet', TACET_PG_USER: 'tacet_app',
+});
 const DRIVER_LINE = "const d = require('./lib/db-driver'); console.log('DRIVER=' + d.DRIVER);";
 
 try {
@@ -157,7 +161,7 @@ try {
       const inv = require('./lib/inventory');
       try { const v = inv.getAvailable(1, 1); console.log('RETURNED=' + JSON.stringify(v)); }
       catch (e) { console.log('THREW=' + e.constructor.name + '|' + e.message); }
-    `);
+    `, PG_ENV);
     assert.ok(r.ok, `the probe process died: ${r.err}`);
     assert.ok(!/RETURNED=/.test(r.out),
       `A REAL CALL SITE RETURNED A VALUE UNDER POSTGRES INSTEAD OF THROWING:\n${r.out}`);
@@ -172,13 +176,13 @@ try {
       const { FORBIDDEN_NAMES } = require('./lib/pg-handle');
       console.log('PRESENT=' + FORBIDDEN_NAMES.filter((n) => n in h).join(','));
       console.log('KEYS=' + Object.keys(h).join(','));
-    `);
+    `, PG_ENV);
     assert.ok(r.ok, r.err);
     assert.ok(/PRESENT=\s*$/m.test(r.out), `forbidden names present: ${(/PRESENT=(.*)/.exec(r.out) || [])[1]}`);
   });
 
   t('10 `exec` in particular is absent — control() would take the SQLite branch', () => {
-    const r = boot('postgres', "const h=require('./database'); console.log('EXEC=' + typeof h.exec);");
+    const r = boot('postgres', "const h=require('./database'); console.log('EXEC=' + typeof h.exec);", PG_ENV);
     assert.ok(r.ok, r.err);
     assert.ok(/EXEC=undefined/.test(r.out),
       `the handle carries exec; lib/db-transaction.js control() tests it FIRST:\n${r.out}`);
@@ -215,23 +219,73 @@ try {
       try { h.prepare = () => {}; console.log('MUTATED'); }
       catch (e) { console.log('FROZEN=' + e.constructor.name); }
       console.log('AFTER=' + typeof h.prepare);
-    `);
+    `, PG_ENV);
     assert.ok(r.ok, r.err);
     assert.ok(/AFTER=undefined/.test(r.out), `prepare was successfully bolted on:\n${r.out}`);
   });
 
-  t('13 every use of the unwired handle names the gap', () => {
+  t('13 THE POOL IS REACHED — query() goes to Postgres, not to a stub', () => {
+    // Pointed at a port nothing listens on. A connection error is the proof:
+    // a stub would have refused before any socket was attempted, and the
+    // message would name a gap rather than a connection.
     const r = boot('postgres', `
-      const h = require('./database');
-      try { h.query('SELECT 1'); console.log('RAN'); }
-      catch (e) { console.log('THREW=' + e.message); }
-    `);
+      require('./database').query('SELECT 1')
+        .then(() => console.log('CONNECTED'))
+        .catch((e) => console.log('PGERR=' + (e.code || e.message)));
+    `, PG_ENV);
     assert.ok(r.ok, r.err);
-    assert.ok(!/RAN/.test(r.out), 'the unwired handle executed a query');
-    assert.ok(/G3/.test(r.out), `the error does not name the gap:\n${r.out}`);
+    assert.ok(/PGERR=/.test(r.out), `query() did not reach a connection attempt:\n${r.out}`);
+    assert.ok(/ECONNREFUSED/.test(r.out), `expected a real connection failure, got:\n${r.out}`);
+    assert.ok(!/G3/.test(r.out), 'query() still reports the pool as unwired');
   });
 
-  t('14 THE SQLITE PATH IS UNCHANGED — real handle, real query, real shape', () => {
+  t('14 lib/pg.js KEEPS its load-time throw on missing config', () => {
+    const r = boot('postgres', "require('./database'); console.log('BUILT');");
+    assert.ok(!r.ok, 'postgres booted with no TACET_PG_* config');
+    assert.ok(/refusing to build a pool: missing/.test(r.err),
+      `failed for the wrong reason:\n${r.err}`);
+    assert.ok(!/BUILT/.test(r.out), 'a handle was built without a pool config');
+  });
+
+  t('15 *** IDENTITY *** — tdb(), rawTdb() and the export are ONE object', () => {
+    // lib/tenant-db.js compares the ALS store against mainDb BY IDENTITY, keys
+    // dbToId by raw handle, and tenantAls.run() throws on a wrapper. Two objects
+    // for one driver would make currentTenantId() misreport or throw per request,
+    // and that value selects a tenant's credentials.
+    const r = boot('postgres', `
+      const h = require('./database');
+      const again = require('./database');
+      const { tdb, rawTdb } = require('./lib/tenant-db');
+      const { seam, isWrapped } = require('./lib/db-seam');
+      console.log('CACHED=' + (h === again));
+      console.log('TDB=' + (tdb() === h));
+      console.log('RAWTDB=' + (rawTdb() === h));
+      console.log('SEAM_NOWRAP=' + (seam(h) === h));
+      console.log('NOT_WRAPPED=' + (isWrapped(h) === false));
+    `, PG_ENV);
+    assert.ok(r.ok, r.err);
+    for (const k of ['CACHED', 'TDB', 'RAWTDB', 'SEAM_NOWRAP', 'NOT_WRAPPED']) {
+      assert.ok(new RegExp(k + '=true').test(r.out), `${k} is not identity-stable:\n${r.out}`);
+    }
+  });
+
+  t('16 the ALS accepts the handle and currentTenantId() answers Roots', () => {
+    const r = boot('postgres', `
+      const { tenantAls, rawTdb, currentTenantId, ROOTS_TENANT_ID } = require('./lib/tenant-db');
+      console.log('UNSCOPED=' + currentTenantId());
+      try {
+        tenantAls.run(rawTdb(), () => { console.log('SCOPED=' + currentTenantId()); });
+      } catch (e) { console.log('ALS_THREW=' + e.message.slice(0, 70)); }
+      console.log('ROOTS=' + ROOTS_TENANT_ID);
+    `, PG_ENV);
+    assert.ok(r.ok, r.err);
+    assert.ok(!/ALS_THREW/.test(r.out), `tenantAls.run() rejected the handle:\n${r.out}`);
+    assert.ok(/UNSCOPED=1/.test(r.out), r.out);
+    assert.ok(/SCOPED=1/.test(r.out),
+      `currentTenantId() did not recognise the Roots scope — identity is broken:\n${r.out}`);
+  });
+
+  t('17 THE SQLITE PATH IS UNCHANGED — real handle, real query, real shape', () => {
     const r = boot(undefined, `
       const db = require('./database');
       console.log('SHAPE=' + ['prepare','exec','transaction','pragma']
@@ -245,7 +299,7 @@ try {
     assert.ok(/WAL=wal/.test(r.out), `journal_mode is not WAL — a pragma was lost:\n${r.out}`);
   });
 
-  t('15 database.js carries an INSERT-ONLY diff — the byte-identity proof', () => {
+  t('18 database.js carries an INSERT-ONLY diff — the byte-identity proof', () => {
     // Source-level, and labelled as such per §24 v4.34 rather than left to read
     // as behavioural. The claim "the SQLite path is unchanged" rests on there
     // being no modified line for a change to hide in; test 14 proves it runs,
