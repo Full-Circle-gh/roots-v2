@@ -1,0 +1,928 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — Counter till mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   COUNTER TILL — Tacet, static mockup, no live data.
+
+   Device: Android tablet 9.7", 2048x1280 physical, landscape, touch
+   only. Drawn at 1024x640 CSS px (2x DPR) — the tightest plausible
+   reading of that panel. Anything that fits here fits a 1.5x device
+   (1365x853) with room to spare. Every touch target >= 44px; the
+   working ones are 52-76px.
+
+   NOT the desktop admin shell. There is no rail and no topbar on this
+   device, so none is drawn (patterns doc S0, "chrome is quoted, never
+   drawn"). The till is full-bleed on the tablet.
+
+   Colour is the live --td-* block copied verbatim from
+   public/retail-admin.css :8205-8254 — dark first (the admin default),
+   light as the opt-in override, exactly as live. The till runs
+   data-theme="light": a counter is a bright room and Paper is the
+   brand's ground. Both themes are defined so the till can flip.
+
+   Type: Inter only, 400/500. Fraunces 300 appears ONCE, on this
+   document's own headline, never inside a frame. No monospace exists
+   in Tacet; money and quantities are Inter + tabular-nums.
+
+   English only, per the standing mockup rule. Every string here is one
+   half of a cuT('en','zh') source pair; the Chinese halves ship in the
+   handoff table, not on this surface.
+   ============================================================ */
+
+:root {
+  /* --- verbatim from retail-admin.css :8205-8237 (dark, the default) --- */
+  --td-surface:    #18233A;
+  --td-raised:     #1E2A44;
+  --td-border:     #2A3550;
+  --td-header:     #364058;
+  --td-unseen:     #182329;
+  --td-text:       #FBF9F4;
+  --td-text2:      #9AA3B2;
+  --td-heat-rgb:   251, 249, 244;
+  --td-dusk:       #6E67AF;
+  --td-dusk-hi:    #7E77BF;
+  --td-dusk-tint:  #262A4A;
+  --td-sage:       #A3B49F;
+  --td-sage-tint:  #1E2C26;
+  --td-sage-ink:   #A3B49F;
+  --td-amber:      #C9954A;
+  --td-amber-tint: #33290F;
+  --td-amber-ink:  #C9954A;
+  --td-brick:      #B4533E;
+  --td-brick-tint: #351B14;
+  --td-brick-ink:  #D07A66;
+  --td-paper:      #111A2B;
+
+  --f-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  --f-display: "Fraunces", Georgia, serif;
+  --r-control: 8px;
+  --r-card: 14px;
+  --r-pill: 999px;
+  --shadow-soft: 0 1px 2px rgba(17,26,43,0.05), 0 4px 16px rgba(17,26,43,0.04);
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+}
+:root[data-theme="light"], .till {
+  /* --- verbatim from retail-admin.css :8238-8254 (light override) --- */
+  --td-surface:    #FFFFFF;
+  --td-raised:     #F6F3EC;
+  --td-border:     #E4E0D5;
+  --td-header:     #DAD5C6;
+  --td-unseen:     #F4F5F0;
+  --td-text:       #111A2B;
+  --td-text2:      #58606E;
+  --td-heat-rgb:   17, 26, 43;
+  --td-dusk-tint:  #EEEDF6;
+  --td-sage-tint:  #EDF1EC;
+  --td-sage-ink:   #4A6249;
+  --td-amber-tint: #F7EEDE;
+  --td-amber-ink:  #8A6425;
+  --td-brick-tint: #F6E7E3;
+  --td-brick-ink:  #B4533E;
+  --td-paper:      #FBF9F4;
+}
+
+* { box-sizing: border-box; }
+
+/* ---- the document around the frames (not part of the design) ---- */
+body {
+  margin: 0;
+  font-family: var(--f-sans);
+  background: #EDEAE2;
+  color: #111A2B;
+  -webkit-font-smoothing: antialiased;
+  padding: 48px 24px 96px;
+  line-height: 1.6;
+}
+.doc { max-width: 1120px; margin: 0 auto; }
+.doc h1 {
+  font-family: var(--f-display);
+  font-weight: 300;
+  font-size: 40px;
+  line-height: 1.2;
+  margin: 0 0 8px;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+.doc .lede { font-size: 15px; color: #58606E; margin: 0 0 8px; max-width: 62ch; }
+.doc .meta { font-size: 13px; color: #58606E; margin: 0 0 48px; max-width: 72ch; }
+.doc h2 {
+  font-size: 18px; font-weight: 500; margin: 64px 0 4px; letter-spacing: -0.005em;
+}
+.doc h2 .n { color: #58606E; font-weight: 400; margin-right: 10px; }
+.doc h2 + p { font-size: 14px; color: #58606E; margin: 0 0 20px; max-width: 72ch; }
+.doc hr { border: 0; border-top: 1px solid #DCD8CE; margin: 64px 0 0; }
+
+/* The frame is exact device pixels, so nothing about it is guesswork.
+   That makes it wider than a laptop window, so each one gets its OWN
+   horizontal scroller — the document body must never scroll sideways. */
+.stage { overflow-x: auto; padding-bottom: 4px; }
+.device {
+  width: 1024px; height: 640px;
+  border-radius: 18px;
+  border: 1px solid #C9C4B8;
+  background: #FBF9F4;
+  overflow: hidden;
+  box-shadow: var(--shadow-soft);
+  position: relative;
+}
+.device-note {
+  font-size: 12px; color: #58606E; margin: 10px 0 0;
+  display: flex; gap: 8px; align-items: baseline;
+}
+.device-note b { font-weight: 500; color: #111A2B; }
+
+/* ============================================================
+   THE TILL
+   ============================================================ */
+.till {
+  width: 100%; height: 100%;
+  background: var(--td-paper);
+  color: var(--td-text);
+  font-family: var(--f-sans);
+  font-size: 15px;
+  display: flex; flex-direction: column;
+  position: relative;
+}
+
+/* ---- slim header. 56px, matching the admin topbar, for family
+        resemblance only — it carries no admin furniture. ---- */
+.t-head {
+  height: 56px; flex: none;
+  display: flex; align-items: center; gap: 12px;
+  padding: 0 16px;
+  background: var(--td-surface);
+  border-bottom: 1px solid var(--td-border);
+}
+.t-brand { font-size: 15px; font-weight: 500; letter-spacing: -0.01em; }
+.t-store { font-size: 13px; color: var(--td-text2); }
+.t-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--td-border); flex: none; }
+.t-spacer { flex: 1; }
+.t-cashier {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--td-raised); border: 1px solid var(--td-border);
+  display: grid; place-items: center;
+  font-size: 13px; font-weight: 500; color: var(--td-text2);
+}
+
+.t-body { flex: 1; display: flex; min-height: 0; }
+
+/* ============================================================
+   LEFT — product entry
+   ============================================================ */
+.t-entry {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column;
+  padding: 16px; gap: 12px;
+}
+
+/* Search sits ABOVE the grid on purpose: tapping it raises the
+   on-screen keyboard, which covers the bottom half of a 640px screen.
+   A search field below the grid would be hidden by the very keyboard
+   it summons. */
+.t-search {
+  height: 52px; flex: none;
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 14px;
+  background: var(--td-surface);
+  border: 1px solid var(--td-border);
+  border-radius: var(--r-control);
+  color: var(--td-text2);
+  font-size: 15px;
+}
+.t-search svg { width: 18px; height: 18px; flex: none; }
+.t-search.is-typed { color: var(--td-text); border-color: var(--td-text2); }
+.t-search .caret {
+  width: 1.5px; height: 20px; background: var(--td-dusk); margin-left: -4px;
+  animation: blink 1.1s steps(1,end) infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+.t-cats { display: flex; gap: 8px; flex: none; }
+.t-cat {
+  height: 44px; padding: 0 16px;
+  display: inline-flex; align-items: center;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--td-border);
+  background: var(--td-surface);
+  color: var(--td-text2);
+  font-size: 14px; font-weight: 500;
+  white-space: nowrap;
+}
+.t-cat.on { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
+
+.t-grid {
+  flex: 1; min-height: 0;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-auto-rows: 100px;
+  gap: 12px;
+  align-content: start;
+  overflow: hidden;
+}
+
+/* A tile carries three things and no more: what it is, what it costs,
+   and whether you can sell it. */
+.tile {
+  border-radius: var(--r-card);
+  border: 1px solid var(--td-border);
+  background: var(--td-surface);
+  padding: 12px;
+  display: flex; flex-direction: column; justify-content: space-between;
+  text-align: left;
+  font-family: inherit;
+  color: var(--td-text);
+  overflow: hidden;
+}
+.tile .nm {
+  font-size: 14px; font-weight: 500; line-height: 1.3;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tile .pr { font-size: 15px; font-variant-numeric: tabular-nums; }
+.tile .foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+
+/* Low stock is amber and still sellable. */
+.tile .left {
+  font-size: 12px; font-weight: 500;
+  color: var(--td-amber-ink);
+  background: var(--td-amber-tint);
+  border-radius: var(--r-pill);
+  padding: 2px 8px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Out of stock stays IN the grid, in its own place. Removing the tile
+   would make the cashier hunt for something that isn't there, and
+   muscle memory is the whole point of a tile grid. It is not tappable
+   and it does not pretend to be. */
+.tile.out {
+  background: var(--td-raised);
+  border-style: dashed;
+  border-color: var(--td-border);
+}
+.tile.out .nm, .tile.out .pr { color: var(--td-text2); }
+.tile.out .pr { text-decoration: line-through; }
+.tile.out .left {
+  color: var(--td-brick-ink);
+  background: var(--td-brick-tint);
+}
+
+/* ============================================================
+   RIGHT — the running order
+   ============================================================ */
+.t-order {
+  width: 380px; flex: none;
+  background: var(--td-surface);
+  border-left: 1px solid var(--td-border);
+  display: flex; flex-direction: column;
+  min-height: 0;
+}
+
+/* Walk-ins are anonymous by default. Attaching a customer is one tap
+   and never a required step — the row states which it is in words. */
+.t-cust {
+  flex: none; height: 56px;
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--td-border);
+}
+.t-cust .who { flex: 1; min-width: 0; font-size: 14px; color: var(--td-text2); }
+.t-cust .add {
+  height: 44px; padding: 0 14px;
+  border-radius: var(--r-control);
+  border: 1px solid var(--td-border);
+  background: transparent;
+  color: var(--td-text);
+  font: inherit; font-size: 14px; font-weight: 500;
+}
+.t-cust.linked .who { color: var(--td-text); }
+.t-cust.linked .who b { font-weight: 500; }
+.t-cust .bal {
+  font-size: 12px; color: var(--td-sage-ink); background: var(--td-sage-tint);
+  border-radius: var(--r-pill); padding: 2px 8px; font-variant-numeric: tabular-nums;
+}
+
+.t-lines { flex: 1; min-height: 0; overflow: hidden; }
+
+.line {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--td-border);
+  display: flex; gap: 12px; align-items: baseline;
+  min-height: 64px;
+}
+.line .nm { flex: 1; min-width: 0; font-size: 15px; }
+.line .sub { font-size: 13px; color: var(--td-text2); font-variant-numeric: tabular-nums; margin-top: 2px; }
+.line .tot { font-size: 15px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.line .qty {
+  font-size: 13px; font-weight: 500; color: var(--td-text2);
+  background: var(--td-raised); border-radius: var(--r-pill);
+  padding: 1px 8px; font-variant-numeric: tabular-nums; margin-right: 6px;
+}
+
+/* Selected: the controls open INSIDE the line, in place. Not a modal —
+   a modal on a till hides the order the cashier is reading from and
+   charges a dismiss tap for every quantity fix. */
+.line.sel { background: var(--td-raised); border-left: 3px solid var(--td-text); padding-left: 13px; }
+.line-ctl {
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 16px 12px 13px;
+  background: var(--td-raised);
+  border-bottom: 1px solid var(--td-border);
+  border-left: 3px solid var(--td-text);
+}
+.step {
+  width: 52px; height: 52px; flex: none;
+  border-radius: var(--r-control);
+  border: 1px solid var(--td-border);
+  background: var(--td-surface);
+  color: var(--td-text);
+  font: inherit; font-size: 22px; font-weight: 400;
+  display: grid; place-items: center;
+}
+.step-n {
+  min-width: 56px; height: 52px;
+  display: grid; place-items: center;
+  font-size: 18px; font-variant-numeric: tabular-nums;
+}
+.ctl-sp { flex: 1; }
+.rm {
+  height: 52px; padding: 0 16px;
+  border-radius: var(--r-control);
+  border: 1px solid var(--td-brick);
+  background: transparent;
+  color: var(--td-brick-ink);
+  font: inherit; font-size: 14px; font-weight: 500;
+}
+
+/* Empty. A compliment, not an apology — and it names what arrives. */
+.t-empty {
+  height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px; padding: 32px; text-align: center;
+}
+.t-empty .wave { display: block; margin-bottom: 10px; color: var(--td-border); }
+.t-empty h3 { margin: 0; font-size: 16px; font-weight: 500; }
+.t-empty p { margin: 0; font-size: 14px; color: var(--td-text2); max-width: 26ch; }
+
+/* The foot is pinned. The total and the charge button never move, so
+   the thumb finds them without looking. */
+.t-foot {
+  flex: none;
+  border-top: 1px solid var(--td-border);
+  padding: 16px;
+  background: var(--td-surface);
+}
+/* Count only. The subtotal equalled the total on every frame here, and
+   the same number printed twice one line apart is noise, not a
+   reconciliation. This row grows a money column the moment something
+   makes the two differ — a discount, points, a wallet part-payment. */
+.t-sums { font-size: 13px; color: var(--td-text2); }
+.t-sums div { display: flex; justify-content: space-between; font-variant-numeric: tabular-nums; }
+.t-total {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin: 8px 0 14px;
+}
+.t-total .lab { font-size: 15px; }
+/* The number the cashier reads aloud. Nothing else on the screen is
+   this size. */
+.t-total .amt { font-size: 34px; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; line-height: 1; }
+
+/* Charge is INK, not Dusk. Dusk means "tacet did this for you"
+   (S1.8 rule 5, corrected axis: WHO is acting). Taking money at a
+   counter is the cashier acting, emphatically. The till spends no Dusk
+   budget at all, the way a Console doesn't — Dusk appears here only as
+   a focus ring and as the automation dot on the waiting screen, both
+   exempt under rules 2 and 3. */
+.charge {
+  width: 100%; height: 76px;
+  border-radius: var(--r-control);
+  border: 1px solid var(--td-text);
+  background: var(--td-text);
+  color: var(--td-paper);
+  font: inherit; font-size: 19px; font-weight: 500;
+  display: flex; align-items: center; justify-content: center; gap: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.charge[disabled] {
+  background: var(--td-raised); border-color: var(--td-border);
+  color: var(--td-text2);
+}
+
+/* ============================================================
+   PAYMENT — a takeover, not a sheet
+   The cashier turns the tablet round. Nothing behind it should be
+   readable over the customer's shoulder, so the till is replaced
+   rather than dimmed (S1.8 rule 5: "a page is a takeover, not a
+   sheet").
+   ============================================================ */
+.pay {
+  position: absolute; inset: 0;
+  background: var(--td-paper);
+  display: flex; flex-direction: column;
+  padding: 24px 32px 28px;
+}
+.pay-top { display: flex; align-items: center; gap: 12px; flex: none; }
+.pay-back {
+  height: 44px; padding: 0 14px; display: inline-flex; align-items: center; gap: 8px;
+  border-radius: var(--r-control); border: 1px solid var(--td-border);
+  background: var(--td-surface); color: var(--td-text); font: inherit; font-size: 14px; font-weight: 500;
+}
+.pay-main { flex: 1; display: flex; align-items: center; justify-content: center; gap: 56px; min-height: 0; }
+.pay-amt { text-align: right; }
+.pay-amt .lab { font-size: 15px; color: var(--td-text2); margin-bottom: 6px; }
+.pay-amt .amt { font-size: 64px; font-variant-numeric: tabular-nums; letter-spacing: -0.03em; line-height: 1; }
+.pay-amt .lines { font-size: 14px; color: var(--td-text2); margin-top: 12px; font-variant-numeric: tabular-nums; }
+
+.qr-card {
+  background: var(--td-surface);
+  border: 1px solid var(--td-border);
+  border-radius: var(--r-card);
+  padding: 20px;
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+}
+.qr-card canvas { display: block; border-radius: 4px; }
+.qr-rails { display: flex; align-items: center; gap: 14px; font-size: 13px; color: var(--td-text2); }
+.qr-rails .r { display: inline-flex; align-items: center; gap: 6px; }
+.qr-rails svg { width: 16px; height: 16px; }
+
+.pay-status {
+  flex: none; display: flex; align-items: center; justify-content: center; gap: 10px;
+  font-size: 15px; color: var(--td-text2); min-height: 28px;
+}
+/* The breathing dot is an automation indicator — Dusk, and exempt from
+   the one-Dusk budget under rule 2. It means tacet is watching for the
+   gateway callback, which is true. */
+.pulse {
+  width: 9px; height: 9px; border-radius: 50%; background: var(--td-dusk);
+  animation: breathe 1.8s var(--ease-settle) infinite;
+}
+@keyframes breathe { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
+
+.paid-mark {
+  width: 108px; height: 108px; border-radius: 50%;
+  background: var(--td-sage-tint);
+  display: grid; place-items: center;
+  color: var(--td-sage-ink);
+}
+.paid-mark svg { width: 52px; height: 52px; }
+.pay-done { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+.pay-done h2 { margin: 0; font-size: 24px; font-weight: 500; }
+.pay-done .meth { font-size: 14px; color: var(--td-text2); font-variant-numeric: tabular-nums; }
+.pay-next {
+  height: 60px; padding: 0 28px;
+  border-radius: var(--r-control);
+  border: 1px solid var(--td-text); background: var(--td-text); color: var(--td-paper);
+  font: inherit; font-size: 16px; font-weight: 500;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pulse, .t-search .caret { animation: none; }
+}
+
+/* ---- handoff notes ---- */
+.notes { margin-top: 24px; }
+.notes ol { margin: 0; padding-left: 20px; }
+.notes li { font-size: 14px; margin-bottom: 12px; max-width: 76ch; }
+.notes li b { font-weight: 500; }
+.notes code {
+  font-family: inherit; font-size: 13px;
+  background: #E4E0D5; border-radius: 4px; padding: 1px 5px;
+}
+</style>
+</head>
+<body>
+<div class="doc">
+
+  <h1>Counter till</h1>
+  <p class="lede">A cashier rings up a walk-in, takes the money, and the customer leaves with the goods. One screen, two columns, no delivery and no dates.</p>
+  <p class="meta">Android tablet, 9.7&Prime;, 2048&times;1280 landscape, touch only. Drawn at 1024&times;640 CSS pixels &mdash; the tightest plausible reading of that panel at 2&times; density. Every working target is 52&ndash;76px. Colour is the live <code>--td-*</code> block copied verbatim; type is Inter throughout. This is not the desktop admin: the tablet has no rail and no topbar, so none is drawn.</p>
+
+  <h2><span class="n">The page</span>Four lines rung up</h2>
+  <p>The working state. Entry left, order right, total and charge pinned to the bottom of the rail where the thumb already is. Line 2 is a quantity of 3.</p>
+  <div class="stage">
+  <div class="device">
+    <div class="till">
+      <div class="t-head">
+        <span class="t-brand">Counter</span>
+        <span class="t-dot"></span>
+        <span class="t-store">Tianhe</span>
+        <span class="t-spacer"></span>
+        <span class="t-cashier">MW</span>
+      </div>
+      <div class="t-body">
+        <div class="t-entry">
+          <div class="t-search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/></svg>
+            <span>Search anything not on a tile</span>
+          </div>
+          <div class="t-cats">
+            <span class="t-cat on">All</span>
+            <span class="t-cat">Drinks</span>
+            <span class="t-cat">Bakery</span>
+            <span class="t-cat">Pantry</span>
+            <span class="t-cat">Chilled</span>
+          </div>
+          <div class="t-grid">
+            <button class="tile"><span class="nm">Oat milk latte</span><span class="foot"><span class="pr">&yen;28.00</span></span></button>
+            <button class="tile"><span class="nm">Osmanthus oolong</span><span class="foot"><span class="pr">&yen;32.00</span></span></button>
+            <button class="tile"><span class="nm">Matcha bun</span><span class="foot"><span class="pr">&yen;18.00</span></span></button>
+            <button class="tile"><span class="nm">Sourdough loaf</span><span class="foot"><span class="pr">&yen;42.00</span><span class="left">4 left</span></span></button>
+            <button class="tile"><span class="nm">Cold brew</span><span class="foot"><span class="pr">&yen;26.00</span></span></button>
+            <button class="tile"><span class="nm">Almond croissant</span><span class="foot"><span class="pr">&yen;22.00</span></span></button>
+            <button class="tile"><span class="nm">Sesame biscuit tin</span><span class="foot"><span class="pr">&yen;68.00</span></span></button>
+            <button class="tile"><span class="nm">Soy yoghurt</span><span class="foot"><span class="pr">&yen;16.00</span></span></button>
+            <button class="tile"><span class="nm">Jasmine green tea</span><span class="foot"><span class="pr">&yen;30.00</span></span></button>
+            <button class="tile"><span class="nm">Walnut brownie</span><span class="foot"><span class="pr">&yen;24.00</span></span></button>
+            <button class="tile"><span class="nm">Chilli oil jar</span><span class="foot"><span class="pr">&yen;38.00</span><span class="left">2 left</span></span></button>
+            <button class="tile"><span class="nm">Rice cracker pack</span><span class="foot"><span class="pr">&yen;14.00</span></span></button>
+            <button class="tile"><span class="nm">Ginger kombucha</span><span class="foot"><span class="pr">&yen;29.00</span></span></button>
+            <button class="tile"><span class="nm">Seed granola</span><span class="foot"><span class="pr">&yen;54.00</span></span></button>
+            <button class="tile"><span class="nm">Plum soda</span><span class="foot"><span class="pr">&yen;19.00</span></span></button>
+            <button class="tile"><span class="nm">Tote bag</span><span class="foot"><span class="pr">&yen;45.00</span></span></button>
+          </div>
+        </div>
+
+        <div class="t-order">
+          <div class="t-cust">
+            <span class="who">Walk-in &mdash; no account</span>
+            <button class="add">Add customer</button>
+          </div>
+          <div class="t-lines">
+            <div class="line">
+              <span class="nm">Oat milk latte<div class="sub">&yen;28.00 each</div></span>
+              <span class="tot">&yen;28.00</span>
+            </div>
+            <div class="line">
+              <span class="nm"><span class="qty">&times;3</span>Matcha bun<div class="sub">&yen;18.00 each</div></span>
+              <span class="tot">&yen;54.00</span>
+            </div>
+            <div class="line">
+              <span class="nm">Sourdough loaf<div class="sub">&yen;42.00 each</div></span>
+              <span class="tot">&yen;42.00</span>
+            </div>
+            <div class="line">
+              <span class="nm">Cold brew<div class="sub">&yen;26.00 each</div></span>
+              <span class="tot">&yen;26.00</span>
+            </div>
+          </div>
+          <div class="t-foot">
+            <div class="t-sums"><div><span>6 items</span></div></div>
+            <div class="t-total"><span class="lab">Total</span><span class="amt">&yen;150.00</span></div>
+            <button class="charge">Charge &yen;150.00</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+  <p class="device-note"><b>Reads as:</b> six items, one hundred and fifty yuan. The total is the only 34px number on the screen.</p>
+
+  <hr>
+
+  <h2><span class="n">State 1</span>Empty till, ready for the first item</h2>
+  <p>The compliment, not the apology &mdash; and it names what arrives. Charge is disabled and says nothing false: it shows no amount because there is none.</p>
+  <div class="stage">
+  <div class="device">
+    <div class="till">
+      <div class="t-head">
+        <span class="t-brand">Counter</span>
+        <span class="t-dot"></span>
+        <span class="t-store">Tianhe</span>
+        <span class="t-spacer"></span>
+        <span class="t-cashier">MW</span>
+      </div>
+      <div class="t-body">
+        <div class="t-entry">
+          <div class="t-search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/></svg>
+            <span>Search anything not on a tile</span>
+          </div>
+          <div class="t-cats">
+            <span class="t-cat on">All</span>
+            <span class="t-cat">Drinks</span>
+            <span class="t-cat">Bakery</span>
+            <span class="t-cat">Pantry</span>
+            <span class="t-cat">Chilled</span>
+          </div>
+          <div class="t-grid">
+            <button class="tile"><span class="nm">Oat milk latte</span><span class="foot"><span class="pr">&yen;28.00</span></span></button>
+            <button class="tile"><span class="nm">Osmanthus oolong</span><span class="foot"><span class="pr">&yen;32.00</span></span></button>
+            <button class="tile"><span class="nm">Matcha bun</span><span class="foot"><span class="pr">&yen;18.00</span></span></button>
+            <button class="tile"><span class="nm">Sourdough loaf</span><span class="foot"><span class="pr">&yen;42.00</span><span class="left">4 left</span></span></button>
+            <button class="tile"><span class="nm">Cold brew</span><span class="foot"><span class="pr">&yen;26.00</span></span></button>
+            <button class="tile"><span class="nm">Almond croissant</span><span class="foot"><span class="pr">&yen;22.00</span></span></button>
+            <button class="tile"><span class="nm">Sesame biscuit tin</span><span class="foot"><span class="pr">&yen;68.00</span></span></button>
+            <button class="tile"><span class="nm">Soy yoghurt</span><span class="foot"><span class="pr">&yen;16.00</span></span></button>
+            <button class="tile"><span class="nm">Jasmine green tea</span><span class="foot"><span class="pr">&yen;30.00</span></span></button>
+            <button class="tile"><span class="nm">Walnut brownie</span><span class="foot"><span class="pr">&yen;24.00</span></span></button>
+            <button class="tile"><span class="nm">Chilli oil jar</span><span class="foot"><span class="pr">&yen;38.00</span><span class="left">2 left</span></span></button>
+            <button class="tile"><span class="nm">Rice cracker pack</span><span class="foot"><span class="pr">&yen;14.00</span></span></button>
+            <button class="tile"><span class="nm">Ginger kombucha</span><span class="foot"><span class="pr">&yen;29.00</span></span></button>
+            <button class="tile"><span class="nm">Seed granola</span><span class="foot"><span class="pr">&yen;54.00</span></span></button>
+            <button class="tile"><span class="nm">Plum soda</span><span class="foot"><span class="pr">&yen;19.00</span></span></button>
+            <button class="tile"><span class="nm">Tote bag</span><span class="foot"><span class="pr">&yen;45.00</span></span></button>
+          </div>
+        </div>
+
+        <div class="t-order">
+          <div class="t-cust">
+            <span class="who">Walk-in &mdash; no account</span>
+            <button class="add">Add customer</button>
+          </div>
+          <div class="t-lines">
+            <div class="t-empty">
+              <svg class="wave" width="72" height="14" viewBox="0 0 72 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M1 7h70"/></svg>
+              <h3>Ready when you are</h3>
+              <p>Tap a product to start the sale.</p>
+            </div>
+          </div>
+          <div class="t-foot">
+            <div class="t-total"><span class="lab">Total</span><span class="amt">&yen;0.00</span></div>
+            <button class="charge" disabled>Charge</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+  <p class="device-note"><b>Note:</b> the summary line above the total is absent, not empty &mdash; a zero item count is not information.</p>
+
+  <hr>
+
+  <h2><span class="n">State 3</span>A line selected</h2>
+  <p>Tapping a line opens its controls inside the line, in place. Not a modal: a modal on a till covers the order the cashier is reading from, and charges a dismiss tap for every quantity fix.</p>
+  <div class="stage">
+  <div class="device">
+    <div class="till">
+      <div class="t-head">
+        <span class="t-brand">Counter</span>
+        <span class="t-dot"></span>
+        <span class="t-store">Tianhe</span>
+        <span class="t-spacer"></span>
+        <span class="t-cashier">MW</span>
+      </div>
+      <div class="t-body">
+        <div class="t-entry">
+          <div class="t-search">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/></svg>
+            <span>Search anything not on a tile</span>
+          </div>
+          <div class="t-cats">
+            <span class="t-cat on">All</span>
+            <span class="t-cat">Drinks</span>
+            <span class="t-cat">Bakery</span>
+            <span class="t-cat">Pantry</span>
+            <span class="t-cat">Chilled</span>
+          </div>
+          <div class="t-grid">
+            <button class="tile"><span class="nm">Oat milk latte</span><span class="foot"><span class="pr">&yen;28.00</span></span></button>
+            <button class="tile"><span class="nm">Osmanthus oolong</span><span class="foot"><span class="pr">&yen;32.00</span></span></button>
+            <button class="tile"><span class="nm">Matcha bun</span><span class="foot"><span class="pr">&yen;18.00</span></span></button>
+            <button class="tile"><span class="nm">Sourdough loaf</span><span class="foot"><span class="pr">&yen;42.00</span><span class="left">4 left</span></span></button>
+            <button class="tile"><span class="nm">Cold brew</span><span class="foot"><span class="pr">&yen;26.00</span></span></button>
+            <button class="tile"><span class="nm">Almond croissant</span><span class="foot"><span class="pr">&yen;22.00</span></span></button>
+            <button class="tile"><span class="nm">Sesame biscuit tin</span><span class="foot"><span class="pr">&yen;68.00</span></span></button>
+            <button class="tile"><span class="nm">Soy yoghurt</span><span class="foot"><span class="pr">&yen;16.00</span></span></button>
+            <button class="tile"><span class="nm">Jasmine green tea</span><span class="foot"><span class="pr">&yen;30.00</span></span></button>
+            <button class="tile"><span class="nm">Walnut brownie</span><span class="foot"><span class="pr">&yen;24.00</span></span></button>
+            <button class="tile"><span class="nm">Chilli oil jar</span><span class="foot"><span class="pr">&yen;38.00</span><span class="left">2 left</span></span></button>
+            <button class="tile"><span class="nm">Rice cracker pack</span><span class="foot"><span class="pr">&yen;14.00</span></span></button>
+            <button class="tile"><span class="nm">Ginger kombucha</span><span class="foot"><span class="pr">&yen;29.00</span></span></button>
+            <button class="tile"><span class="nm">Seed granola</span><span class="foot"><span class="pr">&yen;54.00</span></span></button>
+            <button class="tile"><span class="nm">Plum soda</span><span class="foot"><span class="pr">&yen;19.00</span></span></button>
+            <button class="tile"><span class="nm">Tote bag</span><span class="foot"><span class="pr">&yen;45.00</span></span></button>
+          </div>
+        </div>
+
+        <div class="t-order">
+          <div class="t-cust linked">
+            <span class="who"><b>Chen Jing</b> &middot; 412 points</span>
+            <span class="bal">&yen;80.00 wallet</span>
+          </div>
+          <div class="t-lines">
+            <div class="line">
+              <span class="nm">Oat milk latte<div class="sub">&yen;28.00 each</div></span>
+              <span class="tot">&yen;28.00</span>
+            </div>
+            <div class="line sel">
+              <span class="nm"><span class="qty">&times;3</span>Matcha bun<div class="sub">&yen;18.00 each</div></span>
+              <span class="tot">&yen;54.00</span>
+            </div>
+            <div class="line-ctl">
+              <button class="step">&minus;</button>
+              <span class="step-n">3</span>
+              <button class="step">+</button>
+              <span class="ctl-sp"></span>
+              <button class="rm">Remove</button>
+            </div>
+            <div class="line">
+              <span class="nm">Sourdough loaf<div class="sub">&yen;42.00 each</div></span>
+              <span class="tot">&yen;42.00</span>
+            </div>
+            <div class="line">
+              <span class="nm">Cold brew<div class="sub">&yen;26.00 each</div></span>
+              <span class="tot">&yen;26.00</span>
+            </div>
+          </div>
+          <div class="t-foot">
+            <div class="t-sums"><div><span>6 items</span></div></div>
+            <div class="t-total"><span class="lab">Total</span><span class="amt">&yen;150.00</span></div>
+            <button class="charge">Charge &yen;150.00</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+  <p class="device-note"><b>Also shown:</b> a customer attached. The row swaps from &ldquo;Walk-in&rdquo; to the name, points and wallet &mdash; the two things that change what the cashier can offer.</p>
+
+  <hr>
+
+  <h2><span class="n">State 5</span>Out of stock</h2>
+  <p>Sourdough sold out mid-shift. The tile keeps its position &mdash; hunting for a missing tile is worse than reading a struck-through one &mdash; and stops being tappable.</p>
+  <div class="stage">
+  <div class="device">
+    <div class="till">
+      <div class="t-head">
+        <span class="t-brand">Counter</span>
+        <span class="t-dot"></span>
+        <span class="t-store">Tianhe</span>
+        <span class="t-spacer"></span>
+        <span class="t-cashier">MW</span>
+      </div>
+      <div class="t-body">
+        <div class="t-entry">
+          <div class="t-search is-typed">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/></svg>
+            <span>sour</span><span class="caret"></span>
+          </div>
+          <div class="t-cats">
+            <span class="t-cat on">All</span>
+            <span class="t-cat">Drinks</span>
+            <span class="t-cat">Bakery</span>
+            <span class="t-cat">Pantry</span>
+            <span class="t-cat">Chilled</span>
+          </div>
+          <div class="t-grid">
+            <button class="tile out" disabled><span class="nm">Sourdough loaf</span><span class="foot"><span class="pr">&yen;42.00</span><span class="left">Out of stock</span></span></button>
+            <button class="tile"><span class="nm">Sourdough starter jar</span><span class="foot"><span class="pr">&yen;36.00</span></span></button>
+            <button class="tile"><span class="nm">Sour plum soda</span><span class="foot"><span class="pr">&yen;19.00</span></span></button>
+          </div>
+        </div>
+
+        <div class="t-order">
+          <div class="t-cust">
+            <span class="who">Walk-in &mdash; no account</span>
+            <button class="add">Add customer</button>
+          </div>
+          <div class="t-lines">
+            <div class="line">
+              <span class="nm">Oat milk latte<div class="sub">&yen;28.00 each</div></span>
+              <span class="tot">&yen;28.00</span>
+            </div>
+            <div class="line">
+              <span class="nm"><span class="qty">&times;3</span>Matcha bun<div class="sub">&yen;18.00 each</div></span>
+              <span class="tot">&yen;54.00</span>
+            </div>
+          </div>
+          <div class="t-foot">
+            <div class="t-sums"><div><span>4 items</span></div></div>
+            <div class="t-total"><span class="lab">Total</span><span class="amt">&yen;82.00</span></div>
+            <button class="charge">Charge &yen;82.00</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+  <p class="device-note"><b>Also shown:</b> search filtering the grid. Three matches for &ldquo;sour&rdquo;, one of them dead.</p>
+
+  <hr>
+
+  <h2><span class="n">State 4a</span>Payment &mdash; waiting for the scan</h2>
+  <p>A takeover, not a sheet. The cashier turns the tablet round, so nothing of the till is left readable over the customer&rsquo;s shoulder. One QR serves both rails; the customer&rsquo;s own app decides which.</p>
+  <div class="stage">
+  <div class="device">
+    <div class="till">
+      <div class="pay">
+        <div class="pay-top">
+          <button class="pay-back">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
+            Back to order
+          </button>
+        </div>
+        <div class="pay-main">
+          <div class="pay-amt">
+            <div class="lab">Amount due</div>
+            <div class="amt">&yen;150.00</div>
+            <div class="lines">6 items &middot; Counter sale</div>
+          </div>
+          <div class="qr-card">
+            <canvas class="qr" width="196" height="196" data-seed="7"></canvas>
+            <div class="qr-rails">
+              <span class="r">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 4.5C5.9 4.5 3 7 3 10c0 1.7.9 3.2 2.4 4.2L4.7 16l2.2-1.1c.8.2 1.7.4 2.6.4M14.5 9.5c3.6 0 6.5 2.3 6.5 5.2 0 2.9-2.9 5.3-6.5 5.3-.8 0-1.5-.1-2.2-.3L9.7 21l.6-1.6c-1.4-1-2.3-2.3-2.3-3.7 0-2.9 2.9-5.2 6.5-5.2Z"/></svg>
+                WeChat Pay
+              </span>
+              <span class="r">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><path d="M7 14c3.5 1.8 7.5 1.8 10-1M9 8h6M11 6v5"/></svg>
+                Alipay
+              </span>
+            </div>
+          </div>
+        </div>
+        <div class="pay-status"><span class="pulse"></span> Waiting for the customer to scan</div>
+      </div>
+    </div>
+  </div>
+  </div>
+  <p class="device-note"><b>The Dusk dot is the only Dusk on the till.</b> It is an automation indicator &mdash; tacet watching for the gateway callback &mdash; and exempt from the one-Dusk budget.</p>
+
+  <hr>
+
+  <h2><span class="n">State 4b</span>Payment &mdash; paid, confirmed</h2>
+  <p>The callback landed. The cashier turns the tablet back and the next sale is one tap away. Nothing here asks the cashier to confirm what the gateway already confirmed.</p>
+  <div class="stage">
+  <div class="device">
+    <div class="till">
+      <div class="pay">
+        <div class="pay-top"></div>
+        <div class="pay-main">
+          <div class="pay-done">
+            <span class="paid-mark">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 12.5 5.5 5.5L20 7"/></svg>
+            </span>
+            <h2>Paid &yen;150.00</h2>
+            <div class="meth">WeChat Pay &middot; 14:52 &middot; TC-0248</div>
+            <button class="pay-next">Start next sale</button>
+          </div>
+        </div>
+        <div class="pay-status">Receipt printing at Tianhe</div>
+      </div>
+    </div>
+  </div>
+  </div>
+  <p class="device-note"><b>Reads as:</b> done, and here is the proof &mdash; amount, rail, time, order number.</p>
+
+  <hr>
+
+  <div class="notes">
+    <h2><span class="n">Notes</span>Decisions a reviewer will ask about</h2>
+    <ol>
+      <li><b>Charge is Ink, not Dusk.</b> &sect;1.8 rule 5 was corrected in July on the axis <i>who is acting</i>: Dusk means &ldquo;tacet did this for you&rdquo;, and taking money at a counter is the cashier acting. The till therefore spends no Dusk budget at all, the way a Console doesn&rsquo;t. Dusk appears twice on this whole surface &mdash; focus rings (rule 3) and the waiting-for-payment dot (rule 2) &mdash; both exempt.</li>
+      <li><b>Search is above the grid.</b> Tapping it raises the on-screen keyboard, which covers roughly the bottom half of a 640px-tall screen. A search field placed below the grid would be hidden by the very keyboard it summons.</li>
+      <li><b>Quantity controls open inside the line.</b> A modal would cover the order the cashier is reading aloud from, and charge a dismiss tap for every quantity fix. &sect;1.13 permits a modal; the till doesn&rsquo;t need one.</li>
+      <li><b>An out-of-stock tile keeps its slot.</b> Muscle memory is the point of a tile grid, so the tile stays where the thumb expects it, struck through and not tappable, rather than vanishing and reshuffling every tile after it.</li>
+      <li><b>Payment is a takeover, not an overlay.</b> The tablet gets turned around. A dimmed sheet leaves the till readable over the customer&rsquo;s shoulder; a takeover does not.</li>
+      <li><b>Fulfilment is Counter, always.</b> No address block, no date picker, no fulfilment picker &mdash; the screen cannot express any other kind of order, so it never has to validate one.</li>
+      <li><b>The currency mark is not settled.</b> <code>&yen;</code> is Roots&rsquo; currency, hardcoded today; the IA blueprint v2.5 and consolidation &sect;0 both call that a defect to remove, not a decision. Treat the symbol as per-business configuration wherever this gets built.</li>
+      <li><b>Archetype.</b> None of the seven fits &mdash; this is not records arriving, things I made, authoring with preview, configuring, connection status, reading the situation, or analysing a range. Its job is <i>take the money</i>. Under &sect;6 that is an eighth-archetype conversation, and adopting one is a deliberate act, not something a mockup gets to do quietly.</li>
+    </ol>
+  </div>
+</div>
+
+<script>
+/* A QR that looks like a QR without pretending to be one. Deterministic
+   from a fixed seed, so it renders identically every time and no reviewer
+   mistakes it for a scannable code. Canvas rather than 625 divs. */
+(function () {
+  var mods = 25, quiet = 1, total = mods + quiet * 2;
+  document.querySelectorAll('canvas.qr').forEach(function (cv) {
+    var ctx = cv.getContext('2d');
+    var px = cv.width / total;
+    var s = parseInt(cv.dataset.seed, 10) || 1;
+    function rnd() { s = (s * 1103515245 + 12345) & 0x7fffffff; return s / 0x7fffffff; }
+    var ink = getComputedStyle(cv).getPropertyValue('color') || '#111A2B';
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0, 0, cv.width, cv.height);
+    ctx.fillStyle = ink.trim() || '#111A2B';
+    function finder(cx, cy) {
+      ctx.fillRect((cx + quiet) * px, (cy + quiet) * px, 7 * px, 7 * px);
+      ctx.clearRect((cx + quiet + 1) * px, (cy + quiet + 1) * px, 5 * px, 5 * px);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect((cx + quiet + 1) * px, (cy + quiet + 1) * px, 5 * px, 5 * px);
+      ctx.fillStyle = ink.trim() || '#111A2B';
+      ctx.fillRect((cx + quiet + 2) * px, (cy + quiet + 2) * px, 3 * px, 3 * px);
+    }
+    function inFinder(x, y) {
+      return (x < 8 && y < 8) || (x > mods - 9 && y < 8) || (x < 8 && y > mods - 9);
+    }
+    for (var y = 0; y < mods; y++) {
+      for (var x = 0; x < mods; x++) {
+        if (inFinder(x, y)) continue;
+        if (rnd() > 0.52) ctx.fillRect((x + quiet) * px, (y + quiet) * px, px, px);
+      }
+    }
+    finder(0, 0); finder(mods - 7, 0); finder(0, mods - 7);
+  });
+})();
+</script>
+</body>
+</html>
