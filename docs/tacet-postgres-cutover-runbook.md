@@ -2,7 +2,7 @@
 
 **A procedure, not a summary.** Written to be followed literally, at 3am, by one person who is not a developer, with the shop trading and no ability to improvise.
 
-> **G22 AND G23 ARE CLOSED — v0.5, 2026-08-20. THE FLIP NOW HAS A WAY BACK, AND SOMEBODY AUTHORISED TO TAKE IT.** `scripts/rollback-to-sqlite.sh` and `scripts/rollback-delta-report.js` merged at `7483cb91`; **PART H is rewritten from a list of holes into a procedure.** The decision-maker is **Ash, alone, with no escalation**; the triggers are four observables with stated thresholds; the window default is **ONE HOUR**. **Seventeen gaps remain of the twenty-three identified.**
+> **G22 AND G23 ARE CLOSED — v0.5, 2026-08-20. THE FLIP NOW HAS A WAY BACK, AND SOMEBODY AUTHORISED TO TAKE IT.** `scripts/rollback-to-sqlite.sh` and `scripts/rollback-delta-report.js` merged at `7483cb91`; **PART H is rewritten from a list of holes into a procedure.** The decision-maker is **Ash, alone, with no escalation**; the triggers are four observables with stated thresholds; the window default is **ONE HOUR**. **Nineteen gaps remain of the twenty-five identified** — two of them, G24 and G25, found by writing PART H itself.
 >
 > **READ WHAT THAT DOES AND DOES NOT CHANGE, BECAUSE THE ASYMMETRY v0.4 NAMED IS THE THING THAT MOVED.** v0.4 said there was a way onto Postgres and no way off it, so the flip was irreversible from its first second. **That sentence is now retired.** The way off is a **rename**, not a merge: it restores the pre-flip file and carries nothing back, and a reverse copy is recorded as a **REJECTED option rather than unbuilt work** (§24 v4.46, four reasons). **So the flip is reversible WITH LOSS, for as long as exactly one database is moving** — which is why the daemons stop for the flip and why refusals R1 and R4 exist. PART I is rewritten around that. **Nothing else moved: no call site is converted (G1), nothing has ever executed against Postgres (G20), nothing stops trading (G16), and G5 still serialises transactions application-wide. A rollback that exists is not permission to flip; it is permission to stop.**
 >
@@ -20,7 +20,7 @@
 >
 > **CORRECTED BEFORE MERGE, 2026-08-19 — v0.1 → v0.2, and the correction is recorded rather than tidied away.** The draft was written against a reading of `claimMigrationCredit` that had been out of date for six days. **G11 said both of its pieces were unbuilt; the writer fix landed at `225aa13` on 2026-08-13** and is on `main`. Two forward-looking claims that rested on it were false when this file was written and are struck below. **That pass concluded the gap did not close** — the backfill unbuilt, F still failing, Part G still needing its baseline. **All three were wrong, and v0.3 above says why: the backfill had already run on 2026-08-17 and the run was never recorded anywhere this pass could see.** The v0.2 reasoning is left standing rather than rewritten, because it is the clearest evidence of what an unrecorded production write costs: a careful re-derivation against a current record reached a confident and false conclusion. Line-number cites for `reverseOrderBalance` and the `sqlite_sequence` reset were re-derived at this head in the same pass; both had drifted. See §24 and the re-derivation inside G11.
 
-**READ THIS BEFORE ANYTHING ELSE. THIS RUNBOOK CANNOT BE FOLLOWED TODAY.** It is a first draft written to find out what is missing, and the missing parts are marked in it rather than papered over. **Seventeen steps of this procedure have no command to run, because the thing they depend on has not been built.** They are marked 🔴 **GAP** and numbered `G1`–`G23`, of which **G2, G3, G4, G11, G22 and G23 are CLOSED** — twenty-three were identified, six have since been built, repaired or decided, and the numbers are not reused. The index is in PART A.
+**READ THIS BEFORE ANYTHING ELSE. THIS RUNBOOK CANNOT BE FOLLOWED TODAY.** It is a first draft written to find out what is missing, and the missing parts are marked in it rather than papered over. **Nineteen steps of this procedure have no command to run, because the thing they depend on has not been built.** They are marked 🔴 **GAP** and numbered `G1`–`G25`, of which **G2, G3, G4, G11, G22 and G23 are CLOSED** — **twenty-five have now been identified**, six have since been built, repaired or decided, and the numbers are not reused. **G24 and G25 were found on 2026-08-20 while writing PART H, which is what a procedure is for: walking it turns up holes a survey does not.** The index is in PART A.
 
 **A runbook that reads as complete when it is not is worse than no runbook**, because it gets trusted on the night. So where a step could not be written honestly, it is left as a hole with a name, and the hole says what has to exist before it can be filled.
 
@@ -103,9 +103,11 @@ There are **three** phases, settled 2026-08-10 (§24 *THREE PHASES, AND WHY THE 
 | **G20** | G1 | **No application smoke test against Postgres.** No checkout has ever executed on the pg driver, anywhere | nothing written |
 | **G21** | G5 | No procedure covers the channel daemons, which are separate pm2 processes with their own database handles | nothing written |
 | ~~**G22**~~ | ~~H2~~ | ✅ **CLOSED `7483cb91`.** `scripts/rollback-to-sqlite.sh` + `scripts/rollback-delta-report.js`, 23 assertions, mutation red-proven. **Restore-and-lose: a reverse copy is a REJECTED option, not unbuilt work.** Row kept, not deleted | status doc item 17, §24 v4.46 |
+| **G24** | B17 | **The fidelity instrument does not exist as written.** `checks.py` reads a gitignored, never-deployed `wide_cols.json` at import, and its `SRC` points at the file F1 renames away. **Step G7 has a command that looks runnable and is not** | §24 v4.50, found writing PART H |
+| **G25** | B18 | **No alerting substitute for the window.** F1 silences every alert including the watchdog's own. The stopgap loop **must run off-box** — a loop on a wedged box dies with it and its silence reads as green | §24 v4.46 finding (1), v4.50 |
 | ~~**G23**~~ | ~~H1~~ | ✅ **CLOSED 2026-08-20.** Decision-maker **Ash, alone**; four triggers with thresholds (H2); window default **ONE HOUR** (H3); watch loop (H4); refusal procedure R0–R4 (H7). Row kept, not deleted | §24 v4.46, PART H |
 
-**Read the shape of that list, not just its length.** **Eleven of the seventeen open gaps sit in PART B, before the day starts** — which is the same sentence it has always been and is still the most useful thing on this page. **What changed on 2026-08-20 is the pair that used to sit at the two ends of it.** G2 and G22 were the same missing thing seen from both sides — no built way onto Postgres, no built way back off it. **Both are now closed, and G23 with them, so the flip has a mechanism, a way back, a trigger list and a named decision-maker.** It does not have converted call sites (G1), a smoke test (G20), a freeze (G16) or a delta pass (G18), **and those four are what still make this document unusable as a checklist.** The rollback is not permission to flip. It is permission to stop.
+**Read the shape of that list, not just its length.** **Thirteen of the nineteen open gaps sit in PART B, before the day starts** — which is the same sentence it has always been and is still the most useful thing on this page. **What changed on 2026-08-20 is the pair that used to sit at the two ends of it.** G2 and G22 were the same missing thing seen from both sides — no built way onto Postgres, no built way back off it. **Both are now closed, and G23 with them, so the flip has a mechanism, a way back, a trigger list and a named decision-maker.** It does not have converted call sites (G1), a smoke test (G20), a freeze (G16) or a delta pass (G18), **and those four are what still make this document unusable as a checklist.** The rollback is not permission to flip. It is permission to stop.
 
 ---
 
@@ -347,6 +349,46 @@ ssh root@47.239.89.63 "cd /root/roots-v2 && node scripts/diagnose_deployed_tree.
 **BAD** — the script errors, or the EXTRA list is long and unexplained.
 
 **IF BAD** — do not delete anything yet; this reading is an input to step F3, not an action. **The deploy pipeline never removes a file** — proven live, `public/retail-admin.js` was still on the server 54 days after being deleted from `main`. Anything dropped from the repository keeps running in production until someone removes it by hand.
+
+---
+
+## B17 🔴 GAP G24 — The fidelity instrument named in PART G does not exist as written
+
+**WHAT THIS STEP WOULD DO** — prove, after the copy and after the flip, that the data itself arrived intact: all 144 foreign keys validating through Postgres, Chinese character counts exact, the wide base64 columns matching by SHA-256. **This is step G7, and it is the trigger T4 in PART H.**
+
+**WHY THERE IS NO COMMAND — `scripts/postgres-full-copy/checks.py` CANNOT RUN AFTER STEP F1. Two independent blockers, either fatal on its own.** Found 2026-08-20, while writing PART H, and **recorded rather than fixed per the standing freeze.**
+
+1. **It reads `wide_cols.json` on line 13, AT IMPORT, before its first check runs.** That file is generated by `volume.py`, is covered by `scripts/postgres-full-copy/.gitignore`, and is **not in the repository — so the deploy has never shipped it and never will.** If it is not already sitting on the box from the Phase 1 rehearsal, `python3 checks.py` dies with `FileNotFoundError` and prints **nothing at all** — not a partial result, not a warning, no output.
+2. **It hardcodes `SRC = "file:/root/roots-v2/data/roots.db?mode=ro"`.** **Step F1 renames that file to `roots.db.pre-cutover`.** So the SQLite side of every comparison is missing during the exact window this check exists to guard, and `sqlite3.connect` fails on a path that was correct when the script was written and is wrong by the time anybody runs it.
+
+**READ WHY THIS ONE IS WORSE THAN AN ORDINARY UNBUILT THING.** Every other gap in PART B is a step that is visibly empty — you reach it, there is no command, you stop. **This one has a command, in PART G, that looks runnable and is not.** The failure arrives at the point of maximum cost: after the copy, after the flip, with the shop live, at the exact moment the answer matters. **A step that reads as complete and is not is the failure mode this whole document was written against.**
+
+**WHAT MUST EXIST FIRST — two things, both small, neither done here:**
+
+- **`wide_cols.json` confirmed present on the box**, or regenerated by running `volume.py` there ahead of the night — and a decision about whether a file the deploy cannot ship should be a load-bearing input at all.
+- **`SRC` pointed at `roots.db.pre-cutover`**, or made an argument, so the script reads the file that exists after F1 rather than the name it had before.
+
+**A THIRD THING THAT IS NOT A BLOCKER BUT MUST BE WRITTEN DOWN BESIDE THEM: this script issues `ALTER TABLE … VALIDATE CONSTRAINT` 144 times.** That is **DDL against a live production cluster**, not a read. It belongs at G7, once. **It must never be put in a watch loop**, and PART H says so where the loops are.
+
+**IF YOU REACH HERE ON THE NIGHT** — stop. **And if you reach step G7 on the night having skipped this, understand what you have: no fidelity instrument.** The nearest surviving half is **check P** in step G6 — **P proves the KEYS came across, `checks.py` proves the CELLS did.** P is not a substitute for it. It is the half you still have.
+
+---
+
+## B18 🔴 GAP G25 — There is no alerting substitute for the window, and it cannot live where it would naturally go
+
+**WHAT THIS STEP WOULD DO** — replace, for the duration of the rollback window, the alerting that step F1 switches off.
+
+**WHY THERE IS NO COMMAND — nothing is built.** `lib/ops-alert.js` resolves the WeCom webhook **only** through a read of `data/roots.db` **by path**, with `fileMustExist: true`. F1 renames that file, the open throws, the `catch` swallows it, the webhook resolves to `''`, and **every alert in the system degrades to a `console.error` line** — **including the health watchdog's own `🔴 roots-v2 storefront DOWN` page.** No driver switch reaches this; it reads a path, not a handle. **PART H/H4 gives a hand-pasted watch loop as the stopgap. That is a stopgap and not a mechanism, and this row is here so it is not mistaken for one.**
+
+**AND HERE IS THE PART TO RECORD, BECAUSE IT IS THE REASON THE OBVIOUS FIX IS WRONG: THE WATCH LOOP MUST LIVE ON THE LAPTOP, NOT ON THE BOX.**
+
+**A loop running on the box dies with the box — and its silence is indistinguishable from everything being fine.** That is not hypothetical here. The 2026-06-28 outage was this exact failure: the box wedged after 47 days of uptime with sshd, nginx and the app all accepting TCP and returning zero bytes, and it then stayed dark because nothing off-box noticed. **A monitor that shares a fate with the thing it monitors reports green by going quiet**, and quiet is precisely what you are already expecting once alerting is off. **The one observation only an off-box watcher can make — "the box stopped answering" — is the single most important thing it can tell you, and it is the one thing an on-box loop can never say.**
+
+**A second reason, smaller and just as binding:** the natural home for a helper script is `scripts/`, and **a file under `scripts/` ships on the next deploy and bounces pm2.** Adding one to tidy up the loop would restart production in the middle of the window it exists to watch.
+
+**WHAT MUST EXIST FIRST** — either alerting that survives the rename (`lib/ops-alert.js` reading the webhook from `process.env`, which `health-watchdog.js` **already sets and which is dead code today**), or a deliberate off-box watcher with a stated home that is not `scripts/` and not the production host. **§24 v4.46 records fixing the alerting as the first thing to do when the freeze lifts.**
+
+**IF YOU REACH HERE ON THE NIGHT** — you cannot fix it on the night. **Start the H4 loops on the laptop before the flip, and know that they are the whole alerting channel for the hour.**
 
 ---
 
@@ -728,7 +770,7 @@ ssh root@47.239.89.63 "cd /root/roots-v2/scripts/postgres-full-copy && python3 c
 
 **IF BAD** — go to Part H. A failing foreign key after a copy is not something to fix in place under time pressure.
 
-> 🔴 **THIS STEP CANNOT RUN AS WRITTEN. FOUND 2026-08-20, RECORDED AND NOT FIXED (H10, finding 1).** Two independent blockers, either of which is fatal on its own.
+> 🔴 **THIS STEP CANNOT RUN AS WRITTEN — GAP G24, B17. FOUND 2026-08-20, RECORDED AND NOT FIXED.** Two independent blockers, either of which is fatal on its own.
 >
 > - **`checks.py` reads `wide_cols.json` on line 13, at import, before its first check runs.** That file is generated by `volume.py`, is covered by `scripts/postgres-full-copy/.gitignore`, and is **not in the repository — so the deploy has never shipped it.** If it is not already on the box from the Phase 1 rehearsal, this dies with `FileNotFoundError` and prints nothing at all.
 > - **`checks.py` hardcodes `SRC = "file:/root/roots-v2/data/roots.db?mode=ro"` — the file step F1 renamed away.** Its SQLite comparison source does not exist during the exact window this check guards.
@@ -896,7 +938,7 @@ ssh root@47.239.89.63 "for p in / /api/retail/categories /api/retail/config /api
 2. **`checks.py` hardcodes `SRC = "file:/root/roots-v2/data/roots.db?mode=ro"`.** **Step F1 renames that file away.** So during the exact window this check exists to guard, its SQLite comparison source does not exist. **Step G7 as currently written cannot run after the flip.**
 3. **`checks.py` issues `ALTER TABLE … VALIDATE CONSTRAINT` 144 times.** That is DDL, not a read. It is a once-at-G7 tool and **must never be put in a watch loop.**
 
-**WHAT THAT MEANS FOR THE NIGHT, PLAINLY.** Unless both blockers are cleared *before* the night — `wide_cols.json` confirmed present on the box, and `SRC` pointed at `roots.db.pre-cutover` — **T4 is not a trigger you have, and you are flying without the fidelity instrument.** Confirm it in PART B, not at 3am. The nearest thing left on the panel is **check P under T1**: **P proves the keys survived, `checks.py` proves the cells did.** P is not a replacement. It is the half you still have.
+**WHAT THAT MEANS FOR THE NIGHT, PLAINLY — and this is GAP G24, carried in PART B as B17 where the rest of the exit gate lives.** Unless both blockers are cleared *before* the night — `wide_cols.json` confirmed present on the box, and `SRC` pointed at `roots.db.pre-cutover` — **T4 is not a trigger you have, and you are flying without the fidelity instrument.** Confirm it in PART B, not at 3am. The nearest thing left on the panel is **check P under T1**: **P proves the keys survived, `checks.py` proves the cells did.** P is not a replacement. It is the half you still have.
 
 ---
 
@@ -994,7 +1036,7 @@ a `console.error` line in a log file. **No driver switch can reach this. It read
 
 ### Two rules about where they run
 
-**Run them on the laptop, over SSH. Not on the box.** If the box wedges — the 2026-06-28 failure mode this project has already had once — a loop running *on* the box dies with it, and its silence is indistinguishable from everything being fine. **A loop on the laptop notices that the box stopped answering, which is the single most important thing it can tell you.**
+**Run them on the laptop, over SSH. Not on the box — this is GAP G25, B18, and it is a constraint rather than a preference.** A loop running *on* the box **dies with the box, and its silence is indistinguishable from everything being fine** — which is exactly what you are already expecting once alerting is off. That is not hypothetical: the 2026-06-28 outage was a box that wedged with sshd, nginx and the app all accepting TCP and returning zero bytes, and it stayed dark because nothing off-box noticed. **The one observation only an off-box watcher can make — “the box stopped answering” — is the single most important thing it can tell you, and it is the one thing an on-box loop can never say.**
 
 **Do not put a helper script in `scripts/` to make this tidier.** A file under `scripts/` **ships on the next deploy and bounces pm2**, which is the last thing you want mid-window. Everything here is self-contained on the laptop except `/root/flip-offset`, which lives outside the application directory on purpose.
 
@@ -1332,12 +1374,15 @@ ssh root@47.239.89.63 "bash /root/roots-v2/scripts/rollback.sh --list"
 
 **Per the standing freeze. Each is a thing that would otherwise have been discovered on the night.**
 
-1. **`checks.py` cannot run after step F1 — two independent reasons.** `wide_cols.json` is gitignored, generated by `volume.py`, never deployed, and read at **import**, before any check runs. And `SRC` is hardcoded to `/root/roots-v2/data/roots.db`, **which F1 renames away.** **Step G7 has no runnable command during the window it guards, so T4 is a trigger with no instrument** unless both are cleared in PART B.
+**Two of these are now carried as numbered gaps in PART B — G24 at B17 and G25 at B18 — because PART B is the exit gate and is where somebody would go looking for them.**
+
+1. **`checks.py` cannot run after step F1 — two independent reasons. GAP G24, B17.** `wide_cols.json` is gitignored, generated by `volume.py`, never deployed, and read at **import**, before any check runs. And `SRC` is hardcoded to `/root/roots-v2/data/roots.db`, **which F1 renames away.** **Step G7 has no runnable command during the window it guards, so T4 is a trigger with no instrument** unless both are cleared in PART B.
 2. **`checks.py` issues 144 `ALTER TABLE … VALIDATE CONSTRAINT` statements.** That is DDL against a live production cluster. It is a once-at-G7 tool and **must never be put in a watch loop.**
 3. **`rollback-delta-report.js` must be run BEFORE the rollback, and nothing in the tool says so.** Its default `--since-db` is the pre-cutover file, which the rollback renames away; and pointing it at the restored `data/roots.db` afterwards **silently omits exactly one window order**, because the reservation marker raises `retail_orders`' watermark by one. **A wrong answer, not an error.**
 4. **A T2 threshold of one is unusable without excluding `[ops-alert] SUPPRESSED`** — and the flip itself *guarantees* those lines, in the same log, from the same `console.error`. **The trigger and its own noise source are created by the same step.**
 5. **`docs/tacet-postgres-status.md` item 17 is stale.** It says the tool is *"BUILT ON `claude/survey-land-shipment-default-vw1hcn`, NOT MERGED"*. It merged at **`7483cb91`** and all three files are on `main`. Same class as G11 — the record lagging the world rather than the code.
-6. **The health watchdog does not restart every four minutes; it latches** (`!state.down`). Repeated ~4-minute restarts mean a **flap**, not a loop, and the runbook should not describe them as the same thing. See H5.
+6. **There is no alerting substitute for the window, and it cannot live on the box. GAP G25, B18.** F1 silences every alert including the watchdog's own; the H4 loops are a hand-pasted stopgap, not a mechanism. **They must run off-box: a loop on a wedged box dies with it and its silence reads as green.**
+7. **The health watchdog does not restart every four minutes; it latches** (`!state.down`). Repeated ~4-minute restarts mean a **flap**, not a loop, and the runbook should not describe them as the same thing. See H5.
 
 ---
 
