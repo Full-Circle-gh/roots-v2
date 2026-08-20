@@ -1857,6 +1857,7 @@ check('refund_printed_at is a real column',
 // deleting either half must fail, not quietly halve the supported devices.
 
 const TILL = fs.readFileSync(path.join(__dirname, '..', 'public', 'till.html'), 'utf8');
+const POS_TILL_SRC = TILL;
 const TILL_HEAD = TILL.slice(0, TILL.indexOf('</head>'));
 check('till.html has a head to read', TILL_HEAD.length > 200, true);
 
@@ -1945,6 +1946,60 @@ check('the settle screen still has a Back control at all',
 // .tile's overflow:hidden clips product names with no visible sign it did.
 check('the product grid adapts its column count for narrow tablets',
   (TILL.match(/@media \(max-width:\d+px\)\{ ?\.grid\{grid-template-columns/g) || []).length >= 2, true);
+
+// ── The phone ────────────────────────────────────────────────────────────
+// The till shipped as a two-column layout with a 380px flex:none rail, so on a
+// 375px phone the rail claimed 380 of them: the running total and Mark paid sat
+// off the right edge, reachable only by horizontal scroll, with nothing on
+// screen to say half the till was over there. Below the two-column floor the
+// rail stops being a column and becomes a section under the products.
+const phoneBlock = (() => {
+  const i = POS_TILL_SRC.indexOf('@media (max-width:700px){\n  .t-body{flex-direction:column}');
+  const j = POS_TILL_SRC.indexOf('@media (max-width:700px){\r\n  .t-body{flex-direction:column}');
+  const k = i === -1 ? j : i;
+  if (k === -1) return '';
+  return POS_TILL_SRC.slice(k, POS_TILL_SRC.indexOf('\n}', k) + 2);
+})();
+check('the till stacks its rail under the products on a phone', phoneBlock.length > 100, true);
+// NOT SHRINKABLE. .t-entry above it is flex:1 and its grid wants every pixel,
+// so a shrinkable rail gets squeezed below its own content height and pushes the
+// pay button off the bottom of the screen — which is what it did.
+check('the stacked rail cannot be squeezed below its own content',
+  /\.t-order\{[\s\S]*?flex:0 0 auto/.test(phoneBlock), true);
+check('the stacked rail is capped so it cannot swallow the product grid',
+  /max-height:\d+%/.test(phoneBlock), true);
+// THE OVERRIDE BLOCK MUST COME LAST. .t-order, .lines, .smain, .samt, .spick and
+// .sconf are all declared further up at the SAME specificity; written any
+// earlier the base rules win and the whole media query silently does nothing.
+// It WAS written earlier the first time, and the rail kept computing to 380px
+// inside a 375px viewport with no error anywhere.
+const phoneAt = POS_TILL_SRC.indexOf('.t-body{flex-direction:column}');
+const railAt = POS_TILL_SRC.indexOf('.t-order{');
+const smainAt = POS_TILL_SRC.indexOf('.smain{');
+check('the phone override block is the LAST word in the stylesheet, after every rule it overrides',
+  [phoneAt > railAt, phoneAt > smainAt], [true, true]);
+
+// ── The store control ────────────────────────────────────────────────────
+// Boot READ localStorage 'tacet-till-store' to reopen on the last store used.
+// Nothing ever WROTE it, so the lookup always missed, the pick fell through to
+// the first store, and a second location was unreachable — the store name was a
+// <span>, not a control.
+check('the store name is a control, not a caption',
+  /<button class="t-store" id="hd-store" type="button" data-store>/.test(POS_TILL_SRC), true);
+check('choosing a store WRITES the preference boot reads back',
+  /localStorage\.setItem\('tacet-till-store'/.test(POS_TILL_SRC), true);
+check('the preference is still read at boot, so the write has a reader',
+  /localStorage\.getItem\('tacet-till-store'\)/.test(POS_TILL_SRC), true);
+// Switching shelf means switching stock; the catalogue must be re-read rather
+// than left showing the previous store's.
+check('switching store re-reads the catalogue', /function switchStore[\s\S]{0,600}loadCatalogue\(\)/.test(POS_TILL_SRC), true);
+check('switching store drops the previous shelf', /function switchStore[\s\S]{0,400}S\.stock = \{\}/.test(POS_TILL_SRC), true);
+// A basket is priced and stock-checked against ONE store.
+check('the store cannot change under a basket', /canSwitch = S\.stores\.length > 1 && !S\.lines\.length/.test(POS_TILL_SRC), true);
+// The picker's id must not sit one character from the settle screen's .spick
+// wallet list — this file already carries a note about that class of collision.
+check('the store picker does not collide with the settle wallet list',
+  [/id="storepick"/.test(POS_TILL_SRC), /id="spick"/.test(POS_TILL_SRC)], [true, false]);
 
 // ═══ 16. POS is a sales channel, and closing it closes something ═══════════
 // THE ASSERTION THIS SECTION EXISTS FOR: a channel toggle that changes nothing

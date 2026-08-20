@@ -413,6 +413,52 @@ button{font:inherit;color:inherit;margin:0}
 }
 .boot p{margin:0;color:var(--td-text2);font-size:15px;max-width:44ch}
 .boot a{color:var(--td-text);text-underline-offset:3px}
+/* ══ OVERRIDES LAST ══════════════════════════════════════════════════════
+   This block must stay at the END of the sheet. It targets .t-order, .lines,
+   .smain, .samt, .spick and .sconf, all of which are declared further up at
+   the SAME specificity — written any earlier, their base rules win and the
+   media query silently does nothing. It was written earlier the first time,
+   and the rail kept computing to width:380px inside a 375px phone. */
+/* ── PHONE ────────────────────────────────────────────────────────────────
+   Below the two-column floor the rail STOPS BEING A COLUMN and becomes a
+   section under the products.
+
+   It has to. .t-order is `flex:none; width:380px`, so on a 412px phone it
+   claimed 380 of them and the grid's own min-content pushed the document
+   wider than the screen: the rail, the running total and Mark paid all sat
+   off the right edge, reachable only by horizontal scrolling, and the page
+   gave no sign that a whole half of the till was over there.
+
+   The rail is content-sized and capped rather than given a fixed share: an
+   empty basket must not eat half a phone screen, and a long one must not
+   push the products off it. .lines drops to flex:0 1 auto so the rail can
+   shrink to nothing when the basket is empty, and shrink-and-scroll once the
+   cap is hit — which keeps .foot, and therefore the total and the pay
+   button, pinned to the bottom of the rail at every basket length. */
+@media (max-width:700px){
+  .t-body{flex-direction:column}
+  .t-entry{flex:1 1 auto;min-height:0}
+  .t-order{
+    /* 0 0 auto, NOT 0 1 auto: the entry above is flex:1 and its grid wants
+       every pixel, so a shrinkable rail gets squeezed below its own content
+       height and pushes the pay button off the bottom of the screen. The rail
+       sizes to content, capped; .lines is the only thing that gives. */
+    width:100%;flex:0 0 auto;max-height:46%;
+    border-left:0;border-top:1px solid var(--td-border);
+  }
+  .lines{flex:0 1 auto}
+  /* The head must not wrap: the store control is the only way to change shop. */
+  .t-brand{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+  /* The settle takeover is amount-beside-wallets at 56px apart, which does not
+     fit a phone either. Stack it, and let the two fixed 340px blocks be as wide
+     as the screen allows. */
+  .smain{flex-direction:column;gap:20px}
+  .samt{text-align:center}
+  .samt .amt{font-size:52px}
+  .spick,.sconf{width:100%;max-width:340px}
+}
+
 [hidden]{display:none !important}
 </style>
 </head>
@@ -446,7 +492,7 @@ button{font:inherit;color:inherit;margin:0}
     </div>
   </div>
   <div class="settle" id="settle" hidden></div>
-  <div class="sscrim" id="spick" hidden></div>
+  <div class="sscrim" id="storepick" hidden></div>
 </div>
 <div class="boot" id="boot"><p id="boot-msg"></p></div>
 
@@ -724,7 +770,7 @@ button{font:inherit;color:inherit;margin:0}
   }
 
   function renderPicker() {
-    var el = $('spick');
+    var el = $('storepick');
     el.hidden = !S.pickOpen;
     if (!S.pickOpen) { el.innerHTML = ''; return; }
     var h = '<div class="ssheet"><div class="hd">' + esc(T('store')) + '</div>';
@@ -1031,7 +1077,7 @@ button{font:inherit;color:inherit;margin:0}
     document.addEventListener('click', function (ev) {
       // The scrim closes the picker: tapping away from a short list is the
       // expected way out, and it is the only dismissal this pop-up needs.
-      if (S.pickOpen && ev.target.id === 'spick') { S.pickOpen = false; return render(); }
+      if (S.pickOpen && ev.target.id === 'storepick') { S.pickOpen = false; return render(); }
       var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick]');
       if (!t) return;
       if (t.hasAttribute('data-store')) { S.pickOpen = !S.pickOpen; return render(); }
