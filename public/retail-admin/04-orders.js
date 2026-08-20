@@ -2971,6 +2971,22 @@ function renderSortChips() {
 // tear down any open floating window (tracking popover, etc.).
 function renderSortableItems(o) {
   const ships = o.shipments || [];
+  // PACK BADGES ARE FOR PACKING, so an order that packs nothing shows none.
+  // renderPackBadges says so itself — an Air-only / Land-only mark is "a real
+  // packing warning (e.g. Land only — airline rejected)". A counter sale was
+  // handed over at the till and a pickup is collected at the counter; neither
+  // ever goes in a box or on a plane, so the item's shipping restriction has
+  // no addressee and reads as a promise about a parcel that will not exist.
+  //
+  // Wider than counter, deliberately: the fallback branch below is reached by
+  // pickup orders too (its own comment says so), which have been showing the
+  // same meaningless badge. ordShipsNothing covers both, which is what it is
+  // for.
+  //
+  // Items already grouped into a shipment card pass `false` here for a related
+  // reason — the parcel header states the mode, so repeating it per line is
+  // noise. Same flag, same intent.
+  const packable = !ordShipsNothing(o);
   // Items grouped into parcels render in their shipment card. Anything NOT in a
   // parcel — a pending order before its parcels are assigned, a pickup order
   // (no shipments at all), or an orphaned row — would otherwise vanish from the
@@ -2985,8 +3001,8 @@ function renderSortableItems(o) {
       ? `<div class="shipment-card"><div class="shipment-head">
            <span class="mode-pill"><svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="M3.3 7l8.7 5 8.7-5"/><path d="M12 22V12"/></svg>Not yet in a parcel · 待分配</span>
            <span class="count">${cuT(`${loose.length} item${loose.length === 1 ? '' : 's'}`, `${loose.length} 件商品`)}</span>
-         </div>${renderItemsTable(loose, true)}</div>`
-      : renderItemsTable(loose, true);   // pickup / no-parcel order: plain list
+         </div>${renderItemsTable(loose, packable)}</div>`
+      : renderItemsTable(loose, packable);   // pickup / no-parcel order: plain list
   }
   return renderSortChips()
     + ships.map(s => renderShipmentCard(o, s)).join('')
