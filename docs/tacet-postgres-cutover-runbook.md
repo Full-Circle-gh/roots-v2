@@ -1,6 +1,14 @@
-# The Postgres cutover runbook — v0.6, FIRST DRAFT, NOT EXECUTABLE
+# The Postgres cutover runbook — v0.7, FIRST DRAFT, NOT EXECUTABLE
 
 **A procedure, not a summary.** Written to be followed literally, at 3am, by one person who is not a developer, with the shop trading and no ability to improvise.
+
+> **THE BIGGEST ITEM IN THIS MIGRATION WAS NOT ON THE LIST UNTIL NOW — v0.7, 2026-08-20. G28.** The Phase 1 copy performed the tenant→account rename on the schema and **the application code was never updated to match**. **12 tables and 2 columns have different names in Postgres, and 266 statements across 23 files still use the old ones** — `tenants`→`accounts` alone is 104. That is **nearly three times G9's 96 dialect statements**, and it is a different class: `SELECT * FROM tenants` is valid Postgres, there is simply no such relation, so **no dialect scanner would flag it and none exists here to have tried.**
+>
+> **G26 AND G28 CLOSE TOGETHER OR NOT AT ALL.** Clearing G26 makes the application boot; these 266 statements then throw `relation "tenants" does not exist` on the first request that reaches one — and **PART H trigger T2 stops at ONE such line.** A flip taken between the two goes red immediately for a cause of your own making.
+>
+> **G26 ITSELF IS SMALL AND HAS A HOME.** One mechanism, not eleven fixes: 0 of its 19 tables are in `schema.sql` or `database.js`, all 19 already exist in Postgres, and the module-load timing is incidental — so the answer is uniformly "run on sqlite, skip on pg". **`database.js` already carries 106 `CREATE TABLE` blocks behind the pg early return**, so moving them there inherits the skip for free.
+>
+> **AND THE DISK HAS A DATE.** `db-backup.sh` carries `MIN_FREE_MB=2048` with `WORK=/tmp` on the same filesystem, so **the nightly off-site backup of both SQLite and the Postgres dump stops on ~2026-09-03**, before 95% and with no warning tier ahead of it. See status item 26.
 
 > **SOMETHING RAN — v0.6, 2026-08-20. APPLICATION CODE HAS EXECUTED AGAINST POSTGRES FOR THE FIRST TIME, AND FOUR STEPS OF THIS DOCUMENT ARE NOW MARKED AS NOT RUNNING AS WRITTEN.** `eval/pg-probe/g20-categories.js` runs the body of `GET /api/retail/categories` through the real chain and returns **1381 bytes, `sha256 24c690d3…` — byte-identical to what the live SQLite application serves.** G20 is instrumented, not closed: **one statement is not a smoke test.**
 >
@@ -8,7 +16,7 @@
 >
 > **READ THE FOUR CORRECTIONS BEFORE FOLLOWING ANY OF THOSE STEPS.** **Step G2's GOOD condition is unreachable** — the `[db-driver]` line prints and the process dies before listening (G26). **Step G6, PART H trigger T1, the H4 slow watch loop and H6 step 2 all exit 2** on the environment, not on the data (G27) — and **T1's exit-2 rule escalates to RED, so the panel would order a rollback within two minutes of the flip for a configuration reason.** Each step now carries its correction inline. **Twenty-one gaps remain of twenty-seven identified.**
 
-> **G22 AND G23 ARE CLOSED — v0.5, 2026-08-20. THE FLIP NOW HAS A WAY BACK, AND SOMEBODY AUTHORISED TO TAKE IT.** `scripts/rollback-to-sqlite.sh` and `scripts/rollback-delta-report.js` merged at `7483cb91`; **PART H is rewritten from a list of holes into a procedure.** The decision-maker is **Ash, alone, with no escalation**; the triggers are four observables with stated thresholds; the window default is **ONE HOUR**. **Twenty-one gaps remain of the twenty-seven identified** — G24 and G25 found by writing PART H, G26 and G27 by building the G20 probe and running it.
+> **G22 AND G23 ARE CLOSED — v0.5, 2026-08-20. THE FLIP NOW HAS A WAY BACK, AND SOMEBODY AUTHORISED TO TAKE IT.** `scripts/rollback-to-sqlite.sh` and `scripts/rollback-delta-report.js` merged at `7483cb91`; **PART H is rewritten from a list of holes into a procedure.** The decision-maker is **Ash, alone, with no escalation**; the triggers are four observables with stated thresholds; the window default is **ONE HOUR**. **Twenty-two gaps remain of the twenty-eight identified** — G24/G25 from writing PART H, G26/G27 from building the G20 probe, and **G28 from surveying G26**, which is where the biggest number in this document came from.
 >
 > **READ WHAT THAT DOES AND DOES NOT CHANGE, BECAUSE THE ASYMMETRY v0.4 NAMED IS THE THING THAT MOVED.** v0.4 said there was a way onto Postgres and no way off it, so the flip was irreversible from its first second. **That sentence is now retired.** The way off is a **rename**, not a merge: it restores the pre-flip file and carries nothing back, and a reverse copy is recorded as a **REJECTED option rather than unbuilt work** (§24 v4.46, four reasons). **So the flip is reversible WITH LOSS, for as long as exactly one database is moving** — which is why the daemons stop for the flip and why refusals R1 and R4 exist. PART I is rewritten around that. **Nothing else moved: no call site is converted (G1), nothing has ever executed against Postgres (G20), nothing stops trading (G16), and G5 still serialises transactions application-wide. A rollback that exists is not permission to flip; it is permission to stop.**
 >
@@ -26,7 +34,7 @@
 >
 > **CORRECTED BEFORE MERGE, 2026-08-19 — v0.1 → v0.2, and the correction is recorded rather than tidied away.** The draft was written against a reading of `claimMigrationCredit` that had been out of date for six days. **G11 said both of its pieces were unbuilt; the writer fix landed at `225aa13` on 2026-08-13** and is on `main`. Two forward-looking claims that rested on it were false when this file was written and are struck below. **That pass concluded the gap did not close** — the backfill unbuilt, F still failing, Part G still needing its baseline. **All three were wrong, and v0.3 above says why: the backfill had already run on 2026-08-17 and the run was never recorded anywhere this pass could see.** The v0.2 reasoning is left standing rather than rewritten, because it is the clearest evidence of what an unrecorded production write costs: a careful re-derivation against a current record reached a confident and false conclusion. Line-number cites for `reverseOrderBalance` and the `sqlite_sequence` reset were re-derived at this head in the same pass; both had drifted. See §24 and the re-derivation inside G11.
 
-**READ THIS BEFORE ANYTHING ELSE. THIS RUNBOOK CANNOT BE FOLLOWED TODAY.** It is a first draft written to find out what is missing, and the missing parts are marked in it rather than papered over. **Twenty-one steps of this procedure have no command to run, because the thing they depend on has not been built.** They are marked 🔴 **GAP** and numbered `G1`–`G27`, of which **G2, G3, G4, G11, G22 and G23 are CLOSED** — **twenty-seven have now been identified**, six have since been built, repaired or decided, and the numbers are not reused. **G24 and G25 were found writing PART H; G26 and G27 were found building the first thing that actually ran.** Walking a procedure turns up holes a survey does not, and running one turns up holes walking it does not. The index is in PART A.
+**READ THIS BEFORE ANYTHING ELSE. THIS RUNBOOK CANNOT BE FOLLOWED TODAY.** It is a first draft written to find out what is missing, and the missing parts are marked in it rather than papered over. **Twenty-two steps of this procedure have no command to run, because the thing they depend on has not been built.** They are marked 🔴 **GAP** and numbered `G1`–`G28`, of which **G2, G3, G4, G11, G22 and G23 are CLOSED** — **twenty-eight have now been identified**, six have since been built, repaired or decided, and the numbers are not reused. **G24 and G25 were found writing PART H; G26 and G27 were found building the first thing that actually ran; G28 was found surveying G26 and is the largest measured item in the whole migration.** Walking a procedure turns up holes a survey does not, running one turns up holes walking it does not, and **surveying a small gap turns up a large one behind it.** The index is in PART A.
 
 **A runbook that reads as complete when it is not is worse than no runbook**, because it gets trusted on the night. So where a step could not be written honestly, it is left as a hole with a name, and the hole says what has to exist before it can be filled.
 
@@ -112,10 +120,11 @@ There are **three** phases, settled 2026-08-10 (§24 *THREE PHASES, AND WHY THE 
 | **G24** | B17 | **The fidelity instrument does not exist as written.** `checks.py` reads a gitignored, never-deployed `wide_cols.json` at import, and its `SRC` points at the file F1 renames away. **Step G7 has a command that looks runnable and is not** | §24 v4.50, found writing PART H |
 | **G25** | B18 | **No alerting substitute for the window.** F1 silences every alert including the watchdog's own. The stopgap loop **must run off-box** — a loop on a wedged box dies with it and its silence reads as green | §24 v4.46 finding (1), v4.50 |
 | **G26** | B19 | **The application cannot BOOT on Postgres** — 11 `.exec()` calls at module load across 10 files, first `lib/tenant-creds.js:34` from `server.js:281`, 631 lines before `app.listen()`. **Not the call sites; the boot** | §24 v4.52, found building the G20 probe |
+| **G28** | B21 | **The copy renamed 12 tables and 2 columns; the code still uses the old names.** **266 statements across 23 files** — `tenants`→`accounts` alone is 104. Nearly 3× G9's dialect count, a different class, and invisible to every instrument here | §24 v4.53, found surveying G26 |
 | **G27** | B20 | **`.env` is parsed by an IIFE inside `server.js` and by nothing else**, so every `--pg` script exits 2 — G6, PART H's T1, the H4 slow loop and the H6 delta report all unusable as written | §24 v4.52 |
 | ~~**G23**~~ | ~~H1~~ | ✅ **CLOSED 2026-08-20.** Decision-maker **Ash, alone**; four triggers with thresholds (H2); window default **ONE HOUR** (H3); watch loop (H4); refusal procedure R0–R4 (H7). Row kept, not deleted | §24 v4.46, PART H |
 
-**Read the shape of that list, not just its length.** **Fifteen of the twenty-one open gaps sit in PART B, before the day starts** — which is the same sentence it has always been and is still the most useful thing on this page. **What changed on 2026-08-20 is the pair that used to sit at the two ends of it.** G2 and G22 were the same missing thing seen from both sides — no built way onto Postgres, no built way back off it. **Both are now closed, and G23 with them, so the flip has a mechanism, a way back, a trigger list and a named decision-maker.** It does not have converted call sites (G1), a smoke test (G20), a freeze (G16) or a delta pass (G18), **and those four are what still make this document unusable as a checklist.** The rollback is not permission to flip. It is permission to stop.
+**Read the shape of that list, not just its length.** **Sixteen of the twenty-two open gaps sit in PART B, before the day starts** — which is the same sentence it has always been and is still the most useful thing on this page. **What changed on 2026-08-20 is the pair that used to sit at the two ends of it.** G2 and G22 were the same missing thing seen from both sides — no built way onto Postgres, no built way back off it. **Both are now closed, and G23 with them, so the flip has a mechanism, a way back, a trigger list and a named decision-maker.** It does not have converted call sites (G1), a smoke test (G20), a freeze (G16) or a delta pass (G18), **and those four are what still make this document unusable as a checklist.** The rollback is not permission to flip. It is permission to stop.
 
 ---
 
@@ -427,7 +436,17 @@ ssh root@47.239.89.63 "cd /root/roots-v2 && node scripts/diagnose_deployed_tree.
 
 **IT ALSO BLOCKS THE OBVIOUS HARNESS.** `routes/retail.js` requires `lib/tenant-creds` at load, so a bare express app mounting just that router fails on the same line. Its load-time closure is 40 modules and contains **exactly one** blocker. By contrast `routes/lookups.js` (5 modules), `lib/tenant-db.js` (4) and `database.js` (2) are **blocker-free** — which is what made the G20 probe possible without touching any of this.
 
-**WHAT MUST EXIST FIRST** — a decision about what those ten boot-time schema blocks do under Postgres (skip, translate, or move out of module load), then the change.
+**THE SHAPE IS ONE MECHANISM, NOT ELEVEN FIXES — SETTLED BY MEASUREMENT 2026-08-20.** The eleven are the same thing eleven times: an idempotent `CREATE TABLE IF NOT EXISTS … AUTOINCREMENT` block, at module load, on a handle, creating **19 tables and 10 indexes** between them. Three measurements decide it:
+
+- **0 of the 19 are in `schema.sql`. 0 are in `database.js`.** So on SQLite these execs are the ONLY place those tables come from — **load-bearing, not belt-and-braces**, and they cannot simply be deleted.
+- **All 19 already exist in the live Postgres cluster** — 12 under the same name, **7 under a renamed one** (`tenant_secrets`→`account_secrets`, `tenants`→`accounts`, … see **G28**). So under pg the DDL is pure redundancy.
+- **The module-load TIMING is incidental, not deliberate.** None of the eleven queries at load; they only create. Nothing needs the table to exist at `require` time — it is needed at first query.
+
+So the behaviour wanted is uniform — **run on sqlite, skip on pg** — which is one guard, not eleven decisions.
+
+**AND `database.js` ALREADY HAS THE HOME, WHICH IS WHY THIS IS SMALL.** It is the largest schema path in the tree — **106 `CREATE TABLE IF NOT EXISTS` plus 307 `addColumn()`** against `schema.sql`'s 30 — and **it already sits behind the pg early return**, so anything moved into it inherits the skip for free, with no new mechanism to design or test. There are three schema homes today; **these eleven are the only one that is not driver-aware.**
+
+**WHAT MUST EXIST FIRST** — the decision to move the 19 into `database.js`'s existing boot-time schema path (or gate them the same way), then the move. ⚠️**But see G28 before scheduling it**: clearing this alone makes the application boot and then throw `relation "tenants" does not exist` on 266 statements, which trips PART H's T2 on its first line.
 
 **IF YOU REACH HERE ON THE NIGHT** — stop. **And do not read step G2's GOOD condition as reachable until this is closed** — see the correction recorded on that step.
 
@@ -462,6 +481,47 @@ LEDGER_EXIT=2
 **WHAT MUST EXIST FIRST** — either the loader extracted from `server.js` into something requirable, or the three `--pg`-capable scripts carrying their own. Until then **every trigger in PART H that reads Postgres is unusable**, and the ones that matter are the money ones.
 
 **IF YOU REACH HERE ON THE NIGHT** — prefix the variables by hand and write down that you did.
+
+---
+
+## B21 🔴 GAP G28 — The copy RENAMED 12 tables and 2 columns, and the application still uses the old names
+
+**WHAT THIS STEP WOULD DO** — let the application address the tables it owns, on Postgres, at all.
+
+**WHY THERE IS NO COMMAND — THIS IS THE LARGEST SINGLE ITEM IN THIS DOCUMENT AND IT WAS NOT ON THE LIST UNTIL 2026-08-20.** The Phase 1 copy performed the tenant→account rename recorded in §24 — *"the tenant→account rename across tables, columns and identifiers, per the retired `tenant` glossary term"*. **The schema half happened. The code half did not, and nothing recorded that.**
+
+**TWELVE TABLES HAVE DIFFERENT NAMES IN POSTGRES:**
+
+| SQLite (what the code says) | Postgres (what exists) | Statements |
+|---|---|---|
+| `tenants` | `accounts` | **104** |
+| `tenant_users` | `account_users` | **81** |
+| `tenant_domains` | `account_domains` | 19 |
+| `tenant_user_codes` | `account_user_codes` | 13 |
+| `tenant_user_sessions` | `account_user_sessions` | 13 |
+| `tenant_integrations` | `account_integrations` | 7 |
+| `tenant_onboarding` | `account_onboarding` | 6 |
+| `tenant_signup_requests` | `account_signup_requests` | 6 |
+| `tenant_secrets` | `account_secrets` | 5 |
+| `tenant_operator_push_subs` | `account_operator_push_subs` | 4 |
+| `tenant_user_caps` | `account_user_caps` | 4 |
+| `tenant_user_stores` | `account_user_stores` | 4 |
+
+**266 statements across 23 files**, comment-stripped (267 raw; one was prose). Concentrated in `routes/backend-auth.js` (92), `routes/saas-admin.js` (32), `routes/store-admin.js` (31), `routes/backend-team.js` (29), `routes/retail.js` (17).
+
+**AND TWO COLUMNS ARE RENAMED TOO, WHICH THE TABLE COUNT DOES NOT INCLUDE:** `tenant_id` → `account_id` **in 20 tables** and `tenant_user_id` → `account_user_id` **in 5**. Raw identifier occurrences in the runtime are 251 and 54, **but those have NOT been separated into SQL references and ordinary JavaScript variables, so they are not a statement count and must not be quoted as one.** **The column half of this gap is unmeasured and the true total is higher than 266.**
+
+**READ THE SIZE OF IT AGAINST THE FIGURES THIS DOCUMENT ALREADY CARRIES.** G9's dialect problem is **96 statements** — like for like, this is **nearly three times larger**. G1 is 102 unconverted transaction *blocks*, a different unit, so the two are not directly comparable; what is comparable is that **266 is the biggest measured statement count in the migration.**
+
+**AND IT IS A DIFFERENT CLASS FROM EVERYTHING ALREADY LISTED, WHICH IS WHY NOTHING CAUGHT IT.** G9 counts *dialect* — syntax Postgres will not parse. `SELECT * FROM tenants` is perfectly valid Postgres; there is simply no such relation. **No dialect scanner would flag it, and none exists in `scripts/` to have tried.** It is invisible to every instrument this project owns.
+
+**THE INTERACTION WITH G26 IS THE PART THAT BITES ON THE NIGHT.** Clearing G26 makes the application boot. **These 266 statements then throw `relation "tenants" does not exist` on the first request that reaches one** — and **PART H trigger T2 stops at ONE such line.** So a flip taken after G26 and before G28 goes red immediately, for a cause of your own making, and the panel cannot tell it apart from a real dialect failure. **Do not clear G26 and flip. They close together or not at all.**
+
+**ONE PIECE OF EVIDENCE THAT SOMEBODY ALREADY MET THIS AND WROTE IT DOWN IN THE ONLY PLACE THEY COULD**: `routes/retail.js` `tickRetryWeChatShipping()` wraps its `tenants` read in `try { … } catch { tenants = null; }` with the comment *"tenants table not migrated yet → single-DB fallback"*. **One call site anticipated exactly this failure. The other 265 did not.**
+
+**WHAT MUST EXIST FIRST** — a decision on which side moves: rename the tables back in Postgres, or rename the identifiers in 23 files. **§24 retired the word `tenant` deliberately, so renaming the schema back reverses a decision rather than fixing a defect** — which makes this a decision to take, not a mechanical edit to schedule.
+
+**IF YOU REACH HERE ON THE NIGHT** — stop.
 
 ---
 
