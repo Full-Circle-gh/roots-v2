@@ -8387,6 +8387,7 @@ const ONW_ERR_WHERE = {
   no_items: 'prod', invalid_item: 'prod', product_unavailable: 'prod', bad_unit_price: 'prod',
   bad_shipping_fee: 'money', bad_packing_fee: 'money', bad_total: 'money',
   bad_channel: 'route', bad_store_id: 'route', store_not_found: 'route',
+  store_required_for_counter: 'route',
   bad_fulfillment_type: 'route', fulfillment_type_required: 'route',
   address_required_for_delivery: 'addr',
   address_not_allowed_for_pickup: 'addr', address_not_allowed_for_counter: 'addr',
@@ -8429,6 +8430,13 @@ function ordNewErrText(code, detail) {
     bad_channel: cuT('Pick a channel this order can be created on.', '请选择可下单的渠道。'),
     bad_store_id: cuT('Pick a store.', '请选择门店。'),
     store_not_found: cuT('That store no longer exists. Pick another.', '该门店已不存在,请另选。'),
+    // The server refuses a walk-in with no location: the goods left a shelf, and
+    // which shelf is not optional (retail.js, beside the address rule). Only
+    // reachable when the store list came back empty — the picker preselects the
+    // first store otherwise — so the sentence names that, rather than telling the
+    // operator to pick from a list with nothing in it.
+    store_required_for_counter: cuT('A counter sale needs a store — it is the till it was rung up at. No store is set up yet.',
+                                    '前台销售必须选择门店(即收银所在门店)。目前还没有设置门店。'),
     fulfillment_type_required: cuT('Pick how this order is fulfilled.', '请选择履约方式。'),
     bad_fulfillment_type: cuT('Pick how this order is fulfilled.', '请选择履约方式。'),
     address_required_for_delivery: cuT('A delivery order needs a full address.', '配送订单需要完整地址。'),

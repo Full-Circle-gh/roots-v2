@@ -1177,6 +1177,158 @@ check('the preview names the first product and counts the rest when nobody is na
 check('the preview returns no UI sentences for the page to display',
   /Empty draft|more'|no drafts/i.test(previewSrc), false);
 
+
+// ═══ 11. Stock — a counter sale takes the goods off the shelf, and a refund
+//        puts them back ═════════════════════════════════════════════════════
+// THE ASSERTION THIS SECTION EXISTS FOR: until 2026-08-20 a counter sale was
+// booked, printed and counted as revenue while physical_qty never moved. It fell
+// between two rules — a manual order never reserves, so the commit path was a
+// no-op for it, and the only other decrement was gated on a Guangzhou ADDRESS,
+// which a counter sale is forbidden to carry. Nothing errored. The shelf simply
+// drifted by one sale at a time.
+//
+// The SECOND half is older and larger: commitUnreservedOrder's ledger reason
+// 'order_prepare' was written in one place and read in none, so every
+// out-of-Guangzhou and scheduled-ahead order decremented and never got its stock
+// back on refund — the reversers looked for reservation rows those orders never
+// had, found none, and returned zero. The scheduled-ahead case below is that
+// bug; it needs a test or it comes back.
+//
+// RUN AGAINST THE REAL FUNCTIONS. commitUnreservedOrder and
+// reverseCommittedLedger are extracted from lib/inventory.js and executed
+// against this throwaway database, so drift is caught here rather than in a
+// shop. Extraction rather than require() because lib/inventory.js opens the real
+// database at load — the one thing this file must never do.
+db.exec(`
+  CREATE TABLE retail_store_stock (
+    store_id INTEGER, product_id INTEGER, physical_qty INTEGER NOT NULL DEFAULT 0,
+    updated_at DATETIME, UNIQUE(store_id, product_id)
+  );
+  CREATE TABLE retail_stock_ledger (
+    id INTEGER PRIMARY KEY, store_id INTEGER, product_id INTEGER, delta INTEGER,
+    reason TEXT, ref_table TEXT, ref_id INTEGER, balance_after INTEGER,
+    actor_user_id INTEGER, actor_label TEXT, channel TEXT, note TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+  CREATE TABLE retail_stock_reservations (
+    id INTEGER PRIMARY KEY, store_id INTEGER, product_id INTEGER, order_id INTEGER,
+    qty INTEGER, channel TEXT, status TEXT, expires_at DATETIME,
+    created_at DATETIME, committed_at DATETIME, released_at DATETIME
+  );
+`);
+
+const INVENTORY_SRC = fs.readFileSync(
+  path.join(__dirname, '..', 'lib', 'inventory.js'), 'utf8');
+const STOCK_FNS = ['commitUnreservedOrder', 'reverseCommittedLedger'];
+const stockSrc = {};
+for (const n of STOCK_FNS) stockSrc[n] = extractFn(n, INVENTORY_SRC);
+const stockMissing = STOCK_FNS.filter(n => !stockSrc[n]);
+check('both stock functions were found in lib/inventory.js (extraction is intact)',
+  stockMissing, []);
+
+if (!stockMissing.length) {
+  // The three things the extracted functions reach for that this harness has to
+  // supply. `syncCalls` is not a stub to be ignored: the channel-sync enqueue is
+  // WHY the decrement goes through this helper rather than adjustStock, so the
+  // fact that it fires is asserted below, not assumed.
+  const syncCalls = [];
+  const stock = new Function('db', 'syncCalls', `
+    const tdb = () => db;
+    const enqueueChannelSync = (storeId, productId) => syncCalls.push(storeId + ':' + productId);
+    const _bumpStockLive = () => {};
+    ${STOCK_FNS.map((n) => stockSrc[n]).join('\n')}
+    return { ${STOCK_FNS.join(', ')} };
+  `)(db, syncCalls);
+
+  const OAT = 910, MATCHA = 911;
+  db.prepare('INSERT INTO retail_store_stock (store_id, product_id, physical_qty) VALUES (?,?,?)').run(1, OAT, 50);
+  db.prepare('INSERT INTO retail_store_stock (store_id, product_id, physical_qty) VALUES (?,?,?)').run(1, MATCHA, 30);
+  const qty = (pid) => db.prepare('SELECT physical_qty AS q FROM retail_store_stock WHERE store_id = 1 AND product_id = ?').get(pid).q;
+  const mkOrder = (id, ft) => db.prepare(
+    "INSERT INTO retail_orders (id, order_no, status, fulfillment_type, store_id, channel) VALUES (?,?,?,?,1,'manual')"
+  ).run(id, 'R-STK' + id, 'delivered', ft);
+
+  // ── A counter sale decrements ──────────────────────────────────────────────
+  mkOrder(9001, 'counter');
+  const c1 = stock.commitUnreservedOrder(9001, [{ product_id: OAT, qty: 3 }],
+    { actorLabel: 'Auto · counter sale (paid)' });
+  check('a counter sale takes its units off the shelf',
+    [c1.committed, qty(OAT)], [1, 47]);
+  // The ledger row is ORDER-LINKED. That is the property adjustStock would have
+  // destroyed (it writes ref_table='retail_store_stock', ref_id=NULL), and it is
+  // what every "already decremented?" guard and the refund cap read.
+  check('the decrement is recorded against the order, not against a bare stock row',
+    db.prepare(`SELECT reason, ref_table, ref_id, delta FROM retail_stock_ledger
+                 WHERE ref_id = 9001 AND product_id = ?`).all(OAT),
+    [{ reason: 'order_prepare', ref_table: 'retail_orders', ref_id: 9001, delta: -3 }]);
+  // Meituan/Eleme/Guanyi hear about it. A decrement they never see is an oversell
+  // on a marketplace that still believes the unit is there.
+  check('the decrement enqueues the channel sync', syncCalls.includes('1:' + OAT), true);
+
+  // Re-firing must not double-count — markOrderPaid can run twice on a gateway
+  // retry, and the admin Mark-paid path calls the same helper.
+  const c2 = stock.commitUnreservedOrder(9001, [{ product_id: OAT, qty: 3 }], {});
+  check('decrementing the same counter sale twice takes the units once',
+    [c2.skipped, qty(OAT)], ['already_committed', 47]);
+
+  // ── A refund gives them back ───────────────────────────────────────────────
+  const r1 = stock.reverseCommittedLedger(9001, [{ product_id: OAT, qty: 3 }], { note: 'refund (full)' });
+  check('refunding a counter sale returns its units',
+    [r1.reversed, qty(OAT)], [3, 50]);
+  check('the reversal enqueues the channel sync too',
+    syncCalls.filter((s) => s === '1:' + OAT).length >= 2, true);
+
+  // ── A second refund cannot return them again ──────────────────────────────
+  // The cap is arithmetic, not a flag: still_out is the sum of the order's own
+  // decrements minus the sum of its reversals, so there is nothing left to give.
+  const r2 = stock.reverseCommittedLedger(9001, [{ product_id: OAT, qty: 3 }], { note: 'refund again' });
+  check('refunding the same counter sale twice does NOT return the units twice',
+    [r2.reversed, qty(OAT)], [0, 50]);
+
+  // ── The older half of the bug: a scheduled-ahead order ────────────────────
+  // Out-of-Guangzhou and scheduled-ahead orders skip the reserve gate and
+  // decrement through this very same helper, so they were never reversed either.
+  // This is not a counter-sale test; it is the regression guard for the larger
+  // population the fix covers.
+  mkOrder(9002, 'delivery');
+  stock.commitUnreservedOrder(9002, [{ product_id: MATCHA, qty: 5 }], {});
+  check('a scheduled-ahead delivery decrements the same way', qty(MATCHA), 25);
+  const r3 = stock.reverseCommittedLedger(9002, [{ product_id: MATCHA, qty: 5 }], { note: 'refund' });
+  check('refunding a scheduled-ahead order returns its stock (the pre-existing bug)',
+    [r3.reversed, qty(MATCHA)], [5, 30]);
+
+  // ── Partial refunds accumulate, and the last one is capped ────────────────
+  // Two partials on one order are legitimate and must BOTH settle — which is why
+  // the cap is computed rather than borrowed from reverseCommittedOrder's
+  // single-'order_reverse'-row guard, which would have blocked the second.
+  mkOrder(9003, 'counter');
+  stock.commitUnreservedOrder(9003, [{ product_id: OAT, qty: 10 }], {});
+  const p1 = stock.reverseCommittedLedger(9003, [{ product_id: OAT, qty: 4 }], { note: 'partial 1' });
+  const p2 = stock.reverseCommittedLedger(9003, [{ product_id: OAT, qty: 4 }], { note: 'partial 2' });
+  const p3 = stock.reverseCommittedLedger(9003, [{ product_id: OAT, qty: 4 }], { note: 'partial 3 — over-asks' });
+  check('two partial refunds both settle, and a third is capped at what is left',
+    [p1.reversed, p2.reversed, p3.reversed, qty(OAT)], [4, 4, 2, 50]);
+
+  // ── A sale with no till is refused, by name rather than by silence ────────
+  // The create route now refuses a counter sale with no store_id; the helper is
+  // the second line of defence, and returns a NAMED skip rather than a zero that
+  // reads like "nothing to do".
+  db.prepare("INSERT INTO retail_orders (id, order_no, status, fulfillment_type, store_id) VALUES (9004,'R-STK9004','delivered','counter',NULL)").run();
+  check('a counter sale with no store is skipped by name, not silently',
+    [stock.commitUnreservedOrder(9004, [{ product_id: OAT, qty: 1 }], {}).skipped,
+     stock.reverseCommittedLedger(9004, [{ product_id: OAT, qty: 1 }], {}).skipped],
+    ['no_store', 'no_store']);
+}
+
+// The two server-side rules that make the above coherent, asserted against the
+// real source rather than re-implemented here: a counter sale must name its
+// till, and the decrement must NOT be an adjustStock call.
+check('the create route refuses a counter sale with no store',
+  /fulfillmentType === 'counter' && !storeId/.test(SERVER_SRC)
+  && /store_required_for_counter/.test(SERVER_SRC), true);
+check('the counter decrement goes through prepareCommitUnreservedOrder, not adjustStock',
+  /prepareCommitUnreservedOrder\(orderId, \{ actorLabel: 'Auto · counter sale \(paid\)' \}\)/.test(SERVER_SRC), true);
+
 // ── Report ──────────────────────────────────────────────────────────────────
 // §8's by-phone classifier is asserted through the REAL async function, so the
 // report waits on it: report() is called from that promise's settle handlers,

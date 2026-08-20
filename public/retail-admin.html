@@ -2214,8 +2214,20 @@
          position:relative only for this. -->
     <!-- Points at the full sub-page (§1.13: the operator authors here). The
          modal this replaced is gone as of 2026-07-31 — there is one way to
-         create an order. -->
-    <button class="btn btn-primary t-cta ord-head-cta" onclick="ordNewOpen()" title="Create an order on a customer's behalf · 代客下单">
+         create an order.
+         GATED ON orders:edit, which is the cap the endpoints behind this button
+         actually enforce — POST /orders and all five /order-drafts routes
+         (lib/cap-routes.js). It carried NO data-cap until now, so a view-only
+         operator was shown the one control on the page they cannot use, and the
+         command-palette entry for the same action was gated while its twin here
+         was not (02-settings-ops.js).
+         ONE cap, not the palette's `orders:view && orders:edit`, because
+         data-cap is ANY-of: a space-separated list resolves through canAny()
+         (01-core.js:166), so writing both here would SHOW the button to someone
+         holding only orders:view — the exact hole this closes. orders:view is
+         already required to reach this section at all (TAB_CAP, 01-core.js:181),
+         so one cap here is the same effective gate. -->
+    <button class="btn btn-primary t-cta ord-head-cta" data-cap="orders:edit" onclick="ordNewOpen()" title="Create an order on a customer's behalf · 代客下单">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       New order · 新建订单
     </button>

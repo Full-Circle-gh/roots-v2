@@ -1460,6 +1460,84 @@ function prepareCommitUnreservedOrder(orderId, { actorUserId = null, actorLabel 
   const lines = expandStockLines(resolved);
   return inventory.commitUnreservedOrder(orderId, lines, { actorUserId, actorLabel, note: o.order_no });
 }
+// The mirror image of the function above: the expanded component lines to hand
+// BACK when a ledger-committed order is refunded or cancelled.
+//
+// `only` is an optional [{ product_id, qty }] naming ORDER-LEVEL products — what
+// retail_order_items holds and what the refund UI sends, i.e. a bundle's own id,
+// not its components'. Absent means the whole order.
+//
+// THE PRODUCT SELECT IS `id, bundle_items` AND DELIBERATELY MATCHES
+// prepareCommitUnreservedOrder's, COLUMN FOR COLUMN. It looks short — expandStockLines
+// also tests `ship_from_supplier` to drop drop-ship lines, and neither function
+// selects it, so on this path that test reads undefined and never fires. That is
+// a real asymmetry with the reserve path, and it is preserved rather than fixed
+// here ON PURPOSE: this list has to name exactly what the decrement took, or the
+// return is short by every supplier-direct unit. Fixing the asymmetry means
+// fixing both halves in one commit, which is not this change.
+function orderStockLinesForReversal(orderId, only) {
+  const cap = new Map();
+  if (Array.isArray(only)) {
+    for (const l of only) {
+      const pid = parseInt(l && l.product_id, 10);
+      const q = Number(l && l.qty);
+      if (pid && q > 0) cap.set(pid, (cap.get(pid) || 0) + q);
+    }
+    if (!cap.size) return [];
+  }
+  const items = tdb().prepare(
+    'SELECT product_id, qty, options_json FROM retail_order_items WHERE order_id = ? ORDER BY id'
+  ).all(orderId);
+  const resolved = [];
+  for (const it of items) {
+    if (!it.product_id) continue;
+    let qty = Number(it.qty) || 0;
+    // A refund names a product and a count, not a row. One product can span two
+    // rows (different options), so the asked-for qty is drawn down across rows
+    // in id order rather than applied to each — otherwise refunding 1 of a
+    // product on 2 rows would return 2.
+    if (cap.size) {
+      const left = cap.get(it.product_id) || 0;
+      if (!(left > 0)) continue;
+      qty = Math.min(qty, left);
+      cap.set(it.product_id, left - qty);
+    }
+    if (!(qty > 0)) continue;
+    const prod = tdb().prepare('SELECT id, bundle_items FROM store_products WHERE id = ?').get(it.product_id);
+    if (!prod) continue;
+    let options = [];
+    try { const oj = JSON.parse(it.options_json || '[]'); if (Array.isArray(oj)) options = oj; } catch { /* no options */ }
+    resolved.push({ product: prod, qty, options });
+  }
+  return expandStockLines(resolved);
+}
+// Reverse an order's stock, whichever way it was committed. ONE entry point, so
+// the six refund/cancel sites do not each have to know that the estate is split.
+//
+// The reservation-driven reversers own orders that reserved at checkout. Orders
+// that skipped the reserve gate — out-of-GZ, scheduled-ahead, and counter sales —
+// decremented straight to the ledger and are INVISIBLE to those two, which
+// return { reversed: 0 } and always did. That zero is the signal to fall through.
+//
+// Falling through after a { reversed: 0, idempotent: true } is safe and is not
+// special-cased: reverseCommittedLedger nets the already-written 'order_reverse'
+// rows off its own cap, so a second pass computes nothing left to return.
+//
+// A partial reserve (the add-on path's allowPartial) cannot strand a line here.
+// A product that was short is never reserved AND never committed, and
+// commitUnreservedOrder refuses any order carrying a reservation row at all — so
+// an unreserved line on a partly-reserved order was never decremented, and there
+// is nothing to give back.
+function reverseOrderStock(orderId, { lines = null, actorUserId = null, actorLabel = null, note = null } = {}) {
+  const opts = { actorUserId, actorLabel, note };
+  const first = lines
+    ? inventory.reverseCommittedLines(orderId, lines, opts)
+    : inventory.reverseCommittedOrder(orderId, opts);
+  if (first && first.reversed > 0) return first;
+  const expanded = orderStockLinesForReversal(orderId, lines);
+  if (!expanded.length) return first;
+  return inventory.reverseCommittedLedger(orderId, expanded, opts);
+}
 // Decorate a storefront list / PDP row IN PLACE: flag bundles, override the
 // displayed `stock` with the assemble-from-components figure, and (PDP only)
 // attach the "what's inside" component cards. The raw recipe JSON is stripped
@@ -4443,6 +4521,20 @@ function markOrderPaid(orderId) {
   // absence of an 'order_delivered' activity event is also deliberate — the
   // dashboard Recap counts "N orders delivered" from those events, and a
   // walk-in is not a delivery.
+  //
+  // THE GOODS ALSO LEAVE THE SHELF HERE, and until 2026-08-20 they did not.
+  // A counter sale was booked, printed and counted as revenue while
+  // physical_qty never moved — it fell out of two rules meeting: manual orders
+  // never reserve (so the commit below is a no-op), and the only other decrement
+  // path is gated on a Guangzhou ADDRESS, which a counter sale is forbidden to
+  // carry. Nothing was wrong with either rule; the walk-in simply fell between
+  // them, silently, and the shelf count drifted by one sale every time.
+  //
+  // PAID, NOT CREATED, is the moment — for the same reason the status flip above
+  // is here rather than at the INSERT. A counter sale keyed in as pending and
+  // settled by QR seconds later is a normal till flow, and decrementing at
+  // creation would take stock for a sale that may never be paid, with no
+  // reversal hook on the cancel-before-payment path.
   if (r.changes > 0 && !isWait) {
     try {
       const ft = tdb().prepare('SELECT fulfillment_type FROM retail_orders WHERE id = ?').get(orderId);
@@ -4454,6 +4546,19 @@ function markOrderPaid(orderId) {
                   updated_at = CURRENT_TIMESTAMP
             WHERE id = ? AND status = 'paid'`
         ).run(orderId);
+        // Through prepareCommitUnreservedOrder, NOT adjustStock. adjustStock
+        // writes its ledger row against retail_store_stock with a NULL ref_id,
+        // so nothing would link the decrement to this order — and the
+        // "already decremented?" guards in commitUnreservedOrder and
+        // isStockPending both look for exactly that link. A counter sale
+        // adjusted rather than committed would be invisible to them: it could
+        // decrement twice on a retry, show "stock pending" in the drawer
+        // forever, and have no ledger row for reverseCommittedLedger to cap a
+        // refund against. The helper here expands bundles and paid add-ons,
+        // writes the order-linked row, and enqueues the Meituan/Eleme/Guanyi
+        // sync per line, exactly as it does for the out-of-GZ orders it was
+        // built for.
+        prepareCommitUnreservedOrder(orderId, { actorLabel: 'Auto · counter sale (paid)' });
       }
     } catch (e) { console.warn('[markOrderPaid counter-terminal]', orderId, e.message); }
   }
@@ -20778,6 +20883,29 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
     return res.status(400).json({ success: false, error: 'address_not_allowed_for_' + fulfillmentType });
   }
 
+  // ── A counter sale must name the till it was rung up at ───────────────────
+  // Same shape as the address rule above, and the same reason for existing: a
+  // walk-in with no location is not an under-specified order, it is an
+  // incoherent one. The goods left a shelf, and which shelf is not optional.
+  //
+  // It is also load-bearing now that the sale decrements: the decrement reads
+  // store_id off the order, and with none it returns { skipped: 'no_store' } —
+  // SILENTLY. Refusing at create is the difference between an operator being
+  // told and stock quietly drifting.
+  //
+  // COUNTER ONLY, deliberately narrow. §13 of the decisions doc has already
+  // decided that every staff-created order must have a location, but making the
+  // field required outright would break the case the comment above the store_id
+  // block protects — a phone order taken before routing is decided, which
+  // legitimately has no store yet. A walk-in is never that case.
+  //
+  // Reachable in practice only where a tenant has no active stores: the page
+  // preselects the first one and always sends it (04-orders.js ordNewLoadStores
+  // / ordNewCollect), so an empty select is the one way to get here.
+  if (fulfillmentType === 'counter' && !storeId) {
+    return res.status(400).json({ success: false, error: 'store_required_for_counter' });
+  }
+
   // Guest-pay handle — lets a customer without an app account pay this one
   // order by QR at /pay/:token. Minted for every manual order (harmless on
   // ones staff mark paid straight away).
@@ -25312,6 +25440,33 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     // admin path bypasses it.
     try { inventory.commitOrderReservations(id, { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null }); }
     catch (e) { console.error('[inventory.commit (admin)]', e); }
+    // A counter sale marked paid HERE must move stock exactly as one settled
+    // through markOrderPaid does. This is the same feature, not a second one:
+    // the operator rings a walk-in up as pending, the customer pays at the till,
+    // and the operator clicks Mark paid — the commit above is a no-op for it
+    // (a manual order holds no reservation), so without this the walk-in
+    // decrements on one route and not the other, purely by which button settled
+    // it. Guarded on the genuine pending→paid transition, like the print and
+    // WeCom hooks below; commitUnreservedOrder is idempotent besides, so a
+    // re-save cannot double-count.
+    //
+    // NOTE: this path does NOT flip the order to 'delivered' the way
+    // markOrderPaid does — it never calls isTerminalOnPaid, so a counter sale
+    // marked paid from the drawer sits at 'paid'. That is a real and separate
+    // bug, recorded in docs/tacet-pos-counter-survey.md under "ADJACENT BUG",
+    // and deliberately NOT fixed here. The stock decrement is correct either
+    // way: it is keyed on the sale being paid, not on the status it lands in.
+    if (o.status !== 'paid') {
+      try {
+        const _ft = tdb().prepare('SELECT fulfillment_type FROM retail_orders WHERE id = ?').get(id);
+        if (isTerminalOnPaid(_ft)) {
+          prepareCommitUnreservedOrder(id, {
+            actorUserId: req.user.id,
+            actorLabel: req.user.display_name || req.user.username || null,
+          });
+        }
+      } catch (e) { console.error('[inventory.commit (admin counter)]', e); }
+    }
     try { creditReferralReward(id); } catch (e) { console.error('[creditReferralReward]', e); }
     // Auto-print the bill, same as the gateway callbacks do inside
     // markOrderPaid(). This admin path bypasses markOrderPaid(), so without
@@ -25373,9 +25528,9 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
               WHERE order_id = ? AND product_id IS NOT NULL
               GROUP BY product_id HAVING qty > 0`
           ).all(id);
-          inventory.reverseCommittedLines(id, remaining, { ...actor, note: reason || 'cancel — remaining units after partial refund' });
+          reverseOrderStock(id, { lines: remaining, ...actor, note: reason || 'cancel — remaining units after partial refund' });
         } else {
-          inventory.reverseCommittedOrder(id, { ...actor, note: reason || null });
+          reverseOrderStock(id, { ...actor, note: reason || null });
         }
       } catch (e) { console.error('[inventory.reverse (cancel)]', e); }
     }
@@ -25491,7 +25646,7 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
     try { reverseOrderBalance(id); } catch (e) { console.error('[reverseOrderBalance]', e); }
     try { reverseOrderReferral(id); } catch (e) { console.error('[reverseOrderReferral]', e); }
     try { reverseLifetimeCommission(id); } catch (e) { console.error('[reverseLifetimeCommission]', e); }
-    try { inventory.reverseCommittedOrder(id, { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null, note: reason || null }); }
+    try { reverseOrderStock(id, { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null, note: reason || null }); }
     catch (e) { console.error('[inventory.reverse (refund)]', e); }
     // Mirror onto retail_payments for the audit trail.
     try {
@@ -25849,9 +26004,9 @@ router.post('/api/retail-admin/orders/:id/refund/approve', requireRetailAdmin, e
   try {
     const _actorLabel = req.user.display_name || req.user.username || null;
     if (isFull) {
-      inventory.reverseCommittedOrder(id, { actorUserId: req.user.id, actorLabel: _actorLabel, note: 'refund approved (full)' });
+      reverseOrderStock(id, { actorUserId: req.user.id, actorLabel: _actorLabel, note: 'refund approved (full)' });
     } else if (lines) {
-      inventory.reverseCommittedLines(id, lines, { actorUserId: req.user.id, actorLabel: _actorLabel, note: 'refund approved (partial lines)' });
+      reverseOrderStock(id, { lines, actorUserId: req.user.id, actorLabel: _actorLabel, note: 'refund approved (partial lines)' });
     }
   } catch (e) { console.error('[inventory.reverse (approve)]', e); }
   // Mark refunded units (see direct path) — at approval, where stock is released
@@ -26173,9 +26328,9 @@ router.post('/api/retail-admin/orders/:id/refund/direct', requireRetailAdmin, ex
   try {
     const _actorLabel = req.user.display_name || req.user.username || null;
     if (isFull) {
-      inventory.reverseCommittedOrder(id, { actorUserId: req.user.id, actorLabel: _actorLabel, note: 'refund (direct full)' });
+      reverseOrderStock(id, { actorUserId: req.user.id, actorLabel: _actorLabel, note: 'refund (direct full)' });
     } else if (lines) {
-      inventory.reverseCommittedLines(id, lines, { actorUserId: req.user.id, actorLabel: _actorLabel, note: 'refund (direct partial lines)' });
+      reverseOrderStock(id, { lines, actorUserId: req.user.id, actorLabel: _actorLabel, note: 'refund (direct partial lines)' });
     }
   } catch (e) { console.error('[inventory.reverse (direct)]', e); }
   // Mark the refunded units on each line so the drawer strikes them, the packing
