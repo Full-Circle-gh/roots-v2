@@ -1888,7 +1888,12 @@ function shipByPlan(o) {
 // "today (15h)").
 function shipByUrgency(p, actionable) {
   const r = { color: actionable ? 'var(--warn)' : 'var(--text-1)', level: 'none', hrs: null, days: null, dateOnly: false };
-  if (!p.urgencyDate || !p.urgencyBasis) {
+  // `p` itself may be null — shipByPlan returns null for a counter sale, which
+  // has no plan to be urgent about. Its two callers guard before they get here,
+  // so this is the second line rather than the first; it is present because
+  // this helper takes the plan directly and a future caller will not know that
+  // null is a legal value unless the function says so.
+  if (!p || !p.urgencyDate || !p.urgencyBasis) {
     r.color = actionable ? 'var(--warn)' : 'var(--text-3)';
     return r;
   }
@@ -1954,6 +1959,10 @@ function renderShipByCell(o) {
   if (ordIsReadonlyChannel(o)) return '<span class="muted">—</span>';
   const actionable = (o.status === 'paid' || o.status === 'preparing');
   const p = shipByPlan(o);
+  // No plan — a counter sale, which was paid and handed over in one moment and
+  // owes nothing. Same em-dash the caller above already renders for it
+  // (renderDeliveryCell), so the two agree if that upstream guard ever moves.
+  if (!p) return '<span class="muted">—</span>';
   const u = shipByUrgency(p, actionable);
   const headline = (p.headlineRaw != null && p.headlineRaw !== '')
     ? escapeHtml(p.headlineRaw)
@@ -2252,6 +2261,18 @@ function fulfillmentShortStrip(o) {
 function renderShipByTile(o) {
   const actionable = (o.status === 'paid' || o.status === 'preparing');
   const p = shipByPlan(o);
+  // NO PLAN, NO TILE. shipByPlan returns null for a counter sale on purpose:
+  // it was paid and handed over in one moment, so there is no deadline, no
+  // window and no requested timing. The tile is omitted rather than defaulted,
+  // because any date this could fall back to — placed_at, paid_at — would
+  // render as a promise the shop never made.
+  //
+  // This is the bug that made order 1248 unopenable: the ORDERS LIST guards
+  // counter upstream (renderDeliveryCell returns an em-dash and never calls its
+  // renderer), but the drawer called this unconditionally, so shipByUrgency
+  // dereferenced a null plan and the whole drawer failed to render. The list
+  // and the drawer now agree about the same documented null.
+  if (!p) return '';
   const u = shipByUrgency(p, actionable);
   const usingRaw = (p.headlineRaw != null && p.headlineRaw !== '');
   const headlineText = usingRaw ? String(p.headlineRaw) : cuT(p.headlineEn, p.headlineCn);

@@ -1510,6 +1510,196 @@ check('the till declares a locked source for every string it renders',
   /admin: |vocab: |admin$/m.test(stringsBlock) && stringsBlock.split('\n').filter(l => /\/\/ admin|\/\/ vocab/.test(l)).length >= 10,
   true);
 
+
+// ═══ 13. The drawer renders a counter sale ═════════════════════════════════
+// THE ASSERTION THIS SECTION EXISTS FOR: opening a counter sale in the order
+// drawer must not throw. It did, for every counter sale ever made, and the
+// operator saw "Failed" with no message because a second bug ate the text
+// (§12's banner fix is what finally let the drawer say what was wrong:
+// "Cannot read properties of null (reading 'urgencyDate')").
+//
+// THE SHAPE OF IT, because the fix is not where the crash was. shipByPlan()
+// returns null for a counter sale ON PURPOSE — paid and handed over in one
+// moment, so there is no deadline, no window and no requested timing. That
+// null is correct and documented at its return. What was missing was any
+// caller honouring it: the ORDERS LIST guards counter upstream and never calls
+// its renderer, but the DRAWER called renderShipByTile() unconditionally, so
+// shipByUrgency() dereferenced a null plan.
+//
+// So the rule under test is not "counter has a plan" — it is "a null plan is a
+// legal answer and every consumer survives it". The fix omits the tile rather
+// than defaulting a date, because any date available to fall back on
+// (placed_at, paid_at) would render as a promise the shop never made.
+//
+// RUN AGAINST THE REAL FUNCTIONS, whole-file. Every top-level function and
+// const in 04-orders.js is loaded into one sandbox, so no helper is missing and
+// nothing is stubbed except the browser globals the file closes over. That
+// matters more here than in §11: the bug was an INTERACTION between two
+// functions that each looked correct alone.
+
+const ORDERS_JS = fs.readFileSync(
+  path.join(__dirname, '..', 'public', 'retail-admin', '04-orders.js'), 'utf8');
+
+function orderBlocks(src) {
+  const L = src.split('\n');
+  const out = { code: [], names: [] };
+  for (let i = 0; i < L.length; i++) {
+    const fn = /^(?:async )?function ([A-Za-z_$][\w$]*)\s*\(/.exec(L[i]);
+    const cn = /^const ([A-Z_][A-Z0-9_]*) = [{[]/.exec(L[i]);
+    if (fn) {
+      for (let j = i + 1; j < L.length; j++) {
+        if (/^\}/.test(L[j])) { out.code.push(L.slice(i, j + 1).join('\n')); out.names.push(fn[1]); i = j; break; }
+      }
+    } else if (cn) {
+      for (let j = i + 1; j < L.length; j++) {
+        if (/^\};|^\];/.test(L[j])) { out.code.push(L.slice(i, j + 1).join('\n')); i = j; break; }
+      }
+    }
+  }
+  return out;
+}
+
+const OB = orderBlocks(ORDERS_JS);
+check('the drawer sandbox loaded a real slice of 04-orders.js (not vacuously empty)',
+  OB.code.length > 150, true);
+
+// The browser globals the file closes over. Deliberately dumb: if a helper
+// needs more than this it will throw a ReferenceError naming what it wants,
+// which is a legible failure rather than a silent pass.
+const DRAWER_SANDBOX = `
+  var cuT = (en) => en, CN = () => false, can = () => true, canAny = () => true;
+  var TRACKING_CARRIERS = [], _OPEN_ORDER = null, _ODM_OPEN = false, ORDERS = [];
+  var _ITEMS_SORT_MODE = 'sku', _ORD_PAGE_MODE = false, _ORDER_BACK_CUSTOMER = null;
+  var document = { getElementById: () => null, querySelector: () => null, querySelectorAll: () => [],
+    addEventListener(){}, removeEventListener(){},
+    createElement: () => ({ style:{}, classList:{ add(){}, remove(){}, toggle(){} }, setAttribute(){},
+                            appendChild(){}, querySelector: () => null, querySelectorAll: () => [] }),
+    body: { classList: { add(){}, remove(){}, toggle(){}, contains: () => false } } };
+  var window = { addEventListener(){}, removeEventListener(){},
+                 matchMedia: () => ({ matches: false, addEventListener(){} }) };
+  var localStorage = { getItem: () => null, setItem(){} };
+  function escapeHtml(s){ return String(s == null ? '' : s); }
+  function escapeAttr(s){ return escapeHtml(s); }
+  function fmt(n){ return Number(n || 0).toFixed(2); }
+  function thumbUrl(){ return ''; }
+  function paymentBrandHTML(){ return ''; }
+  function toast(){}
+  function api(){ return Promise.resolve({ data: [] }); }
+  function $(){ return null; }
+  function $$(){ return []; }
+  function tdWhen(){ return 'Aug 21'; }
+  function tdRange(){ return ''; }
+  function tdDate(){ return 'Aug 21'; }
+  ${OB.code.join('\n')}
+  return { shipByPlan, shipByUrgency, renderShipByTile, renderShipByCell, renderDeliveryCell, ordIsCounter };
+`;
+
+let DRAWER = null;
+try { DRAWER = new Function(DRAWER_SANDBOX)(); }
+catch (e) { console.log('    drawer sandbox failed: ' + e.message); }
+check('the drawer sandbox evaluates', !!DRAWER, true);
+
+if (DRAWER) {
+  const baseOrder = {
+    id: 1248, order_no: 'TC000331', status: 'delivered', channel: 'manual',
+    payment_method: 'wechat_offline', recipient_name: 'Guest', recipient_phone: null,
+    subtotal: 44, total: 44, shipping_fee: 0, packing_fee: 0,
+    placed_at: '2026-08-20 09:38:19', paid_at: '2026-08-20 09:38:19',
+    delivered_at: '2026-08-20 09:38:19', updated_at: '2026-08-20 09:38:19',
+    store_id: 1, seen_at: 'x', print_status: 'printed', printed_at: '2026-08-20 09:38:19',
+    source: 'manual', created_by: 1, pay_token: 'abc', customer_id: null, nickname: null,
+    scheduled_for: null, delivery_slot_label: null, delivery_slot_kind: null,
+    promised_ship_date: null, promised_delivery_date: null, ship_by_mode: null,
+    address_json: null, address: null, address_full: null,
+    items: [{ id: 1, product_id: 64, name_en: 'Wraps', name_cn: '卷饼', sku: '3-270',
+              qty: 1, unit_price: 44, line_total: 44, ship_modes: 'air' }],
+    payments: [{ id: 1, method: 'wechat_offline', amount: 44, status: 'success', out_trade_no: 'TC000331' }],
+    shipments: [], reservations: [], addons: [], stock_pending: false,
+  };
+  const shape = (over) => Object.assign({}, baseOrder, over);
+  // Every renderer call below goes through this. A regression must print a
+  // NAMED failing assertion, not crash the gate with a stack trace — the whole
+  // point of the section is to say WHICH shape broke.
+  const safe = (fn) => { try { return fn(); } catch (e) { return 'THREW: ' + e.message; } };
+
+  // ── The reported bug, at every status a counter sale can hold ────────────
+  // Three, not one: the crash was in shipByUrgency, whose behaviour branches on
+  // `actionable` (paid/preparing). A fix that only covered the delivered case
+  // would leave the till's own pending→paid window broken.
+  const COUNTER_STATES = ['delivered', 'paid', 'pending_payment', 'preparing', 'refunded', 'cancelled'];
+  const counterThrows = COUNTER_STATES.filter((st) => {
+    try { DRAWER.renderShipByTile(shape({ fulfillment_type: 'counter', status: st })); return false; }
+    catch (e) { return true; }
+  });
+  check('the drawer tile renders a counter sale at every status it can hold',
+    counterThrows, []);
+
+  // The null is the CORRECT answer, not an accident to be defaulted away.
+  check('a counter sale has no ship-by plan at all',
+    DRAWER.shipByPlan(shape({ fulfillment_type: 'counter' })), null);
+  // …and the tile is OMITTED rather than filled with a borrowed date. Asserting
+  // the empty string is the point: a tile showing placed_at would render as a
+  // deadline the shop never promised, and would still pass a does-not-throw test.
+  check('no plan means no tile — never a tile with a substituted date',
+    safe(() => DRAWER.renderShipByTile(shape({ fulfillment_type: 'counter' }))), '');
+  // The list cell and the drawer tile must agree about the same null.
+  check('the orders-list cell agrees, and shows a dash rather than crashing',
+    safe(() => /—/.test(DRAWER.renderShipByCell(shape({ fulfillment_type: 'counter' })))), true);
+  // shipByUrgency takes the plan directly, so it is a caller away from the same
+  // crash. It tolerates the documented null on its own.
+  check('urgency tolerates a null plan without being handed one by a guard',
+    (() => { try { DRAWER.shipByUrgency(null, true); DRAWER.shipByUrgency(null, false); return 'ok'; }
+             catch (e) { return e.message; } })(), 'ok');
+
+  // ── Every other shape with no delivery, so the fix is not counter-shaped ──
+  // The question that mattered was whether this reached wider than counter —
+  // a pickup with no slot, a manual delivery with no address, an order whose
+  // fulfilment type never got written. It does not: shipByPlan returns a plan
+  // object for all of them and only null for counter. These rows are here to
+  // keep that true, because the next person to add a `return null` will not
+  // remember that two callers dereference it.
+  const SHAPES = [
+    ['pickup, no slot',          { fulfillment_type: 'pickup' }],
+    ['pickup, with slot',        { fulfillment_type: 'pickup', scheduled_for: '2026-08-21 14:30:00', delivery_slot_label: '14:30-15:30' }],
+    ['delivery, no address',     { fulfillment_type: 'delivery' }],
+    ['delivery, asap',           { fulfillment_type: 'delivery', ship_by_mode: 'asap' }],
+    ['delivery, fresh batch',    { fulfillment_type: 'delivery', promised_ship_date: '2026-08-22' }],
+    ['delivery, scheduled',      { fulfillment_type: 'delivery', scheduled_for: '2026-08-23 10:00:00' }],
+    ['fulfilment type missing',  { fulfillment_type: null }],
+    ['read-only mirror channel', { fulfillment_type: 'delivery', channel: 'meituan' }],
+  ];
+  const shapeThrows = SHAPES.filter(([, over]) => {
+    try { DRAWER.renderShipByTile(shape(over)); DRAWER.renderShipByCell(shape(over)); return false; }
+    catch (e) { return true; }
+  }).map(([label]) => label);
+  check('every other order shape still renders, delivery or not', shapeThrows, []);
+
+  // ── The whole drawer payload, not just the tile that broke ───────────────
+  // §12 covers the till; this covers what the operator opens afterwards. Every
+  // helper renderOpenOrder calls on the order object, run against a real
+  // counter sale. Named individually so a failure says WHICH one, rather than
+  // "the drawer".
+  const DRAWER_HELPERS = ['renderShipByTile', 'fulfillmentShortStrip', 'hoistedTracking',
+    'routingNote', 'rerouteShortNote', 'orderHeadPrint', 'orderHeadMarks', 'orderHeadMore',
+    'orderStatusPill', 'orderItemNames', 'orderPayLinkTile', 'renderAddonTimeline',
+    'renderAlipayProof', 'renderOrderTotalBanner', 'drawerRefundBanner', 'addressChangedNote',
+    'splitSuggestionBanner', 'shipmentMergeControls', 'renderSortableItems', 'renderRefundPanel',
+    'undoDispatchable', 'undoPreparable', 'nextStatusFor', 'renderTrackingCell'];
+  const available = DRAWER_HELPERS.filter((n) => OB.names.includes(n));
+  check('the drawer-helper list still matches what 04-orders.js exports',
+    available.length >= 20, true);
+
+  const wide = new Function(DRAWER_SANDBOX.replace(
+    'return { shipByPlan, shipByUrgency, renderShipByTile, renderShipByCell, renderDeliveryCell, ordIsCounter };',
+    'return { ' + available.join(', ') + ' };'))();
+  const counter = shape({ fulfillment_type: 'counter' });
+  const helperThrows = available.filter((n) => {
+    try { wide[n](counter); return false; } catch (e) { return true; }
+  });
+  check('every drawer helper survives an order with no delivery, no parcel and no customer',
+    helperThrows, []);
+}
+
 // ── Report ──────────────────────────────────────────────────────────────────
 // §8's by-phone classifier is asserted through the REAL async function, so the
 // report waits on it: report() is called from that promise's settle handlers,
