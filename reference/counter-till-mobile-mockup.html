@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — Counter till, phone</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   COUNTER TILL — PHONE. Tacet, static mockup, no live data.
+
+   Companion to counter-till-mockup.html, which draws the tablet.
+   This is not a narrower version of that screen; the tablet's two
+   columns do not survive a phone and the layout changes shape.
+
+   Device: drawn at 390x844 CSS px — the tight case. A 412x915 phone
+   (what this was reported on) gets the same layout with more room.
+   Every touch target >= 44px; the working ones are 48-60px.
+
+   WHAT THE SHIPPED PHONE LAYOUT GOT WRONG, and what this fixes:
+     1. The order list was a 46%-tall strip under the products, so two
+        lines were visible and the rest scrolled inside a box the eye
+        reads as a footer. The order was effectively hidden.
+     2. "Guest" + "+ Customer" owned an 80px row on a screen with none
+        to spare — a whole band of the most valuable real estate spent
+        on a control a walk-in never touches.
+     3. A store whose counter is closed vanished from the picker, so
+        the control went quiet with no reason given and read as broken.
+
+   COLOUR is the live --td-* block copied verbatim from
+   public/retail-admin.css :8205-8254 — dark first (the admin default),
+   light as the opt-in override. The till runs light: a counter is a
+   bright room and Paper is the brand's ground.
+
+   TYPE is Inter 400/500. Fraunces 300 appears ONCE, on this document's
+   own headline, never inside a frame. No monospace exists in Tacet;
+   money and quantities are Inter + tabular-nums.
+
+   ENGLISH ONLY, per the standing mockup rule. Every string here is one
+   half of a cuT('en','zh') source pair; the Chinese halves ship in the
+   handoff table, not on this surface.
+   ============================================================ */
+
+:root {
+  /* --- verbatim from retail-admin.css :8205-8237 (dark, the default) --- */
+  --td-surface:    #18233A;
+  --td-raised:     #1E2A44;
+  --td-border:     #2A3550;
+  --td-header:     #364058;
+  --td-unseen:     #182329;
+  --td-text:       #FBF9F4;
+  --td-text2:      #9AA3B2;
+  --td-heat-rgb:   251, 249, 244;
+  --td-dusk:       #6E67AF;
+  --td-dusk-hi:    #7E77BF;
+  --td-dusk-tint:  #262A4A;
+  --td-sage:       #A3B49F;
+  --td-sage-tint:  #1E2C26;
+  --td-sage-ink:   #A3B49F;
+  --td-amber:      #C9954A;
+  --td-amber-tint: #33290F;
+  --td-amber-ink:  #C9954A;
+  --td-brick:      #B4533E;
+  --td-brick-tint: #351B14;
+  --td-brick-ink:  #D07A66;
+  --td-paper:      #111A2B;
+
+  --f-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  --f-display: "Fraunces", Georgia, serif;
+  --r-control: 8px;
+  --r-card: 14px;
+  --shadow-soft: 0 1px 2px rgba(17,26,43,0.05), 0 4px 16px rgba(17,26,43,0.04);
+  --shadow-sheet: 0 -2px 6px rgba(17,26,43,0.06), 0 -12px 32px rgba(17,26,43,0.10);
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
+}
+:root[data-theme="light"], .till {
+  /* --- verbatim from retail-admin.css :8238-8254 (light override) --- */
+  --td-surface:    #FFFFFF;
+  --td-raised:     #F6F3EC;
+  --td-border:     #E4E0D5;
+  --td-header:     #DAD5C6;
+  --td-unseen:     #F4F5F0;
+  --td-text:       #111A2B;
+  --td-text2:      #58606E;
+  --td-heat-rgb:   17, 26, 43;
+  --td-dusk-tint:  #EEEDF6;
+  --td-sage-tint:  #EDF1EC;
+  --td-sage-ink:   #4A6249;
+  --td-amber-tint: #F7EEDE;
+  --td-amber-ink:  #8A6425;
+  --td-brick-tint: #F6E7E3;
+  --td-brick-ink:  #B4533E;
+  --td-paper:      #FBF9F4;
+}
+
+* { box-sizing: border-box; }
+
+/* ---- the document around the frames (not part of the design) ---- */
+body {
+  margin: 0;
+  font-family: var(--f-sans);
+  background: #EDEAE2;
+  color: #111A2B;
+  -webkit-font-smoothing: antialiased;
+  padding: 48px 24px 96px;
+  line-height: 1.6;
+}
+.doc { max-width: 1120px; margin: 0 auto; }
+.doc h1 {
+  font-family: var(--f-display);
+  font-weight: 300;
+  font-size: 40px;
+  line-height: 1.2;
+  margin: 0 0 8px;
+  letter-spacing: -0.01em;
+  text-wrap: balance;
+}
+.lede { font-size: 17px; margin: 0 0 10px; max-width: 68ch; color: #2B3444; }
+.meta { font-size: 13px; color: #58606E; margin: 0 0 40px; max-width: 82ch; }
+.meta code, .notes code {
+  font-family: inherit; font-size: 12px;
+  background: #E4E0D5; border-radius: 4px; padding: 1px 5px;
+}
+.doc h2 {
+  font-size: 15px; font-weight: 500; margin: 44px 0 4px;
+  display: flex; align-items: baseline; gap: 10px;
+}
+.doc h2 .n {
+  font-size: 11px; font-weight: 500; letter-spacing: 0.06em;
+  color: #58606E; background: #E4E0D5;
+  border-radius: 4px; padding: 2px 7px; text-transform: none;
+}
+.doc h2 + p { font-size: 14px; color: #2B3444; margin: 0 0 16px; max-width: 74ch; }
+.row { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; }
+.device {
+  width: 390px; height: 844px;
+  border-radius: 22px;
+  border: 1px solid #C9C4B8;
+  background: #FBF9F4;
+  overflow: hidden;
+  box-shadow: var(--shadow-soft);
+  position: relative;
+  flex: none;
+}
+.device-note {
+  font-size: 12px; color: #58606E; margin: 10px 0 0; max-width: 390px;
+}
+.device-note b { font-weight: 500; color: #111A2B; }
+.notes { margin-top: 56px; }
+.notes ol { margin: 0; padding-left: 20px; }
+.notes li { font-size: 14px; margin-bottom: 14px; max-width: 78ch; }
+.notes li b { font-weight: 500; }
+
+/* ============================================================
+   THE TILL
+   ============================================================ */
+.till {
+  width: 100%; height: 100%;
+  background: var(--td-paper);
+  color: var(--td-text);
+  font-family: var(--f-sans);
+  font-size: 15px;
+  display: flex; flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+/* ---- head ---- */
+.t-head {
+  height: 52px; flex: none;
+  display: flex; align-items: center; gap: 8px;
+  padding: 0 10px 0 14px;
+  background: var(--td-surface);
+  border-bottom: 1px solid var(--td-border);
+}
+.t-brand { font-size: 15px; font-weight: 500; letter-spacing: -0.01em; white-space: nowrap; }
+.t-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--td-border); flex: none; }
+/* The store is a CONTROL. It carries a caret so it reads as one. */
+.t-store {
+  min-height: 44px; padding: 0 8px;
+  border: 1px solid var(--td-border); background: transparent;
+  border-radius: var(--r-control);
+  font: inherit; font-size: 13px; color: var(--td-text2);
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.t-store svg { width: 14px; height: 14px; flex: none; }
+.t-sp { flex: 1; }
+.hbtn {
+  min-width: 44px; height: 44px; padding: 0 10px;
+  border-radius: var(--r-control);
+  border: 1px solid var(--td-border); background: transparent;
+  color: var(--td-text2); font: inherit; font-size: 13px; font-weight: 500;
+}
+
+/* ---- entry: the whole screen, because it is the whole job ---- */
+.t-entry { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 12px 14px 0; gap: 10px; }
+.srch {
+  height: 52px; flex: none; display: flex; align-items: center; gap: 10px;
+  padding: 0 14px; border-radius: var(--r-control);
+  background: var(--td-surface); border: 1px solid var(--td-border);
+}
+.srch svg { width: 18px; height: 18px; flex: none; color: var(--td-text2); }
+.srch .ph { color: var(--td-text2); font-size: 15px; }
+.cats { display: flex; gap: 8px; flex: none; overflow: hidden; }
+.cat {
+  height: 44px; padding: 0 16px; flex: none;
+  display: inline-flex; align-items: center;
+  border-radius: 999px; border: 1px solid var(--td-border);
+  background: var(--td-surface); color: var(--td-text2);
+  font-size: 14px; font-weight: 500; white-space: nowrap;
+}
+.cat.on { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
+.grid {
+  flex: 1; min-height: 0;
+  display: grid; grid-template-columns: repeat(2, 1fr);
+  grid-auto-rows: 96px; gap: 10px; align-content: start;
+  overflow: hidden;
+}
+.tile {
+  border-radius: var(--r-card); border: 1px solid var(--td-border);
+  background: var(--td-surface); padding: 12px;
+  display: flex; flex-direction: column; justify-content: space-between;
+  text-align: left; overflow: hidden; position: relative;
+}
+.tile .nm {
+  font-size: 14px; line-height: 1.25; color: var(--td-text);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.tile .pr { font-size: 15px; font-variant-numeric: tabular-nums; }
+.tile .qty {
+  position: absolute; right: 10px; bottom: 10px;
+  min-width: 24px; height: 24px; padding: 0 7px;
+  border-radius: 999px; background: var(--td-amber-tint); color: var(--td-amber-ink);
+  font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.tile.out { opacity: 0.55; }
+.tile.out .pr { text-decoration: line-through; color: var(--td-text2); }
+.tile .oos {
+  position: absolute; right: 10px; bottom: 10px;
+  font-size: 11px; font-weight: 500; color: var(--td-brick-ink);
+  background: var(--td-brick-tint); border-radius: 999px; padding: 3px 8px;
+}
+
+/* ---- the bar: the order, folded to two rows ----
+   This is the whole idea. The order does not need a permanent column on
+   a phone; it needs a permanent TOTAL and a way in. */
+.t-bar {
+  flex: none; background: var(--td-surface);
+  border-top: 1px solid var(--td-border);
+  padding: 8px 14px 14px;
+}
+.bar-sum {
+  height: 44px; width: 100%;
+  display: flex; align-items: center; gap: 8px;
+  background: transparent; border: 0; padding: 0;
+  color: var(--td-text); font: inherit;
+}
+.bar-sum .chev { width: 18px; height: 18px; flex: none; color: var(--td-text2); }
+.bar-sum .ct { font-size: 14px; color: var(--td-text2); }
+.bar-sum .sp { flex: 1; }
+.bar-sum .amt { font-size: 20px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.pay {
+  width: 100%; height: 60px; border-radius: var(--r-control);
+  border: 1px solid var(--td-text); background: var(--td-text); color: var(--td-paper);
+  font: inherit; font-size: 17px; font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.pay[disabled] { background: var(--td-raised); border-color: var(--td-border); color: var(--td-text2); }
+.bar-empty { font-size: 13px; color: var(--td-text2); text-align: center; padding: 2px 0 10px; }
+
+/* ---- the order sheet ---- */
+.scrim { position: absolute; inset: 0; background: rgba(17,26,43,0.34); }
+.sheet {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 86%;
+  background: var(--td-paper);
+  border-top-left-radius: 18px; border-top-right-radius: 18px;
+  box-shadow: var(--shadow-sheet);
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.grab { width: 36px; height: 4px; border-radius: 2px; background: var(--td-border); margin: 8px auto 0; flex: none; }
+.sheet-hd {
+  flex: none; display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px 12px; border-bottom: 1px solid var(--td-border);
+}
+.sheet-hd .ttl { font-size: 16px; font-weight: 500; }
+.sheet-hd .ct { font-size: 14px; color: var(--td-text2); }
+.sheet-hd .sp { flex: 1; }
+/* The customer control, reduced from a row to a 44px button. */
+.cbtn {
+  min-height: 44px; padding: 0 12px;
+  display: inline-flex; align-items: center; gap: 7px;
+  border-radius: var(--r-control); border: 1px solid var(--td-border);
+  background: var(--td-surface); color: var(--td-text2);
+  font: inherit; font-size: 13px; font-weight: 500; white-space: nowrap;
+}
+.cbtn svg { width: 16px; height: 16px; flex: none; }
+.cchip {
+  min-height: 48px; padding: 0 2px 0 12px;
+  display: inline-flex; align-items: center; gap: 8px;
+  border-radius: var(--r-control); border: 1px solid var(--td-border);
+  background: var(--td-raised); color: var(--td-text); font-size: 13px;
+}
+.cchip .who { font-weight: 500; }
+.cchip .bal { color: var(--td-text2); font-variant-numeric: tabular-nums; }
+/* 44px like everything else. It sits inside the chip rather than beside it,
+   so the chip grows to hold it rather than the target shrinking to fit. */
+.cchip .x {
+  width: 44px; height: 44px; border-radius: var(--r-control);
+  border: 0; background: transparent; color: var(--td-text2);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.cchip .x svg { width: 15px; height: 15px; }
+.slines { flex: 1; min-height: 0; overflow: hidden; }
+.ln {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 14px; min-height: 68px;
+  border-bottom: 1px solid var(--td-border);
+}
+.ln .nm { flex: 1; min-width: 0; font-size: 15px; line-height: 1.3; }
+.ln .ea { font-size: 13px; color: var(--td-text2); font-variant-numeric: tabular-nums; }
+.ln .lt { font-size: 15px; font-variant-numeric: tabular-nums; text-align: right; }
+.step { display: flex; align-items: center; gap: 2px; flex: none; }
+.step button {
+  width: 44px; height: 44px; flex: none;
+  border-radius: var(--r-control); border: 1px solid var(--td-border);
+  background: var(--td-surface); color: var(--td-text);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.step button svg { width: 16px; height: 16px; }
+.step .n { min-width: 34px; text-align: center; font-size: 16px; font-variant-numeric: tabular-nums; }
+.sheet-foot { flex: none; border-top: 1px solid var(--td-border); background: var(--td-surface); padding: 12px 14px 14px; }
+.sums { font-size: 13px; color: var(--td-text2); }
+.sums div { display: flex; justify-content: space-between; padding: 2px 0; font-variant-numeric: tabular-nums; }
+.tot { display: flex; align-items: baseline; justify-content: space-between; margin: 8px 0 12px; }
+.tot .lb { font-size: 15px; }
+.tot .amt { font-size: 30px; font-weight: 500; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+
+/* ---- store picker ---- */
+.pscrim { position: absolute; inset: 0; background: rgba(17,26,43,0.38); display: flex; align-items: center; justify-content: center; padding: 24px; }
+.psheet {
+  width: 100%; background: var(--td-surface);
+  border: 1px solid var(--td-border); border-radius: var(--r-card);
+  padding: 14px; display: flex; flex-direction: column; gap: 8px;
+}
+.psheet .hd { font-size: 13px; color: var(--td-text2); }
+.srow {
+  min-height: 60px; padding: 0 14px;
+  border-radius: var(--r-control); border: 1px solid var(--td-border);
+  background: transparent; color: var(--td-text); font: inherit; font-size: 16px;
+  display: flex; align-items: center; gap: 10px; text-align: left;
+}
+.srow.on { border-color: var(--td-text); background: var(--td-raised); }
+.srow .tick { width: 18px; height: 18px; flex: none; opacity: 0; }
+.srow.on .tick { opacity: 1; }
+.srow .sp { flex: 1; }
+/* A CLOSED counter is shown and labelled, never hidden. */
+.srow.shut { opacity: 0.6; }
+.srow .shutlb {
+  font-size: 12px; font-weight: 500;
+  color: var(--td-brick-ink); background: var(--td-brick-tint);
+  border-radius: 999px; padding: 3px 9px;
+}
+
+/* ---- settle takeover ---- */
+.settle { position: absolute; inset: 0; background: var(--td-paper); display: flex; flex-direction: column; padding: 16px 18px 18px; }
+.stop { display: flex; align-items: center; flex: none; }
+.back {
+  height: 44px; padding: 0 13px; display: inline-flex; align-items: center; gap: 7px;
+  border-radius: var(--r-control); border: 1px solid var(--td-border);
+  background: var(--td-surface); font-size: 14px; font-weight: 500; color: var(--td-text);
+}
+.back svg { width: 15px; height: 15px; }
+.smain { flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; }
+.samt { text-align: center; flex: none; }
+.samt .lb { font-size: 14px; color: var(--td-text2); margin-bottom: 6px; }
+.samt .amt { font-size: 52px; font-variant-numeric: tabular-nums; letter-spacing: -0.03em; line-height: 1; }
+.samt .sb { font-size: 13px; color: var(--td-text2); margin-top: 8px; }
+.spick { width: 100%; max-width: 320px; flex: none; }
+.spick .lb { font-size: 13px; color: var(--td-text2); margin-bottom: 8px; }
+.wal {
+  width: 100%; min-height: 60px; padding: 0 16px; margin-bottom: 8px;
+  border-radius: var(--r-control); border: 1px solid var(--td-border);
+  background: var(--td-surface); display: flex; align-items: center; gap: 12px;
+  font-size: 16px; text-align: left; color: var(--td-text);
+}
+.wal .rad { width: 22px; height: 22px; flex: none; border-radius: 50%; border: 1.5px solid var(--td-border); display: grid; place-items: center; }
+.wal.on { border-color: var(--td-text); background: var(--td-raised); }
+.wal.on .rad { border-color: var(--td-text); }
+.wal.on .rad::after { content: ""; width: 11px; height: 11px; border-radius: 50%; background: var(--td-text); }
+.sfoot { flex: none; }
+.sconf {
+  width: 100%; height: 68px; border-radius: var(--r-control);
+  border: 1px solid var(--td-text); background: var(--td-text); color: var(--td-paper);
+  font-size: 17px; font-weight: 500;
+}
+</style>
+</head>
+<body>
+<div class="doc">
+
+  <h1>Counter till, on a phone</h1>
+  <p class="lede">The tablet till has two columns. A phone has room for one, so the order stops being a column and becomes a bar you can open — and the products get the screen back.</p>
+  <p class="meta">Drawn at 390&times;844 CSS pixels, the tight case; a 412&times;915 phone gets the same layout with more room. Colour is the live <code>--td-*</code> block copied verbatim from <code>retail-admin.css</code>; type is Inter throughout, tabular figures on every number. English only, per the mockup rule. Companion to <code>counter-till-mockup.html</code>, which draws the 9.7&Prime; tablet — this is not that screen made narrower.</p>
+
+  <h2><span class="n">Problem</span>What the shipped phone layout does today</h2>
+  <p>The rail was stacked under the products and capped, so the order list became a two-line strip above the total — present, but not readable. The customer control kept a full-width row it had not earned. Both are fixed below.</p>
+
+  <div class="row">
+
+    <!-- ============ 1. PRODUCTS, THE DEFAULT ============ -->
+    <div>
+      <div class="device"><div class="till">
+        <div class="t-head">
+          <span class="t-brand">Counter sale</span>
+          <span class="t-dot"></span>
+          <button class="t-store">Tianhe
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <span class="t-sp"></span>
+          <button class="hbtn">EN</button>
+        </div>
+        <div class="t-entry">
+          <div class="srch">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/></svg>
+            <span class="ph">Search a product to add&hellip;</span>
+          </div>
+          <div class="cats">
+            <span class="cat on">All</span>
+            <span class="cat">Dry &amp; Pantry</span>
+            <span class="cat">Fresh &amp; Deli</span>
+          </div>
+          <div class="grid">
+            <div class="tile"><div class="nm">Hazelnut-Chocolate Spread</div><div class="pr">&yen;89.00</div><span class="qty">1</span></div>
+            <div class="tile"><div class="nm">Maple Cinnamon Almond Butter</div><div class="pr">&yen;57.00</div></div>
+            <div class="tile"><div class="nm">Whole-Wheat Wraps &mdash; XL 10&Prime; (12pc)</div><div class="pr">&yen;44.00</div><span class="qty">2</span></div>
+            <div class="tile"><div class="nm">Peanut Butter (100% Peanuts)</div><div class="pr">&yen;42.00</div></div>
+            <div class="tile"><div class="nm">Dried Sweet Banana</div><div class="pr">&yen;22.00</div><span class="qty">1</span></div>
+            <div class="tile"><div class="nm">Zhoug &mdash; Green Chilli Dip</div><div class="pr">&yen;42.00</div></div>
+            <div class="tile"><div class="nm">Nacho Cheese Dip</div><div class="pr">&yen;38.00</div></div>
+            <div class="tile out"><div class="nm">Tzatziki</div><div class="pr">&yen;43.00</div><span class="oos">Out of stock</span></div>
+          </div>
+        </div>
+        <div class="t-bar">
+          <button class="bar-sum">
+            <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m18 15-6-6-6 6"/></svg>
+            <span class="ct">4 items</span>
+            <span class="sp"></span>
+            <span class="amt">&yen;199.00</span>
+          </button>
+          <button class="pay">Mark paid &yen;199.00</button>
+        </div>
+      </div></div>
+      <p class="device-note"><b>1 &middot; Products.</b> The grid gets every pixel the bar does not need. The bar is the order, folded: count, total, and one tap to open it. Tapping a product adds it and its tile takes a count &mdash; the cashier never has to look away to confirm the last scan landed.</p>
+    </div>
+
+    <!-- ============ 2. THE ORDER SHEET ============ -->
+    <div>
+      <div class="device"><div class="till">
+        <div class="t-head">
+          <span class="t-brand">Counter sale</span>
+          <span class="t-dot"></span>
+          <button class="t-store">Tianhe
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <span class="t-sp"></span>
+          <button class="hbtn">EN</button>
+        </div>
+        <div class="t-entry">
+          <div class="srch">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/></svg>
+            <span class="ph">Search a product to add&hellip;</span>
+          </div>
+          <div class="cats"><span class="cat on">All</span><span class="cat">Dry &amp; Pantry</span><span class="cat">Fresh &amp; Deli</span></div>
+          <div class="grid">
+            <div class="tile"><div class="nm">Hazelnut-Chocolate Spread</div><div class="pr">&yen;89.00</div><span class="qty">1</span></div>
+            <div class="tile"><div class="nm">Maple Cinnamon Almond Butter</div><div class="pr">&yen;57.00</div></div>
+          </div>
+        </div>
+        <div class="scrim"></div>
+        <div class="sheet">
+          <div class="grab"></div>
+          <div class="sheet-hd">
+            <span class="ttl">Order</span>
+            <span class="ct">4 items</span>
+            <span class="sp"></span>
+            <button class="cbtn">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"/><path d="M5.5 20a6.5 6.5 0 0 1 13 0"/></svg>
+              Customer
+            </button>
+          </div>
+          <div class="slines">
+            <div class="ln">
+              <div class="nm">Hazelnut-Chocolate Spread<div class="ea">&yen;89.00 each</div></div>
+              <div class="step">
+                <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+                <span class="n">1</span>
+                <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+              </div>
+              <div class="lt">&yen;89.00</div>
+            </div>
+            <div class="ln">
+              <div class="nm">Whole-Wheat Wraps &mdash; XL 10&Prime; (12pc)<div class="ea">&yen;44.00 each</div></div>
+              <div class="step">
+                <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+                <span class="n">2</span>
+                <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+              </div>
+              <div class="lt">&yen;88.00</div>
+            </div>
+            <div class="ln">
+              <div class="nm">Dried Sweet Banana<div class="ea">&yen;22.00 each</div></div>
+              <div class="step">
+                <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+                <span class="n">1</span>
+                <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+              </div>
+              <div class="lt">&yen;22.00</div>
+            </div>
+          </div>
+          <div class="sheet-foot">
+            <div class="sums"><div><span>3 lines &middot; 4 items</span><span>&yen;199.00</span></div></div>
+            <div class="tot"><span class="lb">Total</span><span class="amt">&yen;199.00</span></div>
+            <button class="pay">Mark paid &yen;199.00</button>
+          </div>
+        </div>
+      </div></div>
+      <p class="device-note"><b>2 &middot; The order, opened.</b> The list gets ~500px instead of ~150 &mdash; eight lines rather than two. Quantity steppers are 44px and sit on the row, so changing a count is one tap, not tap-to-select-then-tap. Total and <i>Mark paid</i> stay pinned; the sheet never hides the thing it exists to confirm.</p>
+    </div>
+
+    <!-- ============ 3. CUSTOMER ATTACHED ============ -->
+    <div>
+      <div class="device"><div class="till">
+        <div class="t-head">
+          <span class="t-brand">Counter sale</span>
+          <span class="t-dot"></span>
+          <button class="t-store">Tianhe
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <span class="t-sp"></span>
+          <button class="hbtn">EN</button>
+        </div>
+        <div class="t-entry">
+          <div class="srch">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/></svg>
+            <span class="ph">Search a product to add&hellip;</span>
+          </div>
+          <div class="cats"><span class="cat on">All</span><span class="cat">Dry &amp; Pantry</span><span class="cat">Fresh &amp; Deli</span></div>
+          <div class="grid">
+            <div class="tile"><div class="nm">Hazelnut-Chocolate Spread</div><div class="pr">&yen;89.00</div><span class="qty">1</span></div>
+            <div class="tile"><div class="nm">Maple Cinnamon Almond Butter</div><div class="pr">&yen;57.00</div></div>
+          </div>
+        </div>
+        <div class="scrim"></div>
+        <div class="sheet">
+          <div class="grab"></div>
+          <div class="sheet-hd">
+            <span class="ttl">Order</span>
+            <span class="sp"></span>
+            <span class="cchip">
+              <span class="who">Li Wei</span>
+              <span class="bal">340 pts &middot; &yen;58.00</span>
+              <button class="x"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+            </span>
+          </div>
+          <div class="slines">
+            <div class="ln">
+              <div class="nm">Hazelnut-Chocolate Spread<div class="ea">&yen;89.00 each</div></div>
+              <div class="step">
+                <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+                <span class="n">1</span>
+                <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+              </div>
+              <div class="lt">&yen;89.00</div>
+            </div>
+            <div class="ln">
+              <div class="nm">Whole-Wheat Wraps &mdash; XL 10&Prime; (12pc)<div class="ea">&yen;44.00 each</div></div>
+              <div class="step">
+                <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+                <span class="n">2</span>
+                <button><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+              </div>
+              <div class="lt">&yen;88.00</div>
+            </div>
+          </div>
+          <div class="sheet-foot">
+            <div class="sums">
+              <div><span>3 lines &middot; 4 items</span><span>&yen;199.00</span></div>
+              <div><span>Earns</span><span>199 pts</span></div>
+            </div>
+            <div class="tot"><span class="lb">Total</span><span class="amt">&yen;199.00</span></div>
+            <button class="pay">Mark paid &yen;199.00</button>
+          </div>
+        </div>
+      </div></div>
+      <p class="device-note"><b>3 &middot; A customer attached.</b> Optional, and priced accordingly: one 44px button in the sheet header, not a band across the products screen. Attached, it becomes a chip carrying the two facts a cashier is asked for &mdash; points and wallet &mdash; with an <i>x</i> to detach. A walk-in never sees any of it.</p>
+    </div>
+
+    <!-- ============ 4. STORE PICKER ============ -->
+    <div>
+      <div class="device"><div class="till">
+        <div class="t-head">
+          <span class="t-brand">Counter sale</span>
+          <span class="t-dot"></span>
+          <button class="t-store">Tianhe
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+          </button>
+          <span class="t-sp"></span>
+          <button class="hbtn">EN</button>
+        </div>
+        <div class="t-entry">
+          <div class="srch">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/></svg>
+            <span class="ph">Search a product to add&hellip;</span>
+          </div>
+          <div class="cats"><span class="cat on">All</span><span class="cat">Dry &amp; Pantry</span><span class="cat">Fresh &amp; Deli</span></div>
+          <div class="grid">
+            <div class="tile"><div class="nm">Hazelnut-Chocolate Spread</div><div class="pr">&yen;89.00</div></div>
+            <div class="tile"><div class="nm">Maple Cinnamon Almond Butter</div><div class="pr">&yen;57.00</div></div>
+            <div class="tile"><div class="nm">Whole-Wheat Wraps &mdash; XL 10&Prime; (12pc)</div><div class="pr">&yen;44.00</div></div>
+            <div class="tile"><div class="nm">Peanut Butter (100% Peanuts)</div><div class="pr">&yen;42.00</div></div>
+          </div>
+        </div>
+        <div class="t-bar">
+          <div class="bar-empty">No items yet &mdash; tap a product to start</div>
+          <button class="pay" disabled>Mark paid</button>
+        </div>
+        <div class="pscrim">
+          <div class="psheet">
+            <div class="hd">Store</div>
+            <button class="srow on">
+              <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 13 4 4L19 7"/></svg>
+              <span>Tianhe</span>
+            </button>
+            <button class="srow shut">
+              <svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 13 4 4L19 7"/></svg>
+              <span>Yuexiu</span>
+              <span class="sp"></span>
+              <span class="shutlb">Counter closed</span>
+            </button>
+          </div>
+        </div>
+      </div></div>
+      <p class="device-note"><b>4 &middot; Store picker, with one counter closed.</b> The fix for the night this was reported as broken. A store whose POS channel is closed on the Sales page is <i>listed and labelled</i>, never dropped &mdash; a missing row and a dead button look identical, and the cashier is owed the reason. Also note the empty-basket bar: no total, no count, and <i>Mark paid</i> visibly inert.</p>
+    </div>
+
+    <!-- ============ 5. SETTLE ============ -->
+    <div>
+      <div class="device"><div class="till">
+        <div class="settle">
+          <div class="stop">
+            <button class="back">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+              Back
+            </button>
+          </div>
+          <div class="smain">
+            <div class="samt">
+              <div class="lb">Amount</div>
+              <div class="amt">&yen;199.00</div>
+              <div class="sb">Counter sale &middot; 4 items</div>
+            </div>
+            <div class="spick">
+              <div class="lb">Pay method</div>
+              <button class="wal on"><span class="rad"></span>WeChat (off-app)</button>
+              <button class="wal"><span class="rad"></span>Alipay (off-app)</button>
+              <button class="wal"><span class="rad"></span>Cash</button>
+            </div>
+          </div>
+          <div class="sfoot"><button class="sconf">Mark paid</button></div>
+        </div>
+      </div></div>
+      <p class="device-note"><b>5 &middot; Settle.</b> A takeover, not a sheet &mdash; the cashier turns the phone round or leans over it, and nothing of the till should stay readable behind. The amount is the largest thing on the screen because reading it aloud and keying it into a terminal is the entire job. <i>Back</i> sits top-left and never scrolls away: a standalone PWA on iOS has no swipe-back, so it is the only way out.</p>
+    </div>
+
+  </div>
+
+  <div class="notes">
+    <h2><span class="n">Notes</span>Decisions a reviewer will ask about</h2>
+    <ol>
+      <li><b>Why a bar and not a stacked column.</b> A phone has one column of room and two things competing for it. The products are what the cashier touches dozens of times a sale; the order is what they check two or three times. Splitting the screen served the rare job at the cost of the constant one, and made both cramped. The bar keeps the only part of the order that must always be true &mdash; the total &mdash; and puts the rest one tap away at full height.</li>
+      <li><b>The tile count is not decoration.</b> With the order list closed by default, the product tile is the only confirmation that a tap registered. The count badge is what makes the closed state safe; without it a cashier would have to open the sheet after every item, which is the stacked layout again with extra steps.</li>
+      <li><b>Customer costs one button, not a row.</b> Walk-ins are anonymous and the control is optional, so it gets space proportional to how often it is used. It also moves <i>into</i> the sheet: attaching a customer is part of composing the order, not part of browsing products.</li>
+      <li><b>A closed counter is shown, not hidden.</b> Filtering closed stores out of the picker is defensible and was what shipped, but from the cashier's side an absent row and a broken button are the same thing. Listing it with <i>Counter closed</i> costs one row and answers the question before it is asked. The row is not selectable &mdash; the server refuses those sales anyway.</li>
+      <li><b>Steppers on the row, not behind a selection.</b> The tablet reveals quantity controls when a line is selected, which is right when a rail is always visible and space is tight. In a sheet opened on purpose there is room to show them, and a correction becomes one tap instead of three.</li>
+      <li><b>What is unchanged.</b> Fulfilment is always Counter and no shipping mode is shown. Payment is manual: the cashier reads the total aloud and keys it into a separate terminal, then records which wallet took it. Receipt printing stays automatic and fire-and-forget; reprint is a secondary affordance on the completed screen, not drawn here.</li>
+      <li><b>The tablet is untouched.</b> This layout applies below the two-column floor only. <code>counter-till-mockup.html</code> remains the specification at 9.7&Prime; and above, and the two share every token, string and rule.</li>
+    </ol>
+  </div>
+
+</div>
+</body>
+</html>
