@@ -123,7 +123,37 @@ button{font:inherit;color:inherit;margin:0}
 }
 .t-brand{font-size:15px;font-weight:500;letter-spacing:-.01em}
 .t-dot{width:4px;height:4px;border-radius:50%;background:var(--td-border);flex:none}
-.t-store{font-size:13px;color:var(--td-text2)}
+/* The store is a CONTROL, not a caption. It was a <span>, and the saved-store
+   key it restored from was never written by anything — so the till always fell
+   through to the first store and a second location was unreachable. */
+.t-store{
+  min-height:44px;padding:0 10px;border:1px solid transparent;background:transparent;
+  border-radius:var(--r-control);font-size:13px;color:var(--td-text2);
+  display:inline-flex;align-items:center;gap:6px;
+}
+.t-store.switchable{border-color:var(--td-border)}
+.t-store .chev{width:14px;height:14px;flex:none}
+
+/* Store picker — a centred pop-up. Not a drawer: this is a short list and a
+   decision, and it sits over the till rather than beside it. */
+.sscrim{
+  position:absolute;inset:0;z-index:20;background:rgba(17,26,43,.38);
+  display:flex;align-items:center;justify-content:center;padding:24px;
+}
+.ssheet{
+  width:100%;max-width:360px;max-height:100%;overflow-y:auto;
+  background:var(--td-surface);border:1px solid var(--td-border);
+  border-radius:var(--r-card);padding:16px;display:flex;flex-direction:column;gap:8px;
+}
+.ssheet .hd{font-size:13px;color:var(--td-text2);margin-bottom:2px}
+.srow{
+  min-height:56px;padding:0 14px;border-radius:var(--r-control);
+  border:1px solid var(--td-border);background:transparent;color:var(--td-text);
+  font-size:16px;text-align:left;display:flex;align-items:center;gap:10px;
+}
+.srow.on{border-color:var(--td-text);background:var(--td-raised)}
+.srow .tick{width:18px;height:18px;flex:none;opacity:0}
+.srow.on .tick{opacity:1}
 .t-sp{flex:1}
 .hbtn{
   min-width:44px;height:44px;padding:0 12px;border-radius:var(--r-control);
@@ -391,7 +421,7 @@ button{font:inherit;color:inherit;margin:0}
   <div class="t-head">
     <span class="t-brand" id="hd-title"></span>
     <span class="t-dot"></span>
-    <span class="t-store" id="hd-store"></span>
+    <button class="t-store" id="hd-store" type="button" data-store></button>
     <span class="t-sp"></span>
     <button class="hbtn" id="hd-lang" type="button"></button>
   </div>
@@ -416,6 +446,7 @@ button{font:inherit;color:inherit;margin:0}
     </div>
   </div>
   <div class="settle" id="settle" hidden></div>
+  <div class="sscrim" id="spick" hidden></div>
 </div>
 <div class="boot" id="boot"><p id="boot-msg"></p></div>
 
@@ -474,6 +505,7 @@ button{font:inherit;color:inherit;margin:0}
     markPaid:     ['Mark paid', '标记已付款'],         // admin: 04-orders.js NEXT_STATUS:2677
     back:         ['Back', '返回'],                    // admin
     closed:       ['Closed', '已关闭'],                // admin: 01-core.js:647 (sales grid cell)
+    store:        ['Store', '门店'],                   // admin: 04-orders.js:3575
     cancel:       ['Cancel', '取消'],                  // admin
     other:        ['Other', '其他'],                   // admin: PAY_METHOD_CHOICES
     // done
@@ -528,7 +560,7 @@ button{font:inherit;color:inherit;margin:0}
 
   /* ==================================================================== */
   var S = {
-    stores: [], storeId: null, storeName: '',
+    stores: [], storeId: null, storeName: '', pickOpen: false,
     products: [], stock: {}, cats: [], cat: '', q: '',
     lines: [], sel: null,
     customer: null, custBusy: false,
@@ -616,8 +648,7 @@ button{font:inherit;color:inherit;margin:0}
         var saved = null;
         try { saved = localStorage.getItem('tacet-till-store'); } catch (e) {}
         var pick = list.filter(function (s) { return String(s.id) === String(saved); })[0] || list[0];
-        S.storeId = pick.id;
-        S.storeName = cuT(pick.name_en || pick.code || ('#' + pick.id), pick.name_cn || pick.name_en || pick.code || ('#' + pick.id));
+        setStore(pick);
         return loadCatalogue();
       })
       .then(function () {
@@ -667,11 +698,64 @@ button{font:inherit;color:inherit;margin:0}
     });
   }
 
+  // One place that sets the current store, so the header, the catalogue read
+  // and the saved preference cannot drift apart. The write to localStorage is
+  // the half that was missing: boot READ 'tacet-till-store' to restore a choice
+  // that nothing had ever saved, so `pick` always fell through to list[0] and a
+  // second location could not be reached at all.
+  function setStore(st) {
+    S.storeId = st.id;
+    S.storeName = cuT(st.name_en || st.code || ('#' + st.id),
+                      st.name_cn || st.name_en || st.code || ('#' + st.id));
+    try { localStorage.setItem('tacet-till-store', String(st.id)); } catch (e) {}
+  }
+
+  // Switching shelf means switching stock, so the catalogue is re-read rather
+  // than reused. Guarded by the caller: a basket built against one store's shelf
+  // is not carried to another.
+  function switchStore(id) {
+    var st = S.stores.filter(function (x) { return String(x.id) === String(id); })[0];
+    S.pickOpen = false;
+    if (!st || String(st.id) === String(S.storeId)) return render();
+    setStore(st);
+    S.stock = {}; S.products = []; S.cats = []; S.cat = ''; S.q = '';
+    render();
+    loadCatalogue().then(render).catch(function () { render(); });
+  }
+
+  function renderPicker() {
+    var el = $('spick');
+    el.hidden = !S.pickOpen;
+    if (!S.pickOpen) { el.innerHTML = ''; return; }
+    var h = '<div class="ssheet"><div class="hd">' + esc(T('store')) + '</div>';
+    S.stores.forEach(function (st) {
+      var on = String(st.id) === String(S.storeId);
+      var nm = cuT(st.name_en || st.code || ('#' + st.id), st.name_cn || st.name_en || st.code || ('#' + st.id));
+      h += '<button class="srow' + (on ? ' on' : '') + '" type="button" data-pick="' + esc(String(st.id)) + '">'
+        + '<svg class="tick" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 13 4 4L19 7"/></svg>'
+        + '<span>' + esc(nm) + '</span></button>';
+    });
+    h += '</div>';
+    el.innerHTML = h;
+  }
+
   /* ---- render ---------------------------------------------------------- */
   function render() {
     if (!S.storeId) return;
     $('hd-title').textContent = T('counterSale');
-    $('hd-store').textContent = S.storeName;
+    // A basket is built against ONE store's shelf, so the store cannot change
+    // underneath it — the control goes quiet until the sale is cleared or rung
+    // up, rather than silently revaluing lines against different stock.
+    var sb = $('hd-store');
+    var canSwitch = S.stores.length > 1 && !S.lines.length;
+    sb.textContent = S.storeName;
+    sb.disabled = !canSwitch;
+    sb.classList.toggle('switchable', canSwitch);
+    if (canSwitch) {
+      sb.insertAdjacentHTML('beforeend',
+        '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>');
+    }
+    renderPicker();
     $('hd-lang').textContent = _lang === 'cn' ? 'EN' : '中文';
     var qi = $('q');
     qi.placeholder = T('searchAdd');
@@ -945,8 +1029,13 @@ button{font:inherit;color:inherit;margin:0}
   /* ---- wiring. Delegated: the grid and the rail re-render constantly. ---- */
   function wire() {
     document.addEventListener('click', function (ev) {
-      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-more],[data-confirm],[data-go],[data-print]');
+      // The scrim closes the picker: tapping away from a short list is the
+      // expected way out, and it is the only dismissal this pop-up needs.
+      if (S.pickOpen && ev.target.id === 'spick') { S.pickOpen = false; return render(); }
+      var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick]');
       if (!t) return;
+      if (t.hasAttribute('data-store')) { S.pickOpen = !S.pickOpen; return render(); }
+      if (t.hasAttribute('data-pick'))  return switchStore(t.getAttribute('data-pick'));
       if (t.hasAttribute('data-add'))   return addLine(Number(t.getAttribute('data-add')));
       if (t.hasAttribute('data-cat'))   { S.cat = t.getAttribute('data-cat'); return render(); }
       if (t.hasAttribute('data-line'))  { var i = Number(t.getAttribute('data-line')); S.sel = (S.sel === i ? null : i); return render(); }
