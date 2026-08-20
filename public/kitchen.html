@@ -1021,6 +1021,12 @@ function _urlBase64ToUint8Array(base64) {
 }
 async function _enableWebPush() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  // Respect a stored "off". Permission stays 'granted' after a switch-off,
+  // which on its own was enough for this page to re-enrol the device.
+  try {
+    const pref = await (await fetch('/api/push/pref')).json();
+    if (pref && pref.enabled === false) return;
+  } catch { /* unreachable → behave as before and enrol */ }
   const r = await fetch('/api/push/vapid-key');
   const d = await r.json();
   if (!d?.enabled || !d.publicKey) return;

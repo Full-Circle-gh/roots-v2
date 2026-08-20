@@ -3626,7 +3626,13 @@ async function _requestNotifPerm() {
     // Also try to enrol in true Web Push so notifications fire even
     // when the browser is closed. Best-effort — falls back silently
     // if VAPID isn't configured or the browser doesn't support it.
-    _enableWebPush().catch(() => {});
+    // This is a deliberate click on "Enable", so it clears any stored
+    // "off" first — the only path in this page that may do so.
+    fetch('/api/push/pref', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: true }),
+    }).catch(() => {}).then(() => _enableWebPush().catch(() => {}));
   }
 }
 
@@ -3646,6 +3652,13 @@ function _urlBase64ToUint8Array(base64) {
 }
 async function _enableWebPush() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  // Respect a stored "off" before enrolling. Browser permission stays
+  // 'granted' after the user switches push off, so without this check every
+  // page load silently minted a fresh subscription and the pushes came back.
+  try {
+    const pref = await (await fetch('/api/push/pref')).json();
+    if (pref && pref.enabled === false) return;
+  } catch { /* unreachable → behave as before and enrol */ }
   // Fetch the VAPID public key — empty string when push isn't set up
   // server-side, in which case we silently bail.
   const r = await fetch('/api/push/vapid-key');

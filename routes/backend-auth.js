@@ -1015,6 +1015,26 @@ router.post('/api/backend/push/unsubscribe', express.json(), (req, res) => {
   _push.operatorUnsubscribe((req.body && req.body.endpoint) || '', req.session.backendUserId);
   res.json({ success: true });
 });
+// Operator notification preference. The toggle writes this INSTEAD OF
+// relying on the live subscription to carry the state, which is what let an
+// "off" read back as "on" the moment another page re-enrolled the device.
+router.get('/api/backend/push/pref', (req, res) => {
+  if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  res.json(_push.operatorPref(req.session.backendUserId));
+});
+router.post('/api/backend/push/pref', express.json(), (req, res) => {
+  if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
+  const b = req.body || {};
+  try {
+    // The endpoint lets the server mute the kitchen-side subscription that
+    // shares this browser's push endpoint — a different login, same device.
+    const r = _push.operatorSetPref(req.session.backendUserId, b.enabled !== false, b.endpoint || '');
+    res.json({ success: true, enabled: r.enabled });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.post('/api/backend/push/test', async (req, res) => {
   if (!req.session?.backendUserId) return res.status(401).json({ error: 'Not authenticated · 未登录' });
   const r = await _push.sendPushToOperator(req.session.backendUserId, {

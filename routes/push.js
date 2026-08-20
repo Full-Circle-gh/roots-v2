@@ -25,6 +25,52 @@ const db = seam(require('../database'));
 const { requireAuth, logActivity } = require('../middleware/auth');
 const router = express.Router();
 
+// ─── Mute list ──────────────────────────────────────────
+// A row here means "this subject has switched notifications off". No row
+// means on, so nothing needs backfilling and anyone who never touched the
+// toggle behaves exactly as before.
+//
+// Two identity spaces share the table because two subscription stores do:
+// `push_subscriptions` is keyed to kitchen `users`, `tenant_operator_push_subs`
+// to backend `tenant_users`. They are unrelated logins that still land on the
+// SAME browser push endpoint (one service worker at scope '/'), so switching
+// push off in one has to be able to mute the other. `linked_user_id` records
+// the kitchen user muted alongside an operator so switching back on reverses
+// both halves.
+try {
+  db.exec(`CREATE TABLE IF NOT EXISTS push_optouts (
+    scope          TEXT    NOT NULL,       -- 'user' | 'operator'
+    subject_id     INTEGER NOT NULL,
+    linked_user_id INTEGER,                -- operator scope only
+    created_at     DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (scope, subject_id)
+  )`);
+} catch (e) {
+  console.warn('[push] could not create push_optouts: ' + e.message);
+}
+
+function isMuted(scope, subjectId) {
+  try {
+    return !!db.prepare('SELECT 1 FROM push_optouts WHERE scope = ? AND subject_id = ?').get(scope, subjectId);
+  } catch { return false; }
+}
+function setMuted(scope, subjectId, muted, linkedUserId) {
+  if (muted) {
+    db.prepare(`INSERT INTO push_optouts (scope, subject_id, linked_user_id) VALUES (?, ?, ?)
+                ON CONFLICT(scope, subject_id) DO UPDATE SET
+                  linked_user_id = COALESCE(excluded.linked_user_id, push_optouts.linked_user_id)`)
+      .run(scope, subjectId, linkedUserId == null ? null : linkedUserId);
+  } else {
+    db.prepare('DELETE FROM push_optouts WHERE scope = ? AND subject_id = ?').run(scope, subjectId);
+  }
+}
+function mutedLink(scope, subjectId) {
+  try {
+    const r = db.prepare('SELECT linked_user_id FROM push_optouts WHERE scope = ? AND subject_id = ?').get(scope, subjectId);
+    return r ? r.linked_user_id : null;
+  } catch { return null; }
+}
+
 const VAPID_PUBLIC  = process.env.VAPID_PUBLIC_KEY  || '';
 const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || '';
 const VAPID_CONTACT = process.env.VAPID_CONTACT     || 'mailto:owner@rootskitchen.cn';
@@ -76,6 +122,28 @@ router.post('/api/push/unsubscribe', requireAuth, (req, res) => {
   res.json({ success: true });
 });
 
+// GET /api/push/pref — does this signed-in user want push at all? The
+// client checks this BEFORE silently re-enrolling a device. Without it,
+// browser permission staying 'granted' after a switch-off was enough for
+// the next page load to mint a fresh subscription and bring the pushes back.
+router.get('/api/push/pref', requireAuth, (req, res) => {
+  res.json({ enabled: !isMuted('user', req.user.id) });
+});
+
+// POST /api/push/pref — record the intent. Only ever called from an explicit
+// user action. Sign-out uses /unsubscribe, which must NOT mute, or signing
+// out would silently disable notifications for good.
+router.post('/api/push/pref', requireAuth, (req, res) => {
+  const enabled = !(req.body && req.body.enabled === false);
+  try {
+    setMuted('user', req.user.id, !enabled);
+    if (!enabled) db.prepare('DELETE FROM push_subscriptions WHERE user_id = ?').run(req.user.id);
+    res.json({ success: true, enabled });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // POST /api/push/test — debug endpoint: send a test push to the
 // current user's subscriptions. Useful while validating the setup.
 router.post('/api/push/test', requireAuth, async (req, res) => {
@@ -111,21 +179,21 @@ async function _send(sub, payload) {
 
 async function sendPushToUser(userId, payload) {
   if (!ENABLED) return { sent: 0, pruned: 0, skipped: 'disabled' };
-  const subs = db.prepare('SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id = ?').all(userId);
-  return _sendMany(subs, payload);
+  const subs = db.prepare('SELECT id, endpoint, p256dh, auth, user_id AS subject_id FROM push_subscriptions WHERE user_id = ?').all(userId);
+  return _sendMany(subs, payload, 'user');
 }
 
 async function sendPushToUsers(userIds, payload) {
   if (!ENABLED || !userIds || !userIds.length) return { sent: 0, pruned: 0 };
   const placeholders = userIds.map(() => '?').join(',');
-  const subs = db.prepare(`SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id IN (${placeholders})`).all(...userIds);
-  return _sendMany(subs, payload);
+  const subs = db.prepare(`SELECT id, endpoint, p256dh, auth, user_id AS subject_id FROM push_subscriptions WHERE user_id IN (${placeholders})`).all(...userIds);
+  return _sendMany(subs, payload, 'user');
 }
 
 async function sendPushToAll(payload) {
   if (!ENABLED) return { sent: 0, pruned: 0, skipped: 'disabled' };
-  const subs = db.prepare('SELECT id, endpoint, p256dh, auth FROM push_subscriptions').all();
-  return _sendMany(subs, payload);
+  const subs = db.prepare('SELECT id, endpoint, p256dh, auth, user_id AS subject_id FROM push_subscriptions').all();
+  return _sendMany(subs, payload, 'user');
 }
 
 // Send to all users who have a given permission flag (e.g. 'purchases').
@@ -151,14 +219,36 @@ async function sendPushByPermission(permKey, payload) {
   return sendPushToUsers(users.map(u => u.id), payload);
 }
 
-async function _sendMany(subs, payload) {
-  let sent = 0, pruned = 0;
-  await Promise.all(subs.map(async (s) => {
+// The one place every send funnels through, which is why the mute is
+// enforced HERE rather than in each caller: a sender added later cannot
+// forget it. Every SELECT above aliases its owner column to `subject_id`
+// for this filter. A row without one, or a call without a scope, passes
+// through unfiltered and behaves exactly as before.
+async function _sendMany(subs, payload, scope) {
+  let sent = 0, pruned = 0, muted = 0;
+  let live = subs;
+  if (scope && subs.length) {
+    const ids = [...new Set(subs.map(s => s.subject_id).filter(v => v != null))];
+    if (ids.length) {
+      let mutedIds = new Set();
+      try {
+        const ph = ids.map(() => '?').join(',');
+        mutedIds = new Set(db.prepare(
+          `SELECT subject_id FROM push_optouts WHERE scope = ? AND subject_id IN (${ph})`
+        ).all(scope, ...ids).map(r => r.subject_id));
+      } catch { /* table missing — nobody is muted */ }
+      if (mutedIds.size) {
+        live = subs.filter(s => !mutedIds.has(s.subject_id));
+        muted = subs.length - live.length;
+      }
+    }
+  }
+  await Promise.all(live.map(async (s) => {
     const r = await _send(s, payload);
     if (r.ok) sent++;
     if (r.pruned) pruned++;
   }));
-  return { sent, pruned, total: subs.length };
+  return { sent, pruned, muted, total: subs.length };
 }
 
 // ─── Backend-operator push (tenant_users) ──────────────────────────────────
@@ -180,6 +270,36 @@ function operatorSubscribe({ tenantUserId, tenantId, endpoint, keys, ua }) {
     .run(endpoint, tenantUserId, tenantId || null, keys.p256dh, keys.auth, String(ua || '').slice(0, 300));
   return { ok: true };
 }
+// The Tacet toggle (Profile → Notifications) writes this. Because the
+// operator and the kitchen user are different logins on the SAME device,
+// muting also takes out the kitchen subscription sharing this browser's
+// endpoint — otherwise app.html re-enrols on the next load and the pushes
+// come back. The kitchen user id is remembered on the operator row so
+// switching back on reverses both halves.
+function operatorPref(tenantUserId) {
+  return { enabled: !isMuted('operator', tenantUserId) };
+}
+function operatorSetPref(tenantUserId, enabled, endpoint) {
+  if (enabled) {
+    const linked = mutedLink('operator', tenantUserId);
+    if (linked != null) setMuted('user', linked, false);
+    setMuted('operator', tenantUserId, false);
+    return { ok: true, enabled: true, linkedUserId: linked };
+  }
+  let linked = null;
+  if (endpoint) {
+    try {
+      const row = db.prepare('SELECT user_id FROM push_subscriptions WHERE endpoint = ?').get(endpoint);
+      if (row) linked = row.user_id;
+    } catch { /* no kitchen subscription on this device */ }
+  }
+  setMuted('operator', tenantUserId, true, linked);
+  if (linked != null) setMuted('user', linked, true);
+  if (endpoint) {
+    try { db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(endpoint); } catch {}
+  }
+  return { ok: true, enabled: false, linkedUserId: linked };
+}
 function operatorUnsubscribe(endpoint, tenantUserId) {
   if (!endpoint) return { ok: false };
   db.prepare('DELETE FROM tenant_operator_push_subs WHERE endpoint = ? AND tenant_user_id = ?').run(endpoint, tenantUserId);
@@ -187,21 +307,24 @@ function operatorUnsubscribe(endpoint, tenantUserId) {
 }
 async function sendPushToOperator(tenantUserId, payload) {
   if (!ENABLED) return { sent: 0, pruned: 0, skipped: 'disabled' };
-  const subs = db.prepare('SELECT endpoint, p256dh, auth FROM tenant_operator_push_subs WHERE tenant_user_id = ?').all(tenantUserId);
-  return _sendMany(subs, payload);
+  const subs = db.prepare('SELECT endpoint, p256dh, auth, tenant_user_id AS subject_id FROM tenant_operator_push_subs WHERE tenant_user_id = ?').all(tenantUserId);
+  return _sendMany(subs, payload, 'operator');
 }
 // Fan out to every operator of a tenant (used for new-order alerts). Failed
 // endpoints are pruned by _send. Best-effort; callers wrap in try/catch.
 async function sendPushToTenantOperators(tenantId, payload) {
   if (!ENABLED || !tenantId) return { sent: 0, pruned: 0, skipped: 'disabled' };
-  const subs = db.prepare('SELECT endpoint, p256dh, auth FROM tenant_operator_push_subs WHERE tenant_id = ?').all(tenantId);
-  return _sendMany(subs, payload);
+  const subs = db.prepare('SELECT endpoint, p256dh, auth, tenant_user_id AS subject_id FROM tenant_operator_push_subs WHERE tenant_id = ?').all(tenantId);
+  return _sendMany(subs, payload, 'operator');
 }
 
 module.exports = router;
 module.exports.vapidPublicKey = VAPID_PUBLIC;
 module.exports.operatorSubscribe = operatorSubscribe;
 module.exports.operatorUnsubscribe = operatorUnsubscribe;
+module.exports.operatorPref       = operatorPref;
+module.exports.operatorSetPref    = operatorSetPref;
+module.exports.isMuted            = isMuted;
 module.exports.sendPushToOperator = sendPushToOperator;
 module.exports.sendPushToTenantOperators = sendPushToTenantOperators;
 module.exports.sendPushToUser     = sendPushToUser;

@@ -909,12 +909,18 @@
         pushEl.classList.add('busy'); setMsg($('ntfPushMsg'), null, ''); $('ntfPushMsg').querySelector('span').textContent = L('This browser doesn’t support push notifications.','此浏览器不支持推送通知。'); $('ntfPushMsg').classList.add('show');
         return;
       }
-      swReg().then(function(reg){
-        if (!reg || !reg.pushManager) return;
-        reg.pushManager.getSubscription().then(function(sub){
-          var on = !!sub && Notification.permission === 'granted';
-          setSw('ntfPush', on); $('ntfPushTest').hidden = !on;
-        });
+      Promise.all([
+        swReg().then(function(reg){ return (reg && reg.pushManager) ? reg.pushManager.getSubscription() : null; })
+               .catch(function(){ return null; }),
+        fetch('/api/backend/push/pref', { credentials:'same-origin' })
+          .then(function(r){ return r.json(); }).catch(function(){ return { enabled:true }; })
+      ]).then(function(res){
+        var sub = res[0], pref = res[1] || {};
+        // Stored intent wins. This used to be derived purely from the live
+        // subscription, so an "off" the user had chosen read back as "on"
+        // as soon as another page re-enrolled the device.
+        var on = pref.enabled !== false && !!sub && Notification.permission === 'granted';
+        setSw('ntfPush', on); $('ntfPushTest').hidden = !on;
       });
     }
     function bindNotifToggles(){
@@ -949,19 +955,35 @@
             return reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:b64ToU8(v.publicKey) }).then(function(sub){
               var j = sub.toJSON();
               return fetch('/api/backend/push/subscribe', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body:JSON.stringify({ endpoint:j.endpoint, keys:j.keys }) })
-                .then(function(r){ if (!r.ok) return Promise.reject('save'); });
+                .then(function(r){ if (!r.ok) return Promise.reject('save'); })
+                // Explicit "on" — lift the stored mute, including the
+                // kitchen-side one taken out alongside it.
+                .then(function(){ return setPushPref(true, j.endpoint); });
             });
           });
         });
       });
     }
+    function setPushPref(enabled, endpoint){
+      return fetch('/api/backend/push/pref', {
+        method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin',
+        body:JSON.stringify({ enabled: !!enabled, endpoint: endpoint || null })
+      }).then(function(r){ if (!r.ok) return Promise.reject('pref'); });
+    }
     function pushUnsubscribe(){
+      // Record the intent FIRST and independently of the service worker. The
+      // old version returned early when the SW or the subscription was missing
+      // while the switch still flipped to off — a silent false-off that the
+      // next page load undid. The "off" is now stored server-side whatever the
+      // browser state, and it also mutes the kitchen subscription sharing this
+      // device's endpoint.
       return swReg().then(function(reg){
-        if (!reg || !reg.pushManager) return;
-        return reg.pushManager.getSubscription().then(function(sub){
+        return (reg && reg.pushManager) ? reg.pushManager.getSubscription() : null;
+      }).catch(function(){ return null; }).then(function(sub){
+        var ep = sub ? sub.endpoint : null;
+        return setPushPref(false, ep).then(function(){
           if (!sub) return;
-          var ep = sub.endpoint;
-          return sub.unsubscribe().then(function(){
+          return sub.unsubscribe().catch(function(){}).then(function(){
             return fetch('/api/backend/push/unsubscribe', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'same-origin', body:JSON.stringify({ endpoint:ep }) });
           });
         });
