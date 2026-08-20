@@ -16210,6 +16210,33 @@ router.post('/api/retail-admin/customers/:id/wallet-adjust', requireRetailAdmin,
   res.json({ success: true, balance_after: balanceAfter });
 });
 
+// One customer's saved addresses, and NOTHING ELSE.
+//
+// GET /api/retail-admin/customers/:id already returns these rows — but it also
+// stamps seen_at the first time anyone opens it, and the New-order wizard's
+// address prefill fires on every customer pick. Reading the profile route there
+// would have marked customers as read on the Customers page as a side effect of
+// starting an order, which is not what that stamp is supposed to mean: it says
+// a human looked at the record, not that someone typed their name into a search
+// box. It is also a page-sized read — orders by month, points, vouchers,
+// reviews, sessions, diagnostics — to fill in three address fields.
+//
+// So: the same rows, the same ORDER BY, the same envelope key, and NO WRITE OF
+// ANY KIND — no seen_at, no activity log, nothing. Anything that needs to
+// record having looked at a customer belongs on the profile route, not here.
+router.get('/api/retail-admin/customers/:id/addresses', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ success: false, error: 'bad_id' });
+  const c = tdb().prepare('SELECT id FROM retail_customers WHERE id = ?').get(id);
+  if (!c) return res.status(404).json({ success: false, error: 'not_found' });
+  const addresses = tdb().prepare(
+    'SELECT * FROM retail_customer_addresses WHERE customer_id = ? ORDER BY is_default DESC, id DESC'
+  ).all(id);
+  // Same key the profile route puts them under, so a caller reads
+  // j.data.addresses without needing to know which route answered.
+  res.json({ success: true, data: { addresses } });
+});
+
 // Address admin — create / edit / delete a customer's saved addresses.
 // Mirrors the customer-side routes at /api/retail/addresses but scoped by
 // path-param customer_id and gated by retail-admin auth.

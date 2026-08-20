@@ -7772,6 +7772,88 @@ function ordNewPickCustomer(i) {
   ONW.phoneNote = null;
   ordNewPaintCustState();
   ordNewPaintPhoneNote();
+  // Deliberately NOT awaited: the chip has to appear on this tick. The prefill
+  // is one GET that settles a moment later, never gates the two paints above,
+  // and swallows its own failures.
+  ordNewPrefillAddress(c.id);
+}
+
+// ── The address this customer already has on file ──────────────────────
+// Picking a customer fills the delivery block from their DEFAULT saved address.
+// This is a COPY, not a parse: retail_customer_addresses stores province / city
+// / district as the same canonical catalogue strings (广东省 / 广州市 / 天河区)
+// that retail_delivery_zones matches on by exact equality, so the values go
+// straight into the two selects the operator would otherwise pick by hand.
+//
+// IT OVERWRITES whatever is in the fields. Picking a customer is a deliberate
+// act, and a merge that kept half of some previous address would be harder to
+// reason about than a clean replacement — every field stays editable after.
+//
+// IT RUNS FOR EVERY FULFILMENT. The block is hidden on pickup and counter, but
+// an operator who switches to Delivery afterwards must find the address already
+// sitting there rather than an empty form.
+//
+// NOTHING HERE FAILS LOUDLY. No address book, an empty list, a dead network —
+// each leaves the block exactly as it was and the operator types the address by
+// hand, which is what they did before this existed.
+
+// '+8613800138000' / '8613800138000' → '13800138000'. The input sits behind a
+// fixed '+86' prefix, so a stored country code would read back as +86 +86.
+// Narrow on purpose: the code comes off ONLY when what follows is a plain run
+// of digits, so a field holding a note ('门卫电话 1380…') or a foreign number is
+// handed back exactly as stored — see lib/phone-cn.js on why a phone number is
+// never rewritten on a guess.
+function onwLocalPhone(raw) {
+  const s = String(raw == null ? '' : raw).trim();
+  const m = /^\+?86(\d{7,15})$/.exec(s);
+  return m ? m[1] : s;
+}
+
+let _ONW_PREFILL = 0;
+async function ordNewPrefillAddress(customerId) {
+  const mine = ++_ONW_PREFILL;
+  const ownONW = ONW;                  // the form instance this prefill belongs to
+  let a;
+  try {
+    const j = await api('/api/retail-admin/customers/' + encodeURIComponent(customerId) + '/addresses');
+    const list = j && j.data && j.data.addresses;
+    // No saved address — a guest-shaped account, or someone who has only ever
+    // collected. Not an error and not something to announce: leave the block.
+    if (!Array.isArray(list) || !list.length) return;
+    // Entry zero IS the default: the endpoint orders by is_default DESC, id DESC
+    // (routes/retail.js). Re-sorting here could only ever disagree with it.
+    a = list[0];
+  } catch (e) {
+    // Covers the 401 case too, where api() has already navigated to the login.
+    console.error('[ordNewPrefillAddress]', e);
+    return;
+  }
+  // A second pick, or a reset/close, owns the fields now. ONW is REPLACED by
+  // ordNewRender, so identity is what tells a re-opened form from this one.
+  if (mine !== _ONW_PREFILL || ONW !== ownONW || !_ORD_NEW_OPEN) return;
+
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
+  set('onw-addr-name', a.recipient_name || '');
+  set('onw-addr-phone', onwLocalPhone(a.phone));
+  set('onw-addr-street', a.address || '');
+  // Almost always empty — no customer app collects one and the zone matcher
+  // never reads one. Copied anyway, so a hand-entered code isn't thrown away.
+  set('onw-addr-postal', a.postal_code || '');
+
+  // Same order, and the same reason, as ordNewRestore: a <select> can only hold
+  // a value once its options exist, and the district list depends on the city.
+  // ordNewFillCities repaints the province caption itself, so the derived 省
+  // lands with the city rather than needing a field of its own.
+  try {
+    await ordNewFillCities(a.city || '');
+    if (mine !== _ONW_PREFILL || ONW !== ownONW) return;
+    await ordNewFillDistricts(a.city || '', a.district || '');
+  } catch (e) {
+    console.error('[ordNewPrefillAddress regions]', e);   // pickers stay empty
+  }
+  if (mine !== _ONW_PREFILL || ONW !== ownONW || !_ORD_NEW_OPEN) return;
+  // Re-quote both fees against the destination that just arrived.
+  ordNewAddrChanged();
 }
 function ordNewUseGuest() {
   ONW.cust = 'guest';
@@ -8512,7 +8594,15 @@ function ordNewValidate(body) {
     // until now nothing anywhere refused an order with no city. Province is
     // derived from the city, so requiring it is really a second assertion that
     // the picked city was a catalogue city.
-    if (!(a.city && a.province && a.address && a.postal_code)) {
+    //
+    // 🔴 POSTAL CODE IS NOT REQUIRED, AND MUST NOT BE PUT BACK. It was a dead
+    // rule: no customer app collects one (there is no postal_code in the
+    // mini-app's EMPTY_FORM, miniapp/pages/addresses/addresses.js), every one of
+    // the saved addresses on file has it empty, the server stores it as
+    // optional, and matchDeliveryZone never reads it. Requiring it would reject
+    // every order prefilled from a customer's own saved address — an address
+    // good enough for the customer to check out with, refused when staff key it.
+    if (!(a.city && a.province && a.address)) {
       return ['addr', ordNewErrText('address_required_for_delivery')];
     }
     // District is optional for a city that delivers city-wide, and REQUIRED for
