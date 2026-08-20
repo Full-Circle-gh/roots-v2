@@ -1626,6 +1626,12 @@ addColumn('retail_orders', 'refund_approved_at',      'DATETIME');
 addColumn('retail_orders', 'refund_paid_at',          'DATETIME');
 addColumn('retail_orders', 'refund_reviewer_id',      'INTEGER');
 addColumn('retail_orders', 'refund_payer_id',         'INTEGER');
+// When the REFUND slip printed. Distinct from printed_at, which belongs to the
+// original order slip and must not be disturbed by a refund. Three routes can
+// complete a refund (/refund/payout, /refund/direct, and the PATCH /status
+// shortcut) and they are reachable in sequence on one order, so this doubles as
+// the once-only guard: autoPrintRefundReceipt claims the stamp before printing.
+addColumn('retail_orders', 'refund_printed_at',       'DATETIME');
 
 // Provenance — how this order was created. NULL/'app' = customer checkout
 // (mini app / web storefront); 'manual' = keyed in by staff via the Mini App

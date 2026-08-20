@@ -1700,6 +1700,151 @@ if (DRAWER) {
     helperThrows, []);
 }
 
+// ═══ 14. The settled-refund slip ═══════════════════════════════════════════
+// A completed refund prints paper. Three routes can complete one, so the guard
+// that keeps the customer from being handed two slips is asserted here as well
+// as the slip itself.
+//
+// THE ASSERTION THIS SECTION EXISTS FOR is (c) below: no Chinese string on this
+// slip may be composed for it. Every CJK run the template emits has to already
+// exist somewhere else in the tree — that is the rule stated as code rather than
+// as a habit, and it is the one that will still be enforced when nobody
+// remembers the conversation. Two labels were cut from this template by exactly
+// this check (退回 Back to, 单号 Ref) and replaced with the English-only form the
+// receipt's own `Paid by` row already uses.
+
+const _feieMod = require(path.join(__dirname, '..', 'lib', 'feie.js'));
+check('lib/feie.js exports a settled-refund template',
+  typeof _feieMod.renderRefundReceipt, 'function');
+
+const RF_BASE = {
+  order_no: 'TC000331', total: 44, refund_amount_paid: 44,
+  recipient_name: 'Guest', recipient_phone: '13800000000',
+  paid_at: '2026-08-20 09:38:19', refund_paid_at: '2026-08-20 09:40:00',
+  refund_payout_method: 'wechat_offline', refund_payout_ref: 'R-9931',
+};
+const RF_SHAPES = [
+  ['counter, full',    { fulfillment_type: 'counter' }, []],
+  ['counter, partial', { fulfillment_type: 'counter' },
+    [{ sku: '3-270', name_en: 'Wraps', name_cn: '卷饼', qty: 1, amount: 44 }]],
+  ['delivery, full',   { fulfillment_type: 'delivery' }, []],
+  ['pickup, partial',  { fulfillment_type: 'pickup' },
+    [{ sku: '9-001', name_en: 'A very long product name that will wrap', name_cn: '一个非常长的产品名称', qty: 12, amount: 480.5 }]],
+  ['a very large amount', { refund_amount_paid: 99999999.99 }, []],
+  ['nothing set at all', {}, null],
+];
+const rfRender = (over, lines) =>
+  _feieMod.renderRefundReceipt(Object.assign({}, RF_BASE, over), lines, 'Roots');
+
+const rfThrows = RF_SHAPES.filter(([, over, lines]) => {
+  try { rfRender(over, lines); return false; } catch (e) { return true; }
+}).map(([label]) => label);
+check('the refund slip renders for every order shape, including an empty one', rfThrows, []);
+
+// The template source, read once — (a) and (c) both measure it.
+const RF_SRC = fs.readFileSync(path.join(__dirname, '..', 'lib', 'feie.js'), 'utf8');
+const rfBody = RF_SRC.slice(RF_SRC.indexOf('function renderRefundReceipt'));
+const rfTemplate = rfBody.slice(0, rfBody.indexOf('\n}\n') + 3);
+check('the refund template was located in lib/feie.js', rfTemplate.length > 400, true);
+
+const cjkWidth = (t) => [...t].reduce((n, c) => n + (/[ᄀ-ᅟ⺀-꓏ꥠ-꥿가-힣豈-﫿︰-﹏＀-￯]/.test(c) ? 2 : 1), 0);
+
+// (a) §1.20 — ONLY the enlarged lines get a hard budget. `<B>` and `<CB>` are
+// double-WIDTH, so they hold 16 columns and drop the overflow SILENTLY off the
+// END; `<BOLD>` is normal width and WRAPS instead — confirmed on paper at
+// docs/tacet-desktop-patterns.md:1179 ("`<B>` and `<CB>` double; `<BOLD>` does
+// not"). So a long `<BOLD>` product name is not a defect, it is two lines, and
+// asserting 31 on it would fail the shipping request slip too, which emits item
+// names exactly the same way. What must never overflow is a line that would
+// silently lose its own amount, and nothing about that failure is visible until
+// it is on paper in a shop.
+const overWide = [];
+for (const [label, over, lines] of RF_SHAPES) {
+  for (const ln of rfRender(over, lines).split('\n')) {
+    const big = /^<(CB|B)>(.*)<\/\1>$/.exec(ln);
+    if (big && cjkWidth(big[2]) > 16) overWide.push(`${label}: ${big[2]} (${cjkWidth(big[2])}/16)`);
+  }
+}
+check('no enlarged line on the refund slip overflows its 16-column budget', overWide, []);
+
+// The AUTHORED normal-width strings do have to fit without wrapping — unlike an
+// item name, nobody passes these in, so a wrap here is a design slip rather than
+// data being long. Literals only: anything with an interpolation is data.
+const fixedNorm = [...rfTemplate.matchAll(/<(BOLD|C)>([^`$<]*)<\/\1>/g)]
+  .map((m) => m[2]).filter((t) => /\S/.test(t));
+check('the refund slip has authored normal-width lines to measure', fixedNorm.length > 0, true);
+check('every authored normal-width line fits 31 columns without wrapping',
+  fixedNorm.filter((t) => cjkWidth(t) > 31), []);
+
+// (b) A counter buyer is standing at the till. The name typed only to satisfy a
+// required field must not print back at them, exactly as the receipt suppresses
+// it. Asserted as a PAIR against a shape that HAS a name and phone, so a
+// template that simply never emitted them would fail the second row rather than
+// passing the first vacuously.
+check('a counter refund slip prints no recipient name or phone',
+  /^(To|Tel) /m.test(rfRender({ fulfillment_type: 'counter' }, [])), false);
+check('a delivery refund slip still prints them',
+  /^To /m.test(rfRender({ fulfillment_type: 'delivery' }, [])), true);
+
+// (c) THE LOCKED-SOURCE RULE, MECHANISED. Chinese on a slip is either a string
+// that already ships somewhere in this tree or it is invented, and invented is
+// not allowed. Search the whole tree minus the template itself: a run that
+// appears ONLY inside renderRefundReceipt has no source.
+const treeFiles = [];
+(function walk(dir, depth) {
+  if (depth > 3) return;
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (e.name === 'node_modules' || e.name === '.git' || e.name.startsWith('.')) continue;
+    const full = path.join(dir, e.name);
+    if (e.isDirectory()) walk(full, depth + 1);
+    else if (/\.(js|html|md|json)$/.test(e.name)) treeFiles.push(full);
+  }
+})(path.join(__dirname, '..'), 0);
+const HAYSTACK = treeFiles.map((f) => {
+  try {
+    const t = fs.readFileSync(f, 'utf8');
+    return f.endsWith('feie.js') ? t.split(rfTemplate).join('') : t;
+  } catch (e) { return ''; }
+}).join('\n');
+// Only STRING literals — the comments in this template discuss 退回 precisely to
+// explain why it is NOT used, and a comment prints nothing.
+const rfLiterals = rfTemplate.replace(/^\s*\/\/.*$/gm, '');
+const cjkRuns = [...new Set((rfLiterals.match(/[一-鿿]+/g) || []))];
+check('the refund slip emits Chinese at all (so this check is not vacuous)',
+  cjkRuns.length > 0, true);
+const unsourced = cjkRuns.filter((run) => !HAYSTACK.includes(run));
+check('every Chinese string on the refund slip already exists elsewhere in the tree — none composed for it',
+  unsourced, []);
+
+// (d) The once-only guard, read from the route file. A fourth refund-completion
+// route is the thing that breaks this, and it will be written by someone who
+// never saw this slip.
+const RET_SRC = fs.readFileSync(path.join(__dirname, '..', 'routes', 'retail.js'), 'utf8');
+const missingCall = ['refund/payout', 'refund/direct'].filter((r) => {
+  const at = RET_SRC.indexOf(`'/api/retail-admin/orders/:id/${r}'`);
+  if (at === -1) return true;
+  const nextRoute = RET_SRC.indexOf('\nrouter.', at + 10);
+  return !RET_SRC.slice(at, nextRoute === -1 ? undefined : nextRoute).includes('autoPrintRefundReceipt(');
+});
+check('every operator refund-completion route prints the settled slip', missingCall, []);
+check('the PATCH /status refunded shortcut prints it too',
+  /if \(status === 'refunded'\)[\s\S]{0,4000}?autoPrintRefundReceipt\(/.test(RET_SRC), true);
+// The guard is the WRITE, not a read-then-write: two routes racing on one order
+// must not both see a null and both print.
+check('the print claim is a conditional UPDATE, so it cannot double-print under a race',
+  /UPDATE retail_orders SET refund_printed_at = CURRENT_TIMESTAMP WHERE id = \? AND refund_printed_at IS NULL/.test(RET_SRC), true);
+check('a failed send releases the stamp so the refund can print later',
+  /releaseRefundPrintStamp/.test(RET_SRC), true);
+// The refund slip must not disturb the ORIGINAL order slip's bookkeeping —
+// printed_at describes what was BOUGHT and stays valid paper after a refund.
+const rcpBody = RET_SRC.slice(RET_SRC.indexOf('function autoPrintRefundReceipt'));
+check('printing a refund slip never touches print_status or printed_at',
+  /\bprint_status\b|[^_]\bprinted_at\b/.test(rcpBody.slice(0, rcpBody.indexOf('\n}\n'))), false);
+// And the column it DOES use has to exist, or every print silently no-ops.
+check('refund_printed_at is a real column',
+  /addColumn\('retail_orders', 'refund_printed_at'/.test(
+    fs.readFileSync(path.join(__dirname, '..', 'database.js'), 'utf8')), true);
+
 // ── Report ──────────────────────────────────────────────────────────────────
 // §8's by-phone classifier is asserted through the REAL async function, so the
 // report waits on it: report() is called from that promise's settle handlers,

@@ -24140,6 +24140,25 @@ function autoPrintAddon(orderId, newItemIds, addonPaidAt) {
   } catch (e) { console.warn('[feie addon setup]', e.message); }
 }
 
+// Turn a refund-line spec ([{item_id, qty, amount?}]) into rows a slip can
+// describe itself with. Shared by the request slip and the settled receipt so
+// the two name the same items the same way; returns [] for a full refund, which
+// both templates read as "no list, the order number covers it".
+function enrichRefundLines(lines) {
+  if (!Array.isArray(lines) || !lines.length) return [];
+  const ids = lines.map(l => parseInt(l.item_id, 10)).filter(Boolean);
+  const ph = ids.map(() => '?').join(',');
+  const rows = ids.length ? tdb().prepare(
+    `SELECT oi.id, oi.sku, oi.name_en, oi.name_cn, oi.product_id
+       FROM retail_order_items oi WHERE oi.id IN (${ph})`
+  ).all(...ids) : [];
+  const byId = new Map(rows.map(r => [r.id, r]));
+  return lines.map(l => {
+    const r = byId.get(parseInt(l.item_id, 10)) || {};
+    return { ...r, qty: l.qty, amount: l.amount };
+  });
+}
+
 // Print a "refund request" alert slip the moment a customer files a refund, so
 // staff get a paper heads-up without watching the dashboard. Mirrors
 // autoPrintAddon: best-effort + fire-and-forget; never blocks the request.
@@ -24154,26 +24173,64 @@ function autoPrintRefundRequest(orderId, lines) {
     if (!order) return;
     const printer = printerForOrder(order, pp);
     if (!printer || !printer.sn) { console.warn('[feie refund]', orderId, 'no_printer_for_store'); return; }
-    // Enrich each refund line with the item's name/sku for the slip.
-    let enriched = [];
-    if (Array.isArray(lines) && lines.length) {
-      const ids = lines.map(l => parseInt(l.item_id, 10)).filter(Boolean);
-      const ph = ids.map(() => '?').join(',');
-      const rows = ids.length ? tdb().prepare(
-        `SELECT oi.id, oi.sku, oi.name_en, oi.name_cn, oi.product_id
-           FROM retail_order_items oi WHERE oi.id IN (${ph})`
-      ).all(...ids) : [];
-      const byId = new Map(rows.map(r => [r.id, r]));
-      enriched = lines.map(l => {
-        const r = byId.get(parseInt(l.item_id, 10)) || {};
-        return { ...r, qty: l.qty, amount: l.amount };
-      });
-    }
-    const content = _feie.renderRefundRequest(order, enriched, pp.shop_name);
+    const content = _feie.renderRefundRequest(order, enrichRefundLines(lines), pp.shop_name);
     _feie.printContent(content, { sn: printer.sn, copies: printer.copies || 1 }, integ().feie)
       .then(r => console.log('[feie refund]', orderId, r.ok ? 'ok' : r.msg))
       .catch(e => console.warn('[feie refund]', orderId, e.message));
   } catch (e) { console.warn('[feie refund setup]', e.message); }
+}
+
+// Print the SETTLED refund slip — the paper counterpart to the money actually
+// going back. The request slip (above) is an alert that staff owe a decision;
+// this one is a receipt that the decision is done, and it is what the customer
+// walks away with at the till.
+//
+// ONCE PER ORDER, ENFORCED HERE RATHER THAN AT THE CALL SITES. Three routes can
+// complete a refund — /refund/payout, /refund/direct, and the PATCH /status
+// 'refunded' shortcut — and they are reachable in SEQUENCE on one order (pay a
+// customer's approved request, then set the order to Refunded), which would
+// otherwise hand the customer two identical slips. The claim is a conditional
+// UPDATE, so the guard is the same write that records it: whichever route gets
+// there first changes a row and prints, the rest change nothing and return. A
+// send that fails releases the stamp so the next completion can retry — the
+// stamp means "a slip went to the printer", not "a slip was attempted".
+//
+// Best-effort + fire-and-forget, matching autoPrintRefundRequest: the refund is
+// already committed by the time this runs, and a dead printer must never fail
+// it. Nothing here touches print_status or printed_at — those belong to the
+// ORIGINAL order slip, which stays valid paper describing what was bought.
+function autoPrintRefundReceipt(orderId) {
+  try {
+    const pp = loadPrinterPrefs();
+    // Same toggle as the request slip: an operator who turned refund printing
+    // off does not want the settled slip either.
+    if (pp.auto_print_refund === false || !_feie.feieEnabled(integ().feie)) return;
+    const order = tdb().prepare('SELECT * FROM retail_orders WHERE id = ?').get(orderId);
+    if (!order) return;
+    const printer = printerForOrder(order, pp);
+    if (!printer || !printer.sn) { console.warn('[feie refund receipt]', orderId, 'no_printer_for_store'); return; }
+    // Claim last, so a store with no printer does not burn the stamp.
+    const claim = tdb().prepare(
+      'UPDATE retail_orders SET refund_printed_at = CURRENT_TIMESTAMP WHERE id = ? AND refund_printed_at IS NULL'
+    ).run(orderId);
+    if (!claim.changes) return;   // another completion route already printed it
+    // Partial refunds name what came back; a full refund stores no lines and the
+    // template renders none.
+    let lines = [];
+    try { lines = JSON.parse(order.refund_lines_json || '[]') || []; } catch (e) { lines = []; }
+    const content = _feie.renderRefundReceipt(order, enrichRefundLines(lines), pp.shop_name);
+    _feie.printContent(content, { sn: printer.sn, copies: printer.copies || 1 }, integ().feie)
+      .then((r) => {
+        console.log('[feie refund receipt]', orderId, r.ok ? 'ok' : r.msg);
+        if (!r.ok) releaseRefundPrintStamp(orderId);
+      })
+      .catch((e) => { console.warn('[feie refund receipt]', orderId, e.message); releaseRefundPrintStamp(orderId); });
+  } catch (e) { console.warn('[feie refund receipt setup]', e.message); }
+}
+
+function releaseRefundPrintStamp(orderId) {
+  try { tdb().prepare('UPDATE retail_orders SET refund_printed_at = NULL WHERE id = ?').run(orderId); }
+  catch (e) { console.warn('[feie refund receipt unstamp]', e.message); }
 }
 
 // Print a short "date changed" slip when a customer reschedules an order whose
@@ -25896,6 +25953,9 @@ router.patch('/api/retail-admin/orders/:id/status', requireRetailAdmin, express.
       try { tdb().prepare("UPDATE retail_orders SET refund_payout_method = 'wechat', refund_payout_ref = ? WHERE id = ?").run(wechatRefundRef, id); }
       catch (e) { console.error('[refund ref]', e); }
     }
+    // Last in the block on purpose: the slip reads refund_amount_paid, the
+    // payout method and the ref, and every one of those is written above.
+    autoPrintRefundReceipt(id);
   }
 
   // Fire a subscribe-message notification (no-op in DEV, real send in PROD).
@@ -26396,6 +26456,7 @@ router.post('/api/retail-admin/orders/:id/refund/payout', requireRetailAdmin, ex
     meta: { method: payoutMethodRec, reference: reference || null, cash: amount, pure_credit: pureCredit },
   });
   logActivity(req.user.id, req.user.username, 'refund_payout', 'retail_order', id, { amount, method, reference }, req.ip);
+  autoPrintRefundReceipt(id);
   notifyOrderStatusChange(id, null);
   notifyForOrder(id, (o) => ({
     category: 'refund', type: 'refund_paid',
@@ -26591,6 +26652,7 @@ router.post('/api/retail-admin/orders/:id/refund/direct', requireRetailAdmin, ex
   logRefundEvent({ orderId: id, event: 'approved', amount, note: note || null, userId: req.user.id, meta: { is_full: isFull, lines, direct: true } });
   logRefundEvent({ orderId: id, event: 'paid',     amount, note: note || null, userId: req.user.id, meta: { method: payoutMethod, reference: payoutRef, direct: true } });
   logActivity(req.user.id, req.user.username, 'refund_direct', 'retail_order', id, { amount, is_full: isFull, lines, method: payoutMethod }, req.ip);
+  autoPrintRefundReceipt(id);
   notifyOrderStatusChange(id, isFull ? 'refunded' : null);
   notifyForOrder(id, (o) => ({
     category: 'refund', type: 'refund_paid',
