@@ -2251,11 +2251,15 @@ check('the channel name reuses the locked Counter sale pair',
   /pos: cuT\('Counter sale', '前台销售'\)/.test(POS_CORE), true);
 
 // ── The money actually counts ────────────────────────────────────────────
-// KEYED BY FULFILMENT TYPE. A counter sale carries channel='manual' exactly like
-// a phone order an operator typed in, so a channel-based query would sweep both
-// into the POS card and overstate the till.
+// KEYED BY FULFILMENT TYPE. A counter sale used to carry channel='manual'
+// exactly like a phone order an operator typed in, so a channel-based query
+// would sweep both into the POS card and overstate the till. The bucket now
+// also excludes the two daemon channels, whose own cards claim their rows —
+// the six Sales buckets have to be a partition or the page's total drifts from
+// the dashboard's (scripts/test_sales_summary_partition.js). fulfillment_type
+// is still what SELECTS the till's sales; the exclusion only fences the edges.
 check('POS revenue is keyed on fulfillment_type, not on channel',
-  /const ps = storeAgg\("fulfillment_type='counter'"\)/.test(POS_RT), true);
+  /const ps = storeAgg\("fulfillment_type='counter'/.test(POS_RT), true);
 check('POS appears in the sales summary payload', /^\s*pos:\s*\{ connected: true/m.test(POS_RT), true);
 
 // ── The till respects it before the cashier builds a basket ──────────────

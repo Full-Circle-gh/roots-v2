@@ -1699,6 +1699,11 @@ addColumn('retail_orders', 'wx_shipping_locked_at',   'DATETIME'); // NULL = fre
 // rejected) flips back to a live status — otherwise phantom stock accumulates.
 addColumn('retail_orders', 'channel_stock_restored', 'INTEGER DEFAULT 0');
 
+// Free-text origin for a staff-keyed order whose channel is 'other' — the New
+// order form requires it, so the catch-all bucket stays auditable instead of
+// becoming the next unattributable pile. NULL for every other channel.
+addColumn('retail_orders', 'channel_note', 'TEXT');
+
 try {
   db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_retail_orders_idem
              ON retail_orders(customer_id, idempotency_key)
