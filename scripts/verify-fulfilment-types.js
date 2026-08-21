@@ -2062,6 +2062,64 @@ check('removing a line clears the selection, because indexes shift under it',
 check('a product tile shows how many of it are in the basket',
   /inc > 0 \? '<span class="incart">' \+ inc/.test(POS_TILL_SRC), true);
 
+// ── Attaching a customer ─────────────────────────────────────────────────
+// It was window.prompt(): an unstyleable box captioned with the origin
+// ("store.rootskitchenchina.com says"), which could not show what it found and
+// took the FIRST match of pageSize=1 — so two customers sharing a given name
+// were a coin toss nobody saw. It is a Tacet sheet now, and it shows its work.
+//
+// COMMENTS STRIPPED before the search: the replacement's own comment names
+// window.prompt to explain what it replaced, and a rule that a comment can
+// satisfy is a rule that stops holding.
+const tillCode = POS_TILL_SRC.replace(/^\s*\/\/.*$/gm, '');
+check('the till opens no browser dialogs',
+  (tillCode.match(/window\.(prompt|alert|confirm)\s*\(/g) || []), []);
+check('the customer picker is a Tacet sheet, sharing the store picker\'s idiom',
+  /id="custpick"/.test(POS_TILL_SRC) && /<div class="ssheet cust-sheet">/.test(POS_TILL_SRC), true);
+// A row has to carry enough to tell two people apart AND the two numbers a
+// cashier is asked for at the counter.
+// SCOPED TO THE ROW RENDERER. Checked against the whole file these pass from
+// the attached-customer chip, which shows points and wallet too — so the row
+// could lose them and the assertion would still be green. It was.
+const custRowSrc = (() => {
+  const i = POS_TILL_SRC.indexOf('function renderCustResults');
+  return i === -1 ? '' : POS_TILL_SRC.slice(i, POS_TILL_SRC.indexOf('\n  }', i));
+})();
+check('the row renderer was located', custRowSrc.length > 200, true);
+check('a result row shows who they are and what they hold',
+  [/class="cwho"/.test(custRowSrc), /c\.phone/.test(custRowSrc),
+   /T\('points'\)/.test(custRowSrc), /T\('wallet'\)/.test(custRowSrc)],
+  [true, true, true, true]);
+// THE CARET TRAP: rebuilding the shell on every keystroke replaces the <input>
+// being typed into. The shell is built once and only the rows redraw.
+check('the search shell is built once, so typing does not lose the caret',
+  /data-built/.test(POS_TILL_SRC) && /function renderCustResults/.test(POS_TILL_SRC), true);
+// A slow reply for "Li" must not land after a fast one for "Li Wei".
+check('a stale search reply cannot overwrite a newer one',
+  /mine !== _custToken/.test(POS_TILL_SRC), true);
+check('the search is debounced rather than one query per keystroke',
+  /clearTimeout\(_custTimer\)/.test(POS_TILL_SRC), true);
+// Nothing typed yet is not the same as nothing found and must not say so.
+check('an untouched search shows no empty-state',
+  /S\.custRows === null.*?innerHTML = ''/.test(POS_TILL_SRC), true);
+// 'pick' OPENS the picker and is the + Customer button's long-standing value;
+// the row action is 'use'. Merging them broke the button on the first pass.
+check('the row action does not collide with the button that opens the picker',
+  [/data-cust="use"/.test(POS_TILL_SRC), /act === 'use'/.test(POS_TILL_SRC)], [true, true]);
+// SEARCH-ONLY, by decision: a customer who does not exist yet is created in the
+// backend. No create path is wired here, and none should appear by accident.
+check('the till does not create customers',
+  /POST[\s\S]{0,40}retail-admin\/customers/.test(tillCode), false);
+
+// A bare number is one a cashier reads off this very screen — '#43' is how a
+// nameless account renders — so it has to find that customer, not only orders.
+// Read locally rather than leaning on SERVER_SRC from an earlier section: a
+// section that cannot run standalone is a section nobody checks before a push,
+// which is exactly how the last gate failure reached CI.
+const custSearchSrc = fs.readFileSync(path.join(__dirname, '..', 'routes', 'retail.js'), 'utf8');
+check('a numeric search finds the customer id itself',
+  /ors\.push\('id = \?'\)/.test(custSearchSrc), true);
+
 // ── The product code ─────────────────────────────────────────────────────
 // Search already matches on SKU — typing a code filters the grid — so the code
 // that produced a match was the one thing the screen would not show back. It

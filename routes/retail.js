@@ -15392,7 +15392,13 @@ function customerSearchWhere(q) {
   const params = [like, like, like];
 
   if (/^\d+$/.test(term)) {
-    // numeric → also an order id or order number
+    // numeric → the CUSTOMER's own id FIRST. An account with no nickname is
+    // shown as '#<id>' on the till and in the drawer, so that is a number
+    // staff read off a screen and type back — and it was the one lookup that
+    // missed, because a bare number only ever reached order ids.
+    ors.push('id = ?');
+    params.push(parseInt(term, 10));
+    // …and an order id or order number
     ors.push('id IN (SELECT customer_id FROM retail_orders WHERE id = ? OR order_no LIKE ?)');
     params.push(parseInt(term, 10), like);
     // …and a saved delivery-address phone (the recipient number can differ from

@@ -342,6 +342,36 @@ button{font:inherit;color:inherit;margin:0}
 }
 .pay[disabled]{background:var(--td-raised);border-color:var(--td-border);color:var(--td-text2)}
 
+/* ---- customer picker: the store picker's sheet, with a search in it ---- */
+.cust-sheet{max-width:460px;gap:10px}
+.csearch{
+  height:52px;flex:none;display:flex;align-items:center;gap:10px;padding:0 14px;
+  border-radius:var(--r-control);background:var(--td-paper);border:1px solid var(--td-border);
+}
+.csearch svg{width:18px;height:18px;flex:none;color:var(--td-text2)}
+.csearch input{
+  flex:1;min-width:0;height:100%;border:0;background:transparent;font:inherit;font-size:15px;
+  color:var(--td-text);-webkit-user-select:text;user-select:text;
+}
+.csearch input:focus{outline:none}
+.crows{max-height:46vh;overflow-y:auto;-webkit-overflow-scrolling:touch;display:flex;flex-direction:column;gap:6px}
+.crow{
+  min-height:60px;padding:8px 14px;border-radius:var(--r-control);
+  border:1px solid var(--td-border);background:transparent;color:var(--td-text);
+  font:inherit;display:flex;align-items:center;gap:12px;text-align:left;
+}
+.cwho{flex:1;min-width:0;font-size:15px;display:flex;flex-direction:column;gap:2px}
+.cbal{
+  flex:none;font-size:13px;text-align:right;
+  display:flex;flex-direction:column;gap:2px;font-variant-numeric:tabular-nums;
+}
+.cmeta{font-size:13px;color:var(--td-text2);font-variant-numeric:tabular-nums}
+.cempty{padding:18px 4px;text-align:center;color:var(--td-text2);font-size:14px}
+.ccancel{
+  min-height:52px;border-radius:var(--r-control);border:1px solid var(--td-border);
+  background:transparent;color:var(--td-text2);font:inherit;font-size:15px;font-weight:500;
+}
+
 /* ---- settle: a takeover, not a sheet ----
    The cashier turns the tablet round or leans over it; nothing of the till
    should stay readable behind. A page is a takeover, not an overlay. */
@@ -558,7 +588,7 @@ button{font:inherit;color:inherit;margin:0}
   /* Above the sheet, always — the takeover's whole point is that nothing of
      the till stays readable behind it. */
   .settle{z-index:30}
-  #storepick{z-index:40}
+  #storepick,#custpick{z-index:40}
 
   /* The settle takeover is amount-beside-wallets at 56px apart, which does not
      fit a phone either. Stack it, and let the two fixed 340px blocks be as wide
@@ -614,6 +644,7 @@ button{font:inherit;color:inherit;margin:0}
   </div>
   <div class="settle" id="settle" hidden></div>
   <div class="sscrim" id="storepick" hidden></div>
+  <div class="sscrim" id="custpick" hidden></div>
 </div>
 <div class="boot" id="boot"><p id="boot-msg"></p></div>
 
@@ -673,6 +704,9 @@ button{font:inherit;color:inherit;margin:0}
     back:         ['Back', '返回'],                    // admin
     closed:       ['Closed', '已关闭'],                // admin: 01-core.js:647 (sales grid cell)
     store:        ['Store', '门店'],                   // admin: 04-orders.js:3575
+    custSearch:   ['Search name or phone, or leave as guest',
+                   '搜索姓名或电话,或留空作为访客'],       // admin: retail-admin.html:2762
+    noMatches:    ['No matches', '无匹配'],            // admin: 09-products.js:2994
     cancel:       ['Cancel', '取消'],                  // admin
     other:        ['Other', '其他'],                   // admin: PAY_METHOD_CHOICES
     // done
@@ -729,6 +763,7 @@ button{font:inherit;color:inherit;margin:0}
   var S = {
     stores: [], storeId: null, storeName: '', pickOpen: false,
     posOpen: null,             // storeCode -> bool, or null when unknown
+    custOpen: false, custQ: '', custRows: null,   // null = nothing searched yet
     sheetOpen: false,          // phone only: is the order sheet up?
     products: [], stock: {}, cats: [], cat: '', q: '',
     lines: [], sel: null,
@@ -941,6 +976,7 @@ button{font:inherit;color:inherit;margin:0}
         '<svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>');
     }
     renderPicker();
+    renderCustPicker();
     $('hd-lang').textContent = _lang === 'cn' ? 'EN' : '中文';
     var qi = $('q');
     qi.placeholder = T('searchAdd');
@@ -1258,18 +1294,104 @@ button{font:inherit;color:inherit;margin:0}
   // Attaching a customer. Uses the browser prompt deliberately: a full search
   // panel is its own screen and this is an optional, uncommon step at a till.
   // It stays one tap from the rail and never blocks the sale.
+  // ATTACHING A CUSTOMER IS A TACET SCREEN, not a browser prompt.
+  //
+  // It used to be window.prompt(): a chrome-coloured box saying
+  // "store.rootskitchenchina.com says", which cannot be styled, cannot show
+  // what it found, and took the FIRST match of pageSize=1 — so two customers
+  // with the same given name were a coin toss the cashier never saw.
+  //
+  // Now it searches and shows what it found, with enough on each row to tell
+  // two people apart. SEARCH-ONLY by decision: a customer who does not exist
+  // yet is created in the backend, not at the till.
   function pickCustomer() {
-    if (S.custBusy) return;
-    var term = window.prompt(T('customer'));
-    if (!term) return;
-    S.custBusy = true;
-    api('/api/retail-admin/customers?pageSize=1&q=' + encodeURIComponent(term.trim()))
-      .then(function (j) {
-        S.custBusy = false;
-        var c = (j.data || [])[0];
-        if (c) { S.customer = c; render(); }
-      })
-      .catch(function () { S.custBusy = false; });
+    S.custOpen = true; S.custQ = ''; S.custRows = null;
+    render();
+  }
+
+  function closeCustPicker() {
+    S.custOpen = false; S.custRows = null;
+    var el = $('custpick'); if (el) el.removeAttribute('data-built');
+    render();
+  }
+
+  // Debounced so a four-letter name is one query rather than four. The token
+  // guards against an earlier, slower reply landing after a later one and
+  // overwriting it with results for a term the cashier has already changed.
+  var _custTimer = null, _custToken = 0;
+  function custSearch(term) {
+    S.custQ = term;
+    if (_custTimer) clearTimeout(_custTimer);
+    var mine = ++_custToken;
+    if (!term.trim()) { S.custRows = null; renderCustResults(); return; }
+    _custTimer = setTimeout(function () {
+      api('/api/retail-admin/customers?pageSize=12&q=' + encodeURIComponent(term.trim()))
+        .then(function (j) {
+          if (mine !== _custToken) return;      // a newer search already answered
+          S.custRows = j.data || [];
+          renderCustResults();
+        })
+        .catch(function () {
+          if (mine !== _custToken) return;
+          S.custRows = [];
+          renderCustResults();
+        });
+    }, 220);
+  }
+
+  function attachCustomer(id) {
+    var c = (S.custRows || []).filter(function (x) { return String(x.id) === String(id); })[0];
+    if (!c) return;
+    S.customer = c; S.custOpen = false; S.custRows = null;
+    var el = $('custpick'); if (el) el.removeAttribute('data-built');
+    render();
+  }
+
+  // THE SHELL IS BUILT ONCE, on open. Re-rendering it on every keystroke would
+  // replace the <input> the cashier is typing into and drop the caret — the
+  // classic way a search box becomes unusable. Only the result list redraws.
+  function renderCustPicker() {
+    var el = $('custpick');
+    el.hidden = !S.custOpen;
+    if (!S.custOpen) { el.innerHTML = ''; return; }
+    if (el.getAttribute('data-built') === '1') { renderCustResults(); return; }
+    el.innerHTML =
+      '<div class="ssheet cust-sheet">'
+      + '<div class="hd">' + esc(T('customer')) + '</div>'
+      + '<div class="csearch">'
+      + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4.3-4.3"/></svg>'
+      + '<input id="cust-q" type="search" autocomplete="off" autocorrect="off" spellcheck="false">'
+      + '</div>'
+      + '<div class="crows" id="cust-rows"></div>'
+      + '<button class="ccancel" type="button" data-cust="close">' + esc(T('cancel')) + '</button>'
+      + '</div>';
+    el.setAttribute('data-built', '1');
+    var input = $('cust-q');
+    input.placeholder = T('custSearch');
+    input.addEventListener('input', function () { custSearch(this.value); });
+    try { input.focus(); } catch (e) {}
+    renderCustResults();
+  }
+
+  function renderCustResults() {
+    var box = document.getElementById('cust-rows');
+    if (!box) return;
+    // Nothing typed yet is not the same as nothing found, and must not say so.
+    if (S.custRows === null) { box.innerHTML = ''; return; }
+    if (!S.custRows.length) { box.innerHTML = '<div class="cempty">' + esc(T('noMatches')) + '</div>'; return; }
+    var h = '';
+    S.custRows.forEach(function (c) {
+      // Name and phone are what tell two people apart; points and wallet are
+      // what the cashier is asked for at the counter. Both, on every row.
+      var who = c.nickname || ('#' + c.id);
+      h += '<button class="crow" type="button" data-cust="use" data-id="' + esc(String(c.id)) + '">'
+        + '<span class="cwho">' + esc(who)
+        + '<span class="cmeta">' + esc(c.phone || '') + '</span></span>'
+        + '<span class="cbal">' + esc(T('points')) + ' ' + (Number(c.points) || 0)
+        + '<span class="cmeta">' + esc(T('wallet')) + ' ' + yuan(c.balance) + '</span></span>'
+        + '</button>';
+    });
+    box.innerHTML = h;
   }
 
   /* ---- wiring. Delegated: the grid and the rail re-render constantly. ---- */
@@ -1278,6 +1400,7 @@ button{font:inherit;color:inherit;margin:0}
       // The scrim closes the picker: tapping away from a short list is the
       // expected way out, and it is the only dismissal this pop-up needs.
       if (S.pickOpen && ev.target.id === 'storepick') { S.pickOpen = false; return render(); }
+      if (S.custOpen && ev.target.id === 'custpick') return closeCustPicker();
       var t = ev.target.closest('[data-add],[data-cat],[data-line],[data-q],[data-cust],[data-wal],[data-more],[data-confirm],[data-go],[data-print],[data-store],[data-pick],[data-sheet]');
       if (!t) return;
       if (t.hasAttribute('data-store')) { S.pickOpen = !S.pickOpen; return render(); }
@@ -1290,7 +1413,15 @@ button{font:inherit;color:inherit;margin:0}
       if (t.hasAttribute('data-cat'))   { S.cat = t.getAttribute('data-cat'); return render(); }
       if (t.hasAttribute('data-line'))  { var i = Number(t.getAttribute('data-line')); S.sel = (S.sel === i ? null : i); return render(); }
       if (t.hasAttribute('data-q'))     return bumpQty(t.getAttribute('data-q'), t.getAttribute('data-i'));
-      if (t.hasAttribute('data-cust'))  { if (t.getAttribute('data-cust') === 'clear') { S.customer = null; return render(); } return pickCustomer(); }
+      if (t.hasAttribute('data-cust'))  {
+        var act = t.getAttribute('data-cust');
+        if (act === 'clear') { S.customer = null; return render(); }
+        if (act === 'close') return closeCustPicker();
+        // 'use' attaches a searched row; 'pick' OPENS the picker and is the
+        // + Customer button's own long-standing value — do not merge the two.
+        if (act === 'use')   return attachCustomer(t.getAttribute('data-id'));
+        return pickCustomer();
+      }
       if (t.hasAttribute('data-wal'))   { S.wallet = t.getAttribute('data-wal'); S.err = ''; return render(); }
       if (t.hasAttribute('data-more'))  { S.moreOpen = true; return render(); }
       if (t.hasAttribute('data-confirm')) return confirm();
