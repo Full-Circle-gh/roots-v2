@@ -61,7 +61,10 @@ Page({
     const hasToken = !!(app?.globalData?.token);
     try {
       const [cfg, prods, cats, flash, polls] = await Promise.all([
-        config.load(force),
+        // Caught, never thrown — same reason as home.js: a rejecting config
+        // would drop the whole Promise.all and blank a page that the stale
+        // config cache could still have rendered.
+        config.load(force).catch(() => null),
         api.get('/api/retail/products?limit=100').catch(() => []),
         api.get('/api/retail/category-tree').catch(() => []),
         api.get('/api/retail/flash-sales').catch(() => []),

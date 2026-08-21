@@ -65,3 +65,20 @@
   font-size: calc(26rpx * var(--font-scale));
   line-height: 1.5;
 }
+/* Retry — only shown when the layout is missing because the fetch failed. */
+.empty-retry {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 48rpx;
+  padding: 0 56rpx;
+  height: 84rpx;
+  background: var(--lime);
+  color: var(--ink);
+  font-family: var(--f-toni);
+  font-size: calc(24rpx * var(--font-scale));
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  border-radius: 999rpx;
+}
+.empty-retry-tap { opacity: 0.72; }

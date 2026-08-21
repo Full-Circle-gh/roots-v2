@@ -10,6 +10,7 @@ const lang   = require('../../utils/lang');
 const theme  = require('../../utils/theme');
 const { createPoller } = require('../../utils/livepoll');
 const fontgate = require('../../utils/fontgate');
+const diag   = require('../../utils/diag');
 
 Page({
   data: {
@@ -62,6 +63,10 @@ Page({
     notifColor: '',
     lang: 'en',
     loading: true,
+    // True when the last refresh could not reach /api/retail/config at all.
+    // Splits the empty state in two: a customer-facing network error (with a
+    // retry) vs. a storefront whose layout genuinely was never published.
+    loadError: false,
     // User-configured page background, set in /cms → Theme picker. Empty
     // string means "use the page-wxss default" (oat). Updated on every
     // onShow + refresh so a publish-then-pull-down sees the new colour.
@@ -173,6 +178,11 @@ Page({
       this._orderPoller = createPoller(() => this._fetchActiveOrderFor(this.data.layout));
     }
     this._orderPoller.start();
+    // Self-heal an empty home. If the launch fetch failed (lift, tunnel, a
+    // flaky first request on a cold start) nothing else re-fetches the layout,
+    // so the customer is stranded on the empty state for the whole session.
+    // Every return to Home is a fresh chance at a working network — take it.
+    if (!this.data.layout.length && !this.data.loading) this.refresh(true);
   },
 
   onHide() {
@@ -228,6 +238,13 @@ Page({
     };
   },
 
+  // Empty-state retry button. Forces a fresh fetch rather than trusting the
+  // 60s config TTL — a customer tapping "try again" means now.
+  retry() {
+    if (this.data.loading) return;
+    this.refresh(true);
+  },
+
   async onPullDownRefresh() {
     await this.refresh(true);
     wx.stopPullDownRefresh();
@@ -241,7 +258,10 @@ Page({
     const hasToken = !!(app?.globalData?.token);
     try {
       const [cfg, prods, cats, flash, aff, polls, favs, notif] = await Promise.all([
-        config.load(force),
+        // Caught, never thrown: every other fetch below is already optional,
+        // and a rejecting config would take the whole Promise.all down with it
+        // — products, categories and all — leaving a blank storefront.
+        config.load(force).catch(() => null),
         // lean=1: home cards render name/price/image/tagline only — never the
         // full rich-HTML description. lean drops it server-side (a 100-row pull
         // was 1.28 MB, 1.2 MB of it descriptions the home throws away → ~80 KB).
@@ -265,9 +285,17 @@ Page({
         hasToken ? api.get('/api/retail/notifications/unread-count').catch(() => null) : Promise.resolve(null),
       ]);
       const layout = cfg?.home?.layout || [];
+      // Tell the two empty states apart. No config at all means we could not
+      // reach the server — a network error the customer can retry, not an
+      // operator who forgot to publish. Leave a diagnostics breadcrumb either
+      // way so this stops being invisible to support.
+      const loadError = !layout.length && !cfg;
+      if (loadError) diag.reportError('home_config_unavailable', null, { forced: !!force });
+      else if (config.wasStale()) diag.reportNotice('home_config_stale');
       const notifPatch = this._buildNotifPatch(notif);
       this.setData({
         layout,
+        loadError,
         products: Array.isArray(prods) ? prods : (prods?.data || []),
         // Categories now come from the 2-level category tree's TOP nodes (the
         // legacy categories table is gone). Shape each top as { id, name (EN,
@@ -306,7 +334,8 @@ Page({
       this._fetchTopupPackagesFor(layout);
     } catch (e) {
       console.warn('[home] refresh failed:', e.message);
-      this.setData({ loading: false });
+      diag.reportError('home_refresh_failed: ' + e.message, e.stack);
+      this.setData({ loading: false, loadError: !this.data.layout.length });
     }
   },
 
