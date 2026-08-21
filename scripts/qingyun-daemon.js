@@ -408,10 +408,18 @@ const upsert = db.prepare(`
 `);
 
 // ── Auto-fill the customer-facing ETA from the courier ────────────────────────
-// A same-city (local) order's "Estimated arrival" was operator-typed. Once Qingyun
-// dispatches a courier it hands us the promised arrival time (expectedDeliveredTime),
+// A same-city (local) order's "Estimated arrival" was operator-typed. Once a rider is
+// actually CARRYING the parcel, Qingyun's live route gives a real arrival prediction,
 // so we stamp that onto the order's 'local' shipment (local_eta = 'HH:MM' Beijing) and
-// mark eta_source='auto'. The customer order page + admin drawer both read local_eta,
+// mark eta_source='auto'.
+//
+// This used to read expectedDeliveredTime instead, on the belief that Qingyun "hands
+// us the promised arrival time". It does not. lib/qingyun-payload sends the customer's
+// booked slot as expectFrom AND expectTo when the order is created, and Qingyun echoes
+// that number back unchanged forever — traced across a whole delivery on TC000336,
+// where it still read 10:00 after the parcel had been collected, carried and delivered
+// at 11:19. So the field is the time the CUSTOMER ASKED FOR, wearing a courier's label,
+// and stamping it made every booked order display its own request as an estimate. The customer order page + admin drawer both read local_eta,
 // so one write feeds the whole chain. An operator override sets eta_source='manual'
 // (see routes/retail.js saveLocalEta), which we never overwrite. Same-day by design:
 // we only stamp when the promised time is today (Beijing) so a next-day scheduled
@@ -454,15 +462,16 @@ function stampLocalEta(retailOrderId, d, track) {
   const dispatched = !!(d.deliveryId || d.carrierName || d.riderName
     || (track && track.deliveryId) || (track && Number(track.deliveryStatus) > 0));
   if (!dispatched) return;
-  let hhmm = beijingSameDayHHMM(d.expectedDeliveredTime);
   // track.etaSeconds is route.duration, which tracks whichever leg the rider is
   // CURRENTLY navigating — the shop until they've collected the parcel (deliveryStatus
-  // < 30), the customer after. Before pickup that's time-to-shop, not time-to-customer,
-  // so only trust it as the fallback "estimated arrival" once actually picked up.
+  // < 30), the customer after. Before pickup that's time-to-shop, not time-to-customer:
+  // there is no honest arrival estimate to give yet, so we give none and the drawer
+  // shows the booked window instead. This is now the ONLY source — see above for why
+  // expectedDeliveredTime is not one.
   const pickedUp = track && Number(track.deliveryStatus) >= 30;
-  if (!hhmm && pickedUp && Number.isFinite(track.etaSeconds) && track.etaSeconds > 0) {
-    hhmm = beijingSameDayHHMM(Date.now() + track.etaSeconds * 1000);
-  }
+  if (!pickedUp) return;
+  if (!Number.isFinite(track.etaSeconds) || track.etaSeconds <= 0) return;
+  const hhmm = beijingSameDayHHMM(Date.now() + track.etaSeconds * 1000);
   if (!hhmm) return;
   try { stampEta.run({ eta: hhmm, order_id: retailOrderId }); }
   catch (e) { log('eta', `stampLocalEta ${retailOrderId} error: ${e.message}`); }
