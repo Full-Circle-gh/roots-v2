@@ -3299,13 +3299,24 @@ function renderLocalEtaCard(o, s, hoisted) {
     // window it matters. (The ship-by kicker does exempt 'dispatched', but its
     // deadline was to SHIP, which by then has happened; this one is to ARRIVE.)
     if (['delivered', 'cancelled', 'refunded'].includes(o.status)) return false;
-    // Read 'HH:MM' by slice, exactly as the picker above does. It was a regex, and
-    // an escaping slip ate its character classes — it compiled fine and matched the
-    // literal text "dd:dd", so the whole check silently returned false forever.
+    const now = new Date();
+    // The deadline is the END of the customer's window, never its start — the same
+    // anchor the orders list has always used. This matters because `eta` is NOT an
+    // independent courier estimate: scheduled_for holds only the window START, we push
+    // that single instant to Qingyun as expectFrom AND expectTo, and the daemon stamps
+    // what Qingyun echoes back. So on a "10:00–12:00" order `eta` is 10:00, and
+    // comparing against it called the order late at 10:01 — two hours early, while the
+    // customer was still inside the window they chose.
+    const start = parseSchedFor(o.scheduled_for);
+    const winEnd = isNaN(start.getTime()) ? null : parseSlotEnd(start, o.delivery_slot_label);
+    if (winEnd) return winEnd.getTime() < now.getTime();
+    // No window in the label — fall back to the stamped clock, read by slice exactly
+    // as the picker above does. (This was a regex; an escaping slip ate its character
+    // classes, so it matched the literal text "dd:dd" and never fired at all.)
     if (eta.length !== 5 || eta.charAt(2) !== ':') return false;
     const hh = Number(eta.slice(0, 2)), mm = Number(eta.slice(3, 5));
     if (!Number.isFinite(hh) || !Number.isFinite(mm)) return false;
-    const now = new Date(), g = gzParts(now);
+    const g = gzParts(now);
     return gzWall(g.y, g.mo, g.da, hh, mm).getTime() < now.getTime();
   })();
   // Inline (under the items) it sits below a dashed divider; hoisted to the top
