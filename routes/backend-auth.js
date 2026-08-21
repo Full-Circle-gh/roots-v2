@@ -261,9 +261,9 @@ function seedBackend() {
   let roots = db.prepare("SELECT id FROM tenants ORDER BY id ASC LIMIT 1").get();
   if (!roots) {
     const r = db.prepare("INSERT INTO tenants (name, brand_name, status) VALUES (?,?,?)")
-      .run('Roots', 'Full Circle', 'active');
+      .run('Roots', 'Roots', 'active');
     roots = { id: r.lastInsertRowid };
-    console.log('[backend-auth] seeded tenant #' + roots.id + ' (Roots · Full Circle)');
+    console.log('[backend-auth] seeded tenant #' + roots.id + ' (Roots)');
   }
   const count = db.prepare('SELECT COUNT(*) c FROM tenant_users WHERE tenant_id = ?').get(roots.id).c;
   if (count === 0) {

@@ -83,7 +83,7 @@ router.post('/api/backend/billing/select-plan', requireBackend, express.json(), 
 
   const sub = getSub(tenantId);
   if (sub && sub.is_internal) {
-    return res.status(400).json({ error: 'Your account is on an internal plan, managed directly by Full Circle. · 您的账户为内部套餐,由 Full Circle 直接管理。' });
+    return res.status(400).json({ error: 'Your account is on an internal plan, managed directly by Tacet. · 您的账户为内部套餐,由 Tacet 直接管理。' });
   }
   const plan = db.prepare('SELECT * FROM billing_plans WHERE code = ? AND is_active = 1 AND is_public = 1').get(plan_code);
   if (!plan) return res.status(404).json({ error: 'Unknown plan · 未知套餐' });

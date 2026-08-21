@@ -18789,7 +18789,7 @@ router.post('/api/retail-admin/system-alerts/test', requireRetailAdmin, express.
   try {
     const r = await fetch(url, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ msgtype: 'text', text: { content: '[System Alerts · 系统告警] ✅ Test — Full Circle system notifications are wired to this group.' } }),
+      body: JSON.stringify({ msgtype: 'text', text: { content: '[System Alerts · 系统告警] ✅ Test — Tacet system notifications are wired to this group.' } }),
     });
     const j = await r.json().catch(() => ({}));
     if (j.errcode === 0) return res.json({ success: true });

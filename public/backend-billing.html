@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Full Circle · Billing</title>
+<title>tacet · Billing</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <meta name="theme-color" content="#12161A" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -98,7 +98,7 @@
           <path d="M17.5 8.5C16 6.5 13.7 5.4 11.4 5.7 8.1 6.2 5.5 9 5.5 12.4c0 3.3 2.7 6 6 6 2.6 0 4.9-1.7 5.7-4.1" fill="none" stroke="#E8E5DC" stroke-width="1.5" stroke-linecap="round"/>
         </svg>
       </div>
-      <span class="word">Full Circle</span>
+      <span class="word">tacet</span>
     </div>
     <div class="sub">Billing · 账单</div>
 
@@ -322,7 +322,7 @@
     if (!j || !j.user) { location.replace('/backend/login'); return; }
     const tn = j.user.tenant || {};
     COMPANY = tn.brand || tn.name || '—';
-    // White-label: show this tenant's brand in the chrome (Roots → "Full Circle").
+    // White-label: a tenant's own brand replaces the default tacet wordmark here.
     if (tn.brand) { const w = document.querySelector('.word'); if (w) w.textContent = tn.brand; document.title = tn.brand + ' · Billing'; }
     if (tn.accent) { const m = document.querySelector('.mark'); if (m) m.style.borderColor = tn.accent; }
     loadAll();

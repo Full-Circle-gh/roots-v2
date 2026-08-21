@@ -3393,12 +3393,12 @@ async function renderMe(){
   }).join('')
     +(loggedIn?`<button class="me-row danger" data-act="signout"><span class="rbody"><span class="rt">${cn?'退出登录':'Sign out'}</span></span><span class="ra">→</span></button>`:'');
 
-  // footer (brand me_footer; falls back to Full Circle for un-customised tenants)
+  // footer (brand me_footer; falls back to tacet for un-customised tenants)
   const mf=(state.config&&state.config.brand&&state.config.brand.me_footer)||{};
   const wmImg=mf.wordmark_image||'';
   const tagEN=(mf.tagline_en||'').trim(),tagCN=(mf.tagline_cn||'').trim();
   const tagline=(tagEN&&tagCN)?(tagEN+' · '+tagCN):(tagEN||tagCN||mf.tagline||'Clarity with code');
-  const credit=cn?(mf.credit_cn||'由 Full Circle 提供技术支持'):(mf.credit_en||'Powered by Full Circle');
+  const credit=cn?(mf.credit_cn||'由 tacet 提供技术支持'):(mf.credit_en||'Powered by tacet');
   const wmText=mf.wordmark_text||(wmImg?'':state.brand);
 
   v.innerHTML=`<div class="me">

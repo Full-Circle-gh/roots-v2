@@ -1874,9 +1874,9 @@ try {
 } catch (e) { console.error('[migration seed_category_tree_v1]', e); }
 
 // Seed Roots' Mini-app footer (Me page) so that flipping the SaaS-wide
-// defaults to Full Circle ('Clarity with code', 'Powered by Full Circle')
+// defaults to tacet ('Clarity with code', 'Powered by tacet')
 // doesn't accidentally rebrand Roots' live customer footer. New tenants
-// have no row → they fall through to the Full Circle defaults in me.js
+// have no row → they fall through to the tacet defaults in me.js
 // until their operator saves the Mini App Backend → Mini-app footer card.
 // INSERT OR IGNORE preserves any existing operator-saved row.
 try {
@@ -1949,7 +1949,7 @@ try {
 // is a no-op when a brand.me_footer row already exists. If the operator
 // clicked Save on an empty footer-settings card between the feature shipping
 // and the v1 seed landing, that row exists but is all-nulls → v1 skipped →
-// Roots' customers see the Full Circle SaaS fallbacks instead of their own
+// Roots' customers see the tacet SaaS fallbacks instead of their own
 // branding. This pass replaces an all-empty row with the canonical Roots
 // values; rows that have ANY real content (operator authored their own)
 // are preserved untouched.
