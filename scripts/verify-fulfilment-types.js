@@ -411,9 +411,19 @@ if (!cardMissing.length) {
   check('counter alert carries no recipient, address or slot',
     [/收货人|To:/.test(counterCard), /地址|Address:/.test(counterCard), /Slot:/.test(counterCard)],
     [false, false, false]);
-  check('counter alert carries store, order, items, total, cashier and the method line',
-    ['门店', 'R-CNTR', '燕麦奶×2', '¥100.00', 'ash', '前台 Counter'].map(t => counterCard.includes(t)),
-    [true, true, true, true, true, true]);
+  check('counter alert carries store, order, total, cashier and the method line',
+    ['门店', 'R-CNTR', '¥100.00', 'ash', '前台 Counter'].map(t => counterCard.includes(t)),
+    [true, true, true, true, true]);
+  // NO ITEM LIST — decided 2026-08-21, after the card was read on a phone in a
+  // channel that also carries real delivery jobs. The goods have already left
+  // with the customer, so a list of them is not something anyone acts on, and
+  // it was the longest row in a card whose whole job is to be skimmed past.
+  //
+  // THE FIXTURE STILL SUPPLIES counter_items, deliberately: the builder has to
+  // IGNORE it, not merely be starved of it. Asserted the other way round this
+  // would pass on any card that happened to receive no items.
+  check('counter alert does NOT list the goods, even when handed them',
+    counterCard.includes('燕麦奶×2'), false);
   // Its own lead line — a completed sale, not a new order to fulfil.
   check('counter alert does NOT use the new-order lead line',
     /新订单|New order/.test(counterCard), false);
