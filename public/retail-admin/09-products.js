@@ -121,16 +121,21 @@ function _paStockOf(p) {
 // How many whole bundles the components can make right now (0 when any part is
 // missing). Reads each component's store-aware stock the same way _paStockOf
 // does, so the figure matches what the shop would show. `p.bundle_items` is the
-// raw [{id, qty}] recipe the list endpoint ships.
-function _paBundleStock(p) {
+// raw [{id, qty}] recipe the list endpoint ships. `storeId` names the store to
+// count in — omit it to follow the "Stock for" switcher (PA_STORE); the
+// two-location list passes each column's own store, otherwise both columns
+// would print the same switcher-wide figure and a store with nothing on its
+// shelves would still read as stocked.
+function _paBundleStock(p, storeId) {
+  const store = (storeId === undefined) ? PA_STORE : storeId;
   const comps = Array.isArray(p.bundle_items) ? p.bundle_items : [];
   if (!comps.length) return 0;
   let min = Infinity;
   for (const c of comps) {
     const qty = Math.max(1, Number(c.qty) || 1);
     let stock;
-    if (PA_STORE !== 'all' && PA_STOCK_LOADED) {
-      stock = _paStoreQty(c.id, PA_STORE);
+    if (store !== 'all' && PA_STOCK_LOADED) {
+      stock = _paStoreQty(c.id, store);
     } else {
       const cp = (Array.isArray(PA_PRODUCTS) ? PA_PRODUCTS : []).find(x => x.id === c.id);
       stock = cp ? Number(cp.effective_stock ?? cp.stock_qty ?? 0) : 0;
@@ -1036,7 +1041,7 @@ function _paStoreStockCell(u, storeId) {
     return `<span class="pa-stock ${paused ? 'is-out' : ''}" title="${title}"><span class="pa-stock-dot"></span>${label}</span>`;
   }
   if (!u.group && u.p.is_bundle) {
-    const q = _paBundleStock(u.p);
+    const q = _paBundleStock(u.p, storeId);
     const c = q <= 0 ? 'is-out' : (q <= paLowThreshold(u.p, storeId) ? 'is-low' : '');
     return `<span class="pa-stock pa-stock-locked ${c}" title="${cuT('Made from other products — stock follows the parts', '由其他产品组成 — 库存取决于组成商品')}"><span class="pa-stock-dot"></span>${q <= 0 ? cuT('Out', '缺货') : q}</span>`;
   }
