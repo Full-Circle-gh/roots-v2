@@ -673,6 +673,30 @@ async function drainPushQueue(storeCode, br) {
         continue;
       }
       const payload = await pushPayload(order, shop, br, storeCode);
+      // A BOOKED order is checked now and created when staff call the delivery.
+      //
+      // Creating it here meant handing Qingyun a delivery time hours before anyone
+      // touched the order, and the only time we have to hand it is the customer's
+      // window — so we were telling a courier platform that a 10:00–12:00 order was
+      // due at 10:00 sharp, ten hours early. 86% of booked orders were flagged
+      // 配送已超时 as a result, which made the platform's own lateness signal useless,
+      // and the echoed time came back to us dressed as a courier estimate.
+      //
+      // Everything that makes an early push worth having still happens right here:
+      // pushPayload is what geocodes, translates, resolves the delivery point and
+      // parks the row on needs_point / awaiting_choice. A bad address still surfaces
+      // now, hours ahead. The ONLY thing deferred is createOrder, so what staff get
+      // at dispatch is an address already known to be good.
+      //
+      // ASAP orders are untouched: they are dispatched within the hour, so creating
+      // and calling are already the same moment for them.
+      if (order.scheduled_for) {
+        db.prepare("UPDATE qingyun_push_queue SET status='ready', last_error=NULL, geo_held_at=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(row.id);
+        const geo = payload._geo || {};
+        log(storeCode, `push: ${order.order_no} checked, held until staff call the delivery${pinTag(geo)}`);
+        logSync(storeCode, 'push', 'ok', { order_no: order.order_no, held_for_dispatch: true, geo });
+        continue;
+      }
       const res = await br.createOrder(payload);
       if (res.ok) {
         db.prepare("UPDATE qingyun_push_queue SET status='done', qingyun_order_id=?, last_error=NULL, geo_held_at=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(res.orderId, row.id);

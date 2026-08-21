@@ -4429,7 +4429,9 @@ db.exec(`
     id               INTEGER PRIMARY KEY AUTOINCREMENT,
     retail_order_id  INTEGER NOT NULL UNIQUE,
     store_code       TEXT NOT NULL,
-    status           TEXT NOT NULL DEFAULT 'pending',  -- pending|processing|done|error|skipped|needs_point
+    status           TEXT NOT NULL DEFAULT 'pending',  -- pending|processing|ready|done|error|skipped|needs_point|awaiting_choice
+    -- 'ready' = address checked, copy deliberately NOT created yet: a booked order
+    -- waiting for staff to call the delivery (lib/qingyun-queue.awaitingDispatch).
     qingyun_order_id TEXT,                             -- the created Qingyun order id
     attempts         INTEGER NOT NULL DEFAULT 0,
     last_error       TEXT,

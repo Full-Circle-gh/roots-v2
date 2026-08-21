@@ -23078,10 +23078,94 @@ function _qingyunOrderRef(retailOrderId) {
   return null;
 }
 
+// Create the Qingyun copy for a booked order the drain deliberately held back
+// (status 'ready' — address already checked, nothing created). This is what "we call
+// the delivery when we want" means in code: the copy appears when staff reach for a
+// courier, not hours earlier, so the platform is never told a delivery time that came
+// from the customer's booking rather than from us.
+//
+// Creating the 待配送 copy costs nothing and calls nobody — it is the same free state
+// every order sat in before — so running it when staff merely OPEN the price list is
+// safe, and it means the list they open is never empty for want of a copy.
+//
+// Silent by contract: it returns nothing and the caller re-reads _qingyunOrderRef. A
+// failure leaves the row back on 'ready' with the reason on it, and the caller then
+// reports "not in Qingyun" exactly as it did before this existed.
+async function _qingyunMaterialize(retailOrderId) {
+  const q = _qingyunPushRow(retailOrderId);
+  if (!q || q.qingyun_order_id || q.status !== 'ready') return;
+  // Claim the row before doing anything slow. Two people opening the same drawer
+  // would otherwise each create a copy, and the spare is a live 待配送 order nobody
+  // tracks that someone can still dispatch — a second rider, paid for.
+  let claimed;
+  try {
+    claimed = tdb().prepare(
+      `UPDATE qingyun_push_queue SET status = 'processing', updated_at = CURRENT_TIMESTAMP
+        WHERE retail_order_id = ? AND status = 'ready' AND qingyun_order_id IS NULL`
+    ).run(retailOrderId);
+  } catch (_) { return; }
+  if (!claimed.changes) return;                 // someone else got there first
+  // Put it back so the next click can try again. A row stranded on 'processing'
+  // would be invisible to the drain (it only takes 'pending') and to this function.
+  const release = (why) => {
+    try {
+      tdb().prepare(
+        `UPDATE qingyun_push_queue SET status = 'ready', last_error = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE retail_order_id = ? AND qingyun_order_id IS NULL`
+      ).run(why ? String(why).slice(0, 300) : null, retailOrderId);
+    } catch (_) { /* nothing left to do */ }
+  };
+  try {
+    const order = tdb().prepare(
+      `SELECT id, order_no, status, recipient_name, recipient_phone, address_json,
+              scheduled_for, delivery_slot_label
+         FROM retail_orders WHERE id = ?`
+    ).get(retailOrderId);
+    if (!order) return release('order missing');
+    // Same gate the drain carries: a closed order must never get a courier job.
+    if (qingyunQueue.isClosedOrderStatus(order.status)) {
+      try { tdb().prepare(qingyunQueue.RETIRE_CLOSED_SQL).run(`order ${order.status}`, retailOrderId); } catch (_) {}
+      return;
+    }
+    const { getQingyunBrowser } = require('../lib/qingyun-browser');
+    const { buildCreatePayload } = require('../lib/qingyun-payload');
+    const br = await getQingyunBrowser(q.store_code);
+    const shop = await br.getShop();
+    if (!shop || !shop.shopId) return release('store unavailable');
+    const payload = await buildCreatePayload(order, shop, br, {
+      geocode,
+      translateCn: addressCn.translateToChinese,
+      goodsPicUrl: cfgValue('delivery.qingyunGoodsPicUrl', QY_GOODS_PIC_DEFAULT),
+      onWarn: (m) => console.warn('[qingyun materialize]', m),
+    });
+    const created = await br.createOrder(payload);
+    if (!created.ok || !created.orderId) return release(created.msg || 'create failed');
+    tdb().prepare(
+      `UPDATE qingyun_push_queue SET status = 'done', qingyun_order_id = ?, last_error = NULL,
+              updated_at = CURRENT_TIMESTAMP
+        WHERE retail_order_id = ? AND qingyun_order_id IS NULL`
+    ).run(created.orderId, retailOrderId);
+    try {
+      tdb().prepare(
+        `INSERT INTO qingyun_sync_log (store_code, event_type, status, detail)
+         VALUES (?, 'push', 'ok', ?)`
+      ).run(q.store_code, JSON.stringify({
+        order_no: order.order_no, qy: created.orderId, on_dispatch: true, geo: payload._geo || {},
+      }));
+    } catch (_) { /* logging must never sink the create */ }
+  } catch (e) {
+    console.error('[qingyun materialize]', e.message);
+    release(e.message);
+  }
+}
+
 // Live carrier prices for one order (待配送 in Qingyun). available:false when the
 // order isn't in Qingyun yet (not a same-city delivery / not pushed).
 router.get('/api/retail-admin/orders/:id/qingyun/carriers', requireRetailAdmin, async (req, res) => {
   const id = parseInt(req.params.id, 10);
+  // Reaching for the price list IS staff calling the delivery, so a booked order the
+  // drain held back gets its Qingyun copy here. No-op for everything else.
+  await _qingyunMaterialize(id);
   const ref = _qingyunOrderRef(id);
   if (!ref) return res.json({ success: true, data: { available: false, reason: 'not_in_qingyun' } });
   try {
@@ -23121,6 +23205,7 @@ router.post('/api/retail-admin/orders/:id/qingyun/dispatch', requireRetailAdmin,
   if (!picks && req.body?.carrierId != null) picks = [{ carrierId: req.body.carrierId, serviceCode: req.body.serviceCode }];
   picks = (picks || []).filter(p => p && p.carrierId != null && p.serviceCode);
   if (!picks.length) return res.status(400).json({ success: false, error: 'carriers required' });
+  await _qingyunMaterialize(id);                 // held-back booked order, called direct
   const ref = _qingyunOrderRef(id);
   if (!ref) return res.status(400).json({ success: false, error: 'order_not_in_qingyun' });
   // Qingyun refuses a second delivery/create on an order that already has a courier,
@@ -23505,7 +23590,26 @@ router.post('/api/retail-admin/orders/:id/qingyun/ship-from', requireRetailAdmin
   // Moving the collection point means re-creating an existing copy elsewhere.
   // A row that never produced one (still pending, or refused) has nothing to
   // move — the fix there is to correct the address and retry the push.
-  if (!q.qingyun_order_id) return res.status(409).json({ success: false, error: 'push_not_completed', push_status: q.status });
+  if (!q.qingyun_order_id) {
+    // A booked order that has been checked but deliberately not created yet. There is
+    // no copy to move, so this is simply choosing which store's account will create it
+    // when someone calls the delivery — a queue-row edit, no Qingyun call, nothing to
+    // delete afterwards. Without this branch, holding booked orders back would have
+    // quietly broken "collect at the other store" for the whole window before dispatch,
+    // which is exactly when staff use it.
+    if (qingyunQueue.awaitingDispatch(q)) {
+      if (q.store_code === target) return res.json({ success: true, unchanged: true, store_code: target });
+      const s = _qingyunStoreStatus().find(x => x.code === target);
+      if (!s) return res.status(400).json({ success: false, error: 'unknown_store' });
+      if (!s.connected) return res.status(409).json({ success: false, error: 'store_not_connected' });
+      tdb().prepare(
+        `UPDATE qingyun_push_queue SET store_code = ?, updated_at = CURRENT_TIMESTAMP
+          WHERE retail_order_id = ? AND qingyun_order_id IS NULL AND status = 'ready'`
+      ).run(target, id);
+      return res.json({ success: true, store_code: target, old_removed: true });
+    }
+    return res.status(409).json({ success: false, error: 'push_not_completed', push_status: q.status });
+  }
   if (q.store_code === target) return res.json({ success: true, unchanged: true, store_code: target });
 
   const store = _qingyunStoreStatus().find(s => s.code === target);
