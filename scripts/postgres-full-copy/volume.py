@@ -19,16 +19,36 @@ for n, t, r in big[:15]:
     print(f"  {n/1e6:>8.2f} MB  {t:<30} rows={r}")
 
 print("\n=== widest text values (base64 suspects, max length > 50k chars) ===")
+# COLUMNS COME FROM THE LIVE SCHEMA, NOT FROM plan.json's cols[].
+#
+# wide_cols.json is an INPUT to checks.py (verdict 3, the SHA-256 comparison)
+# and to verify.py. Built from the census's column list it could never name a
+# column added since the census -- so a new base64 column would be copied and
+# then never hashed, and verdict 3 would report
+#   all wide columns byte-identical: True
+# without having looked at it. That is the same class as the eleven columns
+# found on 2026-08-21, and the same shape as the verifier sharing the copier's
+# map: an instrument whose scope is defined by the thing it is auditing.
+#
+# READING THE LIVE SCHEMA HERE RATHER THAN HAVING drift_guard REFUSE. This file
+# already reads live DATA for every length below, so live column NAMES add no
+# new source and no new epoch -- it becomes correct by construction. A guard
+# would only tell you to come and fix this line, and would leave a second
+# artefact to keep in step with the first.
+#
+# The cls == "TEXT" filter goes with it. LENGTH() is defined on every storage
+# class, and the 50k threshold is what actually selects the base64 columns:
+# no integer has ever been fifty thousand characters wide.
 wide = []
-for st, spec in plan["tables"].items():
-    if spec["rows"] == 0:
+for st in [r[0] for r in con.execute(
+        "select name from sqlite_master where type='table' order by name")]:
+    if st.startswith("sqlite_"):
         continue
-    for c in spec["cols"]:
-        if c["cls"] != "TEXT":
-            continue
-        m = con.execute(f'SELECT MAX(LENGTH("{c["sq"]}")) FROM "{st}"').fetchone()[0] or 0
+    for cname in [r[1] for r in con.execute(f'PRAGMA table_info("{st}")')]:
+        m = con.execute(
+            f'SELECT MAX(LENGTH("{cname}")) FROM "{st}"').fetchone()[0] or 0
         if m > 50000:
-            wide.append((m, st, c["sq"]))
+            wide.append((m, st, cname))
 wide.sort(reverse=True)
 for m, t, c in wide:
     print(f"  {m:>9} chars  {t}.{c}")

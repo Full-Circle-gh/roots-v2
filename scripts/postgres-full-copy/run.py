@@ -85,7 +85,20 @@ def main():
         print("*** aborting before the TRUNCATE: plan.json does not describe the source ***")
         sys.exit(rc)
 
-    todo = [t for t in order if plan["tables"][sq_of[t]]["rows"] > 0]
+    # EVERY table in the copy order, unconditionally. This used to filter on
+    # plan["tables"][...]["rows"] > 0 -- a count taken 2026-08-03 -- so a table
+    # that was empty at census time and has gained rows since was TRUNCATED by
+    # the line below and then never refilled, in silence. eleme_sync_queue was
+    # one row of that on 2026-08-21; on the night it could be any of the 33.
+    #
+    # Unconditional rather than "read the live count instead": swapping one
+    # derived number for another leaves the same shape, and a count read here
+    # can still go stale before the SELECT. An empty table costs one no-op
+    # SELECT, a two-line .sql file and one psql call. That is the whole price.
+    #
+    # This is only SAFE because drift_guard.main() ran above and proved that
+    # copy_order.json, plan.json and the live source name the same tables.
+    todo = list(order)
     print(f"tables to copy: {len(todo)}")
 
     print("\n--- source row counts at start ---")
@@ -188,7 +201,20 @@ def main():
     for k, (got, exp) in report.items():
         print(f"  {k}: fired {got} times (expected {exp}) {'OK' if got == exp else '*** MISMATCH ***'}")
     if bad:
-        print("*** override rule fired an unexpected number of times ***")
+        print("")
+        print("*** AN OVERRIDE RULE DID NOT FIRE ON THE ROWS ITS OWN CONDITION MATCHES ***")
+        print("")
+        print("    READ THIS BEFORE DECIDING ANYTHING. THE COPY ITSELF COMPLETED.")
+        print("    Every table loaded, every count matched, and timings.json and")
+        print("    counts_before.json are written. What failed is the assertion below,")
+        print("    and it runs AFTER the copy because it can only be checked once every")
+        print("    value has passed through the generator.")
+        print("")
+        print("    The expectation is re-derived from the source every run, so this is")
+        print("    NOT a stale constant: a rule missed a row it should have caught, or")
+        print("    caught one it should not have. Investigate the rule against the rows.")
+        print("")
+        print("    DO NOT roll back on this alone. The data is in Postgres.")
         sys.exit(1)
 
 

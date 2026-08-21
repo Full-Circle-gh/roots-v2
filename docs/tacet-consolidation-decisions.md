@@ -1,9 +1,11 @@
-# Tacet shared-core consolidation — decisions record, v4.59
+# Tacet shared-core consolidation — decisions record, v4.60
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-08-21 · v4.60 — §24 Database: **THE COPY LADDER NOW EXITS CLEAN, AND THE GUARD COVERS THE HOLE THAT WOULD HAVE EMPTIED A TABLE AND NEVER REFILLED IT.** **`drift_guard.py` did not compare `plan.json` against `copy_order.json`** — and `run.py` truncates from the first and loads from the second, so a table in one and missing from the other is **emptied and never refilled while every source check passes.** Now guarded in three directions (missing, unplanned, duplicated), red-proven in five and restored to green after each. **ITEM 54 CLOSED BY DELETION, NOT BY GUARDING:** `run.py`'s `todo` no longer reads `plan["rows"]` at all — it copies every table in the order, unconditionally, which is safe precisely because the guard proves the three lists agree. Proven by forcing `waste_entries` to `rows: 0` and watching it copy anyway. **ITEM 55 CLOSED:** `overrides.py` derives each rule's expectation from **the rule's own condition in SQL against the source**, re-read every run, so `updated_by_null` reports `fired 2 (expected 2)` instead of aborting against a 2026-08-03 constant. **`run.py` NOW EXITS 0 ON A CLEAN COPY** — every prior run this session exited 1 after the truncate and after the copy completed, which is a run that looks failed and is not. **`volume.py` reads the LIVE schema**, so `wide_cols.json` cannot miss a base64 column the census never saw; red-proven by hiding `supplier_documents.data` from `cols[]` and watching it be found anyway. **THE CLEAN REHEARSAL: 164 tables, 99s, `run.py` 0, `setseq.py` 0, `checks.py` 0 WITH ALL THREE VERDICTS PASSED** (145/145 foreign keys; **1,582,020 CJK characters identical on both sides**; all 14 wide columns byte-identical), **`final.py` 0 with zero uncopied tables**, and `verify.py` 4,231,782 cells with 15 differences, all live trading. **AND THE RULE THIS SESSION'S BIGGEST FINDING GENERALISES TO, now recorded beside the scan-count and names-as-data rules: A VERIFIER THAT SHARES THE COPIER'S MAP CANNOT AUDIT THE MAP.** A high cell count is not coverage — 4.2 million cells and eleven blind columns were the same run.
 
 2026-08-21 · v4.59 — §24 Database: **THE COPY WAS TAKING ITS SHAPE FROM A 2026-08-03 CENSUS AND ITS CONTENTS FROM LIVE SQLITE, AND THIRTEEN OBJECTS HAD FALLEN THROUGH THE GAP BETWEEN THE TWO.** Two tables and eleven columns existed in the source and **did not exist in Postgres at all** — not copied as NULL, ABSENT. **`verify.py` could not catch it because it builds its comparison from the same `cols[]` `gen.py` builds its SELECT from**: the round-trip reported `retail_orders` OK at 120,546 cells while two of its columns were never looked at. **A verifier that shares the copier's map cannot audit the map.** **THE RATE IS THE FINDING** — one object every 1.4 days since the census, and `push_optouts` arrived DURING this session in `626cc802`. So the fix is a guard, not a patch: **`drift_guard.py` refuses the copy on any table-or-column difference and `run.py` calls it as the first statement of `main()`, before the TRUNCATE** — exit 1 on drift, **exit 2 when it cannot see the source**, red-proven at 13 before being made green at 0. **All thirteen applied and proven end to end:** 165 tables, copy re-run at **131 tables** (was 129) in 91.3s with zero load errors, all 11 columns matching their source non-null counts, round-trip on the five affected tables **25,394 cells and 0 differences**, and `ingredients` now comparing 25 columns where it compared 24. **`line_price` took `numeric(14,6)` and holds `4.558820`** — cents would have rounded it to 4.56, which is v3.0's reversal applied rather than re-learned. **WHAT IT DOES NOT CLOSE, SAID PLAINLY: the guard covers tables and columns, NOT row counts.** `run.py`'s `todo` still filters on the census's `rows > 0`, and the two new tables copy only because that figure was set from today's count by hand. `copy_order.json`, `overrides.py` and `volume.py` remain census-shaped too. The class is now loud, not empty.
 
@@ -2766,6 +2768,48 @@ No foreign key DEFINITION was edited. Postgres carries a reference across a tabl
 
 **A NEW AS-BUILT RECORD**, `docs/tacet-postgres-schema-as-built-2026-08-21.sql`, 163 tables, body proven verbatim by sha256 against raw `pg_dump -s --no-owner` output. It supersedes the 2026-08-11 file; that file and the 2026-08-04 one are retained byte-for-byte. **Two consumers still open the 2026-08-04 file BY ITS DATED NAME** — `scripts/diagnose_seam_statements.js` and `scripts/diagnose_statement_sweep.js` — and their regex discards the index name while capturing the TABLE and its COLUMNS, so the index renames do not reach them and the table and column renames do. Not repointed; recorded so it is not rediscovered.
 
+### RULE — A VERIFIER THAT SHARES THE COPIER'S MAP CANNOT AUDIT THE MAP — RECORDED 2026-08-21
+
+**The most generalisable thing this session produced, and it was found the hard way.**
+
+`gen.py` builds its SELECT from `plan.json`'s `cols[]`. **`verify.py` builds its cell-by-cell comparison from the same `cols[]`.** So on 2026-08-21 the round-trip reported **4,220,046 cells compared, 34 differences, every one attributed** — and `retail_orders` came back **OK at 120,546 cells** while `refund_printed_at` and `channel_note` had never been copied and were never looked at. **The verification was not weak. It was scoped by the thing it was verifying.**
+
+**THE SHAPE, STATED SO IT IS RECOGNISABLE ELSEWHERE: when an instrument takes its SCOPE from the same artefact as the thing it audits, it can only ever confirm that artefact's internal consistency.** It cannot see what the artefact omits, and its silence about the omission is indistinguishable from a pass. **A high cell count is not coverage.** 4.2 million cells and eleven blind columns were the same run.
+
+**THREE MEMBERS OF THIS FAMILY ARE NOW IN §24, AND THEY ARE THE SAME FAILURE SEEN FROM THREE ANGLES:**
+
+- **A count derived from a scan** is correct about its criterion and silent about the criterion's edge — an extractor that truncates rather than failing, a `grep` that reads the front of a name.
+- **A name held as DATA is invisible to a scan of CODE** — `CONTROL_PLANE_TABLES`, the archived `sequences.json`, `copy_order.json`.
+- **A verifier sharing the copier's map cannot audit the map** — this entry.
+
+**WHAT IT COSTS TO FIX IS SMALL AND THE FIX IS ALWAYS THE SAME: give the auditor a DIFFERENT source from the audited.** `volume.py` now reads the live schema instead of `cols[]`, so `wide_cols.json` cannot miss a column the census never recorded. `drift_guard.py` compares `plan.json` against the live source and against `copy_order.json`, so neither can drift alone. **Neither is clever. Both simply refuse to look through the same window twice.**
+
+**AND THE COROLLARY, WHICH IS THE PART TO CARRY: an instrument that reports a number should also report what it did NOT examine.** `verify.py` still does not do this — it prints cells compared, not columns skipped, and it has no way to know it skipped any. That is why the guard runs first rather than the verifier running smarter.
+
+### WHAT `drift_guard.py` DOES AND DOES NOT CHECK — RECORDED 2026-08-21
+
+**Written down because a guard's name invites the assumption that it covers everything, and this one deliberately does not.**
+
+**IT CHECKS, and refuses the copy on any difference:**
+
+1. **Every live SQLite table is in `plan["tables"]`.** A table added since the census would otherwise not exist in Postgres at all.
+2. **Every `plan["tables"]` entry is a live SQLite table.** The reverse: the copy would fail on a table the source has dropped.
+3. **Every live column is in that table's `cols[]`.** A column added since is otherwise dropped with no error, invisible to `gen.py` AND to `verify.py`.
+4. **Every `cols[]` entry is a live column.** The SELECT would fail loudly on these, which is the safe direction, but it is still drift.
+5. **Every `plan["tables"]` entry appears in `copy_order.json`.** **This is the one that is not obvious.** `run.py` builds its TRUNCATE list from `plan["tables"]` and its `todo` from `copy_order.json`, so a table in the first and missing from the second is **emptied and never refilled** — and checks 1 to 4 all pass, because SQLite and `plan.json` agree perfectly.
+6. **Every `copy_order.json` entry is in `plan["tables"]`**, and **no table is listed twice** — a duplicate would load its rows a second time.
+
+**IT DOES NOT CHECK:**
+
+- **Row counts.** Deliberately. `run.py`'s `todo` no longer consults `plan["rows"]` at all, so there is no rows dimension left to guard — the dependency was deleted rather than watched. See ITEM 54.
+- **The ORDER inside `copy_order.json`**, only its membership. That order is a topological sort of the Postgres foreign-key graph, and checking it needs a Postgres read — which this guard deliberately never does, so that it can run and refuse before the cluster is even reachable. **Validated by hand on 2026-08-21 against all 145 live FK edges, 0 parents loading after a child.** A new foreign key added since the census would not be caught here. **Open.**
+- **Column TYPES, nullability, defaults or conversion classes.** Only names. A column whose SQLite type changed under a stable name passes this guard.
+- **Anything about Postgres.** It reads `plan.json`, `copy_order.json` and live SQLite, and nothing else.
+
+**EXIT CODES ARE PART OF THE CONTRACT.** `0` agree; `1` differ, with every difference named; **`2` the check could not run** — unreadable file, unopenable source, a source reporting zero tables. **Two is not a pass.** A guard that cannot see the source must refuse rather than wave the copy through, which is the same rule as `checks.py`'s exit code and the `fuser` lesson before it.
+
+**RED-PROVEN IN FIVE DIRECTIONS before being trusted**, each restored to green after: a table missing from `copy_order.json` (named `retail_orders`, `rows=1087`), a table in `copy_order.json` and not the plan, a table listed twice, a column hidden from `cols[]`, and the original thirteen.
+
 ### THE COPY TOOK ITS SHAPE FROM A CENSUS AND ITS CONTENTS FROM THE SOURCE — CLOSED 2026-08-21
 
 **`plan.json` is a census taken 2026-08-03. `run.py` takes the SHAPE of the copy from it — which tables, which columns, which have rows — and the CONTENTS from live SQLite.** Two epochs in one operation, and every difference between them was invisible.
@@ -2806,6 +2850,36 @@ No foreign key DEFINITION was edited. Postgres carries a reference across a tabl
 **WHAT THIS DOES NOT CLOSE, STATED PLAINLY.** The guard covers TABLES and COLUMNS. **It does not cover ROW COUNTS**, and `run.py`'s `todo` still filters on `plan["tables"][...]["rows"] > 0` — a 2026-08-03 figure. The two new tables are copied only because their `rows` was set from today's live count by hand. **A table that goes empty and refills between now and the flip is still skipped in silence.** That filter is a separate fix and is open.
 
 **AND THE OTHER SURVEY-DERIVED SHAPES ARE UNTOUCHED:** `copy_order.json` is a fixed list, `overrides.py` asserts hardcoded counts, `volume.py` looks for wide columns only among the census's columns, and `setseq.py`, `checks.py`, `preflight.py` and `final.py` all iterate `plan["tables"]`. **The guard makes the table-and-column class loud. It does not make the class empty.**
+
+> ✅ **THREE OF THOSE FOUR ARE NOW CLOSED — 2026-08-21, LATER THE SAME DAY.** `run.py`'s `todo` no longer reads `plan["rows"]` at all (ITEM 54); `overrides.py` derives its expectation from each rule's own condition instead of a stored count (ITEM 55); `volume.py` reads the live schema. `copy_order.json`'s MEMBERSHIP is now guarded, though its ORDER is not. **The scripts that iterate `plan["tables"]` are unchanged and are now safe BECAUSE the guard proves the plan matches the source** — which is a coupling, not an absence of one: their correctness depends on the guard having run.
+
+### E2 REHEARSED CLEAN — 2026-08-21, THE THIRD RUN AND THE FIRST WITH NOTHING TO EXPLAIN
+
+**Every exit code in the ladder is 0 except the round-trip, and that one is 15 rows of live trading.** From a directory proven byte-identical to the committed tree by md5 on all 25 files.
+
+| Step | Exit | Result |
+|---|---|---|
+| `volume.py` | **0** | 14 wide columns, now found from the LIVE schema |
+| `drift_guard.py` | **0** | 164 tables, 1,928 columns; `copy_order.json` covers all 164 |
+| `preflight.py` | **0** | 29 unmapped as expected, same 20 data findings |
+| **`run.py` (E2)** | **0** | **164 tables** (was 131), 99s, zero load errors, zero drift, **all three override rules matching** |
+| `setseq.py` (E4) | **0** | 140 sequences, 120 from the AUTOINCREMENT high-water |
+| setseq's bad condition, asserted | **0** | **0 sequences behind `max(id)`** |
+| `checks.py` | **0** | **ALL THREE VERDICTS PASSED** |
+| `verify.py` | 1 | **4,231,782 cells, 15 differences, all live trading** |
+| `final.py` | **0** | **0 tables where Postgres differs from the count copied against** |
+
+**`run.py` EXITING 0 IS THE HEADLINE.** Every prior run in this session exited 1 on the stale `updated_by_null` constant, **after the truncate and after the copy had completed and written its artefacts** — a run that looked failed and was not. The expectation is now re-derived from the rule's own condition every run, so `updated_by_null: fired 2 times (expected 2) OK`. **An operator will not meet exit 1 on a good copy at 2am and reach for the rollback.**
+
+**`checks.py` PASSING ALL THREE IS THE SECOND.** Verdict 1: **145 of 145** foreign keys validated by Postgres against its own rows (144 before the new table). Verdict 2: **1,582,020 CJK characters on both sides, 0 columns mismatched** — exact, where the 15-day-old copy differed by 207,265 across 82 columns. Verdict 3: all 14 wide columns byte-identical. **The copy is now fast enough that the instruments have nothing to report.**
+
+**`final.py` REPORTS 0 UNCOPIED TABLES**, where on the first rehearsal it reported `('eleme_sync_queue', 1, 0)`. That is ITEM 54 closed, confirmed by the one instrument that could see it.
+
+**THE 15 DIFFERENCES ARE THE SAME SHAPE AS THE 34 BEFORE THEM, AND SMALLER.** Two daemon heartbeats (`qingyun_status`, `store_business_status`), two sync-log row counts (+3 and +8), one customer's `last_used_at`, and three orders whose `tracking_synced_at` advanced. **SQLite ahead of Postgres in every one, never a different value at the same instant.** And `retail_orders` now compares **122,831 cells across 113 columns** where it compared 120,546 across 111 — the two columns that were invisible in the first rehearsal are inside the verifier's scope.
+
+**TIMING: 99s for 164 tables**, against 91.3s for 131. **The 33 empty tables cost about 8 seconds**, which is the whole price of deleting the rows dimension.
+
+**`retail_order_counters` survived untouched**, `('TC', 0, 2026-08-11 18:02:15.007983+08)` before and after, as it has through every rehearsal. 165 cluster tables throughout.
 
 ### THE FIRST END-TO-END REHEARSAL OF E2 — RUN 2026-08-21
 

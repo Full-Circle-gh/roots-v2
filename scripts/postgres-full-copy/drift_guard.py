@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Refuse to copy if plan.json no longer describes the source.
+Refuse to copy if plan.json no longer describes the source, or if the copy
+order no longer matches plan.json.
 
 WHY THIS EXISTS. plan.json is a CENSUS, taken 2026-08-03. run.py takes the
 SHAPE of the copy from it — which tables, which columns, which have rows — and
@@ -20,10 +21,19 @@ Measured when this was written: 13 objects had drifted in 18 days, one of them
 that same day. The rate is the problem, not the backlog, so this is a guard
 rather than a patch.
 
+TWO COMPARISONS, AND THE SECOND IS NOT A DETAIL. run.py builds its TRUNCATE
+list from `plan["tables"]` and its `todo` from copy_order.json. **A table in
+plan.json and missing from copy_order.json is therefore EMPTIED AND NEVER
+REFILLED** — and the source comparison alone goes green, because SQLite and
+plan.json agree perfectly. Nothing about that is visible from either file on
+its own. The two new tables of 2026-08-21 were added to copy_order.json by
+hand; this makes forgetting that impossible.
+
 READ-ONLY on SQLite, and proven so on connect. Touches Postgres not at all.
 
 EXIT CODES
-  0  plan.json and live SQLite agree on tables and columns
+  0  plan.json agrees with live SQLite on tables and columns, AND with
+     copy_order.json on the set of tables to copy
   1  they differ — the differences are printed, nothing was copied
   2  the check could not run. NOT a pass. A guard that cannot see the source
      must refuse, never wave the copy through.
@@ -42,11 +52,11 @@ SRC = "file:/root/roots-v2/data/roots.db?mode=ro"
 INTERNAL_PREFIX = "sqlite_"
 
 
-def load_plan():
+def load_json(name):
     try:
-        return json.load(open(os.path.join(HERE, "plan.json"), encoding="utf-8"))
+        return json.load(open(os.path.join(HERE, name), encoding="utf-8"))
     except Exception as e:
-        print("REFUSE: cannot read plan.json — %s" % e)
+        print("REFUSE: cannot read %s — %s" % (name, e))
         sys.exit(2)
 
 
@@ -66,7 +76,11 @@ def open_source():
 
 
 def main(quiet=False):
-    plan = load_plan()
+    plan = load_json("plan.json")
+    order = load_json("copy_order.json")
+    if not isinstance(order, list) or not order:
+        print("REFUSE: copy_order.json is not a non-empty list")
+        sys.exit(2)
     con = open_source()
 
     try:
@@ -108,16 +122,25 @@ def main(quiet=False):
         except Exception:
             return "?"
 
-    total = len(new_tables) + len(gone_tables) + len(new_cols) + len(gone_cols)
+    # ---- plan.json vs copy_order.json -------------------------------------
+    # Membership only. The ORDER within copy_order.json is a separate property,
+    # derived from the Postgres foreign keys, and this guard does not check it.
+    dupes = sorted({t for t in order if order.count(t) > 1})
+    unordered = sorted(planned - set(order))    # truncated, never refilled
+    unplanned = sorted(set(order) - planned)    # copy_order names a table the plan lacks
+
+    total = (len(new_tables) + len(gone_tables) + len(new_cols) + len(gone_cols)
+             + len(unordered) + len(unplanned) + len(dupes))
     if not total:
         if not quiet:
-            print("drift guard: plan.json matches the source — %d tables, %d columns"
-                  % (len(live), sum(len(plan["tables"][t]["cols"]) for t in live)))
+            print("drift guard: plan.json matches the source — %d tables, %d columns; "
+                  "copy_order.json covers all %d"
+                  % (len(live), sum(len(plan["tables"][t]["cols"]) for t in live), len(order)))
         con.close()
         return 0
 
     print("")
-    print("*** DRIFT GUARD: plan.json NO LONGER DESCRIBES THE SOURCE ***")
+    print("*** DRIFT GUARD: THE COPY PLAN AND WHAT IT DESCRIBES HAVE DIVERGED ***")
     print("")
     if new_tables:
         print("  IN THE SOURCE, NOT IN THE PLAN — these would not exist in Postgres at all:")
@@ -135,6 +158,19 @@ def main(quiet=False):
         print("  IN cols[], NOT IN THE SOURCE — the SELECT would fail on these:")
         for t, c in gone_cols:
             print("     %s.%s" % (t, c))
+    if unordered:
+        print("  IN plan.json, NOT IN copy_order.json — THE TRUNCATE EMPTIES THESE")
+        print("  AND NOTHING REFILLS THEM. The source comparison cannot see this:")
+        for t in unordered:
+            print("     %-38s rows=%s" % (t, rows(t)))
+    if unplanned:
+        print("  IN copy_order.json, NOT IN plan.json — the copy would fail on these:")
+        for t in unplanned:
+            print("     %s" % t)
+    if dupes:
+        print("  LISTED TWICE IN copy_order.json — the second load would duplicate rows:")
+        for t in dupes:
+            print("     %s" % t)
     print("")
     print("  %d difference(s). NOTHING HAS BEEN COPIED." % total)
     print("")
