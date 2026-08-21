@@ -624,7 +624,7 @@ cuApplyThemeIcon();
     'Pending': '待付款',
     'Paid': '已付款',
     'Preparing': '备货中',
-    'Rider coming': '骑手来取货',
+    'Rider coming': '骑手前往取货',
     'Dispatched': '已发货',
     'Delivered': '已送达',
     'Awaiting restock': '等待补货',

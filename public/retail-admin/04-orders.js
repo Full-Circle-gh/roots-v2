@@ -2476,10 +2476,10 @@ function renderCourierListLine(o) {
   // The order can reach a terminal state while the courier's live row froze mid-transit:
   // a finished job drops off the courier's in-flight list, so its snapshot never flips
   // to 'delivered' and stays at 'in_transit'. Trust the order status — once it's
-  // delivered/cancelled/refunded, the frozen "En route · ~1m · 91m" line is a lie, so
+  // delivered/cancelled/refunded, the frozen "On the way · ~1m · 91m" line is a lie, so
   // bail and let renderTrackingCell fall through to the settled arrival line.
   if (o.status === 'delivered' || o.status === 'cancelled' || o.status === 'refunded') return '';
-  const label = c.stage === 'in_transit'        ? cuT('En route', '配送中')
+  const label = c.stage === 'in_transit'        ? cuT('On the way', '配送中')
               : c.stage === 'heading_to_pickup' ? cuT('Rider coming', '骑手前往取货')
               : c.stage === 'awaiting_dispatch' ? cuT('Finding a rider', '正在找骑手')
               : '';
@@ -3583,23 +3583,39 @@ async function mountCourierMap(o) {
       + cuT('Map unavailable — rider details are below.', '地图暂不可用 — 骑手信息见下方') + '</div>';
     return;
   }
-  el.innerHTML = '';                                      // clear the "Loading…" placeholder
-
   const state = { orderId: o.id, map: null, timer: null, rider: null, shop: null, cust: null, line: null, fitted: false };
   _courierMap = state;
-  const map = new AMap.Map(el, { zoom: 15, resizeEnable: true, jogEnable: false });
-  state.map = map;
+  // Built on the first payload that carries a coordinate, NOT up front. An AMap.Map
+  // constructed with no `center` falls back to a view of its own choosing, and a
+  // payload whose position fields were all momentarily null left it sitting on that
+  // view: a Guangzhou order's drawer showed a map ~700km away in Hunan, under a
+  // "Locating rider…" chip. A map with nothing to anchor on must stay a placeholder —
+  // the "Loading map…" text is a truthful thing to show, an unrelated province is not.
+  const ensureMap = (anchor) => {
+    if (state.map || !anchor) return state.map;
+    el.innerHTML = '';                                    // clear the "Loading…" placeholder
+    state.map = new AMap.Map(el, { zoom: 15, resizeEnable: true, jogEnable: false,
+                                   center: [anchor.lng, anchor.lat] });
+    return state.map;
+  };
 
   const setMarker = (cur, pos, opts, label, z) => {
-    if (!pos) return cur;
+    if (!pos || !state.map) return cur;
     const lnglat = [pos.lng, pos.lat];
     if (cur) { cur.setPosition(lnglat); return cur; }
     const mk = new AMap.Marker({ position: lnglat, content: _courierMarkerHtml(label, opts), anchor: 'center', zIndex: z });
-    mk.setMap(map);
+    mk.setMap(state.map);
     return mk;
   };
   const apply = (d) => {
     if (!d || !d.tracking) return;
+    // Any coordinate at all, in preference order. route[0] is the store end of
+    // Qingyun's own route line and is present whenever tracking is, so it is the
+    // backstop that keeps the map anchored when every marker field reads null.
+    const anchor = d.rider_position || d.recipient_position || d.shop_position
+      || ((Array.isArray(d.route) && d.route.length) ? d.route[0] : null);
+    const map = ensureMap(anchor);
+    if (!map) return;                                     // nothing to anchor on yet
     state.shop  = setMarker(state.shop,  d.shop_position,      { color: '#58606E', size: 11 },                          cuT('Store', '门店'),    100);
     state.cust  = setMarker(state.cust,  d.recipient_position, { color: '#111A2B', size: 11, ring: true },              cuT('Customer', '收货'), 100);
     state.rider = setMarker(state.rider, d.rider_position,     { color: '#B4533E', size: 22, halo: true, pill: true, glyph: deliveryIcon('scooter', 13) }, cuT('Rider', '骑手'), 120);
@@ -3631,8 +3647,7 @@ async function mountCourierMap(o) {
       const pts = [state.shop, state.cust, state.rider].filter(Boolean);
       if (pts.length > 1) { try { map.setFitView(pts, false, [24, 24, 24, 24]); } catch (e) {} state.fitted = true; }
       else {
-        const only = d.rider_position || d.recipient_position || d.shop_position;
-        if (only) { map.setZoomAndCenter(15, [only.lng, only.lat]); state.fitted = true; }
+        if (anchor) { map.setZoomAndCenter(15, [anchor.lng, anchor.lat]); state.fitted = true; }
       }
     } else if (d.rider_position) {
       map.setCenter([d.rider_position.lng, d.rider_position.lat]);   // keep the rider centred as it moves

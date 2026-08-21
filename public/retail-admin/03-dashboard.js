@@ -967,7 +967,7 @@ function dashOnroadRender() {
     const c = o.courier;
     if (c && c.stage === 'in_transit') {
       const m = c.eta_seconds != null ? Math.max(1, Math.round(c.eta_seconds / 60)) : null;
-      return { txt: m != null ? cuT('En route · ' + m + ' min', '配送中 · ' + m + ' 分钟') : cuT('En route', '配送中'), soon: m != null && m <= 10 };
+      return { txt: m != null ? cuT('On the way · ' + m + ' min', '配送中 · ' + m + ' 分钟') : cuT('On the way', '配送中'), soon: m != null && m <= 10 };
     }
     // Rider assigned but hasn't collected the parcel yet — not "en route" to the
     // customer, so must not share that copy (see routes/retail.js deliveryJobStage).
@@ -3151,7 +3151,7 @@ function dashBarList(rows) {
 
 const DASH_STATUS_LABELS = {
   pending_payment: 'Pending · 待付款', paid: 'Paid · 已付款', preparing: 'Preparing · 备货中',
-  rider_pickup: 'Rider coming · 骑手来取货',
+  rider_pickup: 'Rider coming · 骑手前往取货',
   dispatched: 'Dispatched · 已发货', delivered: 'Delivered · 已送达',
   awaiting_restock: 'Awaiting stock · 待补货', cancelled: 'Cancelled · 已取消', refunded: 'Refunded · 已退款',
 };
