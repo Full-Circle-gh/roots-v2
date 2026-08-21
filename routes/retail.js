@@ -4187,9 +4187,13 @@ function buildWecomOrderCard(o, awaitingRestock) {
 // a job — recipient, address, slot — and this group also carries real delivery
 // jobs. A walk-in that already left with the goods, wearing the same shape,
 // teaches staff to skim the channel. So counter gets its own lead line and
-// carries only what makes it a record: store, order, what was sold, total, and
-// who rang it up. No recipient block, no address, no slot, nothing phrased as an
-// instruction.
+// carries only what makes it a record: store, order, total, and who rang it up.
+// No recipient block, no address, no slot, nothing phrased as an instruction.
+//
+// NO ITEM LIST. It was here and was removed: the goods have already left with
+// the customer, so a list of them is not something anyone acts on, and it was
+// the longest row in a card whose whole job is to be skimmed past. The order
+// number is in the card for anyone who does need the detail.
 //
 // The two languages sit on their own lines rather than glued with a middle dot
 // (§1.11). The `标签 Label:` rows below reuse the card's existing idiom — those
@@ -4203,7 +4207,6 @@ function buildWecomCounterCard(o) {
     '**Counter sale**',
     store ? `> 门店 Store: ${store}` : null,
     `> 订单号 Order: \`${o.order_no}\``,
-    o.counter_items ? `> 商品 Items: ${o.counter_items}` : null,
     `> 金额 Amount: <font color="warning">${amount}</font>`,
     time ? `> 时间 Time: ${time}` : null,
     o.counter_cashier ? `> 收银 Cashier: ${o.counter_cashier}` : null,
@@ -4231,17 +4234,10 @@ function sendWecomOrderAlert(orderId, { awaitingRestock = false } = {}) {
         WHERE o.id = ?`
     ).get(orderId);
     if (!o) return;
-    // Counter sales need three things the delivery card never asked for. Fetched
-    // only on that branch so the normal path costs nothing extra.
+    // Counter sales need something the delivery card never asked for: the name
+    // of whoever rang the sale up. Fetched only on that branch so the normal
+    // path costs nothing extra.
     if (isCounter(o)) {
-      try {
-        const items = tdb().prepare(
-          'SELECT name_en, name_cn, qty FROM retail_order_items WHERE order_id = ? ORDER BY id'
-        ).all(orderId);
-        o.counter_items = items
-          .map(it => `${it.name_cn || it.name_en || '?'}×${it.qty}`)
-          .join('、').slice(0, 200) || null;
-      } catch (e) { console.warn('[wecom counter items]', orderId, e.message); }
       // created_by is a bare audit integer across TWO id spaces (tenant_users for
       // a Mini App Backend operator, users for a kitchen login), so it cannot be
       // joined safely. Look it up in the realm that actually creates manual

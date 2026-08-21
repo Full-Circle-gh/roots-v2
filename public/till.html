@@ -308,9 +308,15 @@ button{font:inherit;color:inherit;margin:0}
 .step[disabled]{color:var(--td-text2);background:var(--td-raised)}
 .stepn{min-width:56px;height:52px;display:grid;place-items:center;font-size:18px;font-variant-numeric:tabular-nums}
 .lsp{flex:1}
+/* QUIET, NOT ABSENT. A brick-outlined box made the destructive control the
+   loudest thing in the row — louder than the price — and it read as a form
+   button dropped into a list. It keeps its ink, its 52px target and its
+   distance from the +/- pair (that gap is mis-tap protection, not spacing),
+   and gives up the border it never needed: stepping the quantity to zero
+   already removes a line, so this is a shortcut rather than the only way out. */
 .rm{
-  height:52px;padding:0 16px;border-radius:var(--r-control);
-  border:1px solid var(--td-brick);background:transparent;color:var(--td-brick-ink);
+  height:52px;padding:0 12px;border-radius:var(--r-control);
+  border:0;background:transparent;color:var(--td-brick-ink);
   font-size:14px;font-weight:500;
 }
 .empty{
