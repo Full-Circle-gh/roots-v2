@@ -2062,6 +2062,26 @@ check('removing a line clears the selection, because indexes shift under it',
 check('a product tile shows how many of it are in the basket',
   /inc > 0 \? '<span class="incart">' \+ inc/.test(POS_TILL_SRC), true);
 
+// ── The product code ─────────────────────────────────────────────────────
+// Search already matches on SKU — typing a code filters the grid — so the code
+// that produced a match was the one thing the screen would not show back. It
+// appears on the tile and on the order line, and the LINE has to carry it:
+// S.lines held only id/name/price/qty, so there was nothing to render from.
+check('a basket line carries the product code, not just its name',
+  /S\.lines\.push\(\{ id: id, name: pname\(p\), sku: p\.sku/.test(POS_TILL_SRC), true);
+check('the code shows on the order line and on the tile',
+  [/<div class="sb">' \+ \(l\.sku/.test(POS_TILL_SRC),
+   /\(p\.sku \? '<span class="sku">'/.test(POS_TILL_SRC)], [true, true]);
+// On a tile the PRICE must never be what a long code squeezes out.
+check('the tile price is protected against a long code',
+  /\.tile \.pr\{flex:none\}/.test(POS_TILL_SRC)
+  && /\.tile \.sku\{[^}]*text-overflow:ellipsis/.test(POS_TILL_SRC), true);
+// No monospace exists in Tacet; Inter's tabular figures give the alignment that
+// would otherwise be the reason to reach for one.
+check('the code is set in tabular figures, not a monospace face',
+  /\.sku\{[^}]*font-variant-numeric:tabular-nums/.test(POS_TILL_SRC)
+  && !/\.sku\{[^}]*monospace/.test(POS_TILL_SRC), true);
+
 // ── A closed counter is shown, not hidden ────────────────────────────────
 // Filtering closed stores out of the picker was the first shape of this, and it
 // read as a broken button: a store that vanishes and a control that does
