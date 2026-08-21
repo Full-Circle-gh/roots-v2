@@ -14,6 +14,7 @@
     "test:manual-order-fees": "node scripts/test_manual_order_fees.js",
     "test:needs-point": "node scripts/test_needs_point.js && node scripts/test_needs_point_client.js",
     "test:phone": "node scripts/test_recipient_phone.js",
+    "test:push-mute": "node scripts/test_push_mute_action.js",
     "test:point-search": "node scripts/test_point_search.js",
     "test:addon-stock": "node scripts/test_addon_stock_gate.js",
     "test:preorder": "node scripts/test_preorder_local.js",
