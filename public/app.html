@@ -2779,7 +2779,7 @@ async function init() {
     registerServiceWorker();
     installPushNotifications();  // OS notification + sound for kitchen orders
     installAlertPushPoll();      // toast pop-ups for new operational alerts (out of stock, expiring, price changes…)
-    installVersionWatcher();     // polls /api/version, banners on deploy
+    installVersionWatcher();     // polls /api/version, silently reloads at a safe moment
     sproutInit();                // floating AI chat button if user has `ai` permission
     // Deep-link: /?openProduct=ID lands on the product detail view directly.
     // Used by the order-detail item links in /retail-admin (new-tab open).
@@ -2794,121 +2794,104 @@ async function init() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// VERSION WATCHER — pop a banner when a fresh build is deployed
+// VERSION WATCHER — pick up a new build without asking
 // ─────────────────────────────────────────────────────────────────────────────
 //
-// Captures the server's version token at boot, polls every 60s while the
-// tab is visible (and immediately on focus), and shows a sticky banner
-// the moment the token changes. Banner has a "Reload now" button that
-// also clears the SW shell cache + busts the URL so the user actually
-// gets the new HTML — not the cached version.
-let _appVersionAtBoot = null;
-let _versionBannerShown = false;
+// The kitchen tab stays open all day, so a deploy would otherwise never reach
+// it. We poll /api/version (a token that changes on every deploy / restart)
+// and, once it differs from what the page booted with, reload silently — but
+// ONLY at a moment where a reload cannot cost anyone anything.
+//
+// That guard is the whole point. This used to be a "New version available"
+// banner with a Reload button, and it popped on every pm2 restart — not just
+// on a real app.html change — so the kitchen saw it several times a day and
+// learned to dismiss it. The backend (retail-admin) already dropped its banner
+// for this same silent watcher on 07-10; app.html now matches it. Sitting on
+// an old build for a while is cheap; interrupting a cook, or reloading out
+// from under a half-typed recipe, is not.
+let _versionBootToken = null;
 async function installVersionWatcher() {
-  try {
-    const r = await fetch('/api/version');
-    const d = await r.json();
-    _appVersionAtBoot = d?.version || null;
-  } catch { return; /* silent fail — feature degrades gracefully */ }
-  if (!_appVersionAtBoot) return;
-  const check = async () => {
-    if (_versionBannerShown) return;             // already showing
-    if (document.hidden) return;                 // tab in background
+  const IDLE_MS = 10 * 60 * 1000;   // untouched this long = safe to reload in place
+  const POLL_MS =  2 * 60 * 1000;
+
+  let pending   = false;            // a newer build exists; waiting for a safe moment
+  let lastTouch = Date.now();
+
+  ['pointerdown', 'keydown', 'wheel', 'touchstart'].forEach(ev =>
+    document.addEventListener(ev, () => { lastTouch = Date.now(); }, { passive: true, capture: true }));
+
+  // Fields the human actually typed into / picked from. Tracking the edit
+  // itself (rather than only comparing value to defaultValue) keeps a filter
+  // or picker that JS pre-selected on render from reading as "unsaved work"
+  // and blocking every reload forever.
+  const _touchedFields = new WeakSet();
+  ['input', 'change'].forEach(ev =>
+    document.addEventListener(ev, e => {
+      if (e.isTrusted && e.target && e.target.tagName) _touchedFields.add(e.target);
+    }, { passive: true, capture: true }));
+
+  async function fetchVersion() {
     try {
-      const r = await fetch('/api/version', { cache: 'no-store' });
-      const d = await r.json();
-      if (d?.version && d.version !== _appVersionAtBoot) {
-        _showVersionBanner();
-      }
-    } catch {}
-  };
-  // Poll every 60s — same cadence as the auto-refresh poller. Cheap on
-  // the server (single stat() call).
-  setInterval(check, 60000);
-  // Plus an immediate check whenever the tab regains focus / visibility,
-  // so a user coming back to the app after a deploy sees the banner
-  // right away instead of waiting up to 60s.
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
-  window.addEventListener('focus', check);
-}
+      const r = await fetch('/api/version', { cache: 'no-store' }).then(r => r.json());
+      return r && r.version ? r.version : null;
+    } catch { return null; }
+  }
 
-function _showVersionBanner() {
-  if (_versionBannerShown) return;
-  _versionBannerShown = true;
-  const bar = document.createElement('div');
-  bar.id = 'versionBanner';
-  // Modern admin chrome: dark ink-on-cream "system pill" floating from the
-  // top, with a lime-accent left rail signalling "ship/update". Replaces
-  // the prior loud lime-gradient bar that clashed with the dark admin theme.
-  // Self-contained styles (no rule depends on outer CSS) so the banner
-  // looks identical in retail-admin.html / app.html / etc.
-  bar.style.cssText = `
-    position:fixed; top:14px; left:50%; transform:translateX(-50%) translateY(-120%);
-    z-index:2147483645;
-    max-width:min(720px, calc(100vw - 28px));
-    background:#1a1a17;
-    color:#F2E7DF;
-    border:1px solid rgba(204, 217, 0, .35);
-    border-left:3px solid #CCD900;
-    border-radius:12px;
-    padding:12px 14px 12px 18px;
-    display:flex; align-items:center; gap:14px;
-    font-size:13px; line-height:1.4; font-weight:500;
-    font-family:-apple-system, 'Helvetica Neue', 'PingFang SC', sans-serif;
-    box-shadow:0 12px 36px rgba(0,0,0,.42), 0 2px 6px rgba(0,0,0,.18);
-    backdrop-filter:saturate(1.1);
-    transition:transform .45s cubic-bezier(.22,.61,.36,1);
-  `;
-  // Inline keyframes / slide-in handled via the transition on `transform`.
-  bar.innerHTML = `
-    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="#CCD900" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;">
-      <path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 4 21 10 15 10"/>
-    </svg>
-    <div style="flex:1; min-width:0;">
-      <div style="font-weight:600; letter-spacing:.01em;">New version available · 新版本可用</div>
-      <div style="font-size:11.5px; color:rgba(242,231,223,.62); margin-top:2px; letter-spacing:.02em;">Reload to get the latest · 重新加载以获取最新版本</div>
-    </div>
-    <button onclick="_reloadForNewVersion()" style="
-      background:#CCD900; color:#1a1a17; border:none;
-      padding:8px 14px; border-radius:8px;
-      font-weight:700; font-size:12px; letter-spacing:.06em; text-transform:uppercase;
-      cursor:pointer; font-family:inherit; white-space:nowrap;
-      transition:background .15s ease, transform .15s ease;
-    " onmouseover="this.style.background='#d8e500'" onmouseout="this.style.background='#CCD900'">
-      Reload · 重新加载
-    </button>
-    <button onclick="document.getElementById('versionBanner')?.remove()" title="Dismiss · 忽略" aria-label="Dismiss" style="
-      background:transparent; border:none; color:rgba(242,231,223,.55);
-      cursor:pointer; padding:6px; margin:-6px -4px -6px 0;
-      display:flex; align-items:center; justify-content:center;
-      border-radius:6px; transition:background .15s ease, color .15s ease;
-    " onmouseover="this.style.color='#F2E7DF'; this.style.background='rgba(255,255,255,.06)'"
-       onmouseout="this.style.color='rgba(242,231,223,.55)'; this.style.background='transparent'">
-      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-    </button>
-  `;
-  document.body.appendChild(bar);
-  // Trigger the slide-in on next frame so the transform transition fires
-  // instead of the element appearing already at rest.
-  requestAnimationFrame(() => {
-    bar.style.transform = 'translateX(-50%) translateY(0)';
-  });
-  // Floating pill no longer occupies a full row at the top of the page,
-  // so we no longer need to push #main down — the prior 46px padding was
-  // making admin pages jump on first load.
-}
+  // Anything on screen someone could be part-way through. Overlays here are
+  // built and removed on the fly (closeOverlay() deletes the node), so merely
+  // being in the DOM means open.
+  function overlayOpen() {
+    return !!document.querySelector('.overlay, [id$="Overlay"], dialog[open], .side-drawer.open, .modal.open');
+  }
 
-async function _reloadForNewVersion() {
-  // Clear caches so the SW serves fresh HTML on the next request, not
-  // the cached version that's now obsolete.
-  try {
-    if ('caches' in window) {
-      const keys = await caches.keys();
-      await Promise.all(keys.map(k => caches.delete(k)));
+  // A touched field that still differs from what the markup / last render put
+  // there — i.e. an edit that hasn't been saved away yet. A save re-renders
+  // the field (or replaces the node), which clears this by itself.
+  function unsavedEdits() {
+    for (const el of document.querySelectorAll('input, textarea, select')) {
+      if (!_touchedFields.has(el)) continue;
+      if (el.disabled || el.readOnly || el.type === 'search' || el.type === 'hidden') continue;
+      if (el.tagName === 'SELECT') {
+        if ([...el.options].some(o => o.selected !== o.defaultSelected)) return true;
+      } else if (el.type === 'checkbox' || el.type === 'radio') {
+        if (el.checked !== el.defaultChecked) return true;
+      } else if (el.value !== el.defaultValue) return true;
     }
-  } catch {}
-  // Cache-busting query string so the browser bypasses HTTP cache too.
-  window.location.replace(window.location.pathname + '?v=' + Date.now());
+    return false;
+  }
+
+  function inFlight() {
+    return !!document.querySelector('button.busy, .btn.busy, [aria-busy="true"]');
+  }
+
+  function safeToReload() {
+    const away = document.visibilityState === 'hidden';
+    const idle = Date.now() - lastTouch > IDLE_MS;
+    if (!away && !idle) return false;
+    return !overlayOpen() && !unsavedEdits() && !inFlight();
+  }
+
+  function maybeReload() {
+    // Plain reload: the SW serves HTML network-first, so this really does
+    // fetch the new shell (no cache-busting query string needed).
+    if (pending && safeToReload()) location.reload();
+  }
+
+  async function check() {
+    const v = await fetchVersion();
+    if (!v) return;
+    if (_versionBootToken === null) { _versionBootToken = v; return; }   // first read = baseline
+    if (v !== _versionBootToken) pending = true;
+    maybeReload();
+  }
+
+  check();                                // establish baseline on load
+  setInterval(check, POLL_MS);
+  setInterval(maybeReload, 30 * 1000);    // idle can arrive between polls
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') maybeReload();   // reload behind their back, never under their hands
+    else { lastTouch = Date.now(); check(); }
+  });
 }
 
 async function loadIngredientsCache() {
