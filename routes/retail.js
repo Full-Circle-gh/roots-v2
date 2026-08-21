@@ -11885,13 +11885,24 @@ router.get('/api/retail/orders/:id', requireRetailAuth, async (req, res) => {
 //   in_transit         picked up — actually en route to the customer — "on the way"
 //   delivered          已送达
 //
-// heading_to_pickup vs in_transit is read off deliveryStatus, NOT orderStatus:
-// orderStatus alone goes 20→30 the moment a rider is assigned, well before they've
-// physically collected the parcel — checked against live raw_track, Qingyun's own
-// routeInfo (the rider's active navigation leg) targets the SHOP while
-// deliveryStatus is 20, and only switches to targeting the CUSTOMER once
-// deliveryStatus hits 30. So orderStatus>=30 alone showing "On the way" is wrong
-// while the rider is still en route to (or standing in) the store.
+// Which of the three live stages it is comes off deliveryStatus, NOT orderStatus.
+// orderStatus goes 20→30 the moment the COURIER IS CALLED (发起配送), which is well
+// before any rider exists — so orderStatus>=30 says nothing about a rider. The
+// deliveryStatus ladder, re-mapped off the live portal 2026-07-29 (the same remap
+// that fixed ACTIVE_LIST_STATUSES in lib/qingyun-browser), is the one that does:
+//   10 待抢单  courier called, NO rider yet      -> awaiting_dispatch
+//   20 待取货  rider assigned, going to collect -> heading_to_pickup
+//   30 配送中  parcel collected, carrying it    -> in_transit
+// Checked against live raw_track: Qingyun's routeInfo (the rider's active
+// navigation leg) targets the SHOP while deliveryStatus is 20 and only switches to
+// the CUSTOMER at 30, so orderStatus>=30 alone showing "On the way" is wrong while
+// the rider is still en route to (or standing in) the store — and showing "Rider
+// coming" at deliveryStatus 10 is wrong because there is no rider to come. That
+// second half is what this used to get wrong: it read ds<30 as heading_to_pickup,
+// so every order sitting in 待抢单 announced a rider who did not exist.
+// docs/tacet-delivery-vocabulary.md §"Courier stages" locks this: "Rider coming
+// means exactly heading_to_pickup — a rider is travelling to the store. It is never
+// used for awaiting_dispatch (no rider yet)."
 function deliveryJobStage(job) {
   const os = job.order_status;
   const dispatched = !!(job.delivery_id || job.carrier_name || job.rider_name
@@ -11900,7 +11911,13 @@ function deliveryJobStage(job) {
     if (os >= 50) return 'delivered';
     if (os >= 30) {
       const ds = job.delivery_status;
-      return (ds != null && Number(ds) < 30) ? 'heading_to_pickup' : 'in_transit';
+      // No deliveryStatus at all — keep the old benefit of the doubt.
+      if (ds == null) return 'in_transit';
+      // <20 is 待抢单: the courier is called and nobody has grabbed it yet. Under-claim
+      // rather than over-claim — a stale rider_name must NOT promote this (the daemon's
+      // COALESCE upsert keeps the name of a rider who cancelled).
+      if (Number(ds) < 20) return 'awaiting_dispatch';
+      return Number(ds) < 30 ? 'heading_to_pickup' : 'in_transit';
     }
     // os is 待配送 (20): NO rider is actively on it. Trust the status over any
     // rider name — the daemon keeps a stale rider_name (COALESCE upsert), so a
@@ -12004,10 +12021,16 @@ function buildDeliveryTrackData(job, slotLabel, scheduledFor, lang) {
     shop_position: shopPos,
     recipient_position: recipientPos || coord(job.recipient_lat, job.recipient_lng),
     route,
-    // No ETA/distance before an actual courier is on it — suppress for 'scheduled'
-    // so the pre-dispatch preview never shows a bogus "~N min".
-    eta_seconds: stage === 'scheduled' ? null : (job.eta_seconds ?? etaFromTrack),
-    rider_to_cust_m: stage === 'scheduled' ? null : (job.rider_to_cust_m ?? distFromTrack),
+    // No ETA/distance until a RIDER is on it. 'scheduled' never had one; but
+    // 'awaiting_dispatch' is just as bogus and used to leak one, because Qingyun keeps
+    // returning a routeInfo with no rider attached — the STORE-to-CUSTOMER leg. The
+    // drawer rendered that as "~49 min to store" on an order whose own map was,
+    // correctly, still saying "Locating rider…". Suppressed at this one definition
+    // site so the admin drawer and the mini-app cannot disagree about it.
+    eta_seconds: (stage === 'scheduled' || stage === 'awaiting_dispatch')
+      ? null : (job.eta_seconds ?? etaFromTrack),
+    rider_to_cust_m: (stage === 'scheduled' || stage === 'awaiting_dispatch')
+      ? null : (job.rider_to_cust_m ?? distFromTrack),
     expected_delivery_at: job.expected_delivery_at || null,
     slot_label: slotLabel || null,   // human slot for the 'scheduled' sub-line
     // Same slot with its leading relative day word re-derived from
@@ -23073,6 +23096,21 @@ router.get('/api/retail-admin/orders/:id/qingyun/carriers', requireRetailAdmin, 
   }
 });
 
+// Does this Qingyun order already have a courier committed to it? Deliberately NOT
+// _qingyunMoveBlockedBy, which blocks on any tracked job: a rider who accepts and
+// then drops the order reverts it to 待配送 (orderStatus 20), and that MUST stay
+// re-dispatchable even though the job row still carries the dead rider's name.
+// orderStatus >= 30 is the one signal that the portal is holding a live delivery.
+// Returns the stage (for wording) or null when the order is free to dispatch.
+function _qingyunCourierCommitted(qyOrderId) {
+  try {
+    const job = tdb().prepare('SELECT * FROM delivery_jobs WHERE qingyun_order_id = ?').get(String(qyOrderId));
+    if (!job || job.order_status == null) return null;
+    if (Number(job.order_status) < 30) return null;      // 待配送 — nobody sent for it
+    return deliveryJobStage(job);
+  } catch (_) { return null; }                            // table missing pre-migration
+}
+
 // Dispatch the chosen carrier. Re-quotes to get a FRESH waybill (they expire), then
 // delivery/create → deducts the fee from the Qingyun wallet + sends a courier.
 router.post('/api/retail-admin/orders/:id/qingyun/dispatch', requireRetailAdmin, express.json(), async (req, res) => {
@@ -23085,6 +23123,12 @@ router.post('/api/retail-admin/orders/:id/qingyun/dispatch', requireRetailAdmin,
   if (!picks.length) return res.status(400).json({ success: false, error: 'carriers required' });
   const ref = _qingyunOrderRef(id);
   if (!ref) return res.status(400).json({ success: false, error: 'order_not_in_qingyun' });
+  // Qingyun refuses a second delivery/create on an order that already has a courier,
+  // and the refusal used to surface as a bare "Dispatch failed" — so a staff member
+  // whose dispatch had just SUCCEEDED read it as a failure and clicked four more
+  // times. Say so plainly here, before spending the call.
+  const committed = _qingyunCourierCommitted(ref.qyOrderId);
+  if (committed) return res.status(409).json({ success: false, error: 'courier_already_called', stage: committed });
   try {
     const { getQingyunBrowser } = require('../lib/qingyun-browser');
     const br = await getQingyunBrowser(ref.storeCode);
@@ -23099,6 +23143,11 @@ router.post('/api/retail-admin/orders/:id/qingyun/dispatch', requireRetailAdmin,
     const r = await br.dispatch(ref.qyOrderId, chosen);
     if (!r.ok) {
       const insufficient = /余额|余额不足|balance|充值/i.test(String(r.msg || ''));
+      // Qingyun's refusal text is the ONLY thing that explains a failed dispatch, and
+      // it was being dropped at both ends: nothing logged here, and the client
+      // replaced it with a generic string. A dispatch that fails in production has to
+      // leave a trace that says why.
+      console.error(`[qingyun dispatch] order ${id} refused: code=${r.code} msg=${r.msg || '(none)'}`);
       return res.json({ success: false, error: r.msg || 'dispatch_failed', insufficient_balance: insufficient });
     }
     res.json({ success: true, carriers: chosen.map(c => ({ name: c.serviceName, fee_yuan: c.feeYuan })) });

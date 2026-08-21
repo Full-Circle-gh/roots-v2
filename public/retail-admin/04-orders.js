@@ -2481,7 +2481,7 @@ function renderCourierListLine(o) {
   if (o.status === 'delivered' || o.status === 'cancelled' || o.status === 'refunded') return '';
   const label = c.stage === 'in_transit'        ? cuT('En route', '配送中')
               : c.stage === 'heading_to_pickup' ? cuT('Rider coming', '骑手前往取货')
-              : c.stage === 'awaiting_dispatch' ? cuT('Finding rider', '正在找骑手')
+              : c.stage === 'awaiting_dispatch' ? cuT('Finding a rider', '正在找骑手')
               : '';
   if (!label) return '';
   // eta_seconds is time-to-STORE while heading_to_pickup (Qingyun's own routeInfo
@@ -3283,6 +3283,23 @@ function renderLocalEtaCard(o, s, hoisted) {
   // eta_source='auto' marks that; the manual picker is tucked behind a toggle so
   // staff can still override (an override flips the row to 'manual' server-side).
   const isAuto = eta && s.eta_source === 'auto';
+  // The auto ETA is the COURIER's promised arrival, stamped once from Qingyun's
+  // expectedDeliveredTime and never revised when the courier runs late. It is a bare
+  // 'HH:MM' carrying no date, so an hour-old promise rendered exactly like a live
+  // one: "10:00 AM" still sitting here at 11:00 with the rider not yet at the store.
+  // Tag it rather than hide it — staff still need the number, they just must not
+  // read it as a commitment that still stands. GZ wall-clock via gzParts/gzWall so an
+  // operator in another timezone reads the same clock as the store, for the same
+  // reason slot urgency does. Closed orders are exempt (vocabulary rule 3: a settled
+  // order must not carry a live promise, and it must not cry OVERDUE either).
+  const etaLapsed = (() => {
+    if (!isAuto) return false;
+    if (['dispatched', 'delivered', 'cancelled', 'refunded'].includes(o.status)) return false;
+    const m = /^(d{2}):(d{2})$/.exec(eta);
+    if (!m) return false;
+    const now = new Date(), g = gzParts(now);
+    return gzWall(g.y, g.mo, g.da, Number(m[1]), Number(m[2])).getTime() < now.getTime();
+  })();
   // Inline (under the items) it sits below a dashed divider; hoisted to the top
   // of the drawer it stands on its own, so drop the divider/top margin there.
   const wrapStyle = hoisted ? '' : 'margin-top: var(--s3); padding-top: var(--s3); border-top: 1px dashed var(--line-soft);';
@@ -3322,8 +3339,10 @@ function renderLocalEtaCard(o, s, hoisted) {
       ${isAuto ? `
         <div style="display:flex; flex-wrap:wrap; align-items:center; gap:12px; padding:10px 12px; background: var(--bg-elev-1); border-radius:6px; margin-bottom:10px;">
           <div>
-            <div style="font-size:12px; color:var(--text-3);">Estimated arrival · 预计送达</div>
-            <div style="font-family: var(--f-mono); font-weight:600; font-size:15px;">${escapeHtml(pretty)}</div>
+            <div style="font-size:12px; color:var(--text-3);">ETA · 预计送达</div>
+            <div style="font-family: var(--f-mono); font-weight:600; font-size:15px;">${escapeHtml(pretty)}${etaLapsed
+              ? ` <b style="color:var(--danger); font-family:var(--f-sans); font-size:11px; letter-spacing:.04em;">${cuT('OVERDUE', '已逾期')}</b>`
+              : ''}</div>
           </div>
           <div style="flex:1; min-width:120px; text-align:right;">
             <span class="muted" style="font-size:11px;">Set by the courier · 来自骑手,自动</span>
@@ -4595,7 +4614,19 @@ async function qyDispatch(orderId, btn) {
     } else {
       if (btn) { btn.disabled = false; btn.textContent = cuT('Dispatch courier', '发起配送'); }
       if (j.insufficient_balance) toast(cuT('Qingyun balance too low — top up first', '青云余额不足,请先充值'), 'err');
-      else toast(cuT('Dispatch failed', '发起配送失败'), 'err');
+      else if (j.error === 'courier_already_called') {
+        // The dispatch that "failed" had in fact already succeeded moments earlier.
+        // Re-render the drawer so the pick list is replaced by the live tracking
+        // card, instead of sitting there inviting another click.
+        toast(cuT('A courier is already on this order', '该订单已呼叫运力'), 'err');
+        openOrder(orderId, { instant: true });
+        loadOrders();
+      } else {
+        // Qingyun's own words, appended the way adminWrite does it. A bare "Dispatch
+        // failed" is unactionable and hides the single fact that explains it.
+        const why = (j.error && j.error !== 'dispatch_failed') ? ': ' + j.error : '';
+        toast(cuT('Dispatch failed', '发起配送失败') + why, 'err');
+      }
     }
   } catch (e) {
     if (btn) { btn.disabled = false; btn.textContent = cuT('Dispatch courier', '发起配送'); }

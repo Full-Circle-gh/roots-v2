@@ -972,7 +972,7 @@ function dashOnroadRender() {
     // Rider assigned but hasn't collected the parcel yet — not "en route" to the
     // customer, so must not share that copy (see routes/retail.js deliveryJobStage).
     if (c && c.stage === 'heading_to_pickup') return { txt: cuT('Rider coming', '骑手前往取货'), soon: false };
-    if (c && c.stage === 'awaiting_dispatch') return { txt: cuT('Finding rider', '正在找骑手'), soon: false };
+    if (c && c.stage === 'awaiting_dispatch') return { txt: cuT('Finding a rider', '正在找骑手'), soon: false };
     return { txt: cuT('Out for delivery', '配送中'), soon: false };
   };
   host.innerHTML = rows.slice(0, 5).map((o, i) => {
@@ -1015,8 +1015,15 @@ function dashReadyRender() {
     const cn = DASH_CHAN_SHORT[String(o.channel || '').toLowerCase()];
     const chan = cn ? cuT(cn[0], cn[1]) : '';
     const sub = [who, chan].filter(Boolean).join(' · ');
-    const riderComing = o.courier && o.courier.stage === 'awaiting_dispatch';
-    const st = riderComing ? { txt: cuT('Rider coming', '骑手来取'), soon: true } : { txt: cuT('Packing', '打包中'), soon: false };
+    // Two different things, and this card used to call both "Rider coming":
+    // awaiting_dispatch means the courier is called and NOBODY has accepted yet, so
+    // there is no rider to get the order ready for. Only heading_to_pickup has a
+    // real rider travelling to the store, and only that one earns the urgency
+    // highlight. Words from docs/tacet-delivery-vocabulary.md, "Courier stages".
+    const cstage = o.courier && o.courier.stage;
+    const st = cstage === 'heading_to_pickup' ? { txt: cuT('Rider coming', '骑手前往取货'), soon: true }
+             : cstage === 'awaiting_dispatch' ? { txt: cuT('Finding a rider', '正在找骑手'), soon: false }
+             : { txt: cuT('Packing', '打包中'), soon: false };
     const cls = i >= 4 ? ' detail2' : (i >= 2 ? ' detail' : '');
     return `<div class="bx-in-row${cls}">
       <span class="bx-in-nm">${escapeHtml('#' + (o.order_no || o.id || ''))}<span class="bx-in-sub">${escapeHtml(sub)}</span></span>
