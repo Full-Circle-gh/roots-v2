@@ -2112,6 +2112,37 @@ check('the selected-line edge is a state, not a property of every strip',
 check('a phone shows no selected-line edge',
   /\.lctl\.sel\{border-left-color:transparent\}/.test(POS_TILL_SRC), true);
 
+// The strip had padding-top:0 against 12px at the bottom, so the group's top
+// border landed exactly on the line's bottom border — measured at a 0px gap —
+// and the two hairlines read as one thick seam through the row.
+check('the stepper does not sit on the line above it',
+  /\.lctl\{[^}]*padding:12px 16px 12px 13px/.test(POS_TILL_SRC), true);
+
+// ── The tile footer ──────────────────────────────────────────────────────
+// A tile is 140px at four columns, leaving ~116px of content. "Out of stock"
+// is ~88px of that and the price another ~45: they never both fitted, and
+// adding the product code only made the overflow show sooner — the label broke
+// across two lines and rendered as "Ou"/"stc".
+//
+// So a sold-out tile shows the REASON instead of the price. The price of
+// something that cannot be sold is not a number anyone acts on, and the slot
+// itself is unchanged, which is the rule that actually matters: the tile stays
+// where the thumb expects it, dimmed, dashed and not tappable.
+check('a sold-out tile shows the reason instead of a price it would crowd',
+  /\? '<span class="lo">' \+ esc\(T\('outOfStock'\)\)/.test(POS_TILL_SRC), true);
+check('and carries no product code, which identifies something unsellable',
+  /: \(p\.sku \? '<span class="sku">'/.test(POS_TILL_SRC), true);
+// A pill that wraps is not a pill.
+check('the stock pill holds its shape rather than breaking in half',
+  /\.tile \.lo\{[^}]*white-space:nowrap/.test(POS_TILL_SRC), true);
+// An in-stock tile still shows all three when the shelf is low — there the
+// pill is a single digit and fits.
+check('an in-stock tile still shows code, price and a low-stock count',
+  /left != null && left <= 5 \? '<span class="lo">' \+ left/.test(POS_TILL_SRC), true);
+// The strikethrough had one job and nothing left to strike.
+check('no dead strikethrough rule survives the price it styled',
+  /\.tile\.out \.pr\{text-decoration:line-through\}/.test(POS_TILL_SRC), false);
+
 // ── Attaching a customer ─────────────────────────────────────────────────
 // It was window.prompt(): an unstyleable box captioned with the origin
 // ("store.rootskitchenchina.com says"), which could not show what it found and

@@ -236,13 +236,16 @@ button{font:inherit;color:inherit;margin:0}
 .tile .lo{
   font-size:12px;font-weight:500;border-radius:var(--r-pill);padding:2px 8px;
   font-variant-numeric:tabular-nums;color:var(--td-amber-ink);background:var(--td-amber-tint);
+  /* A pill that wraps is not a pill. "Out of stock" broke across two lines and
+     came out as "Ou"/"stc"; it holds its shape and lets the row shrink around
+     it instead. */
+  white-space:nowrap;flex:none;
 }
 /* Out of stock keeps its slot. Muscle memory is the point of a tile grid, so a
    sold-out line stays where the thumb expects it — struck through and not
    tappable — rather than vanishing and reshuffling every tile after it. */
 .tile.out{background:var(--td-raised);border-style:dashed}
-.tile.out .nm,.tile.out .pr{color:var(--td-text2)}
-.tile.out .pr{text-decoration:line-through}
+.tile.out .nm{color:var(--td-text2)}
 .tile.out .lo{color:var(--td-brick-ink);background:var(--td-brick-tint)}
 .gempty{
   grid-column:1/-1;padding:32px;text-align:center;color:var(--td-text2);font-size:14px;
@@ -296,7 +299,7 @@ button{font:inherit;color:inherit;margin:0}
 /* Controls open INSIDE the line. A modal would cover the order the cashier is
    reading aloud from and charge a dismiss tap for every quantity fix. */
 .lctl{
-  display:flex;align-items:center;gap:10px;padding:0 16px 12px 13px;
+  display:flex;align-items:center;gap:10px;padding:12px 16px 12px 13px;
   background:var(--td-raised);border-bottom:1px solid var(--td-border);
   /* The ink edge marks the SELECTED line, so it belongs to the selected state
      and not to the strip. On a phone every line carries a strip and nothing is
@@ -1049,10 +1052,13 @@ button{font:inherit;color:inherit;margin:0}
          + (inc > 0 ? '<span class="incart">' + inc + '</span>' : '')
          + '<span class="nm">' + esc(pname(p)) + '</span>'
          + '<span class="ft">'
-         + (p.sku ? '<span class="sku">' + esc(p.sku) + '</span>' : '')
-         + '<span class="pr">' + yuan(p.sell_price) + '</span>'
-         + (out ? '<span class="lo">' + esc(T('outOfStock')) + '</span>'
-                : (left != null && left <= 5 ? '<span class="lo">' + left + '</span>' : ''))
+         + (out
+              // Sold out: the reason replaces the price it would have crowded.
+              ? '<span class="lo">' + esc(T('outOfStock')) + '</span>'
+              // In stock: code, price, and a single digit when the shelf is low.
+              : (p.sku ? '<span class="sku">' + esc(p.sku) + '</span>' : '')
+                + '<span class="pr">' + yuan(p.sell_price) + '</span>'
+                + (left != null && left <= 5 ? '<span class="lo">' + left + '</span>' : ''))
          + '</span></button>';
     });
     $('grid').innerHTML = h;
