@@ -1754,7 +1754,23 @@ check('the refund slip renders for every order shape, including an empty one', r
 // The template source, read once — (a) and (c) both measure it.
 const RF_SRC = fs.readFileSync(path.join(__dirname, '..', 'lib', 'feie.js'), 'utf8');
 const rfBody = RF_SRC.slice(RF_SRC.indexOf('function renderRefundReceipt'));
-const rfTemplate = rfBody.slice(0, rfBody.indexOf('\n}\n') + 3);
+// TOP-LEVEL FUNCTION BODY, WHATEVER THE LINE ENDINGS ARE.
+//
+// These slices used to end at the literal '\n}\n' — a closing brace alone on a
+// line. That never matches a CRLF file, where the sequence is '}\r\n', so
+// indexOf returned -1, slice() ran to the end of the file, and assertions that
+// were meant to read ONE function silently read everything after it. Three of
+// them broke the moment a co-session's merge brought routes/retail.js back as
+// CRLF; on an LF checkout they had been passing by luck.
+//
+// A no-match returns '' rather than the rest of the file, so a bad slice fails
+// its check instead of quietly passing a wider one.
+function fnBodyFrom(src, at) {
+  if (at === -1) return '';
+  const m = /\r?\n\}\r?\n/.exec(src.slice(at));
+  return m ? src.slice(at, at + m.index + m[0].length) : '';
+}
+const rfTemplate = fnBodyFrom(rfBody, 0);
 check('the refund template was located in lib/feie.js', rfTemplate.length > 400, true);
 
 const cjkWidth = (t) => [...t].reduce((n, c) => n + (/[ᄀ-ᅟ⺀-꓏ꥠ-꥿가-힣豈-﫿︰-﹏＀-￯]/.test(c) ? 2 : 1), 0);
@@ -1849,7 +1865,7 @@ check('a failed send releases the stamp so the refund can print later',
 // printed_at describes what was BOUGHT and stays valid paper after a refund.
 const rcpBody = RET_SRC.slice(RET_SRC.indexOf('function autoPrintRefundReceipt'));
 check('printing a refund slip never touches print_status or printed_at',
-  /\bprint_status\b|[^_]\bprinted_at\b/.test(rcpBody.slice(0, rcpBody.indexOf('\n}\n'))), false);
+  /\bprint_status\b|[^_]\bprinted_at\b/.test(fnBodyFrom(rcpBody, 0)), false);
 // And the column it DOES use has to exist, or every print silently no-ops.
 check('refund_printed_at is a real column',
   /addColumn\('retail_orders', 'refund_printed_at'/.test(
@@ -2243,7 +2259,15 @@ check('no other fulfilment type is gated on the pos channel',
 
 const posHelperSrc = (() => {
   const i = POS_RT.indexOf('function posClosedForStore');
-  return i === -1 ? '' : POS_RT.slice(i, POS_RT.indexOf('\n}\n', i) + 3);
+  if (i === -1) return '';
+  // Sliced here rather than through §14's helper so this section still runs
+  // standalone — a section that only works as part of the whole file is one
+  // nobody can check before a push, and that is how two failures reached CI.
+  // /\r?\n\}\r?\n/ because a CRLF checkout ends the line '}\r\n': a literal
+  // '\n}\n' matches nothing there, and the slice silently widens to the rest
+  // of the file.
+  const m = /\r?\n\}\r?\n/.exec(POS_RT.slice(i));
+  return m ? POS_RT.slice(i, i + m.index + m[0].length) : '';
 })();
 check('the reader exists at module scope', posHelperSrc.length > 100, true);
 // ABSENT ROW = OPEN. Every tenant that has never touched the toggle has no
