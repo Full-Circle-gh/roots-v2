@@ -1,61 +1,59 @@
 --
--- Tacet - PostgreSQL schema, as built. Taken 2026-08-21.
+-- Tacet — PostgreSQL schema, as built. Taken 2026-08-21, SECOND of the day.
 --
--- A schema-only pg_dump of the `tacet` database on 47.239.89.63, taken
--- immediately after the G28 rename. 163 tables, 144 foreign keys, 231 indexes.
+-- A schema-only pg_dump of the `tacet` database on 47.239.89.63.
+-- 165 tables, 145 foreign keys.
 --
--- It SUPERSEDES docs/tacet-postgres-schema-as-built-2026-08-11.sql. ONE thing
--- differs from that record, and it is this work: 74 relations, columns,
--- indexes, sequences and constraints renamed back from account* to tenant*.
+-- THIS FILE REPLACES the earlier 2026-08-21 dump rather than sitting beside it,
+-- because both describe the same date and the earlier one was superseded four
+-- hours later by the change below. Keeping two files with one date would make
+-- the dated name useless as an identifier. The 2026-08-11 and 2026-08-04 files
+-- are untouched and remain the record of their own dates.
 --
---   12  tables      accounts -> tenants, and eleven account_* -> tenant_*
---   25  columns     account_id -> tenant_id (20), account_user_id -> tenant_user_id (5)
---    4  indexes     the standalone idx_* ones; the other 16 came with their constraint
---    8  sequences   the identity sequences of the renamed tables
---   25  constraints 12 primary keys, 4 unique, 9 foreign keys - their NAMES only
+-- TWO CHANGES SINCE THE 2026-08-11 RECORD, in the order they happened:
 --
--- No foreign key DEFINITION was edited. Postgres carries a reference across a
--- table rename by oid; it does not carry the constraint NAME, which is why the
--- 25 are here and the references are not. Five foreign keys into the renamed
--- tables keep their own names unchanged, because those names never contained
--- the word: fk_billing_invoices_1, fk_billing_subscriptions_2,
--- fk_integration_help_requests_1, fk_integration_sessions_1, fk_subscriptions_2.
+--   1. THE G28 RENAME. 74 relations, columns, indexes, sequences and constraint
+--      names renamed back from account* to tenant*, in one transaction.
+--      docs/tacet-postgres-g28-rename-back.sql, §24 THE TENANT→ACCOUNT
+--      PHYSICAL RENAME IS DECLINED.
 --
--- FIVE IDENTIFIERS STILL CONTAIN THE STRING "account" AND ARE CORRECT:
---   eleme_tokens.account and eleme_tokens_account_key - an Eleme platform login
---   retail_stores.meituan_account_id                  - a Meituan platform id
---   ingredients.accounting_category                   - "accounting"
---   purchase_orders.posted_to_accounting              - "accounting"
--- A sixth occurrence is prose, not an identifier: the COMMENT on
--- retail_order_counters uses the word in the sentence sense.
+--   2. THE SCHEMA THE CENSUS NEVER SAW. Two tables and eleven columns that
+--      existed in live SQLite and did not exist here at all:
 --
--- WHAT THIS IS NOT. It does not reverse the vocabulary decision. The word
--- `tenant` stays retired in prose and in new work; what came back is the
--- physical relation name, which the glossary always allowed to survive.
+--        ingredient_cost_skips                 (table, 3 rows)
+--        push_optouts                          (table, 3 rows)
+--        ingredients.free_by_design
+--        qingyun_push_queue.geo_held_at, .needs_point_at, .guessed_lat,
+--                           .guessed_lng, .guessed_precision, .candidates_json
+--        retail_customer_addresses.geo_source, .geo_precision
+--        retail_orders.refund_printed_at, .channel_note
 --
--- docs/tacet-postgres-schema-as-built-2026-08-11.sql and the 2026-08-04 file
--- are RETAINED, byte-for-byte unchanged, as the record of the shape each date
--- was built in. Do not edit them and do not read either as current. This
--- follows the phase-1 precedent: the superseded file carries no banner, the
--- superseding one carries the note.
+--      All thirteen were added to SQLite AFTER the 2026-08-03 census, between
+--      2026-08-05 and 2026-08-21. docs/tacet-postgres-schema-drift-2026-08-21.sql
+--      carries the DDL and the reasoning for every type choice.
+--
+-- WHY THEY WERE INVISIBLE, WHICH MATTERS MORE THAN THE THIRTEEN. `gen.py`
+-- builds its SELECT from plan.json's `cols[]` and `verify.py` builds its
+-- comparison from the same list, so a column the census never recorded is
+-- unreadable to the copier AND to the verifier. On 2026-08-21 the round-trip
+-- compared 4,220,046 cells clean while eleven columns went uncopied.
+-- `scripts/postgres-full-copy/drift_guard.py` now refuses the copy on any
+-- difference between plan.json and the live source, and `run.py` calls it
+-- before the TRUNCATE.
 --
 -- TWO CONSUMERS STILL OPEN THE 2026-08-04 FILE BY ITS DATED NAME and are now
--- reading stale table and column names for the twelve renamed tables:
--- scripts/diagnose_seam_statements.js and scripts/diagnose_statement_sweep.js.
--- Their regex discards the index name and captures the TABLE and its COLUMNS,
--- so the index renames do not reach them but the table and column renames do.
--- Deliberately not repointed here; recorded so it is not rediscovered.
---
--- Reasoning is recorded in docs/tacet-consolidation-decisions.md §24,
--- "THE TENANT->ACCOUNT PHYSICAL RENAME IS DECLINED".
+-- two schema changes behind: scripts/diagnose_seam_statements.js and
+-- scripts/diagnose_statement_sweep.js. Their regex discards the index name and
+-- captures the TABLE and its COLUMNS, so both changes reach them. Deliberately
+-- not repointed; recorded so it is not rediscovered.
 --
 -- EVERYTHING BELOW THIS HEADER IS VERBATIM pg_dump OUTPUT. Proven by sha256 at
 -- generation time, not asserted: strip the header and the remainder hashes to
 -- the raw dump. The header is the only hand-written part of this file.
 --
---   header lines: 61
+--   header lines: 59
 --   sha256 of the body, LF line endings:
---   3a8791ef2be79bd2bf60f75ac2571622c3ffaf18b558552524447bacf7d6680d
+--   f56cce34b32358e19062e846b0ed9c98979df5f901533f9911ccf151bfbecf08
 --
 -- Regenerate with:  sudo -u postgres pg_dump -s --no-owner -d tacet
 --
@@ -63,7 +61,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict eL4ox264hbX58rH4ZS7qbtnobf0A3rhXUSw2b0wczTa0wGQpQap91pt5WkhvGPO
+\restrict nhVxrbhiRV3SngqJzwGcs0nfii6fMscPxRMCkmwsR0iAdh2IN3e9ZNDp3L6fh3S
 
 -- Dumped from database version 16.14 (Ubuntu 16.14-1.pgdg22.04+1)
 -- Dumped by pg_dump version 16.14 (Ubuntu 16.14-1.pgdg22.04+1)
@@ -1121,6 +1119,50 @@ ALTER TABLE public.income_entries ALTER COLUMN id ADD GENERATED BY DEFAULT AS ID
 
 
 --
+-- Name: ingredient_cost_skips; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ingredient_cost_skips (
+    id integer NOT NULL,
+    ingredient_id integer NOT NULL,
+    po_id integer,
+    reason text NOT NULL,
+    line_unit text,
+    line_price numeric(14,6),
+    created_at timestamp with time zone DEFAULT now(),
+    resolved_at timestamp with time zone
+);
+
+
+--
+-- Name: COLUMN ingredient_cost_skips.reason; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.ingredient_cost_skips.reason IS 'One of a fixed set, stored raw so each can be counted on its own: no_pack_contents | unit_mismatch | unsupported_recipe_unit | no_pack_size | no_price.';
+
+
+--
+-- Name: COLUMN ingredient_cost_skips.resolved_at; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.ingredient_cost_skips.resolved_at IS 'Set when a later PO priced this item cleanly. The row stays as a record of what once went unpriced; only open rows (resolved_at IS NULL) alert.';
+
+
+--
+-- Name: ingredient_cost_skips_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.ingredient_cost_skips ALTER COLUMN id ADD GENERATED BY DEFAULT AS IDENTITY (
+    SEQUENCE NAME public.ingredient_cost_skips_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+
+--
 -- Name: ingredient_price_history; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1178,7 +1220,8 @@ CREATE TABLE public.ingredients (
     pack_contents_qty double precision,
     pack_contents_unit text,
     accounting_category text,
-    item_kind text DEFAULT 'food'::text
+    item_kind text DEFAULT 'food'::text,
+    free_by_design boolean DEFAULT false
 );
 
 
@@ -2549,6 +2592,32 @@ ALTER TABLE public.purchase_orders ALTER COLUMN id ADD GENERATED BY DEFAULT AS I
 
 
 --
+-- Name: push_optouts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.push_optouts (
+    scope text NOT NULL,
+    subject_id integer NOT NULL,
+    linked_user_id integer,
+    created_at timestamp with time zone DEFAULT now()
+);
+
+
+--
+-- Name: COLUMN push_optouts.scope; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.push_optouts.scope IS 'user | operator';
+
+
+--
+-- Name: COLUMN push_optouts.linked_user_id; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.push_optouts.linked_user_id IS 'operator scope only';
+
+
+--
 -- Name: push_subscriptions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2593,7 +2662,13 @@ CREATE TABLE public.qingyun_push_queue (
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now(),
     stale_qingyun_order_id text,
-    stale_store_code text
+    stale_store_code text,
+    geo_held_at timestamp with time zone,
+    needs_point_at timestamp with time zone,
+    guessed_lat double precision,
+    guessed_lng double precision,
+    guessed_precision text,
+    candidates_json text
 );
 
 
@@ -3022,7 +3097,9 @@ CREATE TABLE public.retail_customer_addresses (
     geocoded_at timestamp with time zone,
     province_en text,
     city_en text,
-    district_en text
+    district_en text,
+    geo_source text,
+    geo_precision text
 );
 
 
@@ -3709,7 +3786,9 @@ CREATE TABLE public.retail_orders (
     channel_stock_restored boolean DEFAULT false,
     address_changed_at timestamp with time zone,
     channel_preorder_at timestamp with time zone,
-    wx_shipping_locked_at timestamp with time zone
+    wx_shipping_locked_at timestamp with time zone,
+    refund_printed_at timestamp with time zone,
+    channel_note text
 );
 
 
@@ -5625,6 +5704,14 @@ ALTER TABLE ONLY public.income_entries
 
 
 --
+-- Name: ingredient_cost_skips ingredient_cost_skips_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ingredient_cost_skips
+    ADD CONSTRAINT ingredient_cost_skips_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: ingredient_price_history ingredient_price_history_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -6134,6 +6221,14 @@ ALTER TABLE ONLY public.purchase_orders
 
 ALTER TABLE ONLY public.purchase_orders
     ADD CONSTRAINT purchase_orders_po_number_key UNIQUE (po_number);
+
+
+--
+-- Name: push_optouts push_optouts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.push_optouts
+    ADD CONSTRAINT push_optouts_pkey PRIMARY KEY (scope, subject_id);
 
 
 --
@@ -7271,6 +7366,14 @@ ALTER TABLE ONLY public.guanyi_sync_queue
 
 ALTER TABLE ONLY public.income_entries
     ADD CONSTRAINT fk_income_entries_1 FOREIGN KEY (created_by) REFERENCES public.users(id);
+
+
+--
+-- Name: ingredient_cost_skips fk_ingredient_cost_skips_1; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ingredient_cost_skips
+    ADD CONSTRAINT fk_ingredient_cost_skips_1 FOREIGN KEY (ingredient_id) REFERENCES public.ingredients(id);
 
 
 --
@@ -8711,6 +8814,20 @@ GRANT SELECT,USAGE ON SEQUENCE public.income_entries_id_seq TO tacet_app;
 
 
 --
+-- Name: TABLE ingredient_cost_skips; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ingredient_cost_skips TO tacet_app;
+
+
+--
+-- Name: SEQUENCE ingredient_cost_skips_id_seq; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,USAGE ON SEQUENCE public.ingredient_cost_skips_id_seq TO tacet_app;
+
+
+--
 -- Name: TABLE ingredient_price_history; Type: ACL; Schema: public; Owner: -
 --
 
@@ -9289,6 +9406,13 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.purchase_orders TO tacet_app;
 --
 
 GRANT SELECT,USAGE ON SEQUENCE public.purchase_orders_id_seq TO tacet_app;
+
+
+--
+-- Name: TABLE push_optouts; Type: ACL; Schema: public; Owner: -
+--
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.push_optouts TO tacet_app;
 
 
 --
@@ -10380,5 +10504,5 @@ ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT SELECT,INSERT,
 -- PostgreSQL database dump complete
 --
 
-\unrestrict eL4ox264hbX58rH4ZS7qbtnobf0A3rhXUSw2b0wczTa0wGQpQap91pt5WkhvGPO
+\unrestrict nhVxrbhiRV3SngqJzwGcs0nfii6fMscPxRMCkmwsR0iAdh2IN3e9ZNDp3L6fh3S
 

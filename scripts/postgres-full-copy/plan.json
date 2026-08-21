@@ -3609,6 +3609,93 @@
    ],
    "autoincrement": true
   },
+  "ingredient_cost_skips": {
+   "pg": "ingredient_cost_skips",
+   "rows": 3,
+   "cols": [
+    {
+     "sq": "id",
+     "pg": "id",
+     "sqtype": "INTEGER",
+     "pgtype": "integer",
+     "cls": "INT",
+     "notnull": true,
+     "identity": "d",
+     "default": ""
+    },
+    {
+     "sq": "ingredient_id",
+     "pg": "ingredient_id",
+     "sqtype": "INTEGER",
+     "pgtype": "integer",
+     "cls": "INT",
+     "notnull": true,
+     "identity": "",
+     "default": ""
+    },
+    {
+     "sq": "po_id",
+     "pg": "po_id",
+     "sqtype": "INTEGER",
+     "pgtype": "integer",
+     "cls": "INT",
+     "notnull": false,
+     "identity": "",
+     "default": ""
+    },
+    {
+     "sq": "reason",
+     "pg": "reason",
+     "sqtype": "TEXT",
+     "pgtype": "text",
+     "cls": "TEXT",
+     "notnull": true,
+     "identity": "",
+     "default": ""
+    },
+    {
+     "sq": "line_unit",
+     "pg": "line_unit",
+     "sqtype": "TEXT",
+     "pgtype": "text",
+     "cls": "TEXT",
+     "notnull": false,
+     "identity": "",
+     "default": ""
+    },
+    {
+     "sq": "line_price",
+     "pg": "line_price",
+     "sqtype": "REAL",
+     "pgtype": "numeric(14,6)",
+     "cls": "NUM6",
+     "notnull": false,
+     "identity": "",
+     "default": ""
+    },
+    {
+     "sq": "created_at",
+     "pg": "created_at",
+     "sqtype": "DATETIME",
+     "pgtype": "timestamp with time zone",
+     "cls": "TS",
+     "notnull": false,
+     "identity": "",
+     "default": "now()"
+    },
+    {
+     "sq": "resolved_at",
+     "pg": "resolved_at",
+     "sqtype": "DATETIME",
+     "pgtype": "timestamp with time zone",
+     "cls": "TS",
+     "notnull": false,
+     "identity": "",
+     "default": ""
+    }
+   ],
+   "autoincrement": true
+  },
   "ingredient_price_history": {
    "pg": "ingredient_price_history",
    "rows": 889,
@@ -3939,6 +4026,16 @@
      "notnull": false,
      "identity": "",
      "default": "'food'::text"
+    },
+    {
+     "sq": "free_by_design",
+     "pg": "free_by_design",
+     "sqtype": "INTEGER",
+     "pgtype": "boolean",
+     "cls": "BOOL",
+     "notnull": false,
+     "identity": "",
+     "default": "false"
     }
    ],
    "autoincrement": true
@@ -9083,6 +9180,53 @@
    ],
    "autoincrement": true
   },
+  "push_optouts": {
+   "pg": "push_optouts",
+   "rows": 3,
+   "cols": [
+    {
+     "sq": "scope",
+     "pg": "scope",
+     "sqtype": "TEXT",
+     "pgtype": "text",
+     "cls": "TEXT",
+     "notnull": true,
+     "identity": "",
+     "default": ""
+    },
+    {
+     "sq": "subject_id",
+     "pg": "subject_id",
+     "sqtype": "INTEGER",
+     "pgtype": "integer",
+     "cls": "INT",
+     "notnull": true,
+     "identity": "",
+     "default": ""
+    },
+    {
+     "sq": "linked_user_id",
+     "pg": "linked_user_id",
+     "sqtype": "INTEGER",
+     "pgtype": "integer",
+     "cls": "INT",
+     "notnull": false,
+     "identity": "",
+     "default": ""
+    },
+    {
+     "sq": "created_at",
+     "pg": "created_at",
+     "sqtype": "DATETIME",
+     "pgtype": "timestamp with time zone",
+     "cls": "TS",
+     "notnull": false,
+     "identity": "",
+     "default": "now()"
+    }
+   ],
+   "autoincrement": false
+  },
   "push_subscriptions": {
    "pg": "push_subscriptions",
    "rows": 5,
@@ -9277,6 +9421,66 @@
     {
      "sq": "stale_store_code",
      "pg": "stale_store_code",
+     "sqtype": "TEXT",
+     "pgtype": "text",
+     "cls": "TEXT",
+     "notnull": false,
+     "identity": "",
+     "default": ""
+    },
+    {
+     "sq": "geo_held_at",
+     "pg": "geo_held_at",
+     "sqtype": "DATETIME",
+     "pgtype": "timestamp with time zone",
+     "cls": "TS",
+     "notnull": false,
+     "identity": "",
+     "default": ""
+    },
+    {
+     "sq": "needs_point_at",
+     "pg": "needs_point_at",
+     "sqtype": "DATETIME",
+     "pgtype": "timestamp with time zone",
+     "cls": "TS",
+     "notnull": false,
+     "identity": "",
+     "default": ""
+    },
+    {
+     "sq": "guessed_lat",
+     "pg": "guessed_lat",
+     "sqtype": "REAL",
+     "pgtype": "double precision",
+     "cls": "REAL",
+     "notnull": false,
+     "identity": "",
+     "default": ""
+    },
+    {
+     "sq": "guessed_lng",
+     "pg": "guessed_lng",
+     "sqtype": "REAL",
+     "pgtype": "double precision",
+     "cls": "REAL",
+     "notnull": false,
+     "identity": "",
+     "default": ""
+    },
+    {
+     "sq": "guessed_precision",
+     "pg": "guessed_precision",
+     "sqtype": "TEXT",
+     "pgtype": "text",
+     "cls": "TEXT",
+     "notnull": false,
+     "identity": "",
+     "default": ""
+    },
+    {
+     "sq": "candidates_json",
+     "pg": "candidates_json",
      "sqtype": "TEXT",
      "pgtype": "text",
      "cls": "TEXT",
@@ -10865,6 +11069,26 @@
     {
      "sq": "district_en",
      "pg": "district_en",
+     "sqtype": "TEXT",
+     "pgtype": "text",
+     "cls": "TEXT",
+     "notnull": false,
+     "identity": "",
+     "default": ""
+    },
+    {
+     "sq": "geo_source",
+     "pg": "geo_source",
+     "sqtype": "TEXT",
+     "pgtype": "text",
+     "cls": "TEXT",
+     "notnull": false,
+     "identity": "",
+     "default": ""
+    },
+    {
+     "sq": "geo_precision",
+     "pg": "geo_precision",
      "sqtype": "TEXT",
      "pgtype": "text",
      "cls": "TEXT",
@@ -14064,6 +14288,26 @@
      "sqtype": "DATETIME",
      "pgtype": "timestamp with time zone",
      "cls": "TS",
+     "notnull": false,
+     "identity": "",
+     "default": ""
+    },
+    {
+     "sq": "refund_printed_at",
+     "pg": "refund_printed_at",
+     "sqtype": "DATETIME",
+     "pgtype": "timestamp with time zone",
+     "cls": "TS",
+     "notnull": false,
+     "identity": "",
+     "default": ""
+    },
+    {
+     "sq": "channel_note",
+     "pg": "channel_note",
+     "sqtype": "TEXT",
+     "pgtype": "text",
+     "cls": "TEXT",
      "notnull": false,
      "identity": "",
      "default": ""
@@ -21769,6 +22013,17 @@
     "id"
    ],
    "def": "FOREIGN KEY (created_by) REFERENCES users(id)"
+  },
+  {
+   "table": "ingredient_cost_skips",
+   "cols": [
+    "ingredient_id"
+   ],
+   "ref": "ingredients",
+   "refcols": [
+    "id"
+   ],
+   "def": "FOREIGN KEY (ingredient_id) REFERENCES ingredients(id)"
   }
  ],
  "cons": [
@@ -22846,6 +23101,16 @@
    "table": "waste_entries",
    "type": "p",
    "def": "PRIMARY KEY (id)"
+  },
+  {
+   "table": "ingredient_cost_skips",
+   "type": "p",
+   "def": "PRIMARY KEY (id)"
+  },
+  {
+   "table": "push_optouts",
+   "type": "p",
+   "def": "PRIMARY KEY (scope, subject_id)"
   }
  ],
  "sequences": [
@@ -22995,6 +23260,10 @@
   },
   {
    "seq": "income_entries_id_seq",
+   "owned": ""
+  },
+  {
+   "seq": "ingredient_cost_skips_id_seq",
    "owned": ""
   },
   {

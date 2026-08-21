@@ -1,4 +1,4 @@
-# The Postgres migration — status, v2.3
+# The Postgres migration — status, v2.4
 
 **2026-08-10 · A LIVING DOCUMENT. Both halves, in one place: what is built, and what is left.**
 Covers 2026-08-03 onwards. Read-only in itself — no code change ever accompanies it.
@@ -183,6 +183,8 @@ Type: **C** conversion · **F** fix · **D** design question · **O** operationa
 | 56 | ⚠️ **`retail_order_counters` is the ONLY copy of itself** — Postgres-only, absent from `data/roots.db`, `plan.json` and `schema.sql`. **E2 does not touch it** (162 plan tables vs 163 in the cluster) and the rehearsal proved it byte-identical before and after. **The risk is a manual truncate-everything or a drop-and-recreate restore**, which has no source to re-copy from. Cheap today at `last_no = 0`; expensive from F2 onward, when it becomes the only record of which numbers were issued | O | §24 `retail_order_counters` IS THE ONLY COPY OF ITSELF |
 
 | 57 | ✅ **RULE — a name held as DATA is invisible to a scan of CODE.** Three instances this session: `CONTROL_PLANE_TABLES` (strings in a `Set`), the archived `sequences.json` (a stale key printing blank, which reads like a pass), and `copy_order.json` (twelve stale names that blocked E2 entirely with a `KeyError`). **When a name changes, enumerate committed DATA files as a first-class population** — closed here from `git ls-files`, not sampled: 99 committed data files repo-wide, 11 hold any of the 28 names | O | §24 A NAME HELD AS DATA IS INVISIBLE TO A SCAN OF CODE |
+| 58 | ✅ **CLOSED 2026-08-21 — the copy's SHAPE came from a 2026-08-03 census while its CONTENTS came from live SQLite.** 2 tables + 11 columns existed in the source and **not in Postgres at all**; `verify.py` was blind to them because it reads the same `cols[]` as `gen.py`. DDL applied (165 tables), `plan.json` and `copy_order.json` extended, copy re-run at 131 tables, round-trip on the affected tables **0 differences**. **`drift_guard.py` now refuses the copy on any table/column drift and `run.py` calls it before the TRUNCATE** — exit 2 if it cannot see the source. ⚠️ **It does NOT cover row counts; item 54 stands** | F | §24 THE COPY TOOK ITS SHAPE FROM A CENSUS AND ITS CONTENTS FROM THE SOURCE |
+
 ### After the flip — explicitly not preconditions
 
 §24 is clear that the switchover **precedes** the isolation work; building the wall on SQLite first means building it twice.

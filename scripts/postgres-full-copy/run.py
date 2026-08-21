@@ -7,7 +7,7 @@ SQLite is opened read-only throughout. Each table's SQL file is deleted once it
 has loaded, so peak disk stays near the size of the largest single table.
 """
 import sqlite3, json, os, sys, subprocess, time
-import gen, overrides
+import gen, overrides, drift_guard
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 plan = json.load(open(os.path.join(HERE, "plan.json"), encoding="utf-8"))
@@ -73,6 +73,18 @@ def sequences():
 
 def main():
     t0 = time.time()
+
+    # FIRST, and before anything is read or emptied. plan.json is a census;
+    # this copy takes its SHAPE from it and its CONTENTS from live SQLite, so
+    # a table or column added since the census is invisible to the copy AND to
+    # verify.py, which builds its comparison from the same cols[]. The guard
+    # refuses rather than copying a shape that no longer matches the source.
+    # It exits 2 when it cannot see the source at all, which is also a refusal.
+    rc = drift_guard.main(quiet=True)
+    if rc != 0:
+        print("*** aborting before the TRUNCATE: plan.json does not describe the source ***")
+        sys.exit(rc)
+
     todo = [t for t in order if plan["tables"][sq_of[t]]["rows"] > 0]
     print(f"tables to copy: {len(todo)}")
 
