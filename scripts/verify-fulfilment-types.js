@@ -2072,6 +2072,30 @@ check('removing a line clears the selection, because indexes shift under it',
 check('a product tile shows how many of it are in the basket',
   /inc > 0 \? '<span class="incart">' \+ inc/.test(POS_TILL_SRC), true);
 
+// ── The quantity control ─────────────────────────────────────────────────
+// Each of -, the count and + carried its own border with 10px of air between
+// them, so one quantity read as three floating chips and the number they change
+// looked like it belonged to neither button. They share a border now, divided
+// by hairlines.
+check('the quantity control is one unit, not three chips',
+  /<span class="qgrp">/.test(POS_TILL_SRC) && /\.qgrp\{[^}]*border:1px solid/.test(POS_TILL_SRC), true);
+check('the buttons inside it drop their own borders',
+  /\.step\{[^}]*border:0/.test(POS_TILL_SRC), true);
+// Grouping must not shrink the targets — this is a counter, operated by thumb.
+check('the targets stay 52px inside the group',
+  /\.step\{[^}]*width:52px;height:52px/.test(POS_TILL_SRC), true);
+check('the count is divided from the buttons by hairlines, not gaps',
+  /\.stepn\{[^}]*border-left:1px solid/.test(POS_TILL_SRC), true);
+// THE INK EDGE BELONGS TO THE SELECTED STATE, not to the strip. Every line
+// carries a strip on a phone, so a bar on the strip itself painted one on all
+// of them and claimed a selection the screen did not have.
+check('the selected-line edge is a state, not a property of every strip',
+  /\.lctl\{[^}]*border-left:3px solid transparent/.test(POS_TILL_SRC)
+  && /\.lctl\.sel\{border-left-color:var\(--td-text\)\}/.test(POS_TILL_SRC), true);
+// …and on a phone it marks nothing at all, because every strip is already open.
+check('a phone shows no selected-line edge',
+  /\.lctl\.sel\{border-left-color:transparent\}/.test(POS_TILL_SRC), true);
+
 // ── Attaching a customer ─────────────────────────────────────────────────
 // It was window.prompt(): an unstyleable box captioned with the origin
 // ("store.rootskitchenchina.com says"), which could not show what it found and

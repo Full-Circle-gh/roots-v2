@@ -298,15 +298,35 @@ button{font:inherit;color:inherit;margin:0}
 .lctl{
   display:flex;align-items:center;gap:10px;padding:0 16px 12px 13px;
   background:var(--td-raised);border-bottom:1px solid var(--td-border);
-  border-left:3px solid var(--td-text);
+  /* The ink edge marks the SELECTED line, so it belongs to the selected state
+     and not to the strip. On a phone every line carries a strip and nothing is
+     selected — a bar on all of them would claim a selection that is not there.
+     Transparent rather than absent so the rows stay aligned either way. */
+  border-left:3px solid transparent;
+}
+.lctl.sel{border-left-color:var(--td-text)}
+
+/* ONE CONTROL, NOT THREE. Each of -, the count and + used to carry its own
+   border with 10px of air between them, so a single quantity read as three
+   floating chips and the number it changes appeared to belong to neither
+   button. They share a border now, divided by hairlines: the group is the
+   control, the hairlines are the seams, and the 52px targets are unchanged. */
+.qgrp{
+  display:inline-flex;align-items:stretch;flex:none;overflow:hidden;
+  border:1px solid var(--td-border);border-radius:var(--r-control);
+  background:var(--td-surface);
 }
 .step{
-  width:52px;height:52px;flex:none;border-radius:var(--r-control);
-  border:1px solid var(--td-border);background:var(--td-surface);
+  width:52px;height:52px;flex:none;border:0;border-radius:0;
+  background:transparent;color:var(--td-text);
   font-size:22px;display:grid;place-items:center;
 }
 .step[disabled]{color:var(--td-text2);background:var(--td-raised)}
-.stepn{min-width:56px;height:52px;display:grid;place-items:center;font-size:18px;font-variant-numeric:tabular-nums}
+.stepn{
+  min-width:56px;height:52px;display:grid;place-items:center;
+  font-size:18px;font-variant-numeric:tabular-nums;
+  border-left:1px solid var(--td-border);border-right:1px solid var(--td-border);
+}
 .lsp{flex:1}
 /* QUIET, NOT ABSENT. A brick-outlined box made the destructive control the
    loudest thing in the row — louder than the price — and it read as a form
@@ -547,6 +567,11 @@ button{font:inherit;color:inherit;margin:0}
   /* Every line carries its stepper: the sheet was opened on purpose and has
      the room, so a correction is one tap instead of select-then-tap. */
   .lctl{display:flex}
+  /* …and because every strip is already open, SELECTION marks nothing here.
+     Tapping a row still sets it (the row is the same control it is on a
+     tablet), so the ink edge is suppressed rather than left to appear on one
+     arbitrary line and imply a state the screen does not otherwise have. */
+  .lctl.sel{border-left-color:transparent}
 
   /* The bar. Two rows: the order folded, and the thing the thumb is going for. */
   .t-bar{
@@ -1091,9 +1116,11 @@ button{font:inherit;color:inherit;margin:0}
         var st = stockOf(l.id);
         var capped = st != null && l.qty >= st;
         h += '<div class="lctl' + (sel ? ' sel' : '') + '" data-for="' + i + '">'
+           + '<span class="qgrp">'
            + '<button class="step" type="button" data-q="-1" data-i="' + i + '">&minus;</button>'
            + '<span class="stepn">' + l.qty + '</span>'
            + '<button class="step" type="button" data-q="1" data-i="' + i + '"' + (capped ? ' disabled' : '') + '>+</button>'
+           + '</span>'
            + '<span class="lsp"></span>'
            + '<button class="rm" type="button" data-q="x" data-i="' + i + '">' + esc(T('remove')) + '</button>'
            + '</div>';
