@@ -12756,11 +12756,21 @@ router.post('/api/retail/vouchers/validate', requireRetailAuth, express.json(), 
 // (retail_stock_ledger reason=gzgrocery_order, units=-delta; reverses subtract)
 // UNIONed with the legacy drift pickups (guanyi_pickup_log) for pre-order-read
 // history. Revenue = units × (gz price → retail → sell_price). Returns
-// { revenue, orders, byBucket } bucketed by day (or hour, opts.hourly). Folds
-// into REVENUE only — never the order/customer counts (wholesale, no storefront
-// order). No-op for a tenant without these tables.
+// { revenue, lines, orders, byBucket } bucketed by day (or hour, opts.hourly).
+// Folds into REVENUE only — never the customer counts (wholesale, no storefront
+// customer). No-op for a tenant without these tables.
+//
+// `lines` vs `orders` is the distinction this function used to collapse, and the
+// collapse is why the Sales page and the dashboard disagreed on the order count.
+// A ledger row is one PRODUCT LINE of one gzgrocery order, so counting rows
+// reported a 3-product order as three orders. `lines` keeps that number (it is
+// the honest "units picked" figure the Sales card shows as Pickups); `orders`
+// counts the daemon's mirror rows in retail_orders — the SAME rows the dashboard
+// counts — so both pages now answer "how many orders" from one source. With
+// mirroring off there are no mirror rows and both report 0 orders against folded
+// revenue, which is consistent rather than merely non-zero.
 function guanyiPickupSales(db, from, to, opts) {
-  const out = { revenue: 0, orders: 0, byBucket: {} };
+  const out = { revenue: 0, lines: 0, orders: 0, byBucket: {} };
   try {
     const TZ = '+8 hours';
     const hourly = !!(opts && opts.hourly);
@@ -12798,13 +12808,22 @@ function guanyiPickupSales(db, from, to, opts) {
       if (!units) continue;
       const rev = units * (Number(r.owed) || 0);
       out.revenue += rev;
-      if (units > 0) out.orders += 1;
-      const b = out.byBucket[r.bucket] || { revenue: 0, orders: 0 };
+      if (units > 0) out.lines += 1;
+      const b = out.byBucket[r.bucket] || { revenue: 0, lines: 0 };
       b.revenue += rev;
-      if (units > 0) b.orders += 1;
+      if (units > 0) b.lines += 1;
       out.byBucket[r.bucket] = b;
     }
     out.revenue = +out.revenue.toFixed(2);
+    // Real order count — the daemon's mirror rows, counted on the same date
+    // expression and the same paid-status set the dashboard uses, so the two
+    // pages cannot drift apart. Cancelled mirrors are excluded by that set.
+    out.orders = db.prepare(`
+      SELECT COUNT(*) AS n FROM retail_orders
+       WHERE channel='gzgrocery'
+         AND status IN ('paid','preparing','dispatched','delivered','awaiting_restock')
+         AND date(COALESCE(paid_at, placed_at), '${TZ}') BETWEEN ? AND ?
+    `).get(from, to)?.n || 0;
   } catch (e) { /* tenant without the gzgrocery ledger → zeros */ }
   return out;
 }
@@ -12917,10 +12936,17 @@ router.get('/api/retail-admin/sales/summary', requireRetailAdmin, (req, res) => 
         `).get(today)?.n || 0;
       } catch (e) { return 0; }
     };
-    const wc = storeAgg("COALESCE(NULLIF(channel,''),'wechat')='wechat'");
-    const wb = storeAgg("channel='web'");
-    const wcItems = storeItems("COALESCE(NULLIF(o.channel,''),'wechat')='wechat'");
-    const wbItems = storeItems("o.channel='web'");
+    //
+    // Both exclude counter fulfilment, which the POS card below claims. Without
+    // that exclusion a till sale carrying a storefront channel would be summed
+    // into BOTH cards, inflating the page total. The six buckets have to be a
+    // true partition of the day's paid orders for the residual below to work.
+    const NOT_COUNTER  = "COALESCE(fulfillment_type,'') <> 'counter'";
+    const NOT_COUNTERO = "COALESCE(o.fulfillment_type,'') <> 'counter'";
+    const wc = storeAgg(`COALESCE(NULLIF(channel,''),'wechat')='wechat' AND ${NOT_COUNTER}`);
+    const wb = storeAgg(`channel='web' AND ${NOT_COUNTER}`);
+    const wcItems = storeItems(`COALESCE(NULLIF(o.channel,''),'wechat')='wechat' AND ${NOT_COUNTERO}`);
+    const wbItems = storeItems(`o.channel='web' AND ${NOT_COUNTERO}`);
 
     // gzgrocery — wholesale pickup channel (revenue + order count from the ledger).
     const gy = guanyiPickupSales(tdb(), today, today);
@@ -12939,20 +12965,51 @@ router.get('/api/retail-admin/sales/summary', requireRetailAdmin, (req, res) => 
     // 'meituan', so every counter sale was missing from the Sales page while
     // sitting in the orders list. The row is new revenue on the page, not
     // double-counted revenue.
-    const ps = storeAgg("fulfillment_type='counter'");
-    const psItems = storeItems("o.fulfillment_type='counter'");
+    const ps = storeAgg("fulfillment_type='counter' AND COALESCE(channel,'') NOT IN ('meituan','gzgrocery')");
+    const psItems = storeItems("o.fulfillment_type='counter' AND COALESCE(o.channel,'') NOT IN ('meituan','gzgrocery')");
+
+    // Direct — every paid order none of the five cards above claims: the staff-
+    // keyed orders from the New order form (channel = the operator's "order came
+    // from" answer), plus legacy channel='manual' rows, plus anything a future
+    // channel starts writing before it earns a card.
+    //
+    // Defined as a RESIDUAL rather than an inclusion list, and that is the point.
+    // The page used to hand-build five buckets and sum THOSE into the headline,
+    // so any order matching none of them — a phone order keyed for delivery, say
+    // — was silently dropped from the Sales total while the dashboard, which
+    // aggregates all of retail_orders, still counted it. That is the whole
+    // "Sales says ¥5,115, dashboard says ¥5,384" discrepancy. A residual cannot
+    // drop revenue: whatever the other buckets don't take lands here by
+    // construction, so the two pages reconcile permanently.
+    //
+    // gzgrocery mirror rows stay out because their revenue is folded in from the
+    // ledger (guanyiPickupSales) — counting the mirrors too would double-book.
+    const claimedBy = (p) => `(
+         ${p}channel='meituan'
+      OR ${p}channel='gzgrocery'
+      OR ${p}fulfillment_type='counter'
+      OR COALESCE(NULLIF(${p}channel,''),'wechat') IN ('wechat','web')
+    )`;
+    const dr = storeAgg(`NOT ${claimedBy('')}`);
+    const drItems = storeItems(`NOT ${claimedBy('o.')}`);
 
     const channels = {
       wechat:    { connected: true,  revenue: +Number(wc.revenue || 0).toFixed(2), orders: wc.orders || 0, aov: +Number(wc.aov || 0).toFixed(2), extra: wcItems },
       web:       { connected: true,  revenue: +Number(wb.revenue || 0).toFixed(2), orders: wb.orders || 0, aov: +Number(wb.aov || 0).toFixed(2), extra: wbItems },
       meituan:   { connected: true,  revenue: +Number(mt.revenue || 0).toFixed(2), orders: mt.orders || 0, aov: +Number(mt.aov || 0).toFixed(2), extra: mtPushes },
-      gzgrocery: { connected: true,  revenue: gy.revenue || 0, orders: gy.orders || 0, aov: gyAov, extra: gy.orders || 0 },
+      gzgrocery: { connected: true,  revenue: gy.revenue || 0, orders: gy.orders || 0, aov: gyAov, extra: gy.lines || 0 },
       eleme:     { connected: false, revenue: 0, orders: 0, aov: 0, extra: 0 },
       pos:       { connected: true,  revenue: +Number(ps.revenue || 0).toFixed(2), orders: ps.orders || 0, aov: +Number(ps.aov || 0).toFixed(2), extra: psItems },
+      // Not a connectable channel — nothing to switch on, nothing to configure —
+      // so it carries `intrinsic` and is skipped by the "N / M live now" tile
+      // below. It still sums into revenue/orders like any other bucket.
+      direct:    { connected: true, intrinsic: true, revenue: +Number(dr.revenue || 0).toFixed(2), orders: dr.orders || 0, aov: +Number(dr.aov || 0).toFixed(2), extra: drItems },
     };
-    let revenue = 0, orders = 0, active = 0;
+    let revenue = 0, orders = 0, active = 0, connectable = 0;
     for (const k of Object.keys(channels)) {
       revenue += channels[k].revenue; orders += channels[k].orders;
+      if (channels[k].intrinsic) continue;
+      connectable += 1;
       if (channels[k].connected) active += 1;
     }
     // Cash-basis: fold today's wallet top-up CASH into revenue (real money in
@@ -12964,7 +13021,7 @@ router.get('/api/retail-admin/sales/summary', requireRetailAdmin, (req, res) => 
     const creditRedeemed = storeCreditRedeemed(tdb(), today, today);
     revenue = +(revenue + tu.received).toFixed(2);
     res.json({ success: true, channels, summary: {
-      revenue, orders, aov, active, total: Object.keys(channels).length,
+      revenue, orders, aov, active, total: connectable,
       topups_received: tu.received, store_credit_redeemed: creditRedeemed,
     } });
   } catch (e) {
@@ -20676,7 +20733,25 @@ router.get('/api/retail-admin/invoices/unseen-count', requireRetailAdmin, (req, 
 // neither fulfils nor prints them. Letting staff hand-key one would mint an order
 // nobody can act on, and would collide with the daemon's own mirror row.
 // Inclusion list, never fall-through (§1.17 rule 2).
-const MANUAL_ORDER_CHANNELS = ['manual', 'wechat', 'web'];
+//
+// These are ORIGINS — how the customer reached us — not platform channels. The
+// distinction matters because `source` already records that staff keyed the row;
+// a channel of 'manual' therefore said nothing the row didn't already say, and
+// left the Sales page with no card to file it under.
+//
+// 'wechat' and 'web' are gone: those storefronts write their own orders, and a
+// staff-keyed row claiming one was being summed into the Mini app / Web shop
+// cards, inflating self-serve revenue with hand-keyed sales. A customer who
+// messaged the shop on WeChat is 'wechat_chat', which is a different thing from
+// the mini app and now counts as one.
+//
+// 'manual' survives for the TILL only (public/till.html posts it with
+// fulfillment_type='counter') and for older API callers. A counter sale has no
+// origin question to ask — the customer is standing at the counter — so it is
+// allowed through here and rejected below for anything that isn't a counter
+// sale. New form submissions must name a real origin.
+const MANUAL_ORDER_ORIGINS  = ['pickup', 'wechat_chat', 'wholesale', 'other'];
+const MANUAL_ORDER_CHANNELS = ['manual', ...MANUAL_ORDER_ORIGINS];
 // delivery = ship/courier to an address · pickup = customer collects at a store
 // later · counter = handed over at the till now, nothing to ship or collect.
 const ORDER_FULFILLMENT_TYPES = ['delivery', 'pickup', 'counter'];
@@ -20907,12 +20982,21 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
 
   // ── What the operator actually chose: channel, store, fulfilment ──────────
   // Absent channel → 'manual', which is what every row got when this was
-  // hardcoded, so an existing caller's stored value does not move.
+  // hardcoded, so an existing caller's stored value does not move. The New order
+  // form no longer offers it and the cross-check below rejects it for anything
+  // that isn't a counter sale, so the default is a floor for old callers, not a
+  // way for the form to skip the question.
   const channel = b.channel == null || b.channel === ''
     ? 'manual'
     : String(b.channel).toLowerCase();
   if (!MANUAL_ORDER_CHANNELS.includes(channel)) {
     return res.status(400).json({ success: false, error: 'bad_channel', allowed: MANUAL_ORDER_CHANNELS });
+  }
+  // 'other' is only meaningful with a note; without one it is the same
+  // unattributable bucket 'manual' was, just spelled differently.
+  const channelNote = b.channel_note == null ? null : String(b.channel_note).trim().slice(0, 200);
+  if (channel === 'other' && !channelNote) {
+    return res.status(400).json({ success: false, error: 'channel_note_required' });
   }
 
   // store_id is optional (a phone order taken before routing is decided has no
@@ -20939,6 +21023,14 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
   const fulfillmentType = String(b.fulfillment_type).toLowerCase();
   if (!ORDER_FULFILLMENT_TYPES.includes(fulfillmentType)) {
     return res.status(400).json({ success: false, error: 'bad_fulfillment_type', allowed: ORDER_FULFILLMENT_TYPES });
+  }
+  // Origin is required for anything a human keyed on a customer's behalf. Only
+  // the till is exempt: a counter sale's origin IS the counter, already recorded
+  // in fulfillment_type, so there is nothing to ask. Everything else must name
+  // where the order came from — an unanswered origin is exactly what left this
+  // revenue with no card on the Sales page.
+  if (channel === 'manual' && fulfillmentType !== 'counter') {
+    return res.status(400).json({ success: false, error: 'channel_required', allowed: MANUAL_ORDER_ORIGINS });
   }
 
   // Optional delivery address snapshot (else it's a counter order with just a
@@ -21105,16 +21197,16 @@ router.post('/api/retail-admin/orders', requireRetailAdmin, express.json(), asyn
            order_no, customer_id, status, payment_method,
            recipient_name, recipient_phone, address_full, address_json,
            subtotal, shipping_fee, packing_fee, total,
-           customer_note, staff_note, channel, source, created_by, fulfillment_type, pay_token,
+           customer_note, staff_note, channel, channel_note, source, created_by, fulfillment_type, pay_token,
            store_id
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
       ).run(
         // Always inserted as pending_payment first; markOrderPaid() flips it below
         // when staff chose 'paid', keeping the settle logic in one place.
         orderNo, customerId, 'pending_payment', paymentMethod,
         recipientName, recipientPhone || null, addressFull, addressJson,
         subtotal, shippingFee, packingFee, total,
-        customerNote, staffNote, channel, 'manual', req.user.id, fulfillmentType, payToken,
+        customerNote, staffNote, channel, channelNote, 'manual', req.user.id, fulfillmentType, payToken,
         storeId
       );
       orderId = info.lastInsertRowid;

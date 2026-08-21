@@ -246,8 +246,17 @@ function ordChannelLabel(o) {
   if (c === 'meituan')   return 'Meituan';
   if (c === 'gzgrocery') return 'Gzgrocery';
   if (c === 'web')       return 'Web';
-  if (c === 'manual')    return cuT('Manual', '手动');
   if (c === 'wechat')    return 'WeChat';
+  // Staff-keyed origins — where the customer reached us, asked on the New order
+  // form. 'manual' is the LEGACY value: rows written before the form asked the
+  // question, plus every till sale (whose origin is the counter, recorded in
+  // fulfillment_type). It is no longer selectable, and "Unattributed" says so
+  // rather than implying someone chose it.
+  if (c === 'pickup')      return cuT('Pick up', '到店自取');
+  if (c === 'wechat_chat') return cuT('WeChat message', '微信消息');
+  if (c === 'wholesale')   return cuT('Wholesale', '批发');
+  if (c === 'other')       return cuT('Other', '其他');
+  if (c === 'manual')      return cuT('Unattributed', '未归属');
   return c;
 }
 // Read-only channels (Meituan) carry their OWN order lifecycle we don't fulfil.
@@ -7886,7 +7895,12 @@ function ordNewRender() {
   const ship = document.getElementById('onw-ship'); if (ship) ship.value = '0';
   const pack = document.getElementById('onw-pack'); if (pack) pack.value = '0';
   const ovr = document.getElementById('onw-override'); if (ovr) ovr.value = '';
-  const ch = document.getElementById('onw-channel'); if (ch) ch.value = 'manual';
+  // No pre-selection: the operator has to say where the order came from. A
+  // default here is what produced a pile of orders whose origin nobody ever
+  // answered, and which the Sales page then had no card to file under.
+  const ch = document.getElementById('onw-channel'); if (ch) ch.value = '';
+  const chn = document.getElementById('onw-channel-note'); if (chn) chn.value = '';
+  ordNewChannelChange();
   const ful = document.getElementById('onw-ful'); if (ful) ful.value = 'delivery';
   const st = document.getElementById('onw-status'); if (st) st.value = 'pending_payment';
   const pay = document.getElementById('onw-pay'); if (pay) pay.value = 'wechat';
@@ -8223,6 +8237,19 @@ function ordNewRenderLines() {
 // Delivery: six required fields. Pickup or counter: the block is ABSENT —
 // hidden, out of layout and the accessibility tree (frame E). A counter
 // sale opens on Paid · Cash: born fulfilled, not born closed.
+// "Other" is the only origin that needs a follow-up question, so the note field
+// exists only while it is selected — and is cleared on the way out so a switch
+// away from Other can't leave a stale note attached to a real origin.
+function ordNewChannelChange() {
+  const sel  = document.getElementById('onw-channel');
+  const wrap = document.getElementById('onw-channel-note-wrap');
+  const note = document.getElementById('onw-channel-note');
+  if (!sel || !wrap) return;
+  const isOther = sel.value === 'other';
+  wrap.hidden = !isOther;
+  if (!isOther && note) note.value = '';
+}
+
 function ordNewFulChange() {
   const sel = document.getElementById('onw-ful');
   if (!sel || !ONW) return;
@@ -8660,7 +8687,8 @@ const ONW_ERR_WHERE = {
   forbidden_capability: 'cust',
   no_items: 'prod', invalid_item: 'prod', product_unavailable: 'prod', bad_unit_price: 'prod',
   bad_shipping_fee: 'money', bad_packing_fee: 'money', bad_total: 'money',
-  bad_channel: 'route', bad_store_id: 'route', store_not_found: 'route',
+  bad_channel: 'route', channel_required: 'route', channel_note_required: 'route',
+  bad_store_id: 'route', store_not_found: 'route',
   store_required_for_counter: 'route',
   bad_fulfillment_type: 'route', fulfillment_type_required: 'route',
   payment_method_required_for_counter: 'route',
@@ -8704,6 +8732,8 @@ function ordNewErrText(code, detail) {
     bad_packing_fee: cuT('Packing is not a valid amount.', '包装费金额不正确。'),
     bad_total: cuT('The total override is not a valid amount.', '自定义总额金额不正确。'),
     bad_channel: cuT('Pick a channel this order can be created on.', '请选择可下单的渠道。'),
+    channel_required: cuT('Say where this order came from.', '请选择订单来源。'),
+    channel_note_required: cuT('Write where this order came from.', '请填写具体来源。'),
     bad_store_id: cuT('Pick a store.', '请选择门店。'),
     store_not_found: cuT('That store no longer exists. Pick another.', '该门店已不存在,请另选。'),
     // The server refuses a walk-in with no location: the goods left a shelf, and
@@ -8764,7 +8794,11 @@ function ordNewCollect() {
     packing_fee: Number(val('onw-pack')) || 0,
     status: val('onw-status') || 'pending_payment',
     payment_method: val('onw-pay') || 'offline',
-    channel: val('onw-channel') || 'manual',
+    // No `|| 'manual'` fallback. An empty select means the operator hasn't
+    // answered yet, and ordNewValidate blocks the submit before we get here —
+    // sending a silent default would put the question back where it started.
+    channel: val('onw-channel'),
+    channel_note: val('onw-channel') === 'other' ? (val('onw-channel-note') || null) : null,
     fulfillment_type: ft,
     customer_note: val('onw-note-cust') || null,
     staff_note: val('onw-note-staff') || null,
@@ -8808,6 +8842,13 @@ function ordNewAddress() {
 // local failure and a remote one read identically.
 function ordNewValidate(body) {
   if (!body.recipient_name) return ['cust', ordNewErrText('recipient_name_required')];
+  // Origin, before anything else about the order's shape. The server enforces
+  // the same rule (channel_required / channel_note_required); this is the copy
+  // that puts the message next to the box the operator has to fix.
+  if (!body.channel) return ['route', ordNewErrText('channel_required')];
+  if (body.channel === 'other' && !body.channel_note) {
+    return ['route', ordNewErrText('channel_note_required')];
+  }
   if (!body.items.length) return ['prod', ordNewErrText('no_items')];
   if (body.items.some(i => !(i.qty > 0))) return ['prod', ordNewErrText('invalid_item')];
   if (body.fulfillment_type === 'delivery') {
@@ -8855,6 +8896,8 @@ function ordNewRestore(draft) {
 
   const set = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.value = v; };
   set('onw-channel', f.channel);
+  set('onw-channel-note', f.channel_note);
+  ordNewChannelChange();   // re-reveal the note field if the draft was an "Other"
   set('onw-store', f.store_id != null ? String(f.store_id) : null);
   set('onw-ful', f.fulfillment_type);
   set('onw-status', f.status);
