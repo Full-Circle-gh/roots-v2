@@ -10,7 +10,7 @@
 //
 // Bump CACHE on every UI shape change to force every client to evict
 // its old shell on next load (activate handler deletes all old caches).
-const CACHE = 'roots-v2-shell-v734-cms-footer-placeholders';
+const CACHE = 'roots-v2-shell-v735-push-mute-action';
 const SHELL = ['/', '/login'];
 
 // Heuristic — request that wants HTML?
@@ -41,6 +41,46 @@ self.addEventListener('activate', (e) => {
   })());
 });
 
+// ─── The off switch ──────────────────────────────────────────────
+// A device can carry a kitchen login (push_subscriptions), a backend operator
+// login (tenant_operator_push_subs), or both — unrelated sessions sharing one
+// service worker and therefore one push endpoint. This code cannot know which,
+// so it tells both realms. The one that isn't signed in answers 401 and no-ops.
+const MUTE_ACTION = 'roots-mute';
+
+function _postJSON(path, body) {
+  return fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(body),
+  }).catch(() => null);
+}
+
+// Switch this device off: record the intent server-side wherever a session
+// allows it, then drop the browser subscription regardless.
+async function muteThisDevice() {
+  let sub = null;
+  try { sub = await self.registration.pushManager.getSubscription(); } catch (e) { sub = null; }
+  const endpoint = sub ? sub.endpoint : null;
+  // The endpoint goes up BEFORE the unsubscribe below — the backend realm uses
+  // it to find the kitchen subscription that shares this browser.
+  await Promise.all([
+    _postJSON('/api/push/pref', { enabled: false }),
+    _postJSON('/api/backend/push/pref', { enabled: false, endpoint }),
+  ]);
+  // The belt, and the reason the button can be trusted: an unsubscribed
+  // endpoint cannot be pushed to whatever the server still believes. Any row
+  // still pointing at it is pruned on the next send's 410 (routes/push.js).
+  if (sub) { try { await sub.unsubscribe(); } catch (e) {} }
+  try {
+    await self.registration.showNotification('Notifications off · 通知已关闭', {
+      body: 'This device stops here. Switch them back on in the app. · 此设备将不再收到推送，可在应用内重新开启。',
+      tag: 'roots-muted', icon: '/pos-icon-192.png', badge: '/pos-icon-192.png',
+    });
+  } catch (e) {}
+}
+
 // ─── Web Push handlers ───────────────────────────────────────────
 // Server fires a push to the user's subscription endpoint; the OS
 // wakes the service worker and dispatches 'push'. We render a native
@@ -57,6 +97,13 @@ self.addEventListener('push', (e) => {
   // and badge for every notification (same asset used by app.html).
   e.waitUntil(self.registration.showNotification(title, {
     body, tag, icon: '/pos-icon-192.png', badge: '/pos-icon-192.png',
+    // The off switch travels WITH the notification. Every other one lives on a
+    // page tied to a single login — Profile > Notifications is operator-only,
+    // and the kitchen pages offer Enable and nothing else — so whoever a push
+    // actually reaches may have no surface that can switch it off. This button
+    // sits on the device that is ringing, which is the only place that is
+    // always true. Browsers without action support ignore the key.
+    actions: [{ action: MUTE_ACTION, title: 'Turn off · 关闭' }],
     // When a new push reuses an existing tag the browser replaces the tray
     // entry *silently* unless renotify is set — that's why only the first
     // push banners/chimes and later ones just update quietly. renotify makes
@@ -69,6 +116,8 @@ self.addEventListener('push', (e) => {
 
 self.addEventListener('notificationclick', (e) => {
   e.notification.close();
+  // "Turn off" — never navigate; the whole point of the button is to leave.
+  if (e.action === MUTE_ACTION) { e.waitUntil(muteThisDevice()); return; }
   const url = (e.notification.data && e.notification.data.url) || '/';
   e.waitUntil((async () => {
     const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
