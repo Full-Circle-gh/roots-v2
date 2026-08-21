@@ -1,4 +1,7 @@
-for t in accounts users suppliers purchase_orders invoices; do
+# These five are LITERALS because this is shell and cannot read plan.json.
+# They are the Postgres names. If the schema is renamed again, edit them here
+# -- there is nothing in this file that will notice on its own.
+for t in tenants users suppliers purchase_orders invoices; do
   echo -n "$t pg_count="
   sudo -u postgres psql -d tacet -tAc "select count(*) from $t"
 done

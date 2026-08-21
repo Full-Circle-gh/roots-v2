@@ -6,12 +6,17 @@ The three targeted checks the round-trip pass does not cover on its own:
   2. Chinese text survived with matching character counts
   3. the wide base64 columns arrived at full length, by SHA-256 of the bytes
 """
-import sqlite3, json, os, subprocess, hashlib
+import sqlite3, json, os, sys, subprocess, hashlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 plan = json.load(open(os.path.join(HERE, "plan.json"), encoding="utf-8"))
 WIDE = [tuple(x) for x in json.load(open(os.path.join(HERE, "wide_cols.json"), encoding="utf-8"))]
 SRC = "file:/root/roots-v2/data/roots.db?mode=ro"
+
+# Every verdict below records into this, and the script exits non-zero if it
+# is not empty. Before this existed a failed check printed its failure and
+# still returned 0, so nothing downstream could tell a pass from a failure.
+failures = []
 
 
 def psql(sql, soft=False):
@@ -46,6 +51,10 @@ for b in bad:
 nv = psql("select count(*) from pg_constraint c join pg_namespace n on n.oid=c.connamespace "
           "where n.nspname='public' and c.contype='f' and not c.convalidated;")
 print(f"  constraints still marked NOT VALID: {nv}")
+if bad:
+    failures.append(f"1. foreign keys — {len(bad)} of {len(fks)} constraint(s) failed VALIDATE")
+if int(nv):
+    failures.append(f"1. foreign keys — {nv} constraint(s) still marked NOT VALID")
 
 print("\n=== 2. Chinese text ===")
 con = sqlite3.connect(SRC, uri=True)
@@ -81,6 +90,8 @@ print(f"  CJK characters — sqlite: {tot_sq}   postgres: {tot_pg}")
 print(f"  columns with a character-count mismatch: {len(mismatch)}")
 for m in mismatch:
     print("   ", m)
+if mismatch:
+    failures.append(f"2. Chinese text — {len(mismatch)} column(s) with a character-count mismatch")
 
 print("\n=== 3. wide base64 columns, SHA-256 of the UTF-8 bytes ===")
 allok = True
@@ -111,4 +122,23 @@ for st, col in WIDE:
     for k in bad[:5]:
         print(f"      pk={k} sqlite={sq[k]} postgres={pg.get(k)}")
 print(f"\n  all wide columns byte-identical: {allok}")
+if not allok:
+    failures.append("3. wide base64 columns — not byte-identical")
 con.close()
+
+print("")
+print("=== verdicts ===")
+if failures:
+    for f in failures:
+        print("  FAILED  " + f)
+else:
+    print("  all three verdicts passed")
+print("")
+print("  What a failure here does and does not mean:")
+print("    Verdicts 2 and 3 compare LIVE SQLite against whatever the Postgres copy")
+print("    currently holds, so they measure COPY FRESHNESS. A failure in either one")
+print("    means the copy has gone stale relative to source. It says nothing about")
+print("    table naming, schema shape, or any rename.")
+print("    Verdict 1 is the schema-level check — Postgres validating its own")
+print("    foreign keys against its own rows. That one is unaffected by copy drift.")
+sys.exit(1 if failures else 0)

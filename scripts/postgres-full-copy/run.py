@@ -98,9 +98,16 @@ def main():
     print("\n--- truncating target ---")
     all_pg = ", ".join(f'"{x["pg"]}"' for x in plan["tables"].values())
     psql(f"TRUNCATE {all_pg} RESTART IDENTITY CASCADE;")
-    n = psql("select coalesce(sum(n),0) from (select count(*) n from accounts union all "
-             "select count(*) from users union all select count(*) from suppliers union all "
-             "select count(*) from purchase_orders union all select count(*) from invoices) s;")
+    # The five rehearsal tables, named THROUGH THE PLAN rather than as literals.
+    # This read used to hardcode `accounts`; when that table was renamed the
+    # sanity check became `relation "accounts" does not exist`, and psql() turns
+    # that into sys.exit(3) -- aborting the run one statement after the TRUNCATE
+    # had already emptied the target. The dict KEYS below are SQLite table names,
+    # which do not move; the pg names follow whatever the plan currently says.
+    REHEARSAL = ["tenants", "users", "suppliers", "purchase_orders", "invoices"]
+    parts = " union all ".join(
+        f'select count(*) n from "{plan["tables"][t]["pg"]}"' for t in REHEARSAL)
+    n = psql(f"select coalesce(sum(n),0) from ({parts}) s;")
     print(f"  truncated; rehearsal tables now hold {n.strip()} rows")
 
     print("\n--- copy ---")

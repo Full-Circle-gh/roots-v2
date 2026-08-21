@@ -122,6 +122,10 @@ SKIP = set()  # filled in below by the caller's decision; empty during scan
 for f in plan["fkeys"]:
     child_pg, parent_pg = f["table"], f["ref"]
     if child_pg not in sq_of or parent_pg not in sq_of:
+        # Not a pass. This foreign key was NOT checked, and it used to vanish
+        # here without a word. See EXPECTED_UNMAPPED at the foot of this file.
+        add("FK_UNMAPPED_REFERENCE", child_pg, ",".join(f["cols"]),
+            f"names a table absent from the plan map, so this FK was NOT checked: {f['def']}")
         continue
     child, parent = sq_of[child_pg], sq_of[parent_pg]
     if plan["tables"][child]["rows"] == 0:
@@ -161,6 +165,10 @@ for c in plan["cons"]:
         continue
     pgt = c["table"].strip('"')
     if pgt not in sq_of:
+        # Same as above: this constraint was NOT checked against source.
+        add("CONS_UNMAPPED_REFERENCE", pgt, "",
+            f"names a table absent from the plan map, so this constraint was "
+            f"NOT checked: {c['def']}")
         continue
     st = sq_of[pgt]
     if plan["tables"][st]["rows"] == 0:
@@ -205,3 +213,44 @@ from collections import Counter
 print(f"\n=== {len(findings)} findings ===")
 for k, v in Counter(f["kind"] for f in findings).most_common():
     print(f"{v:>4}  {k}")
+
+# ---- unmapped references: an expected, explained, countable baseline -------
+# plan.json's `fkeys` and `cons` blocks are a survey of the Postgres side as it
+# was built, and they still carry the account* names. The `tables[].pg` map was
+# renamed back to the tenant* names when G28 was closed by renaming the schema
+# rather than the application. So every reference OUT of those two blocks INTO
+# the name map misses — by design, and permanently.
+#
+# That is why this number is not zero, and why it must not be "fixed" to zero.
+# What matters is that it does not MOVE. A deviation means the plan changed;
+# the baseline itself is just this known, deliberate mismatch.
+#
+#   14  FK_UNMAPPED_REFERENCE     foreign keys naming one of the 12 renamed tables
+#   15  CONS_UNMAPPED_REFERENCE   unique/primary keys on one of those tables
+#   --
+#   29  total
+#
+# Of those 29, seventeen (7 FK, 10 unique/PK) were checks that actually ran
+# before the rename. The other twelve were already inert, having exited at the
+# empty-table gate. Seventeen is the number of checks LOST; twenty-nine is the
+# number of references that cannot resolve, and it is the one this file can
+# count from the inside, because working out which of the 29 would have run
+# means resolving exactly the names that no longer resolve.
+EXPECTED_UNMAPPED = {"FK_UNMAPPED_REFERENCE": 14, "CONS_UNMAPPED_REFERENCE": 15}
+
+print("")
+print("=== unmapped references (skipped checks, made visible) ===")
+seen_unmapped = {k: sum(1 for f in findings if f["kind"] == k) for k in EXPECTED_UNMAPPED}
+for k, exp in EXPECTED_UNMAPPED.items():
+    got = seen_unmapped[k]
+    print(f"  {got:>4}  {k:<24} expected {exp:>4}  {'ok' if got == exp else '*** DEVIATION ***'}")
+tot_g, tot_e = sum(seen_unmapped.values()), sum(EXPECTED_UNMAPPED.values())
+print(f"  {tot_g:>4}  total                    expected {tot_e:>4}")
+if seen_unmapped != EXPECTED_UNMAPPED:
+    print("")
+    print("  *** DEVIATION FROM THE EXPECTED BASELINE ***")
+    print("  The known account/tenant mismatch accounts for the expected figure and")
+    print("  nothing else does. A different number means plan.json changed. Find out")
+    print("  what changed before reading any other finding in this report.")
+else:
+    print("  matches the expected baseline; no check was lost beyond the known ones")

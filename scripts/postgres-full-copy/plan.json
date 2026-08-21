@@ -465,7 +465,7 @@
     },
     {
      "sq": "tenant_id",
-     "pg": "account_id",
+     "pg": "tenant_id",
      "sqtype": "INTEGER",
      "pgtype": "integer",
      "cls": "INT",
@@ -749,7 +749,7 @@
     },
     {
      "sq": "tenant_id",
-     "pg": "account_id",
+     "pg": "tenant_id",
      "sqtype": "INTEGER",
      "pgtype": "integer",
      "cls": "INT",
@@ -826,7 +826,7 @@
     },
     {
      "sq": "tenant_id",
-     "pg": "account_id",
+     "pg": "tenant_id",
      "sqtype": "INTEGER",
      "pgtype": "integer",
      "cls": "INT",
@@ -3959,7 +3959,7 @@
     },
     {
      "sq": "tenant_id",
-     "pg": "account_id",
+     "pg": "tenant_id",
      "sqtype": "INTEGER",
      "pgtype": "integer",
      "cls": "INT",
@@ -4066,7 +4066,7 @@
     },
     {
      "sq": "tenant_id",
-     "pg": "account_id",
+     "pg": "tenant_id",
      "sqtype": "INTEGER",
      "pgtype": "integer",
      "cls": "INT",
@@ -4387,7 +4387,7 @@
     },
     {
      "sq": "tenant_id",
-     "pg": "account_id",
+     "pg": "tenant_id",
      "sqtype": "INTEGER",
      "pgtype": "integer",
      "cls": "INT",
@@ -7406,7 +7406,7 @@
     },
     {
      "sq": "tenant_id",
-     "pg": "account_id",
+     "pg": "tenant_id",
      "sqtype": "INTEGER",
      "pgtype": "integer",
      "cls": "INT",
@@ -7493,7 +7493,7 @@
     },
     {
      "sq": "tenant_id",
-     "pg": "account_id",
+     "pg": "tenant_id",
      "sqtype": "INTEGER",
      "pgtype": "integer",
      "cls": "INT",
@@ -7657,7 +7657,7 @@
     },
     {
      "sq": "tenant_id",
-     "pg": "account_id",
+     "pg": "tenant_id",
      "sqtype": "INTEGER",
      "pgtype": "integer",
      "cls": "INT",
@@ -9072,7 +9072,7 @@
     },
     {
      "sq": "tenant_id",
-     "pg": "account_id",
+     "pg": "tenant_id",
      "sqtype": "INTEGER",
      "pgtype": "integer",
      "cls": "INT",
@@ -18351,7 +18351,7 @@
     },
     {
      "sq": "tenant_id",
-     "pg": "account_id",
+     "pg": "tenant_id",
      "sqtype": "INTEGER",
      "pgtype": "integer",
      "cls": "INT",
@@ -18765,7 +18765,7 @@
     },
     {
      "sq": "tenant_id",
-     "pg": "account_id",
+     "pg": "tenant_id",
      "sqtype": "INTEGER",
      "pgtype": "integer",
      "cls": "INT",
@@ -18777,7 +18777,7 @@
    "autoincrement": true
   },
   "tenant_domains": {
-   "pg": "account_domains",
+   "pg": "tenant_domains",
    "rows": 1,
    "cols": [
     {
@@ -18792,7 +18792,7 @@
     },
     {
      "sq": "tenant_id",
-     "pg": "account_id",
+     "pg": "tenant_id",
      "sqtype": "INTEGER",
      "pgtype": "integer",
      "cls": "INT",
@@ -18854,7 +18854,7 @@
    "autoincrement": true
   },
   "tenant_integrations": {
-   "pg": "account_integrations",
+   "pg": "tenant_integrations",
    "rows": 2,
    "cols": [
     {
@@ -18869,7 +18869,7 @@
     },
     {
      "sq": "tenant_id",
-     "pg": "account_id",
+     "pg": "tenant_id",
      "sqtype": "INTEGER",
      "pgtype": "integer",
      "cls": "INT",
@@ -18951,7 +18951,7 @@
    "autoincrement": true
   },
   "tenant_onboarding": {
-   "pg": "account_onboarding",
+   "pg": "tenant_onboarding",
    "rows": 3,
    "cols": [
     {
@@ -18966,7 +18966,7 @@
     },
     {
      "sq": "tenant_id",
-     "pg": "account_id",
+     "pg": "tenant_id",
      "sqtype": "INTEGER",
      "pgtype": "integer",
      "cls": "INT",
@@ -19018,7 +19018,7 @@
    "autoincrement": true
   },
   "tenant_operator_push_subs": {
-   "pg": "account_operator_push_subs",
+   "pg": "tenant_operator_push_subs",
    "rows": 1,
    "cols": [
     {
@@ -19033,7 +19033,7 @@
     },
     {
      "sq": "tenant_user_id",
-     "pg": "account_user_id",
+     "pg": "tenant_user_id",
      "sqtype": "INTEGER",
      "pgtype": "integer",
      "cls": "INT",
@@ -19043,7 +19043,7 @@
     },
     {
      "sq": "tenant_id",
-     "pg": "account_id",
+     "pg": "tenant_id",
      "sqtype": "INTEGER",
      "pgtype": "integer",
      "cls": "INT",
@@ -19105,7 +19105,7 @@
    "autoincrement": false
   },
   "tenant_secrets": {
-   "pg": "account_secrets",
+   "pg": "tenant_secrets",
    "rows": 0,
    "cols": [
     {
@@ -19120,7 +19120,7 @@
     },
     {
      "sq": "tenant_id",
-     "pg": "account_id",
+     "pg": "tenant_id",
      "sqtype": "INTEGER",
      "pgtype": "integer",
      "cls": "INT",
@@ -19162,7 +19162,7 @@
    "autoincrement": true
   },
   "tenant_signup_requests": {
-   "pg": "account_signup_requests",
+   "pg": "tenant_signup_requests",
    "rows": 0,
    "cols": [
     {
@@ -19249,12 +19249,12 @@
    "autoincrement": true
   },
   "tenant_user_caps": {
-   "pg": "account_user_caps",
+   "pg": "tenant_user_caps",
    "rows": 0,
    "cols": [
     {
      "sq": "tenant_id",
-     "pg": "account_id",
+     "pg": "tenant_id",
      "sqtype": "INTEGER",
      "pgtype": "integer",
      "cls": "INT",
@@ -19264,7 +19264,7 @@
     },
     {
      "sq": "tenant_user_id",
-     "pg": "account_user_id",
+     "pg": "tenant_user_id",
      "sqtype": "INTEGER",
      "pgtype": "integer",
      "cls": "INT",
@@ -19316,7 +19316,7 @@
    "autoincrement": false
   },
   "tenant_user_codes": {
-   "pg": "account_user_codes",
+   "pg": "tenant_user_codes",
    "rows": 4,
    "cols": [
     {
@@ -19331,7 +19331,7 @@
     },
     {
      "sq": "tenant_user_id",
-     "pg": "account_user_id",
+     "pg": "tenant_user_id",
      "sqtype": "INTEGER",
      "pgtype": "integer",
      "cls": "INT",
@@ -19413,7 +19413,7 @@
    "autoincrement": true
   },
   "tenant_user_sessions": {
-   "pg": "account_user_sessions",
+   "pg": "tenant_user_sessions",
    "rows": 22,
    "cols": [
     {
@@ -19428,7 +19428,7 @@
     },
     {
      "sq": "tenant_user_id",
-     "pg": "account_user_id",
+     "pg": "tenant_user_id",
      "sqtype": "INTEGER",
      "pgtype": "integer",
      "cls": "INT",
@@ -19438,7 +19438,7 @@
     },
     {
      "sq": "tenant_id",
-     "pg": "account_id",
+     "pg": "tenant_id",
      "sqtype": "INTEGER",
      "pgtype": "integer",
      "cls": "INT",
@@ -19490,12 +19490,12 @@
    "autoincrement": false
   },
   "tenant_user_stores": {
-   "pg": "account_user_stores",
+   "pg": "tenant_user_stores",
    "rows": 0,
    "cols": [
     {
      "sq": "tenant_user_id",
-     "pg": "account_user_id",
+     "pg": "tenant_user_id",
      "sqtype": "INTEGER",
      "pgtype": "integer",
      "cls": "INT",
@@ -19517,7 +19517,7 @@
    "autoincrement": false
   },
   "tenant_users": {
-   "pg": "account_users",
+   "pg": "tenant_users",
    "rows": 7,
    "cols": [
     {
@@ -19532,7 +19532,7 @@
     },
     {
      "sq": "tenant_id",
-     "pg": "account_id",
+     "pg": "tenant_id",
      "sqtype": "INTEGER",
      "pgtype": "integer",
      "cls": "INT",
@@ -19724,7 +19724,7 @@
    "autoincrement": true
   },
   "tenants": {
-   "pg": "accounts",
+   "pg": "tenants",
    "rows": 1,
    "cols": [
     {

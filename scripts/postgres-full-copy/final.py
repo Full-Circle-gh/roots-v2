@@ -57,7 +57,10 @@ rows = seqs["rows"]
 after = seqs["after"]
 print(f"  identity sequences: {len(rows)}")
 print("\n  the five that carried a value before this run (true pre-migration state):")
-PRE = {"accounts_id_seq": "7", "invoices_id_seq": "22", "purchase_orders_id_seq": "69",
+# Postgres sequence names. `accounts_id_seq` became `tenants_id_seq` with
+# the 2026-08-21 rename; a stale key here resolves to None and prints as
+# blank rather than as a mismatch, which reads like a pass.
+PRE = {"tenants_id_seq": "7", "invoices_id_seq": "22", "purchase_orders_id_seq": "69",
        "suppliers_id_seq": "214", "users_id_seq": "8"}
 for k, v in PRE.items():
     print(f"    {k:<32} before={v:<8} after={after.get(k)}")
