@@ -1,9 +1,11 @@
-# Tacet shared-core consolidation — decisions record, v4.60
+# Tacet shared-core consolidation — decisions record, v4.61
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-08-21 · v4.61 — §24 Database: **`copy_order.json` IS DELETED AND THE COPY ORDER IS DERIVED AT RUN TIME — ITEM 59 CLOSED BY REMOVING THE ARTEFACT, NOT BY GUARDING IT.** The file could only be wrong by OMISSION, and omission meant a table truncated and never refilled. Against that it bought almost nothing: **162 of 164 positions were free, the widest tie was 67 tables, and 51 tables appear in no foreign key at all** — **the order was about 2% graph and 98% tie-break.** `run.py` `derive_copy_order()` now takes membership from `plan["tables"]`, constraint from SQLite's declared foreign keys, and an alphabetical tie-break for the rest. **The tie-break is recorded as ARBITRARY BUT STABLE and must not be called "the foreign-key order"** — it fixes 162 of the 164 positions and the graph fixes 2. **Determinism proven four ways** — twice in one process, once fresh, twice more under different `PYTHONHASHSEED` values — all byte-identical, because the obvious set-iterating implementation varies across processes only and would pass every in-process test. **Guard checks 5 and 6 removed with the artefact they guarded**, and the coverage block says so in those terms. `run.py` writes **`copy_order_used.json`**, preserving the one real thing the file was — a record of the order a run actually used — on the output side where it cannot drift. **VERIFIED NEGATIVE, RECORDED BECAUSE NOBODY WILL RE-DERIVE IT: SQLite's and Postgres's foreign-key graphs are IDENTICAL** — 145 edges each, set-compared in both directions with implicit-PK forms resolved, **zero differences either way**. That is what licenses reading the source instead of the cluster. **AND `verify.py` NOW DISCLOSES ITS OWN SCOPE**: it still shares the copier's map and still cannot detect its own blind spot, but its number no longer reads as total coverage — it prints what it examined and what it did not, separates a blind spot from the caller's own scoping, and says **NOT A CLEAN BILL OF HEALTH** in those terms when the map misses something. **Rehearsed clean: 164 tables, 99s, `run.py` 0, `checks.py` 0 with all three verdicts, `final.py` 0, `verify.py` 4,232,730 cells with 7 differences, all live trading.**
 
 2026-08-21 · v4.60 — §24 Database: **THE COPY LADDER NOW EXITS CLEAN, AND THE GUARD COVERS THE HOLE THAT WOULD HAVE EMPTIED A TABLE AND NEVER REFILLED IT.** **`drift_guard.py` did not compare `plan.json` against `copy_order.json`** — and `run.py` truncates from the first and loads from the second, so a table in one and missing from the other is **emptied and never refilled while every source check passes.** Now guarded in three directions (missing, unplanned, duplicated), red-proven in five and restored to green after each. **ITEM 54 CLOSED BY DELETION, NOT BY GUARDING:** `run.py`'s `todo` no longer reads `plan["rows"]` at all — it copies every table in the order, unconditionally, which is safe precisely because the guard proves the three lists agree. Proven by forcing `waste_entries` to `rows: 0` and watching it copy anyway. **ITEM 55 CLOSED:** `overrides.py` derives each rule's expectation from **the rule's own condition in SQL against the source**, re-read every run, so `updated_by_null` reports `fired 2 (expected 2)` instead of aborting against a 2026-08-03 constant. **`run.py` NOW EXITS 0 ON A CLEAN COPY** — every prior run this session exited 1 after the truncate and after the copy completed, which is a run that looks failed and is not. **`volume.py` reads the LIVE schema**, so `wide_cols.json` cannot miss a base64 column the census never saw; red-proven by hiding `supplier_documents.data` from `cols[]` and watching it be found anyway. **THE CLEAN REHEARSAL: 164 tables, 99s, `run.py` 0, `setseq.py` 0, `checks.py` 0 WITH ALL THREE VERDICTS PASSED** (145/145 foreign keys; **1,582,020 CJK characters identical on both sides**; all 14 wide columns byte-identical), **`final.py` 0 with zero uncopied tables**, and `verify.py` 4,231,782 cells with 15 differences, all live trading. **AND THE RULE THIS SESSION'S BIGGEST FINDING GENERALISES TO, now recorded beside the scan-count and names-as-data rules: A VERIFIER THAT SHARES THE COPIER'S MAP CANNOT AUDIT THE MAP.** A high cell count is not coverage — 4.2 million cells and eleven blind columns were the same run.
 
@@ -2768,6 +2770,67 @@ No foreign key DEFINITION was edited. Postgres carries a reference across a tabl
 
 **A NEW AS-BUILT RECORD**, `docs/tacet-postgres-schema-as-built-2026-08-21.sql`, 163 tables, body proven verbatim by sha256 against raw `pg_dump -s --no-owner` output. It supersedes the 2026-08-11 file; that file and the 2026-08-04 one are retained byte-for-byte. **Two consumers still open the 2026-08-04 file BY ITS DATED NAME** — `scripts/diagnose_seam_statements.js` and `scripts/diagnose_statement_sweep.js` — and their regex discards the index name while capturing the TABLE and its COLUMNS, so the index renames do not reach them and the table and column renames do. Not repointed; recorded so it is not rediscovered.
 
+### THE COPY ORDER IS DERIVED, NOT STORED — ITEM 59 CLOSED 2026-08-21
+
+**`copy_order.json` is deleted.** `run.py` `derive_copy_order()` builds the order at run time: **membership** from `plan["tables"]`, **constraint** from SQLite's own declared foreign keys, **an alphabetical tie-break** for everything else.
+
+**WHY DELETE RATHER THAN GUARD, AND THE NUMBER THAT SETTLED IT.** A stored order can only be wrong by omission, and omission was expensive: the `TRUNCATE` list came from `plan.json` and the load order from the file, so a table in the first and missing from the second was **emptied and never refilled** while every other check passed. Against that cost, measured on 2026-08-21:
+
+| | |
+|---|---|
+| Steps where more than one table was eligible | **162 of 164** |
+| Widest tie | **67 tables at once** |
+| Tables in no foreign key at all | **51 of 164 (31%)** |
+| Longest dependency chain | **4** |
+
+**So the order was about 2% graph and 98% tie-break.** A file whose downside is a silent truncate-and-never-refill and whose upside is ordering tables that can go anywhere is not worth keeping. **Deleting it removed the file, guard checks 5 and 6, and this item — three things for one function.**
+
+**THE TIE-BREAK IS A DECISION AND IT IS ARBITRARY. SAYING SO IS THE POINT.** It is *alphabetical among whatever is currently eligible*, and it determines **162 of the 164 positions**. **It must not be described as "the foreign-key order"** — that would credit the graph with a sequence it does not fix. Alphabetical was not chosen because it means anything. **It was chosen because it is STABLE**, and stability is the property that matters: an order that varied between runs would make two rehearsals incomparable and an order-dependent failure impossible to reproduce.
+
+**DETERMINISM PROVEN, NOT ASSUMED — FOUR RUNS, ONE HASH.** Twice inside one process, once in a fresh process, and twice more under `PYTHONHASHSEED=12345` and `PYTHONHASHSEED=999`. All four outputs **byte-identical**, sha256 `ea2b9096…`. This mattered enough to prove because the obvious implementation — iterating a set of ready tables — varies with the hash seed **across processes only**, so it would pass every in-process test and still hand back a different valid order on the box. `derive_copy_order()` iterates sorted lists and never a set or a dict, and the docstring says why.
+
+**COMPLETENESS ASSERTED IN CODE, not relied on.** The derived order must be exactly `plan["tables"]` — same set, same count — and `derive_copy_order()` exits 2 if it is not. The `TRUNCATE` and the load now come from the same dict so they cannot diverge; the assertion is there because **"cannot diverge" is exactly what was believed about the stored file.**
+
+**THE ONE REAL LOSS, PRESERVED FROM THE OUTPUT SIDE.** The file was also a record of the order every verified copy actually ran in — evidence, if a failure ever turns out to be order-dependent. `run.py` now writes **`copy_order_used.json`** beside `timings.json`: the order that run actually used, where it cannot drift from what happened.
+
+**THE DERIVED ORDER IS NOT THE STORED ONE.** They diverge from position 1 (`tenant_onboarding` vs `ai_app_help`), so it was rehearsed rather than assumed. Both satisfy the graph.
+
+---
+
+### VERIFIED NEGATIVE — SQLITE'S AND POSTGRES'S FOREIGN-KEY GRAPHS ARE IDENTICAL — 2026-08-21
+
+**Recorded because a verified negative is worth as much as a finding, and nobody will re-derive this otherwise.**
+
+**145 edges on each side, and the set difference is empty in BOTH directions.**
+
+This is a set comparison, not a count match: each edge is `(child table, child column tuple, parent table, parent column tuple)`, and SQLite's implicit-PK form — where `PRAGMA foreign_key_list` returns `to = NULL` because the reference is to the parent's primary key — was resolved to the parent's actual PK columns before comparing. **`IN POSTGRES, NOT DECLARED IN SQLITE: 0`. `DECLARED IN SQLITE, NOT IN POSTGRES: 0`.**
+
+**WHAT IT LICENSES.** `derive_copy_order()` reads SQLite's declared graph rather than the cluster's, which is what lets it — and the guard — run and refuse before Postgres is reachable. That substitution is only sound because the two graphs are the same, and this is the measurement that says so.
+
+**AND IT HELD THROUGH A CHANGE MADE THE SAME DAY**: `fk_ingredient_cost_skips_1` was added to Postgres on 2026-08-21 and SQLite had declared it on 2026-08-17. The two have stayed in step across the whole migration, including the G28 rename.
+
+One self-referencing edge exists on each side (`retail_media_folders`). It is excluded from the table-level sort deliberately — a self-reference is a ROW ordering problem, and `gen.py` `order_by()` already handles it with `"parent_id" NULLS FIRST`.
+
+---
+
+### `verify.py` NOW DISCLOSES ITS OWN SCOPE — 2026-08-21
+
+**The corollary to A VERIFIER THAT SHARES THE COPIER'S MAP CANNOT AUDIT THE MAP, acted on.** `verify.py` still builds its comparison from `plan.json`'s `cols[]`, and still cannot detect its own blind spot. **What changed is that its number no longer reads as total coverage.** It now prints, beside the result, what it examined and what in the live source it did not:
+
+```
+  tables examined                     : 164 of 164 in the live source
+  columns examined                    : 1928
+  live tables the map cannot see      : 0
+  live columns the map cannot see     : 0
+  -> every table and column examined was compared in full
+```
+
+**THREE CATEGORIES, AND SEPARATING THEM IS THE WHOLE VALUE.** A live table absent from `plan.json`, and a live column absent from `cols[]` in a table that WAS examined, are **blind spots** — listed in full, and they trigger `*** THIS RUN IS NOT A CLEAN BILL OF HEALTH ***` in those terms. A planned table the caller simply did not ask for on the command line is **the caller's own scoping** — counted, not listed, and not a warning. **The first cut of this conflated them and printed all 163 unrequested tables when one table was verified, burying the single real finding in them.** Verifying one table is a normal way to run this.
+
+**RED-PROVEN:** `retail_orders.channel_note` hidden from `cols[]` — the run reported `LIVE COLUMNS ABSENT FROM cols[] : 1  (in tables that WERE examined)` and named it, instead of reporting clean. Restored to green after.
+
+**THE EXIT CODE IS UNCHANGED AND STILL REPORTS DIFFERENCES ONLY.** Scope is disclosed in the output, not folded into the code, because a caller that has always read `0` as *no differences* must keep reading it that way. **The line a human reads is the one that changed.**
+
 ### RULE — A VERIFIER THAT SHARES THE COPIER'S MAP CANNOT AUDIT THE MAP — RECORDED 2026-08-21
 
 **The most generalisable thing this session produced, and it was found the hard way.**
@@ -2796,15 +2859,15 @@ No foreign key DEFINITION was edited. Postgres carries a reference across a tabl
 2. **Every `plan["tables"]` entry is a live SQLite table.** The reverse: the copy would fail on a table the source has dropped.
 3. **Every live column is in that table's `cols[]`.** A column added since is otherwise dropped with no error, invisible to `gen.py` AND to `verify.py`.
 4. **Every `cols[]` entry is a live column.** The SELECT would fail loudly on these, which is the safe direction, but it is still drift.
-5. **Every `plan["tables"]` entry appears in `copy_order.json`.** **This is the one that is not obvious.** `run.py` builds its TRUNCATE list from `plan["tables"]` and its `todo` from `copy_order.json`, so a table in the first and missing from the second is **emptied and never refilled** — and checks 1 to 4 all pass, because SQLite and `plan.json` agree perfectly.
-6. **Every `copy_order.json` entry is in `plan["tables"]`**, and **no table is listed twice** — a duplicate would load its rows a second time.
+5. ~~**Every `plan["tables"]` entry appears in `copy_order.json`.**~~ **REMOVED 2026-08-21 — THE ARTEFACT IS GONE, NOT THE COVERAGE.** This check existed because `run.py` truncated from `plan["tables"]` and loaded from `copy_order.json`, so a table in the first and missing from the second was **emptied and never refilled** while checks 1 to 4 all passed. **`copy_order.json` is deleted.** `run.py` `derive_copy_order()` now builds the order at run time from `plan["tables"]` and SQLite's foreign keys, so the TRUNCATE list and the load list are the same object and **cannot disagree**. A check was deleted along with the thing it checked; nothing became unwatched.
+6. ~~**Every `copy_order.json` entry is in `plan["tables"]`**, and **no table is listed twice**.~~ **REMOVED with 5, for the same reason.** A derived order cannot name a table the plan lacks, and `derive_copy_order()` asserts its output is exactly the planned set — same members, same count — rather than relying on that.
 
 **IT DOES NOT CHECK:**
 
 - **Row counts.** Deliberately. `run.py`'s `todo` no longer consults `plan["rows"]` at all, so there is no rows dimension left to guard — the dependency was deleted rather than watched. See ITEM 54.
-- **The ORDER inside `copy_order.json`**, only its membership. That order is a topological sort of the Postgres foreign-key graph, and checking it needs a Postgres read — which this guard deliberately never does, so that it can run and refuse before the cluster is even reachable. **Validated by hand on 2026-08-21 against all 145 live FK edges, 0 parents loading after a child.** A new foreign key added since the census would not be caught here. **Open.**
+- ~~**The ORDER inside `copy_order.json`**~~ — **no longer applicable.** The order is derived from SQLite's live foreign keys at run time, so it cannot be stale. `derive_copy_order()` exits 2 on a cycle rather than emitting a partial order.
 - **Column TYPES, nullability, defaults or conversion classes.** Only names. A column whose SQLite type changed under a stable name passes this guard.
-- **Anything about Postgres.** It reads `plan.json`, `copy_order.json` and live SQLite, and nothing else.
+- **Anything about Postgres.** It reads `plan.json` and live SQLite, and nothing else — which is what lets it run and refuse before the cluster is reachable.
 
 **EXIT CODES ARE PART OF THE CONTRACT.** `0` agree; `1` differ, with every difference named; **`2` the check could not run** — unreadable file, unopenable source, a source reporting zero tables. **Two is not a pass.** A guard that cannot see the source must refuse rather than wave the copy through, which is the same rule as `checks.py`'s exit code and the `fuser` lesson before it.
 

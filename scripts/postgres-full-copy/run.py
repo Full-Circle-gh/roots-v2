@@ -11,9 +11,85 @@ import gen, overrides, drift_guard
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 plan = json.load(open(os.path.join(HERE, "plan.json"), encoding="utf-8"))
-order = json.load(open(os.path.join(HERE, "copy_order.json"), encoding="utf-8"))
 SRC = "file:/root/roots-v2/data/roots.db?mode=ro"
 sq_of = {t["pg"]: st for st, t in plan["tables"].items()}
+
+
+def derive_copy_order():
+    """The order the copy runs in, DERIVED from the source rather than stored.
+
+    This replaced copy_order.json, which was a stored list of 164 table names.
+    That file could only be wrong by OMISSION, and omission was expensive: the
+    TRUNCATE list comes from plan["tables"] and the load order came from the
+    file, so a table in the first and missing from the second was emptied and
+    never refilled -- silently, with every source check passing.
+
+    MEMBERSHIP comes from plan["tables"], the same dict the TRUNCATE is built
+    from, so the two cannot diverge. CONSTRAINT comes from SQLite's own
+    declared foreign keys, measured 2026-08-21 as identical to Postgres's --
+    145 edges, set-compared both ways with implicit-PK forms resolved, zero
+    differences. Reading the source rather than the cluster keeps the property
+    the guard has: this can run and refuse before Postgres is reachable.
+
+    THE TIE-BREAK IS ALPHABETICAL AND IT IS ARBITRARY. Say that plainly: the
+    foreign-key graph forces almost nothing here. Measured on the same day,
+    162 of 164 steps had more than one table eligible, the widest tie was 67,
+    and 51 tables (31%) appear in no foreign key at all. So this is NOT "the
+    foreign-key order" -- the graph fixes about 2% of the sequence and this
+    rule fixes the rest. Alphabetical is not chosen because it is meaningful.
+    It is chosen because it is STABLE, and stability is the property that
+    matters: an order that varies between runs makes two rehearsals
+    incomparable and an order-dependent failure impossible to reproduce.
+
+    Everything below iterates SORTED LISTS, never a set or a dict. Set
+    iteration order varies with PYTHONHASHSEED across processes, which would
+    hand back a different valid order each run and quietly destroy exactly the
+    property this docstring is about.
+    """
+    tables = sorted(plan["tables"])
+    tset = set(tables)
+    con = sqlite3.connect(SRC, uri=True)
+    try:
+        con.execute("CREATE TABLE __order_probe__ (x)")
+        print("FATAL: SQLite accepted a write in derive_copy_order()")
+        sys.exit(2)
+    except sqlite3.OperationalError:
+        pass
+    parents = {}
+    try:
+        for t in tables:
+            ps = set()
+            for r in con.execute('PRAGMA foreign_key_list("%s")' % t):
+                parent = r[2]
+                # A self-reference is a ROW ordering problem, not a table one:
+                # gen.py order_by() puts retail_media_folders parents first.
+                if parent != t and parent in tset:
+                    ps.add(parent)
+            parents[t] = ps
+    finally:
+        con.close()
+
+    placed, done = [], set()
+    while len(placed) < len(tables):
+        ready = [t for t in tables if t not in done and not (parents[t] - done)]
+        if not ready:
+            stuck = sorted(tset - done)
+            print("FATAL: the foreign keys contain a cycle; cannot order %d table(s): %s"
+                  % (len(stuck), stuck[:10]))
+            sys.exit(2)
+        t = ready[0]              # `tables` is sorted, so this IS the tie-break
+        placed.append(t)
+        done.add(t)
+
+    # COMPLETENESS, asserted rather than relied on. The TRUNCATE and the load
+    # now both come from plan["tables"], so they cannot diverge -- but say so in
+    # code, because "cannot diverge" is exactly what was believed about the
+    # stored file.
+    if len(placed) != len(tables) or set(placed) != tset:
+        print("FATAL: derived order is not the planned table set "
+              "(derived %d, planned %d)" % (len(placed), len(tables)))
+        sys.exit(2)
+    return placed
 
 
 def psql(sql=None, path=None, quiet=True):
@@ -85,6 +161,8 @@ def main():
         print("*** aborting before the TRUNCATE: plan.json does not describe the source ***")
         sys.exit(rc)
 
+    order = derive_copy_order()
+
     # EVERY table in the copy order, unconditionally. This used to filter on
     # plan["tables"][...]["rows"] > 0 -- a count taken 2026-08-03 -- so a table
     # that was empty at census time and has gained rows since was TRUNCATED by
@@ -97,7 +175,7 @@ def main():
     # SELECT, a two-line .sql file and one psql call. That is the whole price.
     #
     # This is only SAFE because drift_guard.main() ran above and proved that
-    # copy_order.json, plan.json and the live source name the same tables.
+    # plan.json and the live source name the same tables.
     todo = list(order)
     print(f"tables to copy: {len(todo)}")
 
@@ -179,6 +257,12 @@ def main():
             print("*** postgres does not hold what the generator produced, aborting ***")
             sys.exit(1)
 
+    # The order this run ACTUALLY used. copy_order.json used to be the record
+    # of that, and losing it was the one real cost of deriving; keeping it on
+    # the OUTPUT side preserves the evidence where it cannot drift from what
+    # happened. If a copy ever fails in an order-dependent way, this is what
+    # says which order it was.
+    json.dump(todo, open(os.path.join(HERE, "copy_order_used.json"), "w"), indent=1)
     json.dump(timings, open(os.path.join(HERE, "timings.json"), "w"), indent=1)
     # each table's source count at ITS OWN copy moment — what final.py means by
     # "source at copy time". Tables that were empty and skipped keep their

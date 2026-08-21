@@ -21,10 +21,11 @@
 
 # The full-copy scripts are the verbatim record of the 2026-08-04 copy and
 # checksum against the copies still on the box. Unlike the rehearsal set they
-# are NOT uniformly LF — checks.py, gen.py, verify.py, plan.json and
-# copy_order.json were written with CRLF, the other sixteen files with LF.
-# A blanket eol=lf would rewrite five of them. Convert nothing in either
-# direction; keep the bytes exactly as they ran.
+# are NOT uniformly LF — checks.py, gen.py, verify.py and plan.json were
+# written with CRLF, the rest with LF. A blanket eol=lf would rewrite them.
+# Convert nothing in either direction; keep the bytes exactly as they ran.
+# (copy_order.json was a fifth CRLF file until 2026-08-21, when the copy
+# order became derived at run time and the file was deleted.)
 /scripts/postgres-full-copy/*.py -text
 /scripts/postgres-full-copy/*.json -text
 /scripts/postgres-full-copy/*.sh -text

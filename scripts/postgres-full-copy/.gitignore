@@ -11,6 +11,11 @@ sql/
 *.log
 *.json
 !plan.json
-!copy_order.json
+# copy_order.json was here until 2026-08-21. run.py now DERIVES the order at
+# run time from plan.json and SQLite's foreign keys, so there is no stored
+# order to commit. The exception is removed rather than left dangling: if a
+# file by that name reappears it is a run artefact and should stay ignored.
+# run.py writes copy_order_used.json -- the order a run ACTUALLY used, kept
+# as evidence on the output side, and ignored here like every other output.
 
 __pycache__/

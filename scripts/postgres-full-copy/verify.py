@@ -171,6 +171,98 @@ def verify(st):
     return len(sqrows), len(pgrows), cells, ovr, diffs
 
 
+def scope_report(examined):
+    """What this run compared, and what in the live source it did not.
+
+    verify.py builds its column list from plan.json's cols[] -- the SAME list
+    gen.py builds its SELECT from. So it is blind in exactly the way the copier
+    is blind, and cannot detect its own blind spot: on 2026-08-21 it reported
+    retail_orders OK at 120,546 cells while two of that table's columns had
+    never been copied and were never looked at. A high cell count is not
+    coverage.
+
+    This cannot fix that -- the fix is drift_guard.py, which reads a DIFFERENT
+    source. What this does is stop the number reading as total coverage when it
+    is not. Nothing about WHAT is compared changes; only what is disclosed.
+
+    THREE CATEGORIES, AND THE DIFFERENCE BETWEEN THEM IS THE WHOLE POINT:
+
+      1. a live table absent from plan.json      -> BLIND SPOT
+      2. a live column absent from that table's
+         cols[], in a table that WAS examined    -> BLIND SPOT
+      3. a planned table the caller did not ask
+         for on the command line                 -> the caller's own scoping
+
+    Only 1 and 2 mean the map cannot see something. 3 means the operator chose
+    a subset, which is a normal way to run this, so it is counted and not
+    listed -- an earlier cut of this function listed all 163 unrequested tables
+    when one table was verified, and buried the single real finding in them.
+
+    Returns the number of BLIND SPOTS (1 + 2), not the number of unexamined
+    objects. Raises rather than returning 0 if it cannot read the source: an
+    unmeasurable scope must not report as a complete one.
+    """
+    con = sqlite3.connect(SRC, uri=True)
+    try:
+        live_tables = [r[0] for r in con.execute(
+            "select name from sqlite_master where type='table' "
+            "order by name") if not r[0].startswith("sqlite_")]
+        if not live_tables:
+            raise SystemExit("REFUSE: the source reports no tables; scope is unmeasurable")
+        unplanned = [t for t in live_tables if t not in plan["tables"]]
+        unrequested = [t for t in live_tables
+                       if t in plan["tables"] and t not in examined]
+        blind_cols, seen_cols = [], 0
+        for t in sorted(examined):
+            if t not in live_tables:
+                continue
+            livecols = [r[1] for r in con.execute(
+                f'PRAGMA table_info("{t}")')]
+            mapped = {c["sq"] for c in plan["tables"][t]["cols"]}
+            seen_cols += len(mapped)
+            for c in livecols:
+                if c not in mapped:
+                    blind_cols.append(t + '.' + c)
+    finally:
+        con.close()
+
+    print("")
+    print("=== what this run examined, and what it did not ===")
+    print("  tables examined                     : %d of %d in the live source"
+          % (len(examined), len(live_tables)))
+    print("  columns examined                    : %d" % seen_cols)
+    if unrequested:
+        print("  planned tables not requested        : %d  (the caller's own scoping,"
+              % len(unrequested))
+        print("                                         not a gap in the map)")
+
+    blind = len(unplanned) + len(blind_cols)
+    if not blind:
+        print("  live tables the map cannot see      : 0")
+        print("  live columns the map cannot see     : 0")
+        print("  -> every table and column examined was compared in full")
+        return 0
+
+    if unplanned:
+        print("  LIVE TABLES ABSENT FROM plan.json   : %d" % len(unplanned))
+        for t in unplanned:
+            print("       %s" % t)
+    if blind_cols:
+        print("  LIVE COLUMNS ABSENT FROM cols[]     : %d  (in tables that WERE examined)"
+              % len(blind_cols))
+        for c in blind_cols:
+            print("       %s" % c)
+    print("")
+    print("  *** THIS RUN IS NOT A CLEAN BILL OF HEALTH. ***")
+    print("  %d live object(s) are outside the map itself, so the cell count and the"
+          % blind)
+    print("  difference count above describe the MAP, not the SOURCE. A table or column")
+    print("  absent from plan.json is absent from this comparison too, and its silence")
+    print("  here is not evidence that it copied. Run drift_guard.py, which reads the")
+    print("  source directly and does not share this map.")
+    return blind
+
+
 if __name__ == "__main__":
     tables = sys.argv[1:]
     grand = cells_tot = ovr_tot = 0
@@ -189,9 +281,15 @@ if __name__ == "__main__":
         if len(diffs) > 10:
             print(f"      ... and {len(diffs)-10} more")
     print(f"\ntables={len(tables)}  cells compared={cells_tot}  overrides applied={ovr_tot}  differences={grand}")
+    unexamined = scope_report(set(tables))
     out = os.environ.get("VERIFY_OUT", "verify_result.json")
     json.dump({"cells": cells_tot, "diffs": grand,
                "per_table": [[r[0], r[1], r[2], r[3], len(r[5])] for r in results],
                "detail": {r[0]: [d[:400] for d in r[5]] for r in results if r[5]}},
               open(os.path.join(HERE, out), "w"), indent=1)
+    # The exit code still reports DIFFERENCES, which is its existing contract
+    # and what callers branch on. Scope is disclosed in the output rather than
+    # folded into the code, because a caller that has always read 0 as
+    # "no differences" must keep reading it that way. The line above is the
+    # one a human has to read.
     sys.exit(1 if grand else 0)

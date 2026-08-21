@@ -47,8 +47,27 @@ in this directory regenerates them:
 - `plan.json` — the copy plan. Every table and column mapped SQLite → Postgres
   with its source type, target type and conversion class, plus the foreign keys,
   constraints and sequences. Schema metadata only; it holds no row values.
-- `copy_order.json` — the table order the copy runs in, derived from the
-  Postgres foreign keys so parents load before children.
+
+`copy_order.json` was a third committed input until 2026-08-21 — a stored list
+of the table order. **It is deleted, and `run.py` `derive_copy_order()` builds
+the order at run time instead**: membership from `plan.json`, constraint from
+SQLite's own declared foreign keys, and an alphabetical tie-break for the rest.
+
+The reason is worth keeping. A stored order can only be wrong by OMISSION, and
+omission was expensive: the `TRUNCATE` list came from `plan.json` and the load
+order from the file, so a table in the first and missing from the second was
+**emptied and never refilled**, silently, with every other check passing.
+Against that, the file bought very little: measured on 2026-08-21, the foreign
+keys leave **162 of 164 positions free**, the widest tie was 67 tables, and 51
+tables appear in no foreign key at all. **The order is about 2% graph and 98%
+tie-break.** A file whose downside is a silent truncate-and-never-refill and
+whose upside is ordering tables that can go anywhere is not worth keeping.
+
+The tie-break is **arbitrary but STABLE**, and stable is the property that
+matters: an order that varied between runs would make two rehearsals
+incomparable and an order-dependent failure impossible to reproduce. `run.py`
+writes `copy_order_used.json` so the order a run actually used is still
+recorded — on the output side, where it cannot drift from what happened.
 
 ## The conversion rules these scripts implement
 
@@ -135,9 +154,8 @@ row values.
 ## Byte fidelity
 
 These files are the verbatim record of a run that already happened, and they
-checksum against the copies on the box. `checks.py`, `gen.py`, `verify.py`,
-`plan.json` and `copy_order.json` are stored with **CRLF** endings; everything
-else is **LF**. `.gitattributes` marks this directory `-text` so git converts
+checksum against the copies on the box. `checks.py`, `gen.py`, `verify.py` and
+`plan.json` are stored with **CRLF** endings; everything else is **LF**. `.gitattributes` marks this directory `-text` so git converts
 nothing in either direction. Do not "normalise" them.
 
 ## Result
