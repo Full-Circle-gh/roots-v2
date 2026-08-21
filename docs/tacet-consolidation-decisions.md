@@ -1,9 +1,11 @@
-# Tacet shared-core consolidation — decisions record, v4.57
+# Tacet shared-core consolidation — decisions record, v4.58
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-08-21 · v4.58 — §24 Database: **E2 REHEARSED END TO END FOR THE FIRST TIME, AND IT WORKS — 129 TABLES, 475,746 ROWS, 89.5 SECONDS, ZERO LOAD ERRORS.** Run against the renamed cluster from a directory proven byte-identical to the committed tree by md5 on all 24 files. **`verify.py` compared 4,220,046 cells and found 34 differences, every one live trading**, and **`checks.py` verdict 3 PASSES OUTRIGHT** — 2,452 wide base64 values byte-identical by SHA-256, the check that could only ever fail against a stale copy. **Verdict 2 fails on 5 columns and 112 characters, and `verify.py` independently found the same two rows** — a courier scan four minutes after their tables copied. **Two instruments, same rows: that is what drift looks like, and a copy error looks nothing like it.** **TWO FINDINGS THE REHEARSAL PRODUCED, NEITHER VISIBLE ANY OTHER WAY. (1) `run.py` picks what to copy from `plan.json`s 2026-08-03 SURVEY counts, not from the source, so a table empty then and non-empty now is SKIPPED IN SILENCE** — 33 tables carry `rows == 0` and one, `eleme_sync_queue`, now holds a row; **`final.py` is the only thing in the ladder that caught it**, which is worth noting about a script nearly written off as unrunnable. **(2) `overrides.py`s EXPECTED counts are a 2026-08-03 measurement and have moved** — `updated_by_null` fired 2 against an expected 4 because two `storefront_config` rows have since been edited by a real user, and `run.py` aborts on that **after the TRUNCATE and after the copy completed**: a run that looks failed and is not. **Timing: 30.5% more rows for 9.3% more time than 2026-08-06**, 4,817 → 5,750 rows/s. **ALSO: `copy_order.json` held twelve stale names and blocked E2 entirely** — a `KeyError` before the first `psql`, so it failed closed. **That is the THIRD name-held-as-data to escape a code scan this session**, after `CONTROL_PLANE_TABLES` and the archived `sequences.json`, and it is now a rule: A NAME HELD AS DATA IS INVISIBLE TO A SCAN OF CODE. Enumeration closed rather than sampled: **99 committed data files repo-wide, 11 hold any of the 28 names.** **The commit-set rule is corrected from a pair to at least three files.** Plus: `retail_order_counters` recorded as the sole copy of itself, and the `[skip deploy]` guidance sharpened into a rule with two options, neither of which is the token.
 
 2026-08-21 · v4.57 — §24 Database: **G28 IS CLOSED IN THE TWO DOCUMENTS THAT STILL SAID OTHERWISE, AND A DEAD MONEY RULE IS MARKED IN THE SEVEN PLACES IT WAS STILL READING AS LIVE.** **G28 closed** in the cutover runbook (v0.8) and the status doc (v2.2): gap index row struck, `B21` rewritten from a stop into a closure, and **the `G26 AND G28 CLOSE TOGETHER OR NOT AT ALL` pairing retired in all three places it appeared** — it was the reason not to clear G26, and it is no longer true. **Open gaps 22 → 21 of 28, fifteen of them still in PART B.** **THE MONEY SWEEP FOUND SEVEN, NOT ONE.** §0 Governing rules → Database was the one asked for, and it is the worst of them because it sits in a LOCKED list. The other six: §24's head NOTE (*101 REAL money columns were converted to integer cents*), the rehearsal's conversion rule (*REAL yuan converts to bigint cents*), **Money precision — DECIDED** (*whole cents remains correct for transaction amounts*), the 2026-08-05 scanner FINDING's *money columns (all CENTS)* header, the `expense_entries.amount` line already superseded at v3.0 but carrying no inline mark, and **the entire premise of THE MONEY-UNIT GAP AND THE BOUNDARY LAYER** — which describes a 100-fold display defect that the decimal reversal dissolved, and which was the most dangerous of the seven because it reads as an open defect owing a boundary layer. **Every one is marked, not edited.** **AND THE SWEEP WAS SETTLED AGAINST THE CLUSTER RATHER THAN THE PROSE:** 101 money columns are `numeric(14,6)`, **zero are bigint**, and the only integer-cents columns left are the four literally named `*_cents` on the billing tables, which §24 already records as deliberate. The runbook states whole cents nowhere at all. **Also recorded: EVERY MIGRATION-SCRIPT EDIT RESTARTS THE WHOLE BACKEND** — see A `scripts/` FILE THE APPLICATION NEVER LOADS STILL RESTARTS IT. **AND THE `[skip deploy]` DEFERRAL TAKEN WITH v4.56 WAS OVERTAKEN SEVENTEEN MINUTES LATER** by somebody else's push, which carried its six files out. Not a bug: the diff base is the server's `last-success-sha`, so a skipped run leaves its files pending for the next deploy by anyone. **The token defers a RUN, not a FILE.** The six shipped together and the box is consistent; a two-commit split would have shipped half. See `[skip deploy]` DEFERS A RUN, NOT A FILE.
 
@@ -2748,7 +2750,7 @@ No foreign key DEFINITION was edited. Postgres carries a reference across a tabl
 >
 > **THE SPLIT-DEPLOY HAZARD DID NOT OCCUR, AND THE REASON IS THE ONE THE PARAGRAPH BELOW GIVES.** The six files were in ONE commit, so they shipped together. The box now holds the new `plan.json` beside the new `run.py`, which is the correct end state. **Had they been in two commits, the token would have deferred one of them and this deploy would have shipped the other alone.** The paragraph below stops being advice about a deferral and becomes the reason this was safe at all.
 
-**THE DANGER IS A SPLIT DEPLOY: NEW `plan.json` WITH OLD `run.py`.** That pairing truncates 162 tables correctly by their new names and THEN dies on the hardcoded `accounts` in the sanity read, leaving the target empty and the copy unrun. **`plan.json` and `run.py` must never ship separately, in either direction, and the deferral is safe only because they are in ONE commit.** Anyone splitting that commit — to ship a doc fix, to revert half of it, to cherry-pick — re-creates the failure this paragraph exists to prevent.
+**THE DANGER IS A SPLIT DEPLOY: NEW `plan.json` WITH OLD `run.py`.** That pairing truncates 162 tables correctly by their new names and THEN dies on the hardcoded `accounts` in the sanity read, leaving the target empty and the copy unrun. **`plan.json` and every committed input keyed on those names must never ship separately, in either direction, and the deferral is safe only because they are in ONE commit.** ⚠️ **THAT PAIR IS THE WRONG UNIT AND WAS CORRECTED 2026-08-21: it is at least THREE files.** `copy_order.json` is keyed on the same names and was missed here, because it is DATA and the sweep that found `run.py` read CODE. See §24 A NAME HELD AS DATA IS INVISIBLE TO A SCAN OF CODE. Anyone splitting that commit — to ship a doc fix, to revert half of it, to cherry-pick — re-creates the failure this paragraph exists to prevent.
 
 **SEVEN SCRIPTS READ THE PLAN NAME MAP, NOT THE FOUR THAT WERE LISTED.** `gen.py`, `checks.py`, `preflight.py` and `final.py` were known. **`run.py`, `setseq.py` and `verify.py` were not.** `setseq.py` and `verify.py` resolve everything through `plan.json` and needed no change; `run.py` is item 1 above. Two independent methods agree on the same seven files.
 
@@ -2761,6 +2763,69 @@ No foreign key DEFINITION was edited. Postgres carries a reference across a tabl
 - **`checks.py` verdicts 2 and 3 FAIL, and that failure is not this work.** 82 columns differ on Chinese character count and the wide base64 columns are not byte-identical. Both compare LIVE SQLite against a copy taken 2026-08-06, and the script’s ENTIRE 11,269-byte output is **byte-identical before and after the rename, same md5** — the same 1,580,099 CJK characters against 1,372,834, the same 82 columns named in the same order, the same fourteen wide-column SHA-256 comparisons. **Byte-identical output on both sides of a schema change is a stronger proof that the change did not touch the data than any assertion about it could be.**
 
 **A NEW AS-BUILT RECORD**, `docs/tacet-postgres-schema-as-built-2026-08-21.sql`, 163 tables, body proven verbatim by sha256 against raw `pg_dump -s --no-owner` output. It supersedes the 2026-08-11 file; that file and the 2026-08-04 one are retained byte-for-byte. **Two consumers still open the 2026-08-04 file BY ITS DATED NAME** — `scripts/diagnose_seam_statements.js` and `scripts/diagnose_statement_sweep.js` — and their regex discards the index name while capturing the TABLE and its COLUMNS, so the index renames do not reach them and the table and column renames do. Not repointed; recorded so it is not rediscovered.
+
+### THE FIRST END-TO-END REHEARSAL OF E2 — RUN 2026-08-21
+
+**Every component of the cutover copy had been verified on its own; the whole path never had.** E2 is a cutover step, and its first execution should not be on the night. This is that first execution, against the renamed cluster, from a directory proven byte-identical to the committed tree by md5 on all 24 files.
+
+**IT WORKS. 129 tables, 475,746 rows, 89.5 seconds, zero load errors, zero source drift between each table's count and its own SELECT.**
+
+| Step | Exit | Result |
+|---|---|---|
+| `volume.py` | **0** | `wide_cols.json` regenerated, 14 columns |
+| `preflight.py` | **0** | 49 findings; unmapped references **29**, matching the baseline exactly |
+| `run.py` (E2) | **1** | copy clean; exits 1 on a STALE OVERRIDE CONSTANT, below |
+| `setseq.py` (E4) | **0** | 139 sequences, 119 set from the AUTOINCREMENT high-water, 20 left NEVER_CALLED on empty tables |
+| setseq's bad condition, asserted directly | **0** | **0 sequences behind `max(id)`**; 119 next-ids above max, 20 empty |
+| `verify.py` | **1** | **4,220,046 cells compared, 34 differences, every one attributed to live trading** |
+| `checks.py` verdict 1 | pass | **144 of 144 foreign keys validated by Postgres**, 0 failures, 0 NOT VALID |
+| `checks.py` verdicts 2, 3 | **1** | see below — these are MEANINGFUL now |
+| `final.py` | **0** | runs, and caught something nothing else did |
+
+**VERDICTS 2 AND 3 ARE A DIFFERENT INSTRUMENT AFTER A FRESH COPY, AND THIS IS THE PROOF.** Against the 15-day-old copy they failed on **82 columns and 207,265 CJK characters** — pure staleness, and byte-identical output before and after the rename. Against a copy 20 minutes old:
+
+- **Verdict 3 PASSES OUTRIGHT.** `all wide columns byte-identical: True` — 2,452 values across 14 columns, every SHA-256 matching, the widest 7,165,943 characters.
+- **Verdict 2 fails on 5 columns and 112 characters**, all on `retail_orders` and `retail_shipments` tracking fields — **and `verify.py` independently found the same rows.** A JD courier scan at 15:54:35 moved shipment 1197 and order 1228 from `in_transit` to `out_for_delivery`, four minutes after their tables copied.
+
+**THAT CROSS-CONFIRMATION IS THE POINT.** Two instruments, run separately, pointing at the same five columns and the same two rows, with SQLite ahead of Postgres in every case and never a different value at the same instant. **A copy error looks nothing like that** — it shows Postgres holding a value the source never had. All 34 of `verify.py`s differences are forward-moving source data: 5 new `guanyi_sync_log` rows, 6 new `qingyun_sync_log` rows, a new shipment, two daemon heartbeat timestamps, one customer's `last_used_at`, and the courier scan.
+
+**FINDING 1 — `run.py` CHOOSES WHAT TO COPY FROM THE SURVEY, NOT FROM THE SOURCE.** `todo` is built from `plan["tables"][...]["rows"] > 0`, and those counts were taken on 2026-08-03. **A table that was empty at survey time and has gained rows since is skipped in silence.** Measured today: **33 tables carry `plan.rows == 0`, and one of them, `eleme_sync_queue`, now holds a row.** One row, so the blast radius today is one row — but the mechanism does not care which table it is, and on the night it could be any of the 33. **`final.py` is what caught it**, reporting `('eleme_sync_queue', 1, 0)` under *tables where Postgres != the count copied against*. Nothing else in the ladder looks at a table the copy declined to attempt.
+
+**FINDING 2 — `overrides.py`s EXPECTED COUNTS ARE A 2026-08-03 MEASUREMENT AND THEY HAVE MOVED.** `updated_by_null` fired **2** times against `EXPECTED = 4`, and `run.py` aborts on the mismatch. **Attributed: `storefront_config.updated_by` today holds integer `1` on 133 rows, NULL on 16, and the text `claude-golive` on 2.** Two rows that carried a text sentinel at survey time have since been edited by a real user, so only two remain for the rule to null. The rule did exactly the right thing; the constant is stale.
+
+**AND THE DIRECTION MATTERS.** `overrides.py`s own docstring says the guard exists so *"a rule that silently catches MORE rows than expected is caught rather than trusted."* **Firing FEWER is the benign direction** — it means fewer bad values exist. But the assertion is equality, so it aborts either way, **after the `TRUNCATE` and after the copy has completed and written its artefacts.** The copy is not lost; the exit code says otherwise. On the night, that is a run that looks failed and is not.
+
+**TIMING, AGAINST THE ONLY PRIOR MEASUREMENT.** The 2026-08-06 run: 364,666 rows, 75.7s of generate-plus-load. Today: **475,746 rows, 82.7s** — **30.5% more rows for 9.3% more time**, throughput 4,817 → 5,750 rows/s. Wall clock 90s including the truncate and both sequence snapshots. **The ~100-110s extrapolation in the scoping report was too pessimistic**, because it assumed throughput held constant and it improved.
+
+**WHAT THE REHEARSAL DID NOT COVER, STATED SO IT IS NOT READ AS MORE THAN IT IS.** No delta pass (G18, none exists), no completion test (G19, none defined), no freeze (G16), no smoke test (G20), and the counter is not seeded (F2, deliberately last). **This proves the copy path executes end to end against the renamed cluster. It does not make the cutover ready.**
+
+---
+
+### `retail_order_counters` IS THE ONLY COPY OF ITSELF — RISK RECORDED 2026-08-21
+
+**It exists in Postgres and nowhere else.** Not in `data/roots.db`, not in `plan.json`, not in `schema.sql`. It was created directly on the cluster on 2026-08-11 by `docs/tacet-postgres-order-counter.sql`.
+
+**E2 DOES NOT TOUCH IT, AND THAT IS NOT LUCK.** `run.py` truncates the list it builds from `plan.json`, which holds 162 tables; the cluster holds 163. The counter is the one outside. **Verified across the rehearsal: `('TC', 0, 2026-08-11 18:02:15.007983+08)` before and byte-identical after.**
+
+**THE RISK IS A MANUAL TRUNCATE-EVERYTHING.** `TRUNCATE` across `pg_class`, a `psql -c` written by hand on the night, a restore that drops and recreates the schema — any of those destroys the sole copy of the counter state, and **there is no source to re-copy it from.** Rebuilding it means re-running the DDL and then re-deriving `last_no` from the order table, which is F2's job and is not written as a recovery procedure.
+
+**SCOPE, HONESTLY: today it holds `last_no = 0`, deliberately unseeded**, so losing it today costs one `psql -f`. The risk arrives at F2, when the counter is seeded from live orders and becomes the only record of which numbers have been issued.
+
+---
+
+### RULE — A NAME HELD AS DATA IS INVISIBLE TO A SCAN OF CODE — RECORDED 2026-08-21
+
+**Three times in one session, a table name escaped a scan because it was data rather than code.** This belongs beside the rules about scan-derived counts, because it is the same family: an instrument that is correct about its own criterion and silent about what the criterion cannot see.
+
+1. **`CONTROL_PLANE_TABLES` in `lib/tenant-db.js`** — five of the twelve names, as strings in a `Set`. In none of the 248 AST-measured statements, none of the recorded 266, and none of G26's eleven `.exec()` blocks. **It stayed correct only because nothing edited the file.**
+2. **The archived `sequences.json`** — `final.py` keys its `PRE` dict on a sequence name, and the snapshot on disk still carried `accounts_id_seq`. The stale key resolved to `None` and printed blank rather than mismatched, **which reads like a pass**.
+3. **`copy_order.json`** — 162 table names in dependency order, twelve of them stale. **`run.py` dies at `sq_of[t]` with a `KeyError` before its first `psql` call**, so it failed closed, but E2 could not be rehearsed until it was fixed. **A sweep of `.py` and `.sh` found `run.py` and `drift.sh` and could never have found this.**
+
+**THE MIGRATION DIRECTORY IS MOSTLY DATA, WHICH IS WHY IT KEEPS HAPPENING HERE.** Of 24 committed files under `scripts/postgres-full-copy/`, the two that carry the schema's names in bulk are `plan.json` and `copy_order.json`, and `plan.json` is 478 KB against about 90 KB of Python.
+
+**THE RULE: when a name changes, enumerate the committed DATA files as a first-class population, not as an afterthought to the code sweep.** Done properly here: **99 committed data files repo-wide, 11 hold any of the 28 names**, and the enumeration was taken from `git ls-files` rather than from a search, so the space is closed rather than sampled.
+
+**AND STATE BOTH COUNTS.** A `tenant*` literal in a data file is the same defect as an `account*` one — it is only invisible because it happens to be correct today. `plan.json` still carries **94 `account*` occurrences** in its `fkeys`, `cons`, `sequences` and `pg_rowcounts` blocks, which is deliberate and is what `preflight.py`s 29-reference baseline measures.
 
 ### `[skip deploy]` DEFERS A RUN, NOT A FILE — RECORDED 2026-08-21
 
@@ -2784,7 +2849,12 @@ git diff --name-only "$REC" "$GITHUB_SHA"
 - **The deferral lasts until the next push by anybody**, and on a repository where the post-commit hook pushes automatically, that can be minutes. **Measured here: seventeen.**
 - **Whatever is deferred must be internally complete**, because the deploy that eventually carries it will not be the one that was reasoned about. Six files went out together and were consistent. **Had the same work been split across two commits with the token on one, the deploy would have shipped half.**
 
-**WHAT TO DO INSTEAD, WHEN A DEFERRAL HAS TO HOLD.** Not recorded as a decision, because none was taken: the options are to keep the work off `main` until it should ship, or to accept the restart. **What does NOT work is assuming the token holds.**
+**THE OPERATIONAL RULE, STATED PLAINLY: `[skip deploy]` IS NOT A SCHEDULING TOOL.** It buys one push, and the next push by anyone spends it. **There are exactly two real options and the token is neither of them:**
+
+1. **Deploy deliberately** — omit the token, watch the run, accept the restart at a moment you chose.
+2. **Do not commit yet** — keep the work off `main` until it should ship.
+
+**Assuming the token holds is the failure.** It held for seventeen minutes here, and it was only harmless because the commit was internally complete.
 
 **RELATED:** §24 A `scripts/` FILE THE APPLICATION NEVER LOADS STILL RESTARTS IT — the reason a deferral was wanted in the first place.
 

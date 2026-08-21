@@ -54,8 +54,13 @@ in this directory regenerates them:
 
 Every rule halts the run on a value it does not recognise. Nothing is guessed.
 
-1. **`tenant_id` → `account_id`.** The column is renamed on the way across; the
-   value is carried over unchanged.
+1. ✅ **RETIRED 2026-08-21 — NO COLUMN IS RENAMED ON THE WAY ACROSS.** This rule read
+   *`tenant_id` → `account_id`. The column is renamed on the way across; the value is
+   carried over unchanged.* The Postgres schema was renamed BACK to the `tenant*`
+   names, so `plan.json` now maps every column to itself and the generator emits
+   the source name. Kept and marked rather than deleted, because the copies of
+   2026-08-04 and 2026-08-06 really did apply it. See docs/tacet-consolidation-
+   decisions.md §24 THE TENANT→ACCOUNT PHYSICAL RENAME IS DECLINED.
 2. **Integer flags → real `boolean`.** `0` → `false`, `1` → `true`. Any other
    value halts.
 3. **Transaction money: REAL yuan → `bigint` cents**, via `round(yuan * 100)`
