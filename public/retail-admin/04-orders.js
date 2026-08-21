@@ -3294,11 +3294,19 @@ function renderLocalEtaCard(o, s, hoisted) {
   // order must not carry a live promise, and it must not cry OVERDUE either).
   const etaLapsed = (() => {
     if (!isAuto) return false;
-    if (['dispatched', 'delivered', 'cancelled', 'refunded'].includes(o.status)) return false;
-    const m = /^(d{2}):(d{2})$/.exec(eta);
-    if (!m) return false;
+    // ONLY the settled statuses. Not 'dispatched' — that is exactly when an arrival
+    // promise is live, and suppressing it there would silence the tag in the one
+    // window it matters. (The ship-by kicker does exempt 'dispatched', but its
+    // deadline was to SHIP, which by then has happened; this one is to ARRIVE.)
+    if (['delivered', 'cancelled', 'refunded'].includes(o.status)) return false;
+    // Read 'HH:MM' by slice, exactly as the picker above does. It was a regex, and
+    // an escaping slip ate its character classes — it compiled fine and matched the
+    // literal text "dd:dd", so the whole check silently returned false forever.
+    if (eta.length !== 5 || eta.charAt(2) !== ':') return false;
+    const hh = Number(eta.slice(0, 2)), mm = Number(eta.slice(3, 5));
+    if (!Number.isFinite(hh) || !Number.isFinite(mm)) return false;
     const now = new Date(), g = gzParts(now);
-    return gzWall(g.y, g.mo, g.da, Number(m[1]), Number(m[2])).getTime() < now.getTime();
+    return gzWall(g.y, g.mo, g.da, hh, mm).getTime() < now.getTime();
   })();
   // Inline (under the items) it sits below a dashed divider; hoisted to the top
   // of the drawer it stands on its own, so drop the divider/top margin there.
