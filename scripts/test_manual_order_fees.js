@@ -239,7 +239,7 @@ console.log('\nthe wiring the fee engine cannot prove on its own');
 it('the create route puts packing in the total and in the INSERT', () => {
   assert.ok(/let total = Math\.round\(\(subtotal \+ shippingFee \+ packingFee\)/.test(RETAIL_SRC),
             'the manual order total does not add packingFee');
-  const insert = RETAIL_SRC.slice(RETAIL_SRC.indexOf('customer_note, staff_note, channel, source, created_by') - 400);
+  const insert = RETAIL_SRC.slice(RETAIL_SRC.indexOf('customer_note, staff_note, channel, channel_note, source, created_by') - 400);
   assert.ok(/subtotal, shipping_fee, packing_fee, total,/.test(insert.slice(0, 600)),
             'packing_fee is not a column of the manual order INSERT');
 });

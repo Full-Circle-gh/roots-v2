@@ -2785,10 +2785,12 @@
               <div class="onw-blk">
                 <h3 class="onw-blk-h">Channel, store and fulfilment · 渠道、门店与履约</h3>
                 <div class="onw-row3">
-                  <div class="onw-f"><label for="onw-channel">Channel · 渠道</label><div class="onw-selw"><svg class="onw-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg><select class="onw-in" id="onw-channel">
-                    <option value="manual">Manual · 手工</option>
-                    <option value="wechat">WeChat · 微信</option>
-                    <option value="web">Web · 网页</option>
+                  <div class="onw-f"><label for="onw-channel">Order came from · 订单来源</label><div class="onw-selw"><svg class="onw-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg><select class="onw-in" id="onw-channel" onchange="ordNewChannelChange()">
+                    <option value="">Select… · 请选择</option>
+                    <option value="pickup">Pick up · 到店自取</option>
+                    <option value="wechat_chat">WeChat message · 微信消息</option>
+                    <option value="wholesale">Wholesale · 批发</option>
+                    <option value="other">Other · 其他</option>
                   </select></div></div>
                   <div class="onw-f"><label for="onw-store">Store · 门店</label><div class="onw-selw"><svg class="onw-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg><select class="onw-in" id="onw-store"></select></div></div>
                   <div class="onw-f"><label for="onw-ful">Fulfilment · 履约方式</label><div class="onw-selw"><svg class="onw-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg><select class="onw-in" id="onw-ful" onchange="ordNewFulChange()">
@@ -2796,6 +2798,12 @@
                     <option value="pickup">Pickup · 自提</option>
                     <option value="counter">Counter sale · 前台销售</option>
                   </select></div></div>
+                </div>
+                <!-- Revealed only for "Other" — the origin is required there, so
+                     the catch-all bucket keeps a readable trail. -->
+                <div class="onw-f" id="onw-channel-note-wrap" hidden>
+                  <label for="onw-channel-note">Where did it come from? · 具体来源</label>
+                  <input class="onw-in" id="onw-channel-note" maxlength="200" placeholder="e.g. Xiaohongshu message · 例如：小红书私信">
                 </div>
                 <div class="onw-err" id="onw-err-route" data-no-i18n hidden></div>
               </div>
@@ -10697,6 +10705,33 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
             Open till · 打开收银
           </button>
+        </div>
+      </div>
+
+      <!-- Direct — staff-keyed orders (New order form): the customer reached us
+           by WeChat message, at the shop, or on a wholesale account, and someone
+           typed the order in. Not a connectable channel: there is nothing to
+           switch on or configure, so it carries no toggle and is left out of the
+           "N / M live now" count. It exists because these orders previously
+           matched none of the cards above and so were missing from the Sales
+           total while the dashboard still counted them. -->
+      <div class="sales-ch" data-on="1">
+        <div class="sales-ch-top">
+          <div class="sales-ch-id">
+            <span class="sales-ch-ico ps">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h5"/></svg>
+            </span>
+            <div>
+              <div class="sales-ch-name">Direct orders · 直接下单</div>
+              <div class="sales-ch-stat"><span class="sales-dot ok"></span>Keyed by staff · 手工录入</div>
+            </div>
+          </div>
+        </div>
+        <div class="sales-ch-metrics">
+          <div><div class="m-l">Revenue today · 今日营收</div><div class="m-n" id="sales-dr-rev">—</div></div>
+          <div><div class="m-l">Orders · 订单</div><div class="m-n" id="sales-dr-orders">—</div></div>
+          <div><div class="m-l">Avg order · 客单价</div><div class="m-n" id="sales-dr-aov">—</div></div>
+          <div><div class="m-l">Items sold · 售出件数</div><div class="m-n" id="sales-dr-extra">—</div></div>
         </div>
       </div>
 

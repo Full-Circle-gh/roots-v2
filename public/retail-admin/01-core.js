@@ -442,6 +442,7 @@ async function salesInit() {
     fill('gy', c.gzgrocery);
     fill('el', c.eleme);
     fill('ps', c.pos);
+    fill('dr', c.direct);
   } catch (e) { /* keep placeholders on error */ }
   csLoad();  // unlock + wire the channel-close toggles (channel × location)
   salesWireSetup();  // merge: Set up / Configure per card from the integrations hub
