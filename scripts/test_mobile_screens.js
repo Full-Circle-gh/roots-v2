@@ -87,6 +87,14 @@ function buildCases(src) {
     // Purchasing reads a live ledger, so the sweep seeds one — otherwise every
     // pass renders the loading state and proves nothing about the rows.
     'push:purchasing-rows': "state.posTried=true;state.pos=[{id:4,po_number:'RPO-0004',supplier:'Fresh Co.',store_name_en:'Tianhe',date:'2026-08-14',delivery_date:'2026-08-16',status:'Ordered',line_count:6,received_lines:0,total_cost:3240},{id:5,po_number:'RPO-0005',supplier:'Oat Works',date:'2026-08-20',delivery_date:'2026-08-30',status:'Delivered',line_count:3,received_lines:3,total_cost:1880}];APP.cmd('push','purchasing')",
+    // The mock's own rows must not outlive an empty server answer.
+    'push:inbox-no-reviews': "DB.reviews=[];APP.cmd('push','inbox')",
+    'push:coupons-empty': "DB.coupons=[];APP.cmd('push','coupons')",
+    'push:flash-empty': "DB.flash=[];APP.cmd('push','flash')",
+    'push:broadcasts-empty': "DB.broadcasts=[];APP.cmd('push','broadcasts')",
+    'push:voting': "state.pollsTried=true;state.polls=[{id:1,question_en:'Next flavour',status:'open',reward_points:5,is_featured:1,closes_at:'2026-08-30 12:00:00',total_votes:312,options:[{id:11,label_en:'Matcha oat',votes:193},{id:12,label_en:'Black sesame',votes:119}]},{id:2,question_en:'Store hours',status:'draft',display_min_total:50,options:[]}];APP.cmd('push','voting')",
+    'push:voting-results': "state.pollsTried=true;state.polls=[{id:1,question_en:'Next flavour',status:'closed',winner_option_id:11,total_votes:312,options:[{id:11,label_en:'Matcha oat',votes:193},{id:12,label_en:'Black sesame',votes:119}]}];state.pollOpen=1;APP.cmd('push','voting')",
+    'push:voting-empty': "state.pollsTried=true;state.polls=[];APP.cmd('push','voting')",
     // Membership, Top-up and Leaderboard all read live config/ledgers.
     'push:membership-tiers': "state.sw=Object.assign({},state.sw,{membership:true});state.tiersTried=true;state.tiers=[{key:'seed',name_en:'Seed',name_cn:'种子',threshold:0,points_mult:1,perks_en:['5% off your first order']},{key:'tree',name_en:'Tree',name_cn:'大树',threshold:5000,points_mult:2,perks_en:['20% off','Birthday gift']}];state.tierCounts={seed:186,tree:12};APP.cmd('push','membership')",
     'push:membership-empty': "state.sw=Object.assign({},state.sw,{membership:true});state.tiersTried=true;state.tiers=[];APP.cmd('push','membership')",

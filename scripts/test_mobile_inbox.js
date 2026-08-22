@@ -107,4 +107,11 @@ const CASES = [
   ]],
 ];
 
+CASES.push(['a shop with no reviews', `DB.reviews=[]; APP.cmd('push','inbox');`, [
+  // The mock's three reviews used to survive an empty server answer, because
+  // the loader only assigned `if (list.length)`.
+  ['says there are none',  `txt('content').includes('No reviews yet')`],
+  ['and invents none',     `!txt('content').includes('Chen Meiling') && !txt('content').includes('carrots were super fresh')`],
+]]);
+
 run('inbox', CASES);

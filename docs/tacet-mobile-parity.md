@@ -542,6 +542,45 @@ of `status`, so a pending or failed payment read as money in the till.
 
 `scripts/test_mobile_club.js` — 46 assertions, 8 cases across all three.
 
+### Voting (`10-extras.js`)
+
+The phone drew one bar per poll: the leader's share and the leader's name.
+A poll is a split — "62% · Leading: Matcha oat" says nothing about whether
+second place was 38% or 4%, and the other options existed nowhere on the
+device.
+
+| Desktop capability | Phone |
+|---|---|
+| The polls are the server's | ❌ → ✅ — two invented ones sat in the source for whenever `/polls` came back empty |
+| Status: Draft / Live / Closed | ✅ |
+| **Every option, with its votes and its share** | ❌ → ✅ — tap "See results" |
+| The winner, once one is chosen | ❌ → ✅ — sage bar, named as the winner |
+| Options count, total votes | ✅ |
+| Reward points | ❌ → ✅ |
+| Closing time | ❌ → ✅ |
+| Featured | ❌ → ✅ |
+| A draft is invisible to customers | ❌ → ✅ — said on the card, before you open it |
+| **`display_min_total`** — the floor customers are shown regardless of the real count | ❌ → ✅ — amber. An operator reading a poll needs to know the number on the shopper's screen is not the number in the ledger |
+| Open / Close / Reopen | ✅ — one tap, reversible, so it does not ask |
+| Write the question, options, colours, explainer, rewards; pick a winner; delete | ➖ decided: desktop |
+
+`scripts/test_mobile_voting.js` — 25 assertions, 7 cases.
+
+**With this, no screen on the phone renders invented content any more.**
+
+Finishing the sweep turned up one last shape of the same bug, in the loaders
+rather than the screens: four prefetches assigned only `if (rows.length)` —
+coupons, flash sales, broadcasts and reviews. Every one of those screens
+already had an honest empty state; none of them could ever reach it, because
+an empty server answer left the sample rows in place. The mock outlived the
+data it was standing in for, on exactly the shop least able to tell the
+difference. They assign unconditionally now, and the Reviews tab got the empty
+state it was missing.
+
+The `DB` block is what remains: an offline fallback for the screens that have
+one, every set overwritten by its fetch — including when that fetch says there
+is nothing.
+
 ## 4. Open questions
 
 Not gaps — decisions that are the shop's to make, not this file's.

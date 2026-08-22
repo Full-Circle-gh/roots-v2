@@ -223,10 +223,6 @@ const DB = {
      audience:['Has ordered · Tree, Root','曾下单 · 大树、根系'],deeplink:null,
      meta:['Going out Sat','周六 发送'],status:['Scheduled','已排期'],kind:'draft'},
   ],
-  votes:[
-    {title:['Next flavour','下款口味'],status:['Live','进行中'],kind:'live',votes:['312 votes','312 票'],pct:'62%',top:['Leading: Matcha oat','领先：抹茶燕麦']},
-    {title:['Store hours poll','营业时间投票'],status:['Closed','已结束'],kind:'off',votes:['540 votes','540 票'],pct:'100%',top:['Winner: open until 22:00','胜出：营业至 22:00']},
-  ],
   reviews:[
     {cust:['Chen Meiling','陈美玲'],rating:'5.0',status:['New','新'],kind:'success',text:['Fast delivery, carrots were super fresh!','配送很快，胡萝卜很新鲜！'],time:['2h ago','2 小时前']},
     {cust:['Sarah Lim','Sarah Lim'],rating:'4.0',status:['Replied','已回复'],kind:'clear',text:['Great oat milk. Wish the cold brew came in larger sizes.','燕麦奶很好，希望冷萃有大杯。'],time:['5h ago','5 小时前']},
@@ -289,6 +285,7 @@ const state = {
   tiers:null, tierCounts:null, tiersErr:null, tiersTried:false,
   tup:null, tupPkgs:null, tupErr:null, tupTried:false, tupBusy:null,
   lb:null, lbErr:null, lbTried:false,
+  polls:null, pollsErr:null, pollsTried:false, pollOpen:null, pollBusy:null,
   poDetail:null, poErr:null, poBusy:false,
   toast:null, drag:0, dragging:false, faqOpen:null, reviewsSeen:new Set(),
   qs:{oat:8,nuts:0,carrot:42},
@@ -569,6 +566,24 @@ reg('workOpenRow', i=>{
 });
 reg('inboxSeg', s=>{ state.inboxSeg=s; render(); });
 reg('poSeg', v=>{ state.poSeg=v; render(); });
+reg('pollOpen', id=>{ state.pollOpen = state.pollOpen===Number(id) ? null : Number(id); render(); });
+/* Opening a poll makes it visible to every customer; closing one stops the
+   voting. Both are one tap and both are reversible, so neither asks — but the
+   card says what a draft means before you open it. */
+reg('pollStatus', (id,st)=>{
+  const p=(state.polls||[]).find(x=>x.id===Number(id)); if(!p||state.pollBusy) return;
+  state.pollBusy=p.id; state.pollsErr=null; render();
+  apiWrite('/polls/'+p.id,{status:st},'PUT').then(()=>{
+    state.pollBusy=null;
+    showToast(st==='open'?T('Poll is live','投票已开启'):T('Poll closed','投票已关闭'));
+    state.pollsTried=false; loadPolls(true);
+  }).catch(e=>{
+    state.pollBusy=null;
+    if(String(e.message)==='auth') return;
+    state.pollsErr=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    render();
+  });
+});
 reg('finalizeTopup', id=>{
   const t=(state.tup||[]).find(x=>x.id===Number(id)); if(!t||state.tupBusy) return;
   // It credits a real wallet. The desktop asks; so does this.
@@ -1253,7 +1268,7 @@ function screenInbox(){
   };
   const unseenCount=DB.reviews.filter(r=>!state.reviewsSeen.has(revKey(r))).length;
   let body;
-  if(seg==='reviews') body=DB.reviews.map(r=>item(r,true)).join('');
+  if(seg==='reviews') body=DB.reviews.length?DB.reviews.map(r=>item(r,true)).join(''):emptyState(T('No reviews yet','还没有评价'),T('Reviews customers leave on a product show up here.','顾客在商品下留下的评价会显示在这里。'));
   else if(featOn('feedback')) body=DB.feedback.length?DB.feedback.map(r=>item(r,false)).join(''):emptyState(T('Inbox zero','已清空'),T('No open feedback.','没有待处理反馈。'));
   else body=`<div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:44px 24px;text-align:center">
       <span style="width:52px;height:52px;border-radius:14px;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;color:var(--text-secondary)">${ic('sparkles',22)}</span>
@@ -1386,6 +1401,92 @@ function screenMore(){
         <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`).join('')}</div></div>`).join('')}
     <div style="padding:24px 20px 8px;text-align:center;font-size:12px;color:var(--text-secondary)">tacet · ${T('runs in silence','静默运行')}</div>
   </div>`;
+}
+
+/* ==========================================================================
+   Voting — the polls customers answer (desktop: 10-extras.js)
+   --------------------------------------------------------------------------
+   The phone drew ONE bar per poll: the leader's share, and the leader's name.
+   A poll is a split — "62% Matcha oat" says nothing about whether second place
+   was 38% or 4%, and the other options existed nowhere on this device. It also
+   dropped the reward points, the closing time, whether a poll is featured, and
+   the fact that a draft is invisible to customers. And it carried two invented
+   polls in its source for whenever /polls came back empty.
+   ========================================================================== */
+function loadPolls(force){
+  if(state.pollsTried&&!force) return;
+  state.pollsTried=true;
+  api('/polls').then(rows=>{ state.polls=Array.isArray(rows)?rows:[]; state.pollsErr=null; render(); })
+    .catch(e=>{ if(String(e.message)==='auth') return;
+      state.pollsErr=T('Could not load the polls.','加载投票失败。'); render(); });
+}
+const POLL_WORD={open:['Live','进行中'],draft:['Draft','草稿'],closed:['Closed','已结束']};
+function pollPill(st){
+  const tone = st==='open'?'success' : st==='draft'?'clear' : 'muted';
+  const [bg,fg]=PILL[tone];
+  return `<span class="pill" style="background:${bg};color:${fg}">${T(...(POLL_WORD[st]||[st,st]))}</span>`;
+}
+function pollQ(p){ return LANG==='en' ? (p.question_en||p.question_cn||T('(untitled)','(未命名)'))
+                                      : (p.question_cn||p.question_en||T('(untitled)','(未命名)')); }
+function pollOptLabel(o){ return LANG==='en' ? (o.label_en||o.label_cn||'—') : (o.label_cn||o.label_en||'—'); }
+/* Every option, with its share of the real total — not just the leader. The
+   winner is marked only once one has been chosen on the desktop. */
+function pollBars(p){
+  const opts=(p.options||[]).slice().sort((a,b)=>(b.votes||0)-(a.votes||0));
+  const total=opts.reduce((a,o)=>a+(Number(o.votes)||0),0);
+  if(!opts.length) return `<div style="font-size:13px;color:var(--text-secondary)">${T('No options yet.','还没有选项。')}</div>`;
+  return `<div style="display:flex;flex-direction:column;gap:9px">${opts.map(o=>{
+    const v=Number(o.votes)||0;
+    const pct=total?Math.round(v/total*100):0;
+    const win=p.winner_option_id&&String(p.winner_option_id)===String(o.id);
+    return `<div style="display:flex;flex-direction:column;gap:4px">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+        <span style="font-size:14px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(pollOptLabel(o))}${win?` <span style="font-size:12px;color:var(--text-secondary)">· ${T('winner','胜出')}</span>`:''}</span>
+        <span class="num" style="font-size:12.5px;color:var(--text-secondary);flex:none">${v} ${T(v===1?'vote':'votes','票')} · ${pct}%</span></div>
+      <div style="height:6px;border-radius:999px;background:var(--surface-raised);overflow:hidden">
+        <div style="height:6px;width:${pct}%;border-radius:999px;background:${win?'var(--sage)':'var(--graphite)'}"></div></div></div>`;
+  }).join('')}</div>`;
+}
+function pollCard(p){
+  const opts=p.options||[];
+  const total=Number(p.total_votes||0)||opts.reduce((a,o)=>a+(Number(o.votes)||0),0);
+  const open=state.pollOpen===p.id;
+  const floor=Number(p.display_min_total||0);
+  const meta=[opts.length+' '+T(opts.length===1?'option':'options','个选项'),
+    total+' '+T(total===1?'vote':'votes','票'),
+    Number(p.reward_points||0)?'+'+p.reward_points+' '+T('pts','积分'):null,
+    p.closes_at?T('closes ','截止 ')+fmtDay(p.closes_at):null].filter(Boolean).join(' · ');
+  // The one action a phone is the right place for: a poll you have decided
+  // about, closed on the spot. Writing the question is desktop work.
+  const next = p.status==='open'?'closed':'open';
+  const verb = p.status==='draft'?T('Open','开启') : p.status==='open'?T('Close','关闭') : T('Reopen','重新开启');
+  const busy=state.pollBusy===p.id;
+  const btn=(label,cmd,dis)=>`<button ${dis?'disabled':''} onclick="${cmd}" style="font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 14px;cursor:pointer;font-family:inherit;${dis?'opacity:.5':''}">${label}</button>`;
+  return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+      <span style="font-size:15px;font-weight:500;min-width:0">${escAttr(pollQ(p))}</span>
+      <span style="display:flex;align-items:center;gap:6px;flex:none">${p.is_featured?`<span class="pill" style="background:${PILL.warning[0]};color:${PILL.warning[1]}">${T('Featured','精选')}</span>`:''}${pollPill(p.status)}</span></div>
+    <div class="num" style="font-size:12.5px;color:var(--text-secondary)">${meta}</div>
+    ${p.status==='draft'?`<div style="font-size:12.5px;color:var(--text-secondary)">${T('Customers cannot see a draft.','草稿对顾客不可见。')}</div>`:''}
+    ${floor?`<div style="font-size:12.5px;color:var(--amber)">${T('Customers are shown at least '+floor+' votes, whatever the real count is.','顾客看到的票数下限为 '+floor+' 票，与真实票数无关。')}</div>`:''}
+    ${open?pollBars(p):''}
+    <div style="display:flex;align-items:center;gap:8px;margin-top:2px">
+      ${btn(open?T('Hide results','收起结果'):T('See results','查看结果'),`APP.cmd('pollOpen',${p.id})`,false)}
+      ${btn(busy?T('Saving…','保存中…'):verb,`APP.cmd('pollStatus',${p.id},'${next}')`,busy)}</div></div>`;
+}
+function screenVoting(){
+  loadPolls();
+  if(state.pollsErr) return `<div style="padding:14px 16px 24px">
+    <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick)">${state.pollsErr}</span></div></div>`;
+  if(!state.polls) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!state.polls.length) return nothingYet(T('No polls yet','还没有投票'),
+    T('Polls are written on desktop. Once one exists you can read the split and open or close it from here.',
+      '投票在电脑端创建。创建后可在此查看结果并开启或关闭。'));
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${state.polls.map(pollCard).join('')}
+    ${noteBar(T('Questions, options and rewards are written on desktop.','问题、选项与奖励在电脑端编写。'))}</div>`;
 }
 
 /* ==========================================================================
@@ -2214,11 +2315,7 @@ const SUBS={
     ? `<div style="padding:14px 16px 24px">${flagGate('membership')}</div>` : screenMembership()},
   wallet:{title:['Top-up','充值'],render:()=>screenTopups()},
   leaderboard:{title:['Leaderboard','排行榜'],render:()=>screenLeaderboard()},
-  voting:{title:['Voting','投票'],render:()=>`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:10px">
-    ${DB.votes.map(v=>`<div class="card" style="padding:14px"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px"><span style="font-size:15px;font-weight:500;min-width:0">${T(...v.title)}</span>${pill(v.kind,T(...v.status))}</div>
-      <div class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:5px">${T(...v.votes)}</div>
-      <div style="margin-top:10px;height:6px;border-radius:999px;background:var(--surface-raised);overflow:hidden"><div style="height:6px;width:${v.pct};border-radius:999px;background:var(--graphite)"></div></div>
-      <div style="font-size:12.5px;color:var(--text-secondary);margin-top:7px">${T(...v.top)}</div></div>`).join('')}</div>`},
+  voting:{title:['Voting','投票'],render:()=>screenVoting()},
   editor:{title:['Editor','编辑器'],render:()=>`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
     <div style="background:var(--surface-raised);border-radius:14px;padding:18px;display:flex;flex-direction:column;align-items:center;gap:12px">
       <div style="width:100%;max-width:230px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;overflow:hidden">
@@ -2887,8 +2984,10 @@ function togglePrint(){
 }
 async function loadInbox(){
   try{ const rv=await api('/reviews?limit=30'); const list=Array.isArray(rv)?rv:(rv.reviews||[]);
-    if(list.length){ DB.reviews=list.map(mapReview);
-      state.liveAttn=Object.assign({},state.liveAttn||{},{reviews:DB.reviews.filter(r=>!r.reply).length}); render(); }
+    // Same rule as the coupon ledgers: a shop with no reviews must see none,
+    // not the three the mock ships with.
+    DB.reviews=list.map(mapReview);
+    state.liveAttn=Object.assign({},state.liveAttn||{},{reviews:DB.reviews.filter(r=>!r.reply).length}); render();
   }catch(e){}
   try{ const r=await api('/feedback'); const rows=Array.isArray(r)?r:(r&&r.data); if(rows) { DB.feedback=rows.map(mapFeedback); render(); } }catch(e){}
 }
@@ -4854,16 +4953,6 @@ function mapFeedback(r){
     time:[fmtDay(r.last_at||r.created_at)||'',fmtDay(r.last_at||r.created_at)||''],
     opened: replies>0&&r.created_at ? [fmtDay(r.created_at),fmtDay(r.created_at)] : null};
 }
-function mapPoll(r){
-  const opts=r.options||[]; const total=r.total_votes||opts.reduce((a,o)=>a+(o.votes||0),0);
-  let top=opts[0]; opts.forEach(o=>{ if((o.votes||0)>((top&&top.votes)||0)) top=o; });
-  const pct=total?Math.round(((top&&top.votes||0)/total)*100)+'%':'0%';
-  const st=String(r.status||'draft').toLowerCase();
-  const label=st==='open'?['Live','进行中']:st==='closed'?['Closed','已结束']:['Draft','草稿'];
-  return {title:[r.question_en||r.question_cn||'—',r.question_cn||r.question_en||'—'],
-    status:label, kind:st==='open'?'live':'off', votes:[total+' votes',total+' 票'], pct,
-    top:top?['Leading: '+(top.label_en||top.label_cn||''),'领先：'+(top.label_cn||top.label_en||'')]:['—','—']};
-}
 const TIER_NAMES={seed:['Seed','种子'],sprout:['Sprout','幼苗'],root:['Root','根'],tree:['Tree','大树']};
 reg('openOrder', id=>{
   const row=(state.liveOrders||[]).find(o=>o.id===id);
@@ -4958,7 +5047,7 @@ async function loadLive(){
   }catch(e){}
   // reviews (inbox)
   try{ const rv=await api('/reviews?limit=30'); const list=Array.isArray(rv)?rv:(rv.reviews||[]);
-    if(list.length){ DB.reviews=list.map(mapReview); state.liveAttn=Object.assign({},state.liveAttn,{reviews:list.filter(r=>!(r.reply&&String(r.reply).trim())).length}); }
+    DB.reviews=list.map(mapReview); state.liveAttn=Object.assign({},state.liveAttn,{reviews:list.filter(r=>!(r.reply&&String(r.reply).trim())).length});
   }catch(e){}
   // low-stock count for the Home attention row
   // Low = a shelf that needs buying back. A draft is neither low nor out, so
@@ -4986,12 +5075,15 @@ async function loadLive(){
   apiRaw('/invoices').then(r=>set(()=>{ const rows=(r&&r.data)||[]; state.invLoaded=true;
     if(rows.length) DB.invoices=rows.map(mapInvoice); else DB.invoices=[];
     if(r&&r.counts) state.liveInvoiceCounts=r.counts; })).catch(()=>{});
-  api('/vouchers').then(r=>set(()=>{ if(Array.isArray(r)&&r.length){ DB.coupons=r.map(mapVoucher);
+  // `Array.isArray(r)`, not `r.length`: a shop with no coupons must SEE no
+  // coupons. The `&& r.length` these three used to carry meant an empty server
+  // answer left the sample rows on screen — the mock outliving the data it was
+  // standing in for, on exactly the shop least able to tell the difference.
+  api('/vouchers').then(r=>set(()=>{ if(Array.isArray(r)){ DB.coupons=r.map(mapVoucher);
     DB.coupons.forEach(c=>{ if(state.sw['c_'+c.code]===undefined) state.sw['c_'+c.code]=c.on; }); } })).catch(()=>{});
-  api('/flash-sales').then(r=>set(()=>{ if(Array.isArray(r)&&r.length) DB.flash=r.map(mapFlash); })).catch(()=>{});
-  api('/broadcasts').then(r=>set(()=>{ if(Array.isArray(r)&&r.length) DB.broadcasts=r.map(mapBroadcast); })).catch(()=>{});
+  api('/flash-sales').then(r=>set(()=>{ if(Array.isArray(r)) DB.flash=r.map(mapFlash); })).catch(()=>{});
+  api('/broadcasts').then(r=>set(()=>{ if(Array.isArray(r)) DB.broadcasts=r.map(mapBroadcast); })).catch(()=>{});
   api('/feedback').then(r=>set(()=>{ const rows=Array.isArray(r)?r:(r&&r.data); if(rows) DB.feedback=rows.map(mapFeedback); })).catch(()=>{});
-  api('/polls').then(r=>set(()=>{ if(Array.isArray(r)&&r.length) DB.votes=r.map(mapPoll); })).catch(()=>{});
 
 
   // wallet activity + leaderboard + sales channels
