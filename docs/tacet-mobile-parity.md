@@ -68,6 +68,10 @@ desktop is the right home
 | The Recap, real away-window figures | ✅ |
 | Needs-you rows, deep-linked | ✅ — the real `/dashboard/ops` fires now (delivery, payment mismatch, refunds, orders to start, awaiting restock, invoices, restock), Brick-first then oldest, each opening its filtered list |
 | Today's KPIs with deltas | ✅ |
+| **Also today: sessions, conversion, returning buyers, refunded** | ✅ — with the desktop's own honesty rules kept intact: under 20 sessions conversion shows the raw counts and no percentage; Returning names its denominator, because "New today" counts accounts created and this counts people who paid; a clean day says "nothing sent back", not 0% |
+| ↳ the same money gate as the Recap | ✅ — a warehouse or dispatch account sees no revenue block at all |
+| Orders waiting for a delivery point | ➖ — a same-city dispatch queue; the fires cover what needs a call |
+| On the road / Ready to hand off / Drafts to send | ➖ — the Orders chips carry the same counts one tap away |
 | Unhandled-orders card (paid, nobody started) | ✅ — "Orders to start" |
 | Payment-mismatch fire | ✅ — "Payment doesn't match", opening the Pending list, with the brick mark on the row (and in the drawer) that says which order it is |
 | Payments-to-confirm fire (amber) | ✅ — a proof on file that nobody has accepted; same door |

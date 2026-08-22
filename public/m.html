@@ -888,6 +888,44 @@ function recapCard(){
     <div style="margin-top:18px;display:flex;align-items:baseline;justify-content:flex-end">${workBtn}</div>
     ${workFold()}</div>`;
 }
+/* The four figures the desktop keeps beside Today, with the rules it wrote for
+   each of them — they are the whole point of these cells:
+
+     • Conversion is a lie at small denominators. Under twenty sessions a
+       percentage is noise rendered as a crisis (0.0% over two sessions), so the
+       figure stays a dash and the raw counts carry it instead. Small shops ARE
+       the core case here, not an edge one.
+     • Returning names its own denominator out loud, because "New today" counts
+       ACCOUNTS CREATED and this counts PEOPLE WHO PAID — two populations that
+       read as if they should add up and do not.
+     • Refunds say "nothing sent back" on a clean day rather than a rate of 0%.
+
+   Every cell renders a dash when there is nothing to divide, never a zero
+   dressed up as a result. */
+function vitalsBlock(){
+  const v=state.liveVitals; if(!v) return '';
+  if(recapNoMoney()) return '';   // same gate as the Recap: money is owner-only
+  const CONV_MIN=20;
+  const cell=(label,fig,sub)=>`<div style="min-width:0">
+    <span style="display:block;font-size:13px;color:var(--text-secondary)">${label}</span>
+    <span class="num" style="display:block;font-size:18px;font-weight:500;line-height:1.4">${fig}</span>
+    ${sub?`<span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary)">${sub}</span>`:''}</div>`;
+  const conv = !v.sessions ? ['—',T('no sessions yet','暂无会话')]
+    : v.sessions<CONV_MIN ? ['—',T(v.orders+(v.orders===1?' order':' orders')+' from '+v.sessions+(v.sessions===1?' session':' sessions'), v.sessions+' 次会话中 '+v.orders+' 单')]
+    : [(v.conv==null?'—':v.conv.toFixed(1)+'%'), T(v.orders+' orders ÷ '+v.sessions+' sessions', v.orders+' 单 ÷ '+v.sessions+' 次会话')];
+  const ret = v.buyers ? [String(v.returning), T('of '+v.buyers+' who bought today','今日 '+v.buyers+' 位买家中')]
+                       : ['—', T('nobody has bought yet','今日暂无买家')];
+  return `<div class="rise" style="animation-delay:.15s">
+    <div style="padding:2px 4px 8px;font-size:18px;font-weight:500">${T('Also today','今日其他')}</div>
+    <div class="card" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px">
+      ${cell(T('Sessions','会话'), v.sessions?v.sessions.toLocaleString():'—','')}
+      ${cell(T('Conversion','转化率'), conv[0], conv[1])}
+      ${cell(T('Returning','回头客'), ret[0], ret[1])}
+      ${cell(T('Refunded','已退款'), String(v.refunded),
+        v.refunded?T((v.refundRate||0).toFixed(1)+'% of orders','占订单 '+(v.refundRate||0).toFixed(1)+'%')
+                  :T('nothing sent back','无退款'))}
+    </div></div>`;
+}
 function screenHome(){
   const A=state.liveAttn||{};
   const fires=opsFires()||[];
@@ -928,6 +966,7 @@ function screenHome(){
            <span style="display:block;font-size:13px;color:var(--text-secondary)">${l}</span>
            <span class="num" style="display:block;font-size:18px;font-weight:500;line-height:1.4">${v}</span>
            ${d?`<span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${d}</span>`:''}</div>`).join('')}</div></div>
+    ${vitalsBlock()}
     <div class="rise" style="animation-delay:.18s">
       <div style="padding:2px 4px 8px;font-size:18px;font-weight:500">${T('Quick actions','快捷操作')}</div>
       <div class="list">${quick.map((q,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
@@ -4054,6 +4093,18 @@ async function loadLive(){
       [T('Avg. order','客单价'), money(CUR, ord? rev/ord : 0), ''],
       [T('New customers','新客'), String(nc), deltaText(nc, b.new_customers, bl)],
     ];
+    // The desktop's Today strip carries a fifth figure and its Customers card
+    // four more; the phone kept none of them. Each comes with the honesty rule
+    // the desktop wrote for it — see vitalsBlock.
+    state.liveVitals={
+      refunded:Number(k.refunded_orders||0),
+      refundRate:k.refund_rate!=null?Number(k.refund_rate):null,
+      sessions:Number(k.sessions||0),
+      orders:ord,
+      conv:k.conversion_rate!=null?Number(k.conversion_rate):null,
+      buyers:Number((d.new_vs_returning||{}).buyers||0),
+      returning:Number((d.new_vs_returning||{}).returning_buyers||0),
+    };
     // "Orders awaiting shipment" = paid-but-not-shipped. The dashboard exposes the
     // per-status counts under `funnel` (the old code read `byStatus`, which doesn't
     // exist, so this number was always the fake fallback). Prefer the dedicated
