@@ -186,14 +186,27 @@ function activeProxy() {
 // election ourselves — residential → GZ → direct, first healthy wins — so the
 // channel climbs back onto the residential exit without waiting for a human, and
 // say once that we're doing it, because a missing watchdog is still a fault.
+// `at` of the entry THIS process last wrote, so it can tell its own work apart
+// from the watchdog's. Without it the daemon reads the state it just wrote,
+// sees a current decision, and concludes the watchdog is back — clearing its own
+// alarm every re-election and paging 🟠 then ✅ on a five-minute loop for as long
+// as the watchdog stays dead. Observed doing exactly that on 2026-08-22 between
+// 04:27 and 04:33, in the window before the watchdog was bounced onto the fix.
+let selfWriteAt = 0;
+
 async function ensureProxyFresh() {
   let pm;
   try { pm = require('../lib/proxy-manager'); } catch (_) { return; }   // manager optional
-  let stale;
-  try { stale = pm.isStale(PROXY_CHANNEL); } catch (_) { return; }
+  let stale, entry = null;
+  try {
+    stale = pm.isStale(PROXY_CHANNEL);
+    entry = pm.readState()[PROXY_CHANNEL] || null;
+  } catch (_) { return; }
 
   if (!stale) {
-    if (alerts['proxy_stale']) {
+    // Only a current entry we did NOT write is evidence the watchdog is writing.
+    const byWatchdog = !entry || !selfWriteAt || entry.at !== selfWriteAt;
+    if (alerts['proxy_stale'] && byWatchdog) {
       alerts['proxy_stale'] = false;
       console.log(`[meituan-daemon] ${new Date().toISOString()} proxy watchdog is writing again — leaving the choice to it`);
       sendOpsAlert(`✅ 代理看门狗已恢复，外卖代理切换恢复自动\nproxy-watchdog is updating again — 外卖 proxy failover back on auto`);
@@ -215,6 +228,9 @@ async function ensureProxyFresh() {
   if (elected) {
     console.log(`[meituan-daemon] ${new Date().toISOString()} proxy re-elected → ${elected.label} (${maskProxy(elected.url) || 'direct'})`);
     for (const s of getStoreConfigs()) logSync(s.storeCode, 'proxy_elected', 'ok', { label: elected.label }, null);
+    // Remember the stamp we just caused, so the next pass doesn't mistake it for
+    // the watchdog coming back.
+    try { selfWriteAt = (pm.readState()[PROXY_CHANNEL] || {}).at || 0; } catch (_) { selfWriteAt = 0; }
   }
 }
 function proxyHealthy(timeoutSec = 8) {
