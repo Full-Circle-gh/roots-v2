@@ -869,10 +869,22 @@ const ORDER_NEXT={
   preparing:       {to:'dispatched', en:'Mark dispatched',  zh:'标记已发货', busyEn:'Marking…',  busyZh:'处理中…'},
   dispatched:      {to:'delivered',  en:'Mark delivered',   zh:'标记送达',  busyEn:'Marking…',  busyZh:'处理中…'},
 };
+/* A pickup order walks the same machine with a different journey: dispatched is
+   "ready at the counter" and delivered is "the customer came and took it". The
+   desktop relabels both; so does this, or the phone tells a counter to dispatch
+   something nobody is shipping. */
+const ORDER_NEXT_PICKUP={dispatched:{en:'Mark ready for pickup',zh:'标记可取货'},delivered:{en:'Mark picked up',zh:'标记已取货'}};
 /* pending_payment is deliberately absent: marking an off-app payment records
    WHICH tender it was, and guessing that from a phone would put "unknown" on
    the books. It stays a desktop action until the phone can ask. */
-function orderNext(o){ return o && o.raw ? (ORDER_NEXT[o.raw]||null) : null; }
+function orderNext(o){
+  // A marketplace mirror is read at 100% legibility and acted on at 0%: the
+  // platform drives it, and a button here would write into a queue we do not own.
+  if(!o||o.viewOnly||!o.raw) return null;
+  const n=ORDER_NEXT[o.raw]; if(!n) return null;
+  const alt=o.pickup&&ORDER_NEXT_PICKUP[n.to];
+  return alt?Object.assign({},n,alt):n;
+}
 
 /* A write helper that keeps the server's own words. api() throws away the body,
    and the body is where the reason lives. */
