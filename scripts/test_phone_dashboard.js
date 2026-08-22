@@ -1,36 +1,30 @@
 #!/usr/bin/env node
 /**
- * Offline self-test for the phone dashboard (public/m.html) — its money
- * formatting, its Today deltas, and its Needs-you card.
+ * Offline self-test for three things on the phone dashboard (public/m.html):
+ * its money formatting, its Today deltas, and the amber half of the payment
+ * queue on its Needs-you card.
  *
  *   node scripts/test_phone_dashboard.js
  *
- * Why this file exists. m.html is a standalone app: its own renderer, its own
- * state, no module boundary with public/retail-admin/. That freedom is how it
- * drifted. Three things were shipping wrong at once and all three were visible
- * in a single screenshot:
+ * SCOPE, deliberately narrow. m.html is a standalone app under active redesign
+ * by its own line of work, and that work owns the shape of Home: opsFires(),
+ * the row markup, the ordersGo doors, the Pending chip. This file asserts none
+ * of that — scripts/test_mobile_screens.js renders every screen and is the
+ * suite that guards it. What is asserted here is only what this change put in:
  *
- *   1. ¥3,271.4 — money with ONE decimal, because the formatter capped the
- *      fraction without padding it.
- *   2. "−23.8% vs a typical day" — a raw unrounded delta against a baseline the
- *      line never named, and under Avg. order the comparison label with no
- *      comparison at all beneath it.
- *   3. A "Needs you" card of three hardcoded rows whose fallback values were
- *      SAMPLE NUMBERS, so an unloaded phone stated a confident 2 that meant
- *      nothing — while the fires that matter (a payment nobody accepted, a
- *      delivery gone wrong, a refund waiting) were not on the screen at all.
+ *   1. money() — it printed ¥3,271.4, one decimal, because the formatter capped
+ *      the fraction without padding it.
+ *   2. deltaText() — the tiles read "−23.8% vs a typical day": a raw unrounded
+ *      delta against a baseline the line never named, and under Avg. order the
+ *      comparison label with nothing beneath it at all.
+ *   3. The `payment_unconfirmed` fire — the amber sibling of "Payment doesn't
+ *      match", covering a proof that was verified-but-unflipped, unreadable, or
+ *      never read. Asserted inside the REAL opsFires(), so a restructure of that
+ *      function fails here rather than leaving this green against a copy.
  *
- * No network, no browser. Every function under test is sliced out of the
- * shipped m.html and evaluated against stubs, so editing the real file is what
- * moves these tests — the same technique as scripts/test_needs_point_client.js.
- *
- * What it locks down:
- *   1. MONEY — whole or to the fen, never one decimal; glance cards round.
- *   2. THE DELTA — whole percents, a named baseline, and silence where there is
- *      nothing to compare. The desktop's rules (dashSetDelta), reproduced.
- *   3. THE CARD — built from /dashboard/ops, brick before amber, no row for a
- *      zero count, and "not loaded" told apart from "all clear".
- *   4. THE DOORS — every fire points at a filter this screen actually has.
+ * No network, no browser: each function is sliced out of the shipped file and
+ * evaluated against stubs, the same technique as
+ * scripts/test_needs_point_client.js.
  */
 'use strict';
 
@@ -48,7 +42,7 @@ function it(name, fn) {
 const ROOT = path.join(__dirname, '..');
 const M_HTML = fs.readFileSync(path.join(ROOT, 'public', 'm.html'), 'utf8');
 
-/** A braced block (function or const arrow), anchor → its matching `}`. */
+/** A braced block (function declaration), anchor → its matching `}`. */
 function sliceBlock(src, anchor) {
   const start = src.indexOf(anchor);
   assert.notStrictEqual(start, -1, `not found in the shipped file: ${anchor}`);
@@ -61,7 +55,7 @@ function sliceBlock(src, anchor) {
   throw new Error(`unbalanced braces after ${anchor}`);
 }
 
-/** From `anchor` to the end of the line the terminating `;` sits on. */
+/** `anchor` through the end of the Nth line after it. */
 function sliceLines(src, anchor, lines) {
   const start = src.indexOf(anchor);
   assert.notStrictEqual(start, -1, `not found in the shipped file: ${anchor}`);
@@ -73,26 +67,25 @@ function sliceLines(src, anchor, lines) {
   return src.slice(start, i);
 }
 
-// ── The shipped functions, lifted out of m.html ───────────────────────────
-const MONEY_SRC = sliceLines(M_HTML, 'const money=(cur,n)=>', 2);
-const MONEY0_SRC = sliceLines(M_HTML, 'const money0=(cur,n)=>', 1);
-const DOW_SRC = sliceLines(M_HTML, "const DOW_ABBR_EN=", 2);
-const DELTA_SRC = sliceBlock(M_HTML, 'function deltaText(cur, base, bl)');
-const AGE_SRC = sliceLines(M_HTML, 'const AGE=(m)=>', 1);
-const OLDEST_SRC = sliceBlock(M_HTML, 'function oldestMins(items)');
-const FIRES_SRC = sliceBlock(M_HTML, 'function homeFires()');
-const BLOCK_SRC = sliceBlock(M_HTML, 'function attnBlock(fires)');
+// ── The shipped code under test, plus the helpers opsFires leans on ───────
+const SRC = [
+  sliceLines(M_HTML, 'const money=(cur,n)=>', 2),
+  sliceLines(M_HTML, 'const money0=(cur,n)=>', 1),
+  sliceLines(M_HTML, 'const DOW_ABBR_EN=', 2),
+  sliceBlock(M_HTML, 'function deltaText(cur, base, bl)'),
+  sliceLines(M_HTML, 'const _date=v=>', 1),
+  sliceBlock(M_HTML, 'function oldestMins(items)'),
+  sliceBlock(M_HTML, 'function oldestOf(items)'),
+  sliceBlock(M_HTML, 'function opsFires()'),
+].join(';\n');
 
-// One context carrying the real functions and the smallest honest stubs: T
-// resolves to the English half (the assertions read it), ic() is an icon.
 function ctxWith(state) {
-  const ctx = { state, T: (en) => en, ic: () => '<svg/>', Date, Math, Number, String, JSON, isNaN };
+  const ctx = { state, T: (en) => en, Date, Math, Number, String, isNaN };
   vm.createContext(ctx);
-  // `const` is block-scoped to the script and never lands on the context object,
-  // unlike a function declaration — so the arrow-function helpers are published
+  // `const` is block-scoped to the script and never lands on the context
+  // object, unlike a function declaration — so the arrow helpers are published
   // explicitly. Without this they evaluate fine and are simply unreachable.
-  new vm.Script([MONEY_SRC, MONEY0_SRC, DOW_SRC, DELTA_SRC, AGE_SRC, OLDEST_SRC, FIRES_SRC, BLOCK_SRC]
-    .join(';\n') + ';\nthis.money=money; this.money0=money0; this.AGE=AGE;').runInContext(ctx);
+  new vm.Script(SRC + ';\nthis.money=money; this.money0=money0;').runInContext(ctx);
   return ctx;
 }
 const C = ctxWith({});
@@ -116,7 +109,6 @@ it('two decimals survive', () => {
 });
 
 it('the glance cards round to whole yuan', () => {
-  // A day's takings on a phone tile is read, not reconciled.
   assert.strictEqual(C.money0('¥', 3271.4), '¥3,271');
   assert.strictEqual(C.money0('¥', 7296.7), '¥7,297');
 });
@@ -125,6 +117,11 @@ it('a missing or junk amount is ¥0, never NaN', () => {
   assert.strictEqual(C.money('¥', null), '¥0');
   assert.strictEqual(C.money('¥', undefined), '¥0');
   assert.strictEqual(C.money0('¥', null), '¥0');
+});
+
+it('the two glance surfaces are wired to the rounding one', () => {
+  assert.ok(/夜间营收'\),money0\(CUR,r\.revenue\)/.test(M_HTML), 'the overnight recap');
+  assert.ok(/money0\(CUR,rev\), deltaText/.test(M_HTML), 'the Today revenue tile');
 });
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -139,14 +136,15 @@ it('a whole percent, never the raw decimal', () => {
 });
 
 it('it names the baseline instead of saying "a typical day"', () => {
-  assert.ok(/vs last 3 Sat$/.test(C.deltaText(1, { delta: 5 }, BL)));
   assert.strictEqual(C.deltaText(1, { delta: 5 }, { days: 1, weekday: 1, clipped: false }),
     '▲ 5% vs last 1 Mon');
+  // The CALL, not the phrase — the comment above deltaText quotes the old
+  // label to explain what it replaced, and matching prose would fail on that.
+  assert.ok(!/T\('vs a typical day'/.test(M_HTML), 'the vague label is back in the code');
 });
 
 it('a clipped baseline says so — a slow morning is not a collapse', () => {
-  const t = C.deltaText(1, { delta: -40 }, { ...BL, clipped: true });
-  assert.ok(/by now/.test(t), `no "by now" in: ${t}`);
+  assert.ok(/by now/.test(C.deltaText(1, { delta: -40 }, { ...BL, clipped: true })));
 });
 
 it('nothing yet today is a calm dash, never ▼100%', () => {
@@ -170,143 +168,77 @@ it('a metric with NO baseline says nothing at all', () => {
   assert.strictEqual(C.deltaText(270, null, BL), '');
 });
 
-it('the Avg. order tile is wired to that silence', () => {
+it('the Avg. order tile is wired to that silence, and renders no line for it', () => {
   assert.ok(/T\('Avg\. order','客单价'\), money\(CUR, ord\? rev\/ord : 0\), ''\]/.test(M_HTML),
     'Avg. order must pass an empty delta, not a bare label');
-});
-
-it('a tile with no delta renders no line for one', () => {
-  // Anchored on the conditional, not on the tile's styling — the phone's markup
-  // is redesigned often and this assertion is about the logic.
   assert.ok(/\$\{d\?`<span class="num"[^`]*`:''\}/.test(M_HTML),
     'the delta span must be conditional, or an empty one still takes the space');
 });
 
 // ─────────────────────────────────────────────────────────────────────────
-console.log('\n3 · Needs you — the same fires the desktop shows');
+console.log('\n3 · the amber payment fire, inside the real opsFires()');
 
-const opsWith = (o) => ctxWith({ liveOps: o, liveAttn: {} });
 const OPS0 = {
   payment_mismatch: { count: 0, items: [] }, payment_unconfirmed: { count: 0, unread: 0, items: [] },
   delivery_alerts: { count: 0, items: [] }, refunds: { count: 0, items: [] },
-  awaiting_restock: { count: 0, items: [] }, invoices: { count: 0, items: [] },
-  low_stock: { count: 0, items: [] }, out_of_stock: { count: 0, items: [] },
+  unhandled: { count: 0, items: [] }, awaiting_restock: { count: 0, items: [] },
+  invoices: { count: 0, items: [] }, low_stock: { count: 0, items: [] },
+  out_of_stock: { count: 0, items: [] },
 };
+const firesFor = (o) => [...ctxWith({ ops: { ...OPS0, ...o } }).opsFires()];
 
-it('not loaded is null — which is not the same as all clear', () => {
-  const c = ctxWith({ liveOps: null });
-  assert.strictEqual(c.homeFires(), null);
-  assert.ok(/Checking/.test(c.attnBlock(null)), 'an unloaded card must say it is still looking');
+it('a proof nobody has accepted lights an amber row', () => {
+  const f = firesFor({ payment_unconfirmed: { count: 3, unread: 0, items: [] } });
+  const row = f.find(x => x.label === 'Payments to confirm');
+  assert.ok(row, `no such fire in: ${f.map(x => x.label).join(' | ')}`);
+  assert.strictEqual(row.sev, 'amber', 'nothing here says the money is WRONG');
+  assert.strictEqual(row.n, 3);
 });
 
-it('all clear removes the block from the screen entirely', () => {
-  const c = opsWith(OPS0);
-  assert.strictEqual(c.homeFires().length, 0);
-  assert.strictEqual(c.attnBlock([]), '', 'a shorter Home IS the good news');
-});
-
-it('a zero count never becomes a row', () => {
-  const c = opsWith({ ...OPS0, refunds: { count: 0, items: [] } });
-  assert.strictEqual(c.homeFires().length, 0);
-});
-
-it('the payment fires are on this screen at all — they were not before', () => {
-  const c = opsWith({ ...OPS0,
-    payment_mismatch: { count: 1, items: [{ waiting_since: new Date(Date.now() - 4 * 3600e3).toISOString() }] },
-    payment_unconfirmed: { count: 3, unread: 2, items: [] } });
-  const labels = c.homeFires().map(f => f.label);
-  assert.ok(labels.includes("Payment doesn't match"), labels.join(' | '));
-  assert.ok(labels.includes('Payments to confirm'), labels.join(' | '));
-});
-
-it('brick sorts above amber', () => {
-  const c = opsWith({ ...OPS0,
-    refunds: { count: 2, items: [] },
-    delivery_alerts: { count: 1, items: [] },
-    payment_mismatch: { count: 1, items: [] } });
-  assert.deepStrictEqual([...c.homeFires().map(f => f.sev)], ['brick', 'brick', 'amber']);
-});
-
-it('the unconfirmed row names the unreadable ones', () => {
-  const c = opsWith({ ...OPS0, payment_unconfirmed: { count: 5, unread: 2, items: [] } });
-  const f = c.homeFires().find(x => x.label === 'Payments to confirm');
-  assert.strictEqual(f.sub, "2 couldn't be read");
-  assert.strictEqual(f.n, 5);
+it('it names the unreadable ones rather than an age', () => {
+  const row = firesFor({ payment_unconfirmed: { count: 5, unread: 2, items: [] } })
+    .find(x => x.label === 'Payments to confirm');
+  assert.strictEqual(row.meta, "2 couldn't be read");
 });
 
 it('all-readable says nothing about unreadable ones', () => {
-  const c = opsWith({ ...OPS0, payment_unconfirmed: { count: 5, unread: 0, items: [] } });
-  const f = c.homeFires().find(x => x.label === 'Payments to confirm');
-  assert.ok(!/read/.test(f.sub || ''), `"0 couldn't be read" is a sentence nobody needs: ${f.sub}`);
+  const row = firesFor({ payment_unconfirmed: { count: 5, unread: 0, items: [] } })
+    .find(x => x.label === 'Payments to confirm');
+  assert.ok(!/read/.test(row.meta || ''), `"0 couldn't be read" is a sentence nobody needs: ${row.meta}`);
 });
 
-it('a queue states the age of its oldest, and a clockless row does not vote', () => {
-  const c = opsWith({ ...OPS0, refunds: { count: 2, items: [
-    { waiting_since: new Date(Date.now() - 30 * 60e3).toISOString() },
-    { waiting_since: null },
-    { waiting_since: new Date(Date.now() - 5 * 3600e3).toISOString() },
-  ] } });
-  assert.strictEqual(c.homeFires()[0].sub, '5h', 'the oldest wins, and the null one is skipped');
+it('zero never becomes a row, whatever the unread count says', () => {
+  assert.strictEqual(firesFor({}).length, 0);
+  assert.strictEqual(firesFor({ payment_unconfirmed: { count: 0, unread: 3, items: [] } }).length, 0);
 });
 
-it('stock states its condition, never an age', () => {
-  const c = opsWith({ ...OPS0, out_of_stock: { count: 3, items: [] }, low_stock: { count: 8, items: [] } });
-  const f = c.homeFires().find(x => x.label === 'Restock needed');
-  assert.strictEqual(f.n, 3, 'the pill counts what is actually OUT');
-  assert.strictEqual(f.sub, 'out of stock, 8 running low');
+it('it sorts below its brick sibling, not above it', () => {
+  const f = firesFor({
+    payment_mismatch: { count: 1, items: [] },
+    payment_unconfirmed: { count: 9, unread: 0, items: [] },
+  });
+  assert.deepStrictEqual(f.map(x => x.sev), ['brick', 'amber'],
+    'a bigger amber count must not outrank a brick one');
 });
 
-it('the rendered row carries the count and the severity tint', () => {
-  const c = opsWith({ ...OPS0, payment_mismatch: { count: 2, items: [] } });
-  const html = c.attnBlock(c.homeFires());
-  assert.ok(/var\(--brick\)/.test(html), 'a brick fire must be tinted brick');
-  assert.ok(/>2</.test(html), 'the count is missing from the row');
-});
-
-// ─────────────────────────────────────────────────────────────────────────
-console.log('\n4 · the doors — every fire lands somewhere that exists');
-
-it('no fire points at a filter this screen does not have', () => {
-  // goStatus sets state.statusF, which ordersFiltered matches against o.kind
-  // (or 'all'/'new'). A key with no chip is a row that appears to do nothing.
-  const c = opsWith({ ...OPS0,
-    payment_mismatch: { count: 1, items: [] }, payment_unconfirmed: { count: 1, unread: 0, items: [] },
-    delivery_alerts: { count: 1, items: [] }, refunds: { count: 1, items: [] },
-    awaiting_restock: { count: 1, items: [] } });
-  const wanted = c.homeFires()
-    .map(f => (/goStatus','([a-z_]+)'/.exec(f.cmd) || [])[1])
-    .filter(Boolean);
-  assert.ok(wanted.length >= 5, `expected every queue fire to deep-link, got ${wanted.length}`);
-  for (const key of new Set(wanted)) {
-    assert.ok(new RegExp(`\\{key:'${key}'`).test(M_HTML), `no chip with key '${key}' on the Orders screen`);
+it('both payment fires open the same door — Pending, where both are sitting', () => {
+  const f = firesFor({
+    payment_mismatch: { count: 1, items: [] },
+    payment_unconfirmed: { count: 1, unread: 0, items: [] },
+  });
+  for (const row of f) {
+    assert.strictEqual(row.go, "APP.cmd('ordersGo','pending')", `wrong door on ${row.label}`);
   }
+  // Non-vacuous: that door is a no-op for a filter this screen cannot serve.
+  assert.ok(/pending:'pending_payment'/.test(M_HTML), 'no pending filter for the door to open');
 });
 
-it('Pending has a chip now — the payment fires had nowhere to land', () => {
-  assert.ok(/\{key:'pending',en:'Pending'/.test(M_HTML));
-  assert.ok(/sCount\('pending_payment'/.test(M_HTML), 'its badge must read the real count');
-});
-
-it('goStatus switches tab, narrows, AND refetches', () => {
-  const src = (/reg\('goStatus',[^\n]*/.exec(M_HTML) || [''])[0];
-  assert.ok(/state\.tab='orders'/.test(src), 'it must land on Orders');
-  assert.ok(/state\.statusF=f/.test(src), 'a door that only switched tabs shows the whole list');
-  // The filter is the SERVER's on this screen, so setting statusF alone would
-  // leave whatever page was last fetched on display under a new chip.
-  assert.ok(/loadOrdersPage\(\)/.test(src), 'the narrowed list must be refetched');
-});
-
-it('the sample-number fallbacks are gone', () => {
-  // The card used to fall back to 2 / 3 / 1 — confident numbers that meant
-  // nothing. Nothing may put a literal count on this card again.
-  assert.ok(!/A\.ship!=null\?A\.ship:2/.test(M_HTML), 'the fake shipment count is back');
-  assert.ok(!/A\.reviews!=null\?A\.reviews:3/.test(M_HTML), 'the fake review count is back');
-  assert.ok(!/A\.low!=null\?A\.low:1/.test(M_HTML), 'the fake low-stock count is back');
-});
-
-it('the card is fed by the same endpoint the desktop card uses', () => {
-  assert.ok(/api\('\/dashboard\/ops\?preview=8'\)/.test(M_HTML),
-    'the phone must read /dashboard/ops, or the two screens can disagree');
+it('a payload with no payment_unconfirmed key at all does not throw', () => {
+  // An older server, or a tenant mid-deploy: the block is simply absent, and
+  // the card must degrade to "one fewer fire" rather than to a blank screen.
+  const bare = { ...OPS0 };
+  delete bare.payment_unconfirmed;
+  assert.strictEqual([...ctxWith({ ops: bare }).opsFires()].length, 0);
 });
 
 console.log(`\n${pass} passed, ${fail} failed\n`);
