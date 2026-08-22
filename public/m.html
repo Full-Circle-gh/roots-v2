@@ -280,6 +280,7 @@ const state = {
   prodStores:null, prodStockReady:false, prodBusy:false, prodErr:null,
   cfg:null, setup:null, zones:null, mirror:null, mirrorLoading:null, mirrorMode:null,
   couponBusy:null, couponErr:null, bcBusy:null, bcErr:null, ask:null,
+  ops:null, opsLoading:false,
   media:null, mediaLoading:false, mediaTried:false,
   fapiao:null, fapiaoLoading:false, fapiaoBusy:false, fapiaoTried:false, printerTried:false,
   ordersView:null, ordersTotal:null, ordersLoading:false, ordersMore:false,
@@ -326,6 +327,7 @@ reg('statusF', f=>{ state.statusF=f; loadOrdersPage(); });
 reg('channelF', f=>{ state.channelF=f; loadOrdersPage(); });
 reg('storeF', v=>{ state.storeF=v; loadOrdersPage(); });
 reg('ordersMore', ()=>{ if(!state.ordersLoading) loadOrdersPage(true); });
+reg('ordersGo', f=>{ state.stack=[]; state.tab='orders'; state.statusF=f; state.channelF='all'; state.orderQ=''; loadOrdersPage(); });
 reg('orderSearch', q=>{ state.orderQ=q||''; state.search=false; state.tab='orders'; state.stack=[]; loadOrdersPage(); });
 reg('clearOrderSearch', ()=>{ state.orderQ=''; loadOrdersPage(); });
 reg('ordersClear', ()=>{ state.statusF='all'; state.channelF='all'; state.storeF='all'; state.orderQ=''; loadOrdersPage(); });
@@ -550,11 +552,12 @@ function recapCard(){
 }
 function screenHome(){
   const A=state.liveAttn||{};
-  const attention=[
-    {icon:'package',label:T('Orders awaiting shipment','待发货订单'),count:A.ship!=null?A.ship:2,cmd:"APP.cmd('tab','orders')"},
-    {icon:'message-square-text',label:T('Reviews to reply','待回复评价'),count:A.reviews!=null?A.reviews:3,cmd:"APP.cmd('push','inbox')"},
-    {icon:'triangle-alert',label:T('Low stock','库存偏低'),count:A.low!=null?A.low:1,cmd:"APP.cmd('push','products')"},
-  ];
+  const fires=opsFires()||[];
+  // Reviews are the one fire the ops snapshot does not carry — it watches
+  // orders and stock, not the inbox — so it is added here from the inbox's own
+  // count rather than left off the only screen that lists what is waiting.
+  if(A.reviews) fires.push({sev:'amber',icon:'message-square-text',
+    label:T('Reviews to reply','待回复评价'),n:A.reviews,meta:'',go:"APP.cmd('push','inbox')",mins:null});
   const vy=T('vs yesterday','较昨日');
   const kpis = state.liveKpis || [[T('Revenue','营收'),'¥12,840','+8% '+vy],[T('Orders','订单'),'37','+5 '+vy],[T('Avg. order','客单价'),'¥347','−2% '+vy],[T('Visitors','访客'),'1,204','+11% '+vy]];
   const quick=[
@@ -569,13 +572,17 @@ function screenHome(){
   return `${pageHead({title:T(...GREET[greetKey()]), status:dateLine})}
   <div style="padding:0 16px 24px;display:flex;flex-direction:column;gap:16px">
     ${recapCard()}
-    <div class="rise" style="animation-delay:.06s">
+    ${fires&&fires.length?`<div class="rise" style="animation-delay:.06s">
       <div style="padding:2px 4px 8px;font-size:18px;font-weight:500">${T('Needs you','需要处理')}</div>
-      <div class="list">${attention.map((a,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
-        <button class="row" onclick="${a.cmd}"><span class="rowico">${ic(a.icon)}</span>
-        <span style="flex:1;font-size:15px">${a.label}</span>
-        <span class="num" style="min-width:22px;height:22px;padding:0 7px;border-radius:999px;background:var(--surface-raised);font-size:12.5px;font-weight:500;display:flex;align-items:center;justify-content:center;flex:none">${a.count}</span>
-        <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`).join('')}</div></div>
+      <div class="list">${fires.map((a,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
+        <button class="row" onclick="${a.go}">
+          <span class="rowico" style="background:var(--${a.sev}-tint);color:var(--${a.sev})">${ic(a.icon)}</span>
+          <span style="flex:1;min-width:0">
+            <span style="display:block;font-size:15px">${a.label}</span>
+            ${a.meta?`<span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${a.mins!=null?T('oldest '+a.meta,'最久 '+a.meta):a.meta}</span>`:''}
+          </span>
+          <span class="num" style="min-width:24px;height:24px;padding:0 8px;border-radius:999px;background:var(--${a.sev}-tint);color:var(--${a.sev});font-size:13px;display:flex;align-items:center;justify-content:center;flex:none">${a.n}</span>
+          <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`).join('')}</div></div>`:''}
     <div class="rise" style="animation-delay:.12s">
       <div style="padding:2px 4px 8px;font-size:18px;font-weight:500">${T('Today','今日')}</div>
       <div class="card" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px">${kpis.map(([l,v,d])=>
@@ -599,7 +606,7 @@ function screenHome(){
    why "Delivered 15" could show three. Every filter is the server's now, and the
    list says how much of the set it is showing. */
 const STATUS_PARAM={all:'',paid:'paid',preparing:'preparing',dispatched:'dispatched',
-  delivered:'delivered',restock:'awaiting_restock',refund:'refunds_open'};
+  delivered:'delivered',restock:'awaiting_restock',refund:'refunds_open',mismatch:'payment_mismatch'};
 const CHANNEL_PARAM={all:'',miniapp:'wechat',web:'web',meituan:'meituan',gzgrocery:'gzgrocery',manual:'manual'};
 const ORDERS_PAGE=25;
 function ordersQuery(offset){
@@ -1313,6 +1320,70 @@ async function saveProductEdits(){
     state.prodErr=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
     render();
   }
+}
+/* Needs you, from the same snapshot the desktop reads. The phone used to show
+   three rows it made up locally — orders awaiting shipment, reviews to reply,
+   low stock — while the product's actual list of fires (a delivery gone wrong,
+   a refund waiting on a decision, a payment that does not match) lived in
+   /dashboard/ops and never reached the phone at all. */
+async function loadOps(){
+  if(state.opsLoading) return; state.opsLoading=true;
+  try{ state.ops=await api('/dashboard/ops'); }catch(e){}
+  state.opsLoading=false; render();
+}
+function ageShort(v){
+  const d=_date(v); if(!d) return '';
+  const mins=Math.max(0,Math.round((Date.now()-d.getTime())/60000));
+  if(mins<60) return T(mins+'m',mins+' 分');
+  const h=Math.round(mins/60);
+  if(h<48) return T(h+'h',h+' 小时');
+  return T(Math.round(h/24)+'d',Math.round(h/24)+' 天');
+}
+function oldestMins(items){
+  let oldest=null;
+  for(const it of (items||[])){ const d=_date(it&&it.waiting_since); if(!d) continue; if(!oldest||d<oldest) oldest=d; }
+  return oldest?Math.max(0,Math.round((Date.now()-oldest.getTime())/60000)):null;
+}
+function oldestOf(items){
+  const m=oldestMins(items);
+  if(m==null) return '';
+  if(m<60) return T(m+'m',m+' 分');
+  const h=Math.round(m/60);
+  return h<48?T(h+'h',h+' 小时'):T(Math.round(h/24)+'d',Math.round(h/24)+' 天');
+}
+/* Severity, then oldest first, and a fire with no clock sorts last — a state
+   cannot be ranked by how long it has waited. */
+function opsFires(){
+  const o=state.ops; if(!o) return null;
+  const f=[];
+  // Ranked by how long the oldest thing in each queue has waited, so a
+  // two-day restock outranks a refund from an hour ago. A fire with no clock
+  // (a stock state) sorts last: it cannot be ranked by waiting.
+  const add=(cond,sev,icon,label,n,items,meta,go)=>{ if(cond) f.push({sev,icon,label,n,meta:meta||oldestOf(items),go,mins:oldestMins(items)}); };
+  const c=k=>(o[k]&&o[k].count)||0;
+  add(c('delivery_alerts'),'brick','truck',T('Delivery needs a call','配送需要跟进'),c('delivery_alerts'),o.delivery_alerts.items,'',"APP.cmd('ordersGo','dispatched')");
+  add(c('payment_mismatch'),'brick','banknote',T('Payments to check','付款待核对'),c('payment_mismatch'),o.payment_mismatch.items,'',"APP.cmd('ordersGo','mismatch')");
+  add(c('refunds'),'amber','refund',T('Refunds waiting','退款待处理'),c('refunds'),o.refunds.items,'',"APP.cmd('ordersGo','refund')");
+  add(c('unhandled'),'amber','package',T('Orders to start','待开始备货'),c('unhandled'),o.unhandled.items,'',"APP.cmd('ordersGo','paid')");
+  add(c('awaiting_restock'),'amber','clock',T('Orders awaiting restock','订单待补货'),c('awaiting_restock'),o.awaiting_restock.items,'',"APP.cmd('ordersGo','restock')");
+  add(c('invoices'),'amber','receipt',T('Invoices to issue','待开发票'),c('invoices'),o.invoices.items,'',"APP.cmd('push','invoices')");
+  const oos=c('out_of_stock'), low=c('low_stock');
+  if(oos+low){
+    // The pill counts what is actually OUT; the line names the rest. One number
+    // summing both would say 23 and mean neither.
+    const state_=(oos&&low)?T(oos?'out of stock, '+low+' running low':'', '已售罄，另有 '+low+' 项库存不足')
+      :oos?T('out of stock','已售罄'):T('running low','库存不足');
+    f.push({sev:'amber',icon:'box',label:T('Restock needed','需要补货'),n:oos||low,meta:state_,go:"APP.cmd('tab','products')",mins:null});
+  }
+  const rank={brick:0,amber:1};
+  f.sort((a,b)=>{
+    const s=(rank[a.sev]??9)-(rank[b.sev]??9); if(s) return s;
+    if(a.mins==null&&b.mins==null) return 0;
+    if(a.mins==null) return 1;
+    if(b.mins==null) return -1;
+    return b.mins-a.mins;
+  });
+  return f;
 }
 async function loadMedia(){
   if(state.mediaLoading||state.mediaTried) return; state.mediaLoading=true; state.mediaTried=true;
@@ -2222,6 +2293,7 @@ async function loadLive(){
   }})).catch(()=>{});
   api('/order-channel-counts').then(d=>set(()=>{ if(d) state.liveChannelCounts=d; })).catch(()=>{});
 
+  loadOps();
   api('/setup').then(d=>set(()=>{ if(d&&d.percent!=null) state.setup=d; })).catch(()=>{});
   api('/delivery-zones').then(r=>set(()=>{ if(Array.isArray(r)) state.zones=r; })).catch(()=>{});
   api('/stores').then(r=>set(()=>{ if(Array.isArray(r)) state.stores=r.filter(s=>s.is_active==null||s.is_active); })).catch(()=>{});
