@@ -1,0 +1,415 @@
+<title>Tacet Top Bar Options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap">
+<style>
+/* Tacet's own tokens — this is a canvas for a Tacet surface, so it is drawn in
+   Tacet, not in a canvas style of its own. Copied from public/m.html. */
+:root{
+  --paper:#FBF9F4; --ink:#111A2B; --graphite:#58606E; --dusk:#6E67AF; --sage:#A3B49F;
+  --amber:#C9954A; --brick:#B4533E;
+  --dusk-tint:#EEEDF6; --sage-tint:#EDF1EC;
+  --raised:#F6F3EC; --border:#E4E0D5;
+  --bg:var(--paper); --surface-card:#FFFFFF; --surface-raised:var(--raised);
+  --text-primary:var(--ink); --text-secondary:var(--graphite);
+  --border-default:var(--border); --accent:var(--dusk);
+  --page:#EFEBE1; --rule:#DED9CC;
+  --font-ui:'Inter','Noto Sans SC',-apple-system,system-ui,sans-serif;
+}
+:root:not([data-theme="light"]){
+  @media (prefers-color-scheme: dark){
+    --bg:var(--ink); --surface-card:#182236; --surface-raised:#1E2A40;
+    --text-primary:var(--paper); --text-secondary:#9AA2B0;
+    --border-default:#263149;
+    --page:#0B121F; --rule:#263149;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:var(--ink); --surface-card:#182236; --surface-raised:#1E2A40;
+  --text-primary:var(--paper); --text-secondary:#9AA2B0;
+  --border-default:#263149;
+  --page:#0B121F; --rule:#263149;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--text-primary);
+  font-family:var(--font-ui);font-weight:400;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding:32px 16px 64px}
+h1{margin:0;font-size:24px;font-weight:500;letter-spacing:-.01em;line-height:1.25;text-wrap:balance}
+.lede{margin:8px 0 0;font-size:15px;line-height:1.6;color:var(--text-secondary);max-width:62ch}
+.rule{height:1px;background:var(--rule);margin:32px 0}
+.grid{display:grid;gap:32px;grid-template-columns:1fr}
+@media (min-width:760px){ .grid{grid-template-columns:1fr 1fr} }
+@media (min-width:1120px){ .grid{grid-template-columns:1fr 1fr 1fr} }
+
+.opt{display:flex;flex-direction:column;gap:16px;min-width:0}
+.opt-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.opt-name{font-size:18px;font-weight:500;letter-spacing:-.01em}
+.cost{font-size:13px;color:var(--text-secondary);font-variant-numeric:tabular-nums;
+  border:1px solid var(--border-default);border-radius:999px;padding:2px 9px;white-space:nowrap}
+.cost.win{color:#5F7357;border-color:#A3B49F}
+.cost.base{color:var(--text-secondary)}
+.note{font-size:13.5px;line-height:1.6;color:var(--text-secondary)}
+.note b{color:var(--text-primary);font-weight:500}
+
+/* The phone. Deliberately drawn at the app's own 390px so the measurements
+   below each frame are the real ones. */
+.phone{width:min(390px,100%);border:1px solid var(--rule);border-radius:22px;overflow:hidden;
+  background:var(--bg);box-shadow:0 1px 2px rgba(17,26,43,.05),0 8px 24px rgba(17,26,43,.06)}
+.chrome{position:relative}
+/* The measuring band: how much height is spent before the first row of content. */
+.chrome::after{content:"";position:absolute;left:0;right:0;top:0;height:100%;
+  background:repeating-linear-gradient(135deg,rgba(110,103,175,.10) 0 6px,transparent 6px 12px);
+  pointer-events:none}
+.tick{display:flex;align-items:center;gap:8px;padding:6px 14px;font-size:12px;
+  color:var(--accent);background:var(--dusk-tint);font-variant-numeric:tabular-nums}
+.tick svg{display:block}
+
+/* ---- app chrome, 1:1 with public/m.html ---- */
+.topbar{display:flex;align-items:center;gap:8px;padding:16px 6px 12px 16px;
+  border-bottom:1px solid var(--border-default);background:var(--bg)}
+.topbar.slim{padding:10px 6px 8px 16px}
+.iconbtn{width:44px;height:44px;flex:none;display:flex;align-items:center;justify-content:center;
+  border:none;background:transparent;color:var(--text-primary);padding:0}
+.iconbtn.sm{width:38px;height:38px}
+.avatar{width:32px;height:32px;border-radius:8px;background:var(--dusk-tint);color:var(--accent);
+  display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500}
+.dotwrap{position:relative;display:flex;flex:none}
+.dot{position:absolute;top:9px;right:9px;width:6px;height:6px;border-radius:50%;
+  background:var(--sage);box-shadow:0 0 0 2px var(--bg)}
+.head{padding:24px 16px 16px}
+.head.tight{padding:16px 16px 12px}
+.title{margin:0;font-size:24px;font-weight:500;letter-spacing:-.01em;line-height:1.25}
+.title.sm{font-size:20px}
+.status{margin:4px 0 0;font-size:15px;color:var(--text-secondary);font-variant-numeric:tabular-nums}
+.wordmark{font-size:15px;font-weight:500;letter-spacing:-.01em}
+
+.chips{display:flex;gap:8px;padding:0 16px 12px;overflow:hidden}
+.chip{flex:none;height:36px;display:flex;align-items:center;gap:8px;padding:0 14px;
+  border-radius:999px;border:1px solid var(--border-default);font-size:13px;color:var(--text-primary);
+  background:transparent;white-space:nowrap}
+.chip.on{background:var(--text-primary);color:var(--bg);border-color:var(--text-primary)}
+.chip .c{font-size:11px;font-variant-numeric:tabular-nums;opacity:.8}
+
+.card{margin:0 16px 10px;background:var(--surface-card);border:1px solid var(--border-default);
+  border-radius:14px;padding:14px;display:flex;flex-direction:column;gap:7px}
+.row1{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.no{font-size:13px;color:var(--text-secondary);font-variant-numeric:tabular-nums;
+  display:flex;align-items:center;gap:7px;min-width:0}
+.amt{font-size:18px;font-weight:500;font-variant-numeric:tabular-nums;flex:none}
+.who{font-size:15px;font-weight:500}
+.pill{font-size:12px;padding:3px 10px;border-radius:999px;background:rgba(88,96,110,.10);
+  color:var(--text-secondary);white-space:nowrap}
+.meta{font-size:12.5px;color:var(--text-secondary)}
+.fade{height:40px;background:linear-gradient(to bottom,transparent,var(--bg))}
+svg.i{display:block;stroke:currentColor;fill:none;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round}
+
+.verdict{border:1px solid var(--rule);border-radius:14px;padding:20px;background:var(--bg);
+  display:flex;flex-direction:column;gap:12px}
+.verdict h2{margin:0;font-size:18px;font-weight:500;letter-spacing:-.01em}
+.verdict ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:10px;
+  font-size:14.5px;line-height:1.6;color:var(--text-secondary)}
+.verdict b{color:var(--text-primary);font-weight:500}
+.pickme{font-size:13.5px;color:var(--accent)}
+</style>
+
+<div class="wrap">
+
+<h1>Six ways to spend the top of the screen</h1>
+<p class="lede">The bar as it ships costs 164&thinsp;px before the first order row — a wordmark
+nobody can read at 58&thinsp;px, a stretch of nothing, three controls, and then a second
+header underneath it saying the page's name again. On an 844&thinsp;px phone that is a
+fifth of the glass gone before any work appears. Each option below is drawn at the
+app's real 390&thinsp;px with real rows, so the saving is the saving.</p>
+
+<div class="rule"></div>
+
+<div class="grid">
+
+  <!-- 1 ─────────────────────────────────────────────────────────────── -->
+  <div class="opt">
+    <div class="opt-head">
+      <span class="opt-name">1 · As it ships</span>
+      <span class="cost base">164 px</span>
+    </div>
+    <div class="phone">
+      <div class="chrome">
+        <div class="topbar">
+          <span style="flex:none;display:flex;padding:2px 0">
+            <svg width="58" height="19" viewBox="0 0 340 110" fill="none" style="display:block">
+              <path d="M20 55 C30 15, 40 95, 50 55 C59 22, 68 88, 77 55 C85 30, 93 80, 101 55 C109 38, 117 72, 125 55 C133 44, 141 66, 149 55 C160 50, 171 60, 182 55 C215 55, 260 55, 305 55" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"/>
+              <circle cx="305" cy="55" r="6" fill="#6E67AF"/></svg></span>
+          <span style="flex:1"></span>
+          <span class="iconbtn"><svg class="i" width="20" height="20" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span>
+          <span class="dotwrap"><span class="iconbtn"><svg class="i" width="20" height="20" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg></span><span class="dot"></span></span>
+          <span class="iconbtn"><span class="avatar">R</span></span>
+        </div>
+        <div class="head">
+          <h2 class="title">Orders</h2>
+          <p class="status">5 awaiting fulfilment</p>
+        </div>
+      </div>
+      <div class="tick">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v16"/><path d="M8 8 12 4l4 4"/><path d="M8 16l4 4 4-4"/></svg>
+        164 px before the first row
+      </div>
+      <div class="chips">
+        <span class="chip on">All <span class="c">1123</span></span>
+        <span class="chip">Pending <span class="c">0</span></span>
+        <span class="chip">Paid <span class="c">5</span></span>
+      </div>
+      <div class="card">
+        <div class="row1"><span class="no">TC000362 · 12:22 PM</span><span class="amt">¥572.50</span></div>
+        <div class="row1"><span class="who">Hunter Hill</span><span class="pill">Paid</span></div>
+        <div class="row1"><span class="meta">Guangzhou · Nansha</span><span class="meta">ship when ready</span></div>
+      </div>
+      <div class="fade"></div>
+    </div>
+    <p class="note">Two headers, one job. The wave is 19&thinsp;px tall here — at that size
+      it is a texture, not a mark. Everything between it and the search icon is empty.</p>
+  </div>
+
+  <!-- 2 ─────────────────────────────────────────────────────────────── -->
+  <div class="opt">
+    <div class="opt-head">
+      <span class="opt-name">2 · Tighten it</span>
+      <span class="cost">128 px</span>
+    </div>
+    <div class="phone">
+      <div class="chrome">
+        <div class="topbar slim">
+          <span style="flex:none;display:flex">
+            <svg width="46" height="15" viewBox="0 0 340 110" fill="none" style="display:block">
+              <path d="M20 55 C30 15, 40 95, 50 55 C59 22, 68 88, 77 55 C85 30, 93 80, 101 55 C109 38, 117 72, 125 55 C133 44, 141 66, 149 55 C160 50, 171 60, 182 55 C215 55, 260 55, 305 55" stroke="currentColor" stroke-width="3.5" stroke-linecap="round"/>
+              <circle cx="305" cy="55" r="6" fill="#6E67AF"/></svg></span>
+          <span style="flex:1"></span>
+          <span class="iconbtn sm"><svg class="i" width="20" height="20" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span>
+          <span class="dotwrap"><span class="iconbtn sm"><svg class="i" width="20" height="20" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg></span><span class="dot" style="top:6px;right:6px"></span></span>
+          <span class="iconbtn sm"><span class="avatar" style="width:28px;height:28px;font-size:13px">R</span></span>
+        </div>
+        <div class="head tight">
+          <h2 class="title">Orders</h2>
+          <p class="status">5 awaiting fulfilment</p>
+        </div>
+      </div>
+      <div class="tick">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v16"/><path d="M8 8 12 4l4 4"/><path d="M8 16l4 4 4-4"/></svg>
+        128 px — 36 px back
+      </div>
+      <div class="chips">
+        <span class="chip on">All <span class="c">1123</span></span>
+        <span class="chip">Pending <span class="c">0</span></span>
+        <span class="chip">Paid <span class="c">5</span></span>
+      </div>
+      <div class="card">
+        <div class="row1"><span class="no">TC000362 · 12:22 PM</span><span class="amt">¥572.50</span></div>
+        <div class="row1"><span class="who">Hunter Hill</span><span class="pill">Paid</span></div>
+        <div class="row1"><span class="meta">Guangzhou · Nansha</span><span class="meta">ship when ready</span></div>
+      </div>
+      <div class="card" style="opacity:.55">
+        <div class="row1"><span class="no">TC000361 · 11:11 AM</span><span class="amt">¥448.60</span></div>
+      </div>
+      <div class="fade"></div>
+    </div>
+    <p class="note">Nothing moves, everything shrinks. Cheapest change, keeps both headers,
+      and the wave gets <em>less</em> legible. <b>Half a fix.</b></p>
+  </div>
+
+  <!-- 3 ─────────────────────────────────────────────────────────────── -->
+  <div class="opt">
+    <div class="opt-head">
+      <span class="opt-name">3 · Say the shop's name</span>
+      <span class="cost">128 px</span>
+    </div>
+    <div class="phone">
+      <div class="chrome">
+        <div class="topbar slim">
+          <span class="wordmark" style="flex:none">Roots Kitchen</span>
+          <span style="flex:1"></span>
+          <span class="iconbtn sm"><svg class="i" width="20" height="20" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span>
+          <span class="dotwrap"><span class="iconbtn sm"><svg class="i" width="20" height="20" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg></span><span class="dot" style="top:6px;right:6px"></span></span>
+          <span class="iconbtn sm"><span class="avatar" style="width:28px;height:28px;font-size:13px">R</span></span>
+        </div>
+        <div class="head tight">
+          <h2 class="title">Orders</h2>
+          <p class="status">5 awaiting fulfilment</p>
+        </div>
+      </div>
+      <div class="tick">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v16"/><path d="M8 8 12 4l4 4"/><path d="M8 16l4 4 4-4"/></svg>
+        128 px — and the mark is readable
+      </div>
+      <div class="chips">
+        <span class="chip on">All <span class="c">1123</span></span>
+        <span class="chip">Pending <span class="c">0</span></span>
+        <span class="chip">Paid <span class="c">5</span></span>
+      </div>
+      <div class="card">
+        <div class="row1"><span class="no">TC000362 · 12:22 PM</span><span class="amt">¥572.50</span></div>
+        <div class="row1"><span class="who">Hunter Hill</span><span class="pill">Paid</span></div>
+        <div class="row1"><span class="meta">Guangzhou · Nansha</span><span class="meta">ship when ready</span></div>
+      </div>
+      <div class="card" style="opacity:.55">
+        <div class="row1"><span class="no">TC000361 · 11:11 AM</span><span class="amt">¥448.60</span></div>
+      </div>
+      <div class="fade"></div>
+    </div>
+    <p class="note">The wave is a signature — it belongs where it can be seen, on the
+      storefront and the printed slip. In the admin the useful fact is <b>which shop you
+      are logged into</b>, which matters the moment anyone runs two.</p>
+  </div>
+
+  <!-- 4 ─────────────────────────────────────────────────────────────── -->
+  <div class="opt">
+    <div class="opt-head">
+      <span class="opt-name">4 · One header</span>
+      <span class="cost win">92 px</span>
+    </div>
+    <div class="phone">
+      <div class="chrome">
+        <div class="topbar" style="padding:14px 6px 10px 16px;align-items:center">
+          <span style="flex:1;min-width:0">
+            <span class="title sm" style="display:block">Orders</span>
+          </span>
+          <span class="iconbtn sm"><svg class="i" width="20" height="20" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span>
+          <span class="dotwrap"><span class="iconbtn sm"><svg class="i" width="20" height="20" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg></span><span class="dot" style="top:6px;right:6px"></span></span>
+          <span class="iconbtn sm"><span class="avatar" style="width:28px;height:28px;font-size:13px">R</span></span>
+        </div>
+        <div style="padding:10px 16px 12px">
+          <p class="status" style="margin:0">5 awaiting fulfilment</p>
+        </div>
+      </div>
+      <div class="tick">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v16"/><path d="M8 8 12 4l4 4"/><path d="M8 16l4 4 4-4"/></svg>
+        92 px — 72 px back, a whole order row
+      </div>
+      <div class="chips">
+        <span class="chip on">All <span class="c">1123</span></span>
+        <span class="chip">Pending <span class="c">0</span></span>
+        <span class="chip">Paid <span class="c">5</span></span>
+      </div>
+      <div class="card">
+        <div class="row1"><span class="no">TC000362 · 12:22 PM</span><span class="amt">¥572.50</span></div>
+        <div class="row1"><span class="who">Hunter Hill</span><span class="pill">Paid</span></div>
+        <div class="row1"><span class="meta">Guangzhou · Nansha</span><span class="meta">ship when ready</span></div>
+      </div>
+      <div class="card" style="opacity:.55">
+        <div class="row1"><span class="no">TC000361 · 11:11 AM</span><span class="amt">¥448.60</span></div>
+        <div class="row1"><span class="who">Rasalika</span><span class="pill">Dispatched</span></div>
+      </div>
+      <div class="fade"></div>
+    </div>
+    <p class="note">The bar stops being chrome and becomes the page. The title drops to
+      20&thinsp;px to sit on a 44&thinsp;px control line. The status line stays, in the
+      scroll, so it goes away when you scroll and the title does not.
+      <b>Costs:</b> the shop's identity leaves the screen entirely.</p>
+  </div>
+
+  <!-- 5 ─────────────────────────────────────────────────────────────── -->
+  <div class="opt">
+    <div class="opt-head">
+      <span class="opt-name">5 · No bar at all</span>
+      <span class="cost win">88 px</span>
+    </div>
+    <div class="phone">
+      <div class="chrome">
+        <div style="padding:20px 16px 14px;display:flex;align-items:flex-start;gap:12px">
+          <span style="flex:1;min-width:0">
+            <span class="title" style="display:block">Orders</span>
+            <span class="status" style="display:block;margin-top:4px">5 awaiting fulfilment</span>
+          </span>
+          <span style="display:flex;flex:none;margin:-4px -6px 0 0">
+            <span class="iconbtn sm"><svg class="i" width="20" height="20" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span>
+            <span class="dotwrap"><span class="iconbtn sm"><svg class="i" width="20" height="20" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg></span><span class="dot" style="top:6px;right:6px"></span></span>
+          </span>
+        </div>
+      </div>
+      <div class="tick">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 4v16"/><path d="M8 8 12 4l4 4"/><path d="M8 16l4 4 4-4"/></svg>
+        88 px — and no fixed chrome
+      </div>
+      <div class="chips">
+        <span class="chip on">All <span class="c">1123</span></span>
+        <span class="chip">Pending <span class="c">0</span></span>
+        <span class="chip">Paid <span class="c">5</span></span>
+      </div>
+      <div class="card">
+        <div class="row1"><span class="no">TC000362 · 12:22 PM</span><span class="amt">¥572.50</span></div>
+        <div class="row1"><span class="who">Hunter Hill</span><span class="pill">Paid</span></div>
+        <div class="row1"><span class="meta">Guangzhou · Nansha</span><span class="meta">ship when ready</span></div>
+      </div>
+      <div class="card" style="opacity:.55">
+        <div class="row1"><span class="no">TC000361 · 11:11 AM</span><span class="amt">¥448.60</span></div>
+        <div class="row1"><span class="who">Rasalika</span><span class="pill">Dispatched</span></div>
+      </div>
+      <div class="fade"></div>
+    </div>
+    <p class="note">The header keeps its full 24&thinsp;px title and takes the two controls
+      into its own row. The account moves into <b>More</b>, where the rest of the
+      settings already live. Nothing is pinned, so the whole 88&thinsp;px scrolls away and
+      a long list has the entire screen.</p>
+  </div>
+
+  <!-- 6 ─────────────────────────────────────────────────────────────── -->
+  <div class="opt">
+    <div class="opt-head">
+      <span class="opt-name">6 · Collapse on scroll</span>
+      <span class="cost">164 → 56 px</span>
+    </div>
+    <div class="phone">
+      <div class="chrome">
+        <div class="topbar slim" style="padding:8px 6px 8px 16px">
+          <span class="wordmark" style="flex:none;font-size:16px">Orders</span>
+          <span style="flex:1"></span>
+          <span class="iconbtn sm"><svg class="i" width="20" height="20" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></span>
+          <span class="dotwrap"><span class="iconbtn sm"><svg class="i" width="20" height="20" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg></span><span class="dot" style="top:6px;right:6px"></span></span>
+          <span class="iconbtn sm"><span class="avatar" style="width:28px;height:28px;font-size:13px">R</span></span>
+        </div>
+      </div>
+      <div class="tick">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 20V4"/><path d="M8 8 12 4l4 4"/></svg>
+        56 px once you start scrolling
+      </div>
+      <div class="chips">
+        <span class="chip on">All <span class="c">1123</span></span>
+        <span class="chip">Pending <span class="c">0</span></span>
+        <span class="chip">Paid <span class="c">5</span></span>
+      </div>
+      <div class="card">
+        <div class="row1"><span class="no">TC000362 · 12:22 PM</span><span class="amt">¥572.50</span></div>
+        <div class="row1"><span class="who">Hunter Hill</span><span class="pill">Paid</span></div>
+        <div class="row1"><span class="meta">Guangzhou · Nansha</span><span class="meta">ship when ready</span></div>
+      </div>
+      <div class="card" style="opacity:.55">
+        <div class="row1"><span class="no">TC000361 · 11:11 AM</span><span class="amt">¥448.60</span></div>
+        <div class="row1"><span class="who">Rasalika</span><span class="pill">Dispatched</span></div>
+      </div>
+      <div class="fade"></div>
+    </div>
+    <p class="note">Full header at rest, then the title slides into a 56&thinsp;px bar as
+      you scroll and stays there. Best of both — and the only option here with a
+      <b>moving part</b>: a scroll listener, a transition, and a state that can get stuck
+      halfway on a fast flick.</p>
+  </div>
+
+</div>
+
+<div class="rule"></div>
+
+<div class="verdict">
+  <h2>What I'd ship, and in what order</h2>
+  <ol>
+    <li><b>Option 4 (one header)</b> if you want the space back today. It is the smallest
+      change that actually solves the complaint: 72&thinsp;px returned — a full order row —
+      and it removes the duplicated page name rather than shrinking it. The identity loss
+      is real but small: the shop's name still sits under the avatar, one tap away.</li>
+    <li><b>Option 5 (no bar)</b> if you'd rather the list own the screen. It keeps the
+      24&thinsp;px title the design system asks for, scrolls everything away, and is the
+      only option where a long list gets the whole glass. It moves the account into More,
+      which is where every other setting already is.</li>
+    <li><b>Option 3</b> is worth taking whichever of the two you pick: the wave should not
+      be doing identity work at 19&thinsp;px. Put the shop's name there instead, or nothing.</li>
+  </ol>
+  <p class="pickme">Say a number and I'll build it.</p>
+</div>
+
+</div>
