@@ -174,6 +174,18 @@ desktop is the right home
 | Search by code or title | ➖ — the list is short and segmented |
 | Create / edit a coupon, grant to a customer | ➖ — authoring, desktop |
 
+### Flash sales (`05-marketing.js`)
+
+| Desktop | Phone |
+|---|---|
+| **The flash price, the old price, the % off** | ✅ — the card showed a name, two clock times and a pill. A flash sale IS a price, and the price was the one thing missing |
+| **Sold / limit, with how many are left** | ✅ — with a bar, and "sold out" in brick when the cap is hit |
+| Product photo | ✅ |
+| **The window with its dates** | ✅ — two bare times read as "today 12:00–14:00" on a sale that runs all week. Same-day shows the date once and both times; a multi-day sale shows both dates |
+| **"Product is not on the shop"** | ✅ — a flash price on an unpublished product is a sale no customer can see, and nothing said so |
+| "No coupons on top" | ✅ |
+| Create / edit a flash sale | ➖ — authoring, desktop |
+
 ### Media library (`07-content-billing.js`)
 
 | Desktop capability | Phone |

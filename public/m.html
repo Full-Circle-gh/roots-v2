@@ -223,8 +223,12 @@ const DB = {
      expires:'2026-07-31',ended:true,soon:false,on:false,active:true,pills:[]},
   ],
   flash:[
-    {title:['Lunch flash','午市闪购'],win:['12:00–14:00 · 30% off drinks','12:00–14:00 · 饮品 7 折'],status:['Live','进行中'],kind:'live'},
-    {title:['Friday clearance','周五清仓'],win:['Fri 18:00–22:00','周五 18:00–22:00'],status:['Scheduled','已排期'],kind:'draft'},
+    {_id:1,title:['Lemongrass Kombucha','香茅康普茶'],sku:'SKU 2-110',img:'',
+     price:'¥20',was:'¥29',off:31,limit:120,sold:86,left:34,pct:72,
+     win:'Today · 12:00 PM–2:00 PM',hidden:false,noCoupon:true,status:['Live','进行中'],kind:'live'},
+    {_id:2,title:['Coconut Flakes','椰子片'],sku:'SKU 4-290',img:'',
+     price:'¥16',was:'¥23',off:30,limit:null,sold:0,left:null,pct:null,
+     win:'Aug 29 – Aug 31',hidden:false,noCoupon:false,status:['Scheduled','已排期'],kind:'draft'},
   ],
   broadcasts:[
     {title:['New arrivals this week','本周新品到货'],meta:['Sent to 2,140 · 68% opened','发送 2,140 · 68% 打开'],status:['Sent','已发送'],kind:'delivered'},
@@ -1483,10 +1487,32 @@ const SUBS={
   }},
   flash:{title:['Flash sales','秒杀'],render:()=>{
     const list=DB.flash||[];
-    if(!list.length) return nothingYet(T('No flash sales','没有秒杀'),T('Flash sales are built on desktop. Running and upcoming ones show here.','秒杀在电脑端创建。进行中与即将开始的会显示在这里。'));
-    return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
-    ${list.map(f=>`<div class="card" style="padding:16px"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px"><span style="font-size:15px;font-weight:500">${T(...f.title)}</span>${pill(f.kind,T(...f.status))}</div>
-      <div class="num" style="font-size:13px;color:var(--text-secondary);margin-top:8px">${T(...f.win)}</div></div>`).join('')}
+    if(!list.length) return nothingYet(T('No flash sales','没有秒杀'),
+      T('Flash sales are built on desktop. Running and upcoming ones show here.','秒杀在电脑端创建。进行中与即将开始的会显示在这里。'));
+    return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${list.map(f=>`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;gap:12px;align-items:flex-start">
+        <span style="width:52px;height:52px;flex:none;border-radius:10px;overflow:hidden;background:var(--surface-raised);border:1px solid var(--border-default);display:flex;align-items:center;justify-content:center;color:var(--text-secondary)${f.img?`;background-image:url('${String(f.img).replace(/'/g,'%27')}');background-size:cover;background-position:center;border-color:transparent`:''}">${f.img?'':ic('zap',20)}</span>
+        <span style="flex:1;min-width:0">
+          <span style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+            <span style="font-size:15px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...f.title)}</span>
+            ${pill(f.kind,T(...f.status))}</span>
+          ${f.price?`<span style="display:flex;align-items:baseline;gap:8px;margin-top:4px;flex-wrap:wrap">
+            <span class="num" style="font-size:18px;font-weight:500">${f.price}</span>
+            ${f.was?`<span class="num" style="font-size:13px;color:var(--text-secondary);text-decoration:line-through">${f.was}</span>`:''}
+            ${f.off?`<span class="pill" style="background:var(--brick-tint);color:var(--brick)">${T(f.off+'% off',f.off+'% 折扣')}</span>`:''}</span>`:''}
+          ${f.sku?`<span class="num" style="display:block;font-size:12px;color:var(--text-secondary);margin-top:3px">${escAttr(f.sku)}</span>`:''}
+        </span></div>
+      ${f.win?`<div class="num" style="font-size:13px;color:var(--text-secondary)">${f.win}</div>`:''}
+      ${f.limit!=null?`<div>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:13px">
+          <span class="num" style="color:var(--text-secondary)">${T(f.sold+' of '+f.limit+' sold',f.limit+' 件中已售 '+f.sold)}</span>
+          <span class="num" style="color:${f.left===0?'var(--brick)':'var(--text-secondary)'}">${f.left===0?T('sold out','已售罄'):T(f.left+' left','剩 '+f.left)}</span></div>
+        <span style="display:block;margin-top:6px;height:4px;border-radius:999px;background:var(--surface-raised)"><span style="display:block;height:4px;width:${f.pct||0}%;border-radius:999px;background:${f.left===0?'var(--brick)':'var(--text-primary)'}"></span></span></div>`:''}
+      ${(f.hidden||f.noCoupon)?`<div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${f.hidden?`<span class="pill" style="background:var(--brick-tint);color:var(--brick)">${T('Product is not on the shop','商品未上架')}</span>`:''}
+        ${f.noCoupon?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('No coupons on top','不可叠加优惠券')}</span>`:''}</div>`:''}
+    </div>`).join('')}
     ${desktopNote()}</div>`;
   }},
   broadcasts:{title:['Broadcasts','广播'],render:()=>{
@@ -4066,11 +4092,41 @@ function mapVoucher(r){
     pills, on:live, active:!!r.is_active};
 }
 const FLASH_KIND={live:'live',running:'live',scheduled:'draft',upcoming:'draft',ended:'off',none:'off'};
+/* A flash sale is a PRICE for a WINDOW, and the phone's card showed neither —
+   just a name, a pair of clock times and a status pill. The two questions an
+   operator has about one are "how cheap is it" and "how many are left", and
+   both were on the desktop and neither was here.
+
+   The window also has to carry its dates. Two bare times read as "today
+   10:00–18:00" on a sale that in fact runs for a week. */
+function flashWindow(a,b){
+  const A=_date(a), B=_date(b);
+  if(!A&&!B) return null;
+  const sameDay = A&&B&&A.toDateString()===B.toDateString();
+  if(sameDay) return fmtDay(a)+' · '+fmtTime(a)+'–'+fmtTime(b);
+  return [A?fmtDay(a):'', B?fmtDay(b):''].filter(Boolean).join(' – ');
+}
 function mapFlash(r){
-  const win=[hhmm(r.flash_starts_at),hhmm(r.flash_ends_at)].filter(Boolean).join('–')||'—';
   const state=String(r.flash_state||'none');
-  const label=state==='live'?['Live','进行中']:state==='ended'?['Ended','已结束']:['Scheduled','已排期'];
-  return {title:[r.name_en||r.name_cn||'—',r.name_cn||r.name_en||'—'], win:[win,win], status:label, kind:FLASH_KIND[state]||'draft'};
+  const label=state==='active'||state==='live'?['Live','进行中']
+    :state==='ended'?['Ended','已结束']
+    :state==='upcoming'?['Scheduled','已排期']:['Scheduled','已排期'];
+  const was=Number(r.sell_price)||0, now=Number(r.flash_price)||0;
+  const off=(was>0&&now>0&&now<was)?Math.round((1-now/was)*100):null;
+  const limit=r.flash_stock_limit!=null?Number(r.flash_stock_limit):null;
+  const sold=Number(r.flash_sold)||0;
+  return {
+    _id:r.id,
+    title:[r.name_en||r.name_cn||'—',r.name_cn||r.name_en||'—'],
+    sku:r.sku||'', img:r.image_data||r.image_url||'',
+    price:now?money(CUR,now):null, was:was?money(CUR,was):null, off,
+    limit, sold, left:limit!=null?Math.max(0,limit-sold):null,
+    pct:(limit!=null&&limit>0)?Math.min(100,Math.round(sold/limit*100)):null,
+    win:flashWindow(r.flash_starts_at,r.flash_ends_at),
+    // A flash price on an UNPUBLISHED product is a sale no customer can see.
+    hidden:r.is_published!=null&&!Number(r.is_published),
+    noCoupon:!!Number(r.no_coupon_on_flash),
+    status:label, kind:FLASH_KIND[state]||'draft'};
 }
 const BC_KIND={sent:'delivered',scheduled:'draft',draft:'draft'};
 function mapBroadcast(r){
