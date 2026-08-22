@@ -14572,6 +14572,11 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
   let invoices = { count: 0, items: [] };
   let unhandled = { count: 0, items: [] };
   let awaiting_restock = { count: 0, items: [] };
+  // Orders whose Alipay proof was read and did NOT match (see
+  // validateAlipayProof): the customer believes they have paid, the system
+  // refused to confirm it, and the order is stuck in pending_payment until a
+  // human looks. Same zero-count default as its siblings.
+  let payment_mismatch = { count: 0, items: [] };
   // Orders parked for a delivery point (§7). Zero-count default like its
   // siblings, so a query failure renders an ABSENT block rather than a broken
   // one — which for this block is the correct degradation: it is absent at zero
@@ -15042,6 +15047,73 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
       })),
     };
 
+    // ── Alipay proof read, but it doesn't match ──────────────────────────
+    // The customer uploaded a payment screenshot, the vision read succeeded,
+    // and validateAlipayProof rejected it — short amount, wrong payee, stale
+    // receipt, or a screenshot/txn already spent on another order. Auto-flip
+    // never fires on a mismatch, so the order sits in pending_payment with the
+    // customer believing they have paid. Nothing retries it and nothing times
+    // it out (the stale-pending sweep would eventually CANCEL it), so it is
+    // invisible until someone happens to open that order — exactly the case a
+    // Needs-you fire exists for.
+    //
+    // Only 'mismatch', and only while still pending_payment. A verdict of
+    // 'error' is "we couldn't read it", not "the money is wrong", and it has
+    // its own re-read button in the drawer. An order a human already judged
+    // and marked paid (or cancelled) has left this queue by definition — which
+    // is what makes the fire self-clearing without a dismiss button.
+    //
+    // Read-only channel mirrors are excluded like every other worklist here;
+    // they never carry an Alipay proof, but the exclusion keeps the definition
+    // of "our operator's work" identical across the blocks.
+    const pmWhere = "o.alipay_ocr_verdict = 'mismatch' AND o.status = 'pending_payment'"
+      + " AND COALESCE(o.channel,'') NOT IN ('meituan','gzgrocery')"
+      + (storeId ? ' AND o.store_id = @store_id' : '');
+    const pmCount = tdb().prepare(
+      `SELECT COUNT(*) AS n FROM retail_orders o WHERE ${pmWhere}`
+    ).get(storeBind).n;
+    // The age is how long the customer has been waiting on money they believe
+    // they already sent, so it counts from when THEY uploaded the proof.
+    // alipay_proof_at is stamped on every upload, but a row migrated in (or one
+    // whose verdict was written by a re-read on an older order) can carry none,
+    // so placed_at is the never-null floor — same COALESCE rule as `unhandled`.
+    const pmItems = tdb().prepare(`
+      SELECT o.id, o.order_no, o.total, o.alipay_ocr_json, o.alipay_proof_at,
+             COALESCE(o.alipay_proof_at, o.placed_at) AS waiting_since,
+             COALESCE(NULLIF(TRIM(c.nickname), ''), NULLIF(TRIM(o.recipient_name), ''), NULLIF(TRIM(o.recipient_phone), ''), NULLIF(TRIM(c.phone), '')) AS buyer
+        FROM retail_orders o
+        LEFT JOIN retail_customers c ON c.id = o.customer_id
+       WHERE ${pmWhere}
+       ORDER BY waiting_since ASC LIMIT @preview
+    `).all({ ...storeBind, preview: previewLimit });
+    payment_mismatch = {
+      count: pmCount,
+      items: pmItems.map(o => {
+        // What the AI read off the screenshot, so the row can state the gap
+        // ("paid ¥318.00 · order ¥318.20") instead of only "something's off".
+        // The column is operator-visible JSON written by ocrVerifyAlipayProof;
+        // a malformed one must not take the whole block down with it.
+        let d = {};
+        try { d = o.alipay_ocr_json ? JSON.parse(o.alipay_ocr_json) : {}; } catch (e) { d = {}; }
+        const reasons = Array.isArray(d.reasons) ? d.reasons : [];
+        return {
+          id:            o.id,
+          order_no:      o.order_no,
+          total:         o.total,
+          // Null when the read couldn't put a number on it — the client says so
+          // in words rather than printing ¥0.00, which would read as "paid
+          // nothing" when it means "we don't know".
+          paid_amount:   d.amount == null ? null : Number(d.amount),
+          // First reason only: the row is one line, and the drawer carries the
+          // full list. Empty array → null, never an empty string.
+          reason:        reasons[0] || null,
+          proof_at:      o.alipay_proof_at || null,
+          waiting_since: o.waiting_since,
+          buyer:         o.buyer,
+        };
+      }),
+    };
+
     // ── Orders waiting for a delivery point (spec §7) ────────────────────
     // A same-city courier push that could only place the address to a coarse
     // AREA parks in `needs_point` and waits for a person to say where the door
@@ -15127,7 +15199,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
   }
 
   res.set('Cache-Control', 'no-store');
-  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, awaiting_restock, needs_point, server_now: Date.now() } });
+  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, awaiting_restock, payment_mismatch, needs_point, server_now: Date.now() } });
 });
 
 // Admin CRUD for vouchers.
@@ -21503,6 +21575,12 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     o.refund_status, o.refund_amount_requested,
                     o.refund_amount_approved, o.refund_amount_paid,
                     o.refund_requested_at,
+                    -- Alipay proof verdict, so a pending row can say WHY it is
+                    -- still pending ("payment doesn't match") instead of looking
+                    -- like an ordinary unpaid order. The list only ever reads
+                    -- 'mismatch'; the screenshot, the read amounts and the
+                    -- reasons stay in the drawer.
+                    o.alipay_ocr_verdict,
                     -- Fapiao request riding the order (the Invoices sub-tab is
                     -- retired; the list's "Needs invoice" chip + row summary and
                     -- the drawer block are the invoice UI now). subtotal +
@@ -21583,6 +21661,13 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
     // issued ones stay browsable in this view but sort below the open work.
     filterSql += ` AND o.needs_invoice = 1
              AND o.status NOT IN ('cancelled','pending_payment')`;
+  } else if (status === 'payment_mismatch') {
+    // Pseudo-status: the customer's Alipay proof was read and rejected, so the
+    // order never left pending_payment. Same definition as the dashboard's
+    // Needs-you fire (see /dashboard/ops), so the card's deep link and this
+    // chip can never show different orders. Marking it paid or cancelling it
+    // is what removes it from the view — there is no separate "handled" flag.
+    filterSql += " AND o.alipay_ocr_verdict = 'mismatch' AND o.status = 'pending_payment'";
   } else if (status === 'paid') {
     // The "Paid / to-ship" tab is a worklist, not a strict status filter: a
     // multi-parcel order that's had only SOME parcels shipped flips to
@@ -21634,7 +21719,13 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
     ? ` ORDER BY (CASE WHEN o.invoice_status = 'issued' THEN 1 ELSE 0 END) ASC,
                  (CASE WHEN o.invoice_status = 'issued' THEN NULL ELSE o.placed_at END) ASC,
                  o.placed_at DESC LIMIT ? OFFSET ?`
-    : ' ORDER BY o.placed_at DESC LIMIT ? OFFSET ?';
+    // The mismatch view is a worklist too: the customer who has been waiting
+    // longest on a payment we refused to confirm goes to the top. Same clock
+    // the dashboard fire ages from (proof upload, falling back to placement),
+    // so the card's "oldest 4h" names the row this list puts first.
+    : (status === 'payment_mismatch')
+      ? ' ORDER BY COALESCE(o.alipay_proof_at, o.placed_at) ASC LIMIT ? OFFSET ?'
+      : ' ORDER BY o.placed_at DESC LIMIT ? OFFSET ?';
   params.push(limit, offset);
 
   const rows = tdb().prepare(sql).all(...params);
@@ -21749,6 +21840,15 @@ router.get('/api/retail-admin/order-status-counts', requireRetailAdmin, (req, re
       WHERE needs_invoice = 1
         AND COALESCE(invoice_status, 'requested') <> 'issued'
         AND status NOT IN ('cancelled','pending_payment')${where}`
+  ).get(...args).n;
+
+  // Alipay proofs that were read and rejected — orders stuck in pending_payment
+  // with the customer believing they have paid. Matches the `payment_mismatch`
+  // pseudo-filter and the dashboard's Needs-you fire exactly, so the chip badge,
+  // the list and the card all count the same orders.
+  out.payment_mismatch = tdb().prepare(
+    `SELECT COUNT(*) AS n FROM retail_orders
+      WHERE alipay_ocr_verdict = 'mismatch' AND status = 'pending_payment'${where}`
   ).get(...args).n;
 
   // Oldest UNFULFILLED order, for the Orders page header status line (§1.7).

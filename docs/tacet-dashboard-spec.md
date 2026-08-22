@@ -111,6 +111,30 @@ Each row deep-links to the place the fire is put out. Rows are counts + one line
 
 ---
 
+## "Payment doesn't match" — the definition
+
+**A payment mismatch is an order still in `pending_payment` whose Alipay proof was READ and REJECTED** (`alipay_ocr_verdict = 'mismatch'`). The customer uploaded a screenshot, the vision read succeeded, and `validateAlipayProof` refused it: a short amount, a payee that isn't ours, a receipt outside the freshness window, or a screenshot/transaction already spent on another order. Auto-flip never fires on a mismatch, so the order stays unpaid.
+
+**Why it is a fire and not a state.** It passes both disciplines above. It is actionable — the operator opens the order, reads the screenshot against the amounts, and either marks it paid or cancels it. And it is invisible everywhere else: in the Orders list the row looks exactly like an order nobody ever paid for, so nothing retries it, nothing times it out (the stale-pending sweep would eventually *cancel* it, with the customer's money already sent), and it waits until somebody happens to open that one order. It is the only fire on the card where the customer believes the transaction is finished.
+
+**Severity: brick.** Money is in dispute. Amber is "there is work"; this is "someone paid us and we have not accepted it".
+
+**Data source:** one `payment_mismatch: {count, items}` key on `/api/retail-admin/dashboard/ops`, store-scoped like its siblings, read-only channel mirrors excluded like every other worklist there. No new route, no new poll.
+
+**The clock:** `waiting_since = COALESCE(alipay_proof_at, placed_at)` — how long the CUSTOMER has been waiting on money they believe they already sent, never null (the `paid_at` caveat below, applied in advance).
+
+**What the row is allowed to say.** With ONE order behind the fire it states the gap — "paid ¥318.00, order ¥318.20" — because that is the fact the operator is about to go and look up. With several, no pair of numbers is true of them all, so it is a count and an age. And the gap is printed only when an amount was actually read AND it differs: a mismatch on payee or time would otherwise render two identical numbers and read as a bug in our own arithmetic.
+
+**The door:** one order → that order's drawer over the dashboard, scrolled to its Alipay card (`openOrder(id, { focus: 'payment' })`); several → the Orders list on the `payment_mismatch` chip, which the server sorts oldest-proof-first, so the order the card aged from is the one at the top.
+
+**Self-clearing, with no "handled" flag.** Marking it paid or cancelling it removes it from the queue by definition — the same two actions that resolve it. A re-read that now matches removes it too.
+
+**Deliberately NOT in it:** verdict `'error'` ("couldn't read it"). That is a re-read, not a money dispute, and it has its own button in the drawer. Folding it in would make the row's words untrue about half its contents.
+
+**Where else it appears (and why that is not a dedup violation):** the Orders list row carries a brick note line on a pending order with a rejected proof. That is not the same fire said twice — it is the *reason* a row in a list the operator is already reading is still pending, which is precisely the information the list was missing. The Needs-you card remains the only place that gathers them.
+
+---
+
 ## "Unhandled orders" — the definition
 
 **An unhandled order is an order in status `paid`.** Money received, nobody has started preparing. This is not an invention — it is the product's own state machine: the moment anyone acts, the order moves to `preparing`.
