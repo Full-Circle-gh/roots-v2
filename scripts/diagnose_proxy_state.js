@@ -192,6 +192,8 @@ function dbCandidates() {
 }
 
 const STORE = process.env.PROXY_DIAG_STORE || 'tianhe';
+const found = [];   // databases that actually hold this store's Meituan history
+const quiet = [];   // …and the ones that hold none, named but not printed
 if (Database) {
   for (const file of dbCandidates()) {
     let db;
@@ -209,7 +211,6 @@ if (Database) {
     const has = (t) => !!one("SELECT name FROM sqlite_master WHERE type='table' AND name=?", t);
     if (!has('meituan_sync_log')) { try { db.close(); } catch (_) {} continue; }
 
-    say(`  ${file}`);
     const lastOk  = one("SELECT event_type, created_at FROM meituan_sync_log WHERE store_code=? AND status='ok' ORDER BY id DESC LIMIT 1", STORE);
     const lastErr = one("SELECT event_type, error_msg, created_at FROM meituan_sync_log WHERE store_code=? AND status='error' ORDER BY id DESC LIMIT 1", STORE);
     const lastLogin = one("SELECT event_type, created_at FROM meituan_sync_log WHERE store_code=? AND status='error' AND event_type IN ('needs_login','verify_required') ORDER BY id DESC LIMIT 1", STORE);
@@ -227,6 +228,25 @@ if (Database) {
     const errAt = utc(lastLogin && lastLogin.created_at);
     const signedIn = errAt && errAt > okAt ? false : (okAt ? true : null);
 
+    try { db.close(); } catch (_) {}
+
+    // A tenant that has never touched Meituan prints nothing: on a box with
+    // several tenant files the empty ones are pure noise, and they push the
+    // answer off the end of a log that is only ever read by its tail.
+    const active = !!(lastOk || lastErr || lastOrder || (q && ((q.pending || 0) + (q.failed || 0) > 0)));
+    if (!active) { quiet.push(path.basename(file)); continue; }
+
+    found.push({
+      file, signedIn,
+      okAt: utc(lastOk && lastOk.created_at),
+      pushAt: utc(lastPush && lastPush.created_at),
+      orderAt: utc(lastOrder && lastOrder.imported_at),
+      orderNo: lastOrder && lastOrder.meituan_order_no,
+      today: today ? today.n : null,
+      lastOk, lastErr, lastLogin, biz, q, utc,
+    });
+
+    say(`  ${file}`);
     say(`      signed in: ${signedIn === true ? 'YES' : signedIn === false ? `NO — ${lastLogin.event_type}` : 'unknown (no activity either way)'}`);
     say(`      last ok event:   ${lastOk ? `${lastOk.event_type} ${ago(utc(lastOk.created_at))}` : 'never'}`);
     say(`      last stock push: ${lastPush ? ago(utc(lastPush.created_at)) : 'never'}`);
@@ -235,8 +255,41 @@ if (Database) {
     say(`      last order:      ${lastOrder ? `${lastOrder.meituan_order_no} ${ago(utc(lastOrder.imported_at))}` : 'never'}`);
     say(`      orders today:    ${today ? today.n : '?'}`);
     if (q) say(`      push queue:      ${q.pending || 0} pending, ${q.failed || 0} failed`);
-    try { db.close(); } catch (_) {}
   }
+  if (quiet.length) say(`  (${quiet.length} database(s) with no ${STORE} Meituan activity, not shown: ${quiet.join(', ')})`);
+  if (!found.length) say(`  no database on this box holds any ${STORE} Meituan activity`);
+}
+
+// ── The answer, last ─────────────────────────────────────────────────────────
+// Everything above is evidence. A reader who sees only the last few lines — and
+// with a log viewer that tails, that is every reader — still gets the verdict.
+head(`VERDICT — ${STORE} 外卖`);
+const entry = (() => {
+  try { return JSON.parse(read(STATE_FILE) || '{}')[STORE] || null; } catch (_) { return null; }
+})();
+const exitLabel = entry ? entry.label : null;
+say(`  exit in use:  ${exitLabel || 'unknown'}${exitLabel && exitLabel !== 'residential' ? '  (NOT the residential exit)' : ''}`);
+
+const primary = found.slice().sort((a, b) => Math.max(b.okAt, b.orderAt) - Math.max(a.okAt, a.orderAt))[0];
+if (!primary) {
+  say('  trading:      UNKNOWN — no Meituan history in any database on this box');
+} else {
+  const sig = primary.signedIn;
+  say(`  signed in:    ${sig === true ? 'YES' : sig === false ? 'NO — needs a human to sign in / pass 验证中心' : 'unknown'}`);
+  say(`  last activity: ${primary.okAt ? ago(primary.okAt) : 'never'}` +
+      `${primary.pushAt ? `, last stock push ${ago(primary.pushAt)}` : ', no stock push on record'}`);
+  say(`  orders today: ${primary.today === null ? '?' : primary.today}` +
+      `${primary.orderAt ? ` (last ${primary.orderNo || ''} ${ago(primary.orderAt)})` : ''}`);
+  if (primary.biz) {
+    say(`  shop status:  ${primary.biz.read_ok ? (primary.biz.is_open === 1 ? 'OPEN on Meituan' : 'CLOSED on Meituan (置休)') : 'last status read FAILED'}`);
+  }
+  // "Live" means the daemon reached Meituan recently AND is not locked out.
+  const recentMs = 45 * 60_000;
+  const live = sig === true && primary.okAt && (Date.now() - primary.okAt) < recentMs;
+  say('');
+  say(`  → ${live ? `LIVE — reaching Meituan, last ok ${ago(primary.okAt)}` : sig === false
+        ? 'NOT LIVE — the session is locked out; a human has to sign in on the box'
+        : `NOT CONFIRMED LIVE — no successful Meituan call in the last ${recentMs / 60000} min`}`);
 }
 
 say('');
