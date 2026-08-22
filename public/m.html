@@ -192,11 +192,6 @@ const DB = {
     {name:['Plant-based','植物基'],icon:'leaf',count:31},{name:['Beverages','饮品'],icon:'cup-soda',count:18},
     {name:['Snacks','零食'],icon:'cookie',count:22},{name:['Household','家居'],icon:'house-plug',count:9},
   ],
-  purchasing:[
-    {id:'PO-…08',supplier:['Fresh Co.','广州鲜果供应'],total:'¥3,240',items:['12 items','12 项'],status:['Received','已入库'],kind:'delivered'},
-    {id:'PO-…07',supplier:['Oat Works','燕麦工坊'],total:'¥1,880',items:['6 items','6 项'],status:['In transit','运输中'],kind:'dispatched'},
-    {id:'PO-…06',supplier:['Nut House','坚果之家'],total:'¥960',items:['4 items','4 项'],status:['Draft','草稿'],kind:'draft'},
-  ],
   activity:[
     {name:['Organic carrots','有机胡萝卜'],meta:['Order RT-…047 · sold','订单 RT-…047 · 售出'],delta:'−4'},
     {name:['Oat milk 1L','燕麦奶 1L'],meta:['PO-…08 received','PO-…08 入库'],delta:'+48'},
@@ -311,6 +306,8 @@ const state = {
   ordersView:null, ordersTotal:null, ordersLoading:false, ordersMore:false,
   storeF:'all', stores:null, orderQ:'',
   reply:null, thread:null, createKind:null, createValue:10, createActive:true,
+  pos:null, posErr:null, posTried:false, poSeg:'open', poId:null,
+  poDetail:null, poErr:null, poBusy:false,
   toast:null, drag:0, dragging:false, faqOpen:null, reviewsSeen:new Set(),
   qs:{oat:8,nuts:0,carrot:42},
   sw:{fapiao:true,membership:true,affiliate:false,social:false,faq:true,feedback:true,
@@ -589,6 +586,37 @@ reg('workOpenRow', i=>{
   if(e.ref_type==='guanyi'){ CMD.mirror('gzgrocery'); return; }
 });
 reg('inboxSeg', s=>{ state.inboxSeg=s; render(); });
+reg('poSeg', v=>{ state.poSeg=v; render(); });
+reg('openPO', id=>{ state.poId=Number(id); state.poDetail=null; state.poErr=null; state.poBusy=false; render();
+  api('/purchases/'+Number(id)).then(d=>{ if(state.poId!==Number(id)) return; state.poDetail=d; render(); })
+    .catch(e=>{ if(state.poId!==Number(id)||String(e.message)==='auth') return;
+      state.poErr=T('Could not load this order.','无法加载这张采购单。'); state.poDetail={id:Number(id),items:[]}; render(); }); });
+reg('closePO', ()=>{ state.poId=null; state.poDetail=null; state.poErr=null; render(); });
+/* Marking a delivery in writes stock and posts the cost to the books, so it
+   asks first and says both of those things before it does. */
+reg('poStatus', st=>{
+  const d=state.poDetail; if(!d||state.poBusy) return;
+  const run=()=>{
+    state.poBusy=true; state.poErr=null; render();
+    apiWrite('/purchases/'+d.id+'/status',{status:st},'PUT').then(()=>{
+      state.poBusy=false; state.poErr=null;
+      showToast(st==='Delivered'?T('Received · stock updated','已收货 · 库存已更新'):T('Marked ordered','已标记下单'));
+      state.posTried=false; loadPOs(true);
+      return api('/purchases/'+d.id).then(x=>{ if(state.poId===d.id){ state.poDetail=x; render(); } });
+    }).catch(e=>{
+      state.poBusy=false;
+      if(String(e.message)==='auth') return;
+      state.poErr=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+      render();
+    });
+  };
+  if(st!=='Delivered'){ run(); return; }
+  state.ask={title:T('Everything arrived?','全部到货了吗？'),
+    body:T('Every line is counted in at the quantity ordered, stock goes up across your stores, and the cost posts to the books. Short counts and damage are recorded per line on desktop.',
+           '所有项目按下单数量入库，各门店库存增加，采购金额记入账目。缺货与破损需在电脑端逐项登记。'),
+    confirmLabel:T('Tick it in','确认收货'), run};
+  render();
+});
 reg('invSeg', v=>{ state.invSeg=v; render(); });
 /* A review has one turn, so a reply box is the whole story. A feedback
    thread does not: by the third message the phone was showing the newest
@@ -1354,6 +1382,161 @@ function screenMore(){
 }
 
 /* ==========================================================================
+   Purchasing — the goods ledger (desktop: 16-purchasing.js)
+   --------------------------------------------------------------------------
+   This screen used to be three invented purchase orders out of DB.purchasing,
+   with statuses the server has never had ("In transit", "Draft") and a tap
+   that called openOrder() — the CUSTOMER order sheet — with a PO number it
+   could never find. It is now the real ledger: /purchases, the desktop's three
+   segments, its statline, and the row it draws.
+
+   The wizard, per-line receive with damaged counts, suppliers, bills and
+   reorder stay on the desktop. What moves here is the part you do standing at
+   the delivery door: read the order, and tick the whole delivery in.
+   ========================================================================== */
+function loadPOs(force){
+  if(state.posTried&&!force) return;
+  state.posTried=true;
+  api('/purchases').then(rows=>{
+    state.pos=Array.isArray(rows)?rows:[]; state.posErr=null; render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    state.posErr=T('Could not load purchase orders.','无法加载采购单。'); render();
+  });
+}
+/* The desktop's four words for four stored statuses. "Received" is what the
+   operator calls Delivered; nothing else is renamed. */
+function poWord(st){
+  return {Requested:['Draft','草稿'],Ordered:['Ordered','已下单'],
+          Delivered:['Received','已收货'],Cancelled:['Cancelled','已取消']}[st]||[st,st];
+}
+const poLate=p=>p.status==='Ordered'&&p.delivery_date&&p.delivery_date<GZ_ISO();
+const GZ_ISO=()=>new Date(Date.now()+8*3600*1000).toISOString().slice(0,10);
+function poPill(p){
+  // pill() takes an order KIND, and a PO's four statuses are not order kinds —
+  // so the tone is named here rather than smuggled through a map that would
+  // silently answer "clear" to every word it did not recognise.
+  const tone = poLate(p)?'warning' : p.status==='Delivered'?'success'
+    : p.status==='Cancelled'?'muted' : 'clear';
+  const [bg,fg]=PILL[tone];
+  return `<span class="pill" style="background:${bg};color:${fg}">${poLate(p)?T('Late','已逾期'):T(...poWord(p.status))}</span>`;
+}
+function poStore(p){ return [p.store_name_en,p.store_name_cn].filter(Boolean).join(' · '); }
+function poRow(p){
+  const lines=Number(p.line_count||0), rcv=Number(p.received_lines||0);
+  const arrives = p.delivery_date
+    ? (poLate(p)
+        ? `<span class="num" style="color:var(--amber)">${p.delivery_date} · ${T('late','逾期')}</span>`
+        : `<span class="num">${p.delivery_date}</span>`)
+    : '';
+  return `<button class="card" onclick="APP.cmd('openPO',${p.id})" style="display:flex;flex-direction:column;gap:9px;text-align:left;cursor:pointer;padding:14px;width:100%">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+      <span style="display:flex;flex-direction:column;min-width:0">
+        <span class="num" style="font-size:14.5px;font-weight:500">${escAttr(p.po_number||('#'+p.id))}</span>
+        <span style="font-size:12.5px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(p.supplier||T('No supplier','未指定供应商'))}${poStore(p)?' · '+escAttr(poStore(p)):''}</span></span>
+      <span class="num" style="font-size:16px;font-weight:500;flex:none">${money0(CUR,p.total_cost)}</span></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <span class="num" style="font-size:12.5px;color:var(--text-secondary)">${lines} ${T(lines===1?'line':'lines','项')}${rcv?' · '+rcv+' '+T('in','入库'):''}</span>
+      ${poPill(p)}</div>
+    ${arrives?`<div style="font-size:12.5px;color:var(--text-secondary)">${T('Arrives','到货')} ${arrives}</div>`:''}</button>`;
+}
+function screenPurchasing(){
+  loadPOs();
+  if(state.posErr) return `<div style="padding:14px 16px 24px">
+    <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick)">${state.posErr}</span></div></div>`;
+  if(!state.pos) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const all=state.pos;
+  if(!all.length) return nothingYet(T('No purchase orders yet','还没有采购单'),
+    T('An order is what you are buying from one supplier for one store. They are written on desktop; once one exists you can read it and tick it in from here.',
+      '采购单记录你向某个供应商、为某家门店采购的内容。在电脑端创建后，可在此查看并收货。'));
+  const open=all.filter(p=>p.status==='Requested'||p.status==='Ordered');
+  const rcvd=all.filter(p=>p.status==='Delivered');
+  const late=all.filter(poLate);
+  const m=GZ_ISO().slice(0,7);
+  const spend=all.filter(p=>String(p.date||'').slice(0,7)===m&&(p.status==='Ordered'||p.status==='Delivered'))
+    .reduce((a,p)=>a+(Number(p.total_cost)||0),0);
+  const seg=state.poSeg;
+  const rows = seg==='open'?open : seg==='received'?rcvd : all;
+  const segBtn=(k,label,n)=>`<button onclick="APP.cmd('poSeg','${k}')" style="flex:1;padding:8px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;
+    background:${seg===k?'var(--surface-card)':'transparent'};color:${seg===k?'var(--text-primary)':'var(--text-secondary)'};box-shadow:${seg===k?'0 1px 3px rgba(17,26,43,.08)':'none'}">${label} <span class="num" style="color:var(--text-secondary)">${n}</span></button>`;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;flex-wrap:wrap;gap:6px 18px;padding:2px 2px 4px">
+      <span style="font-size:13.5px;color:var(--text-secondary)"><b class="num" style="color:var(--text-primary);font-weight:500">${open.length}</b> ${T('open','进行中')}</span>
+      ${late.length?`<span style="font-size:13.5px;color:var(--amber)"><b class="num" style="font-weight:500">${late.length}</b> ${T('late','逾期')}</span>`:''}
+      <span style="font-size:13.5px;color:var(--text-secondary)"><b class="num" style="color:var(--text-primary);font-weight:500">${money0(CUR,spend)}</b> ${T('spent this month','本月采购')}</span>
+    </div>
+    <div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px">
+      ${segBtn('open',T('Open','进行中'),open.length)}${segBtn('received',T('Received','已收货'),rcvd.length)}${segBtn('all',T('All','全部'),all.length)}</div>
+    ${rows.length?`<div style="display:flex;flex-direction:column;gap:10px">${rows.map(poRow).join('')}</div>`
+      :`<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Nothing here — try another filter.','这里没有内容 — 换个筛选试试。')}</div>`}</div>`;
+}
+function poLineRow(it){
+  const name=[it.name_en,it.name_cn].filter(Boolean).join(' · ')||'—';
+  const got=it.qty_received;
+  const short=got!=null&&Number(got)<Number(it.qty||0);
+  return `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px">
+    <span style="display:flex;flex-direction:column;min-width:0">
+      <span style="font-size:14.5px">${escAttr(name)}</span>
+      <span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${escAttr(it.sku||'')}${it.sku&&it.current_stock!=null?' · ':''}${it.current_stock!=null?T('on shelf ','在架 ')+it.current_stock:''}</span>
+      ${got!=null?`<span class="num" style="font-size:12px;margin-top:3px;color:${short?'var(--amber)':'var(--text-secondary)'}">${T('received','已收')} ${got}${short?' '+T('of','/')+' '+it.qty:''}${Number(it.damaged_qty||0)?' · '+it.damaged_qty+' '+T('damaged','损坏'):''}</span>`:''}
+    </span>
+    <span style="display:flex;flex-direction:column;align-items:flex-end;flex:none">
+      <span class="num" style="font-size:14.5px;font-weight:500">${money0(CUR,it.total_cost)}</span>
+      <span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${it.qty||0}${it.unit?' '+escAttr(it.unit):''}</span></span></div>`;
+}
+function sheetPO(){
+  const d=state.poDetail;
+  const busy=state.poBusy;
+  const head=(title,right)=>`<div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" onclick="APP.cmd('closePO')">${ic('x',22,2)}</button>
+      <span class="num" style="flex:1;font-size:17px;font-weight:500;min-width:0">${title}</span>${right||'<span style="width:36px;flex:none"></span>'}</div></div>`;
+  if(!d) return `<div class="scrim" style="z-index:45" onclick="APP.cmd('closePO')"></div>
+    <div class="sheet" style="top:120px;z-index:46;overflow:hidden">${head(T('Loading…','加载中…'))}
+      <div style="flex:1;min-height:0;padding:40px 16px;text-align:center;font-size:15px;color:var(--text-secondary);background:var(--bg)">${T('Loading…','加载中…')}</div></div>`;
+  const items=d.items||[];
+  const lines=items.length;
+  const done=d.status==='Delivered'||d.status==='Cancelled';
+  // The one PO action that belongs on a phone: you are at the door, the boxes
+  // are all there. Anything partial — short counts, damage — is per-line work
+  // and stays on the desktop, which is where the receive screen lives.
+  const cta = d.status==='Requested'
+    ? {label:T('Mark ordered','标记已下单'),status:'Ordered'}
+    : d.status==='Ordered'
+      ? {label:T('Everything arrived','全部到货'),status:'Delivered'}
+      : null;
+  return `<div class="scrim" style="z-index:45" onclick="APP.cmd('closePO')"></div>
+   <div class="sheet" style="top:76px;z-index:46;overflow:hidden">
+     ${head(escAttr(d.po_number||('#'+d.id)),poPill(d))}
+     <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;background:var(--bg)">
+       ${state.poErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+         <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+         <span style="font-size:14px;color:var(--brick)">${state.poErr}</span></div>`:''}
+       <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
+         ${poFact(T('Supplier','供应商'),escAttr(d.supplier||T('No supplier','未指定供应商')))}
+         ${poStore(d)?poFact(T('Store','门店'),escAttr(poStore(d))):''}
+         ${d.date?poFact(T('Ordered','下单'),`<span class="num">${escAttr(d.date)}</span>`):''}
+         ${d.delivery_date?poFact(T('Arrives','到货'),`<span class="num" style="${poLate(d)?'color:var(--amber)':''}">${escAttr(d.delivery_date)}${poLate(d)?' · '+T('late','逾期'):''}</span>`):''}
+         ${poFact(T('Total','金额'),`<span class="num" style="font-weight:500">${money0(CUR,d.total_cost!=null?d.total_cost:items.reduce((a,i)=>a+(Number(i.total_cost)||0),0))}</span>`)}
+       </div>
+       ${lines?`<div><div class="eyebrow" style="padding:0 2px 8px">${lines} ${T(lines===1?'line':'lines','项')}</div>
+         <div class="list">${items.map((it,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}${poLineRow(it)}`).join('')}</div></div>`:''}
+       ${d.notes?`<div class="card" style="padding:14px"><div class="eyebrow">${T('Notes','备注')}</div>
+         <div style="font-size:14px;line-height:1.55;margin-top:8px;white-space:pre-wrap">${escAttr(d.notes)}</div></div>`:''}
+       ${done?'':noteBar(T('Short counts and damage are per-line — record those on desktop.','缺货与破损需逐项登记，请在电脑端处理。'))}
+     </div>
+     ${cta?`<div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card)">
+       <button class="btn2" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('poStatus','${cta.status}')">${busy?T('Saving…','保存中…'):cta.label}</button></div>`:''}</div>`;
+}
+function poFact(label,value){
+  return `<div style="display:flex;align-items:baseline;justify-content:space-between;gap:14px">
+    <span style="font-size:13px;color:var(--text-secondary);flex:none">${label}</span>
+    <span style="font-size:14px;text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis">${value}</span></div>`;
+}
+
+/* ==========================================================================
    Pushed sub-screens
    ========================================================================== */
 function settingsGroupCard(rows){
@@ -1436,13 +1619,7 @@ const SUBS={
         <span style="width:32px;height:32px;border-radius:8px;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;color:var(--text-secondary);flex:none">${ic(c.icon)}</span>
         <span style="flex:1;font-size:15px">${T(...c.name)}</span><span class="num" style="font-size:13px;color:var(--text-secondary)">${c.count}</span>
         <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`).join('')}</div></div>`},
-  purchasing:{title:['Purchasing','采购'],render:()=>`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:10px">
-    ${DB.purchasing.map(po=>`<button class="card" onclick="APP.cmd('openOrder','${po.id}')" style="display:flex;flex-direction:column;gap:9px;text-align:left;cursor:pointer;padding:14px">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
-        <span style="display:flex;flex-direction:column;min-width:0"><span class="num" style="font-size:14.5px;font-weight:500">${po.id}</span>
-        <span style="font-size:12.5px;color:var(--text-secondary);margin-top:2px">${T(...po.supplier)}</span></span>
-        <span class="num" style="font-size:16px;font-weight:500;flex:none">${po.total}</span></div>
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="num" style="font-size:12.5px;color:var(--text-secondary)">${T(...po.items)}</span>${pill(po.kind,T(...po.status))}</div></button>`).join('')}</div>`},
+  purchasing:{title:['Purchasing','采购'],render:()=>screenPurchasing()},
   activity:{title:['Activity','库存流水'],render:()=>`<div style="padding:14px 16px 24px"><div class="list">${DB.activity.map((a,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
     <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 14px">
       <span style="display:flex;flex-direction:column;min-width:0"><span style="font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...a.name)}</span>
@@ -2347,7 +2524,11 @@ async function refreshOrders(){
   api('/order-status-counts').then(d=>{ if(d){ state.liveStatusCounts=d;
     state.liveAttn=Object.assign({},state.liveAttn||{},{ship:(d.paid||0)+(d.preparing||0)}); render(); } }).catch(()=>{});
 }
-function findOrder(id){ return DB.orders.find(o=>o.id===id) || DB.purchasing.find(o=>o.id===id); }
+/* A purchase order is not a customer order. This used to fall back to
+   DB.purchasing, so tapping a PO opened the ORDER sheet on a row that has
+   no items, no customer and no status the sheet understands. POs have
+   sheetPO() now. */
+function findOrder(id){ return DB.orders.find(o=>o.id===id); }
 /* ---- the refund panel --------------------------------------------------
    The phone shipped the refund ACTIONS months before the figures behind them:
    an operator could approve a refund without the screen ever having told them
@@ -3494,6 +3675,7 @@ function render(){
   if(state.detailActions) html += sheetActions();
   if(state.productSku) html += sheetProduct();
   if(state.reply!=null) html += sheetReply();
+  if(state.poId!=null) html += sheetPO();
   if(state.createKind) html += sheetCreate();
   if(state.search) html += sheetSearch();
   if(state.toast) html += `<div class="toast">${state.toast}</div>`;
@@ -4115,13 +4297,6 @@ const CAT_ICON={produce:'sprout',fresh:'sprout',bakery:'croissant',bread:'croiss
 function catIcon(name){ const n=String(name||'').toLowerCase(); for(const k in CAT_ICON){ if(n.includes(k)) return CAT_ICON[k]; } return 'tag'; }
 function mapCategory(r){ const nm=r.name||r.name_en||'—'; return {name:[nm,r.name_cn||nm],icon:catIcon(nm),count:r.usage_count!=null?r.usage_count:(r.count!=null?r.count:0)}; }
 
-const PO_KIND={received:'delivered',partial:'preparing',in_transit:'dispatched',ordered:'dispatched',sent:'dispatched',draft:'draft',cancelled:'off'};
-function mapPurchase(r){
-  const st=String(r.status||'draft').toLowerCase();
-  return {id:r.po_number||('PO-'+r.id), _id:r.id, supplier:[r.supplier||r.store_name_en||'—',r.supplier||r.store_name_cn||'—'],
-    total:money(CUR,r.total_cost), items:[(r.line_count||0)+' items',(r.line_count||0)+' 项'],
-    status:[st.charAt(0).toUpperCase()+st.slice(1),st], kind:PO_KIND[st]||'pending'};
-}
 function mapActivity(r){
   const src=r.source||r.reason||'';
   return {name:[r.product||r.sku||'—',r.product||r.sku||'—'],
@@ -4438,7 +4613,6 @@ async function loadLive(){
   api('/delivery-zones').then(r=>set(()=>{ if(Array.isArray(r)) state.zones=r; })).catch(()=>{});
   api('/stores').then(r=>set(()=>{ if(Array.isArray(r)) state.stores=r.filter(s=>s.is_active==null||s.is_active); })).catch(()=>{});
   api('/categories').then(r=>set(()=>{ if(Array.isArray(r)&&r.length) DB.categories=r.map(mapCategory); })).catch(()=>{});
-  api('/purchases').then(r=>set(()=>{ if(Array.isArray(r)&&r.length) DB.purchasing=r.map(mapPurchase); })).catch(()=>{});
   api('/activity').then(r=>set(()=>{ const rows=(r&&r.rows)||(Array.isArray(r)?r:null); if(rows&&rows.length) DB.activity=rows.slice(0,20).map(mapActivity); })).catch(()=>{});
   // apiRaw, not api: the chip counts ride the envelope beside `data`, and
   // api() returns `data` alone — so liveInvoiceCounts was never once set and

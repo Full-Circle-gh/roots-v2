@@ -24,30 +24,7 @@
  */
 'use strict';
 
-const fs = require('fs');
-const os = require('os');
-const path = require('path');
-const { execFileSync } = require('child_process');
-
-const APP = path.join(__dirname, '..', 'public', 'm.html');
-
-function findChrome() {
-  if (process.env.CHROME_BIN) return process.env.CHROME_BIN;
-  try {
-    const p = require('playwright').chromium.executablePath();
-    if (p && fs.existsSync(p)) return p;
-  } catch (e) { /* not installed here */ }
-  const guesses = ['/usr/bin/chromium', '/usr/bin/chromium-browser', '/usr/bin/google-chrome'];
-  for (const g of guesses) { if (fs.existsSync(g)) return g; }
-  const pw = '/opt/pw-browsers';
-  if (fs.existsSync(pw)) {
-    for (const d of fs.readdirSync(pw)) {
-      const p = path.join(pw, d, 'chrome-linux', 'chrome');
-      if (fs.existsSync(p)) return p;
-    }
-  }
-  return null;
-}
+const { run } = require('./lib/m-probe');
 
 // A feedback thread the customer opened and has come back to, and a direct
 // message the store started. Between them they cover every mark the row draws.
@@ -76,7 +53,8 @@ const THREAD = `{id:11, loading:false, err:null, page:'checkout', appVersion:'2.
         {id:1,author:'admin',author_name:'Mei',body:'Thanks — we are looking at it.',created_at:'2026-08-19 10:40:00'},
         {id:2,author:'customer',body:'Still doing it on the newest build.',created_at:'2026-08-22 09:10:00'}]}`;
 
-// txt() is defined in the page harness below; it is the innerText of one node.
+// txt(id) and sheetText() come from scripts/lib/m-probe.js and read what is
+// actually on the glass — never document.body, which contains the script.
 const CASES = [
   ['feedback list', OPEN_FEEDBACK, [
     ['maps at all — the customer name is on the row',      `txt('content').includes('Wu Yaqi')`],
@@ -109,7 +87,7 @@ const CASES = [
     ['their turns are signed Customer', `txt('mThread').includes('Customer')`],
     ['the photo is in the thread',    `document.querySelectorAll("#mThread a[href^='/api/retail/media/']").length === 1`],
     ['a composer is present',         `!!document.getElementById('mReply')`],
-    ['and it says where the reply lands', `document.querySelector('.sheet').innerText.includes('mini-app inbox')`],
+    ['and it says where the reply lands', `sheetText().includes('mini-app inbox')`],
   ]],
   ['thread still loading', OPEN_FEEDBACK + `APP.cmd('openReply','fb:11'); render();`, [
     ['says so rather than showing an empty thread', `txt('mThread').includes('Loading')`],
@@ -123,64 +101,10 @@ const CASES = [
   ['a review is still a review, not a thread', `
     DB.reviews[0].id=7; DB.reviews[0].stream='review';
     APP.cmd('push','inbox'); APP.cmd('openReply', revKey(DB.reviews[0]));`, [
-    ['no thread was fetched',           `state_thread_null()`],
+    ['no thread was fetched',           `state.thread===null||state.thread===undefined`],
     ['the composer is there',           `!!document.getElementById('mReply')`],
-    ['and it names the public surface', `document.querySelector('.sheet').innerText.includes('under the review')`],
+    ['and it names the public surface', `sheetText().includes('under the review')`],
   ]],
 ];
 
-function main() {
-  const chrome = findChrome();
-  if (!chrome) { console.log('SKIP — no Chromium found. Set CHROME_BIN to run this check.'); process.exit(0); }
-  let src = fs.readFileSync(APP, 'utf8')
-    .replace(/<script src="https:\/\/unpkg\.com[^>]*><\/script>/, '')
-    .replace(/<link rel="stylesheet" href="https:\/\/fonts\.googleapis\.com[^>]*>/, '');
-
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'm-inbox-'));
-  let pass = 0; const failures = [];
-
-  for (const [name, setup, checks] of CASES) {
-    // The probe runs INSIDE the app page: `state` is a const, so a parent frame
-    // cannot see it, and only in here does txt() read the node the user reads.
-    const harness = `<script>addEventListener('load',function(){setTimeout(function(){
-      var out=[];
-      function txt(id){ var el=document.getElementById(id); return el?el.innerText:''; }
-      function state_thread_null(){ return state.thread===null||state.thread===undefined; }
-      try{ ${setup} }catch(e){ document.title='SETUP '+e.message; return; }
-      var checks=${JSON.stringify(checks.map((c) => c[0]))};
-      var fns=[${checks.map((c) => `function(){return (${c[1]})}`).join(',')}];
-      for(var i=0;i<fns.length;i++){
-        var ok=false, why='';
-        try{ ok=!!fns[i](); }catch(e){ why=' ('+e.message+')'; }
-        if(!ok) out.push(checks[i]+why);
-      }
-      document.title = out.length ? ('BAD '+out.join(' ¦ ')) : 'GOOD';
-    },250)});</script>`;
-    const file = path.join(dir, name.replace(/[^a-z0-9]/gi, '_') + '.html');
-    fs.writeFileSync(file, src.replace('</body>', harness + '</body>'));
-    let out = '';
-    try {
-      out = execFileSync(chrome, ['--headless=new', '--disable-gpu', '--no-sandbox',
-        '--window-size=500,940', '--virtual-time-budget=2500', '--dump-dom', 'file://' + file],
-      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 30000 });
-    } catch (e) { failures.push([name, 'chrome failed: ' + e.message]); continue; }
-    const title = (out.match(/<title>([^<]*)<\/title>/) || [])[1] || 'no title';
-    if (title === 'GOOD') { console.log(`  ✓ ${name} — ${checks.length} checks`); pass += checks.length; }
-    else {
-      const bad = title.replace(/^BAD /, '').split(' ¦ ');
-      console.log(`  ✗ ${name}`);
-      for (const b of bad) console.log(`      ${b}`);
-      failures.push([name, bad.length]);
-      pass += checks.length - (title.startsWith('BAD') ? bad.length : checks.length);
-    }
-  }
-
-  fs.rmSync(dir, { recursive: true, force: true });
-  if (failures.length) {
-    console.error(`\n${failures.length} of ${CASES.length} inbox cases failed.`);
-    process.exit(1);
-  }
-  console.log(`\nok — ${pass} inbox assertions across ${CASES.length} cases.`);
-}
-
-main();
+run('inbox', CASES);

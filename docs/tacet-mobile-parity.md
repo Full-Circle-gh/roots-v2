@@ -411,6 +411,38 @@ to rendered text rather than to source, including the thread's loading and
 failed states. It was mutation-tested: reverting the row to lead with the root,
 and the thread to show only its last turn, fails it.
 
+### Purchasing (`16-purchasing.js`)
+
+The phone's Purchasing screen was three hard-coded purchase orders — Fresh Co.
+¥3,240 *Received*, Oat Works *In transit*, Nut House *Draft*. Two of those
+statuses have never existed on the server (`PO_STATUSES` is Requested / Ordered
+/ Delivered / Cancelled). A live prefetch did overwrite the list, but only
+`if (rows.length)`, so a shop with an empty ledger saw three orders it had never
+placed and a month's spend it had never made. And each row's tap called
+`openOrder()` — the *customer* order sheet — with a PO number that sheet could
+never find.
+
+| Desktop capability | Phone |
+|---|---|
+| The ledger is the server's | ❌ → ✅ — `/purchases`, and an empty ledger now says it is empty |
+| Open / Received / All, with counts | ✅ |
+| Statline: open · late · spent this month | ✅ — suppliers count is on the desktop's suppliers screen, which has not moved |
+| Row: number, date, supplier, store, lines (+ received), total, arrival, status | ✅ |
+| **Late** — Ordered, with an arrival date already past | ✅ — amber on the row and the pill, same rule |
+| Status words: Draft / Ordered / Received / Cancelled | ✅ — the phone had invented its own |
+| Tapping a row opens the order | ❌ → ✅ — it opened the customer-order sheet on a row with no items, no customer and no status it understood. POs have their own sheet |
+| Order sheet: supplier, store, dates, total, every line with qty/unit/cost | ✅ |
+| Per-line shelf stock, received count, damage | ✅ read-only |
+| Mark a draft Ordered | ✅ |
+| **Tick a whole delivery in** | ✅ — `PUT /purchases/:id/status {Delivered}`, the server's own "everything arrived" path: every line counted in at the ordered quantity, stock applied, cost posted. It asks first and says both of those things, because it is not undoable from here |
+| Per-line receive: short counts, damaged qty, tracking, invoice status | ➖ decided: desktop. It is a table of number inputs, and the sheet says so rather than pretending |
+| New order wizard, suppliers, bills, reorder, price history, import | ➖ decided: desktop |
+| Search / filter by month or store | ➖ |
+
+`scripts/test_mobile_purchasing.js` — 40 assertions, 9 cases, including the
+empty ledger, the failed load, and that the confirm asks before anything is
+sent.
+
 ## 4. Open questions
 
 Not gaps — decisions that are the shop's to make, not this file's.
