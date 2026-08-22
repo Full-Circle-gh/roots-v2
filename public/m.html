@@ -3317,7 +3317,11 @@ async function saveProductEdits(){
   state.prodBusy=true; state.prodErr=null; render();
   try{
     if(price!==Number(p.priceNum)) await apiWrite('/products/'+p._id,{sell_price:price},'PATCH');
-    for(const st of stores){
+    // Belt to the read-only card: neither a supplier-direct item nor a bundle
+    // has stock of its own, so no stepper is drawn for them — and no write is
+    // sent for them either, whatever is left in sheetStep from a previous
+    // product's sheet.
+    for(const st of (p.supplier||p.bundle?[]:stores)){
       const now=Number(sheetStep['st_'+st.id]);
       if(!isNaN(now)&&now!==st.qty){
         await apiWrite('/stores/'+st.id+'/stock/'+p._id,{physical_qty:now},'PATCH');
@@ -4162,6 +4166,22 @@ function stepperCard(label,key,val,prefix){
    spreading one number across two shelves would be a guess. */
 function stockCard(p){
   const stores=state.prodStores||[];
+  /* Two kinds of product have no stock of their own, and the desktop makes
+     both read-only for the same reason: a number typed here would mean
+     nothing. A supplier-direct item ships from the supplier; an assembled
+     bundle's count is derived from its parts. The phone offered a per-store
+     stepper for both, and the write would have gone through. */
+  if(p.supplier) return `<div class="card" style="padding:16px">
+    <div class="eyebrow">${T('Stock','库存')}</div>
+    <div style="font-size:18px;font-weight:500;margin-top:10px">${p.paused?T('Paused','已暂停'):T('Available','有货')}</div>
+    <div style="font-size:13px;color:var(--text-secondary);margin-top:5px;line-height:1.55">${p.paused
+      ? T('Supplier paused — customers cannot order it. Resume on desktop.','供应商已暂停 — 顾客无法下单。请在电脑端恢复。')
+      : T('Ships from the supplier, so it holds none of your stock and never runs out.','由供应商直发，不占用你的库存，也不会缺货。')}</div></div>`;
+  if(p.bundle) return `<div class="card" style="padding:16px">
+    <div class="eyebrow">${T('Stock','库存')}</div>
+    <div class="num" style="font-size:26px;font-weight:500;margin-top:10px">${p.stock<=0?T('Out','缺货'):p.stock}</div>
+    <div style="font-size:13px;color:var(--text-secondary);margin-top:5px;line-height:1.55">${
+      T('Made from other products — the count follows the parts, so it is not set here.','由其他商品组成 — 库存取决于组成商品，无法在此设置。')}</div></div>`;
   if(state.prodStockReady&&!stores.length){
     return `<div class="card" style="padding:16px">
       <div class="eyebrow">${T('In stock','库存')}</div>
@@ -5453,9 +5473,14 @@ function mapProduct(r){
   // item holds no stock of ours, so it is never Low and never Out.
   const pub = r.is_published==null ? true : !!Number(r.is_published);
   const supplier = !!r.ship_from_supplier;
+  const paused = supplier && !!r.supplier_paused;
   const low = prodLowThreshold(r);
   let kind,st;
   if(!pub){ kind='draft'; st=['Draft','草稿']; }
+  // A supplier-direct item holds no stock of ours, so it is never Low and
+  // never Out — but the operator CAN pause selling it, and a paused one is not
+  // orderable. The phone showed it as Live, which is the one thing it is not.
+  else if(paused){ kind='off'; st=['Paused','已暂停']; }
   else if(!supplier&&stock<=0){ kind='off'; st=['Out','缺货']; }
   else if(!supplier&&stock<=low){ kind='restock'; st=['Low','库存低']; }
   else { kind='on'; st=['Live','在售']; }
@@ -5474,7 +5499,7 @@ function mapProduct(r){
     bundle:!!(r.is_bundle||r.bundle_mode==='prepacked'),
     designed:!!r.has_blocks,
     price:money(CUR,price), priceNum:Number(price)||0, stock, stockLabel:[stock+' in stock',('库存 '+stock)], status:st, kind,
-    pub, supplier, cat:String(r.top_category||r.category||'').trim(),
+    pub, supplier, paused, cat:String(r.top_category||r.category||'').trim(),
     // One lowercased haystack per product, built once: name in both languages
     // and the SKU, which is what the desktop's search box matches on.
     hay:[r.name_en||'',r.name_cn||'',r.sku||''].join(' ').toLowerCase()};

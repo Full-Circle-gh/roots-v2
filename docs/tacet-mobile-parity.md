@@ -896,6 +896,25 @@ answer arrives, and its empty state only after.
 
 The tests carry their own rows now, which is where a test's fixtures belong.
 
+### Products — the third sweep: the shapes with no stock of their own
+
+The desktop catalogue treats three shapes differently, and for the same reason
+each time: a number typed into their stock cell would mean nothing. The phone
+drew a per-store stepper for all three, and the save would have written it
+through the canonical inventory path.
+
+| Shape | Desktop | Phone |
+|---|---|---|
+| **Supplier-direct** (`ship_from_supplier`) | An availability badge, never a count — it ships from the supplier, holds none of your stock, and never runs out | ❌ → ✅ read-only, and says why |
+| **Paused supplier item** (`supplier_paused`) | Red badge: paused, not orderable | ❌ → ✅ — the phone showed it as **Live**, which is the one thing it is not. It is now Paused in the list and on the sheet, and never "Out", because it has no stock of ours to be out of |
+| **Assembled bundle** (`is_bundle`) | The derived count, read-only — stock follows the parts | ❌ → ✅ |
+| An ordinary product | Per-store count, editable | ✅ (unchanged) |
+
+The save path carries the same rule as a belt, so a stepper value left over
+from a previous product's sheet cannot be written to one of these.
+
+`scripts/test_mobile_products.js` — 16 assertions, 5 cases.
+
 ## 4. Open questions
 
 Not gaps — decisions that are the shop's to make, not this file's.
