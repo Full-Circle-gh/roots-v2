@@ -98,7 +98,7 @@ const crow = (label, desc, right) => `
           <span class="crow-main"><b>${label}</b>${desc ? `<span class="cap" style="display:block">${desc}</span>` : ''}</span>
           ${right}
         </div>`;
-const sw = (on) => `<span class="switch${on ? ' on' : ''}"><span></span></span>`;
+const sw = (on, kind = 'ink') => `<span class="switch ${kind}${on ? ' on' : ''}"><span></span></span>`;
 const val = (v) => `<span class="crow-val">${v}</span><span style="flex:none;width:20px;height:20px;color:var(--td-text2);margin-left:8px">${I.chev}</span>`;
 const group = (title, rows) => `
     <section style="flex:none">
@@ -119,7 +119,7 @@ writeFileSync(join(OUT, 'Delivery.dc.html'), doc('Delivery', `
         <div class="crow">
           <span class="crow-main"><b>Route to the nearest store</b><span class="cap" style="display:block">Picked Tianhe for 14 orders today.</span></span>
           <span class="pill" style="background:var(--td-dusk-tint);color:var(--td-dusk);gap:8px"><span class="dusk-dot"></span>On</span>
-        </div>` + crow('Pause when stock runs out', '', sw(true)))}
+        </div>` + crow('Pause when stock runs out', '', sw(true, 'dusk')))}
   </div>
   ${tabbar('more', { more: true })}
 </div>`));
@@ -177,7 +177,7 @@ writeFileSync(join(OUT, 'ChannelDetail.dc.html'), doc('Meituan', `
     </div>
   </div>
   <div class="body" style="gap:24px">
-    ${group('Connection', crow('Store', '', val('天河店')) + crow('Auto-accept orders', 'Orders enter Preparing without you', sw(true)) + crow('Menu sync', 'Last run 4 min ago', val('On')))}
+    ${group('Connection', crow('Store', '', val('Tianhe store')) + crow('Auto-accept orders', 'Orders enter Preparing without you', sw(true, 'dusk')) + crow('Menu sync', 'Last run 4 min ago', val('On')))}
     <section style="flex:none">
       <h2 class="sec-title" style="margin-bottom:4px">Orders from Meituan</h2>
       <p class="cap" style="margin:0 0 16px">Mirrored from the platform. Acted on there, never here.</p>
