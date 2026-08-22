@@ -1188,14 +1188,7 @@ function setupState(){
 }
 function screenMore(){
   const su=setupState();
-  return `<div style="padding:4px 0 8px">
-    <div style="padding:0 16px 14px">
-      <button class="card" onclick="APP.cmd('overflow')" style="display:flex;align-items:center;gap:14px;width:100%;padding:14px 16px;cursor:pointer;text-align:left;font-family:inherit;color:var(--text-primary)">
-        <span style="width:38px;height:38px;flex:none;border-radius:10px;background:var(--dusk-tint);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:500">${(state.storeName||'').trim().charAt(0).toUpperCase()||ic('user',20)}</span>
-        <span style="flex:1;min-width:0">
-          <span style="display:block;font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${state.storeName||T('Your store','你的店铺')}</span>
-          <span style="display:block;font-size:13px;color:var(--text-secondary);margin-top:2px">${T('Account, language, theme, sign out','账户、语言、主题、退出')}</span></span>
-        <span style="color:var(--text-secondary);display:flex;flex:none">${ic('chevron-right')}</span></button></div>
+  return `<div style="padding:16px 0 8px">
     <div style="padding:0 16px 6px"><div class="card" style="padding:16px">
       <button onclick="APP.cmd('push','setup')" style="display:flex;align-items:center;gap:14px;width:100%;background:transparent;border:none;cursor:pointer;text-align:left;padding:0;font-family:inherit">
         <span style="width:38px;height:38px;border-radius:10px;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;color:var(--accent);flex:none">${ic('compass',22)}</span>
@@ -3042,25 +3035,34 @@ function headControls(){
     <span style="position:relative;display:flex;flex:none">
       <button class="iconbtn" style="width:38px;height:38px" onclick="APP.cmd('push','inbox')" aria-label="${T('Inbox','消息')}">${ic('message-square-text')}</button>
       ${unseen?`<span style="position:absolute;top:6px;right:6px;width:6px;height:6px;border-radius:50%;background:var(--sage);box-shadow:0 0 0 2px var(--bg)"></span>`:''}
-    </span></span>`;
+    </span>
+    <button class="iconbtn" style="width:38px;height:38px" onclick="APP.cmd('overflow')" aria-label="${T('Account','账户')}">
+      <span style="width:28px;height:28px;border-radius:8px;background:var(--dusk-tint);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500">${(state.storeName||'').trim().charAt(0).toUpperCase()||ic('user',16)}</span>
+    </button></span>`;
 }
-/* ONE header. The title sits ON the control line rather than beside a floating
-   pair of buttons, so the top of every screen reads as a single band instead of
-   a heading with chrome parked next to it. The title keeps its 24px — dropping
-   it to fit would have taken it off the type scale, and a 24px line is 30px
-   tall, which sits inside a 38px control row with room to spare. The status
-   line goes underneath, in the scroll, so it leaves when you scroll and the
-   name of the page is the last thing standing. */
+/* Frame 4 of the canvas, "One header" — built as drawn. The old top bar carried
+   a wordmark and then a SECOND header underneath it repeating the page's name;
+   this is that bar, with the page's name in it instead. It is a bar and not a
+   heading with icons parked beside it, which is what the hairline underneath is
+   for: it closes the band, so everything below it is content.
+
+   The title is 20px here, one step off the 24/18 type scale. That is deliberate
+   and it is the one place in the app that does it: 24px next to a 38px control
+   makes the control look small, and 18px makes the page's own name quieter than
+   a card heading. Recorded so the next person knows it was chosen, not missed.
+
+   The status line sits BELOW the hairline, in the scroll, so it goes away when
+   you scroll and the name of the page is the last thing standing. */
 function pageHead({title, status, cta, back, controls}){
   const right = (cta||'') + (controls?headControls():'');
-  return `<div style="padding:calc(env(safe-area-inset-top,0px) + ${back?'10px':'14px'}) 16px ${status?'12px':'14px'}">
+  return `<div style="border-bottom:1px solid var(--border-default);padding:calc(env(safe-area-inset-top,0px) + ${back?'10px':'14px'}) 6px 10px 16px">
     ${back?`<button onclick="APP.cmd('back')" style="display:flex;align-items:center;gap:6px;margin:0 0 6px -4px;padding:8px 4px;background:none;border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--text-secondary)">${ic('chevron-left',16,2)}${back}</button>`:''}
-    <div style="display:flex;align-items:center;gap:12px;min-height:${right?'38px':'0'}">
-      <h1 style="flex:1;min-width:0;margin:0;font-size:24px;font-weight:500;letter-spacing:-.01em;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${title}</h1>
+    <div style="display:flex;align-items:center;gap:12px;min-height:38px;padding-right:${right?'0':'10px'}">
+      <h1 style="flex:1;min-width:0;margin:0;font-size:20px;font-weight:500;letter-spacing:-.01em;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${title}</h1>
       ${right}
     </div>
-    ${status?`<p class="num" style="margin:6px 0 0;font-size:15px;color:var(--text-secondary)">${status}</p>`:''}
-  </div>`;
+  </div>
+  ${status?`<div style="padding:10px 16px 12px"><p class="num" style="margin:0;font-size:15px;color:var(--text-secondary)">${status}</p></div>`:''}`;
 }
 function tabbar(){
   return `<div class="tabbar">${Object.keys(TAB_META).map(k=>{const m=TAB_META[k];const on=state.tab===k&&!state.stack.length;const col=on?'var(--text-primary)':'var(--text-secondary)';

@@ -283,7 +283,7 @@ columns of fact. Reported from production, then swept column by column.
 
 | Desktop | Phone |
 |---|---|
-| Fixed rail + topbar | ✅ five-tab bar at the bottom; **no top bar** — search and the inbox ride the page header, the account lives in More. 79 px of glass returned on every screen |
+| Fixed rail + topbar | ✅ five-tab bar at the bottom; **one header** (canvas frame 4) — the bar carries the page's name, then search, inbox and the account, closed by a hairline; the status line sits below it in the scroll. The old bar spent 72 px on a wordmark and then repeated the page's name underneath itself; the chips now start at 103 px instead of 165 px |
 
 ### Customers — the second sweep
 
