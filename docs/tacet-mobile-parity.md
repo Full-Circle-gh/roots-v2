@@ -73,7 +73,8 @@ desktop is the right home
 | Payments-to-confirm fire (amber) | ✅ — a proof on file that nobody has accepted; same door |
 | The three proof states on the row | ✅ — rejected in brick; verified-but-unpaid and never-read in brass, mirroring `paymentCheckLine` |
 | Low-stock drawer with per-store counts | ➖ |
-| Activity feed ("Show the work") | ✖ — the Recap's fold is the brand's own affordance |
+| Activity feed ("Show the work") | ✅ — the same `/dashboard/activity` feed, the same sentences, opened in place under the Recap. Latest 40 rows, each tapping through to its order / customer / thread |
+| The away-window boundary ("you left here") | ➖ — the phone's Recap window is computed client-side from the orders list, so there is no server `since` to draw the line at |
 | Reports chapters | ➖ |
 
 ### Orders (`04-orders.js`)
@@ -196,6 +197,7 @@ Ordered by what an operator loses today, not by effort.
 | ~~10~~ | ~~Products: search, category filter, real status chips~~ | | **Done 2026-08-22** — the chips were wired to `noop` and counted only the 50 rows boot had fetched |
 | ~~11~~ | ~~Reviews: hide / restore~~ | | **Done 2026-08-22** — and reviews are keyed by source+id now, not by the writer's name, which two reviews from one customer used to share |
 | ~~12~~ | ~~Message the customer~~ | | **Done 2026-08-22** |
+| ~~13~~ | ~~The Recap's "Show the work" feed~~ | `/dashboard/activity` | **Done 2026-08-22** |
 | 9 | **The remaining feature toggles** | one endpoint each | fapiao, membership, FAQ, feedback inbox, pop-ups, coupon active — each needs its real key confirmed before it is wired. |
 
 Nothing above needs a new endpoint. Every one of them needs the same three

@@ -275,6 +275,7 @@ const state = {
   custSeg:'all', custTier:'all', customers:null, custMeta:null, custLoaded:false,
   custId:null, custDetail:null, prodView:'catalogue',
   prodQ:'', prodStatus:'all', prodCat:'all', catalogueTried:false, catalogueLoading:false,
+  workOpen:false, workEvents:null, workLoading:false, workErr:null,
   overflow:false, search:false, detailId:null, detailActions:false, productSku:null,
   orderBusy:null, orderErr:null, replyBusy:false, replyErr:null, revBusy:null, revErr:null,
   printer:null, printerLoading:false, printerBusy:false, printerErr:null,
@@ -456,6 +457,23 @@ reg('prodCat', v=>{ state.prodCat=v; render(); });
 reg('prodSearch', v=>{ const el=document.getElementById('mProdQ');
   state.prodQ=String(v||''); state.focus={id:'mProdQ',pos:el?el.selectionStart:null}; render(); });
 reg('prodClearQ', ()=>{ state.prodQ=''; state.prodStatus='all'; state.prodCat='all'; render(); });
+/* The Recap says what happened while you were away; "Show the work" is the
+   promise that it is not withholding the rest. Same feed the desktop's fold
+   reads, same rows, opened in place instead of over a pinned card height —
+   a phone has a page that scrolls, so nothing needs pinning. */
+reg('toggleWork', ()=>{
+  state.workOpen=!state.workOpen; render();
+  if(state.workOpen&&!state.workEvents&&!state.workLoading) loadWork();
+});
+reg('workRetry', ()=>{ state.workErr=null; loadWork(); });
+reg('workOpenRow', i=>{
+  const e=(state.workEvents||[])[Number(i)]; if(!e) return;
+  const p=e.payload||{};
+  if(e.ref_type==='order'&&p.order_no){ CMD.openOrder(p.order_no); return; }
+  if(e.ref_type==='customer'&&e.ref_id!=null){ CMD.tab('customers'); CMD.openCustomer(e.ref_id); return; }
+  if(e.ref_type==='feedback'){ state.inboxSeg='feedback'; CMD.push('inbox'); return; }
+  if(e.ref_type==='guanyi'){ CMD.mirror('gzgrocery'); return; }
+});
 reg('inboxSeg', s=>{ state.inboxSeg=s; render(); });
 reg('openReply', who=>{ state.reply=who; state.reviewsSeen.add(who); state.replyErr=null; state.replyBusy=false; render(); });
 const findReview=k=>DB.reviews.find(x=>revKey(x)===k)||DB.feedback.find(x=>revKey(x)===k);
@@ -585,6 +603,89 @@ function flagGate(flag){
    ========================================================================== */
 function greetKey(){ const h=new Date().getHours(); return h<5?'night':h<12?'morning':h<18?'afternoon':'evening'; }
 const GREET={night:['Good evening','晚上好'],morning:['Good morning','早上好'],afternoon:['Good afternoon','下午好'],evening:['Good evening','晚上好']};
+function loadWork(){
+  state.workLoading=true; state.workErr=null; render();
+  api('/dashboard/activity?limit=200').then(j=>{
+    const evs=(j&&j.events)||(j&&j.data&&j.data.events)||(Array.isArray(j)?j:[]);
+    state.workEvents=evs.slice().sort((a,b)=>workMs(b)-workMs(a));
+    state.workLoading=false; render();
+  }).catch(e=>{
+    state.workLoading=false;
+    if(String(e.message)==='auth') return;
+    state.workErr=T('That did not load. Try again.','加载失败，请重试。');
+    render();
+  });
+}
+/* Prose per row, ported from the desktop's tdFeedMeta — same sentences, same
+   money on the right, same first-order badge. Duplicated rather than shared:
+   m.html is a standalone app with its own renderer, and the desktop's version
+   builds desktop class names. */
+const WORK_MAX_ROWS=40;
+/* This feed stamps `ts` as epoch MILLISECONDS, not the "YYYY-MM-DD HH:MM:SS"
+   string every other endpoint returns — so the app's own date helpers, which
+   parse strings, read it as Invalid Date. Convert once, here. */
+function workDate(e){
+  const t=e&&e.ts; if(t==null) return null;
+  const d=(typeof t==='number')?new Date(t):_date(t);
+  return (d&&!isNaN(d))?d:null;
+}
+const workMs=e=>{ const d=workDate(e); return d?d.getTime():0; };
+function workTime(e){
+  const d=workDate(e); if(!d) return '';
+  return LANG==='en' ? d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})
+                     : d.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',hour12:false});
+}
+function workMeta(e){
+  const p=e.payload||{}, esc=escAttr;
+  const yuan=n=>money0(CUR,n);
+  const buyer=esc(String(p.buyer||'').trim());
+  const ono=esc(p.order_no||'');
+  const who=buyer||ono;
+  const chan={meituan:'Meituan',eleme:'Eleme',gzgrocery:'Gzgrocery'}[String(p.channel||'').toLowerCase()];
+  const badge=p.first_order?T('first order','首单'):'';
+  switch(e.type){
+    case 'paid_order': return {text:buyer?T(buyer+' paid',buyer+' 已支付'):(chan?T(chan+' order',chan+' 订单'):T('Order paid','订单已支付')),
+      amount:yuan(p.total), badge};
+    case 'order_dispatched': return {text:T(who+' — dispatched',who+' — 已发货')};
+    case 'order_delivered': return {text:T(who+' — delivered',who+' — 已送达')};
+    case 'order_cancelled': return {text:T('Cancelled — '+ono,'已取消 — '+ono), amount:p.total?yuan(p.total):'',
+      badge:p.reason==='auto_cancelled_unpaid'?T('unpaid','未付款'):''};
+    case 'refund_request': return {text:T('Refund requested — '+ono,'退款申请 — '+ono), amount:p.amount?yuan(p.amount):''};
+    case 'refund_paid': return {text:T('Refund settled — '+ono,'退款完成 — '+ono), amount:p.amount?yuan(p.amount):''};
+    case 'refund_rejected': return {text:T('Refund declined — '+ono,'退款驳回 — '+ono)};
+    case 'topup': return {text:buyer?T(buyer+' topped up',buyer+' 已充值'):T('Wallet top-up','钱包充值'), amount:yuan(p.amount)};
+    case 'new_customer': { const nm=esc(p.name||''); return {text:nm?T(nm+' joined',nm+' 加入'):T('New customer joined','新顾客加入')}; }
+    case 'feedback': return {text:T('Feedback · “'+esc(p.excerpt||'')+'”','反馈 · “'+esc(p.excerpt||'')+'”')};
+    case 'gzgrocery_pickup': {
+      const nm=esc(LANG==='en'?(p.name_en||p.name_cn||''):(p.name_cn||p.name_en||''));
+      const u=Math.abs(Number(p.units||0));
+      return p.is_return
+        ? {text:T('Gzgrocery return · '+nm,'Gzgrocery 退货 · '+nm), amount:'−'+yuan(Math.abs(p.owed))}
+        : {text:T('Gzgrocery pickup · '+nm+' ×'+u,'Gzgrocery 提货 · '+nm+' ×'+u), amount:yuan(Math.abs(p.owed))};
+    }
+    default: return {text:esc(e.type)};
+  }
+}
+function workFold(){
+  if(!state.workOpen) return '';
+  const wrap=b=>`<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border-default)">${b}</div>`;
+  if(state.workErr) return wrap(`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+    <span style="font-size:14px;color:var(--brick)">${state.workErr}</span>
+    <button class="btn2" style="width:auto;padding:8px 16px;flex:none" onclick="APP.cmd('workRetry')">${T('Try again','重试')}</button></div>`);
+  if(state.workLoading&&!state.workEvents) return wrap(`<div style="font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`);
+  const evs=state.workEvents||[];
+  if(!evs.length) return wrap(`<div style="font-size:15px;color:var(--text-secondary)">${T('Nothing yet today','今日暂无动态')}</div>`);
+  const shown=evs.slice(0,WORK_MAX_ROWS);
+  return wrap(`<div style="display:flex;flex-direction:column">
+    ${shown.map((e,i)=>{ const m=workMeta(e);
+      return `<button onclick="APP.cmd('workOpenRow',${i})" style="display:flex;align-items:baseline;gap:10px;padding:9px 0;background:none;border:none;border-top:${i?'1px solid var(--border-default)':'none'};cursor:pointer;font-family:inherit;text-align:left;color:var(--text-primary);width:100%">
+        <span class="num" style="flex:none;font-size:12.5px;color:var(--text-secondary);width:64px">${workTime(e)}</span>
+        <span style="flex:1;min-width:0;font-size:14px;line-height:1.5">${m.text}${m.badge?` <span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${m.badge}</span>`:''}</span>
+        ${m.amount?`<span class="num" style="flex:none;font-size:13.5px;color:var(--text-secondary)">${m.amount}</span>`:''}
+      </button>`; }).join('')}
+    ${evs.length>shown.length?`<div style="padding:12px 0 0;font-size:13px;color:var(--text-secondary)">${T('Showing the latest '+shown.length+' of '+evs.length+' — the rest is on the desktop.', '显示最近 '+shown.length+' 条，共 '+evs.length+' 条 — 其余请在电脑端查看。')}</div>`:''}
+  </div>`);
+}
 function recapCard(){
   const g=greetKey();
   // Title matches the time of day; "while you slept" only reads right in the morning.
@@ -601,7 +702,11 @@ function recapCard(){
       `<div style="display:flex;align-items:baseline;justify-content:space-between;padding:11px 0;${i?'border-top:1px solid var(--border-default)':''}">
          <span style="font-size:15px;color:var(--text-secondary)">${l}</span>
          <span class="num" style="font-size:20px;font-weight:500">${v}</span></div>`).join('')}</div>
-    <div style="margin-top:18px;font-size:15px;color:var(--text-secondary);font-style:italic">${T("You're welcome.",'不用谢。')}</div></div>`;
+    <div style="margin-top:18px;display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+      <span style="font-size:15px;color:var(--text-secondary);font-style:italic">${T("You're welcome.",'不用谢。')}</span>
+      <button onclick="APP.cmd('toggleWork')" style="flex:none;background:none;border:none;padding:4px 0;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;color:var(--text-primary)">${state.workOpen?T('Hide the work ▴','收起明细 ▴'):T('Show the work ▾','查看明细 ▾')}</button>
+    </div>
+    ${workFold()}</div>`;
 }
 function screenHome(){
   const A=state.liveAttn||{};
