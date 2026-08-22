@@ -116,6 +116,35 @@ for (const file of candidates()) {
   const targets = one("SELECT COUNT(DISTINCT COALESCE('b'||bundle_id,'p'||product_id)) n FROM meituan_sync_queue WHERE store_code=? AND status='pending'", STORE);
   if (targets) console.log(`Distinct products/bundles waiting: ${targets.n}`);
 
+  // ── The window the drain actually reads ──────────────────────────────────
+  // The drain is not per-store. It takes the 40 oldest pending rows across EVERY
+  // store, then drops the ones belonging to a store this daemon does not own
+  // (SKIP_STORES — yuexiu is handled by 闪购/shangou-sync). Nothing re-runs the
+  // query afterwards, so if rows from a skipped store fill that window, the
+  // batch does nothing and the very same rows fill it again on the next cycle,
+  // forever. The store this daemon DOES own never gets a turn, and its rows sit
+  // at attempts=0 with no error — untouched rather than failed.
+  console.log('\n\nPending across ALL stores (the drain reads one shared window):');
+  for (const r of all("SELECT store_code, COUNT(*) n, MIN(created_at) oldest FROM meituan_sync_queue WHERE status='pending' GROUP BY store_code ORDER BY oldest")) {
+    console.log(`  ${String(r.store_code).padEnd(12)} ${String(r.n).padStart(5)} pending, oldest ${ago(r.oldest)}`);
+  }
+
+  const WINDOW = 40;   // the drain's LIMIT
+  console.log(`\nComposition of the drain's next ${WINDOW}-row window (oldest first):`);
+  const win = all(`SELECT store_code, COUNT(*) n FROM (
+                     SELECT store_code FROM meituan_sync_queue
+                      WHERE status='pending' AND attempts < ?
+                      ORDER BY created_at LIMIT ${WINDOW}
+                   ) GROUP BY store_code ORDER BY n DESC`, ATTEMPT_CAP);
+  for (const r of win) console.log(`  ${String(r.store_code).padEnd(12)} ${String(r.n).padStart(3)} of ${WINDOW}`);
+  const mine = win.find(r => r.store_code === STORE);
+  if (!mine) {
+    console.log(`  → ${STORE} holds NONE of the window: every cycle reads the same rows`);
+    console.log(`    belonging to another store and does nothing. Head-of-line blocked.`);
+  } else if (mine.n < WINDOW) {
+    console.log(`  → ${STORE} holds ${mine.n} of ${WINDOW}; the rest belong to other stores.`);
+  }
+
   try { db.close(); } catch (_) {}
 }
 
