@@ -80,4 +80,51 @@ CASES.push(['a partial ops payload does not take the screen down', `state.ops={u
   ['and the rest of Home too', `txt('content').includes('Today')`],
 ]]);
 
+// ── The two big lists, when the fetch fails ───────────────────────────────
+// Both used to substitute their sample set — five orders, five customers, with
+// real-looking numbers and names — and call it honest because the counts and
+// the "load more" were suppressed. Nothing on the screen said they were
+// samples. On a bad connection an operator could read them, tap into them and
+// act on them.
+CASES.push(['orders that did not load', `APP.cmd('tab','orders');
+  state.ordersLoadErr='Could not load orders.'; state.ordersView=null; state.ordersLoading=false; render();`, [
+  ['it says so',            `txt('content').includes('Could not load orders')`],
+  ['reassures about the data', `txt('content').includes('Nothing is wrong with your orders')`],
+  ['and offers a retry',    `txt('content').includes('Try again')`],
+  ['NO SAMPLE ORDERS',      `!txt('content').includes('RT-') && !txt('content').includes('¥312')`],
+  ['and not "no orders yet" either', `!txt('content').includes('No orders yet')`],
+]]);
+
+CASES.push(['customers that did not load', `APP.cmd('tab','customers');
+  state.custLoadErr='Could not load customers.'; state.customers=[]; state.custLoaded=true; state.custLoading=false; render();`, [
+  ['it says so',              `txt('content').includes('Could not load customers')`],
+  ['and offers a retry',      `txt('content').includes('Try again')`],
+  ['NO SAMPLE CUSTOMERS',     `!txt('content').includes('Chen Meiling') && !txt('content').includes('Sarah Lim')`],
+  ['and not "no customers yet"', `!txt('content').includes('No customers yet')`],
+]]);
+
+// Every chip on Orders used to carry a count typed into the source — Pending 3,
+// Paid 8, Preparing 6, Dispatched 11, Delivered 15, Mini app 28, All 47 — shown
+// until the counts endpoint answered and forever if it did not. A badge on a
+// filter chip is read as a fact about this shop.
+CASES.push(['no chip invents a count', `APP.cmd('tab','orders');
+  state.liveStatusCounts=null; state.liveChannelCounts=null; state.ordersLoading=false;
+  state.ordersView=[]; render();`, [
+  ['the chips are all there', `txt('content').includes('Pending') && txt('content').includes('Mini app')`],
+  ['and none carries a number',
+   "[].slice.call(document.querySelectorAll('#content .chip')).every(function(b){return !/\\d/.test(b.innerText)})"],
+  ['nor does the status line', `!/waiting to ship/.test(txt('content'))`],
+]]);
+
+CASES.push(['real counts do appear', `APP.cmd('tab','orders');
+  state.liveStatusCounts={pending_payment:2,paid:7}; state.liveChannelCounts={all:31,wechat:20};
+  state.ordersLoading=false; state.ordersView=[]; render();`, [
+  ['on the chips that have one',
+   "[].slice.call(document.querySelectorAll('#content .chip')).some(function(b){return b.innerText.indexOf('Pending')>=0 && b.innerText.indexOf('2')>=0})"],
+  ['including the totals',
+   "[].slice.call(document.querySelectorAll('#content .chip')).some(function(b){return b.innerText.indexOf('All')>=0 && b.innerText.indexOf('31')>=0})"],
+  ['and Delivered stays blank, since nothing sends it',
+   "[].slice.call(document.querySelectorAll('#content .chip')).some(function(b){return b.innerText.indexOf('Delivered')>=0 && !/\\d/.test(b.innerText)})"],
+]]);
+
 run('home', CASES);

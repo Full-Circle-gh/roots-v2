@@ -861,6 +861,22 @@ oldest thing in each queue has waited.
 `scripts/test_mobile_home.js` — 23 assertions, 6 cases, each fake figure
 asserted absent by its own value.
 
+### Orders and Customers — the mock outliving the fetch, again
+
+Home's invented "Today" figures turned out to be one instance of a wider
+pattern on the two busiest screens.
+
+| Finding | Now |
+|---|---|
+| **`ordersFiltered()` was `state.ordersView \|\| DB.orders`** — the substitution was not in the catch block, it was on this line, at render time, on every paint where the live list was null: while loading, and permanently after a failed fetch. Five sample orders with real-looking numbers, tappable, with nothing on screen saying so | The list is the server's or it is empty |
+| A failed orders fetch swapped in the sample set and called it honest because it suppressed the counts | Says it failed, reassures that the orders themselves are fine, and offers a retry |
+| A failed customers fetch did the same with five sample customers | Same |
+| **Every filter chip carried a fallback count typed into the source** — Pending 3, Paid 8, Preparing 6, Dispatched 11, Delivered 15, Mini app 28, All 47 — shown until the counts endpoint answered and forever if it did not. A badge on a chip is read as a fact about this shop | A badge is the server's number or it is not drawn. **Delivered** never had one: the endpoint has never sent that key, so it was 15 every time |
+| `ordersStatusLine()` counted `DB.orders` when the live figure was missing, so a shop with nothing waiting read "2 waiting to ship" | Only the server's figure |
+| `/products` assigned only `if (rows.length)`, so a shop with no catalogue kept the mock's six products | Assigns unconditionally |
+
+`scripts/test_mobile_home.js` — 38 assertions, 10 cases.
+
 ## 4. Open questions
 
 Not gaps — decisions that are the shop's to make, not this file's.

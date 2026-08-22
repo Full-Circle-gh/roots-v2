@@ -267,7 +267,7 @@ const state = {
   prodStores:null, prodStockReady:false, prodBusy:false, prodErr:null,
   cfg:null, setup:null, zones:null, mirror:null, mirrorLoading:null, mirrorMode:null,
   couponBusy:null, couponErr:null, bcBusy:null, bcErr:null, ask:null, askErr:null,
-  custBusy:null, custErr:null,
+  custBusy:null, custErr:null, ordersLoadErr:null, custLoadErr:null,
   ops:null, opsLoading:false, featBusy:null, featErr:null,
   media:null, mediaLoading:false, mediaTried:false, mediaBusy:null, mediaErr:null,
   fapiao:null, fapiaoLoading:false, fapiaoBusy:false, fapiaoTried:false, printerTried:false,
@@ -353,6 +353,8 @@ reg('ordersMore', ()=>{ if(!state.ordersLoading) loadOrdersPage(true); });
 reg('ordersGo', f=>{ state.stack=[]; state.tab='orders'; state.statusF=f; state.channelF='all'; state.orderQ=''; loadOrdersPage(); });
 reg('orderSearch', q=>{ state.orderQ=q||''; state.search=false; state.tab='orders'; state.stack=[]; loadOrdersPage(); });
 reg('clearOrderSearch', ()=>{ state.orderQ=''; loadOrdersPage(); });
+reg('ordersRetry', ()=>{ state.ordersLoadErr=null; loadOrdersPage(); });
+reg('custRetry', ()=>{ state.custLoadErr=null; loadCustomers(); });
 reg('ordersClear', ()=>{ state.statusF='all'; state.channelF='all'; state.storeF='all'; state.orderQ=''; loadOrdersPage(); });
 reg('openOrder', id=>{ state.detailId=id; state.drag=0; render(); });
 reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; state.orderErr=null; state.orderBusy=null; render(); });
@@ -1203,7 +1205,7 @@ function ordersQuery(offset){
 }
 async function loadOrdersPage(more){
   const offset=more?((state.ordersView||[]).length):0;
-  state.ordersLoading=true; if(!more){ state.ordersView=null; } render();
+  state.ordersLoading=true; state.ordersLoadErr=null; if(!more){ state.ordersView=null; } render();
   try{
     const j=await apiRaw('/orders?'+ordersQuery(offset));
     const rows=(j&&j.data)||[];
@@ -1215,9 +1217,13 @@ async function loadOrdersPage(more){
     state.ordersMore=(total!=null)?state.ordersView.length<total:rows.length===ORDERS_PAGE;
   }catch(e){
     if(String(e.message)==='auth') return;
-    // Offline / static preview: the sample set stands in, unfiltered and honest
-    // about it — no counts, no "load more".
-    if(!more){ state.ordersView=DB.orders.slice(); state.ordersTotal=null; state.ordersMore=false; }
+    /* This used to substitute DB.orders — five sample orders, unfiltered — and
+       call that honest because it suppressed the counts. Nothing on the screen
+       said they were samples, so a failed fetch on a bad connection put five
+       orders in front of an operator that they could read, tap and act on. A
+       failed load says it failed. */
+    if(!more){ state.ordersView=null; state.ordersTotal=null; state.ordersMore=false; }
+    state.ordersLoadErr=T('Could not load orders.','无法加载订单。');
   }
   state.ordersLoading=false; render();
 }
@@ -1237,20 +1243,33 @@ function orderMetaLine(o){
   if(!bits.length) return '';
   return `<div style="font-size:12.5px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${bits.join(' · ')}</div>`;
 }
-function ordersFiltered(){ return state.ordersView||DB.orders; }
+/* `|| DB.orders` was the substitution. Not the catch block — this line, at
+   render time, on every paint where the live list was null: while loading,
+   and forever after a failed fetch. Five sample orders with real-looking
+   numbers, tappable, in front of an operator who had no way to know. The
+   list is the server's or it is empty, and the screen says which. */
+function ordersFiltered(){ return state.ordersView||[]; }
 function ordersHeader(){
-  // Real counts when available (undefined → no badge shown, instead of a fake number).
+  /* Every one of these chips used to carry a fallback count typed into the
+     source — Pending 3, Paid 8, Preparing 6, Dispatched 11, Delivered 15,
+     Mini app 28 — shown until the counts endpoint answered and forever if it
+     did not. A badge is a fact about this shop or it is not drawn. */
   const S=state.liveStatusCounts, C=state.liveChannelCounts;
-  const sCount=(k,f)=> S ? (k==null?undefined:S[k]) : f;
-  const cCount=(k,f)=> C ? (C[k]!=null?C[k]:0) : f;
-  const allOrders = C?C.all:(S?undefined:47);
+  const sCount=k=> S ? (k==null?undefined:S[k]) : undefined;
+  const cCount=k=> C ? (C[k]!=null?C[k]:0) : undefined;
+  // No counts yet → no badge. This used to read 47, a number from the mockup,
+  // on the All chip of a shop that might have none.
+  const allOrders = C?C.all:undefined;
   const sc=[{key:'all',en:'All',zh:'全部',count:allOrders},
-    {key:'pending',en:'Pending',zh:'待付款',count:sCount('pending_payment',3)},
-    {key:'paid',en:'Paid',zh:'已付',count:sCount('paid',8)},
-    {key:'preparing',en:'Preparing',zh:'备货',count:sCount('preparing',6)},{key:'dispatched',en:'Dispatched',zh:'已发',count:sCount('dispatched',11)},{key:'delivered',en:'Delivered',zh:'送达',count:S?undefined:15},
-    {key:'restock',en:'Awaiting restock',zh:'待补货',count:sCount('awaiting_restock',2)},{key:'refund',en:'Refund queue',zh:'退款',count:sCount('refunds_open',2)}];
-  const cc=[{key:'all',en:'All channels',zh:'全部渠道',count:allOrders},{key:'miniapp',en:'Mini app',zh:'小程序',count:cCount('wechat',28)},{key:'web',en:'Web',zh:'网页',count:cCount('web',9)},
-    {key:'meituan',en:'Meituan',zh:'美团',count:cCount('meituan',6)},{key:'gzgrocery',en:'gzgrocery',zh:'gzgrocery',count:cCount('gzgrocery',2)},{key:'manual',en:'Manual',zh:'手动',count:cCount('manual',2)}];
+    {key:'pending',en:'Pending',zh:'待付款',count:sCount('pending_payment')},
+    {key:'paid',en:'Paid',zh:'已付',count:sCount('paid')},
+    {key:'preparing',en:'Preparing',zh:'备货',count:sCount('preparing')},{key:'dispatched',en:'Dispatched',zh:'已发',count:sCount('dispatched')},
+    // The counts endpoint has never carried `delivered`, so this badge has
+    // nothing behind it and is not drawn — rather than drawn as 15.
+    {key:'delivered',en:'Delivered',zh:'送达',count:undefined},
+    {key:'restock',en:'Awaiting restock',zh:'待补货',count:sCount('awaiting_restock')},{key:'refund',en:'Refund queue',zh:'退款',count:sCount('refunds_open')}];
+  const cc=[{key:'all',en:'All channels',zh:'全部渠道',count:allOrders},{key:'miniapp',en:'Mini app',zh:'小程序',count:cCount('wechat')},{key:'web',en:'Web',zh:'网页',count:cCount('web')},
+    {key:'meituan',en:'Meituan',zh:'美团',count:cCount('meituan')},{key:'gzgrocery',en:'gzgrocery',zh:'gzgrocery',count:cCount('gzgrocery')},{key:'manual',en:'Manual',zh:'手动',count:cCount('manual')}];
   const stores=state.stores||[];
   const st=[{key:'all',en:'All stores',zh:'全部门店'}].concat(stores.map(s=>({key:String(s.id),en:s.name_en||s.name||('#'+s.id),zh:s.name_cn||s.name_en||s.name||('#'+s.id)})));
   return `<div style="padding:0 0 16px">
@@ -1262,8 +1281,10 @@ function ordersHeader(){
    sitting on someone, not how many exist. It ships only when a real number is
    behind it — no placeholder, no dash. */
 function ordersStatusLine(){
+  // Only the server's figure. It used to fall back to counting the five sample
+  // orders, so a shop with nothing waiting read "2 waiting to ship".
   const live=state.liveAttn&&state.liveAttn.ship;
-  const n = live!=null ? live : DB.orders.filter(o=>o.kind==='paid'||o.kind==='preparing').length;
+  const n = live!=null ? live : null;
   if(!n) return '';
   return T(n+' awaiting fulfilment', n+' 单待履约');
 }
@@ -1280,10 +1301,15 @@ function screenOrders(){
   return `${pageHead({title:T('Orders','订单'), status:ordersStatusLine(), controls:true})}
   ${ordersHeader()}
   <div style="padding:0 16px 24px;display:flex;flex-direction:column;gap:16px">
+    ${state.ordersLoadErr?`<div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:40px 24px;text-align:center">
+        <span style="color:var(--brick);display:flex">${ic('triangle-alert',24)}</span>
+        <div style="font-size:16px;font-weight:500">${state.ordersLoadErr}</div>
+        <div style="font-size:14px;color:var(--text-secondary);max-width:250px;line-height:1.55">${T('Nothing is wrong with your orders — the list just did not arrive.','订单本身没有问题 — 只是列表没有加载出来。')}</div>
+        <button class="btn2" style="width:auto;padding:11px 26px" onclick="APP.cmd('ordersRetry')">${T('Try again','重试')}</button></div>`:''}
     ${state.ordersLoading&&!os.length?`${ordSkeleton()}${ordSkeleton()}${ordSkeleton()}${ordSkeleton()}`:''}
-    ${!state.ordersLoading&&!os.length&&ordersFiltered0()?emptyState(T('No orders yet','还没有订单'),
+    ${!state.ordersLoadErr&&!state.ordersLoading&&!os.length&&ordersFiltered0()?emptyState(T('No orders yet','还没有订单'),
         T('New orders settle in here from every channel — mini app, web, Meituan.','各渠道的新订单都会出现在这里 — 小程序、网页、美团。')):''}
-    ${!state.ordersLoading&&!os.length&&!ordersFiltered0()?`<div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:48px 24px;text-align:center">
+    ${!state.ordersLoadErr&&!state.ordersLoading&&!os.length&&!ordersFiltered0()?`<div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:48px 24px;text-align:center">
         <div style="font-size:18px;font-weight:500">${state.orderQ?T('No orders match “'+state.orderQ+'”','没有匹配“'+state.orderQ+'”的订单'):T('No orders match these filters','没有符合筛选的订单')}</div>
         <div style="font-size:15px;color:var(--text-secondary);max-width:260px">${T('Clear them and the whole list comes back.','清除筛选即可看到全部。')}</div>
         <button class="btn2" onclick="APP.cmd('ordersClear')">${T('Clear filters','清除筛选')}</button></div>`:''}
@@ -3357,7 +3383,7 @@ async function saveProductEdits(){
     }
     state.prodBusy=false; state.productSku=null; render();
     showToast(T('Saved','已保存'));
-    try{ const rows=await api('/products?limit=50'); if(Array.isArray(rows)&&rows.length){ DB.products=rows.map(mapProduct); render(); } }catch(e){}
+    try{ const rows=await api('/products?limit=50'); if(Array.isArray(rows)){ DB.products=rows.map(mapProduct); render(); } }catch(e){}
   }catch(e){
     state.prodBusy=false;
     if(String(e.message)==='auth') return;
@@ -4478,7 +4504,13 @@ function screenCustomers(){
     ['tree','root','sprout','seed'].map(k=>({key:k,en:TIER_LABEL[k][0],zh:TIER_LABEL[k][1]})));
   const rows=custFiltered();
   let body;
-  if(!state.custLoaded){
+  if(state.custLoadErr){
+    body=`<div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:40px 24px;text-align:center">
+      <span style="color:var(--brick);display:flex">${ic('triangle-alert',24)}</span>
+      <div style="font-size:16px;font-weight:500">${state.custLoadErr}</div>
+      <div style="font-size:14px;color:var(--text-secondary);max-width:250px;line-height:1.55">${T('Nothing is wrong with your customers — the roster just did not arrive.','客户数据没有问题 — 只是名单没有加载出来。')}</div>
+      <button class="btn2" style="width:auto;padding:11px 26px" onclick="APP.cmd('custRetry')">${T('Try again','重试')}</button></div>`;
+  } else if(!state.custLoaded){
     body=`${custSkeleton()}${custSkeleton()}${custSkeleton()}${custSkeleton()}`;
   } else if(!rows.length && (state.custSeg==='all' && (state.custTier||'all')==='all')){
     body=emptyState(T('No customers yet','还没有顾客'),
@@ -4687,7 +4719,9 @@ function loadCatalogue(){
   state.catalogueTried=true; state.catalogueLoading=true;
   api('/products?limit=500').then(rows=>{
     state.catalogueLoading=false;
-    if(Array.isArray(rows)&&rows.length){ DB.products=rows.map(mapProduct); state.liveProductsLoaded=true; }
+    // `Array.isArray`, not `rows.length` — a shop with no products yet must
+    // see no products, not the mock's six.
+    if(Array.isArray(rows)){ DB.products=rows.map(mapProduct); state.liveProductsLoaded=true; }
     render();
   }).catch(()=>{ state.catalogueLoading=false; render(); });
 }
@@ -4996,7 +5030,7 @@ function custQuery(offset){
 }
 async function loadCustomers(more){
   const offset=more?((state.customers||[]).length):0;
-  state.custLoading=true; if(!more){ state.customers=null; state.custLoaded=false; }
+  state.custLoading=true; state.custLoadErr=null; if(!more){ state.customers=null; state.custLoaded=false; }
   render();
   try{
     const j=await apiRaw('/customers?'+custQuery(offset));
@@ -5010,9 +5044,10 @@ async function loadCustomers(more){
     state.custLoaded=true;
   }catch(e){
     if(String(e.message)==='auth') return;
-    // Static preview / offline: the sample roster stands in, unfiltered and
-    // honest about it — no total, no "load more".
-    if(!more){ state.customers=DB.customers.slice(); state.custTotal=null; state.custMore=false; state.custLoaded=true; }
+    // Same rule as the orders list: a failed load says so rather than handing
+    // back five sample customers with real-looking names and spend.
+    if(!more){ state.customers=[]; state.custTotal=null; state.custMore=false; state.custLoaded=true; }
+    state.custLoadErr=T('Could not load customers.','无法加载客户。');
   }
   state.custLoading=false;
   loadCustomerMeta();

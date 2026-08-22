@@ -87,6 +87,8 @@ function buildCases(src) {
     // Purchasing reads a live ledger, so the sweep seeds one — otherwise every
     // pass renders the loading state and proves nothing about the rows.
     'push:purchasing-rows': "state.posTried=true;state.poList=[{id:4,po_number:'RPO-0004',supplier:'Fresh Co.',store_name_en:'Tianhe',date:'2026-08-14',delivery_date:'2026-08-16',status:'Ordered',line_count:6,received_lines:0,total_cost:3240},{id:5,po_number:'RPO-0005',supplier:'Oat Works',date:'2026-08-20',delivery_date:'2026-08-30',status:'Delivered',line_count:3,received_lines:3,total_cost:1880}];APP.cmd('push','purchasing')",
+    'tab:orders-failed': "state.ordersLoadErr='Could not load orders.';state.ordersView=null;state.ordersLoading=false;APP.cmd('tab','orders')",
+    'tab:customers-failed': "state.custLoadErr='Could not load customers.';state.customers=[];state.custLoaded=true;state.custLoading=false;APP.cmd('tab','customers')",
     'push:sharecards': "state.scTried=true;state.scAff={shareImage:'/api/retail-admin/media/4',shareTitle:{en:'Join me on Roots'}};state.cfg=Object.assign({},state.cfg,{sharing:{home:'/api/retail-admin/media/1',homeTitle:{en:'Roots — plant-based grocery'}}});APP.cmd('push','sharecards')",
     'push:sharecards-bare': "state.scTried=true;state.scAff={};state.cfg=Object.assign({},state.cfg,{sharing:{}});APP.cmd('push','sharecards')",
     'push:mt-stuck': "state.mirror={meituan:[{id:'MT-1',cust:'Li',total:'¥88',when:'Today',store:'Tianhe'}]};state.mtStatusTried=true;state.mtStatus={queuePending:107,queueFailed:0,queueOldestMin:1140,mappedCount:212,lastOrder:[{imported_at:'2026-08-22 09:00:00',store_code:'tianhe'}]};APP.cmd('push','mirror_meituan')",
