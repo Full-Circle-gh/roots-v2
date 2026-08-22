@@ -260,7 +260,15 @@ const DB = {
     {cust:['Sarah Lim','Sarah Lim'],rating:'4.0',status:['Replied','已回复'],kind:'clear',text:['Great oat milk. Wish the cold brew came in larger sizes.','燕麦奶很好，希望冷萃有大杯。'],time:['5h ago','5 小时前']},
     {cust:['Zhang Wei','张伟'],rating:'3.0',status:['New','新'],kind:'success',text:['One parcel was late but support handled it well.','一个包裹晚到了，但客服处理得很好。'],time:['Yesterday','昨日']},
   ],
-  feedback:[{cust:['Wu Yaqi','吴雅琪'],status:['Open','待处理'],kind:'success',text:['Checkout kept the pickup time from my last order — small bug.','结账沿用了上单的自提时间 — 小问题。'],time:['3h ago','3 小时前']}],
+  feedback:[
+    {key:'fb:1',id:1,stream:'feedback',cust:['Wu Yaqi','吴雅琪'],status:['Needs reply','待回复'],kind:'success',
+     opener:['Checkout kept the pickup time from my last order — small bug.','结账沿用了上单的自提时间 — 小问题。'],
+     text:['Still doing it on the newest build.','最新版本还是这样。'],lastWho:['Customer','顾客'],replies:2,
+     page:'checkout',appVersion:'2.4.1',time:['3h ago','3 小时前'],opened:['Aug 19','8月19日']},
+    {key:'fb:2',id:2,stream:'feedback',cust:['Zhang Wei','张伟'],status:['Replied','已回复'],kind:'clear',isMessage:true,
+     text:['Thanks — the credit is on your account.','谢谢 — 余额已到账。'],lastWho:['Store','商家'],replies:1,
+     time:['Yesterday','昨天']},
+  ],
   customers:[
     {id:'s1',name:'Chen Meiling',phone:'138****2841',tier:'tree',orders:24,spend:6240,seen:'2026-07-29 09:40:00',unseen:true},
     {id:'s2',name:'Sarah Lim',phone:'159****7723',tier:'tree',orders:18,spend:4180,seen:'2026-07-28 19:12:00',unseen:true},
@@ -302,7 +310,7 @@ const state = {
   fapiao:null, fapiaoLoading:false, fapiaoBusy:false, fapiaoTried:false, printerTried:false,
   ordersView:null, ordersTotal:null, ordersLoading:false, ordersMore:false,
   storeF:'all', stores:null, orderQ:'',
-  reply:null, createKind:null, createValue:10, createActive:true,
+  reply:null, thread:null, createKind:null, createValue:10, createActive:true,
   toast:null, drag:0, dragging:false, faqOpen:null, reviewsSeen:new Set(),
   qs:{oat:8,nuts:0,carrot:42},
   sw:{fapiao:true,membership:true,affiliate:false,social:false,faq:true,feedback:true,
@@ -582,7 +590,34 @@ reg('workOpenRow', i=>{
 });
 reg('inboxSeg', s=>{ state.inboxSeg=s; render(); });
 reg('invSeg', v=>{ state.invSeg=v; render(); });
-reg('openReply', who=>{ state.reply=who; state.reviewsSeen.add(who); state.replyErr=null; state.replyBusy=false; render(); });
+/* A review has one turn, so a reply box is the whole story. A feedback
+   thread does not: by the third message the phone was showing the newest
+   turn and one clipped line of the root, and the middle of the conversation
+   existed nowhere on this device. The desktop drawer reads the whole thread
+   (openFeedbackThread), so this does too. */
+reg('openReply', who=>{
+  state.reply=who; state.reviewsSeen.add(who); state.replyErr=null; state.replyBusy=false;
+  const r=findReview(who);
+  state.thread = (r&&r.stream==='feedback'&&r.id!=null) ? {id:r.id,loading:true,msgs:null,err:null} : null;
+  render();
+  if(state.thread) loadThread(r.id);
+});
+function loadThread(id){
+  api('/feedback/'+id).then(d=>{
+    if(!state.thread||state.thread.id!==id) return;
+    state.thread={id, loading:false, err:null,
+      msgs:Array.isArray(d&&d.messages)?d.messages:[],
+      photos:(()=>{ let ph=d&&d.photos; if(typeof ph==='string'){ try{ ph=JSON.parse(ph||'[]'); }catch(e){ ph=[]; } }
+        return Array.isArray(ph)?ph:[]; })(),
+      page:(d&&d.page_context)||null, appVersion:(d&&d.app_version)||null};
+    render();
+  }).catch(e=>{
+    if(!state.thread||state.thread.id!==id) return;
+    if(String(e.message)==='auth') return;
+    state.thread={id, loading:false, msgs:null, err:T('Could not load the conversation.','无法加载对话。')};
+    render();
+  });
+}
 const findReview=k=>DB.reviews.find(x=>revKey(x)===k)||DB.feedback.find(x=>revKey(x)===k);
 reg('sendReplyText', t=>{
   const text=String(t||'').trim();
@@ -596,7 +631,13 @@ reg('sendReplyText', t=>{
     : apiWrite('/reviews/'+r.id,{reply:text,source:r.source},'PATCH');
   call.then(()=>{
     r.reply=text; r.status=['Replied','已回复']; r.kind='clear';
-    state.replyBusy=false; state.reply=null; render();
+    state.replyBusy=false;
+    // A public review reply is one shot, so the sheet is done. A thread is a
+    // conversation: stay in it and show the turn that was just sent, the way
+    // the desktop drawer re-renders itself after a send.
+    if(state.thread){ const el=document.getElementById('mReply'); if(el) el.value='';
+      state.thread={...state.thread,loading:true}; render(); loadThread(state.thread.id); }
+    else { state.reply=null; render(); }
     showToast(T('Reply sent','回复已发送'));
     loadInbox();
   }).catch(e=>{
@@ -632,7 +673,7 @@ function revWrite(r,visible){
     render();
   });
 }
-reg('closeReply', ()=>{ state.reply=null; render(); });
+reg('closeReply', ()=>{ state.reply=null; state.thread=null; render(); });
 
 reg('create', k=>{ state.createKind=k; state.createValue=10; state.createActive=true; render(); });
 reg('closeCreate', ()=>{ state.createKind=null; render(); });
@@ -1155,12 +1196,21 @@ function screenInbox(){
         ${r.rating?`<span class="num" style="display:flex;align-items:center;gap:3px;color:var(--text-secondary);font-size:13px">${ic('star',14)} ${r.rating}</span>`:''}</span>
         ${hidden?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('Hidden','已隐藏')}</span>`:pill(r.kind,T(...r.status))}</div>
       ${r.product?`<div style="font-size:12.5px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...r.product)}</div>`:''}
+      ${r.opener?`<div style="font-size:12.5px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.8">${escAttr(T(...r.opener))}</div>`:''}
+      ${r.lastWho?`<div style="font-size:12px;font-weight:500;color:var(--text-secondary)">${T(...r.lastWho)}</div>`:''}
       <div style="font-size:14px;line-height:1.55;color:var(--text-secondary)">${T(...r.text)}</div>
+      ${r.photos?`<div style="display:flex;gap:6px;flex-wrap:wrap">${r.photos.slice(0,4).map(u=>
+        `<a href="${escAttr(u)}" target="_blank" rel="noopener" style="width:52px;height:52px;border-radius:8px;overflow:hidden;border:1px solid var(--border-default);background-image:url('${String(u).replace(/'/g,'%27')}');background-size:cover;background-position:center;display:block"></a>`).join('')}</div>`:''}
+      ${(r.isMessage||r.page||r.replies)?`<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
+        ${r.isMessage?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('We messaged them','商家发起')}</span>`:''}
+        ${r.page?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${escAttr(r.page)}${r.appVersion?' · v'+escAttr(r.appVersion):''}</span>`:''}
+        ${r.replies?`<span style="font-size:12px;color:var(--text-secondary)">${T(r.replies+(r.replies===1?' reply':' replies'),r.replies+' 条往来')}</span>`:''}
+      </div>`:''}
       ${r.reply?`<div style="border-left:2px solid var(--border-default);padding:2px 0 2px 10px;display:flex;flex-direction:column;gap:3px">
         <span class="eyebrow">${T('Your reply','商家回复')}</span>
         <span style="font-size:13.5px;line-height:1.55">${String(r.reply).replace(/</g,'&lt;')}</span></div>`:''}
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:2px">
-        <span style="font-size:12px;color:var(--text-secondary)">${T(...r.time)}</span>
+        <span style="font-size:12px;color:var(--text-secondary)">${T(...r.time)}${r.opened?' · '+T('opened '+T(...r.opened),'发起于 '+T(...r.opened)):''}</span>
         <span style="display:flex;align-items:center;gap:8px;flex:none">
           ${r.stream==='review'&&r.id!=null?smallBtn(busy?T('Saving…','保存中…'):(hidden?T('Restore','恢复'):T('Hide','隐藏')),`APP.cmd('toggleReviewVisible','${k}')`,busy):''}
           ${smallBtn(r.reply?T('Edit reply','编辑回复'):T('Reply','回复'),`APP.cmd('openReply','${k}')`,false)}
@@ -2803,22 +2853,55 @@ function sheetProduct(){
      <div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card)">
        <button class="btn2" style="width:100%" ${state.prodBusy?'disabled':''} onclick="APP.cmd('saveProduct')">${state.prodBusy?T('Saving…','保存中…'):T('Save','保存')}</button></div></div>`;
 }
+function fbBubble(m){
+  const mine=m.author==='admin';
+  const who = mine ? (m.author_name||T('Store','商家')) : T('Customer','顾客');
+  const when = m.created_at?fmtDay(m.created_at):'';
+  // The customer's turns sit left on the raised ground; ours sit right on the
+  // card, the same left/right split the desktop drawer uses.
+  return `<div style="display:flex;flex-direction:column;gap:4px;align-items:${mine?'flex-end':'flex-start'}">
+    <span style="font-size:11.5px;color:var(--text-secondary)">${escAttr(who)}${when?' · '+when:''}</span>
+    <div style="max-width:82%;border-radius:13px;padding:11px 13px;font-size:14px;line-height:1.55;
+      background:${mine?'var(--surface-card)':'var(--surface-raised)'};border:1px solid ${mine?'var(--border-default)':'transparent'};
+      color:var(--text-primary);white-space:pre-wrap;word-break:break-word">${escAttr(m.body||'')}</div></div>`;
+}
+function threadBody(){
+  const th=state.thread;
+  if(th.loading) return `<div style="padding:28px 0;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(th.err) return `<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+    <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+    <span style="font-size:14px;color:var(--brick)">${th.err}</span></div>`;
+  const msgs=th.msgs||[];
+  const photos=th.photos||[];
+  return `${th.page?`<div style="display:flex;flex-wrap:wrap;gap:6px">
+      <span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${escAttr(th.page)}${th.appVersion?' · v'+escAttr(th.appVersion):''}</span></div>`:''}
+    <div style="display:flex;flex-direction:column;gap:14px">${msgs.map(fbBubble).join('')||
+      `<div style="font-size:14px;color:var(--text-secondary)">${T('Nothing in this thread yet.','这条对话还没有内容。')}</div>`}</div>
+    ${photos.length?`<div style="display:flex;gap:8px;flex-wrap:wrap">${photos.map(u=>
+      `<a href="${escAttr(u)}" target="_blank" rel="noopener" style="width:64px;height:64px;border-radius:9px;overflow:hidden;border:1px solid var(--border-default);background-image:url('${String(u).replace(/'/g,'%27')}');background-size:cover;background-position:center;display:block"></a>`).join('')}</div>`:''}`;
+}
 function sheetReply(){
   const r=findReview(state.reply)||{cust:[state.reply,state.reply],text:['','']};
+  const th=state.thread;
+  const foot = th
+    ? T('The customer gets this in their mini-app inbox.','顾客会在小程序消息中收到。')
+    : T('Replies show under the review in the mini app, signed with the store name.','回复会显示在小程序的评价下方，署名为店铺名称。');
   return `<div class="scrim" style="z-index:45" onclick="APP.cmd('closeReply')"></div>
-   <div class="sheet" style="top:150px;z-index:46;overflow:hidden">
+   <div class="sheet" style="top:${th?'80px':'150px'};z-index:46;overflow:hidden">
      <div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" onclick="APP.cmd('closeReply')">${ic('x',22,2)}</button>
        <span style="flex:1;font-size:17px;font-weight:500">${T(...r.cust)}</span><span style="width:36px;flex:none"></span></div></div>
-     <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;background:var(--bg)">
-       <div style="background:var(--surface-raised);border-radius:12px;padding:14px;font-size:14px;line-height:1.55;color:var(--text-secondary)">${T(...r.text)}</div>
-       <textarea id="mReply" placeholder="${T('Write a reply…','写下回复…')}" style="min-height:100px;resize:none">${r.reply?String(r.reply).replace(/</g,'&lt;'):''}</textarea>
+     <div id="mThread" style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;background:var(--bg)">
+       ${th?threadBody():`<div style="background:var(--surface-raised);border-radius:12px;padding:14px;font-size:14px;line-height:1.55;color:var(--text-secondary)">${T(...r.text)}</div>`}
+       ${th?'':`<textarea id="mReply" placeholder="${T('Write a reply…','写下回复…')}" style="min-height:100px;resize:none">${r.reply?String(r.reply).replace(/</g,'&lt;'):''}</textarea>`}
        ${state.replyErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
          <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
          <span style="font-size:14px;color:var(--brick)">${state.replyErr}</span></div>`:''}
-       <div style="font-size:13px;color:var(--text-secondary)">${T('Replies show under the review in the mini app, signed with the store name.','回复会显示在小程序的评价下方，署名为店铺名称。')}</div></div>
-     <div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card)">
-       <button class="btn2" style="width:100%" ${state.replyBusy?'disabled':''} onclick="APP.cmd('sendReplyText',(document.getElementById('mReply')||{}).value)">${state.replyBusy?T('Sending…','发送中…'):T('Send reply','发送回复')}</button></div></div>`;
+       ${th?'':`<div style="font-size:13px;color:var(--text-secondary)">${foot}</div>`}</div>
+     <div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card);display:flex;flex-direction:column;gap:10px">
+       ${th?`<textarea id="mReply" placeholder="${T('Write a reply…','写下回复…')}" style="min-height:52px;max-height:120px;resize:none"></textarea>`:''}
+       <button class="btn2" style="width:100%" ${state.replyBusy?'disabled':''} onclick="APP.cmd('sendReplyText',(document.getElementById('mReply')||{}).value)">${state.replyBusy?T('Sending…','发送中…'):T('Send reply','发送回复')}</button>
+       ${th?`<div style="font-size:12px;color:var(--text-secondary);text-align:center">${foot}</div>`:''}</div></div>`;
 }
 function sheetCreate(){
   const cfg={coupon:{title:T('New coupon','新建优惠券'),ph:'WELCOME10',unit:'%',showValue:true,verb:T('Create coupon','创建优惠券')},
@@ -4181,6 +4264,41 @@ function mapBroadcast(r){
     audience:bcAudience(r.audience),
     deeplink:r.deeplink||null,
     meta, status:label, kind:BC_KIND[st]||'draft'};
+}
+/* A feedback row is a THREAD, and the desktop's leads with its NEWEST turn for
+   a stated reason: on a conversation staff started, the root is the operator's
+   own opener, so showing the root means the customer's answer never appears in
+   the list at all. The phone showed the root. It also never said how many turns
+   there had been, who spoke last, which page the report came from, or whether a
+   thread was a customer's bug report or a message the shop sent first.
+
+   (This function was deleted outright by the Broadcasts edit — it sat inside the
+   sliced region — and nothing caught it, because it is only reached on a live
+   fetch inside a try/catch. scripts/test_mobile_screens.js now fails on a called
+   -but-undefined helper for exactly this reason.) */
+function mapFeedback(r){
+  const replies=Number(r.reply_count||0);
+  const fromCustomer=r.last_author!=='admin';
+  const who = fromCustomer ? T('Customer','顾客')
+    : (r.last_author_name||T('Store','商家'));
+  return {key:'fb:'+r.id, id:r.id, stream:'feedback',
+    cust:[r.customer_name||r.nickname||'Customer',r.customer_name||r.nickname||'顾客'],
+    // needs_reply covers a brand-new report AND an unanswered follow-up.
+    status:r.needs_reply?['Needs reply','待回复']:(r.replied?['Replied','已回复']:['Open','待处理']),
+    kind:r.needs_reply?'success':(r.replied?'clear':'success'),
+    // The newest turn is the body; the root survives as one clipped line of
+    // context once there are replies and it has scrolled out of view.
+    text:[(r.last_body||r.message||''),(r.last_body||r.message||'')],
+    opener: replies>0 ? [(r.message||''),(r.message||'')] : null,
+    lastWho:[who,who], replies,
+    // A message the shop sent first is not a bug report, and a shared inbox
+    // that cannot tell them apart is unreadable.
+    isMessage:r.kind==='message',
+    page:r.page_context||null, appVersion:r.app_version||null,
+    photos:(()=>{ let ph=r.photos; if(typeof ph==='string'){ try{ ph=JSON.parse(ph||'[]'); }catch(e){ ph=[]; } }
+      return Array.isArray(ph)&&ph.length?ph:null; })(),
+    time:[fmtDay(r.last_at||r.created_at)||'',fmtDay(r.last_at||r.created_at)||''],
+    opened: replies>0&&r.created_at ? [fmtDay(r.created_at),fmtDay(r.created_at)] : null};
 }
 function mapPoll(r){
   const opts=r.options||[]; const total=r.total_votes||opts.reduce((a,o)=>a+(o.votes||0),0);

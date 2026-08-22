@@ -75,6 +75,14 @@ function buildCases(src) {
     'sheet:customer': "state.customers=DB.customers.slice();state.custLoaded=true;APP.cmd('tab','customers');state.custId='s1';state.custDetail={customer:{nickname:'A',tier_key:'tree'},stats:{orders:{}}};render()",
     'sheet:product': "state.prodStores=[{id:1,name_en:'T',name_cn:'T',qty:2}];state.prodStockReady=true;DB.products[1]._id=42;APP.cmd('tab','products');state.productSku=DB.products[1].sku;render()",
     'sheet:reply': "DB.reviews[0].id=7;DB.reviews[0].stream='review';APP.cmd('push','inbox');APP.cmd('openReply',DB.reviews[0].cust[0])",
+    // The feedback half of the inbox, and the thread sheet in all three of its
+    // states — the fetch in flight, the conversation on screen, and the fetch
+    // that failed. A thread that renders only when the network is kind is a
+    // thread that renders nowhere.
+    'push:inbox-feedback': "state.inboxSeg='feedback';APP.cmd('push','inbox')",
+    'sheet:thread-loading': "state.inboxSeg='feedback';APP.cmd('push','inbox');APP.cmd('openReply','fb:1')",
+    'sheet:thread': "state.inboxSeg='feedback';APP.cmd('push','inbox');APP.cmd('openReply','fb:1');state.thread={id:1,loading:false,err:null,page:'checkout',appVersion:'2.4.1',photos:['/x.png'],msgs:[{id:0,author:'customer',body:'Pickup time is wrong.',created_at:'2026-08-19 10:02:00'},{id:1,author:'admin',author_name:'Mei',body:'Looking at it now.',created_at:'2026-08-19 10:40:00'},{id:2,author:'customer',body:'Still doing it.',created_at:'2026-08-22 09:10:00'}]};render()",
+    'sheet:thread-error': "state.inboxSeg='feedback';APP.cmd('push','inbox');APP.cmd('openReply','fb:1');state.thread={id:1,loading:false,err:'Could not load the conversation.',msgs:null};render()",
     'sheet:search': "APP.cmd('openSearch')",
     'sheet:account': "APP.cmd('overflow')",
     'sheet:create': "APP.cmd('create','coupon')",
@@ -120,6 +128,34 @@ function main() {
   const work = [];
   for (const [name, js] of Object.entries(cases)) {
     for (const [pass, seed] of passes) work.push([`${name} [${pass}]`, seed, js]);
+  }
+
+  // ── Static pass: a helper that is called but never defined ──────────────
+  // Rendering every screen does NOT catch this. A helper reached only from a
+  // live fetch sits inside a try/catch, so a missing one is swallowed and the
+  // screen paints its fallback — which is exactly how mapFeedback shipped
+  // deleted (an edit sliced a region and took it with it, twice in one day).
+  // These names follow the file's own conventions, so the check is a grep, not
+  // a parser: every mapX / loadX / screenX / sheetX that is CALLED must exist.
+  {
+    const raw = (src.match(/<script>([\s\S]*?)<\/script>/) || [])[1] || '';
+    // Strip comments first: a comment naming a helper is not a call, and this
+    // file's comments name plenty of them.
+    const js = raw.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+    const defined = new Set();
+    for (const m of js.matchAll(/(?:function|const|let|var)\s+([a-zA-Z_$][\w$]*)/g)) defined.add(m[1]);
+    // Match the BARE identifier, not `name(`. The two call sites that shipped
+    // this bug were `rows.map(mapFeedback)` — a reference passed to .map(),
+    // with no parentheses of its own, which a call-shaped regex walks straight
+    // past. That is precisely the shape this check exists to catch.
+    const called = new Set();
+    for (const m of js.matchAll(/\b((?:map|load|screen|sheet)[A-Z][\w$]*)\b/g)) called.add(m[1]);
+    const missing = [...called].filter((n) => !defined.has(n)).sort();
+    if (missing.length) {
+      for (const n of missing) console.error(`FAIL static — ${n}() is called but never defined`);
+      console.error(`\n${missing.length} helper${missing.length === 1 ? '' : 's'} called but not defined.`);
+      process.exit(1);
+    }
   }
 
   for (const [name, seed, js] of work) {

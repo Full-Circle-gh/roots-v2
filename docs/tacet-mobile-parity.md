@@ -382,6 +382,35 @@ columns of fact. Reported from production, then swept column by column.
 | Sign out all devices | ➖ — **asked and declined 2026-08-22.** The device count is on the record; ending the sessions stays on the desktop |
 | Address edit / delete / set default | ➖ decided: desktop |
 
+### Inbox — the second sweep (`07-content-billing.js`)
+
+The Reviews half was audited in §2. The Feedback half had never been read
+against `renderFeedbackRow` / `openFeedbackThread`, and it did not survive
+that reading.
+
+| Desktop capability | Phone |
+|---|---|
+| The list renders at all | ❌ → ✅ — `mapFeedback` was **called but never defined**: an edit to Broadcasts sliced a region of the file and took it with it. Every screen still painted, because the only two call sites sit behind a live fetch inside a `try/catch`, so the inbox just showed its sample data forever. `scripts/test_mobile_screens.js` now fails the build on a called-but-undefined `mapX`/`loadX`/`screenX`/`sheetX` |
+| **The row leads with the newest turn** | ❌ → ✅ — the phone led with the thread root. On a thread the store started, the root is the operator's own opener, so the customer's answer appeared nowhere on this device |
+| One clipped line of the root, once there are replies | ✅ |
+| Who spoke last (Customer / the operator's name) | ✅ |
+| `n replies` / `n 条往来` | ✅ |
+| Needs reply / Replied status | ✅ |
+| Page context + app version | ✅ — `checkout · v2.4.1`, one pill |
+| ✉ Message — a thread the store started | ✅ — "We messaged them" |
+| Attached photos | ✅ — up to four on the row, tap to open full size |
+| `opened <date>` beside the last-activity stamp | ✅ |
+| **Read the whole conversation** | ❌ → ✅ — the phone had a reply box, not a thread. Past the third message the middle of the conversation existed on the desktop and nowhere else. `openReply` on a feedback row now fetches `/feedback/:id` and renders every turn as a bubble, customer left / store right, with the composer pinned at the foot — and, as on the desktop, opening it stamps `admin_read_at` |
+| Sending keeps you in the thread | ✅ — a public review reply is one shot and closes; a thread re-reads itself and shows the turn just sent |
+| Where the reply lands is stated, per stream | ✅ — a review reply says "under the review"; a thread reply says "the customer's mini-app inbox". The phone said "under the review" for both |
+| Lightbox | ➖ — photos open in the OS viewer, which is the phone's own affordance |
+| Filter / search the inbox | ➖ |
+
+`scripts/test_mobile_inbox.js` (30 assertions, 6 cases) locks all of the above
+to rendered text rather than to source, including the thread's loading and
+failed states. It was mutation-tested: reverting the row to lead with the root,
+and the thread to show only its last turn, fails it.
+
 ## 4. Open questions
 
 Not gaps — decisions that are the shop's to make, not this file's.
