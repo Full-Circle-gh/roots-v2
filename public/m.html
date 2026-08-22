@@ -287,6 +287,7 @@ const state = {
   custSeg:'all', custTier:'all', customers:null, custMeta:null, custLoaded:false,
   custId:null, custDetail:null, prodView:'catalogue',
   overflow:false, search:false, detailId:null, detailActions:false, productSku:null,
+  orderBusy:null, orderErr:null,
   reply:null, createKind:null, createValue:10, createActive:true,
   toast:null, drag:0, dragging:false, faqOpen:null, reviewsSeen:new Set(),
   qs:{oat:8,nuts:0,carrot:42},
@@ -295,6 +296,16 @@ const state = {
 };
 const app = document.getElementById('app');
 let toastTimer;
+function copyText(t){
+  if(!t) return;
+  const done=()=>showToast(T('Copied','已复制'));
+  const fallback=()=>{ try{
+      const ta=document.createElement('textarea'); ta.value=t; ta.style.position='fixed'; ta.style.opacity='0';
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); done();
+    }catch(e){ showToast(T('Could not copy','复制失败')); } };
+  if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done).catch(fallback);
+  else fallback();
+}
 function showToast(m){ state.toast=m; render(); clearTimeout(toastTimer); toastTimer=setTimeout(()=>{state.toast=null;render();},1900); }
 function push(route){ const s=SUBS[route]; if(s) state.stack.push({route,title:s.title}); render(); }
 function pop(){ state.stack.pop(); render(); }
@@ -317,14 +328,50 @@ reg('push', k=>push(k));
 reg('statusF', f=>{ state.statusF=f; render(); });
 reg('channelF', f=>{ state.channelF=f; render(); });
 reg('openOrder', id=>{ state.detailId=id; state.drag=0; render(); });
-reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; render(); });
+reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; state.orderErr=null; state.orderBusy=null; render(); });
 reg('detailActions', ()=>{ state.detailActions=true; render(); });
 reg('closeActions', ()=>{ state.detailActions=false; render(); });
-reg('markDelivered', ()=>{ state.detailId=null; state.detailActions=false; showToast(T('Order updated','订单已更新')); });
-reg('reprint', ()=>{ state.detailActions=false; showToast(T('Reprinting receipt…','正在重打小票…')); });
-reg('refundOrder', ()=>{ state.detailActions=false; showToast(T('Refund started','已发起退款')); });
-reg('copyAddr', ()=>showToast(T('Copied','已复制')));
-reg('copyTxn', ()=>showToast(T('Copied','已复制')));
+/* The one forward step the status machine allows from where this order is. */
+reg('advance', to=>{
+  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  if(!o||o._id==null) return;
+  orderWrite('advance', async()=>{
+    await apiWrite('/orders/'+o._id+'/status',{status:to},'PATCH');
+    return T('Order updated','订单已更新');
+  });
+});
+reg('undoDispatch', ()=>{
+  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  state.detailActions=false;
+  if(!o||o._id==null) return;
+  orderWrite('undo', async()=>{
+    await apiWrite('/orders/'+o._id+'/undo-dispatch',{});
+    return T('Back to preparing','已退回备货中');
+  });
+});
+/* The printer can succeed as a request and fail as a print — the endpoint says
+   so with ok:false, and so does this. */
+reg('printOrder', ()=>{
+  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  state.detailActions=false;
+  if(!o||o._id==null) return;
+  orderWrite('print', async()=>{
+    const r=await apiWrite('/orders/'+o._id+'/print',{});
+    if(r&&r.ok) return T('Sent to the printer','已发送到打印机');
+    const why=r&&r.error==='not_configured'
+      ? T('No printer is set up. Add one in Settings on desktop.','尚未配置打印机。请在电脑端设置中添加。')
+      : T('The printer did not take it. Check that it is on and has paper.','打印机没有接收。请检查是否开机、有纸。');
+    const err=new Error(why); err.code='__plain'; throw err;
+  });
+});
+reg('copyAddr', ()=>{
+  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  copyText(o?`${T(...o.cust)} · ${o.phone}\n${T(...o.addr)}`:'');
+});
+reg('copyTxn', ()=>{
+  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  copyText(o?String(o.txn||o.id):'');
+});
 reg('openProduct', sku=>{ state.productSku=sku; render(); });
 reg('closeProduct', ()=>{ state.productSku=null; render(); });
 reg('saveProduct', ()=>{ state.productSku=null; showToast(T('Saved','已保存')); });
@@ -816,6 +863,62 @@ function screenSettings(){
 /* ==========================================================================
    Sheets
    ========================================================================== */
+const ORDER_NEXT={
+  paid:            {to:'preparing',  en:'Start preparing',  zh:'开始备货',  busyEn:'Starting…',  busyZh:'处理中…'},
+  awaiting_restock:{to:'preparing',  en:'Restocked · start preparing', zh:'已补货 · 开始备货', busyEn:'Starting…', busyZh:'处理中…'},
+  preparing:       {to:'dispatched', en:'Mark dispatched',  zh:'标记已发货', busyEn:'Marking…',  busyZh:'处理中…'},
+  dispatched:      {to:'delivered',  en:'Mark delivered',   zh:'标记送达',  busyEn:'Marking…',  busyZh:'处理中…'},
+};
+/* pending_payment is deliberately absent: marking an off-app payment records
+   WHICH tender it was, and guessing that from a phone would put "unknown" on
+   the books. It stays a desktop action until the phone can ask. */
+function orderNext(o){ return o && o.raw ? (ORDER_NEXT[o.raw]||null) : null; }
+
+/* A write helper that keeps the server's own words. api() throws away the body,
+   and the body is where the reason lives. */
+async function apiWrite(path, body, method){
+  const r=await fetch(API+path,{method:method||'POST',credentials:'same-origin',
+    headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify(body||{})});
+  if(r.status===401||r.status===403){ location.href='/backend/login'; throw new Error('auth'); }
+  let j=null; try{ j=await r.json(); }catch(e){}
+  if(!r.ok){ const e=new Error((j&&(j.message||j.error))||('HTTP '+r.status)); e.code=j&&j.error; throw e; }
+  return j;
+}
+function orderErrorText(e){
+  if(e.code==='__plain') return e.message;
+  if(e.code==='invalid_transition') return T('This order has already moved on. Close and open it again to see where it is now.',
+                                             '这个订单已经进入下一步。请关闭后重新打开查看当前状态。');
+  if(e.code==='refund_already_processing'||e.code==='use_refund_payout') return e.message;
+  if(e.code==='already_shipped') return T('A parcel already has a waybill, so this cannot be undone here. Cancel the waybill first.',
+                                          '已有包裹生成运单，无法在此撤销。请先取消运单。');
+  return T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。');
+}
+/* Every write disables the control it belongs to and says what it is doing, and
+   a failure renders where the operator is looking and stays until they act on
+   it. A toast confirms; it never reports a failure. */
+async function orderWrite(kind, run){
+  if(state.orderBusy) return;
+  state.orderBusy=kind; state.orderErr=null; render();
+  try{
+    const msg=await run();
+    state.orderBusy=null; render();
+    if(msg) showToast(msg);
+    refreshOrders();
+  }catch(e){
+    state.orderBusy=null;
+    if(String(e.message)==='auth') return;
+    state.orderErr=orderErrorText(e); render();
+  }
+}
+async function refreshOrders(){
+  const id=state.detailId, row=(state.liveOrders||[]).find(o=>o.id===id);
+  if(row&&row._id!=null){ try{ const o=await api('/orders/'+row._id); if(state.detailId===id){ state.liveDetail=mapDetail(o); render(); } }catch(e){} }
+  try{ const rows=await api('/orders?limit=50');
+    if(Array.isArray(rows)&&rows.length){ state.liveOrders=rows.map(mapOrderRow); DB.orders=state.liveOrders; render(); }
+  }catch(e){}
+  api('/order-status-counts').then(d=>{ if(d){ state.liveStatusCounts=d;
+    state.liveAttn=Object.assign({},state.liveAttn||{},{ship:(d.paid||0)+(d.preparing||0)}); render(); } }).catch(()=>{});
+}
 function findOrder(id){ return DB.orders.find(o=>o.id===id) || DB.purchasing.find(o=>o.id===id); }
 function sheetOrderDetail(){
   const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId); if(!o) return '';
@@ -834,12 +937,12 @@ function sheetOrderDetail(){
          <span style="flex:1"></span>
          <button class="iconbtn" style="width:40px;height:40px;margin-right:-6px" onclick="APP.cmd('closeOrder')" aria-label="${T('Close','关闭')}">${ic('x',22,2)}</button>
        </div>
-       <div style="display:flex;align-items:center;gap:8px;margin-top:12px">
-         <button class="btn2" style="flex:1;min-width:0" onclick="APP.cmd('${isPO?'saveStock':'markDelivered'}')">${isPO?T('Receive stock','入库'):(o.kind==='refund'?T('Approve refund','通过退款'):T('Mark delivered','标记送达'))}</button>
-         ${isPO?'':`<button class="btn2" style="width:44px;padding:0;flex:none" onclick="APP.cmd('reprint')" aria-label="${T('Reprint receipt','重打小票')}">${ic('printer',20)}</button>
-         <button class="btn2" style="width:44px;padding:0;flex:none" onclick="APP.cmd('detailActions')" aria-label="${T('More actions','更多操作')}">${ic('ellipsis',20)}</button>`}
-       </div></div>
+       ${orderActionRow(o,isPO)}
+       </div>
      <div style="flex:1;min-height:0;overflow-y:auto;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 24px);display:flex;flex-direction:column;gap:16px;background:var(--bg)">
+       ${state.orderErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+         <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+         <span style="font-size:14px;color:var(--brick)">${state.orderErr}</span></div>`:''}
        ${o.trk?`<div class="card" style="padding:14px">
          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
            <span style="display:flex;align-items:center;gap:8px;min-width:0;color:var(--text-secondary)">${ic('truck',18)}<span style="font-size:14.5px;font-weight:500;color:var(--text-primary)">${T(...o.trk.carrier)}</span></span>
@@ -876,8 +979,29 @@ function sheetOrderDetail(){
      </div>
    </div>`;
 }
+function orderActionRow(o,isPO){
+  if(isPO) return `<div style="display:flex;align-items:center;gap:8px;margin-top:12px">
+    <button class="btn2" style="flex:1" onclick="APP.cmd('saveStock')">${T('Receive stock','入库')}</button></div>`;
+  if(o._id==null) return '';   // sample data in the static preview: no live order to act on
+  const next=orderNext(o);
+  const busy=state.orderBusy;
+  const undoable=['dispatched','delivered'].includes(o.raw);
+  const btns=[];
+  if(next) btns.push(`<button class="btn2" style="flex:1;min-width:0" ${busy?'disabled':''} onclick="APP.cmd('advance','${next.to}')">${busy==='advance'?T(next.busyEn,next.busyZh):T(next.en,next.zh)}</button>`);
+  btns.push(`<button class="btn2" style="${next?'width:44px;padding:0;flex:none':'flex:1;gap:8px'}" ${busy?'disabled':''} onclick="APP.cmd('printOrder')" aria-label="${T('Reprint receipt','重打小票')}">${ic('printer',20)}${next?'':`<span>${busy==='print'?T('Printing…','打印中…'):T('Reprint receipt','重打小票')}</span>`}</button>`);
+  if(undoable) btns.push(`<button class="btn2" style="width:44px;padding:0;flex:none" ${busy?'disabled':''} onclick="APP.cmd('detailActions')" aria-label="${T('More actions','更多操作')}">${ic('ellipsis',20)}</button>`);
+  return `<div style="display:flex;align-items:center;gap:8px;margin-top:12px">${btns.join('')}</div>`;
+}
 function sheetActions(){
-  const acts=[['printer',T('Reprint receipt','重打小票'),"APP.cmd('reprint')"],['refund-cw',T('Issue refund','发起退款'),"APP.cmd('refundOrder')"],['copy',T('Copy order link','复制链接'),"APP.cmd('copyTxn')"],['route',T('Re-route order','改派订单'),"APP.cmd('closeActions')"]];
+  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  const wasDelivered=o&&o.raw==='delivered';
+  const acts=[['printer',T('Reprint receipt','重打小票'),"APP.cmd('printOrder')"]];
+  if(o&&['dispatched','delivered'].includes(o.raw)){
+    // Forward-only machine: without this, a mis-tap sits on the queue with only
+    // a refund as the way out. The server refuses once a parcel has a waybill,
+    // and that refusal is shown rather than swallowed.
+    acts.push(['undo-2',wasDelivered?T('Undo delivery · back to preparing','撤销送达 · 退回备货'):T('Undo dispatch · back to preparing','撤销发货 · 退回备货'),"APP.cmd('undoDispatch')"]);
+  }
   return `<div class="scrim" style="z-index:47;background:rgba(17,26,43,.30)" onclick="APP.cmd('closeActions')"></div>
    <div class="sheet" style="z-index:48;padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 30px)"><div class="grabber" style="margin-bottom:10px"></div>
    ${acts.map(([i,l,c])=>`<button class="row" style="min-height:52px;padding:12px 20px" onclick="${c}"><span style="display:flex;flex:none;color:var(--text-secondary)">${ic(i)}</span><span style="flex:1;font-size:15px">${l}</span></button>`).join('')}</div>`;
@@ -1338,7 +1462,7 @@ function mapOrderRow(r){
     id:r.order_no||('#'+r.id), _id:r.id,
     ch, cust:[r.recipient_name||r.nickname||'—', r.recipient_name||r.nickname||'—'],
     total:money(CUR,r.total), placed:hhmm(r.placed_at),
-    status:[sk[1],sk[2]], kind, isNew:!r.seen_at,
+    status:[sk[1],sk[2]], kind, raw:r.status||null, refundStatus:r.refund_status||null, isNew:!r.seen_at,
     ship:Array.isArray(shipCity)?shipCity:[shipCity,shipCity],
     by: by?[by,by]:null, byAmber:false,
     viewOnly: ch==='meituan'||ch==='gzgrocery',
@@ -1469,6 +1593,7 @@ function mapSalesChannel(key,c){
 reg('openOrder', id=>{
   const row=(state.liveOrders||[]).find(o=>o.id===id);
   state.detailId=id; state.drag=0; state.liveDetail=null; state.detailMounted=false;
+  state.orderErr=null; state.orderBusy=null;
   if(row&&row._id!=null){
     render();
     // Sheet has animated once now — suppress the slide-up on the fetch re-render
