@@ -4592,6 +4592,9 @@
   }
   .ord-note-line svg { width: 11px; height: 11px; flex: none; }
   .ord-note-line.is-owed { color: var(--brass); font-weight: 600; }
+  /* Brick, one step past brass: brass is "still owed", this is "the money
+     doesn't add up" — the payment-mismatch line on a pending row. */
+  .ord-note-line.is-alert { color: var(--tacet-brick); font-weight: 600; }
   /* Inline among a row of pills — no top offset needed there, the row's
      align-items:center already handles vertical placement. The order drawer
      shows these on its .od-marks line now (the pinned header carries the ONE
