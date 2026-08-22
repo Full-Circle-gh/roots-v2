@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
- * Settings, the Setup guide and Social proof — asserted against
- * 02-settings-ops.js, 17-setup-guide.js and lib/features.js.
+ * The operator's own screens — Settings, the Setup guide, Social proof,
+ * Delivery and the Editor — asserted against 02-settings-ops.js,
+ * 17-setup-guide.js, 06-delivery.js, cms.html and lib/features.js.
  *
  *   node scripts/test_mobile_settings.js
  *
@@ -149,4 +150,51 @@ CASES.push(['holiday mode off', ZONES + `APP.cmd('push','delivery');`, [
   ['with no alarm',               `!txt('content').includes('delivery is paused')`],
 ]]);
 
-run('settings', CASES);
+// ── Editor ────────────────────────────────────────────────────────────────
+// This screen was a drawing: a grey wireframe of a page, a hard-coded
+// "Published" pill, and four section names typed into the source — Hero
+// banner, Featured products, Categories, Flash sale strip — which a shop may
+// or may not have, in that or any other order. It told an operator their home
+// page was published without asking anything.
+const LAYOUT = `state.cmsTried={home:true}; state.cms={home:{page:'home', dirty:false,
+  live:[{id:'a',type:'hero_banner',title_en:'Autumn drop',title_cn:'秋季上新'},
+        {id:'b',type:'product_grid'},
+        {id:'c',type:'flash_sale_strip'}],
+  draft:[{id:'a',type:'hero_banner'},{id:'b',type:'product_grid'},{id:'c',type:'flash_sale_strip'}]}};
+  APP.cmd('push','editor');`;
+
+CASES.push(['the real layout', LAYOUT, [
+  ['blocks are the server\'s',      `txt('content').includes('Hero banner')`],
+  ['by the composer\'s own names',  `txt('content').includes('Product grid') && txt('content').includes('Flash sale')`],
+  ['in order, numbered',            `txt('content').indexOf('Hero banner') < txt('content').indexOf('Flash sale')`],
+  ['counted',                       `txt('content').includes('3 blocks live')`],
+  ['a title the operator wrote is shown', `txt('content').includes('Autumn drop')`],
+  ['no invented section survives',  `!txt('content').includes('Featured products')`],
+  ['and the other CMS pages are reachable', `txt('content').includes('Promotions') && txt('content').includes('Onboarding')`],
+]]);
+
+CASES.push(['published, and it means it', LAYOUT, [
+  ['says published',            `txt('content').includes('Published')`],
+  ['with no draft warning',     `!txt('content').includes('Unpublished')`],
+]]);
+
+CASES.push(['a draft nobody published', `state.cmsTried={home:true};
+  state.cms={home:{page:'home',dirty:true,
+    live:[{id:'a',type:'hero_banner'}],
+    draft:[{id:'a',type:'hero_banner'},{id:'b',type:'coupon_block'}]}};
+  APP.cmd('push','editor');`, [
+  // The old screen said "Published" unconditionally, which is exactly wrong
+  // here: someone's edits are sitting unpublished and nobody would know.
+  ['it says so',                    `txt('content').includes('Unpublished changes')`],
+  ['and what does not match',       `txt('content').includes('does not match what shoppers see')`],
+  ['naming both counts',            `txt('content').includes('2 blocks in the draft, 1 live')`],
+  ['it does not claim published',   `!/\bPublished\b/.test(txt('content'))`],
+]]);
+
+CASES.push(['a page with nothing on it', `state.cmsTried={home:true};
+  state.cms={home:{page:'home',dirty:false,live:[],draft:[]}}; APP.cmd('push','editor');`, [
+  ['says so',       `txt('content').includes('Nothing is published on this page yet')`],
+  ['invents none',  `!txt('content').includes('Hero banner')`],
+]]);
+
+run('operator screens', CASES);

@@ -277,6 +277,7 @@ const state = {
   poList:null, posErr:null, posTried:false, poSeg:'open', poId:null,
   act:null, actErr:null, actTried:false, actRange:'today', actSource:'', actMore:false,
   cats:null, catCounts:null, catsErr:null, catsTried:false, catTop:null,
+  cms:{}, cmsPage:'home', cmsErr:null, cmsTried:{},
   tiers:null, tierCounts:null, tiersErr:null, tiersTried:false,
   tup:null, tupPkgs:null, tupErr:null, tupTried:false, tupBusy:null,
   lb:null, lbErr:null, lbTried:false,
@@ -614,6 +615,7 @@ reg('finalizeTopup', id=>{
     }};
   render();
 });
+reg('cmsPage', v=>{ state.cmsPage=v; state.cmsErr=null; render(); loadCms(v); });
 reg('catTop', v=>{ state.catTop=v||null; render(); });
 reg('actRange', v=>{ state.actRange=v; state.act=null; state.actTried=false; render(); loadActivity(); });
 reg('actSource', v=>{ state.actSource=v; state.act=null; state.actTried=false; render(); loadActivity(); });
@@ -1393,6 +1395,97 @@ function setupState(){
   if(d) return {pct:d.percent, done:d.requiredDone, total:d.requiredTotal, left:Math.max(0,d.requiredTotal-d.requiredDone), real:true};
   return {pct:null, real:false};
 }
+/* ==========================================================================
+   Editor — what the shop's pages are actually made of (desktop: cms.html)
+   --------------------------------------------------------------------------
+   This screen was a drawing. A grey wireframe of a page, a hard-coded
+   "Published" pill, and four section names typed into the source — Hero
+   banner, Featured products, Categories, Flash sale strip — which a shop may
+   or may not have, in that or any other order. It told an operator their home
+   page was published without asking anything, and described a layout it had
+   never seen.
+
+   It reads /cms/layout now: the live blocks in their real order, and the one
+   fact the desktop composer leads with — whether the draft differs from what
+   is live, i.e. whether somebody's edits are sitting unpublished. Composing is
+   a drag-and-drop canvas and stays there.
+   ========================================================================== */
+const CMS_PAGES=[['home','Home','首页'],['promotions','Promotions','促销'],
+  ['membership','Membership','会员'],['categories','Categories','分类'],['onboarding','Onboarding','引导']];
+/* The composer's own names for its blocks (cms.html BLOCK_META), so the phone
+   never invents a label for something an operator placed by a different one. */
+const CMS_BLOCK={
+  announcement_bar:['Announcement bar','公告栏'], hero_banner:['Hero banner','主图横幅'],
+  category_tabs:['Category tabs','分类标签'], featured_item:['Featured item','精选单品'],
+  product_grid:['Product grid','商品网格'], spacer:['Spacer','间距'],
+  countdown_timer:['Countdown timer','倒计时'], flash_sale_strip:['Flash sale','限时秒杀'],
+  coupon_block:['Coupon','优惠券'], points_widget:['Points','积分'], top_up:['Top up','充值'],
+  review_card:['Review','评价'], store_info:['Stores','门店'], voting_block:['Voting','投票'],
+  affiliate_block:['Refer a friend','邀请好友'], greeting:['Greeting','问候语'],
+  kitchen_status:['Kitchen status','厨房状态'], recipe_story:['Recipe story','食谱故事'],
+  bundle:['Bundle','套装'], wecom_contact:['Add us on WeCom','添加企业微信'],
+  favorites_block:['Favorites','收藏'], leaderboard:['Leaderboard','排行榜'],
+  video_banner:['Video banner','视频横幅'], order_tracker:['Order tracker','订单追踪'],
+  notification_bar:['Notification bar','通知条'],
+};
+const cmsName=t=>CMS_BLOCK[t]?T(...CMS_BLOCK[t]):(t||'—');
+function loadCms(page){
+  if(state.cmsTried[page]) return;
+  state.cmsTried=Object.assign({},state.cmsTried,{[page]:true});
+  api('/cms/layout?page='+encodeURIComponent(page)).then(d=>{
+    state.cms=Object.assign({},state.cms,{[page]:d||{}}); state.cmsErr=null; render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    state.cmsErr=T('Could not load the layout.','加载版面失败。'); render();
+  });
+}
+/* A block is worth naming by more than its type when it carries a title an
+   operator wrote — that is how they will recognise which one it is. */
+function cmsBlockLabel(b){
+  const p=b.props||b||{};
+  const t=LANG==='en'
+    ? (p.title_en||p.title||p.heading_en||p.heading||p.text_en||p.text||'')
+    : (p.title_cn||p.title||p.heading_cn||p.heading||p.text_cn||p.text||'');
+  return typeof t==='string' ? t.trim().slice(0,48) : '';
+}
+function screenEditor(){
+  const page=state.cmsPage;
+  loadCms(page);
+  const chips=CMS_PAGES.map(([k,en,zh])=>({key:k,en,zh}));
+  const head=`<div style="padding:12px 0 4px">${chipRow(chips,page,'cmsPage')}</div>`;
+  if(state.cmsErr) return `${head}<div style="padding:8px 16px 24px">
+    <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick)">${state.cmsErr}</span></div></div>`;
+  const d=state.cms[page];
+  if(!d) return `${head}<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const live=Array.isArray(d.live)?d.live:[];
+  const draft=Array.isArray(d.draft)?d.draft:[];
+  const dirty=!!d.dirty;
+  const [bg,fg]=dirty?PILL.warning:PILL.success;
+  return `${head}<div style="padding:8px 16px 24px;display:flex;flex-direction:column;gap:14px">
+    <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+        <span style="font-size:15px;font-weight:500">${live.length} ${T(live.length===1?'block live':'blocks live','个模块已上线')}</span>
+        <span class="pill" style="background:${bg};color:${fg}">${dirty?T('Unpublished changes','有未发布的修改'):T('Published','已发布')}</span></div>
+      ${dirty?`<div style="font-size:13px;color:var(--text-secondary);line-height:1.5">${T(
+        'A draft is saved that does not match what shoppers see'+(draft.length!==live.length?' — '+draft.length+' blocks in the draft, '+live.length+' live':'')+'. Publishing is on desktop.',
+        '已保存的草稿与顾客当前看到的不一致'+(draft.length!==live.length?' — 草稿 '+draft.length+' 个模块，线上 '+live.length+' 个':'')+'。发布请在电脑端进行。')}</div>`:''}
+    </div>
+    ${live.length?`<div><div class="eyebrow" style="padding:2px 4px 8px">${T('In order','按顺序')}</div>
+      <div class="list">${live.map((b,i)=>{ const lbl=cmsBlockLabel(b);
+        return `${i?'<div class="sep" style="margin-left:52px"></div>':''}
+        <div style="display:flex;align-items:center;gap:12px;padding:13px 14px">
+          <span class="num" style="width:24px;text-align:center;font-size:13px;color:var(--text-secondary);flex:none">${i+1}</span>
+          <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+            <span style="font-size:15px">${escAttr(cmsName(b.type))}</span>
+            ${lbl?`<span style="font-size:12.5px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(lbl)}</span>`:''}</span></div>`;
+      }).join('')}</div></div>`
+      :`<div style="padding:30px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${
+        T('Nothing is published on this page yet.','这个页面还没有发布任何内容。')}</div>`}
+    ${noteBar(T('Blocks are placed, edited and published on desktop.','模块的添加、编辑与发布在电脑端进行。'))}</div>`;
+}
+
 /* ==========================================================================
    Delivery (desktop: 06-delivery.js)
    --------------------------------------------------------------------------
@@ -2425,15 +2518,7 @@ const SUBS={
   wallet:{title:['Top-up','充值'],render:()=>screenTopups()},
   leaderboard:{title:['Leaderboard','排行榜'],render:()=>screenLeaderboard()},
   voting:{title:['Voting','投票'],render:()=>screenVoting()},
-  editor:{title:['Editor','编辑器'],render:()=>`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
-    <div style="background:var(--surface-raised);border-radius:14px;padding:18px;display:flex;flex-direction:column;align-items:center;gap:12px">
-      <div style="width:100%;max-width:230px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;overflow:hidden">
-        <div style="height:70px;background:rgba(88,96,110,.08);display:flex;align-items:center;justify-content:center;color:var(--text-secondary);font-size:12.5px">tacet</div>
-        <div style="padding:12px"><div style="height:8px;width:60%;border-radius:4px;background:var(--surface-raised)"></div>
-        <div style="display:flex;gap:8px;margin-top:10px"><div style="flex:1;height:44px;border-radius:8px;background:var(--surface-raised)"></div><div style="flex:1;height:44px;border-radius:8px;background:var(--surface-raised)"></div></div></div></div>
-      ${pill('on',T('Published','已发布'))}</div>
-    <div><div class="eyebrow" style="padding:2px 4px 8px">${T('Sections','版块')}</div>
-    <div class="list">${[['Hero banner','首图'],['Featured products','精选商品'],['Categories','分类'],['Flash sale strip','秒杀条']].map((n,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}<div style="padding:13px 14px;font-size:15px">${T(...n)}</div>`).join('')}</div></div>${desktopNote()}</div>`},
+  editor:{title:['Editor','编辑器'],render:()=>screenEditor()},
   about:{title:['About page','关于页'],render:()=>{
     const c=cfgGet('about.content',null);
     if(!state.cfg) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;

@@ -651,6 +651,26 @@ went nowhere; it names whoever is signed in and goes to Settings, where Sign
 out lives. `scripts/test_mobile_screens.js` now fails the build on any
 reference to the name.
 
+### Editor (`cms.html`)
+
+This screen was a drawing. A grey wireframe of a phone, a hard-coded
+**"Published"** pill, and four section names typed into the source — Hero
+banner, Featured products, Categories, Flash sale strip — which a shop may or
+may not have, in that or any other order. It told an operator their home page
+was published without asking anything.
+
+| Desktop capability | Phone |
+|---|---|
+| The live layout | ❌ → ✅ — `/cms/layout`, blocks in their real order, numbered |
+| Block names | ❌ → ✅ — the composer's own `BLOCK_META` names, so the phone never invents a label for something placed under a different one |
+| The title an operator wrote on a block | ➕ — it is how they will recognise which one it is |
+| **Draft vs live** | ❌ → ✅ — the pill was hard-coded to "Published". When a saved draft does not match what shoppers see, it says so, names both block counts, and does **not** claim published |
+| All five CMS pages | ❌ → ✅ — home, promotions, membership, categories, onboarding |
+| Compose: add, drag, edit, publish, preview QR | ➖ decided: desktop. It is a drag-and-drop canvas |
+
+`scripts/test_mobile_settings.js` now covers the whole operator group —
+Settings, Setup, Social proof, Delivery, Editor — 63 assertions, 17 cases.
+
 ## 4. Open questions
 
 Not gaps — decisions that are the shop's to make, not this file's.
