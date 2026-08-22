@@ -581,11 +581,7 @@ function renderAlipayProof(o) {
     ? `<div class="ap-hint">${cuT('Verify the amount matches, then Mark paid below.', '核对金额一致后,点击下方“标记已付款”。')}</div>`
     : '';
 
-  // id so a caller that opened this order BECAUSE of the payment can scroll to
-  // it (openOrder's `focus: 'payment'` — the dashboard's mismatch fire). Keyed
-  // by order id like #qp-<id>, so a drawer swap can never scroll to the
-  // previous order's card.
-  return `<div class="full ap-proof" id="ap-proof-${o.id}">
+  return `<div class="full ap-proof">
     <div class="kicker">Alipay payment · 支付宝付款</div>
     <div class="ap-card">
       <div class="ap-head">
@@ -4792,18 +4788,6 @@ function odFocusPointSection(orderId) {
   return true;
 }
 
-// Same contract for the Alipay proof card — used by the dashboard's "Payment
-// doesn't match" fire, whose whole subject is that card. Same degradation as
-// above: an order whose proof was cleared (or re-read to a match) between the
-// dashboard's poll and this click renders no .ap-proof at all, and landing at
-// the top of the drawer is the honest fallback, not an error.
-function odFocusPaymentSection(orderId) {
-  const el = document.getElementById('ap-proof-' + orderId);
-  if (!el) return false;
-  el.scrollIntoView({ block: 'start', behavior: 'smooth' });
-  return true;
-}
-
 async function openOrder(id, opts = {}) {
   _OPEN_ORDER = null;
   _ORDER_BACK_CUSTOMER = null;
@@ -4910,9 +4894,6 @@ async function openOrder(id, opts = {}) {
   // for a concurrent open to race with; and a missing #qp-<id> is still a clean
   // no-op inside odFocusPointSection.
   if (opts.focus === 'point' && _OPEN_ORDER) odFocusPointSection(_OPEN_ORDER.id);
-  // Same opt-gate, same reasoning, for the payment proof (dashboard mismatch
-  // fire → this order's Alipay card).
-  if (opts.focus === 'payment' && _OPEN_ORDER) odFocusPaymentSection(_OPEN_ORDER.id);
 }
 
 // Generic side-drawer open/close. Shared across Orders, Customers,
@@ -7852,7 +7833,6 @@ async function refreshOrderStatusCounts() {
     const d = j.data || {};
     const set = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = n > 0 ? String(n) : ''; };
     set('oc-pending_payment', d.pending_payment);
-    set('oc-payment_mismatch', d.payment_mismatch);
     set('oc-paid',            d.paid);
     set('oc-preparing',       d.preparing);
     set('oc-rider_pickup',    d.rider_pickup);
