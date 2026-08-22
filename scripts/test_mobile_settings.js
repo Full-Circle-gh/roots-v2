@@ -243,4 +243,43 @@ CASES.push(['nothing referred yet', `state.affiliateTried=true;
   ['no invented rows',           `!txt('content').includes('Chen')`],
 ]]);
 
+// ── Operations ────────────────────────────────────────────────────────────
+// Two toggles and "deeper config on desktop". Everything the desktop's
+// Operations panel exists to answer — is every store located, is the maps key
+// working, can customers pay by Alipay — was absent, and those are the
+// questions you ask when you are away from your desk.
+const OPS = `state.printerTried=true; state.printer={auto_print:true};
+  state.fapiaoTried=true; state.fapiao={autoIssue:false};
+  state.geoTried=true; state.geo={provider:'amap',tencent_maps_configured:true,
+    stores:{total:3,geocoded:2,missing:1}, addresses:{total:180,geocoded:174,missing:6}, last_error:null};
+  state.alipayTried=true; state.alipay={enabled:true,account:'Roots Ltd'};
+  state.stores=[{id:1,code:'th',name_en:'Tianhe',name_cn:'天河',city:'Guangzhou',district:'Tianhe',lat:23.1,lng:113.3},
+                {id:2,code:'yx',name_en:'Yuexiu',name_cn:'越秀',city:'Guangzhou'}];
+  APP.cmd('push','operations');`;
+
+CASES.push(['operations answers the away-from-desk questions', OPS, [
+  ['can customers pay by Alipay QR', `txt('content').includes('Alipay by QR code')`],
+  ['and under whose name',           `txt('content').includes('Roots Ltd')`],
+  ['which maps provider',            `txt('content').includes('Amap')`],
+  ['stores located',                 `txt('content').includes('2/3')`],
+  ['CUSTOMER ADDRESSES located',     `txt('content').includes('174/180')`],
+  ['each store is named',            `txt('content').includes('Tianhe') && txt('content').includes('Yuexiu')`],
+  ['and the unlocated one is marked', `txt('content').includes('no coordinates')`],
+  ['the located one is not alarming', `txt('content').includes('located')`],
+]]);
+
+CASES.push(['a maps quota that has run out', `state.printerTried=true; state.printer={auto_print:false};
+  state.fapiaoTried=true; state.fapiao={autoIssue:true};
+  state.geoTried=true; state.geo={provider:'amap',tencent_maps_configured:true,
+    stores:{total:1,geocoded:1,missing:0}, addresses:{total:10,geocoded:4,missing:6},
+    last_error:{code:'CUQPS_HAS_EXCEEDED_THE_LIMIT',message:'quota exhausted',quota:true}};
+  state.alipayTried=true; state.alipay={enabled:false}; state.stores=[];
+  APP.cmd('push','operations');`, [
+  // The key is still configured and nothing errors in front of a customer.
+  // Every new address just quietly stops being locatable.
+  ['it is named',              `txt('content').includes('Maps quota is used up for today')`],
+  ['and what it costs',        `txt('content').includes('stop routing to the nearest store')`],
+  ['Alipay off reads off',     `txt('content').includes('off')`],
+]]);
+
 run('operator screens', CASES);

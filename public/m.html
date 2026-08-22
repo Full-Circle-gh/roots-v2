@@ -278,6 +278,7 @@ const state = {
   act:null, actErr:null, actTried:false, actRange:'today', actSource:'', actMore:false,
   cats:null, catCounts:null, catsErr:null, catsTried:false, catTop:null,
   cms:{}, cmsPage:'home', cmsErr:null, cmsTried:{},
+  alipay:null, alipayTried:false,
   tiers:null, tierCounts:null, tiersErr:null, tiersTried:false,
   tup:null, tupPkgs:null, tupErr:null, tupTried:false, tupBusy:null,
   lb:null, lbErr:null, lbTried:false,
@@ -1396,6 +1397,79 @@ function setupState(){
   if(d) return {pct:d.percent, done:d.requiredDone, total:d.requiredTotal, left:Math.max(0,d.requiredTotal-d.requiredDone), real:true};
   return {pct:null, real:false};
 }
+/* ==========================================================================
+   Operations (desktop: 02-settings-ops.js)
+   --------------------------------------------------------------------------
+   Two toggles and a line saying "deeper config on desktop". Everything the
+   desktop's Operations panel exists to answer — is every store located, is the
+   maps key working, can customers pay by Alipay — was absent, and those are
+   exactly the questions you ask away from your desk.
+
+   The maps one has a failure mode worth naming: a daily geocoding quota can
+   run out. The key is still configured, nothing errors in front of a customer,
+   and every new address quietly stops being locatable — so routing degrades
+   with no signal anywhere. geocode-status reports it, the desktop shows it,
+   and the phone did not.
+   ========================================================================== */
+async function loadAlipayManual(){
+  if(state.alipayTried) return; state.alipayTried=true;
+  try{ state.alipay=await api('/alipay-manual')||{}; }catch(e){ state.alipay={}; }
+  render();
+}
+function opsStoreRow(st,i){
+  const name=LANG==='en'?(st.name_en||st.name_cn||st.code):(st.name_cn||st.name_en||st.code);
+  const loc=[st.city,st.district].filter(Boolean).join(' · ');
+  const located=st.lat!=null&&st.lng!=null;
+  return `${i?'<div class="sep" style="margin-left:14px"></div>':''}
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px">
+      <span style="display:flex;flex-direction:column;min-width:0">
+        <span style="font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(name)}</span>
+        ${loc||st.address?`<span style="font-size:12px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(loc||st.address)}</span>`:''}</span>
+      <span style="flex:none;font-size:12.5px;color:${located?'var(--text-secondary)':'var(--brick)'}">${
+        located?T('located','已定位'):T('no coordinates','未定位')}</span></div>`;
+}
+function screenOperations(){
+  if(!state.printer&&!state.printerTried) loadPrinter();
+  if(!state.fapiao&&!state.fapiaoTried) loadFapiao();
+  loadGeo(); loadAlipayManual();
+  const g=state.geo;
+  const stores=Array.isArray(state.stores)?state.stores:null;
+  const ali=state.alipay;
+  const aliOn=!!(ali&&ali.enabled);
+  const le=g&&g.last_error;
+  const provider = g&&g.provider==='amap' ? 'Amap 高德' : g&&g.provider==='tencent' ? 'Tencent 腾讯' : T('Maps','地图');
+  const noKey=g&&g.tencent_maps_configured===false;
+  const addr=(g&&g.addresses)||null;
+  const st=(g&&g.stores)||null;
+  return `<div style="padding:16px;display:flex;flex-direction:column;gap:16px">
+    ${le&&le.quota?`<div style="display:flex;flex-direction:column;gap:5px;background:var(--brick-tint);border-radius:14px;padding:14px 16px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="flex:none;color:var(--brick);display:flex">${ic('triangle-alert',18)}</span>
+        <span style="font-size:14.5px;font-weight:500;color:var(--brick)">${T('Maps quota is used up for today','今日地图配额已用尽')}</span></div>
+      <div style="font-size:13px;color:var(--brick);opacity:.9;line-height:1.5">${T('No new address can be located until it resets, so orders stop routing to the nearest store correctly.','配额重置前无法定位新地址，就近派单会受影响。')}</div></div>`
+    : le?`<div style="display:flex;align-items:flex-start;gap:11px;background:rgba(201,149,74,0.12);border-radius:12px;padding:12px 14px">
+      <span style="flex:none;color:var(--amber);display:flex;margin-top:1px">${ic('triangle-alert',17)}</span>
+      <span style="font-size:13.5px;color:#8A6425;line-height:1.5">${T('Last locate attempt failed','最近一次定位失败')} (${escAttr(provider)}): ${escAttr(String(le.code||''))} ${escAttr(le.message||'')}</span></div>`:''}
+    ${settingsGroupCard([
+      {label:T('Auto-print receipts','自动打印小票'),printer:true},
+      {label:T('Fapiao auto-issue','发票自动开具'),fapiao:true},
+    ])}
+    <div><div class="eyebrow" style="padding:2px 4px 8px">${T('Taking money','收款')}</div>
+      ${settingsGroupCard([{label:T('Alipay by QR code','支付宝收款码'),
+        value: !ali ? T('Loading…','加载中…')
+          : aliOn ? (ali.account?T('on · '+ali.account,'已开启 · '+ali.account):T('on','已开启'))
+          : T('off','已关闭')}])}</div>
+    <div><div class="eyebrow" style="padding:2px 4px 8px">${T('Locating','定位')}</div>
+      ${settingsGroupCard([
+        {label:T('Maps provider','地图服务'),value: !g?T('Loading…','加载中…'):(noKey?T('no key','未配置密钥'):provider)},
+        {label:T('Stores located','门店已定位'),value: st?(st.geocoded+'/'+st.total):T('Loading…','加载中…')},
+        {label:T('Customer addresses located','顾客地址已定位'),value: addr?(addr.geocoded+'/'+addr.total):T('Loading…','加载中…')},
+      ])}</div>
+    ${stores&&stores.length?`<div><div class="eyebrow" style="padding:2px 4px 8px">${T('Stores','门店')}</div>
+      <div class="list">${stores.map(opsStoreRow).join('')}</div></div>`:''}
+    ${noteBar(T('Store details, staff, printers and payment keys are set on desktop.','门店资料、员工、打印机与支付密钥在电脑端设置。'))}</div>`;
+}
+
 /* ==========================================================================
    Affiliate (desktop: 10-extras.js)
    --------------------------------------------------------------------------
@@ -2680,16 +2754,7 @@ const SUBS={
   quickstock:{title:['Quick stock','快速盘点'],render:()=>nothingYet(T('Counted in Products','在产品页盘点'),
     T('Open a product and set the count for each store — it writes straight to that shelf. The three-item list that used to live here counted nothing.','打开某个产品即可按门店修改库存，直接写入。此前这里的列表并不会保存。')),
   },
-  operations:{title:['Operations','运营'],render:()=>{
-    if(!state.printer&&!state.printerTried) loadPrinter();
-    if(!state.fapiao&&!state.fapiaoTried) loadFapiao();
-    return `<div style="padding:16px;display:flex;flex-direction:column;gap:16px">
-    ${settingsGroupCard([
-      {label:T('Auto-print receipts','自动打印小票'),printer:true},
-      {label:T('Fapiao auto-issue','发票自动开具'),fapiao:true},
-    ])}
-    <div style="text-align:center;font-size:13px;color:var(--text-secondary)">${T('Deeper config on desktop','更多设置见电脑端')}</div></div>`;
-  }},
+  operations:{title:['Operations','运营'],render:()=>screenOperations()},
   settings:{title:['Settings','设置'],render:()=>screenSettings()},
   mirror_meituan:{title:['Meituan','美团'],render:()=>mirrorScreen('meituan',T('Read-only mirror. Manage in the Meituan app.','只读镜像，请在美团后台管理。'))},
   mirror_gzgrocery:{title:['gzgrocery','gzgrocery'],render:()=>mirrorScreen('gzgrocery',T('Read-only ERP mirror.','只读 ERP 镜像。'))},

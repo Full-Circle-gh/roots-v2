@@ -693,6 +693,24 @@ same envelope as the summary; there was never a call being saved.
 | Adjust a reward, void, restore | ➖ decided: desktop — each is a money edit with a typed reason |
 | Reward settings, lifetime rate and window, share image | ➖ decided: desktop |
 
+### Operations (`02-settings-ops.js`)
+
+Two toggles and a line saying "deeper config on desktop". Everything the
+desktop's Operations panel exists to answer — is every store located, is the
+maps key working, can customers pay by Alipay — was absent, and those are
+exactly the questions you ask when you are away from your desk.
+
+| Desktop capability | Phone |
+|---|---|
+| Auto-print receipts, fapiao auto-issue | ✅ (already) |
+| **Manual Alipay** — on/off, and the payee name | ❌ → ✅. It is how customers pay when 当面付 is not available |
+| Maps provider, and whether a key is configured | ❌ → ✅ |
+| Stores geocoded | ✅ (was on Delivery) |
+| **Customer addresses geocoded** | ❌ → ✅ — the phone only ever counted stores |
+| **The geocoder's last error, and quota exhaustion** | ❌ → ✅ — brick. This is a silent failure: the key is still configured, nothing errors in front of a customer, and every new address quietly stops being locatable, so orders stop routing to the nearest store. The desktop shows it; the phone did not |
+| Every store by name, with its city/district and whether it has coordinates | ❌ → ✅ read-only |
+| Edit a store, assign stock staff, printer prefs per store, upload the Alipay QR, shipping integration keys | ➖ decided: desktop |
+
 ## 4. Open questions
 
 Not gaps — decisions that are the shop's to make, not this file's.
