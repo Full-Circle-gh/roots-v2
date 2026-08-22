@@ -37,13 +37,15 @@ sent nothing to the server.
 | Copy (ship-to, payment) | order sheet | toast said "Copied", clipboard untouched | **Fixed** — real clipboard write |
 | Issue refund | order ⋯ | toast "Refund started" — on a money flow | **Removed** — a refund is full/partial and needs the chooser; desktop-only for now |
 | Re-route order | order ⋯ | closed the menu | **Removed** |
-| Save (product stock + price) | product sheet, `m.html` `sheetProduct` | toast "Saved" | **Still fake** — see §3 |
-| Send reply (review) | reply sheet | toast "Reply sent" | **Still fake** — see §3 |
+| Save (product stock + price) | product sheet | toast "Saved" | **Fixed** — price via `PATCH /products/:id`, stock **per store** via `PATCH /stores/:id/stock/:pid` |
+| Send reply (review / feedback) | reply sheet | toast "Reply sent" | **Fixed** — `PATCH /reviews/:id` · `POST /feedback/:id/reply` |
 | Create (coupon / flash / broadcast) | create sheet | toast "Created" | **Still fake** — see §3 |
 | Receive stock (PO) | purchase-order sheet | toast "Stock received" | **Still fake** — see §3 |
-| Every settings + automation toggle | settings, delivery, operations | flips `state.sw[...]` in memory only; a reload undoes it | **Still fake** — see §3 |
-| Sign out | account menu | toast "Signed out"; the session stays open | **Still fake** — see §3 |
-| Search | topbar | a static list of five hardcoded results; the input does nothing | **Still fake** — see §3 |
+| Auto-print receipts | settings, delivery | flipped in memory; a reload undid it | **Fixed** — real value from `GET /printer`, written with `PUT /printer` |
+| Auto-route, low-stock pause | settings, delivery | switches for settings that do not exist | **Removed** — routing is behaviour, not a preference; the page says so |
+| Other feature toggles (fapiao, membership, FAQ, coupons active…) | settings, marketing | in-memory only | **Still fake** — each needs its own endpoint mapping, one at a time |
+| Sign out | account menu | toast "Signed out"; the session stayed open | **Fixed** — `POST /api/backend/logout`, then the login page |
+| Search | topbar | five hardcoded results; the input did nothing | **Fixed** — searches orders server-side (`q=`); the jump list is built from the real nav |
 
 ---
 
@@ -69,7 +71,7 @@ desktop is the right home
 
 | Desktop capability | Phone |
 |---|---|
-| Status + channel filter chips with live counts | ✅ |
+| Status + channel filter chips with live counts | ✅ — **server-side now**; they used to filter only the 50 rows already loaded, so "Delivered 15" could list three |
 | Row → record, full detail | ✅ |
 | Forward transition, one step at a time | ✅ (fixed today) |
 | Pickup relabelling (ready for pickup / picked up) | ✅ (fixed today) |
@@ -82,9 +84,9 @@ desktop is the right home
 | Edit ship-to address | ✖ — the most common phone-side correction |
 | Tracking number entry / parcel split | ➖ |
 | Staff note | ✖ — cheap, and it is how one operator tells the next what happened |
-| Store filter (multi-store) | ✖ — the phone shows every store's orders with no way to narrow |
-| Pagination | ✖ — the phone loads 50 and stops, silently |
-| Search within orders | ✖ — see the search row in §1 |
+| Store filter (multi-store) | ✅ — a third chip row, shown only when the account has more than one store |
+| Pagination | ✅ — 25 a page, "N of M", Load more |
+| Search within orders | ✅ — server-side, from the topbar |
 | Bulk tracking paste, CSV export | ➖ |
 
 ### Customers (`08-customers.js`)
@@ -106,7 +108,7 @@ desktop is the right home
 | Desktop capability | Phone |
 |---|---|
 | Catalogue, stock activity, categories as sub-views | ✅ |
-| Stock + price quick edit | ⚠ fake — the sheet exists and saves nothing |
+| Stock + price quick edit | ✅ — price, and stock per store |
 | Category filter, search | ✖ (category filter only on desktop) |
 | Add product (wizard or blank), options, variants, photos, bulk edit, reorder | ➖ |
 
@@ -115,7 +117,7 @@ desktop is the right home
 | Desktop capability | Phone |
 |---|---|
 | Two lists, unseen marking | ✅ |
-| Reply to a review / feedback | ⚠ fake — `PATCH /reviews/:id {reply}` and `POST /feedback/:id/reply` both exist |
+| Reply to a review / feedback | ✅ |
 | Hide / show a review | ✖ |
 
 ### Sales, Delivery, Settings
@@ -125,8 +127,9 @@ desktop is the right home
 | Channel board with live status | ✅ |
 | Channel detail (mirror + config) | ✅ read-only |
 | Delivery zones, fees, cut-off, couriers, pickup points | ✅ shown, ⚠ toggles fake |
-| Every settings toggle | ⚠ fake — `PUT /api/retail-admin/config` exists |
-| Sign out | ⚠ fake — `POST /api/backend/logout` exists |
+| Auto-print receipts | ✅ |
+| Other feature toggles | ⚠ fake — one endpoint mapping each, still owed |
+| Sign out | ✅ |
 
 ---
 
@@ -136,14 +139,15 @@ Ordered by what an operator loses today, not by effort.
 
 | # | Build | Endpoint | Notes |
 |---|---|---|---|
-| 1 | **Reply to a review / feedback** | `PATCH /reviews/:id {reply}` · `POST /feedback/:id/reply` | One text field, one write. The most phone-shaped thing in the product. |
-| 2 | **Product stock + price quick edit** | `PATCH /products/:id` | The sheet is already built and already says this is what it is for. |
-| 3 | **Sign out** | `POST /api/backend/logout` | A control that lies about a session is its own kind of defect. |
-| 4 | **Settings + automation toggles** | `PUT /api/retail-admin/config` | Read-modify-write of one config object; needs care not to clobber concurrent desktop edits. |
+| ~~1~~ | ~~Reply to a review / feedback~~ | | **Done** 2026-08-22 |
+| ~~2~~ | ~~Product stock + price quick edit~~ | | **Done** — stock is per store, as it is on the desktop |
+| ~~3~~ | ~~Sign out~~ | | **Done** |
+| ~~4~~ | ~~Auto-print~~ | | **Done**; the rest of the toggles still owed, one endpoint each |
 | 5 | **Refunds: approve / reject a request** | existing refund-review routes | Money. Needs the confirm + the amount, and the desktop's own guards. |
-| 6 | **Orders: store filter, pagination, real search** | existing `/orders` params | The list quietly stops at 50 today. |
+| ~~6~~ | ~~Orders: store filter, pagination, real search~~ | | **Done** |
 | 7 | **Customer: points, wallet, block** | existing per-customer routes | Each is a small modal on desktop. |
 | 8 | **Staff note, edit ship-to** | existing order routes | Small, and both are corrections an operator makes while standing up. |
+| 9 | **The remaining feature toggles** | one endpoint each | fapiao, membership, FAQ, feedback inbox, pop-ups, coupon active — each needs its real key confirmed before it is wired. |
 
 Nothing above needs a new endpoint. Every one of them needs the same three
 states the rulebook already requires and the order actions now demonstrate:

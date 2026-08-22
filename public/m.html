@@ -287,7 +287,11 @@ const state = {
   custSeg:'all', custTier:'all', customers:null, custMeta:null, custLoaded:false,
   custId:null, custDetail:null, prodView:'catalogue',
   overflow:false, search:false, detailId:null, detailActions:false, productSku:null,
-  orderBusy:null, orderErr:null,
+  orderBusy:null, orderErr:null, replyBusy:false, replyErr:null,
+  printer:null, printerLoading:false, printerBusy:false, printerErr:null,
+  storeStock:null, prodStockReady:false, prodBusy:false, prodErr:null,
+  ordersView:null, ordersTotal:null, ordersLoading:false, ordersMore:false,
+  storeF:'all', stores:null, orderQ:'',
   reply:null, createKind:null, createValue:10, createActive:true,
   toast:null, drag:0, dragging:false, faqOpen:null, reviewsSeen:new Set(),
   qs:{oat:8,nuts:0,carrot:42},
@@ -314,7 +318,8 @@ const CMD={}; function reg(n,f){CMD[n]=f;}
 window.APP={cmd:(n,a)=>{ if(CMD[n]) CMD[n](a); }};
 
 reg('tab', t=>{ state.stack=[]; state.tab=t; state.detailId=null; render();
-  if(t==='customers' && !state.custLoaded && !state.custLoading) loadCustomers(); });
+  if(t==='customers' && !state.custLoaded && !state.custLoading) loadCustomers();
+  if(t==='orders' && !state.ordersView && !state.ordersLoading) loadOrdersPage(); });
 reg('back', ()=>{ if(state.stack.length) pop(); });
 reg('overflow', ()=>{ state.overflow=true; render(); });
 reg('closeOverflow', ()=>{ state.overflow=false; render(); });
@@ -325,8 +330,13 @@ reg('toggleLive', ()=>{ state.live=!state.live; render(); });
 reg('openSearch', ()=>{ state.overflow=false; state.search=true; render(); });
 reg('closeSearch', ()=>{ state.search=false; render(); });
 reg('push', k=>push(k));
-reg('statusF', f=>{ state.statusF=f; render(); });
-reg('channelF', f=>{ state.channelF=f; render(); });
+reg('statusF', f=>{ state.statusF=f; loadOrdersPage(); });
+reg('channelF', f=>{ state.channelF=f; loadOrdersPage(); });
+reg('storeF', v=>{ state.storeF=v; loadOrdersPage(); });
+reg('ordersMore', ()=>{ if(!state.ordersLoading) loadOrdersPage(true); });
+reg('orderSearch', q=>{ state.orderQ=q||''; state.search=false; state.tab='orders'; state.stack=[]; loadOrdersPage(); });
+reg('clearOrderSearch', ()=>{ state.orderQ=''; loadOrdersPage(); });
+reg('ordersClear', ()=>{ state.statusF='all'; state.channelF='all'; state.storeF='all'; state.orderQ=''; loadOrdersPage(); });
 reg('openOrder', id=>{ state.detailId=id; state.drag=0; render(); });
 reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; state.orderErr=null; state.orderBusy=null; render(); });
 reg('detailActions', ()=>{ state.detailActions=true; render(); });
@@ -372,9 +382,15 @@ reg('copyTxn', ()=>{
   const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
   copyText(o?String(o.txn||o.id):'');
 });
-reg('openProduct', sku=>{ state.productSku=sku; render(); });
+reg('openProduct', sku=>{
+  state.productSku=sku; state.prodErr=null; state.prodBusy=false;
+  const p=DB.products.find(x=>x.sku===sku);
+  (state.stores||[]).forEach(st=>{ delete sheetStep['st_'+st.id]; });
+  render();
+  if(p&&p._id!=null) loadProductStock(p._id);
+});
 reg('closeProduct', ()=>{ state.productSku=null; render(); });
-reg('saveProduct', ()=>{ state.productSku=null; showToast(T('Saved','已保存')); });
+reg('saveProduct', ()=>saveProductEdits());
 reg('custSeg', v=>{ state.custSeg=v; state.custLoaded=false; state.customers=null; render(); loadCustomers(); });
 reg('custTier', v=>{ state.custTier=v; render(); });
 reg('custClear', ()=>{ state.custSeg='all'; state.custTier='all'; state.custLoaded=false; render(); loadCustomers(); });
@@ -382,10 +398,33 @@ reg('openCustomer', id=>{ state.custId=id; state.custDetail=null; render(); load
 reg('closeCustomer', ()=>{ state.custId=null; state.custDetail=null; render(); });
 reg('prodView', v=>{ state.prodView=v; render(); });
 reg('inboxSeg', s=>{ state.inboxSeg=s; render(); });
-reg('openReply', who=>{ state.reply=who; state.reviewsSeen.add(who); render(); });
+reg('openReply', who=>{ state.reply=who; state.reviewsSeen.add(who); state.replyErr=null; state.replyBusy=false; render(); });
+reg('sendReplyText', t=>{
+  const text=String(t||'').trim();
+  const r=DB.reviews.find(x=>x.cust[0]===state.reply)||DB.feedback.find(x=>x.cust[0]===state.reply);
+  if(!text){ state.replyErr=T('Write something first.','请先输入内容。'); render(); return; }
+  if(!r||r.id==null){ state.replyErr=T('This one cannot be replied to from the phone yet.','暂时无法在手机端回复。'); render(); return; }
+  if(state.replyBusy) return;
+  state.replyBusy=true; state.replyErr=null; render();
+  const call = r.stream==='feedback'
+    ? apiWrite('/feedback/'+r.id+'/reply',{message:text})
+    : apiWrite('/reviews/'+r.id,{reply:text,source:r.source},'PATCH');
+  call.then(()=>{
+    r.reply=text; r.status=['Replied','已回复']; r.kind='clear';
+    state.replyBusy=false; state.reply=null; render();
+    showToast(T('Reply sent','回复已发送'));
+    loadInbox();
+  }).catch(e=>{
+    state.replyBusy=false;
+    if(String(e.message)==='auth') return;
+    state.replyErr=e.code==='message_required'?T('Write something first.','请先输入内容。')
+      :T('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
+    render();
+  });
+});
 reg('markAllReviewsRead', ()=>{ DB.reviews.forEach(r=>state.reviewsSeen.add(r.cust[0])); render(); });
 reg('closeReply', ()=>{ state.reply=null; render(); });
-reg('sendReply', ()=>{ state.reply=null; showToast(T('Reply sent','回复已发送')); });
+
 reg('create', k=>{ state.createKind=k; state.createValue=10; state.createActive=true; render(); });
 reg('closeCreate', ()=>{ state.createKind=null; render(); });
 reg('submitCreate', ()=>{ state.createKind=null; showToast(T('Created','已创建')); });
@@ -393,10 +432,16 @@ reg('createValInc', ()=>{ state.createValue++; render(); });
 reg('createValDec', ()=>{ state.createValue=Math.max(0,state.createValue-1); render(); });
 reg('toggleCreateActive', ()=>{ state.createActive=!state.createActive; render(); });
 reg('sw', k=>{ state.sw[k]=!state.sw[k]; render(); });
+reg('togglePrint', ()=>togglePrint());
 reg('qsInc', n=>{ state.qs[n]=(state.qs[n]||0)+1; render(); });
 reg('qsDec', n=>{ state.qs[n]=Math.max(0,(state.qs[n]||0)-1); render(); });
 reg('saveStock', ()=>showToast(T('Stock received','已入库')));
-reg('signout', ()=>showToast(T('Signed out','已退出')));
+reg('signout', ()=>{
+  state.overflow=false; showToast(T('Signing out…','正在退出…')); render();
+  fetch('/api/backend/logout',{method:'POST',credentials:'same-origin'})
+    .catch(()=>{})
+    .then(()=>{ location.href='/backend/login'; });
+});
 reg('enable', f=>{ state.sw[f]=true; showToast(T('Enabled','已开启')); });
 reg('faqToggle', i=>{ state.faqOpen=state.faqOpen===i?null:i; render(); });
 reg('mirror', w=>push('mirror_'+w));
@@ -498,13 +543,43 @@ function screenHome(){
 /* ==========================================================================
    Orders — archetype B
    ========================================================================== */
-function ordersFiltered(){
-  return DB.orders.filter(o=>{
-    const okS = state.statusF==='all' || (state.statusF==='new'&&o.isNew) || o.kind===state.statusF;
-    const okC = state.channelF==='all' || o.ch===state.channelF;
-    return okS && okC;
-  });
+/* The chips used to filter the fifty rows that happened to be loaded, which is
+   why "Delivered 15" could show three. Every filter is the server's now, and the
+   list says how much of the set it is showing. */
+const STATUS_PARAM={all:'',paid:'paid',preparing:'preparing',dispatched:'dispatched',
+  delivered:'delivered',restock:'awaiting_restock',refund:'refunds_open'};
+const CHANNEL_PARAM={all:'',miniapp:'wechat',web:'web',meituan:'meituan',gzgrocery:'gzgrocery',manual:'manual'};
+const ORDERS_PAGE=25;
+function ordersQuery(offset){
+  const qs=new URLSearchParams();
+  const st=STATUS_PARAM[state.statusF]||''; if(st) qs.set('status',st);
+  const ch=CHANNEL_PARAM[state.channelF]||''; if(ch) qs.set('channel',ch);
+  if(state.orderQ) qs.set('q',state.orderQ);
+  if(state.storeF&&state.storeF!=='all') qs.set('store_id',state.storeF);
+  qs.set('limit',ORDERS_PAGE); qs.set('offset',offset||0);
+  return qs.toString();
 }
+async function loadOrdersPage(more){
+  const offset=more?((state.ordersView||[]).length):0;
+  state.ordersLoading=true; if(!more){ state.ordersView=null; } render();
+  try{
+    const j=await apiRaw('/orders?'+ordersQuery(offset));
+    const rows=(j&&j.data)||[];
+    const mapped=rows.map(mapOrderRow);
+    state.ordersView=more?(state.ordersView||[]).concat(mapped):mapped;
+    state.liveOrders=state.ordersView;
+    const total=j&&j.meta&&j.meta.total;
+    state.ordersTotal=(total!=null)?total:null;
+    state.ordersMore=(total!=null)?state.ordersView.length<total:rows.length===ORDERS_PAGE;
+  }catch(e){
+    if(String(e.message)==='auth') return;
+    // Offline / static preview: the sample set stands in, unfiltered and honest
+    // about it — no counts, no "load more".
+    if(!more){ state.ordersView=DB.orders.slice(); state.ordersTotal=null; state.ordersMore=false; }
+  }
+  state.ordersLoading=false; render();
+}
+function ordersFiltered(){ return state.ordersView||DB.orders; }
 function ordersHeader(){
   // Real counts when available (undefined → no badge shown, instead of a fake number).
   const S=state.liveStatusCounts, C=state.liveChannelCounts;
@@ -516,8 +591,12 @@ function ordersHeader(){
     {key:'restock',en:'Awaiting restock',zh:'待补货',count:sCount('awaiting_restock',2)},{key:'refund',en:'Refund queue',zh:'退款',count:sCount('refunds_open',2)}];
   const cc=[{key:'all',en:'All channels',zh:'全部渠道',count:allOrders},{key:'miniapp',en:'Mini app',zh:'小程序',count:cCount('wechat',28)},{key:'web',en:'Web',zh:'网页',count:cCount('web',9)},
     {key:'meituan',en:'Meituan',zh:'美团',count:cCount('meituan',6)},{key:'gzgrocery',en:'gzgrocery',zh:'gzgrocery',count:cCount('gzgrocery',2)},{key:'manual',en:'Manual',zh:'手动',count:cCount('manual',2)}];
+  const stores=state.stores||[];
+  const st=[{key:'all',en:'All stores',zh:'全部门店'}].concat(stores.map(s=>({key:String(s.id),en:s.name_en||s.name||('#'+s.id),zh:s.name_cn||s.name_en||s.name||('#'+s.id)})));
   return `<div style="padding:0 0 16px">
-    ${chipRow(sc,state.statusF,'statusF')}<div style="height:8px"></div>${chipRow(cc,state.channelF,'channelF')}</div>`;
+    ${state.orderQ?`<div style="padding:0 16px 8px"><button onclick="APP.cmd('clearOrderSearch')" class="chip on" style="max-width:100%"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T('Search','搜索')}: ${state.orderQ}</span>${ic('x',14,2)}</button></div>`:''}
+    ${chipRow(sc,state.statusF,'statusF')}<div style="height:8px"></div>${chipRow(cc,state.channelF,'channelF')}
+    ${stores.length>1?`<div style="height:8px"></div>${chipRow(st,state.storeF,'storeF')}`:''}</div>`;
 }
 /* The status line reports WORK WAITING, never population: how many orders are
    sitting on someone, not how many exist. It ships only when a real number is
@@ -528,11 +607,26 @@ function ordersStatusLine(){
   if(!n) return '';
   return T(n+' awaiting fulfilment', n+' 单待履约');
 }
+function ordersFiltered0(){ return state.statusF==='all'&&state.channelF==='all'&&(state.storeF||'all')==='all'&&!state.orderQ; }
+function ordSkeleton(){
+  const bar=(w,h)=>`<span style="display:block;width:${w};height:${h}px;border-radius:999px;background:var(--surface-raised)"></span>`;
+  return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:16px">
+    <div style="display:flex;justify-content:space-between;gap:16px">${bar('45%',13)}${bar('20%',18)}</div>
+    <div style="display:flex;justify-content:space-between;gap:16px">${bar('35%',15)}${bar('24%',24)}</div>
+    ${bar('55%',13)}</div>`;
+}
 function screenOrders(){
   const os=ordersFiltered();
   return `${pageHead({title:T('Orders','订单'), status:ordersStatusLine()})}
   ${ordersHeader()}
   <div style="padding:0 16px 24px;display:flex;flex-direction:column;gap:16px">
+    ${state.ordersLoading&&!os.length?`${ordSkeleton()}${ordSkeleton()}${ordSkeleton()}${ordSkeleton()}`:''}
+    ${!state.ordersLoading&&!os.length&&ordersFiltered0()?emptyState(T('No orders yet','还没有订单'),
+        T('New orders settle in here from every channel — mini app, web, Meituan.','各渠道的新订单都会出现在这里 — 小程序、网页、美团。')):''}
+    ${!state.ordersLoading&&!os.length&&!ordersFiltered0()?`<div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:48px 24px;text-align:center">
+        <div style="font-size:18px;font-weight:500">${state.orderQ?T('No orders match “'+state.orderQ+'”','没有匹配“'+state.orderQ+'”的订单'):T('No orders match these filters','没有符合筛选的订单')}</div>
+        <div style="font-size:15px;color:var(--text-secondary);max-width:260px">${T('Clear them and the whole list comes back.','清除筛选即可看到全部。')}</div>
+        <button class="btn2" onclick="APP.cmd('ordersClear')">${T('Clear filters','清除筛选')}</button></div>`:''}
     ${os.length?os.map(o=>`
       <button class="card${o.isNew?' unseen':''}" onclick="APP.cmd('openOrder','${o.id}')" style="display:flex;flex-direction:column;gap:8px;text-align:left;cursor:pointer;padding:16px;color:var(--text-primary)">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
@@ -547,8 +641,11 @@ function screenOrders(){
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
           <span style="font-size:13px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...o.ship)}</span>
           ${o.by?`<span class="num" style="font-size:13px;color:${o.byAmber?'#8A6425':'var(--text-secondary)'};flex:none">${T(...o.by)}</span>`:''}</div>
-      </button>`).join('')
-    :emptyState(T('Nothing needs you','无待处理'),T('Nothing here. Enjoy it.','暂无订单，好好休息。'))}
+      </button>`).join(''):''}
+    ${os.length&&state.ordersTotal!=null?`<div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:8px 0 0">
+      <span class="num" style="font-size:13px;color:var(--text-secondary)">${T(os.length+' of '+state.ordersTotal, state.ordersTotal+' 单中的 '+os.length)}</span>
+      ${state.ordersMore?`<button class="btn2" style="width:100%" ${state.ordersLoading?'disabled':''} onclick="APP.cmd('ordersMore')">${state.ordersLoading?T('Loading…','加载中…'):T('Load more','加载更多')}</button>`:''}
+    </div>`:''}
   </div>`;
 }
 
@@ -652,9 +749,16 @@ function screenMore(){
    Pushed sub-screens
    ========================================================================== */
 function settingsGroupCard(rows){
+  const ctl=r=> r.printer
+      ? (state.printer
+          ? toggle(!!state.printer.auto_print,"APP.cmd('togglePrint')")
+          : `<span style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span>`)
+      : r.tgl ? toggle(state.sw[r.tgl],`APP.cmd('sw','${r.tgl}')`)
+      : `<span style="font-size:15px;color:var(--text-secondary);white-space:nowrap">${r.value}</span>`;
   return `<div class="list">${rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
-    <div style="display:flex;align-items:center;gap:12px;padding:14px"><span style="flex:1;min-width:0;font-size:15px">${r.label}</span>
-    ${r.tgl?toggle(state.sw[r.tgl],`APP.cmd('sw','${r.tgl}')`):`<span style="font-size:14px;color:var(--text-secondary);white-space:nowrap">${r.value}</span>`}</div>`).join('')}</div>`;
+    <div style="display:flex;align-items:center;gap:16px;padding:12px 16px;min-height:56px"><span style="flex:1;min-width:0;font-size:15px">${r.label}</span>
+    ${ctl(r)}</div>`).join('')}
+    ${state.printerErr&&rows.some(r=>r.printer)?`<div style="padding:12px 16px;font-size:13px;color:var(--brick);background:var(--brick-tint)">${state.printerErr}</div>`:''}</div>`;
 }
 let sheetStep={};
 const SUBS={
@@ -705,9 +809,15 @@ const SUBS={
       <span style="display:flex;flex-direction:column;min-width:0"><span style="font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...a.name)}</span>
       <span style="font-size:12px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...a.meta)}</span></span>
       <span class="num" style="font-size:15px;font-weight:500;color:var(--text-secondary);flex:none">${a.delta}</span></div>`).join('')}</div></div>`},
-  delivery:{title:['Delivery','配送'],render:()=>`<div style="padding:16px;display:flex;flex-direction:column;gap:14px">
-    ${settingsGroupCard([{label:T('Auto-route to nearest store','自动派往最近门店'),tgl:'autoroute'},{label:T('Auto-print receipts','自动打印小票'),tgl:'autoprint'},{label:T('Low-stock pause','低库存自动暂停'),tgl:'lowstock'}])}
-    ${settingsGroupCard([{label:T('Delivery zones','配送范围'),value:'6'},{label:T('Couriers','快递'),value:'JD · kd100'},{label:T('Pickup points','自提点'),value:'2'}])}${desktopNote()}</div>`},
+  delivery:{title:['Delivery','配送'],render:()=>{
+    if(!state.printer&&!state.printerLoading) loadPrinter();
+    return `<div style="padding:16px;display:flex;flex-direction:column;gap:14px">
+    ${settingsGroupCard([
+      {label:T('Auto-print receipts','自动打印小票'),printer:true},
+      {label:T('Routing','派单'),value:T('Nearest store, automatically','自动派往最近门店')},
+    ])}
+    ${settingsGroupCard([{label:T('Delivery zones','配送范围'),value:'6'},{label:T('Couriers','快递'),value:'JD · kd100'},{label:T('Pickup points','自提点'),value:'2'}])}${desktopNote()}</div>`;
+  }},
   invoices:{title:['Invoices','发票'],render:()=>`<div><div style="padding:12px 0 4px">${chipRow([{key:'all',en:'All',zh:'全部',count:214},{key:'issued',en:'Issued',zh:'已开',count:198},{key:'pending',en:'Pending',zh:'待开',count:16}],'all','noop')}</div>
     <div style="padding:8px 16px 24px;display:flex;flex-direction:column;gap:10px">
       <div style="display:flex;align-items:flex-start;gap:11px;background:var(--dusk-tint);border-radius:12px;padding:13px 14px">
@@ -841,10 +951,23 @@ function screenSettings(){
   const groups=[
     {h:T('Store','店铺'),rows:[{label:T('Store profile','店铺资料'),value:state.storeName||T('Your store','你的店铺')},{label:T('Operations','运营'),cmd:"APP.cmd('push','operations')",chev:true},{label:T('Quick stock','快速盘点'),cmd:"APP.cmd('push','quickstock')",chev:true}]},
     {h:T('Notifications','通知'),rows:[{label:T('Live updates','实时更新'),tgl:'__live'},{label:T('Sound','提示音'),tgl:'__sound'}]},
-    {h:T('Automation','自动化'),rows:[{label:T('Auto-print','自动打印'),tgl:'autoprint',dusk:true},{label:T('Auto-route','自动派单'),tgl:'autoroute',dusk:true}]},
+    {h:T('Automation','自动化'),rows:[
+      {label:T('Auto-print receipts','自动打印小票'),printer:true},
+      // Routing is behaviour, not a setting: every order already goes to the
+      // nearest store and there is nothing to switch. Saying so beats a toggle
+      // that writes nowhere.
+      {label:T('Routing','派单'),value:T('Nearest store, automatically','自动派往最近门店')},
+    ]},
     {h:T('Preferences','偏好'),rows:[{label:T('Language','语言'),value:state.lang==='en'?'English':'中文',cmd:"APP.cmd('toggleLang')",chev:true},{label:T('Theme','主题'),value:state.theme==='light'?T('Light','浅色'):T('Dark','深色'),cmd:"APP.cmd('toggleTheme')",chev:true}]},
   ];
-  const rt=r=> r.tgl==='__live'?toggle(state.live,"APP.cmd('toggleLive')"):r.tgl==='__sound'?toggle(state.sound,"APP.cmd('toggleSound')"):toggle(state.sw[r.tgl],`APP.cmd('sw','${r.tgl}')`);
+  const rt=r=> r.printer
+      ? (state.printer
+          ? toggle(!!state.printer.auto_print,"APP.cmd('togglePrint')")
+          : `<span style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span>`)
+      : r.tgl==='__live'?toggle(state.live,"APP.cmd('toggleLive')")
+      : r.tgl==='__sound'?toggle(state.sound,"APP.cmd('toggleSound')")
+      : toggle(state.sw[r.tgl],`APP.cmd('sw','${r.tgl}')`);
+  if(!state.printer&&!state.printerLoading) loadPrinter();
   return `<div style="padding:16px 16px 28px;display:flex;flex-direction:column;gap:18px">
     <button onclick="APP.cmd('noop')" style="display:flex;align-items:center;gap:14px;width:100%;text-align:left;cursor:pointer;background:var(--surface-raised);border:none;border-radius:14px;padding:16px;font-family:inherit">
       <span style="width:46px;height:46px;border-radius:12px;background:var(--surface-card);display:flex;align-items:center;justify-content:center;flex:none;font-size:18px;font-weight:500;color:var(--text-primary)">${(state.storeName||T('Your store','你的店铺')).trim().charAt(0)}</span>
@@ -922,11 +1045,95 @@ async function orderWrite(kind, run){
     state.orderErr=orderErrorText(e); render();
   }
 }
+/* printer.* is private config, so it has its own read and write. The phone shows
+   the switch only once it knows the real value — a switch that guesses its own
+   position is worse than no switch. */
+async function loadProductStock(pid){
+  const stores=state.stores||[];
+  if(!stores.length||pid==null){ state.prodStockReady=true; render(); return; }
+  state.prodStockReady=false; render();
+  state.storeStock=state.storeStock||{};
+  for(const st of stores){
+    if(state.storeStock[st.id]) continue;
+    try{
+      const rows=await api('/stores/'+st.id+'/stock');
+      const m={}; (Array.isArray(rows)?rows:[]).forEach(r=>{ m[r.product_id]=Number(r.physical_qty||0); });
+      state.storeStock[st.id]=m;
+    }catch(e){ state.storeStock[st.id]=null; }
+  }
+  stores.forEach(st=>{
+    const m=state.storeStock[st.id];
+    if(m) sheetStep['st_'+st.id]=Number(m[pid]||0);
+  });
+  state.prodStockReady=true; render();
+}
+async function saveProductEdits(){
+  const p=DB.products.find(x=>x.sku===state.productSku);
+  if(!p||p._id==null||state.prodBusy) return;
+  const priceRaw=(document.getElementById('mPrice')||{}).value;
+  const price=Math.max(0,parseFloat(String(priceRaw).replace(/[^0-9.]/g,''))||0);
+  const stores=state.stores||[];
+  state.prodBusy=true; state.prodErr=null; render();
+  try{
+    if(price!==Number(p.priceNum)) await apiWrite('/products/'+p._id,{sell_price:price},'PATCH');
+    for(const st of stores){
+      const m=state.storeStock&&state.storeStock[st.id];
+      if(!m) continue;
+      const was=Number(m[p._id]||0), now=Number(sheetStep['st_'+st.id]);
+      if(!isNaN(now)&&now!==was){
+        await apiWrite('/stores/'+st.id+'/stock/'+p._id,{physical_qty:now},'PATCH');
+        m[p._id]=now;
+      }
+    }
+    state.prodBusy=false; state.productSku=null; render();
+    showToast(T('Saved','已保存'));
+    try{ const rows=await api('/products?limit=50'); if(Array.isArray(rows)&&rows.length){ DB.products=rows.map(mapProduct); render(); } }catch(e){}
+  }catch(e){
+    state.prodBusy=false;
+    if(String(e.message)==='auth') return;
+    state.prodErr=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    render();
+  }
+}
+async function loadPrinter(){
+  if(state.printerLoading) return; state.printerLoading=true;
+  try{ const p=await api('/printer'); state.printer=p||null; }catch(e){}
+  state.printerLoading=false; render();
+}
+function togglePrint(){
+  if(!state.printer||state.printerBusy) return;
+  const next=!state.printer.auto_print;
+  state.printerBusy=true; state.printerErr=null; render();
+  apiWrite('/printer',{auto_print:next},'PUT').then(()=>{
+    state.printer.auto_print=next; state.printerBusy=false; render();
+    showToast(next?T('Auto-print on','已开启自动打印'):T('Auto-print off','已关闭自动打印'));
+  }).catch(e=>{
+    state.printerBusy=false;
+    if(String(e.message)==='auth') return;
+    state.printerErr=T('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
+  });
+}
+async function loadInbox(){
+  try{ const rv=await api('/reviews?limit=30'); const list=Array.isArray(rv)?rv:(rv.reviews||[]);
+    if(list.length){ DB.reviews=list.map(mapReview);
+      state.liveAttn=Object.assign({},state.liveAttn||{},{reviews:DB.reviews.filter(r=>!r.reply).length}); render(); }
+  }catch(e){}
+  try{ const r=await api('/feedback'); const rows=Array.isArray(r)?r:(r&&r.data); if(rows) { DB.feedback=rows.map(mapFeedback); render(); } }catch(e){}
+}
 async function refreshOrders(){
   const id=state.detailId, row=(state.liveOrders||[]).find(o=>o.id===id);
   if(row&&row._id!=null){ try{ const o=await api('/orders/'+row._id); if(state.detailId===id){ state.liveDetail=mapDetail(o); render(); } }catch(e){} }
-  try{ const rows=await api('/orders?limit=50');
-    if(Array.isArray(rows)&&rows.length){ state.liveOrders=rows.map(mapOrderRow); DB.orders=state.liveOrders; render(); }
+  // Repaint the list the operator is actually looking at — same filters, same
+  // depth. Refetching a bare first page would silently drop their filter and
+  // every page they had loaded past the first.
+  try{
+    const depth=Math.max(ORDERS_PAGE,(state.ordersView||[]).length);
+    const qs=ordersQuery(0).replace(/limit=\d+/,'limit='+Math.min(depth,200));
+    const j=await apiRaw('/orders?'+qs);
+    const rows=(j&&j.data)||[];
+    if(rows.length||state.ordersView){ state.ordersView=rows.map(mapOrderRow); state.liveOrders=state.ordersView;
+      const total=j&&j.meta&&j.meta.total; state.ordersTotal=(total!=null)?total:null;
+      state.ordersMore=(total!=null)?state.ordersView.length<total:false; render(); }
   }catch(e){}
   api('/order-status-counts').then(d=>{ if(d){ state.liveStatusCounts=d;
     state.liveAttn=Object.assign({},state.liveAttn||{},{ship:(d.paid||0)+(d.preparing||0)}); render(); } }).catch(()=>{});
@@ -1026,6 +1233,37 @@ function stepperCard(label,key,val,prefix){
       <span class="num" style="font-size:26px;font-weight:500">${prefix||''}${sheetStep[key]}</span>
       <button class="stepbtn" onclick="APP.cmd('stepInc','${key}')">${ic('plus',18,2.25)}</button></div></div>`;
 }
+/* One row per store, because that is where a physical count lives. With no
+   store list to read, the phone shows the total and says where to change it —
+   spreading one number across two shelves would be a guess. */
+function stockCard(p){
+  const stores=state.stores||[];
+  if(!stores.length){
+    return `<div class="card" style="padding:16px">
+      <div class="eyebrow">${T('In stock','库存')}</div>
+      <div class="num" style="font-size:26px;font-weight:500;margin-top:12px">${p.stock}</div>
+      <div style="font-size:13px;color:var(--text-secondary);margin-top:4px">${T('Counted per store — adjust on desktop.','按门店计数 — 请在电脑端调整。')}</div></div>`;
+  }
+  if(!state.prodStockReady){
+    return `<div class="card" style="padding:16px"><div class="eyebrow">${T('In stock','库存')}</div>
+      <div style="font-size:15px;color:var(--text-secondary);margin-top:12px">${T('Loading…','加载中…')}</div></div>`;
+  }
+  return `<div class="card" style="padding:16px">
+    <div class="eyebrow">${T('In stock','库存')}</div>
+    ${stores.map((st,i)=>{
+      const m=state.storeStock&&state.storeStock[st.id];
+      const name=T(st.name_en||st.name||('#'+st.id), st.name_cn||st.name_en||st.name||('#'+st.id));
+      if(!m) return `<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;${i?'border-top:1px solid var(--border-default);margin-top:16px;padding-top:16px':'margin-top:12px'}">
+        <span style="font-size:15px">${name}</span>
+        <span style="font-size:13px;color:var(--text-secondary)">${T('Could not read','读取失败')}</span></div>`;
+      return `<div style="${i?'border-top:1px solid var(--border-default);margin-top:16px;padding-top:16px':'margin-top:12px'}">
+        <div style="font-size:15px">${name}</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">
+          <button class="stepbtn" onclick="APP.cmd('stepDec','st_${st.id}')">${ic('minus',18,2.25)}</button>
+          <span class="num" style="font-size:26px;font-weight:500">${sheetStep['st_'+st.id]!=null?sheetStep['st_'+st.id]:0}</span>
+          <button class="stepbtn" onclick="APP.cmd('stepInc','st_${st.id}')">${ic('plus',18,2.25)}</button></div></div>`;
+    }).join('')}</div>`;
+}
 function sheetProduct(){
   const p=DB.products.find(x=>x.sku===state.productSku); if(!p) return '';
   return `<div class="scrim" style="z-index:45" onclick="APP.cmd('closeProduct')"></div>
@@ -1035,11 +1273,22 @@ function sheetProduct(){
          <button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" onclick="APP.cmd('closeProduct')">${ic('x',22,2)}</button>
          <div style="flex:1;min-width:0;padding-top:1px"><div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap"><span style="font-size:17px;font-weight:500">${T(...p.name)}</span>${pill(p.kind,T(...p.status))}</div>
          <div class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:3px">${p.sku}</div></div><span style="width:36px;flex:none"></span></div></div>
-     <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;background:var(--bg)">
+     <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:16px;background:var(--bg)">
        ${noteBar(T('Quick-edit stock and price · full editing on desktop','快改库存与价格 · 完整编辑在电脑端'))}
-       ${stepperCard(T('In stock','库存'),'p_stock',p.stock)}
-       ${stepperCard(T('Price','价格'),'p_price',parseInt(p.price.replace(/[^0-9]/g,'')),'¥')}</div>
-     <div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card)"><button class="cta" onclick="APP.cmd('saveProduct')">${T('Save','保存')}</button></div></div>`;
+       ${state.prodErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+         <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+         <span style="font-size:14px;color:var(--brick)">${state.prodErr}</span></div>`:''}
+       <div class="card" style="padding:16px">
+         <div class="eyebrow">${T('Price','价格')}</div>
+         <div style="display:flex;align-items:center;gap:8px;margin-top:12px">
+           <span class="num" style="font-size:18px;color:var(--text-secondary)">${CUR}</span>
+           <input id="mPrice" class="num" inputmode="decimal" value="${p.priceNum!=null?p.priceNum:(parseFloat(String(p.price).replace(/[^0-9.]/g,''))||'')}" style="font-size:18px;font-weight:500">
+         </div>
+       </div>
+       ${stockCard(p)}
+     </div>
+     <div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card)">
+       <button class="btn2" style="width:100%" ${state.prodBusy?'disabled':''} onclick="APP.cmd('saveProduct')">${state.prodBusy?T('Saving…','保存中…'):T('Save','保存')}</button></div></div>`;
 }
 function sheetReply(){
   const r=DB.reviews.find(x=>x.cust[0]===state.reply)||DB.feedback.find(x=>x.cust[0]===state.reply)||{cust:[state.reply,state.reply],text:['','']};
@@ -1050,8 +1299,13 @@ function sheetReply(){
        <span style="flex:1;font-size:17px;font-weight:500">${T(...r.cust)}</span><span style="width:36px;flex:none"></span></div></div>
      <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;background:var(--bg)">
        <div style="background:var(--surface-raised);border-radius:12px;padding:14px;font-size:14px;line-height:1.55;color:var(--text-secondary)">${T(...r.text)}</div>
-       <textarea placeholder="${T('Write a reply…','写下回复…')}" style="min-height:100px;resize:none"></textarea></div>
-     <div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card)"><button class="cta" onclick="APP.cmd('sendReply')">${T('Send reply','发送回复')}</button></div></div>`;
+       <textarea id="mReply" placeholder="${T('Write a reply…','写下回复…')}" style="min-height:100px;resize:none">${r.reply?String(r.reply).replace(/</g,'&lt;'):''}</textarea>
+       ${state.replyErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+         <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+         <span style="font-size:14px;color:var(--brick)">${state.replyErr}</span></div>`:''}
+       <div style="font-size:13px;color:var(--text-secondary)">${T('Replies show under the review in the mini app, signed with the store name.','回复会显示在小程序的评价下方，署名为店铺名称。')}</div></div>
+     <div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card)">
+       <button class="btn2" style="width:100%" ${state.replyBusy?'disabled':''} onclick="APP.cmd('sendReplyText',(document.getElementById('mReply')||{}).value)">${state.replyBusy?T('Sending…','发送中…'):T('Send reply','发送回复')}</button></div></div>`;
 }
 function sheetCreate(){
   const cfg={coupon:{title:T('New coupon','新建优惠券'),ph:'WELCOME10',unit:'%',showValue:true,verb:T('Create coupon','创建优惠券')},
@@ -1092,22 +1346,30 @@ function sheetOverflow(){
        <span style="width:20px;display:flex;justify-content:center;flex:none;color:var(--text-secondary)">${ic('bell',18)}</span>
        <span style="flex:1;font-size:15px">${T('Sound','提示音')}</span>${toggle(state.sound,"APP.cmd('toggleSound')")}</div></div>`;
 }
+/* The jump list is built from the nav itself, so it can never drift from what
+   the app actually has — the five destinations and every row of More. */
+function searchIndex(){
+  const out=Object.keys(TAB_META).filter(k=>k!=='more').map(k=>({icon:TAB_META[k].icon,p:[TAB_META[k].en,TAB_META[k].zh],g:['Go to','前往'],cmd:`APP.cmd('closeSearch');APP.cmd('tab','${k}')`}));
+  MORE_GROUPS.forEach(gr=>gr.rows.forEach(r=>out.push({icon:r[1],p:[r[2],r[3]],g:gr.h||['More','更多'],cmd:`APP.cmd('closeSearch');APP.cmd('push','${r[0]}')`})));
+  return out;
+}
 function sheetSearch(){
-  const results=[
-    {icon:'package',p:['Orders','订单'],s:'RT-…047',g:['Run','运营'],cmd:"APP.cmd('closeSearch');APP.cmd('tab','orders')"},
-    {icon:'box',p:['Products','产品'],s:'Oat milk',g:['Catalog','目录'],cmd:"APP.cmd('closeSearch');APP.cmd('push','products')"},
-    {icon:'truck',p:['Delivery','配送'],s:'6 zones',g:['Fulfilment','履约'],cmd:"APP.cmd('closeSearch');APP.cmd('push','delivery')"},
-    {icon:'ticket',p:['Coupons','优惠券'],s:'WELCOME10',g:['Marketing','营销'],cmd:"APP.cmd('closeSearch');APP.cmd('push','coupons')"},
-    {icon:'settings',p:['Settings','设置'],s:'Auto-print',g:['Setup','设置'],cmd:"APP.cmd('closeSearch');APP.cmd('push','operations')"},
-  ];
+  const results=searchIndex();
   return `<div style="position:absolute;inset:0;z-index:50;background:var(--bg);display:flex;flex-direction:column;animation:tFade .2s ease both">
     <div style="flex:none;padding:calc(env(safe-area-inset-top,0px) + 16px) 10px 12px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border-default)">
-      <input autofocus placeholder="${T('Search every page and setting…','搜索页面与设置…')}">
+      <input id="mSearch" autofocus inputmode="search" enterkeyhint="search"
+        placeholder="${T('Search orders — number, name, phone','搜索订单 — 单号、姓名、手机')}"
+        onkeydown="if(event.key==='Enter'){APP.cmd('orderSearch',this.value.trim())}">
       <button onclick="APP.cmd('closeSearch')" style="background:transparent;border:none;color:var(--text-secondary);font-size:15px;font-weight:500;cursor:pointer;padding:8px 6px;font-family:inherit;flex:none">${T('Cancel','取消')}</button></div>
-    <div style="flex:1;overflow-y:auto;padding:14px 0"><div class="eyebrow" style="padding:6px 20px">${T('Jump to','快速跳转')}</div>
+    <div style="flex:1;overflow-y:auto;padding:14px 0">
+      <button class="row" style="min-height:52px;padding:11px 20px" onclick="APP.cmd('orderSearch',(document.getElementById('mSearch')||{}).value?document.getElementById('mSearch').value.trim():'')">
+        <span style="color:var(--text-secondary);display:flex;flex:none">${ic('search')}</span>
+        <span style="flex:1;font-size:15px">${T('Search orders','搜索订单')}</span>
+        <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>
+      <div class="eyebrow" style="padding:16px 20px 6px">${T('Jump to','快速跳转')}</div>
       ${results.map(r=>`<button class="row" style="min-height:52px;padding:11px 20px" onclick="${r.cmd}"><span style="color:var(--text-secondary);display:flex;flex:none">${ic(r.icon)}</span>
-        <span style="flex:1;display:flex;align-items:baseline;gap:7px"><span style="font-size:15px">${T(...r.p)}</span><span style="font-size:13px;color:var(--text-secondary)">${r.s}</span></span>
-        <span style="font-size:12px;color:var(--text-secondary)">${T(...r.g)}</span></button>`).join('')}</div></div>`;
+        <span style="flex:1;font-size:15px">${T(...r.p)}</span>
+        <span style="font-size:13px;color:var(--text-secondary)">${T(...r.g)}</span></button>`).join('')}</div></div>`;
 }
 
 
@@ -1504,12 +1766,12 @@ function mapProduct(r){
   const price=r.sell_price!=null?r.sell_price:(r.price!=null?r.price:0);
   const kind=stock<=0?'off':(stock<=10?'restock':'on');
   const st=stock<=0?['Out','缺货']:(stock<=10?['Low','库存低']:['Live','在售']);
-  return {name:[r.name_en||r.name_cn||'—',r.name_cn||r.name_en||'—'],sku:r.sku?('SKU '+r.sku):('#'+r.id),
-    price:money(CUR,price), stock, stockLabel:[stock+' in stock',('库存 '+stock)], status:st, kind};
+  return {_id:r.id, name:[r.name_en||r.name_cn||'—',r.name_cn||r.name_en||'—'],sku:r.sku?('SKU '+r.sku):('#'+r.id),
+    price:money(CUR,price), priceNum:Number(price)||0, stock, stockLabel:[stock+' in stock',('库存 '+stock)], status:st, kind};
 }
 function mapReview(r){
   const replied=r.reply&&String(r.reply).trim();
-  return {cust:[r.customer_name||'Customer',r.customer_name||'顾客'], rating:r.rating?Number(r.rating).toFixed(1):'',
+  return {id:r.id, source:r.source||'real', stream:'review', reply:r.reply||'', cust:[r.customer_name||'Customer',r.customer_name||'顾客'], rating:r.rating?Number(r.rating).toFixed(1):'',
     status:replied?['Replied','已回复']:['New','新'], kind:replied?'clear':'success',
     text:[r.comment||'',r.comment||''], time:[hhmm(r.created_at)||'',hhmm(r.created_at)||'']};
 }
@@ -1564,7 +1826,7 @@ function mapBroadcast(r){
 }
 function mapFeedback(r){
   const open=r.needs_reply||!r.replied;
-  return {cust:[r.customer_name||r.nickname||'Customer',r.customer_name||r.nickname||'顾客'],
+  return {id:r.id, stream:'feedback', cust:[r.customer_name||r.nickname||'Customer',r.customer_name||r.nickname||'顾客'],
     status:open?['Open','待处理']:['Replied','已回复'], kind:open?'success':'clear',
     text:[r.message||r.last_body||'',r.message||r.last_body||''], time:[hhmm(r.created_at)||'',hhmm(r.created_at)||'']};
 }
@@ -1690,6 +1952,7 @@ async function loadLive(){
   }})).catch(()=>{});
   api('/order-channel-counts').then(d=>set(()=>{ if(d) state.liveChannelCounts=d; })).catch(()=>{});
 
+  api('/stores').then(r=>set(()=>{ if(Array.isArray(r)) state.stores=r.filter(s=>s.is_active==null||s.is_active); })).catch(()=>{});
   api('/categories').then(r=>set(()=>{ if(Array.isArray(r)&&r.length) DB.categories=r.map(mapCategory); })).catch(()=>{});
   api('/purchases').then(r=>set(()=>{ if(Array.isArray(r)&&r.length) DB.purchasing=r.map(mapPurchase); })).catch(()=>{});
   api('/activity').then(r=>set(()=>{ const rows=(r&&r.rows)||(Array.isArray(r)?r:null); if(rows&&rows.length) DB.activity=rows.slice(0,20).map(mapActivity); })).catch(()=>{});
