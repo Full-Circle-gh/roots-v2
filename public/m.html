@@ -1127,12 +1127,20 @@ function screenHome(){
   // count rather than left off the only screen that lists what is waiting.
   if(A.reviews) fires.push({sev:'amber',icon:'message-square-text',
     label:T('Reviews to reply','待回复评价'),n:A.reviews,meta:'',go:"APP.cmd('push','inbox')",mins:null});
-  const vy=T('vs yesterday','较昨日');
-  const kpis = state.liveKpis || [[T('Revenue','营收'),'¥12,840','+8% '+vy],[T('Orders','订单'),'37','+5 '+vy],[T('Avg. order','客单价'),'¥347','−2% '+vy],[T('Visitors','访客'),'1,204','+11% '+vy]];
+  /* This tile used to fall back to ¥12,840 · 37 orders · ¥347 · 1,204 visitors
+     — four numbers typed into a mockup, under the heading "Today", on the
+     first screen the app opens. Nothing else in the app was in a worse place
+     to be inventing money. A tile with no figure yet says so. */
+  const kpis = state.liveKpis;
+  /* "Add product", "Create coupon", "Send broadcast" — three verbs, none of
+     which the phone can do, each opening a read-only list. They are not
+     controls wired to nothing, which is why they survived the noop sweep, but
+     they promise the same thing and break it. These three are what a phone
+     can genuinely do in one tap. */
   const quick=[
-    {icon:'plus',label:T('Add product','添加产品'),cmd:"APP.cmd('push','products')"},
-    {icon:'ticket',label:T('Create coupon','创建优惠券'),cmd:"APP.cmd('push','coupons')"},
-    {icon:'megaphone',label:T('Send broadcast','发送广播'),cmd:"APP.cmd('push','broadcasts')"},
+    {icon:'message-square-text',label:T('Answer the inbox','回复消息'),cmd:"APP.cmd('push','inbox')"},
+    {icon:'shopping-cart',label:T('Tick a delivery in','确认收货'),cmd:"APP.cmd('push','purchasing')"},
+    {icon:'box',label:T('Fix a price or a count','改价或改库存'),cmd:"APP.cmd('tab','products')"},
   ];
   const today=new Date();
   const dateLine = LANG==='en'
@@ -1154,11 +1162,16 @@ function screenHome(){
           <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`).join('')}</div></div>`:''}
     <div class="rise" style="animation-delay:.12s">
       <div style="padding:2px 4px 8px;font-size:18px;font-weight:500">${T('Today','今日')}</div>
-      <div class="card" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px">${kpis.map(([l,v,d])=>
+      <div class="card" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px">${kpis
+        ? kpis.map(([l,v,d])=>
         `<div style="min-width:0">
            <span style="display:block;font-size:13px;color:var(--text-secondary)">${l}</span>
            <span class="num" style="display:block;font-size:18px;font-weight:500;line-height:1.4">${v}</span>
-           ${d?`<span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${d}</span>`:''}</div>`).join('')}</div></div>
+           ${d?`<span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${d}</span>`:''}</div>`).join('')
+        : [T('Revenue (all channels)','营收（全渠道）'),T('Orders (storefront)','订单（自营）'),T('Avg. order','客单价'),T('New customers','新客')].map(l=>
+        `<div style="min-width:0">
+           <span style="display:block;font-size:13px;color:var(--text-secondary)">${l}</span>
+           <span class="num" style="display:block;font-size:18px;font-weight:500;line-height:1.4;color:var(--text-secondary);opacity:.55">—</span></div>`).join('')}</div></div>
     ${vitalsBlock()}
     <div class="rise" style="animation-delay:.18s">
       <div style="padding:2px 4px 8px;font-size:18px;font-weight:500">${T('Quick actions','快捷操作')}</div>
@@ -3513,8 +3526,14 @@ function opsFires(){
   // (a stock state) sorts last: it cannot be ranked by waiting.
   const add=(cond,sev,icon,label,n,items,meta,go)=>{ if(cond) f.push({sev,icon,label,n,meta:meta||oldestOf(items),go,mins:oldestMins(items)}); };
   const c=k=>(o[k]&&o[k].count)||0;
-  add(c('delivery_alerts'),'brick','truck',T('Delivery needs a call','配送需要跟进'),c('delivery_alerts'),o.delivery_alerts.items,'',"APP.cmd('ordersGo','dispatched')");
-  add(c('payment_mismatch'),'brick','banknote',T("Payment doesn't match",'付款金额不符'),c('payment_mismatch'),o.payment_mismatch.items,'',"APP.cmd('ordersGo','pending')");
+  /* Arguments are evaluated before add() looks at its condition, so reading
+     o.<key>.items inline threw on any payload missing a key — and a render
+     that throws leaves the PREVIOUS screen on the glass, so Home would simply
+     look stale. The server sends every key today; this does not depend on it
+     continuing to. */
+  const items=k=>(o[k]&&o[k].items)||[];
+  add(c('delivery_alerts'),'brick','truck',T('Delivery needs a call','配送需要跟进'),c('delivery_alerts'),items('delivery_alerts'),'',"APP.cmd('ordersGo','dispatched')");
+  add(c('payment_mismatch'),'brick','banknote',T("Payment doesn't match",'付款金额不符'),c('payment_mismatch'),items('payment_mismatch'),'',"APP.cmd('ordersGo','pending')");
   // The brick fire's sibling: a proof IS on file, it was not rejected, and the
   // order is still unpaid — verified with auto-flip off, unreadable, or never
   // read at all (no vision key, which makes it every proof that tenant gets).
@@ -3524,13 +3543,13 @@ function opsFires(){
   // click. Same door as its sibling — both are sitting in Pending.
   if(c('payment_unconfirmed')){
     const pu=o.payment_unconfirmed, k=Number(pu.unread||0);
-    add(true,'amber','banknote',T('Payments to confirm','待确认付款'),pu.count,pu.items,
+    add(true,'amber','banknote',T('Payments to confirm','待确认付款'),pu.count,items('payment_unconfirmed'),
       k>0?T(k+" couldn't be read",k+' 张无法识别'):'',"APP.cmd('ordersGo','pending')");
   }
-  add(c('refunds'),'amber','refund',T('Refunds waiting','退款待处理'),c('refunds'),o.refunds.items,'',"APP.cmd('ordersGo','refund')");
-  add(c('unhandled'),'amber','package',T('Orders to start','待开始备货'),c('unhandled'),o.unhandled.items,'',"APP.cmd('ordersGo','paid')");
-  add(c('awaiting_restock'),'amber','clock',T('Orders awaiting restock','订单待补货'),c('awaiting_restock'),o.awaiting_restock.items,'',"APP.cmd('ordersGo','restock')");
-  add(c('invoices'),'amber','receipt',T('Invoices to issue','待开发票'),c('invoices'),o.invoices.items,'',"APP.cmd('push','invoices')");
+  add(c('refunds'),'amber','refund',T('Refunds waiting','退款待处理'),c('refunds'),items('refunds'),'',"APP.cmd('ordersGo','refund')");
+  add(c('unhandled'),'amber','package',T('Orders to start','待开始备货'),c('unhandled'),items('unhandled'),'',"APP.cmd('ordersGo','paid')");
+  add(c('awaiting_restock'),'amber','clock',T('Orders awaiting restock','订单待补货'),c('awaiting_restock'),items('awaiting_restock'),'',"APP.cmd('ordersGo','restock')");
+  add(c('invoices'),'amber','receipt',T('Invoices to issue','待开发票'),c('invoices'),items('invoices'),'',"APP.cmd('push','invoices')");
   const oos=c('out_of_stock'), low=c('low_stock');
   if(oos+low){
     // The pill counts what is actually OUT; the line names the rest. One number

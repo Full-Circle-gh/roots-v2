@@ -842,6 +842,25 @@ jobs, and the second is a phone job.
 | What each card is for | ❌ → ✅ — the desktop's own blurbs |
 | Upload a picture, write a title, live WeChat-chat preview | ➖ decided: desktop |
 
+### Home — the third sweep
+
+Two defects, neither of them a broken control, on the first screen the app
+opens.
+
+| Finding | Now |
+|---|---|
+| **The "Today" tile fell back to `¥12,840 · 37 orders · ¥347 · 1,204 visitors`** — four numbers typed into a mockup, under a heading that says *Today*. Any slow or failed `/dashboard` call put invented money in front of an operator, in the worst possible place for it | Removed. The tile keeps its four labels and shows `—` until the figure arrives |
+| **Quick actions offered "Add product", "Create coupon", "Send broadcast"** — three verbs the phone cannot perform, each opening a read-only list. Not wired to `noop`, which is why they outlived that sweep, but they make the same promise and break it the same way | Replaced with three things the phone genuinely does in one tap: answer the inbox, tick a delivery in, fix a price or a count |
+| `opsFires` read `o.<key>.items` inline, and arguments are evaluated before `add()` looks at its condition — so a `/dashboard/ops` payload missing any key threw mid-render. A render that throws leaves the *previous* screen on the glass, so Home would have looked stale rather than broken | Defensive, and pinned by a test |
+
+The needs-you queue itself was already the ops snapshot and stays: delivery,
+payment mismatch, payments to confirm, refunds, orders to start, awaiting
+restock, invoices, stock — ranked brick before amber, then by how long the
+oldest thing in each queue has waited.
+
+`scripts/test_mobile_home.js` — 23 assertions, 6 cases, each fake figure
+asserted absent by its own value.
+
 ## 4. Open questions
 
 Not gaps — decisions that are the shop's to make, not this file's.
