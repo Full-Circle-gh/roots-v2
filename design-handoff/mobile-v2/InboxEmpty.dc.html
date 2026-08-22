@@ -1,0 +1,210 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&family=Fraunces:opsz,wght@9..144,300&display=swap">
+  <style>
+    /* ── Tacet tokens · light (Paper). Values lifted verbatim from the live
+       --td-* block, retail-admin.css :root[data-theme="light"]. Dark mode is a
+       token swap only: Paper and Ink trade places, every other role holds. ── */
+    :root{
+      --td-paper:#FBF9F4; --td-surface:#FFFFFF; --td-raised:#F6F3EC;
+      --td-border:#E4E0D5; --td-header:#DAD5C6; --td-unseen:#F4F5F0;
+      --td-text:#111A2B; --td-text2:#58606E;
+      --td-dusk:#6E67AF; --td-dusk-tint:#EEEDF6;
+      --td-sage:#A3B49F; --td-sage-tint:#EDF1EC; --td-sage-ink:#4A6249;
+      --td-amber:#C9954A; --td-amber-tint:#F7EEDE; --td-amber-ink:#8A6425;
+      --td-brick:#B4533E; --td-brick-tint:#F6E7E3; --td-brick-ink:#B4533E;
+      --settle:cubic-bezier(0.16,1,0.3,1);
+      --ui:'Inter','Source Han Sans SC','PingFang SC',system-ui,sans-serif;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--td-paper);color:var(--td-text);
+      font-family:var(--ui);font-size:15px;font-weight:400;line-height:1.6;
+      -webkit-font-smoothing:antialiased}
+    a{color:var(--td-text);text-decoration:underline;text-decoration-color:rgba(17,26,43,.6)}
+    a:hover{text-decoration-color:var(--td-text)}
+    .num{font-variant-numeric:tabular-nums}
+    /* Frame — one phone screen. 390x844 = the artboard, never a drawn device. */
+    .screen{width:390px;height:844px;display:flex;flex-direction:column;
+      background:var(--td-paper);overflow:hidden;position:relative}
+    /* ── Topbar · the shell, identical on every page (rulebook §1.1d: closed) ── */
+    .topbar{flex:none;height:56px;display:flex;align-items:center;gap:8px;
+      padding:0 8px 0 16px;background:var(--td-surface);
+      border-bottom:1px solid var(--td-border)}
+    .lockup{display:flex;align-items:center;gap:8px;flex:none}
+    .lockup svg{display:block;width:58px;height:20px}
+    .wordmark{font-family:'Fraunces',Georgia,serif;font-weight:300;font-size:17px;
+      letter-spacing:.2em;line-height:1;color:var(--td-text)}
+    .cobrand{width:1px;height:24px;background:var(--td-border);margin:0 16px;flex:none}
+    .spacer{flex:1 1 auto;min-width:0}
+    .ico{width:44px;height:44px;flex:none;display:flex;align-items:center;justify-content:center;
+      border:0;border-radius:8px;background:none;color:var(--td-text2);cursor:pointer}
+    .ico svg{width:20px;height:20px}
+    .ico-wrap{position:relative;flex:none;display:flex}
+    .unseen-dot{position:absolute;top:9px;right:9px;width:6px;height:6px;border-radius:50%;
+      background:var(--td-sage);box-shadow:0 0 0 2px var(--td-surface)}
+    .avatar{width:32px;height:32px;border-radius:8px;background:var(--td-dusk-tint);
+      color:var(--td-dusk);display:flex;align-items:center;justify-content:center;
+      font-weight:500;font-size:15px;flex:none;margin:0 6px}
+    /* ── Page header · title / status line / one Dusk CTA (§1.7) ── */
+    .page-head{flex:none;display:flex;align-items:flex-start;gap:16px;padding:24px 16px 16px}
+    .page-head h1{margin:0;font-size:24px;font-weight:500;letter-spacing:-.01em;line-height:1.25}
+    .status-line{margin:4px 0 0;font-size:15px;color:var(--td-text2);font-variant-numeric:tabular-nums}
+    .btn{border:0;border-radius:8px;font-family:var(--ui);font-size:15px;font-weight:500;
+      min-height:44px;padding:0 16px;cursor:pointer;display:inline-flex;align-items:center;
+      justify-content:center;gap:8px;white-space:nowrap;transition:background .2s var(--settle)}
+    .btn-primary{background:var(--td-dusk);color:var(--td-paper)}
+    .btn-secondary{background:transparent;color:var(--td-text);
+      box-shadow:inset 0 0 0 1px var(--td-border)}
+    .btn-ghost{background:none;color:var(--td-text2);padding:0 8px}
+        .btn[disabled]{opacity:.55;cursor:default}
+    /* ── Scroll body ── */
+    .body{flex:1 1 auto;min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:24px;
+      padding:0 16px 16px}
+    .sec-title{margin:0 0 16px;font-size:18px;font-weight:500;letter-spacing:0}
+    .cap{font-size:13px;color:var(--td-text2)}
+    .card{background:var(--td-surface);border:1px solid var(--td-border);border-radius:14px}
+    .raised{background:var(--td-raised);border-radius:14px}
+    .pill{display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;
+      font-size:13px;font-weight:400;white-space:nowrap;flex:none}
+    .p-sage{background:var(--td-sage-tint);color:var(--td-sage-ink)}
+    .p-amber{background:var(--td-amber-tint);color:var(--td-amber-ink)}
+    .p-brick{background:var(--td-brick-tint);color:var(--td-brick-ink)}
+    .p-mute{background:var(--td-raised);color:var(--td-text2)}
+    .dusk-dot{width:8px;height:8px;border-radius:50%;background:var(--td-dusk);flex:none;
+      animation:breathe 2.4s ease-in-out infinite}
+    @keyframes breathe{0%,100%{opacity:1}50%{opacity:.45}}
+    @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+    /* ── Filter chips · primary axis, live counts (A1) ── */
+    .chiprow{display:flex;gap:8px;overflow:hidden;padding:0 16px;flex:none}
+    .chip{display:inline-flex;align-items:center;gap:8px;height:44px;padding:0 16px;
+      border-radius:999px;border:1px solid var(--td-border);background:var(--td-surface);
+      color:var(--td-text2);font-size:13px;font-family:var(--ui);white-space:nowrap;flex:none}
+    .chip .c{font-variant-numeric:tabular-nums;color:var(--td-text2)}
+    .chip.on{background:var(--td-text);border-color:var(--td-text);color:var(--td-paper)}
+    .chip.on .c{color:var(--td-paper);opacity:.7}
+    /* ── Order card · the phone render of a Worklist row ── */
+    .ordcard{display:flex;flex-direction:column;gap:8px;padding:16px;background:var(--td-surface);
+      border:1px solid var(--td-border);border-radius:14px;text-align:left}
+    .ordcard.unseen{background:var(--td-unseen);box-shadow:inset 4px 0 0 var(--td-sage)}
+    .ord-top{display:flex;align-items:center;justify-content:space-between;gap:8px}
+    .ord-id{display:flex;align-items:center;gap:8px;min-width:0;color:var(--td-text2);font-size:13px;
+      font-variant-numeric:tabular-nums}
+    .ord-id svg{width:16px;height:16px;flex:none}
+    .ord-total{font-size:18px;font-weight:500;font-variant-numeric:tabular-nums;flex:none}
+    .ord-mid{display:flex;align-items:center;justify-content:space-between;gap:8px}
+    .ord-name{font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .ord-bot{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;
+      color:var(--td-text2)}
+    .ord-bot .when{font-variant-numeric:tabular-nums;flex:none}
+    .amber{color:var(--td-amber-ink)}
+    /* ── Bottom nav · five destinations, Ink active, Sage unseen dot ── */
+    .tabbar{flex:none;display:flex;height:64px;background:var(--td-surface);
+      border-top:1px solid var(--td-border)}
+    .tab{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;
+      justify-content:center;gap:4px;border:0;background:none;color:var(--td-text2);
+      font-family:var(--ui);font-size:13px;line-height:1;cursor:pointer;position:relative}
+    .tab svg{width:22px;height:22px}
+    .tab .lab{max-width:100%;letter-spacing:-.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .tab.on{color:var(--td-text);font-weight:500}
+    .tab .dot{position:absolute;top:8px;left:calc(50% + 8px);width:6px;height:6px;border-radius:50%;
+      background:var(--td-sage)}
+    /* ── Sub-view strip · swaps what kind of thing you are looking at (§1.7) ── */
+    .subviews{display:flex;gap:24px;padding:0 16px;flex:none;border-bottom:1px solid var(--td-border)}
+    .subview{border:0;background:none;font-family:var(--ui);font-size:15px;color:var(--td-text2);
+      height:44px;padding:0;cursor:pointer;position:relative;white-space:nowrap}
+    .subview.on{color:var(--td-text);font-weight:500}
+    .subview.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--td-text)}
+    /* ── Monogram · rounded square, never a circle (§1.14) ── */
+    .mono{flex:none;width:32px;height:32px;border-radius:8px;background:var(--td-dusk-tint);
+      color:var(--td-dusk);display:flex;align-items:center;justify-content:center;font-weight:500;font-size:15px}
+    /* ── Product thumb · placeholder until the catalogue's own image loads ── */
+    .thumb{flex:none;width:48px;height:48px;border-radius:8px;background:var(--td-raised);
+      display:flex;align-items:center;justify-content:center;color:var(--td-border)}
+    .thumb svg{width:20px;height:20px}
+    /* ── Record card · a list row on a phone ── */
+    .reccard{display:flex;gap:16px;align-items:center;padding:16px;background:var(--td-surface);
+      border:1px solid var(--td-border);border-radius:14px;text-align:left}
+    .reccard.unseen{background:var(--td-unseen);box-shadow:inset 4px 0 0 var(--td-sage)}
+    .rec-main{flex:1;min-width:0}
+    .rec-name{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:500;min-width:0}
+    .rec-name b{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .rec-sub{display:block;font-size:13px;color:var(--td-text2);white-space:nowrap;overflow:hidden;
+      text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+    .rec-side{flex:none;text-align:right}
+    .zero{color:var(--td-text2)}
+    /* ── Console row · label + one-line description left, one control right ── */
+    .crow{display:flex;align-items:center;gap:16px;width:100%;min-height:56px;padding:12px 16px;text-align:left}
+    .crow + .crow{border-top:1px solid var(--td-border)}
+    .crow-main{flex:1;min-width:0}
+    .crow-main b{display:block;font-weight:400;font-size:15px}
+    .crow-val{flex:none;font-size:15px;color:var(--td-text2);font-variant-numeric:tabular-nums}
+    /* The switch is a control, so it takes the control radius at its own scale. */
+    .switch{flex:none;width:44px;height:26px;border-radius:999px;position:relative;background:var(--td-border)}
+    /* Dusk only where the switch ARMS AN AUTOMATION — there it is telling the
+       truth about who acts. A plain preference takes Ink. */
+    .switch.on{background:var(--td-dusk)}
+    .switch.ink.on{background:var(--td-text)}
+    .switch span{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#FFFFFF;
+      box-shadow:0 1px 2px rgba(17,26,43,.2)}
+    .switch.on span{left:21px}
+    /* ── Board card · one external system, one status dot, at most two metrics ── */
+    .bcard{display:flex;flex-direction:column;gap:8px;padding:16px;background:var(--td-surface);
+      border:1px solid var(--td-border);border-radius:14px}
+    .bhead{display:flex;align-items:center;gap:12px}
+    .bglyph{flex:none;width:36px;height:36px;border-radius:8px;background:var(--td-raised);
+      display:flex;align-items:center;justify-content:center;color:var(--td-text2)}
+    .bglyph svg{width:20px;height:20px}
+    .dot{flex:none;width:8px;height:8px;border-radius:50%}
+    /* ── Notes drawn on the artboard, never part of the screen ── */
+    .note{position:absolute;font-size:13px;line-height:1.5;color:var(--td-text2)}
+  </style>
+</helmet>
+
+<div class="screen">
+  
+  <div class="topbar">
+    <span class="lockup"><svg viewBox="0 0 340 110" fill="none" aria-hidden="true"><path d="M20 55 C30 15, 40 95, 50 55 C59 22, 68 88, 77 55 C85 30, 93 80, 101 55 C109 38, 117 72, 125 55 C133 44, 141 66, 149 55 C160 50, 171 60, 182 55 C215 55, 260 55, 305 55" stroke="currentColor" stroke-width="8.8" stroke-linecap="round"/></svg><span class="wordmark">tacet</span></span>
+    <span class="spacer"></span>
+    <button class="ico" aria-label="Search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
+    <span class="ico-wrap"><button class="ico" aria-label="Inbox"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></button></span>
+    <span class="avatar">A</span>
+  </div>
+  
+  <div class="page-head">
+    <div style="flex:1;min-width:0">
+      <h1>Inbox</h1>
+      
+    </div>
+  </div>
+  
+  <div class="subviews">
+    <button class="subview">Reviews</button>
+    <button class="subview on">Feedback</button>
+  </div>
+  <div style="height:16px;flex:none"></div>
+  <div class="body" style="justify-content:center;align-items:center;gap:16px;padding-bottom:80px;text-align:center">
+    <p style="margin:0;font-size:18px;font-weight:500">Nothing needs you</p>
+    <p style="margin:0;max-width:260px;font-size:15px;color:var(--td-text2)">Every note customers have sent has an answer. Enjoy it.</p>
+  </div>
+  
+  <nav class="tabbar" aria-label="Sections">
+    <button class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg><span class="lab">Home</span></button>
+    <button class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M9 13h6"/><path d="M9 17h6"/></svg><span class="lab">Orders</span></button>
+    <button class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span class="lab">Customers</span></button>
+    <button class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18l-2 14H5L3 3z"/><circle cx="9" cy="20" r="1.5"/><circle cx="17" cy="20" r="1.5"/><path d="M8 7h8"/></svg><span class="lab">Products</span></button>
+    <button class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none"/></svg><span class="lab">More</span></button>
+  </nav>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>

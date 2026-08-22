@@ -21,13 +21,19 @@
   --amber:#C9954A; --brick:#B4533E;
   --dusk-tint:#EEEDF6; --sage-tint:#EDF1EC; --amber-tint:#F7EEDE; --brick-tint:#F6E7E3;
   --raised:#F6F3EC; --border:#E4E0D5; --dusk-hover:#605AA0; --dusk-press:#524C8C;
+  /* The row surface for a record nobody on the team has opened yet. Deliberately
+     LIGHTER than a header band: an unseen row is transient content and must never
+     read as heavy as the page's own chrome. Pairs with a Sage left edge drawn as an
+     inset shadow, never a border — a marker that resizes its row makes the list
+     jump as records get opened. */
+  --unseen:#F4F5F0;
 
   --bg:var(--paper); --surface-card:#FFFFFF; --surface-raised:var(--raised); --surface-dark:var(--ink);
   --text-primary:var(--ink); --text-secondary:var(--graphite); --text-caption:var(--graphite);
   --border-default:var(--border); --border-strong:var(--graphite); --border-focus:var(--dusk);
   --accent:var(--dusk); --accent-hover:var(--dusk-hover); --accent-press:var(--dusk-press); --accent-tint:var(--dusk-tint);
   --success:var(--sage); --warning:var(--amber); --danger:var(--brick);
-  --radius-card:16px;
+  --radius-card:14px;
 
   --ease-settle:cubic-bezier(0.16,1,0.3,1);
   --font-ui:'Inter','Noto Sans SC','Source Han Sans SC',-apple-system,system-ui,sans-serif;
@@ -36,6 +42,7 @@
   --bg:var(--ink); --surface-card:#182236; --surface-raised:#1E2A40; --surface-dark:#0B121F;
   --text-primary:var(--paper); --text-secondary:#9AA2B0; --text-caption:#9AA2B0;
   --border-default:#263149; --border-strong:#3A455D;
+  --unseen:#182329;
 }
 *{box-sizing:border-box;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%}
@@ -68,38 +75,42 @@ button,input,textarea{font-family:inherit}
 .iconbtn{width:44px;height:44px;flex:none;display:flex;align-items:center;justify-content:center;
   border:none;background:transparent;color:var(--text-secondary);cursor:pointer;border-radius:8px}
 .card{background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px}
+.card.unseen{background:var(--unseen);box-shadow:inset 4px 0 0 var(--sage);
+  transition:background .6s var(--ease-settle), box-shadow .6s var(--ease-settle)}
 .list{background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;overflow:hidden}
 .sep{height:1px;background:var(--border-default)}
-.eyebrow{font-size:11.5px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--text-secondary)}
-.row{display:flex;align-items:center;gap:14px;width:100%;min-height:54px;padding:11px 14px;background:transparent;
+.eyebrow{font-size:13px;font-weight:500;color:var(--text-secondary)}
+.row{display:flex;align-items:center;gap:16px;width:100%;min-height:56px;padding:12px 16px;background:transparent;
   border:none;cursor:pointer;text-align:left;color:var(--text-primary);font-family:inherit}
-.rowico{width:34px;height:34px;border-radius:9px;background:var(--surface-raised);display:flex;align-items:center;
+.rowico{width:36px;height:36px;border-radius:8px;background:var(--surface-raised);display:flex;align-items:center;
   justify-content:center;color:var(--text-secondary);flex:none}
 .num{font-variant-numeric:tabular-nums}
-.cta{width:100%;padding:15px;border:none;border-radius:12px;background:var(--accent);color:#fff;
-  font-family:inherit;font-size:16px;font-weight:500;cursor:pointer;transition:background .2s var(--ease-settle)}
+.btn2{min-height:44px;padding:0 16px;border-radius:8px;border:1px solid var(--border-default);background:transparent;
+  color:var(--text-primary);font-family:inherit;font-size:15px;font-weight:500;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.btn2:disabled{opacity:.55;cursor:default}
+.cta{width:100%;min-height:44px;padding:12px 16px;border:none;border-radius:8px;background:var(--accent);color:#fff;
+  font-family:inherit;font-size:15px;font-weight:500;cursor:pointer;transition:background .2s var(--ease-settle)}
 .cta:hover{background:var(--accent-hover)}.cta:active{background:var(--accent-press)}
 .scrim{position:absolute;inset:0;background:rgba(17,26,43,.38);animation:tFade .2s ease both}
 .sheet{position:absolute;left:0;right:0;bottom:0;background:var(--surface-card);
-  border-top-left-radius:22px;border-top-right-radius:22px;box-shadow:0 -10px 44px rgba(17,26,43,.18);
+  border-top-left-radius:14px;border-top-right-radius:14px;
+  box-shadow:0 1px 2px rgba(17,26,43,.05), 0 4px 16px rgba(17,26,43,.04);
   animation:tSheetUp .4s var(--ease-settle) both;display:flex;flex-direction:column}
 .grabber{width:38px;height:5px;border-radius:999px;background:var(--border-default);margin:6px auto 8px}
-.pill{display:inline-flex;align-items:center;font-size:12px;font-weight:500;padding:3px 10px;border-radius:999px;white-space:nowrap;flex:none}
-.stepbtn{width:42px;height:42px;border-radius:11px;background:var(--surface-raised);border:1px solid var(--border-default);
+.pill{display:inline-flex;align-items:center;font-size:13px;font-weight:400;padding:4px 10px;border-radius:999px;white-space:nowrap;flex:none}
+.stepbtn{width:44px;height:44px;border-radius:8px;background:var(--surface-raised);border:1px solid var(--border-default);
   display:flex;align-items:center;justify-content:center;color:var(--text-primary);cursor:pointer;flex:none}
-.chip{display:flex;align-items:center;gap:6px;flex:none;padding:7px 12px;border-radius:999px;font-size:13px;
+.chip{display:flex;align-items:center;gap:8px;flex:none;height:44px;padding:0 16px;border-radius:999px;font-size:13px;
   cursor:pointer;font-family:inherit;white-space:nowrap;border:1px solid var(--border-default);
   background:var(--surface-card);color:var(--text-secondary)}
 .chip.on{background:var(--text-primary);color:var(--bg);border-color:var(--text-primary)}
 .chip .c{font-size:11px;font-variant-numeric:tabular-nums;opacity:.8}
 .i svg,svg.i{display:block;flex:none}
 .toast{position:absolute;left:50%;transform:translateX(-50%);bottom:112px;z-index:60;background:var(--text-primary);
-  color:var(--bg);padding:10px 18px;border-radius:999px;font-size:13.5px;white-space:nowrap;
+  color:var(--bg);padding:10px 18px;border-radius:999px;font-size:13px;white-space:nowrap;
   box-shadow:0 6px 20px rgba(17,26,43,.22);animation:tFade .2s ease both}
-.fab{position:absolute;right:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 84px);z-index:30;display:flex;
-  align-items:center;gap:8px;padding:13px 18px 13px 14px;border:none;border-radius:999px;background:var(--accent);
-  color:#fff;cursor:pointer;font-size:15px;font-weight:500;box-shadow:0 6px 20px rgba(110,103,175,.38)}
-input,textarea{padding:12px 14px;border:1px solid var(--border-default);border-radius:11px;background:var(--surface-card);
+input,textarea{padding:12px 14px;border:1px solid var(--border-default);border-radius:8px;background:var(--surface-card);
   color:var(--text-primary);font-size:15px;width:100%}
 input:focus,textarea:focus{outline:none;border-color:var(--border-focus)}
 </style>
@@ -153,23 +164,23 @@ function toggle(on, onClick){
 const CH_ICON = {miniapp:'smartphone',web:'globe',meituan:'bike',gzgrocery:'warehouse',manual:'square-pen'};
 const DB = {
   orders:[
-    {id:'RT-…047',ch:'miniapp',cust:['Chen Meiling','陈美玲'],total:'¥312',placed:'14:22',status:['Paid','已付款'],kind:'paid',isNew:true,ship:['Guangzhou · Tianhe','广州 · 天河区'],by:['Ship by 18:00 · 3h left','今日 18:00 截单 · 剩 3h'],byAmber:true,phone:'138****2841',addr:['Tianhe, Guangzhou','广州市天河区'],pay:['WeChat Pay','微信支付'],txn:'42000••••8831',fulfil:['Tianhe store','天河店'],route:['Auto-routed to nearest store','自动派往最近门店'],trk:null,items:[[1,'Organic carrots 500g','¥18'],[2,'Oat milk 1L','¥64'],[1,'Mixed nuts 250g','¥45']],breakdown:[['Subtotal','¥300'],['Delivery','¥12']]},
-    {id:'RT-…046',ch:'web',cust:['Sarah Lim','Sarah Lim'],total:'¥186',placed:'14:07',status:['Paid','已付款'],kind:'paid',isNew:true,ship:['Guangzhou · Yuexiu','广州 · 越秀区'],by:['Ship by 18:00','今日 18:00 截单'],phone:'159****7723',addr:['Yuexiu, Guangzhou','广州市越秀区'],pay:['Card','银行卡'],txn:'••••7723',fulfil:['Tianhe store','天河店'],route:['Nearest store','最近门店'],items:[[2,'Sourdough loaf','¥93']],breakdown:[['Subtotal','¥186']]},
-    {id:'RT-…045',ch:'miniapp',cust:['Wang Zhiqiang','王志强'],total:'¥458',placed:'13:41',status:['Preparing','备货中'],kind:'preparing',ship:['Pickup in-store','到店自提'],by:['Pickup · tomorrow 12:00','自提 · 明日 12:00'],phone:'137****5510',addr:['Pickup · Panyu store','自提 · 番禺店'],pay:['WeChat Pay','微信支付'],txn:'••••5510',fulfil:['Panyu store','番禺店'],route:['Pickup','自提'],items:[[6,'Assorted grocery','¥458']],breakdown:[['Subtotal','¥458']]},
-    {id:'RT-…044',ch:'meituan',cust:['Li Na','李娜'],total:'¥95',placed:'13:15',status:['Out for delivery','配送中'],kind:'dispatched',viewOnly:true,ship:['Guangzhou · Haizhu','广州 · 海珠区'],phone:'—',addr:['Haizhu, Guangzhou','广州市海珠区'],pay:['Meituan','美团'],txn:'platform',fulfil:['Platform rider','平台骑手'],route:['Meituan dispatch','美团派单'],trk:{carrier:['Platform rider','平台骑手'],no:'MT-…044',event:['Rider 1.2km away','骑手距 1.2km'],live:true},items:[[3,'Snacks','¥95']],breakdown:[['Subtotal','¥95']]},
-    {id:'RT-…043',ch:'miniapp',cust:['Zhang Wei','张伟'],total:'¥726',placed:'11:50',status:['Dispatched','已发货'],kind:'dispatched',ship:['Shenzhen · Nanshan','深圳 · 南山区'],by:['Met','已发'],phone:'186****0092',addr:['Nanshan, Shenzhen','深圳市南山区'],pay:['WeChat Pay','微信支付'],txn:'••••0092',fulfil:['Tianhe store','天河店'],route:['JD Express','京东快递'],trk:{carrier:['JD Express','京东快递'],no:'JDV0038821',event:['In transit · left Guangzhou hub','运输中 · 已离开广州分拣'],live:true},items:[[8,'Bulk order','¥726']],breakdown:[['Subtotal','¥700'],['Delivery','¥26']]},
-    {id:'RT-…041',ch:'manual',cust:['Guest (staff)','访客（员工）'],total:'¥164',placed:'11:04',status:['Pending','待处理'],kind:'pending',ship:['Guangzhou · Tianhe','广州 · 天河区'],phone:'—',addr:['Tianhe, Guangzhou','广州市天河区'],pay:['Cash on pickup','到店付款'],txn:'—',fulfil:['Tianhe store','天河店'],route:['Manual','手动'],items:[[2,'Staff order','¥164']],breakdown:[['Subtotal','¥164']]},
-    {id:'RT-…039',ch:'miniapp',cust:['Huang Xiaoting','黄小婷'],total:'¥215',placed:'10:21',status:['Awaiting restock','等待补货'],kind:'restock',ship:['Guangzhou · Baiyun','广州 · 白云区'],by:['Paused','已暂停'],phone:'139****4456',addr:['Baiyun, Guangzhou','广州市白云区'],pay:['WeChat Pay','微信支付'],txn:'••••4456',fulfil:['Panyu store','番禺店'],route:['Paused — low stock','已暂停 — 库存不足'],items:[[3,'Out-of-stock item','¥215']],breakdown:[['Subtotal','¥215']]},
-    {id:'RT-…037',ch:'miniapp',cust:['Wu Yaqi','吴雅琪'],total:'¥134',placed:'09:30',status:['Refund requested','申请退款'],kind:'refund',ship:['Guangzhou · Tianhe','广州 · 天河区'],by:['Met','已发'],phone:'188****3320',addr:['Tianhe, Guangzhou','广州市天河区'],pay:['WeChat Pay','微信支付'],txn:'••••3320',fulfil:['Tianhe store','天河店'],route:['Delivered','已送达'],receipt:['Receipt auto-printed at Tianhe','小票已在天河自动打印'],items:[[2,'Returned items','¥134']],breakdown:[['Subtotal','¥134']]},
-    {id:'RT-…036',ch:'miniapp',cust:['Zheng Hao','郑浩'],total:'¥298',placed:'09:02',status:['Delivered','已送达'],kind:'delivered',ship:['Dongguan · Nancheng','东莞 · 南城区'],by:['Met','已发'],phone:'136****9911',addr:['Nancheng, Dongguan','东莞市南城区'],pay:['WeChat Pay','微信支付'],txn:'••••9911',fulfil:['Tianhe store','天河店'],route:['kuaidi100','快递100'],receipt:['Receipt auto-printed','小票已自动打印'],items:[[4,'Grocery','¥298']],breakdown:[['Subtotal','¥298']]},
+    {id:'RT-…047',ch:'miniapp',cust:['Chen Meiling','陈美玲'],total:'¥312',placed:'2:22 PM',status:['Paid','已付款'],kind:'paid',isNew:true,ship:['Guangzhou · Tianhe','广州 · 天河区'],by:['Ship by 6:00 PM · 3h left','今日 18:00 截单 · 剩 3h'],byAmber:true,phone:'138****2841',addr:['Tianhe, Guangzhou','广州市天河区'],pay:['WeChat Pay','微信支付'],txn:'42000••••8831',fulfil:['Tianhe store','天河店'],route:['Auto-routed to nearest store','自动派往最近门店'],trk:null,items:[[1,'Organic carrots 500g','¥18'],[2,'Oat milk 1L','¥64'],[1,'Mixed nuts 250g','¥45']],breakdown:[['Subtotal','¥300'],['Delivery','¥12']]},
+    {id:'RT-…046',ch:'web',cust:['Sarah Lim','Sarah Lim'],total:'¥186',placed:'2:07 PM',status:['Paid','已付款'],kind:'paid',isNew:true,ship:['Guangzhou · Yuexiu','广州 · 越秀区'],by:['Ship by 6:00 PM','今日 18:00 截单'],phone:'159****7723',addr:['Yuexiu, Guangzhou','广州市越秀区'],pay:['Card','银行卡'],txn:'••••7723',fulfil:['Tianhe store','天河店'],route:['Nearest store','最近门店'],items:[[2,'Sourdough loaf','¥93']],breakdown:[['Subtotal','¥186']]},
+    {id:'RT-…045',ch:'miniapp',cust:['Wang Zhiqiang','王志强'],total:'¥458',placed:'1:41 PM',status:['Preparing','备货中'],kind:'preparing',ship:['Pickup in-store','到店自提'],by:['Pickup · tomorrow 12:00 PM','自提 · 明日 12:00'],phone:'137****5510',addr:['Pickup · Panyu store','自提 · 番禺店'],pay:['WeChat Pay','微信支付'],txn:'••••5510',fulfil:['Panyu store','番禺店'],route:['Pickup','自提'],items:[[6,'Assorted grocery','¥458']],breakdown:[['Subtotal','¥458']]},
+    {id:'RT-…044',ch:'meituan',cust:['Li Na','李娜'],total:'¥95',placed:'1:15 PM',status:['Out for delivery','配送中'],kind:'dispatched',viewOnly:true,ship:['Guangzhou · Haizhu','广州 · 海珠区'],phone:'—',addr:['Haizhu, Guangzhou','广州市海珠区'],pay:['Meituan','美团'],txn:'platform',fulfil:['Platform rider','平台骑手'],route:['Meituan dispatch','美团派单'],trk:{carrier:['Platform rider','平台骑手'],no:'MT-…044',event:['Rider 1.2km away','骑手距 1.2km'],live:true},items:[[3,'Snacks','¥95']],breakdown:[['Subtotal','¥95']]},
+    {id:'RT-…043',ch:'miniapp',cust:['Zhang Wei','张伟'],total:'¥726',placed:'11:50 AM',status:['Dispatched','已发货'],kind:'dispatched',ship:['Shenzhen · Nanshan','深圳 · 南山区'],by:['Met','已发'],phone:'186****0092',addr:['Nanshan, Shenzhen','深圳市南山区'],pay:['WeChat Pay','微信支付'],txn:'••••0092',fulfil:['Tianhe store','天河店'],route:['JD Express','京东快递'],trk:{carrier:['JD Express','京东快递'],no:'JDV0038821',event:['In transit · left Guangzhou hub','运输中 · 已离开广州分拣'],live:true},items:[[8,'Bulk order','¥726']],breakdown:[['Subtotal','¥700'],['Delivery','¥26']]},
+    {id:'RT-…041',ch:'manual',cust:['Guest (staff)','访客（员工）'],total:'¥164',placed:'11:04 AM',status:['Pending','待处理'],kind:'pending',ship:['Guangzhou · Tianhe','广州 · 天河区'],phone:'—',addr:['Tianhe, Guangzhou','广州市天河区'],pay:['Cash on pickup','到店付款'],txn:'—',fulfil:['Tianhe store','天河店'],route:['Manual','手动'],items:[[2,'Staff order','¥164']],breakdown:[['Subtotal','¥164']]},
+    {id:'RT-…039',ch:'miniapp',cust:['Huang Xiaoting','黄小婷'],total:'¥215',placed:'10:21 AM',status:['Awaiting restock','等待补货'],kind:'restock',ship:['Guangzhou · Baiyun','广州 · 白云区'],by:['Paused','已暂停'],phone:'139****4456',addr:['Baiyun, Guangzhou','广州市白云区'],pay:['WeChat Pay','微信支付'],txn:'••••4456',fulfil:['Panyu store','番禺店'],route:['Paused — low stock','已暂停 — 库存不足'],items:[[3,'Out-of-stock item','¥215']],breakdown:[['Subtotal','¥215']]},
+    {id:'RT-…037',ch:'miniapp',cust:['Wu Yaqi','吴雅琪'],total:'¥134',placed:'9:30 AM',status:['Refund requested','申请退款'],kind:'refund',ship:['Guangzhou · Tianhe','广州 · 天河区'],by:['Met','已发'],phone:'188****3320',addr:['Tianhe, Guangzhou','广州市天河区'],pay:['WeChat Pay','微信支付'],txn:'••••3320',fulfil:['Tianhe store','天河店'],route:['Delivered','已送达'],receipt:['Receipt auto-printed at Tianhe','小票已在天河自动打印'],items:[[2,'Returned items','¥134']],breakdown:[['Subtotal','¥134']]},
+    {id:'RT-…036',ch:'miniapp',cust:['Zheng Hao','郑浩'],total:'¥298',placed:'9:02 AM',status:['Delivered','已送达'],kind:'delivered',ship:['Dongguan · Nancheng','东莞 · 南城区'],by:['Met','已发'],phone:'136****9911',addr:['Nancheng, Dongguan','东莞市南城区'],pay:['WeChat Pay','微信支付'],txn:'••••9911',fulfil:['Tianhe store','天河店'],route:['kuaidi100','快递100'],receipt:['Receipt auto-printed','小票已自动打印'],items:[[4,'Grocery','¥298']],breakdown:[['Subtotal','¥298']]},
   ],
   mirror:{meituan:[
-      {id:'MT-…044',cust:['Li Na','李娜'],total:'¥95',status:['Out for delivery','配送中'],kind:'dispatched',time:'13:15'},
-      {id:'MT-…031',cust:['Mr Wang','王先生'],total:'¥142',status:['Completed','已完成'],kind:'delivered',time:'11:02'},
-      {id:'MT-…028',cust:['Ms Liu','刘女士'],total:'¥68',status:['Completed','已完成'],kind:'delivered',time:'10:20'}],
+      {id:'MT-…044',cust:['Li Na','李娜'],total:'¥95',status:['Out for delivery','配送中'],kind:'dispatched',time:'1:15 PM'},
+      {id:'MT-…031',cust:['Mr Wang','王先生'],total:'¥142',status:['Completed','已完成'],kind:'delivered',time:'11:02 AM'},
+      {id:'MT-…028',cust:['Ms Liu','刘女士'],total:'¥68',status:['Completed','已完成'],kind:'delivered',time:'10:20 AM'}],
     gzgrocery:[
-      {id:'GZ-…038',cust:['Mr Zhou','周先生'],total:'¥1,040',status:['Picking','拣货中'],kind:'preparing',time:'09:55'},
-      {id:'GZ-…022',cust:['Ms Chen','陈女士'],total:'¥560',status:['Completed','已完成'],kind:'delivered',time:'08:40'}]},
+      {id:'GZ-…038',cust:['Mr Zhou','周先生'],total:'¥1,040',status:['Picking','拣货中'],kind:'preparing',time:'9:55 AM'},
+      {id:'GZ-…022',cust:['Ms Chen','陈女士'],total:'¥560',status:['Completed','已完成'],kind:'delivered',time:'8:40 AM'}]},
   products:[
     {name:['Organic carrots','有机胡萝卜'],sku:'SKU 10231 · 500g',price:'¥18',stock:42,stockLabel:['42 in stock','库存 42'],status:['Live','在售'],kind:'on'},
     {name:['Oat milk 1L','燕麦奶 1L'],sku:'SKU 10188',price:'¥32',stock:8,stockLabel:['8 left','剩 8'],status:['Low','库存低'],kind:'restock'},
@@ -195,8 +206,8 @@ const DB = {
     {name:['Cold brew','冷萃咖啡'],meta:['Manual adjust · staff','手动调整 · 员工'],delta:'+12'},
   ],
   invoices:[
-    {id:'FP-2026-0451',order:'RT-…047',amount:'¥312',status:['Issued','已开票'],kind:'on',date:['Today 14:30','今日 14:30']},
-    {id:'FP-2026-0450',order:'RT-…043',amount:'¥726',status:['Issued','已开票'],kind:'on',date:['Today 12:02','今日 12:02']},
+    {id:'FP-2026-0451',order:'RT-…047',amount:'¥312',status:['Issued','已开票'],kind:'on',date:['Today 2:30 PM','今日 14:30']},
+    {id:'FP-2026-0450',order:'RT-…043',amount:'¥726',status:['Issued','已开票'],kind:'on',date:['Today 12:02 PM','今日 12:02']},
     {id:'FP-2026-0449',order:'RT-…040',amount:'¥390',status:['Pending','待开票'],kind:'pending',date:['Yesterday','昨日']},
   ],
   coupons:[
@@ -212,16 +223,15 @@ const DB = {
     {title:['New arrivals this week','本周新品到货'],meta:['Sent to 2,140 · 68% opened','发送 2,140 · 68% 打开'],status:['Sent','已发送'],kind:'delivered'},
     {title:['Double points weekend','会员积分翻倍'],meta:['Scheduled Sat 10:00','排期周六 10:00'],status:['Scheduled','已排期'],kind:'draft'},
   ],
-  shareCards:[{title:['Autumn harvest card','秋收卡片'],meta:['Shared 340×','分享 340 次']},{title:['Oat milk promo','燕麦奶促销'],meta:['Shared 128×','分享 128 次']}],
-  tiers:[{tier:['Gold','金'],pts:['≥ 2,000 pts','≥ 2,000 分'],members:'46',kind:'gold'},{tier:['Silver','银'],pts:['≥ 800 pts','≥ 800 分'],members:'132',kind:'off'},{tier:['Bronze','铜'],pts:['≥ 0 pts','≥ 0 分'],members:'610',kind:'off'}],
+  tiers:[{tier:['Tree','大树'],pts:['≥ 2,000 pts','≥ 2,000 分'],members:'46',kind:'off'},{tier:['Root','根系'],pts:['≥ 800 pts','≥ 800 分'],members:'132',kind:'off'},{tier:['Sprout','嫩芽'],pts:['≥ 0 pts','≥ 0 分'],members:'610',kind:'off'}],
   members:[
-    {name:['Chen Meiling','陈美玲'],tier:['Gold','金'],pts:'2,410',gold:true},{name:['Zhang Wei','张伟'],tier:['Silver','银'],pts:'1,180'},
-    {name:['Sarah Lim','Sarah Lim'],tier:['Gold','金'],pts:'2,050',gold:true},{name:['Wang Zhiqiang','王志强'],tier:['Bronze','铜'],pts:'420'},
+    {name:['Chen Meiling','陈美玲'],tier:['Tree','大树'],pts:'2,410',gold:true},{name:['Zhang Wei','张伟'],tier:['Root','根系'],pts:'1,180'},
+    {name:['Sarah Lim','Sarah Lim'],tier:['Tree','大树'],pts:'2,050',gold:true},{name:['Wang Zhiqiang','王志强'],tier:['Sprout','嫩芽'],pts:'420'},
   ],
   wallet:[
-    {label:['Top-up','充值'],who:['Chen Meiling','陈美玲'],time:'14:20',amt:'+¥200',color:'#5F7357'},
-    {label:['Spend','消费'],who:['Zhang Wei','张伟'],time:'13:02',amt:'−¥88',color:'var(--text-primary)'},
-    {label:['Top-up','充值'],who:['Sarah Lim','Sarah Lim'],time:'11:40',amt:'+¥100',color:'#5F7357'},
+    {label:['Top-up','充值'],who:['Chen Meiling','陈美玲'],time:'2:20 PM',amt:'+¥200',color:'#5F7357'},
+    {label:['Spend','消费'],who:['Zhang Wei','张伟'],time:'1:02 PM',amt:'−¥88',color:'var(--text-primary)'},
+    {label:['Top-up','充值'],who:['Sarah Lim','Sarah Lim'],time:'11:40 AM',amt:'+¥100',color:'#5F7357'},
   ],
   leaderboard:[{rank:'1',name:['Chen Meiling','陈美玲'],pts:'2,410'},{rank:'2',name:['Sarah Lim','Sarah Lim'],pts:'2,050'},{rank:'3',name:['Zhang Wei','张伟'],pts:'1,180'},{rank:'4',name:['Li Na','李娜'],pts:'940'},{rank:'5',name:['Wang Zhiqiang','王志强'],pts:'420'}],
   votes:[
@@ -241,16 +251,12 @@ const DB = {
     {name:['gzgrocery ERP','gzgrocery'],icon:'warehouse',status:['Synced','已同步'],kind:'on',metric:['2 pickups · ¥1,600','2 自提 · ¥1,600'],action:['View','查看'],viewOnly:true},
     {name:['Eleme','饿了么'],icon:'utensils-crossed',status:['Not connected','未连接'],kind:'off',metric:['Tap to connect','点击连接'],action:['Connect','连接']},
   ],
-  legal:[
-    {name:['Terms of service','服务条款'],updated:['Updated 2026-05-01','更新于 2026-05-01']},
-    {name:['Privacy policy','隐私政策'],updated:['Updated 2026-05-01','更新于 2026-05-01']},
-    {name:['Refund policy','退款政策'],updated:['Updated 2026-03-12','更新于 2026-03-12']},
-    {name:['Delivery terms','配送条款'],updated:['Updated 2026-04-08','更新于 2026-04-08']},
-  ],
-  faqs:[
-    {q:['How do I track my order?','如何查看订单？'],a:['Open the order in the mini app; live tracking shows once dispatched.','在小程序打开订单；发货后可查看实时跟踪。']},
-    {q:['What areas do you deliver to?','配送范围？'],a:['Guangzhou city and neighbouring districts; pickup at both stores.','广州市及周边区；两家门店均可自提。']},
-    {q:['Can I change my pickup time?','可以改自提时间吗？'],a:['Yes — contact us before the order enters Preparing.','可以 — 请在订单进入备货前联系我们。']},
+  customers:[
+    {id:'s1',name:'Chen Meiling',phone:'138****2841',tier:'tree',orders:24,spend:6240,seen:'2026-07-29 09:40:00',unseen:true},
+    {id:'s2',name:'Sarah Lim',phone:'159****7723',tier:'tree',orders:18,spend:4180,seen:'2026-07-28 19:12:00',unseen:true},
+    {id:'s3',name:'Zhang Wei',phone:'186****0092',tier:'root',orders:9,spend:2260,seen:'2026-07-24 11:02:00'},
+    {id:'s4',name:'Wang Zhiqiang',phone:'137****5510',tier:'sprout',orders:3,spend:812,seen:'2026-06-30 08:20:00'},
+    {id:'s5',name:'Wu Yaqi',phone:'188****3320',tier:'seed',orders:0,spend:0,seen:'2026-05-02 15:44:00'},
   ],
   setupSteps:[
     {name:['Add your first product','添加第一件商品'],done:true},{name:['Set up delivery','配送设置'],done:true},
@@ -266,19 +272,40 @@ function chIcon(ch){ return `<span style="color:var(--text-secondary);display:fl
 const state = {
   tab:'home', theme:'light', lang:'en', live:true, sound:true,
   stack:[], statusF:'all', channelF:'all', inboxSeg:'reviews',
+  custSeg:'all', custTier:'all', customers:null, custMeta:null, custLoaded:false,
+  custId:null, custDetail:null, prodView:'catalogue',
   overflow:false, search:false, detailId:null, detailActions:false, productSku:null,
+  orderBusy:null, orderErr:null, replyBusy:false, replyErr:null,
+  printer:null, printerLoading:false, printerBusy:false, printerErr:null,
+  prodStores:null, prodStockReady:false, prodBusy:false, prodErr:null,
+  cfg:null, setup:null, zones:null, mirror:null, mirrorLoading:null, mirrorMode:null,
+  couponBusy:null, couponErr:null, bcBusy:null, bcErr:null, ask:null,
+  media:null, mediaLoading:false, mediaTried:false,
+  fapiao:null, fapiaoLoading:false, fapiaoBusy:false, fapiaoTried:false, printerTried:false,
+  ordersView:null, ordersTotal:null, ordersLoading:false, ordersMore:false,
+  storeF:'all', stores:null, orderQ:'',
   reply:null, createKind:null, createValue:10, createActive:true,
   toast:null, drag:0, dragging:false, faqOpen:null, reviewsSeen:new Set(),
   qs:{oat:8,nuts:0,carrot:42},
-  // Live payloads. `liveOps` is deliberately null rather than {} until the pull
-  // lands: the Needs-you card tells "not checked yet" apart from "all clear",
-  // and an empty object would make an unloaded phone claim the second.
-  liveOps:null, liveKpis:null, liveRecap:null, liveAttn:null, liveStatusCounts:null,
+  // `liveOps` is deliberately null rather than {} until the pull lands: the
+  // Needs-you card tells "not checked yet" apart from "all clear", and an empty
+  // object would make an unloaded phone claim the second.
+  liveOps:null,
   sw:{fapiao:true,membership:true,affiliate:false,social:false,faq:true,feedback:true,
       autoprint:true,autoroute:true,lowstock:true,popups:true,c_WELCOME10:true,c_WEEKEND20:true,c_OVER200:false},
 };
 const app = document.getElementById('app');
 let toastTimer;
+function copyText(t){
+  if(!t) return;
+  const done=()=>showToast(T('Copied','已复制'));
+  const fallback=()=>{ try{
+      const ta=document.createElement('textarea'); ta.value=t; ta.style.position='fixed'; ta.style.opacity='0';
+      document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); done();
+    }catch(e){ showToast(T('Could not copy','复制失败')); } };
+  if(navigator.clipboard&&navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done).catch(fallback);
+  else fallback();
+}
 function showToast(m){ state.toast=m; render(); clearTimeout(toastTimer); toastTimer=setTimeout(()=>{state.toast=null;render();},1900); }
 function push(route){ const s=SUBS[route]; if(s) state.stack.push({route,title:s.title}); render(); }
 function pop(){ state.stack.pop(); render(); }
@@ -286,7 +313,9 @@ function pop(){ state.stack.pop(); render(); }
 const CMD={}; function reg(n,f){CMD[n]=f;}
 window.APP={cmd:(n,a)=>{ if(CMD[n]) CMD[n](a); }};
 
-reg('tab', t=>{ state.stack=[]; state.tab=t; state.detailId=null; render(); });
+reg('tab', t=>{ state.stack=[]; state.tab=t; state.detailId=null; render();
+  if(t==='customers' && !state.custLoaded && !state.custLoading) loadCustomers();
+  if(t==='orders' && !state.ordersView && !state.ordersLoading) loadOrdersPage(); });
 reg('back', ()=>{ if(state.stack.length) pop(); });
 reg('overflow', ()=>{ state.overflow=true; render(); });
 reg('closeOverflow', ()=>{ state.overflow=false; render(); });
@@ -297,28 +326,152 @@ reg('toggleLive', ()=>{ state.live=!state.live; render(); });
 reg('openSearch', ()=>{ state.overflow=false; state.search=true; render(); });
 reg('closeSearch', ()=>{ state.search=false; render(); });
 reg('push', k=>push(k));
-reg('statusF', f=>{ state.statusF=f; render(); });
+reg('statusF', f=>{ state.statusF=f; loadOrdersPage(); });
 // A Needs-you row's door: jump to Orders AND narrow it in one go, so the fire
-// lands on the rows it was counting rather than on the whole list.
-reg('goStatus', f=>{ state.stack=[]; state.tab='orders'; state.detailId=null; state.statusF=f; render(); });
-reg('channelF', f=>{ state.channelF=f; render(); });
+// lands on the rows it was counting rather than on the whole list. Goes through
+// loadOrdersPage like the chips do — the filter is the server's, so a tab
+// switch alone would show whatever was last fetched.
+reg('goStatus', f=>{ state.stack=[]; state.tab='orders'; state.detailId=null; state.statusF=f; loadOrdersPage(); });
+reg('channelF', f=>{ state.channelF=f; loadOrdersPage(); });
+reg('storeF', v=>{ state.storeF=v; loadOrdersPage(); });
+reg('ordersMore', ()=>{ if(!state.ordersLoading) loadOrdersPage(true); });
+reg('orderSearch', q=>{ state.orderQ=q||''; state.search=false; state.tab='orders'; state.stack=[]; loadOrdersPage(); });
+reg('clearOrderSearch', ()=>{ state.orderQ=''; loadOrdersPage(); });
+reg('ordersClear', ()=>{ state.statusF='all'; state.channelF='all'; state.storeF='all'; state.orderQ=''; loadOrdersPage(); });
 reg('openOrder', id=>{ state.detailId=id; state.drag=0; render(); });
-reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; render(); });
+reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; state.orderErr=null; state.orderBusy=null; render(); });
 reg('detailActions', ()=>{ state.detailActions=true; render(); });
 reg('closeActions', ()=>{ state.detailActions=false; render(); });
-reg('markDelivered', ()=>{ state.detailId=null; state.detailActions=false; showToast(T('Order updated','订单已更新')); });
-reg('reprint', ()=>{ state.detailActions=false; showToast(T('Reprinting receipt…','正在重打小票…')); });
-reg('refundOrder', ()=>{ state.detailActions=false; showToast(T('Refund started','已发起退款')); });
-reg('copyAddr', ()=>showToast(T('Copied','已复制')));
-reg('copyTxn', ()=>showToast(T('Copied','已复制')));
-reg('openProduct', sku=>{ state.productSku=sku; render(); });
+reg('closeAsk', ()=>{ state.ask=null; render(); });
+reg('askRun', key=>{ const a=state.ask; state.ask=null; render(); if(a&&a.run) a.run(key); });
+/* The one forward step the status machine allows from where this order is. */
+reg('advance', to=>{
+  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  if(!o||o._id==null) return;
+  orderWrite('advance', async()=>{
+    await apiWrite('/orders/'+o._id+'/status',{status:to},'PATCH');
+    return T('Order updated','订单已更新');
+  });
+});
+reg('undoDispatch', ()=>{
+  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  state.detailActions=false;
+  if(!o||o._id==null) return;
+  orderWrite('undo', async()=>{
+    await apiWrite('/orders/'+o._id+'/undo-dispatch',{});
+    return T('Back to preparing','已退回备货中');
+  });
+});
+/* Off-app payment records WHICH tender it was — that is the whole reason this
+   was desktop-only. The phone can ask, so now it can do it. */
+const PAY_METHODS=[['cash','Cash','现金'],['bank_transfer','Bank transfer','银行转账'],
+  ['wechat_offline','WeChat (off app)','微信（线下）'],['alipay_offline','Alipay (off app)','支付宝（线下）'],['other','Other','其他']];
+reg('markPaid', ()=>{
+  const o=currentOrder(); if(!o||o._id==null) return;
+  state.ask={title:T('How was this paid?','这笔款是怎么收的？'),
+    body:T('Recording the tender keeps the day\u2019s takings split correctly.','记录收款方式，账目才分得清。'),
+    options:PAY_METHODS.map(([k,en,zh])=>({key:k,label:T(en,zh)})),
+    run:(method)=>{ if(!method) return; orderWrite('advance', async()=>{
+      await apiWrite('/orders/'+o._id+'/status',{status:'paid',pay_method:method},'PATCH');
+      return T('Marked paid','已标记付款'); }); }};
+  render();
+});
+reg('approveRefund', ()=>{
+  const o=currentOrder(); state.detailActions=false; if(!o||o._id==null){ render(); return; }
+  state.ask={title:T('Approve this refund?','通过这笔退款？'),
+    body:T('Approving accepts what the customer asked for. The money does not move until you pay it out.','通过即接受顾客申请的金额。款项在你发起打款前不会退出。'),
+    confirmLabel:T('Approve','通过'),
+    run:()=>orderWrite('refund', async()=>{ await apiWrite('/orders/'+o._id+'/refund/approve',{}); return T('Refund approved','退款已通过'); })};
+  render();
+});
+reg('rejectRefund', ()=>{
+  const o=currentOrder(); state.detailActions=false; if(!o||o._id==null){ render(); return; }
+  state.ask={title:T('Reject this refund?','拒绝这笔退款？'),
+    body:T('The customer is told it was declined. You can still refund the order later.','顾客会收到未通过的通知。之后仍可退款。'),
+    confirmLabel:T('Reject','拒绝'), danger:true,
+    run:()=>orderWrite('refund', async()=>{ await apiWrite('/orders/'+o._id+'/refund/reject',{}); return T('Refund rejected','已拒绝'); })};
+  render();
+});
+reg('payRefund', ()=>{
+  const o=currentOrder(); state.detailActions=false; if(!o||o._id==null){ render(); return; }
+  state.ask={title:T('Send the money back how?','以什么方式退款？'),
+    body:T('This moves money. Pick the way it actually goes back to the customer.','这会真实退款。请选择实际退回的方式。'),
+    options:[['wechat','WeChat','微信'],['alipay','Alipay','支付宝'],['bank','Bank transfer','银行转账'],
+      ['cash','Cash','现金'],['wallet','Store wallet','店铺钱包'],['other','Other','其他']].map(([k,en,zh])=>({key:k,label:T(en,zh)})),
+    run:(method)=>{ if(!method) return; orderWrite('refund', async()=>{
+      await apiWrite('/orders/'+o._id+'/refund/payout',{method});
+      return T('Refund paid','退款已打出'); }); }};
+  render();
+});
+function currentOrder(){
+  return (state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+}
+/* The printer can succeed as a request and fail as a print — the endpoint says
+   so with ok:false, and so does this. */
+reg('printOrder', ()=>{
+  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  state.detailActions=false;
+  if(!o||o._id==null) return;
+  orderWrite('print', async()=>{
+    const r=await apiWrite('/orders/'+o._id+'/print',{});
+    if(r&&r.ok) return T('Sent to the printer','已发送到打印机');
+    const why=r&&r.error==='not_configured'
+      ? T('No printer is set up. Add one in Settings on desktop.','尚未配置打印机。请在电脑端设置中添加。')
+      : T('The printer did not take it. Check that it is on and has paper.','打印机没有接收。请检查是否开机、有纸。');
+    const err=new Error(why); err.code='__plain'; throw err;
+  });
+});
+reg('copyAddr', ()=>{
+  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  copyText(o?`${T(...o.cust)} · ${o.phone}\n${T(...o.addr)}`:'');
+});
+reg('copyTxn', ()=>{
+  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  copyText(o?String(o.txn||o.id):'');
+});
+reg('openProduct', sku=>{
+  state.productSku=sku; state.prodErr=null; state.prodBusy=false;
+  const p=DB.products.find(x=>x.sku===sku);
+  (state.prodStores||[]).forEach(st=>{ delete sheetStep['st_'+st.id]; });
+  render();
+  if(p&&p._id!=null) loadProductStock(p._id);
+});
 reg('closeProduct', ()=>{ state.productSku=null; render(); });
-reg('saveProduct', ()=>{ state.productSku=null; showToast(T('Saved','已保存')); });
+reg('saveProduct', ()=>saveProductEdits());
+reg('custSeg', v=>{ state.custSeg=v; state.custLoaded=false; state.customers=null; render(); loadCustomers(); });
+reg('custTier', v=>{ state.custTier=v; render(); });
+reg('custClear', ()=>{ state.custSeg='all'; state.custTier='all'; state.custLoaded=false; render(); loadCustomers(); });
+reg('openCustomer', id=>{ state.custId=id; state.custDetail=null; render(); loadCustomerDetail(id); });
+reg('closeCustomer', ()=>{ state.custId=null; state.custDetail=null; render(); });
+reg('prodView', v=>{ state.prodView=v; render(); });
 reg('inboxSeg', s=>{ state.inboxSeg=s; render(); });
-reg('openReply', who=>{ state.reply=who; state.reviewsSeen.add(who); render(); });
+reg('openReply', who=>{ state.reply=who; state.reviewsSeen.add(who); state.replyErr=null; state.replyBusy=false; render(); });
+reg('sendReplyText', t=>{
+  const text=String(t||'').trim();
+  const r=DB.reviews.find(x=>x.cust[0]===state.reply)||DB.feedback.find(x=>x.cust[0]===state.reply);
+  if(!text){ state.replyErr=T('Write something first.','请先输入内容。'); render(); return; }
+  if(!r||r.id==null){ state.replyErr=T('This one cannot be replied to from the phone yet.','暂时无法在手机端回复。'); render(); return; }
+  if(state.replyBusy) return;
+  state.replyBusy=true; state.replyErr=null; render();
+  const call = r.stream==='feedback'
+    ? apiWrite('/feedback/'+r.id+'/reply',{message:text})
+    : apiWrite('/reviews/'+r.id,{reply:text,source:r.source},'PATCH');
+  call.then(()=>{
+    r.reply=text; r.status=['Replied','已回复']; r.kind='clear';
+    state.replyBusy=false; state.reply=null; render();
+    showToast(T('Reply sent','回复已发送'));
+    loadInbox();
+  }).catch(e=>{
+    state.replyBusy=false;
+    if(String(e.message)==='auth') return;
+    state.replyErr=e.code==='message_required'?T('Write something first.','请先输入内容。')
+      :T('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
+    render();
+  });
+});
 reg('markAllReviewsRead', ()=>{ DB.reviews.forEach(r=>state.reviewsSeen.add(r.cust[0])); render(); });
 reg('closeReply', ()=>{ state.reply=null; render(); });
-reg('sendReply', ()=>{ state.reply=null; showToast(T('Reply sent','回复已发送')); });
+
 reg('create', k=>{ state.createKind=k; state.createValue=10; state.createActive=true; render(); });
 reg('closeCreate', ()=>{ state.createKind=null; render(); });
 reg('submitCreate', ()=>{ state.createKind=null; showToast(T('Created','已创建')); });
@@ -326,14 +479,22 @@ reg('createValInc', ()=>{ state.createValue++; render(); });
 reg('createValDec', ()=>{ state.createValue=Math.max(0,state.createValue-1); render(); });
 reg('toggleCreateActive', ()=>{ state.createActive=!state.createActive; render(); });
 reg('sw', k=>{ state.sw[k]=!state.sw[k]; render(); });
+reg('toggleCoupon', code=>toggleCoupon(code));
+reg('recallBroadcast', id=>recallBroadcast(Number(id)));
+reg('togglePrint', ()=>togglePrint());
+reg('toggleFapiao', ()=>toggleFapiao());
 reg('qsInc', n=>{ state.qs[n]=(state.qs[n]||0)+1; render(); });
 reg('qsDec', n=>{ state.qs[n]=Math.max(0,(state.qs[n]||0)-1); render(); });
 reg('saveStock', ()=>showToast(T('Stock received','已入库')));
-reg('newOrder', ()=>showToast(T('New order · opens on desktop','新建订单 · 请在电脑端')));
-reg('signout', ()=>showToast(T('Signed out','已退出')));
+reg('signout', ()=>{
+  state.overflow=false; showToast(T('Signing out…','正在退出…')); render();
+  fetch('/api/backend/logout',{method:'POST',credentials:'same-origin'})
+    .catch(()=>{})
+    .then(()=>{ location.href='/backend/login'; });
+});
 reg('enable', f=>{ state.sw[f]=true; showToast(T('Enabled','已开启')); });
 reg('faqToggle', i=>{ state.faqOpen=state.faqOpen===i?null:i; render(); });
-reg('mirror', w=>push('mirror_'+w));
+reg('mirror', w=>{ push('mirror_'+w); loadMirror(w); });
 reg('stepInc', k=>{ sheetStep[k]=(sheetStep[k]||0)+1; render(); });
 reg('stepDec', k=>{ sheetStep[k]=Math.max(0,(sheetStep[k]||0)-1); render(); });
 reg('noop', ()=>{});
@@ -353,6 +514,17 @@ function emptyState(title,msg){
 function noteBar(text){ return `<div style="display:flex;align-items:flex-start;gap:11px;background:var(--surface-raised);border-radius:12px;padding:12px 14px">
   <span style="color:var(--text-secondary);display:flex;flex:none;margin-top:1px">${ic('eye',18)}</span>
   <span style="font-size:12.5px;color:var(--text-secondary)">${text}</span></div>`; }
+/* An honest empty: what is not here, and where it is instead. Used by every
+   screen whose content is authored somewhere else — better than a mockup's
+   invented tagline, fake share counts or a legal date nobody set. */
+function nothingYet(title,msg){
+  return `<div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:48px 24px;text-align:center">
+    <div style="font-size:18px;font-weight:500">${title}</div>
+    <div style="font-size:15px;color:var(--text-secondary);max-width:270px;line-height:1.55">${msg}</div></div>`;
+}
+/* storefront_config comes back as one nested object; these screens read their
+   own corner of it rather than shipping sample content. */
+const cfgGet=(path,dflt)=>{ let v=state.cfg; for(const k of String(path).split('.')){ if(v==null) return dflt; v=v[k]; } return v==null?dflt:v; };
 const desktopNote=()=>`<div style="text-align:center;font-size:12.5px;color:var(--text-secondary)">${T('Best edited on desktop','建议在电脑端编辑')}</div>`;
 function flagGate(flag){
   return `<div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:44px 24px;text-align:center">
@@ -447,7 +619,7 @@ function homeFires(){
 
   // Phone-only, and genuinely actionable: the inbox lives on this device.
   const rv=Number((state.liveAttn||{}).reviews||0);
-  add('amber','message-square-text',T('Reviews to reply','待回复评价'),rv,"APP.cmd('tab','inbox')",'');
+  add('amber','message-square-text',T('Reviews to reply','待回复评价'),rv,"APP.cmd('push','inbox')",'');
 
   return f.sort((a,b)=>(a.sev==='brick'?0:1)-(b.sev==='brick'?0:1));
 }
@@ -456,13 +628,12 @@ function homeFires(){
 // not zero, though: it means the pull has not landed, and a card that vanished
 // while loading would read as "all clear" before anything had been checked.
 function attnBlock(fires){
-  if(fires===null) return `<div class="rise" style="animation-delay:.06s">
-    <div class="eyebrow" style="padding:2px 4px 8px">${T('Needs you','需要处理')}</div>
+  const head=`<div style="padding:2px 4px 8px;font-size:18px;font-weight:500">${T('Needs you','需要处理')}</div>`;
+  if(fires===null) return `<div class="rise" style="animation-delay:.06s">${head}
     <div class="list"><div style="padding:16px;font-size:14px;color:var(--text-secondary)">${T('Checking…','检查中…')}</div></div></div>`;
   if(!fires.length) return '';
   const tint=(sev)=>sev==='brick'?'var(--brick)':'var(--amber)';
-  return `<div class="rise" style="animation-delay:.06s">
-    <div class="eyebrow" style="padding:2px 4px 8px">${T('Needs you','需要处理')}</div>
+  return `<div class="rise" style="animation-delay:.06s">${head}
     <div class="list">${fires.map((a,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
       <button class="row" onclick="${a.cmd}"><span class="rowico" style="color:${tint(a.sev)}">${ic(a.icon)}</span>
       <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:left">
@@ -480,21 +651,23 @@ function screenHome(){
     {icon:'ticket',label:T('Create coupon','创建优惠券'),cmd:"APP.cmd('push','coupons')"},
     {icon:'megaphone',label:T('Send broadcast','发送广播'),cmd:"APP.cmd('push','broadcasts')"},
   ];
-  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:0 2px">
-      <span style="font-size:19px;font-weight:500;letter-spacing:-.01em">${T(...GREET[greetKey()])}</span>
-      <span style="font-size:12.5px;color:var(--text-secondary)">${T('Updated just now','刚刚更新')}</span></div>
+  const today=new Date();
+  const dateLine = LANG==='en'
+    ? today.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})
+    : (today.getMonth()+1)+'月'+today.getDate()+'日 周'+'日一二三四五六'[today.getDay()];
+  return `${pageHead({title:T(...GREET[greetKey()]), status:dateLine})}
+  <div style="padding:0 16px 24px;display:flex;flex-direction:column;gap:16px">
     ${recapCard()}
     ${attnBlock(attention)}
     <div class="rise" style="animation-delay:.12s">
-      <div class="eyebrow" style="padding:2px 4px 8px">${T('Today','今日')}</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${kpis.map(([l,v,d])=>
-        `<div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:5px">
-           <span style="font-size:12.5px;color:var(--text-secondary)">${l}</span>
-           <span class="num" style="font-size:23px;font-weight:500;letter-spacing:-.015em">${v}</span>
-           ${d?`<span class="num" style="font-size:12px;color:var(--text-secondary)">${d}</span>`:''}</div>`).join('')}</div></div>
+      <div style="padding:2px 4px 8px;font-size:18px;font-weight:500">${T('Today','今日')}</div>
+      <div class="card" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px">${kpis.map(([l,v,d])=>
+        `<div style="min-width:0">
+           <span style="display:block;font-size:13px;color:var(--text-secondary)">${l}</span>
+           <span class="num" style="display:block;font-size:18px;font-weight:500;line-height:1.4">${v}</span>
+           ${d?`<span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${d}</span>`:''}</div>`).join('')}</div></div>
     <div class="rise" style="animation-delay:.18s">
-      <div class="eyebrow" style="padding:2px 4px 8px">${T('Quick actions','快捷操作')}</div>
+      <div style="padding:2px 4px 8px;font-size:18px;font-weight:500">${T('Quick actions','快捷操作')}</div>
       <div class="list">${quick.map((q,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
         <button class="row" onclick="${q.cmd}"><span class="rowico">${ic(q.icon)}</span>
         <span style="flex:1;font-size:15px">${q.label}</span>
@@ -505,56 +678,113 @@ function screenHome(){
 /* ==========================================================================
    Orders — archetype B
    ========================================================================== */
-function ordersFiltered(){
-  return DB.orders.filter(o=>{
-    const okS = state.statusF==='all' || (state.statusF==='new'&&o.isNew) || o.kind===state.statusF;
-    const okC = state.channelF==='all' || o.ch===state.channelF;
-    return okS && okC;
-  });
+/* The chips used to filter the fifty rows that happened to be loaded, which is
+   why "Delivered 15" could show three. Every filter is the server's now, and the
+   list says how much of the set it is showing. */
+// `pending` is new here. Unpaid orders had no filter at all, so the status a
+// customer's money can be stuck in was the one this screen could not show —
+// and the two payment fires on Home had nowhere to land.
+const STATUS_PARAM={all:'',pending:'pending_payment',paid:'paid',preparing:'preparing',dispatched:'dispatched',
+  delivered:'delivered',restock:'awaiting_restock',refund:'refunds_open'};
+const CHANNEL_PARAM={all:'',miniapp:'wechat',web:'web',meituan:'meituan',gzgrocery:'gzgrocery',manual:'manual'};
+const ORDERS_PAGE=25;
+function ordersQuery(offset){
+  const qs=new URLSearchParams();
+  const st=STATUS_PARAM[state.statusF]||''; if(st) qs.set('status',st);
+  const ch=CHANNEL_PARAM[state.channelF]||''; if(ch) qs.set('channel',ch);
+  if(state.orderQ) qs.set('q',state.orderQ);
+  if(state.storeF&&state.storeF!=='all') qs.set('store_id',state.storeF);
+  qs.set('limit',ORDERS_PAGE); qs.set('offset',offset||0);
+  return qs.toString();
 }
+async function loadOrdersPage(more){
+  const offset=more?((state.ordersView||[]).length):0;
+  state.ordersLoading=true; if(!more){ state.ordersView=null; } render();
+  try{
+    const j=await apiRaw('/orders?'+ordersQuery(offset));
+    const rows=(j&&j.data)||[];
+    const mapped=rows.map(mapOrderRow);
+    state.ordersView=more?(state.ordersView||[]).concat(mapped):mapped;
+    state.liveOrders=state.ordersView;
+    const total=j&&j.meta&&j.meta.total;
+    state.ordersTotal=(total!=null)?total:null;
+    state.ordersMore=(total!=null)?state.ordersView.length<total:rows.length===ORDERS_PAGE;
+  }catch(e){
+    if(String(e.message)==='auth') return;
+    // Offline / static preview: the sample set stands in, unfiltered and honest
+    // about it — no counts, no "load more".
+    if(!more){ state.ordersView=DB.orders.slice(); state.ordersTotal=null; state.ordersMore=false; }
+  }
+  state.ordersLoading=false; render();
+}
+function ordersFiltered(){ return state.ordersView||DB.orders; }
 function ordersHeader(){
   // Real counts when available (undefined → no badge shown, instead of a fake number).
   const S=state.liveStatusCounts, C=state.liveChannelCounts;
   const sCount=(k,f)=> S ? (k==null?undefined:S[k]) : f;
   const cCount=(k,f)=> C ? (C[k]!=null?C[k]:0) : f;
   const allOrders = C?C.all:(S?undefined:47);
-  const sc=[{key:'all',en:'All',zh:'全部',count:allOrders},{key:'new',en:'New',zh:'新',count:S?undefined:2},
-    // Unpaid orders had no chip at all, so the two payment fires had nowhere to
-    // land — and the status a customer's money is stuck in was the one status
-    // this screen could not show.
+  const sc=[{key:'all',en:'All',zh:'全部',count:allOrders},
     {key:'pending',en:'Pending',zh:'待付款',count:sCount('pending_payment',0)},{key:'paid',en:'Paid',zh:'已付',count:sCount('paid',8)},
     {key:'preparing',en:'Preparing',zh:'备货',count:sCount('preparing',6)},{key:'dispatched',en:'Dispatched',zh:'已发',count:sCount('dispatched',11)},{key:'delivered',en:'Delivered',zh:'送达',count:S?undefined:15},
     {key:'restock',en:'Awaiting restock',zh:'待补货',count:sCount('awaiting_restock',2)},{key:'refund',en:'Refund queue',zh:'退款',count:sCount('refunds_open',2)}];
   const cc=[{key:'all',en:'All channels',zh:'全部渠道',count:allOrders},{key:'miniapp',en:'Mini app',zh:'小程序',count:cCount('wechat',28)},{key:'web',en:'Web',zh:'网页',count:cCount('web',9)},
     {key:'meituan',en:'Meituan',zh:'美团',count:cCount('meituan',6)},{key:'gzgrocery',en:'gzgrocery',zh:'gzgrocery',count:cCount('gzgrocery',2)},{key:'manual',en:'Manual',zh:'手动',count:cCount('manual',2)}];
-  return `<div style="flex:none;background:var(--bg);border-bottom:1px solid var(--border-default);padding:10px 0">
-    ${chipRow(sc,state.statusF,'statusF')}<div style="height:8px"></div>${chipRow(cc,state.channelF,'channelF')}</div>`;
+  const stores=state.stores||[];
+  const st=[{key:'all',en:'All stores',zh:'全部门店'}].concat(stores.map(s=>({key:String(s.id),en:s.name_en||s.name||('#'+s.id),zh:s.name_cn||s.name_en||s.name||('#'+s.id)})));
+  return `<div style="padding:0 0 16px">
+    ${state.orderQ?`<div style="padding:0 16px 8px"><button onclick="APP.cmd('clearOrderSearch')" class="chip on" style="max-width:100%"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T('Search','搜索')}: ${state.orderQ}</span>${ic('x',14,2)}</button></div>`:''}
+    ${chipRow(sc,state.statusF,'statusF')}<div style="height:8px"></div>${chipRow(cc,state.channelF,'channelF')}
+    ${stores.length>1?`<div style="height:8px"></div>${chipRow(st,state.storeF,'storeF')}`:''}</div>`;
+}
+/* The status line reports WORK WAITING, never population: how many orders are
+   sitting on someone, not how many exist. It ships only when a real number is
+   behind it — no placeholder, no dash. */
+function ordersStatusLine(){
+  const live=state.liveAttn&&state.liveAttn.ship;
+  const n = live!=null ? live : DB.orders.filter(o=>o.kind==='paid'||o.kind==='preparing').length;
+  if(!n) return '';
+  return T(n+' awaiting fulfilment', n+' 单待履约');
+}
+function ordersFiltered0(){ return state.statusF==='all'&&state.channelF==='all'&&(state.storeF||'all')==='all'&&!state.orderQ; }
+function ordSkeleton(){
+  const bar=(w,h)=>`<span style="display:block;width:${w};height:${h}px;border-radius:999px;background:var(--surface-raised)"></span>`;
+  return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:16px">
+    <div style="display:flex;justify-content:space-between;gap:16px">${bar('45%',13)}${bar('20%',18)}</div>
+    <div style="display:flex;justify-content:space-between;gap:16px">${bar('35%',15)}${bar('24%',24)}</div>
+    ${bar('55%',13)}</div>`;
 }
 function screenOrders(){
   const os=ordersFiltered();
-  return `<div style="padding:12px 16px 90px;display:flex;flex-direction:column;gap:10px">
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:0 2px 2px">
-      <span style="font-size:12.5px;color:var(--text-secondary)">${os.length} ${T('orders','单')}</span>
-      <span style="font-size:12.5px;color:var(--text-secondary)">${T('Updated just now','刚刚更新')}</span></div>
+  return `${pageHead({title:T('Orders','订单'), status:ordersStatusLine()})}
+  ${ordersHeader()}
+  <div style="padding:0 16px 24px;display:flex;flex-direction:column;gap:16px">
+    ${state.ordersLoading&&!os.length?`${ordSkeleton()}${ordSkeleton()}${ordSkeleton()}${ordSkeleton()}`:''}
+    ${!state.ordersLoading&&!os.length&&ordersFiltered0()?emptyState(T('No orders yet','还没有订单'),
+        T('New orders settle in here from every channel — mini app, web, Meituan.','各渠道的新订单都会出现在这里 — 小程序、网页、美团。')):''}
+    ${!state.ordersLoading&&!os.length&&!ordersFiltered0()?`<div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:48px 24px;text-align:center">
+        <div style="font-size:18px;font-weight:500">${state.orderQ?T('No orders match “'+state.orderQ+'”','没有匹配“'+state.orderQ+'”的订单'):T('No orders match these filters','没有符合筛选的订单')}</div>
+        <div style="font-size:15px;color:var(--text-secondary);max-width:260px">${T('Clear them and the whole list comes back.','清除筛选即可看到全部。')}</div>
+        <button class="btn2" onclick="APP.cmd('ordersClear')">${T('Clear filters','清除筛选')}</button></div>`:''}
     ${os.length?os.map(o=>`
-      <button class="card" onclick="APP.cmd('openOrder','${o.id}')" style="display:flex;flex-direction:column;gap:9px;text-align:left;cursor:pointer;padding:14px;color:var(--text-primary)">
+      <button class="card${o.isNew?' unseen':''}" onclick="APP.cmd('openOrder','${o.id}')" style="display:flex;flex-direction:column;gap:8px;text-align:left;cursor:pointer;padding:16px;color:var(--text-primary)">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
           <span style="display:flex;align-items:center;gap:7px;min-width:0;color:var(--text-secondary)">${chIcon(o.ch)}
-            <span class="num" style="font-size:13px;letter-spacing:.01em">${o.id}</span>
-            ${o.isNew?`<span style="font-size:9.5px;font-weight:600;letter-spacing:.07em;padding:2px 6px;border-radius:5px;background:var(--text-primary);color:var(--bg);flex:none">${T('NEW','新')}</span>`:''}</span>
-          <span style="display:flex;flex-direction:column;align-items:flex-end;flex:none">
-            <span class="num" style="font-size:16px;font-weight:500">${o.total}</span>
-            <span class="num" style="font-size:11px;color:var(--text-secondary);margin-top:1px">${o.placed}</span></span></div>
+            <span class="num" style="font-size:13px">${o.id} · ${o.placed}</span></span>
+          <span class="num" style="font-size:18px;font-weight:500;flex:none">${o.total}</span></div>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
           <span style="display:flex;align-items:center;gap:8px;min-width:0">
             <span style="font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${T(...o.cust)}</span>
             ${o.viewOnly?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('View only','只读')}</span>`:''}</span>
           ${pill(o.kind,T(...o.status))}</div>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-          <span style="font-size:12.5px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...o.ship)}</span>
-          ${o.by?`<span class="num" style="font-size:12.5px;color:${o.byAmber?'#B07E31':'var(--text-secondary)'};flex:none">${T(...o.by)}</span>`:''}</div>
-      </button>`).join('')
-    :emptyState(T('Nothing needs you','无待处理'),T('Nothing here. Enjoy it.','暂无订单，好好休息。'))}
+          <span style="font-size:13px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...o.ship)}</span>
+          ${o.by?`<span class="num" style="font-size:13px;color:${o.byAmber?'#8A6425':'var(--text-secondary)'};flex:none">${T(...o.by)}</span>`:''}</div>
+      </button>`).join(''):''}
+    ${os.length&&state.ordersTotal!=null?`<div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:8px 0 0">
+      <span class="num" style="font-size:13px;color:var(--text-secondary)">${T(os.length+' of '+state.ordersTotal, state.ordersTotal+' 单中的 '+os.length)}</span>
+      ${state.ordersMore?`<button class="btn2" style="width:100%" ${state.ordersLoading?'disabled':''} onclick="APP.cmd('ordersMore')">${state.ordersLoading?T('Loading…','加载中…'):T('Load more','加载更多')}</button>`:''}
+    </div>`:''}
   </div>`;
 }
 
@@ -623,24 +853,36 @@ function screenSales(){
 /* ==========================================================================
    More grouped list — icons + labels 1:1 with the mockup
    ========================================================================== */
+/* Everything that is not one of the five destinations, one flat level deep.
+   Catalogue, Categories and Stock activity are gone from this list: they are
+   sub-views of Products now, and a page reachable two ways drifts in one. */
 const MORE_GROUPS=[
-  {h:['Catalog','产品目录'],rows:[['products','box','Products','产品'],['categories','tags','Categories','分类'],['purchasing','shopping-cart','Purchasing','采购'],['activity','scroll-text','Activity','库存流水']]},
-  {h:['Fulfilment','履约'],rows:[['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票']]},
+  {h:['Operations','运营'],rows:[['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购']]},
   {h:['Marketing','营销'],rows:[['coupons','ticket','Coupons','优惠券'],['flash','zap','Flash sales','秒杀'],['popups','app-window','Pop-ups','弹窗'],['affiliate','share-2','Affiliate','分销'],['sharecards','gift','Share cards','分享卡片'],['broadcasts','megaphone','Broadcasts','广播'],['social','quote','Social proof','社交证明']]},
   {h:['Loyalty & Wallet','会员与钱包'],rows:[['membership','award','Membership','会员积分'],['wallet','wallet','Top-up','充值'],['leaderboard','trophy','Leaderboard','排行榜'],['voting','vote','Voting','投票']]},
   {h:['Content','内容'],rows:[['editor','pen-tool','Editor','编辑器'],['about','info','About page','关于页'],['media','image','Media','媒体库'],['legal','scale','Legal pages','法律条款'],['faq','circle-help','FAQ & help','常见问题']]},
   {h:null,rows:[['settings','settings','Settings','设置']]},
 ];
+/* One source for setup progress, and it is the server's. The card used to
+   compute a percentage from a hardcoded list of steps, so every store on earth
+   read "50% set up · 3 steps left" whatever it had actually done. */
+function setupState(){
+  const d=state.setup;
+  if(d) return {pct:d.percent, done:d.requiredDone, total:d.requiredTotal, left:Math.max(0,d.requiredTotal-d.requiredDone), real:true};
+  return {pct:null, real:false};
+}
 function screenMore(){
-  const done=DB.setupSteps.filter(s=>s.done).length, pct=Math.round(done/DB.setupSteps.length*100);
+  const su=setupState();
   return `<div style="padding:16px 0 8px">
     <div style="padding:0 16px 6px"><div class="card" style="padding:16px">
       <button onclick="APP.cmd('push','setup')" style="display:flex;align-items:center;gap:14px;width:100%;background:transparent;border:none;cursor:pointer;text-align:left;padding:0;font-family:inherit">
         <span style="width:38px;height:38px;border-radius:10px;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;color:var(--accent);flex:none">${ic('compass',22)}</span>
         <span style="flex:1;min-width:0">
           <span style="display:block;font-size:15px;font-weight:500;color:var(--text-primary)">${T('Open your store','开店引导')}</span>
-          <span style="display:block;font-size:13px;color:var(--text-secondary);margin-top:2px">${T(pct+'% set up · '+(DB.setupSteps.length-done)+' steps left',`已完成 ${pct}% · 还差 ${DB.setupSteps.length-done} 步`)}</span>
-          <span style="display:block;margin-top:10px;height:4px;border-radius:999px;background:var(--dusk-tint)"><span style="display:block;height:4px;width:${pct}%;border-radius:999px;background:var(--accent)"></span></span></span>
+          <span style="display:block;font-size:13px;color:var(--text-secondary);margin-top:2px">${su.real
+            ? (su.left?T(su.pct+'% set up · '+su.left+' steps left',`已完成 ${su.pct}% · 还差 ${su.left} 步`):T('Everything is set up','已全部完成'))
+            : T('Checking…','检查中…')}</span>
+          ${su.real?`<span style="display:block;margin-top:10px;height:4px;border-radius:999px;background:var(--surface-raised)"><span style="display:block;height:4px;width:${su.pct}%;border-radius:999px;background:var(--text-primary)"></span></span>`:''}</span>
         <span style="color:var(--text-secondary);display:flex;flex:none;align-self:flex-start;margin-top:9px">${ic('chevron-right')}</span></button></div></div>
     ${MORE_GROUPS.map(g=>`<div style="margin-top:14px">
       ${g.h?`<div class="eyebrow" style="padding:6px 20px">${T(...g.h)}</div>`:''}
@@ -656,20 +898,38 @@ function screenMore(){
    Pushed sub-screens
    ========================================================================== */
 function settingsGroupCard(rows){
+  const ctl=r=> r.printer
+      ? (state.printer
+          ? toggle(!!state.printer.auto_print,"APP.cmd('togglePrint')")
+          : `<span style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span>`)
+      : r.fapiao
+      ? (state.fapiao
+          ? toggle(!!state.fapiao.autoIssue,"APP.cmd('toggleFapiao')")
+          : `<span style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span>`)
+      : r.tgl ? toggle(state.sw[r.tgl],`APP.cmd('sw','${r.tgl}')`)
+      : `<span style="font-size:15px;color:var(--text-secondary);white-space:nowrap">${r.value}</span>`;
   return `<div class="list">${rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
-    <div style="display:flex;align-items:center;gap:12px;padding:14px"><span style="flex:1;min-width:0;font-size:15px">${r.label}</span>
-    ${r.tgl?toggle(state.sw[r.tgl],`APP.cmd('sw','${r.tgl}')`):`<span style="font-size:14px;color:var(--text-secondary);white-space:nowrap">${r.value}</span>`}</div>`).join('')}</div>`;
+    <div style="display:flex;align-items:center;gap:16px;padding:12px 16px;min-height:56px"><span style="flex:1;min-width:0;font-size:15px">${r.label}</span>
+    ${ctl(r)}</div>`).join('')}
+    ${state.printerErr&&rows.some(r=>r.printer||r.fapiao)?`<div style="padding:12px 16px;font-size:13px;color:var(--brick);background:var(--brick-tint)">${state.printerErr}</div>`:''}</div>`;
 }
 let sheetStep={};
 const SUBS={
   setup:{title:['Open your store','开店引导'],render:()=>{
-    const done=DB.setupSteps.filter(s=>s.done).length, pct=Math.round(done/DB.setupSteps.length*100);
+    const su=setupState();
+    const SETUP_LABEL={store:['Your store','门店信息'],products:['Add your first product','添加第一件商品'],
+      payment:['Add a payment method','添加收款方式'],fulfillment:['Set up delivery or pickup','设置配送或自提'],
+      open:['Open your store','开始营业'],wechat:['Connect WeChat','连接微信'],brand:['Add your brand','完善品牌']};
+    const steps=(state.setup&&Array.isArray(state.setup.steps))
+      ? state.setup.steps.map(x=>({name:SETUP_LABEL[x.key]||[x.key,x.key],done:!!x.done}))
+      : DB.setupSteps;
+    const done=su.real?su.done:steps.filter(s=>s.done).length, pct=su.real?su.pct:Math.round(done/steps.length*100);
     return `<div style="padding:16px 16px 24px;display:flex;flex-direction:column;gap:16px">
       <div style="background:var(--surface-raised);border-radius:14px;padding:18px">
         <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><span style="font-size:15px;font-weight:500">${T('Setup progress','开店进度')}</span>
-        <span class="num" style="font-size:13px;color:var(--text-secondary)">${pct}% · ${DB.setupSteps.length-done} ${T('left','待完成')}</span></div>
+        <span class="num" style="font-size:13px;color:var(--text-secondary)">${pct}% · ${steps.length-done} ${T('left','待完成')}</span></div>
         <div style="margin-top:12px;height:6px;border-radius:999px;background:var(--surface-card);overflow:hidden"><div style="height:6px;width:${pct}%;border-radius:999px;background:var(--graphite)"></div></div></div>
-      <div class="list">${DB.setupSteps.map((s,i)=>`${i?'<div class="sep" style="margin-left:52px"></div>':''}
+      <div class="list">${steps.map((s,i)=>`${i?'<div class="sep" style="margin-left:52px"></div>':''}
         <button class="row" onclick="APP.cmd('noop')">
           ${s.done?`<span style="width:24px;height:24px;border-radius:50%;background:rgba(163,180,159,.28);display:flex;align-items:center;justify-content:center;color:#5F7357;flex:none">${ic('check',15,2.25)}</span>`
                  :`<span style="width:24px;height:24px;border-radius:50%;border:2px solid var(--border-default);flex:none"></span>`}
@@ -709,9 +969,16 @@ const SUBS={
       <span style="display:flex;flex-direction:column;min-width:0"><span style="font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...a.name)}</span>
       <span style="font-size:12px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...a.meta)}</span></span>
       <span class="num" style="font-size:15px;font-weight:500;color:var(--text-secondary);flex:none">${a.delta}</span></div>`).join('')}</div></div>`},
-  delivery:{title:['Delivery','配送'],render:()=>`<div style="padding:16px;display:flex;flex-direction:column;gap:14px">
-    ${settingsGroupCard([{label:T('Auto-route to nearest store','自动派往最近门店'),tgl:'autoroute'},{label:T('Auto-print receipts','自动打印小票'),tgl:'autoprint'},{label:T('Low-stock pause','低库存自动暂停'),tgl:'lowstock'}])}
-    ${settingsGroupCard([{label:T('Delivery zones','配送范围'),value:'6'},{label:T('Couriers','快递'),value:'JD · kd100'},{label:T('Pickup points','自提点'),value:'2'}])}${desktopNote()}</div>`},
+  delivery:{title:['Delivery','配送'],render:()=>{
+    if(!state.printer&&!state.printerTried) loadPrinter();
+    return `<div style="padding:16px;display:flex;flex-direction:column;gap:14px">
+    ${settingsGroupCard([
+      {label:T('Auto-print receipts','自动打印小票'),printer:true},
+      {label:T('Routing','派单'),value:T('Nearest store, automatically','自动派往最近门店')},
+    ])}
+    ${settingsGroupCard([{label:T('Delivery zones','配送范围'),
+        value: state.zones ? String(state.zones.length) : T('Loading…','加载中…')}])}${desktopNote()}</div>`;
+  }},
   invoices:{title:['Invoices','发票'],render:()=>`<div><div style="padding:12px 0 4px">${chipRow([{key:'all',en:'All',zh:'全部',count:214},{key:'issued',en:'Issued',zh:'已开',count:198},{key:'pending',en:'Pending',zh:'待开',count:16}],'all','noop')}</div>
     <div style="padding:8px 16px 24px;display:flex;flex-direction:column;gap:10px">
       <div style="display:flex;align-items:flex-start;gap:11px;background:var(--dusk-tint);border-radius:12px;padding:13px 14px">
@@ -726,39 +993,68 @@ const SUBS={
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
           <span style="display:flex;align-items:center;gap:9px;min-width:0">${pill(v.kind,T(...v.status))}<span class="num" style="font-size:12px;color:var(--text-secondary)">${T(...v.date)}</span></span>
           <button onclick="APP.cmd('noop')" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 12px;cursor:pointer;font-family:inherit;flex:none">${ic('download',15)} ${T('Download','下载')}</button></div></div>`).join('')}</div></div>`},
-  coupons:{title:['Coupons','优惠券'],render:()=>`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:10px">
-    <button class="cta" onclick="APP.cmd('create','coupon')">${T('New coupon','新建优惠券')}</button>
-    ${DB.coupons.map(c=>{const k='c_'+c.code;return `<div style="display:flex;align-items:center;gap:12px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:14px">
+  coupons:{title:['Coupons','优惠券'],render:()=>{
+    const list=DB.coupons||[];
+    if(!list.length) return nothingYet(T('No coupons','没有优惠券'),T('Coupons are written on desktop. Live ones show here, and can be paused from here.','优惠券在电脑端创建。生效中的会显示在这里，可在此暂停。'));
+    return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    ${state.couponErr?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick)">${state.couponErr}</div>`:''}
+    ${list.map(c=>`<div style="display:flex;align-items:center;gap:16px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:16px">
       <span style="flex:1;min-width:0"><span style="display:block;font-size:15px;font-weight:500">${T(...c.title)}</span>
-      <span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary);margin-top:2px">${c.code} · ${T(...c.meta)}</span></span>
-      ${toggle(state.sw[k],`APP.cmd('sw','${k}')`)}</div>`}).join('')}</div>`},
-  flash:{title:['Flash sales','秒杀'],render:()=>`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:10px">
-    <button class="cta" onclick="APP.cmd('create','flash')">${T('New flash sale','新建秒杀')}</button>
-    ${DB.flash.map(f=>`<div class="card" style="padding:14px"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px"><span style="font-size:15px;font-weight:500">${T(...f.title)}</span>${pill(f.kind,T(...f.status))}</div>
-      <div class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:6px">${T(...f.win)}</div></div>`).join('')}</div>`},
-  broadcasts:{title:['Broadcasts','广播'],render:()=>`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:10px">
-    <button class="cta" onclick="APP.cmd('create','broadcast')">${T('New broadcast','新建广播')}</button>
-    ${DB.broadcasts.map(b=>`<div class="card" style="padding:14px"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px"><span style="font-size:15px;font-weight:500;min-width:0">${T(...b.title)}</span>${pill(b.kind,T(...b.status))}</div>
-      <div class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:6px">${T(...b.meta)}</div></div>`).join('')}</div>`},
-  sharecards:{title:['Share cards','分享卡片'],render:()=>`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:10px">
-    <button class="cta" onclick="APP.cmd('noop')">${T('Generate card','生成卡片')}</button>
-    ${DB.shareCards.map(c=>`<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px">
-      <span style="font-size:15px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...c.title)}</span>
-      <span class="num" style="font-size:12.5px;color:var(--text-secondary);flex:none">${T(...c.meta)}</span></div>`).join('')}</div>`},
-  popups:{title:['Pop-ups','弹窗'],render:()=>`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
-    <div style="background:var(--surface-raised);border-radius:14px;padding:22px;display:flex;justify-content:center">
-      <div style="width:100%;max-width:240px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:12px;padding:16px;text-align:center">
-        <div style="font-size:14px;font-weight:500">${T('Welcome!','欢迎！')}</div><div style="font-size:12.5px;color:var(--text-secondary);margin-top:4px">${T('Get ¥10 off your first order','首单立减 ¥10')}</div>
-        <div style="margin-top:12px;font-size:12.5px;font-weight:500;border:1px solid var(--border-default);border-radius:8px;padding:8px">${T('Claim','领取')}</div></div></div>
-    <div style="display:flex;align-items:center;gap:12px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:14px"><span style="flex:1;font-size:15px">${T('Show pop-up to visitors','向访客展示弹窗')}</span>${toggle(state.sw.popups,"APP.cmd('sw','popups')")}</div>${desktopNote()}</div>`},
+      <span class="num" style="display:block;font-size:13px;color:var(--text-secondary);margin-top:2px">${c.code} · ${T(...c.meta)}</span></span>
+      ${c.id==null?`<span style="font-size:13px;color:var(--text-secondary)">${c.on?T('On','已启用'):T('Off','已关闭')}</span>`
+        :(state.couponBusy===c.code?`<span style="font-size:13px;color:var(--text-secondary)">${T('Saving…','保存中…')}</span>`
+        :toggle(!!c.on,`APP.cmd('toggleCoupon','${c.code}')`))}</div>`).join('')}
+    ${desktopNote()}</div>`;
+  }},
+  flash:{title:['Flash sales','秒杀'],render:()=>{
+    const list=DB.flash||[];
+    if(!list.length) return nothingYet(T('No flash sales','没有秒杀'),T('Flash sales are built on desktop. Running and upcoming ones show here.','秒杀在电脑端创建。进行中与即将开始的会显示在这里。'));
+    return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    ${list.map(f=>`<div class="card" style="padding:16px"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px"><span style="font-size:15px;font-weight:500">${T(...f.title)}</span>${pill(f.kind,T(...f.status))}</div>
+      <div class="num" style="font-size:13px;color:var(--text-secondary);margin-top:8px">${T(...f.win)}</div></div>`).join('')}
+    ${desktopNote()}</div>`;
+  }},
+  broadcasts:{title:['Broadcasts','广播'],render:()=>{
+    const list=DB.broadcasts||[];
+    if(!list.length) return nothingYet(T('No broadcasts','没有广播'),T('Broadcasts are written and sent from desktop. Anything scheduled can be stopped from here.','广播在电脑端撰写与发送。已排期的可在此取消。'));
+    return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    ${state.bcErr?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick)">${state.bcErr}</div>`:''}
+    ${list.map(b=>`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+        <span style="font-size:15px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...b.title)}</span>
+        ${pill(b.kind,T(...b.status))}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+        <span class="num" style="font-size:13px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...b.meta)}</span>
+        ${b.st==='scheduled'&&b.id!=null?`<button class="btn2" style="min-height:44px;padding:0 16px;font-size:13px;flex:none" ${state.bcBusy===b.id?'disabled':''} onclick="APP.cmd('recallBroadcast','${b.id}')">${state.bcBusy===b.id?T('Stopping…','取消中…'):T('Cancel send','取消发送')}</button>`:''}</div>
+    </div>`).join('')}
+    ${desktopNote()}</div>`;
+  }},
+  sharecards:{title:['Share cards','分享卡片'],render:()=>nothingYet(T('Made on desktop','在电脑端制作'),
+    T('Share cards are designed and generated in the admin on a big screen. The counts that used to sit here were never real.','分享卡片在电脑端设计与生成。此前这里显示的数据并非真实数据。')),
+  },
+  popups:{title:['Pop-ups','弹窗'],render:()=>{
+    const list=cfgGet('popups.list',null);
+    if(Array.isArray(list)&&!list.length) return nothingYet(T('No pop-ups','没有弹窗'),
+      T('Nothing is interrupting your customers right now.','目前没有任何弹窗打扰顾客。'));
+    if(!Array.isArray(list)) return `<div style="padding:14px 16px 24px">${nothingYet(T('Pop-ups','弹窗'),T('Loading…','加载中…'))}</div>`;
+    return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+      ${list.map(p=>`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+          <span style="font-size:15px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(p.title_en||p.name_en||'—',p.title_cn||p.name_cn||p.title_en||'—')}</span>
+          <span class="pill" style="background:${p.enabled?'var(--sage-tint)':'rgba(88,96,110,.10)'};color:${p.enabled?'#4A6249':'var(--text-secondary)'}">${p.enabled?T('Live','进行中'):T('Off','已关闭')}</span>
+        </div>
+        ${(p.body_en||p.body_cn)?`<div style="font-size:15px;color:var(--text-secondary)">${T(p.body_en||p.body_cn,p.body_cn||p.body_en)}</div>`:''}
+        ${p.start_at||p.end_at?`<div class="num" style="font-size:13px;color:var(--text-secondary)">${[p.start_at?fmtDay(p.start_at):'',p.end_at?fmtDay(p.end_at):''].filter(Boolean).join(' – ')}</div>`:''}
+      </div>`).join('')}
+      ${desktopNote()}</div>`;
+  }},
   affiliate:{title:['Affiliate','分销'],render:()=> state.sw.affiliate?`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
       <div style="background:var(--surface-raised);border-radius:14px;padding:16px"><div class="eyebrow">${T('Overview','概览')}</div><div class="num" style="font-size:15px;margin-top:8px">${T('42 affiliates · ¥8,120 referred','42 位分销 · 引流 ¥8,120')}</div></div>
       <div style="display:flex;align-items:center;gap:12px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:14px"><span style="flex:1;font-size:15px">${T('Enabled','已启用')}</span>${toggle(true,"APP.cmd('sw','affiliate')")}</div>${desktopNote()}</div>`
     :`<div style="padding:14px 16px 24px">${flagGate('affiliate')}</div>`},
-  social:{title:['Social proof','社交证明'],render:()=> state.sw.social?`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
-      <div style="background:var(--surface-raised);border-radius:14px;padding:16px"><div class="eyebrow">${T('Overview','概览')}</div><div class="num" style="font-size:15px;margin-top:8px">${T('“12 people bought this today”','“今日 12 人购买”')}</div></div>
-      <div style="display:flex;align-items:center;gap:12px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:14px"><span style="flex:1;font-size:15px">${T('Enabled','已启用')}</span>${toggle(true,"APP.cmd('sw','social')")}</div>${desktopNote()}</div>`
-    :`<div style="padding:14px 16px 24px">${flagGate('social')}</div>`},
+  social:{title:['Social proof','社交证明'],render:()=>nothingYet(T('Set up on desktop','在电脑端设置'),
+    T('Social proof shows recent buyers to your customers. It is configured on desktop; nothing about it can be read or changed from here yet.','社交证明会向顾客展示最近的购买。设置在电脑端完成，手机端暂时无法查看或修改。')),
+  },
   membership:{title:['Membership','会员积分'],render:()=> !state.sw.membership?`<div style="padding:14px 16px 24px">${flagGate('membership')}</div>`:
     `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
       <div><div class="eyebrow" style="padding:2px 4px 8px">${T('Tiers','等级')}</div>
@@ -792,57 +1088,198 @@ const SUBS={
       ${pill('on',T('Published','已发布'))}</div>
     <div><div class="eyebrow" style="padding:2px 4px 8px">${T('Sections','版块')}</div>
     <div class="list">${[['Hero banner','首图'],['Featured products','精选商品'],['Categories','分类'],['Flash sale strip','秒杀条']].map((n,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}<div style="padding:13px 14px;font-size:15px">${T(...n)}</div>`).join('')}</div></div>${desktopNote()}</div>`},
-  about:{title:['About page','关于页'],render:()=>`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
-    <div><div class="eyebrow" style="padding:2px 4px 8px">${T('Tagline','标语')}</div>
-      <input value="${T('Fresh, plant-based, delivered quietly.','新鲜植物基，静静送达。')}"><button class="cta" style="margin-top:10px" onclick="APP.cmd('noop')">${T('Save','保存')}</button></div>
-    <div><div class="eyebrow" style="padding:2px 4px 8px">${T('Preview','预览')}</div>
-      <div class="card" style="padding:16px;font-size:14.5px;line-height:1.6;color:var(--text-secondary)">${T('We source plant-based groceries from local farms and deliver across Guangzhou.','我们从本地农场采购植物基食材，配送覆盖广州。')}</div></div>${desktopNote()}</div>`},
-  media:{title:['Media','媒体库'],render:()=>`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
-    <button class="cta" style="display:flex;align-items:center;justify-content:center;gap:8px" onclick="APP.cmd('noop')">${ic('camera')} ${T('Add photo','添加图片')}</button>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">${Array.from({length:9},(_,i)=>`<div style="aspect-ratio:1;border-radius:12px;background:var(--surface-raised);border:1px solid var(--border-default);display:flex;align-items:flex-end;padding:8px"><span style="font-size:10.5px;color:var(--text-secondary)">IMG_${1000+i}</span></div>`).join('')}</div>${desktopNote()}</div>`},
-  legal:{title:['Legal pages','法律条款'],render:()=>`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
-    <div class="list">${DB.legal.map((l,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}<button class="row" onclick="APP.cmd('noop')">
-      <span style="flex:1;min-width:0"><span style="display:block;font-size:15px">${T(...l.name)}</span><span style="display:block;font-size:12px;color:var(--text-secondary);margin-top:2px">${T(...l.updated)}</span></span>
-      <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`).join('')}</div>
-    <div style="text-align:center;font-size:12.5px;color:var(--text-secondary)">${T('Read-only on mobile','手机端只读')}</div></div>`},
-  faq:{title:['FAQ & help','常见问题'],render:()=> !state.sw.faq?`<div style="padding:14px 16px 24px">${flagGate('faq')}</div>`:
-    `<div style="padding:14px 16px 24px"><div class="list">${DB.faqs.map((f,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
-      <button onclick="APP.cmd('faqToggle',${i})" style="display:flex;flex-direction:column;gap:8px;width:100%;padding:14px;background:transparent;border:none;cursor:pointer;text-align:left;font-family:inherit">
+  about:{title:['About page','关于页'],render:()=>{
+    const c=cfgGet('about.content',null);
+    if(!state.cfg) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+    if(!c) return nothingYet(T('Nothing written yet','还没有内容'),
+      T('The about page is written on desktop. What you publish shows here and in the mini app.','关于页在电脑端撰写，发布后会显示在这里和小程序中。'));
+    const pick=(en,cn)=>T(String(c&&c[en]||''),String(c&&c[cn]||c&&c[en]||''));
+    const manifesto=pick('manifesto_en','manifesto_cn').replace(/\*\*/g,'');
+    return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+      ${manifesto?`<div class="card" style="padding:16px">
+        <div class="eyebrow">${pick('kicker_en','kicker_cn')||T('About','关于')}</div>
+        <div style="font-size:15px;line-height:1.6;margin-top:8px">${manifesto}</div></div>`:''}
+      ${(c&&c.founder_name_en)?`<div class="card" style="padding:16px">
+        <div class="eyebrow">${pick('founder_kicker_en','founder_kicker_cn')}</div>
+        <div style="font-size:15px;font-weight:500;margin-top:8px">${pick('founder_name_en','founder_name_cn')}</div>
+        <div style="font-size:13px;color:var(--text-secondary)">${pick('founder_title_en','founder_title_cn')}</div>
+        ${c.founder_quote_en?`<div style="font-size:15px;color:var(--text-secondary);line-height:1.6;margin-top:8px">${pick('founder_quote_en','founder_quote_cn')}</div>`:''}</div>`:''}
+      ${desktopNote()}</div>`;
+  }},
+  media:{title:['Media','媒体库'],render:()=>{
+    if(!state.media){ if(!state.mediaTried) loadMedia(); return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`; }
+    if(!state.media.rows.length) return nothingYet(T('Nothing in the library','媒体库是空的'),
+      T('Photos you upload on desktop appear here, ready to use in the mini app.','在电脑端上传的图片会出现在这里，可用于小程序。'));
+    return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+      <div class="num" style="font-size:13px;color:var(--text-secondary)">${T(state.media.total+' images','共 '+state.media.total+' 张')}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">${state.media.rows.map(m=>`
+        <div style="aspect-ratio:1;border-radius:8px;overflow:hidden;background:var(--surface-raised);border:1px solid var(--border-default)">
+          <img loading="lazy" src="/api/retail/media/${m.id}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">
+        </div>`).join('')}</div>
+      ${desktopNote()}</div>`;
+  }},
+  legal:{title:['Legal pages','法律条款'],render:()=>{
+    // Both documents live in storefront_config; the dates are theirs, not a
+    // pair of numbers typed into a mockup.
+    const docs=[
+      {key:'terms',   name:['Terms of service','服务条款']},
+      {key:'privacy', name:['Privacy policy','隐私政策']},
+    ].map(d=>{
+      const body=cfgGet('legal.'+d.key+'.body_'+(LANG==='en'?'en':'cn'),'')||cfgGet('legal.'+d.key+'.body_en','');
+      return Object.assign({},d,{body:String(body||''), updated:cfgGet('legal.'+d.key+'.updated_at','')});
+    });
+    const any=docs.some(d=>d.body);
+    if(!state.cfg) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+    if(!any) return nothingYet(T('Nothing published yet','尚未发布'),
+      T('Your terms and privacy policy are written on desktop. Once published they show here and in the mini app.','服务条款与隐私政策在电脑端撰写，发布后会显示在这里和小程序中。'));
+    return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    <div class="list">${docs.map((d,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
+      <button onclick="APP.cmd('faqToggle',${i})" style="display:flex;flex-direction:column;gap:8px;width:100%;padding:16px;background:transparent;border:none;cursor:pointer;text-align:left;font-family:inherit">
+        <span style="display:flex;align-items:center;gap:10px;width:100%">
+          <span style="flex:1;min-width:0">
+            <span style="display:block;font-size:15px;color:var(--text-primary)">${T(...d.name)}</span>
+            <span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${d.updated?T('Updated '+fmtDay(d.updated),'更新于 '+fmtDay(d.updated)):T('Not published','未发布')}</span>
+          </span>
+          <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span>
+        ${state.faqOpen===i&&d.body?`<span style="font-size:15px;line-height:1.6;color:var(--text-secondary);white-space:pre-wrap">${String(d.body).slice(0,1200).replace(/</g,'&lt;')}</span>`:''}</button>`).join('')}</div>
+    ${desktopNote()}</div>`;
+  }},
+  faq:{title:['FAQ & help','常见问题'],render:()=>{
+    // The store's own published questions (storefront_config.faq.questions) —
+    // the three that used to render here were invented for the mockup.
+    if(!state.cfg) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+    const qs=cfgGet('faq.questions',null);
+    const list=Array.isArray(qs)?qs.map(q=>({q:[q.q_en||q.q_cn||'',q.q_cn||q.q_en||''],a:[q.a_en||q.a_cn||'',q.a_cn||q.a_en||'']})):[];
+    if(!list.length) return nothingYet(T('No questions yet','还没有常见问题'),
+      T('Questions you publish appear here, and in the mini app under Help.','发布后会出现在这里，也会出现在小程序帮助页。'));
+    const rows=list;
+    return `<div style="padding:14px 16px 24px"><div class="list">${rows.map((f,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
+      <button onclick="APP.cmd('faqToggle',${i})" style="display:flex;flex-direction:column;gap:8px;width:100%;padding:16px;background:transparent;border:none;cursor:pointer;text-align:left;font-family:inherit">
         <span style="display:flex;align-items:center;gap:10px;width:100%"><span style="flex:1;min-width:0;font-size:15px;font-weight:500;color:var(--text-primary)">${T(...f.q)}</span><span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span>
-        ${state.faqOpen===i?`<span style="font-size:14px;line-height:1.6;color:var(--text-secondary)">${T(...f.a)}</span>`:''}</button>`).join('')}</div></div>`},
-  quickstock:{title:['Quick stock','快速盘点'],render:()=>{const rows=[['carrot',['Organic carrots','有机胡萝卜'],'SKU 10231'],['oat',['Oat milk 1L','燕麦奶 1L'],'SKU 10188'],['nuts',['Mixed nuts','混合坚果'],'SKU 10450']];
-    return `<div style="padding:16px;display:flex;flex-direction:column;gap:12px">${rows.map(([k,nm,sku])=>`<div style="display:flex;align-items:center;gap:12px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:14px">
-      <span style="flex:1;min-width:0"><span style="display:block;font-size:15px;font-weight:500">${T(...nm)}</span><span class="num" style="display:block;font-size:12px;color:var(--text-secondary);margin-top:2px">${sku}</span></span>
-      <button class="stepbtn" style="width:38px;height:38px" onclick="APP.cmd('qsDec','${k}')">${ic('minus',18,2.25)}</button>
-      <span class="num" style="min-width:38px;text-align:center;font-size:18px;font-weight:500;flex:none">${state.qs[k]}</span>
-      <button class="stepbtn" style="width:38px;height:38px" onclick="APP.cmd('qsInc','${k}')">${ic('plus',18,2.25)}</button></div>`).join('')}
-    <button class="cta" onclick="APP.cmd('saveStock')">${T('Save stock','保存库存')}</button>
-    <div style="text-align:center;font-size:12.5px;color:var(--text-secondary)">${T('Adjusts on-hand stock across channels.','将同步各渠道现有库存。')}</div></div>`}},
-  operations:{title:['Operations','运营'],render:()=>`<div style="padding:16px;display:flex;flex-direction:column;gap:14px">
-    ${settingsGroupCard([{label:T('Auto-print receipts','自动打印小票'),tgl:'autoprint'},{label:T('Auto-route orders','自动派单'),tgl:'autoroute'},{label:T('Low-stock auto-pause','低库存自动暂停'),tgl:'lowstock'},{label:T('Fapiao auto-issue','发票自动开具'),tgl:'fapiao'}])}
-    <div style="text-align:center;font-size:12.5px;color:var(--text-secondary)">${T('Deeper config on desktop','更多设置见电脑端')}</div></div>`},
+        ${state.faqOpen===i?`<span style="font-size:15px;line-height:1.6;color:var(--text-secondary)">${T(...f.a)}</span>`:''}</button>`).join('')}</div>
+      <div style="padding:16px 0 0">${desktopNote()}</div></div>`;
+  }},
+  quickstock:{title:['Quick stock','快速盘点'],render:()=>nothingYet(T('Counted in Products','在产品页盘点'),
+    T('Open a product and set the count for each store — it writes straight to that shelf. The three-item list that used to live here counted nothing.','打开某个产品即可按门店修改库存，直接写入。此前这里的列表并不会保存。')),
+  },
+  operations:{title:['Operations','运营'],render:()=>{
+    if(!state.printer&&!state.printerTried) loadPrinter();
+    if(!state.fapiao&&!state.fapiaoTried) loadFapiao();
+    return `<div style="padding:16px;display:flex;flex-direction:column;gap:16px">
+    ${settingsGroupCard([
+      {label:T('Auto-print receipts','自动打印小票'),printer:true},
+      {label:T('Fapiao auto-issue','发票自动开具'),fapiao:true},
+    ])}
+    <div style="text-align:center;font-size:13px;color:var(--text-secondary)">${T('Deeper config on desktop','更多设置见电脑端')}</div></div>`;
+  }},
   settings:{title:['Settings','设置'],render:()=>screenSettings()},
   mirror_meituan:{title:['Meituan','美团'],render:()=>mirrorScreen('meituan',T('Read-only mirror. Manage in the Meituan app.','只读镜像，请在美团后台管理。'))},
   mirror_gzgrocery:{title:['gzgrocery','gzgrocery'],render:()=>mirrorScreen('gzgrocery',T('Read-only ERP mirror.','只读 ERP 镜像。'))},
 };
+/* Inbox and Sales left the bottom nav when Customers and Products took their
+   places. Both keep every screen they had; the inbox also has a topbar control,
+   so it is never more than one tap away. */
+SUBS.inbox={title:['Inbox','消息'],render:()=>screenInbox()};
+SUBS.sales={title:['Sales','销售'],render:()=>screenSales()};
+
+/* Pausing a coupon is the one marketing action a phone should have: it is a
+   single field on a single record, and it is what an operator reaches for when
+   a code is being abused. Creating one is authoring, and stays on the desktop. */
+function toggleCoupon(code){
+  const c=(DB.coupons||[]).find(x=>x.code===code);
+  if(!c||c.id==null||state.couponBusy) return;
+  const next=!c.on;
+  state.couponBusy=code; state.couponErr=null; render();
+  apiWrite('/vouchers/'+c.id,{is_active:next},'PATCH').then(()=>{
+    c.on=next; state.sw['c_'+code]=next; state.couponBusy=null; render();
+    showToast(next?T('Coupon on','已启用'):T('Coupon paused','已暂停'));
+  }).catch(e=>{
+    state.couponBusy=null;
+    if(String(e.message)==='auth') return;
+    state.couponErr=T('That did not save. The coupon is unchanged.','没有保存成功。优惠券没有变化。'); render();
+  });
+}
+/* A scheduled broadcast can still be stopped; a sent one cannot. The server is
+   the judge — it refuses anything already on its way out. */
+function recallBroadcast(id){
+  const b=(DB.broadcasts||[]).find(x=>x.id===id);
+  if(!b||state.bcBusy) return;
+  state.bcBusy=id; state.bcErr=null; render();
+  apiWrite('/broadcasts/'+id+'/recall',{}).then(r=>{
+    const st=(r&&r.data&&r.data.status)||'cancelled';
+    b.st=st; b.status=st==='cancelled'?['Cancelled','已取消']:['Sent','已发送']; b.kind=st==='cancelled'?'off':'delivered';
+    state.bcBusy=null; render();
+    showToast(st==='cancelled'?T('Send cancelled','已取消发送'):T('It had already gone out','已经发送完成'));
+  }).catch(e=>{
+    state.bcBusy=null;
+    if(String(e.message)==='auth') return;
+    state.bcErr=T('That did not go through. Nothing has changed.','没有成功。数据没有变化。'); render();
+  });
+}
+async function loadMirror(which){
+  if(state.mirrorLoading===which) return;
+  state.mirrorLoading=which; state.mirror=state.mirror||{}; render();
+  try{
+    if(which==='meituan'){
+      const rows=await api('/meituan/orders?limit=30');
+      state.mirror.meituan=(Array.isArray(rows)?rows:[]).map(r=>({
+        id:r.order_no||('#'+r.id), cust:r.recipient_name||'—', total:money(CUR,r.total),
+        when:fmtDay(r.placed_at), store:T(r.store_name_en||r.store_code||'',r.store_name_cn||r.store_name_en||''),
+        items:(r.items||[]).length}));
+    } else {
+      const d=await api('/guanyi/pickups');
+      const recent=(d&&d.recent)||[];
+      state.mirror.gzgrocery=recent.slice(0,30).map(r=>({
+        id:T(r.name_en||r.name_cn||'—', r.name_cn||r.name_en||'—'),
+        cust:r.product_sku?('SKU '+r.product_sku):'', total:(r.inferred_pickup!=null?('×'+r.inferred_pickup):''),
+        when:fmtDay(r.created_at), store:'', items:0}));
+      state.mirrorMode=(d&&d.mode)||null;
+    }
+  }catch(e){ if(String(e.message)==='auth') return; state.mirror[which]=null; }
+  state.mirrorLoading=null; render();
+}
 function mirrorScreen(which,note){
-  return `<div style="padding:12px 16px 24px;display:flex;flex-direction:column;gap:10px">
-    <div style="display:flex;align-items:center;gap:10px;background:var(--surface-raised);border-radius:12px;padding:12px 14px"><span style="color:var(--text-secondary);display:flex;flex:none">${ic('eye',18)}</span><span style="font-size:13px;color:var(--text-secondary)">${note}</span></div>
-    ${DB.mirror[which].map(o=>`<div class="card" style="display:flex;flex-direction:column;gap:9px;padding:14px">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
-        <span style="display:flex;align-items:center;gap:7px;min-width:0"><span class="num" style="font-size:13px;color:var(--text-secondary)">${o.id}</span><span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('View only','只读')}</span></span>
-        <span class="num" style="font-size:16px;font-weight:500;flex:none">${o.total}</span></div>
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span style="font-size:14.5px">${T(...o.cust)}</span>${pill(o.kind,T(...o.status))}</div>
-      <div class="num" style="font-size:12px;color:var(--text-secondary)">${o.time}</div></div>`).join('')}</div>`;
+  const rows=(state.mirror&&state.mirror[which])||null;
+  if(!rows&&state.mirrorLoading!==which&&!state.mirrorTried){ /* first paint kicks the load */ }
+  if(!rows||!rows.length){
+    if(state.mirrorLoading===which) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+    if(rows&&!rows.length) return nothingYet(which==='meituan'?T('No orders from Meituan yet','美团暂无订单'):T('No pickups recorded yet','暂无提货记录'),
+      which==='meituan'?T('Orders the platform sends appear here, mirrored and read-only.','平台推送的订单会以只读方式出现在这里。')
+                       :T('Wholesale pickups appear here as gzgrocery records them.','gzgrocery 记录的提货会出现在这里。'));
+    return nothingYet(T('Could not read this channel','无法读取该渠道'),
+      T('The channel did not answer. Nothing is wrong with your orders — try again in a moment.','渠道没有响应。订单数据没有问题 — 请稍后重试。'));
+  }
+  return `<div style="padding:12px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    <div style="display:flex;align-items:center;gap:12px;background:var(--surface-raised);border-radius:14px;padding:12px 16px"><span style="color:var(--text-secondary);display:flex;flex:none">${ic('eye',18)}</span><span style="font-size:13px;color:var(--text-secondary)">${note}</span></div>
+    ${rows.map(o=>`<div class="card" style="display:flex;flex-direction:column;gap:8px;padding:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+        <span class="num" style="font-size:15px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.id}</span>
+        <span class="num" style="font-size:15px;font-weight:500;flex:none">${o.total}</span></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;font-size:13px;color:var(--text-secondary)">
+        <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.cust}${o.store?' · '+o.store:''}</span>
+        <span class="num" style="flex:none">${o.when}</span></div></div>`).join('')}</div>`;
 }
 function screenSettings(){
   const groups=[
     {h:T('Store','店铺'),rows:[{label:T('Store profile','店铺资料'),value:state.storeName||T('Your store','你的店铺')},{label:T('Operations','运营'),cmd:"APP.cmd('push','operations')",chev:true},{label:T('Quick stock','快速盘点'),cmd:"APP.cmd('push','quickstock')",chev:true}]},
     {h:T('Notifications','通知'),rows:[{label:T('Live updates','实时更新'),tgl:'__live'},{label:T('Sound','提示音'),tgl:'__sound'}]},
-    {h:T('Automation','自动化'),rows:[{label:T('Auto-print','自动打印'),tgl:'autoprint',dusk:true},{label:T('Auto-route','自动派单'),tgl:'autoroute',dusk:true}]},
+    {h:T('Automation','自动化'),rows:[
+      {label:T('Auto-print receipts','自动打印小票'),printer:true},
+      // Routing is behaviour, not a setting: every order already goes to the
+      // nearest store and there is nothing to switch. Saying so beats a toggle
+      // that writes nowhere.
+      {label:T('Routing','派单'),value:T('Nearest store, automatically','自动派往最近门店')},
+    ]},
     {h:T('Preferences','偏好'),rows:[{label:T('Language','语言'),value:state.lang==='en'?'English':'中文',cmd:"APP.cmd('toggleLang')",chev:true},{label:T('Theme','主题'),value:state.theme==='light'?T('Light','浅色'):T('Dark','深色'),cmd:"APP.cmd('toggleTheme')",chev:true}]},
   ];
-  const rt=r=> r.tgl==='__live'?toggle(state.live,"APP.cmd('toggleLive')"):r.tgl==='__sound'?toggle(state.sound,"APP.cmd('toggleSound')"):toggle(state.sw[r.tgl],`APP.cmd('sw','${r.tgl}')`);
+  const rt=r=> r.printer
+      ? (state.printer
+          ? toggle(!!state.printer.auto_print,"APP.cmd('togglePrint')")
+          : `<span style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span>`)
+      : r.tgl==='__live'?toggle(state.live,"APP.cmd('toggleLive')")
+      : r.tgl==='__sound'?toggle(state.sound,"APP.cmd('toggleSound')")
+      : toggle(state.sw[r.tgl],`APP.cmd('sw','${r.tgl}')`);
+  if(!state.printer&&!state.printerTried) loadPrinter();
   return `<div style="padding:16px 16px 28px;display:flex;flex-direction:column;gap:18px">
     <button onclick="APP.cmd('noop')" style="display:flex;align-items:center;gap:14px;width:100%;text-align:left;cursor:pointer;background:var(--surface-raised);border:none;border-radius:14px;padding:16px;font-family:inherit">
       <span style="width:46px;height:46px;border-radius:12px;background:var(--surface-card);display:flex;align-items:center;justify-content:center;flex:none;font-size:18px;font-weight:500;color:var(--text-primary)">${(state.storeName||T('Your store','你的店铺')).trim().charAt(0)}</span>
@@ -861,6 +1298,179 @@ function screenSettings(){
 /* ==========================================================================
    Sheets
    ========================================================================== */
+const ORDER_NEXT={
+  paid:            {to:'preparing',  en:'Start preparing',  zh:'开始备货',  busyEn:'Starting…',  busyZh:'处理中…'},
+  awaiting_restock:{to:'preparing',  en:'Restocked · start preparing', zh:'已补货 · 开始备货', busyEn:'Starting…', busyZh:'处理中…'},
+  preparing:       {to:'dispatched', en:'Mark dispatched',  zh:'标记已发货', busyEn:'Marking…',  busyZh:'处理中…'},
+  dispatched:      {to:'delivered',  en:'Mark delivered',   zh:'标记送达',  busyEn:'Marking…',  busyZh:'处理中…'},
+};
+/* A pickup order walks the same machine with a different journey: dispatched is
+   "ready at the counter" and delivered is "the customer came and took it". The
+   desktop relabels both; so does this, or the phone tells a counter to dispatch
+   something nobody is shipping. */
+const ORDER_NEXT_PICKUP={dispatched:{en:'Mark ready for pickup',zh:'标记可取货'},delivered:{en:'Mark picked up',zh:'标记已取货'}};
+/* pending_payment is deliberately absent: marking an off-app payment records
+   WHICH tender it was, and guessing that from a phone would put "unknown" on
+   the books. It stays a desktop action until the phone can ask. */
+function orderNext(o){
+  // A marketplace mirror is read at 100% legibility and acted on at 0%: the
+  // platform drives it, and a button here would write into a queue we do not own.
+  if(!o||o.viewOnly||!o.raw) return null;
+  const n=ORDER_NEXT[o.raw]; if(!n) return null;
+  const alt=o.pickup&&ORDER_NEXT_PICKUP[n.to];
+  return alt?Object.assign({},n,alt):n;
+}
+
+/* A write helper that keeps the server's own words. api() throws away the body,
+   and the body is where the reason lives. */
+async function apiWrite(path, body, method){
+  const r=await fetch(API+path,{method:method||'POST',credentials:'same-origin',
+    headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify(body||{})});
+  if(r.status===401||r.status===403){ location.href='/backend/login'; throw new Error('auth'); }
+  let j=null; try{ j=await r.json(); }catch(e){}
+  if(!r.ok){ const e=new Error((j&&(j.message||j.error))||('HTTP '+r.status)); e.code=j&&j.error; throw e; }
+  return j;
+}
+function orderErrorText(e){
+  if(e.code==='__plain') return e.message;
+  if(e.code==='invalid_transition') return T('This order has already moved on. Close and open it again to see where it is now.',
+                                             '这个订单已经进入下一步。请关闭后重新打开查看当前状态。');
+  if(e.code==='refund_already_processing'||e.code==='use_refund_payout') return e.message;
+  if(e.code==='already_shipped') return T('A parcel already has a waybill, so this cannot be undone here. Cancel the waybill first.',
+                                          '已有包裹生成运单，无法在此撤销。请先取消运单。');
+  return T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。');
+}
+/* Every write disables the control it belongs to and says what it is doing, and
+   a failure renders where the operator is looking and stays until they act on
+   it. A toast confirms; it never reports a failure. */
+async function orderWrite(kind, run){
+  if(state.orderBusy) return;
+  state.orderBusy=kind; state.orderErr=null; render();
+  try{
+    const msg=await run();
+    state.orderBusy=null; render();
+    if(msg) showToast(msg);
+    refreshOrders();
+  }catch(e){
+    state.orderBusy=null;
+    if(String(e.message)==='auth') return;
+    state.orderErr=orderErrorText(e); render();
+  }
+}
+/* printer.* is private config, so it has its own read and write. The phone shows
+   the switch only once it knows the real value — a switch that guesses its own
+   position is worse than no switch. */
+/* One product, every store, one call — /products/:id/store-stocks answers with
+   exactly the rows this sheet edits. (The first version read each store's whole
+   catalogue and picked one row out of it.) */
+async function loadProductStock(pid){
+  if(pid==null){ state.prodStockReady=true; render(); return; }
+  state.prodStockReady=false; state.prodStores=null; render();
+  try{
+    const rows=await api('/products/'+pid+'/store-stocks');
+    state.prodStores=(Array.isArray(rows)?rows:[]).map(r=>({
+      id:r.store_id, name_en:r.name_en||r.code||('#'+r.store_id), name_cn:r.name_cn||r.name_en||r.code||('#'+r.store_id),
+      qty:Number(r.physical_qty||0)}));
+    state.prodStores.forEach(st=>{ sheetStep['st_'+st.id]=st.qty; });
+  }catch(e){ state.prodStores=null; }
+  state.prodStockReady=true; render();
+}
+async function saveProductEdits(){
+  const p=DB.products.find(x=>x.sku===state.productSku);
+  if(!p||p._id==null||state.prodBusy) return;
+  const priceRaw=(document.getElementById('mPrice')||{}).value;
+  const price=Math.max(0,parseFloat(String(priceRaw).replace(/[^0-9.]/g,''))||0);
+  const stores=state.prodStores||[];
+  state.prodBusy=true; state.prodErr=null; render();
+  try{
+    if(price!==Number(p.priceNum)) await apiWrite('/products/'+p._id,{sell_price:price},'PATCH');
+    for(const st of stores){
+      const now=Number(sheetStep['st_'+st.id]);
+      if(!isNaN(now)&&now!==st.qty){
+        await apiWrite('/stores/'+st.id+'/stock/'+p._id,{physical_qty:now},'PATCH');
+        st.qty=now;
+      }
+    }
+    state.prodBusy=false; state.productSku=null; render();
+    showToast(T('Saved','已保存'));
+    try{ const rows=await api('/products?limit=50'); if(Array.isArray(rows)&&rows.length){ DB.products=rows.map(mapProduct); render(); } }catch(e){}
+  }catch(e){
+    state.prodBusy=false;
+    if(String(e.message)==='auth') return;
+    state.prodErr=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    render();
+  }
+}
+async function loadMedia(){
+  if(state.mediaLoading||state.mediaTried) return; state.mediaLoading=true; state.mediaTried=true;
+  try{ const d=await api('/media/list?limit=30');
+    state.media={rows:(d&&d.rows)||[], total:(d&&d.total)||0};
+  }catch(e){ state.media={rows:[],total:0}; }
+  state.mediaLoading=false; render();
+}
+/* Fapiao auto-issue is a real preference with a real endpoint, same shape as
+   the printer's: read it before showing a switch that claims to know its state. */
+async function loadFapiao(){
+  if(state.fapiaoLoading||state.fapiaoTried) return; state.fapiaoLoading=true; state.fapiaoTried=true;
+  try{ state.fapiao=await api('/fapiao-settings'); }catch(e){}
+  state.fapiaoLoading=false; render();
+}
+function toggleFapiao(){
+  if(!state.fapiao||state.fapiaoBusy) return;
+  const next=!state.fapiao.autoIssue;
+  state.fapiaoBusy=true; state.printerErr=null; render();
+  apiWrite('/fapiao-settings',{autoIssue:next},'PUT').then(()=>{
+    state.fapiao.autoIssue=next; state.fapiaoBusy=false; render();
+    showToast(next?T('Auto-issue on','已开启自动开票'):T('Auto-issue off','已关闭自动开票'));
+  }).catch(e=>{
+    state.fapiaoBusy=false;
+    if(String(e.message)==='auth') return;
+    state.printerErr=T('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
+  });
+}
+async function loadPrinter(){
+  if(state.printerLoading||state.printerTried) return; state.printerLoading=true; state.printerTried=true;
+  try{ const p=await api('/printer'); state.printer=p||null; }catch(e){}
+  state.printerLoading=false; render();
+}
+function togglePrint(){
+  if(!state.printer||state.printerBusy) return;
+  const next=!state.printer.auto_print;
+  state.printerBusy=true; state.printerErr=null; render();
+  apiWrite('/printer',{auto_print:next},'PUT').then(()=>{
+    state.printer.auto_print=next; state.printerBusy=false; render();
+    showToast(next?T('Auto-print on','已开启自动打印'):T('Auto-print off','已关闭自动打印'));
+  }).catch(e=>{
+    state.printerBusy=false;
+    if(String(e.message)==='auth') return;
+    state.printerErr=T('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
+  });
+}
+async function loadInbox(){
+  try{ const rv=await api('/reviews?limit=30'); const list=Array.isArray(rv)?rv:(rv.reviews||[]);
+    if(list.length){ DB.reviews=list.map(mapReview);
+      state.liveAttn=Object.assign({},state.liveAttn||{},{reviews:DB.reviews.filter(r=>!r.reply).length}); render(); }
+  }catch(e){}
+  try{ const r=await api('/feedback'); const rows=Array.isArray(r)?r:(r&&r.data); if(rows) { DB.feedback=rows.map(mapFeedback); render(); } }catch(e){}
+}
+async function refreshOrders(){
+  const id=state.detailId, row=(state.liveOrders||[]).find(o=>o.id===id);
+  if(row&&row._id!=null){ try{ const o=await api('/orders/'+row._id); if(state.detailId===id){ state.liveDetail=mapDetail(o); render(); } }catch(e){} }
+  // Repaint the list the operator is actually looking at — same filters, same
+  // depth. Refetching a bare first page would silently drop their filter and
+  // every page they had loaded past the first.
+  try{
+    const depth=Math.max(ORDERS_PAGE,(state.ordersView||[]).length);
+    const qs=ordersQuery(0).replace(/limit=\d+/,'limit='+Math.min(depth,200));
+    const j=await apiRaw('/orders?'+qs);
+    const rows=(j&&j.data)||[];
+    if(rows.length||state.ordersView){ state.ordersView=rows.map(mapOrderRow); state.liveOrders=state.ordersView;
+      const total=j&&j.meta&&j.meta.total; state.ordersTotal=(total!=null)?total:null;
+      state.ordersMore=(total!=null)?state.ordersView.length<total:false; render(); }
+  }catch(e){}
+  api('/order-status-counts').then(d=>{ if(d){ state.liveStatusCounts=d;
+    state.liveAttn=Object.assign({},state.liveAttn||{},{ship:(d.paid||0)+(d.preparing||0)}); render(); } }).catch(()=>{});
+}
 function findOrder(id){ return DB.orders.find(o=>o.id===id) || DB.purchasing.find(o=>o.id===id); }
 function sheetOrderDetail(){
   const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId); if(!o) return '';
@@ -873,13 +1483,18 @@ function sheetOrderDetail(){
    <div class="sheet" id="detailSheet" style="top:46px;overflow:hidden;z-index:46;${noAnim}transform:translateY(${state.drag}px);transition:${trans}">
      <div id="dragHandle" style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default);touch-action:none;cursor:grab">
        <div class="grabber"></div>
-       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
-         <button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" onclick="APP.cmd('closeOrder')" aria-label="Close">${ic('x',22,2)}</button>
-         <div style="flex:1;min-width:0;padding-top:1px">
-           <div style="font-size:12px;color:var(--text-secondary)">${isPO?T('Purchase order','采购单'):T('Order','订单')}</div>
-           <div style="display:flex;align-items:center;gap:9px;margin-top:3px;flex-wrap:wrap"><span class="num" style="font-size:17px;font-weight:500;letter-spacing:-.01em">${o.id}</span>${pill(o.kind,T(...o.status))}</div></div>
-         ${isPO?'<span style="width:36px;flex:none"></span>':`<button class="iconbtn" style="width:36px;height:36px" onclick="APP.cmd('detailActions')" aria-label="More">${ic('ellipsis')}</button>`}</div></div>
-     <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;background:var(--bg)">
+       <div style="display:flex;align-items:center;gap:12px;min-width:0">
+         <span class="num" style="font-size:18px;font-weight:500;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${o.id}</span>
+         ${pill(o.kind,T(...o.status))}
+         <span style="flex:1"></span>
+         <button class="iconbtn" style="width:40px;height:40px;margin-right:-6px" onclick="APP.cmd('closeOrder')" aria-label="${T('Close','关闭')}">${ic('x',22,2)}</button>
+       </div>
+       ${orderActionRow(o,isPO)}
+       </div>
+     <div style="flex:1;min-height:0;overflow-y:auto;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 24px);display:flex;flex-direction:column;gap:16px;background:var(--bg)">
+       ${state.orderErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+         <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+         <span style="font-size:14px;color:var(--brick)">${state.orderErr}</span></div>`:''}
        ${o.trk?`<div class="card" style="padding:14px">
          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
            <span style="display:flex;align-items:center;gap:8px;min-width:0;color:var(--text-secondary)">${ic('truck',18)}<span style="font-size:14.5px;font-weight:500;color:var(--text-primary)">${T(...o.trk.carrier)}</span></span>
@@ -890,16 +1505,16 @@ function sheetOrderDetail(){
          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><span style="font-size:13px;color:var(--text-secondary)">${T('Total','合计')}</span><span class="num" style="font-size:26px;font-weight:500;letter-spacing:-.02em">${o.total}</span></div>
          ${o.breakdown?`<div style="margin-top:12px;display:flex;flex-direction:column;gap:7px">${o.breakdown.map(([l,v])=>`<div style="display:flex;align-items:baseline;justify-content:space-between;font-size:13px"><span style="color:var(--text-secondary)">${T(l,l)}</span><span class="num">${v}</span></div>`).join('')}</div>`:''}</div>
        ${isPO?'':`
-       <div class="card" style="padding:14px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="eyebrow" style="letter-spacing:.05em">${T('Ship to','收货地址')}</span>
+       <div class="card" style="padding:14px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="eyebrow">${T('Ship to','收货地址')}</span>
          <button onclick="APP.cmd('copyAddr')" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);background:transparent;border:none;cursor:pointer;font-family:inherit">${T('Copy','复制')} ${ic('copy',13)}</button></div>
          <div class="num" style="font-size:15px;margin-top:7px">${T(...o.cust)} · ${o.phone}</div><div style="font-size:13.5px;color:var(--text-secondary);margin-top:2px">${T(...o.addr)}</div></div>
-       <div class="card" style="padding:14px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="eyebrow" style="letter-spacing:.05em">${T('Payment','支付')}</span>
+       <div class="card" style="padding:14px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="eyebrow">${T('Payment','支付')}</span>
          <button onclick="APP.cmd('copyTxn')" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);background:transparent;border:none;cursor:pointer;font-family:inherit">${T('Copy','复制')} ${ic('copy',13)}</button></div>
          <div style="font-size:15px;margin-top:7px">${T(...o.pay)}</div><div class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:2px">${T('Txn','交易号')} ${o.txn}</div></div>
-       <div class="card" style="padding:14px"><span class="eyebrow" style="letter-spacing:.05em">${T('Fulfilled by','履约门店')}</span>
+       <div class="card" style="padding:14px"><span class="eyebrow">${T('Fulfilled by','履约门店')}</span>
          <div style="font-size:15px;margin-top:7px">${T(...o.fulfil)}</div>
          <div style="display:flex;align-items:center;gap:6px;margin-top:5px;color:var(--text-secondary)">${ic('route',14)}<span style="font-size:12.5px">${T(...o.route)}</span></div></div>
-       ${o.receipt?`<div class="card" style="padding:14px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="eyebrow" style="letter-spacing:.05em">${T('Receipt','小票')}</span>
+       ${o.receipt?`<div class="card" style="padding:14px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="eyebrow">${T('Receipt','小票')}</span>
          <button onclick="APP.cmd('reprint')" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:8px;cursor:pointer;padding:5px 9px;font-family:inherit">${ic('printer',15)} ${T('Reprint','重打')}</button></div>
          <div style="display:flex;align-items:center;gap:7px;margin-top:8px"><span style="display:flex;color:#5F7357">${ic('check',16,2.25)}</span><span style="font-size:14.5px">${T(...o.receipt)}</span></div></div>`:''}`}
        <div><div class="eyebrow" style="padding:4px 4px 8px">${o.items.length} ${T('items','件')}</div>
@@ -914,23 +1529,95 @@ function sheetOrderDetail(){
              <span style="text-align:right;flex:none"><span class="num" style="display:block;font-size:14px">${it[2]}</span><span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary);margin-top:1px">×${it[0]}</span></span></div>`;
          }).join('')}</div></div>
      </div>
-     <div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card)">
-       <button class="cta" onclick="APP.cmd('${isPO?'saveStock':'markDelivered'}')">${isPO?T('Receive stock','入库'):(o.kind==='refund'?T('Approve refund','通过退款'):T('Mark delivered','标记送达'))}</button></div>
+   </div>`;
+}
+function orderActionRow(o,isPO){
+  if(isPO) return `<div style="display:flex;align-items:center;gap:8px;margin-top:12px">
+    <button class="btn2" style="flex:1" onclick="APP.cmd('saveStock')">${T('Receive stock','入库')}</button></div>`;
+  if(o._id==null) return '';   // sample data in the static preview: no live order to act on
+  const next=orderNext(o);
+  const busy=state.orderBusy;
+  const undoable=['dispatched','delivered'].includes(o.raw);
+  const refundOpen=['pending','reviewing'].includes(o.refundStatus);
+  const refundApproved=o.refundStatus==='approved';
+  const canPay=o.raw==='pending_payment'&&!o.viewOnly;
+  const btns=[];
+  if(canPay) btns.push(`<button class="btn2" style="flex:1;min-width:0" ${busy?'disabled':''} onclick="APP.cmd('markPaid')">${busy==='advance'?T('Marking…','处理中…'):T('Mark paid','标记已付款')}</button>`);
+  else if(next) btns.push(`<button class="btn2" style="flex:1;min-width:0" ${busy?'disabled':''} onclick="APP.cmd('advance','${next.to}')">${busy==='advance'?T(next.busyEn,next.busyZh):T(next.en,next.zh)}</button>`);
+  btns.push(`<button class="btn2" style="${next?'width:44px;padding:0;flex:none':'flex:1;gap:8px'}" ${busy?'disabled':''} onclick="APP.cmd('printOrder')" aria-label="${T('Reprint receipt','重打小票')}">${ic('printer',20)}${next?'':`<span>${busy==='print'?T('Printing…','打印中…'):T('Reprint receipt','重打小票')}</span>`}</button>`);
+  if(undoable||refundOpen||refundApproved) btns.push(`<button class="btn2" style="width:44px;padding:0;flex:none" ${busy?'disabled':''} onclick="APP.cmd('detailActions')" aria-label="${T('More actions','更多操作')}">${ic('ellipsis',20)}</button>`);
+  return `<div style="display:flex;align-items:center;gap:8px;margin-top:12px">${btns.join('')}</div>`;
+}
+function sheetAsk(){
+  const a=state.ask; if(!a) return '';
+  return `<div class="scrim" style="z-index:49" onclick="APP.cmd('closeAsk')"></div>
+   <div class="sheet" style="z-index:50;padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 24px)">
+     <div class="grabber" style="margin-bottom:12px"></div>
+     <div style="padding:0 20px 8px">
+       <div style="font-size:18px;font-weight:500">${a.title}</div>
+       ${a.body?`<div style="font-size:15px;color:var(--text-secondary);margin-top:8px;line-height:1.55">${a.body}</div>`:''}
+     </div>
+     ${a.options
+       ? a.options.map(o=>`<button class="row" style="min-height:56px;padding:12px 20px" onclick="APP.cmd('askRun','${o.key}')"><span style="flex:1;font-size:15px">${o.label}</span></button>`).join('')
+       : `<div style="display:flex;gap:8px;padding:16px 20px 0">
+            <button class="btn2" style="flex:1" onclick="APP.cmd('closeAsk')">${T('Cancel','取消')}</button>
+            <button class="btn2" style="flex:1;${a.danger?'color:var(--brick);border-color:var(--brick)':''}" onclick="APP.cmd('askRun','')">${a.confirmLabel||T('Confirm','确认')}</button>
+          </div>`}
    </div>`;
 }
 function sheetActions(){
-  const acts=[['printer',T('Reprint receipt','重打小票'),"APP.cmd('reprint')"],['refund-cw',T('Issue refund','发起退款'),"APP.cmd('refundOrder')"],['copy',T('Copy order link','复制链接'),"APP.cmd('copyTxn')"],['route',T('Re-route order','改派订单'),"APP.cmd('closeActions')"]];
+  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  const wasDelivered=o&&o.raw==='delivered';
+  const acts=[['printer',T('Reprint receipt','重打小票'),"APP.cmd('printOrder')"]];
+  if(o&&['pending','reviewing'].includes(o.refundStatus)){
+    acts.push(['check',T('Approve refund','通过退款'),"APP.cmd('approveRefund')"]);
+    acts.push(['x',T('Reject refund','拒绝退款'),"APP.cmd('rejectRefund')"]);
+  }
+  if(o&&o.refundStatus==='approved') acts.push(['banknote',T('Pay the refund','打出退款'),"APP.cmd('payRefund')"]);
+  if(o&&['dispatched','delivered'].includes(o.raw)){
+    // Forward-only machine: without this, a mis-tap sits on the queue with only
+    // a refund as the way out. The server refuses once a parcel has a waybill,
+    // and that refusal is shown rather than swallowed.
+    acts.push(['undo-2',wasDelivered?T('Undo delivery · back to preparing','撤销送达 · 退回备货'):T('Undo dispatch · back to preparing','撤销发货 · 退回备货'),"APP.cmd('undoDispatch')"]);
+  }
   return `<div class="scrim" style="z-index:47;background:rgba(17,26,43,.30)" onclick="APP.cmd('closeActions')"></div>
    <div class="sheet" style="z-index:48;padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 30px)"><div class="grabber" style="margin-bottom:10px"></div>
    ${acts.map(([i,l,c])=>`<button class="row" style="min-height:52px;padding:12px 20px" onclick="${c}"><span style="display:flex;flex:none;color:var(--text-secondary)">${ic(i)}</span><span style="flex:1;font-size:15px">${l}</span></button>`).join('')}</div>`;
 }
 function stepperCard(label,key,val,prefix){
   if(sheetStep[key]==null) sheetStep[key]=val;
-  return `<div class="card" style="padding:16px"><div class="eyebrow" style="letter-spacing:.05em">${label}</div>
+  return `<div class="card" style="padding:16px"><div class="eyebrow">${label}</div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">
       <button class="stepbtn" onclick="APP.cmd('stepDec','${key}')">${ic('minus',18,2.25)}</button>
       <span class="num" style="font-size:26px;font-weight:500">${prefix||''}${sheetStep[key]}</span>
       <button class="stepbtn" onclick="APP.cmd('stepInc','${key}')">${ic('plus',18,2.25)}</button></div></div>`;
+}
+/* One row per store, because that is where a physical count lives. With no
+   store list to read, the phone shows the total and says where to change it —
+   spreading one number across two shelves would be a guess. */
+function stockCard(p){
+  const stores=state.prodStores||[];
+  if(state.prodStockReady&&!stores.length){
+    return `<div class="card" style="padding:16px">
+      <div class="eyebrow">${T('In stock','库存')}</div>
+      <div class="num" style="font-size:26px;font-weight:500;margin-top:12px">${p.stock}</div>
+      <div style="font-size:13px;color:var(--text-secondary);margin-top:4px">${T('Counted per store — adjust on desktop.','按门店计数 — 请在电脑端调整。')}</div></div>`;
+  }
+  if(!state.prodStockReady){
+    return `<div class="card" style="padding:16px"><div class="eyebrow">${T('In stock','库存')}</div>
+      <div style="font-size:15px;color:var(--text-secondary);margin-top:12px">${T('Loading…','加载中…')}</div></div>`;
+  }
+  return `<div class="card" style="padding:16px">
+    <div class="eyebrow">${T('In stock','库存')}</div>
+    ${stores.map((st,i)=>{
+      const name=T(st.name_en,st.name_cn);
+      return `<div style="${i?'border-top:1px solid var(--border-default);margin-top:16px;padding-top:16px':'margin-top:12px'}">
+        <div style="font-size:15px">${name}</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">
+          <button class="stepbtn" onclick="APP.cmd('stepDec','st_${st.id}')">${ic('minus',18,2.25)}</button>
+          <span class="num" style="font-size:26px;font-weight:500">${sheetStep['st_'+st.id]!=null?sheetStep['st_'+st.id]:0}</span>
+          <button class="stepbtn" onclick="APP.cmd('stepInc','st_${st.id}')">${ic('plus',18,2.25)}</button></div></div>`;
+    }).join('')}</div>`;
 }
 function sheetProduct(){
   const p=DB.products.find(x=>x.sku===state.productSku); if(!p) return '';
@@ -941,11 +1628,22 @@ function sheetProduct(){
          <button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" onclick="APP.cmd('closeProduct')">${ic('x',22,2)}</button>
          <div style="flex:1;min-width:0;padding-top:1px"><div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap"><span style="font-size:17px;font-weight:500">${T(...p.name)}</span>${pill(p.kind,T(...p.status))}</div>
          <div class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:3px">${p.sku}</div></div><span style="width:36px;flex:none"></span></div></div>
-     <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;background:var(--bg)">
+     <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:16px;background:var(--bg)">
        ${noteBar(T('Quick-edit stock and price · full editing on desktop','快改库存与价格 · 完整编辑在电脑端'))}
-       ${stepperCard(T('In stock','库存'),'p_stock',p.stock)}
-       ${stepperCard(T('Price','价格'),'p_price',parseInt(p.price.replace(/[^0-9]/g,'')),'¥')}</div>
-     <div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card)"><button class="cta" onclick="APP.cmd('saveProduct')">${T('Save','保存')}</button></div></div>`;
+       ${state.prodErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+         <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+         <span style="font-size:14px;color:var(--brick)">${state.prodErr}</span></div>`:''}
+       <div class="card" style="padding:16px">
+         <div class="eyebrow">${T('Price','价格')}</div>
+         <div style="display:flex;align-items:center;gap:8px;margin-top:12px">
+           <span class="num" style="font-size:18px;color:var(--text-secondary)">${CUR}</span>
+           <input id="mPrice" class="num" inputmode="decimal" value="${p.priceNum!=null?p.priceNum:(parseFloat(String(p.price).replace(/[^0-9.]/g,''))||'')}" style="font-size:18px;font-weight:500">
+         </div>
+       </div>
+       ${stockCard(p)}
+     </div>
+     <div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card)">
+       <button class="btn2" style="width:100%" ${state.prodBusy?'disabled':''} onclick="APP.cmd('saveProduct')">${state.prodBusy?T('Saving…','保存中…'):T('Save','保存')}</button></div></div>`;
 }
 function sheetReply(){
   const r=DB.reviews.find(x=>x.cust[0]===state.reply)||DB.feedback.find(x=>x.cust[0]===state.reply)||{cust:[state.reply,state.reply],text:['','']};
@@ -956,8 +1654,13 @@ function sheetReply(){
        <span style="flex:1;font-size:17px;font-weight:500">${T(...r.cust)}</span><span style="width:36px;flex:none"></span></div></div>
      <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;background:var(--bg)">
        <div style="background:var(--surface-raised);border-radius:12px;padding:14px;font-size:14px;line-height:1.55;color:var(--text-secondary)">${T(...r.text)}</div>
-       <textarea placeholder="${T('Write a reply…','写下回复…')}" style="min-height:100px;resize:none"></textarea></div>
-     <div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card)"><button class="cta" onclick="APP.cmd('sendReply')">${T('Send reply','发送回复')}</button></div></div>`;
+       <textarea id="mReply" placeholder="${T('Write a reply…','写下回复…')}" style="min-height:100px;resize:none">${r.reply?String(r.reply).replace(/</g,'&lt;'):''}</textarea>
+       ${state.replyErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+         <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+         <span style="font-size:14px;color:var(--brick)">${state.replyErr}</span></div>`:''}
+       <div style="font-size:13px;color:var(--text-secondary)">${T('Replies show under the review in the mini app, signed with the store name.','回复会显示在小程序的评价下方，署名为店铺名称。')}</div></div>
+     <div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card)">
+       <button class="btn2" style="width:100%" ${state.replyBusy?'disabled':''} onclick="APP.cmd('sendReplyText',(document.getElementById('mReply')||{}).value)">${state.replyBusy?T('Sending…','发送中…'):T('Send reply','发送回复')}</button></div></div>`;
 }
 function sheetCreate(){
   const cfg={coupon:{title:T('New coupon','新建优惠券'),ph:'WELCOME10',unit:'%',showValue:true,verb:T('Create coupon','创建优惠券')},
@@ -971,7 +1674,7 @@ function sheetCreate(){
        <span style="flex:1;font-size:17px;font-weight:500">${cfg.title}</span><span style="width:36px;flex:none"></span></div></div>
      <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;background:var(--bg)">
        <div><div class="eyebrow" style="padding:0 2px 7px;letter-spacing:.05em">${T('Title','标题')}</div><input placeholder="${cfg.ph}"></div>
-       ${cfg.showValue?`<div class="card" style="padding:16px"><div class="eyebrow" style="letter-spacing:.05em">${T('Value','面额')}</div>
+       ${cfg.showValue?`<div class="card" style="padding:16px"><div class="eyebrow">${T('Value','面额')}</div>
          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">
            <button class="stepbtn" onclick="APP.cmd('createValDec')">${ic('minus',18,2.25)}</button>
            <span class="num" style="font-size:26px;font-weight:500">${state.createValue}${cfg.unit}</span>
@@ -985,12 +1688,12 @@ function sheetOverflow(){
   const val=t=>`<span style="font-size:14px;color:var(--text-secondary)">${t}</span>`;
   return `<div class="scrim" style="z-index:40;background:rgba(17,26,43,.30)" onclick="APP.cmd('closeOverflow')"></div>
    <div class="sheet" style="z-index:41;padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 30px)"><div class="grabber"></div>
-     <div style="padding:4px 20px 6px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-secondary)">${T('Menu','菜单')}</div>
+     <div style="padding:4px 20px 6px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Menu','菜单')}</div>
      ${row('search',T('Search','搜索'),`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`,"APP.cmd('openSearch')",true)}
      ${row('languages',T('Language','语言'),val(state.lang==='en'?'English':'中文'),"APP.cmd('toggleLang')",true)}
      ${row('sun-moon',T('Theme','主题'),val(state.theme==='light'?T('Light','浅色'):T('Dark','深色')),"APP.cmd('toggleTheme')",true)}
      ${row('circle-user-round',T('Account','账户'),val(state.storeName||T('Your store','你的店铺'))+`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`,"APP.cmd('noop')",false)}
-     <div style="padding:16px 20px 6px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-secondary)">${T('Updates','更新')}</div>
+     <div style="padding:16px 20px 6px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Updates','更新')}</div>
      <div style="display:flex;align-items:center;gap:14px;min-height:48px;padding:8px 20px">
        <span style="width:20px;display:flex;justify-content:center;flex:none">${state.live?'<span class="breathe" style="width:9px;height:9px;border-radius:50%;background:var(--accent)"></span>':'<span style="width:9px;height:9px;border-radius:50%;background:var(--border-strong)"></span>'}</span>
        <span style="flex:1;font-size:15px">${T('Live updates','实时更新')}</span>${toggle(state.live,"APP.cmd('toggleLive')")}</div>
@@ -998,68 +1701,273 @@ function sheetOverflow(){
        <span style="width:20px;display:flex;justify-content:center;flex:none;color:var(--text-secondary)">${ic('bell',18)}</span>
        <span style="flex:1;font-size:15px">${T('Sound','提示音')}</span>${toggle(state.sound,"APP.cmd('toggleSound')")}</div></div>`;
 }
+/* The jump list is built from the nav itself, so it can never drift from what
+   the app actually has — the five destinations and every row of More. */
+function searchIndex(){
+  const out=Object.keys(TAB_META).filter(k=>k!=='more').map(k=>({icon:TAB_META[k].icon,p:[TAB_META[k].en,TAB_META[k].zh],g:['Go to','前往'],cmd:`APP.cmd('closeSearch');APP.cmd('tab','${k}')`}));
+  MORE_GROUPS.forEach(gr=>gr.rows.forEach(r=>out.push({icon:r[1],p:[r[2],r[3]],g:gr.h||['More','更多'],cmd:`APP.cmd('closeSearch');APP.cmd('push','${r[0]}')`})));
+  return out;
+}
 function sheetSearch(){
-  const results=[
-    {icon:'package',p:['Orders','订单'],s:'RT-…047',g:['Run','运营'],cmd:"APP.cmd('closeSearch');APP.cmd('tab','orders')"},
-    {icon:'box',p:['Products','产品'],s:'Oat milk',g:['Catalog','目录'],cmd:"APP.cmd('closeSearch');APP.cmd('push','products')"},
-    {icon:'truck',p:['Delivery','配送'],s:'6 zones',g:['Fulfilment','履约'],cmd:"APP.cmd('closeSearch');APP.cmd('push','delivery')"},
-    {icon:'ticket',p:['Coupons','优惠券'],s:'WELCOME10',g:['Marketing','营销'],cmd:"APP.cmd('closeSearch');APP.cmd('push','coupons')"},
-    {icon:'settings',p:['Settings','设置'],s:'Auto-print',g:['Setup','设置'],cmd:"APP.cmd('closeSearch');APP.cmd('push','operations')"},
-  ];
+  const results=searchIndex();
   return `<div style="position:absolute;inset:0;z-index:50;background:var(--bg);display:flex;flex-direction:column;animation:tFade .2s ease both">
     <div style="flex:none;padding:calc(env(safe-area-inset-top,0px) + 16px) 10px 12px 16px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border-default)">
-      <input autofocus placeholder="${T('Search every page and setting…','搜索页面与设置…')}">
+      <input id="mSearch" autofocus inputmode="search" enterkeyhint="search"
+        placeholder="${T('Search orders — number, name, phone','搜索订单 — 单号、姓名、手机')}"
+        onkeydown="if(event.key==='Enter'){APP.cmd('orderSearch',this.value.trim())}">
       <button onclick="APP.cmd('closeSearch')" style="background:transparent;border:none;color:var(--text-secondary);font-size:15px;font-weight:500;cursor:pointer;padding:8px 6px;font-family:inherit;flex:none">${T('Cancel','取消')}</button></div>
-    <div style="flex:1;overflow-y:auto;padding:14px 0"><div class="eyebrow" style="padding:6px 20px">${T('Jump to','快速跳转')}</div>
+    <div style="flex:1;overflow-y:auto;padding:14px 0">
+      <button class="row" style="min-height:52px;padding:11px 20px" onclick="APP.cmd('orderSearch',(document.getElementById('mSearch')||{}).value?document.getElementById('mSearch').value.trim():'')">
+        <span style="color:var(--text-secondary);display:flex;flex:none">${ic('search')}</span>
+        <span style="flex:1;font-size:15px">${T('Search orders','搜索订单')}</span>
+        <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>
+      <div class="eyebrow" style="padding:16px 20px 6px">${T('Jump to','快速跳转')}</div>
       ${results.map(r=>`<button class="row" style="min-height:52px;padding:11px 20px" onclick="${r.cmd}"><span style="color:var(--text-secondary);display:flex;flex:none">${ic(r.icon)}</span>
-        <span style="flex:1;display:flex;align-items:baseline;gap:7px"><span style="font-size:15px">${T(...r.p)}</span><span style="font-size:13px;color:var(--text-secondary)">${r.s}</span></span>
-        <span style="font-size:12px;color:var(--text-secondary)">${T(...r.g)}</span></button>`).join('')}</div></div>`;
+        <span style="flex:1;font-size:15px">${T(...r.p)}</span>
+        <span style="font-size:13px;color:var(--text-secondary)">${T(...r.g)}</span></button>`).join('')}</div></div>`;
+}
+
+
+/* ==========================================================================
+   Customers — a Worklist that is not a queue. Records arrive, so a record
+   nobody has opened wears the unseen surface; but nothing here is WAITING on
+   an operator, so the header is the title alone. The strip under it carries
+   the segments an operator actually reaches for, with real counts from the
+   server; tier chips carry no counts because no endpoint gives them one.
+   ========================================================================== */
+const TIER_LABEL={tree:['Tree','大树'],root:['Root','根系'],sprout:['Sprout','嫩芽'],seed:['Seed','种子']};
+function mapCustomer(r){
+  return {
+    id:r.id, name:r.nickname||'', phone:r.phone||'',
+    tier:String(r.tier_key||'seed'),
+    orders:Number(r.orders_count||0),
+    spend:Number(r.lifetime_spend||0),
+    seen:r.last_login_at||r.created_at,
+    unseen:!r.seen_at, blocked:!!r.is_blocked,
+  };
+}
+function custFiltered(){
+  const t=state.custTier||'all';
+  return (state.customers||[]).filter(c=>t==='all'||c.tier===t);
+}
+/* The pulse renders as one line, not tiles: four tiles cannot share a phone's
+   width, and showing two of them would be an arbitrary subset. It renders only
+   the figures the server actually returned. */
+function custPulse(){
+  const m=state.custMeta||{}; const bits=[];
+  if(m.buyers!=null) bits.push(T(m.buyers+' buyers', m.buyers+' 位买家'));
+  if(m.returnRate!=null) bits.push(T(m.returnRate+'% returning', m.returnRate+'% 复购'));
+  if(m.never!=null) bits.push(T(m.never+' never ordered', m.never+' 位未下单'));
+  return bits.join(' · ');
+}
+function custCard(c){
+  const tier=TIER_LABEL[c.tier]||[c.tier,c.tier];
+  return `<button class="card${c.unseen?' unseen':''}" onclick="APP.cmd('openCustomer','${c.id}')"
+      style="display:flex;align-items:center;gap:16px;padding:16px;text-align:left;cursor:pointer;color:var(--text-primary);font-family:inherit">
+    <span style="width:32px;height:32px;flex:none;border-radius:8px;background:var(--dusk-tint);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500">${(c.name||'·').trim().charAt(0).toUpperCase()}</span>
+    <span style="flex:1;min-width:0">
+      <span style="display:flex;align-items:center;gap:8px;min-width:0">
+        <span style="font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.name||T('No name','未填姓名')}</span>
+        <span class="pill" style="background:rgba(88,96,110,.10);color:var(--text-secondary)">${T(...tier)}</span>
+        ${c.blocked?`<span class="pill" style="background:var(--brick-tint);color:var(--brick)">${T('Blocked','已封禁')}</span>`:''}
+      </span>
+      <span class="num" style="display:block;font-size:13px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.phone||'—'} · ${c.orders?T(c.orders+' orders',c.orders+' 单'):T('No orders','暂无订单')}</span>
+    </span>
+    <span style="flex:none;text-align:right">
+      <span class="num" style="display:block;font-size:15px;font-weight:500;${c.spend?'':'color:var(--text-secondary)'}">${money(CUR,c.spend)}</span>
+      <span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${fmtDay(c.seen)}</span>
+    </span>
+  </button>`;
+}
+function custSkeleton(){
+  const bar=(w,h)=>`<span style="display:block;width:${w};height:${h}px;border-radius:999px;background:var(--surface-raised)"></span>`;
+  return `<div class="card" style="display:flex;align-items:center;gap:16px;padding:16px">
+    <span style="width:32px;height:32px;flex:none;border-radius:8px;background:var(--surface-raised)"></span>
+    <span style="flex:1;display:flex;flex-direction:column;gap:8px">${bar('55%',15)}${bar('35%',13)}</span>
+    <span style="flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:8px">${bar('64px',15)}${bar('40px',13)}</span></div>`;
+}
+function screenCustomers(){
+  const m=state.custMeta||{};
+  const segs=[{key:'all',en:'All',zh:'全部',count:m.all},
+    {key:'new_week',en:'New this week',zh:'本周新客',count:m.new_week},
+    {key:'sleeping',en:'Sleeping 60d+',zh:'沉睡 60 天',count:m.sleeping}];
+  if(m.blocked) segs.push({key:'blocked',en:'Blocked',zh:'已封禁',count:m.blocked});
+  const tiers=[{key:'all',en:'All tiers',zh:'全部等级'}].concat(
+    ['tree','root','sprout','seed'].map(k=>({key:k,en:TIER_LABEL[k][0],zh:TIER_LABEL[k][1]})));
+  const rows=custFiltered();
+  let body;
+  if(!state.custLoaded){
+    body=`${custSkeleton()}${custSkeleton()}${custSkeleton()}${custSkeleton()}`;
+  } else if(!rows.length && (state.custSeg==='all' && (state.custTier||'all')==='all')){
+    body=emptyState(T('No customers yet','还没有顾客'),
+      T('They settle in here as soon as someone orders — every channel, remembered without you asking.',
+        '有人下单后就会出现在这里 — 每个渠道，无需你操心。'));
+  } else if(!rows.length){
+    body=`<div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:48px 24px;text-align:center">
+      <div style="font-size:18px;font-weight:500">${T('No customers match these filters','没有符合筛选的顾客')}</div>
+      <div style="font-size:15px;color:var(--text-secondary);max-width:260px">${T('Clear them and the whole list comes back.','清除筛选即可看到全部。')}</div>
+      <button onclick="APP.cmd('custClear')" style="min-height:44px;padding:0 16px;border-radius:8px;border:1px solid var(--border-default);background:transparent;color:var(--text-primary);font-family:inherit;font-size:15px;font-weight:500;cursor:pointer">${T('Clear filters','清除筛选')}</button></div>`;
+  } else {
+    body=rows.map(custCard).join('');
+  }
+  const pulse=custPulse();
+  return `${pageHead({title:T('Customers','顾客')})}
+    ${pulse?`<p class="num" style="margin:-8px 0 16px;padding:0 16px;font-size:13px;color:var(--text-secondary)">${pulse}</p>`:''}
+    ${chipRow(segs,state.custSeg||'all','custSeg')}
+    <div style="height:8px"></div>
+    ${chipRow(tiers,state.custTier||'all','custTier')}
+    <div style="padding:16px 16px 24px;display:flex;flex-direction:column;gap:16px">${body}</div>`;
+}
+
+/* The customer record. Read-only for now — every figure on it is one the
+   server already computes, and none of the write flows (points, wallet, block)
+   exist on the phone yet. Opening it stamps seen_at server-side, which is what
+   settles the row's unseen surface on the way back. */
+function sheetCustomer(){
+  const d=state.custDetail;
+  const c=(d&&d.customer)||{};
+  const st=(d&&d.stats)||{};
+  const o=st.orders||{};
+  const tier=TIER_LABEL[String(c.tier_key||'seed')]||['Seed','种子'];
+  const snap=(label,val)=>`<span style="min-width:0">
+      <span style="display:block;font-size:13px;color:var(--text-secondary)">${label}</span>
+      <span class="num" style="display:block;font-size:18px;font-weight:500;line-height:1.4">${val}</span></span>`;
+  const since=(()=>{ const d=_date(c.created_at); if(!d) return '—';
+    return LANG==='en' ? d.toLocaleDateString('en-US',{month:'short',year:'numeric'})
+                       : d.getFullYear()+'年'+(d.getMonth()+1)+'月'; })();
+  const body = !d ? `<div style="padding:24px 0;color:var(--text-secondary);font-size:15px">${T('Loading…','加载中…')}</div>` : `
+    <div style="background:var(--surface-raised);border-radius:14px;padding:16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+      ${snap(T('Ordered','消费'),money(CUR,o.revenue||0))}
+      ${snap(T('Orders','订单'),String(o.orders_count||0))}
+      ${snap(T('Avg. order','客单价'),money(CUR,Math.round(o.aov||0)))}
+      ${snap(T('Points','积分'),Number(c.points_balance||0).toLocaleString())}
+      ${snap(T('Wallet','钱包'),money(CUR,c.balance||0))}
+      ${snap(T('Since','注册于'),since)}
+    </div>
+    <p style="margin:8px 0 0;font-size:13px;color:var(--text-secondary)">${T('Ordered is the goods total before discounts — the same measure the list column shows.','消费为折扣前的商品金额 — 与列表口径一致。')}</p>
+    ${(d.recent_orders||[]).length?`<div style="margin-top:16px">
+      <div style="font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${T('Recent orders','最近订单')}</div>
+      <div class="list">${d.recent_orders.slice(0,5).map((r,i)=>`${i?'<div class="sep"></div>':''}
+        <div style="display:flex;align-items:center;gap:16px;padding:12px 16px">
+          <span style="flex:1;min-width:0">
+            <span class="num" style="display:block;font-size:15px">${r.order_no||('#'+r.id)}</span>
+            <span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${fmtDay(r.placed_at)}</span></span>
+          <span class="num" style="flex:none;font-size:15px">${money(CUR,r.total)}</span></div>`).join('')}</div></div>`:''}
+    ${(d.addresses||[]).length?`<div style="margin-top:16px">
+      <div style="font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${T('Addresses','地址')}</div>
+      <div class="list">${d.addresses.slice(0,3).map((a,i)=>`${i?'<div class="sep"></div>':''}
+        <div style="padding:12px 16px;font-size:15px">${[a.city,a.district,a.detail].filter(Boolean).join(' · ')||'—'}</div>`).join('')}</div></div>`:''}
+    <div style="margin-top:16px;font-size:13px;color:var(--text-secondary)">${
+      d.diagnostics && d.diagnostics.unavailable ? T('Diagnostics could not be read.','诊断数据读取失败。')
+      : d.diagnostics && d.diagnostics.error_count_7d ? T(d.diagnostics.error_count_7d+' app errors in 7 days', '近 7 天 '+d.diagnostics.error_count_7d+' 次报错')
+      : T('No app errors in 7 days','近 7 天无报错')}</div>`;
+  return `<div class="scrim" onclick="APP.cmd('closeCustomer')"></div>
+    <div class="sheet" style="top:46px;overflow:hidden">
+      <div style="flex:none;padding:8px 16px 16px;border-bottom:1px solid var(--border-default)">
+        <div class="grabber"></div>
+        <div style="display:flex;align-items:center;gap:16px">
+          <span style="width:32px;height:32px;flex:none;border-radius:8px;background:var(--dusk-tint);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500">${((c.nickname||'·').trim().charAt(0)||'·').toUpperCase()}</span>
+          <span style="font-size:18px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.nickname||T('No name','未填姓名')}</span>
+          <span class="pill" style="background:rgba(88,96,110,.10);color:var(--text-secondary)">${T(...tier)}</span>
+          <span style="flex:1"></span>
+          <button class="iconbtn" onclick="APP.cmd('closeCustomer')" aria-label="${T('Close','关闭')}">${ic('x',20,2)}</button>
+        </div>
+        <div class="num" style="margin-top:4px;font-size:13px;color:var(--text-secondary)">${c.phone||'—'}</div>
+      </div>
+      <div style="flex:1;min-height:0;overflow-y:auto;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 24px)">${body}</div>
+    </div>`;
+}
+
+/* ==========================================================================
+   Products — one page, three sub-views. The strip swaps WHAT KIND of thing you
+   are looking at; the chips inside each view narrow the same records.
+   ========================================================================== */
+const PROD_VIEWS=[['catalogue',['Catalogue','目录'],'products'],['activity',['Stock activity','库存流水'],'activity'],['categories',['Categories','分类'],'categories']];
+function screenProducts(){
+  const v=state.prodView||'catalogue';
+  const strip=`<div class="hscroll" style="display:flex;gap:24px;padding:0 16px;border-bottom:1px solid var(--border-default)">
+    ${PROD_VIEWS.map(([k,label])=>{const on=k===v;
+      return `<button onclick="APP.cmd('prodView','${k}')" style="position:relative;flex:none;height:44px;padding:0;border:none;background:none;cursor:pointer;font-family:inherit;font-size:15px;white-space:nowrap;font-weight:${on?'500':'400'};color:${on?'var(--text-primary)':'var(--text-secondary)'}">
+        ${T(...label)}${on?`<span style="position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--text-primary)"></span>`:''}</button>`;}).join('')}
+  </div>`;
+  const sub=PROD_VIEWS.find(x=>x[0]===v)[2];
+  return `${pageHead({title:T('Products','产品')})}${strip}${SUBS[sub].render()}`;
 }
 
 /* ==========================================================================
    Shell chrome + master render
    ========================================================================== */
-const TAB_META={home:{en:'Home',zh:'概览',icon:'house'},orders:{en:'Orders',zh:'订单',icon:'package',badge:2},
-  inbox:{en:'Inbox',zh:'消息',icon:'inbox',badge:3},sales:{en:'Sales',zh:'销售',icon:'store'},more:{en:'More',zh:'更多',icon:'menu'}};
+/* Five destinations, matching the desktop shell's bottom nav. Inbox and Sales
+   moved into More (the inbox also has a topbar control, so it is never more than
+   one tap away). There is no drill-down here: a five-item bar and a fourteen-row
+   rail are different problems, and More stays one flat, grouped list. */
+const TAB_META={home:{en:'Home',zh:'概览',icon:'house'},orders:{en:'Orders',zh:'订单',icon:'package'},
+  customers:{en:'Customers',zh:'顾客',icon:'users'},products:{en:'Products',zh:'产品',icon:'shopping-bag'},
+  more:{en:'More',zh:'更多',icon:'menu'}};
+/* Unseen is one 6px Sage dot — never a count, never red. A count in the chrome
+   turns arriving work into an alarm, and a record arriving is the CUSTOMER
+   acting, not the system: it does not earn Dusk either. */
+function unseenOrders(){ return DB.orders.some(o=>o.isNew); }
+function unseenReviews(){ return DB.reviews.filter(r=>!state.reviewsSeen.has(r.cust[0])).length; }
+function tabDot(k){ return k==='orders' ? unseenOrders() : k==='more' ? unseenReviews()>0 : false; }
+/* The bar is the same on every screen and CLOSED to page controls: nothing here
+   names the page and no page adds a button to it. Identity lives in the page,
+   which is why every screen below owns a real header. Zero Dusk — chrome that
+   appears on every page cannot spend a page's Dusk before the page loads. */
 function topbar(){
-  const sub=state.stack[state.stack.length-1];
-  let left;
-  if(sub){
-    left=`<button class="iconbtn" style="width:40px;height:40px;margin-left:-8px;color:var(--text-primary)" onclick="APP.cmd('back')" aria-label="Back">${ic('chevron-left',24,2)}</button>
-      <span style="font-size:19px;font-weight:500;letter-spacing:-.01em">${T(...sub.title)}</span>`;
-  } else if(state.tab==='home'){
-    left=`<span style="display:flex;align-items:center;padding:2px 0">${WAVE(66)}</span>`;
-  } else {
-    const m=TAB_META[state.tab];
-    left=`<span style="font-size:19px;font-weight:500;letter-spacing:-.01em">${T(m.en,m.zh)}</span>`;
-  }
-  return `<div class="topbar"><div style="display:flex;align-items:center;gap:6px;min-height:36px">${left}</div>
-    <button class="iconbtn" onclick="APP.cmd('overflow')" aria-label="Menu">${ic('ellipsis')}</button></div>`;
+  const unseen=unseenReviews();
+  return `<div class="topbar">
+    <span style="display:flex;align-items:center;gap:8px;flex:none;padding:2px 0">${WAVE(58)}</span>
+    <span style="flex:1"></span>
+    <button class="iconbtn" onclick="APP.cmd('openSearch')" aria-label="${T('Search','搜索')}">${ic('search')}</button>
+    <span style="position:relative;display:flex;flex:none">
+      <button class="iconbtn" onclick="APP.cmd('push','inbox')" aria-label="${T('Inbox','消息')}">${ic('message-square-text')}</button>
+      ${unseen?`<span style="position:absolute;top:9px;right:9px;width:6px;height:6px;border-radius:50%;background:var(--sage);box-shadow:0 0 0 2px var(--surface-card)"></span>`:''}
+    </span>
+    <button onclick="APP.cmd('overflow')" aria-label="${T('Account','账户')}" style="width:44px;height:44px;flex:none;display:flex;align-items:center;justify-content:center;border:none;background:transparent;cursor:pointer;padding:0">
+      <span style="width:32px;height:32px;border-radius:8px;background:var(--dusk-tint);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500">${(state.storeName||'').trim().charAt(0).toUpperCase()||ic('user',18)}</span>
+    </button>
+  </div>`;
+}
+
+/* The §1.7 page header, on a phone: title · status line · one Dusk CTA — and,
+   on a pushed screen, the back link that replaces the eyebrow by stating where
+   you came from. Three elements. There is no fourth. */
+function pageHead({title, status, cta, back}){
+  return `<div style="padding:${back?'12px':'24px'} 16px 16px">
+    ${back?`<button onclick="APP.cmd('back')" style="display:flex;align-items:center;gap:6px;margin:0 0 8px -4px;padding:8px 4px;background:none;border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--text-secondary)">${ic('chevron-left',16,2)}${back}</button>`:''}
+    <div style="display:flex;align-items:flex-start;gap:16px">
+      <div style="flex:1;min-width:0">
+        <h1 style="margin:0;font-size:24px;font-weight:500;letter-spacing:-.01em;line-height:1.25">${title}</h1>
+        ${status?`<p class="num" style="margin:4px 0 0;font-size:15px;color:var(--text-secondary)">${status}</p>`:''}
+      </div>
+      ${cta||''}
+    </div>
+  </div>`;
 }
 function tabbar(){
   return `<div class="tabbar">${Object.keys(TAB_META).map(k=>{const m=TAB_META[k];const on=state.tab===k&&!state.stack.length;const col=on?'var(--text-primary)':'var(--text-secondary)';
-    return `<button onclick="APP.cmd('tab','${k}')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;background:transparent;border:none;cursor:pointer;padding:4px 2px;font-family:inherit;color:${col}">
-      <span style="position:relative;display:flex;align-items:center;justify-content:center;height:26px;width:26px">${ic(m.icon,24,on?2:1.75)}
-      ${m.badge?`<span class="num" style="position:absolute;top:-5px;left:15px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:var(--text-primary);color:var(--bg);font-size:10px;font-weight:500;display:flex;align-items:center;justify-content:center">${m.badge}</span>`:''}</span>
-      <span style="font-size:11px;font-weight:${on?'500':'400'};line-height:1.15;color:${col}">${T(m.en,m.zh)}</span></button>`;}).join('')}</div>`;
+    return `<button onclick="APP.cmd('tab','${k}')" style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px;background:transparent;border:none;cursor:pointer;padding:4px 2px;font-family:inherit;color:${col}">
+      <span style="position:relative;display:flex;align-items:center;justify-content:center;height:24px;width:24px">${ic(m.icon,22,on?2:1.75)}
+      ${tabDot(k)?`<span style="position:absolute;top:-2px;left:16px;width:6px;height:6px;border-radius:50%;background:var(--sage)"></span>`:''}</span>
+      <span style="font-size:13px;letter-spacing:-.01em;font-weight:${on?'500':'400'};line-height:1.15;color:${col};max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(m.en,m.zh)}</span></button>`;}).join('')}</div>`;
 }
 function bodyHtml(){
   const sub=state.stack[state.stack.length-1];
-  if(sub) return SUBS[sub.route].render();
+  if(sub) return pageHead({title:T(...sub.title), back:T('More','更多')}) + SUBS[sub.route].render();
   switch(state.tab){
     case 'home': return screenHome();
     case 'orders': return screenOrders();
-    case 'inbox': return screenInbox();
-    case 'sales': return screenSales();
-    case 'more': return screenMore();
+    case 'customers': return screenCustomers();
+    case 'products': return screenProducts();
+    case 'more': return pageHead({title:T('More','更多')}) + screenMore();
   }
 }
 function render(){
-  const showOrdersHeader = state.tab==='orders' && !state.stack.length;
-  const showFab = state.tab==='orders' && !state.stack.length && !state.detailId;
-  let html = topbar() + (showOrdersHeader?ordersHeader():'') + `<div class="content" id="content">${bodyHtml()}</div>` + tabbar();
-  if(showFab) html += `<button class="fab" onclick="APP.cmd('newOrder')" aria-label="New order">${ic('plus',20,2.25)}<span>${T('New order','新建订单')}</span></button>`;
+  let html = topbar() + `<div class="content" id="content">${bodyHtml()}</div>` + tabbar();
   if(state.overflow) html += sheetOverflow();
+  if(state.ask) html += sheetAsk();
+  if(state.custId) html += sheetCustomer();
   if(state.detailId) html += sheetOrderDetail();
   if(state.detailActions) html += sheetActions();
   if(state.productSku) html += sheetProduct();
@@ -1097,7 +2005,73 @@ async function api(path){
   const j=await r.json();
   return (j && j.data!==undefined) ? j.data : j;
 }
-const hhmm=v=>{ if(!v) return ''; const d=new Date(String(v).replace(' ','T')); return isNaN(d)?'':d.toTimeString().slice(0,5); };
+/* The surface's language picks the date convention and then follows it
+   completely: English renders US times (2:22 PM), Chinese renders 24-hour
+   (14:22). There is no house style and no third format. The year appears only
+   when the date is not in the current year. */
+const _date=v=>{ if(!v) return null; const d=new Date(String(v).replace(' ','T')); return isNaN(d)?null:d; };
+function fmtTime(v){ const d=_date(v); if(!d) return '';
+  return LANG==='en' ? d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})
+                     : d.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',hour12:false}); }
+function fmtDay(v){ const d=_date(v); if(!d) return '';
+  const now=new Date(), same=(a,b)=>a.toDateString()===b.toDateString();
+  if(same(d,now)) return fmtTime(v);
+  const y=new Date(now); y.setDate(y.getDate()-1);
+  if(same(d,y)) return T('Yesterday','昨天');
+  const thisYear=d.getFullYear()===now.getFullYear();
+  return LANG==='en'
+    ? d.toLocaleDateString('en-US', thisYear?{month:'short',day:'numeric'}:{month:'short',day:'numeric',year:'numeric'})
+    : (thisYear ? (d.getMonth()+1)+'月'+d.getDate()+'日'
+                : d.getFullYear()+'年'+(d.getMonth()+1)+'月'+d.getDate()+'日'); }
+async function apiRaw(path){
+  const r=await fetch(API+path,{credentials:'same-origin',headers:{accept:'application/json'}});
+  if(r.status===401||r.status===403){ location.href='/backend/login'; throw new Error('auth'); }
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  return r.json();
+}
+async function loadCustomers(){
+  state.custLoading=true;
+  const seg=state.custSeg||'all';
+  const q='/customers?pageSize=50&withSegments=1'+(seg!=='all'?'&segment='+seg:'');
+  try{
+    const j=await apiRaw(q);
+    const rows=(j&&j.data)||[];
+    state.customers=rows.map(mapCustomer);
+    if(j&&j.segments) state.custMeta=Object.assign({},state.custMeta||{},j.segments);
+    state.custLoaded=true;
+  }catch(e){
+    if(String(e.message)==='auth') return;
+    // Static preview / offline: the sample roster stands in, same as every other screen.
+    state.customers=DB.customers.slice(); state.custLoaded=true;
+  }
+  state.custLoading=false;
+  loadCustomerMeta();
+  render();
+}
+/* The pulse's three figures come from the stat call the desktop roster makes.
+   Anything it doesn't return simply doesn't render — the line is never padded. */
+async function loadCustomerMeta(){
+  if(state.custMetaLoaded) return; state.custMetaLoaded=true;
+  try{
+    const j=await apiRaw('/customers?pageSize=1&includeBlocked=1&withReturning=1&withSegments=1');
+    const m=Object.assign({},state.custMeta||{});
+    if(j&&j.segments) Object.assign(m,j.segments);
+    if(j&&j.returning&&j.returning.buyers!=null){
+      m.buyers=j.returning.buyers;
+      m.returnRate=j.returning.buyers?Math.round((j.returning.returners||0)/j.returning.buyers*100):null;
+      if(j.customers_on_file!=null) m.never=Math.max(0,j.customers_on_file-j.returning.buyers);
+    }
+    state.custMeta=m; render();
+  }catch(e){}
+}
+async function loadCustomerDetail(id){
+  try{ const d=await api('/customers/'+id); state.custDetail=d;
+    // The server stamps seen_at on the first open, so settle the row behind the sheet.
+    const c=(state.customers||[]).find(x=>String(x.id)===String(id)); if(c) c.unseen=false;
+    render();
+  }catch(e){ if(String(e.message)!=='auth'){ state.custDetail={customer:{},stats:{}}; render(); } }
+}
+const hhmm=v=>fmtTime(v);
 // Money is either whole or to the fen — never the one-decimal ¥3,271.4 this
 // used to print. maximumFractionDigits alone caps the tail without padding it,
 // so a .40 lost its zero and a .7 rendered as a single digit, which reads as a
@@ -1159,7 +2133,7 @@ function mapOrderRow(r){
     id:r.order_no||('#'+r.id), _id:r.id,
     ch, cust:[r.recipient_name||r.nickname||'—', r.recipient_name||r.nickname||'—'],
     total:money(CUR,r.total), placed:hhmm(r.placed_at),
-    status:[sk[1],sk[2]], kind, isNew:!r.seen_at,
+    status:[sk[1],sk[2]], kind, raw:r.status||null, refundStatus:r.refund_status||null, isNew:!r.seen_at,
     ship:Array.isArray(shipCity)?shipCity:[shipCity,shipCity],
     by: by?[by,by]:null, byAmber:false,
     viewOnly: ch==='meituan'||ch==='gzgrocery',
@@ -1189,12 +2163,12 @@ function mapProduct(r){
   const price=r.sell_price!=null?r.sell_price:(r.price!=null?r.price:0);
   const kind=stock<=0?'off':(stock<=10?'restock':'on');
   const st=stock<=0?['Out','缺货']:(stock<=10?['Low','库存低']:['Live','在售']);
-  return {name:[r.name_en||r.name_cn||'—',r.name_cn||r.name_en||'—'],sku:r.sku?('SKU '+r.sku):('#'+r.id),
-    price:money(CUR,price), stock, stockLabel:[stock+' in stock',('库存 '+stock)], status:st, kind};
+  return {_id:r.id, name:[r.name_en||r.name_cn||'—',r.name_cn||r.name_en||'—'],sku:r.sku?('SKU '+r.sku):('#'+r.id),
+    price:money(CUR,price), priceNum:Number(price)||0, stock, stockLabel:[stock+' in stock',('库存 '+stock)], status:st, kind};
 }
 function mapReview(r){
   const replied=r.reply&&String(r.reply).trim();
-  return {cust:[r.customer_name||'Customer',r.customer_name||'顾客'], rating:r.rating?Number(r.rating).toFixed(1):'',
+  return {id:r.id, source:r.source||'real', stream:'review', reply:r.reply||'', cust:[r.customer_name||'Customer',r.customer_name||'顾客'], rating:r.rating?Number(r.rating).toFixed(1):'',
     status:replied?['Replied','已回复']:['New','新'], kind:replied?'clear':'success',
     text:[r.comment||'',r.comment||''], time:[hhmm(r.created_at)||'',hhmm(r.created_at)||'']};
 }
@@ -1228,7 +2202,7 @@ function mapInvoice(r){
 function mapVoucher(r){
   const val=r.type==='percent'?(r.value+'% off'):money(CUR,r.value)+' off';
   const min=r.min_subtotal?(' · min '+money(CUR,r.min_subtotal)):'';
-  return {title:[r.description||val,r.description||val], code:r.code,
+  return {id:r.id, title:[r.description||val,r.description||val], code:r.code,
     meta:['Used '+(r.grant_used_count||r.used_count||0)+min,'已用 '+(r.grant_used_count||r.used_count||0)+min],
     on:!!r.is_active};
 }
@@ -1245,11 +2219,11 @@ function mapBroadcast(r){
   const label=st==='sent'?['Sent','已发送']:st==='scheduled'?['Scheduled','已排期']:['Draft','草稿'];
   const meta=st==='sent'?('Sent to '+(r.recipient_count||0)):(r.scheduled_for?('Scheduled '+r.scheduled_for):'Draft');
   const metaCn=st==='sent'?('发送 '+(r.recipient_count||0)):(r.scheduled_for?('排期 '+r.scheduled_for):'草稿');
-  return {title:[r.title_en||r.title_cn||'—',r.title_cn||r.title_en||'—'], meta:[meta,metaCn], status:label, kind:BC_KIND[st]||'draft'};
+  return {id:r.id, st, title:[r.title_en||r.title_cn||'—',r.title_cn||r.title_en||'—'], meta:[meta,metaCn], status:label, kind:BC_KIND[st]||'draft'};
 }
 function mapFeedback(r){
   const open=r.needs_reply||!r.replied;
-  return {cust:[r.customer_name||r.nickname||'Customer',r.customer_name||r.nickname||'顾客'],
+  return {id:r.id, stream:'feedback', cust:[r.customer_name||r.nickname||'Customer',r.customer_name||r.nickname||'顾客'],
     status:open?['Open','待处理']:['Replied','已回复'], kind:open?'success':'clear',
     text:[r.message||r.last_body||'',r.message||r.last_body||''], time:[hhmm(r.created_at)||'',hhmm(r.created_at)||'']};
 }
@@ -1290,6 +2264,7 @@ function mapSalesChannel(key,c){
 reg('openOrder', id=>{
   const row=(state.liveOrders||[]).find(o=>o.id===id);
   state.detailId=id; state.drag=0; state.liveDetail=null; state.detailMounted=false;
+  state.orderErr=null; state.orderBusy=null;
   if(row&&row._id!=null){
     render();
     // Sheet has animated once now — suppress the slide-up on the fetch re-render
@@ -1302,6 +2277,7 @@ reg('openOrder', id=>{
 async function loadLive(){
   // config → store name + currency (best-effort; keeps mock on any miss)
   try{ const cfg=await api('/config') || {};
+    state.cfg=cfg;
     // Store name lives at brand.me_footer.wordmark_text; currency at currency.symbol.
     // (The old code read store_name/currency_symbol, which don't exist — so the app
     //  kept showing the fake "Maru Studio" and could render currency as [object Object].)
@@ -1329,9 +2305,6 @@ async function loadLive(){
       [T('Avg. order','客单价'), money(CUR, ord? rev/ord : 0), ''],
       [T('New customers','新客'), String(nc), deltaText(nc, b.new_customers, bl)],
     ];
-    // The Needs-you card is built from /dashboard/ops now, so nothing here
-    // seeds it. `liveAttn` survives for the one signal ops does not carry: the
-    // review inbox, which is this device's own screen.
   }catch(e){ if(String(e.message)==='auth') return; }
   // orders list (the heart of the app)
   try{ const rows=await api('/orders?limit=50');
@@ -1370,10 +2343,17 @@ async function loadLive(){
   // Needs you — the same /dashboard/ops payload the desktop card is built from,
   // so the two screens agree on what is on fire. One pull; homeFires() shapes it.
   api('/dashboard/ops?preview=8').then(d=>set(()=>{ if(d) state.liveOps=d; })).catch(()=>{});
-  // order status + channel counts → real filter-chip numbers
-  api('/order-status-counts').then(d=>set(()=>{ if(d) state.liveStatusCounts=d; })).catch(()=>{});
+
+  // order status + channel counts → real filter-chip numbers + Home "awaiting shipment"
+  api('/order-status-counts').then(d=>set(()=>{ if(d){ state.liveStatusCounts=d;
+    const ship=(d.paid||0)+(d.preparing||0);
+    state.liveAttn=Object.assign({},state.liveAttn||{},{ship});
+  }})).catch(()=>{});
   api('/order-channel-counts').then(d=>set(()=>{ if(d) state.liveChannelCounts=d; })).catch(()=>{});
 
+  api('/setup').then(d=>set(()=>{ if(d&&d.percent!=null) state.setup=d; })).catch(()=>{});
+  api('/delivery-zones').then(r=>set(()=>{ if(Array.isArray(r)) state.zones=r; })).catch(()=>{});
+  api('/stores').then(r=>set(()=>{ if(Array.isArray(r)) state.stores=r.filter(s=>s.is_active==null||s.is_active); })).catch(()=>{});
   api('/categories').then(r=>set(()=>{ if(Array.isArray(r)&&r.length) DB.categories=r.map(mapCategory); })).catch(()=>{});
   api('/purchases').then(r=>set(()=>{ if(Array.isArray(r)&&r.length) DB.purchasing=r.map(mapPurchase); })).catch(()=>{});
   api('/activity').then(r=>set(()=>{ const rows=(r&&r.rows)||(Array.isArray(r)?r:null); if(rows&&rows.length) DB.activity=rows.slice(0,20).map(mapActivity); })).catch(()=>{});

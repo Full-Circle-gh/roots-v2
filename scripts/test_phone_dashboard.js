@@ -176,7 +176,9 @@ it('the Avg. order tile is wired to that silence', () => {
 });
 
 it('a tile with no delta renders no line for one', () => {
-  assert.ok(/\$\{d\?`<span class="num" style="font-size:12px/.test(M_HTML),
+  // Anchored on the conditional, not on the tile's styling — the phone's markup
+  // is redesigned often and this assertion is about the logic.
+  assert.ok(/\$\{d\?`<span class="num"[^`]*`:''\}/.test(M_HTML),
     'the delta span must be conditional, or an empty one still takes the space');
 });
 
@@ -285,9 +287,13 @@ it('Pending has a chip now — the payment fires had nowhere to land', () => {
   assert.ok(/sCount\('pending_payment'/.test(M_HTML), 'its badge must read the real count');
 });
 
-it('goStatus switches tab AND narrows, in one command', () => {
-  assert.ok(/reg\('goStatus', f=>\{ state\.stack=\[\]; state\.tab='orders'; state\.detailId=null; state\.statusF=f;/.test(M_HTML),
-    'a door that only switched tabs would drop the operator on the whole list');
+it('goStatus switches tab, narrows, AND refetches', () => {
+  const src = (/reg\('goStatus',[^\n]*/.exec(M_HTML) || [''])[0];
+  assert.ok(/state\.tab='orders'/.test(src), 'it must land on Orders');
+  assert.ok(/state\.statusF=f/.test(src), 'a door that only switched tabs shows the whole list');
+  // The filter is the SERVER's on this screen, so setting statusF alone would
+  // leave whatever page was last fetched on display under a new chip.
+  assert.ok(/loadOrdersPage\(\)/.test(src), 'the narrowed list must be refetched');
 });
 
 it('the sample-number fallbacks are gone', () => {
