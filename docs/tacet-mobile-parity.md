@@ -186,6 +186,18 @@ desktop is the right home
 | "No coupons on top" | ✅ |
 | Create / edit a flash sale | ➖ — authoring, desktop |
 
+### Broadcasts (`05-marketing.js`)
+
+| Desktop | Phone |
+|---|---|
+| **The message body** | ✅ — the phone let an operator CANCEL a scheduled send without showing what it said. A switch over a black box |
+| **Who it goes to** (activity · tiers · regions) | ✅ — "Sent to 2,140" is a number with no population behind it. Composed in the desktop's own words, collapsing to "3 regions" past two |
+| Deeplink | ✅ |
+| Sent / scheduled / draft, with the date | ✅ — the scheduled line printed the raw column, so it read "Scheduled 2026-08-29 10:00:00" |
+| Cancel a scheduled send | ✅ — only on scheduled ones; the server is the judge |
+| Compose and send | ➖ — authoring, desktop |
+| Audience-count preview while composing | ➖ — belongs to composing |
+
 ### Media library (`07-content-billing.js`)
 
 | Desktop capability | Phone |
