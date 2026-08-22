@@ -48,6 +48,7 @@ h1{margin:0;font-size:24px;font-weight:500;letter-spacing:-.01em;line-height:1.2
   border:1px solid var(--border-default);border-radius:999px;padding:2px 9px;white-space:nowrap}
 .cost.win{color:#5F7357;border-color:#A3B49F}
 .cost.base{color:var(--text-secondary)}
+.cost.shipped{background:var(--accent);color:#fff;border-color:var(--accent)}
 .note{font-size:13.5px;line-height:1.6;color:var(--text-secondary)}
 .note b{color:var(--text-primary);font-weight:500}
 
@@ -309,6 +310,7 @@ app's real 390&thinsp;px with real rows, so the saving is the saving.</p>
     <div class="opt-head">
       <span class="opt-name">5 · No bar at all</span>
       <span class="cost win">88 px</span>
+      <span class="cost shipped">shipped</span>
     </div>
     <div class="phone">
       <div class="chrome">
@@ -395,8 +397,21 @@ app's real 390&thinsp;px with real rows, so the saving is the saving.</p>
 
 <div class="rule"></div>
 
+<div class="verdict" style="border-color:var(--accent)">
+  <h2>Shipped: option 5</h2>
+  <p class="note" style="margin:0">Measured on the built app at 390&thinsp;px, Orders: the
+    filter chips used to start at <b>165&thinsp;px</b> and now start at <b>86&thinsp;px</b>;
+    the first order card moved from 277&thinsp;px to 198&thinsp;px. <b>79&thinsp;px back</b>,
+    a little more than this canvas estimated. Search and the inbox sit beside the page
+    title; the account is a row at the top of More that names the shop you are signed
+    into. Nothing is pinned, so the header scrolls away and a long list has the whole
+    screen — which the fixed bar could never do.</p>
+</div>
+
+<div class="rule"></div>
+
 <div class="verdict">
-  <h2>What I'd ship, and in what order</h2>
+  <h2>The reasoning, kept for the record</h2>
   <ol>
     <li><b>Option 4 (one header)</b> if you want the space back today. It is the smallest
       change that actually solves the complaint: 72&thinsp;px returned — a full order row —
