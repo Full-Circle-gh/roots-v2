@@ -197,4 +197,50 @@ CASES.push(['a page with nothing on it', `state.cmsTried={home:true};
   ['invents none',  `!txt('content').includes('Hero banner')`],
 ]]);
 
+// ── Affiliate ─────────────────────────────────────────────────────────────
+// The phone asked for the referral summary with pageSize=1 — the smallest page
+// the endpoint allows — read the summary off the envelope and threw the rows
+// away. Three numbers, and no way to see a single referral: not who referred
+// whom, not which code, not what was paid, and not the row an operator would
+// go looking for — the friend who joined and has not ordered.
+const AFF = `state.affiliateTried=true;
+  state.affiliate={total:24,converted:9,paid_out:180,lifetime_paid:42.5,still_earning:6,
+    joined_this_month:5,joined_last_month:3};
+  state.affRows=[
+   {id:1,referrer_id:1,invitee_id:2,referrer_nickname:'Chen',invitee_nickname:'Ling',
+    invitee_phone:'138****1',code_used:'CHEN24',status:'ordered',reward_amount:20,
+    first_paid_order_id:412,joined_at:'2026-08-01 10:00:00',lifetime_active:1},
+   {id:2,referrer_id:1,invitee_id:3,referrer_nickname:'Chen',invitee_nickname:'Wu',
+    code_used:'CHEN24',status:'joined',reward_amount:0,joined_at:'2026-08-18 10:00:00'},
+   {id:3,referrer_id:4,invitee_id:5,referrer_nickname:'Sarah',invitee_nickname:'Mo',
+    code_used:'SAR7',status:'void',voided_reason:'duplicate account',reward_amount:0,
+    joined_at:'2026-07-02 10:00:00'}];
+  APP.cmd('push','affiliate');`;
+
+CASES.push(['the referral ledger', AFF, [
+  ['THE ROWS EXIST',            `txt('content').includes('Chen') && txt('content').includes('Ling')`],
+  ['referrer → friend',         `txt('content').includes('→')`],
+  ['the code used',             `txt('content').includes('CHEN24')`],
+  ['the reward paid',           `txt('content').includes('¥20')`],
+  ['a converted one says so',   `txt('content').includes('first order #412')`],
+  ['a waiting one is named',    `txt('content').includes('Waiting for first order')`],
+  ['still earning is its own state', `txt('content').includes('Still earning')`],
+  ['a voided one gives the reason',  `txt('content').includes('duplicate account')`],
+]]);
+
+CASES.push(['the four figures', AFF, [
+  ['friends joined',            `txt('content').includes('Friends joined')`],
+  ['against last month',        `txt('content').includes('+2 vs last month')`],
+  ['first orders and the rate', `txt('content').includes('38% converted')`],
+  ['rewards including lifetime share', `txt('content').includes('incl. ¥43 lifetime')`],
+  ['still earning is counted',  `txt('content').includes('within lifetime window')`],
+]]);
+
+CASES.push(['nothing referred yet', `state.affiliateTried=true;
+  state.affiliate={total:0,converted:0,paid_out:0}; state.affRows=[]; APP.cmd('push','affiliate');`, [
+  ['says so',                    `txt('content').includes('No referrals yet')`],
+  ['and explains what fills it', `txt('content').includes('shares their code')`],
+  ['no invented rows',           `!txt('content').includes('Chen')`],
+]]);
+
 run('operator screens', CASES);

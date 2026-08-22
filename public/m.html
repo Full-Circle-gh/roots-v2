@@ -258,7 +258,7 @@ const state = {
   custId:null, custDetail:null, prodView:'catalogue',
   prodQ:'', prodStatus:'all', prodCat:'all', catalogueTried:false, catalogueLoading:false,
   workOpen:false, workEvents:null, workLoading:false, workErr:null, vchSeg:'on',
-  affiliate:null, affiliateTried:false, invSeg:'all', invLoaded:false,
+  affiliate:null, affiliateTried:false, affRows:null, affSeg:'', affErr:null, invSeg:'all', invLoaded:false,
   geo:null, geoTried:false, chan:null, chanTried:false, sales:null,
   recap:null, recapTried:false, recapSince:0, reallyAway:false, pos:'default',
   overflow:false, search:false, detailId:null, detailActions:false, productSku:null,
@@ -615,6 +615,7 @@ reg('finalizeTopup', id=>{
     }};
   render();
 });
+reg('affSeg', v=>{ state.affSeg=v; state.affRows=null; state.affiliateTried=false; render(); loadAffiliate(true); });
 reg('cmsPage', v=>{ state.cmsPage=v; state.cmsErr=null; render(); loadCms(v); });
 reg('catTop', v=>{ state.catTop=v||null; render(); });
 reg('actRange', v=>{ state.actRange=v; state.act=null; state.actTried=false; render(); loadActivity(); });
@@ -1395,6 +1396,101 @@ function setupState(){
   if(d) return {pct:d.percent, done:d.requiredDone, total:d.requiredTotal, left:Math.max(0,d.requiredTotal-d.requiredDone), real:true};
   return {pct:null, real:false};
 }
+/* ==========================================================================
+   Affiliate (desktop: 10-extras.js)
+   --------------------------------------------------------------------------
+   The phone asked for the referral summary with pageSize=1 — the smallest page
+   the endpoint allows — read the summary off the envelope and threw the rows
+   away. So it had three numbers and no way to see a single referral: not who
+   referred whom, not which code, not what was paid, and not the one row an
+   operator would actually go looking for, the friend who has joined and not
+   yet ordered. The rows ride the same envelope as the summary; there was never
+   a call to be saved.
+   ========================================================================== */
+function affStatus(r){
+  if(r.status==='ordered') return r.lifetime_active
+    ? {label:T('Still earning','持续分成'), tone:'dusk'}
+    : {label:T('Rewarded','已奖励'), tone:'success'};
+  if(r.status==='void') return {label:T('Voided','已作废'), tone:'muted'};
+  return {label:T('Waiting for first order','待首单'), tone:'warning'};
+}
+function affPill(r){
+  const st=affStatus(r);
+  if(st.tone==='dusk') return `<span class="pill" style="background:var(--dusk-tint,rgba(110,103,175,.14));color:var(--dusk,#6E67AF)">${st.label}</span>`;
+  const [bg,fg]=PILL[st.tone];
+  return `<span class="pill" style="background:${bg};color:${fg}">${st.label}</span>`;
+}
+/* The desktop's sub-line: the friend's phone, and what happened. */
+function affNote(r){
+  if(r.status==='ordered') return T('first order','已首单')+(r.first_paid_order_id?' #'+r.first_paid_order_id:'');
+  if(r.status==='void') return r.voided_reason||T('voided','已作废');
+  return T('new customer','新顾客');
+}
+function affRow(r){
+  const ref=r.referrer_nickname||('#'+r.referrer_id);
+  const inv=r.invitee_nickname||('#'+r.invitee_id);
+  const sub=[r.invitee_phone||r.referrer_phone||'',affNote(r)].filter(Boolean).join(' · ');
+  const amt=Number(r.reward_amount||0);
+  return `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px">
+    <span style="display:flex;flex-direction:column;min-width:0">
+      <span style="font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(ref)} <span style="color:var(--text-secondary)">→</span> ${escAttr(inv)}</span>
+      <span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(sub)}</span>
+      ${r.code_used?`<span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${escAttr(r.code_used)}${r.joined_at?' · '+fmtDay(r.joined_at):''}</span>`:''}
+    </span>
+    <span style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex:none">
+      <span class="num" style="font-size:14.5px;font-weight:500;color:${amt>0?'var(--text-primary)':'var(--text-secondary)'}">${money(CUR,amt)}</span>
+      ${affPill(r)}</span></div>`;
+}
+function screenAffiliate(){
+  if(!featOn('affiliate')) return `<div style="padding:14px 16px 24px">${flagGate('affiliate')}</div>`;
+  loadAffiliate();
+  const a=state.affiliate, rows=state.affRows, busy=state.featBusy==='affiliate';
+  const seg=state.affSeg;
+  const chips=[{key:'',en:'All',zh:'全部'},{key:'joined',en:'Waiting',zh:'待首单'},
+    {key:'ordered',en:'Ordered',zh:'已首单'},{key:'void',en:'Voided',zh:'已作废'}];
+  /* The desktop's four tiles, and the two comparisons that make them mean
+     something: this month against last, and rewards including lifetime share. */
+  const tiles=()=>{
+    if(!a) return '';
+    const total=Number(a.total||0), conv=Number(a.converted||0);
+    const pct=total>0?Math.round(conv/total*100):0;
+    const jT=Number(a.joined_this_month||0), jL=Number(a.joined_last_month||0), d=jT-jL;
+    const vs = d>0?T('+'+d+' vs last month','较上月 +'+d)
+      : d<0?T(d+' vs last month','较上月 '+d) : T('level with last month','与上月持平');
+    const paid=(Number(a.paid_out)||0)+(Number(a.lifetime_paid)||0);
+    const paidSub=Number(a.lifetime_paid)>0
+      ? T('incl. '+money0(CUR,a.lifetime_paid)+' lifetime','含长期分成 '+money0(CUR,a.lifetime_paid))
+      : T('to referrer wallets','入推荐人钱包');
+    const tile=(k,v,sub)=>`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:3px">
+      <div class="eyebrow">${k}</div>
+      <div class="num" style="font-size:20px;font-weight:500;letter-spacing:-.01em">${v}</div>
+      ${sub?`<div style="font-size:12px;color:var(--text-secondary)">${sub}</div>`:''}</div>`;
+    return `<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      ${tile(T('Friends joined','好友加入'),total,vs)}
+      ${tile(T('First orders','首单转化'),conv,T(pct+'% converted',pct+'% 转化'))}
+      ${tile(T('Rewards paid','已发奖励'),money0(CUR,paid),paidSub)}
+      ${tile(T('Still earning','持续分成'),Number(a.still_earning||0),T('within lifetime window','在分成周期内'))}</div>`;
+  };
+  const ledger = state.affErr
+    ? `<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+        <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+        <span style="font-size:14px;color:var(--brick)">${state.affErr}</span></div>`
+    : !rows ? `<div style="padding:30px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`
+    : !rows.length ? `<div style="padding:30px 16px;text-align:center;font-size:14px;color:var(--text-secondary);line-height:1.55">${
+        seg ? T('None match.','没有匹配项。')
+            : T('No referrals yet. When a customer shares their code and a friend joins, they show up here.','暂无推荐记录。顾客分享邀请码、好友加入后会显示在这里。')}</div>`
+    : `<div class="list">${rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}${affRow(r)}`).join('')}</div>`;
+  return `<div style="padding:14px 0 24px;display:flex;flex-direction:column;gap:14px">
+    <div style="padding:0 16px">${tiles()}</div>
+    ${chipRow(chips,seg,'affSeg')}
+    <div style="padding:0 16px">${ledger}</div>
+    <div style="padding:0 16px;display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;align-items:center;gap:12px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:14px">
+        <span style="flex:1;font-size:15px">${busy?T('Saving…','保存中…'):T('Referrals on','推荐已开启')}</span>${toggle(featOn('affiliate'),"APP.cmd('toggleFeature','affiliate')")}</div>
+      ${state.featErr?`<div style="font-size:14px;color:var(--brick)">${state.featErr}</div>`:''}
+      ${noteBar(T('Reward amounts, the lifetime share, and voiding a referral are on desktop.','奖励金额、长期分成与作废推荐在电脑端处理。'))}</div></div>`;
+}
+
 /* ==========================================================================
    Editor — what the shop's pages are actually made of (desktop: cms.html)
    --------------------------------------------------------------------------
@@ -2478,25 +2574,7 @@ const SUBS={
       </div>`).join('')}
       ${desktopNote()}</div>`;
   }},
-  affiliate:{title:['Affiliate','分销'],render:()=>{
-    if(!featOn('affiliate')) return `<div style="padding:14px 16px 24px">${flagGate('affiliate')}</div>`;
-    loadAffiliate();
-    const a=state.affiliate;
-    const busy=state.featBusy==='affiliate';
-    const overview = !a
-      ? `<div style="font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`
-      : !a.total
-        ? `<div style="font-size:15px;color:var(--text-secondary);line-height:1.55">${T('Nobody has been referred yet. Once a customer shares their code, the friends they bring show up here.','还没有推荐记录。顾客分享邀请码后，带来的好友会显示在这里。')}</div>`
-        : `<div class="num" style="font-size:15px;line-height:1.6">${T(a.total+' friends referred · '+a.converted+' ordered', a.total+' 位好友 · '+a.converted+' 位已下单')}</div>
-           <div class="num" style="font-size:13px;color:var(--text-secondary);margin-top:4px">${T(money0(CUR,a.paid_out)+' rewarded', '已发放奖励 '+money0(CUR,a.paid_out))}</div>`;
-    return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
-      <div style="background:var(--surface-raised);border-radius:14px;padding:16px"><div class="eyebrow">${T('Overview','概览')}</div>
-        <div style="margin-top:8px">${overview}</div></div>
-      <div style="display:flex;align-items:center;gap:12px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:14px">
-        <span style="flex:1;font-size:15px">${busy?T('Saving…','保存中…'):T('Referrals on','推荐已开启')}</span>${toggle(featOn('affiliate'),"APP.cmd('toggleFeature','affiliate')")}</div>
-      ${state.featErr?`<div style="font-size:14px;color:var(--brick)">${state.featErr}</div>`:''}
-      <div style="text-align:center;font-size:12.5px;color:var(--text-secondary)">${T('Reward amounts and the ledger are on desktop','奖励金额与明细在电脑端')}</div></div>`;
-  }},
+  affiliate:{title:['Affiliate','分销'],render:()=>screenAffiliate()},
   social:{title:['Social proof','社交证明'],render:()=>{
     // The switch is real (features.socialProof) and reachable from Settings, so
     // this screen states what it is currently doing rather than saying nothing
@@ -3131,11 +3209,22 @@ async function uploadMedia(files){
 /* The Affiliate screen used to state "42 affiliates · ¥8,120 referred" — a
    sentence from the mockup, on a screen an operator would believe. The real
    summary rides the referrals endpoint, past api()'s .data unwrap. */
-async function loadAffiliate(){
-  if(state.affiliateTried) return; state.affiliateTried=true;
-  try{ const j=await apiRaw('/affiliate/referrals?pageSize=1');
+/* pageSize=1 fetched the summary and threw the ledger away, so the phone had
+   three numbers and no way to see a single referral. The summary rides the same
+   envelope as the rows; there was never a reason to ask for one without the
+   other. */
+async function loadAffiliate(force){
+  if(state.affiliateTried&&!force) return; state.affiliateTried=true;
+  const qs=new URLSearchParams({pageSize:'50'});
+  if(state.affSeg) qs.set('status',state.affSeg);
+  try{ const j=await apiRaw('/affiliate/referrals?'+qs);
     state.affiliate=(j&&j.summary)||null;
-  }catch(e){}
+    state.affRows=(j&&j.data)||[];
+    state.affErr=null;
+  }catch(e){
+    if(String(e.message)==='auth') return;
+    state.affErr=T('Could not load referrals.','加载推荐记录失败。');
+  }
   render();
 }
 /* "Routing · Nearest store" was a setting-shaped row for something that is not

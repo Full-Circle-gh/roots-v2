@@ -671,6 +671,28 @@ was published without asking anything.
 `scripts/test_mobile_settings.js` now covers the whole operator group —
 Settings, Setup, Social proof, Delivery, Editor — 63 assertions, 17 cases.
 
+### Affiliate — the second sweep (`10-extras.js`)
+
+The phone asked `/affiliate/referrals?pageSize=1` — the smallest page the
+endpoint allows — read the summary off the envelope and discarded the rows. So
+it had three numbers and no way to see a single referral. The rows ride the
+same envelope as the summary; there was never a call being saved.
+
+| Desktop capability | Phone |
+|---|---|
+| **The referral ledger** | ❌ → ✅ — referrer → friend, the code, the reward, when they joined |
+| Status: Waiting for first order / Rewarded / **Still earning** / Voided | ❌ → ✅ — Still earning is its own state (the referrer is inside the lifetime-share window), in Dusk, as on the desktop |
+| Why a referral was voided | ❌ → ✅ |
+| Which order converted it | ❌ → ✅ |
+| Filter by status | ❌ → ✅ |
+| Friends joined, **against last month** | ❌ → ✅ — the phone had a bare total |
+| First orders, **and the conversion rate** | ❌ → ✅ |
+| Rewards paid, **including lifetime share** | ❌ → ✅ — the phone showed `paid_out` alone, which understates what the shop has actually paid out |
+| Still earning | ❌ → ✅ |
+| Referrals on/off | ✅ (already) |
+| Adjust a reward, void, restore | ➖ decided: desktop — each is a money edit with a typed reason |
+| Reward settings, lifetime rate and window, share image | ➖ decided: desktop |
+
 ## 4. Open questions
 
 Not gaps — decisions that are the shop's to make, not this file's.
