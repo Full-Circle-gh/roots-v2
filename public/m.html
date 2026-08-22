@@ -139,6 +139,7 @@ let LANG = 'en';
 function T(en, zh){ return LANG==='en' ? en : (zh||en); }
 
 /* ---- status pill palette (from the mockup's PILL map) ---- */
+const DELIV_TONE={brick:'var(--brick)',amber:'#8A6425',plain:'var(--text-secondary)'};
 const PILL = {
   clear:['rgba(88,96,110,0.10)','var(--text-secondary)'],
   success:['rgba(163,180,159,0.26)','#5F7357'],
@@ -164,15 +165,15 @@ function toggle(on, onClick){
 const CH_ICON = {miniapp:'smartphone',web:'globe',meituan:'bike',gzgrocery:'warehouse',manual:'square-pen'};
 const DB = {
   orders:[
-    {id:'RT-…047',ch:'miniapp',cust:['Chen Meiling','陈美玲'],total:'¥312',placed:'2:22 PM',status:['Paid','已付款'],kind:'paid',isNew:true,ship:['Guangzhou · Tianhe','广州 · 天河区'],by:['Ship by 6:00 PM · 3h left','今日 18:00 截单 · 剩 3h'],byAmber:true,phone:'138****2841',addr:['Tianhe, Guangzhou','广州市天河区'],pay:['WeChat Pay','微信支付'],txn:'42000••••8831',fulfil:['Tianhe store','天河店'],route:['Auto-routed to nearest store','自动派往最近门店'],trk:null,items:[[1,'Organic carrots 500g','¥18'],[2,'Oat milk 1L','¥64'],[1,'Mixed nuts 250g','¥45']],breakdown:[['Subtotal','¥300'],['Delivery','¥12']]},
-    {id:'RT-…046',ch:'web',cust:['Sarah Lim','Sarah Lim'],total:'¥186',placed:'2:07 PM',status:['Paid','已付款'],kind:'paid',isNew:true,ship:['Guangzhou · Yuexiu','广州 · 越秀区'],by:['Ship by 6:00 PM','今日 18:00 截单'],phone:'159****7723',addr:['Yuexiu, Guangzhou','广州市越秀区'],pay:['Card','银行卡'],txn:'••••7723',fulfil:['Tianhe store','天河店'],route:['Nearest store','最近门店'],items:[[2,'Sourdough loaf','¥93']],breakdown:[['Subtotal','¥186']]},
-    {id:'RT-…045',ch:'miniapp',cust:['Wang Zhiqiang','王志强'],total:'¥458',placed:'1:41 PM',status:['Preparing','备货中'],kind:'preparing',ship:['Pickup in-store','到店自提'],by:['Pickup · tomorrow 12:00 PM','自提 · 明日 12:00'],phone:'137****5510',addr:['Pickup · Panyu store','自提 · 番禺店'],pay:['WeChat Pay','微信支付'],txn:'••••5510',fulfil:['Panyu store','番禺店'],route:['Pickup','自提'],items:[[6,'Assorted grocery','¥458']],breakdown:[['Subtotal','¥458']]},
+    {id:'RT-…047',ch:'miniapp',cust:['Chen Meiling','陈美玲'],total:'¥312',placed:'2:22 PM',status:['Paid','已付款'],kind:'paid',isNew:true,ship:['Guangzhou · Tianhe','广州 · 天河区'],deliv:{text:'Ship by 6:00 PM · 3h left',tone:'amber'},phone:'138****2841',addr:['Tianhe, Guangzhou','广州市天河区'],pay:['WeChat Pay','微信支付'],txn:'42000••••8831',fulfil:['Tianhe store','天河店'],route:['Auto-routed to nearest store','自动派往最近门店'],trk:null,items:[[1,'Organic carrots 500g','¥18'],[2,'Oat milk 1L','¥64'],[1,'Mixed nuts 250g','¥45']],breakdown:[['Subtotal','¥300'],['Delivery','¥12']]},
+    {id:'RT-…046',ch:'web',cust:['Sarah Lim','Sarah Lim'],total:'¥186',placed:'2:07 PM',status:['Paid','已付款'],kind:'paid',isNew:true,ship:['Guangzhou · Yuexiu','广州 · 越秀区'],deliv:{text:'Ship by 6:00 PM',tone:'plain'},phone:'159****7723',addr:['Yuexiu, Guangzhou','广州市越秀区'],pay:['Card','银行卡'],txn:'••••7723',fulfil:['Tianhe store','天河店'],route:['Nearest store','最近门店'],items:[[2,'Sourdough loaf','¥93']],breakdown:[['Subtotal','¥186']]},
+    {id:'RT-…045',ch:'miniapp',cust:['Wang Zhiqiang','王志强'],total:'¥458',placed:'1:41 PM',status:['Preparing','备货中'],kind:'preparing',ship:['Pickup in-store','到店自提'],deliv:{text:'Pickup · tomorrow 12:00 PM',tone:'plain'},phone:'137****5510',addr:['Pickup · Panyu store','自提 · 番禺店'],pay:['WeChat Pay','微信支付'],txn:'••••5510',fulfil:['Panyu store','番禺店'],route:['Pickup','自提'],items:[[6,'Assorted grocery','¥458']],breakdown:[['Subtotal','¥458']]},
     {id:'RT-…044',ch:'meituan',cust:['Li Na','李娜'],total:'¥95',placed:'1:15 PM',status:['Out for delivery','配送中'],kind:'dispatched',viewOnly:true,ship:['Guangzhou · Haizhu','广州 · 海珠区'],phone:'—',addr:['Haizhu, Guangzhou','广州市海珠区'],pay:['Meituan','美团'],txn:'platform',fulfil:['Platform rider','平台骑手'],route:['Meituan dispatch','美团派单'],trk:{carrier:['Platform rider','平台骑手'],no:'MT-…044',event:['Rider 1.2km away','骑手距 1.2km'],live:true},items:[[3,'Snacks','¥95']],breakdown:[['Subtotal','¥95']]},
-    {id:'RT-…043',ch:'miniapp',cust:['Zhang Wei','张伟'],total:'¥726',placed:'11:50 AM',status:['Dispatched','已发货'],kind:'dispatched',ship:['Shenzhen · Nanshan','深圳 · 南山区'],by:['Met','已发'],phone:'186****0092',addr:['Nanshan, Shenzhen','深圳市南山区'],pay:['WeChat Pay','微信支付'],txn:'••••0092',fulfil:['Tianhe store','天河店'],route:['JD Express','京东快递'],trk:{carrier:['JD Express','京东快递'],no:'JDV0038821',event:['In transit · left Guangzhou hub','运输中 · 已离开广州分拣'],live:true},items:[[8,'Bulk order','¥726']],breakdown:[['Subtotal','¥700'],['Delivery','¥26']]},
+    {id:'RT-…043',ch:'miniapp',cust:['Zhang Wei','张伟'],total:'¥726',placed:'11:50 AM',status:['Dispatched','已发货'],kind:'dispatched',ship:['Shenzhen · Nanshan','深圳 · 南山区'],deliv:{text:'Met',tone:'plain'},phone:'186****0092',addr:['Nanshan, Shenzhen','深圳市南山区'],pay:['WeChat Pay','微信支付'],txn:'••••0092',fulfil:['Tianhe store','天河店'],route:['JD Express','京东快递'],trk:{carrier:['JD Express','京东快递'],no:'JDV0038821',event:['In transit · left Guangzhou hub','运输中 · 已离开广州分拣'],live:true},items:[[8,'Bulk order','¥726']],breakdown:[['Subtotal','¥700'],['Delivery','¥26']]},
     {id:'RT-…041',ch:'manual',cust:['Guest (staff)','访客（员工）'],total:'¥164',placed:'11:04 AM',status:['Pending','待处理'],kind:'pending',ship:['Guangzhou · Tianhe','广州 · 天河区'],phone:'—',addr:['Tianhe, Guangzhou','广州市天河区'],pay:['Cash on pickup','到店付款'],txn:'—',fulfil:['Tianhe store','天河店'],route:['Manual','手动'],items:[[2,'Staff order','¥164']],breakdown:[['Subtotal','¥164']]},
-    {id:'RT-…039',ch:'miniapp',cust:['Huang Xiaoting','黄小婷'],total:'¥215',placed:'10:21 AM',status:['Awaiting restock','等待补货'],kind:'restock',ship:['Guangzhou · Baiyun','广州 · 白云区'],by:['Paused','已暂停'],phone:'139****4456',addr:['Baiyun, Guangzhou','广州市白云区'],pay:['WeChat Pay','微信支付'],txn:'••••4456',fulfil:['Panyu store','番禺店'],route:['Paused — low stock','已暂停 — 库存不足'],items:[[3,'Out-of-stock item','¥215']],breakdown:[['Subtotal','¥215']]},
-    {id:'RT-…037',ch:'miniapp',cust:['Wu Yaqi','吴雅琪'],total:'¥134',placed:'9:30 AM',status:['Refund requested','申请退款'],kind:'refund',ship:['Guangzhou · Tianhe','广州 · 天河区'],by:['Met','已发'],phone:'188****3320',addr:['Tianhe, Guangzhou','广州市天河区'],pay:['WeChat Pay','微信支付'],txn:'••••3320',fulfil:['Tianhe store','天河店'],route:['Delivered','已送达'],receipt:['Receipt auto-printed at Tianhe','小票已在天河自动打印'],items:[[2,'Returned items','¥134']],breakdown:[['Subtotal','¥134']]},
-    {id:'RT-…036',ch:'miniapp',cust:['Zheng Hao','郑浩'],total:'¥298',placed:'9:02 AM',status:['Delivered','已送达'],kind:'delivered',ship:['Dongguan · Nancheng','东莞 · 南城区'],by:['Met','已发'],phone:'136****9911',addr:['Nancheng, Dongguan','东莞市南城区'],pay:['WeChat Pay','微信支付'],txn:'••••9911',fulfil:['Tianhe store','天河店'],route:['kuaidi100','快递100'],receipt:['Receipt auto-printed','小票已自动打印'],items:[[4,'Grocery','¥298']],breakdown:[['Subtotal','¥298']]},
+    {id:'RT-…039',ch:'miniapp',cust:['Huang Xiaoting','黄小婷'],total:'¥215',placed:'10:21 AM',status:['Awaiting restock','等待补货'],kind:'restock',ship:['Guangzhou · Baiyun','广州 · 白云区'],deliv:{text:'Paused',tone:'plain'},phone:'139****4456',addr:['Baiyun, Guangzhou','广州市白云区'],pay:['WeChat Pay','微信支付'],txn:'••••4456',fulfil:['Panyu store','番禺店'],route:['Paused — low stock','已暂停 — 库存不足'],items:[[3,'Out-of-stock item','¥215']],breakdown:[['Subtotal','¥215']]},
+    {id:'RT-…037',ch:'miniapp',cust:['Wu Yaqi','吴雅琪'],total:'¥134',placed:'9:30 AM',status:['Refund requested','申请退款'],kind:'refund',ship:['Guangzhou · Tianhe','广州 · 天河区'],deliv:{text:'Met',tone:'plain'},phone:'188****3320',addr:['Tianhe, Guangzhou','广州市天河区'],pay:['WeChat Pay','微信支付'],txn:'••••3320',fulfil:['Tianhe store','天河店'],route:['Delivered','已送达'],receipt:['Receipt auto-printed at Tianhe','小票已在天河自动打印'],items:[[2,'Returned items','¥134']],breakdown:[['Subtotal','¥134']]},
+    {id:'RT-…036',ch:'miniapp',cust:['Zheng Hao','郑浩'],total:'¥298',placed:'9:02 AM',status:['Delivered','已送达'],kind:'delivered',ship:['Dongguan · Nancheng','东莞 · 南城区'],deliv:{text:'Met',tone:'plain'},phone:'136****9911',addr:['Nancheng, Dongguan','东莞市南城区'],pay:['WeChat Pay','微信支付'],txn:'••••9911',fulfil:['Tianhe store','天河店'],route:['kuaidi100','快递100'],receipt:['Receipt auto-printed','小票已自动打印'],items:[[4,'Grocery','¥298']],breakdown:[['Subtotal','¥298']]},
   ],
   mirror:{meituan:[
       {id:'MT-…044',cust:['Li Na','李娜'],total:'¥95',status:['Out for delivery','配送中'],kind:'dispatched',time:'1:15 PM'},
@@ -906,6 +907,19 @@ async function loadOrdersPage(more){
   }
   state.ordersLoading=false; render();
 }
+/* Store, item count and the routing note — the desktop's Store and Items
+   columns, folded into one muted line because a phone card cannot spend a row
+   on each. The store half is suppressed on a single-store shop, where naming it
+   on every row says nothing. */
+function orderMetaLine(o){
+  const bits=[];
+  const many=(state.stores||[]).length>1;
+  if(o.store&&many) bits.push(T(...o.store));
+  if(o.items_n!=null) bits.push(T(o.items_n+(o.items_n===1?' item':' items'), o.items_n+' 件'));
+  if(o.routeNote) bits.push(o.routeNote);
+  if(!bits.length) return '';
+  return `<div style="font-size:12.5px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${bits.join(' · ')}</div>`;
+}
 function ordersFiltered(){ return state.ordersView||DB.orders; }
 function ordersHeader(){
   // Real counts when available (undefined → no badge shown, instead of a fake number).
@@ -968,6 +982,8 @@ function screenOrders(){
             ${o.viewOnly?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('View only','只读')}</span>`:''}</span>
           ${pill(o.kind,T(...o.status))}</div>
         ${o.payNote?`<div style="display:flex;align-items:center;gap:7px;color:var(--${o.payNote.sev});font-size:13px">${ic(o.payNote.icon,15)}<span>${T(...o.payNote.label)}</span></div>`:''}
+        ${o.notes?`<div style="display:flex;flex-wrap:wrap;gap:6px">${o.notes.map(nt=>
+          `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:3px 8px;border-radius:999px;background:${nt.sev==='muted'?PILL.muted[0]:'var(--'+nt.sev+'-tint)'};color:${nt.sev==='muted'?PILL.muted[1]:'var(--'+nt.sev+')'}">${ic(nt.icon,12)}${nt.label}</span>`).join('')}</div>`:''}
         ${o.parcels?`<div style="display:flex;align-items:center;gap:7px;font-size:13px;color:var(--text-secondary);flex-wrap:wrap">
           ${ic('package',14)}<span>${T(o.parcels.total+' parcels',o.parcels.total+' 个包裹')}</span>
           ${o.parcels.delivered?`<span style="color:#5F7357">· ${T(o.parcels.delivered+' delivered',o.parcels.delivered+' 已签收')}</span>`:''}
@@ -976,7 +992,10 @@ function screenOrders(){
         </div>`:''}
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
           <span style="font-size:13px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...o.ship)}</span>
-          ${o.by?`<span class="num" style="font-size:13px;color:${o.byAmber?'#8A6425':'var(--text-secondary)'};flex:none">${T(...o.by)}</span>`:''}</div>
+          ${o.deliv?`<span style="display:flex;flex-direction:column;align-items:flex-end;flex:none;max-width:52%">
+            <span class="${o.deliv.num?'num':''}" style="font-size:13px;color:${DELIV_TONE[o.deliv.tone]||'var(--text-secondary)'};overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">${o.deliv.text}</span>
+            ${o.deliv.sub?`<span style="font-size:11.5px;color:var(--text-secondary);margin-top:1px">${o.deliv.sub}</span>`:''}</span>`:''}</div>
+        ${orderMetaLine(o)}
       </button>`).join(''):''}
     ${os.length&&state.ordersTotal!=null?`<div style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:8px 0 0">
       <span class="num" style="font-size:13px;color:var(--text-secondary)">${T(os.length+' of '+state.ordersTotal, state.ordersTotal+' 单中的 '+os.length)}</span>
@@ -2884,6 +2903,170 @@ function payNoteOf(r){
       : ['A screenshot is on file and nobody has checked it. Open it on the desktop and verify.',
          '已上传付款截图但尚未核对。请在电脑端打开核对。']};
 }
+/* ---- The Delivery cell ---------------------------------------------------
+   The desktop merges tracking and ship-by into ONE column, because on any given
+   row exactly one of them is the live fact: a shipped order has a waybill and a
+   deadline already in the past; an unshipped one has a deadline and no waybill.
+   The phone was showing only the second half of that, and only its raw label —
+   no tracking state, no courier, no missing-waybill warning, and no urgency, so
+   `byAmber` was a field that existed and was never once true. */
+const GZ_TODAY=()=>{ const p=new Date(Date.now()+8*3600*1000).toISOString().slice(0,10).split('-');
+  return new Date(+p[0],+p[1]-1,+p[2]); };
+const _sched=v=>{ const d=_date(v); return d&&!isNaN(d)?d:null; };
+/* shipByPlan, reduced: the same five kinds and the same urgency anchors. The
+   desktop's label prettifiers (humanizeSlotLabel / slotWindowText) are not
+   ported — the stored label is used as-is — so a row can read slightly more
+   raw here than on the desktop, but it never reads WRONG. */
+function shipByPlan(r){
+  const done=['dispatched','delivered','cancelled','refunded'].includes(r.status);
+  if(r.fulfillment_type==='counter') return null;
+  if(r.fulfillment_type==='pickup') return {kind:'pickup',
+    label:r.delivery_slot_label||T('During pickup hours','营业时间内自取'),
+    sub:T('pickup','自提'), when:r.scheduled_for||null, basis:'arrival', done};
+  if(r.promised_ship_date){
+    const ship=fmtDay(r.promised_ship_date), arr=r.promised_delivery_date?fmtDay(r.promised_delivery_date):'';
+    return {kind:'batch', label:arr||ship,
+      sub:arr?T('made fresh · ship '+ship,'现做 · '+ship+'发货'):T('made fresh','现做'),
+      when:r.promised_ship_date, basis:'arrival', done};
+  }
+  if(r.ship_by_mode==='asap'||!r.scheduled_for){
+    if(r.delivery_slot_kind==='right_away') return {kind:'asap',label:T('Right away','立即配送'),sub:'',when:r.placed_at||null,basis:'age',done};
+    return {kind:'asap',label:T('Courier — ship when ready','快递 · 备好即发'),sub:'',when:r.placed_at||null,basis:'age',done};
+  }
+  return {kind:'scheduled', label:r.delivery_slot_label||fmtDay(r.scheduled_for),
+    sub:'', when:r.scheduled_for, basis:'arrival', done};
+}
+/* shipByUrgency, ported thresholds and all — including the rule that "today" is
+   the STORE's today (Guangzhou), not the browser's, so an operator abroad does
+   not read yesterday's bucket. */
+function shipByUrgency(p,actionable){
+  const out={level:'none',days:null};
+  if(!p||!p.when||!actionable) return out;
+  if(p.basis==='age'){
+    const d=_sched(p.when); if(!d) return out;
+    const age=Math.floor((Date.now()-d.getTime())/86400000);
+    out.days=age;
+    out.level = age>=4?'overdue' : age>=2?'soon' : 'fresh';
+    return out;
+  }
+  const dm=/^(\d{4})-(\d{2})-(\d{2})$/.exec(String(p.when));
+  if(dm){
+    const target=new Date(+dm[1],+dm[2]-1,+dm[3]);
+    const days=Math.round((target.getTime()-GZ_TODAY().getTime())/86400000);
+    out.days=days;
+    out.level = days<0?'overdue' : days===0?'today' : days===1?'tomorrow' : 'later';
+    return out;
+  }
+  const d=_sched(p.when); if(!d) return out;
+  const hrs=(d.getTime()-Date.now())/3600000;
+  out.level = hrs<0?'overdue' : hrs<24?'today' : hrs<48?'tomorrow' : 'later';
+  return out;
+}
+/* Live courier stage — the same three the desktop names, and the same rule that
+   a terminal order status wins over a frozen in-transit snapshot. */
+function courierLine(r){
+  const c=r.courier;
+  if(!c||!c.stage||c.stage==='scheduled'||c.stage==='delivered') return null;
+  if(['delivered','cancelled','refunded'].includes(r.status)) return null;
+  const label = c.stage==='in_transit'?T('On the way','配送中')
+    : c.stage==='heading_to_pickup'?T('Rider coming','骑手前往取货')
+    : c.stage==='awaiting_dispatch'?T('Finding a rider','正在找骑手') : '';
+  if(!label) return null;
+  const mins=(c.stage==='in_transit'&&c.eta_seconds!=null)?('~'+Math.max(1,Math.round(c.eta_seconds/60))+T('m','分')):'';
+  return {text:mins?label+' · '+mins:label, tone:'brick'};
+}
+/* deliveryStateInfo, ported: problems first, because those are what the
+   operator must act on. */
+const DELIV_STATE={
+  no_contact:{en:"Can't reach the customer",cn:'联系不上顾客',tone:'brick'},
+  exception:{en:'Delivery issue',cn:'配送异常',tone:'brick'},
+  returning:{en:'Returning to sender',cn:'退回中',tone:'brick'},
+  returned:{en:'Returned',cn:'已退回',tone:'brick'},
+  pickup_point:{en:'At a pickup point',cn:'已到驿站',tone:'amber'},
+  locker:{en:'In a locker',cn:'已入快递柜',tone:'amber'},
+  delivered:{en:'Delivered',cn:'已签收',tone:'plain'},
+  out_for_delivery:{en:'Out for delivery',cn:'派送中',tone:'plain'},
+  in_transit:{en:'In transit',cn:'运输中',tone:'plain'},
+  picked_up:{en:'Picked up',cn:'已揽收',tone:'plain'},
+};
+function deliveryState(r){
+  if(r.status==='delivered') return {text:T('Delivered','已签收'),tone:'plain'};
+  const sc=r.tracking_scenario||'', st=r.tracking_status||'';
+  const k=DELIV_STATE[sc]||DELIV_STATE[st];
+  return k?{text:T(k.en,k.cn),tone:k.tone}:null;
+}
+/* One line, the way the desktop picks one cell: the live fact for THIS row. */
+function deliveryLine(r){
+  const readonly=['meituan','gzgrocery'].includes(String(r.channel||'').toLowerCase());
+  if(r.fulfillment_type==='counter') return null;
+  if(readonly){
+    if(['cancelled','refunded'].includes(r.status)) return null;
+    const when=r.status==='delivered'?(r.delivered_at||null):null;
+    if(when) return {text:T('arrived '+fmtTime(when),'已送达 '+fmtTime(when)),tone:'plain'};
+    if(r.channel_preorder_at&&r.status!=='delivered') return {text:T('booked '+fmtTime(r.channel_preorder_at),'预约 '+fmtTime(r.channel_preorder_at)),tone:'amber'};
+    if(r.channel_eta) return {text:T('arrival '+fmtTime(r.channel_eta),'预计 '+fmtTime(r.channel_eta)),tone:'plain'};
+    return null;
+  }
+  const moving = r.status==='dispatched'||r.status==='delivered'||r.tracking_number||r.local_eta;
+  if(moving&&r.fulfillment_type!=='pickup'){
+    if(r.air_delivery_delayed) return {text:T('Air delayed · call the customer','空运延误 · 请联系顾客'),tone:'brick'};
+    const live=courierLine(r); if(live) return live;
+    if(r.is_local){
+      if(r.local_eta) return {text:T('arrival '+r.local_eta,'预计 '+r.local_eta),tone:'plain'};
+      if(r.status==='dispatched') return {text:T('no arrival time set','未设送达时间'),tone:'amber'};
+      return null;
+    }
+    if(!r.tracking_number){
+      // Shipped with no waybill = the office still has to enter it, and the
+      // customer has nothing to track. The desktop shouts about this in red.
+      if(r.status==='dispatched') return {text:T('No waybill yet','缺运单号'),tone:'brick'};
+      return null;
+    }
+    const dl=deliveryState(r);
+    const wb=(r.tracking_carrier||'').toUpperCase()+' '+r.tracking_number;
+    return {text:dl?wb+' · '+dl.text:wb, tone:dl?dl.tone:'plain', num:true};
+  }
+  const plan=shipByPlan(r); if(!plan) return null;
+  const actionable=r.status==='paid'||r.status==='preparing';
+  const u=shipByUrgency(plan,actionable);
+  let tag='';
+  if(actionable){
+    if(u.level==='overdue') tag=' · '+T('overdue','已逾期');
+    else if(plan.kind!=='batch'&&u.level==='today') tag=' · '+T('today','今天');
+    else if(plan.kind!=='batch'&&u.level==='tomorrow') tag=' · '+T('tomorrow','明天');
+  }
+  const tone = !actionable?'plain' : u.level==='overdue'?'brick' : (u.level==='today'||u.level==='tomorrow'||u.level==='soon')?'amber':'plain';
+  return {text:plan.label+tag, sub:plan.sub||'', tone};
+}
+/* Why an order is being fulfilled somewhere other than the obvious store.
+   Silent for nearest/only-store, which is the normal case and says nothing. */
+function routingNote(reason){
+  const r=String(reason||'').toLowerCase().trim();
+  if(r==='fallback_no_stock') return T('rerouted · out of stock','改派 · 缺货');
+  if(r==='manual') return T('manually routed','手动改派');
+  if(r==='out_of_city') return T('out-of-city warehouse','外地仓发货');
+  return '';
+}
+/* The desktop stacks these under the status pill, and every one of them changes
+   what the operator does next: items were added after the slip printed; the
+   shipping store is short; the stock has not actually come off yet; a fapiao is
+   owed. The phone showed the pill alone. */
+function orderNotes(r){
+  const out=[];
+  if(Number(r.addon_count)) out.push({sev:'amber',icon:'plus',label:T('Items added after paying','下单后加购')});
+  let shortPids=[];
+  try{ shortPids=JSON.parse(r.fulfillment_short_pids||'[]')||[]; }catch(e){}
+  if(shortPids.length) out.push({sev:'amber',icon:'triangle-alert',
+    label:T(shortPids.length===1?'Shipping store is short 1 item':'Shipping store is short '+shortPids.length+' items',
+            '出货门店缺 '+shortPids.length+' 件')});
+  if(r.stock_pending) out.push({sev:'amber',icon:'box',label:T('Stock not deducted yet','库存待扣')});
+  if(Number(r.needs_invoice)){
+    const issued=r.invoice_status==='issued';
+    out.push({sev:issued?'muted':'amber',icon:'receipt',label:issued?T('Invoice issued','已开票'):T('Invoice to issue','待开票')});
+  }
+  if(r.air_delivery_delayed) out.push({sev:'brick',icon:'plane',label:T('Air delayed · call the customer','空运延误 · 请联系顾客')});
+  return out.length?out:null;
+}
 /* The desktop's renderSplitRollupLine, on a phone. Under two parcels there is
    nothing to roll up and the row says nothing. */
 function parcelRollup(r){
@@ -2898,20 +3081,38 @@ function mapOrderRow(r){
   let kind=sk[0];
   if(['pending','reviewing','approved'].includes(r.refund_status)){ kind='refund'; sk=['refund','Refund requested','申请退款']; }
   const ch=CH_BACK[(r.channel||'wechat').toLowerCase()]||'miniapp';
-  const shipCity=r.ship_pickup?['Pickup in-store','到店自提']:[[r.ship_city,r.ship_district].filter(Boolean).join(' · ')||'—',[r.ship_city,r.ship_district].filter(Boolean).join(' · ')||'—'];
-  const by = r.delivery_slot_label||r.promised_ship_date||'';
+  // A walk-in is not a pickup. The desktop keeps them apart on purpose — "a
+  // list that calls a walk-in a pickup is a small lie that ends up in a report".
+  const shipCity=r.ship_counter?['Counter','前台']
+    :r.ship_pickup?['Pickup in-store','到店自提']
+    :(()=>{ const en=[r.ship_city_en||r.ship_city,r.ship_district_en||r.ship_district].filter(Boolean).join(' · ')||'—';
+            const cn=[r.ship_city,r.ship_district].filter(Boolean).join(' · ')||'—';
+            return [en,cn]; })();
+  const deliv = deliveryLine(r);
   return {
     id:r.order_no||('#'+r.id), _id:r.id,
     ch, cust:[r.recipient_name||r.nickname||'—', r.recipient_name||r.nickname||'—'],
-    total:money(CUR,r.total), placed:hhmm(r.placed_at),
+    // fmtDay, not hhmm: an order from three days ago showed a bare "9:07 AM".
+    total:money(CUR,r.total), placed:fmtDay(r.placed_at),
     status:[sk[1],sk[2]], kind, raw:r.status||null, refundStatus:r.refund_status||null, isNew:!r.seen_at,
     ship:Array.isArray(shipCity)?shipCity:[shipCity,shipCity],
-    by: by?[by,by]:null, byAmber:false,
+    deliv,
     viewOnly: ch==='meituan'||ch==='gzgrocery',
     // A proof is not a status — the order never moved, it is still
     // pending_payment. It rides its own row as a mark, exactly as the desktop
     // does, so the Pending list can be scanned for the one that needs a person.
     payNote: payNoteOf(r),
+    // What the desktop's Store, Items and Placed columns carry. A shop with two
+    // stores could not tell from this list which one owes the work, and an order
+    // from three days ago showed a bare "9:07 AM" with no date on it.
+    items_n: r.item_count!=null?Number(r.item_count):null,
+    store: r.store_code?[r.store_name_en||r.store_code, r.store_name_cn||r.store_name_en||r.store_code]:null,
+    routeNote: routingNote(r.routing_reason),
+    // The Status cell's stack of note lines. Each is a fact about the order that
+    // changes what an operator does with it, and none of them were here.
+    notes: orderNotes(r),
+    pickup: r.fulfillment_type==='pickup',
+    counter: r.fulfillment_type==='counter',
     // Multi-parcel rollup, from the list query's own counts. Without it a
     // dispatched order sitting in the Paid tab looks like a bug: the tab is
     // right — one parcel has gone and another has not — and the row was the

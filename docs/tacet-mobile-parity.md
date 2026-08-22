@@ -223,6 +223,36 @@ order actions demonstrate: the control disables and says what it is doing, a
 refusal renders where the operator is looking and stays, and a toast confirms
 but never reports failure.
 
+## 3b. The second audit — fields, not just controls
+
+The first audit asked "does this control work". It did not ask "does this row
+say what the desktop's row says", and that is where the real losses were: a
+phone card with a status pill and a price, next to a desktop row with ten
+columns of fact. Reported from production, then swept column by column.
+
+### Orders list — the desktop's ten columns
+
+| Desktop column | Phone |
+|---|---|
+| Order # | ✅ |
+| Channel | ✅ icon (the label is the icon here) |
+| Customer | ✅ |
+| **Store** + routing note + "needs restock" | ✅ — a two-store shop could not tell which store owed the work. Folded into one muted line with Items; suppressed on a single-store shop, where naming it on every row says nothing |
+| Ship to | ✅ — and Counter is no longer called Pickup, which the desktop keeps apart on purpose |
+| **Items** | ✅ |
+| Total | ✅ |
+| Status pill | ✅ |
+| ↳ payment-proof line | ✅ (three states) |
+| ↳ **add-on badge** ("items added after paying") | ✅ |
+| ↳ **stock-pending badge** | ✅ |
+| ↳ **invoice line** (owed / issued) | ✅ |
+| ↳ **shipping-store-short warning** | ✅ |
+| ↳ refund badge, partial vs full, with the amount | ⚠ the pill says "Refund requested"; the partial/full split and the amount are not on the row yet |
+| **Delivery** (the merged tracking + ship-by cell) | ✅ — ported branch for branch: waybill + carrier state, the ten delivery states with problems first, the live courier stage, "No waybill yet" in brick, air-delay, local ETA, marketplace arrival/booked, and the ship-by plan with its urgency tag |
+| ↳ ship-by label prettifiers | ⚠ the stored slot label is used as-is; the desktop humanises it. Raw, never wrong |
+| Placed | ✅ — was a bare time, so an order from three days ago read "9:07 AM" |
+| Split-parcel rollup | ✅ |
+
 ## 4. Open questions
 
 Not gaps — decisions that are the shop's to make, not this file's.
