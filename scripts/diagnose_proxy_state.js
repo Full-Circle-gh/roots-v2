@@ -168,5 +168,76 @@ else {
   for (const l of lines) say('  ' + l);
 }
 
+// ── 5. Is the channel actually trading? ──────────────────────────────────────
+// The proxy is only half the question. "Is 天河 live" means: is the session
+// signed in, is stock pushing, are orders arriving. Same signals, and the same
+// ruler, routes/integrations-admin.js uses for the admin card, so this answer
+// and the screen an operator looks at cannot disagree.
+//
+// The daemon writes through `database.js` (the main DB) while the routes read
+// through tdb() (a per-tenant file), so both are checked and the source of the
+// numbers is named rather than assumed.
+head('Is 天河 trading?');
+let Database = null;
+try { Database = require(path.join(APP, 'node_modules', 'better-sqlite3')); }
+catch (_) { say('  (better-sqlite3 not loadable here — skipping the database section)'); }
+
+function dbCandidates() {
+  const list = [path.join(APP, 'data', 'roots.db')];
+  try {
+    const dir = path.join(APP, 'data', 'tenants');
+    for (const f of fs.readdirSync(dir)) if (f.endsWith('.db')) list.push(path.join(dir, f));
+  } catch (_) { /* single-tenant box */ }
+  return list.filter(f => { try { return fs.statSync(f).isFile(); } catch (_) { return false; } });
+}
+
+const STORE = process.env.PROXY_DIAG_STORE || 'tianhe';
+if (Database) {
+  for (const file of dbCandidates()) {
+    let db;
+    try { db = new Database(file, { readonly: true, fileMustExist: true }); }
+    catch (e) { say(`  ${file}: cannot open (${e.message})`); continue; }
+
+    // Prove read-only on the connection, do not assume it — same gate every
+    // other diagnostic in this directory applies before reading anything.
+    let proven = false;
+    try { db.exec('CREATE TABLE __ro_probe__ (x)'); }
+    catch (_) { proven = true; }
+    if (!proven) { say(`  ${file}: FATAL — the connection accepted a write, reading nothing from it`); try { db.close(); } catch (_) {} continue; }
+
+    const one = (sql, ...a) => { try { return db.prepare(sql).get(...a) || null; } catch (_) { return null; } };
+    const has = (t) => !!one("SELECT name FROM sqlite_master WHERE type='table' AND name=?", t);
+    if (!has('meituan_sync_log')) { try { db.close(); } catch (_) {} continue; }
+
+    say(`  ${file}`);
+    const lastOk  = one("SELECT event_type, created_at FROM meituan_sync_log WHERE store_code=? AND status='ok' ORDER BY id DESC LIMIT 1", STORE);
+    const lastErr = one("SELECT event_type, error_msg, created_at FROM meituan_sync_log WHERE store_code=? AND status='error' ORDER BY id DESC LIMIT 1", STORE);
+    const lastLogin = one("SELECT event_type, created_at FROM meituan_sync_log WHERE store_code=? AND status='error' AND event_type IN ('needs_login','verify_required') ORDER BY id DESC LIMIT 1", STORE);
+    const lastPush = one("SELECT created_at FROM meituan_sync_log WHERE store_code=? AND event_type='stock_push' AND status='ok' ORDER BY id DESC LIMIT 1", STORE);
+    const biz = has('store_business_status') ? one('SELECT is_open, read_ok, read_at FROM store_business_status WHERE store_code=?', STORE) : null;
+    const lastOrder = has('meituan_order_import') ? one('SELECT meituan_order_no, imported_at FROM meituan_order_import WHERE store_code=? ORDER BY id DESC LIMIT 1', STORE) : null;
+    const today = has('meituan_order_import') ? one("SELECT COUNT(*) n FROM meituan_order_import WHERE store_code=? AND date(imported_at)=date('now')", STORE) : null;
+    const q = has('meituan_sync_queue')
+      ? one("SELECT SUM(status='pending') pending, SUM(status='failed') failed FROM meituan_sync_queue WHERE store_code=?", STORE)
+      : null;
+
+    // UTC in the log, UTC here — the daemon writes CURRENT_TIMESTAMP.
+    const utc = (t) => (t ? Date.parse(String(t).replace(' ', 'T') + (String(t).includes('Z') ? '' : 'Z')) || 0 : 0);
+    const okAt = Math.max(utc(lastOk && lastOk.created_at), (biz && biz.read_ok) ? utc(biz.read_at) : 0);
+    const errAt = utc(lastLogin && lastLogin.created_at);
+    const signedIn = errAt && errAt > okAt ? false : (okAt ? true : null);
+
+    say(`      signed in: ${signedIn === true ? 'YES' : signedIn === false ? `NO — ${lastLogin.event_type}` : 'unknown (no activity either way)'}`);
+    say(`      last ok event:   ${lastOk ? `${lastOk.event_type} ${ago(utc(lastOk.created_at))}` : 'never'}`);
+    say(`      last stock push: ${lastPush ? ago(utc(lastPush.created_at)) : 'never'}`);
+    say(`      last error:      ${lastErr ? `${lastErr.event_type} ${ago(utc(lastErr.created_at))} — ${String(lastErr.error_msg || '').slice(0, 90)}` : 'none'}`);
+    if (biz) say(`      shop on Meituan: ${biz.read_ok ? (biz.is_open === 1 ? 'OPEN' : 'CLOSED (置休)') : 'last status read FAILED'} (read ${ago(utc(biz.read_at))})`);
+    say(`      last order:      ${lastOrder ? `${lastOrder.meituan_order_no} ${ago(utc(lastOrder.imported_at))}` : 'never'}`);
+    say(`      orders today:    ${today ? today.n : '?'}`);
+    if (q) say(`      push queue:      ${q.pending || 0} pending, ${q.failed || 0} failed`);
+    try { db.close(); } catch (_) {}
+  }
+}
+
 say('');
 console.log(out.join('\n'));
