@@ -34,13 +34,12 @@ const ORDERS = [
   ordCard({ ch: I.miniapp, id: 'RT-…039', at: '10:21 AM', total: '¥215', name: 'Huang Xiaoting', pill: 'Awaiting restock', pillKind: 'amber', ship: 'Guangzhou · Baiyun', by: 'Paused' }),
 ].join('');
 
-const ordersHead = ({ status = true, cta = true } = {}) => `
+const ordersHead = ({ status = true } = {}) => `
   <div class="page-head">
     <div style="flex:1;min-width:0">
       <h1>Orders</h1>
       ${status ? '<p class="status-line">8 awaiting fulfilment</p>' : ''}
     </div>
-    ${cta ? '<button class="btn btn-primary">New order</button>' : ''}
   </div>`;
 
 const ordersChips = `

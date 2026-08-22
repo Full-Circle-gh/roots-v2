@@ -67,7 +67,7 @@
       "x": 0,
       "y": 1928,
       "w": 390,
-      "h": 740,
+      "h": 790,
       "title": "Write states"
     },
     {
@@ -187,6 +187,13 @@
       "y": 3776,
       "w": 390,
       "text": "The hybrid (§1.13). An order is glance-and-act, so its sheet is the whole story. A product is light to glance at and heavy to edit, so its sheet carries exactly one extra door — Open full page — and nothing else about it differs. Two zoom levels of one record, not a second pattern."
+    },
+    {
+      "id": "shipped-note",
+      "x": 1410,
+      "y": 2812,
+      "w": 390,
+      "text": "Synced with what shipped in /m (the phone build), 22 Aug.\n\nFour things changed on contact with the product, all the same kind: the design promised something the phone could not do yet.\n\n· Orders and Products head with an EMPTY Dusk slot — neither create flow exists on a phone, and a primary that only says \"do this on the desktop\" is a promise the page cannot keep. §1.7 says the empty slot is the finished answer.\n· Tier chips carry no counts. No endpoint returns them, and an invented number is worse than a missing one.\n· The customer record is read-only: every figure on it is one the server already computes, and none of the write flows exist here yet. The action row lands with them.\n· Home's Today carries the four figures the dashboard actually returns, with their deltas."
     }
   ],
   "launch": {

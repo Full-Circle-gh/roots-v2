@@ -7,7 +7,6 @@ import { chips } from './pages-2.mjs';
 const prodHead = `
   <div class="page-head">
     <div style="flex:1;min-width:0"><h1>Products</h1></div>
-    <button class="btn btn-primary">Add product</button>
   </div>`;
 
 const subviews = (active) => `

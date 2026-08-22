@@ -115,6 +115,30 @@
     .tab.on{color:var(--td-text);font-weight:500}
     .tab .dot{position:absolute;top:8px;left:calc(50% + 8px);width:6px;height:6px;border-radius:50%;
       background:var(--td-sage)}
+    /* ── Sub-view strip · swaps what kind of thing you are looking at (§1.7) ── */
+    .subviews{display:flex;gap:24px;padding:0 16px;flex:none;border-bottom:1px solid var(--td-border)}
+    .subview{border:0;background:none;font-family:var(--ui);font-size:15px;color:var(--td-text2);
+      height:44px;padding:0;cursor:pointer;position:relative;white-space:nowrap}
+    .subview.on{color:var(--td-text);font-weight:500}
+    .subview.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--td-text)}
+    /* ── Monogram · rounded square, never a circle (§1.14) ── */
+    .mono{flex:none;width:32px;height:32px;border-radius:8px;background:var(--td-dusk-tint);
+      color:var(--td-dusk);display:flex;align-items:center;justify-content:center;font-weight:500;font-size:15px}
+    /* ── Product thumb · placeholder until the catalogue's own image loads ── */
+    .thumb{flex:none;width:48px;height:48px;border-radius:8px;background:var(--td-raised);
+      display:flex;align-items:center;justify-content:center;color:var(--td-border)}
+    .thumb svg{width:20px;height:20px}
+    /* ── Record card · a list row on a phone ── */
+    .reccard{display:flex;gap:16px;align-items:center;padding:16px;background:var(--td-surface);
+      border:1px solid var(--td-border);border-radius:14px;text-align:left}
+    .reccard.unseen{background:var(--td-unseen);box-shadow:inset 4px 0 0 var(--td-sage)}
+    .rec-main{flex:1;min-width:0}
+    .rec-name{display:flex;align-items:center;gap:8px;font-size:15px;font-weight:500;min-width:0}
+    .rec-name b{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .rec-sub{display:block;font-size:13px;color:var(--td-text2);white-space:nowrap;overflow:hidden;
+      text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+    .rec-side{flex:none;text-align:right}
+    .zero{color:var(--td-text2)}
     /* ── Notes drawn on the artboard, never part of the screen ── */
     .note{position:absolute;font-size:13px;line-height:1.5;color:var(--td-text2)}
   </style>
@@ -186,21 +210,30 @@
     </section>
     <section style="flex:none">
       <h2 class="sec-title">Today</h2>
-      <div class="card" style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:16px;padding:16px">
+      <div class="card" style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:16px;padding:16px">
         
           <span style="min-width:0">
             <span class="cap" style="display:block;line-height:1.4">Revenue</span>
             <span class="num" style="display:block;font-size:18px;font-weight:500;line-height:1.4">¥12,840</span>
+            <span class="cap num" style="display:block;line-height:1.4">+8% vs a typical day</span>
           </span>
         
           <span style="min-width:0">
             <span class="cap" style="display:block;line-height:1.4">Orders</span>
             <span class="num" style="display:block;font-size:18px;font-weight:500;line-height:1.4">37</span>
+            <span class="cap num" style="display:block;line-height:1.4">+5 vs a typical day</span>
           </span>
         
           <span style="min-width:0">
             <span class="cap" style="display:block;line-height:1.4">Avg. order</span>
             <span class="num" style="display:block;font-size:18px;font-weight:500;line-height:1.4">¥347</span>
+            <span class="cap num" style="display:block;line-height:1.4">vs a typical day</span>
+          </span>
+        
+          <span style="min-width:0">
+            <span class="cap" style="display:block;line-height:1.4">New customers</span>
+            <span class="num" style="display:block;font-size:18px;font-weight:500;line-height:1.4">6</span>
+            <span class="cap num" style="display:block;line-height:1.4">+2 vs a typical day</span>
           </span>
       </div>
     </section>

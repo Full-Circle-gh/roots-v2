@@ -83,9 +83,27 @@ passing every artboard and `canvas.json`, and publish to the URL above.
 - **The product sheet is the hybrid**, with exactly one extra control (Open
   full page). Nothing else about it differs from the order sheet.
 
+## Shipped
+
+Batch one and two are implemented in `public/m.html` — the phone build
+`server.js:625` serves to any mobile browser opening the backend. Four things
+changed on contact with the product, and the artboards were updated to match:
+
+| Design said | Ships as | Why |
+|---|---|---|
+| Orders header CTA "New order" | Empty Dusk slot | No create flow on a phone; §1.7 says the empty slot is the finished answer |
+| Products header CTA "Add product" | Empty Dusk slot | Same — the catalogue is authored on desktop |
+| Tier chips with counts | Tier chips, no counts | No endpoint returns them |
+| Customer record with an action row | Read-only record | None of the write flows (points, wallet, block) exist here yet |
+
+Also folded in while the shell was open: the last uppercase labels, the Dusk
+setup meter (a progress bar is not an automation), the drawer's Dusk primary
+(a drawer inherits the page's budget), and 24-hour English times.
+
 ## Known gaps (batch three)
 
-Dark theme is specified as a token swap but not drawn; Chinese is not rendered
+The customer record's action row waits on the phone write flows; dark theme is
+specified as a token swap but not drawn; Chinese is not rendered
 anywhere here (source carries the pair, one language ships — §1.11); Customers
 and Products own the six states by inheritance from Orders but only two of
 theirs are drawn; the co-brand slot has no merchant artwork in this account,

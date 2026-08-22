@@ -57,10 +57,11 @@ const needsRow = (icon, sev, label, count, meta, first) => `
         <span style="flex:none;width:20px;height:20px;color:var(--td-text2)">${I.chev}</span>
       </button>`;
 
-const stat = (label, value) => `
+const stat = (label, value, delta) => `
           <span style="min-width:0">
             <span class="cap" style="display:block;line-height:1.4">${label}</span>
             <span class="num" style="display:block;font-size:18px;font-weight:500;line-height:1.4">${value}</span>
+            <span class="cap num" style="display:block;line-height:1.4">${delta}</span>
           </span>`;
 
 writeFileSync(join(OUT, 'Main.dc.html'), doc('Home', `
@@ -93,10 +94,11 @@ writeFileSync(join(OUT, 'Main.dc.html'), doc('Home', `
     </section>
     <section style="flex:none">
       <h2 class="sec-title">Today</h2>
-      <div class="card" style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:16px;padding:16px">
-        ${stat('Revenue', '¥12,840')}
-        ${stat('Orders', '37')}
-        ${stat('Avg. order', '¥347')}
+      <div class="card" style="display:grid;grid-template-columns:repeat(2, minmax(0, 1fr));gap:16px;padding:16px">
+        ${stat('Revenue', '¥12,840', '+8% vs a typical day')}
+        ${stat('Orders', '37', '+5 vs a typical day')}
+        ${stat('Avg. order', '¥347', 'vs a typical day')}
+        ${stat('New customers', '6', '+2 vs a typical day')}
       </div>
     </section>
   </div>

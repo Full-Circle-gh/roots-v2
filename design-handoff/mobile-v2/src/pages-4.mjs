@@ -34,7 +34,7 @@ const cusHead = `
 const cusChips = `
   <div class="chiprow">${chips([['All', 693, true], ['New this week', 12], ['Sleeping 60d+', 84]])}</div>
   <div style="height:8px;flex:none"></div>
-  <div class="chiprow">${chips([['All tiers', null, true], ['Tree', 46], ['Root', 132], ['Sprout', 411]])}</div>
+  <div class="chiprow">${chips([['All tiers', null, true], ['Tree'], ['Root'], ['Sprout'], ['Seed']])}</div>
   <div style="height:16px;flex:none"></div>`;
 
 writeFileSync(join(OUT, 'Customers.dc.html'), doc('Customers', `
@@ -70,6 +70,14 @@ const snap = (label, value) => `
             <span class="cap" style="display:block;line-height:1.4">${label}</span>
             <span class="num" style="display:block;font-size:18px;font-weight:500;line-height:1.4">${value}</span>
           </span>`;
+const ord = (id, when, total, first) => `
+        <div style="display:flex;align-items:center;gap:16px;padding:12px 16px;${first ? '' : 'border-top:1px solid var(--td-border);'}">
+          <span style="flex:1;min-width:0">
+            <span class="num" style="display:block;font-size:15px">${id}</span>
+            <span class="cap num" style="display:block">${when}</span>
+          </span>
+          <span class="num" style="flex:none;font-size:15px">${total}</span>
+        </div>`;
 const acc = (label, count, first) => `
         <button style="display:flex;align-items:center;gap:16px;width:100%;min-height:56px;padding:8px 16px;background:none;border:0;${first ? '' : 'border-top:1px solid var(--td-border);'}text-align:left;font-family:var(--ui);font-size:15px;color:var(--td-text);cursor:pointer">
           <span style="flex:1;min-width:0">${label}</span>
@@ -94,11 +102,7 @@ writeFileSync(join(OUT, 'CustomerSheet.dc.html'), doc('Customer record', `
         <span style="flex:1"></span>
         <button class="ico" style="margin-right:-8px" aria-label="Close"><span style="width:20px;height:20px;display:block">${I.close}</span></button>
       </div>
-      <div style="display:flex;align-items:center;gap:8px;margin-top:16px">
-        <button class="btn btn-secondary" style="flex:1;min-height:44px">Adjust points</button>
-        <button class="btn btn-secondary" style="width:44px;padding:0" aria-label="Top up wallet"><span style="width:20px;height:20px;display:block">${I.wallet}</span></button>
-        <button class="btn btn-secondary" style="width:44px;padding:0" aria-label="More actions"><span style="width:20px;height:20px;display:block">${I.dots}</span></button>
-      </div>
+      <p class="cap num" style="margin:4px 0 0">138****2841</p>
     </div>
     <div style="flex:1;min-height:0;overflow:hidden;padding:0 16px 16px">
       <div class="raised" style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:16px;padding:16px">
@@ -109,14 +113,16 @@ writeFileSync(join(OUT, 'CustomerSheet.dc.html'), doc('Customer record', `
         ${snap('Wallet', '¥86')}
         ${snap('Since', 'Mar 2025')}
       </div>
-      <p class="cap" style="margin:8px 0 16px">Ordered is order subtotal — the one measure the list and this card share.</p>
+      <p class="cap" style="margin:8px 0 16px">Ordered is the goods total before discounts — the same measure the list column shows.</p>
+      <h3 style="margin:0 0 8px;font-size:13px;font-weight:500;color:var(--td-text2)">Recent orders</h3>
       <div class="card" style="overflow:hidden">
-        ${acc('Recent orders', '24', true)}
-        ${acc('Points ledger', '61 entries')}
-        ${acc('Top items', '8')}
-        ${acc('Addresses', '2')}
-        ${acc('Device &amp; app', 'No errors in 7 days')}
+        ${ord('RT-…047', 'Jul 29', '¥312', true)}
+        ${ord('RT-…041', 'Jul 27', '¥164')}
+        ${ord('RT-…036', 'Jul 22', '¥298')}
       </div>
+      <h3 style="margin:16px 0 8px;font-size:13px;font-weight:500;color:var(--td-text2)">Addresses</h3>
+      <div class="card" style="padding:12px 16px;font-size:15px">Guangzhou · Tianhe · Tower B</div>
+      <p class="cap" style="margin:16px 0 0">No app errors in 7 days</p>
     </div>
   </div>
 </div>`));
