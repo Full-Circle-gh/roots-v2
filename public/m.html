@@ -2893,24 +2893,29 @@ function tabDot(k){ return k==='orders' ? unseenOrders() : k==='more' ? unseenRe
    is one tap from the tab that does. */
 function headControls(){
   const unseen=unseenReviews();
-  return `<span style="display:flex;flex:none;margin:-4px -6px 0 0">
+  return `<span style="display:flex;flex:none;margin:0 -6px 0 0">
     <button class="iconbtn" style="width:38px;height:38px" onclick="APP.cmd('openSearch')" aria-label="${T('Search','搜索')}">${ic('search')}</button>
     <span style="position:relative;display:flex;flex:none">
       <button class="iconbtn" style="width:38px;height:38px" onclick="APP.cmd('push','inbox')" aria-label="${T('Inbox','消息')}">${ic('message-square-text')}</button>
       ${unseen?`<span style="position:absolute;top:6px;right:6px;width:6px;height:6px;border-radius:50%;background:var(--sage);box-shadow:0 0 0 2px var(--bg)"></span>`:''}
     </span></span>`;
 }
+/* ONE header. The title sits ON the control line rather than beside a floating
+   pair of buttons, so the top of every screen reads as a single band instead of
+   a heading with chrome parked next to it. The title keeps its 24px — dropping
+   it to fit would have taken it off the type scale, and a 24px line is 30px
+   tall, which sits inside a 38px control row with room to spare. The status
+   line goes underneath, in the scroll, so it leaves when you scroll and the
+   name of the page is the last thing standing. */
 function pageHead({title, status, cta, back, controls}){
-  return `<div style="padding:calc(env(safe-area-inset-top,0px) + ${back?'10px':'20px'}) 16px 14px">
-    ${back?`<button onclick="APP.cmd('back')" style="display:flex;align-items:center;gap:6px;margin:0 0 8px -4px;padding:8px 4px;background:none;border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--text-secondary)">${ic('chevron-left',16,2)}${back}</button>`:''}
-    <div style="display:flex;align-items:flex-start;gap:12px">
-      <div style="flex:1;min-width:0">
-        <h1 style="margin:0;font-size:24px;font-weight:500;letter-spacing:-.01em;line-height:1.25">${title}</h1>
-        ${status?`<p class="num" style="margin:4px 0 0;font-size:15px;color:var(--text-secondary)">${status}</p>`:''}
-      </div>
-      ${cta||''}
-      ${controls?headControls():''}
+  const right = (cta||'') + (controls?headControls():'');
+  return `<div style="padding:calc(env(safe-area-inset-top,0px) + ${back?'10px':'14px'}) 16px ${status?'12px':'14px'}">
+    ${back?`<button onclick="APP.cmd('back')" style="display:flex;align-items:center;gap:6px;margin:0 0 6px -4px;padding:8px 4px;background:none;border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--text-secondary)">${ic('chevron-left',16,2)}${back}</button>`:''}
+    <div style="display:flex;align-items:center;gap:12px;min-height:${right?'38px':'0'}">
+      <h1 style="flex:1;min-width:0;margin:0;font-size:24px;font-weight:500;letter-spacing:-.01em;line-height:1.25;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${title}</h1>
+      ${right}
     </div>
+    ${status?`<p class="num" style="margin:6px 0 0;font-size:15px;color:var(--text-secondary)">${status}</p>`:''}
   </div>`;
 }
 function tabbar(){
