@@ -1823,7 +1823,9 @@ function custWrite(kind, run, okMsg){
   }).catch(e=>{
     state.custBusy=null;
     if(String(e.message)==='auth') return;
-    state.custErr=e.code==='message_required'?T('Write something first.','请先输入内容。')
+    state.custErr=e.code==='bad_email'?T('That email address will not work.','邮箱地址无效。')
+      :e.code==='phone_taken'?T('Another customer already has that phone number.','该手机号已被其他顾客使用。')
+      :e.code==='message_required'?T('Write something first.','请先输入内容。')
       :e.code==='reason_required'?T('A reason is required.','需要填写原因。')
       :e.code==='bad_delta'?T('That amount will not work. Use a number, and not zero.','金额无效。请填写非零数字。')
       :T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
@@ -1845,6 +1847,29 @@ reg('messageCustomer', ()=>{
       await apiWrite('/customers/'+c.id+'/message',{message:v.msg});
       loadInbox();
     }, T('Message sent','消息已发送'))};
+  render();
+});
+/* The desktop's Edit profile, minus the phone number. That field is the key
+   customer records are DEDUPED on — the create path matches on it, and two
+   records holding one number breaks everything keyed to it — so a mistyped
+   digit one-handed is a merge or a split, not a typo. Name and email are safe
+   to fix from anywhere; the phone stays a desktop edit, and the sheet says so
+   rather than leaving the operator wondering where it went. */
+reg('editCustomer', ()=>{
+  const c=(state.custDetail&&state.custDetail.customer)||null;
+  if(!c||c.id==null) return;
+  state.ask={title:T('Edit profile','编辑资料'),
+    body:T('The phone number is what customer records are matched on, so it is changed on the desktop.','手机号是顾客记录的匹配依据，请在电脑端修改。'),
+    fields:[
+      {id:'nickname',label:T('Name','姓名'),value:c.nickname||'',placeholder:T('No name','未填姓名')},
+      {id:'email',label:T('Email','邮箱'),value:c.email||'',placeholder:'name@example.com'},
+    ],
+    confirmLabel:T('Save','保存'),
+    validate:v=>(v.email&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v.email))
+      ? T('That email address will not work.','邮箱地址无效。') : null,
+    run:v=>custWrite('profile',
+      ()=>apiWrite('/customers/'+c.id,{nickname:v.nickname,email:v.email||null},'PATCH'),
+      T('Profile saved','资料已保存'))};
   render();
 });
 reg('adjustPoints', ()=>{
@@ -2902,6 +2927,7 @@ function sheetCustomer(){
         <div class="num" style="margin-top:4px;font-size:13px;color:var(--text-secondary)">${c.phone||'—'}</div>
       ${d?`<div style="display:flex;align-items:center;gap:8px;margin-top:16px">
         <button class="btn2" style="flex:1;min-width:0" ${state.custBusy?'disabled':''} onclick="APP.cmd('adjustPoints')">${state.custBusy==='points'?T('Saving…','保存中…'):T('Adjust points','调整积分')}</button>
+        <button class="btn2" style="width:44px;padding:0;flex:none" ${state.custBusy?'disabled':''} onclick="APP.cmd('editCustomer')" aria-label="${T('Edit profile','编辑资料')}">${ic('pencil',20)}</button>
         <button class="btn2" style="width:44px;padding:0;flex:none" ${state.custBusy?'disabled':''} onclick="APP.cmd('messageCustomer')" aria-label="${T('Message','发消息')}">${ic('message-square-text',20)}</button>
         <button class="btn2" style="width:44px;padding:0;flex:none" ${state.custBusy?'disabled':''} onclick="APP.cmd('adjustWallet')" aria-label="${T('Adjust wallet','调整钱包')}">${ic('wallet',20)}</button>
         <button class="btn2" style="width:44px;padding:0;flex:none" ${state.custBusy?'disabled':''} onclick="APP.cmd('toggleBlock')" aria-label="${c.is_blocked?T('Unblock','解除封禁'):T('Block','封禁')}">${ic(c.is_blocked?'lock-open':'ban',20)}</button>

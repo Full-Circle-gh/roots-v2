@@ -319,8 +319,8 @@ columns of fact. Reported from production, then swept column by column.
 | Diagnostics | ✅ |
 | Activity chart by month | ➖ — a chart is the desktop's affordance; the figures behind it are all on the phone |
 | Message, Adjust points, Adjust wallet, Block | ✅ |
-| Edit profile (name, phone, email) | ✖ **question for the shop** |
-| Sign out all devices | ✖ **question for the shop** |
+| Edit profile (name, email) | ✅ — **asked and answered 2026-08-22.** The phone number stays a desktop edit: it is the key customer records are deduped on, so a mistyped digit is a merge or a split, not a typo. The sheet says where it moved rather than leaving the field missing |
+| Sign out all devices | ➖ — **asked and declined 2026-08-22.** The device count is on the record; ending the sessions stays on the desktop |
 | Address edit / delete / set default | ➖ decided: desktop |
 
 ## 4. Open questions
