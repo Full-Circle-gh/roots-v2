@@ -125,13 +125,15 @@ Each row deep-links to the place the fire is put out. Rows are counts + one line
 
 **What the row is allowed to say.** With ONE order behind the fire it states the gap — "paid ¥318.00, order ¥318.20" — because that is the fact the operator is about to go and look up. With several, no pair of numbers is true of them all, so it is a count and an age. And the gap is printed only when an amount was actually read AND it differs: a mismatch on payee or time would otherwise render two identical numbers and read as a bug in our own arithmetic.
 
-**The door:** one order → that order's drawer over the dashboard, scrolled to its Alipay card (`openOrder(id, { focus: 'payment' })`); several → the Orders list on the `payment_mismatch` chip, which the server sorts oldest-proof-first, so the order the card aged from is the one at the top.
+**The door:** the **Pending** chip on the Orders list — the chip the order is already in.
+
+**And deliberately nothing more than a door.** A rejected proof is NOT a stage. The order has not moved, so its place in the Orders list must not move either. The first build gave it a "Payment check" chip of its own beside Pending, and that was wrong twice over: it invented a status the order does not have, and it took the order *out* of the list an operator scans when they are looking for money they are owed. One order, two apparent states. The fire is the notification; Pending is where the work is; and the row inside Pending carries the mark (below) that says which one it is.
 
 **Self-clearing, with no "handled" flag.** Marking it paid or cancelling it removes it from the queue by definition — the same two actions that resolve it. A re-read that now matches removes it too.
 
 **Deliberately NOT in it:** verdict `'error'` ("couldn't read it"). That is a re-read, not a money dispute, and it has its own button in the drawer. Folding it in would make the row's words untrue about half its contents.
 
-**Where else it appears (and why that is not a dedup violation):** the Orders list row carries a brick note line on a pending order with a rejected proof. That is not the same fire said twice — it is the *reason* a row in a list the operator is already reading is still pending, which is precisely the information the list was missing. The Needs-you card remains the only place that gathers them.
+**Where else it appears (and why that is not a dedup violation):** the Orders list row carries a brick note line on a pending order with a rejected proof. That is not the same fire said twice — it is the *reason* a row in a list the operator is already reading is still pending, which is precisely the information the list was missing. It is also what makes the door above work: the fire drops you into Pending, and the mark is how you find the order among the others. The Needs-you card remains the only place that gathers them, and the only place that counts them.
 
 ---
 
