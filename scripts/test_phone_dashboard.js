@@ -120,8 +120,21 @@ it('a missing or junk amount is ¥0, never NaN', () => {
 });
 
 it('the two glance surfaces are wired to the rounding one', () => {
-  assert.ok(/夜间营收'\),money0\(CUR,r\.revenue\)/.test(M_HTML), 'the overnight recap');
+  // The recap's own money helper. This used to name the "夜间营收" row, which was
+  // the phone's INVENTED overnight-revenue metric — that card is gone (the Recap
+  // now reads the activity feed since you left, like the desktop's). The rule it
+  // was guarding is unchanged and still worth guarding: every yuan figure the
+  // recap prints goes through money0, so none of them grows a decimal tail.
+  assert.ok(/const m=n=>money0\(CUR,n\);/.test(M_HTML), 'the recap rows');
   assert.ok(/money0\(CUR,rev\), deltaText/.test(M_HTML), 'the Today revenue tile');
+});
+
+it('the recap prints no money any other way', () => {
+  // Belt and braces on the above: inside recapRows, every amount is m(...) —
+  // a bare money() there would put "¥3,271.40" back on the hero.
+  const body = M_HTML.slice(M_HTML.indexOf('function recapRows()'), M_HTML.indexOf('function recapTitle()'));
+  assert.ok(body.length > 200, 'found recapRows');
+  assert.ok(!/[^0]money\(CUR/.test(body), 'recapRows uses only the rounding helper');
 });
 
 // ─────────────────────────────────────────────────────────────────────────

@@ -67,8 +67,6 @@ button,input,textarea{font-family:inherit}
 .hscroll::-webkit-scrollbar{display:none}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important}}
 
-.topbar{flex:none;display:flex;align-items:center;justify-content:space-between;gap:8px;
-  padding:calc(env(safe-area-inset-top,0px) + 16px) 6px 12px 16px;border-bottom:1px solid var(--border-default);background:var(--bg)}
 .content{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;background:var(--bg)}
 .tabbar{flex:none;display:flex;background:var(--surface-card);border-top:1px solid var(--border-default);
   padding:8px 4px calc(env(safe-area-inset-bottom,0px) + 12px)}
@@ -870,7 +868,7 @@ function screenHome(){
   const dateLine = LANG==='en'
     ? today.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})
     : (today.getMonth()+1)+'月'+today.getDate()+'日 周'+'日一二三四五六'[today.getDay()];
-  return `${pageHead({title:T(...GREET[greetKey()]), status:dateLine})}
+  return `${pageHead({title:T(...GREET[greetKey()]), status:dateLine, controls:true})}
   <div style="padding:0 16px 24px;display:flex;flex-direction:column;gap:16px">
     ${recapCard()}
     ${fires&&fires.length?`<div class="rise" style="animation-delay:.06s">
@@ -992,7 +990,7 @@ function ordSkeleton(){
 }
 function screenOrders(){
   const os=ordersFiltered();
-  return `${pageHead({title:T('Orders','订单'), status:ordersStatusLine()})}
+  return `${pageHead({title:T('Orders','订单'), status:ordersStatusLine(), controls:true})}
   ${ordersHeader()}
   <div style="padding:0 16px 24px;display:flex;flex-direction:column;gap:16px">
     ${state.ordersLoading&&!os.length?`${ordSkeleton()}${ordSkeleton()}${ordSkeleton()}${ordSkeleton()}`:''}
@@ -1184,7 +1182,14 @@ function setupState(){
 }
 function screenMore(){
   const su=setupState();
-  return `<div style="padding:16px 0 8px">
+  return `<div style="padding:4px 0 8px">
+    <div style="padding:0 16px 14px">
+      <button class="card" onclick="APP.cmd('overflow')" style="display:flex;align-items:center;gap:14px;width:100%;padding:14px 16px;cursor:pointer;text-align:left;font-family:inherit;color:var(--text-primary)">
+        <span style="width:38px;height:38px;flex:none;border-radius:10px;background:var(--dusk-tint);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:500">${(state.storeName||'').trim().charAt(0).toUpperCase()||ic('user',20)}</span>
+        <span style="flex:1;min-width:0">
+          <span style="display:block;font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${state.storeName||T('Your store','你的店铺')}</span>
+          <span style="display:block;font-size:13px;color:var(--text-secondary);margin-top:2px">${T('Account, language, theme, sign out','账户、语言、主题、退出')}</span></span>
+        <span style="color:var(--text-secondary);display:flex;flex:none">${ic('chevron-right')}</span></button></div>
     <div style="padding:0 16px 6px"><div class="card" style="padding:16px">
       <button onclick="APP.cmd('push','setup')" style="display:flex;align-items:center;gap:14px;width:100%;background:transparent;border:none;cursor:pointer;text-align:left;padding:0;font-family:inherit">
         <span style="width:38px;height:38px;border-radius:10px;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;color:var(--accent);flex:none">${ic('compass',22)}</span>
@@ -1562,8 +1567,8 @@ const SUBS={
   mirror_gzgrocery:{title:['gzgrocery','gzgrocery'],render:()=>mirrorScreen('gzgrocery',T('Read-only ERP mirror.','只读 ERP 镜像。'))},
 };
 /* Inbox and Sales left the bottom nav when Customers and Products took their
-   places. Both keep every screen they had; the inbox also has a topbar control,
-   so it is never more than one tap away. */
+   places. Both keep every screen they had; the inbox also rides every top-level
+   page header, so it is never more than one tap away. */
 SUBS.inbox={title:['Inbox','消息'],render:()=>screenInbox()};
 SUBS.sales={title:['Sales','销售'],render:()=>screenSales()};
 
@@ -2703,7 +2708,7 @@ function screenCustomers(){
   const pulse=custPulse();
   const chans=[{key:'all',en:'All channels',zh:'全部渠道'},{key:'wechat',en:'Mini app',zh:'小程序'},
     {key:'web',en:'Web',zh:'网页'},{key:'manual',en:'Added by staff',zh:'员工添加'}];
-  return `${pageHead({title:T('Customers','顾客')})}
+  return `${pageHead({title:T('Customers','顾客'), controls:true})}
     ${pulse?`<p class="num" style="margin:-8px 0 16px;padding:0 16px;font-size:13px;color:var(--text-secondary)">${pulse}</p>`:''}
     <div style="padding:0 16px 12px"><input id="mCustQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.custQ)}"
       placeholder="${T('Search name or phone','搜索姓名或手机')}" style="width:100%"
@@ -2852,16 +2857,17 @@ function screenProducts(){
         ${T(...label)}${on?`<span style="position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--text-primary)"></span>`:''}</button>`;}).join('')}
   </div>`;
   const sub=PROD_VIEWS.find(x=>x[0]===v)[2];
-  return `${pageHead({title:T('Products','产品')})}${strip}${SUBS[sub].render()}`;
+  return `${pageHead({title:T('Products','产品'), controls:true})}${strip}${SUBS[sub].render()}`;
 }
 
 /* ==========================================================================
    Shell chrome + master render
    ========================================================================== */
 /* Five destinations, matching the desktop shell's bottom nav. Inbox and Sales
-   moved into More (the inbox also has a topbar control, so it is never more than
-   one tap away). There is no drill-down here: a five-item bar and a fourteen-row
-   rail are different problems, and More stays one flat, grouped list. */
+   moved into More (the inbox also rides every top-level page header, so it is
+   never more than one tap away). There is no drill-down here: a five-item bar
+   and a fourteen-row rail are different problems, and More stays one flat,
+   grouped list. */
 const TAB_META={home:{en:'Home',zh:'概览',icon:'house'},orders:{en:'Orders',zh:'订单',icon:'package'},
   customers:{en:'Customers',zh:'顾客',icon:'users'},products:{en:'Products',zh:'产品',icon:'shopping-bag'},
   more:{en:'More',zh:'更多',icon:'menu'}};
@@ -2871,38 +2877,39 @@ const TAB_META={home:{en:'Home',zh:'概览',icon:'house'},orders:{en:'Orders',zh
 function unseenOrders(){ return DB.orders.some(o=>o.isNew); }
 function unseenReviews(){ return DB.reviews.filter(r=>!state.reviewsSeen.has(revKey(r))).length; }
 function tabDot(k){ return k==='orders' ? unseenOrders() : k==='more' ? unseenReviews()>0 : false; }
-/* The bar is the same on every screen and CLOSED to page controls: nothing here
-   names the page and no page adds a button to it. Identity lives in the page,
-   which is why every screen below owns a real header. Zero Dusk — chrome that
-   appears on every page cannot spend a page's Dusk before the page loads. */
-function topbar(){
-  const unseen=unseenReviews();
-  return `<div class="topbar">
-    <span style="display:flex;align-items:center;gap:8px;flex:none;padding:2px 0">${WAVE(58)}</span>
-    <span style="flex:1"></span>
-    <button class="iconbtn" onclick="APP.cmd('openSearch')" aria-label="${T('Search','搜索')}">${ic('search')}</button>
-    <span style="position:relative;display:flex;flex:none">
-      <button class="iconbtn" onclick="APP.cmd('push','inbox')" aria-label="${T('Inbox','消息')}">${ic('message-square-text')}</button>
-      ${unseen?`<span style="position:absolute;top:9px;right:9px;width:6px;height:6px;border-radius:50%;background:var(--sage);box-shadow:0 0 0 2px var(--surface-card)"></span>`:''}
-    </span>
-    <button onclick="APP.cmd('overflow')" aria-label="${T('Account','账户')}" style="width:44px;height:44px;flex:none;display:flex;align-items:center;justify-content:center;border:none;background:transparent;cursor:pointer;padding:0">
-      <span style="width:32px;height:32px;border-radius:8px;background:var(--dusk-tint);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500">${(state.storeName||'').trim().charAt(0).toUpperCase()||ic('user',18)}</span>
-    </button>
-  </div>`;
-}
-
+/* Unseen is one 6px Sage dot — never a count, never red. A count in the chrome
+   turns arriving work into an alarm, and a record arriving is the CUSTOMER
+   acting, not the system: it does not earn Dusk either. */
 /* The §1.7 page header, on a phone: title · status line · one Dusk CTA — and,
    on a pushed screen, the back link that replaces the eyebrow by stating where
    you came from. Three elements. There is no fourth. */
-function pageHead({title, status, cta, back}){
-  return `<div style="padding:${back?'12px':'24px'} 16px 16px">
+/* Search and the inbox used to ride a fixed bar above every screen. That bar
+   cost 72px of glass on every page and repeated the page's own name underneath
+   itself; the two controls in it are the only things it carried that a page
+   could not. So they moved into the header row, and the bar is gone: one header
+   per screen, nothing pinned, and a long list gets the whole screen when it
+   scrolls. The account went with it into More, where every other setting is.
+   Only a TOP-LEVEL screen carries them — a pushed screen has its back link and
+   is one tap from the tab that does. */
+function headControls(){
+  const unseen=unseenReviews();
+  return `<span style="display:flex;flex:none;margin:-4px -6px 0 0">
+    <button class="iconbtn" style="width:38px;height:38px" onclick="APP.cmd('openSearch')" aria-label="${T('Search','搜索')}">${ic('search')}</button>
+    <span style="position:relative;display:flex;flex:none">
+      <button class="iconbtn" style="width:38px;height:38px" onclick="APP.cmd('push','inbox')" aria-label="${T('Inbox','消息')}">${ic('message-square-text')}</button>
+      ${unseen?`<span style="position:absolute;top:6px;right:6px;width:6px;height:6px;border-radius:50%;background:var(--sage);box-shadow:0 0 0 2px var(--bg)"></span>`:''}
+    </span></span>`;
+}
+function pageHead({title, status, cta, back, controls}){
+  return `<div style="padding:calc(env(safe-area-inset-top,0px) + ${back?'10px':'20px'}) 16px 14px">
     ${back?`<button onclick="APP.cmd('back')" style="display:flex;align-items:center;gap:6px;margin:0 0 8px -4px;padding:8px 4px;background:none;border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--text-secondary)">${ic('chevron-left',16,2)}${back}</button>`:''}
-    <div style="display:flex;align-items:flex-start;gap:16px">
+    <div style="display:flex;align-items:flex-start;gap:12px">
       <div style="flex:1;min-width:0">
         <h1 style="margin:0;font-size:24px;font-weight:500;letter-spacing:-.01em;line-height:1.25">${title}</h1>
         ${status?`<p class="num" style="margin:4px 0 0;font-size:15px;color:var(--text-secondary)">${status}</p>`:''}
       </div>
       ${cta||''}
+      ${controls?headControls():''}
     </div>
   </div>`;
 }
@@ -2924,11 +2931,11 @@ function bodyHtml(){
     case 'orders': return screenOrders();
     case 'customers': return screenCustomers();
     case 'products': return screenProducts();
-    case 'more': return pageHead({title:T('More','更多')}) + screenMore();
+    case 'more': return pageHead({title:T('More','更多'), controls:true}) + screenMore();
   }
 }
 function render(){
-  let html = topbar() + `<div class="content" id="content">${bodyHtml()}</div>` + tabbar();
+  let html = `<div class="content" id="content">${bodyHtml()}</div>` + tabbar();
   if(state.overflow) html += sheetOverflow();
   if(state.ask) html += sheetAsk();
   if(state.custId) html += sheetCustomer();

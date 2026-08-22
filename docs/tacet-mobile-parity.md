@@ -279,6 +279,12 @@ columns of fact. Reported from production, then swept column by column.
 | Reservations table | ➖ |
 | Edit ship-to / make address Chinese | ➖ decided: desktop |
 
+### The shell
+
+| Desktop | Phone |
+|---|---|
+| Fixed rail + topbar | ✅ five-tab bar at the bottom; **no top bar** — search and the inbox ride the page header, the account lives in More. 79 px of glass returned on every screen |
+
 ## 4. Open questions
 
 Not gaps — decisions that are the shop's to make, not this file's.
