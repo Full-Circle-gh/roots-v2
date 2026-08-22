@@ -61,7 +61,7 @@ const actRow = (name, meta, delta, auto, first) => `
           <span class="cap" style="display:block">${meta}</span>
         </span>
         ${auto ? `<span class="pill" style="background:var(--td-dusk-tint);color:var(--td-dusk);gap:8px"><span class="dusk-dot"></span>Automatic</span>` : ''}
-        <span class="num" style="flex:none;font-size:15px;font-weight:500">${delta}</span>
+        ${delta ? `<span class="num" style="flex:none;font-size:15px;font-weight:500">${delta}</span>` : ''}
       </div>`;
 
 writeFileSync(join(OUT, 'StockActivity.dc.html'), doc('Stock activity', `
@@ -73,7 +73,7 @@ writeFileSync(join(OUT, 'StockActivity.dc.html'), doc('Stock activity', `
     <section style="flex:none">
       <h2 class="sec-title" style="margin-bottom:0">Today</h2>
       ${actRow('Organic carrots 500g', 'Order RT-…047 · sold', '−4', false, true)}
-      ${actRow('Mixed nuts 250g', 'Flagged out of stock', '0', true)}
+      ${actRow('Mixed nuts 250g', 'Flagged out of stock', '', true)}
       ${actRow('Oat milk 1L', 'PO-…08 received · Tianhe', '+48')}
       ${actRow('Sourdough loaf', 'Order RT-…046 · sold', '−2')}
     </section>
