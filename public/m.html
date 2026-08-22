@@ -279,6 +279,9 @@ const state = {
   printer:null, printerLoading:false, printerBusy:false, printerErr:null,
   prodStores:null, prodStockReady:false, prodBusy:false, prodErr:null,
   cfg:null, setup:null, zones:null, mirror:null, mirrorLoading:null, mirrorMode:null,
+  couponBusy:null, couponErr:null, bcBusy:null, bcErr:null, ask:null,
+  media:null, mediaLoading:false, mediaTried:false,
+  fapiao:null, fapiaoLoading:false, fapiaoBusy:false, fapiaoTried:false, printerTried:false,
   ordersView:null, ordersTotal:null, ordersLoading:false, ordersMore:false,
   storeF:'all', stores:null, orderQ:'',
   reply:null, createKind:null, createValue:10, createActive:true,
@@ -330,6 +333,8 @@ reg('openOrder', id=>{ state.detailId=id; state.drag=0; render(); });
 reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; state.orderErr=null; state.orderBusy=null; render(); });
 reg('detailActions', ()=>{ state.detailActions=true; render(); });
 reg('closeActions', ()=>{ state.detailActions=false; render(); });
+reg('closeAsk', ()=>{ state.ask=null; render(); });
+reg('askRun', key=>{ const a=state.ask; state.ask=null; render(); if(a&&a.run) a.run(key); });
 /* The one forward step the status machine allows from where this order is. */
 reg('advance', to=>{
   const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
@@ -348,6 +353,50 @@ reg('undoDispatch', ()=>{
     return T('Back to preparing','已退回备货中');
   });
 });
+/* Off-app payment records WHICH tender it was — that is the whole reason this
+   was desktop-only. The phone can ask, so now it can do it. */
+const PAY_METHODS=[['cash','Cash','现金'],['bank_transfer','Bank transfer','银行转账'],
+  ['wechat_offline','WeChat (off app)','微信（线下）'],['alipay_offline','Alipay (off app)','支付宝（线下）'],['other','Other','其他']];
+reg('markPaid', ()=>{
+  const o=currentOrder(); if(!o||o._id==null) return;
+  state.ask={title:T('How was this paid?','这笔款是怎么收的？'),
+    body:T('Recording the tender keeps the day\u2019s takings split correctly.','记录收款方式，账目才分得清。'),
+    options:PAY_METHODS.map(([k,en,zh])=>({key:k,label:T(en,zh)})),
+    run:(method)=>{ if(!method) return; orderWrite('advance', async()=>{
+      await apiWrite('/orders/'+o._id+'/status',{status:'paid',pay_method:method},'PATCH');
+      return T('Marked paid','已标记付款'); }); }};
+  render();
+});
+reg('approveRefund', ()=>{
+  const o=currentOrder(); state.detailActions=false; if(!o||o._id==null){ render(); return; }
+  state.ask={title:T('Approve this refund?','通过这笔退款？'),
+    body:T('Approving accepts what the customer asked for. The money does not move until you pay it out.','通过即接受顾客申请的金额。款项在你发起打款前不会退出。'),
+    confirmLabel:T('Approve','通过'),
+    run:()=>orderWrite('refund', async()=>{ await apiWrite('/orders/'+o._id+'/refund/approve',{}); return T('Refund approved','退款已通过'); })};
+  render();
+});
+reg('rejectRefund', ()=>{
+  const o=currentOrder(); state.detailActions=false; if(!o||o._id==null){ render(); return; }
+  state.ask={title:T('Reject this refund?','拒绝这笔退款？'),
+    body:T('The customer is told it was declined. You can still refund the order later.','顾客会收到未通过的通知。之后仍可退款。'),
+    confirmLabel:T('Reject','拒绝'), danger:true,
+    run:()=>orderWrite('refund', async()=>{ await apiWrite('/orders/'+o._id+'/refund/reject',{}); return T('Refund rejected','已拒绝'); })};
+  render();
+});
+reg('payRefund', ()=>{
+  const o=currentOrder(); state.detailActions=false; if(!o||o._id==null){ render(); return; }
+  state.ask={title:T('Send the money back how?','以什么方式退款？'),
+    body:T('This moves money. Pick the way it actually goes back to the customer.','这会真实退款。请选择实际退回的方式。'),
+    options:[['wechat','WeChat','微信'],['alipay','Alipay','支付宝'],['bank','Bank transfer','银行转账'],
+      ['cash','Cash','现金'],['wallet','Store wallet','店铺钱包'],['other','Other','其他']].map(([k,en,zh])=>({key:k,label:T(en,zh)})),
+    run:(method)=>{ if(!method) return; orderWrite('refund', async()=>{
+      await apiWrite('/orders/'+o._id+'/refund/payout',{method});
+      return T('Refund paid','退款已打出'); }); }};
+  render();
+});
+function currentOrder(){
+  return (state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+}
 /* The printer can succeed as a request and fail as a print — the endpoint says
    so with ok:false, and so does this. */
 reg('printOrder', ()=>{
@@ -421,7 +470,10 @@ reg('createValInc', ()=>{ state.createValue++; render(); });
 reg('createValDec', ()=>{ state.createValue=Math.max(0,state.createValue-1); render(); });
 reg('toggleCreateActive', ()=>{ state.createActive=!state.createActive; render(); });
 reg('sw', k=>{ state.sw[k]=!state.sw[k]; render(); });
+reg('toggleCoupon', code=>toggleCoupon(code));
+reg('recallBroadcast', id=>recallBroadcast(Number(id)));
 reg('togglePrint', ()=>togglePrint());
+reg('toggleFapiao', ()=>toggleFapiao());
 reg('qsInc', n=>{ state.qs[n]=(state.qs[n]||0)+1; render(); });
 reg('qsDec', n=>{ state.qs[n]=Math.max(0,(state.qs[n]||0)-1); render(); });
 reg('saveStock', ()=>showToast(T('Stock received','已入库')));
@@ -763,12 +815,16 @@ function settingsGroupCard(rows){
       ? (state.printer
           ? toggle(!!state.printer.auto_print,"APP.cmd('togglePrint')")
           : `<span style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span>`)
+      : r.fapiao
+      ? (state.fapiao
+          ? toggle(!!state.fapiao.autoIssue,"APP.cmd('toggleFapiao')")
+          : `<span style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span>`)
       : r.tgl ? toggle(state.sw[r.tgl],`APP.cmd('sw','${r.tgl}')`)
       : `<span style="font-size:15px;color:var(--text-secondary);white-space:nowrap">${r.value}</span>`;
   return `<div class="list">${rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
     <div style="display:flex;align-items:center;gap:16px;padding:12px 16px;min-height:56px"><span style="flex:1;min-width:0;font-size:15px">${r.label}</span>
     ${ctl(r)}</div>`).join('')}
-    ${state.printerErr&&rows.some(r=>r.printer)?`<div style="padding:12px 16px;font-size:13px;color:var(--brick);background:var(--brick-tint)">${state.printerErr}</div>`:''}</div>`;
+    ${state.printerErr&&rows.some(r=>r.printer||r.fapiao)?`<div style="padding:12px 16px;font-size:13px;color:var(--brick);background:var(--brick-tint)">${state.printerErr}</div>`:''}</div>`;
 }
 let sheetStep={};
 const SUBS={
@@ -827,7 +883,7 @@ const SUBS={
       <span style="font-size:12px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...a.meta)}</span></span>
       <span class="num" style="font-size:15px;font-weight:500;color:var(--text-secondary);flex:none">${a.delta}</span></div>`).join('')}</div></div>`},
   delivery:{title:['Delivery','配送'],render:()=>{
-    if(!state.printer&&!state.printerLoading) loadPrinter();
+    if(!state.printer&&!state.printerTried) loadPrinter();
     return `<div style="padding:16px;display:flex;flex-direction:column;gap:14px">
     ${settingsGroupCard([
       {label:T('Auto-print receipts','自动打印小票'),printer:true},
@@ -850,20 +906,42 @@ const SUBS={
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
           <span style="display:flex;align-items:center;gap:9px;min-width:0">${pill(v.kind,T(...v.status))}<span class="num" style="font-size:12px;color:var(--text-secondary)">${T(...v.date)}</span></span>
           <button onclick="APP.cmd('noop')" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 12px;cursor:pointer;font-family:inherit;flex:none">${ic('download',15)} ${T('Download','下载')}</button></div></div>`).join('')}</div></div>`},
-  coupons:{title:['Coupons','优惠券'],render:()=>`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:10px">
-    <button class="cta" onclick="APP.cmd('create','coupon')">${T('New coupon','新建优惠券')}</button>
-    ${DB.coupons.map(c=>{const k='c_'+c.code;return `<div style="display:flex;align-items:center;gap:12px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:14px">
+  coupons:{title:['Coupons','优惠券'],render:()=>{
+    const list=DB.coupons||[];
+    if(!list.length) return nothingYet(T('No coupons','没有优惠券'),T('Coupons are written on desktop. Live ones show here, and can be paused from here.','优惠券在电脑端创建。生效中的会显示在这里，可在此暂停。'));
+    return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    ${state.couponErr?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick)">${state.couponErr}</div>`:''}
+    ${list.map(c=>`<div style="display:flex;align-items:center;gap:16px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:16px">
       <span style="flex:1;min-width:0"><span style="display:block;font-size:15px;font-weight:500">${T(...c.title)}</span>
-      <span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary);margin-top:2px">${c.code} · ${T(...c.meta)}</span></span>
-      ${toggle(state.sw[k],`APP.cmd('sw','${k}')`)}</div>`}).join('')}</div>`},
-  flash:{title:['Flash sales','秒杀'],render:()=>`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:10px">
-    <button class="cta" onclick="APP.cmd('create','flash')">${T('New flash sale','新建秒杀')}</button>
-    ${DB.flash.map(f=>`<div class="card" style="padding:14px"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px"><span style="font-size:15px;font-weight:500">${T(...f.title)}</span>${pill(f.kind,T(...f.status))}</div>
-      <div class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:6px">${T(...f.win)}</div></div>`).join('')}</div>`},
-  broadcasts:{title:['Broadcasts','广播'],render:()=>`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:10px">
-    <button class="cta" onclick="APP.cmd('create','broadcast')">${T('New broadcast','新建广播')}</button>
-    ${DB.broadcasts.map(b=>`<div class="card" style="padding:14px"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px"><span style="font-size:15px;font-weight:500;min-width:0">${T(...b.title)}</span>${pill(b.kind,T(...b.status))}</div>
-      <div class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:6px">${T(...b.meta)}</div></div>`).join('')}</div>`},
+      <span class="num" style="display:block;font-size:13px;color:var(--text-secondary);margin-top:2px">${c.code} · ${T(...c.meta)}</span></span>
+      ${c.id==null?`<span style="font-size:13px;color:var(--text-secondary)">${c.on?T('On','已启用'):T('Off','已关闭')}</span>`
+        :(state.couponBusy===c.code?`<span style="font-size:13px;color:var(--text-secondary)">${T('Saving…','保存中…')}</span>`
+        :toggle(!!c.on,`APP.cmd('toggleCoupon','${c.code}')`))}</div>`).join('')}
+    ${desktopNote()}</div>`;
+  }},
+  flash:{title:['Flash sales','秒杀'],render:()=>{
+    const list=DB.flash||[];
+    if(!list.length) return nothingYet(T('No flash sales','没有秒杀'),T('Flash sales are built on desktop. Running and upcoming ones show here.','秒杀在电脑端创建。进行中与即将开始的会显示在这里。'));
+    return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    ${list.map(f=>`<div class="card" style="padding:16px"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px"><span style="font-size:15px;font-weight:500">${T(...f.title)}</span>${pill(f.kind,T(...f.status))}</div>
+      <div class="num" style="font-size:13px;color:var(--text-secondary);margin-top:8px">${T(...f.win)}</div></div>`).join('')}
+    ${desktopNote()}</div>`;
+  }},
+  broadcasts:{title:['Broadcasts','广播'],render:()=>{
+    const list=DB.broadcasts||[];
+    if(!list.length) return nothingYet(T('No broadcasts','没有广播'),T('Broadcasts are written and sent from desktop. Anything scheduled can be stopped from here.','广播在电脑端撰写与发送。已排期的可在此取消。'));
+    return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    ${state.bcErr?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick)">${state.bcErr}</div>`:''}
+    ${list.map(b=>`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+        <span style="font-size:15px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...b.title)}</span>
+        ${pill(b.kind,T(...b.status))}</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+        <span class="num" style="font-size:13px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...b.meta)}</span>
+        ${b.st==='scheduled'&&b.id!=null?`<button class="btn2" style="min-height:44px;padding:0 16px;font-size:13px;flex:none" ${state.bcBusy===b.id?'disabled':''} onclick="APP.cmd('recallBroadcast','${b.id}')">${state.bcBusy===b.id?T('Stopping…','取消中…'):T('Cancel send','取消发送')}</button>`:''}</div>
+    </div>`).join('')}
+    ${desktopNote()}</div>`;
+  }},
   sharecards:{title:['Share cards','分享卡片'],render:()=>nothingYet(T('Made on desktop','在电脑端制作'),
     T('Share cards are designed and generated in the admin on a big screen. The counts that used to sit here were never real.','分享卡片在电脑端设计与生成。此前这里显示的数据并非真实数据。')),
   },
@@ -941,9 +1019,18 @@ const SUBS={
         ${c.founder_quote_en?`<div style="font-size:15px;color:var(--text-secondary);line-height:1.6;margin-top:8px">${pick('founder_quote_en','founder_quote_cn')}</div>`:''}</div>`:''}
       ${desktopNote()}</div>`;
   }},
-  media:{title:['Media','媒体库'],render:()=>`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
-    <button class="cta" style="display:flex;align-items:center;justify-content:center;gap:8px" onclick="APP.cmd('noop')">${ic('camera')} ${T('Add photo','添加图片')}</button>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">${Array.from({length:9},(_,i)=>`<div style="aspect-ratio:1;border-radius:12px;background:var(--surface-raised);border:1px solid var(--border-default);display:flex;align-items:flex-end;padding:8px"><span style="font-size:10.5px;color:var(--text-secondary)">IMG_${1000+i}</span></div>`).join('')}</div>${desktopNote()}</div>`},
+  media:{title:['Media','媒体库'],render:()=>{
+    if(!state.media){ if(!state.mediaTried) loadMedia(); return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`; }
+    if(!state.media.rows.length) return nothingYet(T('Nothing in the library','媒体库是空的'),
+      T('Photos you upload on desktop appear here, ready to use in the mini app.','在电脑端上传的图片会出现在这里，可用于小程序。'));
+    return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+      <div class="num" style="font-size:13px;color:var(--text-secondary)">${T(state.media.total+' images','共 '+state.media.total+' 张')}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">${state.media.rows.map(m=>`
+        <div style="aspect-ratio:1;border-radius:8px;overflow:hidden;background:var(--surface-raised);border:1px solid var(--border-default)">
+          <img loading="lazy" src="/api/retail/media/${m.id}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">
+        </div>`).join('')}</div>
+      ${desktopNote()}</div>`;
+  }},
   legal:{title:['Legal pages','法律条款'],render:()=>{
     // Both documents live in storefront_config; the dates are theirs, not a
     // pair of numbers typed into a mockup.
@@ -985,17 +1072,19 @@ const SUBS={
         ${state.faqOpen===i?`<span style="font-size:15px;line-height:1.6;color:var(--text-secondary)">${T(...f.a)}</span>`:''}</button>`).join('')}</div>
       <div style="padding:16px 0 0">${desktopNote()}</div></div>`;
   }},
-  quickstock:{title:['Quick stock','快速盘点'],render:()=>{const rows=[['carrot',['Organic carrots','有机胡萝卜'],'SKU 10231'],['oat',['Oat milk 1L','燕麦奶 1L'],'SKU 10188'],['nuts',['Mixed nuts','混合坚果'],'SKU 10450']];
-    return `<div style="padding:16px;display:flex;flex-direction:column;gap:12px">${rows.map(([k,nm,sku])=>`<div style="display:flex;align-items:center;gap:12px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:14px">
-      <span style="flex:1;min-width:0"><span style="display:block;font-size:15px;font-weight:500">${T(...nm)}</span><span class="num" style="display:block;font-size:12px;color:var(--text-secondary);margin-top:2px">${sku}</span></span>
-      <button class="stepbtn" style="width:38px;height:38px" onclick="APP.cmd('qsDec','${k}')">${ic('minus',18,2.25)}</button>
-      <span class="num" style="min-width:38px;text-align:center;font-size:18px;font-weight:500;flex:none">${state.qs[k]}</span>
-      <button class="stepbtn" style="width:38px;height:38px" onclick="APP.cmd('qsInc','${k}')">${ic('plus',18,2.25)}</button></div>`).join('')}
-    <button class="cta" onclick="APP.cmd('saveStock')">${T('Save stock','保存库存')}</button>
-    <div style="text-align:center;font-size:12.5px;color:var(--text-secondary)">${T('Adjusts on-hand stock across channels.','将同步各渠道现有库存。')}</div></div>`}},
-  operations:{title:['Operations','运营'],render:()=>`<div style="padding:16px;display:flex;flex-direction:column;gap:14px">
-    ${settingsGroupCard([{label:T('Auto-print receipts','自动打印小票'),tgl:'autoprint'},{label:T('Auto-route orders','自动派单'),tgl:'autoroute'},{label:T('Low-stock auto-pause','低库存自动暂停'),tgl:'lowstock'},{label:T('Fapiao auto-issue','发票自动开具'),tgl:'fapiao'}])}
-    <div style="text-align:center;font-size:12.5px;color:var(--text-secondary)">${T('Deeper config on desktop','更多设置见电脑端')}</div></div>`},
+  quickstock:{title:['Quick stock','快速盘点'],render:()=>nothingYet(T('Counted in Products','在产品页盘点'),
+    T('Open a product and set the count for each store — it writes straight to that shelf. The three-item list that used to live here counted nothing.','打开某个产品即可按门店修改库存，直接写入。此前这里的列表并不会保存。')),
+  },
+  operations:{title:['Operations','运营'],render:()=>{
+    if(!state.printer&&!state.printerTried) loadPrinter();
+    if(!state.fapiao&&!state.fapiaoTried) loadFapiao();
+    return `<div style="padding:16px;display:flex;flex-direction:column;gap:16px">
+    ${settingsGroupCard([
+      {label:T('Auto-print receipts','自动打印小票'),printer:true},
+      {label:T('Fapiao auto-issue','发票自动开具'),fapiao:true},
+    ])}
+    <div style="text-align:center;font-size:13px;color:var(--text-secondary)">${T('Deeper config on desktop','更多设置见电脑端')}</div></div>`;
+  }},
   settings:{title:['Settings','设置'],render:()=>screenSettings()},
   mirror_meituan:{title:['Meituan','美团'],render:()=>mirrorScreen('meituan',T('Read-only mirror. Manage in the Meituan app.','只读镜像，请在美团后台管理。'))},
   mirror_gzgrocery:{title:['gzgrocery','gzgrocery'],render:()=>mirrorScreen('gzgrocery',T('Read-only ERP mirror.','只读 ERP 镜像。'))},
@@ -1006,6 +1095,40 @@ const SUBS={
 SUBS.inbox={title:['Inbox','消息'],render:()=>screenInbox()};
 SUBS.sales={title:['Sales','销售'],render:()=>screenSales()};
 
+/* Pausing a coupon is the one marketing action a phone should have: it is a
+   single field on a single record, and it is what an operator reaches for when
+   a code is being abused. Creating one is authoring, and stays on the desktop. */
+function toggleCoupon(code){
+  const c=(DB.coupons||[]).find(x=>x.code===code);
+  if(!c||c.id==null||state.couponBusy) return;
+  const next=!c.on;
+  state.couponBusy=code; state.couponErr=null; render();
+  apiWrite('/vouchers/'+c.id,{is_active:next},'PATCH').then(()=>{
+    c.on=next; state.sw['c_'+code]=next; state.couponBusy=null; render();
+    showToast(next?T('Coupon on','已启用'):T('Coupon paused','已暂停'));
+  }).catch(e=>{
+    state.couponBusy=null;
+    if(String(e.message)==='auth') return;
+    state.couponErr=T('That did not save. The coupon is unchanged.','没有保存成功。优惠券没有变化。'); render();
+  });
+}
+/* A scheduled broadcast can still be stopped; a sent one cannot. The server is
+   the judge — it refuses anything already on its way out. */
+function recallBroadcast(id){
+  const b=(DB.broadcasts||[]).find(x=>x.id===id);
+  if(!b||state.bcBusy) return;
+  state.bcBusy=id; state.bcErr=null; render();
+  apiWrite('/broadcasts/'+id+'/recall',{}).then(r=>{
+    const st=(r&&r.data&&r.data.status)||'cancelled';
+    b.st=st; b.status=st==='cancelled'?['Cancelled','已取消']:['Sent','已发送']; b.kind=st==='cancelled'?'off':'delivered';
+    state.bcBusy=null; render();
+    showToast(st==='cancelled'?T('Send cancelled','已取消发送'):T('It had already gone out','已经发送完成'));
+  }).catch(e=>{
+    state.bcBusy=null;
+    if(String(e.message)==='auth') return;
+    state.bcErr=T('That did not go through. Nothing has changed.','没有成功。数据没有变化。'); render();
+  });
+}
 async function loadMirror(which){
   if(state.mirrorLoading===which) return;
   state.mirrorLoading=which; state.mirror=state.mirror||{}; render();
@@ -1069,7 +1192,7 @@ function screenSettings(){
       : r.tgl==='__live'?toggle(state.live,"APP.cmd('toggleLive')")
       : r.tgl==='__sound'?toggle(state.sound,"APP.cmd('toggleSound')")
       : toggle(state.sw[r.tgl],`APP.cmd('sw','${r.tgl}')`);
-  if(!state.printer&&!state.printerLoading) loadPrinter();
+  if(!state.printer&&!state.printerTried) loadPrinter();
   return `<div style="padding:16px 16px 28px;display:flex;flex-direction:column;gap:18px">
     <button onclick="APP.cmd('noop')" style="display:flex;align-items:center;gap:14px;width:100%;text-align:left;cursor:pointer;background:var(--surface-raised);border:none;border-radius:14px;padding:16px;font-family:inherit">
       <span style="width:46px;height:46px;border-radius:12px;background:var(--surface-card);display:flex;align-items:center;justify-content:center;flex:none;font-size:18px;font-weight:500;color:var(--text-primary)">${(state.storeName||T('Your store','你的店铺')).trim().charAt(0)}</span>
@@ -1191,8 +1314,35 @@ async function saveProductEdits(){
     render();
   }
 }
+async function loadMedia(){
+  if(state.mediaLoading||state.mediaTried) return; state.mediaLoading=true; state.mediaTried=true;
+  try{ const d=await api('/media/list?limit=30');
+    state.media={rows:(d&&d.rows)||[], total:(d&&d.total)||0};
+  }catch(e){ state.media={rows:[],total:0}; }
+  state.mediaLoading=false; render();
+}
+/* Fapiao auto-issue is a real preference with a real endpoint, same shape as
+   the printer's: read it before showing a switch that claims to know its state. */
+async function loadFapiao(){
+  if(state.fapiaoLoading||state.fapiaoTried) return; state.fapiaoLoading=true; state.fapiaoTried=true;
+  try{ state.fapiao=await api('/fapiao-settings'); }catch(e){}
+  state.fapiaoLoading=false; render();
+}
+function toggleFapiao(){
+  if(!state.fapiao||state.fapiaoBusy) return;
+  const next=!state.fapiao.autoIssue;
+  state.fapiaoBusy=true; state.printerErr=null; render();
+  apiWrite('/fapiao-settings',{autoIssue:next},'PUT').then(()=>{
+    state.fapiao.autoIssue=next; state.fapiaoBusy=false; render();
+    showToast(next?T('Auto-issue on','已开启自动开票'):T('Auto-issue off','已关闭自动开票'));
+  }).catch(e=>{
+    state.fapiaoBusy=false;
+    if(String(e.message)==='auth') return;
+    state.printerErr=T('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
+  });
+}
 async function loadPrinter(){
-  if(state.printerLoading) return; state.printerLoading=true;
+  if(state.printerLoading||state.printerTried) return; state.printerLoading=true; state.printerTried=true;
   try{ const p=await api('/printer'); state.printer=p||null; }catch(e){}
   state.printerLoading=false; render();
 }
@@ -1301,16 +1451,42 @@ function orderActionRow(o,isPO){
   const next=orderNext(o);
   const busy=state.orderBusy;
   const undoable=['dispatched','delivered'].includes(o.raw);
+  const refundOpen=['pending','reviewing'].includes(o.refundStatus);
+  const refundApproved=o.refundStatus==='approved';
+  const canPay=o.raw==='pending_payment'&&!o.viewOnly;
   const btns=[];
-  if(next) btns.push(`<button class="btn2" style="flex:1;min-width:0" ${busy?'disabled':''} onclick="APP.cmd('advance','${next.to}')">${busy==='advance'?T(next.busyEn,next.busyZh):T(next.en,next.zh)}</button>`);
+  if(canPay) btns.push(`<button class="btn2" style="flex:1;min-width:0" ${busy?'disabled':''} onclick="APP.cmd('markPaid')">${busy==='advance'?T('Marking…','处理中…'):T('Mark paid','标记已付款')}</button>`);
+  else if(next) btns.push(`<button class="btn2" style="flex:1;min-width:0" ${busy?'disabled':''} onclick="APP.cmd('advance','${next.to}')">${busy==='advance'?T(next.busyEn,next.busyZh):T(next.en,next.zh)}</button>`);
   btns.push(`<button class="btn2" style="${next?'width:44px;padding:0;flex:none':'flex:1;gap:8px'}" ${busy?'disabled':''} onclick="APP.cmd('printOrder')" aria-label="${T('Reprint receipt','重打小票')}">${ic('printer',20)}${next?'':`<span>${busy==='print'?T('Printing…','打印中…'):T('Reprint receipt','重打小票')}</span>`}</button>`);
-  if(undoable) btns.push(`<button class="btn2" style="width:44px;padding:0;flex:none" ${busy?'disabled':''} onclick="APP.cmd('detailActions')" aria-label="${T('More actions','更多操作')}">${ic('ellipsis',20)}</button>`);
+  if(undoable||refundOpen||refundApproved) btns.push(`<button class="btn2" style="width:44px;padding:0;flex:none" ${busy?'disabled':''} onclick="APP.cmd('detailActions')" aria-label="${T('More actions','更多操作')}">${ic('ellipsis',20)}</button>`);
   return `<div style="display:flex;align-items:center;gap:8px;margin-top:12px">${btns.join('')}</div>`;
+}
+function sheetAsk(){
+  const a=state.ask; if(!a) return '';
+  return `<div class="scrim" style="z-index:49" onclick="APP.cmd('closeAsk')"></div>
+   <div class="sheet" style="z-index:50;padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 24px)">
+     <div class="grabber" style="margin-bottom:12px"></div>
+     <div style="padding:0 20px 8px">
+       <div style="font-size:18px;font-weight:500">${a.title}</div>
+       ${a.body?`<div style="font-size:15px;color:var(--text-secondary);margin-top:8px;line-height:1.55">${a.body}</div>`:''}
+     </div>
+     ${a.options
+       ? a.options.map(o=>`<button class="row" style="min-height:56px;padding:12px 20px" onclick="APP.cmd('askRun','${o.key}')"><span style="flex:1;font-size:15px">${o.label}</span></button>`).join('')
+       : `<div style="display:flex;gap:8px;padding:16px 20px 0">
+            <button class="btn2" style="flex:1" onclick="APP.cmd('closeAsk')">${T('Cancel','取消')}</button>
+            <button class="btn2" style="flex:1;${a.danger?'color:var(--brick);border-color:var(--brick)':''}" onclick="APP.cmd('askRun','')">${a.confirmLabel||T('Confirm','确认')}</button>
+          </div>`}
+   </div>`;
 }
 function sheetActions(){
   const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
   const wasDelivered=o&&o.raw==='delivered';
   const acts=[['printer',T('Reprint receipt','重打小票'),"APP.cmd('printOrder')"]];
+  if(o&&['pending','reviewing'].includes(o.refundStatus)){
+    acts.push(['check',T('Approve refund','通过退款'),"APP.cmd('approveRefund')"]);
+    acts.push(['x',T('Reject refund','拒绝退款'),"APP.cmd('rejectRefund')"]);
+  }
+  if(o&&o.refundStatus==='approved') acts.push(['banknote',T('Pay the refund','打出退款'),"APP.cmd('payRefund')"]);
   if(o&&['dispatched','delivered'].includes(o.raw)){
     // Forward-only machine: without this, a mis-tap sits on the queue with only
     // a refund as the way out. The server refuses once a parcel has a waybill,
@@ -1703,6 +1879,7 @@ function bodyHtml(){
 function render(){
   let html = topbar() + `<div class="content" id="content">${bodyHtml()}</div>` + tabbar();
   if(state.overflow) html += sheetOverflow();
+  if(state.ask) html += sheetAsk();
   if(state.custId) html += sheetCustomer();
   if(state.detailId) html += sheetOrderDetail();
   if(state.detailActions) html += sheetActions();
@@ -1897,7 +2074,7 @@ function mapInvoice(r){
 function mapVoucher(r){
   const val=r.type==='percent'?(r.value+'% off'):money(CUR,r.value)+' off';
   const min=r.min_subtotal?(' · min '+money(CUR,r.min_subtotal)):'';
-  return {title:[r.description||val,r.description||val], code:r.code,
+  return {id:r.id, title:[r.description||val,r.description||val], code:r.code,
     meta:['Used '+(r.grant_used_count||r.used_count||0)+min,'已用 '+(r.grant_used_count||r.used_count||0)+min],
     on:!!r.is_active};
 }
@@ -1914,7 +2091,7 @@ function mapBroadcast(r){
   const label=st==='sent'?['Sent','已发送']:st==='scheduled'?['Scheduled','已排期']:['Draft','草稿'];
   const meta=st==='sent'?('Sent to '+(r.recipient_count||0)):(r.scheduled_for?('Scheduled '+r.scheduled_for):'Draft');
   const metaCn=st==='sent'?('发送 '+(r.recipient_count||0)):(r.scheduled_for?('排期 '+r.scheduled_for):'草稿');
-  return {title:[r.title_en||r.title_cn||'—',r.title_cn||r.title_en||'—'], meta:[meta,metaCn], status:label, kind:BC_KIND[st]||'draft'};
+  return {id:r.id, st, title:[r.title_en||r.title_cn||'—',r.title_cn||r.title_en||'—'], meta:[meta,metaCn], status:label, kind:BC_KIND[st]||'draft'};
 }
 function mapFeedback(r){
   const open=r.needs_reply||!r.replied;

@@ -72,6 +72,10 @@ function buildCases(src) {
     'sheet:search': "APP.cmd('openSearch')",
     'sheet:account': "APP.cmd('overflow')",
     'sheet:create': "APP.cmd('create','coupon')",
+    'sheet:mark-paid': "DB.orders[0]._id=1;DB.orders[0].raw='pending_payment';state.liveOrders=DB.orders;APP.cmd('tab','orders');APP.cmd('openOrder',DB.orders[0].id);APP.cmd('markPaid')",
+    'sheet:refund-review': "DB.orders[0]._id=1;DB.orders[0].raw='paid';DB.orders[0].refundStatus='pending';state.liveOrders=DB.orders;APP.cmd('openOrder',DB.orders[0].id);APP.cmd('detailActions')",
+    'sheet:refund-approve': "DB.orders[0]._id=1;DB.orders[0].raw='paid';DB.orders[0].refundStatus='pending';state.liveOrders=DB.orders;APP.cmd('openOrder',DB.orders[0].id);APP.cmd('approveRefund')",
+    'sheet:refund-payout': "DB.orders[0]._id=1;DB.orders[0].raw='paid';DB.orders[0].refundStatus='approved';state.liveOrders=DB.orders;APP.cmd('openOrder',DB.orders[0].id);APP.cmd('payRefund')",
     'theme:dark': "APP.cmd('toggleTheme');APP.cmd('tab','orders')",
     'lang:zh': "APP.cmd('toggleLang');APP.cmd('tab','more')",
   });

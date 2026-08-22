@@ -43,7 +43,12 @@ sent nothing to the server.
 | Receive stock (PO) | purchase-order sheet | toast "Stock received" | **Still fake** — see §3 |
 | Auto-print receipts | settings, delivery | flipped in memory; a reload undid it | **Fixed** — real value from `GET /printer`, written with `PUT /printer` |
 | Auto-route, low-stock pause | settings, delivery | switches for settings that do not exist | **Removed** — routing is behaviour, not a preference; the page says so |
-| Other feature toggles (fapiao, membership, FAQ, coupons active…) | settings, marketing | in-memory only | **Still fake** — each needs its own endpoint mapping, one at a time |
+| Coupon on/off | Coupons | in-memory only | **Fixed** — `PATCH /vouchers/:id {is_active}` |
+| Fapiao auto-issue | Operations | in-memory only | **Fixed** — `GET/PUT /fapiao-settings` |
+| Create coupon / flash sale / broadcast | marketing screens | toast "Created" | **Removed** — authoring belongs on a keyboard; the lists stay, and a scheduled broadcast can now be **cancelled** (`POST /broadcasts/:id/recall`) |
+| Quick stock (3 hardcoded products) | Quick stock | counted nothing | **Removed** — a product's stock is edited per store in Products, for real |
+| Media library (9 fake tiles) | Media | `IMG_1000`…`IMG_1008` | **Fixed** — the real library from `GET /media/list` |
+| Remaining feature toggles (membership, pop-ups, feedback inbox…) | settings | in-memory only | **Still fake** — each needs its real key confirmed |
 | Sign out | account menu | toast "Signed out"; the session stayed open | **Fixed** — `POST /api/backend/logout`, then the login page |
 | Search | topbar | five hardcoded results; the input did nothing | **Fixed** — searches orders server-side (`q=`); the jump list is built from the real nav |
 
@@ -78,8 +83,9 @@ desktop is the right home
 | Undo dispatch / delivery | ✅ (fixed today) |
 | Print receipt | ✅ (fixed today) |
 | Read-only marketplace mirrors carry no actions | ✅ (fixed today) |
-| Mark paid, with the tender recorded | ➖ — a phone that guesses writes "unknown" to the books |
-| Refund (full / partial chooser) + approve/reject a request | ✖ — refunds are a Needs-you fire; an operator on a phone is exactly who gets asked |
+| Mark paid, with the tender recorded | ✅ — the phone asks which tender, so nothing lands as "unknown" |
+| Refund: approve / reject a request, then pay it out | ✅ — approve and payout stay two acts, as on desktop; the payout asks how the money goes back |
+| Refund: partial / line-level amounts | ➖ — approving takes what the customer asked for; editing lines is desktop work |
 | Cancel + refund | ➖ |
 | Edit ship-to address | ✖ — the most common phone-side correction |
 | Tracking number entry / parcel split | ➖ |
@@ -169,8 +175,9 @@ Ordered by what an operator loses today, not by effort.
 | ~~2~~ | ~~Product stock + price quick edit~~ | | **Done** — stock is per store, as it is on the desktop |
 | ~~3~~ | ~~Sign out~~ | | **Done** |
 | ~~4~~ | ~~Auto-print~~ | | **Done**; the rest of the toggles still owed, one endpoint each |
-| 5 | **Refunds: approve / reject a request** | existing refund-review routes | Money. Needs the confirm + the amount, and the desktop's own guards. |
+| ~~5~~ | ~~Refunds: approve / reject / pay out, and Mark paid~~ | | **Done** — each behind a confirm or a tender chooser |
 | ~~6~~ | ~~Orders: store filter, pagination, real search~~ | | **Done** |
+| ~~9~~ | ~~Coupon on/off, fapiao auto-issue, media, the channel mirrors~~ | | **Done** |
 | 7 | **Customer: points, wallet, block** | existing per-customer routes | Each is a small modal on desktop. |
 | 8 | **Staff note, edit ship-to** | existing order routes | Small, and both are corrections an operator makes while standing up. |
 | 9 | **The remaining feature toggles** | one endpoint each | fapiao, membership, FAQ, feedback inbox, pop-ups, coupon active — each needs its real key confirmed before it is wired. |
