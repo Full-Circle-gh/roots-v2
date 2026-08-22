@@ -244,13 +244,6 @@ const DB = {
     {cust:['Zhang Wei','张伟'],rating:'3.0',status:['New','新'],kind:'success',text:['One parcel was late but support handled it well.','一个包裹晚到了，但客服处理得很好。'],time:['Yesterday','昨日']},
   ],
   feedback:[{cust:['Wu Yaqi','吴雅琪'],status:['Open','待处理'],kind:'success',text:['Checkout kept the pickup time from my last order — small bug.','结账沿用了上单的自提时间 — 小问题。'],time:['3h ago','3 小时前']}],
-  salesChannels:[
-    {name:['Mini app','小程序'],icon:'smartphone',status:['Connected','已连接'],kind:'on',metric:['28 orders · ¥7,120','28 单 · ¥7,120'],action:['Manage','管理']},
-    {name:['Web store','网店'],icon:'globe',status:['Connected','已连接'],kind:'on',metric:['9 orders · ¥2,180','9 单 · ¥2,180'],action:['Manage','管理']},
-    {name:['Meituan','美团'],icon:'bike',status:['Live','运行中'],kind:'on',metric:['6 orders · ¥540','6 单 · ¥540'],action:['View','查看'],viewOnly:true},
-    {name:['gzgrocery ERP','gzgrocery'],icon:'warehouse',status:['Synced','已同步'],kind:'on',metric:['2 pickups · ¥1,600','2 自提 · ¥1,600'],action:['View','查看'],viewOnly:true},
-    {name:['Eleme','饿了么'],icon:'utensils-crossed',status:['Not connected','未连接'],kind:'off',metric:['Tap to connect','点击连接'],action:['Connect','连接']},
-  ],
   customers:[
     {id:'s1',name:'Chen Meiling',phone:'138****2841',tier:'tree',orders:24,spend:6240,seen:'2026-07-29 09:40:00',unseen:true},
     {id:'s2',name:'Sarah Lim',phone:'159****7723',tier:'tree',orders:18,spend:4180,seen:'2026-07-28 19:12:00',unseen:true},
@@ -277,7 +270,7 @@ const state = {
   prodQ:'', prodStatus:'all', prodCat:'all', catalogueTried:false, catalogueLoading:false,
   workOpen:false, workEvents:null, workLoading:false, workErr:null,
   affiliate:null, affiliateTried:false, invSeg:'all', invLoaded:false,
-  geo:null, geoTried:false, recapTried:false,
+  geo:null, geoTried:false, recapTried:false, chan:null, chanTried:false, sales:null,
   overflow:false, search:false, detailId:null, detailActions:false, productSku:null,
   orderBusy:null, orderErr:null, replyBusy:false, replyErr:null, revBusy:null, revErr:null,
   printer:null, printerLoading:false, printerBusy:false, printerErr:null,
@@ -932,24 +925,71 @@ function screenInbox(){
 /* ==========================================================================
    Sales — archetype A-lite
    ========================================================================== */
+/* `key` is this channel's name in /sales/summary, which is not the name the
+   status grid uses for the same channel (mini_app vs wechat). */
+const CHAN_META={
+  mini_app:{icon:'smartphone',en:'Mini app',zh:'小程序',key:'wechat'},
+  web:{icon:'globe',en:'Web store',zh:'网店',key:'web'},
+  meituan:{icon:'bike',en:'Meituan',zh:'美团',key:'meituan',mirror:'meituan'},
+  eleme:{icon:'utensils-crossed',en:'Eleme',zh:'饿了么',key:'eleme'},
+  gzgrocery:{icon:'warehouse',en:'gzgrocery ERP',zh:'gzgrocery',key:'gzgrocery',mirror:'gzgrocery'},
+  pos:{icon:'store',en:'In store',zh:'门店',key:'pos'},
+};
 function screenSales(){
+  loadChannels();
+  const d=state.chan;
+  if(!d) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const chans=(d.channels||[]).filter(c=>CHAN_META[c.channel]);
+  if(!chans.length) return nothingYet(T('No channels yet','还没有渠道'),
+    T('Sales channels are connected on desktop. Once one is live it shows here.','销售渠道在电脑端连接。上线后会显示在这里。'));
+  // The line above the cards states what the grid actually says: every channel
+  // open everywhere, or exactly which ones are not.
+  const closed=chans.filter(c=>c.integrated!==false&&!c.cardOpen);
+  const head = closed.length
+    ? {sev:'amber', text:T(closed.length===1
+        ? CHAN_META[closed[0].channel].en+' is closed everywhere'
+        : closed.length+' channels are closed everywhere',
+        closed.length===1 ? CHAN_META[closed[0].channel].zh+' 全部门店已关闭' : closed.length+' 个渠道全部门店已关闭')}
+    : {sev:'sage', text:T('Every channel is open','所有渠道均已开启')};
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
-    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--surface-raised);border-radius:14px;padding:13px 16px">
-      <span style="display:flex;align-items:center;gap:9px;min-width:0"><span class="breathe" style="width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none"></span>
-      <span style="font-size:14px;font-weight:500">${T('All channels in sync','所有渠道已同步')}</span></span>
-      <span style="font-size:12.5px;color:var(--text-secondary);flex:none">${T('Updated just now','刚刚更新')}</span></div>
-    ${DB.salesChannels.map(c=>`
-      <button class="card" onclick="${c.viewOnly?`APP.cmd('mirror','${c.name[0]==='Meituan'?'meituan':'gzgrocery'}')`:"APP.cmd('noop')"}" style="display:flex;flex-direction:column;gap:12px;text-align:left;cursor:pointer;padding:16px;color:var(--text-primary)">
+    <div style="display:flex;align-items:center;gap:10px;background:var(--surface-raised);border-radius:14px;padding:13px 16px">
+      <span style="width:8px;height:8px;border-radius:50%;background:var(--${head.sev==='sage'?'sage':'amber'});flex:none"></span>
+      <span style="font-size:14px;font-weight:500;min-width:0">${head.text}</span></div>
+    ${chans.map(c=>{
+      const m=CHAN_META[c.channel];
+      const cells=c.cells||[];
+      const open=cells.filter(x=>x.open).length;
+      const notIntegrated=c.integrated===false;
+      const sale=(state.sales&&m.key)?state.sales[m.key]:null;
+      // Open/closed is the state that matters; a channel with no integration
+      // has no state at all and says so instead of wearing a green pill.
+      const st = notIntegrated ? ['muted',T('Not connected','未接入')]
+        : !cells.length ? ['muted',T('No stores','没有门店')]
+        : open===cells.length ? ['success',T('Open','营业中')]
+        : open ? ['warning',T('Open at '+open+' of '+cells.length, cells.length+' 家中 '+open+' 家营业')]
+        : ['danger',T('Closed','已关闭')];
+      const line=[];
+      // Today's figures, said as today's — the old line gave a bare number with
+      // no window on it, which reads as all-time.
+      if(sale&&sale.connected) line.push(T(sale.orders+' today · '+money0(CUR,sale.revenue), '今日 '+sale.orders+' 单 · '+money0(CUR,sale.revenue)));
+      if(!notIntegrated&&cells.length&&open<cells.length){
+        const shut=cells.filter(x=>!x.open).map(x=>LANG==='en'?(x.nameEn||x.name):(x.nameCn||x.name));
+        line.push(T('closed at '+shut.join(', '), shut.join('、')+' 已关闭'));
+      }
+      const go=m.mirror?`APP.cmd('mirror','${m.mirror}')`:'';
+      const Tag=go?'button':'div';
+      return `<${Tag} class="card" ${go?`onclick="${go}"`:''} style="display:flex;flex-direction:column;gap:12px;text-align:left;${go?'cursor:pointer;':''}padding:16px;color:var(--text-primary);width:100%">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
           <span style="display:flex;align-items:center;gap:10px;min-width:0">
-            <span style="width:36px;height:36px;border-radius:9px;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;color:var(--text-secondary);flex:none">${ic(c.icon)}</span>
-            <span style="display:flex;align-items:center;gap:8px;min-width:0"><span style="font-size:16px;font-weight:500">${T(...c.name)}</span>
-            ${c.viewOnly?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('View only','只读')}</span>`:''}</span></span>
-          ${pill(c.kind,T(...c.status))}</div>
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-          <span class="num" style="font-size:13px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...c.metric)}</span>
-          <span style="display:flex;align-items:center;gap:5px;font-size:13.5px;font-weight:500;flex:none">${T(...c.action)}<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span></div>
-      </button>`).join('')}
+            <span style="width:36px;height:36px;border-radius:9px;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;color:var(--text-secondary);flex:none">${ic(m.icon)}</span>
+            <span style="display:flex;align-items:center;gap:8px;min-width:0"><span style="font-size:16px;font-weight:500">${T(m.en,m.zh)}</span>
+            ${m.mirror?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('View only','只读')}</span>`:''}</span></span>
+          <span class="pill" style="background:${PILL[st[0]][0]};color:${PILL[st[0]][1]};flex:none">${st[1]}</span></div>
+        ${(line.length||go)?`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+          <span class="num" style="font-size:13px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${line.join(' · ')}</span>
+          ${go?`<span style="display:flex;align-items:center;gap:5px;font-size:13.5px;font-weight:500;flex:none">${T('View','查看')}<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span>`:''}</div>`:''}
+      </${Tag}>`;}).join('')}
+    <div style="text-align:center;font-size:12.5px;color:var(--text-secondary)">${T('Opening and closing a channel is on desktop','渠道的开启与关闭在电脑端')}</div>
   </div>`;
 }
 
@@ -1820,6 +1860,24 @@ async function loadAffiliate(){
 async function loadGeo(){
   if(state.geoTried) return; state.geoTried=true;
   try{ state.geo=await api('/inventory/geocode-status'); }catch(e){}
+  render();
+}
+/* The Sales board stated "28 orders · ¥7,120" per channel and "All channels in
+   sync · Updated just now" above them — five sentences from the mockup, none of
+   them measured. What is real is the channel × store open/closed grid the
+   desktop's own board is built from, plus the per-channel order counts already
+   fetched for the Orders chips. Whether the shop is OPEN on Meituan right now
+   is the most phone-shaped question in the app; changing it is not, so this
+   reads and says where the switch is. */
+async function loadChannels(){
+  if(state.chanTried) return; state.chanTried=true;
+  // Two reads, two different questions: the grid says whether the shop is OPEN
+  // on each channel, the summary says what each SOLD today. The board used to
+  // answer only the second, and only once /sales/summary had landed — before
+  // that it showed the mock's "28 orders · ¥7,120".
+  try{ state.chan=await apiRaw('/channel-status'); }catch(e){}
+  render();
+  try{ const d=await api('/sales/summary'); state.sales=(d&&d.channels)||null; }catch(e){}
   render();
 }
 async function loadMedia(){
@@ -2813,18 +2871,6 @@ function mapWallet(r){
   return {label:['Top-up','充值'], who:[r.nickname||'—',r.nickname||'—'], time:hhmm(r.paid_at||r.created_at)||'',
     amt:'+'+money(CUR,amt), color:'#5F7357'};
 }
-const CH_META={wechat:['Mini app','小程序','smartphone',false],web:['Web store','网店','globe',false],
-  meituan:['Meituan','美团','bike',true],gzgrocery:['gzgrocery ERP','gzgrocery','warehouse',true],eleme:['Eleme','饿了么','utensils-crossed',false]};
-function mapSalesChannel(key,c){
-  const m=CH_META[key]||[key,key,'store',false];
-  const connected=!!(c&&c.connected);
-  const metric=connected?((c.orders||0)+' orders · '+money(CUR,c.revenue||0)):'Tap to connect';
-  const metricCn=connected?((c.orders||0)+' 单 · '+money(CUR,c.revenue||0)):'点击连接';
-  return {name:[m[0],m[1]], icon:m[2], viewOnly:m[3],
-    status:connected?['Connected','已连接']:['Not connected','未连接'], kind:connected?'on':'off',
-    metric:[metric,metricCn], action:m[3]?['View','查看']:(connected?['Manage','管理']:['Connect','连接'])};
-}
-
 reg('openOrder', id=>{
   const row=(state.liveOrders||[]).find(o=>o.id===id);
   state.detailId=id; state.drag=0; state.liveDetail=null; state.detailMounted=false;
@@ -2959,8 +3005,6 @@ async function loadLive(){
   api('/topup-transactions?limit=20').then(r=>set(()=>{ if(Array.isArray(r)&&r.length) DB.wallet=r.map(mapWallet); })).catch(()=>{});
   api('/leaderboard/preview').then(d=>set(()=>{ const rows=d&&(d.revealed_entries||d.raw_entries); if(rows&&rows.length)
     DB.leaderboard=rows.map(e=>({rank:String(e.rank),name:[e.name||e.nickname||'—',e.name||e.nickname||'—'],pts:Number(e.value||0).toLocaleString()})); })).catch(()=>{});
-  api('/sales/summary').then(d=>set(()=>{ const ch=d&&d.channels; if(ch){
-    DB.salesChannels=['wechat','web','meituan','gzgrocery','eleme'].filter(k=>ch[k]).map(k=>mapSalesChannel(k,ch[k])); } })).catch(()=>{});
 }
 
 document.documentElement.setAttribute('data-theme',state.theme);

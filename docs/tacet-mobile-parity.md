@@ -151,8 +151,10 @@ desktop is the right home
 
 | Desktop capability | Phone |
 |---|---|
-| Channel board with live status | ✅ |
+| Channel board with live status | ✅ — the real channel × store grid from `/channel-status`: open, closed, or open at 2 of 3, naming which store is shut. The header line says it for the whole board |
+| Today's per-channel orders and revenue | ✅ — `/sales/summary`, said as *today's* rather than as a bare number with no window on it |
 | Channel detail (mirror + config) | ✅ read-only |
+| Open / close a channel or a location | ➖ **open question** — the most phone-shaped write in the app ("we're slammed, close Meituan") and also the heaviest: it stops orders arriving. Left on the desktop until asked for |
 | Delivery zones | ✅ count, from `/delivery-zones` |
 | Store geocoding health | ✅ — replaced a "Routing · Nearest store" row that described behaviour as if it were a setting. A store with no coordinates can never be the nearest one, and now the phone says so |
 | Fees, cut-off, couriers, pickup points | ➖ |
@@ -213,6 +215,7 @@ Ordered by what an operator loses today, not by effort.
 | ~~14~~ | ~~Media upload from the phone~~ | `POST /media/upload` | **Done 2026-08-22** |
 | ~~9~~ | ~~The remaining feature toggles~~ | | **Done 2026-08-22** — the last two that wrote nothing (the Feedback empty state's Enable, the Affiliate screen's switch) now write `features.<key>`, and the local-only `sw` command is gone rather than left where the next person would reach for it |
 | ~~15~~ | ~~Invented content: Affiliate overview, Invoice counts, the fapiao banner, the Recap's fallback~~ | | **Done 2026-08-22** |
+| ~~16~~ | ~~Sales board on real channel status~~ | `/channel-status` + `/sales/summary` | **Done 2026-08-22** |
 
 Nothing above needs a new endpoint. Every one of them needs the same three
 states the rulebook already requires and the order actions now demonstrate:
