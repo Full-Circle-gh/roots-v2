@@ -2151,6 +2151,80 @@ async function refreshOrders(){
     state.liveAttn=Object.assign({},state.liveAttn||{},{ship:(d.paid||0)+(d.preparing||0)}); render(); } }).catch(()=>{});
 }
 function findOrder(id){ return DB.orders.find(o=>o.id===id) || DB.purchasing.find(o=>o.id===id); }
+/* ---- the refund panel --------------------------------------------------
+   The phone shipped the refund ACTIONS months before the figures behind them:
+   an operator could approve a refund without the screen ever having told them
+   how much was asked for, of what, or why. Every field here was in the payload
+   the drawer already fetched. */
+const REFUND_STATE={
+  pending:{en:'Refund requested',zh:'申请退款',sev:'amber'},
+  reviewing:{en:'Refund under review',zh:'退款处理中',sev:'amber'},
+  approved:{en:'Refund approved',zh:'退款已批准',sev:'sage'},
+  paying:{en:'Refund being paid',zh:'退款打款中',sev:'dusk'},
+  paid:{en:'Refund paid',zh:'已退款',sev:'sage'},
+  rejected:{en:'Refund rejected',zh:'退款已拒绝',sev:'brick'},
+  withdrawn:{en:'Refund withdrawn',zh:'退款已撤回',sev:'muted'},
+};
+const REF_TONE={amber:['var(--amber-tint)','#8A6425'],sage:['var(--sage-tint)','#5F7357'],
+  dusk:['var(--dusk-tint)','var(--accent)'],brick:['var(--brick-tint)','var(--brick)'],
+  muted:['var(--surface-raised)','var(--text-secondary)']};
+function refundPanel(o){
+  const r=o.refund; if(!r) return '';
+  const st=REFUND_STATE[r.state]||{en:r.state,zh:r.state,sev:'muted'};
+  const [bg,fg]=REF_TONE[st.sev]||REF_TONE.muted;
+  const open=r.state==='pending'||r.state==='reviewing';
+  const fig=(l,v)=>v==null?'':`<span style="min-width:0">
+    <span style="display:block;font-size:12px;color:var(--text-secondary)">${l}</span>
+    <span class="num" style="display:block;font-size:16px;font-weight:500;margin-top:1px">${money(CUR,v)}</span></span>`;
+  // Cash vs store credit: when an order paid partly with the wallet is refunded,
+  // only some of the value moves as cash. One figure would hide the rest.
+  const credit=(r.cash!=null&&r.approved!=null)?Math.max(0,+(r.approved-r.cash).toFixed(2)):null;
+  const figs=[
+    fig(T('Order total','订单总额'),Number(String(o.total).replace(/[^0-9.]/g,''))||null),
+    fig(T('Asked for','申请'),r.requested),
+    fig(T('Approved','已批准'),r.approved),
+    fig(T('Paid back','已退'),r.paid),
+    (credit!=null&&credit>0.005)?fig(T('As cash','现金'),r.cash):'',
+    (credit!=null&&credit>0.005)?fig(T('To wallet','退回余额'),credit):'',
+  ].filter(Boolean).join('');
+  return `<div style="border-radius:14px;background:${bg};padding:14px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap">
+      <span style="font-size:15px;font-weight:500;color:${fg}">${T(st.en,st.zh)}</span>
+      ${r.at?`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${T('asked '+fmtDay(r.at),'申请于 '+fmtDay(r.at))}</span>`:''}</div>
+    ${(open&&r.requested!=null)?`<div style="font-size:14px">${T('The customer asked for '+money(CUR,r.requested)+' of '+o.total,'顾客申请退 '+money(CUR,r.requested)+' / 共 '+o.total)}</div>`:''}
+    ${r.reason?`<div style="font-size:14px;line-height:1.55;background:var(--surface-card);border-radius:10px;padding:10px 12px">
+      <span class="eyebrow" style="display:block;margin-bottom:4px">${T('In their words','顾客说明')}</span>${escAttr(r.reason)}</div>`:''}
+    ${r.lines?`<div style="background:var(--surface-card);border-radius:10px;padding:10px 12px">
+      <span class="eyebrow" style="display:block;margin-bottom:6px">${T('The lines they picked','顾客选择的商品')}</span>
+      ${r.lines.map(l=>`<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:13.5px;padding:2px 0">
+        <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(l.name)} ×${l.qty}</span>
+        <span class="num" style="flex:none">${money(CUR,l.amount)}</span></div>`).join('')}</div>`:''}
+    ${figs?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${figs}</div>`:''}
+    ${r.method?`<div class="num" style="font-size:12.5px;color:var(--text-secondary)">${T('Paid by '+r.method,'退款方式 '+r.method)}${r.ref?' · '+escAttr(r.ref):''}</div>`:''}
+    ${r.staffNote?`<div style="font-size:13px;color:var(--text-secondary)"><span class="eyebrow">${T('Staff note','客服备注')}</span> ${escAttr(r.staffNote)}</div>`:''}
+    ${r.state==='paying'?`<div style="display:flex;align-items:flex-start;gap:9px;font-size:13px;color:var(--text-secondary)">
+      <span class="breathe" style="width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none;margin-top:5px"></span>
+      <span>${T('The money is moving through the payment gateway. This finishes on its own — nothing to do.','正在通过支付网关打款，会自动完成，无需操作。')}</span></div>`:''}
+  </div>`;
+}
+/* The promise this order was sold on — the desktop's Ship-by tile. The list row
+   carries it; the drawer did not, so opening an order lost the one fact that
+   says whether it is late. */
+function shipByTile(o){
+  const p=o.plan; if(!p) return '';
+  const u=o.planUrgency||{level:'none'};
+  const tone=u.level==='overdue'?'brick':(u.level==='today'||u.level==='tomorrow'||u.level==='soon')?'amber':null;
+  const KICK={pickup:['Pickup time','取货时间'],batch:['Deliver by','送达时间'],
+    scheduled:['Booked','顾客预约'],asap:['Ship by','最迟发货']};
+  const k=p.done?['Requested timing','原定时间']:(KICK[p.kind]||KICK.asap);
+  return `<div class="card" style="padding:14px">
+    <span class="eyebrow">${T(...k)}</span>
+    <div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;margin-top:7px">
+      <span class="num" style="font-size:16px;font-weight:500">${escAttr(p.label)}</span>
+      ${tone?`<span class="pill" style="background:var(--${tone}-tint);color:var(--${tone})">${
+        u.level==='overdue'?T('overdue','已逾期'):u.level==='today'?T('today','今天'):u.level==='tomorrow'?T('tomorrow','明天'):T('soon','即将')}</span>`:''}</div>
+    ${p.sub?`<div style="font-size:13px;color:var(--text-secondary);margin-top:4px">${escAttr(p.sub)}</div>`:''}</div>`;
+}
 /* The desktop's od-marks strip: when the order was placed, and every mark that
    changes what happens next. "Partially shipped" is the one that explains why a
    Dispatched order is still in the Paid tab; "Print failed" is a failure an
@@ -2233,6 +2307,7 @@ function sheetOrderDetail(){
          <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
          <span style="font-size:14px;color:var(--brick)">${state.orderErr}</span></div>`:''}
        ${orderHeadMarks(o)}
+       ${refundPanel(o)}
        ${o.custNote?`<div class="card" style="padding:14px;border-color:var(--accent)">
          <div style="display:flex;align-items:center;gap:8px;color:var(--accent)">${ic('message-square-text',16)}<span class="eyebrow" style="color:var(--accent)">${T('Customer note','顾客备注')}</span></div>
          <div style="font-size:14.5px;line-height:1.55;margin-top:8px;white-space:pre-wrap">${escAttr(o.custNote)}</div></div>`:''}
@@ -2270,10 +2345,18 @@ function sheetOrderDetail(){
            <div style="font-size:12px;color:var(--text-secondary);margin-top:6px">${T('The screenshot the customer sent — tap to see it whole','顾客上传的付款截图 — 点击查看大图')}</div></div>`:''}</div>
        <div class="card" style="padding:14px"><span class="eyebrow">${T('Fulfilled by','履约门店')}</span>
          <div style="font-size:15px;margin-top:7px">${T(...o.fulfil)}</div>
-         <div style="display:flex;align-items:center;gap:6px;margin-top:5px;color:var(--text-secondary)">${ic('route',14)}<span style="font-size:12.5px">${T(...o.route)}</span></div></div>
+         <div style="display:flex;align-items:center;gap:6px;margin-top:5px;color:var(--text-secondary)">${ic('route',14)}<span style="font-size:12.5px">${T(...o.route)}</span></div>
+         ${o.routedByArea?`<div style="display:flex;align-items:flex-start;gap:7px;margin-top:8px;color:#8A6425;font-size:12.5px;line-height:1.5">
+           ${ic('triangle-alert',14)}<span>${T('Routed by area — the address could not be located, so check the store is right.','按区域派单 — 地址无法定位，请核对门店是否正确。')}</span></div>`:''}
+         ${o.shortItems?`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border-default)">
+           <span style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500;color:#8A6425">
+             <span style="width:6px;height:6px;border-radius:50%;background:var(--amber);flex:none"></span>${T('The nearer store was short on','就近门店缺货')}</span>
+           <div style="margin-top:6px;display:flex;flex-direction:column;gap:3px">${o.shortItems.map(nm=>
+             `<span style="font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(nm)}</span>`).join('')}</div></div>`:''}</div>
        ${o.receipt?`<div class="card" style="padding:14px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="eyebrow">${T('Receipt','小票')}</span>
          <button onclick="APP.cmd('reprint')" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:8px;cursor:pointer;padding:5px 9px;font-family:inherit">${ic('printer',15)} ${T('Reprint','重打')}</button></div>
          <div style="display:flex;align-items:center;gap:7px;margin-top:8px"><span style="display:flex;color:#5F7357">${ic('check',16,2.25)}</span><span style="font-size:14.5px">${T(...o.receipt)}</span></div></div>`:''}`}
+       ${shipByTile(o)}
        ${invoiceBlock(o)}
        ${orderItemsBlock(o)}
        ${addonTimeline(o)}
@@ -3631,6 +3714,40 @@ function mapDetail(o){
     ?((o.address&&(o.address.store_name_en||o.address.store_name_cn))||o.store_name_en||o.store_code||'')
     :null;
   base.stockPending=!!o.stock_pending;
+  // The refund panel. The phone had the ACTIONS — approve, reject, pay out —
+  // with none of the figures behind them, so an operator was approving an amount
+  // the screen had never shown them, and the customer's own reason for asking
+  // was nowhere on the device they would be holding while phoning them back.
+  base.refund=o.refund_status?{
+    state:o.refund_status,
+    at:o.refund_requested_at||null,
+    reason:(o.refund_reason||'').trim()||null,
+    staffNote:(o.refund_review_note||'').trim()||null,
+    requested:o.refund_amount_requested!=null?Number(o.refund_amount_requested):null,
+    approved:o.refund_amount_approved!=null?Number(o.refund_amount_approved):null,
+    paid:o.refund_amount_paid!=null?Number(o.refund_amount_paid):null,
+    cash:o.refund_cash_amount!=null?Number(o.refund_cash_amount):null,
+    method:o.refund_payout_method||null, ref:o.refund_payout_ref||null,
+    // Which lines the customer actually picked, resolved to their names.
+    lines:(()=>{ let L=[]; try{ L=o.refund_lines_json?JSON.parse(o.refund_lines_json):[]; }catch(e){ L=[]; }
+      if(!Array.isArray(L)||!L.length) return null;
+      const by=new Map((o.items||[]).map(it=>[it.id,it]));
+      return L.map(l=>{ const it=by.get(l.item_id);
+        return {name:it?(it.name_en||it.name_cn||('#'+l.item_id)):('#'+l.item_id), qty:l.qty||1, amount:Number(l.amount)||0}; }); })(),
+  }:null;
+  // The ship-by plan, so the drawer states the promise the order was sold on
+  // rather than making the operator infer it from the list row they came from.
+  base.plan=shipByPlan(o);
+  base.planUrgency=shipByUrgency(base.plan,o.status==='paid'||o.status==='preparing');
+  // The SKUs the nearer store was short of — the reason this order is being
+  // fulfilled from somewhere else. "改派(缺货)" without them is an opaque note.
+  base.shortItems=(()=>{
+    let pids=[]; try{ pids=JSON.parse(o.reroute_short_pids||'[]')||[]; }catch(e){}
+    if(!pids.length) return null;
+    const by=new Map((o.items||[]).map(it=>[it.product_id,it]));
+    return pids.map(pid=>{ const it=by.get(pid);
+      return it?(it.name_en||it.name_cn||('#'+pid)):('#'+pid); }); })();
+  base.routedByArea=o.routed_by_distance===0;
   if(o.subtotal!=null||o.shipping_fee!=null){
     base.breakdown=[['Subtotal',money(CUR,o.subtotal!=null?o.subtotal:o.total)]].concat(o.shipping_fee?[['Delivery',money(CUR,o.shipping_fee)]]:[]);
   }

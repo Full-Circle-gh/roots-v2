@@ -247,7 +247,7 @@ columns of fact. Reported from production, then swept column by column.
 | ↳ **stock-pending badge** | ✅ |
 | ↳ **invoice line** (owed / issued) | ✅ |
 | ↳ **shipping-store-short warning** | ✅ |
-| ↳ refund badge, partial vs full, with the amount | ⚠ the pill says "Refund requested"; the partial/full split and the amount are not on the row yet |
+| ↳ refund badge, partial vs full, with the amount | ➖ — the row's pill still says only "Refund requested"; the drawer now carries every figure, one tap away |
 | **Delivery** (the merged tracking + ship-by cell) | ✅ — ported branch for branch: waybill + carrier state, the ten delivery states with problems first, the live courier stage, "No waybill yet" in brick, air-delay, local ETA, marketplace arrival/booked, and the ship-by plan with its urgency tag |
 | ↳ ship-by label prettifiers | ⚠ the stored slot label is used as-is; the desktop humanises it. Raw, never wrong |
 | Placed | ✅ — was a bare time, so an order from three days ago read "9:07 AM" |
@@ -260,7 +260,7 @@ columns of fact. Reported from production, then swept column by column.
 | Order #, status, actions | ✅ |
 | Head marks: placed, **partially shipped (n/total)**, **items added (+¥)**, **stock pending**, **print failed** | ✅ |
 | Hoisted per-parcel tracking | ✅ (each parcel card carries its own) |
-| Refund banner + panel (requested / approved / paid, reason) | ⚠ the actions are there; the amounts and the customer's reason are not shown |
+| Refund banner + panel (requested / approved / paid, reason) | ✅ — every state, the customer's own words, the lines they picked, the cash-vs-wallet split, the payout method and reference, the staff note, and the "paying" hold |
 | Invoice block (type, title, tax id, email, file) | ✅ read-only — issuing stays desktop |
 | Order total banner + breakdown | ✅ — **voucher** line added |
 | Ship to / **Pickup (which store)** / **Counter sale** | ✅ |
@@ -269,8 +269,8 @@ columns of fact. Reported from production, then swept column by column.
 | Payment method + status | ✅ |
 | Pay-link tile (resend an unpaid order's link) | ➖ |
 | **Voucher** | ✅ |
-| Ship-by tile | ⚠ the list row carries the ship-by plan; the drawer does not repeat it |
-| Store + routing note + reroute-short + "routed by area" | ⚠ store and reason shown; the short-SKU list and the area-routing warning are not |
+| Ship-by tile | ✅ — the promise the order was sold on, with its overdue/today/tomorrow mark. Absent on a counter sale, which promised nothing |
+| Store + routing note + reroute-short + "routed by area" | ✅ — the rerouted order now names the products the nearer store was short of, and an address that could not be located says so |
 | **Alipay proof screenshot** | ✅ — tap to open it whole |
 | **Customer note** | ✅ — the single most obviously missing thing in the drawer |
 | Split banner + merge/split parcel controls | ➖ — packing decisions, desktop |
