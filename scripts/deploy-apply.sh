@@ -263,6 +263,15 @@ bounce_holder() {   # $1 = repo path of the holder script
 bounce_holder scripts/shangou-chrome.js
 bounce_holder scripts/qingyun-chrome.js
 
+# The proxy failover watchdog is a daemon like any other: its own loop, its own
+# pm2 process, require()ing lib/proxy-manager.js. It was missing from this list,
+# which is the worst possible one to miss — it is the process that DECIDES which
+# exit every Meituan channel uses, so shipping a fix to the failover model while
+# leaving the old watchdog running means the deploy reports SUCCESS and changes
+# nothing: the stale process keeps writing its old verdict into
+# data/proxy-active.json, and every launcher keeps obeying it.
+bounce_daemon proxy-watchdog scripts/proxy-watchdog.js
+
 bounce_daemon qingyun   scripts/qingyun-daemon.js
 bounce_daemon guanyi    scripts/guanyi-daemon.js
 bounce_daemon meituan   scripts/meituan-daemon.js
