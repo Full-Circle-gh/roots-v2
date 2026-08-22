@@ -279,7 +279,8 @@ const state = {
   printer:null, printerLoading:false, printerBusy:false, printerErr:null,
   prodStores:null, prodStockReady:false, prodBusy:false, prodErr:null,
   cfg:null, setup:null, zones:null, mirror:null, mirrorLoading:null, mirrorMode:null,
-  couponBusy:null, couponErr:null, bcBusy:null, bcErr:null, ask:null,
+  couponBusy:null, couponErr:null, bcBusy:null, bcErr:null, ask:null, askErr:null,
+  custBusy:null, custErr:null,
   ops:null, opsLoading:false,
   media:null, mediaLoading:false, mediaTried:false,
   fapiao:null, fapiaoLoading:false, fapiaoBusy:false, fapiaoTried:false, printerTried:false,
@@ -335,8 +336,17 @@ reg('openOrder', id=>{ state.detailId=id; state.drag=0; render(); });
 reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; state.orderErr=null; state.orderBusy=null; render(); });
 reg('detailActions', ()=>{ state.detailActions=true; render(); });
 reg('closeActions', ()=>{ state.detailActions=false; render(); });
-reg('closeAsk', ()=>{ state.ask=null; render(); });
-reg('askRun', key=>{ const a=state.ask; state.ask=null; render(); if(a&&a.run) a.run(key); });
+reg('closeAsk', ()=>{ state.ask=null; state.askErr=null; render(); });
+reg('askRun', key=>{
+  const a=state.ask; if(!a) return;
+  if(a.fields){
+    const vals={}; a.fields.forEach(f=>{ const el=document.getElementById('ask-'+f.id); vals[f.id]=el?el.value.trim():''; });
+    const err=a.validate&&a.validate(vals);
+    if(err){ state.askErr=err; render(); return; }   // the sheet stays open with the reason why
+    state.ask=null; state.askErr=null; render(); a.run(vals); return;
+  }
+  state.ask=null; state.askErr=null; render(); if(a.run) a.run(key);
+});
 /* The one forward step the status machine allows from where this order is. */
 reg('advance', to=>{
   const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
@@ -434,7 +444,7 @@ reg('saveProduct', ()=>saveProductEdits());
 reg('custSeg', v=>{ state.custSeg=v; state.custLoaded=false; state.customers=null; render(); loadCustomers(); });
 reg('custTier', v=>{ state.custTier=v; render(); });
 reg('custClear', ()=>{ state.custSeg='all'; state.custTier='all'; state.custLoaded=false; render(); loadCustomers(); });
-reg('openCustomer', id=>{ state.custId=id; state.custDetail=null; render(); loadCustomerDetail(id); });
+reg('openCustomer', id=>{ state.custId=id; state.custDetail=null; state.custErr=null; state.custBusy=null; render(); loadCustomerDetail(id); });
 reg('closeCustomer', ()=>{ state.custId=null; state.custDetail=null; render(); });
 reg('prodView', v=>{ state.prodView=v; render(); });
 reg('inboxSeg', s=>{ state.inboxSeg=s; render(); });
@@ -1326,6 +1336,66 @@ async function saveProductEdits(){
    low stock — while the product's actual list of fires (a delivery gone wrong,
    a refund waiting on a decision, a payment that does not match) lived in
    /dashboard/ops and never reached the phone at all. */
+function custWrite(kind, run, okMsg){
+  if(state.custBusy) return;
+  state.custBusy=kind; state.custErr=null; render();
+  run().then(()=>{
+    state.custBusy=null; render();
+    if(okMsg) showToast(okMsg);
+    if(state.custId!=null) loadCustomerDetail(state.custId);
+    loadCustomers();
+  }).catch(e=>{
+    state.custBusy=null;
+    if(String(e.message)==='auth') return;
+    state.custErr=e.code==='reason_required'?T('A reason is required.','需要填写原因。')
+      :e.code==='bad_delta'?T('That amount will not work. Use a number, and not zero.','金额无效。请填写非零数字。')
+      :T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    render();
+  });
+}
+reg('adjustPoints', ()=>{
+  const d=state.custDetail, c=(d&&d.customer)||{}; if(!state.custId) return;
+  state.ask={title:T('Adjust points','调整积分'),
+    body:T('Now: '+Number(c.points_balance||0).toLocaleString()+' points. Use a minus sign to take points away.',
+           '当前 '+Number(c.points_balance||0).toLocaleString()+' 分。减少请填负数。'),
+    fields:[{id:'delta',label:T('Change by','变动'),placeholder:'100',numeric:true},
+            {id:'reason',label:T('Reason','原因'),placeholder:T('Goodwill after a late delivery','配送延误补偿')}],
+    confirmLabel:T('Save','保存'),
+    validate:v=>{ const n=parseInt(v.delta,10);
+      if(!Number.isFinite(n)||n===0) return T('Enter a number other than zero.','请输入非零数字。');
+      if(!v.reason) return T('Say why — it goes on the customer\u2019s ledger.','请填写原因，会记入顾客账目。');
+      return ''; },
+    run:v=>custWrite('points', ()=>apiWrite('/customers/'+state.custId+'/points-adjust',
+      {delta:parseInt(v.delta,10), reason:v.reason}), T('Points updated','积分已更新'))};
+  render();
+});
+reg('adjustWallet', ()=>{
+  const d=state.custDetail, c=(d&&d.customer)||{}; if(!state.custId) return;
+  state.ask={title:T('Adjust wallet','调整钱包'),
+    body:T('Now: '+money(CUR,c.balance||0)+'. Use a minus sign to take money off.',
+           '当前 '+money(CUR,c.balance||0)+'。扣减请填负数。'),
+    fields:[{id:'delta',label:T('Change by','变动'),placeholder:'50',numeric:true},
+            {id:'reason',label:T('Reason','原因'),placeholder:T('Refund for a missing item','缺货退款')}],
+    confirmLabel:T('Save','保存'),
+    validate:v=>{ const n=Number(v.delta);
+      if(!Number.isFinite(n)||n===0) return T('Enter an amount other than zero.','请输入非零金额。');
+      if(!v.reason) return T('Say why — it goes on the customer\u2019s ledger.','请填写原因，会记入顾客账目。');
+      return ''; },
+    run:v=>custWrite('wallet', ()=>apiWrite('/customers/'+state.custId+'/wallet-adjust',
+      {delta:Number(v.delta), reason:v.reason}), T('Wallet updated','钱包已更新'))};
+  render();
+});
+reg('toggleBlock', ()=>{
+  const d=state.custDetail, c=(d&&d.customer)||{}; if(!state.custId) return;
+  const blocked=!!c.is_blocked;
+  state.ask={title:blocked?T('Unblock this customer?','解除封禁？'):T('Block this customer?','封禁该顾客？'),
+    body:blocked?T('They can sign in and order again.','解除后可以重新登录下单。')
+                :T('They cannot sign in or order until you unblock them. Their orders and points stay as they are.','封禁后无法登录或下单，订单与积分保持不变。'),
+    confirmLabel:blocked?T('Unblock','解除'):T('Block','封禁'), danger:!blocked,
+    run:()=>custWrite('block', ()=>apiWrite('/customers/'+state.custId+'/'+(blocked?'unblock':'block'),{}),
+      blocked?T('Unblocked','已解除'):T('Blocked','已封禁'))};
+  render();
+});
 async function loadOps(){
   if(state.opsLoading) return; state.opsLoading=true;
   try{ state.ops=await api('/dashboard/ops'); }catch(e){}
@@ -1541,6 +1611,13 @@ function sheetAsk(){
        <div style="font-size:18px;font-weight:500">${a.title}</div>
        ${a.body?`<div style="font-size:15px;color:var(--text-secondary);margin-top:8px;line-height:1.55">${a.body}</div>`:''}
      </div>
+     ${a.fields?`<div style="padding:8px 20px 0;display:flex;flex-direction:column;gap:16px">
+       ${a.fields.map(f=>`<label style="display:block">
+         <span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${f.label}</span>
+         <input id="ask-${f.id}" ${f.numeric?'inputmode="text"':''} placeholder="${f.placeholder||''}" value="${f.value!=null?f.value:''}">
+       </label>`).join('')}
+       ${state.askErr?`<div style="font-size:14px;color:var(--brick)">${state.askErr}</div>`:''}
+     </div>`:''}
      ${a.options
        ? a.options.map(o=>`<button class="row" style="min-height:56px;padding:12px 20px" onclick="APP.cmd('askRun','${o.key}')"><span style="flex:1;font-size:15px">${o.label}</span></button>`).join('')
        : `<div style="display:flex;gap:8px;padding:16px 20px 0">
@@ -1853,12 +1930,22 @@ function sheetCustomer(){
           <span style="width:32px;height:32px;flex:none;border-radius:8px;background:var(--dusk-tint);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500">${((c.nickname||'·').trim().charAt(0)||'·').toUpperCase()}</span>
           <span style="font-size:18px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.nickname||T('No name','未填姓名')}</span>
           <span class="pill" style="background:rgba(88,96,110,.10);color:var(--text-secondary)">${T(...tier)}</span>
+          ${c.is_blocked?`<span class="pill" style="background:var(--brick-tint);color:var(--brick)">${T('Blocked','已封禁')}</span>`:''}
           <span style="flex:1"></span>
           <button class="iconbtn" onclick="APP.cmd('closeCustomer')" aria-label="${T('Close','关闭')}">${ic('x',20,2)}</button>
         </div>
         <div class="num" style="margin-top:4px;font-size:13px;color:var(--text-secondary)">${c.phone||'—'}</div>
+      ${d?`<div style="display:flex;align-items:center;gap:8px;margin-top:16px">
+        <button class="btn2" style="flex:1;min-width:0" ${state.custBusy?'disabled':''} onclick="APP.cmd('adjustPoints')">${state.custBusy==='points'?T('Saving…','保存中…'):T('Adjust points','调整积分')}</button>
+        <button class="btn2" style="width:44px;padding:0;flex:none" ${state.custBusy?'disabled':''} onclick="APP.cmd('adjustWallet')" aria-label="${T('Adjust wallet','调整钱包')}">${ic('wallet',20)}</button>
+        <button class="btn2" style="width:44px;padding:0;flex:none" ${state.custBusy?'disabled':''} onclick="APP.cmd('toggleBlock')" aria-label="${c.is_blocked?T('Unblock','解除封禁'):T('Block','封禁')}">${ic(c.is_blocked?'lock-open':'ban',20)}</button>
+      </div>`:''}
       </div>
-      <div style="flex:1;min-height:0;overflow-y:auto;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 24px)">${body}</div>
+      <div style="flex:1;min-height:0;overflow-y:auto;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 24px)">
+        ${state.custErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint);margin-bottom:16px">
+          <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+          <span style="font-size:14px;color:var(--brick)">${state.custErr}</span></div>`:''}
+        ${body}</div>
     </div>`;
 }
 
