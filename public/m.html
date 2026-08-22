@@ -276,6 +276,8 @@ const state = {
   custId:null, custDetail:null, prodView:'catalogue',
   prodQ:'', prodStatus:'all', prodCat:'all', catalogueTried:false, catalogueLoading:false,
   workOpen:false, workEvents:null, workLoading:false, workErr:null,
+  affiliate:null, affiliateTried:false, invSeg:'all', invLoaded:false,
+  geo:null, geoTried:false, recapTried:false,
   overflow:false, search:false, detailId:null, detailActions:false, productSku:null,
   orderBusy:null, orderErr:null, replyBusy:false, replyErr:null, revBusy:null, revErr:null,
   printer:null, printerLoading:false, printerBusy:false, printerErr:null,
@@ -475,6 +477,7 @@ reg('workOpenRow', i=>{
   if(e.ref_type==='guanyi'){ CMD.mirror('gzgrocery'); return; }
 });
 reg('inboxSeg', s=>{ state.inboxSeg=s; render(); });
+reg('invSeg', v=>{ state.invSeg=v; render(); });
 reg('openReply', who=>{ state.reply=who; state.reviewsSeen.add(who); state.replyErr=null; state.replyBusy=false; render(); });
 const findReview=k=>DB.reviews.find(x=>revKey(x)===k)||DB.feedback.find(x=>revKey(x)===k);
 reg('sendReplyText', t=>{
@@ -533,7 +536,6 @@ reg('submitCreate', ()=>{ state.createKind=null; showToast(T('Created','已创�
 reg('createValInc', ()=>{ state.createValue++; render(); });
 reg('createValDec', ()=>{ state.createValue=Math.max(0,state.createValue-1); render(); });
 reg('toggleCreateActive', ()=>{ state.createActive=!state.createActive; render(); });
-reg('sw', k=>{ state.sw[k]=!state.sw[k]; render(); });
 reg('toggleCoupon', code=>toggleCoupon(code));
 reg('recallBroadcast', id=>recallBroadcast(Number(id)));
 reg('togglePrint', ()=>togglePrint());
@@ -691,19 +693,23 @@ function recapCard(){
   // Title matches the time of day; "while you slept" only reads right in the morning.
   const title=(g==='morning'||g==='night')?T('While you slept','在你休息时'):T('While you were away','在你离开时');
   const r=state.liveRecap;
-  // Real overnight figures when live; otherwise the sample card (static preview only).
+  // Real overnight figures when live. The sample card is the STATIC PREVIEW
+  // only — once the app has asked the server, a failed read says so rather than
+  // showing three numbers nobody measured.
   const items = r ? [[T('orders overnight','夜间订单'),String(r.orders)],[T('revenue overnight','夜间营收'),money0(CUR,r.revenue)]]
+                  : state.recapTried ? null
                   : [[T('orders processed','处理订单'),'214'],[T('issues resolved','解决问题'),'3'],[T('stock-outs prevented','避免缺货'),'2']];
   return `<div class="rise" style="background:var(--surface-raised);border-radius:var(--radius-card);padding:24px;color:var(--text-primary)">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
       <span class="breathe" style="width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none"></span>
       <span style="font-size:18px;font-weight:500">${title}</span></div>
-    <div style="display:flex;flex-direction:column">${items.map(([l,v],i)=>
+    ${items?`<div style="display:flex;flex-direction:column">${items.map(([l,v],i)=>
       `<div style="display:flex;align-items:baseline;justify-content:space-between;padding:11px 0;${i?'border-top:1px solid var(--border-default)':''}">
          <span style="font-size:15px;color:var(--text-secondary)">${l}</span>
-         <span class="num" style="font-size:20px;font-weight:500">${v}</span></div>`).join('')}</div>
+         <span class="num" style="font-size:20px;font-weight:500">${v}</span></div>`).join('')}</div>`
+      :`<div style="font-size:15px;color:var(--text-secondary);line-height:1.55;padding:2px 0 4px">${T('The overnight figures could not be read. Everything below is still live.','夜间数据读取失败。下方内容仍为实时数据。')}</div>`}
     <div style="margin-top:18px;display:flex;align-items:baseline;justify-content:space-between;gap:12px">
-      <span style="font-size:15px;color:var(--text-secondary);font-style:italic">${T("You're welcome.",'不用谢。')}</span>
+      <span style="font-size:15px;color:var(--text-secondary);font-style:italic">${items?T("You're welcome.",'不用谢。'):''}</span>
       <button onclick="APP.cmd('toggleWork')" style="flex:none;background:none;border:none;padding:4px 0;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;color:var(--text-primary)">${state.workOpen?T('Hide the work ▴','收起明细 ▴'):T('Show the work ▾','查看明细 ▾')}</button>
     </div>
     ${workFold()}</div>`;
@@ -909,7 +915,8 @@ function screenInbox(){
       <span style="width:52px;height:52px;border-radius:14px;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;color:var(--text-secondary)">${ic('sparkles',22)}</span>
       <div style="font-size:16px;font-weight:500">${T('Feedback is off','反馈已关闭')}</div>
       <div style="font-size:13.5px;color:var(--text-secondary);max-width:250px;line-height:1.55">${T('Turn on the feedback inbox to collect customer notes.','开启反馈以收集客户留言。')}</div>
-      <button class="cta" style="width:auto;padding:12px 30px;font-size:15px" onclick="APP.cmd('sw','feedback')">${T('Enable','开启')}</button></div>`;
+      <button class="cta" style="width:auto;padding:12px 30px;font-size:15px" ${state.featBusy?'disabled':''} onclick="APP.cmd('toggleFeature','feedback')">${state.featBusy==='feedback'?T('Turning on…','开启中…'):T('Enable','开启')}</button>
+      ${state.featErr?`<div style="font-size:14px;color:var(--brick)">${state.featErr}</div>`:''}</div>`;
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
     <div style="display:flex;align-items:center;gap:10px">
       <div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px;flex:1">
@@ -1089,28 +1096,56 @@ const SUBS={
       <span class="num" style="font-size:15px;font-weight:500;color:var(--text-secondary);flex:none">${a.delta}</span></div>`).join('')}</div></div>`},
   delivery:{title:['Delivery','配送'],render:()=>{
     if(!state.printer&&!state.printerTried) loadPrinter();
+    loadGeo();
+    const g=state.geo, st=(g&&g.stores)||null;
+    const located = !g ? T('Loading…','加载中…')
+      : !st||!st.total ? T('No stores','没有门店')
+      : T(st.geocoded+' of '+st.total,st.total+' 家中的 '+st.geocoded);
+    const missing = st&&st.missing ? st.missing : 0;
+    const noKey = g && g.tencent_maps_configured===false;
     return `<div style="padding:16px;display:flex;flex-direction:column;gap:14px">
+    ${settingsGroupCard([{label:T('Auto-print receipts','自动打印小票'),printer:true}])}
     ${settingsGroupCard([
-      {label:T('Auto-print receipts','自动打印小票'),printer:true},
-      {label:T('Routing','派单'),value:T('Nearest store','最近门店')},
+      {label:T('Delivery zones','配送范围'), value: state.zones ? String(state.zones.length) : T('Loading…','加载中…')},
+      {label:T('Stores located','门店已定位'), value:located},
     ])}
-    ${settingsGroupCard([{label:T('Delivery zones','配送范围'),
-        value: state.zones ? String(state.zones.length) : T('Loading…','加载中…')}])}${desktopNote()}</div>`;
+    ${missing?`<div style="display:flex;align-items:flex-start;gap:11px;background:var(--brick-tint);border-radius:12px;padding:12px 14px">
+      <span style="flex:none;color:var(--brick);display:flex;margin-top:1px">${ic('triangle-alert',17)}</span>
+      <span style="font-size:13.5px;color:var(--brick);line-height:1.5">${T(missing===1?'One store has no coordinates, so it can never be the nearest one. Fix it on desktop.':missing+' stores have no coordinates, so they can never be the nearest one. Fix them on desktop.', missing+' 家门店没有坐标，无法参与就近派单。请在电脑端处理。')}</span></div>`:''}
+    ${noKey?noteBar(T('No maps key is configured, so nothing can be located','未配置地图密钥，无法进行定位')):''}
+    ${desktopNote()}</div>`;
   }},
-  invoices:{title:['Invoices','发票'],render:()=>`<div><div style="padding:12px 0 4px">${chipRow([{key:'all',en:'All',zh:'全部',count:214},{key:'issued',en:'Issued',zh:'已开',count:198},{key:'pending',en:'Pending',zh:'待开',count:16}],'all','noop')}</div>
+  invoices:{title:['Invoices','发票'],render:()=>{
+    if(!state.fapiao&&!state.fapiaoTried) loadFapiao();
+    const c=state.liveInvoiceCounts;
+    const all=c?(c.requested||0)+(c.issued||0):null;
+    const chips=[{key:'all',en:'All',zh:'全部',count:all},
+      {key:'issued',en:'Issued',zh:'已开',count:c?c.issued:null},
+      {key:'pending',en:'Pending',zh:'待开',count:c?c.requested:null}];
+    const seg=state.invSeg||'all';
+    const rows=(DB.invoices||[]).filter(v=>seg==='all'||(seg==='issued'?v.issued:!v.issued));
+    // The banner used to claim "8 fapiao issued automatically overnight" — a
+    // sentence nothing measured. What is actually knowable is whether auto-issue
+    // is ON, which the fapiao settings say.
+    const auto=state.fapiao?!!state.fapiao.autoIssue:null;
+    const note = auto===null ? '' : noteBar(auto
+      ? T('Auto-issue is on · issue and edit on desktop','自动开票已开启 · 开具与编辑在电脑端')
+      : T('Auto-issue is off · issue fapiao on desktop','自动开票已关闭 · 请在电脑端开具'));
+    if(state.invLoaded&&!(DB.invoices||[]).length) return nothingYet(T('No fapiao requested','没有发票申请'),
+      T('When a customer asks for a fapiao with their order, the request shows here.','顾客下单时申请发票，申请会显示在这里。'));
+    return `<div><div style="padding:12px 0 4px">${chipRow(chips,seg,'invSeg')}</div>
     <div style="padding:8px 16px 24px;display:flex;flex-direction:column;gap:10px">
-      <div style="display:flex;align-items:flex-start;gap:11px;background:var(--dusk-tint);border-radius:12px;padding:13px 14px">
-        <span class="breathe" style="width:8px;height:8px;border-radius:50%;background:var(--accent);margin-top:5px;flex:none"></span>
-        <span style="flex:1;min-width:0"><span style="display:block;font-size:14px;font-weight:500">${T('8 fapiao issued automatically overnight','夜间自动开具 8 张发票')}</span>
-        <span style="display:block;font-size:12.5px;color:var(--text-secondary);margin-top:2px">${T('Issue and edit fapiao on desktop','在电脑端开具与编辑发票')}</span></span></div>
-      ${DB.invoices.map(v=>`<div class="card" style="display:flex;flex-direction:column;gap:9px;padding:14px">
+      ${note}
+      ${!rows.length?`<div style="padding:32px 8px;text-align:center;font-size:15px;color:var(--text-secondary)">${seg==='issued'?T('None issued yet','尚无已开发票'):T('Nothing waiting','没有待开发票')}</div>`:''}
+      ${rows.map(v=>`<div class="card" style="display:flex;flex-direction:column;gap:9px;padding:14px">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
           <span style="display:flex;flex-direction:column;min-width:0"><span class="num" style="font-size:14.5px;font-weight:500">${v.id}</span>
           <span class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:2px">${v.order}</span></span>
           <span class="num" style="font-size:16px;font-weight:500;flex:none">${v.amount}</span></div>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
           <span style="display:flex;align-items:center;gap:9px;min-width:0">${pill(v.kind,T(...v.status))}<span class="num" style="font-size:12px;color:var(--text-secondary)">${T(...v.date)}</span></span>
-          <button onclick="APP.cmd('noop')" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 12px;cursor:pointer;font-family:inherit;flex:none">${ic('download',15)} ${T('Download','下载')}</button></div></div>`).join('')}</div></div>`},
+          ${v.file?`<a href="${escAttr(v.file)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 12px;cursor:pointer;font-family:inherit;flex:none;text-decoration:none">${ic('download',15)} ${T('Open','打开')}</a>`:''}</div></div>`).join('')}</div></div>`;
+  }},
   coupons:{title:['Coupons','优惠券'],render:()=>{
     const list=DB.coupons||[];
     if(!list.length) return nothingYet(T('No coupons','没有优惠券'),T('Coupons are written on desktop. Live ones show here, and can be paused from here.','优惠券在电脑端创建。生效中的会显示在这里，可在此暂停。'));
@@ -1166,10 +1201,25 @@ const SUBS={
       </div>`).join('')}
       ${desktopNote()}</div>`;
   }},
-  affiliate:{title:['Affiliate','分销'],render:()=> featOn('affiliate')?`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
-      <div style="background:var(--surface-raised);border-radius:14px;padding:16px"><div class="eyebrow">${T('Overview','概览')}</div><div class="num" style="font-size:15px;margin-top:8px">${T('42 affiliates · ¥8,120 referred','42 位分销 · 引流 ¥8,120')}</div></div>
-      <div style="display:flex;align-items:center;gap:12px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:14px"><span style="flex:1;font-size:15px">${T('Enabled','已启用')}</span>${toggle(true,"APP.cmd('sw','affiliate')")}</div>${desktopNote()}</div>`
-    :`<div style="padding:14px 16px 24px">${flagGate('affiliate')}</div>`},
+  affiliate:{title:['Affiliate','分销'],render:()=>{
+    if(!featOn('affiliate')) return `<div style="padding:14px 16px 24px">${flagGate('affiliate')}</div>`;
+    loadAffiliate();
+    const a=state.affiliate;
+    const busy=state.featBusy==='affiliate';
+    const overview = !a
+      ? `<div style="font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`
+      : !a.total
+        ? `<div style="font-size:15px;color:var(--text-secondary);line-height:1.55">${T('Nobody has been referred yet. Once a customer shares their code, the friends they bring show up here.','还没有推荐记录。顾客分享邀请码后，带来的好友会显示在这里。')}</div>`
+        : `<div class="num" style="font-size:15px;line-height:1.6">${T(a.total+' friends referred · '+a.converted+' ordered', a.total+' 位好友 · '+a.converted+' 位已下单')}</div>
+           <div class="num" style="font-size:13px;color:var(--text-secondary);margin-top:4px">${T(money0(CUR,a.paid_out)+' rewarded', '已发放奖励 '+money0(CUR,a.paid_out))}</div>`;
+    return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+      <div style="background:var(--surface-raised);border-radius:14px;padding:16px"><div class="eyebrow">${T('Overview','概览')}</div>
+        <div style="margin-top:8px">${overview}</div></div>
+      <div style="display:flex;align-items:center;gap:12px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:14px">
+        <span style="flex:1;font-size:15px">${busy?T('Saving…','保存中…'):T('Referrals on','推荐已开启')}</span>${toggle(featOn('affiliate'),"APP.cmd('toggleFeature','affiliate')")}</div>
+      ${state.featErr?`<div style="font-size:14px;color:var(--brick)">${state.featErr}</div>`:''}
+      <div style="text-align:center;font-size:12.5px;color:var(--text-secondary)">${T('Reward amounts and the ledger are on desktop','奖励金额与明细在电脑端')}</div></div>`;
+  }},
   social:{title:['Social proof','社交证明'],render:()=>nothingYet(T('Set up on desktop','在电脑端设置'),
     T('Social proof shows recent buyers to your customers. It is configured on desktop; nothing about it can be read or changed from here yet.','社交证明会向顾客展示最近的购买。设置在电脑端完成，手机端暂时无法查看或修改。')),
   },
@@ -1752,6 +1802,25 @@ async function uploadMedia(files){
   }
   if(ok){ state.mediaTried=false; state.media=null; loadMedia(); showToast(ok===1?T('Photo added','已添加图片'):T(ok+' photos added',ok+' 张图片已添加')); }
   else render();
+}
+/* The Affiliate screen used to state "42 affiliates · ¥8,120 referred" — a
+   sentence from the mockup, on a screen an operator would believe. The real
+   summary rides the referrals endpoint, past api()'s .data unwrap. */
+async function loadAffiliate(){
+  if(state.affiliateTried) return; state.affiliateTried=true;
+  try{ const j=await apiRaw('/affiliate/referrals?pageSize=1');
+    state.affiliate=(j&&j.summary)||null;
+  }catch(e){}
+  render();
+}
+/* "Routing · Nearest store" was a setting-shaped row for something that is not
+   a setting: routing IS nearest-store, always. What an operator can actually
+   act on is whether the addresses it routes by are located at all — a store
+   with no coordinates cannot be the nearest one to anybody. */
+async function loadGeo(){
+  if(state.geoTried) return; state.geoTried=true;
+  try{ state.geo=await api('/inventory/geocode-status'); }catch(e){}
+  render();
 }
 async function loadMedia(){
   if(state.mediaLoading||state.mediaTried) return; state.mediaLoading=true; state.mediaTried=true;
@@ -2685,9 +2754,14 @@ function mapActivity(r){
 const INV_KIND={issued:'on',requested:'pending',pending:'pending'};
 function mapInvoice(r){
   const st=String(r.invoice_status||'requested').toLowerCase();
-  const label=st==='issued'?['Issued','已开票']:['Pending','待开票'];
+  const issued=st==='issued';
+  const label=issued?['Issued','已开票']:['Pending','待开票'];
   return {id:r.invoice_number||r.order_no||('#'+r.id), order:r.order_no||'—', amount:money(CUR,r.total),
-    status:label, kind:INV_KIND[st]||'pending', date:[hhmm(r.invoice_issued_at||r.placed_at)||'—',hhmm(r.invoice_issued_at||r.placed_at)||'—']};
+    status:label, kind:INV_KIND[st]||'pending', issued,
+    // Only an issued fapiao has a file. The button used to be offered on every
+    // row and did nothing on any of them.
+    file:r.invoice_file_url||null,
+    date:[fmtDay(r.invoice_issued_at||r.placed_at)||'—',fmtDay(r.invoice_issued_at||r.placed_at)||'—']};
 }
 function mapVoucher(r){
   const val=r.type==='percent'?(r.value+'% off'):money(CUR,r.value)+' off';
@@ -2805,7 +2879,11 @@ async function loadLive(){
   }catch(e){ if(String(e.message)==='auth') return; }
   // orders list (the heart of the app)
   try{ const rows=await api('/orders?limit=50');
-    if(Array.isArray(rows)&&rows.length){
+    // An array, not a NON-EMPTY array: a shop whose first night is quiet has
+    // zero overnight orders, and zero is an answer. Requiring rows.length left
+    // liveRecap null and the card fell back to the mock's "214 orders
+    // processed" — an invented number, on a live phone, in the hero.
+    if(Array.isArray(rows)){
       // Overnight recap from raw timestamps: last night 22:00 → 08:00 today (or now, if earlier).
       // gzgrocery rows are display-only wholesale-pickup mirrors (see routes/retail.js
       // dashboard route) — they're excluded from every other order/revenue count in the
@@ -2824,6 +2902,9 @@ async function loadLive(){
       state.liveOrders=rows.map(mapOrderRow); DB.orders=state.liveOrders;
     }
   }catch(e){}
+  // Tried, whatever came back. The Recap uses this to tell "no orders" from
+  // "never asked": only the second may show the sample card.
+  state.recapTried=true;
   // products
   try{ const rows=await api('/products?limit=50');
     if(Array.isArray(rows)&&rows.length){ DB.products=rows.map(mapProduct); state.liveProductsLoaded=true; }
@@ -2855,7 +2936,12 @@ async function loadLive(){
   api('/categories').then(r=>set(()=>{ if(Array.isArray(r)&&r.length) DB.categories=r.map(mapCategory); })).catch(()=>{});
   api('/purchases').then(r=>set(()=>{ if(Array.isArray(r)&&r.length) DB.purchasing=r.map(mapPurchase); })).catch(()=>{});
   api('/activity').then(r=>set(()=>{ const rows=(r&&r.rows)||(Array.isArray(r)?r:null); if(rows&&rows.length) DB.activity=rows.slice(0,20).map(mapActivity); })).catch(()=>{});
-  api('/invoices').then(r=>set(()=>{ const rows=Array.isArray(r)?r:(r&&r.data); if(rows&&rows.length) DB.invoices=rows.map(mapInvoice); if(r&&r.counts) state.liveInvoiceCounts=r.counts; })).catch(()=>{});
+  // apiRaw, not api: the chip counts ride the envelope beside `data`, and
+  // api() returns `data` alone — so liveInvoiceCounts was never once set and
+  // the chips kept showing the mock's 214 / 198 / 16.
+  apiRaw('/invoices').then(r=>set(()=>{ const rows=(r&&r.data)||[]; state.invLoaded=true;
+    if(rows.length) DB.invoices=rows.map(mapInvoice); else DB.invoices=[];
+    if(r&&r.counts) state.liveInvoiceCounts=r.counts; })).catch(()=>{});
   api('/vouchers').then(r=>set(()=>{ if(Array.isArray(r)&&r.length){ DB.coupons=r.map(mapVoucher);
     DB.coupons.forEach(c=>{ if(state.sw['c_'+c.code]===undefined) state.sw['c_'+c.code]=c.on; }); } })).catch(()=>{});
   api('/flash-sales').then(r=>set(()=>{ if(Array.isArray(r)&&r.length) DB.flash=r.map(mapFlash); })).catch(()=>{});

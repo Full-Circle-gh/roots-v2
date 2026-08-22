@@ -153,9 +153,13 @@ desktop is the right home
 |---|---|
 | Channel board with live status | ✅ |
 | Channel detail (mirror + config) | ✅ read-only |
-| Delivery zones, fees, cut-off, couriers, pickup points | ✅ shown, ⚠ toggles fake |
+| Delivery zones | ✅ count, from `/delivery-zones` |
+| Store geocoding health | ✅ — replaced a "Routing · Nearest store" row that described behaviour as if it were a setting. A store with no coordinates can never be the nearest one, and now the phone says so |
+| Fees, cut-off, couriers, pickup points | ➖ |
 | Auto-print receipts | ✅ |
-| Other feature toggles | ⚠ fake — one endpoint mapping each, still owed |
+| Feature toggles (membership, reviews, feedback, FAQ, affiliate) | ✅ — all real, `PUT /config {features.<key>}` |
+| Affiliate overview | ✅ — the real referral summary; it used to state "42 affiliates · ¥8,120 referred" |
+| Invoices: real counts, working chips, open the issued file | ✅ — the counts ride the envelope beside `data`, which `api()` was discarding |
 | Sign out | ✅ |
 
 ---
@@ -207,7 +211,8 @@ Ordered by what an operator loses today, not by effort.
 | ~~12~~ | ~~Message the customer~~ | | **Done 2026-08-22** |
 | ~~13~~ | ~~The Recap's "Show the work" feed~~ | `/dashboard/activity` | **Done 2026-08-22** |
 | ~~14~~ | ~~Media upload from the phone~~ | `POST /media/upload` | **Done 2026-08-22** |
-| 9 | **The remaining feature toggles** | one endpoint each | fapiao, membership, FAQ, feedback inbox, pop-ups, coupon active — each needs its real key confirmed before it is wired. |
+| ~~9~~ | ~~The remaining feature toggles~~ | | **Done 2026-08-22** — the last two that wrote nothing (the Feedback empty state's Enable, the Affiliate screen's switch) now write `features.<key>`, and the local-only `sw` command is gone rather than left where the next person would reach for it |
+| ~~15~~ | ~~Invented content: Affiliate overview, Invoice counts, the fapiao banner, the Recap's fallback~~ | | **Done 2026-08-22** |
 
 Nothing above needs a new endpoint. Every one of them needs the same three
 states the rulebook already requires and the order actions now demonstrate:
