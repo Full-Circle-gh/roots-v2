@@ -48,6 +48,21 @@ let firstRun = true;
 const FAIL_THRESHOLD = Number(process.env.PROXY_FAIL_THRESHOLD || 2);
 const failCount = {}; // `${channel}:${label}` -> consecutive failed probes
 
+// Everything this process decides used to go to the WeCom bot and NOWHERE else,
+// so `pm2 logs proxy-watchdog` was empty — and sendProxyAlert returns false and
+// says nothing when PROXY_WATCHDOG_WEBHOOK is unset or the send fails, which the
+// startup line already admits is possible ("webhook=MISSING"). The process that
+// decides which exit every Meituan channel uses kept no local record of having
+// decided anything. Every alert is now mirrored to stdout, where pm2 keeps it.
+function say(msg) { console.log(`[proxy-watchdog] ${new Date().toISOString()} ${msg}`); }
+async function announce(text, line) { say(line); await pm.sendProxyAlert(text); }
+
+// …and a periodic line even when nothing changes, so the log distinguishes "no
+// failovers" from "this loop stopped running hours ago". Bounded: once per
+// window per channel, not once per tick.
+const LOG_EVERY_MS = Number(process.env.PROXY_WATCHDOG_LOG_MS || 1_800_000); // 30 min
+const lastLogged = {}; // channel -> epoch ms
+
 async function tick() {
   const stateOut = pm.readState();
   for (const channel of pm.CHANNELS) {
@@ -75,9 +90,10 @@ async function tick() {
       const now = avail[c.label], before = prevHealth[c.label];
       if (before !== undefined && before !== now) {
         const name = pm.LABEL_CN[c.label] || c.label;
-        await pm.sendProxyAlert(now
+        await announce(now
           ? `🟢 ${cn}：${name} 恢复可用\n${cn}: ${c.label} proxy back UP`
-          : `🟠 ${cn}：${name} 不可达\n${cn}: ${c.label} proxy DOWN (can't reach Meituan)`);
+          : `🟠 ${cn}：${name} 不可达\n${cn}: ${c.label} proxy DOWN (can't reach Meituan)`,
+          `${channel}: ${c.label} ${now ? 'back UP' : "DOWN (can't reach Meituan)"}`);
       }
     }
     lastHealth[channel] = avail;
@@ -86,9 +102,17 @@ async function tick() {
     const prevActive = lastActive[channel];
     const toName = pm.LABEL_CN[active.label] || active.label;
     if (firstRun) {
-      await pm.sendProxyAlert(`ℹ️ ${cn}：当前走 ${toName}\n${cn} active proxy: ${active.label}\n${desc}`);
+      await announce(`ℹ️ ${cn}：当前走 ${toName}\n${cn} active proxy: ${active.label}\n${desc}`,
+        `${channel}: active=${active.label} — ${desc}`);
+      lastLogged[channel] = Date.now();
     } else if (prevActive !== undefined && prevActive !== active.url) {
-      await pm.sendProxyAlert(`🔀 ${cn}：切换到 ${toName}\n${cn} FAILOVER → ${active.label}\n${desc}`);
+      await announce(`🔀 ${cn}：切换到 ${toName}\n${cn} FAILOVER → ${active.label}\n${desc}`,
+        `${channel}: FAILOVER ${prevActive || 'direct'} → ${active.label} — ${desc}`);
+      lastLogged[channel] = Date.now();
+    } else if (Date.now() - (lastLogged[channel] || 0) >= LOG_EVERY_MS) {
+      // Quiet-period heartbeat — no alert, just proof the loop is still deciding.
+      say(`${channel}: active=${active.label} — ${desc}`);
+      lastLogged[channel] = Date.now();
     }
     lastActive[channel] = active.url;
 
@@ -105,6 +129,10 @@ async function main() {
   console.log(`[proxy-watchdog] residential=${pm.residentialUrl() || '(unset)'} gz=${pm.gzUrl() ? 'set' : '(unset)'} webhook=${pm.envVal('PROXY_WATCHDOG_WEBHOOK') ? 'set' : 'MISSING'}`);
   for (;;) {
     try { await tick(); } catch (e) { console.error('[proxy-watchdog] tick error:', e.message); }
+    // A tick that throws writes no state, so the entry ages — which is now the
+    // signal a reader acts on (lib/proxy-manager STATE_TTL_MS). Nothing to do
+    // here but keep looping; the daemons re-elect around a watchdog that has
+    // stopped producing decisions.
     await new Promise(r => setTimeout(r, CHECK_MS));
   }
 }
