@@ -21575,11 +21575,14 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     o.refund_status, o.refund_amount_requested,
                     o.refund_amount_approved, o.refund_amount_paid,
                     o.refund_requested_at,
-                    -- Alipay proof verdict, so a pending row can say WHY it is
-                    -- still pending ("payment doesn't match") instead of looking
-                    -- like an ordinary unpaid order. The list only ever reads
-                    -- 'mismatch'; the screenshot, the read amounts and the
-                    -- reasons stay in the drawer.
+                    -- Alipay proof verdict, so a row inside the Pending chip can
+                    -- say WHY it is still pending ("payment doesn't match")
+                    -- instead of looking like an ordinary unpaid order. A
+                    -- rejected proof is deliberately NOT its own status or its
+                    -- own chip: the order has not moved, so neither does its
+                    -- place in this list — the row just carries a mark. The list
+                    -- only ever reads 'mismatch'; the screenshot, the read
+                    -- amounts and the reasons stay in the drawer.
                     o.alipay_ocr_verdict,
                     -- Fapiao request riding the order (the Invoices sub-tab is
                     -- retired; the list's "Needs invoice" chip + row summary and
@@ -21661,13 +21664,6 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
     // issued ones stay browsable in this view but sort below the open work.
     filterSql += ` AND o.needs_invoice = 1
              AND o.status NOT IN ('cancelled','pending_payment')`;
-  } else if (status === 'payment_mismatch') {
-    // Pseudo-status: the customer's Alipay proof was read and rejected, so the
-    // order never left pending_payment. Same definition as the dashboard's
-    // Needs-you fire (see /dashboard/ops), so the card's deep link and this
-    // chip can never show different orders. Marking it paid or cancelling it
-    // is what removes it from the view — there is no separate "handled" flag.
-    filterSql += " AND o.alipay_ocr_verdict = 'mismatch' AND o.status = 'pending_payment'";
   } else if (status === 'paid') {
     // The "Paid / to-ship" tab is a worklist, not a strict status filter: a
     // multi-parcel order that's had only SOME parcels shipped flips to
@@ -21719,13 +21715,7 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
     ? ` ORDER BY (CASE WHEN o.invoice_status = 'issued' THEN 1 ELSE 0 END) ASC,
                  (CASE WHEN o.invoice_status = 'issued' THEN NULL ELSE o.placed_at END) ASC,
                  o.placed_at DESC LIMIT ? OFFSET ?`
-    // The mismatch view is a worklist too: the customer who has been waiting
-    // longest on a payment we refused to confirm goes to the top. Same clock
-    // the dashboard fire ages from (proof upload, falling back to placement),
-    // so the card's "oldest 4h" names the row this list puts first.
-    : (status === 'payment_mismatch')
-      ? ' ORDER BY COALESCE(o.alipay_proof_at, o.placed_at) ASC LIMIT ? OFFSET ?'
-      : ' ORDER BY o.placed_at DESC LIMIT ? OFFSET ?';
+    : ' ORDER BY o.placed_at DESC LIMIT ? OFFSET ?';
   params.push(limit, offset);
 
   const rows = tdb().prepare(sql).all(...params);
@@ -21840,15 +21830,6 @@ router.get('/api/retail-admin/order-status-counts', requireRetailAdmin, (req, re
       WHERE needs_invoice = 1
         AND COALESCE(invoice_status, 'requested') <> 'issued'
         AND status NOT IN ('cancelled','pending_payment')${where}`
-  ).get(...args).n;
-
-  // Alipay proofs that were read and rejected — orders stuck in pending_payment
-  // with the customer believing they have paid. Matches the `payment_mismatch`
-  // pseudo-filter and the dashboard's Needs-you fire exactly, so the chip badge,
-  // the list and the card all count the same orders.
-  out.payment_mismatch = tdb().prepare(
-    `SELECT COUNT(*) AS n FROM retail_orders
-      WHERE alipay_ocr_verdict = 'mismatch' AND status = 'pending_payment'${where}`
   ).get(...args).n;
 
   // Oldest UNFULFILLED order, for the Orders page header status line (§1.7).

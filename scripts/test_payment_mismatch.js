@@ -26,16 +26,19 @@
  *      already judged (marked paid / cancelled), not a read-only channel mirror.
  *   2. SELF-CLEARING — the same rows leave the queue on the two actions an
  *      operator can take, with no "handled" flag to forget to set.
- *   3. ONE DEFINITION — the dashboard fire, the Orders chip and the chip's badge
- *      count select the SAME orders. Asserted by running all three predicates
- *      over one fixture set, so a future edit to one of them fails here.
+ *   3. NOT A STAGE — there is no pseudo-status, no chip and no badge for it,
+ *      and the order is still plainly Pending. An earlier build gave it a
+ *      "Payment check" chip beside Pending; that invented a status the order
+ *      does not have, and an operator scanning Pending for the money they were
+ *      owed no longer found it there. These assertions stop it coming back.
  *   4. THE CLOCK — the queue ages from the proof upload, and a row with no
  *      proof stamp still gets a never-null age (placed_at) rather than a NaN.
  *   5. THE ROW'S WORDS — the amount gap is stated only when we actually read an
  *      amount AND it differs; a mismatch on payee/time says nothing false.
- *   6. THE DOOR — one order behind the fire opens THAT order focused on its
- *      payment card; several open the filtered list; a payload that lost its id
- *      falls back to the list rather than being a dead click.
+ *   6. THE DOOR — the fire opens the PENDING list, the chip the order is
+ *      already in. A rejected proof is not a stage: the order never moved, so
+ *      neither does its place in the Orders list, and the row there carries the
+ *      mark that says which one it is.
  */
 'use strict';
 
@@ -103,32 +106,17 @@ function sliceTemplate(src, anchor) {
   return src.slice(open, close + 1);
 }
 
-// ── The three predicates, lifted out of routes/retail.js ──────────────────
-// Each is EVALUATED, not pattern-matched: what these tests run is the string
-// the route will hand to SQLite.
-
-// 1. The dashboard fire (/dashboard/ops). The count and the items query share
-//    one predicate in the route, so testing the items query tests both.
+// ── The one predicate, lifted out of routes/retail.js ─────────────────────
+// EVALUATED, not pattern-matched: what these tests run is the string the route
+// will hand to SQLite.
+//
+// One, and only one. This suite briefly carried three — the dashboard block, an
+// Orders pseudo-status and a chip badge — and section 3 exists to keep it that
+// way: the queue is a notification, not a place an order goes.
 const PM_WHERE_SRC = sliceStatement(RETAIL_JS, 'const pmWhere =');
 const PM_ITEMS_SQL_SRC = sliceTemplate(RETAIL_JS, 'const pmItems = tdb().prepare(');
 const pmItemsSql = (storeId) =>
   vm.runInNewContext(`(() => { ${PM_WHERE_SRC} return ${PM_ITEMS_SQL_SRC}; })()`, { storeId });
-
-// 2. The Orders list chip (?status=payment_mismatch). The route appends to a
-//    running `filterSql`; the branch's own contribution is what is under test.
-const PM_LIST_SRC = sliceStatement(RETAIL_JS, 'filterSql +=',
-  { from: "} else if (status === 'payment_mismatch') {" });
-const pmListWhere = () =>
-  vm.runInNewContext(`(() => { let filterSql = ''; ${PM_LIST_SRC} return filterSql; })()`, {});
-
-// 3. The chip's badge (/order-status-counts).
-const PM_COUNT_SQL = sliceTemplate(RETAIL_JS, 'out.payment_mismatch = tdb().prepare(');
-const pmCountSql = (storeScoped) =>
-  vm.runInNewContext('(() => { return ' + PM_COUNT_SQL + '; })()',
-    // `where` is the counts route's shared clause: the read-only-channel
-    // exclusion, plus the store filter when one was passed. Rebuilt here
-    // exactly as that route builds it.
-    { where: " AND COALESCE(channel,'') NOT IN ('meituan','gzgrocery')" + (storeScoped ? ' AND store_id = ?' : '') });
 
 // ── The database ──────────────────────────────────────────────────────────
 const { openTablesDb, driver } = require('./test-support/memory-db');
@@ -158,14 +146,10 @@ function seed(db, row = {}) {
       r.verdict, r.ocr === null ? null : JSON.stringify(r.ocr), r.proof_at);
   return no;
 }
-// What each predicate says about the SAME table, as a set of order_nos.
+// What the block says about the table, as a set of order_nos.
 const opsRows = (db, storeId = '') => db.prepare(pmItemsSql(storeId))
   .all(storeId ? { store_id: storeId, preview: 50 } : { preview: 50 });
 const opsNos = (db, storeId = '') => opsRows(db, storeId).map(r => r.order_no);
-const listNos = (db) => db.prepare(
-  `SELECT o.order_no FROM retail_orders o WHERE 1=1 ${pmListWhere()} ORDER BY o.order_no`
-).all().map(r => r.order_no);
-const badgeCount = (db) => db.prepare(pmCountSql(false)).get().n;
 
 (async () => {
 
@@ -246,36 +230,51 @@ it('a re-read that now matches takes it out of the queue', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────
-console.log('\n3 · one definition — the fire, the chip and the badge agree');
+console.log('\n3 · a rejected proof is NOT a stage of its own');
 
-it('all three predicates select the same orders', () => {
-  // The card's deep link lands on the chip, and the chip carries the badge. If
-  // these three ever disagreed, the operator would click a fire counting 3 and
-  // arrive at a list of 2 — which is the failure this test exists to prevent.
-  const db = freshDb();
-  const a = seed(db);
-  const b = seed(db, { proof_at: '2026-08-22 04:00:00' });
-  seed(db, { verdict: 'match' });
-  seed(db, { status: 'paid' });
-  seed(db, { verdict: 'error' });
-  assert.deepStrictEqual(opsNos(db).slice().sort(), [a, b].sort(), 'dashboard fire');
-  assert.deepStrictEqual(listNos(db), [a, b].sort(), 'orders chip');
-  assert.strictEqual(badgeCount(db), 2, 'chip badge');
+// The order never moved, so its place in the Orders list must not move either.
+// This was briefly built the other way — a "Payment check" chip beside Pending
+// — and that chip invented a status the order does not have: the same order
+// appeared to be in two states, and an operator scanning Pending for the money
+// they were owed no longer found it there. These tests are what stop it coming
+// back.
+
+it('the orders list has no payment_mismatch filter to reach', () => {
+  assert.ok(!/status === 'payment_mismatch'/.test(RETAIL_JS),
+    'a pseudo-status branch is back in the orders list route');
 });
 
-it('the fire follows the dashboard store picker; the chip predicate never scopes', () => {
-  // The fire is store-scoped like every sibling on /dashboard/ops. The chip's
-  // own predicate is not — the Orders list route applies its own `store_id`
-  // filter a few lines later, and narrowing twice would silently drop rows for
-  // an operator who had picked a store there.
+it('order-status-counts ships no badge for it', () => {
+  assert.ok(!/out\.payment_mismatch/.test(RETAIL_JS),
+    'a chip badge count is back on /order-status-counts');
+});
+
+it('the chip row carries no such chip', () => {
+  const html = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin.html'), 'utf8');
+  assert.ok(!/data-status="payment_mismatch"/.test(html), 'the Payment check chip is back');
+  assert.ok(!/oc-payment_mismatch/.test(html), 'its badge slot is back');
+  // Non-vacuous: the chip the fire DOES point at has to be there.
+  assert.ok(/data-status="pending_payment"/.test(html), 'the Pending chip is missing');
+});
+
+it('a rejected proof still sits in the plain Pending list, counted as pending', () => {
+  // The point of the whole shape: nothing about the order changed, so the
+  // Pending chip's own filter still finds it and its badge still counts it.
+  const db = freshDb();
+  const no = seed(db);
+  const inPending = db.prepare(
+    "SELECT order_no FROM retail_orders WHERE status = 'pending_payment'"
+  ).all().map(r => r.order_no);
+  assert.deepStrictEqual(inPending, [no]);
+});
+
+it('the fire follows the dashboard store picker, like every sibling on /dashboard/ops', () => {
   const db = freshDb();
   const mine = seed(db, { store_id: 1 });
   const theirs = seed(db, { store_id: 2 });
   assert.deepStrictEqual(opsNos(db, '1'), [mine], 'store-scoped fire sees one shelf');
   assert.deepStrictEqual(opsNos(db, '').slice().sort(), [mine, theirs].sort(),
     'all-stores view sees both');
-  assert.deepStrictEqual(listNos(db), [mine, theirs].sort(),
-    'the pseudo-status branch adds no store clause of its own');
 });
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -297,19 +296,12 @@ it('a row with no proof stamp still gets an age — never null, never NaN', () =
   assert.strictEqual(row.alipay_proof_at, null, 'the raw column stays truthful');
 });
 
-it('the longest-waiting customer is first — both on the card and in the list', () => {
+it('the longest-waiting customer is first, so the card ages off the true oldest', () => {
   const db = freshDb();
   const recent = seed(db, { proof_at: '2026-08-22 06:45:00' });
   const oldest = seed(db, { proof_at: '2026-08-21 11:00:00' });
   const middle = seed(db, { proof_at: '2026-08-22 01:00:00' });
   assert.deepStrictEqual(opsNos(db), [oldest, middle, recent]);
-  // The chip view is a worklist too, and it must age off the SAME clock — so
-  // the card's "oldest 4h" names the order that list puts first. Read off the
-  // shipped ORDER BY: the branch that picks it, and the clause it picks.
-  const listOrderBy = sliceStatement(RETAIL_JS, "(status === 'payment_mismatch')",
-    { from: "sql += (status === 'needs_invoice')" });
-  assert.ok(/ORDER BY COALESCE\(o\.alipay_proof_at, o\.placed_at\) ASC/.test(listOrderBy),
-    'the chip view must sort on the proof clock, oldest first');
 });
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -376,7 +368,6 @@ it('one order → the row states the actual gap', () => {
   const f = buildFire({ count: 1, items: [{ id: 7, paid_amount: 318.00, total: 318.20 }] });
   assert.strictEqual(f.state, 'paid ¥318.00, order ¥318.20');
   assert.strictEqual(f.sev, 'brick', 'money in dispute is never amber');
-  assert.strictEqual(f.go, 'dashOpenPaymentMismatch()');
   assert.strictEqual(f.n, 1);
 });
 
@@ -438,93 +429,38 @@ it('the fires that had only one of the two are unchanged', () => {
 // ─────────────────────────────────────────────────────────────────────────
 console.log('\n7 · the door — where a click on the fire lands');
 
-const OPEN_SRC = sliceBlock(DASH_JS, 'function dashOpenPaymentMismatch()');
-function clickFire(payment_mismatch) {
-  const seen = { opened: null, opts: null, chip: null };
-  const ctx = {
-    DASH_OPS: payment_mismatch === undefined ? null : { payment_mismatch },
-    openOrder: (id, opts) => { seen.opened = id; seen.opts = opts; },
-    tdSecOpenOrders: (s) => { seen.chip = s; },
-  };
-  vm.createContext(ctx);
-  new vm.Script(`${OPEN_SRC}; dashOpenPaymentMismatch();`).runInContext(ctx);
-  return seen;
-}
+// The fire's `go` is read off the shipped push rather than asserted as a
+// string in two places, so renaming the destination moves this test.
+const FIRE_GO = buildFire({ count: 2, items: [{ id: 864 }] });
 
-it('ONE order → that order’s drawer, landed on its payment card', () => {
-  const s = clickFire({ count: 1, items: [{ id: 864, order_no: 'TC000864' }] });
-  assert.strictEqual(s.opened, 864, 'the internal id, never the order_no');
-  // Compared field-by-field, not deepStrictEqual: the object is built inside the
-  // vm context, so its prototype is that realm's Object and a strict deep
-  // compare fails on provenance rather than on content.
-  assert.strictEqual(s.opts.focus, 'payment');
-  assert.deepStrictEqual(Object.keys(s.opts), ['focus'], 'no other opt is passed');
-  assert.strictEqual(s.chip, null, 'no tab change — the operator keeps their place');
+it('the fire opens the Pending list — not a chip of its own, not a drawer', () => {
+  assert.strictEqual(FIRE_GO.go, "tdSecOpenOrders('pending_payment')");
 });
 
-it('SEVERAL orders → the Orders list on the payment-check chip', () => {
-  const s = clickFire({ count: 3, items: [{ id: 864 }, { id: 865 }] });
-  assert.strictEqual(s.chip, 'payment_mismatch');
-  assert.strictEqual(s.opened, null);
-});
-
-it('a payload that lost its id falls back to the list — never a dead click', () => {
-  assert.strictEqual(clickFire({ count: 1, items: [{ order_no: 'TC000864' }] }).chip, 'payment_mismatch');
-  assert.strictEqual(clickFire({ count: 1, items: [] }).chip, 'payment_mismatch');
-  assert.strictEqual(clickFire(undefined).chip, 'payment_mismatch');
-});
-
-it('the chip the fallback clicks actually exists in the shipped page', () => {
-  // Non-vacuous version of the test above: tdSecOpenOrders is a no-op when no
-  // chip carries that data-status, so the fallback would be a silent dead end.
+it('the destination is the chip that already exists', () => {
+  // tdSecOpenOrders is a silent no-op when no chip carries the data-status it
+  // is handed, so a typo here would be a dead click with nothing to show for
+  // it. This is the assertion that makes the one above non-vacuous.
   const html = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin.html'), 'utf8');
-  assert.ok(/data-status="payment_mismatch"/.test(html), 'no payment_mismatch chip in retail-admin.html');
+  const target = /go: "tdSecOpenOrders\('([a-z_]+)'\)"/.exec(
+    sliceBlock(DASH_JS, "if (pm.count && dashCardWants('orders'))", { from: '// Payment read but rejected' }));
+  assert.ok(target, 'the fire no longer routes through tdSecOpenOrders');
+  assert.ok(new RegExp(`data-status="${target[1]}"`).test(html),
+    `the fire points at a chip that does not exist: ${target[1]}`);
+});
+
+it('nothing opens the order drawer from the dashboard any more', () => {
+  // The build this replaced opened one order's drawer focused on its Alipay
+  // card. That path and everything that served it is gone, not merely unused:
+  // a dead helper reads as a live feature to the next person.
+  assert.ok(!/dashOpenPaymentMismatch/.test(DASH_JS), 'the old opener is still here');
+  assert.ok(!/odFocusPaymentSection/.test(ORDERS_JS), 'the scroll helper is still here');
+  assert.ok(!/focus === 'payment'/.test(ORDERS_JS), "openOrder still honours focus: 'payment'");
+  assert.ok(!/ap-proof-/.test(ORDERS_JS), 'the proof card still carries its scroll anchor');
 });
 
 // ─────────────────────────────────────────────────────────────────────────
-console.log('\n8 · the landing — scrolling to the payment card');
-
-const FOCUS_SRC = sliceBlock(ORDERS_JS, 'function odFocusPaymentSection(orderId)');
-function focusWith(nodeId) {
-  const seen = { scrolled: 0 };
-  const el = { scrollIntoView: () => { seen.scrolled++; } };
-  const ctx = { document: { getElementById: (id) => (id === nodeId ? el : null) } };
-  vm.createContext(ctx);
-  new vm.Script(`${FOCUS_SRC}; var __r = odFocusPaymentSection(864);`).runInContext(ctx);
-  return { ...seen, returned: ctx.__r };
-}
-
-it('scrolls THIS order’s proof card into view', () => {
-  const r = focusWith('ap-proof-864');
-  assert.strictEqual(r.scrolled, 1);
-  assert.strictEqual(r.returned, true);
-});
-
-it('an order whose proof vanished between the poll and the click just opens', () => {
-  // Re-read to a match, or cleared — the drawer renders no .ap-proof at all.
-  // Landing at the top of it is the honest fallback; a throw out of a click
-  // handler is not.
-  const r = focusWith('ap-proof-999');
-  assert.strictEqual(r.scrolled, 0);
-  assert.strictEqual(r.returned, false);
-});
-
-it('the card the scroll targets carries that id in the shipped renderer', () => {
-  assert.ok(/class="full ap-proof" id="ap-proof-\$\{o\.id\}"/.test(ORDERS_JS),
-    'renderAlipayProof must key its card by order id, or the landing is a no-op');
-});
-
-it('openOrder only scrolls when it was ASKED to', () => {
-  // Opt-gated: every existing caller passes no `focus` and must behave exactly
-  // as it did before this build.
-  const gate = sliceStatement(ORDERS_JS, "if (opts.focus === 'payment'");
-  assert.ok(/opts\.focus === 'payment' && _OPEN_ORDER/.test(gate), 'the opt-gate is gone');
-  assert.ok(!/^\s*odFocusPaymentSection\(/m.test(
-    ORDERS_JS.replace(/if \(opts\.focus === 'payment'[^\n]*\n/, '')), 'an ungated call would scroll every open');
-});
-
-// ─────────────────────────────────────────────────────────────────────────
-console.log('\n9 · the list row says why a pending order is still pending');
+console.log('\n8 · the list row says why a pending order is still pending');
 
 const LINE_SRC = sliceBlock(ORDERS_JS, 'function paymentCheckLine(o)');
 function lineFor(o) {

@@ -1331,27 +1331,6 @@ function dashOpenInvoices() {
   if (chip && typeof setOrderStatus === 'function' && !chip.classList.contains('active')) setOrderStatus(chip);
 }
 
-// The "Payment doesn't match" fire's door. One order behind it → open THAT
-// order's drawer over the dashboard, landed on its Alipay card (openOrder
-// fetches by id, so no tab change is needed and the operator keeps their
-// place) — a filtered list of one is a wasted click, and the fire's whole
-// subject is that one screenshot. Several → the Orders list on the
-// `payment_mismatch` chip, which the server sorts oldest-proof-first, so the
-// order the card aged from is the one at the top.
-//
-// The id is retail_orders.id, exactly what /dashboard/ops sends as `id` — not
-// the order_no the row would print. Falls back to the list if the payload is
-// missing or the item carries no id, so the row can never be a dead click.
-function dashOpenPaymentMismatch() {
-  const pm = (DASH_OPS && DASH_OPS.payment_mismatch) || null;
-  const one = (pm && pm.count === 1 && (pm.items || [])[0]) || null;
-  if (one && one.id !== null && one.id !== undefined && one.id !== '' && typeof openOrder === 'function') {
-    openOrder(one.id, { focus: 'payment' });
-    return;
-  }
-  tdSecOpenOrders('payment_mismatch');
-}
-
 // Programmatic tab-switch — clicks the tab button so the global switcher
 // runs (closes drawers, updates active classes, etc.). Returns true if the
 // tab exists, false otherwise — lets callers fall back to a sibling tab.
@@ -2361,10 +2340,6 @@ function tdSecPaint() {
   const ordersFoot = document.getElementById('td-sec-orders-foot');
   if (ordersFoot && TD_SEC_COUNTS) {
     ordersFoot.innerHTML = tdSecFootHtml([
-      // Ahead of everything else: money the customer has already sent and we
-      // have not accepted. Until someone checks it, the order cannot even join
-      // the queue below — it is still sitting in Pending.
-      { n: Number(c.payment_mismatch || 0), go: "tdSecOpenOrders('payment_mismatch')", label: n => cuT(`${n} ${n === 1 ? 'payment' : 'payments'} to check`, `${n} 笔付款待核对`) },
       // Paid and untouched — nobody has started it yet. This is the most urgent
       // thing on the page and it had no home until now: the operator saw
       // "preparing" but never the orders waiting to BE prepared.
@@ -2606,7 +2581,12 @@ function tdAttnRender() {
       // money they believe they already sent.
       mins: tdOldestMins(pm.items),
       state,
-      cta: cuT('Check payment', '核对付款'), go: 'dashOpenPaymentMismatch()',
+      // Straight to Pending. A rejected proof is not a stage of its own — the
+      // order never moved, so it is sitting in that list already, and the row
+      // there carries the brick "Payment doesn't match" mark (paymentCheckLine
+      // in 04-orders.js) that says which one it is. A chip of its own would
+      // have invented a status the order does not have.
+      cta: cuT('Open pending', '前往待付款'), go: "tdSecOpenOrders('pending_payment')",
     });
   }
 

@@ -2261,14 +2261,6 @@
     <div class="status-chips" id="orders-status-chips" style="margin-bottom: var(--s3)">
       <div class="status-chip st-all active"             data-status=""                 onclick="setOrderStatus(this)"><span class="dot"></span>All</div>
       <div class="status-chip st-pending_payment"        data-status="pending_payment"  onclick="setOrderStatus(this)"><span class="dot"></span>Pending<span class="chip-ct" id="oc-pending_payment"></span></div>
-      <!-- Pseudo-status, not a stored one: the customer's Alipay screenshot was
-           read and REJECTED (short amount, wrong payee, stale receipt, or a
-           proof already spent on another order), so the order is still sitting
-           inside Pending above with nothing saying why. Brick colouring (shared
-           with the refund chips) because it is money in dispute. Marking it paid
-           or cancelling it is what empties this view. Same definition as the
-           dashboard's "Payment doesn't match" fire. -->
-      <div class="status-chip st-refunded"               data-status="payment_mismatch" onclick="setOrderStatus(this)" title="Payment proof read but it doesn't match — check before marking paid · 付款凭证已识别但不一致,请核对后再标记付款"><span class="dot"></span>Payment check<span class="chip-ct alert" id="oc-payment_mismatch"></span></div>
       <div class="status-chip st-paid"                   data-status="paid"             onclick="setOrderStatus(this)"><span class="dot"></span>Paid<span class="chip-ct" id="oc-paid"></span></div>
       <div class="status-chip st-preparing"              data-status="preparing"        onclick="setOrderStatus(this)"><span class="dot"></span>Preparing<span class="chip-ct" id="oc-preparing"></span></div>
       <div class="status-chip st-rider_pickup"           data-status="rider_pickup"     onclick="setOrderStatus(this)" title="Meituan rider on the way to collect — have it ready · 美团骑手正来取货,请备好"><span class="dot"></span>Rider coming<span class="chip-ct alert" id="oc-rider_pickup"></span></div>
