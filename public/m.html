@@ -273,7 +273,7 @@ const state = {
   geo:null, geoTried:false, chan:null, chanTried:false, sales:null,
   recap:null, recapTried:false, recapSince:0, reallyAway:false, pos:'default',
   overflow:false, search:false, detailId:null, detailActions:false, productSku:null,
-  orderBusy:null, orderErr:null, replyBusy:false, replyErr:null, revBusy:null, revErr:null,
+  orderBusy:null, orderErr:null, replyBusy:false, replyErr:null, revBusy:null, revErr:null, parcelBusy:null,
   printer:null, printerLoading:false, printerBusy:false, printerErr:null,
   prodStores:null, prodStockReady:false, prodBusy:false, prodErr:null,
   cfg:null, setup:null, zones:null, mirror:null, mirrorLoading:null, mirrorMode:null,
@@ -344,6 +344,27 @@ reg('askRun', key=>{
     state.ask=null; state.askErr=null; render(); a.run(vals); return;
   }
   state.ask=null; state.askErr=null; render(); if(a.run) a.run(key);
+});
+/* One parcel of a multi-parcel order goes on its own. This is how an order can
+   read "Dispatched" and still sit in the Paid tab: the other box has not left. */
+reg('dispatchParcel', sid=>{
+  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  if(!o||o._id==null||state.parcelBusy) return;
+  state.parcelBusy=sid; state.orderErr=null; render();
+  apiWrite('/orders/'+o._id+'/shipments/'+sid+'/dispatch',{}).then(()=>{
+    state.parcelBusy=null;
+    showToast(T('Parcel dispatched','包裹已发货'));
+    // Re-read the order: the parcel's state, the order's status and the list's
+    // rollup all move together, and guessing any of them here would put the
+    // drawer and the row it came from out of step.
+    api('/orders/'+o._id).then(d=>{ if(state.detailId===o.id){ state.liveDetail=mapDetail(d); render(); } }).catch(()=>render());
+    loadOrdersPage();
+  }).catch(e=>{
+    state.parcelBusy=null;
+    if(String(e.message)==='auth') return;
+    state.orderErr=T('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
+    render();
+  });
 });
 /* The one forward step the status machine allows from where this order is. */
 reg('advance', to=>{
@@ -947,6 +968,12 @@ function screenOrders(){
             ${o.viewOnly?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('View only','只读')}</span>`:''}</span>
           ${pill(o.kind,T(...o.status))}</div>
         ${o.payNote?`<div style="display:flex;align-items:center;gap:7px;color:var(--${o.payNote.sev});font-size:13px">${ic(o.payNote.icon,15)}<span>${T(...o.payNote.label)}</span></div>`:''}
+        ${o.parcels?`<div style="display:flex;align-items:center;gap:7px;font-size:13px;color:var(--text-secondary);flex-wrap:wrap">
+          ${ic('package',14)}<span>${T(o.parcels.total+' parcels',o.parcels.total+' 个包裹')}</span>
+          ${o.parcels.delivered?`<span style="color:#5F7357">· ${T(o.parcels.delivered+' delivered',o.parcels.delivered+' 已签收')}</span>`:''}
+          ${o.parcels.moving?`<span>· ${T(o.parcels.moving+' in transit',o.parcels.moving+' 运输中')}</span>`:''}
+          ${o.parcels.toShip?`<span style="color:#8A6425;font-weight:500">· ${T(o.parcels.toShip+' to ship',o.parcels.toShip+' 待发货')}</span>`:''}
+        </div>`:''}
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
           <span style="font-size:13px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...o.ship)}</span>
           ${o.by?`<span class="num" style="font-size:13px;color:${o.byAmber?'#8A6425':'var(--text-secondary)'};flex:none">${T(...o.by)}</span>`:''}</div>
@@ -2041,6 +2068,11 @@ async function refreshOrders(){
     state.liveAttn=Object.assign({},state.liveAttn||{},{ship:(d.paid||0)+(d.preparing||0)}); render(); } }).catch(()=>{});
 }
 function findOrder(id){ return DB.orders.find(o=>o.id===id) || DB.purchasing.find(o=>o.id===id); }
+/* The hoisted tracking block is the ORDER-level waybill, which is the primary
+   shipment's and only that one. On a split order it would show the Air parcel's
+   number at the top, repeat it inside the Air card, and never mention the Land
+   one — so once an order has parcels, each card carries its own and the hoisted
+   block stands down. */
 function sheetOrderDetail(){
   const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId); if(!o) return '';
   const isPO=!!o.supplier;
@@ -2064,7 +2096,7 @@ function sheetOrderDetail(){
        ${state.orderErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
          <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
          <span style="font-size:14px;color:var(--brick)">${state.orderErr}</span></div>`:''}
-       ${o.trk?`<div class="card" style="padding:14px">
+       ${o.trk&&!(o.shipments&&o.shipments.length)?`<div class="card" style="padding:14px">
          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
            <span style="display:flex;align-items:center;gap:8px;min-width:0;color:var(--text-secondary)">${ic('truck',18)}<span style="font-size:14.5px;font-weight:500;color:var(--text-primary)">${T(...o.trk.carrier)}</span></span>
            ${o.trk.live?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]};gap:6px"><span style="width:7px;height:7px;border-radius:50%;background:#5F7357"></span>${T('Live sync','实时同步')}</span>`:''}</div>
@@ -2089,19 +2121,77 @@ function sheetOrderDetail(){
        ${o.receipt?`<div class="card" style="padding:14px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="eyebrow">${T('Receipt','小票')}</span>
          <button onclick="APP.cmd('reprint')" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:8px;cursor:pointer;padding:5px 9px;font-family:inherit">${ic('printer',15)} ${T('Reprint','重打')}</button></div>
          <div style="display:flex;align-items:center;gap:7px;margin-top:8px"><span style="display:flex;color:#5F7357">${ic('check',16,2.25)}</span><span style="font-size:14.5px">${T(...o.receipt)}</span></div></div>`:''}`}
-       <div><div class="eyebrow" style="padding:4px 4px 8px">${o.items.length} ${T('items','件')}</div>
-         <div style="display:flex;flex-direction:column;gap:8px">${o.items.map(it=>{
-           const sku=it[3], img=it[4];
-           return `<div style="display:flex;align-items:center;gap:12px;padding:10px;border:1px solid var(--border-default);border-radius:14px;background:var(--surface-card)">
-             <span style="width:44px;height:44px;border-radius:10px;flex:none;overflow:hidden;background:var(--surface-raised);border:1px solid var(--border-default);display:flex;align-items:center;justify-content:center;color:var(--text-secondary)${img?`;background-image:url('${String(img).replace(/'/g,'%27')}');background-size:cover;background-position:center;border-color:transparent`:''}">${img?'':ic('package',22)}</span>
-             <span style="flex:1;min-width:0">
-               <span style="display:block;font-size:14.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it[1]}</span>
-               ${sku?`<span class="num" style="display:inline-flex;align-items:center;gap:4px;font-size:10.5px;color:var(--text-secondary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:6px;padding:1px 6px;margin-top:4px">${ic('barcode',11)}${sku}</span>`:''}
-             </span>
-             <span style="text-align:right;flex:none"><span class="num" style="display:block;font-size:14px">${it[2]}</span><span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary);margin-top:1px">×${it[0]}</span></span></div>`;
-         }).join('')}</div></div>
+       ${orderItemsBlock(o)}
      </div>
    </div>`;
+}
+/* One line of an order. Same shape whether it sits loose or inside a parcel. */
+function itemRow(it){
+  const sku=it[3], img=it[4];
+  return `<div style="display:flex;align-items:center;gap:12px;padding:10px;border:1px solid var(--border-default);border-radius:14px;background:var(--surface-card)">
+    <span style="width:44px;height:44px;border-radius:10px;flex:none;overflow:hidden;background:var(--surface-raised);border:1px solid var(--border-default);display:flex;align-items:center;justify-content:center;color:var(--text-secondary)${img?`;background-image:url('${String(img).replace(/'/g,'%27')}');background-size:cover;background-position:center;border-color:transparent`:''}">${img?'':ic('package',22)}</span>
+    <span style="flex:1;min-width:0">
+      <span style="display:block;font-size:14.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it[1]}</span>
+      ${sku?`<span class="num" style="display:inline-flex;align-items:center;gap:4px;font-size:10.5px;color:var(--text-secondary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:6px;padding:1px 6px;margin-top:4px">${ic('barcode',11)}${sku}</span>`:''}
+    </span>
+    <span style="text-align:right;flex:none"><span class="num" style="display:block;font-size:14px">${it[2]}</span><span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary);margin-top:1px">×${it[0]}</span></span></div>`;
+}
+/* The desktop's shipment cards. The mode is the fact the phone was missing
+   entirely: an order that leaves as an Air parcel and a Land parcel arrives on
+   two different days, and nothing here said which box a line was in — or that
+   there were two boxes. Same four labels, same three states. */
+const PARCEL_MODE={
+  air:{en:'Air',zh:'空运',icon:'plane'},
+  land:{en:'Land',zh:'陆运',icon:'truck'},
+  local:{en:'Local delivery',zh:'同城配送',icon:'bike'},
+  supplier:{en:'Supplier-direct',zh:'供应商直发',icon:'warehouse'},
+};
+const PARCEL_STATE={
+  pending:{en:'Not shipped',zh:'未发货',kind:'clear'},
+  dispatched:{en:'Dispatched',zh:'已发货',kind:'success'},
+  delivered:{en:'Delivered',zh:'已送达',kind:'success'},
+};
+function parcelCard(o,sp,i,n){
+  const m=PARCEL_MODE[sp.mode]||PARCEL_MODE.local;
+  const st=PARCEL_STATE[sp.state]||PARCEL_STATE.pending;
+  const busy=state.parcelBusy===sp.id;
+  // Per-parcel dispatch, on the desktop's own conditions: this parcel has not
+  // gone, it is not supplier-direct (which ships when its waybill is entered),
+  // the order is somewhere it can ship from, and there is more than one parcel —
+  // with one, the header button already does exactly this.
+  const canDispatch = sp.state==='pending' && sp.mode!=='supplier' && n>1
+    && ['paid','preparing','dispatched'].includes(o.rawStatus) && !o.viewOnly && o._id!=null;
+  return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <span style="display:flex;align-items:center;gap:8px;min-width:0;color:var(--text-secondary)">${ic(m.icon,17)}
+        <span style="font-size:14.5px;font-weight:500;color:var(--text-primary)">${T(m.en,m.zh)}</span>
+        <span class="num" style="font-size:12.5px">${T(sp.units+' items',sp.units+' 件')}</span></span>
+      ${pill(st.kind,T(st.en,st.zh))}</div>
+    ${sp.items.length?`<div style="display:flex;flex-direction:column;gap:8px">${sp.items.map(itemRow).join('')}</div>`:''}
+    ${sp.no?`<div style="padding-top:10px;border-top:1px solid var(--border-default)">
+      <div class="num" style="font-size:12.5px;color:var(--text-secondary)">${(sp.carrier||T('Courier','快递')).toString()} ${sp.no}</div>
+      ${sp.event?`<div style="font-size:13.5px;margin-top:5px">${sp.event}</div>`:''}</div>`:''}
+    ${!sp.no&&sp.localEta?`<div style="padding-top:10px;border-top:1px solid var(--border-default);font-size:13.5px;color:var(--text-secondary)">${T('Arriving around '+sp.localEta,'预计 '+sp.localEta+' 送达')}</div>`:''}
+    ${canDispatch?`<button class="btn2" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('dispatchParcel',${sp.id})">${busy?T('Marking…','处理中…'):T('Mark this parcel dispatched','标记此包裹已发货')}</button>`:''}
+  </div>`;
+}
+function orderItemsBlock(o){
+  const ships=o.shipments||[];
+  const loose=ships.length?(o.loose||[]):(o.items||[]);
+  const n=(o.items||[]).length;
+  if(!ships.length){
+    return `<div><div class="eyebrow" style="padding:4px 4px 8px">${n} ${T('items','件')}</div>
+      <div style="display:flex;flex-direction:column;gap:8px">${(o.items||[]).map(itemRow).join('')}</div></div>`;
+  }
+  return `<div><div class="eyebrow" style="padding:4px 4px 8px">${T(ships.length>1?ships.length+' parcels':'1 parcel', ships.length+' 个包裹')} · ${n} ${T('items','件')}</div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      ${ships.map((sp,i)=>parcelCard(o,sp,i,ships.length)).join('')}
+      ${loose.length?`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;align-items:center;gap:8px;color:var(--text-secondary)">${ic('package',17)}
+          <span style="font-size:14.5px;font-weight:500;color:var(--text-primary)">${T('Not yet in a parcel','待分配包裹')}</span>
+          <span class="num" style="font-size:12.5px">${T(loose.length+' items',loose.length+' 件')}</span></div>
+        <div style="display:flex;flex-direction:column;gap:8px">${loose.map(itemRow).join('')}</div></div>`:''}
+    </div></div>`;
 }
 function orderActionRow(o,isPO){
   if(isPO) return `<div style="display:flex;align-items:center;gap:8px;margin-top:12px">
@@ -2794,6 +2884,15 @@ function payNoteOf(r){
       : ['A screenshot is on file and nobody has checked it. Open it on the desktop and verify.',
          '已上传付款截图但尚未核对。请在电脑端打开核对。']};
 }
+/* The desktop's renderSplitRollupLine, on a phone. Under two parcels there is
+   nothing to roll up and the row says nothing. */
+function parcelRollup(r){
+  const total=Number(r.shipment_count)||0;
+  if(total<2) return null;
+  const delivered=Math.min(Number(r.shipment_delivered)||0,total);
+  const moving=Math.min(Number(r.shipment_moving)||0,total-delivered);
+  return {total, delivered, moving, toShip:Math.max(0,total-delivered-moving)};
+}
 function mapOrderRow(r){
   let sk=ORDER_STATUS[r.status]||['pending',r.status||'—',r.status||'—'];
   let kind=sk[0];
@@ -2813,6 +2912,11 @@ function mapOrderRow(r){
     // pending_payment. It rides its own row as a mark, exactly as the desktop
     // does, so the Pending list can be scanned for the one that needs a person.
     payNote: payNoteOf(r),
+    // Multi-parcel rollup, from the list query's own counts. Without it a
+    // dispatched order sitting in the Paid tab looks like a bug: the tab is
+    // right — one parcel has gone and another has not — and the row was the
+    // only place that could say so.
+    parcels: parcelRollup(r),
     phone:r.recipient_phone||r.customer_phone||'—',
     addr:[r.address_full||'—', r.address_full||'—'],
     pay:[r.payment_method||'—', r.payment_method||'—'], txn:r.order_no||'—',
@@ -2822,9 +2926,28 @@ function mapOrderRow(r){
     items:[], breakdown:[['Subtotal',money(CUR,r.subtotal!=null?r.subtotal:r.total)]].concat(r.shipping_fee?[['Delivery',money(CUR,r.shipping_fee)]]:[]),
   };
 }
+const ITEM_TUPLE=it=>[it.qty||it.quantity||1, it.name_en||it.name||it.name_cn||'Item', money(CUR,it.price||it.unit_price||0), it.sku||'', it.image_url||it.image||''];
 function mapDetail(o){
   const base=mapOrderRow(o);
-  base.items=(o.items||[]).map(it=>[it.qty||it.quantity||1, it.name_en||it.name||it.name_cn||'Item', money(CUR,it.price||it.unit_price||0), it.sku||'', it.image_url||it.image||'']);
+  base.items=(o.items||[]).map(ITEM_TUPLE);
+  // The parcels the order is actually split into. An out-of-Guangzhou order
+  // becomes an Air parcel and a Land parcel, each shipping and arriving on its
+  // own clock — the phone showed one flat item list and one tracking block, so
+  // "which box is this in, and has it gone?" had no answer here at all.
+  base.shipments=(o.shipments||[]).map(sp=>({
+    id:sp.id, mode:sp.mode||'local', state:sp.state||'pending',
+    items:(sp.items||[]).map(ITEM_TUPLE),
+    units:(sp.items||[]).reduce((n,it)=>n+(Number(it.qty||it.quantity)||0),0),
+    carrier:sp.tracking_carrier||'', no:sp.tracking_number||'',
+    event:sp.tracking_status||'', live:!!(sp.tracking_kd100_subscribed||sp.jd_live),
+    localEta:sp.local_eta||null,
+  }));
+  // Anything not assigned to a parcel yet still has to show, or a line silently
+  // vanishes from the order it was bought on.
+  const inParcel=new Set();
+  (o.shipments||[]).forEach(sp=>(sp.items||[]).forEach(it=>inParcel.add(it.id)));
+  base.loose=(o.items||[]).filter(it=>!inParcel.has(it.id)).map(ITEM_TUPLE);
+  base.rawStatus=o.status||null;
   if(o.subtotal!=null||o.shipping_fee!=null){
     base.breakdown=[['Subtotal',money(CUR,o.subtotal!=null?o.subtotal:o.total)]].concat(o.shipping_fee?[['Delivery',money(CUR,o.shipping_fee)]]:[]);
   }
