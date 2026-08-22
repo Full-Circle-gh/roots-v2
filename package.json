@@ -19,6 +19,7 @@
     "test:addon-stock": "node scripts/test_addon_stock_gate.js",
     "test:preorder": "node scripts/test_preorder_local.js",
     "test:proxy": "node scripts/test_proxy_failover.js",
+    "test:queue-window": "node scripts/test_meituan_queue_window.js",
     "test:split-merge": "node scripts/test_shipments_split_merge.js",
     "test:handle-threading": "node scripts/test_handle_threading_batch1.js && node scripts/test_handle_threading_batch2.js",
     "test:transaction": "node scripts/test_db_transaction.js && node scripts/test_db_transaction_nesting.js",

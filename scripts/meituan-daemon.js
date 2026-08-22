@@ -435,6 +435,58 @@ function heartbeatTick(storeCode) {
   }
 }
 
+// ── Queue-stall canary (Layer 2 for STOCK, mirroring the heartbeat for ORDERS) ─
+// The heartbeat above proves the daemon can still READ from Meituan. It says
+// nothing about writes, and the two failed independently on 2026-08-22: orders
+// kept importing on their own code path for 19 hours while not one stock push
+// went out. Nothing noticed, because a queue that is never read produces no
+// errors — its rows just sit at attempts=0, and a growing `pending` count is
+// indistinguishable from an ordinary busy queue.
+//
+// So: during open hours, a pushable store whose oldest waiting row is older than
+// QUEUE_STALL_MIN pages ops. Excused exactly like the heartbeat — a store that is
+// closed, cooling down, or unbound is not stalled, it is waiting, and those
+// states own their own alerts.
+const QUEUE_STALL_MS = Number(process.env.MEITUAN_QUEUE_STALL_MIN || 120) * 60_000;
+const QUEUE_STALL_CHECK_MS = 5 * 60_000;
+
+function queueStallTick(stores) {
+  const pushable = pushableStores(stores);
+  for (const s of stores) {
+    const storeCode = s.storeCode;
+    const key = 'queue_stall:' + storeCode;
+    if (!pushable.includes(storeCode)) { alerts[key] = alerts[key] || false; continue; }
+    let oldest = null;
+    try {
+      oldest = db.prepare(`
+        SELECT MIN(created_at) AS oldest, COUNT(*) AS n
+          FROM meituan_sync_queue
+         WHERE store_code = ? AND status = 'pending' AND attempts < 3
+      `).get(storeCode);
+    } catch (_) { continue; }
+    if (!oldest || !oldest.n || !oldest.oldest) {
+      if (alerts[key]) {
+        alerts[key] = false;
+        logSync(storeCode, 'queue_resumed', 'ok', null, 'stock push queue drained');
+        sendOpsAlert(`✅ 美团外卖 ${storeCode} 库存推送队列已清空，库存同步恢复\nMeituan 外卖 ${storeCode} stock push queue drained — stock sync recovered`);
+      }
+      continue;
+    }
+    const ageMs = Date.now() - (Date.parse(String(oldest.oldest).replace(' ', 'T') + 'Z') || Date.now());
+    if (ageMs >= QUEUE_STALL_MS && !alerts[key]) {
+      alerts[key] = true;
+      const mins = Math.round(ageMs / 60000);
+      logSync(storeCode, 'queue_stalled', 'error', { pending: oldest.n },
+        `oldest stock push waiting ~${mins} min during open hours`);
+      sendOpsAlert(`🔴 美团外卖 ${storeCode} 库存推送卡住：${oldest.n} 条待推送，最早一条已等待约 ${mins} 分钟，美团上的库存已过期\nMeituan 外卖 ${storeCode} stock pushes are stuck — ${oldest.n} queued, oldest waiting ~${mins} min; listings on Meituan are stale`);
+    } else if (ageMs < QUEUE_STALL_MS && alerts[key]) {
+      alerts[key] = false;
+      logSync(storeCode, 'queue_resumed', 'ok', { pending: oldest.n }, 'stock push queue moving again');
+      sendOpsAlert(`✅ 美团外卖 ${storeCode} 库存推送恢复正常\nMeituan 外卖 ${storeCode} stock pushes moving again`);
+    }
+  }
+}
+
 // ── Store config ─────────────────────────────────────────────────────────────
 // Reads store codes from retail_stores table; maps code → Meituan credentials
 // from environment variables.
@@ -646,13 +698,41 @@ async function sweepStaleOrders(storeConfig) {
 
 // ── Stock push queue ──────────────────────────────────────────────────────────
 
-async function processStockQueue() {
+// Which of this daemon's stores can be pushed to RIGHT NOW. Every reason to skip
+// a store is resolved here, before the query, because the query has a LIMIT and
+// the skips used to happen after it — see the note on the SELECT below.
+function pushableStores(stores) {
+  return stores
+    .map(s => s.storeCode)
+    .filter(code => !SKIP_STORES.includes(code))
+    .filter(code => isStoreOpen(code))
+    .filter(code => !inVerifyCooldown(code))
+    .filter(code => !bindingSuspected(code));
+}
+
+async function processStockQueue(stores) {
   // q.product_id is a store_products.id (order ingest, push-all, and adjustStock all
   // key off store_products) — NOT the legacy `products` kitchen table, whose ids
   // diverge for many SKUs. Joining `products` fed the wrong name/货号 for ~118 rows;
   // masked because the 外卖 push resolves by map_meituan_name first and most SPUs are
   // single-variant, but a wrong 货号 could still pick the wrong variant. Use
   // store_products so name fallback + variant-disambiguation 货号 are correct.
+  // The queue is SHARED between the 外卖 and 闪购 daemons, so this window must be
+  // filtered to the stores THIS daemon will push, inside the query, before the
+  // LIMIT. It used to take the 40 oldest pending rows across every store and drop
+  // the unusable ones afterwards — which is not a filter, it is a starvation bug:
+  // if 40 older rows belonged to a store this daemon skips, the batch did nothing,
+  // the next cycle selected the identical 40 rows, and the store it DOES own never
+  // got a turn. Its rows sat at attempts=0 with no error — untouched, not failed,
+  // so nothing looked wrong anywhere.
+  //
+  // That is what froze 天河 for 19 hours on 2026-08-22: 137 yuexiu rows, the oldest
+  // three days old, filled all 40 slots while 114 天河 rows waited behind them.
+  // Same shape for a store that is merely closed or in a cool-down, so the whole
+  // eligible set is resolved up front and the query can only return actionable rows.
+  const eligible = pushableStores(stores);
+  if (!eligible.length) return;
+  const ph = eligible.map(() => '?').join(',');
   const rows = db.prepare(`
     SELECT q.*, p.name_cn, p.name_en,
            COALESCE(mm.meituan_sku, p.sku) AS sku,
@@ -662,9 +742,10 @@ async function processStockQueue() {
       LEFT JOIN meituan_product_map mm
              ON mm.product_id = q.product_id AND mm.retail_store_id = q.retail_store_id
      WHERE q.status = 'pending' AND q.attempts < 3
+       AND q.store_code IN (${ph})
      ORDER BY q.created_at
      LIMIT 40
-  `).all();
+  `).all(...eligible);
 
   if (!rows.length) return;
 
@@ -675,19 +756,13 @@ async function processStockQueue() {
   }
 
   for (const [storeCode, items] of Object.entries(byStore)) {
-    // A store handled by another channel daemon (e.g. yuexiu on 闪购) — leave its
-    // queue rows pending for that daemon; never touch them here.
-    if (SKIP_STORES.includes(storeCode)) continue;
-    // Don't push while the store is CLOSED on Meituan (a backend edit at 3am is a
-    // bot tell, and stock accuracy doesn't matter until it reopens) or while it's
-    // in a verification cool-down (a push would re-hit risk-control). Rows stay
-    // pending and flush at the next open / after the cool-down.
-    if (!isStoreOpen(storeCode)) continue;
-    if (inVerifyCooldown(storeCode)) continue;
-    // Don't push to a store whose store binding is suspected lost — every write
-    // would just return acctId=null. Rows stay pending; the order poll clears the
-    // binding once a re-login lands, then pushes flush on the next cycle.
-    if (bindingSuspected(storeCode)) continue;
+    // pushableStores() already excluded every store that must not be pushed to —
+    // owned by the 闪购 daemon, closed on Meituan (a backend edit at 3am is a bot
+    // tell), inside a verification cool-down, or suspected of having lost its
+    // store binding (every write would return acctId=null). This repeats the
+    // check only because state can change between the query and the push; it is
+    // a guard, no longer the filter.
+    if (!eligible.includes(storeCode)) continue;
 
     // Collapse to the latest qty per product/bundle so we push each target once,
     // not replay every intermediate change. Older same-target rows are retired.
@@ -1120,6 +1195,9 @@ async function main() {
   // 0 = run the drift sweep on the first cycle, so a deploy immediately re-queues
   // whatever the previous build left stranded rather than waiting out the interval.
   let lastDriftSweep = 0;
+  // 0 = check on the first cycle, so a deploy landing into a stalled queue says
+  // so immediately instead of waiting out the interval.
+  let lastQueueStallCheck = 0;
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
@@ -1210,8 +1288,15 @@ async function main() {
       });
     }
 
+    // Stock-write counterpart to the order-read heartbeat: a queue nobody drains
+    // raises no errors on its own, so someone has to go and look at its age.
+    if (now - lastQueueStallCheck >= QUEUE_STALL_CHECK_MS) {
+      lastQueueStallCheck = now;
+      try { queueStallTick(stores); } catch (e) { console.error('[meituan-daemon] queueStallTick:', e.message); }
+    }
+
     // Always process stock queue
-    await processStockQueue();
+    await processStockQueue(stores);
 
     // Handle any on-demand listing-scrape requests from the admin tab
     await processListingJobs();

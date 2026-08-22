@@ -125,7 +125,23 @@ router.get('/api/retail-admin/meituan/status', requireRetailAdmin, (req, res) =>
   const db = tdb();
   try {
     const queuePending = db.prepare("SELECT COUNT(*) AS n FROM meituan_sync_queue WHERE status='pending'").get()?.n || 0;
-    const queueFailed  = db.prepare("SELECT COUNT(*) AS n FROM meituan_sync_queue WHERE status='failed'").get()?.n || 0;
+    // 'error' is the status the daemon actually writes on a terminal push failure.
+    // This counted 'failed', which nothing in the system has ever written, so the
+    // tile read 0 no matter how badly pushes were going.
+    //
+    // Scoped to the last day on purpose: the column holds every terminal failure
+    // ever recorded (1276 of them on 天河 as of 2026-08-22, the oldest 55 days
+    // old), and a tile pinned to a permanent four-figure number is a tile nobody
+    // reads. What an operator needs is "is something failing NOW".
+    const queueFailed  = db.prepare("SELECT COUNT(*) AS n FROM meituan_sync_queue WHERE status='error' AND processed_at >= datetime('now','-1 day')").get()?.n || 0;
+    // How long the oldest waiting push has been waiting. Without this a stuck
+    // queue and a busy one are the same number on the screen — which is how a
+    // 19-hour stock freeze presented as "107 sending…", the display the UI
+    // describes as normal and clearing in seconds.
+    const oldestPending = db.prepare("SELECT MIN(created_at) AS t FROM meituan_sync_queue WHERE status='pending'").get()?.t || null;
+    const queueOldestMin = oldestPending
+      ? Math.max(0, Math.round((Date.now() - (Date.parse(String(oldestPending).replace(' ', 'T') + 'Z') || Date.now())) / 60000))
+      : 0;
     const recentLogs = db.prepare(`
       SELECT store_code, event_type, status, detail, error_msg, created_at
         FROM meituan_sync_log ORDER BY created_at DESC LIMIT 20
@@ -150,7 +166,7 @@ router.get('/api/retail-admin/meituan/status', requireRetailAdmin, (req, res) =>
     `).all();
     const mappedCount = db.prepare('SELECT COUNT(*) AS n FROM meituan_product_map WHERE sync_enabled=1').get()?.n || 0;
 
-    res.json({ success: true, queuePending, queueFailed, recentLogs, recentStock, recentSystem, lastOrder, mappedCount });
+    res.json({ success: true, queuePending, queueFailed, queueOldestMin, recentLogs, recentStock, recentSystem, lastOrder, mappedCount });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }

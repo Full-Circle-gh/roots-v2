@@ -143,7 +143,19 @@
       // the healthy resting state; "N sending…" is a queue mid-drain (normal,
       // clears in seconds); "N failed" is the only state that needs a human.
       const pending = Number(s.queuePending || 0), qfailed = Number(s.queueFailed || 0);
-      if (qfailed > 0) {
+      // A queue mid-drain clears in seconds, so anything still waiting after
+      // STUCK_MIN is not sending, it is stuck — and saying "sending…" for it is
+      // how 107 rows sat unpushed for 19 hours with the tile looking normal.
+      const STUCK_MIN = 30;
+      const oldestMin = Number(s.queueOldestMin || 0);
+      const stuck = pending > 0 && oldestMin >= STUCK_MIN;
+      const stuckFor = oldestMin >= 120
+        ? cuT(`${Math.round(oldestMin / 60)} h`, `${Math.round(oldestMin / 60)} 小时`)
+        : cuT(`${oldestMin} min`, `${oldestMin} 分钟`);
+      if (stuck) {
+        mtSetKpi('mt-kpi-queue', pending);
+        mtSetKpi('mt-kpi-queue-sub', cuT(`stuck ${stuckFor} — stock on Meituan is stale`, `卡住 ${stuckFor} — 美团库存已过期`));
+      } else if (qfailed > 0) {
         mtSetKpi('mt-kpi-queue', qfailed);
         mtSetKpi('mt-kpi-queue-sub', cuT('failed', '推送失败')
           + (pending > 0 ? cuT(` · ${pending} sending…`, ` · ${pending} 发送中…`) : ''));
@@ -154,7 +166,7 @@
         mtSetKpi('mt-kpi-queue', cuT('All sent', '已全部发送'));
         mtSetKpi('mt-kpi-queue-sub', '✓');
       }
-      mtAlertTile('mt-kpi-queue-tile', pending > 0 || qfailed > 0);
+      mtAlertTile('mt-kpi-queue-tile', stuck || qfailed > 0 || pending > 0);
 
       // Last order — short tail of the order no; the full no lives in Orders
       const lo = (s.lastOrder && s.lastOrder[0]) || null;
