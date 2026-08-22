@@ -323,4 +323,46 @@ CASES.push(['nothing is interrupting anyone', `state.cfg=Object.assign({},state.
   ['invents no pop-up',     `!txt('content').includes('Autumn promo')`],
 ]]);
 
+// ── Help & Legal ──────────────────────────────────────────────────────────
+// Help is stored as TWO arrays — faq.categories and faq.questions, each
+// question carrying a `cat` — and the mini app's Help screen groups by them.
+// The phone rendered a flat list. Thirty questions flat is a scroll; the same
+// thirty under six headings is a page.
+const FAQ = `state.cfg=Object.assign({},state.cfg,{faq:{
+  categories:[{id:'orders',en:'Orders',cn:'订单'},{id:'delivery',en:'Delivery',cn:'配送'}],
+  questions:[
+    {id:'q1',cat:'orders',q_en:'Where is my order?',a_en:'Track it in the app.'},
+    {id:'q2',cat:'delivery',q_en:'Do you deliver here?',a_en:'Check your postcode.'},
+    {id:'q3',cat:'gone',q_en:'Orphan question',a_en:'Still visible to customers.'}]}});
+  APP.cmd('push','faq');`;
+
+CASES.push(['help is grouped the way customers see it', FAQ, [
+  ['the categories are headings',  `txt('content').includes('Orders') && txt('content').includes('Delivery')`],
+  ['questions sit under them',     `txt('content').includes('Where is my order?')`],
+  ['in the order the store set',   `txt('content').indexOf('Orders') < txt('content').indexOf('Delivery')`],
+  ['a question whose category is gone is NOT hidden',
+   `txt('content').includes('Orphan question')`],
+  ['it gets a heading that says so', `txt('content').includes('Everything else')`],
+]]);
+
+CASES.push(['an answer opens', FAQ + `APP.cmd('faqToggle',0);`, [
+  ['the answer is on screen', `txt('content').includes('Track it in the app')`],
+  ['and only that one',       `!txt('content').includes('Check your postcode')`],
+]]);
+
+CASES.push(['a long legal document says it is clipped',
+  `state.cfg=Object.assign({},state.cfg,{legal:{terms:{body_en:'x'.repeat(2000),updated_at:'2026-05-01'},
+    privacy:{body_en:'short one',updated_at:'2026-05-01'}}}); state.faqOpen=0; APP.cmd('push','legal');`, [
+  // It has always cut at 1200 characters and said nothing, so an operator
+  // could read a partial terms document believing it was the whole thing.
+  ['it says so',  `txt('content').includes('Clipped here')`],
+  ['and where the rest is', `txt('content').includes('on desktop')`],
+]]);
+
+CASES.push(['a short one is not marked clipped',
+  `state.cfg=Object.assign({},state.cfg,{legal:{terms:{body_en:'short one',updated_at:'2026-05-01'}}});
+   state.faqOpen=0; APP.cmd('push','legal');`, [
+  ['no clip note', `!txt('content').includes('Clipped here')`],
+]]);
+
 run('operator screens', CASES);

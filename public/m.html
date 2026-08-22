@@ -1420,6 +1420,53 @@ function setupState(){
   return {pct:null, real:false};
 }
 /* ==========================================================================
+   FAQ & help (desktop: 07-content-billing.js)
+   --------------------------------------------------------------------------
+   The questions were live already; what the phone dropped was the shape. Help
+   is stored as TWO arrays — faq.categories and faq.questions, each question
+   carrying a `cat` — and the mini app's Help screen groups by them. A flat
+   list of thirty questions on a phone is a scroll; the same thirty under six
+   headings is a page. A question whose category has been deleted is not hidden
+   here either: it still shows, under a heading that says so, because the
+   customer can still see it.
+   ========================================================================== */
+function screenFaq(){
+  if(!state.cfg) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const qs=cfgGet('faq.questions',null);
+  const cats=cfgGet('faq.categories',null);
+  const list=Array.isArray(qs)?qs:[];
+  if(!list.length) return nothingYet(T('No questions yet','还没有常见问题'),
+    T('Questions you publish appear here, and in the mini app under Help.','发布后会出现在这里，也会出现在小程序帮助页。'));
+  const catList=Array.isArray(cats)?cats:[];
+  const catName=id=>{ const c=catList.find(x=>String(x.id)===String(id));
+    return c ? (LANG==='en'?(c.en||c.cn||id):(c.cn||c.en||id)) : null; };
+  // Group in the order the store put its categories in, then anything left.
+  const groups=[];
+  const used=new Set();
+  for(const c of catList){
+    const rows=list.filter(q=>String(q.cat||'')===String(c.id));
+    rows.forEach(q=>used.add(q));
+    if(rows.length) groups.push({name:catName(c.id),rows});
+  }
+  const rest=list.filter(q=>!used.has(q));
+  if(rest.length) groups.push({name: groups.length?T('Everything else','其他'):null, rows:rest});
+  let n=0;
+  const row=(q)=>{ const i=n++;
+    const qt=LANG==='en'?(q.q_en||q.q_cn||''):(q.q_cn||q.q_en||'');
+    const at=LANG==='en'?(q.a_en||q.a_cn||''):(q.a_cn||q.a_en||'');
+    return `<button onclick="APP.cmd('faqToggle',${i})" style="display:flex;flex-direction:column;gap:8px;width:100%;padding:16px;background:transparent;border:none;cursor:pointer;text-align:left;font-family:inherit">
+      <span style="display:flex;align-items:center;gap:10px;width:100%">
+        <span style="flex:1;min-width:0;font-size:15px;font-weight:500;color:var(--text-primary)">${escAttr(qt)}</span>
+        <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span>
+      ${state.faqOpen===i?`<span style="font-size:15px;line-height:1.6;color:var(--text-secondary);white-space:pre-wrap">${escAttr(at)}</span>`:''}</button>`;
+  };
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    ${groups.map(g=>`<div>${g.name?`<div class="eyebrow" style="padding:2px 4px 8px">${escAttr(g.name)}</div>`:''}
+      <div class="list">${g.rows.map((q,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}${row(q)}`).join('')}</div></div>`).join('')}
+    ${desktopNote()}</div>`;
+}
+
+/* ==========================================================================
    Pop-ups (desktop: 05-marketing.js)
    --------------------------------------------------------------------------
    The phone read `enabled` and printed Live or Off from it alone — the same
@@ -2810,24 +2857,11 @@ const SUBS={
             <span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${d.updated?T('Updated '+fmtDay(d.updated),'更新于 '+fmtDay(d.updated)):T('Not published','未发布')}</span>
           </span>
           <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span>
-        ${state.faqOpen===i&&d.body?`<span style="font-size:15px;line-height:1.6;color:var(--text-secondary);white-space:pre-wrap">${String(d.body).slice(0,1200).replace(/</g,'&lt;')}</span>`:''}</button>`).join('')}</div>
+        ${state.faqOpen===i&&d.body?`<span style="font-size:15px;line-height:1.6;color:var(--text-secondary);white-space:pre-wrap">${String(d.body).slice(0,1200).replace(/</g,'&lt;')}</span>
+        ${String(d.body).length>1200?`<span style="font-size:12.5px;color:var(--text-secondary);opacity:.85">${T('Clipped here — the rest is on desktop.','此处已截断 — 完整内容见电脑端。')}</span>`:''}`:''}</button>`).join('')}</div>
     ${desktopNote()}</div>`;
   }},
-  faq:{title:['FAQ & help','常见问题'],render:()=>{
-    // The store's own published questions (storefront_config.faq.questions) —
-    // the three that used to render here were invented for the mockup.
-    if(!state.cfg) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
-    const qs=cfgGet('faq.questions',null);
-    const list=Array.isArray(qs)?qs.map(q=>({q:[q.q_en||q.q_cn||'',q.q_cn||q.q_en||''],a:[q.a_en||q.a_cn||'',q.a_cn||q.a_en||'']})):[];
-    if(!list.length) return nothingYet(T('No questions yet','还没有常见问题'),
-      T('Questions you publish appear here, and in the mini app under Help.','发布后会出现在这里，也会出现在小程序帮助页。'));
-    const rows=list;
-    return `<div style="padding:14px 16px 24px"><div class="list">${rows.map((f,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
-      <button onclick="APP.cmd('faqToggle',${i})" style="display:flex;flex-direction:column;gap:8px;width:100%;padding:16px;background:transparent;border:none;cursor:pointer;text-align:left;font-family:inherit">
-        <span style="display:flex;align-items:center;gap:10px;width:100%"><span style="flex:1;min-width:0;font-size:15px;font-weight:500;color:var(--text-primary)">${T(...f.q)}</span><span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span>
-        ${state.faqOpen===i?`<span style="font-size:15px;line-height:1.6;color:var(--text-secondary)">${T(...f.a)}</span>`:''}</button>`).join('')}</div>
-      <div style="padding:16px 0 0">${desktopNote()}</div></div>`;
-  }},
+  faq:{title:['FAQ & help','常见问题'],render:()=>screenFaq()},
   quickstock:{title:['Quick stock','快速盘点'],render:()=>nothingYet(T('Counted in Products','在产品页盘点'),
     T('Open a product and set the count for each store — it writes straight to that shelf. The three-item list that used to live here counted nothing.','打开某个产品即可按门店修改库存，直接写入。此前这里的列表并不会保存。')),
   },

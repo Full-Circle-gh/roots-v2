@@ -729,6 +729,19 @@ December read **Live**. One whose end date passed in July read **Live**.
 | Live phone preview of the pop-up | ➖ — the copy, pages, frequency and CTA are all on the card; a rendering of a rendering is desktop craft |
 | Write, schedule, duplicate, delete, pick pages | ➖ decided: desktop |
 
+### FAQ & help, and Legal (`07-content-billing.js`)
+
+Both were already live and honest — what they dropped was shape.
+
+| Desktop capability | Phone |
+|---|---|
+| Help is **two arrays** — `faq.categories` + `faq.questions`, each question carrying a `cat` — and the mini app's Help screen groups by them | ❌ → ✅. Thirty questions flat is a scroll; the same thirty under six headings is a page |
+| Categories in the order the store put them | ✅ |
+| A question whose category has been deleted | ➕ — still shown, under "Everything else". It is still visible to customers, so hiding it from the operator would be the wrong way round |
+| Category colours, reordering, editing | ➖ decided: desktop |
+| Terms / privacy, with their real published dates | ✅ (already) |
+| **The document is clipped at 1,200 characters** | ➕ said. It always was, silently, so an operator could read a partial terms document believing it was the whole thing |
+
 ## 4. Open questions
 
 Not gaps — decisions that are the shop's to make, not this file's.
