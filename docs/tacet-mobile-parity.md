@@ -117,7 +117,11 @@ desktop is the right home
 |---|---|
 | Catalogue, stock activity, categories as sub-views | ✅ |
 | Stock + price quick edit | ✅ — price, and stock per store |
-| Category filter, search | ✖ (category filter only on desktop) |
+| Category filter, search | ✅ — search (name en/cn, SKU), category chips built from the catalogue's own top categories, and status chips that filter for real |
+| Status buckets (Live / Draft / Low / Out) | ✅ — the desktop's own predicate: published first, supplier-direct never Low or Out, low line from `inventory.lowStockThreshold`. The phone previously called every well-stocked row "Live", drafts included |
+| Whole catalogue in hand | ✅ — `/products?limit=500` on first open of the tab (boot still fetches 50 for Home) |
+| Subcategory filter | ➖ — it exists on the desktop to scope drag-to-reorder, which the phone does not do |
+| Assembled-bundle stock (min over components) | ➖ — the phone shows `effective_stock`; a bundle's buildable count stays desktop |
 | Add product (wizard or blank), options, variants, photos, bulk edit, reorder | ➖ |
 
 ### Inbox — Reviews + Feedback (`10-extras.js`)
@@ -183,6 +187,7 @@ Ordered by what an operator loses today, not by effort.
 | ~~7~~ | ~~Customer: points, wallet, block~~ | | **Done** |
 | — | ~~Edit ship-to~~ | | **Decided 2026-08-22: stays on desktop.** Seven fields with Chinese address matching behind them, and a mistyped district is a failed delivery. Not a phone job for now. |
 | — | ~~Staff note~~ | | **Not a thing** — `staff_note` is written at order creation only; no endpoint edits it afterwards. Would need backend work. |
+| ~~10~~ | ~~Products: search, category filter, real status chips~~ | | **Done 2026-08-22** — the chips were wired to `noop` and counted only the 50 rows boot had fetched |
 | 9 | **The remaining feature toggles** | one endpoint each | fapiao, membership, FAQ, feedback inbox, pop-ups, coupon active — each needs its real key confirmed before it is wired. |
 
 Nothing above needs a new endpoint. Every one of them needs the same three

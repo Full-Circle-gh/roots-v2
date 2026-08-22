@@ -274,6 +274,7 @@ const state = {
   stack:[], statusF:'all', channelF:'all', inboxSeg:'reviews',
   custSeg:'all', custTier:'all', customers:null, custMeta:null, custLoaded:false,
   custId:null, custDetail:null, prodView:'catalogue',
+  prodQ:'', prodStatus:'all', prodCat:'all', catalogueTried:false, catalogueLoading:false,
   overflow:false, search:false, detailId:null, detailActions:false, productSku:null,
   orderBusy:null, orderErr:null, replyBusy:false, replyErr:null,
   printer:null, printerLoading:false, printerBusy:false, printerErr:null,
@@ -447,6 +448,14 @@ reg('custClear', ()=>{ state.custSeg='all'; state.custTier='all'; state.custLoad
 reg('openCustomer', id=>{ state.custId=id; state.custDetail=null; state.custErr=null; state.custBusy=null; render(); loadCustomerDetail(id); });
 reg('closeCustomer', ()=>{ state.custId=null; state.custDetail=null; render(); });
 reg('prodView', v=>{ state.prodView=v; render(); });
+reg('prodStatus', v=>{ state.prodStatus=(state.prodStatus===v?'all':v); render(); });
+reg('prodCat', v=>{ state.prodCat=v; render(); });
+/* The whole app re-renders into one innerHTML, so an input loses focus on
+   every keystroke unless the caret is put back. Nothing is trimmed here —
+   trimming mid-word would eat the space the operator just typed. */
+reg('prodSearch', v=>{ const el=document.getElementById('mProdQ');
+  state.prodQ=String(v||''); state.focus={id:'mProdQ',pos:el?el.selectionStart:null}; render(); });
+reg('prodClearQ', ()=>{ state.prodQ=''; state.prodStatus='all'; state.prodCat='all'; render(); });
 reg('inboxSeg', s=>{ state.inboxSeg=s; render(); });
 reg('openReply', who=>{ state.reply=who; state.reviewsSeen.add(who); state.replyErr=null; state.replyBusy=false; render(); });
 reg('sendReplyText', t=>{
@@ -528,6 +537,7 @@ function nothingYet(title,msg){
 }
 /* storefront_config comes back as one nested object; these screens read their
    own corner of it rather than shipping sample content. */
+const escAttr=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const cfgGet=(path,dflt)=>{ let v=state.cfg; for(const k of String(path).split('.')){ if(v==null) return dflt; v=v[k]; } return v==null?dflt:v; };
 const desktopNote=()=>`<div style="text-align:center;font-size:12.5px;color:var(--text-secondary)">${T('Best edited on desktop','建议在电脑端编辑')}</div>`;
 function flagGate(flag){
@@ -875,18 +885,38 @@ const SUBS={
       <button class="cta" onclick="APP.cmd('noop')">${T('Continue setup','继续设置')}</button></div>`;
   }},
   products:{title:['Products','产品'],render:()=>{
+    loadCatalogue();
     const L=state.liveProductsLoaded, P=DB.products;
-    const cd=[{key:'all',en:'All',zh:'全部',count:L?P.length:118},{key:'live',en:'Live',zh:'在售',count:L?P.filter(p=>p.kind==='on').length:96},
-      {key:'low',en:'Low',zh:'库存低',count:L?P.filter(p=>p.kind==='restock').length:14},{key:'out',en:'Out',zh:'缺货',count:L?P.filter(p=>p.kind==='off').length:8}];
-    return `<div><div style="padding:12px 0 4px">${chipRow(cd,'all','noop')}</div>
+    const n=k=>L?P.filter(x=>x.kind===k).length:null;
+    const cd=[{key:'all',en:'All',zh:'全部',count:L?P.length:118},
+      {key:'live',en:'Live',zh:'在售',count:L?n('on'):96},
+      {key:'draft',en:'Draft',zh:'草稿',count:L?n('draft'):0},
+      {key:'low',en:'Low',zh:'库存低',count:L?n('restock'):14},
+      {key:'out',en:'Out',zh:'缺货',count:L?n('off'):8}];
+    const cats=prodCategories();
+    const rows=prodFiltered();
+    const narrowed=!(state.prodStatus==='all'&&state.prodCat==='all'&&!state.prodQ);
+    return `<div>
+      <div style="padding:12px 16px 4px">
+        <input id="mProdQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.prodQ)}"
+          placeholder="${T('Search name or SKU','搜索名称或 SKU')}" style="width:100%"
+          oninput="APP.cmd('prodSearch',this.value)"></div>
+      <div style="padding:8px 0 4px">${chipRow(cd,state.prodStatus,'prodStatus')}</div>
+      ${cats.length>1?`<div style="padding:0 0 4px">${chipRow(cats,state.prodCat,'prodCat')}</div>`:''}
       <div style="padding:8px 16px 24px;display:flex;flex-direction:column;gap:10px">
         ${noteBar(T('Quick edits here · full authoring on desktop','这里可快速编辑 · 完整编辑请用电脑端'))}
-        ${DB.products.map(p=>`<button class="card" onclick="APP.cmd('openProduct','${p.sku}')" style="display:flex;flex-direction:column;gap:8px;text-align:left;cursor:pointer;padding:14px">
+        ${state.catalogueLoading&&!rows.length?`<div style="padding:32px 0;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading the catalogue…','正在加载目录…')}</div>`:''}
+        ${!state.catalogueLoading&&!rows.length&&narrowed?`<div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:40px 24px;text-align:center">
+          <div style="font-size:18px;font-weight:500">${T('No products match','没有匹配的产品')}</div>
+          <button class="btn2" onclick="APP.cmd('prodClearQ')">${T('Clear the filters','清除筛选')}</button></div>`:''}
+        ${rows.map(p=>`<button class="card" onclick="APP.cmd('openProduct','${p.sku}')" style="display:flex;flex-direction:column;gap:8px;text-align:left;cursor:pointer;padding:14px">
           <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
             <span style="display:flex;flex-direction:column;min-width:0"><span style="font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...p.name)}</span>
             <span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${p.sku}</span></span>
             <span class="num" style="font-size:16px;font-weight:500;flex:none">${p.price}</span></div>
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="num" style="font-size:12.5px;color:var(--text-secondary)">${T(...p.stockLabel)}</span>${pill(p.kind,T(...p.status))}</div></button>`).join('')}</div></div>`;
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="num" style="font-size:12.5px;color:var(--text-secondary)">${T(...p.stockLabel)}</span>${pill(p.kind,T(...p.status))}</div></button>`).join('')}
+        ${L&&rows.length&&rows.length!==P.length?`<div style="text-align:center;padding:4px 0 0"><span class="num" style="font-size:13px;color:var(--text-secondary)">${T(rows.length+' of '+P.length, P.length+' 件中的 '+rows.length)}</span></div>`:''}
+      </div></div>`;
   }},
   categories:{title:['Categories','分类'],render:()=>`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
     ${noteBar(T('Reorder categories on desktop','排序请在电脑端进行'))}
@@ -1988,6 +2018,53 @@ function sheetCustomer(){
     </div>`;
 }
 
+/* The catalogue view used to describe the fifty rows boot happened to fetch:
+   the chips under it were wired to 'noop' and filtered nothing, and every count
+   beside them was either the mock's or a fraction of the shelf. The desktop
+   holds the whole catalogue and narrows it in the browser; so does this — read
+   the first time Products is opened, not at boot, because a phone should not
+   pay for a screen nobody has looked at. */
+function loadCatalogue(){
+  if(state.catalogueTried) return;
+  state.catalogueTried=true; state.catalogueLoading=true;
+  api('/products?limit=500').then(rows=>{
+    state.catalogueLoading=false;
+    if(Array.isArray(rows)&&rows.length){ DB.products=rows.map(mapProduct); state.liveProductsLoaded=true; }
+    render();
+  }).catch(()=>{ state.catalogueLoading=false; render(); });
+}
+/* Chip keys are the INDEX, never the category name: chipRow writes the key into
+   an onclick, and a shelf called "Chef's picks" would end the JS string there. */
+function prodCategories(){
+  const seen=[];
+  (DB.products||[]).forEach(p=>{ const c=String(p.cat||'').trim(); if(c&&seen.indexOf(c)<0) seen.push(c); });
+  seen.sort((a,b)=>a.localeCompare(b));
+  return [{key:'all',en:'All categories',zh:'全部分类'}].concat(seen.map((c,i)=>({key:String(i),en:c,zh:c})));
+}
+function prodCatName(){
+  const k=state.prodCat;
+  if(!k||k==='all') return null;
+  const c=prodCategories().find(x=>x.key===k);
+  return c?c.en:null;
+}
+const PROD_STATUS_KIND={live:'on',draft:'draft',low:'restock',out:'off'};
+function prodFiltered(){
+  const q=String(state.prodQ||'').trim().toLowerCase();
+  const cat=prodCatName();
+  const want=PROD_STATUS_KIND[state.prodStatus||'all'];
+  return (DB.products||[]).filter(p=>{
+    if(q){
+      // Live rows carry a prebuilt haystack; the sample rows do not, so fall
+      // back to both names and the SKU — the desktop's own three fields.
+      const hay=p.hay!=null?p.hay:((p.name||[]).join(' ')+' '+(p.sku||'')).toLowerCase();
+      if(hay.indexOf(q)<0) return false;
+    }
+    if(cat&&String(p.cat||'')!==cat) return false;
+    if(want&&p.kind!==want) return false;
+    return true;
+  });
+}
+
 /* ==========================================================================
    Products — one page, three sub-views. The strip swaps WHAT KIND of thing you
    are looking at; the chips inside each view narrow the same records.
@@ -2087,6 +2164,10 @@ function render(){
   if(state.toast) html += `<div class="toast">${state.toast}</div>`;
   app.innerHTML = html;
   wireDrag();
+  if(state.focus){ const el=document.getElementById(state.focus.id);
+    if(el){ el.focus();
+      if(state.focus.pos!=null&&el.setSelectionRange){ try{ el.setSelectionRange(state.focus.pos,state.focus.pos); }catch(e){} } }
+    state.focus=null; }
 }
 function wireDrag(){
   const h=document.getElementById('dragHandle'); if(!h) return;
@@ -2228,16 +2309,40 @@ function mapDetail(o){
   base.id=o.order_no||base.id;
   return base;
 }
+/* The low-stock line is the tenant's, not a number this file picked: a
+   per-product override first, then `inventory.lowStockThreshold`, which is what
+   the desktop reads. The phone used to hardcode 10, so a shop that called 3 low
+   saw seven products wearing a warning they had not asked for. */
+function prodLowThreshold(r){
+  const t=r&&r.low_stock_threshold;
+  if(t!=null&&t!==''&&Number(t)>=0) return Number(t);
+  const d=Number(cfgGet('inventory.lowStockThreshold',5));
+  return isNaN(d)?5:d;
+}
 function mapProduct(r){
   // Backend returns effective_stock (summed across active stores) / stock_qty,
   // and sell_price — NOT `stock`/`price`. Reading the wrong keys made every live
   // product show ¥0 and "Out of stock". Keep the old keys as last-resort fallback.
   const stock=Number(r.effective_stock!=null?r.effective_stock:(r.stock_qty!=null?r.stock_qty:(r.stock!=null?r.stock:0)));
   const price=r.sell_price!=null?r.sell_price:(r.price!=null?r.price:0);
-  const kind=stock<=0?'off':(stock<=10?'restock':'on');
-  const st=stock<=0?['Out','缺货']:(stock<=10?['Low','库存低']:['Live','在售']);
+  // The desktop's buckets (_paStatusMatch), not a stock ladder of this file's
+  // own: published comes FIRST — an unpublished product is a draft whatever its
+  // shelf looks like, and the phone used to show it as "Live". A supplier-direct
+  // item holds no stock of ours, so it is never Low and never Out.
+  const pub = r.is_published==null ? true : !!Number(r.is_published);
+  const supplier = !!r.ship_from_supplier;
+  const low = prodLowThreshold(r);
+  let kind,st;
+  if(!pub){ kind='draft'; st=['Draft','草稿']; }
+  else if(!supplier&&stock<=0){ kind='off'; st=['Out','缺货']; }
+  else if(!supplier&&stock<=low){ kind='restock'; st=['Low','库存低']; }
+  else { kind='on'; st=['Live','在售']; }
   return {_id:r.id, name:[r.name_en||r.name_cn||'—',r.name_cn||r.name_en||'—'],sku:r.sku?('SKU '+r.sku):('#'+r.id),
-    price:money(CUR,price), priceNum:Number(price)||0, stock, stockLabel:[stock+' in stock',('库存 '+stock)], status:st, kind};
+    price:money(CUR,price), priceNum:Number(price)||0, stock, stockLabel:[stock+' in stock',('库存 '+stock)], status:st, kind,
+    pub, supplier, cat:String(r.top_category||r.category||'').trim(),
+    // One lowercased haystack per product, built once: name in both languages
+    // and the SKU, which is what the desktop's search box matches on.
+    hay:[r.name_en||'',r.name_cn||'',r.sku||''].join(' ').toLowerCase()};
 }
 function mapReview(r){
   const replied=r.reply&&String(r.reply).trim();
@@ -2410,7 +2515,9 @@ async function loadLive(){
     if(list.length){ DB.reviews=list.map(mapReview); state.liveAttn=Object.assign({},state.liveAttn,{reviews:list.filter(r=>!(r.reply&&String(r.reply).trim())).length}); }
   }catch(e){}
   // low-stock count for the Home attention row
-  try{ state.liveAttn=Object.assign({},state.liveAttn||{},{low:DB.products.filter(p=>p.kind!=='on').length}); }catch(e){}
+  // Low = a shelf that needs buying back. A draft is neither low nor out, so
+  // counting everything that is not 'on' would put unpublished work in it.
+  try{ state.liveAttn=Object.assign({},state.liveAttn||{},{low:DB.products.filter(p=>p.kind==='restock'||p.kind==='off').length}); }catch(e){}
   render();
 
   // ---- secondary screens: fetch in parallel, each falls back to its sample data ----
