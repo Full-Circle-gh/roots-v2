@@ -2590,6 +2590,31 @@ function tdAttnRender() {
     });
   }
 
+  // Payment proof on file that nobody has accepted yet — verified-but-unflipped,
+  // unreadable, or never read at all. Amber, not brick: nothing here says the
+  // money is wrong, only that we have not said it is right. Its brick sibling
+  // above is the one where the numbers disagree.
+  const pu = DASH_OPS.payment_unconfirmed || { count: 0, unread: 0, items: [] };
+  if (pu.count && dashCardWants('orders')) {
+    // Name the unreadable ones when there are any: "3 · 2 couldn't be read"
+    // tells the operator that most of this queue is a click and some of it is
+    // a judgement call. Exact count from the server, never derived from the
+    // capped preview. All-readable → no state, because "0 couldn't be read" is
+    // a sentence nobody needs.
+    const k = Number(pu.unread || 0);
+    const state = k > 0 ? cuT(`${k} couldn't be read`, `${k} 张无法识别`) : null;
+    fires.push({
+      sev: 'amber', icon: 'yuan',
+      label: cuT('Payments to confirm', '待确认付款'),
+      n: pu.count,
+      mins: tdOldestMins(pu.items),
+      state,
+      // Same door as its brick sibling: these orders are in Pending too, and
+      // the row there says which is which.
+      cta: cuT('Open pending', '前往待付款'), go: "tdSecOpenOrders('pending_payment')",
+    });
+  }
+
   // Delivery — the carrier, the platform or our own rider has left someone
   // waiting. Brick: this is the only one of the five where a customer is
   // already having a bad day.

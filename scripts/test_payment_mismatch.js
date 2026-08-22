@@ -118,6 +118,19 @@ const PM_ITEMS_SQL_SRC = sliceTemplate(RETAIL_JS, 'const pmItems = tdb().prepare
 const pmItemsSql = (storeId) =>
   vm.runInNewContext(`(() => { ${PM_WHERE_SRC} return ${PM_ITEMS_SQL_SRC}; })()`, { storeId });
 
+// Its sibling: a proof on file that was NOT rejected and is still unpaid.
+const PU_WHERE_SRC = sliceStatement(RETAIL_JS, 'const puWhere =');
+const PU_ITEMS_SQL_SRC = sliceTemplate(RETAIL_JS, 'const puItems = tdb().prepare(');
+const puItemsSql = (storeId) =>
+  vm.runInNewContext(`(() => { ${PU_WHERE_SRC} return ${PU_ITEMS_SQL_SRC}; })()`, { storeId });
+const PU_UNREAD_SQL_SRC = sliceTemplate(RETAIL_JS, 'const puUnread = tdb().prepare(');
+const puUnreadSql = (storeId) =>
+  vm.runInNewContext(`(() => { ${PU_WHERE_SRC} return ${PU_UNREAD_SQL_SRC}; })()`, { storeId });
+
+// The clause the stale-pending sweep exempts on — read from the sweep itself,
+// so the coverage proof below is against the real rule and not a paraphrase.
+const SWEEP_EXEMPT_SRC = sliceBlock(RETAIL_JS, 'function cancelStalePendingOrdersForTenant()');
+
 // ── The database ──────────────────────────────────────────────────────────
 const { openTablesDb, driver } = require('./test-support/memory-db');
 console.log(`  (sqlite driver: ${driver})`);
@@ -135,21 +148,30 @@ function seed(db, row = {}) {
   const r = {
     status: 'pending_payment', verdict: 'mismatch', channel: 'wechat', store_id: 1,
     total: 318.20, ocr: { amount: 318.00, reasons: ['amount ¥318.00 < expected ¥318.20'] },
-    proof_at: '2026-08-22 06:45:00', placed_at: '2026-08-22 06:40:00', ...row,
+    proof_at: '2026-08-22 06:45:00', placed_at: '2026-08-22 06:40:00',
+    // A proof on file by default — that is what every case here has in common,
+    // and it is the exact column the stale-pending sweep exempts on. Pass
+    // `proof: null` for an order nobody ever paid for.
+    proof: 'data:image/jpeg;base64,/9j/EXAMPLE', ...row,
   };
   const no = 'TC0009' + String(++seq).padStart(2, '0');
   db.prepare(`INSERT INTO retail_orders
       (order_no, status, total, channel, store_id, placed_at,
-       alipay_ocr_verdict, alipay_ocr_json, alipay_proof_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+       alipay_ocr_verdict, alipay_ocr_json, alipay_proof_at, alipay_proof_image,
+       payment_method)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'alipay')`)
     .run(no, r.status, r.total, r.channel, r.store_id, r.placed_at,
-      r.verdict, r.ocr === null ? null : JSON.stringify(r.ocr), r.proof_at);
+      r.verdict, r.ocr === null ? null : JSON.stringify(r.ocr), r.proof_at, r.proof);
   return no;
 }
 // What the block says about the table, as a set of order_nos.
 const opsRows = (db, storeId = '') => db.prepare(pmItemsSql(storeId))
   .all(storeId ? { store_id: storeId, preview: 50 } : { preview: 50 });
 const opsNos = (db, storeId = '') => opsRows(db, storeId).map(r => r.order_no);
+const puRows = (db, storeId = '') => db.prepare(puItemsSql(storeId))
+  .all(storeId ? { store_id: storeId, preview: 50 } : { preview: 50 });
+const puNos = (db, storeId = '') => puRows(db, storeId).map(r => r.order_no);
+const puUnread = (db) => db.prepare(puUnreadSql('')).get({}).n;
 
 (async () => {
 
@@ -466,7 +488,7 @@ const LINE_SRC = sliceBlock(ORDERS_JS, 'function paymentCheckLine(o)');
 function lineFor(o) {
   const ctx = {
     cuT: (en) => en, escapeAttr: (s) => s,
-    ICON_PAY_CHECK: '<svg/>',
+    ICON_PAY_CHECK: '<svg/>', ICON_PAY_OK: '<svg/>',
   };
   vm.createContext(ctx);
   new vm.Script(`${LINE_SRC}; var __out = paymentCheckLine(${JSON.stringify(o)});`).runInContext(ctx);
@@ -483,10 +505,34 @@ it('an order a human already marked paid says nothing — the verdict is history
   assert.strictEqual(lineFor({ alipay_ocr_verdict: 'mismatch', status: 'paid' }), '');
 });
 
-it('a matched or unread proof says nothing', () => {
-  assert.strictEqual(lineFor({ alipay_ocr_verdict: 'match', status: 'pending_payment' }), '');
-  assert.strictEqual(lineFor({ alipay_ocr_verdict: 'error', status: 'pending_payment' }), '');
+it('a verified-but-unconfirmed proof asks for the click, in brass not brick', () => {
+  const html = lineFor({ alipay_ocr_verdict: 'match', status: 'pending_payment', has_alipay_proof: 1 });
+  assert.ok(/is-owed/.test(html), 'nothing is wrong here — it must not wear the brick');
+  assert.ok(!/is-alert/.test(html));
+  assert.ok(/Payment verified/.test(html));
+});
+
+it('a proof nobody could read, and one nobody ran, both say "not checked yet"', () => {
+  for (const v of ['error', null]) {
+    const html = lineFor({ alipay_ocr_verdict: v, status: 'pending_payment', has_alipay_proof: 1 });
+    assert.ok(/Payment not checked yet/.test(html), `verdict ${v} says nothing`);
+    assert.ok(/is-owed/.test(html), `verdict ${v} must not claim the money is wrong`);
+  }
+});
+
+it('an order with NO proof says nothing — the Pending pill already covers it', () => {
+  // The distinction has_alipay_proof exists to draw: "nobody ever paid" is not
+  // "somebody paid and we have not looked".
   assert.strictEqual(lineFor({ status: 'pending_payment' }), '');
+  assert.strictEqual(lineFor({ status: 'pending_payment', has_alipay_proof: 0 }), '');
+});
+
+it('the list SELECTs the proof-presence flag the row branches on', () => {
+  assert.ok(/\(o\.alipay_proof_image IS NOT NULL\) AS has_alipay_proof/.test(RETAIL_JS),
+    'without it every row falls to the no-proof branch and says nothing');
+  // And never the blob itself — it is a data URI, one per row, through a poll.
+  assert.ok(!/^\s*o\.alipay_proof_image,$/m.test(RETAIL_JS),
+    'the screenshot itself must never ride the orders list');
 });
 
 it('the list actually SELECTs the column the row reads', () => {
@@ -494,6 +540,103 @@ it('the list actually SELECTs the column the row reads', () => {
   // quietly render nothing, which is the bug this whole file is about.
   assert.ok(/^\s*o\.alipay_ocr_verdict,$/m.test(RETAIL_JS),
     'o.alipay_ocr_verdict is missing from the orders list SELECT');
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+console.log('\n9 · the sibling queue — a proof nobody has accepted');
+
+it('a verified proof on a still-unpaid order is in it (auto-flip off)', () => {
+  // Nothing is wrong with this one. The read matched; the operator has chosen
+  // to confirm payments by hand, so the money is only ours once they click.
+  const db = freshDb();
+  const no = seed(db, { verdict: 'match' });
+  assert.deepStrictEqual(puNos(db), [no]);
+});
+
+it('a proof the read could not handle is in it', () => {
+  const db = freshDb();
+  const no = seed(db, { verdict: 'error', ocr: { error: 'vision timeout' } });
+  assert.deepStrictEqual(puNos(db), [no]);
+});
+
+it('a proof the read never ran on is in it — the OCR-off tenant', () => {
+  // The case that decided the COALESCE in the predicate: a bare
+  // `alipay_ocr_verdict <> 'mismatch'` is NULL for this row, so SQL drops it —
+  // and on a tenant with no vision key that is EVERY proof they receive.
+  const db = freshDb();
+  const no = seed(db, { verdict: null, ocr: null });
+  assert.deepStrictEqual(puNos(db), [no], 'a NULL verdict must not fall through the predicate');
+});
+
+it('a REJECTED proof is not — its brick sibling owns it, one order one fire', () => {
+  const db = freshDb();
+  seed(db, { verdict: 'mismatch' });
+  assert.deepStrictEqual(puNos(db), []);
+});
+
+it('an order nobody ever paid for is not — no proof, nothing to accept', () => {
+  const db = freshDb();
+  seed(db, { proof: null, verdict: null, ocr: null });
+  assert.deepStrictEqual(puNos(db), []);
+});
+
+it('an order already marked paid is not', () => {
+  const db = freshDb();
+  seed(db, { verdict: 'match', status: 'paid' });
+  assert.deepStrictEqual(puNos(db), []);
+});
+
+it('the unread count is exact and excludes the verified ones', () => {
+  // The row says "N couldn't be read" in words, so this number can never be
+  // derived from the capped preview.
+  const db = freshDb();
+  seed(db, { verdict: 'match' });
+  seed(db, { verdict: 'match' });
+  seed(db, { verdict: 'error' });
+  seed(db, { verdict: null, ocr: null });
+  assert.strictEqual(puNos(db).length, 4, 'all four are waiting on a person');
+  assert.strictEqual(puUnread(db), 2, 'only the two nobody could read');
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+console.log('\n10 · the two queues cover the sweep\u2019s blind spot exactly');
+
+it('the sweep really does exempt every order with a proof on file', () => {
+  // Read off cancelStalePendingOrdersForTenant, not asserted from memory — an
+  // earlier version of this work claimed the opposite in a code comment.
+  assert.ok(/NOT \(payment_method = 'alipay' AND alipay_proof_image IS NOT NULL\)/.test(SWEEP_EXEMPT_SRC),
+    'the hours rule no longer exempts orders carrying a proof');
+  assert.ok(/alipay_proof_image IS NULL/.test(SWEEP_EXEMPT_SRC),
+    'the pay-window rule no longer restricts itself to orders with no proof');
+});
+
+it('every order the sweep will never reap lands in exactly one of the two', () => {
+  // The property that makes this pair of blocks a complete answer rather than
+  // two nice cards: nothing times these orders out, so anything not counted
+  // here waits forever with a customer believing they have paid.
+  const db = freshDb();
+  const all = [
+    seed(db, { verdict: 'mismatch' }),
+    seed(db, { verdict: 'match' }),
+    seed(db, { verdict: 'error' }),
+    seed(db, { verdict: null, ocr: null }),
+  ];
+  // Neighbours that must NOT be in either: no proof, or already judged.
+  seed(db, { proof: null, verdict: null, ocr: null });
+  seed(db, { verdict: 'mismatch', status: 'paid' });
+  seed(db, { verdict: 'match', status: 'cancelled' });
+
+  // What the sweep leaves behind, by its own rule.
+  const exempt = db.prepare(
+    `SELECT order_no FROM retail_orders
+      WHERE status = 'pending_payment' AND payment_method = 'alipay'
+        AND alipay_proof_image IS NOT NULL`
+  ).all().map(r => r.order_no).sort();
+  assert.deepStrictEqual(exempt, all.slice().sort(), 'fixture check: these four are the exempt set');
+
+  const covered = [...opsNos(db), ...puNos(db)].sort();
+  assert.deepStrictEqual(covered, all.slice().sort(), 'an exempt order is uncounted, or counted twice');
+  assert.strictEqual(new Set(covered).size, covered.length, 'no order may light both fires');
 });
 
 console.log(`\n${pass} passed, ${fail} failed\n`);

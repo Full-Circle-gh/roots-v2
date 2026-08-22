@@ -270,6 +270,10 @@ const state = {
   reply:null, createKind:null, createValue:10, createActive:true,
   toast:null, drag:0, dragging:false, faqOpen:null, reviewsSeen:new Set(),
   qs:{oat:8,nuts:0,carrot:42},
+  // Live payloads. `liveOps` is deliberately null rather than {} until the pull
+  // lands: the Needs-you card tells "not checked yet" apart from "all clear",
+  // and an empty object would make an unloaded phone claim the second.
+  liveOps:null, liveKpis:null, liveRecap:null, liveAttn:null, liveStatusCounts:null,
   sw:{fapiao:true,membership:true,affiliate:false,social:false,faq:true,feedback:true,
       autoprint:true,autoroute:true,lowstock:true,popups:true,c_WELCOME10:true,c_WEEKEND20:true,c_OVER200:false},
 };
@@ -294,6 +298,9 @@ reg('openSearch', ()=>{ state.overflow=false; state.search=true; render(); });
 reg('closeSearch', ()=>{ state.search=false; render(); });
 reg('push', k=>push(k));
 reg('statusF', f=>{ state.statusF=f; render(); });
+// A Needs-you row's door: jump to Orders AND narrow it in one go, so the fire
+// lands on the rows it was counting rather than on the whole list.
+reg('goStatus', f=>{ state.stack=[]; state.tab='orders'; state.detailId=null; state.statusF=f; render(); });
 reg('channelF', f=>{ state.channelF=f; render(); });
 reg('openOrder', id=>{ state.detailId=id; state.drag=0; render(); });
 reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; render(); });
@@ -366,7 +373,7 @@ function recapCard(){
   const title=(g==='morning'||g==='night')?T('While you slept','在你休息时'):T('While you were away','在你离开时');
   const r=state.liveRecap;
   // Real overnight figures when live; otherwise the sample card (static preview only).
-  const items = r ? [[T('orders overnight','夜间订单'),String(r.orders)],[T('revenue overnight','夜间营收'),money(CUR,r.revenue)]]
+  const items = r ? [[T('orders overnight','夜间订单'),String(r.orders)],[T('revenue overnight','夜间营收'),money0(CUR,r.revenue)]]
                   : [[T('orders processed','处理订单'),'214'],[T('issues resolved','解决问题'),'3'],[T('stock-outs prevented','避免缺货'),'2']];
   return `<div class="rise" style="background:var(--surface-raised);border-radius:var(--radius-card);padding:24px;color:var(--text-primary)">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
@@ -378,13 +385,94 @@ function recapCard(){
          <span class="num" style="font-size:20px;font-weight:500">${v}</span></div>`).join('')}</div>
     <div style="margin-top:18px;font-size:15px;color:var(--text-secondary);font-style:italic">${T("You're welcome.",'不用谢。')}</div></div>`;
 }
+// ── Needs you ─────────────────────────────────────────────────────────────
+// The same fires the desktop dashboard shows, from the same source: one
+// /dashboard/ops pull (see the "Needs you" section of
+// docs/tacet-dashboard-spec.md). This list used to be three hardcoded rows —
+// shipment, reviews, low stock — with SAMPLE NUMBERS as their fallback, so a
+// phone that failed to load showed a confident "2" that meant nothing, and the
+// fires that actually matter (a payment nobody accepted, a delivery gone wrong,
+// a refund waiting on a decision) were not on this screen at all.
+//
+// The row shapes are duplicated from tdAttnRender rather than shared: this file
+// is a standalone app with its own renderer and no module boundary with
+// public/retail-admin/. Keep the two in step by hand — the labels and the
+// severities are meant to read identically on both surfaces.
+const AGE=(m)=>m==null?'':m<60?`${Math.round(m)}m`:m<1440?`${Math.round(m/60)}h`:`${Math.round(m/1440)}d`;
+// Oldest thing in a queue, in minutes. A row with no clock does not vote,
+// exactly as on the desktop — one age-less row must not drag a real age to zero.
+function oldestMins(items){
+  let o=null;
+  (items||[]).forEach(it=>{ const t=new Date(String((it&&it.waiting_since)||'').replace(' ','T'));
+    if(isNaN(t)) return; const m=(Date.now()-t.getTime())/60000; if(m>=0&&(o==null||m>o)) o=m; });
+  return o;
+}
+function homeFires(){
+  const o=state.liveOps; if(!o) return null;          // not loaded — say so, invent nothing
+  const f=[];
+  const add=(sev,icon,label,n,cmd,sub)=>{ if(n>0) f.push({sev,icon,label,n,cmd,sub}); };
+  const q=(k)=>o[k]||{count:0,items:[]};
+
+  // Brick: a customer is already having a bad day.
+  const pm=q('payment_mismatch');
+  add('brick','circle-alert',T("Payment doesn't match",'付款金额不符'),pm.count,
+    "APP.cmd('goStatus','pending')", AGE(oldestMins(pm.items)));
+  const da=q('delivery_alerts');
+  add('brick','truck',T('Delivery needs a call','配送需要跟进'),da.count,
+    "APP.cmd('goStatus','dispatched')", AGE(oldestMins(da.items)));
+
+  // Amber: work waiting, nothing wrong.
+  const pu=q('payment_unconfirmed');
+  const unread=Number(pu.unread||0);
+  add('amber','circle-check',T('Payments to confirm','待确认付款'),pu.count,
+    "APP.cmd('goStatus','pending')",
+    unread>0?T(`${unread} couldn't be read`,`${unread} 张无法识别`):AGE(oldestMins(pu.items)));
+  const rf=q('refunds');
+  add('amber','rotate-ccw',T('Refunds waiting','退款待处理'),rf.count,
+    "APP.cmd('goStatus','refund')", AGE(oldestMins(rf.items)));
+  const aw=q('awaiting_restock');
+  add('amber','package',T('Orders awaiting restock','订单待补货'),aw.count,
+    "APP.cmd('goStatus','restock')", AGE(oldestMins(aw.items)));
+  const inv=q('invoices');
+  add('amber','receipt',T('Invoices to issue','待开发票'),inv.count,
+    "APP.cmd('push','invoices')", AGE(oldestMins(inv.items)));
+
+  // Stock states a condition, never an age — nothing records when a product
+  // went short, and a duration here would be invented precision.
+  const oos=q('out_of_stock').count, low=q('low_stock').count;
+  add('amber','triangle-alert',T('Restock needed','需要补货'),oos||low,
+    "APP.cmd('push','products')",
+    oos&&low?T(`out of stock, ${low} running low`,`已售罄，另有 ${low} 项库存不足`)
+      :oos?T('out of stock','已售罄'):T('running low','库存不足'));
+
+  // Phone-only, and genuinely actionable: the inbox lives on this device.
+  const rv=Number((state.liveAttn||{}).reviews||0);
+  add('amber','message-square-text',T('Reviews to reply','待回复评价'),rv,"APP.cmd('tab','inbox')",'');
+
+  return f.sort((a,b)=>(a.sev==='brick'?0:1)-(b.sev==='brick'?0:1));
+}
+// Nothing waiting → the block leaves the screen entirely, the same promise the
+// desktop card makes (.is-quiet). A shorter Home IS the good news. `null` is
+// not zero, though: it means the pull has not landed, and a card that vanished
+// while loading would read as "all clear" before anything had been checked.
+function attnBlock(fires){
+  if(fires===null) return `<div class="rise" style="animation-delay:.06s">
+    <div class="eyebrow" style="padding:2px 4px 8px">${T('Needs you','需要处理')}</div>
+    <div class="list"><div style="padding:16px;font-size:14px;color:var(--text-secondary)">${T('Checking…','检查中…')}</div></div></div>`;
+  if(!fires.length) return '';
+  const tint=(sev)=>sev==='brick'?'var(--brick)':'var(--amber)';
+  return `<div class="rise" style="animation-delay:.06s">
+    <div class="eyebrow" style="padding:2px 4px 8px">${T('Needs you','需要处理')}</div>
+    <div class="list">${fires.map((a,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
+      <button class="row" onclick="${a.cmd}"><span class="rowico" style="color:${tint(a.sev)}">${ic(a.icon)}</span>
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:2px;text-align:left">
+        <span style="font-size:15px">${a.label}</span>
+        ${a.sub?`<span class="num" style="font-size:12px;color:var(--text-secondary)">${a.sub}</span>`:''}</span>
+      <span class="num" style="min-width:22px;height:22px;padding:0 7px;border-radius:999px;background:${a.sev==='brick'?'var(--brick-tint)':'var(--amber-tint)'};color:${tint(a.sev)};font-size:12.5px;font-weight:500;display:flex;align-items:center;justify-content:center;flex:none">${a.n}</span>
+      <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`).join('')}</div></div>`;
+}
 function screenHome(){
-  const A=state.liveAttn||{};
-  const attention=[
-    {icon:'package',label:T('Orders awaiting shipment','待发货订单'),count:A.ship!=null?A.ship:2,cmd:"APP.cmd('tab','orders')"},
-    {icon:'message-square-text',label:T('Reviews to reply','待回复评价'),count:A.reviews!=null?A.reviews:3,cmd:"APP.cmd('tab','inbox')"},
-    {icon:'triangle-alert',label:T('Low stock','库存偏低'),count:A.low!=null?A.low:1,cmd:"APP.cmd('push','products')"},
-  ];
+  const attention=homeFires();
   const vy=T('vs yesterday','较昨日');
   const kpis = state.liveKpis || [[T('Revenue','营收'),'¥12,840','+8% '+vy],[T('Orders','订单'),'37','+5 '+vy],[T('Avg. order','客单价'),'¥347','−2% '+vy],[T('Visitors','访客'),'1,204','+11% '+vy]];
   const quick=[
@@ -397,20 +485,14 @@ function screenHome(){
       <span style="font-size:19px;font-weight:500;letter-spacing:-.01em">${T(...GREET[greetKey()])}</span>
       <span style="font-size:12.5px;color:var(--text-secondary)">${T('Updated just now','刚刚更新')}</span></div>
     ${recapCard()}
-    <div class="rise" style="animation-delay:.06s">
-      <div class="eyebrow" style="padding:2px 4px 8px">${T('Needs you','需要处理')}</div>
-      <div class="list">${attention.map((a,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
-        <button class="row" onclick="${a.cmd}"><span class="rowico">${ic(a.icon)}</span>
-        <span style="flex:1;font-size:15px">${a.label}</span>
-        <span class="num" style="min-width:22px;height:22px;padding:0 7px;border-radius:999px;background:var(--surface-raised);font-size:12.5px;font-weight:500;display:flex;align-items:center;justify-content:center;flex:none">${a.count}</span>
-        <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`).join('')}</div></div>
+    ${attnBlock(attention)}
     <div class="rise" style="animation-delay:.12s">
       <div class="eyebrow" style="padding:2px 4px 8px">${T('Today','今日')}</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${kpis.map(([l,v,d])=>
         `<div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:5px">
            <span style="font-size:12.5px;color:var(--text-secondary)">${l}</span>
            <span class="num" style="font-size:23px;font-weight:500;letter-spacing:-.015em">${v}</span>
-           <span class="num" style="font-size:12px;color:var(--text-secondary)">${d}</span></div>`).join('')}</div></div>
+           ${d?`<span class="num" style="font-size:12px;color:var(--text-secondary)">${d}</span>`:''}</div>`).join('')}</div></div>
     <div class="rise" style="animation-delay:.18s">
       <div class="eyebrow" style="padding:2px 4px 8px">${T('Quick actions','快捷操作')}</div>
       <div class="list">${quick.map((q,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
@@ -436,7 +518,11 @@ function ordersHeader(){
   const sCount=(k,f)=> S ? (k==null?undefined:S[k]) : f;
   const cCount=(k,f)=> C ? (C[k]!=null?C[k]:0) : f;
   const allOrders = C?C.all:(S?undefined:47);
-  const sc=[{key:'all',en:'All',zh:'全部',count:allOrders},{key:'new',en:'New',zh:'新',count:S?undefined:2},{key:'paid',en:'Paid',zh:'已付',count:sCount('paid',8)},
+  const sc=[{key:'all',en:'All',zh:'全部',count:allOrders},{key:'new',en:'New',zh:'新',count:S?undefined:2},
+    // Unpaid orders had no chip at all, so the two payment fires had nowhere to
+    // land — and the status a customer's money is stuck in was the one status
+    // this screen could not show.
+    {key:'pending',en:'Pending',zh:'待付款',count:sCount('pending_payment',0)},{key:'paid',en:'Paid',zh:'已付',count:sCount('paid',8)},
     {key:'preparing',en:'Preparing',zh:'备货',count:sCount('preparing',6)},{key:'dispatched',en:'Dispatched',zh:'已发',count:sCount('dispatched',11)},{key:'delivered',en:'Delivered',zh:'送达',count:S?undefined:15},
     {key:'restock',en:'Awaiting restock',zh:'待补货',count:sCount('awaiting_restock',2)},{key:'refund',en:'Refund queue',zh:'退款',count:sCount('refunds_open',2)}];
   const cc=[{key:'all',en:'All channels',zh:'全部渠道',count:allOrders},{key:'miniapp',en:'Mini app',zh:'小程序',count:cCount('wechat',28)},{key:'web',en:'Web',zh:'网页',count:cCount('web',9)},
@@ -1012,7 +1098,48 @@ async function api(path){
   return (j && j.data!==undefined) ? j.data : j;
 }
 const hhmm=v=>{ if(!v) return ''; const d=new Date(String(v).replace(' ','T')); return isNaN(d)?'':d.toTimeString().slice(0,5); };
-const money=(cur,n)=>{ const s=cur||'¥'; const num=Number(n||0); return s+num.toLocaleString(undefined,{maximumFractionDigits:num%1?2:0}); };
+// Money is either whole or to the fen — never the one-decimal ¥3,271.4 this
+// used to print. maximumFractionDigits alone caps the tail without padding it,
+// so a .40 lost its zero and a .7 rendered as a single digit, which reads as a
+// rounding bug rather than a price. minimum and maximum move together.
+const money=(cur,n)=>{ const s=cur||'¥'; const num=Number(n||0); const f=num%1?2:0;
+  return s+num.toLocaleString(undefined,{minimumFractionDigits:f,maximumFractionDigits:f}); };
+// Whole yuan, for the glance cards — a day's takings on a phone tile is read,
+// not reconciled, and the fen is noise at that size. Matches what the desktop
+// dashboard shows in the same place (dashMoney with no dp).
+const money0=(cur,n)=>(cur||'¥')+Math.round(Number(n||0)).toLocaleString();
+
+// ── The delta line under a Today tile ─────────────────────────────────────
+// Mirrors the desktop's dashSetDelta (public/retail-admin/03-dashboard.js) —
+// same baseline, same rules, deliberately the same answers:
+//
+//   • nothing yet today  → a calm dash, never an alarming ▼100% every morning;
+//   • no same-weekday history → "new", not a percentage of nothing;
+//   • otherwise a WHOLE percent. The raw delta arrives with decimals and this
+//     used to print them ("−23.8%"), which claims a precision a handful of
+//     orders cannot support.
+//
+// It also names the baseline. The desktop hides that in a hover tooltip; a
+// phone has no hover, so the honest phrase goes inline — "vs last 3 Sat" rather
+// than the "vs a typical day" this used to say, which never told you what the
+// typical day was measured over. `by now` when the server clipped the baseline
+// days to the current time, or a slow morning reads as a collapse.
+//
+// Returns '' for a metric with no baseline at all (average order value). The
+// caller renders no line rather than a comparison label with nothing to compare
+// — the dangling "vs a typical day" under Avg. order was exactly that.
+const DOW_ABBR_EN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const DOW_CN=['周日','周一','周二','周三','周四','周五','周六'];
+function deltaText(cur, base, bl){
+  if(base===undefined || base===null) return '';
+  if(!cur) return T('none yet today','今日暂无');
+  if(!bl || !bl.days || base.delta==null) return T('new','新');
+  const n=bl.days, ab=DOW_ABBR_EN[bl.weekday]||'day', cn=DOW_CN[bl.weekday]||'天';
+  const by=bl.clipped?T(' by now','同一时段'):'';
+  const vs=T(`vs last ${n} ${ab}${by}`, `较前 ${n} 个${cn}${by}`);
+  const r=Math.round(base.delta);
+  return (r>0?'▲ '+r+'%':r<0?'▼ '+Math.abs(r)+'%':'±0%')+' '+vs;
+}
 const ORDER_STATUS={
   paid:['paid','Paid','已付款'],preparing:['preparing','Preparing','备货中'],dispatched:['dispatched','Dispatched','已发货'],
   delivered:['delivered','Delivered','已送达'],pending:['pending','Pending','待处理'],pending_payment:['pending','Unpaid','待付款'],
@@ -1188,21 +1315,23 @@ async function loadLive(){
   // defaults to a trailing 30 days, so an unscoped call made the "Today" tiles
   // show 30-day totals (and killed the vs-typical-day baseline).
   const gzToday=new Date(Date.now()+8*3600*1000).toISOString().slice(0,10);
-  try{ const d=await api('/dashboard?from='+gzToday+'&to='+gzToday); const k=d.kpi||d.kpis||d||{}; const b=d.baseline||{};
-    const vy=T('vs a typical day','较日常');
-    const dl=x=>x&&x.delta!=null?((x.delta>=0?'+':'−')+Math.abs(x.delta)+'% '+vy):vy;
+  try{ const d=await api('/dashboard?from='+gzToday+'&to='+gzToday); const k=d.kpi||d.kpis||d||{}; const bl=d.baseline||null; const b=bl||{};
+    const rev=Number(k.revenue||0), ord=Number(k.orders!=null?k.orders:0);
+    const nc=Number(k.new_customers!=null?k.new_customers:(k.newCustomers||0));
     state.liveKpis=[
-      [T('Revenue (all channels)','营收（全渠道）'), money(CUR,k.revenue), dl(b.revenue)],
-      [T('Orders (storefront)','订单（自营）'), String(k.orders!=null?k.orders:0), dl(b.orders)],
-      [T('Avg. order','客单价'), money(CUR, k.orders? (Number(k.revenue||0)/k.orders):0), vy],
-      [T('New customers','新客'), String(k.new_customers!=null?k.new_customers:(k.newCustomers||0)), dl(b.new_customers)],
+      // Whole yuan on the two money tiles the eye lands on first; the fen stays
+      // on the average, where the number is small enough for it to mean something.
+      [T('Revenue (all channels)','营收（全渠道）'), money0(CUR,rev), deltaText(rev, b.revenue, bl)],
+      [T('Orders (storefront)','订单（自营）'), String(ord), deltaText(ord, b.orders, bl)],
+      // The server sends no baseline for average order value, so this tile has
+      // nothing to compare against and says nothing — rather than printing a
+      // comparison label with no comparison under it.
+      [T('Avg. order','客单价'), money(CUR, ord? rev/ord : 0), ''],
+      [T('New customers','新客'), String(nc), deltaText(nc, b.new_customers, bl)],
     ];
-    // "Orders awaiting shipment" = paid-but-not-shipped. The dashboard exposes the
-    // per-status counts under `funnel` (the old code read `byStatus`, which doesn't
-    // exist, so this number was always the fake fallback). Prefer the dedicated
-    // order-status-counts endpoint below; fall back to the dashboard funnel.
-    const bs=d.funnel||d.byStatus||{};
-    state.liveAttn={ ship:(bs.paid?bs.paid.n:null), reviews:null, low:null };
+    // The Needs-you card is built from /dashboard/ops now, so nothing here
+    // seeds it. `liveAttn` survives for the one signal ops does not carry: the
+    // review inbox, which is this device's own screen.
   }catch(e){ if(String(e.message)==='auth') return; }
   // orders list (the heart of the app)
   try{ const rows=await api('/orders?limit=50');
@@ -1233,18 +1362,16 @@ async function loadLive(){
   try{ const rv=await api('/reviews?limit=30'); const list=Array.isArray(rv)?rv:(rv.reviews||[]);
     if(list.length){ DB.reviews=list.map(mapReview); state.liveAttn=Object.assign({},state.liveAttn,{reviews:list.filter(r=>!(r.reply&&String(r.reply).trim())).length}); }
   }catch(e){}
-  // low-stock count for the Home attention row
-  try{ state.liveAttn=Object.assign({},state.liveAttn||{},{low:DB.products.filter(p=>p.kind!=='on').length}); }catch(e){}
   render();
 
   // ---- secondary screens: fetch in parallel, each falls back to its sample data ----
   const set=(fn)=>{ try{ fn(); }catch(e){} render(); };
 
-  // order status + channel counts → real filter-chip numbers + Home "awaiting shipment"
-  api('/order-status-counts').then(d=>set(()=>{ if(d){ state.liveStatusCounts=d;
-    const ship=(d.paid||0)+(d.preparing||0);
-    state.liveAttn=Object.assign({},state.liveAttn||{},{ship});
-  }})).catch(()=>{});
+  // Needs you — the same /dashboard/ops payload the desktop card is built from,
+  // so the two screens agree on what is on fire. One pull; homeFires() shapes it.
+  api('/dashboard/ops?preview=8').then(d=>set(()=>{ if(d) state.liveOps=d; })).catch(()=>{});
+  // order status + channel counts → real filter-chip numbers
+  api('/order-status-counts').then(d=>set(()=>{ if(d) state.liveStatusCounts=d; })).catch(()=>{});
   api('/order-channel-counts').then(d=>set(()=>{ if(d) state.liveChannelCounts=d; })).catch(()=>{});
 
   api('/categories').then(r=>set(()=>{ if(Array.isArray(r)&&r.length) DB.categories=r.map(mapCategory); })).catch(()=>{});
