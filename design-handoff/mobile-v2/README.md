@@ -18,6 +18,12 @@ Published canvas: https://claude.ai/code/artifact/59dd60e2-cf68-457a-b329-5e96da
 | `MoreSheet.dc.html` | More — flat, grouped, no drill-down |
 | `OrdersLoading/Empty/NoResults.dc.html` | Three of the six states |
 | `WriteStates.dc.html` | In flight · error · silent refresh |
+| `Customers.dc.html` | Customers — segments, tier chips, unopened records |
+| `CustomerSheet.dc.html` | The customer record as a sheet: snapshot + accordions |
+| `CustomersFiltered.dc.html` | "Found — but your filters are hiding her" |
+| `Products.dc.html` | Catalogue — sub-view strip, stock states |
+| `StockActivity.dc.html` | Stock activity — the second sub-view |
+| `ProductSheet.dc.html` | The product record, with the hybrid's one door |
 | `canvas.json` | Layout, notes, launch view |
 
 ## Rebuilding
@@ -25,7 +31,8 @@ Published canvas: https://claude.ai/code/artifact/59dd60e2-cf68-457a-b329-5e96da
 Artboards are generated, not hand-edited — edit `src/` and run:
 
 ```
-node src/pages-1.mjs && node src/pages-2.mjs && node src/pages-3.mjs
+node src/pages-1.mjs && node src/pages-2.mjs && node src/pages-3.mjs \
+  && node src/pages-4.mjs && node src/pages-5.mjs
 ```
 
 `src/_shared.css` holds the tokens (lifted verbatim from the live `--td-*`
@@ -58,9 +65,28 @@ passing every artboard and `canvas.json`, and publish to the URL above.
 - **No drill-down in More.** A five-item bar and a fourteen-row rail are
   different problems; More is one flat, grouped list.
 
-## Known gaps (batch two)
+## Decisions batch two settles
 
-Customers and Products are still the live phone build; dark theme is drawn
-only as a token swap, not rendered; Chinese is not rendered anywhere here
-(source carries the pair, one language ships — §1.11); the co-brand slot has
-no merchant artwork in this account, so it is drawn empty per §8b.
+- **Customers keeps the title alone.** 693 records, none waiting on anyone —
+  §1.7's work rule, with Customers as its reference case. The pulse takes its
+  line render instead of tiles: four tiles cannot share a 390px row, and two
+  of them would be an arbitrary subset.
+- **Tier pills are neutral.** A tier is a fact about the customer, not a state
+  needing attention; Sage and Amber are not spent on it. Blocked keeps Brick.
+  Tiers are Tree · Root · Sprout · Seed, from `CU_TIER_LABEL`.
+- **The unseen surface is for records that arrive** — Orders and Customers,
+  one shared `seen_at`, meaning "nobody on this team has opened this". It never
+  appears on Products, which the merchant authored.
+- **Products carries the sub-view strip** under the header — Catalogue · Stock
+  activity · Categories, Ink underline on the live one — and no status line:
+  the chips already say running low and out of stock.
+- **The product sheet is the hybrid**, with exactly one extra control (Open
+  full page). Nothing else about it differs from the order sheet.
+
+## Known gaps (batch three)
+
+Dark theme is specified as a token swap but not drawn; Chinese is not rendered
+anywhere here (source carries the pair, one language ships — §1.11); Customers
+and Products own the six states by inheritance from Orders but only two of
+theirs are drawn; the co-brand slot has no merchant artwork in this account,
+so it is drawn empty per §8b.

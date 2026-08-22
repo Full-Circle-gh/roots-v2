@@ -1,21 +1,195 @@
 {
   "artboards": [
-    { "file": "Shell.dc.html",           "x": 0,    "y": 0,    "w": 390, "h": 844 },
-    { "file": "Main.dc.html",            "x": 470,  "y": 0,    "w": 390, "h": 844, "title": "Home" },
-    { "file": "Orders.dc.html",          "x": 940,  "y": 0,    "w": 390, "h": 844 },
-    { "file": "OrderSheet.dc.html",      "x": 1410, "y": 0,    "w": 390, "h": 844, "title": "Order sheet" },
-    { "file": "MoreSheet.dc.html",       "x": 0,    "y": 964,  "w": 390, "h": 844, "title": "More sheet" },
-    { "file": "OrdersLoading.dc.html",   "x": 470,  "y": 964,  "w": 390, "h": 844, "title": "Orders · loading" },
-    { "file": "OrdersEmpty.dc.html",     "x": 940,  "y": 964,  "w": 390, "h": 844, "title": "Orders · empty" },
-    { "file": "OrdersNoResults.dc.html", "x": 1410, "y": 964,  "w": 390, "h": 844, "title": "Orders · no results" },
-    { "file": "WriteStates.dc.html",     "x": 0,    "y": 1928, "w": 390, "h": 740, "title": "Write states" }
+    {
+      "file": "Shell.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Main.dc.html",
+      "x": 470,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Home"
+    },
+    {
+      "file": "Orders.dc.html",
+      "x": 940,
+      "y": 0,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "OrderSheet.dc.html",
+      "x": 1410,
+      "y": 0,
+      "w": 390,
+      "h": 844,
+      "title": "Order sheet"
+    },
+    {
+      "file": "MoreSheet.dc.html",
+      "x": 0,
+      "y": 964,
+      "w": 390,
+      "h": 844,
+      "title": "More sheet"
+    },
+    {
+      "file": "OrdersLoading.dc.html",
+      "x": 470,
+      "y": 964,
+      "w": 390,
+      "h": 844,
+      "title": "Orders · loading"
+    },
+    {
+      "file": "OrdersEmpty.dc.html",
+      "x": 940,
+      "y": 964,
+      "w": 390,
+      "h": 844,
+      "title": "Orders · empty"
+    },
+    {
+      "file": "OrdersNoResults.dc.html",
+      "x": 1410,
+      "y": 964,
+      "w": 390,
+      "h": 844,
+      "title": "Orders · no results"
+    },
+    {
+      "file": "WriteStates.dc.html",
+      "x": 0,
+      "y": 1928,
+      "w": 390,
+      "h": 740,
+      "title": "Write states"
+    },
+    {
+      "file": "Customers.dc.html",
+      "x": 470,
+      "y": 1928,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "CustomerSheet.dc.html",
+      "x": 940,
+      "y": 1928,
+      "w": 390,
+      "h": 844,
+      "title": "Customer record"
+    },
+    {
+      "file": "CustomersFiltered.dc.html",
+      "x": 1410,
+      "y": 1928,
+      "w": 390,
+      "h": 844,
+      "title": "Customers · filtered"
+    },
+    {
+      "file": "Products.dc.html",
+      "x": 0,
+      "y": 2892,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "StockActivity.dc.html",
+      "x": 470,
+      "y": 2892,
+      "w": 390,
+      "h": 844,
+      "title": "Stock activity"
+    },
+    {
+      "file": "ProductSheet.dc.html",
+      "x": 940,
+      "y": 2892,
+      "w": 390,
+      "h": 844,
+      "title": "Product record"
+    }
   ],
   "annotations": [
-    { "id": "batch-one", "x": 0, "y": -200, "w": 860, "text": "Tacet mobile — batch one\nThe shell, Home (A6 Digest) and Orders (A1 Worklist), derived from tacet-desktop-patterns.md v4.6 rather than patched from the current phone build. Light Paper shown; dark is a token swap only.\n\nSample data is the app's own (RT-…047, Chen Meiling, ¥312), retimed to the English US formats §1.18 requires." },
-    { "id": "shell-note", "x": 0, "y": 884, "w": 390, "text": "What changes vs the live phone chrome: red count badges → one 6px Sage dot · brass active tab → Ink 500 · 10px/800 labels → 13px Inter 500 sentence case · uppercase sheet headings → sentence case." },
-    { "id": "orders-note", "x": 940, "y": 884, "w": 390, "text": "The unseen card replaces the \"NEW\" pill: --td-unseen surface + inset 4px Sage edge, settling to Paper over 600ms on open. Inset shadow, never a border — an indicator that resizes its row makes the list jump.\n\nOne Dusk element: the header's New order. The FAB is gone — a floating circle is not in the system, and §1.7 puts the primary in the header." },
-    { "id": "sheet-note", "x": 1410, "y": 884, "w": 390, "text": "The drawer, on a phone. Pinned block is exactly two rows: identifier + ONE status pill, then the action row — 3 controls at this width (state action · workhorse · ⋯), with the workhorse holding the right edge.\n\nActions are Secondary: the sheet inherits the page's Dusk budget, and Orders already spent it. The Dusk here is the auto-routed badge — tacet acting, which is exempt." },
-    { "id": "states-note", "x": 470, "y": 1848, "w": 860, "text": "Every page ships all six states. Loading has no status line and no chip counts — a real number is not known yet, and §1.7's honesty rule forbids inventing one. Empty and no-results are different sentences: one is a compliment, the other is a search that missed." }
+    {
+      "id": "batch-one",
+      "x": 0,
+      "y": -200,
+      "w": 860,
+      "text": "Tacet mobile — batch one\nThe shell, Home (A6 Digest) and Orders (A1 Worklist), derived from tacet-desktop-patterns.md v4.6 rather than patched from the current phone build. Light Paper shown; dark is a token swap only.\n\nSample data is the app's own (RT-…047, Chen Meiling, ¥312), retimed to the English US formats §1.18 requires."
+    },
+    {
+      "id": "shell-note",
+      "x": 0,
+      "y": 884,
+      "w": 390,
+      "text": "What changes vs the live phone chrome: red count badges → one 6px Sage dot · brass active tab → Ink 500 · 10px/800 labels → 13px Inter 500 sentence case · uppercase sheet headings → sentence case."
+    },
+    {
+      "id": "orders-note",
+      "x": 940,
+      "y": 884,
+      "w": 390,
+      "text": "The unseen card replaces the \"NEW\" pill: --td-unseen surface + inset 4px Sage edge, settling to Paper over 600ms on open. Inset shadow, never a border — an indicator that resizes its row makes the list jump.\n\nOne Dusk element: the header's New order. The FAB is gone — a floating circle is not in the system, and §1.7 puts the primary in the header."
+    },
+    {
+      "id": "sheet-note",
+      "x": 1410,
+      "y": 884,
+      "w": 390,
+      "text": "The drawer, on a phone. Pinned block is exactly two rows: identifier + ONE status pill, then the action row — 3 controls at this width (state action · workhorse · ⋯), with the workhorse holding the right edge.\n\nActions are Secondary: the sheet inherits the page's Dusk budget, and Orders already spent it. The Dusk here is the auto-routed badge — tacet acting, which is exempt."
+    },
+    {
+      "id": "states-note",
+      "x": 470,
+      "y": 1848,
+      "w": 860,
+      "text": "Every page ships all six states. Loading has no status line and no chip counts — a real number is not known yet, and §1.7's honesty rule forbids inventing one. Empty and no-results are different sentences: one is a compliment, the other is a search that missed."
+    },
+    {
+      "id": "batch-two",
+      "x": 470,
+      "y": 1808,
+      "w": 860,
+      "text": "Batch two — Customers and Products, the other two Worklists. Same vocabulary as Orders: chips on the primary axis, records as cards, the drawer as a sheet with a two-row pinned header."
+    },
+    {
+      "id": "customers-note",
+      "x": 470,
+      "y": 2812,
+      "w": 390,
+      "text": "No status line, deliberately: 693 records, none waiting on anyone (§1.7's work rule — Customers is its reference case).\n\nThe pulse takes its line render. Four tiles cannot share a 390px row, and showing two of them would be an arbitrary subset.\n\nTier pills are neutral. A tier is a fact about the customer, not a state needing attention — Sage and Amber are not spent on it. Blocked keeps Brick, because that one IS a state."
+    },
+    {
+      "id": "unseen-note",
+      "x": 940,
+      "y": 2812,
+      "w": 390,
+      "text": "The unseen surface means nobody on the team has opened this record — one shared timestamp, not \"you haven't\". It appears on Customers and Orders, where records ARRIVE, and never on Products, which the merchant authored. Same card vocabulary, different truth.\n\nThe sage \"New\" pill stays removed: signing up today and being unopened are different facts."
+    },
+    {
+      "id": "products-note",
+      "x": 0,
+      "y": 3776,
+      "w": 390,
+      "text": "Products carries the sub-view strip under the header — Catalogue · Stock activity · Categories, Ink underline on the live one. It swaps what kind of thing you are looking at; the chips below narrow the same records.\n\nNo status line here either: the chips already say running low and out of stock, and §1.7 prefers the fact nothing else shows over a fourth copy of a count."
+    },
+    {
+      "id": "hybrid-note",
+      "x": 940,
+      "y": 3776,
+      "w": 390,
+      "text": "The hybrid (§1.13). An order is glance-and-act, so its sheet is the whole story. A product is light to glance at and heavy to edit, so its sheet carries exactly one extra door — Open full page — and nothing else about it differs. Two zoom levels of one record, not a second pattern."
+    }
   ],
-  "launch": { "view": "canvas" }
+  "launch": {
+    "view": "canvas"
+  }
 }
