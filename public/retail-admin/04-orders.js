@@ -480,13 +480,43 @@ function invoiceLine(o) {
 // own status. Only on pending_payment: once a human has judged it and marked it
 // paid (or cancelled it), the verdict is history and the row says nothing.
 const ICON_PAY_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5"/><path d="M12 16v.2"/></svg>';
+const ICON_PAY_OK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="m8.4 12.2 2.4 2.4 4.8-5.2"/></svg>';
 function paymentCheckLine(o) {
-  if (o.alipay_ocr_verdict !== 'mismatch' || o.status !== 'pending_payment') return '';
-  const title = cuT(
-    "The payment screenshot was read and doesn't match this order — open it and check before marking paid",
-    '已识别付款截图,与本订单不一致 — 请打开核对后再标记付款');
-  return `<div class="ord-note-line is-alert" title="${escapeAttr(title)}">`
-    + `${ICON_PAY_CHECK}${cuT("Payment doesn't match", '付款不一致')}</div>`;
+  // Only while unpaid. Once a human has judged it — marked paid, cancelled —
+  // the verdict is history and the row says nothing.
+  if (o.status !== 'pending_payment') return '';
+  const v = o.alipay_ocr_verdict;
+  if (v === 'mismatch') {
+    const title = cuT(
+      "The payment screenshot was read and doesn't match this order — open it and check before marking paid",
+      '已识别付款截图,与本订单不一致 — 请打开核对后再标记付款');
+    return `<div class="ord-note-line is-alert" title="${escapeAttr(title)}">`
+      + `${ICON_PAY_CHECK}${cuT("Payment doesn't match", '付款不一致')}</div>`;
+  }
+  // Everything below needs a proof to exist. Without one this is an ordinary
+  // unpaid order and the Pending pill already says so — the whole point of
+  // has_alipay_proof is telling those two apart.
+  if (!o.has_alipay_proof) return '';
+  if (v === 'match') {
+    // Read, verified, and STILL unpaid: auto-flip is off, so the money is only
+    // ours once a person says so. Brass, not brick — nothing is wrong, it is
+    // one click of work.
+    const title = cuT(
+      'The payment screenshot was read and matches — confirm it to mark this order paid',
+      '已识别付款截图并核对一致 — 确认后即可标记为已付款');
+    return `<div class="ord-note-line is-owed" title="${escapeAttr(title)}">`
+      + `${ICON_PAY_OK}${cuT('Payment verified — confirm', '付款已核对 · 待确认')}</div>`;
+  }
+  // 'error' (the read threw) or null (it never ran — OCR not configured). Both
+  // mean the same thing to whoever is standing here: a customer says they paid
+  // and nobody has looked.
+  const title = v === 'error'
+    ? cuT('The payment screenshot could not be read — open it and check by hand',
+          '付款截图无法识别 — 请打开人工核对')
+    : cuT('A payment screenshot is on file and has not been checked — open it and verify',
+          '已上传付款截图但尚未核对 — 请打开核对');
+  return `<div class="ord-note-line is-owed" title="${escapeAttr(title)}">`
+    + `${ICON_PAY_CHECK}${cuT('Payment not checked yet', '付款待核对')}</div>`;
 }
 
 // Big, hard-to-miss banner at the top of the order drawer. Surfaces the

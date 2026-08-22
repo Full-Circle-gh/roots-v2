@@ -15,6 +15,7 @@
     "test:mobile-screens": "node scripts/test_mobile_screens.js",
     "test:needs-point": "node scripts/test_needs_point.js && node scripts/test_needs_point_client.js",
     "test:payment-mismatch": "node scripts/test_payment_mismatch.js",
+    "test:phone-dashboard": "node scripts/test_phone_dashboard.js",
     "test:phone": "node scripts/test_recipient_phone.js",
     "test:push-mute": "node scripts/test_push_mute_action.js",
     "test:point-search": "node scripts/test_point_search.js",

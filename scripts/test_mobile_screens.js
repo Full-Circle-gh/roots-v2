@@ -27,7 +27,13 @@ function findChrome() {
   if (process.env.CHROME_BIN) return process.env.CHROME_BIN;
   try {
     // eslint-disable-next-line global-require
-    return require('playwright').chromium.executablePath();
+    const p = require('playwright').chromium.executablePath();
+    // …and only if it is actually THERE. executablePath() reports where this
+    // playwright build expects its browser, not where one exists: a box whose
+    // /opt/pw-browsers was provisioned for a different revision gets a
+    // confident path to nothing, and every screen then failed with ENOENT
+    // while the working binary sat two lines below in the fallback list.
+    if (p && fs.existsSync(p)) return p;
   } catch (e) { /* playwright not installed here */ }
   const guesses = [
     '/opt/pw-browsers/chromium-1194/chrome-linux/chrome',
