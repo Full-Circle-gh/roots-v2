@@ -139,6 +139,14 @@ desktop is the right home
 | Remove a seeded review | ➖ — a permanent delete, and only synthetic rows can take it. Desktop |
 | Filter by rating / visibility / product | ➖ |
 
+### Media library (`07-content-billing.js`)
+
+| Desktop capability | Phone |
+|---|---|
+| Browse the library | ✅ — `GET /media/list` |
+| Add photos | ✅ — camera or roll, straight to `POST /media/upload`, the one thing the phone can do that the desktop cannot |
+| Folders, tags, alt text, rename, delete, bulk move | ➖ — cataloguing work, and it says so |
+
 ### Sales, Delivery, Settings
 
 | Desktop capability | Phone |
@@ -198,6 +206,7 @@ Ordered by what an operator loses today, not by effort.
 | ~~11~~ | ~~Reviews: hide / restore~~ | | **Done 2026-08-22** — and reviews are keyed by source+id now, not by the writer's name, which two reviews from one customer used to share |
 | ~~12~~ | ~~Message the customer~~ | | **Done 2026-08-22** |
 | ~~13~~ | ~~The Recap's "Show the work" feed~~ | `/dashboard/activity` | **Done 2026-08-22** |
+| ~~14~~ | ~~Media upload from the phone~~ | `POST /media/upload` | **Done 2026-08-22** |
 | 9 | **The remaining feature toggles** | one endpoint each | fapiao, membership, FAQ, feedback inbox, pop-ups, coupon active — each needs its real key confirmed before it is wired. |
 
 Nothing above needs a new endpoint. Every one of them needs the same three

@@ -284,7 +284,7 @@ const state = {
   couponBusy:null, couponErr:null, bcBusy:null, bcErr:null, ask:null, askErr:null,
   custBusy:null, custErr:null,
   ops:null, opsLoading:false, featBusy:null, featErr:null,
-  media:null, mediaLoading:false, mediaTried:false,
+  media:null, mediaLoading:false, mediaTried:false, mediaBusy:null, mediaErr:null,
   fapiao:null, fapiaoLoading:false, fapiaoBusy:false, fapiaoTried:false, printerTried:false,
   ordersView:null, ordersTotal:null, ordersLoading:false, ordersMore:false,
   storeF:'all', stores:null, orderQ:'',
@@ -1224,17 +1224,26 @@ const SUBS={
         ${c.founder_quote_en?`<div style="font-size:15px;color:var(--text-secondary);line-height:1.6;margin-top:8px">${pick('founder_quote_en','founder_quote_cn')}</div>`:''}</div>`:''}
       ${desktopNote()}</div>`;
   }},
-  media:{title:['Media','媒体库'],render:()=>{
-    if(!state.media){ if(!state.mediaTried) loadMedia(); return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`; }
-    if(!state.media.rows.length) return nothingYet(T('Nothing in the library','媒体库是空的'),
-      T('Photos you upload on desktop appear here, ready to use in the mini app.','在电脑端上传的图片会出现在这里，可用于小程序。'));
+  media:{title:['Media','媒体库'],
+    cta:()=>{ const b=state.mediaBusy;
+      return `<button class="cta" style="width:auto;padding:12px 20px;flex:none" ${b?'disabled':''} onclick="APP.cmd('pickMedia')">${
+        b?T('Uploading '+b.done+'/'+b.total+'…','上传中 '+b.done+'/'+b.total+'…'):T('Add photos','添加图片')}</button>`; },
+    render:()=>{
+    const err=state.mediaErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick)">${state.mediaErr}</span></div>`:'';
+    if(!state.media){ if(!state.mediaTried) loadMedia();
+      return `<div style="padding:0 16px">${err}</div><div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`; }
+    if(!state.media.rows.length) return `<div style="padding:0 16px">${err}</div>`+nothingYet(T('Nothing in the library','媒体库是空的'),
+      T('Add photos from this phone, or upload them on desktop — either way they land here, ready for the mini app.','可以直接用手机添加图片，也可以在电脑端上传 — 都会出现在这里，供小程序使用。'));
     return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+      ${err}
       <div class="num" style="font-size:13px;color:var(--text-secondary)">${T(state.media.total+' images','共 '+state.media.total+' 张')}</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">${state.media.rows.map(m=>`
         <div style="aspect-ratio:1;border-radius:8px;overflow:hidden;background:var(--surface-raised);border:1px solid var(--border-default)">
           <img loading="lazy" src="/api/retail/media/${m.id}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">
         </div>`).join('')}</div>
-      ${desktopNote()}</div>`;
+      <div style="text-align:center;font-size:12.5px;color:var(--text-secondary)">${T('Folders, tags and alt text are on desktop','分组、标签与替代文本在电脑端设置')}</div></div>`;
   }},
   legal:{title:['Legal pages','法律条款'],render:()=>{
     // Both documents live in storefront_config; the dates are theirs, not a
@@ -1700,6 +1709,49 @@ function opsFires(){
     return b.mins-a.mins;
   });
   return f;
+}
+/* The camera is the one thing a phone has that a desktop does not. accept +
+   capture hands the operator their own picker — camera or roll, their choice —
+   and the files go to the same multipart endpoint the desktop's dropzone uses.
+   No preview step: the library below IS the preview, and it refreshes. */
+reg('pickMedia', ()=>{
+  if(state.mediaBusy) return;
+  const el=document.createElement('input');
+  el.type='file'; el.accept='image/*'; el.multiple=true;
+  el.onchange=()=>uploadMedia(Array.prototype.slice.call(el.files||[]));
+  el.click();
+});
+const MEDIA_ERR={
+  too_large:['That photo is too large. Try a smaller one.','图片太大，请换一张较小的。'],
+  not_an_image:['That file is not an image the shop can use.','该文件不是可用的图片格式。'],
+  no_file:['Nothing was picked.','没有选择文件。'],
+};
+async function uploadMedia(files){
+  files=(files||[]).filter(f=>/^image\//.test(f.type||''));
+  if(!files.length) return;
+  state.mediaBusy={done:0,total:files.length}; state.mediaErr=null; render();
+  let ok=0, fail=0, why=null;
+  for(const f of files){
+    const fd=new FormData(); fd.append('file',f);
+    try{
+      const r=await fetch(API+'/media/upload',{method:'POST',credentials:'same-origin',body:fd});
+      if(r.status===401||r.status===403){ location.href='/backend/login'; return; }
+      const j=await r.json().catch(()=>({}));
+      if(r.ok&&j&&j.success) ok++; else { fail++; why=why||(j&&j.error); }
+    }catch(e){ fail++; }
+    state.mediaBusy={done:ok+fail,total:files.length}; render();
+  }
+  state.mediaBusy=null;
+  // A refusal names the reason the server gave when it gave one, and says how
+  // many DID land — "3 of 4" is the difference between a retry and a re-do.
+  if(fail){
+    const reason=MEDIA_ERR[why];
+    const head=ok?T(ok+' of '+(ok+fail)+' uploaded.', '已上传 '+ok+'/'+(ok+fail)+' 张。')
+                 :T('That did not upload.','上传失败。');
+    state.mediaErr=head+' '+(reason?T(...reason):T('Try again.','请重试。'));
+  }
+  if(ok){ state.mediaTried=false; state.media=null; loadMedia(); showToast(ok===1?T('Photo added','已添加图片'):T(ok+' photos added',ok+' 张图片已添加')); }
+  else render();
 }
 async function loadMedia(){
   if(state.mediaLoading||state.mediaTried) return; state.mediaLoading=true; state.mediaTried=true;
@@ -2324,7 +2376,10 @@ function tabbar(){
 }
 function bodyHtml(){
   const sub=state.stack[state.stack.length-1];
-  if(sub) return pageHead({title:T(...sub.title), back:T('More','更多')}) + SUBS[sub.route].render();
+  if(sub){
+    const def=SUBS[sub.route];
+    return pageHead({title:T(...sub.title), back:T('More','更多'), cta:def.cta?def.cta():''}) + def.render();
+  }
   switch(state.tab){
     case 'home': return screenHome();
     case 'orders': return screenOrders();
