@@ -21,13 +21,19 @@
   --amber:#C9954A; --brick:#B4533E;
   --dusk-tint:#EEEDF6; --sage-tint:#EDF1EC; --amber-tint:#F7EEDE; --brick-tint:#F6E7E3;
   --raised:#F6F3EC; --border:#E4E0D5; --dusk-hover:#605AA0; --dusk-press:#524C8C;
+  /* The row surface for a record nobody on the team has opened yet. Deliberately
+     LIGHTER than a header band: an unseen row is transient content and must never
+     read as heavy as the page's own chrome. Pairs with a Sage left edge drawn as an
+     inset shadow, never a border — a marker that resizes its row makes the list
+     jump as records get opened. */
+  --unseen:#F4F5F0;
 
   --bg:var(--paper); --surface-card:#FFFFFF; --surface-raised:var(--raised); --surface-dark:var(--ink);
   --text-primary:var(--ink); --text-secondary:var(--graphite); --text-caption:var(--graphite);
   --border-default:var(--border); --border-strong:var(--graphite); --border-focus:var(--dusk);
   --accent:var(--dusk); --accent-hover:var(--dusk-hover); --accent-press:var(--dusk-press); --accent-tint:var(--dusk-tint);
   --success:var(--sage); --warning:var(--amber); --danger:var(--brick);
-  --radius-card:16px;
+  --radius-card:14px;
 
   --ease-settle:cubic-bezier(0.16,1,0.3,1);
   --font-ui:'Inter','Noto Sans SC','Source Han Sans SC',-apple-system,system-ui,sans-serif;
@@ -36,6 +42,7 @@
   --bg:var(--ink); --surface-card:#182236; --surface-raised:#1E2A40; --surface-dark:#0B121F;
   --text-primary:var(--paper); --text-secondary:#9AA2B0; --text-caption:#9AA2B0;
   --border-default:#263149; --border-strong:#3A455D;
+  --unseen:#182329;
 }
 *{box-sizing:border-box;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%}
@@ -68,38 +75,42 @@ button,input,textarea{font-family:inherit}
 .iconbtn{width:44px;height:44px;flex:none;display:flex;align-items:center;justify-content:center;
   border:none;background:transparent;color:var(--text-secondary);cursor:pointer;border-radius:8px}
 .card{background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px}
+.card.unseen{background:var(--unseen);box-shadow:inset 4px 0 0 var(--sage);
+  transition:background .6s var(--ease-settle), box-shadow .6s var(--ease-settle)}
 .list{background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;overflow:hidden}
 .sep{height:1px;background:var(--border-default)}
-.eyebrow{font-size:11.5px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--text-secondary)}
-.row{display:flex;align-items:center;gap:14px;width:100%;min-height:54px;padding:11px 14px;background:transparent;
+.eyebrow{font-size:13px;font-weight:500;color:var(--text-secondary)}
+.row{display:flex;align-items:center;gap:16px;width:100%;min-height:56px;padding:12px 16px;background:transparent;
   border:none;cursor:pointer;text-align:left;color:var(--text-primary);font-family:inherit}
-.rowico{width:34px;height:34px;border-radius:9px;background:var(--surface-raised);display:flex;align-items:center;
+.rowico{width:36px;height:36px;border-radius:8px;background:var(--surface-raised);display:flex;align-items:center;
   justify-content:center;color:var(--text-secondary);flex:none}
 .num{font-variant-numeric:tabular-nums}
-.cta{width:100%;padding:15px;border:none;border-radius:12px;background:var(--accent);color:#fff;
-  font-family:inherit;font-size:16px;font-weight:500;cursor:pointer;transition:background .2s var(--ease-settle)}
+.btn2{min-height:44px;padding:0 16px;border-radius:8px;border:1px solid var(--border-default);background:transparent;
+  color:var(--text-primary);font-family:inherit;font-size:15px;font-weight:500;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;gap:8px}
+.btn2:disabled{opacity:.55;cursor:default}
+.cta{width:100%;min-height:44px;padding:12px 16px;border:none;border-radius:8px;background:var(--accent);color:#fff;
+  font-family:inherit;font-size:15px;font-weight:500;cursor:pointer;transition:background .2s var(--ease-settle)}
 .cta:hover{background:var(--accent-hover)}.cta:active{background:var(--accent-press)}
 .scrim{position:absolute;inset:0;background:rgba(17,26,43,.38);animation:tFade .2s ease both}
 .sheet{position:absolute;left:0;right:0;bottom:0;background:var(--surface-card);
-  border-top-left-radius:22px;border-top-right-radius:22px;box-shadow:0 -10px 44px rgba(17,26,43,.18);
+  border-top-left-radius:14px;border-top-right-radius:14px;
+  box-shadow:0 1px 2px rgba(17,26,43,.05), 0 4px 16px rgba(17,26,43,.04);
   animation:tSheetUp .4s var(--ease-settle) both;display:flex;flex-direction:column}
 .grabber{width:38px;height:5px;border-radius:999px;background:var(--border-default);margin:6px auto 8px}
-.pill{display:inline-flex;align-items:center;font-size:12px;font-weight:500;padding:3px 10px;border-radius:999px;white-space:nowrap;flex:none}
-.stepbtn{width:42px;height:42px;border-radius:11px;background:var(--surface-raised);border:1px solid var(--border-default);
+.pill{display:inline-flex;align-items:center;font-size:13px;font-weight:400;padding:4px 10px;border-radius:999px;white-space:nowrap;flex:none}
+.stepbtn{width:44px;height:44px;border-radius:8px;background:var(--surface-raised);border:1px solid var(--border-default);
   display:flex;align-items:center;justify-content:center;color:var(--text-primary);cursor:pointer;flex:none}
-.chip{display:flex;align-items:center;gap:6px;flex:none;padding:7px 12px;border-radius:999px;font-size:13px;
+.chip{display:flex;align-items:center;gap:8px;flex:none;height:44px;padding:0 16px;border-radius:999px;font-size:13px;
   cursor:pointer;font-family:inherit;white-space:nowrap;border:1px solid var(--border-default);
   background:var(--surface-card);color:var(--text-secondary)}
 .chip.on{background:var(--text-primary);color:var(--bg);border-color:var(--text-primary)}
 .chip .c{font-size:11px;font-variant-numeric:tabular-nums;opacity:.8}
 .i svg,svg.i{display:block;flex:none}
 .toast{position:absolute;left:50%;transform:translateX(-50%);bottom:112px;z-index:60;background:var(--text-primary);
-  color:var(--bg);padding:10px 18px;border-radius:999px;font-size:13.5px;white-space:nowrap;
+  color:var(--bg);padding:10px 18px;border-radius:999px;font-size:13px;white-space:nowrap;
   box-shadow:0 6px 20px rgba(17,26,43,.22);animation:tFade .2s ease both}
-.fab{position:absolute;right:16px;bottom:calc(env(safe-area-inset-bottom,0px) + 84px);z-index:30;display:flex;
-  align-items:center;gap:8px;padding:13px 18px 13px 14px;border:none;border-radius:999px;background:var(--accent);
-  color:#fff;cursor:pointer;font-size:15px;font-weight:500;box-shadow:0 6px 20px rgba(110,103,175,.38)}
-input,textarea{padding:12px 14px;border:1px solid var(--border-default);border-radius:11px;background:var(--surface-card);
+input,textarea{padding:12px 14px;border:1px solid var(--border-default);border-radius:8px;background:var(--surface-card);
   color:var(--text-primary);font-size:15px;width:100%}
 input:focus,textarea:focus{outline:none;border-color:var(--border-focus)}
 </style>
@@ -153,23 +164,23 @@ function toggle(on, onClick){
 const CH_ICON = {miniapp:'smartphone',web:'globe',meituan:'bike',gzgrocery:'warehouse',manual:'square-pen'};
 const DB = {
   orders:[
-    {id:'RT-…047',ch:'miniapp',cust:['Chen Meiling','陈美玲'],total:'¥312',placed:'14:22',status:['Paid','已付款'],kind:'paid',isNew:true,ship:['Guangzhou · Tianhe','广州 · 天河区'],by:['Ship by 18:00 · 3h left','今日 18:00 截单 · 剩 3h'],byAmber:true,phone:'138****2841',addr:['Tianhe, Guangzhou','广州市天河区'],pay:['WeChat Pay','微信支付'],txn:'42000••••8831',fulfil:['Tianhe store','天河店'],route:['Auto-routed to nearest store','自动派往最近门店'],trk:null,items:[[1,'Organic carrots 500g','¥18'],[2,'Oat milk 1L','¥64'],[1,'Mixed nuts 250g','¥45']],breakdown:[['Subtotal','¥300'],['Delivery','¥12']]},
-    {id:'RT-…046',ch:'web',cust:['Sarah Lim','Sarah Lim'],total:'¥186',placed:'14:07',status:['Paid','已付款'],kind:'paid',isNew:true,ship:['Guangzhou · Yuexiu','广州 · 越秀区'],by:['Ship by 18:00','今日 18:00 截单'],phone:'159****7723',addr:['Yuexiu, Guangzhou','广州市越秀区'],pay:['Card','银行卡'],txn:'••••7723',fulfil:['Tianhe store','天河店'],route:['Nearest store','最近门店'],items:[[2,'Sourdough loaf','¥93']],breakdown:[['Subtotal','¥186']]},
-    {id:'RT-…045',ch:'miniapp',cust:['Wang Zhiqiang','王志强'],total:'¥458',placed:'13:41',status:['Preparing','备货中'],kind:'preparing',ship:['Pickup in-store','到店自提'],by:['Pickup · tomorrow 12:00','自提 · 明日 12:00'],phone:'137****5510',addr:['Pickup · Panyu store','自提 · 番禺店'],pay:['WeChat Pay','微信支付'],txn:'••••5510',fulfil:['Panyu store','番禺店'],route:['Pickup','自提'],items:[[6,'Assorted grocery','¥458']],breakdown:[['Subtotal','¥458']]},
-    {id:'RT-…044',ch:'meituan',cust:['Li Na','李娜'],total:'¥95',placed:'13:15',status:['Out for delivery','配送中'],kind:'dispatched',viewOnly:true,ship:['Guangzhou · Haizhu','广州 · 海珠区'],phone:'—',addr:['Haizhu, Guangzhou','广州市海珠区'],pay:['Meituan','美团'],txn:'platform',fulfil:['Platform rider','平台骑手'],route:['Meituan dispatch','美团派单'],trk:{carrier:['Platform rider','平台骑手'],no:'MT-…044',event:['Rider 1.2km away','骑手距 1.2km'],live:true},items:[[3,'Snacks','¥95']],breakdown:[['Subtotal','¥95']]},
-    {id:'RT-…043',ch:'miniapp',cust:['Zhang Wei','张伟'],total:'¥726',placed:'11:50',status:['Dispatched','已发货'],kind:'dispatched',ship:['Shenzhen · Nanshan','深圳 · 南山区'],by:['Met','已发'],phone:'186****0092',addr:['Nanshan, Shenzhen','深圳市南山区'],pay:['WeChat Pay','微信支付'],txn:'••••0092',fulfil:['Tianhe store','天河店'],route:['JD Express','京东快递'],trk:{carrier:['JD Express','京东快递'],no:'JDV0038821',event:['In transit · left Guangzhou hub','运输中 · 已离开广州分拣'],live:true},items:[[8,'Bulk order','¥726']],breakdown:[['Subtotal','¥700'],['Delivery','¥26']]},
-    {id:'RT-…041',ch:'manual',cust:['Guest (staff)','访客（员工）'],total:'¥164',placed:'11:04',status:['Pending','待处理'],kind:'pending',ship:['Guangzhou · Tianhe','广州 · 天河区'],phone:'—',addr:['Tianhe, Guangzhou','广州市天河区'],pay:['Cash on pickup','到店付款'],txn:'—',fulfil:['Tianhe store','天河店'],route:['Manual','手动'],items:[[2,'Staff order','¥164']],breakdown:[['Subtotal','¥164']]},
-    {id:'RT-…039',ch:'miniapp',cust:['Huang Xiaoting','黄小婷'],total:'¥215',placed:'10:21',status:['Awaiting restock','等待补货'],kind:'restock',ship:['Guangzhou · Baiyun','广州 · 白云区'],by:['Paused','已暂停'],phone:'139****4456',addr:['Baiyun, Guangzhou','广州市白云区'],pay:['WeChat Pay','微信支付'],txn:'••••4456',fulfil:['Panyu store','番禺店'],route:['Paused — low stock','已暂停 — 库存不足'],items:[[3,'Out-of-stock item','¥215']],breakdown:[['Subtotal','¥215']]},
-    {id:'RT-…037',ch:'miniapp',cust:['Wu Yaqi','吴雅琪'],total:'¥134',placed:'09:30',status:['Refund requested','申请退款'],kind:'refund',ship:['Guangzhou · Tianhe','广州 · 天河区'],by:['Met','已发'],phone:'188****3320',addr:['Tianhe, Guangzhou','广州市天河区'],pay:['WeChat Pay','微信支付'],txn:'••••3320',fulfil:['Tianhe store','天河店'],route:['Delivered','已送达'],receipt:['Receipt auto-printed at Tianhe','小票已在天河自动打印'],items:[[2,'Returned items','¥134']],breakdown:[['Subtotal','¥134']]},
-    {id:'RT-…036',ch:'miniapp',cust:['Zheng Hao','郑浩'],total:'¥298',placed:'09:02',status:['Delivered','已送达'],kind:'delivered',ship:['Dongguan · Nancheng','东莞 · 南城区'],by:['Met','已发'],phone:'136****9911',addr:['Nancheng, Dongguan','东莞市南城区'],pay:['WeChat Pay','微信支付'],txn:'••••9911',fulfil:['Tianhe store','天河店'],route:['kuaidi100','快递100'],receipt:['Receipt auto-printed','小票已自动打印'],items:[[4,'Grocery','¥298']],breakdown:[['Subtotal','¥298']]},
+    {id:'RT-…047',ch:'miniapp',cust:['Chen Meiling','陈美玲'],total:'¥312',placed:'2:22 PM',status:['Paid','已付款'],kind:'paid',isNew:true,ship:['Guangzhou · Tianhe','广州 · 天河区'],by:['Ship by 6:00 PM · 3h left','今日 18:00 截单 · 剩 3h'],byAmber:true,phone:'138****2841',addr:['Tianhe, Guangzhou','广州市天河区'],pay:['WeChat Pay','微信支付'],txn:'42000••••8831',fulfil:['Tianhe store','天河店'],route:['Auto-routed to nearest store','自动派往最近门店'],trk:null,items:[[1,'Organic carrots 500g','¥18'],[2,'Oat milk 1L','¥64'],[1,'Mixed nuts 250g','¥45']],breakdown:[['Subtotal','¥300'],['Delivery','¥12']]},
+    {id:'RT-…046',ch:'web',cust:['Sarah Lim','Sarah Lim'],total:'¥186',placed:'2:07 PM',status:['Paid','已付款'],kind:'paid',isNew:true,ship:['Guangzhou · Yuexiu','广州 · 越秀区'],by:['Ship by 6:00 PM','今日 18:00 截单'],phone:'159****7723',addr:['Yuexiu, Guangzhou','广州市越秀区'],pay:['Card','银行卡'],txn:'••••7723',fulfil:['Tianhe store','天河店'],route:['Nearest store','最近门店'],items:[[2,'Sourdough loaf','¥93']],breakdown:[['Subtotal','¥186']]},
+    {id:'RT-…045',ch:'miniapp',cust:['Wang Zhiqiang','王志强'],total:'¥458',placed:'1:41 PM',status:['Preparing','备货中'],kind:'preparing',ship:['Pickup in-store','到店自提'],by:['Pickup · tomorrow 12:00 PM','自提 · 明日 12:00'],phone:'137****5510',addr:['Pickup · Panyu store','自提 · 番禺店'],pay:['WeChat Pay','微信支付'],txn:'••••5510',fulfil:['Panyu store','番禺店'],route:['Pickup','自提'],items:[[6,'Assorted grocery','¥458']],breakdown:[['Subtotal','¥458']]},
+    {id:'RT-…044',ch:'meituan',cust:['Li Na','李娜'],total:'¥95',placed:'1:15 PM',status:['Out for delivery','配送中'],kind:'dispatched',viewOnly:true,ship:['Guangzhou · Haizhu','广州 · 海珠区'],phone:'—',addr:['Haizhu, Guangzhou','广州市海珠区'],pay:['Meituan','美团'],txn:'platform',fulfil:['Platform rider','平台骑手'],route:['Meituan dispatch','美团派单'],trk:{carrier:['Platform rider','平台骑手'],no:'MT-…044',event:['Rider 1.2km away','骑手距 1.2km'],live:true},items:[[3,'Snacks','¥95']],breakdown:[['Subtotal','¥95']]},
+    {id:'RT-…043',ch:'miniapp',cust:['Zhang Wei','张伟'],total:'¥726',placed:'11:50 AM',status:['Dispatched','已发货'],kind:'dispatched',ship:['Shenzhen · Nanshan','深圳 · 南山区'],by:['Met','已发'],phone:'186****0092',addr:['Nanshan, Shenzhen','深圳市南山区'],pay:['WeChat Pay','微信支付'],txn:'••••0092',fulfil:['Tianhe store','天河店'],route:['JD Express','京东快递'],trk:{carrier:['JD Express','京东快递'],no:'JDV0038821',event:['In transit · left Guangzhou hub','运输中 · 已离开广州分拣'],live:true},items:[[8,'Bulk order','¥726']],breakdown:[['Subtotal','¥700'],['Delivery','¥26']]},
+    {id:'RT-…041',ch:'manual',cust:['Guest (staff)','访客（员工）'],total:'¥164',placed:'11:04 AM',status:['Pending','待处理'],kind:'pending',ship:['Guangzhou · Tianhe','广州 · 天河区'],phone:'—',addr:['Tianhe, Guangzhou','广州市天河区'],pay:['Cash on pickup','到店付款'],txn:'—',fulfil:['Tianhe store','天河店'],route:['Manual','手动'],items:[[2,'Staff order','¥164']],breakdown:[['Subtotal','¥164']]},
+    {id:'RT-…039',ch:'miniapp',cust:['Huang Xiaoting','黄小婷'],total:'¥215',placed:'10:21 AM',status:['Awaiting restock','等待补货'],kind:'restock',ship:['Guangzhou · Baiyun','广州 · 白云区'],by:['Paused','已暂停'],phone:'139****4456',addr:['Baiyun, Guangzhou','广州市白云区'],pay:['WeChat Pay','微信支付'],txn:'••••4456',fulfil:['Panyu store','番禺店'],route:['Paused — low stock','已暂停 — 库存不足'],items:[[3,'Out-of-stock item','¥215']],breakdown:[['Subtotal','¥215']]},
+    {id:'RT-…037',ch:'miniapp',cust:['Wu Yaqi','吴雅琪'],total:'¥134',placed:'9:30 AM',status:['Refund requested','申请退款'],kind:'refund',ship:['Guangzhou · Tianhe','广州 · 天河区'],by:['Met','已发'],phone:'188****3320',addr:['Tianhe, Guangzhou','广州市天河区'],pay:['WeChat Pay','微信支付'],txn:'••••3320',fulfil:['Tianhe store','天河店'],route:['Delivered','已送达'],receipt:['Receipt auto-printed at Tianhe','小票已在天河自动打印'],items:[[2,'Returned items','¥134']],breakdown:[['Subtotal','¥134']]},
+    {id:'RT-…036',ch:'miniapp',cust:['Zheng Hao','郑浩'],total:'¥298',placed:'9:02 AM',status:['Delivered','已送达'],kind:'delivered',ship:['Dongguan · Nancheng','东莞 · 南城区'],by:['Met','已发'],phone:'136****9911',addr:['Nancheng, Dongguan','东莞市南城区'],pay:['WeChat Pay','微信支付'],txn:'••••9911',fulfil:['Tianhe store','天河店'],route:['kuaidi100','快递100'],receipt:['Receipt auto-printed','小票已自动打印'],items:[[4,'Grocery','¥298']],breakdown:[['Subtotal','¥298']]},
   ],
   mirror:{meituan:[
-      {id:'MT-…044',cust:['Li Na','李娜'],total:'¥95',status:['Out for delivery','配送中'],kind:'dispatched',time:'13:15'},
-      {id:'MT-…031',cust:['Mr Wang','王先生'],total:'¥142',status:['Completed','已完成'],kind:'delivered',time:'11:02'},
-      {id:'MT-…028',cust:['Ms Liu','刘女士'],total:'¥68',status:['Completed','已完成'],kind:'delivered',time:'10:20'}],
+      {id:'MT-…044',cust:['Li Na','李娜'],total:'¥95',status:['Out for delivery','配送中'],kind:'dispatched',time:'1:15 PM'},
+      {id:'MT-…031',cust:['Mr Wang','王先生'],total:'¥142',status:['Completed','已完成'],kind:'delivered',time:'11:02 AM'},
+      {id:'MT-…028',cust:['Ms Liu','刘女士'],total:'¥68',status:['Completed','已完成'],kind:'delivered',time:'10:20 AM'}],
     gzgrocery:[
-      {id:'GZ-…038',cust:['Mr Zhou','周先生'],total:'¥1,040',status:['Picking','拣货中'],kind:'preparing',time:'09:55'},
-      {id:'GZ-…022',cust:['Ms Chen','陈女士'],total:'¥560',status:['Completed','已完成'],kind:'delivered',time:'08:40'}]},
+      {id:'GZ-…038',cust:['Mr Zhou','周先生'],total:'¥1,040',status:['Picking','拣货中'],kind:'preparing',time:'9:55 AM'},
+      {id:'GZ-…022',cust:['Ms Chen','陈女士'],total:'¥560',status:['Completed','已完成'],kind:'delivered',time:'8:40 AM'}]},
   products:[
     {name:['Organic carrots','有机胡萝卜'],sku:'SKU 10231 · 500g',price:'¥18',stock:42,stockLabel:['42 in stock','库存 42'],status:['Live','在售'],kind:'on'},
     {name:['Oat milk 1L','燕麦奶 1L'],sku:'SKU 10188',price:'¥32',stock:8,stockLabel:['8 left','剩 8'],status:['Low','库存低'],kind:'restock'},
@@ -195,8 +206,8 @@ const DB = {
     {name:['Cold brew','冷萃咖啡'],meta:['Manual adjust · staff','手动调整 · 员工'],delta:'+12'},
   ],
   invoices:[
-    {id:'FP-2026-0451',order:'RT-…047',amount:'¥312',status:['Issued','已开票'],kind:'on',date:['Today 14:30','今日 14:30']},
-    {id:'FP-2026-0450',order:'RT-…043',amount:'¥726',status:['Issued','已开票'],kind:'on',date:['Today 12:02','今日 12:02']},
+    {id:'FP-2026-0451',order:'RT-…047',amount:'¥312',status:['Issued','已开票'],kind:'on',date:['Today 2:30 PM','今日 14:30']},
+    {id:'FP-2026-0450',order:'RT-…043',amount:'¥726',status:['Issued','已开票'],kind:'on',date:['Today 12:02 PM','今日 12:02']},
     {id:'FP-2026-0449',order:'RT-…040',amount:'¥390',status:['Pending','待开票'],kind:'pending',date:['Yesterday','昨日']},
   ],
   coupons:[
@@ -219,9 +230,9 @@ const DB = {
     {name:['Sarah Lim','Sarah Lim'],tier:['Gold','金'],pts:'2,050',gold:true},{name:['Wang Zhiqiang','王志强'],tier:['Bronze','铜'],pts:'420'},
   ],
   wallet:[
-    {label:['Top-up','充值'],who:['Chen Meiling','陈美玲'],time:'14:20',amt:'+¥200',color:'#5F7357'},
-    {label:['Spend','消费'],who:['Zhang Wei','张伟'],time:'13:02',amt:'−¥88',color:'var(--text-primary)'},
-    {label:['Top-up','充值'],who:['Sarah Lim','Sarah Lim'],time:'11:40',amt:'+¥100',color:'#5F7357'},
+    {label:['Top-up','充值'],who:['Chen Meiling','陈美玲'],time:'2:20 PM',amt:'+¥200',color:'#5F7357'},
+    {label:['Spend','消费'],who:['Zhang Wei','张伟'],time:'1:02 PM',amt:'−¥88',color:'var(--text-primary)'},
+    {label:['Top-up','充值'],who:['Sarah Lim','Sarah Lim'],time:'11:40 AM',amt:'+¥100',color:'#5F7357'},
   ],
   leaderboard:[{rank:'1',name:['Chen Meiling','陈美玲'],pts:'2,410'},{rank:'2',name:['Sarah Lim','Sarah Lim'],pts:'2,050'},{rank:'3',name:['Zhang Wei','张伟'],pts:'1,180'},{rank:'4',name:['Li Na','李娜'],pts:'940'},{rank:'5',name:['Wang Zhiqiang','王志强'],pts:'420'}],
   votes:[
@@ -252,6 +263,13 @@ const DB = {
     {q:['What areas do you deliver to?','配送范围？'],a:['Guangzhou city and neighbouring districts; pickup at both stores.','广州市及周边区；两家门店均可自提。']},
     {q:['Can I change my pickup time?','可以改自提时间吗？'],a:['Yes — contact us before the order enters Preparing.','可以 — 请在订单进入备货前联系我们。']},
   ],
+  customers:[
+    {id:'s1',name:'Chen Meiling',phone:'138****2841',tier:'tree',orders:24,spend:6240,seen:'2026-07-29 09:40:00',unseen:true},
+    {id:'s2',name:'Sarah Lim',phone:'159****7723',tier:'tree',orders:18,spend:4180,seen:'2026-07-28 19:12:00',unseen:true},
+    {id:'s3',name:'Zhang Wei',phone:'186****0092',tier:'root',orders:9,spend:2260,seen:'2026-07-24 11:02:00'},
+    {id:'s4',name:'Wang Zhiqiang',phone:'137****5510',tier:'sprout',orders:3,spend:812,seen:'2026-06-30 08:20:00'},
+    {id:'s5',name:'Wu Yaqi',phone:'188****3320',tier:'seed',orders:0,spend:0,seen:'2026-05-02 15:44:00'},
+  ],
   setupSteps:[
     {name:['Add your first product','添加第一件商品'],done:true},{name:['Set up delivery','配送设置'],done:true},
     {name:['Connect a channel','连接渠道'],done:true},{name:['Add a payment method','添加收款方式'],done:false},
@@ -266,6 +284,8 @@ function chIcon(ch){ return `<span style="color:var(--text-secondary);display:fl
 const state = {
   tab:'home', theme:'light', lang:'en', live:true, sound:true,
   stack:[], statusF:'all', channelF:'all', inboxSeg:'reviews',
+  custSeg:'all', custTier:'all', customers:null, custMeta:null, custLoaded:false,
+  custId:null, custDetail:null, prodView:'catalogue',
   overflow:false, search:false, detailId:null, detailActions:false, productSku:null,
   reply:null, createKind:null, createValue:10, createActive:true,
   toast:null, drag:0, dragging:false, faqOpen:null, reviewsSeen:new Set(),
@@ -282,7 +302,8 @@ function pop(){ state.stack.pop(); render(); }
 const CMD={}; function reg(n,f){CMD[n]=f;}
 window.APP={cmd:(n,a)=>{ if(CMD[n]) CMD[n](a); }};
 
-reg('tab', t=>{ state.stack=[]; state.tab=t; state.detailId=null; render(); });
+reg('tab', t=>{ state.stack=[]; state.tab=t; state.detailId=null; render();
+  if(t==='customers' && !state.custLoaded && !state.custLoading) loadCustomers(); });
 reg('back', ()=>{ if(state.stack.length) pop(); });
 reg('overflow', ()=>{ state.overflow=true; render(); });
 reg('closeOverflow', ()=>{ state.overflow=false; render(); });
@@ -307,6 +328,12 @@ reg('copyTxn', ()=>showToast(T('Copied','已复制')));
 reg('openProduct', sku=>{ state.productSku=sku; render(); });
 reg('closeProduct', ()=>{ state.productSku=null; render(); });
 reg('saveProduct', ()=>{ state.productSku=null; showToast(T('Saved','已保存')); });
+reg('custSeg', v=>{ state.custSeg=v; state.custLoaded=false; state.customers=null; render(); loadCustomers(); });
+reg('custTier', v=>{ state.custTier=v; render(); });
+reg('custClear', ()=>{ state.custSeg='all'; state.custTier='all'; state.custLoaded=false; render(); loadCustomers(); });
+reg('openCustomer', id=>{ state.custId=id; state.custDetail=null; render(); loadCustomerDetail(id); });
+reg('closeCustomer', ()=>{ state.custId=null; state.custDetail=null; render(); });
+reg('prodView', v=>{ state.prodView=v; render(); });
 reg('inboxSeg', s=>{ state.inboxSeg=s; render(); });
 reg('openReply', who=>{ state.reply=who; state.reviewsSeen.add(who); render(); });
 reg('markAllReviewsRead', ()=>{ DB.reviews.forEach(r=>state.reviewsSeen.add(r.cust[0])); render(); });
@@ -322,7 +349,6 @@ reg('sw', k=>{ state.sw[k]=!state.sw[k]; render(); });
 reg('qsInc', n=>{ state.qs[n]=(state.qs[n]||0)+1; render(); });
 reg('qsDec', n=>{ state.qs[n]=Math.max(0,(state.qs[n]||0)-1); render(); });
 reg('saveStock', ()=>showToast(T('Stock received','已入库')));
-reg('newOrder', ()=>showToast(T('New order · opens on desktop','新建订单 · 请在电脑端')));
 reg('signout', ()=>showToast(T('Signed out','已退出')));
 reg('enable', f=>{ state.sw[f]=true; showToast(T('Enabled','已开启')); });
 reg('faqToggle', i=>{ state.faqOpen=state.faqOpen===i?null:i; render(); });
@@ -382,7 +408,7 @@ function screenHome(){
   const A=state.liveAttn||{};
   const attention=[
     {icon:'package',label:T('Orders awaiting shipment','待发货订单'),count:A.ship!=null?A.ship:2,cmd:"APP.cmd('tab','orders')"},
-    {icon:'message-square-text',label:T('Reviews to reply','待回复评价'),count:A.reviews!=null?A.reviews:3,cmd:"APP.cmd('tab','inbox')"},
+    {icon:'message-square-text',label:T('Reviews to reply','待回复评价'),count:A.reviews!=null?A.reviews:3,cmd:"APP.cmd('push','inbox')"},
     {icon:'triangle-alert',label:T('Low stock','库存偏低'),count:A.low!=null?A.low:1,cmd:"APP.cmd('push','products')"},
   ];
   const vy=T('vs yesterday','较昨日');
@@ -392,27 +418,29 @@ function screenHome(){
     {icon:'ticket',label:T('Create coupon','创建优惠券'),cmd:"APP.cmd('push','coupons')"},
     {icon:'megaphone',label:T('Send broadcast','发送广播'),cmd:"APP.cmd('push','broadcasts')"},
   ];
-  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:0 2px">
-      <span style="font-size:19px;font-weight:500;letter-spacing:-.01em">${T(...GREET[greetKey()])}</span>
-      <span style="font-size:12.5px;color:var(--text-secondary)">${T('Updated just now','刚刚更新')}</span></div>
+  const today=new Date();
+  const dateLine = LANG==='en'
+    ? today.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})
+    : (today.getMonth()+1)+'月'+today.getDate()+'日 周'+'日一二三四五六'[today.getDay()];
+  return `${pageHead({title:T(...GREET[greetKey()]), status:dateLine})}
+  <div style="padding:0 16px 24px;display:flex;flex-direction:column;gap:16px">
     ${recapCard()}
     <div class="rise" style="animation-delay:.06s">
-      <div class="eyebrow" style="padding:2px 4px 8px">${T('Needs you','需要处理')}</div>
+      <div style="padding:2px 4px 8px;font-size:18px;font-weight:500">${T('Needs you','需要处理')}</div>
       <div class="list">${attention.map((a,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
         <button class="row" onclick="${a.cmd}"><span class="rowico">${ic(a.icon)}</span>
         <span style="flex:1;font-size:15px">${a.label}</span>
         <span class="num" style="min-width:22px;height:22px;padding:0 7px;border-radius:999px;background:var(--surface-raised);font-size:12.5px;font-weight:500;display:flex;align-items:center;justify-content:center;flex:none">${a.count}</span>
         <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`).join('')}</div></div>
     <div class="rise" style="animation-delay:.12s">
-      <div class="eyebrow" style="padding:2px 4px 8px">${T('Today','今日')}</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${kpis.map(([l,v,d])=>
-        `<div class="card" style="padding:14px 16px;display:flex;flex-direction:column;gap:5px">
-           <span style="font-size:12.5px;color:var(--text-secondary)">${l}</span>
-           <span class="num" style="font-size:23px;font-weight:500;letter-spacing:-.015em">${v}</span>
-           <span class="num" style="font-size:12px;color:var(--text-secondary)">${d}</span></div>`).join('')}</div></div>
+      <div style="padding:2px 4px 8px;font-size:18px;font-weight:500">${T('Today','今日')}</div>
+      <div class="card" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px">${kpis.map(([l,v,d])=>
+        `<div style="min-width:0">
+           <span style="display:block;font-size:13px;color:var(--text-secondary)">${l}</span>
+           <span class="num" style="display:block;font-size:18px;font-weight:500;line-height:1.4">${v}</span>
+           <span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${d}</span></div>`).join('')}</div></div>
     <div class="rise" style="animation-delay:.18s">
-      <div class="eyebrow" style="padding:2px 4px 8px">${T('Quick actions','快捷操作')}</div>
+      <div style="padding:2px 4px 8px;font-size:18px;font-weight:500">${T('Quick actions','快捷操作')}</div>
       <div class="list">${quick.map((q,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
         <button class="row" onclick="${q.cmd}"><span class="rowico">${ic(q.icon)}</span>
         <span style="flex:1;font-size:15px">${q.label}</span>
@@ -436,37 +464,42 @@ function ordersHeader(){
   const sCount=(k,f)=> S ? (k==null?undefined:S[k]) : f;
   const cCount=(k,f)=> C ? (C[k]!=null?C[k]:0) : f;
   const allOrders = C?C.all:(S?undefined:47);
-  const sc=[{key:'all',en:'All',zh:'全部',count:allOrders},{key:'new',en:'New',zh:'新',count:S?undefined:2},{key:'paid',en:'Paid',zh:'已付',count:sCount('paid',8)},
+  const sc=[{key:'all',en:'All',zh:'全部',count:allOrders},{key:'paid',en:'Paid',zh:'已付',count:sCount('paid',8)},
     {key:'preparing',en:'Preparing',zh:'备货',count:sCount('preparing',6)},{key:'dispatched',en:'Dispatched',zh:'已发',count:sCount('dispatched',11)},{key:'delivered',en:'Delivered',zh:'送达',count:S?undefined:15},
     {key:'restock',en:'Awaiting restock',zh:'待补货',count:sCount('awaiting_restock',2)},{key:'refund',en:'Refund queue',zh:'退款',count:sCount('refunds_open',2)}];
   const cc=[{key:'all',en:'All channels',zh:'全部渠道',count:allOrders},{key:'miniapp',en:'Mini app',zh:'小程序',count:cCount('wechat',28)},{key:'web',en:'Web',zh:'网页',count:cCount('web',9)},
     {key:'meituan',en:'Meituan',zh:'美团',count:cCount('meituan',6)},{key:'gzgrocery',en:'gzgrocery',zh:'gzgrocery',count:cCount('gzgrocery',2)},{key:'manual',en:'Manual',zh:'手动',count:cCount('manual',2)}];
-  return `<div style="flex:none;background:var(--bg);border-bottom:1px solid var(--border-default);padding:10px 0">
+  return `<div style="padding:0 0 16px">
     ${chipRow(sc,state.statusF,'statusF')}<div style="height:8px"></div>${chipRow(cc,state.channelF,'channelF')}</div>`;
+}
+/* The status line reports WORK WAITING, never population: how many orders are
+   sitting on someone, not how many exist. It ships only when a real number is
+   behind it — no placeholder, no dash. */
+function ordersStatusLine(){
+  const live=state.liveAttn&&state.liveAttn.ship;
+  const n = live!=null ? live : DB.orders.filter(o=>o.kind==='paid'||o.kind==='preparing').length;
+  if(!n) return '';
+  return T(n+' awaiting fulfilment', n+' 单待履约');
 }
 function screenOrders(){
   const os=ordersFiltered();
-  return `<div style="padding:12px 16px 90px;display:flex;flex-direction:column;gap:10px">
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:0 2px 2px">
-      <span style="font-size:12.5px;color:var(--text-secondary)">${os.length} ${T('orders','单')}</span>
-      <span style="font-size:12.5px;color:var(--text-secondary)">${T('Updated just now','刚刚更新')}</span></div>
+  return `${pageHead({title:T('Orders','订单'), status:ordersStatusLine()})}
+  ${ordersHeader()}
+  <div style="padding:0 16px 24px;display:flex;flex-direction:column;gap:16px">
     ${os.length?os.map(o=>`
-      <button class="card" onclick="APP.cmd('openOrder','${o.id}')" style="display:flex;flex-direction:column;gap:9px;text-align:left;cursor:pointer;padding:14px;color:var(--text-primary)">
+      <button class="card${o.isNew?' unseen':''}" onclick="APP.cmd('openOrder','${o.id}')" style="display:flex;flex-direction:column;gap:8px;text-align:left;cursor:pointer;padding:16px;color:var(--text-primary)">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
           <span style="display:flex;align-items:center;gap:7px;min-width:0;color:var(--text-secondary)">${chIcon(o.ch)}
-            <span class="num" style="font-size:13px;letter-spacing:.01em">${o.id}</span>
-            ${o.isNew?`<span style="font-size:9.5px;font-weight:600;letter-spacing:.07em;padding:2px 6px;border-radius:5px;background:var(--text-primary);color:var(--bg);flex:none">${T('NEW','新')}</span>`:''}</span>
-          <span style="display:flex;flex-direction:column;align-items:flex-end;flex:none">
-            <span class="num" style="font-size:16px;font-weight:500">${o.total}</span>
-            <span class="num" style="font-size:11px;color:var(--text-secondary);margin-top:1px">${o.placed}</span></span></div>
+            <span class="num" style="font-size:13px">${o.id} · ${o.placed}</span></span>
+          <span class="num" style="font-size:18px;font-weight:500;flex:none">${o.total}</span></div>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
           <span style="display:flex;align-items:center;gap:8px;min-width:0">
             <span style="font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${T(...o.cust)}</span>
             ${o.viewOnly?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('View only','只读')}</span>`:''}</span>
           ${pill(o.kind,T(...o.status))}</div>
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-          <span style="font-size:12.5px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...o.ship)}</span>
-          ${o.by?`<span class="num" style="font-size:12.5px;color:${o.byAmber?'#B07E31':'var(--text-secondary)'};flex:none">${T(...o.by)}</span>`:''}</div>
+          <span style="font-size:13px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...o.ship)}</span>
+          ${o.by?`<span class="num" style="font-size:13px;color:${o.byAmber?'#8A6425':'var(--text-secondary)'};flex:none">${T(...o.by)}</span>`:''}</div>
       </button>`).join('')
     :emptyState(T('Nothing needs you','无待处理'),T('Nothing here. Enjoy it.','暂无订单，好好休息。'))}
   </div>`;
@@ -537,9 +570,11 @@ function screenSales(){
 /* ==========================================================================
    More grouped list — icons + labels 1:1 with the mockup
    ========================================================================== */
+/* Everything that is not one of the five destinations, one flat level deep.
+   Catalogue, Categories and Stock activity are gone from this list: they are
+   sub-views of Products now, and a page reachable two ways drifts in one. */
 const MORE_GROUPS=[
-  {h:['Catalog','产品目录'],rows:[['products','box','Products','产品'],['categories','tags','Categories','分类'],['purchasing','shopping-cart','Purchasing','采购'],['activity','scroll-text','Activity','库存流水']]},
-  {h:['Fulfilment','履约'],rows:[['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票']]},
+  {h:['Operations','运营'],rows:[['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购']]},
   {h:['Marketing','营销'],rows:[['coupons','ticket','Coupons','优惠券'],['flash','zap','Flash sales','秒杀'],['popups','app-window','Pop-ups','弹窗'],['affiliate','share-2','Affiliate','分销'],['sharecards','gift','Share cards','分享卡片'],['broadcasts','megaphone','Broadcasts','广播'],['social','quote','Social proof','社交证明']]},
   {h:['Loyalty & Wallet','会员与钱包'],rows:[['membership','award','Membership','会员积分'],['wallet','wallet','Top-up','充值'],['leaderboard','trophy','Leaderboard','排行榜'],['voting','vote','Voting','投票']]},
   {h:['Content','内容'],rows:[['editor','pen-tool','Editor','编辑器'],['about','info','About page','关于页'],['media','image','Media','媒体库'],['legal','scale','Legal pages','法律条款'],['faq','circle-help','FAQ & help','常见问题']]},
@@ -554,7 +589,7 @@ function screenMore(){
         <span style="flex:1;min-width:0">
           <span style="display:block;font-size:15px;font-weight:500;color:var(--text-primary)">${T('Open your store','开店引导')}</span>
           <span style="display:block;font-size:13px;color:var(--text-secondary);margin-top:2px">${T(pct+'% set up · '+(DB.setupSteps.length-done)+' steps left',`已完成 ${pct}% · 还差 ${DB.setupSteps.length-done} 步`)}</span>
-          <span style="display:block;margin-top:10px;height:4px;border-radius:999px;background:var(--dusk-tint)"><span style="display:block;height:4px;width:${pct}%;border-radius:999px;background:var(--accent)"></span></span></span>
+          <span style="display:block;margin-top:10px;height:4px;border-radius:999px;background:var(--surface-raised)"><span style="display:block;height:4px;width:${pct}%;border-radius:999px;background:var(--text-primary)"></span></span></span>
         <span style="color:var(--text-secondary);display:flex;flex:none;align-self:flex-start;margin-top:9px">${ic('chevron-right')}</span></button></div></div>
     ${MORE_GROUPS.map(g=>`<div style="margin-top:14px">
       ${g.h?`<div class="eyebrow" style="padding:6px 20px">${T(...g.h)}</div>`:''}
@@ -739,6 +774,12 @@ const SUBS={
   mirror_meituan:{title:['Meituan','美团'],render:()=>mirrorScreen('meituan',T('Read-only mirror. Manage in the Meituan app.','只读镜像，请在美团后台管理。'))},
   mirror_gzgrocery:{title:['gzgrocery','gzgrocery'],render:()=>mirrorScreen('gzgrocery',T('Read-only ERP mirror.','只读 ERP 镜像。'))},
 };
+/* Inbox and Sales left the bottom nav when Customers and Products took their
+   places. Both keep every screen they had; the inbox also has a topbar control,
+   so it is never more than one tap away. */
+SUBS.inbox={title:['Inbox','消息'],render:()=>screenInbox()};
+SUBS.sales={title:['Sales','销售'],render:()=>screenSales()};
+
 function mirrorScreen(which,note){
   return `<div style="padding:12px 16px 24px;display:flex;flex-direction:column;gap:10px">
     <div style="display:flex;align-items:center;gap:10px;background:var(--surface-raised);border-radius:12px;padding:12px 14px"><span style="color:var(--text-secondary);display:flex;flex:none">${ic('eye',18)}</span><span style="font-size:13px;color:var(--text-secondary)">${note}</span></div>
@@ -787,13 +828,18 @@ function sheetOrderDetail(){
    <div class="sheet" id="detailSheet" style="top:46px;overflow:hidden;z-index:46;${noAnim}transform:translateY(${state.drag}px);transition:${trans}">
      <div id="dragHandle" style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default);touch-action:none;cursor:grab">
        <div class="grabber"></div>
-       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
-         <button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" onclick="APP.cmd('closeOrder')" aria-label="Close">${ic('x',22,2)}</button>
-         <div style="flex:1;min-width:0;padding-top:1px">
-           <div style="font-size:12px;color:var(--text-secondary)">${isPO?T('Purchase order','采购单'):T('Order','订单')}</div>
-           <div style="display:flex;align-items:center;gap:9px;margin-top:3px;flex-wrap:wrap"><span class="num" style="font-size:17px;font-weight:500;letter-spacing:-.01em">${o.id}</span>${pill(o.kind,T(...o.status))}</div></div>
-         ${isPO?'<span style="width:36px;flex:none"></span>':`<button class="iconbtn" style="width:36px;height:36px" onclick="APP.cmd('detailActions')" aria-label="More">${ic('ellipsis')}</button>`}</div></div>
-     <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;background:var(--bg)">
+       <div style="display:flex;align-items:center;gap:12px;min-width:0">
+         <span class="num" style="font-size:18px;font-weight:500;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${o.id}</span>
+         ${pill(o.kind,T(...o.status))}
+         <span style="flex:1"></span>
+         <button class="iconbtn" style="width:40px;height:40px;margin-right:-6px" onclick="APP.cmd('closeOrder')" aria-label="${T('Close','关闭')}">${ic('x',22,2)}</button>
+       </div>
+       <div style="display:flex;align-items:center;gap:8px;margin-top:12px">
+         <button class="btn2" style="flex:1;min-width:0" onclick="APP.cmd('${isPO?'saveStock':'markDelivered'}')">${isPO?T('Receive stock','入库'):(o.kind==='refund'?T('Approve refund','通过退款'):T('Mark delivered','标记送达'))}</button>
+         ${isPO?'':`<button class="btn2" style="width:44px;padding:0;flex:none" onclick="APP.cmd('reprint')" aria-label="${T('Reprint receipt','重打小票')}">${ic('printer',20)}</button>
+         <button class="btn2" style="width:44px;padding:0;flex:none" onclick="APP.cmd('detailActions')" aria-label="${T('More actions','更多操作')}">${ic('ellipsis',20)}</button>`}
+       </div></div>
+     <div style="flex:1;min-height:0;overflow-y:auto;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 24px);display:flex;flex-direction:column;gap:16px;background:var(--bg)">
        ${o.trk?`<div class="card" style="padding:14px">
          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
            <span style="display:flex;align-items:center;gap:8px;min-width:0;color:var(--text-secondary)">${ic('truck',18)}<span style="font-size:14.5px;font-weight:500;color:var(--text-primary)">${T(...o.trk.carrier)}</span></span>
@@ -804,16 +850,16 @@ function sheetOrderDetail(){
          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><span style="font-size:13px;color:var(--text-secondary)">${T('Total','合计')}</span><span class="num" style="font-size:26px;font-weight:500;letter-spacing:-.02em">${o.total}</span></div>
          ${o.breakdown?`<div style="margin-top:12px;display:flex;flex-direction:column;gap:7px">${o.breakdown.map(([l,v])=>`<div style="display:flex;align-items:baseline;justify-content:space-between;font-size:13px"><span style="color:var(--text-secondary)">${T(l,l)}</span><span class="num">${v}</span></div>`).join('')}</div>`:''}</div>
        ${isPO?'':`
-       <div class="card" style="padding:14px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="eyebrow" style="letter-spacing:.05em">${T('Ship to','收货地址')}</span>
+       <div class="card" style="padding:14px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="eyebrow">${T('Ship to','收货地址')}</span>
          <button onclick="APP.cmd('copyAddr')" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);background:transparent;border:none;cursor:pointer;font-family:inherit">${T('Copy','复制')} ${ic('copy',13)}</button></div>
          <div class="num" style="font-size:15px;margin-top:7px">${T(...o.cust)} · ${o.phone}</div><div style="font-size:13.5px;color:var(--text-secondary);margin-top:2px">${T(...o.addr)}</div></div>
-       <div class="card" style="padding:14px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="eyebrow" style="letter-spacing:.05em">${T('Payment','支付')}</span>
+       <div class="card" style="padding:14px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="eyebrow">${T('Payment','支付')}</span>
          <button onclick="APP.cmd('copyTxn')" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);background:transparent;border:none;cursor:pointer;font-family:inherit">${T('Copy','复制')} ${ic('copy',13)}</button></div>
          <div style="font-size:15px;margin-top:7px">${T(...o.pay)}</div><div class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:2px">${T('Txn','交易号')} ${o.txn}</div></div>
-       <div class="card" style="padding:14px"><span class="eyebrow" style="letter-spacing:.05em">${T('Fulfilled by','履约门店')}</span>
+       <div class="card" style="padding:14px"><span class="eyebrow">${T('Fulfilled by','履约门店')}</span>
          <div style="font-size:15px;margin-top:7px">${T(...o.fulfil)}</div>
          <div style="display:flex;align-items:center;gap:6px;margin-top:5px;color:var(--text-secondary)">${ic('route',14)}<span style="font-size:12.5px">${T(...o.route)}</span></div></div>
-       ${o.receipt?`<div class="card" style="padding:14px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="eyebrow" style="letter-spacing:.05em">${T('Receipt','小票')}</span>
+       ${o.receipt?`<div class="card" style="padding:14px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="eyebrow">${T('Receipt','小票')}</span>
          <button onclick="APP.cmd('reprint')" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:8px;cursor:pointer;padding:5px 9px;font-family:inherit">${ic('printer',15)} ${T('Reprint','重打')}</button></div>
          <div style="display:flex;align-items:center;gap:7px;margin-top:8px"><span style="display:flex;color:#5F7357">${ic('check',16,2.25)}</span><span style="font-size:14.5px">${T(...o.receipt)}</span></div></div>`:''}`}
        <div><div class="eyebrow" style="padding:4px 4px 8px">${o.items.length} ${T('items','件')}</div>
@@ -828,8 +874,6 @@ function sheetOrderDetail(){
              <span style="text-align:right;flex:none"><span class="num" style="display:block;font-size:14px">${it[2]}</span><span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary);margin-top:1px">×${it[0]}</span></span></div>`;
          }).join('')}</div></div>
      </div>
-     <div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card)">
-       <button class="cta" onclick="APP.cmd('${isPO?'saveStock':'markDelivered'}')">${isPO?T('Receive stock','入库'):(o.kind==='refund'?T('Approve refund','通过退款'):T('Mark delivered','标记送达'))}</button></div>
    </div>`;
 }
 function sheetActions(){
@@ -840,7 +884,7 @@ function sheetActions(){
 }
 function stepperCard(label,key,val,prefix){
   if(sheetStep[key]==null) sheetStep[key]=val;
-  return `<div class="card" style="padding:16px"><div class="eyebrow" style="letter-spacing:.05em">${label}</div>
+  return `<div class="card" style="padding:16px"><div class="eyebrow">${label}</div>
     <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">
       <button class="stepbtn" onclick="APP.cmd('stepDec','${key}')">${ic('minus',18,2.25)}</button>
       <span class="num" style="font-size:26px;font-weight:500">${prefix||''}${sheetStep[key]}</span>
@@ -885,7 +929,7 @@ function sheetCreate(){
        <span style="flex:1;font-size:17px;font-weight:500">${cfg.title}</span><span style="width:36px;flex:none"></span></div></div>
      <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;background:var(--bg)">
        <div><div class="eyebrow" style="padding:0 2px 7px;letter-spacing:.05em">${T('Title','标题')}</div><input placeholder="${cfg.ph}"></div>
-       ${cfg.showValue?`<div class="card" style="padding:16px"><div class="eyebrow" style="letter-spacing:.05em">${T('Value','面额')}</div>
+       ${cfg.showValue?`<div class="card" style="padding:16px"><div class="eyebrow">${T('Value','面额')}</div>
          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">
            <button class="stepbtn" onclick="APP.cmd('createValDec')">${ic('minus',18,2.25)}</button>
            <span class="num" style="font-size:26px;font-weight:500">${state.createValue}${cfg.unit}</span>
@@ -899,12 +943,12 @@ function sheetOverflow(){
   const val=t=>`<span style="font-size:14px;color:var(--text-secondary)">${t}</span>`;
   return `<div class="scrim" style="z-index:40;background:rgba(17,26,43,.30)" onclick="APP.cmd('closeOverflow')"></div>
    <div class="sheet" style="z-index:41;padding:8px 0 calc(env(safe-area-inset-bottom,0px) + 30px)"><div class="grabber"></div>
-     <div style="padding:4px 20px 6px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-secondary)">${T('Menu','菜单')}</div>
+     <div style="padding:4px 20px 6px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Menu','菜单')}</div>
      ${row('search',T('Search','搜索'),`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`,"APP.cmd('openSearch')",true)}
      ${row('languages',T('Language','语言'),val(state.lang==='en'?'English':'中文'),"APP.cmd('toggleLang')",true)}
      ${row('sun-moon',T('Theme','主题'),val(state.theme==='light'?T('Light','浅色'):T('Dark','深色')),"APP.cmd('toggleTheme')",true)}
      ${row('circle-user-round',T('Account','账户'),val(state.storeName||T('Your store','你的店铺'))+`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`,"APP.cmd('noop')",false)}
-     <div style="padding:16px 20px 6px;font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-secondary)">${T('Updates','更新')}</div>
+     <div style="padding:16px 20px 6px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Updates','更新')}</div>
      <div style="display:flex;align-items:center;gap:14px;min-height:48px;padding:8px 20px">
        <span style="width:20px;display:flex;justify-content:center;flex:none">${state.live?'<span class="breathe" style="width:9px;height:9px;border-radius:50%;background:var(--accent)"></span>':'<span style="width:9px;height:9px;border-radius:50%;background:var(--border-strong)"></span>'}</span>
        <span style="flex:1;font-size:15px">${T('Live updates','实时更新')}</span>${toggle(state.live,"APP.cmd('toggleLive')")}</div>
@@ -930,50 +974,246 @@ function sheetSearch(){
         <span style="font-size:12px;color:var(--text-secondary)">${T(...r.g)}</span></button>`).join('')}</div></div>`;
 }
 
+
+/* ==========================================================================
+   Customers — a Worklist that is not a queue. Records arrive, so a record
+   nobody has opened wears the unseen surface; but nothing here is WAITING on
+   an operator, so the header is the title alone. The strip under it carries
+   the segments an operator actually reaches for, with real counts from the
+   server; tier chips carry no counts because no endpoint gives them one.
+   ========================================================================== */
+const TIER_LABEL={tree:['Tree','大树'],root:['Root','根系'],sprout:['Sprout','嫩芽'],seed:['Seed','种子']};
+function mapCustomer(r){
+  return {
+    id:r.id, name:r.nickname||'', phone:r.phone||'',
+    tier:String(r.tier_key||'seed'),
+    orders:Number(r.orders_count||0),
+    spend:Number(r.lifetime_spend||0),
+    seen:r.last_login_at||r.created_at,
+    unseen:!r.seen_at, blocked:!!r.is_blocked,
+  };
+}
+function custFiltered(){
+  const t=state.custTier||'all';
+  return (state.customers||[]).filter(c=>t==='all'||c.tier===t);
+}
+/* The pulse renders as one line, not tiles: four tiles cannot share a phone's
+   width, and showing two of them would be an arbitrary subset. It renders only
+   the figures the server actually returned. */
+function custPulse(){
+  const m=state.custMeta||{}; const bits=[];
+  if(m.buyers!=null) bits.push(T(m.buyers+' buyers', m.buyers+' 位买家'));
+  if(m.returnRate!=null) bits.push(T(m.returnRate+'% returning', m.returnRate+'% 复购'));
+  if(m.never!=null) bits.push(T(m.never+' never ordered', m.never+' 位未下单'));
+  return bits.join(' · ');
+}
+function custCard(c){
+  const tier=TIER_LABEL[c.tier]||[c.tier,c.tier];
+  return `<button class="card${c.unseen?' unseen':''}" onclick="APP.cmd('openCustomer','${c.id}')"
+      style="display:flex;align-items:center;gap:16px;padding:16px;text-align:left;cursor:pointer;color:var(--text-primary);font-family:inherit">
+    <span style="width:32px;height:32px;flex:none;border-radius:8px;background:var(--dusk-tint);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500">${(c.name||'·').trim().charAt(0).toUpperCase()}</span>
+    <span style="flex:1;min-width:0">
+      <span style="display:flex;align-items:center;gap:8px;min-width:0">
+        <span style="font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.name||T('No name','未填姓名')}</span>
+        <span class="pill" style="background:rgba(88,96,110,.10);color:var(--text-secondary)">${T(...tier)}</span>
+        ${c.blocked?`<span class="pill" style="background:var(--brick-tint);color:var(--brick)">${T('Blocked','已封禁')}</span>`:''}
+      </span>
+      <span class="num" style="display:block;font-size:13px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.phone||'—'} · ${c.orders?T(c.orders+' orders',c.orders+' 单'):T('No orders','暂无订单')}</span>
+    </span>
+    <span style="flex:none;text-align:right">
+      <span class="num" style="display:block;font-size:15px;font-weight:500;${c.spend?'':'color:var(--text-secondary)'}">${money(CUR,c.spend)}</span>
+      <span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${fmtDay(c.seen)}</span>
+    </span>
+  </button>`;
+}
+function custSkeleton(){
+  const bar=(w,h)=>`<span style="display:block;width:${w};height:${h}px;border-radius:999px;background:var(--surface-raised)"></span>`;
+  return `<div class="card" style="display:flex;align-items:center;gap:16px;padding:16px">
+    <span style="width:32px;height:32px;flex:none;border-radius:8px;background:var(--surface-raised)"></span>
+    <span style="flex:1;display:flex;flex-direction:column;gap:8px">${bar('55%',15)}${bar('35%',13)}</span>
+    <span style="flex:none;display:flex;flex-direction:column;align-items:flex-end;gap:8px">${bar('64px',15)}${bar('40px',13)}</span></div>`;
+}
+function screenCustomers(){
+  const m=state.custMeta||{};
+  const segs=[{key:'all',en:'All',zh:'全部',count:m.all},
+    {key:'new_week',en:'New this week',zh:'本周新客',count:m.new_week},
+    {key:'sleeping',en:'Sleeping 60d+',zh:'沉睡 60 天',count:m.sleeping}];
+  if(m.blocked) segs.push({key:'blocked',en:'Blocked',zh:'已封禁',count:m.blocked});
+  const tiers=[{key:'all',en:'All tiers',zh:'全部等级'}].concat(
+    ['tree','root','sprout','seed'].map(k=>({key:k,en:TIER_LABEL[k][0],zh:TIER_LABEL[k][1]})));
+  const rows=custFiltered();
+  let body;
+  if(!state.custLoaded){
+    body=`${custSkeleton()}${custSkeleton()}${custSkeleton()}${custSkeleton()}`;
+  } else if(!rows.length && (state.custSeg==='all' && (state.custTier||'all')==='all')){
+    body=emptyState(T('No customers yet','还没有顾客'),
+      T('They settle in here as soon as someone orders — every channel, remembered without you asking.',
+        '有人下单后就会出现在这里 — 每个渠道，无需你操心。'));
+  } else if(!rows.length){
+    body=`<div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:48px 24px;text-align:center">
+      <div style="font-size:18px;font-weight:500">${T('No customers match these filters','没有符合筛选的顾客')}</div>
+      <div style="font-size:15px;color:var(--text-secondary);max-width:260px">${T('Clear them and the whole list comes back.','清除筛选即可看到全部。')}</div>
+      <button onclick="APP.cmd('custClear')" style="min-height:44px;padding:0 16px;border-radius:8px;border:1px solid var(--border-default);background:transparent;color:var(--text-primary);font-family:inherit;font-size:15px;font-weight:500;cursor:pointer">${T('Clear filters','清除筛选')}</button></div>`;
+  } else {
+    body=rows.map(custCard).join('');
+  }
+  const pulse=custPulse();
+  return `${pageHead({title:T('Customers','顾客')})}
+    ${pulse?`<p class="num" style="margin:-8px 0 16px;padding:0 16px;font-size:13px;color:var(--text-secondary)">${pulse}</p>`:''}
+    ${chipRow(segs,state.custSeg||'all','custSeg')}
+    <div style="height:8px"></div>
+    ${chipRow(tiers,state.custTier||'all','custTier')}
+    <div style="padding:16px 16px 24px;display:flex;flex-direction:column;gap:16px">${body}</div>`;
+}
+
+/* The customer record. Read-only for now — every figure on it is one the
+   server already computes, and none of the write flows (points, wallet, block)
+   exist on the phone yet. Opening it stamps seen_at server-side, which is what
+   settles the row's unseen surface on the way back. */
+function sheetCustomer(){
+  const d=state.custDetail;
+  const c=(d&&d.customer)||{};
+  const st=(d&&d.stats)||{};
+  const o=st.orders||{};
+  const tier=TIER_LABEL[String(c.tier_key||'seed')]||['Seed','种子'];
+  const snap=(label,val)=>`<span style="min-width:0">
+      <span style="display:block;font-size:13px;color:var(--text-secondary)">${label}</span>
+      <span class="num" style="display:block;font-size:18px;font-weight:500;line-height:1.4">${val}</span></span>`;
+  const since=(()=>{ const d=_date(c.created_at); if(!d) return '—';
+    return LANG==='en' ? d.toLocaleDateString('en-US',{month:'short',year:'numeric'})
+                       : d.getFullYear()+'年'+(d.getMonth()+1)+'月'; })();
+  const body = !d ? `<div style="padding:24px 0;color:var(--text-secondary);font-size:15px">${T('Loading…','加载中…')}</div>` : `
+    <div style="background:var(--surface-raised);border-radius:14px;padding:16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px">
+      ${snap(T('Ordered','消费'),money(CUR,o.revenue||0))}
+      ${snap(T('Orders','订单'),String(o.orders_count||0))}
+      ${snap(T('Avg. order','客单价'),money(CUR,Math.round(o.aov||0)))}
+      ${snap(T('Points','积分'),Number(c.points_balance||0).toLocaleString())}
+      ${snap(T('Wallet','钱包'),money(CUR,c.balance||0))}
+      ${snap(T('Since','注册于'),since)}
+    </div>
+    <p style="margin:8px 0 0;font-size:13px;color:var(--text-secondary)">${T('Ordered is the goods total before discounts — the same measure the list column shows.','消费为折扣前的商品金额 — 与列表口径一致。')}</p>
+    ${(d.recent_orders||[]).length?`<div style="margin-top:16px">
+      <div style="font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${T('Recent orders','最近订单')}</div>
+      <div class="list">${d.recent_orders.slice(0,5).map((r,i)=>`${i?'<div class="sep"></div>':''}
+        <div style="display:flex;align-items:center;gap:16px;padding:12px 16px">
+          <span style="flex:1;min-width:0">
+            <span class="num" style="display:block;font-size:15px">${r.order_no||('#'+r.id)}</span>
+            <span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${fmtDay(r.placed_at)}</span></span>
+          <span class="num" style="flex:none;font-size:15px">${money(CUR,r.total)}</span></div>`).join('')}</div></div>`:''}
+    ${(d.addresses||[]).length?`<div style="margin-top:16px">
+      <div style="font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${T('Addresses','地址')}</div>
+      <div class="list">${d.addresses.slice(0,3).map((a,i)=>`${i?'<div class="sep"></div>':''}
+        <div style="padding:12px 16px;font-size:15px">${[a.city,a.district,a.detail].filter(Boolean).join(' · ')||'—'}</div>`).join('')}</div></div>`:''}
+    <div style="margin-top:16px;font-size:13px;color:var(--text-secondary)">${
+      d.diagnostics && d.diagnostics.unavailable ? T('Diagnostics could not be read.','诊断数据读取失败。')
+      : d.diagnostics && d.diagnostics.error_count_7d ? T(d.diagnostics.error_count_7d+' app errors in 7 days', '近 7 天 '+d.diagnostics.error_count_7d+' 次报错')
+      : T('No app errors in 7 days','近 7 天无报错')}</div>`;
+  return `<div class="scrim" onclick="APP.cmd('closeCustomer')"></div>
+    <div class="sheet" style="top:46px;overflow:hidden">
+      <div style="flex:none;padding:8px 16px 16px;border-bottom:1px solid var(--border-default)">
+        <div class="grabber"></div>
+        <div style="display:flex;align-items:center;gap:16px">
+          <span style="width:32px;height:32px;flex:none;border-radius:8px;background:var(--dusk-tint);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500">${((c.nickname||'·').trim().charAt(0)||'·').toUpperCase()}</span>
+          <span style="font-size:18px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.nickname||T('No name','未填姓名')}</span>
+          <span class="pill" style="background:rgba(88,96,110,.10);color:var(--text-secondary)">${T(...tier)}</span>
+          <span style="flex:1"></span>
+          <button class="iconbtn" onclick="APP.cmd('closeCustomer')" aria-label="${T('Close','关闭')}">${ic('x',20,2)}</button>
+        </div>
+        <div class="num" style="margin-top:4px;font-size:13px;color:var(--text-secondary)">${c.phone||'—'}</div>
+      </div>
+      <div style="flex:1;min-height:0;overflow-y:auto;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 24px)">${body}</div>
+    </div>`;
+}
+
+/* ==========================================================================
+   Products — one page, three sub-views. The strip swaps WHAT KIND of thing you
+   are looking at; the chips inside each view narrow the same records.
+   ========================================================================== */
+const PROD_VIEWS=[['catalogue',['Catalogue','目录'],'products'],['activity',['Stock activity','库存流水'],'activity'],['categories',['Categories','分类'],'categories']];
+function screenProducts(){
+  const v=state.prodView||'catalogue';
+  const strip=`<div class="hscroll" style="display:flex;gap:24px;padding:0 16px;border-bottom:1px solid var(--border-default)">
+    ${PROD_VIEWS.map(([k,label])=>{const on=k===v;
+      return `<button onclick="APP.cmd('prodView','${k}')" style="position:relative;flex:none;height:44px;padding:0;border:none;background:none;cursor:pointer;font-family:inherit;font-size:15px;white-space:nowrap;font-weight:${on?'500':'400'};color:${on?'var(--text-primary)':'var(--text-secondary)'}">
+        ${T(...label)}${on?`<span style="position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--text-primary)"></span>`:''}</button>`;}).join('')}
+  </div>`;
+  const sub=PROD_VIEWS.find(x=>x[0]===v)[2];
+  return `${pageHead({title:T('Products','产品')})}${strip}${SUBS[sub].render()}`;
+}
+
 /* ==========================================================================
    Shell chrome + master render
    ========================================================================== */
-const TAB_META={home:{en:'Home',zh:'概览',icon:'house'},orders:{en:'Orders',zh:'订单',icon:'package',badge:2},
-  inbox:{en:'Inbox',zh:'消息',icon:'inbox',badge:3},sales:{en:'Sales',zh:'销售',icon:'store'},more:{en:'More',zh:'更多',icon:'menu'}};
+/* Five destinations, matching the desktop shell's bottom nav. Inbox and Sales
+   moved into More (the inbox also has a topbar control, so it is never more than
+   one tap away). There is no drill-down here: a five-item bar and a fourteen-row
+   rail are different problems, and More stays one flat, grouped list. */
+const TAB_META={home:{en:'Home',zh:'概览',icon:'house'},orders:{en:'Orders',zh:'订单',icon:'package'},
+  customers:{en:'Customers',zh:'顾客',icon:'users'},products:{en:'Products',zh:'产品',icon:'shopping-bag'},
+  more:{en:'More',zh:'更多',icon:'menu'}};
+/* Unseen is one 6px Sage dot — never a count, never red. A count in the chrome
+   turns arriving work into an alarm, and a record arriving is the CUSTOMER
+   acting, not the system: it does not earn Dusk either. */
+function unseenOrders(){ return DB.orders.some(o=>o.isNew); }
+function unseenReviews(){ return DB.reviews.filter(r=>!state.reviewsSeen.has(r.cust[0])).length; }
+function tabDot(k){ return k==='orders' ? unseenOrders() : k==='more' ? unseenReviews()>0 : false; }
+/* The bar is the same on every screen and CLOSED to page controls: nothing here
+   names the page and no page adds a button to it. Identity lives in the page,
+   which is why every screen below owns a real header. Zero Dusk — chrome that
+   appears on every page cannot spend a page's Dusk before the page loads. */
 function topbar(){
-  const sub=state.stack[state.stack.length-1];
-  let left;
-  if(sub){
-    left=`<button class="iconbtn" style="width:40px;height:40px;margin-left:-8px;color:var(--text-primary)" onclick="APP.cmd('back')" aria-label="Back">${ic('chevron-left',24,2)}</button>
-      <span style="font-size:19px;font-weight:500;letter-spacing:-.01em">${T(...sub.title)}</span>`;
-  } else if(state.tab==='home'){
-    left=`<span style="display:flex;align-items:center;padding:2px 0">${WAVE(66)}</span>`;
-  } else {
-    const m=TAB_META[state.tab];
-    left=`<span style="font-size:19px;font-weight:500;letter-spacing:-.01em">${T(m.en,m.zh)}</span>`;
-  }
-  return `<div class="topbar"><div style="display:flex;align-items:center;gap:6px;min-height:36px">${left}</div>
-    <button class="iconbtn" onclick="APP.cmd('overflow')" aria-label="Menu">${ic('ellipsis')}</button></div>`;
+  const unseen=unseenReviews();
+  return `<div class="topbar">
+    <span style="display:flex;align-items:center;gap:8px;flex:none;padding:2px 0">${WAVE(58)}</span>
+    <span style="flex:1"></span>
+    <button class="iconbtn" onclick="APP.cmd('openSearch')" aria-label="${T('Search','搜索')}">${ic('search')}</button>
+    <span style="position:relative;display:flex;flex:none">
+      <button class="iconbtn" onclick="APP.cmd('push','inbox')" aria-label="${T('Inbox','消息')}">${ic('message-square-text')}</button>
+      ${unseen?`<span style="position:absolute;top:9px;right:9px;width:6px;height:6px;border-radius:50%;background:var(--sage);box-shadow:0 0 0 2px var(--surface-card)"></span>`:''}
+    </span>
+    <button onclick="APP.cmd('overflow')" aria-label="${T('Account','账户')}" style="width:44px;height:44px;flex:none;display:flex;align-items:center;justify-content:center;border:none;background:transparent;cursor:pointer;padding:0">
+      <span style="width:32px;height:32px;border-radius:8px;background:var(--dusk-tint);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500">${(state.storeName||'').trim().charAt(0).toUpperCase()||ic('user',18)}</span>
+    </button>
+  </div>`;
+}
+
+/* The §1.7 page header, on a phone: title · status line · one Dusk CTA — and,
+   on a pushed screen, the back link that replaces the eyebrow by stating where
+   you came from. Three elements. There is no fourth. */
+function pageHead({title, status, cta, back}){
+  return `<div style="padding:${back?'12px':'24px'} 16px 16px">
+    ${back?`<button onclick="APP.cmd('back')" style="display:flex;align-items:center;gap:6px;margin:0 0 8px -4px;padding:8px 4px;background:none;border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--text-secondary)">${ic('chevron-left',16,2)}${back}</button>`:''}
+    <div style="display:flex;align-items:flex-start;gap:16px">
+      <div style="flex:1;min-width:0">
+        <h1 style="margin:0;font-size:24px;font-weight:500;letter-spacing:-.01em;line-height:1.25">${title}</h1>
+        ${status?`<p class="num" style="margin:4px 0 0;font-size:15px;color:var(--text-secondary)">${status}</p>`:''}
+      </div>
+      ${cta||''}
+    </div>
+  </div>`;
 }
 function tabbar(){
   return `<div class="tabbar">${Object.keys(TAB_META).map(k=>{const m=TAB_META[k];const on=state.tab===k&&!state.stack.length;const col=on?'var(--text-primary)':'var(--text-secondary)';
-    return `<button onclick="APP.cmd('tab','${k}')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;background:transparent;border:none;cursor:pointer;padding:4px 2px;font-family:inherit;color:${col}">
-      <span style="position:relative;display:flex;align-items:center;justify-content:center;height:26px;width:26px">${ic(m.icon,24,on?2:1.75)}
-      ${m.badge?`<span class="num" style="position:absolute;top:-5px;left:15px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;background:var(--text-primary);color:var(--bg);font-size:10px;font-weight:500;display:flex;align-items:center;justify-content:center">${m.badge}</span>`:''}</span>
-      <span style="font-size:11px;font-weight:${on?'500':'400'};line-height:1.15;color:${col}">${T(m.en,m.zh)}</span></button>`;}).join('')}</div>`;
+    return `<button onclick="APP.cmd('tab','${k}')" style="flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px;background:transparent;border:none;cursor:pointer;padding:4px 2px;font-family:inherit;color:${col}">
+      <span style="position:relative;display:flex;align-items:center;justify-content:center;height:24px;width:24px">${ic(m.icon,22,on?2:1.75)}
+      ${tabDot(k)?`<span style="position:absolute;top:-2px;left:16px;width:6px;height:6px;border-radius:50%;background:var(--sage)"></span>`:''}</span>
+      <span style="font-size:13px;letter-spacing:-.01em;font-weight:${on?'500':'400'};line-height:1.15;color:${col};max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(m.en,m.zh)}</span></button>`;}).join('')}</div>`;
 }
 function bodyHtml(){
   const sub=state.stack[state.stack.length-1];
-  if(sub) return SUBS[sub.route].render();
+  if(sub) return pageHead({title:T(...sub.title), back:T('More','更多')}) + SUBS[sub.route].render();
   switch(state.tab){
     case 'home': return screenHome();
     case 'orders': return screenOrders();
-    case 'inbox': return screenInbox();
-    case 'sales': return screenSales();
-    case 'more': return screenMore();
+    case 'customers': return screenCustomers();
+    case 'products': return screenProducts();
+    case 'more': return pageHead({title:T('More','更多')}) + screenMore();
   }
 }
 function render(){
-  const showOrdersHeader = state.tab==='orders' && !state.stack.length;
-  const showFab = state.tab==='orders' && !state.stack.length && !state.detailId;
-  let html = topbar() + (showOrdersHeader?ordersHeader():'') + `<div class="content" id="content">${bodyHtml()}</div>` + tabbar();
-  if(showFab) html += `<button class="fab" onclick="APP.cmd('newOrder')" aria-label="New order">${ic('plus',20,2.25)}<span>${T('New order','新建订单')}</span></button>`;
+  let html = topbar() + `<div class="content" id="content">${bodyHtml()}</div>` + tabbar();
   if(state.overflow) html += sheetOverflow();
+  if(state.custId) html += sheetCustomer();
   if(state.detailId) html += sheetOrderDetail();
   if(state.detailActions) html += sheetActions();
   if(state.productSku) html += sheetProduct();
@@ -1011,7 +1251,73 @@ async function api(path){
   const j=await r.json();
   return (j && j.data!==undefined) ? j.data : j;
 }
-const hhmm=v=>{ if(!v) return ''; const d=new Date(String(v).replace(' ','T')); return isNaN(d)?'':d.toTimeString().slice(0,5); };
+/* The surface's language picks the date convention and then follows it
+   completely: English renders US times (2:22 PM), Chinese renders 24-hour
+   (14:22). There is no house style and no third format. The year appears only
+   when the date is not in the current year. */
+const _date=v=>{ if(!v) return null; const d=new Date(String(v).replace(' ','T')); return isNaN(d)?null:d; };
+function fmtTime(v){ const d=_date(v); if(!d) return '';
+  return LANG==='en' ? d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})
+                     : d.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',hour12:false}); }
+function fmtDay(v){ const d=_date(v); if(!d) return '';
+  const now=new Date(), same=(a,b)=>a.toDateString()===b.toDateString();
+  if(same(d,now)) return fmtTime(v);
+  const y=new Date(now); y.setDate(y.getDate()-1);
+  if(same(d,y)) return T('Yesterday','昨天');
+  const thisYear=d.getFullYear()===now.getFullYear();
+  return LANG==='en'
+    ? d.toLocaleDateString('en-US', thisYear?{month:'short',day:'numeric'}:{month:'short',day:'numeric',year:'numeric'})
+    : (thisYear ? (d.getMonth()+1)+'月'+d.getDate()+'日'
+                : d.getFullYear()+'年'+(d.getMonth()+1)+'月'+d.getDate()+'日'); }
+async function apiRaw(path){
+  const r=await fetch(API+path,{credentials:'same-origin',headers:{accept:'application/json'}});
+  if(r.status===401||r.status===403){ location.href='/backend/login'; throw new Error('auth'); }
+  if(!r.ok) throw new Error('HTTP '+r.status);
+  return r.json();
+}
+async function loadCustomers(){
+  state.custLoading=true;
+  const seg=state.custSeg||'all';
+  const q='/customers?pageSize=50&withSegments=1'+(seg!=='all'?'&segment='+seg:'');
+  try{
+    const j=await apiRaw(q);
+    const rows=(j&&j.data)||[];
+    state.customers=rows.map(mapCustomer);
+    if(j&&j.segments) state.custMeta=Object.assign({},state.custMeta||{},j.segments);
+    state.custLoaded=true;
+  }catch(e){
+    if(String(e.message)==='auth') return;
+    // Static preview / offline: the sample roster stands in, same as every other screen.
+    state.customers=DB.customers.slice(); state.custLoaded=true;
+  }
+  state.custLoading=false;
+  loadCustomerMeta();
+  render();
+}
+/* The pulse's three figures come from the stat call the desktop roster makes.
+   Anything it doesn't return simply doesn't render — the line is never padded. */
+async function loadCustomerMeta(){
+  if(state.custMetaLoaded) return; state.custMetaLoaded=true;
+  try{
+    const j=await apiRaw('/customers?pageSize=1&includeBlocked=1&withReturning=1&withSegments=1');
+    const m=Object.assign({},state.custMeta||{});
+    if(j&&j.segments) Object.assign(m,j.segments);
+    if(j&&j.returning&&j.returning.buyers!=null){
+      m.buyers=j.returning.buyers;
+      m.returnRate=j.returning.buyers?Math.round((j.returning.returners||0)/j.returning.buyers*100):null;
+      if(j.customers_on_file!=null) m.never=Math.max(0,j.customers_on_file-j.returning.buyers);
+    }
+    state.custMeta=m; render();
+  }catch(e){}
+}
+async function loadCustomerDetail(id){
+  try{ const d=await api('/customers/'+id); state.custDetail=d;
+    // The server stamps seen_at on the first open, so settle the row behind the sheet.
+    const c=(state.customers||[]).find(x=>String(x.id)===String(id)); if(c) c.unseen=false;
+    render();
+  }catch(e){ if(String(e.message)!=='auth'){ state.custDetail={customer:{},stats:{}}; render(); } }
+}
+const hhmm=v=>fmtTime(v);
 const money=(cur,n)=>{ const s=cur||'¥'; const num=Number(n||0); return s+num.toLocaleString(undefined,{maximumFractionDigits:num%1?2:0}); };
 const ORDER_STATUS={
   paid:['paid','Paid','已付款'],preparing:['preparing','Preparing','备货中'],dispatched:['dispatched','Dispatched','已发货'],
