@@ -418,7 +418,8 @@ function metaOf(f) {
   };
   vm.createContext(ctx);
   new vm.Script(`${META_SRC}; var __out = tdAttnRowHtml(${JSON.stringify(f)});`).runInContext(ctx);
-  return (/class="td-nmeta"[^>]*>([^<]*)</.exec(ctx.__out) || [, ''])[1];
+  const m = /class="td-nmeta"[^>]*>([^<]*)</.exec(ctx.__out);
+  return m ? m[1] : '';
 }
 
 it('a fire with both a state and an age prints both', () => {
