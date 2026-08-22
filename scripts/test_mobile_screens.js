@@ -220,6 +220,30 @@ function main() {
     }
   }
 
+  // ── Static pass: both halves of every bilingual pair ───────────────────
+  // Half the people who open this app read Chinese. T(en, zh) is the only way
+  // a string reaches them, and a pair whose second half is English reaches
+  // them as English — silently, on one row, in one state, which is exactly
+  // where it will not be noticed. Cheap to check, so checked.
+  {
+    const raw = (src.match(/<script>([\s\S]*?)<\/script>/) || [])[1] || '';
+    const js4 = raw.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+    const cjk = (t) => /[一-鿿]/.test(t);
+    const bad = [];
+    for (const m of js4.matchAll(/(^|[^\w$.])T\(\s*'((?:[^'\\]|\\.)*)'\s*,\s*'((?:[^'\\]|\\.)*)'\s*\)/g)) {
+      const [, , en, zh] = m;
+      // A pair with no Chinese is fine when it has no words either — '×3',
+      // a SKU, a currency symbol, a proper noun the shop uses in both.
+      if (!cjk(zh) && /[A-Za-z]{3}/.test(zh) && zh === en) bad.push(en);
+      else if (!cjk(zh) && /[A-Za-z]{4,}\s+[A-Za-z]{3,}/.test(zh)) bad.push(en);
+    }
+    if (bad.length) {
+      for (const t of [...new Set(bad)].slice(0, 20)) console.error(`FAIL i18n — "${t}" has no Chinese`);
+      console.error(`\n${new Set(bad).size} bilingual pair${new Set(bad).size === 1 ? '' : 's'} whose Chinese half is English.`);
+      process.exit(1);
+    }
+  }
+
   // ── Static pass: the dispatcher can feed every handler ─────────────────
   // APP.cmd is the only way a control reaches a handler. It used to forward ONE
   // argument while two handlers took two, so APP.cmd('pollStatus', 7, 'closed')
