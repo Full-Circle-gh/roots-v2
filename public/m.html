@@ -281,6 +281,7 @@ const state = {
   alipay:null, alipayTried:false, puBusy:null, puErr:null,
   gzFlagged:null, gzSummary:null, gzBusy:null, gzErr:null,
   mtStatus:null, mtStatusTried:false, mtOffline:false,
+  scAff:null, scTried:false,
   tiers:null, tierCounts:null, tiersErr:null, tiersTried:false,
   tup:null, tupPkgs:null, tupErr:null, tupTried:false, tupBusy:null,
   lb:null, lbErr:null, lbTried:false,
@@ -2811,9 +2812,7 @@ const SUBS={
     </div>`).join('')}
     ${desktopNote()}</div>`;
   }},
-  sharecards:{title:['Share cards','分享卡片'],render:()=>nothingYet(T('Made on desktop','在电脑端制作'),
-    T('Share cards are designed and generated in the admin on a big screen. The counts that used to sit here were never real.','分享卡片在电脑端设计与生成。此前这里显示的数据并非真实数据。')),
-  },
+  sharecards:{title:['Share cards','分享卡片'],render:()=>screenShareCards()},
   popups:{title:['Pop-ups','弹窗'],render:()=>screenPopups()},
   affiliate:{title:['Affiliate','分销'],render:()=>screenAffiliate()},
   social:{title:['Social proof','社交证明'],render:()=>{
@@ -2991,6 +2990,62 @@ async function loadMirror(which){
   }catch(e){ if(String(e.message)==='auth') return; state.mirror[which]=null; }
   state.mirrorLoading=null; render();
 }
+/* ==========================================================================
+   Share cards (desktop: 10-extras.js)
+   --------------------------------------------------------------------------
+   The phone said these are made on desktop and stopped — true, and the counts
+   it used to invent deserved deleting. But designing a card and CHECKING one
+   are different jobs, and the second is a phone job: four pages, each either
+   carrying a picture you set or falling back to the page's own look. "Did the
+   invite card ever get set" is a question with a picture for an answer.
+   ========================================================================== */
+const SC_PAGES=[
+  {key:'home',    name:['Home page','首页'],    titled:true,
+   blurb:['Forwarding the store home, with no referral code.','转发店铺首页（不含推荐码）。']},
+  {key:'product', name:['Product page','商品页'], titled:false,
+   blurb:['Backup picture — used only when a product has no photo of its own.','备用图 — 仅当商品没有自己的图片时使用。']},
+  {key:'voting',  name:['Voting page','投票页'], titled:true,
+   blurb:['Forwarding the community polls. A live poll titles itself.','转发社区投票页；有进行中的投票时用其问题作标题。']},
+  {key:'invite',  name:['Invite card','邀请卡片'], titled:true, aff:true,
+   blurb:['A customer sharing their referral code.','顾客分享推荐码时显示。']},
+];
+function loadShareCards(){
+  if(state.scTried) return; state.scTried=true;
+  api('/affiliate/settings').then(d=>{ state.scAff=d||{}; render(); }).catch(()=>{ state.scAff={}; render(); });
+}
+function screenShareCards(){
+  if(!state.cfg) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  loadShareCards();
+  const sharing=cfgGet('sharing',null)||{};
+  const aff=state.scAff;
+  const rows=SC_PAGES.map(pg=>{
+    const img = pg.aff ? (aff&&aff.shareImage) : sharing[pg.key];
+    const tObj = pg.aff ? (aff&&aff.shareTitle) : sharing[pg.key+'Title'];
+    const title = pg.titled&&tObj ? (LANG==='en'?(tObj.en||tObj.cn||''):(tObj.cn||tObj.en||'')) : '';
+    return Object.assign({},pg,{img:img||'', title:String(title||'').trim(),
+      pending: pg.aff && !aff});
+  });
+  const set=rows.filter(r=>r.img).length;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+    <div style="font-size:13px;color:var(--text-secondary)">${T(
+      set+' of '+rows.length+' pages have a picture you set. The rest use the page’s own look.',
+      rows.length+' 个页面中有 '+set+' 个使用了自定义图片，其余使用页面自带样式。')}</div>
+    ${rows.map(r=>`<div class="card" style="padding:14px;display:flex;gap:13px;align-items:flex-start">
+      ${r.img
+        ? `<a href="${escAttr(r.img)}" target="_blank" rel="noopener" style="width:70px;height:56px;flex:none;border-radius:9px;overflow:hidden;border:1px solid var(--border-default);background-image:url('${String(r.img).replace(/'/g,'%27')}');background-size:cover;background-position:center;display:block"></a>`
+        : `<span style="width:70px;height:56px;flex:none;border-radius:9px;border:1px dashed var(--border-strong);display:flex;align-items:center;justify-content:center;color:var(--text-secondary)">${ic('image',20)}</span>`}
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+        <span style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+          <span style="font-size:15px;font-weight:500;min-width:0">${T(...r.name)}</span>
+          ${r.pending?`<span style="font-size:12px;color:var(--text-secondary);flex:none">${T('Loading…','加载中…')}</span>`
+            :`<span class="pill" style="background:${r.img?PILL.success[0]:PILL.muted[0]};color:${r.img?PILL.success[1]:PILL.muted[1]};flex:none">${r.img?T('Set','已设置'):T('Default','默认')}</span>`}</span>
+        ${r.titled?`<span style="font-size:13px;color:var(--text-secondary);line-height:1.5">${r.title
+            ? '“'+escAttr(r.title)+'”'
+            : T('No title set — the page titles itself.','未设置标题 — 由页面自动生成。')}</span>`:''}
+        <span style="font-size:12.5px;color:var(--text-secondary);line-height:1.5;opacity:.9">${T(...r.blurb)}</span></span></div>`).join('')}
+    ${noteBar(T('Pictures and titles are set on desktop — about 500 × 400 works best.','图片与标题在电脑端设置 — 建议尺寸约 500 × 400。'))}</div>`;
+}
+
 /* Meituan's health, which the phone did not show at all.
    --------------------------------------------------------------------------
    The state worth naming is a STUCK stock queue. A queue mid-drain clears in

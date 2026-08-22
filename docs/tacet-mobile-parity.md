@@ -806,6 +806,20 @@ The phone showed the order ledger and nothing about the channel's health.
 | Order ledger | ✅ (already) |
 | Product matching, bundles, sync toggles, push-now, logs | ➖ decided: desktop |
 
+### Share cards (`10-extras.js`)
+
+Previously an honest "made on desktop" note — the fake share counts it replaced
+deserved deleting. But designing a card and **checking** one are different
+jobs, and the second is a phone job.
+
+| Desktop capability | Phone |
+|---|---|
+| The four forwardable pages: home, product, voting, invite | ❌ → ✅ |
+| **Set vs Default** per page, and the picture itself | ❌ → ✅. "Did the invite card ever get set" is a question with a picture for an answer |
+| The custom title, or a note saying the page titles itself | ❌ → ✅ |
+| What each card is for | ❌ → ✅ — the desktop's own blurbs |
+| Upload a picture, write a title, live WeChat-chat preview | ➖ decided: desktop |
+
 ## 4. Open questions
 
 Not gaps — decisions that are the shop's to make, not this file's.

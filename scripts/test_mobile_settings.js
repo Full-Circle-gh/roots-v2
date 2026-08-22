@@ -484,4 +484,30 @@ CASES.push(['the sync service is offline', `state.mirror={meituan:null}; state.m
   ['and what stopped', `txt('content').includes('not being imported')`],
 ]]);
 
+// ── Share cards ───────────────────────────────────────────────────────────
+// The phone said these are made on desktop and stopped — true, and the fake
+// share counts it used to show deserved deleting. But designing a card and
+// CHECKING one are different jobs, and "did the invite card ever get set" is a
+// question with a picture for an answer.
+CASES.push(['which pages carry a card', `state.scTried=true;
+  state.scAff={shareImage:'/api/retail-admin/media/4',shareTitle:{en:'Join me on Roots'}};
+  state.cfg=Object.assign({},state.cfg,{sharing:{home:'/api/retail-admin/media/1',
+    homeTitle:{en:'Roots — plant-based grocery'}}});
+  APP.cmd('push','sharecards');`, [
+  ['all four pages are listed',   `txt('content').includes('Home page') && txt('content').includes('Product page') && txt('content').includes('Voting page') && txt('content').includes('Invite card')`],
+  ['the ones with a picture say Set', `txt('content').includes('Set')`],
+  ['the ones without say Default',    `txt('content').includes('Default')`],
+  ['counted at the top',              `txt('content').includes('2 of 4 pages')`],
+  ['the titles are shown',            `txt('content').includes('Roots — plant-based grocery') && txt('content').includes('Join me on Roots')`],
+  ['a titled page with no title says who titles it', `txt('content').includes('the page titles itself')`],
+  ['the pictures are there to look at',
+   "document.querySelectorAll(\"#content a[href^='/api/retail-admin/media/']\").length === 2"],
+]]);
+
+CASES.push(['nothing set at all', `state.scTried=true; state.scAff={};
+  state.cfg=Object.assign({},state.cfg,{sharing:{}}); APP.cmd('push','sharecards');`, [
+  ['says none of them',  `txt('content').includes('0 of 4 pages')`],
+  ['and invents no counts', `!/\\d+ shares/.test(txt('content'))`],
+]]);
+
 run('operator screens', CASES);
