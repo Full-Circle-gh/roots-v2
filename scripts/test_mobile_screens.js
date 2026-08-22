@@ -100,9 +100,19 @@ function main() {
   const cases = buildCases(src);
   const failures = [];
 
+  // Two passes. WARM seeds server-shaped state so each screen renders its real
+  // branch. COLD seeds nothing — the first paint, and the offline one, where a
+  // screen must show a loading or empty state rather than reaching into data
+  // that has not arrived. Half the crashes in this app's history live there.
+  const passes = [['warm', SEED], ['cold', '']];
+  const work = [];
   for (const [name, js] of Object.entries(cases)) {
+    for (const [pass, seed] of passes) work.push([`${name} [${pass}]`, seed, js]);
+  }
+
+  for (const [name, seed, js] of work) {
     const html = src.replace('</body>',
-      `<script>addEventListener("load",function(){try{${SEED}${js}}catch(e){window.__e.push("cmd: "+e.message)}});</script>${PROBE}</body>`);
+      `<script>addEventListener("load",function(){try{${seed}${js}}catch(e){window.__e.push("cmd: "+e.message)}});</script>${PROBE}</body>`);
     const file = path.join(dir, name.replace(/[^a-z0-9]/gi, '_') + '.html');
     fs.writeFileSync(file, html);
     let out = '';
@@ -119,13 +129,13 @@ function main() {
   }
 
   fs.rmSync(dir, { recursive: true, force: true });
-  const total = Object.keys(cases).length;
+  const total = work.length;
   if (failures.length) {
     for (const [name, why] of failures) console.error(`FAIL ${name} — ${why}`);
     console.error(`\n${failures.length} of ${total} screens failed.`);
     process.exit(1);
   }
-  console.log(`ok — ${total} screens painted, no uncaught errors.`);
+  console.log(`ok — ${total} renders (${Object.keys(cases).length} screens, warm and cold), no uncaught errors.`);
 }
 
 main();

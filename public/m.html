@@ -223,11 +223,10 @@ const DB = {
     {title:['New arrivals this week','本周新品到货'],meta:['Sent to 2,140 · 68% opened','发送 2,140 · 68% 打开'],status:['Sent','已发送'],kind:'delivered'},
     {title:['Double points weekend','会员积分翻倍'],meta:['Scheduled Sat 10:00','排期周六 10:00'],status:['Scheduled','已排期'],kind:'draft'},
   ],
-  shareCards:[{title:['Autumn harvest card','秋收卡片'],meta:['Shared 340×','分享 340 次']},{title:['Oat milk promo','燕麦奶促销'],meta:['Shared 128×','分享 128 次']}],
-  tiers:[{tier:['Gold','金'],pts:['≥ 2,000 pts','≥ 2,000 分'],members:'46',kind:'gold'},{tier:['Silver','银'],pts:['≥ 800 pts','≥ 800 分'],members:'132',kind:'off'},{tier:['Bronze','铜'],pts:['≥ 0 pts','≥ 0 分'],members:'610',kind:'off'}],
+  tiers:[{tier:['Tree','大树'],pts:['≥ 2,000 pts','≥ 2,000 分'],members:'46',kind:'off'},{tier:['Root','根系'],pts:['≥ 800 pts','≥ 800 分'],members:'132',kind:'off'},{tier:['Sprout','嫩芽'],pts:['≥ 0 pts','≥ 0 分'],members:'610',kind:'off'}],
   members:[
-    {name:['Chen Meiling','陈美玲'],tier:['Gold','金'],pts:'2,410',gold:true},{name:['Zhang Wei','张伟'],tier:['Silver','银'],pts:'1,180'},
-    {name:['Sarah Lim','Sarah Lim'],tier:['Gold','金'],pts:'2,050',gold:true},{name:['Wang Zhiqiang','王志强'],tier:['Bronze','铜'],pts:'420'},
+    {name:['Chen Meiling','陈美玲'],tier:['Tree','大树'],pts:'2,410',gold:true},{name:['Zhang Wei','张伟'],tier:['Root','根系'],pts:'1,180'},
+    {name:['Sarah Lim','Sarah Lim'],tier:['Tree','大树'],pts:'2,050',gold:true},{name:['Wang Zhiqiang','王志强'],tier:['Sprout','嫩芽'],pts:'420'},
   ],
   wallet:[
     {label:['Top-up','充值'],who:['Chen Meiling','陈美玲'],time:'2:20 PM',amt:'+¥200',color:'#5F7357'},
@@ -251,17 +250,6 @@ const DB = {
     {name:['Meituan','美团'],icon:'bike',status:['Live','运行中'],kind:'on',metric:['6 orders · ¥540','6 单 · ¥540'],action:['View','查看'],viewOnly:true},
     {name:['gzgrocery ERP','gzgrocery'],icon:'warehouse',status:['Synced','已同步'],kind:'on',metric:['2 pickups · ¥1,600','2 自提 · ¥1,600'],action:['View','查看'],viewOnly:true},
     {name:['Eleme','饿了么'],icon:'utensils-crossed',status:['Not connected','未连接'],kind:'off',metric:['Tap to connect','点击连接'],action:['Connect','连接']},
-  ],
-  legal:[
-    {name:['Terms of service','服务条款'],updated:['Updated 2026-05-01','更新于 2026-05-01']},
-    {name:['Privacy policy','隐私政策'],updated:['Updated 2026-05-01','更新于 2026-05-01']},
-    {name:['Refund policy','退款政策'],updated:['Updated 2026-03-12','更新于 2026-03-12']},
-    {name:['Delivery terms','配送条款'],updated:['Updated 2026-04-08','更新于 2026-04-08']},
-  ],
-  faqs:[
-    {q:['How do I track my order?','如何查看订单？'],a:['Open the order in the mini app; live tracking shows once dispatched.','在小程序打开订单；发货后可查看实时跟踪。']},
-    {q:['What areas do you deliver to?','配送范围？'],a:['Guangzhou city and neighbouring districts; pickup at both stores.','广州市及周边区；两家门店均可自提。']},
-    {q:['Can I change my pickup time?','可以改自提时间吗？'],a:['Yes — contact us before the order enters Preparing.','可以 — 请在订单进入备货前联系我们。']},
   ],
   customers:[
     {id:'s1',name:'Chen Meiling',phone:'138****2841',tier:'tree',orders:24,spend:6240,seen:'2026-07-29 09:40:00',unseen:true},
@@ -290,7 +278,7 @@ const state = {
   orderBusy:null, orderErr:null, replyBusy:false, replyErr:null,
   printer:null, printerLoading:false, printerBusy:false, printerErr:null,
   prodStores:null, prodStockReady:false, prodBusy:false, prodErr:null,
-  cfg:null, setup:null, zones:null,
+  cfg:null, setup:null, zones:null, mirror:null, mirrorLoading:null, mirrorMode:null,
   ordersView:null, ordersTotal:null, ordersLoading:false, ordersMore:false,
   storeF:'all', stores:null, orderQ:'',
   reply:null, createKind:null, createValue:10, createActive:true,
@@ -445,7 +433,7 @@ reg('signout', ()=>{
 });
 reg('enable', f=>{ state.sw[f]=true; showToast(T('Enabled','已开启')); });
 reg('faqToggle', i=>{ state.faqOpen=state.faqOpen===i?null:i; render(); });
-reg('mirror', w=>push('mirror_'+w));
+reg('mirror', w=>{ push('mirror_'+w); loadMirror(w); });
 reg('stepInc', k=>{ sheetStep[k]=(sheetStep[k]||0)+1; render(); });
 reg('stepDec', k=>{ sheetStep[k]=Math.max(0,(sheetStep[k]||0)-1); render(); });
 reg('noop', ()=>{});
@@ -937,7 +925,8 @@ const SUBS={
     <div class="list">${[['Hero banner','首图'],['Featured products','精选商品'],['Categories','分类'],['Flash sale strip','秒杀条']].map((n,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}<div style="padding:13px 14px;font-size:15px">${T(...n)}</div>`).join('')}</div></div>${desktopNote()}</div>`},
   about:{title:['About page','关于页'],render:()=>{
     const c=cfgGet('about.content',null);
-    if(state.cfg&&!c) return nothingYet(T('Nothing written yet','还没有内容'),
+    if(!state.cfg) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+    if(!c) return nothingYet(T('Nothing written yet','还没有内容'),
       T('The about page is written on desktop. What you publish shows here and in the mini app.','关于页在电脑端撰写，发布后会显示在这里和小程序中。'));
     const pick=(en,cn)=>T(String(c&&c[en]||''),String(c&&c[cn]||c&&c[en]||''));
     const manifesto=pick('manifesto_en','manifesto_cn').replace(/\*\*/g,'');
@@ -966,7 +955,8 @@ const SUBS={
       return Object.assign({},d,{body:String(body||''), updated:cfgGet('legal.'+d.key+'.updated_at','')});
     });
     const any=docs.some(d=>d.body);
-    if(state.cfg&&!any) return nothingYet(T('Nothing published yet','尚未发布'),
+    if(!state.cfg) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+    if(!any) return nothingYet(T('Nothing published yet','尚未发布'),
       T('Your terms and privacy policy are written on desktop. Once published they show here and in the mini app.','服务条款与隐私政策在电脑端撰写，发布后会显示在这里和小程序中。'));
     return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
     <div class="list">${docs.map((d,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
@@ -983,11 +973,12 @@ const SUBS={
   faq:{title:['FAQ & help','常见问题'],render:()=>{
     // The store's own published questions (storefront_config.faq.questions) —
     // the three that used to render here were invented for the mockup.
+    if(!state.cfg) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
     const qs=cfgGet('faq.questions',null);
-    const list=Array.isArray(qs)?qs.map(q=>({q:[q.q_en||q.q_cn||'',q.q_cn||q.q_en||''],a:[q.a_en||q.a_cn||'',q.a_cn||q.a_en||'']})):null;
-    if(list&&!list.length) return nothingYet(T('No questions yet','还没有常见问题'),
+    const list=Array.isArray(qs)?qs.map(q=>({q:[q.q_en||q.q_cn||'',q.q_cn||q.q_en||''],a:[q.a_en||q.a_cn||'',q.a_cn||q.a_en||'']})):[];
+    if(!list.length) return nothingYet(T('No questions yet','还没有常见问题'),
       T('Questions you publish appear here, and in the mini app under Help.','发布后会出现在这里，也会出现在小程序帮助页。'));
-    const rows=list||DB.faqs;
+    const rows=list;
     return `<div style="padding:14px 16px 24px"><div class="list">${rows.map((f,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
       <button onclick="APP.cmd('faqToggle',${i})" style="display:flex;flex-direction:column;gap:8px;width:100%;padding:16px;background:transparent;border:none;cursor:pointer;text-align:left;font-family:inherit">
         <span style="display:flex;align-items:center;gap:10px;width:100%"><span style="flex:1;min-width:0;font-size:15px;font-weight:500;color:var(--text-primary)">${T(...f.q)}</span><span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span>
@@ -1015,15 +1006,48 @@ const SUBS={
 SUBS.inbox={title:['Inbox','消息'],render:()=>screenInbox()};
 SUBS.sales={title:['Sales','销售'],render:()=>screenSales()};
 
+async function loadMirror(which){
+  if(state.mirrorLoading===which) return;
+  state.mirrorLoading=which; state.mirror=state.mirror||{}; render();
+  try{
+    if(which==='meituan'){
+      const rows=await api('/meituan/orders?limit=30');
+      state.mirror.meituan=(Array.isArray(rows)?rows:[]).map(r=>({
+        id:r.order_no||('#'+r.id), cust:r.recipient_name||'—', total:money(CUR,r.total),
+        when:fmtDay(r.placed_at), store:T(r.store_name_en||r.store_code||'',r.store_name_cn||r.store_name_en||''),
+        items:(r.items||[]).length}));
+    } else {
+      const d=await api('/guanyi/pickups');
+      const recent=(d&&d.recent)||[];
+      state.mirror.gzgrocery=recent.slice(0,30).map(r=>({
+        id:T(r.name_en||r.name_cn||'—', r.name_cn||r.name_en||'—'),
+        cust:r.product_sku?('SKU '+r.product_sku):'', total:(r.inferred_pickup!=null?('×'+r.inferred_pickup):''),
+        when:fmtDay(r.created_at), store:'', items:0}));
+      state.mirrorMode=(d&&d.mode)||null;
+    }
+  }catch(e){ if(String(e.message)==='auth') return; state.mirror[which]=null; }
+  state.mirrorLoading=null; render();
+}
 function mirrorScreen(which,note){
-  return `<div style="padding:12px 16px 24px;display:flex;flex-direction:column;gap:10px">
-    <div style="display:flex;align-items:center;gap:10px;background:var(--surface-raised);border-radius:12px;padding:12px 14px"><span style="color:var(--text-secondary);display:flex;flex:none">${ic('eye',18)}</span><span style="font-size:13px;color:var(--text-secondary)">${note}</span></div>
-    ${DB.mirror[which].map(o=>`<div class="card" style="display:flex;flex-direction:column;gap:9px;padding:14px">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
-        <span style="display:flex;align-items:center;gap:7px;min-width:0"><span class="num" style="font-size:13px;color:var(--text-secondary)">${o.id}</span><span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('View only','只读')}</span></span>
-        <span class="num" style="font-size:16px;font-weight:500;flex:none">${o.total}</span></div>
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span style="font-size:14.5px">${T(...o.cust)}</span>${pill(o.kind,T(...o.status))}</div>
-      <div class="num" style="font-size:12px;color:var(--text-secondary)">${o.time}</div></div>`).join('')}</div>`;
+  const rows=(state.mirror&&state.mirror[which])||null;
+  if(!rows&&state.mirrorLoading!==which&&!state.mirrorTried){ /* first paint kicks the load */ }
+  if(!rows||!rows.length){
+    if(state.mirrorLoading===which) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+    if(rows&&!rows.length) return nothingYet(which==='meituan'?T('No orders from Meituan yet','美团暂无订单'):T('No pickups recorded yet','暂无提货记录'),
+      which==='meituan'?T('Orders the platform sends appear here, mirrored and read-only.','平台推送的订单会以只读方式出现在这里。')
+                       :T('Wholesale pickups appear here as gzgrocery records them.','gzgrocery 记录的提货会出现在这里。'));
+    return nothingYet(T('Could not read this channel','无法读取该渠道'),
+      T('The channel did not answer. Nothing is wrong with your orders — try again in a moment.','渠道没有响应。订单数据没有问题 — 请稍后重试。'));
+  }
+  return `<div style="padding:12px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    <div style="display:flex;align-items:center;gap:12px;background:var(--surface-raised);border-radius:14px;padding:12px 16px"><span style="color:var(--text-secondary);display:flex;flex:none">${ic('eye',18)}</span><span style="font-size:13px;color:var(--text-secondary)">${note}</span></div>
+    ${rows.map(o=>`<div class="card" style="display:flex;flex-direction:column;gap:8px;padding:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+        <span class="num" style="font-size:15px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.id}</span>
+        <span class="num" style="font-size:15px;font-weight:500;flex:none">${o.total}</span></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;font-size:13px;color:var(--text-secondary)">
+        <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.cust}${o.store?' · '+o.store:''}</span>
+        <span class="num" style="flex:none">${o.when}</span></div></div>`).join('')}</div>`;
 }
 function screenSettings(){
   const groups=[
