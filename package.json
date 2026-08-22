@@ -12,6 +12,7 @@
     "test:batch-timing": "node scripts/test_batch_timing.js",
     "test:customer-search": "node scripts/test_customer_search.js",
     "test:manual-order-fees": "node scripts/test_manual_order_fees.js",
+    "test:mobile-screens": "node scripts/test_mobile_screens.js",
     "test:needs-point": "node scripts/test_needs_point.js && node scripts/test_needs_point_client.js",
     "test:payment-mismatch": "node scripts/test_payment_mismatch.js",
     "test:phone": "node scripts/test_recipient_phone.js",

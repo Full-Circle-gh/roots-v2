@@ -289,7 +289,8 @@ const state = {
   overflow:false, search:false, detailId:null, detailActions:false, productSku:null,
   orderBusy:null, orderErr:null, replyBusy:false, replyErr:null,
   printer:null, printerLoading:false, printerBusy:false, printerErr:null,
-  storeStock:null, prodStockReady:false, prodBusy:false, prodErr:null,
+  prodStores:null, prodStockReady:false, prodBusy:false, prodErr:null,
+  cfg:null, setup:null, zones:null,
   ordersView:null, ordersTotal:null, ordersLoading:false, ordersMore:false,
   storeF:'all', stores:null, orderQ:'',
   reply:null, createKind:null, createValue:10, createActive:true,
@@ -385,7 +386,7 @@ reg('copyTxn', ()=>{
 reg('openProduct', sku=>{
   state.productSku=sku; state.prodErr=null; state.prodBusy=false;
   const p=DB.products.find(x=>x.sku===sku);
-  (state.stores||[]).forEach(st=>{ delete sheetStep['st_'+st.id]; });
+  (state.prodStores||[]).forEach(st=>{ delete sheetStep['st_'+st.id]; });
   render();
   if(p&&p._id!=null) loadProductStock(p._id);
 });
@@ -464,6 +465,17 @@ function emptyState(title,msg){
 function noteBar(text){ return `<div style="display:flex;align-items:flex-start;gap:11px;background:var(--surface-raised);border-radius:12px;padding:12px 14px">
   <span style="color:var(--text-secondary);display:flex;flex:none;margin-top:1px">${ic('eye',18)}</span>
   <span style="font-size:12.5px;color:var(--text-secondary)">${text}</span></div>`; }
+/* An honest empty: what is not here, and where it is instead. Used by every
+   screen whose content is authored somewhere else — better than a mockup's
+   invented tagline, fake share counts or a legal date nobody set. */
+function nothingYet(title,msg){
+  return `<div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:48px 24px;text-align:center">
+    <div style="font-size:18px;font-weight:500">${title}</div>
+    <div style="font-size:15px;color:var(--text-secondary);max-width:270px;line-height:1.55">${msg}</div></div>`;
+}
+/* storefront_config comes back as one nested object; these screens read their
+   own corner of it rather than shipping sample content. */
+const cfgGet=(path,dflt)=>{ let v=state.cfg; for(const k of String(path).split('.')){ if(v==null) return dflt; v=v[k]; } return v==null?dflt:v; };
 const desktopNote=()=>`<div style="text-align:center;font-size:12.5px;color:var(--text-secondary)">${T('Best edited on desktop','建议在电脑端编辑')}</div>`;
 function flagGate(flag){
   return `<div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:44px 24px;text-align:center">
@@ -724,16 +736,26 @@ const MORE_GROUPS=[
   {h:['Content','内容'],rows:[['editor','pen-tool','Editor','编辑器'],['about','info','About page','关于页'],['media','image','Media','媒体库'],['legal','scale','Legal pages','法律条款'],['faq','circle-help','FAQ & help','常见问题']]},
   {h:null,rows:[['settings','settings','Settings','设置']]},
 ];
+/* One source for setup progress, and it is the server's. The card used to
+   compute a percentage from a hardcoded list of steps, so every store on earth
+   read "50% set up · 3 steps left" whatever it had actually done. */
+function setupState(){
+  const d=state.setup;
+  if(d) return {pct:d.percent, done:d.requiredDone, total:d.requiredTotal, left:Math.max(0,d.requiredTotal-d.requiredDone), real:true};
+  return {pct:null, real:false};
+}
 function screenMore(){
-  const done=DB.setupSteps.filter(s=>s.done).length, pct=Math.round(done/DB.setupSteps.length*100);
+  const su=setupState();
   return `<div style="padding:16px 0 8px">
     <div style="padding:0 16px 6px"><div class="card" style="padding:16px">
       <button onclick="APP.cmd('push','setup')" style="display:flex;align-items:center;gap:14px;width:100%;background:transparent;border:none;cursor:pointer;text-align:left;padding:0;font-family:inherit">
         <span style="width:38px;height:38px;border-radius:10px;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;color:var(--accent);flex:none">${ic('compass',22)}</span>
         <span style="flex:1;min-width:0">
           <span style="display:block;font-size:15px;font-weight:500;color:var(--text-primary)">${T('Open your store','开店引导')}</span>
-          <span style="display:block;font-size:13px;color:var(--text-secondary);margin-top:2px">${T(pct+'% set up · '+(DB.setupSteps.length-done)+' steps left',`已完成 ${pct}% · 还差 ${DB.setupSteps.length-done} 步`)}</span>
-          <span style="display:block;margin-top:10px;height:4px;border-radius:999px;background:var(--surface-raised)"><span style="display:block;height:4px;width:${pct}%;border-radius:999px;background:var(--text-primary)"></span></span></span>
+          <span style="display:block;font-size:13px;color:var(--text-secondary);margin-top:2px">${su.real
+            ? (su.left?T(su.pct+'% set up · '+su.left+' steps left',`已完成 ${su.pct}% · 还差 ${su.left} 步`):T('Everything is set up','已全部完成'))
+            : T('Checking…','检查中…')}</span>
+          ${su.real?`<span style="display:block;margin-top:10px;height:4px;border-radius:999px;background:var(--surface-raised)"><span style="display:block;height:4px;width:${su.pct}%;border-radius:999px;background:var(--text-primary)"></span></span>`:''}</span>
         <span style="color:var(--text-secondary);display:flex;flex:none;align-self:flex-start;margin-top:9px">${ic('chevron-right')}</span></button></div></div>
     ${MORE_GROUPS.map(g=>`<div style="margin-top:14px">
       ${g.h?`<div class="eyebrow" style="padding:6px 20px">${T(...g.h)}</div>`:''}
@@ -763,13 +785,20 @@ function settingsGroupCard(rows){
 let sheetStep={};
 const SUBS={
   setup:{title:['Open your store','开店引导'],render:()=>{
-    const done=DB.setupSteps.filter(s=>s.done).length, pct=Math.round(done/DB.setupSteps.length*100);
+    const su=setupState();
+    const SETUP_LABEL={store:['Your store','门店信息'],products:['Add your first product','添加第一件商品'],
+      payment:['Add a payment method','添加收款方式'],fulfillment:['Set up delivery or pickup','设置配送或自提'],
+      open:['Open your store','开始营业'],wechat:['Connect WeChat','连接微信'],brand:['Add your brand','完善品牌']};
+    const steps=(state.setup&&Array.isArray(state.setup.steps))
+      ? state.setup.steps.map(x=>({name:SETUP_LABEL[x.key]||[x.key,x.key],done:!!x.done}))
+      : DB.setupSteps;
+    const done=su.real?su.done:steps.filter(s=>s.done).length, pct=su.real?su.pct:Math.round(done/steps.length*100);
     return `<div style="padding:16px 16px 24px;display:flex;flex-direction:column;gap:16px">
       <div style="background:var(--surface-raised);border-radius:14px;padding:18px">
         <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><span style="font-size:15px;font-weight:500">${T('Setup progress','开店进度')}</span>
-        <span class="num" style="font-size:13px;color:var(--text-secondary)">${pct}% · ${DB.setupSteps.length-done} ${T('left','待完成')}</span></div>
+        <span class="num" style="font-size:13px;color:var(--text-secondary)">${pct}% · ${steps.length-done} ${T('left','待完成')}</span></div>
         <div style="margin-top:12px;height:6px;border-radius:999px;background:var(--surface-card);overflow:hidden"><div style="height:6px;width:${pct}%;border-radius:999px;background:var(--graphite)"></div></div></div>
-      <div class="list">${DB.setupSteps.map((s,i)=>`${i?'<div class="sep" style="margin-left:52px"></div>':''}
+      <div class="list">${steps.map((s,i)=>`${i?'<div class="sep" style="margin-left:52px"></div>':''}
         <button class="row" onclick="APP.cmd('noop')">
           ${s.done?`<span style="width:24px;height:24px;border-radius:50%;background:rgba(163,180,159,.28);display:flex;align-items:center;justify-content:center;color:#5F7357;flex:none">${ic('check',15,2.25)}</span>`
                  :`<span style="width:24px;height:24px;border-radius:50%;border:2px solid var(--border-default);flex:none"></span>`}
@@ -816,7 +845,8 @@ const SUBS={
       {label:T('Auto-print receipts','自动打印小票'),printer:true},
       {label:T('Routing','派单'),value:T('Nearest store, automatically','自动派往最近门店')},
     ])}
-    ${settingsGroupCard([{label:T('Delivery zones','配送范围'),value:'6'},{label:T('Couriers','快递'),value:'JD · kd100'},{label:T('Pickup points','自提点'),value:'2'}])}${desktopNote()}</div>`;
+    ${settingsGroupCard([{label:T('Delivery zones','配送范围'),
+        value: state.zones ? String(state.zones.length) : T('Loading…','加载中…')}])}${desktopNote()}</div>`;
   }},
   invoices:{title:['Invoices','发票'],render:()=>`<div><div style="padding:12px 0 4px">${chipRow([{key:'all',en:'All',zh:'全部',count:214},{key:'issued',en:'Issued',zh:'已开',count:198},{key:'pending',en:'Pending',zh:'待开',count:16}],'all','noop')}</div>
     <div style="padding:8px 16px 24px;display:flex;flex-direction:column;gap:10px">
@@ -846,25 +876,32 @@ const SUBS={
     <button class="cta" onclick="APP.cmd('create','broadcast')">${T('New broadcast','新建广播')}</button>
     ${DB.broadcasts.map(b=>`<div class="card" style="padding:14px"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px"><span style="font-size:15px;font-weight:500;min-width:0">${T(...b.title)}</span>${pill(b.kind,T(...b.status))}</div>
       <div class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:6px">${T(...b.meta)}</div></div>`).join('')}</div>`},
-  sharecards:{title:['Share cards','分享卡片'],render:()=>`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:10px">
-    <button class="cta" onclick="APP.cmd('noop')">${T('Generate card','生成卡片')}</button>
-    ${DB.shareCards.map(c=>`<div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px">
-      <span style="font-size:15px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...c.title)}</span>
-      <span class="num" style="font-size:12.5px;color:var(--text-secondary);flex:none">${T(...c.meta)}</span></div>`).join('')}</div>`},
-  popups:{title:['Pop-ups','弹窗'],render:()=>`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
-    <div style="background:var(--surface-raised);border-radius:14px;padding:22px;display:flex;justify-content:center">
-      <div style="width:100%;max-width:240px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:12px;padding:16px;text-align:center">
-        <div style="font-size:14px;font-weight:500">${T('Welcome!','欢迎！')}</div><div style="font-size:12.5px;color:var(--text-secondary);margin-top:4px">${T('Get ¥10 off your first order','首单立减 ¥10')}</div>
-        <div style="margin-top:12px;font-size:12.5px;font-weight:500;border:1px solid var(--border-default);border-radius:8px;padding:8px">${T('Claim','领取')}</div></div></div>
-    <div style="display:flex;align-items:center;gap:12px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:14px"><span style="flex:1;font-size:15px">${T('Show pop-up to visitors','向访客展示弹窗')}</span>${toggle(state.sw.popups,"APP.cmd('sw','popups')")}</div>${desktopNote()}</div>`},
+  sharecards:{title:['Share cards','分享卡片'],render:()=>nothingYet(T('Made on desktop','在电脑端制作'),
+    T('Share cards are designed and generated in the admin on a big screen. The counts that used to sit here were never real.','分享卡片在电脑端设计与生成。此前这里显示的数据并非真实数据。')),
+  },
+  popups:{title:['Pop-ups','弹窗'],render:()=>{
+    const list=cfgGet('popups.list',null);
+    if(Array.isArray(list)&&!list.length) return nothingYet(T('No pop-ups','没有弹窗'),
+      T('Nothing is interrupting your customers right now.','目前没有任何弹窗打扰顾客。'));
+    if(!Array.isArray(list)) return `<div style="padding:14px 16px 24px">${nothingYet(T('Pop-ups','弹窗'),T('Loading…','加载中…'))}</div>`;
+    return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+      ${list.map(p=>`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+          <span style="font-size:15px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(p.title_en||p.name_en||'—',p.title_cn||p.name_cn||p.title_en||'—')}</span>
+          <span class="pill" style="background:${p.enabled?'var(--sage-tint)':'rgba(88,96,110,.10)'};color:${p.enabled?'#4A6249':'var(--text-secondary)'}">${p.enabled?T('Live','进行中'):T('Off','已关闭')}</span>
+        </div>
+        ${(p.body_en||p.body_cn)?`<div style="font-size:15px;color:var(--text-secondary)">${T(p.body_en||p.body_cn,p.body_cn||p.body_en)}</div>`:''}
+        ${p.start_at||p.end_at?`<div class="num" style="font-size:13px;color:var(--text-secondary)">${[p.start_at?fmtDay(p.start_at):'',p.end_at?fmtDay(p.end_at):''].filter(Boolean).join(' – ')}</div>`:''}
+      </div>`).join('')}
+      ${desktopNote()}</div>`;
+  }},
   affiliate:{title:['Affiliate','分销'],render:()=> state.sw.affiliate?`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
       <div style="background:var(--surface-raised);border-radius:14px;padding:16px"><div class="eyebrow">${T('Overview','概览')}</div><div class="num" style="font-size:15px;margin-top:8px">${T('42 affiliates · ¥8,120 referred','42 位分销 · 引流 ¥8,120')}</div></div>
       <div style="display:flex;align-items:center;gap:12px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:14px"><span style="flex:1;font-size:15px">${T('Enabled','已启用')}</span>${toggle(true,"APP.cmd('sw','affiliate')")}</div>${desktopNote()}</div>`
     :`<div style="padding:14px 16px 24px">${flagGate('affiliate')}</div>`},
-  social:{title:['Social proof','社交证明'],render:()=> state.sw.social?`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
-      <div style="background:var(--surface-raised);border-radius:14px;padding:16px"><div class="eyebrow">${T('Overview','概览')}</div><div class="num" style="font-size:15px;margin-top:8px">${T('“12 people bought this today”','“今日 12 人购买”')}</div></div>
-      <div style="display:flex;align-items:center;gap:12px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:14px"><span style="flex:1;font-size:15px">${T('Enabled','已启用')}</span>${toggle(true,"APP.cmd('sw','social')")}</div>${desktopNote()}</div>`
-    :`<div style="padding:14px 16px 24px">${flagGate('social')}</div>`},
+  social:{title:['Social proof','社交证明'],render:()=>nothingYet(T('Set up on desktop','在电脑端设置'),
+    T('Social proof shows recent buyers to your customers. It is configured on desktop; nothing about it can be read or changed from here yet.','社交证明会向顾客展示最近的购买。设置在电脑端完成，手机端暂时无法查看或修改。')),
+  },
   membership:{title:['Membership','会员积分'],render:()=> !state.sw.membership?`<div style="padding:14px 16px 24px">${flagGate('membership')}</div>`:
     `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
       <div><div class="eyebrow" style="padding:2px 4px 8px">${T('Tiers','等级')}</div>
@@ -898,24 +935,65 @@ const SUBS={
       ${pill('on',T('Published','已发布'))}</div>
     <div><div class="eyebrow" style="padding:2px 4px 8px">${T('Sections','版块')}</div>
     <div class="list">${[['Hero banner','首图'],['Featured products','精选商品'],['Categories','分类'],['Flash sale strip','秒杀条']].map((n,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}<div style="padding:13px 14px;font-size:15px">${T(...n)}</div>`).join('')}</div></div>${desktopNote()}</div>`},
-  about:{title:['About page','关于页'],render:()=>`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
-    <div><div class="eyebrow" style="padding:2px 4px 8px">${T('Tagline','标语')}</div>
-      <input value="${T('Fresh, plant-based, delivered quietly.','新鲜植物基，静静送达。')}"><button class="cta" style="margin-top:10px" onclick="APP.cmd('noop')">${T('Save','保存')}</button></div>
-    <div><div class="eyebrow" style="padding:2px 4px 8px">${T('Preview','预览')}</div>
-      <div class="card" style="padding:16px;font-size:14.5px;line-height:1.6;color:var(--text-secondary)">${T('We source plant-based groceries from local farms and deliver across Guangzhou.','我们从本地农场采购植物基食材，配送覆盖广州。')}</div></div>${desktopNote()}</div>`},
+  about:{title:['About page','关于页'],render:()=>{
+    const c=cfgGet('about.content',null);
+    if(state.cfg&&!c) return nothingYet(T('Nothing written yet','还没有内容'),
+      T('The about page is written on desktop. What you publish shows here and in the mini app.','关于页在电脑端撰写，发布后会显示在这里和小程序中。'));
+    const pick=(en,cn)=>T(String(c&&c[en]||''),String(c&&c[cn]||c&&c[en]||''));
+    const manifesto=pick('manifesto_en','manifesto_cn').replace(/\*\*/g,'');
+    return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+      ${manifesto?`<div class="card" style="padding:16px">
+        <div class="eyebrow">${pick('kicker_en','kicker_cn')||T('About','关于')}</div>
+        <div style="font-size:15px;line-height:1.6;margin-top:8px">${manifesto}</div></div>`:''}
+      ${(c&&c.founder_name_en)?`<div class="card" style="padding:16px">
+        <div class="eyebrow">${pick('founder_kicker_en','founder_kicker_cn')}</div>
+        <div style="font-size:15px;font-weight:500;margin-top:8px">${pick('founder_name_en','founder_name_cn')}</div>
+        <div style="font-size:13px;color:var(--text-secondary)">${pick('founder_title_en','founder_title_cn')}</div>
+        ${c.founder_quote_en?`<div style="font-size:15px;color:var(--text-secondary);line-height:1.6;margin-top:8px">${pick('founder_quote_en','founder_quote_cn')}</div>`:''}</div>`:''}
+      ${desktopNote()}</div>`;
+  }},
   media:{title:['Media','媒体库'],render:()=>`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
     <button class="cta" style="display:flex;align-items:center;justify-content:center;gap:8px" onclick="APP.cmd('noop')">${ic('camera')} ${T('Add photo','添加图片')}</button>
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">${Array.from({length:9},(_,i)=>`<div style="aspect-ratio:1;border-radius:12px;background:var(--surface-raised);border:1px solid var(--border-default);display:flex;align-items:flex-end;padding:8px"><span style="font-size:10.5px;color:var(--text-secondary)">IMG_${1000+i}</span></div>`).join('')}</div>${desktopNote()}</div>`},
-  legal:{title:['Legal pages','法律条款'],render:()=>`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
-    <div class="list">${DB.legal.map((l,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}<button class="row" onclick="APP.cmd('noop')">
-      <span style="flex:1;min-width:0"><span style="display:block;font-size:15px">${T(...l.name)}</span><span style="display:block;font-size:12px;color:var(--text-secondary);margin-top:2px">${T(...l.updated)}</span></span>
-      <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`).join('')}</div>
-    <div style="text-align:center;font-size:12.5px;color:var(--text-secondary)">${T('Read-only on mobile','手机端只读')}</div></div>`},
-  faq:{title:['FAQ & help','常见问题'],render:()=> !state.sw.faq?`<div style="padding:14px 16px 24px">${flagGate('faq')}</div>`:
-    `<div style="padding:14px 16px 24px"><div class="list">${DB.faqs.map((f,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
-      <button onclick="APP.cmd('faqToggle',${i})" style="display:flex;flex-direction:column;gap:8px;width:100%;padding:14px;background:transparent;border:none;cursor:pointer;text-align:left;font-family:inherit">
+  legal:{title:['Legal pages','法律条款'],render:()=>{
+    // Both documents live in storefront_config; the dates are theirs, not a
+    // pair of numbers typed into a mockup.
+    const docs=[
+      {key:'terms',   name:['Terms of service','服务条款']},
+      {key:'privacy', name:['Privacy policy','隐私政策']},
+    ].map(d=>{
+      const body=cfgGet('legal.'+d.key+'.body_'+(LANG==='en'?'en':'cn'),'')||cfgGet('legal.'+d.key+'.body_en','');
+      return Object.assign({},d,{body:String(body||''), updated:cfgGet('legal.'+d.key+'.updated_at','')});
+    });
+    const any=docs.some(d=>d.body);
+    if(state.cfg&&!any) return nothingYet(T('Nothing published yet','尚未发布'),
+      T('Your terms and privacy policy are written on desktop. Once published they show here and in the mini app.','服务条款与隐私政策在电脑端撰写，发布后会显示在这里和小程序中。'));
+    return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    <div class="list">${docs.map((d,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
+      <button onclick="APP.cmd('faqToggle',${i})" style="display:flex;flex-direction:column;gap:8px;width:100%;padding:16px;background:transparent;border:none;cursor:pointer;text-align:left;font-family:inherit">
+        <span style="display:flex;align-items:center;gap:10px;width:100%">
+          <span style="flex:1;min-width:0">
+            <span style="display:block;font-size:15px;color:var(--text-primary)">${T(...d.name)}</span>
+            <span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${d.updated?T('Updated '+fmtDay(d.updated),'更新于 '+fmtDay(d.updated)):T('Not published','未发布')}</span>
+          </span>
+          <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span>
+        ${state.faqOpen===i&&d.body?`<span style="font-size:15px;line-height:1.6;color:var(--text-secondary);white-space:pre-wrap">${String(d.body).slice(0,1200).replace(/</g,'&lt;')}</span>`:''}</button>`).join('')}</div>
+    ${desktopNote()}</div>`;
+  }},
+  faq:{title:['FAQ & help','常见问题'],render:()=>{
+    // The store's own published questions (storefront_config.faq.questions) —
+    // the three that used to render here were invented for the mockup.
+    const qs=cfgGet('faq.questions',null);
+    const list=Array.isArray(qs)?qs.map(q=>({q:[q.q_en||q.q_cn||'',q.q_cn||q.q_en||''],a:[q.a_en||q.a_cn||'',q.a_cn||q.a_en||'']})):null;
+    if(list&&!list.length) return nothingYet(T('No questions yet','还没有常见问题'),
+      T('Questions you publish appear here, and in the mini app under Help.','发布后会出现在这里，也会出现在小程序帮助页。'));
+    const rows=list||DB.faqs;
+    return `<div style="padding:14px 16px 24px"><div class="list">${rows.map((f,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
+      <button onclick="APP.cmd('faqToggle',${i})" style="display:flex;flex-direction:column;gap:8px;width:100%;padding:16px;background:transparent;border:none;cursor:pointer;text-align:left;font-family:inherit">
         <span style="display:flex;align-items:center;gap:10px;width:100%"><span style="flex:1;min-width:0;font-size:15px;font-weight:500;color:var(--text-primary)">${T(...f.q)}</span><span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span>
-        ${state.faqOpen===i?`<span style="font-size:14px;line-height:1.6;color:var(--text-secondary)">${T(...f.a)}</span>`:''}</button>`).join('')}</div></div>`},
+        ${state.faqOpen===i?`<span style="font-size:15px;line-height:1.6;color:var(--text-secondary)">${T(...f.a)}</span>`:''}</button>`).join('')}</div>
+      <div style="padding:16px 0 0">${desktopNote()}</div></div>`;
+  }},
   quickstock:{title:['Quick stock','快速盘点'],render:()=>{const rows=[['carrot',['Organic carrots','有机胡萝卜'],'SKU 10231'],['oat',['Oat milk 1L','燕麦奶 1L'],'SKU 10188'],['nuts',['Mixed nuts','混合坚果'],'SKU 10450']];
     return `<div style="padding:16px;display:flex;flex-direction:column;gap:12px">${rows.map(([k,nm,sku])=>`<div style="display:flex;align-items:center;gap:12px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:14px">
       <span style="flex:1;min-width:0"><span style="display:block;font-size:15px;font-weight:500">${T(...nm)}</span><span class="num" style="display:block;font-size:12px;color:var(--text-secondary);margin-top:2px">${sku}</span></span>
@@ -1048,23 +1126,19 @@ async function orderWrite(kind, run){
 /* printer.* is private config, so it has its own read and write. The phone shows
    the switch only once it knows the real value — a switch that guesses its own
    position is worse than no switch. */
+/* One product, every store, one call — /products/:id/store-stocks answers with
+   exactly the rows this sheet edits. (The first version read each store's whole
+   catalogue and picked one row out of it.) */
 async function loadProductStock(pid){
-  const stores=state.stores||[];
-  if(!stores.length||pid==null){ state.prodStockReady=true; render(); return; }
-  state.prodStockReady=false; render();
-  state.storeStock=state.storeStock||{};
-  for(const st of stores){
-    if(state.storeStock[st.id]) continue;
-    try{
-      const rows=await api('/stores/'+st.id+'/stock');
-      const m={}; (Array.isArray(rows)?rows:[]).forEach(r=>{ m[r.product_id]=Number(r.physical_qty||0); });
-      state.storeStock[st.id]=m;
-    }catch(e){ state.storeStock[st.id]=null; }
-  }
-  stores.forEach(st=>{
-    const m=state.storeStock[st.id];
-    if(m) sheetStep['st_'+st.id]=Number(m[pid]||0);
-  });
+  if(pid==null){ state.prodStockReady=true; render(); return; }
+  state.prodStockReady=false; state.prodStores=null; render();
+  try{
+    const rows=await api('/products/'+pid+'/store-stocks');
+    state.prodStores=(Array.isArray(rows)?rows:[]).map(r=>({
+      id:r.store_id, name_en:r.name_en||r.code||('#'+r.store_id), name_cn:r.name_cn||r.name_en||r.code||('#'+r.store_id),
+      qty:Number(r.physical_qty||0)}));
+    state.prodStores.forEach(st=>{ sheetStep['st_'+st.id]=st.qty; });
+  }catch(e){ state.prodStores=null; }
   state.prodStockReady=true; render();
 }
 async function saveProductEdits(){
@@ -1072,17 +1146,15 @@ async function saveProductEdits(){
   if(!p||p._id==null||state.prodBusy) return;
   const priceRaw=(document.getElementById('mPrice')||{}).value;
   const price=Math.max(0,parseFloat(String(priceRaw).replace(/[^0-9.]/g,''))||0);
-  const stores=state.stores||[];
+  const stores=state.prodStores||[];
   state.prodBusy=true; state.prodErr=null; render();
   try{
     if(price!==Number(p.priceNum)) await apiWrite('/products/'+p._id,{sell_price:price},'PATCH');
     for(const st of stores){
-      const m=state.storeStock&&state.storeStock[st.id];
-      if(!m) continue;
-      const was=Number(m[p._id]||0), now=Number(sheetStep['st_'+st.id]);
-      if(!isNaN(now)&&now!==was){
+      const now=Number(sheetStep['st_'+st.id]);
+      if(!isNaN(now)&&now!==st.qty){
         await apiWrite('/stores/'+st.id+'/stock/'+p._id,{physical_qty:now},'PATCH');
-        m[p._id]=now;
+        st.qty=now;
       }
     }
     state.prodBusy=false; state.productSku=null; render();
@@ -1237,8 +1309,8 @@ function stepperCard(label,key,val,prefix){
    store list to read, the phone shows the total and says where to change it —
    spreading one number across two shelves would be a guess. */
 function stockCard(p){
-  const stores=state.stores||[];
-  if(!stores.length){
+  const stores=state.prodStores||[];
+  if(state.prodStockReady&&!stores.length){
     return `<div class="card" style="padding:16px">
       <div class="eyebrow">${T('In stock','库存')}</div>
       <div class="num" style="font-size:26px;font-weight:500;margin-top:12px">${p.stock}</div>
@@ -1251,11 +1323,7 @@ function stockCard(p){
   return `<div class="card" style="padding:16px">
     <div class="eyebrow">${T('In stock','库存')}</div>
     ${stores.map((st,i)=>{
-      const m=state.storeStock&&state.storeStock[st.id];
-      const name=T(st.name_en||st.name||('#'+st.id), st.name_cn||st.name_en||st.name||('#'+st.id));
-      if(!m) return `<div style="display:flex;align-items:center;justify-content:space-between;gap:16px;${i?'border-top:1px solid var(--border-default);margin-top:16px;padding-top:16px':'margin-top:12px'}">
-        <span style="font-size:15px">${name}</span>
-        <span style="font-size:13px;color:var(--text-secondary)">${T('Could not read','读取失败')}</span></div>`;
+      const name=T(st.name_en,st.name_cn);
       return `<div style="${i?'border-top:1px solid var(--border-default);margin-top:16px;padding-top:16px':'margin-top:12px'}">
         <div style="font-size:15px">${name}</div>
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">
@@ -1880,6 +1948,7 @@ reg('openOrder', id=>{
 async function loadLive(){
   // config → store name + currency (best-effort; keeps mock on any miss)
   try{ const cfg=await api('/config') || {};
+    state.cfg=cfg;
     // Store name lives at brand.me_footer.wordmark_text; currency at currency.symbol.
     // (The old code read store_name/currency_symbol, which don't exist — so the app
     //  kept showing the fake "Maru Studio" and could render currency as [object Object].)
@@ -1952,6 +2021,8 @@ async function loadLive(){
   }})).catch(()=>{});
   api('/order-channel-counts').then(d=>set(()=>{ if(d) state.liveChannelCounts=d; })).catch(()=>{});
 
+  api('/setup').then(d=>set(()=>{ if(d&&d.percent!=null) state.setup=d; })).catch(()=>{});
+  api('/delivery-zones').then(r=>set(()=>{ if(Array.isArray(r)) state.zones=r; })).catch(()=>{});
   api('/stores').then(r=>set(()=>{ if(Array.isArray(r)) state.stores=r.filter(s=>s.is_active==null||s.is_active); })).catch(()=>{});
   api('/categories').then(r=>set(()=>{ if(Array.isArray(r)&&r.length) DB.categories=r.map(mapCategory); })).catch(()=>{});
   api('/purchases').then(r=>set(()=>{ if(Array.isArray(r)&&r.length) DB.purchasing=r.map(mapPurchase); })).catch(()=>{});

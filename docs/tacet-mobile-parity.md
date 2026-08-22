@@ -133,6 +133,32 @@ desktop is the right home
 
 ---
 
+## 2b. The screens that invented their content
+
+Worse than a button that does nothing: a screen that shows numbers an operator
+will believe. Ten of them rendered sample data with no live source behind it.
+
+| Screen | Showed | Now |
+|---|---|---|
+| Open your store (More card + screen) | "50% set up · 3 steps left" — the same for every store on earth | Real, from `GET /setup` |
+| FAQ & help | three invented questions | The store's own `faq.questions` |
+| Legal pages | "Terms of service · Updated 2026-05-01" | The real documents and their real dates, expandable to read |
+| Pop-ups | a mocked-up "Welcome! Get ¥10 off" card | The real `popups.list`, with live/off and its window |
+| About page | an invented tagline and an invented story, over a Save that saved nothing | The published about content, read-only |
+| Delivery | "6 zones · JD · kd100 · 2 pickup points" — three numbers typed once | The real zone count; the two with no source are gone |
+| Share cards | invented share counts | An honest "made on desktop" |
+| Social proof | "12 people bought this today" and a toggle over nothing | An honest "set up on desktop" |
+| Product stock | one flat number for a multi-store catalogue | Per store, from `GET /products/:id/store-stocks` |
+
+**A regression net came with it.** `npm run test:mobile-screens` renders every
+tab, every pushed screen, every sheet, both languages and both themes, and
+fails on any uncaught error. It exists because of how this class of bug hides:
+when a render throws, the previous screen stays on the glass, so the tap looks
+ignored and a screenshot of the broken screen shows the working one. A missing
+helper shipped that way during this very pass.
+
+---
+
 ## 3. What it would take
 
 Ordered by what an operator loses today, not by effort.
