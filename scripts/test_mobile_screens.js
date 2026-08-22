@@ -87,6 +87,16 @@ function buildCases(src) {
     // Purchasing reads a live ledger, so the sweep seeds one — otherwise every
     // pass renders the loading state and proves nothing about the rows.
     'push:purchasing-rows': "state.posTried=true;state.pos=[{id:4,po_number:'RPO-0004',supplier:'Fresh Co.',store_name_en:'Tianhe',date:'2026-08-14',delivery_date:'2026-08-16',status:'Ordered',line_count:6,received_lines:0,total_cost:3240},{id:5,po_number:'RPO-0005',supplier:'Oat Works',date:'2026-08-20',delivery_date:'2026-08-30',status:'Delivered',line_count:3,received_lines:3,total_cost:1880}];APP.cmd('push','purchasing')",
+    // Categories reads the storefront's two-level tree plus its counts.
+    'push:categories-tree': "state.catsTried=true;state.cats=[{id:'dry',name:'Dry & Pantry',name_cn:'干货',subs:[{id:'nuts',name:'Nuts & Seeds',name_cn:'坚果'},{id:'jams',name:'Jams',name_cn:'果酱'}]},{id:'drinks',name:'Drinks',name_cn:'饮品',subs:[]}];state.catCounts={dry:{n:14,published:14},nuts:{n:9,published:9},jams:{n:5,published:0},drinks:{n:0,published:0}};APP.cmd('push','categories')",
+    'push:categories-sub': "state.catsTried=true;state.cats=[{id:'dry',name:'Dry & Pantry',name_cn:'干货',subs:[{id:'nuts',name:'Nuts & Seeds',name_cn:'坚果'}]}];state.catCounts={dry:{n:14,published:14},nuts:{n:9,published:9}};state.catTop='dry';APP.cmd('push','categories')",
+    'push:categories-empty': "state.catsTried=true;state.cats=[];state.catCounts={};APP.cmd('push','categories')",
+    'push:categories-error': "state.catsTried=true;state.catsErr='Could not load the categories.';APP.cmd('push','categories')",
+    // Stock activity reads a live envelope (rows + summary + digest), so the
+    // sweep seeds one — otherwise every pass renders "Loading…".
+    'push:activity-rows': "state.actTried=true;state.act={total:2,rows:[{id:1,ts_local:'2026-08-22 09:12:00',source:'miniapp',store:'Tianhe',sku:'OM-1L',product:'Oat milk 1L',delta:-2,balance_after:10},{id:2,ts_local:'2026-08-22 08:02:00',source:'manual',store:'Tianhe',sku:'CR-01',product:'Carrots',delta:12,balance_after:0,actor_label:'Mei',note:'recount'}],summary:[{source:'miniapp',events:1,units_out:2,units_in:0},{source:'manual',events:1,units_out:0,units_in:12}],digest:{zeroed:[{ts_local:'2026-08-22 08:02:00',product:'Carrots',sku:'CR-01'}],big:[{ts_local:'2026-08-22 08:02:00',source:'manual',product:'Carrots',delta:12,actor_label:'Mei'}],zeroed_total:1}};APP.cmd('push','activity')",
+    'push:activity-quiet': "state.actTried=true;state.act={total:0,rows:[],summary:[],digest:{zeroed:[],big:[],zeroed_total:0}};APP.cmd('push','activity')",
+    'push:activity-error': "state.actTried=true;state.actErr='Could not load stock activity.';APP.cmd('push','activity')",
     'push:purchasing-empty': "state.posTried=true;state.pos=[];APP.cmd('push','purchasing')",
     'push:purchasing-error': "state.posTried=true;state.posErr='Could not load purchase orders.';APP.cmd('push','purchasing')",
     'sheet:po': "state.posTried=true;state.pos=[];APP.cmd('push','purchasing');state.poId=4;state.poDetail={id:4,po_number:'RPO-0004',supplier:'Fresh Co.',store_name_en:'Tianhe',date:'2026-08-14',delivery_date:'2026-08-16',status:'Ordered',total_cost:3240,notes:'Back door before 9.',items:[{id:1,name_en:'Oat milk 1L',sku:'OM-1L',qty:48,unit:'btl',total_cost:1440,current_stock:12},{id:2,name_en:'Carrots',sku:'CR-01',qty:20,unit:'kg',total_cost:1800,qty_received:18,damaged_qty:2}]};render()",
@@ -162,6 +172,29 @@ function main() {
     if (missing.length) {
       for (const n of missing) console.error(`FAIL static — ${n}() is called but never defined`);
       console.error(`\n${missing.length} helper${missing.length === 1 ? '' : 's'} called but not defined.`);
+      process.exit(1);
+    }
+  }
+
+  // ── Static pass: the sample-data block still has all its keys ───────────
+  // Three separate edits have now replaced a SLICE of this file — from one
+  // landmark to the next — and silently taken everything in between with it.
+  // Twice that was a screen, caught by the sweep; once it was a helper, caught
+  // by the check above; once it was 5,600 characters of DB (invoices through
+  // customers), and the only reason it was caught is that a screen happened to
+  // call .filter on one of them. Every key the app reads as DB.x must be in the
+  // literal that defines DB.
+  {
+    const raw = (src.match(/<script>([\s\S]*?)<\/script>/) || [])[1] || '';
+    const js2 = raw.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+    const lit = (js2.match(/\bconst DB\s*=\s*\{([\s\S]*?)\n\};/) || [])[1] || '';
+    if (!lit) { console.error('FAIL static — cannot find the DB literal'); process.exit(1); }
+    const have = new Set([...lit.matchAll(/\n {2}([a-zA-Z_$][\w$]*)\s*:/g)].map((m) => m[1]));
+    const read = new Set([...js2.matchAll(/\bDB\.([a-zA-Z_$][\w$]*)/g)].map((m) => m[1]));
+    const gone = [...read].filter((k) => !have.has(k)).sort();
+    if (gone.length) {
+      for (const k of gone) console.error(`FAIL static — DB.${k} is read but the DB literal has no such key`);
+      console.error(`\n${gone.length} DB key${gone.length === 1 ? '' : 's'} read but not defined.`);
       process.exit(1);
     }
   }

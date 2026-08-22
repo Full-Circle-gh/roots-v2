@@ -443,6 +443,58 @@ never find.
 empty ledger, the failed load, and that the confirm asks before anything is
 sent.
 
+### Stock activity (`13-activity.js`)
+
+Five rows hard-coded into `DB.activity` — "Organic carrots · Order RT-…047 ·
+sold · −4" and four friends — overwritten by the live fetch only
+`if (rows.length)`. A ledger is opened on the days you are *not* sure anything
+moved, and on exactly those days it showed five movements that never happened.
+It also threw away everything a ledger is for.
+
+| Desktop capability | Phone |
+|---|---|
+| The rows are the server's | ❌ → ✅ — and a quiet range now says "Nothing moved in this range" |
+| Time of the move | ❌ → ✅ — clock on a same-day window, month-day on a range, same rule |
+| Channel it came through | ❌ → ✅ — including Meituan split per storefront (Tianhe / Yuexiu) |
+| Store | ❌ → ✅ |
+| Delta, and the **balance it left behind** | ❌ → ✅ — a zero balance is the only amber on this ledger |
+| Who made a manual move, and the note | ❌ → ✅ |
+| Date window: today / 7 days / 30 days | ❌ → ✅ — today is the default, which is what the endpoint defaults to |
+| Channel tabs with event counts | ✅ — as chips. Counts come from the server's *unfiltered* summary, so they do not move when you switch channel |
+| Caption: channel · events · out · in | ✅ |
+| Digest "Hit zero" | ✅ |
+| Digest "Big moves", crediting the person on a manual one | ✅ |
+| Digest "By channel" | ➖ — the chips already carry every channel and its count, which is the same tally |
+| Paging | ✅ — Show more, with how far in you are |
+| CSV export | ➖ decided: desktop. It is a download, and a phone has nowhere to put it |
+| Live 15s auto-refresh | ➖ — the desktop polls because the tab sits open all day |
+| Free-text search, store filter | ➖ |
+
+`scripts/test_mobile_activity.js` — 33 assertions, 8 cases.
+
+### Categories (`catLoad`, `01-core.js`)
+
+The phone was reading the wrong shelves. `/categories` is a **flat** list out of
+the legacy `categories` table, counted over the legacy `store_products.category`
+column. The shop does not run on that: the storefront renders a **two-level
+tree** held in `storefront_config`, and every product is tagged with
+`top_category` + `subcategory` from it. So the phone showed a different set of
+shelves, with different counts, from the ones a shopper sees — and when the flat
+list came back empty, six invented ones ("Fresh produce 24", "Bakery 12") that
+were in neither scheme.
+
+| Desktop capability | Phone |
+|---|---|
+| The shop's real tree | ❌ → ✅ — `/category-tree` + `/category-counts`, the pair the desktop editor reads |
+| Top categories, and their subcategories | ❌ → ✅ — tap a top to drill in |
+| Counts per node | ❌ → ✅ — and *published* vs total, which is the distinction that matters |
+| **A shelf with products but none published is invisible in the shop** | ❌ → ✅ — named when there is one, counted when there are several, amber either way. A shelf with nothing on it reads "empty", which is a different thing and gets no amber |
+| Status line: tops · subs · hidden shelves | ✅ |
+| Rename / add / delete / drag to reorder, with autosave | ➖ decided: desktop. It is a drag-to-sort tree editor, and a rename migrates every product row that referenced the old name. The screen says so rather than offering a row that does nothing — which is what it used to do |
+| Per-category product list | ➖ — the Products screen filters by category already |
+
+`scripts/test_mobile_categories.js` — 24 assertions, 9 cases.
+
 ## 4. Open questions
 
 Not gaps — decisions that are the shop's to make, not this file's.
