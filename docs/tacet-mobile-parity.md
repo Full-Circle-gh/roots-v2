@@ -217,7 +217,22 @@ Ordered by what an operator loses today, not by effort.
 | ~~15~~ | ~~Invented content: Affiliate overview, Invoice counts, the fapiao banner, the Recap's fallback~~ | | **Done 2026-08-22** |
 | ~~16~~ | ~~Sales board on real channel status~~ | `/channel-status` + `/sales/summary` | **Done 2026-08-22** |
 
-Nothing above needs a new endpoint. Every one of them needs the same three
-states the rulebook already requires and the order actions now demonstrate:
-the control disables and says what it is doing, a refusal renders where the
-operator is looking and stays, and a toast confirms but never reports failure.
+Nothing above needed a new endpoint, and as of 2026-08-22 every row is struck
+through. Each was built to the same three states the rulebook requires and the
+order actions demonstrate: the control disables and says what it is doing, a
+refusal renders where the operator is looking and stays, and a toast confirms
+but never reports failure.
+
+## 4. Open questions
+
+Not gaps — decisions that are the shop's to make, not this file's.
+
+| Question | Why it is not decided here |
+|---|---|
+| Should the phone be able to open and close a sales channel? | It is the most phone-shaped write in the whole app — you are standing in a slammed kitchen and you want Meituan off — and also the heaviest, because it stops orders arriving. Reading the state is shipped; the switch is not. |
+| Should marking an off-app payment as paid move to the phone? | It records WHICH tender the money came in as. A phone that cannot ask would put "unknown" on the books, so it needs a tender chooser designed before it moves. |
+
+Settled already, and recorded above rather than re-litigated: editing a ship-to
+address stays on the desktop (seven fields with Chinese address matching behind
+them); the staff note needs backend work before any surface can edit it;
+line-level refund amounts stay on the desktop.
