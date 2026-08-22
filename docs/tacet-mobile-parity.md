@@ -285,6 +285,44 @@ columns of fact. Reported from production, then swept column by column.
 |---|---|
 | Fixed rail + topbar | ✅ five-tab bar at the bottom; **no top bar** — search and the inbox ride the page header, the account lives in More. 79 px of glass returned on every screen |
 
+### Customers — the second sweep
+
+| Desktop | Phone |
+|---|---|
+| Stat strip: Buyers, Returning rate, Never ordered | ✅ as one line |
+| ↳ New today | ➖ — the "New this week" chip carries its own count and covers the same question |
+| ↳ Blocked count | ➖ — the Blocked chip appears only when there are any, which says it |
+| Segments: All / New this week / Sleeping 60d+ / Blocked | ✅ |
+| Tier filter | ✅ (single-select chips; the desktop's is multi-select) |
+| Channel filter | ✅ |
+| Search by name or phone | ✅ |
+| **Sort** | ✅ — seven orderings, the endpoint's own. **Neither surface had a sort control**: the desktop sets `last_seen` once and never changes it, which is why "show me the newest customer" had no answer anywhere |
+| Row: name, blocked, phone, tier, orders, spend, points, wallet, last seen | ✅ |
+| ↳ Channel column | ✅ — named only when it is not the default, since a column reading "WeChat" 1,300 times is not information |
+| ↳ the date on the row | ✅ — it now says whether it is a visit or a signup, and follows the sort |
+| Pager with page-size picker | ✅ Load more, with a real total |
+
+### Customer record — the drawer's eleven blocks
+
+| Desktop block | Phone |
+|---|---|
+| Stats: orders, spend, avg, points, wallet, joined | ✅ |
+| Recent orders | ✅ |
+| Addresses | ✅ read-only |
+| **Top items** | ✅ |
+| **Points ledger** | ✅ — where each point came from |
+| **Top-ups** | ✅ — with the bonus, and a failed one saying so |
+| **Vouchers held / used** | ✅ |
+| **Reviews written + average** | ✅ |
+| **Referrals**: their code, who referred them, who they brought | ✅ |
+| **Last order / last sign-in / devices signed in** | ✅ |
+| Diagnostics | ✅ |
+| Activity chart by month | ➖ — a chart is the desktop's affordance; the figures behind it are all on the phone |
+| Message, Adjust points, Adjust wallet, Block | ✅ |
+| Edit profile (name, phone, email) | ✖ **question for the shop** |
+| Sign out all devices | ✖ **question for the shop** |
+| Address edit / delete / set default | ➖ decided: desktop |
+
 ## 4. Open questions
 
 Not gaps — decisions that are the shop's to make, not this file's.

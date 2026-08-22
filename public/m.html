@@ -265,7 +265,7 @@ const state = {
   tab:'home', theme:'light', lang:'en', live:true, sound:true,
   stack:[], statusF:'all', channelF:'all', inboxSeg:'reviews',
   custSeg:'all', custTier:'all', custChan:'all', custQ:'', customers:null, custMeta:null, custLoaded:false,
-  custTotal:null, custMore:false,
+  custTotal:null, custMore:false, custSort:'last_seen',
   custId:null, custDetail:null, prodView:'catalogue',
   prodQ:'', prodStatus:'all', prodCat:'all', catalogueTried:false, catalogueLoading:false,
   workOpen:false, workEvents:null, workLoading:false, workErr:null,
@@ -482,6 +482,12 @@ reg('saveProduct', ()=>saveProductEdits());
 reg('custSeg', v=>{ state.custSeg=v; loadCustomers(); });
 reg('custTier', v=>{ state.custTier=v; loadCustomers(); });
 reg('custChan', v=>{ state.custChan=v; loadCustomers(); });
+reg('custSortPick', ()=>{
+  state.ask={title:T('Sort customers','顾客排序'),
+    options:CUST_SORTS.map(c=>({key:c.key,label:T(c.en,c.zh)+(c.key===(state.custSort||'last_seen')?' ✓':'')})),
+    run:k=>{ if(!k) return; state.custSort=k; loadCustomers(); }};
+  render();
+});
 reg('custMore', ()=>{ if(!state.custLoading) loadCustomers(true); });
 reg('custSearch', v=>{ const el=document.getElementById('mCustQ');
   state.custQ=String(v||''); state.focus={id:'mCustQ',pos:el?el.selectionStart:null}; render(); });
@@ -2628,7 +2634,8 @@ function mapCustomer(r){
     points:Number(r.points_balance||0),
     wallet:Number(r.balance||0),
     chan:String(r.channel||'').toLowerCase()||null,
-    seen:r.last_login_at||r.created_at,
+    seen:r.last_login_at||null, joined:r.created_at||null,
+    everSeen:!!r.last_login_at,
     unseen:!r.seen_at, blocked:!!r.is_blocked,
   };
 }
@@ -2655,14 +2662,34 @@ function custCard(c){
         <span class="pill" style="background:rgba(88,96,110,.10);color:var(--text-secondary)">${T(...tier)}</span>
         ${c.blocked?`<span class="pill" style="background:var(--brick-tint);color:var(--brick)">${T('Blocked','已封禁')}</span>`:''}
       </span>
-      <span class="num" style="display:block;font-size:13px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.phone||'—'} · ${c.orders?T(c.orders+' orders',c.orders+' 单'):T('No orders','暂无订单')}</span>
+      <span class="num" style="display:block;font-size:13px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.phone||'—'} · ${c.orders?T(c.orders+' orders',c.orders+' 单'):T('No orders','暂无订单')}${custChanNote(c)}</span>
     </span>
     <span style="flex:none;text-align:right">
       <span class="num" style="display:block;font-size:15px;font-weight:500;${c.spend?'':'color:var(--text-secondary)'}">${money(CUR,c.spend)}</span>
-      <span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${fmtDay(c.seen)}</span>
+      ${custWhen(c)}
       ${custHolds(c)}
     </span>
   </button>`;
+}
+/* The desktop gives the signup channel a column of its own. Nearly every row in
+   it says "WeChat", because that is where the shop's customers come from — so on
+   a phone the column would be a word repeated 1,300 times. Name the exception
+   instead: a web signup or one a member of staff typed in is worth knowing. */
+const CUST_CHAN={web:['web','网页'],manual:['added by staff','员工添加']};
+function custChanNote(c){
+  const k=CUST_CHAN[c.chan];
+  return k?' · '+T(...k):'';
+}
+/* The row used to print a bare time under the spend — "3:14 PM" — with nothing
+   saying whether that was a visit or a signup. It is whichever one the list is
+   ordered by, and it now says which. A customer who has never logged in has no
+   last-seen at all; that is a fact, not a blank. */
+function custWhen(c){
+  const bySignup=(state.custSort||'last_seen')==='recent_signup';
+  const when = bySignup ? c.joined : (c.everSeen?c.seen:null);
+  const word = bySignup ? T('joined','加入') : T('seen','活动');
+  if(!when) return `<span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${T('never signed in','未登录过')}</span>`;
+  return `<span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${word} ${fmtDay(when)}</span>`;
 }
 /* Points and a wallet balance are money the shop is holding. Rendered only when
    there is some — a column of zeroes is what the desktop greys out, and a phone
@@ -2709,7 +2736,10 @@ function screenCustomers(){
   const chans=[{key:'all',en:'All channels',zh:'全部渠道'},{key:'wechat',en:'Mini app',zh:'小程序'},
     {key:'web',en:'Web',zh:'网页'},{key:'manual',en:'Added by staff',zh:'员工添加'}];
   return `${pageHead({title:T('Customers','顾客'), controls:true})}
-    ${pulse?`<p class="num" style="margin:-8px 0 16px;padding:0 16px;font-size:13px;color:var(--text-secondary)">${pulse}</p>`:''}
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:0 16px 12px">
+      <span class="num" style="font-size:13px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${pulse||''}</span>
+      <button onclick="APP.cmd('custSortPick')" style="flex:none;display:inline-flex;align-items:center;gap:4px;background:none;border:none;padding:2px 0;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--text-primary)">${custSortLabel()} ${ic('chevron-down',14,2)}</button>
+    </div>
     <div style="padding:0 16px 12px"><input id="mCustQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.custQ)}"
       placeholder="${T('Search name or phone','搜索姓名或手机')}" style="width:100%"
       oninput="APP.cmd('custSearch',this.value)"
@@ -2731,6 +2761,89 @@ function screenCustomers(){
    server already computes, and none of the write flows (points, wallet, block)
    exist on the phone yet. Opening it stamps seen_at server-side, which is what
    settles the row's unseen surface on the way back. */
+/* ---- the customer record's remaining sections -------------------------
+   The desktop's drawer carries eleven blocks. The phone rendered four of them
+   and fetched all eleven — every one of these reads a field the same call
+   already returned. */
+function custSection(title,body,right){
+  if(!body) return '';
+  return `<div style="margin-top:16px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:8px">
+      <span style="font-size:13px;font-weight:500;color:var(--text-secondary)">${title}</span>
+      ${right||''}</div>${body}</div>`;
+}
+const custRow=(l,r,sub)=>`<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:11px 16px">
+  <span style="min-width:0"><span style="display:block;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${l}</span>
+  ${sub?`<span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary);margin-top:2px">${sub}</span>`:''}</span>
+  <span class="num" style="flex:none;font-size:14.5px;text-align:right">${r}</span></div>`;
+const custList=rows=>rows.length?`<div class="list">${rows.map((r,i)=>(i?'<div class="sep"></div>':'')+r).join('')}</div>`:'';
+
+/* What this person actually buys — the desktop's Top items. */
+function custTopItems(d){
+  const t=(d.top_items||[]).slice(0,5);
+  if(!t.length) return '';
+  return custSection(T('What they buy','常购商品'), custList(t.map(it=>
+    custRow(escAttr(LANG==='en'?(it.name_en||it.name_cn||'—'):(it.name_cn||it.name_en||'—')),
+            T('×'+(it.qty||it.total_qty||0), '×'+(it.qty||it.total_qty||0))))));
+}
+/* Where the points came from. A balance with no history behind it is a number
+   an operator has to take on trust, and points are the thing customers argue
+   about most. */
+const PT_SOURCE={order:['from an order','订单获得'],admin_adjust:['adjusted by staff','员工调整'],
+  topup:['top-up bonus','充值赠送'],signup:['joining','注册赠送'],referral:['a referral','推荐奖励'],
+  review:['a review','评价奖励'],expire:['expired','已过期'],redeem:['spent','已使用']};
+function custPointsLedger(d){
+  const rows=(d.recent_points||[]).slice(0,6);
+  if(!rows.length) return '';
+  return custSection(T('Points ledger','积分明细'), custList(rows.map(r=>{
+    const src=PT_SOURCE[String(r.source||'').toLowerCase()];
+    const n=Number(r.delta)||0;
+    return custRow(src?T(...src):escAttr(r.source||'—'),
+      `<span style="color:${n<0?'var(--brick)':'var(--text-primary)'}">${n>0?'+':''}${n.toLocaleString()}</span>`,
+      [fmtDay(r.created_at), r.note?escAttr(r.note):''].filter(Boolean).join(' · '));
+  })));
+}
+/* Money the customer actually put in, and whether it landed. */
+function custTopups(d){
+  const rows=(d.recent_topups||[]).slice(0,5);
+  if(!rows.length) return '';
+  return custSection(T('Top-ups','充值明细'), custList(rows.map(r=>{
+    const ok=String(r.status||'').toLowerCase()==='success';
+    const method=r.payment_method==='admin_adjust'?T('by staff','员工调整'):escAttr(r.payment_method||'');
+    return custRow(money(CUR,r.amount)+(Number(r.bonus_points)?` <span style="font-size:12.5px;color:var(--text-secondary)">+${Number(r.bonus_points).toLocaleString()} ${T('pts','分')}</span>`:''),
+      ok?'':`<span style="color:var(--brick);font-size:13px">${escAttr(r.status||'')}</span>`,
+      [fmtDay(r.paid_at||r.created_at), method].filter(Boolean).join(' · '));
+  })));
+}
+/* Who brought them, and who they have brought. */
+function custAffiliate(d){
+  const a=d.affiliate; if(!a) return '';
+  const sum=a.summary||{};
+  const rows=[];
+  if(a.referral_code) rows.push(custRow(T('Their code','本人邀请码'),`<span class="num">${escAttr(a.referral_code)}</span>`));
+  if(a.referred_by) rows.push(custRow(T('Referred by','推荐人'),escAttr(a.referred_by.nickname||a.referred_by.phone||('#'+a.referred_by.id))));
+  if(Number(sum.total)) rows.push(custRow(T('Friends invited','已邀请'),
+    T(sum.total+' · '+(sum.converted||0)+' ordered', sum.total+' 位 · '+(sum.converted||0)+' 位已下单'),
+    Number(sum.earned)?T(money(CUR,sum.earned)+' rewarded','已发放 '+money(CUR,sum.earned)):''));
+  if(!rows.length) return '';
+  return custSection(T('Referrals','推荐'), custList(rows));
+}
+/* The one-line facts the desktop keeps in its header strip. Each renders only
+   when the server actually returned it — a dash here would be a claim. */
+function custFacts(d,c,st){
+  const o=(st.orders)||{}, v=(st.vouchers)||{}, rv=(st.reviews)||{};
+  const rows=[];
+  if(o.last_order_at) rows.push(custRow(T('Last order','最近订单'),fmtDay(o.last_order_at)));
+  if(c.last_login_at) rows.push(custRow(T('Last signed in','最近登录'),fmtDay(c.last_login_at)));
+  if(Number(v.unused)) rows.push(custRow(T('Vouchers held','持有优惠券'),String(v.unused),
+    Number(v.used)?T(v.used+' used','已用 '+v.used):''));
+  if(Number(rv.count)) rows.push(custRow(T('Reviews written','已写评价'),String(rv.count),
+    rv.avg_rating?T(Number(rv.avg_rating).toFixed(1)+' average',Number(rv.avg_rating).toFixed(1)+' 平均分'):''));
+  if(Number(st.active_sessions)) rows.push(custRow(T('Signed in on','已登录设备'),
+    T(st.active_sessions+(st.active_sessions===1?' device':' devices'), st.active_sessions+' 台')));
+  if(!rows.length) return '';
+  return custSection(T('Account','账户'), custList(rows));
+}
 function sheetCustomer(){
   const d=state.custDetail;
   const c=(d&&d.customer)||{};
@@ -2765,6 +2878,11 @@ function sheetCustomer(){
       <div style="font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${T('Addresses','地址')}</div>
       <div class="list">${d.addresses.slice(0,3).map((a,i)=>`${i?'<div class="sep"></div>':''}
         <div style="padding:12px 16px;font-size:15px">${[a.city,a.district,a.detail].filter(Boolean).join(' · ')||'—'}</div>`).join('')}</div></div>`:''}
+    ${custTopItems(d)}
+    ${custPointsLedger(d)}
+    ${custTopups(d)}
+    ${custAffiliate(d)}
+    ${custFacts(d,c,st)}
     <div style="margin-top:16px;font-size:13px;color:var(--text-secondary)">${
       d.diagnostics && d.diagnostics.unavailable ? T('Diagnostics could not be read.','诊断数据读取失败。')
       : d.diagnostics && d.diagnostics.error_count_7d ? T(d.diagnostics.error_count_7d+' app errors in 7 days', '近 7 天 '+d.diagnostics.error_count_7d+' 次报错')
@@ -3009,6 +3127,21 @@ async function apiRaw(path){
   if(!r.ok) throw new Error('HTTP '+r.status);
   return r.json();
 }
+/* The roster is ordered by LAST ACTIVITY, which is the desktop's default too —
+   and which buries the customer who signed up ten minutes ago and has not come
+   back, because "never logged in" sorts to the tail whatever the direction. So
+   "show me the newest" had no answer on either surface. The endpoint has
+   supported these seven orderings all along; nothing was driving them. */
+const CUST_SORTS=[
+  {key:'last_seen',en:'Last seen',zh:'最近活动'},
+  {key:'recent_signup',en:'Newest first',zh:'最新加入'},
+  {key:'spend',en:'Most spent',zh:'消费最多'},
+  {key:'orders',en:'Most orders',zh:'下单最多'},
+  {key:'points',en:'Most points',zh:'积分最多'},
+  {key:'wallet',en:'Biggest wallet',zh:'钱包最多'},
+  {key:'name',en:'Name',zh:'按姓名'},
+];
+const custSortLabel=()=>{ const c=CUST_SORTS.find(x=>x.key===(state.custSort||'last_seen'))||CUST_SORTS[0]; return T(c.en,c.zh); };
 /* The tier chips used to filter the fifty rows the phone happened to hold, so
    on a roster of 1,200 "Tree" showed whichever Tree customers were in the first
    page and the rest were invisible. Every filter is the server's now — tier,
@@ -3024,6 +3157,7 @@ function custQuery(offset){
   const t=state.custTier||'all'; if(t!=='all') qs.set('tier',t);
   const ch=state.custChan||'all'; if(ch!=='all') qs.set('channel',ch);
   if(state.custQ) qs.set('q',state.custQ);
+  qs.set('sort',state.custSort||'last_seen');
   return qs.toString();
 }
 async function loadCustomers(more){
