@@ -951,7 +951,10 @@ function orderMetaLine(o){
   const bits=[];
   const many=(state.stores||[]).length>1;
   if(o.store&&many) bits.push(T(...o.store));
-  if(o.items_n!=null) bits.push(T(o.items_n+(o.items_n===1?' item':' items'), o.items_n+' 件'));
+  // "products", not "items" — the list only knows how many LINES an order has
+  // (the endpoint counts rows, not units), and the drawer now says products and
+  // units apart. One word for one number, across both surfaces.
+  if(o.items_n!=null) bits.push(T(o.items_n+(o.items_n===1?' product':' products'), o.items_n+' 款'));
   if(o.routeNote) bits.push(o.routeNote);
   if(!bits.length) return '';
   return `<div style="font-size:12.5px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${bits.join(' · ')}</div>`;
@@ -2278,15 +2281,24 @@ function sheetOrderDetail(){
    </div>`;
 }
 /* One line of an order. Same shape whether it sits loose or inside a parcel. */
+/* One line of an order, read by someone with a box in front of them. Two things
+   on it must not be skimmed past, and both were set in the same muted grey as
+   everything else: a quantity greater than one, and the variant the customer
+   actually chose. The desktop marks the first with .qty-multi — Ink, weight 500,
+   against the Graphite of a plain ×1 — and this is that rule. */
 function itemRow(it){
-  const sku=it[3], img=it[4];
+  const sku=it[3], img=it[4], opts=it[5];
+  const qty=Number(it[0])||1, many=qty>1;
   return `<div style="display:flex;align-items:center;gap:12px;padding:10px;border:1px solid var(--border-default);border-radius:14px;background:var(--surface-card)">
     <span style="width:44px;height:44px;border-radius:10px;flex:none;overflow:hidden;background:var(--surface-raised);border:1px solid var(--border-default);display:flex;align-items:center;justify-content:center;color:var(--text-secondary)${img?`;background-image:url('${String(img).replace(/'/g,'%27')}');background-size:cover;background-position:center;border-color:transparent`:''}">${img?'':ic('package',22)}</span>
     <span style="flex:1;min-width:0">
       <span style="display:block;font-size:14.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it[1]}</span>
+      ${opts?`<span style="display:block;font-size:13px;font-weight:500;color:var(--text-primary);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(T(...opts))}</span>`:''}
       ${sku?`<span class="num" style="display:inline-flex;align-items:center;gap:4px;font-size:10.5px;color:var(--text-secondary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:6px;padding:1px 6px;margin-top:4px">${ic('barcode',11)}${sku}</span>`:''}
     </span>
-    <span style="text-align:right;flex:none"><span class="num" style="display:block;font-size:14px">${it[2]}</span><span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary);margin-top:1px">×${it[0]}</span></span></div>`;
+    <span style="text-align:right;flex:none">
+      <span class="num" style="display:block;font-size:14px">${it[2]}</span>
+      <span class="num" style="display:block;margin-top:1px;font-size:${many?'15px':'12.5px'};font-weight:${many?'500':'400'};color:var(--${many?'text-primary':'text-secondary'})">×${qty}</span></span></div>`;
 }
 /* ---- Tracking, hoisted -------------------------------------------------
    Once a parcel is on its way, the thing the operator watches is its waybill
@@ -2401,28 +2413,40 @@ function parcelCard(o,sp,i,n){
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
       <span style="display:flex;align-items:center;gap:8px;min-width:0;color:var(--text-secondary)">${ic(m.icon,17)}
         <span style="font-size:14.5px;font-weight:500;color:var(--text-primary)">${T(m.en,m.zh)}</span>
-        <span class="num" style="font-size:12.5px">${T(sp.units+' items',sp.units+' 件')}</span></span>
+        <span class="num" style="font-size:12.5px">${countLabel(sp.items.length,sp.units)}</span></span>
       ${pill(st.kind,T(st.en,st.zh))}</div>
     ${sp.items.length?`<div style="display:flex;flex-direction:column;gap:8px">${sp.items.map(itemRow).join('')}</div>`:''}
     ${sp.trk&&sp.trk.number?`<div style="padding-top:10px;border-top:1px solid var(--border-default);font-size:12.5px;color:var(--text-secondary)">${T('Tracking is at the top of this order','物流信息在本单顶部')}</div>`:''}
     ${canDispatch?`<button class="btn2" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('dispatchParcel',${sp.id})">${busy?T('Marking…','处理中…'):T('Mark this parcel dispatched','标记此包裹已发货')}</button>`:''}
   </div>`;
 }
+/* PRODUCTS is how many lines to pick; UNITS is how many things go in the box.
+   They diverge the moment one line has a quantity over one, and the drawer was
+   printing lines in the heading and units on the parcel card — both labelled
+   "items", one saying 5 and the other 6, eight pixels apart. The desktop names
+   them, and only when they actually differ. */
+function countLabel(lines,units){
+  return units!==lines
+    ? T(lines+(lines===1?' product · ':' products · ')+units+' units', lines+' 款 · '+units+' 件')
+    : T(lines+(lines===1?' product':' products'), lines+' 款');
+}
 function orderItemsBlock(o){
   const ships=o.shipments||[];
   const loose=ships.length?(o.loose||[]):(o.items||[]);
-  const n=(o.items||[]).length;
+  const all=o.items||[];
+  const n=all.length;
+  const units=all.reduce((t,it)=>t+(Number(it[0])||0),0);
   if(!ships.length){
-    return `<div><div class="eyebrow" style="padding:4px 4px 8px">${n} ${T('items','件')}</div>
-      <div style="display:flex;flex-direction:column;gap:8px">${(o.items||[]).map(itemRow).join('')}</div></div>`;
+    return `<div><div class="eyebrow" style="padding:4px 4px 8px">${countLabel(n,units)}</div>
+      <div style="display:flex;flex-direction:column;gap:8px">${all.map(itemRow).join('')}</div></div>`;
   }
-  return `<div><div class="eyebrow" style="padding:4px 4px 8px">${T(ships.length>1?ships.length+' parcels':'1 parcel', ships.length+' 个包裹')} · ${n} ${T('items','件')}</div>
+  return `<div><div class="eyebrow" style="padding:4px 4px 8px">${T(ships.length>1?ships.length+' parcels':'1 parcel', ships.length+' 个包裹')} · ${countLabel(n,units)}</div>
     <div style="display:flex;flex-direction:column;gap:12px">
       ${ships.map((sp,i)=>parcelCard(o,sp,i,ships.length)).join('')}
       ${loose.length?`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:12px">
         <div style="display:flex;align-items:center;gap:8px;color:var(--text-secondary)">${ic('package',17)}
           <span style="font-size:14.5px;font-weight:500;color:var(--text-primary)">${T('Not yet in a parcel','待分配包裹')}</span>
-          <span class="num" style="font-size:12.5px">${T(loose.length+' items',loose.length+' 件')}</span></div>
+          <span class="num" style="font-size:12.5px">${countLabel(loose.length,loose.reduce((t,it)=>t+(Number(it[0])||0),0))}</span></div>
         <div style="display:flex;flex-direction:column;gap:8px">${loose.map(itemRow).join('')}</div></div>`:''}
     </div></div>`;
 }
@@ -3536,7 +3560,24 @@ function mapOrderRow(r){
     items:[], breakdown:[['Subtotal',money(CUR,r.subtotal!=null?r.subtotal:r.total)]].concat(r.shipping_fee?[['Delivery',money(CUR,r.shipping_fee)]]:[]),
   };
 }
-const ITEM_TUPLE=it=>[it.qty||it.quantity||1, it.name_en||it.name||it.name_cn||'Item', money(CUR,it.price||it.unit_price||0), it.sku||'', it.image_url||it.image||''];
+/* The choices the CUSTOMER made on this line — "Heat up?: Yes", a size, a
+   flavour. The phone dropped them entirely, so two lines of the same product in
+   different variants read as the same thing twice and a packer boxes the wrong
+   one. Kept as an EN/CN pair rather than resolved here, because the operator can
+   flip language after the order was mapped. */
+function itemOpts(it){
+  const arr=Array.isArray(it.options)?it.options:[];
+  const side=cn=>arr.map(o=>{
+    if(!o) return '';
+    const val=cn?(o.label_cn||o.label||''):(o.label||o.label_cn||'');
+    if(!val) return '';
+    const q=cn?(o.question_cn||o.question_en||''):(o.question_en||o.question_cn||'');
+    return q?(q+': '+val):val;
+  }).filter(Boolean).join(' · ');
+  const en=side(false), zh=side(true);
+  return en||zh?[en||zh, zh||en]:null;
+}
+const ITEM_TUPLE=it=>[it.qty||it.quantity||1, it.name_en||it.name||it.name_cn||'Item', money(CUR,it.price||it.unit_price||0), it.sku||'', it.image_url||it.image||'', itemOpts(it)];
 function mapDetail(o){
   const base=mapOrderRow(o);
   base.items=(o.items||[]).map(ITEM_TUPLE);
