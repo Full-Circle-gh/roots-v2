@@ -792,6 +792,20 @@ now stub `fetch` and assert what actually goes over the wire:
 
 `scripts/test_mobile_orders.js` — 11 assertions, 5 cases.
 
+### The Meituan mirror (`11-meituan.js`)
+
+The phone showed the order ledger and nothing about the channel's health.
+
+| Desktop capability | Phone |
+|---|---|
+| **A stuck stock queue** | ❌ → ✅ — the state worth naming. A queue mid-drain clears in seconds, so "107 sending…" and "107 stuck for 19 hours" are the same number on screen unless something reads how long the oldest push has waited. The desktop's own comment records a 19-hour stock freeze presenting as a normal tile. Same 30-minute line here, and it says what it costs: what Meituan shows is out of date |
+| Failed pushes, scoped to the last day | ❌ → ✅ |
+| A queue that is merely busy | ❌ → ✅ — reads "sending…", not an alarm |
+| **The sync service being unreachable** | ❌ → ✅ — the answer to "why has nothing come in". Fetched separately from the orders, so a cached order list cannot mask it |
+| Last order imported, products synced | ❌ → ✅ |
+| Order ledger | ✅ (already) |
+| Product matching, bundles, sync toggles, push-now, logs | ➖ decided: desktop |
+
 ## 4. Open questions
 
 Not gaps — decisions that are the shop's to make, not this file's.

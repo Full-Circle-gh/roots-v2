@@ -439,4 +439,49 @@ CASES.push(['ignoring posts to ignore', GZ + STUB + `APP.cmd('gzPickup',9,'ignor
   ['and never to apply', `!window.__sent.some(function(r){return r.u.indexOf('/apply')>=0})`],
 ]]);
 
+// ── The Meituan mirror's health ───────────────────────────────────────────
+// The state worth naming is a STUCK stock queue. A queue mid-drain clears in
+// seconds, so "107 sending…" and "107 stuck for 19 hours" are the same number
+// on screen unless something looks at how long the oldest push has waited. The
+// desktop's own comment records a 19-hour stock freeze presenting as a normal
+// tile. The phone showed no queue state at all.
+CASES.push(['a stuck stock queue', `state.mirror={meituan:[{id:'MT-1',cust:'Li',total:'¥88',when:'Today',store:'Tianhe'}]};
+  state.mtStatusTried=true; state.mtStatus={queuePending:107,queueFailed:0,queueOldestMin:1140,
+    mappedCount:212,lastOrder:[{imported_at:'2026-08-22 09:00:00',store_code:'tianhe'}]};
+  APP.cmd('push','mirror_meituan');`, [
+  ['it says stuck, not sending', `txt('content').includes('stuck for 19 h')`],
+  ['and what that means',        `txt('content').includes('out of date')`],
+  ['never "sending…"',           `!txt('content').includes('sending…')`],
+  ['the order list is still there', `txt('content').includes('MT-1')`],
+]]);
+
+CASES.push(['a queue that is merely busy', `state.mirror={meituan:[]}; state.mtStatusTried=true;
+  state.mtStatus={queuePending:12,queueFailed:0,queueOldestMin:2,mappedCount:212,lastOrder:[]};
+  APP.cmd('push','mirror_meituan');`, [
+  ['reads as sending', `txt('content').includes('12 sending…')`],
+  ['not as stuck',     `!txt('content').includes('stuck')`],
+]]);
+
+CASES.push(['failed pushes', `state.mirror={meituan:[]}; state.mtStatusTried=true;
+  state.mtStatus={queuePending:0,queueFailed:5,queueOldestMin:0,mappedCount:212,lastOrder:[]};
+  APP.cmd('push','mirror_meituan');`, [
+  ['are counted, and scoped to the last day', `txt('content').includes('5 stock pushes failed in the last day')`],
+]]);
+
+CASES.push(['a healthy channel', `state.mirror={meituan:[]}; state.mtStatusTried=true;
+  state.mtStatus={queuePending:0,queueFailed:0,queueOldestMin:0,mappedCount:212,
+    lastOrder:[{imported_at:'2026-08-22 09:00:00'}]};
+  APP.cmd('push','mirror_meituan');`, [
+  ['says everything is sent', `txt('content').includes('All stock pushes sent')`],
+  ['when the last order came', `txt('content').includes('Last order')`],
+  ['and how many products sync', `txt('content').includes('212 products synced')`],
+]]);
+
+CASES.push(['the sync service is offline', `state.mirror={meituan:null}; state.mtStatusTried=true;
+  state.mtOffline=true; APP.cmd('push','mirror_meituan');`, [
+  // The answer to "why has nothing come in".
+  ['it says so',       `txt('content').includes('sync service is offline')`],
+  ['and what stopped', `txt('content').includes('not being imported')`],
+]]);
+
 run('operator screens', CASES);

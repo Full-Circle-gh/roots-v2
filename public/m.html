@@ -280,6 +280,7 @@ const state = {
   cms:{}, cmsPage:'home', cmsErr:null, cmsTried:{},
   alipay:null, alipayTried:false, puBusy:null, puErr:null,
   gzFlagged:null, gzSummary:null, gzBusy:null, gzErr:null,
+  mtStatus:null, mtStatusTried:false, mtOffline:false,
   tiers:null, tierCounts:null, tiersErr:null, tiersTried:false,
   tup:null, tupPkgs:null, tupErr:null, tupTried:false, tupBusy:null,
   lb:null, lbErr:null, lbTried:false,
@@ -2960,6 +2961,12 @@ async function loadMirror(which){
   state.mirrorLoading=which; state.mirror=state.mirror||{}; render();
   try{
     if(which==='meituan'){
+      // Health first, and separately: the daemon being unreachable is the
+      // answer to "why has nothing come in", and it must not be swallowed by
+      // the orders fetch succeeding from cache.
+      try{ state.mtStatus=await apiRaw('/meituan/status'); state.mtOffline=false; }
+      catch(e){ if(String(e.message)!=='auth'){ state.mtStatus=null; state.mtOffline=true; } }
+      state.mtStatusTried=true;
       const rows=await api('/meituan/orders?limit=30');
       state.mirror.meituan=(Array.isArray(rows)?rows:[]).map(r=>({
         id:r.order_no||('#'+r.id), cust:r.recipient_name||'—', total:money(CUR,r.total),
@@ -2983,6 +2990,46 @@ async function loadMirror(which){
     }
   }catch(e){ if(String(e.message)==='auth') return; state.mirror[which]=null; }
   state.mirrorLoading=null; render();
+}
+/* Meituan's health, which the phone did not show at all.
+   --------------------------------------------------------------------------
+   The state worth naming is a STUCK stock queue. A queue mid-drain clears in
+   seconds, so "107 sending…" and "107 stuck for 19 hours" are the same number
+   on screen unless somebody looks at how long the oldest one has been waiting.
+   The desktop learned that the hard way — its own comment says a 19-hour stock
+   freeze presented as a normal-looking tile — and uses 30 minutes as the line.
+   This uses the same line, because a phone is where you would notice. */
+const MT_STUCK_MIN=30;
+function mtHealthCard(){
+  if(state.mtOffline) return `<div style="display:flex;flex-direction:column;gap:5px;background:var(--brick-tint);border-radius:14px;padding:14px 16px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="flex:none;color:var(--brick);display:flex">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14.5px;font-weight:500;color:var(--brick)">${T('The Meituan sync service is offline','美团同步服务离线')}</span></div>
+    <div style="font-size:13px;color:var(--brick);opacity:.9;line-height:1.5">${T('Orders are not being imported and stock is not being pushed.','订单未导入，库存也未推送。')}</div></div>`;
+  const st=state.mtStatus;
+  if(!st) return '';
+  const pending=Number(st.queuePending||0), failed=Number(st.queueFailed||0);
+  const oldest=Number(st.queueOldestMin||0);
+  const stuck=pending>0&&oldest>=MT_STUCK_MIN;
+  const stuckFor = oldest>=120 ? T(Math.round(oldest/60)+' h',Math.round(oldest/60)+' 小时')
+                               : T(oldest+' min',oldest+' 分钟');
+  const lo=(st.lastOrder&&st.lastOrder[0])||null;
+  let line, tone;
+  if(stuck){ tone='brick'; line=T('Stock pushes have been stuck for '+stuckFor+' — what Meituan shows is out of date.',
+                                  '库存推送已卡住 '+stuckFor+' — 美团上显示的库存已过期。'); }
+  else if(failed>0){ tone='amber'; line=T(failed+' stock push'+(failed===1?'':'es')+' failed in the last day'+(pending?' · '+pending+' sending…':''),
+                                          '最近一天有 '+failed+' 次库存推送失败'+(pending?' · '+pending+' 发送中…':'')); }
+  else if(pending>0){ tone='plain'; line=T(pending+' sending…',pending+' 发送中…'); }
+  else { tone='plain'; line=T('All stock pushes sent','库存推送已全部发送'); }
+  const bgs={brick:'var(--brick-tint)',amber:'rgba(201,149,74,0.12)',plain:'var(--surface-card)'};
+  const fgs={brick:'var(--brick)',amber:'#8A6425',plain:'var(--text-primary)'};
+  return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:7px;background:${bgs[tone]}${tone==='plain'?'':';border:none'}">
+    <div style="display:flex;align-items:center;gap:10px">
+      ${tone==='plain'?'':`<span style="flex:none;color:${fgs[tone]};display:flex">${ic('triangle-alert',18)}</span>`}
+      <span style="font-size:14.5px;font-weight:500;color:${fgs[tone]}">${line}</span></div>
+    <div class="num" style="font-size:12.5px;color:${tone==='plain'?'var(--text-secondary)':fgs[tone]};opacity:${tone==='plain'?1:.9}">${
+      lo ? T('Last order '+fmtDay(lo.imported_at),'最近订单 '+fmtDay(lo.imported_at)) : T('No orders yet','暂无订单')
+    }${st.mappedCount!=null?' · '+T(st.mappedCount+' products synced',st.mappedCount+' 件商品已同步'):''}</div></div>`;
 }
 /* The three modes the daemon can be in, and what each one means for stock.
    "shadow" is the one worth spelling out: it detects and logs and does NOT
@@ -3036,13 +3083,14 @@ function gzFlaggedBlock(){
 function mirrorScreen(which,note){
   const rows=(state.mirror&&state.mirror[which])||null;
   if(!rows&&state.mirrorLoading!==which&&!state.mirrorTried){ /* first paint kicks the load */ }
+  const mt = which==='meituan' ? mtHealthCard() : '';
   const gz = which==='gzgrocery'
     ? `${state.gzErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
         <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
         <span style="font-size:14px;color:var(--brick)">${state.gzErr}</span></div>`:''}${gzModeCard()}${gzFlaggedBlock()}`
     : '';
   if(!rows||!rows.length){
-    if(gz&&state.mirrorLoading!==which) return `<div style="padding:12px 16px 24px;display:flex;flex-direction:column;gap:16px">${gz}
+    if((gz||mt)&&state.mirrorLoading!==which) return `<div style="padding:12px 16px 24px;display:flex;flex-direction:column;gap:16px">${mt}${gz}
       <div style="padding:24px 8px;text-align:center;font-size:14px;color:var(--text-secondary);line-height:1.55">${
         rows?T('No pickups recorded yet.','暂无提货记录。'):T('The channel did not answer. Nothing is wrong with your orders — try again in a moment.','渠道没有响应。订单数据没有问题 — 请稍后重试。')}</div></div>`;
     if(state.mirrorLoading===which) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
@@ -3053,7 +3101,7 @@ function mirrorScreen(which,note){
       T('The channel did not answer. Nothing is wrong with your orders — try again in a moment.','渠道没有响应。订单数据没有问题 — 请稍后重试。'));
   }
   return `<div style="padding:12px 16px 24px;display:flex;flex-direction:column;gap:16px">
-    ${gz}
+    ${mt}${gz}
     <div style="display:flex;align-items:center;gap:12px;background:var(--surface-raised);border-radius:14px;padding:12px 16px"><span style="color:var(--text-secondary);display:flex;flex:none">${ic('eye',18)}</span><span style="font-size:13px;color:var(--text-secondary)">${note}</span></div>
     ${rows.map(o=>`<div class="card" style="display:flex;flex-direction:column;gap:8px;padding:16px">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
