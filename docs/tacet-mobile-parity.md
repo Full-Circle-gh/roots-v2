@@ -70,6 +70,8 @@ desktop is the right home
 | Today's KPIs with deltas | ✅ |
 | Unhandled-orders card (paid, nobody started) | ✅ — "Orders to start" |
 | Payment-mismatch fire | ✅ — "Payment doesn't match", opening the Pending list, with the brick mark on the row (and in the drawer) that says which order it is |
+| Payments-to-confirm fire (amber) | ✅ — a proof on file that nobody has accepted; same door |
+| The three proof states on the row | ✅ — rejected in brick; verified-but-unpaid and never-read in brass, mirroring `paymentCheckLine` |
 | Low-stock drawer with per-store counts | ➖ |
 | Activity feed ("Show the work") | ✖ — the Recap's fold is the brand's own affordance |
 | Reports chapters | ➖ |

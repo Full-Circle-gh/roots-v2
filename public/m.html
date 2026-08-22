@@ -752,7 +752,7 @@ function screenOrders(){
             <span style="font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${T(...o.cust)}</span>
             ${o.viewOnly?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('View only','只读')}</span>`:''}</span>
           ${pill(o.kind,T(...o.status))}</div>
-        ${o.payMismatch?`<div style="display:flex;align-items:center;gap:7px;color:var(--brick);font-size:13px">${ic('triangle-alert',15)}<span>${T("Payment doesn't match",'付款不一致')}</span></div>`:''}
+        ${o.payNote?`<div style="display:flex;align-items:center;gap:7px;color:var(--${o.payNote.sev});font-size:13px">${ic(o.payNote.icon,15)}<span>${T(...o.payNote.label)}</span></div>`:''}
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
           <span style="font-size:13px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...o.ship)}</span>
           ${o.by?`<span class="num" style="font-size:13px;color:${o.byAmber?'#8A6425':'var(--text-secondary)'};flex:none">${T(...o.by)}</span>`:''}</div>
@@ -1706,9 +1706,9 @@ function sheetOrderDetail(){
        <div class="card" style="padding:14px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="eyebrow">${T('Payment','支付')}</span>
          <button onclick="APP.cmd('copyTxn')" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);background:transparent;border:none;cursor:pointer;font-family:inherit">${T('Copy','复制')} ${ic('copy',13)}</button></div>
          <div style="font-size:15px;margin-top:7px">${T(...o.pay)}</div><div class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:2px">${T('Txn','交易号')} ${o.txn}</div>
-         ${o.payMismatch?`<div style="display:flex;align-items:flex-start;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border-default);color:var(--brick);font-size:13px">
-           <span style="flex:none;display:flex;margin-top:1px">${ic('triangle-alert',15)}</span>
-           <span>${T("The screenshot was read and doesn't match this order. Check it on the desktop before marking it paid.",'系统识别的付款截图与本单不符,请在电脑端核实后再标记已付款。')}</span></div>`:''}</div>
+         ${o.payNote?`<div style="display:flex;align-items:flex-start;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border-default);color:var(--${o.payNote.sev});font-size:13px">
+           <span style="flex:none;display:flex;margin-top:1px">${ic(o.payNote.icon,15)}</span>
+           <span>${T(...o.payNote.why)}</span></div>`:''}</div>
        <div class="card" style="padding:14px"><span class="eyebrow">${T('Fulfilled by','履约门店')}</span>
          <div style="font-size:15px;margin-top:7px">${T(...o.fulfil)}</div>
          <div style="display:flex;align-items:center;gap:6px;margin-top:5px;color:var(--text-secondary)">${ic('route',14)}<span style="font-size:12.5px">${T(...o.route)}</span></div></div>
@@ -2391,6 +2391,32 @@ const ORDER_STATUS={
 const CH_BACK={wechat:'miniapp',web:'web',meituan:'meituan',gzgrocery:'gzgrocery',manual:'manual'};
 let CUR='¥';
 
+/* The desktop's paymentCheckLine, on a phone. Only while unpaid — once a person
+   has judged it, the verdict is history. Three states, not one: rejected is
+   brick, because the money may be wrong; verified-but-still-unpaid and
+   never-read are brass, because nothing is wrong, someone just has to look.
+   Without a proof at all this is an ordinary unpaid order and the Pending pill
+   already says so, which is the whole point of has_alipay_proof. */
+function payNoteOf(r){
+  if(r.status!=='pending_payment') return null;
+  const v=r.alipay_ocr_verdict;
+  if(v==='mismatch') return {sev:'brick',icon:'triangle-alert',
+    label:["Payment doesn't match",'付款不一致'],
+    why:["The screenshot was read and doesn't match this order. Check it on the desktop before marking it paid.",
+         '系统识别的付款截图与本单不符，请在电脑端核实后再标记已付款。']};
+  if(!r.has_alipay_proof) return null;
+  if(v==='match') return {sev:'amber',icon:'circle-check',
+    label:['Payment verified · confirm','付款已核对 · 待确认'],
+    why:['The screenshot was read and matches. Marking it paid is a desktop action — it records which tender it was.',
+         '付款截图已核对一致。标记已付款需在电脑端完成 — 需要记录收款方式。']};
+  return {sev:'amber',icon:'triangle-alert',
+    label:['Payment not checked yet','付款待核对'],
+    why: v==='error'
+      ? ['The screenshot could not be read. Open it on the desktop and check it by hand.',
+         '付款截图无法识别。请在电脑端打开人工核对。']
+      : ['A screenshot is on file and nobody has checked it. Open it on the desktop and verify.',
+         '已上传付款截图但尚未核对。请在电脑端打开核对。']};
+}
 function mapOrderRow(r){
   let sk=ORDER_STATUS[r.status]||['pending',r.status||'—',r.status||'—'];
   let kind=sk[0];
@@ -2406,10 +2432,10 @@ function mapOrderRow(r){
     ship:Array.isArray(shipCity)?shipCity:[shipCity,shipCity],
     by: by?[by,by]:null, byAmber:false,
     viewOnly: ch==='meituan'||ch==='gzgrocery',
-    // A rejected payment screenshot is not a status — the order never moved, it
-    // is still pending_payment. It rides its own row as a mark, exactly as the
-    // desktop does, so the Pending list can be scanned for the one that is wrong.
-    payMismatch: r.alipay_ocr_verdict==='mismatch'&&r.status==='pending_payment',
+    // A proof is not a status — the order never moved, it is still
+    // pending_payment. It rides its own row as a mark, exactly as the desktop
+    // does, so the Pending list can be scanned for the one that needs a person.
+    payNote: payNoteOf(r),
     phone:r.recipient_phone||r.customer_phone||'—',
     addr:[r.address_full||'—', r.address_full||'—'],
     pay:[r.payment_method||'—', r.payment_method||'—'], txn:r.order_no||'—',
