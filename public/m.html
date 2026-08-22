@@ -347,6 +347,25 @@ reg('askRun', key=>{
   }
   state.ask=null; state.askErr=null; render(); if(a.run) a.run(key);
 });
+reg('copyWaybill', v=>{ copyText(String(v||''), T('Waybill copied','运单号已复制')); });
+/* Clearing the air-delay alert also drops the order from the dashboard's
+   "needs a call" fire and the list badge, so it is a real write, not a dismiss. */
+reg('clearAirDelay', sid=>{
+  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  if(!o||o._id==null||state.parcelBusy) return;
+  state.parcelBusy='air'+sid; state.orderErr=null; render();
+  apiWrite('/orders/'+o._id+'/air-delay/ack',{cleared:true}).then(()=>{
+    state.parcelBusy=null;
+    showToast(T('Marked handled','已标记处理'));
+    api('/orders/'+o._id).then(d=>{ if(state.detailId===o.id){ state.liveDetail=mapDetail(d); render(); } }).catch(()=>render());
+    loadOps();
+  }).catch(e=>{
+    state.parcelBusy=null;
+    if(String(e.message)==='auth') return;
+    state.orderErr=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    render();
+  });
+});
 /* One parcel of a multi-parcel order goes on its own. This is how an order can
    read "Dispatched" and still sit in the Paid tab: the other box has not left. */
 reg('dispatchParcel', sid=>{
@@ -2185,6 +2204,7 @@ function sheetOrderDetail(){
        ${o.custNote?`<div class="card" style="padding:14px;border-color:var(--accent)">
          <div style="display:flex;align-items:center;gap:8px;color:var(--accent)">${ic('message-square-text',16)}<span class="eyebrow" style="color:var(--accent)">${T('Customer note','顾客备注')}</span></div>
          <div style="font-size:14.5px;line-height:1.55;margin-top:8px;white-space:pre-wrap">${escAttr(o.custNote)}</div></div>`:''}
+       ${hoistedTracking(o)}
        ${o.trk&&!(o.shipments&&o.shipments.length)?`<div class="card" style="padding:14px">
          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
            <span style="display:flex;align-items:center;gap:8px;min-width:0;color:var(--text-secondary)">${ic('truck',18)}<span style="font-size:14.5px;font-weight:500;color:var(--text-primary)">${T(...o.trk.carrier)}</span></span>
@@ -2239,6 +2259,90 @@ function itemRow(it){
     </span>
     <span style="text-align:right;flex:none"><span class="num" style="display:block;font-size:14px">${it[2]}</span><span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary);margin-top:1px">×${it[0]}</span></span></div>`;
 }
+/* ---- Tracking, hoisted -------------------------------------------------
+   Once a parcel is on its way, the thing the operator watches is its waybill
+   and where it has got to — so the desktop lifts that OUT of the buried items
+   section and up to the top of the drawer, one card per shipped parcel. The
+   phone had it the other way round: buried at the bottom of a parcel card, and
+   printed as raw column values. */
+const TRK_STATE_TONE={delivered:'plain',out_for_delivery:'plain',in_transit:'plain',picked_up:'plain',
+  exception:'brick',returning:'brick',returned:'brick'};
+function evTime(t){
+  // The carrier stamps are "YYYY-MM-DD HH:MM:SS". Drop the year and the
+  // seconds, the way the desktop's event rows do.
+  return String(t||'').replace(/^\d{4}-/,'').replace(/:\d{2}$/,'');
+}
+function trackingCard(o,sp,label){
+  const t=sp.trk;
+  const has=!!(t&&t.number);
+  const st=t&&(LANG==='en'?(t.status_label_en||t.status_label_cn):(t.status_label_cn||t.status_label_en));
+  const tone=(t&&TRK_STATE_TONE[t.status_code])||'plain';
+  const badge = !has ? ''
+    : sp.jdLive ? {text:T('JD live sync on','京东实时同步中'),tone:'sage'}
+    : sp.kd100 ? {text:T('kd100 live sync on','快递100实时同步中'),tone:'sage'}
+    : sp.lastError ? {text:sp.lastError,tone:'brick'}
+    : {text:T('manual entry only','仅手动录入'),tone:'muted'};
+  const evs=(t&&t.events)||[];
+  const rest=evs.length>1?evs.slice(1):[];
+  const evRow=ev=>`<div style="display:flex;gap:10px;font-size:12.5px;line-height:1.5">
+    <span class="num" style="flex:none;min-width:74px;color:var(--text-secondary)">${escAttr(evTime(ev.time))}</span>
+    <span style="flex:1;min-width:0">${escAttr(LANG==='en'?(ev.description_en||ev.description_cn||''):(ev.description_cn||ev.description_en||''))}${ev.location?`<span style="color:var(--text-secondary)"> · ${escAttr(ev.location)}</span>`:''}</span></div>`;
+  const reuse=t&&t.reuse_warning;
+  return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <span class="eyebrow">${label?label:T('Tracking','物流')}</span>
+      ${st?`<span style="font-size:13px;font-weight:500;color:${DELIV_TONE[tone]}">${st}</span>`:''}</div>
+    ${sp.airCleared==null&&o.airDelayed&&sp.mode==='air'?`<div style="display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:12px;background:var(--brick-tint);color:var(--brick)">
+      <span style="display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:500">${ic('triangle-alert',16)}${T('Air shipment delayed','空运延误')}</span>
+      <span style="font-size:13px;line-height:1.5">${T('Fresh items may no longer be safe. Call the customer and tell them not to eat it, then claim the delay with JD.','生鲜可能已不安全。请联系顾客告知勿食用，并向京东申请延误赔偿。')}</span>
+      <button class="btn2" style="width:100%;color:var(--brick);border-color:var(--brick)" ${state.parcelBusy===('air'+sp.id)?'disabled':''} onclick="APP.cmd('clearAirDelay',${sp.id})">${state.parcelBusy===('air'+sp.id)?T('Saving…','处理中…'):T('Mark handled — customer contacted','标记已处理 — 已联系顾客')}</button></div>`:''}
+    ${sp.airCleared?`<div style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text-secondary)">${ic('check',14)}${T('Air delay handled'+(sp.airClearedBy?' · '+sp.airClearedBy:''),'空运延误已处理'+(sp.airClearedBy?' · '+sp.airClearedBy:''))}</div>`:''}
+    ${reuse?`<div style="padding:10px 12px;border-radius:12px;background:var(--brick-tint);color:var(--brick);font-size:12.5px;line-height:1.5">${
+      reuse.delivered?T('This waybill is already on a delivered order ('+escAttr(reuse.order_no)+'). A reused number will not sync — check it.','此运单号已用于一笔已签收订单('+escAttr(reuse.order_no)+')，重复号码不会同步，请核对。')
+                     :T('This waybill is also on order '+escAttr(reuse.order_no)+'. Reused numbers may not sync.','此运单号也绑定在订单 '+escAttr(reuse.order_no)+' 上，可能无法同步。')}</div>`:''}
+    ${has?`<div>
+      <div class="num" style="font-size:16px;font-weight:500;letter-spacing:.01em">${escAttr(t.number)}</div>
+      <div style="font-size:13px;color:var(--text-secondary);margin-top:2px">${escAttr(LANG==='en'?(t.carrier_name_en||''):(t.carrier_name_cn||''))}</div></div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+        ${badge?`<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:${badge.tone==='sage'?'#5F7357':badge.tone==='brick'?'var(--brick)':'var(--text-secondary)'}">${badge.tone==='sage'?'<span style="width:6px;height:6px;border-radius:50%;background:#5F7357"></span>':''}${badge.text}</span>`:''}
+        <span class="num" style="font-size:12px;color:var(--text-secondary)">${t.synced_at?T('Updated '+fmtDay(t.synced_at),'更新于 '+fmtDay(t.synced_at)):T('no live sync yet','尚未实时同步')}</span></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn2" style="width:auto;padding:8px 14px;flex:none" onclick="APP.cmd('copyWaybill','${escAttr(t.number)}')">${ic('copy',14)} ${T('Copy','复制')}</button>
+        ${t.track_url?`<a href="${escAttr(t.track_url)}" target="_blank" rel="noopener" class="btn2" style="width:auto;padding:8px 14px;flex:none;display:inline-flex;align-items:center;gap:6px;text-decoration:none">${T('Carrier site','承运商官网')} ${ic('chevron-right',14)}</a>`:''}
+      </div>
+      ${evs.length?`<div style="padding-top:10px;border-top:1px solid var(--border-default);display:flex;flex-direction:column;gap:7px">
+        <span class="eyebrow">${T('Recent events','最近事件')}</span>
+        ${evRow(evs[0])}
+        ${rest.length?`<details><summary style="cursor:pointer;list-style:none;font-size:12.5px;color:var(--text-secondary);padding:4px 0">${T(rest.length+' earlier events','更早的 '+rest.length+' 条')}</summary>
+          <div style="display:flex;flex-direction:column;gap:7px;margin-top:7px">${rest.map(evRow).join('')}</div></details>`:''}
+      </div>`:`<div style="font-size:13px;color:var(--text-secondary)">${T('Waiting for the first carrier update.','等待承运商第一条更新。')}</div>`}
+    `:`<div style="font-size:13.5px;color:var(--brick)">${T('No waybill on this parcel yet — add it on the desktop.','此包裹尚无运单号 — 请在电脑端录入。')}</div>`}
+  </div>`;
+}
+/* A same-city parcel has no waybill; what the operator watches is the arrival
+   time, so that is what hoists instead. */
+function localEtaCard(o,sp,label){
+  return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:8px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <span class="eyebrow">${label?label:T('Same-city delivery','同城配送')}</span>
+      ${sp.etaSource==='auto'?`<span style="font-size:12px;color:var(--text-secondary)">${T('from the courier','来自骑手')}</span>`:''}</div>
+    <div class="num" style="font-size:20px;font-weight:500">${sp.localEta?sp.localEta:T('No arrival time set','未设送达时间')}</div>
+    ${!sp.localEta?`<div style="font-size:13px;color:var(--text-secondary)">${T('Set it on the desktop so the customer sees when to expect it.','请在电脑端设置，顾客才能看到预计时间。')}</div>`:''}
+  </div>`;
+}
+/* One card per parcel that has actually left, at the top of the drawer. */
+function hoistedTracking(o){
+  const all=o.shipments||[];
+  const multi=all.length>1;
+  const cards=all.map((sp,i)=>{
+    if(sp.mode==='supplier') return '';
+    if(!['dispatched','delivered'].includes(sp.state)) return '';
+    const word = sp.mode==='air'?T('Air','空运') : sp.mode==='land'?T('Land','陆运') : sp.mode==='local'?T('Same-city','同城') : '';
+    const label = multi ? T('Parcel '+(i+1),'包裹 '+(i+1))+(word?' · '+word:'') : (word||T('Tracking','物流'));
+    return sp.mode==='local'?localEtaCard(o,sp,label):trackingCard(o,sp,label);
+  }).filter(Boolean);
+  return cards.join('');
+}
 /* The desktop's shipment cards. The mode is the fact the phone was missing
    entirely: an order that leaves as an Air parcel and a Land parcel arrives on
    two different days, and nothing here said which box a line was in — or that
@@ -2271,10 +2375,7 @@ function parcelCard(o,sp,i,n){
         <span class="num" style="font-size:12.5px">${T(sp.units+' items',sp.units+' 件')}</span></span>
       ${pill(st.kind,T(st.en,st.zh))}</div>
     ${sp.items.length?`<div style="display:flex;flex-direction:column;gap:8px">${sp.items.map(itemRow).join('')}</div>`:''}
-    ${sp.no?`<div style="padding-top:10px;border-top:1px solid var(--border-default)">
-      <div class="num" style="font-size:12.5px;color:var(--text-secondary)">${(sp.carrier||T('Courier','快递')).toString()} ${sp.no}</div>
-      ${sp.event?`<div style="font-size:13.5px;margin-top:5px">${sp.event}</div>`:''}</div>`:''}
-    ${!sp.no&&sp.localEta?`<div style="padding-top:10px;border-top:1px solid var(--border-default);font-size:13.5px;color:var(--text-secondary)">${T('Arriving around '+sp.localEta,'预计 '+sp.localEta+' 送达')}</div>`:''}
+    ${sp.trk&&sp.trk.number?`<div style="padding-top:10px;border-top:1px solid var(--border-default);font-size:12.5px;color:var(--text-secondary)">${T('Tracking is at the top of this order','物流信息在本单顶部')}</div>`:''}
     ${canDispatch?`<button class="btn2" style="width:100%" ${busy?'disabled':''} onclick="APP.cmd('dispatchParcel',${sp.id})">${busy?T('Marking…','处理中…'):T('Mark this parcel dispatched','标记此包裹已发货')}</button>`:''}
   </div>`;
 }
@@ -3273,10 +3374,18 @@ function mapDetail(o){
     id:sp.id, mode:sp.mode||'local', state:sp.state||'pending',
     items:(sp.items||[]).map(ITEM_TUPLE),
     units:(sp.items||[]).reduce((n,it)=>n+(Number(it.qty||it.quantity)||0),0),
-    carrier:sp.tracking_carrier||'', no:sp.tracking_number||'',
-    event:sp.tracking_status||'', live:!!(sp.tracking_kd100_subscribed||sp.jd_live),
-    localEta:sp.local_eta||null,
+    // The whole tracking view, not two raw column values. The drawer used to
+    // print `tracking_carrier` and `tracking_status` straight out of the row,
+    // so a shipped parcel read "jd JDVC37829030835 / in_transit" — a carrier
+    // code and a status key, neither of them words.
+    trk:sp.tracking||null,
+    jdLive:!!sp.jd_live, kd100:!!sp.tracking_kd100_subscribed,
+    lastError:sp.tracking_last_error||null,
+    localEta:sp.local_eta||null, etaSource:sp.eta_source||null,
+    airCleared:sp.air_delay_cleared_at||null, airClearedBy:sp.air_delay_cleared_by||null,
+    dispatchedAt:sp.dispatched_at||null, deliveredAt:sp.delivered_at||null,
   }));
+  base.airDelayed=!!o.air_delivery_delayed;
   // Anything not assigned to a parcel yet still has to show, or a line silently
   // vanishes from the order it was bought on.
   const inParcel=new Set();
