@@ -253,6 +253,32 @@ columns of fact. Reported from production, then swept column by column.
 | Placed | ✅ — was a bare time, so an order from three days ago read "9:07 AM" |
 | Split-parcel rollup | ✅ |
 
+### Order drawer — the desktop's sections
+
+| Desktop block | Phone |
+|---|---|
+| Order #, status, actions | ✅ |
+| Head marks: placed, **partially shipped (n/total)**, **items added (+¥)**, **stock pending**, **print failed** | ✅ |
+| Hoisted per-parcel tracking | ✅ (each parcel card carries its own) |
+| Refund banner + panel (requested / approved / paid, reason) | ⚠ the actions are there; the amounts and the customer's reason are not shown |
+| Invoice block (type, title, tax id, email, file) | ✅ read-only — issuing stays desktop |
+| Order total banner + breakdown | ✅ — **voucher** line added |
+| Ship to / **Pickup (which store)** / **Counter sale** | ✅ |
+| Address-changed note | ➖ |
+| Customer tile + **link to their record** | ✅ |
+| Payment method + status | ✅ |
+| Pay-link tile (resend an unpaid order's link) | ➖ |
+| **Voucher** | ✅ |
+| Ship-by tile | ⚠ the list row carries the ship-by plan; the drawer does not repeat it |
+| Store + routing note + reroute-short + "routed by area" | ⚠ store and reason shown; the short-SKU list and the area-routing warning are not |
+| **Alipay proof screenshot** | ✅ — tap to open it whole |
+| **Customer note** | ✅ — the single most obviously missing thing in the drawer |
+| Split banner + merge/split parcel controls | ➖ — packing decisions, desktop |
+| Items, grouped into parcels with their mode | ✅ |
+| **Add-on timeline** (what was added, when) | ✅ |
+| Reservations table | ➖ |
+| Edit ship-to / make address Chinese | ➖ decided: desktop |
+
 ## 4. Open questions
 
 Not gaps — decisions that are the shop's to make, not this file's.

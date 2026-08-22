@@ -464,6 +464,13 @@ reg('saveProduct', ()=>saveProductEdits());
 reg('custSeg', v=>{ state.custSeg=v; state.custLoaded=false; state.customers=null; render(); loadCustomers(); });
 reg('custTier', v=>{ state.custTier=v; render(); });
 reg('custClear', ()=>{ state.custSeg='all'; state.custTier='all'; state.custLoaded=false; render(); loadCustomers(); });
+/* From an order to the person who placed it — the desktop's "› #id" link. */
+reg('openCustomerFromOrder', id=>{
+  state.detailId=null; state.detailActions=false;
+  state.stack=[]; state.tab='customers';
+  if(!state.custLoaded&&!state.custLoading) loadCustomers();
+  CMD.openCustomer(id);
+});
 reg('openCustomer', id=>{ state.custId=id; state.custDetail=null; state.custErr=null; state.custBusy=null; render(); loadCustomerDetail(id); });
 reg('closeCustomer', ()=>{ state.custId=null; state.custDetail=null; render(); });
 reg('prodView', v=>{ state.prodView=v; render(); });
@@ -2087,6 +2094,59 @@ async function refreshOrders(){
     state.liveAttn=Object.assign({},state.liveAttn||{},{ship:(d.paid||0)+(d.preparing||0)}); render(); } }).catch(()=>{});
 }
 function findOrder(id){ return DB.orders.find(o=>o.id===id) || DB.purchasing.find(o=>o.id===id); }
+/* The desktop's od-marks strip: when the order was placed, and every mark that
+   changes what happens next. "Partially shipped" is the one that explains why a
+   Dispatched order is still in the Paid tab; "Print failed" is a failure an
+   operator can otherwise only discover at the counter. */
+function orderHeadMarks(o){
+  const marks=[];
+  if(o.fulfil_rollup==='partial'&&o.fulfil_counts)
+    marks.push({sev:'amber',icon:'package',label:T('Partially shipped '+o.fulfil_counts.done+'/'+o.fulfil_counts.total,'部分发货 '+o.fulfil_counts.done+'/'+o.fulfil_counts.total)});
+  if(o.addons&&o.addons.length)
+    marks.push({sev:'amber',icon:'plus',label:T('Items added · +'+money(CUR,o.addonTotal),'加单 · +'+money(CUR,o.addonTotal))});
+  if(o.stockPending) marks.push({sev:'amber',icon:'box',label:T('Stock not deducted yet','库存待扣')});
+  if(o.printFailed!=null) marks.push({sev:'brick',icon:'printer',label:T('Receipt did not print','小票打印失败')});
+  if(!marks.length&&!o.placedFull) return '';
+  return `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
+    ${marks.map(m=>`<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:4px 9px;border-radius:999px;background:var(--${m.sev}-tint);color:var(--${m.sev})">${ic(m.icon,13)}${m.label}</span>`).join('')}
+    ${o.printFailed?`<span style="width:100%;font-size:12.5px;color:var(--brick)">${escAttr(o.printFailed)}</span>`:''}
+  </div>`;
+}
+/* WHAT was added and WHEN — the slip was very likely printed before any of it
+   existed, which is the whole reason the desktop time-stamps each one. */
+function addonTimeline(o){
+  if(!o.addons||!o.addons.length) return '';
+  return `<div class="card" style="padding:14px">
+    <span class="eyebrow">${T('Added after paying','下单后加购')}</span>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:9px">
+      ${o.addons.map(a=>`<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+        <span style="min-width:0">
+          <span style="display:block;font-size:14px;font-weight:500">${a.items.length?a.items.map(it=>escAttr(it.name)+' ×'+it.qty).join('、'):T('Items added','已加单')}</span>
+          <span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary);margin-top:2px">${fmtDay(a.when)}</span></span>
+        <span class="num" style="flex:none;font-size:14px">+${money(CUR,a.amount)}</span></div>`).join('')}
+    </div></div>`;
+}
+/* The fapiao the customer asked for. Issuing it is a desktop job, but WHAT was
+   requested — the title, the tax id, where it goes — is exactly what someone
+   away from their desk gets asked to read out. */
+function invoiceBlock(o){
+  const v=o.invoice; if(!v) return '';
+  const issued=v.status==='issued';
+  const row=(l,val)=>val?`<div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;font-size:13.5px;margin-top:6px">
+    <span style="color:var(--text-secondary);flex:none">${l}</span><span class="num" style="min-width:0;text-align:right;word-break:break-all">${escAttr(val)}</span></div>`:'';
+  return `<div class="card" style="padding:14px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <span class="eyebrow">${T('Fapiao','发票')}</span>
+      ${pill(issued?'delivered':'restock',issued?T('Issued','已开票'):T('To issue','待开票'))}</div>
+    ${row(T('Type','类型'),v.type==='company'?T('Company','企业'):v.type==='personal'?T('Personal','个人'):v.type)}
+    ${row(T('Title','抬头'),v.title)}
+    ${row(T('Tax ID','税号'),v.taxId)}
+    ${row(T('Send to','发送至'),v.email)}
+    ${row(T('Number','发票号'),v.number)}
+    ${v.file?`<a href="${escAttr(v.file)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;margin-top:10px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 12px;text-decoration:none">${ic('download',15)} ${T('Open the fapiao','打开发票')}</a>`:''}
+    ${!issued?`<div style="font-size:12.5px;color:var(--text-secondary);margin-top:10px">${T('Issuing it is a desktop job.','开具发票请在电脑端。')}</div>`:''}
+  </div>`;
+}
 /* The hoisted tracking block is the ORDER-level waybill, which is the primary
    shipment's and only that one. On a split order it would show the Air parcel's
    number at the top, repeat it inside the Air card, and never mention the Land
@@ -2115,6 +2175,10 @@ function sheetOrderDetail(){
        ${state.orderErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
          <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
          <span style="font-size:14px;color:var(--brick)">${state.orderErr}</span></div>`:''}
+       ${orderHeadMarks(o)}
+       ${o.custNote?`<div class="card" style="padding:14px;border-color:var(--accent)">
+         <div style="display:flex;align-items:center;gap:8px;color:var(--accent)">${ic('message-square-text',16)}<span class="eyebrow" style="color:var(--accent)">${T('Customer note','顾客备注')}</span></div>
+         <div style="font-size:14.5px;line-height:1.55;margin-top:8px;white-space:pre-wrap">${escAttr(o.custNote)}</div></div>`:''}
        ${o.trk&&!(o.shipments&&o.shipments.length)?`<div class="card" style="padding:14px">
          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
            <span style="display:flex;align-items:center;gap:8px;min-width:0;color:var(--text-secondary)">${ic('truck',18)}<span style="font-size:14.5px;font-weight:500;color:var(--text-primary)">${T(...o.trk.carrier)}</span></span>
@@ -2123,24 +2187,38 @@ function sheetOrderDetail(){
          <div style="font-size:13.5px;margin-top:9px;padding-top:10px;border-top:1px solid var(--border-default)">${T(...o.trk.event)}</div></div>`:''}
        <div style="background:var(--surface-raised);border-radius:14px;padding:16px">
          <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><span style="font-size:13px;color:var(--text-secondary)">${T('Total','合计')}</span><span class="num" style="font-size:26px;font-weight:500;letter-spacing:-.02em">${o.total}</span></div>
-         ${o.breakdown?`<div style="margin-top:12px;display:flex;flex-direction:column;gap:7px">${o.breakdown.map(([l,v])=>`<div style="display:flex;align-items:baseline;justify-content:space-between;font-size:13px"><span style="color:var(--text-secondary)">${T(l,l)}</span><span class="num">${v}</span></div>`).join('')}</div>`:''}</div>
+         ${o.breakdown?`<div style="margin-top:12px;display:flex;flex-direction:column;gap:7px">${o.breakdown.map(([l,v])=>`<div style="display:flex;align-items:baseline;justify-content:space-between;font-size:13px"><span style="color:var(--text-secondary)">${T(l,l)}</span><span class="num">${v}</span></div>`).join('')}
+           ${o.voucher?`<div style="display:flex;align-items:baseline;justify-content:space-between;font-size:13px"><span style="color:var(--text-secondary)">${T('Voucher','优惠券')}${o.voucher.code?' · '+escAttr(o.voucher.code):''}</span><span class="num">−${money(CUR,o.voucher.amount)}</span></div>`:''}
+         </div>`:''}</div>
        ${isPO?'':`
-       <div class="card" style="padding:14px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="eyebrow">${T('Ship to','收货地址')}</span>
+       <div class="card" style="padding:14px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+         <span class="eyebrow">${o.counter?T('Counter sale','前台销售'):o.pickup?T('Pickup','到店自提'):T('Ship to','收货地址')}</span>
          <button onclick="APP.cmd('copyAddr')" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);background:transparent;border:none;cursor:pointer;font-family:inherit">${T('Copy','复制')} ${ic('copy',13)}</button></div>
-         <div class="num" style="font-size:15px;margin-top:7px">${T(...o.cust)} · ${o.phone}</div><div style="font-size:13.5px;color:var(--text-secondary);margin-top:2px">${T(...o.addr)}</div></div>
+         <div class="num" style="font-size:15px;margin-top:7px">${T(...o.cust)} · ${o.phone}</div>
+         <div style="font-size:13.5px;color:var(--text-secondary);margin-top:2px">${
+           o.counter?T('Handed over at the till','已在前台交付')
+           :o.pickup?(o.pickupStore?T('Collects at '+o.pickupStore,'自提门店 '+o.pickupStore):T('Collects in store','到店自提'))
+           :T(...o.addr)}</div>
+         ${o.custId!=null?`<button onclick="APP.cmd('openCustomerFromOrder',${o.custId})" style="display:inline-flex;align-items:center;gap:5px;margin-top:10px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 12px;cursor:pointer;font-family:inherit">${ic('user',14)} ${T('Open their record','查看顾客')}</button>`:''}</div>
        <div class="card" style="padding:14px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="eyebrow">${T('Payment','支付')}</span>
          <button onclick="APP.cmd('copyTxn')" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);background:transparent;border:none;cursor:pointer;font-family:inherit">${T('Copy','复制')} ${ic('copy',13)}</button></div>
          <div style="font-size:15px;margin-top:7px">${T(...o.pay)}</div><div class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:2px">${T('Txn','交易号')} ${o.txn}</div>
          ${o.payNote?`<div style="display:flex;align-items:flex-start;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border-default);color:var(--${o.payNote.sev});font-size:13px">
            <span style="flex:none;display:flex;margin-top:1px">${ic(o.payNote.icon,15)}</span>
-           <span>${T(...o.payNote.why)}</span></div>`:''}</div>
+           <span>${T(...o.payNote.why)}</span></div>`:''}
+         ${o.proof?`<div style="margin-top:10px">
+           <a href="${escAttr(o.proof)}" target="_blank" rel="noopener" style="display:block;border-radius:10px;overflow:hidden;border:1px solid var(--border-default)">
+             <img src="${escAttr(o.proof)}" alt="${T('Payment screenshot','付款截图')}" style="display:block;width:100%;max-height:220px;object-fit:cover"></a>
+           <div style="font-size:12px;color:var(--text-secondary);margin-top:6px">${T('The screenshot the customer sent — tap to see it whole','顾客上传的付款截图 — 点击查看大图')}</div></div>`:''}</div>
        <div class="card" style="padding:14px"><span class="eyebrow">${T('Fulfilled by','履约门店')}</span>
          <div style="font-size:15px;margin-top:7px">${T(...o.fulfil)}</div>
          <div style="display:flex;align-items:center;gap:6px;margin-top:5px;color:var(--text-secondary)">${ic('route',14)}<span style="font-size:12.5px">${T(...o.route)}</span></div></div>
        ${o.receipt?`<div class="card" style="padding:14px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="eyebrow">${T('Receipt','小票')}</span>
          <button onclick="APP.cmd('reprint')" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:8px;cursor:pointer;padding:5px 9px;font-family:inherit">${ic('printer',15)} ${T('Reprint','重打')}</button></div>
          <div style="display:flex;align-items:center;gap:7px;margin-top:8px"><span style="display:flex;color:#5F7357">${ic('check',16,2.25)}</span><span style="font-size:14.5px">${T(...o.receipt)}</span></div></div>`:''}`}
+       ${invoiceBlock(o)}
        ${orderItemsBlock(o)}
+       ${addonTimeline(o)}
      </div>
    </div>`;
 }
@@ -3149,6 +3227,30 @@ function mapDetail(o){
   (o.shipments||[]).forEach(sp=>(sp.items||[]).forEach(it=>inParcel.add(it.id)));
   base.loose=(o.items||[]).filter(it=>!inParcel.has(it.id)).map(ITEM_TUPLE);
   base.rawStatus=o.status||null;
+  // The facts the desktop drawer carries and this one did not. Every one of
+  // them is already in the payload — the drawer was simply not reading them.
+  base.custNote=(o.customer_note||'').trim()||null;         // what the CUSTOMER asked for
+  base.custId=o.customer_id!=null?o.customer_id:null;       // so the name can be tapped
+  base.custName=o.nickname||o.recipient_name||'';
+  base.voucher=(Number(o.voucher_amount)>0)?{code:o.voucher_code||'',amount:Number(o.voucher_amount)}:null;
+  base.printFailed=(o.print_status==='failed'&&!['pending_payment','cancelled','refunded'].includes(o.status))?(o.print_error||''):null;
+  base.fulfil_rollup=(o.fulfillment&&o.fulfillment.rollup)||null;
+  base.fulfil_counts=o.fulfillment?{done:o.fulfillment.dispatched,total:o.fulfillment.total}:null;
+  base.addons=(o.addons||[]).filter(a=>(a.items||[]).length||Number(a.amount)).map(a=>({
+    when:a.paid_at||null, amount:Number(a.amount)||0,
+    items:(a.items||[]).map(it=>({name:it.name_en||it.name_cn||'', qty:it.qty||1})),
+  }));
+  base.addonTotal=Number(o.addon_total)||0;
+  base.proof=o.alipay_proof_image||null;                    // the screenshot itself
+  base.invoice=Number(o.needs_invoice)?{
+    status:o.invoice_status||'requested', type:o.invoice_type||'',
+    title:o.invoice_title||'', taxId:o.invoice_tax_id||'', email:o.invoice_email||'',
+    number:o.invoice_number||'', file:o.invoice_file_url||'', issuedAt:o.invoice_issued_at||'',
+  }:null;
+  base.pickupStore=(o.fulfillment_type==='pickup')
+    ?((o.address&&(o.address.store_name_en||o.address.store_name_cn))||o.store_name_en||o.store_code||'')
+    :null;
+  base.stockPending=!!o.stock_pending;
   if(o.subtotal!=null||o.shipping_fee!=null){
     base.breakdown=[['Subtotal',money(CUR,o.subtotal!=null?o.subtotal:o.total)]].concat(o.shipping_fee?[['Delivery',money(CUR,o.shipping_fee)]]:[]);
   }
