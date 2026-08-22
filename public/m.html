@@ -270,7 +270,8 @@ const state = {
   prodQ:'', prodStatus:'all', prodCat:'all', catalogueTried:false, catalogueLoading:false,
   workOpen:false, workEvents:null, workLoading:false, workErr:null,
   affiliate:null, affiliateTried:false, invSeg:'all', invLoaded:false,
-  geo:null, geoTried:false, recapTried:false, chan:null, chanTried:false, sales:null,
+  geo:null, geoTried:false, chan:null, chanTried:false, sales:null,
+  recap:null, recapTried:false, recapSince:0, reallyAway:false, pos:'default',
   overflow:false, search:false, detailId:null, detailActions:false, productSku:null,
   orderBusy:null, orderErr:null, replyBusy:false, replyErr:null, revBusy:null, revErr:null,
   printer:null, printerLoading:false, printerBusy:false, printerErr:null,
@@ -598,6 +599,7 @@ function flagGate(flag){
    ========================================================================== */
 function greetKey(){ const h=new Date().getHours(); return h<5?'night':h<12?'morning':h<18?'afternoon':'evening'; }
 const GREET={night:['Good evening','晚上好'],morning:['Good morning','早上好'],afternoon:['Good afternoon','下午好'],evening:['Good evening','晚上好']};
+
 function loadWork(){
   state.workLoading=true; state.workErr=null; render();
   api('/dashboard/activity?limit=200').then(j=>{
@@ -681,30 +683,118 @@ function workFold(){
     ${evs.length>shown.length?`<div style="padding:12px 0 0;font-size:13px;color:var(--text-secondary)">${T('Showing the latest '+shown.length+' of '+evs.length+' — the rest is on the desktop.', '显示最近 '+shown.length+' 条，共 '+evs.length+' 条 — 其余请在电脑端查看。')}</div>`:''}
   </div>`);
 }
-function recapCard(){
+/* ---- The Recap ----------------------------------------------------------
+   This is the desktop's Recap, not a phone-shaped reinvention of it. It used to
+   compute its own "orders overnight / revenue overnight" client-side from the
+   fifty orders boot happened to hold, over a 22:00–08:00 window nothing else in
+   the product uses — a metric that does not exist on the desktop and a number
+   that could not be reconciled with any other number in the app.
+
+   The real Recap reads the ACTIVITY FEED since the moment you last left, and
+   states what happened in the same sentences tdRecapRender writes: orders paid
+   (with the money), dispatched, delivered, unpaid ones auto-cancelled, refunds
+   settled, top-ups, new customers, gzgrocery pickups. When the window is empty
+   it is not a card at all — one quiet line, because a card that says nothing
+   happened is furniture.
+
+   Framing rules are the desktop's too: a gap under 25 minutes is a reload, not a
+   departure, so it reads "Recently" rather than "While you were away"; the
+   window is floored at 30 minutes and capped at 7 days. And the money rows are
+   owner-only — a warehouse or dispatch account sees its own queue without the
+   revenue, exactly as tdRecapNoMoney decides on the desktop. */
+const RECAP_SEEN_KEY='tacet.m.lastSeen';
+const RECAP_NO_MONEY=['warehouse','dispatch','customer_service'];
+function recapNoMoney(){ return RECAP_NO_MONEY.includes(state.pos); }
+async function loadRecap(){
+  if(state.recapTried) return; state.recapTried=true;
+  let since=0;
+  try{ since=parseInt(localStorage.getItem(RECAP_SEEN_KEY)||'0',10)||0; }catch(e){}
+  const now=Date.now();
+  const MAX_BACK=7*86400000, MIN_BACK=30*60000, REAL_ABSENCE=25*60000;
+  state.reallyAway=!!since&&(now-since>=REAL_ABSENCE)&&(now-since<=MAX_BACK);
+  if(!since||now-since>MAX_BACK) since=now-MAX_BACK;
+  if(now-since<MIN_BACK) since=now-MIN_BACK;
+  state.recapSince=since;
+  try{ localStorage.setItem(RECAP_SEEN_KEY,String(now)); }catch(e){}
+  try{ const j=await api('/dashboard/activity?since='+since+'&limit=500');
+    state.recap=(j&&j.events)||(Array.isArray(j)?j:[]);
+  }catch(e){ state.recap=null; }
+  render();
+}
+/* The same eight sentences the desktop writes, in the same order. Kept as data
+   so the empty case can be told from the failed one without re-deriving it. */
+function recapRows(){
+  const ev=state.recap; if(!ev) return null;
+  const of=t=>ev.filter(e=>e.type===t);
+  const sum=(rows,k)=>rows.reduce((n,e)=>n+(Number(e.payload&&e.payload[k])||0),0);
+  const m=n=>money0(CUR,n);
+  const paid=of('paid_order'), disp=of('order_dispatched'), deliv=of('order_delivered');
+  const autoCanc=of('order_cancelled').filter(e=>e.payload&&e.payload.reason==='auto_cancelled_unpaid');
+  const refunded=of('refund_paid'), newCust=of('new_customer'), topups=of('topup');
+  const pickups=of('gzgrocery_pickup').filter(e=>!(e.payload&&e.payload.is_return));
+  const noMoney=recapNoMoney();
+  const wh=state.pos==='warehouse';
+  const delivery=state.pos==='dispatch'||state.pos==='customer_service';
+  const rows=[];
+  const n1=(a,one,many)=>a.length===1?one:many;
+  if(paid.length&&!delivery){
+    rows.push(wh
+      ? T(paid.length+' '+n1(paid,'order','orders')+' entered your queue', paid.length+' 笔订单进入待处理队列')
+      : T(paid.length+' '+n1(paid,'order','orders')+' paid — '+m(sum(paid,'total')), paid.length+' 笔订单已支付，共 '+m(sum(paid,'total'))));
+  }
+  if(disp.length) rows.push(T(disp.length+' '+n1(disp,'order','orders')+' dispatched', disp.length+' 个订单已发货'));
+  if(deliv.length&&!wh) rows.push(T(deliv.length+' '+n1(deliv,'order','orders')+' delivered', deliv.length+' 个订单已送达'));
+  if(!noMoney&&autoCanc.length) rows.push(T(autoCanc.length+' unpaid '+n1(autoCanc,'order','orders')+' cancelled automatically', autoCanc.length+' 个未付款订单已自动取消'));
+  if(!noMoney&&refunded.length) rows.push(T(refunded.length+' '+n1(refunded,'refund','refunds')+' settled — '+m(sum(refunded,'amount')), refunded.length+' 笔退款已完成，共 '+m(sum(refunded,'amount'))));
+  if(!noMoney&&topups.length) rows.push(T(topups.length+' wallet '+n1(topups,'top-up','top-ups')+' — '+m(sum(topups,'amount')), topups.length+' 笔钱包充值，共 '+m(sum(topups,'amount'))));
+  if(!noMoney&&newCust.length) rows.push(T(newCust.length+' new '+n1(newCust,'customer','customers')+' joined', '新增 '+newCust.length+' 位客户'));
+  if(pickups.length&&!delivery) rows.push(T(pickups.length+' gzgrocery '+n1(pickups,'pickup','pickups')+' recorded', '记录 '+pickups.length+' 笔 gzgrocery 提货'));
+  return rows;
+}
+function recapTitle(){
+  if(!state.reallyAway) return T('Recently','最近动态');
   const g=greetKey();
-  // Title matches the time of day; "while you slept" only reads right in the morning.
-  const title=(g==='morning'||g==='night')?T('While you slept','在你休息时'):T('While you were away','在你离开时');
-  const r=state.liveRecap;
-  // Real overnight figures when live. The sample card is the STATIC PREVIEW
-  // only — once the app has asked the server, a failed read says so rather than
-  // showing three numbers nobody measured.
-  const items = r ? [[T('orders overnight','夜间订单'),String(r.orders)],[T('revenue overnight','夜间营收'),money0(CUR,r.revenue)]]
-                  : state.recapTried ? null
-                  : [[T('orders processed','处理订单'),'214'],[T('issues resolved','解决问题'),'3'],[T('stock-outs prevented','避免缺货'),'2']];
+  return (g==='morning'||g==='night')?T('While you slept','在你休息时'):T('While you were away','在你离开时');
+}
+function recapSinceLabel(){
+  const d=_date(state.recapSince?new Date(state.recapSince):null)||new Date(state.recapSince||Date.now());
+  const hm=LANG==='en' ? d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})
+                       : d.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',hour12:false});
+  const now=new Date();
+  const days=Math.floor((new Date(now.getFullYear(),now.getMonth(),now.getDate())
+    - new Date(d.getFullYear(),d.getMonth(),d.getDate()))/86400000);
+  if(!state.reallyAway) return T('since '+hm,hm+' 起');
+  if(days<=0) return T('you left here — '+hm, '您离开时 — '+hm);
+  if(days===1) return T('you left yesterday — '+hm, '您昨天 '+hm+' 离开');
+  return T('you left '+(d.getMonth()+1)+'/'+d.getDate()+' — '+hm, '您于'+(d.getMonth()+1)+'月'+d.getDate()+'日 '+hm+' 离开');
+}
+function recapCard(){
+  loadRecap();
+  const rows=recapRows();
+  const workBtn=`<button onclick="APP.cmd('toggleWork')" style="flex:none;background:none;border:none;padding:4px 0;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;color:var(--text-primary)">${state.workOpen?T('Hide the work ▴','收起明细 ▴'):T('Show the work ▾','查看明细 ▾')}</button>`;
+  // Nothing happened, so the Recap does not need a card to say so — one quiet
+  // line above the rest of Home, and the only remaining route to the day's log.
+  // It says the FEED was quiet, never "nothing needed doing": the fires below it
+  // own that question and can be shouting while the feed is silent.
+  if(rows&&!rows.length){
+    return `<div class="rise" style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:2px 4px 4px">
+      <span style="font-size:15px;color:var(--text-secondary);min-width:0">${state.reallyAway?T('All quiet while you were away.','您不在时一切平静。'):T('Nothing new just now.','暂时没有新动静。')}</span>
+      ${workBtn}</div>${workFold()}`;
+  }
+  const body = rows===null
+    ? (state.recapTried&&state.recap===null
+        ? `<div style="font-size:15px;color:var(--text-secondary);line-height:1.55">${T('The recap could not be read. Everything below is still live.','动态读取失败。下方内容仍为实时数据。')}</div>`
+        : `<div style="font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`)
+    : `<div style="display:flex;flex-direction:column;gap:12px">${rows.map(r=>
+        `<div style="display:flex;align-items:flex-start;gap:11px">
+           <span style="width:7px;height:7px;border-radius:50%;background:var(--accent);flex:none;margin-top:7px"></span>
+           <span style="font-size:15px;line-height:1.5">${r}</span></div>`).join('')}</div>`;
   return `<div class="rise" style="background:var(--surface-raised);border-radius:var(--radius-card);padding:24px;color:var(--text-primary)">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
-      <span class="breathe" style="width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none"></span>
-      <span style="font-size:18px;font-weight:500">${title}</span></div>
-    ${items?`<div style="display:flex;flex-direction:column">${items.map(([l,v],i)=>
-      `<div style="display:flex;align-items:baseline;justify-content:space-between;padding:11px 0;${i?'border-top:1px solid var(--border-default)':''}">
-         <span style="font-size:15px;color:var(--text-secondary)">${l}</span>
-         <span class="num" style="font-size:20px;font-weight:500">${v}</span></div>`).join('')}</div>`
-      :`<div style="font-size:15px;color:var(--text-secondary);line-height:1.55;padding:2px 0 4px">${T('The overnight figures could not be read. Everything below is still live.','夜间数据读取失败。下方内容仍为实时数据。')}</div>`}
-    <div style="margin-top:18px;display:flex;align-items:baseline;justify-content:space-between;gap:12px">
-      <span style="font-size:15px;color:var(--text-secondary);font-style:italic">${items?T("You're welcome.",'不用谢。'):''}</span>
-      <button onclick="APP.cmd('toggleWork')" style="flex:none;background:none;border:none;padding:4px 0;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;color:var(--text-primary)">${state.workOpen?T('Hide the work ▴','收起明细 ▴'):T('Show the work ▾','查看明细 ▾')}</button>
-    </div>
+    <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:16px">
+      <span style="font-size:18px;font-weight:500">${recapTitle()}</span>
+      <span class="num" style="font-size:13px;color:var(--text-secondary)">${recapSinceLabel()}</span></div>
+    ${body}
+    <div style="margin-top:18px;display:flex;align-items:baseline;justify-content:flex-end">${workBtn}</div>
     ${workFold()}</div>`;
 }
 function screenHome(){
@@ -2884,7 +2974,25 @@ reg('openOrder', id=>{
   } else { render(); state.detailMounted=true; }
 });
 
+/* The operator's role, the same read the desktop bootstraps RA_POS from. It
+   decides whether the Recap says the money out loud: a warehouse, dispatch or
+   customer-service account sees its own queue without the revenue. Defaults to
+   the full owner view when the read fails, which is what the desktop does too. */
+async function loadMe(){
+  try{
+    const r=await fetch('/api/backend/me',{credentials:'same-origin',headers:{accept:'application/json'}});
+    if(!r.ok) return;
+    const j=await r.json();
+    const u=(j&&(j.user||j.data||j))||{};
+    const POS=['store_manager','warehouse','customer_service','dispatch'];
+    if(POS.includes(u.role)) state.pos=u.role;
+  }catch(e){}
+}
 async function loadLive(){
+  // Role first, and awaited: the Recap renders money rows or does not depending
+  // on it, and a card that shows revenue for half a second before hiding it has
+  // already shown it.
+  await loadMe();
   // config → store name + currency (best-effort; keeps mock on any miss)
   try{ const cfg=await api('/config') || {};
     state.cfg=cfg;
@@ -2923,34 +3031,11 @@ async function loadLive(){
     const bs=d.funnel||d.byStatus||{};
     state.liveAttn={ ship:(bs.paid?bs.paid.n:null), reviews:null, low:null };
   }catch(e){ if(String(e.message)==='auth') return; }
-  // orders list (the heart of the app)
+  // orders list (the heart of the app). The Recap no longer derives anything
+  // from it — it reads the activity feed since you last left, like the desktop.
   try{ const rows=await api('/orders?limit=50');
-    // An array, not a NON-EMPTY array: a shop whose first night is quiet has
-    // zero overnight orders, and zero is an answer. Requiring rows.length left
-    // liveRecap null and the card fell back to the mock's "214 orders
-    // processed" — an invented number, on a live phone, in the hero.
-    if(Array.isArray(rows)){
-      // Overnight recap from raw timestamps: last night 22:00 → 08:00 today (or now, if earlier).
-      // gzgrocery rows are display-only wholesale-pickup mirrors (see routes/retail.js
-      // dashboard route) — they're excluded from every other order/revenue count in the
-      // app, so they must be excluded here too, or a quiet storefront night reads as sales.
-      // Cancelled/refunded orders don't belong in a "while you slept" recap either.
-      const RECAP_STATUSES=new Set(['paid','preparing','dispatched','delivered','awaiting_restock']);
-      try{ const now=new Date();
-        const end=new Date(now); end.setHours(8,0,0,0);
-        const start=new Date(end); start.setDate(start.getDate()-1); start.setHours(22,0,0,0);
-        const cutoff=now<end?now:end; let n=0, rev=0;
-        rows.forEach(r=>{ if(r.channel==='gzgrocery'||!RECAP_STATUSES.has(r.status)) return;
-          const t=new Date(String(r.placed_at||'').replace(' ','T'));
-          if(!isNaN(t)&&t>=start&&t<=cutoff){ n++; rev+=Number(r.total||0); } });
-        state.liveRecap={orders:n, revenue:rev};
-      }catch(e){}
-      state.liveOrders=rows.map(mapOrderRow); DB.orders=state.liveOrders;
-    }
+    if(Array.isArray(rows)){ state.liveOrders=rows.map(mapOrderRow); DB.orders=state.liveOrders; }
   }catch(e){}
-  // Tried, whatever came back. The Recap uses this to tell "no orders" from
-  // "never asked": only the second may show the sample card.
-  state.recapTried=true;
   // products
   try{ const rows=await api('/products?limit=50');
     if(Array.isArray(rows)&&rows.length){ DB.products=rows.map(mapProduct); state.liveProductsLoaded=true; }
