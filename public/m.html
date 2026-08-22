@@ -281,7 +281,7 @@ const state = {
   cfg:null, setup:null, zones:null, mirror:null, mirrorLoading:null, mirrorMode:null,
   couponBusy:null, couponErr:null, bcBusy:null, bcErr:null, ask:null, askErr:null,
   custBusy:null, custErr:null,
-  ops:null, opsLoading:false,
+  ops:null, opsLoading:false, featBusy:null, featErr:null,
   media:null, mediaLoading:false, mediaTried:false,
   fapiao:null, fapiaoLoading:false, fapiaoBusy:false, fapiaoTried:false, printerTried:false,
   ordersView:null, ordersTotal:null, ordersLoading:false, ordersMore:false,
@@ -495,7 +495,8 @@ reg('signout', ()=>{
     .catch(()=>{})
     .then(()=>{ location.href='/backend/login'; });
 });
-reg('enable', f=>{ state.sw[f]=true; showToast(T('Enabled','已开启')); });
+reg('enable', f=>{ if(FEATURES.includes(f)) toggleFeature(f); });
+reg('toggleFeature', k=>toggleFeature(k));
 reg('faqToggle', i=>{ state.faqOpen=state.faqOpen===i?null:i; render(); });
 reg('mirror', w=>{ push('mirror_'+w); loadMirror(w); });
 reg('stepInc', k=>{ sheetStep[k]=(sheetStep[k]||0)+1; render(); });
@@ -530,11 +531,13 @@ function nothingYet(title,msg){
 const cfgGet=(path,dflt)=>{ let v=state.cfg; for(const k of String(path).split('.')){ if(v==null) return dflt; v=v[k]; } return v==null?dflt:v; };
 const desktopNote=()=>`<div style="text-align:center;font-size:12.5px;color:var(--text-secondary)">${T('Best edited on desktop','建议在电脑端编辑')}</div>`;
 function flagGate(flag){
+  const busy=state.featBusy===flag;
   return `<div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:44px 24px;text-align:center">
     <span style="width:52px;height:52px;border-radius:14px;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;color:var(--text-secondary)">${ic('sparkles',22)}</span>
     <div style="font-size:16px;font-weight:500">${T('Turned off','未开启')}</div>
     <div style="font-size:13.5px;color:var(--text-secondary);max-width:250px;line-height:1.55">${T('Set this up on desktop, or enable it here.','可在电脑端设置，或在此开启。')}</div>
-    <button class="cta" style="width:auto;padding:12px 30px;font-size:15px" onclick="APP.cmd('enable','${flag}')">${T('Enable','开启')}</button></div>`;
+    <button class="btn2" style="padding:0 24px" ${busy?'disabled':''} onclick="APP.cmd('enable','${flag}')">${busy?T('Turning on…','开启中…'):T('Turn it on','开启')}</button>
+    ${state.featErr?`<div style="font-size:14px;color:var(--brick)">${state.featErr}</div>`:''}</div>`;
 }
 
 /* ==========================================================================
@@ -742,7 +745,7 @@ function screenInbox(){
   const unseenCount=DB.reviews.filter(r=>!state.reviewsSeen.has(r.cust[0])).length;
   let body;
   if(seg==='reviews') body=DB.reviews.map(r=>item(r,true)).join('');
-  else if(state.sw.feedback) body=DB.feedback.length?DB.feedback.map(r=>item(r,false)).join(''):emptyState(T('Inbox zero','已清空'),T('No open feedback.','没有待处理反馈。'));
+  else if(featOn('feedback')) body=DB.feedback.length?DB.feedback.map(r=>item(r,false)).join(''):emptyState(T('Inbox zero','已清空'),T('No open feedback.','没有待处理反馈。'));
   else body=`<div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:44px 24px;text-align:center">
       <span style="width:52px;height:52px;border-radius:14px;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;color:var(--text-secondary)">${ic('sparkles',22)}</span>
       <div style="font-size:16px;font-weight:500">${T('Feedback is off','反馈已关闭')}</div>
@@ -836,10 +839,12 @@ function settingsGroupCard(rows){
       ? (state.fapiao
           ? toggle(!!state.fapiao.autoIssue,"APP.cmd('toggleFapiao')")
           : `<span style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span>`)
-      : r.tgl ? toggle(state.sw[r.tgl],`APP.cmd('sw','${r.tgl}')`)
+      : r.feat ? (state.featBusy===r.feat
+          ? `<span style="font-size:13px;color:var(--text-secondary)">${T('Saving…','保存中…')}</span>`
+          : toggle(featOn(r.feat),`APP.cmd('toggleFeature','${r.feat}')`))
       : `<span style="font-size:15px;color:var(--text-secondary);white-space:nowrap">${r.value}</span>`;
   return `<div class="list">${rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
-    <div style="display:flex;align-items:center;gap:16px;padding:12px 16px;min-height:56px"><span style="flex:1;min-width:0;font-size:15px">${r.label}</span>
+    <div style="display:flex;align-items:center;gap:16px;padding:12px 16px;min-height:56px"><span style="flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.label}</span>
     ${ctl(r)}</div>`).join('')}
     ${state.printerErr&&rows.some(r=>r.printer||r.fapiao)?`<div style="padding:12px 16px;font-size:13px;color:var(--brick);background:var(--brick-tint)">${state.printerErr}</div>`:''}</div>`;
 }
@@ -904,7 +909,7 @@ const SUBS={
     return `<div style="padding:16px;display:flex;flex-direction:column;gap:14px">
     ${settingsGroupCard([
       {label:T('Auto-print receipts','自动打印小票'),printer:true},
-      {label:T('Routing','派单'),value:T('Nearest store, automatically','自动派往最近门店')},
+      {label:T('Routing','派单'),value:T('Nearest store','最近门店')},
     ])}
     ${settingsGroupCard([{label:T('Delivery zones','配送范围'),
         value: state.zones ? String(state.zones.length) : T('Loading…','加载中…')}])}${desktopNote()}</div>`;
@@ -978,14 +983,14 @@ const SUBS={
       </div>`).join('')}
       ${desktopNote()}</div>`;
   }},
-  affiliate:{title:['Affiliate','分销'],render:()=> state.sw.affiliate?`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+  affiliate:{title:['Affiliate','分销'],render:()=> featOn('affiliate')?`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
       <div style="background:var(--surface-raised);border-radius:14px;padding:16px"><div class="eyebrow">${T('Overview','概览')}</div><div class="num" style="font-size:15px;margin-top:8px">${T('42 affiliates · ¥8,120 referred','42 位分销 · 引流 ¥8,120')}</div></div>
       <div style="display:flex;align-items:center;gap:12px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:14px"><span style="flex:1;font-size:15px">${T('Enabled','已启用')}</span>${toggle(true,"APP.cmd('sw','affiliate')")}</div>${desktopNote()}</div>`
     :`<div style="padding:14px 16px 24px">${flagGate('affiliate')}</div>`},
   social:{title:['Social proof','社交证明'],render:()=>nothingYet(T('Set up on desktop','在电脑端设置'),
     T('Social proof shows recent buyers to your customers. It is configured on desktop; nothing about it can be read or changed from here yet.','社交证明会向顾客展示最近的购买。设置在电脑端完成，手机端暂时无法查看或修改。')),
   },
-  membership:{title:['Membership','会员积分'],render:()=> !state.sw.membership?`<div style="padding:14px 16px 24px">${flagGate('membership')}</div>`:
+  membership:{title:['Membership','会员积分'],render:()=> !featOn('membership')?`<div style="padding:14px 16px 24px">${flagGate('membership')}</div>`:
     `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
       <div><div class="eyebrow" style="padding:2px 4px 8px">${T('Tiers','等级')}</div>
       <div class="list">${DB.tiers.map((t,i)=>`${i?'<div class="sep"></div>':''}<div style="display:flex;align-items:center;gap:12px;padding:13px 14px">${pill(t.kind,T(...t.tier))}
@@ -1193,12 +1198,19 @@ function screenSettings(){
   const groups=[
     {h:T('Store','店铺'),rows:[{label:T('Store profile','店铺资料'),value:state.storeName||T('Your store','你的店铺')},{label:T('Operations','运营'),cmd:"APP.cmd('push','operations')",chev:true},{label:T('Quick stock','快速盘点'),cmd:"APP.cmd('push','quickstock')",chev:true}]},
     {h:T('Notifications','通知'),rows:[{label:T('Live updates','实时更新'),tgl:'__live'},{label:T('Sound','提示音'),tgl:'__sound'}]},
+    {h:T('Features','功能'),rows:[
+      {label:T('Membership & points','会员积分'),feat:'membership'},
+      {label:T('Customer reviews','顾客评价'),feat:'reviews'},
+      {label:T('Feedback inbox','反馈收件箱'),feat:'feedback'},
+      {label:T('FAQ & help','常见问题'),feat:'faq'},
+      {label:T('Affiliate','分销'),feat:'affiliate'},
+    ]},
     {h:T('Automation','自动化'),rows:[
       {label:T('Auto-print receipts','自动打印小票'),printer:true},
       // Routing is behaviour, not a setting: every order already goes to the
       // nearest store and there is nothing to switch. Saying so beats a toggle
       // that writes nowhere.
-      {label:T('Routing','派单'),value:T('Nearest store, automatically','自动派往最近门店')},
+      {label:T('Routing','派单'),value:T('Nearest store','最近门店')},
     ]},
     {h:T('Preferences','偏好'),rows:[{label:T('Language','语言'),value:state.lang==='en'?'English':'中文',cmd:"APP.cmd('toggleLang')",chev:true},{label:T('Theme','主题'),value:state.theme==='light'?T('Light','浅色'):T('Dark','深色'),cmd:"APP.cmd('toggleTheme')",chev:true}]},
   ];
@@ -1208,19 +1220,22 @@ function screenSettings(){
           : `<span style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span>`)
       : r.tgl==='__live'?toggle(state.live,"APP.cmd('toggleLive')")
       : r.tgl==='__sound'?toggle(state.sound,"APP.cmd('toggleSound')")
-      : toggle(state.sw[r.tgl],`APP.cmd('sw','${r.tgl}')`);
+      : r.feat ? (state.featBusy===r.feat
+          ? `<span style="font-size:13px;color:var(--text-secondary)">${T('Saving…','保存中…')}</span>`
+          : toggle(featOn(r.feat),`APP.cmd('toggleFeature','${r.feat}')`))
+      : `<span style="font-size:15px;color:var(--text-secondary)">${r.value||''}</span>`;
   if(!state.printer&&!state.printerTried) loadPrinter();
   return `<div style="padding:16px 16px 28px;display:flex;flex-direction:column;gap:18px">
     <button onclick="APP.cmd('noop')" style="display:flex;align-items:center;gap:14px;width:100%;text-align:left;cursor:pointer;background:var(--surface-raised);border:none;border-radius:14px;padding:16px;font-family:inherit">
       <span style="width:46px;height:46px;border-radius:12px;background:var(--surface-card);display:flex;align-items:center;justify-content:center;flex:none;font-size:18px;font-weight:500;color:var(--text-primary)">${(state.storeName||T('Your store','你的店铺')).trim().charAt(0)}</span>
-      <span style="flex:1;min-width:0"><span style="display:block;font-size:16px;font-weight:500">${state.storeName||T('Your store','你的店铺')}</span><span style="display:block;font-size:13px;color:var(--text-secondary);margin-top:2px">${T('Owner · Growth plan','店主 · 成长版')}</span></span>
+      <span style="flex:1;min-width:0"><span style="display:block;font-size:16px;font-weight:500">${state.storeName||T('Your store','你的店铺')}</span>${state.setup&&state.setup.allDone===false?`<span style="display:block;font-size:13px;color:var(--text-secondary);margin-top:2px">${T(state.setup.percent+'% set up','已完成 '+state.setup.percent+'%')}</span>`:''}</span>
       <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>
     ${groups.map(g=>`<div><div class="eyebrow" style="padding:2px 4px 8px">${g.h}</div>
       <div class="list">${g.rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:60px"></div>':''}
-        <button class="row" onclick="${r.cmd||"APP.cmd('noop')"}">
+        <div class="row" style="cursor:${r.cmd?'pointer':'default'}" ${r.cmd?`onclick="${r.cmd}"`:''}>
           <span style="width:32px;height:32px;border-radius:8px;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;color:var(--text-secondary);flex:none">${ic('settings',16)}</span>
-          <span style="flex:1;min-width:0;font-size:15px">${r.label}</span>
-          ${r.tgl?rt(r):`<span style="display:flex;align-items:center;gap:8px;flex:none">${r.dusk?'<span class="breathe" style="width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none"></span>':''}${r.value?`<span style="font-size:14px;color:var(--text-secondary);white-space:nowrap">${r.value}</span>`:''}${r.chev||r.value?`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`:''}</span>`}</button>`).join('')}</div></div>`).join('')}
+          <span style="flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.label}</span>
+          ${(r.tgl||r.feat||r.printer||r.fapiao)?rt(r):`<span style="display:flex;align-items:center;gap:8px;flex:none">${r.value?`<span style="font-size:15px;color:var(--text-secondary);white-space:nowrap">${r.value}</span>`:''}${r.chev||r.value?`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`:''}</span>`}</div>`).join('')}</div></div>`).join('')}
     <button onclick="APP.cmd('signout')" style="width:100%;padding:15px;border:1px solid var(--border-default);border-radius:14px;background:var(--surface-card);color:var(--danger);font-family:inherit;font-size:15px;font-weight:500;cursor:pointer">${T('Sign out','退出登录')}</button>
     <div style="text-align:center;font-size:12px;color:var(--text-secondary);padding:2px 0 6px">tacet · v1.0 · ${T('runs in silence','静默运行')}</div></div>`;
 }
@@ -1396,6 +1411,24 @@ reg('toggleBlock', ()=>{
       blocked?T('Unblocked','已解除'):T('Blocked','已封禁'))};
   render();
 });
+/* features.<key> in storefront_config — the same switch the desktop writes, and
+   the same default (on) the server reads it with. */
+const FEATURES=['membership','affiliate','faq','feedback','reviews'];
+function featOn(key){ const v=cfgGet('features.'+key,null); return v==null?true:!!v; }
+function toggleFeature(key){
+  if(state.featBusy) return;
+  const next=!featOn(key);
+  state.featBusy=key; state.featErr=null; render();
+  apiWrite('/config',{['features.'+key]:next},'PUT').then(()=>{
+    state.cfg=state.cfg||{}; state.cfg.features=Object.assign({},state.cfg.features||{},{[key]:next});
+    state.featBusy=null; render();
+    showToast(next?T('Turned on','已开启'):T('Turned off','已关闭'));
+  }).catch(e=>{
+    state.featBusy=null;
+    if(String(e.message)==='auth') return;
+    state.featErr=T('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
+  });
+}
 async function loadOps(){
   if(state.opsLoading) return; state.opsLoading=true;
   try{ state.ops=await api('/dashboard/ops'); }catch(e){}

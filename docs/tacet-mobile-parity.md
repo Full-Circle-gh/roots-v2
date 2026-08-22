@@ -48,7 +48,9 @@ sent nothing to the server.
 | Create coupon / flash sale / broadcast | marketing screens | toast "Created" | **Removed** — authoring belongs on a keyboard; the lists stay, and a scheduled broadcast can now be **cancelled** (`POST /broadcasts/:id/recall`) |
 | Quick stock (3 hardcoded products) | Quick stock | counted nothing | **Removed** — a product's stock is edited per store in Products, for real |
 | Media library (9 fake tiles) | Media | `IMG_1000`…`IMG_1008` | **Fixed** — the real library from `GET /media/list` |
-| Remaining feature toggles (membership, pop-ups, feedback inbox…) | settings | in-memory only | **Still fake** — each needs its real key confirmed |
+| Feature switches (membership, reviews, feedback, FAQ, affiliate) | settings, and the gates on those screens | in-memory only — **and the screens were gated on them**, so a store could see a feature it had switched off | **Fixed** — `features.<key>` in storefront_config, the same switch the desktop writes |
+| Every settings switch | settings | rendered **below** its row — a `<button>` inside a `<button>` is invalid HTML, so the parser re-parented it | **Fixed** — the row is a div |
+| "Owner · Growth plan" | settings | a plan nobody sold them | **Removed** — the real setup progress takes the line |
 | Sign out | account menu | toast "Signed out"; the session stayed open | **Fixed** — `POST /api/backend/logout`, then the login page |
 | Search | topbar | five hardcoded results; the input did nothing | **Fixed** — searches orders server-side (`q=`); the jump list is built from the real nav |
 
@@ -64,10 +66,10 @@ desktop is the right home
 | Desktop capability | Phone |
 |---|---|
 | The Recap, real away-window figures | ✅ |
-| Needs-you rows, deep-linked | ✅ (three rows; desktop has five fires) |
+| Needs-you rows, deep-linked | ✅ — the real `/dashboard/ops` fires now (delivery, payments to check, refunds, orders to start, awaiting restock, invoices, restock), Brick-first then oldest, each opening its filtered list |
 | Today's KPIs with deltas | ✅ |
-| Unhandled-orders card (paid, nobody started) | ✖ — it is the same question the operator opens the phone to ask |
-| Payment-mismatch fire (new, `a5ac97e`) | ✖ — add to Needs you |
+| Unhandled-orders card (paid, nobody started) | ✅ — "Orders to start" |
+| Payment-mismatch fire | ✅ — "Payments to check" |
 | Low-stock drawer with per-store counts | ➖ |
 | Activity feed ("Show the work") | ✖ — the Recap's fold is the brand's own affordance |
 | Reports chapters | ➖ |
@@ -102,9 +104,9 @@ desktop is the right home
 | Segments with real counts, tier filter | ✅ |
 | Roster with the unopened treatment | ✅ |
 | Record: ordered / orders / avg, points, wallet, recent orders, addresses, diagnostics | ✅ (read-only) |
-| Adjust points | ✖ |
-| Top up wallet | ✖ |
-| Block / unblock | ✖ |
+| Adjust points | ✅ — with the reason the server requires |
+| Top up wallet | ✅ |
+| Block / unblock | ✅ |
 | Message the customer | ✖ — the one that is genuinely phone-shaped |
 | Edit profile, addresses CRUD | ➖ |
 | Force logout, reset test account, CSV export | ➖ |
@@ -178,8 +180,9 @@ Ordered by what an operator loses today, not by effort.
 | ~~5~~ | ~~Refunds: approve / reject / pay out, and Mark paid~~ | | **Done** — each behind a confirm or a tender chooser |
 | ~~6~~ | ~~Orders: store filter, pagination, real search~~ | | **Done** |
 | ~~9~~ | ~~Coupon on/off, fapiao auto-issue, media, the channel mirrors~~ | | **Done** |
-| 7 | **Customer: points, wallet, block** | existing per-customer routes | Each is a small modal on desktop. |
-| 8 | **Staff note, edit ship-to** | existing order routes | Small, and both are corrections an operator makes while standing up. |
+| ~~7~~ | ~~Customer: points, wallet, block~~ | | **Done** |
+| 8 | **Edit ship-to** | `POST /orders/:id/address/apply-chinese` | Seven fields with Chinese address matching behind them. The most common phone-side correction, and the one where a mistyped district means a failed delivery. **Owner's call before building.** |
+| — | ~~Staff note~~ | | **Not a thing** — `staff_note` is written at order creation only; no endpoint edits it afterwards. Would need backend work. |
 | 9 | **The remaining feature toggles** | one endpoint each | fapiao, membership, FAQ, feedback inbox, pop-ups, coupon active — each needs its real key confirmed before it is wired. |
 
 Nothing above needs a new endpoint. Every one of them needs the same three
