@@ -158,6 +158,22 @@ desktop is the right home
 | Drag-to-reorder, bulk edit, export | ➖ |
 | Full product editor (photos, description, badge, category, thresholds) | ➖ decided: desktop. Price and per-store stock are the phone's two edits |
 
+### Coupons (`05-marketing.js`)
+
+| Desktop | Phone |
+|---|---|
+| **What the coupon gives** (¥ off / % off / free shipping) | ✅ — the phone showed a title, a code and a used count, so "20% off everything" and "¥5 off over ¥200" looked the same |
+| **The rules** (minimum, per-customer limit, total cap) | ✅ — "every order" stated rather than left blank, since no limit is a decision |
+| **Used / max** | ✅ |
+| **Ends**, amber inside a week or once past | ✅ |
+| **Pills**: auto-apply (naming *whose* checkout), in the app, new signups, given N/M | ✅ — auto-apply keeps its Dusk, since "the system does this for you" is what Dusk means |
+| Running / Off / All segments with counts | ✅ |
+| ↳ "N coupons are off — view" | ✅ |
+| **Expired ≠ running** | ✅ — **a real bug fixed**: the phone read `is_active` alone, so a coupon that expired months ago sat at the top of the list with its switch on |
+| Turn on / pause | ✅ — writes `is_active`; an expired coupon turned back on says Ended, because it is |
+| Search by code or title | ➖ — the list is short and segmented |
+| Create / edit a coupon, grant to a customer | ➖ — authoring, desktop |
+
 ### Media library (`07-content-billing.js`)
 
 | Desktop capability | Phone |

@@ -210,9 +210,17 @@ const DB = {
     {id:'FP-2026-0449',order:'RT-…040',amount:'¥390',status:['Pending','待开票'],kind:'pending',date:['Yesterday','昨日']},
   ],
   coupons:[
-    {title:['¥10 off first order','首单立减 ¥10'],code:'WELCOME10',meta:['Used 128 · min ¥50','已用 128 · 满 ¥50'],on:true},
-    {title:['Weekend 20% off','周末 8 折'],code:'WEEKEND20',meta:['Used 64 · Sat–Sun','已用 64 · 周末'],on:true},
-    {title:['¥30 off over ¥200','满 200 减 30'],code:'OVER200',meta:['Used 12 · min ¥200','已用 12 · 满 ¥200'],on:false},
+    {code:'WELCOME10',title:['First order','首单优惠'],gives:['¥10 off','立减 ¥10'],
+     rules:['orders over ¥50 · once each','满 ¥50、每人一次'],used:128,max:null,
+     expires:null,ended:false,soon:false,on:true,active:true,
+     pills:[{dusk:true,label:'Applied for new signups'},{label:'New signups'}]},
+    {code:'WEEKEND20',title:['Weekend','周末活动'],gives:['20% off','20% 折扣'],
+     rules:['every order · 200 total','每人不限次、共 200 张'],used:64,max:200,
+     expires:'2026-08-27',ended:false,soon:true,on:true,active:true,
+     pills:[{label:'In the app'}]},
+    {code:'OVER200',title:['Big baskets','大额订单'],gives:['¥30 off','立减 ¥30'],
+     rules:['orders over ¥200 · once each','满 ¥200、每人一次'],used:12,max:null,
+     expires:'2026-07-31',ended:true,soon:false,on:false,active:true,pills:[]},
   ],
   flash:[
     {title:['Lunch flash','午市闪购'],win:['12:00–14:00 · 30% off drinks','12:00–14:00 · 饮品 7 折'],status:['Live','进行中'],kind:'live'},
@@ -268,7 +276,7 @@ const state = {
   custTotal:null, custMore:false, custSort:'last_seen',
   custId:null, custDetail:null, prodView:'catalogue',
   prodQ:'', prodStatus:'all', prodCat:'all', catalogueTried:false, catalogueLoading:false,
-  workOpen:false, workEvents:null, workLoading:false, workErr:null,
+  workOpen:false, workEvents:null, workLoading:false, workErr:null, vchSeg:'on',
   affiliate:null, affiliateTried:false, invSeg:'all', invLoaded:false,
   geo:null, geoTried:false, chan:null, chanTried:false, sales:null,
   recap:null, recapTried:false, recapSince:0, reallyAway:false, pos:'default',
@@ -543,6 +551,7 @@ function reKindProduct(p){
   else if(!p.supplier&&p.stock<=low){ p.kind='restock'; p.status=['Low','库存低']; }
   else { p.kind='on'; p.status=['Live','在售']; }
 }
+reg('vchSeg', v=>{ state.vchSeg=v; render(); });
 reg('prodClearQ', ()=>{ state.prodQ=''; state.prodStatus='all'; state.prodCat='all'; render(); });
 /* The Recap says what happened while you were away; "Show the work" is the
    promise that it is not withholding the rest. Same feed the desktop's fold
@@ -1432,17 +1441,45 @@ const SUBS={
           ${v.file?`<a href="${escAttr(v.file)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 12px;cursor:pointer;font-family:inherit;flex:none;text-decoration:none">${ic('download',15)} ${T('Open','打开')}</a>`:''}</div></div>`).join('')}</div></div>`;
   }},
   coupons:{title:['Coupons','优惠券'],render:()=>{
-    const list=DB.coupons||[];
-    if(!list.length) return nothingYet(T('No coupons','没有优惠券'),T('Coupons are written on desktop. Live ones show here, and can be paused from here.','优惠券在电脑端创建。生效中的会显示在这里，可在此暂停。'));
-    return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    const all=DB.coupons||[];
+    if(!all.length) return nothingYet(T('No coupons','没有优惠券'),
+      T('Coupons are written on desktop. Running ones show here, and can be paused from here.','优惠券在电脑端创建。生效中的会显示在这里，可在此暂停。'));
+    const on=all.filter(c=>c.on), off=all.filter(c=>!c.on);
+    const seg=state.vchSeg||'on';
+    const list=seg==='on'?on:seg==='off'?off:on.concat(off);
+    const segs=[{key:'on',en:'Running',zh:'生效中',count:on.length},
+      {key:'off',en:'Off',zh:'已停用',count:off.length},
+      {key:'all',en:'All',zh:'全部',count:all.length}];
+    return `<div>
+    <div style="padding:12px 0 4px">${chipRow(segs,seg,'vchSeg')}</div>
+    <div style="padding:8px 16px 24px;display:flex;flex-direction:column;gap:12px">
     ${state.couponErr?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick)">${state.couponErr}</div>`:''}
-    ${list.map(c=>`<div style="display:flex;align-items:center;gap:16px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:16px">
-      <span style="flex:1;min-width:0"><span style="display:block;font-size:15px;font-weight:500">${T(...c.title)}</span>
-      <span class="num" style="display:block;font-size:13px;color:var(--text-secondary);margin-top:2px">${c.code} · ${T(...c.meta)}</span></span>
-      ${c.id==null?`<span style="font-size:13px;color:var(--text-secondary)">${c.on?T('On','已启用'):T('Off','已关闭')}</span>`
-        :(state.couponBusy===c.code?`<span style="font-size:13px;color:var(--text-secondary)">${T('Saving…','保存中…')}</span>`
-        :toggle(!!c.on,`APP.cmd('toggleCoupon','${c.code}')`))}</div>`).join('')}
-    ${desktopNote()}</div>`;
+    ${!list.length?`<div style="padding:32px 8px;text-align:center;font-size:15px;color:var(--text-secondary)">${
+      seg==='on'?T('Nothing running right now.','当前没有生效中的优惠券。'):T('Nothing here.','这里没有优惠券。')}</div>`:''}
+    ${list.map(c=>`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:9px${c.on?'':';opacity:.7'}">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+        <span style="min-width:0;display:flex;flex-direction:column;gap:2px">
+          <span style="display:flex;align-items:center;gap:8px;min-width:0">
+            <span class="num" style="font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(c.code)}</span>
+            ${!c.on?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]};flex:none">${c.ended?T('Ended','已到期'):T('Off','已停用')}</span>`:''}</span>
+          <span style="font-size:13px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...c.title)}</span></span>
+        ${c.id==null?`<span style="font-size:13px;color:var(--text-secondary);flex:none">${c.on?T('On','已启用'):T('Off','已关闭')}</span>`
+          :(state.couponBusy===c.code?`<span style="font-size:13px;color:var(--text-secondary);flex:none">${T('Saving…','保存中…')}</span>`
+          :`<span style="flex:none">${toggle(!!c.active,`APP.cmd('toggleCoupon','${escAttr(c.code)}')`)}</span>`)}
+      </div>
+      <div style="font-size:18px;font-weight:500;letter-spacing:-.01em">${T(...c.gives)}</div>
+      <div style="font-size:13px;color:var(--text-secondary);line-height:1.5">${T(...c.rules)}</div>
+      ${c.pills.length?`<div style="display:flex;flex-wrap:wrap;gap:6px">${c.pills.map(p=>
+        `<span class="pill" style="background:${p.dusk?'var(--dusk-tint)':PILL.muted[0]};color:${p.dusk?'var(--accent)':PILL.muted[1]};${p.dusk?'display:inline-flex;align-items:center;gap:6px':''}">${
+          p.dusk?'<span class="breathe" style="width:6px;height:6px;border-radius:50%;background:var(--accent)"></span>':''}${p.label}</span>`).join('')}</div>`:''}
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-top:8px;border-top:1px solid var(--border-default)">
+        <span class="num" style="font-size:13px;color:var(--text-secondary)">${T('Used '+c.used+(c.max!=null?' of '+c.max:''),'已用 '+c.used+(c.max!=null?' / '+c.max:''))}</span>
+        <span class="num" style="font-size:13px;color:${c.ended||c.soon?'#8A6425':'var(--text-secondary)'}">${
+          c.expires?(c.ended?T('ended '+fmtDay(c.expires),'已于 '+fmtDay(c.expires)+' 结束'):T('ends '+fmtDay(c.expires),fmtDay(c.expires)+' 结束')):T('no end date','长期有效')}</span></div>
+    </div>`).join('')}
+    ${seg==='on'&&off.length?`<div style="text-align:center;font-size:13px;color:var(--text-secondary);padding-top:4px">${
+      T(off.length+(off.length===1?' coupon is off':' coupons are off'),off.length+' 张已停用')} · <button onclick="APP.cmd('vchSeg','off')" style="background:none;border:none;padding:0;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--text-primary);text-decoration:underline">${T('view','查看')}</button></div>`:''}
+    ${desktopNote()}</div></div>`;
   }},
   flash:{title:['Flash sales','秒杀'],render:()=>{
     const list=DB.flash||[];
@@ -1650,10 +1687,13 @@ SUBS.sales={title:['Sales','销售'],render:()=>screenSales()};
 function toggleCoupon(code){
   const c=(DB.coupons||[]).find(x=>x.code===code);
   if(!c||c.id==null||state.couponBusy) return;
-  const next=!c.on;
+  // The switch controls is_active. LIVE is is_active AND unexpired, so turning
+  // an expired coupon back on makes it active and still not live — and the card
+  // has to keep saying "Ended" rather than flipping to running.
+  const next=!c.active;
   state.couponBusy=code; state.couponErr=null; render();
   apiWrite('/vouchers/'+c.id,{is_active:next},'PATCH').then(()=>{
-    c.on=next; state.sw['c_'+code]=next; state.couponBusy=null; render();
+    c.active=next; c.on=next&&!c.ended; state.sw['c_'+code]=next; state.couponBusy=null; render();
     showToast(next?T('Coupon on','已启用'):T('Coupon paused','已暂停'));
   }).catch(e=>{
     state.couponBusy=null;
@@ -3980,12 +4020,50 @@ function mapInvoice(r){
     file:r.invoice_file_url||null,
     date:[fmtDay(r.invoice_issued_at||r.placed_at)||'—',fmtDay(r.invoice_issued_at||r.placed_at)||'—']};
 }
+/* A coupon's headline fact is what it GIVES, and the phone's card never said —
+   it showed a title, a code and a used count, so "20% off everything" and "¥5
+   off over ¥200" were indistinguishable without opening the desktop. */
+function vchGives(r){
+  if(r.type==='free_shipping') return [T('Free shipping','免运费'),T('Free shipping','免运费')];
+  if(r.type==='percent') return [(Number(r.value)||0)+'% off',(Number(r.value)||0)+'% 折扣'];
+  return [money(CUR,r.value)+' off','立减 '+money(CUR,r.value)];
+}
+/* The rules, in the desktop's own order and words. "every order" is stated
+   rather than left blank: no per-customer limit is a decision, not an absence. */
+function vchRules(r){
+  const en=[],zh=[];
+  if(Number(r.min_subtotal)>0){ en.push('orders over '+money(CUR,r.min_subtotal)); zh.push('满 '+money(CUR,r.min_subtotal)); }
+  const per=Number(r.per_customer_limit||0);
+  if(per===1){ en.push('once each'); zh.push('每人一次'); }
+  else if(per>1){ en.push(per+' each'); zh.push('每人 '+per+' 次'); }
+  else { en.push('every order'); zh.push('每人不限次'); }
+  if(r.max_uses!=null){ en.push(r.max_uses+' total'); zh.push('共 '+r.max_uses+' 张'); }
+  return [en.join(' · '), zh.join('、')];
+}
 function mapVoucher(r){
-  const val=r.type==='percent'?(r.value+'% off'):money(CUR,r.value)+' off';
-  const min=r.min_subtotal?(' · min '+money(CUR,r.min_subtotal)):'';
-  return {id:r.id, title:[r.description||val,r.description||val], code:r.code,
-    meta:['Used '+(r.grant_used_count||r.used_count||0)+min,'已用 '+(r.grant_used_count||r.used_count||0)+min],
-    on:!!r.is_active};
+  const gives=vchGives(r);
+  const exp=r.expires_at?_date(r.expires_at):null;
+  const ended=!!(exp&&exp<=new Date());
+  // LIVE is is_active AND not past its expiry. The phone read is_active alone,
+  // so a coupon that expired in May sat at the top of the list with its switch
+  // on, reading as a running promotion.
+  const live=!!r.is_active&&!ended;
+  const pills=[];
+  if(r.auto_apply) pills.push({dusk:true, label:r.auto_grant_signup?T('Applied for new signups','新客自动抵扣')
+    :r.is_public?T('Applied for everyone','全场自动抵扣'):T('Applied for the people it was given to','已发放顾客自动抵扣')});
+  if(r.is_public) pills.push({label:T('In the app','小程序可领')});
+  if(r.auto_grant_signup) pills.push({label:T('New signups','新客自动发')});
+  if(r.grant_count) pills.push({label:T('Given '+(Number(r.per_customer_limit||0)!==1?r.grant_count:((r.grant_used_count||0)+'/'+r.grant_count)),
+    '已发 '+(Number(r.per_customer_limit||0)!==1?r.grant_count:((r.grant_used_count||0)+'/'+r.grant_count)))});
+  return {id:r.id, code:r.code,
+    title:[r.title_en||r.title_cn||r.description||gives[0], r.title_cn||r.title_en||r.description||gives[1]],
+    gives, rules:vchRules(r),
+    used:Number(r.used_count||0), max:r.max_uses!=null?Number(r.max_uses):null,
+    expires:r.expires_at||null, ended,
+    // Ending inside a week is the desktop's quiet amber: time to decide whether
+    // to extend it, and the only moment this date is worth noticing.
+    soon:!!(exp&&!ended&&(exp-Date.now())<7*864e5),
+    pills, on:live, active:!!r.is_active};
 }
 const FLASH_KIND={live:'live',running:'live',scheduled:'draft',upcoming:'draft',ended:'off',none:'off'};
 function mapFlash(r){
