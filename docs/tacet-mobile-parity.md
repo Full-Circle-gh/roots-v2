@@ -5,10 +5,32 @@
 under `public/retail-admin/`. Every row below carries a file reference; nothing
 here is inferred from a screenshot.
 
-> **The finding, in one line: the phone is a monitoring app whose write
-> controls are mockups.** Nine controls looked like they did something and
-> wrote nothing. The order controls were fixed on 2026-08-22 (`9f84247`); the
-> rest are listed here with what each would take.
+> **The finding, in one line: the phone was a monitoring app whose write
+> controls were mockups, monitoring numbers it had made up.** Nine controls
+> looked like they did something and wrote nothing. Eleven screens rendered
+> content that came from the source rather than the server.
+
+**Closed, 2026-08-22.** Every screen in `public/m.html` has now been read
+against its desktop counterpart. What that turned up, by class:
+
+| Class | Count | Now |
+|---|---|---|
+| Controls wired to `noop` — a row, a chevron, and nothing behind it | 9 | Gone. `noop` itself is deleted, and the sweep fails the build on the name |
+| Screens rendering invented content — fake purchase orders, five stock movements that never happened, six categories in neither scheme, a `¥184,220` balance no endpoint returns | 11 | Gone. Every screen reads its server, and an empty answer looks empty |
+| Loaders that assigned only `if (rows.length)`, so an empty server answer left the mock on the glass | 4 | Fixed |
+| Status computed from one flag where the desktop resolves several from the dates — an expired coupon reading *Running*, a pop-up starting in December reading *Live* | 3 | Fixed |
+| **Writes that reported success and sent nothing** | 1 | Fixed — `APP.cmd` forwarded one argument to a two-argument handler. Voting's Open/Close had never worked and always said it had |
+| Health an operator can only see from a desk — a stuck Meituan queue, an exhausted maps quota, a gzgrocery decision queue, unpublished CMS drafts | 4 | Surfaced |
+
+**What holds it:** `scripts/test_mobile_screens.js` renders every screen, warm
+and cold, in both languages and both themes (208 renders), and carries five
+static guards — a called-but-undefined helper, a missing `DB` key, a duplicate
+or undeclared `state` key, a `noop` reference, and an `APP.cmd` call site
+passing arguments the dispatcher would drop. Each was written *after* the bug
+it describes shipped, and each is mutation-tested. Seven behavioural probes
+(`test_mobile_inbox`, `_purchasing`, `_activity`, `_categories`, `_club`,
+`_voting`, `_settings`, `_orders`) assert rendered text and, for the writes
+with the worst failure modes, the request body.
 
 ---
 
