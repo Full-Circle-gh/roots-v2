@@ -581,6 +581,48 @@ The `DB` block is what remains: an offline fallback for the screens that have
 one, every set overwritten by its fetch — including when that fetch says there
 is nothing.
 
+### Settings → Features (`02-settings-ops.js`, `lib/features.js`)
+
+| Desktop capability | Phone |
+|---|---|
+| membership, affiliate, reviews, feedback, faq | ✅ |
+| **socialProof** | ❌ → ✅ — decides whether shoppers see bought-counts, the recent-buyers ticker and the SOLD badge. Unreachable from a phone |
+| **quickStock** | ❌ → ✅ — off means shop staff open `/stock` and get a closed screen |
+| **kitchenAdd** | ❌ → ✅ — off means kitchen staff cannot log what they just made |
+| The desktop's names | ✅ — "Referral program", not "Affiliate"; "Product reviews", not "Customer reviews" |
+| **The entitlement ceiling** (`tenant.entitlements`) | ❌ → ✅ — a feature the tenant is not entitled to draws no switch, the same rule the desktop boots with. The phone would have written a preference nobody would ever honour |
+| What turning one OFF does | ➕ — stated under the row while it is off. On a phone there is no hover, no help text and no second column, and "Quick Stock" alone does not tell you the staff app closes |
+
+Two dead controls went with it: the store card was a button wired to `noop`
+with a chevron on it, and the "Store profile" row drew a chevron and did
+nothing. The card now opens the setup guide while setup is unfinished and is a
+plain card once it is done; the row says where a profile is edited.
+
+Also `state.sw` — a map that read like a feature-flag store (`membership`,
+`affiliate`, `social`, `faq`, `feedback`, `autoprint`, `autoroute`, `lowstock`,
+`popups`) and that nothing had looked at since those switches were wired to the
+real config. Trimmed to the coupon switches it actually holds.
+
+### Social proof
+
+Was an honest "nothing about it can be read or changed from here" — which
+stopped being true the moment its flag became reachable. It now states what the
+flag is doing in shopper terms, with the switch on the card.
+
+### Setup guide (`17-setup-guide.js`)
+
+| Desktop capability | Phone |
+|---|---|
+| Progress over the five REQUIRED steps | ❌ → ✅ — the phone merged `steps` and `optional` into one list, so the two optional items counted against a percentage the server computes from the required five |
+| Which step is next | ❌ → ✅ |
+| Per-step detail the endpoint already returns | ❌ → ✅ — how many stores, how many products, which payment methods, delivery / pickup / both |
+| Optional steps, marked optional and said not to gate opening | ❌ → ✅ |
+| "Your store is open" once every required step is done | ✅ |
+| Running any step | ➖ decided: desktop. Each one is a wizard — a store with an address, hours and a map pin; an Alipay QR upload; a delivery-or-pickup chooser; "open the doors". **Three controls used to pretend otherwise**: every step row was a button with a chevron wired to `noop`, and so was "Continue setup". They are gone, and the screen says where the work happens |
+
+`scripts/test_mobile_settings.js` — 33 assertions, 9 cases across all three,
+including that the step list contains no buttons at all.
+
 ## 4. Open questions
 
 Not gaps — decisions that are the shop's to make, not this file's.

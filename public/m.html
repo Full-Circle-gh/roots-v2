@@ -244,11 +244,6 @@ const DB = {
     {id:'s4',name:'Wang Zhiqiang',phone:'137****5510',tier:'sprout',orders:3,spend:812,seen:'2026-06-30 08:20:00'},
     {id:'s5',name:'Wu Yaqi',phone:'188****3320',tier:'seed',orders:0,spend:0,seen:'2026-05-02 15:44:00'},
   ],
-  setupSteps:[
-    {name:['Add your first product','添加第一件商品'],done:true},{name:['Set up delivery','配送设置'],done:true},
-    {name:['Connect a channel','连接渠道'],done:true},{name:['Add a payment method','添加收款方式'],done:false},
-    {name:['Publish your mini app','发布小程序'],done:false},{name:['Invite your team','邀请团队'],done:false},
-  ],
 };
 function chIcon(ch){ return `<span style="color:var(--text-secondary);display:flex;flex:none">${ic(CH_ICON[ch]||'store',16)}</span>`; }
 
@@ -279,7 +274,7 @@ const state = {
   ordersView:null, ordersTotal:null, ordersLoading:false, ordersMore:false,
   storeF:'all', stores:null, orderQ:'',
   reply:null, thread:null, createKind:null, createValue:10, createActive:true,
-  pos:null, posErr:null, posTried:false, poSeg:'open', poId:null,
+  poList:null, posErr:null, posTried:false, poSeg:'open', poId:null,
   act:null, actErr:null, actTried:false, actRange:'today', actSource:'', actMore:false,
   cats:null, catCounts:null, catsErr:null, catsTried:false, catTop:null,
   tiers:null, tierCounts:null, tiersErr:null, tiersTried:false,
@@ -288,9 +283,23 @@ const state = {
   polls:null, pollsErr:null, pollsTried:false, pollOpen:null, pollBusy:null,
   poDetail:null, poErr:null, poBusy:false,
   toast:null, drag:0, dragging:false, faqOpen:null, reviewsSeen:new Set(),
+  /* Declared here rather than sprung into existence by whichever loader gets
+     there first. There is one state object and well over a hundred keys on it,
+     and two screens picking the same short name is not a hypothetical: `pos`
+     was the operator's ROLE, read by the money gate, and a later screen reused
+     it for a list of purchase orders. Nothing failed — they simply took turns
+     clobbering each other. Everything the app touches is on this list now, and
+     scripts/test_mobile_screens.js fails the build on a key that is not. */
+  storeName:null, focus:null,
+  liveOrders:null, liveDetail:null, liveKpis:null, liveVitals:null, liveAttn:null,
+  liveStatusCounts:null, liveChannelCounts:null, liveInvoiceCounts:null, liveProductsLoaded:false,
+  custLoading:false, custMetaLoaded:false, detailMounted:false, mirrorTried:false, ent:{},
   qs:{oat:8,nuts:0,carrot:42},
-  sw:{fapiao:true,membership:true,affiliate:false,social:false,faq:true,feedback:true,
-      autoprint:true,autoroute:true,lowstock:true,popups:true,c_WELCOME10:true,c_WEEKEND20:true,c_OVER200:false},
+  /* Coupon switches only, keyed c_<CODE>. This map used to also carry
+     membership / affiliate / social / faq / feedback / autoprint / autoroute /
+     lowstock / popups — nine names that read like feature flags and that
+     nothing had looked at since those switches were wired to the real config. */
+  sw:{},
 };
 const app = document.getElementById('app');
 let toastTimer;
@@ -1380,6 +1389,71 @@ function setupState(){
   if(d) return {pct:d.percent, done:d.requiredDone, total:d.requiredTotal, left:Math.max(0,d.requiredTotal-d.requiredDone), real:true};
   return {pct:null, real:false};
 }
+/* ==========================================================================
+   Setup guide — read-only (desktop: 17-setup-guide.js)
+   --------------------------------------------------------------------------
+   The phone's version had three controls that did nothing: every step row was
+   a button with a chevron wired to noop, and so was "Continue setup". It also
+   flattened /setup's two lists into one, so the two OPTIONAL steps (WeChat
+   sign-in, brand) counted against progress that the server computes from the
+   five required ones — and it threw away every per-step detail the endpoint
+   returns: how many stores, how many products, which payment method, whether
+   handover is delivery or pickup.
+
+   Nothing here is actionable on purpose. Each step on the desktop opens a
+   wizard — a store with a map and a timezone, an Alipay QR upload, a
+   delivery-or-pickup chooser, "open the doors". None of that is phone work.
+   So this screen reports, and says where the work happens.
+   ========================================================================== */
+const SETUP_LABEL={store:['Your store','门店信息'],products:['Add your first product','添加第一件商品'],
+  payment:['Add a payment method','添加收款方式'],fulfillment:['Set up delivery or pickup','设置配送或自提'],
+  open:['Open your store','开始营业'],wechat:['Connect WeChat sign-in','连接微信登录'],brand:['Add your brand','完善品牌']};
+/* What the server already knows about each step, said rather than discarded. */
+function setupDetail(x){
+  if(x.key==='store'&&x.count!=null) return x.count+' '+T(x.count===1?'store':'stores','家门店');
+  if(x.key==='products'&&x.count!=null) return x.count+' '+T(x.count===1?'product':'products','件商品');
+  if(x.key==='payment') return x.method==='both'?T('WeChat Pay and Alipay','微信支付与支付宝')
+    :x.method==='wechat'?T('WeChat Pay','微信支付'):x.method==='alipay'?T('Alipay','支付宝'):'';
+  if(x.key==='fulfillment'){
+    if(x.delivery&&x.pickup) return T('Delivery and pickup','配送与自提');
+    if(x.delivery) return T('Delivery','配送');
+    if(x.pickup) return T('Pickup only','仅自提');
+    return '';
+  }
+  return '';
+}
+function setupRow(x,i,n){
+  const det=setupDetail(x);
+  return `${i?'<div class="sep" style="margin-left:52px"></div>':''}
+    <div style="display:flex;align-items:center;gap:12px;padding:13px 14px">
+      ${x.done?`<span style="width:24px;height:24px;border-radius:50%;background:rgba(163,180,159,.28);display:flex;align-items:center;justify-content:center;color:#5F7357;flex:none">${ic('check',15,2.25)}</span>`
+             :`<span style="width:24px;height:24px;border-radius:50%;border:2px solid var(--border-default);flex:none"></span>`}
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+        <span style="font-size:15px">${T(...(SETUP_LABEL[x.key]||[x.key,x.key]))}</span>
+        ${det?`<span class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:2px">${det}</span>`:''}</span>
+      ${x.done?'':`<span style="font-size:12.5px;color:var(--text-secondary);flex:none">${n?T('next','下一步'):T('to do','待办')}</span>`}</div>`;
+}
+function screenSetup(){
+  const d=state.setup;
+  if(!d) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const req=Array.isArray(d.steps)?d.steps:[];
+  const opt=Array.isArray(d.optional)?d.optional:[];
+  const pct=Number(d.percent||0), done=Number(d.requiredDone||0), total=Number(d.requiredTotal||req.length);
+  const nextIdx=req.findIndex(x=>!x.done);
+  return `<div style="padding:16px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    <div style="background:var(--surface-raised);border-radius:14px;padding:18px">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+        <span style="font-size:15px;font-weight:500">${d.allDone?T('Your store is open','店铺已开业'):T('Setup progress','开店进度')}</span>
+        <span class="num" style="font-size:13px;color:var(--text-secondary)">${pct}%${d.allDone?'':' · '+Math.max(0,total-done)+' '+T('left','待完成')}</span></div>
+      <div style="margin-top:12px;height:6px;border-radius:999px;background:var(--surface-card);overflow:hidden">
+        <div style="height:6px;width:${pct}%;border-radius:999px;background:${d.allDone?'var(--sage)':'var(--graphite)'}"></div></div>
+      ${nextIdx>=0?`<div style="font-size:13px;color:var(--text-secondary);margin-top:12px">${T('Next','下一步')}: ${T(...(SETUP_LABEL[req[nextIdx].key]||['—','—']))}</div>`:''}</div>
+    <div class="list">${req.map((x,i)=>setupRow(x,i,i===nextIdx)).join('')}</div>
+    ${opt.length?`<div><div class="eyebrow" style="padding:2px 4px 8px">${T('Optional','可选')}</div>
+      <div class="list">${opt.map((x,i)=>setupRow(x,i,false)).join('')}</div>
+      <div style="font-size:12.5px;color:var(--text-secondary);padding:8px 4px 0">${T('These do not gate opening.','这些不影响开业。')}</div></div>`:''}
+    ${noteBar(T('Each step is a wizard on desktop — a store with its address and hours, a payment method, delivery or pickup.','每一步在电脑端以引导方式完成 — 门店地址与营业时间、收款方式、配送或自提。'))}</div>`;
+}
 function screenMore(){
   const su=setupState();
   return `<div style="padding:16px 0 8px">
@@ -1910,7 +1984,7 @@ function loadPOs(force){
   if(state.posTried&&!force) return;
   state.posTried=true;
   api('/purchases').then(rows=>{
-    state.pos=Array.isArray(rows)?rows:[]; state.posErr=null; render();
+    state.poList=Array.isArray(rows)?rows:[]; state.posErr=null; render();
   }).catch(e=>{
     if(String(e.message)==='auth') return;
     state.posErr=T('Could not load purchase orders.','无法加载采购单。'); render();
@@ -1958,8 +2032,8 @@ function screenPurchasing(){
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
       <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
       <span style="font-size:14px;color:var(--brick)">${state.posErr}</span></div></div>`;
-  if(!state.pos) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
-  const all=state.pos;
+  if(!state.poList) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const all=state.poList;
   if(!all.length) return nothingYet(T('No purchase orders yet','还没有采购单'),
     T('An order is what you are buying from one supplier for one store. They are written on desktop; once one exists you can read it and tick it in from here.',
       '采购单记录你向某个供应商、为某家门店采购的内容。在电脑端创建后，可在此查看并收货。'));
@@ -2071,27 +2145,7 @@ function settingsGroupCard(rows){
 }
 let sheetStep={};
 const SUBS={
-  setup:{title:['Open your store','开店引导'],render:()=>{
-    const su=setupState();
-    const SETUP_LABEL={store:['Your store','门店信息'],products:['Add your first product','添加第一件商品'],
-      payment:['Add a payment method','添加收款方式'],fulfillment:['Set up delivery or pickup','设置配送或自提'],
-      open:['Open your store','开始营业'],wechat:['Connect WeChat','连接微信'],brand:['Add your brand','完善品牌']};
-    const steps=(state.setup&&Array.isArray(state.setup.steps))
-      ? state.setup.steps.map(x=>({name:SETUP_LABEL[x.key]||[x.key,x.key],done:!!x.done}))
-      : DB.setupSteps;
-    const done=su.real?su.done:steps.filter(s=>s.done).length, pct=su.real?su.pct:Math.round(done/steps.length*100);
-    return `<div style="padding:16px 16px 24px;display:flex;flex-direction:column;gap:16px">
-      <div style="background:var(--surface-raised);border-radius:14px;padding:18px">
-        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px"><span style="font-size:15px;font-weight:500">${T('Setup progress','开店进度')}</span>
-        <span class="num" style="font-size:13px;color:var(--text-secondary)">${pct}% · ${steps.length-done} ${T('left','待完成')}</span></div>
-        <div style="margin-top:12px;height:6px;border-radius:999px;background:var(--surface-card);overflow:hidden"><div style="height:6px;width:${pct}%;border-radius:999px;background:var(--graphite)"></div></div></div>
-      <div class="list">${steps.map((s,i)=>`${i?'<div class="sep" style="margin-left:52px"></div>':''}
-        <button class="row" onclick="APP.cmd('noop')">
-          ${s.done?`<span style="width:24px;height:24px;border-radius:50%;background:rgba(163,180,159,.28);display:flex;align-items:center;justify-content:center;color:#5F7357;flex:none">${ic('check',15,2.25)}</span>`
-                 :`<span style="width:24px;height:24px;border-radius:50%;border:2px solid var(--border-default);flex:none"></span>`}
-          <span style="flex:1;font-size:15px">${T(...s.name)}</span><span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`).join('')}</div>
-      <button class="cta" onclick="APP.cmd('noop')">${T('Continue setup','继续设置')}</button></div>`;
-  }},
+  setup:{title:['Open your store','开店引导'],render:()=>screenSetup()},
   products:{title:['Products','产品'],render:()=>{
     loadCatalogue();
     const L=state.liveProductsLoaded, P=DB.products;
@@ -2308,9 +2362,22 @@ const SUBS={
       ${state.featErr?`<div style="font-size:14px;color:var(--brick)">${state.featErr}</div>`:''}
       <div style="text-align:center;font-size:12.5px;color:var(--text-secondary)">${T('Reward amounts and the ledger are on desktop','奖励金额与明细在电脑端')}</div></div>`;
   }},
-  social:{title:['Social proof','社交证明'],render:()=>nothingYet(T('Set up on desktop','在电脑端设置'),
-    T('Social proof shows recent buyers to your customers. It is configured on desktop; nothing about it can be read or changed from here yet.','社交证明会向顾客展示最近的购买。设置在电脑端完成，手机端暂时无法查看或修改。')),
-  },
+  social:{title:['Social proof','社交证明'],render:()=>{
+    // The switch is real (features.socialProof) and reachable from Settings, so
+    // this screen states what it is currently doing rather than saying nothing
+    // can be read from here — which stopped being true.
+    const on=featOn('socialProof'), busy=state.featBusy==='socialProof';
+    return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+      <div class="card" style="padding:16px;display:flex;align-items:center;gap:14px">
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+          <span style="font-size:15px;font-weight:500">${busy?T('Saving…','保存中…'):(on?T('Showing recent buyers','正在展示最近购买'):T('Switched off','已关闭'))}</span>
+          <span style="font-size:12.5px;color:var(--text-secondary);margin-top:3px;line-height:1.5">${on
+            ? T('Shoppers see bought-counts, a recent-buyers ticker and the SOLD badge.','顾客会看到购买人数、最近购买动态与“已售”标签。')
+            : T('None of the bought-counts, the recent-buyers ticker or the SOLD badge are shown.','购买人数、最近购买动态与“已售”标签均不显示。')}</span></span>
+        ${toggle(on,"APP.cmd('toggleFeature','socialProof')")}</div>
+      ${state.featErr?`<div style="font-size:14px;color:var(--brick)">${state.featErr}</div>`:''}
+      ${noteBar(T('What counts as recent, and which products show it, are set on desktop.','“最近”的范围与展示哪些商品在电脑端设置。'))}</div>`;
+  }},
   membership:{title:['Membership','会员积分'],render:()=> !featOn('membership')
     ? `<div style="padding:14px 16px 24px">${flagGate('membership')}</div>` : screenMembership()},
   wallet:{title:['Top-up','充值'],render:()=>screenTopups()},
@@ -2508,17 +2575,42 @@ function mirrorScreen(which,note){
         <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.cust}${o.store?' · '+o.store:''}</span>
         <span class="num" style="flex:none">${o.when}</span></div></div>`).join('')}</div>`;
 }
+/* The desktop's Settings → Features, all eight of them. The phone carried five
+   — socialProof, quickStock and kitchenAdd were missing entirely, so three
+   switches that change what shoppers and shop staff see could not be reached
+   from a phone at all. Each row says what turning it OFF does, because on this
+   list that is the consequence nobody can guess: quickStock off means the
+   staff stock app shows a closed screen. Names follow the desktop's. */
+const FEATURE_CATALOG=[
+  {key:'membership',  en:'Membership & points', zh:'会员与积分',
+   offEn:'Off: no tiers and no points in the mini app.', offZh:'关闭后：小程序不显示等级与积分。'},
+  {key:'affiliate',   en:'Referral program',    zh:'推荐计划',
+   offEn:'Off: nobody can apply a code or earn a reward.', offZh:'关闭后：无法使用邀请码，也无法获得奖励。'},
+  {key:'reviews',     en:'Product reviews',     zh:'商品评价',
+   offEn:'Off: customers cannot leave or read reviews.', offZh:'关闭后：顾客无法评价或查看评价。'},
+  {key:'feedback',    en:'Customer feedback',   zh:'用户反馈',
+   offEn:'Off: the "Found a bug?" inbox closes.', offZh:'关闭后：反馈收件箱关闭。'},
+  {key:'socialProof', en:'Social proof',        zh:'社交证明',
+   offEn:'Off: no bought-counts, recent buyers or SOLD badge.', offZh:'关闭后：不显示购买人数、最近购买与“已售”标签。'},
+  {key:'faq',         en:'Help / FAQ',          zh:'帮助 / 常见问题',
+   offEn:'Off: the help screen is hidden in the mini app.', offZh:'关闭后：小程序内隐藏帮助页面。'},
+  {key:'quickStock',  en:'Quick Stock (mobile)', zh:'手机库存',
+   offEn:'Off: shop staff open /stock and get a closed screen.', offZh:'关闭后：门店员工打开 /stock 会看到停用页面。'},
+  {key:'kitchenAdd',  en:'Add Stock (kitchen)',  zh:'加库存',
+   offEn:'Off: kitchen staff cannot add what they just made.', offZh:'关闭后：后厨员工无法录入刚制作的数量。'},
+];
+/* Entitled, or not on the list. A missing key means entitled — that is the
+   server's own rule (lib/features.js entitlements()). */
+const featEntitled=k=>!(state.ent&&state.ent[k]===false);
+function FEATURE_ROWS(){
+  return FEATURE_CATALOG.filter(f=>featEntitled(f.key))
+    .map(f=>({label:T(f.en,f.zh), feat:f.key, note:featOn(f.key)?null:T(f.offEn,f.offZh)}));
+}
 function screenSettings(){
   const groups=[
-    {h:T('Store','店铺'),rows:[{label:T('Store profile','店铺资料'),value:state.storeName||T('Your store','你的店铺')},{label:T('Operations','运营'),cmd:"APP.cmd('push','operations')",chev:true},{label:T('Quick stock','快速盘点'),cmd:"APP.cmd('push','quickstock')",chev:true}]},
+    {h:T('Store','店铺'),rows:[{label:T('Store profile','店铺资料'),value:T('on desktop','在电脑端')},{label:T('Operations','运营'),cmd:"APP.cmd('push','operations')",chev:true},{label:T('Quick stock','快速盘点'),cmd:"APP.cmd('push','quickstock')",chev:true}]},
     {h:T('Notifications','通知'),rows:[{label:T('Live updates','实时更新'),tgl:'__live'},{label:T('Sound','提示音'),tgl:'__sound'}]},
-    {h:T('Features','功能'),rows:[
-      {label:T('Membership & points','会员积分'),feat:'membership'},
-      {label:T('Customer reviews','顾客评价'),feat:'reviews'},
-      {label:T('Feedback inbox','反馈收件箱'),feat:'feedback'},
-      {label:T('FAQ & help','常见问题'),feat:'faq'},
-      {label:T('Affiliate','分销'),feat:'affiliate'},
-    ]},
+    {h:T('Features','功能'),rows:FEATURE_ROWS()},
     {h:T('Automation','自动化'),rows:[
       {label:T('Auto-print receipts','自动打印小票'),printer:true},
       // Routing is behaviour, not a setting: every order already goes to the
@@ -2540,15 +2632,24 @@ function screenSettings(){
       : `<span style="font-size:15px;color:var(--text-secondary)">${r.value||''}</span>`;
   if(!state.printer&&!state.printerTried) loadPrinter();
   return `<div style="padding:16px 16px 28px;display:flex;flex-direction:column;gap:18px">
-    <button onclick="APP.cmd('noop')" style="display:flex;align-items:center;gap:14px;width:100%;text-align:left;cursor:pointer;background:var(--surface-raised);border:none;border-radius:14px;padding:16px;font-family:inherit">
-      <span style="width:46px;height:46px;border-radius:12px;background:var(--surface-card);display:flex;align-items:center;justify-content:center;flex:none;font-size:18px;font-weight:500;color:var(--text-primary)">${(state.storeName||T('Your store','你的店铺')).trim().charAt(0)}</span>
-      <span style="flex:1;min-width:0"><span style="display:block;font-size:16px;font-weight:500">${state.storeName||T('Your store','你的店铺')}</span>${state.setup&&state.setup.allDone===false?`<span style="display:block;font-size:13px;color:var(--text-secondary);margin-top:2px">${T(state.setup.percent+'% set up','已完成 '+state.setup.percent+'%')}</span>`:''}</span>
-      <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>
+    ${(()=>{ // The card led with a chevron and a noop. It goes somewhere now
+             // when there is somewhere to go — the setup guide — and is a
+             // plain card, not a button, when there is not.
+      const unfinished=state.setup&&state.setup.allDone===false;
+      const inner=`<span style="width:46px;height:46px;border-radius:12px;background:var(--surface-card);display:flex;align-items:center;justify-content:center;flex:none;font-size:18px;font-weight:500;color:var(--text-primary)">${(state.storeName||T('Your store','你的店铺')).trim().charAt(0)}</span>
+      <span style="flex:1;min-width:0"><span style="display:block;font-size:16px;font-weight:500">${state.storeName||T('Your store','你的店铺')}</span>${unfinished?`<span style="display:block;font-size:13px;color:var(--text-secondary);margin-top:2px">${T(state.setup.percent+'% set up','已完成 '+state.setup.percent+'%')}</span>`:''}</span>
+      ${unfinished?`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`:''}`;
+      return unfinished
+        ? `<button onclick="APP.cmd('push','setup')" style="display:flex;align-items:center;gap:14px;width:100%;text-align:left;cursor:pointer;background:var(--surface-raised);border:none;border-radius:14px;padding:16px;font-family:inherit">${inner}</button>`
+        : `<div style="display:flex;align-items:center;gap:14px;width:100%;background:var(--surface-raised);border-radius:14px;padding:16px">${inner}</div>`;
+    })()}
     ${groups.map(g=>`<div><div class="eyebrow" style="padding:2px 4px 8px">${g.h}</div>
       <div class="list">${g.rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:60px"></div>':''}
         <div class="row" style="cursor:${r.cmd?'pointer':'default'}" ${r.cmd?`onclick="${r.cmd}"`:''}>
           <span style="width:32px;height:32px;border-radius:8px;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;color:var(--text-secondary);flex:none">${ic('settings',16)}</span>
-          <span style="flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.label}</span>
+          <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+            <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.label}</span>
+            ${r.note?`<span style="font-size:12.5px;color:var(--text-secondary);margin-top:2px">${r.note}</span>`:''}</span>
           ${(r.tgl||r.feat||r.printer||r.fapiao)?rt(r):`<span style="display:flex;align-items:center;gap:8px;flex:none">${r.value?`<span style="font-size:15px;color:var(--text-secondary);white-space:nowrap">${r.value}</span>`:''}${r.chev||r.value?`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`:''}</span>`}</div>`).join('')}</div></div>`).join('')}
     <button onclick="APP.cmd('signout')" style="width:100%;padding:15px;border:1px solid var(--border-default);border-radius:14px;background:var(--surface-card);color:var(--danger);font-family:inherit;font-size:15px;font-weight:500;cursor:pointer">${T('Sign out','退出登录')}</button>
     <div style="text-align:center;font-size:12px;color:var(--text-secondary);padding:2px 0 6px">tacet · v1.0 · ${T('runs in silence','静默运行')}</div></div>`;
@@ -4979,6 +5080,11 @@ async function loadMe(){
     const u=(j&&(j.user||j.data||j))||{};
     const POS=['store_manager','warehouse','customer_service','dispatch'];
     if(POS.includes(u.role)) state.pos=u.role;
+    // The platform ceiling. A feature the tenant is not entitled to must not
+    // carry a switch here — the desktop hides it, and a switch that writes a
+    // preference nobody will ever honour is worse than an absent one. A
+    // missing key means entitled, so the default is an empty object.
+    state.ent=(u.tenant&&u.tenant.entitlements)||{};
   }catch(e){}
 }
 async function loadLive(){

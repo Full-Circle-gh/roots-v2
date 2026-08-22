@@ -86,7 +86,12 @@ function buildCases(src) {
     'sheet:search': "APP.cmd('openSearch')",
     // Purchasing reads a live ledger, so the sweep seeds one — otherwise every
     // pass renders the loading state and proves nothing about the rows.
-    'push:purchasing-rows': "state.posTried=true;state.pos=[{id:4,po_number:'RPO-0004',supplier:'Fresh Co.',store_name_en:'Tianhe',date:'2026-08-14',delivery_date:'2026-08-16',status:'Ordered',line_count:6,received_lines:0,total_cost:3240},{id:5,po_number:'RPO-0005',supplier:'Oat Works',date:'2026-08-20',delivery_date:'2026-08-30',status:'Delivered',line_count:3,received_lines:3,total_cost:1880}];APP.cmd('push','purchasing')",
+    'push:purchasing-rows': "state.posTried=true;state.poList=[{id:4,po_number:'RPO-0004',supplier:'Fresh Co.',store_name_en:'Tianhe',date:'2026-08-14',delivery_date:'2026-08-16',status:'Ordered',line_count:6,received_lines:0,total_cost:3240},{id:5,po_number:'RPO-0005',supplier:'Oat Works',date:'2026-08-20',delivery_date:'2026-08-30',status:'Delivered',line_count:3,received_lines:3,total_cost:1880}];APP.cmd('push','purchasing')",
+    // Setup reads /setup's two lists; Settings reads the entitlement ceiling.
+    'push:setup-live': "state.setup={percent:60,requiredDone:3,requiredTotal:5,allDone:false,steps:[{key:'store',done:true,count:2},{key:'products',done:true,count:128},{key:'payment',done:true,method:'both'},{key:'fulfillment',done:false,delivery:false,pickup:false},{key:'open',done:false}],optional:[{key:'wechat',done:false},{key:'brand',done:true}]};APP.cmd('push','setup')",
+    'push:setup-done': "state.setup={percent:100,requiredDone:5,requiredTotal:5,allDone:true,steps:[{key:'store',done:true,count:2},{key:'products',done:true,count:128},{key:'payment',done:true,method:'wechat'},{key:'fulfillment',done:true,pickup:true},{key:'open',done:true}],optional:[]};APP.cmd('push','setup')",
+    'push:settings-gated': "state.ent={socialProof:false,kitchenAdd:false};APP.cmd('push','settings')",
+    'push:social-off': "state.cfg=Object.assign({},state.cfg,{features:{socialProof:false}});APP.cmd('push','social')",
     // The mock's own rows must not outlive an empty server answer.
     'push:inbox-no-reviews': "DB.reviews=[];APP.cmd('push','inbox')",
     'push:coupons-empty': "DB.coupons=[];APP.cmd('push','coupons')",
@@ -113,11 +118,11 @@ function buildCases(src) {
     'push:activity-rows': "state.actTried=true;state.act={total:2,rows:[{id:1,ts_local:'2026-08-22 09:12:00',source:'miniapp',store:'Tianhe',sku:'OM-1L',product:'Oat milk 1L',delta:-2,balance_after:10},{id:2,ts_local:'2026-08-22 08:02:00',source:'manual',store:'Tianhe',sku:'CR-01',product:'Carrots',delta:12,balance_after:0,actor_label:'Mei',note:'recount'}],summary:[{source:'miniapp',events:1,units_out:2,units_in:0},{source:'manual',events:1,units_out:0,units_in:12}],digest:{zeroed:[{ts_local:'2026-08-22 08:02:00',product:'Carrots',sku:'CR-01'}],big:[{ts_local:'2026-08-22 08:02:00',source:'manual',product:'Carrots',delta:12,actor_label:'Mei'}],zeroed_total:1}};APP.cmd('push','activity')",
     'push:activity-quiet': "state.actTried=true;state.act={total:0,rows:[],summary:[],digest:{zeroed:[],big:[],zeroed_total:0}};APP.cmd('push','activity')",
     'push:activity-error': "state.actTried=true;state.actErr='Could not load stock activity.';APP.cmd('push','activity')",
-    'push:purchasing-empty': "state.posTried=true;state.pos=[];APP.cmd('push','purchasing')",
+    'push:purchasing-empty': "state.posTried=true;state.poList=[];APP.cmd('push','purchasing')",
     'push:purchasing-error': "state.posTried=true;state.posErr='Could not load purchase orders.';APP.cmd('push','purchasing')",
-    'sheet:po': "state.posTried=true;state.pos=[];APP.cmd('push','purchasing');state.poId=4;state.poDetail={id:4,po_number:'RPO-0004',supplier:'Fresh Co.',store_name_en:'Tianhe',date:'2026-08-14',delivery_date:'2026-08-16',status:'Ordered',total_cost:3240,notes:'Back door before 9.',items:[{id:1,name_en:'Oat milk 1L',sku:'OM-1L',qty:48,unit:'btl',total_cost:1440,current_stock:12},{id:2,name_en:'Carrots',sku:'CR-01',qty:20,unit:'kg',total_cost:1800,qty_received:18,damaged_qty:2}]};render()",
-    'sheet:po-loading': "state.posTried=true;state.pos=[];APP.cmd('push','purchasing');state.poId=4;render()",
-    'sheet:po-receive-ask': "state.posTried=true;state.pos=[];APP.cmd('push','purchasing');state.poId=4;state.poDetail={id:4,po_number:'RPO-0004',supplier:'F',status:'Ordered',total_cost:1,items:[]};render();APP.cmd('poStatus','Delivered')",
+    'sheet:po': "state.posTried=true;state.poList=[];APP.cmd('push','purchasing');state.poId=4;state.poDetail={id:4,po_number:'RPO-0004',supplier:'Fresh Co.',store_name_en:'Tianhe',date:'2026-08-14',delivery_date:'2026-08-16',status:'Ordered',total_cost:3240,notes:'Back door before 9.',items:[{id:1,name_en:'Oat milk 1L',sku:'OM-1L',qty:48,unit:'btl',total_cost:1440,current_stock:12},{id:2,name_en:'Carrots',sku:'CR-01',qty:20,unit:'kg',total_cost:1800,qty_received:18,damaged_qty:2}]};render()",
+    'sheet:po-loading': "state.posTried=true;state.poList=[];APP.cmd('push','purchasing');state.poId=4;render()",
+    'sheet:po-receive-ask': "state.posTried=true;state.poList=[];APP.cmd('push','purchasing');state.poId=4;state.poDetail={id:4,po_number:'RPO-0004',supplier:'F',status:'Ordered',total_cost:1,items:[]};render();APP.cmd('poStatus','Delivered')",
     'sheet:account': "APP.cmd('overflow')",
     'sheet:create': "APP.cmd('create','coupon')",
     'sheet:cust-points': "state.customers=DB.customers.slice();state.custLoaded=true;APP.cmd('tab','customers');state.custId=1;state.custDetail={customer:{nickname:'A',tier_key:'tree',points_balance:120,balance:8},stats:{orders:{}}};render();APP.cmd('adjustPoints')",
@@ -188,6 +193,48 @@ function main() {
     if (missing.length) {
       for (const n of missing) console.error(`FAIL static — ${n}() is called but never defined`);
       console.error(`\n${missing.length} helper${missing.length === 1 ? '' : 's'} called but not defined.`);
+      process.exit(1);
+    }
+  }
+
+  // ── Static pass: every state key is declared, exactly once ─────────────
+  // The app has ONE state object and ~120 keys on it. Two screens can pick the
+  // same short name without either author noticing: `state.pos` was the
+  // operator's ROLE (loadMe writes it; the money gate reads it) and a later
+  // edit reused it for the purchase-order list. Nothing failed — the two just
+  // took turns clobbering each other, and the symptom would have been revenue
+  // appearing for a warehouse operator, which no render test looks for.
+  // So: every state.x the file touches must appear in the literal, once.
+  {
+    const raw = (src.match(/<script>([\s\S]*?)<\/script>/) || [])[1] || '';
+    const js2 = raw.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+    const lit = (js2.match(/\bconst state\s*=\s*\{([\s\S]*?)\n\};/) || [])[1] || '';
+    if (!lit) { console.error('FAIL static — cannot find the state literal'); process.exit(1); }
+    // TOP-LEVEL keys only, and several per line. A regex cannot do this: the
+    // literal packs many keys on one line AND contains nested objects
+    // (`sw:{fapiao:…, affiliate:…}` is a map of feature flags, not of state
+    // keys). So walk it, tracking brace depth and skipping quoted strings.
+    const seen = new Map();
+    {
+      let depth = 0, q = null, ident = '';
+      for (let i = 0; i < lit.length; i++) {
+        const c = lit[i];
+        if (q) { if (c === '\\') i++; else if (c === q) q = null; continue; }
+        if (c === "'" || c === '"' || c === '`') { q = c; ident = ''; continue; }
+        if (c === '{' || c === '[' || c === '(') { depth++; ident = ''; continue; }
+        if (c === '}' || c === ']' || c === ')') { depth--; ident = ''; continue; }
+        if (/[A-Za-z0-9_$]/.test(c)) { ident += c; continue; }
+        if (c === ':' && depth === 0 && ident) seen.set(ident, (seen.get(ident) || 0) + 1);
+        ident = '';
+      }
+    }
+    const dupes = [...seen].filter(([, n]) => n > 1).map(([k]) => k).sort();
+    for (const k of dupes) console.error(`FAIL static — state.${k} is declared twice`);
+    const used = new Set([...js2.matchAll(/\bstate\.([a-zA-Z_$][\w$]*)/g)].map((m) => m[1]));
+    const undecl = [...used].filter((k) => !seen.has(k)).sort();
+    for (const k of undecl) console.error(`FAIL static — state.${k} is used but never declared in the state literal`);
+    if (dupes.length || undecl.length) {
+      console.error(`\n${dupes.length + undecl.length} state key problem${dupes.length + undecl.length === 1 ? '' : 's'}.`);
       process.exit(1);
     }
   }

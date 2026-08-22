@@ -36,7 +36,7 @@ const POS = `[
   {id:8, po_number:'RPO-0008', supplier:'Gone Ltd', date:'2026-07-02', status:'Cancelled', line_count:1, total_cost:5000}
 ]`;
 
-const SEEDED = `state.posTried=true; state.pos=${POS}; APP.cmd('push','purchasing');`;
+const SEEDED = `state.posTried=true; state.poList=${POS}; APP.cmd('push','purchasing');`;
 
 const DETAIL = `{id:4, po_number:'RPO-0004', supplier:'Fresh Co.', store_name_en:'Tianhe', store_name_cn:'天河店',
   date:'2026-08-14', delivery_date:'2026-08-16', status:'Ordered', total_cost:3240, notes:'Back door before 9am.',
@@ -69,7 +69,7 @@ const CASES = [
     ['All holds the cancelled one too', `txt('content').includes('RPO-0008')`],
     ['a draft reads Draft, the desktop\'s word for Requested', `txt('content').includes('Draft')`],
   ]],
-  ['empty ledger', `state.posTried=true; state.pos=[]; APP.cmd('push','purchasing');`, [
+  ['empty ledger', `state.posTried=true; state.poList=[]; APP.cmd('push','purchasing');`, [
     ['says there are none',        `txt('content').includes('No purchase orders yet')`],
     ['and invents none',           `!txt('content').includes('RPO-') && !txt('content').includes('Fresh Co.')`],
     ['no spend figure either',     `!txt('content').includes('spent this month')`],
