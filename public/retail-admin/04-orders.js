@@ -471,6 +471,24 @@ function invoiceLine(o) {
     + `${issued ? ICON_INV_DONE : ICON_INV_OWED}${label}</div>`;
 }
 
+// Why a pending order is STILL pending: the customer sent an Alipay screenshot,
+// the read succeeded, and it didn't match (short amount, wrong payee, stale
+// receipt, or a proof already used on another order). Without this the row is
+// indistinguishable from an order nobody ever paid for — which is exactly how
+// one sits unnoticed while the customer waits. Brick, because it is money in
+// dispute; a note line rather than a pill so it never competes with the order's
+// own status. Only on pending_payment: once a human has judged it and marked it
+// paid (or cancelled it), the verdict is history and the row says nothing.
+const ICON_PAY_CHECK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5"/><path d="M12 16v.2"/></svg>';
+function paymentCheckLine(o) {
+  if (o.alipay_ocr_verdict !== 'mismatch' || o.status !== 'pending_payment') return '';
+  const title = cuT(
+    "The payment screenshot was read and doesn't match this order — open it and check before marking paid",
+    '已识别付款截图,与本订单不一致 — 请打开核对后再标记付款');
+  return `<div class="ord-note-line is-alert" title="${escapeAttr(title)}">`
+    + `${ICON_PAY_CHECK}${cuT("Payment doesn't match", '付款不一致')}</div>`;
+}
+
 // Big, hard-to-miss banner at the top of the order drawer. Surfaces the
 // fact that this order has an open refund request even when the order's
 // primary status (Delivered, Paid, …) looks unremarkable. Skipped when
@@ -563,7 +581,11 @@ function renderAlipayProof(o) {
     ? `<div class="ap-hint">${cuT('Verify the amount matches, then Mark paid below.', '核对金额一致后,点击下方“标记已付款”。')}</div>`
     : '';
 
-  return `<div class="full ap-proof">
+  // id so a caller that opened this order BECAUSE of the payment can scroll to
+  // it (openOrder's `focus: 'payment'` — the dashboard's mismatch fire). Keyed
+  // by order id like #qp-<id>, so a drawer swap can never scroll to the
+  // previous order's card.
+  return `<div class="full ap-proof" id="ap-proof-${o.id}">
     <div class="kicker">Alipay payment · 支付宝付款</div>
     <div class="ap-card">
       <div class="ap-head">
@@ -1251,7 +1273,7 @@ async function loadOrders(opts = {}) {
         <td class="oc-shipto">${renderShipToCell(o)}</td>
         <td>${o.item_count}</td>
         <td class="numeric oc-total">¥${fmt(o.total)}</td>
-        <td class="status-cell"><div class="stack">${(() => { const p = orderStatusPill(o); return `<span class="pill ${p.cls}"><span class="dot"></span>${p.label}</span>`; })()}${refundBadge(o)}${addonBadge(o)}</div>${stockPendingBadge(o)}${invoiceLine(o)}</td>
+        <td class="status-cell"><div class="stack">${(() => { const p = orderStatusPill(o); return `<span class="pill ${p.cls}"><span class="dot"></span>${p.label}</span>`; })()}${refundBadge(o)}${addonBadge(o)}</div>${paymentCheckLine(o)}${stockPendingBadge(o)}${invoiceLine(o)}</td>
         <td class="oc-delivery">${renderDeliveryCell(o)}</td>
         <td class="muted oc-placed" style="font-size: 11px">${formatDate(o.placed_at)}</td>
       </tr>`;
@@ -4770,6 +4792,18 @@ function odFocusPointSection(orderId) {
   return true;
 }
 
+// Same contract for the Alipay proof card — used by the dashboard's "Payment
+// doesn't match" fire, whose whole subject is that card. Same degradation as
+// above: an order whose proof was cleared (or re-read to a match) between the
+// dashboard's poll and this click renders no .ap-proof at all, and landing at
+// the top of the drawer is the honest fallback, not an error.
+function odFocusPaymentSection(orderId) {
+  const el = document.getElementById('ap-proof-' + orderId);
+  if (!el) return false;
+  el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  return true;
+}
+
 async function openOrder(id, opts = {}) {
   _OPEN_ORDER = null;
   _ORDER_BACK_CUSTOMER = null;
@@ -4876,6 +4910,9 @@ async function openOrder(id, opts = {}) {
   // for a concurrent open to race with; and a missing #qp-<id> is still a clean
   // no-op inside odFocusPointSection.
   if (opts.focus === 'point' && _OPEN_ORDER) odFocusPointSection(_OPEN_ORDER.id);
+  // Same opt-gate, same reasoning, for the payment proof (dashboard mismatch
+  // fire → this order's Alipay card).
+  if (opts.focus === 'payment' && _OPEN_ORDER) odFocusPaymentSection(_OPEN_ORDER.id);
 }
 
 // Generic side-drawer open/close. Shared across Orders, Customers,
@@ -7815,6 +7852,7 @@ async function refreshOrderStatusCounts() {
     const d = j.data || {};
     const set = (id, n) => { const el = document.getElementById(id); if (el) el.textContent = n > 0 ? String(n) : ''; };
     set('oc-pending_payment', d.pending_payment);
+    set('oc-payment_mismatch', d.payment_mismatch);
     set('oc-paid',            d.paid);
     set('oc-preparing',       d.preparing);
     set('oc-rider_pickup',    d.rider_pickup);

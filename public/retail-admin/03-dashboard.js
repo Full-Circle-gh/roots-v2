@@ -1331,6 +1331,27 @@ function dashOpenInvoices() {
   if (chip && typeof setOrderStatus === 'function' && !chip.classList.contains('active')) setOrderStatus(chip);
 }
 
+// The "Payment doesn't match" fire's door. One order behind it → open THAT
+// order's drawer over the dashboard, landed on its Alipay card (openOrder
+// fetches by id, so no tab change is needed and the operator keeps their
+// place) — a filtered list of one is a wasted click, and the fire's whole
+// subject is that one screenshot. Several → the Orders list on the
+// `payment_mismatch` chip, which the server sorts oldest-proof-first, so the
+// order the card aged from is the one at the top.
+//
+// The id is retail_orders.id, exactly what /dashboard/ops sends as `id` — not
+// the order_no the row would print. Falls back to the list if the payload is
+// missing or the item carries no id, so the row can never be a dead click.
+function dashOpenPaymentMismatch() {
+  const pm = (DASH_OPS && DASH_OPS.payment_mismatch) || null;
+  const one = (pm && pm.count === 1 && (pm.items || [])[0]) || null;
+  if (one && one.id !== null && one.id !== undefined && one.id !== '' && typeof openOrder === 'function') {
+    openOrder(one.id, { focus: 'payment' });
+    return;
+  }
+  tdSecOpenOrders('payment_mismatch');
+}
+
 // Programmatic tab-switch — clicks the tab button so the global switcher
 // runs (closes drawers, updates active classes, etc.). Returns true if the
 // tab exists, false otherwise — lets callers fall back to a sibling tab.
@@ -2340,6 +2361,10 @@ function tdSecPaint() {
   const ordersFoot = document.getElementById('td-sec-orders-foot');
   if (ordersFoot && TD_SEC_COUNTS) {
     ordersFoot.innerHTML = tdSecFootHtml([
+      // Ahead of everything else: money the customer has already sent and we
+      // have not accepted. Until someone checks it, the order cannot even join
+      // the queue below — it is still sitting in Pending.
+      { n: Number(c.payment_mismatch || 0), go: "tdSecOpenOrders('payment_mismatch')", label: n => cuT(`${n} ${n === 1 ? 'payment' : 'payments'} to check`, `${n} 笔付款待核对`) },
       // Paid and untouched — nobody has started it yet. This is the most urgent
       // thing on the page and it had no home until now: the operator saw
       // "preparing" but never the orders waiting to BE prepared.
@@ -2392,6 +2417,10 @@ const TD_ATTN_ICON = {
   order: '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h9l5 5v13a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1Z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h4"/></svg>',
   refund:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h12a4 4 0 0 1 0 8h-6"/><path d="m8 5-4 4 4 4"/></svg>',
   invoice:'<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 2h12v20l-3-2-3 2-3-2-3 2Z"/><path d="M9 8h6M9 12h6M9 16h3"/></svg>',
+  // Payment that doesn't add up: a ¥ note inside a circle. Line-only like its
+  // siblings (brand rule: stroke SVG, never emoji, never a glyph in a text node
+  // — a bare ¥ would inherit the row's font and refuse the severity tint).
+  yuan:  '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 7.5 3.5 5 3.5-5"/><path d="M9 13h6M9 16h6M12 12.5V18"/></svg>',
 };
 
 // ── Running-low rolling window ─────────────────────────────────────────────
@@ -2545,6 +2574,42 @@ function tdAttnRender() {
   // waited; null means this fire has no clock and states its condition instead.
   const fires = [];
 
+  // Payment read but rejected — the customer sent a screenshot, the system
+  // refused to confirm it, and the order never left pending_payment. Brick:
+  // money is in dispute and the customer is sitting on an order they believe
+  // they paid for. Nothing else on the dashboard shows this today, which is
+  // exactly why it could sit for hours: the order looks like any other unpaid
+  // one in the list.
+  const pm = DASH_OPS.payment_mismatch || { count: 0, items: [] };
+  if (pm.count && dashCardWants('orders')) {
+    // With ONE order behind the fire, the row can state the actual gap instead
+    // of only that there is one — that is the fact the operator is about to go
+    // and look up. With several, no single pair of numbers is true of them all,
+    // so the row stays a count and the age carries the urgency.
+    // Only when we read an amount AND it differs: a mismatch can also be a
+    // wrong payee, a stale receipt or a screenshot already used on another
+    // order, and quoting two identical numbers would read as a bug.
+    let state = null;
+    const one = pm.count === 1 ? (pm.items || [])[0] : null;
+    if (one && one.paid_amount != null && one.total != null
+        && Math.abs(Number(one.paid_amount) - Number(one.total)) >= 0.005) {
+      const paid = dashMoney(one.paid_amount, 2), due = dashMoney(one.total, 2);
+      // Comma, never " · " — same i18n-walker rule as the Restock line below.
+      state = cuT(`paid ${paid}, order ${due}`, `已付 ${paid},订单 ${due}`);
+    }
+    fires.push({
+      sev: 'brick', icon: 'yuan',
+      label: cuT("Payment doesn't match", '付款金额不符'),
+      n: pm.count,
+      // Ages from when the CUSTOMER uploaded the proof (server-side COALESCE
+      // to placed_at, so it is never null) — how long they have been waiting on
+      // money they believe they already sent.
+      mins: tdOldestMins(pm.items),
+      state,
+      cta: cuT('Check payment', '核对付款'), go: 'dashOpenPaymentMismatch()',
+    });
+  }
+
   // Delivery — the carrier, the platform or our own rider has left someone
   // waiting. Brick: this is the only one of the five where a customer is
   // already having a bad day.
@@ -2674,8 +2739,12 @@ function tdOldestMins(items) {
 // row that has no age — there is no empty cell here because there was never a
 // cell.
 function tdAttnRowHtml(f) {
-  const meta = f.mins == null ? (f.state || '')
-    : cuT(`oldest ${dashAgeShort(f.mins)}`, `最久 ${dashAgeShort(f.mins)}`);
+  // A fire states its condition, its age, or (payment mismatch on a single
+  // order) both — the numbers first, because that is what is being checked,
+  // then how long it has waited. Comma-joined for the same reason the Restock
+  // state uses one: " · " is what the i18n walker splits an EN/CN pair on.
+  const age = f.mins == null ? '' : cuT(`oldest ${dashAgeShort(f.mins)}`, `最久 ${dashAgeShort(f.mins)}`);
+  const meta = [f.state || '', age].filter(Boolean).join(', ');
   const chev = '<svg class="td-nchev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>';
   return `<button type="button" class="td-nrow" onclick="${f.go}">
     <span class="td-nico is-${f.sev}" aria-hidden="true">${TD_ATTN_ICON[f.icon] || ''}</span>
