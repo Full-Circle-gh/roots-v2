@@ -89,9 +89,9 @@ desktop is the right home
 | Refund: approve / reject a request, then pay it out | ✅ — approve and payout stay two acts, as on desktop; the payout asks how the money goes back |
 | Refund: partial / line-level amounts | ➖ — approving takes what the customer asked for; editing lines is desktop work |
 | Cancel + refund | ➖ |
-| Edit ship-to address | ✖ — the most common phone-side correction |
+| Edit ship-to address | ➖ — decided: desktop only. Seven fields with address matching behind them; a mistyped district is a failed delivery |
 | Tracking number entry / parcel split | ➖ |
-| Staff note | ✖ — cheap, and it is how one operator tells the next what happened |
+| Staff note | ➖ — no endpoint edits an existing order's note; it is written at creation only. Backend work, not a screen |
 | Store filter (multi-store) | ✅ — a third chip row, shown only when the account has more than one store |
 | Pagination | ✅ — 25 a page, "N of M", Load more |
 | Search within orders | ✅ — server-side, from the topbar |
@@ -181,7 +181,7 @@ Ordered by what an operator loses today, not by effort.
 | ~~6~~ | ~~Orders: store filter, pagination, real search~~ | | **Done** |
 | ~~9~~ | ~~Coupon on/off, fapiao auto-issue, media, the channel mirrors~~ | | **Done** |
 | ~~7~~ | ~~Customer: points, wallet, block~~ | | **Done** |
-| 8 | **Edit ship-to** | `POST /orders/:id/address/apply-chinese` | Seven fields with Chinese address matching behind them. The most common phone-side correction, and the one where a mistyped district means a failed delivery. **Owner's call before building.** |
+| — | ~~Edit ship-to~~ | | **Decided 2026-08-22: stays on desktop.** Seven fields with Chinese address matching behind them, and a mistyped district is a failed delivery. Not a phone job for now. |
 | — | ~~Staff note~~ | | **Not a thing** — `staff_note` is written at order creation only; no endpoint edits it afterwards. Would need backend work. |
 | 9 | **The remaining feature toggles** | one endpoint each | fapiao, membership, FAQ, feedback inbox, pop-ups, coupon active — each needs its real key confirmed before it is wired. |
 
