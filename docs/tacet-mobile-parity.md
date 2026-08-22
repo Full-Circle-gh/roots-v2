@@ -711,6 +711,24 @@ exactly the questions you ask when you are away from your desk.
 | Every store by name, with its city/district and whether it has coordinates | ❌ → ✅ read-only |
 | Edit a store, assign stock staff, printer prefs per store, upload the Alipay QR, shipping integration keys | ➖ decided: desktop |
 
+### Pop-ups (`05-marketing.js`)
+
+The phone printed Live or Off from `enabled` alone — the same mistake the
+coupon list used to make, with the same result. A pop-up scheduled to start in
+December read **Live**. One whose end date passed in July read **Live**.
+
+| Desktop capability | Phone |
+|---|---|
+| **Four states resolved from the dates** — Off / Starts *date* / Ended *date* / Live | ❌ → ✅ |
+| How many are actually interrupting customers right now | ➕ |
+| **Which pages it appears on** | ❌ → ✅ |
+| **How often** — once / daily / once a session / every visit | ❌ → ✅ |
+| **What its button opens** | ❌ → ✅ |
+| The internal name leads the card | ❌ → ✅ — the phone led with the customer-facing title, which is not what an operator named it |
+| Turn one on or off | ❌ → ✅ — and it stamps `updated_at`, because the mini app keys "seen" on `id + updated_at`. Without the bump, switching one back on would show it to nobody who had already dismissed it, and the switch would appear to work while doing nothing |
+| Live phone preview of the pop-up | ➖ — the copy, pages, frequency and CTA are all on the card; a rendering of a rendering is desktop craft |
+| Write, schedule, duplicate, delete, pick pages | ➖ decided: desktop |
+
 ## 4. Open questions
 
 Not gaps — decisions that are the shop's to make, not this file's.

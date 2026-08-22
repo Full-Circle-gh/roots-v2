@@ -278,7 +278,7 @@ const state = {
   act:null, actErr:null, actTried:false, actRange:'today', actSource:'', actMore:false,
   cats:null, catCounts:null, catsErr:null, catsTried:false, catTop:null,
   cms:{}, cmsPage:'home', cmsErr:null, cmsTried:{},
-  alipay:null, alipayTried:false,
+  alipay:null, alipayTried:false, puBusy:null, puErr:null,
   tiers:null, tierCounts:null, tiersErr:null, tiersTried:false,
   tup:null, tupPkgs:null, tupErr:null, tupTried:false, tupBusy:null,
   lb:null, lbErr:null, lbTried:false,
@@ -615,6 +615,28 @@ reg('finalizeTopup', id=>{
       });
     }};
   render();
+});
+/* Switching one back on is how a merchant re-runs it, so the desktop stamps
+   updated_at — the mini app keys "seen" on id+updated_at, and without the bump
+   everyone who already dismissed it would never see it again. The phone has to
+   do the same or its switch quietly does nothing for most customers. */
+reg('togglePopup', id=>{
+  const list=cfgGet('popups.list',null);
+  if(!Array.isArray(list)||state.puBusy) return;
+  const p=list.find(x=>String(x.id)===String(id)); if(!p) return;
+  const next=!p.enabled;
+  state.puBusy=p.id; state.puErr=null; render();
+  const out=list.map(x=>String(x.id)===String(id)?Object.assign({},x,{enabled:next,updated_at:Date.now()}):x);
+  apiWrite('/config',{'popups.list':out},'PUT').then(()=>{
+    state.cfg=Object.assign({},state.cfg||{},{popups:Object.assign({},(state.cfg||{}).popups||{},{list:out})});
+    state.puBusy=null; render();
+    showToast(next?T('Pop-up is on','弹窗已启用'):T('Pop-up is off','弹窗已停用'));
+  }).catch(e=>{
+    state.puBusy=null;
+    if(String(e.message)==='auth') return;
+    state.puErr=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    render();
+  });
 });
 reg('affSeg', v=>{ state.affSeg=v; state.affRows=null; state.affiliateTried=false; render(); loadAffiliate(true); });
 reg('cmsPage', v=>{ state.cmsPage=v; state.cmsErr=null; render(); loadCms(v); });
@@ -1397,6 +1419,76 @@ function setupState(){
   if(d) return {pct:d.percent, done:d.requiredDone, total:d.requiredTotal, left:Math.max(0,d.requiredTotal-d.requiredDone), real:true};
   return {pct:null, real:false};
 }
+/* ==========================================================================
+   Pop-ups (desktop: 05-marketing.js)
+   --------------------------------------------------------------------------
+   The phone read `enabled` and printed Live or Off from it alone — the same
+   mistake the coupon list used to make, and with the same result: a pop-up
+   scheduled to start next week read Live, and one whose end date passed in
+   July read Live too. The desktop resolves four states from the dates, not
+   one from the flag.
+
+   It also dropped everything that says what a pop-up DOES: which pages it
+   appears on, how often, and what its button opens. A pop-up is the one thing
+   in this app that interrupts a customer, so those are not details.
+   ========================================================================== */
+const PU_PAGE={all:['All pages','全部页面'],home:['Home','首页'],shop:['Shop','商店'],
+  cart:['Cart','购物车'],me:['Me','我的'],product:['Product detail','商品详情'],
+  checkout:['Checkout','结账'],'order-success':['Order success','下单成功'],
+  orders:['My orders','我的订单'],membership:['Membership','会员'],addresses:['Addresses','地址']};
+const PU_FREQ={once:['shows once','仅一次'],daily:['daily','每天一次'],
+  session:['once a session','每次会话'],every_visit:['every visit','每次访问']};
+/* The desktop's four states, resolved from the dates. `enabled` alone answers
+   none of the three questions that actually matter: has it started, has it
+   ended, is it running right now. */
+function puState(p){
+  const today=GZ_ISO();
+  if(!p.enabled) return {tone:'muted', label:T('Off','已停用'), live:false};
+  if(p.start_at&&today<p.start_at) return {tone:'clear', label:T('Starts ','待开始 ')+p.start_at, live:false};
+  if(p.end_at&&today>p.end_at) return {tone:'muted', label:T('Ended ','已结束 ')+p.end_at, live:false};
+  return {tone:'success', label:T('Live','进行中'), live:true};
+}
+function puWhere(p){
+  if(!p.pages||!p.pages.length) return T('No page picked','未选择页面');
+  if(p.pages.indexOf('all')>=0) return T(...PU_PAGE.all);
+  return p.pages.map(k=>PU_PAGE[k]?T(...PU_PAGE[k]):k).join(' · ');
+}
+function screenPopups(){
+  const list=cfgGet('popups.list',null);
+  if(!Array.isArray(list)) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  if(!list.length) return nothingYet(T('The app is quiet','暂无弹窗'),
+    T('Nothing is interrupting your customers. Pop-ups are written on desktop — a promo, a review nudge, a holiday notice.','目前没有弹窗打扰顾客。弹窗在电脑端创建 — 活动、邀请评价或歇业通知。'));
+  const live=list.filter(p=>puState(p).live).length;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+    <div style="font-size:13px;color:var(--text-secondary)">${T(live===1?'1 pop-up is interrupting customers right now':live+' pop-ups are interrupting customers right now',
+      live+' 个弹窗正在向顾客展示')} · ${T(list.length+' in total',list.length+' 个共计')}</div>
+    ${state.puErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick)">${state.puErr}</span></div>`:''}
+    ${list.map(p=>{
+      const st=puState(p);
+      const [bg,fg]=PILL[st.tone];
+      const title=LANG==='en'?(p.title_en||p.title_cn||''):(p.title_cn||p.title_en||'');
+      const body=LANG==='en'?(p.body_en||p.body_cn||''):(p.body_cn||p.body_en||'');
+      const cta=LANG==='en'?(p.cta_label_en||p.cta_label_cn||''):(p.cta_label_cn||p.cta_label_en||'');
+      const freq=PU_FREQ[p.frequency]?T(...PU_FREQ[p.frequency]):(p.frequency||'');
+      const busy=state.puBusy===p.id;
+      return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:9px${st.live?'':';opacity:.72'}">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+          <span style="font-size:15px;font-weight:500;min-width:0">${escAttr(p.name||T('Untitled pop-up','未命名弹窗'))}</span>
+          <span class="pill" style="background:${bg};color:${fg};flex:none">${escAttr(st.label)}</span></div>
+        ${title?`<div style="font-size:14px">${escAttr(title)}</div>`:''}
+        ${body?`<div style="font-size:13.5px;color:var(--text-secondary);line-height:1.55">${escAttr(body)}</div>`:''}
+        <div style="font-size:12.5px;color:var(--text-secondary)">
+          <b style="font-weight:500;color:var(--text-primary)">${escAttr(puWhere(p))}</b>${freq?' · '+escAttr(freq):''}${cta&&p.cta_target?' · → '+escAttr(cta):''}</div>
+        ${p.start_at||p.end_at?`<div class="num" style="font-size:12.5px;color:var(--text-secondary)">${[p.start_at||'',p.end_at||''].filter(Boolean).join(' – ')}</div>`:''}
+        <div style="display:flex;align-items:center;gap:12px;margin-top:2px">
+          <span style="flex:1;font-size:13.5px;color:var(--text-secondary)">${busy?T('Saving…','保存中…'):(p.enabled?T('On','已启用'):T('Off','已停用'))}</span>
+          ${toggle(!!p.enabled,`APP.cmd('togglePopup','${escAttr(p.id)}')`)}</div></div>`;
+    }).join('')}
+    ${noteBar(T('Pop-ups are written, scheduled and previewed on desktop.','弹窗的撰写、排期与预览在电脑端进行。'))}</div>`;
+}
+
 /* ==========================================================================
    Operations (desktop: 02-settings-ops.js)
    --------------------------------------------------------------------------
@@ -2632,22 +2724,7 @@ const SUBS={
   sharecards:{title:['Share cards','分享卡片'],render:()=>nothingYet(T('Made on desktop','在电脑端制作'),
     T('Share cards are designed and generated in the admin on a big screen. The counts that used to sit here were never real.','分享卡片在电脑端设计与生成。此前这里显示的数据并非真实数据。')),
   },
-  popups:{title:['Pop-ups','弹窗'],render:()=>{
-    const list=cfgGet('popups.list',null);
-    if(Array.isArray(list)&&!list.length) return nothingYet(T('No pop-ups','没有弹窗'),
-      T('Nothing is interrupting your customers right now.','目前没有任何弹窗打扰顾客。'));
-    if(!Array.isArray(list)) return `<div style="padding:14px 16px 24px">${nothingYet(T('Pop-ups','弹窗'),T('Loading…','加载中…'))}</div>`;
-    return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
-      ${list.map(p=>`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:8px">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
-          <span style="font-size:15px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(p.title_en||p.name_en||'—',p.title_cn||p.name_cn||p.title_en||'—')}</span>
-          <span class="pill" style="background:${p.enabled?'var(--sage-tint)':'rgba(88,96,110,.10)'};color:${p.enabled?'#4A6249':'var(--text-secondary)'}">${p.enabled?T('Live','进行中'):T('Off','已关闭')}</span>
-        </div>
-        ${(p.body_en||p.body_cn)?`<div style="font-size:15px;color:var(--text-secondary)">${T(p.body_en||p.body_cn,p.body_cn||p.body_en)}</div>`:''}
-        ${p.start_at||p.end_at?`<div class="num" style="font-size:13px;color:var(--text-secondary)">${[p.start_at?fmtDay(p.start_at):'',p.end_at?fmtDay(p.end_at):''].filter(Boolean).join(' – ')}</div>`:''}
-      </div>`).join('')}
-      ${desktopNote()}</div>`;
-  }},
+  popups:{title:['Pop-ups','弹窗'],render:()=>screenPopups()},
   affiliate:{title:['Affiliate','分销'],render:()=>screenAffiliate()},
   social:{title:['Social proof','社交证明'],render:()=>{
     // The switch is real (features.socialProof) and reachable from Settings, so

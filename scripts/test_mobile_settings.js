@@ -282,4 +282,45 @@ CASES.push(['a maps quota that has run out', `state.printerTried=true; state.pri
   ['Alipay off reads off',     `txt('content').includes('off')`],
 ]]);
 
+// ── Pop-ups ───────────────────────────────────────────────────────────────
+// The phone printed Live or Off from `enabled` alone — the same mistake the
+// coupon list used to make, with the same result: a pop-up scheduled to start
+// in December read Live, and one whose end date passed in July read Live too.
+// It also dropped everything that says what a pop-up DOES: which pages it
+// appears on, how often, and what its button opens. A pop-up is the one thing
+// in this app that interrupts a customer.
+const POPUPS = `state.cfg=Object.assign({},state.cfg,{popups:{list:[
+  {id:'p1',name:'Autumn promo',enabled:true,title_en:'20% off',body_en:'This week only.',
+   pages:['home','shop'],frequency:'once',cta_label_en:'Shop now',cta_target:'/pages/shop/index',
+   start_at:'2026-08-01',end_at:'2026-12-01'},
+  {id:'p2',name:'Old notice',enabled:true,title_en:'Closed for the holiday',
+   pages:['all'],frequency:'daily',end_at:'2026-07-01'},
+  {id:'p3',name:'Next month',enabled:true,pages:[],frequency:'session',start_at:'2026-12-01'},
+  {id:'p4',name:'Paused',enabled:false,pages:['me'],frequency:'every_visit'}
+]}}); APP.cmd('push','popups');`;
+
+CASES.push(['pop-up state comes from the dates, not the flag', POPUPS, [
+  ['a running one is live',            `txt('content').includes('Live')`],
+  ['ONE THAT ENDED IN JULY says ended', `txt('content').includes('Ended 2026-07-01')`],
+  ['ONE THAT STARTS IN DECEMBER says so', `txt('content').includes('Starts 2026-12-01')`],
+  ['a switched-off one reads off',     `txt('content').includes('Off')`],
+  ['and only one of the four is counted as interrupting',
+   `txt('content').includes('1 pop-up is interrupting customers right now')`],
+]]);
+
+CASES.push(['what a pop-up actually does', POPUPS, [
+  ['the pages it appears on',   `txt('content').includes('Home · Shop')`],
+  ['"all pages" is spelled out', `txt('content').includes('All pages')`],
+  ['no page picked is called out', `txt('content').includes('No page picked')`],
+  ['how often',                 `txt('content').includes('shows once') && txt('content').includes('every visit')`],
+  ['what its button opens',     `txt('content').includes('Shop now')`],
+  ['the internal name leads',   `txt('content').includes('Autumn promo')`],
+]]);
+
+CASES.push(['nothing is interrupting anyone', `state.cfg=Object.assign({},state.cfg,{popups:{list:[]}});
+  APP.cmd('push','popups');`, [
+  ['says the app is quiet', `txt('content').includes('The app is quiet')`],
+  ['invents no pop-up',     `!txt('content').includes('Autumn promo')`],
+]]);
+
 run('operator screens', CASES);
