@@ -619,7 +619,7 @@ function screenHome(){
    why "Delivered 15" could show three. Every filter is the server's now, and the
    list says how much of the set it is showing. */
 const STATUS_PARAM={all:'',paid:'paid',preparing:'preparing',dispatched:'dispatched',
-  delivered:'delivered',restock:'awaiting_restock',refund:'refunds_open',mismatch:'payment_mismatch'};
+  delivered:'delivered',restock:'awaiting_restock',refund:'refunds_open',pending:'pending_payment'};
 const CHANNEL_PARAM={all:'',miniapp:'wechat',web:'web',meituan:'meituan',gzgrocery:'gzgrocery',manual:'manual'};
 const ORDERS_PAGE=25;
 function ordersQuery(offset){
@@ -658,7 +658,9 @@ function ordersHeader(){
   const sCount=(k,f)=> S ? (k==null?undefined:S[k]) : f;
   const cCount=(k,f)=> C ? (C[k]!=null?C[k]:0) : f;
   const allOrders = C?C.all:(S?undefined:47);
-  const sc=[{key:'all',en:'All',zh:'全部',count:allOrders},{key:'paid',en:'Paid',zh:'已付',count:sCount('paid',8)},
+  const sc=[{key:'all',en:'All',zh:'全部',count:allOrders},
+    {key:'pending',en:'Pending',zh:'待付款',count:sCount('pending_payment',3)},
+    {key:'paid',en:'Paid',zh:'已付',count:sCount('paid',8)},
     {key:'preparing',en:'Preparing',zh:'备货',count:sCount('preparing',6)},{key:'dispatched',en:'Dispatched',zh:'已发',count:sCount('dispatched',11)},{key:'delivered',en:'Delivered',zh:'送达',count:S?undefined:15},
     {key:'restock',en:'Awaiting restock',zh:'待补货',count:sCount('awaiting_restock',2)},{key:'refund',en:'Refund queue',zh:'退款',count:sCount('refunds_open',2)}];
   const cc=[{key:'all',en:'All channels',zh:'全部渠道',count:allOrders},{key:'miniapp',en:'Mini app',zh:'小程序',count:cCount('wechat',28)},{key:'web',en:'Web',zh:'网页',count:cCount('web',9)},
@@ -710,6 +712,7 @@ function screenOrders(){
             <span style="font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${T(...o.cust)}</span>
             ${o.viewOnly?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('View only','只读')}</span>`:''}</span>
           ${pill(o.kind,T(...o.status))}</div>
+        ${o.payMismatch?`<div style="display:flex;align-items:center;gap:7px;color:var(--brick);font-size:13px">${ic('triangle-alert',15)}<span>${T("Payment doesn't match",'付款不一致')}</span></div>`:''}
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
           <span style="font-size:13px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...o.ship)}</span>
           ${o.by?`<span class="num" style="font-size:13px;color:${o.byAmber?'#8A6425':'var(--text-secondary)'};flex:none">${T(...o.by)}</span>`:''}</div>
@@ -1465,7 +1468,7 @@ function opsFires(){
   const add=(cond,sev,icon,label,n,items,meta,go)=>{ if(cond) f.push({sev,icon,label,n,meta:meta||oldestOf(items),go,mins:oldestMins(items)}); };
   const c=k=>(o[k]&&o[k].count)||0;
   add(c('delivery_alerts'),'brick','truck',T('Delivery needs a call','配送需要跟进'),c('delivery_alerts'),o.delivery_alerts.items,'',"APP.cmd('ordersGo','dispatched')");
-  add(c('payment_mismatch'),'brick','banknote',T('Payments to check','付款待核对'),c('payment_mismatch'),o.payment_mismatch.items,'',"APP.cmd('ordersGo','mismatch')");
+  add(c('payment_mismatch'),'brick','banknote',T("Payment doesn't match",'付款金额不符'),c('payment_mismatch'),o.payment_mismatch.items,'',"APP.cmd('ordersGo','pending')");
   add(c('refunds'),'amber','refund',T('Refunds waiting','退款待处理'),c('refunds'),o.refunds.items,'',"APP.cmd('ordersGo','refund')");
   add(c('unhandled'),'amber','package',T('Orders to start','待开始备货'),c('unhandled'),o.unhandled.items,'',"APP.cmd('ordersGo','paid')");
   add(c('awaiting_restock'),'amber','clock',T('Orders awaiting restock','订单待补货'),c('awaiting_restock'),o.awaiting_restock.items,'',"APP.cmd('ordersGo','restock')");
@@ -1597,7 +1600,10 @@ function sheetOrderDetail(){
          <div class="num" style="font-size:15px;margin-top:7px">${T(...o.cust)} · ${o.phone}</div><div style="font-size:13.5px;color:var(--text-secondary);margin-top:2px">${T(...o.addr)}</div></div>
        <div class="card" style="padding:14px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="eyebrow">${T('Payment','支付')}</span>
          <button onclick="APP.cmd('copyTxn')" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);background:transparent;border:none;cursor:pointer;font-family:inherit">${T('Copy','复制')} ${ic('copy',13)}</button></div>
-         <div style="font-size:15px;margin-top:7px">${T(...o.pay)}</div><div class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:2px">${T('Txn','交易号')} ${o.txn}</div></div>
+         <div style="font-size:15px;margin-top:7px">${T(...o.pay)}</div><div class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:2px">${T('Txn','交易号')} ${o.txn}</div>
+         ${o.payMismatch?`<div style="display:flex;align-items:flex-start;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border-default);color:var(--brick);font-size:13px">
+           <span style="flex:none;display:flex;margin-top:1px">${ic('triangle-alert',15)}</span>
+           <span>${T("The screenshot was read and doesn't match this order. Check it on the desktop before marking it paid.",'系统识别的付款截图与本单不符,请在电脑端核实后再标记已付款。')}</span></div>`:''}</div>
        <div class="card" style="padding:14px"><span class="eyebrow">${T('Fulfilled by','履约门店')}</span>
          <div style="font-size:15px;margin-top:7px">${T(...o.fulfil)}</div>
          <div style="display:flex;align-items:center;gap:6px;margin-top:5px;color:var(--text-secondary)">${ic('route',14)}<span style="font-size:12.5px">${T(...o.route)}</span></div></div>
@@ -2200,6 +2206,10 @@ function mapOrderRow(r){
     ship:Array.isArray(shipCity)?shipCity:[shipCity,shipCity],
     by: by?[by,by]:null, byAmber:false,
     viewOnly: ch==='meituan'||ch==='gzgrocery',
+    // A rejected payment screenshot is not a status — the order never moved, it
+    // is still pending_payment. It rides its own row as a mark, exactly as the
+    // desktop does, so the Pending list can be scanned for the one that is wrong.
+    payMismatch: r.alipay_ocr_verdict==='mismatch'&&r.status==='pending_payment',
     phone:r.recipient_phone||r.customer_phone||'—',
     addr:[r.address_full||'—', r.address_full||'—'],
     pay:[r.payment_method||'—', r.payment_method||'—'], txn:r.order_no||'—',

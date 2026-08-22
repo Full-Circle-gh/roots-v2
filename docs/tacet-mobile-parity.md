@@ -66,10 +66,10 @@ desktop is the right home
 | Desktop capability | Phone |
 |---|---|
 | The Recap, real away-window figures | ✅ |
-| Needs-you rows, deep-linked | ✅ — the real `/dashboard/ops` fires now (delivery, payments to check, refunds, orders to start, awaiting restock, invoices, restock), Brick-first then oldest, each opening its filtered list |
+| Needs-you rows, deep-linked | ✅ — the real `/dashboard/ops` fires now (delivery, payment mismatch, refunds, orders to start, awaiting restock, invoices, restock), Brick-first then oldest, each opening its filtered list |
 | Today's KPIs with deltas | ✅ |
 | Unhandled-orders card (paid, nobody started) | ✅ — "Orders to start" |
-| Payment-mismatch fire | ✅ — "Payments to check" |
+| Payment-mismatch fire | ✅ — "Payment doesn't match", opening the Pending list, with the brick mark on the row (and in the drawer) that says which order it is |
 | Low-stock drawer with per-store counts | ➖ |
 | Activity feed ("Show the work") | ✖ — the Recap's fold is the brand's own affordance |
 | Reports chapters | ➖ |
