@@ -87,6 +87,10 @@ function buildCases(src) {
     // Purchasing reads a live ledger, so the sweep seeds one — otherwise every
     // pass renders the loading state and proves nothing about the rows.
     'push:purchasing-rows': "state.posTried=true;state.poList=[{id:4,po_number:'RPO-0004',supplier:'Fresh Co.',store_name_en:'Tianhe',date:'2026-08-14',delivery_date:'2026-08-16',status:'Ordered',line_count:6,received_lines:0,total_cost:3240},{id:5,po_number:'RPO-0005',supplier:'Oat Works',date:'2026-08-20',delivery_date:'2026-08-30',status:'Delivered',line_count:3,received_lines:3,total_cost:1880}];APP.cmd('push','purchasing')",
+    'push:gz-flagged': "state.mirror={gzgrocery:[{id:'Oat milk',cust:'SKU OM-1L',total:'×3',when:'Today'}]};state.mirrorMode='live';state.gzSummary={appliedEvents24h:4,appliedUnits24h:11};state.gzFlagged=[{id:9,product_id:5,name_en:'Carrots',product_sku:'CR-01',baseline_qty:40,observed_qty:10,drift:-30,inferred_pickup:30,current_qty:38,created_at:'2026-08-22 08:00:00'}];APP.cmd('push','mirror_gzgrocery')",
+    'push:gz-shadow': "state.mirror={gzgrocery:[]};state.mirrorMode='shadow';state.gzSummary={};state.gzFlagged=[];APP.cmd('push','mirror_gzgrocery')",
+    'sheet:gz-apply': "state.mirror={gzgrocery:[]};state.mirrorMode='live';state.gzFlagged=[{id:9,product_id:5,name_en:'Carrots',baseline_qty:40,observed_qty:10,drift:-30,inferred_pickup:30,current_qty:38}];APP.cmd('push','mirror_gzgrocery');APP.cmd('gzPickup',9,'apply')",
+    'sheet:gz-ignore': "state.mirror={gzgrocery:[]};state.mirrorMode='live';state.gzFlagged=[{id:9,product_id:5,name_en:'Carrots',baseline_qty:40,observed_qty:10,drift:-30,inferred_pickup:30,current_qty:38}];APP.cmd('push','mirror_gzgrocery');APP.cmd('gzPickup',9,'ignore')",
     'push:faq-grouped': "state.cfg=Object.assign({},state.cfg,{faq:{categories:[{id:'orders',en:'Orders',cn:'订单'},{id:'delivery',en:'Delivery',cn:'配送'}],questions:[{id:'q1',cat:'orders',q_en:'Where is my order?',a_en:'Track it in the app.'},{id:'q2',cat:'delivery',q_en:'Do you deliver here?',a_en:'Check your postcode.'},{id:'q3',cat:'gone',q_en:'Orphan question',a_en:'Still visible to customers.'}]}});APP.cmd('push','faq')",
     'push:faq-open': "state.cfg=Object.assign({},state.cfg,{faq:{categories:[{id:'orders',en:'Orders',cn:'订单'}],questions:[{id:'q1',cat:'orders',q_en:'Where is my order?',a_en:'Track it in the app.'}]}});state.faqOpen=0;APP.cmd('push','faq')",
     'push:legal-clipped': "state.cfg=Object.assign({},state.cfg,{legal:{terms:{body_en:'x'.repeat(2000),updated_at:'2026-05-01'},privacy:{body_en:'short',updated_at:'2026-05-01'}}});state.faqOpen=0;APP.cmd('push','legal')",
@@ -207,6 +211,31 @@ function main() {
     if (missing.length) {
       for (const n of missing) console.error(`FAIL static — ${n}() is called but never defined`);
       console.error(`\n${missing.length} helper${missing.length === 1 ? '' : 's'} called but not defined.`);
+      process.exit(1);
+    }
+  }
+
+  // ── Static pass: the dispatcher can feed every handler ─────────────────
+  // APP.cmd is the only way a control reaches a handler. It used to forward ONE
+  // argument while two handlers took two, so APP.cmd('pollStatus', 7, 'closed')
+  // arrived as (7, undefined): the PUT body became {status: undefined}, which
+  // JSON.stringify drops, so the server saw an empty patch, changed nothing,
+  // answered 200 — and the phone said "Poll closed". A write that reports
+  // success and does nothing is the worst shape a bug can take, and no render
+  // test can see it. This one is a grep on the dispatcher itself.
+  {
+    const raw = (src.match(/<script>([\s\S]*?)<\/script>/) || [])[1] || '';
+    const js3 = raw.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+    const disp = (js3.match(/window\.APP\s*=\s*\{\s*cmd\s*:\s*\(([^)]*)\)/) || [])[1] || '';
+    const variadic = /\.\.\./.test(disp);
+    // Call sites that pass more than one argument, e.g. APP.cmd('x', 1, 'y').
+    const multi = new Set();
+    for (const m of js3.matchAll(/APP\.cmd\(\s*'([a-zA-Z_$][\w$]*)'\s*,[^)]*,[^)]*\)/g)) multi.add(m[1]);
+    if (multi.size && !variadic) {
+      for (const n of [...multi].sort()) {
+        console.error(`FAIL static — APP.cmd('${n}', …) passes extra arguments the dispatcher drops`);
+      }
+      console.error(`\nMake APP.cmd variadic, or stop passing arguments it cannot forward.`);
       process.exit(1);
     }
   }

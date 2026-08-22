@@ -80,4 +80,20 @@ const CASES = [
   ]],
 ];
 
+// The write itself, not the button label. APP.cmd forwarded only ONE argument
+// while this handler takes two, so APP.cmd('pollStatus', 1, 'closed') arrived
+// as (1, undefined): the body became {status: undefined}, JSON.stringify
+// dropped the key, the server saw an empty patch and answered 200, and the
+// phone said "Poll closed". Every assertion above passed throughout, because
+// they read the card and the card was right. This one reads the request.
+CASES.push(['closing a poll actually sends "closed"', SEEDED + `
+  window.__sent=[];
+  window.fetch=function(u,o){ window.__sent.push({u:String(u), body:(o&&o.body)||null});
+    return Promise.resolve({ok:true, status:200, json:function(){return Promise.resolve({success:true})}}); };
+  APP.cmd('pollStatus',1,'closed');`, [
+  ['a request went out',        `window.__sent.some(function(r){return r.u.indexOf('/polls/1')>=0})`],
+  ['carrying the new status',   `window.__sent.some(function(r){return (r.body||'').indexOf('"status":"closed"')>=0})`],
+  ['and not an empty patch',    `!window.__sent.some(function(r){return r.u.indexOf('/polls/1')>=0 && r.body==='{}'})`],
+]]);
+
 run('voting', CASES);

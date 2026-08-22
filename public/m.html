@@ -279,6 +279,7 @@ const state = {
   cats:null, catCounts:null, catsErr:null, catsTried:false, catTop:null,
   cms:{}, cmsPage:'home', cmsErr:null, cmsTried:{},
   alipay:null, alipayTried:false, puBusy:null, puErr:null,
+  gzFlagged:null, gzSummary:null, gzBusy:null, gzErr:null,
   tiers:null, tierCounts:null, tiersErr:null, tiersTried:false,
   tup:null, tupPkgs:null, tupErr:null, tupTried:false, tupBusy:null,
   lb:null, lbErr:null, lbTried:false,
@@ -320,7 +321,15 @@ function push(route){ const s=SUBS[route]; if(s) state.stack.push({route,title:s
 function pop(){ state.stack.pop(); render(); }
 
 const CMD={}; function reg(n,f){CMD[n]=f;}
-window.APP={cmd:(n,a)=>{ if(CMD[n]) CMD[n](a); }};
+/* Variadic. It used to be `(n,a)=>CMD[n](a)` — one argument — while two
+   handlers were written to take two. `APP.cmd('pollStatus', 7, 'closed')`
+   arrived as (7, undefined), so the PUT body was {status: undefined}, which
+   JSON.stringify drops entirely: the server saw an empty patch, changed
+   nothing, answered 200, and the phone showed "Poll closed". A write that
+   reports success and does nothing is the worst shape a bug can take, so
+   scripts/test_mobile_screens.js now fails on a handler whose arity the
+   dispatcher cannot feed. */
+window.APP={cmd:(n,...a)=>{ if(CMD[n]) CMD[n](...a); }};
 
 reg('tab', t=>{ state.stack=[]; state.tab=t; state.detailId=null; render();
   if(t==='customers' && !state.custLoaded && !state.custLoading) loadCustomers();
@@ -620,6 +629,39 @@ reg('finalizeTopup', id=>{
    updated_at — the mini app keys "seen" on id+updated_at, and without the bump
    everyone who already dismissed it would never see it again. The phone has to
    do the same or its switch quietly does nothing for most customers. */
+/* Apply lowers your shelf by the inferred amount, through the canonical
+   inventory path, so it ledgers and fans out to every other channel. Ignore
+   leaves your shelf alone and re-pushes your true number back to gzgrocery to
+   correct theirs. Both are decisions about stock, so both say what they do. */
+reg('gzPickup', (id,how)=>{
+  const rows=state.gzFlagged||[];
+  const f=rows.find(x=>x.id===Number(id)); if(!f||state.gzBusy) return;
+  const drop=Math.abs(Number(f.drift||0))||Number(f.inferred_pickup||0);
+  const run=()=>{
+    state.gzBusy=f.id; state.gzErr=null; render();
+    apiWrite('/guanyi/pickups/'+f.id+'/'+how,{}).then(()=>{
+      state.gzBusy=null;
+      state.gzFlagged=(state.gzFlagged||[]).filter(x=>x.id!==f.id);
+      showToast(how==='apply'?T('Stock lowered by '+drop,'库存已扣减 '+drop):T('Left alone · gzgrocery corrected','库存未变 · 已回推 gzgrocery'));
+      render(); loadMirror('gzgrocery');
+    }).catch(e=>{
+      state.gzBusy=null;
+      if(String(e.message)==='auth') return;
+      state.gzErr=T('That did not go through. Nothing has changed — try again.','没有处理成功。数据没有变化 — 请重试。');
+      render();
+    });
+  };
+  state.ask = how==='apply'
+    ? {title:T('Take '+drop+' off the shelf?','扣减 '+drop+' 件库存？'),
+       body:T('Your stock drops by '+drop+' and the new number goes out to every other channel. Do this when the drop was a real sale.',
+              '库存将减少 '+drop+' 件，并同步到其他所有渠道。确认为真实售出时使用。'),
+       confirmLabel:T('Take it off','确认扣减'), run}
+    : {title:T('Leave the stock alone?','保持库存不变？'),
+       body:T('Your shelf does not change, and your true number is pushed back to gzgrocery to correct theirs. Do this when the drop was a glitch.',
+              '你的库存不变，并将真实数量回推至 gzgrocery 以纠正其数据。确认为数据错误时使用。'),
+       confirmLabel:T('Leave it','保持不变'), run};
+  render();
+});
 reg('togglePopup', id=>{
   const list=cfgGet('popups.list',null);
   if(!Array.isArray(list)||state.puBusy) return;
@@ -2924,21 +2966,85 @@ async function loadMirror(which){
         when:fmtDay(r.placed_at), store:T(r.store_name_en||r.store_code||'',r.store_name_cn||r.store_name_en||''),
         items:(r.items||[]).length}));
     } else {
-      const d=await api('/guanyi/pickups');
+      // apiRaw, not api: mode, flagged and summary ride the envelope BESIDE
+      // `data`, and api() returns `data` alone. The phone was reading `recent`
+      // — the drops that were applied automatically — and dropping the queue
+      // of drops that are waiting for a human, which is the only thing on this
+      // screen anybody can act on.
+      const d=await apiRaw('/guanyi/pickups');
       const recent=(d&&d.recent)||[];
       state.mirror.gzgrocery=recent.slice(0,30).map(r=>({
         id:T(r.name_en||r.name_cn||'—', r.name_cn||r.name_en||'—'),
         cust:r.product_sku?('SKU '+r.product_sku):'', total:(r.inferred_pickup!=null?('×'+r.inferred_pickup):''),
         when:fmtDay(r.created_at), store:'', items:0}));
+      state.gzFlagged=(d&&d.flagged)||[];
+      state.gzSummary=(d&&d.summary)||null;
       state.mirrorMode=(d&&d.mode)||null;
     }
   }catch(e){ if(String(e.message)==='auth') return; state.mirror[which]=null; }
   state.mirrorLoading=null; render();
 }
+/* The three modes the daemon can be in, and what each one means for stock.
+   "shadow" is the one worth spelling out: it detects and logs and does NOT
+   change anything, so a list of pickups under it is a list of things that did
+   not happen to your shelf. */
+function gzModeCard(){
+  const m=state.mirrorMode;
+  if(!m) return '';
+  const sm=state.gzSummary||{};
+  const meta = m==='live'
+    ? {tone:'success', label:T('Live','实时'), note:T('Pickups lower your stock automatically.','提货会自动扣减库存。')}
+    : m==='shadow'
+      ? {tone:'warning', label:T('Shadow','影子模式'), note:T('Detecting and logging only — nothing here has changed your stock.','仅检测与记录 — 这些记录没有改动你的库存。')}
+      : {tone:'muted', label:T('Off','已关闭'), note:T('Nothing is being read from gzgrocery right now.','当前没有在读取 gzgrocery 数据。')};
+  const [bg,fg]=PILL[meta.tone];
+  const units=Number(sm.appliedUnits24h||0), ev=Number(sm.appliedEvents24h||0);
+  return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:8px">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+      <span style="font-size:15px;font-weight:500">${T('gzgrocery pickups','gzgrocery 提货')}</span>
+      <span class="pill" style="background:${bg};color:${fg}">${meta.label}</span></div>
+    <div style="font-size:13px;color:var(--text-secondary);line-height:1.5">${meta.note}</div>
+    ${units||ev?`<div class="num" style="font-size:12.5px;color:var(--text-secondary)">${T(ev+' applied · '+units+' units in 24h',ev+' 次 · '+units+' 件(24 小时)')}</div>`:''}</div>`;
+}
+/* The queue. A big or suspicious drop is capped rather than applied, and waits
+   for a person to say whether it was a real sale. Nothing on the phone showed
+   it, so the answer to "is anything waiting on me" was always no. */
+function gzFlaggedBlock(){
+  const rows=state.gzFlagged;
+  if(!Array.isArray(rows)||!rows.length) return '';
+  const btn=(label,cmd,dis,danger)=>`<button ${dis?'disabled':''} onclick="${cmd}" style="font-size:13px;font-weight:500;color:${danger?'var(--brick)':'var(--text-primary)'};background:var(--surface-card);border:1px solid var(--border-default);border-radius:9px;padding:7px 14px;cursor:pointer;font-family:inherit;${dis?'opacity:.5':''}">${label}</button>`;
+  return `<div style="display:flex;flex-direction:column;gap:10px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="flex:none;color:var(--amber);display:flex">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14.5px;font-weight:500">${T(rows.length===1?'One drop needs your decision':rows.length+' drops need your decision', rows.length+' 条待确认')}</span></div>
+    ${rows.map(f=>{
+      const name=LANG==='en'?(f.name_en||f.name_cn||f.guanyi_name||('#'+f.product_id))
+                           :(f.name_cn||f.name_en||f.guanyi_name||('#'+f.product_id));
+      const drop=Math.abs(Number(f.drift||0))||Number(f.inferred_pickup||0);
+      const busy=state.gzBusy===f.id;
+      return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:9px;background:rgba(201,149,74,0.07)">
+        <div style="font-size:14.5px">${escAttr(name)}${f.product_sku?`<span class="num" style="font-size:12px;color:var(--text-secondary)"> ${escAttr(f.product_sku)}</span>`:''}</div>
+        <div class="num" style="font-size:12.5px;color:var(--text-secondary);line-height:1.5">${T(
+          'gzgrocery went '+f.baseline_qty+' → '+f.observed_qty+' (a drop of '+drop+'). Your shelf says '+f.current_qty+'.',
+          'gzgrocery 从 '+f.baseline_qty+' 变为 '+f.observed_qty+'（减少 '+drop+'）。你的库存为 '+f.current_qty+'。')}
+          ${f.created_at?' · '+fmtDay(f.created_at):''}</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          ${btn(busy?T('Saving…','处理中…'):T('It sold · take '+drop+' off','确认售出 · 扣减 '+drop),`APP.cmd('gzPickup',${f.id},'apply')`,busy,false)}
+          ${btn(T('Glitch · leave it','数据错误 · 不扣减'),`APP.cmd('gzPickup',${f.id},'ignore')`,busy,false)}</div></div>`;
+    }).join('')}</div>`;
+}
 function mirrorScreen(which,note){
   const rows=(state.mirror&&state.mirror[which])||null;
   if(!rows&&state.mirrorLoading!==which&&!state.mirrorTried){ /* first paint kicks the load */ }
+  const gz = which==='gzgrocery'
+    ? `${state.gzErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+        <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+        <span style="font-size:14px;color:var(--brick)">${state.gzErr}</span></div>`:''}${gzModeCard()}${gzFlaggedBlock()}`
+    : '';
   if(!rows||!rows.length){
+    if(gz&&state.mirrorLoading!==which) return `<div style="padding:12px 16px 24px;display:flex;flex-direction:column;gap:16px">${gz}
+      <div style="padding:24px 8px;text-align:center;font-size:14px;color:var(--text-secondary);line-height:1.55">${
+        rows?T('No pickups recorded yet.','暂无提货记录。'):T('The channel did not answer. Nothing is wrong with your orders — try again in a moment.','渠道没有响应。订单数据没有问题 — 请稍后重试。')}</div></div>`;
     if(state.mirrorLoading===which) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
     if(rows&&!rows.length) return nothingYet(which==='meituan'?T('No orders from Meituan yet','美团暂无订单'):T('No pickups recorded yet','暂无提货记录'),
       which==='meituan'?T('Orders the platform sends appear here, mirrored and read-only.','平台推送的订单会以只读方式出现在这里。')
@@ -2947,6 +3053,7 @@ function mirrorScreen(which,note){
       T('The channel did not answer. Nothing is wrong with your orders — try again in a moment.','渠道没有响应。订单数据没有问题 — 请稍后重试。'));
   }
   return `<div style="padding:12px 16px 24px;display:flex;flex-direction:column;gap:16px">
+    ${gz}
     <div style="display:flex;align-items:center;gap:12px;background:var(--surface-raised);border-radius:14px;padding:12px 16px"><span style="color:var(--text-secondary);display:flex;flex:none">${ic('eye',18)}</span><span style="font-size:13px;color:var(--text-secondary)">${note}</span></div>
     ${rows.map(o=>`<div class="card" style="display:flex;flex-direction:column;gap:8px;padding:16px">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">

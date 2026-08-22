@@ -365,4 +365,49 @@ CASES.push(['a short one is not marked clipped',
   ['no clip note', `!txt('content').includes('Clipped here')`],
 ]]);
 
+// ── The gzgrocery mirror ──────────────────────────────────────────────────
+// The daemon infers a pickup from a drop in gzgrocery's stock. A big or
+// suspicious drop is CAPPED rather than applied, and waits for a person to say
+// whether it was a real sale. The phone read only `recent` — the drops already
+// applied automatically — so the answer to "is anything waiting on me" was
+// always no. It also never rendered the mode, and "shadow" means the daemon is
+// detecting and logging and changing nothing, which makes a list of pickups a
+// list of things that did not happen to your shelf.
+const GZ = `state.mirror={gzgrocery:[{id:'Oat milk',cust:'SKU OM-1L',total:'×3',when:'Today'}]};
+  state.mirrorMode='live'; state.gzSummary={appliedEvents24h:4,appliedUnits24h:11};
+  state.gzFlagged=[{id:9,product_id:5,name_en:'Carrots',name_cn:'胡萝卜',product_sku:'CR-01',
+    baseline_qty:40,observed_qty:10,drift:-30,inferred_pickup:30,current_qty:38,
+    created_at:'2026-08-22 08:00:00'}];
+  APP.cmd('push','mirror_gzgrocery');`;
+
+CASES.push(['the queue that was invisible', GZ, [
+  ['it says something is waiting',  `txt('content').includes('One drop needs your decision')`],
+  ['naming the product',            `txt('content').includes('Carrots')`],
+  ['and the numbers behind it',     `txt('content').includes('40 → 10') && txt('content').includes('a drop of 30')`],
+  ['and what your own shelf says',  `txt('content').includes('Your shelf says 38')`],
+  ['both decisions are offered',
+   "[].slice.call(document.querySelectorAll('#content button')).some(function(b){return b.innerText.indexOf('It sold')>=0}) && [].slice.call(document.querySelectorAll('#content button')).some(function(b){return b.innerText.indexOf('Glitch')>=0})"],
+  ['the mode is stated',            `txt('content').includes('Live')`],
+  ['and the 24h tally',             `txt('content').includes('4 applied · 11 units in 24h')`],
+  ['the auto-applied list is still there', `txt('content').includes('Oat milk')`],
+]]);
+
+CASES.push(['shadow mode says nothing has changed', `state.mirror={gzgrocery:[]}; state.mirrorMode='shadow';
+  state.gzSummary={}; state.gzFlagged=[]; APP.cmd('push','mirror_gzgrocery');`, [
+  ['it is named',   `txt('content').includes('Shadow')`],
+  ['and explained', `txt('content').includes('nothing here has changed your stock')`],
+]]);
+
+CASES.push(['applying says what it does', GZ + `APP.cmd('gzPickup',9,'apply');`, [
+  ['it asks',                      `sheetText().includes('Take 30 off the shelf?')`],
+  ['naming the fan-out',           `sheetText().includes('every other channel')`],
+  ['and when it is the right call', `sheetText().includes('a real sale')`],
+  ['nothing sent yet',             `state.gzBusy === null`],
+]]);
+
+CASES.push(['ignoring says what it does', GZ + `APP.cmd('gzPickup',9,'ignore');`, [
+  ['it asks',                    `sheetText().includes('Leave the stock alone?')`],
+  ['and says gzgrocery gets corrected', `sheetText().includes('pushed back to gzgrocery')`],
+]]);
+
 run('operator screens', CASES);

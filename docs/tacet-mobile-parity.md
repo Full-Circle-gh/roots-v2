@@ -742,6 +742,38 @@ Both were already live and honest — what they dropped was shape.
 | Terms / privacy, with their real published dates | ✅ (already) |
 | **The document is clipped at 1,200 characters** | ➕ said. It always was, silently, so an operator could read a partial terms document believing it was the whole thing |
 
+### The gzgrocery mirror (`12-guanyi.js`)
+
+The daemon infers a pickup from a drop in gzgrocery's stock. A big or
+suspicious drop is **capped** rather than applied, and waits for a person to
+say whether it was a real sale. The phone read only `recent` — the drops
+already applied automatically — so the answer to "is anything waiting on me"
+was always no.
+
+| Desktop capability | Phone |
+|---|---|
+| **The flagged queue** | ❌ → ✅ — with the numbers behind each one: what gzgrocery went from and to, the size of the drop, and what your own shelf says |
+| **Apply** — it sold, take it off | ❌ → ✅ — asks first, because it lowers stock through the canonical path and the new number fans out to every other channel |
+| **Ignore** — a glitch, leave it | ❌ → ✅ — asks first too, because it re-pushes your number back to gzgrocery to correct theirs |
+| **The mode** — live / shadow / off | ❌ → ✅. "Shadow" means detecting and logging and changing nothing, so a list of pickups under it is a list of things that did **not** happen to your shelf. The phone stored the mode and never drew it |
+| 24h applied events and units | ❌ → ✅ |
+| Recent auto-applied pickups | ✅ (already) |
+| Analytics, unpriced products, order-read config | ➖ decided: desktop |
+
+### `APP.cmd` forwarded one argument
+
+Found while wiring the queue above. The dispatcher was
+`cmd:(n,a)=>CMD[n](a)` — a single argument — while two handlers took two. So
+`APP.cmd('pollStatus', 7, 'closed')` arrived as `(7, undefined)`, the PUT body
+became `{status: undefined}`, `JSON.stringify` dropped the key, the server saw
+an empty patch and answered 200, and the phone reported **"Poll closed"**.
+
+Voting's Open / Close / Reopen had never worked. Every assertion in
+`test_mobile_voting.js` passed throughout, because they all read the card and
+the card was right — the bug lived entirely in the request. The dispatcher is
+variadic now, the sweep fails on any `APP.cmd` call site passing arguments it
+cannot forward, and the voting probe stubs `fetch` and asserts the body.
+
 ## 4. Open questions
 
 Not gaps — decisions that are the shop's to make, not this file's.
