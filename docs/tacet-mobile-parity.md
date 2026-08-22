@@ -495,6 +495,53 @@ were in neither scheme.
 
 `scripts/test_mobile_categories.js` — 24 assertions, 9 cases.
 
+### Membership (`07-content-billing.js`, the tier cards)
+
+| Desktop capability | Phone |
+|---|---|
+| The ladder is the shop's, from `roots_club.tiers` | ❌ → ✅ — the phone had a fixed four-rung ladder in its source |
+| **A threshold is lifetime spend in ¥** | ❌ → ✅ — the phone read "≥ 2,000 pts". Wrong number *and* wrong unit |
+| The bottom rung says everyone starts there | ✅ |
+| Points multiplier per rung | ❌ → ✅ |
+| Perks per rung, in the reading language | ❌ → ✅ — with "No perks yet" where there are none |
+| Live member counts per rung (`/tier-counts`) | ✅ |
+| Rungs in threshold order | ✅ |
+| Add / rename / re-threshold / edit perks, with the key-stability and lowest-must-be-¥0 rules | ➖ decided: desktop |
+| "Recent members" | ➖ removed — it was recent *signups* relabelled, and Customers already lists them |
+
+### Top-up (`loadTopupTransactions`)
+
+The screen led with **¥184,220 · 788 members** in 30px type. There is no
+endpoint that returns either number; no fetch ever replaced them. And
+`mapWallet` painted every row a green `+¥` with the label "Top-up" regardless
+of `status`, so a pending or failed payment read as money in the till.
+
+| Desktop capability | Phone |
+|---|---|
+| Invented balance headline | ❌ → removed |
+| Transactions: when, who, phone, amount, bonus points, method | ✅ |
+| **Status, and money coloured only when it is money** | ❌ → ✅ — Paid / Pending / Failed / Cancelled / Refunded; only a success is a green `+¥` |
+| Pending work surfaced | ✅ — a line at the top counts what is waiting |
+| **Mark a stuck top-up successful** | ✅ — `POST /topup-transactions/:id/finalize`. It credits a real wallet, so it asks first, names the amount and the bonus points, and says when to use it |
+| Packages on offer, with their bonus | ✅ read-only — inactive ones are not shown, because they are not on offer |
+| Create / price / activate a package | ➖ decided: desktop |
+| `out_trade_no` | ➖ — a WeChat trace id is desktop support work |
+
+### Leaderboard (`leaderboard.config`)
+
+| Desktop capability | Phone |
+|---|---|
+| The board's title | ✅ |
+| **Whether it is switched on at all** | ❌ → ✅ — the phone drew a board regardless. It now says Off, and that customers cannot see it |
+| **The metric** — lifetime spend / points / orders | ❌ → ✅ — every value used to be labelled "pts". Money renders as money, orders as orders |
+| The period, and top N | ✅ |
+| Reveal mode | ✅ — the masked list is the one shown, and a note says that is what customers see |
+| **Seeded placeholder entries** | ❌ → ✅ — amber, because customers are being shown invented names |
+| Ranks, names, values | ✅ |
+| Rewards copy, hidden-name list, editing the config | ➖ decided: desktop |
+
+`scripts/test_mobile_club.js` — 46 assertions, 8 cases across all three.
+
 ## 4. Open questions
 
 Not gaps — decisions that are the shop's to make, not this file's.

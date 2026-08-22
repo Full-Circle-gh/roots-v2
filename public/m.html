@@ -223,17 +223,6 @@ const DB = {
      audience:['Has ordered · Tree, Root','曾下单 · 大树、根系'],deeplink:null,
      meta:['Going out Sat','周六 发送'],status:['Scheduled','已排期'],kind:'draft'},
   ],
-  tiers:[{tier:['Tree','大树'],pts:['≥ 2,000 pts','≥ 2,000 分'],members:'46',kind:'off'},{tier:['Root','根系'],pts:['≥ 800 pts','≥ 800 分'],members:'132',kind:'off'},{tier:['Sprout','嫩芽'],pts:['≥ 0 pts','≥ 0 分'],members:'610',kind:'off'}],
-  members:[
-    {name:['Chen Meiling','陈美玲'],tier:['Tree','大树'],pts:'2,410',gold:true},{name:['Zhang Wei','张伟'],tier:['Root','根系'],pts:'1,180'},
-    {name:['Sarah Lim','Sarah Lim'],tier:['Tree','大树'],pts:'2,050',gold:true},{name:['Wang Zhiqiang','王志强'],tier:['Sprout','嫩芽'],pts:'420'},
-  ],
-  wallet:[
-    {label:['Top-up','充值'],who:['Chen Meiling','陈美玲'],time:'2:20 PM',amt:'+¥200',color:'#5F7357'},
-    {label:['Spend','消费'],who:['Zhang Wei','张伟'],time:'1:02 PM',amt:'−¥88',color:'var(--text-primary)'},
-    {label:['Top-up','充值'],who:['Sarah Lim','Sarah Lim'],time:'11:40 AM',amt:'+¥100',color:'#5F7357'},
-  ],
-  leaderboard:[{rank:'1',name:['Chen Meiling','陈美玲'],pts:'2,410'},{rank:'2',name:['Sarah Lim','Sarah Lim'],pts:'2,050'},{rank:'3',name:['Zhang Wei','张伟'],pts:'1,180'},{rank:'4',name:['Li Na','李娜'],pts:'940'},{rank:'5',name:['Wang Zhiqiang','王志强'],pts:'420'}],
   votes:[
     {title:['Next flavour','下款口味'],status:['Live','进行中'],kind:'live',votes:['312 votes','312 票'],pct:'62%',top:['Leading: Matcha oat','领先：抹茶燕麦']},
     {title:['Store hours poll','营业时间投票'],status:['Closed','已结束'],kind:'off',votes:['540 votes','540 票'],pct:'100%',top:['Winner: open until 22:00','胜出：营业至 22:00']},
@@ -297,6 +286,9 @@ const state = {
   pos:null, posErr:null, posTried:false, poSeg:'open', poId:null,
   act:null, actErr:null, actTried:false, actRange:'today', actSource:'', actMore:false,
   cats:null, catCounts:null, catsErr:null, catsTried:false, catTop:null,
+  tiers:null, tierCounts:null, tiersErr:null, tiersTried:false,
+  tup:null, tupPkgs:null, tupErr:null, tupTried:false, tupBusy:null,
+  lb:null, lbErr:null, lbTried:false,
   poDetail:null, poErr:null, poBusy:false,
   toast:null, drag:0, dragging:false, faqOpen:null, reviewsSeen:new Set(),
   qs:{oat:8,nuts:0,carrot:42},
@@ -577,6 +569,27 @@ reg('workOpenRow', i=>{
 });
 reg('inboxSeg', s=>{ state.inboxSeg=s; render(); });
 reg('poSeg', v=>{ state.poSeg=v; render(); });
+reg('finalizeTopup', id=>{
+  const t=(state.tup||[]).find(x=>x.id===Number(id)); if(!t||state.tupBusy) return;
+  // It credits a real wallet. The desktop asks; so does this.
+  state.ask={title:T('Mark this top-up successful?','标记这笔充值为成功？'),
+    body:T('The wallet is credited with '+money(CUR,t.amount)+(Number(t.bonus_points||0)?' and '+t.bonus_points+' bonus points':'')+'. Use this only when the payment really landed and the callback did not.',
+           '将为钱包入账 '+money(CUR,t.amount)+(Number(t.bonus_points||0)?'，并赠送 '+t.bonus_points+' 积分':'')+'。仅在确认已收到款项、但回调未触发时使用。'),
+    confirmLabel:T('Mark successful','标记成功'),
+    run:()=>{
+      state.tupBusy=t.id; render();
+      apiWrite('/topup-transactions/'+t.id+'/finalize',{}).then(()=>{
+        state.tupBusy=null; showToast(T('Top-up confirmed','充值已确认'));
+        state.tupTried=false; loadTopups(true);
+      }).catch(e=>{
+        state.tupBusy=null;
+        if(String(e.message)==='auth') return;
+        state.tupErr=T('That did not go through. Nothing has changed — try again.','没有处理成功。数据没有变化 — 请重试。');
+        render();
+      });
+    }};
+  render();
+});
 reg('catTop', v=>{ state.catTop=v||null; render(); });
 reg('actRange', v=>{ state.actRange=v; state.act=null; state.actTried=false; render(); loadActivity(); });
 reg('actSource', v=>{ state.actSource=v; state.act=null; state.actTried=false; render(); loadActivity(); });
@@ -1376,6 +1389,189 @@ function screenMore(){
 }
 
 /* ==========================================================================
+   Membership, Top-up and Leaderboard — three screens that were making it up
+   --------------------------------------------------------------------------
+   Membership showed a fixed four-rung ladder ("Tree ≥ 2,000 pts") whose
+   thresholds were both invented AND in the wrong unit: a tier threshold is
+   LIFETIME SPEND in ¥, not points. The ladder is editable — tiers are stored
+   in storefront_config under roots_club.tiers, with a points multiplier and a
+   perks list per rung — so a shop that had renamed a tier, moved a threshold
+   or added a rung saw none of it. And "Recent members" was recent SIGNUPS
+   relabelled, which is a different thing and is already on Customers.
+
+   Top-up led with "¥184,220 · 788 members" in 30px type. No fetch ever
+   replaced it, because there is no endpoint that returns it. It was a number
+   somebody typed into a mockup, sitting on a phone, above a real transaction
+   list. Worse, every transaction rendered as a green +¥ regardless of status,
+   so a pending or failed top-up read as money in the till.
+
+   Leaderboard showed a board even when the board is switched off, labelled
+   every value "pts" when the metric is configurable (lifetime spend, points or
+   order count), and ignored reveal mode — the setting that decides whether
+   customers see full names.
+   ========================================================================== */
+function loadTiers(){
+  if(state.tiersTried) return;
+  state.tiersTried=true;
+  Promise.all([api('/config'),api('/tier-counts').catch(()=>null)]).then(([cfg,counts])=>{
+    const list=cfg&&cfg.roots_club&&cfg.roots_club.tiers;
+    state.tiers=Array.isArray(list)?list:[];
+    state.tierCounts=(counts&&typeof counts==='object')?counts:null;
+    state.tiersErr=null; render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    state.tiersErr=T('Could not load the tiers.','加载会员等级失败。'); render();
+  });
+}
+const tierKey=t=>String((t&&t.key)||'').trim()||String((t&&t.name_en)||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+function tierName(t){ return LANG==='en' ? (t.name_en||t.name_cn||T('Untitled tier','未命名等级'))
+                                         : (t.name_cn||t.name_en||T('Untitled tier','未命名等级')); }
+/* One decimal only when there is one — "2× points", not "2.0× points". */
+const multText=n=>{ const v=Number(n)||1; return (v%1?v.toFixed(1):String(v)); };
+function screenMembership(){
+  loadTiers();
+  if(state.tiersErr) return `<div style="padding:14px 16px 24px">
+    <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick)">${state.tiersErr}</span></div></div>`;
+  if(!state.tiers) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const tiers=state.tiers.slice().sort((a,b)=>(Number(a.threshold)||0)-(Number(b.threshold)||0));
+  if(!tiers.length) return nothingYet(T('No tiers yet','暂无会员等级'),
+    T('The membership ladder is built on desktop. Once there are rungs, they show here with how many members stand on each.',
+      '会员等级在电脑端设置。设置后会连同各等级人数显示在这里。'));
+  const card=t=>{
+    const th=Number(t.threshold)||0;
+    const from = th===0 ? T('from ¥0 — everyone starts here','从 ¥0 起 — 人人有份')
+      : T('from '+money0(CUR,th)+' lifetime spend','累计消费 '+money0(CUR,th)+' 起');
+    const n = state.tierCounts ? Number(state.tierCounts[tierKey(t)]||0) : null;
+    const perks = LANG==='en'
+      ? ((t.perks_en&&t.perks_en.length?t.perks_en:t.perks_cn)||[])
+      : ((t.perks_cn&&t.perks_cn.length?t.perks_cn:t.perks_en)||[]);
+    return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:9px">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+        <span style="font-size:16px;font-weight:500;min-width:0">${escAttr(tierName(t))}</span>
+        <span class="num" style="font-size:13px;color:var(--text-secondary);flex:none">${multText(t.points_mult)}× ${T('points','积分')}</span></div>
+      <div class="num" style="font-size:13px;color:var(--text-secondary)">${from}</div>
+      ${n!=null?`<div style="font-size:13px;color:var(--text-secondary)"><b class="num" style="color:var(--text-primary);font-weight:500">${n.toLocaleString()}</b> ${T(n===1?'member':'members','名会员')}</div>`:''}
+      ${perks.length?`<ul style="margin:4px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:4px">${perks.map(pk=>
+        `<li style="font-size:13.5px;line-height:1.5;color:var(--text-secondary)">${escAttr(pk)}</li>`).join('')}</ul>`
+        :`<div style="font-size:13px;color:var(--text-secondary);opacity:.8">${T('No perks yet','暂无权益')}</div>`}</div>`;
+  };
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${tiers.map(card).join('')}
+    ${noteBar(T('Thresholds, multipliers and perks are edited on desktop.','门槛、倍数与权益在电脑端编辑。'))}</div>`;
+}
+
+/* ── Top-up ──────────────────────────────────────────────────────────────── */
+function loadTopups(force){
+  if(state.tupTried&&!force) return;
+  state.tupTried=true;
+  Promise.all([api('/topup-transactions?limit=50'),api('/topup-packages').catch(()=>[])]).then(([tx,pk])=>{
+    state.tup=Array.isArray(tx)?tx:[];
+    state.tupPkgs=Array.isArray(pk)?pk:[];
+    state.tupErr=null; render();
+  }).catch(e=>{
+    if(String(e.message)==='auth') return;
+    state.tupErr=T('Could not load top-ups.','加载充值记录失败。'); render();
+  });
+}
+/* Only a SUCCEEDED top-up is money. Everything else is a row that says what
+   happened to it — the phone used to paint all three green. */
+const TUP_WORD={success:['Paid','已支付'],pending:['Pending','待支付'],failed:['Failed','失败'],
+  cancelled:['Cancelled','已取消'],refunded:['Refunded','已退款']};
+function tupRow(t){
+  const st=String(t.status||'pending').toLowerCase();
+  const paid=st==='success';
+  const word=TUP_WORD[st]||[st,st];
+  const tone=paid?'success':(st==='pending'?'clear':'muted');
+  const [bg,fg]=PILL[tone];
+  const bonus=Number(t.bonus_points||0);
+  return `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px">
+    <span style="display:flex;flex-direction:column;min-width:0">
+      <span style="font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(t.nickname||T('(no name)','无名'))}</span>
+      <span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${fmtDay(t.paid_at||t.created_at)||''}${t.phone?' · '+escAttr(t.phone):''}${t.payment_method?' · '+escAttr(t.payment_method):''}</span>
+      ${bonus?`<span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">+${bonus} ${T('bonus points','赠送积分')}</span>`:''}
+      ${st==='pending'?`<button ${state.tupBusy===t.id?'disabled':''} onclick="APP.cmd('finalizeTopup',${t.id})" style="align-self:flex-start;margin-top:9px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 14px;cursor:pointer;font-family:inherit;${state.tupBusy===t.id?'opacity:.5':''}">${state.tupBusy===t.id?T('Marking…','处理中…'):T('Mark successful','标记成功')}</button>`:''}
+    </span>
+    <span style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex:none">
+      <span class="num" style="font-size:15px;font-weight:500;color:${paid?'#5F7357':'var(--text-secondary)'}">${paid?'+':''}${money(CUR,t.amount)}</span>
+      <span class="pill" style="background:${bg};color:${fg}">${T(...word)}</span></span></div>`;
+}
+function screenTopups(){
+  loadTopups();
+  if(state.tupErr) return `<div style="padding:14px 16px 24px">
+    <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick)">${state.tupErr}</span></div></div>`;
+  if(!state.tup) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const rows=state.tup, pkgs=(state.tupPkgs||[]).filter(p=>p.is_active!==0);
+  const stuck=rows.filter(r=>String(r.status||'').toLowerCase()==='pending').length;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+    ${stuck?noteBar(T(stuck===1?'One top-up is waiting to be confirmed.':stuck+' top-ups are waiting to be confirmed.',
+      stuck+' 笔充值待确认。')):''}
+    ${pkgs.length?`<div><div class="eyebrow" style="padding:2px 4px 8px">${T('Packages on offer','充值套餐')}</div>
+      <div class="list">${pkgs.map((pk,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px">
+          <span style="display:flex;flex-direction:column;min-width:0">
+            <span class="num" style="font-size:14.5px">${money(CUR,pk.amount)}</span>
+            ${pk.title_en||pk.title_cn?`<span style="font-size:12px;color:var(--text-secondary);margin-top:2px">${escAttr(LANG==='en'?(pk.title_en||pk.title_cn):(pk.title_cn||pk.title_en))}</span>`:''}</span>
+          <span class="num" style="font-size:13px;color:var(--text-secondary);flex:none">${Number(pk.bonus_points||0)?'+'+pk.bonus_points+' '+T('points','积分'):T('no bonus','无赠送')}</span></div>`).join('')}</div></div>`:''}
+    <div><div class="eyebrow" style="padding:2px 4px 8px">${T('Recent top-ups','最近充值')}</div>
+      ${rows.length?`<div class="list">${rows.map((t,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}${tupRow(t)}`).join('')}</div>`
+        :`<div style="padding:30px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('No top-ups yet.','暂无充值记录。')}</div>`}</div>
+    ${noteBar(T('Packages are created and priced on desktop.','充值套餐在电脑端创建与定价。'))}</div>`;
+}
+
+/* ── Leaderboard ─────────────────────────────────────────────────────────── */
+function loadLeaderboard(){
+  if(state.lbTried) return;
+  state.lbTried=true;
+  api('/leaderboard/preview').then(d=>{ state.lb=d||{}; state.lbErr=null; render(); })
+    .catch(e=>{ if(String(e.message)==='auth') return;
+      state.lbErr=T('Could not load the leaderboard.','加载排行榜失败。'); render(); });
+}
+const LB_METRIC={lifetime_spend:['lifetime spend','累计消费'],points_balance:['points','积分'],orders_count:['orders','订单数']};
+const LB_PERIOD={all:['all time','全部时间'],year:['past year','近一年'],month:['past month','近一月'],week:['past 7 days','近 7 天']};
+function lbValue(v,metric){
+  const n=Number(v||0);
+  if(metric==='lifetime_spend') return money0(CUR,n);
+  if(metric==='orders_count') return n.toLocaleString()+' '+T(n===1?'order':'orders','单');
+  return n.toLocaleString()+' '+T('pts','分');
+}
+function screenLeaderboard(){
+  loadLeaderboard();
+  if(state.lbErr) return `<div style="padding:14px 16px 24px">
+    <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick)">${state.lbErr}</span></div></div>`;
+  if(!state.lb) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const cfg=state.lb.config||{};
+  // The preview is what STAFF see. reveal_mode is what CUSTOMERS see, so the
+  // masked list is the one on screen and the note says which it is.
+  const rows=state.lb.revealed_entries||state.lb.raw_entries||[];
+  const metric=cfg.metric||'lifetime_spend';
+  const off=!cfg.enabled;
+  const head=`<div style="display:flex;flex-direction:column;gap:6px">
+    <div style="display:flex;align-items:center;gap:9px;flex-wrap:wrap">
+      <span style="font-size:16px;font-weight:500">${escAttr(LANG==='en'?(cfg.title_en||'Leaderboard'):(cfg.title_cn||cfg.title_en||'排行榜'))}</span>
+      ${off?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('Off','已关闭')}</span>`
+           :`<span class="pill" style="background:${PILL.success[0]};color:${PILL.success[1]}">${T('Live','进行中')}</span>`}</div>
+    <div style="font-size:13px;color:var(--text-secondary)">${T('Ranked by','排名依据')} ${T(...(LB_METRIC[metric]||[metric,metric]))} · ${T(...(LB_PERIOD[cfg.period||'all']||['all time','全部时间']))} · ${T('top','前')} ${Number(cfg.top_n||20)}</div>
+    ${cfg.reveal_mode&&cfg.reveal_mode!=='full'?`<div style="font-size:12.5px;color:var(--text-secondary)">${T('Names are shown to customers the way they appear below.','顾客看到的名称与下方一致。')}</div>`:''}
+    ${cfg.seed_enabled?`<div style="font-size:12.5px;color:var(--amber)">${T('Placeholder entries are switched on — customers see seeded names mixed in.','占位名单已开启 — 顾客会看到混入的示例名称。')}</div>`:''}</div>`;
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+    ${head}
+    ${off?noteBar(T('The board is switched off, so customers cannot see it. This is what it would show.','排行榜当前关闭，顾客看不到。以下是开启后的内容。')):''}
+    ${rows.length?`<div class="list">${rows.map((e,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
+      <div style="display:flex;align-items:center;gap:14px;padding:13px 14px">
+        <span class="num" style="width:26px;text-align:center;font-size:15px;font-weight:500;flex:none">${Number(e.rank||i+1)}</span>
+        <span style="flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(e.name||e.nickname||'—')}</span>
+        <span class="num" style="font-size:13.5px;color:var(--text-secondary);flex:none">${lbValue(e.value,metric)}</span></div>`).join('')}</div>`
+      :`<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Nobody is on the board yet.','排行榜还没有人。')}</div>`}
+    ${noteBar(T('Metric, period, rewards and who is hidden are set on desktop.','排名依据、周期、奖励与隐藏名单在电脑端设置。'))}</div>`;
+}
+
+/* ==========================================================================
    Categories — the shop's shelves (desktop: catLoad in 01-core.js)
    --------------------------------------------------------------------------
    The phone read /categories: a FLAT list out of the legacy `categories` table,
@@ -2014,25 +2210,10 @@ const SUBS={
   social:{title:['Social proof','社交证明'],render:()=>nothingYet(T('Set up on desktop','在电脑端设置'),
     T('Social proof shows recent buyers to your customers. It is configured on desktop; nothing about it can be read or changed from here yet.','社交证明会向顾客展示最近的购买。设置在电脑端完成，手机端暂时无法查看或修改。')),
   },
-  membership:{title:['Membership','会员积分'],render:()=> !featOn('membership')?`<div style="padding:14px 16px 24px">${flagGate('membership')}</div>`:
-    `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
-      <div><div class="eyebrow" style="padding:2px 4px 8px">${T('Tiers','等级')}</div>
-      <div class="list">${DB.tiers.map((t,i)=>`${i?'<div class="sep"></div>':''}<div style="display:flex;align-items:center;gap:12px;padding:13px 14px">${pill(t.kind,T(...t.tier))}
-        <span class="num" style="flex:1;font-size:13px;color:var(--text-secondary)">${T(...t.pts)}</span><span class="num" style="font-size:13.5px;flex:none">${t.members} ${T('members','人')}</span></div>`).join('')}</div></div>
-      <div><div class="eyebrow" style="padding:2px 4px 8px">${T('Recent members','最近会员')}</div>
-      <div class="list">${DB.members.map((m,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}<div style="display:flex;align-items:center;gap:12px;padding:12px 14px">
-        <span style="flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...m.name)}</span>${pill(m.gold?'gold':'off',T(...m.tier))}<span class="num" style="font-size:13px;color:var(--text-secondary);flex:none">${m.pts}</span></div>`).join('')}</div></div></div>`},
-  wallet:{title:['Top-up','充值'],render:()=>`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
-    <div style="background:var(--surface-raised);border-radius:14px;padding:18px"><div style="font-size:13px;color:var(--text-secondary)">${T('Stored balance','储值余额')}</div>
-    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-top:6px"><span class="num" style="font-size:30px;font-weight:500;letter-spacing:-.02em">¥184,220</span><span class="num" style="font-size:12.5px;color:var(--text-secondary)">${T('788 members','788 位会员')}</span></div></div>
-    <div><div class="eyebrow" style="padding:2px 4px 8px">${T('Recent activity','最近记录')}</div>
-    <div class="list">${DB.wallet.map((x,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px">
-      <span style="display:flex;flex-direction:column;min-width:0"><span style="font-size:14.5px">${T(...x.label)}</span><span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${T(...x.who)} · ${x.time}</span></span>
-      <span class="num" style="font-size:15px;font-weight:500;color:${x.color};flex:none">${x.amt}</span></div>`).join('')}</div></div></div>`},
-  leaderboard:{title:['Leaderboard','排行榜'],render:()=>`<div style="padding:14px 16px 24px"><div class="list">${DB.leaderboard.map((m,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}<div style="display:flex;align-items:center;gap:14px;padding:13px 14px">
-    <span class="num" style="width:26px;text-align:center;font-size:15px;font-weight:500;flex:none">${m.rank}</span>
-    <span style="flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...m.name)}</span>
-    <span class="num" style="font-size:13.5px;color:var(--text-secondary);flex:none">${m.pts} ${T('pts','分')}</span></div>`).join('')}</div></div>`},
+  membership:{title:['Membership','会员积分'],render:()=> !featOn('membership')
+    ? `<div style="padding:14px 16px 24px">${flagGate('membership')}</div>` : screenMembership()},
+  wallet:{title:['Top-up','充值'],render:()=>screenTopups()},
+  leaderboard:{title:['Leaderboard','排行榜'],render:()=>screenLeaderboard()},
   voting:{title:['Voting','投票'],render:()=>`<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:10px">
     ${DB.votes.map(v=>`<div class="card" style="padding:14px"><div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px"><span style="font-size:15px;font-weight:500;min-width:0">${T(...v.title)}</span>${pill(v.kind,T(...v.status))}</div>
       <div class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:5px">${T(...v.votes)}</div>
@@ -4684,17 +4865,6 @@ function mapPoll(r){
     top:top?['Leading: '+(top.label_en||top.label_cn||''),'领先：'+(top.label_cn||top.label_en||'')]:['—','—']};
 }
 const TIER_NAMES={seed:['Seed','种子'],sprout:['Sprout','幼苗'],root:['Root','根'],tree:['Tree','大树']};
-const TIER_PTS={seed:['≥ 0 pts','≥ 0 分'],sprout:['≥ 500 pts','≥ 500 分'],root:['≥ 2,000 pts','≥ 2,000 分'],tree:['≥ 5,000 pts','≥ 5,000 分']};
-function mapMember(r){
-  const tk=String(r.tier_key||'seed');
-  return {name:[r.nickname||'—',r.nickname||'—'], tier:TIER_NAMES[tk]||[tk,tk], pts:Number(r.points_balance||0).toLocaleString(),
-    gold:tk==='tree'||tk==='root'};
-}
-function mapWallet(r){
-  const amt=Number(r.amount||0);
-  return {label:['Top-up','充值'], who:[r.nickname||'—',r.nickname||'—'], time:hhmm(r.paid_at||r.created_at)||'',
-    amt:'+'+money(CUR,amt), color:'#5F7357'};
-}
 reg('openOrder', id=>{
   const row=(state.liveOrders||[]).find(o=>o.id===id);
   state.detailId=id; state.drag=0; state.liveDetail=null; state.detailMounted=false;
@@ -4823,16 +4993,8 @@ async function loadLive(){
   api('/feedback').then(r=>set(()=>{ const rows=Array.isArray(r)?r:(r&&r.data); if(rows) DB.feedback=rows.map(mapFeedback); })).catch(()=>{});
   api('/polls').then(r=>set(()=>{ if(Array.isArray(r)&&r.length) DB.votes=r.map(mapPoll); })).catch(()=>{});
 
-  // membership: tier counts (+ static ladder names) and recent members
-  api('/tier-counts').then(d=>set(()=>{ if(d&&typeof d==='object'){
-    DB.tiers=['tree','root','sprout','seed'].filter(k=>d[k]!=null).map(k=>({tier:TIER_NAMES[k],pts:TIER_PTS[k],members:String(d[k]),kind:(k==='tree'||k==='root')?'gold':'off'}));
-  }})).catch(()=>{});
-  api('/customers?sort=recent_signup&pageSize=6').then(r=>set(()=>{ const rows=Array.isArray(r)?r:(r&&r.data); if(rows&&rows.length) DB.members=rows.map(mapMember); })).catch(()=>{});
 
   // wallet activity + leaderboard + sales channels
-  api('/topup-transactions?limit=20').then(r=>set(()=>{ if(Array.isArray(r)&&r.length) DB.wallet=r.map(mapWallet); })).catch(()=>{});
-  api('/leaderboard/preview').then(d=>set(()=>{ const rows=d&&(d.revealed_entries||d.raw_entries); if(rows&&rows.length)
-    DB.leaderboard=rows.map(e=>({rank:String(e.rank),name:[e.name||e.nickname||'—',e.name||e.nickname||'—'],pts:Number(e.value||0).toLocaleString()})); })).catch(()=>{});
 }
 
 document.documentElement.setAttribute('data-theme',state.theme);
