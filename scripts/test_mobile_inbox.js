@@ -99,6 +99,8 @@ const CASES = [
     ['does not offer an empty thread',       `!txt('mThread').includes('Nothing in this thread yet')`],
   ]],
   ['a review is still a review, not a thread', `
+    DB.reviews=[{cust:['Chen Meiling','陈美玲'],rating:'5.0',status:['New','新'],kind:'success',
+      text:['Fast delivery.','配送很快。'],time:['2h ago','2 小时前']}];
     DB.reviews[0].id=7; DB.reviews[0].stream='review';
     APP.cmd('push','inbox'); APP.cmd('openReply', revKey(DB.reviews[0]));`, [
     ['no thread was fetched',           `state.thread===null||state.thread===undefined`],
@@ -107,9 +109,10 @@ const CASES = [
   ]],
 ];
 
-CASES.push(['a shop with no reviews', `DB.reviews=[]; APP.cmd('push','inbox');`, [
+CASES.push(['a shop with no reviews', `DB.reviews=[]; state.revLoaded=true; APP.cmd('push','inbox');`, [
   // The mock's three reviews used to survive an empty server answer, because
-  // the loader only assigned `if (list.length)`.
+  // the loader only assigned `if (list.length)`. revLoaded is what separates
+  // "the server said none" from "the server has not answered".
   ['says there are none',  `txt('content').includes('No reviews yet')`],
   ['and invents none',     `!txt('content').includes('Chen Meiling') && !txt('content').includes('carrots were super fresh')`],
 ]]);

@@ -877,6 +877,25 @@ pattern on the two busiest screens.
 
 `scripts/test_mobile_home.js` — 38 assertions, 10 cases.
 
+### The sample data is gone
+
+Rather than keep hunting the places where a mock outlived a fetch, the mock is
+deleted. `DB` shipped 45 sample rows — five orders at ¥312 with customer names
+and addresses, five products, three coupons, two flash sales, two broadcasts,
+three reviews, two feedback threads, three invoices, five customers — and every
+screen rendered them on first paint, before any fetch, and went on rendering
+them wherever a loader assigned only `if (rows.length)`. `DB` is now nine empty
+arrays: the runtime store and nothing else.
+
+That closed the whole class in one move, and opened a smaller one in the other
+direction: with an empty store and no way to tell *nothing yet* from *not asked
+yet*, each of those screens said a confident "none" for the length of a fetch.
+Four now carry a loaded flag — coupons, flash sales, broadcasts, the inbox —
+joining the three that already had one. Each says "Loading…" until its own
+answer arrives, and its empty state only after.
+
+The tests carry their own rows now, which is where a test's fixtures belong.
+
 ## 4. Open questions
 
 Not gaps — decisions that are the shop's to make, not this file's.

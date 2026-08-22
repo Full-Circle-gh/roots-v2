@@ -51,6 +51,28 @@ function findChrome() {
   return null;
 }
 
+// One row of each shape, for the cases that need a record to open. The app used
+// to ship these as sample data inside DB; it no longer does — an empty DB is
+// the point — so the rows a test needs are the test's own.
+const ROWS = `
+  DB.orders=[{id:'RT-…047', ch:'miniapp', cust:['Chen Meiling','陈美玲'], total:'¥312',
+    placed:'2:22 PM', status:['Paid','已付款'], kind:'paid', isNew:true,
+    ship:['Guangzhou · Tianhe','广州 · 天河区'], deliv:{text:'Ship by 6:00 PM',tone:'amber'},
+    phone:'138****2841', addr:['Tianhe, Guangzhou','广州市天河区'], pay:['WeChat Pay','微信支付'],
+    txn:'42000••••8831', fulfil:['Tianhe store','天河店'], route:['Nearest store','最近门店'],
+    trk:null, items:[[1,'Organic carrots 500g','¥18'],[2,'Oat milk 1L','¥64']],
+    breakdown:[['Subtotal','¥300'],['Delivery','¥12']]}];
+  DB.products=[
+    {name:['Organic carrots','有机胡萝卜'], sku:'SKU 10231 · 500g', price:'¥18', stock:42,
+     stockLabel:['42 in stock','库存 42'], status:['Live','在售'], kind:'on'},
+    {name:['Oat milk 1L','燕麦奶 1L'], sku:'SKU 10188', price:'¥32', stock:8,
+     stockLabel:['8 left','剩 8'], status:['Low','库存低'], kind:'restock'}];
+  DB.reviews=[{cust:['Chen Meiling','陈美玲'], rating:'5.0', status:['New','新'], kind:'success',
+    text:['Fast delivery.','配送很快。'], time:['2h ago','2 小时前']}];
+  DB.customers=[{id:'s1', name:'Chen Meiling', phone:'138****2841', tier:'tree', orders:24,
+    spend:6240, seen:'2026-07-29 09:40:00'}];
+`;
+
 // Enough server-shaped state that screens which read live data render their real
 // branch rather than their loading one. Deliberately minimal: a screen that
 // needs more than this to paint is a screen that will break on a slow network.
@@ -70,11 +92,11 @@ function buildCases(src) {
   for (const t of ['home', 'orders', 'customers', 'products', 'more']) cases['tab:' + t] = `APP.cmd('tab','${t}')`;
   for (const k of subs) cases['push:' + k] = `APP.cmd('push','${k}')`;
   Object.assign(cases, {
-    'sheet:order': "DB.orders[0]._id=1;DB.orders[0].raw='paid';state.liveOrders=DB.orders;APP.cmd('tab','orders');APP.cmd('openOrder',DB.orders[0].id)",
-    'sheet:order-actions': "DB.orders[0]._id=1;DB.orders[0].raw='dispatched';state.liveOrders=DB.orders;APP.cmd('openOrder',DB.orders[0].id);APP.cmd('detailActions')",
-    'sheet:customer': "state.customers=DB.customers.slice();state.custLoaded=true;APP.cmd('tab','customers');state.custId='s1';state.custDetail={customer:{nickname:'A',tier_key:'tree'},stats:{orders:{}}};render()",
-    'sheet:product': "state.prodStores=[{id:1,name_en:'T',name_cn:'T',qty:2}];state.prodStockReady=true;DB.products[1]._id=42;APP.cmd('tab','products');state.productSku=DB.products[1].sku;render()",
-    'sheet:reply': "DB.reviews[0].id=7;DB.reviews[0].stream='review';APP.cmd('push','inbox');APP.cmd('openReply',DB.reviews[0].cust[0])",
+    'sheet:order': "" + ROWS + "DB.orders[0]._id=1;DB.orders[0].raw='paid';state.liveOrders=DB.orders;APP.cmd('tab','orders');APP.cmd('openOrder',DB.orders[0].id)",
+    'sheet:order-actions': "" + ROWS + "DB.orders[0]._id=1;DB.orders[0].raw='dispatched';state.liveOrders=DB.orders;APP.cmd('openOrder',DB.orders[0].id);APP.cmd('detailActions')",
+    'sheet:customer': "" + ROWS + "state.customers=DB.customers.slice();state.custLoaded=true;APP.cmd('tab','customers');state.custId='s1';state.custDetail={customer:{nickname:'A',tier_key:'tree'},stats:{orders:{}}};render()",
+    'sheet:product': "" + ROWS + "state.prodStores=[{id:1,name_en:'T',name_cn:'T',qty:2}];state.prodStockReady=true;DB.products[1]._id=42;APP.cmd('tab','products');state.productSku=DB.products[1].sku;render()",
+    'sheet:reply': "" + ROWS + "DB.reviews[0].id=7;DB.reviews[0].stream='review';APP.cmd('push','inbox');APP.cmd('openReply',DB.reviews[0].cust[0])",
     // The feedback half of the inbox, and the thread sheet in all three of its
     // states — the fetch in flight, the conversation on screen, and the fetch
     // that failed. A thread that renders only when the network is kind is a
@@ -117,11 +139,17 @@ function buildCases(src) {
     'push:setup-done': "state.setup={percent:100,requiredDone:5,requiredTotal:5,allDone:true,steps:[{key:'store',done:true,count:2},{key:'products',done:true,count:128},{key:'payment',done:true,method:'wechat'},{key:'fulfillment',done:true,pickup:true},{key:'open',done:true}],optional:[]};APP.cmd('push','setup')",
     'push:settings-gated': "state.ent={socialProof:false,kitchenAdd:false};APP.cmd('push','settings')",
     'push:social-off': "state.cfg=Object.assign({},state.cfg,{features:{socialProof:false}});APP.cmd('push','social')",
+    // The four lists that now have a loaded flag: before it, a screen must say
+    // it is loading rather than confidently saying there is nothing.
+    'push:coupons-loading': "APP.cmd('push','coupons')",
+    'push:flash-loading': "APP.cmd('push','flash')",
+    'push:broadcasts-loading': "APP.cmd('push','broadcasts')",
+    'push:inbox-loading': "APP.cmd('push','inbox')",
     // The mock's own rows must not outlive an empty server answer.
-    'push:inbox-no-reviews': "DB.reviews=[];APP.cmd('push','inbox')",
-    'push:coupons-empty': "DB.coupons=[];APP.cmd('push','coupons')",
-    'push:flash-empty': "DB.flash=[];APP.cmd('push','flash')",
-    'push:broadcasts-empty': "DB.broadcasts=[];APP.cmd('push','broadcasts')",
+    'push:inbox-no-reviews': "state.revLoaded=true;" + ROWS + "DB.reviews=[];APP.cmd('push','inbox')",
+    'push:coupons-empty': "state.vchLoaded=true;" + ROWS + "DB.coupons=[];APP.cmd('push','coupons')",
+    'push:flash-empty': "state.flashLoaded=true;" + ROWS + "DB.flash=[];APP.cmd('push','flash')",
+    'push:broadcasts-empty': "state.bcLoaded=true;" + ROWS + "DB.broadcasts=[];APP.cmd('push','broadcasts')",
     'push:voting': "state.pollsTried=true;state.polls=[{id:1,question_en:'Next flavour',status:'open',reward_points:5,is_featured:1,closes_at:'2026-08-30 12:00:00',total_votes:312,options:[{id:11,label_en:'Matcha oat',votes:193},{id:12,label_en:'Black sesame',votes:119}]},{id:2,question_en:'Store hours',status:'draft',display_min_total:50,options:[]}];APP.cmd('push','voting')",
     'push:voting-results': "state.pollsTried=true;state.polls=[{id:1,question_en:'Next flavour',status:'closed',winner_option_id:11,total_votes:312,options:[{id:11,label_en:'Matcha oat',votes:193},{id:12,label_en:'Black sesame',votes:119}]}];state.pollOpen=1;APP.cmd('push','voting')",
     'push:voting-empty': "state.pollsTried=true;state.polls=[];APP.cmd('push','voting')",
@@ -150,12 +178,12 @@ function buildCases(src) {
     'sheet:po-receive-ask': "state.posTried=true;state.poList=[];APP.cmd('push','purchasing');state.poId=4;state.poDetail={id:4,po_number:'RPO-0004',supplier:'F',status:'Ordered',total_cost:1,items:[]};render();APP.cmd('poStatus','Delivered')",
     'sheet:account': "APP.cmd('overflow')",
     'sheet:create': "APP.cmd('create','coupon')",
-    'sheet:cust-points': "state.customers=DB.customers.slice();state.custLoaded=true;APP.cmd('tab','customers');state.custId=1;state.custDetail={customer:{nickname:'A',tier_key:'tree',points_balance:120,balance:8},stats:{orders:{}}};render();APP.cmd('adjustPoints')",
-    'sheet:cust-block': "state.customers=DB.customers.slice();state.custLoaded=true;APP.cmd('tab','customers');state.custId=1;state.custDetail={customer:{nickname:'A',tier_key:'tree',is_blocked:1},stats:{orders:{}}};render();APP.cmd('toggleBlock')",
-    'sheet:mark-paid': "DB.orders[0]._id=1;DB.orders[0].raw='pending_payment';state.liveOrders=DB.orders;APP.cmd('tab','orders');APP.cmd('openOrder',DB.orders[0].id);APP.cmd('markPaid')",
-    'sheet:refund-review': "DB.orders[0]._id=1;DB.orders[0].raw='paid';DB.orders[0].refundStatus='pending';state.liveOrders=DB.orders;APP.cmd('openOrder',DB.orders[0].id);APP.cmd('detailActions')",
-    'sheet:refund-approve': "DB.orders[0]._id=1;DB.orders[0].raw='paid';DB.orders[0].refundStatus='pending';state.liveOrders=DB.orders;APP.cmd('openOrder',DB.orders[0].id);APP.cmd('approveRefund')",
-    'sheet:refund-payout': "DB.orders[0]._id=1;DB.orders[0].raw='paid';DB.orders[0].refundStatus='approved';state.liveOrders=DB.orders;APP.cmd('openOrder',DB.orders[0].id);APP.cmd('payRefund')",
+    'sheet:cust-points': "" + ROWS + "state.customers=DB.customers.slice();state.custLoaded=true;APP.cmd('tab','customers');state.custId=1;state.custDetail={customer:{nickname:'A',tier_key:'tree',points_balance:120,balance:8},stats:{orders:{}}};render();APP.cmd('adjustPoints')",
+    'sheet:cust-block': "" + ROWS + "state.customers=DB.customers.slice();state.custLoaded=true;APP.cmd('tab','customers');state.custId=1;state.custDetail={customer:{nickname:'A',tier_key:'tree',is_blocked:1},stats:{orders:{}}};render();APP.cmd('toggleBlock')",
+    'sheet:mark-paid': "" + ROWS + "DB.orders[0]._id=1;DB.orders[0].raw='pending_payment';state.liveOrders=DB.orders;APP.cmd('tab','orders');APP.cmd('openOrder',DB.orders[0].id);APP.cmd('markPaid')",
+    'sheet:refund-review': "" + ROWS + "DB.orders[0]._id=1;DB.orders[0].raw='paid';DB.orders[0].refundStatus='pending';state.liveOrders=DB.orders;APP.cmd('openOrder',DB.orders[0].id);APP.cmd('detailActions')",
+    'sheet:refund-approve': "" + ROWS + "DB.orders[0]._id=1;DB.orders[0].raw='paid';DB.orders[0].refundStatus='pending';state.liveOrders=DB.orders;APP.cmd('openOrder',DB.orders[0].id);APP.cmd('approveRefund')",
+    'sheet:refund-payout': "" + ROWS + "DB.orders[0]._id=1;DB.orders[0].raw='paid';DB.orders[0].refundStatus='approved';state.liveOrders=DB.orders;APP.cmd('openOrder',DB.orders[0].id);APP.cmd('payRefund')",
     'theme:dark': "APP.cmd('toggleTheme');APP.cmd('tab','orders')",
     'lang:zh': "APP.cmd('toggleLang');APP.cmd('tab','more')",
   });

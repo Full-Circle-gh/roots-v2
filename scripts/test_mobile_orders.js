@@ -26,7 +26,14 @@ const STUB = `window.__sent=[];
   window.fetch=function(u,o){ window.__sent.push({u:String(u), m:(o&&o.method)||'GET', body:(o&&o.body)||null});
     return Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve({success:true,data:{}})}}); };`;
 
-const openOrder = (raw) => `DB.orders[0]._id=77; DB.orders[0].raw='${raw}';
+// The app ships no sample data any more, so the row a write test needs is the
+// test's own.
+const ONE_ORDER = `DB.orders=[{id:'RT-…047', ch:'miniapp', cust:['Chen Meiling','陈美玲'], total:'¥312',
+    placed:'2:22 PM', status:['Paid','已付款'], kind:'paid', ship:['Guangzhou · Tianhe','广州 · 天河区'],
+    phone:'138****2841', addr:['Tianhe, Guangzhou','广州市天河区'], pay:['WeChat Pay','微信支付'],
+    txn:'42000••••8831', fulfil:['Tianhe store','天河店'], route:['Nearest store','最近门店'],
+    trk:null, items:[[1,'Organic carrots 500g','¥18']], breakdown:[['Subtotal','¥312']]}]; `;
+const openOrder = (raw) => ONE_ORDER + `DB.orders[0]._id=77; DB.orders[0].raw='${raw}';
   state.liveOrders=DB.orders; APP.cmd('tab','orders'); APP.cmd('openOrder',DB.orders[0].id);`;
 
 const sent = (frag) => `window.__sent.some(function(r){return r.u.indexOf(${JSON.stringify(frag)})>=0})`;
@@ -52,7 +59,7 @@ const CASES = [
     ['no request at all', `window.__sent.length === 0`],
   ]],
   ['paying a refund out records how it went',
-   `DB.orders[0]._id=77; DB.orders[0].raw='paid'; DB.orders[0].refundStatus='approved';
+   ONE_ORDER + `DB.orders[0]._id=77; DB.orders[0].raw='paid'; DB.orders[0].refundStatus='approved';
     state.liveOrders=DB.orders; APP.cmd('openOrder',DB.orders[0].id);` + STUB
     + `APP.cmd('payRefund'); APP.cmd('askRun','wallet');`, [
     ['it posts the payout', `${sent('/orders/77/refund/payout')}`],

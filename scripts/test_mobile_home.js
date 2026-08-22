@@ -127,4 +127,29 @@ CASES.push(['real counts do appear', `APP.cmd('tab','orders');
    "[].slice.call(document.querySelectorAll('#content .chip')).some(function(b){return b.innerText.indexOf('Delivered')>=0 && !/\\d/.test(b.innerText)})"],
 ]]);
 
+// ── "Nothing yet" vs "not asked yet" ──────────────────────────────────────
+// The sample rows are gone from DB entirely, which closed the whole class of
+// mock-outlives-fetch bugs — and opened a smaller one in the other direction:
+// with an empty store and no loaded flag, every one of these screens said a
+// confident "none" for the length of a fetch. Each has a flag now.
+const listCases = [
+  ['coupons',    "coupons",    'vchLoaded',   'No coupons'],
+  ['flash sales',"flash",      'flashLoaded', 'No flash sales'],
+  ['broadcasts', "broadcasts", 'bcLoaded',    'No broadcasts'],
+];
+for (const [label, screen, flag, emptyText] of listCases) {
+  CASES.push([label + ' before the fetch lands', `state.${flag}=false; DB.${screen === 'coupons' ? 'coupons' : screen}=[]; APP.cmd('push','${screen}');`, [
+    ['says it is loading',       `txt('content').includes('Loading')`],
+    ['not that there are none',  `!txt('content').includes(${JSON.stringify(emptyText)})`],
+  ]]);
+}
+CASES.push(['an inbox before the fetch lands', `state.revLoaded=false; DB.reviews=[]; APP.cmd('push','inbox');`, [
+  ['says it is loading',      `txt('content').includes('Loading')`],
+  ['not "No reviews yet"',    `!txt('content').includes('No reviews yet')`],
+]]);
+CASES.push(['an inbox that really is empty', `state.revLoaded=true; DB.reviews=[]; APP.cmd('push','inbox');`, [
+  ['says there are none',  `txt('content').includes('No reviews yet')`],
+  ['and stops loading',    `!txt('content').includes('Loading')`],
+]]);
+
 run('home', CASES);

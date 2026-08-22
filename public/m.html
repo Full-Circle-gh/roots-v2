@@ -162,88 +162,21 @@ function toggle(on, onClick){
    ========================================================================== */
 const CH_ICON = {miniapp:'smartphone',web:'globe',meituan:'bike',gzgrocery:'warehouse',manual:'square-pen'};
 const DB = {
-  orders:[
-    {id:'RT-…047',ch:'miniapp',cust:['Chen Meiling','陈美玲'],total:'¥312',placed:'2:22 PM',status:['Paid','已付款'],kind:'paid',isNew:true,ship:['Guangzhou · Tianhe','广州 · 天河区'],deliv:{text:'Ship by 6:00 PM · 3h left',tone:'amber'},phone:'138****2841',addr:['Tianhe, Guangzhou','广州市天河区'],pay:['WeChat Pay','微信支付'],txn:'42000••••8831',fulfil:['Tianhe store','天河店'],route:['Auto-routed to nearest store','自动派往最近门店'],trk:null,items:[[1,'Organic carrots 500g','¥18'],[2,'Oat milk 1L','¥64'],[1,'Mixed nuts 250g','¥45']],breakdown:[['Subtotal','¥300'],['Delivery','¥12']]},
-    {id:'RT-…046',ch:'web',cust:['Sarah Lim','Sarah Lim'],total:'¥186',placed:'2:07 PM',status:['Paid','已付款'],kind:'paid',isNew:true,ship:['Guangzhou · Yuexiu','广州 · 越秀区'],deliv:{text:'Ship by 6:00 PM',tone:'plain'},phone:'159****7723',addr:['Yuexiu, Guangzhou','广州市越秀区'],pay:['Card','银行卡'],txn:'••••7723',fulfil:['Tianhe store','天河店'],route:['Nearest store','最近门店'],items:[[2,'Sourdough loaf','¥93']],breakdown:[['Subtotal','¥186']]},
-    {id:'RT-…045',ch:'miniapp',cust:['Wang Zhiqiang','王志强'],total:'¥458',placed:'1:41 PM',status:['Preparing','备货中'],kind:'preparing',ship:['Pickup in-store','到店自提'],deliv:{text:'Pickup · tomorrow 12:00 PM',tone:'plain'},phone:'137****5510',addr:['Pickup · Panyu store','自提 · 番禺店'],pay:['WeChat Pay','微信支付'],txn:'••••5510',fulfil:['Panyu store','番禺店'],route:['Pickup','自提'],items:[[6,'Assorted grocery','¥458']],breakdown:[['Subtotal','¥458']]},
-    {id:'RT-…044',ch:'meituan',cust:['Li Na','李娜'],total:'¥95',placed:'1:15 PM',status:['Out for delivery','配送中'],kind:'dispatched',viewOnly:true,ship:['Guangzhou · Haizhu','广州 · 海珠区'],phone:'—',addr:['Haizhu, Guangzhou','广州市海珠区'],pay:['Meituan','美团'],txn:'platform',fulfil:['Platform rider','平台骑手'],route:['Meituan dispatch','美团派单'],trk:{carrier:['Platform rider','平台骑手'],no:'MT-…044',event:['Rider 1.2km away','骑手距 1.2km'],live:true},items:[[3,'Snacks','¥95']],breakdown:[['Subtotal','¥95']]},
-    {id:'RT-…043',ch:'miniapp',cust:['Zhang Wei','张伟'],total:'¥726',placed:'11:50 AM',status:['Dispatched','已发货'],kind:'dispatched',ship:['Shenzhen · Nanshan','深圳 · 南山区'],deliv:{text:'Met',tone:'plain'},phone:'186****0092',addr:['Nanshan, Shenzhen','深圳市南山区'],pay:['WeChat Pay','微信支付'],txn:'••••0092',fulfil:['Tianhe store','天河店'],route:['JD Express','京东快递'],trk:{carrier:['JD Express','京东快递'],no:'JDV0038821',event:['In transit · left Guangzhou hub','运输中 · 已离开广州分拣'],live:true},items:[[8,'Bulk order','¥726']],breakdown:[['Subtotal','¥700'],['Delivery','¥26']]},
-    {id:'RT-…041',ch:'manual',cust:['Guest (staff)','访客（员工）'],total:'¥164',placed:'11:04 AM',status:['Pending','待处理'],kind:'pending',ship:['Guangzhou · Tianhe','广州 · 天河区'],phone:'—',addr:['Tianhe, Guangzhou','广州市天河区'],pay:['Cash on pickup','到店付款'],txn:'—',fulfil:['Tianhe store','天河店'],route:['Manual','手动'],items:[[2,'Staff order','¥164']],breakdown:[['Subtotal','¥164']]},
-    {id:'RT-…039',ch:'miniapp',cust:['Huang Xiaoting','黄小婷'],total:'¥215',placed:'10:21 AM',status:['Awaiting restock','等待补货'],kind:'restock',ship:['Guangzhou · Baiyun','广州 · 白云区'],deliv:{text:'Paused',tone:'plain'},phone:'139****4456',addr:['Baiyun, Guangzhou','广州市白云区'],pay:['WeChat Pay','微信支付'],txn:'••••4456',fulfil:['Panyu store','番禺店'],route:['Paused — low stock','已暂停 — 库存不足'],items:[[3,'Out-of-stock item','¥215']],breakdown:[['Subtotal','¥215']]},
-    {id:'RT-…037',ch:'miniapp',cust:['Wu Yaqi','吴雅琪'],total:'¥134',placed:'9:30 AM',status:['Refund requested','申请退款'],kind:'refund',ship:['Guangzhou · Tianhe','广州 · 天河区'],deliv:{text:'Met',tone:'plain'},phone:'188****3320',addr:['Tianhe, Guangzhou','广州市天河区'],pay:['WeChat Pay','微信支付'],txn:'••••3320',fulfil:['Tianhe store','天河店'],route:['Delivered','已送达'],receipt:['Receipt auto-printed at Tianhe','小票已在天河自动打印'],items:[[2,'Returned items','¥134']],breakdown:[['Subtotal','¥134']]},
-    {id:'RT-…036',ch:'miniapp',cust:['Zheng Hao','郑浩'],total:'¥298',placed:'9:02 AM',status:['Delivered','已送达'],kind:'delivered',ship:['Dongguan · Nancheng','东莞 · 南城区'],deliv:{text:'Met',tone:'plain'},phone:'136****9911',addr:['Nancheng, Dongguan','东莞市南城区'],pay:['WeChat Pay','微信支付'],txn:'••••9911',fulfil:['Tianhe store','天河店'],route:['kuaidi100','快递100'],receipt:['Receipt auto-printed','小票已自动打印'],items:[[4,'Grocery','¥298']],breakdown:[['Subtotal','¥298']]},
-  ],
-  mirror:{meituan:[
-      {id:'MT-…044',cust:['Li Na','李娜'],total:'¥95',status:['Out for delivery','配送中'],kind:'dispatched',time:'1:15 PM'},
-      {id:'MT-…031',cust:['Mr Wang','王先生'],total:'¥142',status:['Completed','已完成'],kind:'delivered',time:'11:02 AM'},
-      {id:'MT-…028',cust:['Ms Liu','刘女士'],total:'¥68',status:['Completed','已完成'],kind:'delivered',time:'10:20 AM'}],
-    gzgrocery:[
-      {id:'GZ-…038',cust:['Mr Zhou','周先生'],total:'¥1,040',status:['Picking','拣货中'],kind:'preparing',time:'9:55 AM'},
-      {id:'GZ-…022',cust:['Ms Chen','陈女士'],total:'¥560',status:['Completed','已完成'],kind:'delivered',time:'8:40 AM'}]},
-  products:[
-    {name:['Organic carrots','有机胡萝卜'],sku:'SKU 10231 · 500g',price:'¥18',stock:42,stockLabel:['42 in stock','库存 42'],status:['Live','在售'],kind:'on'},
-    {name:['Oat milk 1L','燕麦奶 1L'],sku:'SKU 10188',price:'¥32',stock:8,stockLabel:['8 left','剩 8'],status:['Low','库存低'],kind:'restock'},
-    {name:['Mixed nuts','混合坚果'],sku:'SKU 10450 · 250g',price:'¥45',stock:0,stockLabel:['Out of stock','缺货'],status:['Out','缺货'],kind:'off'},
-    {name:['Sourdough','酸种面包'],sku:'SKU 10012',price:'¥28',stock:15,stockLabel:['15 in stock','库存 15'],status:['Live','在售'],kind:'on'},
-    {name:['Cold brew','冷萃咖啡'],sku:'SKU 10770',price:'¥22',stock:60,stockLabel:['60 in stock','库存 60'],status:['Live','在售'],kind:'on'},
-  ],
-  invoices:[
-    {id:'FP-2026-0451',order:'RT-…047',amount:'¥312',status:['Issued','已开票'],kind:'on',date:['Today 2:30 PM','今日 14:30']},
-    {id:'FP-2026-0450',order:'RT-…043',amount:'¥726',status:['Issued','已开票'],kind:'on',date:['Today 12:02 PM','今日 12:02']},
-    {id:'FP-2026-0449',order:'RT-…040',amount:'¥390',status:['Pending','待开票'],kind:'pending',date:['Yesterday','昨日']},
-  ],
-  coupons:[
-    {code:'WELCOME10',title:['First order','首单优惠'],gives:['¥10 off','立减 ¥10'],
-     rules:['orders over ¥50 · once each','满 ¥50、每人一次'],used:128,max:null,
-     expires:null,ended:false,soon:false,on:true,active:true,
-     pills:[{dusk:true,label:'Applied for new signups'},{label:'New signups'}]},
-    {code:'WEEKEND20',title:['Weekend','周末活动'],gives:['20% off','20% 折扣'],
-     rules:['every order · 200 total','每人不限次、共 200 张'],used:64,max:200,
-     expires:'2026-08-27',ended:false,soon:true,on:true,active:true,
-     pills:[{label:'In the app'}]},
-    {code:'OVER200',title:['Big baskets','大额订单'],gives:['¥30 off','立减 ¥30'],
-     rules:['orders over ¥200 · once each','满 ¥200、每人一次'],used:12,max:null,
-     expires:'2026-07-31',ended:true,soon:false,on:false,active:true,pills:[]},
-  ],
-  flash:[
-    {_id:1,title:['Lemongrass Kombucha','香茅康普茶'],sku:'SKU 2-110',img:'',
-     price:'¥20',was:'¥29',off:31,limit:120,sold:86,left:34,pct:72,
-     win:'Today · 12:00 PM–2:00 PM',hidden:false,noCoupon:true,status:['Live','进行中'],kind:'live'},
-    {_id:2,title:['Coconut Flakes','椰子片'],sku:'SKU 4-290',img:'',
-     price:'¥16',was:'¥23',off:30,limit:null,sold:0,left:null,pct:null,
-     win:'Aug 29 – Aug 31',hidden:false,noCoupon:false,status:['Scheduled','已排期'],kind:'draft'},
-  ],
-  broadcasts:[
-    {st:'sent',title:['New arrivals this week','本周新品到货'],
-     body:['Six new ferments landed this morning — the lemongrass kombucha is back.','六款新发酵品今早到店 — 香茅康普茶已回归。'],
-     audience:['All active customers','所有活跃客户'],deeplink:'/pages/shop/index',
-     meta:['Sent Aug 19 to 2,140','8月19日 发送给 2,140 人'],status:['Sent','已发送'],kind:'delivered'},
-    {st:'scheduled',title:['Double points weekend','会员积分翻倍'],
-     body:['Two points on everything, Saturday and Sunday only.','周六周日全场积分翻倍。'],
-     audience:['Has ordered · Tree, Root','曾下单 · 大树、根系'],deeplink:null,
-     meta:['Going out Sat','周六 发送'],status:['Scheduled','已排期'],kind:'draft'},
-  ],
-  reviews:[
-    {cust:['Chen Meiling','陈美玲'],rating:'5.0',status:['New','新'],kind:'success',text:['Fast delivery, carrots were super fresh!','配送很快，胡萝卜很新鲜！'],time:['2h ago','2 小时前']},
-    {cust:['Sarah Lim','Sarah Lim'],rating:'4.0',status:['Replied','已回复'],kind:'clear',text:['Great oat milk. Wish the cold brew came in larger sizes.','燕麦奶很好，希望冷萃有大杯。'],time:['5h ago','5 小时前']},
-    {cust:['Zhang Wei','张伟'],rating:'3.0',status:['New','新'],kind:'success',text:['One parcel was late but support handled it well.','一个包裹晚到了，但客服处理得很好。'],time:['Yesterday','昨日']},
-  ],
-  feedback:[
-    {key:'fb:1',id:1,stream:'feedback',cust:['Wu Yaqi','吴雅琪'],status:['Needs reply','待回复'],kind:'success',
-     opener:['Checkout kept the pickup time from my last order — small bug.','结账沿用了上单的自提时间 — 小问题。'],
-     text:['Still doing it on the newest build.','最新版本还是这样。'],lastWho:['Customer','顾客'],replies:2,
-     page:'checkout',appVersion:'2.4.1',time:['3h ago','3 小时前'],opened:['Aug 19','8月19日']},
-    {key:'fb:2',id:2,stream:'feedback',cust:['Zhang Wei','张伟'],status:['Replied','已回复'],kind:'clear',isMessage:true,
-     text:['Thanks — the credit is on your account.','谢谢 — 余额已到账。'],lastWho:['Store','商家'],replies:1,
-     time:['Yesterday','昨天']},
-  ],
-  customers:[
-    {id:'s1',name:'Chen Meiling',phone:'138****2841',tier:'tree',orders:24,spend:6240,seen:'2026-07-29 09:40:00',unseen:true},
-    {id:'s2',name:'Sarah Lim',phone:'159****7723',tier:'tree',orders:18,spend:4180,seen:'2026-07-28 19:12:00',unseen:true},
-    {id:'s3',name:'Zhang Wei',phone:'186****0092',tier:'root',orders:9,spend:2260,seen:'2026-07-24 11:02:00'},
-    {id:'s4',name:'Wang Zhiqiang',phone:'137****5510',tier:'sprout',orders:3,spend:812,seen:'2026-06-30 08:20:00'},
-    {id:'s5',name:'Wu Yaqi',phone:'188****3320',tier:'seed',orders:0,spend:0,seen:'2026-05-02 15:44:00'},
-  ],
+  /* The runtime store, and nothing else. Every one of these used to ship with
+     sample rows — five orders at ¥312, three coupons, two flash sales, three
+     reviews — which the screens rendered on first paint, before any fetch, and
+     went on rendering wherever a loader only assigned `if (rows.length)`. They
+     are empty now: a screen shows its loading state until its own fetch lands,
+     and its empty state when the answer is nothing. */
+  orders:[],
+  products:[],
+  invoices:[],
+  coupons:[],
+  flash:[],
+  broadcasts:[],
+  reviews:[],
+  feedback:[],
+  categories:[],
 };
 function chIcon(ch){ return `<span style="color:var(--text-secondary);display:flex;flex:none">${ic(CH_ICON[ch]||'store',16)}</span>`; }
 
@@ -268,6 +201,10 @@ const state = {
   cfg:null, setup:null, zones:null, mirror:null, mirrorLoading:null, mirrorMode:null,
   couponBusy:null, couponErr:null, bcBusy:null, bcErr:null, ask:null, askErr:null,
   custBusy:null, custErr:null, ordersLoadErr:null, custLoadErr:null,
+  /* One per list that has no other way to tell "nothing yet" from "not
+     asked yet". Without them, emptying the sample data turned every one
+     of these screens into a confident "none" for the length of a fetch. */
+  vchLoaded:false, flashLoaded:false, bcLoaded:false, revLoaded:false,
   ops:null, opsLoading:false, featBusy:null, featErr:null,
   media:null, mediaLoading:false, mediaTried:false, mediaBusy:null, mediaErr:null,
   fapiao:null, fapiaoLoading:false, fapiaoBusy:false, fapiaoTried:false, printerTried:false,
@@ -1390,8 +1327,11 @@ function screenInbox(){
   };
   const unseenCount=DB.reviews.filter(r=>!state.reviewsSeen.has(revKey(r))).length;
   let body;
-  if(seg==='reviews') body=DB.reviews.length?DB.reviews.map(r=>item(r,true)).join(''):emptyState(T('No reviews yet','还没有评价'),T('Reviews customers leave on a product show up here.','顾客在商品下留下的评价会显示在这里。'));
-  else if(featOn('feedback')) body=DB.feedback.length?DB.feedback.map(r=>item(r,false)).join(''):emptyState(T('Inbox zero','已清空'),T('No open feedback.','没有待处理反馈。'));
+  if(seg==='reviews') body=DB.reviews.length?DB.reviews.map(r=>item(r,true)).join('')
+    :(state.revLoaded?emptyState(T('No reviews yet','还没有评价'),T('Reviews customers leave on a product show up here.','顾客在商品下留下的评价会显示在这里。'))
+                    :`<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`);
+  else if(featOn('feedback')) body=DB.feedback.length?DB.feedback.map(r=>item(r,false)).join('')
+    :(state.revLoaded?emptyState(T('Inbox zero','已清空'),T('No open feedback.','没有待处理反馈。')):`<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`);
   else body=`<div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:44px 24px;text-align:center">
       <span style="width:52px;height:52px;border-radius:14px;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;color:var(--text-secondary)">${ic('sparkles',22)}</span>
       <div style="font-size:16px;font-weight:500">${T('Feedback is off','反馈已关闭')}</div>
@@ -2762,6 +2702,7 @@ const SUBS={
   }},
   coupons:{title:['Coupons','优惠券'],render:()=>{
     const all=DB.coupons||[];
+    if(!state.vchLoaded&&!all.length) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
     if(!all.length) return nothingYet(T('No coupons','没有优惠券'),
       T('Coupons are written on desktop. Running ones show here, and can be paused from here.','优惠券在电脑端创建。生效中的会显示在这里，可在此暂停。'));
     const on=all.filter(c=>c.on), off=all.filter(c=>!c.on);
@@ -2803,6 +2744,7 @@ const SUBS={
   }},
   flash:{title:['Flash sales','秒杀'],render:()=>{
     const list=DB.flash||[];
+    if(!state.flashLoaded&&!list.length) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
     if(!list.length) return nothingYet(T('No flash sales','没有秒杀'),
       T('Flash sales are built on desktop. Running and upcoming ones show here.','秒杀在电脑端创建。进行中与即将开始的会显示在这里。'));
     return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
@@ -2833,6 +2775,7 @@ const SUBS={
   }},
   broadcasts:{title:['Broadcasts','广播'],render:()=>{
     const list=DB.broadcasts||[];
+    if(!state.bcLoaded&&!list.length) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
     if(!list.length) return nothingYet(T('No broadcasts','没有广播'),T('Broadcasts are written and sent from desktop. Anything scheduled can be stopped from here.','广播在电脑端撰写与发送。已排期的可在此取消。'));
     return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
     ${state.bcErr?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick)">${state.bcErr}</div>`:''}
@@ -3734,7 +3677,7 @@ async function loadInbox(){
   try{ const rv=await api('/reviews?limit=30'); const list=Array.isArray(rv)?rv:(rv.reviews||[]);
     // Same rule as the coupon ledgers: a shop with no reviews must see none,
     // not the three the mock ships with.
-    DB.reviews=list.map(mapReview);
+    DB.reviews=list.map(mapReview); state.revLoaded=true;
     state.liveAttn=Object.assign({},state.liveAttn||{},{reviews:DB.reviews.filter(r=>!r.reply).length}); render();
   }catch(e){}
   try{ const r=await api('/feedback'); const rows=Array.isArray(r)?r:(r&&r.data); if(rows) { DB.feedback=rows.map(mapFeedback); render(); } }catch(e){}
@@ -5827,7 +5770,7 @@ async function loadLive(){
   }catch(e){}
   // reviews (inbox)
   try{ const rv=await api('/reviews?limit=30'); const list=Array.isArray(rv)?rv:(rv.reviews||[]);
-    DB.reviews=list.map(mapReview); state.liveAttn=Object.assign({},state.liveAttn,{reviews:list.filter(r=>!(r.reply&&String(r.reply).trim())).length});
+    DB.reviews=list.map(mapReview); state.revLoaded=true; state.liveAttn=Object.assign({},state.liveAttn,{reviews:list.filter(r=>!(r.reply&&String(r.reply).trim())).length});
   }catch(e){}
   // low-stock count for the Home attention row
   // Low = a shelf that needs buying back. A draft is neither low nor out, so
@@ -5859,10 +5802,10 @@ async function loadLive(){
   // coupons. The `&& r.length` these three used to carry meant an empty server
   // answer left the sample rows on screen — the mock outliving the data it was
   // standing in for, on exactly the shop least able to tell the difference.
-  api('/vouchers').then(r=>set(()=>{ if(Array.isArray(r)){ DB.coupons=r.map(mapVoucher);
+  api('/vouchers').then(r=>set(()=>{ state.vchLoaded=true; if(Array.isArray(r)){ DB.coupons=r.map(mapVoucher);
     DB.coupons.forEach(c=>{ if(state.sw['c_'+c.code]===undefined) state.sw['c_'+c.code]=c.on; }); } })).catch(()=>{});
-  api('/flash-sales').then(r=>set(()=>{ if(Array.isArray(r)) DB.flash=r.map(mapFlash); })).catch(()=>{});
-  api('/broadcasts').then(r=>set(()=>{ if(Array.isArray(r)) DB.broadcasts=r.map(mapBroadcast); })).catch(()=>{});
+  api('/flash-sales').then(r=>set(()=>{ state.flashLoaded=true; if(Array.isArray(r)) DB.flash=r.map(mapFlash); })).catch(()=>{});
+  api('/broadcasts').then(r=>set(()=>{ state.bcLoaded=true; if(Array.isArray(r)) DB.broadcasts=r.map(mapBroadcast); })).catch(()=>{});
   api('/feedback').then(r=>set(()=>{ const rows=Array.isArray(r)?r:(r&&r.data); if(rows) DB.feedback=rows.map(mapFeedback); })).catch(()=>{});
 
 
