@@ -148,6 +148,9 @@ function jitter(baseMs, frac = 0.3) {
   return Math.round(baseMs - spread + Math.random() * spread * 2);
 }
 
+// The proxy-manager channel key this daemon follows — 外卖 rides the 天河 entry.
+const PROXY_CHANNEL = process.env.MEITUAN_PROXY_CHANNEL || 'tianhe';
+
 // Quick proxy health probe: can the configured proxy actually REACH Meituan? A
 // flaky GZ proxy that TCP-accepts but can't complete upstream requests makes
 // every page load hang (net::ERR_TIMED_OUT / Timeout 30000ms). The browser layer
@@ -164,10 +167,55 @@ function jitter(baseMs, frac = 0.3) {
 function activeProxy() {
   let proxy = process.env.MEITUAN_PROXY_URL || '';
   try {
-    const a = require('../lib/proxy-manager').readActive('tianhe');
+    const a = require('../lib/proxy-manager').readActive(PROXY_CHANNEL);
     if (a !== undefined) proxy = a;
   } catch (_) { /* manager optional — keep env value */ }
   return proxy;
+}
+
+// Nothing watches the proxy watchdog. health-watchdog only probes the storefront,
+// so proxy-watchdog dying (crash, a pm2 stop during a deploy, a box reboot that
+// brought the daemons up without it) is invisible — and its last written choice
+// used to be obeyed forever. If that choice was 直连, 外卖 quietly kept running
+// from the datacenter IP, which is the thing the residential exit exists to
+// avoid, until risk-control served a 验证中心 challenge and the channel looked,
+// to the operator, like it had simply dropped off.
+//
+// proxy-manager now expires that choice (PROXY_STATE_TTL_MS), which alone would
+// only get us back to the env default. This goes the rest of the way: re-run the
+// election ourselves — residential → GZ → direct, first healthy wins — so the
+// channel climbs back onto the residential exit without waiting for a human, and
+// say once that we're doing it, because a missing watchdog is still a fault.
+async function ensureProxyFresh() {
+  let pm;
+  try { pm = require('../lib/proxy-manager'); } catch (_) { return; }   // manager optional
+  let stale;
+  try { stale = pm.isStale(PROXY_CHANNEL); } catch (_) { return; }
+
+  if (!stale) {
+    if (alerts['proxy_stale']) {
+      alerts['proxy_stale'] = false;
+      console.log(`[meituan-daemon] ${new Date().toISOString()} proxy watchdog is writing again — leaving the choice to it`);
+      sendOpsAlert(`✅ 代理看门狗已恢复，外卖代理切换恢复自动\nproxy-watchdog is updating again — 外卖 proxy failover back on auto`);
+    }
+    return;
+  }
+
+  if (!alerts['proxy_stale']) {
+    alerts['proxy_stale'] = true;
+    console.log(`[meituan-daemon] ${new Date().toISOString()} proxy choice is stale (proxy-watchdog not writing) — re-electing the path myself`);
+    for (const s of getStoreConfigs()) logSync(s.storeCode, 'proxy_stale', 'error', null, 'proxy-watchdog not updating — daemon re-electing the proxy path');
+    sendOpsAlert(`🟠 代理看门狗未在更新（proxy-watchdog 可能已停止），外卖同步改为自行选路，请检查\nproxy-watchdog isn't updating — 外卖 is re-electing its own proxy path; check \`pm2 status proxy-watchdog\``);
+  }
+
+  let elected = null;
+  try { elected = await pm.ensureFresh(PROXY_CHANNEL); } catch (e) {
+    console.log(`[meituan-daemon] proxy re-election failed: ${e.message}`);
+  }
+  if (elected) {
+    console.log(`[meituan-daemon] ${new Date().toISOString()} proxy re-elected → ${elected.label} (${maskProxy(elected.url) || 'direct'})`);
+    for (const s of getStoreConfigs()) logSync(s.storeCode, 'proxy_elected', 'ok', { label: elected.label }, null);
+  }
 }
 function proxyHealthy(timeoutSec = 8) {
   const proxy = activeProxy();
@@ -1065,6 +1113,12 @@ async function main() {
     // this cycle. A dead proxy otherwise cascades into page-load timeouts, browser
     // crashes, and a FALSE "session expired" that triggers needless re-logins. We
     // simply wait it out and log the outage once (the admin sync log is the alert).
+    // Before judging the path, make sure the path is a CURRENT decision and not a
+    // dead watchdog's last word — otherwise this gate happily green-lights 直连
+    // forever (direct is always "healthy") and the channel never gets back on the
+    // residential exit.
+    await ensureProxyFresh();
+
     if (!(await proxyHealthy())) {
       proxyFailStreak++;
       if (!alerts['proxy_down'] && proxyFailStreak >= PROXY_DOWN_GRACE) {

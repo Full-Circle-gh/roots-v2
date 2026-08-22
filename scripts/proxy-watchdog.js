@@ -92,7 +92,9 @@ async function tick() {
     }
     lastActive[channel] = active.url;
 
-    stateOut[channel] = { url: active.url, label: active.label, ts: new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 19) };
+    // `at` (epoch ms) is stamped by writeState — it is what readers date the
+    // entry by, so a watchdog that stops writing stops being obeyed.
+    stateOut[channel] = { url: active.url, label: active.label, ts: pm.shStamp() };
   }
   pm.writeState(stateOut);
   firstRun = false;
