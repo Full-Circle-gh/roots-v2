@@ -127,5 +127,86 @@ it('the admin queue counter counts the status the daemon writes', () => {
   assert.match(ADMIN, /queueOldestMin/, 'a stuck queue and a busy one must not be the same number');
 });
 
+// ── Enqueue side: the queue must not grow without bound ─────────────────────
+// A store that is shut is not being pushed, so every edit used to append another
+// row for as long as the closure lasted. 越秀 was closed indefinitely and had 137
+// rows across 3 days, climbing. Nothing is lost by collapsing them: the drain
+// already keeps only the latest qty per target, and the drift sweep re-queues
+// whatever actually drifted once the store opens.
+const bundlesLib = require('../lib/meituan-bundles');
+
+function enqueueDb({ active = 1 } = {}) {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE meituan_sync_queue (
+      id INTEGER PRIMARY KEY AUTOINCREMENT, retail_store_id INTEGER, product_id INTEGER,
+      store_code TEXT, new_qty INTEGER, status TEXT DEFAULT 'pending', meituan_name TEXT,
+      bundle_id INTEGER, last_error TEXT, attempts INTEGER DEFAULT 0,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE meituan_product_map (retail_store_id INTEGER, product_id INTEGER, store_code TEXT, sync_enabled INTEGER);
+    CREATE TABLE retail_store_stock (store_id INTEGER, product_id INTEGER, physical_qty INTEGER);
+    CREATE TABLE retail_stores (id INTEGER PRIMARY KEY, code TEXT, is_active INTEGER);
+    CREATE TABLE meituan_bundles (id INTEGER PRIMARY KEY, retail_store_id INTEGER, store_code TEXT, sync_enabled INTEGER, meituan_name TEXT, max_qty INTEGER);
+    CREATE TABLE meituan_bundle_components (bundle_id INTEGER, product_id INTEGER, qty INTEGER);
+  `);
+  db.prepare('INSERT INTO retail_stores (id, code, is_active) VALUES (7, ?, ?)').run('yuexiu', active);
+  db.prepare('INSERT INTO meituan_product_map VALUES (7, 42, ?, 1)').run('yuexiu');
+  db.prepare('INSERT INTO retail_store_stock VALUES (7, 42, 5)').run();
+  return db;
+}
+const qcount = (db) => db.prepare("SELECT COUNT(*) n FROM meituan_sync_queue WHERE status='pending'").get().n;
+
+it('twenty edits to one product while a store is shut leave ONE waiting row', () => {
+  const db = enqueueDb();
+  for (let i = 1; i <= 20; i++) {
+    db.prepare('UPDATE retail_store_stock SET physical_qty=? WHERE store_id=7 AND product_id=42').run(i);
+    bundlesLib.enqueueProductStock(db, 7, 42);
+  }
+  assert.strictEqual(qcount(db), 1, 'one row per target, not one per edit');
+  assert.strictEqual(db.prepare("SELECT new_qty q FROM meituan_sync_queue").get().q, 20,
+    'and it carries the LATEST quantity, not the first');
+});
+
+it('the waiting row keeps its age, so a stuck row cannot hide behind new edits', () => {
+  const db = enqueueDb();
+  bundlesLib.enqueueProductStock(db, 7, 42);
+  db.prepare("UPDATE meituan_sync_queue SET created_at='2026-08-19 01:00:00'").run();
+  bundlesLib.enqueueProductStock(db, 7, 42);
+  assert.strictEqual(db.prepare('SELECT created_at c FROM meituan_sync_queue').get().c, '2026-08-19 01:00:00',
+    'bumping created_at would reset the FIFO position and the stall canary age');
+});
+
+it('a row already being pushed is left alone and the new value queues behind it', () => {
+  const db = enqueueDb();
+  bundlesLib.enqueueProductStock(db, 7, 42);
+  db.prepare("UPDATE meituan_sync_queue SET status='processing'").run();
+  db.prepare('UPDATE retail_store_stock SET physical_qty=9 WHERE store_id=7 AND product_id=42').run();
+  bundlesLib.enqueueProductStock(db, 7, 42);
+  assert.strictEqual(db.prepare("SELECT COUNT(*) n FROM meituan_sync_queue WHERE status='processing'").get().n, 1);
+  assert.strictEqual(qcount(db), 1, 'the in-flight push owns its value; the change needs its own row');
+});
+
+it('an inactive location enqueues nothing at all', () => {
+  const db = enqueueDb({ active: 0 });
+  bundlesLib.enqueueProductStock(db, 7, 42);
+  assert.strictEqual(qcount(db), 0, 'a store that is not trading gets no rows nobody will push');
+});
+
+it('an unknown store still enqueues — never silently drop a real update', () => {
+  const db = enqueueDb();
+  db.prepare('DELETE FROM retail_stores').run();
+  bundlesLib.enqueueProductStock(db, 7, 42);
+  assert.strictEqual(qcount(db), 1);
+});
+
+it('bundles collapse the same way', () => {
+  const db = enqueueDb();
+  db.prepare("INSERT INTO meituan_bundles VALUES (3, 7, 'yuexiu', 1, 'combo', NULL)").run();
+  db.prepare('INSERT INTO meituan_bundle_components VALUES (3, 42, 1)').run();
+  const b = db.prepare('SELECT * FROM meituan_bundles WHERE id=3').get();
+  for (let i = 0; i < 10; i++) bundlesLib.enqueueBundle(db, b);
+  assert.strictEqual(qcount(db), 1);
+});
+
 console.log(`\n${fail ? '✗' : '✓'} ${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

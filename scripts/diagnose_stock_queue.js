@@ -130,19 +130,30 @@ for (const file of candidates()) {
   }
 
   const WINDOW = 40;   // the drain's LIMIT
-  console.log(`\nComposition of the drain's next ${WINDOW}-row window (oldest first):`);
-  const win = all(`SELECT store_code, COUNT(*) n FROM (
-                     SELECT store_code FROM meituan_sync_queue
-                      WHERE status='pending' AND attempts < ?
-                      ORDER BY created_at LIMIT ${WINDOW}
-                   ) GROUP BY store_code ORDER BY n DESC`, ATTEMPT_CAP);
-  for (const r of win) console.log(`  ${String(r.store_code).padEnd(12)} ${String(r.n).padStart(3)} of ${WINDOW}`);
-  const mine = win.find(r => r.store_code === STORE);
-  if (!mine) {
-    console.log(`  → ${STORE} holds NONE of the window: every cycle reads the same rows`);
-    console.log(`    belonging to another store and does nothing. Head-of-line blocked.`);
-  } else if (mine.n < WINDOW) {
-    console.log(`  → ${STORE} holds ${mine.n} of ${WINDOW}; the rest belong to other stores.`);
+
+  // What the drain reads NOW: filtered to this store inside the query.
+  const served = all(`SELECT COUNT(*) n FROM (
+                        SELECT id FROM meituan_sync_queue
+                         WHERE status='pending' AND attempts < ? AND store_code = ?
+                         ORDER BY created_at LIMIT ${WINDOW})`, ATTEMPT_CAP, STORE)[0];
+  console.log(`\nRows ${STORE} gets in the next ${WINDOW}-row window: ${served ? served.n : 0}`);
+
+  // And what it WOULD have read before the store filter moved inside the query —
+  // kept as a regression check, not as a verdict. If this shows a foreign store
+  // filling the window while the line above is 0, the old starvation is back.
+  const oldWin = all(`SELECT store_code, COUNT(*) n FROM (
+                        SELECT store_code FROM meituan_sync_queue
+                         WHERE status='pending' AND attempts < ?
+                         ORDER BY created_at LIMIT ${WINDOW}
+                      ) GROUP BY store_code ORDER BY n DESC`, ATTEMPT_CAP);
+  const foreign = oldWin.filter(r => r.store_code !== STORE).reduce((a, r) => a + r.n, 0);
+  console.log(`  (unfiltered, the pre-fix query: ${oldWin.map(r => `${r.store_code} ${r.n}`).join(', ')})`);
+  if (foreign === WINDOW && served && served.n > 0) {
+    console.log(`  → ${foreign}/${WINDOW} of the unfiltered window belongs to another store, and`);
+    console.log(`    ${STORE} is served anyway. That is the store filter doing its job.`);
+  } else if (foreign === WINDOW) {
+    console.log(`  → the unfiltered window is entirely another store's, and ${STORE} has nothing`);
+    console.log(`    waiting either — nothing to conclude from this run.`);
   }
 
   try { db.close(); } catch (_) {}
