@@ -591,7 +591,7 @@ function recapCard(){
   const title=(g==='morning'||g==='night')?T('While you slept','在你休息时'):T('While you were away','在你离开时');
   const r=state.liveRecap;
   // Real overnight figures when live; otherwise the sample card (static preview only).
-  const items = r ? [[T('orders overnight','夜间订单'),String(r.orders)],[T('revenue overnight','夜间营收'),money(CUR,r.revenue)]]
+  const items = r ? [[T('orders overnight','夜间订单'),String(r.orders)],[T('revenue overnight','夜间营收'),money0(CUR,r.revenue)]]
                   : [[T('orders processed','处理订单'),'214'],[T('issues resolved','解决问题'),'3'],[T('stock-outs prevented','避免缺货'),'2']];
   return `<div class="rise" style="background:var(--surface-raised);border-radius:var(--radius-card);padding:24px;color:var(--text-primary)">
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px">
@@ -642,7 +642,7 @@ function screenHome(){
         `<div style="min-width:0">
            <span style="display:block;font-size:13px;color:var(--text-secondary)">${l}</span>
            <span class="num" style="display:block;font-size:18px;font-weight:500;line-height:1.4">${v}</span>
-           <span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${d}</span></div>`).join('')}</div></div>
+           ${d?`<span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${d}</span>`:''}</div>`).join('')}</div></div>
     <div class="rise" style="animation-delay:.18s">
       <div style="padding:2px 4px 8px;font-size:18px;font-weight:500">${T('Quick actions','快捷操作')}</div>
       <div class="list">${quick.map((q,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
@@ -1562,6 +1562,18 @@ function opsFires(){
   const c=k=>(o[k]&&o[k].count)||0;
   add(c('delivery_alerts'),'brick','truck',T('Delivery needs a call','配送需要跟进'),c('delivery_alerts'),o.delivery_alerts.items,'',"APP.cmd('ordersGo','dispatched')");
   add(c('payment_mismatch'),'brick','banknote',T("Payment doesn't match",'付款金额不符'),c('payment_mismatch'),o.payment_mismatch.items,'',"APP.cmd('ordersGo','pending')");
+  // The brick fire's sibling: a proof IS on file, it was not rejected, and the
+  // order is still unpaid — verified with auto-flip off, unreadable, or never
+  // read at all (no vision key, which makes it every proof that tenant gets).
+  // Amber, because nothing here says the money is wrong, only that we have not
+  // said it is right. Where there are unreadable ones it names them instead of
+  // an age: that is the half of the queue that is a judgement rather than a
+  // click. Same door as its sibling — both are sitting in Pending.
+  if(c('payment_unconfirmed')){
+    const pu=o.payment_unconfirmed, k=Number(pu.unread||0);
+    add(true,'amber','banknote',T('Payments to confirm','待确认付款'),pu.count,pu.items,
+      k>0?T(k+" couldn't be read",k+' 张无法识别'):'',"APP.cmd('ordersGo','pending')");
+  }
   add(c('refunds'),'amber','refund',T('Refunds waiting','退款待处理'),c('refunds'),o.refunds.items,'',"APP.cmd('ordersGo','refund')");
   add(c('unhandled'),'amber','package',T('Orders to start','待开始备货'),c('unhandled'),o.unhandled.items,'',"APP.cmd('ordersGo','paid')");
   add(c('awaiting_restock'),'amber','clock',T('Orders awaiting restock','订单待补货'),c('awaiting_restock'),o.awaiting_restock.items,'',"APP.cmd('ordersGo','restock')");
@@ -2329,7 +2341,48 @@ async function loadCustomerDetail(id){
   }catch(e){ if(String(e.message)!=='auth'){ state.custDetail={customer:{},stats:{}}; render(); } }
 }
 const hhmm=v=>fmtTime(v);
-const money=(cur,n)=>{ const s=cur||'¥'; const num=Number(n||0); return s+num.toLocaleString(undefined,{maximumFractionDigits:num%1?2:0}); };
+// Money is either whole or to the fen — never the one-decimal ¥3,271.4 this
+// used to print. maximumFractionDigits alone caps the tail without padding it,
+// so a .40 lost its zero and a .7 rendered as a single digit, which reads as a
+// rounding bug rather than a price. minimum and maximum move together.
+const money=(cur,n)=>{ const s=cur||'¥'; const num=Number(n||0); const f=num%1?2:0;
+  return s+num.toLocaleString(undefined,{minimumFractionDigits:f,maximumFractionDigits:f}); };
+// Whole yuan, for the glance cards — a day's takings on a phone tile is read,
+// not reconciled, and the fen is noise at that size. Matches what the desktop
+// dashboard shows in the same place (dashMoney with no dp).
+const money0=(cur,n)=>(cur||'¥')+Math.round(Number(n||0)).toLocaleString();
+
+// ── The delta line under a Today tile ─────────────────────────────────────
+// Mirrors the desktop's dashSetDelta (public/retail-admin/03-dashboard.js) —
+// same baseline, same rules, deliberately the same answers:
+//
+//   • nothing yet today  → a calm dash, never an alarming ▼100% every morning;
+//   • no same-weekday history → "new", not a percentage of nothing;
+//   • otherwise a WHOLE percent. The raw delta arrives with decimals and this
+//     used to print them ("−23.8%"), which claims a precision a handful of
+//     orders cannot support.
+//
+// It also names the baseline. The desktop hides that in a hover tooltip; a
+// phone has no hover, so the honest phrase goes inline — "vs last 3 Sat" rather
+// than the "vs a typical day" this used to say, which never told you what the
+// typical day was measured over. `by now` when the server clipped the baseline
+// days to the current time, or a slow morning reads as a collapse.
+//
+// Returns '' for a metric with no baseline at all (average order value). The
+// caller renders no line rather than a comparison label with nothing to compare
+// — the dangling "vs a typical day" under Avg. order was exactly that.
+const DOW_ABBR_EN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const DOW_CN=['周日','周一','周二','周三','周四','周五','周六'];
+function deltaText(cur, base, bl){
+  if(base===undefined || base===null) return '';
+  if(!cur) return T('none yet today','今日暂无');
+  if(!bl || !bl.days || base.delta==null) return T('new','新');
+  const n=bl.days, ab=DOW_ABBR_EN[bl.weekday]||'day', cn=DOW_CN[bl.weekday]||'天';
+  const by=bl.clipped?T(' by now','同一时段'):'';
+  const vs=T(`vs last ${n} ${ab}${by}`, `较前 ${n} 个${cn}${by}`);
+  const r=Math.round(base.delta);
+  return (r>0?'▲ '+r+'%':r<0?'▼ '+Math.abs(r)+'%':'±0%')+' '+vs;
+}
 const ORDER_STATUS={
   paid:['paid','Paid','已付款'],preparing:['preparing','Preparing','备货中'],dispatched:['dispatched','Dispatched','已发货'],
   delivered:['delivered','Delivered','已送达'],pending:['pending','Pending','待处理'],pending_payment:['pending','Unpaid','待付款'],
@@ -2543,13 +2596,19 @@ async function loadLive(){
   // show 30-day totals (and killed the vs-typical-day baseline).
   const gzToday=new Date(Date.now()+8*3600*1000).toISOString().slice(0,10);
   try{ const d=await api('/dashboard?from='+gzToday+'&to='+gzToday); const k=d.kpi||d.kpis||d||{}; const b=d.baseline||{};
-    const vy=T('vs a typical day','较日常');
-    const dl=x=>x&&x.delta!=null?((x.delta>=0?'+':'−')+Math.abs(x.delta)+'% '+vy):vy;
+    const bl=d.baseline||null;
+    const rev=Number(k.revenue||0), ord=Number(k.orders!=null?k.orders:0);
+    const nc=Number(k.new_customers!=null?k.new_customers:(k.newCustomers||0));
     state.liveKpis=[
-      [T('Revenue (all channels)','营收（全渠道）'), money(CUR,k.revenue), dl(b.revenue)],
-      [T('Orders (storefront)','订单（自营）'), String(k.orders!=null?k.orders:0), dl(b.orders)],
-      [T('Avg. order','客单价'), money(CUR, k.orders? (Number(k.revenue||0)/k.orders):0), vy],
-      [T('New customers','新客'), String(k.new_customers!=null?k.new_customers:(k.newCustomers||0)), dl(b.new_customers)],
+      // Whole yuan on the money tile the eye lands on first; the fen stays on
+      // the average, where the number is small enough for it to mean something.
+      [T('Revenue (all channels)','营收（全渠道）'), money0(CUR,rev), deltaText(rev, b.revenue, bl)],
+      [T('Orders (storefront)','订单（自营）'), String(ord), deltaText(ord, b.orders, bl)],
+      // The server sends no baseline for average order value, so this tile has
+      // nothing to compare against and says nothing — rather than printing a
+      // comparison label with no comparison under it.
+      [T('Avg. order','客单价'), money(CUR, ord? rev/ord : 0), ''],
+      [T('New customers','新客'), String(nc), deltaText(nc, b.new_customers, bl)],
     ];
     // "Orders awaiting shipment" = paid-but-not-shipped. The dashboard exposes the
     // per-status counts under `funnel` (the old code read `byStatus`, which doesn't

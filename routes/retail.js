@@ -14577,6 +14577,10 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
   // refused to confirm it, and the order is stuck in pending_payment until a
   // human looks. Same zero-count default as its siblings.
   let payment_mismatch = { count: 0, items: [] };
+  // The other half of the same exemption: a proof is on file, it was NOT
+  // rejected, and the order is still unpaid — so a human has to look before the
+  // money is ours. Same zero-count default as its siblings.
+  let payment_unconfirmed = { count: 0, unread: 0, items: [] };
   // Orders parked for a delivery point (§7). Zero-count default like its
   // siblings, so a query failure renders an ABSENT block rather than a broken
   // one — which for this block is the correct degradation: it is absent at zero
@@ -15052,10 +15056,16 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
     // and validateAlipayProof rejected it — short amount, wrong payee, stale
     // receipt, or a screenshot/txn already spent on another order. Auto-flip
     // never fires on a mismatch, so the order sits in pending_payment with the
-    // customer believing they have paid. Nothing retries it and nothing times
-    // it out (the stale-pending sweep would eventually CANCEL it), so it is
-    // invisible until someone happens to open that order — exactly the case a
-    // Needs-you fire exists for.
+    // customer believing they have paid. Nothing retries it, and nothing times
+    // it out either: cancelStalePendingOrdersForTenant deliberately EXEMPTS any
+    // Alipay order carrying a proof image (both of its rules do), because
+    // cancelling an order the customer has paid for would be the worse bug. So
+    // the row waits forever, invisible until someone happens to open it —
+    // exactly the case a Needs-you fire exists for.
+    //
+    // That exemption is the definition of this queue and its sibling below: the
+    // set of orders the sweep will never reap is exactly `pending_payment` with
+    // a proof on file, and between the two blocks every one of them is counted.
     //
     // Only 'mismatch', and only while still pending_payment. A verdict of
     // 'error' is "we couldn't read it", not "the money is wrong", and it has
@@ -15112,6 +15122,69 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
           buyer:         o.buyer,
         };
       }),
+    };
+
+    // ── Alipay proof on file, and nobody has accepted it ─────────────────
+    // The sibling of the block above, and together they cover the whole set the
+    // stale-pending sweep refuses to reap. A proof is on file, the read did NOT
+    // reject it, and the order is still pending_payment. Three ways that
+    // happens, and a human has to act on all three:
+    //
+    //   • verdict 'match' with auto-flip OFF — the read verified it and the
+    //     operator has chosen to confirm payments by hand. Nothing is wrong;
+    //     it just needs the click. On a tenant that runs this way it IS their
+    //     payment inbox, which is precisely why it belongs on the card.
+    //   • verdict 'error' — the vision read threw. "We couldn't read it" is not
+    //     "the money is wrong", so it must never wear the brick fire's words;
+    //     the drawer offers a re-read button for exactly this row.
+    //   • verdict NULL — the read never ran at all (OCR not configured). On a
+    //     tenant with no vision key that is EVERY proof they ever receive, and
+    //     before this block not one of them was counted anywhere.
+    //
+    // Mismatch is excluded because the block above owns it — one order, one
+    // fire. COALESCE, not `<> 'mismatch'` alone: a NULL verdict fails a bare
+    // inequality in SQL, which would have silently dropped the third case above
+    // — the one tenant-wide case this block exists for.
+    //
+    // alipay_proof_image is TESTED but never SELECTED: it holds the screenshot
+    // itself (a data URI), so pulling it into a dashboard poll would put a
+    // megabyte per row through a card that only needs to know it exists.
+    const puWhere = "o.status = 'pending_payment' AND o.alipay_proof_image IS NOT NULL"
+      + " AND COALESCE(o.alipay_ocr_verdict, '') <> 'mismatch'"
+      + " AND COALESCE(o.channel,'') NOT IN ('meituan','gzgrocery')"
+      + (storeId ? ' AND o.store_id = @store_id' : '');
+    const puCount = tdb().prepare(
+      `SELECT COUNT(*) AS n FROM retail_orders o WHERE ${puWhere}`
+    ).get(storeBind).n;
+    // How many of them nobody could read — exact, not derived from the capped
+    // preview, because the row states it in words ("2 couldn't be read") and a
+    // number that quietly stopped at the preview limit would be a lie.
+    const puUnread = tdb().prepare(
+      `SELECT COUNT(*) AS n FROM retail_orders o WHERE ${puWhere}
+         AND COALESCE(o.alipay_ocr_verdict, '') <> 'match'`
+    ).get(storeBind).n;
+    const puItems = tdb().prepare(`
+      SELECT o.id, o.order_no, o.total, o.alipay_ocr_verdict,
+             COALESCE(o.alipay_proof_at, o.placed_at) AS waiting_since,
+             COALESCE(NULLIF(TRIM(c.nickname), ''), NULLIF(TRIM(o.recipient_name), ''), NULLIF(TRIM(o.recipient_phone), ''), NULLIF(TRIM(c.phone), '')) AS buyer
+        FROM retail_orders o
+        LEFT JOIN retail_customers c ON c.id = o.customer_id
+       WHERE ${puWhere}
+       ORDER BY waiting_since ASC LIMIT @preview
+    `).all({ ...storeBind, preview: previewLimit });
+    payment_unconfirmed = {
+      count: puCount,
+      unread: puUnread,
+      items: puItems.map(o => ({
+        id:            o.id,
+        order_no:      o.order_no,
+        total:         o.total,
+        // 'match' | 'error' | null, passed through as it is stored. The client
+        // chooses the words; the API does not guess at them.
+        verdict:       o.alipay_ocr_verdict || null,
+        waiting_since: o.waiting_since,
+        buyer:         o.buyer,
+      })),
     };
 
     // ── Orders waiting for a delivery point (spec §7) ────────────────────
@@ -15199,7 +15272,7 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
   }
 
   res.set('Cache-Control', 'no-store');
-  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, awaiting_restock, payment_mismatch, needs_point, server_now: Date.now() } });
+  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, awaiting_restock, payment_mismatch, payment_unconfirmed, needs_point, server_now: Date.now() } });
 });
 
 // Admin CRUD for vouchers.
@@ -21584,6 +21657,11 @@ router.get('/api/retail-admin/orders', requireRetailAdmin, (req, res) => {
                     -- only ever reads 'mismatch'; the screenshot, the read
                     -- amounts and the reasons stay in the drawer.
                     o.alipay_ocr_verdict,
+                    -- Presence only. The column holds the screenshot (a data
+                    -- URI), so it is tested here and never selected: the row
+                    -- needs to know a proof EXISTS to tell "not checked yet"
+                    -- apart from "nobody ever paid", and nothing more.
+                    (o.alipay_proof_image IS NOT NULL) AS has_alipay_proof,
                     -- Fapiao request riding the order (the Invoices sub-tab is
                     -- retired; the list's "Needs invoice" chip + row summary and
                     -- the drawer block are the invoice UI now). subtotal +
