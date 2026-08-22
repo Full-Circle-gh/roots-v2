@@ -24,6 +24,9 @@ Published canvas: https://claude.ai/code/artifact/59dd60e2-cf68-457a-b329-5e96da
 | `Products.dc.html` | Catalogue — sub-view strip, stock states |
 | `StockActivity.dc.html` | Stock activity — the second sub-view |
 | `ProductSheet.dc.html` | The product record, with the hybrid's one door |
+| `Inbox.dc.html` · `Reply.dc.html` · `InboxEmpty.dc.html` | Inbox — two Worklists behind one strip, and its one write flow |
+| `Delivery.dc.html` | Delivery — A4 Console |
+| `Sales.dc.html` · `ChannelDetail.dc.html` | Sales — A5 Board, and the marketplace pattern |
 | `canvas.json` | Layout, notes, launch view |
 
 ## Rebuilding
@@ -32,7 +35,7 @@ Artboards are generated, not hand-edited — edit `src/` and run:
 
 ```
 node src/pages-1.mjs && node src/pages-2.mjs && node src/pages-3.mjs \
-  && node src/pages-4.mjs && node src/pages-5.mjs
+  && node src/pages-4.mjs && node src/pages-5.mjs && node src/pages-6.mjs
 ```
 
 `src/_shared.css` holds the tokens (lifted verbatim from the live `--td-*`
@@ -100,7 +103,25 @@ Also folded in while the shell was open: the last uppercase labels, the Dusk
 setup meter (a progress bar is not an automation), the drawer's Dusk primary
 (a drawer inherits the page's budget), and 24-hour English times.
 
-## Known gaps (batch three)
+## Decisions batch three settles
+
+- **Inbox states the work once.** The status line carries "2 reviews need a
+  reply", so the pulse slot stays empty rather than saying it twice. A review
+  arrives, so an unopened one wears the unseen surface; "Replied" stays a pill,
+  because that is a state the operator put it in.
+- **Send reply is Secondary.** Writing a reply is the operator acting, and Dusk
+  means one thing. Do not correct it to a Dusk button.
+- **Delivery has no master switch**, because delivery cannot be turned off.
+  Holiday mode sits in Timing with its consequence in words, which is what the
+  master-switch rule is actually asking for. No Dusk anywhere on a Console —
+  except the automation row's breathing dot, which reports rather than asks.
+- **The Board carries no summary banner.** Five cards, one dot each: a banner
+  saying "everything is in sync" is a fourth copy of what the dots say. Eleme
+  keeps its slot while disconnected — an absent channel is information.
+- **Invoices is not a page.** §4 absorbs fapiao into Orders as a filter; the
+  phone's current Invoices screen is a leftover to fold in, not a page to design.
+
+## Known gaps (batch four)
 
 The customer record's action row waits on the phone write flows; dark theme is
 specified as a token swap but not drawn; Chinese is not rendered

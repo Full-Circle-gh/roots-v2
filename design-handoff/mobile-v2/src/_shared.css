@@ -128,5 +128,25 @@
       text-overflow:ellipsis;font-variant-numeric:tabular-nums}
     .rec-side{flex:none;text-align:right}
     .zero{color:var(--td-text2)}
+    /* ── Console row · label + one-line description left, one control right ── */
+    .crow{display:flex;align-items:center;gap:16px;width:100%;min-height:56px;padding:12px 16px;text-align:left}
+    .crow + .crow{border-top:1px solid var(--td-border)}
+    .crow-main{flex:1;min-width:0}
+    .crow-main b{display:block;font-weight:400;font-size:15px}
+    .crow-val{flex:none;font-size:15px;color:var(--td-text2);font-variant-numeric:tabular-nums}
+    /* The switch is a control, so it takes the control radius at its own scale. */
+    .switch{flex:none;width:44px;height:26px;border-radius:999px;position:relative;background:var(--td-border)}
+    .switch.on{background:var(--td-dusk)}
+    .switch span{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#FFFFFF;
+      box-shadow:0 1px 2px rgba(17,26,43,.2)}
+    .switch.on span{left:21px}
+    /* ── Board card · one external system, one status dot, at most two metrics ── */
+    .bcard{display:flex;flex-direction:column;gap:8px;padding:16px;background:var(--td-surface);
+      border:1px solid var(--td-border);border-radius:14px}
+    .bhead{display:flex;align-items:center;gap:12px}
+    .bglyph{flex:none;width:36px;height:36px;border-radius:8px;background:var(--td-raised);
+      display:flex;align-items:center;justify-content:center;color:var(--td-text2)}
+    .bglyph svg{width:20px;height:20px}
+    .dot{flex:none;width:8px;height:8px;border-radius:50%}
     /* ── Notes drawn on the artboard, never part of the screen ── */
     .note{position:absolute;font-size:13px;line-height:1.5;color:var(--td-text2)}

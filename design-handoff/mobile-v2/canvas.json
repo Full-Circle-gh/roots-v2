@@ -115,6 +115,51 @@
       "w": 390,
       "h": 844,
       "title": "Product record"
+    },
+    {
+      "file": "Inbox.dc.html",
+      "x": 0,
+      "y": 3856,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Reply.dc.html",
+      "x": 470,
+      "y": 3856,
+      "w": 390,
+      "h": 844,
+      "title": "Reply"
+    },
+    {
+      "file": "InboxEmpty.dc.html",
+      "x": 940,
+      "y": 3856,
+      "w": 390,
+      "h": 844,
+      "title": "Inbox · empty"
+    },
+    {
+      "file": "Delivery.dc.html",
+      "x": 1410,
+      "y": 3856,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "Sales.dc.html",
+      "x": 0,
+      "y": 4820,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "file": "ChannelDetail.dc.html",
+      "x": 470,
+      "y": 4820,
+      "w": 390,
+      "h": 844,
+      "title": "Meituan"
     }
   ],
   "annotations": [
@@ -194,6 +239,34 @@
       "y": 2812,
       "w": 390,
       "text": "Synced with what shipped in /m (the phone build), 22 Aug.\n\nFour things changed on contact with the product, all the same kind: the design promised something the phone could not do yet.\n\n· Orders and Products head with an EMPTY Dusk slot — neither create flow exists on a phone, and a primary that only says \"do this on the desktop\" is a promise the page cannot keep. §1.7 says the empty slot is the finished answer.\n· Tier chips carry no counts. No endpoint returns them, and an invented number is worse than a missing one.\n· The customer record is read-only: every figure on it is one the server already computes, and none of the write flows exist here yet. The action row lands with them.\n· Home's Today carries the four figures the dashboard actually returns, with their deltas."
+    },
+    {
+      "id": "batch-three",
+      "x": 0,
+      "y": 3746,
+      "w": 860,
+      "text": "Batch three — Inbox, Delivery and Sales: the three archetypes the phone had not proved yet. A Worklist behind a sub-view strip, a Console, and a Board."
+    },
+    {
+      "id": "inbox-note",
+      "x": 0,
+      "y": 4716,
+      "w": 390,
+      "text": "One fact, one place: the work waiting is in the status line, so the pulse slot stays empty rather than saying it twice.\n\nA review that nobody has opened wears the unseen surface, exactly as an order does — a review ARRIVES. \"Replied\" stays a pill because that one is a state the operator put it in.\n\nSend reply is Secondary. Writing a reply is the operator acting, and Dusk means one thing: tacet did this for you. Do not correct this to a Dusk button."
+    },
+    {
+      "id": "delivery-note",
+      "x": 1410,
+      "y": 4716,
+      "w": 390,
+      "text": "A Console, so no Dusk anywhere: configuring is not the AI acting.\n\nNo master switch — delivery cannot be turned off, and promoting Holiday mode into that slot would say it can. It sits in Timing with its consequence spelled out (\"Off. Orders are being accepted.\"), which is what the master-switch rule is really asking for.\n\nThe automation row carries a breathing Dusk dot and states what it did today. An automation indicator is exempt from the one-Dusk rule; it is reporting, not asking."
+    },
+    {
+      "id": "sales-note",
+      "x": 940,
+      "y": 4820,
+      "w": 390,
+      "text": "The Board is the status — five cards, one dot each, at most two metrics, one link out. No summary banner over them: it would be a fourth copy of what the dots already say.\n\nEleme keeps its slot while disconnected. An absent channel is information.\n\nThe channel detail beside it is the pattern for all three marketplaces: a Console for what you configure, a read-only list under it at full legibility and zero affordance — no chevrons, no actions, the state in italics. Mirrored, never driven."
     }
   ],
   "launch": {

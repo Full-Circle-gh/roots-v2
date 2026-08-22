@@ -45,6 +45,10 @@ const I = {
   expand: S('<path d="M9 3H3v6"/><path d="M15 21h6v-6"/><path d="M3 3l7 7"/><path d="M21 21l-7-7"/>'),
   plusminus: S('<path d="M4 8h8"/><path d="M8 4v8"/><path d="M12 17h8"/>'),
   tag: S('<path d="M3 12V4a1 1 0 0 1 1-1h8l9 9-9 9z"/><circle cx="7.5" cy="7.5" r="1.3"/>'),
+  star: S('<path d="M12 3.5l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8L3.5 9.7l5.9-.9z"/>'),
+  bike: S('<circle cx="6" cy="17" r="3.5"/><circle cx="18" cy="17" r="3.5"/><path d="M9 17h5l3-7h-4"/><path d="M12 6h3"/>'),
+  utensils: S('<path d="M5 3v8a2 2 0 0 0 4 0V3"/><path d="M7 11v10"/><path d="M17 3c-1.5 1.5-2 3-2 5s.5 3 2 3v10"/>'),
+  clock: S('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
   warn: S('<path d="M10.3 4.3 2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 0 0 0 1.7-3L13.7 4.3a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/>'),
 };
 
