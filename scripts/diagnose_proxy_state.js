@@ -236,8 +236,18 @@ if (Database) {
     const active = !!(lastOk || lastErr || lastOrder || (q && ((q.pending || 0) + (q.failed || 0) > 0)));
     if (!active) { quiet.push(path.basename(file)); continue; }
 
+    // Contact = something that can ONLY have happened by reaching Meituan. The
+    // sync log's ok events include the daemon's own housekeeping (proxy_up,
+    // poll_resumed, restart), so "last ok" is not evidence of contact and must
+    // never be read as one — a paused daemon logging proxy_up would otherwise
+    // report itself as live.
+    const contactAt = Math.max(
+      utc(lastPush && lastPush.created_at),
+      utc(lastOrder && lastOrder.imported_at),
+      (biz && biz.read_ok) ? utc(biz.read_at) : 0,
+    );
     found.push({
-      file, signedIn,
+      file, signedIn, contactAt,
       okAt: utc(lastOk && lastOk.created_at),
       pushAt: utc(lastPush && lastPush.created_at),
       orderAt: utc(lastOrder && lastOrder.imported_at),
@@ -270,26 +280,35 @@ const entry = (() => {
 const exitLabel = entry ? entry.label : null;
 say(`  exit in use:  ${exitLabel || 'unknown'}${exitLabel && exitLabel !== 'residential' ? '  (NOT the residential exit)' : ''}`);
 
-const primary = found.slice().sort((a, b) => Math.max(b.okAt, b.orderAt) - Math.max(a.okAt, a.orderAt))[0];
+const primary = found.slice().sort((a, b) => b.contactAt - a.contactAt)[0];
 if (!primary) {
   say('  trading:      UNKNOWN — no Meituan history in any database on this box');
 } else {
   const sig = primary.signedIn;
   say(`  signed in:    ${sig === true ? 'YES' : sig === false ? 'NO — needs a human to sign in / pass 验证中心' : 'unknown'}`);
-  say(`  last activity: ${primary.okAt ? ago(primary.okAt) : 'never'}` +
-      `${primary.pushAt ? `, last stock push ${ago(primary.pushAt)}` : ', no stock push on record'}`);
+  say(`  reached Meituan: ${primary.contactAt ? ago(primary.contactAt) : 'never'}` +
+      `${primary.okAt ? `  (any log activity ${ago(primary.okAt)})` : ''}`);
+  say(`  last stock push: ${primary.pushAt ? ago(primary.pushAt) : 'never'}`);
   say(`  orders today: ${primary.today === null ? '?' : primary.today}` +
       `${primary.orderAt ? ` (last ${primary.orderNo || ''} ${ago(primary.orderAt)})` : ''}`);
   if (primary.biz) {
     say(`  shop status:  ${primary.biz.read_ok ? (primary.biz.is_open === 1 ? 'OPEN on Meituan' : 'CLOSED on Meituan (置休)') : 'last status read FAILED'}`);
   }
-  // "Live" means the daemon reached Meituan recently AND is not locked out.
+  // Two independent questions, reported separately, because the channel can be
+  // perfectly live for orders while stock has not moved for a day — and calling
+  // that "live" unqualified is how a 106-row backlog goes unnoticed.
   const recentMs = 45 * 60_000;
-  const live = sig === true && primary.okAt && (Date.now() - primary.okAt) < recentMs;
+  const live = sig === true && primary.contactAt && (Date.now() - primary.contactAt) < recentMs;
+  const pending = primary.q ? (primary.q.pending || 0) : 0;
+  const pushStale = pending > 0 && (!primary.pushAt || Date.now() - primary.pushAt > 2 * 3600_000);
   say('');
-  say(`  → ${live ? `LIVE — reaching Meituan, last ok ${ago(primary.okAt)}` : sig === false
+  say(`  → orders:     ${live ? `LIVE — reached Meituan ${ago(primary.contactAt)}` : sig === false
         ? 'NOT LIVE — the session is locked out; a human has to sign in on the box'
-        : `NOT CONFIRMED LIVE — no successful Meituan call in the last ${recentMs / 60000} min`}`);
+        : `NOT CONFIRMED — nothing proves contact with Meituan in the last ${recentMs / 60000} min`}`);
+  say(`  → stock sync: ${pushStale
+        ? `STALLED — ${pending} queued, last push ${primary.pushAt ? ago(primary.pushAt) : 'never'}`
+        : pending ? `draining — ${pending} queued, last push ${ago(primary.pushAt)}`
+        : 'idle — nothing queued'}`);
 }
 
 say('');
