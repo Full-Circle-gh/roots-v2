@@ -205,6 +205,7 @@ const state = {
      asked yet". Without them, emptying the sample data turned every one
      of these screens into a confident "none" for the length of a fetch. */
   vchLoaded:false, flashLoaded:false, bcLoaded:false, revLoaded:false,
+  inboxUnseen:null, inboxPolled:false,
   ops:null, opsLoading:false, featBusy:null, featErr:null,
   media:null, mediaLoading:false, mediaTried:false, mediaBusy:null, mediaErr:null,
   fapiao:null, fapiaoLoading:false, fapiaoBusy:false, fapiaoTried:false, printerTried:false,
@@ -282,7 +283,9 @@ reg('toggleSound', ()=>{ state.sound=!state.sound; render(); });
 reg('toggleLive', ()=>{ state.live=!state.live; render(); });
 reg('openSearch', ()=>{ state.overflow=false; state.search=true; render(); });
 reg('closeSearch', ()=>{ state.search=false; render(); });
-reg('push', k=>push(k));
+/* Opening the inbox IS reading it — the desktop stamps last-seen the moment
+   its sub-tab becomes active, and the dot has nothing to count afterwards. */
+reg('push', k=>{ push(k); if(k==='inbox') markInboxSeen(); });
 reg('statusF', f=>{ state.statusF=f; loadOrdersPage(); });
 reg('channelF', f=>{ state.channelF=f; loadOrdersPage(); });
 reg('storeF', v=>{ state.storeF=v; loadOrdersPage(); });
@@ -431,7 +434,8 @@ reg('copyAddr', ()=>{
 });
 reg('copyTxn', ()=>{
   const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
-  copyText(o?String(o.txn||o.id):'');
+  if(!o||!o.txn) return;   // nothing to copy is nothing to copy
+  copyText(String(o.txn));
 });
 reg('openProduct', sku=>{
   state.productSku=sku; state.prodErr=null; state.prodBusy=false;
@@ -716,7 +720,7 @@ reg('sendReplyText', t=>{
     render();
   });
 });
-reg('markAllReviewsRead', ()=>{ DB.reviews.forEach(r=>state.reviewsSeen.add(revKey(r))); render(); });
+reg('markAllReviewsRead', ()=>{ DB.reviews.forEach(r=>state.reviewsSeen.add(revKey(r))); markInboxSeen(); });
 /* Hiding takes the review off the product page, so it asks first. Restoring
    puts back what was already public, so it does not. */
 reg('toggleReviewVisible', key=>{
@@ -3892,8 +3896,9 @@ function sheetOrderDetail(){
            :T(...o.addr)}</div>
          ${o.custId!=null?`<button onclick="APP.cmd('openCustomerFromOrder',${o.custId})" style="display:inline-flex;align-items:center;gap:5px;margin-top:10px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 12px;cursor:pointer;font-family:inherit">${ic('user',14)} ${T('Open their record','查看顾客')}</button>`:''}</div>
        <div class="card" style="padding:14px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="eyebrow">${T('Payment','支付')}</span>
-         <button onclick="APP.cmd('copyTxn')" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);background:transparent;border:none;cursor:pointer;font-family:inherit">${T('Copy','复制')} ${ic('copy',13)}</button></div>
-         <div style="font-size:15px;margin-top:7px">${T(...o.pay)}</div><div class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:2px">${T('Txn','交易号')} ${o.txn}</div>
+         ${o.txn?`<button onclick="APP.cmd('copyTxn')" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);background:transparent;border:none;cursor:pointer;font-family:inherit">${T('Copy','复制')} ${ic('copy',13)}</button>`:''}</div>
+         <div style="font-size:15px;margin-top:7px${o.payRaw?';color:var(--text-secondary)':''}">${T(...o.pay)}${o.payStatus?`<span style="color:var(--text-secondary)"> · ${T(...o.payStatus)}</span>`:''}</div>
+         ${o.txn?`<div class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:2px">${T('Txn','交易号')} ${escAttr(o.txn)}</div>`:''}
          ${o.payNote?`<div style="display:flex;align-items:flex-start;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--border-default);color:var(--${o.payNote.sev});font-size:13px">
            <span style="flex:none;display:flex;margin-top:1px">${ic(o.payNote.icon,15)}</span>
            <span>${T(...o.payNote.why)}</span></div>`:''}
@@ -4393,6 +4398,10 @@ function custFiltered0(){ return (state.custSeg||'all')==='all'&&(state.custTier
 /* The pulse renders as one line, not tiles: four tiles cannot share a phone's
    width, and showing two of them would be an arbitrary subset. It renders only
    the figures the server actually returned. */
+/* Three figures on one line, in a row it shares with the sort control, at
+   390px. It was nowrap with an ellipsis, so it clipped at "17 buyers · 53%
+   returning · 225 never o…" — losing the one figure the line exists to
+   surface. It wraps now: two short lines beat one clipped one. */
 function custPulse(){
   const m=state.custMeta||{}; const bits=[];
   if(m.buyers!=null) bits.push(T(m.buyers+' buyers', m.buyers+' 位买家'));
@@ -4404,17 +4413,32 @@ function custPulse(){
 function custCard(c){
   const tier=TIER_LABEL[c.tier]||[c.tier,c.tier];
   return `<button class="card${c.unseen?' unseen':''}" onclick="APP.cmd('openCustomer','${c.id}')"
-      style="display:flex;align-items:center;gap:16px;padding:16px;text-align:left;cursor:pointer;color:var(--text-primary);font-family:inherit">
+      style="display:flex;align-items:center;gap:12px;padding:16px 14px;text-align:left;cursor:pointer;color:var(--text-primary);font-family:inherit">
     <span style="width:32px;height:32px;flex:none;border-radius:8px;background:var(--dusk-tint);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500">${(c.name||'·').trim().charAt(0).toUpperCase()}</span>
     <span style="flex:1;min-width:0">
-      <span style="display:flex;align-items:center;gap:8px;min-width:0">
-        <span style="font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.name||T('No name','未填姓名')}</span>
+      ${/* Wrapping, so the NAME wins. Nowrap here meant every pill on the row
+           took its width out of the name: adding the channel mark clipped
+           "Sarah Lim" to "Sarah…" to make room for the word "web". A pill can
+           drop to a second line; a person's name cannot be guessed from its
+           first five letters. */''}
+      <span style="display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap">
+        <span style="font-size:15px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.name||T('No name','未填姓名')}</span>
         <span class="pill" style="background:rgba(88,96,110,.10);color:var(--text-secondary)">${T(...tier)}</span>
         ${c.blocked?`<span class="pill" style="background:var(--brick-tint);color:var(--brick)">${T('Blocked','已封禁')}</span>`:''}
+        ${/* The channel mark is an EXCEPTION mark — it appears only for web and
+             staff-added, never for the mini app — so it belongs with the other
+             exception pills rather than on the end of the meta line, where it
+             was the first thing to be clipped away. */''}
+        ${CUST_CHAN[c.chan]?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T(...CUST_CHAN[c.chan])}</span>`:''}
       </span>
-      <span class="num" style="display:block;font-size:13px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.phone||'—'} · ${c.orders?T(c.orders+' orders',c.orders+' 单'):T('No orders','暂无订单')}${custChanNote(c)}</span>
+      <span class="num" style="display:block;font-size:13px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.phone||'—'} · ${c.orders?T(c.orders+' orders',c.orders+' 单'):T('No orders','暂无订单')}</span>
     </span>
-    <span style="flex:none;text-align:right">
+    ${/* The right column was flex:none and unbounded, so a long spend + a
+         last-seen date + a holds pill ate the row and the line beside it
+         clipped to "138****2841 · 24 orders · we…" — losing the channel mark,
+         which only appears at all for the two channels worth marking. Capped,
+         so the body keeps the majority of a 390px row. */''}
+    <span style="flex:none;max-width:38%;text-align:right">
       <span class="num" style="display:block;font-size:15px;font-weight:500;${c.spend?'':'color:var(--text-secondary)'}">${money(CUR,c.spend)}</span>
       ${custWhen(c)}
       ${custHolds(c)}
@@ -4426,10 +4450,6 @@ function custCard(c){
    a phone the column would be a word repeated 1,300 times. Name the exception
    instead: a web signup or one a member of staff typed in is worth knowing. */
 const CUST_CHAN={web:['web','网页'],manual:['added by staff','员工添加']};
-function custChanNote(c){
-  const k=CUST_CHAN[c.chan];
-  return k?' · '+T(...k):'';
-}
 /* The row used to print a bare time under the spend — "3:14 PM" — with nothing
    saying whether that was a visit or a signup. It is whichever one the list is
    ordered by, and it now says which. A customer who has never logged in has no
@@ -4493,7 +4513,7 @@ function screenCustomers(){
     {key:'web',en:'Web',zh:'网页'},{key:'manual',en:'Added by staff',zh:'员工添加'}];
   return `${pageHead({title:T('Customers','顾客'), controls:true})}
     <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:0 16px 12px">
-      <span class="num" style="font-size:13px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${pulse||''}</span>
+      <span class="num" style="font-size:13px;color:var(--text-secondary);min-width:0;line-height:1.5">${pulse||''}</span>
       <button onclick="APP.cmd('custSortPick')" style="flex:none;display:inline-flex;align-items:center;gap:4px;background:none;border:none;padding:2px 0;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--text-primary)">${custSortLabel()} ${ic('chevron-down',14,2)}</button>
     </div>
     <div style="padding:0 16px 12px"><input id="mCustQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.custQ)}"
@@ -4724,6 +4744,14 @@ function productCard(u){
   const lo=Math.min.apply(null,members.map(m=>m.priceNum||0));
   const hi=Math.max.apply(null,members.map(m=>m.priceNum||0));
   const priceTxt = (u.group&&hi>lo) ? money(CUR,lo)+'–'+money(CUR,hi) : p.price;
+  /* The row used to carry BOTH a "Live" pill and an "On shop" switch, which
+     are the same fact twice — is_published — with a stock figure beside them
+     saying the rest of what "Live" means. And "Draft" is the switch in its off
+     position, spelled out. So the pill is drawn only when it says something
+     the switch cannot: Low, Out, or a supplier item the operator has Paused.
+     The label under the switch names what the switch controls and stays put;
+     it was an on/off echo, set at 10.5px, below the type scale's floor. */
+  const statusPill = p.kind==='restock'||p.kind==='off';
   const marks=[];
   if(u.group) marks.push({t:T(members.length+' sizes',members.length+' 规格'),sev:'muted'});
   if(p.bundle) marks.push({t:T('Bundle','套装'),sev:'muted'});
@@ -4738,14 +4766,14 @@ function productCard(u){
         <span class="num" style="font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${
           u.group?members.map(m=>escAttr(m.vLabel||m.sku)).join(' · '):escAttr(p.sku)}</span>
         <span style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
-          ${pill(p.kind,T(...p.status))}
+          ${statusPill?pill(p.kind,T(...p.status)):''}
           ${marks.map(m=>`<span class="pill" style="background:${m.sev==='amber'?'var(--amber-tint)':PILL.muted[0]};color:${m.sev==='amber'?'#8A6425':PILL.muted[1]}">${m.t}</span>`).join('')}
           ${u.group?'':`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${T(...p.stockLabel)}</span>`}
         </span></span></button>
-    <span style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:none;padding-top:2px">
-      ${busy?`<span style="font-size:11px;color:var(--text-secondary);width:44px;text-align:center">${T('…','…')}</span>`
+    <span style="display:flex;flex-direction:column;align-items:center;gap:5px;flex:none;padding-top:2px">
+      ${busy?`<span style="font-size:12px;color:var(--text-secondary);width:44px;text-align:center">${T('…','…')}</span>`
             :toggle(on,`APP.cmd('toggleShop','${ids}')`)}
-      <span style="font-size:10.5px;color:var(--text-secondary);white-space:nowrap">${on?T('On shop','已上架'):T('Off shop','未上架')}</span></span>
+      <span style="font-size:12px;color:var(--text-secondary);white-space:nowrap">${T('In shop','上架')}</span></span>
   </div>`;
 }
 /* _paUnits, on a phone: siblings of one variant group collapse into a single
@@ -4813,9 +4841,50 @@ const TAB_META={home:{en:'Home',zh:'概览',icon:'house'},orders:{en:'Orders',zh
   more:{en:'More',zh:'更多',icon:'menu'}};
 /* Unseen is one 6px Sage dot — never a count, never red. A count in the chrome
    turns arriving work into an alarm, and a record arriving is the CUSTOMER
-   acting, not the system: it does not earn Dusk either. */
-function unseenOrders(){ return DB.orders.some(o=>o.isNew); }
-function unseenReviews(){ return DB.reviews.filter(r=>!state.reviewsSeen.has(revKey(r))).length; }
+   acting, not the system: it does not earn Dusk either.
+   --------------------------------------------------------------------------
+   Both dots used to be unclearable, in two different ways.
+
+   ORDERS read DB.orders — the boot prefetch's snapshot, taken once and never
+   written again, while the list the operator actually reads and taps lives in
+   state.ordersView. So opening every order on the screen changed nothing the
+   dot could see: it stayed lit until a reload, and after the reload it lit
+   again from the same stale array.
+
+   THE INBOX counted reviews missing from an in-memory Set. A reload empties a
+   Set, so "mark all read" lasted exactly as long as the page did. The desktop
+   solved this years ago and the phone simply did not follow it: a last-seen
+   TIMESTAMP in localStorage per category, and a server endpoint that counts
+   what arrived after it (reviews/unseen-count, feedback/unseen-count). That
+   survives a reload because it is not in memory, and it counts feedback too —
+   which the phone's Set never did, though the dot sits on the inbox button. */
+const INBOX_SEEN_KEY='tacet.m.inboxSeen';
+function inboxSeenAt(){
+  try{ return localStorage.getItem(INBOX_SEEN_KEY)||''; }catch(e){ return ''; }
+}
+function markInboxSeen(){
+  try{ localStorage.setItem(INBOX_SEEN_KEY,new Date().toISOString()); }catch(e){}
+  state.inboxUnseen=0; render();
+}
+/* Polled once per app start and again whenever the inbox is opened or left —
+   the same events the desktop repaints on. */
+function loadInboxUnseen(force){
+  if(state.inboxPolled&&!force) return;
+  state.inboxPolled=true;
+  const since=encodeURIComponent(inboxSeenAt());
+  Promise.all([
+    api('/reviews/unseen-count?since='+since).catch(()=>null),
+    api('/feedback/unseen-count?since='+since).catch(()=>null),
+  ]).then(([rv,fb])=>{
+    const n=Number((rv&&rv.count)||0)+Number((fb&&fb.count)||0);
+    state.inboxUnseen=n; render();
+  }).catch(()=>{});
+}
+/* The list on screen, not a snapshot taken at boot. `seen_at` is stamped
+   server-side the moment an order is opened, and openOrder clears the row
+   locally too so the dot goes out on the tap rather than on the next reload. */
+function unseenOrders(){ return (state.ordersView||state.liveOrders||[]).some(o=>o.isNew); }
+function unseenReviews(){ return state.inboxUnseen==null?0:state.inboxUnseen; }
 function tabDot(k){ return k==='orders' ? unseenOrders() : k==='more' ? unseenReviews()>0 : false; }
 /* Unseen is one 6px Sage dot — never a count, never red. A count in the chrome
    turns arriving work into an alarm, and a record arriving is the CUSTOMER
@@ -5151,7 +5220,12 @@ function shipByPlan(r){
   }
   if(r.ship_by_mode==='asap'||!r.scheduled_for){
     if(r.delivery_slot_kind==='right_away') return {kind:'asap',label:T('Right away','立即配送'),sub:'',when:r.placed_at||null,basis:'age',done};
-    return {kind:'asap',label:T('Courier — ship when ready','快递 · 备好即发'),sub:'',when:r.placed_at||null,basis:'age',done};
+    /* The desktop's headline is "Courier — ship when ready" on a wide row. On
+       a phone this cell is capped at 52% of the card and does not wrap, so the
+       one-string version clipped to "Courier — ship when re…" — a label an
+       operator cannot read. Split across the two lines this cell already has,
+       the same way the pickup plan does ("During pickup hours" / "pickup"). */
+    return {kind:'asap',label:T('Ship when ready','备好即发'),sub:T('courier','快递'),when:r.placed_at||null,basis:'age',done};
   }
   return {kind:'scheduled', label:r.delivery_slot_label||fmtDay(r.scheduled_for),
     sub:'', when:r.scheduled_for, basis:'arrival', done};
@@ -5296,6 +5370,39 @@ function parcelRollup(r){
   const moving=Math.min(Number(r.shipment_moving)||0,total-delivered);
   return {total, delivered, moving, toShip:Math.max(0,total-delivered-moving)};
 }
+/* An order can carry more than one payment row — a checkout placeholder the
+   gateway callback never settled, plus the row written when staff marked it
+   paid off-app. Prefer the settled one, so a paid order never reads "pending".
+   (The desktop's primaryPayment, same order of preference.) */
+function primaryPayment(r){
+  const list=(r&&r.payments)||[];
+  return list.find(p=>p.status==='success')||list.find(p=>p.status==='refunded')||list[list.length-1]||null;
+}
+const PAY_LABEL={
+  wechat:['WeChat','微信'], weixin:['WeChat','微信'], wechatpay:['WeChat','微信'], wechat_pay:['WeChat','微信'],
+  alipay:['Alipay','支付宝'], zhifubao:['Alipay','支付宝'],
+  cash:['Cash','现金'], bank_transfer:['Bank transfer','银行转账'],
+  wechat_offline:['WeChat off-app','微信（线下）'], alipay_offline:['Alipay off-app','支付宝（线下）'],
+  other:['Other','其他'],
+};
+const payIsKnown=m=>!!PAY_LABEL[String(m||'').toLowerCase().trim()];
+/* The raw enum was being printed as the tender: an order paid by WeChat read
+   "wechat", lowercase, as though the column name were the word for it. An
+   unknown key still shows raw and unstyled on purpose — the desktop's rule,
+   and its reason: an unhandled key that inherits a real label's authority
+   passes for a payment type nobody has taught this screen. */
+function payLabel(m){
+  const k=String(m||'').toLowerCase().trim();
+  const l=PAY_LABEL[k];
+  if(l) return l;
+  return [m||'—', m||'—'];
+}
+function payStatusWord(pm){
+  if(!pm) return null;
+  const w={success:['paid','已付'],pending:['pending','待付'],created:['pending','待付'],
+           refunded:['refunded','已退'],failed:['failed','失败']}[pm.status];
+  return w||null;
+}
 function mapOrderRow(r){
   let sk=ORDER_STATUS[r.status]||['pending',r.status||'—',r.status||'—'];
   let kind=sk[0];
@@ -5340,7 +5447,15 @@ function mapOrderRow(r){
     parcels: parcelRollup(r),
     phone:r.recipient_phone||r.customer_phone||'—',
     addr:[r.address_full||'—', r.address_full||'—'],
-    pay:[r.payment_method||'—', r.payment_method||'—'], txn:r.order_no||'—',
+    pay:payLabel(r.payment_method), payRaw:payIsKnown(r.payment_method)?null:(r.payment_method||''),
+    payStatus:payStatusWord(primaryPayment(r)),
+    /* The transaction id, or nothing. This used to be `r.order_no` — the ORDER
+       NUMBER, printed under the label "Txn", on a card headed Payment, in a
+       sheet whose own title is that same number. It was not a transaction id
+       and never had been. The real one lives on the payment row
+       (retail_payments.transaction_id); an order paid off-app has none, and
+       the desktop simply omits the chip. So does this. */
+    txn:(function(){ const pm=primaryPayment(r); return (pm&&(pm.transaction_id||pm.out_trade_no))||null; })(),
     fulfil:[r.store_name_en||r.store_code||'—', r.store_name_cn||r.store_name_en||'—'],
     route:[r.routing_reason||'—', r.routing_reason||'—'],
     trk: r.tracking_number?{carrier:[r.tracking_carrier||'Courier','快递'],no:r.tracking_number,event:[r.tracking_status||'In transit','运输中'],live:!!r.jd_live}:null,
@@ -5705,6 +5820,13 @@ function mapFeedback(r){
 const TIER_NAMES={seed:['Seed','种子'],sprout:['Sprout','幼苗'],root:['Root','根'],tree:['Tree','大树']};
 reg('openOrder', id=>{
   const row=(state.liveOrders||[]).find(o=>o.id===id);
+  /* The server stamps seen_at on this open (routes/retail.js). Clear the row
+     here too, so the dot goes out on the tap instead of on the next reload —
+     and clear it in BOTH lists, because the drawer reads one and the dot the
+     other. */
+  [state.ordersView,state.liveOrders].forEach(list=>{
+    if(Array.isArray(list)){ const r=list.find(o=>o.id===id); if(r) r.isNew=false; }
+  });
   state.detailId=id; state.drag=0; state.liveDetail=null; state.detailMounted=false;
   state.orderErr=null; state.orderBusy=null;
   if(row&&row._id!=null){
@@ -5820,6 +5942,7 @@ async function loadLive(){
   }})).catch(()=>{});
   api('/order-channel-counts').then(d=>set(()=>{ if(d) state.liveChannelCounts=d; })).catch(()=>{});
 
+  loadInboxUnseen();
   loadOps();
   api('/setup').then(d=>set(()=>{ if(d&&d.percent!=null) state.setup=d; })).catch(()=>{});
   api('/delivery-zones').then(r=>set(()=>{ if(Array.isArray(r)) state.zones=r; })).catch(()=>{});
