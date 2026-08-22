@@ -623,6 +623,34 @@ flag is doing in shopper terms, with the switch on the card.
 `scripts/test_mobile_settings.js` — 33 assertions, 9 cases across all three,
 including that the step list contains no buttons at all.
 
+### Delivery — the second sweep (`06-delivery.js`)
+
+The phone said **Delivery zones · 7**. A bare total is the one number on that
+screen that cannot go wrong, and it hides the one that can.
+
+| Desktop capability | Phone |
+|---|---|
+| Zones **live**, not just total | ❌ → ✅ |
+| Provinces covered | ❌ → ✅ |
+| Same-day districts | ❌ → ✅ |
+| **Zones switched off** | ❌ → ✅ — amber, and it says what it costs: an address inside an off zone does not match, so that customer is told you do not deliver there. This is the desktop KPI strip's only alert |
+| **Holiday mode** | ❌ → ✅ — the switch that stops delivery altogether and puts a message in front of every shopper was not on the phone at all. It is now the first thing on the screen when it is on, in brick, quoting the message shoppers are being shown |
+| Same-day cut-off | ❌ → ✅ |
+| Stores located / missing coordinates | ✅ (already) |
+| Turning holiday mode on or off | ➖ for now — same class of write as closing a sales channel: it stops orders. Added to §4 rather than decided here |
+| Zone editor, fees, region picker, batch schedule, JD auto-print, box labels, bulk tracking | ➖ decided: desktop |
+
+### The last dead control, and a guard for the class
+
+`APP.cmd('noop')` is gone from the file, and so is the `noop` command itself.
+It was the mechanism by which this app shipped controls that pretended: a row,
+a chevron, a tap target, and nothing behind it — an operator taps and assumes
+the screen is still loading. The last one was the Account row in the menu
+sheet, which showed the *store's* name (not an account) behind a chevron that
+went nowhere; it names whoever is signed in and goes to Settings, where Sign
+out lives. `scripts/test_mobile_screens.js` now fails the build on any
+reference to the name.
+
 ## 4. Open questions
 
 Not gaps — decisions that are the shop's to make, not this file's.
@@ -630,6 +658,7 @@ Not gaps — decisions that are the shop's to make, not this file's.
 | Question | Why it is not decided here |
 |---|---|
 | Should the phone be able to open and close a sales channel? | It is the most phone-shaped write in the whole app — you are standing in a slammed kitchen and you want Meituan off — and also the heaviest, because it stops orders arriving. Reading the state is shipped; the switch is not. |
+| Should the phone be able to turn holiday mode on? | Same class as the channel switch above: it stops delivery for everyone and puts a message in front of every shopper. Reading the state is shipped — it is now the loudest thing on the Delivery screen when it is on. |
 | Should marking an off-app payment as paid move to the phone? | It records WHICH tender the money came in as. A phone that cannot ask would put "unknown" on the books, so it needs a tender chooser designed before it moves. |
 
 Settled already, and recorded above rather than re-litigated: editing a ship-to

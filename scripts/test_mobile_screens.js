@@ -87,6 +87,8 @@ function buildCases(src) {
     // Purchasing reads a live ledger, so the sweep seeds one — otherwise every
     // pass renders the loading state and proves nothing about the rows.
     'push:purchasing-rows': "state.posTried=true;state.poList=[{id:4,po_number:'RPO-0004',supplier:'Fresh Co.',store_name_en:'Tianhe',date:'2026-08-14',delivery_date:'2026-08-16',status:'Ordered',line_count:6,received_lines:0,total_cost:3240},{id:5,po_number:'RPO-0005',supplier:'Oat Works',date:'2026-08-20',delivery_date:'2026-08-30',status:'Delivered',line_count:3,received_lines:3,total_cost:1880}];APP.cmd('push','purchasing')",
+    'push:delivery-live': "state.zones=[{id:1,is_active:1,zone_type:'gz_district',province_cn:'广东省',same_day_allowed:1},{id:2,is_active:1,zone_type:'city',province_cn:'江苏省'},{id:3,is_active:0,zone_type:'city',province_cn:'浙江省'}];state.geoTried=true;state.geo={stores:{total:3,geocoded:2,missing:1},tencent_maps_configured:true};state.printerTried=true;state.printer={auto_print:true};APP.cmd('push','delivery')",
+    'push:delivery-holiday': "state.cfg=Object.assign({},state.cfg,{delivery:{holidayMode:true,holidayMessage:{en:'Closed for Mid-Autumn, back Thursday.'},sameDayCutoffMinutes:20}});state.zones=[];state.geoTried=true;state.geo={stores:{total:1,geocoded:1,missing:0}};state.printerTried=true;state.printer={auto_print:false};APP.cmd('push','delivery')",
     // Setup reads /setup's two lists; Settings reads the entitlement ceiling.
     'push:setup-live': "state.setup={percent:60,requiredDone:3,requiredTotal:5,allDone:false,steps:[{key:'store',done:true,count:2},{key:'products',done:true,count:128},{key:'payment',done:true,method:'both'},{key:'fulfillment',done:false,delivery:false,pickup:false},{key:'open',done:false}],optional:[{key:'wechat',done:false},{key:'brand',done:true}]};APP.cmd('push','setup')",
     'push:setup-done': "state.setup={percent:100,requiredDone:5,requiredTotal:5,allDone:true,steps:[{key:'store',done:true,count:2},{key:'products',done:true,count:128},{key:'payment',done:true,method:'wechat'},{key:'fulfillment',done:true,pickup:true},{key:'open',done:true}],optional:[]};APP.cmd('push','setup')",
@@ -193,6 +195,23 @@ function main() {
     if (missing.length) {
       for (const n of missing) console.error(`FAIL static — ${n}() is called but never defined`);
       console.error(`\n${missing.length} helper${missing.length === 1 ? '' : 's'} called but not defined.`);
+      process.exit(1);
+    }
+  }
+
+  // ── Static pass: no control wired to nothing ───────────────────────────
+  // Half of §1 of docs/tacet-mobile-parity.md is controls that pretended: a row
+  // with a chevron, a tap target, and APP.cmd('noop') behind it. An operator
+  // taps, nothing happens, and they assume the screen is still loading. Every
+  // one of them is gone; this keeps them gone.
+  {
+    // Comments stripped first — the comment explaining why noop is gone names it.
+    const noopSrc = src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+    const hits = [...noopSrc.matchAll(/APP\.cmd\(\s*'noop'/g)].length
+               + [...noopSrc.matchAll(/\breg\(\s*'noop'/g)].length;
+    if (hits) {
+      console.error(`FAIL static — ${hits} reference${hits === 1 ? '' : 's'} to the 'noop' command.`);
+      console.error("A control wired to noop is a control that lies. Give it a destination or stop drawing it as a control.");
       process.exit(1);
     }
   }

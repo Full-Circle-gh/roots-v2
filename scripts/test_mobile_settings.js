@@ -99,4 +99,54 @@ const CASES = [
   ]],
 ];
 
+// ── Delivery ──────────────────────────────────────────────────────────────
+// The phone said "Delivery zones · 7" and stopped. A bare count is the one
+// number on that screen that cannot go wrong, and it hides the one that can: a
+// zone switched OFF does not match addresses, so a customer inside it is told
+// you do not deliver there. Holiday mode — the switch that stops delivery
+// altogether and puts a message in front of every shopper — was not on the
+// phone at all.
+const ZONES = `state.zones=[
+  {id:1,is_active:1,zone_type:'gz_district',province_cn:'广东省',same_day_allowed:1},
+  {id:2,is_active:1,zone_type:'gz_district',province_cn:'广东省',same_day_surcharge:5},
+  {id:3,is_active:1,zone_type:'city',province_cn:'江苏省'},
+  {id:4,is_active:0,zone_type:'city',province_cn:'浙江省'},
+  {id:5,is_active:0,zone_type:'city',province_cn:'福建省'}];
+  state.geoTried=true; state.geo={stores:{total:3,geocoded:2,missing:1},tencent_maps_configured:true};
+  state.printerTried=true; state.printer={auto_print:true};`;
+
+CASES.push(['delivery facts', ZONES + `APP.cmd('push','delivery');`, [
+  ['live zones, not a bare total',   `txt('content').includes('3 live')`],
+  ['provinces covered',              `txt('content').includes('Provinces covered')`],
+  ['same-day districts are counted', `txt('content').includes('Same-day districts')`],
+  ['stores located',                 `txt('content').includes('2 of 3')`],
+  ['a store with no coordinates is called out', `txt('content').includes('never be the nearest one')`],
+  ['SWITCHED-OFF ZONES are called out',
+   `txt('content').includes('2 zones are switched off')`],
+  ['with what it costs the customer',
+   `txt('content').includes('told you do not deliver there')`],
+]]);
+
+CASES.push(['no zones switched off', `state.zones=[{id:1,is_active:1,zone_type:'city',province_cn:'广东省'}];
+  state.geoTried=true; state.geo={stores:{total:1,geocoded:1,missing:0}};
+  state.printerTried=true; state.printer={auto_print:true}; APP.cmd('push','delivery');`, [
+  ['no warning',       `!txt('content').includes('switched off')`],
+  ['and no geocoding warning either', `!txt('content').includes('never be the nearest one')`],
+]]);
+
+CASES.push(['holiday mode', `state.cfg=Object.assign({},state.cfg,{delivery:{holidayMode:true,
+    holidayMessage:{en:'Closed for Mid-Autumn, back Thursday.'},sameDayCutoffMinutes:20}});
+  state.zones=[]; state.geoTried=true; state.geo={stores:{total:1,geocoded:1,missing:0}};
+  state.printerTried=true; state.printer={auto_print:false}; APP.cmd('push','delivery');`, [
+  ['it is impossible to miss',   `txt('content').includes('Holiday mode is on')`],
+  ['and says delivery is paused', `txt('content').includes('delivery is paused')`],
+  ['and quotes what shoppers are told', `txt('content').includes('Closed for Mid-Autumn')`],
+  ['the cut-off is stated',      `txt('content').includes('20 min before close')`],
+]]);
+
+CASES.push(['holiday mode off', ZONES + `APP.cmd('push','delivery');`, [
+  ['says so quietly, as a fact',  `txt('content').includes('Holiday mode')`],
+  ['with no alarm',               `!txt('content').includes('delivery is paused')`],
+]]);
+
 run('settings', CASES);

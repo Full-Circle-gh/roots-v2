@@ -293,7 +293,7 @@ const state = {
   storeName:null, focus:null,
   liveOrders:null, liveDetail:null, liveKpis:null, liveVitals:null, liveAttn:null,
   liveStatusCounts:null, liveChannelCounts:null, liveInvoiceCounts:null, liveProductsLoaded:false,
-  custLoading:false, custMetaLoaded:false, detailMounted:false, mirrorTried:false, ent:{},
+  custLoading:false, custMetaLoaded:false, detailMounted:false, mirrorTried:false, ent:{}, me:null,
   qs:{oat:8,nuts:0,carrot:42},
   /* Coupon switches only, keyed c_<CODE>. This map used to also carry
      membership / affiliate / social / faq / feedback / autoprint / autoroute /
@@ -759,7 +759,11 @@ reg('faqToggle', i=>{ state.faqOpen=state.faqOpen===i?null:i; render(); });
 reg('mirror', w=>{ push('mirror_'+w); loadMirror(w); });
 reg('stepInc', k=>{ sheetStep[k]=(sheetStep[k]||0)+1; render(); });
 reg('stepDec', k=>{ sheetStep[k]=Math.max(0,(sheetStep[k]||0)-1); render(); });
-reg('noop', ()=>{});
+/* `noop` is gone. It was the mechanism by which this app shipped controls
+   that did nothing: a chevron, a tap target, a call to APP.cmd('noop'), and
+   an operator who assumed the screen behind it was still loading. Every
+   caller has a real destination now or is not a control, and
+   scripts/test_mobile_screens.js fails the build if the name comes back. */
 
 /* ==========================================================================
    Shared bits
@@ -1389,6 +1393,64 @@ function setupState(){
   if(d) return {pct:d.percent, done:d.requiredDone, total:d.requiredTotal, left:Math.max(0,d.requiredTotal-d.requiredDone), real:true};
   return {pct:null, real:false};
 }
+/* ==========================================================================
+   Delivery (desktop: 06-delivery.js)
+   --------------------------------------------------------------------------
+   The phone said "Delivery zones · 7" and stopped there. A bare count is the
+   one number on that screen that cannot go wrong, and it hides the one that
+   can: a zone that is switched OFF will not match an address, so a customer in
+   it is told you do not deliver there. The desktop's KPI strip alerts on
+   exactly that. And holiday mode — the switch that stops delivery altogether
+   and puts a message in front of every shopper — did not appear on the phone
+   at all, which is a strange thing not to be able to check from a phone.
+   ========================================================================== */
+function dlvZoneFacts(){
+  const rows=Array.isArray(state.zones)?state.zones:null;
+  if(!rows) return null;
+  const live=rows.filter(z=>z.is_active);
+  const provs=new Set(live.map(z=>z.province_cn||z.province_en||'').filter(Boolean));
+  const sameday=live.filter(z=>z.zone_type==='gz_district'&&(z.same_day_allowed||Number(z.same_day_surcharge)>0)).length;
+  return {total:rows.length, live:live.length, off:rows.length-live.length, provs:provs.size, sameday};
+}
+function screenDelivery(){
+  if(!state.printer&&!state.printerTried) loadPrinter();
+  loadGeo();
+  const g=state.geo, st=(g&&g.stores)||null;
+  const located = !g ? T('Loading…','加载中…')
+    : !st||!st.total ? T('No stores','没有门店')
+    : T(st.geocoded+' of '+st.total,st.total+' 家中的 '+st.geocoded);
+  const missing = st&&st.missing ? st.missing : 0;
+  const noKey = g && g.tencent_maps_configured===false;
+  const z=dlvZoneFacts();
+  const dlv=(state.cfg&&state.cfg.delivery)||{};
+  const holiday=!!dlv.holidayMode;
+  const hMsg=dlv.holidayMessage||{};
+  const hText=LANG==='en'?(hMsg.en||hMsg.cn||''):(hMsg.cn||hMsg.en||'');
+  const cutoff=dlv.sameDayCutoffMinutes!=null?Number(dlv.sameDayCutoffMinutes):null;
+  return `<div style="padding:16px;display:flex;flex-direction:column;gap:14px">
+    ${holiday?`<div style="display:flex;flex-direction:column;gap:6px;background:var(--brick-tint);border-radius:14px;padding:14px 16px">
+      <div style="display:flex;align-items:center;gap:10px">
+        <span style="flex:none;color:var(--brick);display:flex">${ic('triangle-alert',18)}</span>
+        <span style="font-size:14.5px;font-weight:500;color:var(--brick)">${T('Holiday mode is on — delivery is paused','假日模式已开启 — 配送已暂停')}</span></div>
+      ${hText?`<div style="font-size:13px;color:var(--brick);line-height:1.5;opacity:.9">${T('Shoppers are told','顾客看到')}: “${escAttr(hText)}”</div>`:''}</div>`:''}
+    ${settingsGroupCard([{label:T('Auto-print receipts','自动打印小票'),printer:true}])}
+    ${settingsGroupCard([
+      {label:T('Delivery zones','配送范围'), value: z ? T(z.live+' live','启用 '+z.live) : T('Loading…','加载中…')},
+      {label:T('Provinces covered','覆盖省份'), value: z ? String(z.provs) : T('Loading…','加载中…')},
+      {label:T('Same-day districts','当日达区域'), value: z ? String(z.sameday) : T('Loading…','加载中…')},
+      {label:T('Stores located','门店已定位'), value:located},
+    ].concat(cutoff!=null?[{label:T('Same-day cut-off','当日达截单'),value:T(cutoff+' min before close',cutoff+' 分钟(打烊前)')}]:[])
+     .concat(holiday?[]:[{label:T('Holiday mode','假日模式'),value:T('Off','已关闭')}]))}
+    ${z&&z.off?`<div style="display:flex;align-items:flex-start;gap:11px;background:rgba(201,149,74,0.12);border-radius:12px;padding:12px 14px">
+      <span style="flex:none;color:var(--amber);display:flex;margin-top:1px">${ic('triangle-alert',17)}</span>
+      <span style="font-size:13.5px;color:#8A6425;line-height:1.5">${T(z.off===1?'One zone is switched off, so addresses in it will not match — those customers are told you do not deliver there.':z.off+' zones are switched off, so addresses in them will not match — those customers are told you do not deliver there.', z.off+' 个配送范围已停用，其中的地址无法匹配 — 顾客会被告知不支持配送。')}</span></div>`:''}
+    ${missing?`<div style="display:flex;align-items:flex-start;gap:11px;background:var(--brick-tint);border-radius:12px;padding:12px 14px">
+      <span style="flex:none;color:var(--brick);display:flex;margin-top:1px">${ic('triangle-alert',17)}</span>
+      <span style="font-size:13.5px;color:var(--brick);line-height:1.5">${T(missing===1?'One store has no coordinates, so it can never be the nearest one. Fix it on desktop.':missing+' stores have no coordinates, so they can never be the nearest one. Fix them on desktop.', missing+' 家门店没有坐标，无法参与就近派单。请在电脑端处理。')}</span></div>`:''}
+    ${noKey?noteBar(T('No maps key is configured, so nothing can be located','未配置地图密钥，无法进行定位')):''}
+    ${desktopNote()}</div>`;
+}
+
 /* ==========================================================================
    Setup guide — read-only (desktop: 17-setup-guide.js)
    --------------------------------------------------------------------------
@@ -2181,27 +2243,7 @@ const SUBS={
   categories:{title:['Categories','分类'],render:()=>screenCategories()},
   purchasing:{title:['Purchasing','采购'],render:()=>screenPurchasing()},
   activity:{title:['Stock activity','库存流水'],render:()=>screenActivity()},
-  delivery:{title:['Delivery','配送'],render:()=>{
-    if(!state.printer&&!state.printerTried) loadPrinter();
-    loadGeo();
-    const g=state.geo, st=(g&&g.stores)||null;
-    const located = !g ? T('Loading…','加载中…')
-      : !st||!st.total ? T('No stores','没有门店')
-      : T(st.geocoded+' of '+st.total,st.total+' 家中的 '+st.geocoded);
-    const missing = st&&st.missing ? st.missing : 0;
-    const noKey = g && g.tencent_maps_configured===false;
-    return `<div style="padding:16px;display:flex;flex-direction:column;gap:14px">
-    ${settingsGroupCard([{label:T('Auto-print receipts','自动打印小票'),printer:true}])}
-    ${settingsGroupCard([
-      {label:T('Delivery zones','配送范围'), value: state.zones ? String(state.zones.length) : T('Loading…','加载中…')},
-      {label:T('Stores located','门店已定位'), value:located},
-    ])}
-    ${missing?`<div style="display:flex;align-items:flex-start;gap:11px;background:var(--brick-tint);border-radius:12px;padding:12px 14px">
-      <span style="flex:none;color:var(--brick);display:flex;margin-top:1px">${ic('triangle-alert',17)}</span>
-      <span style="font-size:13.5px;color:var(--brick);line-height:1.5">${T(missing===1?'One store has no coordinates, so it can never be the nearest one. Fix it on desktop.':missing+' stores have no coordinates, so they can never be the nearest one. Fix them on desktop.', missing+' 家门店没有坐标，无法参与就近派单。请在电脑端处理。')}</span></div>`:''}
-    ${noKey?noteBar(T('No maps key is configured, so nothing can be located','未配置地图密钥，无法进行定位')):''}
-    ${desktopNote()}</div>`;
-  }},
+  delivery:{title:['Delivery','配送'],render:()=>screenDelivery()},
   invoices:{title:['Invoices','发票'],render:()=>{
     if(!state.fapiao&&!state.fapiaoTried) loadFapiao();
     const c=state.liveInvoiceCounts;
@@ -3690,6 +3732,18 @@ function sheetCreate(){
        <div style="display:flex;align-items:center;gap:12px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:14px"><span style="flex:1;font-size:15px">${T('Active','启用')}</span>${toggle(state.createActive,"APP.cmd('toggleCreateActive')")}</div></div>
      <div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card)"><button class="cta" onclick="APP.cmd('submitCreate')">${cfg.verb}</button></div></div>`;
 }
+/* Who is signed in, in the operator's own words. The four positions are the
+   ones the backend recognises; anything else is an owner/admin/staff login and
+   is named rather than labelled. */
+const ROLE_NAMES={store_manager:['Store manager','店长'],warehouse:['Warehouse','仓库'],
+  customer_service:['Customer service','客服'],dispatch:['Dispatch','调度'],
+  owner:['Owner','店主'],admin:['Admin','管理员'],staff:['Staff','员工']};
+function ROLE_WORD(me){
+  if(!me) return T('Signed in','已登录');
+  const r=ROLE_NAMES[me.role];
+  if(me.name&&r) return me.name+' · '+T(...r);
+  return me.name || (r?T(...r):T('Signed in','已登录'));
+}
 function sheetOverflow(){
   const row=(icn,label,right,cmd,sep)=>`<button class="row" style="min-height:52px;padding:12px 20px" onclick="${cmd}">
     <span style="color:var(--text-secondary);display:flex;flex:none">${ic(icn)}</span><span style="flex:1;font-size:15px">${label}</span>${right||''}</button>${sep?'<div class="sep" style="margin-left:54px"></div>':''}`;
@@ -3700,7 +3754,12 @@ function sheetOverflow(){
      ${row('search',T('Search','搜索'),`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`,"APP.cmd('openSearch')",true)}
      ${row('languages',T('Language','语言'),val(state.lang==='en'?'English':'中文'),"APP.cmd('toggleLang')",true)}
      ${row('sun-moon',T('Theme','主题'),val(state.theme==='light'?T('Light','浅色'):T('Dark','深色')),"APP.cmd('toggleTheme')",true)}
-     ${row('circle-user-round',T('Account','账户'),val(state.storeName||T('Your store','你的店铺'))+`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`,"APP.cmd('noop')",false)}
+     ${/* This row showed the STORE's name — not an account — behind a chevron
+          wired to noop. It names whoever is signed in, and goes to Settings,
+          which is where Sign out lives. */''}
+     ${row('circle-user-round',T('Account','账户'),
+        val(ROLE_WORD(state.me))+`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`,
+        "APP.cmd('closeOverflow');APP.cmd('push','settings')",false)}
      <div style="padding:16px 20px 6px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Updates','更新')}</div>
      <div style="display:flex;align-items:center;gap:14px;min-height:48px;padding:8px 20px">
        <span style="width:20px;display:flex;justify-content:center;flex:none">${state.live?'<span class="breathe" style="width:9px;height:9px;border-radius:50%;background:var(--accent)"></span>':'<span style="width:9px;height:9px;border-radius:50%;background:var(--border-strong)"></span>'}</span>
@@ -5085,6 +5144,7 @@ async function loadMe(){
     // preference nobody will ever honour is worse than an absent one. A
     // missing key means entitled, so the default is an empty object.
     state.ent=(u.tenant&&u.tenant.entitlements)||{};
+    state.me={name:u.displayName||u.username||null, role:u.role||null};
   }catch(e){}
 }
 async function loadLive(){
