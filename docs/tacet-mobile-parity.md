@@ -107,7 +107,7 @@ desktop is the right home
 | Adjust points | ✅ — with the reason the server requires |
 | Top up wallet | ✅ |
 | Block / unblock | ✅ |
-| Message the customer | ✖ — the one that is genuinely phone-shaped |
+| Message the customer | ✅ — `POST /customers/:id/message`; the desktop then opens the feedback thread, the phone says where the reply will land and refreshes the Inbox |
 | Edit profile, addresses CRUD | ➖ |
 | Force logout, reset test account, CSV export | ➖ |
 
@@ -193,6 +193,7 @@ Ordered by what an operator loses today, not by effort.
 | — | ~~Staff note~~ | | **Not a thing** — `staff_note` is written at order creation only; no endpoint edits it afterwards. Would need backend work. |
 | ~~10~~ | ~~Products: search, category filter, real status chips~~ | | **Done 2026-08-22** — the chips were wired to `noop` and counted only the 50 rows boot had fetched |
 | ~~11~~ | ~~Reviews: hide / restore~~ | | **Done 2026-08-22** — and reviews are keyed by source+id now, not by the writer's name, which two reviews from one customer used to share |
+| ~~12~~ | ~~Message the customer~~ | | **Done 2026-08-22** |
 | 9 | **The remaining feature toggles** | one endpoint each | fapiao, membership, FAQ, feedback inbox, pop-ups, coupon active — each needs its real key confirmed before it is wired. |
 
 Nothing above needs a new endpoint. Every one of them needs the same three

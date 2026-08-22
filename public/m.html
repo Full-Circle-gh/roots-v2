@@ -1440,12 +1440,30 @@ function custWrite(kind, run, okMsg){
   }).catch(e=>{
     state.custBusy=null;
     if(String(e.message)==='auth') return;
-    state.custErr=e.code==='reason_required'?T('A reason is required.','需要填写原因。')
+    state.custErr=e.code==='message_required'?T('Write something first.','请先输入内容。')
+      :e.code==='reason_required'?T('A reason is required.','需要填写原因。')
       :e.code==='bad_delta'?T('That amount will not work. Use a number, and not zero.','金额无效。请填写非零数字。')
       :T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
     render();
   });
 }
+/* The desktop hands off to the feedback thread it just created; the phone has
+   no thread view, so it says where the conversation now lives and refreshes the
+   Inbox behind the sheet rather than claiming more than it did. */
+reg('messageCustomer', ()=>{
+  const c=(state.custDetail&&state.custDetail.customer)||null;
+  if(!c||c.id==null) return;
+  state.ask={title:T('Message this customer','给顾客发消息'),
+    body:T('They get a notification in the mini app. The reply lands in Inbox → Feedback.','顾客会在小程序收到通知。回复会出现在收件箱 → 反馈。'),
+    fields:[{id:'msg',label:T('Message','消息'),multiline:true,placeholder:T('Write a message…','写下消息…')}],
+    confirmLabel:T('Send','发送'),
+    validate:v=>v.msg?null:T('Write something first.','请先输入内容。'),
+    run:v=>custWrite('message', async()=>{
+      await apiWrite('/customers/'+c.id+'/message',{message:v.msg});
+      loadInbox();
+    }, T('Message sent','消息已发送'))};
+  render();
+});
 reg('adjustPoints', ()=>{
   const d=state.custDetail, c=(d&&d.customer)||{}; if(!state.custId) return;
   state.ask={title:T('Adjust points','调整积分'),
@@ -1728,7 +1746,9 @@ function sheetAsk(){
      ${a.fields?`<div style="padding:8px 20px 0;display:flex;flex-direction:column;gap:16px">
        ${a.fields.map(f=>`<label style="display:block">
          <span style="display:block;font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${f.label}</span>
-         <input id="ask-${f.id}" ${f.numeric?'inputmode="text"':''} placeholder="${f.placeholder||''}" value="${f.value!=null?f.value:''}">
+         ${f.multiline
+           ? `<textarea id="ask-${f.id}" placeholder="${f.placeholder||''}" style="min-height:96px;resize:none">${f.value!=null?escAttr(f.value):''}</textarea>`
+           : `<input id="ask-${f.id}" ${f.numeric?'inputmode="text"':''} placeholder="${f.placeholder||''}" value="${f.value!=null?escAttr(f.value):''}">`}
        </label>`).join('')}
        ${state.askErr?`<div style="font-size:14px;color:var(--brick)">${state.askErr}</div>`:''}
      </div>`:''}
@@ -2051,6 +2071,7 @@ function sheetCustomer(){
         <div class="num" style="margin-top:4px;font-size:13px;color:var(--text-secondary)">${c.phone||'—'}</div>
       ${d?`<div style="display:flex;align-items:center;gap:8px;margin-top:16px">
         <button class="btn2" style="flex:1;min-width:0" ${state.custBusy?'disabled':''} onclick="APP.cmd('adjustPoints')">${state.custBusy==='points'?T('Saving…','保存中…'):T('Adjust points','调整积分')}</button>
+        <button class="btn2" style="width:44px;padding:0;flex:none" ${state.custBusy?'disabled':''} onclick="APP.cmd('messageCustomer')" aria-label="${T('Message','发消息')}">${ic('message-square-text',20)}</button>
         <button class="btn2" style="width:44px;padding:0;flex:none" ${state.custBusy?'disabled':''} onclick="APP.cmd('adjustWallet')" aria-label="${T('Adjust wallet','调整钱包')}">${ic('wallet',20)}</button>
         <button class="btn2" style="width:44px;padding:0;flex:none" ${state.custBusy?'disabled':''} onclick="APP.cmd('toggleBlock')" aria-label="${c.is_blocked?T('Unblock','解除封禁'):T('Block','封禁')}">${ic(c.is_blocked?'lock-open':'ban',20)}</button>
       </div>`:''}
