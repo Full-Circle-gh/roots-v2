@@ -276,7 +276,7 @@ const state = {
   custId:null, custDetail:null, prodView:'catalogue',
   prodQ:'', prodStatus:'all', prodCat:'all', catalogueTried:false, catalogueLoading:false,
   overflow:false, search:false, detailId:null, detailActions:false, productSku:null,
-  orderBusy:null, orderErr:null, replyBusy:false, replyErr:null,
+  orderBusy:null, orderErr:null, replyBusy:false, replyErr:null, revBusy:null, revErr:null,
   printer:null, printerLoading:false, printerBusy:false, printerErr:null,
   prodStores:null, prodStockReady:false, prodBusy:false, prodErr:null,
   cfg:null, setup:null, zones:null, mirror:null, mirrorLoading:null, mirrorMode:null,
@@ -458,9 +458,10 @@ reg('prodSearch', v=>{ const el=document.getElementById('mProdQ');
 reg('prodClearQ', ()=>{ state.prodQ=''; state.prodStatus='all'; state.prodCat='all'; render(); });
 reg('inboxSeg', s=>{ state.inboxSeg=s; render(); });
 reg('openReply', who=>{ state.reply=who; state.reviewsSeen.add(who); state.replyErr=null; state.replyBusy=false; render(); });
+const findReview=k=>DB.reviews.find(x=>revKey(x)===k)||DB.feedback.find(x=>revKey(x)===k);
 reg('sendReplyText', t=>{
   const text=String(t||'').trim();
-  const r=DB.reviews.find(x=>x.cust[0]===state.reply)||DB.feedback.find(x=>x.cust[0]===state.reply);
+  const r=findReview(state.reply);
   if(!text){ state.replyErr=T('Write something first.','请先输入内容。'); render(); return; }
   if(!r||r.id==null){ state.replyErr=T('This one cannot be replied to from the phone yet.','暂时无法在手机端回复。'); render(); return; }
   if(state.replyBusy) return;
@@ -481,7 +482,31 @@ reg('sendReplyText', t=>{
     render();
   });
 });
-reg('markAllReviewsRead', ()=>{ DB.reviews.forEach(r=>state.reviewsSeen.add(r.cust[0])); render(); });
+reg('markAllReviewsRead', ()=>{ DB.reviews.forEach(r=>state.reviewsSeen.add(revKey(r))); render(); });
+/* Hiding takes the review off the product page, so it asks first. Restoring
+   puts back what was already public, so it does not. */
+reg('toggleReviewVisible', key=>{
+  const r=DB.reviews.find(x=>revKey(x)===key); if(!r||r.id==null) return;
+  const hidden=r.visible===false;
+  if(hidden){ revWrite(r,true); return; }
+  state.ask={title:T('Hide this review?','隐藏这条评价？'),
+    body:T('It stops showing on the product page. Nothing is deleted — you can restore it from here.','评价将不再显示在商品页。内容不会删除 — 可随时在此恢复。'),
+    confirmLabel:T('Hide','隐藏'), danger:true, run:()=>revWrite(r,false)};
+  render();
+});
+function revWrite(r,visible){
+  if(state.revBusy) return;
+  state.revBusy=revKey(r); state.revErr=null; render();
+  apiWrite('/reviews/'+r.id,{is_visible:visible,source:r.source||'real'},'PATCH').then(()=>{
+    r.visible=visible; state.revBusy=null; render();
+    showToast(visible?T('Review restored','评价已恢复'):T('Review hidden','评价已隐藏'));
+  }).catch(e=>{
+    state.revBusy=null;
+    if(String(e.message)==='auth') return;
+    state.revErr=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    render();
+  });
+}
 reg('closeReply', ()=>{ state.reply=null; render(); });
 
 reg('create', k=>{ state.createKind=k; state.createValue=10; state.createActive=true; render(); });
@@ -537,6 +562,11 @@ function nothingYet(title,msg){
 }
 /* storefront_config comes back as one nested object; these screens read their
    own corner of it rather than shipping sample content. */
+/* A review is identified by source+id, never by the writer's name: two
+   reviews from one customer shared a key, so marking one read marked both
+   and Reply opened whichever sat first in the list. Sample rows have no id,
+   so they keep falling back to the name. */
+const revKey=r=>r.key||r.cust[0];
 const escAttr=v=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const cfgGet=(path,dflt)=>{ let v=state.cfg; for(const k of String(path).split('.')){ if(v==null) return dflt; v=v[k]; } return v==null?dflt:v; };
 const desktopNote=()=>`<div style="text-align:center;font-size:12.5px;color:var(--text-secondary)">${T('Best edited on desktop','建议在电脑端编辑')}</div>`;
@@ -741,21 +771,32 @@ function screenInbox(){
   const seg=state.inboxSeg;
   const segBtn=(k,label)=>`<button onclick="APP.cmd('inboxSeg','${k}')" style="flex:1;padding:8px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;
     background:${seg===k?'var(--surface-card)':'transparent'};color:${seg===k?'var(--text-primary)':'var(--text-secondary)'};box-shadow:${seg===k?'0 1px 3px rgba(17,26,43,.08)':'none'}">${label}</button>`;
+  const smallBtn=(label,cmd,busy)=>`<button ${busy?'disabled':''} onclick="${cmd}" style="font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 14px;cursor:pointer;font-family:inherit;${busy?'opacity:.5':''}">${label}</button>`;
   const item=(r,trackSeen)=>{
-    const unseen=trackSeen && !state.reviewsSeen.has(r.cust[0]);
-    return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:8px">
+    const k=revKey(r);
+    const unseen=trackSeen && !state.reviewsSeen.has(k);
+    const hidden=r.visible===false;
+    const busy=state.revBusy===k;
+    return `<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:8px${hidden?';opacity:.6':''}">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
         <span style="display:flex;align-items:center;gap:8px;min-width:0">
         ${unseen?`<span style="width:7px;height:7px;border-radius:50%;background:var(--text-primary);flex:none" aria-hidden="true"></span>`:''}
         <span style="font-size:15px;font-weight:500">${T(...r.cust)}</span>
         ${r.rating?`<span class="num" style="display:flex;align-items:center;gap:3px;color:var(--text-secondary);font-size:13px">${ic('star',14)} ${r.rating}</span>`:''}</span>
-        ${pill(r.kind,T(...r.status))}</div>
+        ${hidden?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('Hidden','已隐藏')}</span>`:pill(r.kind,T(...r.status))}</div>
+      ${r.product?`<div style="font-size:12.5px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...r.product)}</div>`:''}
       <div style="font-size:14px;line-height:1.55;color:var(--text-secondary)">${T(...r.text)}</div>
+      ${r.reply?`<div style="border-left:2px solid var(--border-default);padding:2px 0 2px 10px;display:flex;flex-direction:column;gap:3px">
+        <span class="eyebrow">${T('Your reply','商家回复')}</span>
+        <span style="font-size:13.5px;line-height:1.55">${String(r.reply).replace(/</g,'&lt;')}</span></div>`:''}
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:2px">
         <span style="font-size:12px;color:var(--text-secondary)">${T(...r.time)}</span>
-        <button onclick="APP.cmd('openReply','${r.cust[0]}')" style="font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 14px;cursor:pointer;font-family:inherit">${T('Reply','回复')}</button></div></div>`;
+        <span style="display:flex;align-items:center;gap:8px;flex:none">
+          ${r.stream==='review'&&r.id!=null?smallBtn(busy?T('Saving…','保存中…'):(hidden?T('Restore','恢复'):T('Hide','隐藏')),`APP.cmd('toggleReviewVisible','${k}')`,busy):''}
+          ${smallBtn(r.reply?T('Edit reply','编辑回复'):T('Reply','回复'),`APP.cmd('openReply','${k}')`,false)}
+        </span></div></div>`;
   };
-  const unseenCount=DB.reviews.filter(r=>!state.reviewsSeen.has(r.cust[0])).length;
+  const unseenCount=DB.reviews.filter(r=>!state.reviewsSeen.has(revKey(r))).length;
   let body;
   if(seg==='reviews') body=DB.reviews.map(r=>item(r,true)).join('');
   else if(featOn('feedback')) body=DB.feedback.length?DB.feedback.map(r=>item(r,false)).join(''):emptyState(T('Inbox zero','已清空'),T('No open feedback.','没有待处理反馈。'));
@@ -769,7 +810,11 @@ function screenInbox(){
       <div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px;flex:1">
       ${segBtn('reviews',T('Reviews','评价'))}${segBtn('feedback',T('Feedback','反馈'))}</div>
       ${seg==='reviews'&&unseenCount>0?`<button onclick="APP.cmd('markAllReviewsRead')" style="font-size:13px;font-weight:500;color:var(--text-primary);background:none;border:none;cursor:pointer;font-family:inherit;white-space:nowrap;padding:6px 2px">${T('Mark all read','全部已读')}</button>`:''}
-    </div>${body}</div>`;
+    </div>
+    ${state.revErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick)">${state.revErr}</span></div>`:''}
+    ${body}</div>`;
 }
 
 /* ==========================================================================
@@ -1776,7 +1821,7 @@ function sheetProduct(){
        <button class="btn2" style="width:100%" ${state.prodBusy?'disabled':''} onclick="APP.cmd('saveProduct')">${state.prodBusy?T('Saving…','保存中…'):T('Save','保存')}</button></div></div>`;
 }
 function sheetReply(){
-  const r=DB.reviews.find(x=>x.cust[0]===state.reply)||DB.feedback.find(x=>x.cust[0]===state.reply)||{cust:[state.reply,state.reply],text:['','']};
+  const r=findReview(state.reply)||{cust:[state.reply,state.reply],text:['','']};
   return `<div class="scrim" style="z-index:45" onclick="APP.cmd('closeReply')"></div>
    <div class="sheet" style="top:150px;z-index:46;overflow:hidden">
      <div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
@@ -2095,7 +2140,7 @@ const TAB_META={home:{en:'Home',zh:'概览',icon:'house'},orders:{en:'Orders',zh
    turns arriving work into an alarm, and a record arriving is the CUSTOMER
    acting, not the system: it does not earn Dusk either. */
 function unseenOrders(){ return DB.orders.some(o=>o.isNew); }
-function unseenReviews(){ return DB.reviews.filter(r=>!state.reviewsSeen.has(r.cust[0])).length; }
+function unseenReviews(){ return DB.reviews.filter(r=>!state.reviewsSeen.has(revKey(r))).length; }
 function tabDot(k){ return k==='orders' ? unseenOrders() : k==='more' ? unseenReviews()>0 : false; }
 /* The bar is the same on every screen and CLOSED to page controls: nothing here
    names the page and no page adds a button to it. Identity lives in the page,
@@ -2346,8 +2391,15 @@ function mapProduct(r){
 }
 function mapReview(r){
   const replied=r.reply&&String(r.reply).trim();
-  return {id:r.id, source:r.source||'real', stream:'review', reply:r.reply||'', cust:[r.customer_name||'Customer',r.customer_name||'顾客'], rating:r.rating?Number(r.rating).toFixed(1):'',
+  const src=r.source||'real';
+  const pe=r.product_name_en||r.product_name_cn||'', pc=r.product_name_cn||r.product_name_en||'';
+  return {key:src+':'+r.id, id:r.id, source:src, stream:'review', reply:r.reply||'',
+    cust:[r.customer_name||'Customer',r.customer_name||'顾客'], rating:r.rating?Number(r.rating).toFixed(1):'',
     status:replied?['Replied','已回复']:['New','新'], kind:replied?'clear':'success',
+    // A review is about a product; the phone showed only who wrote it, so an
+    // operator could not tell which shelf a one-star was aimed at.
+    product:pe?[pe,pc]:null,
+    visible: r.is_visible==null?true:!!Number(r.is_visible),
     text:[r.comment||'',r.comment||''], time:[hhmm(r.created_at)||'',hhmm(r.created_at)||'']};
 }
 
@@ -2401,7 +2453,7 @@ function mapBroadcast(r){
 }
 function mapFeedback(r){
   const open=r.needs_reply||!r.replied;
-  return {id:r.id, stream:'feedback', cust:[r.customer_name||r.nickname||'Customer',r.customer_name||r.nickname||'顾客'],
+  return {key:'fb:'+r.id, id:r.id, stream:'feedback', cust:[r.customer_name||r.nickname||'Customer',r.customer_name||r.nickname||'顾客'],
     status:open?['Open','待处理']:['Replied','已回复'], kind:open?'success':'clear',
     text:[r.message||r.last_body||'',r.message||r.last_body||''], time:[hhmm(r.created_at)||'',hhmm(r.created_at)||'']};
 }

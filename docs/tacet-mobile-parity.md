@@ -130,7 +130,11 @@ desktop is the right home
 |---|---|
 | Two lists, unseen marking | ✅ |
 | Reply to a review / feedback | ✅ |
-| Hide / show a review | ✖ |
+| Hide / show a review | ✅ — `PATCH /reviews/:id {is_visible, source}`; hiding asks first, restoring does not |
+| The product a review is about | ✅ — the phone showed only who wrote it |
+| The live merchant reply, inline | ✅ — and the button reads "Edit reply" once there is one |
+| Remove a seeded review | ➖ — a permanent delete, and only synthetic rows can take it. Desktop |
+| Filter by rating / visibility / product | ➖ |
 
 ### Sales, Delivery, Settings
 
@@ -188,6 +192,7 @@ Ordered by what an operator loses today, not by effort.
 | — | ~~Edit ship-to~~ | | **Decided 2026-08-22: stays on desktop.** Seven fields with Chinese address matching behind them, and a mistyped district is a failed delivery. Not a phone job for now. |
 | — | ~~Staff note~~ | | **Not a thing** — `staff_note` is written at order creation only; no endpoint edits it afterwards. Would need backend work. |
 | ~~10~~ | ~~Products: search, category filter, real status chips~~ | | **Done 2026-08-22** — the chips were wired to `noop` and counted only the 50 rows boot had fetched |
+| ~~11~~ | ~~Reviews: hide / restore~~ | | **Done 2026-08-22** — and reviews are keyed by source+id now, not by the writer's name, which two reviews from one customer used to share |
 | 9 | **The remaining feature toggles** | one endpoint each | fapiao, membership, FAQ, feedback inbox, pop-ups, coupon active — each needs its real key confirmed before it is wired. |
 
 Nothing above needs a new endpoint. Every one of them needs the same three
