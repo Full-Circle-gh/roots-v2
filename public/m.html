@@ -510,6 +510,39 @@ reg('prodCat', v=>{ state.prodCat=v; render(); });
    trimming mid-word would eat the space the operator just typed. */
 reg('prodSearch', v=>{ const el=document.getElementById('mProdQ');
   state.prodQ=String(v||''); state.focus={id:'mProdQ',pos:el?el.selectionStart:null}; render(); });
+/* On the shop, or not. The desktop puts this switch on every card because it is
+   the one product decision that is urgent — something is wrong with a line and
+   it has to stop selling NOW — and that is a phone job if anything is. It flips
+   every size of a family at once, the way the desktop's does, and puts the
+   switch back if the server refuses. */
+reg('toggleShop', ids=>{
+  const list=String(ids).split(',').map(Number).filter(Boolean);
+  if(!list.length||state.prodBusy) return;
+  const rows=list.map(id=>(DB.products||[]).find(p=>p._id===id)).filter(Boolean);
+  if(!rows.length) return;
+  const next=!rows.some(p=>p.pub);
+  state.prodBusy='shop'+list[0]; state.prodErr=null;
+  rows.forEach(p=>{ p.pub=next; reKindProduct(p); });   // optimistic
+  render();
+  Promise.all(list.map(id=>apiWrite('/products/'+id,{is_published:next?1:0},'PATCH')))
+    .then(()=>{ state.prodBusy=null; render(); showToast(next?T('On the shop','已上架'):T('Off the shop','已下架')); })
+    .catch(e=>{
+      rows.forEach(p=>{ p.pub=!next; reKindProduct(p); });   // the switch must never lie
+      state.prodBusy=null;
+      if(String(e.message)==='auth') return;
+      state.prodErr=T('That did not save. The product is unchanged.','没有保存成功。产品状态未变。');
+      render();
+    });
+});
+/* The status buckets are derived, so a published flag that changes has to
+   re-derive them or the pill and the switch disagree on the same card. */
+function reKindProduct(p){
+  const low=Number(cfgGet('inventory.lowStockThreshold',5))||5;
+  if(!p.pub){ p.kind='draft'; p.status=['Draft','草稿']; }
+  else if(!p.supplier&&p.stock<=0){ p.kind='off'; p.status=['Out','缺货']; }
+  else if(!p.supplier&&p.stock<=low){ p.kind='restock'; p.status=['Low','库存低']; }
+  else { p.kind='on'; p.status=['Live','在售']; }
+}
 reg('prodClearQ', ()=>{ state.prodQ=''; state.prodStatus='all'; state.prodCat='all'; render(); });
 /* The Recap says what happened while you were away; "Show the work" is the
    promise that it is not withholding the rest. Same feed the desktop's fold
@@ -1277,16 +1310,14 @@ const SUBS={
       ${cats.length>1?`<div style="padding:0 0 4px">${chipRow(cats,state.prodCat,'prodCat')}</div>`:''}
       <div style="padding:8px 16px 24px;display:flex;flex-direction:column;gap:10px">
         ${noteBar(T('Quick edits here · full authoring on desktop','这里可快速编辑 · 完整编辑请用电脑端'))}
-        ${state.catalogueLoading&&!rows.length?`<div style="padding:32px 0;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading the catalogue…','正在加载目录…')}</div>`:''}
+        ${state.prodErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+        <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+        <span style="font-size:14px;color:var(--brick)">${state.prodErr}</span></div>`:''}
+      ${state.catalogueLoading&&!rows.length?`<div style="padding:32px 0;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading the catalogue…','正在加载目录…')}</div>`:''}
         ${!state.catalogueLoading&&!rows.length&&narrowed?`<div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:40px 24px;text-align:center">
           <div style="font-size:18px;font-weight:500">${T('No products match','没有匹配的产品')}</div>
           <button class="btn2" onclick="APP.cmd('prodClearQ')">${T('Clear the filters','清除筛选')}</button></div>`:''}
-        ${rows.map(p=>`<button class="card" onclick="APP.cmd('openProduct','${p.sku}')" style="display:flex;flex-direction:column;gap:8px;text-align:left;cursor:pointer;padding:14px">
-          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
-            <span style="display:flex;flex-direction:column;min-width:0"><span style="font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...p.name)}</span>
-            <span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${p.sku}</span></span>
-            <span class="num" style="font-size:16px;font-weight:500;flex:none">${p.price}</span></div>
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="num" style="font-size:12.5px;color:var(--text-secondary)">${T(...p.stockLabel)}</span>${pill(p.kind,T(...p.status))}</div></button>`).join('')}
+        ${prodUnits(rows).map(productCard).join('')}
         ${L&&rows.length&&rows.length!==P.length?`<div style="text-align:center;padding:4px 0 0"><span class="num" style="font-size:13px;color:var(--text-secondary)">${T(rows.length+' of '+P.length, P.length+' 件中的 '+rows.length)}</span></div>`:''}
       </div></div>`;
   }},
@@ -3070,6 +3101,69 @@ function prodCatName(){
   const c=prodCategories().find(x=>x.key===k);
   return c?c.en:null;
 }
+/* One catalogue card. The desktop's is a photograph with its marks on it, a
+   name, its sizes, and the switch that takes it off the shop; the phone's was a
+   line of text. A picture is what a person recognises a product by and what a
+   small screen is best at, so it leads here too. */
+function productCard(u){
+  const p=u.p;
+  const members=u.group?u.members:[p];
+  const anyOut=members.filter(m=>m.pub&&m.stock<=0).length;
+  // A family shows the group OWNER's photo, and the owner is whichever size was
+  // created first — not necessarily the one anybody photographed. Fall back to
+  // any sibling that has one, so a family is never a blank square because of
+  // which row happens to own the group.
+  const img=p.img||((members.find(m=>m.img)||{}).img)||'';
+  const busy=state.prodBusy==='shop'+members[0]._id;
+  const on=members.some(m=>m.pub);
+  const ids=members.map(m=>m._id).join(',');
+  // A family's price is a range when its sizes differ, and one figure when they
+  // do not — quoting the cheapest size as THE price is how a shop undercharges.
+  const lo=Math.min.apply(null,members.map(m=>m.priceNum||0));
+  const hi=Math.max.apply(null,members.map(m=>m.priceNum||0));
+  const priceTxt = (u.group&&hi>lo) ? money(CUR,lo)+'–'+money(CUR,hi) : p.price;
+  const marks=[];
+  if(u.group) marks.push({t:T(members.length+' sizes',members.length+' 规格'),sev:'muted'});
+  if(p.bundle) marks.push({t:T('Bundle','套装'),sev:'muted'});
+  if(anyOut&&u.group) marks.push({t:T(anyOut+' out of stock',anyOut+' 项缺货'),sev:'amber'});
+  return `<div class="card" style="display:flex;gap:12px;padding:12px;align-items:flex-start">
+    <button onclick="APP.cmd('openProduct','${escAttr(p.sku)}')" style="display:flex;gap:12px;flex:1;min-width:0;text-align:left;cursor:pointer;background:none;border:none;padding:0;font-family:inherit;color:var(--text-primary)">
+      <span style="width:56px;height:56px;flex:none;border-radius:10px;overflow:hidden;background:var(--surface-raised);border:1px solid var(--border-default);display:flex;align-items:center;justify-content:center;color:var(--text-secondary)${img?`;background-image:url('${String(img).replace(/'/g,'%27')}');background-size:cover;background-position:center;border-color:transparent`:''}">${img?'':ic('shopping-bag',22)}</span>
+      <span style="flex:1;min-width:0;display:flex;flex-direction:column;gap:4px">
+        <span style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
+          <span style="font-size:15px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...p.name)}</span>
+          <span class="num" style="font-size:15px;font-weight:500;flex:none">${priceTxt}</span></span>
+        <span class="num" style="font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${
+          u.group?members.map(m=>escAttr(m.vLabel||m.sku)).join(' · '):escAttr(p.sku)}</span>
+        <span style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
+          ${pill(p.kind,T(...p.status))}
+          ${marks.map(m=>`<span class="pill" style="background:${m.sev==='amber'?'var(--amber-tint)':PILL.muted[0]};color:${m.sev==='amber'?'#8A6425':PILL.muted[1]}">${m.t}</span>`).join('')}
+          ${u.group?'':`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${T(...p.stockLabel)}</span>`}
+        </span></span></button>
+    <span style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:none;padding-top:2px">
+      ${busy?`<span style="font-size:11px;color:var(--text-secondary);width:44px;text-align:center">${T('…','…')}</span>`
+            :toggle(on,`APP.cmd('toggleShop','${ids}')`)}
+      <span style="font-size:10.5px;color:var(--text-secondary);white-space:nowrap">${on?T('On shop','已上架'):T('Off shop','未上架')}</span></span>
+  </div>`;
+}
+/* _paUnits, on a phone: siblings of one variant group collapse into a single
+   card carrying its members. A family of one is just a product. */
+function prodUnits(rows){
+  const byGid=new Map();
+  rows.forEach(p=>{ if(!p.gid) return; if(!byGid.has(p.gid)) byGid.set(p.gid,[]); byGid.get(p.gid).push(p); });
+  const units=[], seen=new Set();
+  rows.forEach(p=>{
+    if(!p.gid){ units.push({group:false,p}); return; }
+    if(seen.has(p.gid)) return;
+    seen.add(p.gid);
+    const members=byGid.get(p.gid).slice().sort((a,b)=>
+      (a.vSort-b.vSort) || String(a.vLabel).localeCompare(String(b.vLabel)) || (a._id-b._id));
+    if(members.length<2){ units.push({group:false,p:members[0]}); return; }
+    const rep=members.find(m=>m._id===p.gid)||members[0];
+    units.push({group:true,p:rep,members});
+  });
+  return units;
+}
 const PROD_STATUS_KIND={live:'on',draft:'draft',low:'restock',out:'off'};
 function prodFiltered(){
   const q=String(state.prodQ||'').trim().toLowerCase();
@@ -3783,6 +3877,19 @@ function mapProduct(r){
   else if(!supplier&&stock<=low){ kind='restock'; st=['Low','库存低']; }
   else { kind='on'; st=['Live','在售']; }
   return {_id:r.id, name:[r.name_en||r.name_cn||'—',r.name_cn||r.name_en||'—'],sku:r.sku?('SKU '+r.sku):('#'+r.id),
+    // The photo. The desktop's catalogue is a grid of pictures and the phone's
+    // was a list of names — which is the wrong way round, because a picture is
+    // exactly what a small screen is good at and what a person recognises a
+    // product by.
+    img:r.image_data||r.image_url||'',
+    // Variant family. A product sold in three sizes is THREE rows here and ONE
+    // card on the desktop, so the phone's catalogue read as three unrelated
+    // products with almost the same name.
+    gid:r.variant_group_id||null,
+    vLabel:String(r.variant_label||'').trim()||r.size||'',
+    vSort:r.variant_sort!=null?Number(r.variant_sort):0,
+    bundle:!!(r.is_bundle||r.bundle_mode==='prepacked'),
+    designed:!!r.has_blocks,
     price:money(CUR,price), priceNum:Number(price)||0, stock, stockLabel:[stock+' in stock',('库存 '+stock)], status:st, kind,
     pub, supplier, cat:String(r.top_category||r.category||'').trim(),
     // One lowercased haystack per product, built once: name in both languages

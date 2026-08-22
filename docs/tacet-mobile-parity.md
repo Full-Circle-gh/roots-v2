@@ -139,6 +139,21 @@ desktop is the right home
 | Remove a seeded review | ➖ — a permanent delete, and only synthetic rows can take it. Desktop |
 | Filter by rating / visibility / product | ➖ |
 
+### Products — the second sweep
+
+| Desktop card | Phone |
+|---|---|
+| **The product photo** | ✅ — the desktop's catalogue is a grid of pictures; the phone's was a list of names, which is the wrong way round for a small screen |
+| **Variant families collapsed to one card** | ✅ — a product in three sizes was three near-identical rows. Now one card with its size chips, a price *range* when the sizes differ, and "1 out of stock" when a live size is empty |
+| ↳ family photo inherited from a sibling | ✅ — the group owner is whichever size was created first, not necessarily the one anyone photographed |
+| **On shop / Off shop switch** | ✅ — flips every size of a family at once, and puts itself back if the server refuses. The one product decision that is genuinely urgent |
+| Bundle mark | ✅ |
+| Draft mark | ✅ |
+| Designed / Plain mark | ➖ — whether a product has authored page sections is an authoring fact, and authoring is desktop |
+| Duplicate | ➖ |
+| Drag-to-reorder, bulk edit, export | ➖ |
+| Full product editor (photos, description, badge, category, thresholds) | ➖ decided: desktop. Price and per-store stock are the phone's two edits |
+
 ### Media library (`07-content-billing.js`)
 
 | Desktop capability | Phone |
