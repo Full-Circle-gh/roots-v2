@@ -152,4 +152,15 @@ CASES.push(['an inbox that really is empty', `state.revLoaded=true; DB.reviews=[
   ['and stops loading',    `!txt('content').includes('Loading')`],
 ]]);
 
+// The desktop prints "0%" for the returning rate on purpose, and says why in a
+// comment: an absent figure makes the reader guess between "none", "not
+// loaded" and "broken", and only one of those is true. The phone went null on
+// a shop with no buyers, which dropped the whole clause out of the line.
+CASES.push(['a shop where nobody has come back', `state.custMeta={all:12,buyers:5,returnRate:0,never:7};
+  state.customers=[]; state.custLoaded=true; APP.cmd('tab','customers');`, [
+  ['0% is printed',       `txt('content').includes('0% returning')`],
+  ['beside the buyers',   `txt('content').includes('5 buyers')`],
+  ['and the never-ordered', `txt('content').includes('7 never ordered')`],
+]]);
+
 run('home', CASES);

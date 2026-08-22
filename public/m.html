@@ -4396,6 +4396,7 @@ function custFiltered0(){ return (state.custSeg||'all')==='all'&&(state.custTier
 function custPulse(){
   const m=state.custMeta||{}; const bits=[];
   if(m.buyers!=null) bits.push(T(m.buyers+' buyers', m.buyers+' 位买家'));
+  // 0% is printed, not omitted — see loadCustomerMeta.
   if(m.returnRate!=null) bits.push(T(m.returnRate+'% returning', m.returnRate+'% 复购'));
   if(m.never!=null) bits.push(T(m.never+' never ordered', m.never+' 位未下单'));
   return bits.join(' · ');
@@ -5026,7 +5027,13 @@ async function loadCustomerMeta(){
     if(j&&j.segments) Object.assign(m,j.segments);
     if(j&&j.returning&&j.returning.buyers!=null){
       m.buyers=j.returning.buyers;
-      m.returnRate=j.returning.buyers?Math.round((j.returning.returners||0)/j.returning.buyers*100):null;
+      /* Zero is a real answer. The desktop prints "0%" here on purpose and
+         says why: an absent figure makes the reader guess between "none",
+         "not loaded" and "broken", and only one of those is true. This used
+         to go null on a shop with no buyers, which dropped the whole clause
+         out of the line. */
+      m.returnRate=Math.round(((j.returning.returners||0)/(j.returning.buyers||1))*100);
+      if(!j.returning.buyers) m.returnRate=0;
       if(j.customers_on_file!=null) m.never=Math.max(0,j.customers_on_file-j.returning.buyers);
     }
     state.custMeta=m; render();
