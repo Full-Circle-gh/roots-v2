@@ -410,4 +410,33 @@ CASES.push(['ignoring says what it does', GZ + `APP.cmd('gzPickup',9,'ignore');`
   ['and says gzgrocery gets corrected', `sheetText().includes('pushed back to gzgrocery')`],
 ]]);
 
+// ── What actually goes over the wire ──────────────────────────────────────
+// After APP.cmd was found forwarding one argument to a two-argument handler —
+// a write that reported success and sent nothing — the claims a screen makes
+// about its own writes are worth pinning to the request, not the toast.
+const STUB = `window.__sent=[];
+  window.fetch=function(u,o){ window.__sent.push({u:String(u), m:(o&&o.method)||'GET', body:(o&&o.body)||null});
+    return Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve({success:true})}}); };`;
+
+CASES.push(['switching a pop-up on stamps updated_at', POPUPS + STUB + `APP.cmd('togglePopup','p4');`, [
+  // The mini app keys a dismissal on `popup_seen:<id>:<updated_at>`. Without
+  // the bump, switching one back on shows it to nobody who already dismissed
+  // it — the switch looks like it worked and reaches almost no one.
+  ['a PUT went to /config',   `window.__sent.some(function(r){return r.u.indexOf('/config')>=0 && r.m==='PUT'})`],
+  ['carrying the whole list', `window.__sent.some(function(r){return (r.body||'').indexOf('popups.list')>=0})`],
+  ['with that pop-up now on', `window.__sent.some(function(r){ var b=r.body||''; var i=b.indexOf('"id":"p4"'); return i>=0 && b.slice(i,i+300).indexOf('"enabled":true')>=0; })`],
+  ['and its updated_at stamped', `window.__sent.some(function(r){ var b=r.body||''; var i=b.indexOf('"id":"p4"'); return i>=0 && b.slice(i,i+300).indexOf('"updated_at"')>=0; })`],
+  ['leaving the others alone',   `window.__sent.some(function(r){ var b=r.body||''; var i=b.indexOf('"id":"p1"'); return i>=0 && b.slice(i,i+300).indexOf('"updated_at"')<0; })`],
+]]);
+
+CASES.push(['applying a flagged pickup posts to apply, not ignore', GZ + STUB + `APP.cmd('gzPickup',9,'apply'); APP.cmd('askRun','');`, [
+  ['it posts',            `window.__sent.some(function(r){return r.u.indexOf('/guanyi/pickups/9/apply')>=0})`],
+  ['and never to ignore', `!window.__sent.some(function(r){return r.u.indexOf('/ignore')>=0})`],
+]]);
+
+CASES.push(['ignoring posts to ignore', GZ + STUB + `APP.cmd('gzPickup',9,'ignore'); APP.cmd('askRun','');`, [
+  ['it posts',           `window.__sent.some(function(r){return r.u.indexOf('/guanyi/pickups/9/ignore')>=0})`],
+  ['and never to apply', `!window.__sent.some(function(r){return r.u.indexOf('/apply')>=0})`],
+]]);
+
 run('operator screens', CASES);

@@ -774,6 +774,24 @@ the card was right — the bug lived entirely in the request. The dispatcher is
 variadic now, the sweep fails on any `APP.cmd` call site passing arguments it
 cannot forward, and the voting probe stubs `fetch` and asserts the body.
 
+### Reading the request, not the toast
+
+`APP.cmd` taught something worth generalising: a write can report success and
+send nothing, and no amount of reading the screen will find it. Three probes
+now stub `fetch` and assert what actually goes over the wire:
+
+| Write | What is pinned |
+|---|---|
+| Poll open / close | the body carries `status`, and is never `{}` |
+| Pop-up on / off | the whole list goes, that pop-up is `enabled`, **its `updated_at` is stamped and the others' are not** |
+| Flagged pickup Apply / Ignore | it posts to the endpoint it says it does, and never the other one |
+| **Mark paid** | `status: paid` **and the tender that was picked** — the sheet promises "recording the tender keeps the day's takings split correctly", so a dropped `pay_method` would book an unknown tender under a green toast |
+| Refund payout | the method the money actually went back by |
+| Advance | the next status, never an empty patch |
+| Cancelling a tender sheet | **no request at all** |
+
+`scripts/test_mobile_orders.js` — 11 assertions, 5 cases.
+
 ## 4. Open questions
 
 Not gaps — decisions that are the shop's to make, not this file's.
