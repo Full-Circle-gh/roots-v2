@@ -200,10 +200,16 @@ router.get('/api/retail-admin/eleme/products', requireRetailAdmin, (req, res) =>
        ORDER BY p.name_cn, p.variant_group_id, p.id
     `).all();
     const maps = db.prepare(`
-      SELECT product_id, retail_store_id, store_code, extend_code, eleme_name,
-             spec_id, spec_name,
-             sync_enabled, last_pushed_qty, last_pushed_at
-        FROM eleme_product_map
+      SELECT m.product_id, m.retail_store_id, m.store_code, m.extend_code, m.eleme_name,
+             m.spec_id, m.spec_name,
+             m.sync_enabled, m.last_pushed_qty, m.last_pushed_at,
+             -- How many sizes the mapped listing holds. Drives the Multi-size
+             -- filter and the "pick a size" flag: on Eleme a size CAN be
+             -- targeted, so a multi-size listing with none picked is a real
+             -- gap, not just a note.
+             (SELECT json_array_length(c.specs) FROM eleme_catalogue_cache c
+               WHERE c.store_code = m.store_code AND c.name = m.eleme_name) AS specCount
+        FROM eleme_product_map m
     `).all();
     const idx = {};
     for (const m of maps) { (idx[m.product_id] = idx[m.product_id] || {})[m.store_code] = m; }

@@ -10,6 +10,8 @@
   let _enabled  = false;
   let _initiated = false;
   let _lastStores = [];  // last /status.stores, so the status line can repaint
+  let _elFilter = 'all';  // chip filter: all | att | ok | size
+  let _elStore  = '';     // store filter: '' = all stores
   let _catalogue = {}; // storeCode -> [{name, stock, updated_at}], see elLoadCatalogue
 
   // ── Entry point ────────────────────────────────────────────────────────────
@@ -55,7 +57,8 @@
   // ── Config / feature switch ─────────────────────────────────────────────────
   // Eleme is browser automation (lib/eleme-browser.js), not OAuth — there is no
   // server-side app key to configure, so this note is always the same "link a
-  // shop id, then log in once" instruction (see elRenderStores' session status).
+  // shop id, then log in once" instruction — the notice in elRenderHead()
+  // carries it now, per store, only when that store needs it.
   window.elLoadConfig = async function () {
     try {
       const r = await api('/api/retail-admin/eleme/config');
@@ -92,103 +95,144 @@
     try {
       const r = await api('/api/retail-admin/eleme/stores');
       _stores = r.data || [];
-      elRenderStoreCards(_lastStores);
+      elRenderHead();
       elRenderProducts(); // store columns depend on _stores
     } catch (e) {}
   };
 
-  // One card per store, from /eleme/status.stores — the same shape the Meituan
-  // page uses. A store is blocked when it cannot push at all: no shop id linked
-  // (never set up) or no saved login session. A run of failed pushes is NOT
-  // blocked: listings get renamed and the 审核 queue rejects writes while the
-  // channel itself is fine, and colouring that amber would cry wolf on the one
-  // state that actually means a person is needed.
+  // -- The head: status line, three tiles, at most one notice ----------------
+  // Same shape as the Meituan page. A store is blocked when it cannot push at
+  // all: no shop id linked, or no saved login session. A run of failed pushes
+  // is deliberately not blocked - listings get renamed and the review queue
+  // rejects writes while the channel itself is fine.
   const EL_BLOCK_TXT = {
-    no_shop:     ['No Eleme shop linked yet', '尚未关联饿了么店铺'],
-    needs_login: ['Signed out — needs a one-time login', '已退出登录 — 需重新登录一次'],
+    no_shop:     ['has no Eleme shop linked yet', '\u5c1a\u672a\u5173\u8054\u9976\u4e86\u4e48\u5e97\u94fa'],
+    needs_login: ['is signed out', '\u5df2\u9000\u51fa\u767b\u5f55'],
   };
 
-  function elRenderStoreCards(stores) {
-    const box = document.getElementById('el-stores');
-    if (!box) return;
-    const rows = Array.isArray(stores) ? stores : [];
-    if (!rows.length) { box.innerHTML = ''; return; }
-    box.innerHTML = rows.map(st => {
-      const bt = EL_BLOCK_TXT[st.blockedBy] || ['Not syncing', '同步已停'];
-      const state = st.blocked ? cuT(bt[0], bt[1])
-                               : cuT('Signed in · pushing stock', '已登录 · 正在推送');
-      const stranded = Number(st.processing || 0);
-      const cat = st.catalogueCount
-        ? cuT(st.catalogueCount + ' listings read', '已读取 ' + st.catalogueCount + ' 个商品')
-        : cuT('no catalogue yet', '暂无目录');
-      const facts = [
-        { k: cuT('Live', '已上架'),      v: st.live,      warn: false },
-        { k: cuT('Unmatched', '未匹配'), v: st.unmatched, warn: st.unmatched > 0 },
-        { k: cuT('Waiting', '待推送'),   v: st.pending,   warn: false },
-        stranded ? { k: cuT('Stranded', '卡住'), v: stranded, warn: true } : null,
-        { k: cuT('Catalogue', '商品目录'), v: cat, warn: !st.catalogueCount },
-        { k: cuT('Last push', '最近推送'),
-          v: st.lastPushAt ? (fmtAgo(st.lastPushAt) || '—') : cuT('never', '从未'), warn: false },
-      ].filter(Boolean);
-      const factHtml = facts.map(f =>
-        '<div class="sf"><div class="k">' + esc(f.k) + '</div><div class="v' +
-        (f.warn ? ' warn' : '') + '">' + esc(String(f.v)) + '</div></div>').join('');
-      // The one action that unblocks this store, and nothing else. Linking a
-      // shop id is a field; signing in needs a human at a browser on the box,
-      // so that one is the command to run, never a button that cannot work.
-      let act = '';
-      if (st.blockedBy === 'no_shop') {
-        act = '<div class="sact">' +
-          '<input id="el-shop-' + st.id + '" class="inp" placeholder="' +
-            cuT('Eleme shop id', '饿了么店铺ID') + '">' +
-          '<button class="btn btn-sm btn-primary" onclick="elSetShop(' + st.id + ", '" + esc(st.code) + "')\">" +
-          cuT('Link shop', '关联店铺') + '</button></div>';
-      } else if (st.blockedBy === 'needs_login') {
-        act = '<div class="sact"><code>node scripts/eleme-login.js ' +
-          esc(st.code) + ' ' + esc(st.shopId || '') + '</code></div>';
+  function elRenderHead() {
+    const rows = _lastStores || [];
+    const active = _products.filter(p => Number(p.is_active) !== 0);
+    const live = active.filter(p => Object.values(p.stores || {}).some(m => m.eleme_name)).length;
+    const att = active.filter(elNeedsAttention).length;
+    const waiting = rows.reduce((a2, r) => a2 + Number(r.pending || 0) + Number(r.processing || 0), 0);
+    const per = (key) => rows.map(r => Number(r[key] || 0) + ' ' + r.name).join(' \u00b7 ');
+
+    const st = document.getElementById('el-status');
+    if (st) {
+      let html = esc(cuT(live + ' live', live + ' \u4e2a\u5df2\u4e0a\u67b6'));
+      if (att) html += ' \u00b7 ' + esc(cuT(att + ' need attention', att + ' \u4e2a\u5f85\u5904\u7406'));
+      const bad = rows.filter(r => r.blocked);
+      if (bad.length) {
+        html += ' \u00b7 <span class="att">' +
+          esc(cuT(bad.map(r => r.name).join(', ') + ' needs you',
+                  bad.map(r => r.name).join('\u3001') + ' \u9700\u8981\u5904\u7406')) + '</span>';
+      } else if (!att) {
+        html += ' \u00b7 ' + esc(cuT('all matched', '\u5168\u90e8\u5df2\u5339\u914d'));
       }
-      return '<div class="el-store' + (st.blocked ? ' blocked' : '') + '">' +
-          '<div class="sh"><span class="sdot"></span>' +
-            '<span class="sname">' + esc(st.name) + '</span>' +
-            '<span class="smode">' + esc(st.shopName || st.shopId || cuT('not linked', '未关联')) + '</span></div>' +
-          '<div class="sstate">' + esc(state) + '</div>' +
-          '<div class="sfacts">' + factHtml + '</div>' + act +
-        '</div>';
+      st.innerHTML = html;
+    }
+
+    const tiles = document.getElementById('el-tiles');
+    if (tiles) {
+      const tile = (k, v, sub, warn) =>
+        '<div class="el-tile"><div class="k">' + esc(k) + '</div>' +
+        '<div class="v' + (warn ? ' att' : '') + '">' + esc(String(v)) + '</div>' +
+        '<div class="s">' + esc(sub) + '</div></div>';
+      tiles.innerHTML =
+        tile(cuT('Live on Eleme', '\u5df2\u4e0a\u67b6\u9976\u4e86\u4e48'), live, per('live'), false) +
+        tile(cuT('Need attention', '\u5f85\u5904\u7406'), att,
+             cuT('unmatched, or missing a size', '\u672a\u5339\u914d\uff0c\u6216\u672a\u9009\u89c4\u683c'), att > 0) +
+        tile(cuT('Stock updates waiting', '\u5f85\u63a8\u9001\u5e93\u5b58'), waiting, per('pending'), false);
+    }
+
+    const notice = document.getElementById('el-notice');
+    if (notice) {
+      const bad = rows.filter(r => r.blocked)[0];
+      if (!bad) { notice.innerHTML = ''; return; }
+      const what = EL_BLOCK_TXT[bad.blockedBy] || ['is not syncing', '\u540c\u6b65\u5df2\u505c'];
+      const cat = bad.catalogueCount
+        ? cuT(bad.catalogueCount + ' listings read', '\u5df2\u8bfb\u53d6 ' + bad.catalogueCount + ' \u4e2a\u5546\u54c1')
+        : cuT('no catalogue read yet, so nothing can be matched there',
+              '\u5c1a\u672a\u8bfb\u53d6\u5546\u54c1\u76ee\u5f55\uff0c\u65e0\u6cd5\u5339\u914d');
+      // The one action that unblocks it. Linking a shop id is a field; signing
+      // in needs a human at a browser on the box, so that one is the command.
+      const act = bad.blockedBy === 'no_shop'
+        ? '<input id="el-shop-' + bad.id + '" class="inp el-nameinp" placeholder="' +
+            cuT('Eleme shop id', '\u9976\u4e86\u4e48\u5e97\u94faID') + '">' +
+          '<button class="btn btn-sm btn-primary" onclick="elSetShop(' + bad.id + ", '" + esc(bad.code) + "')\">" +
+            cuT('Link shop', '\u5173\u8054\u5e97\u94fa') + '</button>'
+        : '<code class="el-psku">node scripts/eleme-login.js ' + esc(bad.code) + ' ' + esc(bad.shopId || '') + '</code>';
+      notice.innerHTML = '<div class="el-notice"><span class="dot"></span>' +
+        '<div class="m"><b>' + esc(bad.name + ' ' + cuT(what[0], what[1])) + '.</b>' +
+        '<div class="sub">' + esc(cat) + '</div></div>' + act + '</div>';
+    }
+  }
+
+  // Needs attention: not mapped anywhere, or mapped to a listing that holds
+  // several sizes with none picked — on Eleme a size CAN be targeted, so that
+  // second case is a real gap, not a note.
+  function elNeedsAttention(p) {
+    const maps = Object.values(p.stores || {});
+    if (!maps.some(m => m.eleme_name)) return true;
+    return maps.some(m => m.eleme_name && Number(m.specCount || 0) > 1 && !m.spec_id);
+  }
+
+  // -- Chip + store filters ---------------------------------------------------
+  const EL_CHIPS = [
+    { id: 'all',  en: 'All',            cn: '\u5168\u90e8' },
+    { id: 'att',  en: 'Needs attention', cn: '\u5f85\u5904\u7406' },
+    { id: 'ok',   en: 'Synced',          cn: '\u5df2\u540c\u6b65' },
+    { id: 'size', en: 'Needs a size',    cn: '\u5f85\u9009\u89c4\u683c' },
+  ];
+
+  function elChipMatch(p, id) {
+    const maps = Object.values(p.stores || {});
+    if (id === 'att')  return elNeedsAttention(p);
+    if (id === 'ok')   return maps.some(m => m.eleme_name);
+    if (id === 'size') return maps.some(m => m.eleme_name && Number(m.specCount || 0) > 1 && !m.spec_id);
+    return true;
+  }
+
+  function elStorePass(p) {
+    if (!_elStore) return true;
+    return !!(p.stores || {})[_elStore] || elNeedsAttention(p);
+  }
+
+  function elRenderChips() {
+    const box = document.getElementById('el-chips');
+    if (!box) return;
+    const active = _products.filter(p => Number(p.is_active) !== 0).filter(elStorePass);
+    box.innerHTML = EL_CHIPS.map(c => {
+      const n = active.filter(p => elChipMatch(p, c.id)).length;
+      return '<button class="el-fchip' + (_elFilter === c.id ? ' on' : '') +
+        '" onclick="elSetFilter(\'' + c.id + '\')">' + esc(cuT(c.en, c.cn)) +
+        ' <span class="c">' + n + '</span></button>';
     }).join('');
   }
 
-  // §1.7 status line: live state for the section, real numbers, sentence case.
-  function elRenderStatusLine(stores) {
-    const el = document.getElementById('el-status');
-    if (!el) return;
-    const rows = Array.isArray(stores) ? stores : [];
-    if (!rows.length) { el.textContent = ''; return; }
-    // Distinct products, never the sum of the stores — most are live on both.
-    const active = _products.filter(p => Number(p.is_active) !== 0);
-    const live = active.filter(p => Object.values(p.stores || {}).some(m => Number(m.sync_enabled) === 1)).length;
-    const parts = [cuT(live + ' live on Eleme', live + ' 个已上架饿了么')];
-    const unmatched = active.length - live;
-    if (unmatched > 0) parts.push(cuT(unmatched + ' unmatched', unmatched + ' 个未匹配'));
-    let html = parts.map(esc).join(' · ');
-    const bad = rows.filter(r => r.blocked);
-    if (bad.length) {
-      html += ' · <span class="att">' +
-        esc(cuT(bad.map(r => r.name).join(', ') + ' needs you',
-                bad.map(r => r.name).join('、') + ' 需要处理')) + '</span>';
-    }
-    el.innerHTML = html;
+  window.elSetFilter = function (f) { _elFilter = f; elRenderChips(); elRenderProducts(); };
+
+  function elRenderStoreFilter() {
+    const sel = document.getElementById('el-store-filter');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">' + esc(cuT('All stores', '\u5168\u90e8\u95e8\u5e97')) + '</option>' +
+      _stores.map(s2 => '<option value="' + esc(s2.code) + '"' + (_elStore === s2.code ? ' selected' : '') +
+        '>' + esc(s2.name) + '</option>').join('');
   }
+
+  window.elSetStore = function (code) { _elStore = code || ''; elRenderStoreFilter(); elRenderChips(); elRenderProducts(); };
 
   function fmtAgo(iso) {
     if (!iso) return '';
     const t = Date.parse(String(iso).replace(' ', 'T') + (String(iso).includes('Z') ? '' : 'Z'));
     if (!t) return '';
     const m = Math.max(0, Math.round((Date.now() - t) / 60000));
-    if (m < 1) return cuT('just now', '刚刚');
-    if (m < 60) return cuT(m + ' min ago', m + ' 分钟前');
+    if (m < 1) return cuT('just now', '\u521a\u521a');
+    if (m < 60) return cuT(m + ' min ago', m + ' \u5206\u949f\u524d');
     const h = Math.floor(m / 60);
-    if (h < 24) return cuT(h + ' h ago', h + ' 小时前');
-    return cuT(Math.floor(h / 24) + ' d ago', Math.floor(h / 24) + ' 天前');
+    if (h < 24) return cuT(h + ' h ago', h + ' \u5c0f\u65f6\u524d');
+    return cuT(Math.floor(h / 24) + ' d ago', Math.floor(h / 24) + ' \u5929\u524d');
   }
 
   // ── Eleme catalogue cache (autocomplete source for the name-override field) ──
@@ -296,8 +340,7 @@
       // The four KPI tiles summed the stores into numbers that could not say
       // WHICH store was unwell. Store cards carry it per store now.
       _lastStores = r.stores || [];
-      elRenderStoreCards(_lastStores);
-      elRenderStatusLine(_lastStores);
+      elRenderHead();
       const upd = document.getElementById('el-upd');
       if (upd) upd.textContent = cuT('Updated just now', '刚刚更新');
       elRenderPushLog(r.recentStock || []);
@@ -346,7 +389,8 @@
       const r = await api('/api/retail-admin/eleme/products');
         _products = r.data || [];
       elRenderProducts();
-      elRenderStatusLine(_lastStores);  // counts only exist now
+      elRenderHead();  // counts only exist now
+      elRenderChips();
     } catch (e) {}
   };
 
@@ -356,71 +400,98 @@
     const tbody = document.getElementById('el-tbody');
     if (!tbody) return;
     const th = document.getElementById('el-th-stores');
-    if (th) th.textContent = cuT('Sync per store · 各门店同步', '各门店同步');
+    if (th) th.textContent = cuT('Sync per store', '\u5404\u95e8\u5e97\u540c\u6b65');
+
+    // Text match covers the SKU and the mapped listing name too — the two
+    // things you actually have in front of you when hunting a row.
     const q = (document.getElementById('el-search')?.value || '').trim().toLowerCase();
-    const rows = _products.filter(p => {
-      if (!q) return true;
-      return (p.name_cn || '').toLowerCase().includes(q)
-          || (p.name_en || '').toLowerCase().includes(q)
-          || (p.sku || '').toLowerCase().includes(q);
-    });
+    const rows = _products
+      .filter(p => Number(p.is_active) !== 0)
+      .filter(p => elChipMatch(p, _elFilter))
+      .filter(elStorePass)
+      .filter(p => !q
+        || (p.name_cn || '').toLowerCase().includes(q)
+        || (p.name_en || '').toLowerCase().includes(q)
+        || (p.sku || '').toLowerCase().includes(q)
+        || Object.values(p.stores || {}).some(m => (m.eleme_name || '').toLowerCase().includes(q)));
+
     const cnt = document.getElementById('el-count');
-    if (cnt) cnt.textContent = `${rows.length}`;
+    if (cnt) cnt.textContent = String(rows.length);
+    elRenderHead();
+    elRenderChips();
+
+    if (!rows.length) {
+      tbody.innerHTML = '<tr><td colspan="3" class="el-empty">' + cuT('Nothing here.', '\u6682\u65e0\u5546\u54c1\u3002') + '</td></tr>';
+      return;
+    }
+
     tbody.innerHTML = rows.map(p => {
       const base = cuT(p.name_en || p.name_cn, p.name_cn || p.name_en);
+      const alt  = cuT(p.name_cn || '', p.name_en || '');
       // Size variants are separate products sharing a variant_group_id, so two
-      // sizes arrive here as two rows with the SAME name — indistinguishable
-      // without the label. 11-meituan.js has always printed it; this table
-      // didn't, which is why variants read as duplicates.
-      const nm = p.variant_label ? base + ' · ' + p.variant_label : base;
-      const cells = _stores.map(s => {
-        const m = (p.stores || {})[s.code];
-        const on = m && Number(m.sync_enabled) === 1;
-        const mappedName = (m && m.eleme_name) || '';
-        const specs = elSpecsFor(s.code, mappedName);
-        const chosen = String((m && m.spec_id) || '');
-        // A listing with several sizes and no size chosen can't be pushed
-        // accurately — the driver falls back to a rule that writes a made-up
-        // number to every size. Flag it rather than let it run silently.
-        const guessing = on && specs.length > 1 && !chosen;
-        // Eleme has no extCode/货号 to match on yet, so a wrong/missing name
-        // here is the single most common reason a push fails — this input is
-        // the operator's escape hatch (ELEME_BROWSER_RECON.md). It's an
-        // autocomplete against the real Eleme catalogue (list=), not free
-        // text — a hand-typed name once used the wrong apostrophe character
-        // and silently failed every push; picking from a real listing string
-        // makes that whole class of error impossible.
-        return `<div style="display:inline-flex;align-items:center;gap:6px;margin-right:14px;margin-bottom:4px">
-          <label class="toggle-label" title="${esc(s.name)}">
-            <input type="checkbox" ${on ? 'checked' : ''} onchange="elToggleSync(${p.id}, ${s.id}, '${s.code}', this.checked)">
-            <span class="muted" style="font-size:12px">${esc(s.name)}</span>
-          </label>
-          <input type="text" class="inp el-nameinp" data-no-i18n
-                 list="el-catalogue-dl-${esc(s.code)}"
-                 placeholder="${cuT('Eleme listing name', '饿了么商品名')}"
-                 value="${esc(mappedName)}"
-                 onchange="elSetElemeName(${p.id}, ${s.id}, '${s.code}', this.value)">
-          ${specs.length > 1 ? `
-          <select data-no-i18n
-                  class="inp el-size${guessing ? ' warn' : ''}"
-                  title="${cuT('Which size inside this listing', '对应该商品的哪个规格')}"
-                  onchange="elSetElemeSpec(${p.id}, ${s.id}, '${s.code}', this.value, this.options[this.selectedIndex].dataset.label || '')">
-            <option value="" data-label="">${cuT('Pick size…', '选择规格…')}</option>
-            ${specs.map((sp, i) => {
-              const lbl = elSpecLabel(sp, i);
-              return `<option value="${esc(sp.specGlobalId)}" data-label="${esc(sp.name || lbl)}"${
-                String(sp.specGlobalId) === chosen ? ' selected' : ''}>${esc(lbl)}</option>`;
-            }).join('')}
-          </select>` : ''}
-          ${guessing ? `<span title="${cuT('This listing has several sizes and none is picked — the stock pushed to it is a guess.', '该商品有多个规格且未选择 — 推送的库存并不准确。')}"
-                 class="el-guess">!</span>` : ''}
-        </div>`;
-      }).join('');
-      return `<tr style="border-top:1px solid var(--line)">
-        <td style="padding:6px 10px">${esc(nm)}${Number(p.is_active) === 0 ? ' <span class="muted">(' + cuT('hidden', '隐藏') + ')</span>' : ''}</td>
-        <td style="padding:6px 10px"><code>${esc(p.sku || '—')}</code></td>
-        <td style="padding:6px 10px">${cells || '<span class="muted">—</span>'}</td>
-      </tr>`;
+      // sizes arrive as two rows with the SAME name — the label is what tells
+      // them apart.
+      const nameCell = '<div class="el-pcell"><div>' +
+        '<div class="el-pname">' + esc(base) +
+          (p.variant_label ? ' <span class="vl">\u00b7 ' + esc(p.variant_label) + '</span>' : '') + '</div>' +
+        (alt && alt !== base ? '<div class="el-pmeta">' + esc(alt) + '</div>' : '') +
+        '</div></div>';
+
+      const stores = _stores
+        .filter(st => !_elStore || st.code === _elStore)
+        .map(st => {
+          const m = (p.stores || {})[st.code];
+          const on = !!(m && Number(m.sync_enabled) === 1);
+          const mappedName = (m && m.eleme_name) || '';
+          const specs = elSpecsFor(st.code, mappedName);
+          const chosen = String((m && m.spec_id) || '');
+          // A listing with several sizes and none picked cannot be pushed
+          // accurately — the driver falls back to a rule that writes a made-up
+          // number to every size. That is the one state worth colouring.
+          const needsSize = on && specs.length > 1 && !chosen;
+          const pill = !mappedName ? '<span class="el-pill att"><span class="d"></span>' + cuT('Add name', '\u5f85\u586b\u540d\u79f0') + '</span>'
+            : needsSize ? '<span class="el-pill att"><span class="d"></span>' + cuT('Pick a size', '\u5f85\u9009\u89c4\u683c') + '</span>'
+            : on ? '<span class="el-pill ok"><span class="d"></span>' + cuT('Synced', '\u5df2\u540c\u6b65') + '</span>'
+            : '<span class="el-pill off"><span class="d"></span>' + cuT('Sync off', '\u5df2\u5173\u95ed') + '</span>';
+          const last = (m && m.last_pushed_at)
+            ? '<div class="el-pmeta">' + esc(cuT('pushed ', '\u63a8\u9001\u4e8e ') + (fmtAgo(m.last_pushed_at) || '')) + '</div>'
+            : '';
+          // The name field is an autocomplete against the real catalogue, not
+          // free text: a hand-typed name once used a curly apostrophe and
+          // silently failed every push.
+          return '<div class="el-cellstore">' +
+            '<div class="el-cellhd">' + pill +
+              '<span class="nm">' + esc(st.name) + '</span>' +
+              '<label class="toggle-label" title="' + esc(cuT('Sync on / off', '\u540c\u6b65\u5f00\u5173')) + '">' +
+                '<input type="checkbox" ' + (on ? 'checked' : '') +
+                ' onchange="elToggleSync(' + p.id + ', ' + st.id + ", '" + esc(st.code) + "', this.checked)\"></label>" +
+            '</div>' +
+            '<input type="text" class="inp el-nameinp" data-no-i18n' +
+              ' list="el-catalogue-dl-' + esc(st.code) + '"' +
+              ' placeholder="' + esc(cuT('Eleme listing name', '\u9976\u4e86\u4e48\u5546\u54c1\u540d')) + '"' +
+              ' value="' + esc(mappedName) + '"' +
+              ' onchange="elSetElemeName(' + p.id + ', ' + st.id + ", '" + esc(st.code) + "', this.value)\">" +
+            (specs.length > 1
+              ? '<select data-no-i18n class="inp el-size' + (needsSize ? ' warn' : '') + '"' +
+                ' title="' + esc(cuT('Which size inside this listing', '\u5bf9\u5e94\u8be5\u5546\u54c1\u7684\u54ea\u4e2a\u89c4\u683c')) + '"' +
+                ' onchange="elSetElemeSpec(' + p.id + ', ' + st.id + ", '" + esc(st.code) + "', this.value, this.options[this.selectedIndex].dataset.label || '')\">" +
+                '<option value="" data-label="">' + esc(cuT('Pick a size\u2026', '\u9009\u62e9\u89c4\u683c\u2026')) + '</option>' +
+                specs.map((sp, i) => {
+                  const lbl = elSpecLabel(sp, i);
+                  return '<option value="' + esc(sp.specGlobalId) + '" data-label="' + esc(sp.name || lbl) + '"' +
+                    (String(sp.specGlobalId) === chosen ? ' selected' : '') + '>' + esc(lbl) + '</option>';
+                }).join('') +
+                '</select>'
+              : '') +
+            last +
+          '</div>';
+        }).join('');
+
+      return '<tr>' +
+        '<td>' + nameCell + '</td>' +
+        '<td>' + (p.sku ? '<span class="el-psku">' + esc(p.sku) + '</span>' : '') + '</td>' +
+        '<td>' + (stores || '<span class="el-pill off">\u2014</span>') + '</td>' +
+      '</tr>';
     }).join('');
   }
 

@@ -5850,24 +5850,68 @@
   .el-chan input:checked::after { left: 19px; }
   .el-chan input:focus-visible { outline: 2px solid var(--td-sage); outline-offset: 2px; }
 
-  .el-stores { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; margin: 0 0 32px; }
-  .el-store { border: 1px solid var(--td-border); border-radius: 14px; padding: 24px; background: var(--td-surface); }
-  .el-store.blocked { border-color: var(--td-amber); background: var(--td-surface); }
-  .el-store .sh { display: flex; align-items: baseline; gap: 8px; }
-  .el-store .sdot { width: 8px; height: 8px; border-radius: 999px; background: var(--td-sage); flex: none; align-self: center; }
-  .el-store.blocked .sdot { background: var(--td-amber); }
-  .el-store .sname { font: 500 18px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); }
-  .el-store .smode { margin-left: auto; font: 400 13px var(--f-sans); color: var(--td-text2); }
-  .el-store .sstate { font: 400 15px/1.6 var(--f-sans); margin-top: 8px; color: var(--td-sage-ink); }
-  .el-store.blocked .sstate { color: var(--td-amber-ink); }
-  .el-store .sfacts { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--td-border); }
-  .el-store.blocked .sfacts { border-top-color: var(--td-border); }
-  .el-store .sf .k { font: 500 13px var(--f-sans); color: var(--td-text2); }
-  .el-store .sf .v { font: 400 15px var(--f-sans); color: var(--td-text); font-variant-numeric: tabular-nums; }
-  .el-store .sf .v.warn { color: var(--td-amber-ink); }
-  .el-store .sact { margin-top: 16px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .el-store .sact code { display: inline-block; font: 400 13px var(--f-sans); color: var(--td-text2); background: var(--td-raised); border-radius: 8px; padding: 8px 16px; }
-  .el-store .sact .inp { max-width: 160px; }
+  /* ── Tile row + one notice, the same shape the Meituan page uses (which is
+     the shape the Orders page uses). Replaces the store cards: the tiles
+     headline the numbers an operator acts on and split each per store
+     underneath, and health is not permanent furniture — the notice exists only
+     while a store needs a person. */
+  .el-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 32px; }
+  .el-tile { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px; padding: 24px; }
+  .el-tile .k { font: 400 13px var(--f-sans); color: var(--td-text2); }
+  .el-tile .v { font: 500 30px/1.2 var(--f-sans); letter-spacing: -.02em; margin-top: 8px; color: var(--td-text); font-variant-numeric: tabular-nums; }
+  .el-tile .v.att { color: var(--td-amber-ink); }
+  .el-tile .s { font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 8px; font-variant-numeric: tabular-nums; }
+  @media (max-width: 900px) { .el-tiles { grid-template-columns: 1fr; } }
+
+  .el-notice { display: flex; align-items: center; gap: 16px; background: var(--td-surface); border: 1px solid var(--td-amber); border-radius: 14px; padding: 16px 24px; margin-bottom: 32px; }
+  .el-notice .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--td-amber); flex: none; }
+  .el-notice .m { flex: 1; min-width: 0; font: 400 15px/1.6 var(--f-sans); color: var(--td-text); }
+  .el-notice .m b { font-weight: 500; }
+  .el-notice .sub { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin-top: 4px; }
+  .el-notice .inp { max-width: 176px; }
+
+  /* Chip filters + toolbar, as on Meituan. "Needs a size" is Eleme-only and
+     earns its place: here a size CAN be targeted, so a multi-size listing with
+     none picked is a real gap rather than a note. */
+  .el-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .el-fchip { font: 400 13px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 999px; padding: 8px 16px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+  .el-fchip:hover { border-color: var(--td-text2); }
+  .el-fchip.on { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
+  .el-fchip .c { color: var(--td-text2); font-variant-numeric: tabular-nums; }
+  .el-fchip.on .c { color: var(--td-paper); opacity: .7; }
+
+  .el-tools { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+  .el-sel { appearance: none; -webkit-appearance: none; font: 400 15px var(--f-sans); color: var(--td-text);
+    border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 48px 8px 16px; cursor: pointer;
+    background-color: var(--td-surface);
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2358606E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat: no-repeat; background-position: right 24px center; }
+  .el-sel:focus-visible { outline: 2px solid var(--td-sage); outline-offset: 2px; }
+  .el-search { flex: 1 1 280px; font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; }
+  .el-search::placeholder { color: var(--td-text2); }
+
+  /* Table cells */
+  .el-pcell { display: flex; gap: 16px; }
+  .el-pname { font-weight: 500; }
+  .el-pname .vl { font-weight: 400; color: var(--td-text2); }
+  .el-pmeta { font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 4px; }
+  .el-psku { display: inline-block; margin-top: 8px; font: 400 13px var(--f-sans); color: var(--td-text2); background: var(--td-raised); border: 1px solid var(--td-border); border-radius: 8px; padding: 0 8px; font-variant-numeric: tabular-nums; }
+  .el-pill { display: inline-flex; align-items: center; gap: 8px; font: 500 13px var(--f-sans); border-radius: 999px; padding: 0 8px; }
+  .el-pill .d { width: 8px; height: 8px; border-radius: 999px; background: currentColor; flex: none; }
+  .el-pill.ok  { background: var(--td-sage-tint);  color: var(--td-sage-ink); }
+  .el-pill.att { background: var(--td-amber-tint); color: var(--td-amber-ink); }
+  .el-pill.off { background: var(--td-raised);     color: var(--td-text2); }
+  .el-cellsub { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin-top: 8px; }
+  .el-empty { padding: 24px; text-align: center; font: 400 15px var(--f-sans); color: var(--td-text2); }
+  /* The per-store block inside a cell: sync switch, name field, size picker. */
+  .el-cellstore + .el-cellstore { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--td-border); }
+  .el-cellhd { display: flex; align-items: center; gap: 8px; }
+  .el-cellhd .nm { font: 400 13px var(--f-sans); color: var(--td-text2); }
+
+  /* §1.3: body is lh 1.6, 1.7 for CJK runs — half of every label here is 中文. */
+  html[data-ui-lang="cn"] #tab-eleme { line-height: 1.7; }
+  html[data-ui-lang="cn"] #tab-eleme .el-status,
+  html[data-ui-lang="cn"] #tab-eleme .el-notice .m { line-height: 1.7; }
 
   .el-tabs { display: flex; align-items: center; gap: 24px; border-bottom: 1px solid var(--td-border); margin: 0 0 16px; }
   .el-tab { appearance: none; background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 0; font: 500 13px var(--f-sans); color: var(--td-text2); cursor: pointer; display: flex; align-items: center; gap: 8px; }
@@ -5886,7 +5930,7 @@
   .el-cap { font: 400 13px var(--f-sans); color: var(--td-text2); margin: 0 0 16px; font-variant-numeric: tabular-nums; }
   .el-tablewrap { overflow-x: auto; border: 1px solid var(--td-border); border-radius: 14px; }
   #el-products-table { width: 100%; border-collapse: collapse; }
-  #el-products-table thead th { background: var(--td-header); color: var(--td-text); font: 500 13px var(--f-sans); letter-spacing: 0; text-transform: none; text-align: left; border-bottom: 1px solid var(--td-border); padding: 10px 16px; }
+  #el-products-table thead th { background: var(--td-header); color: var(--td-text); font: 500 13px var(--f-sans); letter-spacing: 0; text-transform: none; text-align: left; border-bottom: 1px solid var(--td-border); padding: 8px 16px; }
   #el-products-table td { padding: 16px; font-size: 15px; border-bottom: 1px solid var(--td-border); }
 
   /* The size picker on a multi-size listing, and the flag for one with no size
@@ -5895,6 +5939,19 @@
   .el-size { width: 148px; font: 400 13px var(--f-sans); }
   .el-size.warn { border-color: var(--td-amber); }
   .el-guess { font: 500 13px var(--f-sans); color: var(--td-amber-ink); }
+
+  #el-products-table .toggle-label { display: inline-flex; align-items: center; opacity: 0; transition: opacity 200ms cubic-bezier(.16,1,.3,1); }
+  #el-products-table tr:hover .toggle-label,
+  #el-products-table .toggle-label:focus-within,
+  #el-products-table .toggle-label:has(input:not(:checked)) { opacity: 1; }
+  #el-products-table .toggle-label input { appearance: none; -webkit-appearance: none; margin: 0; width: 32px; height: 18px; border-radius: 999px; background: var(--td-border); border: none; position: relative; cursor: pointer; transition: background 200ms cubic-bezier(.16,1,.3,1); flex: none; }
+  #el-products-table .toggle-label input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 999px; background: var(--td-surface); transition: left 200ms cubic-bezier(.16,1,.3,1); }
+  #el-products-table .toggle-label input:checked { background: var(--td-sage); }
+  #el-products-table .toggle-label input:checked::after { left: 17px; }
+  @media (prefers-reduced-motion: reduce) {
+    #el-products-table .toggle-label, #el-products-table .toggle-label input,
+    #el-products-table .toggle-label input::after { transition: none; }
+  }
 
   .el-act-h { font: 500 18px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); margin: 0 0 16px; }
   .el-act-h + .el-log { margin-bottom: 32px; }
