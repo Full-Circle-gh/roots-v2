@@ -333,6 +333,7 @@ function meituanStoreHealth(db) {
       id: st.id,
       code: st.code,
       name: st.name,
+      nameEn: st.nameEn || st.name,
       blocked:    !!blockedEvent && !recovered,
       blockedBy:  blockedEvent && !recovered ? blockedEvent.event_type : null,
       blockedAt:  blockedEvent && !recovered ? blockedEvent.created_at : null,

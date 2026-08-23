@@ -675,6 +675,10 @@ async function refreshOrderStatus(storeCode, order) {
         meituanOrderNo: order.meituanOrderNo, statusDesc: order.statusDesc, eta: order.eta,
         preOrderAt: order.preOrderAt, note: order.note,
         needsCutlery: order.needsCutlery, placedAt: order.placedAt,
+        // The rest of the same payload (rider, settlement, customer). Sent on
+        // EVERY poll rather than only at import: at import an order has no rider
+        // yet, so the delivery record exists only on later reads.
+        channel: order.channel,
       }),
     });
     if (res.ok) {
