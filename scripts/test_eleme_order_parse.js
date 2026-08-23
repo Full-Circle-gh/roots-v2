@@ -1,4 +1,5 @@
-// Local test for the Eleme order reader's parse step (npm run test:eleme-orders).
+// Local test for the Eleme order reader's parse step, plus the void/restock
+// classifiers on BOTH channel routes (npm run test:eleme-orders).
 //
 // Eleme's real order payload has never been captured — the recon
 // (ELEME_BROWSER_RECON.md) got the RPC method names and nothing else — so
@@ -270,6 +271,56 @@ section('I · void classification (routes/eleme-internal.js)');
   for (const settled of ['已取消', '已退款', '交易关闭']) {
     const st = statusOf(settled);
     ok(`"${settled}" is terminal (${st})`, st === 'cancelled' || st === 'refunded', st);
+  }
+}
+
+
+// ── J. The two channels must agree on what returns stock ────────────────────
+// Eleme's void classifier is a deliberate COPY of Meituan's, not a shared import
+// (the two platforms word their statuses differently, and a shared list would make
+// one channel's wording fix a risk to the other). Copies drift. These assertions
+// pin the cases where drift would cost real money — a label that restocks on one
+// channel and not the other means one of them is wrong.
+section('J · Meituan and Eleme agree on what restocks');
+{
+  const liftFrom = (relPath, name) => {
+    const src = fs.readFileSync(path.join(__dirname, '..', relPath), 'utf8');
+    const start = src.indexOf('function ' + name + '(');
+    if (start === -1) throw new Error('could not find ' + name + ' in ' + relPath);
+    let depth = 0, i = src.indexOf('{', start);
+    const open = i;
+    for (; i < src.length; i++) {
+      if (src[i] === '{') depth++;
+      else if (src[i] === '}') { depth--; if (depth === 0) break; }
+    }
+    if (depth !== 0) throw new Error('unbalanced braces reading ' + name + ' in ' + relPath);
+    // eslint-disable-next-line no-new-func
+    return new Function('return function ' + name + '(desc) ' + src.slice(open, i + 1))();
+  };
+  const mtVoid = liftFrom('routes/meituan-internal.js', 'isConfirmedVoid');
+  const elVoid = liftFrom('routes/eleme-internal.js', 'isConfirmedVoid');
+
+  // Shared wording — both platforms use these, and both must answer the same.
+  const shared = [
+    ['退款申请', false], ['申请退款', false], ['退款中', false], ['退货中', false],
+    ['协商中', false], ['部分退款', false],
+    ['已取消', true], ['订单取消', true], ['交易取消', true], ['已关闭', true],
+    ['交易关闭', true], ['已退款', true], ['退款成功', true], ['退款完成', true],
+    ['全额退款', true],
+    ['配送中', false], ['已送达', false], ['', false],
+  ];
+  for (const [label, want] of shared) {
+    const m = mtVoid(label), e = elVoid(label);
+    ok(`"${label || '(empty)'}" → ${want} on both`, m === want && e === want, { meituan: m, eleme: e });
+  }
+
+  // Both must have a born-void guard: an order first seen cancelled must not be
+  // deducted, because the restock only fires on a transition that never comes.
+  for (const rel of ['routes/meituan-internal.js', 'routes/eleme-internal.js']) {
+    const src = fs.readFileSync(path.join(__dirname, '..', rel), 'utf8');
+    ok(`${rel} has the born-void guard`, /const bornVoid = /.test(src) && /bornVoid \? \[\] : items/.test(src));
+    ok(`${rel} marks born-void stock as not-deducted`,
+      /if \(bornVoid\) db\.prepare\('UPDATE retail_orders SET channel_stock_restored = 1/.test(src));
   }
 }
 

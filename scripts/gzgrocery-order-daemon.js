@@ -231,15 +231,30 @@ function ensureGzMirror({ orderId, status, customer, dateAdded, ours, storeId, v
       // first one left overseas numbers unparsed, so the raw line (name and
       // phone included) ended up as the address. A hand-edited name, and an
       // address already read by the current parser, are left alone.
+      //
+      // The name also gets replaced when it CONTAINS the mobile we just parsed.
+      // That is the pre-ship-to blob: on the orders whose list cell wasn't
+      // masked, the whole "Name (phone) address…" string was stored as the
+      // recipient. A person's name never contains their own phone number, so
+      // this can only hit the blob — and a real name typed by hand survives.
       const stale = `COALESCE(address_json,'') = '' OR address_json NOT LIKE '%"p":${SHIPTO_PARSER}%'`;
+      // …and when it is the WeChat handle we fell back to (mini_g2l8vG) on a read
+      // that couldn't parse a name, now that a later read has a real one. Our own
+      // fallback must never outrank the recipient printed on the dispatch note.
+      const staleHandle = (shipTo && shipTo.contacter && shipName && shipTo.contacter !== shipName)
+        ? shipTo.contacter : null;
       db.prepare(`UPDATE retail_orders SET
-           recipient_name  = CASE WHEN COALESCE(recipient_name,'') IN ('', ?) THEN COALESCE(?, recipient_name) ELSE recipient_name END,
+           recipient_name  = CASE WHEN COALESCE(recipient_name,'') IN ('', ?)
+                                    OR (? IS NOT NULL AND instr(COALESCE(recipient_name,''), ?) > 0)
+                                    OR (? IS NOT NULL AND recipient_name = ?)
+                                  THEN COALESCE(?, recipient_name) ELSE recipient_name END,
            recipient_phone = CASE WHEN COALESCE(recipient_phone,'') = '' THEN COALESCE(?, recipient_phone) ELSE recipient_phone END,
            address_full    = CASE WHEN ${stale} THEN COALESCE(?, address_full) ELSE address_full END,
            address_json    = CASE WHEN ${stale} THEN COALESCE(?, address_json) ELSE address_json END,
            updated_at = CURRENT_TIMESTAMP
          WHERE id = ?`)
-        .run(String(orderId), shipName, shipPhone, shipAddr, shipJson, existing.id);
+        .run(String(orderId), shipPhone, shipPhone, staleHandle, staleHandle, shipName,
+          shipPhone, shipAddr, shipJson, existing.id);
     }
     return;
   }
@@ -340,7 +355,7 @@ function backfillGzMirrorSkus() {
 // and phone unparsed and the raw line — number and all — sitting in the address.
 // Without a generation there is no way to tell "already read" from "already read
 // by the version that got it wrong".
-const SHIPTO_PARSER    = 2;
+const SHIPTO_PARSER    = 3;
 const SHIPTO_PER_CYCLE = Number(process.env.GZGROCERY_SHIPTO_PER_CYCLE || 40);
 const SHIPTO_GAP_MS    = Number(process.env.GZGROCERY_SHIPTO_GAP_MS || 400);
 function shipToJson(shipTo, extra) {
