@@ -211,6 +211,20 @@
                      : 'node scripts/meituan-login.js ' + code;
   }
 
+  // The Configure panel had a real "Sign in again" that opens the guided relay
+  // wizard; the page only had a command to copy. Use the button when the
+  // wizard is loaded, and fall back to the command when it is not — an
+  // operator on the box can still act, and neither option pretends to do
+  // something it cannot.
+  function mtFixAction(code) {
+    if (typeof window.igRelayWizard === 'function') {
+      return '<button class="btn btn-sm btn-primary" onclick="igRelayWizard(\'meituan\', ' +
+        '{step:\'creds\', store:\'' + esc(code) + '\'})">' +
+        cuT('Sign in again', '重新登录') + '</button>';
+    }
+    return '<code>' + esc(mtFixHint(code)) + '</code>';
+  }
+
   // §1.7 status line: live state for the section, directly under the title,
   // sentence case, tabular, facts joined by " · ". It replaces the purpose line
   // that used to sit there and never changed. Zero Dusk — this is state, not
@@ -258,7 +272,13 @@
       const blockTxt = st.blocked ? cuT(bt[0], bt[1])
         : st.closed ? cuT('Closed · stock still syncing', '休息中 · 库存照常同步')
         : cuT('Signed in · pushing stock', '已登录 · 正在推送');
-      const since = st.blocked && st.blockedAt ? ' · ' + (fmtAgo(st.blockedAt) || '') : '';
+      let since = st.blocked && st.blockedAt ? ' · ' + (fmtAgo(st.blockedAt) || '') : '';
+      // Whether Meituan itself has the store open. Only ever shown in the old
+      // Configure panel, never on the page it described. null = not read yet,
+      // and saying nothing beats guessing "closed".
+      if (!st.blocked && st.openOnMeituan === false) since += ' · ' + cuT('closed on Meituan', '美团已置休');
+      if (!st.blocked && st.openOnMeituan === true)  since += ' · ' + cuT('open on Meituan', '美团营业中');
+      if (st.lastPushAt) since += ' · ' + cuT('pushed ', '推送于 ') + (fmtAgo(st.lastPushAt) || '');
       // A stranded row is one the daemon claimed and never finished. Nothing
       // counted these before, so 40 of them showed up in neither number.
       const stranded = Number(st.processing || 0);
@@ -267,6 +287,9 @@
         { k: cuT('Unmatched', '未匹配'),   v: st.unmatched, warn: st.unmatched > 0 },
         { k: cuT('Waiting', '待推送'),     v: st.pending,   warn: false },
         stranded ? { k: cuT('Stranded', '卡住'), v: stranded, warn: true } : null,
+        // Orders today and the last push came off the scrapped Configure panel.
+        // "Last order" alone could not tell a quiet morning from a dead channel.
+        { k: cuT('Orders today', '今日订单'), v: Number(st.ordersToday || 0), warn: false },
         { k: cuT('Last order', '最近订单'),
           v: st.lastOrderAt ? (fmtAgo(st.lastOrderAt) || '—') : cuT('none', '无'), warn: false },
       ].filter(Boolean);
@@ -280,9 +303,7 @@
             '<span class="smode">' + esc(mode) + '</span></div>' +
           '<div class="sstate">' + esc(blockTxt) + esc(since) + '</div>' +
           '<div class="sfacts">' + factHtml + '</div>' +
-          (st.blocked
-            ? '<div class="sact"><code style="font-size:11.5px">' + esc(mtFixHint(st.code)) + '</code></div>'
-            : '') +
+          (st.blocked ? '<div class="sact">' + mtFixAction(st.code) + '</div>' : '') +
         '</div>';
     }).join('');
   }

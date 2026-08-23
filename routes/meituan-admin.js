@@ -207,6 +207,14 @@ function meituanStoreHealth(db) {
   `);
   const lastOrder = db.prepare(
     'SELECT MAX(imported_at) AS t FROM meituan_order_import WHERE store_code = ?');
+  const ordersToday = db.prepare(
+    "SELECT COUNT(*) AS n FROM meituan_order_import WHERE store_code = ? AND date(imported_at) = date('now')");
+  // 营业/休息 as Meituan itself reports it, written by the daemon's status read.
+  // This was only ever visible in the Configure panel; the page it describes
+  // never showed it. read_ok guards against reporting a stale/failed read as
+  // "closed", which would be a worse lie than saying nothing.
+  const bizStatus = db.prepare(
+    'SELECT is_open, read_ok FROM store_business_status WHERE store_code = ?');
   const liveCount = db.prepare(`
     SELECT COUNT(*) AS n FROM meituan_product_map m
       JOIN store_products p ON p.id = m.product_id
@@ -246,6 +254,12 @@ function meituanStoreHealth(db) {
       processing: Number(q.processing || 0),
       failed:     Number(q.failed     || 0),
       lastOrderAt: lastOrder.get(st.code)?.t || null,
+      ordersToday: ordersToday.get(st.code)?.n || 0,
+      openOnMeituan: (() => {
+        let b = null;
+        try { b = bizStatus.get(st.code); } catch (e) { b = null; }
+        return (b && b.read_ok) ? b.is_open === 1 : null;   // null = not read yet
+      })(),
       live,
       unmatched: Math.max(0, activeProducts - live),
     };

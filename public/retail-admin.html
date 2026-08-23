@@ -10839,6 +10839,13 @@
 
     <div class="mt-stores" id="mt-stores"></div>
 
+    <!-- The two setup actions the scrapped Configure panel carried. Quiet, at
+         the end of the store region: they are rare, and neither is the page. -->
+    <div class="mt-storefoot">
+      <button class="btn btn-sm" onclick="if(window.igRelayWizard)igRelayWizard('meituan')">Connect another store · 连接其他门店</button>
+      <button class="mt-help" onclick="if(window.igHelp)igHelp('meituan')">Get help · 获取帮助</button>
+    </div>
+
     <!-- Sub-tabs: one job per view. Counts are filled in by JS. -->
     <div class="mt-tabs" role="tablist">
       <button id="mt-tab-products" class="mt-tab active" role="tab" onclick="mtView('products')">

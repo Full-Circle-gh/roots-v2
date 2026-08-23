@@ -5391,6 +5391,10 @@
   .mt-store .sact code { display: inline-block; font: 400 13px var(--f-sans); color: var(--td-text2); background: var(--td-raised); border-radius: 8px; padding: 8px 16px; }
   .mt-store.blocked .sact code { background: var(--td-surface); }
 
+  .mt-storefoot { display: flex; align-items: center; gap: 16px; justify-content: flex-end; margin: -16px 0 32px; }
+  .mt-help { background: none; border: none; cursor: pointer; font: 400 13px var(--f-sans); color: var(--td-text2); padding: 0; }
+  .mt-help:hover { color: var(--td-text); }
+
   /* ── Activity — the sync log /status always returned and nothing showed. */
   .mt-act-h { font: 500 18px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); margin: 0 0 16px; }
   .mt-act-h + .mt-log { margin-bottom: 32px; }
