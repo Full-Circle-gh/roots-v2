@@ -1,9 +1,11 @@
-# Tacet shared-core consolidation — decisions record, v4.68
+# Tacet shared-core consolidation — decisions record, v4.69
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-08-23 · v4.69 — §24 Channels: 🔴 **THE 闪购 CHALLENGES ARE A PROXY FLAP, NOT A BROWSER CRASH.** `shangou-chrome` logs `proxy switch — relaunching Chrome`: the residential tunnel flaps, `proxy-watchdog` fails the channel over, Chrome's proxy is a launch argument so the holder relaunches, the fresh browser hits 闪购 cold and 风控 answers 418. **`isColdStartChallenge` had been saying so all along.** **Why Yuexiu and not Tianhe:** tianhe falls back residential→**GZ datacenter**→direct and stays on a Guangzhou IP; **yuexiu has no middle rung and lands on direct — a Hong Kong IP**, a Guangzhou store suddenly calling from abroad. **The hysteresis is one-sided** — `FAIL_THRESHOLD=2` to go DOWN but **UP on the first success** — so a marginal tunnel oscillates: 4 transitions in 11 minutes, each relaunching 2 browsers. Its own comment names the harm it half-prevents, *thrashing browser relaunches*. Rare for 2 months, **resumes 08-22 12:00**, 11 switches today. **Persisting `verifyState` fixes 23 of 113; this is the other 90** — and a persistent back-off alone would have made a flapping tunnel look like a permanently quiet channel.
 
 2026-08-23 · v4.68 — §24 Channels: 🔴 **DEPLOYS TRIGGER 闪购 RISK-CONTROL CHALLENGES.** `verifyState` in `shangou-daemon.js` is in-memory, so a restart discards an active back-off. **23 of 113 challenges land within 60s of a daemon start, every one at 0—2 seconds.** With 48 deploys in two days **the 30→60→120→240 ladder can never reach its cap** — Yuexiu reset to 30 min four times in two hours on 08-23, while on 08-22 left alone it sat at the 4-hour cap. **The log undercounts it 6×**: `noteVerifyResult` gates its DB write behind the `verifyFlagged` log-once latch, so 113 challenges became 19 rows — **a dedupe latch on the alert silently became a dedupe latch on the record.** **And the asymmetry is backwards**: alert latches are on disk and survive, the back-off that protects the channel does not. Same `verifyState` shape in `meituan-daemon.js` and `qingyun-daemon.js`; none in guanyi/gzgrocery. **NOT FIXED — its own pass**; an unreadable store must read as STILL COOLING DOWN. §24 **DELAYED, NOT LOST is verified**: 3-day sweep windows, no persisted cursor, explicit `INSERT OR IGNORE` dedupe — a 35s bounce is 7,400× inside the window; only the 30-minute sweep timers restart their clock. §24 **I PRESENTED SELECTED HOURS AS THE MEASUREMENT** — hand-picked 16 of 24 rows into a deploy-window table and wrote real zeros as dashes, so omissions and zeros were indistinguishable to the person choosing when to take the storefront down. **A table with a row missing is not a shorter table, it is a different claim.**
 
@@ -3182,6 +3184,32 @@ One self-referencing edge exists on each side (`retail_media_folders`). It is ex
 **RED-PROVEN:** `retail_orders.channel_note` hidden from `cols[]` — the run reported `LIVE COLUMNS ABSENT FROM cols[] : 1  (in tables that WERE examined)` and named it, instead of reporting clean. Restored to green after.
 
 **THE EXIT CODE IS UNCHANGED AND STILL REPORTS DIFFERENCES ONLY.** Scope is disclosed in the output, not folded into the code, because a caller that has always read `0` as *no differences* must keep reading it that way. **The line a human reads is the one that changed.**
+
+### 🔴 THE 闪购 CHALLENGES ARE A PROXY FLAP, NOT A BROWSER CRASH — 2026-08-23
+
+**Chrome is not dying. It is being deliberately relaunched, and the trigger is one line in its own log:**
+
+```
+[shangou-chrome] proxy switch (socks5://127.0.0.1:1180 → direct) — relaunching Chrome
+[shangou-chrome] proxy switch (direct → socks5://127.0.0.1:1180) — relaunching Chrome
+```
+
+**THE CHAIN, END TO END:** the residential tunnel flaps → `proxy-watchdog` fails the channel over → Chrome's proxy is a launch argument, so the holder must relaunch → the fresh browser hits 闪购 cold → 风控 answers 418 → `noteVerifyResult` starts a back-off. **`isColdStartChallenge` was telling us this all along** — it labelled the 12:25 challenge *right after a browser relaunch, session intact*. The daemon knew. Nobody had followed it back one more step.
+
+**AND IT EXPLAINS WHY YUEXIU AND NOT TIANHE, which is the part worth keeping.** Both stores fail over on the same probe, one second apart. They do not land in the same place:
+
+| Store | Tiers | Where a residential failure lands it |
+|---|---|---|
+| tianhe | residential → **GZ datacenter** → direct | a Guangzhou IP — 闪购 sees nothing odd |
+| yuexiu | residential → direct | **a Hong Kong IP** — a Guangzhou store calling from abroad |
+
+**Tianhe is not getting away with it; it has a middle rung and Yuexiu does not.** Yuexiu's watchdog line reads `门店住宅代理 · 直连(香港)` with no GZ entry at all. **The challenge is not really about a cold browser — it is about the exit IP changing country mid-session.**
+
+**THE HYSTERESIS IS ONE-SIDED, AND THAT IS WHAT MAKES IT OSCILLATE.** `FAIL_THRESHOLD = 2` consecutive failed probes to declare DOWN, **but UP again on the first success.** A tunnel that is marginal rather than dead therefore rings back and forth: 04:11 down, 04:20 up, 04:21 down, 04:22 up — four transitions in eleven minutes, each one relaunching two browsers. **The comment above the threshold names the exact harm it was written to prevent** — *thrashing browser relaunches* — and it prevents it in one direction only.
+
+**WHEN IT STARTED.** Proxy switches were rare for two months (2 at a time, weeks apart), with one burst on 08-08. They resume **08-22 12:00** and are worst on 08-23: 2, 4, 5 per hour. That is the window in which the Tianhe residential path was being rebuilt as a reverse SSH tunnel over TCP/22. **63 switches all-time on this holder, 11 of them today.**
+
+**SO PERSISTING `verifyState` FIXES 23 OF 113. THIS IS THE OTHER 90.** Stabilising the tunnel, or giving Yuexiu a Guangzhou middle rung, removes the cause rather than the symptom — and a back-off that persisted across restarts would, on its own, have made a flapping tunnel look like a channel that had gone permanently quiet.
 
 ### I PRESENTED SELECTED HOURS AS THE MEASUREMENT — 2026-08-23
 

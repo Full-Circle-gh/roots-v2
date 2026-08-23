@@ -1,4 +1,4 @@
-# The Postgres migration — status, v3.3
+# The Postgres migration — status, v3.4
 
 **2026-08-10 · A LIVING DOCUMENT. Both halves, in one place: what is built, and what is left.**
 Covers 2026-08-03 onwards. Read-only in itself — no code change ever accompanies it.
@@ -208,6 +208,8 @@ Type: **C** conversion · **F** fix · **D** design question · **O** operationa
 | 69 | 🔴 **Deploy frequency has an unpriced cost: each bounce clears 闪购's in-memory risk-control back-off.** 23 of 113 challenges within 60s of a daemon start, all at 0—2s. 48 deploys in 2 days → the 30→240 min ladder never reaches its cap. **The daemon log undercounts 6×** (`verifyFlagged` gates the DB write). Same shape in `meituan-daemon.js`, `qingyun-daemon.js`. **Own pass — persist beside `alert-latch`, unreadable must mean STILL COOLING DOWN** | O | §24 DEPLOYS TRIGGER 闪购 RISK-CONTROL |
 
 | 70 | 🟢 **Yuexiu's 24h-stale 闪购 stock is NOT an overselling exposure.** `scripts/zero_yuexiu_stock.js` zeroed the store on 2026-08-21 at the operator's request and pushed the zeros; `retail_store_stock` shows **234 rows, 0 above zero, 0 units**, last changed 08-21 17:46. Nothing has needed pushing since, so nothing is stale in a way a customer can reach | C | §24 DEPLOYS TRIGGER 闪购 RISK-CONTROL |
+
+| 71 | 🔴 **闪购 risk-control root cause: a flapping residential tunnel, not a dying browser.** `proxy switch — relaunching Chrome` → cold browser → 418. **Yuexiu has no GZ middle rung so it fails over to a Hong Kong IP**; tianhe keeps a Guangzhou one. `FAIL_THRESHOLD=2` down but **UP on first success** — one-sided hysteresis oscillates. Fix the tunnel or give yuexiu a GZ tier; `verifyState` persistence only covers 23 of 113 | O | §24 THE 闪购 CHALLENGES ARE A PROXY FLAP |
 
 ### After the flip — explicitly not preconditions
 
