@@ -43,7 +43,11 @@ const MATCHES = [
   ['地板清洁液', 'Floor Cleaner 地板清洁（7-502)'],
   ['沙瓦玛素肉卷', '沙瓦玛卷 Shawarma Wrap'],
   ['苏马克粉（漆树果）', '苏模粉/漆树果粉Sumac'],
-  ['扎塔香料', "Za'atar绿百里香粉"],
+  // NOTE: Eleme's real listing uses a curly LEFT SINGLE QUOTATION MARK
+  // (U+2018 '‘') here, not a straight apostrophe — confirmed live 2026-08-23
+  // after this exact mistyped entry made the push fail "product not found"
+  // despite looking identical on screen.
+  ['扎塔香料', 'Za‘atar绿百里香粉'],
   ['西双版纳易武咖啡豆', '易武咖啡豆 Black Plum Coffee Beans'],
   ['烤榛子', 'Roasted Hazelnuts熟榛子仁'],
   ['法拉费小饼', '【速冻】法拉费小饼（非油炸）Baked Falafel'],
