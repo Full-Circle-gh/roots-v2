@@ -8092,6 +8092,50 @@
       </table>
     </div>
 
+    <!-- Reward for reviewing — sits ABOVE auto top-up on purpose: earning real
+         reviews is the fix, seeding them is the patch. -->
+    <div class="card" style="margin-top: var(--s5);">
+      <div class="row" style="justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
+        <h3 style="font-size: 13px; margin: 0;">Reward for reviewing · 评价奖励</h3>
+        <div class="muted" style="font-size: 11px;" id="rrw-stats"></div>
+      </div>
+      <div class="muted" style="font-size: 11px; margin-bottom: 12px;">
+        Gives a customer points for reviewing something they bought. Most shoppers never review unless there is a
+        reason to — this is the setting that grows your real reviews instead of seeded ones.
+        · 顾客对已购商品发表评价即可获得积分。多数顾客没有理由就不会评价——这项设置用于增加真实评价,而非种子评价。
+      </div>
+      <div class="muted" style="font-size: 11px; margin-bottom: 12px;">
+        <b>The reward never depends on the star rating.</b> A 1★ review earns exactly what a 5★ review earns.
+        Paying for good ratings specifically is illegal, and it also makes the reviews worthless to read.
+        · <b>奖励与评分高低无关。</b>1 星评价与 5 星评价获得的积分完全相同。仅为好评付费属违法行为,也会让评价失去参考价值。
+      </div>
+      <div class="row" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
+        <div class="field" style="margin: 0;">
+          <label class="stacked">Status · 状态</label>
+          <label class="fc-switch">
+            <input type="checkbox" id="rrw-enabled" onchange="rrwSyncLabel()">
+            <span class="fc-switch-track"></span>
+            <span id="rrw-status-label" style="font-size: 12px;">OFF · 关闭</span>
+          </label>
+        </div>
+        <div class="field" style="margin: 0;">
+          <label class="stacked">Points per review · 每条评价积分</label>
+          <input type="number" id="rrw-points" min="0" max="10000" step="1" value="20" style="width: 130px;">
+        </div>
+        <div class="field" style="margin: 0;">
+          <label class="stacked">Most rewarded per order · 每单最多奖励</label>
+          <input type="number" id="rrw-max" min="1" max="50" step="1" value="1" style="width: 150px;">
+        </div>
+      </div>
+      <div class="muted" style="font-size: 11px; margin: 8px 0 12px;">
+        The per-order cap stops a ten-item order becoming ten rewards. Points expire on the same clock as points
+        earned from orders. · 每单上限可避免十件商品的订单产生十份奖励。积分有效期与订单积分相同。
+      </div>
+      <div class="row" style="gap: 8px; align-items: center; flex-wrap: wrap;">
+        <button class="btn btn-primary btn-sm" type="button" onclick="saveReviewReward()">Save · 保存</button>
+        <span id="rrw-note" class="muted" style="font-size: 12px;"></span>
+      </div>
+    </div>
     <!-- Auto top-up — holds thin products at a review floor by seeding the
          shortfall. Sits with the tag editor below the daily moderation queue
          because it is set once and then left alone. -->

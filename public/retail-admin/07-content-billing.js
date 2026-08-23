@@ -1734,6 +1734,58 @@ function closeReviewLightbox() {
 // reviews, seeding the shortfall. Settings ride the shared config PUT under
 // the dotted key reviews.topup; the estimate + manual run have their own
 // endpoints. Server side: lib/review-topup.js.
+// ── Reward for reviewing ───────────────────────────────────────────────────
+// Points for the ACT of reviewing, never for a good rating. Settings ride the
+// shared config PUT under reviews.reward; server side lives beside the review
+// submit route in routes/retail.js.
+function rrwSyncLabel() {
+  const on = !!$("#rrw-enabled").checked;
+  $("#rrw-status-label").textContent = on ? cuT("ON", "开启") : cuT("OFF", "关闭");
+}
+
+async function loadReviewReward(fillForm) {
+  try {
+    const { data } = await api("/api/retail-admin/reviews/reward");
+    if (fillForm) {
+      $("#rrw-enabled").checked = !!data.enabled;
+      $("#rrw-points").value = data.points;
+      $("#rrw-max").value = data.max_per_order;
+      rrwSyncLabel();
+    }
+    $("#rrw-stats").textContent = data.grants
+      ? cuT(data.grants + " rewarded · " + data.points_given + " points given",
+            "已奖励 " + data.grants + " 条 · 共 " + data.points_given + " 积分")
+      : cuT("Nothing rewarded yet.", "尚未发放奖励。");
+  } catch (e) {
+    $("#rrw-stats").textContent = cuT("Failed", "失败") + ": " + e.message;
+  }
+}
+
+async function saveReviewReward() {
+  const points = parseInt($("#rrw-points").value, 10);
+  const max = parseInt($("#rrw-max").value, 10);
+  if (!(points >= 0 && points <= 10000)) { toast(cuT("Points must be 0–10000", "积分需为 0–10000"), "err"); return; }
+  if (!(max >= 1 && max <= 50))          { toast(cuT("Per-order cap must be 1–50", "每单上限需为 1–50"), "err"); return; }
+  const enabled = !!$("#rrw-enabled").checked;
+  const note = $("#rrw-note");
+  try {
+    await api("/api/retail-admin/config", {
+      method: "PUT",
+      body: { "reviews.reward": { enabled, points, max_per_order: max } },
+    });
+    toast(cuT("Saved", "已保存"));
+    // Customers only find out there is a reward if the mini app says so, and
+    // that copy ships with a republish — flag it rather than let the switch
+    // look like the whole job.
+    note.textContent = enabled
+      ? cuT("On. The mini app needs a republish before shoppers are told about it.",
+            "已开启。需重新发布小程序,顾客才会看到该奖励提示。")
+      : "";
+    await loadReviewReward(false);
+  } catch (e) {
+    toast(cuT("Save failed", "保存失败") + ": " + e.message, "err");
+  }
+}
 function rtuSyncLabel() {
   const on = !!$("#rtu-enabled").checked;
   $("#rtu-status-label").textContent = on ? cuT("ON", "开启") : cuT("OFF", "关闭");
@@ -1824,6 +1876,7 @@ document.querySelector('[data-tab="reviews"]').addEventListener('click', () => {
     // Tags first so the reviews table can render with the right labels.
     loadReviewTags().then(loadReviews);
     loadReviewTopup(true);
+    loadReviewReward(true);
   }
 });
 

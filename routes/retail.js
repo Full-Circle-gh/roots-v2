@@ -17778,6 +17778,66 @@ router.post('/api/retail/feedback/:id/reply', requireRetailAuth, express.json(),
 // Customer submits a review. Must own a 'delivered' order containing this
 // product (anti-spam — only buyers can review). One review per
 // (customer, product, order) — UNIQUE constraint catches dupes.
+// ── Reward for leaving a review ──────────────────────────────────────────────
+// Reviewing currently earns a customer nothing, which is the likeliest reason
+// there are far more seeded reviews than real ones. This pays points for the
+// act of reviewing.
+//
+// ⚠️ The reward is deliberately NOT conditional on the rating, and must never
+// become so. Paying for 5★ specifically is what turns an incentive into a
+// fake-review scheme — it is the thing 电子商务法 art.17 names, and it is also
+// how a review corpus stops being worth reading. Any rating earns the same.
+//
+// Config lives in storefront_config under 'reviews.reward'.
+const REVIEW_REWARD_DEFAULTS = Object.freeze({
+  enabled: false,      // opt-in; an upgrade never starts paying points on its own
+  points: 20,          // per rewarded review
+  max_per_order: 1,    // a 10-item order shouldn't be a 10x points farm
+});
+function getReviewReward() {
+  let saved = {};
+  try {
+    const row = tdb().prepare("SELECT value_json FROM storefront_config WHERE key = 'reviews.reward'").get();
+    if (row && row.value_json) saved = JSON.parse(row.value_json) || {};
+  } catch { saved = {}; }
+  const clampInt = (v, lo, hi, dflt) => {
+    const n = Math.floor(Number(v));
+    return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : dflt;
+  };
+  return {
+    enabled:       !!saved.enabled,
+    points:        clampInt(saved.points,        0, 10000, REVIEW_REWARD_DEFAULTS.points),
+    max_per_order: clampInt(saved.max_per_order, 1, 50,    REVIEW_REWARD_DEFAULTS.max_per_order),
+  };
+}
+// Grant the reward for one freshly-inserted review. Returns the points given
+// (0 when off, capped, or zero-valued). Best-effort: a failure here must never
+// cost the customer the review they just wrote, so it is caught by the caller.
+function awardReviewPoints(customerId, orderId, reviewId) {
+  const cfg = getReviewReward();
+  if (!cfg.enabled || cfg.points <= 0 || !customerId) return 0;
+  // Cap per ORDER, counted from the ledger itself so it survives a retry.
+  const given = tdb().prepare(
+    "SELECT COUNT(*) AS n FROM retail_points_transactions WHERE order_id = ? AND source = 'review_earn'"
+  ).get(orderId).n;
+  if (given >= cfg.max_per_order) return 0;
+  // Same expiry clock as order_earn — a reward is a liability like any other
+  // point, and NULL here would mean it never expires.
+  const expiresAt = nextEarnExpiry();
+  tdb().transaction(() => {
+    tdb().prepare('UPDATE retail_customers SET points_balance = COALESCE(points_balance, 0) + ? WHERE id = ?')
+      .run(cfg.points, customerId);
+    const after = tdb().prepare('SELECT points_balance FROM retail_customers WHERE id = ?')
+      .get(customerId).points_balance;
+    tdb().prepare(
+      `INSERT INTO retail_points_transactions
+         (customer_id, delta, balance_after, source, order_id, note, expires_at)
+       VALUES (?, ?, ?, 'review_earn', ?, ?, ?)`
+    ).run(customerId, cfg.points, after, orderId, 'Review #' + reviewId, expiresAt);
+  })();
+  return cfg.points;
+}
+
 router.post('/api/retail/products/:id/reviews', requireRetailAuth, express.json(), async (req, res) => {
   const productId = parseInt(req.params.id, 10);
   const orderId   = parseInt(req.body?.order_id, 10);
@@ -17840,7 +17900,16 @@ router.post('/api/retail/products/:id/reviews', requireRetailAuth, express.json(
       photos.length ? JSON.stringify(photos) : null,
       secHold ? 0 : 1, secHold,
     );
-    res.json({ success: true, data: { id: info.lastInsertRowid } });
+    // Points for reviewing. A held-back (sec_hold) review still earns — the
+    // customer did the work, and the hold is our check running late, not their
+    // fault. Never let a reward failure fail the review itself.
+    let pointsAwarded = 0;
+    try {
+      pointsAwarded = awardReviewPoints(req.customer.id, orderId, info.lastInsertRowid);
+    } catch (e) {
+      console.error('[reviews/reward]', e.message);
+    }
+    res.json({ success: true, data: { id: info.lastInsertRowid, points_awarded: pointsAwarded } });
   } catch (e) {
     if (/UNIQUE/.test(e.message)) {
       return res.status(409).json({ success: false, error: 'already_reviewed' });
@@ -18183,6 +18252,24 @@ router.delete('/api/retail-admin/reviews/:id', requireRetailAdmin, (req, res) =>
 // under 'reviews.topup' and are saved through the shared config PUT; these two
 // routes only report what a run WOULD do and let staff trigger one by hand.
 // See lib/review-topup.js for the sweeper that runs this on a timer.
+// The review reward settings, for the admin form. The write side rides the
+// shared config PUT under 'reviews.reward'.
+router.get('/api/retail-admin/reviews/reward', requireRetailAdmin, (req, res) => {
+  try {
+    const cfg = getReviewReward();
+    // How the reward is actually landing, so the operator sees it working
+    // rather than trusting the switch.
+    const stats = tdb().prepare(
+      `SELECT COUNT(*) AS grants, COALESCE(SUM(delta), 0) AS points
+         FROM retail_points_transactions WHERE source = 'review_earn'`
+    ).get();
+    res.json({ success: true, data: { ...cfg, grants: stats.grants, points_given: stats.points } });
+  } catch (e) {
+    console.error('[reviews/reward GET]', e);
+    res.status(500).json({ success: false, error: 'reward_read_failed' });
+  }
+});
+
 router.get('/api/retail-admin/reviews/topup', requireRetailAdmin, (req, res) => {
   try {
     res.json({ success: true, data: reviewTopup.estimateTopup(tdb()) });
