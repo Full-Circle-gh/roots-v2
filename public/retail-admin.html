@@ -11227,9 +11227,10 @@
            rather than take a secondary. Push all stock sits by the tabs. -->
     </div>
 
-    <!-- One card per store, from /eleme/status.stores. A store is blocked when
-         it cannot push at all: no shop id linked, or no saved login session. -->
-    <div class="el-stores" id="el-stores"></div>
+    <!-- Three tiles and, only while a store needs a person, one notice.
+         Painted by elRenderHead() from /eleme/status.stores. -->
+    <div class="el-tiles" id="el-tiles"></div>
+    <div id="el-notice"></div>
 
     <div class="el-tabs" role="tablist">
       <button id="el-tab-products" class="el-tab active" role="tab" onclick="elView('products')">
@@ -11243,8 +11244,12 @@
     </div>
 
     <div id="el-view-products" class="el-view">
-      <div class="pa-toolbar">
-        <input id="el-search" type="text" data-ph-en="Search products" data-ph-cn="搜索商品" placeholder="Search products" oninput="elFilterProducts()">
+      <div class="el-chips" id="el-chips" data-no-i18n></div>
+      <div class="el-tools">
+        <select class="el-sel" id="el-store-filter" data-no-i18n onchange="elSetStore(this.value)"></select>
+        <input class="el-search" id="el-search" type="text"
+               data-ph-en="Search product, SKU or listing name…" data-ph-cn="搜索商品、货号或饿了么商品名…"
+               placeholder="Search product, SKU or listing name…" oninput="elFilterProducts()">
       </div>
       <details class="el-how">
         <summary>How matching works · 匹配原理</summary>

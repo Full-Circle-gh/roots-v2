@@ -638,6 +638,31 @@
   // the escape hatch when the scrape can't reach Meituan.
   let _match = { stage: 'intro', applied: 0, failed: 0, running: false };
 
+  /* §1.13: a dialog closes on ✕ and on Esc. The listener is per-overlay and
+     comes off with it, so nothing accumulates across opens. `guard` lets the
+     match wizard refuse to close mid-run, the same way its scrim click does. */
+  function mtDlgShow(ov, close, guard) {
+    ov._mtEsc = function (e) {
+      if (e.key !== 'Escape') return;
+      if (guard && !guard()) return;
+      e.stopPropagation();
+      close();
+    };
+    document.addEventListener('keydown', ov._mtEsc);
+    document.body.appendChild(ov);
+    // Focus lands on the first real field, not on ✕ — which is what a plain
+    // document-order query returns, since the header comes first.
+    const first = ov.querySelector('.mt-dlg-bd input, .mt-dlg-bd select, .mt-dlg-bd textarea');
+    if (first) first.focus();
+  }
+  function mtDlgHide(id) {
+    const ov = document.getElementById(id);
+    if (!ov) return null;
+    if (ov._mtEsc) document.removeEventListener('keydown', ov._mtEsc);
+    ov.remove();
+    return ov;
+  }
+
   window.mtOpenMatch = function () {
     if (document.getElementById('mt-match-overlay')) return;
     _match = { stage: 'intro', applied: 0, failed: 0, running: false };
@@ -646,14 +671,11 @@
     ov.className = 'mt-ovl';
     ov.innerHTML = '<div class="mt-dlg" role="dialog" data-no-i18n><div id="mt-match-body"></div></div>';
     ov.addEventListener('click', e => { if (e.target === ov && !_match.running) mtMatchClose(); });
-    document.body.appendChild(ov);
+    mtDlgShow(ov, mtMatchClose, () => !_match.running);
     mtMatchRender();
   };
 
-  window.mtMatchClose = function () {
-    const ov = document.getElementById('mt-match-overlay');
-    if (ov) ov.remove();
-  };
+  window.mtMatchClose = function () { mtDlgHide('mt-match-overlay'); };
 
   // Close is a labelled button, not a glyph — and it is disabled while the run
   // is reading, because the run cannot be cancelled today and a button that
@@ -1007,8 +1029,7 @@
     ov.innerHTML = `
       <div class="mt-dlg" role="dialog">
         <div class="mt-dlg-hd">${cuT('Paste Meituan names', '\u7c98\u8d34\u7f8e\u56e2\u5546\u54c1\u540d')}
-          <span class="mt-tabs-grow"></span>
-          <button class="btn btn-sm" onclick="mtClosePaste()" aria-label="Close">\u2715</button></div>
+          <button class="mt-dlg-x" onclick="mtClosePaste()" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
         <div class="mt-dlg-bd"><div class="mt-form">
           <label class="mt-field">${cuT('Store', '\u95e8\u5e97')}
             <select id="mt-paste-store">${opts}</select>
@@ -1026,13 +1047,10 @@
         </div>
       </div>`;
     ov.addEventListener('click', e => { if (e.target === ov) mtClosePaste(); });
-    document.body.appendChild(ov);
+    mtDlgShow(ov, mtClosePaste);
   };
 
-  window.mtClosePaste = function () {
-    const ov = document.getElementById('mt-paste-overlay');
-    if (ov) ov.remove();
-  };
+  window.mtClosePaste = function () { mtDlgHide('mt-paste-overlay'); };
 
   window.mtPasteApply = async function () {
     const sel  = document.getElementById('mt-paste-store');
@@ -1215,12 +1233,11 @@
 
     const ov = document.createElement('div');
     ov.id = 'mt-bundle-overlay';
-    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+    ov.className = 'mt-ovl';
     ov.innerHTML = `
       <div class="mt-dlg" role="dialog">
         <div class="mt-dlg-hd">${existing ? cuT('Edit bundle', '\u7f16\u8f91\u5957\u9910') : cuT('Add bundle', '\u65b0\u589e\u5957\u9910')}
-          <span class="mt-tabs-grow"></span>
-          <button class="btn btn-sm" onclick="mtCloseBundle()" aria-label="Close">\u2715</button></div>
+          <button class="mt-dlg-x" onclick="mtCloseBundle()" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
         <div class="mt-dlg-bd"><div class="mt-form">
           <label class="mt-field">${cuT('Store', '\u95e8\u5e97')}
             <select id="mt-b-store">${_stores.map(s2 => `<option value="${esc(s2.code)}" ${s2.code === _bundleDraft.storeCode ? 'selected' : ''}>${esc(s2.name || s2.code)}</option>`).join('')}</select>
@@ -1248,7 +1265,7 @@
         </div>
       </div>`;
     ov.addEventListener('click', e => { if (e.target === ov) mtCloseBundle(); });
-    document.body.appendChild(ov);
+    mtDlgShow(ov, mtCloseBundle);
     mtRenderBundleComps();
   };
 
@@ -1266,7 +1283,7 @@
         <span class="cn">${esc(label || ('#' + c.productId))}</span>
         <span class="mt-hint">${cuT('qty', '\u6570\u91cf')}</span>
         <input type="number" min="1" value="${c.qty}" class="cq" onchange="mtBundleCompQty(${i}, this.value)">
-        <button class="btn btn-sm" onclick="mtBundleRemoveComp(${i})">✕</button>
+        <button class="rm" onclick="mtBundleRemoveComp(${i})" aria-label="${cuT('Remove', '移除')}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>`;
     }).join('');
   }
@@ -1297,7 +1314,7 @@
   };
   window.mtBundleCompQty = function (i, v) { if (_bundleDraft.components[i]) _bundleDraft.components[i].qty = Math.max(1, parseInt(v, 10) || 1); };
   window.mtBundleRemoveComp = function (i) { _bundleDraft.components.splice(i, 1); mtRenderBundleComps(); };
-  window.mtCloseBundle = function () { const ov = document.getElementById('mt-bundle-overlay'); if (ov) ov.remove(); _bundleDraft = null; };
+  window.mtCloseBundle = function () { mtDlgHide('mt-bundle-overlay'); _bundleDraft = null; };
 
   window.mtSaveBundle = async function () {
     const code  = document.getElementById('mt-b-store').value;

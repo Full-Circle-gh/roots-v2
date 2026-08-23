@@ -10,7 +10,7 @@
 //
 // Bump CACHE on every UI shape change to force every client to evict
 // its old shell on next load (activate handler deletes all old caches).
-const CACHE = 'roots-v2-shell-v790-meituan-option-picker';
+const CACHE = 'roots-v2-shell-v791-meituan-option-picker';
 const SHELL = ['/', '/login'];
 
 // Heuristic — request that wants HTML?
