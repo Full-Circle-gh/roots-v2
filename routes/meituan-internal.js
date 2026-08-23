@@ -288,6 +288,14 @@ router.post('/ingest-order', (req, res) => {
     // A terminal Meituan label (已完成/已取消/退款…) maps to the matching internal
     // status so the order lands in the right tab; anything in-progress → 'paid'.
     const internalStatus = internalStatusForChannel(channelStatus) || 'paid';
+    // An order whose FIRST sighting is already void. The restock in
+    // /update-order-status only fires on the TRANSITION into cancelled/refunded —
+    // which by definition never happens for one that arrived cancelled — so
+    // deducting here takes stock that nothing ever gives back. Live example found
+    // 2026-08-24: order 604 (MT20260714365100), placed_at == channel_status_at ==
+    // 订单取消, deducted and still sitting at channel_stock_restored = 0.
+    // Record the order, skip the deduction.
+    const bornVoid = internalStatus === 'cancelled' || internalStatus === 'refunded';
 
     // The rest of the same payload (see chan/attachChannelLines above).
     const ch    = chan(order);
@@ -352,6 +360,11 @@ router.post('/ingest-order', (req, res) => {
              ftext(cust.name), inv.wanted ? 1 : 0, ftext(inv.title), ftext(inv.taxId),
              fetchedAt, deliveredAt);
       const oid = r.lastInsertRowid;
+      // channel_stock_restored means "this order's stock is NOT currently deducted
+      // from our count". A born-void order never had its stock taken, so it starts
+      // in that state — which is also what makes the re-deduct branch in
+      // /update-order-status correct if Meituan later revives the order.
+      if (bornVoid) db.prepare('UPDATE retail_orders SET channel_stock_restored = 1 WHERE id = ?').run(oid);
       for (const it of items) {
         // Snapshot the Meituan 货号 (SKU token) so the view-only order drawer can
         // show it per line — including UNMATCHED lines (productId null), which
@@ -378,7 +391,7 @@ router.post('/ingest-order', (req, res) => {
     const unresolved = [];
     const oversold = [];
     let deducted = 0;
-    for (const it of items) {
+    for (const it of bornVoid ? [] : items) {
       if (!it.productId) { unresolved.push({ name: it.name, sku: it.sku, qty: it.qty, reason: it.matchBy }); continue; }
       const cur  = db.prepare('SELECT physical_qty FROM retail_store_stock WHERE store_id = ? AND product_id = ?').get(storeId, it.productId);
       const oldQ = cur ? cur.physical_qty : 0;
@@ -394,6 +407,22 @@ router.post('/ingest-order', (req, res) => {
         note: `Meituan ${ref}${order.daySeq != null ? ` #${order.daySeq}` : ''} — ${it.nameEn} x${it.qty}`,
       });
       deducted++;
+    }
+
+    // Visible in the sync log rather than only in the response body — "stock
+    // deliberately not deducted" is exactly the kind of silent decision that looks
+    // like a bug six weeks later.
+    if (bornVoid) {
+      try {
+        db.prepare(`
+          INSERT INTO meituan_sync_log (store_code, event_type, status, detail, error_msg)
+          VALUES (?, 'order_born_void', 'warn', ?, ?)
+        `).run(
+          storeCode || null,
+          JSON.stringify({ ref, channelStatus, items: items.length }),
+          `order first seen as "${channelStatus}" — recorded without deducting stock`
+        );
+      } catch (logErr) { console.error('[meituan-internal] order_born_void log failed:', logErr.message); }
     }
 
     // 3. Surface unmatched line-items. Previously these were dropped silently —
