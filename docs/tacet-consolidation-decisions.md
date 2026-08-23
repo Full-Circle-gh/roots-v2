@@ -1,9 +1,11 @@
-# Tacet shared-core consolidation — decisions record, v4.70
+# Tacet shared-core consolidation — decisions record, v4.71
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-08-23 · v4.71 — §24 Channels: **THE TUNNEL REBUILD REMOVED BLIP-TOLERANCE RATHER THAN DEGRADING THE LINK** — record as a standing property, not an incident. WireGuard/UDP is connectionless and absorbs a blip; **the SSH/TCP tunnel is a session, and the SOCKS listener on `127.0.0.1:1180` is owned by the `sshd` process itself** (`ss -lntp` PID matched the flap minute exactly), so a blip does not degrade the proxy, it deletes it. 44 re-establishments on 08-23. **The tunnel is still the right call** — the UDP path is blackholed — but everything above it must assume the listener can vanish and return. Settling: 40 in hour 11, 4 in hour 12, **0 in hours 13-14** (2 hours, not a week). **THE GZ RUNG COMPARISON AND ITS LIMIT:** same tunnel, same probe 1s apart, identical UP durations (63s, 675s) because `residentialUrl()` takes no channel argument — **0 challenges against 114**. But the stores run **different daemons on different channels**, so rung and channel are confounded; giving yuexiu the rung is the experiment that separates them. **THE HOLDERS HAVE NO RELAUNCH DEBOUNCE AT ALL** — searched `shangou-chrome.js` and `browser-warmup.js`: no cooldown, no minimum interval, no rate cap. **The watchdog threshold is the only guard in the chain and it guards one direction.** That is the more serious half. **`UP_THRESHOLD = 4` rests on TWO complete UP periods (63s, 675s)** — sample stated beside the number; re-derive from a week.
 
 2026-08-23 · v4.70 — §24 Ops: **TWO TRAPS FOUND LOOKING FOR AN OFF SWITCH, neither specific to 闪购.** 🔴 **`pm2 stop` is not durable on this box** — read from pm2's source, `God.restartProcessId` falls through to `startProcessId` when a process is not online, and `bounce_daemon` runs `pm2 restart` on any `lib/*` change, **so a hand-stopped daemon returns on the next shared deploy** — within hours at 48 deploys per two days. Use `pm2 delete` or a config gate. ⚠️ **`SHANGOU_STORES=` empty does not disable anything**: `('' || 'yuexiu')` falls back, and the only value yielding an empty list is a **bare comma**. A flag whose obvious value is a no-op and whose working value is punctuation. §24 **AN INSTRUMENT CAN BE RIGHT AND UNREAD**: `isColdStartChallenge` printed the correct diagnosis 113 times — *right after a browser relaunch, session intact* — and nobody walked one step further to ask why the browser was relaunching. Not a missing detector; a correct one read as noise, partly because its own message ends *no action needed*, true of the session and silent about the cause.
 
@@ -3187,6 +3189,48 @@ One self-referencing edge exists on each side (`retail_media_folders`). It is ex
 
 **THE EXIT CODE IS UNCHANGED AND STILL REPORTS DIFFERENCES ONLY.** Scope is disclosed in the output, not folded into the code, because a caller that has always read `0` as *no differences* must keep reading it that way. **The line a human reads is the one that changed.**
 
+### THE TUNNEL REBUILD REMOVED BLIP-TOLERANCE — A STANDING PROPERTY, NOT AN INCIDENT — 2026-08-23
+
+**The link did not get worse on 08-22. The thing that was hiding its blips was replaced.**
+
+**WireGuard over UDP is connectionless.** A few lost packets are a few lost packets; the local endpoint persists and nothing above it notices. **The reverse SSH tunnel over TCP/22 is a session.** The SOCKS listener on `127.0.0.1:1180` is owned by the `sshd` process serving user `tianheproxy` — confirmed by `ss -lntp`, whose PID matched the minute of the last flap exactly. **When that session drops the listener goes with it, and the proxy is not degraded, it is gone.**
+
+**So the same underlying link quality now produces hard proxy outages where it used to produce nothing at all.** 44 re-establishments on 08-23 (cross-checked against 56 distinct sshd PIDs, the same count including privsep children), each one a `proxy switch — relaunching Chrome` and, for Yuexiu, a cold browser on a Hong Kong IP.
+
+**RECORD IT AS A PROPERTY OF THE CURRENT DESIGN.** The tunnel is the right call — GFW blackholes the WireGuard UDP path, so this is session-fragility bought in exchange for working at all. **But anything built on top of it must assume the listener can vanish and return**, which is exactly what a one-sided UP threshold and a missing middle rung failed to assume.
+
+**It is settling rather than chronically bad, on the evidence so far:** 40 re-establishments in hour 11 (when it was being built), 4 in hour 12, **and none in hours 13 or 14.** Two clean hours is not a week — stated as the sample, not as a verdict.
+
+---
+
+### THE GZ RUNG COMPARISON, WITH ITS LIMIT — 2026-08-23
+
+**The control is unusually good and it is still not a clean experiment. Both halves belong in the record.**
+
+**What makes it strong:** tianhe and yuexiu are probed by the same `proxy-watchdog` process, fail over on the same probe **one second apart**, and show **identical UP-period durations (63s, 675s)** because `residentialUrl()` takes no channel argument — there is one tunnel and both stores exit through it. The only difference is where a failure lands them: tianhe on the GZ datacenter (Guangzhou), yuexiu on direct (Hong Kong).
+
+| | verify rows in DB | challenges in the daemon log |
+|---|---|---|
+| tianhe — has the rung | 1 | **0** |
+| yuexiu — no rung | 18 | **114** |
+
+**What keeps it from being conclusive:** the two stores also run **different daemons against different channels** — `meituan-daemon.js` against 美团 main, `shangou-daemon.js` against 闪购. 闪购 may simply enforce risk control harder. **The rung and the channel are confounded**, and 0-versus-114 cannot separate them on its own.
+
+**Which is why giving Yuexiu the rung is an experiment and not only a fix.** If the challenges stop while it stays on 闪购, the channel is ruled out and the country-change mechanism is confirmed.
+
+---
+
+### THE HOLDERS HAVE NO RELAUNCH DEBOUNCE AT ALL — 2026-08-23
+
+**Searched for and not found in `scripts/shangou-chrome.js` or `lib/browser-warmup.js`: any cooldown, minimum interval, consecutive-count or rate cap on relaunching Chrome.** A proxy switch relaunches the browser immediately, every time, with nothing in the holder limiting how often that can happen.
+
+**So `proxy-watchdog`'s `FAIL_THRESHOLD` is the ONLY guard anywhere in the chain — and it guards one direction.** `failCount[key] = ok ? 0 : (failCount[key] || 0) + 1` means two consecutive failures to declare DOWN and **a single success to declare UP**. The comment above it names *thrashing browser relaunches* as the harm it exists to prevent.
+
+**This is the more serious half of the finding.** A one-sided threshold is a bug in a guard. **No guard at the place where the expensive thing actually happens is a missing layer**, and it means any future source of proxy churn — not just this tunnel — arrives at the browser unthrottled.
+
+**`UP_THRESHOLD = 4` (~2 minutes at a 30s check) rests on TWO complete UP periods: 63s and 675s.** The 63s one is the false recovery; 4 gives roughly 2× margin over it. **Two periods is not a distribution** — stdout mirroring of the watchdog log is recent, so there is no more history to draw on. The number is defensible against what was observed and should be re-derived from a week of log before it is treated as settled.
+
+---
 ### RULE — AN INSTRUMENT CAN BE RIGHT AND UNREAD — 2026-08-23
 
 **`isColdStartChallenge` had the answer to the 闪购 challenges from the first one, and printed it every time.** Its message reads *right after a browser relaunch — session intact; the cool-down clears it on its own*. That is the correct diagnosis. It was written into the log 113 times and nobody followed it back the one further step to *why is the browser relaunching*.
