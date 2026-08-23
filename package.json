@@ -23,6 +23,7 @@
     "test:preorder": "node scripts/test_preorder_local.js",
     "test:proxy": "node scripts/test_proxy_failover.js",
     "test:queue-window": "node scripts/test_meituan_queue_window.js",
+    "test:queue-stall": "node scripts/test_meituan_queue_stall.js",
     "test:split-merge": "node scripts/test_shipments_split_merge.js",
     "test:stock-screens": "node scripts/test_stock_screens.js",
     "test:handle-threading": "node scripts/test_handle_threading_batch1.js && node scripts/test_handle_threading_batch2.js",

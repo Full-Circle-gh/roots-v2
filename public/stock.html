@@ -61,7 +61,6 @@
   --shadow-overlay:0 1px 2px rgba(17,26,43,.05),0 4px 16px rgba(17,26,43,.04);
   --settle:cubic-bezier(0.16,1,0.3,1);
   --sa-top:env(safe-area-inset-top,0px); --sa-bot:env(safe-area-inset-bottom,0px);
-  --chrome:calc(var(--sa-top) + 56px);
   color-scheme:light;
 }
 /* Dark mode is a token swap: Paper and Ink trade places, every other colour
@@ -107,23 +106,20 @@ input{font-family:inherit;-webkit-user-select:text;user-select:text;}
 
 #app{display:flex;flex-direction:column;min-height:100%;}
 
-/* ── Topbar · the shell. The mark alone, never the wordmark: Fraunces is the
-   marketing voice and never appears inside product UI (§1.3), and below 24px
-   the system asks for the mark on its own (§8). ── */
-.topbar{
-  position:sticky;top:0;z-index:20;height:var(--chrome);
-  display:flex;align-items:center;gap:8px;padding:var(--sa-top) 8px 0 16px;
-  background:var(--surface);border-bottom:1px solid var(--line);
-}
-.mark{display:block;width:58px;height:20px;flex:none;color:var(--text);}
+/* ── The mark · in the account sheet, not in a bar of its own ───────────────
+   A 56px topbar to carry a mark the operator already taps on their home screen
+   is rent, and on a 844px phone it is a fifth of the shelf. The identity lives
+   on the app icon and one tap inside the account sheet. Mark alone, never the
+   wordmark: Fraunces is the marketing voice and never appears in product UI
+   (§1.3), and below 24px the system asks for the mark on its own (§8). */
+.mark{display:block;width:58px;height:20px;flex:none;color:var(--text2);}
 /* §8a — the stroke is set optically at small size, not scaled from the viewBox.
    non-scaling-stroke holds it at 1.6px however the mark is sized; the spec's
    3.5 units would resolve to 0.64px here and the mark would simply vanish. */
 .mark path{vector-effect:non-scaling-stroke;stroke-width:1.6;}
-.tb-spacer{flex:1;min-width:0;}
 /* Avatar — rounded square, never a circle (§1.14). */
 .avatar{
-  width:32px;height:32px;border-radius:8px;flex:none;margin-right:6px;
+  width:32px;height:32px;border-radius:8px;flex:none;
   /* --dusk-ink, not --dusk: the initial is 15px type, and #6E67AF on the dark
      theme's dusk tint is 2.5:1. The other three hues already had an ink for
      exactly this; Dusk was the one that did not. */
@@ -135,13 +131,21 @@ input{font-family:inherit;-webkit-user-select:text;user-select:text;}
 /* ── Page header · title · status line · one Dusk CTA (§1.7).
    Quick stock has no create action and nothing waiting that the chips do not
    already count, so the CTA slot and the status line both stay EMPTY. That is
-   the finished header, not a gap (Customers is the reference case). ── */
-.page-head{padding:24px 16px 16px;}
+   the finished header, not a gap (Customers is the reference case). The account
+   control sits in the CTA's place — it is the shell's, not the page's, and on a
+   phone with no topbar there is nowhere else for it to live.
+   The negative bottom margin absorbs the safe-area inset the pinned band below
+   carries for itself: without it, a notched phone shows the inset TWICE at rest
+   (once here, once as the band's own top padding) and the head floats. ── */
+.page-head{display:flex;align-items:flex-start;gap:16px;
+  padding:calc(var(--sa-top) + 20px) 16px 12px;margin-bottom:calc(-1 * var(--sa-top));}
+.page-head .headmain{flex:1;min-width:0;}
 .page-head h1{margin:0;font-size:24px;font-weight:500;letter-spacing:-.01em;line-height:1.25;}
 
-/* Toolbar — the store control. Hidden entirely when the staffer has one store
-   (§1.9, data precondition: self-hide, no placeholder). */
-.toolbar{padding:0 16px 16px;}
+/* The store is the head's second line, not a control row of its own — it names
+   which shelf you are counting, which is state, not an action. Hidden entirely
+   when the staffer has one store (§1.9, data precondition: self-hide). */
+.toolbar{padding:0;}
 .btn{
   min-height:44px;padding:0 16px;border-radius:8px;font-size:15px;font-weight:500;
   display:inline-flex;align-items:center;justify-content:center;gap:8px;
@@ -154,14 +158,35 @@ input{font-family:inherit;-webkit-user-select:text;user-select:text;}
 .btn-danger{background:transparent;color:var(--brick-ink);border:1px solid var(--brick-ink);}
 .btn-danger:active{background:var(--brick-tint);}
 .btn[disabled]{opacity:.55;cursor:default;}
-.btn-store{width:100%;justify-content:flex-start;}
-.btn-store svg{width:20px;height:20px;color:var(--text2);flex:none;}
+/* A text line, but still a 44px target: the padding makes the box, the negative
+   margins keep the head tight around it. Vertical only — a control pulled past
+   its own horizontal padding lands on the browser's edge gesture. */
+.btn-store{justify-content:flex-start;border:0;background:none;color:var(--text2);
+  font-size:15px;font-weight:400;gap:6px;min-height:44px;padding:10px 0;margin:-8px 0 -10px;}
+.btn-store .ico{display:none;}
 .btn-store .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.btn-store .chev{margin-left:auto;color:var(--text2);}
+.btn-store .chev{margin-left:0;width:18px;height:18px;color:var(--text2);}
+.btn-store:active{background:none;color:var(--text);}
 
 /* ── Search + chips band · pinned. Fixed height, fully opaque (§1.13a rule 2):
-   a band that grows or lets tinted rows show through stops being a pin. ── */
-.band{position:sticky;top:var(--chrome);z-index:15;background:var(--bg);padding:0 16px 12px;}
+   a band that grows or lets tinted rows show through stops being a pin.
+   It carries the safe-area inset ITSELF, because a sticky element pins to the
+   viewport and ignores any padding on the page — measured, not assumed: with
+   the inset on <html> the band still lands at y=0, i.e. under the status bar.
+   The head's negative bottom margin cancels the inset while the head is there,
+   so the gap is 12px in every case and nothing moves when the band takes over.
+   The rule at the bottom closes the whole head, so the search never sits naked
+   against the top of the screen with cards sliding under it. ── */
+.band{position:sticky;top:0;z-index:15;background:var(--bg);
+  padding:calc(var(--sa-top) + 12px) 16px 12px;border-bottom:1px solid var(--line);}
+/* The account button rides in the pinned row, so it is still reachable once the
+   head has scrolled away. Its space is RESERVED at rest rather than claimed on
+   the fold — a search field that changes width as you scroll is the opposite of
+   everything settling. */
+.bandrow{display:flex;align-items:center;gap:8px;}
+.bandrow .searchwrap{flex:1;min-width:0;}
+.bandrow .avatar{visibility:hidden;opacity:0;transition:opacity .2s var(--settle);}
+body.compact .bandrow .avatar{visibility:visible;opacity:1;}
 .searchwrap{position:relative;}
 .searchwrap .s-ico{position:absolute;left:14px;top:50%;transform:translateY(-50%);width:18px;height:18px;color:var(--text2);pointer-events:none;}
 #q{
@@ -306,6 +331,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
 .grabber{width:38px;height:5px;border-radius:999px;background:var(--line);margin:6px auto 8px;}
 /* Sentence case, 13px Inter 500 — the uppercase eyebrow is banned (§1.6). */
 .sheet-h{font-size:13px;font-weight:500;color:var(--text2);padding:12px 16px 4px;}
+.sheet-mark{padding:8px 16px 0;}
 .sheet-item{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:12px 16px;text-align:left;}
 .sheet-item:active{background:var(--raised);}
 .sheet-item .code{font-size:13px;color:var(--text2);font-variant-numeric:tabular-nums;}
@@ -345,38 +371,31 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
 </head>
 <body>
 <div id="app">
-  <!-- The shell. Quick stock is a tacet surface and says so: the mark, and the
-       operator. Nothing else lives up here (§1.1d). -->
-  <header class="topbar">
-    <svg class="mark" viewBox="0 0 340 110" fill="none" role="img" aria-label="tacet">
-      <path d="M20 55 C30 15, 40 95, 50 55 C59 22, 68 88, 77 55 C85 30, 93 80, 101 55
-               C109 38, 117 72, 125 55 C133 44, 141 66, 149 55 C160 50, 171 60, 182 55
-               C215 55, 260 55, 305 55"
-            stroke="currentColor" stroke-linecap="round"/>
-      <circle cx="305" cy="55" r="5" fill="#6E67AF"/>
-    </svg>
-    <div class="tb-spacer"></div>
+  <!-- One head: the page's name, the shelf you are counting, and the way out.
+       The status line and the Dusk CTA slot stay empty (§1.7) — the chips carry
+       every real number, and nothing is created on this page. -->
+  <div class="page-head" id="pageHead" hidden>
+    <div class="headmain">
+      <h1 id="hTitle"></h1>
+      <div class="toolbar" id="toolbar" hidden>
+        <button class="btn btn-store" id="storeBtn">
+          <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/><path d="M9 20v-6h6v6"/></svg>
+          <span class="nm" id="storeName">—</span>
+          <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+        </button>
+      </div>
+    </div>
     <button class="avatar" id="acctBtn" hidden aria-label="Account"><span id="acctInitial">·</span></button>
-  </header>
-
-  <!-- Title · status line · one Dusk CTA. Both the status line and the CTA slot
-       are empty here on purpose: the chips already carry every real number, and
-       nothing is created on this page (§1.7). -->
-  <div class="page-head" id="pageHead" hidden><h1 id="hTitle"></h1></div>
-
-  <div class="toolbar" id="toolbar" hidden>
-    <button class="btn btn-secondary btn-store" id="storeBtn">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/><path d="M9 20v-6h6v6"/></svg>
-      <span class="nm" id="storeName">—</span>
-      <svg class="chev" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
-    </button>
   </div>
 
   <div class="band" id="band" hidden>
+    <div class="bandrow">
     <div class="searchwrap">
       <svg class="s-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
       <input id="q" type="search" inputmode="search" autocomplete="off" enterkeyhint="search">
       <button class="q-clear" id="qClear" aria-label="Clear"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+      <button class="avatar" id="acctPinned" aria-label="Account" tabindex="-1"><span id="acctInitial2">·</span></button>
     </div>
     <div class="filters" id="filters">
       <button class="chip active" data-filter="all"><span class="lbl"></span> <span class="c" id="cAll">0</span></button>
@@ -407,13 +426,20 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   <div id="sheetList"></div>
 </div>
 
-<!-- Account. Who is signed in, the two preferences, and the way out. Language
-     and appearance moved off the topbar: three icon buttons for settings a
-     staffer touches twice a year is chrome, and chrome is what this product
-     removes. -->
+<!-- Account. The mark, who is signed in, the two preferences, and the way out.
+     Language and appearance live here rather than in the chrome: three icon
+     buttons for settings a staffer touches twice a year is rent, and rent is
+     what this product stops paying. -->
 <div class="sheet-back" id="acctBack"></div>
 <div class="sheet" id="acctSheet">
   <div class="grabber"></div>
+  <div class="sheet-mark"><svg class="mark" viewBox="0 0 340 110" fill="none" role="img" aria-label="tacet">
+      <path d="M20 55 C30 15, 40 95, 50 55 C59 22, 68 88, 77 55 C85 30, 93 80, 101 55
+               C109 38, 117 72, 125 55 C133 44, 141 66, 149 55 C160 50, 171 60, 182 55
+               C215 55, 260 55, 305 55"
+            stroke="currentColor" stroke-linecap="round"/>
+      <circle cx="305" cy="55" r="5" fill="#6E67AF"/>
+    </svg></div>
   <div class="sheet-h" id="acctWho"></div>
   <div class="srow">
     <span class="lbl" id="acctLangLbl"></span>
@@ -611,6 +637,7 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     setChip('low', t('Low', '偏低'));
     setChip('out', t('Out', '售罄'));
     paintSync();
+    measureHead();
     if (state.storeId != null) {
       var s = state.stores.filter(function (x) { return x.id === state.storeId; })[0];
       $('#storeName').textContent = s ? storeLabel(s) : '—';
@@ -626,10 +653,13 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
   }
 
   function mountAccount() {
-    var b = $('#acctBtn');
+    var b = $('#acctBtn'), pinned = $('#acctPinned');
     b.hidden = false;
-    $('#acctInitial').textContent = (state.userName || '·').trim().charAt(0).toUpperCase() || '·';
+    var initial = (state.userName || '·').trim().charAt(0).toUpperCase() || '·';
+    $('#acctInitial').textContent = initial;
+    $('#acctInitial2').textContent = initial;
     b.onclick = openAccount;
+    pinned.onclick = openAccount;
     $('#acctBack').onclick = closeAccount;
     $('#langSeg').addEventListener('click', function (e) {
       var btn = e.target.closest('[data-lang]'); if (!btn) return;
@@ -675,7 +705,40 @@ main.enter > .row{animation:rise .35s var(--settle) both;}
     });
     $('#kpSave').onclick = kpSave;
     $('#kpBack').onclick = closeKeypad;
+    watchHead();
     startPolling();
+  }
+
+  // The head folds. Once it has scrolled out of the way the pinned band is the
+  // whole chrome, so the account button appears in it — the operator is never
+  // more than one tap from signing out, whatever the list is doing.
+  // NOTHING is hidden or resized to achieve this: the head scrolls away on its
+  // own and the button's space was reserved all along, so the page height never
+  // changes and the list cannot jump under a counting finger.
+  var headBottom = 0;
+  function measureHead() {
+    var head = $('#pageHead');
+    headBottom = head.hidden ? 0 : head.offsetTop + head.offsetHeight;
+  }
+  function watchHead() {
+    var pinned = $('#acctPinned'), on = null;
+    function apply() {
+      var want = headBottom > 0 && window.scrollY >= headBottom - 1;
+      if (want === on) return;
+      on = want;
+      document.body.classList.toggle('compact', want);
+      pinned.setAttribute('tabindex', want ? '0' : '-1');
+    }
+    // Two cheap things, deliberately: a CACHED threshold, because
+    // offsetTop/offsetHeight force layout and doing that per scroll event on a
+    // 250-row list is how a phone starts stuttering; and the work applied
+    // STRAIGHT from the listener rather than inside requestAnimationFrame,
+    // because a rAF that never runs leaves the fold stuck — headless Chrome
+    // under a virtual clock produces no frames, and this suite went red half
+    // the time until the rAF came out. There is no layout read left to defer.
+    measureHead(); apply();
+    addEventListener('scroll', apply, { passive: true });
+    addEventListener('resize', function () { measureHead(); apply(); });
   }
 
   function setFilter(key) {

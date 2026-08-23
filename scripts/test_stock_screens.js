@@ -152,6 +152,12 @@ const ROWS = [
   { product_id: 9, name_en: 'Arugula-Basil Pesto', name_cn: '芝麻菜青酱', sku: '1-20', physical_qty: 3, restock_target: 6 },
 ];
 const STOCKED = [ROWS[0]];
+// A shelf long enough to scroll. Three rows do not fill a phone, so a fold test
+// against ROWS scrolls by nothing and passes for the wrong reason.
+const MANY = [];
+for (let i = 0; i < 9; i++) {
+  MANY.push(Object.assign({}, ROWS[i % 3], { product_id: 100 + i, sku: '2-' + (10 + i) }));
+}
 
 // The page is the whole app: it self-authenticates and reads two endpoints.
 // The stub answers both, and can fail either one — half the states on this
@@ -202,6 +208,25 @@ const CASES = {
     js: "document.querySelector('.row .plus').click();" },
   'write-error': { rows: ROWS, fail: { write: true }, wait: 1600, expect: ['Didn’t save', 'Retry'],
     js: "document.querySelector('.row .plus').click();" },
+  // The head folds once the list is moving: the account button rides into the
+  // pinned band, the page height never changes, and nothing lands on the edge.
+  // The scroll WAITS FOR A ROW rather than for a delay: while the page is still
+  // a skeleton it is too short to scroll, so a timed scroll clamps to nothing
+  // and the case passes for the wrong reason — which it did, intermittently,
+  // before this loop replaced the setTimeout.
+  'folded': { rows: MANY, compact: true, acct: 'visible', wait: 900,
+    expect: ['Hummus Asli'],
+    // The scroll event is DELIVERED BY HAND, and that is not cheating: a browser
+    // fires scroll (and rAF, and IntersectionObserver) during its rendering
+    // step, and headless Chrome under a virtual clock produces no frames after
+    // load — so a real scroll here moves the page and notifies nobody. The
+    // position is real; only the notification is ours. What is under test is
+    // what the handler does at scrollY=400, which is the part that can break.
+    js: "var t=setInterval(function(){if(!document.querySelector('.row'))return;"
+      + "window.scrollTo(0,400);window.dispatchEvent(new Event('scroll'));"
+      + "if(document.body.classList.contains('compact')){clearInterval(t);window.__ready=1;}},40);" },
+  'not-folded-at-rest': { rows: ROWS, expect: ['Quick stock', 'Tianhe'], compact: false,
+    acct: 'hidden', ctxPatch: TWO_STORES },
   'add-error': { rows: ROWS, ctxPatch: { mode: 'add' }, fail: { write: true }, wait: 1800,
     expect: ['Didn’t add', 'Retry'], js: "document.querySelector('.row .plus').click();" },
 };
@@ -224,15 +249,33 @@ function main() {
     // Assertions read what the STAFFER sees — innerText, not the DOM dump: the
     // dump carries every comment and every sheet parked off-screen, so a
     // substring check against it passes on prose and on states nobody opened.
+    // The stamp waits for the case to say it is ready (window.__ready) and only
+    // falls back to the raw delay if it never does. A case that scrolls and then
+    // waits a fixed 900ms is a race: under a virtual clock the fold callback can
+    // land on either side of it, which is exactly how this suite went
+    // intermittently red before the flag existed.
     const probe = '<script>addEventListener("load",function(){setTimeout(function(){' +
       'try{' + (c.js || '') + '}catch(e){window.__e.push("case: "+e.message)}' +
-      'setTimeout(function(){var n=document.querySelectorAll("#app *").length;' +
+      'var t0=Date.now();var iv=setInterval(function(){' +
+      '  if(!window.__ready && Date.now()-t0 < ' + wait + ') return;' +
+      '  clearInterval(iv);stamp();},40);' +
+      'function stamp(){var n=document.querySelectorAll("#app *").length;' +
       'var seen=(document.getElementById("app").innerText||"").replace(/\\s+/g," ");' +
       'var sheets=[].slice.call(document.querySelectorAll(".sheet.show"));' +
       'seen+=" "+sheets.map(function(s){return s.innerText.replace(/\\s+/g," ")}).join(" ");' +
       'document.body.setAttribute("data-seen",seen);' +
       'document.body.setAttribute("data-open",sheets.map(function(s){return s.id}).join(","));' +
-      'document.title=window.__e.length?("ERR "+window.__e.join(" | ")):("OK "+n);},' + wait + ');},80)});</scr' + 'ipt>';
+      // The screen-edge rule, measured rather than eyeballed: no control may
+      // render within 8px of the top of the phone. This is what the pinned
+      // search band broke — it had no top padding, so the moment it pinned the
+      // input sat flush on the edge with cards sliding under it.
+      'var ctrls=[].slice.call(document.querySelectorAll("#band input,#band button,.row button"));' +
+      'var tops=ctrls.map(function(e){var r=e.getBoundingClientRect();' +
+      '  return (r.height>0&&r.bottom>0)?Math.round(r.top):9999});' +
+      'document.body.setAttribute("data-mintop",String(Math.min.apply(null,tops.concat([9999]))));' +
+      'document.body.setAttribute("data-compact",document.body.classList.contains("compact")?"1":"0");' +
+      'document.body.setAttribute("data-acct",getComputedStyle(document.getElementById("acctPinned")).visibility);' +
+      'document.title=window.__e.length?("ERR "+window.__e.join(" | ")):("OK "+n);}},80)});</scr' + 'ipt>';
     // The preference script goes in the HEAD, ahead of the page's own theme and
     // language boot — set after it, a preference is one the page has already read.
     const pre = c.pre ? '<script>' + c.pre + '</scr' + 'ipt>' : '';
@@ -248,12 +291,30 @@ function main() {
         '--window-size=402,874', '--virtual-time-budget=6000', '--dump-dom', 'file://' + file],
       { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 40000 });
     } catch (e) { failures.push([name, 'chrome failed: ' + e.message]); continue; }
+    if (process.env.DEBUG_CASE && name === process.env.DEBUG_CASE) {
+      console.log('DEBUG', name, (out.match(/data-mintop="[^"]*"/) || ['-'])[0], (out.match(/data-compact="[^"]*"/) || ['-'])[0], (out.match(/data-open="[^"]*"/) || ['-'])[0]);
+    }
     const title = (out.match(/<title>([^<]*)<\/title>/) || [])[1] || 'no title';
     if (!title.startsWith('OK')) { failures.push([name, title]); continue; }
     const nodes = Number((title.match(/^OK (\d+)/) || [])[1] || 0);
     if (nodes < 12) { failures.push([name, `painted only ${nodes} nodes`]); continue; }
     const seen = (out.match(/data-seen="([^"]*)"/) || [])[1] || '';
     const open = (out.match(/data-open="([^"]*)"/) || [])[1] || '';
+    const minTop = Number((out.match(/data-mintop="(-?\d+)"/) || [])[1]);
+    const compact = (out.match(/data-compact="([01])"/) || [])[1];
+    if (Number.isFinite(minTop) && minTop < 8) {
+      failures.push([name, `a control renders ${minTop}px from the top of the screen — nothing sits on the edge`]);
+    }
+    if (c.compact !== undefined && compact !== (c.compact ? '1' : '0')) {
+      failures.push([name, `head is ${compact === '1' ? 'folded' : 'open'}, expected the opposite`]);
+    }
+    // Folded, the pinned band is the whole chrome — so the way out has to be in
+    // it. At rest its slot is reserved but empty, or the search field would
+    // change width as the operator scrolls.
+    const acct = (out.match(/data-acct="([a-z]+)"/) || [])[1];
+    if (c.acct && acct !== c.acct) {
+      failures.push([name, `the pinned account button is ${acct}, expected ${c.acct}`]);
+    }
     for (const want of c.expect || []) {
       if (!seen.includes(want)) failures.push([name, `never says “${want}”`]);
     }

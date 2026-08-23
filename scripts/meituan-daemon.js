@@ -46,6 +46,7 @@ const { seam } = require('../lib/db-seam');
 const db = seam(require('../database'));
 const { getBrowser, closeAll } = require('../lib/meituan-browser');
 const { sweepStockDrift } = require('../lib/meituan-drift-sweep');
+const { stallTick } = require('../lib/meituan-queue-stall');
 const { sendOpsAlert } = require('../lib/ops-alert');
 // Ops-alert latches that survive a restart (see lib/alert-latch).
 const { latchStore } = require('../lib/alert-latch');
@@ -443,48 +444,97 @@ function heartbeatTick(storeCode) {
 // errors — its rows just sit at attempts=0, and a growing `pending` count is
 // indistinguishable from an ordinary busy queue.
 //
-// So: during open hours, a pushable store whose oldest waiting row is older than
-// QUEUE_STALL_MIN pages ops. Excused exactly like the heartbeat — a store that is
-// closed, cooling down, or unbound is not stalled, it is waiting, and those
-// states own their own alerts.
+// So: a pushable store whose oldest waiting row has sat at the head of the queue
+// for QUEUE_STALL_MIN of PUSHABLE time pages ops. Excused exactly like the
+// heartbeat — a store that is closed, cooling down, or unbound is not stalled, it
+// is waiting, and those states own their own alerts.
+//
+// "Pushable time", not wall-clock age, and the distinction is the whole alert.
+// The first version compared `now - created_at` against the threshold, which
+// counts the overnight hours when the store is shut and NOTHING can be pushed.
+// The drift sweep re-queues rows around the clock (by design — no browser, and
+// they should be waiting at the doors when the shop opens), so 天河 opened at
+// 09:45 on 2026-08-23 holding five rows queued at 21:57 the night before, and the
+// 09:48 check paged 🔴 "stock pushes are stuck · oldest waiting ~711 min" about a
+// queue that drained ten seconds later on that same cycle's drain. Every morning,
+// red then green, on the one canary that catches a real freeze. lib/meituan-queue-
+// stall.js holds the measurement and the reasoning; see also
+// scripts/test_meituan_queue_stall.js.
 const QUEUE_STALL_MS = Number(process.env.MEITUAN_QUEUE_STALL_MIN || 120) * 60_000;
 const QUEUE_STALL_CHECK_MS = 5 * 60_000;
+const stallState = {}; // storeCode -> stallTick state (in-process; the latch is on disk)
 
 function queueStallTick(stores) {
   const pushable = pushableStores(stores);
+  const now = Date.now();
   for (const s of stores) {
     const storeCode = s.storeCode;
     const key = 'queue_stall:' + storeCode;
-    if (!pushable.includes(storeCode)) { alerts[key] = alerts[key] || false; continue; }
-    let oldest = null;
+
+    // The oldest row that the drain would actually pick up next, and how many are
+    // behind it. Ordered exactly like the drain (created_at, then id) so "the head
+    // of the queue" means the same thing to the canary as to the pusher.
+    let head = null;
     try {
-      oldest = db.prepare(`
-        SELECT MIN(created_at) AS oldest, COUNT(*) AS n
+      const row = db.prepare(`
+        SELECT id, created_at
           FROM meituan_sync_queue
          WHERE store_code = ? AND status = 'pending' AND attempts < 3
+         ORDER BY created_at, id
+         LIMIT 1
       `).get(storeCode);
-    } catch (_) { continue; }
-    if (!oldest || !oldest.n || !oldest.oldest) {
-      if (alerts[key]) {
-        alerts[key] = false;
-        logSync(storeCode, 'queue_resumed', 'ok', null, 'stock push queue drained');
-        sendOpsAlert(`✅ 美团外卖 ${storeCode} 库存推送队列已清空，库存同步恢复\nMeituan 外卖 ${storeCode} stock push queue drained — stock sync recovered`);
+      if (row) {
+        const pending = db.prepare(`
+          SELECT COUNT(*) AS n FROM meituan_sync_queue
+           WHERE store_code = ? AND status = 'pending' AND attempts < 3
+        `).get(storeCode).n;
+        const ms = Date.parse(String(row.created_at).replace(' ', 'T') + 'Z');
+        head = { id: row.id, createdAtMs: Number.isFinite(ms) ? ms : now, pending };
       }
-      continue;
-    }
-    const ageMs = Date.now() - (Date.parse(String(oldest.oldest).replace(' ', 'T') + 'Z') || Date.now());
-    if (ageMs >= QUEUE_STALL_MS && !alerts[key]) {
+    } catch (_) { continue; }
+
+    const prevHeadId = (stallState[storeCode] || {}).headId;
+    const d = stallTick({
+      state: stallState[storeCode], pushable: pushable.includes(storeCode),
+      head, alerted: alerts[key], now, stallMs: QUEUE_STALL_MS,
+    });
+    stallState[storeCode] = d.state;
+
+    if (d.alert === 'page') {
       alerts[key] = true;
-      const mins = Math.round(ageMs / 60000);
-      logSync(storeCode, 'queue_stalled', 'error', { pending: oldest.n },
-        `oldest stock push waiting ~${mins} min during open hours`);
-      sendOpsAlert(`🔴 美团外卖 ${storeCode} 库存推送卡住：${oldest.n} 条待推送，最早一条已等待约 ${mins} 分钟，美团上的库存已过期\nMeituan 外卖 ${storeCode} stock pushes are stuck — ${oldest.n} queued, oldest waiting ~${mins} min; listings on Meituan are stale`);
-    } else if (ageMs < QUEUE_STALL_MS && alerts[key]) {
+      logSync(storeCode, 'queue_stalled', 'error', { pending: d.pending },
+        `oldest stock push waiting ~${d.waitedMin} min of open time (queued ~${d.ageMin} min ago)`);
+      sendOpsAlert(`🔴 美团外卖 ${storeCode} 库存推送卡住：${d.pending} 条待推送，最早一条在营业时间内已等待约 ${d.waitedMin} 分钟没有推出去，美团上的库存已过期\nMeituan 外卖 ${storeCode} stock pushes are stuck — ${d.pending} queued, the oldest has sat ~${d.waitedMin} min of TRADING time without going out; listings on Meituan are stale`);
+    } else if (d.alert === 'clear') {
       alerts[key] = false;
-      logSync(storeCode, 'queue_resumed', 'ok', { pending: oldest.n }, 'stock push queue moving again');
-      sendOpsAlert(`✅ 美团外卖 ${storeCode} 库存推送恢复正常\nMeituan 外卖 ${storeCode} stock pushes moving again`);
+      // An empty window is not proof the pushes landed: a row that burns its third
+      // attempt leaves this window exactly like one that succeeded. Say which
+      // happened, because "recovered" and "gave up" call for different reactions —
+      // the second needs the operator to know the listings are still wrong until
+      // the drift sweep picks them back up.
+      const gaveUp = d.pending === 0 && prevHeadId != null && headGaveUp(prevHeadId);
+      if (gaveUp) {
+        logSync(storeCode, 'queue_resumed', 'error', null,
+          'queue emptied by failed pushes, not successful ones — drift sweep will retry');
+        sendOpsAlert(`🟠 美团外卖 ${storeCode} 库存推送队列已清空，但最早一条是推送失败退出的，不是成功推出去的——美团上的库存仍然不对，等待补偿扫描重新入队\nMeituan 外卖 ${storeCode} stock push queue is empty, but the oldest row left by FAILING, not by landing — Meituan stock is still wrong until the drift sweep re-queues it`);
+      } else {
+        logSync(storeCode, 'queue_resumed', 'ok', { pending: d.pending },
+          d.pending ? 'stock push queue moving again' : 'stock push queue drained');
+        sendOpsAlert(`✅ 美团外卖 ${storeCode} 库存推送恢复正常\nMeituan 外卖 ${storeCode} stock pushes moving again`);
+      }
     }
   }
+}
+
+// Did the row that just left the pending window leave because it FAILED? A row
+// that burned its last attempt lands in status='error' and disappears from the
+// canary's window as silently as a successful one. Unknown/missing rows read as
+// "not a failure" — the honest default when we cannot tell.
+function headGaveUp(rowId) {
+  try {
+    const r = db.prepare('SELECT status FROM meituan_sync_queue WHERE id = ?').get(rowId);
+    return !!(r && r.status === 'error');
+  } catch (_) { return false; }
 }
 
 // ── Store config ─────────────────────────────────────────────────────────────
