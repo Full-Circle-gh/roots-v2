@@ -33,6 +33,7 @@ const qingyunQueue = require('../lib/qingyun-queue');
 const phoneCn = require('../lib/phone-cn');
 const tracking = require('../lib/tracking');
 const flashsales = require('../lib/flashsales');
+const reviewTopup = require('../lib/review-topup');
 const { imageAspect } = require('../lib/image-dims');
 const { getCategoryTree, sanitizeTree, normalizeCategoryPair } = require('../lib/category-tree');
 // What delivery/pickup/counter each MEAN — see lib/fulfilment.js. Prefer these
@@ -18166,6 +18167,37 @@ router.delete('/api/retail-admin/reviews/:id', requireRetailAdmin, (req, res) =>
   tdb().prepare('DELETE FROM retail_synthetic_reviews WHERE id = ?').run(id);
   logActivity(req.user.id, req.user.username, 'delete', 'retail_synthetic_review', id, null, req.ip);
   res.json({ success: true });
+});
+
+// ── Seeded-review top-up ────────────────────────────────────────────────────
+// The operator switch that holds every published product at a floor of N
+// visible reviews, seeding the shortfall. Settings live in storefront_config
+// under 'reviews.topup' and are saved through the shared config PUT; these two
+// routes only report what a run WOULD do and let staff trigger one by hand.
+// See lib/review-topup.js for the sweeper that runs this on a timer.
+router.get('/api/retail-admin/reviews/topup', requireRetailAdmin, (req, res) => {
+  try {
+    res.json({ success: true, data: reviewTopup.estimateTopup(tdb()) });
+  } catch (e) {
+    console.error('[review.topup estimate]', e);
+    res.status(500).json({ success: false, error: 'estimate_failed' });
+  }
+});
+
+// Run one top-up now. `force` so the preview/"Run now" button works while the
+// switch is still off — the operator clicking it IS the intent. The feature
+// gate inside topUpOnce still applies.
+router.post('/api/retail-admin/reviews/topup/run', requireRetailAdmin, express.json(), (req, res) => {
+  try {
+    const added = reviewTopup.topUpOnce(tdb(), { force: true });
+    if (added) {
+      logActivity(req.user.id, req.user.username, 'create', 'retail_synthetic_review', null, { seeded: added }, req.ip);
+    }
+    res.json({ success: true, data: { added } });
+  } catch (e) {
+    console.error('[review.topup run]', e);
+    res.status(500).json({ success: false, error: 'topup_failed' });
+  }
 });
 
 // Customer-side REFUND REQUEST — for paid+ orders the customer can't

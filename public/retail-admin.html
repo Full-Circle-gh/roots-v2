@@ -8085,6 +8085,55 @@
       </table>
     </div>
 
+    <!-- Auto top-up — holds thin products at a review floor by seeding the
+         shortfall. Sits with the tag editor below the daily moderation queue
+         because it is set once and then left alone. -->
+    <div class="card" style="margin-top: var(--s5);">
+      <div class="row" style="justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
+        <h3 style="font-size: 13px; margin: 0;">Auto top-up · 自动补充</h3>
+        <div class="muted" style="font-size: 11px;">Off by default. · 默认关闭。</div>
+      </div>
+      <div class="muted" style="font-size: 11px; margin-bottom: 12px;">
+        Keeps every published product at a minimum number of reviews. Anything below the line is topped up
+        automatically, so a new product arrives with reviews already on it and never shows an empty rating.
+        · 让每个已上架商品保持最少的评价数量。低于设定值的商品会自动补足,新品上架即带有评价,不会出现空白评分。
+      </div>
+      <div class="muted" style="font-size: 11px; margin-bottom: 12px;">
+        <b>These are seeded reviews, not customer ones</b> — written from the built-in copy, signed with made-up
+        names, and marked <b>Seeded</b> in the table above. No customer, order or real name is ever used.
+        Products listed in the last 24 hours are left alone.
+        · <b>补充的是种子评价,并非顾客评价</b>:文案由系统生成,署名为虚构昵称,在上方列表中标记为 <b>Seeded</b>。
+        不会使用任何顾客、订单或真实姓名。上架未满 24 小时的商品不会补充。
+      </div>
+      <div class="row" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
+        <div class="field" style="margin: 0;">
+          <label class="stacked">Status · 状态</label>
+          <label class="fc-switch">
+            <input type="checkbox" id="rtu-enabled" onchange="rtuSyncLabel()">
+            <span class="fc-switch-track"></span>
+            <span id="rtu-status-label" style="font-size: 12px;">OFF · 关闭</span>
+          </label>
+        </div>
+        <div class="field" style="margin: 0;">
+          <label class="stacked">Minimum reviews · 最少评价数</label>
+          <input type="number" id="rtu-min" min="1" max="20" step="1" value="3" style="width: 110px;">
+        </div>
+        <div class="field" style="margin: 0;">
+          <label class="stacked">Most to add per run · 每次最多添加</label>
+          <input type="number" id="rtu-max" min="1" max="500" step="1" value="50" style="width: 130px;">
+        </div>
+      </div>
+      <div class="muted" style="font-size: 11px; margin: 8px 0 12px;">
+        The cap stops the first run flooding the whole catalogue. It checks again every few hours, so a big
+        backlog clears over a day or so. · 该上限可避免首次运行时一次性铺满整个商品库。系统每几小时检查一次,
+        积压的商品会在一天左右内补齐。
+      </div>
+      <div class="row" style="gap: 8px; align-items: center; flex-wrap: wrap;">
+        <button class="btn btn-primary btn-sm" type="button" onclick="saveReviewTopup()">Save · 保存</button>
+        <button class="btn btn-sm" type="button" onclick="runReviewTopupNow()">Run now · 立即运行</button>
+        <span id="rtu-estimate" class="muted" style="font-size: 12px;"></span>
+      </div>
+    </div>
     <!-- Tag-chip editor — setup done rarely, so it sits below the daily moderation queue. -->
     <div class="card" style="margin-top: var(--s5);">
       <div class="row" style="justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
