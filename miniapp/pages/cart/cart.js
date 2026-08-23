@@ -1,10 +1,11 @@
 // Cart tab — reads local cart state. Editable qty steppers + delete.
-// The free-shipping bar states store policy — "满 ¥399 包邮" — and makes no
-// claim about this cart. It can't: nothing at or before the cart asks the
-// customer where the order is going, so any zone the server resolves for us is
-// a guess we have no way to qualify. /api/retail/free-shipping-threshold is
-// still called, but only so a zone with no free-shipping state at all can
-// suppress the line.
+// The free-shipping bar shows the gap to free delivery against the DELIVERY
+// ZONE's own threshold, so the figure agrees with what checkout will charge —
+// a Shenzhen address reads Shenzhen's number, not the store-wide default. The
+// zone comes from /api/retail/free-shipping-threshold, which resolves the
+// address checkout last used, else the default saved one; the store-wide
+// figure stands in only when no address resolves, and where the resolved zone
+// has no free-shipping state at all the bar renders nothing.
 
 const cart   = require('../../utils/cart');
 const config = require('../../utils/config');
@@ -18,9 +19,11 @@ Page({
     subtotal: 0,
     savedTotal: '',
     threshold: 0,
+    remaining: 0,
+    unlocked: false,
+    pct: 0,
     // Two states only:
-    //   'policy' — state the store threshold as a condition. No progress, no
-    //              "unlocked", nothing that reads as a promise about this cart.
+    //   'bar'    — show the gap + progress fill against `threshold`.
     //   'none'   — the resolved zone has no free-shipping state, or we have no
     //              figure yet; the bar doesn't render.
     shipState: 'none',
@@ -43,8 +46,8 @@ Page({
     this.recompute();
     // Copy overrides + theme; the bar's own numbers no longer come from here.
     config.load().then(() => this.recompute()).catch(() => {});
-    // The free-shipping bar's figure, its zone name and whether that zone has
-    // a free state at all. Until this lands the bar shows nothing.
+    // The free-shipping bar's figure for the resolved delivery zone, and
+    // whether that zone has a free state at all. Until this lands, no bar.
     this.loadZoneThreshold();
     // Cart unit_prices are frozen at add-time; re-price against the server so
     // flash sales that started/ended since show the CURRENT price + savings.
@@ -62,17 +65,20 @@ Page({
     const L = this.data.lang;
     const state = cart.get();
     const subtotal = cart.subtotal();
-    // The store's free-shipping figure, from the server (loadZoneThreshold).
-    // Deliberately NOT the resolved zone's number: the zone is a guess the cart
-    // can't qualify, so a figure derived from it would read as a promise about
-    // this order. The store figure is true whichever address wins.
+    // The free-shipping figure, from the server (loadZoneThreshold): the
+    // resolved zone's own threshold where an address resolved, the store-wide
+    // one where none did. Round the gap UP so the bar never understates what's
+    // left, and clamp the fill at 100% — same arithmetic as public/shop.html.
     const known = this._ship || null;
     const t = known ? Number(known.threshold) || 0 : 0;
+    // t <= 0 with a figure fetched means the store charges no delivery at all.
+    const alwaysFree = !!known && t <= 0;
+    const remainingRaw = alwaysFree ? 0 : Math.max(0, t - subtotal);
+    const remaining = Math.ceil(remainingRaw);
     let shipState;
-    if (!known)                          shipState = 'none';    // nothing fetched
+    if (!known)                              shipState = 'none'; // nothing fetched
     else if (known.zone && !known.reachable) shipState = 'none'; // no free state here
-    else if (t > 0)                      shipState = 'policy';
-    else                                 shipState = 'none';    // no figure to state
+    else                                     shipState = 'bar';
     // A line shows a strikethrough "was" price + feeds the "You saved" tally
     // when it's on flash OR it's a bundle priced below its components' combined
     // worth (bundle_worth, server-computed, frozen on the cart item at add-time).
@@ -120,6 +126,9 @@ Page({
       subtotal: subtotal.toFixed(2),
       savedTotal: savedTotal > 0 ? savedTotal.toFixed(2) : '',
       threshold: t,
+      remaining,
+      unlocked: alwaysFree || remainingRaw <= 0,
+      pct: alwaysFree ? 100 : Math.min(100, (subtotal / t) * 100),
       shipState,
       copy: {
         kicker:    this.tx('copy.cart.kicker',       L === 'cn' ? '购物车'                   : 'YOUR BASKET'),
@@ -130,15 +139,15 @@ Page({
     });
   },
 
-  // Fetch the store's free-shipping figure, plus whether the zone the server
-  // resolved has any free-shipping state at all.
+  // Fetch the free-shipping figure the bar prices against, plus whether the
+  // zone the server resolved has any free-shipping state at all.
   //
-  // We still send activeAddressId, but only so the server resolves the same
-  // zone checkout would — the answer we keep from it is `reachable`, and it can
-  // only take the line away, never put a number on it. The figure we display
-  // (`policy_threshold`) is the store's, not that zone's, precisely because the
-  // zone is a guess: the customer is never asked for an address at or before
-  // the cart, so a per-zone number here would be a promise made on their behalf.
+  // `threshold` is the resolved zone's own number (the store-wide one only
+  // where no address resolved), so the bar and checkout quote the same figure —
+  // a Shenzhen address reads Shenzhen's. We send activeAddressId so the server
+  // resolves the same address checkout would; it falls back to the default
+  // saved one. `reachable` is false where the pricing engine will never hand
+  // this zone a ¥0 delivery line, and then the bar renders nothing at all.
   //
   // Best-effort: on any failure `_ship` stays unset and the bar renders nothing.
   // Silence is the only honest fallback — there is no local default to fall to.
@@ -150,9 +159,9 @@ Page({
     } catch {}
     api.get(path)
       .then((d) => {
-        if (!d || !Number.isFinite(Number(d.policy_threshold))) return;
+        if (!d || !Number.isFinite(Number(d.threshold))) return;
         this._ship = {
-          threshold: Number(d.policy_threshold),
+          threshold: Number(d.threshold),
           zone: d.zone || null,
           reachable: !!d.reachable,
         };
