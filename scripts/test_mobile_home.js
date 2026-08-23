@@ -54,14 +54,22 @@ const CASES = [
     ['no "Create coupon"',     `!txt('content').includes('Create coupon')`],
     ['no "Send broadcast"',    `!txt('content').includes('Send broadcast')`],
   ]],
+  // waiting_since, the column /dashboard/ops actually returns — placed_at here
+  // meant the age line never rendered and the sub-line assertions below could
+  // not have failed if the app had dropped it.
   ['the needs-you queue is the ops snapshot', `state.ops={
-      unhandled:{count:3,items:[{placed_at:'2026-08-22 07:00:00'}]},
+      unhandled:{count:3,items:[{waiting_since:'2026-08-22 07:00:00'}]},
+      payment_unconfirmed:{count:2,unread:1,items:[{waiting_since:'2026-08-22 10:00:00'}]},
       refunds:{count:1,items:[]}, out_of_stock:{count:2}, low_stock:{count:5}};
     state.liveAttn={reviews:2}; APP.cmd('tab','home');`, [
     ['orders to start',       `txt('content').includes('Orders to start')`],
     ['refunds waiting',       `txt('content').includes('Refunds waiting')`],
     ['restock, counting what is OUT', `txt('content').includes('Restock needed') && txt('content').includes('out of stock, 5 running low')`],
     ['reviews, which the ops snapshot does not carry', `txt('content').includes('Reviews to reply')`],
+    ['a queue with a clock is aged',   `/oldest \\d+[mhd]/.test(txt('content'))`],
+    // The unreadable-proofs fire passes a SENTENCE as its sub-line, and the row
+    // used to glue "oldest" onto the front of it: "oldest 1 couldn't be read".
+    ['a queue with a sentence is not', `txt('content').includes("1 couldn't be read") && !txt('content').includes("oldest 1 couldn't")`],
   ]],
   ['a quiet shop shows no queue at all', `state.ops={unhandled:{count:0,items:[]}};
     state.liveAttn={}; APP.cmd('tab','home');`, [

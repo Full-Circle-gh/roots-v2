@@ -53,7 +53,9 @@ const CASES = [
     ['money is the server\'s total_cost',      `txt('content').includes('¥3,240')`],
     ['open is counted',                        `/3\\s+open/.test(txt('content'))`],
     ['late is counted separately',             `/1\\s+late/.test(txt('content'))`],
-    ['this month\'s spend is stated',          `txt('content').includes('spent this month')`],
+    // In the head band now, not the first row of the body — §1.7, and the same
+  // move the Orders status line made.
+  ['this month\'s spend is stated',          `txt('content').includes('¥6,080 this month')`],
     ['a late order says so, on the row',       `txt('content').includes('late')`],
     ['lines are counted',                      `txt('content').includes('6 lines')`],
     ['segments carry their counts',            `/Open\\s*3/.test(txt('content')) && /Received\\s*1/.test(txt('content')) && /All\\s*5/.test(txt('content'))`],
@@ -81,7 +83,9 @@ const CASES = [
   ['order sheet', SEEDED + `APP.cmd('openPO',4); state.poDetail=${DETAIL}; render();`, [
     ['the number is the title',      `sheetText().includes('RPO-0004')`],
     ['supplier and store are facts', `sheetText().includes('Fresh Co.') && sheetText().includes('Tianhe')`],
-    ['the arrival date is there',    `sheetText().includes('2026-08-16')`],
+    // Formatted, not the raw column: the phone writes dates the way §1.18 says
+    // and 2026-08-16 appearing here would mean the ISO string leaked through.
+    ['the arrival date is there',    `sheetText().includes('Aug 16') && !sheetText().includes('2026-08-16')`],
     ['every line is listed',         `sheetText().includes('Oat milk 1L') && sheetText().includes('Carrots')`],
     ['with the quantity ordered',    `sheetText().includes('48 btl')`],
     ['and what is on the shelf now', `sheetText().includes('on shelf 12')`],

@@ -72,13 +72,15 @@ const CASES = [
     ['and so is "Stored balance"',      `!txt('content').includes('Stored balance')`],
     ['who topped up',                   `txt('content').includes('Chen Meiling')`],
     ['their phone',                     `txt('content').includes('138****2841')`],
-    ['the method',                      `txt('content').includes('wechat')`],
+    // The tender, with a name — not the column's enum. This row printed
+    // "wechat" long after the order sheet had learned to say WeChat.
+    ['the method',                      `txt('content').includes('WeChat') && !txt('content').includes('wechat')`],
     ['bonus points where there are any', `txt('content').includes('+20 bonus points')`],
     ['a paid one reads Paid',           `txt('content').includes('Paid')`],
     ['a pending one reads Pending',     `txt('content').includes('Pending')`],
     ['a failed one reads Failed',       `txt('content').includes('Failed')`],
     ['only the paid one is a +amount',  `txt('content').split('+¥').length === 2`],
-    ['pending work is surfaced at the top', `txt('content').includes('One top-up is waiting to be confirmed')`],
+    ['pending work is surfaced at the top', `txt('content').includes('1 waiting to be confirmed')`],
     ['the packages on offer are listed',    `txt('content').includes('Starter')`],
     ['an inactive package is not offered',  `!txt('content').includes('¥500')`],
   ]],

@@ -95,10 +95,10 @@ function buildCases(src) {
     'sheet:order': "" + ROWS + "DB.orders[0]._id=1;DB.orders[0].raw='paid';state.liveOrders=DB.orders;APP.cmd('tab','orders');APP.cmd('openOrder',DB.orders[0].id)",
     'sheet:order-actions': "" + ROWS + "DB.orders[0]._id=1;DB.orders[0].raw='dispatched';state.liveOrders=DB.orders;APP.cmd('openOrder',DB.orders[0].id);APP.cmd('detailActions')",
     'sheet:customer': "" + ROWS + "state.customers=DB.customers.slice();state.custLoaded=true;APP.cmd('tab','customers');state.custId='s1';state.custDetail={customer:{nickname:'A',tier_key:'tree'},stats:{orders:{}}};render()",
-    'sheet:product-supplier': "state.prodStores=[{id:1,name_en:'T',name_cn:'T',qty:2}];state.prodStockReady=true;DB.products=[{sku:'SD-1',_id:9,name:['Supplier item','直发商品'],price:'¥20',priceNum:20,status:['Live','在售'],kind:'on',stock:0,stockLabel:['0 in stock','库存 0'],supplier:true,paused:false}];APP.cmd('tab','products');state.productSku='SD-1';render()",
+    'sheet:product-supplier': "state.prodStores=[{id:1,name_en:'Tianhe store',name_cn:'天河店',qty:8}];sheetStep['st_1']=8;state.prodStockReady=true;DB.products=[{sku:'SD-1',_id:9,name:['Supplier item','直发商品'],price:'¥20',priceNum:20,status:['Live','在售'],kind:'on',stock:0,stockLabel:['0 in stock','库存 0'],supplier:true,paused:false}];APP.cmd('tab','products');state.productSku='SD-1';render()",
     'sheet:product-paused': "state.prodStores=[];state.prodStockReady=true;DB.products=[{sku:'SD-2',_id:10,name:['Paused item','暂停商品'],price:'¥20',priceNum:20,status:['Paused','已暂停'],kind:'off',stock:0,stockLabel:['0 in stock','库存 0'],supplier:true,paused:true}];APP.cmd('tab','products');state.productSku='SD-2';render()",
-    'sheet:product-bundle': "state.prodStores=[{id:1,name_en:'T',name_cn:'T',qty:2}];state.prodStockReady=true;DB.products=[{sku:'BD-1',_id:11,name:['Gift box','礼盒'],price:'¥99',priceNum:99,status:['Live','在售'],kind:'on',stock:4,stockLabel:['4 in stock','库存 4'],bundle:true}];APP.cmd('tab','products');state.productSku='BD-1';render()",
-    'sheet:product': "" + ROWS + "state.prodStores=[{id:1,name_en:'T',name_cn:'T',qty:2}];state.prodStockReady=true;DB.products[1]._id=42;APP.cmd('tab','products');state.productSku=DB.products[1].sku;render()",
+    'sheet:product-bundle': "state.prodStores=[{id:1,name_en:'Tianhe store',name_cn:'天河店',qty:8}];sheetStep['st_1']=8;state.prodStockReady=true;DB.products=[{sku:'BD-1',_id:11,name:['Gift box','礼盒'],price:'¥99',priceNum:99,status:['Live','在售'],kind:'on',stock:4,stockLabel:['4 in stock','库存 4'],bundle:true}];APP.cmd('tab','products');state.productSku='BD-1';render()",
+    'sheet:product': "" + ROWS + "state.prodStores=[{id:1,name_en:'Tianhe store',name_cn:'天河店',qty:8}];sheetStep['st_1']=8;state.prodStockReady=true;DB.products[1]._id=42;APP.cmd('tab','products');state.productSku=DB.products[1].sku;render()",
     'sheet:reply': "" + ROWS + "DB.reviews[0].id=7;DB.reviews[0].stream='review';APP.cmd('push','inbox');APP.cmd('openReply',DB.reviews[0].cust[0])",
     // The feedback half of the inbox, and the thread sheet in all three of its
     // states — the fetch in flight, the conversation on screen, and the fetch
@@ -193,10 +193,22 @@ function buildCases(src) {
   return cases;
 }
 
+// The title carries three verdicts: a thrown error, a raw column date that
+// reached the glass, or the node count.
+//
+// The date one: §1.18 of the design system says English reads Aug 16 and
+// Chinese reads 8月16日, and the app has fmtDay/fmtDateOnly for exactly that.
+// But every date arrives from the server as YYYY-MM-DD, so a screen that
+// forgets to format one looks fine to every other check in this directory —
+// it is a plausible-looking string in the right place. Purchasing shipped four
+// of them and Pop-ups printed one twice, in the pill and again three lines
+// down. A regex on the painted text finds all of them at once.
 const PROBE = `<script>window.__e=[];addEventListener('error',function(e){window.__e.push(e.message)},true);
 addEventListener('load',function(){setTimeout(function(){
   var n=document.querySelectorAll('#app *').length;
-  document.title = window.__e.length ? ('ERR '+window.__e.join(' | ')) : ('OK '+n);
+  var iso=((document.getElementById('app')||{}).innerText||'').match(/\\d{4}-\\d{2}-\\d{2}/);
+  document.title = window.__e.length ? ('ERR '+window.__e.join(' | '))
+    : iso ? ('ISO '+iso[0]) : ('OK '+n);
 },400)});</script>`;
 
 function main() {
@@ -361,6 +373,43 @@ function main() {
     }
   }
 
+  // ── Static pass: every tint and ink is defined in BOTH themes ──────────
+  // The four --*-tint tokens were declared once, in :root, and never in the
+  // dark block — so a Sage icon tile, an Amber count badge and a Brick warning
+  // banner all kept their paper-coloured fill on a near-black page, and Home
+  // drew seven cream slabs down the side of the "Needs you" list. Nothing
+  // throws, nothing renders wrong, and no assertion on text can see it.
+  //
+  // The second half is the pairing: a hue on its own tint. Amber #C9954A on
+  // Amber-tint #F7EEDE is 2.2:1, which is under the floor for a 13px number,
+  // and the fires' count badges were drawn exactly that way. Text on a tint
+  // uses the matching --*-ink, which exists for this.
+  {
+    const css = (src.match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
+    const block = (re) => (css.match(re) || [])[1] || '';
+    const light = block(/:root\s*\{([\s\S]*?)\}/);
+    const dark = block(/:root\[data-theme="dark"\]\s*\{([\s\S]*?)\}/);
+    if (!light || !dark) { console.error('FAIL static — cannot find the theme blocks'); process.exit(1); }
+    // name -> value, so an ALIAS can be skipped: --accent-tint is
+    // `var(--dusk-tint)`, which follows whatever the theme sets. And the
+    // hyphen before the suffix keeps --ink itself out of it: that is a raw
+    // palette hue, fixed on purpose.
+    const decls = (b) => new Map([...b.matchAll(/(--[a-z-]+)\s*:\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]));
+    const inDark = decls(dark);
+    const missing = [...decls(light)]
+      .filter(([n, v]) => /-[a-z]+-(tint|ink)$/.test(n) && !/^var\(/.test(v) && !inDark.has(n))
+      .map(([n]) => n).sort();
+    for (const n of missing) console.error(`FAIL theme — ${n} is defined for light only; dark inherits the light value`);
+
+    const paired = [...src.matchAll(/background:var\(--([a-z]+)-tint[^)]*\);\s*color:var\(--\1[,)]/g)].map((m) => m[1]);
+    for (const h of [...new Set(paired)]) console.error(`FAIL theme — --${h} is used as text on --${h}-tint; use --${h}-ink`);
+
+    if (missing.length || paired.length) {
+      console.error(`\n${missing.length + new Set(paired).size} theme token problem${missing.length + new Set(paired).size === 1 ? '' : 's'}.`);
+      process.exit(1);
+    }
+  }
+
   // ── Static pass: the sample-data block still has all its keys ───────────
   // Three separate edits have now replaced a SLICE of this file — from one
   // landmark to the next — and silently taken everything in between with it.
@@ -397,7 +446,8 @@ function main() {
     } catch (e) { failures.push([name, 'chrome failed: ' + e.message]); continue; }
     const title = (out.match(/<title>([^<]*)<\/title>/) || [])[1] || 'no title';
     const nodes = Number((title.match(/^OK (\d+)/) || [])[1] || 0);
-    if (!title.startsWith('OK')) failures.push([name, title]);
+    if (title.startsWith('ISO')) failures.push([name, `a raw column date reached the screen: ${title.slice(4)} — format it with fmtDay/fmtDateOnly`]);
+    else if (!title.startsWith('OK')) failures.push([name, title]);
     // A screen that paints almost nothing is a screen that failed quietly.
     else if (nodes < 12) failures.push([name, `painted only ${nodes} nodes`]);
   }
