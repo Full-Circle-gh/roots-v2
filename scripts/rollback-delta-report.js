@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+// GAP G27. Nothing but server.js used to parse .env, so this script saw no
+// TACET_PG_* and lib/pg refused to build a pool -- an environment failure
+// wearing the clothes of a data finding. Loaded here, before anything reaches
+// for a connection, so a missing variable is reported as a missing variable.
+require('../lib/load-env').loadEnv();
 /**
  * rollback-delta-report.js — what the window left on Postgres. G22.
  *
@@ -145,10 +150,22 @@ function render(rep) {
 module.exports = { buildReport, render, DETAIL, COUNT_ONLY, DISPOSABLE };
 
 if (require.main === module) {
+  let exitCode = 0;
   (async () => {
     const argv = process.argv.slice(2);
     const at = (f) => { const i = argv.indexOf(f); return i >= 0 ? argv[i + 1] : null; };
     const sqlitePath = at('--since-db') || require('path').join(__dirname, '..', 'data', 'roots.db.pre-cutover');
+
+    // Everything that can stop this report from running at all is checked
+    // HERE, and refuses with 2. Below this line every failure is a finding.
+    require('../lib/load-env').requireEnv(
+      ['TACET_PG_HOST', 'TACET_PG_DATABASE', 'TACET_PG_USER'], 'delta-report');
+    if (!require('fs').existsSync(sqlitePath)) {
+      console.error(`[delta-report] REFUSING TO RUN: no pre-flip database at ${sqlitePath}.`);
+      console.error('  Without it there are no watermarks and no delta can be computed.');
+      console.error('  THIS IS NOT A FINDING ABOUT YOUR DATA. Nothing was measured.');
+      process.exit(2);
+    }
 
     const Database = require('better-sqlite3');
     const db = new Database(sqlitePath, { readonly: true, fileMustExist: true });
@@ -165,9 +182,29 @@ if (require.main === module) {
     try {
       const rep = await buildReport((sql, params) => client.query(sql, params), watermarks);
       console.log(render(rep));
+      // THE EXIT CODE IS THE VERDICT, AND IT HAS THREE VALUES ON PURPOSE.
+      // This runs at H6 step 2, AFTER the decision to roll back is taken, when
+      // nobody has attention left for reading prose. Before this the script had
+      // ONE exit path -- 1, from the catch -- so a missing .env, a dead pool and
+      // an absent pre-flip database were indistinguishable from each other, and
+      // a real delta exited 0, exactly like a clean one. Now:
+      //   0  ran, and the window left NOTHING that needs a person
+      //   1  ran, and there IS business data on Postgres to work through
+      //   2  COULD NOT RUN. Nothing measured. Not a verdict about anything
+      // Disposable rows (abandoned quotes, sync logs) are deliberately NOT a 1:
+      // they are 63% of the drift and none of them is a reason to act.
+      exitCode = rep.totals.business > 0 ? 1 : 0;
     } finally {
       client.release();
       await pool.end();
     }
-  })().catch((e) => { console.error('[delta-report]', e.message); process.exit(1); });
+  })().then(() => process.exit(exitCode))
+    .catch((e) => {
+      // Anything reaching here failed DURING the report, after the
+      // preconditions passed -- a dropped connection, a renamed table. Still
+      // "could not run" rather than a finding, so it is 2 and says so.
+      console.error('[delta-report] FAILED PART-WAY THROUGH:', e.message);
+      console.error('  The report is INCOMPLETE. Do not read the rows above as the whole delta.');
+      process.exit(2);
+    });
 }
