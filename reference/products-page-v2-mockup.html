@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — Products v2 mockup</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   TACET PRODUCTS v2 — static mockup, no live data.
+   Built to docs/tacet-desktop-patterns.md v4.6.
+
+   Archetype: A1 Worklist (§4, same as Orders).
+   Region order per §1.1a: header · sub-view strip · pulse ·
+   filter chips · filter row · table · pager.
+   Content column 1120px, never full-bleed (§1.1).
+   Detail = Hybrid: drawer that expands to a full page (§1.13),
+   which is the row this document already assigns to "Products
+   detail" — so the drawer and the page are one record at two
+   zoom levels, not two designs.
+
+   Dusk appears ONCE: the "Add product" CTA (§1.8). Stock,
+   status and price are the operator's own work, never Dusk.
+
+   Inter only, no Fraunces (§1.3). Sentence case, no uppercase
+   (§1.6). Two weights, 400 and 500. All numbers tabular.
+   English-only labels — the build renders one language from a
+   source pair, never glued (§1.11).
+
+   CHROME IS QUOTED, NEVER DRAWN (§0). The rail and topbar are
+   deliberately absent: this file renders the content column
+   only. Do not implement shell furniture from this mockup.
+
+   Tokens below are the LIVE --td-* block copied verbatim from
+   retail-admin.css (:root dark, :root[data-theme="light"]).
+   Never hard-code a hex against this file (§1.2).
+   ============================================================ */
+
+:root {
+  --td-surface:    #18233A;
+  --td-raised:     #1E2A44;
+  --td-border:     #2A3550;
+  --td-header:     #364058;
+  --td-unseen:     #182329;
+  --td-text:       #FBF9F4;
+  --td-text2:      #9AA3B2;
+  --td-heat-rgb:   251, 249, 244;
+  --td-dusk:       #6E67AF;
+  --td-dusk-hi:    #7E77BF;
+  --td-dusk-tint:  #262A4A;
+  --td-sage:       #A3B49F;
+  --td-sage-tint:  #1E2C26;
+  --td-sage-ink:   #A3B49F;
+  --td-amber:      #C9954A;
+  --td-amber-tint: #33290F;
+  --td-amber-ink:  #C9954A;
+  --td-brick:      #B4533E;
+  --td-brick-tint: #351B14;
+  --td-brick-ink:  #D07A66;
+  --td-paper:      #111A2B;
+}
+:root[data-theme="light"] {
+  --td-surface:    #FFFFFF;
+  --td-raised:     #F6F3EC;
+  --td-border:     #E4E0D5;
+  --td-header:     #DAD5C6;
+  --td-unseen:     #F4F5F0;
+  --td-text:       #111A2B;
+  --td-text2:      #58606E;
+  --td-heat-rgb:   17, 26, 43;
+  --td-dusk-tint:  #EEEDF6;
+  --td-sage-tint:  #EDF1EC;
+  --td-sage-ink:   #4A6249;
+  --td-amber-tint: #F7EEDE;
+  --td-amber-ink:  #8A6425;
+  --td-brick-tint: #F6E7E3;
+  --td-brick-ink:  #B4533E;
+  --td-paper:      #FBF9F4;
+}
+:root {
+  --f-sans: "Inter", -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  --r-control: 8px;
+  --r-card: 14px;
+  --shadow-soft: 0 1px 2px rgba(17,26,43,.05), 0 4px 16px rgba(17,26,43,.04);
+  --ease: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: var(--f-sans); font-size: 15px; line-height: 1.6;
+  color: var(--td-text); background: var(--td-paper);
+  -webkit-font-smoothing: antialiased;
+}
+.num { font-variant-numeric: tabular-nums; }
+button { font: inherit; color: inherit; cursor: pointer; background: none; border: 0; }
+
+/* ── mockup chrome (not part of the design) ─────────────────── */
+.mk-bar {
+  position: sticky; top: 0; z-index: 90;
+  display: flex; align-items: center; gap: 18px; flex-wrap: wrap;
+  padding: 10px 24px; background: var(--td-text); color: var(--td-paper);
+  font-size: 13px;
+}
+.mk-bar b { font-weight: 500; }
+.mk-bar label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; opacity: .72; }
+.mk-bar input { accent-color: var(--td-paper); }
+.mk-bar input:checked + span { text-decoration: underline; text-underline-offset: 3px; }
+.mk-note {
+  max-width: 1120px; margin: 0 auto; padding: 28px 48px 0;
+  color: var(--td-text2); font-size: 13px;
+}
+.mk-h {
+  max-width: 1120px; margin: 0 auto; padding: 56px 48px 0;
+  font-size: 18px; font-weight: 500;
+}
+.mk-h small { display: block; font-size: 13px; font-weight: 400; color: var(--td-text2); margin-top: 4px; }
+.state { position: absolute; opacity: 0; pointer-events: none; }
+
+/* screen switching */
+#sc-list:checked   ~ .wrap .screen:not(.s-list),
+#sc-drawer:checked ~ .wrap .screen:not(.s-drawer),
+#sc-page:checked   ~ .wrap .screen:not(.s-page),
+#sc-bulk:checked   ~ .wrap .screen:not(.s-bulk),
+#sc-states:checked ~ .wrap .screen:not(.s-states),
+#sc-cover:checked  ~ .wrap .screen:not(.s-cover) { display: none; }
+
+/* coverage table (mockup documentation, not part of the design) */
+.cov { width: 100%; border-collapse: collapse; table-layout: auto; margin-top: 16px; font-size: 13px; }
+.cov th { background: var(--td-raised); text-align: left; font-weight: 500; color: var(--td-text2);
+  padding: 10px 12px; border-bottom: 1px solid var(--td-border); white-space: nowrap; }
+.cov td { padding: 10px 12px; border-bottom: 1px solid var(--td-border); vertical-align: top; }
+.cov tr:last-child td { border-bottom: 0; }
+.cov .where { color: var(--td-text2); }
+.cov code { font-family: var(--f-sans); color: var(--td-text2); }
+.kill { color: var(--td-brick-ink); }
+
+/* ── §1.1 content column ────────────────────────────────────── */
+.col { max-width: 1120px; margin: 0 auto; padding: 32px 48px 96px; }
+
+/* ── §1.7 page header ───────────────────────────────────────── */
+.hd { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
+.hd-title { font-size: 24px; font-weight: 500; letter-spacing: -.01em; }
+.hd-status { font-size: 15px; color: var(--td-text2); font-variant-numeric: tabular-nums; margin-top: 2px; }
+/* The page's ONE Dusk element (§1.8). Split control: the face starts the
+   guided flow, the caret offers the blank form. */
+.cta { display: inline-flex; flex: none; }
+.cta > button {
+  height: 40px; padding: 0 18px; background: var(--td-dusk); color: #fff;
+  border-radius: var(--r-control) 0 0 var(--r-control); font-weight: 500;
+}
+.cta > button + button { padding: 0 12px; border-radius: 0 var(--r-control) var(--r-control) 0; border-left: 1px solid rgba(255,255,255,.22); }
+.cta > button:hover { background: var(--td-dusk-hi); }
+
+/* ── §1.1a row 2 · sub-view strip (segmented, ink underline) ── */
+.subviews { display: flex; gap: 24px; margin-top: 24px; border-bottom: 1px solid var(--td-border); }
+.subview { padding: 0 0 11px; color: var(--td-text2); position: relative; }
+.subview:hover { color: var(--td-text); }
+.subview.on { color: var(--td-text); font-weight: 500; }
+.subview.on::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--td-text); }
+.subview .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--td-amber); margin-right: 6px; vertical-align: 1px; }
+
+/* ── §1.1a row 3 · the pulse — 4 tiles, one row, never two ──── */
+.pulse { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-top: 32px; }
+.tile {
+  background: var(--td-surface); border: 1px solid var(--td-border);
+  border-radius: var(--r-card); padding: 24px; text-align: left;
+}
+.tile:hover { border-color: var(--td-text2); }
+.tile .l { font-size: 13px; color: var(--td-text2); }
+.tile .n { font-size: 30px; font-weight: 500; line-height: 1.1; margin-top: 8px; font-variant-numeric: tabular-nums; }
+.tile .d { font-size: 13px; color: var(--td-text2); margin-top: 4px; }
+.tile.alert .n { color: var(--td-amber-ink); }
+.tile.bad .n { color: var(--td-brick-ink); }
+/* A tile that is also a filter says so only by being pressable. */
+.tile.on { border-color: var(--td-text); box-shadow: inset 0 -2px 0 var(--td-text); }
+
+/* ── §1.1a row 4 · filter chips — primary axis, live counts ─── */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 32px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 8px; height: 32px; padding: 0 14px;
+  border: 1px solid var(--td-border); border-radius: var(--r-control);
+  background: var(--td-surface); font-size: 13px; white-space: nowrap;
+}
+.chip:hover { background: rgba(var(--td-heat-rgb), .04); }
+.chip.on { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); font-weight: 500; }
+.chip .c { color: var(--td-text2); font-variant-numeric: tabular-nums; }
+.chip.on .c { color: var(--td-paper); opacity: .7; }
+
+/* ── §1.1a row 5 · filter row — two dropdowns + one wide search ── */
+.filters { display: flex; align-items: center; gap: 16px; margin-top: 16px; }
+.sel, .search {
+  height: 40px; border: 1px solid var(--td-border); border-radius: var(--r-control);
+  background: var(--td-surface); font-size: 15px; color: var(--td-text);
+  display: inline-flex; align-items: center; gap: 8px; padding: 0 14px;
+}
+.sel { flex: none; color: var(--td-text2); }
+.sel b { font-weight: 400; color: var(--td-text); }
+.search { flex: 1; color: var(--td-text2); }
+.search svg { width: 16px; height: 16px; flex: none; }
+.tools { display: flex; align-items: center; gap: 8px; flex: none; }
+.tbtn {
+  height: 40px; padding: 0 14px; border: 1px solid var(--td-border);
+  border-radius: var(--r-control); background: var(--td-surface);
+  font-size: 13px; display: inline-flex; align-items: center; gap: 7px;
+}
+.tbtn:hover { border-color: var(--td-text2); }
+.tbtn.on { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
+.tbtn svg { width: 16px; height: 16px; }
+.seg { display: inline-flex; border: 1px solid var(--td-border); border-radius: var(--r-control); overflow: hidden; }
+.seg button { width: 40px; height: 40px; display: grid; place-items: center; background: var(--td-surface); color: var(--td-text2); }
+.seg button + button { border-left: 1px solid var(--td-border); }
+.seg button.on { background: var(--td-raised); color: var(--td-text); }
+.seg svg { width: 16px; height: 16px; }
+
+/* ── §1.1a row 6 · the table ─────────────────────────────────
+   §1.19: table-layout fixed, a classed col per column, widths in
+   PERCENTAGES SUMMING TO EXACTLY 100. No px, no clamp() — a math
+   function on a col width is silently discarded and every column
+   falls back to auto.
+
+   Measured at the 996px reference width (1120px column at a
+   1280px window, less gutters):
+     sel      4%  = 40px   checkbox only
+     photo    5%  = 50px   40px thumb + gap
+     product 26%  = 259px  SLACK ABSORBER — name ellipses, meta under
+     category 12% = 120px  "Dried fruit" ~78px + padding
+     sku      11% = 110px  "SPR-PSB-240" ~86px, tabular
+     tianhe    9% = 90px   header "Tianhe" ~48px; input 56px + state dot
+     yuexiu    9% = 90px   ditto
+     price    11% = 110px  worst case "¥168–288" ~78px
+     status   13% = 129px  worst case "Sold out" pill ~92px
+   Slack is taken by `product` alone — never by a number, a pill or
+   a code (§1.19). Re-measure on any new status label or category. */
+.tblwrap { margin-top: 24px; border: 1px solid var(--td-border); border-radius: var(--r-card); overflow: hidden; background: var(--td-surface); }
+table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+col.c-sel { width: 4%; }  col.c-photo { width: 5%; }  col.c-prod { width: 26%; }
+col.c-cat { width: 12%; } col.c-sku { width: 11%; }   col.c-stk { width: 9%; }
+col.c-price { width: 11%; } col.c-status { width: 13%; }
+thead th {
+  background: var(--td-raised); text-align: left; white-space: nowrap;
+  font-size: 13px; font-weight: 500; color: var(--td-text2);
+  padding: 12px 14px; border-bottom: 1px solid var(--td-border);
+}
+th.r, td.r { text-align: right; }
+th.c, td.c { text-align: center; }
+tbody tr { border-bottom: 1px solid var(--td-border); }
+tbody tr:last-child { border-bottom: 0; }
+tbody tr:hover { background: rgba(var(--td-heat-rgb), .035); }
+tbody tr.open { background: var(--td-raised); box-shadow: inset 3px 0 0 var(--td-text); }
+td { padding: 12px 14px; vertical-align: middle; }
+.thumb { width: 40px; height: 40px; border-radius: 10px; background: var(--td-raised); border: 1px solid var(--td-border); display: grid; place-items: center; color: var(--td-text2); }
+.thumb svg { width: 18px; height: 18px; }
+.pname { font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pmeta { font-size: 13px; color: var(--td-text2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cell-dim, .cell-dim .cur { color: var(--td-text2); }
+.cur { color: var(--td-text2); }
+.was { color: var(--td-text2); text-decoration: line-through; margin-left: 6px; font-size: 13px; }
+.sizes { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; margin-left: 8px;
+  border-radius: 999px; background: var(--td-raised); border: 1px solid var(--td-border);
+  color: var(--td-text2); font-size: 13px; }
+input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--td-text); }
+
+/* Stock cell has four shapes, because four kinds of product answer
+   "how many" differently. All four are rows in the table below. */
+.stkbox {
+  width: 100%; height: 32px; text-align: center; font: 400 15px var(--f-sans);
+  font-variant-numeric: tabular-nums; border: 1px solid var(--td-border);
+  border-radius: var(--r-control); background: var(--td-surface); color: var(--td-text);
+}
+.stkbox:focus { outline: none; border-color: var(--td-text); }
+.stkbox.low { border-color: var(--td-amber); color: var(--td-amber-ink); }
+.stkbox.out { border-color: var(--td-brick); color: var(--td-brick-ink); }
+.stkbox.saving { opacity: .5; background: var(--td-raised); }
+.stkbox.saved { border-color: var(--td-sage-ink); background: var(--td-sage-tint); }
+.stkro { display: inline-flex; align-items: center; gap: 7px; justify-content: center; font-variant-numeric: tabular-nums; }
+.stkro i { width: 6px; height: 6px; border-radius: 50%; background: var(--td-sage-ink); flex: none; }
+.stkro.low i { background: var(--td-amber); } .stkro.low { color: var(--td-amber-ink); }
+.stkro.out i { background: var(--td-brick); } .stkro.out { color: var(--td-brick-ink); }
+.stkerr { font-size: 13px; color: var(--td-brick-ink); margin-top: 4px; }
+
+/* §1.10 status colour is semantic. Sage = live, amber = needs someone,
+   plain = deliberately off. Never decorative. */
+.badge { display: inline-flex; align-items: center; gap: 7px; height: 24px; padding: 0 11px;
+  border-radius: 999px; font-size: 13px; white-space: nowrap; }
+.badge i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.badge.live { background: var(--td-sage-tint); color: var(--td-sage-ink); }
+.badge.out { background: var(--td-amber-tint); color: var(--td-amber-ink); }
+.badge.off { background: var(--td-raised); color: var(--td-text2); border: 1px solid var(--td-border); }
+.flag { display: inline-flex; align-items: center; height: 20px; padding: 0 8px; margin-left: 6px;
+  border-radius: 999px; border: 1px solid var(--td-border); background: var(--td-raised);
+  color: var(--td-text2); font-size: 13px; }
+
+/* pager */
+.pager { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 16px;
+  font-size: 13px; color: var(--td-text2); font-variant-numeric: tabular-nums; }
+.pager .sizes-opt { display: inline-flex; gap: 4px; }
+.pager .sizes-opt button { padding: 4px 9px; border-radius: 6px; }
+.pager .sizes-opt button.on { background: var(--td-raised); color: var(--td-text); }
+
+/* bulk bar — replaces the filter row while selecting */
+.bulk { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 16px;
+  padding: 12px 16px; background: var(--td-raised); border: 1px solid var(--td-border); border-radius: var(--r-card); }
+.bulk .n { font-weight: 500; }
+.bulk .sp { flex: 1; }
+.bulk .del { color: var(--td-brick-ink); border-color: var(--td-brick); }
+
+/* ── §1.13 Hybrid detail — the drawer ───────────────────────── */
+.stage { position: relative; }
+.scrim { position: absolute; inset: 0; background: rgba(17,26,43,.32); border-radius: var(--r-card); }
+.drawer {
+  position: absolute; top: 0; right: 0; bottom: 0; width: 480px;
+  background: var(--td-paper); border-left: 1px solid var(--td-border);
+  box-shadow: var(--shadow-soft); display: flex; flex-direction: column;
+}
+.dw-head { padding: 16px 20px; border-bottom: 1px solid var(--td-border); }
+.dw-top { display: flex; align-items: center; gap: 12px; }
+.dw-thumb { width: 44px; height: 44px; flex: none; border-radius: 10px; background: var(--td-raised); border: 1px solid var(--td-border); display: grid; place-items: center; color: var(--td-text2); }
+.dw-id { flex: 1; min-width: 0; }
+.dw-name { font-size: 18px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dw-sub { font-size: 13px; color: var(--td-text2); font-variant-numeric: tabular-nums; }
+.dw-x { width: 32px; height: 32px; border-radius: var(--r-control); display: grid; place-items: center; color: var(--td-text2); }
+.dw-x:hover { background: rgba(var(--td-heat-rgb), .05); color: var(--td-text); }
+.dw-actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+.saved { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; color: var(--td-text2); }
+.saved svg { width: 15px; height: 15px; color: var(--td-sage-ink); }
+.dw-tabs { display: flex; gap: 20px; padding: 0 20px; border-bottom: 1px solid var(--td-border); }
+.dw-tab { padding: 12px 0 11px; font-size: 15px; color: var(--td-text2); position: relative; }
+.dw-tab.on { color: var(--td-text); font-weight: 500; }
+.dw-tab.on::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--td-text); }
+.dw-body { flex: 1; overflow: auto; padding: 24px 20px 48px; }
+
+/* fields, shared by drawer and page */
+.grp + .grp { margin-top: 32px; }
+.grp-h { font-size: 18px; font-weight: 500; margin-bottom: 16px; }
+.field + .field, .two + .field, .field + .two, .two + .two { margin-top: 16px; }
+.field label, .two label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 8px; }
+.field label .hint, .two label .hint { font-weight: 400; color: var(--td-text2); }
+.inp {
+  width: 100%; height: 40px; padding: 0 14px; font: 400 15px var(--f-sans);
+  border: 1px solid var(--td-border); border-radius: var(--r-control);
+  background: var(--td-surface); color: var(--td-text);
+}
+.inp:focus { outline: none; border-color: var(--td-dusk); }
+textarea.inp { height: auto; min-height: 96px; padding: 10px 14px; line-height: 1.6; resize: vertical; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.pick { display: flex; align-items: center; justify-content: space-between; }
+.pick svg { width: 16px; height: 16px; color: var(--td-text2); }
+.money { position: relative; }
+.money .cur { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); }
+.money .inp { padding-left: 28px; }
+.rowline { display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  padding: 16px; border: 1px solid var(--td-border); border-radius: var(--r-control); background: var(--td-surface); }
+.rl-t { font-weight: 500; }
+.rl-s { font-size: 13px; color: var(--td-text2); }
+.sw { width: 44px; height: 24px; border-radius: 999px; background: var(--td-border); position: relative; flex: none; }
+.sw i { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(17,26,43,.2); transition: left .2s var(--ease); }
+.sw.on { background: var(--td-sage-ink); } .sw.on i { left: 23px; }
+.photos { display: flex; flex-wrap: wrap; gap: 8px; }
+.ph { width: 64px; height: 64px; border-radius: 10px; background: var(--td-raised); border: 1px solid var(--td-border); display: grid; place-items: center; color: var(--td-text2); position: relative; }
+.ph.cover::after { content: "Cover"; position: absolute; left: 0; right: 0; bottom: 0; text-align: center;
+  font-size: 13px; background: var(--td-text); color: var(--td-paper); border-radius: 0 0 9px 9px; }
+.ph.add { border-style: dashed; }
+.hintline { font-size: 13px; color: var(--td-text2); margin-top: 8px; }
+
+/* summary rows — what the drawer shows in place of the sections
+   that only open out on the page. A fact, and the way through. */
+.sumcard { border: 1px solid var(--td-border); border-radius: var(--r-card); background: var(--td-surface); overflow: hidden; }
+.sumrow { display: flex; align-items: center; gap: 16px; width: 100%; padding: 16px; text-align: left; border-bottom: 1px solid var(--td-border); }
+.sumrow:last-child { border-bottom: 0; }
+.sumrow:hover { background: rgba(var(--td-heat-rgb), .04); }
+.sm-main { flex: 1; min-width: 0; }
+.sm-t { display: block; font-size: 13px; color: var(--td-text2); }
+.sm-v { display: block; font-weight: 500; margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sm-go { display: inline-flex; align-items: center; gap: 4px; flex: none; font-size: 13px; color: var(--td-text2); }
+.sm-go svg { width: 14px; height: 14px; }
+.expandbtn { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; height: 40px;
+  margin-top: 16px; border: 1px solid var(--td-border); border-radius: var(--r-control);
+  background: var(--td-surface); font-size: 13px; font-weight: 500; }
+.expandbtn:hover { background: rgba(var(--td-heat-rgb), .04); }
+.expandbtn svg { width: 15px; height: 15px; }
+
+/* sales card in the drawer */
+.sales { border: 1px solid var(--td-border); border-radius: var(--r-card); padding: 16px; background: var(--td-surface); }
+.sales-h { display: flex; align-items: center; justify-content: space-between; }
+.sales-h .t { font-size: 13px; color: var(--td-text2); }
+.ranges { display: inline-flex; gap: 4px; }
+.ranges button { font-size: 13px; padding: 3px 9px; border-radius: 999px; border: 1px solid var(--td-border); color: var(--td-text2); }
+.ranges button.on { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
+.sales-k { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 16px; }
+.sales-k .v { font-size: 18px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.sales-k .l { font-size: 13px; color: var(--td-text2); }
+
+/* ── the expanded page ──────────────────────────────────────── */
+.crumb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--td-text2); }
+.crumb svg { width: 15px; height: 15px; }
+.crumb .here { color: var(--td-text); }
+.pp-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-top: 16px; }
+.pp-title { font-size: 24px; font-weight: 500; letter-spacing: -.01em; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.pp-acts { display: flex; gap: 8px; flex: none; }
+.card { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: var(--r-card); padding: 24px; }
+.card + .card { margin-top: 24px; }
+.card-h { font-size: 18px; font-weight: 500; margin-bottom: 16px; display: flex; align-items: center; gap: 12px; }
+.card-h .meta { font-size: 13px; font-weight: 400; color: var(--td-text2); }
+.varhead, .varrow { display: grid; grid-template-columns: 1fr 120px 96px 96px 96px; gap: 16px; align-items: center; }
+.varhead { font-size: 13px; color: var(--td-text2); padding-bottom: 12px; border-bottom: 1px solid var(--td-border); }
+.varrow { padding: 16px 0; border-bottom: 1px solid var(--td-border); }
+.varrow:last-of-type { border-bottom: 0; }
+.varrow .vn { font-weight: 500; }
+.acc { border: 1px solid var(--td-border); border-radius: var(--r-card); overflow: hidden; }
+.acc-row { border-bottom: 1px solid var(--td-border); }
+.acc-row:last-child { border-bottom: 0; }
+.acc-sum { display: flex; align-items: center; gap: 12px; padding: 16px; width: 100%; text-align: left; }
+.acc-sum:hover { background: rgba(var(--td-heat-rgb), .03); }
+.acc-sum .t { font-weight: 500; }
+.acc-sum .s { color: var(--td-text2); font-size: 13px; }
+.acc-sum .sp { flex: 1; }
+.acc-body { padding: 0 16px 16px 44px; }
+.line { display: flex; align-items: center; gap: 12px; padding: 8px 0; }
+.line .q { color: var(--td-text2); font-variant-numeric: tabular-nums; width: 32px; flex: none; }
+.line .n { flex: 1; }
+.line .p { font-variant-numeric: tabular-nums; font-weight: 500; }
+.tag { display: inline-flex; align-items: center; height: 28px; padding: 0 12px; border-radius: 999px;
+  background: var(--td-raised); border: 1px solid var(--td-border); font-size: 13px; }
+.tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.radio { display: flex; gap: 12px; padding: 16px; border: 1px solid var(--td-border); border-radius: var(--r-control); background: var(--td-surface); align-items: flex-start; }
+.radio + .radio { margin-top: 8px; }
+.radio.on { border-color: var(--td-text); background: var(--td-raised); }
+.radio .dot { width: 18px; height: 18px; flex: none; border: 1.5px solid var(--td-border); border-radius: 50%; margin-top: 2px; display: grid; place-items: center; }
+.radio.on .dot { border-color: var(--td-text); }
+.radio.on .dot::after { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--td-text); }
+.radio .t { font-weight: 500; display: block; }
+.radio .s { font-size: 13px; color: var(--td-text2); display: block; margin-top: 4px; }
+.foot { display: flex; align-items: center; gap: 8px; margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--td-border); }
+.foot .sp { flex: 1; }
+.btn { height: 40px; padding: 0 16px; border: 1px solid var(--td-border); border-radius: var(--r-control);
+  background: var(--td-surface); font-size: 15px; display: inline-flex; align-items: center; gap: 8px; }
+.btn:hover { border-color: var(--td-text2); }
+.btn.brick { color: var(--td-brick-ink); border-color: var(--td-brick); background: transparent; }
+.btn.brick:hover { background: var(--td-brick-tint); }
+.btn.sm { height: 32px; padding: 0 12px; font-size: 13px; }
+.phone { width: 128px; height: 228px; flex: none; border: 4px solid var(--td-text); border-radius: 16px; overflow: hidden; background: var(--td-paper); }
+.phone .img { height: 88px; background: var(--td-raised); display: grid; place-items: center; color: var(--td-text2); }
+.phone .bd { padding: 10px; }
+.phone .t { font-size: 13px; font-weight: 500; line-height: 1.3; }
+.phone .p { font-size: 13px; font-weight: 500; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.phone .ln { height: 5px; border-radius: 3px; background: var(--td-raised); margin-top: 6px; }
+.phone .ln.s { width: 68%; }
+.pagecard { display: flex; gap: 24px; align-items: flex-start; }
+.blocks { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 16px; }
+.rte { border: 1px solid var(--td-border); border-radius: var(--r-control); background: var(--td-surface); }
+.rte-bar { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px; border-bottom: 1px solid var(--td-border); color: var(--td-text2); font-size: 13px; }
+.rte-bar span { padding: 4px 8px; border-radius: 6px; }
+.rte-body { padding: 12px 14px; min-height: 96px; font-size: 15px; }
+.nudge { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 12px 16px; margin-bottom: 16px;
+  border: 1px solid var(--td-amber); background: var(--td-amber-tint); border-radius: var(--r-control); font-size: 13px; color: var(--td-amber-ink); }
+
+/* ── §1.12 states ───────────────────────────────────────────── */
+.state-box { border: 1px solid var(--td-border); border-radius: var(--r-card); background: var(--td-surface); padding: 64px 24px; text-align: center; }
+.state-box .t { font-size: 18px; font-weight: 500; }
+.state-box .s { color: var(--td-text2); margin-top: 8px; }
+.state-box .a { margin-top: 24px; display: inline-flex; gap: 8px; }
+.skel { height: 16px; border-radius: 6px; background: var(--td-raised); }
+.err { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border: 1px solid var(--td-brick);
+  background: var(--td-brick-tint); border-radius: var(--r-control); color: var(--td-brick-ink); }
+</style>
+</head>
+<body>
+
+<input type="radio" name="sc" id="sc-list" class="state" checked>
+<input type="radio" name="sc" id="sc-drawer" class="state">
+<input type="radio" name="sc" id="sc-page" class="state">
+<input type="radio" name="sc" id="sc-bulk" class="state">
+<input type="radio" name="sc" id="sc-states" class="state">
+<input type="radio" name="sc" id="sc-cover" class="state">
+
+<div class="mk-bar">
+  <b>Products v2</b>
+  <span style="opacity:.6">A1 Worklist · 1120px column · rail + topbar cropped, never drawn</span>
+  <label><input type="radio" name="sc2" onclick="document.getElementById('sc-list').checked=true" checked><span>Catalogue</span></label>
+  <label><input type="radio" name="sc2" onclick="document.getElementById('sc-drawer').checked=true"><span>Drawer</span></label>
+  <label><input type="radio" name="sc2" onclick="document.getElementById('sc-page').checked=true"><span>Expanded page</span></label>
+  <label><input type="radio" name="sc2" onclick="document.getElementById('sc-bulk').checked=true"><span>Selecting</span></label>
+  <label><input type="radio" name="sc2" onclick="document.getElementById('sc-states').checked=true"><span>States</span></label>
+  <label><input type="radio" name="sc2" onclick="document.getElementById('sc-cover').checked=true"><span>Coverage</span></label>
+  <span style="flex:1"></span>
+  <label><input type="checkbox" onclick="document.documentElement.setAttribute('data-theme', this.checked?'dark':'light')"><span>Dark</span></label>
+</div>
+
+<div class="wrap">
+
+<!-- ═══════════════════════ 1 · CATALOGUE ═══════════════════════ -->
+<section class="screen s-list">
+<div class="col">
+
+  <!-- §1.7 header: title · status line · one Dusk CTA. Three elements.
+       The status line reports WORK WAITING, not population — "209
+       products" is a census and would belong in a tile. -->
+  <div class="hd">
+    <div>
+      <div class="hd-title">Products</div>
+      <div class="hd-status num">8 sold out · 12 low on stock</div>
+    </div>
+    <div class="cta">
+      <button>Add product</button>
+      <button aria-label="More ways to add">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- §1.1a row 2 — sub-view strip, in-page, directly under the header.
+       Swaps what KIND of thing you are looking at (§1.7 test). -->
+  <nav class="subviews">
+    <button class="subview on">Catalogue</button>
+    <button class="subview"><i class="dot"></i>Stock activity</button>
+    <button class="subview">Categories</button>
+  </nav>
+
+  <!-- §1.1a row 3 — the pulse. Four tiles, one row, never two.
+       Each jumps to its matching filter. Sold out and Low stock are
+       already in the status line, so the tiles carry the four facts
+       the header does not (§1.7 non-duplication). -->
+  <div class="pulse">
+    <button class="tile">
+      <div class="l">Active in shop</div>
+      <div class="n num">176</div>
+      <div class="d num">of 209</div>
+    </button>
+    <button class="tile">
+      <div class="l">Disabled</div>
+      <div class="n num">26</div>
+      <div class="d">Hidden from shoppers</div>
+    </button>
+    <button class="tile alert">
+      <div class="l">Going nowhere</div>
+      <div class="n num">5</div>
+      <div class="d">No sale in 30 days</div>
+    </button>
+    <button class="tile">
+      <div class="l">On promotion</div>
+      <div class="n num">3</div>
+      <div class="d">Flash sale running</div>
+    </button>
+  </div>
+
+  <!-- §1.1a row 4 — filter chips. Primary axis is category, live
+       counts inside, Ink fill on active. A1: chips, never a select. -->
+  <div class="chips">
+    <button class="chip on">All <span class="c num">209</span></button>
+    <button class="chip">Spreads <span class="c num">32</span></button>
+    <button class="chip">Dips <span class="c num">18</span></button>
+    <button class="chip">Teas <span class="c num">24</span></button>
+    <button class="chip">Dried fruit <span class="c num">41</span></button>
+    <button class="chip">Drinks <span class="c num">29</span></button>
+    <button class="chip">Bakery <span class="c num">22</span></button>
+    <button class="chip">Pantry <span class="c num">43</span></button>
+  </div>
+
+  <!-- §1.1a row 5 — filter row: two dropdowns + one wide search, in
+       that order. No dividers, no chips. The view controls sit after
+       the search because they change the operator's own view, not the
+       records (§1.13 popover row). -->
+  <div class="filters">
+    <button class="sel">All stores <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></button>
+    <button class="sel">Status: <b>All</b> <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></button>
+    <div class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      Filter these products
+    </div>
+    <div class="tools">
+      <button class="tbtn">Select</button>
+      <div class="seg">
+        <button class="on" aria-label="List"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></button>
+        <button aria-label="Grid"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></button>
+      </div>
+      <button class="tbtn">View <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></button>
+      <button class="tbtn" aria-label="Export CSV"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg></button>
+    </div>
+  </div>
+
+  <!-- §1.1a row 6 — the table. Every awkward shape this catalogue
+       actually holds is a ROW here, not a labelled panel (§0):
+       a size family, a promo, a sold-out, a supplier-direct item, an
+       assembled bundle, a disabled row, a save in flight, a save that
+       failed. Design the worst case. -->
+  <div class="tblwrap">
+    <table>
+      <colgroup>
+        <col class="c-sel"><col class="c-photo"><col class="c-prod"><col class="c-cat">
+        <col class="c-sku"><col class="c-stk"><col class="c-stk"><col class="c-price"><col class="c-status">
+      </colgroup>
+      <thead>
+        <tr>
+          <th><input type="checkbox" aria-label="Select all"></th>
+          <th></th>
+          <th>Product</th>
+          <th>Category</th>
+          <th>SKU</th>
+          <th class="c">Tianhe</th>
+          <th class="c">Yuexiu</th>
+          <th class="r">Price</th>
+          <th>Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- size family — one row for the whole family; price is a range,
+             stock is a read-only rollup because each size owns its own -->
+        <tr>
+          <td><input type="checkbox"></td>
+          <td><span class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.7"/><path d="m21 16-5-5L4.5 20.5"/></svg></span></td>
+          <td><div class="pname">Roasted pumpkin seed butter<span class="sizes num">3 sizes</span></div></td>
+          <td>Spreads</td>
+          <td class="num cell-dim">—</td>
+          <td class="c"><span class="stkro num"><i></i>18</span></td>
+          <td class="c"><span class="stkro num"><i></i>14</span></td>
+          <td class="r num"><span class="cur">¥</span>57–89</td>
+          <td><span class="badge live"><i></i>Active</span></td>
+        </tr>
+        <!-- ordinary product, stock editable inline in both stores -->
+        <tr>
+          <td><input type="checkbox"></td>
+          <td><span class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.7"/><path d="m21 16-5-5L4.5 20.5"/></svg></span></td>
+          <td><div class="pname">Almond &amp; fig spread</div></td>
+          <td>Spreads</td>
+          <td class="num">SPR-ALF</td>
+          <td class="c"><input class="stkbox num" value="12"></td>
+          <td class="c"><input class="stkbox num" value="8"></td>
+          <td class="r num"><span class="cur">¥</span>48</td>
+          <td><span class="badge live"><i></i>Active</span></td>
+        </tr>
+        <!-- on promotion — the was-price rides in the price cell -->
+        <tr>
+          <td><input type="checkbox"></td>
+          <td><span class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.7"/><path d="m21 16-5-5L4.5 20.5"/></svg></span></td>
+          <td><div class="pname">Jasmine silver needle<span class="flag">On promo</span></div></td>
+          <td>Teas</td>
+          <td class="num">TEA-JSN</td>
+          <td class="c"><input class="stkbox num low" value="3"></td>
+          <td class="c"><input class="stkbox num low" value="2"></td>
+          <td class="r num"><span class="cur">¥</span>120<span class="was">¥150</span></td>
+          <td><span class="badge live"><i></i>Active</span></td>
+        </tr>
+        <!-- sold out everywhere — amber, because someone must act -->
+        <tr>
+          <td><input type="checkbox"></td>
+          <td><span class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.7"/><path d="m21 16-5-5L4.5 20.5"/></svg></span></td>
+          <td><div class="pname">Sun-dried tomato dip</div></td>
+          <td>Dips</td>
+          <td class="num">DIP-SDT</td>
+          <td class="c"><input class="stkbox num out" value="0"></td>
+          <td class="c"><input class="stkbox num out" value="0"></td>
+          <td class="r num"><span class="cur">¥</span>39</td>
+          <td><span class="badge out"><i></i>Sold out</span></td>
+        </tr>
+        <!-- supplier-direct — holds none of our stock, so it can never
+             be "out"; the cell answers from the supplier flag instead -->
+        <tr>
+          <td><input type="checkbox"></td>
+          <td><span class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.7"/><path d="m21 16-5-5L4.5 20.5"/></svg></span></td>
+          <td><div class="pname">Golden raisin medley</div><div class="pmeta">Ships from supplier</div></td>
+          <td>Dried fruit</td>
+          <td class="num">DRY-RSN</td>
+          <td class="c"><span class="stkro"><i></i>Available</span></td>
+          <td class="c"><span class="stkro"><i></i>Available</span></td>
+          <td class="r num"><span class="cur">¥</span>22</td>
+          <td><span class="badge live"><i></i>Active</span></td>
+        </tr>
+        <!-- assembled bundle — stock is computed from its parts, so the
+             cell is read-only and says why on hover -->
+        <tr>
+          <td><input type="checkbox"></td>
+          <td><span class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.7"/><path d="m21 16-5-5L4.5 20.5"/></svg></span></td>
+          <td><div class="pname">Breakfast set<span class="flag">Bundle</span></div><div class="pmeta">Stock follows its parts</div></td>
+          <td>Pantry</td>
+          <td class="num">BND-BRK</td>
+          <td class="c"><span class="stkro num low"><i></i>4</span></td>
+          <td class="c"><span class="stkro num"><i></i>9</span></td>
+          <td class="r num"><span class="cur">¥</span>118</td>
+          <td><span class="badge live"><i></i>Active</span></td>
+        </tr>
+        <!-- a save in flight, and a save that failed. §1.12: a failed
+             write renders where the operator is looking and stays. -->
+        <tr>
+          <td><input type="checkbox"></td>
+          <td><span class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.7"/><path d="m21 16-5-5L4.5 20.5"/></svg></span></td>
+          <td><div class="pname">Candied ginger petals</div></td>
+          <td>Dried fruit</td>
+          <td class="num">DRY-GNG</td>
+          <td class="c"><input class="stkbox num saving" value="15" disabled></td>
+          <td class="c">
+            <input class="stkbox num out" value="0">
+            <div class="stkerr">Couldn't save</div>
+          </td>
+          <td class="r num"><span class="cur">¥</span>24</td>
+          <td><span class="badge live"><i></i>Active</span></td>
+        </tr>
+        <!-- disabled — deliberately off, so the row is quiet, not alarming -->
+        <tr>
+          <td><input type="checkbox"></td>
+          <td><span class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.7"/><path d="m21 16-5-5L4.5 20.5"/></svg></span></td>
+          <td><div class="pname cell-dim">Preserved hawthorn slices</div></td>
+          <td class="cell-dim">Dried fruit</td>
+          <td class="num cell-dim">DRY-HAW</td>
+          <td class="c"><input class="stkbox num out" value="0"></td>
+          <td class="c"><input class="stkbox num out" value="0"></td>
+          <td class="r num cell-dim"><span class="cur">¥</span>18</td>
+          <td><span class="badge off"><i></i>Disabled</span></td>
+        </tr>
+        <!-- a save that just landed -->
+        <tr>
+          <td><input type="checkbox"></td>
+          <td><span class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.7"/><path d="m21 16-5-5L4.5 20.5"/></svg></span></td>
+          <td><div class="pname">Matcha, ceremonial grade</div></td>
+          <td>Teas</td>
+          <td class="num">TEA-MCH</td>
+          <td class="c"><input class="stkbox num saved" value="9"></td>
+          <td class="c"><input class="stkbox num out" value="0"></td>
+          <td class="r num"><span class="cur">¥</span>168</td>
+          <td><span class="badge live"><i></i>Active</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="pager">
+    <span class="num">Showing 9 of 209</span>
+    <span class="sizes-opt">
+      Per page
+      <button class="on">50</button><button>100</button><button>200</button><button>All</button>
+    </span>
+  </div>
+
+  <p class="mk-note" style="padding-left:0;padding-right:0">
+    Drag-to-reorder arms only when exactly one category chip is on and nothing
+    else is filtering — a grip column slides in ahead of the photo and the pager
+    is replaced by the hint “Drag to set the order shoppers see”. Not drawn: it
+    is the same table with one column added.
+  </p>
+
+</div>
+</section>
+
+<!-- ═══════════════════════ 2 · DRAWER ═══════════════════════ -->
+<section class="screen s-drawer">
+<div class="col">
+  <div class="mk-note" style="padding:0 0 24px">
+    §1.13 assigns <b>Products detail</b> the Hybrid: a drawer that expands to a
+    full page. The drawer is the glance — it holds what is quick to change and
+    a summary row for everything that is heavy. It settles in 350ms, closes on
+    ✕ or Esc, and never opens another drawer.
+  </div>
+
+  <div class="stage" style="height:640px;border:1px solid var(--td-border);border-radius:var(--r-card);overflow:hidden">
+    <div style="padding:0;height:100%;overflow:hidden;background:var(--td-surface)">
+      <table>
+        <colgroup>
+          <col class="c-sel"><col class="c-photo"><col class="c-prod"><col class="c-cat">
+          <col class="c-sku"><col class="c-stk"><col class="c-stk"><col class="c-price"><col class="c-status">
+        </colgroup>
+        <thead><tr>
+          <th><input type="checkbox"></th><th></th><th>Product</th><th>Category</th><th>SKU</th>
+          <th class="c">Tianhe</th><th class="c">Yuexiu</th><th class="r">Price</th><th>Status</th>
+        </tr></thead>
+        <tbody>
+          <tr class="open">
+            <td><input type="checkbox"></td>
+            <td><span class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.7"/><path d="m21 16-5-5L4.5 20.5"/></svg></span></td>
+            <td><div class="pname">Roasted pumpkin seed butter<span class="sizes num">3 sizes</span></div></td>
+            <td>Spreads</td><td class="num cell-dim">—</td>
+            <td class="c"><span class="stkro num"><i></i>18</span></td>
+            <td class="c"><span class="stkro num"><i></i>14</span></td>
+            <td class="r num"><span class="cur">¥</span>57–89</td>
+            <td><span class="badge live"><i></i>Active</span></td>
+          </tr>
+          <tr><td><input type="checkbox"></td><td><span class="thumb"></span></td><td><div class="pname">Almond &amp; fig spread</div></td><td>Spreads</td><td class="num">SPR-ALF</td><td class="c"><input class="stkbox num" value="12"></td><td class="c"><input class="stkbox num" value="8"></td><td class="r num"><span class="cur">¥</span>48</td><td><span class="badge live"><i></i>Active</span></td></tr>
+          <tr><td><input type="checkbox"></td><td><span class="thumb"></span></td><td><div class="pname">Cashew cheese spread</div></td><td>Spreads</td><td class="num">SPR-CCH</td><td class="c"><input class="stkbox num" value="9"></td><td class="c"><input class="stkbox num" value="7"></td><td class="r num"><span class="cur">¥</span>62</td><td><span class="badge live"><i></i>Active</span></td></tr>
+          <tr><td><input type="checkbox"></td><td><span class="thumb"></span></td><td><div class="pname">Date &amp; walnut butter</div></td><td>Spreads</td><td class="num">SPR-DWB</td><td class="c"><input class="stkbox num" value="6"></td><td class="c"><input class="stkbox num" value="5"></td><td class="r num"><span class="cur">¥</span>54</td><td><span class="badge live"><i></i>Active</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="scrim"></div>
+    <aside class="drawer">
+      <div class="dw-head">
+        <div class="dw-top">
+          <span class="dw-thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.7"/><path d="m21 16-5-5L4.5 20.5"/></svg></span>
+          <div class="dw-id">
+            <div class="dw-name">Roasted pumpkin seed butter</div>
+            <div class="dw-sub num">SPR-PSB · In the shop</div>
+          </div>
+          <button class="dw-x" aria-label="Close">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19"/></svg>
+          </button>
+        </div>
+        <div class="dw-actions">
+          <span class="saved">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+            All changes saved
+          </span>
+          <span style="flex:1"></span>
+          <button class="btn sm">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+            Expand
+          </button>
+        </div>
+      </div>
+
+      <nav class="dw-tabs">
+        <button class="dw-tab on">Basics</button>
+        <button class="dw-tab">Stock</button>
+        <button class="dw-tab">Page</button>
+        <button class="dw-tab">Details</button>
+      </nav>
+
+      <div class="dw-body">
+        <!-- Sales sits first: it is why an operator opens a product they
+             were not already editing. Hidden until the product is saved. -->
+        <div class="sales">
+          <div class="sales-h">
+            <span class="t">Sales</span>
+            <span class="ranges"><button>7d</button><button class="on">30d</button><button>90d</button></span>
+          </div>
+          <div class="sales-k">
+            <div><div class="v num">34</div><div class="l">units sold</div></div>
+            <div><div class="v num">¥2,412</div><div class="l">revenue</div></div>
+            <div><div class="v num">#12 / 209</div><div class="l">rank</div></div>
+          </div>
+        </div>
+
+        <div class="grp" style="margin-top:32px">
+          <div class="grp-h">Photos</div>
+          <div class="photos">
+            <span class="ph cover"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.7"/><path d="m21 16-5-5L4.5 20.5"/></svg></span>
+            <span class="ph"></span><span class="ph"></span><span class="ph"></span>
+            <span class="ph add"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+          </div>
+          <div class="hintline">5 of 8 · the first is the cover · <b style="font-weight:500">From library</b></div>
+        </div>
+
+        <div class="grp">
+          <div class="grp-h">Basics</div>
+          <div class="field"><label>Name</label><input class="inp" value="Roasted pumpkin seed butter"></div>
+          <div class="field"><label>Name <span class="hint">· second language</span></label><input class="inp" value="烤南瓜籽酱"></div>
+          <div class="two">
+            <div><label>Price <span class="hint">· set per size</span></label>
+              <div class="money"><span class="cur">¥</span><input class="inp num" value="57–89" readonly></div></div>
+            <div><label>Was <span class="hint">· optional</span></label>
+              <div class="money"><span class="cur">¥</span><input class="inp num" placeholder="—"></div></div>
+          </div>
+          <div class="field"><label>SKU</label><input class="inp num" value="SPR-PSB"></div>
+          <div class="two">
+            <div><label>Shop section</label><div class="inp pick">Dry &amp; Pantry <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></div></div>
+            <div><label>Subcategory</label><div class="inp pick">Nut butters <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></div></div>
+          </div>
+          <div class="two">
+            <div><label>Badge <span class="hint">· shop card</span></label><div class="inp pick">Auto <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></div></div>
+            <div><label>Size / weight</label><input class="inp" value="240 g"></div>
+          </div>
+        </div>
+
+        <div class="grp">
+          <div class="grp-h">Availability</div>
+          <div class="rowline">
+            <div><div class="rl-t">Show in shop</div><div class="rl-s">Mini app and website — one storefront, one price.</div></div>
+            <span class="sw on"><i></i></span>
+          </div>
+          <div class="field" style="margin-top:16px"><label>Status</label>
+            <div class="inp pick">Active <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></div>
+          </div>
+        </div>
+
+        <!-- What the drawer does NOT hold. Each is a fact plus the way
+             through — one tap lands on that section of the page. -->
+        <div class="grp">
+          <div class="grp-h">The rest</div>
+          <div class="sumcard">
+            <button class="sumrow">
+              <span class="sm-main"><span class="sm-t">Sizes</span><span class="sm-v">3 sizes · each with its own price and stock</span></span>
+              <span class="sm-go">Edit <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg></span>
+            </button>
+            <button class="sumrow">
+              <span class="sm-main"><span class="sm-t">Stock</span><span class="sm-v num">Tianhe 18 · Yuexiu 14 · we hold it</span></span>
+              <span class="sm-go">Edit <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg></span>
+            </button>
+            <button class="sumrow">
+              <span class="sm-main"><span class="sm-t">Sell it in more ways</span><span class="sm-v">1 bundle · 2 add-ons · 1 choice group</span></span>
+              <span class="sm-go">Edit <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg></span>
+            </button>
+            <button class="sumrow">
+              <span class="sm-main"><span class="sm-t">Shopper page</span><span class="sm-v">Designed page · description written</span></span>
+              <span class="sm-go">Edit <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg></span>
+            </button>
+            <button class="sumrow">
+              <span class="sm-main"><span class="sm-t">Details</span><span class="sm-v">Air · Land · vegan, no palm oil</span></span>
+              <span class="sm-go">Edit <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg></span>
+            </button>
+          </div>
+          <button class="expandbtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>
+            Open the full product page
+          </button>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+</section>
+
+<!-- ═══════════════════════ 3 · EXPANDED PAGE ═══════════════════════ -->
+<section class="screen s-page">
+<div class="col">
+
+  <div class="crumb">
+    <button style="display:inline-flex;align-items:center;gap:6px;color:var(--td-text2)">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+      Products
+    </button>
+    <span style="opacity:.5">/</span>
+    <span class="here">Roasted pumpkin seed butter</span>
+  </div>
+
+  <div class="pp-head">
+    <div>
+      <div class="pp-title">Roasted pumpkin seed butter <span class="badge live"><i></i>Active</span></div>
+      <div class="hd-status num">3 sizes · 32 on hand across 2 stores</div>
+    </div>
+    <div class="pp-acts">
+      <button class="btn">Collapse</button>
+      <button class="btn">View in shop</button>
+    </div>
+  </div>
+
+  <div style="margin-top:32px">
+    <div class="card">
+      <div class="card-h">Basics <span class="meta">All changes saved</span></div>
+      <div class="two">
+        <div><label>Name</label><input class="inp" value="Roasted pumpkin seed butter"></div>
+        <div><label>Name <span class="hint">· second language</span></label><input class="inp" value="烤南瓜籽酱"></div>
+      </div>
+      <div class="two" style="margin-top:16px">
+        <div><label>SKU</label><input class="inp num" value="SPR-PSB"></div>
+        <div><label>Size / weight</label><input class="inp" value="240 g"></div>
+      </div>
+      <div style="margin-top:24px">
+        <label style="display:block;font-size:13px;font-weight:500;margin-bottom:8px">Photos <span class="hint" style="font-weight:400;color:var(--td-text2)">· 5 of 8, drag to reorder</span></label>
+        <div class="photos">
+          <span class="ph cover"></span><span class="ph"></span><span class="ph"></span><span class="ph"></span><span class="ph"></span>
+          <span class="ph add"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">Stock <span class="meta">per size · per store</span></div>
+      <label class="radio on"><span class="dot"></span><span><span class="t">We hold the stock</span><span class="s">Counted per store below. When it hits zero, your out-of-stock rule decides what shoppers see.</span></span></label>
+      <label class="radio"><span class="dot"></span><span><span class="t">Ships directly from supplier</span><span class="s">The supplier holds and ships it — we don't count stock here. Sell it until the supplier runs out.</span></span></label>
+
+      <div class="varhead" style="margin-top:24px">
+        <div>Size</div><div>Price</div><div class="r">Tianhe</div><div class="r">Yuexiu</div><div class="r">On hand</div>
+      </div>
+      <div class="varrow">
+        <div class="vn">Small <span class="hint" style="font-weight:400;color:var(--td-text2)">120 g</span></div>
+        <div class="money"><span class="cur">¥</span><input class="inp num" value="57"></div>
+        <div><input class="stkbox num" value="6"></div>
+        <div><input class="stkbox num" value="5"></div>
+        <div class="r num">11</div>
+      </div>
+      <div class="varrow">
+        <div class="vn">Medium <span class="hint" style="font-weight:400;color:var(--td-text2)">250 g</span></div>
+        <div class="money"><span class="cur">¥</span><input class="inp num" value="72"></div>
+        <div><input class="stkbox num" value="8"></div>
+        <div><input class="stkbox num" value="6"></div>
+        <div class="r num">14</div>
+      </div>
+      <div class="varrow">
+        <div class="vn">Large <span class="hint" style="font-weight:400;color:var(--td-text2)">480 g</span></div>
+        <div class="money"><span class="cur">¥</span><input class="inp num" value="89"></div>
+        <div><input class="stkbox num low" value="4"></div>
+        <div><input class="stkbox num low" value="3"></div>
+        <div class="r num">7</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button class="btn sm">Add a size</button>
+        <button class="btn sm">Rename sizes</button>
+      </div>
+
+      <div class="two" style="margin-top:24px">
+        <div><label>Low-stock alert at</label><input class="inp num" value="3"></div>
+        <div><label>When out of stock</label><div class="inp pick">Pre-order outside Guangzhou <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></div></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">Sell it in more ways</div>
+      <div class="acc">
+        <div class="acc-row">
+          <button class="acc-sum"><span class="t">Bundle — sold as one</span><span class="s">Breakfast set · ¥118 · assembled</span><span class="sp"></span><span class="sm-go">Edit</span></button>
+          <div class="acc-body">
+            <div class="line"><span class="q num">1 ×</span><span class="n">Crunchy granola</span><span class="p num">¥42</span></div>
+            <div class="line"><span class="q num">1 ×</span><span class="n">Mango kombucha</span><span class="p num">¥38</span></div>
+            <div class="line"><span class="q num">1 ×</span><span class="n">Roasted pumpkin seed butter, Small</span><span class="p num">¥57</span></div>
+            <div class="hintline">Bundle stock follows its parts — the lowest part decides.</div>
+          </div>
+        </div>
+        <div class="acc-row">
+          <button class="acc-sum"><span class="t">Suggested add-ons</span><span class="s">2 add-ons</span><span class="sp"></span><span class="sm-go">Edit</span></button>
+          <div class="acc-body">
+            <div class="line"><span class="n">Organic moringa powder</span><span class="p num">¥36</span></div>
+            <div class="line"><span class="n">Crunchy granola</span><span class="p num">¥42</span></div>
+          </div>
+        </div>
+        <div class="acc-row">
+          <button class="acc-sum"><span class="t">Options — customer chooses</span><span class="s">1 choice group · Sweetness</span><span class="sp"></span><span class="sm-go">Edit</span></button>
+          <div class="acc-body">
+            <div class="tags" style="margin-top:8px"><span class="tag">Regular</span><span class="tag">Less sugar</span><span class="tag">No sugar</span></div>
+            <div class="hintline">Options are choices only — no separate stock or SKU. Sizes with their own price and stock live under Stock.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">Page</div>
+      <div class="nudge">
+        Designed page is out of date — the description changed after it was built.
+        <span style="flex:1"></span>
+        <button class="btn sm">Rebuild</button>
+      </div>
+      <div class="pagecard">
+        <div class="phone">
+          <div class="img"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.7"/><path d="m21 16-5-5L4.5 20.5"/></svg></div>
+          <div class="bd">
+            <div class="t">Roasted pumpkin seed butter</div>
+            <div class="p num">¥57–89</div>
+            <div class="ln"></div><div class="ln s"></div><div class="ln"></div>
+          </div>
+        </div>
+        <div style="flex:1">
+          <div style="font-weight:500">Designed page</div>
+          <div class="hintline" style="margin-top:4px">A custom shopper page — layout, story and photos arranged by you.</div>
+          <div class="blocks">
+            <span class="tag">Cover photo</span><span class="tag">Title &amp; price</span><span class="tag">Story</span><span class="tag">Gallery</span><span class="tag">Ingredients</span>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn sm">Open page designer</button>
+            <button class="btn sm">Build it from the description</button>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:24px">
+        <label style="display:block;font-size:13px;font-weight:500;margin-bottom:8px">Product details <span class="hint" style="font-weight:400;color:var(--td-text2)">· shown on the shopper page</span></label>
+        <div class="two">
+          <div><label>Origin</label><input class="inp" value="Guangzhou, China"></div>
+          <div><label>Shelf life</label><input class="inp" value="Best within 6 months"></div>
+        </div>
+        <div class="two" style="margin-top:16px">
+          <div><label>Ingredients</label><textarea class="inp" style="min-height:64px">Pumpkin seeds, sea salt</textarea></div>
+          <div><label>Storage</label><textarea class="inp" style="min-height:64px">Cool, dry place. Refrigerate after opening.</textarea></div>
+        </div>
+        <div class="field" style="margin-top:16px"><label>Serving suggestion</label><textarea class="inp" style="min-height:64px">Spoon over warm toast, or stir through porridge.</textarea></div>
+        <button class="btn sm" style="margin-top:12px">Fill these in from the description</button>
+      </div>
+
+      <div style="margin-top:24px">
+        <label style="display:block;font-size:13px;font-weight:500;margin-bottom:8px">Description</label>
+        <div class="rte">
+          <div class="rte-bar">
+            <span>Format</span><span>B</span><span>I</span><span>U</span><span>Colour</span><span>Align</span><span>Lists</span><span>Link</span><span>Image</span><span>Table</span><span>Undo</span><span>Fullscreen</span>
+          </div>
+          <div class="rte-body">Slow-roasted and stone-ground, then jarred the same day. Nothing but the good part — no palm oil, no fillers.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-h">Details</div>
+      <div class="two">
+        <div>
+          <label>Shipping</label>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;padding-top:4px">
+            <label style="display:inline-flex;gap:8px;align-items:center;font-size:15px;font-weight:400"><input type="checkbox" checked> Air</label>
+            <label style="display:inline-flex;gap:8px;align-items:center;font-size:15px;font-weight:400"><input type="checkbox" checked> Land</label>
+            <label style="display:inline-flex;gap:8px;align-items:center;font-size:15px;font-weight:400"><input type="checkbox"> Local only</label>
+          </div>
+        </div>
+        <div>
+          <label>Flags</label>
+          <div style="display:flex;flex-direction:column;gap:8px;padding-top:4px">
+            <label style="display:inline-flex;gap:8px;align-items:center;font-size:15px;font-weight:400"><input type="checkbox" checked> Sold at markets</label>
+            <label style="display:inline-flex;gap:8px;align-items:center;font-size:15px;font-weight:400"><input type="checkbox"> Made fresh in batches</label>
+            <label style="display:inline-flex;gap:8px;align-items:center;font-size:15px;font-weight:400"><input type="checkbox"> Restock-only, internal</label>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:24px">
+        <label style="display:block;font-size:13px;font-weight:500;margin-bottom:8px">Free of</label>
+        <div class="tags"><span class="tag">Nuts</span><span class="tag">Soy</span><span class="tag">Gluten</span><span class="tag">5 spice</span></div>
+      </div>
+      <div class="field" style="margin-top:24px"><label>Internal notes <span class="hint">· staff only, never shown to shoppers</span></label><textarea class="inp" style="min-height:64px"></textarea></div>
+    </div>
+
+    <div class="foot">
+      <button class="btn">Duplicate</button>
+      <button class="btn brick">Delete</button>
+      <span class="sp"></span>
+      <button class="btn">Version history</button>
+    </div>
+  </div>
+</div>
+</section>
+
+<!-- ═══════════════════════ 4 · SELECTING ═══════════════════════ -->
+<section class="screen s-bulk">
+<div class="col">
+  <div class="mk-note" style="padding:0 0 24px">
+    Ticking any row arms select mode and the bulk bar replaces the filter row —
+    the operator is acting on a set, not narrowing one. Every write control
+    disables while it writes (§1.12 “in flight”).
+  </div>
+
+  <div class="bulk">
+    <span class="n num">7 selected</span>
+    <button class="tbtn">Show in shop <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></button>
+    <button class="tbtn">Badge <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></button>
+    <button class="tbtn">Shipping <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></button>
+    <button class="tbtn">Category <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></button>
+    <button class="tbtn">More <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m6 9 6 6 6-6"/></svg></button>
+    <span class="sp"></span>
+    <button class="tbtn del">Delete</button>
+    <button class="tbtn">Cancel</button>
+  </div>
+
+  <div class="tblwrap">
+    <table>
+      <colgroup>
+        <col class="c-sel"><col class="c-photo"><col class="c-prod"><col class="c-cat">
+        <col class="c-sku"><col class="c-stk"><col class="c-stk"><col class="c-price"><col class="c-status">
+      </colgroup>
+      <thead><tr>
+        <th><input type="checkbox" checked></th><th></th><th>Product</th><th>Category</th><th>SKU</th>
+        <th class="c">Tianhe</th><th class="c">Yuexiu</th><th class="r">Price</th><th>Status</th>
+      </tr></thead>
+      <tbody>
+        <tr class="open"><td><input type="checkbox" checked></td><td><span class="thumb"></span></td><td><div class="pname">Roasted pumpkin seed butter<span class="sizes num">3 sizes</span></div></td><td>Spreads</td><td class="num cell-dim">—</td><td class="c"><span class="stkro num"><i></i>18</span></td><td class="c"><span class="stkro num"><i></i>14</span></td><td class="r num"><span class="cur">¥</span>57–89</td><td><span class="badge live"><i></i>Active</span></td></tr>
+        <tr class="open"><td><input type="checkbox" checked></td><td><span class="thumb"></span></td><td><div class="pname">Almond &amp; fig spread</div></td><td>Spreads</td><td class="num">SPR-ALF</td><td class="c"><input class="stkbox num" value="12"></td><td class="c"><input class="stkbox num" value="8"></td><td class="r num"><span class="cur">¥</span>48</td><td><span class="badge live"><i></i>Active</span></td></tr>
+        <tr class="open"><td><input type="checkbox" checked></td><td><span class="thumb"></span></td><td><div class="pname">Cashew cheese spread</div></td><td>Spreads</td><td class="num">SPR-CCH</td><td class="c"><input class="stkbox num" value="9"></td><td class="c"><input class="stkbox num" value="7"></td><td class="r num"><span class="cur">¥</span>62</td><td><span class="badge live"><i></i>Active</span></td></tr>
+        <tr><td><input type="checkbox"></td><td><span class="thumb"></span></td><td><div class="pname">Date &amp; walnut butter</div></td><td>Spreads</td><td class="num">SPR-DWB</td><td class="c"><input class="stkbox num" value="6"></td><td class="c"><input class="stkbox num" value="5"></td><td class="r num"><span class="cur">¥</span>54</td><td><span class="badge live"><i></i>Active</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+</section>
+
+<!-- ═══════════════════════ 5 · STATES ═══════════════════════ -->
+<section class="screen s-states">
+<div class="col">
+
+  <div class="mk-h" style="max-width:none;padding:0">Empty
+    <small>Nothing here yet. A compliment, not an apology — and it names what will arrive.</small></div>
+  <div class="state-box" style="margin-top:16px">
+    <div class="t">Your catalogue starts here</div>
+    <div class="s">Add your first product and it shows up in the shop the moment you switch it on.</div>
+    <div class="a"><span class="cta"><button style="border-radius:var(--r-control)">Add product</button></span></div>
+  </div>
+
+  <div class="mk-h" style="max-width:none;padding:48px 0 0">No results
+    <small>A different state and a different sentence — there is plenty here, the filter matched none of it. Never a compliment.</small></div>
+  <div class="state-box" style="margin-top:16px">
+    <div class="t">No products match “kombucha”</div>
+    <div class="s">Nothing in Spreads matches that search.</div>
+    <div class="a"><button class="btn">Clear search</button><button class="btn">Clear category</button></div>
+  </div>
+
+  <div class="mk-h" style="max-width:none;padding:48px 0 0">Loading
+    <small>The region's own skeleton at --td-raised, settling. No spinners. Only on a real load — a poller refresh never flashes.</small></div>
+  <div class="tblwrap" style="margin-top:16px">
+    <table>
+      <colgroup><col class="c-sel"><col class="c-photo"><col class="c-prod"><col class="c-cat"><col class="c-sku"><col class="c-stk"><col class="c-stk"><col class="c-price"><col class="c-status"></colgroup>
+      <thead><tr><th></th><th></th><th>Product</th><th>Category</th><th>SKU</th><th class="c">Tianhe</th><th class="c">Yuexiu</th><th class="r">Price</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td></td><td><span class="thumb" style="border:0"></span></td><td><div class="skel" style="width:78%"></div></td><td><div class="skel" style="width:60%"></div></td><td><div class="skel" style="width:70%"></div></td><td><div class="skel"></div></td><td><div class="skel"></div></td><td><div class="skel" style="width:60%;margin-left:auto"></div></td><td><div class="skel" style="width:80%"></div></td></tr>
+        <tr><td></td><td><span class="thumb" style="border:0"></span></td><td><div class="skel" style="width:64%"></div></td><td><div class="skel" style="width:52%"></div></td><td><div class="skel" style="width:66%"></div></td><td><div class="skel"></div></td><td><div class="skel"></div></td><td><div class="skel" style="width:54%;margin-left:auto"></div></td><td><div class="skel" style="width:72%"></div></td></tr>
+        <tr><td></td><td><span class="thumb" style="border:0"></span></td><td><div class="skel" style="width:71%"></div></td><td><div class="skel" style="width:58%"></div></td><td><div class="skel" style="width:62%"></div></td><td><div class="skel"></div></td><td><div class="skel"></div></td><td><div class="skel" style="width:58%;margin-left:auto"></div></td><td><div class="skel" style="width:76%"></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="mk-h" style="max-width:none;padding:48px 0 0">Error
+    <small>What happened, and how to fix it. Renders where the operator is looking and stays until acknowledged — never a toast that flies away.</small></div>
+  <div class="err" style="margin-top:16px">
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" style="flex:none;margin-top:2px"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
+    <div>
+      <div style="font-weight:500">Couldn't save Tianhe stock for Candied ginger petals</div>
+      <div style="margin-top:4px">The count is still 15 on the server. Check your connection and try again — your other edits saved.</div>
+      <button class="btn sm" style="margin-top:12px">Try again</button>
+    </div>
+  </div>
+
+</div>
+</section>
+
+<!-- ═══════════════════════ 6 · COVERAGE ═══════════════════════ -->
+<section class="screen s-cover">
+<div class="col">
+  <div class="mk-h" style="max-width:none;padding:0">Where every current feature lands
+    <small>Taken from a full read of #tab-products, 09-products.js and the Products CSS block.
+    Nothing on this list is dropped by accident — the last group is dropped on purpose.</small></div>
+
+  <table class="cov">
+    <thead><tr><th>Today</th><th>In v2</th></tr></thead>
+    <tbody>
+      <tr><td>Page title, ⓘ help, eyebrow</td><td class="where">Title + status line. The ⓘ goes — §1.7 allows three elements and the status line answers "what needs me" better than a tooltip nobody opens.</td></tr>
+      <tr><td>Sub-view switch · Catalogue / Stock activity / Categories</td><td class="where">Kept, in place, under the header (§1.1a row 2). The dead amber dot goes.</td></tr>
+      <tr><td>Health band — Active hero, proportion bar, legend, 5 jump tiles</td><td class="where">Four tiles (§A1 caps the pulse at 4, one row). Sold out and Low stock move to the status line, which is where work-waiting belongs; the bar and legend go — the tiles carry the same fact in fewer marks.</td></tr>
+      <tr><td>Search · category filter · subcategory filter · store switcher</td><td class="where">Category is the chip row (primary axis). Store and Status are the two dropdowns. Search is the wide field. Subcategory appears as a second chip strip once a category is picked.</td></tr>
+      <tr><td>Add product — Step by step / Add manually</td><td class="where">The header's one Dusk CTA, split: face = guided, caret = blank form.</td></tr>
+      <tr><td>List / Grid view toggle · Export CSV · per-page 50/100/200/All</td><td class="where">Kept as-is. Export still takes the whole catalogue, not the filtered view — that is deliberate and worth a tooltip.</td></tr>
+      <tr><td>Table — photo, name, sizes pill, category, SKU, per-store stock, price, status</td><td class="where">Nine columns, fixed layout, percentages summing to 100 (§1.19). Columns never collapse; a narrow window scrolls the table sideways.</td></tr>
+      <tr><td>Stock cell — editable · family rollup · supplier badge · bundle computed · saving / saved / error</td><td class="where">All five are rows in the Catalogue screen. The error stays put next to the cell, never a toast (§1.12).</td></tr>
+      <tr><td>Bulk select — Shop, Badge, Shipping, Markets, Fresh batch, Delete</td><td class="where">Selecting screen. "Category" is promoted out of More; Markets and Fresh batch stay under it.</td></tr>
+      <tr><td>Drag-to-reorder within one category</td><td class="where">Same table, grip column, pager swapped for the hint. Arming conditions unchanged.</td></tr>
+      <tr><td>Grid / compact card view, inline shop toggle, duplicate button</td><td class="where">Kept behind the view toggle. Not drawn — it is the same records in cards, and the design does not change.</td></tr>
+      <tr><td>Editor — Basics, Stock, Page, Details</td><td class="where">Drawer (glance) → full page (work), the Hybrid §1.13 already assigns to Products detail. Basics and the sales card live in the drawer; everything with sub-rows is a summary row that opens the page at that section.</td></tr>
+      <tr><td>Sizes, bundle-as-one, add-ons, choice groups</td><td class="where">Page → Stock (sizes) and "Sell it in more ways" (the other three, as an accordion).</td></tr>
+      <tr><td>Sourcing, stock matrix, low-stock alert, out-of-stock policy, supplier pause</td><td class="where">Page → Stock, in that order: who holds it, how much, when to warn, what shoppers see at zero.</td></tr>
+      <tr><td>Facts ×5, AI auto-fill, description rich-text, design on/off, stale nudge, page designer ↗</td><td class="where">Page → Page. The stale nudge also surfaces on the drawer's summary row, so it can't hide behind a collapsed section.</td></tr>
+      <tr><td>Shipping, flags, free-of, internal notes</td><td class="where">Page → Details.</td></tr>
+      <tr><td>Autosave, save status, duplicate, delete, version history</td><td class="where">Save status in the drawer header; duplicate / delete / version history in the page footer.</td></tr>
+      <tr><td>Guided wizard (5 steps), version history modal, media library picker, product page designer</td><td class="where">Own surfaces, unchanged. The wizard already has its own mockup — <code>add-product-wizard-mockup.html</code>.</td></tr>
+      <tr><td>Restock filter (dashboard deep-link only)</td><td class="where">Gets a real home at last: an option in the Status dropdown. Today it can only be reached from a dashboard tile.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="mk-h" style="max-width:none;padding:48px 0 0">Dropped on purpose
+    <small>Nineteen things in the current page cannot be reached by any operator. They are not features; they are weight.</small></div>
+  <table class="cov">
+    <thead><tr><th>Dead today</th><th>Why it goes</th></tr></thead>
+    <tbody>
+      <tr><td class="kill">Designer Sections modal <code>#pa-edit-bg</code> + its engine</td><td class="where">~1,300 lines in 09-products.js. Nothing ever opens it — it is a duplicate of the live <code>product-editor.html</code>. Biggest single deletion available on this page.</td></tr>
+      <tr><td class="kill">"View" display-options popover (9 options)</td><td class="where">Wrapper is <code>display:none</code>. Photo crop / status display / empty-photo style have never been reachable.</td></tr>
+      <tr><td class="kill">Compact view button</td><td class="where">Hidden; the mode only survives in an old localStorage value.</td></tr>
+      <tr><td class="kill">Store switcher <code>#pa-store-seg</code></td><td class="where">Its guards contradict: hidden under 2 stores, and hidden at 2+ because per-store columns exist instead.</td></tr>
+      <tr><td class="kill">5 KPI ids with no markup, <code>.pa-kpi-click</code>, <code>.pa-recap-rule</code>, the sub-view dot</td><td class="where">Written to or styled, never rendered.</td></tr>
+      <tr><td class="kill"><code>paBulkSetPublished</code>, <code>pdRevert</code>, <code>pdSaveNext</code>, <code>pdSaveStoreStocks</code>, <code>pdFactsToggle</code>, <code>vaStockInput</code>, <code>_paPills</code> + the slim row</td><td class="where">No caller, or targeting an id that isn't in the markup.</td></tr>
+      <tr><td class="kill">Low-stock knob CSS, <code>#cat2-save</code>, "Type an answer" option type</td><td class="where">Styling with no markup; a save-state that never paints; a choice type neither storefront can render.</td></tr>
+      <tr><td class="kill">Stock-activity mini cards as <code>&lt;button&gt;</code></td><td class="where">They look pressable and do nothing. Either wire them to a filter or make them plain.</td></tr>
+    </tbody>
+  </table>
+
+  <p class="mk-note" style="padding:32px 0 0">
+    <b>One open question for the build, not for the design.</b> Revert exists and works
+    (<code>pdRevert</code> restores the as-opened snapshot) but has no button. Version history
+    covers the same ground from the server side. Either give Revert a home in the page footer
+    or delete it — leaving a working undo that nobody can press is the worst of the three.
+  </p>
+</div>
+</section>
+
+</div>
+</body>
+</html>
