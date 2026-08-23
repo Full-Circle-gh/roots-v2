@@ -105,7 +105,16 @@ function internalSecret() {
   return process.env.ELEME_INTERNAL_SECRET || 'eleme-daemon-internal';
 }
 
+// Self-expiring manual override, for verifying a read outside opening hours.
+// Counts from daemon START and reverts on its own, so there is no way to leave a
+// 24/7 poll running by accident — which would itself be a bot tell. Same shape as
+// meituan-daemon MEITUAN_FORCE_OPEN_MINUTES. Harmless when unset.
+const FORCE_OPEN_UNTIL = Number(process.env.ELEME_FORCE_OPEN_MINUTES) > 0
+  ? Date.now() + Number(process.env.ELEME_FORCE_OPEN_MINUTES) * 60_000
+  : 0;
+
 function isStoreOpen(storeCode, now = new Date()) {
+  if (FORCE_OPEN_UNTIL && now.getTime() < FORCE_OPEN_UNTIL) return true;
   return within(storeHours(storeCode), { openGraceMin: OPEN_GRACE_MIN, closeGraceMin: OPEN_GRACE_MIN, now });
 }
 

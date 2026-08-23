@@ -252,15 +252,17 @@ function pushableStores() {
 // working channel down.
 // Per-store switch: the Sales card's per-location toggle
 // (store_business_status.target_open). The channel flag above is all-or-nothing;
-// this is one store. target_open only, never is_open — a shop closed for the
-// night still wants accurate stock at open. Absent means on.
+// this is one store. target_open is a command the daemon nulls once applied, so
+// it falls through to is_open, the 营业/置休 state. Absent means on.
 function storePushEnabled(storeCode) {
   if (!storeCode) return true;
   try {
-    const row = db.prepare('SELECT target_open FROM store_business_status WHERE store_code = ?')
+    const row = db.prepare('SELECT target_open, is_open FROM store_business_status WHERE store_code = ?')
                   .get(storeCode);
-    return !row || row.target_open === null || row.target_open === undefined
-      ? true : row.target_open === 1;
+    if (!row) return true;
+    if (row.target_open === 0 || row.target_open === 1) return row.target_open === 1;
+    if (row.is_open === 0 || row.is_open === 1) return row.is_open === 1;
+    return true;
   } catch { return true; }
 }
 
