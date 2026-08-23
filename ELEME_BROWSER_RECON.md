@@ -144,6 +144,52 @@ One ordering difference from Meituan, on purpose: Eleme's `骑手已接单` clas
 **Not built:** accept-order, history sweeps, and anything that un-masks customer
 PII.
 
+### 🔴 BLOCKER, found live 2026-08-24: the orders micro-frontend is NOT authenticated standalone
+
+The build above is deployed and its reader works, but it cannot read anything yet,
+and the reason is worth writing down because it invalidates an assumption at the
+top of this file.
+
+**Every order RPC issued from `napos-order-pc.faas.ele.me` loaded as a top-level
+tab comes back `UNAUTHORIZED: 未登录[0]`** — and critically, **that includes the
+calls the PAGE makes for itself**, not just ours. Meanwhile two `GrayService`
+calls on the very same page return proper results, so the session, the cookies and
+the gateway are all fine. It is the order services specifically that refuse.
+
+So this line, near the top of this doc, is **true for goods and false for orders**:
+
+> Both run standalone in a top-level tab if the `.ele.me` session cookies are present
+
+It was verified for `napos-goods-pc` (that is how the stock capture was taken) and
+assumed for `napos-order-pc`. It does not hold. The orders app evidently needs the
+session that the `melody.shop.ele.me` shell establishes — most likely its own
+`ksid`, bound to that app, which it never obtains when opened directly.
+
+**The fix is to load the orders UI the way a merchant does — inside the shell — and
+run the RPCs from that iframe**, which is both authenticated and origin-correct.
+`_ensureOnOrders` currently navigates straight to the standalone URL; it needs to
+drive the shell to its order route and hand `_rpc` the `napos-order-pc` frame
+instead of a page (Playwright frames expose `evaluate` the same way).
+
+Three chase-the-symptom rounds preceded finding this, all recorded in the git log,
+none of which could ever have worked. Worth reading before the next attempt:
+1. filling `shopId`/`queryType` into a replayed request — the fields were never
+   the problem;
+2. replaying the whole `params` envelope instead of `params.request`;
+3. replaying the page's entire body including `metas` — correct in principle, and
+   the right thing to keep, but an authenticated envelope is a precondition, not a
+   substitute.
+
+What DID resolve it was making the reader say why a response was unusable, rather
+than only that it was. `{name,message,meta}` is the order services' error shape;
+it is not the ncp `{result,error}` envelope, so a "result null" check reads an
+auth failure as an empty shop.
+
+**Holding state:** `ELEME_ORDER_POLL=0` is set in `.env` on the box, so the daemon
+makes no order requests at all rather than repeating unauthenticated ones every
+5 minutes. Stock push is untouched and healthy. Remove that line to re-enable once
+the shell-iframe load lands.
+
 ## Build plan (mirror Meituan)
 
 1. `lib/eleme-browser.js` = twin of `lib/meituan-browser.js`: Playwright init + fingerprint,
