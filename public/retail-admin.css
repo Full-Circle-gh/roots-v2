@@ -5290,6 +5290,49 @@
   .mt-tab .n:empty { display: none; }
   .mt-tab.active .n { background: rgba(201,149,74,.16); color: var(--brass); }
 
+  .mt-tabs-grow { flex: 1 1 auto; }
+  .mt-tabs .mt-upd { font-size: 11.5px; color: var(--text-3); padding-right: 10px; align-self: center; }
+  .mt-tabs .btn { align-self: center; margin-bottom: 6px; }
+
+  /* ── Page head + channel switch ─────────────────────────────────────────
+     Same shape as the Eleme page's channel card, but inline with the title:
+     the switch is one control, not a card's worth of chrome. */
+  .mt-pagehead { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+  .mt-pagehead-t { min-width: 0; flex: 1 1 340px; }
+  .mt-chan { display: inline-flex; align-items: center; gap: 10px; flex: none; padding-top: 6px; }
+  .mt-chan .muted { font-weight: 400; font-size: 12.5px; }
+
+  /* ── Per-store health cards ─────────────────────────────────────────────
+     One card per Meituan store. The old strip reported the pair as a single
+     "Sync · Active", which could not express "天河 is fine and 越秀 is locked
+     out" — the state the channel was actually in for 24 days. A blocked store
+     turns amber (Tacet: amber warns) and grows the one button that fixes it. */
+  .mt-stores { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin: 4px 0 18px; }
+  .mt-store { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; background: var(--bg-pane); }
+  .mt-store.blocked { border-color: var(--brass); background: rgba(201,149,74,.08); }
+  .mt-store .sh { display: flex; align-items: center; gap: 9px; }
+  .mt-store .sdot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
+  .mt-store.blocked .sdot { background: var(--brass); }
+  .mt-store .sname { font-size: 14px; font-weight: 600; color: var(--text-1); }
+  .mt-store .smode { margin-left: auto; font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--text-3); }
+  .mt-store .sstate { font-size: 13px; margin-top: 7px; color: var(--accent); }
+  .mt-store.blocked .sstate { color: var(--brass); font-weight: 500; }
+  .mt-store .sfacts { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line-soft); }
+  .mt-store .sf .k { font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--text-3); }
+  .mt-store .sf .v { font-size: 15px; font-weight: 500; letter-spacing: -.01em; color: var(--text-1); font-variant-numeric: tabular-nums; }
+  .mt-store .sf .v.warn { color: var(--brass); }
+  .mt-store .sact { margin-top: 11px; display: flex; gap: 8px; flex-wrap: wrap; }
+
+  /* ── Activity view ──────────────────────────────────────────────────────
+     The sync log /status has always returned and this page never showed. */
+  .mt-act-h { font-size: 13px; font-weight: 600; color: var(--text-1); margin: 4px 0 8px; }
+  .mt-act-h + .mt-log { margin-bottom: 20px; }
+  .mt-log { font-size: 12px; line-height: 1.7; max-height: 260px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; background: var(--bg-pane); color: var(--text-2); }
+  .mt-log .t { color: var(--text-3); }
+  .mt-log .bad { color: var(--danger, #B4533E); }
+  .mt-log .warnrow { color: var(--brass); }
+  .mt-log .empty { color: var(--text-3); }
+
   /* attention banner — only home of the Match-names flow */
   .mt-attn { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; background: rgba(201,149,74,.12); border: 1px solid rgba(201,149,74,.35); border-radius: 10px; padding: 11px 16px; margin: 0 0 12px; color: var(--brass); }
   .mt-attn .atxt { flex: 1; min-width: 200px; color: var(--text-2); font-size: 13px; }
