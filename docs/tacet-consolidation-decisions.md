@@ -3774,6 +3774,7 @@ Measured at this head: `routes/retail.js` holds **28 `withTransaction(` call sit
 
 **ONE ORDERING CONSTRAINT IS STILL OPEN ON THE BOX.** `lib/db-driver.js`, `lib/pg.js` and `lib/pg-handle.js` are **deleted from the repository but deliberately still present on the box.** The box's `database.js` is the pre-cancellation file and **requires `./lib/db-driver` unconditionally at line 37** — outside the `if (IS_POSTGRES)` guard. **Deleting it before the new `database.js` deploys throws `MODULE_NOT_FOUND` in a file ~94 others require, including all six channel daemons, and the health watchdog would restart the application into the same failure every two minutes.** Remove the three only after the deploy lands. Everything else the migration left on the box is gone; a copy of all of it is at `/root/backups/pg-migration-boxcopy-20260823.tgz`.
 
+
 ## 25. A printed slip that goes stale is corrected on paper, not reprinted — DECIDED 2026-08-07
 
 DECISION: When a customer reschedules an order whose receipt has already printed, the printer emits a short CHANGE SLIP naming the new day, the day it replaces, and enough identity to match it to the original. The original receipt is never reprinted.
