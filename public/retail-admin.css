@@ -3128,6 +3128,16 @@
   /* The footer is empty on the page — the save status went up to the header
      and the record's actions went to the foot of the index. */
   .pd-pp-mount #pd-editor .pu-editor-foot { display: none; }
+  /* Details holds exactly the four cards that move to the second column
+     (shipping, flags, free-of, notes), so on the page the pane is an empty grid
+     under a heading for nothing. Docked it is a real tab and stays. */
+  #pd-editor.pd-fullpage .pd-pane[data-pane="details"] { display: none; }
+  /* Photos, now the lower half of the Basics card rather than a card beside it:
+     drop its own card chrome and separate it with a hairline instead. */
+  #pd-editor.pd-fullpage .pdb-card > #pd-sec-photos {
+    border: 0; border-radius: 0; background: none; padding: 0;
+    border-top: 1px solid var(--td-border); padding-top: 18px; margin-top: 4px;
+  }
   /* Sales is the one block on the page you cannot change. On Paper it looked
      like the cards around it that you can; on the raised surface it reads as
      something reported to you. */
@@ -3149,12 +3159,18 @@
     padding-top: 2px; scroll-margin-top: 76px;
   }
   #pd-editor.pd-fullpage .pdb-belowgrid + .pd-pp-sech { margin-top: 26px; }
+  /* A section heading that sits INSIDE a card grid (Where it shows) is a grid
+     item like the cards around it, so the grid's 14px gap is all the air it
+     gets above. Give it the same separation a heading between panes has. */
+  #pd-editor.pd-fullpage .pdb-grid > .pd-pp-sech { margin-top: 16px; }
+  #pd-editor.pd-fullpage .pdb-grid > .pd-pp-sech:first-child { margin-top: 0; }
   /* Jump targets clear the sticky topbar. */
   #pd-editor.pd-fullpage .pd-pane,
-  #pd-sec-sizes, #pd-sec-more { scroll-margin-top: 76px; }
-  /* Sizes is one block, not a pair — the 2-up rule the other vgrid wants would
-     strand it in half the row. Two ids to outrank the container query. */
-  #pd-editor #pd-sec-sizes { grid-template-columns: 1fr; }
+  #pd-sec-sizes { scroll-margin-top: 76px; }
+  /* Sizes used to be pinned to one column because it was a single box in a
+     grid built for pairs — on its own it would have been stranded in half a
+     row. It now shares that grid with the other three, so the pin comes off
+     and the pairs are real. */
   /* Docked, Sourcing has stepped out of the Stock grid and left "Stock &
      status" alone in a 7-of-12 track. Let it take the whole row rather than
      sit beside five columns of nothing. */
@@ -3178,50 +3194,6 @@
      so a 1512 window leaves about this much. The old cap was right for a single
      column of form and would squeeze the middle one to nothing. */
   .pd-pagestage { max-width: 1220px; margin: 0 auto; scroll-margin-top: 76px; }
-  /* The stage owns two columns — the index and everything else. The third
-     column (the side rail) is cut INSIDE the editor, one level down, because
-     its blocks have to stay within `#pd-editor` to keep their styling. */
-  .pd-pp-grid {
-    display: grid; grid-template-columns: 180px minmax(0, 1fr);
-    gap: 32px; align-items: start;
-  }
-  .pd-pp-nav { position: sticky; top: 76px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .pd-nav-i {
-    display: block; width: 100%; text-align: left;
-    padding: 7px 10px; border: 0; border-radius: 8px; background: none;
-    font: 400 15px var(--f-sans); color: var(--td-text2); cursor: pointer;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  .pd-nav-i:hover { color: var(--td-text); background: rgba(var(--td-heat-rgb), .04); }
-  .pd-nav-i.is-on { background: var(--td-raised); color: var(--td-text); font-weight: 500; }
-  .pd-nav-i:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 2px; }
-  /* Duplicate · Version history · Delete, moved into the foot of the index by
-     pdMoveFootActs(). Quiet full-width rows so they read as the tail of the
-     list rather than three buttons parked under it. */
-  .pd-pp-nav .pd-foot-acts {
-    flex-direction: column; align-items: stretch; gap: 2px;
-    margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--td-border);
-  }
-  .pd-pp-nav .pd-foot-acts .btn {
-    justify-content: flex-start; border-color: transparent; background: none;
-    padding: 7px 10px; font-weight: 400; color: var(--td-text2);
-  }
-  .pd-pp-nav .pd-foot-acts .btn:hover { background: rgba(var(--td-heat-rgb), .04); color: var(--td-text); }
-  /* Narrow: the index would eat a third of the width, so it goes — but the
-     record's actions live inside it, and hiding the whole <nav> would take
-     Duplicate, Version history and Delete off the page entirely. So the rows
-     go and the <nav> stays, ordered BELOW the form, which puts the actions
-     exactly where the footer would have put them. */
-  @media (max-width: 900px) {
-    .pd-pp-grid { grid-template-columns: minmax(0, 1fr); }
-    .pd-pp-nav { position: static; order: 2; }
-    #pd-pp-navrows { display: none; }
-    .pd-pp-nav .pd-foot-acts {
-      flex-direction: row; flex-wrap: wrap; gap: 8px;
-      margin-top: 0; padding-top: 20px;
-    }
-    .pd-pp-nav .pd-foot-acts .btn { border-color: var(--td-border); }
-  }
   .pd-pp-crumb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--td-text2); margin-bottom: 16px; }
   .pd-pp-crumb button {
     display: inline-flex; align-items: center; gap: 6px; padding: 0;
@@ -3231,18 +3203,101 @@
   .pd-pp-crumb button:hover { color: var(--td-text); }
   .pd-pp-sep { opacity: .5; }
   .pd-pp-here { color: var(--td-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pd-pp-titlerow { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 18px; }
-  .pd-pp-title { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font: 500 24px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); min-width: 0; }
+  /* ── The page header ──────────────────────────────────────────────────────
+     Two rows on two columns, so the four things it carries line up instead of
+     floating: title over status line on the left, controls over save state on
+     the right, both right-hand cells aligned to the same edge as the column
+     below them. `align-items: baseline` on the top row sits the switch and the
+     Collapse button on the title's baseline rather than its box. */
+  .pd-pp-head {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline; column-gap: 24px; row-gap: 6px;
+    padding-bottom: 20px; margin-bottom: 28px;
+    border-bottom: 1px solid var(--td-border);
+  }
+  .pd-pp-title { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; font: 500 24px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); min-width: 0; }
   .pd-pp-alt { font-size: 15px; font-weight: 400; color: var(--td-text2); }
-  .pd-pp-acts { display: flex; align-items: center; gap: 14px; flex: none; }
-  /* Save status + shop switch, moved up here by pdMoveHeadState(). They read
-     left to right as state, state, exit. */
-  .pd-pp-state { display: flex; align-items: center; gap: 10px; }
-  .pd-pp-state:empty { display: none; }
+  .pd-pp-acts { display: flex; align-items: center; gap: 12px; flex: none; justify-self: end; }
+  .pd-pp-tags { display: flex; align-items: center; gap: 8px; }
+  .pd-pp-tags:empty { display: none; }
+  /* The status line: SKU, where it shows, price. Real values, read from the
+     form — never a description of the page. */
+  .pd-pp-sub { font-size: 15px; color: var(--td-text2); font-variant-numeric: tabular-nums; min-width: 0; }
+  .pd-pp-sub:empty { display: none; }
+  .pd-pp-savestate { justify-self: end; display: flex; align-items: center; }
   /* Inside the stage the editor is the page, not a card floating on it. */
   .pd-pp-mount #pd-editor {
     width: auto; height: auto; max-width: 100%; max-height: none;
     border: 0; background: none; border-radius: 0; box-shadow: none;
+    /* The short story, then the things you set once. The head and foot are
+       display:none here, so only .pu-editor-body and .pd-pp-side take a track. */
+    display: grid; grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 32px; align-items: start;
+  }
+  /* The second column. Sticky so it stays put while the form scrolls past it. */
+  #pd-editor .pd-pp-side { display: none; }
+  /* NOT sticky. A column that holds still while the one beside it moves gives
+     the page two scroll rates in one view — you scroll, half the screen stays,
+     then it starts moving too. One page, one scroll. */
+  .pd-pp-mount #pd-editor .pd-pp-side {
+    display: flex; flex-direction: column; gap: 20px; min-width: 0;
+  }
+  .pd-pp-mount #pd-editor .pd-pp-side:empty { display: none; }
+  /* Blocks authored as grid children are just cards in a column here; their
+     pdb-c* span classes are inert outside .pdb-grid. */
+  #pd-editor .pd-pp-side > .pdb-card,
+  #pd-editor .pd-pp-side > .pd-card,
+  #pd-editor .pd-pp-side > .pe-rows { width: 100%; }
+  /* "Sell it in more ways" keeps its heading, sized to the column rather than
+     to a page-width section. */
+  #pd-editor .pd-pp-side > .pd-pp-sech { font-size: 15px; margin: 4px 2px 0; }
+  /* Sales at 340px: three numbers across is too tight, two rows of two is not. */
+  #pd-editor .pd-pp-side .pd-sales-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  /* Duplicate · Version history · Delete, stacked full-width rather than a row
+     that wraps into a ragged block at this width. */
+  #pd-editor .pd-pp-side .pd-foot-acts { flex-direction: column; align-items: stretch; gap: 8px; }
+  #pd-editor .pd-pp-side .pd-foot-acts .btn { justify-content: center; }
+  /* ── The form column is ONE column ────────────────────────────────────────
+     The cards inside it are authored as a 12-track grid and go 2-up as soon as
+     they have 600px, which put "Where it shows" beside "Basics" under a heading
+     that said Basics — a section heading has to own everything under it or it
+     is not a heading. Two cards abreast inside a column that already sits
+     beside a second column also reads as three columns of stuff, which is most
+     of why the page felt busy. One card per row; the spans that only mean
+     something in a 12-track grid are neutralised so none of them can conjure an
+     implicit column here. */
+  .pd-pp-mount #pd-editor .pu-editor-body .pdb-grid,
+  .pd-pp-mount #pd-editor .pu-editor-body .pdb-grid-auto {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  /* .pdb-vgrid is deliberately NOT in that list. Those are the four toggle
+     rows of "How it's sold", and two-up is what the component was drawn for —
+     the open one still spans the full width. This is one section with four
+     rows in it, not two cards abreast under a heading that owns one of them,
+     which is the thing that made the page read as three columns. */
+  .pd-pp-mount #pd-editor .pu-editor-body [class*="pdb-c"] { grid-column: 1 / -1; }
+  /* Fields stay two abreast — at the column's full width auto-fit would put
+     three on a line, and a form reads worse the wider its rows get. */
+  .pd-pp-mount #pd-editor .pu-editor-body .pdb-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  @media (max-width: 720px) {
+    .pd-pp-mount #pd-editor .pu-editor-body .pdb-fields { grid-template-columns: minmax(0, 1fr); }
+  }
+
+  /* Under this the second column has no honest width left, so it drops under
+     the form. 1400 and not 1040: the query reads the VIEWPORT and the rail
+     spends 236px of it before this page sees a pixel. */
+  @media (max-width: 1400px) {
+    .pd-pp-mount #pd-editor { grid-template-columns: minmax(0, 1fr); }
+    .pd-pp-mount #pd-editor .pd-pp-side {
+      position: static;
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+  }
+  @media (max-width: 720px) {
+    .pd-pp-head { grid-template-columns: minmax(0, 1fr); }
+    .pd-pp-acts, .pd-pp-savestate { justify-self: start; }
   }
   .pd-pp-mount #pd-editor .pu-editor-body { overflow: visible; overscroll-behavior: auto; }
   .pd-pp-mount #pd-editor .pu-editor-head,
@@ -3268,6 +3323,67 @@
      the same thing about the same value — except the tag is the one you can
      act on, and it also carries Sold out and Bundle. Keep the tag. */
   #pd-pagestage #pd-pp-badge { display: none; }
+
+  /* These three groups (Shipping · Free of · Flags) used to carry their layout
+     as inline styles. It moved here so the side column can restyle them as
+     chips — which an inline declaration would have made impossible. These are
+     the DOCK's shape, reproducing exactly what the inline styles did, and they
+     sit ABOVE the chip block so the side column's equal-specificity rules win
+     on order rather than on !important. */
+  #pd-editor .pd-chipset { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  #pd-editor .pd-chipset.pd-chipset-col { flex-direction: column; align-items: flex-start; gap: 9px; }
+
+  /* ── Set-once settings, as chips ──────────────────────────────────────────
+     Shipping, Free of and the product flags are thirteen checkboxes between
+     them. In a form column they cost as much page as the price does, and they
+     are set once when a product is created and then left alone. In the side
+     column they become pills: same inputs, same ids, same change handlers —
+     the checkbox is still what saves, it is just drawn as the pill instead of
+     sitting next to one.
+
+     Two things make this work and neither is decoration:
+       · the real <input> stays in the DOM (clipped, not display:none) so it is
+         still focusable, still keyboard-operable, and still dispatches change;
+       · :has(:checked) paints the ON state, so nothing has to be told when a
+         value flips — including a flip that came from a save, a revert or the
+         version history restoring an older product. */
+  #pd-editor .pd-pp-side .pd-chipset,
+  #pd-editor .pd-pp-side .pd-chipset.pd-chipset-col {
+    display: flex; flex-direction: row; flex-wrap: wrap;
+    align-items: center; gap: 8px;
+  }
+  #pd-editor .pd-pp-side .pd-chipset > label {
+    display: inline-flex; align-items: center; gap: 0;
+    height: 30px; padding: 0 12px; border-radius: 999px;
+    border: 1px solid var(--td-border); background: var(--td-surface);
+    font: 500 13px var(--f-sans); color: var(--td-text2);
+    cursor: pointer; user-select: none; white-space: nowrap;
+    transition: background .15s ease, border-color .15s ease, color .15s ease;
+  }
+  #pd-editor .pd-pp-side .pd-chipset > label:hover { border-color: var(--td-text2); color: var(--td-text); }
+  #pd-editor .pd-pp-side .pd-chipset > label:has(input:checked) {
+    background: var(--td-text); border-color: var(--td-text); color: var(--td-paper);
+  }
+  /* Clipped, not hidden — a display:none input leaves the chip unreachable by
+     keyboard, which would make this a picture of a control rather than one. */
+  /* !important earns its keep exactly once here: every one of these inputs
+     carries an inline `width:15px;height:15px`, and an inline declaration beats
+     any selector. Without it the raw checkbox goes on painting inside the pill.
+     Scoped to chips in the side column, so it cannot reach anything else. */
+  #pd-editor .pd-pp-side .pd-chipset > label > input[type=checkbox] {
+    position: absolute !important;
+    width: 1px !important; height: 1px !important;
+    margin: 0 !important; padding: 0 !important; border: 0 !important;
+    clip-path: inset(50%); overflow: hidden; appearance: none;
+  }
+  #pd-editor .pd-pp-side .pd-chipset > label:has(input:focus-visible) {
+    outline: 2px solid var(--td-dusk); outline-offset: 2px;
+  }
+  /* The little brass glyphs inside these labels were drawn to sit beside a
+     checkbox. Inside a filled pill they fight the fill and say nothing the
+     word does not. */
+  #pd-editor .pd-pp-side .pd-chipset > label > svg { display: none; }
+  #pd-editor .pd-pp-side .pd-chipset-cap { font-size: 13px; color: var(--td-text2); margin-top: 12px; }
 
   /* ── Dock summary rows — a fact and a way through to change it ───────────── */
   .pd-sumcard { border: 1px solid var(--td-border); border-radius: 14px; background: var(--td-surface); overflow: hidden; }
@@ -3296,7 +3412,6 @@
   #pd-sum-more { margin-top: 18px; }
 
   @media (max-width: 720px) {
-    .pd-pp-titlerow { flex-direction: column; gap: 12px; }
     .pd-pp-title { font-size: 20px; }
   }
 
@@ -5395,6 +5510,16 @@
   #tab-meituan .btn-primary { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
   #tab-meituan .btn-primary:hover { background: var(--td-text); border-color: var(--td-text); opacity: .88; }
 
+  /* §1.3: body line-height is 1.6, and 1.7 for CJK runs. Half of every label
+     here is 中文, so the page steps up as a whole when the admin is switched to
+     Chinese — html[data-ui-lang] is the only honest signal for that; detecting
+     a CJK run per node would need markup this page does not emit. */
+  html[data-ui-lang="cn"] #tab-meituan { line-height: 1.7; }
+  html[data-ui-lang="cn"] #tab-meituan .mt-status,
+  html[data-ui-lang="cn"] #tab-meituan .mt-notice .m,
+  html[data-ui-lang="cn"] #tab-meituan .mt-store .sstate,
+  html[data-ui-lang="cn"] .mt-dlg .mt-dlg-bd { line-height: 1.7; }
+
   /* ── Header (§1.7): title, status line, one Dusk CTA. No fourth element. ── */
   .mt-pagehead { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 32px; }
   .mt-pagehead-t { min-width: 0; flex: 1 1 320px; }
@@ -5403,8 +5528,11 @@
   .mt-pagehead h2 { font: 500 24px/1.3 var(--f-sans); letter-spacing: -.01em; text-transform: none; color: var(--td-text); margin: 0; }
   .mt-status { font: 400 15px/1.6 var(--f-sans); color: var(--td-text2); margin: 4px 0 0; font-variant-numeric: tabular-nums; }
   .mt-status .att { color: var(--td-amber-ink); }
-  .mt-pagehead .btn-primary { background: var(--td-dusk); border-color: var(--td-dusk); color: #fff; }
-  .mt-pagehead .btn-primary:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); opacity: 1; }
+  /* ⚠️ Must out-specify #tab-meituan .btn-primary above. That rule is (1,1,0)
+     and a two-class selector is only (0,2,0), so the Ink treatment was winning
+     and the page's one Dusk element rendered navy. */
+  #tab-meituan .mt-pagehead .btn-primary { background: var(--td-dusk); border-color: var(--td-dusk); color: #fff; }
+  #tab-meituan .mt-pagehead .btn-primary:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); opacity: 1; }
 
   /* ── Tile row — Orders' opening shape ───────────────────────────────────── */
   .mt-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 32px; }
@@ -5449,20 +5577,15 @@
      overrode that reserve, so the label ran under the arrow. Declaring the
      whole thing — arrow included — means neither rule can half-win. */
   .mt-sel { appearance: none; -webkit-appearance: none; font: 400 15px var(--f-sans); color: var(--td-text);
-    border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 40px 8px 16px; cursor: pointer;
+    border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 48px 8px 16px; cursor: pointer;
     background-color: var(--td-surface);
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2358606E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
-    background-repeat: no-repeat; background-position: right 16px center; }
+    background-repeat: no-repeat; background-position: right 24px center; }
   .mt-sel:focus-visible { outline: 2px solid var(--td-sage); outline-offset: 2px; }
   .mt-search { flex: 1 1 280px; font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; }
   .mt-search::placeholder { color: var(--td-text2); }
 
   /* ── Table ──────────────────────────────────────────────────────────────── */
-  .mt-tablewrap { border: 1px solid var(--td-border); border-radius: 14px; overflow: hidden; background: var(--td-surface); }
-  #mt-products-table { width: 100%; border-collapse: collapse; }
-  #mt-products-table thead th { background: var(--td-header); color: var(--td-text); font: 500 13px var(--f-sans); letter-spacing: 0; text-transform: none; text-align: left; padding: 10px 16px; border: 0; }
-  #mt-products-table td { padding: 16px; border-top: 1px solid var(--td-border); border-bottom: 0; vertical-align: top; font-size: 15px; color: var(--td-text); }
-  #mt-products-table tbody tr:hover { background: var(--td-raised); }
   .mt-pcell { display: flex; gap: 16px; }
   .mt-thumb { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; border: 1px solid var(--td-border); flex: none; background: var(--td-raised); }
   .mt-thumb-ph { width: 40px; height: 40px; border-radius: 8px; background: var(--td-raised); border: 1px solid var(--td-border); flex: none; }
@@ -5474,6 +5597,24 @@
   .mt-name-input::placeholder { color: var(--td-text2); }
   .mt-sub { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin-top: 8px; }
   .mt-sub b { font-weight: 500; color: var(--td-text); }
+
+  /* Which 规格 of a shared listing a product is. background-COLOR, never the
+     `background` shorthand, and the chevron declared in full — the shorthand
+     resets repeat/position and the global select rule then tiles its arrow
+     across the width (the Add-bundle dialog bug, css:5546). Amber until it is
+     answered: an unanswered one is writing the same count to every option. */
+  .mt-spec {
+    display: block; width: 100%; margin-top: 8px;
+    font: 400 15px var(--f-sans); color: var(--td-text);
+    background-color: var(--td-surface);
+    border: 1px solid var(--td-border); border-radius: 8px;
+    padding: 8px 48px 8px 16px;
+    appearance: none; -webkit-appearance: none; cursor: pointer;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2358606E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat: no-repeat; background-position: right 16px center;
+  }
+  .mt-spec.warn { border-color: var(--td-amber); }
+
   .mt-cell-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
   .mt-empty { padding: 24px; text-align: center; font: 400 15px var(--f-sans); color: var(--td-text2); }
 
@@ -5503,10 +5644,6 @@
   .mt-pill.att { background: var(--td-amber-tint); color: var(--td-amber-ink); }
   .mt-pill.off { background: var(--td-raised);     color: var(--td-text2); }
 
-  /* Size picker on a multi-size listing, and the flag when none is chosen. */
-  .mt-size { margin-top: 8px; font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; }
-  .mt-size.warn { border-color: var(--td-amber); }
-
   /* ── Views ──────────────────────────────────────────────────────────────── */
   .mt-view[hidden] { display: none; }
   .mt-act-h { font: 500 18px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); margin: 0 0 16px; }
@@ -5529,13 +5666,52 @@
      match dialog renders as a plain block instead of a centred modal. All three
      dialogs (match, paste, bundle editor) now share this shell; the paste and
      bundle ones used to build their own panel out of inline styles. */
-  .mt-ovl { position: fixed; inset: 0; background: var(--bg-overlay, rgba(0,0,0,.4)); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .mt-ovl {
+    position: fixed; inset: 0; z-index: 9999;
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+    /* Ink scrim, matching .cs-ov. NOT --bg-overlay: that resolves to Ink
+       Charcoal rgb(18,22,26), a base token, and the base tokens are not Tacet
+       (Tacet Ink is #111A2B). A scrim built on the wrong ink reads cold. */
+    background: rgba(17, 26, 43, .4);
+    /* These overlays are appended to document.body, OUTSIDE #tab-meituan — so
+       the page's token remap (css:5376) never reached them and every base-token
+       rule inside painted off-palette. Repeat the remap on the shell. */
+    --bg-pane:     var(--td-surface);
+    --bg-elev-1:   var(--td-raised);
+    --bg-elev-2:   var(--td-raised);
+    --line:        var(--td-border);
+    --line-soft:   var(--td-border);
+    --line-strong: var(--td-border);
+    --text-1:      var(--td-text);
+    --text-2:      var(--td-text);
+    --text-3:      var(--td-text2);
+    --text-4:      var(--td-text2);
+    --accent:      var(--td-sage-ink);
+    --brass:       var(--td-amber);
+    --brass-hi:    var(--td-amber);
+    --danger:      var(--td-brick-ink);
+  }
+  /* §1.8 rule 5 ("Modal → spends nothing. Its primary is Ink.") is enforced on
+     .mt-dlg further down — do not add a second copy here. */
 
   /* Form rows inside a dialog. One stack, one rhythm, 8px scale. */
   .mt-form { display: flex; flex-direction: column; gap: 16px; }
   .mt-field { display: flex; flex-direction: column; gap: 8px; font: 400 13px var(--f-sans); color: var(--td-text2); }
   .mt-field > input, .mt-field > select, .mt-field > textarea,
-  .mt-inp { font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; width: 100%; }
+  .mt-inp { font: 400 15px var(--f-sans); color: var(--td-text); background-color: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; width: 100%; }
+  /* background-COLOR above, never the `background` shorthand. The shorthand
+     reset repeat/position, and the global chevron (css:4923, restated with a
+     light stroke at css:139) came back with no-repeat gone — so the arrow
+     TILED the full width of every dialog <select>, a row of chevrons striking
+     through the label. Selects declare the whole arrow here, gutter included,
+     so neither rule can half-win. */
+  .mt-field > select, select.mt-inp {
+    appearance: none; -webkit-appearance: none; cursor: pointer;
+    /* 48/24, not 40/16: 40 is not on the 8px scale (1.4). Same optics. */
+    padding-right: 48px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2358606E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat: no-repeat; background-position: right 24px center;
+  }
   .mt-field > textarea { min-height: 160px; line-height: 1.6; resize: vertical; }
   .mt-field > input::placeholder, .mt-inp::placeholder, .mt-field > textarea::placeholder { color: var(--td-text2); }
   .mt-inp.narrow { max-width: 144px; }
@@ -5549,6 +5725,16 @@
   .mt-comprow { display: flex; gap: 8px; align-items: center; }
   .mt-comprow + .mt-comprow { margin-top: 8px; }
   .mt-comprow .cn { flex: 1; font: 400 15px var(--f-sans); color: var(--td-text); }
+  /* Remove is a ghost icon, not a bordered .btn — a component row should read
+     as one line of content, not as a row of two competing controls. */
+  .mt-comprow .rm {
+    appearance: none; border: none; background: none; cursor: pointer; flex: none;
+    color: var(--td-text2); padding: 8px; border-radius: 8px; line-height: 0;
+    transition: background 200ms cubic-bezier(.16, 1, .3, 1), color 200ms cubic-bezier(.16, 1, .3, 1);
+  }
+  .mt-comprow .rm svg { width: 16px; height: 16px; display: block; }
+  .mt-comprow .rm:hover { background: var(--td-brick-tint); color: var(--td-brick-ink); }
+  .mt-comprow .rm:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 2px; }
   .mt-comprow .cq { width: 72px; font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px; text-align: center; font-variant-numeric: tabular-nums; }
   .mt-suggest { border: 1px solid var(--td-border); border-radius: 14px; padding: 16px 24px; margin: 0 0 16px; background: var(--td-surface); }
   .mt-suggest .sh { font: 500 13px var(--f-sans); color: var(--td-text); margin-bottom: 8px; }
@@ -5558,18 +5744,105 @@
   .mt-srow .st { font: 400 13px var(--f-sans); color: var(--td-text2); }
 
   /* ── Match-names dialog + its pickers ───────────────────────────────────── */
-  .mt-dlg { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px; width: min(680px, 92vw); max-height: 86vh; display: flex; flex-direction: column; overflow: hidden; }
+  .mt-dlg {
+    background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px;
+    width: min(560px, 92vw); max-height: 86vh;
+    display: flex; flex-direction: column; overflow: hidden;
+    /* §302: one soft ambient shadow, overlays only, never on a resting card. */
+    box-shadow: 0 1px 2px rgba(17,26,43,.05), 0 4px 16px rgba(17,26,43,.04);
+    /* §1.5 settles at 350ms. Deliberately no `both` fill — a held opacity:0
+       before the animation starts is how a surface goes permanently blank on a
+       slow device. An entrance must fail visible. */
+    animation: td-settle .35s cubic-bezier(.16, 1, .3, 1);
+  }
+  @media (prefers-reduced-motion: reduce) { .mt-dlg { animation: none; } }
+  /* The match wizard is multi-stage with side-by-side pickers. §1.13's first-yes
+     test sends it to a full page rather than a narrower modal, and that call is
+     not made here — so it keeps its width as a named exception, and 560 stays
+     the default instead of becoming the special case. */
+  #mt-match-overlay .mt-dlg { width: min(680px, 92vw); }
+  /* Ghost close, per .cs-modal-x. A bordered .btn made ✕ compete with Save. */
+  .mt-dlg-x {
+    margin-left: auto; appearance: none; border: none; background: none; cursor: pointer;
+    color: var(--td-text2); padding: 8px; border-radius: 8px; line-height: 0; flex: none;
+    transition: background 200ms cubic-bezier(.16, 1, .3, 1), color 200ms cubic-bezier(.16, 1, .3, 1);
+  }
+  .mt-dlg-x svg { width: 18px; height: 18px; display: block; }
+  .mt-dlg-x:hover { background: var(--td-raised); color: var(--td-text); }
+  .mt-dlg-x:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 2px; }
   .mt-dlg-hd { display: flex; align-items: center; gap: 16px; padding: 24px; border-bottom: 1px solid var(--td-border); font: 500 18px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); }
-  .mt-dlg-bd { padding: 24px; overflow: auto; font: 400 15px/1.6 var(--f-sans); color: var(--td-text); }
+  .mt-dlg-bd { padding: 24px; overflow: auto; font: 400 15px/1.6 var(--f-sans); color: var(--td-text); display: flex; flex-direction: column; gap: 24px; }
+  .mt-dlg-bd p { margin: 0; max-width: 62ch; }
+
+  /* ⚠️ The dialogs mount on document.body, OUTSIDE #tab-meituan — so the Ink
+     rule scoped to the tab never reached them and every dialog button fell back
+     to the base .btn-primary, which is built on --brass. That is why Start
+     matching rendered amber. Scope to the dialog itself, which is where the
+     buttons actually live. Ink, not Dusk: Dusk is one element per screen and
+     the page spends its one on Match names. */
+  .mt-dlg .btn-primary { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
+  .mt-dlg .btn-primary:hover { background: var(--td-text); border-color: var(--td-text); opacity: .88; }
+  .mt-dlg .btn[disabled] { color: var(--td-text2); cursor: not-allowed; opacity: 1; }
+
+  /* Reading. No spinner: motion settles, so the bar eases out once and holds,
+     and the real counts sit under it. A true percentage is not knowable — the
+     total only arrives with the last page — so an honest easing beats a
+     fake-precise fill. */
+  .mt-prog { height: 4px; border-radius: 999px; background: var(--td-raised); overflow: hidden; }
+  .mt-prog i { display: block; height: 100%; width: 18%; border-radius: 999px; background: var(--td-sage); animation: mt-creep 8s cubic-bezier(.16,1,.3,1) forwards; }
+  @keyframes mt-creep { from { width: 18%; } to { width: 72%; } }
+  .mt-progsub { font: 400 13px var(--f-sans); color: var(--td-text2); font-variant-numeric: tabular-nums; }
+  @media (prefers-reduced-motion: reduce) { .mt-prog i { animation: none; width: 45%; } }
+
+  /* Results. Each section is a heading plus a list; the two kinds of row differ
+     because the work differs — a pick is a choice between chips, a missing
+     listing is one row with one action. */
+  .mt-picklist { display: flex; flex-direction: column; gap: 16px; }
+  .mt-pickrow { display: flex; align-items: center; gap: 16px; }
+  .mt-pickrow .pn { flex: 1; min-width: 0; font-weight: 500; }
+  .mt-nosug { font: 400 13px var(--f-sans); color: var(--td-text2); }
+
   .mt-dlg-ft { display: flex; align-items: center; gap: 8px; padding: 16px 24px; border-top: 1px solid var(--td-border); }
-  .mt-okline { display: flex; align-items: center; gap: 8px; background: var(--td-sage-tint); color: var(--td-sage-ink); border-radius: 8px; padding: 8px 16px; font: 500 13px var(--f-sans); margin-bottom: 8px; }
-  .mt-pickhd { font: 500 13px var(--f-sans); color: var(--td-text2); margin: 16px 0 8px; }
-  .mt-pick { display: flex; flex-wrap: wrap; gap: 8px; }
+  .mt-okline { display: flex; align-items: center; gap: 8px; background: var(--td-sage-tint); color: var(--td-sage-ink); border-radius: 8px; padding: 8px 16px; font: 500 13px var(--f-sans); }
+  .mt-okline svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; flex: none; }
+  .mt-pickhd { font: 500 13px var(--f-sans); color: var(--td-text2); margin: 0 0 16px; }
+  .mt-pick { display: flex; flex-direction: column; gap: 8px; }
   .mt-pick .pn { font-weight: 500; }
+  .mt-pick .chips { display: flex; flex-wrap: wrap; gap: 8px; }
   .mt-chip { font: 400 13px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 999px; padding: 8px 16px; cursor: pointer; }
   .mt-chip:hover { border-color: var(--td-sage); color: var(--td-sage-ink); background: var(--td-sage-tint); }
   .mt-tinylink { background: none; border: none; padding: 0; cursor: pointer; font: 400 13px var(--f-sans); color: var(--td-text2); text-decoration: underline; }
   .mt-tinylink:hover { color: var(--td-text); }
+
+
+  /* ── Both channel tables follow the Orders table's rules (retail-admin.html
+     :278). Two of them are load-bearing:
+
+     table-layout: fixed + a <colgroup> of PLAIN PERCENTAGES. Auto layout let
+     the columns sprawl — a short SKU sat marooned in a canyon of its own. And
+     the percentages must stay plain: under table-layout:fixed a math function
+     on a <col> width is silently IGNORED and the column falls back to auto.
+
+     A sticky band at top:56px — the exact topbar height, so it pins flush with
+     no gap. That needs NO overflow on the wrapper (overflow:hidden on an
+     ancestor kills position:sticky), which is why the wrapper below is a plain
+     bordered box and the band is square: Orders makes the same trade, and a
+     rounded band pinned under the topbar reads as a floating pill. */
+  .mt-tablewrap, .el-tablewrap { border: 1px solid var(--td-border); background: var(--td-surface); }
+  #mt-products-table, #el-products-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  #mt-products-table thead th, #el-products-table thead th {
+    position: sticky; top: 56px; z-index: 5;
+    background: var(--td-header); color: var(--td-text);
+    font: 500 13px var(--f-sans); letter-spacing: 0; text-transform: none; text-align: left;
+    padding: 8px 16px; border-bottom: 1px solid var(--td-border); border-radius: 0; white-space: nowrap;
+  }
+  #mt-products-table td, #el-products-table td {
+    padding: 16px; border-top: 1px solid var(--td-border); border-bottom: 0;
+    vertical-align: top; font-size: 15px; color: var(--td-text);
+  }
+  #mt-products-table tbody tr:hover, #el-products-table tbody tr:hover { background: var(--td-raised); }
+  /* Long listing names must wrap inside their fixed column, never widen it. */
+  #mt-products-table td, #el-products-table td { overflow-wrap: anywhere; }
 
   /* ══ Eleme channel page ══════════════════════════════════════════════════
      Ported onto the same pattern as the Meituan tab. The page previously had
@@ -5593,6 +5866,14 @@
     --danger:      var(--td-brick-ink);
   }
 
+  /* Base .btn-primary is built on --brass, which this tab remaps to Amber — so
+     without this every primary button here comes out amber and Amber stops
+     meaning "warning". A strong in-page action is Ink. The Eleme header has no
+     create action, so §1.7 leaves its Dusk slot empty and there is no Dusk rule
+     to pair with this one. */
+  #tab-eleme .btn-primary { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
+  #tab-eleme .btn-primary:hover { background: var(--td-text); border-color: var(--td-text); opacity: .88; }
+
   .el-pagehead { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 32px; }
   .el-pagehead-t { min-width: 0; flex: 1 1 340px; }
   /* text-transform must be reset explicitly: the global h2 (css:973) is the
@@ -5610,24 +5891,66 @@
   .el-chan input:checked::after { left: 19px; }
   .el-chan input:focus-visible { outline: 2px solid var(--td-sage); outline-offset: 2px; }
 
-  .el-stores { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; margin: 0 0 32px; }
-  .el-store { border: 1px solid var(--td-border); border-radius: 14px; padding: 24px; background: var(--td-surface); }
-  .el-store.blocked { border-color: var(--td-amber); background: var(--td-surface); }
-  .el-store .sh { display: flex; align-items: baseline; gap: 8px; }
-  .el-store .sdot { width: 8px; height: 8px; border-radius: 999px; background: var(--td-sage); flex: none; align-self: center; }
-  .el-store.blocked .sdot { background: var(--td-amber); }
-  .el-store .sname { font: 500 18px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); }
-  .el-store .smode { margin-left: auto; font: 400 13px var(--f-sans); color: var(--td-text2); }
-  .el-store .sstate { font: 400 15px/1.6 var(--f-sans); margin-top: 8px; color: var(--td-sage-ink); }
-  .el-store.blocked .sstate { color: var(--td-amber-ink); }
-  .el-store .sfacts { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--td-border); }
-  .el-store.blocked .sfacts { border-top-color: var(--td-border); }
-  .el-store .sf .k { font: 500 13px var(--f-sans); color: var(--td-text2); }
-  .el-store .sf .v { font: 400 15px var(--f-sans); color: var(--td-text); font-variant-numeric: tabular-nums; }
-  .el-store .sf .v.warn { color: var(--td-amber-ink); }
-  .el-store .sact { margin-top: 16px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .el-store .sact code { display: inline-block; font: 400 13px var(--f-sans); color: var(--td-text2); background: var(--td-raised); border-radius: 8px; padding: 8px 16px; }
-  .el-store .sact .inp { max-width: 160px; }
+  /* ── Tile row + one notice, the same shape the Meituan page uses (which is
+     the shape the Orders page uses). Replaces the store cards: the tiles
+     headline the numbers an operator acts on and split each per store
+     underneath, and health is not permanent furniture — the notice exists only
+     while a store needs a person. */
+  .el-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 32px; }
+  .el-tile { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px; padding: 24px; }
+  .el-tile .k { font: 400 13px var(--f-sans); color: var(--td-text2); }
+  .el-tile .v { font: 500 30px/1.2 var(--f-sans); letter-spacing: -.02em; margin-top: 8px; color: var(--td-text); font-variant-numeric: tabular-nums; }
+  .el-tile .v.att { color: var(--td-amber-ink); }
+  .el-tile .s { font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 8px; font-variant-numeric: tabular-nums; }
+  @media (max-width: 900px) { .el-tiles { grid-template-columns: 1fr; } }
+
+  .el-notice { display: flex; align-items: center; gap: 16px; background: var(--td-surface); border: 1px solid var(--td-amber); border-radius: 14px; padding: 16px 24px; margin-bottom: 32px; }
+  .el-notice .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--td-amber); flex: none; }
+  .el-notice .m { flex: 1; min-width: 0; font: 400 15px/1.6 var(--f-sans); color: var(--td-text); }
+  .el-notice .m b { font-weight: 500; }
+  .el-notice .sub { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin-top: 4px; }
+  .el-notice .inp { max-width: 176px; }
+
+  /* Chip filters + toolbar, as on Meituan. "Needs a size" is Eleme-only and
+     earns its place: here a size CAN be targeted, so a multi-size listing with
+     none picked is a real gap rather than a note. */
+  .el-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .el-fchip { font: 400 13px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 999px; padding: 8px 16px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+  .el-fchip:hover { border-color: var(--td-text2); }
+  .el-fchip.on { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
+  .el-fchip .c { color: var(--td-text2); font-variant-numeric: tabular-nums; }
+  .el-fchip.on .c { color: var(--td-paper); opacity: .7; }
+
+  .el-tools { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+  .el-sel { appearance: none; -webkit-appearance: none; font: 400 15px var(--f-sans); color: var(--td-text);
+    border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 48px 8px 16px; cursor: pointer;
+    background-color: var(--td-surface);
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2358606E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat: no-repeat; background-position: right 24px center; }
+  .el-sel:focus-visible { outline: 2px solid var(--td-sage); outline-offset: 2px; }
+  .el-search { flex: 1 1 280px; font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; }
+  .el-search::placeholder { color: var(--td-text2); }
+
+  /* Table cells */
+  .el-pname { font-weight: 500; }
+  .el-pname .vl { font-weight: 400; color: var(--td-text2); }
+  .el-pmeta { font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 4px; }
+  .el-psku { display: inline-block; margin-top: 8px; font: 400 13px var(--f-sans); color: var(--td-text2); background: var(--td-raised); border: 1px solid var(--td-border); border-radius: 8px; padding: 0 8px; font-variant-numeric: tabular-nums; }
+  .el-pill { display: inline-flex; align-items: center; gap: 8px; font: 500 13px var(--f-sans); border-radius: 999px; padding: 0 8px; }
+  .el-pill .d { width: 8px; height: 8px; border-radius: 999px; background: currentColor; flex: none; }
+  .el-pill.ok  { background: var(--td-sage-tint);  color: var(--td-sage-ink); }
+  .el-pill.att { background: var(--td-amber-tint); color: var(--td-amber-ink); }
+  .el-pill.off { background: var(--td-raised);     color: var(--td-text2); }
+  .el-cellsub { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin-top: 8px; }
+  .el-empty { padding: 24px; text-align: center; font: 400 15px var(--f-sans); color: var(--td-text2); }
+  /* One store per cell now, so no in-cell separator is needed. */
+  .el-cellhd { display: flex; align-items: center; gap: 8px; }
+  .el-cellhd .nm { font: 400 13px var(--f-sans); color: var(--td-text2); }
+
+  /* §1.3: body is lh 1.6, 1.7 for CJK runs — half of every label here is 中文. */
+  html[data-ui-lang="cn"] #tab-eleme { line-height: 1.7; }
+  html[data-ui-lang="cn"] #tab-eleme .el-status,
+  html[data-ui-lang="cn"] #tab-eleme .el-notice .m { line-height: 1.7; }
 
   .el-tabs { display: flex; align-items: center; gap: 24px; border-bottom: 1px solid var(--td-border); margin: 0 0 16px; }
   .el-tab { appearance: none; background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 0; font: 500 13px var(--f-sans); color: var(--td-text2); cursor: pointer; display: flex; align-items: center; gap: 8px; }
@@ -5644,17 +5967,26 @@
   .el-how summary { cursor: pointer; }
   .el-how > div { margin-top: 8px; padding: 16px 24px; background: var(--td-raised); border: 1px solid var(--td-border); border-radius: 14px; max-width: 70ch; }
   .el-cap { font: 400 13px var(--f-sans); color: var(--td-text2); margin: 0 0 16px; font-variant-numeric: tabular-nums; }
-  .el-tablewrap { overflow-x: auto; border: 1px solid var(--td-border); border-radius: 14px; }
-  #el-products-table { width: 100%; border-collapse: collapse; }
-  #el-products-table thead th { background: var(--td-header); color: var(--td-text); font: 500 13px var(--f-sans); letter-spacing: 0; text-transform: none; text-align: left; border-bottom: 1px solid var(--td-border); padding: 10px 16px; }
-  #el-products-table td { padding: 16px; font-size: 15px; border-bottom: 1px solid var(--td-border); }
 
   /* The size picker on a multi-size listing, and the flag for one with no size
      chosen — the only state on this table that needs a person. */
-  .el-nameinp { width: 168px; font: 400 13px var(--f-sans); }
-  .el-size { width: 148px; font: 400 13px var(--f-sans); }
+  .el-nameinp { display: block; width: 100%; margin-top: 8px; font: 400 15px var(--f-sans); }
+  .el-size { display: block; width: 100%; margin-top: 8px; font: 400 15px var(--f-sans); }
   .el-size.warn { border-color: var(--td-amber); }
   .el-guess { font: 500 13px var(--f-sans); color: var(--td-amber-ink); }
+
+  #el-products-table .toggle-label { display: inline-flex; align-items: center; opacity: 0; transition: opacity 200ms cubic-bezier(.16,1,.3,1); }
+  #el-products-table tr:hover .toggle-label,
+  #el-products-table .toggle-label:focus-within,
+  #el-products-table .toggle-label:has(input:not(:checked)) { opacity: 1; }
+  #el-products-table .toggle-label input { appearance: none; -webkit-appearance: none; margin: 0; width: 32px; height: 18px; border-radius: 999px; background: var(--td-border); border: none; position: relative; cursor: pointer; transition: background 200ms cubic-bezier(.16,1,.3,1); flex: none; }
+  #el-products-table .toggle-label input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 999px; background: var(--td-surface); transition: left 200ms cubic-bezier(.16,1,.3,1); }
+  #el-products-table .toggle-label input:checked { background: var(--td-sage); }
+  #el-products-table .toggle-label input:checked::after { left: 17px; }
+  @media (prefers-reduced-motion: reduce) {
+    #el-products-table .toggle-label, #el-products-table .toggle-label input,
+    #el-products-table .toggle-label input::after { transition: none; }
+  }
 
   .el-act-h { font: 500 18px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); margin: 0 0 16px; }
   .el-act-h + .el-log { margin-bottom: 32px; }

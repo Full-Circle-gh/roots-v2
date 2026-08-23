@@ -5289,7 +5289,11 @@ function renderReadonlyOrder(o) {
           <div class="sub">${formatDate(when)}</div>
         </div>`;
         })()}
-        ${hasCust ? `<div>
+        ${o.address_full ? `<div class="full">
+          <div class="kicker">Ship to · 收货人 ${copyChip([cust.name !== '—' ? cust.name : '', cust.phone, o.address_full].filter(Boolean).join('\n'), 'Ship-to')}</div>
+          <div class="val" data-no-i18n><b>${escapeHtml(cust.name)}</b>${cust.phone ? ` · ${escapeHtml(cust.phone)}` : ''}</div>
+          <div class="sub" data-no-i18n>${escapeHtml(o.address_full)}</div>
+        </div>` : hasCust ? `<div>
           <div class="kicker">Customer · 顾客</div>
           <div class="val" data-no-i18n><b>${escapeHtml(cust.name)}</b></div>
           ${cust.phone ? `<div class="sub" data-no-i18n>${escapeHtml(cust.phone)}</div>` : ''}
