@@ -186,7 +186,8 @@ reaches half the staff as English, silently, on one row.
 
 - **The mark alone, never the wordmark** — Fraunces is the marketing voice and
   never appears in product UI (§1.3), and §8 puts the mark on its own below 24px
-  anyway. It renders 58×20 in the topbar.
+  anyway. It renders 58×20. *(It sat in a topbar of its own for one day; §14
+  moved it into the account sheet.)*
 - **The stroke is optical.** `vector-effect: non-scaling-stroke` holds it at
   **1.6px** (§8a). The spec's 3.5 viewBox units resolve to 0.64px at this size,
   and a mark that isn't there looks like a spacing choice. `m.html` ships the
@@ -255,3 +256,90 @@ mutation-tested when it was written.
   count, put the sentence back **once**, not 249 times.
 - **The 60s poll interval** is a guess that has never been measured against a
   shop's actual pace. It is one constant, at the top of the loading section.
+
+---
+
+## 14. The chrome pass — 2026-08-23, same day
+
+> Raised by Ash from the live phone, in two sentences: *"search product bar
+> touching the top"* and *"no need the top bar with the logo, waste of space."*
+> Both were right, and one of them was a bug shipped that morning.
+
+### The search bar really was on the edge
+
+`.band` — search plus chips — shipped with **no top padding**. At rest that is
+invisible, because the head sits above it. The moment it pins, the input's own
+border is flush against the chrome above it and the cards slide under a naked
+control. This is the failure `tacet-desktop-patterns.md` §1.13a keeps returning
+to, and the phone build had just landed its own version of it ("the account
+button's tap target was flush with the right edge of the screen").
+
+The band now carries `calc(var(--sa-top) + 12px)` of top space and a hairline
+that closes it. **The inset is on the BAND, not on the page**, and that is
+measured rather than assumed: with `padding-top` on `<html>`, a sticky child
+still pins at `y = 0`, i.e. under the status bar. The head cancels the inset
+while it is on screen with a matching negative bottom margin, so the gap reads
+as 12px in a browser and 12px on a notched phone, and nothing moves when the
+band takes over.
+
+### The topbar was rent
+
+56px — a fifteenth of a 844px phone — for a mark the operator taps on their own
+home screen to open this app, and one avatar. **This reverses the call made in
+§9 the same morning** ("Quick stock is a tacet surface and says so"): identity
+in the chrome is worth paying for on a 34-page shell where the bar also
+navigates. On a one-screen tool it is decoration with a rent bill, and the tool
+is used one-handed in a kitchen. The mark now opens the account sheet instead —
+one tap, zero pixels.
+
+Three layouts were built as working code and photographed at 390×844 before
+choosing (`v-now`, `A`, `B`, `C` in the session's mockup set). Measured chrome —
+everything above the first card:
+
+| | at rest | scrolling | |
+|---|---|---|---|
+| shipped that morning | 298px | 168px | topbar + head + store row + band |
+| **A** — one head | 212px | 125px | account scrolls away with the head |
+| **B** — head folds | **212px** | **125px** | account rides into the pinned band |
+| C — search first | 125px | 125px | no title, and the store name off screen |
+
+**B was chosen by Ash.** C is the densest and was rejected for a real reason:
+on a two-store account the store name disappears entirely, and counting the
+wrong store's shelf is a worse failure than a tall header.
+
+### What B is, mechanically
+
+- **One head**: title, the store as its second line (a 44px target dressed as a
+  text line — the store is *state*, not an action, so it stopped being a
+  bordered control row), and the account button in the header's right slot.
+  §1.7's Dusk CTA slot stays empty; the account button is the *shell's* control,
+  not the page's, and with no topbar there is nowhere else for it to live.
+- **The head scrolls away like content.** Nothing is hidden, collapsed or
+  resized, so the page height never changes and the list cannot jump under a
+  counting finger. The only thing the fold does is **fade in the account button
+  inside the pinned band** — whose space is reserved at rest, so the search
+  field never changes width.
+- **The threshold is cached** (`head.offsetTop + head.offsetHeight`, re-measured
+  on language change and resize) rather than read per scroll event: reading
+  layout on every frame of a 250-row list is how a phone starts stuttering.
+
+### The lesson the test suite paid for
+
+The fold is scroll-driven, and **scroll events, `requestAnimationFrame` and
+`IntersectionObserver` all fire during the browser's rendering step — which
+headless Chrome under `--virtual-time-budget` does not perform after load.** A
+real `window.scrollTo(0, 400)` in that environment moves the page and notifies
+nobody. The first version of the check went red about half the time; the second
+(rAF-throttled) went red more often, and the third told the truth:
+
+- the app applies the fold **straight from the scroll listener**, with no rAF —
+  there is no layout read left to defer, and a rAF that never runs leaves the
+  fold stuck;
+- the test **dispatches the scroll event itself** after scrolling. The position
+  is real; only the notification is the test's.
+
+Two new guards, both mutation-tested: `folded` (the head folds, the account
+button becomes visible) and a geometry assertion on **every** case —
+`data-mintop`, the smallest distance from the top of the screen to any control.
+Removing the band's top padding, i.e. re-introducing the exact bug Ash reported,
+fails it with *"a control renders 0px from the top of the screen"*.
