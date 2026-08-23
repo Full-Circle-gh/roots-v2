@@ -770,6 +770,17 @@ function pushableStores(stores) {
 // everywhere it is set up, so an ABSENT key means ON. Only an explicit false
 // stops it — otherwise the first deploy of this switch would silently take a
 // working channel down.
+// Per-store switch. The channel flag above is all-or-nothing; this is one
+// store. Same default: absent key means on.
+function storePushEnabled(storeCode) {
+  if (!storeCode) return true;
+  try {
+    const row = db.prepare("SELECT value_json FROM storefront_config WHERE key = ?")
+                  .get('meituan.store.' + storeCode + '.enabled');
+    return row ? JSON.parse(row.value_json) !== false : true;
+  } catch { return true; }
+}
+
 function meituanChannelEnabled() {
   try {
     const row = db.prepare("SELECT value_json FROM storefront_config WHERE key = 'meituan.enabled'").get();
@@ -781,6 +792,10 @@ async function processStockQueue(stores) {
   // Channel switched off — leave the rows pending so a switch back on resumes
   // exactly where this stopped, and push nothing to Meituan meanwhile.
   if (!meituanChannelEnabled()) return;
+  // A store switched off is skipped outright: its rows were dropped when it was
+  // turned off, and nothing new is being queued for it.
+  stores = (stores || []).filter(s2 => storePushEnabled(s2.storeCode || s2.store_code || s2.code));
+  if (!stores.length) return;
   // q.product_id is a store_products.id (order ingest, push-all, and adjustStock all
   // key off store_products) — NOT the legacy `products` kitchen table, whose ids
   // diverge for many SKUs. Joining `products` fed the wrong name/货号 for ~118 rows;

@@ -10865,7 +10865,11 @@
 
     <!-- Three tiles + a notice, both painted by mtRenderHead() from /status. -->
     <div class="mt-tiles" id="mt-tiles"></div>
-    <div id="mt-notice"></div>
+    <!-- One line per store, carrying that store's switch. Turning a store off
+         stops the daemon working for it: nothing new is queued, whatever was
+         waiting is dropped. The blocked state lives on the line too, so the
+         page does not say the same thing twice. -->
+    <div class="mt-storelines" id="mt-storelines"></div>
 
     <div class="mt-tabs" role="tablist">
       <button id="mt-tab-products" class="mt-tab active" role="tab" onclick="mtView('products')">
@@ -10875,8 +10879,6 @@
       <button id="mt-tab-activity" class="mt-tab" role="tab" onclick="mtView('activity')">
         Activity · 同步日志</button>
       <span class="mt-tabs-grow"></span>
-      <button class="btn btn-sm" id="mt-pushall-btn" onclick="mtPushAll()"
-        title="Queue a fresh stock push for every mapped product">Sync now · 立即同步</button>
     </div>
 
     <div id="mt-view-products" class="mt-view">

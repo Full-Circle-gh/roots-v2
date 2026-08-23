@@ -250,6 +250,17 @@ function pushableStores() {
 // everywhere it is set up, so an ABSENT key means ON. Only an explicit false
 // stops it — otherwise the first deploy of this switch would silently take a
 // working channel down.
+// Per-store switch. The channel flag above is all-or-nothing; this is one
+// store. Same default: absent key means on.
+function storePushEnabled(storeCode) {
+  if (!storeCode) return true;
+  try {
+    const row = db.prepare("SELECT value_json FROM storefront_config WHERE key = ?")
+                  .get('meituan.store.' + storeCode + '.enabled');
+    return row ? JSON.parse(row.value_json) !== false : true;
+  } catch { return true; }
+}
+
 function meituanChannelEnabled() {
   try {
     const row = db.prepare("SELECT value_json FROM storefront_config WHERE key = 'meituan.enabled'").get();
@@ -262,7 +273,7 @@ async function processStockQueue() {
   // same meituan_sync_queue, so gating only the 外卖 daemon would leave half the
   // channel live behind an "off" switch.
   if (!meituanChannelEnabled()) return;
-  const eligible = pushableStores();
+  const eligible = pushableStores().filter(storePushEnabled);
   if (!eligible.length) return;
   const placeholders = eligible.map(() => '?').join(',');
   // The queue's product_id is a store_products.id (the canonical retail catalogue
