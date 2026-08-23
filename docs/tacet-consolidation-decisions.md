@@ -1,9 +1,11 @@
-# Tacet shared-core consolidation — decisions record, v4.62
+# Tacet shared-core consolidation — decisions record, v4.63
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-08-23 · v4.63 — §24 Database: **THE OBSERVATION LAYER REPORTED CANNOT-SEE AS A BENIGN STATE, IN ALL THREE INSTRUMENTS THE NIGHT DEPENDS ON.** **`ops-alert` said *alerts disabled* when the database was unreadable** — wrong, not just unhelpful: it sends the reader to Settings. Now three states, and after an F1-style rename it says **CANNOT READ ALERT CONFIG … NOBODY WAS PAGED**. **`alert-latch`'s read path reintroduced the exact bug the file exists to stop** — `existsSync` conflates *absent* with *unreadable*, so an unreadable latch dir read CLEAR and the recovery ✅ was swallowed, which is the 2026-07-25 闪购 failure via the error path. Now `statSync` with `throwIfNoEntry:false`, and cannot-see fails towards **STILL LATCHED**. **And `health-watchdog` did not merely miss a dead app — it CLOSED THE INCIDENT**: given `state.down=true` and an app answering 500 on every route, `res.status > 0` made it send **✅ storefront RECOVERED** and write `{fails:0, down:false}`. Red-proven old-vs-new for all three. The replacement probe is `deploy-apply.sh`'s, taken verbatim — **which is the lesson: the strictest assertion in the tree was already written and was only running at ship time, while the thing that runs every two minutes accepted anything.** **HAZARD RECORDED: after F1 alerting fails PARTIALLY** — a cached fd survives a rename, so processes started before the rename keep paging and ones started after go silent, **and arriving alerts read as a working channel**. Cost of making it uniform reported, not applied. **AND `.env` IS NOT SHELL-SOURCEABLE** — line 63's unquoted `<` aborts the source, so lines 1-62 load and the four `TACET_PG_*` on 91-94 do not; the obvious G27 wrapper fails partially and silently. **Plus 14 stale files deleted from the box, 4 of them publicly fetchable over HTTPS for months** (2.14 MB of admin front-end, no credentials — verified by extracting the matches, not counting them).
 
 2026-08-21 · v4.62 — §24 Database: **THE DETECTOR FOR THE BOX'S DRIFT HAD ITSELF DRIFTED, AND IT WAS MOST OF THE NOISE.** `diagnose_deployed_tree.js`'s manifest was 77 commits stale. Regenerated at `cfaefd77`: **88 DIFFER → 0, 122 EXTRA → 15, 1 MISSING → 0, 394 match → 586, verdict PASS.** **EVERY ONE of the 88 was the detector; NONE was the box** — the deployed tree is exactly the repository. ⚠️ **AND THIS ENTRY FIRST CLAIMED 17 REAL DIFFERENCES, FROM A MANIFEST REGENERATED AT A LOCAL `HEAD` THAT WAS 101 COMMITS BEHIND `main`.** Files newer than my reference read as production drift. Corrected within the hour and left visible: **a stale reference does not announce itself as stale, it announces itself as a finding** — which is the same failure this pass was about, committed in the pass about it. **ITEM 24 HAS A DETECTOR AFTER ALL** — the brief assumed nothing flagged box-only files and that was wrong: the `EXTRA` category has always existed, already separates residue from drift from installer-rewritten, and its header already names the cause. **No code was needed.** So why did `copy_order.json` sit there? **`EXTRA` never fails by design, and NOTHING RUNS THE TOOL** — `ro-query.yml` is `workflow_dispatch` only, no cron, no timer, all three verified. **Detected, unenforced, unscheduled.** **AND THE GENERATED BLOCK HAD A RECIPE, NOT A GENERATOR:** the shell one-liner in its header covers `MANIFEST` and not `MANIFEST_COMMIT` or `MANIFEST_SW_NORMALIZED`, so two of three values were hand-maintained — which is the step that gets skipped. Committing a real generator is still owed and is not free, because a new `scripts/` file is itself deployable. **Two standing rules recorded: check `.gitattributes` before editing and never let a tool normalise on write** (five incidents now; the latest turned a 98-line change into 295/295 and falsified a README line in the same commit), and **a sort that iterates a set varies ACROSS PROCESSES ONLY**, so it passes every in-process test — `PYTHONHASHSEED` at two values plus a fresh process is the proof that catches it.
 
@@ -2797,6 +2799,84 @@ Python randomises string hashing per process, so a set's iteration order is **st
 
 **THE FIX IS DULLER THAN THE BUG:** iterate sorted lists, never a set or a dict, anywhere the output order is meaningful. Say so in the docstring, because the next person to tidy the code will reach for a set.
 
+### THE OBSERVATION LAYER REPORTED CANNOT-SEE AS A BENIGN STATE — FIXED 2026-08-23
+
+**Three instruments used to decide flip-or-roll-back each answered a question they could not see the answer to.** Two went quiet on a real problem; one declared a fake recovery. All three are repaired and red-proven; the proofs are the point, because every one of these reported success while failing.
+
+**1. `lib/ops-alert.js` — three states, not two.** Its `roConfig()` caught every failure to `null`, so `webhookUrl()` returned `''` and `sendOpsAlert()` printed *SUPPRESSED (alerts disabled)*. **That message is not merely unhelpful, it is wrong**: it sends whoever reads it to Settings to switch on something that was never off. `roConfig()` now returns `{ok, value}` and `webhookStatus()` separates *unreadable* from *switched off*.
+
+| | old | new |
+|---|---|---|
+| `data/roots.db` renamed exactly as F1 does | `SUPPRESSED (alerts disabled)` | `CANNOT READ ALERT CONFIG (unable to open database file)` — `alerting is NOT switched off; …/data/roots.db could not be read. NOBODY WAS PAGED:` |
+
+**2. `lib/alert-latch.js` — the read path reintroduced the bug the file exists to stop.** `fs.existsSync()` answers `false` for *no such file* AND for *cannot read this directory*, so an unreadable `data/alert-latch/` made every latch read CLEAR. A daemon restarting mid-incident concluded it owed nobody an all-clear and **the recovery ✅ was swallowed** — which is exactly the 2026-07-25 闪购 failure this file was written to prevent, arriving through the error path instead of the memory path. The docstring covered the write path and said nothing about the read.
+
+Now `fs.statSync(f, {throwIfNoEntry: false})`: `undefined` is genuinely-absent, a **throw** is cannot-see, and cannot-see reads as **STILL LATCHED**. Red-proven with a regular file where the directory should be (ENOTDIR — `chmod 000` proves nothing here, the box runs as root and root bypasses the check): old read `false` and swallowed the ✅; new reads `true`, logs the fault, and the ✅ fires. **The cost is named rather than hidden**: an unreadable directory on a cold start makes never-latched keys read latched, so each emits one spurious ✅. Noisy, visible, self-limiting — and the opposite mistake is silent.
+
+**3. `scripts/health-watchdog.js` — it did not merely miss a dead app, it closed the incident.** The assertion was `res.status > 0`: **any HTTP answer counted as healthy**, so an app returning 500 on every route probed GREEN, every two minutes, for as long as it stayed up. That is the G26/G1 failure mode exactly.
+
+**The proof is worse than the description.** Given a watchdog already tracking an outage (`state.down = true`) and an app answering 500 on every route:
+
+- **old** — sent `✅ roots-v2 storefront RECOVERED` and wrote `{fails: 0, down: false}`. **It declared recovery and closed the incident.**
+- **new** — `app probe FAILED (4/99) [/=500]`, state stays `{fails: 4, down: true}`.
+
+The replacement is not new work: it is **`scripts/deploy-apply.sh`'s readiness probe, taken verbatim** — the same four paths (`/`, `/api/retail/categories`, `/api/retail/config`, `/api/retail/products`) and the same verdict (000 or 5xx is broken, 4xx counts as up so a stray client error cannot restart a healthy app).
+
+**AND THAT IS THE GENERAL LESSON, WORTH MORE THAN THE FIX.** The strictest assertion in the tree was already written, already correct, and was only running **once, at ship time**, while the thing that runs **every two minutes** accepted anything. **The strictest assertion should be the one that runs continuously.** A deploy-time check protects the deploy; a monitor protects the fortnight after it.
+
+---
+
+### AFTER F1, ALERTING FAILS PARTIALLY — AND PARTIAL SILENCE READS AS A WORKING CHANNEL — HAZARD RECORDED 2026-08-23
+
+**`lib/ops-alert.js` caches its SQLite handle in `_ro`, per process. Renaming a file does not invalidate an open fd.**
+
+So at F1 the fleet splits. A process that opened the handle **before** the rename keeps reading the renamed inode and **keeps alerting normally**. A process that starts **after** it cannot open `data/roots.db` at all and goes silent. Both states persist until something restarts.
+
+**That is worse than total silence, and this is the part to keep:** alerts continuing to arrive from four daemons is read as evidence that the alerting channel is up. Nobody checks a channel that is delivering. The two daemons that restarted during the window are the ones whose pages are being dropped, and there is nothing in the arriving traffic to say so.
+
+**57 call sites across 12 files flow through `sendOpsAlert`** — `meituan-daemon` 15, `qingyun-daemon` 14, `shangou-daemon` 6, `routes/retail.js` 5, `health-watchdog` 4, `guanyi-daemon` 3, `server.js` 3, `meituan-drift-sweep` 2, `eleme-daemon` 2, `alert-latch` 1 — including *storefront DOWN*, `uncaughtException`, every route 500, and every channel disconnect.
+
+**WHAT MAKING IT UNIFORM WOULD COST, reported and NOT done.** Two shapes:
+
+- **Reopen per call.** Delete `_ro`, open and close around each read. Correct and trivial to reason about. The cost is a `better-sqlite3` open per alert — and `health-watchdog` alone reaches this four times per cron tick, plus every daemon transition. An open is sub-millisecond on a warm page cache, so the real objection is not speed but that it re-opens **during an incident**, which is the moment the disk is least likely to answer.
+- **Revalidate the handle.** Keep the cache, `fs.statSync(DB_FILE)` before use, drop and reopen if the inode changed. One stat per call instead of one open. Detects the rename exactly, because the rename is what changes the inode at the path.
+
+**Neither is applied.** `roConfig()` now drops the handle when a query throws, which is hygiene, not a repair — after a rename **nothing throws**, so that line never runs. **Revalidation is the smaller and more targeted of the two and is what I would build; it is a design decision and it is yours.**
+
+**AND SOURCING THE WEBHOOK INDEPENDENTLY IS A DIFFERENT DECISION AGAIN.** A distinct message is the repair; **surviving F1 is the fix**, and it means not reading the migrating database at all. Three options, with costs:
+
+1. **An env var, like `lib/platform-alert.js` already uses** (`PLATFORM_OPS_WEBHOOK`). Cheapest, survives F1 completely. **But it inherits G27 wholesale** — `.env` is parsed only by `server.js`, so every daemon and cron script would read it as unset, which is the failure this entry is about, moved.
+2. **A small file beside the config**, written by retail-admin when the setting changes, read by `ops-alert`. Survives F1, no env dependency, no database. Cost: a second source of truth for one setting, and a write path in the admin that must not silently fail.
+3. **Read it from Postgres after the flip**, via `lib/db-driver.js` rather than a hardcoded SQLite path. Architecturally right and the only option with one source of truth. Cost: it is exactly backwards during the window — the alerting layer would depend on the database being migrated, at the moment that database is being migrated.
+
+**My reading: (2) during the cutover window and (3) after it**, because the window is the one time alerting must not depend on the database. Not decided here.
+
+---
+
+### `.env` IS NOT SHELL-SOURCEABLE — RECORDED 2026-08-23 SO NOBODY REACHES FOR THE OBVIOUS WRAPPER
+
+**G27's tempting one-line workaround does not work, and it fails PARTIALLY, which is worse than failing.**
+
+`set -a; . ./.env; set +a` aborts with a bash syntax error at **line 63**:
+
+```
+EMAIL_FROM=Roots <noreply@rootskitchenchina.com>
+```
+
+The unquoted `<` is a redirect. The source stops there, so **lines 1–62 load and 64–94 do not** — and the four `TACET_PG_*` variables live on lines 91–94. A caller who writes `. ./.env 2>/dev/null` gets a half-populated environment and no signal at all.
+
+**So the minimal fix for G27 is not a shell wrapper.** It is extracting `server.js`'s `loadEnv()` IIFE into a module the scripts require — which parses `KEY=VALUE` literally and does not care what the value contains. Not built; out of scope for this pass.
+
+---
+
+### THE SHAPE TO COPY: A WATCHDOG WHOSE FAILURE IS DETECTED BY A DIFFERENT PROCESS — 2026-08-23
+
+**`scripts/meituan-daemon.js` watches whether `proxy-watchdog` is still WRITING**, not whether it is running. If the proxy choice goes stale it logs `proxy_stale`, re-elects its own path, and pages: *proxy-watchdog isn't updating — check `pm2 status proxy-watchdog`*. When it resumes, a ✅ follows.
+
+**That is the pattern the rest of this layer lacks.** Every other instrument here answers for itself, and an instrument that answers for itself cannot report its own absence — the same shape as A VERIFIER THAT SHARES THE COPIER'S MAP CANNOT AUDIT THE MAP, applied to liveness instead of data. `proxy-watchdog` is `online` again as of 2026-08-23 10:14, having been stopped for the whole 2026-08-21 session; **the detector is why that was visible at all.**
+
+**Its one weakness, and it is the one this entry is about: the alert flows through `sendOpsAlert`.** After F1 the detector survives and its output does not. **A cross-process detector is only as good as the channel it reports on**, which is an argument for fixing the channel before copying the pattern anywhere else.
+
 ### THE DETECTOR FOR THE BOX'S DRIFT HAD DRIFTED — ITEM 60 CLOSED 2026-08-21
 
 **`scripts/diagnose_deployed_tree.js` is the only thing that compares the box against the repository, and its manifest was 77 commits stale.** Regenerated at `cfaefd77`.
@@ -2830,7 +2910,7 @@ Python randomises string hashing per process, so a set's iteration order is **st
 
 **A detector that is stale and unrun is not a detector.** Item 24's status is therefore: **it has a detector, the detector is now current, and it is still neither enforced nor scheduled.** Whether to schedule it is a decision nobody has taken.
 
-**15 EXTRA files stand on the box today** (it read 40 against the `99b4031f` manifest; 25 of those were simply newer than it), and the list is worth reading rather than summarising: `.bak-*` copies made by hand during incidents (`lib/jd.js.bak-decouple-20260627`, `routes/retail.js.bak-sysalert`, six more), a `public/cms.html.tmp/` build directory, `public/retail-admin.html.bak` and `public/retail-admin.js`, and about twenty `scripts/test_*.js` and `scripts/diagnose_*.js` that exist on the box and not in `main`. **Four more were mine** — `__pycache__/*.pyc` left by running `drift_guard.py` in the deployed directory to verify a deploy, removed by hand, and a reminder that a diagnostic run leaves residue too.
+**15 EXTRA files stood on the box, and 14 were deleted on 2026-08-23** ⚠️ **FOUR OF THEM WERE PUBLICLY FETCHABLE OVER HTTPS AND HAD BEEN FOR MONTHS.** `public/` is served at `/assets`, so `public/retail-admin.js` (940 KB), `public/retail-admin.html.bak` (760 KB) and `public/cms.html.tmp/` (442 KB) answered **HTTP 200 with full content** at `https://store.rootskitchenchina.com/assets/…` — **2.14 MB of stale admin front-end**, the oldest sitting there since 2026-05-20. **They carried NO credentials**, verified by extracting every `password|secret|api_key|token|Bearer` match rather than counting them: all are identifiers, DOM ids and prose (`secret_masked`, `v('jd-app_secret')`, `<code>SECRET</code> are configured in <code>.env</code>`). The exposure was old admin logic and internal API paths. **`public/retail-admin.js` is item 24's pure case** — the only one of the fifteen ever committed, deleted from `main`, and left live by an installer that only ever copies. Ten `.bak-*` files (hand-made during June/July incidents, 2.5 MB, none loadable by Node since it resolves `.js`/`.json`/`.node` and never `.bak-lowio`) went with them. **4.69 MB removed; the app stayed healthy across it.** The fifteenth, `scripts/zero_yuexiu_stock.js`, is KEPT and now listed in `EXPECTED_EXTRA` with its reason — its own header says *untracked ON PURPOSE: a committed `scripts/` file ships and bounces pm2*, which is this project's own finding applied correctly. The old wording follows (it read 40 against the `99b4031f` manifest; 25 of those were simply newer than it), and the list is worth reading rather than summarising: `.bak-*` copies made by hand during incidents (`lib/jd.js.bak-decouple-20260627`, `routes/retail.js.bak-sysalert`, six more), a `public/cms.html.tmp/` build directory, `public/retail-admin.html.bak` and `public/retail-admin.js`, and about twenty `scripts/test_*.js` and `scripts/diagnose_*.js` that exist on the box and not in `main`. **Four more were mine** — `__pycache__/*.pyc` left by running `drift_guard.py` in the deployed directory to verify a deploy, removed by hand, and a reminder that a diagnostic run leaves residue too.
 
 ---
 
