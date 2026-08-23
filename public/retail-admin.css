@@ -5560,7 +5560,6 @@
   .mt-tab .n:empty { display: none; }
   .mt-tab.active .n { color: var(--td-text); }
   .mt-tabs-grow { flex: 1 1 auto; }
-  .mt-upd { font: 400 13px var(--f-sans); color: var(--td-text2); font-variant-numeric: tabular-nums; }
 
   /* ── Chip filters — Orders' filter row ──────────────────────────────────── */
   .mt-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
@@ -5932,6 +5931,9 @@
   .el-search::placeholder { color: var(--td-text2); }
 
   /* Table cells */
+  .el-pcell { display: flex; gap: 16px; }
+  .el-thumb { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; border: 1px solid var(--td-border); flex: none; background: var(--td-raised); }
+  .el-thumb-ph { width: 40px; height: 40px; border-radius: 8px; background: var(--td-raised); border: 1px solid var(--td-border); flex: none; }
   .el-pname { font-weight: 500; }
   .el-pname .vl { font-weight: 400; color: var(--td-text2); }
   .el-pmeta { font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 4px; }
@@ -5960,7 +5962,6 @@
   .el-tab .n:empty { display: none; }
   .el-tab.active .n { background: var(--td-raised); color: var(--td-text); }
   .el-tabs-grow { flex: 1 1 auto; }
-  .el-tabs .el-upd { font: 400 13px var(--f-sans); color: var(--td-text2); padding-right: 16px; font-variant-numeric: tabular-nums; }
   .el-tabs .btn { align-self: center; margin-bottom: 8px; }
 
   .el-how { margin: 0 0 16px; font: 400 13px var(--f-sans); color: var(--td-text2); }
