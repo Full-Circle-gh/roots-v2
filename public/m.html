@@ -2,9 +2,76 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
-<meta name="theme-color" content="#FBF9F4">
-<title>Tacet Mobile</title>
+<!-- user-scalable=no on top of maximum-scale=1: an installed app is not a page.
+     Pinch-zoom on a fixed 402px shell only ever moves the whole app off-screen
+     with no way to see the edge you have lost, and double-tap-to-zoom costs
+     every button a 300ms wait for the second tap that isn't coming. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" id="mThemeColor" content="#FBF9F4">
+<meta name="color-scheme" content="light dark">
+<!-- Order numbers and SKUs are not phone numbers. iOS Safari turns anything
+     that looks like one into a blue call link, which puts a dialler behind
+     half the digits in the app. -->
+<meta name="format-detection" content="telephone=no">
+<title>Tacet · store</title>
+
+<!-- ── Installed-app wiring ────────────────────────────────────────────────
+     This page is the store backend on a phone, and it is meant to be INSTALLED
+     — home-screen icon, own task in the app switcher, no URL bar, no browser
+     tabs. That takes three things and they only work together: a manifest
+     served from the host root (/m-manifest.webmanifest), a service worker with
+     the same scope (registered at the bottom of this file), and HTTPS. Miss any
+     one and Chrome quietly declines to offer Install and the operator keeps
+     looking at the address bar. Same shape as /kitchen and /stock.
+
+     The apple-* tags are the iOS half of the same job: Safari has no manifest
+     support worth relying on, so name, icon and status-bar treatment come from
+     these. black-translucent draws the app UNDER the status bar, which is why
+     every top band in this file pads by env(safe-area-inset-top). -->
+<link rel="manifest" href="/m-manifest.webmanifest">
+<link rel="icon" type="image/svg+xml" href="/tacet-favicon.svg">
+<link rel="apple-touch-icon" href="/tacet-apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="application-name" content="Tacet">
+<meta name="apple-mobile-web-app-title" content="Tacet">
+<!-- The attribute on the tag below is load-bearing, not decoration:
+     scripts/test_mobile_screens.js and friends find the app's own code by
+     matching the first script tag with no attributes on it, and a second bare
+     one up here would hand them forty lines of theme boot to analyse instead
+     of the app. Anything at all on the tag keeps that anchor unique. -->
+<script data-boot="theme">
+  /* Theme, before the first paint. Two reasons this is not left to the app's
+     own state: an app that opens white and then turns dark has flashed, which a
+     browser tab gets forgiven for and an installed app does not; and the theme
+     has to survive being closed — state.theme was a fresh 'light' on every
+     launch, so a shop owner on dark chose dark again every single time.
+
+     'roots_theme' is the same key public/stock.html writes, deliberately: the
+     two phone surfaces share a device and a person, and disagreeing about
+     whether it is night on the same handset is worse than either choice. */
+  (function () {
+    try {
+      var saved = localStorage.getItem('roots_theme');
+      var theme = (saved === 'light' || saved === 'dark') ? saved
+        : (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-theme', theme);
+      var m = document.getElementById('mThemeColor');
+      if (m) m.setAttribute('content', theme === 'light' ? '#FBF9F4' : '#111A2B');
+    } catch (e) { document.documentElement.setAttribute('data-theme', 'light'); }
+    /* Standalone means launched from the home screen: no address bar, no browser
+       back button, and the OS status bar sitting on top of the page. The app
+       needs to KNOW that — a few rules below hang off [data-standalone], and the
+       install prompt must never offer to install an app that is already open. */
+    try {
+      var standalone = (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)
+        || (window.matchMedia && window.matchMedia('(display-mode: fullscreen)').matches)
+        || window.navigator.standalone === true;
+      if (standalone) document.documentElement.setAttribute('data-standalone', '1');
+    } catch (e) {}
+  })();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+SC:wght@400;500&display=swap">
@@ -70,7 +137,47 @@ button,input,textarea{font-family:inherit}
   body{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
   #app{width:402px;height:min(874px,calc(100vh - 48px));border-radius:44px;
        box-shadow:0 24px 70px rgba(17,26,43,.28),0 0 0 11px #1c1c1e,0 0 0 12px #2c2c2e}
+  /* …unless the app IS the window. The drawn phone is a preview device for
+     looking at a phone app on a desk; an installed app opened on a laptop is
+     the real thing, and a real thing does not draw a picture of a handset
+     around itself inside its own window. */
+  :root[data-standalone] body{display:block;padding:0}
+  :root[data-standalone] #app{width:100vw;height:100vh;height:100dvh;border-radius:0;box-shadow:none}
 }
+
+/* ── The app, not the page ────────────────────────────────────────────────
+   Launched from the home screen there is no address bar, no reload button and
+   no browser Back — so a handful of browser behaviours stop being helpful and
+   start being bugs, and this is where they are switched off.
+
+   Pull-to-reload is the sharpest of them: dragging a list past its top RELOADS
+   an installed app, which throws away every screen it was on and every sheet
+   it had open, for a gesture people make by accident all day. It is replaced,
+   not just removed — see wirePull() for the refresh that takes its place. */
+html,body{overscroll-behavior:none}
+.content{overscroll-behavior-y:contain}
+/* Tapping a control should not paint its label blue and offer to copy it.
+   Selection stays ON everywhere else on purpose: an address, a phone number
+   and an order number are things people lift out of this app by hand. */
+button,.tabbar,.row,.chip,.pill,.eyebrow,h1,.grabber{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+/* No 300ms wait on every tap for a double-tap-to-zoom that can't happen. */
+button,a,.row,.chip,.stepbtn{touch-action:manipulation}
+/* The refresh that replaces pull-to-reload: a ring in the gap the content
+   leaves behind as it is dragged down. Sits UNDER the content — which paints
+   its own background — so it is only ever visible while the gap is open. */
+:root{--pull-gap:calc(56px + env(safe-area-inset-top,0px))}
+.pullring{position:absolute;top:0;left:0;right:0;height:var(--pull-gap);z-index:0;display:flex;
+  align-items:center;justify-content:center;pointer-events:none;color:var(--text-secondary);
+  /* The inset, so the ring is not spinning behind the phone's own clock: on iOS
+     the app is drawn UNDER the status bar (apple-mobile-web-app-status-bar-style
+     is black-translucent), and the gap a pull opens starts at the very top of
+     the glass. The gap grows by the same inset to keep the ring centred in the
+     part of it anyone can see. */
+  padding-top:env(safe-area-inset-top,0px)}
+.pullring svg{transition:opacity .15s linear}
+.spin{animation:tSpin .9s linear infinite}
+@keyframes tSpin{to{transform:rotate(360deg)}}
+.content{position:relative;z-index:1}
 
 @keyframes tBreathe{0%,100%{opacity:1}50%{opacity:.45}}
 @keyframes tSheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
@@ -231,7 +338,11 @@ function chIcon(ch){ return `<span style="color:var(--text-secondary);display:fl
    State + navigation
    ========================================================================== */
 const state = {
-  tab:'home', theme:'light', lang:'en', live:true, sound:true,
+  /* The head script already resolved the theme (saved choice, else the phone's
+     own) and wrote it onto <html> before the first paint. Read it back rather
+     than defaulting to 'light' again here — that second default is what used to
+     make the Settings row say "Light" on a page that was visibly dark. */
+  tab:'home', theme:(document.documentElement.getAttribute('data-theme')==='dark'?'dark':'light'), lang:'en', live:true, sound:true,
   stack:[], statusF:'all', channelF:'all', inboxSeg:'reviews',
   custSeg:'all', custTier:'all', custChan:'all', custQ:'', customers:null, custMeta:null, custLoaded:false,
   custTotal:null, custMore:false, custSort:'last_seen',
@@ -245,6 +356,12 @@ const state = {
   trend:null, trendKey:null, trendErr:null, trendRange:'7', trendMetric:'revenue',
   recap:null, recapTried:false, recapSince:0, reallyAway:false, pos:'default',
   overflow:false, search:false, detailId:null, detailActions:false, productSku:null,
+  /* Installed-app state. canInstall is set by the browser telling us it would
+     offer an install (beforeinstallprompt); installBar is the strip that says
+     so, dismissible and remembered; installSheet is the iOS walkthrough, which
+     exists because Safari has no prompt to fire. refreshing is the pull-to-
+     refresh spinner — see wirePull(). */
+  canInstall:false, installBar:false, installSheet:false, refreshing:false, refreshedAt:0,
   orderBusy:null, orderErr:null, replyBusy:false, replyErr:null, revBusy:null, revErr:null, parcelBusy:null,
   printer:null, printerLoading:false, printerBusy:false, printerErr:null,
   prodStores:null, prodStockReady:false, prodBusy:false, prodErr:null,
@@ -327,8 +444,25 @@ reg('tab', t=>{ state.stack=[]; state.tab=t; state.detailId=null; render();
 reg('back', ()=>{ if(state.stack.length) pop(); });
 reg('overflow', ()=>{ state.overflow=true; render(); });
 reg('closeOverflow', ()=>{ state.overflow=false; render(); });
-reg('toggleTheme', ()=>{ state.theme=state.theme==='light'?'dark':'light'; document.documentElement.setAttribute('data-theme',state.theme); render(); });
-reg('toggleLang', ()=>{ state.lang=state.lang==='en'?'zh':'en'; LANG=state.lang; document.documentElement.lang=state.lang; render(); });
+reg('toggleTheme', ()=>{ state.theme=state.theme==='light'?'dark':'light'; applyTheme(); render(); });
+/* Paints the choice, remembers it, and repaints the OS chrome to match. That
+   last part is what an installed app needs and a tab does not: in standalone
+   the status bar and the gesture area are coloured by theme-color, so a dark
+   app under a cream status bar looks like the app has been cropped. */
+function applyTheme(){
+  document.documentElement.setAttribute('data-theme',state.theme);
+  try{ localStorage.setItem('roots_theme',state.theme); }catch(e){}
+  const m=document.getElementById('mThemeColor');
+  if(m) m.setAttribute('content', state.theme==='light'?'#FBF9F4':'#111A2B');
+}
+/* Remembered, for the same reason the theme is: an operator who reads Chinese
+   reads Chinese every morning, and re-picking it at every launch is the app
+   forgetting who it belongs to. Its own key — public/stock.html's
+   'roots-admin-lang' speaks en/cn and this speaks en/zh, and a shared key
+   would have one of them reading the other's word for Chinese as English. */
+const M_LANG_KEY='tacet-m-lang';
+reg('toggleLang', ()=>{ state.lang=state.lang==='en'?'zh':'en'; LANG=state.lang; document.documentElement.lang=state.lang;
+  try{ localStorage.setItem(M_LANG_KEY,state.lang); }catch(e){} render(); });
 reg('toggleSound', ()=>{ state.sound=!state.sound; render(); });
 reg('toggleLive', ()=>{ state.live=!state.live; render(); });
 reg('openSearch', ()=>{ state.overflow=false; state.search=true; render(); });
@@ -3543,6 +3677,19 @@ function screenSettings(){
     ]},
     {h:T('Preferences','偏好'),rows:[{label:T('Language','语言'),value:state.lang==='en'?'English':'中文',cmd:"APP.cmd('toggleLang')",chev:true},{label:T('Theme','主题'),value:state.theme==='light'?T('Light','浅色'):T('Dark','深色'),cmd:"APP.cmd('toggleTheme')",chev:true}]},
   ];
+  /* The permanent home for Install, so dismissing the strip at the bottom of
+     the screen only silences the ASKING — the offer itself stays somewhere an
+     operator can find it. When the app is already installed the row says so
+     rather than disappearing: an app that hides the fact it is installed
+     invites a second copy on the home screen. */
+  groups.push({h:T('App','应用'),rows:[
+    STANDALONE
+      ? {label:T('Home screen','主屏幕'),value:T('Installed','已安装')}
+      : installOffered()
+        ? {label:T('Add to home screen','添加到主屏幕'),value:T('Full screen','全屏'),cmd:"APP.cmd('install')",chev:true}
+        : {label:T('Add to home screen','添加到主屏幕'),value:T('browser menu','浏览器菜单')},
+    {label:T('Refresh now','立即刷新'),value:state.refreshing?T('Refreshing…','刷新中…'):T('or pull down','或下拉'),cmd:"APP.cmd('refresh')",chev:true},
+  ]});
   const rt=r=> r.printer
       ? (state.printer
           ? toggle(!!state.printer.auto_print,"APP.cmd('togglePrint')")
@@ -4895,6 +5042,12 @@ function sheetOverflow(){
         val(ROLE_WORD(state.me))+`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`,
         "APP.cmd('closeOverflow');APP.cmd('push','settings')",false)}
      <div style="padding:16px 20px 6px;font-size:13px;font-weight:500;color:var(--text-secondary)">${T('Updates','更新')}</div>
+     ${/* Installed, this app has no reload button — the browser's is not there
+          to borrow. The pull-down gesture is the everyday way to refresh and
+          this row is the one you can find without knowing about it. */''}
+     ${row('refresh-cw',T('Refresh','刷新'),
+        state.refreshing?`<span style="font-size:14px;color:var(--text-secondary)">${T('Refreshing…','刷新中…')}</span>`:'',
+        "APP.cmd('closeOverflow');APP.cmd('refresh')",true)}
      <div style="display:flex;align-items:center;gap:14px;min-height:48px;padding:8px 20px">
        <span style="width:20px;display:flex;justify-content:center;flex:none">${state.live?'<span class="breathe" style="width:9px;height:9px;border-radius:50%;background:var(--accent)"></span>':'<span style="width:9px;height:9px;border-radius:50%;background:var(--border-strong)"></span>'}</span>
        <span style="flex:1;font-size:15px">${T('Live updates','实时更新')}</span>${toggle(state.live,"APP.cmd('toggleLive')")}</div>
@@ -5560,7 +5713,13 @@ function bodyHtml(){
   }
 }
 function render(){
-  let html = `<div class="content" id="content">${bodyHtml()}</div>` + tabbar();
+  /* Order matters: the pull ring is painted first so the content sits on top of
+     it, the install strip is a sibling BETWEEN the scroller and the tab bar so
+     it takes its own room instead of covering the last row of a list. */
+  let html = pullRing()
+    + `<div class="content" id="content"${state.refreshing?' style="transform:translateY(var(--pull-gap));transition:transform .3s var(--ease-settle)"':''}>${bodyHtml()}</div>`
+    + installStrip() + tabbar();
+  if(state.installSheet) html += sheetInstall();
   if(state.overflow) html += sheetOverflow();
   if(state.ask) html += sheetAsk();
   if(state.custId) html += sheetCustomer();
@@ -5574,6 +5733,8 @@ function render(){
   if(state.toast) html += `<div class="toast">${state.toast}</div>`;
   app.innerHTML = html;
   wireDrag();
+  wirePull();
+  syncHistory();
   if(state.focus){ const el=document.getElementById(state.focus.id);
     if(el){ el.focus();
       if(state.focus.pos!=null&&el.setSelectionRange){ try{ el.setSelectionRange(state.focus.pos,state.focus.pos); }catch(e){} } }
@@ -5587,6 +5748,272 @@ function wireDrag(){
   const up=()=>{ if(!state.dragging) return; state.dragging=false; if(state.drag>110){ state.drag=0; state.detailId=null; render(); } else { state.drag=0; const s=document.getElementById('detailSheet'); if(s){ s.style.transition='transform .3s var(--ease-settle)'; s.style.transform='translateY(0)'; } } };
   h.addEventListener('pointerdown',down); window.addEventListener('pointermove',move); window.addEventListener('pointerup',up);
   h.addEventListener('touchstart',down,{passive:true}); window.addEventListener('touchmove',move,{passive:true}); window.addEventListener('touchend',up);
+}
+
+/* ==========================================================================
+   THE APP SHELL
+   ------------------------------------------------------------------------
+   Everything in this block exists for one reason: this page is meant to be
+   INSTALLED — a home-screen icon, its own card in the app switcher, no URL bar
+   and no tab strip. A browser gives a page a great deal for free (a reload
+   button, a Back button, a way to leave), and an installed app has none of it.
+   So each piece below either replaces something the browser chrome was doing,
+   or removes something the browser does that an app must not.
+
+     1. pullRing / wirePull  — refresh. There is no reload button in a
+                               standalone window, and nothing here polls.
+     2. syncHistory / Back   — the phone's Back gesture closes the top layer
+                               instead of quitting the app.
+     3. installStrip / sheet — how the operator gets it onto the home screen
+                               in the first place, on both platforms.
+     4. the service worker   — the thing Chrome requires before it will offer
+                               Install at all, and the offline shell.
+   ========================================================================== */
+
+/* ── 1. Pull to refresh ─────────────────────────────────────────────────────
+   The gesture the browser's own pull-to-reload used to occupy (switched off in
+   the CSS above, because a reload throws away every screen and sheet the app
+   had open). This one refetches instead: same data, same place, nothing lost.
+
+   Numbers: the drag is halved (a 140px pull moves the content 70px) so it
+   resists like a real scroll view, capped at 96px, and fires at 64px. */
+const PULL_MAX=96, PULL_FIRE=64;
+function pullRing(){
+  // No text, ever — this is chrome, and it is drawn under the content where a
+  // sentence would be half-covered. The ring says what it means by turning.
+  return `<div class="pullring" aria-hidden="true"><svg id="pullSpin"${state.refreshing?' class="spin"':''}
+    width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+    style="opacity:${state.refreshing?'1':'0'}">
+    <path d="M21 12a9 9 0 1 1-6.2-8.6"/></svg></div>`;
+}
+function wirePull(){
+  const el=document.getElementById('content'); if(!el||state.refreshing) return;
+  const ring=document.getElementById('pullSpin');
+  let y0=null, pulled=0;
+  const reset=(animate)=>{
+    if(animate) el.style.transition='transform .3s var(--ease-settle)';
+    el.style.transform='';
+    if(ring) ring.style.opacity='0';
+    setTimeout(()=>{ el.style.transition=''; },animate?320:0);
+    y0=null; pulled=0;
+  };
+  el.addEventListener('touchstart',e=>{
+    // Only from a list that is already at its top, and only with one finger —
+    // a pinch or a two-finger scroll is not a pull.
+    if(e.touches.length!==1||el.scrollTop>0){ y0=null; return; }
+    y0=e.touches[0].clientY; pulled=0; el.style.transition='';
+  },{passive:true});
+  el.addEventListener('touchmove',e=>{
+    if(y0==null||e.touches.length!==1) return;
+    const dy=e.touches[0].clientY-y0;
+    // Dragging UP is a scroll, not a pull — hand the gesture back at once.
+    if(dy<=0){ if(pulled){ reset(false); } y0=null; return; }
+    pulled=Math.min(PULL_MAX,dy*0.5);
+    el.style.transform=`translateY(${pulled}px)`;
+    if(ring){ ring.style.opacity=String(Math.min(1,pulled/PULL_FIRE));
+      ring.style.transform=`rotate(${pulled*4}deg)`; }
+  },{passive:true});
+  const end=()=>{
+    if(y0==null) return;
+    const fire=pulled>=PULL_FIRE;
+    y0=null;
+    if(!fire){ reset(true); return; }
+    // Hand off to the renderer: it draws the content held open at 56px with the
+    // ring spinning in the gap, so the state survives the re-render that the
+    // refresh itself will cause.
+    el.style.transform=''; el.style.transition='';
+    refreshNow();
+  };
+  el.addEventListener('touchend',end,{passive:true});
+  el.addEventListener('touchcancel',end,{passive:true});
+}
+/* What "refresh" means depends on where you are standing: the shared snapshot
+   every screen reads from, plus the one paged list the current tab is showing.
+   Both are best-effort — a refresh that fails leaves what was already on the
+   glass, because the alternative is emptying a working screen over a dropped
+   connection. */
+function refreshNow(){
+  if(state.refreshing) return;
+  state.refreshing=true; render();
+  const jobs=[Promise.resolve(loadLive()).catch(()=>{})];
+  if(state.tab==='orders') jobs.push(Promise.resolve(loadOrdersPage()).catch(()=>{}));
+  if(state.tab==='customers') jobs.push(Promise.resolve(loadCustomers()).catch(()=>{}));
+  // A spinner that vanishes in 80ms reads as a glitch, not as work — hold the
+  // floor at half a second so the gesture visibly did something.
+  const floor=new Promise(r=>setTimeout(r,500));
+  Promise.all([Promise.all(jobs),floor]).then(()=>{
+    state.refreshing=false; state.refreshedAt=Date.now(); render();
+  });
+}
+reg('refresh', refreshNow);
+
+/* ── 2. The Back gesture ────────────────────────────────────────────────────
+   On Android, Back in an installed app with nothing on the history stack QUITS
+   it. This app opens sheets and pushes screens without navigating, so every one
+   of those was invisible to the system: a swipe from the edge to dismiss a
+   sheet closed the whole app instead.
+
+   The fix is to keep the history stack as deep as the app's own layers. One
+   pushState per open layer, and Back pops the top layer rather than the app.
+   Layers are counted from state, not tracked by hand, so a sheet added later
+   is covered the day it is added and cannot forget to register itself. */
+const HIST_OK = location.protocol==='http:'||location.protocol==='https:';
+let histDepth=0, histIgnore=0;
+/* Every dismissible layer, outermost first — the order Back closes them in is
+   the REVERSE of this list, i.e. whatever is on top goes first. */
+function layers(){
+  const L=[];
+  // state.stack.pop(), not pop(): the helper renders, and the caller here is
+  // about to render anyway. One repaint per Back press.
+  for(let i=0;i<state.stack.length;i++) L.push(()=>{ state.stack.pop(); });
+  if(state.custId) L.push(()=>{ state.custId=null; });
+  if(state.detailId) L.push(()=>{ state.detailId=null; });
+  if(state.productSku) L.push(()=>{ state.productSku=null; });
+  if(state.poId!=null) L.push(()=>{ state.poId=null; });
+  if(state.chanSheet) L.push(()=>{ state.chanSheet=null; });
+  if(state.reply!=null) L.push(()=>{ state.reply=null; });
+  if(state.detailActions) L.push(()=>{ state.detailActions=false; });
+  if(state.search) L.push(()=>{ state.search=false; });
+  if(state.overflow) L.push(()=>{ state.overflow=false; });
+  if(state.installSheet) L.push(()=>{ state.installSheet=false; });
+  return L;
+}
+function syncHistory(){
+  if(!HIST_OK) return;
+  const n=layers().length;
+  try{
+    while(histDepth<n){ histDepth++; history.pushState({tacet:histDepth},''); }
+    if(histDepth>n){
+      // The app closed a layer on its own (a Cancel, a scrim tap). Walk the
+      // history back to match, and swallow the popstate that walk will fire —
+      // otherwise Back would have to be pressed twice to get anywhere.
+      const back=histDepth-n; histDepth=n; histIgnore+=back; history.go(-back);
+    }
+  }catch(e){ /* a sandbox with no history to push — the app still works */ }
+}
+if(HIST_OK){
+  try{ history.replaceState({tacet:0},''); }catch(e){}
+  window.addEventListener('popstate',()=>{
+    if(histIgnore>0){ histIgnore--; return; }
+    const L=layers();
+    if(!L.length) return;   // nothing open: Back leaves, which is correct
+    // The browser has already dropped the entry, so the count comes down with it.
+    histDepth=Math.max(0,histDepth-1);
+    L[L.length-1]();
+    render();
+  });
+}
+
+/* ── 3. Getting onto the home screen ────────────────────────────────────────
+   Two platforms, two mechanisms, one strip.
+
+   Chrome/Edge/Samsung fire beforeinstallprompt when the app qualifies (served
+   over HTTPS, manifest reachable, service worker registered). Holding onto that
+   event is the ONLY way to show the install dialog later — it cannot be
+   conjured, so it is caught and kept.
+
+   Safari fires nothing and offers no API. On iOS the same strip opens a sheet
+   that tells the operator where the button is, because "Add to Home Screen" is
+   three taps into a menu most people have never opened. */
+const INSTALL_KEY='tacet-install-off';
+let installEvent=null;
+const IS_IOS=(()=>{ try{
+  const ua=navigator.userAgent||'';
+  return /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua)&&navigator.maxTouchPoints>1);
+}catch(e){ return false; } })();
+const STANDALONE=document.documentElement.getAttribute('data-standalone')==='1';
+function installOffered(){ return !STANDALONE && (state.canInstall||IS_IOS); }
+function installStrip(){
+  if(!state.installBar||!installOffered()) return '';
+  return `<div style="flex:none;display:flex;align-items:center;gap:12px;padding:10px 8px 10px 16px;
+      background:var(--dusk-tint);border-top:1px solid var(--border-default)">
+    <span style="color:var(--dusk-ink);display:flex;flex:none">${ic('download',20)}</span>
+    <span style="flex:1;min-width:0;font-size:13px;line-height:1.35;color:var(--text-primary)">${
+      T('Keep Tacet on your home screen — full screen, no browser.','把 Tacet 添加到主屏幕 — 全屏，无浏览器。')}</span>
+    <button onclick="APP.cmd('install')" style="flex:none;min-height:36px;padding:0 14px;border:none;border-radius:8px;
+      background:var(--accent);color:#fff;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer">${T('Add','添加')}</button>
+    <button onclick="APP.cmd('installOff')" aria-label="${T('Dismiss','忽略')}" style="flex:none;width:36px;height:36px;display:flex;
+      align-items:center;justify-content:center;background:transparent;border:none;color:var(--text-secondary);cursor:pointer">${ic('x',18)}</button>
+  </div>`;
+}
+function sheetInstall(){
+  const step=(n,txt)=>`<div style="display:flex;gap:12px;align-items:flex-start;padding:10px 0">
+    <span style="width:24px;height:24px;flex:none;border-radius:50%;background:var(--surface-raised);color:var(--text-secondary);
+      display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500">${n}</span>
+    <span style="flex:1;font-size:15px;line-height:1.5">${txt}</span></div>`;
+  return `<div class="scrim" style="z-index:60" onclick="APP.cmd('closeInstall')"></div>
+   <div class="sheet" style="z-index:61;padding:8px 20px calc(env(safe-area-inset-bottom,0px) + 24px)"><div class="grabber"></div>
+     <div style="font-size:18px;font-weight:500;padding:6px 0 2px">${T('Add Tacet to your home screen','添加到主屏幕')}</div>
+     <p style="margin:2px 0 8px;font-size:14px;color:var(--text-secondary);line-height:1.5">${
+       T('It opens full screen, with its own icon — no address bar, no tabs.','将以全屏方式打开，拥有独立图标 — 没有地址栏和标签页。')}</p>
+     ${step(1,T('Tap the Share button at the bottom of Safari.','点击 Safari 底部的“分享”按钮。'))}
+     ${step(2,T('Scroll down and choose <b style="font-weight:500">Add to Home Screen</b>.','向下滑动，选择<b style="font-weight:500">“添加到主屏幕”</b>。'))}
+     ${step(3,T('Tap Add. Open it from the icon from now on.','点击“添加”。以后从图标打开即可。'))}
+     <button class="cta" style="margin-top:14px" onclick="APP.cmd('closeInstall')">${T('Got it','知道了')}</button>
+   </div>`;
+}
+reg('install', async ()=>{
+  if(installEvent){
+    const e=installEvent; installEvent=null; state.canInstall=false; state.installBar=false; render();
+    try{ e.prompt(); const r=await e.userChoice;
+      // Dismissed is not "never" — the strip stays available from Settings, but
+      // it stops asking from the bottom of the screen.
+      if(r&&r.outcome!=='accepted') try{ localStorage.setItem(INSTALL_KEY,'1'); }catch(err){}
+    }catch(err){}
+    return;
+  }
+  if(IS_IOS){ state.installSheet=true; render(); return; }
+  showToast(T('Use your browser menu → Install app','请在浏览器菜单中选择“安装应用”'));
+});
+reg('installOff', ()=>{ state.installBar=false; try{ localStorage.setItem(INSTALL_KEY,'1'); }catch(e){} render(); });
+reg('closeInstall', ()=>{ state.installSheet=false; render(); });
+window.addEventListener('beforeinstallprompt',(e)=>{
+  // Chrome's own mini-infobar is not ours to place and covers the tab bar.
+  e.preventDefault();
+  installEvent=e; state.canInstall=true;
+  let off=false; try{ off=localStorage.getItem(INSTALL_KEY)==='1'; }catch(err){}
+  state.installBar=!off;
+  render();
+});
+window.addEventListener('appinstalled',()=>{
+  installEvent=null; state.canInstall=false; state.installBar=false;
+  try{ localStorage.setItem(INSTALL_KEY,'1'); }catch(e){}
+  render(); showToast(T('Added to your home screen','已添加到主屏幕'));
+});
+/* iOS has no event to wait for, so the strip is offered on a timer instead —
+   late enough that it is not the first thing a new operator meets. */
+if(IS_IOS&&!STANDALONE){
+  setTimeout(()=>{
+    let off=false; try{ off=localStorage.getItem(INSTALL_KEY)==='1'; }catch(e){}
+    if(!off){ state.installBar=true; render(); }
+  },4000);
+}
+
+/* ── 4. The service worker ──────────────────────────────────────────────────
+   Required: Chrome will not offer to install an app that has no service worker,
+   whatever its manifest says. It also gives the shell an offline copy, so an
+   operator in a basement stockroom opens the app rather than a browser error.
+
+   /sw.js is the one shared worker for this origin (kitchen, stock and this all
+   register it at scope '/'); it is network-first for HTML, so a deploy is never
+   masked by a cached shell. */
+/* isSecureContext, not a hand-rolled protocol check: it is the browser's own
+   answer to the question a service worker actually asks, and it already knows
+   the exceptions a string comparison forgets — 127.0.0.1 and localhost count,
+   an http:// LAN address does not. */
+if('serviceWorker' in navigator && window.isSecureContext){
+  navigator.serviceWorker.register('/sw.js',{scope:'/'}).then(reg=>{
+    // An installed app can go weeks without a navigation, and browsers throttle
+    // the automatic update check to about a day. Check whenever it comes back
+    // to the foreground instead — same as public/kitchen.html.
+    document.addEventListener('visibilitychange',()=>{
+      if(document.visibilityState==='visible') reg.update().catch(()=>{});
+    });
+  }).catch(()=>{});
+  let reloaded=false;
+  navigator.serviceWorker.addEventListener('message',(e)=>{
+    if(e.data&&e.data.type==='sw-updated'&&!reloaded){ reloaded=true; location.reload(); }
+  });
 }
 
 /* ==========================================================================
@@ -6642,7 +7069,24 @@ async function loadLive(){
   // wallet activity + leaderboard + sales channels
 }
 
+/* Language, restored before the first paint — the pair to the theme the head
+   script already applied. Both are read back here rather than defaulted so a
+   relaunch opens the app the way it was left. */
+try{ const l=localStorage.getItem(M_LANG_KEY); if(l==='en'||l==='zh'){ state.lang=l; LANG=l; } }catch(e){}
+document.documentElement.lang=state.lang;
 document.documentElement.setAttribute('data-theme',state.theme);
+
+/* Where to open. A launcher tap opens Home; a long-press on the icon offers the
+   shortcuts declared in m-manifest.webmanifest, and those arrive as ?to=orders
+   / ?to=products / ?to=inbox. Anything unrecognised is ignored rather than
+   guessed at — the app opening somewhere the operator did not ask for is worse
+   than it opening Home. */
+(function(){
+  let to=''; try{ to=new URLSearchParams(location.search).get('to')||''; }catch(e){}
+  if(!to) return;
+  if(TAB_META[to]) state.tab=to;
+  else if(SUBS[to]){ state.stack=[{route:to,title:SUBS[to].title}]; if(to==='inbox') markInboxSeen(); }
+})();
 render();
 /* Lucide loads async — re-render once its icon set is ready so glyphs fill in. */
 if(!(window.lucide && window.lucide.icons)){

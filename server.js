@@ -723,6 +723,23 @@ app.get('/m', (req, res) => {
   res.set('Pragma', 'no-cache');
   res.sendFile(path.join(__dirname, 'public', 'm.html'));
 });
+// Tacet Mobile's install manifest + its launcher icons. Both must answer from
+// the ROOT of the host the app runs on: a manifest is fetched by the browser,
+// not the page, and its start_url ('/m') and scope ('/') are resolved against
+// the manifest's own URL — parking it under /assets would scope the installed
+// app to /assets and the install would be refused. The route mirrors
+// /kitchen-manifest.webmanifest exactly; see the note above /kitchen for why a
+// PWA's start_url has to be reachable without a redirect.
+app.get('/m-manifest.webmanifest', (req, res) => {
+  res.type('application/manifest+json').sendFile(path.join(__dirname, 'public', 'm-manifest.webmanifest'));
+});
+['tacet-icon-192.png', 'tacet-icon-512.png', 'tacet-icon-192-maskable.png',
+  'tacet-icon-512-maskable.png', 'tacet-apple-touch-icon.png', 'tacet-icon.svg'].forEach(name => {
+  app.get('/' + name, (req, res) => {
+    res.set('Cache-Control', 'public, max-age=86400');
+    res.sendFile(path.join(__dirname, 'public', name));
+  });
+});
 
 // Public storefront preview — renders the LIVE home.layout in a phone
 // frame for any visitor. No auth, no editor chrome. Used by the team to
