@@ -1,9 +1,12 @@
-# Tacet shared-core consolidation — decisions record, v4.71
+# Tacet shared-core consolidation — decisions record, v4.72
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+
+2026-08-23 · v4.72 — §24 Database: 🔴 **THE POSTGRES MIGRATION IS CANCELLED. TACET STAYS ON SQLITE.** Ash's call, after the `.prepare` survey: **2,835 `.prepare` call sites in the runtime** (`server.js` 12 / `database.js` 228 / `routes/` 2,414 / `lib/` 175 / `middleware/` 6), **zero `.query` call sites**, **all 39 files in `routes/` affected** — and `lib/pg-handle.js` refuses `.prepare` BY DESIGN, because an adapter would hand 3,339 sites a Promise where a row is expected and the application would compute wrong answers across every route rather than crash, with a customer as the first evidence. **The 27 "converted" sites were not converted**: the wrapper moved, the 70 `tx.prepare(` statements inside it did not, so a converted block dies on its first statement exactly like an unconverted one. **Runbook B19 is superseded in place** — clearing G26 does NOT turn *"the app cannot start"* into *"the app starts and individual routes fail"*; it does not start, and every route fails on its first line. **It stopped because multi-tenancy already works** (`TENANT_DATA_ISOLATION=1`, five per-tenant files, Roots in `roots.db`) and **no measured constraint was being hit**; the cost was not proportionate. Restart conditions are stated as conditions, not as a plan. **The one path that would have worked is recorded so it is not rediscovered**: a synchronous `.query(text, params)` on the SQLite handle, convert a file at a time under real traffic, driver switch as a config change last. **All 20 open gaps are CLOSED — MIGRATION CANCELLED, and the cutover runbook is retired rather than deleted.** The findings that outlive the migration move to `docs/tacet-operating-findings.md`, and the write-surface survey to `docs/tacet-write-surface.md`.
 
 2026-08-23 · v4.71 — §24 Channels: **THE TUNNEL REBUILD REMOVED BLIP-TOLERANCE RATHER THAN DEGRADING THE LINK** — record as a standing property, not an incident. WireGuard/UDP is connectionless and absorbs a blip; **the SSH/TCP tunnel is a session, and the SOCKS listener on `127.0.0.1:1180` is owned by the `sshd` process itself** (`ss -lntp` PID matched the flap minute exactly), so a blip does not degrade the proxy, it deletes it. 44 re-establishments on 08-23. **The tunnel is still the right call** — the UDP path is blackholed — but everything above it must assume the listener can vanish and return. Settling: 40 in hour 11, 4 in hour 12, **0 in hours 13-14** (2 hours, not a week). **THE GZ RUNG COMPARISON AND ITS LIMIT:** same tunnel, same probe 1s apart, identical UP durations (63s, 675s) because `residentialUrl()` takes no channel argument — **0 challenges against 114**. But the stores run **different daemons on different channels**, so rung and channel are confounded; giving yuexiu the rung is the experiment that separates them. **THE HOLDERS HAVE NO RELAUNCH DEBOUNCE AT ALL** — searched `shangou-chrome.js` and `browser-warmup.js`: no cooldown, no minimum interval, no rate cap. **The watchdog threshold is the only guard in the chain and it guards one direction.** That is the more serious half. **`UP_THRESHOLD = 4` rests on TWO complete UP periods (63s, 675s)** — sample stated beside the number; re-derive from a week.
 
@@ -3606,6 +3609,129 @@ server.js | database.js | schema.sql | package.json | package-lock.json
 **WHAT THE FIX IS NOT.** Removing `scripts/*` from the allowlist would stop shipping the ~20 files under `scripts/` that production genuinely runs — the six channel daemons among them — and `bounce_daemon` would then restart daemons whose code never arrived. **The allowlist is a path prefix and the directory is not sorted by whether the app loads it.** Any real fix has to separate those two populations first, and that is the work, not the one-line edit it looks like.
 
 **RELATED, AND THE SAME ROOT.** G13 owes an audit of the ~80 `scripts/` files that assume a SQLite path. **That audit would produce exactly the split this entry needs** — which of them production runs, and which are hand tools. One survey answers both.
+
+### 🔴 THE POSTGRES MIGRATION IS CANCELLED. TACET STAYS ON SQLITE — DECIDED 2026-08-23
+
+**This supersedes `Database: PostgreSQL, one shared database, row-level account isolation — DECIDED 2026-08-03` and every entry in §24 that assumes the flip will happen. Those entries are left standing.** They are the account of how the distance was measured, and the measurement is the reason for this decision. Nothing below is a correction of them; the work was not wrong, it was disproportionate.
+
+**Ash's call, taken 2026-08-23, after the `.prepare` survey.**
+
+---
+
+#### a) WHAT WAS MEASURED
+
+**2,835 `.prepare` call sites in the runtime.** By file and directory, at the survey head:
+
+| Where | `.prepare(` sites |
+|---|---|
+| `server.js` | 12 |
+| `database.js` | 228 |
+| `routes/` | 2,414 |
+| `lib/` | 175 |
+| `middleware/` | 6 |
+| **total** | **2,835** |
+
+**Zero `.query` call sites.** The only three occurrences in the tree are `lib/pg-handle.js`'s own two forwarders and one line inside `lib/db-transaction.js`'s `control()`. **No application code calls `.query`.** Every statement the application issues, it issues through `.prepare`.
+
+**All 39 files in `routes/` are affected.** Not most of them — `routes/` holds exactly 39 `.js` files and every one of them calls `.prepare`. There is no subset of the route layer that could have moved first.
+
+> **RE-MEASURED AT THIS HEAD AND THE TWO FIGURES THAT MOVED ARE RECORDED RATHER THAN TIDIED, per rule 5.** `routes/` reads **2,423** here and `lib/` reads **177**, for a total of **2,846** — eleven more than the survey, from ordinary work that shipped between the two heads. **The instrument is a text scan** — occurrences of `.prepare(` counted per occurrence rather than per line — **not an AST pass**, so it is subject to the same class of error this record has now written down seven times, and it is quoted as a magnitude and not as a precise population. **The decision does not turn on the eleven.** Both readings give the same order of magnitude, and the order of magnitude is the argument.
+
+**THE HANDLE IS FROZEN AND REFUSES ADAPTERS BY DESIGN, AND THE REASON IS `lib/pg-handle.js`'s OWN.** Quoted from its header rather than paraphrased, because the paraphrase is what loses the point:
+
+> *"Give those 3,339 sites a `.prepare()` that returns something with `.get/.all/.run`, and each one receives a PROMISE where it expects a row. JavaScript does not throw on that. `.name` on a Promise is `undefined`. `.changes` is `undefined`. `lastInsertRowid` is `undefined`. The application does not crash — it quietly computes wrong answers, across every route at once, and the first evidence is a customer."*
+
+`FORBIDDEN_NAMES` in that file lists `prepare` second, after `exec`, and the suite asserts each name's absence individually. **The refusal is deliberate and it is right.** It converts a silent wrong answer into a loud `TypeError` carrying a stack trace to the exact line. **But the refusal is also the measurement.** The reason an adapter is forbidden is the reason there is no shortcut, and 2,835 is what the absence of a shortcut costs.
+
+---
+
+#### b) THE 27 "CONVERTED" SITES WERE NOT CONVERTED
+
+**The wrapper changed. The statements inside it did not.**
+
+Conversion replaced `<handle>.transaction(fn)` with `await withTransaction(<handle>, (tx) => …)`. That moved the transaction boundary onto a driver-neutral helper. It was real work, it found a real concurrency defect before the checkout was converted, and it is not being disparaged here. **What it did not do is change a single statement inside the body.**
+
+Measured at this head: `routes/retail.js` holds **28 `withTransaction(` call sites and 70 `tx.prepare(` call sites**. Every converted body opens by calling `.prepare` on the handle the helper hands it. The first line inside the block at `routes/retail.js`'s fapiao-settings writer is `const upsert = tx.prepare(`, and that shape is the rule, not an exception.
+
+**On Postgres, `tx` is a leased `pg` client wrapped by `lib/pg-handle.js`, and `prepare` is on its forbidden list.** So the first statement of a converted block evaluates `tx.prepare` to `undefined` and throws `TypeError: tx.prepare is not a function`.
+
+**A converted block therefore fails on its first statement exactly like an unconverted one.** The conversion count measured a boundary being moved. It was read as distance travelled toward a working Postgres application, and it is not that. **The number was never wrong; the reading was.** The four batch entries above stand as written.
+
+---
+
+#### c) THE RUNBOOK'S ACCOUNT OF THE DISTANCE WAS WRONG — B19 SUPERSEDED IN PLACE
+
+**`docs/tacet-postgres-cutover-runbook.md` B19 (GAP G26) says:**
+
+> *"clearing it is what turns 'the app cannot start' into 'the app starts and individual routes fail', which is the only state in which G1 can be worked incrementally at all."*
+
+**That sentence is false twice, and the second half is the load-bearing one.**
+
+**First: it does not start.** Clearing the eleven module-load `.exec()` blocks removes the eleven. `database.js` alone holds **228** `.prepare` sites and is required at boot. The eleven were the first obstacle found in front of the listener, not the last one. **B19 measured the obstacle it had found and then described it as the obstacle.**
+
+**Second, and this is what matters: "individual routes fail" is not what happens. Every route fails, on its first line.** There is no gradient to work along. A route's first database access is a `.prepare` call, `.prepare` does not exist on the handle, and all 39 files in `routes/` do this. **"Individual routes fail" describes a state in which some routes work.** That state does not exist and cannot be reached incrementally, because the unit that would have to be converted one at a time is the statement, and there are 2,835 of them.
+
+**B19 is marked superseded in place. It is not struck out and not removed.** Its file-and-line table is correct, its skip-on-pg reasoning is sound, its foreign-key ordering finding stands on its own, and its count-correction note — 24 tables and 15 indexes, not 19 and 10, because an extractor that could not find a block's end read 400 characters instead of failing — is a finding that outlives this decision entirely.
+
+**AND THE FAILURE IS THE ONE THIS RECORD KEEPS NAMING.** B19 measured one obstacle honestly and then wrote a sentence about the distance behind it that no measurement supported. **A survey of the nearest blocker cannot see the population behind it, and "what clearing this turns into" is a claim about that population.** Same family as *a scan for one shape only finds that shape*, and same family as *a check that cannot run must refuse*. **It is the eighth scan-derived claim in this project to be wrong, and the first where the error was in the sentence around the number rather than in the number.**
+
+---
+
+#### d) WHY IT STOPPED
+
+**Postgres was for two things: hosting, and multi-tenancy.**
+
+**Multi-tenancy already works.** Measured on the production box 2026-08-23:
+
+- `TENANT_DATA_ISOLATION=1` in `/root/roots-v2/.env` — on in production, as §24 *`TENANT_DATA_ISOLATION` IS ON IN PRODUCTION — RECORD CORRECTED 2026-08-08* established.
+- Five per-tenant databases in `/root/roots-v2/data/tenants/` — `2.db`, `4.db`, `5.db`, `6.db`, `7.db`, each about 1.6 MB. **There is no `3.db`. The set is not a contiguous range and should not be written down as "2–7".**
+- Roots is served from `/root/roots-v2/data/roots.db`, **711 MB**, written the same day.
+- ⚠️ **A zero-byte `data/tenants/roots.db` also exists and is not the Roots database.** Zero bytes since 2026-07-05. Do not mistake it for one.
+
+> **ONE QUALIFICATION, recorded because it cuts against the case rather than for it.** No per-tenant file has been written since **2026-08-05**. So "multi-tenancy works" is proven as a mechanism and not under load. **That does not weaken the decision — it is the decision.** File-per-tenant is not being asked to do very much yet, which is exactly why replacing it now would have been paying for a constraint nobody is hitting.
+
+**No measured constraint was being hit.** Not connections, not write concurrency, not database size, not tenant count. **The migration was never triggered by a symptom.** It was chosen as the right destination and then pursued for its own sake, and three weeks of measurement never produced a number showing the current shape failing at anything.
+
+**The cost was not proportionate.** Against zero measured pressure: 2,835 statements to rewrite, twenty open gaps, no smoke test, no write freeze, no delta pass, an unproven fresh-cluster restore, and a rollback window in which every alert in the system — including the health watchdog's own page — is silenced by step F1. **The work was good. The trade was not.**
+
+---
+
+#### e) WHAT WOULD HAVE TO BECOME TRUE TO RESTART
+
+**Stated as conditions and deliberately not as a plan, so this is not relitigated from scratch and not restarted on enthusiasm.** Any ONE of these reopens the question. **None of them is true today.**
+
+1. **A named tenant at a scale file-per-tenant cannot serve.** Not "tenants are growing" — a specific tenant, with a specific number, where the measured failure is a property of one-database-per-tenant rather than of a query that could be fixed. Cross-tenant reporting that has to open N files to answer one question; a working set larger than the box's page cache; a write concurrency that SQLite's single-writer lock actually refuses.
+2. **A hosting requirement SQLite cannot meet.** A move to managed infrastructure, a read-replica requirement, a point-in-time-recovery obligation, or a compliance rule naming a database that does not live on one machine's filesystem.
+3. **A tenant commitment already made.** A signed customer whose contract requires row-level isolation, an audited shared database, or an availability figure a single-box SQLite file cannot honestly be argued to meet.
+
+**And one condition on HOW rather than whether:** if any of the three becomes true, the restart does not resume from where this stopped. **It starts from (f).**
+
+---
+
+#### f) THE ONE PATH THAT WOULD HAVE WORKED — RECORDED, NOT RECOMMENDED
+
+**A record of the option and of why it was not taken, written down so it is not rediscovered as a new idea.**
+
+**Give the SQLite handle a `.query(text, params)` returning `{rows, rowCount}` synchronously.** Then:
+
+1. **Convert call sites a file at a time, on SQLite, under real traffic.** Each converted statement runs against the database already serving customers, so production proves every conversion before the next one starts.
+2. **The driver switch becomes a configuration change at the end** — `TACET_DB`, which already exists in `lib/db-driver.js`, selecting between two handles that share one call signature.
+
+**WHY IT WOULD HAVE WORKED WHERE THE ACTUAL PATH DID NOT.** The actual path made the two drivers *deliberately incompatible*, then required every call site to move before any of it could run. **That ordering has no partial state.** Nothing works until nearly everything is converted, so there is no point along the way at which production tells you whether the conversion is correct — which is why, twenty days in, one statement had executed against Postgres and the number was a milestone. The `.query` path inverts it: the compatible shape comes first, conversion is incremental and continuously verified by live traffic, and the flip is the last and smallest step instead of the first and largest.
+
+**WHY IT WAS NOT TAKEN, STATED FAIRLY. It was not rejected; it was not considered.** `lib/pg-handle.js`'s no-shared-names decision was the right answer to the question being asked — *how do we stop an adapter computing wrong answers?* — and it settled the shape before anyone asked the different question, *what shape lets this be done incrementally?* Those two questions have different answers and only the first was put.
+
+**AND THE ASYMMETRY IS THE PART WORTH REMEMBERING.** A synchronous `.query` on better-sqlite3 is trivially implementable: better-sqlite3 *is* synchronous, so `{rows, rowCount}` is a thin wrapper over `.all()`/`.run()` and nothing has to become a Promise. **The hard direction was never SQLite-to-`.query`. It was Postgres-to-`.prepare`, which is impossible — and the design took the impossible direction as the given and built everything else around it.**
+
+**⚠️ THIS IS NOT A RECOMMENDATION TO DO IT NOW.** Doing it now means rewriting 2,835 statements against a constraint nobody is hitting, which is the trade section (d) declines. **It is the answer to a question a future reader will otherwise ask from the beginning.**
+
+---
+
+#### WHAT THIS DECISION DOES NOT CANCEL
+
+**Most of the last three weeks was not Postgres work and does not retire with the migration.** The full sort — KEEP, RETIRE, DECIDE — is in `docs/tacet-operating-findings.md`. In summary it keeps: the schema drift guard, the safe-copy tool, the three observation instruments and their cannot-see fixes, the health watchdog's widened probe, the crontab sweep, the rollback tool, the `.env` loader, and every live defect the migration found in code that has nothing to do with which database it runs on. **The migration's most valuable output was never the migration.**
+
+**AND THE WRITE-SURFACE SURVEY IS THE MOST REUSABLE THING IT PRODUCED.** It describes the SQLite system as it stands today — eight processes, twelve in-process schedulers, the read-triggered writes, the callback classification — and it is worth more now than it was for the flip. It lives in `docs/tacet-write-surface.md`, outside the retired runbook. **It is re-derived at this head rather than transcribed; that file's own opening note says why, and the reason is itself a finding.**
 
 ## 25. A printed slip that goes stale is corrected on paper, not reprinted — DECIDED 2026-08-07
 
