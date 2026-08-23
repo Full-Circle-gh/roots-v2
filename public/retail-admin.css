@@ -3347,20 +3347,34 @@
      uppercase Inter, the exact thing the ban exists for. The whole grid also
      moves off the legacy --line / --text-1 / --text-4 tokens onto --td-*, so
      it finally follows the theme instead of staying light in a dark admin. */
+  /* ONE size: labelled fields, no table at all. A table brought a header band,
+     an empty label column and a Total — and that Total merely repeated the
+     "N on hand" headline and its per-store split sitting directly above it. A
+     label sitting on its own box can't drift out of alignment with it, which
+     every width-tuning attempt on the table version failed to guarantee. */
+  .pd-storefields { display: flex; flex-wrap: wrap; gap: 12px 14px; }
+  .pd-storefield { display: flex; flex-direction: column; gap: 6px; width: 104px; }
+  .pd-storefield > span {
+    font-size: 13px; font-weight: 400; color: var(--td-text2);
+    font-family: var(--f-sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .pd-stock-msg { margin-top: 8px; }
+
+  /* SEVERAL sizes genuinely IS a grid — sizes down, stores across — so it earns
+     the table, the row labels and a per-size total. */
   /* Fixed layout with a reserved Total column, per the table rule (§1.19).
      With auto layout the columns negotiate for width and Total — the narrowest
      and last — is the one that loses and gets clipped. Reserving it means the
      count boxes give way instead, which is the right thing to sacrifice. */
   /* width:auto, not 100%. Stretched to the card the table had to invent slack
-     somewhere, and it went to the empty leading column — pushing the boxes to
-     the far right, away from the Low-stock field directly beneath them. Sized
-     to its content the table sits left, so every control in the card shares one
-     left edge, and #pd-store-stocks scrolls if a fifth store ever arrives. */
+     somewhere, and it went to the leading column — pushing the boxes to the far
+     right, away from the Low-stock field directly beneath them. Sized to its
+     content the table sits left, so every control in the card shares one left
+     edge, and #pd-store-stocks scrolls if a fifth store ever arrives. */
   .pd-stock-matrix { width: auto; border-collapse: collapse; font-size: 15px; table-layout: fixed; }
   /* A store column is only as wide as the box it holds plus its padding, so
      the heading sits directly over the box instead of floating at the far end
-     of a stretched column. The leading (variant-name) column takes its own
-     content and nothing more, so a single-variant product has no empty gutter. */
+     of a stretched column. */
   .pd-stock-matrix th.mstore, .pd-stock-matrix td.mstore { width: 102px; }
   .pd-stock-matrix th.mtot, .pd-stock-matrix td.mtot { width: 78px; }
   /* Right padding on EVERY cell, including the last. It was 0, so the Total
@@ -3391,13 +3405,18 @@
      box across its column — pushing the Total column off the card edge. That
      rule is right for name and price, so this is a real context override, not a
      duplicate to delete. */
-  #pd-editor .pd-stock-matrix input[type=number] {
-    width: 100%; max-width: 82px; box-sizing: border-box; height: 36px; padding: 0 10px;
+  #pd-editor .pd-stock-matrix input[type=number],
+  #pd-editor .pd-storefield input[type=number] {
+    width: 100%; box-sizing: border-box; height: 36px; padding: 0 10px;
     border: 1px solid var(--td-border); border-radius: 8px;
     background: var(--td-paper); color: var(--td-text);
     font-size: 15px; text-align: right; font-variant-numeric: tabular-nums;
   }
-  #pd-editor .pd-stock-matrix input[type=number]:focus { outline: none; border-color: var(--td-text); }
+  /* Only the grid caps the box — in the fields layout the box IS the column,
+     so it fills the field and the label above lines up with it exactly. */
+  #pd-editor .pd-stock-matrix input[type=number] { max-width: 82px; }
+  #pd-editor .pd-stock-matrix input[type=number]:focus,
+  #pd-editor .pd-storefield input[type=number]:focus { outline: none; border-color: var(--td-text); }
   .pd-stock-matrix td.mtot, .pd-stock-matrix th.mtot {
     color: var(--td-text); font-weight: 500; min-width: 44px; font-variant-numeric: tabular-nums;
   }
