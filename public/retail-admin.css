@@ -3125,6 +3125,13 @@
   /* The mirror of [data-pp-only]: a card heading that only repeats the pane
      heading standing above it on the page. One card carries it — Basics. */
   #pd-editor.pd-fullpage [data-dock-only] { display: none; }
+  /* Details holds exactly the four cards that move to the side column
+     (shipping, flags, free-of, notes), so on the page the pane is an empty
+     grid under a heading for nothing. Docked it is a real tab and stays. */
+  #pd-editor.pd-fullpage .pd-pane[data-pane="details"] { display: none; }
+  /* The footer is empty too now — status went up to the header, the actions
+     went out to the side column. */
+  .pd-pp-mount #pd-editor .pu-editor-foot { display: none; }
   .pd-summary:empty { display: none; }
   /* Every pane on screen at once, each reading as its own section. The
      .is-active selector is repeated so this outranks the pane-entrance rule
@@ -3167,7 +3174,51 @@
 
   /* The stage the editor moves into. Sits where the split row was, centred and
      capped so a wide screen doesn't stretch a form to 2000px. */
-  .pd-pagestage { max-width: 1040px; margin: 0 auto; scroll-margin-top: 76px; }
+  /* 1220, not 1040 — the page carries three columns now and the rail is 236px,
+     so a 1512 window leaves about this much. The old cap was right for a single
+     column of form and would squeeze the middle one to nothing. */
+  .pd-pagestage { max-width: 1220px; margin: 0 auto; scroll-margin-top: 76px; }
+  /* The stage owns two columns — the index and everything else. The third
+     column (the side rail) is cut INSIDE the editor, one level down, because
+     its blocks have to stay within `#pd-editor` to keep their styling. */
+  .pd-pp-grid {
+    display: grid; grid-template-columns: 180px minmax(0, 1fr);
+    gap: 32px; align-items: start;
+  }
+  .pd-pp-nav { position: sticky; top: 76px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .pd-nav-i {
+    display: block; width: 100%; text-align: left;
+    padding: 7px 10px; border: 0; border-radius: 8px; background: none;
+    font: 400 15px var(--f-sans); color: var(--td-text2); cursor: pointer;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .pd-nav-i:hover { color: var(--td-text); background: rgba(var(--td-heat-rgb), .04); }
+  .pd-nav-i.is-on { background: var(--td-raised); color: var(--td-text); font-weight: 500; }
+  .pd-nav-i:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 2px; }
+  /* The side rail. Empty and inert in the dock; on the page the editor becomes
+     a two-column grid (see .pd-pp-mount #pd-editor below) and this is column
+     two. */
+  #pd-editor .pd-pp-side { display: none; }
+  .pd-pp-mount #pd-editor .pd-pp-side {
+    display: flex; flex-direction: column; gap: 20px; min-width: 0;
+    position: sticky; top: 76px;
+  }
+  .pd-pp-mount #pd-editor .pd-pp-side:empty { display: none; }
+  /* The moved blocks were authored as grid children; here they are just cards
+     in a column. Their pdb-c* span classes are inert outside .pdb-grid. */
+  #pd-editor .pd-pp-side > .pdb-card,
+  #pd-editor .pd-pp-side > .pd-card { width: 100%; }
+  /* Sales at 320px: three numbers across is too tight, two rows of two is not. */
+  #pd-editor .pd-pp-side .pd-sales-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
+  /* Duplicate · Version history · Delete, stacked full-width rather than a row
+     that wraps into a ragged block at this width. */
+  #pd-editor .pd-pp-side .pd-foot-acts { flex-direction: column; align-items: stretch; gap: 8px; }
+  #pd-editor .pd-pp-side .pd-foot-acts .btn { justify-content: center; }
+  /* And below this the index goes too — it would eat a third of the width. */
+  @media (max-width: 900px) {
+    .pd-pp-grid { grid-template-columns: minmax(0, 1fr); }
+    .pd-pp-nav { display: none; }
+  }
   .pd-pp-crumb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--td-text2); margin-bottom: 16px; }
   .pd-pp-crumb button {
     display: inline-flex; align-items: center; gap: 6px; padding: 0;
@@ -3189,6 +3240,26 @@
   .pd-pp-mount #pd-editor {
     width: auto; height: auto; max-width: 100%; max-height: none;
     border: 0; background: none; border-radius: 0; box-shadow: none;
+    /* Form, then the side rail. The head and foot are display:none here, so
+       they take no track; only .pu-editor-body and .pd-pp-side are laid out. */
+    display: grid; grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 32px; align-items: start;
+  }
+  /* Below this the side rail has no honest width left: it drops under the form
+     and the page becomes the two-column layout — the same answer the narrow
+     case would have reached anyway.
+     1400 and not 1240, which is what the content column needs: the query reads
+     the VIEWPORT, and the rail eats 236px of it before this page sees a pixel.
+     Three columns need 180 + 32 + 560 + 32 + 320 = 1124 of content, so
+     1124 + 236 (rail) + 48 (main's gutters) ≈ 1408. A folded rail gives the
+     layout 174px back and it simply gets roomier — no second breakpoint for a
+     state the query cannot read anyway. */
+  @media (max-width: 1400px) {
+    .pd-pp-mount #pd-editor { grid-template-columns: minmax(0, 1fr); }
+    .pd-pp-mount #pd-editor .pd-pp-side {
+      position: static;
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    }
   }
   .pd-pp-mount #pd-editor .pu-editor-body { overflow: visible; overscroll-behavior: auto; }
   .pd-pp-mount #pd-editor .pu-editor-head,

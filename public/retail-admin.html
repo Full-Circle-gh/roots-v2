@@ -4547,7 +4547,7 @@
               <input type="checkbox" id="pd-published" hidden>
 
               <!-- Photos -->
-              <section class="pdb-card pdb-c5 pdb-photos">
+              <section class="pdb-card pdb-c5 pdb-photos" id="pd-sec-photos">
                 <div class="pd-sec-h">Photos · 图片</div>
                 <div class="pe-photos-strip">
                   <div id="pd-gallery" class="pd-gallery"></div>
@@ -4561,7 +4561,7 @@
               </section>
 
               <!-- Where it shows -->
-              <section class="pdb-card pdb-c7">
+              <section class="pdb-card pdb-c7" id="pd-sec-where">
                 <div class="pd-sec-h">Where it shows · 分类与陈列</div>
                 <div class="pdb-fields">
                   <div class="field"><label class="stacked">Shop section · 商店分区 <span class="muted" style="font-weight:400;">(left rail)</span></label>
@@ -4756,7 +4756,7 @@
             <div class="pdb-grid pd-heavy">
 
               <!-- Shipping -->
-              <section class="pdb-card pdb-c4">
+              <section class="pdb-card pdb-c4" id="pd-sec-shipping">
                 <div class="pd-sec-h">Shipping · 配送方式</div>
                 <div style="display:flex;gap:14px 16px;align-items:center;flex-wrap:wrap;">
                   <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-ship-air" onchange="pdShipModeChanged('air')" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M21 15.5 13 13V6a1 1 0 0 0-2 0v7l-8 2.5V17l8-1.5V20l-2.5 1.5V23L12 22l3.5 1.5V21.5L13 20v-4.5l8 1.5z"/></svg> Air · 空运</label>
@@ -4767,7 +4767,7 @@
               </section>
 
               <!-- Flags -->
-              <section class="pdb-card pdb-c4">
+              <section class="pdb-card pdb-c4" id="pd-sec-flags">
                 <div class="pd-sec-h">Flags · 标记</div>
                 <div style="display:flex;flex-direction:column;gap:9px;">
                   <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-is-market" style="width:15px;height:15px;"> Sold at markets · 市集销售</label>
@@ -4780,7 +4780,7 @@
               </section>
 
               <!-- Free of -->
-              <section class="pdb-card pdb-c4">
+              <section class="pdb-card pdb-c4" id="pd-sec-freeof">
                 <div class="pd-sec-h">Free of · 不含 <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400;">(tick what applies)</span></div>
                 <div id="pd-free-of" data-freeof-group="1" style="display:flex;flex-wrap:wrap;gap:10px 16px;">
                   <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" data-freeof-id="nuts" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M12 3a3.3 3.3 0 0 0-3 4.9c.3.5.5 1 .5 1.7s-.2 1.2-.5 1.8a3.3 3.3 0 1 0 6 0c-.3-.6-.5-1.1-.5-1.8s.2-1.2.5-1.7A3.3 3.3 0 0 0 12 3z"/><path d="M10 7.5h.01M14 7.5h.01M10.5 11h.01M13.5 11h.01"/></svg> Nuts · 无坚果</label>
@@ -4791,7 +4791,7 @@
               </section>
 
               <!-- Internal notes -->
-              <section class="pdb-card pdb-c12">
+              <section class="pdb-card pdb-c12" id="pd-sec-notes">
                 <div class="pd-sec-h">Internal notes · 内部备注 <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400;">(staff only — never shown to shoppers)</span></div>
                 <textarea id="pd-notes" rows="2" style="width:100%;resize:vertical;font:inherit;padding:6px 8px;box-sizing:border-box;"></textarea>
               </section>
@@ -4807,9 +4807,16 @@
           <div class="pd-foot-acts">
             <button class="btn" id="pd-dup-btn" type="button" onclick="pdDuplicate(false)" title="Make a copy as a new product · 复制为新产品"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5"/><path d="M10.5 5.5V3.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/></svg>Duplicate · 复制</button>
             <button class="btn" id="pd-delete-btn" type="button" onclick="pdDelete()" style="color:var(--danger);border-color:rgba(182,86,86,.4);">Delete · 删除</button>
-            <button class="btn" onclick="pdOpenVersions()" title="See every saved version of this product and roll back to any of them · 查看此产品的所有历史版本并还原"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M8 4v4l2.5 1.5"/><path d="M2.6 6.5A5.5 5.5 0 1 1 2.5 9"/><path d="M2.5 4v2.5H5"/></svg>Version history · 历史版本</button>
+            <button class="btn pd-versions-btn" onclick="pdOpenVersions()" title="See every saved version of this product and roll back to any of them · 查看此产品的所有历史版本并还原"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M8 4v4l2.5 1.5"/><path d="M2.6 6.5A5.5 5.5 0 1 1 2.5 9"/><path d="M2.5 4v2.5H5"/></svg>Version history · 历史版本</button>
           </div>
         </div>
+        <!-- The full page's side column. It lives INSIDE #pd-editor on purpose:
+             thousands of lines of this stylesheet are scoped `#pd-editor …`, so
+             a block moved outside the editor would arrive in the side column
+             stripped of its card, its heading, its fields and its chips. Empty
+             in the dock (`:empty` hides it) and filled by pdMoveSideBlocks()
+             only while the page is open, so the drawer never sees it. -->
+        <aside id="pd-pp-side" class="pd-pp-side"></aside>
       </div>
       </div><!-- /#pd-bg pa-split-editor -->
     </div><!-- /#pa-split -->
@@ -4843,7 +4850,19 @@
           <button class="btn btn-sm" type="button" onclick="pdCollapseToPanel()" title="Back to the list and quick-edit panel · 返回列表与快捷面板"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>Collapse · 收起</button>
         </div>
       </div>
-      <div id="pd-pp-mount" class="pd-pp-mount"></div>
+      <!-- Three columns: the section index, the form, and the things you set
+           once. The middle one is where #pd-editor mounts — the same node that
+           lives in the dock, unchanged. The outer two are page furniture that
+           only exists here, and the side column is FILLED BY MOVING blocks out
+           of the editor (pdMoveSideBlocks) rather than by rendering copies:
+           sales, shipping, flags, free-of, internal notes and the record's own
+           actions all keep their ids and their wiring, they just sit somewhere
+           else while the page is open. Below 1240px the side column drops under
+           the form and this becomes the two-column layout. -->
+      <div class="pd-pp-grid">
+        <nav id="pd-pp-nav" class="pd-pp-nav" aria-label="Sections · 分区"></nav>
+        <div id="pd-pp-mount" class="pd-pp-mount"></div>
+      </div>
     </div>
 
     <!-- The Designer Sections modal (#pa-edit-bg) is GONE. Nothing on this

@@ -2417,6 +2417,147 @@ function pdMoveHeadState(where) {
   if (foot && status) foot.insertBefore(status, foot.firstChild);
   if (band && tags) band.insertBefore(tags, band.firstChild);
 }
+// ── The page's side column ──────────────────────────────────────────────────
+// Two kinds of block get out of the form's way while the full page is open:
+// the one you READ (sales — the only block on the page you cannot change), and
+// the ones you SET ONCE when a product is created (how it ships, what it is
+// free of, the flags, the internal note). Docked they are fine inline: the
+// drawer shows one pane at a time, so nothing is competing. Expanded, all four
+// panes are on screen at once and those blocks cost as much page as the price.
+//
+// They are MOVED, not re-rendered — same rule as the editor itself. Every move
+// remembers the parent and the sibling it left, so collapsing puts each block
+// back exactly where it was authored rather than somewhere that merely looks
+// right today.
+const PD_SIDE_BLOCK_IDS = [
+  'pd-sales-card', 'pd-sec-shipping', 'pd-sec-flags', 'pd-sec-freeof', 'pd-sec-notes',
+];
+let _pdSideHomes = null;
+
+function pdMoveSideBlocks(where) {
+  if (where === 'ppage') {
+    const side = document.getElementById('pd-pp-side');
+    // Already out there. Moving again would record the side column as each
+    // block's home and strand them there on collapse.
+    if (!side || _pdSideHomes) return;
+    _pdSideHomes = [];
+    const take = (el) => {
+      if (!el) return;
+      _pdSideHomes.push({ el, parent: el.parentElement, next: el.nextElementSibling });
+      side.appendChild(el);
+    };
+    PD_SIDE_BLOCK_IDS.forEach(id => take(document.getElementById(id)));
+    // Duplicate / Version history / Delete travel with them. At the end of the
+    // form they sat below three screens of fields, which put the destructive
+    // one at the bottom of the longest scroll on the page.
+    take(document.querySelector('#pd-editor .pd-foot-acts'));
+    return;
+  }
+  if (!_pdSideHomes) return;
+  // Reverse order matters: each block's remembered `next` sibling is itself a
+  // block that moved, so restoring back-to-front means the anchor is always
+  // home before the thing that points at it.
+  for (const h of _pdSideHomes.slice().reverse()) {
+    if (!h.parent) continue;
+    const anchor = h.next && h.next.parentElement === h.parent ? h.next : null;
+    h.parent.insertBefore(h.el, anchor);
+  }
+  _pdSideHomes = null;
+}
+
+// ── The section index ───────────────────────────────────────────────────────
+// The dock has a four-tab strip; expanding used to hide it and offer nothing in
+// its place, so the LONGEST version of the form was the one with no way to
+// navigate it. This is that strip, re-cast for a page: every section, in page
+// order, tracking where you are as you scroll.
+const PD_PAGE_SECTIONS = [
+  // Selectors quoted with ' inside so they can ride a double-quoted data-
+  // attribute below without escaping. Valid CSS either way.
+  { sel: ".pd-pane[data-pane='basics']", en: 'Basics',               cn: '基础' },
+  { sel: '#pd-sec-photos',               en: 'Photos',              cn: '图片' },
+  { sel: '#pd-sec-where',                en: 'Where it shows',      cn: '分类与陈列' },
+  { sel: ".pd-pane[data-pane='stock']",  en: 'Stock',               cn: '库存' },
+  { sel: '#pd-sec-sizes',                en: 'Sizes',               cn: '规格' },
+  { sel: '#pd-sec-more',                 en: 'Sell it in more ways', cn: '更多售卖方式' },
+  { sel: ".pd-pane[data-pane='page']",   en: 'The shop page',       cn: '页面' },
+];
+let _pdNavScroll = null;
+let _pdNavObs = null;
+let _pdNavObsTimer = null;
+
+function pdRenderPageNav() {
+  const nav = document.getElementById('pd-pp-nav');
+  if (!nav) return;
+  // Only sections that actually rendered something. A product with no sizes
+  // has a #pd-sec-sizes that exists but stands zero pixels tall, and an index
+  // row pointing at nothing is worse than no row — it scrolls you somewhere
+  // and leaves you looking for what it promised. Height, not display: the
+  // container is always in the DOM; it is its children that come and go.
+  const rows = PD_PAGE_SECTIONS.filter(s => {
+    const el = document.querySelector(s.sel);
+    return el && el.getBoundingClientRect().height > 0;
+  });
+  nav.innerHTML = rows.map(s =>
+    `<button type="button" class="pd-nav-i" data-sel="${s.sel}">${cuT(s.en, s.cn)}</button>`
+  ).join('');
+  nav.onclick = (e) => {
+    const b = e.target.closest('.pd-nav-i');
+    if (!b) return;
+    document.querySelector(b.dataset.sel)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  };
+  pdNavSync();
+}
+
+// Which row is lit: the last section whose top has passed under the topbar.
+// Read on scroll rather than observed, because the sections are wildly
+// different heights and "which one is mostly visible" gives a different (and
+// wrong) answer for a short block sitting under a tall one.
+function pdNavSync() {
+  const nav = document.getElementById('pd-pp-nav');
+  if (!nav) return;
+  const items = Array.from(nav.querySelectorAll('.pd-nav-i'));
+  if (!items.length) return;
+  let on = items[0];
+  for (const b of items) {
+    const el = document.querySelector(b.dataset.sel);
+    if (el && el.getBoundingClientRect().top <= 96) on = b;
+  }
+  items.forEach(b => b.classList.toggle('is-on', b === on));
+}
+
+function pdBindPageNav(on) {
+  if (on) {
+    if (_pdNavScroll) return;
+    let queued = false;
+    _pdNavScroll = () => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => { queued = false; pdNavSync(); });
+    };
+    window.addEventListener('scroll', _pdNavScroll, { passive: true });
+    // Sizes, the buy-together row, the bundle recipe and the checkout options
+    // are all fetched after the editor opens (vaLoad / buLoad / bpLoad /
+    // optLoad), so at the moment the page appears their sections are empty and
+    // the index correctly leaves them out — then the data lands and the index
+    // is wrong. Watch the two containers instead of guessing at a delay; it
+    // also covers a size being added or removed while the page is open.
+    _pdNavObs = new MutationObserver(() => {
+      clearTimeout(_pdNavObsTimer);
+      _pdNavObsTimer = setTimeout(pdRenderPageNav, 120);
+    });
+    for (const id of ['pd-sec-sizes', 'pd-sec-more']) {
+      const el = document.getElementById(id);
+      if (el) _pdNavObs.observe(el, { childList: true, subtree: true });
+    }
+    return;
+  }
+  if (_pdNavScroll) window.removeEventListener('scroll', _pdNavScroll);
+  _pdNavScroll = null;
+  if (_pdNavObs) _pdNavObs.disconnect();
+  _pdNavObs = null;
+  clearTimeout(_pdNavObsTimer);
+}
+
 // Expand. `section` optionally scrolls to one part of the page — 'basics',
 // 'stock', 'sizes', 'more', 'page' or 'details' — which is what the dock's
 // summary rows pass when the operator taps through from a summary.
@@ -2435,9 +2576,14 @@ function pdExpand(section) {
   document.getElementById('tab-products')?.classList.add('pd-page-open');
   stage.style.display = '';
   pdMoveHeadState('ppage');
+  pdMoveSideBlocks('ppage');
   pdSyncPageHead();
   pdSyncFullscreenBtn(true);
   window.scrollTo({ top: 0, behavior: 'auto' });
+  // After the scroll, so the first row lights rather than whichever section
+  // the dock happened to be looking at.
+  pdRenderPageNav();
+  pdBindPageNav(true);
   if (section) {
     const el = section === 'more'  ? document.getElementById('pd-sec-more')
              : section === 'sizes' ? document.getElementById('pd-sec-sizes')
@@ -2453,6 +2599,9 @@ function pdCollapseToPanel() {
   // parked in the title row and they ride a `display:none` container back into
   // invisibility while the drawer shows an empty footer.
   pdMoveHeadState('dock');
+  // Same reason, and same order — the side column is inside the stage.
+  pdMoveSideBlocks('dock');
+  pdBindPageNav(false);
   pdMoveEditor('dock');
   if (stage) stage.style.display = 'none';
   document.getElementById('tab-products')?.classList.remove('pd-page-open');
