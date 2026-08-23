@@ -64,8 +64,20 @@ function main() {
   const chrome = findChrome();
   if (!chrome) { console.log('SKIP — no Chromium found.'); process.exit(0); }
   fs.mkdirSync(OUT, { recursive: true });
+  // Lucide is a CDN script and this container has no network, so ic() found no
+  // glyph and emitted an empty <svg> of the right size: every icon in every
+  // shot was an invisible hole. The geometry was honest — the box is there and
+  // takes its space — but it made a chevron-down dropdown read as a stray word
+  // and an overflow button as an empty square, and I chased both as bugs.
+  //
+  // A stub gives every name the same neutral mark. It is not the real glyph and
+  // does not pretend to be; what it shows is that an icon is THERE, at the size
+  // and in the colour the layout gives it.
+  const ICON_STUB = `<script>window.lucide={icons:new Proxy({},{get:function(){return ['svg',{},[
+    ['circle',{cx:12,cy:12,r:8.5}],
+    ['circle',{cx:12,cy:12,r:2.25,fill:'currentColor',stroke:'none'}]]];}})};<\/script>`;
   let src = src0
-    .replace(/<script src="https:\/\/unpkg\.com[^>]*><\/script>/, '')
+    .replace(/<script src="https:\/\/unpkg\.com[^>]*><\/script>/, ICON_STUB)
     .replace(/<link rel="stylesheet" href="https:\/\/fonts\.googleapis\.com[^>]*>/, '');
 
   const SERVER = process.env.NO_FAKE_SERVER ? '' : fakeServer();

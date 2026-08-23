@@ -55,9 +55,9 @@
      their paper-coloured fill on a near-black page. Home drew seven cream
      slabs down the left of the "Needs you" list. Same hues, sunk into the
      dark ground, with the inks lifted to match. */
-  --dusk-tint:#262544; --sage-tint:#1F2B26; --amber-tint:#322818; --brick-tint:#34211D;
-  --sage-ink:#B0C1AC; --amber-ink:#E0B26A; --brick-ink:#E08C74; --dusk-ink:#A9A2E0;
-  --amber:#D9A85C; --brick:#D97A63;
+  --amber-tint:rgba(201,149,74,.16); --brick-tint:rgba(180,83,62,.20);
+  --sage-tint:rgba(163,180,159,.16); --dusk-tint:rgba(110,103,175,.24);
+  --amber-ink:#D9A55E; --brick-ink:#DE8B77; --sage-ink:#A3B49F; --dusk-ink:#A9A2E0;
 }
 *{box-sizing:border-box;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%}
@@ -152,12 +152,18 @@ let LANG = 'en';
 function T(en, zh){ return LANG==='en' ? en : (zh||en); }
 
 /* ---- status pill palette (from the mockup's PILL map) ---- */
-const DELIV_TONE={brick:'var(--brick)',amber:'var(--amber-ink)',plain:'var(--text-secondary)'};
+const DELIV_TONE={brick:'var(--brick-ink)',amber:'var(--amber-ink)',plain:'var(--text-secondary)'};
 const PILL = {
+  // The three coloured pills use the theme's own tint tokens rather than fixed
+  // rgba. Both halves then move together when the theme flips — and the dark
+  // tints are weaker than the alphas that were hardcoded here, which is what a
+  // dark ground wants: rgba(163,180,159,.26) over a #182236 card lifted the
+  // background far enough that a Live pill sat at 4.1:1, under the floor for
+  // 12px. Grey needs no token: it is the same neutral on both themes.
   clear:['rgba(88,96,110,0.10)','var(--text-secondary)'],
-  success:['rgba(163,180,159,0.26)','var(--sage-ink)'],
-  warning:['rgba(201,149,74,0.16)','var(--amber-ink)'],
-  danger:['rgba(180,83,62,0.15)','var(--brick-ink)'],
+  success:['var(--sage-tint)','var(--sage-ink)'],
+  warning:['var(--amber-tint)','var(--amber-ink)'],
+  danger:['var(--brick-tint)','var(--brick-ink)'],
   muted:['rgba(88,96,110,0.06)','var(--text-secondary)'],
 };
 const KIND2PILL = {paid:'clear',pending:'clear',preparing:'clear',cancelled:'clear',draft:'clear',
@@ -838,7 +844,7 @@ function flagGate(flag){
     <div style="font-size:16px;font-weight:500">${T('Turned off','未开启')}</div>
     <div style="font-size:13.5px;color:var(--text-secondary);max-width:250px;line-height:1.55">${T('Set this up on desktop, or enable it here.','可在电脑端设置，或在此开启。')}</div>
     <button class="btn2" style="padding:0 24px" ${busy?'disabled':''} onclick="APP.cmd('enable','${flag}')">${busy?T('Turning on…','开启中…'):T('Turn it on','开启')}</button>
-    ${state.featErr?`<div style="font-size:14px;color:var(--brick)">${state.featErr}</div>`:''}</div>`;
+    ${state.featErr?`<div style="font-size:14px;color:var(--brick-ink)">${state.featErr}</div>`:''}</div>`;
 }
 
 /* ==========================================================================
@@ -914,7 +920,7 @@ function workFold(){
   if(!state.workOpen) return '';
   const wrap=b=>`<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border-default)">${b}</div>`;
   if(state.workErr) return wrap(`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
-    <span style="font-size:14px;color:var(--brick)">${state.workErr}</span>
+    <span style="font-size:14px;color:var(--brick-ink)">${state.workErr}</span>
     <button class="btn2" style="width:auto;padding:8px 16px;flex:none" onclick="APP.cmd('workRetry')">${T('Try again','重试')}</button></div>`);
   if(state.workLoading&&!state.workEvents) return wrap(`<div style="font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`);
   const evs=state.workEvents||[];
@@ -1270,7 +1276,7 @@ function screenOrders(){
   ${ordersHeader()}
   <div style="padding:0 16px 24px;display:flex;flex-direction:column;gap:16px">
     ${state.ordersLoadErr?`<div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:40px 24px;text-align:center">
-        <span style="color:var(--brick);display:flex">${ic('triangle-alert',24)}</span>
+        <span style="color:var(--brick-ink);display:flex">${ic('triangle-alert',24)}</span>
         <div style="font-size:16px;font-weight:500">${state.ordersLoadErr}</div>
         <div style="font-size:14px;color:var(--text-secondary);max-width:250px;line-height:1.55">${T('Nothing is wrong with your orders — the list just did not arrive.','订单本身没有问题 — 只是列表没有加载出来。')}</div>
         <button class="btn2" style="width:auto;padding:11px 26px" onclick="APP.cmd('ordersRetry')">${T('Try again','重试')}</button></div>`:''}
@@ -1379,7 +1385,7 @@ function screenInbox(){
       <div style="font-size:16px;font-weight:500">${T('Feedback is off','反馈已关闭')}</div>
       <div style="font-size:13.5px;color:var(--text-secondary);max-width:250px;line-height:1.55">${T('Turn on the feedback inbox to collect customer notes.','开启反馈以收集客户留言。')}</div>
       <button class="cta" style="width:auto;padding:12px 30px;font-size:15px" ${state.featBusy?'disabled':''} onclick="APP.cmd('toggleFeature','feedback')">${state.featBusy==='feedback'?T('Turning on…','开启中…'):T('Enable','开启')}</button>
-      ${state.featErr?`<div style="font-size:14px;color:var(--brick)">${state.featErr}</div>`:''}</div>`;
+      ${state.featErr?`<div style="font-size:14px;color:var(--brick-ink)">${state.featErr}</div>`:''}</div>`;
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
     <div style="display:flex;align-items:center;gap:10px">
       <div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px;flex:1">
@@ -1387,8 +1393,8 @@ function screenInbox(){
       ${seg==='reviews'&&unseenCount>0?`<button onclick="APP.cmd('markAllReviewsRead')" style="font-size:13px;font-weight:500;color:var(--text-primary);background:none;border:none;cursor:pointer;font-family:inherit;white-space:nowrap;padding:6px 2px">${T('Mark all read','全部已读')}</button>`:''}
     </div>
     ${state.revErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-      <span style="font-size:14px;color:var(--brick)">${state.revErr}</span></div>`:''}
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${state.revErr}</span></div>`:''}
     ${body}</div>`;
 }
 
@@ -1591,8 +1597,8 @@ function screenPopups(){
     T('Nothing is interrupting your customers. Pop-ups are written on desktop — a promo, a review nudge, a holiday notice.','目前没有弹窗打扰顾客。弹窗在电脑端创建 — 活动、邀请评价或歇业通知。'));
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
     ${state.puErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-      <span style="font-size:14px;color:var(--brick)">${state.puErr}</span></div>`:''}
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${state.puErr}</span></div>`:''}
     ${list.map(p=>{
       const st=puState(p);
       const [bg,fg]=PILL[st.tone];
@@ -1645,7 +1651,7 @@ function opsStoreRow(st,i){
       <span style="display:flex;flex-direction:column;min-width:0">
         <span style="font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(name)}</span>
         ${loc||st.address?`<span style="font-size:12px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(loc||st.address)}</span>`:''}</span>
-      <span style="flex:none;font-size:12.5px;color:${located?'var(--text-secondary)':'var(--brick)'}">${
+      <span style="flex:none;font-size:12.5px;color:${located?'var(--text-secondary)':'var(--brick-ink)'}">${
         located?T('located','已定位'):T('no coordinates','未定位')}</span></div>`;
 }
 function screenOperations(){
@@ -1664,11 +1670,11 @@ function screenOperations(){
   return `<div style="padding:16px;display:flex;flex-direction:column;gap:16px">
     ${le&&le.quota?`<div style="display:flex;flex-direction:column;gap:5px;background:var(--brick-tint);border-radius:14px;padding:14px 16px">
       <div style="display:flex;align-items:center;gap:10px">
-        <span style="flex:none;color:var(--brick);display:flex">${ic('triangle-alert',18)}</span>
-        <span style="font-size:14.5px;font-weight:500;color:var(--brick)">${T('Maps quota is used up for today','今日地图配额已用尽')}</span></div>
-      <div style="font-size:13px;color:var(--brick);opacity:.9;line-height:1.5">${T('No new address can be located until it resets, so orders stop routing to the nearest store correctly.','配额重置前无法定位新地址，就近派单会受影响。')}</div></div>`
+        <span style="flex:none;color:var(--brick-ink);display:flex">${ic('triangle-alert',18)}</span>
+        <span style="font-size:14.5px;font-weight:500;color:var(--brick-ink)">${T('Maps quota is used up for today','今日地图配额已用尽')}</span></div>
+      <div style="font-size:13px;color:var(--brick-ink);opacity:.9;line-height:1.5">${T('No new address can be located until it resets, so orders stop routing to the nearest store correctly.','配额重置前无法定位新地址，就近派单会受影响。')}</div></div>`
     : le?`<div style="display:flex;align-items:flex-start;gap:11px;background:rgba(201,149,74,0.12);border-radius:12px;padding:12px 14px">
-      <span style="flex:none;color:var(--amber);display:flex;margin-top:1px">${ic('triangle-alert',17)}</span>
+      <span style="flex:none;color:var(--amber-ink);display:flex;margin-top:1px">${ic('triangle-alert',17)}</span>
       <span style="font-size:13.5px;color:var(--amber-ink);line-height:1.5">${T('Last locate attempt failed','最近一次定位失败')} (${escAttr(provider)}): ${escAttr(String(le.code||''))} ${escAttr(le.message||'')}</span></div>`:''}
     ${settingsGroupCard([
       {label:T('Auto-print receipts','自动打印小票'),printer:true},
@@ -1767,8 +1773,8 @@ function screenAffiliate(){
   };
   const ledger = state.affErr
     ? `<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-        <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-        <span style="font-size:14px;color:var(--brick)">${state.affErr}</span></div>`
+        <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+        <span style="font-size:14px;color:var(--brick-ink)">${state.affErr}</span></div>`
     : !rows ? `<div style="padding:30px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`
     : !rows.length ? `<div style="padding:30px 16px;text-align:center;font-size:14px;color:var(--text-secondary);line-height:1.55">${
         seg ? T('None match.','没有匹配项。')
@@ -1781,7 +1787,7 @@ function screenAffiliate(){
     <div style="padding:0 16px;display:flex;flex-direction:column;gap:10px">
       <div style="display:flex;align-items:center;gap:12px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:14px">
         <span style="flex:1;font-size:15px">${busy?T('Saving…','保存中…'):T('Referrals on','推荐已开启')}</span>${toggle(featOn('affiliate'),"APP.cmd('toggleFeature','affiliate')")}</div>
-      ${state.featErr?`<div style="font-size:14px;color:var(--brick)">${state.featErr}</div>`:''}
+      ${state.featErr?`<div style="font-size:14px;color:var(--brick-ink)">${state.featErr}</div>`:''}
       ${noteBar(T('Reward amounts, the lifetime share, and voiding a referral are on desktop.','奖励金额、长期分成与作废推荐在电脑端处理。'))}</div></div>`;
 }
 
@@ -1842,7 +1848,7 @@ function statusEditor(){
   const d=state.cms&&state.cms[state.cmsPage]; if(!d) return '';
   const live=Array.isArray(d.live)?d.live:[];
   return live.length+' '+T(live.length===1?'block live':'blocks live','个模块已上线')
-    + ' · ' + (d.dirty?`<span style="color:var(--amber)">${T('unpublished changes','有未发布的修改')}</span>`:T('published','已发布'));
+    + ' · ' + (d.dirty?`<span style="color:var(--amber-ink)">${T('unpublished changes','有未发布的修改')}</span>`:T('published','已发布'));
 }
 function screenEditor(){
   const page=state.cmsPage;
@@ -1851,8 +1857,8 @@ function screenEditor(){
   const head=`<div style="padding:12px 0 4px">${chipRow(chips,page,'cmsPage')}</div>`;
   if(state.cmsErr) return `${head}<div style="padding:8px 16px 24px">
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-      <span style="font-size:14px;color:var(--brick)">${state.cmsErr}</span></div></div>`;
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${state.cmsErr}</span></div></div>`;
   const d=state.cms[page];
   if(!d) return `${head}<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   const live=Array.isArray(d.live)?d.live:[];
@@ -1924,9 +1930,9 @@ function screenDelivery(){
   return `<div style="padding:16px;display:flex;flex-direction:column;gap:14px">
     ${holiday?`<div style="display:flex;flex-direction:column;gap:6px;background:var(--brick-tint);border-radius:14px;padding:14px 16px">
       <div style="display:flex;align-items:center;gap:10px">
-        <span style="flex:none;color:var(--brick);display:flex">${ic('triangle-alert',18)}</span>
-        <span style="font-size:14.5px;font-weight:500;color:var(--brick)">${T('Holiday mode is on — delivery is paused','假日模式已开启 — 配送已暂停')}</span></div>
-      ${hText?`<div style="font-size:13px;color:var(--brick);line-height:1.5;opacity:.9">${T('Shoppers are told','顾客看到')}: “${escAttr(hText)}”</div>`:''}</div>`:''}
+        <span style="flex:none;color:var(--brick-ink);display:flex">${ic('triangle-alert',18)}</span>
+        <span style="font-size:14.5px;font-weight:500;color:var(--brick-ink)">${T('Holiday mode is on — delivery is paused','假日模式已开启 — 配送已暂停')}</span></div>
+      ${hText?`<div style="font-size:13px;color:var(--brick-ink);line-height:1.5;opacity:.9">${T('Shoppers are told','顾客看到')}: “${escAttr(hText)}”</div>`:''}</div>`:''}
     ${settingsGroupCard([
       {label:T('Delivery zones','配送范围'), value: z ? T(z.live+' live','启用 '+z.live) : T('Loading…','加载中…')},
       {label:T('Provinces covered','覆盖省份'), value: z ? String(z.provs) : T('Loading…','加载中…')},
@@ -1935,11 +1941,11 @@ function screenDelivery(){
     ].concat(cutoff!=null?[{label:T('Same-day cut-off','当日达截单'),value:T(cutoff+' min before close',cutoff+' 分钟(打烊前)')}]:[])
      .concat(holiday?[]:[{label:T('Holiday mode','假日模式'),value:T('Off','已关闭')}]))}
     ${z&&z.off?`<div style="display:flex;align-items:flex-start;gap:11px;background:rgba(201,149,74,0.12);border-radius:12px;padding:12px 14px">
-      <span style="flex:none;color:var(--amber);display:flex;margin-top:1px">${ic('triangle-alert',17)}</span>
+      <span style="flex:none;color:var(--amber-ink);display:flex;margin-top:1px">${ic('triangle-alert',17)}</span>
       <span style="font-size:13.5px;color:var(--amber-ink);line-height:1.5">${T(z.off===1?'One zone is switched off, so addresses in it will not match — those customers are told you do not deliver there.':z.off+' zones are switched off, so addresses in them will not match — those customers are told you do not deliver there.', z.off+' 个配送范围已停用，其中的地址无法匹配 — 顾客会被告知不支持配送。')}</span></div>`:''}
     ${missing?`<div style="display:flex;align-items:flex-start;gap:11px;background:var(--brick-tint);border-radius:12px;padding:12px 14px">
-      <span style="flex:none;color:var(--brick);display:flex;margin-top:1px">${ic('triangle-alert',17)}</span>
-      <span style="font-size:13.5px;color:var(--brick);line-height:1.5">${T(missing===1?'One store has no coordinates, so it can never be the nearest one. Fix it on desktop.':missing+' stores have no coordinates, so they can never be the nearest one. Fix them on desktop.', missing+' 家门店没有坐标，无法参与就近派单。请在电脑端处理。')}</span></div>`:''}
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:1px">${ic('triangle-alert',17)}</span>
+      <span style="font-size:13.5px;color:var(--brick-ink);line-height:1.5">${T(missing===1?'One store has no coordinates, so it can never be the nearest one. Fix it on desktop.':missing+' stores have no coordinates, so they can never be the nearest one. Fix them on desktop.', missing+' 家门店没有坐标，无法参与就近派单。请在电脑端处理。')}</span></div>`:''}
     ${noKey?noteBar(T('No maps key is configured, so nothing can be located','未配置地图密钥，无法进行定位')):''}
     ${desktopNote()}</div>`;
 }
@@ -2097,7 +2103,7 @@ function pollCard(p){
       <span style="display:flex;align-items:center;gap:6px;flex:none">${p.is_featured?`<span class="pill" style="background:${PILL.warning[0]};color:${PILL.warning[1]}">${T('Featured','精选')}</span>`:''}${pollPill(p.status)}</span></div>
     <div class="num" style="font-size:12.5px;color:var(--text-secondary)">${meta}</div>
     ${p.status==='draft'?`<div style="font-size:12.5px;color:var(--text-secondary)">${T('Customers cannot see a draft.','草稿对顾客不可见。')}</div>`:''}
-    ${floor?`<div style="font-size:12.5px;color:var(--amber)">${T('Customers are shown at least '+floor+' votes, whatever the real count is.','顾客看到的票数下限为 '+floor+' 票，与真实票数无关。')}</div>`:''}
+    ${floor?`<div style="font-size:12.5px;color:var(--amber-ink)">${T('Customers are shown at least '+floor+' votes, whatever the real count is.','顾客看到的票数下限为 '+floor+' 票，与真实票数无关。')}</div>`:''}
     ${open?pollBars(p):''}
     <div style="display:flex;align-items:center;gap:8px;margin-top:2px">
       ${btn(open?T('Hide results','收起结果'):T('See results','查看结果'),`APP.cmd('pollOpen',${p.id})`,false)}
@@ -2107,8 +2113,8 @@ function screenVoting(){
   loadPolls();
   if(state.pollsErr) return `<div style="padding:14px 16px 24px">
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-      <span style="font-size:14px;color:var(--brick)">${state.pollsErr}</span></div></div>`;
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${state.pollsErr}</span></div></div>`;
   if(!state.polls) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   if(!state.polls.length) return nothingYet(T('No polls yet','还没有投票'),
     T('Polls are written on desktop. Once one exists you can read the split and open or close it from here.',
@@ -2162,8 +2168,8 @@ function screenMembership(){
   loadTiers();
   if(state.tiersErr) return `<div style="padding:14px 16px 24px">
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-      <span style="font-size:14px;color:var(--brick)">${state.tiersErr}</span></div></div>`;
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${state.tiersErr}</span></div></div>`;
   if(!state.tiers) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   const tiers=state.tiers.slice().sort((a,b)=>(Number(a.threshold)||0)-(Number(b.threshold)||0));
   if(!tiers.length) return nothingYet(T('No tiers yet','暂无会员等级'),
@@ -2231,14 +2237,14 @@ function statusTopups(){
   const rows=state.tup; if(!rows) return '';
   const stuck=rows.filter(r=>String(r.status||'').toLowerCase()==='pending').length;
   if(!stuck) return rows.length?T(rows.length+' recent',rows.length+' 笔近期充值'):'';
-  return `<span style="color:var(--amber)">${T(stuck+' waiting to be confirmed',stuck+' 笔待确认')}</span>`;
+  return `<span style="color:var(--amber-ink)">${T(stuck+' waiting to be confirmed',stuck+' 笔待确认')}</span>`;
 }
 function screenTopups(){
   loadTopups();
   if(state.tupErr) return `<div style="padding:14px 16px 24px">
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-      <span style="font-size:14px;color:var(--brick)">${state.tupErr}</span></div></div>`;
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${state.tupErr}</span></div></div>`;
   if(!state.tup) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   const rows=state.tup, pkgs=(state.tupPkgs||[]).filter(p=>p.is_active!==0);
   const stuck=rows.filter(r=>String(r.status||'').toLowerCase()==='pending').length;
@@ -2276,8 +2282,8 @@ function screenLeaderboard(){
   loadLeaderboard();
   if(state.lbErr) return `<div style="padding:14px 16px 24px">
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-      <span style="font-size:14px;color:var(--brick)">${state.lbErr}</span></div></div>`;
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${state.lbErr}</span></div></div>`;
   if(!state.lb) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   const cfg=state.lb.config||{};
   // The preview is what STAFF see. reveal_mode is what CUSTOMERS see, so the
@@ -2292,7 +2298,7 @@ function screenLeaderboard(){
            :`<span class="pill" style="background:${PILL.success[0]};color:${PILL.success[1]}">${T('Live','进行中')}</span>`}</div>
     <div style="font-size:13px;color:var(--text-secondary)">${T('Ranked by','排名依据')} ${T(...(LB_METRIC[metric]||[metric,metric]))} · ${T(...(LB_PERIOD[cfg.period||'all']||['all time','全部时间']))} · ${T('top','前')} ${Number(cfg.top_n||20)}</div>
     ${cfg.reveal_mode&&cfg.reveal_mode!=='full'?`<div style="font-size:12.5px;color:var(--text-secondary)">${T('Names are shown to customers the way they appear below.','顾客看到的名称与下方一致。')}</div>`:''}
-    ${cfg.seed_enabled?`<div style="font-size:12.5px;color:var(--amber)">${T('Placeholder entries are switched on — customers see seeded names mixed in.','占位名单已开启 — 顾客会看到混入的示例名称。')}</div>`:''}</div>`;
+    ${cfg.seed_enabled?`<div style="font-size:12.5px;color:var(--amber-ink)">${T('Placeholder entries are switched on — customers see seeded names mixed in.','占位名单已开启 — 顾客会看到混入的示例名称。')}</div>`:''}</div>`;
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
     ${head}
     ${off?noteBar(T('The board is switched off, so customers cannot see it. This is what it would show.','排行榜当前关闭，顾客看不到。以下是开启后的内容。')):''}
@@ -2353,7 +2359,7 @@ function catRow(n,onclick,subs){
     <span style="width:32px;height:32px;border-radius:8px;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;color:var(--text-secondary);flex:none">${ic(catIcon(n.name))}</span>
     <span style="flex:1;min-width:0;display:flex;flex-direction:column;text-align:left">
       <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(catName(n))}</span>
-      <span style="font-size:12px;margin-top:2px;color:${m.warn?'var(--amber)':'var(--text-secondary)'}">${m.text}${subs!=null&&subs?' · '+subs+' '+T(subs===1?'subcategory':'subcategories','个子分类'):''}</span></span>
+      <span style="font-size:12px;margin-top:2px;color:${m.warn?'var(--amber-ink)':'var(--text-secondary)'}">${m.text}${subs!=null&&subs?' · '+subs+' '+T(subs===1?'subcategory':'subcategories','个子分类'):''}</span></span>
     ${onclick?`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`:''}</${el}>`;
 }
 function statusCategories(){
@@ -2371,8 +2377,8 @@ function screenCategories(){
   loadCategories();
   if(state.catsErr) return `<div style="padding:14px 16px 24px">
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-      <span style="font-size:14px;color:var(--brick)">${state.catsErr}</span></div></div>`;
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${state.catsErr}</span></div></div>`;
   if(!state.cats) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   const tree=state.cats;
   // One top open at a time — the shop's own left rail, drilled into.
@@ -2398,8 +2404,8 @@ function screenCategories(){
   const shelf = !hidden.length
     ? `<span style="color:var(--text-secondary)">${T('every shelf is visible in the shop','所有分类都显示在店面')}</span>`
     : hidden.length===1
-      ? `<span style="color:var(--amber)">${T('“'+hidden[0]+'” is hidden — nothing published on it','“'+hidden[0]+'” 已隐藏 — 无上架商品')}</span>`
-      : `<span style="color:var(--amber)">${T(hidden.length+' shelves hidden — nothing published on them',hidden.length+' 个分类已隐藏 — 无上架商品')}</span>`;
+      ? `<span style="color:var(--amber-ink)">${T('“'+hidden[0]+'” is hidden — nothing published on it','“'+hidden[0]+'” 已隐藏 — 无上架商品')}</span>`
+      : `<span style="color:var(--amber-ink)">${T(hidden.length+' shelves hidden — nothing published on them',hidden.length+' 个分类已隐藏 — 无上架商品')}</span>`;
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
     <div style="font-size:13px;line-height:1.6">${shelf}</div>
     <div class="list">${tree.map((t,i)=>`${i?'<div class="sep" style="margin-left:60px"></div>':''}${catRow(t,`APP.cmd('catTop','${escAttr(t.id)}')`,(t.subs||[]).length)}`).join('')}</div>
@@ -2465,7 +2471,7 @@ function actRow(r){
   // is the only amber on this ledger — a channel is a filter, not a light.
   const ctx = r.source==='manual' ? [r.actor_label,r.note].filter(Boolean).join(' · ') : (r.note||'');
   const bal = Number(r.balance_after)===0
-    ? `<span class="num" style="color:var(--amber);font-weight:500">0</span>`
+    ? `<span class="num" style="color:var(--amber-ink);font-weight:500">0</span>`
     : `<span class="num" style="color:var(--text-secondary)">${r.balance_after!=null?r.balance_after:'—'}</span>`;
   return `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px">
     <span style="display:flex;flex-direction:column;min-width:0">
@@ -2490,8 +2496,8 @@ function screenActivity(){
     ${rangeBtn('today',T('Today','今天'))}${rangeBtn('week',T('7 days','7 天'))}${rangeBtn('month',T('30 days','30 天'))}</div>`;
   if(state.actErr) return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">${ranges}
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-      <span style="font-size:14px;color:var(--brick)">${state.actErr}</span></div></div>`;
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${state.actErr}</span></div></div>`;
   if(!state.act) return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">${ranges}
     <div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div></div>`;
   const j=state.act, rows=j.rows||[], summary=j.summary||[], dg=j.digest||{};
@@ -2582,7 +2588,7 @@ function poRow(p){
   // No ' · late' here: the Late pill sits nine pixels above this line, so the
   // amber is the only thing the word would add.
   const arrives = p.delivery_date
-    ? `<span class="num"${poLate(p)?' style="color:var(--amber)"':''}>${fmtDateOnly(p.delivery_date)}</span>`
+    ? `<span class="num"${poLate(p)?' style="color:var(--amber-ink)"':''}>${fmtDateOnly(p.delivery_date)}</span>`
     : '';
   return `<button class="card" onclick="APP.cmd('openPO',${p.id})" style="display:flex;flex-direction:column;gap:9px;text-align:left;cursor:pointer;padding:14px;width:100%">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
@@ -2603,15 +2609,15 @@ function statusPurchasing(){
   const spend=all.filter(p=>String(p.date||'').slice(0,7)===m&&(p.status==='Ordered'||p.status==='Delivered'))
     .reduce((a,p)=>a+(Number(p.total_cost)||0),0);
   return [open+' '+T('open','进行中'),
-    late?`<span style="color:var(--amber)">${late+' '+T('late','逾期')}</span>`:'',
+    late?`<span style="color:var(--amber-ink)">${late+' '+T('late','逾期')}</span>`:'',
     money0(CUR,spend)+' '+T('this month','本月')].filter(Boolean).join(' · ');
 }
 function screenPurchasing(){
   loadPOs();
   if(state.posErr) return `<div style="padding:14px 16px 24px">
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-      <span style="font-size:14px;color:var(--brick)">${state.posErr}</span></div></div>`;
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${state.posErr}</span></div></div>`;
   if(!state.poList) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   const all=state.poList;
   if(!all.length) return nothingYet(T('No purchase orders yet','还没有采购单'),
@@ -2641,7 +2647,7 @@ function poLineRow(it){
     <span style="display:flex;flex-direction:column;min-width:0">
       <span style="font-size:14.5px">${escAttr(name)}</span>
       <span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${escAttr(it.sku||'')}${it.sku&&it.current_stock!=null?' · ':''}${it.current_stock!=null?T('on shelf ','在架 ')+it.current_stock:''}</span>
-      ${got!=null?`<span class="num" style="font-size:12px;margin-top:3px;color:${short?'var(--amber)':'var(--text-secondary)'}">${T('received','已收')} ${got}${short?' '+T('of','/')+' '+it.qty:''}${Number(it.damaged_qty||0)?' · '+it.damaged_qty+' '+T('damaged','损坏'):''}</span>`:''}
+      ${got!=null?`<span class="num" style="font-size:12px;margin-top:3px;color:${short?'var(--amber-ink)':'var(--text-secondary)'}">${T('received','已收')} ${got}${short?' '+T('of','/')+' '+it.qty:''}${Number(it.damaged_qty||0)?' · '+it.damaged_qty+' '+T('damaged','损坏'):''}</span>`:''}
     </span>
     <span style="display:flex;flex-direction:column;align-items:flex-end;flex:none">
       <span class="num" style="font-size:14.5px;font-weight:500">${money0(CUR,it.total_cost)}</span>
@@ -2673,13 +2679,13 @@ function sheetPO(){
      ${head(escAttr(d.po_number||('#'+d.id)),poPill(d))}
      <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;background:var(--bg)">
        ${state.poErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-         <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-         <span style="font-size:14px;color:var(--brick)">${state.poErr}</span></div>`:''}
+         <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+         <span style="font-size:14px;color:var(--brick-ink)">${state.poErr}</span></div>`:''}
        <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
          ${poFact(T('Supplier','供应商'),escAttr(d.supplier||T('No supplier','未指定供应商')))}
          ${poStore(d)?poFact(T('Store','门店'),escAttr(poStore(d))):''}
          ${d.date?poFact(T('Ordered','下单'),`<span class="num">${escAttr(fmtDateOnly(d.date))}</span>`):''}
-         ${d.delivery_date?poFact(T('Arrives','到货'),`<span class="num" style="${poLate(d)?'color:var(--amber)':''}">${escAttr(fmtDateOnly(d.delivery_date))}${poLate(d)?' · '+T('late','逾期'):''}</span>`):''}
+         ${d.delivery_date?poFact(T('Arrives','到货'),`<span class="num" style="${poLate(d)?'color:var(--amber-ink)':''}">${escAttr(fmtDateOnly(d.delivery_date))}${poLate(d)?' · '+T('late','逾期'):''}</span>`):''}
          ${poFact(T('Total','金额'),`<span class="num" style="font-weight:500">${money0(CUR,d.total_cost!=null?d.total_cost:items.reduce((a,i)=>a+(Number(i.total_cost)||0),0))}</span>`)}
        </div>
        ${lines?`<div><div class="eyebrow" style="padding:0 2px 8px">${lines} ${T(lines===1?'line':'lines','项')}</div>
@@ -2716,7 +2722,7 @@ function settingsGroupCard(rows){
   return `<div class="list">${rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
     <div style="display:flex;align-items:center;gap:16px;padding:12px 16px;min-height:56px"><span style="flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.label}</span>
     ${ctl(r)}</div>`).join('')}
-    ${state.printerErr&&rows.some(r=>r.printer||r.fapiao)?`<div style="padding:12px 16px;font-size:13px;color:var(--brick);background:var(--brick-tint)">${state.printerErr}</div>`:''}</div>`;
+    ${state.printerErr&&rows.some(r=>r.printer||r.fapiao)?`<div style="padding:12px 16px;font-size:13px;color:var(--brick-ink);background:var(--brick-tint)">${state.printerErr}</div>`:''}</div>`;
 }
 let sheetStep={};
 const SUBS={
@@ -2743,8 +2749,8 @@ const SUBS={
       <div style="padding:8px 16px 24px;display:flex;flex-direction:column;gap:10px">
         ${noteBar(T('Quick edits here · full authoring on desktop','这里可快速编辑 · 完整编辑请用电脑端'))}
         ${state.prodErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-        <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-        <span style="font-size:14px;color:var(--brick)">${state.prodErr}</span></div>`:''}
+        <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+        <span style="font-size:14px;color:var(--brick-ink)">${state.prodErr}</span></div>`:''}
       ${state.catalogueLoading&&!rows.length?`<div style="padding:32px 0;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading the catalogue…','正在加载目录…')}</div>`:''}
         ${!state.catalogueLoading&&!rows.length&&narrowed?`<div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:40px 24px;text-align:center">
           <div style="font-size:18px;font-weight:500">${T('No products match','没有匹配的产品')}</div>
@@ -2806,7 +2812,7 @@ const SUBS={
     return `<div>
     <div style="padding:12px 0 4px">${chipRow(segs,seg,'vchSeg')}</div>
     <div style="padding:8px 16px 24px;display:flex;flex-direction:column;gap:12px">
-    ${state.couponErr?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick)">${state.couponErr}</div>`:''}
+    ${state.couponErr?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${state.couponErr}</div>`:''}
     ${!list.length?`<div style="padding:32px 8px;text-align:center;font-size:15px;color:var(--text-secondary)">${
       seg==='on'?T('Nothing running right now.','当前没有生效中的优惠券。'):T('Nothing here.','这里没有优惠券。')}</div>`:''}
     ${list.map(c=>`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:9px${c.on?'':';opacity:.7'}">
@@ -2861,7 +2867,7 @@ const SUBS={
       ${f.limit!=null?`<div>
         <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:13px">
           <span class="num" style="color:var(--text-secondary)">${T(f.sold+' of '+f.limit+' sold',f.limit+' 件中已售 '+f.sold)}</span>
-          <span class="num" style="color:${f.left===0?'var(--brick)':'var(--text-secondary)'}">${f.left===0?T('sold out','已售罄'):T(f.left+' left','剩 '+f.left)}</span></div>
+          <span class="num" style="color:${f.left===0?'var(--brick-ink)':'var(--text-secondary)'}">${f.left===0?T('sold out','已售罄'):T(f.left+' left','剩 '+f.left)}</span></div>
         <span style="display:block;margin-top:6px;height:4px;border-radius:999px;background:var(--surface-raised)"><span style="display:block;height:4px;width:${f.pct||0}%;border-radius:999px;background:${f.left===0?'var(--brick)':'var(--text-primary)'}"></span></span></div>`:''}
       ${(f.hidden||f.noCoupon)?`<div style="display:flex;flex-wrap:wrap;gap:6px">
         ${f.hidden?`<span class="pill" style="background:var(--brick-tint);color:var(--brick-ink)">${T('Product is not on the shop','商品未上架')}</span>`:''}
@@ -2874,7 +2880,7 @@ const SUBS={
     if(!state.bcLoaded&&!list.length) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
     if(!list.length) return nothingYet(T('No broadcasts','没有广播'),T('Broadcasts are written and sent from desktop. Anything scheduled can be stopped from here.','广播在电脑端撰写与发送。已排期的可在此取消。'));
     return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
-    ${state.bcErr?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick)">${state.bcErr}</div>`:''}
+    ${state.bcErr?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${state.bcErr}</div>`:''}
     ${list.map(b=>`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:9px">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
         <span style="font-size:15px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...b.title)}</span>
@@ -2906,7 +2912,7 @@ const SUBS={
             ? T('Shoppers see bought-counts, a recent-buyers ticker and the SOLD badge.','顾客会看到购买人数、最近购买动态与“已售”标签。')
             : T('None of the bought-counts, the recent-buyers ticker or the SOLD badge are shown.','购买人数、最近购买动态与“已售”标签均不显示。')}</span></span>
         ${toggle(on,"APP.cmd('toggleFeature','socialProof')")}</div>
-      ${state.featErr?`<div style="font-size:14px;color:var(--brick)">${state.featErr}</div>`:''}
+      ${state.featErr?`<div style="font-size:14px;color:var(--brick-ink)">${state.featErr}</div>`:''}
       ${noteBar(T('What counts as recent, and which products show it, are set on desktop.','“最近”的范围与展示哪些商品在电脑端设置。'))}</div>`;
   }},
   membership:{title:['Membership','会员积分'],render:()=> !featOn('membership')
@@ -2939,8 +2945,8 @@ const SUBS={
         b?T('Uploading '+b.done+'/'+b.total+'…','上传中 '+b.done+'/'+b.total+'…'):T('Add photos','添加图片')}</button>`; },
     render:()=>{
     const err=state.mediaErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-      <span style="font-size:14px;color:var(--brick)">${state.mediaErr}</span></div>`:'';
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${state.mediaErr}</span></div>`:'';
     if(!state.media){ if(!state.mediaTried) loadMedia();
       return `<div style="padding:0 16px">${err}</div><div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`; }
     if(!state.media.rows.length) return `<div style="padding:0 16px">${err}</div>`+nothingYet(T('Nothing in the library','媒体库是空的'),
@@ -3136,9 +3142,9 @@ const MT_STUCK_MIN=30;
 function mtHealthCard(){
   if(state.mtOffline) return `<div style="display:flex;flex-direction:column;gap:5px;background:var(--brick-tint);border-radius:14px;padding:14px 16px">
     <div style="display:flex;align-items:center;gap:10px">
-      <span style="flex:none;color:var(--brick);display:flex">${ic('triangle-alert',18)}</span>
-      <span style="font-size:14.5px;font-weight:500;color:var(--brick)">${T('The Meituan sync service is offline','美团同步服务离线')}</span></div>
-    <div style="font-size:13px;color:var(--brick);opacity:.9;line-height:1.5">${T('Orders are not being imported and stock is not being pushed.','订单未导入，库存也未推送。')}</div></div>`;
+      <span style="flex:none;color:var(--brick-ink);display:flex">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14.5px;font-weight:500;color:var(--brick-ink)">${T('The Meituan sync service is offline','美团同步服务离线')}</span></div>
+    <div style="font-size:13px;color:var(--brick-ink);opacity:.9;line-height:1.5">${T('Orders are not being imported and stock is not being pushed.','订单未导入，库存也未推送。')}</div></div>`;
   const st=state.mtStatus;
   if(!st) return '';
   const pending=Number(st.queuePending||0), failed=Number(st.queueFailed||0);
@@ -3155,7 +3161,7 @@ function mtHealthCard(){
   else if(pending>0){ tone='plain'; line=T(pending+' sending…',pending+' 发送中…'); }
   else { tone='plain'; line=T('All stock pushes sent','库存推送已全部发送'); }
   const bgs={brick:'var(--brick-tint)',amber:'rgba(201,149,74,0.12)',plain:'var(--surface-card)'};
-  const fgs={brick:'var(--brick)',amber:'var(--amber-ink)',plain:'var(--text-primary)'};
+  const fgs={brick:'var(--brick-ink)',amber:'var(--amber-ink)',plain:'var(--text-primary)'};
   return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:7px;background:${bgs[tone]}${tone==='plain'?'':';border:none'}">
     <div style="display:flex;align-items:center;gap:10px">
       ${tone==='plain'?'':`<span style="flex:none;color:${fgs[tone]};display:flex">${ic('triangle-alert',18)}</span>`}
@@ -3192,10 +3198,10 @@ function gzModeCard(){
 function gzFlaggedBlock(){
   const rows=state.gzFlagged;
   if(!Array.isArray(rows)||!rows.length) return '';
-  const btn=(label,cmd,dis,danger)=>`<button ${dis?'disabled':''} onclick="${cmd}" style="font-size:13px;font-weight:500;color:${danger?'var(--brick)':'var(--text-primary)'};background:var(--surface-card);border:1px solid var(--border-default);border-radius:9px;padding:7px 14px;cursor:pointer;font-family:inherit;${dis?'opacity:.5':''}">${label}</button>`;
+  const btn=(label,cmd,dis,danger)=>`<button ${dis?'disabled':''} onclick="${cmd}" style="font-size:13px;font-weight:500;color:${danger?'var(--brick-ink)':'var(--text-primary)'};background:var(--surface-card);border:1px solid var(--border-default);border-radius:9px;padding:7px 14px;cursor:pointer;font-family:inherit;${dis?'opacity:.5':''}">${label}</button>`;
   return `<div style="display:flex;flex-direction:column;gap:10px">
     <div style="display:flex;align-items:center;gap:10px">
-      <span style="flex:none;color:var(--amber);display:flex">${ic('triangle-alert',18)}</span>
+      <span style="flex:none;color:var(--amber-ink);display:flex">${ic('triangle-alert',18)}</span>
       <span style="font-size:14.5px;font-weight:500">${T(rows.length===1?'One drop needs your decision':rows.length+' drops need your decision', rows.length+' 条待确认')}</span></div>
     ${rows.map(f=>{
       const name=LANG==='en'?(f.name_en||f.name_cn||f.guanyi_name||('#'+f.product_id))
@@ -3219,8 +3225,8 @@ function mirrorScreen(which,note){
   const mt = which==='meituan' ? mtHealthCard() : '';
   const gz = which==='gzgrocery'
     ? `${state.gzErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-        <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-        <span style="font-size:14px;color:var(--brick)">${state.gzErr}</span></div>`:''}${gzModeCard()}${gzFlaggedBlock()}`
+        <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+        <span style="font-size:14px;color:var(--brick-ink)">${state.gzErr}</span></div>`:''}${gzModeCard()}${gzFlaggedBlock()}`
     : '';
   if(!rows||!rows.length){
     if((gz||mt)&&state.mirrorLoading!==which) return `<div style="padding:12px 16px 24px;display:flex;flex-direction:column;gap:16px">${mt}${gz}
@@ -3989,8 +3995,8 @@ function sheetOrderDetail(){
        </div>
      <div style="flex:1;min-height:0;overflow-y:auto;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 24px);display:flex;flex-direction:column;gap:16px;background:var(--bg)">
        ${state.orderErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-         <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-         <span style="font-size:14px;color:var(--brick)">${state.orderErr}</span></div>`:''}
+         <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+         <span style="font-size:14px;color:var(--brick-ink)">${state.orderErr}</span></div>`:''}
        ${orderHeadMarks(o)}
        ${refundPanel(o)}
        ${o.custNote?`<div class="card" style="padding:14px;border-color:var(--accent)">
@@ -4105,7 +4111,7 @@ function trackingCard(o,sp,label){
     ${sp.airCleared==null&&o.airDelayed&&sp.mode==='air'?`<div style="display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink)">
       <span style="display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:500">${ic('triangle-alert',16)}${T('Air shipment delayed','空运延误')}</span>
       <span style="font-size:13px;line-height:1.5">${T('Fresh items may no longer be safe. Call the customer and tell them not to eat it, then claim the delay with JD.','生鲜可能已不安全。请联系顾客告知勿食用，并向京东申请延误赔偿。')}</span>
-      <button class="btn2" style="width:100%;color:var(--brick);border-color:var(--brick)" ${state.parcelBusy===('air'+sp.id)?'disabled':''} onclick="APP.cmd('clearAirDelay',${sp.id})">${state.parcelBusy===('air'+sp.id)?T('Saving…','处理中…'):T('Mark handled — customer contacted','标记已处理 — 已联系顾客')}</button></div>`:''}
+      <button class="btn2" style="width:100%;color:var(--brick-ink);border-color:var(--brick-ink)" ${state.parcelBusy===('air'+sp.id)?'disabled':''} onclick="APP.cmd('clearAirDelay',${sp.id})">${state.parcelBusy===('air'+sp.id)?T('Saving…','处理中…'):T('Mark handled — customer contacted','标记已处理 — 已联系顾客')}</button></div>`:''}
     ${sp.airCleared?`<div style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text-secondary)">${ic('check',14)}${T('Air delay handled'+(sp.airClearedBy?' · '+sp.airClearedBy:''),'空运延误已处理'+(sp.airClearedBy?' · '+sp.airClearedBy:''))}</div>`:''}
     ${reuse?`<div style="padding:10px 12px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:12.5px;line-height:1.5">${
       reuse.delivered?T('This waybill is already on a delivered order ('+escAttr(reuse.order_no)+'). A reused number will not sync — check it.','此运单号已用于一笔已签收订单('+escAttr(reuse.order_no)+')，重复号码不会同步，请核对。')
@@ -4114,7 +4120,7 @@ function trackingCard(o,sp,label){
       <div class="num" style="font-size:16px;font-weight:500;letter-spacing:.01em">${escAttr(t.number)}</div>
       <div style="font-size:13px;color:var(--text-secondary);margin-top:2px">${escAttr(LANG==='en'?(t.carrier_name_en||''):(t.carrier_name_cn||''))}</div></div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
-        ${badge?`<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:${badge.tone==='sage'?'var(--sage-ink)':badge.tone==='brick'?'var(--brick)':'var(--text-secondary)'}">${badge.tone==='sage'?'<span style="width:6px;height:6px;border-radius:50%;background:var(--sage-ink)"></span>':''}${badge.text}</span>`:''}
+        ${badge?`<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:${badge.tone==='sage'?'var(--sage-ink)':badge.tone==='brick'?'var(--brick-ink)':'var(--text-secondary)'}">${badge.tone==='sage'?'<span style="width:6px;height:6px;border-radius:50%;background:var(--sage-ink)"></span>':''}${badge.text}</span>`:''}
         <span class="num" style="font-size:12px;color:var(--text-secondary)">${t.synced_at?T('Updated '+fmtDay(t.synced_at),'更新于 '+fmtDay(t.synced_at)):T('no live sync yet','尚未实时同步')}</span></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn2" style="width:auto;padding:8px 14px;flex:none" onclick="APP.cmd('copyWaybill','${escAttr(t.number)}')">${ic('copy',14)} ${T('Copy','复制')}</button>
@@ -4126,7 +4132,7 @@ function trackingCard(o,sp,label){
         ${rest.length?`<details><summary style="cursor:pointer;list-style:none;font-size:12.5px;color:var(--text-secondary);padding:4px 0">${T(rest.length+' earlier events','更早的 '+rest.length+' 条')}</summary>
           <div style="display:flex;flex-direction:column;gap:7px;margin-top:7px">${rest.map(evRow).join('')}</div></details>`:''}
       </div>`:`<div style="font-size:13px;color:var(--text-secondary)">${T('Waiting for the first carrier update.','等待承运商第一条更新。')}</div>`}
-    `:`<div style="font-size:13.5px;color:var(--brick)">${T('No waybill on this parcel yet — add it on the desktop.','此包裹尚无运单号 — 请在电脑端录入。')}</div>`}
+    `:`<div style="font-size:13.5px;color:var(--brick-ink)">${T('No waybill on this parcel yet — add it on the desktop.','此包裹尚无运单号 — 请在电脑端录入。')}</div>`}
   </div>`;
 }
 /* A same-city parcel has no waybill; what the operator watches is the arrival
@@ -4252,13 +4258,13 @@ function sheetAsk(){
            ? `<textarea id="ask-${f.id}" placeholder="${f.placeholder||''}" style="min-height:96px;resize:none">${f.value!=null?escAttr(f.value):''}</textarea>`
            : `<input id="ask-${f.id}" ${f.numeric?'inputmode="text"':''} placeholder="${f.placeholder||''}" value="${f.value!=null?escAttr(f.value):''}">`}
        </label>`).join('')}
-       ${state.askErr?`<div style="font-size:14px;color:var(--brick)">${state.askErr}</div>`:''}
+       ${state.askErr?`<div style="font-size:14px;color:var(--brick-ink)">${state.askErr}</div>`:''}
      </div>`:''}
      ${a.options
        ? a.options.map(o=>`<button class="row" style="min-height:56px;padding:12px 20px" onclick="APP.cmd('askRun','${o.key}')"><span style="flex:1;font-size:15px">${o.label}</span></button>`).join('')
        : `<div style="display:flex;gap:8px;padding:16px 20px 0">
             <button class="btn2" style="flex:1" onclick="APP.cmd('closeAsk')">${T('Cancel','取消')}</button>
-            <button class="btn2" style="flex:1;${a.danger?'color:var(--brick);border-color:var(--brick)':''}" onclick="APP.cmd('askRun','')">${a.confirmLabel||T('Confirm','确认')}</button>
+            <button class="btn2" style="flex:1;${a.danger?'color:var(--brick-ink);border-color:var(--brick-ink)':''}" onclick="APP.cmd('askRun','')">${a.confirmLabel||T('Confirm','确认')}</button>
           </div>`}
    </div>`;
 }
@@ -4344,8 +4350,8 @@ function sheetProduct(){
      <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:16px;background:var(--bg)">
        ${noteBar(T('Quick-edit stock and price · full editing on desktop','快改库存与价格 · 完整编辑在电脑端'))}
        ${state.prodErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-         <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-         <span style="font-size:14px;color:var(--brick)">${state.prodErr}</span></div>`:''}
+         <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+         <span style="font-size:14px;color:var(--brick-ink)">${state.prodErr}</span></div>`:''}
        <div class="card" style="padding:16px">
          <div class="eyebrow">${T('Price','价格')}</div>
          <div style="display:flex;align-items:center;gap:8px;margin-top:12px">
@@ -4374,8 +4380,8 @@ function threadBody(){
   const th=state.thread;
   if(th.loading) return `<div style="padding:28px 0;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   if(th.err) return `<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-    <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-    <span style="font-size:14px;color:var(--brick)">${th.err}</span></div>`;
+    <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+    <span style="font-size:14px;color:var(--brick-ink)">${th.err}</span></div>`;
   const msgs=th.msgs||[];
   const photos=th.photos||[];
   return `${th.page?`<div style="display:flex;flex-wrap:wrap;gap:6px">
@@ -4400,8 +4406,8 @@ function sheetReply(){
        ${th?threadBody():`<div style="background:var(--surface-raised);border-radius:12px;padding:14px;font-size:14px;line-height:1.55;color:var(--text-secondary)">${T(...r.text)}</div>`}
        ${th?'':`<textarea id="mReply" placeholder="${T('Write a reply…','写下回复…')}" style="min-height:100px;resize:none">${r.reply?String(r.reply).replace(/</g,'&lt;'):''}</textarea>`}
        ${state.replyErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-         <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-         <span style="font-size:14px;color:var(--brick)">${state.replyErr}</span></div>`:''}
+         <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+         <span style="font-size:14px;color:var(--brick-ink)">${state.replyErr}</span></div>`:''}
        ${th?'':`<div style="font-size:13px;color:var(--text-secondary)">${foot}</div>`}</div>
      <div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card);display:flex;flex-direction:column;gap:10px">
        ${th?`<textarea id="mReply" placeholder="${T('Write a reply…','写下回复…')}" style="min-height:52px;max-height:120px;resize:none"></textarea>`:''}
@@ -4613,7 +4619,7 @@ function screenCustomers(){
   let body;
   if(state.custLoadErr){
     body=`<div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:40px 24px;text-align:center">
-      <span style="color:var(--brick);display:flex">${ic('triangle-alert',24)}</span>
+      <span style="color:var(--brick-ink);display:flex">${ic('triangle-alert',24)}</span>
       <div style="font-size:16px;font-weight:500">${state.custLoadErr}</div>
       <div style="font-size:14px;color:var(--text-secondary);max-width:250px;line-height:1.55">${T('Nothing is wrong with your customers — the roster just did not arrive.','客户数据没有问题 — 只是名单没有加载出来。')}</div>
       <button class="btn2" style="width:auto;padding:11px 26px" onclick="APP.cmd('custRetry')">${T('Try again','重试')}</button></div>`;
@@ -4701,7 +4707,7 @@ function custPointsLedger(d){
     const src=PT_SOURCE[String(r.source||'').toLowerCase()];
     const n=Number(r.delta)||0;
     return custRow(src?T(...src):escAttr(r.source||'—'),
-      `<span style="color:${n<0?'var(--brick)':'var(--text-primary)'}">${n>0?'+':''}${n.toLocaleString()}</span>`,
+      `<span style="color:${n<0?'var(--brick-ink)':'var(--text-primary)'}">${n>0?'+':''}${n.toLocaleString()}</span>`,
       [fmtDay(r.created_at), r.note?escAttr(r.note):''].filter(Boolean).join(' · '));
   })));
 }
@@ -4713,7 +4719,7 @@ function custTopups(d){
     const ok=String(r.status||'').toLowerCase()==='success';
     const method=r.payment_method==='admin_adjust'?T('by staff','员工调整'):escAttr(r.payment_method||'');
     return custRow(money(CUR,r.amount)+(Number(r.bonus_points)?` <span style="font-size:12.5px;color:var(--text-secondary)">+${Number(r.bonus_points).toLocaleString()} ${T('pts','分')}</span>`:''),
-      ok?'':`<span style="color:var(--brick);font-size:13px">${escAttr(r.status||'')}</span>`,
+      ok?'':`<span style="color:var(--brick-ink);font-size:13px">${escAttr(r.status||'')}</span>`,
       [fmtDay(r.paid_at||r.created_at), method].filter(Boolean).join(' · '));
   })));
 }
@@ -4812,8 +4818,8 @@ function sheetCustomer(){
       </div>
       <div style="flex:1;min-height:0;overflow-y:auto;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 24px)">
         ${state.custErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint);margin-bottom:16px">
-          <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-          <span style="font-size:14px;color:var(--brick)">${state.custErr}</span></div>`:''}
+          <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+          <span style="font-size:14px;color:var(--brick-ink)">${state.custErr}</span></div>`:''}
         ${body}</div>
     </div>`;
 }
