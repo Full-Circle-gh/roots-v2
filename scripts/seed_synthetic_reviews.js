@@ -107,6 +107,15 @@ const CN = {
     '很新鲜,没有添加的感觉,放心给家里人喝。',
     '比外面买的香,会一直回购。',
   ],
+  // Non-dairy drinks — juice, kombucha, tea, coffee. Refreshment + sweetness
+  // level only; never 奶味 / 配麦片, which belong to the milk pool.
+  drinks: [
+    '很清爽,不会太甜,冰过之后更好喝。',
+    '味道很正,喝起来很干净,不齁。',
+    '酸甜刚刚好,下午来一瓶很解腻。',
+    '冰镇后特别解渴,已经回购好几次了。',
+    '气泡很自然,不像市面上那些糖水。',
+  ],
   snack: [
     '很香脆,停不下来,追剧必备😋',
     '不会太甜,配茶刚刚好。',
@@ -172,6 +181,15 @@ const EN = {
     'Really smooth — my kid has a glass every morning.',
     'Tastes clean and fresh, happy to give it to the family.',
   ],
+  // Non-dairy drinks — juice, kombucha, tea, coffee. See the CN note above:
+  // no creamy / cereal / "glass every morning" lines here.
+  drinks: [
+    'Really refreshing and not sugary at all.',
+    'Lovely bright taste — best straight from the fridge.',
+    'Nice balance, tart without being sharp. Reordered.',
+    'My afternoon pick-me-up now. Not too sweet.',
+    'Naturally fizzy, none of that syrupy aftertaste.',
+  ],
   snack: [
     'Crunchy and moreish, perfect for movie night. 😋',
     'Not too sweet, great with a cup of tea.',
@@ -224,6 +242,7 @@ const TAGS_BY_CAT = {
   produce: ['fresh', 'value', 'will-buy', 'fast-ship'],
   soup:    ['tasty', 'will-buy', 'packed'],
   milk:    ['fresh', 'tasty', 'will-buy'],
+  drinks:  ['fresh', 'tasty', 'will-buy', 'fast-ship'],
   snack:   ['tasty', 'value', 'packed'],
   meat:    ['fresh', 'packed', 'will-buy'],
   bakery:  ['tasty', 'fresh', 'packed'],
@@ -250,7 +269,11 @@ function categoryOf(p) {
           '唇', '护肤', '洗发', '护发', '面霜', '精华', '牙膏', '牙刷', '沐浴',
           '身体乳', '香水', '化妆', '防晒')) return 'household';
   if (has('soup', '汤', 'curry', '咖喱', 'congee', '粥', 'broth', 'stew', '炖')) return 'soup';
-  if (has('milk', '奶', 'yogurt', '酸奶', 'cream', 'cheese', '芝士', 'butter', '黄油', 'drink', '饮')) return 'milk';
+  if (has('milk', '奶', 'yogurt', '酸奶', 'cream', 'cheese', '芝士', 'butter', '黄油')) return 'milk';
+  // Beverages that are NOT dairy. Checked after milk (so "Coconut Milk" still
+  // reads as milk) but before pantry (which claims 'tea' / 'coffee' / '茶').
+  if (has('kombucha', '康普茶', 'juice', '果汁', '汁', 'tea', '茶', 'coffee', '咖啡', 'soda',
+          'sparkling', 'cider', 'lemonade', 'smoothie', 'drink', '饮', '气泡')) return 'drinks';
   if (has('meat', '肉', 'beef', '牛', 'pork', '猪', 'chicken', '鸡', 'fish', '鱼', 'seafood', '海鲜', 'prawn', '虾', 'lamb', '羊')) return 'meat';
   if (has('bread', '面包', 'cake', '蛋糕', 'pastry', 'bun', '包', 'bakery', 'croissant', 'cookie', '饼干', 'muffin')) return 'bakery';
   if (has('snack', '零食', 'chip', 'crisp', 'nut', '果仁', 'cracker', '脆', 'bar ', 'granola')) return 'snack';
