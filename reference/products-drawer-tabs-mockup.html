@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — Products drawer tab strip options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   The drawer's tab strip — four options, all at the real 560px.
+   Same product in every frame: Stock 30, a designed page.
+   Live --td-* tokens. Inter, sentence case, weights 400/500 only,
+   nothing below 13px, tabular numbers.
+   ============================================================ */
+:root{
+  --td-surface:#18233A;--td-raised:#1E2A44;--td-border:#2A3550;
+  --td-text:#FBF9F4;--td-text2:#9AA3B2;--td-heat-rgb:251,249,244;
+  --td-dusk:#6E67AF;--td-dusk-tint:#262A4A;--td-sage:#A3B49F;--td-sage-tint:#1E2C26;--td-sage-ink:#A3B49F;
+  --td-amber:#C9954A;--td-amber-tint:#33290F;--td-amber-ink:#C9954A;--td-paper:#111A2B;
+}
+:root[data-theme="light"]{
+  --td-surface:#FFFFFF;--td-raised:#F6F3EC;--td-border:#E4E0D5;
+  --td-text:#111A2B;--td-text2:#58606E;--td-heat-rgb:17,26,43;
+  --td-dusk-tint:#EEEDF6;--td-sage-tint:#EDF1EC;--td-sage-ink:#4A6249;
+  --td-amber-tint:#F7EEDE;--td-amber-ink:#8A6425;--td-paper:#FBF9F4;
+}
+:root{--f:"Inter",-apple-system,system-ui,sans-serif}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--f);font-size:15px;line-height:1.6;color:var(--td-text);background:var(--td-paper)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.num{font-variant-numeric:tabular-nums}
+.bar{position:sticky;top:0;z-index:9;display:flex;gap:18px;align-items:center;padding:10px 24px;
+  background:var(--td-text);color:var(--td-paper);font-size:13px}
+.bar b{font-weight:500}
+.bar label{display:inline-flex;gap:6px;align-items:center;cursor:pointer;opacity:.75}
+.wrap{max-width:1240px;margin:0 auto;padding:40px 24px 96px}
+.opt{margin-bottom:52px}
+.opt-h{font-size:18px;font-weight:500}
+.opt-s{font-size:13px;color:var(--td-text2);margin:4px 0 18px;max-width:70ch;text-wrap:pretty}
+.opt-s b{color:var(--td-text);font-weight:500}
+.row{display:flex;gap:28px;align-items:flex-start;flex-wrap:wrap}
+.note{font-size:13px;color:var(--td-text2);flex:1;min-width:230px;max-width:32ch}
+.note b{display:block;color:var(--td-text);font-weight:500;margin-bottom:6px}
+.note ul{margin-left:16px}.note li{margin-bottom:5px}
+.good{color:var(--td-sage-ink)}.bad{color:#B4533E}
+:root[data-theme="dark"] .bad{color:#D07A66}
+
+/* the drawer slice */
+.dw{width:560px;flex:none;border:1px solid var(--td-border);border-radius:14px;overflow:hidden;background:var(--td-paper)}
+.dwb{padding:0 18px}
+.stub{margin:18px 0;border:1px solid var(--td-border);border-radius:14px;background:var(--td-surface);
+  padding:16px;color:var(--td-text2);font-size:13px}
+
+/* shared strip mechanics */
+.tabs{display:flex;border-bottom:1px solid var(--td-border)}
+.tab{position:relative;color:var(--td-text2);white-space:nowrap;display:inline-flex;align-items:center;gap:8px}
+.tab.on{color:var(--td-text);font-weight:500}
+.tab.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--td-text);border-radius:2px}
+.cnt{font-size:13px;font-weight:400;color:var(--td-text2);font-variant-numeric:tabular-nums}
+.tab.on .cnt{color:var(--td-text)}
+/* a state mark that is a fact, not an alarm and not automation */
+.mark{display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:999px;
+  font-size:13px;font-weight:400;background:var(--td-raised);color:var(--td-text2);
+  border:1px solid var(--td-border)}
+
+/* TODAY — reproduced faithfully, faults and all */
+.t-today .tabs{gap:2px}
+.t-today .tab{font:500 13px var(--f);padding:10px 10px 11px}
+.t-today .cnt{font-size:11px;font-weight:600}
+.t-today .mark{font-size:10px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--td-dusk);background:var(--td-dusk-tint);border:0;height:auto;padding:2px 7px}
+
+/* A — same pattern, properly sized */
+.t-a .tabs{gap:24px}
+.t-a .tab{font-size:15px;padding:14px 0 13px}
+
+/* B — equal columns, centred */
+.t-b .tabs{gap:0}
+.t-b .tab{flex:1;justify-content:center;font-size:15px;padding:14px 0 13px}
+
+/* C — segmented pill track */
+.t-c .tabs{border-bottom:0;gap:3px;padding:4px;background:var(--td-raised);
+  border:1px solid var(--td-border);border-radius:10px;margin-top:4px}
+.t-c .tab{flex:1;justify-content:center;font-size:15px;padding:9px 8px;border-radius:8px}
+.t-c .tab.on{background:var(--td-surface);box-shadow:0 1px 2px rgba(17,26,43,.06)}
+.t-c .tab.on::after{display:none}
+
+/* D — bigger, with the icons back */
+.t-d .tabs{gap:22px}
+.t-d .tab{font-size:15px;padding:14px 0 13px}
+.t-d .tab svg{width:17px;height:17px;opacity:.7}
+.t-d .tab.on svg{opacity:1}
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <b>Drawer tabs — four options</b>
+  <span style="opacity:.6">560px · Stock 30 · a designed page</span>
+  <span style="flex:1"></span>
+  <label><input type="checkbox" onclick="document.documentElement.setAttribute('data-theme',this.checked?'dark':'light')"> Dark</label>
+</div>
+
+<div class="wrap">
+
+<div class="opt">
+  <div class="opt-h">Today</div>
+  <div class="opt-s">The strip breaks <b>four type rules at once</b>, and they compound into something that reads as small print rather than as the drawer's main navigation.</div>
+  <div class="row">
+    <div class="dw t-today"><div class="dwb">
+      <div class="tabs">
+        <button class="tab on">Basics</button>
+        <button class="tab">Stock <span class="cnt num">30</span></button>
+        <button class="tab">Page <span class="mark">Designed</span></button>
+        <button class="tab">Details</button>
+      </div>
+      <div class="stub">Basics…</div>
+    </div></div>
+    <div class="note"><b>Faults</b><ul>
+      <li class="bad">Tabs are 13px — the caption size, used for the drawer's primary navigation</li>
+      <li class="bad">"DESIGNED" is uppercase, banned outright (§1.6)</li>
+      <li class="bad">That mark is 10px and the count 11px; nothing may go under 13px (§1.3)</li>
+      <li class="bad">Both are weight 600; only 400 and 500 exist</li>
+      <li class="bad">Dusk means "the system did this" and the page already spends its one Dusk on Add product (§1.8)</li>
+    </ul></div>
+  </div>
+</div>
+
+<div class="opt">
+  <div class="opt-h">A · Same pattern, properly sized <span style="font-size:13px;font-weight:400;color:var(--td-sage-ink)">— recommended</span></div>
+  <div class="opt-s">15px, real breathing room between tabs, taller hit area. Nothing structural changes — this is the strip it was always meant to be, at the size the type scale actually allows. "Designed" becomes a quiet fact in the neutral palette, because it describes the product, not an automation.</div>
+  <div class="row">
+    <div class="dw t-a"><div class="dwb">
+      <div class="tabs">
+        <button class="tab on">Basics</button>
+        <button class="tab">Stock <span class="cnt num">30</span></button>
+        <button class="tab">Page <span class="mark">Designed</span></button>
+        <button class="tab">Details</button>
+      </div>
+      <div class="stub">Basics…</div>
+    </div></div>
+    <div class="note"><b>Trade</b><ul>
+      <li class="good">Reads as navigation, not small print</li>
+      <li class="good">Every rule satisfied, nothing invented</li>
+      <li class="good">Same shape as the page's own sub-view strip</li>
+      <li>Tabs sit left, so the right of the strip is empty</li>
+    </ul></div>
+  </div>
+</div>
+
+<div class="opt">
+  <div class="opt-h">B · Equal columns</div>
+  <div class="opt-s">Each tab takes a quarter of the width and centres its label. Fills the strip edge to edge and gives the largest possible target for each one.</div>
+  <div class="row">
+    <div class="dw t-b"><div class="dwb">
+      <div class="tabs">
+        <button class="tab on">Basics</button>
+        <button class="tab">Stock <span class="cnt num">30</span></button>
+        <button class="tab">Page <span class="mark">Designed</span></button>
+        <button class="tab">Details</button>
+      </div>
+      <div class="stub">Basics…</div>
+    </div></div>
+    <div class="note"><b>Trade</b><ul>
+      <li class="good">Biggest targets, no wasted strip</li>
+      <li class="good">Underline length reads as a real segment</li>
+      <li class="bad">"Page Designed" is far wider than "Basics", so equal columns make the gaps uneven</li>
+      <li class="bad">Breaks from how the page's sub-view strip sits</li>
+    </ul></div>
+  </div>
+</div>
+
+<div class="opt">
+  <div class="opt-h">C · Segmented pill</div>
+  <div class="opt-s">A cream track with the active tab as a raised pill — the shape the editor used before the drawer rebuild, and the one the sales-range chips still use. Unmistakable about which pane is open.</div>
+  <div class="row">
+    <div class="dw t-c"><div class="dwb">
+      <div class="tabs">
+        <button class="tab on">Basics</button>
+        <button class="tab">Stock <span class="cnt num">30</span></button>
+        <button class="tab">Page</button>
+        <button class="tab">Details</button>
+      </div>
+      <div class="stub">Basics…</div>
+    </div></div>
+    <div class="note"><b>Trade</b><ul>
+      <li class="good">Strongest signal of the open pane</li>
+      <li class="good">Familiar from the range chips</li>
+      <li class="bad">§1.7 reserves the pill for filters; underline is the pattern for switching what you are looking at</li>
+      <li class="bad">Little room left for the count and the Designed mark</li>
+    </ul></div>
+  </div>
+</div>
+
+<div class="opt">
+  <div class="opt-h">D · Bigger, with the icons back</div>
+  <div class="opt-s">Option A plus the pane icons, which were dropped when the drawer was 480px and there was no room. At 560px they fit, and they give each tab a fixed anchor the eye can return to.</div>
+  <div class="row">
+    <div class="dw t-d"><div class="dwb">
+      <div class="tabs">
+        <button class="tab on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="8.5" cy="9.5" r="1.5"/><path d="M21 15l-4.5-4-8.5 8"/></svg>Basics</button>
+        <button class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 7.5l9-4.5 9 4.5-9 4.5-9-4.5z"/><path d="M3 7.5V17l9 4.5 9-4.5V7.5"/></svg>Stock <span class="cnt num">30</span></button>
+        <button class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M6 3h8l4 4v14H6z"/><path d="M14 3v4h4"/></svg>Page</button>
+        <button class="tab"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1.4" fill="currentColor" stroke="none"/><circle cx="3.5" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="3.5" cy="18" r="1.4" fill="currentColor" stroke="none"/></svg>Details</button>
+      </div>
+      <div class="stub">Basics…</div>
+    </div></div>
+    <div class="note"><b>Trade</b><ul>
+      <li class="good">Most substantial strip of the four</li>
+      <li class="good">Icons are fixed landmarks, useful on a strip you hit constantly</li>
+      <li class="bad">No room left for the Designed mark beside Page</li>
+      <li class="bad">Four icons is decoration if the four words already read clearly</li>
+    </ul></div>
+  </div>
+</div>
+
+<div class="opt">
+  <div class="opt-h">Fixed in all four</div>
+  <div class="opt-s">
+    <b>Designed</b> is sentence case, 13px, weight 400, in the neutral palette. It was uppercase 10px weight 600 in Dusk — the uppercase ban, two breaks of the type scale, and a second Dusk element on a page whose one Dusk is already spent on Add product. Same for the <b>30</b>, which was 11px weight 600.
+  </div>
+</div>
+
+</div>
+</body>
+</html>

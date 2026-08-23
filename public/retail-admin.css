@@ -3001,20 +3001,29 @@
      mockup's), the icons go, and the sales KPIs wrap instead of squeezing to
      three unreadable columns. All of it is scoped to the dock — expanded, the
      editor gets the room back and keeps the fuller treatment. */
+  /* The drawer's tab strip. 15px, not the 13px caption size it was using for
+     the drawer's primary navigation, with the gap doing the separating instead
+     of horizontal padding — so the underline sits under the WORD rather than
+     under the word plus its padding. Taller hit area to match. */
   .pa-split-editor #pd-editor .pd-tabs {
     background: none; border: 0; border-bottom: 1px solid var(--td-border);
-    border-radius: 0; padding: 0; gap: 2px; margin: 2px 0 18px;
+    border-radius: 0; padding: 0; gap: 24px; margin: 2px 0 20px;
   }
   .pa-split-editor #pd-editor .pd-tab {
-    flex: 0 1 auto; position: relative; padding: 10px 10px 11px; border-radius: 0;
+    flex: 0 1 auto; position: relative; padding: 14px 0 13px;
+    border-radius: 0; font-size: 15px; gap: 8px;
   }
   .pa-split-editor #pd-editor .pd-tab svg { display: none; }
   .pa-split-editor #pd-editor .pd-tab.is-active {
     background: none; box-shadow: none; font-weight: 500;
   }
   .pa-split-editor #pd-editor .pd-tab.is-active::after {
-    content: ""; position: absolute; left: 6px; right: 6px; bottom: -1px;
+    content: ""; position: absolute; left: 0; right: 0; bottom: -1px;
     height: 2px; background: var(--td-text); border-radius: 2px;
+  }
+  @media (max-width: 620px) {
+    .pa-split-editor #pd-editor .pd-tabs { gap: 16px; }
+    .pa-split-editor #pd-editor .pd-tab { font-size: 15px; }
   }
   .pa-split-editor #pd-editor .pd-sales-kpis {
     grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 10px 14px;
@@ -11514,14 +11523,20 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #pd-editor .pd-radio-txt span { display: block; font-size: 12px; color: var(--td-text2); margin-top: 2px; line-height: 1.45; }
 
   /* Tab glance chips — a live hint of what's inside a pane without opening it. */
+  /* The count and the "Designed" mark beside their tabs. Both were below the
+     13px floor and above the 500 weight ceiling, and the mark was uppercase in
+     Dusk — a second Dusk element on a page whose one Dusk is already spent on
+     Add product, marking a state rather than an automation. Now: 13px, weight
+     400, sentence case, neutral. A fact, quietly. */
   #pd-editor .pd-tab-cnt {
-    font-size: 11px; font-weight: 600; color: var(--td-text2);
+    font-size: 13px; font-weight: 400; color: var(--td-text2);
     font-variant-numeric: tabular-nums;
   }
   #pd-editor .pd-tab.is-active .pd-tab-cnt { color: var(--td-text); }
   #pd-editor .pd-tab-chip {
-    font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
-    color: var(--td-dusk); background: var(--td-dusk-tint); border-radius: 999px; padding: 2px 7px;
+    font-size: 13px; font-weight: 400; letter-spacing: 0; text-transform: none;
+    color: var(--td-text2); background: var(--td-raised);
+    border: 1px solid var(--td-border); border-radius: 999px; padding: 1px 9px;
   }
 
   /* ── Editor bento: every tab's cards reflow with the editor's width ─────────
