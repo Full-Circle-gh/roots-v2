@@ -71,9 +71,16 @@ async function tick() {
 
     // Probe every candidate; debounce into a usable/unusable verdict.
     const avail = {};
+    // Raw, undebounced probe results. `avail` is what the failover DECIDES on and
+    // must stay debounced, but on a cold start failCount is empty, so every
+    // candidate reads usable no matter what curl said — the first tick literally
+    // cannot express "this path is down". The cold-start report below needs the
+    // truth, so keep both.
+    const probed = {};
     for (const c of cands) {
       let ok;
       try { ok = await pm.probe(c.url); } catch (_) { ok = false; }
+      probed[c.label] = ok;
       const key = `${channel}:${c.label}`;
       failCount[key] = ok ? 0 : (failCount[key] || 0) + 1;
       // 'direct' is the last resort and always usable; proxies need < threshold fails.
@@ -102,8 +109,23 @@ async function tick() {
     const prevActive = lastActive[channel];
     const toName = pm.LABEL_CN[active.label] || active.label;
     if (firstRun) {
-      await announce(`ℹ️ ${cn}：当前走 ${toName}\n${cn} active proxy: ${active.label}\n${desc}`,
-        `${channel}: active=${active.label} — ${desc}`);
+      // A cold start used to page the bot with this baseline EVERY time, and this
+      // process restarts on every deploy that ships anything under lib/ (see
+      // bounce_daemon in scripts/deploy-apply.sh — it fires on SHARED_TOUCHED, and
+      // nearly every ship touches lib/). Eight deploys on 2026-08-23 meant sixteen
+      // bot messages, all of them saying nothing is wrong; that is how a channel
+      // the operator is supposed to read gets tuned out.
+      // So the baseline now always goes to the pm2 log, and pages the group only
+      // when the process comes up ALREADY degraded — some path failed its probe, or
+      // we are not on the top-priority candidate. Read `probed`, not `avail`: see
+      // above, the debounce makes every candidate look healthy on tick one.
+      const rawDesc = cands.map(c => `${pm.LABEL_CN[c.label] || c.label}${probed[c.label] ? '✓' : '✗'}`).join(' · ');
+      const line = `${channel}: active=${active.label} — ${rawDesc}`;
+      if (cands.some(c => !probed[c.label]) || active.label !== cands[0].label) {
+        await announce(`⚠️ ${cn}：启动时已降级，当前走 ${toName}\n${cn} started DEGRADED — active proxy: ${active.label}\n${rawDesc}`, line);
+      } else {
+        say(line);   // all green on boot — the log remembers it, the group does not need to
+      }
       lastLogged[channel] = Date.now();
     } else if (prevActive !== undefined && prevActive !== active.url) {
       await announce(`🔀 ${cn}：切换到 ${toName}\n${cn} FAILOVER → ${active.label}\n${desc}`,
