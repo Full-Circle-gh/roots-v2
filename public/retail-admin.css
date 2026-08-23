@@ -2965,7 +2965,7 @@
      being a column. A drawer never opens a drawer. */
   .pa-split-editor {
     position: fixed; top: var(--td-topbar-h, 56px); right: 0; bottom: 0; z-index: 190;
-    width: min(480px, 100vw); display: flex; flex-direction: column;
+    width: min(560px, 100vw); display: flex; flex-direction: column;
     background: var(--td-paper); border-left: 1px solid var(--td-border);
     box-shadow: 0 1px 2px rgba(17,26,43,.05), 0 4px 16px rgba(17,26,43,.04);
     transform: translateX(100%); opacity: 0; visibility: hidden;
@@ -3076,7 +3076,32 @@
   .pd-tag-shop.is-live .pd-tag-sw { background: var(--td-sage-ink); }
   .pd-tag-shop.is-live .pd-tag-sw::after { left: 14px; }
 
-  /* The panel's own head: tighter padding at 480px. */
+  /* The drawer's footer: save state on the left, the record's actions right.
+     The status left the header, where — sandwiched between the shop toggle and
+     Expand — it read as a label belonging to that button. Down here it sits
+     with the things that also act on the record as a whole, and it is pinned,
+     so it stays in view while the body scrolls. */
+  #pd-editor .pu-editor-foot { flex-wrap: wrap; gap: 10px; justify-content: flex-start; }
+  #pd-editor .pd-foot-sp { flex: 1; min-width: 0; }
+  #pd-editor .pd-foot-acts { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+  /* ── The sales chart ───────────────────────────────────────────────────── */
+  .pd-chart { margin-top: 14px; }
+  .pd-chart svg { display: block; width: 100%; height: 88px; }
+  .pd-chart svg rect { fill: var(--td-text); }
+  .pd-chart .pd-chart-base { stroke: var(--td-border); stroke-width: 1; vector-effect: non-scaling-stroke; }
+  .pd-chart-x {
+    display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+    margin-top: 8px; font-size: 13px; color: var(--td-text2);
+    font-variant-numeric: tabular-nums;
+  }
+  .pd-chart-peak { color: var(--td-text); font-weight: 500; }
+  .pd-chart-empty {
+    margin-top: 14px; padding: 20px 0; text-align: center;
+    font-size: 13px; color: var(--td-text2);
+  }
+
+  /* The panel's own head: tighter padding than the full page. */
   .pa-split-editor #pd-editor .pu-editor-head { padding: 14px 16px; }
   .pa-split-editor #pd-editor .pu-editor-body { padding: 14px; }
   .pa-split-editor #pd-editor .pu-editor-foot { padding: 12px 14px; flex-wrap: wrap; gap: 8px; }
@@ -11456,8 +11481,9 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #pd-editor .pd-sales-kpi .l { font-size: 11.5px; color: var(--td-text2); margin-top: 2px; }
   /* .db-spark-wrap gives position:relative + the dot marker's absolute
      placement; override its height/color here for this card's bigger chart. */
-  #pd-editor .pd-sales-spark { width: 100%; height: 44px; margin-top: 10px; color: var(--td-text); }
-  #pd-editor .pd-sales-spark .db-spark-dot { background: var(--td-text); }
+  /* The old fixed 44px box was sized for dashSparkline. The chart draws its
+     own height now, so the container just gets out of the way. */
+  #pd-editor .pd-sales-spark { width: 100%; color: var(--td-text); }
 
   /* ── Focused panes (Basics / Stock / Page / Details) ───────────────────────
      Panes are plain show/hide; every field inside is the same node (same id,

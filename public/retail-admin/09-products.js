@@ -2075,6 +2075,46 @@ function pdSetSalesRange(days, btn) {
   pdLoadSales(_pdSalesId);
 }
 
+// ── The sales chart ─────────────────────────────────────────────────────────
+// Bars, not a smoothed line. Units sold per day is a discrete count and most
+// days are zero, so a curve invents a slope between "sold 3" and "sold none"
+// and reads as a row of spikes. A bar says what happened on that day and
+// nothing more. Flat fill, no gradient (§1.4 bans them), one baseline rule,
+// and the peak called out in words so the shape has a scale to be read against.
+function pdSalesChart(d) {
+  const rows = Array.isArray(d && d.daily) ? d.daily : [];
+  if (!rows.length) return '';
+  const max = Math.max(...rows.map(r => r.units || 0));
+  const per = { day: cuT('day', '天'), week: cuT('week', '周'), month: cuT('month', '月') }[d.granularity || 'day'];
+  if (!max) {
+    return `<div class="pd-chart-empty">${cuT('No sales in this window', '此区间暂无销量')}</div>`;
+  }
+  const W = 100, H = 34, n = rows.length;
+  const slot = W / n;
+  const bw = Math.max(0.6, Math.min(slot * 0.62, 3.2));
+  const bars = rows.map((r, i) => {
+    const u = r.units || 0;
+    const h = u ? Math.max(1.5, (u / max) * H) : 0;
+    const x = (i * slot) + (slot - bw) / 2;
+    if (!h) return '';
+    // Native title = a real tooltip with no popover machinery to keep in sync.
+    return `<rect x="${x.toFixed(2)}" y="${(H - h).toFixed(2)}" width="${bw.toFixed(2)}" height="${h.toFixed(2)}"`
+      + ` rx="${Math.min(bw / 2, 1).toFixed(2)}"><title>${escapeHtml(r.date)} · ${u}</title></rect>`;
+  }).join('');
+  const fmt = s => String(s || '').slice(5).replace('-', '/');   // 2026-08-23 → 08/23
+  return '<div class="pd-chart">'
+    + `<svg viewBox="0 0 ${W} ${H + 1}" preserveAspectRatio="none" aria-hidden="true">`
+    + `<line class="pd-chart-base" x1="0" y1="${H + 0.5}" x2="${W}" y2="${H + 0.5}"/>`
+    + bars
+    + '</svg>'
+    + '<div class="pd-chart-x">'
+    +   `<span>${escapeHtml(fmt(rows[0].date))}</span>`
+    +   `<span class="pd-chart-peak">${cuT('peak', '峰值')} ${max} / ${per}</span>`
+    +   `<span>${escapeHtml(fmt(rows[rows.length - 1].date))}</span>`
+    + '</div>'
+    + '</div>';
+}
+
 async function pdLoadSales(id) {
   _pdSalesId = id;
   const card = document.getElementById('pd-sales-card');
@@ -2100,12 +2140,7 @@ async function pdLoadSales(id) {
   setText('pd-sales-units', Number(d.units || 0).toLocaleString());
   setText('pd-sales-revenue', '¥' + Number(d.revenue || 0).toLocaleString(undefined, { maximumFractionDigits: 0 }));
   setText('pd-sales-rank', d.rank ? ('#' + d.rank + ' / ' + d.total_products) : cuT('No sales', '暂无销量'));
-  // Same chart engine as the dashboard (dashSparkline in 03-dashboard.js) —
-  // smoothed curve + ink-to-transparent gradient wash + a marker on today,
-  // instead of a raw straight-line polyline.
-  if (spark && Array.isArray(d.daily) && d.daily.length > 1) {
-    spark.innerHTML = dashSparkline(d.daily.map(x => x.units), { dot: true });
-  }
+  if (spark) spark.innerHTML = pdSalesChart(d);
 }
 
 // Docked editor visibility — pdShowDocked reveals the editor in the right

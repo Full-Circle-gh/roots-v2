@@ -20210,8 +20210,25 @@ router.get('/api/retail-admin/products/:id/sales', requireRetailAdmin, (req, res
 
   const nowGz = new Date(Date.now() + 8 * 3600 * 1000);
   const toDefault = nowGz.toISOString().slice(0, 10);
-  const days = Math.min(90, Math.max(1, parseInt(req.query.days, 10) || 30));
-  const fromDefault = new Date(nowGz.getTime() - (days - 1) * 86400000).toISOString().slice(0, 10);
+  // `days=all` runs from this product's FIRST paid sale to today. A product
+  // that has never sold has no such date, so it falls back to the 30-day
+  // window rather than returning an empty range.
+  const isAll = String(req.query.days || '') === 'all';
+  let fromDefault;
+  if (isAll) {
+    const first = tdb().prepare(`
+      SELECT MIN(${PDATEO}) AS d
+        FROM retail_order_items i
+        JOIN retail_orders o ON o.id = i.order_id
+       WHERE i.product_id = ? AND ${PAIDO}
+    `).get(id);
+    fromDefault = (first && first.d)
+      ? first.d
+      : new Date(nowGz.getTime() - 29 * 86400000).toISOString().slice(0, 10);
+  } else {
+    const days = Math.min(90, Math.max(1, parseInt(req.query.days, 10) || 30));
+    fromDefault = new Date(nowGz.getTime() - (days - 1) * 86400000).toISOString().slice(0, 10);
+  }
   const from = /^\d{4}-\d{2}-\d{2}$/.test(req.query.from || '') ? req.query.from : fromDefault;
   const to   = /^\d{4}-\d{2}-\d{2}$/.test(req.query.to   || '') ? req.query.to   : toDefault;
 
@@ -20242,16 +20259,41 @@ router.get('/api/retail-admin/products/:id/sales', requireRetailAdmin, (req, res
      GROUP BY d
   `).all(id, from, to);
   const byDay = new Map(dailyRows.map(r => [r.d, r.units]));
-  const daily = [];
+  const days = [];
   for (let d = new Date(from + 'T00:00:00Z'); d <= new Date(to + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + 1)) {
     const key = d.toISOString().slice(0, 10);
-    daily.push({ date: key, units: byDay.get(key) || 0 });
+    days.push({ date: key, units: byDay.get(key) || 0 });
+  }
+
+  // Keep the series drawable. A day per point is right for a quarter; over
+  // "all time" a two-year-old product would return ~700 points into a chart a
+  // few hundred pixels wide, so longer spans roll up to weeks and then months.
+  // The client draws whatever it is given and reads `granularity` for labels.
+  const granularity = days.length <= 92 ? 'day' : (days.length <= 731 ? 'week' : 'month');
+  let daily = days;
+  if (granularity !== 'day') {
+    const buckets = new Map();
+    for (const row of days) {
+      // Week buckets start Monday; month buckets on the 1st. The key is also
+      // the bucket's own start date, so the series stays chronological.
+      let key;
+      if (granularity === 'month') { key = row.date.slice(0, 8) + '01'; }
+      else {
+        const dt = new Date(row.date + 'T00:00:00Z');
+        const dow = (dt.getUTCDay() + 6) % 7;          // Mon = 0
+        dt.setUTCDate(dt.getUTCDate() - dow);
+        key = dt.toISOString().slice(0, 10);
+      }
+      buckets.set(key, (buckets.get(key) || 0) + row.units);
+    }
+    daily = [...buckets.entries()].sort((a, b) => a[0] < b[0] ? -1 : 1)
+      .map(([date, units]) => ({ date, units }));
   }
 
   res.json({
     success: true,
     data: {
-      from, to,
+      from, to, granularity, all_time: isAll,
       units: mine.units, revenue: mine.revenue, orders: mine.orders,
       rank: mine.rank, total_products: ranked.length,
       daily,
