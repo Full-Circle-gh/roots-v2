@@ -46,6 +46,19 @@ function scoreMatch(ours, elemeName) {
   const oursCjk = normCjk(ours), eCjk = normCjk(elemeName);
   const oursLat = normLatin(ours), eLat = normLatin(elemeName);
   if (oursCjk && eCjk && oursCjk.length >= 2 && (eCjk.includes(oursCjk) || oursCjk.includes(eCjk))) {
+    // Guard against a short/generic CJK core matching as a small fragment
+    // buried in a much longer, unrelated name — confirmed live: "腰果" (raw
+    // cashews) wrongly contained in "纯腰果发酵奶酪" (cashew SOUR CREAM), "杏仁"
+    // (almonds) in "杏仁酱" (almond BUTTER), "藜麦" (quinoa) in a quinoa SALAD
+    // dish. A generic ingredient name is a substring of every dish that uses
+    // it — containment alone isn't enough. Require the two CJK cores to be
+    // CLOSE in length (not just one containing the other) before trusting it;
+    // this also naturally rejects flavour/size variants that would otherwise
+    // all collide onto one generic listing (three almond-butter flavours all
+    // wanting the same plain "Almond butter" item).
+    const shorter = Math.min(oursCjk.length, eCjk.length);
+    const longer  = Math.max(oursCjk.length, eCjk.length);
+    if (shorter / longer < 0.85) return 0;
     if (oursLat && eLat && (eLat.includes(oursLat) || oursLat.includes(eLat))) return 95;
     return 80;
   }
@@ -98,11 +111,31 @@ async function main() {
     else noMatch.push(p);
   }
 
+  // Two (or more) of OUR products confidently wanting the SAME Eleme listing
+  // means at most one of them is actually right — applying both would have
+  // the second push silently overwrite the first's stock number on that
+  // listing. Demote the whole group to review rather than guess which one
+  // (if either) is correct.
+  const byTarget = new Map();
+  for (const c of confident) (byTarget.get(c.match) || byTarget.set(c.match, []).get(c.match)).push(c);
+  const collided = new Set();
+  for (const [target, group] of byTarget) if (group.length > 1) collided.add(target);
+  const deduped = [];
+  for (const c of confident) {
+    if (collided.has(c.match)) review.push({ ...c, collision: true });
+    else deduped.push(c);
+  }
+  confident.length = 0;
+  confident.push(...deduped);
+
   console.log(`\n[match] CONFIDENT (${confident.length}):`);
   for (const c of confident) console.log(`  [${c.score}] "${c.p.name_cn || c.p.name_en}" → "${c.match}"`);
 
   console.log(`\n[match] NEEDS REVIEW (${review.length}) — ambiguous, NOT auto-applied:`);
-  for (const r of review) console.log(`  [${r.score}] "${r.p.name_cn || r.p.name_en}" → best guess "${r.match}"`);
+  for (const r of review) {
+    const tag = r.collision ? ' [COLLISION — another product also confidently wants this listing]' : '';
+    console.log(`  [${r.score}] "${r.p.name_cn || r.p.name_en}" → best guess "${r.match}"${tag}`);
+  }
 
   console.log(`\n[match] NO MATCH (${noMatch.length}) — likely not sold on Eleme, or the name is very different:`);
   for (const n of noMatch) console.log(`  "${n.name_cn || n.name_en}"`);
