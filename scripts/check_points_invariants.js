@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+// GAP G27. Nothing but server.js used to parse .env, so this script saw no
+// TACET_PG_* and lib/pg refused to build a pool -- an environment failure
+// wearing the clothes of a data finding. Loaded here, before anything reaches
+// for a connection, so a missing variable is reported as a missing variable.
+require('../lib/load-env').loadEnv();
 //
 // check_points_invariants.js — the three invariants that prove no customer is
 // silently short of loyalty points.

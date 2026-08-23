@@ -40,8 +40,10 @@
     // The product table and bundles list are rendered in ONE language (cuT)
     // under data-no-i18n containers, so the auto-translator never touches
     // them — repaint ourselves when the operator flips EN/CN.
-    // Static chrome (headers, buttons) is handled by the "EN · CN" splitter.
+    // Buttons and the remaining static chrome are handled by the "EN · CN"
+    // splitter; the column headings are data now, so they repaint here too.
     if (window.onLangChange) onLangChange(function () {
+      mtRenderTableHead();
       mtFilterProducts();
       mtRenderBundles();
     });
@@ -137,12 +139,24 @@
       // Try to guess 天河 / 越秀 by code or name
       _storeA = _stores.find(s => s.code === 'tianhe' || s.name?.includes('天河')) || _stores[0] || null;
       _storeB = _stores.find(s => s.code === 'yuexiu' || s.name?.includes('越秀')) || _stores[1] || null;
-      // Column headers are static bilingual markup ("Tianhe delivery · 天河外卖")
-      // localized by the EN/CN splitter — no JS header-setting needed.
+      mtRenderTableHead();
     } catch (e) {
       console.warn('[meituan] loadStores error', e);
     }
     mtRenderStoreFilter();
+  }
+
+  // The columns are named after the stores themselves — "Tianhe delivery" and
+  // "Yuexiu instant" carried the matching mode in the heading, which the column
+  // already says (the Yuexiu cells talk about 货号 throughout). Because the text
+  // is data now rather than the splitter's static "EN · CN" markup, it has to be
+  // repainted on a language flip like everything else the JS writes.
+  function mtRenderTableHead() {
+    const cn = document.documentElement.dataset.uiLang === 'cn';
+    const h0 = document.getElementById('mt-th-store-0');
+    const h1 = document.getElementById('mt-th-store-1');
+    if (h0 && _storeA) h0.textContent = mtStoreName(_storeA.code, cn);
+    if (h1 && _storeB) h1.textContent = mtStoreName(_storeB.code, cn);
   }
 
   // ── Status ─────────────────────────────────────────────────────────────────
