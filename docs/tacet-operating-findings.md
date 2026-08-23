@@ -143,6 +143,10 @@ crontab -l | sed 's|...|...|' | crontab -
 
 **Whether to schedule it is a decision nobody has taken.** It is smaller now than it was — the tree is clean apart from 15 known files — which is exactly when it is cheap to schedule.
 
+> 🔴 **THIS BIT DURING THE CLEANUP THAT DELETED IT, 2026-08-23, AND THE SEQUENCE IS WORTH KEEPING.** Three scripts — `rollback-delta-report.js`, `test_db_driver.js`, `diagnose_pg_numeric_parser.js` — were deleted from the box by hand. **The very next deploy put them back**, because the branch it shipped had modified them and they still existed in the repository at that point. The deploy after that deleted them from the repository — **and could not remove them from the box, because a deploy never removes anything.** They sat there requiring three modules that no longer existed.
+>
+> **THE LESSON IS THE ORDER.** Deleting a file from the box before it is deleted from the repository is undone by the next deploy that touches it. **Delete from the repository first, let it land, then remove from the box.** Nothing warns you: the files were inert, the application never loaded them, and every health check stayed green while three scripts on the box pointed at modules that had been gone for an hour.
+
 ## 3.4 🔴 OPEN — three untracked scripts on the box, in one copy, and two of them are in cron
 
 **`/root/scripts/` is outside the deploy tree and outside git. No repository search will ever find it. Nothing backs it up.**
