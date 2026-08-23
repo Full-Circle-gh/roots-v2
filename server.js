@@ -945,6 +945,15 @@ app.listen(PORT, () => {
       getTenantDb: tenantDb.getTenantDb,
     });
   } catch (e) { console.warn('[ship.reminder] start failed:', e.message); }
+  // Seeded-review top-up sweeper. Holds every published product at the review
+  // floor the operator set on Inbox → Reviews. OFF unless they turned it on, and
+  // a no-op once the catalogue sits at the floor, so it costs nothing when idle.
+  try {
+    require('./lib/review-topup').startReviewTopupSweeper({
+      mainDb:      require('./database'),
+      getTenantDb: tenantDb.getTenantDb,
+    });
+  } catch (e) { console.warn('[review.topup] start failed:', e.message); }
   // Secrets-at-rest health (Platform readiness ⑩). A non-Roots tenant's creds
   // are AES-256-GCM encrypted under TENANT_SECRET_KEY; if that key is missing
   // on a box that already has tenants, none of their secrets can be decrypted

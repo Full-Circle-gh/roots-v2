@@ -1728,11 +1728,102 @@ function closeReviewLightbox() {
   $('#rv-lightbox-img').src = '';
 }
 
+
+// ── Auto top-up ────────────────────────────────────────────────────────────
+// Operator switch that holds every published product at a floor of N visible
+// reviews, seeding the shortfall. Settings ride the shared config PUT under
+// the dotted key reviews.topup; the estimate + manual run have their own
+// endpoints. Server side: lib/review-topup.js.
+function rtuSyncLabel() {
+  const on = !!$("#rtu-enabled").checked;
+  $("#rtu-status-label").textContent = on ? cuT("ON", "开启") : cuT("OFF", "关闭");
+}
+
+// Paint the "N products are below the line" hint. Also the only place that
+// reads the saved settings back, so the form always reflects the server.
+async function loadReviewTopup(fillForm) {
+  const out = $("#rtu-estimate");
+  try {
+    const { data } = await api("/api/retail-admin/reviews/topup");
+    if (fillForm) {
+      $("#rtu-enabled").checked = !!data.enabled;
+      $("#rtu-min").value = data.min_reviews;
+      $("#rtu-max").value = data.max_per_run;
+      rtuSyncLabel();
+    }
+    if (!data.available) {
+      out.textContent = cuT("Not available on this database.", "此数据库不支持。");
+      return;
+    }
+    if (!data.products) {
+      out.textContent = cuT("Every product is at the line.", "所有商品都已达到设定值。");
+      return;
+    }
+    const capped = data.uncapped > data.reviews
+      ? cuT(" (" + data.reviews + " this run)", "(本次 " + data.reviews + " 条)")
+      : "";
+    out.textContent = cuT(
+      data.products + " products below " + data.min_reviews + " — would add " + data.uncapped + " reviews" + capped,
+      data.products + " 个商品低于 " + data.min_reviews + " 条 — 将补充 " + data.uncapped + " 条评价" + capped
+    );
+  } catch (e) {
+    out.textContent = cuT("Failed", "失败") + ": " + e.message;
+  }
+}
+
+async function saveReviewTopup() {
+  const min = parseInt($("#rtu-min").value, 10);
+  const max = parseInt($("#rtu-max").value, 10);
+  if (!(min >= 1 && min <= 20))  { toast(cuT("Minimum must be 1–20", "最少评价数需为 1–20"), "err"); return; }
+  if (!(max >= 1 && max <= 500)) { toast(cuT("Per-run cap must be 1–500", "每次上限需为 1–500"), "err"); return; }
+  const enabled = !!$("#rtu-enabled").checked;
+  // Turning it ON publishes made-up reviews to shoppers, so make the operator
+  // say yes to that in words rather than to a switch they may have nudged.
+  if (enabled) {
+    const ok = await askConfirm({
+      title: cuT(
+        "Turn on auto top-up? Every published product below " + min + " reviews will be filled with seeded reviews under made-up names. Customers see them as ordinary reviews.",
+        "开启自动补充?所有评价数低于 " + min + " 条的已上架商品,都会以虚构昵称补充种子评价。顾客看到的与普通评价无异。"
+      ),
+      confirmLabel: cuT("Turn on", "开启"),
+    });
+    if (!ok) return;
+  }
+  try {
+    await api("/api/retail-admin/config", {
+      method: "PUT",
+      body: { "reviews.topup": { enabled, min_reviews: min, max_per_run: max } },
+    });
+    toast(cuT("Saved", "已保存"));
+    await loadReviewTopup(false);
+  } catch (e) {
+    toast(cuT("Save failed", "保存失败") + ": " + e.message, "err");
+  }
+}
+
+// Run one sweep by hand. Works while the switch is off so an operator can see
+// what it does before committing to it.
+async function runReviewTopupNow() {
+  const out = $("#rtu-estimate");
+  out.textContent = cuT("Working…", "处理中…");
+  try {
+    const { data } = await api("/api/retail-admin/reviews/topup/run", { method: "POST", body: {} });
+    toast(data.added
+      ? cuT("Added " + data.added + " reviews", "已补充 " + data.added + " 条评价")
+      : cuT("Nothing to add", "无需补充"));
+    await loadReviewTopup(false);
+    if (data.added && REVIEWS_LOADED) await loadReviews();
+  } catch (e) {
+    out.textContent = cuT("Failed", "失败") + ": " + e.message;
+  }
+}
+
 document.querySelector('[data-tab="reviews"]').addEventListener('click', () => {
   if (!REVIEWS_LOADED) {
     REVIEWS_LOADED = true;
     // Tags first so the reviews table can render with the right labels.
     loadReviewTags().then(loadReviews);
+    loadReviewTopup(true);
   }
 });
 
