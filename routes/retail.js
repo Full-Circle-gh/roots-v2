@@ -7080,6 +7080,11 @@ function autoDispatchQingyunForTenant() {
           WHERE order_id = ? AND COALESCE(mode,'') != 'supplier'`
       ).run(o.id);
     } catch (e) { console.warn('[auto-dispatch] shipment mirror', o.id, e.message); }
+    // The rider picking up IS the forward transition into fulfilment, so the
+    // unreserved (out-of-GZ / scheduled) stock is decremented here for the same
+    // reason PATCH /status does it. Idempotent.
+    try { prepareCommitUnreservedOrder(o.id, { actorLabel: 'Auto · rider picked up' }); }
+    catch (e) { console.warn('[auto-dispatch] prepareCommit', o.id, e.message); }
     try { logActivity(null, 'system', 'status_change', 'retail_order', o.id, { from: o.status, to: 'dispatched', reason: 'qingyun_pickup' }, null); } catch {}
     try { notifyOrderStatusChange(o.id, 'dispatched'); } catch (e) { console.warn('[auto-dispatch] notify', o.id, e.message); }
     fired++;
@@ -23018,6 +23023,16 @@ router.post('/api/retail-admin/orders/:id/shipments/:sid/dispatch',
     firstDispatch = true;
   }
 
+  // Dispatching a PARCEL is a forward transition into fulfilment exactly like
+  // clicking "Start preparing" / "Mark dispatched" is, so it owes the same stock
+  // decrement. Without this an out-of-GZ / scheduled order that ships parcel-by-
+  // parcel walks paid → dispatched here, never touches PATCH /status, and its
+  // physical_qty is never deducted — silently, because isStockPending() only
+  // flags 'paid' orders, so the "Stock pending" badge vanishes with the flip.
+  // Idempotent: a no-op for the second parcel and for orders already committed.
+  try { prepareCommitUnreservedOrder(id, { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null }); }
+  catch (e) { console.error('[inventory.prepareCommit (parcel dispatch)]', e); }
+
   logActivity(req.user.id, req.user.username, 'shipment_dispatched', 'retail_order', id,
     { shipment_id: sid, mode: ship.mode, first: firstDispatch }, req.ip);
   if (firstDispatch) {
@@ -23160,6 +23175,12 @@ router.post('/api/retail-admin/orders/:id/shipments/:sid/deliver',
       try { notifyOrderStatusChange(id, 'delivered'); } catch (e) { /* best-effort */ }
     }
   }
+
+  // Same rule as the parcel-dispatch handler above: this stamps dispatched_at
+  // too, so a single-parcel order can land paid → delivered here without ever
+  // passing PATCH /status. Idempotent.
+  try { prepareCommitUnreservedOrder(id, { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null }); }
+  catch (e) { console.error('[inventory.prepareCommit (parcel deliver)]', e); }
 
   logActivity(req.user.id, req.user.username, 'shipment_delivered', 'retail_order', id,
     { shipment_id: sid, mode: ship.mode }, req.ip);
@@ -25811,6 +25832,10 @@ router.post('/api/retail-admin/orders/:id/jd-waybill', requireRetailAdmin, expre
       "UPDATE retail_orders SET status = 'dispatched', dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(id);
     firstDispatch = true;
   }
+  // Minting a JD waybill ships the parcel, so it owes the stock decrement the
+  // bulk waybill-paste path already does (see PUT /tracking/bulk). Idempotent.
+  try { prepareCommitUnreservedOrder(id, { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null }); }
+  catch (e) { console.error('[inventory.prepareCommit (jd waybill)]', e); }
   logActivity(req.user.id, req.user.username, 'jd_waybill_created', 'retail_order', id,
     { waybill, product, shipment_id: shipment.id, package_count: packageCount }, req.ip);
   if (firstDispatch) { try { notifyOrderStatusChange(id, 'dispatched'); } catch (e) { /* best-effort */ } }
