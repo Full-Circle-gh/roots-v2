@@ -182,14 +182,15 @@
       mtRenderLog('mt-log-stock', s.recentStock, true);
       mtRenderLog('mt-log-sys', s.recentSystem, false);
     } catch (e) {
-      // Cannot reach the admin API. Say so where the notice goes, rather than
-      // leaving the last numbers on screen looking current.
-      const n = document.getElementById('mt-notice');
+      // Cannot reach the admin API. Take over the store lines and say so, rather
+      // than leaving the last numbers on screen looking current.
+      const n = document.getElementById('mt-storelines');
       if (n) {
-        n.innerHTML = '<div class="mt-notice"><span class="dot"></span><div class="m"><b>' +
-          cuT('Cannot reach the sync service', '无法连接同步服务') + '</b><div class="sub">' +
+        n.innerHTML = '<div class="mt-storeline att"><span class="dot"></span>' +
+          '<span class="nm">' + cuT('Cannot reach the sync service', '无法连接同步服务') + '</span>' +
+          '<span class="st">' +
           cuT('The numbers above are from the last successful check.', '上方数据为上次成功检查的结果。') +
-          '</div></div></div>';
+          '</span></div>';
       }
     }
   };
@@ -237,36 +238,60 @@
 
     const tiles = document.getElementById('mt-tiles');
     if (tiles) {
+      // Sync now sits on the tile whose number it changes — beside the tabs it
+      // had nothing to relate to, since tabs switch views and this pushes stock.
+      const syncBtn = '<div class="act"><button class="btn btn-sm" id="mt-pushall-btn" onclick="mtPushAll()"' +
+        ' title="' + esc(cuT('Queue a fresh stock push for every mapped product',
+                             '\u4e3a\u6240\u6709\u5df2\u5339\u914d\u5546\u54c1\u6392\u961f\u63a8\u9001\u5e93\u5b58')) + '">' +
+        cuT('Sync now', '\u7acb\u5373\u540c\u6b65') + '</button></div>';
       tiles.innerHTML =
-        tile(cuT('Live on Meituan', '已上架美团'), live, per('live'), false) +
-        tile(cuT('Not matched', '未匹配'), att,
-             cuT('stock stays frozen until matched', '匹配前库存不会更新'), att > 0) +
-        tile(cuT('Stock updates waiting', '待推送库存'), waiting, per('pending'), false);
+        tile(cuT('Live on Meituan', '\u5df2\u4e0a\u67b6\u7f8e\u56e2'), live, per('live'), false) +
+        tile(cuT('Not matched', '\u672a\u5339\u914d'), att,
+             cuT('stock stays frozen until matched', '\u5339\u914d\u524d\u5e93\u5b58\u4e0d\u4f1a\u66f4\u65b0'), att > 0) +
+        tile(cuT('Stock updates waiting', '\u5f85\u63a8\u9001\u5e93\u5b58'), waiting, per('pending'), false, syncBtn);
     }
 
-    const notice = document.getElementById('mt-notice');
-    if (notice) {
-      const bad = rows.filter(r => r.blocked)[0];
-      if (!bad) { notice.innerHTML = ''; }
-      else {
-        const who  = mtStoreName(bad.code, cn) || bad.name;
-        const what = MT_BLOCK_TXT[bad.blockedBy] || ['is not syncing', '同步已停'];
-        const bits = [];
-        if (bad.blockedAt)   bits.push(cuT('since ' + fmtAgo(bad.blockedAt), fmtAgo(bad.blockedAt)));
-        if (bad.lastOrderAt) bits.push(cuT('last order ' + fmtAgo(bad.lastOrderAt), '最近订单 ' + fmtAgo(bad.lastOrderAt)));
-        notice.innerHTML = '<div class="mt-notice"><span class="dot"></span>' +
-          '<div class="m"><b>' + esc(who + ' ' + cuT(what[0], what[1])) + '.</b>' +
-          (bits.length ? '<div class="sub">' + esc(bits.join(' · ')) +
-            ' · ' + esc(cuT('No stock is going out and no orders are coming in.',
-                            '库存不再推送,订单也不会导入。')) + '</div>' : '') +
-          '</div>' + mtFixAction(bad.code) + '</div>';
-      }
+    // One line per store: state, the one action that unblocks it, and the
+    // store's own switch. Replaces the separate notice — the blocked state and
+    // the control that answers it belong on the same row.
+    const lines = document.getElementById('mt-storelines');
+    if (lines) {
+      lines.innerHTML = rows.map(st => {
+        const who = mtStoreName(st.code, cn) || st.name;
+        const off = st.enabled === false;
+        const what = MT_BLOCK_TXT[st.blockedBy] || ['is not syncing', '\u540c\u6b65\u5df2\u505c'];
+        let state, cls;
+        if (off) {
+          state = cuT('Paused — the daemon skips this store', '\u5df2\u6682\u505c \u2014 \u540c\u6b65\u670d\u52a1\u4e0d\u518d\u5904\u7406\u8be5\u95e8\u5e97');
+          cls = ' off';
+        } else if (st.blocked) {
+          const bits = [];
+          if (st.blockedAt)   bits.push(cuT('since ' + fmtAgo(st.blockedAt), fmtAgo(st.blockedAt)));
+          if (st.lastOrderAt) bits.push(cuT('last order ' + fmtAgo(st.lastOrderAt), '\u6700\u8fd1\u8ba2\u5355 ' + fmtAgo(st.lastOrderAt)));
+          state = cuT(what[0], what[1]) + (bits.length ? ' \u00b7 ' + bits.join(' \u00b7 ') : '');
+          cls = ' att';
+        } else {
+          const n = Number(st.pending || 0) + Number(st.processing || 0);
+          state = n ? cuT(n + ' stock updates waiting', n + ' \u6761\u5e93\u5b58\u5f85\u63a8\u9001')
+                    : cuT('Up to date', '\u5df2\u662f\u6700\u65b0');
+          cls = '';
+        }
+        return '<div class="mt-storeline' + cls + '">' +
+            '<span class="dot"></span><span class="nm">' + esc(who) + '</span>' +
+            '<span class="st">' + esc(state) + '</span>' +
+            (st.blocked && !off ? mtFixAction(st.code) : '') +
+            '<label class="sw" title="' + esc(cuT('Sync this store on or off', '\u5f00\u5173\u8be5\u95e8\u5e97\u7684\u540c\u6b65')) + '">' +
+              '<span class="lab">' + esc(off ? cuT('Paused', '\u5df2\u6682\u505c') : cuT('Syncing', '\u540c\u6b65\u4e2d')) + '</span>' +
+              '<input type="checkbox" ' + (off ? '' : 'checked') +
+              ' onchange="mtToggleStore(\'' + esc(st.code) + '\', this.checked)"></label>' +
+          '</div>';
+      }).join('');
     }
 
-    function tile(k, v, sub, warn) {
+    function tile(k, v, sub, warn, extra) {
       return '<div class="mt-tile"><div class="k">' + esc(k) + '</div>' +
         '<div class="v' + (warn ? ' att' : '') + '">' + esc(String(v)) + '</div>' +
-        '<div class="s">' + esc(sub) + '</div></div>';
+        '<div class="s">' + esc(sub) + '</div>' + (extra || '') + '</div>';
     }
   }
 
@@ -308,6 +333,25 @@
         esc(r.store_code || '-') + ']</span> ' + body + '</div>';
     }).join('');
   }
+
+  // Turn one store's sync off or on. Off drops what that store had waiting —
+  // a queue for a store nothing can reach is not work in progress. On queues a
+  // fresh full push, because after a pause only the CURRENT stock is worth
+  // sending, not a day of stale intermediate values.
+  window.mtToggleStore = async function (code, on) {
+    try {
+      const r = await api('/api/retail-admin/meituan/stores/' + encodeURIComponent(code) + '/enable',
+                          { method: 'POST', body: { enabled: !!on } });
+      if (window.toast) {
+        toast(on
+          ? cuT('Syncing ' + code + ' \u00b7 ' + (r.queued || 0) + ' queued',
+                code + ' \u5df2\u6062\u590d\u540c\u6b65 \u00b7 \u5df2\u6392\u961f ' + (r.queued || 0))
+          : cuT('Paused ' + code + ' \u00b7 ' + (r.dropped || 0) + ' waiting updates dropped',
+                code + ' \u5df2\u6682\u505c \u00b7 \u4e22\u5f03 ' + (r.dropped || 0) + ' \u6761\u5f85\u63a8\u9001'));
+      }
+      mtLoadStatus();
+    } catch (e) { mtLoadStatus(); }
+  };
 
   // ── Sync now (push all) ──────────────────────────────────────────────────────
   // force=true is the "push while closed" path: it forwards a force flag so a
