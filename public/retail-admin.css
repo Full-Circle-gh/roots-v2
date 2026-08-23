@@ -5301,6 +5301,102 @@
   tr.mt-unmapped td:first-child { box-shadow: inset 3px 0 0 var(--brass); }
 
   /* ── Meituan tab redesign (2026-07): status strip + sub-views ─────────────── */
+  /* ══ Eleme channel page ══════════════════════════════════════════════════
+     Ported onto the same pattern as the Meituan tab. The page previously had
+     ZERO css rules — every colour and size lived in an inline style attribute,
+     which is why nothing about it could follow the design system. Same token
+     remap, same shapes; only the prefix differs. */
+  #tab-eleme {
+    --bg-pane:     var(--td-surface);
+    --bg-elev-1:   var(--td-raised);
+    --bg-elev-2:   var(--td-raised);
+    --line:        var(--td-border);
+    --line-soft:   var(--td-border);
+    --line-strong: var(--td-border);
+    --text-1:      var(--td-text);
+    --text-2:      var(--td-text);
+    --text-3:      var(--td-text2);
+    --text-4:      var(--td-text2);
+    --accent:      var(--td-sage-ink);
+    --brass:       var(--td-amber);
+    --brass-hi:    var(--td-amber);
+    --danger:      var(--td-brick-ink);
+  }
+
+  .el-pagehead { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 32px; }
+  .el-pagehead-t { min-width: 0; flex: 1 1 340px; }
+  /* text-transform must be reset explicitly: the global h2 (css:973) is the
+     retired uppercase eyebrow and the `font:` shorthand does not clear it. */
+  .el-pagehead h2 { font: 500 24px/1.3 var(--f-sans); letter-spacing: -.01em; text-transform: none; color: var(--td-text); margin: 0; }
+  .el-status { font: 400 15px/1.6 var(--f-sans); color: var(--td-text2); margin: 4px 0 0; font-variant-numeric: tabular-nums; }
+  .el-status .att { color: var(--td-amber-ink); }
+
+  .el-chanrow { display: flex; align-items: center; justify-content: flex-end; margin-bottom: 16px; }
+  .el-chan { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+  .el-chan .lab { font: 400 13px var(--f-sans); color: var(--td-text2); }
+  .el-chan input { appearance: none; -webkit-appearance: none; margin: 0; width: 36px; height: 20px; border-radius: 999px; background: var(--td-border); border: none; position: relative; cursor: pointer; transition: background 200ms cubic-bezier(.16,1,.3,1); flex: none; }
+  .el-chan input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 999px; background: var(--td-surface); transition: left 200ms cubic-bezier(.16,1,.3,1); }
+  .el-chan input:checked { background: var(--td-sage); }
+  .el-chan input:checked::after { left: 19px; }
+  .el-chan input:focus-visible { outline: 2px solid var(--td-sage); outline-offset: 2px; }
+
+  .el-stores { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; margin: 0 0 32px; }
+  .el-store { border: 1px solid var(--td-border); border-radius: 14px; padding: 24px; background: var(--td-surface); }
+  .el-store.blocked { border-color: var(--td-amber); background: var(--td-surface); }
+  .el-store .sh { display: flex; align-items: baseline; gap: 8px; }
+  .el-store .sdot { width: 8px; height: 8px; border-radius: 999px; background: var(--td-sage); flex: none; align-self: center; }
+  .el-store.blocked .sdot { background: var(--td-amber); }
+  .el-store .sname { font: 500 18px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); }
+  .el-store .smode { margin-left: auto; font: 400 13px var(--f-sans); color: var(--td-text2); }
+  .el-store .sstate { font: 400 15px/1.6 var(--f-sans); margin-top: 8px; color: var(--td-sage-ink); }
+  .el-store.blocked .sstate { color: var(--td-amber-ink); }
+  .el-store .sfacts { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--td-border); }
+  .el-store.blocked .sfacts { border-top-color: var(--td-border); }
+  .el-store .sf .k { font: 500 13px var(--f-sans); color: var(--td-text2); }
+  .el-store .sf .v { font: 400 15px var(--f-sans); color: var(--td-text); font-variant-numeric: tabular-nums; }
+  .el-store .sf .v.warn { color: var(--td-amber-ink); }
+  .el-store .sact { margin-top: 16px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .el-store .sact code { display: inline-block; font: 400 13px var(--f-sans); color: var(--td-text2); background: var(--td-raised); border-radius: 8px; padding: 8px 16px; }
+  .el-store .sact .inp { max-width: 160px; }
+
+  .el-tabs { display: flex; align-items: center; gap: 24px; border-bottom: 1px solid var(--td-border); margin: 0 0 16px; }
+  .el-tab { appearance: none; background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 0; font: 500 13px var(--f-sans); color: var(--td-text2); cursor: pointer; display: flex; align-items: center; gap: 8px; }
+  .el-tab:hover { color: var(--td-text); }
+  .el-tab.active { color: var(--td-text); border-bottom-color: var(--td-text); }
+  .el-tab .n { font: 400 13px var(--f-sans); color: var(--td-text2); background: var(--td-raised); border-radius: 999px; padding: 0 8px; font-variant-numeric: tabular-nums; }
+  .el-tab .n:empty { display: none; }
+  .el-tab.active .n { background: var(--td-raised); color: var(--td-text); }
+  .el-tabs-grow { flex: 1 1 auto; }
+  .el-tabs .el-upd { font: 400 13px var(--f-sans); color: var(--td-text2); padding-right: 16px; font-variant-numeric: tabular-nums; }
+  .el-tabs .btn { align-self: center; margin-bottom: 8px; }
+
+  .el-how { margin: 0 0 16px; font: 400 13px var(--f-sans); color: var(--td-text2); }
+  .el-how summary { cursor: pointer; }
+  .el-how > div { margin-top: 8px; padding: 16px 24px; background: var(--td-raised); border: 1px solid var(--td-border); border-radius: 14px; max-width: 70ch; }
+  .el-cap { font: 400 13px var(--f-sans); color: var(--td-text2); margin: 0 0 16px; font-variant-numeric: tabular-nums; }
+  .el-tablewrap { overflow-x: auto; border: 1px solid var(--td-border); border-radius: 14px; }
+  #el-products-table { width: 100%; border-collapse: collapse; }
+  #el-products-table thead th { background: var(--td-header); color: var(--td-text); font: 500 13px var(--f-sans); letter-spacing: 0; text-transform: none; text-align: left; border-bottom: 1px solid var(--td-border); padding: 10px 16px; }
+  #el-products-table td { padding: 16px; font-size: 15px; border-bottom: 1px solid var(--td-border); }
+
+  /* The size picker on a multi-size listing, and the flag for one with no size
+     chosen — the only state on this table that needs a person. */
+  .el-nameinp { width: 168px; font: 400 13px var(--f-sans); }
+  .el-size { width: 148px; font: 400 13px var(--f-sans); }
+  .el-size.warn { border-color: var(--td-amber); }
+  .el-guess { font: 500 13px var(--f-sans); color: var(--td-amber-ink); }
+
+  .el-act-h { font: 500 18px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); margin: 0 0 16px; }
+  .el-act-h + .el-log { margin-bottom: 32px; }
+  .el-log { font: 400 13px/1.7 var(--f-sans); max-height: 264px; overflow: auto; border: 1px solid var(--td-border); border-radius: 14px; padding: 16px 24px; background: var(--td-surface); color: var(--td-text2); font-variant-numeric: tabular-nums; }
+  .el-log .t { color: var(--td-text2); }
+  .el-log .bad { color: var(--td-brick-ink); }
+  .el-log .empty { color: var(--td-text2); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .el-chan input, .el-chan input::after { transition: none; }
+  }
+
   /* ── Tacet skin for the whole Meituan tab ──────────────────────────────
      The admin's base tokens are warm-grey and pre-date Tacet (--text-1 is
      #12161A "Ink Charcoal", not Tacet Ink #111A2B; --text-2 is #43413a, not
@@ -5349,9 +5445,28 @@
      fourth element. The purpose line that used to sit here ("Stock stays in
      sync…") is banned by §1.7: it describes what the page is for and reads
      the same every day. The status line replaces it with what is true now. */
+  /* Buttons on the channel pages. Base .btn-primary is --brass, which these
+     tabs remap to Amber — so every primary button came out amber and Amber
+     stopped meaning "warning". A strong in-page action is Ink (the treatment
+     .cs-modal uses); only the page header's CTA is Dusk, and there is one. */
+  #tab-meituan .btn-primary, #tab-eleme .btn-primary {
+    background: var(--td-text); border-color: var(--td-text); color: var(--td-paper);
+  }
+  #tab-meituan .btn-primary:hover, #tab-eleme .btn-primary:hover {
+    background: var(--td-text); border-color: var(--td-text); opacity: .88;
+  }
+  .mt-pagehead .btn-primary, .el-pagehead .btn-primary {
+    background: var(--td-dusk); border-color: var(--td-dusk); color: #fff;
+  }
+  .mt-pagehead .btn-primary:hover, .el-pagehead .btn-primary:hover {
+    background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); opacity: 1;
+  }
+
   .mt-pagehead { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 32px; }
   .mt-pagehead-t { min-width: 0; flex: 1 1 340px; }
-  .mt-pagehead h2 { font: 500 24px/1.3 var(--f-sans); letter-spacing: -.01em; color: var(--td-text); margin: 0; }
+  /* text-transform must be reset explicitly: the global h2 (css:973) is the
+     retired uppercase eyebrow and the `font:` shorthand does not clear it. */
+  .mt-pagehead h2 { font: 500 24px/1.3 var(--f-sans); letter-spacing: -.01em; text-transform: none; color: var(--td-text); margin: 0; }
   .mt-status { font: 400 15px/1.6 var(--f-sans); color: var(--td-text2); margin: 4px 0 0; font-variant-numeric: tabular-nums; }
   .mt-status .att { color: var(--td-amber-ink); }
 
@@ -5372,7 +5487,7 @@
      was actually in for 24 days. Amber only ever means a person is needed. */
   .mt-stores { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; margin: 0 0 32px; }
   .mt-store { border: 1px solid var(--td-border); border-radius: 14px; padding: 24px; background: var(--td-surface); }
-  .mt-store.blocked { border-color: var(--td-amber); background: var(--td-amber-tint); }
+  .mt-store.blocked { border-color: var(--td-amber); background: var(--td-surface); }
   .mt-store .sh { display: flex; align-items: baseline; gap: 8px; }
   .mt-store .sdot { width: 8px; height: 8px; border-radius: 999px; background: var(--td-sage); flex: none; align-self: center; }
   .mt-store.blocked .sdot { background: var(--td-amber); }
@@ -5383,13 +5498,13 @@
   .mt-store.blocked .sstate { color: var(--td-amber-ink); }
   .mt-store.closed .sstate { color: var(--td-text2); }
   .mt-store .sfacts { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--td-border); }
-  .mt-store.blocked .sfacts { border-top-color: var(--td-amber); }
+  .mt-store.blocked .sfacts { border-top-color: var(--td-border); }
   .mt-store .sf .k { font: 500 13px var(--f-sans); color: var(--td-text2); }
   .mt-store .sf .v { font: 400 15px var(--f-sans); color: var(--td-text); font-variant-numeric: tabular-nums; }
   .mt-store .sf .v.warn { color: var(--td-amber-ink); }
   .mt-store .sact { margin-top: 16px; }
   .mt-store .sact code { display: inline-block; font: 400 13px var(--f-sans); color: var(--td-text2); background: var(--td-raised); border-radius: 8px; padding: 8px 16px; }
-  .mt-store.blocked .sact code { background: var(--td-surface); }
+  .mt-store.blocked .sact code { background: var(--td-raised); }
 
   .mt-storefoot { display: flex; align-items: center; gap: 16px; justify-content: flex-end; margin: -16px 0 32px; }
   .mt-help { background: none; border: none; cursor: pointer; font: 400 13px var(--f-sans); color: var(--td-text2); padding: 0; }

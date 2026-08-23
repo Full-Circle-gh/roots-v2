@@ -9,6 +9,7 @@
   let _stores   = [];
   let _enabled  = false;
   let _initiated = false;
+  let _lastStores = [];  // last /status.stores, so the status line can repaint
   let _catalogue = {}; // storeCode -> [{name, stock, updated_at}], see elLoadCatalogue
 
   // ── Entry point ────────────────────────────────────────────────────────────
@@ -19,7 +20,6 @@
     await Promise.all([elLoadStores(), elLoadStatus()]);
     await elLoadProducts();
     elLoadCatalogue();
-    elLoadOrders();
     elStartPolling();
     elFlashConnected();
     // The mapping table renders in ONE language under data-no-i18n, so repaint it
@@ -42,6 +42,16 @@
     } catch (_) {}
   }
 
+  // ── Sub-views: Products / Activity ─────────────────────────────────────────
+  window.elView = function (v) {
+    ['products', 'activity'].forEach(k => {
+      const view = document.getElementById('el-view-' + k);
+      const tab  = document.getElementById('el-tab-' + k);
+      if (view) view.hidden = k !== v;
+      if (tab) tab.classList.toggle('active', k === v);
+    });
+  };
+
   // ── Config / feature switch ─────────────────────────────────────────────────
   // Eleme is browser automation (lib/eleme-browser.js), not OAuth — there is no
   // server-side app key to configure, so this note is always the same "link a
@@ -53,14 +63,12 @@
       const cb = document.getElementById('el-enable');
       if (cb) cb.checked = _enabled;
       const txt = document.getElementById('el-enable-txt');
-      if (txt) txt.textContent = _enabled ? cuT('On · 开启', 'On · 开启') : cuT('Off · 关闭', 'Off · 关闭');
-      const note = document.getElementById('el-conn-note');
-      if (note) {
-        note.textContent = cuT(
-          'Enter each store’s Eleme shop id below, then log it in once via `node scripts/eleme-login.js <code> <shopId>` before turning the channel on.',
-          '在下方为每个门店填写饿了么店铺ID,并通过 `node scripts/eleme-login.js <code> <shopId>` 完成一次登录后,再开启渠道。');
-        note.style.color = '';
+      if (txt) {
+        txt.textContent = _enabled ? cuT('Channel on · 渠道开启', '渠道开启')
+                                   : cuT('Channel off · 渠道已关闭', '渠道已关闭');
       }
+      // The standing setup instruction went with the connection card: it is
+      // one-time help, and a store that needs it now says so on its own card.
     } catch (e) { /* surfaced by api() */ }
   };
 
@@ -69,7 +77,10 @@
       await api('/api/retail-admin/eleme/enable', { method: 'POST', body: { enabled: !!on } });
       _enabled = !!on;
       const txt = document.getElementById('el-enable-txt');
-      if (txt) txt.textContent = on ? cuT('On · 开启', 'On · 开启') : cuT('Off · 关闭', 'Off · 关闭');
+      if (txt) {
+        txt.textContent = on ? cuT('Channel on · 渠道开启', '渠道开启')
+                             : cuT('Channel off · 渠道已关闭', '渠道已关闭');
+      }
     } catch (e) {
       const cb = document.getElementById('el-enable');
       if (cb) cb.checked = !on; // revert on failure
@@ -81,35 +92,103 @@
     try {
       const r = await api('/api/retail-admin/eleme/stores');
       _stores = r.data || [];
-      elRenderStores();
+      elRenderStoreCards(_lastStores);
       elRenderProducts(); // store columns depend on _stores
     } catch (e) {}
   };
 
-  // Eleme is browser automation, not OAuth — a store's real state is two
-  // independent facts: is a shop id linked (elSetShop below), and is there an
-  // active login session (sessionActive, written by scripts/eleme-login.js).
-  function elRenderStores() {
+  // One card per store, from /eleme/status.stores — the same shape the Meituan
+  // page uses. A store is blocked when it cannot push at all: no shop id linked
+  // (never set up) or no saved login session. A run of failed pushes is NOT
+  // blocked: listings get renamed and the 审核 queue rejects writes while the
+  // channel itself is fine, and colouring that amber would cry wolf on the one
+  // state that actually means a person is needed.
+  const EL_BLOCK_TXT = {
+    no_shop:     ['No Eleme shop linked yet', '尚未关联饿了么店铺'],
+    needs_login: ['Signed out — needs a one-time login', '已退出登录 — 需重新登录一次'],
+  };
+
+  function elRenderStoreCards(stores) {
     const box = document.getElementById('el-stores');
     if (!box) return;
-    if (!_stores.length) { box.innerHTML = '<div class="muted" style="font-size:13px;padding:8px 0">No active stores.</div>'; return; }
-    box.innerHTML = _stores.map(s => {
-      const shopSet = !!s.shop_id;
-      let status, action;
-      if (!shopSet) {
-        status = `<span class="muted">${cuT('Shop not linked', '未关联店铺')}</span>`;
-        action = `<input id="el-shop-${s.id}" class="inp" style="width:140px" placeholder="${cuT('Eleme shop id', '饿了么店铺ID')}">
-                  <button class="btn btn-sm btn-primary" onclick="elSetShop(${s.id}, '${s.code}')">${cuT('Save · 保存', '保存')}</button>`;
-      } else if (!s.sessionActive) {
-        status = `<span style="color:var(--warn,#b8860b)">${cuT('Linked', '已关联')} · ${s.shop_name || s.shop_id} — ${cuT('needs login', '需要登录')}</span>`;
-        action = `<code data-no-i18n style="font-size:11.5px">node scripts/eleme-login.js ${s.code} ${s.shop_id}</code>`;
-      } else {
-        status = `<span style="color:var(--ok,#2e8b57)">${cuT('Connected', '已连接')} · ${s.shop_name || s.shop_id}</span>`;
-        action = '';
+    const rows = Array.isArray(stores) ? stores : [];
+    if (!rows.length) { box.innerHTML = ''; return; }
+    box.innerHTML = rows.map(st => {
+      const bt = EL_BLOCK_TXT[st.blockedBy] || ['Not syncing', '同步已停'];
+      const state = st.blocked ? cuT(bt[0], bt[1])
+                               : cuT('Signed in · pushing stock', '已登录 · 正在推送');
+      const stranded = Number(st.processing || 0);
+      const cat = st.catalogueCount
+        ? cuT(st.catalogueCount + ' listings read', '已读取 ' + st.catalogueCount + ' 个商品')
+        : cuT('no catalogue yet', '暂无目录');
+      const facts = [
+        { k: cuT('Live', '已上架'),      v: st.live,      warn: false },
+        { k: cuT('Unmatched', '未匹配'), v: st.unmatched, warn: st.unmatched > 0 },
+        { k: cuT('Waiting', '待推送'),   v: st.pending,   warn: false },
+        stranded ? { k: cuT('Stranded', '卡住'), v: stranded, warn: true } : null,
+        { k: cuT('Catalogue', '商品目录'), v: cat, warn: !st.catalogueCount },
+        { k: cuT('Last push', '最近推送'),
+          v: st.lastPushAt ? (fmtAgo(st.lastPushAt) || '—') : cuT('never', '从未'), warn: false },
+      ].filter(Boolean);
+      const factHtml = facts.map(f =>
+        '<div class="sf"><div class="k">' + esc(f.k) + '</div><div class="v' +
+        (f.warn ? ' warn' : '') + '">' + esc(String(f.v)) + '</div></div>').join('');
+      // The one action that unblocks this store, and nothing else. Linking a
+      // shop id is a field; signing in needs a human at a browser on the box,
+      // so that one is the command to run, never a button that cannot work.
+      let act = '';
+      if (st.blockedBy === 'no_shop') {
+        act = '<div class="sact">' +
+          '<input id="el-shop-' + st.id + '" class="inp" placeholder="' +
+            cuT('Eleme shop id', '饿了么店铺ID') + '">' +
+          '<button class="btn btn-sm btn-primary" onclick="elSetShop(' + st.id + ", '" + esc(st.code) + "')\">" +
+          cuT('Link shop', '关联店铺') + '</button></div>';
+      } else if (st.blockedBy === 'needs_login') {
+        act = '<div class="sact"><code>node scripts/eleme-login.js ' +
+          esc(st.code) + ' ' + esc(st.shopId || '') + '</code></div>';
       }
-      return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:7px 0;border-bottom:1px dashed var(--line)">
-        <b style="min-width:120px">${s.name}</b>${status}<span style="flex:1 1 auto"></span>${action}</div>`;
+      return '<div class="el-store' + (st.blocked ? ' blocked' : '') + '">' +
+          '<div class="sh"><span class="sdot"></span>' +
+            '<span class="sname">' + esc(st.name) + '</span>' +
+            '<span class="smode">' + esc(st.shopName || st.shopId || cuT('not linked', '未关联')) + '</span></div>' +
+          '<div class="sstate">' + esc(state) + '</div>' +
+          '<div class="sfacts">' + factHtml + '</div>' + act +
+        '</div>';
     }).join('');
+  }
+
+  // §1.7 status line: live state for the section, real numbers, sentence case.
+  function elRenderStatusLine(stores) {
+    const el = document.getElementById('el-status');
+    if (!el) return;
+    const rows = Array.isArray(stores) ? stores : [];
+    if (!rows.length) { el.textContent = ''; return; }
+    // Distinct products, never the sum of the stores — most are live on both.
+    const active = _products.filter(p => Number(p.is_active) !== 0);
+    const live = active.filter(p => Object.values(p.stores || {}).some(m => Number(m.sync_enabled) === 1)).length;
+    const parts = [cuT(live + ' live on Eleme', live + ' 个已上架饿了么')];
+    const unmatched = active.length - live;
+    if (unmatched > 0) parts.push(cuT(unmatched + ' unmatched', unmatched + ' 个未匹配'));
+    let html = parts.map(esc).join(' · ');
+    const bad = rows.filter(r => r.blocked);
+    if (bad.length) {
+      html += ' · <span class="att">' +
+        esc(cuT(bad.map(r => r.name).join(', ') + ' needs you',
+                bad.map(r => r.name).join('、') + ' 需要处理')) + '</span>';
+    }
+    el.innerHTML = html;
+  }
+
+  function fmtAgo(iso) {
+    if (!iso) return '';
+    const t = Date.parse(String(iso).replace(' ', 'T') + (String(iso).includes('Z') ? '' : 'Z'));
+    if (!t) return '';
+    const m = Math.max(0, Math.round((Date.now() - t) / 60000));
+    if (m < 1) return cuT('just now', '刚刚');
+    if (m < 60) return cuT(m + ' min ago', m + ' 分钟前');
+    const h = Math.floor(m / 60);
+    if (h < 24) return cuT(h + ' h ago', h + ' 小时前');
+    return cuT(Math.floor(h / 24) + ' d ago', Math.floor(h / 24) + ' 天前');
   }
 
   // ── Eleme catalogue cache (autocomplete source for the name-override field) ──
@@ -206,7 +285,7 @@
     _pollTimer = setInterval(async () => {
       if (_pollBusy || !elTabVisible()) return;
       _pollBusy = true;
-      try { await Promise.all([elLoadStatus(), elLoadOrders(true)]); } catch (_) {}
+      try { await elLoadStatus(); } catch (_) {}
       finally { _pollBusy = false; }
     }, 12000);
   }
@@ -214,16 +293,13 @@
   window.elLoadStatus = async function () {
     try {
       const r = await api('/api/retail-admin/eleme/status');
-      const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
-      set('el-kpi-daemon', _enabled ? cuT('On · 运行中', 'On · 运行中') : cuT('Off · 已关闭', 'Off · 已关闭'));
-      set('el-kpi-mapped', r.mappedCount || 0);
-      set('el-kpi-queue', r.queuePending || 0);
-      const qTile = document.getElementById('el-kpi-queue-tile');
-      if (qTile) qTile.classList.toggle('alert', (r.queueError || 0) > 0);
-      const last = (r.lastOrder || [])[0];
-      set('el-kpi-order', last ? '✓' : '—');
-      const sub = document.getElementById('el-kpi-order-sub');
-      if (sub) sub.textContent = last ? `${last.store_code} · ${(last.imported_at || '').slice(5, 16)}` : cuT('no orders yet · 暂无订单', '暂无订单');
+      // The four KPI tiles summed the stores into numbers that could not say
+      // WHICH store was unwell. Store cards carry it per store now.
+      _lastStores = r.stores || [];
+      elRenderStoreCards(_lastStores);
+      elRenderStatusLine(_lastStores);
+      const upd = document.getElementById('el-upd');
+      if (upd) upd.textContent = cuT('Updated just now', '刚刚更新');
       elRenderPushLog(r.recentStock || []);
       elRenderLog(r.recentSystem || []);
     } catch (e) {}
@@ -236,59 +312,41 @@
   function elRenderPushLog(rows) {
     const box = document.getElementById('el-log-stock');
     if (!box) return;
-    if (!rows.length) { box.innerHTML = '<span class="muted">No pushes yet · 暂无推送</span>'; return; }
+    if (!rows.length) { box.innerHTML = `<span class="empty">${cuT('Nothing yet', '暂无记录')}</span>`; return; }
     box.innerHTML = rows.map(r => {
       const t = (r.created_at || '').slice(5, 16);
       let d = {}; try { d = JSON.parse(r.detail || '{}'); } catch (e) {}
       const prod = _products.find(x => x.id === d.product_id);
       const name = prod ? (prod.name_cn || prod.name_en) : (d.sku || ('#' + d.product_id));
-      const colour = r.status === 'error' ? 'var(--danger,#c0392b)' : 'inherit';
       const qty = d.qty != null ? ` → ${d.qty}` : '';
       const err = r.status === 'error' ? `: ${esc(r.error_msg || '')}` : '';
-      return `<div style="color:${colour}">${t} [${r.store_code || '-'}] ${esc(name)}${qty}${err}</div>`;
+      return `<div class="${r.status === 'error' ? 'bad' : ''}"><span class="t">${t} [${esc(r.store_code || '-')}]</span> ${esc(name)}${qty}${err}</div>`;
     }).join('');
   }
 
   function elRenderLog(rows) {
     const box = document.getElementById('el-log-sys');
     if (!box) return;
-    if (!rows.length) { box.innerHTML = '<span class="muted">No events yet · 暂无事件</span>'; return; }
+    if (!rows.length) { box.innerHTML = `<span class="empty">${cuT('Nothing yet', '暂无记录')}</span>`; return; }
     box.innerHTML = rows.map(r => {
       const t = (r.created_at || '').slice(5, 16);
-      const colour = r.status === 'error' ? 'var(--danger,#c0392b)' : r.status === 'warn' ? 'var(--warn,#b8860b)' : 'inherit';
       const msg = r.error_msg || r.event_type;
-      return `<div style="color:${colour}">${t} [${r.store_code || '-'}] ${r.event_type}: ${esc(msg)}</div>`;
+      return `<div class="${r.status === 'error' ? 'bad' : ''}"><span class="t">${t} [${esc(r.store_code || '-')}]</span> ${esc(r.event_type)}: ${esc(msg)}</div>`;
     }).join('');
   }
 
-  // ── Incoming orders ──────────────────────────────────────────────────────────
-  window.elLoadOrders = async function (silent) {
-    const list = document.getElementById('el-orders-list');
-    const cnt  = document.getElementById('el-orders-count');
-    if (!list) return;
-    if (!silent || !list.children.length) list.innerHTML = '<div class="muted" style="font-size:13px;padding:10px 0">Loading…</div>';
-    try {
-      const r = await api('/api/retail-admin/eleme/orders?limit=30');
-      const orders = r.data || [];
-      if (cnt) cnt.textContent = orders.length ? `(${orders.length})` : '';
-      if (!orders.length) { list.innerHTML = '<div class="muted" style="font-size:13px;padding:10px 0">No Eleme orders yet · 暂无饿了么订单</div>'; return; }
-      list.innerHTML = orders.map(o => {
-        const items = (o.items || []).map(i => `${cuT(i.name_en || i.name_cn, i.name_cn || i.name_en)}×${i.qty}`).join(', ');
-        const when = (o.placed_at || '').slice(5, 16);
-        return `<div style="padding:7px 0;border-bottom:1px dashed var(--line);font-size:13px">
-          <b>¥${(o.total || 0).toFixed ? o.total.toFixed(2) : o.total}</b>
-          <span class="muted"> · ${o.store_code || ''} · ${when}</span><br>
-          <span class="muted">${esc(items)}</span></div>`;
-      }).join('');
-    } catch (e) { list.innerHTML = `<div class="muted" style="font-size:13px;padding:10px 0">${esc(e.message)}</div>`; }
-  };
+  // The incoming-orders list went with its card. Eleme order import is not
+  // wired yet (getPendingOrders returns []), so it could only ever render
+  // empty; when it lands, Eleme orders belong on the Orders page with every
+  // other channel, the same call the Meituan page made.
 
   // ── Product mapping ──────────────────────────────────────────────────────────
   window.elLoadProducts = async function () {
     try {
       const r = await api('/api/retail-admin/eleme/products');
-      _products = r.data || [];
+        _products = r.data || [];
       elRenderProducts();
+      elRenderStatusLine(_lastStores);  // counts only exist now
     } catch (e) {}
   };
 
@@ -337,14 +395,14 @@
             <input type="checkbox" ${on ? 'checked' : ''} onchange="elToggleSync(${p.id}, ${s.id}, '${s.code}', this.checked)">
             <span class="muted" style="font-size:12px">${esc(s.name)}</span>
           </label>
-          <input type="text" class="inp" style="width:130px;font-size:11px" data-no-i18n
+          <input type="text" class="inp el-nameinp" data-no-i18n
                  list="el-catalogue-dl-${esc(s.code)}"
                  placeholder="${cuT('Eleme listing name', '饿了么商品名')}"
                  value="${esc(mappedName)}"
                  onchange="elSetElemeName(${p.id}, ${s.id}, '${s.code}', this.value)">
           ${specs.length > 1 ? `
-          <select class="inp" data-no-i18n
-                  style="width:118px;font-size:11px${guessing ? ';border-color:var(--warn,#b8860b)' : ''}"
+          <select data-no-i18n
+                  class="inp el-size${guessing ? ' warn' : ''}"
                   title="${cuT('Which size inside this listing', '对应该商品的哪个规格')}"
                   onchange="elSetElemeSpec(${p.id}, ${s.id}, '${s.code}', this.value, this.options[this.selectedIndex].dataset.label || '')">
             <option value="" data-label="">${cuT('Pick size…', '选择规格…')}</option>
@@ -355,7 +413,7 @@
             }).join('')}
           </select>` : ''}
           ${guessing ? `<span title="${cuT('This listing has several sizes and none is picked — the stock pushed to it is a guess.', '该商品有多个规格且未选择 — 推送的库存并不准确。')}"
-                 style="color:var(--warn,#b8860b);font-size:11px;font-weight:700">!</span>` : ''}
+                 class="el-guess">!</span>` : ''}
         </div>`;
       }).join('');
       return `<tr style="border-top:1px solid var(--line)">
