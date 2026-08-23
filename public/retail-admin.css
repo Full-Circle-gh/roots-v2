@@ -2231,10 +2231,21 @@
   /* Title row + ⓘ. The old standing lede is gone; its "what is this" copy now
      rides in the tooltip below, one-time teaching text kept out of the way. */
   /* ── §1.1 the content column ───────────────────────────────────────────────
-     1120px, never full-bleed. This is what makes Products read as the same
-     product as Orders and Customers rather than a page of its own. The editor
-     no longer competes for this width — it is a drawer over the top (§1.13). */
-  #tab-products { max-width: 1120px; margin: 0 auto; }
+     Capped at 1120px, but LEFT-ALIGNED in <main>, not centred. <main> already
+     is the column (1440px, offset by the rail); centring inside it pushed
+     Products ~270px right of where Orders starts, so the two pages no longer
+     shared a left edge — the one thing that makes them read as one product.
+     The editor doesn't compete for this width — it is a drawer over it. */
+  #tab-products { max-width: 1120px; }
+
+  /* The title. It used to be styled by `:is(#tab-orders, …, #tab-products) > h2`
+     in the skin — a DIRECT-child selector — and the §1.7 header nests the h2
+     inside .pa-head-id, so it silently dropped to browser defaults and read as
+     a small grey eyebrow. Stated here so it no longer depends on its depth. */
+  #tab-products .pa-pagetitle {
+    font: 500 24px var(--f-sans); letter-spacing: -.01em;
+    color: var(--td-text); text-transform: none; margin: 0;
+  }
 
   /* ── §1.7 page header — three elements, no fourth ────────────────────────── */
   #tab-products > .pa-head-row {
@@ -2253,7 +2264,11 @@
   #tab-products > .pa-head-row > .pa-addsplit { margin-left: auto; }
 
   /* ── §1.1a row 3 · the pulse — four tiles, one row, never two ─────────────── */
-  .pa-pulse { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--s4, 24px); margin-bottom: 32px; }
+  /* auto-fit, not repeat(4) — two of the four tiles hide themselves at zero
+     ("Going nowhere", "On promotion"), and a fixed four-track grid left the
+     survivors bunched at 75% width with a hole where the hidden ones would
+     have been. The row is always full, whether it holds two tiles or four. */
+  .pa-pulse { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: var(--s4, 24px); margin-bottom: 32px; }
   .pa-tile {
     display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
     background: var(--td-surface); border: 1px solid var(--td-border);
@@ -2272,7 +2287,7 @@
   /* A tile with a real count to worry about tints its number, never its ground. */
   #pa-kpi-dead-tile .pa-tile-n { color: var(--td-brick-ink); }
   #pa-kpi-promo-tile .pa-tile-n { color: var(--td-sage-ink); }
-  @media (max-width: 980px) { .pa-pulse { grid-template-columns: repeat(2, 1fr); } }
+  /* auto-fit already reflows on its own; the phone just needs one column. */
   @media (max-width: 560px) { .pa-pulse { grid-template-columns: 1fr; } }
   .pa-info-wrap { position: relative; display: inline-flex; align-items: center; }
   .pa-info {
@@ -2346,6 +2361,34 @@
      above carry the same facts in fewer marks; Sold out and Low stock moved
      into the header status line, where work waiting belongs (§1.7). The old
      .pa-recap* / .pa-jump* rules went with the markup they styled. */
+  /* ── §1.1a row 4 · the segment chips ──────────────────────────────────────
+     Category is the primary axis, so it is chips and never a <select> (A1).
+     Deliberately the SAME shape as Orders' status chips — full-round pill,
+     hairline, Ink fill when active, and the count as a neutral rounded token
+     rather than a bare number. A count is a shape here, never a signal.
+     (These rules were written once already and lost to the recap-band cleanup;
+     without them the chips render as bare boxes with the counts glued on.) */
+  .pa-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 32px 0 0; }
+  .pa-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 6px 14px; border-radius: 999px; white-space: nowrap;
+    border: 1px solid var(--td-border); background: var(--td-surface);
+    font: 500 13px var(--f-sans); color: var(--td-text2); cursor: pointer;
+    transition: background .15s var(--ease-out, ease), border-color .15s var(--ease-out, ease), color .15s var(--ease-out, ease);
+  }
+  .pa-chip:hover { border-color: var(--td-text2); color: var(--td-text); }
+  .pa-chip.is-on { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
+  .pa-chip-n {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 17px; height: 16px; padding: 0 6px; border-radius: 999px;
+    background: var(--td-raised); color: var(--td-text2);
+    font-size: 11px; font-weight: 500; line-height: 1; font-variant-numeric: tabular-nums;
+  }
+  .pa-chip.is-on .pa-chip-n { background: rgba(var(--td-heat-rgb), .16); color: var(--td-paper); }
+  .pa-chips:empty { display: none; }
+  /* The category <select> stays in the DOM as the value the chips write to. */
+  .pa-filter-hidden { display: none; }
+
   /* ── §1.1a row 5 · the filter row ─────────────────────────────────────────
      Two dropdowns then one wide search, in that order. No dividers, no chips —
      chips are the segment row above and nowhere else, or the page has two

@@ -1168,6 +1168,14 @@ function paRenderBulkBar() {
   const idset = new Set(PA_FILTERED_IDS || []);
   const shown = overview ? (PA_PRODUCTS || []).filter(p => idset.has(p.id)) : [];
   if (!shown.length) { bar.style.display = 'none'; bar.className = ''; bar.innerHTML = ''; PA_SELECT_MODE = false; PA_SELECTED = new Set(); return; }
+  // The bar is a MODE, not furniture: it appears when the operator has ticked
+  // something and goes when they have not. It used to sit above every list
+  // permanently reading "0 selected" beside a row of dead greyed-out menus,
+  // which is a toolbar that lies about being usable. Ticking any row arms it.
+  if (!PA_SELECT_MODE || !PA_SELECTED.size) {
+    bar.style.display = 'none'; bar.className = ''; bar.innerHTML = '';
+    return;
+  }
 
   {
     const n = PA_SELECTED.size;
