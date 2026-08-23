@@ -8,7 +8,6 @@
   let _products = [];
   let _stores   = [];
   let _enabled  = false;
-  let _configured = false;
   let _initiated = false;
 
   // ── Entry point ────────────────────────────────────────────────────────────
@@ -42,27 +41,23 @@
   }
 
   // ── Config / feature switch ─────────────────────────────────────────────────
+  // Eleme is browser automation (lib/eleme-browser.js), not OAuth — there is no
+  // server-side app key to configure, so this note is always the same "link a
+  // shop id, then log in once" instruction (see elRenderStores' session status).
   window.elLoadConfig = async function () {
     try {
       const r = await api('/api/retail-admin/eleme/config');
       _enabled = !!r.enabled;
-      _configured = !!r.configured;
       const cb = document.getElementById('el-enable');
       if (cb) cb.checked = _enabled;
       const txt = document.getElementById('el-enable-txt');
       if (txt) txt.textContent = _enabled ? cuT('On · 开启', 'On · 开启') : cuT('Off · 关闭', 'Off · 关闭');
       const note = document.getElementById('el-conn-note');
       if (note) {
-        if (!_configured) {
-          note.textContent = cuT(
-            'Server not configured yet — set ELEME_APP_KEY / ELEME_APP_SECRET / ELEME_REDIRECT_URI in .env, then restart.',
-            '服务器尚未配置 — 在 .env 中设置 ELEME_APP_KEY / ELEME_APP_SECRET / ELEME_REDIRECT_URI 后重启。');
-          note.style.color = 'var(--danger, #c0392b)';
-        } else {
-          note.textContent = cuT('Connect each store to its Eleme shop, then turn the channel on.',
-                                  '将每个门店连接到对应的饿了么店铺,然后开启渠道。');
-          note.style.color = '';
-        }
+        note.textContent = cuT(
+          'Enter each store’s Eleme shop id below, then log it in once via `node scripts/eleme-login.js <code> <shopId>` before turning the channel on.',
+          '在下方为每个门店填写饿了么店铺ID,并通过 `node scripts/eleme-login.js <code> <shopId>` 完成一次登录后,再开启渠道。');
+        note.style.color = '';
       }
     } catch (e) { /* surfaced by api() */ }
   };
@@ -89,37 +84,31 @@
     } catch (e) {}
   };
 
+  // Eleme is browser automation, not OAuth — a store's real state is two
+  // independent facts: is a shop id linked (elSetShop below), and is there an
+  // active login session (sessionActive, written by scripts/eleme-login.js).
   function elRenderStores() {
     const box = document.getElementById('el-stores');
     if (!box) return;
     if (!_stores.length) { box.innerHTML = '<div class="muted" style="font-size:13px;padding:8px 0">No active stores.</div>'; return; }
     box.innerHTML = _stores.map(s => {
-      const connected = Number(s.connected) === 1;
       const shopSet = !!s.shop_id;
       let status, action;
-      if (!connected) {
-        status = `<span class="muted">${cuT('Not connected', '未连接')}</span>`;
-        action = `<button class="btn btn-sm btn-primary" ${_configured ? '' : 'disabled'} onclick="elConnect(${s.id}, '${s.code}')">${cuT('Connect Eleme · 连接', '连接饿了么')}</button>`;
-      } else if (!shopSet) {
-        status = `<span style="color:var(--warn,#b8860b)">${cuT('Connected — shop not set', '已连接 — 未设置店铺')}</span>`;
+      if (!shopSet) {
+        status = `<span class="muted">${cuT('Shop not linked', '未关联店铺')}</span>`;
         action = `<input id="el-shop-${s.id}" class="inp" style="width:140px" placeholder="${cuT('Eleme shop id', '饿了么店铺ID')}">
-                  <button class="btn btn-sm" onclick="elSetShop(${s.id}, '${s.code}')">${cuT('Save · 保存', '保存')}</button>
-                  <button class="btn btn-sm" onclick="elConnect(${s.id}, '${s.code}')">${cuT('Reconnect · 重连', '重连')}</button>`;
+                  <button class="btn btn-sm btn-primary" onclick="elSetShop(${s.id}, '${s.code}')">${cuT('Save · 保存', '保存')}</button>`;
+      } else if (!s.sessionActive) {
+        status = `<span style="color:var(--warn,#b8860b)">${cuT('Linked', '已关联')} · ${s.shop_name || s.shop_id} — ${cuT('needs login', '需要登录')}</span>`;
+        action = `<code data-no-i18n style="font-size:11.5px">node scripts/eleme-login.js ${s.code} ${s.shop_id}</code>`;
       } else {
         status = `<span style="color:var(--ok,#2e8b57)">${cuT('Connected', '已连接')} · ${s.shop_name || s.shop_id}</span>`;
-        action = `<button class="btn btn-sm" onclick="elConnect(${s.id}, '${s.code}')">${cuT('Reconnect · 重连', '重连')}</button>`;
+        action = '';
       }
       return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:7px 0;border-bottom:1px dashed var(--line)">
         <b style="min-width:120px">${s.name}</b>${status}<span style="flex:1 1 auto"></span>${action}</div>`;
     }).join('');
   }
-
-  window.elConnect = async function (storeId, storeCode) {
-    try {
-      const r = await api(`/api/retail-admin/eleme/oauth/start?storeId=${storeId}&storeCode=${encodeURIComponent(storeCode)}`);
-      if (r.url) window.open(r.url, '_blank', 'noopener');
-    } catch (e) {}
-  };
 
   window.elSetShop = async function (storeId, storeCode) {
     const inp = document.getElementById('el-shop-' + storeId);

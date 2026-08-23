@@ -623,63 +623,54 @@
   };
 
   // ── Eleme guided setup wizard ───────────────────────────────────────────────
-  // Authorize (OAuth per store) → Link shops → Map products → Verify & enable.
-  // Reuses the existing Eleme endpoints (/api/retail-admin/eleme/*). When the
-  // platform Eleme app isn't configured on the server yet, step 1 shows the
-  // honest assisted state instead of a raw .env error.
+  // Link shop id → Verify & enable. Eleme is browser automation (session
+  // cookies, lib/eleme-browser.js), NOT OAuth — Eleme's open platform rejects
+  // our single-store accounts (ELEME_BROWSER_RECON.md), so there is no
+  // "Connect" button to send the operator through here; the only thing a shop
+  // needs is its Eleme shop id, and the one-time login is an ops action
+  // (scripts/eleme-login.js) this wizard surfaces but can't itself trigger.
   window.igElemeWizard = async function () {
     const box = igHostEl(); if (!box) return;
     box.style.display = ''; box.innerHTML = igMuted(cuT('Loading Eleme setup… · 加载饿了么设置…', '加载饿了么设置…'));
-    let cfg = { configured: false, enabled: false }, stores = [];
-    try { cfg = await api('/api/retail-admin/eleme/config'); } catch (_) {}
+    let stores = [];
     try { const r = await api('/api/retail-admin/eleme/stores'); stores = r.stores || r.data || []; } catch (_) {}
-    igElemeRender(cfg, stores);
+    igElemeRender(stores);
   };
 
-  function igElemeRender(cfg, stores) {
+  function igElemeRender(stores) {
     const box = igHostEl(); if (!box) return;
-    const connectedCount = stores.filter(s => Number(s.connected) === 1).length;
     const shopCount = stores.filter(s => !!s.shop_id).length;
-    // Which step is live.
-    let step = 'authorize';
-    if (cfg.configured && connectedCount > 0 && shopCount < connectedCount) step = 'shops';
-    else if (cfg.configured && connectedCount > 0 && shopCount === stores.length && stores.length) step = 'verify';
-    const rail = ['authorize', 'shops', 'products', 'verify'];
+    const step = (stores.length && shopCount === stores.length) ? 'verify' : 'shop';
+    const rail = ['shop', 'verify'];
     const railLabels = {
-      authorize: cuT('Authorize · 授权', '授权'), shops: cuT('Link shops · 关联门店', '关联门店'),
-      products: cuT('Map products · 商品映射', '商品映射'), verify: cuT('Verify & enable · 验证并开启', '验证并开启'),
+      shop: cuT('Link shops · 关联门店', '关联门店'),
+      verify: cuT('Verify & enable · 验证并开启', '验证并开启'),
     };
     const cur = rail.indexOf(step);
     const railHtml = rail.map((k, i) => `<span style="font-size:12px;color:${i === cur ? 'var(--text-1)' : 'var(--text-3)'};font-weight:${i === cur ? 600 : 400}">${i < cur ? '✓ ' : (i + 1) + '. '}${railLabels[k]}</span>`).join('<span style="color:var(--text-4)"> › </span>');
 
     let body;
-    if (!cfg.configured) {
-      // Platform Eleme app not set up on the server — assisted state, not a dev error.
-      body = `<div style="background:var(--bg-elev-1);border:1px solid var(--line);border-left:3px solid var(--brass);border-radius:6px;padding:14px 16px">
-        <div style="font-weight:600;font-size:13.5px;margin-bottom:4px">${cuT('Eleme isn’t switched on for your account yet', '饿了么尚未为您的账号开通')}</div>
-        <div style="font-size:12.5px;color:var(--text-2);max-width:60ch">${cuT(
-          'Eleme connects through our official Eleme open-platform app. It needs a one-time platform setup (Eleme app keys) before you can authorize your shops — this is on us, not something you configure. Tap below and we’ll get it enabled.',
-          '饿了么通过我们的官方开放平台应用接入,需要先完成一次性平台配置(饿了么应用密钥)才能授权您的店铺 — 这由我们完成。点击下方,我们将为您开通。')}</div>
-        <div style="margin-top:12px;display:flex;gap:10px">
-          <button class="btn btn-sm btn-primary" onclick="igHelp('eleme')">${cuT('Request Eleme setup · 申请开通饿了么', '申请开通饿了么')}</button>
-          <button class="btn btn-sm" onclick="igLocClose()">${cuT('Close · 关闭', '关闭')}</button>
-        </div>
-      </div>`;
-    } else if (step === 'authorize' || step === 'shops') {
+    if (step === 'shop') {
       const rows = stores.map(s => {
-        const connected = Number(s.connected) === 1;
-        const shopSet = !!s.shop_id;
-        let right;
-        if (!connected) right = `<button class="btn btn-sm btn-primary" onclick="igElemeConnect(${s.id}, '${escJs(s.code)}')">${cuT('Connect · 连接', '连接')}</button>`;
-        else if (!shopSet) right = `<span style="display:flex;gap:6px;align-items:center"><input id="igel-shop-${s.id}" placeholder="${cuT('Eleme shop id', '店铺ID')}" style="width:130px"><button class="btn btn-sm btn-primary" onclick="igElemeShop(${s.id},'${escJs(s.code)}')">${cuT('Save', '保存')}</button></span>`;
-        else right = `<span style="color:var(--accent);font-size:12.5px">✓ ${esc(s.shop_name || s.shop_id)}</span>`;
+        const right = s.shop_id
+          ? `<span style="color:var(--accent);font-size:12.5px">✓ ${esc(s.shop_name || s.shop_id)}</span>`
+          : `<span style="display:flex;gap:6px;align-items:center"><input id="igel-shop-${s.id}" placeholder="${cuT('Eleme shop id', '店铺ID')}" style="width:130px"><button class="btn btn-sm btn-primary" onclick="igElemeShop(${s.id},'${escJs(s.code)}')">${cuT('Save', '保存')}</button></span>`;
         return `<div class="ig-linkrow"><div class="grow"><b>${esc(s.name || s.code)}</b></div>${right}</div>`;
       }).join('');
-      body = `<p class="muted" style="font-size:13px">${cuT('Authorize each store to its Eleme shop. You’ll be sent to Eleme to approve, then back here.', '为每个门店授权对应的饿了么店铺。将跳转至饿了么授权后返回。')}</p>
+      body = `<p class="muted" style="font-size:13px">${cuT('Enter each store’s Eleme shop id, found in the Eleme merchant backend’s URL (…/app/shop/<id>/…).', '在饿了么商家后台地址栏中找到店铺ID(…/app/shop/<id>/…),并在此为每个门店填写。')}</p>
         <div style="margin-top:8px">${rows || igMuted(cuT('No stores yet.', '暂无门店。'))}</div>
         <div style="display:flex;gap:10px;margin-top:14px"><button class="btn" onclick="igLocClose()">${cuT('Close · 关闭', '关闭')}</button></div>`;
     } else if (step === 'verify') {
-      body = `<p class="muted" style="font-size:13px">${cuT('All stores connected. Map products by SKU on the Eleme page, then switch the channel on.', '所有门店已连接。请在饿了么页面按货号映射商品,然后开启渠道。')}</p>
+      const needsLogin = stores.filter(s => !s.sessionActive);
+      const loginNote = needsLogin.length
+        ? `<div style="margin-top:10px;padding:8px 12px;background:var(--bg-elev-1);border:1px solid var(--line);border-left:3px solid var(--brass);border-radius:6px;font-size:12.5px">
+             ${cuT('These stores still need a one-time login (an ops task, not a click here):', '以下门店还需要一次性登录(需运维操作,非此处点击):')}
+             <b>${needsLogin.map(s => esc(s.name || s.code)).join(', ')}</b> —
+             <code data-no-i18n>node scripts/eleme-login.js &lt;storeCode&gt; &lt;shopId&gt;</code>
+           </div>`
+        : `<div style="margin-top:10px;color:var(--accent);font-size:12.5px">✓ ${cuT('Every linked store has an active login session.', '所有已关联门店均已登录。')}</div>`;
+      body = `<p class="muted" style="font-size:13px">${cuT('All stores linked to an Eleme shop. Map products by SKU on the Eleme page, then switch the channel on.', '所有门店已关联饿了么店铺。请在饿了么页面按货号映射商品,然后开启渠道。')}</p>
+        ${loginNote}
         <div style="display:flex;gap:10px;margin-top:14px">
           <button class="btn btn-primary" onclick="igElemeEnable()">${cuT('Enable channel · 开启渠道', '开启渠道')}</button>
           <button class="btn" onclick="igLocClose();salesGo('eleme')">${cuT('Map products · 商品映射', '商品映射')}</button>
@@ -696,12 +687,6 @@
     </div>`;
     box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
-  window.igElemeConnect = async function (storeId, storeCode) {
-    try {
-      const r = await api(`/api/retail-admin/eleme/oauth/start?storeId=${storeId}&storeCode=${encodeURIComponent(storeCode)}`);
-      if (r && r.url) window.location.href = r.url;
-    } catch (e) { /* surfaced by api() */ }
-  };
   window.igElemeShop = async function (storeId, storeCode) {
     const inp = document.getElementById('igel-shop-' + storeId);
     const shopId = inp ? inp.value.trim() : '';
