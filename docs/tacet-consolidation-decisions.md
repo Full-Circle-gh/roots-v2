@@ -1,9 +1,11 @@
-# Tacet shared-core consolidation — decisions record, v4.66
+# Tacet shared-core consolidation — decisions record, v4.67
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-08-23 · v4.67 — §24 Database: **THE 48 RESTARTS WERE 48 DEPLOYS, EXACTLY.** 1369→1417 since the 08-21 alerting deploy; 48 deploys in the same window (35 on 08-22, 13 on 08-23); `deploy-apply.sh` restarts the app unconditionally at step 5/5. **`unstable_restarts` is 0 over the process's lifetime, so not one of the 1417 was a crash.** **THE STRICTER 08-21 PROBE HAS NEVER FAILED ONCE** — the last `probe FAILED` line of any kind is **2026-07-13**, six weeks ago, and none carries the `[probeDetail]` bracket the new probe prints; zero `storefront DOWN` lines have ever been written. **`HEALTH_FAILS` 2→3 stays untouched.** A restart counter is a poor smoke alarm on a box that ships thirty times a day. **TWO NEW RULES:** *A CHANGE-DETECTOR CANNOT SEE A FAULT PRESENT AT STARTUP* — two of the four fallbacks read green from tick one, and a loop that compares each minute to the last can never see a value that was wrong before it started; and *A SHAPE-BASED SWEEP ONLY FINDS SHAPES* — thirteen fallback shapes swept and cross-checked still missed `$(( $(cat file) + 1 ))`, because bash's coercion of empty to 0 is a default nobody wrote and nothing can grep for. The sweep was extended to implicit defaults; **a method's silence is not evidence.**
 
 2026-08-23 · v4.66 — §24 Database: ✅ **G27 CLOSED** `loadEnv()` extracted from `server.js` to **`lib/load-env.js`**. **Not a shell wrapper: `.env` is not shell-sourceable, and line 63's unquoted `<` makes `set -a; . .env` fail as a REDIRECTION part-way down** — a partial environment passes `lib/pg`'s check while a variable the caller needed is silently absent. **The gap under-counted itself: FIVE scripts, not three**, found by two independent methods. **Server behaviour proven identical over 15 adversarial `.env` bodies**, not assumed. **The delta report's exit codes were rebuilt with it, because closing G27 alone would have left the worse half standing** — it had ONE exit path, so a missing `.env`, a dead pool and an absent pre-flip database were the same answer, **and a real delta exited 0 exactly like a clean window.** Now 0/1/2 = clean / real delta / could-not-run. **`lib/platform-alert.js` was never exposed** (one importer, in-process) but has the OTHER defect: an unset webhook reads as *off* rather than *cannot tell*. **And the local harness could not reproduce G27's cause at all** — no `pg`, no sqlite bindings — so the box exit codes still need re-measuring. **PART H's fallbacks swept and fixed:** three had operators to find, **a fourth had none** — `$(( $(cat flip-offset) + 1 ))` defaults through bash arithmetic on an empty string. **They failed in OPPOSITE directions** — the offset default went RED on tick one, the two `2>/dev/null` swallows read a missing log as GREEN forever. **The loop's own rule (byte-for-byte identical) detects CHANGE, so a value already wrong at the start is invisible to it.** **And my first fix for the producer was wrong**: `wc -c < LOG > FILE` does not zero the target, it leaves a STALE offset untouched — numeric, plausible, and passed by my own is-it-a-number check. It deletes first now. §24 A SCAN OF SCHEMA CANNOT SEE A SECRET HELD AS A ROW: 57 candidate columns, none of the 13 keys.
 
@@ -3178,6 +3180,49 @@ One self-referencing edge exists on each side (`retail_media_folders`). It is ex
 **RED-PROVEN:** `retail_orders.channel_note` hidden from `cols[]` — the run reported `LIVE COLUMNS ABSENT FROM cols[] : 1  (in tables that WERE examined)` and named it, instead of reporting clean. Restored to green after.
 
 **THE EXIT CODE IS UNCHANGED AND STILL REPORTS DIFFERENCES ONLY.** Scope is disclosed in the output, not folded into the code, because a caller that has always read `0` as *no differences* must keep reading it that way. **The line a human reads is the one that changed.**
+
+### RULE — A CHANGE-DETECTOR CANNOT SEE A FAULT PRESENT AT STARTUP — 2026-08-23
+
+**PART H's fast loop watches one line a minute and rings on any change.** It is a good rule and it has a hole with nothing in it to notice: **it compares each tick to the last, so a value that was already wrong when the loop started never changes and never rings.**
+
+Two of the four fallbacks fixed on 2026-08-23 landed exactly there. A missing error log made `grep -c` count **0 new errors**, and a missing health log left the watchdog count **empty**. Both were wrong from tick one, both stayed constant, and the loop reported a steady green line for the whole window.
+
+**THE GENERAL FORM: a monitor that alerts on DELTA is blind to a fault that predates it.** Startup faults, missing inputs, a probe pointed at the wrong path, a credential that was never set — none of them move. **Only a monitor that also asserts the ABSOLUTE state can see them**, which is why every input on that panel now emits `*** … ***` in the line rather than a plausible number, and why a `***` field is documented as *this trigger is not being evaluated at all* rather than as green.
+
+Beside [A CHECK THAT CANNOT RUN MUST REFUSE]: that one is about an instrument that fails, this one is about an instrument that was never pointed at anything.
+
+---
+
+### RULE — A SHAPE-BASED SWEEP ONLY FINDS SHAPES — 2026-08-23
+
+**Sweeping PART H for default-on-missing found three, by searching for the operators that create one:** `|| echo`, `|| true`, `2>/dev/null`, `${VAR:-default}`, `COALESCE`, a catch returning a constant. Thirteen shapes, cross-checked by a second method, counts agreeing exactly.
+
+**It still missed one, and the one it missed was the trigger command itself.** `$(( $(cat /root/flip-offset) + 1 ))` has **no operator of any kind.** The default comes from bash evaluating an empty string as 0 inside `$(( ))`. There is nothing there to grep for.
+
+**So a sweep by shape reports a complete answer to *which known shapes appear* and reads as an answer to *where can this silently default*.** The sweep was extended to implicit defaults — arithmetic on a command substitution, `grep -c` on a path that may not exist, `wc -l` of a glob, a test on an unquoted variable — and that second pass is what found it.
+
+**The lesson is not *add arithmetic to the pattern list*.** It is that **a language's free coercions are exactly the defaults nobody wrote and nobody can search for**, so a shape sweep must be followed by reading the steps that matter. Same family as A SCAN OF CODE CANNOT SEE A NAME HELD AS DATA and A SCAN OF SCHEMA CANNOT SEE A SECRET HELD AS A ROW: **the method answers the question it can ask, and its silence is not evidence.**
+
+---
+
+### THE 48 RESTARTS WERE 48 DEPLOYS — 2026-08-23
+
+**`roots-v2` showed 1417 restarts and one three minutes before it was looked at, on a box whose health probe had just been made stricter. The suspicion was that the new probe was restarting the app on transient 5xx. It is not, and the numbers are exact.**
+
+| Question | Measured |
+|---|---|
+| Restarts since the 08-21 alerting deploy | **48** (1369 → 1417) |
+| Deploys in the same window | **48** (35 on 08-22, 13 on 08-23) |
+| `unstable_restarts` | **0** — lifetime |
+| Watchdog restarts since 08-21 | **none** |
+| Last `probe FAILED` line of any kind | **2026-07-13**, six weeks ago |
+| `storefront DOWN` lines ever recorded | **0** |
+
+**One deploy, one restart, 48 for 48.** `scripts/deploy-apply.sh` runs `pm2 restart roots-v2 --update-env` unconditionally as step 5/5, so the count is a deploy counter wearing a health metric's name. **And `unstable_restarts` is 0 over the process's whole life, which per H5's own discriminator means not one of the 1417 was a crash.**
+
+**THE STRICTER PROBE HAS NEVER FAILED ONCE.** It was made to fail on 5xx on four paths on 08-21; every `probe FAILED` line in the log predates it, and none carries the `[probeDetail]` bracket the new probe prints. **So `HEALTH_FAILS` 2→3 stays untouched** — there is no evidence to turn it on, and turning it would blunt an instrument that has not yet made a single false call.
+
+**What the restart rate actually tracks is how hard this migration is being worked:** 3 deploys on 08-18, 5 on 08-19, 12 on 08-20, 22 on 08-21, 35 on 08-22. **A restart counter is a poor smoke alarm on a box that ships thirty times a day**, and reading it as one is what made 47 look alarming.
 
 ### RULE — A VERIFIER THAT SHARES THE COPIER'S MAP CANNOT AUDIT THE MAP — RECORDED 2026-08-21
 

@@ -1,4 +1,4 @@
-# The Postgres migration — status, v3.1
+# The Postgres migration — status, v3.2
 
 **2026-08-10 · A LIVING DOCUMENT. Both halves, in one place: what is built, and what is left.**
 Covers 2026-08-03 onwards. Read-only in itself — no code change ever accompanies it.
@@ -200,6 +200,10 @@ Type: **C** conversion · **F** fix · **D** design question · **O** operationa
 | 65 | ✅ **G27 CLOSED** — `lib/load-env.js`. Five scripts wired (the gap said three). Server proven identical over 15 `.env` shapes. **Delta report now 0=clean / 1=real delta / 2=could-not-run**; it had ONE exit path before. ⚠️ **Box exit codes still unmeasured** — the local machine has no `pg` and no sqlite bindings, so the local run never reproduced G27's cause | B | §24 G27 CLOSED |
 
 | 66 | ⚠️ **`lib/platform-alert.js` — an unset `PLATFORM_OPS_WEBHOOK` is a silent no-op.** Not a G27 exposure (one importer, `routes/integrations-admin.js`, in-process) but the same third-state defect `/root/ops-alert.conf` fixed for tenant alerts: missing config reads as *switched off* rather than *cannot tell*. Needs its own pass | O | §24 G27 CLOSED |
+
+| 67 | 🟢 **The app is not being restarted by anything but deploys.** 48 restarts since the 08-21 alerting deploy = 48 deploys, 1:1. `unstable_restarts` **0** lifetime — no crash, ever. **The stricter probe has never failed once**; last `probe FAILED` of any kind is 2026-07-13. **`HEALTH_FAILS` 2→3 stays untouched** — no evidence to turn it | C | §24 THE 48 RESTARTS WERE 48 DEPLOYS |
+
+| 68 | ⚠️ **`main` is moving under this branch.** Another session pushed `92ba9d53` at 12:40 CST on 08-23 and the box deployed it 2 minutes later; 13 deploys today, 35 on 08-22. Not a blocker for a PR merge, but **the 04:00 CST merge must be re-based on whatever `main` is at that hour**, and §24's deploy-race warning applies — check `gh run list` before merging | O | §24 THE 48 RESTARTS WERE 48 DEPLOYS |
 
 ### After the flip — explicitly not preconditions
 
