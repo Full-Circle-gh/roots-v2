@@ -5367,37 +5367,166 @@
   .pill.pub .dot { background: var(--accent); }
   .pill.draft { background: var(--bg-elev-1); color: var(--text-3); border-color: var(--line); }
   .pill.draft .dot { background: var(--text-4); }
-  /* Meituan sync status — Tea = live/synced, Brass = needs action, neutral = not on store */
-  /* Text on a tint is always the -ink variant: sage #A3B49F on sage-tint is
-     unreadable, which is what --warn (the amber BASE) was doing below. */
-  .pill.mt-ok   { background: var(--td-sage-tint); color: var(--td-sage-ink); border-color: var(--td-sage); }
-  .pill.mt-ok .dot   { background: var(--td-sage-ink); }
-  .pill.mt-warn { background: var(--td-amber-tint); color: var(--td-amber-ink); border-color: var(--td-amber); }
-  .pill.mt-warn .dot { background: var(--td-amber-ink); }
-  .pill.mt-off  { background: var(--bg-elev-1); color: var(--text-3); border-color: var(--line); }
-  .pill.mt-off .dot  { background: var(--text-4); }
-  /* Meituan toolbar — segmented filter + overflow menu */
-  .mt-seg { display: inline-flex; border: 1px solid var(--td-border); border-radius: 8px; overflow: hidden; }
-  .mt-seg button { border: 0; background: transparent; color: var(--td-text2); font: 400 13px var(--f-sans); padding: 8px 16px; cursor: pointer; }
-  .mt-seg button + button { border-left: 1px solid var(--td-border); }
-  .mt-seg button.active { background: var(--td-text); color: var(--td-paper); font-weight: 500; }
-  .mt-cell-foot { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
-  .mt-sub { font-size: 13px; line-height: 1.35; margin-top: 3px; }
-  /* Product identity cell — photo + names + SKU chip */
-  .mt-pcell { display: flex; align-items: center; gap: 11px; min-width: 0; }
-  .mt-thumb { width: 40px; height: 40px; border-radius: 8px; flex: none; object-fit: cover;
-              background: var(--bg-elev-2); border: 1px solid var(--line-soft); }
-  .mt-thumb-ph { display: flex; align-items: center; justify-content: center; color: var(--text-4); }
-  .mt-thumb-ph svg { width: 18px; height: 18px; }
-  .mt-pmeta { min-width: 0; }
-  .mt-psku { display: inline-block; font-family: var(--f-mono, ui-monospace, monospace); font-size: 13px;
-             line-height: 1; color: var(--text-3); background: var(--bg-elev-1);
-             border: 1px solid var(--line-soft); border-radius: 8px; padding: 2.5px 6px;
-             margin-top: 4px; letter-spacing: .02em; }
-  /* Live on neither store — brass edge stripe so problem rows pop while scrolling */
-  tr.mt-unmapped td:first-child { box-shadow: inset 3px 0 0 var(--brass); }
 
   /* ── Meituan tab redesign (2026-07): status strip + sub-views ─────────────── */
+
+  /* ══════════════════════════════════════════════════════════════════════
+     MEITUAN CHANNEL PAGE — rebuilt from scratch 2026-08-23 to
+     reference/meituan-page-v2-mockup.html (option 1), which was itself drawn
+     against the Orders page: the one screen already built Tacet-native. Every
+     shape here is one Orders already uses — header, tile row, chip filters,
+     toolbar, table. Nothing invented.
+
+     Gone with the old sheet, deliberately: the four-cell KPI strip, the store
+     cards, the amber attention banner (the "Not matched" tile says it now and
+     the chips act on it), the segmented filter (chips replace it), the channel
+     switch and the setup footer (both are setup, both belong on Sales).
+
+     Rules: §1.3 Inter, 13/15/18/24/30, weights 400+500 · §1.4 14px cards, 8px
+     controls, 999px pills, 8px space · §1.6 sentence case only · §1.7 header is
+     title + status line + one Dusk CTA · Dusk scarce, amber = a person is
+     needed, sage = all clear.
+     ══════════════════════════════════════════════════════════════════════ */
+
+  /* The admin's base tokens pre-date Tacet and are warm-grey (--text-1 is
+     #12161A, not Ink #111A2B). Remap once so every rule below is on-palette. */
+  #tab-meituan {
+    --bg-pane:     var(--td-surface);
+    --bg-elev-1:   var(--td-raised);
+    --bg-elev-2:   var(--td-raised);
+    --line:        var(--td-border);
+    --line-soft:   var(--td-border);
+    --line-strong: var(--td-border);
+    --text-1:      var(--td-text);
+    --text-2:      var(--td-text);
+    --text-3:      var(--td-text2);
+    --text-4:      var(--td-text2);
+    --accent:      var(--td-sage-ink);
+    --brass:       var(--td-amber);
+    --brass-hi:    var(--td-amber);
+    --danger:      var(--td-brick-ink);
+  }
+  /* A strong in-page action is Ink; only the header CTA is Dusk, and there is
+     one. Base .btn-primary is built on --brass, which would make every button
+     amber and stop amber meaning "warning". */
+  #tab-meituan .btn-primary { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
+  #tab-meituan .btn-primary:hover { background: var(--td-text); border-color: var(--td-text); opacity: .88; }
+
+  /* ── Header (§1.7): title, status line, one Dusk CTA. No fourth element. ── */
+  .mt-pagehead { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 32px; }
+  .mt-pagehead-t { min-width: 0; flex: 1 1 320px; }
+  /* text-transform must be reset: the global h2 (css:973) is the retired
+     uppercase eyebrow, and the `font:` shorthand does not clear it. */
+  .mt-pagehead h2 { font: 500 24px/1.3 var(--f-sans); letter-spacing: -.01em; text-transform: none; color: var(--td-text); margin: 0; }
+  .mt-status { font: 400 15px/1.6 var(--f-sans); color: var(--td-text2); margin: 4px 0 0; font-variant-numeric: tabular-nums; }
+  .mt-status .att { color: var(--td-amber-ink); }
+  .mt-pagehead .btn-primary { background: var(--td-dusk); border-color: var(--td-dusk); color: #fff; }
+  .mt-pagehead .btn-primary:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); opacity: 1; }
+
+  /* ── Tile row — Orders' opening shape ───────────────────────────────────── */
+  .mt-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 32px; }
+  .mt-tile { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px; padding: 24px; }
+  .mt-tile .k { font: 400 13px var(--f-sans); color: var(--td-text2); }
+  .mt-tile .v { font: 500 30px/1.2 var(--f-sans); letter-spacing: -.02em; margin-top: 8px; color: var(--td-text); font-variant-numeric: tabular-nums; }
+  .mt-tile .v.att { color: var(--td-amber-ink); }
+  .mt-tile .s { font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 8px; font-variant-numeric: tabular-nums; }
+  @media (max-width: 900px) { .mt-tiles { grid-template-columns: 1fr; } }
+
+  /* ── The one notice. Present ONLY while a store needs a person; when both
+     are healthy the page opens on the work, the way Orders does. ─────────── */
+  .mt-notice { display: flex; align-items: center; gap: 16px; background: var(--td-surface); border: 1px solid var(--td-amber); border-radius: 14px; padding: 16px 24px; margin-bottom: 32px; }
+  .mt-notice .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--td-amber); flex: none; }
+  .mt-notice .m { flex: 1; min-width: 0; font: 400 15px/1.6 var(--f-sans); color: var(--td-text); }
+  .mt-notice .m b { font-weight: 500; }
+  .mt-notice .sub { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin-top: 4px; }
+
+  /* ── Sub-tabs ───────────────────────────────────────────────────────────── */
+  .mt-tabs { display: flex; align-items: center; gap: 24px; border-bottom: 1px solid var(--td-border); margin: 0 0 16px; }
+  .mt-tab { appearance: none; background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 0; font: 500 13px var(--f-sans); color: var(--td-text2); cursor: pointer; display: flex; align-items: center; gap: 8px; }
+  .mt-tab:hover { color: var(--td-text); }
+  .mt-tab.active { color: var(--td-text); border-bottom-color: var(--td-text); }
+  .mt-tab .n { font: 400 13px var(--f-sans); color: var(--td-text2); background: var(--td-raised); border-radius: 999px; padding: 0 8px; font-variant-numeric: tabular-nums; }
+  .mt-tab .n:empty { display: none; }
+  .mt-tab.active .n { color: var(--td-text); }
+  .mt-tabs-grow { flex: 1 1 auto; }
+  .mt-upd { font: 400 13px var(--f-sans); color: var(--td-text2); font-variant-numeric: tabular-nums; }
+
+  /* ── Chip filters — Orders' filter row ──────────────────────────────────── */
+  .mt-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .mt-fchip { font: 400 13px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 999px; padding: 8px 16px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+  .mt-fchip:hover { border-color: var(--td-text2); }
+  .mt-fchip.on { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
+  .mt-fchip .c { color: var(--td-text2); font-variant-numeric: tabular-nums; }
+  .mt-fchip.on .c { color: var(--td-paper); opacity: .7; }
+
+  /* ── Toolbar ────────────────────────────────────────────────────────────── */
+  .mt-tools { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+  .mt-sel { font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; }
+  .mt-search { flex: 1 1 280px; font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; }
+  .mt-search::placeholder { color: var(--td-text2); }
+
+  /* ── Table ──────────────────────────────────────────────────────────────── */
+  .mt-tablewrap { border: 1px solid var(--td-border); border-radius: 14px; overflow: hidden; background: var(--td-surface); }
+  #mt-products-table { width: 100%; border-collapse: collapse; }
+  #mt-products-table thead th { background: var(--td-header); color: var(--td-text); font: 500 13px var(--f-sans); letter-spacing: 0; text-transform: none; text-align: left; padding: 10px 16px; border: 0; }
+  #mt-products-table td { padding: 16px; border-top: 1px solid var(--td-border); border-bottom: 0; vertical-align: top; font-size: 15px; color: var(--td-text); }
+  #mt-products-table tbody tr:hover { background: var(--td-raised); }
+  .mt-pcell { display: flex; gap: 16px; }
+  .mt-thumb { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; border: 1px solid var(--td-border); flex: none; background: var(--td-raised); }
+  .mt-thumb-ph { width: 40px; height: 40px; border-radius: 8px; background: var(--td-raised); border: 1px solid var(--td-border); flex: none; }
+  .mt-pname { font-weight: 500; }
+  .mt-pname .vl { font-weight: 400; color: var(--td-text2); }
+  .mt-pmeta { font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 4px; }
+  .mt-psku { display: inline-block; margin-top: 8px; font: 400 13px var(--f-sans); color: var(--td-text2); background: var(--td-raised); border: 1px solid var(--td-border); border-radius: 8px; padding: 0 8px; font-variant-numeric: tabular-nums; }
+  .mt-name-input { display: block; width: 100%; margin-top: 8px; font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; }
+  .mt-name-input::placeholder { color: var(--td-text2); }
+  .mt-sub { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin-top: 8px; }
+  .mt-sub b { font-weight: 500; color: var(--td-text); }
+  .mt-cell-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .mt-empty { padding: 24px; text-align: center; font: 400 15px var(--f-sans); color: var(--td-text2); }
+
+  /* Status pills. Text on a tint is always the -ink variant. */
+  .mt-pill { display: inline-flex; align-items: center; gap: 8px; font: 500 13px var(--f-sans); border-radius: 999px; padding: 0 8px; }
+  .mt-pill .d { width: 8px; height: 8px; border-radius: 999px; background: currentColor; flex: none; }
+  .mt-pill.ok  { background: var(--td-sage-tint);  color: var(--td-sage-ink); }
+  .mt-pill.att { background: var(--td-amber-tint); color: var(--td-amber-ink); }
+  .mt-pill.off { background: var(--td-raised);     color: var(--td-text2); }
+
+  /* Size picker on a multi-size listing, and the flag when none is chosen. */
+  .mt-size { margin-top: 8px; font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; }
+  .mt-size.warn { border-color: var(--td-amber); }
+
+  /* ── Views ──────────────────────────────────────────────────────────────── */
+  .mt-view[hidden] { display: none; }
+  .mt-act-h { font: 500 18px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); margin: 0 0 16px; }
+  .mt-act-h + .mt-log { margin-bottom: 32px; }
+  .mt-log { font: 400 13px/1.7 var(--f-sans); max-height: 264px; overflow: auto; border: 1px solid var(--td-border); border-radius: 14px; padding: 16px 24px; background: var(--td-surface); color: var(--td-text2); font-variant-numeric: tabular-nums; }
+  .mt-log .t { color: var(--td-text2); }
+  .mt-log .bad { color: var(--td-brick-ink); }
+  .mt-log .empty { color: var(--td-text2); }
+
+  /* ── Bundles ────────────────────────────────────────────────────────────── */
+  .mt-card { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px; overflow: hidden; }
+  .mt-brow { display: flex; align-items: center; gap: 16px; padding: 16px 24px; }
+  .mt-brow + .mt-brow { border-top: 1px solid var(--td-border); }
+  .mt-brow .bn { font-weight: 500; }
+  .mt-brow .bs { font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 4px; }
+  .mt-brow .bg { flex: 1; }
+
+  /* ── Match-names dialog + its pickers ───────────────────────────────────── */
+  .mt-dlg { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px; width: min(680px, 92vw); max-height: 86vh; display: flex; flex-direction: column; overflow: hidden; }
+  .mt-dlg-hd { display: flex; align-items: center; gap: 16px; padding: 24px; border-bottom: 1px solid var(--td-border); font: 500 18px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); }
+  .mt-dlg-bd { padding: 24px; overflow: auto; font: 400 15px/1.6 var(--f-sans); color: var(--td-text); }
+  .mt-dlg-ft { display: flex; align-items: center; gap: 8px; padding: 16px 24px; border-top: 1px solid var(--td-border); }
+  .mt-okline { display: flex; align-items: center; gap: 8px; background: var(--td-sage-tint); color: var(--td-sage-ink); border-radius: 8px; padding: 8px 16px; font: 500 13px var(--f-sans); margin-bottom: 8px; }
+  .mt-pickhd { font: 500 13px var(--f-sans); color: var(--td-text2); margin: 16px 0 8px; }
+  .mt-pick { display: flex; flex-wrap: wrap; gap: 8px; }
+  .mt-pick .pn { font-weight: 500; }
+  .mt-chip { font: 400 13px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 999px; padding: 8px 16px; cursor: pointer; }
+  .mt-chip:hover { border-color: var(--td-sage); color: var(--td-sage-ink); background: var(--td-sage-tint); }
+  .mt-tinylink { background: none; border: none; padding: 0; cursor: pointer; font: 400 13px var(--f-sans); color: var(--td-text2); text-decoration: underline; }
+  .mt-tinylink:hover { color: var(--td-text); }
+
   /* ══ Eleme channel page ══════════════════════════════════════════════════
      Ported onto the same pattern as the Meituan tab. The page previously had
      ZERO css rules — every colour and size lived in an inline style attribute,
@@ -5494,180 +5623,27 @@
     .el-chan input, .el-chan input::after { transition: none; }
   }
 
-  /* ── Tacet skin for the whole Meituan tab ──────────────────────────────
-     The admin's base tokens are warm-grey and pre-date Tacet (--text-1 is
-     #12161A "Ink Charcoal", not Tacet Ink #111A2B; --text-2 is #43413a, not
-     Graphite #58606E). Every .mt-* rule reads those vars, so the page was
-     painting off-palette no matter what the individual rules said. Remap them
-     once here and the whole section recolours — the same move .mc-wiz makes
-     for the Mini App card. Tacet has only two text tones, so text-1/2 both
-     resolve to --td-text and text-3/4 to --td-text2. */
-  #tab-meituan {
-    --bg-pane:     var(--td-surface);
-    --bg-elev-1:   var(--td-raised);
-    --bg-elev-2:   var(--td-raised);
-    --line:        var(--td-border);
-    --line-soft:   var(--td-border);
-    --line-strong: var(--td-border);
-    --text-1:      var(--td-text);
-    --text-2:      var(--td-text);
-    --text-3:      var(--td-text2);
-    --text-4:      var(--td-text2);
-    --accent:      var(--td-sage-ink);   /* live / ok cues */
-    --brass:       var(--td-amber);      /* needs-a-person cues */
-    --brass-hi:    var(--td-amber);
-    --danger:      var(--td-brick-ink);
-  }
 
-  .mt-how { margin: 0 0 var(--s4); font-size: 13px; color: var(--text-3); }
-  .mt-how summary { cursor: pointer; }
-  .mt-how > div { margin-top: 8px; padding: 10px 14px; background: var(--bg-elev-1); border: 1px solid var(--line-soft); border-radius: 8px; max-width: 70ch; color: var(--text-2); }
 
-  /* status strip — one compact row instead of the four fc-kpi tiles */
-  /* The .mt-strip rules went with the strip itself. They also carried two of
-     this section's four text-transform:uppercase declarations (§1.6). */
-  .mt-tabs { display: flex; align-items: center; gap: 24px; border-bottom: 1px solid var(--td-border); margin: 0 0 16px; }
-  .mt-tab { appearance: none; background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 0; font: 500 13px var(--f-sans); color: var(--td-text2); cursor: pointer; display: flex; align-items: center; gap: 8px; }
-  .mt-tab:hover { color: var(--td-text); }
-  .mt-tab.active { color: var(--td-text); border-bottom-color: var(--td-text); }
-  .mt-tab .n { font: 400 13px var(--f-sans); color: var(--td-text2); background: var(--td-raised); border-radius: 999px; padding: 0 8px; font-variant-numeric: tabular-nums; }
-  .mt-tab .n:empty { display: none; }
-  .mt-tab.active .n { background: var(--td-raised); color: var(--td-text); }
 
-  .mt-tabs-grow { flex: 1 1 auto; }
-  .mt-tabs .mt-upd { font-size: 13px; color: var(--td-text2); padding-right: 16px; align-self: center; font-variant-numeric: tabular-nums; }
-  .mt-tabs .btn { align-self: center; margin-bottom: 8px; }
 
-  /* ── Page header — §1.7: title, status line, one Dusk CTA. There is no
-     fourth element. The purpose line that used to sit here ("Stock stays in
-     sync…") is banned by §1.7: it describes what the page is for and reads
-     the same every day. The status line replaces it with what is true now. */
-  /* Buttons on the channel pages. Base .btn-primary is --brass, which these
-     tabs remap to Amber — so every primary button came out amber and Amber
-     stopped meaning "warning". A strong in-page action is Ink (the treatment
-     .cs-modal uses); only the page header's CTA is Dusk, and there is one. */
-  #tab-meituan .btn-primary, #tab-eleme .btn-primary {
-    background: var(--td-text); border-color: var(--td-text); color: var(--td-paper);
-  }
-  #tab-meituan .btn-primary:hover, #tab-eleme .btn-primary:hover {
-    background: var(--td-text); border-color: var(--td-text); opacity: .88;
-  }
-  .mt-pagehead .btn-primary, .el-pagehead .btn-primary {
-    background: var(--td-dusk); border-color: var(--td-dusk); color: #fff;
-  }
-  .mt-pagehead .btn-primary:hover, .el-pagehead .btn-primary:hover {
-    background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); opacity: 1;
-  }
 
-  .mt-pagehead { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 32px; }
-  .mt-pagehead-t { min-width: 0; flex: 1 1 340px; }
-  /* text-transform must be reset explicitly: the global h2 (css:973) is the
-     retired uppercase eyebrow and the `font:` shorthand does not clear it. */
-  .mt-pagehead h2 { font: 500 24px/1.3 var(--f-sans); letter-spacing: -.01em; text-transform: none; color: var(--td-text); margin: 0; }
-  .mt-status { font: 400 15px/1.6 var(--f-sans); color: var(--td-text2); margin: 4px 0 0; font-variant-numeric: tabular-nums; }
-  .mt-status .att { color: var(--td-amber-ink); }
 
-  /* ── Channel switch — a setting, so it lives in the body. §1.7 keeps the
-     top-right slot for the page's one Dusk action and says it stays empty
-     rather than take a secondary. */
-  .mt-chanrow { display: flex; align-items: center; justify-content: flex-end; margin-bottom: 16px; }
-  .mt-chan { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
-  .mt-chan .lab { font: 400 13px var(--f-sans); color: var(--td-text2); }
-  .mt-chan input { appearance: none; -webkit-appearance: none; margin: 0; width: 36px; height: 20px; border-radius: 999px; background: var(--td-border); border: none; position: relative; cursor: pointer; transition: background 200ms cubic-bezier(.16,1,.3,1); flex: none; }
-  .mt-chan input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 999px; background: var(--td-surface); transition: left 200ms cubic-bezier(.16,1,.3,1); }
-  .mt-chan input:checked { background: var(--td-sage); }
-  .mt-chan input:checked::after { left: 19px; }
-  .mt-chan input:focus-visible { outline: 2px solid var(--td-sage); outline-offset: 2px; }
 
-  /* ── Per-store cards. One card per store, because the old single cell could
-     not say "Tianhe is fine and Yuexiu is locked out" — the state the channel
-     was actually in for 24 days. Amber only ever means a person is needed. */
-  .mt-stores { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; margin: 0 0 32px; }
-  .mt-store { border: 1px solid var(--td-border); border-radius: 14px; padding: 24px; background: var(--td-surface); }
-  .mt-store.blocked { border-color: var(--td-amber); background: var(--td-surface); }
-  .mt-store .sh { display: flex; align-items: baseline; gap: 8px; }
-  .mt-store .sdot { width: 8px; height: 8px; border-radius: 999px; background: var(--td-sage); flex: none; align-self: center; }
-  .mt-store.blocked .sdot { background: var(--td-amber); }
-  .mt-store.closed .sdot { background: var(--td-text2); }
-  .mt-store .sname { font: 500 18px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); }
-  .mt-store .smode { margin-left: auto; font: 400 13px var(--f-sans); color: var(--td-text2); }
-  .mt-store .sstate { font: 400 15px/1.6 var(--f-sans); margin-top: 8px; color: var(--td-sage-ink); }
-  .mt-store.blocked .sstate { color: var(--td-amber-ink); }
-  .mt-store.closed .sstate { color: var(--td-text2); }
-  .mt-store .sfacts { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--td-border); }
-  .mt-store.blocked .sfacts { border-top-color: var(--td-border); }
-  .mt-store .sf .k { font: 500 13px var(--f-sans); color: var(--td-text2); }
-  .mt-store .sf .v { font: 400 15px var(--f-sans); color: var(--td-text); font-variant-numeric: tabular-nums; }
-  .mt-store .sf .v.warn { color: var(--td-amber-ink); }
-  .mt-store .sact { margin-top: 16px; }
-  .mt-store .sact code { display: inline-block; font: 400 13px var(--f-sans); color: var(--td-text2); background: var(--td-raised); border-radius: 8px; padding: 8px 16px; }
-  .mt-store.blocked .sact code { background: var(--td-raised); }
 
-  .mt-storefoot { display: flex; align-items: center; gap: 16px; justify-content: flex-end; margin: -16px 0 32px; }
-  .mt-help { background: none; border: none; cursor: pointer; font: 400 13px var(--f-sans); color: var(--td-text2); padding: 0; }
-  .mt-help:hover { color: var(--td-text); }
 
-  /* ── Activity — the sync log /status always returned and nothing showed. */
-  .mt-act-h { font: 500 18px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); margin: 0 0 16px; }
-  .mt-act-h + .mt-log { margin-bottom: 32px; }
-  .mt-log { font: 400 13px/1.7 var(--f-sans); max-height: 264px; overflow: auto; border: 1px solid var(--td-border); border-radius: 14px; padding: 16px 24px; background: var(--td-surface); color: var(--td-text2); font-variant-numeric: tabular-nums; }
-  .mt-log .t { color: var(--td-text2); }
-  .mt-log .bad { color: var(--td-brick-ink); }
-  .mt-log .warnrow { color: var(--td-amber-ink); }
-  .mt-log .empty { color: var(--td-text2); }
 
-  /* ── Table header — the band from tacet-design-system v1.3: --td-header on
-     every table, 13px Inter 500 sentence case in --td-text (NOT --td-text2).
-     The global `th` rule is 11px/600 uppercase; §1.6 says each page's rebuild
-     removes its own rather than changing that globally. */
-  #mt-products-table thead th { background: var(--td-header); color: var(--td-text); font: 500 13px var(--f-sans); letter-spacing: 0; text-transform: none; border-bottom: 1px solid var(--td-border); padding: 10px 16px; }
 
   @media (prefers-reduced-motion: reduce) {
-    .mt-chan input, .mt-chan input::after { transition: none; }
   }
 
-  /* attention banner — only home of the Match-names flow */
-  .mt-attn { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; background: var(--td-amber-tint); border: 1px solid var(--td-amber); border-radius: 14px; padding: 16px 24px; margin: 0 0 16px; color: var(--td-amber-ink); }
-  .mt-attn .atxt { flex: 1; min-width: 200px; color: var(--text-2); font-size: 13px; }
-  .mt-attn .atxt b { color: var(--text-1); }
 
-  /* orders / bundles cards */
-  .mt-card { background: var(--bg-pane); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
-  .mt-orow { display: flex; align-items: center; gap: 12px; padding: 8px 14px; border-bottom: 1px solid var(--line-soft); cursor: pointer; }
-  .mt-orow:hover { background: var(--bg-elev-1); }
 
-  /* mapping-table sync toggle: hidden until the row is hovered so rows read as
-     name + status; stays visible when OFF (a paused product is never hidden)
-     or when reached by keyboard */
-  #mt-products-table .toggle-label { opacity: 0; transition: opacity .12s; }
-  #mt-products-table tr:hover .toggle-label,
-  #mt-products-table .toggle-label:focus-within,
-  #mt-products-table .toggle-label:has(input:not(:checked)) { opacity: 1; }
 
-  /* Match-names dialog */
-  .mt-ovl { position: fixed; inset: 0; background: var(--bg-overlay); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 20px; }
-  .mt-dlg { background: var(--bg-pane); color: var(--text-1); width: min(540px, 100%); max-height: 86vh; overflow: auto; border-radius: 14px; border: 1px solid var(--line-strong); box-shadow: 0 18px 50px rgba(0,0,0,.4); }
-  .mt-dlg-hd { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
-  .mt-dlg-hd b { font-size: 15px; }
-  .mt-dlg-bd { padding: 16px; }
-  .mt-dlg-bd p { margin: 0 0 14px; color: var(--text-2); font-size: 13px; max-width: 52ch; }
-  .mt-okline { display: flex; align-items: center; gap: 8px; background: var(--td-sage-tint); color: var(--td-sage-ink); border-radius: 8px; padding: 8px 16px; font-weight: 500; margin-bottom: 8px; font-size: 13px; }
-  .mt-pickhd { font-size: 13px; font-weight: 500; color: var(--text-2); margin: 12px 0 8px; }
-  .mt-pick { border: 1px solid var(--line-soft); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
-  .mt-pick .pn { font-weight: 500; margin-bottom: 6px; font-size: 13px; }
-  .mt-pick .chips { display: flex; gap: 6px; flex-wrap: wrap; }
-  .mt-chip { border: 1px solid var(--line); background: var(--bg-pane); color: var(--text-1); border-radius: 999px; padding: 4px 12px; font: 12.5px var(--f-sans); cursor: pointer; }
-  .mt-chip:hover { border-color: var(--td-sage); color: var(--td-sage-ink); background: var(--td-sage-tint); }
-  .mt-dlg-ft { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--line); }
-  .mt-tinylink { background: none; border: none; padding: 0; font: 12px var(--f-sans); color: var(--text-4); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
-  .mt-tinylink:hover { color: var(--text-2); }
 
   @media (max-width: 720px) {
-    .mt-cell { padding: 2px 12px; border-right: none; }
-    .mt-strip-act { width: 100%; justify-content: flex-end; padding-top: 6px; }
   }
   @media (prefers-reduced-motion: reduce) {
-    #mt-products-table .toggle-label { transition: none; }
   }
   /* Brass = needs-action / in-flight; Tea = money-in / done; neutral = closed. */
   .pill.st-pending_payment { background: rgba(201, 149, 74, .12); color: var(--st-pending_payment); border-color: rgba(201, 149, 74, .30); }

@@ -17,7 +17,8 @@
   let _bundleSuggest = []; // combo candidates surfaced from pasted/fetched titles
   let _initiated = false;
   let _lastStores = [];  // last /status.stores, so the status line can repaint
-  let _mtFilter  = 'all';  // toolbar segmented filter: 'all' | 'att' (needs attention)
+  let _mtFilter  = 'all';  // chip filter: all | att | ok | ms
+  let _mtStore   = '';     // store filter: '' = all stores
 
   // ── Entry point ────────────────────────────────────────────────────────────
   window.mtAdminInit = async function () {
@@ -68,21 +69,21 @@
     }, 12000);
   }
 
-  // Store-status controls MOVED to the Sales page channel cards (channel × location
-  // matrix — see csLoad/csPopup in 01-core.js). The per-store panel that used to
-  // live here is retired; mtLoadBusinessStatus is kept as a no-op that clears the
-  // (now unused) #mt-business-status slot, because mtAdminInit + the 12s poll still
-  // call it.
-  window.mtLoadBusinessStatus = function () {
-    const box = document.getElementById('mt-business-status');
-    if (box && box.innerHTML) box.innerHTML = '';
-  };
+  // Store open/close (营业/休息) lives on the Sales page channel cards (see
+  // csLoad/csPopup in 01-core.js). The per-store panel that used to sit here was
+  // retired, and the mtLoadBusinessStatus no-op that outlived it was deleted in
+  // the 2026-08-23 rebuild. The read itself is still live server-side
+  // (/meituan/business-status) and still has no UI of its own.
+
 
   // Orders ledger removed — Meituan orders show on the main Orders page like
   // every other channel; keeping a second read-only copy here was duplicate
   // noise. The "Last order" KPI (from /status) stays as the health signal.
 
-  // -- Channel switch ---------------------------------------------------------
+  // -- Channel switch (no UI on this page) -------------------------------------
+  // The on/off control moved to Sales: it is channel setup, not daily work.
+  // These stay because the flag is real — both daemons honour it — and the
+  // Sales card will drive them once it grows a switch.
   // Meituan had no off switch: stopping the channel meant killing the daemon.
   // Both daemons (外卖 and 闪购, which share one queue) now check the same flag.
   // It defaults ON — an absent key must never read as "off" and take a live
@@ -141,6 +142,7 @@
     } catch (e) {
       console.warn('[meituan] loadStores error', e);
     }
+    mtRenderStoreFilter();
   }
 
   // ── Status ─────────────────────────────────────────────────────────────────
@@ -161,156 +163,111 @@
   window.mtLoadStatus = async function () {
     try {
       const s = await api('/api/retail-admin/meituan/status');
-
-      // The channel switch and every store card come straight off /status, so
-      // one poll keeps the whole head of the page honest.
       mtPaintChannel(s.enabled !== false);
       _lastStores = s.stores || [];
-      mtRenderStores(_lastStores);
-      mtRenderStatusLine();
+      mtRenderHead();
       mtRenderLog('mt-log-stock', s.recentStock, true);
       mtRenderLog('mt-log-sys', s.recentSystem, false);
-
       mtSetKpi('mt-upd', cuT('Updated just now', '刚刚更新'));
     } catch (e) {
-      // Cannot reach the admin API at all. Say exactly that, rather than
-      // leaving the last-known store cards on screen looking current.
-      const box = document.getElementById('mt-stores');
-      if (box) {
-        box.innerHTML = '<div class="mt-store blocked"><div class="sh">' +
-          '<span class="sdot"></span><span class="sname">' +
-          cuT('Cannot reach the sync service', '无法连接同步服务') + '</span></div>' +
-          '<div class="sstate">' +
-          cuT('The numbers below are from the last successful check.', '以下数据为上次成功检查的结果。') +
-          '</div></div>';
+      // Cannot reach the admin API. Say so where the notice goes, rather than
+      // leaving the last numbers on screen looking current.
+      const n = document.getElementById('mt-notice');
+      if (n) {
+        n.innerHTML = '<div class="mt-notice"><span class="dot"></span><div class="m"><b>' +
+          cuT('Cannot reach the sync service', '无法连接同步服务') + '</b><div class="sub">' +
+          cuT('The numbers above are from the last successful check.', '上方数据为上次成功检查的结果。') +
+          '</div></div></div>';
       }
       mtSetKpi('mt-upd', cuT('Offline', '离线'));
     }
   };
 
-  // -- Per-store health cards -------------------------------------------------
-  // Replaces the single "Sync / Active" cell, whose green only ever meant that
-  // this HTTP request succeeded. Server-side (meituanStoreHealth) a store is
-  // blocked when its latest health event is a blocking one AND nothing has
-  // pushed since — so 天河 recovering from its own queue_stalled stays green,
-  // while 越秀 sitting behind a verification challenge does not.
+  // ── The head: status line, three tiles, and at most one notice ─────────────
+  // Orders' opening, applied here. The tiles headline the numbers an operator
+  // acts on; the per-store split rides underneath so no figure is ever a total
+  // you have to unpick. The notice exists ONLY while a store needs a person —
+  // when both are healthy the page opens straight on the work.
   const MT_BLOCK_TXT = {
-    needs_login:     ['Signed out', '已退出登录'],
-    verify_required: ['Meituan asked for a verification scan', '美团要求扫码验证'],
-    queue_stalled:   ['Stock updates stalled', '库存推送停滞'],
-    poll_paused:     ['Order polling paused', '订单轮询已暂停'],
-    proxy_stale:     ['Network route down', '网络线路不可用'],
+    needs_login:     ['is signed out', '已退出登录'],
+    verify_required: ['needs a verification scan', '需要扫码验证'],
+    queue_stalled:   ['has a stalled stock queue', '库存推送停滞'],
+    poll_paused:     ['has order polling paused', '订单轮询已暂停'],
+    proxy_stale:     ['has no network route', '网络线路不可用'],
   };
 
-  // What actually gets a store signed back in. Shown as the command to run and
-  // NOT a button: both need a human at a browser on the box, so a button here
-  // could only lie about what pressing it does.
-  function mtFixHint(code) {
-    const isInstant = _storeB && code === _storeB.code;
-    return isInstant ? 'node scripts/shangou-export-session.js'
-                     : 'node scripts/meituan-login.js ' + code;
+  function mtRenderHead() {
+    const rows   = _lastStores || [];
+    const active = _products.filter(p => p.is_active);
+    const live   = active.filter(p => Object.values(p.stores || {}).some(m => m.meituan_name)).length;
+    const att    = active.filter(p => mtNeedsAttention(p)).length;
+    const waiting = rows.reduce((a, r) => a + Number(r.pending || 0) + Number(r.processing || 0), 0);
+    const cn = document.documentElement.dataset.uiLang === 'cn';
+    const per = (key) => rows.map(r => Number(r[key] || 0) + ' ' + (mtStoreName(r.code, cn) || r.name)).join(' · ');
+
+    // Status line (§1.7): live state, sentence case, tabular, " · " between facts.
+    const st = document.getElementById('mt-status');
+    if (st) {
+      let html = esc(cuT(live + ' live', live + ' 个已上架'));
+      if (att) html += ' · ' + esc(cuT(att + ' unmatched', att + ' 个未匹配'));
+      const bad = rows.filter(r => r.blocked);
+      if (bad.length) {
+        const names = bad.map(r => mtStoreName(r.code, cn) || r.name).join(', ');
+        html += ' · <span class="att">' + esc(cuT(names + ' needs you', names + ' 需要处理')) + '</span>';
+      } else if (!att) {
+        html += ' · ' + esc(cuT('all matched', '全部已匹配'));
+      }
+      st.innerHTML = html;
+    }
+
+    const tiles = document.getElementById('mt-tiles');
+    if (tiles) {
+      tiles.innerHTML =
+        tile(cuT('Live on Meituan', '已上架美团'), live, per('live'), false) +
+        tile(cuT('Not matched', '未匹配'), att,
+             cuT('stock stays frozen until matched', '匹配前库存不会更新'), att > 0) +
+        tile(cuT('Stock updates waiting', '待推送库存'), waiting, per('pending'), false);
+    }
+
+    const notice = document.getElementById('mt-notice');
+    if (notice) {
+      const bad = rows.filter(r => r.blocked)[0];
+      if (!bad) { notice.innerHTML = ''; }
+      else {
+        const who  = mtStoreName(bad.code, cn) || bad.name;
+        const what = MT_BLOCK_TXT[bad.blockedBy] || ['is not syncing', '同步已停'];
+        const bits = [];
+        if (bad.blockedAt)   bits.push(cuT('since ' + fmtAgo(bad.blockedAt), fmtAgo(bad.blockedAt)));
+        if (bad.lastOrderAt) bits.push(cuT('last order ' + fmtAgo(bad.lastOrderAt), '最近订单 ' + fmtAgo(bad.lastOrderAt)));
+        notice.innerHTML = '<div class="mt-notice"><span class="dot"></span>' +
+          '<div class="m"><b>' + esc(who + ' ' + cuT(what[0], what[1])) + '.</b>' +
+          (bits.length ? '<div class="sub">' + esc(bits.join(' · ')) +
+            ' · ' + esc(cuT('No stock is going out and no orders are coming in.',
+                            '库存不再推送,订单也不会导入。')) + '</div>' : '') +
+          '</div>' + mtFixAction(bad.code) + '</div>';
+      }
+    }
+
+    function tile(k, v, sub, warn) {
+      return '<div class="mt-tile"><div class="k">' + esc(k) + '</div>' +
+        '<div class="v' + (warn ? ' att' : '') + '">' + esc(String(v)) + '</div>' +
+        '<div class="s">' + esc(sub) + '</div></div>';
+    }
   }
 
-  // The Configure panel had a real "Sign in again" that opens the guided relay
-  // wizard; the page only had a command to copy. Use the button when the
-  // wizard is loaded, and fall back to the command when it is not — an
-  // operator on the box can still act, and neither option pretends to do
-  // something it cannot.
+  // Signing a store back in needs a human at a browser on the box, so this is
+  // the guided wizard when it is loaded and the command to run when it is not.
+  // Never a button that cannot do what it says.
   function mtFixAction(code) {
     if (typeof window.igRelayWizard === 'function') {
-      return '<button class="btn btn-sm btn-primary" onclick="igRelayWizard(\'meituan\', ' +
-        '{step:\'creds\', store:\'' + esc(code) + '\'})">' +
-        cuT('Sign in again', '重新登录') + '</button>';
+      return '<button class="btn btn-primary" onclick="igRelayWizard(\'meituan\', ' +
+        '{step:\'creds\', store:\'' + esc(code) + '\'})">' + cuT('Sign in again', '重新登录') + '</button>';
     }
-    return '<code>' + esc(mtFixHint(code)) + '</code>';
+    const isInstant = _storeB && code === _storeB.code;
+    return '<code class="mt-psku">' + esc(isInstant ? 'node scripts/shangou-export-session.js'
+                                                    : 'node scripts/meituan-login.js ' + code) + '</code>';
   }
 
-  // §1.7 status line: live state for the section, directly under the title,
-  // sentence case, tabular, facts joined by " · ". It replaces the purpose line
-  // that used to sit there and never changed. Zero Dusk — this is state, not
-  // the system acting.
-  function mtRenderStatusLine() {
-    const el = document.getElementById('mt-status');
-    if (!el) return;
-    const rows = _lastStores;
-    if (!rows.length) { el.textContent = ''; return; }
-    const cn = document.documentElement.dataset.uiLang === 'cn';
-    // Count DISTINCT products, never the sum of the stores: most products are
-    // live on both, so summing read "390 live" against a catalogue of 248.
-    // Same definition the toolbar count and the banner use, so the three
-    // numbers on screen agree with each other.
-    const active = _products.filter(p => p.is_active);
-    const live = active.filter(p => Object.values(p.stores || {}).some(m => m.meituan_name)).length;
-    const unmatched = active.filter(p => mtNeedsAttention(p)).length;
-    const parts = [cuT(live + ' live on Meituan', live + ' 个已上架美团')];
-    if (unmatched) parts.push(cuT(unmatched + ' unmatched', unmatched + ' 个未匹配'));
-    let html = parts.map(esc).join(' · ');
-    // A blocked store is the one fact worth colouring. Amber, never Dusk.
-    const bad = rows.filter(r => r.blocked);
-    if (bad.length) {
-      const names = bad.map(r => mtStoreName(r.code, cn) || r.name).join(', ');
-      html += ' · <span class="att">' +
-        esc(cuT(names + ' needs you', names + ' 需要处理')) + '</span>';
-    }
-    el.innerHTML = html;
-  }
-
-  function mtRenderStores(stores) {
-    const box = document.getElementById('mt-stores');
-    if (!box) return;
-    const rows = Array.isArray(stores) ? stores : [];
-    if (!rows.length) { box.innerHTML = ''; return; }
-    const cn = document.documentElement.dataset.uiLang === 'cn';
-    box.innerHTML = rows.map(st => {
-      const isInstant = _storeB && st.code === _storeB.code;
-      const mode = isInstant ? cuT('Matched by SKU', '按货号匹配')
-                             : cuT('Matched by name', '按名称匹配');
-      const bt = MT_BLOCK_TXT[st.blockedBy] || ['Not syncing', '同步已停'];
-      // Closed is not broken. The store shuts overnight and the daemon logs
-      // poll_paused for it; saying so plainly (and not in amber) is the whole
-      // difference between "we are shut" and "something needs you".
-      const blockTxt = st.blocked ? cuT(bt[0], bt[1])
-        : st.closed ? cuT('Closed · stock still syncing', '休息中 · 库存照常同步')
-        : cuT('Signed in · pushing stock', '已登录 · 正在推送');
-      let since = st.blocked && st.blockedAt ? ' · ' + (fmtAgo(st.blockedAt) || '') : '';
-      // Whether Meituan itself has the store open. Only ever shown in the old
-      // Configure panel, never on the page it described. null = not read yet,
-      // and saying nothing beats guessing "closed".
-      if (!st.blocked && st.openOnMeituan === false) since += ' · ' + cuT('closed on Meituan', '美团已置休');
-      if (!st.blocked && st.openOnMeituan === true)  since += ' · ' + cuT('open on Meituan', '美团营业中');
-      if (st.lastPushAt) since += ' · ' + cuT('pushed ', '推送于 ') + (fmtAgo(st.lastPushAt) || '');
-      // A stranded row is one the daemon claimed and never finished. Nothing
-      // counted these before, so 40 of them showed up in neither number.
-      const stranded = Number(st.processing || 0);
-      const facts = [
-        { k: cuT('Live', '已上架'),        v: st.live,      warn: false },
-        { k: cuT('Unmatched', '未匹配'),   v: st.unmatched, warn: st.unmatched > 0 },
-        { k: cuT('Waiting', '待推送'),     v: st.pending,   warn: false },
-        stranded ? { k: cuT('Stranded', '卡住'), v: stranded, warn: true } : null,
-        // Orders today and the last push came off the scrapped Configure panel.
-        // "Last order" alone could not tell a quiet morning from a dead channel.
-        { k: cuT('Orders today', '今日订单'), v: Number(st.ordersToday || 0), warn: false },
-        { k: cuT('Last order', '最近订单'),
-          v: st.lastOrderAt ? (fmtAgo(st.lastOrderAt) || '—') : cuT('none', '无'), warn: false },
-      ].filter(Boolean);
-      const factHtml = facts.map(f =>
-        '<div class="sf"><div class="k">' + esc(f.k) + '</div><div class="v' +
-        (f.warn ? ' warn' : '') + '">' + esc(String(f.v)) + '</div></div>').join('');
-      const cls = st.blocked ? ' blocked' : st.closed ? ' closed' : '';
-      return '<div class="mt-store' + cls + '">' +
-          '<div class="sh"><span class="sdot"></span>' +
-            '<span class="sname">' + esc(mtStoreName(st.code, cn) || st.name) + '</span>' +
-            '<span class="smode">' + esc(mode) + '</span></div>' +
-          '<div class="sstate">' + esc(blockTxt) + esc(since) + '</div>' +
-          '<div class="sfacts">' + factHtml + '</div>' +
-          (st.blocked ? '<div class="sact">' + mtFixAction(st.code) + '</div>' : '') +
-        '</div>';
-    }).join('');
-  }
-
-  // -- Activity ---------------------------------------------------------------
-  // /status has always returned recentStock + recentSystem; nothing rendered
-  // them here, so the page could not answer "what did it just do".
   function mtRenderLog(id, rows, isStock) {
     const box = document.getElementById(id);
     if (!box) return;
@@ -363,30 +320,72 @@
   };
 
   // ── Toolbar: segmented filter ────────────────────────────────────────────────
+  // ── Chip filters + store filter (Orders' filter row) ───────────────────────
+  // Replaces the two-button segmented control. "Multi-size" is the new one and
+  // the reason the specs are captured: 15 of 265 listings at 天河 hold more
+  // than one 规格, and those are exactly the ones whose stock can go wrong.
+  const MT_CHIPS = [
+    { id: 'all', en: 'All',             cn: '全部' },
+    { id: 'att', en: 'Needs attention', cn: '待处理' },
+    { id: 'ok',  en: 'Synced',          cn: '已同步' },
+    { id: 'ms',  en: 'Multi-size',      cn: '多规格' },
+  ];
+
+  function mtChipMatch(p, id) {
+    const maps = Object.values(p.stores || {});
+    if (id === 'att') return mtNeedsAttention(p);
+    if (id === 'ok')  return maps.some(m => m.meituan_name);
+    if (id === 'ms')  return maps.some(m => Number(m.specCount || 0) > 1);
+    return true;
+  }
+
+  function mtRenderChips() {
+    const box = document.getElementById('mt-chips');
+    if (!box) return;
+    const active = _products.filter(p => p.is_active).filter(mtStorePass);
+    box.innerHTML = MT_CHIPS.map(c => {
+      const n = active.filter(p => mtChipMatch(p, c.id)).length;
+      return '<button class="mt-fchip' + (_mtFilter === c.id ? ' on' : '') +
+        '" onclick="mtSetFilter(\'' + c.id + '\')">' + esc(cuT(c.en, c.cn)) +
+        ' <span class="c">' + n + '</span></button>';
+    }).join('');
+  }
+
   window.mtSetFilter = function (f) {
-    _mtFilter = f === 'att' ? 'att' : 'all';
-    const all = document.getElementById('mt-seg-all');
-    const att = document.getElementById('mt-seg-att');
-    if (all) all.classList.toggle('active', _mtFilter === 'all');
-    if (att) att.classList.toggle('active', _mtFilter === 'att');
+    _mtFilter = f;
+    mtRenderChips();
     mtFilterProducts();
   };
 
-  // ── Listing-name autocomplete (same concept as the Eleme tab's) ─────────────
-  // The Tianhe delivery name field (mt-name-input below) was blind free text —
-  // whatever a "Match names" run last cached in _listings is the real source
-  // of truth, so read it on load too (GET only, no scrape) rather than only
-  // populating it as a side effect of running the bulk matcher.
-  async function mtLoadListingsCache() {
-    try {
-      const r = await api('/api/retail-admin/meituan/listings');
-      _listings = (r && r.listings) || {};
-    } catch (e) { /* leave whatever _listings already had */ }
-    mtRenderListingDatalists();
+  // Store filter. Picking one store hides the other's column, so the table is
+  // about the store you are working on rather than both at once.
+  function mtRenderStoreFilter() {
+    const sel = document.getElementById('mt-store-filter');
+    if (!sel) return;
+    const cn = document.documentElement.dataset.uiLang === 'cn';
+    sel.innerHTML = '<option value="">' + esc(cuT('All stores', '全部门店')) + '</option>' +
+      mtUniqueStores().map(s =>
+        '<option value="' + esc(s.code) + '"' + (_mtStore === s.code ? ' selected' : '') + '>' +
+        esc(mtStoreName(s.code, cn) || s.name) + '</option>').join('');
   }
 
-  // One <datalist> per store (their catalogues differ) — datalists have no
-  // visible presence, so they live in a hidden container appended once.
+  window.mtSetStore = function (code) {
+    _mtStore = code || '';
+    const th0 = document.getElementById('mt-th-store-0');
+    const th1 = document.getElementById('mt-th-store-1');
+    if (th0) th0.hidden = !!(_mtStore && _storeA && _mtStore !== _storeA.code);
+    if (th1) th1.hidden = !!(_mtStore && _storeB && _mtStore !== _storeB.code);
+    mtRenderChips();
+    mtFilterProducts();
+  };
+
+  // Chip counts must be filtered the same way the rows are, or the chips claim
+  // 248 while the table shows 40. Mirrors the store filter in mtRenderProducts.
+  function mtStorePass(p) {
+    if (!_mtStore) return true;
+    return !!(p.stores || {})[_mtStore] || mtNeedsAttention(p);
+  }
+
   function mtRenderListingDatalists() {
     let host = document.getElementById('mt-listings-datalists');
     if (!host) {
@@ -418,7 +417,7 @@
 
   // One status pill (Tea = live, Brass = needs action, neutral = not on store).
   function mtPill(kind, label) {
-    return `<span class="pill ${kind}"><span class="dot"></span>${esc(label)}</span>`;
+    return '<span class="mt-pill ' + kind + '"><span class="d"></span>' + esc(label) + '</span>';
   }
   // "Last 18 · 1d ago" footnote for a store mapping (safe inside data-no-i18n).
   function mtLast(map) {
@@ -434,49 +433,39 @@
   }
 
   function mtRenderProducts(filtered) {
-    // Mapping list stays active-only (picker loads inactive variants too).
-    const list   = (filtered || _products).filter(p => p.is_active);
-    const tbody  = document.getElementById('mt-products-body');
-    const storeA = _storeA;
-    const storeB = _storeB;
+    // Active only; the bundle picker loads inactive variants separately.
+    const base = (filtered || _products).filter(p => p.is_active);
+    // Chip + store filters. A store filter narrows the rows to ones that store
+    // actually has something to say about, and hides the other column.
+    const list = base.filter(p => mtChipMatch(p, _mtFilter)).filter(p => {
+      if (!_mtStore) return true;
+      return !!(p.stores || {})[_mtStore] || mtNeedsAttention(p);
+    });
+    const tbody = document.getElementById('mt-products-body');
+    if (!tbody) return;
+    const storeA = _storeA, storeB = _storeB;
+    const showA = !(_mtStore && storeA && _mtStore !== storeA.code);
+    const showB = !(_mtStore && storeB && _mtStore !== storeB.code);
+    const cols  = 1 + (showA ? 1 : 0) + (showB ? 1 : 0);
 
-    // Toolbar count — N shown of the active total, plus how many are live.
     const total = _products.filter(p => p.is_active).length;
-    const live  = _products.filter(p => p.is_active && Object.values(p.stores || {}).some(m => m.meituan_name)).length;
-    const att   = _products.filter(p => p.is_active && mtNeedsAttention(p)).length;
-    const cnt = document.getElementById('mt-count');
-    if (cnt) cnt.textContent = cuT(`${list.length} of ${total} shown · ${live} live`, `显示 ${list.length} / ${total} · ${live} 已上架`);
     const tabn = document.getElementById('mt-tabn-products');
     if (tabn) tabn.textContent = total || '';
-    // The old "Live on Meituan" strip cell summed both stores into one number,
-    // which could not say WHICH store a product was missing from. Per-store
-    // live/unmatched now come off /status.stores and render on the store cards;
-    // `live` here still feeds the toolbar count and the banner below.
-
-    // Attention banner — the only home of the Match-names flow; hidden the
-    // moment every active product is live somewhere.
-    mtRenderStatusLine();  // product counts only exist now
-
-    const attn  = document.getElementById('mt-attn');
-    const attxt = document.getElementById('mt-attn-txt');
-    if (attn) attn.hidden = !att;
-    if (attxt && att) {
-      attxt.innerHTML = cuT(
-        `<b>${att} product${att > 1 ? "s aren't" : " isn't"} matched on Meituan yet.</b> Their stock stays frozen on Meituan until they're matched.`,
-        `<b>${att} 个商品尚未匹配美团。</b>匹配前它们在美团上的库存不会更新。`);
-    }
+    mtRenderHead();      // the tiles read the product list, so repaint them here
+    mtRenderChips();
 
     if (!list.length) {
-      tbody.innerHTML = `<tr><td colspan="3" class="muted" style="padding:24px;text-align:center">${cuT('No products found.', '未找到商品。')}</td></tr>`;
+      tbody.innerHTML = '<tr><td colspan="' + cols + '" class="mt-empty">' +
+        cuT('Nothing here.', '暂无商品。') + '</td></tr>';
       return;
     }
 
-    // Rows sharing the exact same name look like duplicates. Tag them so they're
-    // tellable apart: prefer the variant label, else fall back to the product id.
-    const dupNames = {};
+    // Rows sharing an identical name read as duplicates; tag them apart with the
+    // variant label, or the id when there is no label.
+    const dup = {};
     for (const p of list) {
       const k = (p.name_cn || '') + '|' + (p.name_en || '');
-      dupNames[k] = (dupNames[k] || 0) + 1;
+      dup[k] = (dup[k] || 0) + 1;
     }
 
     tbody.innerHTML = list.map(p => {
@@ -484,83 +473,77 @@
       const mapB = storeB ? (p.stores[storeB.code] || {}) : {};
       const anyMapped = mapA.meituan_name || mapB.meituan_name;
 
-      // Product name — show the active language first, the other as a subline so
-      // staff can still cross-reference the Meituan listing.
       const nm1 = cuT(p.name_en || p.name_cn || '', p.name_cn || p.name_en || '');
       const nm2 = cuT(p.name_cn || '', p.name_en || '');
-      const tag = p.variant_label
-        ? ` <span class="muted" style="font-weight:400;font-size:11px">· ${esc(p.variant_label)}</span>`
-        : (dupNames[(p.name_cn || '') + '|' + (p.name_en || '')] > 1
-            ? ` <span class="muted" style="font-weight:400;font-size:11px">· #${p.id}</span>` : '');
-      // Identity cell: photo + names + SKU chip, so a product is recognisable at
-      // a glance and the SKU that drives the Yuexiu auto-match is visible. The
-      // image is a lazy thumbnail URL (never a blob — see the list-image footgun).
+      const tag = p.variant_label ? ' <span class="vl">· ' + esc(p.variant_label) + '</span>'
+        : (dup[(p.name_cn || '') + '|' + (p.name_en || '')] > 1 ? ' <span class="vl">· #' + p.id + '</span>' : '');
       const thumb = p.image
-        ? `<img class="mt-thumb" loading="lazy" src="${esc(p.image)}" alt="">`
-        : `<span class="mt-thumb mt-thumb-ph"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg></span>`;
-      const skuChip = p.sku ? `<span class="mt-psku">${esc(p.sku)}</span>` : '';
-      const nameCell = `<div class="mt-pcell">${thumb}<div class="mt-pmeta">
-        <div style="font-weight:600;line-height:1.3">${esc(nm1)}${tag}</div>`
-        + (nm2 && nm2 !== nm1 ? `<div class="muted" style="font-size:11px;margin-top:1px">${esc(nm2)}</div>` : '')
-        + skuChip + `</div></div>`;
+        ? '<img class="mt-thumb" loading="lazy" src="' + esc(p.image) + '" alt="">'
+        : '<span class="mt-thumb-ph"></span>';
+      const nameCell = '<div class="mt-pcell">' + thumb + '<div>' +
+        '<div class="mt-pname">' + esc(nm1) + tag + '</div>' +
+        (nm2 && nm2 !== nm1 ? '<div class="mt-pmeta">' + esc(nm2) + '</div>' : '') +
+        (p.sku ? '<span class="mt-psku">' + esc(p.sku) + '</span>' : '') +
+        '</div></div>';
 
-      // Tianhe (delivery) — matches by name, so this column stays editable.
-      let colA;
-      if (!storeA) {
-        colA = '<span class="muted">—</span>';
-      } else {
-        const hasName = !!mapA.meituan_name;
-        const syncOn  = hasName && mapA.sync_enabled !== 0;
-        const pillA = !hasName ? mtPill('mt-warn', cuT('Add name', '待填名称'))
-          : (syncOn ? mtPill('mt-ok', cuT('Synced', '已同步'))
-                    : mtPill('mt-off', cuT('Sync off', '已关闭')));
-        const lastA = mtLast(mapA);
-        const toggleA = hasName
-          ? `<label class="toggle-label" title="${cuT('Tianhe delivery sync on / off', '天河外卖同步开关')}"><input type="checkbox" ${syncOn ? 'checked' : ''} data-pid="${p.id}" onchange="mtToggleSync(this)"></label>`
-          : '';
-        colA = `<div>${pillA}</div>
-          <input type="text" class="form-control mt-name-input" style="font-size:12px;margin-top:5px"
-            list="mt-listings-dl-${esc(storeA.code)}"
-            placeholder="${esc(cuT('Meituan delivery name', '美团外卖商品名'))}"
-            value="${esc(mapA.meituan_name || '')}"
-            data-pid="${p.id}" data-store-id="${storeA.id}" data-store-code="${storeA.code}"
-            onblur="mtSaveMap(this)" onkeydown="if(event.key==='Enter')this.blur()">
-          ${(lastA || toggleA) ? `<div class="mt-cell-foot">${lastA ? `<span class="muted" style="font-size:11px">${esc(lastA)}</span>` : ''}${toggleA}</div>` : ''}`;
+      // Tianhe matches by listing name, so this column is editable.
+      let colA = '';
+      if (showA) {
+        if (!storeA) colA = '<td><span class="mt-pill off">—</span></td>';
+        else {
+          const hasName = !!mapA.meituan_name;
+          const syncOn  = hasName && mapA.sync_enabled !== 0;
+          const pill = !hasName ? mtPill('att', cuT('Add name', '待填名称'))
+            : (syncOn ? mtPill('ok', cuT('Synced', '已同步')) : mtPill('off', cuT('Sync off', '已关闭')));
+          const last = mtLast(mapA);
+          const toggle = hasName
+            ? '<label class="toggle-label" title="' + cuT('Sync on / off', '同步开关') +
+              '"><input type="checkbox" ' + (syncOn ? 'checked' : '') +
+              ' data-pid="' + p.id + '" onchange="mtToggleSync(this)"></label>'
+            : '';
+          // A listing that holds several sizes cannot be pushed accurately
+          // until one is chosen — the driver would guess otherwise.
+          const multi = Number(mapA.specCount || 0) > 1;
+          colA = '<td>' + pill +
+            '<input type="text" class="mt-name-input" list="mt-listings-dl-' + esc(storeA.code) + '"' +
+            ' placeholder="' + esc(cuT('Meituan delivery name', '美团外卖商品名')) + '"' +
+            ' value="' + esc(mapA.meituan_name || '') + '"' +
+            ' data-pid="' + p.id + '" data-store-id="' + storeA.id + '" data-store-code="' + esc(storeA.code) + '"' +
+            ' onblur="mtSaveMap(this)" onkeydown="if(event.key===\'Enter\')this.blur()">' +
+            (multi ? '<div class="mt-sub">' +
+              esc(cuT('This listing holds several sizes.', '该商品含多个规格。')) + '</div>' : '') +
+            ((last || toggle) ? '<div class="mt-cell-foot">' +
+              (last ? '<span class="mt-pmeta">' + esc(last) + '</span>' : '') + toggle + '</div>' : '') +
+            '</td>';
+        }
       }
 
-      // Yuexiu (instant) — read-only. The shangou daemon maps it by 货号; we only
-      // report whether it's live, the matched listing, and when it last pushed.
-      let colB;
-      if (!storeB) {
-        colB = '<span class="muted">—</span>';
-      } else if (mapB.meituan_name) {
-        const on = mapB.sync_enabled !== 0;
-        const pillB = on ? mtPill('mt-ok', cuT('Synced · auto', '已同步 · 自动'))
-                         : mtPill('mt-off', cuT('Sync off', '已关闭'));
-        const lastB = mtLast(mapB);
-        colB = `<div>${pillB}</div>
-          <div class="muted mt-sub">${esc(mapB.meituan_name)}</div>
-          ${lastB ? `<div class="muted mt-sub">${esc(lastB)}</div>` : ''}`;
-      } else {
-        // Was "Not on Meituan — list it on Meituan with this SKU". Wrong twice:
-        // this column is only about 越秀 instant (the left one may well be
-        // synced), and the product is often ALREADY listed there and merely
-        // missing its 货号 — which is the whole reason the auto-map cannot see
-        // it. Say what is actually true and what actually fixes it.
-        const sk = (p.sku || '').trim();
-        colB = `<div>${mtPill('mt-off', cuT('Not linked', '未关联'))}</div>
-          <div class="muted mt-sub">${sk
-            ? cuT(`No listing carries SKU ${esc(sk)} yet — add it on 闪购 and this links itself`,
-                  `暂无商品使用货号 ${esc(sk)} — 在闪购填写后会自动关联`)
-            : cuT('This product has no SKU, so it cannot be matched here',
-                  '该商品没有货号,无法在此匹配')}</div>`;
+      // Yuexiu is read-only: the 闪购 daemon links it by 货号.
+      let colB = '';
+      if (showB) {
+        if (!storeB) colB = '<td><span class="mt-pill off">—</span></td>';
+        else if (mapB.meituan_name) {
+          const on = mapB.sync_enabled !== 0;
+          const last = mtLast(mapB);
+          colB = '<td>' + (on ? mtPill('ok', cuT('Linked by SKU', '按货号关联'))
+                              : mtPill('off', cuT('Sync off', '已关闭'))) +
+            '<div class="mt-sub">' + esc(mapB.meituan_name) + '</div>' +
+            (last ? '<div class="mt-pmeta">' + esc(last) + '</div>' : '') + '</td>';
+        } else {
+          // Not "list it on Meituan": the product is often already listed there
+          // and merely missing its 货号, which is why the auto-map cannot see it.
+          const sk = (p.sku || '').trim();
+          colB = '<td>' + mtPill('off', cuT('Not linked', '未关联')) +
+            '<div class="mt-sub">' + (sk
+              ? esc(cuT('No listing carries SKU ', '暂无商品使用货号 ')) + '<b>' + esc(sk) + '</b>' +
+                esc(cuT(' yet — add it on 闪购 and this links itself', ' — 在闪购填写后会自动关联'))
+              : esc(cuT('This product has no SKU, so it cannot be matched here',
+                        '该商品没有货号,无法在此匹配'))) + '</div></td>';
+        }
       }
 
-      return `<tr data-pid="${p.id}" class="mt-product-row${anyMapped ? '' : ' mt-unmapped'}">
-        <td>${nameCell}</td>
-        <td>${colA}</td>
-        <td>${colB}</td>
-      </tr>`;
+      return '<tr data-pid="' + p.id + '" class="mt-product-row' + (anyMapped ? '' : ' mt-unmapped') + '">' +
+        '<td>' + nameCell + '</td>' + colA + colB + '</tr>';
     }).join('');
   }
 
@@ -1051,12 +1034,15 @@
 
   // ── Filter ──────────────────────────────────────────────────────────────────
   window.mtFilterProducts = function () {
-    const q = (document.getElementById('mt-search')?.value || '').toLowerCase();
-    const filtered = _products.filter(p => {
-      if (_mtFilter === 'att' && !mtNeedsAttention(p)) return false;
-      if (!q) return true;
-      return (p.name_cn || '').toLowerCase().includes(q) || (p.name_en || '').toLowerCase().includes(q);
-    });
+    const q = (document.getElementById('mt-search')?.value || '').trim().toLowerCase();
+    // Chip + store filters live in mtRenderProducts; this is only the text
+    // match, and it now covers the SKU and the mapped Meituan listing name —
+    // the two things you actually have in front of you when hunting a row.
+    const filtered = !q ? _products : _products.filter(p =>
+      (p.name_cn || '').toLowerCase().includes(q) ||
+      (p.name_en || '').toLowerCase().includes(q) ||
+      (p.sku || '').toLowerCase().includes(q) ||
+      Object.values(p.stores || {}).some(m => (m.meituan_name || '').toLowerCase().includes(q)));
     mtRenderProducts(filtered);
   };
 
@@ -1075,25 +1061,29 @@
     if (tabn) tabn.textContent = _bundles.length || '';
     if (!wrap) return;
     if (!_bundles.length) {
-      wrap.innerHTML = `<div class="muted" style="font-size:13px;padding:12px 14px">${cuT('No bundles yet.', '暂无套餐。')}</div>`;
+      wrap.innerHTML = '<div class="mt-empty">' + cuT('No bundles yet.', '暂无套餐。') + '</div>';
       return;
     }
-    wrap.innerHTML = _bundles.map((b, bi) => {
+    wrap.innerHTML = _bundles.map(b => {
       const comps = (b.components || []).map(c =>
-        `${esc([c.name_cn, c.name_en].filter(Boolean).join(' '))}${c.variant_label ? ` (${esc(c.variant_label)})` : ''}${c.qty > 1 ? ` ×${c.qty}` : ''}`
-      ).join(', ');
-      const storeName = (_stores.find(s => s.code === b.store_code) || {}).name || b.store_code;
-      return `<div style="${bi ? 'border-top:1px solid var(--line-soft);' : ''}padding:12px 14px;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;align-items:flex-start">
-        <div style="min-width:240px;flex:1">
-          <div style="font-weight:600">${esc(b.meituan_name)} <span class="muted" style="font-weight:400;font-size:11px">· ${esc(storeName)}</span></div>
-          <div class="muted" style="font-size:12px;margin-top:2px">${comps || '<span style="color:var(--warn)">no components — add some</span>'}</div>
-          <div style="font-size:12px;margin-top:3px">Available now: <b>${b.available}</b>${b.max_qty != null ? ` (cap ${b.max_qty})` : ''}${b.sync_enabled ? '' : ' · <span class="muted">sync off</span>'}${b.last_pushed_at ? ` · last pushed ${b.last_pushed_qty} ${fmtAgo(b.last_pushed_at)}` : ''}</div>
-        </div>
-        <div style="display:flex;gap:6px">
-          <button class="btn btn-sm" onclick="mtEditBundle(${b.id})">Edit</button>
-          <button class="btn btn-sm" onclick="mtDeleteBundle(${b.id})">Delete</button>
-        </div>
-      </div>`;
+        esc([c.name_cn, c.name_en].filter(Boolean).join(' ')) +
+        (c.variant_label ? ' (' + esc(c.variant_label) + ')' : '') +
+        (c.qty > 1 ? ' ×' + c.qty : '')).join(', ');
+      const storeName = (_stores.find(s2 => s2.code === b.store_code) || {}).name || b.store_code;
+      const facts = [cuT('Available now ', '当前可做 ') + b.available];
+      if (b.max_qty != null) facts.push(cuT('cap ' + b.max_qty, '上限 ' + b.max_qty));
+      if (!b.sync_enabled) facts.push(cuT('sync off', '同步已关'));
+      if (b.last_pushed_at) facts.push(cuT('pushed ' + b.last_pushed_qty + ' ' + fmtAgo(b.last_pushed_at),
+                                           '推送 ' + b.last_pushed_qty + ' ' + fmtAgo(b.last_pushed_at)));
+      return '<div class="mt-brow"><div class="bg">' +
+          '<div class="bn">' + esc(b.meituan_name) + '</div>' +
+          '<div class="bs">' + esc(storeName) + ' · ' +
+            (comps || esc(cuT('no components yet', '尚未添加组成商品'))) + '</div>' +
+          '<div class="bs">' + esc(facts.join(' · ')) + '</div>' +
+        '</div>' +
+        '<button class="btn btn-sm" onclick="mtEditBundle(' + b.id + ')">' + cuT('Edit', '编辑') + '</button>' +
+        '<button class="btn btn-sm" onclick="mtDeleteBundle(' + b.id + ')">' + cuT('Delete', '删除') + '</button>' +
+      '</div>';
     }).join('');
   }
 
