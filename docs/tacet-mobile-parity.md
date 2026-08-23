@@ -1020,6 +1020,29 @@ only it has something to explain.
 | Customers | The sort control sat right-aligned and alone on an otherwise empty row, reading as a stray label rather than a control |
 | Media, Customers, Order sheet | "1 images", "1 orders", "1 parcels" |
 
+### Half the app spoke English to a Chinese operator, in the wrong places
+
+`T(en, zh)` resolves the language **now**. That is right for anything a renderer
+builds and wrong for anything a **loader stores** — and two kinds of value are
+stored by loaders.
+
+Home's Today card is built once at boot: `state.liveKpis` held labels and
+comparisons with `T()` already applied, so both were frozen in whatever language
+the app started in. A Chinese operator's first screen read "Revenue (all
+channels)". Those are pairs now, resolved by the renderer that draws them.
+
+Thirty error messages had the same shape: `state.posErr = T('Could not load
+purchase orders.', …)` inside a `.catch()`, sitting in state until the screen is
+next drawn. Someone whose shop had a failure read it in English for as long as
+it stayed on the glass. `E(en, zh)` defers — it keeps the pair and resolves it
+when the template interpolates it, so the thirty assignment sites changed and
+none of the thirty render sites had to.
+
+**The sweep renders every screen a third time, in Chinese, and fails on any long
+English half of a bilingual pair that survives the switch.** 339 renders where
+there were 226. It found all six of these in its first run; nothing that asserts
+on English text could have.
+
 ### A form that said Created and sent nothing
 
 The create sheet — new coupon, new flash sale, new broadcast — had a submit

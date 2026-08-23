@@ -129,7 +129,7 @@ function buildCases(src) {
     'push:inbox-feedback': "state.inboxSeg='feedback';APP.cmd('push','inbox')",
     'sheet:thread-loading': "state.inboxSeg='feedback';APP.cmd('push','inbox');APP.cmd('openReply','fb:1')",
     'sheet:thread': "state.inboxSeg='feedback';APP.cmd('push','inbox');APP.cmd('openReply','fb:1');state.thread={id:1,loading:false,err:null,page:'checkout',appVersion:'2.4.1',photos:['/x.png'],msgs:[{id:0,author:'customer',body:'Pickup time is wrong.',created_at:'2026-08-19 10:02:00'},{id:1,author:'admin',author_name:'Mei',body:'Looking at it now.',created_at:'2026-08-19 10:40:00'},{id:2,author:'customer',body:'Still doing it.',created_at:'2026-08-22 09:10:00'}]};render()",
-    'sheet:thread-error': "state.inboxSeg='feedback';APP.cmd('push','inbox');APP.cmd('openReply','fb:1');state.thread={id:1,loading:false,err:'Could not load the conversation.',msgs:null};render()",
+    'sheet:thread-error': "state.inboxSeg='feedback';APP.cmd('push','inbox');APP.cmd('openReply','fb:1');state.thread={id:1,loading:false,err:E('Could not load the conversation.','\u65e0\u6cd5\u52a0\u8f7d\u5bf9\u8bdd\u3002'),msgs:null};render()",
     'sheet:search': "APP.cmd('openSearch')",
     // Purchasing reads a live ledger, so the sweep seeds one — otherwise every
     // pass renders the loading state and proves nothing about the rows.
@@ -209,7 +209,9 @@ function buildCases(src) {
     'sheet:refund-approve': "" + ROWS + "DB.orders[0]._id=1;DB.orders[0].raw='paid';DB.orders[0].refundStatus='pending';state.liveOrders=DB.orders;APP.cmd('openOrder',DB.orders[0].id);APP.cmd('approveRefund')",
     'sheet:refund-payout': "" + ROWS + "DB.orders[0]._id=1;DB.orders[0].raw='paid';DB.orders[0].refundStatus='approved';state.liveOrders=DB.orders;APP.cmd('openOrder',DB.orders[0].id);APP.cmd('payRefund')",
     'theme:dark': "APP.cmd('toggleTheme');APP.cmd('tab','orders')",
-    'lang:zh': "APP.cmd('toggleLang');APP.cmd('tab','more')",
+    // No 'lang:zh' case any more: the third pass renders EVERY screen in
+    // Chinese, so one hand-written Chinese case adds nothing — and in that pass
+    // it toggled twice and landed back in English, which read as a failure.
   });
   return cases;
 }
@@ -227,10 +229,28 @@ function buildCases(src) {
 const PROBE = `<script>window.__e=[];addEventListener('error',function(e){window.__e.push(e.message)},true);
 addEventListener('load',function(){setTimeout(function(){
   var n=document.querySelectorAll('#app *').length;
-  var iso=((document.getElementById('app')||{}).innerText||'').match(/\\d{4}-\\d{2}-\\d{2}/);
+  var t=(document.getElementById('app')||{}).innerText||'';
+  var iso=t.match(/\\d{4}-\\d{2}-\\d{2}/);
+  var frozen=null;
+  if(window.__EN){ for(var i=0;i<window.__EN.length;i++){ if(t.indexOf(window.__EN[i])>=0){ frozen=window.__EN[i]; break; } } }
   document.title = window.__e.length ? ('ERR '+window.__e.join(' | '))
+    : frozen ? ('EN '+frozen.slice(0,60))
     : iso ? ('ISO '+iso[0]) : ('OK '+n);
 },400)});</script>`;
+
+// Every long English half of a bilingual pair, for the Chinese pass below.
+// Long and spaced, because a short one ('new', 'Open', 'Live') turns up inside
+// a product name or a channel's own Latin name and would cry wolf.
+function englishHalves(src) {
+  const raw = (src.match(/<script>([\s\S]*?)<\/script>/) || [])[1] || '';
+  const js = raw.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+  const out = new Set();
+  for (const m of js.matchAll(/(^|[^\w$.])T\(\s*'((?:[^'\\]|\\.)*)'\s*,\s*'((?:[^'\\]|\\.)*)'\s*\)/g)) {
+    const en = m[2], zh = m[3];
+    if (en !== zh && en.length >= 14 && en.includes(' ') && /[\u4e00-\u9fff]/.test(zh)) out.add(en);
+  }
+  return [...out];
+}
 
 function main() {
   const chrome = findChrome();
@@ -252,11 +272,21 @@ function main() {
   // branch. COLD seeds nothing — the first paint, and the offline one, where a
   // screen must show a loading or empty state rather than reaching into data
   // that has not arrived. Half the crashes in this app's history live there.
-  const passes = [['warm', SEED], ['cold', '']];
+  // A third pass, in Chinese, checking that nothing English survives the
+  // switch. The Today card on HOME did: state.liveKpis is built once at boot
+  // with T() already applied, so both the labels and the comparisons under them
+  // were frozen in whatever language the app started in, and a Chinese operator
+  // read "Revenue (all channels)". Every other bilingual value in the file is
+  // stored as a pair and resolved at render; those two were built in a loader
+  // rather than a renderer and slipped the rule. Nothing that asserts on
+  // English text can see this, and neither can a screenshot nobody takes in
+  // Chinese.
+  const passes = [['warm', SEED], ['cold', ''], ['zh', SEED + "APP.cmd('toggleLang');"]];
   const work = [];
   for (const [name, js] of Object.entries(cases)) {
     for (const [pass, seed] of passes) work.push([`${name} [${pass}]`, seed, js]);
   }
+  const EN = englishHalves(src);
 
   // ── Static pass: a helper that is called but never defined ──────────────
   // Rendering every screen does NOT catch this. A helper reached only from a
@@ -491,6 +521,7 @@ function main() {
 
   for (const [name, seed, js] of work) {
     const html = src.replace('</body>',
+      (name.endsWith('[zh]') ? `<script>window.__EN=${JSON.stringify(EN)};</script>` : '') +
       `<script>addEventListener("load",function(){try{${seed}${js}}catch(e){window.__e.push("cmd: "+e.message)}});</script>${PROBE}</body>`);
     const file = path.join(dir, name.replace(/[^a-z0-9]/gi, '_') + '.html');
     fs.writeFileSync(file, html);
@@ -502,7 +533,8 @@ function main() {
     } catch (e) { failures.push([name, 'chrome failed: ' + e.message]); continue; }
     const title = (out.match(/<title>([^<]*)<\/title>/) || [])[1] || 'no title';
     const nodes = Number((title.match(/^OK (\d+)/) || [])[1] || 0);
-    if (title.startsWith('ISO')) failures.push([name, `a raw column date reached the screen: ${title.slice(4)} — format it with fmtDay/fmtDateOnly`]);
+    if (title.startsWith('EN')) failures.push([name, `English survived the language switch: "${title.slice(3)}" — store the pair, resolve it at render`]);
+    else if (title.startsWith('ISO')) failures.push([name, `a raw column date reached the screen: ${title.slice(4)} — format it with fmtDay/fmtDateOnly`]);
     else if (!title.startsWith('OK')) failures.push([name, title]);
     // A screen that paints almost nothing is a screen that failed quietly.
     else if (nodes < 12) failures.push([name, `painted only ${nodes} nodes`]);
@@ -515,7 +547,7 @@ function main() {
     console.error(`\n${failures.length} of ${total} screens failed.`);
     process.exit(1);
   }
-  console.log(`ok — ${total} renders (${Object.keys(cases).length} screens, warm and cold), no uncaught errors.`);
+  console.log(`ok — ${total} renders (${Object.keys(cases).length} screens, warm, cold and Chinese), no uncaught errors.`);
 }
 
 main();

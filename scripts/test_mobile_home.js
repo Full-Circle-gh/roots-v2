@@ -22,11 +22,15 @@
 
 const { run } = require('./lib/m-probe');
 
+// [labelPair, value, deltaPair] — the label and the comparison are stored as
+// bilingual PAIRS and resolved at render, because this array is built once at
+// boot and used to freeze both in whatever language the app started in. A
+// Chinese operator's Today card read "Revenue (all channels)".
 const KPIS = `state.liveKpis=[
-  ['Revenue (all channels)','¥3,180','+12% vs a typical day'],
-  ['Orders (storefront)','19','+3 vs a typical day'],
-  ['Avg. order','¥167.37',''],
-  ['New customers','4','−1 vs a typical day']];`;
+  [['Revenue (all channels)','营收（全渠道）'],'¥3,180',['+12% vs a typical day','较平常日 +12%']],
+  [['Orders (storefront)','订单（自营）'],'19',['+3 vs a typical day','较平常日 +3']],
+  [['Avg. order','客单价'],'¥167.37',null],
+  [['New customers','新客'],'4',['−1 vs a typical day','较平常日 −1']]];`;
 
 const CASES = [
   ['before the dashboard answers', `APP.cmd('tab','home');`, [
@@ -44,6 +48,10 @@ const CASES = [
     ['the real orders',    `txt('content').includes('19')`],
     ['the real average',   `txt('content').includes('¥167.37')`],
     ['and the comparison', `txt('content').includes('vs a typical day')`],
+    // Both halves are stored, so the card follows the language switch. It used
+    // to be built with T() already applied and stayed English forever.
+    ['in Chinese too',     `(function(){ APP.cmd('toggleLang'); var zh=txt('content'); APP.cmd('toggleLang');
+       return zh.indexOf('营收（全渠道）')>=0 && zh.indexOf('较平常日 +12%')>=0; })()`],
   ]],
   ['quick actions are things the phone can actually do', `APP.cmd('tab','home');`, [
     // Each of these opens a screen that performs the action named.

@@ -150,6 +150,19 @@ const WAVE = (w,color)=>`<svg width="${w}" height="${(w*0.324).toFixed(0)}" view
 /* ---- single live language (EN default), toggled from the overflow menu ---- */
 let LANG = 'en';
 function T(en, zh){ return LANG==='en' ? en : (zh||en); }
+/* A message that outlives the moment it is written. T() resolves the language
+   NOW, which is right for anything a renderer builds and wrong for anything a
+   LOADER stores: an error caught in a .catch() sits in state until the screen
+   is next drawn, and a Chinese operator who hit a failure read it in English
+   for as long as it stayed on the glass. E() defers — the pair is kept and
+   resolved when the template interpolates it, which is render time.
+
+   The same bug had frozen Home's Today card: state.liveKpis is built once at
+   boot with T() already applied, so the labels and the comparisons under them
+   stayed in whatever language the app started in. That one is a pair now,
+   resolved by its renderer. The sweep renders every screen a third time, in
+   Chinese, and fails on any English half of a bilingual pair that survives. */
+function E(en, zh){ return {toString(){ return T(en, zh); }}; }
 
 /* ---- status pill palette (from the mockup's PILL map) ---- */
 const DELIV_TONE={brick:'var(--brick-ink)',amber:'var(--amber-ink)',plain:'var(--text-secondary)'};
@@ -352,7 +365,7 @@ reg('clearAirDelay', sid=>{
   }).catch(e=>{
     state.parcelBusy=null;
     if(String(e.message)==='auth') return;
-    state.orderErr=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    state.orderErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
     render();
   });
 });
@@ -373,7 +386,7 @@ reg('dispatchParcel', sid=>{
   }).catch(e=>{
     state.parcelBusy=null;
     if(String(e.message)==='auth') return;
-    state.orderErr=T('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
+    state.orderErr=E('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
     render();
   });
 });
@@ -523,7 +536,7 @@ reg('toggleShop', ids=>{
       rows.forEach(p=>{ p.pub=!next; reKindProduct(p); });   // the switch must never lie
       state.prodBusy=null;
       if(String(e.message)==='auth') return;
-      state.prodErr=T('That did not save. The product is unchanged.','没有保存成功。产品状态未变。');
+      state.prodErr=E('That did not save. The product is unchanged.','没有保存成功。产品状态未变。');
       render();
     });
 });
@@ -571,7 +584,7 @@ reg('pollStatus', (id,st)=>{
   }).catch(e=>{
     state.pollBusy=null;
     if(String(e.message)==='auth') return;
-    state.pollsErr=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    state.pollsErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
     render();
   });
 });
@@ -590,7 +603,7 @@ reg('finalizeTopup', id=>{
       }).catch(e=>{
         state.tupBusy=null;
         if(String(e.message)==='auth') return;
-        state.tupErr=T('That did not go through. Nothing has changed — try again.','没有处理成功。数据没有变化 — 请重试。');
+        state.tupErr=E('That did not go through. Nothing has changed — try again.','没有处理成功。数据没有变化 — 请重试。');
         render();
       });
     }};
@@ -618,7 +631,7 @@ reg('gzPickup', (id,how)=>{
     }).catch(e=>{
       state.gzBusy=null;
       if(String(e.message)==='auth') return;
-      state.gzErr=T('That did not go through. Nothing has changed — try again.','没有处理成功。数据没有变化 — 请重试。');
+      state.gzErr=E('That did not go through. Nothing has changed — try again.','没有处理成功。数据没有变化 — 请重试。');
       render();
     });
   };
@@ -647,7 +660,7 @@ reg('togglePopup', id=>{
   }).catch(e=>{
     state.puBusy=null;
     if(String(e.message)==='auth') return;
-    state.puErr=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    state.puErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
     render();
   });
 });
@@ -660,7 +673,7 @@ reg('actMore', ()=>{ if(state.actMore) return; state.actMore=true; render(); loa
 reg('openPO', id=>{ state.poId=Number(id); state.poDetail=null; state.poErr=null; state.poBusy=false; render();
   api('/purchases/'+Number(id)).then(d=>{ if(state.poId!==Number(id)) return; state.poDetail=d; render(); })
     .catch(e=>{ if(state.poId!==Number(id)||String(e.message)==='auth') return;
-      state.poErr=T('Could not load this order.','无法加载这张采购单。'); state.poDetail={id:Number(id),items:[]}; render(); }); });
+      state.poErr=E('Could not load this order.','无法加载这张采购单。'); state.poDetail={id:Number(id),items:[]}; render(); }); });
 reg('closePO', ()=>{ state.poId=null; state.poDetail=null; state.poErr=null; render(); });
 /* Marking a delivery in writes stock and posts the cost to the books, so it
    asks first and says both of those things before it does. */
@@ -676,7 +689,7 @@ reg('poStatus', st=>{
     }).catch(e=>{
       state.poBusy=false;
       if(String(e.message)==='auth') return;
-      state.poErr=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+      state.poErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
       render();
     });
   };
@@ -715,7 +728,7 @@ function loadThread(id){
   }).catch(e=>{
     if(!state.thread||state.thread.id!==id) return;
     if(String(e.message)==='auth') return;
-    state.thread={id, loading:false, msgs:null, err:T('Could not load the conversation.','无法加载对话。')};
+    state.thread={id, loading:false, msgs:null, err:E('Could not load the conversation.','无法加载对话。')};
     render();
   });
 }
@@ -723,8 +736,8 @@ const findReview=k=>DB.reviews.find(x=>revKey(x)===k)||DB.feedback.find(x=>revKe
 reg('sendReplyText', t=>{
   const text=String(t||'').trim();
   const r=findReview(state.reply);
-  if(!text){ state.replyErr=T('Write something first.','请先输入内容。'); render(); return; }
-  if(!r||r.id==null){ state.replyErr=T('This one cannot be replied to from the phone yet.','暂时无法在手机端回复。'); render(); return; }
+  if(!text){ state.replyErr=E('Write something first.','请先输入内容。'); render(); return; }
+  if(!r||r.id==null){ state.replyErr=E('This one cannot be replied to from the phone yet.','暂时无法在手机端回复。'); render(); return; }
   if(state.replyBusy) return;
   state.replyBusy=true; state.replyErr=null; render();
   const call = r.stream==='feedback'
@@ -770,7 +783,7 @@ function revWrite(r,visible){
   }).catch(e=>{
     state.revBusy=null;
     if(String(e.message)==='auth') return;
-    state.revErr=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    state.revErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
     render();
   });
 }
@@ -870,7 +883,7 @@ function loadWork(){
   }).catch(e=>{
     state.workLoading=false;
     if(String(e.message)==='auth') return;
-    state.workErr=T('That did not load. Try again.','加载失败，请重试。');
+    state.workErr=E('That did not load. Try again.','加载失败，请重试。');
     render();
   });
 }
@@ -1146,9 +1159,9 @@ function screenHome(){
       <div class="card" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px">${kpis
         ? kpis.map(([l,v,d])=>
         `<div style="min-width:0">
-           <span style="display:block;font-size:13px;color:var(--text-secondary)">${l}</span>
+           <span style="display:block;font-size:13px;color:var(--text-secondary)">${T(...l)}</span>
            <span class="num" style="display:block;font-size:18px;font-weight:500;line-height:1.4">${v}</span>
-           ${d?`<span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${d}</span>`:''}</div>`).join('')
+           ${d?`<span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${T(...d)}</span>`:''}</div>`).join('')
         : [T('Revenue (all channels)','营收（全渠道）'),T('Orders (storefront)','订单（自营）'),T('Avg. order','客单价'),T('New customers','新客')].map(l=>
         `<div style="min-width:0">
            <span style="display:block;font-size:13px;color:var(--text-secondary)">${l}</span>
@@ -1202,7 +1215,7 @@ async function loadOrdersPage(more){
        orders in front of an operator that they could read, tap and act on. A
        failed load says it failed. */
     if(!more){ state.ordersView=null; state.ordersTotal=null; state.ordersMore=false; }
-    state.ordersLoadErr=T('Could not load orders.','无法加载订单。');
+    state.ordersLoadErr=E('Could not load orders.','无法加载订单。');
   }
   state.ordersLoading=false; render();
 }
@@ -1848,7 +1861,7 @@ function loadCms(page){
     state.cms=Object.assign({},state.cms,{[page]:d||{}}); state.cmsErr=null; render();
   }).catch(e=>{
     if(String(e.message)==='auth') return;
-    state.cmsErr=T('Could not load the layout.','加载版面失败。'); render();
+    state.cmsErr=E('Could not load the layout.','加载版面失败。'); render();
   });
 }
 /* A block is worth naming by more than its type when it carries a title an
@@ -2069,7 +2082,7 @@ function loadPolls(force){
   state.pollsTried=true;
   api('/polls').then(rows=>{ state.polls=Array.isArray(rows)?rows:[]; state.pollsErr=null; render(); })
     .catch(e=>{ if(String(e.message)==='auth') return;
-      state.pollsErr=T('Could not load the polls.','加载投票失败。'); render(); });
+      state.pollsErr=E('Could not load the polls.','加载投票失败。'); render(); });
 }
 const POLL_WORD={open:['Live','进行中'],draft:['Draft','草稿'],closed:['Closed','已结束']};
 function pollPill(st){
@@ -2172,7 +2185,7 @@ function loadTiers(){
     state.tiersErr=null; render();
   }).catch(e=>{
     if(String(e.message)==='auth') return;
-    state.tiersErr=T('Could not load the tiers.','加载会员等级失败。'); render();
+    state.tiersErr=E('Could not load the tiers.','加载会员等级失败。'); render();
   });
 }
 const tierKey=t=>String((t&&t.key)||'').trim()||String((t&&t.name_en)||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
@@ -2224,7 +2237,7 @@ function loadTopups(force){
     state.tupErr=null; render();
   }).catch(e=>{
     if(String(e.message)==='auth') return;
-    state.tupErr=T('Could not load top-ups.','加载充值记录失败。'); render();
+    state.tupErr=E('Could not load top-ups.','加载充值记录失败。'); render();
   });
 }
 /* Only a SUCCEEDED top-up is money. Everything else is a row that says what
@@ -2284,7 +2297,7 @@ function loadLeaderboard(){
   state.lbTried=true;
   api('/leaderboard/preview').then(d=>{ state.lb=d||{}; state.lbErr=null; render(); })
     .catch(e=>{ if(String(e.message)==='auth') return;
-      state.lbErr=T('Could not load the leaderboard.','加载排行榜失败。'); render(); });
+      state.lbErr=E('Could not load the leaderboard.','加载排行榜失败。'); render(); });
 }
 const LB_METRIC={lifetime_spend:['lifetime spend','累计消费'],points_balance:['points','积分'],orders_count:['orders','订单数']};
 const LB_PERIOD={all:['all time','全部时间'],year:['past year','近一年'],month:['past month','近一月'],week:['past 7 days','近 7 天']};
@@ -2353,7 +2366,7 @@ function loadCategories(){
       state.catsErr=null; render();
     }).catch(e=>{
       if(String(e.message)==='auth') return;
-      state.catsErr=T('Could not load the categories.','加载分类失败。'); render();
+      state.catsErr=E('Could not load the categories.','加载分类失败。'); render();
     });
 }
 const catCount=n=>(n&&n.id&&state.catCounts&&state.catCounts[n.id])||null;
@@ -2468,7 +2481,7 @@ function loadActivity(more){
   }).catch(e=>{
     if(String(e.message)==='auth') return;
     state.actMore=false;
-    state.actErr=T('Could not load stock activity.','无法加载库存流水。'); render();
+    state.actErr=E('Could not load stock activity.','无法加载库存流水。'); render();
   });
 }
 /* Same-day windows show the clock alone; a multi-day range keeps month-day,
@@ -2577,7 +2590,7 @@ function loadPOs(force){
     state.poList=Array.isArray(rows)?rows:[]; state.posErr=null; render();
   }).catch(e=>{
     if(String(e.message)==='auth') return;
-    state.posErr=T('Could not load purchase orders.','无法加载采购单。'); render();
+    state.posErr=E('Could not load purchase orders.','无法加载采购单。'); render();
   });
 }
 /* The desktop's four words for four stored statuses. "Received" is what the
@@ -3035,7 +3048,7 @@ function toggleCoupon(code){
   }).catch(e=>{
     state.couponBusy=null;
     if(String(e.message)==='auth') return;
-    state.couponErr=T('That did not save. The coupon is unchanged.','没有保存成功。优惠券没有变化。'); render();
+    state.couponErr=E('That did not save. The coupon is unchanged.','没有保存成功。优惠券没有变化。'); render();
   });
 }
 /* A scheduled broadcast can still be stopped; a sent one cannot. The server is
@@ -3052,7 +3065,7 @@ function recallBroadcast(id){
   }).catch(e=>{
     state.bcBusy=null;
     if(String(e.message)==='auth') return;
-    state.bcErr=T('That did not go through. Nothing has changed.','没有成功。数据没有变化。'); render();
+    state.bcErr=E('That did not go through. Nothing has changed.','没有成功。数据没有变化。'); render();
   });
 }
 async function loadMirror(which){
@@ -3166,8 +3179,10 @@ function mtHealthCard(){
   const pending=Number(st.queuePending||0), failed=Number(st.queueFailed||0);
   const oldest=Number(st.queueOldestMin||0);
   const stuck=pending>0&&oldest>=MT_STUCK_MIN;
-  const stuckFor = oldest>=120 ? T(Math.round(oldest/60)+' h',Math.round(oldest/60)+' 小时')
-                               : T(oldest+' min',oldest+' 分钟');
+  // Spelled out, because this reads inside a sentence: "stuck for 19 h" put a
+  // space in the middle of an abbreviation the rest of the app writes as 19h.
+  const stuckFor = (()=>{ if(oldest<120) return T(oldest+(oldest===1?' minute':' minutes'),oldest+' 分钟');
+    const h=Math.round(oldest/60); return T(h+(h===1?' hour':' hours'),h+' 小时'); })();
   const lo=(st.lastOrder&&st.lastOrder[0])||null;
   let line, tone;
   if(stuck){ tone='brick'; line=T('Stock pushes have been stuck for '+stuckFor+' — what Meituan shows is out of date.',
@@ -3470,7 +3485,7 @@ async function saveProductEdits(){
   }catch(e){
     state.prodBusy=false;
     if(String(e.message)==='auth') return;
-    state.prodErr=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    state.prodErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
     render();
   }
 }
@@ -3597,7 +3612,7 @@ function toggleFeature(key){
   }).catch(e=>{
     state.featBusy=null;
     if(String(e.message)==='auth') return;
-    state.featErr=T('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
+    state.featErr=E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
   });
 }
 async function loadOps(){
@@ -3741,7 +3756,7 @@ async function loadAffiliate(force){
     state.affErr=null;
   }catch(e){
     if(String(e.message)==='auth') return;
-    state.affErr=T('Could not load referrals.','加载推荐记录失败。');
+    state.affErr=E('Could not load referrals.','加载推荐记录失败。');
   }
   render();
 }
@@ -3800,7 +3815,7 @@ function toggleFapiao(){
   }).catch(e=>{
     state.fapiaoBusy=false;
     if(String(e.message)==='auth') return;
-    state.printerErr=T('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
+    state.printerErr=E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
   });
 }
 async function loadPrinter(){
@@ -3818,7 +3833,7 @@ function togglePrint(){
   }).catch(e=>{
     state.printerBusy=false;
     if(String(e.message)==='auth') return;
-    state.printerErr=T('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
+    state.printerErr=E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
   });
 }
 async function loadInbox(){
@@ -5278,7 +5293,7 @@ async function loadCustomers(more){
     // Same rule as the orders list: a failed load says so rather than handing
     // back five sample customers with real-looking names and spend.
     if(!more){ state.customers=[]; state.custTotal=null; state.custMore=false; state.custLoaded=true; }
-    state.custLoadErr=T('Could not load customers.','无法加载客户。');
+    state.custLoadErr=E('Could not load customers.','无法加载客户。');
   }
   state.custLoading=false;
   loadCustomerMeta();
@@ -5346,15 +5361,22 @@ const money0=(cur,n)=>(cur||'¥')+Math.round(Number(n||0)).toLocaleString();
 // — the dangling "vs a typical day" under Avg. order was exactly that.
 const DOW_ABBR_EN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const DOW_CN=['周日','周一','周二','周三','周四','周五','周六'];
+/* Returns a PAIR, resolved at render. It used to return one resolved string,
+   and the KPI tiles that hold it are built once at boot — so the labels and the
+   comparisons under them were frozen in whatever language the app booted in,
+   and switching to Chinese left the Today card reading "Revenue (all
+   channels)". Every other bilingual value in this file is stored as a pair for
+   exactly this reason; these two were built in a loader rather than a renderer
+   and slipped the rule. */
 function deltaText(cur, base, bl){
-  if(base===undefined || base===null) return '';
-  if(!cur) return T('none yet today','今日暂无');
-  if(!bl || !bl.days || base.delta==null) return T('new','新');
+  if(base===undefined || base===null) return null;
+  if(!cur) return ['none yet today','今日暂无'];
+  if(!bl || !bl.days || base.delta==null) return ['new','新'];
   const n=bl.days, ab=DOW_ABBR_EN[bl.weekday]||'day', cn=DOW_CN[bl.weekday]||'天';
-  const by=bl.clipped?T(' by now','同一时段'):'';
-  const vs=T(`vs last ${n} ${ab}${by}`, `较前 ${n} 个${cn}${by}`);
   const r=Math.round(base.delta);
-  return (r>0?'▲ '+r+'%':r<0?'▼ '+Math.abs(r)+'%':'±0%')+' '+vs;
+  const arrow=(r>0?'▲ '+r+'%':r<0?'▼ '+Math.abs(r)+'%':'±0%')+' ';
+  return [arrow+`vs last ${n} ${ab}`+(bl.clipped?' by now':''),
+          arrow+`较前 ${n} 个${cn}`+(bl.clipped?'同一时段':'')];
 }
 const ORDER_STATUS={
   paid:['paid','Paid','已付款'],preparing:['preparing','Preparing','备货中'],dispatched:['dispatched','Dispatched','已发货'],
@@ -6102,13 +6124,13 @@ async function loadLive(){
     state.liveKpis=[
       // Whole yuan on the money tile the eye lands on first; the fen stays on
       // the average, where the number is small enough for it to mean something.
-      [T('Revenue (all channels)','营收（全渠道）'), money0(CUR,rev), deltaText(rev, b.revenue, bl)],
-      [T('Orders (storefront)','订单（自营）'), String(ord), deltaText(ord, b.orders, bl)],
+      [['Revenue (all channels)','营收（全渠道）'], money0(CUR,rev), deltaText(rev, b.revenue, bl)],
+      [['Orders (storefront)','订单（自营）'], String(ord), deltaText(ord, b.orders, bl)],
       // The server sends no baseline for average order value, so this tile has
       // nothing to compare against and says nothing — rather than printing a
       // comparison label with no comparison under it.
-      [T('Avg. order','客单价'), money(CUR, ord? rev/ord : 0), ''],
-      [T('New customers','新客'), String(nc), deltaText(nc, b.new_customers, bl)],
+      [['Avg. order','客单价'], money(CUR, ord? rev/ord : 0), null],
+      [['New customers','新客'], String(nc), deltaText(nc, b.new_customers, bl)],
     ];
     // The desktop's Today strip carries a fifth figure and its Customers card
     // four more; the phone kept none of them. Each comes with the honesty rule
