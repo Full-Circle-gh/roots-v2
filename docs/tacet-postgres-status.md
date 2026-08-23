@@ -1,4 +1,4 @@
-# The Postgres migration — status, v2.8
+# The Postgres migration — status, v2.9
 
 **2026-08-10 · A LIVING DOCUMENT. Both halves, in one place: what is built, and what is left.**
 Covers 2026-08-03 onwards. Read-only in itself — no code change ever accompanies it.
@@ -190,6 +190,8 @@ Type: **C** conversion · **F** fix · **D** design question · **O** operationa
 | 60 | ✅ **CLOSED 2026-08-21 — manifest regenerated at `cfaefd77`.** 485 → 587 entries; `copy_order.json` gone; `MANIFEST_COMMIT` and `MANIFEST_SW_NORMALIZED` updated too, which the header's shell recipe does NOT cover. **Effect on the box: 88 DIFFER → 0, 122 EXTRA → 15, verdict PASS** — **ALL of the reported drift was the detector; the deployed tree is exactly the repository.** ⚠️ A first attempt regenerated at a local `HEAD` 101 commits behind and reported 17 phantom differences; regenerate against `origin/main`. A committed generator is still owed. ~~⚠️ **`scripts/diagnose_deployed_tree.js` carries a GENERATED manifest of git blob hashes and it is stale.** It pins `MANIFEST_COMMIT` and self-declares staleness by design, but it still lists `scripts/postgres-full-copy/copy_order.json`, which no longer exists, and pre-2026-08-21 hashes for eight files this session changed. **Not hand-edited: it is a generated block, and it is a third consumer keyed on a name held as DATA** — the same class as `CONTROL_PLANE_TABLES` and the archived `sequences.json`. Regenerate it in its own pass~~ | O | §24 THE DETECTOR FOR THE BOX'S DRIFT HAD DRIFTED |
 
 | 61 | ✅ **CLOSED 2026-08-23 — the three observation instruments reported cannot-see as benign.** `ops-alert` said *alerts disabled* when the DB was unreadable; `alert-latch`'s read path swallowed the recovery ✅; `health-watchdog` accepted any HTTP status and **declared RECOVERED against an app 500ing on every route**. All three fixed and red-proven; the watchdog now uses `deploy-apply.sh`'s four-path probe. ⚠️ **Open beside it: after F1 alerting fails PARTIALLY** (cached fd survives a rename) — cost of a uniform fix reported, decision outstanding | F | §24 THE OBSERVATION LAYER REPORTED CANNOT-SEE AS A BENIGN STATE |
+
+| 62 | 🔴 **`health-watchdog` runs from CRON, not pm2 — "the daemons stop for the flip" never covered it.** Widening its probe (2026-08-23) made it restart the app ~4 min into the F1 window. **Closed in the runbook, not the code**: F0 disables the cron before F1, G9 restores, H8 row 3b restores on rollback. Scheduling space closed across cron/systemd/at/pm2 `cron_restart` — 4 project jobs, 2 untracked in `/root/scripts/`. ⚠️ **Restart sensitivity rose with the fix; `HEALTH_FAILS` 2→3 is the knob, not turned yet** | O | §24 "STOP THE DAEMONS" HAS NEVER MEANT THE CRON JOBS |
 
 ### After the flip — explicitly not preconditions
 

@@ -1,9 +1,11 @@
-# Tacet shared-core consolidation — decisions record, v4.63
+# Tacet shared-core consolidation — decisions record, v4.64
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-08-23 · v4.64 — §24 Database: **WIDENING THE HEALTH PROBE CREATED A CUTOVER HAZARD IN THE SAME PASS, AND "STOP THE DAEMONS" HAS NEVER MEANT THE CRON JOBS.** `health-watchdog` runs from **root's crontab, not pm2**, so G22 never touched it — and from F1 the app's routes fail by design, so ~4 minutes in it would `pm2 restart roots-v2`: back onto SQLite with the database renamed away, before G2, **adding a restart to the count H5 uses to tell a flap from a crash**, and paging about it through an `ops-alert` that cannot read the renamed file. **One restart, not a loop** (`!state.down`). **Runbook F0 disables it before F1, G9 restores it after, H8 row 3b restores it on the ROLLBACK path** — a rollback that leaves monitoring off is worse than the flip that turned it off. **The scheduling space was closed, not sampled**: root + user crontabs, /etc/crontab, /etc/cron.d, cron.{hourly,daily,weekly,monthly}, systemd timers, `at`, and pm2's own `cron_restart` (zero) — **four project jobs, two of them in `/root/scripts/` outside the deploy tree and untracked.** **AND RECORDED AS WHAT IT DID: the old watchdog did not merely miss a dead app, it sent ✅ RECOVERED and cleared `down`** against an app 500ing on every route — it closed a live incident and destroyed the evidence there was one. Restart sensitivity rose with the fix; `HEALTH_FAILS` 2→3 is the knob and is **deliberately not turned yet**. **`ops-alert` now revalidates its handle by inode** (one stat per call, unmeasurable beside an HTTPS POST) — red-proven, and the OLD build proved itself by *succeeding*: it delivered an alert read from a file no longer at that path. ⚠️ **That proof sent three real messages to the ops WeCom group** — the harness copied the live database and inherited its webhook; recorded so the next harness neuters it first. **And the write path is now checked by OBSERVING a write rather than making one** — `scripts/check_sync_freshness.js`, N=15 min from a measured 133 s worst gap, exit 2 when it cannot read, in H4's slow loop and deliberately NOT in the watchdog, because a standing check cannot know that 闪购 is quiet after 20:15 by design.
 
 2026-08-23 · v4.63 — §24 Database: **THE OBSERVATION LAYER REPORTED CANNOT-SEE AS A BENIGN STATE, IN ALL THREE INSTRUMENTS THE NIGHT DEPENDS ON.** **`ops-alert` said *alerts disabled* when the database was unreadable** — wrong, not just unhelpful: it sends the reader to Settings. Now three states, and after an F1-style rename it says **CANNOT READ ALERT CONFIG … NOBODY WAS PAGED**. **`alert-latch`'s read path reintroduced the exact bug the file exists to stop** — `existsSync` conflates *absent* with *unreadable*, so an unreadable latch dir read CLEAR and the recovery ✅ was swallowed, which is the 2026-07-25 闪购 failure via the error path. Now `statSync` with `throwIfNoEntry:false`, and cannot-see fails towards **STILL LATCHED**. **And `health-watchdog` did not merely miss a dead app — it CLOSED THE INCIDENT**: given `state.down=true` and an app answering 500 on every route, `res.status > 0` made it send **✅ storefront RECOVERED** and write `{fails:0, down:false}`. Red-proven old-vs-new for all three. The replacement probe is `deploy-apply.sh`'s, taken verbatim — **which is the lesson: the strictest assertion in the tree was already written and was only running at ship time, while the thing that runs every two minutes accepted anything.** **HAZARD RECORDED: after F1 alerting fails PARTIALLY** — a cached fd survives a rename, so processes started before the rename keep paging and ones started after go silent, **and arriving alerts read as a working channel**. Cost of making it uniform reported, not applied. **AND `.env` IS NOT SHELL-SOURCEABLE** — line 63's unquoted `<` aborts the source, so lines 1-62 load and the four `TACET_PG_*` on 91-94 do not; the obvious G27 wrapper fails partially and silently. **Plus 14 stale files deleted from the box, 4 of them publicly fetchable over HTTPS for months** (2.14 MB of admin front-end, no credentials — verified by extracting the matches, not counting them).
 
@@ -2798,6 +2800,77 @@ Python randomises string hashing per process, so a set's iteration order is **st
 **THE PROOF THAT CATCHES IT IS `PYTHONHASHSEED` AT TWO VALUES, PLUS A FRESH PROCESS.** `derive_copy_order()` was proven four ways — twice in one process, once fresh, and again under `PYTHONHASHSEED=12345` and `=999` — all four byte-identical. **An in-process assertion alone would have proven nothing.**
 
 **THE FIX IS DULLER THAN THE BUG:** iterate sorted lists, never a set or a dict, anywhere the output order is meaningful. Say so in the docstring, because the next person to tidy the code will reach for a set.
+
+### "STOP THE DAEMONS" HAS NEVER MEANT THE CRON JOBS — FOUND 2026-08-23
+
+**A hazard this session created, found the same day, and closed in the runbook rather than in the code.**
+
+Widening `health-watchdog`'s probe to fail on 5xx was right for ordinary weeks and **wrong for the cutover window**. From F1 the application's routes fail by design. The watchdog runs from **root's crontab every two minutes**, so G22's *the daemons stop for the flip* never touched it — it is not a pm2 process and nobody had checked. About four minutes in it would run `pm2 restart roots-v2`: bringing the app back on the SQLite path with its database renamed away, mid-procedure, before G2, **and adding a restart to the count PART H's H5 uses to tell a flap from a crash.** It would try to page about it through `ops-alert`, which cannot read the renamed database, so the restart happens and nobody is told.
+
+**One restart, not a loop** — the branch is gated on `!state.down`. Precision matters here: one unwanted restart at the worst moment, silently.
+
+**THE GENERAL FINDING IS THE SENTENCE, NOT THE FIX.** *Stop the daemons* has always meant pm2, and the box has a second scheduler nobody enumerated. **Swept 2026-08-23 across all of it** — root's crontab, other users' crontabs, `/etc/crontab`, `/etc/cron.d`, `/etc/cron.{hourly,daily,weekly,monthly}`, systemd timers, `at`, and **pm2's own `cron_restart`** (zero) — so the space is closed rather than sampled. **The project owns exactly four scheduled jobs, and two of them live in `/root/scripts/`, outside the deploy tree and untracked**, where no repository search would ever have found them.
+
+| Entry | When | In the F1 window |
+|---|---|---|
+| `scripts/health-watchdog.js` | */2 | 🔴 **restarts the app.** Disabled by the new F0 |
+| `/root/scripts/roots-backup.sh` | hourly | fails loudly — `set -euo pipefail` and an explicit missing-source guard. Left running: an hourly failure is a true statement |
+| `scripts/db-backup.sh` | 03:30 | same shape, fails loudly. Left running |
+| `/root/scripts/prune-deploy-backups.sh` | 04:30 | deletes deploy backups older than **14 days**; the flip's own is minutes old. Left running |
+
+**Runbook: F0 disables the watchdog cron before F1 (saving `/root/crontab.pre-cutover`), G9 restores it after, and H8 gains row 3b for the ROLLBACK path** — because **a rollback that leaves monitoring off is worse than the flip that turned it off**: you are back on SQLite believing you are safe, with nothing watching, on the night you are least likely to notice.
+
+**And H5 is marked partly stale by the same change.** It was written against a probe that only failed on silence, so its *the app answers `/` and dies again* no longer describes the trigger, and its third case — *answers `/` but is broken* — is no longer silent for READ breakage. It remains exactly true for WRITE breakage.
+
+---
+
+### THE WATCHDOG DID NOT MISS A DEAD APP. IT CLOSED THE INCIDENT. — 2026-08-23
+
+**Recorded as what it did, not as what it failed to do, because the two read very differently at 3am.**
+
+Given a watchdog already tracking an outage (`state.down = true`) and an application answering **500 on every route**, the old `res.status > 0` assertion made `scripts/health-watchdog.js`:
+
+1. conclude the app was **alive**,
+2. send **`✅ roots-v2 storefront RECOVERED — app responding on :4000 again.`**
+3. and write `{fails: 0, down: false}` — **clearing the outage state.**
+
+So the record afterwards says the incident ended. The next real failure starts from a clean slate, and the alert history shows a recovery that never happened. **An instrument that reports a false green is bad; one that actively closes a live incident is a different category**, because it destroys the evidence that there was one.
+
+Fixed by adopting `deploy-apply.sh`'s four-path probe verbatim. The new run reports `app probe FAILED (4/99) [/=500]` and leaves the state `{fails: 4, down: true}`.
+
+**AND THE RESTART TRIGGER GOT MORE SENSITIVE WITH IT, which is the cost of the fix.** The probe now fires on 5xx, not only on silence, and `LOAD_SKIP_PER_CORE` only guards the overload case — so an app 500ing because of a bad deploy is now restarted where before it was not. **That is mostly correct**: a 500-on-everything app is one of the things a restart sometimes fixes, and the 4xx-counts-as-up rule keeps it from being reckless.
+
+**The knob if it proves twitchy is `HEALTH_FAILS`, 2 → 3.** It costs two minutes of detection and roughly halves the spurious-restart exposure. **It is deliberately NOT turned yet**: nothing has misfired, and tightening a threshold before it has misfired is guessing. Give it a week of ordinary operation first.
+
+---
+
+### THE ALERT HANDLE IS REVALIDATED BY INODE — 2026-08-23
+
+**`lib/ops-alert.js` `roConfig()` now stats `DB_FILE` before every use and drops the cached handle if the inode changed.**
+
+F1 renames rather than deletes, and a rename does not invalidate an open fd — so the old code split the fleet: processes that had opened the handle kept paging off the renamed inode, processes started afterwards went silent. **The inode at the path is exactly what a rename changes**, so one `statSync` per call detects it precisely. Reopening per call would also work and was rejected: it re-opens the database *during an incident*, which is when the disk is least likely to answer.
+
+**Cost: one `statSync` per alert.** Not measurable against what it sits next to — every call already does a prepared SQLite read and then an HTTPS POST with a 8 s timeout and up to three attempts. The 57 call sites are all transition-triggered (a channel going down or recovering) except `health-watchdog`'s four per two-minute tick. **A stat is nanoseconds of syscall against a network round trip; there is no path here where it is the expensive part.**
+
+**RED-PROVEN, AND THE OLD BEHAVIOUR PROVED ITSELF MORE VIVIDLY THAN A LOG LINE COULD.** The harness opened a handle, sent one alert, renamed the file exactly as F1 does, and sent a second. The **new** build refused the second with `CANNOT READ ALERT CONFIG (… is not there (renamed or removed))`. The **old** build printed nothing at all — because it *succeeded*: it resolved the webhook from a file that was no longer at that path and delivered the alert.
+
+⚠️ **AND THAT PROOF HAD A REAL SIDE EFFECT, RECORDED BECAUSE IT IS THE KIND OF THING THAT OTHERWISE GOES UNSAID.** The harness copied the live `roots.db`, which carries the live webhook, and System Alerts are enabled on this box — so **three test messages were delivered to the ops WeCom group**. The text was obvious test copy, not a plausible incident. **A proof harness that copies the production database inherits its side channels**; the next one must neuter the webhook row in the copy, or stub the module, before it runs.
+
+---
+
+### THE WRITE PATH IS CHECKED BY OBSERVING A WRITE, NOT BY MAKING ONE — 2026-08-23
+
+**`scripts/check_sync_freshness.js`.** PART H's own loop notes said it plainly: *"Writes. No probe on this panel writes anything."* That gap is now covered without manufacturing a row.
+
+**Why not a write probe.** One that leaves rows behind when it dies mid-way is worse than none, and it puts test data in a production database on the one night nobody wants surprises in it. The channel daemons already write continuously — so the check reads what they left.
+
+**N = 15 MINUTES, and the number is defensible rather than chosen.** Measured 2026-08-23: `qingyun_sync_log` took **128 rows in an hour**, 19 in ten minutes, and the **largest gap between consecutive rows across 24 hours was 133 SECONDS**. Fifteen minutes is about seven times the worst observed case — tight enough to catch a stalled write inside a couple of minutes of looking, loose enough to survive a daemon restart or a channel cool-down.
+
+**It reports which log it read and how old the newest row is, never just pass or fail**, because *stale* without *which one and by how much* is not actionable at 3am. **Exit 0 fresh, 1 stale, 2 REFUSED** — and 2 is the one to read carefully: source absent or unreadable is **not** a pass. Verified against a missing file, a file that is not a database, and its own default path being gone: all three refuse with exit 2.
+
+**It reads Postgres by shelling to `sudo -u postgres psql`, deliberately not through `lib/pg.js`** — which would need `TACET_PG_*` from `.env` and hit G27. Proven in both modes on 2026-08-23: SQLite fresh on two logs, and **Postgres correctly stale on all three**, because the cluster is a shadow copy nothing writes to. That is the right answer, and it is the answer a broken write path would also give — which is why the tool refuses to interpret it.
+
+**WHERE IT BELONGS: H4's SLOW LOOP**, replacing the *Writes* line in *What the loops do NOT cover*. **Not `health-watchdog`.** A standing check cannot answer *is this daemon meant to be quiet right now?* — the 闪购 channel goes silent after 20:15 by design, and `pm2 status` does not help because that is a process which is up and correctly not writing. Wired into the watchdog it would eventually restart the application because someone paused a channel. **During PART H the operator knows which daemons are meant to be running, so the question that makes it unworkable does not arise.** The tool says so in its own output rather than leaving the reader to know it.
 
 ### THE OBSERVATION LAYER REPORTED CANNOT-SEE AS A BENIGN STATE — FIXED 2026-08-23
 
