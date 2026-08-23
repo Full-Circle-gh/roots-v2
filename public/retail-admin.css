@@ -2231,9 +2231,12 @@
   /* Title row + ⓘ. The old standing lede is gone; its "what is this" copy now
      rides in the tooltip below, one-time teaching text kept out of the way. */
   #tab-products > .pa-head-row {
-    display: flex; align-items: center; gap: 8px; margin: 0 0 22px;
+    display: flex; align-items: center; gap: 8px; margin: 0 0 22px; flex-wrap: wrap;
   }
   #tab-products > .pa-head-row > .pa-pagetitle { margin: 0; }
+  /* Adding a product is the page's one primary action, so it sits on the title's
+     line at the far right — not buried among the filters. */
+  #tab-products > .pa-head-row > .pa-addsplit { margin-left: auto; }
   .pa-info-wrap { position: relative; display: inline-flex; align-items: center; }
   .pa-info {
     appearance: none; background: none; border: none; margin: 0; padding: 4px;
@@ -2426,11 +2429,31 @@
     background: none; border: 0; border-radius: 0; margin-bottom: 0;
   }
 
+  /* ── Category chips — the filter as a row you can read, not a menu you have
+        to open. The count rides inside each chip so "how much is in here" is
+        answered before the tap. #pa-filter is still the value they write to. ── */
+  .pa-chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 22px 0 0; }
+  .pa-chip {
+    display: inline-flex; align-items: center; gap: 7px;
+    height: 32px; padding: 0 13px; white-space: nowrap;
+    border: 1px solid var(--td-border); border-radius: 8px;
+    background: var(--td-surface); color: var(--td-text);
+    font: 400 13px var(--f-sans); cursor: pointer;
+    transition: background .15s var(--ease-out, ease), border-color .15s var(--ease-out, ease);
+  }
+  .pa-chip:hover { background: rgba(var(--td-heat-rgb), .04); }
+  .pa-chip.is-on { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); font-weight: 500; }
+  .pa-chip-n { font-variant-numeric: tabular-nums; color: var(--td-text2); }
+  .pa-chip.is-on .pa-chip-n { color: var(--td-paper); opacity: .72; }
+  /* Replaced by the chips above, but kept in the DOM as the filter's value. */
+  .pa-filter-hidden { display: none; }
+  .pa-chips:empty { display: none; }
+
   /* ── Toolbar — search · category · add · guided add · layout ───────────── */
   .pa-toolbar {
     display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
     padding: 0; background: transparent; border: 0;
-    margin: 22px 0 var(--s4);
+    margin: 14px 0 var(--s4);   /* the chips row above already opened the gap */
   }
   .pa-toolbar input[type=text] {
     flex: 1; min-width: 220px;
@@ -2927,7 +2950,10 @@
      inline as a second column. Container collapses to one column on narrow
      widths, and to a single column (list-only or editor-only) when the user
      hits Expand on the editor or switches to grid/compact catalogue scan. */
-  .pa-split { display: grid; grid-template-columns: minmax(0, 288px) minmax(0, 1fr); gap: 16px; align-items: start; }
+  /* The list is the page and the editor is a panel beside it — not the other
+     way round. The catalogue keeps the width it needs to stay a readable table
+     while a product is open; the panel is a fixed 452px strip on the right. */
+  .pa-split { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 452px); gap: 16px; align-items: start; }
   .pa-split-list { min-width: 0; }
   /* The editor flows at full height and the whole page scrolls (one scroll, not
      a pane-within-a-page). While the editor is docked the list is capped to 18
@@ -2935,7 +2961,19 @@
      edge — no dead gap, no separate scroll. The overview list (editor closed)
      uses the operator's "Per page" choice instead. */
   .pa-split-editor { min-width: 0; }
+  /* Between 1024 and 1400 the panel gives some width back so the table beside
+     it keeps its columns rather than crushing the product name to nothing. */
+  @media (max-width: 1400px) { .pa-split { grid-template-columns: minmax(0, 1fr) minmax(0, 400px); gap: 14px; } }
   @media (max-width: 1024px) { .pa-split { grid-template-columns: 1fr; } .pa-split-editor { position: static; } }
+  /* Docked, the table is tighter — Category and SKU have folded into the meta
+     line under the name (see paRender), so the row carries two lines. */
+  .pa-list-docked .pa-row { padding: 9px 12px; }
+  .pa-list-docked .pa-rowhead { padding: 10px 12px; }
+  .pa-list-docked .pa-row-img { width: 38px; height: 38px; border-radius: 9px; }
+  .pa-list-docked .pa-row-name { font-size: 14px; }
+  .pa-list-docked .pa-row-sub { font-size: 11.5px; margin-top: 1px; }
+  .pa-list-docked .pa-col-price { font-size: 13.5px; }
+  .pa-list-docked .pa-badge { height: 21px; padding: 0 8px; font-size: 11.5px; }
   /* Catalogue-scan mode: grid/compact view hides the editor so the list takes
      the full page width — same flow as before. List view → split. */
   .pa-split.pa-split-listonly { grid-template-columns: 1fr; }
@@ -2957,6 +2995,38 @@
      scroll container that swallows the chain. Make it overflow:visible so the
      wheel falls through to the page. */
   .pa-split-editor #pd-editor .pu-editor-body { overflow: visible; overscroll-behavior: auto; }
+  /* ── The docked panel at its real width ────────────────────────────────────
+     452px is narrow, so the editor's chrome has to give: the tab strip drops
+     its raised-pill track for quiet text tabs with an ink underline (the
+     mockup's), the icons go, and the sales KPIs wrap instead of squeezing to
+     three unreadable columns. All of it is scoped to the dock — expanded, the
+     editor gets the room back and keeps the fuller treatment. */
+  .pa-split-editor #pd-editor .pd-tabs {
+    background: none; border: 0; border-bottom: 1px solid var(--td-border);
+    border-radius: 0; padding: 0; gap: 2px; margin: 2px 0 18px;
+  }
+  .pa-split-editor #pd-editor .pd-tab {
+    flex: 0 1 auto; position: relative; padding: 10px 10px 11px; border-radius: 0;
+  }
+  .pa-split-editor #pd-editor .pd-tab svg { display: none; }
+  .pa-split-editor #pd-editor .pd-tab.is-active {
+    background: none; box-shadow: none; font-weight: 500;
+  }
+  .pa-split-editor #pd-editor .pd-tab.is-active::after {
+    content: ""; position: absolute; left: 6px; right: 6px; bottom: -1px;
+    height: 2px; background: var(--td-text); border-radius: 2px;
+  }
+  .pa-split-editor #pd-editor .pd-sales-kpis {
+    grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); gap: 10px 14px;
+  }
+  .pa-split-editor #pd-editor .pd-sales-kpi .v { font-size: 18px; }
+  /* The panel's own head: the thumbnail strip and buttons on one line, tight. */
+  .pa-split-editor #pd-editor .pu-editor-head { padding: 12px 14px; gap: 10px; }
+  .pa-split-editor #pd-editor .pu-editor-body { padding: 14px; }
+  .pa-split-editor #pd-editor .pu-editor-foot { padding: 12px 14px; flex-wrap: wrap; gap: 8px; }
+  .pa-split-editor #pd-editor .pd-head-thumb { width: 38px; height: 38px; }
+  .pa-split-editor #pd-editor .pu-editor-head #pd-title { font-size: 16px; }
+
   /* ── Two zoom levels ───────────────────────────────────────────────────────
      Docked (default): the pane shows its .pd-summary rows and hides the
      .pd-heavy blocks they stand for. Expanded (#pd-editor.pd-fullpage, living
@@ -3006,6 +3076,7 @@
   #tab-products.pd-page-open > .pa-head-row,
   #tab-products.pd-page-open > .stk-views,
   #tab-products.pd-page-open #pa-kpis,
+  #tab-products.pd-page-open .pa-chips,
   #tab-products.pd-page-open .pa-toolbar,
   #tab-products.pd-page-open .pa-subbar,
   #tab-products.pd-page-open #pa-split { display: none; }

@@ -846,7 +846,34 @@ function paFillCatFilter() {
       return `<option value="${escapeAttr(c)}">${escapeHtml(c)}${cn}</option>`;
     }).join('');
   sel.value = [...sel.options].some(o => o.value === cur) ? cur : 'all';
+  paRenderCatChips(cats, cnOf);
   paFillSubFilter();   // keep the dependent subcategory select in sync
+}
+
+// Categories as a row of chips, the way the catalogue design shows them — one
+// tap, count in view, no dropdown to open. The <select> stays in the DOM as the
+// single source of truth (paRender and paFillSubFilter both read it); the chips
+// just write to it, so nothing downstream had to learn a second way to ask.
+function paRenderCatChips(cats, cnOf) {
+  const box = document.getElementById('pa-chips');
+  if (!box) return;
+  const cur = (document.getElementById('pa-filter') || {}).value || 'all';
+  const count = c => _paUnits(c === 'all'
+    ? PA_PRODUCTS
+    : PA_PRODUCTS.filter(p => (p.top_category || p.category || '').trim() === c)).length;
+  const chip = (val, label) =>
+    `<button type="button" class="pa-chip${cur === val ? ' is-on' : ''}" onclick="paPickCat('${escapeAttr(val)}')">`
+    + `${escapeHtml(label)}<span class="pa-chip-n">${count(val)}</span></button>`;
+  box.innerHTML = chip('all', cuT('All', '全部'))
+    + cats.map(c => chip(c, cuT(c, cnOf[c] || c))).join('');
+}
+function paPickCat(val) {
+  const sel = document.getElementById('pa-filter');
+  if (!sel) return;
+  sel.value = val;
+  PA_PAGE = 1;
+  paFillCatFilter();   // repaints the chips' own on-state too, and the subs
+  paRender();
 }
 
 // Populate the toolbar SUBcategory filter for the currently-picked top category.
@@ -1697,27 +1724,30 @@ function paRender() {
   }
 
   if (PA_VIEW === 'list') {
-    // Overview = full-width landing table (nothing open) with rich columns for
-    // scanning the catalogue; Docked = narrow list beside the editor, kept to a
-    // compact name + pills row so it fits the 380px pane.
-    const overview = !_paEditorOpen;
+    // The list is the same table whether or not a product is open — opening one
+    // no longer demotes it to a strip of names. What changes is how many columns
+    // it can afford beside the 452px panel: docked, Category and SKU fold into a
+    // meta line under the product's name and the rest of the columns stay put.
+    const overview = true;
+    const docked = _paEditorOpen;
     // Two-location list: one editable stock column per store, both always visible
     // (the Shop toggle column is retired — publish still lives in the grid/card
     // view, bulk actions, and the editor). Falls back to one combined Stock
     // column for single-store tenants or before the grid loads.
-    const listStores = overview ? _paListStores() : [];
-    grid.className = (overview ? 'pa-list pa-list-rich' : 'pa-list')
+    const listStores = _paListStores();
+    grid.className = 'pa-list pa-list-rich'
       + (listStores.length ? ' pa-multistock' : '')
+      + (docked ? ' pa-list-docked' : '')
       + (reorderActive ? ' pa-reorder' : '')
-      + ((overview && PA_SELECT_MODE) ? ' pa-selecting' : '');
+      + (PA_SELECT_MODE ? ' pa-selecting' : '');
     // Drive the grid track list so header + rows + reorder/select modes stay in
-    // lockstep: img · name · category · SKU · [one column per store] · price.
-    if (overview) {
-      const stockTracks = (listStores.length ? listStores.map(() => '104px').join(' ') : '104px');
-      grid.style.setProperty('--pa-grid',
-        `46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) ${stockTracks} 116px 104px`);
-    } else {
-      grid.style.removeProperty('--pa-grid');
+    // lockstep: img · name · [category · SKU] · [one column per store] · price ·
+    // status. The two bracketed columns are the ones the docked width can't hold.
+    {
+      const stockTracks = (listStores.length ? listStores.map(() => '96px').join(' ') : '96px');
+      grid.style.setProperty('--pa-grid', docked
+        ? `40px minmax(0,1fr) ${stockTracks} 92px 96px`
+        : `46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) ${stockTracks} 116px 104px`);
     }
     // Snapshot the on-screen unit order as lists of product ids (a variant group
     // moves as one block). paRowDrop reads this to compute the new sequence.
@@ -1727,12 +1757,11 @@ function paRender() {
     const grip = reorderActive ? '<span></span>' : '';
     const allVisSel = PA_VISIBLE_MEMBER_IDS.length && PA_VISIBLE_MEMBER_IDS.every(id => PA_SELECTED.has(id));
     const selHead = `<span class="pa-selbox"><input type="checkbox" ${allVisSel ? 'checked' : ''} onclick="paSelectAllVisible(this.checked)" title="${cuT('Select all on this page', '全选本页')}"></span>`;
-    const head = (overview && pageUnits.length) ? `
+    const head = pageUnits.length ? `
       <div class="pa-rowhead">
         ${selHead}${grip}<span></span>
         <span>${cuT('Product', '产品')}</span>
-        <span>${cuT('Category', '分类')}</span>
-        <span>SKU</span>
+        ${docked ? '' : `<span>${cuT('Category', '分类')}</span><span>SKU</span>`}
         ${listStores.length
           ? listStores.map(s => `<span class="pa-col-stock-h">${escapeHtml(_paStoreName(s.id))}</span>`).join('')
           : `<span>${cuT('Stock', '库存')}</span>`}
@@ -1765,15 +1794,21 @@ function paRender() {
           ? `<span class="pa-selbox"><input type="checkbox" tabindex="-1" aria-hidden="true" ${selRow ? 'checked' : ''}></span>`
           : `<span class="pa-selbox"><input type="checkbox" ${selRow ? 'checked' : ''} onclick="event.stopPropagation();paToggleSelect('${memberIds}')"></span>`;
         const rowClick = PA_SELECT_MODE ? `paToggleSelect('${memberIds}')` : `paOpenEdit(${p.id})`;
+        // Docked, the two folded columns come back as one quiet meta line under
+        // the name — the same facts, one row tall instead of two columns wide.
+        const metaBits = docked
+          ? [u.group ? '—' : (p.sku || '—'), (p.subcategory || p.top_category || p.category || '').trim()]
+              .filter(Boolean).map(escapeHtml).join(' · ')
+          : '';
         return `
         <div class="pa-row${selRow ? ' is-sel' : ''}" onclick="${rowClick}"${rowDrag}>
           ${selCell}${gripCell}
           <div class="pa-row-img">${img ? `<img src="${escapeAttr(img)}" loading="lazy" alt="">` : PA_ICON_BROKEN}</div>
           <div class="pa-row-main" data-no-i18n>
             <div class="pa-row-name">${escapeHtml(cuT(p.name_en || p.name_cn || '—', p.name_cn || p.name_en || '—'))}${sizesPill}</div>
+            ${metaBits ? `<div class="pa-row-sub"><span class="pa-row-meta">${metaBits}</span></div>` : ''}
           </div>
-          <div class="pa-col-cat">${_paCatCell(u)}</div>
-          <div class="pa-col-sku">${sku}</div>
+          ${docked ? '' : `<div class="pa-col-cat">${_paCatCell(u)}</div><div class="pa-col-sku">${sku}</div>`}
           ${listStores.length
             ? listStores.map(s => `<div class="pa-col-stock">${_paStoreStockCell(u, s.id)}</div>`).join('')
             : `<div class="pa-col-stock">${_paStockCell(u)}</div>`}
