@@ -115,6 +115,17 @@ const SW_STAMP_RE = /(const CACHE = 'roots-v2-shell)[^']*(';)/;
 // should say so rather than report a number it knows is wrong.
 const SELF = 'scripts/diagnose_deployed_tree.js';
 
+// Files that are on the box, are NOT in the repository, and are meant to be.
+// Counted and named separately from EXTRA so a scheduled report does not open
+// with a known-ignorable entry — a report whose first line is always noise is a
+// report people learn to close. Each needs a reason, and the reason has to be
+// about why it is deliberately untracked, not merely why it exists.
+const EXPECTED_EXTRA = {
+  'scripts/zero_yuexiu_stock.js':
+    'one-off operator script, untracked ON PURPOSE — a committed scripts/ file '
+    + 'ships and bounces pm2. Pre-change snapshot at /root/stock-snapshots/.',
+};
+
 let FAILURES = 0;
 const fail = (m) => { FAILURES++; console.log('   FAIL  ' + m); };
 const ok = (m) => console.log('   ok    ' + m);
@@ -191,7 +202,11 @@ function main() {
       rewritten.push({ rel, want, got, matched: true });
     }
   }
-  for (const rel of onBox) if (!(rel in MANIFEST)) extra.push(rel);
+  const expectedExtra = [];
+  for (const rel of onBox) {
+    if (rel in MANIFEST) continue;
+    (rel in EXPECTED_EXTRA ? expectedExtra : extra).push(rel);
+  }
 
   // Only a rewritten file that actually MISmatched goes unjudged. One that
   // matches was compared like any other and counts as a match.
@@ -247,6 +262,10 @@ function main() {
     console.log(`   ${extra.length} extra file(s):`);
     for (const e of extra) console.log('         ' + e);
   }
+  if (expectedExtra.length) {
+    console.log(`   plus ${expectedExtra.length} deliberately untracked, not counted as extra:`);
+    for (const e of expectedExtra) console.log(`         ${e} — ${EXPECTED_EXTRA[e]}`);
+  }
 
   // ══════════════════════════════════════════════════════════════════════════
   console.log('\n' + '═'.repeat(72));
@@ -278,13 +297,13 @@ function main() {
 // MANIFEST_SW_NORMALIZED is public/sw.js hashed with its CACHE stamp replaced by
 // the literal <STAMP>, matching what SW_STAMP_RE does to the deployed copy.
 // ════════════════════════════════════════════════════════════════════════════
-const MANIFEST_COMMIT = 'cfaefd77e5e3903c88af129776d9eb07888b9d03';
+const MANIFEST_COMMIT = '42f0107cfd1b9ea7c25aa1f88ce3ceca175bdd93';
 const MANIFEST_SW_NORMALIZED = '111c63ee2b74d2eb289b23ecbfad6d5c51399ffa';
 const MANIFEST = {
   "database.js": 'bb24a6f850c1eb2973b20043439d2eb2e6b09a23',
   "lib/address-cn.js": '12d738c662f7583d63ceaa8b00380c7cfab99696',
   "lib/address-pin.js": 'ae110a22c6caac8cc9f9e60d77eccfd2ed2c1d4b',
-  "lib/alert-latch.js": 'd4003310c4d5d672bb4bd91ea8a6c3bb5cba58f8',
+  "lib/alert-latch.js": '4642e6bed92eba75fa15f8d7ecf7afac308b268b',
   "lib/alipay-ocr.js": 'b7b7d7850c695f7c532b8ebc7099061863a7a112',
   "lib/aliyun-sms.js": 'e37cbd0ca0c206432ab64982910df0aebe4a92d3',
   "lib/billing-lifecycle.js": '92378adf6e6cd660e069955b7191e0b7e47420bb',
@@ -331,7 +350,7 @@ const MANIFEST = {
   "lib/nuonuo.js": 'c32140cf60d1c9135f890e5e92c25a6c7e816961',
   "lib/onboarding-steps.js": 'd24c09394a759d1a30ad8119ffdd7ef27452b0d5',
   "lib/operator-caps.js": 'b7a7e2a4ae29691b23c921b8e6072f881be8a3b8',
-  "lib/ops-alert.js": '2f8bee496fc4f321a64825683910c091ddd551a2',
+  "lib/ops-alert.js": '1eb788c61ef8623b0418663d82181a08d6e39c72',
   "lib/pg-handle.js": '01fd7389bd4a73e6ab4213f331fa5e87eaead10c',
   "lib/pg.js": '9d21f741808f9be3d434e90d1c45dc9891839b40',
   "lib/phone-cn.js": 'aaa9a429173472a4adf524567320cad81ace5673',
@@ -359,7 +378,7 @@ const MANIFEST = {
   "middleware/auth.js": 'ae2a99cf84911db6d3d3534a73c683341bf41dc1',
   "middleware/public-tenant.js": 'b93126509f30ddf8b1ab4c10a829938b09bffffd',
   "package-lock.json": '85ea48c75a6a1d7ead42fc9accac62cecfb6aecb',
-  "package.json": '680f102bb061973f52f97132921039a245afac4a',
+  "package.json": 'd60dcd681e8341f58a36f2119af0c32203d3c96a',
   "public/app.html": '7cf3cd97a50b20a483ae750d947afbbfa7fcfd21',
   "public/app.html.bak": '5991891f0060f97c4660f4d25b26a422d6845b9e',
   "public/apple-touch-icon.png": '52f0d35477978e0bcccf81dff1a2fa4237ca97ae',
@@ -408,7 +427,7 @@ const MANIFEST = {
   "public/kitchen-manifest.webmanifest": '14730d4ecbb233e21159ed4f70efa284c72affb8',
   "public/kitchen.html": '7805616f936788285c8ca44ed7a8b57dea6dc624',
   "public/login.html": '5cd46e9cc5a747c4717ff2a3f4f76364a6b5e308',
-  "public/m.html": 'af5d99511aee3f0878643cd51ebbb8bb83be3e2f',
+  "public/m.html": 'e6925a81078f2e267d1bb8c9e53fe90c72fcdbee',
   "public/manifest.webmanifest": '0f6513b9b45220bc3f4d6dcf7e240ef98ea5c9e0',
   "public/pos-icon-192-maskable.png": '8176b34f04d6338f0df79779241a15997e0c0a90',
   "public/pos-icon-192.png": '0a85c313e45e17625a93a8a01fae2143b01db519',
@@ -446,7 +465,7 @@ const MANIFEST = {
   "public/shop/product-blocks.js": 'ed2aaf42ba3621a3de663a544c5046e5022bcd0c',
   "public/stock-icon.svg": '0a60278f12f5989be772b50f3548f485fc35831c',
   "public/stock-manifest.webmanifest": '2dd64879e772a3fcc733854f278db34713c87d70',
-  "public/stock.html": 'af8f46af990548f0b31239f6df38763c59fcb84a',
+  "public/stock.html": 'b859cb359cc5c0e442d63c4f34e4d33fcf9def18',
   "public/store-admin.html": '521282047ed7e906dffdfc815ae9b87741b832f1',
   "public/storefront.html": '06096448a17ee5e9b652283863e2ee8df54cd13c',
   "public/sw.js": 'eb0aefded5a8bfd15e773d575b7a64b600a59b2a',
@@ -607,7 +626,7 @@ const MANIFEST = {
   "scripts/guanyi-probe-orders2.js": '560ebb1aee20a971bdde840aeefadbc88b6fd84c',
   "scripts/gzgrocery-order-daemon.js": '2ae02cbc40d0a0681643d316d49d98be4669bf28',
   "scripts/gzgrocery_import.json": '3e83ff17ee9fdae8374e2d1bc4ccfa24d6945604',
-  "scripts/health-watchdog.js": '2207780664740c195b496df977f24e0ba8f9ddf8',
+  "scripts/health-watchdog.js": 'a49b77a59d2277def8498dbcd693a420f3ae005f',
   "scripts/import_descriptions.js": '38128383829c5f77f412ec75869d9ba767f0d833',
   "scripts/import_full.js": '929f45ffc61a88b53cdbec75df8bca49f186fad4',
   "scripts/import_guanyi_pricing.js": 'cdbca75ca12b9dc0069c802413ee0465dcee1b6d',
@@ -618,7 +637,7 @@ const MANIFEST = {
   "scripts/import_yogurt.js": 'dc910766d21c7fde8e7148bd1ed4875d5987c44a',
   "scripts/inherit_variant_blocks.js": '1367334aa2b283c224d6ec9794591d46ef5a2229',
   "scripts/install-backup-cron.sh": '6e7b462be54bfc9f3ccaa6c0c2db7eae08ffb05e',
-  "scripts/lib/m-fakeserver.js": '8505d8f6fba330e17dcbc924b4a8ac002042eace',
+  "scripts/lib/m-fakeserver.js": 'e53a62ab58142ec7c77e535b0079b68347325b8d',
   "scripts/lib/m-probe.js": 'c502819f23b1f1323ba556c447ec1543a223654e',
   "scripts/make_bundle_images.js": 'd0ad5851d41f60ed7793e9e96ceba3d1b8e16999',
   "scripts/make_desktop_mocks.py": '5887577ba76d0c33ae65a7814a1126501d600d18',
@@ -753,7 +772,7 @@ const MANIFEST = {
   "scripts/shangou-status-read.js": 'c2f3c82c827f964ec97b6fdc1bc07e3f3ac4a56d',
   "scripts/shangou-status-recon.js": '197a1f1a769d238d945b694b8378bf4b071b52ff',
   "scripts/ship.sh": '77817db52dbb0c9f88f06140c0072995981c587c',
-  "scripts/shoot_mobile.js": '14b647efab67cf3fcad25d8899ad8367034d80f3',
+  "scripts/shoot_mobile.js": '199a3bd80011ecac262f521a3c479155f84a3929',
   "scripts/shrink_home_media.js": '58999ab58b61924e99351058d0a77bdb1f887f0e',
   "scripts/shrink_store_images.js": '6c5daadc3aa57465ad9fb48c99907fe2aa6112a2',
   "scripts/slot-label-check.js": '4334bc1b83f3bb693999aba9728d26bea99bcb20',
@@ -790,16 +809,17 @@ const MANIFEST = {
   "scripts/test_migration_credit_ledger.js": 'fe6c995ab9b468001254d72cfe84e56052e9f3d1',
   "scripts/test_mobile_activity.js": '771cc4071c0c21ce6252c53dd5c40b1a0bbefbc1',
   "scripts/test_mobile_categories.js": '460b14074cd5df3c91d605124027e61c957b9e2a',
-  "scripts/test_mobile_club.js": '203d51a9d25ee949660d091c7ccc360c6fdce54e',
+  "scripts/test_mobile_club.js": '6d7e512398ccf49ad38b861aab8dea2282d949be',
   "scripts/test_mobile_dots.js": 'd14d8f9e2363da9d742fec3b6263ed6a436a29dc',
-  "scripts/test_mobile_geometry.js": 'a58efe995ef6183638a5f0d8d2711ce37f7f5f10',
-  "scripts/test_mobile_home.js": '2be8e9d61ec0b55d0eee0967337d5506e1f213eb',
-  "scripts/test_mobile_inbox.js": '8e88ca83957337b50e685ec8fd395da4a303bb05',
+  "scripts/test_mobile_geometry.js": 'be38d9831d11f3d07b294e0a5acf0591c87ba7a2',
+  "scripts/test_mobile_home.js": '3efd49f6ed14dacb7c4a87b8185442ecee563a43',
+  "scripts/test_mobile_inbox.js": '9f2d8fa746d43460d6f151acf2e4f6f287f521bf',
   "scripts/test_mobile_orders.js": '740df03f914c488bf011c1ca291c53d6e6aaf6fe',
   "scripts/test_mobile_products.js": '8cfff7b4385dda12179691bb91ff13372aa7fc48',
-  "scripts/test_mobile_purchasing.js": '9acd93743dcf3f5d18e79a3136194173e071abbc',
-  "scripts/test_mobile_screens.js": '35edd09dc89e3897ce14896e957e9cd8bdaa5360',
-  "scripts/test_mobile_settings.js": 'cc3fc54ab3e57627ec88d75b95123185cfd30382',
+  "scripts/test_mobile_purchasing.js": 'e37445eb3fc1d3c8bf4939e706123e7ccb822d14',
+  "scripts/test_mobile_sales.js": '58f086c78b1881f34593d36a2a088c44f5ea2b49',
+  "scripts/test_mobile_screens.js": '9dc06e2999c9ddb05b8a4e2376922c2984415ee3',
+  "scripts/test_mobile_settings.js": '29d6f81def38006f1570445bed34a613db59a4dc',
   "scripts/test_mobile_voting.js": '1199c84452c8c45b18e93196aef06dbbbdf2a69d',
   "scripts/test_needs_point.js": '948cbcfba5df5b717d077b175bce2520d5ddf49e',
   "scripts/test_needs_point_client.js": '3623d7cce6ec2ac2f9bcd2d85461dcd7b7d75f17',
