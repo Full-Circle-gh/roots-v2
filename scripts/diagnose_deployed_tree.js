@@ -297,7 +297,7 @@ function main() {
 // MANIFEST_SW_NORMALIZED is public/sw.js hashed with its CACHE stamp replaced by
 // the literal <STAMP>, matching what SW_STAMP_RE does to the deployed copy.
 // ════════════════════════════════════════════════════════════════════════════
-const MANIFEST_COMMIT = 'c7d7f53bd99d869dcdd98e23ede31863fd8ae9ba';
+const MANIFEST_COMMIT = '1364b153cbd638c2ef098acfb4687d5ca9d49535';
 const MANIFEST_SW_NORMALIZED = '111c63ee2b74d2eb289b23ecbfad6d5c51399ffa';
 const MANIFEST = {
   "database.js": 'bb24a6f850c1eb2973b20043439d2eb2e6b09a23',
@@ -350,7 +350,7 @@ const MANIFEST = {
   "lib/nuonuo.js": 'c32140cf60d1c9135f890e5e92c25a6c7e816961',
   "lib/onboarding-steps.js": 'd24c09394a759d1a30ad8119ffdd7ef27452b0d5',
   "lib/operator-caps.js": 'b7a7e2a4ae29691b23c921b8e6072f881be8a3b8',
-  "lib/ops-alert.js": '1eb788c61ef8623b0418663d82181a08d6e39c72',
+  "lib/ops-alert.js": '05cedd982d468043e7c645137a05f796734da936',
   "lib/pg-handle.js": '01fd7389bd4a73e6ab4213f331fa5e87eaead10c',
   "lib/pg.js": '9d21f741808f9be3d434e90d1c45dc9891839b40',
   "lib/phone-cn.js": 'aaa9a429173472a4adf524567320cad81ace5673',
@@ -427,7 +427,7 @@ const MANIFEST = {
   "public/kitchen-manifest.webmanifest": '14730d4ecbb233e21159ed4f70efa284c72affb8',
   "public/kitchen.html": '7805616f936788285c8ca44ed7a8b57dea6dc624',
   "public/login.html": '5cd46e9cc5a747c4717ff2a3f4f76364a6b5e308',
-  "public/m.html": 'ce3587c4739fcc8a75b528759ef48406f8f99dff',
+  "public/m.html": 'e6925a81078f2e267d1bb8c9e53fe90c72fcdbee',
   "public/manifest.webmanifest": '0f6513b9b45220bc3f4d6dcf7e240ef98ea5c9e0',
   "public/pos-icon-192-maskable.png": '8176b34f04d6338f0df79779241a15997e0c0a90',
   "public/pos-icon-192.png": '0a85c313e45e17625a93a8a01fae2143b01db519',
@@ -549,6 +549,7 @@ const MANIFEST = {
   "scripts/check-tenant-als.js": 'ca68bb41ba4b679b5ee2986e96496dca794b2dfb',
   "scripts/check_ledger_invariants.js": '48d0eaabd3b9b3de00de3af004d83f0ed80037d7',
   "scripts/check_points_invariants.js": 'db900b449b5cde7b9765afeb2fd1b28888340b41',
+  "scripts/check_sync_freshness.js": 'b431ea47e8686979e9fbb99c33b4cbcc961108f3',
   "scripts/clear_stuck_refund_R260618156719.js": 'f4e3bf0fb97b25c59c154581640a32bbca19d9cc',
   "scripts/collapse_zones_into_default.js": '95141695ffc2261a968eed51190ad9282cb96a3d',
   "scripts/compliance_edits.json": 'a3411473eae31950e7c9e485048961e11c03ce73',
@@ -817,9 +818,9 @@ const MANIFEST = {
   "scripts/test_mobile_orders.js": '740df03f914c488bf011c1ca291c53d6e6aaf6fe',
   "scripts/test_mobile_products.js": '8cfff7b4385dda12179691bb91ff13372aa7fc48',
   "scripts/test_mobile_purchasing.js": 'e37445eb3fc1d3c8bf4939e706123e7ccb822d14',
-  "scripts/test_mobile_sales.js": '463c66cb19b43b6c8e865f71320eae5757921762',
-  "scripts/test_mobile_screens.js": 'be29842d7f711afc30a138b27c7ac7879bd93a15',
-  "scripts/test_mobile_settings.js": '8155a7c348f52b69dcac7e509a69338269c35c24',
+  "scripts/test_mobile_sales.js": '58f086c78b1881f34593d36a2a088c44f5ea2b49',
+  "scripts/test_mobile_screens.js": '9dc06e2999c9ddb05b8a4e2376922c2984415ee3',
+  "scripts/test_mobile_settings.js": '29d6f81def38006f1570445bed34a613db59a4dc',
   "scripts/test_mobile_voting.js": '1199c84452c8c45b18e93196aef06dbbbdf2a69d',
   "scripts/test_needs_point.js": '948cbcfba5df5b717d077b175bce2520d5ddf49e',
   "scripts/test_needs_point_client.js": '3623d7cce6ec2ac2f9bcd2d85461dcd7b7d75f17',

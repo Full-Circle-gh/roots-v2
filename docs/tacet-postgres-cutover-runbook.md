@@ -1,4 +1,4 @@
-# The Postgres cutover runbook — v0.8, FIRST DRAFT, NOT EXECUTABLE
+# The Postgres cutover runbook — v0.9, FIRST DRAFT, NOT EXECUTABLE
 
 **A procedure, not a summary.** Written to be followed literally, at 3am, by one person who is not a developer, with the shop trading and no ability to improvise.
 
@@ -730,6 +730,48 @@ ssh root@47.239.89.63 "cd /root/roots-v2/scripts/postgres-full-copy && python3 s
 
 **Order in this part is not negotiable.** Each step depends on the one before it.
 
+## F0 — Stop the cron jobs. "The daemons stop" has never meant these.
+
+**DO THIS BEFORE F1. It is first in PART F because F1 is what makes it necessary.**
+
+**WHY** — `scripts/health-watchdog.js` does not run under pm2. It runs from **root's crontab, every two minutes**, so G22's *the daemons stop for the flip* does not touch it and never did. Nothing in this document stopped it until now.
+
+From F1 onward the application's routes fail. The watchdog's probe was widened on 2026-08-23 to fail on 5xx as well as on silence — which is right for the other 364 days and **wrong here** — so about four minutes into the window (`HEALTH_FAILS=2`, two-minute cron) it runs:
+
+```bash
+pm2 restart roots-v2
+```
+
+**That restart is the hazard.** It brings the application back on the SQLite path with its database renamed away, in the middle of a procedure that has not reached G2 yet, and it adds a restart to the count that **PART H's H5 uses to tell a flap from a crash**. It also tries to page through `lib/ops-alert.js`, which cannot read the renamed database, so the restart happens and nobody is told.
+
+**It restarts ONCE, not in a loop** — the branch is gated on `!state.down`, so after the first one `state.down` stays true. One unwanted restart, at the worst possible moment, silently.
+
+**RUN**
+
+```bash
+ssh root@47.239.89.63 "crontab -l > /root/crontab.pre-cutover && \
+  crontab -l | sed 's|^\(.*health-watchdog.*\)$|#CUTOVER \1|' | crontab - && \
+  crontab -l | grep -n health-watchdog"
+```
+
+**GOOD** — the health-watchdog line comes back prefixed `#CUTOVER`, and `/root/crontab.pre-cutover` exists. **That file is the restore, so check it is there before going on.**
+
+**BAD** — the line is unchanged, or `crontab -l` errors.
+
+**THE OTHER THREE CRON ENTRIES, and why they are left running.** Swept 2026-08-23 across root's crontab, other users' crontabs, `/etc/crontab`, `/etc/cron.d`, `/etc/cron.{hourly,daily,weekly,monthly}`, systemd timers, `at`, and pm2's own `cron_restart` — **the project owns exactly four scheduled jobs and pm2 schedules nothing**:
+
+| Entry | When | In the window |
+|---|---|---|
+| `scripts/health-watchdog.js` | */2 | 🔴 **restarts the app. Disabled above.** |
+| `/root/scripts/roots-backup.sh` | hourly | Fails loudly and correctly — `set -euo pipefail`, and an explicit `[ ! -f "$SRC" ]` guard exits 1 with *source db missing*. Leave it: an hourly failure in `/var/log/roots-backup.log` is a true statement. |
+| `scripts/db-backup.sh` | 03:30 | Same shape, `set -euo pipefail` on `$APP_DIR/data/roots.db`. Fails loudly. Leave it. |
+| `/root/scripts/prune-deploy-backups.sh` | 04:30 | Deletes `/root/backups/deploy-*` older than **14 days**. The flip's own backup is minutes old, so it is not at risk. Leave it. |
+
+**Two of those live in `/root/scripts/`, OUTSIDE the deploy tree and untracked** — `roots-backup.sh` and `prune-deploy-backups.sh`. They will not appear in any repository search.
+
+**IF YOU REACH HERE ON THE NIGHT** — this is a real step with a real command. Do it.
+
+---
 ## F1 — Rename `data/roots.db` — do not delete it
 
 **RUN**
@@ -974,6 +1016,27 @@ ssh root@47.239.89.63 "wc -c /root/.pm2/logs/roots-v2-error.log && tail -n 40 /r
 
 ---
 
+## G9 — Put the cron jobs back
+
+**The flip is not finished until monitoring is back on.** F0 turned the health watchdog off; nothing turns it back on by itself, and a box left with its watchdog commented out looks exactly like a box whose watchdog is working.
+
+**RUN**
+
+```bash
+ssh root@47.239.89.63 "crontab /root/crontab.pre-cutover && crontab -l | grep -n health-watchdog"
+```
+
+**GOOD** — the health-watchdog line is back with no `#CUTOVER` prefix.
+
+**BAD** — `/root/crontab.pre-cutover` is missing. Then restore by hand — the line is:
+
+```
+*/2 * * * * cd /root/roots-v2 && /usr/bin/node scripts/health-watchdog.js >> /var/log/roots-health.log 2>&1
+```
+
+**AND WATCH THE FIRST TICK.** Within two minutes `/var/log/roots-health.log` should show a probe line. If the app is on Postgres and any of the four probed routes answers 5xx, **the watchdog will now restart it** — which is the correct behaviour and may not be what you want two minutes after a flip. If the flip is still settling, leave F0 in place and restore here once the app is serving cleanly.
+
+---
 # PART H — ROLLBACK
 
 **THE ROLLBACK EXISTS NOW, AND THIS PART IS THE PROCEDURE FOR SPENDING IT.** `scripts/rollback-to-sqlite.sh` landed on `main` at `7483cb91` with `scripts/rollback-delta-report.js` beside it. G22 is closed. **A tool without a trigger, a decision-maker and a window is not a rollback — it is a button nobody is authorised to press**, and this part is what closes G23.
@@ -1274,12 +1337,25 @@ printf '\a'; sleep 600; done
 ### What the loops do NOT cover
 
 - **Fidelity / `checks.py`** — once only, at G7, and see T4 for why you may not have it at all. **Never in a loop; it issues DDL.**
-- **The channel daemons.** Nothing here watches them. G21 is still open and the daemons have no per-process confirmation check.
-- **Writes.** No probe on this panel writes anything. T1 is the closest thing to a write check, and it only reads what writes left behind.
+✅ **Writes — NOW COVERED, by observing a write instead of making one.** `scripts/check_sync_freshness.js`, added 2026-08-23. It never writes and never restarts anything.
+
+```bash
+ssh root@47.239.89.63 "cd /root/roots-v2 && node scripts/check_sync_freshness.js; echo FRESH_EXIT=$?"
+```
+
+**Run it in the SLOW loop, beside the ledger check.** It reads the newest row of `qingyun_sync_log`, `guanyi_sync_log` and `meituan_sync_log` and reports how old each is. **N = 15 minutes**, chosen from measurement rather than taste: on 2026-08-23 `qingyun_sync_log` took 128 rows in an hour and the **largest gap between consecutive rows across 24 hours was 133 seconds**, so the window is about seven times the worst observed case.
+
+**Exit 0 fresh, 1 stale, 2 REFUSED.** Two is the one to read carefully — it means the source could not be read at all, which is *not* a pass. After F1 the SQLite path is gone, so post-flip run it in its default Postgres mode (it shells to `sudo -u postgres psql`, deliberately NOT through `lib/pg.js`, so **G27 cannot stop it**).
+
+**IT CANNOT TELL A BROKEN WRITE PATH FROM A DAEMON THAT IS CORRECTLY QUIET, AND IT SAYS SO IN ITS OWN OUTPUT.** The 闪购 channel goes silent after 20:15 by design; a deploy bounces the daemons; you may have paused one yourself. That is exactly why it is here and not in `health-watchdog` — a standing check cannot answer *is this daemon meant to be running?* and **on the night, you can**.
+
+- **The channel daemons.** Nothing here watches them for liveness. G21 is still open and the daemons have no per-process confirmation check.
 
 ---
 
 ## H5 — TELLING A WATCHDOG BOUNCE FROM A CRASH
+
+⚠️ **THIS SECTION WAS WRITTEN AGAINST THE OLD PROBE AND TWO OF ITS CLAIMS MOVED ON 2026-08-23.** `scripts/health-watchdog.js` used to accept **any** HTTP status, so it only ever failed on silence. It now probes four paths and fails on 5xx as well. **So "the app is coming back, answering `/`, and dying again" no longer describes the trigger** — a 500 on any of `/api/retail/categories`, `/api/retail/config` or `/api/retail/products` is now enough. And the third case below — *the app answers `/` but is broken* — **is no longer silent for READ breakage**, though it remains exactly true for WRITE breakage, which nothing on this panel covers. `scripts/check_sync_freshness.js` is the instrument for that half — it is in H4's slow loop.
 
 **One correction to the premise first, because it changes what you are looking at.**
 
@@ -1528,6 +1604,7 @@ ssh root@47.239.89.63 "find /root -name 'roots.db*' -newermt '-2 days' -ls 2>/de
 | 1 | Stop the application accepting new writes | ✅ **the tool does it** — `pm2 stop` on `roots-v2` and every `*-daemon.js`, discovered by `pm_exec_path` and never by a name list. G16 is still open as a *product* gap; the rollback does not need it |
 | 2 | Point the application back at SQLite | ✅ `TACET_DB` is **commented out rather than deleted**, so `.env` still records that a flip happened and was undone. *(This row said "G2 does not exist in either direction" until 2026-08-20 and was stale from `2961d3d`.)* |
 | 3 | Restore `data/roots.db` from `data/roots.db.pre-cutover` | ✅ a rename — **step F1 exists precisely so this is possible** |
+| 3b | **Put the cron jobs back** — `crontab /root/crontab.pre-cutover` | ⚠️ **manual, and easy to forget precisely because the rollback is the stressful path.** F0 disabled the health watchdog. **A rollback that leaves monitoring off is worse than the flip that turned it off**: you are back on SQLite, believing you are safe, with nothing watching. Do this BEFORE you go to bed, not in the morning |
 | 4 | Bring SQLite up to date with everything Postgres accepted since the flip | 🔴 **none, and never will be** — a reverse copy is a **rejected option**, not an unbuilt one (§24 v4.46, four reasons). `rollback-delta-report.js` lists what was left instead |
 | 5 | Undo the app directory rename and the gzgrocery table rename | 🔴 **none** — both ride with the flip deliberately, and standalone the directory rename breaks the SQLite path, pm2, Actions, `deploy-apply.sh` and probably nginx at once |
 | 6 | Restart every pm2 process, not just `roots-v2` | ✅ **the tool does it** — the same discovered list, restarted with `--update-env`, browser holders deliberately excluded because bouncing one costs a risk-control challenge. **The ordered per-process *cutover* procedure is still missing (G21); the rollback's own restart is not** |
