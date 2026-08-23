@@ -1,4 +1,4 @@
-# The Postgres migration — status, v3.0
+# The Postgres migration — status, v3.1
 
 **2026-08-10 · A LIVING DOCUMENT. Both halves, in one place: what is built, and what is left.**
 Covers 2026-08-03 onwards. Read-only in itself — no code change ever accompanies it.
@@ -196,6 +196,10 @@ Type: **C** conversion · **F** fix · **D** design question · **O** operationa
 | 63 | ⚠️ **Two cron scripts live in `/root/scripts`, untracked ON PURPOSE, and NOTHING WATCHES THEM.** `roots-backup.sh` (hourly SQLite tier) and `prune-deploy-backups.sh` (14-day deploy retention). §24 v4.26 records why they are outside the tree and it is a sound trade — committing them moves them off the path cron calls and makes every tweak bounce pm2. **The gap is (a) no off-box copy of the scripts and (b) nothing notices if either stops** — `health-watchdog` mentions backups zero times. **This class has NO detector: `diagnose_deployed_tree.js` asks about the DEPLOY TREE, and `/root/scripts` and crontabs are outside the question it asks** | O | §24 TWO CRON SCRIPTS LIVE OUTSIDE GIT ON PURPOSE |
 
 | 64 | 🔴 **H4's watch loop substitutes a number for a missing `/root/flip-offset`.** `B=$(cat /root/flip-offset 2>/dev/null || echo 1)` — a missing offset becomes 1, T2 reads the error log from byte one, every historical error counts, and **against a threshold of ONE the trigger is red on its first tick for a reason unrelated to the flip.** At 3am that reads as *roll back*. Must refuse, not guess. Recorded not changed: the loop is pasted into a laptop terminal by hand | F | §24 THREE RUNBOOK STEPS SAVE STATE AND ONE SUBSTITUTES A NUMBER |
+
+| 65 | ✅ **G27 CLOSED** — `lib/load-env.js`. Five scripts wired (the gap said three). Server proven identical over 15 `.env` shapes. **Delta report now 0=clean / 1=real delta / 2=could-not-run**; it had ONE exit path before. ⚠️ **Box exit codes still unmeasured** — the local machine has no `pg` and no sqlite bindings, so the local run never reproduced G27's cause | B | §24 G27 CLOSED |
+
+| 66 | ⚠️ **`lib/platform-alert.js` — an unset `PLATFORM_OPS_WEBHOOK` is a silent no-op.** Not a G27 exposure (one importer, `routes/integrations-admin.js`, in-process) but the same third-state defect `/root/ops-alert.conf` fixed for tenant alerts: missing config reads as *switched off* rather than *cannot tell*. Needs its own pass | O | §24 G27 CLOSED |
 
 ### After the flip — explicitly not preconditions
 

@@ -19,27 +19,11 @@ const zlib = require('zlib');
 // dep. Format: KEY=value per line, # comments allowed, blank lines OK.
 // Existing process.env vars take precedence (so pm2's --update-env still
 // works as expected). Used for ANTHROPIC_API_KEY and any future secrets.
-(function loadEnv() {
-  try {
-    const envPath = path.join(__dirname, '.env');
-    if (!fs.existsSync(envPath)) return;
-    const text = fs.readFileSync(envPath, 'utf8');
-    for (const raw of text.split(/\r?\n/)) {
-      const line = raw.trim();
-      if (!line || line.startsWith('#')) continue;
-      const eq = line.indexOf('=');
-      if (eq < 1) continue;
-      const key = line.slice(0, eq).trim();
-      let val = line.slice(eq + 1).trim();
-      // Strip optional surrounding quotes (so KEY="value" works too).
-      if ((val.startsWith('"') && val.endsWith('"')) ||
-          (val.startsWith("'") && val.endsWith("'"))) {
-        val = val.slice(1, -1);
-      }
-      if (!(key in process.env)) process.env[key] = val;
-    }
-  } catch (e) { console.warn('[.env load]', e.message); }
-})();
+// Extracted to lib/load-env.js so the scripts can parse the same file the
+// same way (GAP G27). Behaviour here is unchanged: same format, same
+// precedence, same swallow-and-warn. The report is ignored on purpose --
+// the server has always started without a .env and must keep doing so.
+require('./lib/load-env').loadEnv();
 
 // Ensure data directory exists
 const DATA_DIR = path.join(__dirname, 'data');
