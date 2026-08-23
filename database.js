@@ -2798,6 +2798,49 @@ addColumn('retail_orders', 'channel_eta',       'DATETIME');
 // order due immediately, and the kitchen packs it hours early.
 addColumn('retail_orders', 'channel_preorder_at', 'DATETIME');
 
+// ── The rest of what a channel order already tells us ────────────────────────
+// Everything below is read out of the SAME Meituan order-list response the
+// daemons already fetch (lib/meituan-order-fields.js) — no extra call, no extra
+// exposure. Until now the entire 26KB envelope was reduced to a status label, an
+// ETA and a gross total, and every fact here was thrown away at parse time.
+//
+// Money. `total` is what the CUSTOMER paid and stays that. What we actually earn
+// was nowhere: Meituan takes a commission and the fees split three ways, so a
+// ¥65 order settles at ¥61.75. subtotal / shipping_fee / packing_fee (existing
+// columns) now carry the 商品金额 / 配送费 / 打包袋 split instead of a lump sum.
+addColumn('retail_orders', 'channel_commission',   'REAL');  // 平台服务费 taken by Meituan
+addColumn('retail_orders', 'channel_settle_amount','REAL');  // 预计收入 — what lands with us
+addColumn('retail_orders', 'channel_discount',     'REAL');  // merchant-funded activity spend
+// Rider. Meituan's own fleet carries these orders, so this is the only delivery
+// record that exists for them — our own dispatch columns were always empty.
+// channel_rider_status_code is Meituan's numeric logistics state (40 = 已送达),
+// kept beside the phrase because a code survives their wording changes.
+addColumn('retail_orders', 'channel_rider_name',        'TEXT');
+addColumn('retail_orders', 'channel_rider_status',      'TEXT');
+addColumn('retail_orders', 'channel_rider_status_code', 'INTEGER');
+addColumn('retail_orders', 'channel_rider_assigned_at', 'DATETIME'); // a rider took the job
+addColumn('retail_orders', 'channel_rider_fetched_at',  'DATETIME'); // collected from the store
+// Customer. wm_user_id is the ONLY stable customer identity Meituan gives a
+// merchant — the same value across that person's orders — so repeat business on
+// the channel becomes countable for the first time. TEXT: the ids run past 2^53.
+// channel_customer_orders is their lifetime order count as Meituan reports it
+// ("下单155次"), a fact we cannot derive ourselves because we only see the orders
+// that arrived after this daemon existed.
+addColumn('retail_orders', 'channel_customer_id',     'TEXT');
+addColumn('retail_orders', 'channel_customer_orders', 'INTEGER');
+// Delivery geography. The street address is masked by Meituan and un-masking it
+// would cost a second, privacy-gated request per order (deliberately not done —
+// see lib/meituan-order-fields.js). Distance + drop coordinates come free in the
+// same payload and answer the same questions.
+addColumn('retail_orders', 'channel_distance_m', 'INTEGER');
+addColumn('retail_orders', 'channel_dest_lat',   'REAL');
+addColumn('retail_orders', 'channel_dest_lng',   'REAL');
+// Meituan's own listing id for a line. Their stable per-listing key: name
+// matching and the "(1-380)" SKU token embedded in a title are both merchant-
+// typed and both have lost lines before. Recorded now so a future resolver can
+// key on the id instead — collecting it costs nothing and cannot be backfilled.
+addColumn('retail_order_items', 'channel_food_id', 'TEXT');
+
 // Store pickup: a store is offered as a pickup point at checkout only when
 // this flag is on (admin toggles it per store in the mini-app backend).
 // Independent of is_active routing — a store can fulfill deliveries without
