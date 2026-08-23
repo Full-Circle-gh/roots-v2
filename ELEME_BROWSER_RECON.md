@@ -80,13 +80,77 @@ Method names captured (payloads NOT yet captured — no live order during recon)
   method, and the **history query** (订单查询 page) method. Capture the same way:
   open `napos-order-pc.faas.ele.me` standalone, inject the fetch/XHR hook, act, read `__cap`.
 
+### Order collection is BUILT (2026-08-24) — Tier 0 + Tier 1, shape-agnostic
+
+`lib/eleme-browser.js` now has a real `getPendingOrders` / `getOrderDetail`, and
+`scripts/eleme-daemon.js` polls each store every ~5 min. Because the payload shapes
+above were never captured, none of it guesses field names blindly:
+
+- **It reads what the page fetches.** `napos-order-pc.faas.ele.me` is opened in its
+  own tab (a second page — order RPCs must NOT go out from the goods origin, or the
+  Origin/Referer pair is one no merchant session produces) and context-level
+  `request`/`response` hooks capture the SPA's own order calls. The normal path
+  costs **zero synthetic requests**.
+- **Then it replays.** If the page didn't refetch, the reader re-issues the call
+  using the exact request body captured off the wire.
+- **It does not probe by default.** Guessing request shapes is behind
+  `ELEME_ORDER_PROBE=1`, off in the shipped default, bounded to one pass per
+  browser session.
+- **Responses are parsed structurally** (largest array of order-shaped objects,
+  fields read by candidate key) — an unguessed name yields `null`, never a wrong
+  value. Covered by `npm run test:eleme-orders`
+  (`scripts/test_eleme_order_parse.js`, 57 assertions), which drives the real
+  `parseOrderPayload`/`mergeOrderDetail` against synthetic payloads in several
+  plausible shapes — flat and nested, 元 and 分, epoch-ms/epoch-s/date-string.
+
+**The one thing still needed from a live order:** its real field names. The daemon
+writes a value-stripped key digest of the first list and detail payload it sees to
+`eleme_sync_log` (`event_type='order_shape'`), so:
+
+```sql
+SELECT created_at, detail FROM eleme_sync_log WHERE event_type = 'order_shape';
+```
+
+…prints Eleme's actual order schema after the first order, with no second capture
+session. Fill the candidate-key lists in `lib/eleme-browser.js` from it, and set
+`ELEME_ORDER_DETAIL_METHOD` once the detail RPC name shows up in the observed-RPC
+log line. Until that name is known, Tier 1 stays dormant and says so once.
+
+Also unverified until a live order: **the wire money unit** (元 vs 分 — the stock
+payload echoes `price` back without ever interpreting it, so the repo holds no
+evidence). The reader auto-detects and logs its choice; pin it with
+`ELEME_MONEY_SCALE=yuan|fen`. Raw values are archived in
+`eleme_order_import.detail_json`, so a wrong guess is fixable from stored data.
+
+**Cancel/refund restock IS built.** A voided order LEAVES the in-process list, so
+the list poll alone can never see one — it just stops mentioning the order, which
+is indistinguishable from completion. The daemon therefore also reads Eleme's
+refund/exception queue (`PollingService.abnormalOrders` /
+`ShopQueryService.queryExceptionInfo`), which the merchant page polls for itself,
+so it costs no extra request. That read is **observe + replay only, never probed** —
+unlike the list there is no single confirmed method name to probe with.
+
+Guards, mirrored from the Meituan twin: only a **confirmed** void returns stock (a
+refund *request* the merchant may still reject must not — `isConfirmedVoid`);
+`channel_stock_restored` makes it happen exactly once under a repeating poll; and a
+void that flips back to a live status **re-deducts** what was returned, so a
+rejected refund can't inflate the count. 部分退款 deliberately does not restock — we
+hold no per-line refund detail, so returning the whole order would over-credit.
+
+One ordering difference from Meituan, on purpose: Eleme's `骑手已接单` classifies as
+**rider_pickup**, not preparing, so the floor knows a rider is already on the way.
+`骑手已取餐` (rider HAS it) still classifies as dispatched.
+
+**Not built:** accept-order, history sweeps, and anything that un-masks customer
+PII.
+
 ## Build plan (mirror Meituan)
 
 1. `lib/eleme-browser.js` = twin of `lib/meituan-browser.js`: Playwright init + fingerprint,
    session persist (cookies + `ksid`), `ensureLoggedIn`/`interactiveLogin` (QR),
    risk-control detection, `listFoods`/`updateStock`(→`updateFoodStock`),
    `getPendingOrders`(→`queryInProcessOrders`/polling), `acceptOrder`.
-2. Rewire `scripts/eleme-daemon.js` to use the browser (NOT the OpenAPI `eleme-client.js`).
+2. ✅ DONE — `scripts/eleme-daemon.js` uses the browser (NOT the OpenAPI `eleme-client.js`).
    Reuse existing DB tables (`eleme_sync_queue`, `eleme_order_import`, `eleme_product_map`,
    `eleme_sync_log`); repurpose `eleme_tokens` to hold the browser session/`ksid`.
 3. Keep `inventory.enqueueChannelSync` fan-out + the admin tab (`14-eleme.js`).

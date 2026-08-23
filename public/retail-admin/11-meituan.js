@@ -161,7 +161,6 @@
 
   // ── Status ─────────────────────────────────────────────────────────────────
   // Populates the fc-kpis strip (matches the Products catalogue's KPI tiles).
-  function mtSetKpi(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
   // mtAlertTile went with the strip: a tile that flips amber cannot say WHICH
   // store is unwell, which was the whole problem. The cards carry it now.
 
@@ -182,7 +181,6 @@
       mtRenderHead();
       mtRenderLog('mt-log-stock', s.recentStock, true);
       mtRenderLog('mt-log-sys', s.recentSystem, false);
-      mtSetKpi('mt-upd', cuT('Updated just now', '刚刚更新'));
     } catch (e) {
       // Cannot reach the admin API. Say so where the notice goes, rather than
       // leaving the last numbers on screen looking current.
@@ -193,7 +191,6 @@
           cuT('The numbers above are from the last successful check.', '上方数据为上次成功检查的结果。') +
           '</div></div></div>';
       }
-      mtSetKpi('mt-upd', cuT('Offline', '离线'));
     }
   };
 

@@ -195,7 +195,10 @@ router.get('/api/retail-admin/eleme/products', requireRetailAdmin, (req, res) =>
     const includeInactive = req.query.includeInactive === '1';
     const products = db.prepare(`
       SELECT p.id, p.name_cn, p.name_en, p.sku, p.category, p.is_active,
-             p.variant_label, p.variant_group_id
+             p.variant_label, p.variant_group_id, p.updated_at,
+             CASE WHEN (p.image_data IS NOT NULL AND p.image_data != '')
+                    OR (p.image_url  IS NOT NULL AND p.image_url  != '')
+                  THEN 1 ELSE 0 END AS has_image
         FROM store_products p
        ${includeInactive ? '' : 'WHERE p.is_active = 1'}
        ORDER BY p.name_cn, p.variant_group_id, p.id
@@ -214,7 +217,19 @@ router.get('/api/retail-admin/eleme/products', requireRetailAdmin, (req, res) =>
     `).all();
     const idx = {};
     for (const m of maps) { (idx[m.product_id] = idx[m.product_id] || {})[m.store_code] = m; }
-    res.json({ success: true, data: products.map(p => ({ ...p, stores: idx[p.id] || {} })) });
+    // image = a small lazy thumbnail URL, never the blob — the list-image
+    // footgun. The public /image route serves store_products images on demand.
+    res.json({
+      success: true,
+      data: products.map(p => ({
+        ...p,
+        has_image: undefined,
+        image: p.has_image
+          ? `/api/retail/products/${p.id}/image?v=${encodeURIComponent(p.updated_at || '')}&w=96`
+          : null,
+        stores: idx[p.id] || {},
+      })),
+    });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 

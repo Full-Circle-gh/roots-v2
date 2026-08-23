@@ -349,8 +349,6 @@
       // WHICH store was unwell. Store cards carry it per store now.
       _lastStores = r.stores || [];
       elRenderHead();
-      const upd = document.getElementById('el-upd');
-      if (upd) upd.textContent = cuT('Updated just now', '刚刚更新');
       elRenderPushLog(r.recentStock || []);
       elRenderLog(r.recentSystem || []);
     } catch (e) {}
@@ -458,10 +456,15 @@
       const alt  = cuT(p.name_cn || '', p.name_en || '');
       // SKU rides in the product cell as a chip, as on Meituan — it is a fact
       // about the product, not a column's worth of page.
-      const nameCell = '<div class="el-pname">' + esc(base) +
+      const thumb = p.image
+        ? '<img class="el-thumb" loading="lazy" src="' + esc(p.image) + '" alt="">'
+        : '<span class="el-thumb-ph"></span>';
+      const nameCell = '<div class="el-pcell">' + thumb + '<div>' +
+        '<div class="el-pname">' + esc(base) +
           (p.variant_label ? ' <span class="vl">\u00b7 ' + esc(p.variant_label) + '</span>' : '') + '</div>' +
         (alt && alt !== base ? '<div class="el-pmeta">' + esc(alt) + '</div>' : '') +
-        (p.sku ? '<span class="el-psku">' + esc(p.sku) + '</span>' : '');
+        (p.sku ? '<span class="el-psku">' + esc(p.sku) + '</span>' : '') +
+        '</div></div>';
 
       const cells = shown.map(st => {
         const m = (p.stores || {})[st.code];
