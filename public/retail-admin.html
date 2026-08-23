@@ -10842,20 +10842,14 @@
         title="Read the live Meituan listings and link them to your products">Match names · 匹配名称</button>
     </div>
 
-    <!-- The switch is a setting, not the page action, so it sits in the body. -->
-    <div class="mt-chanrow">
-      <label class="mt-chan" title="Turn the whole Meituan channel on or off">
-        <span class="lab" id="mt-enable-txt">Channel on · 渠道开启</span>
-        <input type="checkbox" id="mt-enable" onchange="mtToggleChannel(this.checked)">
-      </label>
-    </div>
-
+    <!-- The channel on/off switch and Connect another store were removed
+         2026-08-23: both are channel setup and belong on the Sales page, not
+         on the page you work in every day. -->
     <div class="mt-stores" id="mt-stores"></div>
 
     <!-- The two setup actions the scrapped Configure panel carried. Quiet, at
          the end of the store region: they are rare, and neither is the page. -->
     <div class="mt-storefoot">
-      <button class="btn btn-sm" onclick="if(window.igRelayWizard)igRelayWizard('meituan')">Connect another store · 连接其他门店</button>
       <button class="mt-help" onclick="if(window.igHelp)igHelp('meituan')">Get help · 获取帮助</button>
     </div>
 
@@ -11264,13 +11258,6 @@
       </div>
       <!-- §1.7: no create action on this page, so the Dusk slot stays empty
            rather than take a secondary. Push all stock sits by the tabs. -->
-    </div>
-
-    <div class="el-chanrow">
-      <label class="el-chan" title="Turn the whole Eleme channel on or off">
-        <span class="lab" id="el-enable-txt">Channel off · 渠道已关闭</span>
-        <input type="checkbox" id="el-enable" onchange="elToggleEnabled(this.checked)">
-      </label>
     </div>
 
     <!-- One card per store, from /eleme/status.stores. A store is blocked when
