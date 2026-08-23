@@ -2301,58 +2301,67 @@
     .fhelp:hover .fhelp-pop, .fhelp:focus-within .fhelp-pop { transform: translateX(-50%); }
   }
 
-  /* ── Recap band — one calm hero count, then one-click jumps to the three
-        buckets that actually need someone. The numbers ARE the filters. ── */
+  /* ── Recap band — the health strip. One hero count on the left, then the
+        buckets that need someone as equal tiles across the rest of the card,
+        divided by hairlines. The numbers ARE the filters. Severity lives in
+        the NUMBER's colour (brick out, amber low, sage promo), not in a dot —
+        the dot said the same thing twice and stole the tile's first glance. ── */
   .pa-recap {
-    display: flex; align-items: center; gap: 26px; flex-wrap: wrap;
+    display: flex; align-items: stretch; gap: 0; flex-wrap: wrap;
     background: var(--td-surface); border: 1px solid var(--td-border);
-    border-radius: 14px; padding: 22px 26px; margin-bottom: var(--s3);
+    border-radius: 14px; margin-bottom: var(--s3);
   }
-  .pa-recap-hero { flex-shrink: 0; }
+  .pa-recap-hero { flex: 0 0 auto; min-width: 210px; padding: 16px 22px; display: flex; flex-direction: column; justify-content: center; }
   .pa-recap-cap {
-    font-family: var(--f-sans); font-size: 11px; font-weight: 600;
-    letter-spacing: .08em; text-transform: uppercase; color: var(--td-sage-ink);
+    font-family: var(--f-sans); font-size: 13px; font-weight: 400;
+    letter-spacing: 0; text-transform: none; color: var(--td-text2);
   }
   .pa-recap-n {
-    font-size: 44px; font-weight: 600; letter-spacing: -.02em; line-height: 1.05;
-    color: var(--td-text); font-variant-numeric: tabular-nums; margin-top: 6px;
+    font-size: 32px; font-weight: 500; letter-spacing: -.01em; line-height: 1;
+    color: var(--td-text); font-variant-numeric: tabular-nums; margin-top: 8px;
   }
-  .pa-recap-u { font-size: 13px; font-weight: 500; color: var(--td-text2); letter-spacing: 0; }
-  .pa-recap-u b { font-weight: 600; color: var(--td-text); font-variant-numeric: tabular-nums; }
+  .pa-recap-u { font-size: 14px; font-weight: 400; color: var(--td-text2); letter-spacing: 0; }
+  .pa-recap-u b { font-weight: 400; color: var(--td-text2); font-variant-numeric: tabular-nums; }
   /* Proportion bar — the sage fill is the live share of the whole catalogue;
      the cream track behind it is everything disabled. A shape, not just a
      number, so "almost all live" or "half hidden" reads at a glance. */
-  .pa-recap-bar { width: 220px; max-width: 100%; height: 8px; border-radius: 999px; background: var(--td-raised); overflow: hidden; margin-top: 12px; }
-  .pa-recap-bar-fill { display: block; height: 100%; background: var(--td-sage); border-radius: 999px; transition: width .35s cubic-bezier(.16,1,.3,1); }
-  .pa-recap-legend { display: flex; gap: 16px; margin-top: 8px; font-size: 12px; color: var(--td-text2); }
+  .pa-recap-bar { width: 100%; max-width: 100%; height: 5px; border-radius: 999px; background: var(--td-raised); overflow: hidden; margin-top: 10px; }
+  .pa-recap-bar-fill { display: block; height: 100%; background: var(--td-sage-ink); border-radius: 999px; transition: width .35s cubic-bezier(.16,1,.3,1); }
+  .pa-recap-legend { display: flex; gap: 14px; margin-top: 8px; font-size: 12px; color: var(--td-text2); }
   .pa-recap-sw { width: 8px; height: 8px; border-radius: 2px; display: inline-block; margin-right: 5px; vertical-align: 0; }
-  .pa-recap-sw.sw-active { background: var(--td-sage); }
+  .pa-recap-sw.sw-active { background: var(--td-sage-ink); }
   .pa-recap-sw.sw-dis { background: var(--td-raised); border: 1px solid var(--td-border); }
-  .pa-recap-legend b { color: var(--td-text); font-weight: 600; font-variant-numeric: tabular-nums; margin-left: 3px; }
-  .pa-recap-rule { width: 1px; align-self: stretch; background: var(--td-border); margin: 4px 0; }
-  .pa-recap-jump { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
-  .pa-recap-jlbl {
-    font-family: var(--f-sans); font-size: 11px; font-weight: 600;
-    letter-spacing: .08em; text-transform: uppercase; color: var(--td-text2); margin-right: 8px;
+  .pa-recap-legend b { color: var(--td-text); font-weight: 500; font-variant-numeric: tabular-nums; margin-left: 3px; }
+  .pa-recap-rule { display: none; }                    /* the tiles' own hairlines divide now */
+  .pa-recap-jump {
+    flex: 1; min-width: 0; display: grid; gap: 0; align-items: stretch;
+    grid-auto-flow: column; grid-auto-columns: 1fr;
+    border-left: 1px solid var(--td-border);
   }
+  .pa-recap-jlbl { display: none; }                    /* the tiles name themselves */
   .pa-jump {
-    display: inline-flex; align-items: center; gap: 9px; padding: 8px 14px;
-    border: 1px solid transparent; border-radius: 8px; background: none;
+    display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 5px;
+    padding: 14px 14px; border: 0; border-left: 1px solid var(--td-border); border-radius: 0;
+    background: none; text-align: left;
     cursor: pointer; color: var(--td-text); font-family: var(--f-sans); user-select: none;
-    transition: background .18s cubic-bezier(.16,1,.3,1), border-color .18s cubic-bezier(.16,1,.3,1);
+    transition: background .18s cubic-bezier(.16,1,.3,1);
   }
-  .pa-jump:hover { background: var(--td-raised); }
-  .pa-jump:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 2px; }
-  .pa-jump.pa-kpi-on { background: var(--td-raised); border-color: var(--td-border); }
-  .pa-jump-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--td-sage); }
-  .pa-jump-dot.is-out { background: var(--td-brick); }
-  .pa-jump-dot.is-low { background: var(--td-amber); }
-  .pa-jump-dot.is-draft { background: var(--td-text2); }
-  .pa-jump-dot.is-dead { background: var(--td-brick); }
-  .pa-jump-dot.is-promo { background: var(--td-sage); }
-  .pa-jump-n { font-size: 23px; font-weight: 600; letter-spacing: -.01em; line-height: 1; font-variant-numeric: tabular-nums; }
-  .pa-jump-l { font-size: 13.5px; color: var(--td-text2); font-weight: 500; white-space: nowrap; }
+  .pa-recap-jump > .pa-jump:first-child { border-left: 0; }
+  .pa-jump:hover { background: rgba(var(--td-heat-rgb), .04); }
+  .pa-jump:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: -2px; }
+  .pa-jump.pa-kpi-on { background: var(--td-raised); box-shadow: inset 0 -2px 0 var(--td-text); }
+  .pa-jump-dot { display: none; }                      /* severity is the number's colour */
+  .pa-jump-n { font-size: 22px; font-weight: 500; letter-spacing: -.01em; line-height: 1; font-variant-numeric: tabular-nums; }
+  .pa-jump-l { font-size: 12px; color: var(--td-text2); font-weight: 400; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
   .pa-jump.pa-kpi-on .pa-jump-l { color: var(--td-text); }
+  .pa-jump:has(.pa-jump-dot.is-out)   .pa-jump-n { color: var(--td-brick-ink); }
+  .pa-jump:has(.pa-jump-dot.is-low)   .pa-jump-n { color: var(--td-amber-ink); }
+  .pa-jump:has(.pa-jump-dot.is-dead)  .pa-jump-n { color: var(--td-brick-ink); }
+  .pa-jump:has(.pa-jump-dot.is-promo) .pa-jump-n { color: var(--td-sage-ink); }
+  /* Dead + promo tiles ship `hidden` until they have a count. A bare class
+     `display:flex` outranks the UA's [hidden] rule, so re-state it here or
+     they render empty and steal a grid column. */
+  .pa-jump[hidden] { display: none; }
 
   /* Low-stock threshold knob — lives in the sub-bar, out of the scan path. */
   .pa-lowknob {
@@ -2388,10 +2397,21 @@
   }
   .pa-low-reset:hover { color: var(--td-text); }
 
+  /* Narrow: the tile row can't stay one lane of equal columns, so it wraps to
+     a 2-up auto-flow grid under the hero and the hero's left border goes. */
+  @media (max-width: 980px) {
+    .pa-recap-hero { flex: 1 1 100%; min-width: 0; border-bottom: 1px solid var(--td-border); }
+    .pa-recap-jump {
+      flex: 1 1 100%; border-left: 0;
+      grid-auto-flow: row; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+    }
+    .pa-recap-jump > .pa-jump:first-child { border-left: 1px solid var(--td-border); }
+    .pa-recap-jump > .pa-jump:nth-child(odd) { border-left: 0; }
+  }
   @media (max-width: 720px) {
-    .pa-recap { gap: 14px; padding: 14px 16px; }
-    .pa-recap-n { font-size: 30px; }
-    .pa-recap-rule { display: none; }
+    .pa-recap-hero { padding: 14px 16px; }
+    .pa-recap-n { font-size: 28px; }
+    .pa-jump { padding: 12px 14px; }
     .pa-lowknob { margin-left: 0; width: 100%; }
   }
 
@@ -2595,7 +2615,7 @@
        list is set inline per render (paRender) — img · name · category ·
        SKU · one column per store · price. Fallback keeps the old single-stock
        shape for safety. */
-    grid-template-columns: 34px var(--pa-grid, 46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) 104px 116px);
+    grid-template-columns: 34px var(--pa-grid, 46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) 104px 116px 104px);
     align-items: center; gap: var(--s3);
   }
   .pa-list-rich .pa-row {
@@ -2603,17 +2623,23 @@
     border: none; border-bottom: 1px solid var(--td-border); border-radius: 0;
     padding: 12px 18px; transform: none;
   }
-  .pa-list-rich .pa-row:hover { transform: none; background: var(--td-raised); border-color: var(--td-border); }
+  /* Hover is a tint of the theme's own ink, not a jump to the raised surface —
+     the raised fill is what a SELECTED row wears, and having both meant a
+     hovered row was indistinguishable from the open one. */
+  .pa-list-rich .pa-row:hover { transform: none; background: rgba(var(--td-heat-rgb), .035); border-color: var(--td-border); }
   .pa-list-rich .pa-row:last-child { border-bottom: none; border-bottom-left-radius: 14px; border-bottom-right-radius: 14px; }
-  .pa-list-rich .pa-row.is-selected { background: var(--td-raised); }
+  /* The open product: raised fill plus an ink edge down its leading side, so
+     which row the dock is showing survives a glance at the far column. */
+  .pa-list-rich .pa-row.is-selected { background: var(--td-raised); box-shadow: inset 3px 0 0 0 var(--td-text); }
+  .pa-list-rich .pa-row.is-selected:hover { background: var(--td-raised); }
   .pa-rowhead {
-    padding: 14px 18px; background: var(--td-raised);
+    padding: 12px 18px; background: var(--td-raised);
     border-bottom: 1px solid var(--td-border);
     /* Square top, not rounded: once stuck it's pinned flush under the topbar
        (top:56px = exact topbar height, no gap) — a rounded top edge there
        reads as a floating pill instead of an attached bar. */
-    font-size: 13.5px; letter-spacing: .02em; text-transform: none;
-    color: var(--td-text); font-weight: 700;
+    font-size: 13px; letter-spacing: 0; text-transform: none;
+    color: var(--td-text2); font-weight: 500;
     position: sticky; top: 56px; z-index: 5;
   }
   .pa-list-rich .pa-row-img { width: 44px; height: 44px; border-radius: 10px; }
@@ -2637,6 +2663,21 @@
      "Price" was previously reusing .pa-col-price and picking up its font. */
   .pa-col-price-h { justify-self: end; }
   .pa-col-stock { font-size: 14px; }
+
+  /* Status column — one badge per row answering "can a shopper buy this now".
+     Tinted grounds carry the meaning (sage live · amber sold out · plain
+     disabled); the dot is the same ink as the text so the badge reads as one
+     token rather than a pill with a signal stuck to it. */
+  .pa-col-status { min-width: 0; }
+  .pa-badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 23px; padding: 0 10px; border-radius: 999px;
+    font: 500 12px var(--f-sans); white-space: nowrap;
+  }
+  .pa-badge i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+  .pa-badge.is-active   { background: var(--td-sage-tint);  color: var(--td-sage-ink); }
+  .pa-badge.is-soldout  { background: var(--td-amber-tint); color: var(--td-amber-ink); }
+  .pa-badge.is-disabled { background: var(--td-raised); color: var(--td-text2); border: 1px solid var(--td-border); }
 
   /* Stock — sage healthy · amber low · brick sold out. */
   .pa-stock {
@@ -2684,7 +2725,7 @@
      Only the grip starts a drag — the rest of the row still clicks to edit. */
   .pa-list-rich.pa-reorder .pa-row,
   .pa-list-rich.pa-reorder .pa-rowhead {
-    grid-template-columns: 34px 22px var(--pa-grid, 46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) 104px 116px);
+    grid-template-columns: 34px 22px var(--pa-grid, 46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) 104px 116px 104px);
   }
   .pa-grip {
     display: flex; align-items: center; justify-content: center;
@@ -2873,13 +2914,13 @@
   #pd-editor .pd-pub input { width: 16px; height: 16px; }
   /* Autosave status pill in the editor foot. Replaces the old manual Save
      button — edits persist on their own; this just reports state. */
-  .pd-save-status { font: 500 12px var(--f-sans); color: var(--text-3); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; transition: color .2s; }
+  .pd-save-status { font: 500 12px var(--f-sans); color: var(--td-text2); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; transition: color .2s; }
   .pd-save-status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .55; }
-  .pd-save-status.is-saving { color: var(--brass); }
-  .pd-save-status.is-saved  { color: var(--ok, #5a8a5e); }
-  .pd-save-status.is-dirty  { color: var(--text-3); }
-  .pd-save-status.is-hint   { color: var(--brass); }
-  .pd-save-status.is-error  { color: var(--danger, #b65656); }
+  .pd-save-status.is-saving { color: var(--td-amber-ink); }
+  .pd-save-status.is-saved  { color: var(--td-sage-ink); }
+  .pd-save-status.is-dirty  { color: var(--td-text2); }
+  .pd-save-status.is-hint   { color: var(--td-amber-ink); }
+  .pd-save-status.is-error  { color: var(--td-brick-ink); }
 
   /* Products page split view: list on the left, editor docked on the right.
      The editor used to open in a centered .pu-editor-bg overlay; now it lives
@@ -2899,12 +2940,11 @@
      the full page width — same flow as before. List view → split. */
   .pa-split.pa-split-listonly { grid-template-columns: 1fr; }
   .pa-split.pa-split-listonly .pa-split-editor { display: none; }
-  /* Expand-editor mode: hide the list so the editor takes the full page. */
-  .pa-split.pa-split-editonly { grid-template-columns: 1fr; }
-  .pa-split.pa-split-editonly .pa-split-list { display: none; }
-  /* Selected row highlight — picks out the product currently loaded in the
-     docked editor so the operator never loses their place after a save. */
-  .pa-row.is-selected { border-color: var(--brass); background: var(--bg-elev-1); }
+  /* Expand no longer widens the editor in place — it moves the editor out to
+     #pd-pagestage and hides this whole row (see .pd-pagestage below). */
+  /* The selected-row highlight lives with the rest of the list, up in the
+     .pa-list-rich block — a second rule down here only fought it for the
+     border colour. */
   /* Docked editor: drop the modal sizing (centered 1180×90vh) and let it grow
      to its content in the right column. No max-height → no internal scroll; the
      whole page scrolls through it instead, so the edit form isn't squeezed into
@@ -2917,6 +2957,120 @@
      scroll container that swallows the chain. Make it overflow:visible so the
      wheel falls through to the page. */
   .pa-split-editor #pd-editor .pu-editor-body { overflow: visible; overscroll-behavior: auto; }
+  /* ── Two zoom levels ───────────────────────────────────────────────────────
+     Docked (default): the pane shows its .pd-summary rows and hides the
+     .pd-heavy blocks they stand for. Expanded (#pd-editor.pd-fullpage, living
+     inside #pd-pagestage): the tab strip and the summaries go, every pane shows
+     at once as a stacked section, and .pd-heavy opens out. The nodes are the
+     same in both — only which ones are painted changes.
+     Both hide rules are written with :not(.pd-fullpage) rather than a bare
+     `#pd-editor .pd-heavy` — the layout rules they have to beat (`#pd-editor
+     .pdb-grid`, `.pdb-grid-auto`, `.pdb-vgrid`) carry the same id+class weight
+     and sit later in the file, so equal specificity would lose to them. */
+  #pd-editor:not(.pd-fullpage) .pd-heavy,
+  #pd-editor:not(.pd-fullpage) [data-pp-only] { display: none; }
+  #pd-editor.pd-fullpage .pd-summary { display: none; }
+  #pd-editor.pd-fullpage .pd-tabs { display: none; }
+  .pd-summary:empty { display: none; }
+  /* Every pane on screen at once, each reading as its own section. The
+     .is-active selector is repeated so this outranks the pane-entrance rule
+     for that one pane too — four panes fading in together is noise, and the
+     entrance keyframe holds opacity:0 under `fill-mode: both`, which is not a
+     state a whole page should be able to get stuck in. */
+  #pd-editor.pd-fullpage .pd-pane,
+  #pd-editor.pd-fullpage .pd-pane.is-active { display: block; animation: none; }
+  #pd-editor.pd-fullpage .pd-pane + .pd-pane { margin-top: 30px; }
+  /* Section heading above each pane on the full page — the words the tab strip
+     was carrying, now that there is no tab strip. */
+  .pd-pp-sech {
+    font: 500 18px var(--f-sans); color: var(--td-text);
+    letter-spacing: -.005em; margin: 0 2px 14px;
+    padding-top: 2px; scroll-margin-top: 76px;
+  }
+  #pd-editor.pd-fullpage .pdb-belowgrid + .pd-pp-sech { margin-top: 26px; }
+  /* Jump targets clear the sticky topbar. */
+  #pd-editor.pd-fullpage .pd-pane,
+  #pd-sec-sizes, #pd-sec-more { scroll-margin-top: 76px; }
+  /* Sizes is one block, not a pair — the 2-up rule the other vgrid wants would
+     strand it in half the row. Two ids to outrank the container query. */
+  #pd-editor #pd-sec-sizes { grid-template-columns: 1fr; }
+  /* Docked, Sourcing has stepped out of the Stock grid and left "Stock &
+     status" alone in a 7-of-12 track. Let it take the whole row rather than
+     sit beside five columns of nothing. */
+  #pd-editor:not(.pd-fullpage) .pd-pane[data-pane="stock"] .pdb-grid > .pdb-c7 { grid-column: 1 / -1; }
+
+  /* While the full page is open the catalogue steps aside entirely — page
+     title, sub-view switch, health band, toolbar, sub-bar and the list row.
+     The breadcrumb inside the stage is the way back. */
+  #tab-products.pd-page-open > .t-ord-eyebrow,
+  #tab-products.pd-page-open > .pa-head-row,
+  #tab-products.pd-page-open > .stk-views,
+  #tab-products.pd-page-open #pa-kpis,
+  #tab-products.pd-page-open .pa-toolbar,
+  #tab-products.pd-page-open .pa-subbar,
+  #tab-products.pd-page-open #pa-split { display: none; }
+
+  /* The stage the editor moves into. Sits where the split row was, centred and
+     capped so a wide screen doesn't stretch a form to 2000px. */
+  .pd-pagestage { max-width: 1040px; margin: 0 auto; scroll-margin-top: 76px; }
+  .pd-pp-crumb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--td-text2); margin-bottom: 16px; }
+  .pd-pp-crumb button {
+    display: inline-flex; align-items: center; gap: 6px; padding: 0;
+    background: none; border: 0; cursor: pointer;
+    font: 400 13px var(--f-sans); color: var(--td-text2);
+  }
+  .pd-pp-crumb button:hover { color: var(--td-text); }
+  .pd-pp-sep { opacity: .5; }
+  .pd-pp-here { color: var(--td-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .pd-pp-titlerow { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 18px; }
+  .pd-pp-title { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font: 500 24px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); min-width: 0; }
+  .pd-pp-alt { font-size: 15px; font-weight: 400; color: var(--td-text2); }
+  .pd-pp-acts { display: flex; gap: 10px; flex: none; }
+  /* Inside the stage the editor is the page, not a card floating on it. */
+  .pd-pp-mount #pd-editor {
+    width: auto; height: auto; max-width: 100%; max-height: none;
+    border: 0; background: none; border-radius: 0; box-shadow: none;
+  }
+  .pd-pp-mount #pd-editor .pu-editor-body { overflow: visible; overscroll-behavior: auto; }
+  .pd-pp-mount #pd-editor .pu-editor-head,
+  .pd-pp-mount #pd-editor .pu-editor-foot { background: none; }
+  /* The stage already names the product above; the editor's own identity strip
+     would say it a second time. Keep the save status and the action buttons. */
+  .pd-pp-mount #pd-editor .pd-head-id { display: none; }
+  .pd-pp-mount #pd-editor .pu-editor-head { border-bottom: 0; padding-bottom: 0; }
+  .pd-pp-mount #pd-editor .pd-head-actions { margin-left: 0; }
+
+  /* ── Dock summary rows — a fact and a way through to change it ───────────── */
+  .pd-sumcard { border: 1px solid var(--td-border); border-radius: 12px; background: var(--td-surface); overflow: hidden; }
+  .pd-sumrow {
+    display: flex; align-items: center; gap: 12px; width: 100%;
+    padding: 13px 14px; background: none; border: 0;
+    border-bottom: 1px solid var(--td-border);
+    font-family: var(--f-sans); text-align: left; cursor: pointer; color: var(--td-text);
+  }
+  .pd-sumrow:last-child { border-bottom: 0; }
+  .pd-sumrow:hover { background: rgba(var(--td-heat-rgb), .04); }
+  .pd-sm-main { flex: 1; min-width: 0; }
+  .pd-sm-t { display: block; font-size: 13px; color: var(--td-text2); }
+  .pd-sm-v { display: block; font-size: 14px; font-weight: 500; margin-top: 2px; color: var(--td-text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pd-sm-go { display: inline-flex; align-items: center; gap: 4px; flex: none; font-size: 12px; color: var(--td-text2); white-space: nowrap; }
+  .pd-jumpnote { font-size: 12px; color: var(--td-text2); line-height: 1.5; margin: 12px 2px 0; text-wrap: pretty; }
+  .pd-jump-btn {
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    width: 100%; height: 40px; margin-top: 12px;
+    border: 1px solid var(--td-border); border-radius: 9px; background: var(--td-surface);
+    font: 500 13px var(--f-sans); color: var(--td-text); cursor: pointer;
+  }
+  .pd-jump-btn:hover { background: rgba(var(--td-heat-rgb), .04); }
+  /* A summary that follows a block of real fields needs air above it. */
+  #pd-sum-more { margin-top: 18px; }
+
+  @media (max-width: 720px) {
+    .pd-pp-titlerow { flex-direction: column; gap: 12px; }
+    .pd-pp-title { font-size: 20px; }
+  }
+
   /* Empty state shown in the editor pane when no product is selected. */
   .pd-empty { background: var(--td-surface); border: 1px dashed var(--td-border); border-radius: 14px; padding: 56px 24px; text-align: center; color: var(--td-text2); font-family: var(--f-sans); }
   .pd-empty .pd-empty-h { font-size: 14px; color: var(--td-text); margin: 0 0 6px; font-weight: 500; }
@@ -11072,76 +11226,60 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 }
 
 /* ===========================================================================
-   PRODUCT EDITOR - Paper / Inter skin (the approved mockup).
-   The editor renders as a light "Paper" surface no matter the admin's theme.
-   Rather than override every rule, we re-declare the LIGHT Tacet token values
-   scoped to #pd-editor so all native styling resolves to light values; then a
-   few flourishes (Inter caps, white cards, Dusk accent, sliding publish switch)
-   take it the rest of the way. Mockup: reference/product-edit-essentials-mockup.html
+   PRODUCT EDITOR — the dock, on the same native Tacet layer as the catalogue.
+   This used to re-declare the LIGHT token values scoped to #pd-editor so the
+   editor stayed Paper-white in a dark admin. That made it a SECOND layer: any
+   --td-* rule written for the dock lost to a hardcoded hex here. It now reads
+   the shared --td-* tokens like everything else, so both themes flip for free.
+   Mockup: reference/product-edit-essentials-mockup.html
    =========================================================================== */
   #pd-editor {
-    --bg-app:     #FBF9F4;
-    --bg-pane:    #FFFFFF;
-    --bg-elev-1:  #F6F3EC;
-    --bg-elev-2:  #EFEBE2;
-    --bg-input:   #FFFFFF;
-    --bg-overlay: rgba(18, 22, 26, .46);
-    --line-soft:  rgba(18, 22, 26, .09);
-    --line:       rgba(18, 22, 26, .14);
-    --line-strong: rgba(18, 22, 26, .22);
-    --text-1:     #111A2B;
-    --text-2:     #3f4653;
-    --text-3:     #58606E;
-    --text-4:     #8b9098;
-    --brass:      #C9954A;   /* was Aged Brass → Tacet amber */
-    --accent:     #4A6249;   /* was Tea Green → Tacet sage-ink */
-    --danger:     #B4533E;
-    background: #FBF9F4;
-    color: #111A2B;
-    border: 1px solid #E4E0D5;
+    background: var(--td-paper);
+    color: var(--td-text);
+    border: 1px solid var(--td-border);
     border-radius: 14px;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    font-family: var(--f-sans);
   }
-  #pd-editor .pu-editor-head, #pd-editor .pu-editor-foot { background: #FBF9F4; border-color: var(--line); }
-  #pd-editor .pu-editor-head #pd-title { font-size: 18px; font-weight: 600; letter-spacing: -.005em; color: #111A2B; }
-  #pd-editor .pd-card, #pd-editor .bp-mode { background: #FFFFFF; }
-  #pd-editor .pd-card { border: 1px solid #E4E0D5; border-radius: 14px; padding: 18px; }
+  #pd-editor .pu-editor-head, #pd-editor .pu-editor-foot { background: var(--td-paper); border-color: var(--td-border); }
+  #pd-editor .pu-editor-head #pd-title { font-size: 18px; font-weight: 600; letter-spacing: -.005em; color: var(--td-text); }
+  #pd-editor .pd-card, #pd-editor .bp-mode { background: var(--td-surface); }
+  #pd-editor .pd-card { border: 1px solid var(--td-border); border-radius: 14px; padding: 18px; }
   /* Quiet rows = ONE continuous list with hairline dividers (mockup), not cards. */
   #pd-editor .pe-rows { gap: 0; }
   #pd-editor .pe-dis, #pd-editor .pd-var-toggle {
-    background: transparent; border: none; border-top: 1px solid var(--line-soft); border-radius: 0;
+    background: transparent; border: none; border-top: 1px solid var(--td-border); border-radius: 0;
   }
   #pd-editor .pe-dis[open] { background: transparent; }
   #pd-editor .pe-dis > summary { padding: 18px 6px; }
-  #pd-editor .pe-dis > summary:hover, #pd-editor .pd-var-toggle:hover { background: #FBF9F4; border-top-color: var(--line-soft); }
+  #pd-editor .pe-dis > summary:hover, #pd-editor .pd-var-toggle:hover { background: var(--td-paper); border-top-color: var(--td-border); }
   #pd-editor .pe-dis-body { border-top: none; padding: 0 6px 20px; }
   #pd-editor .pd-var-toggle { padding: 18px 6px; }
   /* Small section caps stay uppercase; ROW TITLES are Title-Case ink (mockup). */
   #pd-editor .pd-sec-h, #pd-editor .pd-card-h {
-    font-family: 'Inter', sans-serif; font-size: 11px; font-weight: 600; letter-spacing: .09em;
-    text-transform: uppercase; color: #58606E;
+    font-family: var(--f-sans); font-size: 11px; font-weight: 600; letter-spacing: .09em;
+    text-transform: uppercase; color: var(--td-text2);
   }
   #pd-editor .pe-dis-t, #pd-editor .pd-var-head {
-    font-family: 'Inter', sans-serif; font-size: 15px; font-weight: 500; letter-spacing: 0;
-    text-transform: none; color: #111A2B; margin: 0;
+    font-family: var(--f-sans); font-size: 15px; font-weight: 500; letter-spacing: 0;
+    text-transform: none; color: var(--td-text); margin: 0;
   }
-  #pd-editor .pe-dis-s, #pd-editor .pd-var-summary { font-size: 14px; color: #58606E; }
+  #pd-editor .pe-dis-s, #pd-editor .pd-var-summary { font-size: 14px; color: var(--td-text2); }
   /* Field labels: Title-Case, not the native uppercase micro-label. */
   #pd-editor .stacked, #pd-editor label.stacked, #pd-editor .field label.stacked {
-    text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 500; color: #111A2B;
+    text-transform: none; letter-spacing: 0; font-size: 13px; font-weight: 500; color: var(--td-text);
   }
-  #pd-editor .stacked .muted, #pd-editor label.stacked .muted { color: #58606E; font-weight: 400; }
+  #pd-editor .stacked .muted, #pd-editor label.stacked .muted { color: var(--td-text2); font-weight: 400; }
   #pd-editor input:focus, #pd-editor select:focus, #pd-editor textarea:focus,
-  #pd-editor .pd-rte:focus, #pd-editor .field input:focus { outline: none; border-color: #6E67AF; }
-  #pd-editor .bp-mode input { accent-color: #6E67AF; }
-  #pd-editor .bp-mode.is-on { border-color: #111A2B; background: #F6F3EC; }
-  #pd-editor .pa-pill-bundle, #pd-editor .pa-pill.pa-pill-bundle { background: #F6F3EC; color: #58606E; }
-  #pd-editor .pd-pub { background: #FFFFFF; border-radius: 12px; }
+  #pd-editor .pd-rte:focus, #pd-editor .field input:focus { outline: none; border-color: var(--td-dusk); }
+  #pd-editor .bp-mode input { accent-color: var(--td-dusk); }
+  #pd-editor .bp-mode.is-on { border-color: var(--td-text); background: var(--td-raised); }
+  #pd-editor .pa-pill-bundle, #pd-editor .pa-pill.pa-pill-bundle { background: var(--td-raised); color: var(--td-text2); }
+  #pd-editor .pd-pub { background: var(--td-surface); border-radius: 12px; }
   #pd-editor .pd-pub > svg { display: none; }
-  #pd-editor .pd-pub > span { order: 1; font-weight: 500; color: #111A2B; }
+  #pd-editor .pd-pub > span { order: 1; font-weight: 500; color: var(--td-text); }
   #pd-editor .pd-pub input[type="checkbox"] {
     order: 2; margin-left: auto; -webkit-appearance: none; appearance: none;
-    width: 38px; height: 22px; border-radius: 999px; background: #E4E0D5; position: relative;
+    width: 38px; height: 22px; border-radius: 999px; background: var(--td-border); position: relative;
     cursor: pointer; transition: background .2s var(--ease-out); flex: none;
   }
   #pd-editor .pd-pub input[type="checkbox"]::after {
@@ -11149,26 +11287,26 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
     border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.18);
     transition: transform .2s var(--ease-out);
   }
-  #pd-editor .pd-pub input[type="checkbox"]:checked { background: #111A2B; }
+  #pd-editor .pd-pub input[type="checkbox"]:checked { background: var(--td-sage-ink); }
   #pd-editor .pd-pub input[type="checkbox"]:checked::after { transform: translateX(16px); }
   /* Photos: drop the "PHOTOS" cap (mockup omits it) + tidy the native file input. */
   #pd-editor .pe-ess-main .pd-sec > .pd-sec-h { display: none; }
   #pd-editor #pd-img-file { color: transparent; font-size: 12px; }
   #pd-editor #pd-img-file::file-selector-button {
-    font: 500 12px 'Inter', sans-serif; color: #111A2B; background: #fff; border: 1px solid #E4E0D5;
+    font: 500 12px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border);
     border-radius: 8px; padding: 8px 14px; margin-right: 8px; cursor: pointer;
   }
-  #pd-editor #pd-img-file::file-selector-button:hover { border-color: #58606E; }
+  #pd-editor #pd-img-file::file-selector-button:hover { border-color: var(--td-text2); }
   #pd-editor .pd-gallery .pd-thumb { border-radius: 10px; }
   /* Header identity strip (mockup): thumbnail + title + Bundle pill / SKU subtitle. */
   #pd-editor .pu-editor-head { display: flex; align-items: center; gap: 14px; }
   #pd-editor .pd-head-id { display: flex; align-items: center; gap: 13px; min-width: 0; }
-  #pd-editor .pd-head-thumb { width: 44px; height: 44px; border-radius: 10px; border: 1px solid #E4E0D5;
-    background: #E7E0EE no-repeat center / cover; flex: none; }
+  #pd-editor .pd-head-thumb { width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--td-border);
+    background: var(--td-raised) no-repeat center / cover; flex: none; }
   #pd-editor .pd-head-txt { min-width: 0; }
   #pd-editor .pd-head-titlerow { display: flex; align-items: center; gap: 10px; }
-  #pd-editor .pu-editor-head #pd-title { font-size: 18px; font-weight: 600; letter-spacing: -.005em; color: #111A2B; }
-  #pd-editor .pd-head-sub { font-size: 12.5px; color: #58606E; margin-top: 2px; }
+  #pd-editor .pu-editor-head #pd-title { font-size: 18px; font-weight: 600; letter-spacing: -.005em; color: var(--td-text); }
+  #pd-editor .pd-head-sub { font-size: 12.5px; color: var(--td-text2); margin-top: 2px; }
   #pd-editor .pd-head-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
   #pd-editor .pd-head-actions .pd-save-status { margin-right: 4px; }
   /* Dashed "+ Add" photo tile (mockup): the label triggers the hidden file input. */
@@ -11176,42 +11314,42 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #pd-editor .pe-photos-strip { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
   #pd-editor .pd-gallery { display: contents; }
   #pd-editor .pe-add-tile {
-    width: 84px; height: 84px; border: 1px dashed #C9C3B4; border-radius: 10px;
+    width: 84px; height: 84px; border: 1px dashed var(--td-border); border-radius: 10px;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
-    color: #58606E; font: 500 11px 'Inter', sans-serif; cursor: pointer; flex: none;
+    color: var(--td-text2); font: 500 11px var(--f-sans); cursor: pointer; flex: none;
     transition: border-color .15s var(--ease-out), color .15s var(--ease-out);
   }
-  #pd-editor .pe-add-tile:hover { border-color: #58606E; color: #111A2B; }
+  #pd-editor .pe-add-tile:hover { border-color: var(--td-text2); color: var(--td-text); }
   /* Essentials stock area: loose section like the mockup, not a bordered card.
      (The publish pill card keeps its border.) */
   #pd-editor .pe-ess-side .pd-card:not(.pd-pub) { border: none; border-radius: 0; background: transparent; padding: 0; }
   /* Assembled-bundle computed stock panel in the editor (Dusk = Tacet worked it out). */
-  #pd-editor .pe-bstock { background: #EEEDF6; border-radius: 12px; padding: 14px 15px; }
-  #pd-editor .pe-bstock-cap { display: flex; align-items: center; gap: 8px; font: 600 12px 'Inter', sans-serif; letter-spacing: .05em; text-transform: uppercase; color: #6E67AF; }
-  #pd-editor .pe-bstock-dot { width: 7px; height: 7px; border-radius: 50%; background: #6E67AF; flex: none; }
-  #pd-editor .pe-bstock-big { font-size: 24px; font-weight: 600; margin: 8px 0 2px; color: #111A2B; font-variant-numeric: tabular-nums; }
-  #pd-editor .pe-bstock-lim { font-size: 13px; color: #58606E; }
-  #pd-editor .pe-bstock-split { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(110,103,175,.18); font-size: 13px; color: #111A2B; }
+  #pd-editor .pe-bstock { background: var(--td-dusk-tint); border-radius: 12px; padding: 14px 15px; }
+  #pd-editor .pe-bstock-cap { display: flex; align-items: center; gap: 8px; font: 600 12px var(--f-sans); letter-spacing: .05em; text-transform: uppercase; color: var(--td-dusk); }
+  #pd-editor .pe-bstock-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--td-dusk); flex: none; }
+  #pd-editor .pe-bstock-big { font-size: 24px; font-weight: 600; margin: 8px 0 2px; color: var(--td-text); font-variant-numeric: tabular-nums; }
+  #pd-editor .pe-bstock-lim { font-size: 13px; color: var(--td-text2); }
+  #pd-editor .pe-bstock-split { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 12px; padding-top: 12px; border-top: 1px solid rgba(110,103,175,.18); font-size: 13px; color: var(--td-text); }
   #pd-editor .pe-bstock-split b { font-variant-numeric: tabular-nums; }
-  #pd-editor .pe-bstock-note { font-size: 12px; color: #58606E; margin: 10px 2px 0; }
+  #pd-editor .pe-bstock-note { font-size: 12px; color: var(--td-text2); margin: 10px 2px 0; }
 
   /* Sales card: units/revenue/rank for a chosen window + a daily spark line. */
   #pd-editor .pd-sales-head { display: flex; align-items: center; justify-content: space-between; }
   #pd-editor .pd-sales-chips { display: flex; gap: 6px; }
   #pd-editor .pd-chip {
-    font: 500 11px 'Inter', sans-serif; text-transform: none; letter-spacing: 0;
-    padding: 3px 10px; border-radius: 999px; border: 1px solid #E4E0D5; background: #FFFFFF;
-    color: #58606E; cursor: pointer; transition: all .15s var(--ease-out);
+    font: 500 11px var(--f-sans); text-transform: none; letter-spacing: 0;
+    padding: 3px 10px; border-radius: 999px; border: 1px solid var(--td-border); background: var(--td-surface);
+    color: var(--td-text2); cursor: pointer; transition: all .15s var(--ease-out);
   }
-  #pd-editor .pd-chip:hover { border-color: #58606E; color: #111A2B; }
-  #pd-editor .pd-chip.pd-chip-active { background: #111A2B; border-color: #111A2B; color: #FFFFFF; }
+  #pd-editor .pd-chip:hover { border-color: var(--td-text2); color: var(--td-text); }
+  #pd-editor .pd-chip.pd-chip-active { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
   #pd-editor .pd-sales-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-top: 2px; }
-  #pd-editor .pd-sales-kpi .v { font-size: 20px; font-weight: 600; color: #111A2B; font-variant-numeric: tabular-nums; }
-  #pd-editor .pd-sales-kpi .l { font-size: 11.5px; color: #58606E; margin-top: 2px; }
+  #pd-editor .pd-sales-kpi .v { font-size: 20px; font-weight: 600; color: var(--td-text); font-variant-numeric: tabular-nums; }
+  #pd-editor .pd-sales-kpi .l { font-size: 11.5px; color: var(--td-text2); margin-top: 2px; }
   /* .db-spark-wrap gives position:relative + the dot marker's absolute
      placement; override its height/color here for this card's bigger chart. */
-  #pd-editor .pd-sales-spark { width: 100%; height: 44px; margin-top: 10px; color: #111A2B; }
-  #pd-editor .pd-sales-spark .db-spark-dot { background: #111A2B; }
+  #pd-editor .pd-sales-spark { width: 100%; height: 44px; margin-top: 10px; color: var(--td-text); }
+  #pd-editor .pd-sales-spark .db-spark-dot { background: var(--td-text); }
 
   /* ── Focused panes (Basics / Stock / Page / Details) ───────────────────────
      Panes are plain show/hide; every field inside is the same node (same id,
@@ -11222,21 +11360,21 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
      instead of a thin underline that was easy to miss. ─────────────────── */
   #pd-editor .pd-tabs {
     display: flex; gap: 3px; margin: 4px 0 20px; padding: 4px;
-    background: #F6F3EC; border: 1px solid #E4E0D5; border-radius: 12px;
+    background: var(--td-raised); border: 1px solid var(--td-border); border-radius: 12px;
     overflow-x: auto; scrollbar-width: none;
   }
   #pd-editor .pd-tabs::-webkit-scrollbar { display: none; }
   #pd-editor .pd-tab {
     flex: 1; border: 0; background: none; cursor: pointer; white-space: nowrap;
-    font: 500 13px 'Inter', sans-serif; letter-spacing: 0; text-transform: none;
-    color: #58606E; padding: 9px 10px; border-radius: 9px;
+    font: 500 13px var(--f-sans); letter-spacing: 0; text-transform: none;
+    color: var(--td-text2); padding: 9px 10px; border-radius: 9px;
     display: inline-flex; align-items: center; justify-content: center; gap: 6px;
     transition: background .15s var(--ease-out), color .15s var(--ease-out);
   }
   #pd-editor .pd-tab svg { width: 15px; height: 15px; flex: none; opacity: .75; }
-  #pd-editor .pd-tab:hover { color: #111A2B; }
+  #pd-editor .pd-tab:hover { color: var(--td-text); }
   #pd-editor .pd-tab.is-active {
-    background: #FFFFFF; color: #111A2B;
+    background: var(--td-surface); color: var(--td-text);
     box-shadow: 0 1px 3px rgba(17,26,43,.1), 0 0 0 1px rgba(17,26,43,.03);
   }
   #pd-editor .pd-tab.is-active svg { opacity: 1; }
@@ -11260,32 +11398,32 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #pd-editor .pd-source-choice { display: flex; flex-direction: column; gap: 9px; }
   #pd-editor .pd-radio-card {
     display: flex; gap: 11px; align-items: flex-start; text-align: left;
-    padding: 12px 14px; border: 1px solid #E4E0D5; border-radius: 10px;
-    background: #FFFFFF; cursor: pointer; font: inherit; width: 100%;
+    padding: 12px 14px; border: 1px solid var(--td-border); border-radius: 10px;
+    background: var(--td-surface); cursor: pointer; font: inherit; width: 100%;
     transition: border-color .15s var(--ease-out), background .15s var(--ease-out);
   }
-  #pd-editor .pd-radio-card:hover { border-color: #58606E; }
-  #pd-editor .pd-radio-card.is-on { border-color: #111A2B; background: #F6F3EC; }
+  #pd-editor .pd-radio-card:hover { border-color: var(--td-text2); }
+  #pd-editor .pd-radio-card.is-on { border-color: var(--td-text); background: var(--td-raised); }
   #pd-editor .pd-radio-dot {
-    width: 17px; height: 17px; border-radius: 50%; border: 1.5px solid #E4E0D5;
+    width: 17px; height: 17px; border-radius: 50%; border: 1.5px solid var(--td-border);
     flex: none; margin-top: 1px; position: relative; transition: border-color .15s var(--ease-out);
   }
-  #pd-editor .pd-radio-card.is-on .pd-radio-dot { border-color: #111A2B; }
+  #pd-editor .pd-radio-card.is-on .pd-radio-dot { border-color: var(--td-text); }
   #pd-editor .pd-radio-card.is-on .pd-radio-dot::after {
-    content: ""; position: absolute; inset: 3px; border-radius: 50%; background: #111A2B;
+    content: ""; position: absolute; inset: 3px; border-radius: 50%; background: var(--td-text);
   }
-  #pd-editor .pd-radio-txt b { display: block; font-weight: 500; font-size: 13.5px; color: #111A2B; }
-  #pd-editor .pd-radio-txt span { display: block; font-size: 12px; color: #58606E; margin-top: 2px; line-height: 1.45; }
+  #pd-editor .pd-radio-txt b { display: block; font-weight: 500; font-size: 13.5px; color: var(--td-text); }
+  #pd-editor .pd-radio-txt span { display: block; font-size: 12px; color: var(--td-text2); margin-top: 2px; line-height: 1.45; }
 
   /* Tab glance chips — a live hint of what's inside a pane without opening it. */
   #pd-editor .pd-tab-cnt {
-    font-size: 11px; font-weight: 600; color: #58606E;
+    font-size: 11px; font-weight: 600; color: var(--td-text2);
     font-variant-numeric: tabular-nums;
   }
-  #pd-editor .pd-tab.is-active .pd-tab-cnt { color: #111A2B; }
+  #pd-editor .pd-tab.is-active .pd-tab-cnt { color: var(--td-text); }
   #pd-editor .pd-tab-chip {
     font-size: 10px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
-    color: #4C468A; background: #EEEDF6; border-radius: 999px; padding: 2px 7px;
+    color: var(--td-dusk); background: var(--td-dusk-tint); border-radius: 999px; padding: 2px 7px;
   }
 
   /* ── Editor bento: every tab's cards reflow with the editor's width ─────────
@@ -11325,7 +11463,7 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   }
 
   #pd-editor .pdb-card {
-    background: #FFFFFF; border: 1px solid #E4E0D5; border-radius: 14px;
+    background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px;
     padding: 16px 17px; display: flex; flex-direction: column; gap: 14px; min-width: 0;
   }
   #pd-editor .pdb-card > .pd-sec-h, #pd-editor .pdb-card > .pd-card-h { margin: 0; }
@@ -11352,11 +11490,11 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #pd-editor .pdb-vgrid { display: grid; gap: 12px; grid-template-columns: 1fr; align-items: start; }
   @container (min-width: 760px) { #pd-editor .pdb-vgrid { grid-template-columns: 1fr 1fr; } }
   #pd-editor .pdb-vgrid > .pd-variants {
-    border: 1px solid #E4E0D5; border-radius: 14px; background: #FFFFFF;
+    border: 1px solid var(--td-border); border-radius: 14px; background: var(--td-surface);
     padding: 0 14px; align-self: start; min-width: 0; transition: border-color .12s ease;
   }
   #pd-editor .pdb-vgrid > .pd-variants:empty { display: none; }
-  #pd-editor .pdb-vgrid > .pd-variants:hover { border-color: #C9C3B4; }
+  #pd-editor .pdb-vgrid > .pd-variants:hover { border-color: var(--td-text2); }
   @container (min-width: 760px) {
     #pd-editor .pdb-vgrid > .pd-variants:has(.pd-var-toggle[aria-expanded="true"]) {
       grid-column: 1 / -1; padding-bottom: 14px;

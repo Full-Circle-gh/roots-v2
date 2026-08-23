@@ -4462,7 +4462,7 @@
           </div>
           <div class="pd-head-actions">
             <span id="pd-save-status" class="pd-save-status" aria-live="polite"></span>
-            <button class="btn btn-sm" id="pd-expand-btn" type="button" onclick="pdToggleFullscreen()" title="Expand / shrink editor · 全屏 / 还原"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M3 6V3h3M13 6V3h-3M3 10v3h3M13 10v3h-3"/></svg>Expand · 全屏</button>
+            <button class="btn btn-sm" id="pd-expand-btn" type="button" onclick="pdToggleFullscreen()" title="Open the full product page · 打开完整产品页"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M3 6V3h3M13 6V3h-3M3 10v3h3M13 10v3h-3"/></svg>Expand · 展开</button>
             <button class="btn btn-sm" type="button" onclick="pdClose()" title="Close · 关闭" aria-label="Close"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
           </div>
         </div>
@@ -4506,6 +4506,7 @@
                the SAME node/id as before — only grouping/wrappers changed, so
                save/load wiring is untouched. -->
           <div class="pd-pane is-active" data-pane="basics" role="tabpanel">
+            <div class="pd-pp-sech" data-pp-only="1">Basics · 基础</div>
             <div class="pdb-grid">
 
               <!-- Basics: name + price -->
@@ -4576,14 +4577,22 @@
           </div>
 
           <!-- ══════════ STOCK ══════════ -->
+          <!-- Two zoom levels on the same nodes. Docked, the pane keeps only the
+               quick things (SKU, per-store counts, the low-stock line) and shows
+               .pd-summary rows standing in for anything with sub-rows — sourcing,
+               sizes, bundles, add-ons, options. Expanded, the summaries hide and
+               the .pd-heavy blocks appear in their place. Nothing is duplicated:
+               one set of ids, one set of renderers, two presentations. -->
           <div class="pd-pane" data-pane="stock" role="tabpanel">
+            <div class="pd-summary" id="pd-sum-stock"></div>
+            <div class="pd-pp-sech" data-pp-only="1">Stock · 库存</div>
             <div class="pdb-grid">
             <!-- Sourcing: who holds the stock. Drives which of pd-stock-fields /
                  pd-supplier-block shows below (pdSyncSupplierUi). The underlying
                  data is still the single pd-ship-from-supplier checkbox (kept
                  hidden) so save/load code is untouched — these two cards are
                  just a clearer face on the same value. -->
-            <section class="pdb-card pdb-c5">
+            <section class="pdb-card pdb-c5 pd-heavy">
               <div class="pd-sec-h">Sourcing · 货源</div>
               <div class="pd-source-choice" id="pd-source-choice">
                 <button type="button" class="pd-radio-card is-on" data-src="own" onclick="pdSetSourceMode(false)">
@@ -4624,8 +4633,16 @@
                 </div>
             </section>
             </div>
-            <div class="pe-rows pdb-belowgrid pdb-vgrid">
+            <div class="pd-summary" id="pd-sum-more"></div>
+            <!-- Sizes live with Stock; bundles, add-ons and options are the
+                 "sell it in more ways" group and carry their own heading on the
+                 full page, so the two have separate jump targets from the dock. -->
+            <div class="pd-pp-sech" data-pp-only="1">Sizes · 规格</div>
+            <div class="pe-rows pdb-belowgrid pdb-vgrid pd-heavy" id="pd-sec-sizes">
             <div id="pd-variants" class="pd-variants"></div>
+            </div>
+            <div class="pd-pp-sech" data-pp-only="1">Sell it in more ways · 更多售卖方式</div>
+            <div class="pe-rows pdb-belowgrid pdb-vgrid pd-heavy" id="pd-sec-more">
             <div id="pd-bundle-product" class="pd-variants"></div>
             <div id="pd-bundle" class="pd-variants"></div>
             <div id="pd-options" class="pd-variants"></div>
@@ -4637,7 +4654,9 @@
                rich-text editor goes position:fixed for fullscreen, and a
                container ancestor would trap that fixed element inside the card. -->
           <div class="pd-pane" data-pane="page" role="tabpanel">
-            <div class="pdb-grid-auto">
+            <div class="pd-summary" id="pd-sum-page"></div>
+            <div class="pd-pp-sech" data-pp-only="1">Page · 页面</div>
+            <div class="pdb-grid-auto pd-heavy">
             <section class="pdb-card">
               <div class="pd-sec-h" style="margin-bottom:6px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
                 <span style="display:inline-flex;align-items:center;gap:7px;">Product details · 产品详情</span>
@@ -4718,7 +4737,9 @@
           <!-- Bento: Shipping · Flags · Free-of sit side by side; notes span full.
                Same checkbox nodes/ids/handlers — only the grouping wrappers changed. -->
           <div class="pd-pane" data-pane="details" role="tabpanel">
-            <div class="pdb-grid">
+            <div class="pd-summary" id="pd-sum-details"></div>
+            <div class="pd-pp-sech" data-pp-only="1">Details · 详情</div>
+            <div class="pdb-grid pd-heavy">
 
               <!-- Shipping -->
               <section class="pdb-card pdb-c4">
@@ -4776,6 +4797,30 @@
       </div>
       </div><!-- /#pd-bg pa-split-editor -->
     </div><!-- /#pa-split -->
+
+    <!-- ── The full product page. Expand moves the SAME #pd-editor node out of
+         the dock and into #pd-pp-mount; Collapse moves it back. One node, so
+         every id, value and renderer survives the trip untouched — the two
+         views differ only in the chrome around them and in which of the pane's
+         .pd-summary / .pd-heavy blocks CSS shows. Hidden until Expand. ── -->
+    <div id="pd-pagestage" class="pd-pagestage" style="display:none;">
+      <div class="pd-pp-crumb">
+        <button type="button" onclick="pdCollapseToPanel()"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Products · 产品</button>
+        <span class="pd-pp-sep">/</span>
+        <span class="pd-pp-here" id="pd-pp-crumb-name" data-no-i18n></span>
+      </div>
+      <div class="pd-pp-titlerow">
+        <div class="pd-pp-title" data-no-i18n>
+          <span id="pd-pp-name"></span>
+          <span class="pd-pp-alt" id="pd-pp-name-alt"></span>
+          <span id="pd-pp-badge"></span>
+        </div>
+        <div class="pd-pp-acts">
+          <button class="btn btn-sm" type="button" onclick="pdCollapseToPanel()" title="Back to the list and quick-edit panel · 返回列表与快捷面板"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>Collapse · 收起</button>
+        </div>
+      </div>
+      <div id="pd-pp-mount" class="pd-pp-mount"></div>
+    </div>
 
     <!-- ── Designer Sections editor modal — split-pane (forms + live preview) ── -->
     <div id="pa-edit-bg" class="pu-editor-bg">

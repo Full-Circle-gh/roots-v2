@@ -459,6 +459,10 @@ document.querySelector('[data-tab="products"]').addEventListener('click', () => 
 // (2026-07-13, #tab-purchasing / puInit in 16-purchasing.js) — a supplier
 // order is its own place, not a fact about the catalogue.
 function prodShowView(view) {
+  // A sub-view switch is a "show me the catalogue's other face" move, so the
+  // expanded product page comes down first — otherwise coming back from the
+  // ledger would land on a full page with no toolbar and no way to see the list.
+  if (pdIsExpanded()) pdCollapseToPanel();
   const allowed = (v, cap) => v === view && (typeof can !== 'function' || can(cap));
   if (!allowed('activity', 'activity:view') && !allowed('categories', 'categories:view')) view = 'catalog';
   const panes = {
@@ -908,13 +912,25 @@ function _paPills(p) {
     ${pub ? '' : '<span class="pa-pill pa-pill-draft" title="Not published in mini-app · 未在小程序上架">Draft</span>'}`;
 }
 
-// Overview table status cell — just the Draft pill. The Designed/Plain "has page
-// design" marker is deliberately omitted here: this list is for scanning stock /
-// price / category, and the design state lives in the editor + grid views.
-function _paDraftPill(p) {
-  return p.is_published === 1
-    ? ''
-    : '<span class="pa-pill pa-pill-draft" title="Not published in mini-app · 未在小程序上架">Draft</span>';
+// Overview table status cell — one badge answering "can a shopper buy this
+// right now": Disabled (nothing live) beats Sold out (live but nothing on the
+// shelf) beats Active. The Designed/Plain "has page design" marker is
+// deliberately omitted here: this list is for scanning stock / price /
+// category, and the design state lives in the editor + grid views.
+// Supplier-direct and paused items answer the same question from their own
+// flags — they hold no stock of ours, so a zero count must never read as sold
+// out (the same rule _paStockCell follows for the stock column).
+function _paStatusCell(u) {
+  const members = u.group ? u.members : [u.p];
+  if (!members.some(m => m.is_published === 1)) {
+    return `<span class="pa-badge is-disabled"><i></i>${cuT('Disabled', '已下架')}</span>`;
+  }
+  const soldOut = u.p.ship_from_supplier
+    ? !!u.p.supplier_paused
+    : ((!u.group && u.p.is_bundle) ? _paBundleStock(u.p) : _paUnitStock(u)) <= 0;
+  return soldOut
+    ? `<span class="pa-badge is-soldout"><i></i>${cuT('Sold out', '缺货')}</span>`
+    : `<span class="pa-badge is-active"><i></i>${cuT('Active', '在售')}</span>`;
 }
 
 // Inline "available on the shop" switch — flips is_published (the same flag the
@@ -1670,10 +1686,10 @@ function paRender() {
 
   // Sync the split-view container with the chosen layout: list = split (editor
   // docked on the right), grid/compact = list-only (catalogue scan, full width).
-  // Expand-mode (.pa-split-editonly) is independent — only toggled from the
-  // editor's ⤢ button — and wins over listonly when both apply.
+  // Expanding no longer squeezes this row — the editor leaves it entirely for
+  // #pd-pagestage — so there's nothing to defer to here any more.
   const _paSplit = document.getElementById('pa-split');
-  if (_paSplit && !_paSplit.classList.contains('pa-split-editonly')) {
+  if (_paSplit) {
     // Full width whenever the editor is closed — grid/compact scan AND the new
     // list-view "overview" table both span the page. Opening a product (or "+
     // Add product" from any view) docks the editor and splits the row.
@@ -1699,7 +1715,7 @@ function paRender() {
     if (overview) {
       const stockTracks = (listStores.length ? listStores.map(() => '104px').join(' ') : '104px');
       grid.style.setProperty('--pa-grid',
-        `46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) ${stockTracks} 116px`);
+        `46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) ${stockTracks} 116px 104px`);
     } else {
       grid.style.removeProperty('--pa-grid');
     }
@@ -1721,6 +1737,7 @@ function paRender() {
           ? listStores.map(s => `<span class="pa-col-stock-h">${escapeHtml(_paStoreName(s.id))}</span>`).join('')
           : `<span>${cuT('Stock', '库存')}</span>`}
         <span class="pa-col-price-h">${cuT('Price', '价格')}</span>
+        <span>${cuT('Status', '状态')}</span>
       </div>` : '';
     grid.innerHTML = head + pageUnits.map((u, ui) => {
       const p = u.p;
@@ -1761,6 +1778,7 @@ function paRender() {
             ? listStores.map(s => `<div class="pa-col-stock">${_paStoreStockCell(u, s.id)}</div>`).join('')
             : `<div class="pa-col-stock">${_paStockCell(u)}</div>`}
           ${_paPriceCell(u)}
+          <div class="pa-col-status">${_paStatusCell(u)}</div>
         </div>`;
       }
       // Slim two-line row: one language (live cuT), 30px photo, name on top with
@@ -2230,6 +2248,10 @@ async function pdOpen(id) {
     _pdAutoTimer = null;
     try { await pdAutoSaveNow(); } catch (e) {}
   }
+  // Always land in the dock. Opening a different product while the full page
+  // is up would otherwise leave product B's fields under product A's title,
+  // with the list that chose it hidden behind them.
+  if (pdIsExpanded()) pdCollapseToPanel();
   const p = id != null ? (PA_PRODUCTS || []).find(x => x.id === id) : null;
   const set = (el, v) => { const n = document.getElementById(el); if (n) n.value = (v == null ? '' : v); };
   document.getElementById('pd-id').value = p ? p.id : '';
@@ -2380,6 +2402,10 @@ function pdShowDocked() {
   // Every open lands on the Basics pane — no matter which pane was showing when
   // the previous product was closed.
   pdTab('basics');
+  // First paint of the summary rows. The va*/bu*/bp*/opt* loads that follow are
+  // async and each repaints again as it lands, so this only has to be right for
+  // the fields already in the form.
+  pdRenderSummaries();
   // The docked list pages by 18 while the overview pages by 50/100/200/All, so
   // the product just clicked from a long overview page may fall on a different
   // 18-row page. Jump to the page that holds it (using the full ordered unit
@@ -2420,6 +2446,9 @@ function pdTab(name) {
   if (body) body.scrollTop = 0;
 }
 function pdClose() {
+  // Closing from the full page has to bring the editor home first, or its node
+  // would be hidden inside a stage that stays on screen with the list behind it.
+  if (pdIsExpanded()) pdCollapseToPanel();
   // Deselect — the editor returns to the empty-state placeholder. (Closing the
   // editor doesn't close the page; the list stays put.)
   _pdSelectedId = null;
@@ -2530,16 +2559,188 @@ async function pdRestoreVersion(versionId) {
     toast(cuT('Restored to the chosen version.', '已还原到所选版本。'));
   } catch (e) { toast(cuT('Restore failed: ', '还原失败:') + e.message, 'err'); }
 }
-// Expand mode: hide the left list so the editor fills the page width.
+// ── Two zoom levels on one editor ───────────────────────────────────────────
+// Docked, #pd-editor sits in the right column beside the list and shows the
+// quick fields plus a summary row for anything with sub-rows. Expanded, the
+// SAME node moves into #pd-pagestage and everything opens out on one page.
+// Moving the node (rather than rendering a second copy) is what keeps ids,
+// typed-but-unsaved values, the RTE's contents and every va*/bu*/bp*/opt*
+// renderer working across the switch without a line of sync code.
+function pdIsExpanded() {
+  const st = document.getElementById('pd-pagestage');
+  return !!(st && st.style.display !== 'none');
+}
+function pdMoveEditor(where) {
+  const ed = document.getElementById('pd-editor');
+  const home = document.getElementById(where === 'ppage' ? 'pd-pp-mount' : 'pd-bg');
+  if (!ed || !home || ed.parentElement === home) return;
+  home.appendChild(ed);
+}
+// Expand. `section` optionally scrolls to one part of the page — 'basics',
+// 'stock', 'sizes', 'more', 'page' or 'details' — which is what the dock's
+// summary rows pass when the operator taps through from a summary.
+function pdExpand(section) {
+  const ed = document.getElementById('pd-editor');
+  const stage = document.getElementById('pd-pagestage');
+  if (!ed || !stage || ed.style.display === 'none') return;   // nothing open
+  ed.classList.add('pd-fullpage');
+  pdMoveEditor('ppage');
+  // The full page REPLACES the catalogue — title, sub-view switch, health band,
+  // toolbar and the list row all step aside, and the breadcrumb becomes the way
+  // back. One class does it so nothing has to remember an inline display value.
+  document.getElementById('tab-products')?.classList.add('pd-page-open');
+  stage.style.display = '';
+  pdSyncPageHead();
+  pdSyncFullscreenBtn(true);
+  window.scrollTo({ top: 0, behavior: 'auto' });
+  if (section) {
+    const el = section === 'more'  ? document.getElementById('pd-sec-more')
+             : section === 'sizes' ? document.getElementById('pd-sec-sizes')
+             : ed.querySelector(`.pd-pane[data-pane="${section}"]`);
+    if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
+}
+function pdCollapseToPanel() {
+  const ed = document.getElementById('pd-editor');
+  const stage = document.getElementById('pd-pagestage');
+  if (ed) ed.classList.remove('pd-fullpage');
+  pdMoveEditor('dock');
+  if (stage) stage.style.display = 'none';
+  document.getElementById('tab-products')?.classList.remove('pd-page-open');
+  pdSyncFullscreenBtn(false);
+  // State can have moved while the page was open (a size added, a bundle set
+  // up, a description written) — repaint the summaries that stand for it.
+  pdRenderSummaries();
+  // Land at the top of the catalogue rather than at whatever depth the full
+  // page was scrolled to, which would drop the operator into the middle of a
+  // list they were not reading.
+  window.scrollTo({ top: 0, behavior: 'auto' });
+}
 function pdSyncFullscreenBtn(on) {
   const btn = document.getElementById('pd-expand-btn');
-  if (btn) btn.innerHTML = on ? '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M6 3v3H3M10 3v3h3M6 13v-3H3M10 13v-3h3"/></svg>Shrink · 还原' : '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M3 6V3h3M13 6V3h-3M3 10v3h3M13 10v3h-3"/></svg>Expand · 全屏';
+  if (btn) btn.innerHTML = on ? '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M6 3v3H3M10 3v3h3M6 13v-3H3M10 13v-3h3"/></svg>Collapse · 收起' : '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M3 6V3h3M13 6V3h-3M3 10v3h3M13 10v3h-3"/></svg>Expand · 展开';
 }
-function pdToggleFullscreen() {
-  const split = document.getElementById('pa-split');
-  if (!split) return;
-  const on = split.classList.toggle('pa-split-editonly');
-  pdSyncFullscreenBtn(on);
+// The Expand button now toggles between the two zoom levels.
+function pdToggleFullscreen() { pdIsExpanded() ? pdCollapseToPanel() : pdExpand(); }
+// Breadcrumb + title of the full page, read from the live form so a rename
+// typed a second ago is already reflected up top.
+function pdSyncPageHead() {
+  const nm = (document.getElementById('pd-name-en').value || '').trim();
+  const alt = (document.getElementById('pd-name-cn').value || '').trim();
+  const shown = nm || alt || cuT('New product', '新产品');
+  const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
+  set('pd-pp-crumb-name', shown);
+  set('pd-pp-name', shown);
+  set('pd-pp-name-alt', nm && alt ? alt : '');
+  const badge = document.getElementById('pd-pp-badge');
+  if (badge) {
+    const p = (PA_PRODUCTS || []).find(x => x.id === _pdSelectedId);
+    badge.innerHTML = p ? _paStatusCell({ p, group: null }) : '';
+  }
+}
+
+// ── Dock summaries ──────────────────────────────────────────────────────────
+// What the docked panes show in place of the sections that only open out on
+// the full page. Each is a read of live state, never a second source of truth:
+// the sizes row counts VA_MEMBERS, the more-ways row counts BP/BU/OPT, the page
+// row reads the RTE the operator is typing into. Re-rendered whenever any of
+// those renderers finish (see the tails of vaRender/buRender/bpRender/optRender)
+// and on every collapse, so a summary can never describe a stale product.
+function _pdSumRow(title, value, section, action) {
+  return `<button type="button" class="pd-sumrow" onclick="pdExpand('${section}')">`
+    + `<span class="pd-sm-main"><span class="pd-sm-t">${title}</span><span class="pd-sm-v">${value}</span></span>`
+    + `<span class="pd-sm-go">${action || cuT('Edit', '编辑')}`
+    + '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg></span></button>';
+}
+function _pdJumpBtn(label, section) {
+  return `<button type="button" class="pd-jump-btn" onclick="pdExpand('${section}')">`
+    + '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>'
+    + label + '</button>';
+}
+function pdRenderSummaries() {
+  if (!document.getElementById('pd-sum-stock')) return;
+  const open = _pdSelectedId != null || document.getElementById('pd-editor').style.display !== 'none';
+  if (!open) return;
+  const p = (PA_PRODUCTS || []).find(x => x.id === _pdSelectedId) || null;
+  const set = (id, html) => { const el = document.getElementById(id); if (el) el.innerHTML = html; };
+
+  // Stock — sourcing, then sizes when this product has real siblings.
+  const supplier = !!(document.getElementById('pd-ship-from-supplier') || {}).checked;
+  let rows = _pdSumRow(
+    cuT('Sourcing', '货源'),
+    supplier ? cuT('Ships directly from supplier', '供应商直发') : cuT('We hold the stock', '我们持有库存'),
+    'stock');
+  const sizes = (VA_MEMBERS || []).length;
+  if (sizes > 1) {
+    rows += _pdSumRow(
+      cuT('Sizes', '规格'),
+      sizes + ' ' + cuT('sizes · each with its own price and stock', '个规格 · 各有独立价格与库存'),
+      'sizes');
+  }
+  set('pd-sum-stock', `<div class="pd-sumcard">${rows}</div>`
+    + (sizes > 1
+      ? `<div class="pd-jumpnote">${cuT('This product is stocked per size. Open the full page to set each size’s price and count.', '此产品按规格分别计库存。打开完整页面可分别设置各规格的价格与数量。')}</div>`
+        + _pdJumpBtn(cuT('Expand to edit sizes', '展开编辑规格'), 'sizes')
+      : ''));
+
+  // Sell it in more ways — one row, and only once something is set up. An
+  // empty signpost is clutter; the full page is where you go to start one.
+  const nBundle = (BP || []).length ? 1 : 0;
+  const nAddons = ((BU && BU.ids) || []).length;
+  const nOpts   = (OPT || []).length;
+  if (nBundle || nAddons || nOpts) {
+    const parts = [];
+    if (nBundle) parts.push(cuT('1 bundle', '1 个套装'));
+    if (nAddons) parts.push(nAddons + ' ' + cuT('add-ons', '个搭配'));
+    if (nOpts)   parts.push(nOpts + ' ' + cuT('choice groups', '组选项'));
+    set('pd-sum-more', `<div class="pd-sumcard">${
+      _pdSumRow(cuT('Sell it in more ways', '更多售卖方式'), parts.join(' · '), 'more', cuT('Expand', '展开'))
+    }</div>`);
+  } else {
+    set('pd-sum-more', `<div class="pd-sumcard">${
+      _pdSumRow(cuT('Sell it in more ways', '更多售卖方式'),
+        cuT('Bundles, add-ons, choices — none yet', '套装、搭配、选项 — 暂未设置'), 'more', cuT('Set up', '设置'))
+    }</div>`);
+  }
+
+  // Page — is there a designed page, and is the description written.
+  const designed = p ? _paHasBlocks(p) : false;
+  const rteEn = document.getElementById('pd-rte-en');
+  const rteCn = document.getElementById('pd-rte-cn');
+  const written = !!((rteEn && rteEn.textContent.trim()) || (rteCn && rteCn.textContent.trim()));
+  // The "design is out of date" nudge lives inside the block the dock hides,
+  // so carry its warning up into the summary — otherwise editing a name or a
+  // description in the dock would silently stale the page with nothing to say so.
+  const pageState = _pdDesignStale ? cuT('Designed page — out of date', '已设计页面 — 已过期')
+    : designed ? cuT('Designed page', '已设计页面')
+    : cuT('Default template', '默认模板');
+  set('pd-sum-page', '<div class="pd-sumcard">'
+    + _pdSumRow(cuT('Shopper page', '顾客页面'), pageState, 'page',
+        _pdDesignStale ? cuT('Rebuild', '重新生成') : null)
+    + _pdSumRow(cuT('Description', '描述'),
+        written ? cuT('Written', '已填写') : cuT('Not written yet', '尚未填写'), 'page')
+    + '</div>'
+    + _pdJumpBtn(cuT('Expand to write the page', '展开编辑页面'), 'page'));
+
+  // Details — the three things that live there, each shown as its own answer.
+  const ship = ['air', 'land', 'local']
+    .filter(k => (document.getElementById('pd-ship-' + k) || {}).checked)
+    .map(k => ({ air: cuT('Air', '空运'), land: cuT('Land', '陆运'), local: cuT('Local only', '仅广州') })[k]);
+  const flags = [
+    [(document.getElementById('pd-is-market') || {}).checked, cuT('Markets', '市集')],
+    [(document.getElementById('pd-is-batch-made') || {}).checked, cuT('Made in batches', '分批现做')],
+    [(document.getElementById('pd-is-restock-only') || {}).checked, cuT('Restock-only', '仅补货')],
+  ].filter(x => x[0]).map(x => x[1]);
+  const freeOf = Array.from(document.querySelectorAll('#pd-free-of input[data-freeof-id]'))
+    .filter(i => i.checked).map(i => i.dataset.freeofId);
+  const dash = cuT('Not set', '未设置');
+  set('pd-sum-details', '<div class="pd-sumcard">'
+    + _pdSumRow(cuT('Shipping', '配送方式'), ship.length ? ship.join(' · ') : dash, 'details')
+    + _pdSumRow(cuT('Flags', '标记'), flags.length ? flags.join(' · ') : cuT('None', '无'), 'details')
+    + _pdSumRow(cuT('Free of', '不含'), freeOf.length ? escapeHtml(freeOf.join(' · ')) : cuT('None', '无'), 'details')
+    + '</div>'
+    + `<div class="pd-jumpnote">${cuT('These change rarely, so they live on the full page and the panel stays quick.', '这些很少改动,因此放在完整页面,面板保持轻快。')}</div>`
+    + _pdJumpBtn(cuT('Expand to edit details', '展开编辑详情'), 'details'));
 }
 // Currently-selected product id (the one loaded in the docked editor). Used to
 // paint the row highlight and to power Discard / post-save reload.
@@ -2716,6 +2917,7 @@ function vaRender() {
     `<div class="va-actions">` +
       `<button type="button" class="btn btn-sm" onclick="vaAddSize()">${cuT('+ Add variant', '+ 新增规格')}</button>` +
     `</div>`;
+  pdRenderSummaries();
 }
 function vaLabel(id, lang, val) { const v = VA_MEMBERS.find(x => x.id === id); if (v) { if (lang === 'cn') v.label_cn = val; else v.label = val; pdSyncMatrixLabels(); } }
 // Variant-axis noun — mutates the model only (no re-render, keeps input focus);
@@ -2983,6 +3185,7 @@ function buRender() {
       `<button type="button" class="btn btn-sm" onclick="buTogglePicker()">${BU_PICKING ? cuT('Close', '关闭') : cuT('+ Add product', '+ 添加商品')}</button>` +
     `</div>` + picker;
   if (BU_PICKING) { const s = document.getElementById('bu-search'); if (s) s.focus(); buPickerList(); }
+  pdRenderSummaries();
 }
 function buField(key, val) {
   if (key === 'price') BU.price = (val === '' ? '' : Math.max(0, parseFloat(val) || 0));
@@ -3111,6 +3314,7 @@ function bpRender() {
     `<div class="helper" style="font-size:11px;margin-bottom:2px">${cuT('Customers see ONE product at the price you set above. Choose how you stock it.', '顾客看到的是上方价格的单个产品。请选择其库存管理方式。')}</div>` +
     modes + modeBody;
   if (BP_PICKING) { const s = document.getElementById('bp-search'); if (s) s.focus(); bpPickerList(); }
+  pdRenderSummaries();
 }
 function bpQty(id, val) {
   const c = BP.find(x => x.id === id); if (!c) return;
@@ -3293,6 +3497,7 @@ function optRender() {
       `<button type="button" class="btn btn-sm" onclick="optAddExtras()">${cuT('+ Add paid extras', '+ 添加付费加项')}</button>` +
     `</div>`;
   if (OPT_PICK) { const s = document.getElementById('opt-search'); if (s) s.focus(); optPickerList(); }
+  pdRenderSummaries();
 }
 // One choice row + (when it's the active link target) the product picker below.
 function _optChoiceRow(o, oi, c, ci) {
@@ -4471,6 +4676,8 @@ function pdSetStatus(state, msg) {
 // Debounced trigger — wired to every input/change inside the editor.
 function pdScheduleAutosave() {
   pdSetStatus('dirty');
+  // Keep the full page's own title in step with the name being typed under it.
+  if (pdIsExpanded()) pdSyncPageHead();
   clearTimeout(_pdAutoTimer);
   _pdAutoTimer = setTimeout(pdAutoSaveNow, 800);
 }
@@ -4514,6 +4721,7 @@ function pdMarkDesignStale() {
   if (!_pdUseBlockDesign || _pdDesignStale) return;   // only matters when a design exists
   _pdDesignStale = true;
   pdRenderDesignStale();
+  pdRenderSummaries();   // the dock's Page row carries the same warning
 }
 function pdRebuildDesign() {
   const id = document.getElementById('pd-id').value;
