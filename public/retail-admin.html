@@ -4810,13 +4810,6 @@
             <button class="btn pd-versions-btn" onclick="pdOpenVersions()" title="See every saved version of this product and roll back to any of them · 查看此产品的所有历史版本并还原"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M8 4v4l2.5 1.5"/><path d="M2.6 6.5A5.5 5.5 0 1 1 2.5 9"/><path d="M2.5 4v2.5H5"/></svg>Version history · 历史版本</button>
           </div>
         </div>
-        <!-- The full page's side column. It lives INSIDE #pd-editor on purpose:
-             thousands of lines of this stylesheet are scoped `#pd-editor …`, so
-             a block moved outside the editor would arrive in the side column
-             stripped of its card, its heading, its fields and its chips. Empty
-             in the dock (`:empty` hides it) and filled by pdMoveSideBlocks()
-             only while the page is open, so the drawer never sees it. -->
-        <aside id="pd-pp-side" class="pd-pp-side"></aside>
       </div>
       </div><!-- /#pd-bg pa-split-editor -->
     </div><!-- /#pa-split -->
@@ -4850,17 +4843,17 @@
           <button class="btn btn-sm" type="button" onclick="pdCollapseToPanel()" title="Back to the list and quick-edit panel · 返回列表与快捷面板"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>Collapse · 收起</button>
         </div>
       </div>
-      <!-- Three columns: the section index, the form, and the things you set
-           once. The middle one is where #pd-editor mounts — the same node that
-           lives in the dock, unchanged. The outer two are page furniture that
-           only exists here, and the side column is FILLED BY MOVING blocks out
-           of the editor (pdMoveSideBlocks) rather than by rendering copies:
-           sales, shipping, flags, free-of, internal notes and the record's own
-           actions all keep their ids and their wiring, they just sit somewhere
-           else while the page is open. Below 1240px the side column drops under
-           the form and this becomes the two-column layout. -->
+      <!-- Two columns: the section index, and the form. The right one is where
+           #pd-editor mounts — the same node that lives in the dock, unchanged.
+           The index is page furniture that only exists here.
+           The rows are rendered into #pd-pp-navrows rather than into the <nav>
+           itself, because the record's actions are MOVED in below them
+           (pdMoveFootActs) and a re-render of the rows must not take them with
+           it. Below 900px the index goes and the page is one column. -->
       <div class="pd-pp-grid">
-        <nav id="pd-pp-nav" class="pd-pp-nav" aria-label="Sections · 分区"></nav>
+        <nav id="pd-pp-nav" class="pd-pp-nav" aria-label="Sections · 分区">
+          <div id="pd-pp-navrows"></div>
+        </nav>
         <div id="pd-pp-mount" class="pd-pp-mount"></div>
       </div>
     </div>
