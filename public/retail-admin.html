@@ -4514,7 +4514,12 @@
 
               <!-- Basics: name + price -->
               <section class="pdb-card pdb-c7">
-                <div class="pd-sec-h">Basics · 基础</div>
+                <!-- Dock-only: expanded, the pane already carries a "Basics"
+                     section heading directly above this card, so the card
+                     repeating the word is the only duplicated heading on the
+                     full page. Every other card names something the pane
+                     heading does not (Photos, Sourcing, Shipping…). -->
+                <div class="pd-sec-h" data-dock-only="1">Basics · 基础</div>
                 <div class="pdb-fields">
                   <div class="field"><label class="stacked">Name · 名称</label><input type="text" id="pd-name-en"></div>
                   <div class="field"><label class="stacked">Name (second language) · 名称(第二语言)</label><input type="text" id="pd-name-cn"></div>
@@ -4827,6 +4832,14 @@
           <span id="pd-pp-badge"></span>
         </div>
         <div class="pd-pp-acts">
+          <!-- Where the editor's own state parks while the page is open.
+               pdExpand() moves #pd-save-status (normally in the footer, three
+               screens down) and #pd-head-tags (normally a full-width band of
+               its own above the sales card) in here; pdCollapseToPanel() puts
+               them back. Moving the nodes rather than rendering a second copy
+               keeps one id per control, so pdSetStatus / pdRenderHeadTags go
+               on working wherever they happen to be sitting. -->
+          <span id="pd-pp-state" class="pd-pp-state"></span>
           <button class="btn btn-sm" type="button" onclick="pdCollapseToPanel()" title="Back to the list and quick-edit panel · 返回列表与快捷面板"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>Collapse · 收起</button>
         </div>
       </div>
