@@ -76,18 +76,40 @@ const ROWS = `
 // Enough server-shaped state that screens which read live data render their real
 // branch rather than their loading one. Deliberately minimal: a screen that
 // needs more than this to paint is a screen that will break on a slow network.
+// Real sentences, not single letters. This block used to seed 'K', 'M', 'A',
+// 'F', 'Q' — enough for a sweep that only asks whether a screen paints, and it
+// is shared with scripts/shoot_mobile.js, where it overwrote the fake server's
+// config and left every screenshot of About, FAQ, Legal and Pop-ups showing a
+// column of single characters. A fixture that renders as nonsense makes the
+// screen look broken to the only check that can see it.
 const SEED = `
-  state.cfg={faq:{questions:[{q_en:'Q',q_cn:'问',a_en:'A',a_cn:'答'}]},
-    legal:{terms:{body_en:'T',updated_at:'2026-05-01'},privacy:{body_en:'P',updated_at:'2026-05-01'}},
-    popups:{list:[{title_en:'Hi',body_en:'B',enabled:true,start_at:'2026-08-18'}]},
-    about:{content:{kicker_en:'K',manifesto_en:'M',founder_name_en:'A',founder_title_en:'F',founder_quote_en:'Q'}}};
+  state.cfg={faq:{questions:[{q_en:'Where is my order?',q_cn:'我的订单到哪了？',
+      a_en:'Every order gets a tracking link the moment it leaves the store.',a_cn:'订单出库时会收到物流链接。',group_en:'Orders',group_cn:'订单'}]},
+    legal:{terms:{body_en:'These terms cover everything you buy from Roots, in store and in the mini app.',updated_at:'2026-05-01'},
+           privacy:{body_en:'We keep your phone number and your addresses, and nothing else you have not given us.',updated_at:'2026-05-01'}},
+    popups:{list:[{name:'Autumn promo',title_en:'20% off',body_en:'This week only.',enabled:true,pages:['home'],frequency:'once',start_at:'2026-08-18'}]},
+    about:{content:{kicker_en:'Our story',kicker_cn:'我们的故事',
+      manifesto_en:'We started with one shelf of ferments and a very small van.',manifesto_cn:'我们从一架发酵食品和一辆小货车开始。',
+      founder_kicker_en:'Who runs it',founder_kicker_cn:'主理人',
+      founder_name_en:'Mei Chen',founder_name_cn:'陈玫',
+      founder_title_en:'Founder',founder_title_cn:'创始人',
+      founder_quote_en:'Good food should not be a special occasion.',founder_quote_cn:'好食物不该只在特别的日子。'}}};
   state.setup={percent:71,requiredDone:5,requiredTotal:7,steps:[{key:'store',done:true},{key:'wechat',done:false}]};
   state.zones=[1,2,3]; state.printer={auto_print:true};
   state.stores=[{id:1,name_en:'Tianhe store',name_cn:'天河店'},{id:2,name_en:'Panyu store',name_cn:'番禺店'}];
 `;
 
 function buildCases(src) {
-  const subs = [...src.matchAll(/\n {2}([a-z_0-9]+):\{title:/g)].map((m) => m[1]);
+  // Two patterns, because SUBS is written two ways: most screens are keys of
+  // the object literal, and two — inbox and sales — are assigned to it
+  // afterwards, when they left the bottom nav. Matching only the literal meant
+  // SALES had never been rendered by this sweep, measured by the geometry
+  // check, or photographed. A screen nothing visits is a screen nobody knows
+  // is broken.
+  const subs = [
+    ...[...src.matchAll(/\n {2}([a-z_0-9]+):\{title:/g)].map((m) => m[1]),
+    ...[...src.matchAll(/\nSUBS\.([a-z_0-9]+)\s*=\s*\{title:/g)].map((m) => m[1]),
+  ];
   const cases = {};
   for (const t of ['home', 'orders', 'customers', 'products', 'more']) cases['tab:' + t] = `APP.cmd('tab','${t}')`;
   for (const k of subs) cases['push:' + k] = `APP.cmd('push','${k}')`;
@@ -95,10 +117,10 @@ function buildCases(src) {
     'sheet:order': "" + ROWS + "DB.orders[0]._id=1;DB.orders[0].raw='paid';state.liveOrders=DB.orders;APP.cmd('tab','orders');APP.cmd('openOrder',DB.orders[0].id)",
     'sheet:order-actions': "" + ROWS + "DB.orders[0]._id=1;DB.orders[0].raw='dispatched';state.liveOrders=DB.orders;APP.cmd('openOrder',DB.orders[0].id);APP.cmd('detailActions')",
     'sheet:customer': "" + ROWS + "state.customers=DB.customers.slice();state.custLoaded=true;APP.cmd('tab','customers');state.custId='s1';state.custDetail={customer:{nickname:'A',tier_key:'tree'},stats:{orders:{}}};render()",
-    'sheet:product-supplier': "state.prodStores=[{id:1,name_en:'T',name_cn:'T',qty:2}];state.prodStockReady=true;DB.products=[{sku:'SD-1',_id:9,name:['Supplier item','直发商品'],price:'¥20',priceNum:20,status:['Live','在售'],kind:'on',stock:0,stockLabel:['0 in stock','库存 0'],supplier:true,paused:false}];APP.cmd('tab','products');state.productSku='SD-1';render()",
+    'sheet:product-supplier': "state.prodStores=[{id:1,name_en:'Tianhe store',name_cn:'天河店',qty:8}];sheetStep['st_1']=8;state.prodStockReady=true;DB.products=[{sku:'SD-1',_id:9,name:['Supplier item','直发商品'],price:'¥20',priceNum:20,status:['Live','在售'],kind:'on',stock:0,stockLabel:['0 in stock','库存 0'],supplier:true,paused:false}];APP.cmd('tab','products');state.productSku='SD-1';render()",
     'sheet:product-paused': "state.prodStores=[];state.prodStockReady=true;DB.products=[{sku:'SD-2',_id:10,name:['Paused item','暂停商品'],price:'¥20',priceNum:20,status:['Paused','已暂停'],kind:'off',stock:0,stockLabel:['0 in stock','库存 0'],supplier:true,paused:true}];APP.cmd('tab','products');state.productSku='SD-2';render()",
-    'sheet:product-bundle': "state.prodStores=[{id:1,name_en:'T',name_cn:'T',qty:2}];state.prodStockReady=true;DB.products=[{sku:'BD-1',_id:11,name:['Gift box','礼盒'],price:'¥99',priceNum:99,status:['Live','在售'],kind:'on',stock:4,stockLabel:['4 in stock','库存 4'],bundle:true}];APP.cmd('tab','products');state.productSku='BD-1';render()",
-    'sheet:product': "" + ROWS + "state.prodStores=[{id:1,name_en:'T',name_cn:'T',qty:2}];state.prodStockReady=true;DB.products[1]._id=42;APP.cmd('tab','products');state.productSku=DB.products[1].sku;render()",
+    'sheet:product-bundle': "state.prodStores=[{id:1,name_en:'Tianhe store',name_cn:'天河店',qty:8}];sheetStep['st_1']=8;state.prodStockReady=true;DB.products=[{sku:'BD-1',_id:11,name:['Gift box','礼盒'],price:'¥99',priceNum:99,status:['Live','在售'],kind:'on',stock:4,stockLabel:['4 in stock','库存 4'],bundle:true}];APP.cmd('tab','products');state.productSku='BD-1';render()",
+    'sheet:product': "" + ROWS + "state.prodStores=[{id:1,name_en:'Tianhe store',name_cn:'天河店',qty:8}];sheetStep['st_1']=8;state.prodStockReady=true;DB.products[1]._id=42;APP.cmd('tab','products');state.productSku=DB.products[1].sku;render()",
     'sheet:reply': "" + ROWS + "DB.reviews[0].id=7;DB.reviews[0].stream='review';APP.cmd('push','inbox');APP.cmd('openReply',DB.reviews[0].cust[0])",
     // The feedback half of the inbox, and the thread sheet in all three of its
     // states — the fetch in flight, the conversation on screen, and the fetch
@@ -107,7 +129,7 @@ function buildCases(src) {
     'push:inbox-feedback': "state.inboxSeg='feedback';APP.cmd('push','inbox')",
     'sheet:thread-loading': "state.inboxSeg='feedback';APP.cmd('push','inbox');APP.cmd('openReply','fb:1')",
     'sheet:thread': "state.inboxSeg='feedback';APP.cmd('push','inbox');APP.cmd('openReply','fb:1');state.thread={id:1,loading:false,err:null,page:'checkout',appVersion:'2.4.1',photos:['/x.png'],msgs:[{id:0,author:'customer',body:'Pickup time is wrong.',created_at:'2026-08-19 10:02:00'},{id:1,author:'admin',author_name:'Mei',body:'Looking at it now.',created_at:'2026-08-19 10:40:00'},{id:2,author:'customer',body:'Still doing it.',created_at:'2026-08-22 09:10:00'}]};render()",
-    'sheet:thread-error': "state.inboxSeg='feedback';APP.cmd('push','inbox');APP.cmd('openReply','fb:1');state.thread={id:1,loading:false,err:'Could not load the conversation.',msgs:null};render()",
+    'sheet:thread-error': "state.inboxSeg='feedback';APP.cmd('push','inbox');APP.cmd('openReply','fb:1');state.thread={id:1,loading:false,err:E('Could not load the conversation.','\u65e0\u6cd5\u52a0\u8f7d\u5bf9\u8bdd\u3002'),msgs:null};render()",
     'sheet:search': "APP.cmd('openSearch')",
     // Purchasing reads a live ledger, so the sweep seeds one — otherwise every
     // pass renders the loading state and proves nothing about the rows.
@@ -180,7 +202,6 @@ function buildCases(src) {
     'sheet:po-loading': "state.posTried=true;state.poList=[];APP.cmd('push','purchasing');state.poId=4;render()",
     'sheet:po-receive-ask': "state.posTried=true;state.poList=[];APP.cmd('push','purchasing');state.poId=4;state.poDetail={id:4,po_number:'RPO-0004',supplier:'F',status:'Ordered',total_cost:1,items:[]};render();APP.cmd('poStatus','Delivered')",
     'sheet:account': "APP.cmd('overflow')",
-    'sheet:create': "APP.cmd('create','coupon')",
     'sheet:cust-points': "" + ROWS + "state.customers=DB.customers.slice();state.custLoaded=true;APP.cmd('tab','customers');state.custId=1;state.custDetail={customer:{nickname:'A',tier_key:'tree',points_balance:120,balance:8},stats:{orders:{}}};render();APP.cmd('adjustPoints')",
     'sheet:cust-block': "" + ROWS + "state.customers=DB.customers.slice();state.custLoaded=true;APP.cmd('tab','customers');state.custId=1;state.custDetail={customer:{nickname:'A',tier_key:'tree',is_blocked:1},stats:{orders:{}}};render();APP.cmd('toggleBlock')",
     'sheet:mark-paid': "" + ROWS + "DB.orders[0]._id=1;DB.orders[0].raw='pending_payment';state.liveOrders=DB.orders;APP.cmd('tab','orders');APP.cmd('openOrder',DB.orders[0].id);APP.cmd('markPaid')",
@@ -188,16 +209,48 @@ function buildCases(src) {
     'sheet:refund-approve': "" + ROWS + "DB.orders[0]._id=1;DB.orders[0].raw='paid';DB.orders[0].refundStatus='pending';state.liveOrders=DB.orders;APP.cmd('openOrder',DB.orders[0].id);APP.cmd('approveRefund')",
     'sheet:refund-payout': "" + ROWS + "DB.orders[0]._id=1;DB.orders[0].raw='paid';DB.orders[0].refundStatus='approved';state.liveOrders=DB.orders;APP.cmd('openOrder',DB.orders[0].id);APP.cmd('payRefund')",
     'theme:dark': "APP.cmd('toggleTheme');APP.cmd('tab','orders')",
-    'lang:zh': "APP.cmd('toggleLang');APP.cmd('tab','more')",
+    // No 'lang:zh' case any more: the third pass renders EVERY screen in
+    // Chinese, so one hand-written Chinese case adds nothing — and in that pass
+    // it toggled twice and landed back in English, which read as a failure.
   });
   return cases;
 }
 
+// The title carries three verdicts: a thrown error, a raw column date that
+// reached the glass, or the node count.
+//
+// The date one: §1.18 of the design system says English reads Aug 16 and
+// Chinese reads 8月16日, and the app has fmtDay/fmtDateOnly for exactly that.
+// But every date arrives from the server as YYYY-MM-DD, so a screen that
+// forgets to format one looks fine to every other check in this directory —
+// it is a plausible-looking string in the right place. Purchasing shipped four
+// of them and Pop-ups printed one twice, in the pill and again three lines
+// down. A regex on the painted text finds all of them at once.
 const PROBE = `<script>window.__e=[];addEventListener('error',function(e){window.__e.push(e.message)},true);
 addEventListener('load',function(){setTimeout(function(){
   var n=document.querySelectorAll('#app *').length;
-  document.title = window.__e.length ? ('ERR '+window.__e.join(' | ')) : ('OK '+n);
+  var t=(document.getElementById('app')||{}).innerText||'';
+  var iso=t.match(/\\d{4}-\\d{2}-\\d{2}/);
+  var frozen=null;
+  if(window.__EN){ for(var i=0;i<window.__EN.length;i++){ if(t.indexOf(window.__EN[i])>=0){ frozen=window.__EN[i]; break; } } }
+  document.title = window.__e.length ? ('ERR '+window.__e.join(' | '))
+    : frozen ? ('EN '+frozen.slice(0,60))
+    : iso ? ('ISO '+iso[0]) : ('OK '+n);
 },400)});</script>`;
+
+// Every long English half of a bilingual pair, for the Chinese pass below.
+// Long and spaced, because a short one ('new', 'Open', 'Live') turns up inside
+// a product name or a channel's own Latin name and would cry wolf.
+function englishHalves(src) {
+  const raw = (src.match(/<script>([\s\S]*?)<\/script>/) || [])[1] || '';
+  const js = raw.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+  const out = new Set();
+  for (const m of js.matchAll(/(^|[^\w$.])T\(\s*'((?:[^'\\]|\\.)*)'\s*,\s*'((?:[^'\\]|\\.)*)'\s*\)/g)) {
+    const en = m[2], zh = m[3];
+    if (en !== zh && en.length >= 14 && en.includes(' ') && /[\u4e00-\u9fff]/.test(zh)) out.add(en);
+  }
+  return [...out];
+}
 
 function main() {
   const chrome = findChrome();
@@ -219,11 +272,21 @@ function main() {
   // branch. COLD seeds nothing — the first paint, and the offline one, where a
   // screen must show a loading or empty state rather than reaching into data
   // that has not arrived. Half the crashes in this app's history live there.
-  const passes = [['warm', SEED], ['cold', '']];
+  // A third pass, in Chinese, checking that nothing English survives the
+  // switch. The Today card on HOME did: state.liveKpis is built once at boot
+  // with T() already applied, so both the labels and the comparisons under them
+  // were frozen in whatever language the app started in, and a Chinese operator
+  // read "Revenue (all channels)". Every other bilingual value in the file is
+  // stored as a pair and resolved at render; those two were built in a loader
+  // rather than a renderer and slipped the rule. Nothing that asserts on
+  // English text can see this, and neither can a screenshot nobody takes in
+  // Chinese.
+  const passes = [['warm', SEED], ['cold', ''], ['zh', SEED + "APP.cmd('toggleLang');"]];
   const work = [];
   for (const [name, js] of Object.entries(cases)) {
     for (const [pass, seed] of passes) work.push([`${name} [${pass}]`, seed, js]);
   }
+  const EN = englishHalves(src);
 
   // ── Static pass: a helper that is called but never defined ──────────────
   // Rendering every screen does NOT catch this. A helper reached only from a
@@ -319,6 +382,41 @@ function main() {
     }
   }
 
+  // ── Static pass: no command nothing can reach ──────────────────────────
+  // The mirror of the noop check above, and it caught something worse. The
+  // CREATE SHEET — new coupon, new flash sale, new broadcast — had a submit
+  // handler that read, in full:
+  //
+  //     reg('submitCreate', ()=>{ state.createKind=null; showToast('Created'); })
+  //
+  // It closed itself, said Created, and sent nothing anywhere. The only reason
+  // it never lied to an operator is that nothing in the file called
+  // APP.cmd('create'), so the sheet could not be opened at all — which is not a
+  // safe place to leave a form, because the next person adds a "+" button and
+  // ships it. `saveStock` was the same: a Receive stock button whose handler
+  // was one toast, reachable only through a flag no mapper sets.
+  //
+  // A command's name reaches a handler as a STRING, so the check is on strings:
+  // a name that appears only at its own reg() has no way in. That covers the
+  // template-built call sites too — APP.cmd('${cmd}') where cmd came from a
+  // list of quoted names, which is how the customer sheet's four actions and
+  // every chipRow filter are wired.
+  {
+    const raw = (src.match(/<script>([\s\S]*?)<\/script>/) || [])[1] || '';
+    const js5 = raw.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+    const names = [...new Set([...js5.matchAll(/\breg\(\s*'([a-zA-Z_$][\w$]*)'/g)].map((m) => m[1]))];
+    const orphans = names.filter((n) => {
+      const asString = (js5.match(new RegExp("'" + n + "'", 'g')) || []).length;
+      const asMember = (js5.match(new RegExp('\\bCMD\\.' + n + '\\b', 'g')) || []).length;
+      return asString + asMember <= 1;
+    }).sort();
+    if (orphans.length) {
+      for (const n of orphans) console.error(`FAIL static — reg('${n}') is registered but nothing can reach it`);
+      console.error(`\n${orphans.length} unreachable command${orphans.length === 1 ? '' : 's'}. Wire it or delete it — an unreachable handler is a lie waiting for a button.`);
+      process.exit(1);
+    }
+  }
+
   // ── Static pass: every state key is declared, exactly once ─────────────
   // The app has ONE state object and ~120 keys on it. Two screens can pick the
   // same short name without either author noticing: `state.pos` was the
@@ -361,6 +459,43 @@ function main() {
     }
   }
 
+  // ── Static pass: every tint and ink is defined in BOTH themes ──────────
+  // The four --*-tint tokens were declared once, in :root, and never in the
+  // dark block — so a Sage icon tile, an Amber count badge and a Brick warning
+  // banner all kept their paper-coloured fill on a near-black page, and Home
+  // drew seven cream slabs down the side of the "Needs you" list. Nothing
+  // throws, nothing renders wrong, and no assertion on text can see it.
+  //
+  // The second half is the pairing: a hue on its own tint. Amber #C9954A on
+  // Amber-tint #F7EEDE is 2.2:1, which is under the floor for a 13px number,
+  // and the fires' count badges were drawn exactly that way. Text on a tint
+  // uses the matching --*-ink, which exists for this.
+  {
+    const css = (src.match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
+    const block = (re) => (css.match(re) || [])[1] || '';
+    const light = block(/:root\s*\{([\s\S]*?)\}/);
+    const dark = block(/:root\[data-theme="dark"\]\s*\{([\s\S]*?)\}/);
+    if (!light || !dark) { console.error('FAIL static — cannot find the theme blocks'); process.exit(1); }
+    // name -> value, so an ALIAS can be skipped: --accent-tint is
+    // `var(--dusk-tint)`, which follows whatever the theme sets. And the
+    // hyphen before the suffix keeps --ink itself out of it: that is a raw
+    // palette hue, fixed on purpose.
+    const decls = (b) => new Map([...b.matchAll(/(--[a-z-]+)\s*:\s*([^;]+);/g)].map((m) => [m[1], m[2].trim()]));
+    const inDark = decls(dark);
+    const missing = [...decls(light)]
+      .filter(([n, v]) => /-[a-z]+-(tint|ink)$/.test(n) && !/^var\(/.test(v) && !inDark.has(n))
+      .map(([n]) => n).sort();
+    for (const n of missing) console.error(`FAIL theme — ${n} is defined for light only; dark inherits the light value`);
+
+    const paired = [...src.matchAll(/background:var\(--([a-z]+)-tint[^)]*\);\s*color:var\(--\1[,)]/g)].map((m) => m[1]);
+    for (const h of [...new Set(paired)]) console.error(`FAIL theme — --${h} is used as text on --${h}-tint; use --${h}-ink`);
+
+    if (missing.length || paired.length) {
+      console.error(`\n${missing.length + new Set(paired).size} theme token problem${missing.length + new Set(paired).size === 1 ? '' : 's'}.`);
+      process.exit(1);
+    }
+  }
+
   // ── Static pass: the sample-data block still has all its keys ───────────
   // Three separate edits have now replaced a SLICE of this file — from one
   // landmark to the next — and silently taken everything in between with it.
@@ -386,6 +521,7 @@ function main() {
 
   for (const [name, seed, js] of work) {
     const html = src.replace('</body>',
+      (name.endsWith('[zh]') ? `<script>window.__EN=${JSON.stringify(EN)};</script>` : '') +
       `<script>addEventListener("load",function(){try{${seed}${js}}catch(e){window.__e.push("cmd: "+e.message)}});</script>${PROBE}</body>`);
     const file = path.join(dir, name.replace(/[^a-z0-9]/gi, '_') + '.html');
     fs.writeFileSync(file, html);
@@ -397,7 +533,9 @@ function main() {
     } catch (e) { failures.push([name, 'chrome failed: ' + e.message]); continue; }
     const title = (out.match(/<title>([^<]*)<\/title>/) || [])[1] || 'no title';
     const nodes = Number((title.match(/^OK (\d+)/) || [])[1] || 0);
-    if (!title.startsWith('OK')) failures.push([name, title]);
+    if (title.startsWith('EN')) failures.push([name, `English survived the language switch: "${title.slice(3)}" — store the pair, resolve it at render`]);
+    else if (title.startsWith('ISO')) failures.push([name, `a raw column date reached the screen: ${title.slice(4)} — format it with fmtDay/fmtDateOnly`]);
+    else if (!title.startsWith('OK')) failures.push([name, title]);
     // A screen that paints almost nothing is a screen that failed quietly.
     else if (nodes < 12) failures.push([name, `painted only ${nodes} nodes`]);
   }
@@ -409,7 +547,7 @@ function main() {
     console.error(`\n${failures.length} of ${total} screens failed.`);
     process.exit(1);
   }
-  console.log(`ok — ${total} renders (${Object.keys(cases).length} screens, warm and cold), no uncaught errors.`);
+  console.log(`ok — ${total} renders (${Object.keys(cases).length} screens, warm, cold and Chinese), no uncaught errors.`);
 }
 
 main();

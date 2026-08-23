@@ -57,16 +57,41 @@ const CASES = {};
 }
 const subs = [...sweep.matchAll(/x/g)];   // placeholder, real subs read from the app below
 const src0 = fs.readFileSync(APP, 'utf8');
-for (const m of src0.matchAll(/\n {2}([a-z_0-9]+):\{title:/g)) CASES['push:' + m[1]] = CASES['push:' + m[1]] || `APP.cmd('push','${m[1]}')`;
+// Both ways SUBS is written: keys of the object literal, and the two assigned
+// to it afterwards (inbox and sales). Matching only the literal left Sales
+// unphotographed — see the same note in test_mobile_screens.js.
+for (const re of [/\n {2}([a-z_0-9]+):\{title:/g, /\nSUBS\.([a-z_0-9]+)\s*=\s*\{title:/g])
+  for (const m of src0.matchAll(re)) CASES['push:' + m[1]] = CASES['push:' + m[1]] || `APP.cmd('push','${m[1]}')`;
 for (const t of ['home', 'orders', 'customers', 'products', 'more']) CASES['tab:' + t] = CASES['tab:' + t] || `APP.cmd('tab','${t}')`;
 
 function main() {
   const chrome = findChrome();
   if (!chrome) { console.log('SKIP — no Chromium found.'); process.exit(0); }
   fs.mkdirSync(OUT, { recursive: true });
+  // Lucide is a CDN script and this container has no network, so ic() found no
+  // glyph and emitted an empty <svg> of the right size: every icon in every
+  // shot was an invisible hole. The geometry was honest — the box is there and
+  // takes its space — but it made a chevron-down dropdown read as a stray word
+  // and an overflow button as an empty square, and I chased both as bugs.
+  //
+  // A stub gives every name the same neutral mark. It is not the real glyph and
+  // does not pretend to be; what it shows is that an icon is THERE, at the size
+  // and in the colour the layout gives it.
+  const ICON_STUB = `<script>window.lucide={icons:new Proxy({},{get:function(){return ['svg',{},[
+    ['circle',{cx:12,cy:12,r:8.5}],
+    ['circle',{cx:12,cy:12,r:2.25,fill:'currentColor',stroke:'none'}]]];}})};<\/script>`;
+  // Entry animations off. tSheetUp and tFade are `both`-filled, so a sheet
+  // caught before its animation starts sits at translateY(100%) with a scrim at
+  // opacity 0 — entirely below the viewport, in a shot that otherwise looks like
+  // a perfectly normal screen with no sheet on it. It is intermittent: the order
+  // sheet came up, the customer sheet did not, and I went looking for the state
+  // bug that was not there. Every keyframe's `to` is the element's own static
+  // CSS, so removing the animation IS the settled frame.
+  const STILL = '<style>*,*::before,*::after{animation:none!important;transition:none!important}</style>';
   let src = src0
-    .replace(/<script src="https:\/\/unpkg\.com[^>]*><\/script>/, '')
-    .replace(/<link rel="stylesheet" href="https:\/\/fonts\.googleapis\.com[^>]*>/, '');
+    .replace(/<script src="https:\/\/unpkg\.com[^>]*><\/script>/, ICON_STUB)
+    .replace(/<link rel="stylesheet" href="https:\/\/fonts\.googleapis\.com[^>]*>/, '')
+    .replace('</head>', STILL + '</head>');
 
   const SERVER = process.env.NO_FAKE_SERVER ? '' : fakeServer();
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'm-shoot-'));

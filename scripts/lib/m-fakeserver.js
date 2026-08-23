@@ -44,12 +44,15 @@ const D = {
     baseline: { revenue: 2840, orders: 16, new_customers: 5 },
     new_vs_returning: { buyers: 17, returning_buyers: 9 },
     funnel: { paid: 7, preparing: 3 } },
+  // `waiting_since` — the field oldestMins actually reads. Sending placed_at
+  // made every fire lose its "oldest 2d" line, which looked like the app
+  // dropping it and was this file getting the column name wrong.
   '/dashboard/ops': {
-    unhandled: { count: 3, items: [{ placed_at: '2026-08-22 07:10:00' }, { placed_at: '2026-08-22 09:40:00' }] },
-    refunds: { count: 1, items: [{ placed_at: '2026-08-22 08:00:00' }] },
-    awaiting_restock: { count: 2, items: [{ placed_at: '2026-08-20 12:00:00' }] },
-    invoices: { count: 2, items: [] },
-    payment_unconfirmed: { count: 2, unread: 1, items: [{ placed_at: '2026-08-22 10:00:00' }] },
+    unhandled: { count: 3, items: [{ waiting_since: '2026-08-22 07:10:00' }, { waiting_since: '2026-08-22 09:40:00' }] },
+    refunds: { count: 1, items: [{ waiting_since: '2026-08-22 08:00:00' }] },
+    awaiting_restock: { count: 2, items: [{ waiting_since: '2026-08-20 12:00:00' }] },
+    invoices: { count: 2, items: [{ waiting_since: '2026-08-21 09:00:00' }] },
+    payment_unconfirmed: { count: 2, unread: 1, items: [{ waiting_since: '2026-08-22 10:00:00' }] },
     out_of_stock: { count: 2 }, low_stock: { count: 5 },
   },
   '/dashboard/activity': { rows: [
@@ -76,11 +79,49 @@ const D = {
   '/printer': { auto_print: true },
   '/fapiao-settings': { autoIssue: false },
   '/alipay-manual': { enabled: true, account: 'Roots Ltd' },
-  '/channel-status': { channels: [
-    { channel: 'mini_app', integrated: true, cardOpen: true, stores: [{ name_en: 'Tianhe', open: true }] },
-    { channel: 'meituan', integrated: true, cardOpen: false, stores: [{ name_en: 'Tianhe', open: false }] },
-    { channel: 'web', integrated: true, cardOpen: true, stores: [] } ] },
-  '/sales/summary': { channels: { wechat: { orders: 20, revenue: 2100 }, web: { orders: 6, revenue: 640 }, meituan: { orders: 3, revenue: 260 } } },
+  // `cells`, and every channel in GRID_CHANNELS. This block sent `stores` and
+  // listed three of the six, so every card on the Sales board read "No stores"
+  // and half the board was missing — and nobody had ever seen it, because
+  // SUBS.sales is assigned after the object literal and neither the sweep nor
+  // the camera's regex found the screen at all. Shapes from
+  // routes/meituan-admin.js GET /channel-status and routes/retail.js
+  // GET /sales/summary; both answer at the top level, not under a data key.
+  '/channel-status': {
+    stores: [{ code: 'tianhe', name: '天河店', name_en: 'Tianhe', name_cn: '天河店' },
+             { code: 'panyu',  name: '番禺店', name_en: 'Panyu',  name_cn: '番禺店' }],
+    channels: [
+      { channel: 'mini_app', integrated: true, single: null, cardOpen: true,
+        cells: [{ storeCode: 'tianhe', name: 'Tianhe', nameEn: 'Tianhe', nameCn: '天河店', open: true },
+                { storeCode: 'panyu',  name: 'Panyu',  nameEn: 'Panyu',  nameCn: '番禺店', open: true }] },
+      { channel: 'web', integrated: true, single: null, cardOpen: true,
+        cells: [{ storeCode: 'tianhe', name: 'Tianhe', nameEn: 'Tianhe', nameCn: '天河店', open: true },
+                { storeCode: 'panyu',  name: 'Panyu',  nameEn: 'Panyu',  nameCn: '番禺店', open: false }] },
+      { channel: 'meituan', integrated: true, single: null, cardOpen: true,
+        cells: [{ storeCode: 'tianhe', name: 'Tianhe', nameEn: 'Tianhe', nameCn: '天河店', open: true, readOk: true },
+                { storeCode: 'panyu',  name: 'Panyu',  nameEn: 'Panyu',  nameCn: '番禺店', open: true, readOk: true }] },
+      { channel: 'eleme', integrated: false, single: null, cardOpen: false, cells: [] },
+      { channel: 'gzgrocery', integrated: true, single: 'tianhe', cardOpen: true,
+        cells: [{ storeCode: 'tianhe', name: 'Tianhe', nameEn: 'Tianhe', nameCn: '天河店', open: true }] },
+      { channel: 'pos', integrated: true, single: null, cardOpen: false,
+        cells: [{ storeCode: 'tianhe', name: 'Tianhe', nameEn: 'Tianhe', nameCn: '天河店', open: false },
+                { storeCode: 'panyu',  name: 'Panyu',  nameEn: 'Panyu',  nameCn: '番禺店', open: false }] },
+    ],
+    locations: [{ storeCode: 'tianhe', name: 'Tianhe', nameEn: 'Tianhe', nameCn: '天河店', allOpen: false },
+                { storeCode: 'panyu',  name: 'Panyu',  nameEn: 'Panyu',  nameCn: '番禺店', allOpen: false }],
+  },
+  '/sales/summary': {
+    channels: {
+      wechat:    { connected: true,  revenue: 2140.5, orders: 12, aov: 178.4, extra: 0 },
+      web:       { connected: true,  revenue: 612,    orders: 3,  aov: 204,   extra: 0 },
+      meituan:   { connected: true,  revenue: 288,    orders: 4,  aov: 72,    extra: 0 },
+      gzgrocery: { connected: true,  revenue: 1180,   orders: 2,  aov: 590,   extra: 0 },
+      eleme:     { connected: false, revenue: 0,      orders: 0,  aov: 0,     extra: 0 },
+      pos:       { connected: true,  revenue: 143,    orders: 6,  aov: 23.8,  extra: 9 },
+      direct:    { connected: true, intrinsic: true, revenue: 0, orders: 0, aov: 0, extra: 0 },
+    },
+    summary: { revenue: 4363.5, orders: 27, aov: 161.6, active: 5, total: 6,
+               topups_received: 0, store_credit_redeemed: 0 },
+  },
   '/tier-counts': { seed: 186, sprout: 44, tree: 12 },
   '/topup-packages': [ { id: 1, amount: 200, bonus_points: 20, title_en: 'Starter', title_cn: '入门', is_active: 1 },
                        { id: 2, amount: 500, bonus_points: 80, title_en: 'Regular', title_cn: '常用', is_active: 1 } ],
@@ -122,7 +163,7 @@ const ENVELOPES = {
   '/customers?': (u) => (u.indexOf('pageSize=1&') >= 0
     ? { data: [], segments: { all: 242, new_week: 6, sleeping: 31, blocked: 1 }, returning: { buyers: 17, returners: 9 }, customers_on_file: 242 }
     : { data: CUSTOMERS, meta: { total: 242 } }),
-  '/invoices': () => ({ data: INVOICES, counts: { all: 3, issued: 2, pending: 1 } }),
+  '/invoices': () => ({ data: INVOICES, counts: { requested: 1, issued: 2 } }),
   '/activity?': () => ({ total: 3, rows: ACTIVITY, summary: ACT_SUMMARY, digest: ACT_DIGEST }),
   '/affiliate/referrals?': () => ({ data: REFERRALS, page: 1, pageSize: 50, total: 3,
     summary: { total: 24, converted: 9, paid_out: 180, lifetime_paid: 42.5, still_earning: 6, joined_this_month: 5, joined_last_month: 3 } }),
@@ -178,10 +219,21 @@ const PRODUCTS = [
   { id: 46, name_en: 'Almond butter', name_cn: '杏仁酱', sku: '10999', sell_price: 68, effective_stock: 0, is_published: 1, ship_from_supplier: 1, top_category: 'Dry & Pantry' },
 ];
 
+// placed_at / invoice_issued_at / invoice_file_url — the names the SELECT at
+// routes/retail.js `GET /api/retail-admin/invoices` returns. This block sent
+// created_at and file_url, so every row's date rendered as an em dash and the
+// issued rows offered no Open button, both of which looked like app bugs.
 const INVOICES = [
-  { id: 1, invoice_number: 'FP-2026-0451', order_no: 'RT-…047', total: 312, invoice_status: 'issued', created_at: '2026-08-22 14:30:00', file_url: '/x.pdf' },
-  { id: 2, invoice_number: 'FP-2026-0450', order_no: 'RT-…043', total: 726, invoice_status: 'issued', created_at: '2026-08-22 12:02:00', file_url: '/x.pdf' },
-  { id: 3, order_no: 'RT-…040', total: 390, invoice_status: 'requested', created_at: '2026-08-21 18:00:00' },
+  { id: 1, invoice_number: 'FP-2026-0451', order_no: 'RT-…047', total: 312, invoice_status: 'issued',
+    invoice_type: 'company', invoice_title: 'Guangzhou Lin Trading Co.', invoice_tax_id: '91440101MA5X',
+    invoice_email: 'ap@lintrading.cn', placed_at: '2026-08-21 10:00:00',
+    invoice_issued_at: '2026-08-22 14:30:00', invoice_file_url: '/x.pdf' },
+  { id: 2, invoice_number: 'FP-2026-0450', order_no: 'RT-…043', total: 726, invoice_status: 'issued',
+    invoice_type: 'personal', invoice_title: 'Chen Meiling', placed_at: '2026-08-20 09:00:00',
+    invoice_issued_at: '2026-08-22 12:02:00', invoice_file_url: '/x.pdf' },
+  { id: 3, order_no: 'RT-…040', total: 390, invoice_status: 'requested',
+    invoice_type: 'company', invoice_title: 'Panyu Oat Works Ltd', invoice_tax_id: '91440113MA7K',
+    placed_at: '2026-08-21 18:00:00' },
 ];
 
 const ACTIVITY = [
@@ -207,10 +259,15 @@ const TOPUPS = [
   { id: 7, customer_id: 4, nickname: 'Wu Yaqi', amount: 50, bonus_points: 0, payment_method: 'wechat', status: 'failed', created_at: '2026-08-21 19:00:00' },
 ];
 
+// type / value / min_subtotal / max_uses / title_en / title_cn — retail_vouchers'
+// own columns (database.js, plus the added title_en/title_cn/is_public/
+// auto_apply). This block invented discount_type, discount_value, min_order,
+// total_limit and name_en, so every coupon rendered "¥0 off" with no rule and
+// no title, which read as the app failing to map a voucher.
 const VOUCHERS = [
-  { id: 1, code: 'WELCOME10', name_en: 'First order', name_cn: '首单优惠', discount_type: 'fixed', discount_value: 10, min_order: 50, per_customer_limit: 1, used_count: 128, total_limit: null, expires_at: null, is_active: 1, auto_apply_new: 1 },
-  { id: 2, code: 'WEEKEND20', name_en: 'Weekend', name_cn: '周末活动', discount_type: 'percent', discount_value: 20, min_order: 0, per_customer_limit: 0, used_count: 64, total_limit: 200, expires_at: '2026-08-27', is_active: 1 },
-  { id: 3, code: 'OVER200', name_en: 'Big baskets', name_cn: '大额订单', discount_type: 'fixed', discount_value: 30, min_order: 200, per_customer_limit: 1, used_count: 12, expires_at: '2026-07-31', is_active: 1 },
+  { id: 1, code: 'WELCOME10', title_en: 'First order', title_cn: '首单优惠', type: 'fixed_amount', value: 10, min_subtotal: 50, per_customer_limit: 1, used_count: 128, max_uses: null, expires_at: null, is_active: 1, is_public: 1, auto_apply: 1, auto_grant_signup: 1 },
+  { id: 2, code: 'WEEKEND20', title_en: 'Weekend', title_cn: '周末活动', type: 'percent', value: 20, min_subtotal: 0, per_customer_limit: 0, used_count: 64, max_uses: 200, expires_at: '2026-08-27', is_active: 1, is_public: 1 },
+  { id: 3, code: 'OVER200', title_en: 'Big baskets', title_cn: '大额订单', type: 'fixed_amount', value: 30, min_subtotal: 200, per_customer_limit: 1, used_count: 12, expires_at: '2026-07-31', is_active: 1 },
 ];
 
 // flash_state / flash_stock_limit / flash_starts_at / flash_ends_at — the keys
@@ -265,7 +322,7 @@ function fakeServer() {
         stats:{orders:{count:24,total:6240,avg:260},points:2410,wallet:82,joined:'2025-04-02'},
         recent_orders:ORDERS.slice(0,2), addresses:[{line:'12 Linhe Rd, Tianhe',is_default:1}]}};
       if(p.indexOf('/products?')===0) return {success:true,data:PRODUCTS};
-      if(p.indexOf('/invoices')===0) return {success:true,data:INVOICES,counts:{all:3,issued:2,pending:1}};
+      if(p.indexOf('/invoices')===0) return {success:true,data:INVOICES,counts:{requested:1,issued:2}};
       if(p.indexOf('/activity?')===0) return {success:true,total:3,rows:ACTIVITY,summary:ACT_SUMMARY,digest:ACT_DIGEST};
       if(p.indexOf('/affiliate/referrals?')===0) return {success:true,data:REFERRALS,page:1,pageSize:50,total:3,
         summary:{total:24,converted:9,paid_out:180,lifetime_paid:42.5,still_earning:6,joined_this_month:5,joined_last_month:3}};
@@ -286,6 +343,13 @@ function fakeServer() {
       if(p.indexOf('/dashboard?')===0) return {success:true,data:D['/dashboard']};
       if(p.indexOf('/cms/layout')===0) return {success:true,data:D['/cms/layout']};
       if(p.indexOf('/media/list')===0) return {success:true,data:D['/media/list']};
+      // Top-level, not nested under a data key: both routes answer
+      // {success, channels, ...} and apiRaw/api read the envelope as-is. The
+      // generic D lookup below wraps it, which made Sales see no channels and
+      // paint its empty state with real fixtures sitting behind it.
+      // (No backticks in this comment — the whole file is one template literal.)
+      if(p.indexOf('/channel-status')===0) return Object.assign({success:true},D['/channel-status']);
+      if(p.indexOf('/sales/summary')===0) return Object.assign({success:true},D['/sales/summary']);
       if(p.indexOf('/meituan/status')===0) return Object.assign({success:true},D['/meituan/status']);
       if(p.indexOf('/meituan/orders')===0) return {success:true,data:D['/meituan/orders']};
       if(p.indexOf('/guanyi/pickups')===0) return Object.assign({success:true},D['/guanyi/pickups']);

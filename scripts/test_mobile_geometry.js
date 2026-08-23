@@ -55,7 +55,12 @@ const CASES = {};
   new Function('ROWS', 'cases', body)(ROWS, CASES);
 }
 const appSrc = fs.readFileSync(APP, 'utf8');
-for (const m of appSrc.matchAll(/\n {2}([a-z_0-9]+):\{title:/g)) CASES['push:' + m[1]] = CASES['push:' + m[1]] || `APP.cmd('push','${m[1]}')`;
+// Both ways SUBS is written: keys of the object literal, and the two assigned
+// to it afterwards (inbox and sales) when Customers and Products took the
+// bottom nav. Matching only the literal meant Sales was never measured — see
+// the same note in test_mobile_screens.js.
+for (const re of [/\n {2}([a-z_0-9]+):\{title:/g, /\nSUBS\.([a-z_0-9]+)\s*=\s*\{title:/g])
+  for (const m of appSrc.matchAll(re)) CASES['push:' + m[1]] = CASES['push:' + m[1]] || `APP.cmd('push','${m[1]}')`;
 for (const t of ['home', 'orders', 'customers', 'products', 'more']) CASES['tab:' + t] = CASES['tab:' + t] || `APP.cmd('tab','${t}')`;
 
 // The probe, run inside the app page after it has settled.

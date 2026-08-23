@@ -174,7 +174,9 @@ CASES.push(['the real layout', LAYOUT, [
 ]]);
 
 CASES.push(['published, and it means it', LAYOUT, [
-  ['says published',            `txt('content').includes('Published')`],
+  // In the band, lower case, beside the block count — a published page has no
+  // card of its own any more.
+  ['says published',            `txt('content').includes('3 blocks live · published')`],
   ['with no draft warning',     `!txt('content').includes('Unpublished')`],
 ]]);
 
@@ -223,7 +225,9 @@ CASES.push(['the referral ledger', AFF, [
   ['the code used',             `txt('content').includes('CHEN24')`],
   ['the reward paid',           `txt('content').includes('¥20')`],
   ['a converted one says so',   `txt('content').includes('first order #412')`],
-  ['a waiting one is named',    `txt('content').includes('Waiting for first order')`],
+  // 'Waiting', the same word as the chip that filters to it — the long form ran
+  // nearly the card's width and outsized the two names the row is about.
+  ['a waiting one is named',    `txt('content').includes('Waiting')`],
   ['still earning is its own state', `txt('content').includes('Still earning')`],
   ['a voided one gives the reason',  `txt('content').includes('duplicate account')`],
 ]]);
@@ -301,11 +305,15 @@ const POPUPS = `state.cfg=Object.assign({},state.cfg,{popups:{list:[
 
 CASES.push(['pop-up state comes from the dates, not the flag', POPUPS, [
   ['a running one is live',            `txt('content').includes('Live')`],
-  ['ONE THAT ENDED IN JULY says ended', `txt('content').includes('Ended 2026-07-01')`],
-  ['ONE THAT STARTS IN DECEMBER says so', `txt('content').includes('Starts 2026-12-01')`],
+  // Formatted, and said ONCE. The pill used to carry the raw column and the
+  // window line under it repeated the same date, so both halves are asserted.
+  ['ONE THAT ENDED IN JULY says ended', `txt('content').includes('Ended Jul 1')`],
+  ['ONE THAT STARTS IN DECEMBER says so', `txt('content').includes('Starts Dec 1')`],
+  ['and no raw column dates anywhere',   `!/\\d{4}-\\d{2}-\\d{2}/.test(txt('content'))`],
   ['a switched-off one reads off',     `txt('content').includes('Off')`],
+  // The count lives in the header band now, phrased for the width it has there.
   ['and only one of the four is counted as interrupting',
-   `txt('content').includes('1 pop-up is interrupting customers right now')`],
+   `txt('content').includes('1 showing now · 4 in total')`],
 ]]);
 
 CASES.push(['what a pop-up actually does', POPUPS, [

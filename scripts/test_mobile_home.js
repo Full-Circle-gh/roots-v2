@@ -22,11 +22,15 @@
 
 const { run } = require('./lib/m-probe');
 
+// [labelPair, value, deltaPair] — the label and the comparison are stored as
+// bilingual PAIRS and resolved at render, because this array is built once at
+// boot and used to freeze both in whatever language the app started in. A
+// Chinese operator's Today card read "Revenue (all channels)".
 const KPIS = `state.liveKpis=[
-  ['Revenue (all channels)','¥3,180','+12% vs a typical day'],
-  ['Orders (storefront)','19','+3 vs a typical day'],
-  ['Avg. order','¥167.37',''],
-  ['New customers','4','−1 vs a typical day']];`;
+  [['Revenue (all channels)','营收（全渠道）'],'¥3,180',['+12% vs a typical day','较平常日 +12%']],
+  [['Orders (storefront)','订单（自营）'],'19',['+3 vs a typical day','较平常日 +3']],
+  [['Avg. order','客单价'],'¥167.37',null],
+  [['New customers','新客'],'4',['−1 vs a typical day','较平常日 −1']]];`;
 
 const CASES = [
   ['before the dashboard answers', `APP.cmd('tab','home');`, [
@@ -44,6 +48,10 @@ const CASES = [
     ['the real orders',    `txt('content').includes('19')`],
     ['the real average',   `txt('content').includes('¥167.37')`],
     ['and the comparison', `txt('content').includes('vs a typical day')`],
+    // Both halves are stored, so the card follows the language switch. It used
+    // to be built with T() already applied and stayed English forever.
+    ['in Chinese too',     `(function(){ APP.cmd('toggleLang'); var zh=txt('content'); APP.cmd('toggleLang');
+       return zh.indexOf('营收（全渠道）')>=0 && zh.indexOf('较平常日 +12%')>=0; })()`],
   ]],
   ['quick actions are things the phone can actually do', `APP.cmd('tab','home');`, [
     // Each of these opens a screen that performs the action named.
@@ -54,14 +62,22 @@ const CASES = [
     ['no "Create coupon"',     `!txt('content').includes('Create coupon')`],
     ['no "Send broadcast"',    `!txt('content').includes('Send broadcast')`],
   ]],
+  // waiting_since, the column /dashboard/ops actually returns — placed_at here
+  // meant the age line never rendered and the sub-line assertions below could
+  // not have failed if the app had dropped it.
   ['the needs-you queue is the ops snapshot', `state.ops={
-      unhandled:{count:3,items:[{placed_at:'2026-08-22 07:00:00'}]},
+      unhandled:{count:3,items:[{waiting_since:'2026-08-22 07:00:00'}]},
+      payment_unconfirmed:{count:2,unread:1,items:[{waiting_since:'2026-08-22 10:00:00'}]},
       refunds:{count:1,items:[]}, out_of_stock:{count:2}, low_stock:{count:5}};
     state.liveAttn={reviews:2}; APP.cmd('tab','home');`, [
     ['orders to start',       `txt('content').includes('Orders to start')`],
     ['refunds waiting',       `txt('content').includes('Refunds waiting')`],
     ['restock, counting what is OUT', `txt('content').includes('Restock needed') && txt('content').includes('out of stock, 5 running low')`],
     ['reviews, which the ops snapshot does not carry', `txt('content').includes('Reviews to reply')`],
+    ['a queue with a clock is aged',   `/oldest \\d+[mhd]/.test(txt('content'))`],
+    // The unreadable-proofs fire passes a SENTENCE as its sub-line, and the row
+    // used to glue "oldest" onto the front of it: "oldest 1 couldn't be read".
+    ['a queue with a sentence is not', `txt('content').includes("1 couldn't be read") && !txt('content').includes("oldest 1 couldn't")`],
   ]],
   ['a quiet shop shows no queue at all', `state.ops={unhandled:{count:0,items:[]}};
     state.liveAttn={}; APP.cmd('tab','home');`, [

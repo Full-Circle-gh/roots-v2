@@ -20,6 +20,13 @@
   --paper:#FBF9F4; --ink:#111A2B; --graphite:#58606E; --dusk:#6E67AF; --sage:#A3B49F;
   --amber:#C9954A; --brick:#B4533E;
   --dusk-tint:#EEEDF6; --sage-tint:#EDF1EC; --amber-tint:#F7EEDE; --brick-tint:#F6E7E3;
+  /* Ink that sits ON a tint or on paper — darker than the hue itself, because
+     Sage and Amber at full strength are too pale to read as text. These were
+     twenty-odd hardcoded hexes until the dark theme showed why that does not
+     work: #5F7357 on a #182236 card is 2.6:1, so every "3 delivered", every
+     amber warning and every success pill went nearly invisible the moment the
+     phone switched to dark. */
+  --sage-ink:#5F7357; --amber-ink:#8A6425; --brick-ink:#B4533E; --dusk-ink:#524C8F;
   --raised:#F6F3EC; --border:#E4E0D5; --dusk-hover:#605AA0; --dusk-press:#524C8C;
   /* The row surface for a record nobody on the team has opened yet. Deliberately
      LIGHTER than a header band: an unseen row is transient content and must never
@@ -43,6 +50,14 @@
   --text-primary:var(--paper); --text-secondary:#9AA2B0; --text-caption:#9AA2B0;
   --border-default:#263149; --border-strong:#3A455D;
   --unseen:#182329;
+  /* The tints were defined once, in the light block, and never again — so a
+     Sage icon tile, an Amber count badge and a Brick warning banner all kept
+     their paper-coloured fill on a near-black page. Home drew seven cream
+     slabs down the left of the "Needs you" list. Same hues, sunk into the
+     dark ground, with the inks lifted to match. */
+  --amber-tint:rgba(201,149,74,.16); --brick-tint:rgba(180,83,62,.20);
+  --sage-tint:rgba(163,180,159,.16); --dusk-tint:rgba(110,103,175,.24);
+  --amber-ink:#D9A55E; --brick-ink:#DE8B77; --sage-ink:#A3B49F; --dusk-ink:#A9A2E0;
 }
 *{box-sizing:border-box;-webkit-font-smoothing:antialiased;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%}
@@ -135,14 +150,33 @@ const WAVE = (w,color)=>`<svg width="${w}" height="${(w*0.324).toFixed(0)}" view
 /* ---- single live language (EN default), toggled from the overflow menu ---- */
 let LANG = 'en';
 function T(en, zh){ return LANG==='en' ? en : (zh||en); }
+/* A message that outlives the moment it is written. T() resolves the language
+   NOW, which is right for anything a renderer builds and wrong for anything a
+   LOADER stores: an error caught in a .catch() sits in state until the screen
+   is next drawn, and a Chinese operator who hit a failure read it in English
+   for as long as it stayed on the glass. E() defers — the pair is kept and
+   resolved when the template interpolates it, which is render time.
+
+   The same bug had frozen Home's Today card: state.liveKpis is built once at
+   boot with T() already applied, so the labels and the comparisons under them
+   stayed in whatever language the app started in. That one is a pair now,
+   resolved by its renderer. The sweep renders every screen a third time, in
+   Chinese, and fails on any English half of a bilingual pair that survives. */
+function E(en, zh){ return {toString(){ return T(en, zh); }}; }
 
 /* ---- status pill palette (from the mockup's PILL map) ---- */
-const DELIV_TONE={brick:'var(--brick)',amber:'#8A6425',plain:'var(--text-secondary)'};
+const DELIV_TONE={brick:'var(--brick-ink)',amber:'var(--amber-ink)',plain:'var(--text-secondary)'};
 const PILL = {
+  // The three coloured pills use the theme's own tint tokens rather than fixed
+  // rgba. Both halves then move together when the theme flips — and the dark
+  // tints are weaker than the alphas that were hardcoded here, which is what a
+  // dark ground wants: rgba(163,180,159,.26) over a #182236 card lifted the
+  // background far enough that a Live pill sat at 4.1:1, under the floor for
+  // 12px. Grey needs no token: it is the same neutral on both themes.
   clear:['rgba(88,96,110,0.10)','var(--text-secondary)'],
-  success:['rgba(163,180,159,0.26)','#5F7357'],
-  warning:['rgba(201,149,74,0.16)','#B07E31'],
-  danger:['rgba(180,83,62,0.15)','#B4533E'],
+  success:['var(--sage-tint)','var(--sage-ink)'],
+  warning:['var(--amber-tint)','var(--amber-ink)'],
+  danger:['var(--brick-tint)','var(--brick-ink)'],
   muted:['rgba(88,96,110,0.06)','var(--text-secondary)'],
 };
 const KIND2PILL = {paid:'clear',pending:'clear',preparing:'clear',cancelled:'clear',draft:'clear',
@@ -150,10 +184,15 @@ const KIND2PILL = {paid:'clear',pending:'clear',preparing:'clear',cancelled:'cle
   restock:'warning',gold:'warning',refund:'danger',view:'muted',off:'muted'};
 function pill(kind, label){ const [bg,fg]=PILL[KIND2PILL[kind]||'clear']; return `<span class="pill" style="background:${bg};color:${fg}">${label}</span>`; }
 function toggle(on, onClick){
+  // The off track used to be --border-strong, which is Graphite — a near-black
+  // slab with a white knob in it. Next to an on switch it read as a second ON
+  // in a different colour, so "Fapiao auto-issue" looked enabled when it was
+  // not. Off is a light track: the difference has to be filled-vs-empty, not
+  // one dark colour against another.
   return `<button onclick="${onClick}" aria-label="Toggle" style="width:44px;height:26px;border-radius:999px;
-    background:${on?'var(--accent)':'var(--border-strong)'};position:relative;border:none;cursor:pointer;flex:none;transition:background .2s var(--ease-settle)">
-    <span style="position:absolute;top:3px;left:${on?'21px':'3px'};width:20px;height:20px;border-radius:50%;background:#fff;
-    transition:left .2s var(--ease-settle);box-shadow:0 1px 3px rgba(0,0,0,.25)"></span></button>`;
+    background:${on?'var(--accent)':'var(--surface-raised)'};box-shadow:${on?'none':'inset 0 0 0 1px var(--border-default)'};position:relative;border:none;cursor:pointer;flex:none;transition:background .2s var(--ease-settle)">
+    <span style="position:absolute;top:3px;left:${on?'21px':'3px'};width:20px;height:20px;border-radius:50%;background:${on?'#fff':'var(--surface-card)'};
+    transition:left .2s var(--ease-settle);box-shadow:0 1px 3px rgba(17,26,43,.22)"></span></button>`;
 }
 
 /* ==========================================================================
@@ -192,7 +231,7 @@ const state = {
   prodQ:'', prodStatus:'all', prodCat:'all', catalogueTried:false, catalogueLoading:false,
   workOpen:false, workEvents:null, workLoading:false, workErr:null, vchSeg:'on',
   affiliate:null, affiliateTried:false, affRows:null, affSeg:'', affErr:null, invSeg:'all', invLoaded:false,
-  geo:null, geoTried:false, chan:null, chanTried:false, sales:null,
+  geo:null, geoTried:false, chan:null, chanTried:false, sales:null, salesSummary:null,
   recap:null, recapTried:false, recapSince:0, reallyAway:false, pos:'default',
   overflow:false, search:false, detailId:null, detailActions:false, productSku:null,
   orderBusy:null, orderErr:null, replyBusy:false, replyErr:null, revBusy:null, revErr:null, parcelBusy:null,
@@ -211,7 +250,7 @@ const state = {
   fapiao:null, fapiaoLoading:false, fapiaoBusy:false, fapiaoTried:false, printerTried:false,
   ordersView:null, ordersTotal:null, ordersLoading:false, ordersMore:false,
   storeF:'all', stores:null, orderQ:'',
-  reply:null, thread:null, createKind:null, createValue:10, createActive:true,
+  reply:null, thread:null,
   poList:null, posErr:null, posTried:false, poSeg:'open', poId:null,
   act:null, actErr:null, actTried:false, actRange:'today', actSource:'', actMore:false,
   cats:null, catCounts:null, catsErr:null, catsTried:false, catTop:null,
@@ -237,7 +276,7 @@ const state = {
   liveOrders:null, liveDetail:null, liveKpis:null, liveVitals:null, liveAttn:null,
   liveStatusCounts:null, liveChannelCounts:null, liveInvoiceCounts:null, liveProductsLoaded:false,
   custLoading:false, custMetaLoaded:false, detailMounted:false, mirrorTried:false, ent:{}, me:null,
-  qs:{oat:8,nuts:0,carrot:42},
+
   /* Coupon switches only, keyed c_<CODE>. This map used to also carry
      membership / affiliate / social / faq / feedback / autoprint / autoroute /
      lowstock / popups — nine names that read like feature flags and that
@@ -326,7 +365,7 @@ reg('clearAirDelay', sid=>{
   }).catch(e=>{
     state.parcelBusy=null;
     if(String(e.message)==='auth') return;
-    state.orderErr=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    state.orderErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
     render();
   });
 });
@@ -347,7 +386,7 @@ reg('dispatchParcel', sid=>{
   }).catch(e=>{
     state.parcelBusy=null;
     if(String(e.message)==='auth') return;
-    state.orderErr=T('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
+    state.orderErr=E('That did not send. Nothing has changed — try again.','没有发送成功。数据没有变化 — 请重试。');
     render();
   });
 });
@@ -497,7 +536,7 @@ reg('toggleShop', ids=>{
       rows.forEach(p=>{ p.pub=!next; reKindProduct(p); });   // the switch must never lie
       state.prodBusy=null;
       if(String(e.message)==='auth') return;
-      state.prodErr=T('That did not save. The product is unchanged.','没有保存成功。产品状态未变。');
+      state.prodErr=E('That did not save. The product is unchanged.','没有保存成功。产品状态未变。');
       render();
     });
 });
@@ -545,7 +584,7 @@ reg('pollStatus', (id,st)=>{
   }).catch(e=>{
     state.pollBusy=null;
     if(String(e.message)==='auth') return;
-    state.pollsErr=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    state.pollsErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
     render();
   });
 });
@@ -564,7 +603,7 @@ reg('finalizeTopup', id=>{
       }).catch(e=>{
         state.tupBusy=null;
         if(String(e.message)==='auth') return;
-        state.tupErr=T('That did not go through. Nothing has changed — try again.','没有处理成功。数据没有变化 — 请重试。');
+        state.tupErr=E('That did not go through. Nothing has changed — try again.','没有处理成功。数据没有变化 — 请重试。');
         render();
       });
     }};
@@ -592,7 +631,7 @@ reg('gzPickup', (id,how)=>{
     }).catch(e=>{
       state.gzBusy=null;
       if(String(e.message)==='auth') return;
-      state.gzErr=T('That did not go through. Nothing has changed — try again.','没有处理成功。数据没有变化 — 请重试。');
+      state.gzErr=E('That did not go through. Nothing has changed — try again.','没有处理成功。数据没有变化 — 请重试。');
       render();
     });
   };
@@ -621,7 +660,7 @@ reg('togglePopup', id=>{
   }).catch(e=>{
     state.puBusy=null;
     if(String(e.message)==='auth') return;
-    state.puErr=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    state.puErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
     render();
   });
 });
@@ -634,7 +673,7 @@ reg('actMore', ()=>{ if(state.actMore) return; state.actMore=true; render(); loa
 reg('openPO', id=>{ state.poId=Number(id); state.poDetail=null; state.poErr=null; state.poBusy=false; render();
   api('/purchases/'+Number(id)).then(d=>{ if(state.poId!==Number(id)) return; state.poDetail=d; render(); })
     .catch(e=>{ if(state.poId!==Number(id)||String(e.message)==='auth') return;
-      state.poErr=T('Could not load this order.','无法加载这张采购单。'); state.poDetail={id:Number(id),items:[]}; render(); }); });
+      state.poErr=E('Could not load this order.','无法加载这张采购单。'); state.poDetail={id:Number(id),items:[]}; render(); }); });
 reg('closePO', ()=>{ state.poId=null; state.poDetail=null; state.poErr=null; render(); });
 /* Marking a delivery in writes stock and posts the cost to the books, so it
    asks first and says both of those things before it does. */
@@ -650,7 +689,7 @@ reg('poStatus', st=>{
     }).catch(e=>{
       state.poBusy=false;
       if(String(e.message)==='auth') return;
-      state.poErr=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+      state.poErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
       render();
     });
   };
@@ -681,12 +720,15 @@ function loadThread(id){
       msgs:Array.isArray(d&&d.messages)?d.messages:[],
       photos:(()=>{ let ph=d&&d.photos; if(typeof ph==='string'){ try{ ph=JSON.parse(ph||'[]'); }catch(e){ ph=[]; } }
         return Array.isArray(ph)?ph:[]; })(),
-      page:(d&&d.page_context)||null, appVersion:(d&&d.app_version)||null};
+      page:(d&&d.page_context)||null, appVersion:(d&&d.app_version)||null,
+      // buildFeedbackThread returns customer_name and the phone threw it away,
+      // so the sheet's title fell back to the list key and read "fb:1".
+      name:(d&&d.customer_name)||null};
     render();
   }).catch(e=>{
     if(!state.thread||state.thread.id!==id) return;
     if(String(e.message)==='auth') return;
-    state.thread={id, loading:false, msgs:null, err:T('Could not load the conversation.','无法加载对话。')};
+    state.thread={id, loading:false, msgs:null, err:E('Could not load the conversation.','无法加载对话。')};
     render();
   });
 }
@@ -694,8 +736,8 @@ const findReview=k=>DB.reviews.find(x=>revKey(x)===k)||DB.feedback.find(x=>revKe
 reg('sendReplyText', t=>{
   const text=String(t||'').trim();
   const r=findReview(state.reply);
-  if(!text){ state.replyErr=T('Write something first.','请先输入内容。'); render(); return; }
-  if(!r||r.id==null){ state.replyErr=T('This one cannot be replied to from the phone yet.','暂时无法在手机端回复。'); render(); return; }
+  if(!text){ state.replyErr=E('Write something first.','请先输入内容。'); render(); return; }
+  if(!r||r.id==null){ state.replyErr=E('This one cannot be replied to from the phone yet.','暂时无法在手机端回复。'); render(); return; }
   if(state.replyBusy) return;
   state.replyBusy=true; state.replyErr=null; render();
   const call = r.stream==='feedback'
@@ -741,25 +783,30 @@ function revWrite(r,visible){
   }).catch(e=>{
     state.revBusy=null;
     if(String(e.message)==='auth') return;
-    state.revErr=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    state.revErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
     render();
   });
 }
 reg('closeReply', ()=>{ state.reply=null; state.thread=null; render(); });
 
-reg('create', k=>{ state.createKind=k; state.createValue=10; state.createActive=true; render(); });
-reg('closeCreate', ()=>{ state.createKind=null; render(); });
-reg('submitCreate', ()=>{ state.createKind=null; showToast(T('Created','已创建')); });
-reg('createValInc', ()=>{ state.createValue++; render(); });
-reg('createValDec', ()=>{ state.createValue=Math.max(0,state.createValue-1); render(); });
-reg('toggleCreateActive', ()=>{ state.createActive=!state.createActive; render(); });
+/* The create sheet is gone, and so is every command behind it. It offered a
+   coupon, a flash sale and a broadcast, and its submit handler was
+   `state.createKind=null; showToast('Created')` — it closed itself and said
+   Created, and sent nothing anywhere. Nothing could reach it: no control in
+   this file ever called APP.cmd('create'), which is the only reason it never
+   lied to anybody. That is not a safe place to leave a form. Authoring stays
+   on the desktop — §4 of the parity doc settled that — so the sheet has no
+   destination to be wired to, and leaving it here only invites a "+" button.
+
+   `saveStock` went with it: a Receive stock button reachable only through
+   `isPO`, which no order mapper sets, whose handler was one showToast. A
+   purchase order is received in sheetPO now, which actually PUTs. */
 reg('toggleCoupon', code=>toggleCoupon(code));
 reg('recallBroadcast', id=>recallBroadcast(Number(id)));
 reg('togglePrint', ()=>togglePrint());
 reg('toggleFapiao', ()=>toggleFapiao());
-reg('qsInc', n=>{ state.qs[n]=(state.qs[n]||0)+1; render(); });
-reg('qsDec', n=>{ state.qs[n]=Math.max(0,(state.qs[n]||0)-1); render(); });
-reg('saveStock', ()=>showToast(T('Stock received','已入库')));
+/* qsInc/qsDec went the same way: Quick stock has counted in Products since the
+   parity sweep, and these two moved a number nothing ever saved. */
 reg('signout', ()=>{
   state.overflow=false; showToast(T('Signing out…','正在退出…')); render();
   fetch('/api/backend/logout',{method:'POST',credentials:'same-origin'})
@@ -818,7 +865,7 @@ function flagGate(flag){
     <div style="font-size:16px;font-weight:500">${T('Turned off','未开启')}</div>
     <div style="font-size:13.5px;color:var(--text-secondary);max-width:250px;line-height:1.55">${T('Set this up on desktop, or enable it here.','可在电脑端设置，或在此开启。')}</div>
     <button class="btn2" style="padding:0 24px" ${busy?'disabled':''} onclick="APP.cmd('enable','${flag}')">${busy?T('Turning on…','开启中…'):T('Turn it on','开启')}</button>
-    ${state.featErr?`<div style="font-size:14px;color:var(--brick)">${state.featErr}</div>`:''}</div>`;
+    ${state.featErr?`<div style="font-size:14px;color:var(--brick-ink)">${state.featErr}</div>`:''}</div>`;
 }
 
 /* ==========================================================================
@@ -836,7 +883,7 @@ function loadWork(){
   }).catch(e=>{
     state.workLoading=false;
     if(String(e.message)==='auth') return;
-    state.workErr=T('That did not load. Try again.','加载失败，请重试。');
+    state.workErr=E('That did not load. Try again.','加载失败，请重试。');
     render();
   });
 }
@@ -894,7 +941,7 @@ function workFold(){
   if(!state.workOpen) return '';
   const wrap=b=>`<div style="margin-top:16px;padding-top:16px;border-top:1px solid var(--border-default)">${b}</div>`;
   if(state.workErr) return wrap(`<div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
-    <span style="font-size:14px;color:var(--brick)">${state.workErr}</span>
+    <span style="font-size:14px;color:var(--brick-ink)">${state.workErr}</span>
     <button class="btn2" style="width:auto;padding:8px 16px;flex:none" onclick="APP.cmd('workRetry')">${T('Try again','重试')}</button></div>`);
   if(state.workLoading&&!state.workEvents) return wrap(`<div style="font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`);
   const evs=state.workEvents||[];
@@ -1096,21 +1143,25 @@ function screenHome(){
       <div style="padding:2px 4px 8px;font-size:18px;font-weight:500">${T('Needs you','需要处理')}</div>
       <div class="list">${fires.map((a,i)=>`${i?'<div class="sep" style="margin-left:62px"></div>':''}
         <button class="row" onclick="${a.go}">
-          <span class="rowico" style="background:var(--${a.sev}-tint);color:var(--${a.sev})">${ic(a.icon)}</span>
+          ${/* -ink, not the hue: Amber on Amber-tint is 2.2:1, so the count in
+                the badge — a number an operator reads at a glance — was below
+                the floor for body text, and the icon's 1.75px stroke was
+                fainter still. */''}
+          <span class="rowico" style="background:var(--${a.sev}-tint);color:var(--${a.sev}-ink)">${ic(a.icon)}</span>
           <span style="flex:1;min-width:0">
             <span style="display:block;font-size:15px">${a.label}</span>
-            ${a.meta?`<span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${a.mins!=null?T('oldest '+a.meta,'最久 '+a.meta):a.meta}</span>`:''}
+            ${a.meta?`<span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${(a.age&&a.mins!=null)?T('oldest '+a.meta,'最久 '+a.meta):a.meta}</span>`:''}
           </span>
-          <span class="num" style="min-width:24px;height:24px;padding:0 8px;border-radius:999px;background:var(--${a.sev}-tint);color:var(--${a.sev});font-size:13px;display:flex;align-items:center;justify-content:center;flex:none">${a.n}</span>
+          <span class="num" style="min-width:24px;height:24px;padding:0 8px;border-radius:999px;background:var(--${a.sev}-tint);color:var(--${a.sev}-ink);font-size:13px;display:flex;align-items:center;justify-content:center;flex:none">${a.n}</span>
           <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></button>`).join('')}</div></div>`:''}
     <div class="rise" style="animation-delay:.12s">
       <div style="padding:2px 4px 8px;font-size:18px;font-weight:500">${T('Today','今日')}</div>
       <div class="card" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px">${kpis
         ? kpis.map(([l,v,d])=>
         `<div style="min-width:0">
-           <span style="display:block;font-size:13px;color:var(--text-secondary)">${l}</span>
+           <span style="display:block;font-size:13px;color:var(--text-secondary)">${T(...l)}</span>
            <span class="num" style="display:block;font-size:18px;font-weight:500;line-height:1.4">${v}</span>
-           ${d?`<span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${d}</span>`:''}</div>`).join('')
+           ${d?`<span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${T(...d)}</span>`:''}</div>`).join('')
         : [T('Revenue (all channels)','营收（全渠道）'),T('Orders (storefront)','订单（自营）'),T('Avg. order','客单价'),T('New customers','新客')].map(l=>
         `<div style="min-width:0">
            <span style="display:block;font-size:13px;color:var(--text-secondary)">${l}</span>
@@ -1164,7 +1215,7 @@ async function loadOrdersPage(more){
        orders in front of an operator that they could read, tap and act on. A
        failed load says it failed. */
     if(!more){ state.ordersView=null; state.ordersTotal=null; state.ordersMore=false; }
-    state.ordersLoadErr=T('Could not load orders.','无法加载订单。');
+    state.ordersLoadErr=E('Could not load orders.','无法加载订单。');
   }
   state.ordersLoading=false; render();
 }
@@ -1246,7 +1297,7 @@ function screenOrders(){
   ${ordersHeader()}
   <div style="padding:0 16px 24px;display:flex;flex-direction:column;gap:16px">
     ${state.ordersLoadErr?`<div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:40px 24px;text-align:center">
-        <span style="color:var(--brick);display:flex">${ic('triangle-alert',24)}</span>
+        <span style="color:var(--brick-ink);display:flex">${ic('triangle-alert',24)}</span>
         <div style="font-size:16px;font-weight:500">${state.ordersLoadErr}</div>
         <div style="font-size:14px;color:var(--text-secondary);max-width:250px;line-height:1.55">${T('Nothing is wrong with your orders — the list just did not arrive.','订单本身没有问题 — 只是列表没有加载出来。')}</div>
         <button class="btn2" style="width:auto;padding:11px 26px" onclick="APP.cmd('ordersRetry')">${T('Try again','重试')}</button></div>`:''}
@@ -1272,10 +1323,10 @@ function screenOrders(){
         ${o.notes?`<div style="display:flex;flex-wrap:wrap;gap:6px">${o.notes.map(nt=>
           `<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:3px 8px;border-radius:999px;background:${nt.sev==='muted'?PILL.muted[0]:'var(--'+nt.sev+'-tint)'};color:${nt.sev==='muted'?PILL.muted[1]:'var(--'+nt.sev+')'}">${ic(nt.icon,12)}${nt.label}</span>`).join('')}</div>`:''}
         ${o.parcels?`<div style="display:flex;align-items:center;gap:7px;font-size:13px;color:var(--text-secondary);flex-wrap:wrap">
-          ${ic('package',14)}<span>${T(o.parcels.total+' parcels',o.parcels.total+' 个包裹')}</span>
-          ${o.parcels.delivered?`<span style="color:#5F7357">· ${T(o.parcels.delivered+' delivered',o.parcels.delivered+' 已签收')}</span>`:''}
+          ${ic('package',14)}<span>${T(o.parcels.total+(o.parcels.total===1?' parcel':' parcels'),o.parcels.total+' 个包裹')}</span>
+          ${o.parcels.delivered?`<span style="color:var(--sage-ink)">· ${T(o.parcels.delivered+' delivered',o.parcels.delivered+' 已签收')}</span>`:''}
           ${o.parcels.moving?`<span>· ${T(o.parcels.moving+' in transit',o.parcels.moving+' 运输中')}</span>`:''}
-          ${o.parcels.toShip?`<span style="color:#8A6425;font-weight:500">· ${T(o.parcels.toShip+' to ship',o.parcels.toShip+' 待发货')}</span>`:''}
+          ${o.parcels.toShip?`<span style="color:var(--amber-ink);font-weight:500">· ${T(o.parcels.toShip+' to ship',o.parcels.toShip+' 待发货')}</span>`:''}
         </div>`:''}
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
           <span style="font-size:13px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...o.ship)}</span>
@@ -1312,9 +1363,20 @@ function screenInbox(){
         ${r.rating?`<span class="num" style="display:flex;align-items:center;gap:3px;color:var(--text-secondary);font-size:13px">${ic('star',14)} ${r.rating}</span>`:''}</span>
         ${hidden?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('Hidden','已隐藏')}</span>`:pill(r.kind,T(...r.status))}</div>
       ${r.product?`<div style="font-size:12.5px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...r.product)}</div>`:''}
-      ${r.opener?`<div style="font-size:12.5px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.8">${escAttr(T(...r.opener))}</div>`:''}
-      ${r.lastWho?`<div style="font-size:12px;font-weight:500;color:var(--text-secondary)">${T(...r.lastWho)}</div>`:''}
-      <div style="font-size:14px;line-height:1.55;color:var(--text-secondary)">${T(...r.text)}</div>
+      ${/* The report that opened the thread, then the newest message in it.
+            These used to be three loose lines — the opener greyed to 80% and
+            clipped to one, then the bare word "Customer" on a line of its own,
+            then the message. "Customer" read as a stray label attached to
+            nothing. The speaker belongs to the message, so it becomes that
+            block's eyebrow, inside the same left rule the shop's own reply
+            already uses; and the opener gets two lines, because one sentence
+            clipped mid-word is not a subject line. */''}
+      ${r.opener?`<div style="font-size:13px;color:var(--text-secondary);line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${escAttr(T(...r.opener))}</div>`:''}
+      ${r.lastWho
+        ? `<div style="border-left:2px solid var(--border-default);padding:2px 0 2px 10px;display:flex;flex-direction:column;gap:3px">
+             <span class="eyebrow">${T(...r.lastWho)}</span>
+             <span style="font-size:14px;line-height:1.55">${T(...r.text)}</span></div>`
+        : `<div style="font-size:14px;line-height:1.55;color:var(--text-secondary)">${T(...r.text)}</div>`}
       ${r.photos?`<div style="display:flex;gap:6px;flex-wrap:wrap">${r.photos.slice(0,4).map(u=>
         `<a href="${escAttr(u)}" target="_blank" rel="noopener" style="width:52px;height:52px;border-radius:8px;overflow:hidden;border:1px solid var(--border-default);background-image:url('${String(u).replace(/'/g,'%27')}');background-size:cover;background-position:center;display:block"></a>`).join('')}</div>`:''}
       ${(r.isMessage||r.page||r.replies)?`<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center">
@@ -1344,7 +1406,7 @@ function screenInbox(){
       <div style="font-size:16px;font-weight:500">${T('Feedback is off','反馈已关闭')}</div>
       <div style="font-size:13.5px;color:var(--text-secondary);max-width:250px;line-height:1.55">${T('Turn on the feedback inbox to collect customer notes.','开启反馈以收集客户留言。')}</div>
       <button class="cta" style="width:auto;padding:12px 30px;font-size:15px" ${state.featBusy?'disabled':''} onclick="APP.cmd('toggleFeature','feedback')">${state.featBusy==='feedback'?T('Turning on…','开启中…'):T('Enable','开启')}</button>
-      ${state.featErr?`<div style="font-size:14px;color:var(--brick)">${state.featErr}</div>`:''}</div>`;
+      ${state.featErr?`<div style="font-size:14px;color:var(--brick-ink)">${state.featErr}</div>`:''}</div>`;
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
     <div style="display:flex;align-items:center;gap:10px">
       <div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px;flex:1">
@@ -1352,8 +1414,8 @@ function screenInbox(){
       ${seg==='reviews'&&unseenCount>0?`<button onclick="APP.cmd('markAllReviewsRead')" style="font-size:13px;font-weight:500;color:var(--text-primary);background:none;border:none;cursor:pointer;font-family:inherit;white-space:nowrap;padding:6px 2px">${T('Mark all read','全部已读')}</button>`:''}
     </div>
     ${state.revErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-      <span style="font-size:14px;color:var(--brick)">${state.revErr}</span></div>`:''}
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${state.revErr}</span></div>`:''}
     ${body}</div>`;
 }
 
@@ -1370,6 +1432,11 @@ const CHAN_META={
   gzgrocery:{icon:'warehouse',en:'gzgrocery ERP',zh:'gzgrocery',key:'gzgrocery',mirror:'gzgrocery'},
   pos:{icon:'store',en:'In store',zh:'门店',key:'pos'},
 };
+function statusSales(){
+  const su=state.salesSummary; if(!su) return '';
+  const n=Number(su.orders||0);
+  return money0(CUR,su.revenue||0)+' '+T('today','今日')+' · '+n+' '+T(n===1?'order':'orders','单');
+}
 function screenSales(){
   loadChannels();
   const d=state.chan;
@@ -1384,7 +1451,7 @@ function screenSales(){
     ? {sev:'amber', text:T(closed.length===1
         ? CHAN_META[closed[0].channel].en+' is closed everywhere'
         : closed.length+' channels are closed everywhere',
-        closed.length===1 ? CHAN_META[closed[0].channel].zh+' 全部门店已关闭' : closed.length+' 个渠道全部门店已关闭')}
+        closed.length===1 ? CHAN_META[closed[0].channel].zh+' 已全部关闭' : closed.length+' 个渠道已全部关闭')}
     : {sev:'sage', text:T('Every channel is open','所有渠道均已开启')};
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
     <div style="display:flex;align-items:center;gap:10px;background:var(--surface-raised);border-radius:14px;padding:13px 16px">
@@ -1520,28 +1587,44 @@ const PU_FREQ={once:['shows once','仅一次'],daily:['daily','每天一次'],
    ended, is it running right now. */
 function puState(p){
   const today=GZ_ISO();
-  if(!p.enabled) return {tone:'muted', label:T('Off','已停用'), live:false};
-  if(p.start_at&&today<p.start_at) return {tone:'clear', label:T('Starts ','待开始 ')+p.start_at, live:false};
-  if(p.end_at&&today>p.end_at) return {tone:'muted', label:T('Ended ','已结束 ')+p.end_at, live:false};
-  return {tone:'success', label:T('Live','进行中'), live:true};
+  if(!p.enabled) return {tone:'muted', label:T('Off','已停用'), live:false, covers:null};
+  // `covers` names which end of the window the pill has already spoken for, so
+  // the line underneath can say the other one instead of repeating it. The card
+  // used to print "Ended 2026-07-01" in the pill and "2026-07-01" again three
+  // lines down — the same date twice, both in the raw column format.
+  if(p.start_at&&today<p.start_at) return {tone:'clear', label:T('Starts ','待开始 ')+fmtDateOnly(p.start_at), live:false, covers:'start'};
+  if(p.end_at&&today>p.end_at) return {tone:'muted', label:T('Ended ','已结束 ')+fmtDateOnly(p.end_at), live:false, covers:'end'};
+  return {tone:'success', label:T('Live','进行中'), live:true, covers:null};
+}
+function puWindow(p,st){
+  const a=p.start_at?fmtDateOnly(p.start_at):'', b=p.end_at?fmtDateOnly(p.end_at):'';
+  if(st.covers==='start') return b?T('until ','至 ')+b:'';
+  if(st.covers==='end')   return a?T('from ','自 ')+a:'';
+  if(a&&b) return a+' – '+b;
+  if(a) return T('from ','自 ')+a;
+  if(b) return T('until ','至 ')+b;
+  return '';
 }
 function puWhere(p){
   if(!p.pages||!p.pages.length) return T('No page picked','未选择页面');
   if(p.pages.indexOf('all')>=0) return T(...PU_PAGE.all);
   return p.pages.map(k=>PU_PAGE[k]?T(...PU_PAGE[k]):k).join(' · ');
 }
+function statusPopups(){
+  const list=cfgGet('popups.list',null);
+  if(!Array.isArray(list)||!list.length) return '';
+  const live=list.filter(p=>puState(p).live).length;
+  return T(live+' showing now',live+' 个正在展示') + ' · ' + T(list.length+' in total',list.length+' 个共计');
+}
 function screenPopups(){
   const list=cfgGet('popups.list',null);
   if(!Array.isArray(list)) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   if(!list.length) return nothingYet(T('The app is quiet','暂无弹窗'),
     T('Nothing is interrupting your customers. Pop-ups are written on desktop — a promo, a review nudge, a holiday notice.','目前没有弹窗打扰顾客。弹窗在电脑端创建 — 活动、邀请评价或歇业通知。'));
-  const live=list.filter(p=>puState(p).live).length;
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
-    <div style="font-size:13px;color:var(--text-secondary)">${T(live===1?'1 pop-up is interrupting customers right now':live+' pop-ups are interrupting customers right now',
-      live+' 个弹窗正在向顾客展示')} · ${T(list.length+' in total',list.length+' 个共计')}</div>
     ${state.puErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-      <span style="font-size:14px;color:var(--brick)">${state.puErr}</span></div>`:''}
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${state.puErr}</span></div>`:''}
     ${list.map(p=>{
       const st=puState(p);
       const [bg,fg]=PILL[st.tone];
@@ -1558,7 +1641,7 @@ function screenPopups(){
         ${body?`<div style="font-size:13.5px;color:var(--text-secondary);line-height:1.55">${escAttr(body)}</div>`:''}
         <div style="font-size:12.5px;color:var(--text-secondary)">
           <b style="font-weight:500;color:var(--text-primary)">${escAttr(puWhere(p))}</b>${freq?' · '+escAttr(freq):''}${cta&&p.cta_target?' · → '+escAttr(cta):''}</div>
-        ${p.start_at||p.end_at?`<div class="num" style="font-size:12.5px;color:var(--text-secondary)">${[p.start_at||'',p.end_at||''].filter(Boolean).join(' – ')}</div>`:''}
+        ${puWindow(p,st)?`<div class="num" style="font-size:12.5px;color:var(--text-secondary)">${puWindow(p,st)}</div>`:''}
         <div style="display:flex;align-items:center;gap:12px;margin-top:2px">
           <span style="flex:1;font-size:13.5px;color:var(--text-secondary)">${busy?T('Saving…','保存中…'):(p.enabled?T('On','已启用'):T('Off','已停用'))}</span>
           ${toggle(!!p.enabled,`APP.cmd('togglePopup','${escAttr(p.id)}')`)}</div></div>`;
@@ -1594,7 +1677,7 @@ function opsStoreRow(st,i){
       <span style="display:flex;flex-direction:column;min-width:0">
         <span style="font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(name)}</span>
         ${loc||st.address?`<span style="font-size:12px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(loc||st.address)}</span>`:''}</span>
-      <span style="flex:none;font-size:12.5px;color:${located?'var(--text-secondary)':'var(--brick)'}">${
+      <span style="flex:none;font-size:12.5px;color:${located?'var(--text-secondary)':'var(--brick-ink)'}">${
         located?T('located','已定位'):T('no coordinates','未定位')}</span></div>`;
 }
 function screenOperations(){
@@ -1613,12 +1696,12 @@ function screenOperations(){
   return `<div style="padding:16px;display:flex;flex-direction:column;gap:16px">
     ${le&&le.quota?`<div style="display:flex;flex-direction:column;gap:5px;background:var(--brick-tint);border-radius:14px;padding:14px 16px">
       <div style="display:flex;align-items:center;gap:10px">
-        <span style="flex:none;color:var(--brick);display:flex">${ic('triangle-alert',18)}</span>
-        <span style="font-size:14.5px;font-weight:500;color:var(--brick)">${T('Maps quota is used up for today','今日地图配额已用尽')}</span></div>
-      <div style="font-size:13px;color:var(--brick);opacity:.9;line-height:1.5">${T('No new address can be located until it resets, so orders stop routing to the nearest store correctly.','配额重置前无法定位新地址，就近派单会受影响。')}</div></div>`
+        <span style="flex:none;color:var(--brick-ink);display:flex">${ic('triangle-alert',18)}</span>
+        <span style="font-size:14.5px;font-weight:500;color:var(--brick-ink)">${T('Maps quota is used up for today','今日地图配额已用尽')}</span></div>
+      <div style="font-size:13px;color:var(--brick-ink);opacity:.9;line-height:1.5">${T('No new address can be located until it resets, so orders stop routing to the nearest store correctly.','配额重置前无法定位新地址，就近派单会受影响。')}</div></div>`
     : le?`<div style="display:flex;align-items:flex-start;gap:11px;background:rgba(201,149,74,0.12);border-radius:12px;padding:12px 14px">
-      <span style="flex:none;color:var(--amber);display:flex;margin-top:1px">${ic('triangle-alert',17)}</span>
-      <span style="font-size:13.5px;color:#8A6425;line-height:1.5">${T('Last locate attempt failed','最近一次定位失败')} (${escAttr(provider)}): ${escAttr(String(le.code||''))} ${escAttr(le.message||'')}</span></div>`:''}
+      <span style="flex:none;color:var(--amber-ink);display:flex;margin-top:1px">${ic('triangle-alert',17)}</span>
+      <span style="font-size:13.5px;color:var(--amber-ink);line-height:1.5">${T('Last locate attempt failed','最近一次定位失败')} (${escAttr(provider)}): ${escAttr(String(le.code||''))} ${escAttr(le.message||'')}</span></div>`:''}
     ${settingsGroupCard([
       {label:T('Auto-print receipts','自动打印小票'),printer:true},
       {label:T('Fapiao auto-issue','发票自动开具'),fapiao:true},
@@ -1655,11 +1738,14 @@ function affStatus(r){
     ? {label:T('Still earning','持续分成'), tone:'dusk'}
     : {label:T('Rewarded','已奖励'), tone:'success'};
   if(r.status==='void') return {label:T('Voided','已作废'), tone:'muted'};
-  return {label:T('Waiting for first order','待首单'), tone:'warning'};
+  // 'Waiting', the same word as the chip that filters to it. The long form
+  // ran nearly the width of the card and made the row's own two names the
+  // second thing the eye found.
+  return {label:T('Waiting','待首单'), tone:'warning'};
 }
 function affPill(r){
   const st=affStatus(r);
-  if(st.tone==='dusk') return `<span class="pill" style="background:var(--dusk-tint,rgba(110,103,175,.14));color:var(--dusk,#6E67AF)">${st.label}</span>`;
+  if(st.tone==='dusk') return `<span class="pill" style="background:var(--dusk-tint,rgba(110,103,175,.14));color:var(--dusk-ink,#524C8F)">${st.label}</span>`;
   const [bg,fg]=PILL[st.tone];
   return `<span class="pill" style="background:${bg};color:${fg}">${st.label}</span>`;
 }
@@ -1716,8 +1802,8 @@ function screenAffiliate(){
   };
   const ledger = state.affErr
     ? `<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-        <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-        <span style="font-size:14px;color:var(--brick)">${state.affErr}</span></div>`
+        <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+        <span style="font-size:14px;color:var(--brick-ink)">${state.affErr}</span></div>`
     : !rows ? `<div style="padding:30px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`
     : !rows.length ? `<div style="padding:30px 16px;text-align:center;font-size:14px;color:var(--text-secondary);line-height:1.55">${
         seg ? T('None match.','没有匹配项。')
@@ -1730,7 +1816,7 @@ function screenAffiliate(){
     <div style="padding:0 16px;display:flex;flex-direction:column;gap:10px">
       <div style="display:flex;align-items:center;gap:12px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:14px">
         <span style="flex:1;font-size:15px">${busy?T('Saving…','保存中…'):T('Referrals on','推荐已开启')}</span>${toggle(featOn('affiliate'),"APP.cmd('toggleFeature','affiliate')")}</div>
-      ${state.featErr?`<div style="font-size:14px;color:var(--brick)">${state.featErr}</div>`:''}
+      ${state.featErr?`<div style="font-size:14px;color:var(--brick-ink)">${state.featErr}</div>`:''}
       ${noteBar(T('Reward amounts, the lifetime share, and voiding a referral are on desktop.','奖励金额、长期分成与作废推荐在电脑端处理。'))}</div></div>`;
 }
 
@@ -1775,7 +1861,7 @@ function loadCms(page){
     state.cms=Object.assign({},state.cms,{[page]:d||{}}); state.cmsErr=null; render();
   }).catch(e=>{
     if(String(e.message)==='auth') return;
-    state.cmsErr=T('Could not load the layout.','加载版面失败。'); render();
+    state.cmsErr=E('Could not load the layout.','加载版面失败。'); render();
   });
 }
 /* A block is worth naming by more than its type when it carries a title an
@@ -1787,6 +1873,12 @@ function cmsBlockLabel(b){
     : (p.title_cn||p.title||p.heading_cn||p.heading||p.text_cn||p.text||'');
   return typeof t==='string' ? t.trim().slice(0,48) : '';
 }
+function statusEditor(){
+  const d=state.cms&&state.cms[state.cmsPage]; if(!d) return '';
+  const live=Array.isArray(d.live)?d.live:[];
+  return live.length+' '+T(live.length===1?'block live':'blocks live','个模块已上线')
+    + ' · ' + (d.dirty?`<span style="color:var(--amber-ink)">${T('unpublished changes','有未发布的修改')}</span>`:T('published','已发布'));
+}
 function screenEditor(){
   const page=state.cmsPage;
   loadCms(page);
@@ -1794,23 +1886,28 @@ function screenEditor(){
   const head=`<div style="padding:12px 0 4px">${chipRow(chips,page,'cmsPage')}</div>`;
   if(state.cmsErr) return `${head}<div style="padding:8px 16px 24px">
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-      <span style="font-size:14px;color:var(--brick)">${state.cmsErr}</span></div></div>`;
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${state.cmsErr}</span></div></div>`;
   const d=state.cms[page];
   if(!d) return `${head}<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   const live=Array.isArray(d.live)?d.live:[];
   const draft=Array.isArray(d.draft)?d.draft:[];
   const dirty=!!d.dirty;
   const [bg,fg]=dirty?PILL.warning:PILL.success;
+  // Only a page with a saved-but-unpublished draft gets a card here. When
+  // everything is published the card held two facts and nothing else — "3
+  // blocks live" and a Published pill — which is a status line wearing a
+  // card's clothes, and it pushed the block list a card's height down the
+  // screen. Both facts are in the header band now.
   return `${head}<div style="padding:8px 16px 24px;display:flex;flex-direction:column;gap:14px">
-    <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:8px">
+    ${dirty?`<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:8px">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-        <span style="font-size:15px;font-weight:500">${live.length} ${T(live.length===1?'block live':'blocks live','个模块已上线')}</span>
-        <span class="pill" style="background:${bg};color:${fg}">${dirty?T('Unpublished changes','有未发布的修改'):T('Published','已发布')}</span></div>
-      ${dirty?`<div style="font-size:13px;color:var(--text-secondary);line-height:1.5">${T(
+        <span style="font-size:15px;font-weight:500">${T('Not what shoppers see','与顾客所见不同')}</span>
+        <span class="pill" style="background:${bg};color:${fg}">${T('Unpublished changes','有未发布的修改')}</span></div>
+      <div style="font-size:13px;color:var(--text-secondary);line-height:1.5">${T(
         'A draft is saved that does not match what shoppers see'+(draft.length!==live.length?' — '+draft.length+' blocks in the draft, '+live.length+' live':'')+'. Publishing is on desktop.',
-        '已保存的草稿与顾客当前看到的不一致'+(draft.length!==live.length?' — 草稿 '+draft.length+' 个模块，线上 '+live.length+' 个':'')+'。发布请在电脑端进行。')}</div>`:''}
-    </div>
+        '已保存的草稿与顾客当前看到的不一致'+(draft.length!==live.length?' — 草稿 '+draft.length+' 个模块，线上 '+live.length+' 个':'')+'。发布请在电脑端进行。')}</div>
+    </div>`:''}
     ${live.length?`<div><div class="eyebrow" style="padding:2px 4px 8px">${T('In order','按顺序')}</div>
       <div class="list">${live.map((b,i)=>{ const lbl=cmsBlockLabel(b);
         return `${i?'<div class="sep" style="margin-left:52px"></div>':''}
@@ -1862,10 +1959,9 @@ function screenDelivery(){
   return `<div style="padding:16px;display:flex;flex-direction:column;gap:14px">
     ${holiday?`<div style="display:flex;flex-direction:column;gap:6px;background:var(--brick-tint);border-radius:14px;padding:14px 16px">
       <div style="display:flex;align-items:center;gap:10px">
-        <span style="flex:none;color:var(--brick);display:flex">${ic('triangle-alert',18)}</span>
-        <span style="font-size:14.5px;font-weight:500;color:var(--brick)">${T('Holiday mode is on — delivery is paused','假日模式已开启 — 配送已暂停')}</span></div>
-      ${hText?`<div style="font-size:13px;color:var(--brick);line-height:1.5;opacity:.9">${T('Shoppers are told','顾客看到')}: “${escAttr(hText)}”</div>`:''}</div>`:''}
-    ${settingsGroupCard([{label:T('Auto-print receipts','自动打印小票'),printer:true}])}
+        <span style="flex:none;color:var(--brick-ink);display:flex">${ic('triangle-alert',18)}</span>
+        <span style="font-size:14.5px;font-weight:500;color:var(--brick-ink)">${T('Holiday mode is on — delivery is paused','假日模式已开启 — 配送已暂停')}</span></div>
+      ${hText?`<div style="font-size:13px;color:var(--brick-ink);line-height:1.5;opacity:.9">${T('Shoppers are told','顾客看到')}: “${escAttr(hText)}”</div>`:''}</div>`:''}
     ${settingsGroupCard([
       {label:T('Delivery zones','配送范围'), value: z ? T(z.live+' live','启用 '+z.live) : T('Loading…','加载中…')},
       {label:T('Provinces covered','覆盖省份'), value: z ? String(z.provs) : T('Loading…','加载中…')},
@@ -1874,11 +1970,11 @@ function screenDelivery(){
     ].concat(cutoff!=null?[{label:T('Same-day cut-off','当日达截单'),value:T(cutoff+' min before close',cutoff+' 分钟(打烊前)')}]:[])
      .concat(holiday?[]:[{label:T('Holiday mode','假日模式'),value:T('Off','已关闭')}]))}
     ${z&&z.off?`<div style="display:flex;align-items:flex-start;gap:11px;background:rgba(201,149,74,0.12);border-radius:12px;padding:12px 14px">
-      <span style="flex:none;color:var(--amber);display:flex;margin-top:1px">${ic('triangle-alert',17)}</span>
-      <span style="font-size:13.5px;color:#8A6425;line-height:1.5">${T(z.off===1?'One zone is switched off, so addresses in it will not match — those customers are told you do not deliver there.':z.off+' zones are switched off, so addresses in them will not match — those customers are told you do not deliver there.', z.off+' 个配送范围已停用，其中的地址无法匹配 — 顾客会被告知不支持配送。')}</span></div>`:''}
+      <span style="flex:none;color:var(--amber-ink);display:flex;margin-top:1px">${ic('triangle-alert',17)}</span>
+      <span style="font-size:13.5px;color:var(--amber-ink);line-height:1.5">${T(z.off===1?'One zone is switched off, so addresses in it will not match — those customers are told you do not deliver there.':z.off+' zones are switched off, so addresses in them will not match — those customers are told you do not deliver there.', z.off+' 个配送范围已停用，其中的地址无法匹配 — 顾客会被告知不支持配送。')}</span></div>`:''}
     ${missing?`<div style="display:flex;align-items:flex-start;gap:11px;background:var(--brick-tint);border-radius:12px;padding:12px 14px">
-      <span style="flex:none;color:var(--brick);display:flex;margin-top:1px">${ic('triangle-alert',17)}</span>
-      <span style="font-size:13.5px;color:var(--brick);line-height:1.5">${T(missing===1?'One store has no coordinates, so it can never be the nearest one. Fix it on desktop.':missing+' stores have no coordinates, so they can never be the nearest one. Fix them on desktop.', missing+' 家门店没有坐标，无法参与就近派单。请在电脑端处理。')}</span></div>`:''}
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:1px">${ic('triangle-alert',17)}</span>
+      <span style="font-size:13.5px;color:var(--brick-ink);line-height:1.5">${T(missing===1?'One store has no coordinates, so it can never be the nearest one. Fix it on desktop.':missing+' stores have no coordinates, so they can never be the nearest one. Fix them on desktop.', missing+' 家门店没有坐标，无法参与就近派单。请在电脑端处理。')}</span></div>`:''}
     ${noKey?noteBar(T('No maps key is configured, so nothing can be located','未配置地图密钥，无法进行定位')):''}
     ${desktopNote()}</div>`;
 }
@@ -1920,7 +2016,7 @@ function setupRow(x,i,n){
   const det=setupDetail(x);
   return `${i?'<div class="sep" style="margin-left:52px"></div>':''}
     <div style="display:flex;align-items:center;gap:12px;padding:13px 14px">
-      ${x.done?`<span style="width:24px;height:24px;border-radius:50%;background:rgba(163,180,159,.28);display:flex;align-items:center;justify-content:center;color:#5F7357;flex:none">${ic('check',15,2.25)}</span>`
+      ${x.done?`<span style="width:24px;height:24px;border-radius:50%;background:rgba(163,180,159,.28);display:flex;align-items:center;justify-content:center;color:var(--sage-ink);flex:none">${ic('check',15,2.25)}</span>`
              :`<span style="width:24px;height:24px;border-radius:50%;border:2px solid var(--border-default);flex:none"></span>`}
       <span style="flex:1;min-width:0;display:flex;flex-direction:column">
         <span style="font-size:15px">${T(...(SETUP_LABEL[x.key]||[x.key,x.key]))}</span>
@@ -1986,7 +2082,7 @@ function loadPolls(force){
   state.pollsTried=true;
   api('/polls').then(rows=>{ state.polls=Array.isArray(rows)?rows:[]; state.pollsErr=null; render(); })
     .catch(e=>{ if(String(e.message)==='auth') return;
-      state.pollsErr=T('Could not load the polls.','加载投票失败。'); render(); });
+      state.pollsErr=E('Could not load the polls.','加载投票失败。'); render(); });
 }
 const POLL_WORD={open:['Live','进行中'],draft:['Draft','草稿'],closed:['Closed','已结束']};
 function pollPill(st){
@@ -2036,7 +2132,7 @@ function pollCard(p){
       <span style="display:flex;align-items:center;gap:6px;flex:none">${p.is_featured?`<span class="pill" style="background:${PILL.warning[0]};color:${PILL.warning[1]}">${T('Featured','精选')}</span>`:''}${pollPill(p.status)}</span></div>
     <div class="num" style="font-size:12.5px;color:var(--text-secondary)">${meta}</div>
     ${p.status==='draft'?`<div style="font-size:12.5px;color:var(--text-secondary)">${T('Customers cannot see a draft.','草稿对顾客不可见。')}</div>`:''}
-    ${floor?`<div style="font-size:12.5px;color:var(--amber)">${T('Customers are shown at least '+floor+' votes, whatever the real count is.','顾客看到的票数下限为 '+floor+' 票，与真实票数无关。')}</div>`:''}
+    ${floor?`<div style="font-size:12.5px;color:var(--amber-ink)">${T('Customers are shown at least '+floor+' votes, whatever the real count is.','顾客看到的票数下限为 '+floor+' 票，与真实票数无关。')}</div>`:''}
     ${open?pollBars(p):''}
     <div style="display:flex;align-items:center;gap:8px;margin-top:2px">
       ${btn(open?T('Hide results','收起结果'):T('See results','查看结果'),`APP.cmd('pollOpen',${p.id})`,false)}
@@ -2046,8 +2142,8 @@ function screenVoting(){
   loadPolls();
   if(state.pollsErr) return `<div style="padding:14px 16px 24px">
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-      <span style="font-size:14px;color:var(--brick)">${state.pollsErr}</span></div></div>`;
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${state.pollsErr}</span></div></div>`;
   if(!state.polls) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   if(!state.polls.length) return nothingYet(T('No polls yet','还没有投票'),
     T('Polls are written on desktop. Once one exists you can read the split and open or close it from here.',
@@ -2089,7 +2185,7 @@ function loadTiers(){
     state.tiersErr=null; render();
   }).catch(e=>{
     if(String(e.message)==='auth') return;
-    state.tiersErr=T('Could not load the tiers.','加载会员等级失败。'); render();
+    state.tiersErr=E('Could not load the tiers.','加载会员等级失败。'); render();
   });
 }
 const tierKey=t=>String((t&&t.key)||'').trim()||String((t&&t.name_en)||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_+|_+$/g,'');
@@ -2101,8 +2197,8 @@ function screenMembership(){
   loadTiers();
   if(state.tiersErr) return `<div style="padding:14px 16px 24px">
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-      <span style="font-size:14px;color:var(--brick)">${state.tiersErr}</span></div></div>`;
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${state.tiersErr}</span></div></div>`;
   if(!state.tiers) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   const tiers=state.tiers.slice().sort((a,b)=>(Number(a.threshold)||0)-(Number(b.threshold)||0));
   if(!tiers.length) return nothingYet(T('No tiers yet','暂无会员等级'),
@@ -2141,7 +2237,7 @@ function loadTopups(force){
     state.tupErr=null; render();
   }).catch(e=>{
     if(String(e.message)==='auth') return;
-    state.tupErr=T('Could not load top-ups.','加载充值记录失败。'); render();
+    state.tupErr=E('Could not load top-ups.','加载充值记录失败。'); render();
   });
 }
 /* Only a SUCCEEDED top-up is money. Everything else is a row that says what
@@ -2158,26 +2254,30 @@ function tupRow(t){
   return `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px">
     <span style="display:flex;flex-direction:column;min-width:0">
       <span style="font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(t.nickname||T('(no name)','无名'))}</span>
-      <span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${fmtDay(t.paid_at||t.created_at)||''}${t.phone?' · '+escAttr(t.phone):''}${t.payment_method?' · '+escAttr(t.payment_method):''}</span>
+      <span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${fmtDay(t.paid_at||t.created_at)||''}${t.phone?' · '+escAttr(t.phone):''}${t.payment_method?' · '+escAttr(T(...payLabel(t.payment_method))):''}</span>
       ${bonus?`<span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">+${bonus} ${T('bonus points','赠送积分')}</span>`:''}
       ${st==='pending'?`<button ${state.tupBusy===t.id?'disabled':''} onclick="APP.cmd('finalizeTopup',${t.id})" style="align-self:flex-start;margin-top:9px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 14px;cursor:pointer;font-family:inherit;${state.tupBusy===t.id?'opacity:.5':''}">${state.tupBusy===t.id?T('Marking…','处理中…'):T('Mark successful','标记成功')}</button>`:''}
     </span>
     <span style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex:none">
-      <span class="num" style="font-size:15px;font-weight:500;color:${paid?'#5F7357':'var(--text-secondary)'}">${paid?'+':''}${money(CUR,t.amount)}</span>
+      <span class="num" style="font-size:15px;font-weight:500;color:${paid?'var(--sage-ink)':'var(--text-secondary)'}">${paid?'+':''}${money(CUR,t.amount)}</span>
       <span class="pill" style="background:${bg};color:${fg}">${T(...word)}</span></span></div>`;
+}
+function statusTopups(){
+  const rows=state.tup; if(!rows) return '';
+  const stuck=rows.filter(r=>String(r.status||'').toLowerCase()==='pending').length;
+  if(!stuck) return rows.length?T(rows.length+' recent',rows.length+' 笔近期充值'):'';
+  return `<span style="color:var(--amber-ink)">${T(stuck+' waiting to be confirmed',stuck+' 笔待确认')}</span>`;
 }
 function screenTopups(){
   loadTopups();
   if(state.tupErr) return `<div style="padding:14px 16px 24px">
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-      <span style="font-size:14px;color:var(--brick)">${state.tupErr}</span></div></div>`;
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${state.tupErr}</span></div></div>`;
   if(!state.tup) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   const rows=state.tup, pkgs=(state.tupPkgs||[]).filter(p=>p.is_active!==0);
   const stuck=rows.filter(r=>String(r.status||'').toLowerCase()==='pending').length;
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
-    ${stuck?noteBar(T(stuck===1?'One top-up is waiting to be confirmed.':stuck+' top-ups are waiting to be confirmed.',
-      stuck+' 笔充值待确认。')):''}
     ${pkgs.length?`<div><div class="eyebrow" style="padding:2px 4px 8px">${T('Packages on offer','充值套餐')}</div>
       <div class="list">${pkgs.map((pk,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
         <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px">
@@ -2197,7 +2297,7 @@ function loadLeaderboard(){
   state.lbTried=true;
   api('/leaderboard/preview').then(d=>{ state.lb=d||{}; state.lbErr=null; render(); })
     .catch(e=>{ if(String(e.message)==='auth') return;
-      state.lbErr=T('Could not load the leaderboard.','加载排行榜失败。'); render(); });
+      state.lbErr=E('Could not load the leaderboard.','加载排行榜失败。'); render(); });
 }
 const LB_METRIC={lifetime_spend:['lifetime spend','累计消费'],points_balance:['points','积分'],orders_count:['orders','订单数']};
 const LB_PERIOD={all:['all time','全部时间'],year:['past year','近一年'],month:['past month','近一月'],week:['past 7 days','近 7 天']};
@@ -2211,8 +2311,8 @@ function screenLeaderboard(){
   loadLeaderboard();
   if(state.lbErr) return `<div style="padding:14px 16px 24px">
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-      <span style="font-size:14px;color:var(--brick)">${state.lbErr}</span></div></div>`;
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${state.lbErr}</span></div></div>`;
   if(!state.lb) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   const cfg=state.lb.config||{};
   // The preview is what STAFF see. reveal_mode is what CUSTOMERS see, so the
@@ -2227,7 +2327,7 @@ function screenLeaderboard(){
            :`<span class="pill" style="background:${PILL.success[0]};color:${PILL.success[1]}">${T('Live','进行中')}</span>`}</div>
     <div style="font-size:13px;color:var(--text-secondary)">${T('Ranked by','排名依据')} ${T(...(LB_METRIC[metric]||[metric,metric]))} · ${T(...(LB_PERIOD[cfg.period||'all']||['all time','全部时间']))} · ${T('top','前')} ${Number(cfg.top_n||20)}</div>
     ${cfg.reveal_mode&&cfg.reveal_mode!=='full'?`<div style="font-size:12.5px;color:var(--text-secondary)">${T('Names are shown to customers the way they appear below.','顾客看到的名称与下方一致。')}</div>`:''}
-    ${cfg.seed_enabled?`<div style="font-size:12.5px;color:var(--amber)">${T('Placeholder entries are switched on — customers see seeded names mixed in.','占位名单已开启 — 顾客会看到混入的示例名称。')}</div>`:''}</div>`;
+    ${cfg.seed_enabled?`<div style="font-size:12.5px;color:var(--amber-ink)">${T('Placeholder entries are switched on — customers see seeded names mixed in.','占位名单已开启 — 顾客会看到混入的示例名称。')}</div>`:''}</div>`;
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
     ${head}
     ${off?noteBar(T('The board is switched off, so customers cannot see it. This is what it would show.','排行榜当前关闭，顾客看不到。以下是开启后的内容。')):''}
@@ -2266,7 +2366,7 @@ function loadCategories(){
       state.catsErr=null; render();
     }).catch(e=>{
       if(String(e.message)==='auth') return;
-      state.catsErr=T('Could not load the categories.','加载分类失败。'); render();
+      state.catsErr=E('Could not load the categories.','加载分类失败。'); render();
     });
 }
 const catCount=n=>(n&&n.id&&state.catCounts&&state.catCounts[n.id])||null;
@@ -2288,15 +2388,26 @@ function catRow(n,onclick,subs){
     <span style="width:32px;height:32px;border-radius:8px;background:var(--surface-raised);display:flex;align-items:center;justify-content:center;color:var(--text-secondary);flex:none">${ic(catIcon(n.name))}</span>
     <span style="flex:1;min-width:0;display:flex;flex-direction:column;text-align:left">
       <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(catName(n))}</span>
-      <span style="font-size:12px;margin-top:2px;color:${m.warn?'var(--amber)':'var(--text-secondary)'}">${m.text}${subs!=null&&subs?' · '+subs+' '+T(subs===1?'subcategory':'subcategories','个子分类'):''}</span></span>
+      <span style="font-size:12px;margin-top:2px;color:${m.warn?'var(--amber-ink)':'var(--text-secondary)'}">${m.text}${subs!=null&&subs?' · '+subs+' '+T(subs===1?'subcategory':'subcategories','个子分类'):''}</span></span>
     ${onclick?`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`:''}</${el}>`;
+}
+function statusCategories(){
+  const tree=state.cats; if(!tree||!tree.length) return '';
+  // Drilled into one shelf, the page's subject is that shelf — so the band
+  // counts what is on it rather than repeating the whole tree's totals.
+  const top=state.catTop!=null?tree.find(t=>t.id===state.catTop):null;
+  if(top){ const c=catCount(top), n=(top.subs||[]).length;
+    return [c&&c.n!=null?c.n+' '+T(c.n===1?'product':'products','件商品'):'',
+      n?n+' '+T(n===1?'subcategory':'subcategories','个子分类'):''].filter(Boolean).join(' · '); }
+  let nSubs=0; for(const t of tree) nSubs+=(t.subs||[]).length;
+  return tree.length+' '+T('top categories','主分类')+' · '+nSubs+' '+T('subcategories','子分类');
 }
 function screenCategories(){
   loadCategories();
   if(state.catsErr) return `<div style="padding:14px 16px 24px">
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-      <span style="font-size:14px;color:var(--brick)">${state.catsErr}</span></div></div>`;
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${state.catsErr}</span></div></div>`;
   if(!state.cats) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   const tree=state.cats;
   // One top open at a time — the shop's own left rail, drilled into.
@@ -2322,12 +2433,10 @@ function screenCategories(){
   const shelf = !hidden.length
     ? `<span style="color:var(--text-secondary)">${T('every shelf is visible in the shop','所有分类都显示在店面')}</span>`
     : hidden.length===1
-      ? `<span style="color:var(--amber)">${T('“'+hidden[0]+'” is hidden — nothing published on it','“'+hidden[0]+'” 已隐藏 — 无上架商品')}</span>`
-      : `<span style="color:var(--amber)">${T(hidden.length+' shelves hidden — nothing published on them',hidden.length+' 个分类已隐藏 — 无上架商品')}</span>`;
+      ? `<span style="color:var(--amber-ink)">${T('“'+hidden[0]+'” is hidden — nothing published on it','“'+hidden[0]+'” 已隐藏 — 无上架商品')}</span>`
+      : `<span style="color:var(--amber-ink)">${T(hidden.length+' shelves hidden — nothing published on them',hidden.length+' 个分类已隐藏 — 无上架商品')}</span>`;
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
-    <div style="font-size:13px;line-height:1.6">
-      <b class="num" style="font-weight:500">${tree.length}</b> <span style="color:var(--text-secondary)">${T('top categories','主分类')}</span> ·
-      <b class="num" style="font-weight:500">${nSubs}</b> <span style="color:var(--text-secondary)">${T('subcategories','子分类')}</span><br>${shelf}</div>
+    <div style="font-size:13px;line-height:1.6">${shelf}</div>
     <div class="list">${tree.map((t,i)=>`${i?'<div class="sep" style="margin-left:60px"></div>':''}${catRow(t,`APP.cmd('catTop','${escAttr(t.id)}')`,(t.subs||[]).length)}`).join('')}</div>
     ${noteBar(T('Rename, reorder, add and remove on desktop — every product on a shelf follows a rename.','重命名、排序、新增与删除请在电脑端进行 — 重命名后商品会自动迁移。'))}</div>`;
 }
@@ -2372,7 +2481,7 @@ function loadActivity(more){
   }).catch(e=>{
     if(String(e.message)==='auth') return;
     state.actMore=false;
-    state.actErr=T('Could not load stock activity.','无法加载库存流水。'); render();
+    state.actErr=E('Could not load stock activity.','无法加载库存流水。'); render();
   });
 }
 /* Same-day windows show the clock alone; a multi-day range keeps month-day,
@@ -2383,7 +2492,7 @@ function actClock(ts){
 }
 function actDelta(n){
   const v=Number(n||0);
-  return v>0 ? `<span class="num" style="color:var(--sage-ink,#5F7357);font-weight:500">+${v}</span>`
+  return v>0 ? `<span class="num" style="color:var(--sage-ink);font-weight:500">+${v}</span>`
              : `<span class="num" style="font-weight:500">−${Math.abs(v)}</span>`;
 }
 function actRow(r){
@@ -2391,7 +2500,7 @@ function actRow(r){
   // is the only amber on this ledger — a channel is a filter, not a light.
   const ctx = r.source==='manual' ? [r.actor_label,r.note].filter(Boolean).join(' · ') : (r.note||'');
   const bal = Number(r.balance_after)===0
-    ? `<span class="num" style="color:var(--amber);font-weight:500">0</span>`
+    ? `<span class="num" style="color:var(--amber-ink);font-weight:500">0</span>`
     : `<span class="num" style="color:var(--text-secondary)">${r.balance_after!=null?r.balance_after:'—'}</span>`;
   return `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px">
     <span style="display:flex;flex-direction:column;min-width:0">
@@ -2416,8 +2525,8 @@ function screenActivity(){
     ${rangeBtn('today',T('Today','今天'))}${rangeBtn('week',T('7 days','7 天'))}${rangeBtn('month',T('30 days','30 天'))}</div>`;
   if(state.actErr) return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">${ranges}
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-      <span style="font-size:14px;color:var(--brick)">${state.actErr}</span></div></div>`;
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${state.actErr}</span></div></div>`;
   if(!state.act) return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">${ranges}
     <div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div></div>`;
   const j=state.act, rows=j.rows||[], summary=j.summary||[], dg=j.digest||{};
@@ -2481,7 +2590,7 @@ function loadPOs(force){
     state.poList=Array.isArray(rows)?rows:[]; state.posErr=null; render();
   }).catch(e=>{
     if(String(e.message)==='auth') return;
-    state.posErr=T('Could not load purchase orders.','无法加载采购单。'); render();
+    state.posErr=E('Could not load purchase orders.','无法加载采购单。'); render();
   });
 }
 /* The desktop's four words for four stored statuses. "Received" is what the
@@ -2501,13 +2610,14 @@ function poPill(p){
   const [bg,fg]=PILL[tone];
   return `<span class="pill" style="background:${bg};color:${fg}">${poLate(p)?T('Late','已逾期'):T(...poWord(p.status))}</span>`;
 }
-function poStore(p){ return [p.store_name_en,p.store_name_cn].filter(Boolean).join(' · '); }
+function poStore(p){ return LANG==='en' ? (p.store_name_en||p.store_name_cn||'')
+                                        : (p.store_name_cn||p.store_name_en||''); }
 function poRow(p){
   const lines=Number(p.line_count||0), rcv=Number(p.received_lines||0);
+  // No ' · late' here: the Late pill sits nine pixels above this line, so the
+  // amber is the only thing the word would add.
   const arrives = p.delivery_date
-    ? (poLate(p)
-        ? `<span class="num" style="color:var(--amber)">${p.delivery_date} · ${T('late','逾期')}</span>`
-        : `<span class="num">${p.delivery_date}</span>`)
+    ? `<span class="num"${poLate(p)?' style="color:var(--amber-ink)"':''}>${fmtDateOnly(p.delivery_date)}</span>`
     : '';
   return `<button class="card" onclick="APP.cmd('openPO',${p.id})" style="display:flex;flex-direction:column;gap:9px;text-align:left;cursor:pointer;padding:14px;width:100%">
     <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
@@ -2520,12 +2630,23 @@ function poRow(p){
       ${poPill(p)}</div>
     ${arrives?`<div style="font-size:12.5px;color:var(--text-secondary)">${T('Arrives','到货')} ${arrives}</div>`:''}</button>`;
 }
+function statusPurchasing(){
+  const all=state.poList; if(!all||!all.length) return '';
+  const open=all.filter(p=>p.status==='Requested'||p.status==='Ordered').length;
+  const late=all.filter(poLate).length;
+  const m=GZ_ISO().slice(0,7);
+  const spend=all.filter(p=>String(p.date||'').slice(0,7)===m&&(p.status==='Ordered'||p.status==='Delivered'))
+    .reduce((a,p)=>a+(Number(p.total_cost)||0),0);
+  return [open+' '+T('open','进行中'),
+    late?`<span style="color:var(--amber-ink)">${late+' '+T('late','逾期')}</span>`:'',
+    money0(CUR,spend)+' '+T('this month','本月')].filter(Boolean).join(' · ');
+}
 function screenPurchasing(){
   loadPOs();
   if(state.posErr) return `<div style="padding:14px 16px 24px">
     <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-      <span style="font-size:14px;color:var(--brick)">${state.posErr}</span></div></div>`;
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${state.posErr}</span></div></div>`;
   if(!state.poList) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   const all=state.poList;
   if(!all.length) return nothingYet(T('No purchase orders yet','还没有采购单'),
@@ -2542,25 +2663,20 @@ function screenPurchasing(){
   const segBtn=(k,label,n)=>`<button onclick="APP.cmd('poSeg','${k}')" style="flex:1;padding:8px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;
     background:${seg===k?'var(--surface-card)':'transparent'};color:${seg===k?'var(--text-primary)':'var(--text-secondary)'};box-shadow:${seg===k?'0 1px 3px rgba(17,26,43,.08)':'none'}">${label} <span class="num" style="color:var(--text-secondary)">${n}</span></button>`;
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
-    <div style="display:flex;flex-wrap:wrap;gap:6px 18px;padding:2px 2px 4px">
-      <span style="font-size:13.5px;color:var(--text-secondary)"><b class="num" style="color:var(--text-primary);font-weight:500">${open.length}</b> ${T('open','进行中')}</span>
-      ${late.length?`<span style="font-size:13.5px;color:var(--amber)"><b class="num" style="font-weight:500">${late.length}</b> ${T('late','逾期')}</span>`:''}
-      <span style="font-size:13.5px;color:var(--text-secondary)"><b class="num" style="color:var(--text-primary);font-weight:500">${money0(CUR,spend)}</b> ${T('spent this month','本月采购')}</span>
-    </div>
     <div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px">
       ${segBtn('open',T('Open','进行中'),open.length)}${segBtn('received',T('Received','已收货'),rcvd.length)}${segBtn('all',T('All','全部'),all.length)}</div>
     ${rows.length?`<div style="display:flex;flex-direction:column;gap:10px">${rows.map(poRow).join('')}</div>`
       :`<div style="padding:34px 16px;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Nothing here — try another filter.','这里没有内容 — 换个筛选试试。')}</div>`}</div>`;
 }
 function poLineRow(it){
-  const name=[it.name_en,it.name_cn].filter(Boolean).join(' · ')||'—';
+  const name=(LANG==='en'?(it.name_en||it.name_cn):(it.name_cn||it.name_en))||'—';
   const got=it.qty_received;
   const short=got!=null&&Number(got)<Number(it.qty||0);
   return `<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 14px">
     <span style="display:flex;flex-direction:column;min-width:0">
       <span style="font-size:14.5px">${escAttr(name)}</span>
       <span class="num" style="font-size:12px;color:var(--text-secondary);margin-top:2px">${escAttr(it.sku||'')}${it.sku&&it.current_stock!=null?' · ':''}${it.current_stock!=null?T('on shelf ','在架 ')+it.current_stock:''}</span>
-      ${got!=null?`<span class="num" style="font-size:12px;margin-top:3px;color:${short?'var(--amber)':'var(--text-secondary)'}">${T('received','已收')} ${got}${short?' '+T('of','/')+' '+it.qty:''}${Number(it.damaged_qty||0)?' · '+it.damaged_qty+' '+T('damaged','损坏'):''}</span>`:''}
+      ${got!=null?`<span class="num" style="font-size:12px;margin-top:3px;color:${short?'var(--amber-ink)':'var(--text-secondary)'}">${T('received','已收')} ${got}${short?' '+T('of','/')+' '+it.qty:''}${Number(it.damaged_qty||0)?' · '+it.damaged_qty+' '+T('damaged','损坏'):''}</span>`:''}
     </span>
     <span style="display:flex;flex-direction:column;align-items:flex-end;flex:none">
       <span class="num" style="font-size:14.5px;font-weight:500">${money0(CUR,it.total_cost)}</span>
@@ -2592,13 +2708,13 @@ function sheetPO(){
      ${head(escAttr(d.po_number||('#'+d.id)),poPill(d))}
      <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;background:var(--bg)">
        ${state.poErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-         <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-         <span style="font-size:14px;color:var(--brick)">${state.poErr}</span></div>`:''}
+         <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+         <span style="font-size:14px;color:var(--brick-ink)">${state.poErr}</span></div>`:''}
        <div class="card" style="padding:16px;display:flex;flex-direction:column;gap:10px">
          ${poFact(T('Supplier','供应商'),escAttr(d.supplier||T('No supplier','未指定供应商')))}
          ${poStore(d)?poFact(T('Store','门店'),escAttr(poStore(d))):''}
-         ${d.date?poFact(T('Ordered','下单'),`<span class="num">${escAttr(d.date)}</span>`):''}
-         ${d.delivery_date?poFact(T('Arrives','到货'),`<span class="num" style="${poLate(d)?'color:var(--amber)':''}">${escAttr(d.delivery_date)}${poLate(d)?' · '+T('late','逾期'):''}</span>`):''}
+         ${d.date?poFact(T('Ordered','下单'),`<span class="num">${escAttr(fmtDateOnly(d.date))}</span>`):''}
+         ${d.delivery_date?poFact(T('Arrives','到货'),`<span class="num" style="${poLate(d)?'color:var(--amber-ink)':''}">${escAttr(fmtDateOnly(d.delivery_date))}${poLate(d)?' · '+T('late','逾期'):''}</span>`):''}
          ${poFact(T('Total','金额'),`<span class="num" style="font-weight:500">${money0(CUR,d.total_cost!=null?d.total_cost:items.reduce((a,i)=>a+(Number(i.total_cost)||0),0))}</span>`)}
        </div>
        ${lines?`<div><div class="eyebrow" style="padding:0 2px 8px">${lines} ${T(lines===1?'line':'lines','项')}</div>
@@ -2635,7 +2751,7 @@ function settingsGroupCard(rows){
   return `<div class="list">${rows.map((r,i)=>`${i?'<div class="sep" style="margin-left:14px"></div>':''}
     <div style="display:flex;align-items:center;gap:16px;padding:12px 16px;min-height:56px"><span style="flex:1;min-width:0;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.label}</span>
     ${ctl(r)}</div>`).join('')}
-    ${state.printerErr&&rows.some(r=>r.printer||r.fapiao)?`<div style="padding:12px 16px;font-size:13px;color:var(--brick);background:var(--brick-tint)">${state.printerErr}</div>`:''}</div>`;
+    ${state.printerErr&&rows.some(r=>r.printer||r.fapiao)?`<div style="padding:12px 16px;font-size:13px;color:var(--brick-ink);background:var(--brick-tint)">${state.printerErr}</div>`:''}</div>`;
 }
 let sheetStep={};
 const SUBS={
@@ -2662,8 +2778,8 @@ const SUBS={
       <div style="padding:8px 16px 24px;display:flex;flex-direction:column;gap:10px">
         ${noteBar(T('Quick edits here · full authoring on desktop','这里可快速编辑 · 完整编辑请用电脑端'))}
         ${state.prodErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-        <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-        <span style="font-size:14px;color:var(--brick)">${state.prodErr}</span></div>`:''}
+        <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+        <span style="font-size:14px;color:var(--brick-ink)">${state.prodErr}</span></div>`:''}
       ${state.catalogueLoading&&!rows.length?`<div style="padding:32px 0;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading the catalogue…','正在加载目录…')}</div>`:''}
         ${!state.catalogueLoading&&!rows.length&&narrowed?`<div style="display:flex;flex-direction:column;align-items:center;gap:16px;padding:40px 24px;text-align:center">
           <div style="font-size:18px;font-weight:500">${T('No products match','没有匹配的产品')}</div>
@@ -2672,8 +2788,8 @@ const SUBS={
         ${L&&rows.length&&rows.length!==P.length?`<div style="text-align:center;padding:4px 0 0"><span class="num" style="font-size:13px;color:var(--text-secondary)">${T(rows.length+' of '+P.length, P.length+' 件中的 '+rows.length)}</span></div>`:''}
       </div></div>`;
   }},
-  categories:{title:['Categories','分类'],render:()=>screenCategories()},
-  purchasing:{title:['Purchasing','采购'],render:()=>screenPurchasing()},
+  categories:{title:['Categories','分类'],status:()=>statusCategories(),render:()=>screenCategories()},
+  purchasing:{title:['Purchasing','采购'],status:()=>statusPurchasing(),render:()=>screenPurchasing()},
   activity:{title:['Stock activity','库存流水'],render:()=>screenActivity()},
   delivery:{title:['Delivery','配送'],render:()=>screenDelivery()},
   invoices:{title:['Invoices','发票'],render:()=>{
@@ -2700,11 +2816,15 @@ const SUBS={
       ${!rows.length?`<div style="padding:32px 8px;text-align:center;font-size:15px;color:var(--text-secondary)">${seg==='issued'?T('None issued yet','尚无已开发票'):T('Nothing waiting','没有待开发票')}</div>`:''}
       ${rows.map(v=>`<div class="card" style="display:flex;flex-direction:column;gap:9px;padding:14px">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px">
-          <span style="display:flex;flex-direction:column;min-width:0"><span class="num" style="font-size:14.5px;font-weight:500">${v.id}</span>
-          <span class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:2px">${v.order}</span></span>
+          <span style="display:flex;flex-direction:column;min-width:0">
+            <span style="font-size:14.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(v.title||T('No title given','未填抬头'))}</span>
+            <span class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(v.id)}${v.no?' · '+escAttr(v.no):''}</span></span>
           <span class="num" style="font-size:16px;font-weight:500;flex:none">${v.amount}</span></div>
+        ${(v.taxId||v.email)?`<div class="num" style="font-size:12px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr([v.taxId,v.email].filter(Boolean).join(' · '))}</div>`:''}
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
-          <span style="display:flex;align-items:center;gap:9px;min-width:0">${pill(v.kind,T(...v.status))}<span class="num" style="font-size:12px;color:var(--text-secondary)">${T(...v.date)}</span></span>
+          <span style="display:flex;align-items:center;gap:9px;min-width:0">${pill(v.kind,T(...v.status))}
+            <span style="font-size:12px;color:var(--text-secondary)">${v.company?T('Company','企业'):T('Personal','个人')}</span>
+            ${v.when?`<span class="num" style="font-size:12px;color:var(--text-secondary)">${fmtDay(v.when)}</span>`:''}</span>
           ${v.file?`<a href="${escAttr(v.file)}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 12px;cursor:pointer;font-family:inherit;flex:none;text-decoration:none">${ic('download',15)} ${T('Open','打开')}</a>`:''}</div></div>`).join('')}</div></div>`;
   }},
   coupons:{title:['Coupons','优惠券'],render:()=>{
@@ -2721,7 +2841,7 @@ const SUBS={
     return `<div>
     <div style="padding:12px 0 4px">${chipRow(segs,seg,'vchSeg')}</div>
     <div style="padding:8px 16px 24px;display:flex;flex-direction:column;gap:12px">
-    ${state.couponErr?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick)">${state.couponErr}</div>`:''}
+    ${state.couponErr?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${state.couponErr}</div>`:''}
     ${!list.length?`<div style="padding:32px 8px;text-align:center;font-size:15px;color:var(--text-secondary)">${
       seg==='on'?T('Nothing running right now.','当前没有生效中的优惠券。'):T('Nothing here.','这里没有优惠券。')}</div>`:''}
     ${list.map(c=>`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:9px${c.on?'':';opacity:.7'}">
@@ -2730,7 +2850,7 @@ const SUBS={
           <span style="display:flex;align-items:center;gap:8px;min-width:0">
             <span class="num" style="font-size:15px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(c.code)}</span>
             ${!c.on?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]};flex:none">${c.ended?T('Ended','已到期'):T('Off','已停用')}</span>`:''}</span>
-          <span style="font-size:13px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...c.title)}</span></span>
+          ${c.title?`<span style="font-size:13px;color:var(--text-secondary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...c.title)}</span>`:''}</span>
         ${c.id==null?`<span style="font-size:13px;color:var(--text-secondary);flex:none">${c.on?T('On','已启用'):T('Off','已关闭')}</span>`
           :(state.couponBusy===c.code?`<span style="font-size:13px;color:var(--text-secondary);flex:none">${T('Saving…','保存中…')}</span>`
           :`<span style="flex:none">${toggle(!!c.active,`APP.cmd('toggleCoupon','${escAttr(c.code)}')`)}</span>`)}
@@ -2738,11 +2858,11 @@ const SUBS={
       <div style="font-size:18px;font-weight:500;letter-spacing:-.01em">${T(...c.gives)}</div>
       <div style="font-size:13px;color:var(--text-secondary);line-height:1.5">${T(...c.rules)}</div>
       ${c.pills.length?`<div style="display:flex;flex-wrap:wrap;gap:6px">${c.pills.map(p=>
-        `<span class="pill" style="background:${p.dusk?'var(--dusk-tint)':PILL.muted[0]};color:${p.dusk?'var(--accent)':PILL.muted[1]};${p.dusk?'display:inline-flex;align-items:center;gap:6px':''}">${
+        `<span class="pill" style="background:${p.dusk?'var(--dusk-tint)':PILL.muted[0]};color:${p.dusk?'var(--dusk-ink)':PILL.muted[1]};${p.dusk?'display:inline-flex;align-items:center;gap:6px':''}">${
           p.dusk?'<span class="breathe" style="width:6px;height:6px;border-radius:50%;background:var(--accent)"></span>':''}${p.label}</span>`).join('')}</div>`:''}
       <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding-top:8px;border-top:1px solid var(--border-default)">
         <span class="num" style="font-size:13px;color:var(--text-secondary)">${T('Used '+c.used+(c.max!=null?' of '+c.max:''),'已用 '+c.used+(c.max!=null?' / '+c.max:''))}</span>
-        <span class="num" style="font-size:13px;color:${c.ended||c.soon?'#8A6425':'var(--text-secondary)'}">${
+        <span class="num" style="font-size:13px;color:${c.ended||c.soon?'var(--amber-ink)':'var(--text-secondary)'}">${
           c.expires?(c.ended?T('ended '+fmtDay(c.expires),'已于 '+fmtDay(c.expires)+' 结束'):T('ends '+fmtDay(c.expires),fmtDay(c.expires)+' 结束')):T('no end date','长期有效')}</span></div>
     </div>`).join('')}
     ${seg==='on'&&off.length?`<div style="text-align:center;font-size:13px;color:var(--text-secondary);padding-top:4px">${
@@ -2769,17 +2889,17 @@ const SUBS={
             ${pill(f.kind,T(...f.status))}
             ${f.price?`<span class="num" style="font-size:18px;font-weight:500">${f.price}</span>`:''}
             ${f.price&&f.was?`<span class="num" style="font-size:13px;color:var(--text-secondary);text-decoration:line-through">${f.was}</span>`:''}
-            ${f.off?`<span class="pill" style="background:var(--brick-tint);color:var(--brick)">${T(f.off+'% off',f.off+'% 折扣')}</span>`:''}</span>
+            ${f.off?`<span class="pill" style="background:var(--brick-tint);color:var(--brick-ink)">${T(f.off+'% off',f.off+'% 折扣')}</span>`:''}</span>
           ${f.sku?`<span class="num" style="display:block;font-size:12px;color:var(--text-secondary);margin-top:3px">${escAttr(f.sku)}</span>`:''}
         </span></div>
       ${f.win?`<div class="num" style="font-size:13px;color:var(--text-secondary)">${f.win}</div>`:''}
       ${f.limit!=null?`<div>
         <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:13px">
           <span class="num" style="color:var(--text-secondary)">${T(f.sold+' of '+f.limit+' sold',f.limit+' 件中已售 '+f.sold)}</span>
-          <span class="num" style="color:${f.left===0?'var(--brick)':'var(--text-secondary)'}">${f.left===0?T('sold out','已售罄'):T(f.left+' left','剩 '+f.left)}</span></div>
+          <span class="num" style="color:${f.left===0?'var(--brick-ink)':'var(--text-secondary)'}">${f.left===0?T('sold out','已售罄'):T(f.left+' left','剩 '+f.left)}</span></div>
         <span style="display:block;margin-top:6px;height:4px;border-radius:999px;background:var(--surface-raised)"><span style="display:block;height:4px;width:${f.pct||0}%;border-radius:999px;background:${f.left===0?'var(--brick)':'var(--text-primary)'}"></span></span></div>`:''}
       ${(f.hidden||f.noCoupon)?`<div style="display:flex;flex-wrap:wrap;gap:6px">
-        ${f.hidden?`<span class="pill" style="background:var(--brick-tint);color:var(--brick)">${T('Product is not on the shop','商品未上架')}</span>`:''}
+        ${f.hidden?`<span class="pill" style="background:var(--brick-tint);color:var(--brick-ink)">${T('Product is not on the shop','商品未上架')}</span>`:''}
         ${f.noCoupon?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('No coupons on top','不可叠加优惠券')}</span>`:''}</div>`:''}
     </div>`).join('')}
     ${desktopNote()}</div>`;
@@ -2789,7 +2909,7 @@ const SUBS={
     if(!state.bcLoaded&&!list.length) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
     if(!list.length) return nothingYet(T('No broadcasts','没有广播'),T('Broadcasts are written and sent from desktop. Anything scheduled can be stopped from here.','广播在电脑端撰写与发送。已排期的可在此取消。'));
     return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
-    ${state.bcErr?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick)">${state.bcErr}</div>`:''}
+    ${state.bcErr?`<div style="padding:12px 16px;border-radius:14px;background:var(--brick-tint);font-size:14px;color:var(--brick-ink)">${state.bcErr}</div>`:''}
     ${list.map(b=>`<div class="card" style="padding:14px;display:flex;flex-direction:column;gap:9px">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
         <span style="font-size:15px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T(...b.title)}</span>
@@ -2806,7 +2926,7 @@ const SUBS={
     ${desktopNote()}</div>`;
   }},
   sharecards:{title:['Share cards','分享卡片'],render:()=>screenShareCards()},
-  popups:{title:['Pop-ups','弹窗'],render:()=>screenPopups()},
+  popups:{title:['Pop-ups','弹窗'],status:()=>statusPopups(),render:()=>screenPopups()},
   affiliate:{title:['Affiliate','分销'],render:()=>screenAffiliate()},
   social:{title:['Social proof','社交证明'],render:()=>{
     // The switch is real (features.socialProof) and reachable from Settings, so
@@ -2821,15 +2941,15 @@ const SUBS={
             ? T('Shoppers see bought-counts, a recent-buyers ticker and the SOLD badge.','顾客会看到购买人数、最近购买动态与“已售”标签。')
             : T('None of the bought-counts, the recent-buyers ticker or the SOLD badge are shown.','购买人数、最近购买动态与“已售”标签均不显示。')}</span></span>
         ${toggle(on,"APP.cmd('toggleFeature','socialProof')")}</div>
-      ${state.featErr?`<div style="font-size:14px;color:var(--brick)">${state.featErr}</div>`:''}
+      ${state.featErr?`<div style="font-size:14px;color:var(--brick-ink)">${state.featErr}</div>`:''}
       ${noteBar(T('What counts as recent, and which products show it, are set on desktop.','“最近”的范围与展示哪些商品在电脑端设置。'))}</div>`;
   }},
   membership:{title:['Membership','会员积分'],render:()=> !featOn('membership')
     ? `<div style="padding:14px 16px 24px">${flagGate('membership')}</div>` : screenMembership()},
-  wallet:{title:['Top-up','充值'],render:()=>screenTopups()},
+  wallet:{title:['Top-up','充值'],status:()=>statusTopups(),render:()=>screenTopups()},
   leaderboard:{title:['Leaderboard','排行榜'],render:()=>screenLeaderboard()},
   voting:{title:['Voting','投票'],render:()=>screenVoting()},
-  editor:{title:['Editor','编辑器'],render:()=>screenEditor()},
+  editor:{title:['Editor','编辑器'],status:()=>statusEditor(),render:()=>screenEditor()},
   about:{title:['About page','关于页'],render:()=>{
     const c=cfgGet('about.content',null);
     if(!state.cfg) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
@@ -2844,7 +2964,7 @@ const SUBS={
       ${(c&&c.founder_name_en)?`<div class="card" style="padding:16px">
         <div class="eyebrow">${pick('founder_kicker_en','founder_kicker_cn')}</div>
         <div style="font-size:15px;font-weight:500;margin-top:8px">${pick('founder_name_en','founder_name_cn')}</div>
-        <div style="font-size:13px;color:var(--text-secondary)">${pick('founder_title_en','founder_title_cn')}</div>
+        <div style="font-size:13px;color:var(--text-secondary);margin-top:2px">${pick('founder_title_en','founder_title_cn')}</div>
         ${c.founder_quote_en?`<div style="font-size:15px;color:var(--text-secondary);line-height:1.6;margin-top:8px">${pick('founder_quote_en','founder_quote_cn')}</div>`:''}</div>`:''}
       ${desktopNote()}</div>`;
   }},
@@ -2854,15 +2974,15 @@ const SUBS={
         b?T('Uploading '+b.done+'/'+b.total+'…','上传中 '+b.done+'/'+b.total+'…'):T('Add photos','添加图片')}</button>`; },
     render:()=>{
     const err=state.mediaErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-      <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-      <span style="font-size:14px;color:var(--brick)">${state.mediaErr}</span></div>`:'';
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${state.mediaErr}</span></div>`:'';
     if(!state.media){ if(!state.mediaTried) loadMedia();
       return `<div style="padding:0 16px">${err}</div><div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`; }
     if(!state.media.rows.length) return `<div style="padding:0 16px">${err}</div>`+nothingYet(T('Nothing in the library','媒体库是空的'),
       T('Add photos from this phone, or upload them on desktop — either way they land here, ready for the mini app.','可以直接用手机添加图片，也可以在电脑端上传 — 都会出现在这里，供小程序使用。'));
     return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:16px">
       ${err}
-      <div class="num" style="font-size:13px;color:var(--text-secondary)">${T(state.media.total+' images','共 '+state.media.total+' 张')}</div>
+      <div class="num" style="font-size:13px;color:var(--text-secondary)">${T(state.media.total+(state.media.total===1?' image':' images'),'共 '+state.media.total+' 张')}</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">${state.media.rows.map(m=>`
         <div style="aspect-ratio:1;border-radius:8px;overflow:hidden;background:var(--surface-raised);border:1px solid var(--border-default)">
           <img loading="lazy" src="/api/retail/media/${m.id}" alt="" style="width:100%;height:100%;object-fit:cover;display:block">
@@ -2909,7 +3029,7 @@ const SUBS={
    places. Both keep every screen they had; the inbox also rides every top-level
    page header, so it is never more than one tap away. */
 SUBS.inbox={title:['Inbox','消息'],render:()=>screenInbox()};
-SUBS.sales={title:['Sales','销售'],render:()=>screenSales()};
+SUBS.sales={title:['Sales','销售'],status:()=>statusSales(),render:()=>screenSales()};
 
 /* Pausing a coupon is the one marketing action a phone should have: it is a
    single field on a single record, and it is what an operator reaches for when
@@ -2928,7 +3048,7 @@ function toggleCoupon(code){
   }).catch(e=>{
     state.couponBusy=null;
     if(String(e.message)==='auth') return;
-    state.couponErr=T('That did not save. The coupon is unchanged.','没有保存成功。优惠券没有变化。'); render();
+    state.couponErr=E('That did not save. The coupon is unchanged.','没有保存成功。优惠券没有变化。'); render();
   });
 }
 /* A scheduled broadcast can still be stopped; a sent one cannot. The server is
@@ -2945,7 +3065,7 @@ function recallBroadcast(id){
   }).catch(e=>{
     state.bcBusy=null;
     if(String(e.message)==='auth') return;
-    state.bcErr=T('That did not go through. Nothing has changed.','没有成功。数据没有变化。'); render();
+    state.bcErr=E('That did not go through. Nothing has changed.','没有成功。数据没有变化。'); render();
   });
 }
 async function loadMirror(which){
@@ -3051,16 +3171,18 @@ const MT_STUCK_MIN=30;
 function mtHealthCard(){
   if(state.mtOffline) return `<div style="display:flex;flex-direction:column;gap:5px;background:var(--brick-tint);border-radius:14px;padding:14px 16px">
     <div style="display:flex;align-items:center;gap:10px">
-      <span style="flex:none;color:var(--brick);display:flex">${ic('triangle-alert',18)}</span>
-      <span style="font-size:14.5px;font-weight:500;color:var(--brick)">${T('The Meituan sync service is offline','美团同步服务离线')}</span></div>
-    <div style="font-size:13px;color:var(--brick);opacity:.9;line-height:1.5">${T('Orders are not being imported and stock is not being pushed.','订单未导入，库存也未推送。')}</div></div>`;
+      <span style="flex:none;color:var(--brick-ink);display:flex">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14.5px;font-weight:500;color:var(--brick-ink)">${T('The Meituan sync service is offline','美团同步服务离线')}</span></div>
+    <div style="font-size:13px;color:var(--brick-ink);opacity:.9;line-height:1.5">${T('Orders are not being imported and stock is not being pushed.','订单未导入，库存也未推送。')}</div></div>`;
   const st=state.mtStatus;
   if(!st) return '';
   const pending=Number(st.queuePending||0), failed=Number(st.queueFailed||0);
   const oldest=Number(st.queueOldestMin||0);
   const stuck=pending>0&&oldest>=MT_STUCK_MIN;
-  const stuckFor = oldest>=120 ? T(Math.round(oldest/60)+' h',Math.round(oldest/60)+' 小时')
-                               : T(oldest+' min',oldest+' 分钟');
+  // Spelled out, because this reads inside a sentence: "stuck for 19 h" put a
+  // space in the middle of an abbreviation the rest of the app writes as 19h.
+  const stuckFor = (()=>{ if(oldest<120) return T(oldest+(oldest===1?' minute':' minutes'),oldest+' 分钟');
+    const h=Math.round(oldest/60); return T(h+(h===1?' hour':' hours'),h+' 小时'); })();
   const lo=(st.lastOrder&&st.lastOrder[0])||null;
   let line, tone;
   if(stuck){ tone='brick'; line=T('Stock pushes have been stuck for '+stuckFor+' — what Meituan shows is out of date.',
@@ -3070,7 +3192,7 @@ function mtHealthCard(){
   else if(pending>0){ tone='plain'; line=T(pending+' sending…',pending+' 发送中…'); }
   else { tone='plain'; line=T('All stock pushes sent','库存推送已全部发送'); }
   const bgs={brick:'var(--brick-tint)',amber:'rgba(201,149,74,0.12)',plain:'var(--surface-card)'};
-  const fgs={brick:'var(--brick)',amber:'#8A6425',plain:'var(--text-primary)'};
+  const fgs={brick:'var(--brick-ink)',amber:'var(--amber-ink)',plain:'var(--text-primary)'};
   return `<div class="card" style="padding:16px;display:flex;flex-direction:column;gap:7px;background:${bgs[tone]}${tone==='plain'?'':';border:none'}">
     <div style="display:flex;align-items:center;gap:10px">
       ${tone==='plain'?'':`<span style="flex:none;color:${fgs[tone]};display:flex">${ic('triangle-alert',18)}</span>`}
@@ -3107,10 +3229,10 @@ function gzModeCard(){
 function gzFlaggedBlock(){
   const rows=state.gzFlagged;
   if(!Array.isArray(rows)||!rows.length) return '';
-  const btn=(label,cmd,dis,danger)=>`<button ${dis?'disabled':''} onclick="${cmd}" style="font-size:13px;font-weight:500;color:${danger?'var(--brick)':'var(--text-primary)'};background:var(--surface-card);border:1px solid var(--border-default);border-radius:9px;padding:7px 14px;cursor:pointer;font-family:inherit;${dis?'opacity:.5':''}">${label}</button>`;
+  const btn=(label,cmd,dis,danger)=>`<button ${dis?'disabled':''} onclick="${cmd}" style="font-size:13px;font-weight:500;color:${danger?'var(--brick-ink)':'var(--text-primary)'};background:var(--surface-card);border:1px solid var(--border-default);border-radius:9px;padding:7px 14px;cursor:pointer;font-family:inherit;${dis?'opacity:.5':''}">${label}</button>`;
   return `<div style="display:flex;flex-direction:column;gap:10px">
     <div style="display:flex;align-items:center;gap:10px">
-      <span style="flex:none;color:var(--amber);display:flex">${ic('triangle-alert',18)}</span>
+      <span style="flex:none;color:var(--amber-ink);display:flex">${ic('triangle-alert',18)}</span>
       <span style="font-size:14.5px;font-weight:500">${T(rows.length===1?'One drop needs your decision':rows.length+' drops need your decision', rows.length+' 条待确认')}</span></div>
     ${rows.map(f=>{
       const name=LANG==='en'?(f.name_en||f.name_cn||f.guanyi_name||('#'+f.product_id))
@@ -3134,13 +3256,18 @@ function mirrorScreen(which,note){
   const mt = which==='meituan' ? mtHealthCard() : '';
   const gz = which==='gzgrocery'
     ? `${state.gzErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-        <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-        <span style="font-size:14px;color:var(--brick)">${state.gzErr}</span></div>`:''}${gzModeCard()}${gzFlaggedBlock()}`
+        <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+        <span style="font-size:14px;color:var(--brick-ink)">${state.gzErr}</span></div>`:''}${gzModeCard()}${gzFlaggedBlock()}`
     : '';
   if(!rows||!rows.length){
     if((gz||mt)&&state.mirrorLoading!==which) return `<div style="padding:12px 16px 24px;display:flex;flex-direction:column;gap:16px">${mt}${gz}
+      ${/* Branch on the channel: Meituan sends ORDERS, gzgrocery records
+            PICKUPS, and this line said "No pickups recorded yet" on both — so
+            the Meituan screen reported on a thing Meituan does not have. The
+            nothingYet() branch below already got this right. */''}
       <div style="padding:24px 8px;text-align:center;font-size:14px;color:var(--text-secondary);line-height:1.55">${
-        rows?T('No pickups recorded yet.','暂无提货记录。'):T('The channel did not answer. Nothing is wrong with your orders — try again in a moment.','渠道没有响应。订单数据没有问题 — 请稍后重试。')}</div></div>`;
+        rows?(which==='meituan'?T('No orders from Meituan yet.','美团暂无订单。'):T('No pickups recorded yet.','暂无提货记录。'))
+            :T('The channel did not answer. Nothing is wrong with your orders — try again in a moment.','渠道没有响应。订单数据没有问题 — 请稍后重试。')}</div></div>`;
     if(state.mirrorLoading===which) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
     if(rows&&!rows.length) return nothingYet(which==='meituan'?T('No orders from Meituan yet','美团暂无订单'):T('No pickups recorded yet','暂无提货记录'),
       which==='meituan'?T('Orders the platform sends appear here, mirrored and read-only.','平台推送的订单会以只读方式出现在这里。')
@@ -3148,16 +3275,25 @@ function mirrorScreen(which,note){
     return nothingYet(T('Could not read this channel','无法读取该渠道'),
       T('The channel did not answer. Nothing is wrong with your orders — try again in a moment.','渠道没有响应。订单数据没有问题 — 请稍后重试。'));
   }
+  // The read-only note used to sit between the channel's own cards and the
+  // records — a caption stranded in the middle of the screen, appearing to
+  // annotate whichever card it happened to land under. It goes at the bottom,
+  // where every other screen puts its "this is edited on desktop" line, and the
+  // record list gets the eyebrow it never had: without one, the first card read
+  // as an orphan rather than as the top of a list.
+  const label = which==='meituan'?T('Orders from Meituan','美团订单'):T('Recent pickups','最近提货');
   return `<div style="padding:12px 16px 24px;display:flex;flex-direction:column;gap:16px">
     ${mt}${gz}
-    <div style="display:flex;align-items:center;gap:12px;background:var(--surface-raised);border-radius:14px;padding:12px 16px"><span style="color:var(--text-secondary);display:flex;flex:none">${ic('eye',18)}</span><span style="font-size:13px;color:var(--text-secondary)">${note}</span></div>
+    <div><div class="eyebrow" style="padding:2px 4px 10px">${label}</div>
+    <div style="display:flex;flex-direction:column;gap:10px">
     ${rows.map(o=>`<div class="card" style="display:flex;flex-direction:column;gap:8px;padding:16px">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
         <span class="num" style="font-size:15px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.id}</span>
         <span class="num" style="font-size:15px;font-weight:500;flex:none">${o.total}</span></div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;font-size:13px;color:var(--text-secondary)">
         <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${o.cust}${o.store?' · '+o.store:''}</span>
-        <span class="num" style="flex:none">${o.when}</span></div></div>`).join('')}</div>`;
+        <span class="num" style="flex:none">${o.when}</span></div></div>`).join('')}</div></div>
+    <div style="display:flex;align-items:center;gap:12px;background:var(--surface-raised);border-radius:14px;padding:12px 16px"><span style="color:var(--text-secondary);display:flex;flex:none">${ic('eye',18)}</span><span style="font-size:13px;color:var(--text-secondary)">${note}</span></div></div>`;
 }
 /* The desktop's Settings → Features, all eight of them. The phone carried five
    — socialProof, quickStock and kitchenAdd were missing entirely, so three
@@ -3195,12 +3331,16 @@ function screenSettings(){
     {h:T('Store','店铺'),rows:[{label:T('Store profile','店铺资料'),value:T('on desktop','在电脑端')},{label:T('Operations','运营'),cmd:"APP.cmd('push','operations')",chev:true},{label:T('Quick stock','快速盘点'),cmd:"APP.cmd('push','quickstock')",chev:true}]},
     {h:T('Notifications','通知'),rows:[{label:T('Live updates','实时更新'),tgl:'__live'},{label:T('Sound','提示音'),tgl:'__sound'}]},
     {h:T('Features','功能'),rows:FEATURE_ROWS()},
+    // No Auto-print row here. It used to sit in this group, in Operations, AND
+    // in Delivery — one switch in three places, two of them a tap away from the
+    // third, so flipping it in one left the other two looking stale until the
+    // next render. Operations owns it, the way the desktop's printer settings do.
     {h:T('Automation','自动化'),rows:[
-      {label:T('Auto-print receipts','自动打印小票'),printer:true},
       // Routing is behaviour, not a setting: every order already goes to the
       // nearest store and there is nothing to switch. Saying so beats a toggle
       // that writes nowhere.
       {label:T('Routing','派单'),value:T('Nearest store','最近门店')},
+      {label:T('Printing','打印'),value:T('in Operations','在运营中'),cmd:"APP.cmd('push','operations')",chev:true},
     ]},
     {h:T('Preferences','偏好'),rows:[{label:T('Language','语言'),value:state.lang==='en'?'English':'中文',cmd:"APP.cmd('toggleLang')",chev:true},{label:T('Theme','主题'),value:state.theme==='light'?T('Light','浅色'):T('Dark','深色'),cmd:"APP.cmd('toggleTheme')",chev:true}]},
   ];
@@ -3345,7 +3485,7 @@ async function saveProductEdits(){
   }catch(e){
     state.prodBusy=false;
     if(String(e.message)==='auth') return;
-    state.prodErr=T('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+    state.prodErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
     render();
   }
 }
@@ -3472,7 +3612,7 @@ function toggleFeature(key){
   }).catch(e=>{
     state.featBusy=null;
     if(String(e.message)==='auth') return;
-    state.featErr=T('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
+    state.featErr=E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
   });
 }
 async function loadOps(){
@@ -3508,7 +3648,11 @@ function opsFires(){
   // Ranked by how long the oldest thing in each queue has waited, so a
   // two-day restock outranks a refund from an hour ago. A fire with no clock
   // (a stock state) sorts last: it cannot be ranked by waiting.
-  const add=(cond,sev,icon,label,n,items,meta,go)=>{ if(cond) f.push({sev,icon,label,n,meta:meta||oldestOf(items),go,mins:oldestMins(items)}); };
+  // `age` records whether the sub-line IS the waiting time, because the row
+  // prefixes it with "oldest" and two of these fires pass a sentence instead —
+  // so "Payments to confirm" read "oldest 1 couldn't be read", the prefix
+  // glued onto a phrase that is not a duration.
+  const add=(cond,sev,icon,label,n,items,meta,go)=>{ if(cond) f.push({sev,icon,label,n,meta:meta||oldestOf(items),age:!meta,go,mins:oldestMins(items)}); };
   const c=k=>(o[k]&&o[k].count)||0;
   /* Arguments are evaluated before add() looks at its condition, so reading
      o.<key>.items inline threw on any payload missing a key — and a render
@@ -3612,7 +3756,7 @@ async function loadAffiliate(force){
     state.affErr=null;
   }catch(e){
     if(String(e.message)==='auth') return;
-    state.affErr=T('Could not load referrals.','加载推荐记录失败。');
+    state.affErr=E('Could not load referrals.','加载推荐记录失败。');
   }
   render();
 }
@@ -3640,7 +3784,11 @@ async function loadChannels(){
   // that it showed the mock's "28 orders · ¥7,120".
   try{ state.chan=await apiRaw('/channel-status'); }catch(e){}
   render();
-  try{ const d=await api('/sales/summary'); state.sales=(d&&d.channels)||null; }catch(e){}
+  // The endpoint answers {channels, summary} and only `channels` was kept, so
+  // the day's total — the one number this screen exists to give you — was
+  // fetched and thrown away on every open.
+  try{ const d=await api('/sales/summary');
+    state.sales=(d&&d.channels)||null; state.salesSummary=(d&&d.summary)||null; }catch(e){}
   render();
 }
 async function loadMedia(){
@@ -3667,7 +3815,7 @@ function toggleFapiao(){
   }).catch(e=>{
     state.fapiaoBusy=false;
     if(String(e.message)==='auth') return;
-    state.printerErr=T('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
+    state.printerErr=E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
   });
 }
 async function loadPrinter(){
@@ -3685,7 +3833,7 @@ function togglePrint(){
   }).catch(e=>{
     state.printerBusy=false;
     if(String(e.message)==='auth') return;
-    state.printerErr=T('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
+    state.printerErr=E('That did not save. The setting is unchanged.','没有保存成功。设置没有变化。'); render();
   });
 }
 async function loadInbox(){
@@ -3734,8 +3882,8 @@ const REFUND_STATE={
   rejected:{en:'Refund rejected',zh:'退款已拒绝',sev:'brick'},
   withdrawn:{en:'Refund withdrawn',zh:'退款已撤回',sev:'muted'},
 };
-const REF_TONE={amber:['var(--amber-tint)','#8A6425'],sage:['var(--sage-tint)','#5F7357'],
-  dusk:['var(--dusk-tint)','var(--accent)'],brick:['var(--brick-tint)','var(--brick)'],
+const REF_TONE={amber:['var(--amber-tint)','var(--amber-ink)'],sage:['var(--sage-tint)','var(--sage-ink)'],
+  dusk:['var(--dusk-tint)','var(--dusk-ink)'],brick:['var(--brick-tint)','var(--brick-ink)'],
   muted:['var(--surface-raised)','var(--text-secondary)']};
 function refundPanel(o){
   const r=o.refund; if(!r) return '';
@@ -3786,12 +3934,18 @@ function shipByTile(o){
   const KICK={pickup:['Pickup time','取货时间'],batch:['Deliver by','送达时间'],
     scheduled:['Booked','顾客预约'],asap:['Ship by','最迟发货']};
   const k=p.done?['Requested timing','原定时间']:(KICK[p.kind]||KICK.asap);
+  // The pill and the label can be the same word: since dates render as Today /
+  // Tomorrow rather than as a column, a batch due today read "Today · today".
+  // When they agree the pill goes and the label takes the colour, which is the
+  // only thing the pill was adding.
+  const word = u.level==='overdue'?T('overdue','已逾期'):u.level==='today'?T('today','今天')
+             : u.level==='tomorrow'?T('tomorrow','明天'):T('soon','即将');
+  const echo = tone && String(p.label||'').trim().toLowerCase()===word.toLowerCase();
   return `<div class="card" style="padding:14px">
     <span class="eyebrow">${T(...k)}</span>
     <div style="display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;margin-top:7px">
-      <span class="num" style="font-size:16px;font-weight:500">${escAttr(p.label)}</span>
-      ${tone?`<span class="pill" style="background:var(--${tone}-tint);color:var(--${tone})">${
-        u.level==='overdue'?T('overdue','已逾期'):u.level==='today'?T('today','今天'):u.level==='tomorrow'?T('tomorrow','明天'):T('soon','即将')}</span>`:''}</div>
+      <span class="num" style="font-size:16px;font-weight:500${echo?';color:var(--'+tone+'-ink)':''}">${escAttr(p.label)}</span>
+      ${(tone&&!echo)?`<span class="pill" style="background:var(--${tone}-tint);color:var(--${tone}-ink)">${word}</span>`:''}</div>
     ${p.sub?`<div style="font-size:13px;color:var(--text-secondary);margin-top:4px">${escAttr(p.sub)}</div>`:''}</div>`;
 }
 /* The desktop's od-marks strip: when the order was placed, and every mark that
@@ -3808,8 +3962,8 @@ function orderHeadMarks(o){
   if(o.printFailed!=null) marks.push({sev:'brick',icon:'printer',label:T('Receipt did not print','小票打印失败')});
   if(!marks.length&&!o.placedFull) return '';
   return `<div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px">
-    ${marks.map(m=>`<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:4px 9px;border-radius:999px;background:var(--${m.sev}-tint);color:var(--${m.sev})">${ic(m.icon,13)}${m.label}</span>`).join('')}
-    ${o.printFailed?`<span style="width:100%;font-size:12.5px;color:var(--brick)">${escAttr(o.printFailed)}</span>`:''}
+    ${marks.map(m=>`<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;padding:4px 9px;border-radius:999px;background:var(--${m.sev}-tint);color:var(--${m.sev}-ink)">${ic(m.icon,13)}${m.label}</span>`).join('')}
+    ${o.printFailed?`<span style="width:100%;font-size:12.5px;color:var(--brick-ink)">${escAttr(o.printFailed)}</span>`:''}
   </div>`;
 }
 /* WHAT was added and WHEN — the slip was very likely printed before any of it
@@ -3876,8 +4030,8 @@ function sheetOrderDetail(){
        </div>
      <div style="flex:1;min-height:0;overflow-y:auto;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 24px);display:flex;flex-direction:column;gap:16px;background:var(--bg)">
        ${state.orderErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-         <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-         <span style="font-size:14px;color:var(--brick)">${state.orderErr}</span></div>`:''}
+         <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+         <span style="font-size:14px;color:var(--brick-ink)">${state.orderErr}</span></div>`:''}
        ${orderHeadMarks(o)}
        ${refundPanel(o)}
        ${o.custNote?`<div class="card" style="padding:14px;border-color:var(--accent)">
@@ -3887,7 +4041,7 @@ function sheetOrderDetail(){
        ${o.trk&&!(o.shipments&&o.shipments.length)?`<div class="card" style="padding:14px">
          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
            <span style="display:flex;align-items:center;gap:8px;min-width:0;color:var(--text-secondary)">${ic('truck',18)}<span style="font-size:14.5px;font-weight:500;color:var(--text-primary)">${T(...o.trk.carrier)}</span></span>
-           ${o.trk.live?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]};gap:6px"><span style="width:7px;height:7px;border-radius:50%;background:#5F7357"></span>${T('Live sync','实时同步')}</span>`:''}</div>
+           ${o.trk.live?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]};gap:6px"><span style="width:7px;height:7px;border-radius:50%;background:var(--sage-ink)"></span>${T('Live sync','实时同步')}</span>`:''}</div>
          <div class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:7px">${o.trk.no}</div>
          <div style="font-size:13.5px;margin-top:9px;padding-top:10px;border-top:1px solid var(--border-default)">${T(...o.trk.event)}</div></div>`:''}
        <div style="background:var(--surface-raised);border-radius:14px;padding:16px">
@@ -3903,7 +4057,7 @@ function sheetOrderDetail(){
          <div style="font-size:13.5px;color:var(--text-secondary);margin-top:2px">${
            o.counter?T('Handed over at the till','已在前台交付')
            :o.pickup?(o.pickupStore?T('Collects at '+o.pickupStore,'自提门店 '+o.pickupStore):T('Collects in store','到店自提'))
-           :T(...o.addr)}</div>
+           :o.addr?T(...o.addr):T('No address on file','没有收货地址')}</div>
          ${o.custId!=null?`<button onclick="APP.cmd('openCustomerFromOrder',${o.custId})" style="display:inline-flex;align-items:center;gap:5px;margin-top:10px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 12px;cursor:pointer;font-family:inherit">${ic('user',14)} ${T('Open their record','查看顾客')}</button>`:''}</div>
        <div class="card" style="padding:14px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="eyebrow">${T('Payment','支付')}</span>
          ${o.txn?`<button onclick="APP.cmd('copyTxn')" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);background:transparent;border:none;cursor:pointer;font-family:inherit">${T('Copy','复制')} ${ic('copy',13)}</button>`:''}</div>
@@ -3918,17 +4072,17 @@ function sheetOrderDetail(){
            <div style="font-size:12px;color:var(--text-secondary);margin-top:6px">${T('The screenshot the customer sent — tap to see it whole','顾客上传的付款截图 — 点击查看大图')}</div></div>`:''}</div>
        <div class="card" style="padding:14px"><span class="eyebrow">${T('Fulfilled by','履约门店')}</span>
          <div style="font-size:15px;margin-top:7px">${T(...o.fulfil)}</div>
-         <div style="display:flex;align-items:center;gap:6px;margin-top:5px;color:var(--text-secondary)">${ic('route',14)}<span style="font-size:12.5px">${T(...o.route)}</span></div>
-         ${o.routedByArea?`<div style="display:flex;align-items:flex-start;gap:7px;margin-top:8px;color:#8A6425;font-size:12.5px;line-height:1.5">
+         ${o.route?`<div style="display:flex;align-items:center;gap:6px;margin-top:5px;color:var(--text-secondary)">${ic('route',14)}<span style="font-size:12.5px">${T(...o.route)}</span></div>`:''}
+         ${o.routedByArea?`<div style="display:flex;align-items:flex-start;gap:7px;margin-top:8px;color:var(--amber-ink);font-size:12.5px;line-height:1.5">
            ${ic('triangle-alert',14)}<span>${T('Routed by area — the address could not be located, so check the store is right.','按区域派单 — 地址无法定位，请核对门店是否正确。')}</span></div>`:''}
          ${o.shortItems?`<div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border-default)">
-           <span style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500;color:#8A6425">
+           <span style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500;color:var(--amber-ink)">
              <span style="width:6px;height:6px;border-radius:50%;background:var(--amber);flex:none"></span>${T('The nearer store was short on','就近门店缺货')}</span>
            <div style="margin-top:6px;display:flex;flex-direction:column;gap:3px">${o.shortItems.map(nm=>
              `<span style="font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(nm)}</span>`).join('')}</div></div>`:''}</div>
        ${o.receipt?`<div class="card" style="padding:14px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="eyebrow">${T('Receipt','小票')}</span>
          <button onclick="APP.cmd('reprint')" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:8px;cursor:pointer;padding:5px 9px;font-family:inherit">${ic('printer',15)} ${T('Reprint','重打')}</button></div>
-         <div style="display:flex;align-items:center;gap:7px;margin-top:8px"><span style="display:flex;color:#5F7357">${ic('check',16,2.25)}</span><span style="font-size:14.5px">${T(...o.receipt)}</span></div></div>`:''}`}
+         <div style="display:flex;align-items:center;gap:7px;margin-top:8px"><span style="display:flex;color:var(--sage-ink)">${ic('check',16,2.25)}</span><span style="font-size:14.5px">${T(...o.receipt)}</span></div></div>`:''}`}
        ${shipByTile(o)}
        ${invoiceBlock(o)}
        ${orderItemsBlock(o)}
@@ -3989,19 +4143,19 @@ function trackingCard(o,sp,label){
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
       <span class="eyebrow">${label?label:T('Tracking','物流')}</span>
       ${st?`<span style="font-size:13px;font-weight:500;color:${DELIV_TONE[tone]}">${st}</span>`:''}</div>
-    ${sp.airCleared==null&&o.airDelayed&&sp.mode==='air'?`<div style="display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:12px;background:var(--brick-tint);color:var(--brick)">
+    ${sp.airCleared==null&&o.airDelayed&&sp.mode==='air'?`<div style="display:flex;flex-direction:column;gap:8px;padding:12px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink)">
       <span style="display:flex;align-items:center;gap:7px;font-size:13.5px;font-weight:500">${ic('triangle-alert',16)}${T('Air shipment delayed','空运延误')}</span>
       <span style="font-size:13px;line-height:1.5">${T('Fresh items may no longer be safe. Call the customer and tell them not to eat it, then claim the delay with JD.','生鲜可能已不安全。请联系顾客告知勿食用，并向京东申请延误赔偿。')}</span>
-      <button class="btn2" style="width:100%;color:var(--brick);border-color:var(--brick)" ${state.parcelBusy===('air'+sp.id)?'disabled':''} onclick="APP.cmd('clearAirDelay',${sp.id})">${state.parcelBusy===('air'+sp.id)?T('Saving…','处理中…'):T('Mark handled — customer contacted','标记已处理 — 已联系顾客')}</button></div>`:''}
+      <button class="btn2" style="width:100%;color:var(--brick-ink);border-color:var(--brick-ink)" ${state.parcelBusy===('air'+sp.id)?'disabled':''} onclick="APP.cmd('clearAirDelay',${sp.id})">${state.parcelBusy===('air'+sp.id)?T('Saving…','处理中…'):T('Mark handled — customer contacted','标记已处理 — 已联系顾客')}</button></div>`:''}
     ${sp.airCleared?`<div style="display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--text-secondary)">${ic('check',14)}${T('Air delay handled'+(sp.airClearedBy?' · '+sp.airClearedBy:''),'空运延误已处理'+(sp.airClearedBy?' · '+sp.airClearedBy:''))}</div>`:''}
-    ${reuse?`<div style="padding:10px 12px;border-radius:12px;background:var(--brick-tint);color:var(--brick);font-size:12.5px;line-height:1.5">${
+    ${reuse?`<div style="padding:10px 12px;border-radius:12px;background:var(--brick-tint);color:var(--brick-ink);font-size:12.5px;line-height:1.5">${
       reuse.delivered?T('This waybill is already on a delivered order ('+escAttr(reuse.order_no)+'). A reused number will not sync — check it.','此运单号已用于一笔已签收订单('+escAttr(reuse.order_no)+')，重复号码不会同步，请核对。')
                      :T('This waybill is also on order '+escAttr(reuse.order_no)+'. Reused numbers may not sync.','此运单号也绑定在订单 '+escAttr(reuse.order_no)+' 上，可能无法同步。')}</div>`:''}
     ${has?`<div>
       <div class="num" style="font-size:16px;font-weight:500;letter-spacing:.01em">${escAttr(t.number)}</div>
       <div style="font-size:13px;color:var(--text-secondary);margin-top:2px">${escAttr(LANG==='en'?(t.carrier_name_en||''):(t.carrier_name_cn||''))}</div></div>
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
-        ${badge?`<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:${badge.tone==='sage'?'#5F7357':badge.tone==='brick'?'var(--brick)':'var(--text-secondary)'}">${badge.tone==='sage'?'<span style="width:6px;height:6px;border-radius:50%;background:#5F7357"></span>':''}${badge.text}</span>`:''}
+        ${badge?`<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:${badge.tone==='sage'?'var(--sage-ink)':badge.tone==='brick'?'var(--brick-ink)':'var(--text-secondary)'}">${badge.tone==='sage'?'<span style="width:6px;height:6px;border-radius:50%;background:var(--sage-ink)"></span>':''}${badge.text}</span>`:''}
         <span class="num" style="font-size:12px;color:var(--text-secondary)">${t.synced_at?T('Updated '+fmtDay(t.synced_at),'更新于 '+fmtDay(t.synced_at)):T('no live sync yet','尚未实时同步')}</span></div>
       <div style="display:flex;gap:8px;flex-wrap:wrap">
         <button class="btn2" style="width:auto;padding:8px 14px;flex:none" onclick="APP.cmd('copyWaybill','${escAttr(t.number)}')">${ic('copy',14)} ${T('Copy','复制')}</button>
@@ -4013,7 +4167,7 @@ function trackingCard(o,sp,label){
         ${rest.length?`<details><summary style="cursor:pointer;list-style:none;font-size:12.5px;color:var(--text-secondary);padding:4px 0">${T(rest.length+' earlier events','更早的 '+rest.length+' 条')}</summary>
           <div style="display:flex;flex-direction:column;gap:7px;margin-top:7px">${rest.map(evRow).join('')}</div></details>`:''}
       </div>`:`<div style="font-size:13px;color:var(--text-secondary)">${T('Waiting for the first carrier update.','等待承运商第一条更新。')}</div>`}
-    `:`<div style="font-size:13.5px;color:var(--brick)">${T('No waybill on this parcel yet — add it on the desktop.','此包裹尚无运单号 — 请在电脑端录入。')}</div>`}
+    `:`<div style="font-size:13.5px;color:var(--brick-ink)">${T('No waybill on this parcel yet — add it on the desktop.','此包裹尚无运单号 — 请在电脑端录入。')}</div>`}
   </div>`;
 }
 /* A same-city parcel has no waybill; what the operator watches is the arrival
@@ -4107,8 +4261,10 @@ function orderItemsBlock(o){
     </div></div>`;
 }
 function orderActionRow(o,isPO){
-  if(isPO) return `<div style="display:flex;align-items:center;gap:8px;margin-top:12px">
-    <button class="btn2" style="flex:1" onclick="APP.cmd('saveStock')">${T('Receive stock','入库')}</button></div>`;
+  // A purchase order has no customer-order action. It used to be offered a
+  // Receive stock button whose handler was a toast; receiving happens in
+  // sheetPO, which asks first and PUTs.
+  if(isPO) return '';
   if(o._id==null) return '';   // sample data in the static preview: no live order to act on
   const next=orderNext(o);
   const busy=state.orderBusy;
@@ -4139,13 +4295,13 @@ function sheetAsk(){
            ? `<textarea id="ask-${f.id}" placeholder="${f.placeholder||''}" style="min-height:96px;resize:none">${f.value!=null?escAttr(f.value):''}</textarea>`
            : `<input id="ask-${f.id}" ${f.numeric?'inputmode="text"':''} placeholder="${f.placeholder||''}" value="${f.value!=null?escAttr(f.value):''}">`}
        </label>`).join('')}
-       ${state.askErr?`<div style="font-size:14px;color:var(--brick)">${state.askErr}</div>`:''}
+       ${state.askErr?`<div style="font-size:14px;color:var(--brick-ink)">${state.askErr}</div>`:''}
      </div>`:''}
      ${a.options
        ? a.options.map(o=>`<button class="row" style="min-height:56px;padding:12px 20px" onclick="APP.cmd('askRun','${o.key}')"><span style="flex:1;font-size:15px">${o.label}</span></button>`).join('')
        : `<div style="display:flex;gap:8px;padding:16px 20px 0">
             <button class="btn2" style="flex:1" onclick="APP.cmd('closeAsk')">${T('Cancel','取消')}</button>
-            <button class="btn2" style="flex:1;${a.danger?'color:var(--brick);border-color:var(--brick)':''}" onclick="APP.cmd('askRun','')">${a.confirmLabel||T('Confirm','确认')}</button>
+            <button class="btn2" style="flex:1;${a.danger?'color:var(--brick-ink);border-color:var(--brick-ink)':''}" onclick="APP.cmd('askRun','')">${a.confirmLabel||T('Confirm','确认')}</button>
           </div>`}
    </div>`;
 }
@@ -4231,8 +4387,8 @@ function sheetProduct(){
      <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:16px;background:var(--bg)">
        ${noteBar(T('Quick-edit stock and price · full editing on desktop','快改库存与价格 · 完整编辑在电脑端'))}
        ${state.prodErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-         <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-         <span style="font-size:14px;color:var(--brick)">${state.prodErr}</span></div>`:''}
+         <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+         <span style="font-size:14px;color:var(--brick-ink)">${state.prodErr}</span></div>`:''}
        <div class="card" style="padding:16px">
          <div class="eyebrow">${T('Price','价格')}</div>
          <div style="display:flex;align-items:center;gap:8px;margin-top:12px">
@@ -4261,8 +4417,8 @@ function threadBody(){
   const th=state.thread;
   if(th.loading) return `<div style="padding:28px 0;text-align:center;font-size:14px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
   if(th.err) return `<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-    <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-    <span style="font-size:14px;color:var(--brick)">${th.err}</span></div>`;
+    <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+    <span style="font-size:14px;color:var(--brick-ink)">${th.err}</span></div>`;
   const msgs=th.msgs||[];
   const photos=th.photos||[];
   return `${th.page?`<div style="display:flex;flex-wrap:wrap;gap:6px">
@@ -4273,8 +4429,13 @@ function threadBody(){
       `<a href="${escAttr(u)}" target="_blank" rel="noopener" style="width:64px;height:64px;border-radius:9px;overflow:hidden;border:1px solid var(--border-default);background-image:url('${String(u).replace(/'/g,'%27')}');background-size:cover;background-position:center;display:block"></a>`).join('')}</div>`:''}`;
 }
 function sheetReply(){
-  const r=findReview(state.reply)||{cust:[state.reply,state.reply],text:['','']};
+  // The fallback used to be the LIST KEY — `fb:1`, an internal identifier — as
+  // both halves of the customer's name, which is what the sheet titles itself
+  // with. It shows whenever the row is not in the list: a stale key, a list
+  // refreshed while the sheet is open, or a thread reached from anywhere else.
   const th=state.thread;
+  const r=findReview(state.reply)
+    || {cust:(th&&th.name)?[th.name,th.name]:[T('Conversation','对话'),T('Conversation','对话')], text:['','']};
   const foot = th
     ? T('The customer gets this in their mini-app inbox.','顾客会在小程序消息中收到。')
     : T('Replies show under the review in the mini app, signed with the store name.','回复会显示在小程序的评价下方，署名为店铺名称。');
@@ -4287,33 +4448,13 @@ function sheetReply(){
        ${th?threadBody():`<div style="background:var(--surface-raised);border-radius:12px;padding:14px;font-size:14px;line-height:1.55;color:var(--text-secondary)">${T(...r.text)}</div>`}
        ${th?'':`<textarea id="mReply" placeholder="${T('Write a reply…','写下回复…')}" style="min-height:100px;resize:none">${r.reply?String(r.reply).replace(/</g,'&lt;'):''}</textarea>`}
        ${state.replyErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
-         <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-         <span style="font-size:14px;color:var(--brick)">${state.replyErr}</span></div>`:''}
+         <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+         <span style="font-size:14px;color:var(--brick-ink)">${state.replyErr}</span></div>`:''}
        ${th?'':`<div style="font-size:13px;color:var(--text-secondary)">${foot}</div>`}</div>
      <div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card);display:flex;flex-direction:column;gap:10px">
        ${th?`<textarea id="mReply" placeholder="${T('Write a reply…','写下回复…')}" style="min-height:52px;max-height:120px;resize:none"></textarea>`:''}
        <button class="btn2" style="width:100%" ${state.replyBusy?'disabled':''} onclick="APP.cmd('sendReplyText',(document.getElementById('mReply')||{}).value)">${state.replyBusy?T('Sending…','发送中…'):T('Send reply','发送回复')}</button>
        ${th?`<div style="font-size:12px;color:var(--text-secondary);text-align:center">${foot}</div>`:''}</div></div>`;
-}
-function sheetCreate(){
-  const cfg={coupon:{title:T('New coupon','新建优惠券'),ph:'WELCOME10',unit:'%',showValue:true,verb:T('Create coupon','创建优惠券')},
-    flash:{title:T('New flash sale','新建秒杀'),ph:T('Lunch flash','午市闪购'),unit:'%',showValue:true,verb:T('Schedule flash','排期秒杀')},
-    broadcast:{title:T('New broadcast','新建广播'),ph:T('Message title','消息标题'),showValue:false,verb:T('Send broadcast','发送广播')}}[state.createKind];
-  if(!cfg) return '';
-  return `<div class="scrim" style="z-index:45" onclick="APP.cmd('closeCreate')"></div>
-   <div class="sheet" style="top:120px;z-index:46;overflow:hidden">
-     <div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
-       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" onclick="APP.cmd('closeCreate')">${ic('x',22,2)}</button>
-       <span style="flex:1;font-size:17px;font-weight:500">${cfg.title}</span><span style="width:36px;flex:none"></span></div></div>
-     <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;background:var(--bg)">
-       <div><div class="eyebrow" style="padding:0 2px 7px;letter-spacing:.05em">${T('Title','标题')}</div><input placeholder="${cfg.ph}"></div>
-       ${cfg.showValue?`<div class="card" style="padding:16px"><div class="eyebrow">${T('Value','面额')}</div>
-         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">
-           <button class="stepbtn" onclick="APP.cmd('createValDec')">${ic('minus',18,2.25)}</button>
-           <span class="num" style="font-size:26px;font-weight:500">${state.createValue}${cfg.unit}</span>
-           <button class="stepbtn" onclick="APP.cmd('createValInc')">${ic('plus',18,2.25)}</button></div></div>`:''}
-       <div style="display:flex;align-items:center;gap:12px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:14px"><span style="flex:1;font-size:15px">${T('Active','启用')}</span>${toggle(state.createActive,"APP.cmd('toggleCreateActive')")}</div></div>
-     <div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card)"><button class="cta" onclick="APP.cmd('submitCreate')">${cfg.verb}</button></div></div>`;
 }
 /* Who is signed in, in the operator's own words. The four positions are the
    ones the backend recognises; anything else is an owner/admin/staff login and
@@ -4414,7 +4555,7 @@ function custFiltered0(){ return (state.custSeg||'all')==='all'&&(state.custTier
    surface. It wraps now: two short lines beat one clipped one. */
 function custPulse(){
   const m=state.custMeta||{}; const bits=[];
-  if(m.buyers!=null) bits.push(T(m.buyers+' buyers', m.buyers+' 位买家'));
+  if(m.buyers!=null) bits.push(T(m.buyers+(m.buyers===1?' buyer':' buyers'), m.buyers+' 位买家'));
   // 0% is printed, not omitted — see loadCustomerMeta.
   if(m.returnRate!=null) bits.push(T(m.returnRate+'% returning', m.returnRate+'% 复购'));
   if(m.never!=null) bits.push(T(m.never+' never ordered', m.never+' 位未下单'));
@@ -4424,7 +4565,7 @@ function custCard(c){
   const tier=TIER_LABEL[c.tier]||[c.tier,c.tier];
   return `<button class="card${c.unseen?' unseen':''}" onclick="APP.cmd('openCustomer','${c.id}')"
       style="display:flex;align-items:center;gap:12px;padding:16px 14px;text-align:left;cursor:pointer;color:var(--text-primary);font-family:inherit">
-    <span style="width:32px;height:32px;flex:none;border-radius:8px;background:var(--dusk-tint);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500">${(c.name||'·').trim().charAt(0).toUpperCase()}</span>
+    <span style="width:32px;height:32px;flex:none;border-radius:8px;background:var(--dusk-tint);color:var(--dusk-ink);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500">${(c.name||'·').trim().charAt(0).toUpperCase()}</span>
     <span style="flex:1;min-width:0">
       ${/* Wrapping, so the NAME wins. Nowrap here meant every pill on the row
            took its width out of the name: adding the channel mark clipped
@@ -4434,14 +4575,14 @@ function custCard(c){
       <span style="display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap">
         <span style="font-size:15px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.name||T('No name','未填姓名')}</span>
         <span class="pill" style="background:rgba(88,96,110,.10);color:var(--text-secondary)">${T(...tier)}</span>
-        ${c.blocked?`<span class="pill" style="background:var(--brick-tint);color:var(--brick)">${T('Blocked','已封禁')}</span>`:''}
+        ${c.blocked?`<span class="pill" style="background:var(--brick-tint);color:var(--brick-ink)">${T('Blocked','已封禁')}</span>`:''}
         ${/* The channel mark is an EXCEPTION mark — it appears only for web and
              staff-added, never for the mini app — so it belongs with the other
              exception pills rather than on the end of the meta line, where it
              was the first thing to be clipped away. */''}
         ${CUST_CHAN[c.chan]?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T(...CUST_CHAN[c.chan])}</span>`:''}
       </span>
-      <span class="num" style="display:block;font-size:13px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.phone||'—'} · ${c.orders?T(c.orders+' orders',c.orders+' 单'):T('No orders','暂无订单')}</span>
+      <span class="num" style="display:block;font-size:13px;color:var(--text-secondary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${c.phone||'—'} · ${c.orders?T(c.orders+(c.orders===1?' order':' orders'),c.orders+' 单'):T('No orders','暂无订单')}</span>
     </span>
     ${/* The right column was flex:none and unbounded, so a long spend + a
          last-seen date + a holds pill ate the row and the line beside it
@@ -4500,7 +4641,7 @@ function screenCustomers(){
   let body;
   if(state.custLoadErr){
     body=`<div style="display:flex;flex-direction:column;align-items:center;gap:14px;padding:40px 24px;text-align:center">
-      <span style="color:var(--brick);display:flex">${ic('triangle-alert',24)}</span>
+      <span style="color:var(--brick-ink);display:flex">${ic('triangle-alert',24)}</span>
       <div style="font-size:16px;font-weight:500">${state.custLoadErr}</div>
       <div style="font-size:14px;color:var(--text-secondary);max-width:250px;line-height:1.55">${T('Nothing is wrong with your customers — the roster just did not arrive.','客户数据没有问题 — 只是名单没有加载出来。')}</div>
       <button class="btn2" style="width:auto;padding:11px 26px" onclick="APP.cmd('custRetry')">${T('Try again','重试')}</button></div>`;
@@ -4521,10 +4662,13 @@ function screenCustomers(){
   const pulse=custPulse();
   const chans=[{key:'all',en:'All channels',zh:'全部渠道'},{key:'wechat',en:'Mini app',zh:'小程序'},
     {key:'web',en:'Web',zh:'网页'},{key:'manual',en:'Added by staff',zh:'员工添加'}];
-  return `${pageHead({title:T('Customers','顾客'), controls:true})}
-    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:14px 16px 12px">
-      <span class="num" style="font-size:13px;color:var(--text-secondary);min-width:0;line-height:1.5">${pulse||''}</span>
-      <button onclick="APP.cmd('custSortPick')" style="flex:none;display:inline-flex;align-items:center;gap:4px;background:none;border:none;padding:2px 0;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--text-primary)">${custSortLabel()} ${ic('chevron-down',14,2)}</button>
+  // The pulse goes in the band, like every other page's status line, and the
+  // sort control is left where the eye starts — right-aligned and alone on an
+  // otherwise empty row it read as a stray label rather than a control, so it
+  // says what it is doing: "Sorted by Last seen".
+  return `${pageHead({title:T('Customers','顾客'), status:pulse||'', controls:true})}
+    <div style="padding:14px 16px 12px">
+      <button onclick="APP.cmd('custSortPick')" style="display:inline-flex;align-items:center;gap:5px;background:none;border:none;padding:2px 0;cursor:pointer;font-family:inherit;font-size:13px;color:var(--text-secondary)">${T('Sorted by','排序')} <span style="font-weight:500;color:var(--text-primary)">${custSortLabel()}</span> ${ic('chevron-down',14,2)}</button>
     </div>
     <div style="padding:0 16px 12px"><input id="mCustQ" inputmode="search" enterkeyhint="search" value="${escAttr(state.custQ)}"
       placeholder="${T('Search name or phone','搜索姓名或手机')}" style="width:100%"
@@ -4585,7 +4729,7 @@ function custPointsLedger(d){
     const src=PT_SOURCE[String(r.source||'').toLowerCase()];
     const n=Number(r.delta)||0;
     return custRow(src?T(...src):escAttr(r.source||'—'),
-      `<span style="color:${n<0?'var(--brick)':'var(--text-primary)'}">${n>0?'+':''}${n.toLocaleString()}</span>`,
+      `<span style="color:${n<0?'var(--brick-ink)':'var(--text-primary)'}">${n>0?'+':''}${n.toLocaleString()}</span>`,
       [fmtDay(r.created_at), r.note?escAttr(r.note):''].filter(Boolean).join(' · '));
   })));
 }
@@ -4597,7 +4741,7 @@ function custTopups(d){
     const ok=String(r.status||'').toLowerCase()==='success';
     const method=r.payment_method==='admin_adjust'?T('by staff','员工调整'):escAttr(r.payment_method||'');
     return custRow(money(CUR,r.amount)+(Number(r.bonus_points)?` <span style="font-size:12.5px;color:var(--text-secondary)">+${Number(r.bonus_points).toLocaleString()} ${T('pts','分')}</span>`:''),
-      ok?'':`<span style="color:var(--brick);font-size:13px">${escAttr(r.status||'')}</span>`,
+      ok?'':`<span style="color:var(--brick-ink);font-size:13px">${escAttr(r.status||'')}</span>`,
       [fmtDay(r.paid_at||r.created_at), method].filter(Boolean).join(' · '));
   })));
 }
@@ -4678,27 +4822,42 @@ function sheetCustomer(){
       <div style="flex:none;padding:8px 16px 16px;border-bottom:1px solid var(--border-default)">
         <div class="grabber"></div>
         <div style="display:flex;align-items:center;gap:16px">
-          <span style="width:32px;height:32px;flex:none;border-radius:8px;background:var(--dusk-tint);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500">${((c.nickname||'·').trim().charAt(0)||'·').toUpperCase()}</span>
+          <span style="width:32px;height:32px;flex:none;border-radius:8px;background:var(--dusk-tint);color:var(--dusk-ink);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500">${((c.nickname||'·').trim().charAt(0)||'·').toUpperCase()}</span>
           <span style="font-size:18px;font-weight:500;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${c.nickname||T('No name','未填姓名')}</span>
           <span class="pill" style="background:rgba(88,96,110,.10);color:var(--text-secondary)">${T(...tier)}</span>
-          ${c.is_blocked?`<span class="pill" style="background:var(--brick-tint);color:var(--brick)">${T('Blocked','已封禁')}</span>`:''}
+          ${c.is_blocked?`<span class="pill" style="background:var(--brick-tint);color:var(--brick-ink)">${T('Blocked','已封禁')}</span>`:''}
           <span style="flex:1"></span>
           <button class="iconbtn" onclick="APP.cmd('closeCustomer')" aria-label="${T('Close','关闭')}">${ic('x',20,2)}</button>
         </div>
-        <div class="num" style="margin-top:4px;font-size:13px;color:var(--text-secondary)">${c.phone||'—'}</div>
-      ${d?`<div style="display:flex;align-items:center;gap:8px;margin-top:16px">
-        <button class="btn2" style="flex:1;min-width:0" ${state.custBusy?'disabled':''} onclick="APP.cmd('adjustPoints')">${state.custBusy==='points'?T('Saving…','保存中…'):T('Adjust points','调整积分')}</button>
-        <button class="btn2" style="width:44px;padding:0;flex:none" ${state.custBusy?'disabled':''} onclick="APP.cmd('editCustomer')" aria-label="${T('Edit profile','编辑资料')}">${ic('pencil',20)}</button>
-        <button class="btn2" style="width:44px;padding:0;flex:none" ${state.custBusy?'disabled':''} onclick="APP.cmd('messageCustomer')" aria-label="${T('Message','发消息')}">${ic('message-square-text',20)}</button>
-        <button class="btn2" style="width:44px;padding:0;flex:none" ${state.custBusy?'disabled':''} onclick="APP.cmd('adjustWallet')" aria-label="${T('Adjust wallet','调整钱包')}">${ic('wallet',20)}</button>
-        <button class="btn2" style="width:44px;padding:0;flex:none" ${state.custBusy?'disabled':''} onclick="APP.cmd('toggleBlock')" aria-label="${c.is_blocked?T('Unblock','解除封禁'):T('Block','封禁')}">${ic(c.is_blocked?'lock-open':'ban',20)}</button>
+        ${c.phone?`<div class="num" style="margin-top:4px;font-size:13px;color:var(--text-secondary)">${c.phone}</div>`:''}
+      ${/* Four labelled buttons, and Block is not one of them.
+            This row was one worded button and four bare 44px squares —
+            pencil, speech bubble, wallet, ban — with the words only in an
+            aria-label, which a thumb cannot read. Two of those four write
+            money and one locks the customer out of their account, side by
+            side, told apart by a glyph. Every action says what it is now,
+            and blocking moved to the bottom of the sheet, away from the
+            routine ones: it is the only thing here that takes something
+            away from a person. */''}
+      ${d?`<div style="display:flex;align-items:stretch;gap:8px;margin-top:16px">
+        ${[['adjustPoints','coins',T('Points','积分'),'points'],
+           ['adjustWallet','wallet',T('Wallet','钱包'),'wallet'],
+           ['messageCustomer','message-square-text',T('Message','发消息'),'message'],
+           ['editCustomer','pencil',T('Edit','编辑'),'edit']]
+          .map(([cmd,icon,label,busy])=>`<button class="btn2" style="flex:1;min-width:0;flex-direction:column;gap:4px;padding:9px 4px;height:auto"
+            ${state.custBusy?'disabled':''} onclick="APP.cmd('${cmd}')">${ic(icon,19)}
+            <span style="font-size:12px;font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">${state.custBusy===busy?T('Saving…','保存中…'):label}</span></button>`).join('')}
       </div>`:''}
       </div>
       <div style="flex:1;min-height:0;overflow-y:auto;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 24px)">
         ${state.custErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint);margin-bottom:16px">
-          <span style="flex:none;color:var(--brick);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
-          <span style="font-size:14px;color:var(--brick)">${state.custErr}</span></div>`:''}
-        ${body}</div>
+          <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+          <span style="font-size:14px;color:var(--brick-ink)">${state.custErr}</span></div>`:''}
+        ${body}
+        ${d?`<div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border-default);display:flex;justify-content:center">
+          <button style="font-size:13.5px;font-weight:500;color:${c.is_blocked?'var(--text-primary)':'var(--brick-ink)'};background:transparent;border:none;cursor:pointer;font-family:inherit;padding:8px 12px"
+            ${state.custBusy?'disabled':''} onclick="APP.cmd('toggleBlock')">${state.custBusy==='block'?T('Saving…','保存中…')
+              :(c.is_blocked?T('Unblock this customer','解除封禁'):T('Block this customer','封禁该顾客'))}</button></div>`:''}</div>
     </div>`;
 }
 
@@ -4763,7 +4922,7 @@ function productCard(u){
      it was an on/off echo, set at 10.5px, below the type scale's floor. */
   const statusPill = p.kind==='restock'||p.kind==='off';
   const marks=[];
-  if(u.group) marks.push({t:T(members.length+' sizes',members.length+' 规格'),sev:'muted'});
+  if(u.group) marks.push({t:T(members.length+(members.length===1?' size':' sizes'),members.length+' 规格'),sev:'muted'});
   if(p.bundle) marks.push({t:T('Bundle','套装'),sev:'muted'});
   if(anyOut&&u.group) marks.push({t:T(anyOut+' out of stock',anyOut+' 项缺货'),sev:'amber'});
   return `<div class="card" style="display:flex;gap:12px;padding:12px;align-items:flex-start">
@@ -4777,7 +4936,7 @@ function productCard(u){
           u.group?members.map(m=>escAttr(m.vLabel||m.sku)).join(' · '):escAttr(p.sku)}</span>
         <span style="display:flex;align-items:center;gap:7px;flex-wrap:wrap">
           ${statusPill?pill(p.kind,T(...p.status)):''}
-          ${marks.map(m=>`<span class="pill" style="background:${m.sev==='amber'?'var(--amber-tint)':PILL.muted[0]};color:${m.sev==='amber'?'#8A6425':PILL.muted[1]}">${m.t}</span>`).join('')}
+          ${marks.map(m=>`<span class="pill" style="background:${m.sev==='amber'?'var(--amber-tint)':PILL.muted[0]};color:${m.sev==='amber'?'var(--amber-ink)':PILL.muted[1]}">${m.t}</span>`).join('')}
           ${u.group?'':`<span class="num" style="font-size:12.5px;color:var(--text-secondary)">${T(...p.stockLabel)}</span>`}
         </span></span></button>
     <span style="display:flex;flex-direction:column;align-items:center;gap:5px;flex:none;padding-top:2px">
@@ -4919,7 +5078,7 @@ function headControls(){
       ${unseen?`<span style="position:absolute;top:6px;right:6px;width:6px;height:6px;border-radius:50%;background:var(--sage);box-shadow:0 0 0 2px var(--bg)"></span>`:''}
     </span>
     <button class="iconbtn" style="width:38px;height:38px" onclick="APP.cmd('overflow')" aria-label="${T('Account','账户')}">
-      <span style="width:28px;height:28px;border-radius:8px;background:var(--dusk-tint);color:var(--accent);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500">${(state.storeName||'').trim().charAt(0).toUpperCase()||ic('user',16)}</span>
+      <span style="width:28px;height:28px;border-radius:8px;background:var(--dusk-tint);color:var(--dusk-ink);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500">${(state.storeName||'').trim().charAt(0).toUpperCase()||ic('user',16)}</span>
     </button></span>`;
 }
 /* Frame 4 of the canvas, "One header" — built as drawn. The old top bar carried
@@ -4973,7 +5132,14 @@ function bodyHtml(){
   const sub=state.stack[state.stack.length-1];
   if(sub){
     const def=SUBS[sub.route];
-    return pageHead({title:T(...sub.title), back:T('More','更多'), cta:def.cta?def.cta():''}) + def.render();
+    // A pushed screen gets a status line in the band, the same as a tab does.
+    // Every one of these screens used to open with its summary as the first row
+    // of the BODY — a grey sentence sitting under the rule, indistinguishable
+    // from content, and pushing the real content down a line. §1.7 says the
+    // header is title · status, and "same for every page" is the point: the
+    // number you came for should be in the same place on every screen.
+    return pageHead({title:T(...sub.title), back:T('More','更多'),
+      cta:def.cta?def.cta():'', status:def.status?def.status():''}) + def.render();
   }
   switch(state.tab){
     case 'home': return screenHome();
@@ -4993,7 +5159,6 @@ function render(){
   if(state.productSku) html += sheetProduct();
   if(state.reply!=null) html += sheetReply();
   if(state.poId!=null) html += sheetPO();
-  if(state.createKind) html += sheetCreate();
   if(state.search) html += sheetSearch();
   if(state.toast) html += `<div class="toast">${state.toast}</div>`;
   app.innerHTML = html;
@@ -5034,7 +5199,14 @@ async function api(path){
    completely: English renders US times (2:22 PM), Chinese renders 24-hour
    (14:22). There is no house style and no third format. The year appears only
    when the date is not in the current year. */
-const _date=v=>{ if(!v) return null; const d=new Date(String(v).replace(' ','T')); return isNaN(d)?null:d; };
+// A bare YYYY-MM-DD is parsed as UTC midnight by the language, while a
+// timestamp with a time in it is parsed as local — so the same helper put a
+// promised ship date on the wrong calendar day for anyone west of Greenwich
+// while the order's placed_at beside it was right. Pin the date-only form to
+// local midnight so both forms mean the same thing.
+const _date=v=>{ if(!v) return null; let t=String(v).replace(' ','T');
+  if(/^\d{4}-\d{2}-\d{2}$/.test(t)) t+='T00:00:00';
+  const d=new Date(t); return isNaN(d)?null:d; };
 function fmtTime(v){ const d=_date(v); if(!d) return '';
   return LANG==='en' ? d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})
                      : d.toLocaleTimeString('zh-CN',{hour:'2-digit',minute:'2-digit',hour12:false}); }
@@ -5121,7 +5293,7 @@ async function loadCustomers(more){
     // Same rule as the orders list: a failed load says so rather than handing
     // back five sample customers with real-looking names and spend.
     if(!more){ state.customers=[]; state.custTotal=null; state.custMore=false; state.custLoaded=true; }
-    state.custLoadErr=T('Could not load customers.','无法加载客户。');
+    state.custLoadErr=E('Could not load customers.','无法加载客户。');
   }
   state.custLoading=false;
   loadCustomerMeta();
@@ -5189,15 +5361,22 @@ const money0=(cur,n)=>(cur||'¥')+Math.round(Number(n||0)).toLocaleString();
 // — the dangling "vs a typical day" under Avg. order was exactly that.
 const DOW_ABBR_EN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const DOW_CN=['周日','周一','周二','周三','周四','周五','周六'];
+/* Returns a PAIR, resolved at render. It used to return one resolved string,
+   and the KPI tiles that hold it are built once at boot — so the labels and the
+   comparisons under them were frozen in whatever language the app booted in,
+   and switching to Chinese left the Today card reading "Revenue (all
+   channels)". Every other bilingual value in this file is stored as a pair for
+   exactly this reason; these two were built in a loader rather than a renderer
+   and slipped the rule. */
 function deltaText(cur, base, bl){
-  if(base===undefined || base===null) return '';
-  if(!cur) return T('none yet today','今日暂无');
-  if(!bl || !bl.days || base.delta==null) return T('new','新');
+  if(base===undefined || base===null) return null;
+  if(!cur) return ['none yet today','今日暂无'];
+  if(!bl || !bl.days || base.delta==null) return ['new','新'];
   const n=bl.days, ab=DOW_ABBR_EN[bl.weekday]||'day', cn=DOW_CN[bl.weekday]||'天';
-  const by=bl.clipped?T(' by now','同一时段'):'';
-  const vs=T(`vs last ${n} ${ab}${by}`, `较前 ${n} 个${cn}${by}`);
   const r=Math.round(base.delta);
-  return (r>0?'▲ '+r+'%':r<0?'▼ '+Math.abs(r)+'%':'±0%')+' '+vs;
+  const arrow=(r>0?'▲ '+r+'%':r<0?'▼ '+Math.abs(r)+'%':'±0%')+' ';
+  return [arrow+`vs last ${n} ${ab}`+(bl.clipped?' by now':''),
+          arrow+`较前 ${n} 个${cn}`+(bl.clipped?'同一时段':'')];
 }
 const ORDER_STATUS={
   paid:['paid','Paid','已付款'],preparing:['preparing','Preparing','备货中'],dispatched:['dispatched','Dispatched','已发货'],
@@ -5487,7 +5666,7 @@ function mapOrderRow(r){
     // only place that could say so.
     parcels: parcelRollup(r),
     phone:r.recipient_phone||r.customer_phone||'—',
-    addr:[r.address_full||'—', r.address_full||'—'],
+    addr:r.address_full?[r.address_full,r.address_full]:null,
     pay:payLabel(r.payment_method), payRaw:payIsKnown(r.payment_method)?null:(r.payment_method||''),
     payStatus:payStatusWord(primaryPayment(r)),
     /* The transaction id, or nothing. This used to be `r.order_no` — the ORDER
@@ -5498,7 +5677,7 @@ function mapOrderRow(r){
        the desktop simply omits the chip. So does this. */
     txn:(function(){ const pm=primaryPayment(r); return (pm&&(pm.transaction_id||pm.out_trade_no))||null; })(),
     fulfil:[r.store_name_en||r.store_code||'—', r.store_name_cn||r.store_name_en||'—'],
-    route:[r.routing_reason||'—', r.routing_reason||'—'],
+    route:r.routing_reason?[r.routing_reason,r.routing_reason]:null,
     trk: r.tracking_number?{carrier:[r.tracking_carrier||'Courier','快递'],no:r.tracking_number,event:[r.tracking_status||'In transit','运输中'],live:!!r.jd_live}:null,
     items:[], breakdown:[['Subtotal',money(CUR,r.subtotal!=null?r.subtotal:r.total)]].concat(r.shipping_fee?[['Delivery',money(CUR,r.shipping_fee)]]:[]),
   };
@@ -5691,12 +5870,20 @@ function mapInvoice(r){
   const st=String(r.invoice_status||'requested').toLowerCase();
   const issued=st==='issued';
   const label=issued?['Issued','已开票']:['Pending','待开票'];
-  return {id:r.invoice_number||r.order_no||('#'+r.id), order:r.order_no||'—', amount:money(CUR,r.total),
-    status:label, kind:INV_KIND[st]||'pending', issued,
+  // The headline used to be `invoice_number || order_no`, and a pending request
+  // has no fapiao number — so the card printed the order number twice, once as
+  // its title and once as its own subtitle. What actually names a request is
+  // the TITLE the customer typed, which is the first thing the desktop's fapiao
+  // block shows and the phone showed nowhere: you could not tell whose invoice
+  // was waiting without opening a laptop.
+  const company = r.invoice_type ? r.invoice_type==='company' : !!r.invoice_tax_id;
+  return {id:r.order_no||('#'+r.id), no:r.invoice_number||null,
+    title:r.invoice_title||null, company, taxId:r.invoice_tax_id||null, email:r.invoice_email||null,
+    amount:money(CUR,r.total), status:label, kind:INV_KIND[st]||'pending', issued,
     // Only an issued fapiao has a file. The button used to be offered on every
     // row and did nothing on any of them.
     file:r.invoice_file_url||null,
-    date:[fmtDay(r.invoice_issued_at||r.placed_at)||'—',fmtDay(r.invoice_issued_at||r.placed_at)||'—']};
+    when:r.invoice_issued_at||r.placed_at||null};
 }
 /* A coupon's headline fact is what it GIVES, and the phone's card never said —
    it showed a title, a code and a used count, so "20% off everything" and "¥5
@@ -5730,11 +5917,17 @@ function mapVoucher(r){
   if(r.auto_apply) pills.push({dusk:true, label:r.auto_grant_signup?T('Applied for new signups','新客自动抵扣')
     :r.is_public?T('Applied for everyone','全场自动抵扣'):T('Applied for the people it was given to','已发放顾客自动抵扣')});
   if(r.is_public) pills.push({label:T('In the app','小程序可领')});
-  if(r.auto_grant_signup) pills.push({label:T('New signups','新客自动发')});
+  // Not when the auto-apply pill above already says "for new signups" — the
+  // card carried both, two pills a word apart saying the same thing.
+  if(r.auto_grant_signup&&!r.auto_apply) pills.push({label:T('New signups','新客自动发')});
   if(r.grant_count) pills.push({label:T('Given '+(Number(r.per_customer_limit||0)!==1?r.grant_count:((r.grant_used_count||0)+'/'+r.grant_count)),
     '已发 '+(Number(r.per_customer_limit||0)!==1?r.grant_count:((r.grant_used_count||0)+'/'+r.grant_count)))});
   return {id:r.id, code:r.code,
-    title:[r.title_en||r.title_cn||r.description||gives[0], r.title_cn||r.title_en||r.description||gives[1]],
+    // No fallback to `gives`: the card prints the give in 18px two lines
+    // below, so a coupon with no title of its own read "¥5 off" twice —
+    // once small and grey as though it were the name, once as the fact.
+    title:(r.title_en||r.title_cn||r.description)
+      ? [r.title_en||r.title_cn||r.description, r.title_cn||r.title_en||r.description] : null,
     gives, rules:vchRules(r),
     used:Number(r.used_count||0), max:r.max_uses!=null?Number(r.max_uses):null,
     expires:r.expires_at||null, ended,
@@ -5754,9 +5947,13 @@ const FLASH_KIND={live:'live',running:'live',scheduled:'draft',upcoming:'draft',
 function flashWindow(a,b){
   const A=_date(a), B=_date(b);
   if(!A&&!B) return null;
+  // fmtDay collapses to a bare TIME when the date is today, which is exactly
+  // when a flash sale is most likely to be read — so a lunchtime flash printed
+  // "12:00 PM · 12:00 PM–2:00 PM", the same clock twice with a dot between.
+  // fmtDateOnly says Today, and the window says the hours.
   const sameDay = A&&B&&A.toDateString()===B.toDateString();
-  if(sameDay) return fmtDay(a)+' · '+fmtTime(a)+'–'+fmtTime(b);
-  return [A?fmtDay(a):'', B?fmtDay(b):''].filter(Boolean).join(' – ');
+  if(sameDay) return fmtDateOnly(a)+' · '+fmtTime(a)+'–'+fmtTime(b);
+  return [A?fmtDateOnly(a):'', B?fmtDateOnly(b):''].filter(Boolean).join(' – ');
 }
 function mapFlash(r){
   const state=String(r.flash_state||'none');
@@ -5770,7 +5967,7 @@ function mapFlash(r){
   return {
     _id:r.id,
     title:[r.name_en||r.name_cn||'—',r.name_cn||r.name_en||'—'],
-    sku:r.sku||'', img:r.image_data||r.image_url||'',
+    sku:r.sku?('SKU '+r.sku):'', img:r.image_data||r.image_url||'',
     price:now?money(CUR,now):null, was:was?money(CUR,was):null, off,
     limit, sold, left:limit!=null?Math.max(0,limit-sold):null,
     pct:(limit!=null&&limit>0)?Math.min(100,Math.round(sold/limit*100)):null,
@@ -5927,13 +6124,13 @@ async function loadLive(){
     state.liveKpis=[
       // Whole yuan on the money tile the eye lands on first; the fen stays on
       // the average, where the number is small enough for it to mean something.
-      [T('Revenue (all channels)','营收（全渠道）'), money0(CUR,rev), deltaText(rev, b.revenue, bl)],
-      [T('Orders (storefront)','订单（自营）'), String(ord), deltaText(ord, b.orders, bl)],
+      [['Revenue (all channels)','营收（全渠道）'], money0(CUR,rev), deltaText(rev, b.revenue, bl)],
+      [['Orders (storefront)','订单（自营）'], String(ord), deltaText(ord, b.orders, bl)],
       // The server sends no baseline for average order value, so this tile has
       // nothing to compare against and says nothing — rather than printing a
       // comparison label with no comparison under it.
-      [T('Avg. order','客单价'), money(CUR, ord? rev/ord : 0), ''],
-      [T('New customers','新客'), String(nc), deltaText(nc, b.new_customers, bl)],
+      [['Avg. order','客单价'], money(CUR, ord? rev/ord : 0), null],
+      [['New customers','新客'], String(nc), deltaText(nc, b.new_customers, bl)],
     ];
     // The desktop's Today strip carries a fifth figure and its Customers card
     // four more; the phone kept none of them. Each comes with the honesty rule

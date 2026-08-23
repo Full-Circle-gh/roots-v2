@@ -55,7 +55,7 @@
 
   --bg:var(--paper); --surface:#FFFFFF; --raised:#F6F3EC; --line:#E4E0D5;
   --text:var(--ink); --text2:var(--graphite);
-  --amber-ink:#8A6425; --brick-ink:#B4533E; --sage-ink:#5F7357;
+  --amber-ink:#8A6425; --brick-ink:#B4533E; --sage-ink:#5F7357; --dusk-ink:#524C8F;
   --scrim:rgba(17,26,43,.38);
   /* One soft ambient shadow, on overlays only. Never on a resting card. */
   --shadow-overlay:0 1px 2px rgba(17,26,43,.05),0 4px 16px rgba(17,26,43,.04);
@@ -70,7 +70,7 @@
 :root[data-theme="dark"]{
   --bg:var(--ink); --surface:#182236; --raised:#1E2A40; --line:#263149;
   --text:var(--paper); --text2:#9AA2B0;
-  --amber-ink:#D9A55E; --brick-ink:#DE8B77; --sage-ink:#A3B49F;
+  --amber-ink:#D9A55E; --brick-ink:#DE8B77; --sage-ink:#A3B49F; --dusk-ink:#A9A2E0;
   --amber-tint:rgba(201,149,74,.16); --brick-tint:rgba(180,83,62,.20);
   --sage-tint:rgba(163,180,159,.16); --dusk-tint:rgba(110,103,175,.24);
   --scrim:rgba(8,12,20,.55);
@@ -120,7 +120,10 @@ input{font-family:inherit;-webkit-user-select:text;user-select:text;}
 /* Avatar — rounded square, never a circle (§1.14). */
 .avatar{
   width:32px;height:32px;border-radius:8px;flex:none;
-  background:var(--dusk-tint);color:var(--dusk);
+  /* --dusk-ink, not --dusk: the initial is 15px type, and #6E67AF on the dark
+     theme's dusk tint is 2.5:1. The other three hues already had an ink for
+     exactly this; Dusk was the one that did not. */
+  background:var(--dusk-tint);color:var(--dusk-ink);
   display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500;
 }
 .avatar:active{background:var(--raised);}
