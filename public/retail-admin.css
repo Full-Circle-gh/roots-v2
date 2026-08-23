@@ -5608,7 +5608,7 @@
     font: 400 15px var(--f-sans); color: var(--td-text);
     background-color: var(--td-surface);
     border: 1px solid var(--td-border); border-radius: 8px;
-    padding: 8px 40px 8px 16px;
+    padding: 8px 48px 8px 16px;
     appearance: none; -webkit-appearance: none; cursor: pointer;
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2358606E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
     background-repeat: no-repeat; background-position: right 16px center;
@@ -5932,7 +5932,6 @@
   .el-search::placeholder { color: var(--td-text2); }
 
   /* Table cells */
-  .el-pcell { display: flex; gap: 16px; }
   .el-pname { font-weight: 500; }
   .el-pname .vl { font-weight: 400; color: var(--td-text2); }
   .el-pmeta { font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 4px; }
@@ -5944,8 +5943,7 @@
   .el-pill.off { background: var(--td-raised);     color: var(--td-text2); }
   .el-cellsub { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin-top: 8px; }
   .el-empty { padding: 24px; text-align: center; font: 400 15px var(--f-sans); color: var(--td-text2); }
-  /* The per-store block inside a cell: sync switch, name field, size picker. */
-  .el-cellstore + .el-cellstore { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--td-border); }
+  /* One store per cell now, so no in-cell separator is needed. */
   .el-cellhd { display: flex; align-items: center; gap: 8px; }
   .el-cellhd .nm { font: 400 13px var(--f-sans); color: var(--td-text2); }
 
@@ -5972,9 +5970,8 @@
 
   /* The size picker on a multi-size listing, and the flag for one with no size
      chosen — the only state on this table that needs a person. */
-  .el-fieldrow { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
-  .el-nameinp { flex: 1 1 240px; min-width: 0; font: 400 15px var(--f-sans); }
-  .el-size { flex: 1 1 176px; min-width: 0; font: 400 15px var(--f-sans); }
+  .el-nameinp { display: block; width: 100%; margin-top: 8px; font: 400 15px var(--f-sans); }
+  .el-size { display: block; width: 100%; margin-top: 8px; font: 400 15px var(--f-sans); }
   .el-size.warn { border-color: var(--td-amber); }
   .el-guess { font: 500 13px var(--f-sans); color: var(--td-amber-ink); }
 

@@ -2,46 +2,24 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-// ═══ THE DRIVER BRANCH (G2) — THE ONLY EDIT THIS FILE CARRIES ════════════
+// ═══ ONE DRIVER. SQLITE. ══════════════════════════════════════
 //
-// This file is the construction point: it builds the handle at `new Database(...)`
-// below and exports it at the bottom, and 94 files require it — 47 in runtime
-// code, 47 in scripts/, including all six channel daemons. Most bind it at
-// require time rather than per call, so this is the one place a single decision
-// reaches all of them. Decisions §24 (CUTOVER SEQUENCING) settled that the switch
-// lives here and not in lib/db-seam.js, which receives an already-built handle
-// and can neither substitute a driver nor alter return types.
+// A `TACET_DB` driver branch stood here from 2026-08-19 to 2026-08-23, selecting
+// a Postgres handle via lib/db-driver.js, lib/pg.js and lib/pg-handle.js. The
+// migration was cancelled (decisions §24, THE POSTGRES MIGRATION IS CANCELLED)
+// and all three modules are deleted. The branch is removed with them.
 //
-// THE BRANCH IS AN EARLY RETURN, NOT AN `if/else` AROUND THE FILE, AND THAT IS
-// THE POINT. Everything below this block is byte-for-byte what it was before —
-// the diff that introduced this branch inserts lines and modifies none. That is
-// the proof that the SQLite path is unchanged, and it is a stronger proof than
-// any test could give: there is no altered line for a behaviour change to hide in.
-// A top-level `return` is valid in CommonJS (the module body is a function), and
-// it is what keeps that property. Do not restructure this into an if/else.
+// IF A SECOND DRIVER IS EVER WANTED, THIS IS STILL THE PLACE, AND THE REASON IS
+// UNCHANGED: this file is the construction point. It builds the handle at
+// `new Database(...)` below and exports it at the bottom, and ~94 files require
+// it, most binding it at require time rather than per call. lib/db-seam.js
+// cannot do the job — it receives an already-built handle and can neither
+// substitute a driver nor alter return types.
 //
-// UNDER POSTGRES NOTHING BELOW RUNS, WHICH IS DELIBERATE AND LOAD-BEARING. The
-// rest of this file is a schema manager, not a connection module: it opens the
-// SQLite file, sets two SQLite pragmas, execs schema.sql, and runs 305
-// `addColumn()` calls whose "already migrated" case is a catch on
-// /duplicate column/i — better-sqlite3's message text. None of that is valid or
-// wanted against Postgres, whose duplicate-column message does not match that
-// regex and would therefore throw rather than skip.
-// lib/pg.js is required HERE and nowhere else in the application (G3). It was
-// built 2026-08-08 and wired to nothing until now; requiring it is also what arms
-// the global numeric type parser, without which money read back from Postgres
-// arrives as text. Its own load-time throw on missing TACET_PG_* config is kept
-// deliberately — see its header: "a missing or stray variable would then connect
-// somewhere unintended rather than failing". Selecting Postgres without telling
-// the process where Postgres is should stop the boot, not connect to a guess.
-const { IS_POSTGRES } = require('./lib/db-driver');
-if (IS_POSTGRES) {
-  const { pool } = require('./lib/pg');
-  const { makePooledPgHandle } = require('./lib/pg-handle');
-  module.exports = makePooledPgHandle(pool);
-  return;
-}
-
+// AND READ §24 (f) BEFORE BUILDING ONE. The cancelled attempt made the two
+// handles deliberately incompatible and then needed 2,835 call sites converted
+// before anything could run. A synchronous `.query(text, params)` on this handle
+// is the shape that would have allowed it to be done a file at a time.
 const DATA_DIR = path.join(__dirname, 'data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
@@ -2797,6 +2775,49 @@ addColumn('retail_orders', 'channel_eta',       'DATETIME');
 // order to prepare now. Without it a pre-order is indistinguishable from an
 // order due immediately, and the kitchen packs it hours early.
 addColumn('retail_orders', 'channel_preorder_at', 'DATETIME');
+
+// ── The rest of what a channel order already tells us ────────────────────────
+// Everything below is read out of the SAME Meituan order-list response the
+// daemons already fetch (lib/meituan-order-fields.js) — no extra call, no extra
+// exposure. Until now the entire 26KB envelope was reduced to a status label, an
+// ETA and a gross total, and every fact here was thrown away at parse time.
+//
+// Money. `total` is what the CUSTOMER paid and stays that. What we actually earn
+// was nowhere: Meituan takes a commission and the fees split three ways, so a
+// ¥65 order settles at ¥61.75. subtotal / shipping_fee / packing_fee (existing
+// columns) now carry the 商品金额 / 配送费 / 打包袋 split instead of a lump sum.
+addColumn('retail_orders', 'channel_commission',   'REAL');  // 平台服务费 taken by Meituan
+addColumn('retail_orders', 'channel_settle_amount','REAL');  // 预计收入 — what lands with us
+addColumn('retail_orders', 'channel_discount',     'REAL');  // merchant-funded activity spend
+// Rider. Meituan's own fleet carries these orders, so this is the only delivery
+// record that exists for them — our own dispatch columns were always empty.
+// channel_rider_status_code is Meituan's numeric logistics state (40 = 已送达),
+// kept beside the phrase because a code survives their wording changes.
+addColumn('retail_orders', 'channel_rider_name',        'TEXT');
+addColumn('retail_orders', 'channel_rider_status',      'TEXT');
+addColumn('retail_orders', 'channel_rider_status_code', 'INTEGER');
+addColumn('retail_orders', 'channel_rider_assigned_at', 'DATETIME'); // a rider took the job
+addColumn('retail_orders', 'channel_rider_fetched_at',  'DATETIME'); // collected from the store
+// Customer. wm_user_id is the ONLY stable customer identity Meituan gives a
+// merchant — the same value across that person's orders — so repeat business on
+// the channel becomes countable for the first time. TEXT: the ids run past 2^53.
+// channel_customer_orders is their lifetime order count as Meituan reports it
+// ("下单155次"), a fact we cannot derive ourselves because we only see the orders
+// that arrived after this daemon existed.
+addColumn('retail_orders', 'channel_customer_id',     'TEXT');
+addColumn('retail_orders', 'channel_customer_orders', 'INTEGER');
+// Delivery geography. The street address is masked by Meituan and un-masking it
+// would cost a second, privacy-gated request per order (deliberately not done —
+// see lib/meituan-order-fields.js). Distance + drop coordinates come free in the
+// same payload and answer the same questions.
+addColumn('retail_orders', 'channel_distance_m', 'INTEGER');
+addColumn('retail_orders', 'channel_dest_lat',   'REAL');
+addColumn('retail_orders', 'channel_dest_lng',   'REAL');
+// Meituan's own listing id for a line. Their stable per-listing key: name
+// matching and the "(1-380)" SKU token embedded in a title are both merchant-
+// typed and both have lost lines before. Recorded now so a future resolver can
+// key on the id instead — collecting it costs nothing and cannot be backfilled.
+addColumn('retail_order_items', 'channel_food_id', 'TEXT');
 
 // Store pickup: a store is offered as a pickup point at checkout only when
 // this flag is on (admin toggles it per store in the mini-app backend).

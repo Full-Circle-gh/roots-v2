@@ -92,6 +92,13 @@ function ensureTables() {
     key TEXT PRIMARY KEY, value TEXT
   )`);
   db.exec(`CREATE INDEX IF NOT EXISTS idx_gzo_status ON gzgrocery_orders(status)`);
+  // Ship-to, added after the table shipped. The customer panel on their Order
+  // Details screen is masked (***), so for months the only "customer" we had was
+  // the order id echoed back. The dispatch note carries the real thing — see
+  // GzGroceryAdmin.fetchOrderShipTo.
+  for (const col of ['recipient_name TEXT', 'recipient_phone TEXT', 'address_full TEXT', 'address_json TEXT']) {
+    try { db.exec(`ALTER TABLE gzgrocery_orders ADD COLUMN ${col}`); } catch { /* already there */ }
+  }
 }
 function getMeta(k) { return db.prepare(`SELECT value FROM gzgrocery_meta WHERE key=?`).get(k)?.value ?? null; }
 function setMeta(k, v) { db.prepare(`INSERT INTO gzgrocery_meta (key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value`).run(k, String(v)); }
@@ -194,11 +201,19 @@ function gzMirrorOrderNo(orderId) { return 'GZ-' + orderId; }
 // Upsert the display-only retail_orders row for one gzgrocery order. `voided`
 // flips an existing mirror to 'cancelled' (and never creates a new row for an
 // order that was cancelled before we ever counted it).
-function ensureGzMirror({ orderId, status, customer, dateAdded, ours, storeId, voided }) {
+function ensureGzMirror({ orderId, status, customer, dateAdded, ours, storeId, voided, shipTo }) {
   if (!GZ_MIRROR || MODE !== 'live') return;
   if (!ours || !ours.length) return;
   const roNo = gzMirrorOrderNo(orderId);
   const existing = db.prepare('SELECT id, status FROM retail_orders WHERE order_no=?').get(roNo);
+  // Ship-to for the mirror. Before we read the dispatch note the only "customer"
+  // available was their masked list cell, which fell through to the order id —
+  // so recipient_name held "140078". Prefer the real recipient; keep the old
+  // fallback only for an order whose dispatch note we couldn't read.
+  const shipName  = (shipTo && shipTo.recipientName) || null;
+  const shipPhone = (shipTo && shipTo.recipientPhone) || null;
+  const shipAddr  = (shipTo && shipTo.addressFull) || null;
+  const shipJson  = shipTo ? shipToJson(shipTo, { source: 'gzgrocery_dispatch_note' }) : null;
   // gzgrocery orders are already fulfilled (picked/collected) by the time we
   // mirror them — this channel is read-only for us — so show them as delivered,
   // not merely paid.
@@ -206,6 +221,25 @@ function ensureGzMirror({ orderId, status, customer, dateAdded, ours, storeId, v
   if (existing) {
     if (existing.status !== mStatus) {
       db.prepare('UPDATE retail_orders SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(mStatus, existing.id);
+    }
+    // Self-heal a mirror written before we read ship-to: fill the blanks and
+    // overwrite the placeholder name (the order id echoed back). A hand-edited
+    // name that is NOT the placeholder is left alone.
+    if (shipName || shipPhone || shipAddr) {
+      // Fill blanks, replace the placeholder name (the order id echoed back),
+      // and refresh an address written by an OLDER parser generation — the
+      // first one left overseas numbers unparsed, so the raw line (name and
+      // phone included) ended up as the address. A hand-edited name, and an
+      // address already read by the current parser, are left alone.
+      const stale = `COALESCE(address_json,'') = '' OR address_json NOT LIKE '%"p":${SHIPTO_PARSER}%'`;
+      db.prepare(`UPDATE retail_orders SET
+           recipient_name  = CASE WHEN COALESCE(recipient_name,'') IN ('', ?) THEN COALESCE(?, recipient_name) ELSE recipient_name END,
+           recipient_phone = CASE WHEN COALESCE(recipient_phone,'') = '' THEN COALESCE(?, recipient_phone) ELSE recipient_phone END,
+           address_full    = CASE WHEN ${stale} THEN COALESCE(?, address_full) ELSE address_full END,
+           address_json    = CASE WHEN ${stale} THEN COALESCE(?, address_json) ELSE address_json END,
+           updated_at = CURRENT_TIMESTAMP
+         WHERE id = ?`)
+        .run(String(orderId), shipName, shipPhone, shipAddr, shipJson, existing.id);
     }
     return;
   }
@@ -228,11 +262,14 @@ function ensureGzMirror({ orderId, status, customer, dateAdded, ours, storeId, v
 
   db.transaction(() => {
     const r = db.prepare(`INSERT INTO retail_orders
-        (order_no, status, payment_method, subtotal, total, recipient_name,
+        (order_no, status, payment_method, subtotal, total, recipient_name, recipient_phone,
+         address_full, address_json,
          store_id, channel, fulfillment_type, placed_at, paid_at)
-      VALUES (?, 'delivered', 'gzgrocery', ?, ?, ?, ?, 'gzgrocery', 'delivery',
+      VALUES (?, 'delivered', 'gzgrocery', ?, ?, ?, ?, ?, ?, ?, 'gzgrocery', 'delivery',
               COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))`)
-      .run(roNo, subtotal, subtotal, (customer || '').slice(0, 200) || null, storeId, placedAt, placedAt);
+      .run(roNo, subtotal, subtotal,
+        (shipName || customer || '').slice(0, 200) || null, shipPhone,
+        shipAddr, shipJson, storeId, placedAt, placedAt);
     const oid = r.lastInsertRowid;
     const ins = db.prepare(`INSERT INTO retail_order_items
       (order_id, product_id, sku, name_cn, name_en, qty, unit_price, line_total) VALUES (?,?,?,?,?,?,?,?)`);
@@ -289,6 +326,69 @@ function backfillGzMirrorSkus() {
   if (fixed) log(`backfill: filled SKU on ${fixed} mirrored gzgrocery line item(s)`);
 }
 
+// Backfill ship-to onto orders imported before we read the dispatch note. Those
+// rows carry no customer at all — their recipient_name is the order id, echoed
+// back from the masked list cell. Runs a slice per cycle (not one big burst:
+// this is someone else's admin and each order is a separate page load) and
+// stops on its own once every order has been attempted. address_json is the
+// "attempted" marker — written on every SUCCESSFUL read, even one that parsed
+// nothing, so an order whose note genuinely has no address isn't retried
+// forever, while a network failure IS.
+// Parser generation, stamped into address_json as "p". Bump it when the ship-to
+// PARSER changes and every order re-reads itself once, then stops: the first
+// version missed overseas numbers written "(+85291943231)", which left the name
+// and phone unparsed and the raw line — number and all — sitting in the address.
+// Without a generation there is no way to tell "already read" from "already read
+// by the version that got it wrong".
+const SHIPTO_PARSER    = 2;
+const SHIPTO_PER_CYCLE = Number(process.env.GZGROCERY_SHIPTO_PER_CYCLE || 40);
+const SHIPTO_GAP_MS    = Number(process.env.GZGROCERY_SHIPTO_GAP_MS || 400);
+function shipToJson(shipTo, extra) {
+  return JSON.stringify({
+    region: shipTo.region || '', street: shipTo.street || '',
+    postcode: shipTo.postcode || '', contacter: shipTo.contacter || '',
+    p: SHIPTO_PARSER, ...extra,
+  });
+}
+async function backfillShipTo(client, storeId) {
+  if (MODE !== 'live' || SHIPTO_PER_CYCLE <= 0) return;
+  const rows = db.prepare(
+    `SELECT order_id, status, customer, date_added, items_json, reversed, decremented
+       FROM gzgrocery_orders
+      WHERE our_units > 0
+        AND (COALESCE(address_json,'') = '' OR address_json NOT LIKE '%"p":${SHIPTO_PARSER}%')
+      ORDER BY order_id DESC LIMIT ?`
+  ).all(SHIPTO_PER_CYCLE);
+  if (!rows.length) return;
+  let done = 0, failed = 0;
+  for (const row of rows) {
+    let shipTo;
+    try { shipTo = await client.fetchOrderShipTo(row.order_id); }
+    catch (e) { failed++; log(`ship-to backfill ${row.order_id} failed: ${e.message}`); await sleep(SHIPTO_GAP_MS); continue; }
+    db.prepare(
+      `UPDATE gzgrocery_orders SET recipient_name=?, recipient_phone=?, address_full=?, address_json=?,
+              updated_at=CURRENT_TIMESTAMP WHERE order_id=?`
+    ).run(shipTo.recipientName || null, shipTo.recipientPhone || null, shipTo.addressFull || null,
+      shipToJson(shipTo), row.order_id);
+    // Push the same ship-to onto the display mirror the drawer reads. Only for
+    // orders we actually counted — same gate as backfillGzMirrors. An order that
+    // was never decremented (e.g. its status never parsed, so it never went
+    // ACTIVE) has no mirror on purpose, and filling in an address is not a
+    // reason to invent one and show it in the list as delivered.
+    let ours = [];
+    try { ours = JSON.parse(row.items_json || '[]'); } catch { ours = []; }
+    if (ours.length && row.decremented) {
+      try {
+        ensureGzMirror({ orderId: row.order_id, status: row.status, customer: row.customer,
+          dateAdded: row.date_added, ours, storeId, voided: !!row.reversed, shipTo });
+      } catch (e) { log(`ship-to mirror ${row.order_id} failed: ${e.message}`); }
+    }
+    done++;
+    await sleep(SHIPTO_GAP_MS);
+  }
+  log(`ship-to backfill: ${done} filled, ${failed} failed (${rows.length} attempted this cycle)`);
+}
+
 // Match an order's line items against our catalogue → the OUR-product units.
 function matchOurItems(items, skuMap) {
   const ours = [];
@@ -303,7 +403,7 @@ function matchOurItems(items, skuMap) {
 }
 
 // ── Core: reconcile one order against stored state ───────────────────────────
-function processOrder(o, items, skuMap, storeId) {
+function processOrder(o, items, skuMap, storeId, shipTo) {
   const ours = matchOurItems(items, skuMap);
   const ourUnits = ours.reduce((s, x) => s + x.qty, 0);
   const prev = db.prepare(`SELECT * FROM gzgrocery_orders WHERE order_id=?`).get(o.orderId);
@@ -316,13 +416,21 @@ function processOrder(o, items, skuMap, storeId) {
       customer: o.customer, date_added: o.dateAdded, delivery_time: o.deliveryTime,
       items_json: JSON.stringify(ours), our_units: ourUnits, mode: MODE,
       decremented: prev?.decremented || 0, reversed: prev?.reversed || 0, note: null,
+      // Ship-to read off the dispatch note. A cycle that didn't (or couldn't)
+      // fetch it keeps whatever we stored before — never blank a known address.
+      recipient_name:  shipTo?.recipientName  || prev?.recipient_name  || null,
+      recipient_phone: shipTo?.recipientPhone || prev?.recipient_phone || null,
+      address_full:    shipTo?.addressFull    || prev?.address_full    || null,
+      address_json:    shipTo ? shipToJson(shipTo) : (prev?.address_json || null),
       ...fields,
     };
     db.prepare(`INSERT INTO gzgrocery_orders
-      (order_id,order_no,status,total,customer,date_added,delivery_time,items_json,our_units,decremented,reversed,mode,note,updated_at)
-      VALUES (@order_id,@order_no,@status,@total,@customer,@date_added,@delivery_time,@items_json,@our_units,@decremented,@reversed,@mode,@note,CURRENT_TIMESTAMP)
+      (order_id,order_no,status,total,customer,date_added,delivery_time,items_json,our_units,decremented,reversed,mode,note,recipient_name,recipient_phone,address_full,address_json,updated_at)
+      VALUES (@order_id,@order_no,@status,@total,@customer,@date_added,@delivery_time,@items_json,@our_units,@decremented,@reversed,@mode,@note,@recipient_name,@recipient_phone,@address_full,@address_json,CURRENT_TIMESTAMP)
       ON CONFLICT(order_id) DO UPDATE SET status=@status,total=@total,customer=@customer,delivery_time=@delivery_time,
-        items_json=@items_json,our_units=@our_units,decremented=@decremented,reversed=@reversed,mode=@mode,note=COALESCE(@note,note),updated_at=CURRENT_TIMESTAMP
+        items_json=@items_json,our_units=@our_units,decremented=@decremented,reversed=@reversed,mode=@mode,note=COALESCE(@note,note),
+        recipient_name=COALESCE(@recipient_name,recipient_name),recipient_phone=COALESCE(@recipient_phone,recipient_phone),
+        address_full=COALESCE(@address_full,address_full),address_json=COALESCE(@address_json,address_json),updated_at=CURRENT_TIMESTAMP
     `).run(base);
   };
 
@@ -354,7 +462,7 @@ function processOrder(o, items, skuMap, storeId) {
     notifyOrder(o, ours.map((it) => ({ name_en: it.name_en, name_cn: it.name_cn, sku: it.sku, qty: it.qty })))
       .catch((e) => console.error('[gzgrocery-orders] notify failed:', e.message));
     // Display-only mirror into retail_orders so this shows in the combined list.
-    try { ensureGzMirror({ orderId: o.orderId, status: o.status, customer: o.customer, dateAdded: o.dateAdded, ours, storeId, voided: false }); }
+    try { ensureGzMirror({ orderId: o.orderId, status: o.status, customer: o.customer, dateAdded: o.dateAdded, ours, storeId, voided: false, shipTo }); }
     catch (e) { log(`mirror ${o.orderNo || o.orderId} failed: ${e.message}`); }
     return { result: 'decremented', units: ourUnits };
   }
@@ -378,7 +486,7 @@ function processOrder(o, items, skuMap, storeId) {
     auditLog(o, MODE === 'live' ? 'reversed' : 'would_reverse', applied.join(', '));
     log(`order ${o.orderNo || o.orderId} [${o.status}] ${MODE === 'live' ? 'REVERSED' : 'would reverse'}: ${applied.join(', ')}`);
     // Flip the display mirror to cancelled so the list reflects the void.
-    try { ensureGzMirror({ orderId: o.orderId, status: o.status, customer: o.customer, dateAdded: o.dateAdded, ours, storeId, voided: true }); }
+    try { ensureGzMirror({ orderId: o.orderId, status: o.status, customer: o.customer, dateAdded: o.dateAdded, ours, storeId, voided: true, shipTo }); }
     catch (e) { log(`mirror-void ${o.orderNo || o.orderId} failed: ${e.message}`); }
     return { result: 'reversed', units: ourUnits };
   }
@@ -429,7 +537,17 @@ async function runCycle() {
         !prev; // first sighting → record line items for the audit trail
       if (!needItems) continue;
       const items = await _client.fetchOrderItems(o.orderId);
-      const r = processOrder(o, items, skuMap, storeId);
+      // Ship-to comes off a SECOND page (the dispatch note), so only spend that
+      // request when the order actually holds our products — most gzgrocery
+      // orders are pure third-party grocery and we'd be reading a stranger's
+      // address for nothing. A failure here must not lose the stock decrement,
+      // so it degrades to "no ship-to this cycle" and the backfill retries.
+      let shipTo = null;
+      if (items.some((it) => extractSku(it.model))) {
+        try { shipTo = await _client.fetchOrderShipTo(o.orderId); }
+        catch (e) { log(`order ${o.orderId} ship-to failed: ${e.message}`); }
+      }
+      const r = processOrder(o, items, skuMap, storeId, shipTo);
       if (r.result === 'decremented') dec++;
       else if (r.result === 'reversed') rev++;
       else if (r.result === 'skip-foreign') foreign++;
@@ -440,6 +558,8 @@ async function runCycle() {
     }
   }
   log(`cycle done: ${dec} decremented, ${rev} reversed, ${foreign} non-Roots, ${seeded} backlog-seeded, ${errs} error(s)`);
+  // Fill ship-to on the historic orders, a slice at a time, after the live work.
+  try { await backfillShipTo(_client, storeId); } catch (e) { log(`ship-to backfill failed: ${e.message}`); }
 }
 
 // Record a pre-baseline order as already-counted without touching stock.

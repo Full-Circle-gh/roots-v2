@@ -582,7 +582,13 @@ async function refreshOrderStatus(storeCode, order) {
     const res = await fetch(`${INTERNAL_BASE}/api/internal/meituan/update-order-status`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Internal-Secret': internalSecret() },
-      body: JSON.stringify({ meituanOrderNo: order.meituanOrderNo, statusDesc: order.statusDesc, eta: order.eta }),
+      // `channel` carries the rest of the same payload (rider, settlement,
+      // customer). It rides on EVERY poll, not just the import, because the
+      // delivery record only comes into existence after the order is accepted.
+      body: JSON.stringify({
+        meituanOrderNo: order.meituanOrderNo, statusDesc: order.statusDesc, eta: order.eta,
+        channel: order.channel,
+      }),
     });
     if (res.ok) {
       const data = await res.json().catch(() => ({}));
