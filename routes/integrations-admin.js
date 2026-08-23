@@ -15,6 +15,8 @@
 
 const express = require('express');
 const router = express.Router();
+const fs = require('fs');
+const path = require('path');
 
 const { requireRetailAdmin } = require('./retail');
 const { tdb } = require('../lib/tenant-db');
@@ -59,6 +61,19 @@ function legacyChannelLive(db, tenantId, kind) {
   return false;
 }
 
+// Eleme is browser-automation (session cookies on disk), not OAuth — see
+// lib/eleme-browser.js and ELEME_BROWSER_RECON.md (the OpenAPI/OAuth path is
+// dead; single-store accounts are rejected by Eleme's open platform). A store
+// counts as "logged in" once its session file exists, the same signal
+// scripts/eleme-login.js writes and lib/eleme-browser.js restores from.
+function elemeSessionCount(db) {
+  try {
+    const codes = db.prepare("SELECT store_code FROM eleme_shops WHERE shop_id IS NOT NULL AND shop_id <> ''").all().map(r => r.store_code);
+    const dir = path.join(__dirname, '..', 'data', 'eleme-sessions');
+    return codes.filter(c => fs.existsSync(path.join(dir, `${c}-session.json`))).length;
+  } catch (_) { return 0; }
+}
+
 function deriveStatuses(cards, cardsTenant) {
   const db = tdb();
   const isBaseline = s => s === 'not_configured' || s === 'configured';
@@ -78,10 +93,13 @@ function deriveStatuses(cards, cardsTenant) {
     if (!isBaseline(c.status) && !(sessionKind && wizardStale(c.status))) continue;
     try {
       if (c.kind === 'eleme') {
-        // Connected once any store has an Eleme access token; the channel is
-        // "live" only when the operator has also switched it on.
-        const tokens = db.prepare("SELECT COUNT(*) AS n FROM eleme_tokens WHERE access_token IS NOT NULL").get()?.n || 0;
-        if (tokens > 0) c.status = readBool('eleme.enabled') ? 'connected' : 'paused';
+        // Session-based (browser automation, not OAuth): "configured" once a
+        // store is linked to an Eleme shop id; "connected"/"paused" once at
+        // least one of those stores also has a saved login session, gated on
+        // whether the operator has switched the channel on.
+        const shopsMapped = db.prepare("SELECT COUNT(*) AS n FROM eleme_shops WHERE shop_id IS NOT NULL AND shop_id <> ''").get()?.n || 0;
+        if (elemeSessionCount(db) > 0) c.status = readBool('eleme.enabled') ? 'connected' : 'paused';
+        else if (shopsMapped > 0) c.status = 'configured';
       } else if (c.kind === 'jd') {
         // JD app keys present (env for Roots, tenant_secrets otherwise) → the
         // form is filled but untested. A passing "Save & test" writes a

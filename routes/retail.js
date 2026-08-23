@@ -13952,6 +13952,7 @@ const ACT_SOURCE_SQL = `CASE
     WHEN l.reason LIKE 'meituan%' AND s.code = 'tianhe' THEN 'meituan_tianhe'
     WHEN l.reason LIKE 'meituan%' AND s.code = 'yuexiu' THEN 'meituan_yuexiu'
     WHEN l.reason LIKE 'meituan%'   THEN 'meituan'
+    WHEN l.reason LIKE 'eleme%'     THEN 'eleme'
     WHEN l.reason LIKE 'guanyi%'    THEN 'guanyi'
     WHEN l.reason LIKE 'order%' OR l.reason LIKE 'awaiting%' THEN 'miniapp'
     ELSE 'manual'
@@ -13963,9 +13964,10 @@ const ACT_SOURCE_FILTER = {
   meituan_tianhe: "(l.reason LIKE 'meituan%' AND s.code = 'tianhe')",
   meituan_yuexiu: "(l.reason LIKE 'meituan%' AND s.code = 'yuexiu')",
   meituan:        "l.reason LIKE 'meituan%'",
+  eleme:          "l.reason LIKE 'eleme%'",
   guanyi:         "l.reason LIKE 'guanyi%'",
   miniapp:        "(l.reason LIKE 'order%' OR l.reason LIKE 'awaiting%')",
-  manual:         "(l.reason NOT LIKE 'gzgrocery%' AND l.reason NOT LIKE 'meituan%' AND l.reason NOT LIKE 'guanyi%' AND l.reason NOT LIKE 'order%' AND l.reason NOT LIKE 'awaiting%')",
+  manual:         "(l.reason NOT LIKE 'gzgrocery%' AND l.reason NOT LIKE 'meituan%' AND l.reason NOT LIKE 'eleme%' AND l.reason NOT LIKE 'guanyi%' AND l.reason NOT LIKE 'order%' AND l.reason NOT LIKE 'awaiting%')",
 };
 // Build WHERE + params from the query string, shared by JSON + CSV routes.
 function buildActivityQuery(q) {

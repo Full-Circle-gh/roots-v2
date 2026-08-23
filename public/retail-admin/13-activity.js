@@ -24,6 +24,7 @@ const ACT_SOURCE_NAME = {
   meituan_tianhe: () => actT('Meituan Tianhe', '美团天河'),
   meituan_yuexiu: () => actT('Meituan Yuexiu', '美团越秀'),
   meituan:        () => actT('Meituan', '美团'),
+  eleme:          () => actT('Eleme', '饿了么'),
   guanyi:         () => actT('Guanyi', '管易'),
   manual:         () => actT('Manual', '手动'),
 };
@@ -129,6 +130,7 @@ const ACT_TABS = [
   ['gzgrocery',      () => 'Gzgrocery'],
   ['meituan_tianhe', () => actSourceName('meituan_tianhe')],
   ['meituan_yuexiu', () => actSourceName('meituan_yuexiu')],
+  ['eleme',          () => actSourceName('eleme')],
   ['manual',         () => actSourceName('manual')],
 ];
 

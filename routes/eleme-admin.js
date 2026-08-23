@@ -11,6 +11,8 @@
 'use strict';
 
 const crypto  = require('crypto');
+const fs      = require('fs');
+const path    = require('path');
 const express = require('express');
 const router  = express.Router();
 const { tdb } = require('../lib/tenant-db');
@@ -84,19 +86,28 @@ router.post('/api/retail-admin/eleme/enable', requireRetailAdmin, express.json()
 });
 
 // ── Stores + connection state ──────────────────────────────────────────────────
+// Eleme is browser automation (lib/eleme-browser.js), not OAuth — the open
+// platform rejects our single-store accounts (see ELEME_BROWSER_RECON.md).
+// "connected" used to mean an eleme_tokens.access_token; that path is dead and
+// permanently empty now. The real signal is whether the store's login session
+// is on disk (written by scripts/eleme-login.js, restored by lib/eleme-
+// browser.js) — sessionActive below. `connected` is kept (now meaning
+// "shop id linked") only so any older caller reading that field still gets a
+// sane boolean rather than a silently-wrong one.
 router.get('/api/retail-admin/eleme/stores', requireRetailAdmin, (req, res) => {
   const db = tdb();
   try {
     const stores = db.prepare(`
       SELECT s.id, s.code, COALESCE(s.name_cn, s.name_en, s.code) AS name,
              e.shop_id, e.shop_name,
-             t.expires_at, (t.access_token IS NOT NULL) AS connected
+             (e.shop_id IS NOT NULL AND e.shop_id <> '') AS connected
         FROM retail_stores s
         LEFT JOIN eleme_shops  e ON e.retail_store_id = s.id
-        LEFT JOIN eleme_tokens t ON t.account = s.code
        WHERE s.is_active = 1
        ORDER BY s.sort_order, s.id
     `).all();
+    const sessionDir = path.join(__dirname, '..', 'data', 'eleme-sessions');
+    for (const s of stores) s.sessionActive = fs.existsSync(path.join(sessionDir, `${s.code}-session.json`));
     res.json({ success: true, data: stores });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
