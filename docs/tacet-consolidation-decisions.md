@@ -3757,6 +3757,23 @@ Measured at this head: `routes/retail.js` holds **28 `withTransaction(` call sit
 
 **AND ONE THING THE WORD "IRREVERSIBLE" OVERSTATED, MEASURED BEFORE ANYTHING WAS TOUCHED.** The off-site daily backups hold `tacet.dump` (454 MB) and `roles.sql` for **2026-08-21, 08-22 and 08-23**, under a 30-day retention. **So the cluster is restorable from OSS until roughly 2026-09-22 and not after.** No new dumps are being taken. **Every deleted file is recoverable from git history at `e22964bb` indefinitely.**
 
+
+#### OPERATIONS NOTE — THE CLUSTER WAS DROPPED, IN THIS ORDER, 2026-08-23
+
+**The order is the whole content of this note.** Doing it in any other order breaks the SQLite backups.
+
+**1. `PG_DB=` EMPTIED FIRST, IN `scripts/db-backup.sh` AND ON THE BOX.** `db-backup.sh` preflights `sudo -u postgres psql -Atc "SELECT 1" -d "$PG_DB"` and calls `fail` if it cannot reach it — **and `fail` aborts the WHOLE run, the SQLite and per-tenant tiers included.** So stopping the cluster with `PG_DB=tacet` still set would have silently ended the nightly backup of `roots.db`. The script has the off switch by design and its own comment says so. **The box copy was edited by hand and kept at `scripts/db-backup.sh.pre-pgdrop-20260823`; the repository and the box converge on the next deploy.**
+
+**2. PROVEN BY RUNNING IT, NOT BY READING IT.** A full backup was run with `PG_DB=` empty before anything was stopped. **It uploaded six objects — `roots.db.gz` and the five per-tenant databases — and no `tacet.dump` and no `roles.sql`** (`oss://tacet/daily/20260824-002504/`). ⚠️ **The exit code was NOT captured** — the ssh session was killed by its own timeout while the job continued on the box — **so this is verified by what landed in the bucket and not by an exit status.** The 03:30 cron run writes its verdict to `/var/log/tacet-db-backup.log` and is the confirming observation.
+
+**3. STOPPED, DISABLED, PURGED.** `systemctl stop postgresql`, `systemctl disable postgresql` (`inactive`, `disabled`), then `rm -rf /var/lib/postgresql`. **Disk: 8.1 GB free / 79% → 9.9 GB free / 74%.** The `tacet` database was 716 MB of a 1.8 GB cluster.
+
+**4. THE PACKAGES ARE STILL INSTALLED AND THE UNIT IS ONLY DISABLED, NOT MASKED.** `pg_dump`, `psql` and the server binaries remain, so an apt upgrade could try to start a service whose data directory no longer exists. **Disabled prevents auto-start; masking would be stronger.** Left as a decision rather than taken silently.
+
+**RECOVERABILITY, STATED PRECISELY BECAUSE "IRREVERSIBLE" WAS AN OVERSTATEMENT.** The off-site daily backups hold `tacet.dump` (454 MB) plus `roles.sql` for **2026-08-21, 08-22 and 08-23**, under 30-day retention. **The cluster is restorable until roughly 2026-09-22 and not after.** No new dumps are being taken. `roles.sql` matters more than its 795 bytes suggest: `pg_dump` is per-database and does not carry roles, and the dump names `tacet_app` in 304 GRANT statements.
+
+**ONE ORDERING CONSTRAINT IS STILL OPEN ON THE BOX.** `lib/db-driver.js`, `lib/pg.js` and `lib/pg-handle.js` are **deleted from the repository but deliberately still present on the box.** The box's `database.js` is the pre-cancellation file and **requires `./lib/db-driver` unconditionally at line 37** — outside the `if (IS_POSTGRES)` guard. **Deleting it before the new `database.js` deploys throws `MODULE_NOT_FOUND` in a file ~94 others require, including all six channel daemons, and the health watchdog would restart the application into the same failure every two minutes.** Remove the three only after the deploy lands. Everything else the migration left on the box is gone; a copy of all of it is at `/root/backups/pg-migration-boxcopy-20260823.tgz`.
+
 ## 25. A printed slip that goes stale is corrected on paper, not reprinted — DECIDED 2026-08-07
 
 DECISION: When a customer reschedules an order whose receipt has already printed, the printer emits a short CHANGE SLIP naming the new day, the day it replaces, and enough identity to match it to the original. The original receipt is never reprinted.

@@ -199,7 +199,7 @@ else { debug('[restart] process not online, starting it'); return God.startProce
 
 `db-backup.sh` carries `MIN_FREE_MB=2048` with `WORK=/tmp` on the same filesystem. **Measured 2026-08-23: 40 GB total, 8.4 GB free, 78% used**, with `/root/backups` at 18 GB and the daily SQLite gzip alone growing ~1 MB a day at 463 MB per copy. **The nightly off-site backup stops when free space crosses the floor, with no warning tier ahead of it.**
 
-**This is not a Postgres item and does not go away with the cluster.** Dropping the `tacet` cluster returns part of it — **1.8 GB of `/var/lib/postgresql`, of which the `tacet` database is 716 MB** — and removes the `tacet.dump` leg from the nightly off-site run. **That buys weeks, not a solution.** The daily SQLite copy is 463 MB and grows; the floor arrives again.
+✅ **RELIEVED, NOT SOLVED — the cluster was dropped 2026-08-23 and the disk went 8.1 GB free / 79% → 9.9 GB / 74%**, reclaiming the 1.8 GB of `/var/lib/postgresql`. The `tacet.dump` leg is off the nightly run too. **That buys weeks, not a solution.** The daily SQLite copy is 463 MB and grows, `/root/backups` is 18 GB, and the floor arrives again. **The date has moved; it has not gone.**
 
 ---
 
