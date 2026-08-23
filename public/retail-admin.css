@@ -3165,7 +3165,6 @@
      would say it a second time. Keep the save status and the action buttons. */
   .pd-pp-mount #pd-editor .pd-head-id { display: none; }
   .pd-pp-mount #pd-editor .pu-editor-head { border-bottom: 0; padding-bottom: 0; }
-  .pd-pp-mount #pd-editor .pd-head-actions { margin-left: 0; }
 
   /* ── Dock summary rows — a fact and a way through to change it ───────────── */
   .pd-sumcard { border: 1px solid var(--td-border); border-radius: 14px; background: var(--td-surface); overflow: hidden; }
@@ -11425,17 +11424,14 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   }
   #pd-editor #pd-img-file::file-selector-button:hover { border-color: var(--td-text2); }
   #pd-editor .pd-gallery .pd-thumb { border-radius: 10px; }
-  /* Header identity strip (mockup): thumbnail + title + Bundle pill / SKU subtitle. */
-  #pd-editor .pu-editor-head { display: flex; align-items: center; gap: 14px; }
-  #pd-editor .pd-head-id { display: flex; align-items: center; gap: 13px; min-width: 0; }
+  /* The header is TWO STACKED ROWS and its rules live in the drawer block
+     above — identity on top, state beneath. What was here was the old
+     single-row strip: an equal-specificity  that, purely by
+     sitting ~8,000 lines later, beat the block rule and put the state row back
+     alongside the name. That is what squeezed the title to Hazelnut-C….
+     Only the thumbnail survives; the rest is stated once, up there. */
   #pd-editor .pd-head-thumb { width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--td-border);
     background: var(--td-raised) no-repeat center / cover; flex: none; }
-  #pd-editor .pd-head-txt { min-width: 0; }
-  #pd-editor .pd-head-titlerow { display: flex; align-items: center; gap: 10px; }
-  #pd-editor .pu-editor-head #pd-title { font-size: 18px; font-weight: 600; letter-spacing: -.005em; color: var(--td-text); }
-  #pd-editor .pd-head-sub { font-size: 12.5px; color: var(--td-text2); margin-top: 2px; }
-  #pd-editor .pd-head-actions { margin-left: auto; display: flex; align-items: center; gap: 10px; }
-  #pd-editor .pd-head-actions .pd-save-status { margin-right: 4px; }
   /* Dashed "+ Add" photo tile (mockup): the label triggers the hidden file input. */
   #pd-editor #pd-img-file { display: none; }
   #pd-editor .pe-photos-strip { display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-start; }
