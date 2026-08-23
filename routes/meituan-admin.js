@@ -120,6 +120,115 @@ router.post('/api/retail-admin/meituan/products/:id/map', requireRetailAdmin, ex
   }
 });
 
+// ── Channel switch ─────────────────────────────────────────────────────────
+// Mirrors the Eleme switch (storefront_config 'eleme.enabled'), which the Eleme
+// daemon, lib/eleme-sync and the inventory fan-out all honour. Meituan had no
+// switch at all: the only way to stop the channel was to kill the daemon.
+//
+// ⚠️ DEFAULTS TO ON when the key is absent. Meituan is live for every tenant
+// that has it set up today, so an absent key must not read as "off" and
+// silently stop a working channel the first time this ships.
+function meituanEnabled(db) {
+  try {
+    const row = db.prepare("SELECT value_json FROM storefront_config WHERE key = 'meituan.enabled'").get();
+    return row ? JSON.parse(row.value_json) !== false : true;
+  } catch (e) { return true; }
+}
+
+router.get('/api/retail-admin/meituan/config', requireRetailAdmin, (req, res) => {
+  try { res.json({ success: true, enabled: meituanEnabled(tdb()) }); }
+  catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+router.post('/api/retail-admin/meituan/enable', requireRetailAdmin, express.json(), (req, res) => {
+  const db = tdb();
+  try {
+    const enabled = !!(req.body && req.body.enabled);
+    db.prepare(`
+      INSERT INTO storefront_config (key, value_json, updated_at)
+      VALUES ('meituan.enabled', ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = CURRENT_TIMESTAMP
+    `).run(JSON.stringify(enabled));
+    res.json({ success: true, enabled });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// Per-store health, derived from what the daemons actually recorded.
+//
+// The page used to report one "Sync · Active" for the whole channel, and that
+// word only ever meant "this HTTP call succeeded" — it never looked at a daemon
+// or a login. On 2026-08-23 越秀 had been signed out for 24 days behind a
+// verification challenge while the page showed green.
+//
+// Truth lives in meituan_sync_log. A store is BLOCKED when its most recent
+// health event is a blocking one and no stock has pushed successfully since.
+// That last clause matters: 天河 logs a queue_stalled now and then and recovers
+// on its own, and a store that is visibly still pushing is not blocked.
+const MT_BLOCKING = ['needs_login', 'verify_required', 'queue_stalled', 'poll_paused', 'proxy_stale'];
+const MT_CLEARING = ['verify_cleared', 'queue_resumed', 'poll_resumed', 'proxy_elected'];
+
+function meituanStoreHealth(db) {
+  const stores = db.prepare(`
+    SELECT id, code, COALESCE(name_cn, name_en, code) AS name
+      FROM retail_stores ORDER BY sort_order, id
+  `).all();
+
+  const lastEvent = db.prepare(`
+    SELECT event_type, status, error_msg, created_at
+      FROM meituan_sync_log
+     WHERE store_code = ? AND event_type IN (${[...MT_BLOCKING, ...MT_CLEARING].map(() => '?').join(',')})
+     ORDER BY created_at DESC LIMIT 1
+  `);
+  const lastOkPush = db.prepare(`
+    SELECT MAX(created_at) AS t FROM meituan_sync_log
+     WHERE store_code = ? AND event_type = 'stock_push' AND status = 'ok'
+  `);
+  const queueRow = db.prepare(`
+    SELECT
+      SUM(CASE WHEN status = 'pending'    THEN 1 ELSE 0 END) AS pending,
+      SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) AS processing,
+      SUM(CASE WHEN status = 'error' AND processed_at >= datetime('now','-1 day') THEN 1 ELSE 0 END) AS failed
+      FROM meituan_sync_queue WHERE store_code = ?
+  `);
+  const lastOrder = db.prepare(
+    'SELECT MAX(imported_at) AS t FROM meituan_order_import WHERE store_code = ?');
+  const liveCount = db.prepare(`
+    SELECT COUNT(*) AS n FROM meituan_product_map m
+      JOIN store_products p ON p.id = m.product_id
+     WHERE m.store_code = ? AND m.meituan_name IS NOT NULL AND m.sync_enabled = 1 AND p.is_active = 1
+  `);
+  const activeProducts = db.prepare(
+    'SELECT COUNT(*) AS n FROM store_products WHERE is_active = 1').get()?.n || 0;
+
+  return stores.map(st => {
+    const ev  = lastEvent.get(st.code, ...MT_BLOCKING, ...MT_CLEARING) || null;
+    const ok  = lastOkPush.get(st.code)?.t || null;
+    const blockedEvent = ev && MT_BLOCKING.includes(ev.event_type) ? ev : null;
+    // Pushed successfully since the block? Then it recovered on its own.
+    const recovered = !!(blockedEvent && ok && String(ok) > String(blockedEvent.created_at));
+    const q = queueRow.get(st.code) || {};
+    const live = liveCount.get(st.code)?.n || 0;
+    return {
+      id: st.id,
+      code: st.code,
+      name: st.name,
+      blocked:    !!blockedEvent && !recovered,
+      blockedBy:  blockedEvent && !recovered ? blockedEvent.event_type : null,
+      blockedAt:  blockedEvent && !recovered ? blockedEvent.created_at : null,
+      blockedMsg: blockedEvent && !recovered ? (blockedEvent.error_msg || null) : null,
+      lastPushAt: ok,
+      pending:    Number(q.pending    || 0),
+      // Rows the daemon claimed and never finished. Counted nowhere before, so
+      // 40 stranded pushes showed up in neither "sending" nor "failed".
+      processing: Number(q.processing || 0),
+      failed:     Number(q.failed     || 0),
+      lastOrderAt: lastOrder.get(st.code)?.t || null,
+      live,
+      unmatched: Math.max(0, activeProducts - live),
+    };
+  });
+}
+
 // ── GET /api/retail-admin/meituan/status ─────────────────────────────────
 router.get('/api/retail-admin/meituan/status', requireRetailAdmin, (req, res) => {
   const db = tdb();
@@ -166,7 +275,10 @@ router.get('/api/retail-admin/meituan/status', requireRetailAdmin, (req, res) =>
     `).all();
     const mappedCount = db.prepare('SELECT COUNT(*) AS n FROM meituan_product_map WHERE sync_enabled=1').get()?.n || 0;
 
-    res.json({ success: true, queuePending, queueFailed, queueOldestMin, recentLogs, recentStock, recentSystem, lastOrder, mappedCount });
+    let stores = [];
+    try { stores = meituanStoreHealth(db); } catch (e) { stores = []; }
+    res.json({ success: true, enabled: meituanEnabled(db), stores,
+               queuePending, queueFailed, queueOldestMin, recentLogs, recentStock, recentSystem, lastOrder, mappedCount });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }

@@ -244,7 +244,24 @@ function pushableStores() {
   return SHANGOU_STORES.filter(code => isStoreOpen(code) && !inVerifyCooldown(code));
 }
 
+
+// Is the Meituan channel switched on for the tenant? Mirrors elemeEnabled() in
+// scripts/eleme-daemon.js, with the opposite default: Meituan is already live
+// everywhere it is set up, so an ABSENT key means ON. Only an explicit false
+// stops it — otherwise the first deploy of this switch would silently take a
+// working channel down.
+function meituanChannelEnabled() {
+  try {
+    const row = db.prepare("SELECT value_json FROM storefront_config WHERE key = 'meituan.enabled'").get();
+    return row ? JSON.parse(row.value_json) !== false : true;
+  } catch { return true; }
+}
+
 async function processStockQueue() {
+  // The channel switch covers 闪购 too — it is the same Meituan account and the
+  // same meituan_sync_queue, so gating only the 外卖 daemon would leave half the
+  // channel live behind an "off" switch.
+  if (!meituanChannelEnabled()) return;
   const eligible = pushableStores();
   if (!eligible.length) return;
   const placeholders = eligible.map(() => '?').join(',');

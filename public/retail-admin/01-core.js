@@ -487,6 +487,10 @@ async function salesWireSetup() {
     const status = cfg.alwaysConfigure ? 'connected' : (window.igStatusFor ? igStatusFor(cfg.kind) : 'connected');
     const connected = cfg.alwaysConfigure || status === 'connected' || status === 'paused';
     const isError = status === 'error';
+    // The washed-out card treatment (transparent bg, dashed icon tile, dimmed
+    // figures) follows the LIVE status now — it used to be frozen in the HTML,
+    // so Eleme stayed grey long after it connected.
+    card.dataset.on = connected ? '1' : '0';
     // Status line.
     const statEl = card.querySelector('.sales-ch-stat');
     if (statEl) {

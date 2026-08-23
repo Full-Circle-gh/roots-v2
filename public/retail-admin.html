@@ -10720,7 +10720,7 @@
       </div>
 
       <!-- Eleme -->
-      <div class="sales-ch" data-on="0">
+      <div class="sales-ch" data-on="1">
         <div class="sales-ch-top">
           <div class="sales-ch-id">
             <span class="sales-ch-ico el">
@@ -10812,6 +10812,12 @@
 
   <!-- ── Meituan Sync ── -->
   <section id="tab-meituan">
+    <!-- Page head carries the channel switch, matching the Eleme page.
+         Meituan had no switch at all before: the only way to stop the channel
+         was to kill the daemon. Defaults ON — see meituanEnabled() in
+         routes/meituan-admin.js; an absent key must not read as "off". -->
+    <div class="mt-pagehead">
+      <div class="mt-pagehead-t">
     <h2>美团 · Meituan</h2>
     <p class="helper" data-lang-block="en" style="margin: calc(-1 * var(--s2)) 0 var(--s3);">
       Stock stays in sync and new orders import automatically for both Meituan stores.
@@ -10819,6 +10825,13 @@
     <p class="helper" data-lang-block="cn" style="margin: calc(-1 * var(--s2)) 0 var(--s3);">
       两家美团门店的库存自动同步,新订单自动导入。
     </p>
+      </div>
+      <label class="toggle-label mt-chan" title="Turn the whole Meituan channel on or off">
+        <span id="mt-enable-txt" class="muted">Channel on · 渠道开启</span>
+        <input type="checkbox" id="mt-enable" onchange="mtToggleChannel(this.checked)">
+      </label>
+    </div>
+
     <details class="mt-how">
       <summary>How matching works · 匹配原理</summary>
       <div data-lang-block="en">
@@ -10831,33 +10844,12 @@
       </div>
     </details>
 
-    <!-- Status strip — one compact row fed by mtLoadStatus(); a cell flips to
-         .alert (brass) when the daemon is down or pushes back up. -->
-    <div class="mt-strip" id="mt-kpis">
-      <div class="mt-cell" id="mt-kpi-daemon-tile">
-        <span class="k">Sync · 同步</span>
-        <span class="v"><span class="mt-dot" id="mt-dot"></span><span id="mt-kpi-daemon-val">—</span>
-          <small id="mt-kpi-daemon-sub">every 10 s · 每 10 秒</small></span>
-      </div>
-      <div class="mt-cell" id="mt-kpi-mapped-tile">
-        <span class="k">Live on Meituan · 已上架美团</span>
-        <span class="v"><span id="mt-kpi-mapped">—</span> <small id="mt-kpi-mapped-sub">products · 商品</small></span>
-      </div>
-      <div class="mt-cell" id="mt-kpi-queue-tile">
-        <span class="k">Stock updates · 库存更新</span>
-        <span class="v"><span id="mt-kpi-queue">—</span> <small id="mt-kpi-queue-sub"></small></span>
-      </div>
-      <div class="mt-cell" id="mt-kpi-order-tile">
-        <span class="k">Last order · 最近订单</span>
-        <span class="v"><span id="mt-kpi-order">—</span> <small id="mt-kpi-order-sub">no orders yet · 暂无订单</small></span>
-      </div>
-      <span class="mt-strip-grow"></span>
-      <div class="mt-strip-act">
-        <span class="mt-upd" id="mt-upd" data-no-i18n></span>
-        <button class="btn btn-sm" id="mt-pushall-btn" onclick="mtPushAll()"
-          title="Queue a fresh stock push for every mapped product · 立即为所有已匹配商品排队推送库存">Sync now · 立即同步</button>
-      </div>
-    </div>
+    <!-- One card per store, fed by mtRenderStores() from /status.stores.
+         Replaces the single "Sync · Active" strip, whose green only ever meant
+         "this HTTP call succeeded" — it never looked at a daemon or a login, so
+         越秀 sat signed out for 24 days behind a verification challenge while
+         the page showed healthy. Each card states its own store's truth. -->
+    <div class="mt-stores" id="mt-stores"></div>
 
     <!-- Sub-tabs: one job per view. Counts are filled in by JS. -->
     <div class="mt-tabs" role="tablist">
@@ -10865,6 +10857,15 @@
         Products · 商品 <span class="n" id="mt-tabn-products" data-no-i18n></span></button>
       <button id="mt-tab-bundles" class="mt-tab" role="tab" onclick="mtView('bundles')">
         Bundles · 套餐 <span class="n" id="mt-tabn-bundles" data-no-i18n></span></button>
+          <!-- Activity: the sync log. /status has always returned recentStock +
+           recentSystem and nothing on this page rendered them — the Eleme page
+           shows both. -->
+      <button id="mt-tab-activity" class="mt-tab" role="tab" onclick="mtView('activity')">
+        Activity · 同步日志</button>
+      <span class="mt-tabs-grow"></span>
+      <span class="mt-upd" id="mt-upd" data-no-i18n></span>
+      <button class="btn btn-sm" id="mt-pushall-btn" onclick="mtPushAll()"
+        title="Queue a fresh stock push for every mapped product">Sync now · 立即同步</button>
     </div>
 
     <!-- ══ Products view — the tab's real work: the mapping table ══ -->
@@ -10922,6 +10923,14 @@
       <div class="mt-card" id="mt-bundles-card">
         <div id="mt-bundles-list" data-no-i18n></div>
       </div>
+    </div>
+
+    <!-- ══ Activity view — what the sync actually did ══ -->
+    <div id="mt-view-activity" class="mt-view" hidden>
+      <div class="mt-act-h">Stock pushes · 库存推送</div>
+      <div class="mt-log" id="mt-log-stock" data-no-i18n></div>
+      <div class="mt-act-h">Sync events · 系统事件</div>
+      <div class="mt-log" id="mt-log-sys" data-no-i18n></div>
     </div>
   </section>
 

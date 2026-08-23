@@ -26,7 +26,7 @@
     // guard so the next click on the tab retries instead of showing the static
     // "Loading…" shell until a full page reload.
     try {
-      await Promise.all([mtLoadStores(), mtLoadStatus(), mtLoadBusinessStatus()]);
+      await Promise.all([mtLoadStores(), mtLoadConfig(), mtLoadStatus()]);
       await mtLoadProducts();
     } catch (e) {
       _initiated = false;
@@ -61,7 +61,7 @@
     _pollTimer = setInterval(async () => {
       if (_pollBusy || !mtTabVisible()) return;
       _pollBusy = true;
-      try { await Promise.all([mtLoadStatus(), mtLoadBusinessStatus()]); }
+      try { await mtLoadStatus(); }
       catch (_) { /* transient — next tick retries */ }
       finally { _pollBusy = false; }
     }, 12000);
@@ -81,9 +81,45 @@
   // every other channel; keeping a second read-only copy here was duplicate
   // noise. The "Last order" KPI (from /status) stays as the health signal.
 
+  // -- Channel switch ---------------------------------------------------------
+  // Meituan had no off switch: stopping the channel meant killing the daemon.
+  // Both daemons (外卖 and 闪购, which share one queue) now check the same flag.
+  // It defaults ON — an absent key must never read as "off" and take a live
+  // channel down the first time this ships.
+  window.mtLoadConfig = async function () {
+    try {
+      const r = await api('/api/retail-admin/meituan/config');
+      mtPaintChannel(r.enabled !== false);
+    } catch (e) { /* surfaced by api() */ }
+  };
+
+  function mtPaintChannel(on) {
+    const cb = document.getElementById('mt-enable');
+    if (cb) cb.checked = !!on;
+    const txt = document.getElementById('mt-enable-txt');
+    if (txt) {
+      txt.textContent = on
+        ? cuT('Channel on · 渠道开启', '渠道开启')
+        : cuT('Channel off · 渠道已关闭', '渠道已关闭');
+    }
+  }
+
+  window.mtToggleChannel = async function (on) {
+    try {
+      await api('/api/retail-admin/meituan/enable', { method: 'POST', body: { enabled: !!on } });
+      mtPaintChannel(!!on);
+      if (window.toast) {
+        toast(on
+          ? cuT('Meituan channel on', '美团渠道已开启')
+          : cuT('Meituan channel off — nothing will be pushed', '美团渠道已关闭 — 将不再推送'));
+      }
+      mtLoadStatus();
+    } catch (e) { mtLoadConfig(); }  // revert to whatever the server still says
+  };
+
   // ── Sub-views: Products / Bundles ────────────────────────────────────────────
   window.mtView = function (v) {
-    ['products', 'bundles'].forEach(k => {
+    ['products', 'bundles', 'activity'].forEach(k => {
       const view = document.getElementById('mt-view-' + k);
       const tab  = document.getElementById('mt-tab-' + k);
       if (view) view.hidden = k !== v;
@@ -109,10 +145,8 @@
   // ── Status ─────────────────────────────────────────────────────────────────
   // Populates the fc-kpis strip (matches the Products catalogue's KPI tiles).
   function mtSetKpi(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
-  function mtAlertTile(id, on) {
-    const el = document.getElementById(id);
-    if (el) el.classList.toggle('alert', !!on);
-  }
+  // mtAlertTile went with the strip: a tile that flips amber cannot say WHICH
+  // store is unwell, which was the whole problem. The cards carry it now.
 
   // English store labels keyed by code — the store record only carries a Chinese
   // `name` (天河店 / 越秀店), so in the English log we derive a Latin name instead
@@ -124,70 +158,125 @@
   }
 
   window.mtLoadStatus = async function () {
-    const cn = document.documentElement.dataset.uiLang === 'cn';
     try {
       const s = await api('/api/retail-admin/meituan/status');
 
-      // Sync cell — green dot + Active; flips to alert when unreachable
-      mtSetKpi('mt-kpi-daemon-val', cuT('Active', '运行中'));
-      mtSetKpi('mt-kpi-daemon-sub', cuT('· every 10 s', '· 每 10 秒'));
-      mtAlertTile('mt-kpi-daemon-tile', false);
-      document.getElementById('mt-dot')?.classList.remove('off');
-
-      // "Live on Meituan" tile — the value (live count) and sub (N not matched)
-      // are both owned by mtRenderProducts, which counts distinct products the
-      // same way the banner does. mappedCount (sync-toggle rows, both stores
-      // summed) is deliberately NOT shown as the headline — it double-counts and
-      // conflates "sync on" with "actually live".
-
-      // Stock updates — plain state words, not queue mechanics: "All sent ✓" is
-      // the healthy resting state; "N sending…" is a queue mid-drain (normal,
-      // clears in seconds); "N failed" is the only state that needs a human.
-      const pending = Number(s.queuePending || 0), qfailed = Number(s.queueFailed || 0);
-      // A queue mid-drain clears in seconds, so anything still waiting after
-      // STUCK_MIN is not sending, it is stuck — and saying "sending…" for it is
-      // how 107 rows sat unpushed for 19 hours with the tile looking normal.
-      const STUCK_MIN = 30;
-      const oldestMin = Number(s.queueOldestMin || 0);
-      const stuck = pending > 0 && oldestMin >= STUCK_MIN;
-      const stuckFor = oldestMin >= 120
-        ? cuT(`${Math.round(oldestMin / 60)} h`, `${Math.round(oldestMin / 60)} 小时`)
-        : cuT(`${oldestMin} min`, `${oldestMin} 分钟`);
-      if (stuck) {
-        mtSetKpi('mt-kpi-queue', pending);
-        mtSetKpi('mt-kpi-queue-sub', cuT(`stuck ${stuckFor} — stock on Meituan is stale`, `卡住 ${stuckFor} — 美团库存已过期`));
-      } else if (qfailed > 0) {
-        mtSetKpi('mt-kpi-queue', qfailed);
-        mtSetKpi('mt-kpi-queue-sub', cuT('failed', '推送失败')
-          + (pending > 0 ? cuT(` · ${pending} sending…`, ` · ${pending} 发送中…`) : ''));
-      } else if (pending > 0) {
-        mtSetKpi('mt-kpi-queue', pending);
-        mtSetKpi('mt-kpi-queue-sub', cuT('sending…', '发送中…'));
-      } else {
-        mtSetKpi('mt-kpi-queue', cuT('All sent', '已全部发送'));
-        mtSetKpi('mt-kpi-queue-sub', '✓');
-      }
-      mtAlertTile('mt-kpi-queue-tile', stuck || qfailed > 0 || pending > 0);
-
-      // Last order — short tail of the order no; the full no lives in Orders
-      const lo = (s.lastOrder && s.lastOrder[0]) || null;
-      if (lo) {
-        mtSetKpi('mt-kpi-order', fmtAgo(lo.imported_at) || '—');
-        mtSetKpi('mt-kpi-order-sub', `· ${mtStoreName(lo.store_code, cn)}`);
-      } else {
-        mtSetKpi('mt-kpi-order', '—');
-        mtSetKpi('mt-kpi-order-sub', cuT('no orders yet', '暂无订单'));
-      }
+      // The channel switch and every store card come straight off /status, so
+      // one poll keeps the whole head of the page honest.
+      mtPaintChannel(s.enabled !== false);
+      mtRenderStores(s.stores);
+      mtRenderLog('mt-log-stock', s.recentStock, true);
+      mtRenderLog('mt-log-sys', s.recentSystem, false);
 
       mtSetKpi('mt-upd', cuT('Updated just now', '刚刚更新'));
     } catch (e) {
-      // Daemon unreachable — red dot + brass alert on the sync cell.
-      mtAlertTile('mt-kpi-daemon-tile', true);
-      document.getElementById('mt-dot')?.classList.add('off');
-      mtSetKpi('mt-kpi-daemon-val', cuT('Offline', '离线'));
-      mtSetKpi('mt-kpi-daemon-sub', cuT("can't reach the sync service", '无法连接同步服务'));
+      // Cannot reach the admin API at all. Say exactly that, rather than
+      // leaving the last-known store cards on screen looking current.
+      const box = document.getElementById('mt-stores');
+      if (box) {
+        box.innerHTML = '<div class="mt-store blocked"><div class="sh">' +
+          '<span class="sdot"></span><span class="sname">' +
+          cuT('Cannot reach the sync service', '无法连接同步服务') + '</span></div>' +
+          '<div class="sstate">' +
+          cuT('The numbers below are from the last successful check.', '以下数据为上次成功检查的结果。') +
+          '</div></div>';
+      }
+      mtSetKpi('mt-upd', cuT('Offline', '离线'));
     }
   };
+
+  // -- Per-store health cards -------------------------------------------------
+  // Replaces the single "Sync / Active" cell, whose green only ever meant that
+  // this HTTP request succeeded. Server-side (meituanStoreHealth) a store is
+  // blocked when its latest health event is a blocking one AND nothing has
+  // pushed since — so 天河 recovering from its own queue_stalled stays green,
+  // while 越秀 sitting behind a verification challenge does not.
+  const MT_BLOCK_TXT = {
+    needs_login:     ['Signed out', '已退出登录'],
+    verify_required: ['Meituan asked for a verification scan', '美团要求扫码验证'],
+    queue_stalled:   ['Stock updates stalled', '库存推送停滞'],
+    poll_paused:     ['Order polling paused', '订单轮询已暂停'],
+    proxy_stale:     ['Network route down', '网络线路不可用'],
+  };
+
+  // What actually gets a store signed back in. Shown as the command to run and
+  // NOT a button: both need a human at a browser on the box, so a button here
+  // could only lie about what pressing it does.
+  function mtFixHint(code) {
+    const isInstant = _storeB && code === _storeB.code;
+    return isInstant ? 'node scripts/shangou-export-session.js'
+                     : 'node scripts/meituan-login.js ' + code;
+  }
+
+  function mtRenderStores(stores) {
+    const box = document.getElementById('mt-stores');
+    if (!box) return;
+    const rows = Array.isArray(stores) ? stores : [];
+    if (!rows.length) { box.innerHTML = ''; return; }
+    const cn = document.documentElement.dataset.uiLang === 'cn';
+    box.innerHTML = rows.map(st => {
+      const isInstant = _storeB && st.code === _storeB.code;
+      const mode = isInstant ? cuT('Matched by SKU', '按货号匹配')
+                             : cuT('Matched by name', '按名称匹配');
+      const bt = MT_BLOCK_TXT[st.blockedBy] || ['Not syncing', '同步已停'];
+      const blockTxt = st.blocked ? cuT(bt[0], bt[1])
+                                  : cuT('Signed in · pushing stock', '已登录 · 正在推送');
+      const since = st.blocked && st.blockedAt ? ' · ' + (fmtAgo(st.blockedAt) || '') : '';
+      // A stranded row is one the daemon claimed and never finished. Nothing
+      // counted these before, so 40 of them showed up in neither number.
+      const stranded = Number(st.processing || 0);
+      const facts = [
+        { k: cuT('Live', '已上架'),        v: st.live,      warn: false },
+        { k: cuT('Unmatched', '未匹配'),   v: st.unmatched, warn: st.unmatched > 0 },
+        { k: cuT('Waiting', '待推送'),     v: st.pending,   warn: false },
+        stranded ? { k: cuT('Stranded', '卡住'), v: stranded, warn: true } : null,
+        { k: cuT('Last order', '最近订单'),
+          v: st.lastOrderAt ? (fmtAgo(st.lastOrderAt) || '—') : cuT('none', '无'), warn: false },
+      ].filter(Boolean);
+      const factHtml = facts.map(f =>
+        '<div class="sf"><div class="k">' + esc(f.k) + '</div><div class="v' +
+        (f.warn ? ' warn' : '') + '">' + esc(String(f.v)) + '</div></div>').join('');
+      return '<div class="mt-store' + (st.blocked ? ' blocked' : '') + '">' +
+          '<div class="sh"><span class="sdot"></span>' +
+            '<span class="sname">' + esc(mtStoreName(st.code, cn) || st.name) + '</span>' +
+            '<span class="smode">' + esc(mode) + '</span></div>' +
+          '<div class="sstate">' + esc(blockTxt) + esc(since) + '</div>' +
+          '<div class="sfacts">' + factHtml + '</div>' +
+          (st.blocked
+            ? '<div class="sact"><code style="font-size:11.5px">' + esc(mtFixHint(st.code)) + '</code></div>'
+            : '') +
+        '</div>';
+    }).join('');
+  }
+
+  // -- Activity ---------------------------------------------------------------
+  // /status has always returned recentStock + recentSystem; nothing rendered
+  // them here, so the page could not answer "what did it just do".
+  function mtRenderLog(id, rows, isStock) {
+    const box = document.getElementById(id);
+    if (!box) return;
+    if (!rows || !rows.length) {
+      box.innerHTML = '<div class="empty">' + cuT('Nothing yet', '暂无记录') + '</div>';
+      return;
+    }
+    box.innerHTML = rows.map(r => {
+      const t = String(r.created_at || '').slice(5, 16);
+      let d = {};
+      try { d = JSON.parse(r.detail || '{}'); } catch (e) { d = {}; }
+      const cls = r.status === 'error' ? 'bad' : r.status === 'warn' ? 'warnrow' : '';
+      let body;
+      if (isStock) {
+        const prod = _products.find(x => x.id === d.product_id);
+        const name = prod ? (prod.name_cn || prod.name_en)
+                          : (d.sku || (d.bundle ? cuT('bundle', '套餐') : '#' + d.product_id));
+        body = esc(name) + (d.qty != null ? ' → ' + d.qty : '');
+      } else {
+        body = esc(r.event_type) + ': ' + esc(r.error_msg || r.status || '');
+      }
+      return '<div class="' + cls + '"><span class="t">' + esc(t) + ' [' +
+        esc(r.store_code || '-') + ']</span> ' + body + '</div>';
+    }).join('');
+  }
 
   // ── Sync now (push all) ──────────────────────────────────────────────────────
   // force=true is the "push while closed" path: it forwards a force flag so a
@@ -300,14 +389,10 @@
     if (cnt) cnt.textContent = cuT(`${list.length} of ${total} shown · ${live} live`, `显示 ${list.length} / ${total} · ${live} 已上架`);
     const tabn = document.getElementById('mt-tabn-products');
     if (tabn) tabn.textContent = total || '';
-    // "Live on Meituan" KPI: headline = products actually live (matched on a
-    // store), sub = how many are still stuck. Reconciles with the banner (att)
-    // and with total: live + att = active products.
-    mtSetKpi('mt-kpi-mapped', live);
-    const msub = document.getElementById('mt-kpi-mapped-sub');
-    if (msub) msub.textContent = att
-      ? cuT(`${att} not matched`, `${att} 个未匹配`)
-      : cuT('all matched', '全部已匹配');
+    // The old "Live on Meituan" strip cell summed both stores into one number,
+    // which could not say WHICH store a product was missing from. Per-store
+    // live/unmatched now come off /status.stores and render on the store cards;
+    // `live` here still feeds the toolbar count and the banner below.
 
     // Attention banner — the only home of the Match-names flow; hidden the
     // moment every active product is live somewhere.
@@ -396,8 +481,18 @@
           <div class="muted mt-sub">${esc(mapB.meituan_name)}</div>
           ${lastB ? `<div class="muted mt-sub">${esc(lastB)}</div>` : ''}`;
       } else {
-        colB = `<div>${mtPill('mt-off', cuT('Not on Meituan', '未上架'))}</div>
-          <div class="muted mt-sub">${cuT('No 货号 match — list it on Meituan with this SKU and it links up on its own', '无货号匹配 — 请在美团用此货号上架,系统会自动关联')}</div>`;
+        // Was "Not on Meituan — list it on Meituan with this SKU". Wrong twice:
+        // this column is only about 越秀 instant (the left one may well be
+        // synced), and the product is often ALREADY listed there and merely
+        // missing its 货号 — which is the whole reason the auto-map cannot see
+        // it. Say what is actually true and what actually fixes it.
+        const sk = (p.sku || '').trim();
+        colB = `<div>${mtPill('mt-off', cuT('Not linked', '未关联'))}</div>
+          <div class="muted mt-sub">${sk
+            ? cuT(`No listing carries SKU ${esc(sk)} yet — add it on 闪购 and this links itself`,
+                  `暂无商品使用货号 ${esc(sk)} — 在闪购填写后会自动关联`)
+            : cuT('This product has no SKU, so it cannot be matched here',
+                  '该商品没有货号,无法在此匹配')}</div>`;
       }
 
       return `<tr data-pid="${p.id}" class="mt-product-row${anyMapped ? '' : ' mt-unmapped'}">
