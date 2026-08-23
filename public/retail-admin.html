@@ -4544,11 +4544,12 @@
               <!-- Availability: publish switch + status -->
               <section class="pdb-card pdb-c5 pdb-avail">
                 <div class="pd-sec-h">Availability · 是否上架</div>
-                <label class="pd-pub">
-                  <input type="checkbox" id="pd-published">
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"/><circle cx="12" cy="12" r="3"/></svg>
-                  <span>Show in shop · 在店面显示</span>
-                </label>
+                <!-- "Show in shop" is the tag in the drawer header now — one
+                     switch, in the one place that never scrolls away. The input
+                     STAYS here and stays the single source of truth: pdCollectBody
+                     reads it, pdApplySnapshot writes it, and the header tag paints
+                     from it. Hidden, not deleted. -->
+                <input type="checkbox" id="pd-published" hidden>
                 <div class="field"><label class="stacked">Status · 状态</label>
                   <select id="pd-status">
                     <option value="Active">Active · 在售</option>
