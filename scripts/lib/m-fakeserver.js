@@ -340,7 +340,6 @@ function fakeServer() {
       if(p.indexOf('/feedback')===0) return {success:true,data:FEEDBACK};
       if(p.indexOf('/dashboard/activity')===0) return {success:true,data:D['/dashboard/activity']};
       if(p.indexOf('/dashboard/ops')===0) return {success:true,data:D['/dashboard/ops']};
-      if(p.indexOf('/dashboard?')===0) return {success:true,data:D['/dashboard']};
       if(p.indexOf('/cms/layout')===0) return {success:true,data:D['/cms/layout']};
       if(p.indexOf('/media/list')===0) return {success:true,data:D['/media/list']};
       // Top-level, not nested under a data key: both routes answer
@@ -348,6 +347,32 @@ function fakeServer() {
       // generic D lookup below wraps it, which made Sales see no channels and
       // paint its empty state with real fixtures sitting behind it.
       // (No backticks in this comment — the whole file is one template literal.)
+      // Team answers {success, team, rbacEnforce} at the top level and lives
+      // under /api/backend, not /api/retail-admin — the phone's apiURL takes an
+      // absolute path as given. Shape from routes/backend-team.js publicUser().
+      // /dashboard?from=&to= — the Trend screen asks for a WINDOW, and the
+      // buckets have to follow it or "Days counted" contradicts the chip that
+      // was just tapped. One bucket per day between the two dates, shaped like
+      // the route's own trend array: {bucket, orders, revenue, visits}.
+      if(p.indexOf('/dashboard?')===0){
+        var qs=p.slice(p.indexOf('?')+1).split('&').reduce(function(a,kv){var i=kv.indexOf('=');a[kv.slice(0,i)]=decodeURIComponent(kv.slice(i+1));return a;},{});
+        var d0=new Date(qs.from+'T00:00:00'), d1=new Date(qs.to+'T00:00:00');
+        var n=Math.max(1,Math.round((d1-d0)/86400000)+1), tr=[];
+        for(var i=0;i<n;i++){
+          var d=new Date(d0.getTime()+i*86400000);
+          // Deterministic, and shaped like a week: quiet Mondays, busy weekends.
+          var dow=d.getDay(), wave=1+0.45*Math.sin(i/2.1)+(dow===0||dow===6?0.5:0);
+          var orders=Math.max(0,Math.round(14*wave));
+          tr.push({bucket:d.toISOString().slice(0,10), orders:orders,
+                   revenue:Math.round(orders*168.4*100)/100, visits:Math.round(orders*22*wave), sessions:Math.round(orders*19)});
+        }
+        return {success:true,data:Object.assign({},D['/dashboard'],{trend:tr})};
+      }
+      if(p.indexOf('/api/backend/team')===0) return {success:true,rbacEnforce:false,team:[
+        {id:1,username:'mei',displayName:'Mei Chen',role:'owner',retailStoreId:null,scopeAll:true,isActive:true,isSelf:true,lastLogin:'2026-08-23 08:10:00',hasCustomPerms:false},
+        {id:2,username:'lin',displayName:'Lin Hao',role:'store_manager',retailStoreId:1,scopeAll:false,isActive:true,isSelf:false,lastLogin:'2026-08-22 19:40:00',hasCustomPerms:false},
+        {id:3,username:'wu',displayName:'Wu Jia',role:'warehouse',retailStoreId:2,scopeAll:false,isActive:true,isSelf:false,lastLogin:null,hasCustomPerms:true},
+        {id:4,username:'old',displayName:'Zhao Qing',role:'staff',retailStoreId:null,scopeAll:true,isActive:false,isSelf:false,lastLogin:'2026-06-02 11:00:00',hasCustomPerms:false}]};
       if(p.indexOf('/channel-status')===0) return Object.assign({success:true},D['/channel-status']);
       if(p.indexOf('/sales/summary')===0) return Object.assign({success:true},D['/sales/summary']);
       if(p.indexOf('/meituan/status')===0) return Object.assign({success:true},D['/meituan/status']);

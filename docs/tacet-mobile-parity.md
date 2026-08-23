@@ -1135,6 +1135,54 @@ line-level refund amounts stay on the desktop; authoring — coupons, flash
 sales, broadcasts — stays on the desktop, which is why the create sheet was
 deleted rather than wired up.
 
+### The two the audit had never reached
+
+Every desktop tab was checked against the phone this round — 30 of them. Three
+had no phone screen at all, and only one of those was a decision anybody had
+recorded.
+
+**Team was a blind spot.** It appears nowhere in this document, not even as a
+`➖` row: no pass had ever looked at it. Inviting somebody, assigning a role and
+setting a per-capability permission matrix is authoring and stays on the
+desktop. What the phone gets is the other half — **who has access**, and
+switching one of them off in a hurry. A staffer walks out mid-shift, a phone
+goes missing, and the answer should not be "find a laptop".
+
+The two rules that make that safe are the server's (`routes/backend-team.js`):
+you cannot deactivate yourself, and you cannot leave the shop with no active
+owner. The row **states** both rather than letting a thumb find them as a 400 —
+"Owner · seen 8:10 AM · this is you". Writing the screen surfaced a real gap in
+its own handler: `teamToggle` was guarded only by not *drawing* the control,
+which is a guard the view enforces and `APP.cmd` walks straight past. It checks
+the rules itself now.
+
+This is also the first screen to read outside `/api/retail-admin` — the roster
+is `/api/backend/team`, shared with the backend's own login routes — so `api()`
+grew `apiURL`, which takes an already-absolute path as given.
+
+**The phone knew nothing but today.** Home fetched
+`/dashboard?from=today&to=today` and the only date range anywhere in the file
+was Stock activity's. "Is this week better than last?" is a question you ask
+standing in the shop, and there was no length at which the phone could answer
+it. This document had that as a bare `➖` on "Reports chapters", which the legend
+reads as *desktop is the right home* — right about the **chart**, wrong about
+the **numbers**.
+
+So: not Reports. No chapters, no hover columns, no per-store breakdown, no AI
+read. The endpoint's own `trend` array — one bucket per day of
+`{bucket, orders, revenue, visits}` — was already being fetched for a single
+day. Trend asks for a window and draws the shape plus four figures: total,
+busiest day (named and dated), a typical day, and how many days are counted.
+
+The money gate is the Recap's, and it is enforced in three places rather than
+one: a warehouse, dispatch or customer-service account is not offered Revenue as
+a metric, does not **default** to it, and sees no money figure anywhere. A tile
+that shows money for half a second before hiding it has already shown it.
+
+**Snippets** — the third tab with no phone screen — stays absent on purpose:
+dozens of short bilingual labels for cart, checkout and profile is authoring, by
+the same rule that deleted the create sheet rather than wiring it up.
+
 ### Two more, decided the same way
 
 **The Dusk budget.** §1 of the design system calls Dusk "the AI's colour", puts
