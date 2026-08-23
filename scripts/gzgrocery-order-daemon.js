@@ -213,11 +213,7 @@ function ensureGzMirror({ orderId, status, customer, dateAdded, ours, storeId, v
   const shipName  = (shipTo && shipTo.recipientName) || null;
   const shipPhone = (shipTo && shipTo.recipientPhone) || null;
   const shipAddr  = (shipTo && shipTo.addressFull) || null;
-  const shipJson  = shipTo ? JSON.stringify({
-    region: shipTo.region || '', street: shipTo.street || '',
-    postcode: shipTo.postcode || '', contacter: shipTo.contacter || '',
-    source: 'gzgrocery_dispatch_note',
-  }) : null;
+  const shipJson  = shipTo ? shipToJson(shipTo, { source: 'gzgrocery_dispatch_note' }) : null;
   // gzgrocery orders are already fulfilled (picked/collected) by the time we
   // mirror them — this channel is read-only for us — so show them as delivered,
   // not merely paid.
@@ -230,11 +226,17 @@ function ensureGzMirror({ orderId, status, customer, dateAdded, ours, storeId, v
     // overwrite the placeholder name (the order id echoed back). A hand-edited
     // name that is NOT the placeholder is left alone.
     if (shipName || shipPhone || shipAddr) {
+      // Fill blanks, replace the placeholder name (the order id echoed back),
+      // and refresh an address written by an OLDER parser generation — the
+      // first one left overseas numbers unparsed, so the raw line (name and
+      // phone included) ended up as the address. A hand-edited name, and an
+      // address already read by the current parser, are left alone.
+      const stale = `COALESCE(address_json,'') = '' OR address_json NOT LIKE '%"p":${SHIPTO_PARSER}%'`;
       db.prepare(`UPDATE retail_orders SET
            recipient_name  = CASE WHEN COALESCE(recipient_name,'') IN ('', ?) THEN COALESCE(?, recipient_name) ELSE recipient_name END,
-           recipient_phone = CASE WHEN COALESCE(recipient_phone,'') = '' THEN ? ELSE recipient_phone END,
-           address_full    = CASE WHEN COALESCE(address_full,'')    = '' THEN ? ELSE address_full END,
-           address_json    = CASE WHEN COALESCE(address_json,'')    = '' THEN ? ELSE address_json END,
+           recipient_phone = CASE WHEN COALESCE(recipient_phone,'') = '' THEN COALESCE(?, recipient_phone) ELSE recipient_phone END,
+           address_full    = CASE WHEN ${stale} THEN COALESCE(?, address_full) ELSE address_full END,
+           address_json    = CASE WHEN ${stale} THEN COALESCE(?, address_json) ELSE address_json END,
            updated_at = CURRENT_TIMESTAMP
          WHERE id = ?`)
         .run(String(orderId), shipName, shipPhone, shipAddr, shipJson, existing.id);
@@ -332,14 +334,29 @@ function backfillGzMirrorSkus() {
 // "attempted" marker — written on every SUCCESSFUL read, even one that parsed
 // nothing, so an order whose note genuinely has no address isn't retried
 // forever, while a network failure IS.
+// Parser generation, stamped into address_json as "p". Bump it when the ship-to
+// PARSER changes and every order re-reads itself once, then stops: the first
+// version missed overseas numbers written "(+85291943231)", which left the name
+// and phone unparsed and the raw line — number and all — sitting in the address.
+// Without a generation there is no way to tell "already read" from "already read
+// by the version that got it wrong".
+const SHIPTO_PARSER    = 2;
 const SHIPTO_PER_CYCLE = Number(process.env.GZGROCERY_SHIPTO_PER_CYCLE || 40);
 const SHIPTO_GAP_MS    = Number(process.env.GZGROCERY_SHIPTO_GAP_MS || 400);
+function shipToJson(shipTo, extra) {
+  return JSON.stringify({
+    region: shipTo.region || '', street: shipTo.street || '',
+    postcode: shipTo.postcode || '', contacter: shipTo.contacter || '',
+    p: SHIPTO_PARSER, ...extra,
+  });
+}
 async function backfillShipTo(client, storeId) {
   if (MODE !== 'live' || SHIPTO_PER_CYCLE <= 0) return;
   const rows = db.prepare(
     `SELECT order_id, status, customer, date_added, items_json, reversed, decremented
        FROM gzgrocery_orders
-      WHERE our_units > 0 AND COALESCE(address_json,'') = ''
+      WHERE our_units > 0
+        AND (COALESCE(address_json,'') = '' OR address_json NOT LIKE '%"p":${SHIPTO_PARSER}%')
       ORDER BY order_id DESC LIMIT ?`
   ).all(SHIPTO_PER_CYCLE);
   if (!rows.length) return;
@@ -352,8 +369,7 @@ async function backfillShipTo(client, storeId) {
       `UPDATE gzgrocery_orders SET recipient_name=?, recipient_phone=?, address_full=?, address_json=?,
               updated_at=CURRENT_TIMESTAMP WHERE order_id=?`
     ).run(shipTo.recipientName || null, shipTo.recipientPhone || null, shipTo.addressFull || null,
-      JSON.stringify({ region: shipTo.region || '', street: shipTo.street || '',
-        postcode: shipTo.postcode || '', contacter: shipTo.contacter || '' }), row.order_id);
+      shipToJson(shipTo), row.order_id);
     // Push the same ship-to onto the display mirror the drawer reads. Only for
     // orders we actually counted — same gate as backfillGzMirrors. An order that
     // was never decremented (e.g. its status never parsed, so it never went
@@ -405,10 +421,7 @@ function processOrder(o, items, skuMap, storeId, shipTo) {
       recipient_name:  shipTo?.recipientName  || prev?.recipient_name  || null,
       recipient_phone: shipTo?.recipientPhone || prev?.recipient_phone || null,
       address_full:    shipTo?.addressFull    || prev?.address_full    || null,
-      address_json:    shipTo ? JSON.stringify({
-        region: shipTo.region || '', street: shipTo.street || '',
-        postcode: shipTo.postcode || '', contacter: shipTo.contacter || '',
-      }) : (prev?.address_json || null),
+      address_json:    shipTo ? shipToJson(shipTo) : (prev?.address_json || null),
       ...fields,
     };
     db.prepare(`INSERT INTO gzgrocery_orders
