@@ -148,6 +148,39 @@ CASES.push(['holiday mode', `state.cfg=Object.assign({},state.cfg,{delivery:{hol
 CASES.push(['holiday mode off', ZONES + `APP.cmd('push','delivery');`, [
   ['says so quietly, as a fact',  `txt('content').includes('Holiday mode')`],
   ['with no alarm',               `!txt('content').includes('delivery is paused')`],
+  // ON stays on the desktop: switching it on needs the shopper-facing message,
+  // in both languages, and a phone that could flip it without writing one would
+  // put a stale message — or none — in front of every customer.
+  ['and no way to switch it ON',  `!${btnTexts}.some(function(t){return /holiday|pause/i.test(t)})`],
+]]);
+
+// ── Coming back ───────────────────────────────────────────────────────────
+// The asymmetric half, and the one that belongs on a phone: you are home,
+// delivery should run again, and there is nothing to write. Asserted on the
+// REQUEST, not the toast.
+const HOLIDAY_ON = `state.cfg=Object.assign({},state.cfg,{delivery:{holidayMode:true,
+    holidayMessage:{en:'Closed for Mid-Autumn, back Thursday.'}}});
+  state.zones=[]; state.geoTried=true; state.geo={stores:{total:1,geocoded:1,missing:0}};
+  state.printerTried=true; state.printer={auto_print:false}; APP.cmd('push','delivery');`;
+const WSTUB = `window.__sent=[];
+  window.fetch=function(u,o){ window.__sent.push({u:String(u), m:(o&&o.method)||'GET', body:(o&&o.body)||null});
+    return Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve({success:true,data:{}})}}); };`;
+const wsent = (frag) => `window.__sent.some(function(r){return r.u.indexOf(${JSON.stringify(frag)})>=0})`;
+const wbody = (frag) => `window.__sent.some(function(r){return (r.body||'').indexOf(${JSON.stringify(frag)})>=0})`;
+
+CASES.push(['resuming asks first', WSTUB + HOLIDAY_ON + `APP.cmd('resumeDelivery');`, [
+  ['it asks',                   `sheetText().includes('Resume delivery?')`],
+  ['and says the notice comes down', `sheetText().includes('taken down')`],
+  ['nothing sent yet',          `!${wsent('/config')}`],
+]]);
+
+CASES.push(['confirming writes the config key', WSTUB + HOLIDAY_ON
+  + `APP.cmd('resumeDelivery'); APP.cmd('askRun');`, [
+  ['to /config',              wsent('/config')],
+  ['the desktop\'s own key',  wbody('"delivery.holidayMode"')],
+  // false, not undefined: JSON.stringify drops an undefined value, which is how
+  // a PUT once reached the server as an empty patch and came back 200.
+  ['set to false',            wbody('"delivery.holidayMode":false')],
 ]]);
 
 // ── Editor ────────────────────────────────────────────────────────────────

@@ -1105,17 +1105,50 @@ restating: **copy the column name from the route's SELECT, never from what the
 phone happens to read.** A fake server answering in the phone's own vocabulary
 hides the bugs it exists to find, and — worse — invents ones that are not there.
 
-## 4. Open questions
+## 4. Decided
 
-Not gaps — decisions that are the shop's to make, not this file's.
+These were the open questions. All three are answered, and the answer in each
+case is an **asymmetry** — the phone gets the half of the decision that is a
+judgement made standing up, and the desktop keeps the half that is authoring.
 
-| Question | Why it is not decided here |
+| Question | Answer |
 |---|---|
-| Should the phone be able to open and close a sales channel? | It is the most phone-shaped write in the whole app — you are standing in a slammed kitchen and you want Meituan off — and also the heaviest, because it stops orders arriving. Reading the state is shipped; the switch is not. |
-| Should the phone be able to turn holiday mode on? | Same class as the channel switch above: it stops delivery for everyone and puts a message in front of every shopper. Reading the state is shipped — it is now the loudest thing on the Delivery screen when it is on. |
-| Should marking an off-app payment as paid move to the phone? | It records WHICH tender the money came in as. A phone that cannot ask would put "unknown" on the books, so it needs a tender chooser designed before it moves. |
+| Open and close a sales channel? | **Yes, one store at a time.** Tap a channel on the Sales board, get its stores, tap one, confirm. The endpoint has both halves — `/channel-status/cell` and `/channel-status/channel` — and only the first is wired: closing a channel *everywhere* stops orders arriving at every store on one tap, and a thumb on a phone is not the place for that. It stays on desktop, and the sheet says so. |
+| Turn holiday mode on? | **Off only.** Coming back is the half that belongs on a phone: you are home, delivery should run, and there is nothing to write. Turning it *on* needs the shopper-facing message in both languages, and a phone that could flip it without writing one would put a stale message — or none — in front of every customer. |
+| Mark an off-app payment as paid? | **Yes, with a tender chooser.** `markPaid` asks how the money came in — cash, bank transfer, WeChat off-app, Alipay off-app, other — and PATCHes `{status:'paid', pay_method}`. A phone that could not ask would have put "unknown" on the books, which is why it waited for the chooser. |
 
-Settled already, and recorded above rather than re-litigated: editing a ship-to
+Every confirm names what stops **and what does not**: "No new orders arrive at
+this store on this channel. Orders already placed are not affected." Closed
+reads as cancelled if you do not say otherwise, and the orders already in the
+kitchen are the first thing anyone would worry about.
+
+Both new writes are asserted on the **request**, not the toast —
+`scripts/test_mobile_sales.js` and the delivery cases in
+`test_mobile_settings.js` check the endpoint, the method and every field of the
+body, including that `open` is `false` rather than `undefined`. This app has
+twice shipped a write that reported success and sent nothing.
+
+Settled earlier and recorded above rather than re-litigated: editing a ship-to
 address stays on the desktop (seven fields with Chinese address matching behind
 them); the staff note needs backend work before any surface can edit it;
-line-level refund amounts stay on the desktop.
+line-level refund amounts stay on the desktop; authoring — coupons, flash
+sales, broadcasts — stays on the desktop, which is why the create sheet was
+deleted rather than wired up.
+
+### Two more, decided the same way
+
+**The Dusk budget.** §1 of the design system calls Dusk "the AI's colour", puts
+one Dusk element per screen as the norm and two as the maximum, and says a
+screen full of Dusk is wrong. m.html painted every switched-on toggle in Dusk —
+Settings showed eight at once. A shop owner flipping their own setting is the
+owner acting, not Tacet. The on-track is **Ink** now, and `public/stock.html`
+had already settled the identical question the identical way ("the Dusk budget
+is zero … every write is a staffer counting their own shelf"). Dusk keeps the
+breathing live-updates dot, the focus border, the avatar tint and the one
+primary CTA per screen — which is what makes it mean something.
+
+**Quick stock** is gone from the navigation. Its whole content was "Counted in
+Products — open a product and set the count", which is a menu row that leads to
+a signpost: the same small lie as a control wired to nothing. Products carries
+the counting. The Quick Stock *feature switch* in Settings is a different thing
+and stays — it decides whether staff can open the `/stock` app at all.

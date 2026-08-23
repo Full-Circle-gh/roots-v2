@@ -184,14 +184,22 @@ const KIND2PILL = {paid:'clear',pending:'clear',preparing:'clear',cancelled:'cle
   restock:'warning',gold:'warning',refund:'danger',view:'muted',off:'muted'};
 function pill(kind, label){ const [bg,fg]=PILL[KIND2PILL[kind]||'clear']; return `<span class="pill" style="background:${bg};color:${fg}">${label}</span>`; }
 function toggle(on, onClick){
-  // The off track used to be --border-strong, which is Graphite — a near-black
-  // slab with a white knob in it. Next to an on switch it read as a second ON
-  // in a different colour, so "Fapiao auto-issue" looked enabled when it was
-  // not. Off is a light track: the difference has to be filled-vs-empty, not
-  // one dark colour against another.
+  // ON is INK, not Dusk. Dusk is the AI's colour — §1 of the design system puts
+  // one Dusk element per screen as the norm and two as the maximum, and says a
+  // screen full of Dusk is wrong. Settings showed eight switched-on toggles at
+  // once, all of them purple, which is not what any of them meant: a shop owner
+  // flipping their own setting is the owner acting, not Tacet. public/stock.html
+  // settled the same question the same way ("the Dusk budget is zero ... every
+  // write is a staffer counting their own shelf"), and the two phone surfaces
+  // should not disagree about what a colour means.
+  //
+  // The off track was --border-strong, which is Graphite — a near-black slab
+  // with a white knob in it, reading as a second ON in a different colour. Off
+  // is a light track: the difference is filled-vs-empty, not one dark colour
+  // against another.
   return `<button onclick="${onClick}" aria-label="Toggle" style="width:44px;height:26px;border-radius:999px;
-    background:${on?'var(--accent)':'var(--surface-raised)'};box-shadow:${on?'none':'inset 0 0 0 1px var(--border-default)'};position:relative;border:none;cursor:pointer;flex:none;transition:background .2s var(--ease-settle)">
-    <span style="position:absolute;top:3px;left:${on?'21px':'3px'};width:20px;height:20px;border-radius:50%;background:${on?'#fff':'var(--surface-card)'};
+    background:${on?'var(--text-primary)':'var(--surface-raised)'};box-shadow:${on?'none':'inset 0 0 0 1px var(--border-default)'};position:relative;border:none;cursor:pointer;flex:none;transition:background .2s var(--ease-settle)">
+    <span style="position:absolute;top:3px;left:${on?'21px':'3px'};width:20px;height:20px;border-radius:50%;background:${on?'var(--bg)':'var(--surface-card)'};
     transition:left .2s var(--ease-settle);box-shadow:0 1px 3px rgba(17,26,43,.22)"></span></button>`;
 }
 
@@ -231,7 +239,8 @@ const state = {
   prodQ:'', prodStatus:'all', prodCat:'all', catalogueTried:false, catalogueLoading:false,
   workOpen:false, workEvents:null, workLoading:false, workErr:null, vchSeg:'on',
   affiliate:null, affiliateTried:false, affRows:null, affSeg:'', affErr:null, invSeg:'all', invLoaded:false,
-  geo:null, geoTried:false, chan:null, chanTried:false, sales:null, salesSummary:null,
+  geo:null, geoTried:false, chan:null, chanTried:false, sales:null, salesSummary:null, dlvBusy:false, dlvErr:null,
+  chanSheet:null, chanBusy:null, chanErr:null,
   recap:null, recapTried:false, recapSince:0, reallyAway:false, pos:'default',
   overflow:false, search:false, detailId:null, detailActions:false, productSku:null,
   orderBusy:null, orderErr:null, replyBusy:false, replyErr:null, revBusy:null, revErr:null, parcelBusy:null,
@@ -815,6 +824,65 @@ reg('signout', ()=>{
 });
 reg('enable', f=>{ if(FEATURES.includes(f)) toggleFeature(f); });
 reg('toggleFeature', k=>toggleFeature(k));
+reg('openChannel', k=>{ state.chanSheet=k; state.chanErr=null; render(); });
+reg('closeChannel', ()=>{ state.chanSheet=null; state.chanErr=null; render(); });
+/* One store on one channel. `next` arrives as '1' or '0' from the template —
+   APP.cmd is variadic now, but every argument still crosses as a string. */
+reg('chanCell', (channel, storeCode, next)=>{
+  if(state.chanBusy) return;
+  const d=state.chan, c=((d&&d.channels)||[]).find(x=>x.channel===channel);
+  const cell=c&&(c.cells||[]).find(x=>x.storeCode===storeCode); if(!cell) return;
+  const open=String(next)==='1';
+  const m=CHAN_META[channel]||{en:channel,zh:channel};
+  const store=chanStoreName(cell), chan=T(m.en,m.zh);
+  state.ask={
+    title: open ? T('Open '+chan+' at '+store+'?', '在 '+store+' 开启 '+chan+'？')
+                : T('Close '+chan+' at '+store+'?', '在 '+store+' 关闭 '+chan+'？'),
+    // What stops, and what does not. "Closed" reads as "cancelled" if you do
+    // not say so, and it is the orders already in the kitchen you would worry
+    // about first.
+    body: open ? T('New orders can arrive at this store again.','这家门店可以重新接单。')
+               : T('No new orders arrive at this store on this channel. Orders already placed are not affected.',
+                   '该门店在此渠道将不再接到新订单。已下单的订单不受影响。'),
+    confirmLabel: open?T('Open','开启'):T('Close','关闭'), danger:!open,
+    run:()=>{
+      state.chanBusy=channel+'|'+storeCode; state.chanErr=null; render();
+      apiWrite('/channel-status/cell',{channel,storeCode,open},'POST').then(()=>{
+        cell.open=open;
+        c.cardOpen=(c.cells||[]).some(x=>x.open);
+        state.chanBusy=null; render();
+        showToast(open?T('Open at '+store,store+' 已开启'):T('Closed at '+store,store+' 已关闭'));
+      }).catch(e=>{
+        state.chanBusy=null;
+        if(String(e.message)==='auth') return;
+        state.chanErr=E('That did not save. Nothing has changed — try again.','没有保存成功。数据没有变化 — 请重试。');
+        render();
+      });
+    }};
+  render();
+});
+/* Holiday mode, one direction. See the comment on the button in screenDelivery
+   for why ON stays on the desktop. */
+reg('resumeDelivery', ()=>{
+  if(state.dlvBusy) return;
+  state.ask={title:T('Resume delivery?','恢复配送？'),
+    body:T('Holiday mode goes off and orders can be delivered again. The message shoppers were seeing is taken down.',
+           '假日模式将关闭，恢复接单配送，顾客看到的歇业提示会撤下。'),
+    confirmLabel:T('Resume','恢复'),
+    run:()=>{
+      state.dlvBusy=true; state.dlvErr=null; render();
+      apiWrite('/config',{'delivery.holidayMode':false},'PUT').then(()=>{
+        state.cfg=state.cfg||{};
+        state.cfg.delivery=Object.assign({},state.cfg.delivery||{},{holidayMode:false});
+        state.dlvBusy=false; render(); showToast(T('Delivery resumed','配送已恢复'));
+      }).catch(e=>{
+        state.dlvBusy=false;
+        if(String(e.message)==='auth') return;
+        state.dlvErr=E('That did not save. Holiday mode is still on.','没有保存成功。假日模式仍然开启。'); render();
+      });
+    }};
+  render();
+});
 reg('faqToggle', i=>{ state.faqOpen=state.faqOpen===i?null:i; render(); });
 reg('mirror', w=>{ push('mirror_'+w); loadMirror(w); });
 reg('stepInc', k=>{ sheetStep[k]=(sheetStep[k]||0)+1; render(); });
@@ -1432,6 +1500,59 @@ const CHAN_META={
   gzgrocery:{icon:'warehouse',en:'gzgrocery ERP',zh:'gzgrocery',key:'gzgrocery',mirror:'gzgrocery'},
   pos:{icon:'store',en:'In store',zh:'门店',key:'pos'},
 };
+/* One channel, its stores, and the switch. The Sales board could say a channel
+   was shut at one store and do nothing about it — reading the state shipped,
+   the switch did not. It is the most phone-shaped write in the app: you are
+   standing in a slammed kitchen and you want Meituan off at Tianhe.
+
+   PER STORE, never the whole channel. The endpoint has both — /channel-status/cell
+   and /channel-status/channel — and only the first is here, because the second
+   stops orders arriving everywhere on one tap and a thumb on a phone is not
+   the place for that. Closing a channel outright stays on the desktop.
+
+   The confirm names what stops and what does not, because "closed" is easy to
+   read as "cancelled": orders already placed are untouched either way. */
+function chanStoreName(cell){ return LANG==='en'?(cell.nameEn||cell.name||cell.storeCode)
+                                                :(cell.nameCn||cell.name||cell.storeCode); }
+function sheetChannel(){
+  const key=state.chanSheet; if(!key) return '';
+  const d=state.chan; const c=((d&&d.channels)||[]).find(x=>x.channel===key);
+  const m=CHAN_META[key]; if(!c||!m) return '';
+  const cells=c.cells||[];
+  const open=cells.filter(x=>x.open).length;
+  return `<div class="scrim" style="z-index:45" onclick="APP.cmd('closeChannel')"></div>
+   <div class="sheet" style="top:140px;z-index:46;overflow:hidden">
+     <div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
+       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
+         <button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" onclick="APP.cmd('closeChannel')">${ic('x',22,2)}</button>
+         <span style="flex:1;font-size:17px;font-weight:500;min-width:0">${T(m.en,m.zh)}</span><span style="width:36px;flex:none"></span></div>
+       <div style="font-size:13px;color:var(--text-secondary);padding:2px 8px 0">${
+         T(open+' of '+cells.length+(cells.length===1?' store open':' stores open'), cells.length+' 家门店中 '+open+' 家营业')}</div></div>
+     <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;background:var(--bg)">
+       ${state.chanErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+         <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+         <span style="font-size:14px;color:var(--brick-ink)">${state.chanErr}</span></div>`:''}
+       <div class="list">${cells.map((cell,i)=>{
+         const busy=state.chanBusy===key+'|'+cell.storeCode;
+         return `${i?'<div class="sep" style="margin-left:14px"></div>':''}
+         <button ${busy||state.chanBusy?'disabled':''} onclick="APP.cmd('chanCell','${escAttr(key)}','${escAttr(cell.storeCode)}',${cell.open?'0':'1'})"
+           style="display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;padding:14px;background:transparent;border:none;cursor:pointer;font-family:inherit;text-align:left;${state.chanBusy&&!busy?'opacity:.5':''}">
+           <span style="font-size:15px;color:var(--text-primary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(chanStoreName(cell))}</span>
+           ${/* The state, and a chevron — not the state AND the verb. The row
+                 read "Open   Close" side by side, which is a tinted pill next
+                 to a plain word and still one glance away from being read as
+                 two states. The row IS the control; what tapping it does is
+                 named in the confirm, where there is room to say it properly. */''}
+           <span style="display:flex;align-items:center;gap:9px;flex:none">
+             <span class="pill" style="background:${cell.open?PILL.success[0]:PILL.danger[0]};color:${cell.open?PILL.success[1]:PILL.danger[1]}">${
+               busy?T('Saving…','保存中…'):(cell.open?T('Open','营业中'):T('Closed','已关闭'))}</span>
+             <span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span></button>`;
+       }).join('')}</div>
+       ${m.mirror?`<button class="btn2" style="width:100%" onclick="APP.cmd('mirror','${m.mirror}')">${
+         m.mirror==='meituan'?T('View orders from Meituan','查看美团订单'):T('View pickups','查看提货记录')}</button>`:''}
+       ${noteBar(T('Closing a channel everywhere at once is on desktop.','一次性关闭整个渠道请在电脑端操作。'))}
+     </div></div>`;
+}
 function statusSales(){
   const su=state.salesSummary; if(!su) return '';
   const n=Number(su.orders||0);
@@ -1474,11 +1595,27 @@ function screenSales(){
       // Today's figures, said as today's — the old line gave a bare number with
       // no window on it, which reads as all-time.
       if(sale&&sale.connected) line.push(T(sale.orders+' today · '+money0(CUR,sale.revenue), '今日 '+sale.orders+' 单 · '+money0(CUR,sale.revenue)));
-      if(!notIntegrated&&cells.length&&open<cells.length){
-        const shut=cells.filter(x=>!x.open).map(x=>LANG==='en'?(x.nameEn||x.name):(x.nameCn||x.name));
-        line.push(T('closed at '+shut.join(', '), shut.join('、')+' 已关闭'));
-      }
-      const go=m.mirror?`APP.cmd('mirror','${m.mirror}')`:'';
+      // Which stores are shut gets its OWN line, below, and is allowed to wrap.
+      // It used to be a third clause on the money line — nowrap, sharing a
+      // 196px box with the row's action — so "6 today · ¥143 · closed at
+      // Tianhe, Panyu" clipped 66px short and the half it lost was the half it
+      // exists for. Shortening the wording only moved the threshold; three
+      // facts do not fit on that line at any length. This is the exception on
+      // the card, not a third statistic, and it reads like one now.
+      // Only when SOME are open. A channel shut everywhere already says
+      // "Closed" in its pill, and listing every store underneath repeats it.
+      const shut=(!notIntegrated&&cells.length&&open&&open<cells.length)?cells.filter(x=>!x.open):[];
+      const shutLine=(()=>{ if(!shut.length) return '';
+        const nm=c2=>LANG==='en'?(c2.nameEn||c2.name):(c2.nameCn||c2.name);
+        return shut.length===1 ? T('Closed at '+nm(shut[0]), nm(shut[0])+' 已关闭')
+                               : T('Closed at '+shut.map(nm).join(', '), shut.map(nm).join('、')+' 已关闭'); })();
+      // One tap target per card, one destination. It used to be the mirror for
+      // the two channels that have one and nothing for the other four; now
+      // every channel with stores opens its own sheet, and the mirror is a row
+      // inside that sheet. A channel with no integration has nothing to show
+      // and stays flat.
+      const go=(!notIntegrated&&cells.length)?`APP.cmd('openChannel','${c.channel}')`
+              : m.mirror?`APP.cmd('mirror','${m.mirror}')`:'';
       const Tag=go?'button':'div';
       return `<${Tag} class="card" ${go?`onclick="${go}"`:''} style="display:flex;flex-direction:column;gap:12px;text-align:left;${go?'cursor:pointer;':''}padding:16px;color:var(--text-primary);width:100%">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
@@ -1487,9 +1624,12 @@ function screenSales(){
             <span style="display:flex;align-items:center;gap:8px;min-width:0"><span style="font-size:16px;font-weight:500">${T(m.en,m.zh)}</span>
             ${m.mirror?`<span class="pill" style="background:${PILL.muted[0]};color:${PILL.muted[1]}">${T('View only','只读')}</span>`:''}</span></span>
           <span class="pill" style="background:${PILL[st[0]][0]};color:${PILL[st[0]][1]};flex:none">${st[1]}</span></div>
+        ${shutLine?`<div style="font-size:13px;color:var(--amber-ink);line-height:1.45">${escAttr(shutLine)}</div>`:''}
         ${(line.length||go)?`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
           <span class="num" style="font-size:13px;color:var(--text-secondary);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${line.join(' · ')}</span>
-          ${go?`<span style="display:flex;align-items:center;gap:5px;font-size:13.5px;font-weight:500;flex:none">${T('View','查看')}<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span>`:''}</div>`:''}
+          ${go?`<span style="display:flex;align-items:center;gap:5px;font-size:13.5px;font-weight:500;flex:none">${
+            (!notIntegrated&&cells.length)?T('Open or close','开关门店'):T('View','查看')
+            }<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span></span>`:''}</div>`:''}
       </${Tag}>`;}).join('')}
     <div style="text-align:center;font-size:12.5px;color:var(--text-secondary)">${T('Opening and closing a channel is on desktop','渠道的开启与关闭在电脑端')}</div>
   </div>`;
@@ -1961,7 +2101,17 @@ function screenDelivery(){
       <div style="display:flex;align-items:center;gap:10px">
         <span style="flex:none;color:var(--brick-ink);display:flex">${ic('triangle-alert',18)}</span>
         <span style="font-size:14.5px;font-weight:500;color:var(--brick-ink)">${T('Holiday mode is on — delivery is paused','假日模式已开启 — 配送已暂停')}</span></div>
-      ${hText?`<div style="font-size:13px;color:var(--brick-ink);line-height:1.5;opacity:.9">${T('Shoppers are told','顾客看到')}: “${escAttr(hText)}”</div>`:''}</div>`:''}
+      ${hText?`<div style="font-size:13px;color:var(--brick-ink);line-height:1.5;opacity:.9">${T('Shoppers are told','顾客看到')}: “${escAttr(hText)}”</div>`:''}
+      ${/* OFF only, never on. Turning holiday mode ON needs the shopper-facing
+            message, in both languages, and writing that is authoring — a phone
+            that could switch it on without writing one would put a stale
+            message, or none, in front of every customer. Coming BACK is the
+            asymmetric half: you are home, delivery should run, and there is
+            nothing to write. That is the one that belongs on a phone. */''}
+      <button class="btn2" style="align-self:flex-start;margin-top:6px;min-height:40px;padding:0 14px;font-size:13.5px"
+        ${state.dlvBusy?'disabled':''} onclick="APP.cmd('resumeDelivery')">${
+        state.dlvBusy?T('Resuming…','恢复中…'):T('Resume delivery','恢复配送')}</button>
+      ${state.dlvErr?`<div style="font-size:13px;color:var(--brick-ink)">${state.dlvErr}</div>`:''}</div>`:''}
     ${settingsGroupCard([
       {label:T('Delivery zones','配送范围'), value: z ? T(z.live+' live','启用 '+z.live) : T('Loading…','加载中…')},
       {label:T('Provinces covered','覆盖省份'), value: z ? String(z.provs) : T('Loading…','加载中…')},
@@ -3017,9 +3167,12 @@ const SUBS={
     ${desktopNote()}</div>`;
   }},
   faq:{title:['FAQ & help','常见问题'],render:()=>screenFaq()},
-  quickstock:{title:['Quick stock','快速盘点'],render:()=>nothingYet(T('Counted in Products','在产品页盘点'),
-    T('Open a product and set the count for each store — it writes straight to that shelf. The three-item list that used to live here counted nothing.','打开某个产品即可按门店修改库存，直接写入。此前这里的列表并不会保存。')),
-  },
+  /* No `quickstock` screen. It was a menu row that led to a signpost — its
+     whole content was "Counted in Products, open a product and set the count" —
+     which is the same small lie as a control wired to nothing: you tap it
+     expecting a screen and get told to go elsewhere. Products carries the
+     counting. The Quick Stock FEATURE switch in Settings is a different thing
+     and stays: it decides whether staff can open the /stock app at all. */
   operations:{title:['Operations','运营'],render:()=>screenOperations()},
   settings:{title:['Settings','设置'],render:()=>screenSettings()},
   mirror_meituan:{title:['Meituan','美团'],render:()=>mirrorScreen('meituan',T('Read-only mirror. Manage in the Meituan app.','只读镜像，请在美团后台管理。'))},
@@ -3328,7 +3481,7 @@ function FEATURE_ROWS(){
 }
 function screenSettings(){
   const groups=[
-    {h:T('Store','店铺'),rows:[{label:T('Store profile','店铺资料'),value:T('on desktop','在电脑端')},{label:T('Operations','运营'),cmd:"APP.cmd('push','operations')",chev:true},{label:T('Quick stock','快速盘点'),cmd:"APP.cmd('push','quickstock')",chev:true}]},
+    {h:T('Store','店铺'),rows:[{label:T('Store profile','店铺资料'),value:T('on desktop','在电脑端')},{label:T('Operations','运营'),cmd:"APP.cmd('push','operations')",chev:true}]},
     {h:T('Notifications','通知'),rows:[{label:T('Live updates','实时更新'),tgl:'__live'},{label:T('Sound','提示音'),tgl:'__sound'}]},
     {h:T('Features','功能'),rows:FEATURE_ROWS()},
     // No Auto-print row here. It used to sit in this group, in Operations, AND
@@ -5159,6 +5312,7 @@ function render(){
   if(state.productSku) html += sheetProduct();
   if(state.reply!=null) html += sheetReply();
   if(state.poId!=null) html += sheetPO();
+  if(state.chanSheet) html += sheetChannel();
   if(state.search) html += sheetSearch();
   if(state.toast) html += `<div class="toast">${state.toast}</div>`;
   app.innerHTML = html;

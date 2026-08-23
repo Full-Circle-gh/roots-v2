@@ -36,7 +36,8 @@ const GRID = `state.chanTried=true; state.chan={channels:[
    cells:[{storeCode:'tianhe',nameEn:'Tianhe',nameCn:'天河店',open:true},
           {storeCode:'panyu',nameEn:'Panyu',nameCn:'番禺店',open:false}]},
   {channel:'meituan', integrated:true, cardOpen:true,
-   cells:[{storeCode:'tianhe',nameEn:'Tianhe',nameCn:'天河店',open:true}]},
+   cells:[{storeCode:'tianhe',nameEn:'Tianhe',nameCn:'天河店',open:true},
+          {storeCode:'panyu',nameEn:'Panyu',nameCn:'番禺店',open:true}]},
   {channel:'eleme', integrated:false, cardOpen:false, cells:[]},
   {channel:'gzgrocery', integrated:true, single:'tianhe', cardOpen:true,
    cells:[{storeCode:'tianhe',nameEn:'Tianhe',nameCn:'天河店',open:true}]},
@@ -59,7 +60,9 @@ const CASES = [
         .every(function(n){return txt('content').includes(n)})`],
     ['open everywhere reads Open',      `txt('content').includes('Open')`],
     ['partly open counts the stores',   `txt('content').includes('Open at 1 of 2')`],
-    ['and names the shut one',          `txt('content').includes('closed at Panyu')`],
+    // Its own line, capitalised, and allowed to wrap — three facts never fit
+    // on the money line, at any wording.
+    ['and names the shut one',          `txt('content').includes('Closed at Panyu')`],
     ['shut everywhere reads Closed',    `txt('content').includes('Closed')`],
     // A channel with no integration has no open/closed state at all, and used
     // to be given one.
@@ -87,5 +90,47 @@ const CASES = [
     ['it says loading, not empty', `txt('content').includes('Loading') && !txt('content').includes('No channels yet')`],
   ]],
 ];
+
+// ── The writes ─────────────────────────────────────────────────────────────
+// Asserted on the REQUEST, never the toast. A write that reports success and
+// sends nothing is the worst shape a bug in this app has taken twice: APP.cmd
+// forwarding one argument to a two-argument handler, and a create sheet whose
+// submit was a showToast. Both looked like success from the glass.
+const STUB = `window.__sent=[];
+  window.fetch=function(u,o){ window.__sent.push({u:String(u), m:(o&&o.method)||'GET', body:(o&&o.body)||null});
+    return Promise.resolve({ok:true,status:200,json:function(){return Promise.resolve({success:true,data:{}})}}); };`;
+const sent = (frag) => `window.__sent.some(function(r){return r.u.indexOf(${JSON.stringify(frag)})>=0})`;
+const body = (frag) => `window.__sent.some(function(r){return (r.body||'').indexOf(${JSON.stringify(frag)})>=0})`;
+
+CASES.push(['closing one store asks first', STUB + GRID + `APP.cmd('openChannel','meituan'); APP.cmd('chanCell','meituan','panyu',0);`, [
+  ['it names the channel and the store', `sheetText().includes('Close Meituan at Panyu?')`],
+  // "Closed" reads as "cancelled" if you do not say otherwise, and the orders
+  // already in the kitchen are the first thing anyone would worry about.
+  ['it says what does NOT stop',         `sheetText().includes('Orders already placed are not affected')`],
+  ['and nothing was sent yet',           `!${sent('/channel-status')}`],
+]]);
+
+CASES.push(['confirming sends the cell write', STUB + GRID
+  + `APP.cmd('openChannel','meituan'); APP.cmd('chanCell','meituan','panyu',0); APP.cmd('askRun');`, [
+  ['to the per-store endpoint',   sent('/channel-status/cell')],
+  ['never the whole-channel one', `!${sent('/channel-status/channel')}`],
+  ['carrying the channel',        body('"channel":"meituan"')],
+  ['carrying the store',          body('"storeCode":"panyu"')],
+  ['and open:false, not undefined', body('"open":false')],
+]]);
+
+CASES.push(['opening one back up', STUB + GRID
+  + `APP.cmd('openChannel','pos'); APP.cmd('chanCell','pos','tianhe',1); APP.cmd('askRun');`, [
+  ['asks in the other direction', `${sent('/channel-status/cell')}`],
+  ['with open:true',              body('"open":true')],
+]]);
+
+// The whole-channel endpoint exists and is deliberately unreachable from here:
+// one tap should not be able to stop orders arriving everywhere.
+CASES.push(['no way to close a channel everywhere', GRID + `APP.cmd('openChannel','meituan');`, [
+  ['the sheet says where that lives', `sheetText().includes('everywhere at once is on desktop')`],
+  ['and offers no control for it',
+   `![].slice.call(document.querySelectorAll('.sheet button')).some(function(b){return /everywhere|all stores/i.test(b.innerText)})`],
+]]);
 
 run('sales', CASES);
