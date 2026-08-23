@@ -10885,11 +10885,14 @@
       </div>
       <div class="mt-tablewrap">
         <table id="mt-products-table">
+          <!-- Plain percentages only: under table-layout:fixed a math function
+               on a col width is ignored and the column silently goes auto. -->
+          <colgroup><col style="width:34%"><col style="width:33%"><col style="width:33%"></colgroup>
           <thead>
             <tr>
-              <th style="width:38%">Product · 商品</th>
-              <th id="mt-th-store-0" style="width:31%">Tianhe delivery · 天河外卖</th>
-              <th id="mt-th-store-1" style="width:31%">Yuexiu instant · 越秀闪购</th>
+              <th>Product · 商品</th>
+              <th id="mt-th-store-0">Tianhe delivery · 天河外卖</th>
+              <th id="mt-th-store-1">Yuexiu instant · 越秀闪购</th>
             </tr>
           </thead>
           <tbody id="mt-products-body" data-no-i18n></tbody>
@@ -11266,7 +11269,10 @@
       <div id="el-catalogue-caption" class="el-cap" data-no-i18n></div>
 
       <div class="el-tablewrap">
-        <table id="el-products-table" class="pa-table">
+        <table id="el-products-table">
+          <!-- The sync column carries a field, a size picker and a switch per
+               store; SKU carries a short code. Weight them accordingly. -->
+          <colgroup><col style="width:26%"><col style="width:10%"><col style="width:64%"></colgroup>
           <thead>
             <tr>
               <th>Product · 商品</th>

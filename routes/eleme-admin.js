@@ -128,6 +128,7 @@ router.get('/api/retail-admin/eleme/stores', requireRetailAdmin, (req, res) => {
   try {
     const stores = db.prepare(`
       SELECT s.id, s.code, COALESCE(s.name_cn, s.name_en, s.code) AS name,
+             COALESCE(s.name_en, s.name_cn, s.code) AS nameEn,
              e.shop_id, e.shop_name,
              (e.shop_id IS NOT NULL AND e.shop_id <> '') AS connected
         FROM retail_stores s
@@ -263,6 +264,7 @@ router.post('/api/retail-admin/eleme/products/:id/map', requireRetailAdmin, expr
 function elemeStoreHealth(db) {
   const stores = db.prepare(`
     SELECT s.id, s.code, COALESCE(s.name_cn, s.name_en, s.code) AS name,
+             COALESCE(s.name_en, s.name_cn, s.code) AS nameEn,
            e.shop_id, e.shop_name
       FROM retail_stores s
       LEFT JOIN eleme_shops e ON e.retail_store_id = s.id

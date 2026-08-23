@@ -110,13 +110,21 @@
     needs_login: ['is signed out', '\u5df2\u9000\u51fa\u767b\u5f55'],
   };
 
+  // Both names come from the server; pick by the live language rather than
+  // always taking name_cn — which is why the English UI read 越秀区.
+  function elStoreName(st) {
+    const cn = document.documentElement.dataset.uiLang === 'cn';
+    const en = (st && (st.nameEn || st.name)) || '';
+    return (cn ? (st && st.name) || en : en) || (st && st.code) || '';
+  }
+
   function elRenderHead() {
     const rows = _lastStores || [];
     const active = _products.filter(p => Number(p.is_active) !== 0);
     const live = active.filter(p => Object.values(p.stores || {}).some(m => m.eleme_name)).length;
     const att = active.filter(elNeedsAttention).length;
     const waiting = rows.reduce((a2, r) => a2 + Number(r.pending || 0) + Number(r.processing || 0), 0);
-    const per = (key) => rows.map(r => Number(r[key] || 0) + ' ' + r.name).join(' \u00b7 ');
+    const per = (key) => rows.map(r => Number(r[key] || 0) + ' ' + elStoreName(r)).join(' \u00b7 ');
 
     const st = document.getElementById('el-status');
     if (st) {
@@ -124,9 +132,9 @@
       if (att) html += ' \u00b7 ' + esc(cuT(att + ' need attention', att + ' \u4e2a\u5f85\u5904\u7406'));
       const bad = rows.filter(r => r.blocked);
       if (bad.length) {
+        const nm = bad.map(elStoreName);
         html += ' \u00b7 <span class="att">' +
-          esc(cuT(bad.map(r => r.name).join(', ') + ' needs you',
-                  bad.map(r => r.name).join('\u3001') + ' \u9700\u8981\u5904\u7406')) + '</span>';
+          esc(cuT(nm.join(', ') + ' needs you', nm.join('\u3001') + ' \u9700\u8981\u5904\u7406')) + '</span>';
       } else if (!att) {
         html += ' \u00b7 ' + esc(cuT('all matched', '\u5168\u90e8\u5df2\u5339\u914d'));
       }
@@ -164,7 +172,7 @@
             cuT('Link shop', '\u5173\u8054\u5e97\u94fa') + '</button>'
         : '<code class="el-psku">node scripts/eleme-login.js ' + esc(bad.code) + ' ' + esc(bad.shopId || '') + '</code>';
       notice.innerHTML = '<div class="el-notice"><span class="dot"></span>' +
-        '<div class="m"><b>' + esc(bad.name + ' ' + cuT(what[0], what[1])) + '.</b>' +
+        '<div class="m"><b>' + esc(elStoreName(bad) + ' ' + cuT(what[0], what[1])) + '.</b>' +
         '<div class="sub">' + esc(cat) + '</div></div>' + act + '</div>';
     }
   }
@@ -218,7 +226,7 @@
     if (!sel) return;
     sel.innerHTML = '<option value="">' + esc(cuT('All stores', '\u5168\u90e8\u95e8\u5e97')) + '</option>' +
       _stores.map(s2 => '<option value="' + esc(s2.code) + '"' + (_elStore === s2.code ? ' selected' : '') +
-        '>' + esc(s2.name) + '</option>').join('');
+        '>' + esc(elStoreName(s2)) + '</option>').join('');
   }
 
   window.elSetStore = function (code) { _elStore = code || ''; elRenderStoreFilter(); elRenderChips(); elRenderProducts(); };
@@ -461,11 +469,12 @@
           // silently failed every push.
           return '<div class="el-cellstore">' +
             '<div class="el-cellhd">' + pill +
-              '<span class="nm">' + esc(st.name) + '</span>' +
+              '<span class="nm">' + esc(elStoreName(st)) + '</span>' +
               '<label class="toggle-label" title="' + esc(cuT('Sync on / off', '\u540c\u6b65\u5f00\u5173')) + '">' +
                 '<input type="checkbox" ' + (on ? 'checked' : '') +
                 ' onchange="elToggleSync(' + p.id + ', ' + st.id + ", '" + esc(st.code) + "', this.checked)\"></label>" +
             '</div>' +
+            '<div class="el-fieldrow">' +
             '<input type="text" class="inp el-nameinp" data-no-i18n' +
               ' list="el-catalogue-dl-' + esc(st.code) + '"' +
               ' placeholder="' + esc(cuT('Eleme listing name', '\u9976\u4e86\u4e48\u5546\u54c1\u540d')) + '"' +
@@ -483,6 +492,7 @@
                 }).join('') +
                 '</select>'
               : '') +
+            '</div>' +
             last +
           '</div>';
         }).join('');

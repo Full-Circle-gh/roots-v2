@@ -151,13 +151,13 @@
   // mtAlertTile went with the strip: a tile that flips amber cannot say WHICH
   // store is unwell, which was the whole problem. The cards carry it now.
 
-  // English store labels keyed by code — the store record only carries a Chinese
-  // `name` (天河店 / 越秀店), so in the English log we derive a Latin name instead
-  // of falling through to the Chinese one.
-  const MT_STORE_EN = { tianhe: 'Tianhe', yuexiu: 'Yuexiu' };
+  // The store record carries both names; pick by the live language. This used to
+  // be a hardcoded {tianhe:'Tianhe', yuexiu:'Yuexiu'} map — tenant-specific, and
+  // it only covered the log, so the rest of the English UI still said 天河店.
   function mtStoreName(code, cn) {
-    if (cn === false && MT_STORE_EN[code]) return MT_STORE_EN[code];
-    return (_stores.find(s => s.code === code) || {}).name || code;
+    const st = _stores.find(s => s.code === code) || {};
+    const en = st.nameEn || st.name;
+    return (cn === false ? en : (st.name || en)) || code;
   }
 
   window.mtLoadStatus = async function () {

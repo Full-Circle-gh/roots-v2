@@ -84,7 +84,8 @@ router.get('/api/retail-admin/meituan/stores', requireRetailAdmin, (req, res) =>
   try {
     const stores = db.prepare(`
       SELECT id, code,
-             COALESCE(name_cn, name_en, code) AS name
+             COALESCE(name_cn, name_en, code) AS name,
+             COALESCE(name_en, name_cn, code) AS nameEn
         FROM retail_stores
        ORDER BY sort_order, id
     `).all();
@@ -180,7 +181,8 @@ const MT_CLEARING = ['verify_cleared', 'queue_resumed', 'poll_resumed', 'proxy_e
 
 function meituanStoreHealth(db) {
   const stores = db.prepare(`
-    SELECT id, code, COALESCE(name_cn, name_en, code) AS name
+    SELECT id, code, COALESCE(name_cn, name_en, code) AS name,
+           COALESCE(name_en, name_cn, code) AS nameEn
       FROM retail_stores ORDER BY sort_order, id
   `).all();
 
