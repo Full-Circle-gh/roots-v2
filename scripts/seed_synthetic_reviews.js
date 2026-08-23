@@ -269,6 +269,12 @@ function categoryOf(p) {
           '唇', '护肤', '洗发', '护发', '面霜', '精华', '牙膏', '牙刷', '沐浴',
           '身体乳', '香水', '化妆', '防晒')) return 'household';
   if (has('soup', '汤', 'curry', '咖喱', 'congee', '粥', 'broth', 'stew', '炖')) return 'soup';
+  // Nut/seed butters and jams are spreads, not dairy. 'butter' on its own sent
+  // "All Natural Peanut Butter" into the milk pool ("great with cereal"), so
+  // this guard has to sit AHEAD of it. Real dairy butter (黄油, "Grass-fed
+  // Butter") doesn't match here and still falls through to milk.
+  if (has('peanut butter', 'nut butter', 'almond butter', 'cashew butter', 'seed butter',
+          'tahini', 'jam', 'spread', '花生酱', '果酱', '芝麻酱', '坚果酱')) return 'pantry';
   if (has('milk', '奶', 'yogurt', '酸奶', 'cream', 'cheese', '芝士', 'butter', '黄油')) return 'milk';
   // Beverages that are NOT dairy. Checked after milk (so "Coconut Milk" still
   // reads as milk) but before pantry (which claims 'tea' / 'coffee' / '茶').
