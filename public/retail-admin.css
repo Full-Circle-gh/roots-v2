@@ -2936,7 +2936,9 @@
   #pd-editor .pd-sec-h, #pd-editor .pd-card-h { font-family: var(--f-sans); font-size: 13px; font-weight: 400; letter-spacing: 0; text-transform: none; color: var(--td-text2); margin: 0; }
   /* Autosave status pill in the editor foot. Replaces the old manual Save
      button — edits persist on their own; this just reports state. */
-  .pd-save-status { font: 500 12px var(--f-sans); color: var(--td-text2); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; transition: color .2s; }
+  /* 13px, not 12 — §1.3 puts nothing under 13px, and this line now sits in the
+     page header where it is meant to be read rather than found. */
+  .pd-save-status { font: 500 13px var(--f-sans); color: var(--td-text2); display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; transition: color .2s; }
   .pd-save-status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; opacity: .55; }
   .pd-save-status.is-saving { color: var(--td-amber-ink); }
   .pd-save-status.is-saved  { color: var(--td-sage-ink); }
@@ -3120,6 +3122,9 @@
   #pd-editor:not(.pd-fullpage) [data-pp-only] { display: none; }
   #pd-editor.pd-fullpage .pd-summary { display: none; }
   #pd-editor.pd-fullpage .pd-tabs { display: none; }
+  /* The mirror of [data-pp-only]: a card heading that only repeats the pane
+     heading standing above it on the page. One card carries it — Basics. */
+  #pd-editor.pd-fullpage [data-dock-only] { display: none; }
   .pd-summary:empty { display: none; }
   /* Every pane on screen at once, each reading as its own section. The
      .is-active selector is repeated so this outranks the pane-entrance rule
@@ -3175,7 +3180,11 @@
   .pd-pp-titlerow { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 18px; }
   .pd-pp-title { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font: 500 24px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); min-width: 0; }
   .pd-pp-alt { font-size: 15px; font-weight: 400; color: var(--td-text2); }
-  .pd-pp-acts { display: flex; gap: 10px; flex: none; }
+  .pd-pp-acts { display: flex; align-items: center; gap: 14px; flex: none; }
+  /* Save status + shop switch, moved up here by pdMoveHeadState(). They read
+     left to right as state, state, exit. */
+  .pd-pp-state { display: flex; align-items: center; gap: 10px; }
+  .pd-pp-state:empty { display: none; }
   /* Inside the stage the editor is the page, not a card floating on it. */
   .pd-pp-mount #pd-editor {
     width: auto; height: auto; max-width: 100%; max-height: none;
@@ -3184,10 +3193,27 @@
   .pd-pp-mount #pd-editor .pu-editor-body { overflow: visible; overscroll-behavior: auto; }
   .pd-pp-mount #pd-editor .pu-editor-head,
   .pd-pp-mount #pd-editor .pu-editor-foot { background: none; }
-  /* The stage already names the product above; the editor's own identity strip
-     would say it a second time. Keep the save status and the action buttons. */
-  .pd-pp-mount #pd-editor .pd-head-id { display: none; }
-  .pd-pp-mount #pd-editor .pu-editor-head { border-bottom: 0; padding-bottom: 0; }
+  /* The editor's whole head goes on the page — every part of it now lives in
+     the stage header above. Three stacked headers before the first field
+     (breadcrumb · title row · this band) become one. This replaces the
+     narrower `.pd-head-id { display: none }` that used to sit here.
+       · .pd-head-id said the product's name a second time; the stage above
+         already names it.
+       · #pd-expand-btn is the DOCK's control. It says Expand there and
+         relabels itself to Collapse here (pdSyncFullscreenBtn), which put two
+         buttons carrying the same word and the same handler ~130px apart in
+         the same band. The stage's Collapse is the page's one way back
+         (§1.7a — a sub-page takes up to two exits, not the same exit twice).
+       · #pd-head-tags moves into the title row (pdMoveHeadState), so the shop
+         switch stops floating alone in a full-width strip above the sales
+         card, and the save status travels up with it.
+     Hidden rather than emptied: an empty head still paints its padding, which
+     is a gap where a heading used to be. */
+  .pd-pp-mount #pd-editor .pu-editor-head { display: none; }
+  /* The stage's own status pill would now sit beside the In-shop tag saying
+     the same thing about the same value — except the tag is the one you can
+     act on, and it also carries Sold out and Bundle. Keep the tag. */
+  #pd-pagestage #pd-pp-badge { display: none; }
 
   /* ── Dock summary rows — a fact and a way through to change it ───────────── */
   .pd-sumcard { border: 1px solid var(--td-border); border-radius: 14px; background: var(--td-surface); overflow: hidden; }

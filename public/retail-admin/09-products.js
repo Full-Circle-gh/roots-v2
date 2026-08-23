@@ -2393,6 +2393,30 @@ function pdMoveEditor(where) {
   if (!ed || !home || ed.parentElement === home) return;
   home.appendChild(ed);
 }
+// The editor's two pieces of live state — "All changes saved" and the shop
+// switch — belong beside the title while the full page is open, and back in
+// the drawer's own chrome when it closes. Docked they are fine where they
+// are: the drawer is one screen tall, so the footer is always in view. On the
+// page the footer is three screens down, which is the whole reason this moves:
+// a page that writes every keystroke has to say so where you are looking.
+// Same trick as the editor itself — move the node, never render a second one.
+function pdMoveHeadState(where) {
+  const status = document.getElementById('pd-save-status');
+  const tags   = document.getElementById('pd-head-tags');
+  if (where === 'ppage') {
+    const slot = document.getElementById('pd-pp-state');
+    if (!slot) return;
+    if (status) slot.appendChild(status);
+    if (tags) slot.appendChild(tags);
+    return;
+  }
+  // Home again. Order matters inside the footer — the status reads first, then
+  // the spacer, then the record's actions.
+  const foot = document.querySelector('#pd-editor .pu-editor-foot');
+  const band = document.querySelector('#pd-editor .pd-head-state');
+  if (foot && status) foot.insertBefore(status, foot.firstChild);
+  if (band && tags) band.insertBefore(tags, band.firstChild);
+}
 // Expand. `section` optionally scrolls to one part of the page — 'basics',
 // 'stock', 'sizes', 'more', 'page' or 'details' — which is what the dock's
 // summary rows pass when the operator taps through from a summary.
@@ -2410,6 +2434,7 @@ function pdExpand(section) {
   // way back. One class does it so nothing has to remember an inline display.
   document.getElementById('tab-products')?.classList.add('pd-page-open');
   stage.style.display = '';
+  pdMoveHeadState('ppage');
   pdSyncPageHead();
   pdSyncFullscreenBtn(true);
   window.scrollTo({ top: 0, behavior: 'auto' });
@@ -2424,6 +2449,10 @@ function pdCollapseToPanel() {
   const ed = document.getElementById('pd-editor');
   const stage = document.getElementById('pd-pagestage');
   if (ed) ed.classList.remove('pd-fullpage');
+  // Status and shop switch come home BEFORE the stage is hidden — leave them
+  // parked in the title row and they ride a `display:none` container back into
+  // invisibility while the drawer shows an empty footer.
+  pdMoveHeadState('dock');
   pdMoveEditor('dock');
   if (stage) stage.style.display = 'none';
   document.getElementById('tab-products')?.classList.remove('pd-page-open');
