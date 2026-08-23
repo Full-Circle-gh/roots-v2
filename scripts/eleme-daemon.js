@@ -244,6 +244,17 @@ function logOrderShapes(storeCode, browser) {
     logSync(storeCode, 'order_shape', 'ok', { kind, digest });
     log(storeCode, `${kind} payload shape recorded to eleme_sync_log (${digest.length} chars)`);
   }
+  // The request side, once per process. Values kept (query params, no customer
+  // data) — this is what shows the real tab/queryType a replay had to fill blind.
+  const rqKey = storeCode + ':requests';
+  if (!shapeLogged[rqKey]) {
+    const snap = browser.orderRequestSnapshot ? browser.orderRequestSnapshot() : null;
+    if (snap && Object.keys(snap).length) {
+      shapeLogged[rqKey] = true;
+      logSync(storeCode, 'order_rpc_requests', 'ok', snap);
+      log(storeCode, `observed ${Object.keys(snap).length} order RPC request body/bodies → eleme_sync_log`);
+    }
+  }
 }
 
 // Everything the order carries that has no retail_orders column of its own —
