@@ -1,4 +1,4 @@
-# The Postgres migration — status, v3.2
+# The Postgres migration — status, v3.3
 
 **2026-08-10 · A LIVING DOCUMENT. Both halves, in one place: what is built, and what is left.**
 Covers 2026-08-03 onwards. Read-only in itself — no code change ever accompanies it.
@@ -204,6 +204,10 @@ Type: **C** conversion · **F** fix · **D** design question · **O** operationa
 | 67 | 🟢 **The app is not being restarted by anything but deploys.** 48 restarts since the 08-21 alerting deploy = 48 deploys, 1:1. `unstable_restarts` **0** lifetime — no crash, ever. **The stricter probe has never failed once**; last `probe FAILED` of any kind is 2026-07-13. **`HEALTH_FAILS` 2→3 stays untouched** — no evidence to turn it | C | §24 THE 48 RESTARTS WERE 48 DEPLOYS |
 
 | 68 | ⚠️ **`main` is moving under this branch.** Another session pushed `92ba9d53` at 12:40 CST on 08-23 and the box deployed it 2 minutes later; 13 deploys today, 35 on 08-22. Not a blocker for a PR merge, but **the 04:00 CST merge must be re-based on whatever `main` is at that hour**, and §24's deploy-race warning applies — check `gh run list` before merging | O | §24 THE 48 RESTARTS WERE 48 DEPLOYS |
+
+| 69 | 🔴 **Deploy frequency has an unpriced cost: each bounce clears 闪购's in-memory risk-control back-off.** 23 of 113 challenges within 60s of a daemon start, all at 0—2s. 48 deploys in 2 days → the 30→240 min ladder never reaches its cap. **The daemon log undercounts 6×** (`verifyFlagged` gates the DB write). Same shape in `meituan-daemon.js`, `qingyun-daemon.js`. **Own pass — persist beside `alert-latch`, unreadable must mean STILL COOLING DOWN** | O | §24 DEPLOYS TRIGGER 闪购 RISK-CONTROL |
+
+| 70 | 🟢 **Yuexiu's 24h-stale 闪购 stock is NOT an overselling exposure.** `scripts/zero_yuexiu_stock.js` zeroed the store on 2026-08-21 at the operator's request and pushed the zeros; `retail_store_stock` shows **234 rows, 0 above zero, 0 units**, last changed 08-21 17:46. Nothing has needed pushing since, so nothing is stale in a way a customer can reach | C | §24 DEPLOYS TRIGGER 闪购 RISK-CONTROL |
 
 ### After the flip — explicitly not preconditions
 

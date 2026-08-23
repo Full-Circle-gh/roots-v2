@@ -1,9 +1,11 @@
-# Tacet shared-core consolidation — decisions record, v4.67
+# Tacet shared-core consolidation — decisions record, v4.68
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-08-23 · v4.68 — §24 Channels: 🔴 **DEPLOYS TRIGGER 闪购 RISK-CONTROL CHALLENGES.** `verifyState` in `shangou-daemon.js` is in-memory, so a restart discards an active back-off. **23 of 113 challenges land within 60s of a daemon start, every one at 0—2 seconds.** With 48 deploys in two days **the 30→60→120→240 ladder can never reach its cap** — Yuexiu reset to 30 min four times in two hours on 08-23, while on 08-22 left alone it sat at the 4-hour cap. **The log undercounts it 6×**: `noteVerifyResult` gates its DB write behind the `verifyFlagged` log-once latch, so 113 challenges became 19 rows — **a dedupe latch on the alert silently became a dedupe latch on the record.** **And the asymmetry is backwards**: alert latches are on disk and survive, the back-off that protects the channel does not. Same `verifyState` shape in `meituan-daemon.js` and `qingyun-daemon.js`; none in guanyi/gzgrocery. **NOT FIXED — its own pass**; an unreadable store must read as STILL COOLING DOWN. §24 **DELAYED, NOT LOST is verified**: 3-day sweep windows, no persisted cursor, explicit `INSERT OR IGNORE` dedupe — a 35s bounce is 7,400× inside the window; only the 30-minute sweep timers restart their clock. §24 **I PRESENTED SELECTED HOURS AS THE MEASUREMENT** — hand-picked 16 of 24 rows into a deploy-window table and wrote real zeros as dashes, so omissions and zeros were indistinguishable to the person choosing when to take the storefront down. **A table with a row missing is not a shorter table, it is a different claim.**
 
 2026-08-23 · v4.67 — §24 Database: **THE 48 RESTARTS WERE 48 DEPLOYS, EXACTLY.** 1369→1417 since the 08-21 alerting deploy; 48 deploys in the same window (35 on 08-22, 13 on 08-23); `deploy-apply.sh` restarts the app unconditionally at step 5/5. **`unstable_restarts` is 0 over the process's lifetime, so not one of the 1417 was a crash.** **THE STRICTER 08-21 PROBE HAS NEVER FAILED ONCE** — the last `probe FAILED` line of any kind is **2026-07-13**, six weeks ago, and none carries the `[probeDetail]` bracket the new probe prints; zero `storefront DOWN` lines have ever been written. **`HEALTH_FAILS` 2→3 stays untouched.** A restart counter is a poor smoke alarm on a box that ships thirty times a day. **TWO NEW RULES:** *A CHANGE-DETECTOR CANNOT SEE A FAULT PRESENT AT STARTUP* — two of the four fallbacks read green from tick one, and a loop that compares each minute to the last can never see a value that was wrong before it started; and *A SHAPE-BASED SWEEP ONLY FINDS SHAPES* — thirteen fallback shapes swept and cross-checked still missed `$(( $(cat file) + 1 ))`, because bash's coercion of empty to 0 is a default nobody wrote and nothing can grep for. The sweep was extended to implicit defaults; **a method's silence is not evidence.**
 
@@ -3180,6 +3182,53 @@ One self-referencing edge exists on each side (`retail_media_folders`). It is ex
 **RED-PROVEN:** `retail_orders.channel_note` hidden from `cols[]` — the run reported `LIVE COLUMNS ABSENT FROM cols[] : 1  (in tables that WERE examined)` and named it, instead of reporting clean. Restored to green after.
 
 **THE EXIT CODE IS UNCHANGED AND STILL REPORTS DIFFERENCES ONLY.** Scope is disclosed in the output, not folded into the code, because a caller that has always read `0` as *no differences* must keep reading it that way. **The line a human reads is the one that changed.**
+
+### I PRESENTED SELECTED HOURS AS THE MEASUREMENT — 2026-08-23
+
+**Recorded as an instance of the failure this work has spent a week dismantling, not as a correction.**
+
+Asked which hour was safe to deploy in, I ran a 24-hour histogram and then **hand-picked rows into the report** — dropping 00, 09, 14, 15, 19, 21, 22 and 23 for brevity, and writing the two genuinely empty hours as `—`. The reader could not tell which absences were zeros and which were omissions. **Only 04 and 05 were real zeros; the other eight were me editing.**
+
+**This is exactly the shape of the `2>/dev/null` swallows fixed the same day**, and of a manifest that lists what it found without listing what it could not look at. **An omitted zero and a missing measurement are indistinguishable to whoever reads the table**, and the person reading it was choosing an hour to take the storefront down in.
+
+**THE RULE THAT COMES OUT OF IT: a table with a row missing is not a shorter table, it is a different claim.** Generated series, LEFT JOIN, explicit `0`. Never a filtered `GROUP BY` presented as a census. The corrected version cross-checked to 260 orders against the per-channel totals, which is the other half — **a total that reconciles is how you know no row was dropped.**
+
+---
+
+### DELAYED, NOT LOST — THE MECHANISM, SO IT NEED NOT BE RE-DERIVED — 2026-08-23
+
+**An order arriving while a daemon is bouncing is picked up on the next poll and processed normally.** Verified rather than reasoned from the poll interval, on three independent facts:
+
+1. **The fetch is window-based, not incremental.** `gzgrocery-order-daemon.js` uses `SINCE_DAYS = 3`; `meituan-daemon.js` and `shangou-daemon.js` both use `ORDER_SWEEP_DAYS = 3`. **Every poll re-reads the last three days**, not *since last time*.
+2. **No daemon persists a cursor.** Checked across all four — there is nothing to lose on restart, because the window is re-derived from the clock on every sweep.
+3. **Re-reading is the normal case and dedupe is explicit.** `meituan-daemon.js` checks `existing` and branches before inserting, backed by `INSERT OR IGNORE INTO meituan_sync_queue`.
+
+**A 35-second bounce is roughly 7,400× inside a three-day window.** The stock-push queues are DB tables (`meituan_sync_queue`, `guanyi_sync_queue`, `qingyun_push_queue`) so queued work waits and drains. **What does NOT survive is the 30-minute sweep timers, which restart their clock rather than resume** — a bounce can delay a drift sweep by up to half an hour.
+
+---
+
+### 🔴 DEPLOYS TRIGGER 闪购 RISK-CONTROL CHALLENGES, AND NOBODY WAS COUNTING THE COST — 2026-08-23
+
+**`verifyState` in `shangou-daemon.js` is a module-level in-memory object. A restart clears it, so an active back-off is discarded and the daemon calls into risk control on its next tick.** Measured, not theorised:
+
+| | |
+|---|---|
+| Challenges in the daemon log | **113** |
+| Within 60s of a daemon start | **23** — and every one of the 23 at **0—2 seconds** |
+| Daemon restarts in the log | 77 |
+| Deploys in the last two days | 48 |
+
+**A 0—2 second lag is not correlation, it is the sequence:** the daemon starts, `verifyState` is empty, the first call goes out, risk control answers 418.
+
+**AND THE BACK-OFF CAN NEVER REACH ITS CAP WHILE DEPLOYS KEEP CLEARING IT.** The ladder is 30 min → 60 → 120 → 240, capped at four hours. On 2026-08-22, left alone, Yuexiu climbed to the 240-minute cap and sat there. On 08-23, with deploys landing, the strike counter reset to 30 minutes at 10:15, 11:25, 11:52 and 12:25 — **four resets in two hours, each one a fresh call into a channel that had just refused.** The exponential back-off is doing nothing; it is being restarted faster than it can climb.
+
+**THE LOG UNDERCOUNTS IT BY A FACTOR OF SIX, WHICH IS WHY THIS WAS INVISIBLE.** `noteVerifyResult` gates its database write behind `verifyFlagged`, a log-once-per-transition latch. **113 challenges in the daemon log, 19 rows in `meituan_sync_log`.** Reading the table alone gives *five challenges in two days*; reading the daemon log gives *seven today*. **A dedupe latch on the ALERT silently became a dedupe latch on the RECORD.**
+
+**AND THE ASYMMETRY IS BACKWARDS.** The alert latches are on disk (`lib/alert-latch.js`, `data/alert-latch/`) and survive a restart, so a recovery notice cannot be swallowed. **The back-off that decides whether to CALL is in memory and does not.** The thing that protects the channel is the volatile one; the thing that protects the inbox is durable.
+
+**WHAT THE BACK-OFF GATES**, all via `inVerifyCooldown`: `pushableStores()`, `pollOrders`, the stock-push queue loop, and business-status sync — effectively every outbound call for that store. **All of them resume at once on restart.**
+
+**SAME SHAPE ELSEWHERE:** `meituan-daemon.js` and `qingyun-daemon.js` both declare `verifyState = {}`; Meituan additionally holds `browserDown`, `bindingDown` and `stallState` in memory. `guanyi-daemon.js` and `gzgrocery-order-daemon.js` have none. **Not fixed here** — persisting it belongs beside `alert-latch`, and an unreadable store must read as STILL COOLING DOWN, never as clear, or the failure mode is the one being fixed.
 
 ### RULE — A CHANGE-DETECTOR CANNOT SEE A FAULT PRESENT AT STARTUP — 2026-08-23
 
