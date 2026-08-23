@@ -1,5 +1,17 @@
 # The Postgres migration — status, v3.4
 
+> # 🔴 CLOSED — 2026-08-23. THE MIGRATION IS CANCELLED AND THIS FILE STOPS BEING LIVING.
+>
+> **Tacet stays on SQLite.** The decision, the measurement and the restart conditions are in `docs/tacet-consolidation-decisions.md` §24 **THE POSTGRES MIGRATION IS CANCELLED. TACET STAYS ON SQLITE — DECIDED 2026-08-23**, which wins over every line below, as this file's own rule has always said it does.
+>
+> **PART 3 IS NOW HISTORY, NOT A LIST OF WORK.** Every row in it is closed by cancellation rather than by being done. **Nothing in PART 3 was fixed by this decision; the decision removed the reason to fix it.** Read PART 3 the way you would read a survey of a road nobody is going to build.
+>
+> **PART 4 — HOW TO KEEP THIS FILE CURRENT — NO LONGER APPLIES.** Do not re-run the AST authority against this file, do not advance the LAST UPDATED line, and do not move rows between PART 2 and PART 3. **A living document that nothing is living is just a file that goes stale on a schedule.** Rule 4 said a finished item moves rather than being deleted; this banner is that rule applied to the whole document at once.
+>
+> **PART 1 AND PART 2 KEEP THEIR VALUE AND ARE NOT SUPERSEDED.** PART 1 is a closed historical measurement of what three weeks cost. PART 2 is the record of what was actually built, and a good deal of it — the deploy-stranding fix, the failing production statements, the wallet-ledger backfill, the two cancel paths that returned nothing, the money model survey — was never Postgres work and is still load-bearing today. **The sort of what survives is in `docs/tacet-operating-findings.md`.**
+>
+> **THE FIGURE THAT DECIDED IT, since this file exists to carry figures:** **2,835 `.prepare` call sites in the runtime** — `server.js` 12, `database.js` 228, `routes/` 2,414, `lib/` 175, `middleware/` 6 — **zero `.query` call sites**, and **all 39 files in `routes/` affected.** Instrument: a text scan counted per occurrence, quoted as a magnitude and not as a precise population. **The 27 CONVERTED in the LAST UPDATED line above did not convert their statements** — 70 `tx.prepare(` sites still sit inside 28 `withTransaction(` blocks in `routes/retail.js`, so a converted block fails on its first statement exactly like an unconverted one. **That correction is made here rather than in the header, per rule 5.**
+
 **2026-08-10 · A LIVING DOCUMENT. Both halves, in one place: what is built, and what is left.**
 Covers 2026-08-03 onwards. Read-only in itself — no code change ever accompanies it.
 

@@ -1,5 +1,22 @@
 # The Postgres cutover runbook — v0.9, FIRST DRAFT, NOT EXECUTABLE
 
+> # 🔴 RETIRED — 2026-08-23. THE MIGRATION THIS PROCEDURE EXISTS FOR IS CANCELLED.
+>
+> **Tacet stays on SQLite. There will be no cutover, and nothing in this document is to be executed.** The decision, the measurement behind it and the conditions that would reopen it are in `docs/tacet-consolidation-decisions.md` §24 **THE POSTGRES MIGRATION IS CANCELLED. TACET STAYS ON SQLITE — DECIDED 2026-08-23**. That entry wins over every line below it.
+>
+> **RETIRED, NOT DELETED, AND THE REASON IS NOT SENTIMENT.** This is the best description of this system's write surface that exists anywhere — what writes, from which process, on which schedule, triggered by what, and what happens to each of them when the database goes away. **It was derived by walking a procedure, which is why it found things no survey did.** It will be read again, by whoever next asks what actually touches this database. Read it as a survey. Do not read it as a checklist.
+>
+> **EVERY OPEN GAP IS MARKED `CLOSED — MIGRATION CANCELLED 2026-08-23`.** Closed by cancellation, **not by being fixed** — the distinction is load-bearing and each row says which it was. **Eight gaps closed on their merits before this** (G2, G3, G4, G11, G22, G23, G27, G28) and those rows are untouched. **Twenty were closed by this decision.** The count of open gaps is now **zero**, and a zero reached this way means the procedure was abandoned, never that it became safe.
+>
+> **THREE THINGS IN HERE OUTLIVE THE MIGRATION AND HAVE BEEN MOVED OUT** so they do not retire with it:
+> - **The write surface** — the processes, the schedulers, the read-triggered writes, the callbacks — re-derived at this head in `docs/tacet-write-surface.md`.
+> - **The findings that are not about Postgres** — the instruments that lied, the refusal rules, the live defects, the operational facts — in `docs/tacet-operating-findings.md`.
+> - **The fact that `health-watchdog` runs from cron and not pm2**, which is why *"the daemons stop"* never covered it. That is a permanent property of this box and is recorded in the findings file. **The F0/G9/H8 crontab disable-and-restore steps are cutover-only and retire with this document.**
+>
+> **AND ONE CORRECTION IS MADE IN PLACE RATHER THAN LEFT TO ROT: B19.** Its sentence about what clearing G26 turns into is false twice — the application does not start, and every route fails on its first line rather than individually. The correction is written into B19 itself. **The step is not struck out**: its file-and-line table, its ordering finding and its count-correction note are all correct and all still worth reading.
+
+
+
 **A procedure, not a summary.** Written to be followed literally, at 3am, by one person who is not a developer, with the shop trading and no ability to improvise.
 
 > **G28 IS CLOSED — v0.8, 2026-08-21. THE SCHEMA WAS RENAMED BACK, NOT THE APPLICATION.** The 74 objects the Phase 1 copy had renamed to `account*` — 12 tables, 25 columns, 4 standalone indexes, 8 sequences, 25 constraint names — are back under their `tenant*` names, applied to the live cluster in one transaction (`docs/tacet-postgres-g28-rename-back.sql`, `ade7b955`). **Not one application file was opened.** The banner below is left standing because it is where the 266 figure and the G26 pairing come from, and both are now superseded.
@@ -101,31 +118,31 @@ There are **three** phases, settled 2026-08-10 (§24 *THREE PHASES, AND WHY THE 
 
 | Gap | Step | What is missing | Owned by |
 |---|---|---|---|
-| **G1** | B1 | The code cannot run on Postgres at all — 102 unconverted transaction blocks runtime-wide, 29 in `routes/retail.js` | status doc items 6, 7, 8 |
+| **G1** | B1 | ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** Not fixed. Cancelled. The code cannot run on Postgres at all — 102 unconverted transaction blocks runtime-wide, 29 in `routes/retail.js` | status doc items 6, 7, 8 |
 | ~~**G2**~~ | ~~B2~~ | ✅ **CLOSED `2961d3d`.** `TACET_DB` exists — `lib/db-driver.js`. **The central action of this runbook has a mechanism.** Row kept, not deleted | status doc item 27, now in PART 2 |
 | ~~**G3**~~ | ~~B3~~ | ✅ **CLOSED `2961d3d`.** `database.js` requires `lib/pg.js` under `TACET_DB=postgres`, which also arms the numeric parser | status doc item 28, now in PART 2 |
 | ~~**G4**~~ | ~~B4~~ | ✅ **CLOSED `2961d3d`.** The lease is taken before BEGIN and handed to the body, so `tx` is a distinct client | status doc item 29, now in PART 2 |
-| **G5** | B5 | The pooled-client scoping for the transaction queue is not written | status doc item 30 |
-| **G6** | B6 | `nextOrderNo` Piece 2 — nothing in the application reads the counter row that was created for it | status doc item 12 |
-| **G7** | B7 | The idempotency regex matches better-sqlite3's message text. **Failure mode is a customer charged twice, and nothing fails until money moves** | status doc item 20 |
-| **G8** | B8 | The `sqlite_sequence` resets have no `setval` replacement, and both sit inside silent `try{}catch{}` | status doc item 23 |
-| **G9** | B9 | 96 dialect statements will not run on Postgres, plus 371 dynamic statements no static pass can reach | status doc item 19 |
-| **G10** | B10 | Six statements are failing in production today, on paths that have never executed | status doc item 15 |
+| **G5** | B5 | ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** Not fixed. Cancelled. The pooled-client scoping for the transaction queue is not written | status doc item 30 |
+| **G6** | B6 | ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** Not fixed. Cancelled. `nextOrderNo` Piece 2 — nothing in the application reads the counter row that was created for it | status doc item 12 |
+| **G7** | B7 | ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** Not fixed. Cancelled. The idempotency regex matches better-sqlite3's message text. **Failure mode is a customer charged twice, and nothing fails until money moves** | status doc item 20 |
+| **G8** | B8 | ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** Not fixed. Cancelled. The `sqlite_sequence` resets have no `setval` replacement, and both sit inside silent `try{}catch{}` | status doc item 23 |
+| **G9** | B9 | ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** Not fixed. Cancelled. 96 dialect statements will not run on Postgres, plus 371 dynamic statements no static pass can reach | status doc item 19 |
+| **G10** | B10 | ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** Not fixed. Cancelled. Six statements are failing in production today, on paths that have never executed | status doc item 15 |
 | ~~**G11**~~ | ~~B11~~ | ✅ **CLOSED 2026-08-17.** Writer fixed `225aa13`; backfill RUN, rows 226–232. **Check F is zero and Part G reads it against zero.** Row kept, not deleted | status doc item 42, now in PART 2 |
-| **G12** | B12 | `reverseOrderBalance` reads its sequence number outside the transaction it writes in | §24, found 2026-08-19 |
-| **G13** | B13 | No audit of the ~80 `scripts/` files that assume a SQLite path. A destructive script's backup step would silently back up nothing | status doc items 21, 22 |
-| **G14** | B14 | Fresh-cluster restore is unproven. The rehearsal ran where `tacet_app` already existed, so `CREATE ROLE` never executed. **The new-box case is the disaster case** | status doc item 16 |
-| **G15** | B15 | No end-to-end green run of the Postgres backup tier under cron | §24 backup entry |
-| **G16** | C1 | **The application has no write-freeze, maintenance mode or read-only mode of any kind.** There is no way to stop trading except stopping the process | nothing written |
-| **G17** | C2 | No decision on whether the cutover takes a quiet window or a delta pass. §24 names both and picks neither | §24 *Full data copy*, findings |
-| **G18** | E1 | **No delta-pass tool exists.** `run.py` truncates and re-copies everything; `drift.sh` counts five tables; `drift_proof.py` compares two verification passes. None of them applies a delta | status doc item 31 |
-| **G19** | E3 | No definition of "the delta pass is complete" — no residual-drift threshold, no stopping rule | nothing written |
-| **G20** | G1 | **No application smoke test against Postgres.** No checkout has ever executed on the pg driver, anywhere | nothing written |
-| **G21** | G5 | No procedure covers the channel daemons, which are separate pm2 processes with their own database handles | nothing written |
+| **G12** | B12 | ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** Not fixed. Cancelled. `reverseOrderBalance` reads its sequence number outside the transaction it writes in | §24, found 2026-08-19 |
+| **G13** | B13 | ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** Not fixed. Cancelled. No audit of the ~80 `scripts/` files that assume a SQLite path. A destructive script's backup step would silently back up nothing | status doc items 21, 22 |
+| **G14** | B14 | ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** Not fixed. Cancelled. Fresh-cluster restore is unproven. The rehearsal ran where `tacet_app` already existed, so `CREATE ROLE` never executed. **The new-box case is the disaster case** | status doc item 16 |
+| **G15** | B15 | ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** Not fixed. Cancelled. No end-to-end green run of the Postgres backup tier under cron | §24 backup entry |
+| **G16** | C1 | ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** Not fixed. Cancelled. **The application has no write-freeze, maintenance mode or read-only mode of any kind.** There is no way to stop trading except stopping the process | nothing written |
+| **G17** | C2 | ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** Not fixed. Cancelled. No decision on whether the cutover takes a quiet window or a delta pass. §24 names both and picks neither | §24 *Full data copy*, findings |
+| **G18** | E1 | ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** Not fixed. Cancelled. **No delta-pass tool exists.** `run.py` truncates and re-copies everything; `drift.sh` counts five tables; `drift_proof.py` compares two verification passes. None of them applies a delta | status doc item 31 |
+| **G19** | E3 | ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** Not fixed. Cancelled. No definition of "the delta pass is complete" — no residual-drift threshold, no stopping rule | nothing written |
+| **G20** | G1 | ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** Not fixed. Cancelled. **No application smoke test against Postgres.** No checkout has ever executed on the pg driver, anywhere | nothing written |
+| **G21** | G5 | ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** Not fixed. Cancelled. No procedure covers the channel daemons, which are separate pm2 processes with their own database handles | nothing written |
 | ~~**G22**~~ | ~~H2~~ | ✅ **CLOSED `7483cb91`.** `scripts/rollback-to-sqlite.sh` + `scripts/rollback-delta-report.js`, 23 assertions, mutation red-proven. **Restore-and-lose: a reverse copy is a REJECTED option, not unbuilt work.** Row kept, not deleted | status doc item 17, §24 v4.46 |
-| **G24** | B17 | **The fidelity instrument does not exist as written.** `checks.py` reads a gitignored, never-deployed `wide_cols.json` at import, and its `SRC` points at the file F1 renames away. **Step G7 has a command that looks runnable and is not** | §24 v4.50, found writing PART H |
-| **G25** | B18 | **No alerting substitute for the window.** F1 silences every alert including the watchdog's own. The stopgap loop **must run off-box** — a loop on a wedged box dies with it and its silence reads as green | §24 v4.46 finding (1), v4.50 |
-| **G26** | B19 | **The application cannot BOOT on Postgres** — 11 `.exec()` calls at module load across 10 files, first `lib/tenant-creds.js:34` from `server.js:281`, 631 lines before `app.listen()`. **Not the call sites; the boot** | §24 v4.52, found building the G20 probe |
+| **G24** | B17 | ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** Not fixed. Cancelled. **The fidelity instrument does not exist as written.** `checks.py` reads a gitignored, never-deployed `wide_cols.json` at import, and its `SRC` points at the file F1 renames away. **Step G7 has a command that looks runnable and is not** | §24 v4.50, found writing PART H |
+| **G25** | B18 | ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** Not fixed. Cancelled. **No alerting substitute for the window.** F1 silences every alert including the watchdog's own. The stopgap loop **must run off-box** — a loop on a wedged box dies with it and its silence reads as green | §24 v4.46 finding (1), v4.50 |
+| **G26** | B19 | ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** Not fixed. Cancelled. **The application cannot BOOT on Postgres** — 11 `.exec()` calls at module load across 10 files, first `lib/tenant-creds.js:34` from `server.js:281`, 631 lines before `app.listen()`. **Not the call sites; the boot** | §24 v4.52, found building the G20 probe |
 | ~~**G28**~~ | ~~B21~~ | ✅ **CLOSED 2026-08-21 `ade7b955`.** The SCHEMA was renamed back rather than the statements moved — 74 objects in one transaction, no application file opened. The count was **248 statements across 24 files**, not 266 across 23; 266 summed the per-table column and double-counted joins. Row kept, not deleted | §24 v4.56, THE TENANT→ACCOUNT PHYSICAL RENAME IS DECLINED |
 | ~~**G27**~~ | ~~B20~~ | ✅ **CLOSED 2026-08-23.** `loadEnv()` extracted to `lib/load-env.js`; five scripts wired, not the three first counted. Server behaviour proven identical over 15 cases. **The delta report's exit codes were rebuilt with it** — it had ONE exit path, so cannot-run and a real delta were the same answer | §24 v4.66 |
 | ~~**G23**~~ | ~~H1~~ | ✅ **CLOSED 2026-08-20.** Decision-maker **Ash, alone**; four triggers with thresholds (H2); window default **ONE HOUR** (H3); watch loop (H4); refusal procedure R0–R4 (H7). Row kept, not deleted | §24 v4.46, PART H |
@@ -154,7 +171,9 @@ git fetch origin -q && git checkout origin/main -q && npm install --no-audit --n
 
 ---
 
-## B1 🔴 GAP G1 — The code cannot run on Postgres
+## B1 ✅ CLOSED — MIGRATION CANCELLED · GAP G1 — The code cannot run on Postgres
+> ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** This gap is closed because the procedure it belongs to is retired, **not because anything was built or fixed.** Everything the step says about what is missing was true when written and is still true. See §24 *THE POSTGRES MIGRATION IS CANCELLED. TACET STAYS ON SQLITE*.
+
 
 **WHAT THIS STEP WOULD DO** — confirm that every transaction in the running application works on both drivers, so that changing one setting changes which database is used and nothing else.
 
@@ -198,7 +217,9 @@ git fetch origin -q && git checkout origin/main -q && npm install --no-audit --n
 
 ---
 
-## B5 🔴 GAP G5 — The transaction queue is keyed on the pool, not the client
+## B5 ✅ CLOSED — MIGRATION CANCELLED · GAP G5 — The transaction queue is keyed on the pool, not the client
+> ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** This gap is closed because the procedure it belongs to is retired, **not because anything was built or fixed.** Everything the step says about what is missing was true when written and is still true. See §24 *THE POSTGRES MIGRATION IS CANCELLED. TACET STAYS ON SQLITE*.
+
 
 **WHAT THIS STEP WOULD DO** — stop concurrent transactions from serialising against each other, and make sure a pooled client is released on every exit path.
 
@@ -210,7 +231,9 @@ git fetch origin -q && git checkout origin/main -q && npm install --no-audit --n
 
 ---
 
-## B6 🔴 GAP G6 — Nothing reads the order counter row
+## B6 ✅ CLOSED — MIGRATION CANCELLED · GAP G6 — Nothing reads the order counter row
+> ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** This gap is closed because the procedure it belongs to is retired, **not because anything was built or fixed.** Everything the step says about what is missing was true when written and is still true. See §24 *THE POSTGRES MIGRATION IS CANCELLED. TACET STAYS ON SQLITE*.
+
 
 **WHAT THIS STEP WOULD DO** — mint order numbers from `retail_order_counters` on Postgres instead of the read-MAX-then-insert the SQLite path uses.
 
@@ -224,7 +247,9 @@ git fetch origin -q && git checkout origin/main -q && npm install --no-audit --n
 
 ---
 
-## B7 🔴 GAP G7 — The idempotency regex matches better-sqlite3's message text
+## B7 ✅ CLOSED — MIGRATION CANCELLED · GAP G7 — The idempotency regex matches better-sqlite3's message text
+> ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** This gap is closed because the procedure it belongs to is retired, **not because anything was built or fixed.** Everything the step says about what is missing was true when written and is still true. See §24 *THE POSTGRES MIGRATION IS CANCELLED. TACET STAYS ON SQLITE*.
+
 
 **WHAT THIS STEP WOULD DO** — keep the duplicate-payment guard working after the driver changes.
 
@@ -236,7 +261,9 @@ git fetch origin -q && git checkout origin/main -q && npm install --no-audit --n
 
 ---
 
-## B8 🔴 GAP G8 — `sqlite_sequence` resets have no replacement
+## B8 ✅ CLOSED — MIGRATION CANCELLED · GAP G8 — `sqlite_sequence` resets have no replacement
+> ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** This gap is closed because the procedure it belongs to is retired, **not because anything was built or fixed.** Everything the step says about what is missing was true when written and is still true. See §24 *THE POSTGRES MIGRATION IS CANCELLED. TACET STAYS ON SQLITE*.
+
 
 **WHAT THIS STEP WOULD DO** — make the two counter-reset paths work on Postgres.
 
@@ -248,7 +275,9 @@ git fetch origin -q && git checkout origin/main -q && npm install --no-audit --n
 
 ---
 
-## B9 🔴 GAP G9 — 96 dialect statements, plus 371 nobody can see
+## B9 ✅ CLOSED — MIGRATION CANCELLED · GAP G9 — 96 dialect statements, plus 371 nobody can see
+> ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** This gap is closed because the procedure it belongs to is retired, **not because anything was built or fixed.** Everything the step says about what is missing was true when written and is still true. See §24 *THE POSTGRES MIGRATION IS CANCELLED. TACET STAYS ON SQLITE*.
+
 
 **WHAT THIS STEP WOULD DO** — confirm every SQL statement in the application is valid Postgres.
 
@@ -260,7 +289,9 @@ git fetch origin -q && git checkout origin/main -q && npm install --no-audit --n
 
 ---
 
-## B10 🔴 GAP G10 — Six statements are failing in production today
+## B10 ✅ CLOSED — MIGRATION CANCELLED · GAP G10 — Six statements are failing in production today
+> ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** This gap is closed because the procedure it belongs to is retired, **not because anything was built or fixed.** Everything the step says about what is missing was true when written and is still true. See §24 *THE POSTGRES MIGRATION IS CANCELLED. TACET STAYS ON SQLITE*.
+
 
 **WHAT THIS STEP WOULD DO** — clear the known-broken paths before adding a driver change on top of them.
 
@@ -291,7 +322,9 @@ git fetch origin -q && git checkout origin/main -q && npm install --no-audit --n
 
 ---
 
-## B12 🔴 GAP G12 — `reverseOrderBalance` reads its sequence outside its transaction
+## B12 ✅ CLOSED — MIGRATION CANCELLED · GAP G12 — `reverseOrderBalance` reads its sequence outside its transaction
+> ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** This gap is closed because the procedure it belongs to is retired, **not because anything was built or fixed.** Everything the step says about what is missing was true when written and is still true. See §24 *THE POSTGRES MIGRATION IS CANCELLED. TACET STAYS ON SQLITE*.
+
 
 **WHAT THIS STEP WOULD DO** — stop a double refund of store credit under an async driver.
 
@@ -303,7 +336,9 @@ git fetch origin -q && git checkout origin/main -q && npm install --no-audit --n
 
 ---
 
-## B13 🔴 GAP G13 — The `scripts/` audit has not been done
+## B13 ✅ CLOSED — MIGRATION CANCELLED · GAP G13 — The `scripts/` audit has not been done
+> ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** This gap is closed because the procedure it belongs to is retired, **not because anything was built or fixed.** Everything the step says about what is missing was true when written and is still true. See §24 *THE POSTGRES MIGRATION IS CANCELLED. TACET STAYS ON SQLITE*.
+
 
 **WHAT THIS STEP WOULD DO** — make sure no script on the box quietly does the wrong thing once the application has moved.
 
@@ -319,7 +354,9 @@ git fetch origin -q && git checkout origin/main -q && npm install --no-audit --n
 
 ---
 
-## B14 🔴 GAP G14 — A restore onto a fresh box has never been done
+## B14 ✅ CLOSED — MIGRATION CANCELLED · GAP G14 — A restore onto a fresh box has never been done
+> ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** This gap is closed because the procedure it belongs to is retired, **not because anything was built or fixed.** Everything the step says about what is missing was true when written and is still true. See §24 *THE POSTGRES MIGRATION IS CANCELLED. TACET STAYS ON SQLITE*.
+
 
 **WHAT THIS STEP WOULD DO** — prove that the backup you are relying on tonight can actually rebuild the database somewhere else.
 
@@ -333,7 +370,9 @@ Why that matters, in one line: the `-Fc` archive holds **304 ACL entries naming 
 
 ---
 
-## B15 🔴 GAP G15 — The Postgres backup has never completed a green run under cron
+## B15 ✅ CLOSED — MIGRATION CANCELLED · GAP G15 — The Postgres backup has never completed a green run under cron
+> ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** This gap is closed because the procedure it belongs to is retired, **not because anything was built or fixed.** Everything the step says about what is missing was true when written and is still true. See §24 *THE POSTGRES MIGRATION IS CANCELLED. TACET STAYS ON SQLITE*.
+
 
 **WHAT THIS STEP WOULD DO** — confirm the nightly backup you are trusting actually fires unattended.
 
@@ -375,7 +414,9 @@ ssh root@47.239.89.63 "cd /root/roots-v2 && node scripts/diagnose_deployed_tree.
 
 ---
 
-## B17 🔴 GAP G24 — The fidelity instrument named in PART G does not exist as written
+## B17 ✅ CLOSED — MIGRATION CANCELLED · GAP G24 — The fidelity instrument named in PART G does not exist as written
+> ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** This gap is closed because the procedure it belongs to is retired, **not because anything was built or fixed.** Everything the step says about what is missing was true when written and is still true. See §24 *THE POSTGRES MIGRATION IS CANCELLED. TACET STAYS ON SQLITE*.
+
 
 **WHAT THIS STEP WOULD DO** — prove, after the copy and after the flip, that the data itself arrived intact: all 144 foreign keys validating through Postgres, Chinese character counts exact, the wide base64 columns matching by SHA-256. **This is step G7, and it is the trigger T4 in PART H.**
 
@@ -397,7 +438,9 @@ ssh root@47.239.89.63 "cd /root/roots-v2 && node scripts/diagnose_deployed_tree.
 
 ---
 
-## B18 🔴 GAP G25 — There is no alerting substitute for the window, and it cannot live where it would naturally go
+## B18 ✅ CLOSED — MIGRATION CANCELLED · GAP G25 — There is no alerting substitute for the window, and it cannot live where it would naturally go
+> ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** This gap is closed because the procedure it belongs to is retired, **not because anything was built or fixed.** Everything the step says about what is missing was true when written and is still true. See §24 *THE POSTGRES MIGRATION IS CANCELLED. TACET STAYS ON SQLITE*.
+
 
 **WHAT THIS STEP WOULD DO** — replace, for the duration of the rollback window, the alerting that step F1 switches off.
 
@@ -415,7 +458,9 @@ ssh root@47.239.89.63 "cd /root/roots-v2 && node scripts/diagnose_deployed_tree.
 
 ---
 
-## B19 🔴 GAP G26 — The application cannot BOOT on Postgres. Eleven statements, ten files.
+## B19 ✅ CLOSED — MIGRATION CANCELLED · GAP G26 — The application cannot BOOT on Postgres. Eleven statements, ten files.
+> ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** This gap is closed because the procedure it belongs to is retired, **not because anything was built or fixed.** Everything the step says about what is missing was true when written and is still true. See §24 *THE POSTGRES MIGRATION IS CANCELLED. TACET STAYS ON SQLITE*.
+
 
 **WHAT THIS STEP WOULD DO** — let the process come up on the new driver at all, so that the unconverted call sites (G1) get the chance to fail one route at a time instead of the whole boot failing at once.
 
@@ -439,6 +484,18 @@ ssh root@47.239.89.63 "cd /root/roots-v2 && node scripts/diagnose_deployed_tree.
 **TWO FAILURES ARE STACKED HERE AND BOTH HAVE TO BE ANSWERED**, which is why this is not a one-line fix: `.exec` does not exist on the handle, **and** `INTEGER PRIMARY KEY AUTOINCREMENT` is SQLite-only DDL that Postgres would reject even if it did.
 
 **THE ENCOURAGING HALF, STATED PLAINLY BECAUSE IT IS EASY TO MISS: ELEVEN IS A MUCH SMALLER NUMBER THAN 102.** This is not the async conversion. It is ten files of boot-time schema management, and clearing it is what turns "the app cannot start" into "the app starts and individual routes fail", which is the only state in which G1 can be worked incrementally at all.
+
+> 🔴 **THE PARAGRAPH ABOVE IS SUPERSEDED — 2026-08-23. IT IS FALSE TWICE, AND IT IS LEFT STANDING RATHER THAN REWRITTEN.** Superseded by §24 *THE POSTGRES MIGRATION IS CANCELLED. TACET STAYS ON SQLITE*.
+>
+> **FIRST: IT DOES NOT START.** Clearing the eleven module-load `.exec()` blocks removes the eleven. It does not remove `database.js`'s **228 `.prepare` call sites**, which are on the boot path and reached before `app.listen()`. **The eleven were the first obstacle in front of the listener, not the last one.** This step measured the obstacle it had found and then wrote a sentence describing it as *the* obstacle.
+>
+> **SECOND, AND THIS IS THE LOAD-BEARING HALF: "individual routes fail" is not what happens. Every route fails, on its first line.** There is no gradient to work along. A route's first database access is a `.prepare` call; `.prepare` does not exist on the Postgres handle, deliberately (`lib/pg-handle.js` `FORBIDDEN_NAMES`); and **all 39 files in `routes/` call it.** "Individual routes fail" describes a state in which some routes work. **That state does not exist and cannot be reached incrementally**, because the unit that would have to be converted one at a time is the statement, and the survey counted **2,835 of them** in the runtime — `server.js` 12, `database.js` 228, `routes/` 2,414, `lib/` 175, `middleware/` 6 — against **zero** `.query` call sites.
+>
+> **AND THE 27 "CONVERTED" TRANSACTIONS DO NOT HELP.** They changed the wrapper, not the statements: `routes/retail.js` holds 28 `withTransaction(` sites and **70 `tx.prepare(` sites**, so a converted block throws `TypeError: tx.prepare is not a function` on its first statement exactly like an unconverted one.
+>
+> **WHY THIS IS RECORDED AS A FAILURE CLASS AND NOT A TYPO.** The step measured one blocker honestly and then made a claim about the population *behind* that blocker, which its instrument could not see. **A survey of the nearest obstacle cannot describe what is behind it, and "what clearing this turns into" is exactly that kind of claim.** Same family as *a scan for one shape only finds that shape* and *a check that cannot run must refuse, not pass*. **Eighth scan-derived claim in this project to be wrong — and the first where the number was right and the sentence around it was not.**
+>
+> **WHAT IN THIS STEP IS STILL CORRECT AND SHOULD STILL BE READ:** the eleven files and their lines; that the timing is incidental rather than deliberate; that the load order violates a foreign key SQLite is lenient about and Postgres is not; that `database.js` already sits behind the pg early return; and the count-correction note below — 24 tables and 15 indexes, not 19 and 10, because an extractor that could not find a block's end **read a fixed 400 characters instead of failing.** That last one is a finding in its own right and does not retire with the migration.
 
 **IT ALSO BLOCKS THE OBVIOUS HARNESS.** `routes/retail.js` requires `lib/tenant-creds` at load, so a bare express app mounting just that router fails on the same line. Its load-time closure is 40 modules and contains **exactly one** blocker. By contrast `routes/lookups.js` (5 modules), `lib/tenant-db.js` (4) and `database.js` (2) are **blocker-free** — which is what made the G20 probe possible without touching any of this.
 
@@ -555,7 +612,9 @@ LEDGER_EXIT=2
 
 **This part has no steps, because the decision it depends on has not been made.** It sits before the copy because the copy's correctness depends on the answer.
 
-## C1 🔴 GAP G16 — Nothing in the application can stop trading
+## C1 ✅ CLOSED — MIGRATION CANCELLED · GAP G16 — Nothing in the application can stop trading
+> ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** This gap is closed because the procedure it belongs to is retired, **not because anything was built or fixed.** Everything the step says about what is missing was true when written and is still true. See §24 *THE POSTGRES MIGRATION IS CANCELLED. TACET STAYS ON SQLITE*.
+
 
 **WHAT THIS STEP WOULD DO** — hold writes still while the data is copied, so the copy is a photograph rather than a smear.
 
@@ -569,7 +628,9 @@ LEDGER_EXIT=2
 
 ---
 
-## C2 🔴 GAP G17 — Quiet window or delta pass: nobody has chosen
+## C2 ✅ CLOSED — MIGRATION CANCELLED · GAP G17 — Quiet window or delta pass: nobody has chosen
+> ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** This gap is closed because the procedure it belongs to is retired, **not because anything was built or fixed.** Everything the step says about what is missing was true when written and is still true. See §24 *THE POSTGRES MIGRATION IS CANCELLED. TACET STAYS ON SQLITE*.
+
 
 **WHAT THIS STEP WOULD DO** — commit to one of the two approaches, so the rest of the procedure has one shape instead of two.
 
@@ -652,7 +713,9 @@ ssh root@47.239.89.63 "cd /root/roots-v2 && gunzip -c \$(ls -1t /root/backups/ho
 
 **The 2026-08-04 copy is a rehearsal and it drifts from the moment it was taken.** It is not the copy you go live on. Measured drift over one week: `checkout_quotes` **+23,829**, `guanyi_sync_log` **+4,788**, `customers` **+222**, `orders` **+87**. On `retail_orders` alone the drift is **+121 rows**.
 
-## E1 🔴 GAP G18 — There is no delta-pass tool
+## E1 ✅ CLOSED — MIGRATION CANCELLED · GAP G18 — There is no delta-pass tool
+> ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** This gap is closed because the procedure it belongs to is retired, **not because anything was built or fixed.** Everything the step says about what is missing was true when written and is still true. See §24 *THE POSTGRES MIGRATION IS CANCELLED. TACET STAYS ON SQLITE*.
+
 
 **WHAT THIS STEP WOULD DO** — bring the Postgres copy up to date with everything SQLite has accepted since the copy started, without re-copying everything.
 
@@ -692,7 +755,9 @@ ssh root@47.239.89.63 "cd /root/roots-v2/scripts/postgres-full-copy && python3 r
 
 ---
 
-## E3 🔴 GAP G19 — There is no test for "the delta pass is complete"
+## E3 ✅ CLOSED — MIGRATION CANCELLED · GAP G19 — There is no test for "the delta pass is complete"
+> ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** This gap is closed because the procedure it belongs to is retired, **not because anything was built or fixed.** Everything the step says about what is missing was true when written and is still true. See §24 *THE POSTGRES MIGRATION IS CANCELLED. TACET STAYS ON SQLITE*.
+
 
 **WHAT THIS STEP WOULD DO** — tell you, before you move traffic, that Postgres now holds everything SQLite holds.
 
@@ -850,7 +915,9 @@ Then remove the EXTRA entries **deliberately, one at a time, by name.**
 
 # PART G — THE FLIP, AND HOW YOU KNOW IT WORKED
 
-## G1 🔴 GAP G20 — There is no smoke test against Postgres
+## G1 ✅ CLOSED — MIGRATION CANCELLED · GAP G20 — There is no smoke test against Postgres
+> ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** This gap is closed because the procedure it belongs to is retired, **not because anything was built or fixed.** Everything the step says about what is missing was true when written and is still true. See §24 *THE POSTGRES MIGRATION IS CANCELLED. TACET STAYS ON SQLITE*.
+
 
 **WHAT THIS STEP WOULD DO** — prove, before customers arrive, that the application actually works on the new driver: place an order, take a payment, award points, move stock.
 
@@ -934,7 +1001,9 @@ ssh root@47.239.89.63 "pm2 jlist | node -e 'const d=JSON.parse(require(\"fs\").r
 
 ---
 
-## G5 🔴 GAP G21 — The channel daemons are not covered by any procedure
+## G5 ✅ CLOSED — MIGRATION CANCELLED · GAP G21 — The channel daemons are not covered by any procedure
+> ✅ **CLOSED — MIGRATION CANCELLED 2026-08-23.** This gap is closed because the procedure it belongs to is retired, **not because anything was built or fixed.** Everything the step says about what is missing was true when written and is still true. See §24 *THE POSTGRES MIGRATION IS CANCELLED. TACET STAYS ON SQLITE*.
+
 
 **WHAT THIS STEP WOULD DO** — move the channel daemons onto the new driver alongside the main application, and confirm each one came back.
 
