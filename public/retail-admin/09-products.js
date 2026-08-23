@@ -1457,15 +1457,18 @@ function paSetSelectMode(on) {
 // screen, so ticking one is itself what arms select mode — the bulk bar (always
 // present) then enables its actions and lights up that tick.
 function paToggleSelect(ids) {
-  PA_SELECT_MODE = true;
   const list = String(ids).split(',').map(Number).filter(Boolean);
   const allIn = list.length && list.every(id => PA_SELECTED.has(id));
   list.forEach(id => allIn ? PA_SELECTED.delete(id) : PA_SELECTED.add(id));
+  // Ticking the last box off drops back out of select mode — otherwise it
+  // stays stuck on with nothing selected, and nothing on screen shows it
+  // (the bulk bar looks identical either way), silently disarming reorder.
+  PA_SELECT_MODE = PA_SELECTED.size > 0;
   paRender();
 }
 function paSelectAllVisible(on) {
-  PA_SELECT_MODE = true;
   PA_VISIBLE_MEMBER_IDS.forEach(id => on ? PA_SELECTED.add(id) : PA_SELECTED.delete(id));
+  PA_SELECT_MODE = PA_SELECTED.size > 0;
   paRender();
 }
 // Apply one patch to every ticked product. Confirms, PATCHes each, reports, then
