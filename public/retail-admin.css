@@ -2254,10 +2254,31 @@
   }
   #tab-products > .pa-head-row > .pa-head-id { min-width: 0; }
   #tab-products > .pa-head-row .pa-pagetitle { margin: 0; }
-  /* The status line is gone. It carried "12 sold out · 30 low on stock", and
-     those two are tiles now — §1.7 forbids a line that restates what the
-     tiles already say, and a header whose only honest line would do that is
-     finished with the title alone. */
+  /* Status line — 15px, Graphite, sentence case, tabular. Work waiting only.
+     It restates the Out of stock and Low stock tiles on purpose: §1.7's
+     non-duplication rule is explicitly SOFT ("a preference, not a ban — a
+     restated fact is allowed where it genuinely reads better as a headline"),
+     and this is that case. It is the first thing under the page's name, so it
+     answers "what needs me" before the eye reaches the tiles at all. */
+  .pa-status-line {
+    font: 400 15px var(--f-sans); color: var(--td-text2);
+    font-variant-numeric: tabular-nums; margin-top: 2px;
+  }
+  .pa-status-line[hidden] { display: none; }
+  /* The facts in it are filters, like the tiles they echo. They stay
+     typographically part of the sentence — same size, same Graphite, no button
+     chrome — and only admit to being pressable on hover, on focus, and when
+     they are the live filter. A control that shouted here would turn the
+     calmest line on the page into a toolbar; this slot is state, not actions. */
+  .pa-status-jump {
+    font: inherit; color: inherit; background: none; border: 0; padding: 0;
+    cursor: pointer; font-variant-numeric: tabular-nums;
+    border-bottom: 1px solid transparent;
+  }
+  .pa-status-jump:hover { color: var(--td-text); border-bottom-color: var(--td-border); }
+  .pa-status-jump:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 2px; border-radius: 3px; }
+  .pa-status-jump.is-on { color: var(--td-text); font-weight: 500; border-bottom-color: var(--td-text); }
+  .pa-status-sep { color: var(--td-text2); }
   /* Adding a product is the page's one primary action AND its one Dusk element,
      so it sits on the title's line at the far right — never among the filters. */
   #tab-products > .pa-head-row > .pa-addsplit { margin-left: auto; }

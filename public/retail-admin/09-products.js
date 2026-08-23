@@ -303,6 +303,10 @@ function prodSetHelp(view) {
   const say = (pair) => (typeof cuT === 'function') ? cuT(pair[0], pair[1]) : pair[0];
   const title = document.getElementById('pa-pagetitle');
   if (title) title.textContent = say(m.title);
+  // The status line counts the catalogue's own stock; the other two sub-views
+  // are their own pages and have no work count of ours to report.
+  const line = document.getElementById('pa-status-line');
+  if (line && view !== 'catalog') line.hidden = true;
 }
 // Paint the default (catalogue) help on load and keep it in the live language.
 (function initProdHelp() {
@@ -1101,6 +1105,24 @@ function paRenderKpis(animate) {
   };
   tone('pa-kpi-oos-tile', oos);
   tone('pa-kpi-low-tile', low);
+  // §1.7 status line — work waiting, never population, and only when a real
+  // number is behind it. Nothing waiting = no line at all, which is a finished
+  // header rather than a gap; the dash is banned here as everywhere. Each fact
+  // is its own filter and lights when it is the live one, so the headline and
+  // the tile below it are two doors to the same list.
+  {
+    const el = document.getElementById('pa-status-line');
+    if (el) {
+      const bit = (status, n, label) =>
+        `<button type="button" class="pa-status-jump${PA_STATUS === status ? ' is-on' : ''}"`
+        + ` onclick="paSetStatus('${status}')">${fcNum(n)} ${label}</button>`;
+      const bits = [];
+      if (oos) bits.push(bit('oos', oos, cuT('sold out', '缺货')));
+      if (low) bits.push(bit('low', low, cuT('low on stock', '库存偏低')));
+      el.innerHTML = bits.join('<span class="pa-status-sep"> · </span>');
+      el.hidden = !bits.length;
+    }
+  }
   // Light up whichever jump drives the active quick-filter (none when 'all').
   const tiles = { live: 'pa-kpi-live-tile', restock: 'pa-kpi-restock-tile', oos: 'pa-kpi-oos-tile', low: 'pa-kpi-low-tile', drafts: 'pa-kpi-drafts-tile', dead: 'pa-kpi-dead-tile', promo: 'pa-kpi-promo-tile' };
   for (const [status, id] of Object.entries(tiles)) {
