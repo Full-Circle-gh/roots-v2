@@ -333,22 +333,20 @@ $$('.tabs [data-tab]').forEach(btn => btn.addEventListener('click', () => {
   railResolveFor(btn.dataset.tab);
 }));
 // Sales overview → jump into a single channel's full admin. The "Configure"
-// buttons on #tab-sales call this; it clicks the channel's rail button, which
-// activates that tab AND fires its existing init (mtAdminInit / gyAdminInit /
-// elAdminInit) via that button's own onclick. Keeps one source of truth for
-// tab activation instead of re-implementing it here.
-function salesGo(channel) {
-  const btn = document.querySelector('.tabs [data-tab="' + channel + '"]');
-  if (btn) btn.click();
-}
+// buttons on #tab-sales call this. Now a thin alias for goTab: channel admins
+// (meituan/guanyi/eleme) have had no rail button of their own since the Sales-
+// page redesign, so the "click a real button" path below never fires for them —
+// goTab's manual-activation fallback (with its TAB_INIT dispatch) is what
+// actually opens them. Kept as a separate name since call sites read clearer as
+// "go to this channel's admin" than "go to this tab".
+function salesGo(channel) { goTab(channel); }
 // Activate a tab/section by name from OUTSIDE the rail (e.g. the topbar Inbox
 // dropdown, or in-page buttons like the Sales channel cards). When the tab has
-// a rail button, CLICK it — that's the one source of truth that both activates
-// the section and fires the tab's init (mtAdminInit / gyAdminInit / …) via the
-// button's own onclick. Toggling classes by hand here skipped the init, which
-// left data tabs opened this way stuck on their static "Loading…" placeholders.
-// The manual path stays as the fallback for sections with no rail button
-// (Inbox: Reviews / Feedback).
+// a rail button, CLICK it — that fires whatever the button's own listener does.
+// Otherwise (a channel admin with no rail row any more, or any other rail-less
+// tab) light the section manually and fire its init from TAB_INIT, so opening
+// it this way is never left stuck on a stale/empty placeholder — the failure
+// mode this fallback silently had until TAB_INIT existed.
 function goTab(tab) {
   const btn = document.querySelector('.tabs [data-tab="' + tab + '"]');
   if (btn) { btn.click(); return; }
@@ -365,6 +363,8 @@ function goTab(tab) {
     g.classList.toggle('has-active', has);
   });
   railResolveFor(tab);
+  const initFn = TAB_INIT[tab];
+  if (initFn && typeof window[initFn] === 'function') window[initFn]();
 }
 
 // (Topbar page-identity crumb removed 2026-07-25 — the bar is closed, §1.1d.
@@ -850,6 +850,14 @@ const RAIL_PARENT = {
 // resolves to root highlighting itself; a tab with no rail row and no entry here
 // — Inbox's reviews / feedback, which live in the topbar — resolves to root with
 // nothing highlighted, which is the honest answer.
+// Init function for a rail-less tab, keyed the same way as RAIL_STANDIN. A real
+// rail button's own click handler used to fire these (mtAdminInit / gyAdminInit
+// / elAdminInit); once those buttons were pulled during the Sales-page redesign,
+// nothing called them any more — the tabs' markup and load logic were still
+// there, just permanently dark. goTab's manual-activation fallback (below) now
+// fires this directly so opening a channel admin from the Sales page actually
+// populates it instead of showing a stale/empty section.
+const TAB_INIT = { meituan: 'mtAdminInit', guanyi: 'gyAdminInit', eleme: 'elAdminInit' };
 const RAIL_STANDIN = {
   meituan: 'sales', guanyi: 'sales', gzgrocery: 'sales', eleme: 'sales',
   'product-editor': 'mini-app-editor',
