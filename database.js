@@ -4767,6 +4767,14 @@ addColumn('eleme_catalogue_cache', 'specs', 'TEXT');
 // existed on the table (declared, never written); spec_name is display-only so
 // the admin can show the choice back without re-reading the catalogue.
 addColumn('eleme_product_map', 'spec_name', 'TEXT');
+// Tier 1 order collection: the per-order economics Eleme only exposes on the
+// order-detail read (merchant income after commission, the platform-vs-merchant
+// discount split, packaging/delivery fees), plus the raw list row. Kept here
+// rather than as new retail_orders columns because only this channel populates
+// them and nothing in the UI reads them yet — and because a raw copy is what
+// makes a wrong money-unit guess (ELEME_MONEY_SCALE) recoverable from stored
+// data instead of needing the order re-read from Eleme.
+addColumn('eleme_order_import', 'detail_json', 'TEXT');
 
 // ── Guanyi ERP sync (gzgrocery backoffice, 2026-06-24) ──────────────────────
 // Mirrors the Meituan sync layer for a second sales channel: 管易C-ERP

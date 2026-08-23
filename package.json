@@ -11,6 +11,7 @@
     "test:address": "node scripts/test_address_pin.js && node scripts/test_address_clients.js",
     "test:batch-timing": "node scripts/test_batch_timing.js",
     "test:customer-search": "node scripts/test_customer_search.js",
+    "test:eleme-orders": "node scripts/test_eleme_order_parse.js",
     "test:manual-order-fees": "node scripts/test_manual_order_fees.js",
     "test:mobile-screens": "node scripts/test_mobile_screens.js",
   "test:mobile-geometry": "node scripts/test_mobile_geometry.js",
