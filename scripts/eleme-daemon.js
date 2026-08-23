@@ -299,6 +299,36 @@ function recoverOrphanedProcessing() {
 const ORPHAN_SWEEP_MS = 5 * 60_000; // matches the "stale after 5 min" threshold above
 let lastOrphanSweep = 0;
 
+// ── Catalogue cache (feeds the admin's Eleme-name autocomplete) ─────────────
+// Eleme's live catalogue only exists inside THIS process's browser session —
+// the admin server can't fetch it without driving a second, competing login.
+// Refresh a DB copy periodically instead; the admin API just reads that.
+const CATALOGUE_REFRESH_MS = 30 * 60_000;
+let lastCatalogueRefresh = 0;
+
+async function refreshCatalogueCache(configs) {
+  for (const cfg of configs) {
+    try {
+      const browser = await getBrowser(cfg.store_code, cfg.shop_id);
+      const names = await browser.listFoods();
+      if (!names) { log(cfg.store_code, 'catalogue cache refresh skipped (not logged in / nav failed)'); continue; }
+      const snap = browser.catalogueSnapshot();
+      const tx = db.transaction(() => {
+        db.prepare('DELETE FROM eleme_catalogue_cache WHERE store_code = ?').run(cfg.store_code);
+        const ins = db.prepare(`
+          INSERT INTO eleme_catalogue_cache (store_code, name, item_global_id, stock, updated_at)
+          VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+        `);
+        for (const it of snap) ins.run(cfg.store_code, it.name, it.itemGlobalId, it.stock);
+      });
+      tx();
+      log(cfg.store_code, `catalogue cache refreshed: ${snap.length} item(s)`);
+    } catch (e) {
+      log(cfg.store_code, `catalogue cache refresh failed: ${e.message}`);
+    }
+  }
+}
+
 // ── Main loop ─────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -315,6 +345,10 @@ async function main() {
     if (!elemeEnabled()) { await sleep(jitter(QUEUE_CHECK_MS)); continue; }
 
     const configs = getStoreConfigs();
+    if (Date.now() - lastCatalogueRefresh >= CATALOGUE_REFRESH_MS) {
+      lastCatalogueRefresh = Date.now();
+      await refreshCatalogueCache(configs); // runs before the queue check so a first-boot admin visit isn't empty for 30 min
+    }
     await processStockQueue(configs);
     await sleep(jitter(QUEUE_CHECK_MS));
   }

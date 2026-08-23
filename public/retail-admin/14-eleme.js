@@ -9,6 +9,7 @@
   let _stores   = [];
   let _enabled  = false;
   let _initiated = false;
+  let _catalogue = {}; // storeCode -> [{name, stock, updated_at}], see elLoadCatalogue
 
   // ── Entry point ────────────────────────────────────────────────────────────
   window.elAdminInit = async function () {
@@ -17,6 +18,7 @@
     await elLoadConfig();
     await Promise.all([elLoadStores(), elLoadStatus()]);
     await elLoadProducts();
+    elLoadCatalogue();
     elLoadOrders();
     elStartPolling();
     elFlashConnected();
@@ -108,6 +110,59 @@
       return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:7px 0;border-bottom:1px dashed var(--line)">
         <b style="min-width:120px">${s.name}</b>${status}<span style="flex:1 1 auto"></span>${action}</div>`;
     }).join('');
+  }
+
+  // ── Eleme catalogue cache (autocomplete source for the name-override field) ──
+  // Reads the DB cache scripts/eleme-daemon.js writes (the live catalogue only
+  // exists inside the daemon's browser session, a separate process — see
+  // routes/eleme-admin.js's /eleme/catalogue). Built after a live mismatch: a
+  // hand-typed Eleme name used a straight apostrophe where the real listing
+  // had a curly one and silently failed every push — picking from a real,
+  // exact string makes that whole class of error impossible.
+  window.elLoadCatalogue = async function () {
+    for (const s of _stores) {
+      try {
+        const r = await api('/api/retail-admin/eleme/catalogue?storeCode=' + encodeURIComponent(s.code));
+        _catalogue[s.code] = { rows: r.data || [], refreshedAt: r.refreshedAt || null };
+      } catch (e) { _catalogue[s.code] = { rows: [], refreshedAt: null }; }
+    }
+    elRenderCatalogueDatalists();
+    elRenderCatalogueCaption();
+    elRenderProducts(); // re-render so the name inputs pick up list= now that options exist
+  };
+
+  function elRenderCatalogueCaption() {
+    const el = document.getElementById('el-catalogue-caption');
+    if (!el || !_stores.length) return;
+    el.textContent = _stores.map(s => `${s.name}: ${elCatalogueCaption(s.code)}`).join('   ·   ');
+  }
+
+  // One <datalist> per store (their Eleme catalogues differ) — datalists have
+  // no visible presence, so they live in a hidden container appended once.
+  function elRenderCatalogueDatalists() {
+    let host = document.getElementById('el-catalogue-datalists');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'el-catalogue-datalists';
+      host.style.display = 'none';
+      document.body.appendChild(host);
+    }
+    host.innerHTML = _stores.map(s => {
+      const rows = (_catalogue[s.code] && _catalogue[s.code].rows) || [];
+      const opts = rows.map(r => `<option value="${esc(r.name)}">`).join('');
+      return `<datalist id="el-catalogue-dl-${esc(s.code)}">${opts}</datalist>`;
+    }).join('');
+  }
+
+  // Freshness caption, e.g. "204 listings · updated 12 min ago". Shown once
+  // above the mapping table so it's clear when the autocomplete data is stale
+  // (the daemon refreshes it every ~30 min).
+  function elCatalogueCaption(storeCode) {
+    const c = _catalogue[storeCode];
+    if (!c || !c.rows.length) return cuT('no catalogue cached yet', '暂无缓存目录');
+    const mins = c.refreshedAt ? Math.max(0, Math.round((Date.now() - Date.parse(c.refreshedAt.replace(' ', 'T') + 'Z')) / 60000)) : null;
+    const age = mins == null ? '' : (mins < 1 ? cuT(' · just now', ' · 刚刚') : cuT(` · updated ${mins} min ago`, ` · ${mins} 分钟前更新`));
+    return `${c.rows.length}${cuT(' listings', ' 个商品')}${age}`;
   }
 
   window.elSetShop = async function (storeId, storeCode) {
@@ -239,14 +294,18 @@
         const on = m && Number(m.sync_enabled) === 1;
         // Eleme has no extCode/货号 to match on yet, so a wrong/missing name
         // here is the single most common reason a push fails — this input is
-        // the operator's escape hatch (ELEME_BROWSER_RECON.md), no admin route
-        // for it existed until now.
+        // the operator's escape hatch (ELEME_BROWSER_RECON.md). It's an
+        // autocomplete against the real Eleme catalogue (list=), not free
+        // text — a hand-typed name once used the wrong apostrophe character
+        // and silently failed every push; picking from a real listing string
+        // makes that whole class of error impossible.
         return `<div style="display:inline-flex;align-items:center;gap:6px;margin-right:14px;margin-bottom:4px">
           <label class="toggle-label" title="${esc(s.name)}">
             <input type="checkbox" ${on ? 'checked' : ''} onchange="elToggleSync(${p.id}, ${s.id}, '${s.code}', this.checked)">
             <span class="muted" style="font-size:12px">${esc(s.name)}</span>
           </label>
           <input type="text" class="inp" style="width:130px;font-size:11px" data-no-i18n
+                 list="el-catalogue-dl-${esc(s.code)}"
                  placeholder="${cuT('Eleme listing name', '饿了么商品名')}"
                  value="${esc(m && m.eleme_name || '')}"
                  onchange="elSetElemeName(${p.id}, ${s.id}, '${s.code}', this.value)">
