@@ -524,102 +524,23 @@
   // store gets a tidy summary + a button into the full Meituan management tab,
   // so Configure is consistent with the other channels instead of dumping the
   // operator straight into the raw management screen.
-  // "3 min ago" for the daemon-written UTC timestamps ("YYYY-MM-DD HH:MM:SS").
-  function igAgo(ts) {
-    if (!ts) return cuT('never', '从未');
-    const t = Date.parse(String(ts).replace(' ', 'T') + (String(ts).includes('Z') ? '' : 'Z'));
-    if (!t) return '—';
-    const m = Math.floor((Date.now() - t) / 60000);
-    if (m < 1) return cuT('just now', '刚刚');
-    if (m < 60) return cuT(`${m} min ago`, `${m}分钟前`);
-    const h = Math.floor(m / 60);
-    if (h < 24) return cuT(`${h} h ago`, `${h}小时前`);
-    const d = Math.floor(h / 24);
-    return cuT(`${d} d ago`, `${d}天前`);
-  }
 
-  // One store's connection row on the Meituan page: signed-in state, which
-  // account (masked), and the live proof it's working. "Sign in again" only
-  // appears when the session actually needs it.
-  function igMtStoreRow(s) {
-    const name = esc(cuT(s.name, s.nameCn || s.name));
-    let chip;
-    if (s.signedIn === true) {
-      chip = `<span class="mc-chip on">${MC_SVG.check}<span>${cuT('Signed in', '已登录')}</span></span>`;
-    } else if (s.signedIn === false) {
-      chip = `<span class="mc-chip" style="color:var(--danger,#e8556a)">${MC_SVG.circle}<span>${cuT('Needs sign-in', '需重新登录')}</span></span>`;
-    } else {
-      chip = `<span class="mc-chip">${MC_SVG.circle}<span>${cuT('No activity yet', '暂无活动')}</span></span>`;
-    }
-    const relogin = s.signedIn === false
-      ? `<button class="btn btn-sm btn-primary" onclick="igRelayWizard('meituan',{step:'creds',store:'${escJs(s.code)}'})">${cuT('Sign in again', '重新登录')}</button>`
-      : '';
-    const facts = [];
-    if (s.account) facts.push(`${cuT('Account', '账号')} <span style="font-family:var(--f-mono,monospace)">${esc(s.account)}</span>`);
-    // "Live" = matched + pushing stock (same meaning as the Meituan tab's "N
-    // live"). Unmatched rows are frozen, so call them out separately, never as
-    // "syncing".
-    const liveN = Number(s.liveProducts || 0);
-    const unmatched = Number(s.notMatched || 0);
-    facts.push(`${liveN} ${cuT('products live', '个商品已上架')}`);
-    if (unmatched) facts.push(`<span style="color:var(--brass)">${unmatched} ${cuT('not matched', '个未匹配')}</span>`);
-    if (s.open === true) facts.push(cuT('Store open on Meituan', '门店美团营业中'));
-    else if (s.open === false) facts.push(cuT('Store closed on Meituan', '门店美团已置休'));
-    const live = [
-      `${cuT('Last stock push', '最近库存推送')} ${igAgo(s.lastStockPush)}`,
-      `${cuT('last order', '最近订单')} ${igAgo(s.lastOrder)}`,
-      `${cuT('orders today', '今日订单')} ${Number(s.ordersToday || 0)}`,
-    ].join(' · ');
-    // Each store is its own section card (like the mini-app's two cards): icon
-    // tile + store name in the head, signed-in chip on the right, facts below.
-    const storeIco = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1-5h16l1 5"/><path d="M4 9v11h16V9"/><path d="M9 20v-6h6v6"/></svg>';
-    return `<div class="mc-sec">
-      <div class="mc-sec-head"><span class="mc-ico">${storeIco}</span><b>${name}</b><span style="flex:1"></span>${chip}</div>
-      ${relogin ? `<div style="margin-top:10px">${relogin}</div>` : ''}
-      <div style="font-size:12.5px;color:var(--text-2);margin-top:10px">${facts.join(' · ')}</div>
-      <div style="font-size:12.5px;color:var(--text-3);margin-top:3px">${live}</div>
-    </div>`;
-  }
+  // igMtStoreRow went with the Configure panel it fed.
 
+  // Configure on the Meituan card. There used to be a summary panel here: a
+  // connected chip and one card per store, then a button whose only job was
+  // "Manage products & orders" — the Meituan page. It was a second, worse copy
+  // of that page, so it is gone and Configure goes straight there. The store
+  // cards, the open/closed state, orders today and Sign in again all live on
+  // the page now. A tenant with no Meituan connection still gets the setup
+  // wizard, because there is no page worth showing them yet.
   window.igMeituanConfig = async function () {
     await igEnsureLoaded();
     const status = igStatusFor('meituan');
     const connected = status === 'connected' || status === 'paused';
     if (!connected) { igRelayWizard('meituan'); return; }   // new store → box-first setup
-
-    const box = igHostEl(); if (!box) return;
-    box.style.display = '';
-    box.innerHTML = igMuted(cuT('Loading…', '加载中…'));
-    // Per-store connection detail (signed-in, last sync, last order). Falls back
-    // to the plain store list if the endpoint isn't reachable.
-    let detail = [];
-    try { const r = await api('/api/retail-admin/channel-hub/meituan/stores'); detail = r.data || []; } catch (_) {}
-    if (!detail.length) detail = (_stores || []).map(s => ({ code: s.code, name: s.name || s.code, nameCn: s.name || s.code, signedIn: null, liveProducts: 0, notMatched: 0, ordersToday: 0 }));
-    const paused = status === 'paused';
-    const storeRows = detail.map(igMtStoreRow).join('');
-
-    box.innerHTML = `<div class="ig-wiz mc-wiz">
-      <div class="mc-head">
-        <div>
-          <strong style="font-size:16px">${cuT('Meituan', '美团')}</strong>
-          <div class="mc-subtitle">${cuT('Waimai + Shangou — stock sync and order import.', '外卖 + 闪购 — 库存同步与订单导入。')}</div>
-        </div>
-        <button class="btn btn-sm" onclick="igLocClose()">✕</button>
-      </div>
-      <div class="mc-chips">
-        <span class="mc-chip${paused ? '' : ' on'}">${paused ? MC_SVG.circle : MC_SVG.check}<span>${paused ? cuT('Paused', '已暂停') : cuT('Connected', '已连接')}</span></span>
-      </div>
-
-      ${storeRows || `<div class="mc-sec"><div class="mc-note">${cuT('No stores linked yet.', '尚未关联门店。')}</div></div>`}
-
-      <div class="mc-foot">
-        <button class="helplink" style="background:none;border:none;cursor:pointer;color:var(--text-3);font-size:12.5px;padding:0" onclick="igHelp('meituan')">? ${cuT('Get help', '获取帮助')}</button>
-        <span class="ig-spacer"></span>
-        <button class="btn" onclick="igRelayWizard('meituan')">${cuT('Connect another store', '连接其他门店')}</button>
-        <button class="btn btn-primary" onclick="igLocClose();goTab('meituan')">${cuT('Manage products & orders', '管理商品与订单')}</button>
-      </div>
-    </div>`;
-    box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    igLocClose();
+    if (typeof goTab === 'function') goTab('meituan');
   };
 
   // ── Eleme guided setup wizard ───────────────────────────────────────────────

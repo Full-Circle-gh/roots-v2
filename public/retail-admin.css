@@ -3373,59 +3373,75 @@
      uppercase Inter, the exact thing the ban exists for. The whole grid also
      moves off the legacy --line / --text-1 / --text-4 tokens onto --td-*, so
      it finally follows the theme instead of staying light in a dark admin. */
-  /* Fixed layout with a reserved Total column, per the table rule (§1.19).
-     With auto layout the columns negotiate for width and Total — the narrowest
-     and last — is the one that loses and gets clipped. Reserving it means the
-     count boxes give way instead, which is the right thing to sacrifice. */
-  /* width:auto, not 100%. Stretched to the card the table had to invent slack
-     somewhere, and it went to the empty leading column — pushing the boxes to
-     the far right, away from the Low-stock field directly beneath them. Sized
-     to its content the table sits left, so every control in the card shares one
-     left edge, and #pd-store-stocks scrolls if a fifth store ever arrives. */
+  /* ONE size: labelled fields, no table at all. A table brought a header band,
+     an empty label column and a Total — and that Total merely repeated the
+     "N on hand" headline and its per-store split sitting directly above it. A
+     label sitting on its own box can't drift out of alignment with it, which
+     every width-tuning attempt on the table version failed to guarantee. */
+  .pd-storefields { display: flex; flex-wrap: wrap; gap: 12px 14px; }
+  .pd-storefield { display: flex; flex-direction: column; gap: 6px; width: 104px; }
+  .pd-storefield > span {
+    font-size: 13px; font-weight: 400; color: var(--td-text2);
+    font-family: var(--f-sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .pd-stock-msg { margin-top: 8px; }
+
+  /* SEVERAL sizes genuinely IS a grid — sizes down, stores across — so it earns
+     the table, the row labels and a per-size total. */
+  /* Every column has a declared width, so table-layout:fixed (§1.19) — no
+     negotiating, and Total can't be the one that loses and gets clipped.
+     width:auto, not 100%: stretched to the card the table had to invent slack
+     somewhere and dumped it in the leading column, pushing the boxes away from
+     the Low-stock field directly beneath them. Sized to its content it sits
+     left, so every control in the card shares one left edge. */
   .pd-stock-matrix { width: auto; border-collapse: collapse; font-size: 15px; table-layout: fixed; }
-  /* A store column is only as wide as the box it holds plus its padding, so
-     the heading sits directly over the box instead of floating at the far end
-     of a stretched column. The leading (variant-name) column takes its own
-     content and nothing more, so a single-variant product has no empty gutter. */
-  .pd-stock-matrix th.mstore, .pd-stock-matrix td.mstore { width: 102px; }
-  .pd-stock-matrix th.mtot, .pd-stock-matrix td.mtot { width: 78px; }
-  /* Right padding on EVERY cell, including the last. It was 0, so the Total
-     column ended exactly on the table edge — flush against the scroll
-     container, which clipped the final pixel and read as a cut-off header. */
-  .pd-stock-matrix th, .pd-stock-matrix td { padding: 6px 8px 6px 12px; text-align: right; }
-  /* The leading cell hugs the card edge whatever it is. Left-alignment belongs
-     to the variant-name cell alone — with a single variant there is no name
-     column, and the first STORE column must stay right-aligned with its box. */
-  .pd-stock-matrix tr > *:first-child { padding-left: 0; }
-  .pd-stock-matrix th.vh, .pd-stock-matrix td.vh { text-align: left; }
+  /* EVERY cell is left-aligned with no left padding, and the gutter is carried
+     entirely as padding-RIGHT. That makes each column's content edge identical
+     to its cell's left edge, so a heading sits on its box's left edge by
+     construction — the same attachment the single-size fields layout gets.
+     The previous right-aligned version had to make three numbers agree (cell
+     padding, the box's max-width, the input's 10px inner inset) and the
+     heading drifted off its box every time one of them moved. */
+  .pd-stock-matrix th, .pd-stock-matrix td {
+    padding: 6px 14px 6px 0; text-align: left; vertical-align: middle;
+    /* The global `th` (4894) paints a background and a bottom border. Unset
+       here or BOTH bands appear — the header strip and, because the size
+       labels are also `th`, a second one down the left, meeting in an L. */
+    background: transparent; border-bottom: none;
+  }
+  /* Box column = 94px box + 14px gutter. Sized so three stores still fit the
+     drawer card before #pd-store-stocks has to scroll. */
+  .pd-stock-matrix th.mstore, .pd-stock-matrix td.mstore { width: 108px; }
+  .pd-stock-matrix th.vh, .pd-stock-matrix td.vh { width: 96px; }
+  .pd-stock-matrix th.mtot, .pd-stock-matrix td.mtot { width: 68px; padding-right: 0; }
   .pd-stock-matrix tr:first-child th {
     font-size: 13px; font-weight: 400; letter-spacing: 0; text-transform: none;
     color: var(--td-text2); font-family: var(--f-sans); padding-bottom: 8px;
   }
   .pd-stock-matrix tr + tr td, .pd-stock-matrix tr + tr th { border-top: 1px solid var(--td-border); }
-  /* Variant-name cell — capped so a long name truncates rather than widening
-     the table and squeezing the count boxes. */
+  /* Size-name cell — the column has a fixed width, so a long name truncates
+     rather than widening the table and squeezing the count boxes. */
   .pd-stock-matrix th.vh {
-    text-align: left; color: var(--td-text); font-weight: 500; text-transform: none;
+    color: var(--td-text); font-weight: 500; text-transform: none;
     letter-spacing: 0; font-family: var(--f-sans); white-space: nowrap;
-    max-width: 150px; overflow: hidden; text-overflow: ellipsis;
+    overflow: hidden; text-overflow: ellipsis;
   }
   .pd-stock-matrix tr:first-child th.vh { color: var(--td-text2); font-weight: 400; }
-  /* Sized to the number it holds, not stretched to the column. */
-  /* Scoped and typed so it beats `#pd-editor .field input[type=number]`, which
-     sets width:100% for the ordinary form fields and was stretching every count
-     box across its column — pushing the Total column off the card edge. That
-     rule is right for name and price, so this is a real context override, not a
-     duplicate to delete. */
-  #pd-editor .pd-stock-matrix input[type=number] {
-    width: 100%; max-width: 82px; box-sizing: border-box; height: 36px; padding: 0 10px;
+  /* The box FILLS its column's content box in both layouts, so the heading
+     above it shares its left edge exactly. Scoped and typed so it beats
+     `#pd-editor .field input[type=number]` — that rule is right for name and
+     price, so this is a real context override, not a duplicate to delete. */
+  #pd-editor .pd-stock-matrix input[type=number],
+  #pd-editor .pd-storefield input[type=number] {
+    width: 100%; box-sizing: border-box; height: 36px; padding: 0 10px;
     border: 1px solid var(--td-border); border-radius: 8px;
     background: var(--td-paper); color: var(--td-text);
     font-size: 15px; text-align: right; font-variant-numeric: tabular-nums;
   }
-  #pd-editor .pd-stock-matrix input[type=number]:focus { outline: none; border-color: var(--td-text); }
+  #pd-editor .pd-stock-matrix input[type=number]:focus,
+  #pd-editor .pd-storefield input[type=number]:focus { outline: none; border-color: var(--td-text); }
   .pd-stock-matrix td.mtot, .pd-stock-matrix th.mtot {
-    color: var(--td-text); font-weight: 500; min-width: 44px; font-variant-numeric: tabular-nums;
+    color: var(--td-text); font-weight: 500; font-variant-numeric: tabular-nums;
   }
   .pd-stock-matrix tr:first-child th.mtot { color: var(--td-text2); font-weight: 400; }
   .pd-stock-matrix .va-self { font-size: 13px; color: var(--td-text2); }
@@ -5281,19 +5297,21 @@
   .pill.draft { background: var(--bg-elev-1); color: var(--text-3); border-color: var(--line); }
   .pill.draft .dot { background: var(--text-4); }
   /* Meituan sync status — Tea = live/synced, Brass = needs action, neutral = not on store */
-  .pill.mt-ok   { background: rgba(163,180,159,.12); color: var(--accent); border-color: rgba(163,180,159,.30); }
-  .pill.mt-ok .dot   { background: var(--accent); }
-  .pill.mt-warn { background: rgba(201,149,74,.14); color: var(--warn); border-color: rgba(201,149,74,.35); }
-  .pill.mt-warn .dot { background: var(--warn); }
+  /* Text on a tint is always the -ink variant: sage #A3B49F on sage-tint is
+     unreadable, which is what --warn (the amber BASE) was doing below. */
+  .pill.mt-ok   { background: var(--td-sage-tint); color: var(--td-sage-ink); border-color: var(--td-sage); }
+  .pill.mt-ok .dot   { background: var(--td-sage-ink); }
+  .pill.mt-warn { background: var(--td-amber-tint); color: var(--td-amber-ink); border-color: var(--td-amber); }
+  .pill.mt-warn .dot { background: var(--td-amber-ink); }
   .pill.mt-off  { background: var(--bg-elev-1); color: var(--text-3); border-color: var(--line); }
   .pill.mt-off .dot  { background: var(--text-4); }
   /* Meituan toolbar — segmented filter + overflow menu */
-  .mt-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-  .mt-seg button { border: 0; background: transparent; color: var(--text-2); font-size: 12px; padding: 5px 12px; cursor: pointer; }
-  .mt-seg button + button { border-left: 1px solid var(--line); }
-  .mt-seg button.active { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+  .mt-seg { display: inline-flex; border: 1px solid var(--td-border); border-radius: 8px; overflow: hidden; }
+  .mt-seg button { border: 0; background: transparent; color: var(--td-text2); font: 400 13px var(--f-sans); padding: 8px 16px; cursor: pointer; }
+  .mt-seg button + button { border-left: 1px solid var(--td-border); }
+  .mt-seg button.active { background: var(--td-text); color: var(--td-paper); font-weight: 500; }
   .mt-cell-foot { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
-  .mt-sub { font-size: 11px; line-height: 1.35; margin-top: 3px; }
+  .mt-sub { font-size: 13px; line-height: 1.35; margin-top: 3px; }
   /* Product identity cell — photo + names + SKU chip */
   .mt-pcell { display: flex; align-items: center; gap: 11px; min-width: 0; }
   .mt-thumb { width: 40px; height: 40px; border-radius: 8px; flex: none; object-fit: cover;
@@ -5301,101 +5319,136 @@
   .mt-thumb-ph { display: flex; align-items: center; justify-content: center; color: var(--text-4); }
   .mt-thumb-ph svg { width: 18px; height: 18px; }
   .mt-pmeta { min-width: 0; }
-  .mt-psku { display: inline-block; font-family: var(--f-mono, ui-monospace, monospace); font-size: 11px;
+  .mt-psku { display: inline-block; font-family: var(--f-mono, ui-monospace, monospace); font-size: 13px;
              line-height: 1; color: var(--text-3); background: var(--bg-elev-1);
-             border: 1px solid var(--line-soft); border-radius: 5px; padding: 2.5px 6px;
+             border: 1px solid var(--line-soft); border-radius: 8px; padding: 2.5px 6px;
              margin-top: 4px; letter-spacing: .02em; }
   /* Live on neither store — brass edge stripe so problem rows pop while scrolling */
   tr.mt-unmapped td:first-child { box-shadow: inset 3px 0 0 var(--brass); }
 
   /* ── Meituan tab redesign (2026-07): status strip + sub-views ─────────────── */
-  .mt-how { margin: 0 0 var(--s4); font-size: 12.5px; color: var(--text-3); }
+  /* ── Tacet skin for the whole Meituan tab ──────────────────────────────
+     The admin's base tokens are warm-grey and pre-date Tacet (--text-1 is
+     #12161A "Ink Charcoal", not Tacet Ink #111A2B; --text-2 is #43413a, not
+     Graphite #58606E). Every .mt-* rule reads those vars, so the page was
+     painting off-palette no matter what the individual rules said. Remap them
+     once here and the whole section recolours — the same move .mc-wiz makes
+     for the Mini App card. Tacet has only two text tones, so text-1/2 both
+     resolve to --td-text and text-3/4 to --td-text2. */
+  #tab-meituan {
+    --bg-pane:     var(--td-surface);
+    --bg-elev-1:   var(--td-raised);
+    --bg-elev-2:   var(--td-raised);
+    --line:        var(--td-border);
+    --line-soft:   var(--td-border);
+    --line-strong: var(--td-border);
+    --text-1:      var(--td-text);
+    --text-2:      var(--td-text);
+    --text-3:      var(--td-text2);
+    --text-4:      var(--td-text2);
+    --accent:      var(--td-sage-ink);   /* live / ok cues */
+    --brass:       var(--td-amber);      /* needs-a-person cues */
+    --brass-hi:    var(--td-amber);
+    --danger:      var(--td-brick-ink);
+  }
+
+  .mt-how { margin: 0 0 var(--s4); font-size: 13px; color: var(--text-3); }
   .mt-how summary { cursor: pointer; }
   .mt-how > div { margin-top: 8px; padding: 10px 14px; background: var(--bg-elev-1); border: 1px solid var(--line-soft); border-radius: 8px; max-width: 70ch; color: var(--text-2); }
 
   /* status strip — one compact row instead of the four fc-kpi tiles */
-  .mt-strip { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 0; background: var(--bg-pane); border: 1px solid var(--line); border-radius: 10px; padding: 12px 6px; margin: 0 0 18px; }
-  .mt-cell { display: flex; flex-direction: column; gap: 2px; padding: 2px 18px; border-right: 1px solid var(--line-soft); min-width: 0; }
-  #mt-kpi-order-tile { border-right: none; }
-  .mt-cell .k { font-family: var(--f-mono); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); white-space: nowrap; }
-  .mt-cell .v { font-size: 14px; font-weight: 600; color: var(--text-1); display: flex; align-items: center; gap: 6px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-  .mt-cell .v small { font-weight: 400; color: var(--text-3); font-size: 11.5px; }
-  .mt-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px rgba(163,180,159,.18); flex: none; }
-  .mt-dot.off { background: var(--danger); box-shadow: 0 0 0 3px rgba(232,85,106,.18); }
-  .mt-cell.alert .k, .mt-cell.alert .v { color: var(--warn); }
-  .mt-strip-grow { flex: 1 1 auto; }
-  .mt-strip-act { display: flex; align-items: center; gap: 10px; padding: 0 12px; }
-  .mt-upd { font-size: 11px; color: var(--text-4); white-space: nowrap; }
-
-  /* sub-tabs: Products / Orders / Bundles */
-  .mt-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin: 0 0 16px; }
-  .mt-tab { appearance: none; background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 14px 9px; font: 600 13.5px var(--f-sans); color: var(--text-3); cursor: pointer; display: flex; align-items: center; gap: 7px; }
-  .mt-tab:hover { color: var(--text-1); }
-  .mt-tab.active { color: var(--text-1); border-bottom-color: var(--brass); }
-  .mt-tab .n { font: 600 11px var(--f-mono); color: var(--text-3); background: var(--bg-elev-2); border-radius: 99px; padding: 1px 7px; }
+  /* The .mt-strip rules went with the strip itself. They also carried two of
+     this section's four text-transform:uppercase declarations (§1.6). */
+  .mt-tabs { display: flex; align-items: center; gap: 24px; border-bottom: 1px solid var(--td-border); margin: 0 0 16px; }
+  .mt-tab { appearance: none; background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 0; font: 500 13px var(--f-sans); color: var(--td-text2); cursor: pointer; display: flex; align-items: center; gap: 8px; }
+  .mt-tab:hover { color: var(--td-text); }
+  .mt-tab.active { color: var(--td-text); border-bottom-color: var(--td-text); }
+  .mt-tab .n { font: 400 13px var(--f-sans); color: var(--td-text2); background: var(--td-raised); border-radius: 999px; padding: 0 8px; font-variant-numeric: tabular-nums; }
   .mt-tab .n:empty { display: none; }
-  .mt-tab.active .n { background: rgba(201,149,74,.16); color: var(--brass); }
+  .mt-tab.active .n { background: var(--td-raised); color: var(--td-text); }
 
   .mt-tabs-grow { flex: 1 1 auto; }
-  .mt-tabs .mt-upd { font-size: 11.5px; color: var(--text-3); padding-right: 10px; align-self: center; }
-  .mt-tabs .btn { align-self: center; margin-bottom: 6px; }
+  .mt-tabs .mt-upd { font-size: 13px; color: var(--td-text2); padding-right: 16px; align-self: center; font-variant-numeric: tabular-nums; }
+  .mt-tabs .btn { align-self: center; margin-bottom: 8px; }
 
-  /* ── Page head + channel switch ─────────────────────────────────────────
-     Same shape as the Eleme page's channel card, but inline with the title:
-     the switch is one control, not a card's worth of chrome. */
-  .mt-pagehead { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+  /* ── Page header — §1.7: title, status line, one Dusk CTA. There is no
+     fourth element. The purpose line that used to sit here ("Stock stays in
+     sync…") is banned by §1.7: it describes what the page is for and reads
+     the same every day. The status line replaces it with what is true now. */
+  .mt-pagehead { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 32px; }
   .mt-pagehead-t { min-width: 0; flex: 1 1 340px; }
-  .mt-chan { display: inline-flex; align-items: center; gap: 10px; flex: none; padding-top: 6px; }
-  .mt-chan .muted { font-weight: 400; font-size: 12.5px; }
+  .mt-pagehead h2 { font: 500 24px/1.3 var(--f-sans); letter-spacing: -.01em; color: var(--td-text); margin: 0; }
+  .mt-status { font: 400 15px/1.6 var(--f-sans); color: var(--td-text2); margin: 4px 0 0; font-variant-numeric: tabular-nums; }
+  .mt-status .att { color: var(--td-amber-ink); }
 
-  /* ── Per-store health cards ─────────────────────────────────────────────
-     One card per Meituan store. The old strip reported the pair as a single
-     "Sync · Active", which could not express "天河 is fine and 越秀 is locked
-     out" — the state the channel was actually in for 24 days. A blocked store
-     turns amber (Tacet: amber warns) and grows the one button that fixes it. */
-  .mt-stores { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; margin: 4px 0 18px; }
-  .mt-store { border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; background: var(--bg-pane); }
-  .mt-store.blocked { border-color: var(--brass); background: rgba(201,149,74,.08); }
-  .mt-store .sh { display: flex; align-items: center; gap: 9px; }
-  .mt-store .sdot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: none; }
-  .mt-store.blocked .sdot { background: var(--brass); }
-  .mt-store .sname { font-size: 14px; font-weight: 600; color: var(--text-1); }
-  .mt-store .smode { margin-left: auto; font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--text-3); }
-  .mt-store .sstate { font-size: 13px; margin-top: 7px; color: var(--accent); }
-  .mt-store.blocked .sstate { color: var(--brass); font-weight: 500; }
-  .mt-store .sfacts { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line-soft); }
-  .mt-store .sf .k { font-size: 10.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--text-3); }
-  .mt-store .sf .v { font-size: 15px; font-weight: 500; letter-spacing: -.01em; color: var(--text-1); font-variant-numeric: tabular-nums; }
-  .mt-store .sf .v.warn { color: var(--brass); }
-  .mt-store .sact { margin-top: 11px; display: flex; gap: 8px; flex-wrap: wrap; }
+  /* ── Channel switch — a setting, so it lives in the body. §1.7 keeps the
+     top-right slot for the page's one Dusk action and says it stays empty
+     rather than take a secondary. */
+  .mt-chanrow { display: flex; align-items: center; justify-content: flex-end; margin-bottom: 16px; }
+  .mt-chan { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+  .mt-chan .lab { font: 400 13px var(--f-sans); color: var(--td-text2); }
+  .mt-chan input { appearance: none; -webkit-appearance: none; margin: 0; width: 36px; height: 20px; border-radius: 999px; background: var(--td-border); border: none; position: relative; cursor: pointer; transition: background 200ms cubic-bezier(.16,1,.3,1); flex: none; }
+  .mt-chan input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 999px; background: var(--td-surface); transition: left 200ms cubic-bezier(.16,1,.3,1); }
+  .mt-chan input:checked { background: var(--td-sage); }
+  .mt-chan input:checked::after { left: 19px; }
+  .mt-chan input:focus-visible { outline: 2px solid var(--td-sage); outline-offset: 2px; }
 
-  /* ── Activity view ──────────────────────────────────────────────────────
-     The sync log /status has always returned and this page never showed. */
-  .mt-act-h { font-size: 13px; font-weight: 600; color: var(--text-1); margin: 4px 0 8px; }
-  .mt-act-h + .mt-log { margin-bottom: 20px; }
-  .mt-log { font-size: 12px; line-height: 1.7; max-height: 260px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; background: var(--bg-pane); color: var(--text-2); }
-  .mt-log .t { color: var(--text-3); }
-  .mt-log .bad { color: var(--danger, #B4533E); }
-  .mt-log .warnrow { color: var(--brass); }
-  .mt-log .empty { color: var(--text-3); }
+  /* ── Per-store cards. One card per store, because the old single cell could
+     not say "Tianhe is fine and Yuexiu is locked out" — the state the channel
+     was actually in for 24 days. Amber only ever means a person is needed. */
+  .mt-stores { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; margin: 0 0 32px; }
+  .mt-store { border: 1px solid var(--td-border); border-radius: 14px; padding: 24px; background: var(--td-surface); }
+  .mt-store.blocked { border-color: var(--td-amber); background: var(--td-amber-tint); }
+  .mt-store .sh { display: flex; align-items: baseline; gap: 8px; }
+  .mt-store .sdot { width: 8px; height: 8px; border-radius: 999px; background: var(--td-sage); flex: none; align-self: center; }
+  .mt-store.blocked .sdot { background: var(--td-amber); }
+  .mt-store.closed .sdot { background: var(--td-text2); }
+  .mt-store .sname { font: 500 18px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); }
+  .mt-store .smode { margin-left: auto; font: 400 13px var(--f-sans); color: var(--td-text2); }
+  .mt-store .sstate { font: 400 15px/1.6 var(--f-sans); margin-top: 8px; color: var(--td-sage-ink); }
+  .mt-store.blocked .sstate { color: var(--td-amber-ink); }
+  .mt-store.closed .sstate { color: var(--td-text2); }
+  .mt-store .sfacts { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--td-border); }
+  .mt-store.blocked .sfacts { border-top-color: var(--td-amber); }
+  .mt-store .sf .k { font: 500 13px var(--f-sans); color: var(--td-text2); }
+  .mt-store .sf .v { font: 400 15px var(--f-sans); color: var(--td-text); font-variant-numeric: tabular-nums; }
+  .mt-store .sf .v.warn { color: var(--td-amber-ink); }
+  .mt-store .sact { margin-top: 16px; }
+  .mt-store .sact code { display: inline-block; font: 400 13px var(--f-sans); color: var(--td-text2); background: var(--td-raised); border-radius: 8px; padding: 8px 16px; }
+  .mt-store.blocked .sact code { background: var(--td-surface); }
+
+  .mt-storefoot { display: flex; align-items: center; gap: 16px; justify-content: flex-end; margin: -16px 0 32px; }
+  .mt-help { background: none; border: none; cursor: pointer; font: 400 13px var(--f-sans); color: var(--td-text2); padding: 0; }
+  .mt-help:hover { color: var(--td-text); }
+
+  /* ── Activity — the sync log /status always returned and nothing showed. */
+  .mt-act-h { font: 500 18px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); margin: 0 0 16px; }
+  .mt-act-h + .mt-log { margin-bottom: 32px; }
+  .mt-log { font: 400 13px/1.7 var(--f-sans); max-height: 264px; overflow: auto; border: 1px solid var(--td-border); border-radius: 14px; padding: 16px 24px; background: var(--td-surface); color: var(--td-text2); font-variant-numeric: tabular-nums; }
+  .mt-log .t { color: var(--td-text2); }
+  .mt-log .bad { color: var(--td-brick-ink); }
+  .mt-log .warnrow { color: var(--td-amber-ink); }
+  .mt-log .empty { color: var(--td-text2); }
+
+  /* ── Table header — the band from tacet-design-system v1.3: --td-header on
+     every table, 13px Inter 500 sentence case in --td-text (NOT --td-text2).
+     The global `th` rule is 11px/600 uppercase; §1.6 says each page's rebuild
+     removes its own rather than changing that globally. */
+  #mt-products-table thead th { background: var(--td-header); color: var(--td-text); font: 500 13px var(--f-sans); letter-spacing: 0; text-transform: none; border-bottom: 1px solid var(--td-border); padding: 10px 16px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .mt-chan input, .mt-chan input::after { transition: none; }
+  }
 
   /* attention banner — only home of the Match-names flow */
-  .mt-attn { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; background: rgba(201,149,74,.12); border: 1px solid rgba(201,149,74,.35); border-radius: 10px; padding: 11px 16px; margin: 0 0 12px; color: var(--brass); }
+  .mt-attn { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; background: var(--td-amber-tint); border: 1px solid var(--td-amber); border-radius: 14px; padding: 16px 24px; margin: 0 0 16px; color: var(--td-amber-ink); }
   .mt-attn .atxt { flex: 1; min-width: 200px; color: var(--text-2); font-size: 13px; }
   .mt-attn .atxt b { color: var(--text-1); }
 
   /* orders / bundles cards */
-  .mt-card { background: var(--bg-pane); border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
-  .mt-note { display: flex; align-items: center; gap: 8px; color: var(--text-3); font-size: 12px; padding: 10px 14px; background: var(--bg-elev-1); border-bottom: 1px solid var(--line-soft); }
-  .mt-dayhd { font-family: var(--f-mono); font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-4); padding: 11px 14px 5px; }
+  .mt-card { background: var(--bg-pane); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
   .mt-orow { display: flex; align-items: center; gap: 12px; padding: 8px 14px; border-bottom: 1px solid var(--line-soft); cursor: pointer; }
   .mt-orow:hover { background: var(--bg-elev-1); }
-  .mt-oago { color: var(--text-4); font-size: 11.5px; flex: none; width: 58px; }
-  .mt-ostore { font-size: 10.5px; font-weight: 600; color: var(--text-3); background: var(--bg-elev-2); border-radius: 99px; padding: 2px 8px; flex: none; min-width: 44px; text-align: center; }
-  .mt-ono { font-family: var(--f-mono); font-size: 11.5px; color: var(--text-3); flex: none; }
-  .mt-oitems { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); font-size: 12.5px; }
-  .mt-oamt { font-family: var(--f-mono); font-weight: 600; font-size: 13px; font-variant-numeric: tabular-nums; flex: none; min-width: 64px; text-align: right; color: var(--text-1); }
-  .mt-odetail { padding: 4px 14px 12px 84px; border-bottom: 1px solid var(--line-soft); font-size: 12.5px; color: var(--text-2); }
 
   /* mapping-table sync toggle: hidden until the row is hovered so rows read as
      name + status; stays visible when OFF (a paused product is never hidden)
@@ -5407,18 +5460,18 @@
 
   /* Match-names dialog */
   .mt-ovl { position: fixed; inset: 0; background: var(--bg-overlay); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 20px; }
-  .mt-dlg { background: var(--bg-pane); color: var(--text-1); width: min(540px, 100%); max-height: 86vh; overflow: auto; border-radius: 12px; border: 1px solid var(--line-strong); box-shadow: 0 18px 50px rgba(0,0,0,.4); }
+  .mt-dlg { background: var(--bg-pane); color: var(--text-1); width: min(540px, 100%); max-height: 86vh; overflow: auto; border-radius: 14px; border: 1px solid var(--line-strong); box-shadow: 0 18px 50px rgba(0,0,0,.4); }
   .mt-dlg-hd { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
   .mt-dlg-hd b { font-size: 15px; }
   .mt-dlg-bd { padding: 16px; }
   .mt-dlg-bd p { margin: 0 0 14px; color: var(--text-2); font-size: 13px; max-width: 52ch; }
-  .mt-okline { display: flex; align-items: center; gap: 9px; background: rgba(163,180,159,.14); color: var(--accent); border-radius: 8px; padding: 10px 13px; font-weight: 600; margin-bottom: 6px; font-size: 13px; }
-  .mt-pickhd { font-size: 12px; font-weight: 600; color: var(--text-2); margin: 12px 0 8px; }
+  .mt-okline { display: flex; align-items: center; gap: 8px; background: var(--td-sage-tint); color: var(--td-sage-ink); border-radius: 8px; padding: 8px 16px; font-weight: 500; margin-bottom: 8px; font-size: 13px; }
+  .mt-pickhd { font-size: 13px; font-weight: 500; color: var(--text-2); margin: 12px 0 8px; }
   .mt-pick { border: 1px solid var(--line-soft); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
-  .mt-pick .pn { font-weight: 600; margin-bottom: 6px; font-size: 13px; }
+  .mt-pick .pn { font-weight: 500; margin-bottom: 6px; font-size: 13px; }
   .mt-pick .chips { display: flex; gap: 6px; flex-wrap: wrap; }
-  .mt-chip { border: 1px solid var(--line); background: var(--bg-pane); color: var(--text-1); border-radius: 99px; padding: 4px 12px; font: 12.5px var(--f-sans); cursor: pointer; }
-  .mt-chip:hover { border-color: var(--accent); color: var(--accent); background: rgba(163,180,159,.12); }
+  .mt-chip { border: 1px solid var(--line); background: var(--bg-pane); color: var(--text-1); border-radius: 999px; padding: 4px 12px; font: 12.5px var(--f-sans); cursor: pointer; }
+  .mt-chip:hover { border-color: var(--td-sage); color: var(--td-sage-ink); background: var(--td-sage-tint); }
   .mt-dlg-ft { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-top: 1px solid var(--line); }
   .mt-tinylink { background: none; border: none; padding: 0; font: 12px var(--f-sans); color: var(--text-4); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
   .mt-tinylink:hover { color: var(--text-2); }
@@ -5426,8 +5479,6 @@
   @media (max-width: 720px) {
     .mt-cell { padding: 2px 12px; border-right: none; }
     .mt-strip-act { width: 100%; justify-content: flex-end; padding-top: 6px; }
-    .mt-odetail { padding-left: 14px; }
-    .mt-oago { width: auto; }
   }
   @media (prefers-reduced-motion: reduce) {
     #mt-products-table .toggle-label { transition: none; }

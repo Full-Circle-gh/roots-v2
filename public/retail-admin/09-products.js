@@ -1770,33 +1770,41 @@ function pdRenderBundleStock(box, p) {
 function pdRenderStockMatrix(box, d) {
   const stores = d.stores, variants = d.variants, qty = d.qty || {};
   const multi = variants.length > 1;
-  // The leading column carries the variant name when there is one, and is blank
-  // when there isn't — but it is always PRESENT, because it is what absorbs the
-  // table's slack. Without it the store columns stretch to fill the row and
-  // each 82px box ends up an island in a 200px column, with its heading
-  // floating over empty space instead of over the box.
-  const head = '<tr><th class="vh">' + (multi ? cuT('Variant', '规格') : '') + '</th>' +
-    stores.map(s => '<th class="mstore">' + escapeHtml(cuT(s.name_en || s.code, s.name_cn || s.name_en) || s.code) + '</th>').join('') +
-    '<th class="mtot">' + cuT('Total', '合计') + '</th></tr>';
-  const body = variants.map(v => {
-    const cells = stores.map(s => {
-      const q = (qty[v.id] && qty[v.id][s.store_id]) || 0;
-      return '<td class="mstore"><input type="number" min="0" step="1" value="' + q + '" data-orig="' + q + '" ' +
-        'data-variant-id="' + v.id + '" data-store-id="' + s.store_id + '" oninput="pdMatrixRecalc(this)" onblur="pdMatrixCellSave(this)"></td>';
+  const storeName = s => escapeHtml(cuT(s.name_en || s.code, s.name_cn || s.name_en) || s.code);
+  const cell = (v, s) => {
+    const q = (qty[v.id] && qty[v.id][s.store_id]) || 0;
+    return '<input type="number" min="0" step="1" value="' + q + '" data-orig="' + q + '" ' +
+      'data-variant-id="' + v.id + '" data-store-id="' + s.store_id + '" ' +
+      'oninput="pdMatrixRecalc(this)" onblur="pdMatrixCellSave(this)">';
+  };
+
+  let inner;
+  if (!multi) {
+    // One size is a handful of numbers, so they are plain labelled fields. A
+    // table here dragged in a header band, an empty label column and a Total —
+    // and that Total only repeated the "N on hand" headline and its per-store
+    // split sitting directly above. Fields share a left edge with Low-stock.
+    inner = '<div class="pd-storefields">' + stores.map(s =>
+      '<label class="pd-storefield"><span>' + storeName(s) + '</span>' + cell(variants[0], s) + '</label>'
+    ).join('') + '</div>';
+  } else {
+    // Several sizes IS a grid — sizes down, stores across — so it earns the
+    // table, the row labels and a per-size total.
+    const head = '<tr><th class="vh">' + cuT('Size', '规格') + '</th>' +
+      stores.map(s => '<th class="mstore">' + storeName(s) + '</th>').join('') +
+      '<th class="mtot">' + cuT('Total', '合计') + '</th></tr>';
+    const body = variants.map(v => {
+      const cells = stores.map(s => '<td class="mstore">' + cell(v, s) + '</td>').join('');
+      const tot = stores.reduce((a, s) => a + ((qty[v.id] && qty[v.id][s.store_id]) || 0), 0);
+      const name = escapeHtml(_vaMatrixLabel(v)) +
+        (v.self ? ' <span class="va-self" title="' + cuT('The variant open above', '上方打开的规格') + '">●</span>' : '');
+      return '<tr data-variant-id="' + v.id + '">' +
+        '<th class="vh" title="' + escapeAttr(_vaMatrixLabel(v)) + '">' + name + '</th>' + cells +
+        '<td class="mtot" data-tot="' + v.id + '">' + tot + '</td></tr>';
     }).join('');
-    const tot = stores.reduce((a, s) => a + ((qty[v.id] && qty[v.id][s.store_id]) || 0), 0);
-    // With a single variant the product name is redundant (it's the one being
-    // edited, shown at the top) — leave the row label blank. With several, show
-    // each variant's label + a ● on the one currently open above.
-    const name = !multi ? '' : (escapeHtml(_vaMatrixLabel(v)) +
-      (v.self ? ' <span class="va-self" title="' + cuT('The variant open above', '上方打开的规格') + '">●</span>' : ''));
-    return '<tr data-variant-id="' + v.id + '">' +
-      '<th class="vh"' + (multi ? ' title="' + escapeAttr(_vaMatrixLabel(v)) + '"' : '') + '>' + name + '</th>' + cells +
-      '<td class="mtot" data-tot="' + v.id + '">' + tot + '</td></tr>';
-  }).join('');
-  box.innerHTML =
-    '<table class="pd-stock-matrix">' + head + body + '</table>' +
-    '<div style="margin-top:8px;"><span id="pd-store-stocks-msg" class="muted"></span></div>';
+    inner = '<table class="pd-stock-matrix">' + head + body + '</table>';
+  }
+  box.innerHTML = inner + '<div class="pd-stock-msg"><span id="pd-store-stocks-msg" class="muted"></span></div>';
   pdRenderOnHand();
 }
 // The headline above the grid: everything on hand, and how it splits by store.
@@ -1809,7 +1817,9 @@ function pdRenderOnHand() {
   if (!wrap || !nEl || !sEl) return;
   const d = PD_STOCK_DATA;
   const box = document.getElementById('pd-store-stocks');
-  if (!d || !Array.isArray(d.stores) || !box || !box.querySelector('table.pd-stock-matrix')) {
+  // Gate on the inputs, not on a table: a single-size product renders plain
+  // labelled fields with no table at all, and it still has a headline.
+  if (!d || !Array.isArray(d.stores) || !box || !box.querySelector('input[data-store-id]')) {
     wrap.hidden = true; sEl.textContent = ''; return;
   }
   // Sum the inputs rather than the loaded payload: a typed-but-not-yet-saved

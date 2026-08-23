@@ -16,6 +16,7 @@
   let _bundleDraft = null; // working copy while the bundle editor modal is open
   let _bundleSuggest = []; // combo candidates surfaced from pasted/fetched titles
   let _initiated = false;
+  let _lastStores = [];  // last /status.stores, so the status line can repaint
   let _mtFilter  = 'all';  // toolbar segmented filter: 'all' | 'att' (needs attention)
 
   // ── Entry point ────────────────────────────────────────────────────────────
@@ -164,7 +165,9 @@
       // The channel switch and every store card come straight off /status, so
       // one poll keeps the whole head of the page honest.
       mtPaintChannel(s.enabled !== false);
-      mtRenderStores(s.stores);
+      _lastStores = s.stores || [];
+      mtRenderStores(_lastStores);
+      mtRenderStatusLine();
       mtRenderLog('mt-log-stock', s.recentStock, true);
       mtRenderLog('mt-log-sys', s.recentSystem, false);
 
@@ -208,6 +211,50 @@
                      : 'node scripts/meituan-login.js ' + code;
   }
 
+  // The Configure panel had a real "Sign in again" that opens the guided relay
+  // wizard; the page only had a command to copy. Use the button when the
+  // wizard is loaded, and fall back to the command when it is not — an
+  // operator on the box can still act, and neither option pretends to do
+  // something it cannot.
+  function mtFixAction(code) {
+    if (typeof window.igRelayWizard === 'function') {
+      return '<button class="btn btn-sm btn-primary" onclick="igRelayWizard(\'meituan\', ' +
+        '{step:\'creds\', store:\'' + esc(code) + '\'})">' +
+        cuT('Sign in again', '重新登录') + '</button>';
+    }
+    return '<code>' + esc(mtFixHint(code)) + '</code>';
+  }
+
+  // §1.7 status line: live state for the section, directly under the title,
+  // sentence case, tabular, facts joined by " · ". It replaces the purpose line
+  // that used to sit there and never changed. Zero Dusk — this is state, not
+  // the system acting.
+  function mtRenderStatusLine() {
+    const el = document.getElementById('mt-status');
+    if (!el) return;
+    const rows = _lastStores;
+    if (!rows.length) { el.textContent = ''; return; }
+    const cn = document.documentElement.dataset.uiLang === 'cn';
+    // Count DISTINCT products, never the sum of the stores: most products are
+    // live on both, so summing read "390 live" against a catalogue of 248.
+    // Same definition the toolbar count and the banner use, so the three
+    // numbers on screen agree with each other.
+    const active = _products.filter(p => p.is_active);
+    const live = active.filter(p => Object.values(p.stores || {}).some(m => m.meituan_name)).length;
+    const unmatched = active.filter(p => mtNeedsAttention(p)).length;
+    const parts = [cuT(live + ' live on Meituan', live + ' 个已上架美团')];
+    if (unmatched) parts.push(cuT(unmatched + ' unmatched', unmatched + ' 个未匹配'));
+    let html = parts.map(esc).join(' · ');
+    // A blocked store is the one fact worth colouring. Amber, never Dusk.
+    const bad = rows.filter(r => r.blocked);
+    if (bad.length) {
+      const names = bad.map(r => mtStoreName(r.code, cn) || r.name).join(', ');
+      html += ' · <span class="att">' +
+        esc(cuT(names + ' needs you', names + ' 需要处理')) + '</span>';
+    }
+    el.innerHTML = html;
+  }
+
   function mtRenderStores(stores) {
     const box = document.getElementById('mt-stores');
     if (!box) return;
@@ -219,9 +266,19 @@
       const mode = isInstant ? cuT('Matched by SKU', '按货号匹配')
                              : cuT('Matched by name', '按名称匹配');
       const bt = MT_BLOCK_TXT[st.blockedBy] || ['Not syncing', '同步已停'];
+      // Closed is not broken. The store shuts overnight and the daemon logs
+      // poll_paused for it; saying so plainly (and not in amber) is the whole
+      // difference between "we are shut" and "something needs you".
       const blockTxt = st.blocked ? cuT(bt[0], bt[1])
-                                  : cuT('Signed in · pushing stock', '已登录 · 正在推送');
-      const since = st.blocked && st.blockedAt ? ' · ' + (fmtAgo(st.blockedAt) || '') : '';
+        : st.closed ? cuT('Closed · stock still syncing', '休息中 · 库存照常同步')
+        : cuT('Signed in · pushing stock', '已登录 · 正在推送');
+      let since = st.blocked && st.blockedAt ? ' · ' + (fmtAgo(st.blockedAt) || '') : '';
+      // Whether Meituan itself has the store open. Only ever shown in the old
+      // Configure panel, never on the page it described. null = not read yet,
+      // and saying nothing beats guessing "closed".
+      if (!st.blocked && st.openOnMeituan === false) since += ' · ' + cuT('closed on Meituan', '美团已置休');
+      if (!st.blocked && st.openOnMeituan === true)  since += ' · ' + cuT('open on Meituan', '美团营业中');
+      if (st.lastPushAt) since += ' · ' + cuT('pushed ', '推送于 ') + (fmtAgo(st.lastPushAt) || '');
       // A stranded row is one the daemon claimed and never finished. Nothing
       // counted these before, so 40 of them showed up in neither number.
       const stranded = Number(st.processing || 0);
@@ -230,21 +287,23 @@
         { k: cuT('Unmatched', '未匹配'),   v: st.unmatched, warn: st.unmatched > 0 },
         { k: cuT('Waiting', '待推送'),     v: st.pending,   warn: false },
         stranded ? { k: cuT('Stranded', '卡住'), v: stranded, warn: true } : null,
+        // Orders today and the last push came off the scrapped Configure panel.
+        // "Last order" alone could not tell a quiet morning from a dead channel.
+        { k: cuT('Orders today', '今日订单'), v: Number(st.ordersToday || 0), warn: false },
         { k: cuT('Last order', '最近订单'),
           v: st.lastOrderAt ? (fmtAgo(st.lastOrderAt) || '—') : cuT('none', '无'), warn: false },
       ].filter(Boolean);
       const factHtml = facts.map(f =>
         '<div class="sf"><div class="k">' + esc(f.k) + '</div><div class="v' +
         (f.warn ? ' warn' : '') + '">' + esc(String(f.v)) + '</div></div>').join('');
-      return '<div class="mt-store' + (st.blocked ? ' blocked' : '') + '">' +
+      const cls = st.blocked ? ' blocked' : st.closed ? ' closed' : '';
+      return '<div class="mt-store' + cls + '">' +
           '<div class="sh"><span class="sdot"></span>' +
             '<span class="sname">' + esc(mtStoreName(st.code, cn) || st.name) + '</span>' +
             '<span class="smode">' + esc(mode) + '</span></div>' +
           '<div class="sstate">' + esc(blockTxt) + esc(since) + '</div>' +
           '<div class="sfacts">' + factHtml + '</div>' +
-          (st.blocked
-            ? '<div class="sact"><code style="font-size:11.5px">' + esc(mtFixHint(st.code)) + '</code></div>'
-            : '') +
+          (st.blocked ? '<div class="sact">' + mtFixAction(st.code) + '</div>' : '') +
         '</div>';
     }).join('');
   }
@@ -396,6 +455,8 @@
 
     // Attention banner — the only home of the Match-names flow; hidden the
     // moment every active product is live somewhere.
+    mtRenderStatusLine();  // product counts only exist now
+
     const attn  = document.getElementById('mt-attn');
     const attxt = document.getElementById('mt-attn-txt');
     if (attn) attn.hidden = !att;
