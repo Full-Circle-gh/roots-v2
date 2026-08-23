@@ -3339,14 +3339,25 @@
   /* Stock-by-location grid: variant rows × store columns + a live row total.
      One place to set every variant's stock in every store. Wrapped so many
      stores scroll horizontally instead of bursting out of the narrow card. */
-  #pd-store-stocks { overflow-x: auto; }
+  /* Only scrolls when it genuinely has to. As an always-on scroll container it
+     clipped the right edge by a pixel even when everything fitted. */
+  #pd-store-stocks { overflow-x: auto; padding-right: 2px; }
   /* Column headers are sentence case at 13px weight 400. They were 10px
      uppercase in --f-mono — which is remapped to Inter, so it rendered as
      uppercase Inter, the exact thing the ban exists for. The whole grid also
      moves off the legacy --line / --text-1 / --text-4 tokens onto --td-*, so
      it finally follows the theme instead of staying light in a dark admin. */
-  .pd-stock-matrix { width: 100%; border-collapse: collapse; font-size: 15px; }
-  .pd-stock-matrix th, .pd-stock-matrix td { padding: 6px 0 6px 12px; text-align: right; }
+  /* Fixed layout with a reserved Total column, per the table rule (§1.19).
+     With auto layout the columns negotiate for width and Total — the narrowest
+     and last — is the one that loses and gets clipped. Reserving it means the
+     count boxes give way instead, which is the right thing to sacrifice. */
+  .pd-stock-matrix { width: 100%; border-collapse: collapse; font-size: 15px; table-layout: fixed; }
+  .pd-stock-matrix th.mtot, .pd-stock-matrix td.mtot { width: 78px; }
+  .pd-stock-matrix th.vh { width: 30%; }
+  /* Right padding on EVERY cell, including the last. It was 0, so the Total
+     column ended exactly on the table edge — flush against the scroll
+     container, which clipped the final pixel and read as a cut-off header. */
+  .pd-stock-matrix th, .pd-stock-matrix td { padding: 6px 8px 6px 12px; text-align: right; }
   /* The leading cell hugs the card edge whatever it is. Left-alignment belongs
      to the variant-name cell alone — with a single variant there is no name
      column, and the first STORE column must stay right-aligned with its box. */
@@ -3372,7 +3383,7 @@
      rule is right for name and price, so this is a real context override, not a
      duplicate to delete. */
   #pd-editor .pd-stock-matrix input[type=number] {
-    width: 82px; box-sizing: border-box; height: 36px; padding: 0 10px;
+    width: 100%; max-width: 82px; box-sizing: border-box; height: 36px; padding: 0 10px;
     border: 1px solid var(--td-border); border-radius: 8px;
     background: var(--td-paper); color: var(--td-text);
     font-size: 15px; text-align: right; font-variant-numeric: tabular-nums;
