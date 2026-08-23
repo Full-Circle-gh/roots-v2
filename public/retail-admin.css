@@ -3347,50 +3347,75 @@
      uppercase Inter, the exact thing the ban exists for. The whole grid also
      moves off the legacy --line / --text-1 / --text-4 tokens onto --td-*, so
      it finally follows the theme instead of staying light in a dark admin. */
-  /* Fixed layout with a reserved Total column, per the table rule (§1.19).
-     With auto layout the columns negotiate for width and Total — the narrowest
-     and last — is the one that loses and gets clipped. Reserving it means the
-     count boxes give way instead, which is the right thing to sacrifice. */
-  .pd-stock-matrix { width: 100%; border-collapse: collapse; font-size: 15px; table-layout: fixed; }
-  .pd-stock-matrix th.mtot, .pd-stock-matrix td.mtot { width: 78px; }
-  .pd-stock-matrix th.vh { width: 30%; }
-  /* Right padding on EVERY cell, including the last. It was 0, so the Total
-     column ended exactly on the table edge — flush against the scroll
-     container, which clipped the final pixel and read as a cut-off header. */
-  .pd-stock-matrix th, .pd-stock-matrix td { padding: 6px 8px 6px 12px; text-align: right; }
-  /* The leading cell hugs the card edge whatever it is. Left-alignment belongs
-     to the variant-name cell alone — with a single variant there is no name
-     column, and the first STORE column must stay right-aligned with its box. */
-  .pd-stock-matrix tr > *:first-child { padding-left: 0; }
-  .pd-stock-matrix th.vh, .pd-stock-matrix td.vh { text-align: left; }
+  /* ONE size: labelled fields, no table at all. A table brought a header band,
+     an empty label column and a Total — and that Total merely repeated the
+     "N on hand" headline and its per-store split sitting directly above it. A
+     label sitting on its own box can't drift out of alignment with it, which
+     every width-tuning attempt on the table version failed to guarantee. */
+  .pd-storefields { display: flex; flex-wrap: wrap; gap: 12px 14px; }
+  .pd-storefield { display: flex; flex-direction: column; gap: 6px; width: 104px; }
+  .pd-storefield > span {
+    font-size: 13px; font-weight: 400; color: var(--td-text2);
+    font-family: var(--f-sans); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .pd-stock-msg { margin-top: 8px; }
+
+  /* SEVERAL sizes genuinely IS a grid — sizes down, stores across — so it earns
+     the table, the row labels and a per-size total. */
+  /* Every column has a declared width, so table-layout:fixed (§1.19) — no
+     negotiating, and Total can't be the one that loses and gets clipped.
+     width:auto, not 100%: stretched to the card the table had to invent slack
+     somewhere and dumped it in the leading column, pushing the boxes away from
+     the Low-stock field directly beneath them. Sized to its content it sits
+     left, so every control in the card shares one left edge. */
+  .pd-stock-matrix { width: auto; border-collapse: collapse; font-size: 15px; table-layout: fixed; }
+  /* EVERY cell is left-aligned with no left padding, and the gutter is carried
+     entirely as padding-RIGHT. That makes each column's content edge identical
+     to its cell's left edge, so a heading sits on its box's left edge by
+     construction — the same attachment the single-size fields layout gets.
+     The previous right-aligned version had to make three numbers agree (cell
+     padding, the box's max-width, the input's 10px inner inset) and the
+     heading drifted off its box every time one of them moved. */
+  .pd-stock-matrix th, .pd-stock-matrix td {
+    padding: 6px 14px 6px 0; text-align: left; vertical-align: middle;
+    /* The global `th` (4894) paints a background and a bottom border. Unset
+       here or BOTH bands appear — the header strip and, because the size
+       labels are also `th`, a second one down the left, meeting in an L. */
+    background: transparent; border-bottom: none;
+  }
+  /* Box column = 94px box + 14px gutter. Sized so three stores still fit the
+     drawer card before #pd-store-stocks has to scroll. */
+  .pd-stock-matrix th.mstore, .pd-stock-matrix td.mstore { width: 108px; }
+  .pd-stock-matrix th.vh, .pd-stock-matrix td.vh { width: 96px; }
+  .pd-stock-matrix th.mtot, .pd-stock-matrix td.mtot { width: 68px; padding-right: 0; }
   .pd-stock-matrix tr:first-child th {
     font-size: 13px; font-weight: 400; letter-spacing: 0; text-transform: none;
     color: var(--td-text2); font-family: var(--f-sans); padding-bottom: 8px;
   }
   .pd-stock-matrix tr + tr td, .pd-stock-matrix tr + tr th { border-top: 1px solid var(--td-border); }
-  /* Variant-name cell — capped so a long name truncates rather than widening
-     the table and squeezing the count boxes. */
+  /* Size-name cell — the column has a fixed width, so a long name truncates
+     rather than widening the table and squeezing the count boxes. */
   .pd-stock-matrix th.vh {
-    text-align: left; color: var(--td-text); font-weight: 500; text-transform: none;
+    color: var(--td-text); font-weight: 500; text-transform: none;
     letter-spacing: 0; font-family: var(--f-sans); white-space: nowrap;
-    max-width: 150px; overflow: hidden; text-overflow: ellipsis;
+    overflow: hidden; text-overflow: ellipsis;
   }
   .pd-stock-matrix tr:first-child th.vh { color: var(--td-text2); font-weight: 400; }
-  /* Sized to the number it holds, not stretched to the column. */
-  /* Scoped and typed so it beats `#pd-editor .field input[type=number]`, which
-     sets width:100% for the ordinary form fields and was stretching every count
-     box across its column — pushing the Total column off the card edge. That
-     rule is right for name and price, so this is a real context override, not a
-     duplicate to delete. */
-  #pd-editor .pd-stock-matrix input[type=number] {
-    width: 100%; max-width: 82px; box-sizing: border-box; height: 36px; padding: 0 10px;
+  /* The box FILLS its column's content box in both layouts, so the heading
+     above it shares its left edge exactly. Scoped and typed so it beats
+     `#pd-editor .field input[type=number]` — that rule is right for name and
+     price, so this is a real context override, not a duplicate to delete. */
+  #pd-editor .pd-stock-matrix input[type=number],
+  #pd-editor .pd-storefield input[type=number] {
+    width: 100%; box-sizing: border-box; height: 36px; padding: 0 10px;
     border: 1px solid var(--td-border); border-radius: 8px;
     background: var(--td-paper); color: var(--td-text);
     font-size: 15px; text-align: right; font-variant-numeric: tabular-nums;
   }
-  #pd-editor .pd-stock-matrix input[type=number]:focus { outline: none; border-color: var(--td-text); }
+  #pd-editor .pd-stock-matrix input[type=number]:focus,
+  #pd-editor .pd-storefield input[type=number]:focus { outline: none; border-color: var(--td-text); }
   .pd-stock-matrix td.mtot, .pd-stock-matrix th.mtot {
-    color: var(--td-text); font-weight: 500; min-width: 44px; font-variant-numeric: tabular-nums;
+    color: var(--td-text); font-weight: 500; font-variant-numeric: tabular-nums;
   }
   .pd-stock-matrix tr:first-child th.mtot { color: var(--td-text2); font-weight: 400; }
   .pd-stock-matrix .va-self { font-size: 13px; color: var(--td-text2); }
