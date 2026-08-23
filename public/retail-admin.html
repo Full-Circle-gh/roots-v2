@@ -4560,9 +4560,14 @@
                 </div>
               </section>
 
-              <!-- Where it shows -->
+              <!-- Where it shows. Its own section on the page: it sat under the
+                   "Basics" heading, which is not what it is. Docked it stays a
+                   card inside the Basics pane with its own small heading, so
+                   the heading below is page-only and the card's is dock-only —
+                   the same pair the Basics card carries. -->
+              <div class="pd-pp-sech" data-pp-only="1">Where it shows · 分类与陈列</div>
               <section class="pdb-card pdb-c7" id="pd-sec-where">
-                <div class="pd-sec-h">Where it shows · 分类与陈列</div>
+                <div class="pd-sec-h" data-dock-only="1">Where it shows · 分类与陈列</div>
                 <div class="pdb-fields">
                   <div class="field"><label class="stacked">Shop section · 商店分区 <span class="muted" style="font-weight:400;">(left rail)</span></label>
                     <select id="pd-top-category" onchange="pdOnTopCatChange()"><option value="">— none · 无 —</option></select></div>
@@ -4781,7 +4786,7 @@
 
               <!-- Free of -->
               <section class="pdb-card pdb-c4" id="pd-sec-freeof">
-                <div class="pd-sec-h">Free of · 不含 <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400;">(tick what applies)</span></div>
+                <div class="pd-sec-h">Free of · 不含</div>
                 <div id="pd-free-of" class="pd-chipset" data-freeof-group="1">
                   <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" data-freeof-id="nuts" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M12 3a3.3 3.3 0 0 0-3 4.9c.3.5.5 1 .5 1.7s-.2 1.2-.5 1.8a3.3 3.3 0 1 0 6 0c-.3-.6-.5-1.1-.5-1.8s.2-1.2.5-1.7A3.3 3.3 0 0 0 12 3z"/><path d="M10 7.5h.01M14 7.5h.01M10.5 11h.01M13.5 11h.01"/></svg> Nuts · 无坚果</label>
                   <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" data-freeof-id="soy" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M12 21v-8"/><path d="M12 13c0-3-2-5.5-5.5-5.5 0 3 2 5.5 5.5 5.5z"/><path d="M12 11.5c0-2.6 2-4.8 5.2-4.8 0 2.6-2 4.8-5.2 4.8z"/></svg> Soy · 无大豆</label>
