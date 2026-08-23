@@ -20290,12 +20290,21 @@ router.get('/api/retail-admin/products/:id/sales', requireRetailAdmin, (req, res
       .map(([date, units]) => ({ date, units }));
   }
 
+  // The card reads these two rather than deriving them from the series: once a
+  // long window rolls up to weeks or months, "how many days did it sell on" is
+  // no longer answerable from `daily`. Both come from the raw per-day rows, so
+  // they stay true at every granularity.
+  const soldDays = dailyRows.filter(r => (r.units || 0) > 0).map(r => r.d).sort();
+  const sellingDays = soldDays.length;
+  const lastSale = sellingDays ? soldDays[soldDays.length - 1] : null;
+
   res.json({
     success: true,
     data: {
       from, to, granularity, all_time: isAll,
       units: mine.units, revenue: mine.revenue, orders: mine.orders,
       rank: mine.rank, total_products: ranked.length,
+      selling_days: sellingDays, last_sale: lastSale,
       daily,
     },
   });

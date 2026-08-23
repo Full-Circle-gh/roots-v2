@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — Products sales card options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   The Sales card in the product drawer — five options.
+   EVERY option draws the SAME real data: 6 units over 30 days,
+   sold on 5 separate days, peak 2 in one day. That is a typical
+   product in a 209-line catalogue, and it is the case the card
+   has to survive — not a busy bestseller.
+   Live --td-* tokens. No gradients (§1.4). Inter, sentence case,
+   two weights, tabular numbers.
+   ============================================================ */
+:root{
+  --td-surface:#18233A;--td-raised:#1E2A44;--td-border:#2A3550;
+  --td-text:#FBF9F4;--td-text2:#9AA3B2;--td-heat-rgb:251,249,244;
+  --td-dusk:#6E67AF;--td-sage:#A3B49F;--td-sage-tint:#1E2C26;--td-sage-ink:#A3B49F;
+  --td-amber:#C9954A;--td-amber-tint:#33290F;--td-amber-ink:#C9954A;
+  --td-brick:#B4533E;--td-brick-tint:#351B14;--td-brick-ink:#D07A66;--td-paper:#111A2B;
+}
+:root[data-theme="light"]{
+  --td-surface:#FFFFFF;--td-raised:#F6F3EC;--td-border:#E4E0D5;
+  --td-text:#111A2B;--td-text2:#58606E;--td-heat-rgb:17,26,43;
+  --td-sage-tint:#EDF1EC;--td-sage-ink:#4A6249;--td-amber-tint:#F7EEDE;--td-amber-ink:#8A6425;
+  --td-brick-tint:#F6E7E3;--td-brick-ink:#B4533E;--td-paper:#FBF9F4;
+}
+:root{--f:"Inter",-apple-system,system-ui,sans-serif}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--f);font-size:15px;line-height:1.6;color:var(--td-text);background:var(--td-paper)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.num{font-variant-numeric:tabular-nums}
+.bar{position:sticky;top:0;z-index:9;display:flex;gap:18px;align-items:center;padding:10px 24px;
+  background:var(--td-text);color:var(--td-paper);font-size:13px}
+.bar b{font-weight:500}
+.bar label{display:inline-flex;gap:6px;align-items:center;cursor:pointer;opacity:.75}
+.wrap{max-width:1240px;margin:0 auto;padding:40px 24px 96px}
+.opt{margin-bottom:52px}
+.opt-h{font-size:18px;font-weight:500}
+.opt-s{font-size:13px;color:var(--td-text2);margin:4px 0 18px;max-width:70ch;text-wrap:pretty}
+.opt-s b{color:var(--td-text);font-weight:500}
+.row{display:flex;gap:28px;align-items:flex-start;flex-wrap:wrap}
+.note{font-size:13px;color:var(--td-text2);flex:1;min-width:230px;max-width:34ch}
+.note b{display:block;color:var(--td-text);font-weight:500;margin-bottom:6px}
+.note ul{margin-left:16px}.note li{margin-bottom:5px}
+.good{color:var(--td-sage-ink)}.bad{color:var(--td-brick-ink)}
+
+/* the card, at the drawer's real inner width */
+.card{width:512px;flex:none;border:1px solid var(--td-border);border-radius:14px;
+  background:var(--td-surface);padding:16px}
+.hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.hd .t{font-size:13px;color:var(--td-text2)}
+.ranges{display:inline-flex;gap:4px}
+.ranges button{font-size:13px;padding:3px 10px;border-radius:999px;border:1px solid var(--td-border);color:var(--td-text2)}
+.ranges button.on{background:var(--td-text);border-color:var(--td-text);color:var(--td-paper)}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.kpis .v{font-size:18px;font-weight:500;font-variant-numeric:tabular-nums}
+.kpis .l{font-size:13px;color:var(--td-text2)}
+svg{display:block;width:100%}
+.axis{display:flex;justify-content:space-between;margin-top:8px;font-size:13px;color:var(--td-text2);
+  font-variant-numeric:tabular-nums}
+.base{stroke:var(--td-border);stroke-width:1;vector-effect:non-scaling-stroke}
+.ink{fill:var(--td-text)}
+.sage{fill:var(--td-sage-ink)}
+.line{fill:none;stroke:var(--td-text);stroke-width:2;vector-effect:non-scaling-stroke;
+  stroke-linecap:round;stroke-linejoin:round}
+.fillmute{fill:rgba(var(--td-heat-rgb),.07)}
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <b>Sales card — five options</b>
+  <span style="opacity:.6">all showing the same 6 units / 30 days / peak 2</span>
+  <span style="flex:1"></span>
+  <label><input type="checkbox" onclick="document.documentElement.setAttribute('data-theme',this.checked?'dark':'light')"> Dark</label>
+</div>
+
+<div class="wrap">
+
+<!-- TODAY -->
+<div class="opt">
+  <div class="opt-h">Today — why it looks empty</div>
+  <div class="opt-s">Thirty slots, five of them non-zero. The chart is <b>83% blank by construction</b>, and no amount of styling changes that — the problem is drawing a daily series for a product that sells a few times a month. The height makes it worse: 88px of box for five values.</div>
+  <div class="row">
+    <div class="card">
+      <div class="hd"><span class="t">Sales</span><span class="ranges"><button>7d</button><button class="on">30d</button><button>90d</button><button>All</button></span></div>
+      <div class="kpis"><div><div class="v num">6</div><div class="l">units sold</div></div><div><div class="v num">¥445</div><div class="l">revenue</div></div><div><div class="v num">#62 / 192</div><div class="l">rank</div></div></div>
+      <svg viewBox="0 0 100 35" preserveAspectRatio="none" style="height:88px;margin-top:14px">
+        <line class="base" x1="0" y1="34.5" x2="100" y2="34.5"/>
+        <rect class="ink" x="11.5" y="17" width="1.6" height="17" rx=".8"/>
+        <rect class="ink" x="28.2" y="17" width="1.6" height="17" rx=".8"/>
+        <rect class="ink" x="54.9" y="17" width="1.6" height="17" rx=".8"/>
+        <rect class="ink" x="78.2" y="17" width="1.6" height="17" rx=".8"/>
+        <rect class="ink" x="94.9" y="0" width="1.6" height="34" rx=".8"/>
+      </svg>
+      <div class="axis"><span>07/25</span><span style="color:var(--td-text);font-weight:500">peak 2 / day</span><span>08/23</span></div>
+    </div>
+    <div class="note"><b>Faults</b><ul>
+      <li class="bad">Five bars in thirty slots — mostly air</li>
+      <li class="bad">88px tall for five numbers</li>
+      <li class="bad">"peak 2 / day" floats mid-axis, attached to nothing</li>
+      <li class="bad">Bars this thin read as tally marks, not a chart</li>
+    </ul></div>
+  </div>
+</div>
+
+<!-- A -->
+<div class="opt">
+  <div class="opt-h">A · Bucket to fit the window <span style="font-size:13px;font-weight:400;color:var(--td-sage-ink)">— recommended</span></div>
+  <div class="opt-s">Same bars, fewer and fatter: 30 days becomes <b>weeks</b>, 7 days stays daily, All time already rolls up. Every bar has something in it, the shape is legible, and nothing new has to be invented — the server already buckets, so this is choosing the threshold better.</div>
+  <div class="row">
+    <div class="card">
+      <div class="hd"><span class="t">Sales</span><span class="ranges"><button>7d</button><button class="on">30d</button><button>90d</button><button>All</button></span></div>
+      <div class="kpis"><div><div class="v num">6</div><div class="l">units sold</div></div><div><div class="v num">¥445</div><div class="l">revenue</div></div><div><div class="v num">#62 / 192</div><div class="l">rank</div></div></div>
+      <svg viewBox="0 0 100 32" preserveAspectRatio="none" style="height:64px;margin-top:14px">
+        <line class="base" x1="0" y1="31.5" x2="100" y2="31.5"/>
+        <rect class="ink" x="2"  y="16" width="14" height="15.5" rx="2"/>
+        <rect class="ink" x="22" y="16" width="14" height="15.5" rx="2"/>
+        <rect class="ink" x="42" y="16" width="14" height="15.5" rx="2"/>
+        <rect class="ink" x="62" y="16" width="14" height="15.5" rx="2"/>
+        <rect class="ink" x="82" y="0"  width="14" height="31.5" rx="2"/>
+      </svg>
+      <div class="axis"><span>1 · 1 · 1 · 1 · 2 units per week</span><span>last 5 weeks</span></div>
+    </div>
+    <div class="note"><b>Trade</b><ul>
+      <li class="good">Every bar carries data</li>
+      <li class="good">64px instead of 88px</li>
+      <li class="good">No new concept — the bucketing already exists</li>
+      <li>A single big day is averaged into its week</li>
+    </ul></div>
+  </div>
+</div>
+
+<!-- B -->
+<div class="opt">
+  <div class="opt-h">B · Cumulative — how it added up</div>
+  <div class="opt-s">A running total instead of per-day counts. It is <b>never empty</b>, because the line only ever rises or holds flat, and a flat stretch reads honestly as "nothing sold that week". Answers "is this building?" rather than "what happened on the 9th?".</div>
+  <div class="row">
+    <div class="card">
+      <div class="hd"><span class="t">Sales</span><span class="ranges"><button>7d</button><button class="on">30d</button><button>90d</button><button>All</button></span></div>
+      <div class="kpis"><div><div class="v num">6</div><div class="l">units sold</div></div><div><div class="v num">¥445</div><div class="l">revenue</div></div><div><div class="v num">#62 / 192</div><div class="l">rank</div></div></div>
+      <svg viewBox="0 0 100 32" preserveAspectRatio="none" style="height:64px;margin-top:14px">
+        <line class="base" x1="0" y1="31.5" x2="100" y2="31.5"/>
+        <path class="fillmute" d="M0,31.5 L0,31.5 L12,31.5 L12,26.2 L29,26.2 L29,20.9 L55,20.9 L55,15.6 L78,15.6 L78,10.3 L95,10.3 L95,0 L100,0 L100,31.5 Z"/>
+        <path class="line" d="M0,31.5 L12,31.5 L12,26.2 L29,26.2 L29,20.9 L55,20.9 L55,15.6 L78,15.6 L78,10.3 L95,10.3 L95,0 L100,0"/>
+      </svg>
+      <div class="axis"><span>07/25</span><span>6 units by 08/23</span></div>
+    </div>
+    <div class="note"><b>Trade</b><ul>
+      <li class="good">Never looks empty, at any volume</li>
+      <li class="good">Flat stretches are readable as "no sales"</li>
+      <li class="bad">Hides how big a single day was</li>
+      <li class="bad">Every product's chart rises — harder to compare at a glance</li>
+    </ul></div>
+  </div>
+</div>
+
+<!-- C -->
+<div class="opt">
+  <div class="opt-h">C · No chart — say it in a sentence</div>
+  <div class="opt-s">At this volume a chart is decoration. A line of plain words carries more: <b>how often it sells, and whether it sold recently</b>. The strip underneath marks the days it sold, so the rhythm is still visible without pretending to be a graph.</div>
+  <div class="row">
+    <div class="card">
+      <div class="hd"><span class="t">Sales</span><span class="ranges"><button>7d</button><button class="on">30d</button><button>90d</button><button>All</button></span></div>
+      <div class="kpis"><div><div class="v num">6</div><div class="l">units sold</div></div><div><div class="v num">¥445</div><div class="l">revenue</div></div><div><div class="v num">#62 / 192</div><div class="l">rank</div></div></div>
+      <div style="margin-top:14px;font-size:15px">Sold on <b style="font-weight:500">5 of the last 30 days</b>. Last sale was <b style="font-weight:500">today</b>.</div>
+      <svg viewBox="0 0 100 6" preserveAspectRatio="none" style="height:14px;margin-top:12px">
+        <line class="base" x1="0" y1="3" x2="100" y2="3"/>
+        <circle class="ink" cx="12" cy="3" r="1.6"/><circle class="ink" cx="29" cy="3" r="1.6"/>
+        <circle class="ink" cx="55" cy="3" r="1.6"/><circle class="ink" cx="78" cy="3" r="1.6"/>
+        <circle class="ink" cx="95" cy="3" r="2.4"/>
+      </svg>
+      <div class="axis"><span>07/25</span><span>bigger dot = bigger day</span><span>08/23</span></div>
+    </div>
+    <div class="note"><b>Trade</b><ul>
+      <li class="good">Shortest card by far</li>
+      <li class="good">"Last sale was today" is the fact an operator wants</li>
+      <li class="good">Honest — stops drawing a graph of almost nothing</li>
+      <li class="bad">A genuine bestseller loses its shape</li>
+    </ul></div>
+  </div>
+</div>
+
+<!-- D -->
+<div class="opt">
+  <div class="opt-h">D · Adaptive — C when quiet, A when busy</div>
+  <div class="opt-s">One card, two renders, chosen by the data: under a threshold (say fewer than ~15 sale-days in the window) it reads as the sentence; above it, the bars. <b>The same rule the pulse already follows</b> — tiles when there is a pulse, one line when there is not.</div>
+  <div class="row">
+    <div class="card">
+      <div class="hd"><span class="t">Sales</span><span class="ranges"><button>7d</button><button class="on">30d</button><button>90d</button><button>All</button></span></div>
+      <div class="kpis"><div><div class="v num">6</div><div class="l">units sold</div></div><div><div class="v num">¥445</div><div class="l">revenue</div></div><div><div class="v num">#62 / 192</div><div class="l">rank</div></div></div>
+      <div style="margin-top:14px;font-size:15px">Sold on <b style="font-weight:500">5 of the last 30 days</b>. Last sale was <b style="font-weight:500">today</b>.</div>
+      <div style="font-size:13px;color:var(--td-text2);margin-top:10px;padding-top:10px;border-top:1px solid var(--td-border)">A busy product renders the bars instead ↓</div>
+      <svg viewBox="0 0 100 32" preserveAspectRatio="none" style="height:56px;margin-top:10px">
+        <line class="base" x1="0" y1="31.5" x2="100" y2="31.5"/>
+        <rect class="ink" x="1"  y="14" width="4.5" height="17.5" rx="1"/><rect class="ink" x="8"  y="20" width="4.5" height="11.5" rx="1"/>
+        <rect class="ink" x="15" y="6"  width="4.5" height="25.5" rx="1"/><rect class="ink" x="22" y="18" width="4.5" height="13.5" rx="1"/>
+        <rect class="ink" x="29" y="11" width="4.5" height="20.5" rx="1"/><rect class="ink" x="36" y="24" width="4.5" height="7.5"  rx="1"/>
+        <rect class="ink" x="43" y="3"  width="4.5" height="28.5" rx="1"/><rect class="ink" x="50" y="16" width="4.5" height="15.5" rx="1"/>
+        <rect class="ink" x="57" y="9"  width="4.5" height="22.5" rx="1"/><rect class="ink" x="64" y="21" width="4.5" height="10.5" rx="1"/>
+        <rect class="ink" x="71" y="13" width="4.5" height="18.5" rx="1"/><rect class="ink" x="78" y="5"  width="4.5" height="26.5" rx="1"/>
+        <rect class="ink" x="85" y="19" width="4.5" height="12.5" rx="1"/><rect class="ink" x="92" y="8"  width="4.5" height="23.5" rx="1"/>
+      </svg>
+    </div>
+    <div class="note"><b>Trade</b><ul>
+      <li class="good">Right answer for both ends of the catalogue</li>
+      <li class="good">Matches the pulse's own scaling rule</li>
+      <li class="bad">Two renders to build and keep honest</li>
+      <li class="bad">The card changes shape between products</li>
+    </ul></div>
+  </div>
+</div>
+
+<!-- E -->
+<div class="opt">
+  <div class="opt-h">E · Drop the chart, keep the card short</div>
+  <div class="opt-s">The card becomes three numbers and a line of context, full stop. Everything else is a click away in Reports, which is the page built for time series. <b>Buys the most room</b> for the fields underneath — the thing you actually opened the drawer to edit.</div>
+  <div class="row">
+    <div class="card">
+      <div class="hd"><span class="t">Sales · last 30 days</span><span class="ranges"><button>7d</button><button class="on">30d</button><button>90d</button><button>All</button></span></div>
+      <div class="kpis"><div><div class="v num">6</div><div class="l">units sold</div></div><div><div class="v num">¥445</div><div class="l">revenue</div></div><div><div class="v num">#62 / 192</div><div class="l">rank</div></div></div>
+      <div style="margin-top:12px;font-size:13px;color:var(--td-text2)">Last sale today · 5 selling days</div>
+    </div>
+    <div class="note"><b>Trade</b><ul>
+      <li class="good">Card is ~120px instead of ~260px</li>
+      <li class="good">Nothing on screen can mislead</li>
+      <li class="bad">No shape at all, for any product</li>
+      <li class="bad">"Is it trending?" needs another page</li>
+    </ul></div>
+  </div>
+</div>
+
+<div class="opt">
+  <div class="opt-h">My read</div>
+  <div class="opt-s">
+    <b>A</b> if the chart should stay a chart — it is the smallest change, and the emptiness goes away because the buckets fit the window.
+    <b>D</b> if you want it right at both ends of a 209-product catalogue, where most products look like this one and a handful do not.
+    I would not pick B: a line that always rises flatters every product equally.
+  </div>
+</div>
+
+</div>
+</body>
+</html>

@@ -2075,44 +2075,42 @@ function pdSetSalesRange(days, btn) {
   pdLoadSales(_pdSalesId);
 }
 
-// ── The sales chart ─────────────────────────────────────────────────────────
-// Bars, not a smoothed line. Units sold per day is a discrete count and most
-// days are zero, so a curve invents a slope between "sold 3" and "sold none"
-// and reads as a row of spikes. A bar says what happened on that day and
-// nothing more. Flat fill, no gradient (§1.4 bans them), one baseline rule,
-// and the peak called out in words so the shape has a scale to be read against.
-function pdSalesChart(d) {
-  const rows = Array.isArray(d && d.daily) ? d.daily : [];
-  if (!rows.length) return '';
-  const max = Math.max(...rows.map(r => r.units || 0));
-  const per = { day: cuT('day', '天'), week: cuT('week', '周'), month: cuT('month', '月') }[d.granularity || 'day'];
-  if (!max) {
-    return `<div class="pd-chart-empty">${cuT('No sales in this window', '此区间暂无销量')}</div>`;
-  }
-  const W = 100, H = 34, n = rows.length;
-  const slot = W / n;
-  const bw = Math.max(0.6, Math.min(slot * 0.62, 3.2));
-  const bars = rows.map((r, i) => {
-    const u = r.units || 0;
-    const h = u ? Math.max(1.5, (u / max) * H) : 0;
-    const x = (i * slot) + (slot - bw) / 2;
-    if (!h) return '';
-    // Native title = a real tooltip with no popover machinery to keep in sync.
-    return `<rect x="${x.toFixed(2)}" y="${(H - h).toFixed(2)}" width="${bw.toFixed(2)}" height="${h.toFixed(2)}"`
-      + ` rx="${Math.min(bw / 2, 1).toFixed(2)}"><title>${escapeHtml(r.date)} · ${u}</title></rect>`;
-  }).join('');
-  const fmt = s => String(s || '').slice(5).replace('-', '/');   // 2026-08-23 → 08/23
-  return '<div class="pd-chart">'
-    + `<svg viewBox="0 0 ${W} ${H + 1}" preserveAspectRatio="none" aria-hidden="true">`
-    + `<line class="pd-chart-base" x1="0" y1="${H + 0.5}" x2="${W}" y2="${H + 0.5}"/>`
-    + bars
-    + '</svg>'
-    + '<div class="pd-chart-x">'
-    +   `<span>${escapeHtml(fmt(rows[0].date))}</span>`
-    +   `<span class="pd-chart-peak">${cuT('peak', '峰值')} ${max} / ${per}</span>`
-    +   `<span>${escapeHtml(fmt(rows[rows.length - 1].date))}</span>`
-    + '</div>'
-    + '</div>';
+// ── The sales card's context line ────────────────────────────────────────────
+// There is no chart. A product that sells a handful of times a month — which
+// is most of this catalogue — gave a daily series that was ~83% empty, and
+// bucketing it only moved the problem. These two facts are what the shape was
+// standing in for: has it sold recently, and does it sell steadily or once in
+// a while. Reports is the page built for time series.
+// Dates are the window's own days (GZ-local, from the server), so this compares
+// them as plain YYYY-MM-DD keys rather than reconstructing a timezone.
+function pdSalesWhen(iso) {
+  if (!iso) return '';
+  const now = new Date(Date.now() + 8 * 3600 * 1000);
+  const key = d => d.toISOString().slice(0, 10);
+  if (iso === key(now)) return cuT('today', '今天');
+  if (iso === key(new Date(now.getTime() - 86400000))) return cuT('yesterday', '昨天');
+  const days = Math.round((Date.parse(key(now)) - Date.parse(iso)) / 86400000);
+  if (days > 1 && days <= 30) return cuT(days + ' days ago', days + ' 天前');
+  const d = new Date(iso + 'T00:00:00Z');
+  const mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.getUTCMonth()];
+  return cuT(mon + ' ' + d.getUTCDate(), (d.getUTCMonth() + 1) + '月' + d.getUTCDate() + '日');
+}
+function pdSalesContext(d) {
+  const n = Number(d.selling_days || 0);
+  if (!n) return cuT('No sales in this window', '此区间暂无销量');
+  const when = pdSalesWhen(d.last_sale);
+  const days = n === 1
+    ? cuT('1 selling day', '1 天有销量')
+    : cuT(n + ' selling days', n + ' 天有销量');
+  return when
+    ? cuT('Last sale ' + when, '最近售出 ' + when) + ' · ' + days
+    : days;
+}
+// The range belongs in the card's own title, so the numbers under it are never
+// read against the wrong window once the chips scroll out of view.
+function pdSalesRangeLabel() {
+  if (_pdSalesDays === 'all') return cuT('Sales · all time', '销量 · 全部时间');
+  return cuT('Sales · last ' + _pdSalesDays + ' days', '销量 · 最近 ' + _pdSalesDays + ' 天');
 }
 
 async function pdLoadSales(id) {
@@ -2124,8 +2122,8 @@ async function pdLoadSales(id) {
   const mySeq = ++_pdSalesSeq;
   const setText = (elId, v) => { const n = document.getElementById(elId); if (n) n.textContent = v; };
   setText('pd-sales-units', '…'); setText('pd-sales-revenue', '…'); setText('pd-sales-rank', '…');
-  const spark = document.getElementById('pd-sales-spark');
-  if (spark) spark.innerHTML = '';
+  setText('pd-sales-title', pdSalesRangeLabel());
+  setText('pd-sales-context', '');
   let j;
   try {
     const r = await fetch('/api/retail-admin/products/' + id + '/sales?days=' + _pdSalesDays, { credentials: 'same-origin' });
@@ -2134,13 +2132,14 @@ async function pdLoadSales(id) {
   if (mySeq !== _pdSalesSeq) return; // a newer range click superseded this fetch
   if (!j || !j.success) {
     setText('pd-sales-units', '—'); setText('pd-sales-revenue', '—'); setText('pd-sales-rank', '—');
+    setText('pd-sales-context', cuT('Couldn’t load sales', '无法加载销量'));
     return;
   }
   const d = j.data;
   setText('pd-sales-units', Number(d.units || 0).toLocaleString());
   setText('pd-sales-revenue', '¥' + Number(d.revenue || 0).toLocaleString(undefined, { maximumFractionDigits: 0 }));
   setText('pd-sales-rank', d.rank ? ('#' + d.rank + ' / ' + d.total_products) : cuT('No sales', '暂无销量'));
-  if (spark) spark.innerHTML = pdSalesChart(d);
+  setText('pd-sales-context', pdSalesContext(d));
 }
 
 // Docked editor visibility — pdShowDocked reveals the editor in the right

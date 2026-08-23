@@ -4495,7 +4495,7 @@
                not-yet-saved product (pdLoadSales(null)). ═══ -->
           <section class="pd-card pd-sales-card" id="pd-sales-card" style="display:none;">
             <div class="pd-card-h pd-sales-head">
-              <span>Sales · 销量</span>
+              <span id="pd-sales-title" data-no-i18n>Sales · 销量</span>
               <div class="pd-sales-chips" id="pd-sales-chips">
                 <button type="button" class="pd-chip" onclick="pdSetSalesRange(7, this)">7d</button>
                 <button type="button" class="pd-chip pd-chip-active" onclick="pdSetSalesRange(30, this)">30d</button>
@@ -4511,7 +4511,12 @@
               <div class="pd-sales-kpi"><div class="v" id="pd-sales-revenue">—</div><div class="l">revenue · 营业额</div></div>
               <div class="pd-sales-kpi"><div class="v" id="pd-sales-rank">—</div><div class="l">rank · 排名</div></div>
             </div>
-            <div id="pd-sales-spark" class="pd-sales-spark"></div>
+            <!-- No chart. This product sells a handful of times a month, like
+                 most of the catalogue, so a daily series was ~83% empty by
+                 construction and no styling fixed that. These two facts —
+                 when it last sold, and on how many days — are what the shape
+                 was being asked for anyway. Reports owns time series. -->
+            <div id="pd-sales-context" class="pd-sales-context" data-no-i18n></div>
           </section>
 
           <!-- ═══ Focused panes — Basics · Stock · Page · Details. Every field
