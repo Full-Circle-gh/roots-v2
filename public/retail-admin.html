@@ -4656,12 +4656,17 @@
             <!-- Sizes live with Stock; bundles, add-ons and options are the
                  "sell it in more ways" group and carry their own heading on the
                  full page, so the two have separate jump targets from the dock. -->
-            <div class="pd-pp-sech" data-pp-only="1">Sizes · 规格</div>
+            <!-- One section, four rows. Sizes and the three "more ways" rows are
+                 the SAME component rendered four times — same box, same toggle,
+                 same title-and-summary line — so two headings made them look
+                 like two kinds of thing. They share one grid now, which is also
+                 what lets them sit two-up and lets an open row take the full
+                 width; split across two containers neither could.
+                 #pd-sec-sizes stays the id: the dock's summary rows jump here
+                 by it, and so does pdExpand('sizes'|'more'). -->
+            <div class="pd-pp-sech" data-pp-only="1">How it's sold · 售卖方式</div>
             <div class="pe-rows pdb-belowgrid pdb-vgrid pd-heavy" id="pd-sec-sizes">
             <div id="pd-variants" class="pd-variants"></div>
-            </div>
-            <div class="pd-pp-sech" id="pd-sech-more" data-pp-only="1">Sell it in more ways · 更多售卖方式</div>
-            <div class="pe-rows pdb-belowgrid pdb-vgrid pd-heavy" id="pd-sec-more">
             <div id="pd-bundle-product" class="pd-variants"></div>
             <div id="pd-bundle" class="pd-variants"></div>
             <div id="pd-options" class="pd-variants"></div>
@@ -10885,11 +10890,16 @@
       </div>
       <div class="mt-tablewrap">
         <table id="mt-products-table">
+          <!-- Plain percentages only: under table-layout:fixed a math function
+               on a col width is ignored and the column silently goes auto. -->
+          <colgroup><col style="width:34%"><col style="width:33%"><col style="width:33%"></colgroup>
           <thead>
             <tr>
-              <th style="width:38%">Product · 商品</th>
-              <th id="mt-th-store-0" style="width:31%">Tianhe delivery · 天河外卖</th>
-              <th id="mt-th-store-1" style="width:31%">Yuexiu instant · 越秀闪购</th>
+              <th>Product · 商品</th>
+              <!-- Filled from the store list by mtLoadStores, so the column is
+                   named whatever the store is called, in the live language. -->
+              <th id="mt-th-store-0" data-no-i18n></th>
+              <th id="mt-th-store-1" data-no-i18n></th>
             </tr>
           </thead>
           <tbody id="mt-products-body" data-no-i18n></tbody>
@@ -11227,9 +11237,10 @@
            rather than take a secondary. Push all stock sits by the tabs. -->
     </div>
 
-    <!-- One card per store, from /eleme/status.stores. A store is blocked when
-         it cannot push at all: no shop id linked, or no saved login session. -->
-    <div class="el-stores" id="el-stores"></div>
+    <!-- Three tiles and, only while a store needs a person, one notice.
+         Painted by elRenderHead() from /eleme/status.stores. -->
+    <div class="el-tiles" id="el-tiles"></div>
+    <div id="el-notice"></div>
 
     <div class="el-tabs" role="tablist">
       <button id="el-tab-products" class="el-tab active" role="tab" onclick="elView('products')">
@@ -11243,8 +11254,12 @@
     </div>
 
     <div id="el-view-products" class="el-view">
-      <div class="pa-toolbar">
-        <input id="el-search" type="text" data-ph-en="Search products" data-ph-cn="搜索商品" placeholder="Search products" oninput="elFilterProducts()">
+      <div class="el-chips" id="el-chips" data-no-i18n></div>
+      <div class="el-tools">
+        <select class="el-sel" id="el-store-filter" data-no-i18n onchange="elSetStore(this.value)"></select>
+        <input class="el-search" id="el-search" type="text"
+               data-ph-en="Search product, SKU or listing name…" data-ph-cn="搜索商品、货号或饿了么商品名…"
+               placeholder="Search product, SKU or listing name…" oninput="elFilterProducts()">
       </div>
       <details class="el-how">
         <summary>How matching works · 匹配原理</summary>
@@ -11261,14 +11276,13 @@
       <div id="el-catalogue-caption" class="el-cap" data-no-i18n></div>
 
       <div class="el-tablewrap">
-        <table id="el-products-table" class="pa-table">
-          <thead>
-            <tr>
-              <th>Product · 商品</th>
-              <th>SKU · 货号</th>
-              <th id="el-th-stores">Sync per store · 各门店同步</th>
-            </tr>
-          </thead>
+        <table id="el-products-table">
+          <!-- colgroup + head are rendered from the store list (elRenderTableHead)
+               so the table follows however many stores are active. Plain
+               percentages only: under table-layout:fixed a math function on a
+               col width is silently ignored and the column goes auto. -->
+          <colgroup id="el-colgroup"></colgroup>
+          <thead><tr id="el-headrow"></tr></thead>
           <tbody id="el-tbody" data-no-i18n></tbody>
         </table>
       </div>

@@ -4213,6 +4213,22 @@ db.exec(`
   );
 `);
 
+// Columns added after that table shipped. meituan_sku / meituan_spu_id /
+// meituan_sku_id were created by a one-off catalog script and never declared
+// here, so a fresh tenant DB went without them while the live one had them.
+//
+// meituan_sku_id + meituan_spec are the operator's answer to "which 规格 on this
+// listing is this product?". A listing can hold several (the sorbet's pack
+// counts, the hand soap's scents) and Meituan gives each its own stock; without
+// a choice the driver writes the same number to all of them, so three Roots
+// variants sharing one listing all read the same count. The id is the stock
+// target; the label is cached for the admin row and as a fallback match when a
+// listing edit re-issues sku ids.
+addColumn('meituan_product_map', 'meituan_sku',    'TEXT');
+addColumn('meituan_product_map', 'meituan_spu_id', 'TEXT');
+addColumn('meituan_product_map', 'meituan_sku_id', 'TEXT');
+addColumn('meituan_product_map', 'meituan_spec',   'TEXT');
+
 // Queue of stock changes to push to Meituan. Written by retail.js whenever
 // retail_store_stock is updated; consumed by the meituan-daemon process.
 db.exec(`

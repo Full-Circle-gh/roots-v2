@@ -3166,10 +3166,11 @@
   #pd-editor.pd-fullpage .pdb-grid > .pd-pp-sech:first-child { margin-top: 0; }
   /* Jump targets clear the sticky topbar. */
   #pd-editor.pd-fullpage .pd-pane,
-  #pd-sec-sizes, #pd-sec-more { scroll-margin-top: 76px; }
-  /* Sizes is one block, not a pair — the 2-up rule the other vgrid wants would
-     strand it in half the row. Two ids to outrank the container query. */
-  #pd-editor #pd-sec-sizes { grid-template-columns: 1fr; }
+  #pd-sec-sizes { scroll-margin-top: 76px; }
+  /* Sizes used to be pinned to one column because it was a single box in a
+     grid built for pairs — on its own it would have been stranded in half a
+     row. It now shares that grid with the other three, so the pin comes off
+     and the pairs are real. */
   /* Docked, Sourcing has stepped out of the Stock grid and left "Stock &
      status" alone in a 7-of-12 track. Let it take the whole row rather than
      sit beside five columns of nothing. */
@@ -3250,7 +3251,6 @@
   /* "Sell it in more ways" keeps its heading, sized to the column rather than
      to a page-width section. */
   #pd-editor .pd-pp-side > .pd-pp-sech { font-size: 15px; margin: 4px 2px 0; }
-  #pd-editor .pd-pp-side > #pd-sec-more { grid-template-columns: 1fr; margin-top: 0; }
   /* Sales at 340px: three numbers across is too tight, two rows of two is not. */
   #pd-editor .pd-pp-side .pd-sales-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
   /* Duplicate · Version history · Delete, stacked full-width rather than a row
@@ -3267,10 +3267,14 @@
      something in a 12-track grid are neutralised so none of them can conjure an
      implicit column here. */
   .pd-pp-mount #pd-editor .pu-editor-body .pdb-grid,
-  .pd-pp-mount #pd-editor .pu-editor-body .pdb-grid-auto,
-  .pd-pp-mount #pd-editor .pu-editor-body .pdb-vgrid {
+  .pd-pp-mount #pd-editor .pu-editor-body .pdb-grid-auto {
     grid-template-columns: minmax(0, 1fr);
   }
+  /* .pdb-vgrid is deliberately NOT in that list. Those are the four toggle
+     rows of "How it's sold", and two-up is what the component was drawn for —
+     the open one still spans the full width. This is one section with four
+     rows in it, not two cards abreast under a heading that owns one of them,
+     which is the thing that made the page read as three columns. */
   .pd-pp-mount #pd-editor .pu-editor-body [class*="pdb-c"] { grid-column: 1 / -1; }
   /* Fields stay two abreast — at the column's full width auto-fit would put
      three on a line, and a form reads worse the wider its rows get. */
@@ -5582,11 +5586,6 @@
   .mt-search::placeholder { color: var(--td-text2); }
 
   /* ── Table ──────────────────────────────────────────────────────────────── */
-  .mt-tablewrap { border: 1px solid var(--td-border); border-radius: 14px; overflow: hidden; background: var(--td-surface); }
-  #mt-products-table { width: 100%; border-collapse: collapse; }
-  #mt-products-table thead th { background: var(--td-header); color: var(--td-text); font: 500 13px var(--f-sans); letter-spacing: 0; text-transform: none; text-align: left; padding: 8px 16px; border: 0; }
-  #mt-products-table td { padding: 16px; border-top: 1px solid var(--td-border); border-bottom: 0; vertical-align: top; font-size: 15px; color: var(--td-text); }
-  #mt-products-table tbody tr:hover { background: var(--td-raised); }
   .mt-pcell { display: flex; gap: 16px; }
   .mt-thumb { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; border: 1px solid var(--td-border); flex: none; background: var(--td-raised); }
   .mt-thumb-ph { width: 40px; height: 40px; border-radius: 8px; background: var(--td-raised); border: 1px solid var(--td-border); flex: none; }
@@ -5598,8 +5597,24 @@
   .mt-name-input::placeholder { color: var(--td-text2); }
   .mt-sub { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin-top: 8px; }
   .mt-sub b { font-weight: 500; color: var(--td-text); }
-  .mt-link { color: var(--td-text); text-decoration: underline; text-underline-offset: 2px; }
-  .mt-link:hover { color: var(--td-dusk); }
+
+  /* Which 规格 of a shared listing a product is. background-COLOR, never the
+     `background` shorthand, and the chevron declared in full — the shorthand
+     resets repeat/position and the global select rule then tiles its arrow
+     across the width (the Add-bundle dialog bug, css:5546). Amber until it is
+     answered: an unanswered one is writing the same count to every option. */
+  .mt-spec {
+    display: block; width: 100%; margin-top: 8px;
+    font: 400 15px var(--f-sans); color: var(--td-text);
+    background-color: var(--td-surface);
+    border: 1px solid var(--td-border); border-radius: 8px;
+    padding: 8px 48px 8px 16px;
+    appearance: none; -webkit-appearance: none; cursor: pointer;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2358606E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat: no-repeat; background-position: right 16px center;
+  }
+  .mt-spec.warn { border-color: var(--td-amber); }
+
   .mt-cell-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
   .mt-empty { padding: 24px; text-align: center; font: 400 15px var(--f-sans); color: var(--td-text2); }
 
@@ -5628,10 +5643,6 @@
   .mt-pill.ok  { background: var(--td-sage-tint);  color: var(--td-sage-ink); }
   .mt-pill.att { background: var(--td-amber-tint); color: var(--td-amber-ink); }
   .mt-pill.off { background: var(--td-raised);     color: var(--td-text2); }
-
-  /* Size picker on a multi-size listing, and the flag when none is chosen. */
-  .mt-size { margin-top: 8px; font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; }
-  .mt-size.warn { border-color: var(--td-amber); }
 
   /* ── Views ──────────────────────────────────────────────────────────────── */
   .mt-view[hidden] { display: none; }
@@ -5718,7 +5729,7 @@
      as one line of content, not as a row of two competing controls. */
   .mt-comprow .rm {
     appearance: none; border: none; background: none; cursor: pointer; flex: none;
-    color: var(--td-text2); padding: 6px; border-radius: 8px; line-height: 0;
+    color: var(--td-text2); padding: 8px; border-radius: 8px; line-height: 0;
     transition: background 200ms cubic-bezier(.16, 1, .3, 1), color 200ms cubic-bezier(.16, 1, .3, 1);
   }
   .mt-comprow .rm svg { width: 16px; height: 16px; display: block; }
@@ -5753,7 +5764,7 @@
   /* Ghost close, per .cs-modal-x. A bordered .btn made ✕ compete with Save. */
   .mt-dlg-x {
     margin-left: auto; appearance: none; border: none; background: none; cursor: pointer;
-    color: var(--td-text2); padding: 6px; border-radius: 8px; line-height: 0; flex: none;
+    color: var(--td-text2); padding: 8px; border-radius: 8px; line-height: 0; flex: none;
     transition: background 200ms cubic-bezier(.16, 1, .3, 1), color 200ms cubic-bezier(.16, 1, .3, 1);
   }
   .mt-dlg-x svg { width: 18px; height: 18px; display: block; }
@@ -5803,6 +5814,36 @@
   .mt-tinylink { background: none; border: none; padding: 0; cursor: pointer; font: 400 13px var(--f-sans); color: var(--td-text2); text-decoration: underline; }
   .mt-tinylink:hover { color: var(--td-text); }
 
+
+  /* ── Both channel tables follow the Orders table's rules (retail-admin.html
+     :278). Two of them are load-bearing:
+
+     table-layout: fixed + a <colgroup> of PLAIN PERCENTAGES. Auto layout let
+     the columns sprawl — a short SKU sat marooned in a canyon of its own. And
+     the percentages must stay plain: under table-layout:fixed a math function
+     on a <col> width is silently IGNORED and the column falls back to auto.
+
+     A sticky band at top:56px — the exact topbar height, so it pins flush with
+     no gap. That needs NO overflow on the wrapper (overflow:hidden on an
+     ancestor kills position:sticky), which is why the wrapper below is a plain
+     bordered box and the band is square: Orders makes the same trade, and a
+     rounded band pinned under the topbar reads as a floating pill. */
+  .mt-tablewrap, .el-tablewrap { border: 1px solid var(--td-border); background: var(--td-surface); }
+  #mt-products-table, #el-products-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  #mt-products-table thead th, #el-products-table thead th {
+    position: sticky; top: 56px; z-index: 5;
+    background: var(--td-header); color: var(--td-text);
+    font: 500 13px var(--f-sans); letter-spacing: 0; text-transform: none; text-align: left;
+    padding: 8px 16px; border-bottom: 1px solid var(--td-border); border-radius: 0; white-space: nowrap;
+  }
+  #mt-products-table td, #el-products-table td {
+    padding: 16px; border-top: 1px solid var(--td-border); border-bottom: 0;
+    vertical-align: top; font-size: 15px; color: var(--td-text);
+  }
+  #mt-products-table tbody tr:hover, #el-products-table tbody tr:hover { background: var(--td-raised); }
+  /* Long listing names must wrap inside their fixed column, never widen it. */
+  #mt-products-table td, #el-products-table td { overflow-wrap: anywhere; }
+
   /* ══ Eleme channel page ══════════════════════════════════════════════════
      Ported onto the same pattern as the Meituan tab. The page previously had
      ZERO css rules — every colour and size lived in an inline style attribute,
@@ -5850,24 +5891,66 @@
   .el-chan input:checked::after { left: 19px; }
   .el-chan input:focus-visible { outline: 2px solid var(--td-sage); outline-offset: 2px; }
 
-  .el-stores { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 24px; margin: 0 0 32px; }
-  .el-store { border: 1px solid var(--td-border); border-radius: 14px; padding: 24px; background: var(--td-surface); }
-  .el-store.blocked { border-color: var(--td-amber); background: var(--td-surface); }
-  .el-store .sh { display: flex; align-items: baseline; gap: 8px; }
-  .el-store .sdot { width: 8px; height: 8px; border-radius: 999px; background: var(--td-sage); flex: none; align-self: center; }
-  .el-store.blocked .sdot { background: var(--td-amber); }
-  .el-store .sname { font: 500 18px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); }
-  .el-store .smode { margin-left: auto; font: 400 13px var(--f-sans); color: var(--td-text2); }
-  .el-store .sstate { font: 400 15px/1.6 var(--f-sans); margin-top: 8px; color: var(--td-sage-ink); }
-  .el-store.blocked .sstate { color: var(--td-amber-ink); }
-  .el-store .sfacts { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--td-border); }
-  .el-store.blocked .sfacts { border-top-color: var(--td-border); }
-  .el-store .sf .k { font: 500 13px var(--f-sans); color: var(--td-text2); }
-  .el-store .sf .v { font: 400 15px var(--f-sans); color: var(--td-text); font-variant-numeric: tabular-nums; }
-  .el-store .sf .v.warn { color: var(--td-amber-ink); }
-  .el-store .sact { margin-top: 16px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .el-store .sact code { display: inline-block; font: 400 13px var(--f-sans); color: var(--td-text2); background: var(--td-raised); border-radius: 8px; padding: 8px 16px; }
-  .el-store .sact .inp { max-width: 160px; }
+  /* ── Tile row + one notice, the same shape the Meituan page uses (which is
+     the shape the Orders page uses). Replaces the store cards: the tiles
+     headline the numbers an operator acts on and split each per store
+     underneath, and health is not permanent furniture — the notice exists only
+     while a store needs a person. */
+  .el-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 32px; }
+  .el-tile { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px; padding: 24px; }
+  .el-tile .k { font: 400 13px var(--f-sans); color: var(--td-text2); }
+  .el-tile .v { font: 500 30px/1.2 var(--f-sans); letter-spacing: -.02em; margin-top: 8px; color: var(--td-text); font-variant-numeric: tabular-nums; }
+  .el-tile .v.att { color: var(--td-amber-ink); }
+  .el-tile .s { font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 8px; font-variant-numeric: tabular-nums; }
+  @media (max-width: 900px) { .el-tiles { grid-template-columns: 1fr; } }
+
+  .el-notice { display: flex; align-items: center; gap: 16px; background: var(--td-surface); border: 1px solid var(--td-amber); border-radius: 14px; padding: 16px 24px; margin-bottom: 32px; }
+  .el-notice .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--td-amber); flex: none; }
+  .el-notice .m { flex: 1; min-width: 0; font: 400 15px/1.6 var(--f-sans); color: var(--td-text); }
+  .el-notice .m b { font-weight: 500; }
+  .el-notice .sub { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin-top: 4px; }
+  .el-notice .inp { max-width: 176px; }
+
+  /* Chip filters + toolbar, as on Meituan. "Needs a size" is Eleme-only and
+     earns its place: here a size CAN be targeted, so a multi-size listing with
+     none picked is a real gap rather than a note. */
+  .el-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .el-fchip { font: 400 13px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 999px; padding: 8px 16px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px; }
+  .el-fchip:hover { border-color: var(--td-text2); }
+  .el-fchip.on { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
+  .el-fchip .c { color: var(--td-text2); font-variant-numeric: tabular-nums; }
+  .el-fchip.on .c { color: var(--td-paper); opacity: .7; }
+
+  .el-tools { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+  .el-sel { appearance: none; -webkit-appearance: none; font: 400 15px var(--f-sans); color: var(--td-text);
+    border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 48px 8px 16px; cursor: pointer;
+    background-color: var(--td-surface);
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2358606E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat: no-repeat; background-position: right 24px center; }
+  .el-sel:focus-visible { outline: 2px solid var(--td-sage); outline-offset: 2px; }
+  .el-search { flex: 1 1 280px; font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; }
+  .el-search::placeholder { color: var(--td-text2); }
+
+  /* Table cells */
+  .el-pname { font-weight: 500; }
+  .el-pname .vl { font-weight: 400; color: var(--td-text2); }
+  .el-pmeta { font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 4px; }
+  .el-psku { display: inline-block; margin-top: 8px; font: 400 13px var(--f-sans); color: var(--td-text2); background: var(--td-raised); border: 1px solid var(--td-border); border-radius: 8px; padding: 0 8px; font-variant-numeric: tabular-nums; }
+  .el-pill { display: inline-flex; align-items: center; gap: 8px; font: 500 13px var(--f-sans); border-radius: 999px; padding: 0 8px; }
+  .el-pill .d { width: 8px; height: 8px; border-radius: 999px; background: currentColor; flex: none; }
+  .el-pill.ok  { background: var(--td-sage-tint);  color: var(--td-sage-ink); }
+  .el-pill.att { background: var(--td-amber-tint); color: var(--td-amber-ink); }
+  .el-pill.off { background: var(--td-raised);     color: var(--td-text2); }
+  .el-cellsub { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin-top: 8px; }
+  .el-empty { padding: 24px; text-align: center; font: 400 15px var(--f-sans); color: var(--td-text2); }
+  /* One store per cell now, so no in-cell separator is needed. */
+  .el-cellhd { display: flex; align-items: center; gap: 8px; }
+  .el-cellhd .nm { font: 400 13px var(--f-sans); color: var(--td-text2); }
+
+  /* §1.3: body is lh 1.6, 1.7 for CJK runs — half of every label here is 中文. */
+  html[data-ui-lang="cn"] #tab-eleme { line-height: 1.7; }
+  html[data-ui-lang="cn"] #tab-eleme .el-status,
+  html[data-ui-lang="cn"] #tab-eleme .el-notice .m { line-height: 1.7; }
 
   .el-tabs { display: flex; align-items: center; gap: 24px; border-bottom: 1px solid var(--td-border); margin: 0 0 16px; }
   .el-tab { appearance: none; background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 0; font: 500 13px var(--f-sans); color: var(--td-text2); cursor: pointer; display: flex; align-items: center; gap: 8px; }
@@ -5884,17 +5967,26 @@
   .el-how summary { cursor: pointer; }
   .el-how > div { margin-top: 8px; padding: 16px 24px; background: var(--td-raised); border: 1px solid var(--td-border); border-radius: 14px; max-width: 70ch; }
   .el-cap { font: 400 13px var(--f-sans); color: var(--td-text2); margin: 0 0 16px; font-variant-numeric: tabular-nums; }
-  .el-tablewrap { overflow-x: auto; border: 1px solid var(--td-border); border-radius: 14px; }
-  #el-products-table { width: 100%; border-collapse: collapse; }
-  #el-products-table thead th { background: var(--td-header); color: var(--td-text); font: 500 13px var(--f-sans); letter-spacing: 0; text-transform: none; text-align: left; border-bottom: 1px solid var(--td-border); padding: 10px 16px; }
-  #el-products-table td { padding: 16px; font-size: 15px; border-bottom: 1px solid var(--td-border); }
 
   /* The size picker on a multi-size listing, and the flag for one with no size
      chosen — the only state on this table that needs a person. */
-  .el-nameinp { width: 168px; font: 400 13px var(--f-sans); }
-  .el-size { width: 148px; font: 400 13px var(--f-sans); }
+  .el-nameinp { display: block; width: 100%; margin-top: 8px; font: 400 15px var(--f-sans); }
+  .el-size { display: block; width: 100%; margin-top: 8px; font: 400 15px var(--f-sans); }
   .el-size.warn { border-color: var(--td-amber); }
   .el-guess { font: 500 13px var(--f-sans); color: var(--td-amber-ink); }
+
+  #el-products-table .toggle-label { display: inline-flex; align-items: center; opacity: 0; transition: opacity 200ms cubic-bezier(.16,1,.3,1); }
+  #el-products-table tr:hover .toggle-label,
+  #el-products-table .toggle-label:focus-within,
+  #el-products-table .toggle-label:has(input:not(:checked)) { opacity: 1; }
+  #el-products-table .toggle-label input { appearance: none; -webkit-appearance: none; margin: 0; width: 32px; height: 18px; border-radius: 999px; background: var(--td-border); border: none; position: relative; cursor: pointer; transition: background 200ms cubic-bezier(.16,1,.3,1); flex: none; }
+  #el-products-table .toggle-label input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 999px; background: var(--td-surface); transition: left 200ms cubic-bezier(.16,1,.3,1); }
+  #el-products-table .toggle-label input:checked { background: var(--td-sage); }
+  #el-products-table .toggle-label input:checked::after { left: 17px; }
+  @media (prefers-reduced-motion: reduce) {
+    #el-products-table .toggle-label, #el-products-table .toggle-label input,
+    #el-products-table .toggle-label input::after { transition: none; }
+  }
 
   .el-act-h { font: 500 18px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); margin: 0 0 16px; }
   .el-act-h + .el-log { margin-bottom: 32px; }
