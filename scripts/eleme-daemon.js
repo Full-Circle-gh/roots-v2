@@ -260,7 +260,13 @@ async function processStockQueue(stores) {
   }
 }
 
-// Heal rows stranded in 'processing' by a mid-batch crash/restart.
+// Heal rows stranded in 'processing' by a mid-batch crash/restart. Called at
+// startup AND periodically from the main loop (see ORPHAN_SWEEP_MS below) —
+// startup-only isn't enough: this box runs several other daemons and deploys
+// land constantly, and a crash that happens well after boot (confirmed live,
+// 2026-08-23 — an unrelated concurrent deploy bounced pm2 mid-batch) leaves
+// rows stuck in 'processing' with NO further restart to trigger recovery,
+// silently invisible to both the retry query and the terminal-error path.
 function recoverOrphanedProcessing() {
   let stale;
   try {
@@ -290,14 +296,22 @@ function recoverOrphanedProcessing() {
   if (stale.length) console.log(`[eleme-daemon] startup orphan recovery: ${stale.length} row(s)`);
 }
 
+const ORPHAN_SWEEP_MS = 5 * 60_000; // matches the "stale after 5 min" threshold above
+let lastOrphanSweep = 0;
+
 // ── Main loop ─────────────────────────────────────────────────────────────────
 
 async function main() {
   console.log('[eleme-daemon] starting (browser automation — see ELEME_BROWSER_RECON.md)');
   console.log('[eleme-daemon] order polling not wired yet — stock push only, until a live order is captured');
   recoverOrphanedProcessing();
+  lastOrphanSweep = Date.now();
 
   while (true) {
+    if (Date.now() - lastOrphanSweep >= ORPHAN_SWEEP_MS) {
+      recoverOrphanedProcessing();
+      lastOrphanSweep = Date.now();
+    }
     if (!elemeEnabled()) { await sleep(jitter(QUEUE_CHECK_MS)); continue; }
 
     const configs = getStoreConfigs();
