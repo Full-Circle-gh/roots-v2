@@ -3347,7 +3347,11 @@
      it finally follows the theme instead of staying light in a dark admin. */
   .pd-stock-matrix { width: 100%; border-collapse: collapse; font-size: 15px; }
   .pd-stock-matrix th, .pd-stock-matrix td { padding: 6px 0 6px 12px; text-align: right; }
-  .pd-stock-matrix th:first-child, .pd-stock-matrix td:first-child { padding-left: 0; text-align: left; }
+  /* The leading cell hugs the card edge whatever it is. Left-alignment belongs
+     to the variant-name cell alone — with a single variant there is no name
+     column, and the first STORE column must stay right-aligned with its box. */
+  .pd-stock-matrix tr > *:first-child { padding-left: 0; }
+  .pd-stock-matrix th.vh, .pd-stock-matrix td.vh { text-align: left; }
   .pd-stock-matrix tr:first-child th {
     font-size: 13px; font-weight: 400; letter-spacing: 0; text-transform: none;
     color: var(--td-text2); font-family: var(--f-sans); padding-bottom: 8px;
@@ -3362,13 +3366,18 @@
   }
   .pd-stock-matrix tr:first-child th.vh { color: var(--td-text2); font-weight: 400; }
   /* Sized to the number it holds, not stretched to the column. */
-  .pd-stock-matrix input {
+  /* Scoped and typed so it beats `#pd-editor .field input[type=number]`, which
+     sets width:100% for the ordinary form fields and was stretching every count
+     box across its column — pushing the Total column off the card edge. That
+     rule is right for name and price, so this is a real context override, not a
+     duplicate to delete. */
+  #pd-editor .pd-stock-matrix input[type=number] {
     width: 82px; box-sizing: border-box; height: 36px; padding: 0 10px;
     border: 1px solid var(--td-border); border-radius: 8px;
     background: var(--td-paper); color: var(--td-text);
     font-size: 15px; text-align: right; font-variant-numeric: tabular-nums;
   }
-  .pd-stock-matrix input:focus { outline: none; border-color: var(--td-text); }
+  #pd-editor .pd-stock-matrix input[type=number]:focus { outline: none; border-color: var(--td-text); }
   .pd-stock-matrix td.mtot, .pd-stock-matrix th.mtot {
     color: var(--td-text); font-weight: 500; min-width: 44px; font-variant-numeric: tabular-nums;
   }
