@@ -3128,6 +3128,16 @@
   /* The footer is empty on the page — the save status went up to the header
      and the record's actions went to the foot of the index. */
   .pd-pp-mount #pd-editor .pu-editor-foot { display: none; }
+  /* Details holds exactly the four cards that move to the second column
+     (shipping, flags, free-of, notes), so on the page the pane is an empty grid
+     under a heading for nothing. Docked it is a real tab and stays. */
+  #pd-editor.pd-fullpage .pd-pane[data-pane="details"] { display: none; }
+  /* Photos, now the lower half of the Basics card rather than a card beside it:
+     drop its own card chrome and separate it with a hairline instead. */
+  #pd-editor.pd-fullpage .pdb-card > #pd-sec-photos {
+    border: 0; border-radius: 0; background: none; padding: 0;
+    border-top: 1px solid var(--td-border); padding-top: 18px; margin-top: 4px;
+  }
   /* Sales is the one block on the page you cannot change. On Paper it looked
      like the cards around it that you can; on the raised surface it reads as
      something reported to you. */
@@ -3178,50 +3188,6 @@
      so a 1512 window leaves about this much. The old cap was right for a single
      column of form and would squeeze the middle one to nothing. */
   .pd-pagestage { max-width: 1220px; margin: 0 auto; scroll-margin-top: 76px; }
-  /* The stage owns two columns — the index and everything else. The third
-     column (the side rail) is cut INSIDE the editor, one level down, because
-     its blocks have to stay within `#pd-editor` to keep their styling. */
-  .pd-pp-grid {
-    display: grid; grid-template-columns: 180px minmax(0, 1fr);
-    gap: 32px; align-items: start;
-  }
-  .pd-pp-nav { position: sticky; top: 76px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .pd-nav-i {
-    display: block; width: 100%; text-align: left;
-    padding: 7px 10px; border: 0; border-radius: 8px; background: none;
-    font: 400 15px var(--f-sans); color: var(--td-text2); cursor: pointer;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  }
-  .pd-nav-i:hover { color: var(--td-text); background: rgba(var(--td-heat-rgb), .04); }
-  .pd-nav-i.is-on { background: var(--td-raised); color: var(--td-text); font-weight: 500; }
-  .pd-nav-i:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 2px; }
-  /* Duplicate · Version history · Delete, moved into the foot of the index by
-     pdMoveFootActs(). Quiet full-width rows so they read as the tail of the
-     list rather than three buttons parked under it. */
-  .pd-pp-nav .pd-foot-acts {
-    flex-direction: column; align-items: stretch; gap: 2px;
-    margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--td-border);
-  }
-  .pd-pp-nav .pd-foot-acts .btn {
-    justify-content: flex-start; border-color: transparent; background: none;
-    padding: 7px 10px; font-weight: 400; color: var(--td-text2);
-  }
-  .pd-pp-nav .pd-foot-acts .btn:hover { background: rgba(var(--td-heat-rgb), .04); color: var(--td-text); }
-  /* Narrow: the index would eat a third of the width, so it goes — but the
-     record's actions live inside it, and hiding the whole <nav> would take
-     Duplicate, Version history and Delete off the page entirely. So the rows
-     go and the <nav> stays, ordered BELOW the form, which puts the actions
-     exactly where the footer would have put them. */
-  @media (max-width: 900px) {
-    .pd-pp-grid { grid-template-columns: minmax(0, 1fr); }
-    .pd-pp-nav { position: static; order: 2; }
-    #pd-pp-navrows { display: none; }
-    .pd-pp-nav .pd-foot-acts {
-      flex-direction: row; flex-wrap: wrap; gap: 8px;
-      margin-top: 0; padding-top: 20px;
-    }
-    .pd-pp-nav .pd-foot-acts .btn { border-color: var(--td-border); }
-  }
   .pd-pp-crumb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--td-text2); margin-bottom: 16px; }
   .pd-pp-crumb button {
     display: inline-flex; align-items: center; gap: 6px; padding: 0;
@@ -3231,18 +3197,72 @@
   .pd-pp-crumb button:hover { color: var(--td-text); }
   .pd-pp-sep { opacity: .5; }
   .pd-pp-here { color: var(--td-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .pd-pp-titlerow { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 18px; }
-  .pd-pp-title { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font: 500 24px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); min-width: 0; }
+  /* ── The page header ──────────────────────────────────────────────────────
+     Two rows on two columns, so the four things it carries line up instead of
+     floating: title over status line on the left, controls over save state on
+     the right, both right-hand cells aligned to the same edge as the column
+     below them. `align-items: baseline` on the top row sits the switch and the
+     Collapse button on the title's baseline rather than its box. */
+  .pd-pp-head {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline; column-gap: 24px; row-gap: 6px;
+    padding-bottom: 20px; margin-bottom: 28px;
+    border-bottom: 1px solid var(--td-border);
+  }
+  .pd-pp-title { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; font: 500 24px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); min-width: 0; }
   .pd-pp-alt { font-size: 15px; font-weight: 400; color: var(--td-text2); }
-  .pd-pp-acts { display: flex; align-items: center; gap: 14px; flex: none; }
-  /* Save status + shop switch, moved up here by pdMoveHeadState(). They read
-     left to right as state, state, exit. */
-  .pd-pp-state { display: flex; align-items: center; gap: 10px; }
-  .pd-pp-state:empty { display: none; }
+  .pd-pp-acts { display: flex; align-items: center; gap: 12px; flex: none; justify-self: end; }
+  .pd-pp-tags { display: flex; align-items: center; gap: 8px; }
+  .pd-pp-tags:empty { display: none; }
+  /* The status line: SKU, where it shows, price. Real values, read from the
+     form — never a description of the page. */
+  .pd-pp-sub { font-size: 15px; color: var(--td-text2); font-variant-numeric: tabular-nums; min-width: 0; }
+  .pd-pp-sub:empty { display: none; }
+  .pd-pp-savestate { justify-self: end; display: flex; align-items: center; }
   /* Inside the stage the editor is the page, not a card floating on it. */
   .pd-pp-mount #pd-editor {
     width: auto; height: auto; max-width: 100%; max-height: none;
     border: 0; background: none; border-radius: 0; box-shadow: none;
+    /* The short story, then the things you set once. The head and foot are
+       display:none here, so only .pu-editor-body and .pd-pp-side take a track. */
+    display: grid; grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 32px; align-items: start;
+  }
+  /* The second column. Sticky so it stays put while the form scrolls past it. */
+  #pd-editor .pd-pp-side { display: none; }
+  .pd-pp-mount #pd-editor .pd-pp-side {
+    display: flex; flex-direction: column; gap: 20px; min-width: 0;
+    position: sticky; top: 76px;
+  }
+  .pd-pp-mount #pd-editor .pd-pp-side:empty { display: none; }
+  /* Blocks authored as grid children are just cards in a column here; their
+     pdb-c* span classes are inert outside .pdb-grid. */
+  #pd-editor .pd-pp-side > .pdb-card,
+  #pd-editor .pd-pp-side > .pd-card,
+  #pd-editor .pd-pp-side > .pe-rows { width: 100%; }
+  /* "Sell it in more ways" keeps its heading, sized to the column rather than
+     to a page-width section. */
+  #pd-editor .pd-pp-side > .pd-pp-sech { font-size: 15px; margin: 4px 2px 0; }
+  #pd-editor .pd-pp-side > #pd-sec-more { grid-template-columns: 1fr; margin-top: 0; }
+  /* Sales at 340px: three numbers across is too tight, two rows of two is not. */
+  #pd-editor .pd-pp-side .pd-sales-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  /* Duplicate · Version history · Delete, stacked full-width rather than a row
+     that wraps into a ragged block at this width. */
+  #pd-editor .pd-pp-side .pd-foot-acts { flex-direction: column; align-items: stretch; gap: 8px; }
+  #pd-editor .pd-pp-side .pd-foot-acts .btn { justify-content: center; }
+  /* Under this the second column has no honest width left, so it drops under
+     the form. 1400 and not 1040: the query reads the VIEWPORT and the rail
+     spends 236px of it before this page sees a pixel. */
+  @media (max-width: 1400px) {
+    .pd-pp-mount #pd-editor { grid-template-columns: minmax(0, 1fr); }
+    .pd-pp-mount #pd-editor .pd-pp-side {
+      position: static;
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+  }
+  @media (max-width: 720px) {
+    .pd-pp-head { grid-template-columns: minmax(0, 1fr); }
+    .pd-pp-acts, .pd-pp-savestate { justify-self: start; }
   }
   .pd-pp-mount #pd-editor .pu-editor-body { overflow: visible; overscroll-behavior: auto; }
   .pd-pp-mount #pd-editor .pu-editor-head,
@@ -3268,6 +3288,67 @@
      the same thing about the same value — except the tag is the one you can
      act on, and it also carries Sold out and Bundle. Keep the tag. */
   #pd-pagestage #pd-pp-badge { display: none; }
+
+  /* These three groups (Shipping · Free of · Flags) used to carry their layout
+     as inline styles. It moved here so the side column can restyle them as
+     chips — which an inline declaration would have made impossible. These are
+     the DOCK's shape, reproducing exactly what the inline styles did, and they
+     sit ABOVE the chip block so the side column's equal-specificity rules win
+     on order rather than on !important. */
+  #pd-editor .pd-chipset { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+  #pd-editor .pd-chipset.pd-chipset-col { flex-direction: column; align-items: flex-start; gap: 9px; }
+
+  /* ── Set-once settings, as chips ──────────────────────────────────────────
+     Shipping, Free of and the product flags are thirteen checkboxes between
+     them. In a form column they cost as much page as the price does, and they
+     are set once when a product is created and then left alone. In the side
+     column they become pills: same inputs, same ids, same change handlers —
+     the checkbox is still what saves, it is just drawn as the pill instead of
+     sitting next to one.
+
+     Two things make this work and neither is decoration:
+       · the real <input> stays in the DOM (clipped, not display:none) so it is
+         still focusable, still keyboard-operable, and still dispatches change;
+       · :has(:checked) paints the ON state, so nothing has to be told when a
+         value flips — including a flip that came from a save, a revert or the
+         version history restoring an older product. */
+  #pd-editor .pd-pp-side .pd-chipset,
+  #pd-editor .pd-pp-side .pd-chipset.pd-chipset-col {
+    display: flex; flex-direction: row; flex-wrap: wrap;
+    align-items: center; gap: 8px;
+  }
+  #pd-editor .pd-pp-side .pd-chipset > label {
+    display: inline-flex; align-items: center; gap: 0;
+    height: 30px; padding: 0 12px; border-radius: 999px;
+    border: 1px solid var(--td-border); background: var(--td-surface);
+    font: 500 13px var(--f-sans); color: var(--td-text2);
+    cursor: pointer; user-select: none; white-space: nowrap;
+    transition: background .15s ease, border-color .15s ease, color .15s ease;
+  }
+  #pd-editor .pd-pp-side .pd-chipset > label:hover { border-color: var(--td-text2); color: var(--td-text); }
+  #pd-editor .pd-pp-side .pd-chipset > label:has(input:checked) {
+    background: var(--td-text); border-color: var(--td-text); color: var(--td-paper);
+  }
+  /* Clipped, not hidden — a display:none input leaves the chip unreachable by
+     keyboard, which would make this a picture of a control rather than one. */
+  /* !important earns its keep exactly once here: every one of these inputs
+     carries an inline `width:15px;height:15px`, and an inline declaration beats
+     any selector. Without it the raw checkbox goes on painting inside the pill.
+     Scoped to chips in the side column, so it cannot reach anything else. */
+  #pd-editor .pd-pp-side .pd-chipset > label > input[type=checkbox] {
+    position: absolute !important;
+    width: 1px !important; height: 1px !important;
+    margin: 0 !important; padding: 0 !important; border: 0 !important;
+    clip-path: inset(50%); overflow: hidden; appearance: none;
+  }
+  #pd-editor .pd-pp-side .pd-chipset > label:has(input:focus-visible) {
+    outline: 2px solid var(--td-dusk); outline-offset: 2px;
+  }
+  /* The little brass glyphs inside these labels were drawn to sit beside a
+     checkbox. Inside a filled pill they fight the fill and say nothing the
+     word does not. */
+  #pd-editor .pd-pp-side .pd-chipset > label > svg { display: none; }
+  #pd-editor .pd-pp-side .pd-chipset-cap { font-size: 13px; color: var(--td-text2); margin-top: 12px; }
 
   /* ── Dock summary rows — a fact and a way through to change it ───────────── */
   .pd-sumcard { border: 1px solid var(--td-border); border-radius: 14px; background: var(--td-surface); overflow: hidden; }
@@ -3296,7 +3377,6 @@
   #pd-sum-more { margin-top: 18px; }
 
   @media (max-width: 720px) {
-    .pd-pp-titlerow { flex-direction: column; gap: 12px; }
     .pd-pp-title { font-size: 20px; }
   }
 
