@@ -135,6 +135,18 @@ module.exports = [
     },
   },
 
+  // The PWA test drives a real browser and, unlike its siblings in
+  // scripts/test_mobile_*.js, passes its in-page probes as real arrow functions
+  // to page.evaluate() rather than as template strings. That is deliberate —
+  // the checks are short and readable that way — but it does put browser code
+  // in a Node file, so the handful of globals it touches are declared here.
+  {
+    files: ['scripts/test_mobile_pwa.js'],
+    languageOptions: {
+      globals: { document: 'readonly', window: 'readonly', location: 'readonly', navigator: 'readonly' },
+    },
+  },
+
   // Browser-served scripts (currently just the service worker).
   {
     files: ['public/**/*.js'],

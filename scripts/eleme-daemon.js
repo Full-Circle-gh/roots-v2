@@ -251,7 +251,11 @@ function logOrderShapes(storeCode, browser) {
     const snap = browser.orderRequestSnapshot ? browser.orderRequestSnapshot() : null;
     if (snap && Object.keys(snap).length) {
       shapeLogged[rqKey] = true;
-      logSync(storeCode, 'order_rpc_requests', 'ok', snap);
+      logSync(storeCode, 'order_rpc_requests', 'ok', {
+        params: snap,
+        responsesCaptured: browser._orderRpcResult ? Array.from(browser._orderRpcResult.keys()) : [],
+        responsesUnusable: browser._orderRpcSkip ? Object.fromEntries(browser._orderRpcSkip) : {},
+      });
       log(storeCode, `observed ${Object.keys(snap).length} order RPC request body/bodies → eleme_sync_log`);
     }
   }

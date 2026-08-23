@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <title>tacet · Sign in</title>
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="theme-color" content="#FBF9F4" />
 <link rel="icon" href="/tacet-favicon.svg" />
 
@@ -40,7 +40,12 @@
     font-family:var(--font); font-size:15px;
     -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
     display:flex; align-items:center; justify-content:center;
-    min-height:100%; padding:40px 20px;
+    /* Safe-area padding, because this page is not only a page: an expired
+       session inside the installed phone app (public/m.html) lands here, and
+       there the status bar is drawn OVER the app. A flat 40px is under the
+       notch on most recent handsets. */
+    min-height:100%;
+    padding:calc(env(safe-area-inset-top,0px) + 40px) 20px calc(env(safe-area-inset-bottom,0px) + 40px);
     transition:background .25s var(--ease), color .25s var(--ease);
   }
   html[data-lang=en] .cn{display:none;}
