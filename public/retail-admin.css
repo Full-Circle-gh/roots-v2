@@ -3351,9 +3351,18 @@
      With auto layout the columns negotiate for width and Total — the narrowest
      and last — is the one that loses and gets clipped. Reserving it means the
      count boxes give way instead, which is the right thing to sacrifice. */
-  .pd-stock-matrix { width: 100%; border-collapse: collapse; font-size: 15px; table-layout: fixed; }
+  /* width:auto, not 100%. Stretched to the card the table had to invent slack
+     somewhere, and it went to the empty leading column — pushing the boxes to
+     the far right, away from the Low-stock field directly beneath them. Sized
+     to its content the table sits left, so every control in the card shares one
+     left edge, and #pd-store-stocks scrolls if a fifth store ever arrives. */
+  .pd-stock-matrix { width: auto; border-collapse: collapse; font-size: 15px; table-layout: fixed; }
+  /* A store column is only as wide as the box it holds plus its padding, so
+     the heading sits directly over the box instead of floating at the far end
+     of a stretched column. The leading (variant-name) column takes its own
+     content and nothing more, so a single-variant product has no empty gutter. */
+  .pd-stock-matrix th.mstore, .pd-stock-matrix td.mstore { width: 102px; }
   .pd-stock-matrix th.mtot, .pd-stock-matrix td.mtot { width: 78px; }
-  .pd-stock-matrix th.vh { width: 30%; }
   /* Right padding on EVERY cell, including the last. It was 0, so the Total
      column ended exactly on the table edge — flush against the scroll
      container, which clipped the final pixel and read as a cut-off header. */

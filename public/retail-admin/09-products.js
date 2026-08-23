@@ -1770,16 +1770,18 @@ function pdRenderBundleStock(box, p) {
 function pdRenderStockMatrix(box, d) {
   const stores = d.stores, variants = d.variants, qty = d.qty || {};
   const multi = variants.length > 1;
-  // A single-variant product has no name to put in the first column, and an
-  // empty column still takes width — which is what pushed Total off the card
-  // edge. Drop the column entirely rather than heading it with nothing.
-  const head = '<tr>' + (multi ? '<th class="vh">' + cuT('Variant', '规格') + '</th>' : '') +
-    stores.map(s => '<th>' + escapeHtml(cuT(s.name_en || s.code, s.name_cn || s.name_en) || s.code) + '</th>').join('') +
+  // The leading column carries the variant name when there is one, and is blank
+  // when there isn't — but it is always PRESENT, because it is what absorbs the
+  // table's slack. Without it the store columns stretch to fill the row and
+  // each 82px box ends up an island in a 200px column, with its heading
+  // floating over empty space instead of over the box.
+  const head = '<tr><th class="vh">' + (multi ? cuT('Variant', '规格') : '') + '</th>' +
+    stores.map(s => '<th class="mstore">' + escapeHtml(cuT(s.name_en || s.code, s.name_cn || s.name_en) || s.code) + '</th>').join('') +
     '<th class="mtot">' + cuT('Total', '合计') + '</th></tr>';
   const body = variants.map(v => {
     const cells = stores.map(s => {
       const q = (qty[v.id] && qty[v.id][s.store_id]) || 0;
-      return '<td><input type="number" min="0" step="1" value="' + q + '" data-orig="' + q + '" ' +
+      return '<td class="mstore"><input type="number" min="0" step="1" value="' + q + '" data-orig="' + q + '" ' +
         'data-variant-id="' + v.id + '" data-store-id="' + s.store_id + '" oninput="pdMatrixRecalc(this)" onblur="pdMatrixCellSave(this)"></td>';
     }).join('');
     const tot = stores.reduce((a, s) => a + ((qty[v.id] && qty[v.id][s.store_id]) || 0), 0);
@@ -1789,7 +1791,7 @@ function pdRenderStockMatrix(box, d) {
     const name = !multi ? '' : (escapeHtml(_vaMatrixLabel(v)) +
       (v.self ? ' <span class="va-self" title="' + cuT('The variant open above', '上方打开的规格') + '">●</span>' : ''));
     return '<tr data-variant-id="' + v.id + '">' +
-      (multi ? '<th class="vh" title="' + escapeAttr(_vaMatrixLabel(v)) + '">' + name + '</th>' : '') + cells +
+      '<th class="vh"' + (multi ? ' title="' + escapeAttr(_vaMatrixLabel(v)) + '"' : '') + '>' + name + '</th>' + cells +
       '<td class="mtot" data-tot="' + v.id + '">' + tot + '</td></tr>';
   }).join('');
   box.innerHTML =
