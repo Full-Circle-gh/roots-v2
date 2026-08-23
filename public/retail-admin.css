@@ -5513,6 +5513,39 @@
   .mt-brow .bs { font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 4px; }
   .mt-brow .bg { flex: 1; }
 
+  /* ── Dialogs ────────────────────────────────────────────────────────────
+     .mt-ovl was dropped by the rebuild sweep and restored here — without it the
+     match dialog renders as a plain block instead of a centred modal. All three
+     dialogs (match, paste, bundle editor) now share this shell; the paste and
+     bundle ones used to build their own panel out of inline styles. */
+  .mt-ovl { position: fixed; inset: 0; background: var(--bg-overlay, rgba(0,0,0,.4)); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 24px; }
+
+  /* Form rows inside a dialog. One stack, one rhythm, 8px scale. */
+  .mt-form { display: flex; flex-direction: column; gap: 16px; }
+  .mt-field { display: flex; flex-direction: column; gap: 8px; font: 400 13px var(--f-sans); color: var(--td-text2); }
+  .mt-field > input, .mt-field > select, .mt-field > textarea,
+  .mt-inp { font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; width: 100%; }
+  .mt-field > textarea { min-height: 160px; line-height: 1.6; resize: vertical; }
+  .mt-field > input::placeholder, .mt-inp::placeholder, .mt-field > textarea::placeholder { color: var(--td-text2); }
+  .mt-inp.narrow { max-width: 144px; }
+  .mt-hint { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); }
+  .mt-sechd { font: 500 13px var(--f-sans); color: var(--td-text); }
+  .mt-inline { display: flex; gap: 8px; align-items: center; }
+  .mt-inline > .mt-inp { flex: 1; }
+  .mt-right { display: flex; gap: 8px; justify-content: flex-end; }
+
+  /* Bundle components, and the suggested-bundle list */
+  .mt-comprow { display: flex; gap: 8px; align-items: center; }
+  .mt-comprow + .mt-comprow { margin-top: 8px; }
+  .mt-comprow .cn { flex: 1; font: 400 15px var(--f-sans); color: var(--td-text); }
+  .mt-comprow .cq { width: 72px; font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px; text-align: center; font-variant-numeric: tabular-nums; }
+  .mt-suggest { border: 1px solid var(--td-border); border-radius: 14px; padding: 16px 24px; margin: 0 0 16px; background: var(--td-surface); }
+  .mt-suggest .sh { font: 500 13px var(--f-sans); color: var(--td-text); margin-bottom: 8px; }
+  .mt-srow { display: flex; align-items: center; gap: 16px; padding: 8px 0; }
+  .mt-srow + .mt-srow { border-top: 1px solid var(--td-border); }
+  .mt-srow .sn { flex: 1; font: 400 15px var(--f-sans); }
+  .mt-srow .st { font: 400 13px var(--f-sans); color: var(--td-text2); }
+
   /* ── Match-names dialog + its pickers ───────────────────────────────────── */
   .mt-dlg { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px; width: min(680px, 92vw); max-height: 86vh; display: flex; flex-direction: column; overflow: hidden; }
   .mt-dlg-hd { display: flex; align-items: center; gap: 16px; padding: 24px; border-bottom: 1px solid var(--td-border); font: 500 18px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); }

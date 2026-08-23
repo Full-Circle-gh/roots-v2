@@ -403,7 +403,7 @@
   // ── Products ───────────────────────────────────────────────────────────────
   async function mtLoadProducts() {
     const tbody = document.getElementById('mt-products-body');
-    tbody.innerHTML = '<tr><td colspan="3" class="muted" style="padding:24px;text-align:center">Loading…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="3" class="mt-empty">' + cuT('Loading…', '\u52a0\u8f7d\u4e2d\u2026') + '</td></tr>';
     try {
       // includeInactive so the bundle-component picker can attach paused
       // variants; the mapping list filters back to active in mtRenderProducts.
@@ -411,7 +411,7 @@
       _products = res.data || [];
       mtFilterProducts();
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="3" class="muted" style="padding:24px;text-align:center">Error: ${escape(e.message)}</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="3" class="mt-empty">${escape(e.message)}</td></tr>`;
     }
   }
 
@@ -607,7 +607,7 @@
           <button class="btn btn-sm btn-primary" onclick="mtMatchStart()">${cuT('Start matching', '开始匹配')}</button>
         </div>
         <div class="mt-dlg-ft">
-          <span style="flex:1"></span>
+          <span class="mt-tabs-grow"></span>
           <button class="mt-tinylink" onclick="mtMatchClose();mtOpenPaste()">${cuT("Can't connect? Paste the names yourself", '无法连接?自己粘贴名称')}</button>
         </div>`;
       return;
@@ -648,7 +648,7 @@
         ${it.suggestion ? `<div class="chips"><button class="mt-chip" onclick="mtMatchFallback(${i})">${cuT('Use', '使用')} “${esc(it.suggestion)}”</button></div>` : ''}
       </div>`).join('');
       if (unm.filter(u => u.suggestion).length > 1) {
-        html += `<button class="btn btn-sm" style="margin-top:6px" onclick="mtMatchFallbackAll()">${cuT('Use suggested names for all', '全部使用建议名称')}</button>`;
+        html += `<div class="mt-right"><button class="btn btn-sm" onclick="mtMatchFallbackAll()">${cuT('Use suggested names for all', '全部使用建议名称')}</button></div>`;
       }
     }
     if (!amb.length && !unm.length) {
@@ -656,7 +656,7 @@
     }
     html += `</div><div class="mt-dlg-ft">
       <button class="mt-tinylink" onclick="mtMatchStartOver()">${cuT('Start over — clear all matched names', '重新开始 —— 清除所有已匹配名称')}</button>
-      <span style="flex:1"></span>
+      <span class="mt-tabs-grow"></span>
       <button class="btn btn-sm btn-primary" onclick="mtMatchClose()">${cuT('Done', '完成')}</button>
     </div>`;
     body.innerHTML = html;
@@ -910,30 +910,26 @@
     ).join('');
     const ov = document.createElement('div');
     ov.id = 'mt-paste-overlay';
-    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+    ov.className = 'mt-ovl';
     ov.innerHTML = `
-      <div style="background:var(--bg-pane);color:var(--text-1);width:min(560px,100%);max-height:88vh;overflow:auto;border-radius:10px;border:1px solid var(--line);box-shadow:0 18px 50px rgba(0,0,0,.4)">
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line)">
-          <b style="font-size:15px">Paste Meituan names · 粘贴美团商品名</b>
-          <button class="btn btn-sm" onclick="mtClosePaste()">✕</button>
-        </div>
-        <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
-          <label style="font-size:13px;display:flex;flex-direction:column;gap:4px">
-            Store · 门店
-            <select id="mt-paste-store" class="form-control" style="font-size:13px">${opts}</select>
+      <div class="mt-dlg" role="dialog">
+        <div class="mt-dlg-hd">${cuT('Paste Meituan names', '\u7c98\u8d34\u7f8e\u56e2\u5546\u54c1\u540d')}
+          <span class="mt-tabs-grow"></span>
+          <button class="btn btn-sm" onclick="mtClosePaste()" aria-label="Close">\u2715</button></div>
+        <div class="mt-dlg-bd"><div class="mt-form">
+          <label class="mt-field">${cuT('Store', '\u95e8\u5e97')}
+            <select id="mt-paste-store">${opts}</select>
           </label>
-          <label style="font-size:13px;display:flex;flex-direction:column;gap:4px">
-            Meituan titles — one per line (copy exactly as shown on Meituan)
-            <textarea id="mt-paste-text" class="form-control" rows="12" placeholder="超级莓 SuperBerries Blend
-羽衣甘蓝粉 Kale Powder
-姜黄粉 Turmeric Powder
-…" style="font-size:13px;font-family:inherit;line-height:1.5"></textarea>
+          <label class="mt-field">${cuT('Meituan titles — one per line, copied exactly as they appear on Meituan',
+                                        '\u7f8e\u56e2\u5546\u54c1\u540d \u2014 \u6bcf\u884c\u4e00\u4e2a\uff0c\u4e0e\u7f8e\u56e2\u4e0a\u5b8c\u5168\u4e00\u81f4')}
+            <textarea id="mt-paste-text" rows="12" placeholder="\u8d85\u7ea7\u8393 SuperBerries Blend&#10;\u7fbd\u8863\u7518\u84dd\u7c89 Kale Powder&#10;\u59dc\u9ec4\u7c89 Turmeric Powder"></textarea>
           </label>
-          <div class="muted" style="font-size:12px">I'll match each title to a product by its Chinese name and fill only empty fields. Anything unsure goes to the review panel.</div>
-          <div style="display:flex;gap:8px;justify-content:flex-end">
-            <button class="btn btn-sm" onclick="mtClosePaste()">Cancel</button>
-            <button class="btn btn-sm btn-primary" onclick="mtPasteApply()">Match &amp; fill</button>
-          </div>
+          <div class="mt-hint">${cuT('Each title is matched to a product by its Chinese name, and only empty fields are filled. Anything unsure goes to the review panel.',
+                                     '\u6bcf\u4e2a\u540d\u79f0\u6309\u4e2d\u6587\u540d\u5339\u914d\u5546\u54c1\uff0c\u4ec5\u586b\u5199\u7a7a\u5b57\u6bb5\u3002\u4e0d\u786e\u5b9a\u7684\u8fdb\u5165\u5f85\u786e\u8ba4\u5217\u8868\u3002')}</div>
+        </div></div>
+        <div class="mt-dlg-ft"><span class="mt-tabs-grow"></span>
+          <button class="btn btn-sm" onclick="mtClosePaste()">${cuT('Cancel', '\u53d6\u6d88')}</button>
+          <button class="btn btn-sm btn-primary" onclick="mtPasteApply()">${cuT('Match and fill', '\u5339\u914d\u5e76\u586b\u5199')}</button>
         </div>
       </div>`;
     ov.addEventListener('click', e => { if (e.target === ov) mtClosePaste(); });
@@ -1102,35 +1098,34 @@
     ov.id = 'mt-bundle-overlay';
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
     ov.innerHTML = `
-      <div style="background:var(--bg-pane);color:var(--text-1);width:min(620px,100%);max-height:90vh;overflow:auto;border-radius:10px;border:1px solid var(--line-strong);box-shadow:0 18px 50px rgba(0,0,0,.4)">
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line)">
-          <b style="font-size:15px">${existing ? 'Edit' : 'Add'} bundle</b>
-          <button class="btn btn-sm" onclick="mtCloseBundle()">✕</button>
-        </div>
-        <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
-          <label style="font-size:13px;display:flex;flex-direction:column;gap:4px">Store · 门店
-            <select id="mt-b-store" class="form-control" style="font-size:13px">${_stores.map(s => `<option value="${esc(s.code)}" ${s.code === _bundleDraft.storeCode ? 'selected' : ''}>${esc(s.name || s.code)}</option>`).join('')}</select>
+      <div class="mt-dlg" role="dialog">
+        <div class="mt-dlg-hd">${existing ? cuT('Edit bundle', '\u7f16\u8f91\u5957\u9910') : cuT('Add bundle', '\u65b0\u589e\u5957\u9910')}
+          <span class="mt-tabs-grow"></span>
+          <button class="btn btn-sm" onclick="mtCloseBundle()" aria-label="Close">\u2715</button></div>
+        <div class="mt-dlg-bd"><div class="mt-form">
+          <label class="mt-field">${cuT('Store', '\u95e8\u5e97')}
+            <select id="mt-b-store">${_stores.map(s2 => `<option value="${esc(s2.code)}" ${s2.code === _bundleDraft.storeCode ? 'selected' : ''}>${esc(s2.name || s2.code)}</option>`).join('')}</select>
           </label>
-          <label style="font-size:13px;display:flex;flex-direction:column;gap:4px">Meituan bundle title (exact, as on Meituan)
-            <input id="mt-b-name" class="form-control" style="font-size:13px" value="${esc(_bundleDraft.meituanName)}" placeholder="e.g. 藜麦沙拉套餐 Quinoa Salad Combo">
+          <label class="mt-field">${cuT('Meituan bundle title — exactly as it appears on Meituan',
+                                        '\u7f8e\u56e2\u5957\u9910\u540d \u2014 \u4e0e\u7f8e\u56e2\u4e0a\u5b8c\u5168\u4e00\u81f4')}
+            <input id="mt-b-name" value="${esc(_bundleDraft.meituanName)}" placeholder="\u85dc\u9ea6\u6c99\u62c9\u5957\u9910 Quinoa Salad Combo">
           </label>
-          <label style="font-size:13px;display:flex;flex-direction:column;gap:4px">Max stock cap (optional)
-            <input id="mt-b-cap" type="number" min="0" class="form-control" style="font-size:13px;max-width:140px" value="${_bundleDraft.maxQty == null ? '' : _bundleDraft.maxQty}" placeholder="none">
+          <label class="mt-field">${cuT('Maximum stock cap (optional)', '\u5e93\u5b58\u4e0a\u9650\uff08\u53ef\u9009\uff09')}
+            <input id="mt-b-cap" type="number" min="0" class="mt-inp narrow" value="${_bundleDraft.maxQty == null ? '' : _bundleDraft.maxQty}" placeholder="${cuT('none', '\u65e0')}">
           </label>
-          <div style="font-size:13px;font-weight:600">Components (the products this bundle uses up)</div>
+          <div class="mt-sechd">${cuT('Components — the products this bundle uses up', '\u7ec4\u6210\u5546\u54c1 \u2014 \u8be5\u5957\u9910\u6d88\u8017\u7684\u5546\u54c1')}</div>
           <div id="mt-b-comps"></div>
-          <input id="mt-b-prodsearch" class="form-control" style="font-size:13px" placeholder="🔍 Search products…" oninput="mtBundleFilterProds(this.value)">
-          <div style="display:flex;gap:6px;align-items:center">
-            <select id="mt-b-prodpick" class="form-control" style="font-size:13px;flex:1">
-              <option value="">+ add a component product…</option>
-              ${_products.map(p => { const lbl = [p.name_cn, p.name_en].filter(Boolean).join(' ') + (p.variant_label ? ` (${p.variant_label})` : '') + (p.is_active ? '' : ' · 已下架/inactive'); return `<option value="${p.id}" data-label="${esc(lbl.toLowerCase())}">${esc(lbl)}</option>`; }).join('')}
+          <input id="mt-b-prodsearch" class="mt-inp" placeholder="${cuT('Search products…', '\u641c\u7d22\u5546\u54c1\u2026')}" oninput="mtBundleFilterProds(this.value)">
+          <div class="mt-inline">
+            <select id="mt-b-prodpick" class="mt-inp">
+              ${_products.map(p2 => { const lbl = [p2.name_cn, p2.name_en].filter(Boolean).join(' ') + (p2.variant_label ? ` (${p2.variant_label})` : '') + (p2.is_active ? '' : cuT(' · inactive', ' \u00b7 \u5df2\u4e0b\u67b6')); return `<option value="${p2.id}" data-label="${esc(lbl.toLowerCase())}">${esc(lbl)}</option>`; }).join('')}
             </select>
-            <button class="btn btn-sm" onclick="mtBundleAddComp()">Add</button>
+            <button class="btn btn-sm" onclick="mtBundleAddComp()">${cuT('Add', '\u6dfb\u52a0')}</button>
           </div>
-          <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:6px">
-            <button class="btn btn-sm" onclick="mtCloseBundle()">Cancel</button>
-            <button class="btn btn-sm btn-primary" onclick="mtSaveBundle()">Save bundle</button>
-          </div>
+        </div></div>
+        <div class="mt-dlg-ft"><span class="mt-tabs-grow"></span>
+          <button class="btn btn-sm" onclick="mtCloseBundle()">${cuT('Cancel', '\u53d6\u6d88')}</button>
+          <button class="btn btn-sm btn-primary" onclick="mtSaveBundle()">${cuT('Save', '\u4fdd\u5b58')}</button>
         </div>
       </div>`;
     ov.addEventListener('click', e => { if (e.target === ov) mtCloseBundle(); });
@@ -1142,16 +1137,16 @@
     const box = document.getElementById('mt-b-comps');
     if (!box) return;
     if (!_bundleDraft.components.length) {
-      box.innerHTML = '<div class="muted" style="font-size:12px">No components yet — add at least one.</div>';
+      box.innerHTML = '<div class="mt-hint">' + cuT('No components yet — add at least one.', '\u5c1a\u672a\u6dfb\u52a0\u7ec4\u6210\u5546\u54c1\uff0c\u81f3\u5c11\u6dfb\u52a0\u4e00\u4e2a\u3002') + '</div>';
       return;
     }
     box.innerHTML = _bundleDraft.components.map((c, i) => {
       const p = _products.find(pp => pp.id == c.productId) || {};
       const label = [p.name_cn, p.name_en].filter(Boolean).join(' ') + (p.variant_label ? ` (${p.variant_label})` : '');
-      return `<div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
-        <span style="flex:1;font-size:13px">${esc(label || ('#' + c.productId))}</span>
-        <span class="muted" style="font-size:12px">qty</span>
-        <input type="number" min="1" value="${c.qty}" class="form-control" style="width:62px;font-size:13px" onchange="mtBundleCompQty(${i}, this.value)">
+      return `<div class="mt-comprow">
+        <span class="cn">${esc(label || ('#' + c.productId))}</span>
+        <span class="mt-hint">${cuT('qty', '\u6570\u91cf')}</span>
+        <input type="number" min="1" value="${c.qty}" class="cq" onchange="mtBundleCompQty(${i}, this.value)">
         <button class="btn btn-sm" onclick="mtBundleRemoveComp(${i})">✕</button>
       </div>`;
     }).join('');
@@ -1230,16 +1225,17 @@
       }
     }
     if (!_bundleSuggest.length) {
-      box.innerHTML = `<div class="muted" style="font-size:12px;padding:6px 0">${cuT(
+      box.innerHTML = `<div class="mt-hint">${cuT(
         'No combo-looking titles found. Run Match names first (this session), then try again.',
         '未发现疑似套餐的名称。请先运行「匹配名称」(本次会话内),再试一次。')}</div>`;
       return;
     }
-    box.innerHTML = `<div style="border:1px solid var(--line);border-radius:6px;padding:8px 10px;margin:8px 0">
-      <div style="font-size:12px;font-weight:600;margin-bottom:4px">${_bundleSuggest.length} possible bundle(s) — click Create to set components</div>
-      ${_bundleSuggest.map((s, i) => `<div style="display:flex;justify-content:space-between;gap:8px;align-items:center;padding:3px 0">
-        <span style="font-size:13px">${esc(s.name)} <span class="muted" style="font-size:11px">· ${esc(s.storeName)}</span></span>
-        <button class="btn btn-sm" onclick="mtCreateBundleFrom(${i})">Create</button>
+    box.innerHTML = `<div class="mt-suggest">
+      <div class="sh">${cuT(_bundleSuggest.length + ' possible bundle(s) — Create sets the components',
+                            _bundleSuggest.length + ' \u4e2a\u53ef\u80fd\u7684\u5957\u9910 \u2014 \u521b\u5efa\u540e\u518d\u8bbe\u7f6e\u7ec4\u6210\u5546\u54c1')}</div>
+      ${_bundleSuggest.map((sg, i) => `<div class="mt-srow">
+        <span class="sn">${esc(sg.name)} <span class="st">\u00b7 ${esc(sg.storeName)}</span></span>
+        <button class="btn btn-sm" onclick="mtCreateBundleFrom(${i})">${cuT('Create', '\u521b\u5efa')}</button>
       </div>`).join('')}
     </div>`;
   };
