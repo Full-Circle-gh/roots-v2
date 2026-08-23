@@ -2757,11 +2757,30 @@
   /* ── Add-product split button (toolbar) ─────────────────────────────────
      One control: the main face starts the step-by-step wizard; the caret
      drops a small menu with both ways to add. */
+  /* One control, not two buttons standing near each other. Every rule here is
+     scoped to #tab-products because the page's own `#tab-products .btn` carries
+     id+class weight — a bare `.pa-addsplit-main` loses to it, which is why both
+     halves were drawing full 8px corners and the caret was falling through to
+     the plain surface fill instead of Dusk. The seam is a hairline drawn in the
+     button's own text colour, not a 1px margin: a gap between two fully rounded
+     shapes reads as pinched, which is exactly what it looked like. */
   .pa-addsplit { position: relative; display: inline-flex; }
-  .pa-addsplit-main { border-top-right-radius: 0; border-bottom-right-radius: 0; }
-  .pa-addsplit-caret {
+  #tab-products .pa-addsplit .btn.pa-addsplit-main,
+  #tab-products .pa-addsplit .btn.pa-addsplit-caret {
+    background: var(--td-dusk); border-color: var(--td-dusk); color: #fff;
+  }
+  #tab-products .pa-addsplit .btn.pa-addsplit-main:hover,
+  #tab-products .pa-addsplit .btn.pa-addsplit-caret:hover {
+    background: var(--td-dusk-hi); border-color: var(--td-dusk-hi);
+  }
+  #tab-products .pa-addsplit .btn.pa-addsplit-main {
+    border-top-right-radius: 0; border-bottom-right-radius: 0;
+    border-right: 0; padding-right: 14px;
+  }
+  #tab-products .pa-addsplit .btn.pa-addsplit-caret {
     border-top-left-radius: 0; border-bottom-left-radius: 0;
-    padding-left: 8px; padding-right: 8px; margin-left: 1px;
+    border-left: 1px solid rgba(255, 255, 255, .28);
+    padding: 10px 12px; margin-left: 0;
     display: inline-flex; align-items: center; justify-content: center;
   }
   .pa-addsplit-caret svg { transition: transform .18s var(--ease-out, ease); }
