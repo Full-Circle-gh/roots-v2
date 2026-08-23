@@ -1014,39 +1014,10 @@ const PA_ICON_BROKEN  = '<svg width="28" height="28" viewBox="0 0 24 24" fill="n
 // Six-dot drag grip for the reorder column.
 const PA_ICON_GRIP    = '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><circle cx="6" cy="4" r="1.4"/><circle cx="10" cy="4" r="1.4"/><circle cx="6" cy="8" r="1.4"/><circle cx="10" cy="8" r="1.4"/><circle cx="6" cy="12" r="1.4"/><circle cx="10" cy="12" r="1.4"/></svg>';
 
-// ── Products View tweaks (per-operator) — photo crop / status display / empty.
-const PROD_VIEW_DEFAULTS = { crop: 'square', status: 'badge', empty: 'icon' };
-function pvLoad() {
-  try { return { ...PROD_VIEW_DEFAULTS, ...(JSON.parse(localStorage.getItem('retail-admin-prod-view') || '{}')) }; }
-  catch (e) { return { ...PROD_VIEW_DEFAULTS }; }
-}
-let PROD_VIEW = pvLoad();
-function pvApply() {
-  const sec = document.getElementById('tab-products'); if (!sec) return;
-  sec.classList.remove('pv-crop-portrait', 'pv-crop-full', 'pv-status-border', 'pv-status-minimal', 'pv-empty-hatched', 'pv-empty-plain');
-  if (PROD_VIEW.crop === 'portrait')  sec.classList.add('pv-crop-portrait');
-  if (PROD_VIEW.crop === 'full')      sec.classList.add('pv-crop-full');
-  if (PROD_VIEW.status === 'border')  sec.classList.add('pv-status-border');
-  if (PROD_VIEW.status === 'minimal') sec.classList.add('pv-status-minimal');
-  if (PROD_VIEW.empty === 'hatched')  sec.classList.add('pv-empty-hatched');
-  if (PROD_VIEW.empty === 'plain')    sec.classList.add('pv-empty-plain');
-  pvSyncPanel();
-}
-function pvSet(key, val) {
-  PROD_VIEW[key] = val;
-  try { localStorage.setItem('retail-admin-prod-view', JSON.stringify(PROD_VIEW)); } catch (e) {}
-  pvApply();
-}
-function pvSyncPanel() {
-  const pop = document.getElementById('pv-pop'); if (!pop) return;
-  pop.querySelectorAll('.ovp-seg').forEach(seg => {
-    const key = seg.getAttribute('data-pv');
-    seg.querySelectorAll('button').forEach(b => b.classList.toggle('active', b.getAttribute('data-v') === PROD_VIEW[key]));
-  });
-}
-function pvToggle() { const pop = document.getElementById('pv-pop'); if (!pop) return; if (pop.hidden) { pop.hidden = false; pvSyncPanel(); setTimeout(() => document.addEventListener('mousedown', pvOutside), 0); } else pvClose(); }
-function pvClose() { const pop = document.getElementById('pv-pop'); if (pop) pop.hidden = true; document.removeEventListener('mousedown', pvOutside); }
-function pvOutside(e) { if (!(e.target.closest && e.target.closest('.ovp-wrap'))) pvClose(); }
+// The per-operator View tweaks (photo crop / status display / empty-photo
+// style) are gone with their popover. They had been display:none for most of
+// their life, and a stored preference from that era must not keep steering
+// the grid from a control nobody can see any more.
 
 // Export the WHOLE catalogue as a spreadsheet — deliberately not the filtered
 // view. The button sits next to a search box, so "download" scoped to whatever
@@ -1619,7 +1590,6 @@ function paRender() {
         </div>
       </div>`;
   }).join('');
-  pvApply();   // re-assert per-operator View tweaks after each grid render
   paApplyRowSelection();
 }
 

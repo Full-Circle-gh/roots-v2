@@ -3765,29 +3765,9 @@
     border-radius: 14px;
   }
 
-  /* ── Products View tweaks (per-operator) — photo crop, status display,
-     empty-state. Defaults (square / badge / icon) reproduce the base look. ── */
-  #tab-products.pv-crop-portrait .pa-card-img { aspect-ratio: 3 / 4; }
-  #tab-products.pv-crop-full     .pa-card-img { aspect-ratio: 5 / 7; }
-  /* Status · Border — hide badges, tint the card edge by status (draft wins). */
-  #tab-products.pv-status-border .pa-card-pills,
-  #tab-products.pv-status-minimal .pa-card-pills { display: none; }
-  #tab-products.pv-status-border .pa-card.is-designed { border-color: rgba(163,180,159,.55); }
-  #tab-products.pv-status-border .pa-card.is-draft    { border-color: rgba(201,149,74,.55); }
-  /* Status · Minimal — a small status dot in the image corner. */
-  #tab-products.pv-status-minimal .pa-card-img::after {
-    content: ''; position: absolute; top: 8px; left: 8px;
-    width: 8px; height: 8px; border-radius: 50%;
-    background: rgba(232,229,220,.7); box-shadow: 0 0 0 2px rgba(18,22,26,.25);
-  }
-  #tab-products.pv-status-minimal .pa-card.is-designed .pa-card-img::after { background: var(--success); }
-  #tab-products.pv-status-minimal .pa-card.is-draft    .pa-card-img::after { background: var(--warn); }
-  /* Empty-state shapes — hatched ground or plain (vs the default broken-image icon). */
-  #tab-products.pv-empty-hatched .pa-card-img:has(.pa-card-img-empty) {
-    background-image: repeating-linear-gradient(45deg, transparent, transparent 6px, var(--line) 6px, var(--line) 7px);
-  }
-  #tab-products.pv-empty-hatched .pa-card-img-empty,
-  #tab-products.pv-empty-plain   .pa-card-img-empty { display: none; }
+  /* The per-operator View tweaks are gone with their popover — the defaults
+     they varied from (square crop, badge status, icon empty-state) are the
+     base card look, so removing them changes nothing on screen. */
 
   /* ── Designer Sections editor — 3-pane: palette · canvas · inspector ── */
   /* Stretch the modal to near-fullscreen like the CMS editor */
