@@ -5483,8 +5483,11 @@
   .mt-pagehead h2 { font: 500 24px/1.3 var(--f-sans); letter-spacing: -.01em; text-transform: none; color: var(--td-text); margin: 0; }
   .mt-status { font: 400 15px/1.6 var(--f-sans); color: var(--td-text2); margin: 4px 0 0; font-variant-numeric: tabular-nums; }
   .mt-status .att { color: var(--td-amber-ink); }
-  .mt-pagehead .btn-primary { background: var(--td-dusk); border-color: var(--td-dusk); color: #fff; }
-  .mt-pagehead .btn-primary:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); opacity: 1; }
+  /* ⚠️ Must out-specify #tab-meituan .btn-primary above. That rule is (1,1,0)
+     and a two-class selector is only (0,2,0), so the Ink treatment was winning
+     and the page's one Dusk element rendered navy. */
+  #tab-meituan .mt-pagehead .btn-primary { background: var(--td-dusk); border-color: var(--td-dusk); color: #fff; }
+  #tab-meituan .mt-pagehead .btn-primary:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); opacity: 1; }
 
   /* ── Tile row — Orders' opening shape ───────────────────────────────────── */
   .mt-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 32px; }
@@ -5524,7 +5527,16 @@
 
   /* ── Toolbar ────────────────────────────────────────────────────────────── */
   .mt-tools { display: flex; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
-  .mt-sel { font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; }
+  /* Self-contained on purpose. The global `select` rule (css:4923) paints its
+     own chevron at right 10px and reserves 32px for it; a plain `padding` here
+     overrode that reserve, so the label ran under the arrow. Declaring the
+     whole thing — arrow included — means neither rule can half-win. */
+  .mt-sel { appearance: none; -webkit-appearance: none; font: 400 15px var(--f-sans); color: var(--td-text);
+    border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 40px 8px 16px; cursor: pointer;
+    background-color: var(--td-surface);
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2358606E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat: no-repeat; background-position: right 16px center; }
+  .mt-sel:focus-visible { outline: 2px solid var(--td-sage); outline-offset: 2px; }
   .mt-search { flex: 1 1 280px; font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; }
   .mt-search::placeholder { color: var(--td-text2); }
 
@@ -5545,8 +5557,29 @@
   .mt-name-input::placeholder { color: var(--td-text2); }
   .mt-sub { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin-top: 8px; }
   .mt-sub b { font-weight: 500; color: var(--td-text); }
+  .mt-link { color: var(--td-text); text-decoration: underline; text-underline-offset: 2px; }
+  .mt-link:hover { color: var(--td-dusk); }
   .mt-cell-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
   .mt-empty { padding: 24px; text-align: center; font: 400 15px var(--f-sans); color: var(--td-text2); }
+
+  /* Per-row sync switch. The old sheet hid this until the row was hovered and
+     the rebuild sweep took that rule with everything else — so a bare native
+     checkbox turned up on all 248 rows. It is a switch, like the channel one,
+     and it stays quiet until you are on the row (or it is off, which is worth
+     seeing). */
+  #mt-products-table .toggle-label { display: inline-flex; align-items: center; opacity: 0; transition: opacity 200ms cubic-bezier(.16,1,.3,1); }
+  #mt-products-table tr:hover .toggle-label,
+  #mt-products-table .toggle-label:focus-within,
+  #mt-products-table .toggle-label:has(input:not(:checked)) { opacity: 1; }
+  #mt-products-table .toggle-label input { appearance: none; -webkit-appearance: none; margin: 0; width: 32px; height: 18px; border-radius: 999px; background: var(--td-border); border: none; position: relative; cursor: pointer; transition: background 200ms cubic-bezier(.16,1,.3,1); flex: none; }
+  #mt-products-table .toggle-label input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 999px; background: var(--td-surface); transition: left 200ms cubic-bezier(.16,1,.3,1); }
+  #mt-products-table .toggle-label input:checked { background: var(--td-sage); }
+  #mt-products-table .toggle-label input:checked::after { left: 17px; }
+  #mt-products-table .toggle-label input:focus-visible { outline: 2px solid var(--td-sage); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) {
+    #mt-products-table .toggle-label, #mt-products-table .toggle-label input,
+    #mt-products-table .toggle-label input::after { transition: none; }
+  }
 
   /* Status pills. Text on a tint is always the -ink variant. */
   .mt-pill { display: inline-flex; align-items: center; gap: 8px; font: 500 13px var(--f-sans); border-radius: 999px; padding: 0 8px; }
@@ -5575,6 +5608,51 @@
   .mt-brow .bn { font-weight: 500; }
   .mt-brow .bs { font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 4px; }
   .mt-brow .bg { flex: 1; }
+
+  /* ── Dialogs ────────────────────────────────────────────────────────────
+     .mt-ovl was dropped by the rebuild sweep and restored here — without it the
+     match dialog renders as a plain block instead of a centred modal. All three
+     dialogs (match, paste, bundle editor) now share this shell; the paste and
+     bundle ones used to build their own panel out of inline styles. */
+  .mt-ovl { position: fixed; inset: 0; background: var(--bg-overlay, rgba(0,0,0,.4)); z-index: 9999; display: flex; align-items: center; justify-content: center; padding: 24px; }
+
+  /* Form rows inside a dialog. One stack, one rhythm, 8px scale. */
+  .mt-form { display: flex; flex-direction: column; gap: 16px; }
+  .mt-field { display: flex; flex-direction: column; gap: 8px; font: 400 13px var(--f-sans); color: var(--td-text2); }
+  .mt-field > input, .mt-field > select, .mt-field > textarea,
+  .mt-inp { font: 400 15px var(--f-sans); color: var(--td-text); background-color: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; width: 100%; }
+  /* background-COLOR above, never the `background` shorthand. The shorthand
+     reset repeat/position, and the global chevron (css:4923, restated with a
+     light stroke at css:139) came back with no-repeat gone — so the arrow
+     TILED the full width of every dialog <select>, a row of chevrons striking
+     through the label. Selects declare the whole arrow here, gutter included,
+     so neither rule can half-win. */
+  .mt-field > select, select.mt-inp {
+    appearance: none; -webkit-appearance: none; cursor: pointer;
+    padding-right: 40px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2358606E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat: no-repeat; background-position: right 16px center;
+  }
+  .mt-field > textarea { min-height: 160px; line-height: 1.6; resize: vertical; }
+  .mt-field > input::placeholder, .mt-inp::placeholder, .mt-field > textarea::placeholder { color: var(--td-text2); }
+  .mt-inp.narrow { max-width: 144px; }
+  .mt-hint { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); }
+  .mt-sechd { font: 500 13px var(--f-sans); color: var(--td-text); }
+  .mt-inline { display: flex; gap: 8px; align-items: center; }
+  .mt-inline > .mt-inp { flex: 1; }
+  .mt-right { display: flex; gap: 8px; justify-content: flex-end; }
+
+  /* Bundle components, and the suggested-bundle list */
+  .mt-comprow { display: flex; gap: 8px; align-items: center; }
+  .mt-comprow + .mt-comprow { margin-top: 8px; }
+  .mt-comprow .cn { flex: 1; font: 400 15px var(--f-sans); color: var(--td-text); }
+  .mt-comprow .cq { width: 72px; font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px; text-align: center; font-variant-numeric: tabular-nums; }
+  .mt-suggest { border: 1px solid var(--td-border); border-radius: 14px; padding: 16px 24px; margin: 0 0 16px; background: var(--td-surface); }
+  .mt-suggest .sh { font: 500 13px var(--f-sans); color: var(--td-text); margin-bottom: 8px; }
+  .mt-srow { display: flex; align-items: center; gap: 16px; padding: 8px 0; }
+  .mt-srow + .mt-srow { border-top: 1px solid var(--td-border); }
+  .mt-srow .sn { flex: 1; font: 400 15px var(--f-sans); }
+  .mt-srow .st { font: 400 13px var(--f-sans); color: var(--td-text2); }
 
   /* ── Match-names dialog + its pickers ───────────────────────────────────── */
   .mt-dlg { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px; width: min(680px, 92vw); max-height: 86vh; display: flex; flex-direction: column; overflow: hidden; }
@@ -5611,6 +5689,14 @@
     --brass-hi:    var(--td-amber);
     --danger:      var(--td-brick-ink);
   }
+
+  /* Base .btn-primary is built on --brass, which this tab remaps to Amber — so
+     without this every primary button here comes out amber and Amber stops
+     meaning "warning". A strong in-page action is Ink. The Eleme header has no
+     create action, so §1.7 leaves its Dusk slot empty and there is no Dusk rule
+     to pair with this one. */
+  #tab-eleme .btn-primary { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
+  #tab-eleme .btn-primary:hover { background: var(--td-text); border-color: var(--td-text); opacity: .88; }
 
   .el-pagehead { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 32px; }
   .el-pagehead-t { min-width: 0; flex: 1 1 340px; }
