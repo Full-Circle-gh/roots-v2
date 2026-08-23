@@ -238,16 +238,23 @@ function ensureGzMirror({ orderId, status, customer, dateAdded, ours, storeId, v
       // recipient. A person's name never contains their own phone number, so
       // this can only hit the blob — and a real name typed by hand survives.
       const stale = `COALESCE(address_json,'') = '' OR address_json NOT LIKE '%"p":${SHIPTO_PARSER}%'`;
+      // …and when it is the WeChat handle we fell back to (mini_g2l8vG) on a read
+      // that couldn't parse a name, now that a later read has a real one. Our own
+      // fallback must never outrank the recipient printed on the dispatch note.
+      const staleHandle = (shipTo && shipTo.contacter && shipName && shipTo.contacter !== shipName)
+        ? shipTo.contacter : null;
       db.prepare(`UPDATE retail_orders SET
            recipient_name  = CASE WHEN COALESCE(recipient_name,'') IN ('', ?)
                                     OR (? IS NOT NULL AND instr(COALESCE(recipient_name,''), ?) > 0)
+                                    OR (? IS NOT NULL AND recipient_name = ?)
                                   THEN COALESCE(?, recipient_name) ELSE recipient_name END,
            recipient_phone = CASE WHEN COALESCE(recipient_phone,'') = '' THEN COALESCE(?, recipient_phone) ELSE recipient_phone END,
            address_full    = CASE WHEN ${stale} THEN COALESCE(?, address_full) ELSE address_full END,
            address_json    = CASE WHEN ${stale} THEN COALESCE(?, address_json) ELSE address_json END,
            updated_at = CURRENT_TIMESTAMP
          WHERE id = ?`)
-        .run(String(orderId), shipPhone, shipPhone, shipName, shipPhone, shipAddr, shipJson, existing.id);
+        .run(String(orderId), shipPhone, shipPhone, staleHandle, staleHandle, shipName,
+          shipPhone, shipAddr, shipJson, existing.id);
     }
     return;
   }
