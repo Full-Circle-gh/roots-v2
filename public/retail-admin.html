@@ -4656,12 +4656,17 @@
             <!-- Sizes live with Stock; bundles, add-ons and options are the
                  "sell it in more ways" group and carry their own heading on the
                  full page, so the two have separate jump targets from the dock. -->
-            <div class="pd-pp-sech" data-pp-only="1">Sizes · 规格</div>
+            <!-- One section, four rows. Sizes and the three "more ways" rows are
+                 the SAME component rendered four times — same box, same toggle,
+                 same title-and-summary line — so two headings made them look
+                 like two kinds of thing. They share one grid now, which is also
+                 what lets them sit two-up and lets an open row take the full
+                 width; split across two containers neither could.
+                 #pd-sec-sizes stays the id: the dock's summary rows jump here
+                 by it, and so does pdExpand('sizes'|'more'). -->
+            <div class="pd-pp-sech" data-pp-only="1">How it's sold · 售卖方式</div>
             <div class="pe-rows pdb-belowgrid pdb-vgrid pd-heavy" id="pd-sec-sizes">
             <div id="pd-variants" class="pd-variants"></div>
-            </div>
-            <div class="pd-pp-sech" id="pd-sech-more" data-pp-only="1">Sell it in more ways · 更多售卖方式</div>
-            <div class="pe-rows pdb-belowgrid pdb-vgrid pd-heavy" id="pd-sec-more">
             <div id="pd-bundle-product" class="pd-variants"></div>
             <div id="pd-bundle" class="pd-variants"></div>
             <div id="pd-options" class="pd-variants"></div>

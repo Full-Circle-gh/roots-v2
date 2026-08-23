@@ -2443,8 +2443,6 @@ function pdMoveHeadState(where) {
 // editor arrives stripped of its card, heading, fields and chips.
 const PD_SIDE_BLOCKS = [
   '#pd-sales-card',      // read-only: the one block on the page you cannot change
-  '#pd-sech-more',       // "Sell it in more ways" — the heading travels with its rows
-  '#pd-sec-more',
   '#pd-sec-shipping',
   '#pd-sec-freeof',
   '#pd-sec-flags',
@@ -2527,8 +2525,11 @@ function pdExpand(section) {
   pdSyncFullscreenBtn(true);
   window.scrollTo({ top: 0, behavior: 'auto' });
   if (section) {
-    const el = section === 'more'  ? document.getElementById('pd-sec-more')
-             : section === 'sizes' ? document.getElementById('pd-sec-sizes')
+    // 'sizes' and 'more' were two sections and are now one ("How it's sold"),
+    // so both dock summary rows land on the same block. The two names stay
+    // because the summaries that pass them are still two separate rows.
+    const el = (section === 'more' || section === 'sizes')
+               ? document.getElementById('pd-sec-sizes')
              : ed.querySelector(`.pd-pane[data-pane="${section}"]`);
     if (el) el.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }

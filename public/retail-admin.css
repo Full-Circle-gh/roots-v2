@@ -3166,10 +3166,11 @@
   #pd-editor.pd-fullpage .pdb-grid > .pd-pp-sech:first-child { margin-top: 0; }
   /* Jump targets clear the sticky topbar. */
   #pd-editor.pd-fullpage .pd-pane,
-  #pd-sec-sizes, #pd-sec-more { scroll-margin-top: 76px; }
-  /* Sizes is one block, not a pair — the 2-up rule the other vgrid wants would
-     strand it in half the row. Two ids to outrank the container query. */
-  #pd-editor #pd-sec-sizes { grid-template-columns: 1fr; }
+  #pd-sec-sizes { scroll-margin-top: 76px; }
+  /* Sizes used to be pinned to one column because it was a single box in a
+     grid built for pairs — on its own it would have been stranded in half a
+     row. It now shares that grid with the other three, so the pin comes off
+     and the pairs are real. */
   /* Docked, Sourcing has stepped out of the Stock grid and left "Stock &
      status" alone in a 7-of-12 track. Let it take the whole row rather than
      sit beside five columns of nothing. */
@@ -3250,7 +3251,6 @@
   /* "Sell it in more ways" keeps its heading, sized to the column rather than
      to a page-width section. */
   #pd-editor .pd-pp-side > .pd-pp-sech { font-size: 15px; margin: 4px 2px 0; }
-  #pd-editor .pd-pp-side > #pd-sec-more { grid-template-columns: 1fr; margin-top: 0; }
   /* Sales at 340px: three numbers across is too tight, two rows of two is not. */
   #pd-editor .pd-pp-side .pd-sales-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
   /* Duplicate · Version history · Delete, stacked full-width rather than a row
@@ -3267,10 +3267,14 @@
      something in a 12-track grid are neutralised so none of them can conjure an
      implicit column here. */
   .pd-pp-mount #pd-editor .pu-editor-body .pdb-grid,
-  .pd-pp-mount #pd-editor .pu-editor-body .pdb-grid-auto,
-  .pd-pp-mount #pd-editor .pu-editor-body .pdb-vgrid {
+  .pd-pp-mount #pd-editor .pu-editor-body .pdb-grid-auto {
     grid-template-columns: minmax(0, 1fr);
   }
+  /* .pdb-vgrid is deliberately NOT in that list. Those are the four toggle
+     rows of "How it's sold", and two-up is what the component was drawn for —
+     the open one still spans the full width. This is one section with four
+     rows in it, not two cards abreast under a heading that owns one of them,
+     which is the thing that made the page read as three columns. */
   .pd-pp-mount #pd-editor .pu-editor-body [class*="pdb-c"] { grid-column: 1 / -1; }
   /* Fields stay two abreast — at the column's full width auto-fit would put
      three on a line, and a form reads worse the wider its rows get. */
