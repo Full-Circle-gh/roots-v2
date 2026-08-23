@@ -93,14 +93,46 @@ function memAvailMb() {
   } catch (_) { return Math.round(os.freemem() / 1048576); }
 }
 
-async function probeApp() {
+// The readiness probe, taken verbatim from scripts/deploy-apply.sh — same four
+// paths, same verdict. It had the stricter assertion all along and was only being
+// applied on deploy, while this, the thing that runs every two minutes, accepted
+// `res.status > 0`: ANY HTTP answer counted as healthy, so an app that booted and
+// returned 500 on every route probed GREEN indefinitely. The strictest assertion
+// in the tree should be the one that runs continuously, not the one that runs once
+// at ship time.
+//
+//   /                       — base (302; is the process answering at all?)
+//   /api/retail/categories  — a trivial tenant-DB read
+//   /api/retail/config      — config load + DB
+//   /api/retail/products    — the storefront grid query, the critical read path
+//
+// BROKEN is 000 (refused/timed out) or 5xx (the handler threw). 4xx still counts
+// as up — auth, validation, a deliberately-removed route — so a stray client error
+// cannot restart a healthy app.
+const PROBE_PATHS = ['/', '/api/retail/categories', '/api/retail/config', '/api/retail/products'];
+let probeDetail = '';
+
+async function probeOne(pathname) {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), PROBE_TIMEOUT_MS);
   try {
-    const res = await fetch(APP_URL, { redirect: 'manual', signal: ctrl.signal });
-    // Any HTTP response (200/302/4xx) means the app is alive and listening.
-    return res.status > 0;
-  } catch (_) { return false; } finally { clearTimeout(t); }
+    const res = await fetch(new URL(pathname, APP_URL), { redirect: 'manual', signal: ctrl.signal });
+    return res.status;
+  } catch (_) { return 0; } finally { clearTimeout(t); }
+}
+
+async function probeApp() {
+  const seen = [];
+  for (const p of PROBE_PATHS) {
+    const code = await probeOne(p);
+    seen.push(`${p}=${code || '000'}`);
+    if (code === 0 || code >= 500) {
+      probeDetail = seen.join(' ');
+      return false;
+    }
+  }
+  probeDetail = seen.join(' ');
+  return true;
 }
 
 (async () => {
@@ -136,7 +168,7 @@ async function probeApp() {
   }
 
   state.fails = (state.fails || 0) + 1;
-  console.error(`[health] app probe FAILED (${state.fails}/${FAIL_THRESHOLD}) ${APP_URL}`);
+  console.error(`[health] app probe FAILED (${state.fails}/${FAIL_THRESHOLD}) ${APP_URL} [${probeDetail}]`);
   if (state.fails >= FAIL_THRESHOLD && !state.down) {
     state.down = true;
     // A probe timeout while the box is thrashing (CPU starved) usually means the
@@ -158,7 +190,7 @@ async function probeApp() {
       } catch (e) {
         restartMsg = 'pm2 restart FAILED: ' + e.message;
       }
-      await sendOpsAlert(`🔴 roots-v2 storefront DOWN — app not responding on :4000 after ${state.fails} checks. ${restartMsg}. If this repeats, the box may be wedging (see 2026-06-28 incident).`);
+      await sendOpsAlert(`🔴 roots-v2 storefront DOWN — app not serving on :4000 after ${state.fails} checks (${probeDetail}). ${restartMsg}. If this repeats, the box may be wedging (see 2026-06-28 incident).`);
     }
   }
   saveState(state);
