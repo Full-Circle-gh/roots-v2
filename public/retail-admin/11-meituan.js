@@ -599,75 +599,98 @@
     if (ov) ov.remove();
   };
 
-  function mtMatchHead() {
-    return `<div class="mt-dlg-hd"><b>${cuT('Match names with Meituan', '与美团匹配商品名')}</b>
-      <button class="btn btn-sm" onclick="mtMatchClose()" aria-label="Close">✕</button></div>`;
+  // Close is a labelled button, not a glyph — and it is disabled while the run
+  // is reading, because the run cannot be cancelled today and a button that
+  // looks live but does nothing is worse than one that says it is unavailable.
+  function mtMatchHead(busy) {
+    return `<div class="mt-dlg-hd">${cuT('Match names with Meituan', '与美团匹配商品名')}
+      <span class="mt-tabs-grow"></span>
+      <button class="btn btn-sm" ${busy ? 'disabled' : 'onclick="mtMatchClose()"'}>${cuT('Close', '关闭')}</button></div>`;
   }
 
   function mtMatchRender() {
     const body = document.getElementById('mt-match-body');
     if (!body) return;
 
+    // 1 · Start. The system does not narrate itself in the first person — Tacet
+    // is composed, and "I'll read your product names" is not.
     if (_match.stage === 'intro') {
       body.innerHTML = mtMatchHead() + `
         <div class="mt-dlg-bd">
           <p>${cuT(
-            "I'll read your product names from the Meituan Tianhe store and match them to your products here. Takes about a minute — nothing changes on Meituan.",
-            '我会从美团天河店读取商品名称,并与这里的商品自动匹配。大约一分钟,不会改动美团上的任何内容。')}</p>
-          <button class="btn btn-sm btn-primary" onclick="mtMatchStart()">${cuT('Start matching', '开始匹配')}</button>
+            'Reads the product names from your Meituan Tianhe store and links them to the products here. It takes about a minute, and it changes nothing on Meituan.',
+            '\u4ece\u7f8e\u56e2\u5929\u6cb3\u5e97\u8bfb\u53d6\u5546\u54c1\u540d\u79f0\uff0c\u5e76\u4e0e\u8fd9\u91cc\u7684\u5546\u54c1\u5173\u8054\u3002\u5927\u7ea6\u4e00\u5206\u949f\uff0c\u4e0d\u4f1a\u6539\u52a8\u7f8e\u56e2\u4e0a\u7684\u4efb\u4f55\u5185\u5bb9\u3002')}</p>
+          <div><button class="btn btn-sm btn-primary" onclick="mtMatchStart()">${cuT('Start matching', '\u5f00\u59cb\u5339\u914d')}</button></div>
         </div>
         <div class="mt-dlg-ft">
           <span class="mt-tabs-grow"></span>
-          <button class="mt-tinylink" onclick="mtMatchClose();mtOpenPaste()">${cuT("Can't connect? Paste the names yourself", '无法连接?自己粘贴名称')}</button>
+          <button class="mt-tinylink" onclick="mtMatchClose();mtOpenPaste()">${cuT('Cannot connect? Paste the names yourself', '\u65e0\u6cd5\u8fde\u63a5\uff1f\u81ea\u5df1\u7c98\u8d34\u540d\u79f0')}</button>
         </div>`;
       return;
     }
 
+    // 2 · Reading. The bar cannot be a true percentage — the total only arrives
+    // with the last page — so it eases once and holds while the real counts
+    // underneath do the reporting.
     if (_match.stage === 'working') {
-      body.innerHTML = mtMatchHead() + `
+      const active = _products.filter(p => p.is_active).length;
+      body.innerHTML = mtMatchHead(true) + `
         <div class="mt-dlg-bd">
-          <p id="mt-match-prog">${cuT('Reading your Meituan listings…', '正在读取美团商品…')}</p>
+          <p id="mt-match-prog">${cuT('Reading your Meituan listings…', '\u6b63\u5728\u8bfb\u53d6\u7f8e\u56e2\u5546\u54c1\u2026')}</p>
+          <div class="mt-prog"><i></i></div>
+          <div class="mt-progsub" id="mt-match-sub">${esc(cuT(
+            'matching against ' + active + ' products', '\u5bf9\u6bd4 ' + active + ' \u4e2a\u5546\u54c1'))}</div>
         </div>`;
       return;
     }
 
-    // Results — matched count up top; only the leftovers ask for anything.
+    // 3 · Results, ordered by what each row costs a person: the good news as one
+    // quiet line, then the picks (one tap each), then the ones Meituan does not
+    // have at all.
     const amb = _review.ambiguous, unm = _review.unmatched;
+    const check = '<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
     let html = mtMatchHead() + '<div class="mt-dlg-bd">';
-    html += `<div class="mt-okline">✓ ${cuT(
-      `${_match.applied} matched automatically`, `已自动匹配 ${_match.applied} 个`)}</div>`;
+    html += `<div class="mt-okline">${check}<span>${esc(cuT(
+      _match.applied + ' matched automatically', '\u5df2\u81ea\u52a8\u5339\u914d ' + _match.applied + ' \u4e2a'))}</span></div>`;
     if (_match.failed) {
-      html += `<p class="muted">${cuT(`${_match.failed} failed to save — try again in a minute.`, `${_match.failed} 个保存失败,请稍后重试。`)}</p>`;
+      html += `<p class="mt-progsub">${esc(cuT(
+        _match.failed + ' failed to save — try again in a minute.',
+        _match.failed + ' \u4e2a\u4fdd\u5b58\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002'))}</p>`;
     }
     if (amb.length) {
-      html += `<div class="mt-pickhd">${cuT(
-        `${amb.length} need your pick — tap the right Meituan listing:`,
-        `${amb.length} 个需要你选择 —— 点正确的美团名称:`)}</div>`;
-      html += amb.map((it, i) => `<div class="mt-pick">
-        <div class="pn">${esc(it.label)}</div>
-        <div class="chips">${it.candidates.map((c, j) =>
-          `<button class="mt-chip" onclick="mtMatchPick(${i},${j})">${esc(c)}</button>`).join('')}</div>
-      </div>`).join('');
+      html += `<div><div class="mt-pickhd">${esc(cuT(
+        amb.length + ' need your pick — choose the right Meituan listing',
+        amb.length + ' \u4e2a\u9700\u8981\u4f60\u9009\u62e9 \u2014 \u9009\u4e2d\u6b63\u786e\u7684\u7f8e\u56e2\u5546\u54c1'))}</div>
+        <div class="mt-picklist">` +
+        amb.map((it, i) => `<div class="mt-pick">
+          <div class="pn">${esc(it.label)}</div>
+          <div class="chips">${it.candidates.map((c, j) =>
+            `<button class="mt-chip" onclick="mtMatchPick(${i},${j})">${esc(c)}</button>`).join('')}</div>
+        </div>`).join('') + '</div></div>';
     }
     if (unm.length) {
-      html += `<div class="mt-pickhd">${cuT(
-        `${unm.length} not found on Meituan — stock won't sync until they're listed there:`,
-        `${unm.length} 个在美团上未找到 —— 上架前库存不会同步:`)}</div>`;
-      html += unm.map((it, i) => `<div class="mt-pick">
-        <div class="pn">${esc(it.label)}</div>
-        ${it.suggestion ? `<div class="chips"><button class="mt-chip" onclick="mtMatchFallback(${i})">${cuT('Use', '使用')} “${esc(it.suggestion)}”</button></div>` : ''}
-      </div>`).join('');
+      html += `<div><div class="mt-pickhd">${esc(cuT(
+        unm.length + ' are not on Meituan — their stock stays frozen until they are listed there',
+        unm.length + ' \u4e2a\u5728\u7f8e\u56e2\u4e0a\u672a\u627e\u5230 \u2014 \u4e0a\u67b6\u524d\u5e93\u5b58\u4e0d\u4f1a\u540c\u6b65'))}</div>
+        <div class="mt-picklist">` +
+        unm.map((it, i) => `<div class="mt-pickrow">
+          <span class="pn">${esc(it.label)}</span>
+          ${it.suggestion
+            ? `<button class="mt-chip" onclick="mtMatchFallback(${i})">${esc(cuT('Use', '\u4f7f\u7528'))} \u201c${esc(it.suggestion)}\u201d</button>`
+            : `<span class="mt-nosug">${esc(cuT('no suggestion', '\u65e0\u5efa\u8bae'))}</span>`}
+        </div>`).join('') + '</div>';
       if (unm.filter(u => u.suggestion).length > 1) {
-        html += `<div class="mt-right"><button class="btn btn-sm" onclick="mtMatchFallbackAll()">${cuT('Use suggested names for all', '全部使用建议名称')}</button></div>`;
+        html += `<div class="mt-right"><button class="btn btn-sm" onclick="mtMatchFallbackAll()">${cuT('Use suggested names for all', '\u5168\u90e8\u4f7f\u7528\u5efa\u8bae\u540d\u79f0')}</button></div>`;
       }
+      html += '</div>';
     }
     if (!amb.length && !unm.length) {
-      html += `<p class="muted">${cuT('Everything is matched.', '全部匹配完成。')}</p>`;
+      html += `<p class="mt-progsub">${cuT('Everything is matched.', '\u5168\u90e8\u5339\u914d\u5b8c\u6210\u3002')}</p>`;
     }
     html += `</div><div class="mt-dlg-ft">
-      <button class="mt-tinylink" onclick="mtMatchStartOver()">${cuT('Start over — clear all matched names', '重新开始 —— 清除所有已匹配名称')}</button>
+      <button class="mt-tinylink" onclick="mtMatchStartOver()">${cuT('Start over — clear every matched name', '\u91cd\u65b0\u5f00\u59cb \u2014 \u6e05\u9664\u6240\u6709\u5df2\u5339\u914d\u540d\u79f0')}</button>
       <span class="mt-tabs-grow"></span>
-      <button class="btn btn-sm btn-primary" onclick="mtMatchClose()">${cuT('Done', '完成')}</button>
+      <button class="btn btn-sm btn-primary" onclick="mtMatchClose()">${cuT('Done', '\u5b8c\u6210')}</button>
     </div>`;
     body.innerHTML = html;
   }
@@ -687,8 +710,12 @@
           await new Promise(res => setTimeout(res, 3000));
           data = await api('/api/retail-admin/meituan/listings');
           const total = Object.values(data.listings || {}).reduce((a, b) => a + b.length, 0);
-          const p = document.getElementById('mt-match-prog');
-          if (p) p.textContent = cuT(`Reading your Meituan listings… ${total} found`, `正在读取美团商品… 已读取 ${total} 个`);
+          const sub = document.getElementById('mt-match-sub');
+          if (sub) {
+            const active = _products.filter(x => x.is_active).length;
+            sub.textContent = cuT(`${total} listings read · matching against ${active} products`,
+                                  `已读取 ${total} 个商品 · 对比 ${active} 个商品`);
+          }
           if (!data.running) break;
         }
         _listings = (data && data.listings) || {};
