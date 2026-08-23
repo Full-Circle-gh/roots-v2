@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — Products Stock tab options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   The drawer's Stock tab — reordered, three options.
+   Same product throughout: 2 sizes (Small / Big), 2 stores,
+   93 + 86 on hand, we hold the stock, low-stock default 3.
+   Live --td-* tokens. Inter, sentence case, weights 400/500,
+   nothing under 13px, tabular numbers, no gradients.
+   ============================================================ */
+:root{
+  --td-surface:#18233A;--td-raised:#1E2A44;--td-border:#2A3550;--td-header:#364058;
+  --td-text:#FBF9F4;--td-text2:#9AA3B2;--td-heat-rgb:251,249,244;
+  --td-dusk:#6E67AF;--td-sage:#A3B49F;--td-sage-tint:#1E2C26;--td-sage-ink:#A3B49F;
+  --td-amber:#C9954A;--td-amber-tint:#33290F;--td-amber-ink:#C9954A;
+  --td-brick:#B4533E;--td-brick-tint:#351B14;--td-brick-ink:#D07A66;--td-paper:#111A2B;
+}
+:root[data-theme="light"]{
+  --td-surface:#FFFFFF;--td-raised:#F6F3EC;--td-border:#E4E0D5;--td-header:#DAD5C6;
+  --td-text:#111A2B;--td-text2:#58606E;--td-heat-rgb:17,26,43;
+  --td-sage-tint:#EDF1EC;--td-sage-ink:#4A6249;--td-amber-tint:#F7EEDE;--td-amber-ink:#8A6425;
+  --td-brick-tint:#F6E7E3;--td-brick-ink:#B4533E;--td-paper:#FBF9F4;
+}
+:root{--f:"Inter",-apple-system,system-ui,sans-serif}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--f);font-size:15px;line-height:1.6;color:var(--td-text);background:var(--td-paper)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+input{font:inherit;color:inherit}
+.num{font-variant-numeric:tabular-nums}
+.bar{position:sticky;top:0;z-index:9;display:flex;gap:18px;align-items:center;padding:10px 24px;
+  background:var(--td-text);color:var(--td-paper);font-size:13px}
+.bar b{font-weight:500}
+.bar label{display:inline-flex;gap:6px;align-items:center;cursor:pointer;opacity:.75}
+.wrap{max-width:1280px;margin:0 auto;padding:40px 24px 96px}
+.opt{margin-bottom:52px}
+.opt-h{font-size:18px;font-weight:500}
+.opt-s{font-size:13px;color:var(--td-text2);margin:4px 0 18px;max-width:72ch;text-wrap:pretty}
+.opt-s b{color:var(--td-text);font-weight:500}
+.row{display:flex;gap:28px;align-items:flex-start;flex-wrap:wrap}
+.note{font-size:13px;color:var(--td-text2);flex:1;min-width:220px;max-width:32ch}
+.note b{display:block;color:var(--td-text);font-weight:500;margin-bottom:6px}
+.note ul{margin-left:16px}.note li{margin-bottom:5px}
+.note ol{margin-left:18px}.note ol li{margin-bottom:4px}
+.good{color:var(--td-sage-ink)}.bad{color:#B4533E}
+:root[data-theme="dark"] .bad{color:#D07A66}
+
+/* drawer slice at the real width */
+.dw{width:560px;flex:none;border:1px solid var(--td-border);border-radius:14px;background:var(--td-paper);padding:18px}
+.card{border:1px solid var(--td-border);border-radius:14px;background:var(--td-surface);padding:16px}
+.card+.card{margin-top:14px}
+.card-h{font-size:13px;color:var(--td-text2);margin-bottom:12px}
+.field label{display:block;font-size:13px;font-weight:500;margin-bottom:6px}
+.field+.field{margin-top:14px}
+.hint{font-weight:400;color:var(--td-text2)}
+.inp{width:100%;height:38px;padding:0 12px;border:1px solid var(--td-border);border-radius:8px;
+  background:var(--td-paper);color:var(--td-text);font-size:15px}
+
+/* ── shared: the count field ── */
+.qty{width:76px;height:36px;text-align:right;padding:0 10px;border:1px solid var(--td-border);
+  border-radius:8px;background:var(--td-paper);color:var(--td-text);font-size:15px;
+  font-variant-numeric:tabular-nums}
+.qty:focus{outline:none;border-color:var(--td-text)}
+.qty.low{border-color:var(--td-amber);color:var(--td-amber-ink)}
+.qty.out{border-color:var(--td-brick);color:var(--td-brick-ink)}
+
+/* ── the headline ── */
+.onhand{display:flex;align-items:baseline;gap:10px;margin-bottom:4px}
+.onhand .n{font-size:30px;font-weight:500;line-height:1;font-variant-numeric:tabular-nums}
+.onhand .l{font-size:13px;color:var(--td-text2)}
+.bystore{font-size:13px;color:var(--td-text2);font-variant-numeric:tabular-nums}
+
+/* ── A: grid ── */
+.gr{width:100%;border-collapse:collapse}
+.gr th{font-size:13px;font-weight:400;color:var(--td-text2);text-align:right;padding:0 0 8px;
+  text-transform:none;letter-spacing:0}
+.gr th:first-child{text-align:left}
+.gr td{padding:6px 0;border-top:1px solid var(--td-border)}
+.gr td:first-child{font-weight:500}
+.gr td:not(:first-child){text-align:right}
+.gr .tot{font-weight:500;font-variant-numeric:tabular-nums;padding-left:14px}
+.gr col.c-store{width:96px}
+.gr col.c-tot{width:62px}
+.sz{font-size:13px;color:var(--td-text2);font-weight:400;margin-left:6px}
+
+/* ── B: per-store blocks ── */
+.store{border:1px solid var(--td-border);border-radius:10px;background:var(--td-paper);padding:12px 14px}
+.store+.store{margin-top:10px}
+.store-h{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px}
+.store-h .n{font-weight:500}
+.store-h .t{font-size:13px;color:var(--td-text2);font-variant-numeric:tabular-nums}
+.szrow{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:5px 0}
+.szrow+.szrow{border-top:1px solid var(--td-border)}
+.szrow .nm{font-size:15px}
+
+/* ── C: stepper rows ── */
+.step{display:inline-flex;align-items:center;border:1px solid var(--td-border);border-radius:8px;
+  overflow:hidden;background:var(--td-paper)}
+.step button{width:34px;height:36px;color:var(--td-text2)}
+.step button:hover{background:rgba(var(--td-heat-rgb),.05);color:var(--td-text)}
+.step input{width:54px;height:36px;border:0;border-left:1px solid var(--td-border);
+  border-right:1px solid var(--td-border);text-align:center;background:none;
+  font-size:15px;font-variant-numeric:tabular-nums}
+.step input:focus{outline:none}
+
+/* summary rows for the things that moved down */
+.sum{border:1px solid var(--td-border);border-radius:14px;background:var(--td-surface);overflow:hidden}
+.sumrow{display:flex;align-items:center;gap:14px;width:100%;padding:13px 14px;text-align:left}
+.sumrow+.sumrow{border-top:1px solid var(--td-border)}
+.sumrow:hover{background:rgba(var(--td-heat-rgb),.04)}
+.sm-main{flex:1;min-width:0}
+.sm-t{display:block;font-size:13px;color:var(--td-text2)}
+.sm-v{display:block;font-weight:500;margin-top:1px}
+.sm-go{font-size:13px;color:var(--td-text2);flex:none}
+
+/* TODAY reproduction */
+.t-old .mx{width:100%;border-collapse:collapse;font-size:13px}
+.t-old .mx th{padding:4px 5px;text-align:center;font-size:10px;letter-spacing:.04em;
+  text-transform:uppercase;color:var(--td-text2);font-weight:500}
+.t-old .mx th:first-child{text-align:left}
+.t-old .mx td{padding:4px 5px;text-align:center;border:0}
+.t-old .mx td:first-child{text-align:left;font-weight:600}
+.t-old .mx input{width:100%;padding:6px 7px;border:1px solid var(--td-border);border-radius:8px;
+  font-size:13px;text-align:right;font-variant-numeric:tabular-nums;background:var(--td-paper);color:var(--td-text)}
+.t-old .mtot{font-weight:600;font-variant-numeric:tabular-nums}
+.jump{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;height:40px;
+  border:1px solid var(--td-border);border-radius:8px;background:var(--td-surface);font-size:13px;font-weight:500}
+.jn{font-size:13px;color:var(--td-text2);margin:12px 0}
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <b>Stock tab — three options</b>
+  <span style="opacity:.6">560px · 2 sizes · 2 stores · 179 on hand</span>
+  <span style="flex:1"></span>
+  <label><input type="checkbox" onclick="document.documentElement.setAttribute('data-theme',this.checked?'dark':'light')"> Dark</label>
+</div>
+
+<div class="wrap">
+
+<!-- ORDER -->
+<div class="opt">
+  <div class="opt-h">The order, before the layout</div>
+  <div class="opt-s">The tab is called Stock, and today you scroll past a sourcing row, a sizes row, a paragraph, a full-width button and a SKU field before reaching a single number. Every option below uses this order instead — <b>what you came to change first, what you rarely touch last.</b></div>
+  <div class="row">
+    <div class="note" style="max-width:none;flex:1">
+      <b>Most → least important</b>
+      <ol>
+        <li><b style="display:inline">On hand</b> — the total, and how it splits by store</li>
+        <li><b style="display:inline">The counts</b> — per size, per store; where you type</li>
+        <li><b style="display:inline">Low-stock alert</b> — when to warn you</li>
+        <li><b style="display:inline">When out of stock</b> — what a shopper sees at zero <span class="good">(was full-page only)</span></li>
+        <li><b style="display:inline">Sourcing</b> — who holds it; changes almost never</li>
+        <li><b style="display:inline">Sizes</b> — add or rename; a jump to the full page</li>
+      </ol>
+      <div style="margin-top:10px"><b>Moved out</b> SKU goes to Basics. It is how you identify the product, not a fact about its stock, and it sat directly above the counts pushing them down.</div>
+    </div>
+  </div>
+</div>
+
+<!-- TODAY -->
+<div class="opt">
+  <div class="opt-h">Today</div>
+  <div class="opt-s">Four blocks of chrome before any stock, and the counts themselves are the least finished thing in the drawer.</div>
+  <div class="row">
+    <div class="dw t-old">
+      <div class="sum">
+        <button class="sumrow"><span class="sm-main"><span class="sm-t">Sourcing</span><span class="sm-v">We hold the stock</span></span><span class="sm-go">Edit ↗</span></button>
+        <button class="sumrow"><span class="sm-main"><span class="sm-t">Sizes</span><span class="sm-v">2 sizes · each with its own price and stock</span></span><span class="sm-go">Edit ↗</span></button>
+      </div>
+      <div class="jn">This product is stocked per size. Open the full page to set each size’s price and count.</div>
+      <button class="jump">⤢ Expand to edit sizes</button>
+      <div class="card" style="margin-top:14px">
+        <div class="card-h">Stock &amp; status</div>
+        <div class="field"><label>SKU</label><input class="inp num" value="2-430"></div>
+        <div class="field"><label>Stock by location</label>
+          <table class="mx">
+            <tr><th>Variant</th><th>Tianhe</th><th>Yuexiu</th><th>Total</th></tr>
+            <tr><td>Small</td><td><input class="num" value="93"></td><td><input class="num" value="0"></td><td class="mtot">93</td></tr>
+            <tr><td>Big</td><td><input class="num" value="86"></td><td><input class="num" value="0"></td><td class="mtot">86</td></tr>
+          </table>
+        </div>
+        <div class="field"><label>Low-stock alert at <span class="hint">(optional)</span></label><input class="inp" placeholder="Default 3"></div>
+      </div>
+    </div>
+    <div class="note"><b>Faults</b><ul>
+      <li class="bad">Column headers are 10px uppercase in the mono stack — which is Inter, so it is the banned uppercase</li>
+      <li class="bad">Variant names are weight 600; only 400 and 500 exist</li>
+      <li class="bad">Count boxes stretch the full column for a two-digit number</li>
+      <li class="bad">SKU is identity, not stock, and it pushes the counts down</li>
+      <li class="bad">Nothing says the total: 179 is nowhere on screen</li>
+      <li class="bad">"Stock &amp; status" — the status field is gone</li>
+    </ul></div>
+  </div>
+</div>
+
+<!-- A -->
+<div class="opt">
+  <div class="opt-h">A · Counts first, in a tight grid <span style="font-size:13px;font-weight:400;color:var(--td-sage-ink)">— recommended</span></div>
+  <div class="opt-s">The total leads, the grid sits directly under it, and everything that rarely changes drops to summary rows at the bottom. The grid keeps size × store comparable at a glance, and the boxes are only as wide as the numbers they hold.</div>
+  <div class="row">
+    <div class="dw">
+      <div class="card">
+        <div class="onhand"><span class="n num">179</span><span class="l">on hand</span></div>
+        <div class="bystore">Tianhe 179 · Yuexiu 0</div>
+        <table class="gr" style="margin-top:14px">
+          <colgroup><col><col class="c-store"><col class="c-store"><col class="c-tot"></colgroup>
+          <tr><th>Size</th><th>Tianhe</th><th>Yuexiu</th><th>Total</th></tr>
+          <tr><td>Small <span class="sz">120 g</span></td><td><input class="qty num" value="93"></td><td><input class="qty num out" value="0"></td><td class="tot num">93</td></tr>
+          <tr><td>Big <span class="sz">480 g</span></td><td><input class="qty num" value="86"></td><td><input class="qty num out" value="0"></td><td class="tot num">86</td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <div class="field"><label>Low-stock alert at <span class="hint">· blank uses the store default of 3</span></label><input class="inp num" style="max-width:120px" placeholder="3"></div>
+        <div class="field"><label>When out of stock</label><input class="inp" value="Pre-order outside Guangzhou" readonly></div>
+      </div>
+      <div class="sum" style="margin-top:14px">
+        <button class="sumrow"><span class="sm-main"><span class="sm-t">Sourcing</span><span class="sm-v">We hold the stock</span></span><span class="sm-go">Edit ↗</span></button>
+        <button class="sumrow"><span class="sm-main"><span class="sm-t">Sizes</span><span class="sm-v">2 sizes · add or rename</span></span><span class="sm-go">Edit ↗</span></button>
+      </div>
+    </div>
+    <div class="note"><b>Trade</b><ul>
+      <li class="good">A number is the first thing on the tab</li>
+      <li class="good">Size × store stays comparable in one glance</li>
+      <li class="good">Out-of-stock rule stops being full-page-only</li>
+      <li class="good">Tightest of the three</li>
+      <li>Gets cramped past three stores — the grid would scroll sideways</li>
+    </ul></div>
+  </div>
+</div>
+
+<!-- B -->
+<div class="opt">
+  <div class="opt-h">B · Grouped by store</div>
+  <div class="opt-s">One block per location, each with its own subtotal. Matches how someone counting a shelf actually works — they are standing in one store, not comparing two.</div>
+  <div class="row">
+    <div class="dw">
+      <div class="card">
+        <div class="onhand"><span class="n num">179</span><span class="l">on hand</span></div>
+        <div style="margin-top:14px">
+          <div class="store">
+            <div class="store-h"><span class="n">Tianhe</span><span class="t num">179</span></div>
+            <div class="szrow"><span class="nm">Small <span class="sz">120 g</span></span><input class="qty num" value="93"></div>
+            <div class="szrow"><span class="nm">Big <span class="sz">480 g</span></span><input class="qty num" value="86"></div>
+          </div>
+          <div class="store">
+            <div class="store-h"><span class="n">Yuexiu</span><span class="t num">0</span></div>
+            <div class="szrow"><span class="nm">Small <span class="sz">120 g</span></span><input class="qty num out" value="0"></div>
+            <div class="szrow"><span class="nm">Big <span class="sz">480 g</span></span><input class="qty num out" value="0"></div>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="field"><label>Low-stock alert at <span class="hint">· blank uses the store default of 3</span></label><input class="inp num" style="max-width:120px" placeholder="3"></div>
+        <div class="field"><label>When out of stock</label><input class="inp" value="Pre-order outside Guangzhou" readonly></div>
+      </div>
+      <div class="sum" style="margin-top:14px">
+        <button class="sumrow"><span class="sm-main"><span class="sm-t">Sourcing</span><span class="sm-v">We hold the stock</span></span><span class="sm-go">Edit ↗</span></button>
+        <button class="sumrow"><span class="sm-main"><span class="sm-t">Sizes</span><span class="sm-v">2 sizes · add or rename</span></span><span class="sm-go">Edit ↗</span></button>
+      </div>
+    </div>
+    <div class="note"><b>Trade</b><ul>
+      <li class="good">Scales to any number of stores without cramping</li>
+      <li class="good">Matches counting one shelf at a time</li>
+      <li class="good">Per-store subtotal is free</li>
+      <li class="bad">Taller — every size repeats under every store</li>
+      <li class="bad">Comparing one size across stores means looking in two places</li>
+    </ul></div>
+  </div>
+</div>
+
+<!-- C -->
+<div class="opt">
+  <div class="opt-h">C · Grid with steppers</div>
+  <div class="opt-s">Option A, but each count is a −/+ stepper as well as a field. Stock edits are usually small corrections — "two more came in" — and a stepper makes that a tap instead of selecting a number and retyping it.</div>
+  <div class="row">
+    <div class="dw">
+      <div class="card">
+        <div class="onhand"><span class="n num">179</span><span class="l">on hand</span></div>
+        <div class="bystore">Tianhe 179 · Yuexiu 0</div>
+        <table class="gr" style="margin-top:14px">
+          <colgroup><col><col style="width:132px"><col style="width:132px"></colgroup>
+          <tr><th>Size</th><th style="text-align:center">Tianhe</th><th style="text-align:center">Yuexiu</th></tr>
+          <tr><td>Small <span class="sz">120 g</span></td>
+            <td style="text-align:center"><span class="step"><button>−</button><input class="num" value="93"><button>+</button></span></td>
+            <td style="text-align:center"><span class="step"><button>−</button><input class="num" value="0"><button>+</button></span></td></tr>
+          <tr><td>Big <span class="sz">480 g</span></td>
+            <td style="text-align:center"><span class="step"><button>−</button><input class="num" value="86"><button>+</button></span></td>
+            <td style="text-align:center"><span class="step"><button>−</button><input class="num" value="0"><button>+</button></span></td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <div class="field"><label>Low-stock alert at <span class="hint">· blank uses the store default of 3</span></label><input class="inp num" style="max-width:120px" placeholder="3"></div>
+        <div class="field"><label>When out of stock</label><input class="inp" value="Pre-order outside Guangzhou" readonly></div>
+      </div>
+      <div class="sum" style="margin-top:14px">
+        <button class="sumrow"><span class="sm-main"><span class="sm-t">Sourcing</span><span class="sm-v">We hold the stock</span></span><span class="sm-go">Edit ↗</span></button>
+      </div>
+    </div>
+    <div class="note"><b>Trade</b><ul>
+      <li class="good">Small corrections are one tap</li>
+      <li class="good">Same comparability as A</li>
+      <li class="bad">No room for the Total column at 560px</li>
+      <li class="bad">Two stores × two sizes is already four steppers; a third store overflows</li>
+      <li class="bad">Every tap is a save — needs debouncing or it writes on each press</li>
+    </ul></div>
+  </div>
+</div>
+
+<div class="opt">
+  <div class="opt-h">Fixed in all three</div>
+  <div class="opt-s">
+    Column headers are sentence case at 13px weight 400 — they were 10px uppercase in <b>--f-mono</b>, which is remapped to Inter, so it was uppercase Inter, the exact thing the ban exists for. Variant names drop from weight 600 to 500. The count boxes are sized to their content instead of stretching. The whole matrix moves off the legacy <b>--line / --text-1 / --text-4</b> tokens onto <b>--td-*</b>, so it finally follows the theme. And the card stops being called "Stock &amp; status" now that the status field is gone.
+  </div>
+</div>
+
+</div>
+</body>
+</html>

@@ -1790,7 +1790,35 @@ function pdRenderStockMatrix(box, d) {
   }).join('');
   box.innerHTML =
     '<table class="pd-stock-matrix">' + head + body + '</table>' +
-    '<div style="margin-top:8px;"><span id="pd-store-stocks-msg" class="muted" style="font-size:12px;"></span></div>';
+    '<div style="margin-top:8px;"><span id="pd-store-stocks-msg" class="muted"></span></div>';
+  pdRenderOnHand();
+}
+// The headline above the grid: everything on hand, and how it splits by store.
+// The total was nowhere on screen — an operator had to add the column up. Reads
+// the matrix's own live values, so it follows a cell edit without a refetch.
+function pdRenderOnHand() {
+  const wrap = document.getElementById('pd-onhand');
+  const nEl  = document.getElementById('pd-onhand-n');
+  const sEl  = document.getElementById('pd-onhand-split');
+  if (!wrap || !nEl || !sEl) return;
+  const d = PD_STOCK_DATA;
+  const box = document.getElementById('pd-store-stocks');
+  if (!d || !Array.isArray(d.stores) || !box || !box.querySelector('table.pd-stock-matrix')) {
+    wrap.hidden = true; sEl.textContent = ''; return;
+  }
+  // Sum the inputs rather than the loaded payload: a typed-but-not-yet-saved
+  // change should move the headline immediately, or it contradicts the grid.
+  const val = el => Math.max(0, parseInt(el.value, 10) || 0);
+  let total = 0;
+  const perStore = d.stores.map(s => {
+    const n = [...box.querySelectorAll(`input[data-store-id="${s.store_id}"]`)].reduce((a, el) => a + val(el), 0);
+    total += n;
+    return _paStoreName(s.store_id) + ' ' + fcNum(n);
+  });
+  nEl.textContent = fcNum(total);
+  wrap.hidden = false;
+  // One store needs no breakdown — the headline already said it.
+  sEl.textContent = d.stores.length > 1 ? perStore.join(' · ') : '';
 }
 // Re-label the stock matrix rows live from VA_MEMBERS, so renaming a variant on
 // the left is reflected on the right immediately (no exit + re-open). Only the
@@ -1817,6 +1845,7 @@ function pdMatrixRecalc(inp) {
     .reduce((a, i) => a + (Math.max(0, parseInt(i.value, 10) || 0)), 0);
   const cell = box.querySelector('td.mtot[data-tot="' + vid + '"]');
   if (cell) cell.textContent = sum;
+  pdRenderOnHand();   // the headline follows the cell being typed into
 }
 // Push per-variant totals (from matrix data) into VA_STORE_TOTALS + the variants
 // table, so the read-only STOCK column there matches this grid exactly.

@@ -4520,6 +4520,11 @@
                   <div class="field"><label class="stacked">Name (second language) · 名称(第二语言)</label><input type="text" id="pd-name-cn"></div>
                   <div class="field"><label class="stacked">Price ¥ · 价格</label><input type="number" id="pd-price" min="0" step="0.01"></div>
                   <div class="field"><label class="stacked">Was price · 划线价 <span class="muted" style="font-weight:400;">(optional)</span></label><input type="number" id="pd-compare" min="0" step="0.01" placeholder="strike-through"></div>
+                  <!-- SKU lives here, not on Stock. It is how you identify the
+                       product, not a fact about how many you have — and on the
+                       Stock tab it sat directly above the counts, pushing the
+                       numbers people came for below the fold. -->
+                  <div class="field"><label class="stacked">SKU · 货号</label><input type="text" id="pd-sku" placeholder="required · 必填"></div>
                 </div>
               </section>
 
@@ -4586,6 +4591,37 @@
             <div class="pd-summary" id="pd-sum-stock"></div>
             <div class="pd-pp-sech" data-pp-only="1">Stock · 库存</div>
             <div class="pdb-grid">
+            <section class="pdb-card pdb-c7">
+              <!-- Counts first. The tab is called Stock, and it used to open on
+                   a sourcing row, a sizes row, a paragraph, a jump button and a
+                   SKU field before a single number. SKU moved to Basics — it is
+                   how you identify the product, not a fact about its stock. -->
+              <div class="pd-onhand" id="pd-onhand" hidden>
+                <span class="pd-onhand-n" id="pd-onhand-n">—</span>
+                <span class="pd-onhand-l">on hand · 在库</span>
+              </div>
+              <div class="pd-onhand-split" id="pd-onhand-split" data-no-i18n></div>
+                <div id="pd-stock-fields">
+                  <div class="field"><label class="stacked">Stock by location · 各门店库存</label>
+                    <div id="pd-store-stocks">—</div>
+                  </div>
+                  <div class="field"><label class="stacked">Low-stock alert at · 低库存提醒阈值 <span class="muted" style="font-weight:400;">(optional)</span><span class="fhelp"><button type="button" class="fhelp-btn" tabindex="-1" aria-label="What is this?"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.5" r=".7" fill="currentColor" stroke="none"/></svg></button><span class="fhelp-pop" role="tooltip">Flag this product as low when stock falls to this many units or fewer. Leave blank to use the store default. · 库存降到该数量(含)及以下时标记为低库存。留空则使用全店默认值。</span></span></label>
+                    <input type="number" id="pd-low-stock" min="0" step="1" placeholder="" style="max-width:140px">
+                  </div>
+                </div>
+                <div id="pd-stock-supplier-note" class="muted" style="display:none;font-weight:400;font-size:12px;line-height:1.5;">No stock tracked — this ships from the supplier and is always available. Manage availability with “Supplier out — pause selling” below. · 不跟踪库存——由供应商直发,始终有货。可用下方的“供应商缺货,暂停销售”控制是否可售。</div>
+                <div id="pd-oos-block" style="border-top:1px solid var(--line-soft);padding-top:10px;">
+                  <div style="font-weight:600;margin-bottom:5px;display:inline-flex;align-items:center;">When out of stock · 缺货时<span class="fhelp"><button type="button" class="fhelp-btn" tabindex="-1" aria-label="What is this?"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.5" r=".7" fill="currentColor" stroke="none"/></svg></button><span class="fhelp-pop" role="tooltip">“Pre-order outside Guangzhou” keeps the product orderable for out-of-city shoppers when stock hits 0 (ships on the next batch / restock); only same-day Guangzhou is blocked. · 广州外顾客在缺货时仍可下单预订,仅广州当日配送会被拦截。</span></span></div>
+                  <select id="pd-oos-policy" style="width:100%;padding:7px 8px;border:1px solid #d6d1c7;border-radius:7px;font:inherit;">
+                    <option value="strict">Sold out everywhere · 全国售罄停售</option>
+                    <option value="backorder_gz">Pre-order outside Guangzhou · 广州外可预订（现订现发）</option>
+                  </select>
+                </div>
+                <div id="pd-supplier-block" style="border-top:1px solid var(--line-soft);padding-top:10px;display:none;">
+                  <div style="font-weight:600;margin-bottom:5px;display:inline-flex;align-items:center;">Availability · 是否可售<span class="fhelp"><button type="button" class="fhelp-btn" tabindex="-1" aria-label="What is this?"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.5" r=".7" fill="currentColor" stroke="none"/></svg></button><span class="fhelp-pop" role="tooltip">Ships from the supplier, so it’s always available on our side — no stock to track. Tick this only when the supplier is out; the product stays visible but shows “Temporarily unavailable” and can’t be ordered. · 由供应商直发,我们这边始终有货,无需管理库存。仅在供应商缺货时勾选:商品仍显示,但标为“暂时缺货”且无法下单。</span></span></div>
+                  <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-supplier-paused" style="width:15px;height:15px;"> Supplier out — pause selling · 供应商缺货,暂停销售</label>
+                </div>
+            </section>
             <!-- Sourcing: who holds the stock. Drives which of pd-stock-fields /
                  pd-supplier-block shows below (pdSyncSupplierUi). The underlying
                  data is still the single pd-ship-from-supplier checkbox (kept
@@ -4604,32 +4640,6 @@
                 </button>
                 <input type="checkbox" id="pd-ship-from-supplier" style="display:none;" onchange="pdSyncSupplierUi()">
               </div>
-            </section>
-            <section class="pdb-card pdb-c7">
-              <div class="pd-card-h">Stock &amp; status · 库存与状态</div>
-              <div class="pd-fieldstack">
-                  <div class="field"><label class="stacked">SKU · 货号</label><input type="text" id="pd-sku" placeholder="required · 必填"></div>
-              </div>
-                <div id="pd-stock-fields">
-                  <div class="field"><label class="stacked">Stock by location · 各门店库存</label>
-                    <div id="pd-store-stocks" style="font-size:13px;line-height:1.7;">—</div>
-                  </div>
-                  <div class="field"><label class="stacked">Low-stock alert at · 低库存提醒阈值 <span class="muted" style="font-weight:400;">(optional)</span><span class="fhelp"><button type="button" class="fhelp-btn" tabindex="-1" aria-label="What is this?"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.5" r=".7" fill="currentColor" stroke="none"/></svg></button><span class="fhelp-pop" role="tooltip">Flag this product as low when stock falls to this many units or fewer. Leave blank to use the store default. · 库存降到该数量(含)及以下时标记为低库存。留空则使用全店默认值。</span></span></label>
-                    <input type="number" id="pd-low-stock" min="0" step="1" placeholder="">
-                  </div>
-                </div>
-                <div id="pd-stock-supplier-note" class="muted" style="display:none;font-weight:400;font-size:12px;line-height:1.5;">No stock tracked — this ships from the supplier and is always available. Manage availability with “Supplier out — pause selling” below. · 不跟踪库存——由供应商直发,始终有货。可用下方的“供应商缺货,暂停销售”控制是否可售。</div>
-                <div id="pd-oos-block" style="border-top:1px solid var(--line-soft);padding-top:10px;">
-                  <div style="font-weight:600;margin-bottom:5px;display:inline-flex;align-items:center;">When out of stock · 缺货时<span class="fhelp"><button type="button" class="fhelp-btn" tabindex="-1" aria-label="What is this?"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.5" r=".7" fill="currentColor" stroke="none"/></svg></button><span class="fhelp-pop" role="tooltip">“Pre-order outside Guangzhou” keeps the product orderable for out-of-city shoppers when stock hits 0 (ships on the next batch / restock); only same-day Guangzhou is blocked. · 广州外顾客在缺货时仍可下单预订,仅广州当日配送会被拦截。</span></span></div>
-                  <select id="pd-oos-policy" style="width:100%;padding:7px 8px;border:1px solid #d6d1c7;border-radius:7px;font:inherit;">
-                    <option value="strict">Sold out everywhere · 全国售罄停售</option>
-                    <option value="backorder_gz">Pre-order outside Guangzhou · 广州外可预订（现订现发）</option>
-                  </select>
-                </div>
-                <div id="pd-supplier-block" style="border-top:1px solid var(--line-soft);padding-top:10px;display:none;">
-                  <div style="font-weight:600;margin-bottom:5px;display:inline-flex;align-items:center;">Availability · 是否可售<span class="fhelp"><button type="button" class="fhelp-btn" tabindex="-1" aria-label="What is this?"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.5" r=".7" fill="currentColor" stroke="none"/></svg></button><span class="fhelp-pop" role="tooltip">Ships from the supplier, so it’s always available on our side — no stock to track. Tick this only when the supplier is out; the product stays visible but shows “Temporarily unavailable” and can’t be ordered. · 由供应商直发,我们这边始终有货,无需管理库存。仅在供应商缺货时勾选:商品仍显示,但标为“暂时缺货”且无法下单。</span></span></div>
-                  <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-supplier-paused" style="width:15px;height:15px;"> Supplier out — pause selling · 供应商缺货,暂停销售</label>
-                </div>
             </section>
             </div>
             <div class="pd-summary" id="pd-sum-more"></div>

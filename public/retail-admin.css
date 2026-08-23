@@ -3340,17 +3340,49 @@
      One place to set every variant's stock in every store. Wrapped so many
      stores scroll horizontally instead of bursting out of the narrow card. */
   #pd-store-stocks { overflow-x: auto; }
-  .pd-stock-matrix { width: 100%; border-collapse: collapse; font-size: 13px; }
-  .pd-stock-matrix th, .pd-stock-matrix td { padding: 4px 5px; text-align: center; }
-  .pd-stock-matrix th:first-child, .pd-stock-matrix td:first-child { padding-left: 0; }
-  .pd-stock-matrix tr:first-child th { font-size: 10px; letter-spacing: .04em; text-transform: uppercase; color: var(--text-4); font-family: var(--f-mono); font-weight: 500; }
-  /* Variant-name cell — left-aligned, normal case, and capped so a long product
-     name truncates with an ellipsis rather than widening the whole table. */
-  .pd-stock-matrix th.vh { text-align: left; color: var(--text-1); font-weight: 600; text-transform: none; letter-spacing: 0; font-family: var(--f-sans); white-space: nowrap; max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
-  .pd-stock-matrix tr:first-child th.vh { color: var(--text-4); font-weight: 500; }
-  .pd-stock-matrix input { width: 56px; box-sizing: border-box; padding: 6px 7px; border: 1px solid var(--line,#d8d2c4); border-radius: 8px; font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
-  .pd-stock-matrix td.mtot, .pd-stock-matrix th.mtot { color: var(--text-2); font-weight: 600; min-width: 30px; font-variant-numeric: tabular-nums; }
-  .pd-stock-matrix .va-self { font-size: 11px; }
+  /* Column headers are sentence case at 13px weight 400. They were 10px
+     uppercase in --f-mono — which is remapped to Inter, so it rendered as
+     uppercase Inter, the exact thing the ban exists for. The whole grid also
+     moves off the legacy --line / --text-1 / --text-4 tokens onto --td-*, so
+     it finally follows the theme instead of staying light in a dark admin. */
+  .pd-stock-matrix { width: 100%; border-collapse: collapse; font-size: 15px; }
+  .pd-stock-matrix th, .pd-stock-matrix td { padding: 6px 0 6px 12px; text-align: right; }
+  .pd-stock-matrix th:first-child, .pd-stock-matrix td:first-child { padding-left: 0; text-align: left; }
+  .pd-stock-matrix tr:first-child th {
+    font-size: 13px; font-weight: 400; letter-spacing: 0; text-transform: none;
+    color: var(--td-text2); font-family: var(--f-sans); padding-bottom: 8px;
+  }
+  .pd-stock-matrix tr + tr td, .pd-stock-matrix tr + tr th { border-top: 1px solid var(--td-border); }
+  /* Variant-name cell — capped so a long name truncates rather than widening
+     the table and squeezing the count boxes. */
+  .pd-stock-matrix th.vh {
+    text-align: left; color: var(--td-text); font-weight: 500; text-transform: none;
+    letter-spacing: 0; font-family: var(--f-sans); white-space: nowrap;
+    max-width: 150px; overflow: hidden; text-overflow: ellipsis;
+  }
+  .pd-stock-matrix tr:first-child th.vh { color: var(--td-text2); font-weight: 400; }
+  /* Sized to the number it holds, not stretched to the column. */
+  .pd-stock-matrix input {
+    width: 82px; box-sizing: border-box; height: 36px; padding: 0 10px;
+    border: 1px solid var(--td-border); border-radius: 8px;
+    background: var(--td-paper); color: var(--td-text);
+    font-size: 15px; text-align: right; font-variant-numeric: tabular-nums;
+  }
+  .pd-stock-matrix input:focus { outline: none; border-color: var(--td-text); }
+  .pd-stock-matrix td.mtot, .pd-stock-matrix th.mtot {
+    color: var(--td-text); font-weight: 500; min-width: 44px; font-variant-numeric: tabular-nums;
+  }
+  .pd-stock-matrix tr:first-child th.mtot { color: var(--td-text2); font-weight: 400; }
+  .pd-stock-matrix .va-self { font-size: 13px; color: var(--td-text2); }
+
+  /* The headline over the grid — the total, then the split by store. */
+  .pd-onhand { display: flex; align-items: baseline; gap: 10px; }
+  .pd-onhand[hidden] { display: none; }
+  .pd-onhand-n { font-size: 30px; font-weight: 500; line-height: 1; font-variant-numeric: tabular-nums; }
+  .pd-onhand-l { font-size: 13px; color: var(--td-text2); }
+  .pd-onhand-split { font-size: 13px; color: var(--td-text2); font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .pd-onhand-split:empty { display: none; }
+  #pd-stock-fields > .field:first-child > label.stacked { margin-top: 16px; }
   /* Description editor — Classic (rich) editor + "Product editor" launch, EN|CN side-by-side. */
   .pd-desc-modebar { display: inline-flex; gap: 4px; margin-left: 10px; vertical-align: middle; }
   .pd-mode-btn { font-size: 11px; padding: 3px 10px; border: 1px solid var(--line); background: var(--bg-pane); color: var(--text-2); border-radius: 6px; cursor: pointer; font-weight: 500; }
