@@ -165,6 +165,7 @@
       // one poll keeps the whole head of the page honest.
       mtPaintChannel(s.enabled !== false);
       mtRenderStores(s.stores);
+      mtRenderStatusLine(s.stores);
       mtRenderLog('mt-log-stock', s.recentStock, true);
       mtRenderLog('mt-log-sys', s.recentSystem, false);
 
@@ -208,6 +209,33 @@
                      : 'node scripts/meituan-login.js ' + code;
   }
 
+  // §1.7 status line: live state for the section, directly under the title,
+  // sentence case, tabular, facts joined by " · ". It replaces the purpose line
+  // that used to sit there and never changed. Zero Dusk — this is state, not
+  // the system acting.
+  function mtRenderStatusLine(stores) {
+    const el = document.getElementById('mt-status');
+    if (!el) return;
+    const rows = Array.isArray(stores) ? stores : [];
+    if (!rows.length) { el.textContent = ''; return; }
+    const cn = document.documentElement.dataset.uiLang === 'cn';
+    const live = rows.reduce((acc, r) => acc + Number(r.live || 0), 0);
+    const parts = [cuT(live + ' live on Meituan', live + ' 个已上架美团')];
+    // Per-store unmatched counts overlap heavily (the same product is missing
+    // from both), so report the worst store rather than a misleading sum.
+    const unmatched = rows.reduce((acc, r) => Math.max(acc, Number(r.unmatched || 0)), 0);
+    if (unmatched) parts.push(cuT(unmatched + ' unmatched', unmatched + ' 个未匹配'));
+    let html = parts.map(esc).join(' · ');
+    // A blocked store is the one fact worth colouring. Amber, never Dusk.
+    const bad = rows.filter(r => r.blocked);
+    if (bad.length) {
+      const names = bad.map(r => mtStoreName(r.code, cn) || r.name).join(', ');
+      html += ' · <span class="att">' +
+        esc(cuT(names + ' needs you', names + ' 需要处理')) + '</span>';
+    }
+    el.innerHTML = html;
+  }
+
   function mtRenderStores(stores) {
     const box = document.getElementById('mt-stores');
     if (!box) return;
@@ -219,8 +247,12 @@
       const mode = isInstant ? cuT('Matched by SKU', '按货号匹配')
                              : cuT('Matched by name', '按名称匹配');
       const bt = MT_BLOCK_TXT[st.blockedBy] || ['Not syncing', '同步已停'];
+      // Closed is not broken. The store shuts overnight and the daemon logs
+      // poll_paused for it; saying so plainly (and not in amber) is the whole
+      // difference between "we are shut" and "something needs you".
       const blockTxt = st.blocked ? cuT(bt[0], bt[1])
-                                  : cuT('Signed in · pushing stock', '已登录 · 正在推送');
+        : st.closed ? cuT('Closed · stock still syncing', '休息中 · 库存照常同步')
+        : cuT('Signed in · pushing stock', '已登录 · 正在推送');
       const since = st.blocked && st.blockedAt ? ' · ' + (fmtAgo(st.blockedAt) || '') : '';
       // A stranded row is one the daemon claimed and never finished. Nothing
       // counted these before, so 40 of them showed up in neither number.
@@ -236,7 +268,8 @@
       const factHtml = facts.map(f =>
         '<div class="sf"><div class="k">' + esc(f.k) + '</div><div class="v' +
         (f.warn ? ' warn' : '') + '">' + esc(String(f.v)) + '</div></div>').join('');
-      return '<div class="mt-store' + (st.blocked ? ' blocked' : '') + '">' +
+      const cls = st.blocked ? ' blocked' : st.closed ? ' closed' : '';
+      return '<div class="mt-store' + cls + '">' +
           '<div class="sh"><span class="sdot"></span>' +
             '<span class="sname">' + esc(mtStoreName(st.code, cn) || st.name) + '</span>' +
             '<span class="smode">' + esc(mode) + '</span></div>' +

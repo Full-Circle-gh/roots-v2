@@ -164,7 +164,12 @@ router.post('/api/retail-admin/meituan/enable', requireRetailAdmin, express.json
 // health event is a blocking one and no stock has pushed successfully since.
 // That last clause matters: 天河 logs a queue_stalled now and then and recovers
 // on its own, and a store that is visibly still pushing is not blocked.
-const MT_BLOCKING = ['needs_login', 'verify_required', 'queue_stalled', 'poll_paused', 'proxy_stale'];
+// ⚠️ Only rows the daemon wrote with status='error' count. poll_paused is
+// logged with status 'ok' and means "outside opening hours" — a closed store,
+// not a broken one. Treating the event type alone as blocking turned 天河 amber
+// the moment it shut for the night. Any future informational event is now
+// harmless here for the same reason.
+const MT_BLOCKING = ['needs_login', 'verify_required', 'queue_stalled', 'proxy_stale'];
 const MT_CLEARING = ['verify_cleared', 'queue_resumed', 'poll_resumed', 'proxy_elected'];
 
 function meituanStoreHealth(db) {
@@ -173,12 +178,22 @@ function meituanStoreHealth(db) {
       FROM retail_stores ORDER BY sort_order, id
   `).all();
 
-  const lastEvent = db.prepare(`
+  // Latest genuine failure, and latest thing that would clear one.
+  const lastFault = db.prepare(`
     SELECT event_type, status, error_msg, created_at
       FROM meituan_sync_log
-     WHERE store_code = ? AND event_type IN (${[...MT_BLOCKING, ...MT_CLEARING].map(() => '?').join(',')})
+     WHERE store_code = ? AND status = 'error'
+       AND event_type IN (${MT_BLOCKING.map(() => '?').join(',')})
      ORDER BY created_at DESC LIMIT 1
   `);
+  const lastClear = db.prepare(`
+    SELECT MAX(created_at) AS t FROM meituan_sync_log
+     WHERE store_code = ? AND event_type IN (${MT_CLEARING.map(() => '?').join(',')})
+  `);
+  // Shop hours. poll_paused/poll_resumed are a normal nightly pair; a closed
+  // store is reported plainly, never as a fault.
+  const lastPause  = db.prepare("SELECT MAX(created_at) AS t FROM meituan_sync_log WHERE store_code = ? AND event_type = 'poll_paused'");
+  const lastResume = db.prepare("SELECT MAX(created_at) AS t FROM meituan_sync_log WHERE store_code = ? AND event_type = 'poll_resumed'");
   const lastOkPush = db.prepare(`
     SELECT MAX(created_at) AS t FROM meituan_sync_log
      WHERE store_code = ? AND event_type = 'stock_push' AND status = 'ok'
@@ -201,11 +216,18 @@ function meituanStoreHealth(db) {
     'SELECT COUNT(*) AS n FROM store_products WHERE is_active = 1').get()?.n || 0;
 
   return stores.map(st => {
-    const ev  = lastEvent.get(st.code, ...MT_BLOCKING, ...MT_CLEARING) || null;
+    const ev  = lastFault.get(st.code, ...MT_BLOCKING) || null;
     const ok  = lastOkPush.get(st.code)?.t || null;
-    const blockedEvent = ev && MT_BLOCKING.includes(ev.event_type) ? ev : null;
-    // Pushed successfully since the block? Then it recovered on its own.
-    const recovered = !!(blockedEvent && ok && String(ok) > String(blockedEvent.created_at));
+    const cleared = lastClear.get(st.code, ...MT_CLEARING)?.t || null;
+    const blockedEvent = ev;
+    // Recovered on its own if anything good happened after the fault: a
+    // successful push, or an explicit clearing event.
+    const recovered = !!(blockedEvent && (
+      (ok      && String(ok)      > String(blockedEvent.created_at)) ||
+      (cleared && String(cleared) > String(blockedEvent.created_at))));
+    const pausedAt  = lastPause.get(st.code)?.t || null;
+    const resumedAt = lastResume.get(st.code)?.t || null;
+    const closed = !!(pausedAt && (!resumedAt || String(pausedAt) > String(resumedAt)));
     const q = queueRow.get(st.code) || {};
     const live = liveCount.get(st.code)?.n || 0;
     return {
@@ -216,6 +238,7 @@ function meituanStoreHealth(db) {
       blockedBy:  blockedEvent && !recovered ? blockedEvent.event_type : null,
       blockedAt:  blockedEvent && !recovered ? blockedEvent.created_at : null,
       blockedMsg: blockedEvent && !recovered ? (blockedEvent.error_msg || null) : null,
+      closed,
       lastPushAt: ok,
       pending:    Number(q.pending    || 0),
       // Rows the daemon claimed and never finished. Counted nowhere before, so
