@@ -5540,7 +5540,19 @@
   .mt-form { display: flex; flex-direction: column; gap: 16px; }
   .mt-field { display: flex; flex-direction: column; gap: 8px; font: 400 13px var(--f-sans); color: var(--td-text2); }
   .mt-field > input, .mt-field > select, .mt-field > textarea,
-  .mt-inp { font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; width: 100%; }
+  .mt-inp { font: 400 15px var(--f-sans); color: var(--td-text); background-color: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; width: 100%; }
+  /* background-COLOR above, never the `background` shorthand. The shorthand
+     reset repeat/position, and the global chevron (css:4923, restated with a
+     light stroke at css:139) came back with no-repeat gone — so the arrow
+     TILED the full width of every dialog <select>, a row of chevrons striking
+     through the label. Selects declare the whole arrow here, gutter included,
+     so neither rule can half-win. */
+  .mt-field > select, select.mt-inp {
+    appearance: none; -webkit-appearance: none; cursor: pointer;
+    padding-right: 40px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2358606E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat: no-repeat; background-position: right 16px center;
+  }
   .mt-field > textarea { min-height: 160px; line-height: 1.6; resize: vertical; }
   .mt-field > input::placeholder, .mt-inp::placeholder, .mt-field > textarea::placeholder { color: var(--td-text2); }
   .mt-inp.narrow { max-width: 144px; }
