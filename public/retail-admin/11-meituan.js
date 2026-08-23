@@ -16,6 +16,7 @@
   let _bundleDraft = null; // working copy while the bundle editor modal is open
   let _bundleSuggest = []; // combo candidates surfaced from pasted/fetched titles
   let _initiated = false;
+  let _lastStores = [];  // last /status.stores, so the status line can repaint
   let _mtFilter  = 'all';  // toolbar segmented filter: 'all' | 'att' (needs attention)
 
   // ── Entry point ────────────────────────────────────────────────────────────
@@ -164,8 +165,9 @@
       // The channel switch and every store card come straight off /status, so
       // one poll keeps the whole head of the page honest.
       mtPaintChannel(s.enabled !== false);
-      mtRenderStores(s.stores);
-      mtRenderStatusLine(s.stores);
+      _lastStores = s.stores || [];
+      mtRenderStores(_lastStores);
+      mtRenderStatusLine();
       mtRenderLog('mt-log-stock', s.recentStock, true);
       mtRenderLog('mt-log-sys', s.recentSystem, false);
 
@@ -213,17 +215,20 @@
   // sentence case, tabular, facts joined by " · ". It replaces the purpose line
   // that used to sit there and never changed. Zero Dusk — this is state, not
   // the system acting.
-  function mtRenderStatusLine(stores) {
+  function mtRenderStatusLine() {
     const el = document.getElementById('mt-status');
     if (!el) return;
-    const rows = Array.isArray(stores) ? stores : [];
+    const rows = _lastStores;
     if (!rows.length) { el.textContent = ''; return; }
     const cn = document.documentElement.dataset.uiLang === 'cn';
-    const live = rows.reduce((acc, r) => acc + Number(r.live || 0), 0);
+    // Count DISTINCT products, never the sum of the stores: most products are
+    // live on both, so summing read "390 live" against a catalogue of 248.
+    // Same definition the toolbar count and the banner use, so the three
+    // numbers on screen agree with each other.
+    const active = _products.filter(p => p.is_active);
+    const live = active.filter(p => Object.values(p.stores || {}).some(m => m.meituan_name)).length;
+    const unmatched = active.filter(p => mtNeedsAttention(p)).length;
     const parts = [cuT(live + ' live on Meituan', live + ' 个已上架美团')];
-    // Per-store unmatched counts overlap heavily (the same product is missing
-    // from both), so report the worst store rather than a misleading sum.
-    const unmatched = rows.reduce((acc, r) => Math.max(acc, Number(r.unmatched || 0)), 0);
     if (unmatched) parts.push(cuT(unmatched + ' unmatched', unmatched + ' 个未匹配'));
     let html = parts.map(esc).join(' · ');
     // A blocked store is the one fact worth colouring. Amber, never Dusk.
@@ -429,6 +434,8 @@
 
     // Attention banner — the only home of the Match-names flow; hidden the
     // moment every active product is live somewhere.
+    mtRenderStatusLine();  // product counts only exist now
+
     const attn  = document.getElementById('mt-attn');
     const attxt = document.getElementById('mt-attn-txt');
     if (attn) attn.hidden = !att;
