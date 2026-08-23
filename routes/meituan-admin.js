@@ -243,66 +243,18 @@ router.post('/api/retail-admin/meituan/enable', requireRetailAdmin, express.json
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
-// Is one store's sync switched on? Defaults to ON when the key is absent —
-// every store set up today is live, and an absent key must never read as "off".
-// lib/meituan-bundles.js holds the same reader for the enqueue path and both
-// daemons carry their own; this is the admin's copy.
-function meituanStorePushEnabled(db, code) {
+// Mirrors lib/meituan-bundles.js storePushEnabled: the Sales card's
+// per-location toggle is the one switch, and this is the admin's copy of the
+// read so the store lines can show a paused store as paused.
+function csStorePushEnabled(db, code) {
   try {
-    const row = db.prepare("SELECT value_json FROM storefront_config WHERE key = ?")
-                  .get('meituan.store.' + code + '.enabled');
-    return row ? JSON.parse(row.value_json) !== false : true;
+    const row = db.prepare('SELECT target_open, is_open FROM store_business_status WHERE store_code = ?').get(code);
+    if (!row) return true;
+    if (row.target_open === 0 || row.target_open === 1) return row.target_open === 1;
+    if (row.is_open === 0 || row.is_open === 1) return row.is_open === 1;
+    return true;
   } catch (e) { return true; }
 }
-
-// Turn one store's sync off or on.
-//
-// OFF drops whatever that store had waiting. 越秀 sat signed out for 24 days and
-// 748 updates piled up behind it — a queue for a store that cannot receive is
-// not work in progress, it is a lie the "waiting" tile keeps telling. Nothing
-// new is queued for it either (the enqueue path checks the same flag).
-//
-// ON queues a fresh full push rather than replaying what was dropped: after any
-// pause the only value worth sending is the CURRENT stock, not a day of stale
-// intermediate ones.
-router.post('/api/retail-admin/meituan/stores/:code/enable', requireRetailAdmin, express.json(), (req, res) => {
-  const db = tdb();
-  const code = String(req.params.code || '').trim();
-  const enabled = !!(req.body && req.body.enabled);
-  if (!code) return res.status(400).json({ success: false, error: 'store code required' });
-  try {
-    db.prepare(`
-      INSERT INTO storefront_config (key, value_json, updated_at)
-      VALUES (?, ?, CURRENT_TIMESTAMP)
-      ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = CURRENT_TIMESTAMP
-    `).run('meituan.store.' + code + '.enabled', JSON.stringify(enabled));
-
-    let dropped = 0, queued = 0;
-    if (!enabled) {
-      dropped = db.prepare(
-        "DELETE FROM meituan_sync_queue WHERE store_code = ? AND status IN ('pending','processing')"
-      ).run(code).changes || 0;
-    } else {
-      const mapped = db.prepare(`
-        SELECT m.product_id, m.retail_store_id, m.store_code,
-               COALESCE(s.physical_qty, 0) AS qty
-          FROM meituan_product_map m
-          LEFT JOIN retail_store_stock s
-                 ON s.store_id = m.retail_store_id AND s.product_id = m.product_id
-         WHERE m.store_code = ? AND m.sync_enabled = 1 AND m.meituan_name IS NOT NULL
-      `).all(code);
-      const ins = db.prepare(`
-        INSERT INTO meituan_sync_queue (retail_store_id, product_id, store_code, new_qty, status)
-        VALUES (?, ?, ?, ?, 'pending')
-      `);
-      const tx = db.transaction(() => {
-        for (const m of mapped) { ins.run(m.retail_store_id, m.product_id, m.store_code, m.qty); queued++; }
-      });
-      tx();
-    }
-    res.json({ success: true, enabled, dropped, queued });
-  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
-});
 
 // Per-store health, derived from what the daemons actually recorded.
 //
@@ -395,7 +347,7 @@ function meituanStoreHealth(db) {
       code: st.code,
       name: st.name,
       nameEn: st.nameEn || st.name,
-      enabled:    meituanStorePushEnabled(db, st.code),
+      enabled:    csStorePushEnabled(db, st.code),
       blocked:    !!blockedEvent && !recovered,
       blockedBy:  blockedEvent && !recovered ? blockedEvent.event_type : null,
       blockedAt:  blockedEvent && !recovered ? blockedEvent.created_at : null,
@@ -954,12 +906,37 @@ function csCellOpen(db, channel, storeCode) {
   const r = db.prepare('SELECT is_open FROM channel_status WHERE channel=? AND store_code=?').get(channel, storeCode);
   return r ? r.is_open === 1 : true; // absent = open
 }
+// Closing a Meituan location also stops its stock sync (lib/meituan-bundles.js
+// storePushEnabled reads the same target_open), so the queue has to be dealt
+// with here: drop what it was holding, because a push to a store the operator
+// switched off will never be wanted. Re-opening queues a fresh FULL push rather
+// than replaying the dropped rows — after a pause only the current stock is
+// worth sending, not a trail of stale intermediate values.
+function csSyncQueueForCell(db, storeCode, open) {
+  if (!open) {
+    db.prepare("DELETE FROM meituan_sync_queue WHERE store_code = ? AND status IN ('pending','processing')").run(storeCode);
+    return;
+  }
+  const mapped = db.prepare(`
+    SELECT m.product_id, m.retail_store_id, m.store_code, COALESCE(s.physical_qty, 0) AS qty
+      FROM meituan_product_map m
+      LEFT JOIN retail_store_stock s ON s.store_id = m.retail_store_id AND s.product_id = m.product_id
+     WHERE m.store_code = ? AND m.sync_enabled = 1 AND m.meituan_name IS NOT NULL
+  `).all(storeCode);
+  const ins = db.prepare(`
+    INSERT INTO meituan_sync_queue (retail_store_id, product_id, store_code, new_qty, status)
+    VALUES (?, ?, ?, ?, 'pending')
+  `);
+  for (const m of mapped) ins.run(m.retail_store_id, m.product_id, m.store_code, m.qty);
+}
+
 function csSetCell(db, channel, storeCode, open, by) {
   if (channel === 'meituan') {
     db.prepare(`INSERT INTO store_business_status (store_code, target_open, target_by, target_at, updated_at)
                 VALUES (?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 ON CONFLICT(store_code) DO UPDATE SET target_open=excluded.target_open, target_by=excluded.target_by, target_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP`)
       .run(storeCode, open ? 1 : 0, by);
+    try { csSyncQueueForCell(db, storeCode, open); } catch (e) { /* the toggle itself must still land */ }
   } else {
     db.prepare(`INSERT INTO channel_status (channel, store_code, is_open, updated_at, updated_by)
                 VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?)
