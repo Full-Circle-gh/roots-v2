@@ -19785,7 +19785,12 @@ router.patch('/api/retail-admin/products/:id', requireRetailAdmin, express.json(
   if ('is_market' in body) { sets.push('is_market = ?'); params.push(body.is_market ? 1 : 0); }
   if ('is_restock_only' in body) { sets.push('is_restock_only = ?'); params.push(body.is_restock_only ? 1 : 0); }
   if ('status' in body) {
-    const ST = ['Active', 'Inactive', 'Seasonal', 'Coming Soon'];
+    // Seasonal and Coming Soon are gone. No shopper query ever read status —
+    // it is absent from RETAIL_PRODUCT_COLS and from every storefront WHERE —
+    // so those two looked like promises to a customer and delivered nothing.
+    // Anything unrecognised still coerces to Active, which is the value the
+    // staff-side filters (alerts, dashboard, POS, kitchen) want to see.
+    const ST = ['Active', 'Inactive'];
     sets.push('status = ?'); params.push(ST.includes(body.status) ? body.status : 'Active');
   }
   // Storefront 2-level category. Validated as a pair against the live tree; a
@@ -20052,7 +20057,7 @@ router.post('/api/retail-admin/products', requireRetailAdmin, express.json(), as
   const descEn = descFormat === 'rich' ? sanitizeRichHtml(b.description_en) : ((b.description_en || '').trim() || null);
   const descCn = descFormat === 'rich' ? sanitizeRichHtml(b.description_cn) : ((b.description_cn || '').trim() || null);
   const cat2 = normalizeCategoryPair(b.top_category, b.subcategory, tdb());
-  const ST = ['Active', 'Inactive', 'Seasonal', 'Coming Soon'];
+  const ST = ['Active', 'Inactive'];   // see the PATCH handler for why the other two went
   const status = ST.includes(b.status) ? b.status : 'Active';
   // product_facts: same shape-guard as the PATCH handler — an object of short
   // string fields, stored as JSON (or null). MUST be bound below: it's column 22

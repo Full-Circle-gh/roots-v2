@@ -4551,11 +4551,15 @@
                      from it. Hidden, not deleted. -->
                 <input type="checkbox" id="pd-published" hidden>
                 <div class="field"><label class="stacked">Status · 状态</label>
+                  <!-- Seasonal and Coming Soon are gone: no shopper query has
+                       ever read `status`, so both told a customer nothing and a
+                       "Coming Soon" product with stock was purchasable anyway.
+                       What is left still matters staff-side — Inactive drops a
+                       product out of stock alerts, the dashboard cards, POS and
+                       the kitchen list. -->
                   <select id="pd-status">
                     <option value="Active">Active · 在售</option>
                     <option value="Inactive">Inactive · 停售</option>
-                    <option value="Seasonal">Seasonal · 季节性</option>
-                    <option value="Coming Soon">Coming Soon · 即将上架</option>
                   </select></div>
               </section>
 
