@@ -1062,10 +1062,31 @@ async function processListingJobs() {
     db.prepare(`UPDATE meituan_listing_jobs SET status='processing' WHERE id=?`).run(job.id);
     try {
       const browser = await getBrowser(job.store_code);
-      const scrape = await browser.listProductsWithSpecs();
-      if (!scrape) throw new Error('scrape returned null (not logged in or no content iframe)');
+      // Ask Meituan's own APIs first (walks the category list). The DOM scrape
+      // below can only see rows the list view actually rendered, and on 天河 it
+      // never renders any — that store's cache held 2 pinned notices for a month
+      // while the store really had 265 products. Keep the scrape as the fallback
+      // so a shape change in the API can't take the feature out entirely.
+      let scrape = await browser.listListingsViaApi();
+      let via = 'api';
+      if (!scrape || !(scrape.names || []).length) {
+        log(job.store_code, 'listing read: API returned nothing — falling back to the DOM scrape');
+        scrape = await browser.listProductsWithSpecs();
+        via = 'dom';
+      }
+      if (!scrape) throw new Error('listing read returned null (not logged in or no content iframe)');
       const names = scrape.names || [];
       const listings = scrape.listings || [];
+
+      // A read that came back empty is almost always a broken read, not an empty
+      // store — and this job REPLACES the cache, so letting it through wipes
+      // every listing name the admin's autocomplete has. Fail the job instead
+      // and leave the previous cache standing.
+      if (!names.length) {
+        const held = db.prepare('SELECT COUNT(*) AS n FROM meituan_listings WHERE store_code=?')
+                       .get(job.store_code)?.n || 0;
+        throw new Error(`read 0 listings via ${via} — refusing to wipe the ${held} cached (likely a failed read, not an empty store)`);
+      }
 
       const tx = db.transaction(() => {
         db.prepare(`DELETE FROM meituan_listings WHERE store_code=?`).run(job.store_code);
@@ -1097,8 +1118,8 @@ async function processListingJobs() {
            SET status='done', result_count=?, error=NULL, completed_at=CURRENT_TIMESTAMP
          WHERE id=?
       `).run(names.length, job.id);
-      logSync(job.store_code, 'listing_scrape', 'ok', { count: names.length, specs: specCount });
-      log(job.store_code, `listing scrape done: ${names.length} listing(s), ${specCount} spec(s) across ${listings.length} spu(s)`);
+      logSync(job.store_code, 'listing_scrape', 'ok', { count: names.length, specs: specCount, via });
+      log(job.store_code, `listing read done via ${via}: ${names.length} listing(s), ${specCount} spec(s) across ${listings.length} spu(s)`);
     } catch (err) {
       db.prepare(`
         UPDATE meituan_listing_jobs
