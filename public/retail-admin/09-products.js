@@ -1095,13 +1095,20 @@ function paRenderKpis(animate) {
   // §1.7 status line — work waiting, never population, and only when a real
   // number is behind it. Nothing waiting = no line at all, which is a finished
   // header rather than a gap. The dash is banned here as everywhere.
+  // Each fact IS its filter. These two are the most actionable numbers on the
+  // page; leaving them as plain text made the operator read "12 sold out" and
+  // then go hunting in a dropdown for the list behind it. A1 exists to answer
+  // "what needs me right now" in one click, so the answer is the control.
   {
     const el = document.getElementById('pa-status-line');
     if (el) {
+      const bit = (status, n, label) =>
+        `<button type="button" class="pa-status-jump${PA_STATUS === status ? ' is-on' : ''}"`
+        + ` onclick="paSetStatus('${status}')">${fcNum(n)} ${label}</button>`;
       const bits = [];
-      if (oos) bits.push(fcNum(oos) + ' ' + cuT('sold out', '缺货'));
-      if (low) bits.push(fcNum(low) + ' ' + cuT('low on stock', '库存偏低'));
-      el.textContent = bits.join(' · ');
+      if (oos) bits.push(bit('oos', oos, cuT('sold out', '缺货')));
+      if (low) bits.push(bit('low', low, cuT('low on stock', '库存偏低')));
+      el.innerHTML = bits.join('<span class="pa-status-sep"> · </span>');
       el.hidden = !bits.length;
     }
   }

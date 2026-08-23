@@ -2259,6 +2259,20 @@
     font-variant-numeric: tabular-nums; margin-top: 2px;
   }
   .pa-status-line[hidden] { display: none; }
+  /* The facts in the status line are filters. They stay typographically part of
+     the sentence — same size, same Graphite, no button chrome — and only admit
+     to being pressable on hover/focus and when they are the live filter. A
+     control that shouts here would turn the calmest line on the page into a
+     toolbar; §1.7 still owns this slot and it is state, not an action bar. */
+  .pa-status-jump {
+    font: inherit; color: inherit; background: none; border: 0; padding: 0;
+    cursor: pointer; font-variant-numeric: tabular-nums;
+    border-bottom: 1px solid transparent;
+  }
+  .pa-status-jump:hover { color: var(--td-text); border-bottom-color: var(--td-border); }
+  .pa-status-jump:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 2px; border-radius: 3px; }
+  .pa-status-jump.is-on { color: var(--td-text); font-weight: 500; border-bottom-color: var(--td-text); }
+  .pa-status-sep { color: var(--td-text2); }
   /* Adding a product is the page's one primary action AND its one Dusk element,
      so it sits on the title's line at the far right — never among the filters. */
   #tab-products > .pa-head-row > .pa-addsplit { margin-left: auto; }
