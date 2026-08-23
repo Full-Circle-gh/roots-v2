@@ -310,6 +310,7 @@ function elemeStoreHealth(db) {
       id: st.id,
       code: st.code,
       name: st.name,
+      nameEn: st.nameEn || st.name,
       shopId: st.shop_id || null,
       shopName: st.shop_name || null,
       blocked: !shopSet || !sessionActive,

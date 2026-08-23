@@ -286,7 +286,7 @@
   function elRenderCatalogueCaption() {
     const el = document.getElementById('el-catalogue-caption');
     if (!el || !_stores.length) return;
-    el.textContent = _stores.map(s => `${s.name}: ${elCatalogueCaption(s.code)}`).join('   ·   ');
+    el.textContent = _stores.map(s => `${elStoreName(s)}: ${elCatalogueCaption(s.code)}`).join('   ·   ');
   }
 
   // One <datalist> per store (their Eleme catalogues differ) — datalists have

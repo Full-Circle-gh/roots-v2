@@ -103,6 +103,73 @@ function resolveProduct(item, storeId) {
   return out;
 }
 
+// ── The extras the order payload already carried ─────────────────────────────
+// Both daemons now send `order.channel` — the rest of the SAME order-list
+// response they already fetched, read by lib/meituan-order-fields.js. Every
+// field is optional by contract: a payload shape we've never seen leaves nulls
+// and changes nothing else. These helpers are deliberately total (never throw)
+// so a surprise can cost the extras and never the order or its stock deduction.
+function chan(order) {
+  const c = order && order.channel;
+  return (c && typeof c === 'object') ? c : {};
+}
+// A finite number, else null — so a missing fee writes NULL rather than 0, which
+// would read as "Meituan charged us nothing" instead of "we don't know".
+function fnum(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+function ftext(v) {
+  const s = (v === null || v === undefined) ? '' : String(v).trim();
+  return s || null;
+}
+// "There is nothing to write" — distinguished from a real failure so the poll
+// path stays silent instead of logging an error for the ordinary case.
+class SkipExtras extends Error {}
+
+// Attach the structured payload's per-line price and Meituan listing id to the
+// lines we resolved from the copy text.
+//
+// WHY MATCH INSTEAD OF REPLACE. The copy-text parse is what deducts stock, and
+// it handles a combo by expanding it into its components; the structured rows
+// report that same combo as ONE line. Swapping the source would therefore change
+// what gets deducted — a thing to do on evidence, in daylight, not as a side
+// effect of collecting prices. So the structured rows are matched ONTO the
+// resolved lines: exact normalised name first, then an unambiguous substring,
+// each structured row consumed at most once. A line that finds no match keeps
+// unit_price 0 exactly as before, and the order's money is unaffected either way
+// because the totals come from chargeInfo, not from summing these.
+function attachChannelLines(items, chItems) {
+  const rows = (Array.isArray(chItems) ? chItems : []).map(r => ({ r, used: false }));
+  if (!rows.length) return;
+  for (const it of items) {
+    const wanted = normName(it.name);
+    if (!wanted) continue;
+    let hit = rows.find(x => !x.used && normName(x.r.name) === wanted);
+    if (!hit) {
+      const cands = rows.filter(x => {
+        if (x.used) return false;
+        const n = normName(x.r.name);
+        return n && (n.includes(wanted) || wanted.includes(n));
+      });
+      if (cands.length === 1) hit = cands[0];
+    }
+    if (!hit) continue;
+    hit.used = true;
+    const price = fnum(hit.r.price);
+    if (price !== null) { it.unitPrice = price; it.lineTotal = price * (Number(it.qty) || 0); }
+    it.foodId = ftext(hit.r.foodId);
+    // Add-ons as [{ label }] — the shape options_json already carries for our own
+    // orders, so the packer's per-line options row renders them with no change
+    // there. They are labels only: nothing keys stock off them (a channel order
+    // deducts through adjustStock, never through the option-expanding path).
+    it.options = Array.isArray(hit.r.options) && hit.r.options.length
+      ? hit.r.options.map(label => ({ label }))
+      : null;
+  }
+}
+
 // Map a Meituan platform status label → our internal `status` so the order
 // shows OUR lifecycle vocabulary (Paid/Preparing/Dispatched/Delivered) and
 // lands in the matching Orders tab, exactly like mini-app/web orders. The exact
@@ -222,6 +289,30 @@ router.post('/ingest-order', (req, res) => {
     // status so the order lands in the right tab; anything in-progress → 'paid'.
     const internalStatus = internalStatusForChannel(channelStatus) || 'paid';
 
+    // The rest of the same payload (see chan/attachChannelLines above).
+    const ch    = chan(order);
+    const money = ch.money    || {};
+    const rider = ch.rider    || {};
+    const cust  = ch.customer || {};
+    const inv   = ch.invoice  || {};
+    attachChannelLines(items, ch.items);
+
+    // Money. `total` keeps its meaning — what the customer was charged — and
+    // Meituan's own userPayTotalAmount is the authority on it when present (the
+    // copy text's 合计 agrees; 闪购 previously summed item prices and so under-
+    // reported by the fees). `subtotal` now carries the GOODS amount rather than
+    // a repeat of the total, with the fees in their own long-existing columns.
+    const userPaid    = fnum(money.userPaid);
+    const totalPaid   = userPaid !== null ? userPaid : total;
+    const subtotal    = fnum(money.food) !== null ? fnum(money.food) : totalPaid;
+    const shippingFee = fnum(money.shipping);
+    const packingFee  = fnum(money.packaging);
+    // Delivery lifecycle as the PLATFORM records it. Our own dispatch/delivery
+    // columns were always empty on these orders — nobody here dispatches them —
+    // so the rider's collect/drop times are the only such record that exists.
+    const fetchedAt   = ftext(rider.fetchedAt);
+    const deliveredAt = ftext(rider.deliveredAt);
+
     // 1. Create the order + its line items in one transaction.
     const orderId = db.transaction(() => {
       const r = db.prepare(`
@@ -229,23 +320,55 @@ router.post('/ingest-order', (req, res) => {
           order_no, status, payment_method, subtotal, total,
           store_id, channel, fulfillment_type, placed_at, paid_at,
           channel_status, channel_status_at, channel_eta, channel_preorder_at,
-          customer_note, needs_cutlery
+          customer_note, needs_cutlery,
+          shipping_fee, packing_fee,
+          channel_commission, channel_settle_amount, channel_discount,
+          channel_rider_name, channel_rider_status, channel_rider_status_code,
+          channel_rider_assigned_at, channel_rider_fetched_at,
+          channel_customer_id, channel_customer_orders,
+          channel_distance_m, channel_dest_lat, channel_dest_lng,
+          recipient_name, needs_invoice, invoice_title, invoice_tax_id,
+          dispatched_at, delivered_at
         ) VALUES (?, ?, 'meituan', ?, ?, ?, 'meituan', 'delivery',
                   COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP),
                   ?, CASE WHEN ? IS NULL THEN NULL ELSE CURRENT_TIMESTAMP END, ?, ?,
+                  ?, ?,
+                  COALESCE(?, 0), COALESCE(?, 0),
+                  ?, ?, ?,
+                  ?, ?, ?,
+                  ?, ?,
+                  ?, ?,
+                  ?, ?, ?,
+                  ?, ?, ?, ?,
                   ?, ?)
-      `).run(orderNo, internalStatus, total, total, storeId, placedAt, placedAt,
-             channelStatus, channelStatus, channelEta, preOrderAt, customerNote, needsCutlery);
+      `).run(orderNo, internalStatus, subtotal, totalPaid, storeId, placedAt, placedAt,
+             channelStatus, channelStatus, channelEta, preOrderAt, customerNote, needsCutlery,
+             shippingFee, packingFee,
+             fnum(money.commission), fnum(money.settle), fnum(money.discount),
+             ftext(rider.name), ftext(rider.statusDesc), fnum(rider.statusCode),
+             ftext(rider.assignedAt), fetchedAt,
+             ftext(cust.userId), fnum(cust.orderCount),
+             fnum(cust.distanceM), fnum(cust.lat), fnum(cust.lng),
+             ftext(cust.name), inv.wanted ? 1 : 0, ftext(inv.title), ftext(inv.taxId),
+             fetchedAt, deliveredAt);
       const oid = r.lastInsertRowid;
       for (const it of items) {
         // Snapshot the Meituan 货号 (SKU token) so the view-only order drawer can
         // show it per line — including UNMATCHED lines (productId null), which
         // have no store_products row for the detail route to pull a SKU from.
+        // unit_price/line_total were hard-zeroed here until the structured rows
+        // arrived: every Meituan sale therefore counted as ¥0 of product revenue
+        // in the per-product reports that SUM(line_total). They now carry the
+        // real per-line price when the line matched a structured row, and stay 0
+        // when it didn't — never a guess.
         db.prepare(`
           INSERT INTO retail_order_items
-            (order_id, product_id, name_cn, name_en, sku, qty, unit_price, line_total)
-          VALUES (?, ?, ?, ?, ?, ?, 0, 0)
-        `).run(oid, it.productId, it.nameCn, it.nameEn, it.sku || null, it.qty);
+            (order_id, product_id, name_cn, name_en, sku, qty, unit_price, line_total,
+             channel_food_id, options_json)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(oid, it.productId, it.nameCn, it.nameEn, it.sku || null, it.qty,
+               fnum(it.unitPrice) || 0, fnum(it.lineTotal) || 0,
+               it.foodId || null, it.options ? JSON.stringify(it.options) : null);
       }
       return oid;
     })();
@@ -316,6 +439,47 @@ router.post('/ingest-order', (req, res) => {
       }
     }
 
+    // 5. Record what the payload's own item rows said, versus the copy-text parse
+    //    we deduct from. This is the evidence for a decision not yet taken: the
+    //    structured rows carry Meituan's listing id and would be a sturdier basis
+    //    for matching than a regex over a merchant-typed title — but only if they
+    //    agree with the parse in the cases that matter (combos, add-ons, odd
+    //    characters). Logged when they DISAGREE, plus once per store on first
+    //    sighting so an empty section is visible as a fact rather than as an
+    //    absence. Never blocks the import.
+    try {
+      const chLines = Array.isArray(ch.items) ? ch.items : [];
+      const copyQty = items.reduce((s, i) => s + (Number(i.qty) || 0), 0);
+      const chQty   = chLines.reduce((s, i) => s + (Number(i.qty) || 0), 0);
+      const priced  = items.filter(i => fnum(i.unitPrice) !== null).length;
+      const drift   = chLines.length !== items.length || chQty !== copyQty || priced !== items.length;
+      const firstForStore = !db.prepare(`
+        SELECT 1 FROM meituan_sync_log
+         WHERE event_type = 'order_fields' AND COALESCE(store_code,'') = COALESCE(?,'') LIMIT 1
+      `).get(storeCode || null);
+      if (drift || firstForStore) {
+        db.prepare(`
+          INSERT INTO meituan_sync_log (store_code, event_type, status, detail, error_msg)
+          VALUES (?, 'order_fields', ?, ?, ?)
+        `).run(
+          storeCode || null,
+          drift ? 'warn' : 'ok',
+          JSON.stringify({
+            ref,
+            sections: ch.present || [],
+            copy: items.map(i => ({ name: i.name, qty: i.qty, priced: fnum(i.unitPrice) !== null })),
+            structured: chLines.map(i => ({ name: i.name, qty: i.qty, price: i.price, foodId: i.foodId })),
+            money: money, rider: rider.name || null, customerOrders: cust.orderCount ?? null,
+          }),
+          drift
+            ? `structured/copy item mismatch: ${items.length} copy line(s) qty ${copyQty} vs ${chLines.length} structured qty ${chQty}; ${priced}/${items.length} priced`
+            : null
+        );
+      }
+    } catch (logErr) {
+      console.error('[meituan-internal] order_fields log failed:', logErr.message);
+    }
+
     res.json({ ok: true, orderId, orderNo, items: items.length, deducted, unresolved });
   } catch (err) {
     console.error('[meituan-internal] ingest-order error:', err);
@@ -330,6 +494,9 @@ router.post('/ingest-order', (req, res) => {
 // by Meituan order no via meituan_order_import → retail_order_id.
 router.post('/update-order-status', (req, res) => {
   const { meituanOrderNo, statusDesc, eta, preOrderAt, note, needsCutlery, placedAt } = req.body || {};
+  // The extras ride on every poll, not just the first: at import time an order
+  // usually has no rider yet, so the delivery record only exists on later reads.
+  const ch = chan(req.body);
   const desc = (statusDesc && String(statusDesc).trim()) || null;
   const etaVal = (eta && String(eta).trim()) || null;
   if (!meituanOrderNo || !desc) return res.status(400).json({ error: 'meituanOrderNo and statusDesc required' });
@@ -388,6 +555,92 @@ router.post('/update-order-status', (req, res) => {
            placedVal, placedVal, placedVal,
            placedVal, placedVal, placedVal,
            imp.retail_order_id);
+
+    // The platform-owned extras, refreshed the same way. Two different rules,
+    // deliberately:
+    //   • The RIDER and the settlement move while the order is live (a rider is
+    //     assigned, collects, delivers; a refund re-cuts the settlement), so the
+    //     channel_* columns take the latest non-null value — COALESCE(?, col)
+    //     keeps a poll that simply didn't carry the section from wiping one that
+    //     did.
+    //   • subtotal / shipping_fee / packing_fee and the customer facts are
+    //     BACKFILL-ONLY: written when still empty, never overwritten. That heals
+    //     every order mirrored before this existed without letting a later poll
+    //     rewrite the money on an order somebody has since worked on.
+    // delivered_at / dispatched_at are ours, and only ever fill a blank.
+    // A daemon that didn't send the section at all (an older build, mid-deploy)
+    // writes nothing here rather than a row of COALESCE no-ops.
+    try {
+      if (!Object.keys(ch).length) throw new SkipExtras();
+      const money = ch.money    || {};
+      const rider = ch.rider    || {};
+      const cust  = ch.customer || {};
+      const inv   = ch.invoice  || {};
+      db.prepare(`
+        UPDATE retail_orders
+           SET channel_rider_name        = COALESCE(?, channel_rider_name),
+               channel_rider_status      = COALESCE(?, channel_rider_status),
+               channel_rider_status_code = COALESCE(?, channel_rider_status_code),
+               channel_rider_assigned_at = COALESCE(?, channel_rider_assigned_at),
+               channel_rider_fetched_at  = COALESCE(?, channel_rider_fetched_at),
+               channel_commission        = COALESCE(?, channel_commission),
+               channel_settle_amount     = COALESCE(?, channel_settle_amount),
+               channel_discount          = COALESCE(?, channel_discount),
+               dispatched_at             = COALESCE(dispatched_at, ?),
+               delivered_at              = COALESCE(delivered_at, ?),
+               shipping_fee              = CASE WHEN COALESCE(shipping_fee,0) = 0 THEN COALESCE(?, shipping_fee) ELSE shipping_fee END,
+               packing_fee               = CASE WHEN COALESCE(packing_fee,0)  = 0 THEN COALESCE(?, packing_fee)  ELSE packing_fee  END,
+               subtotal                  = CASE WHEN COALESCE(subtotal,0) = COALESCE(total,0) THEN COALESCE(?, subtotal) ELSE subtotal END,
+               channel_customer_id       = COALESCE(channel_customer_id, ?),
+               channel_customer_orders   = COALESCE(?, channel_customer_orders),
+               channel_distance_m        = COALESCE(channel_distance_m, ?),
+               channel_dest_lat          = COALESCE(channel_dest_lat, ?),
+               channel_dest_lng          = COALESCE(channel_dest_lng, ?),
+               recipient_name            = CASE WHEN COALESCE(recipient_name,'') = '' THEN COALESCE(?, recipient_name) ELSE recipient_name END,
+               invoice_title             = CASE WHEN COALESCE(invoice_title,'')  = '' THEN COALESCE(?, invoice_title)  ELSE invoice_title  END,
+               invoice_tax_id            = CASE WHEN COALESCE(invoice_tax_id,'') = '' THEN COALESCE(?, invoice_tax_id) ELSE invoice_tax_id END,
+               needs_invoice             = CASE WHEN ? = 1 THEN 1 ELSE needs_invoice END
+         WHERE id = ?
+      `).run(
+        ftext(rider.name), ftext(rider.statusDesc), fnum(rider.statusCode),
+        ftext(rider.assignedAt), ftext(rider.fetchedAt),
+        fnum(money.commission), fnum(money.settle), fnum(money.discount),
+        ftext(rider.fetchedAt), ftext(rider.deliveredAt),
+        fnum(money.shipping), fnum(money.packaging), fnum(money.food),
+        ftext(cust.userId), fnum(cust.orderCount),
+        fnum(cust.distanceM), fnum(cust.lat), fnum(cust.lng),
+        ftext(cust.name), ftext(inv.title), ftext(inv.taxId), inv.wanted ? 1 : 0,
+        imp.retail_order_id
+      );
+      // Per-line price + listing id for an order mirrored before the structured
+      // rows were read. Matched by name against the lines already stored, and
+      // only ever fills a zero — a line somebody has since edited is left alone.
+      const chLines = Array.isArray(ch.items) ? ch.items : [];
+      if (chLines.length) {
+        const stored = db.prepare(
+          'SELECT id, name_cn, name_en, qty, unit_price, channel_food_id FROM retail_order_items WHERE order_id = ?'
+        ).all(imp.retail_order_id);
+        const lines = stored.map(s => ({ name: s.name_cn || s.name_en, qty: s.qty, id: s.id, row: s }));
+        attachChannelLines(lines, chLines);
+        for (const l of lines) {
+          const price = fnum(l.unitPrice);
+          if (price === null && !l.foodId) continue;
+          db.prepare(`
+            UPDATE retail_order_items
+               SET unit_price      = CASE WHEN COALESCE(unit_price,0) = 0 THEN COALESCE(?, unit_price) ELSE unit_price END,
+                   line_total      = CASE WHEN COALESCE(line_total,0) = 0 THEN COALESCE(?, line_total) ELSE line_total END,
+                   channel_food_id = COALESCE(channel_food_id, ?)
+             WHERE id = ?
+          `).run(price, fnum(l.lineTotal), l.foodId || null, l.id);
+        }
+      }
+    } catch (e) {
+      // The extras must never cost the status write — that is the load-bearing
+      // half of this endpoint.
+      if (!(e instanceof SkipExtras)) {
+        console.error('[meituan-internal] channel extras update failed:', e.message);
+      }
+    }
 
     // Meituan voided the order → give the stock back. Ingest deducted it (ledgered)
     // and nothing else ever returned it, so without this EVERY cancel drifts our count

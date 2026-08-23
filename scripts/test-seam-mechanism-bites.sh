@@ -22,7 +22,8 @@ REPO=/home/user/roots-v2
 WORK="$(mktemp -d)"
 mkdir -p "$WORK/lib" "$WORK/scripts"
 ln -s "$REPO/node_modules" "$WORK/node_modules"
-ln -s "$REPO/scripts/postgres-full-copy" "$WORK/scripts/postgres-full-copy"
+# scripts/postgres-full-copy used to be symlinked in here; it was deleted with
+# the Postgres migration on 2026-08-23 and there is nothing left to link.
 # The proof refuses to scan a PARTIAL source tree. Without the daemons the scratch
 # tree is incomplete, every mutation "fails" on the missing tree instead of on the
 # sabotage, and the whole mutation test silently proves nothing. The control run at
