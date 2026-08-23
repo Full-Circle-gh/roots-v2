@@ -148,9 +148,30 @@
       set('el-kpi-order', last ? '✓' : '—');
       const sub = document.getElementById('el-kpi-order-sub');
       if (sub) sub.textContent = last ? `${last.store_code} · ${(last.imported_at || '').slice(5, 16)}` : cuT('no orders yet · 暂无订单', '暂无订单');
+      elRenderPushLog(r.recentStock || []);
       elRenderLog(r.recentSystem || []);
     } catch (e) {}
   };
+
+  // Per-product push results (success/fail) — the backend has always returned
+  // this (recentStock on /eleme/status), nothing rendered it. Resolves
+  // product_id against the already-loaded _products list for a readable name;
+  // falls back to the SKU/raw id when the product list hasn't loaded yet.
+  function elRenderPushLog(rows) {
+    const box = document.getElementById('el-log-stock');
+    if (!box) return;
+    if (!rows.length) { box.innerHTML = '<span class="muted">No pushes yet · 暂无推送</span>'; return; }
+    box.innerHTML = rows.map(r => {
+      const t = (r.created_at || '').slice(5, 16);
+      let d = {}; try { d = JSON.parse(r.detail || '{}'); } catch (e) {}
+      const prod = _products.find(x => x.id === d.product_id);
+      const name = prod ? (prod.name_cn || prod.name_en) : (d.sku || ('#' + d.product_id));
+      const colour = r.status === 'error' ? 'var(--danger,#c0392b)' : 'inherit';
+      const qty = d.qty != null ? ` → ${d.qty}` : '';
+      const err = r.status === 'error' ? `: ${esc(r.error_msg || '')}` : '';
+      return `<div style="color:${colour}">${t} [${r.store_code || '-'}] ${esc(name)}${qty}${err}</div>`;
+    }).join('');
+  }
 
   function elRenderLog(rows) {
     const box = document.getElementById('el-log-sys');
@@ -216,9 +237,20 @@
       const cells = _stores.map(s => {
         const m = (p.stores || {})[s.code];
         const on = m && Number(m.sync_enabled) === 1;
-        return `<label class="toggle-label" style="margin-right:14px" title="${esc(s.name)}">
-          <input type="checkbox" ${on ? 'checked' : ''} onchange="elToggleSync(${p.id}, ${s.id}, '${s.code}', this.checked)">
-          <span class="muted" style="font-size:12px">${esc(s.name)}</span></label>`;
+        // Eleme has no extCode/货号 to match on yet, so a wrong/missing name
+        // here is the single most common reason a push fails — this input is
+        // the operator's escape hatch (ELEME_BROWSER_RECON.md), no admin route
+        // for it existed until now.
+        return `<div style="display:inline-flex;align-items:center;gap:6px;margin-right:14px;margin-bottom:4px">
+          <label class="toggle-label" title="${esc(s.name)}">
+            <input type="checkbox" ${on ? 'checked' : ''} onchange="elToggleSync(${p.id}, ${s.id}, '${s.code}', this.checked)">
+            <span class="muted" style="font-size:12px">${esc(s.name)}</span>
+          </label>
+          <input type="text" class="inp" style="width:130px;font-size:11px" data-no-i18n
+                 placeholder="${cuT('Eleme listing name', '饿了么商品名')}"
+                 value="${esc(m && m.eleme_name || '')}"
+                 onchange="elSetElemeName(${p.id}, ${s.id}, '${s.code}', this.value)">
+        </div>`;
       }).join('');
       return `<tr style="border-top:1px solid var(--line)">
         <td style="padding:6px 10px">${esc(nm)}${Number(p.is_active) === 0 ? ' <span class="muted">(' + cuT('hidden', '隐藏') + ')</span>' : ''}</td>
@@ -229,18 +261,45 @@
   }
 
   window.elToggleSync = async function (productId, storeId, storeCode, on) {
+    const p = _products.find(x => x.id === productId);
+    const cur = p && (p.stores || {})[storeCode];
+    try {
+      // Pass the existing eleme_name through — the map POST upserts the whole
+      // row, so omitting it here would silently null out an override the
+      // operator already set (elSetElemeName below has the matching problem
+      // in reverse).
+      await api('/api/retail-admin/eleme/products/' + productId + '/map', {
+        method: 'POST',
+        body: on ? { storeId, storeCode, syncEnabled: 1, elemeName: (cur && cur.eleme_name) || null }
+                 : { storeId, storeCode, remove: 1 },
+      });
+      // Reflect locally without a full reload.
+      if (p) {
+        p.stores = p.stores || {};
+        if (on) p.stores[storeCode] = { ...(cur || {}), sync_enabled: 1 };
+        else delete p.stores[storeCode];
+      }
+    } catch (e) { elLoadProducts(); }
+  };
+
+  // Save a product's Eleme listing-name override for one store. Deliberately
+  // does NOT change sync_enabled — typing a name shouldn't silently turn
+  // pushing on for a product the operator hasn't reviewed yet; the checkbox
+  // stays the only way to do that.
+  window.elSetElemeName = async function (productId, storeId, storeCode, value) {
+    const name = value.trim();
+    const p = _products.find(x => x.id === productId);
+    const cur = p && (p.stores || {})[storeCode];
     try {
       await api('/api/retail-admin/eleme/products/' + productId + '/map', {
         method: 'POST',
-        body: on ? { storeId, storeCode, syncEnabled: 1 } : { storeId, storeCode, remove: 1 },
+        body: { storeId, storeCode, elemeName: name || null, syncEnabled: cur ? Number(cur.sync_enabled) : 0 },
       });
-      // Reflect locally without a full reload.
-      const p = _products.find(x => x.id === productId);
       if (p) {
         p.stores = p.stores || {};
-        if (on) p.stores[storeCode] = { sync_enabled: 1 };
-        else delete p.stores[storeCode];
+        p.stores[storeCode] = { ...(cur || {}), eleme_name: name || null, sync_enabled: cur ? Number(cur.sync_enabled) : 0 };
       }
+      if (window.toast) toast(cuT('Saved · 已保存', '已保存'));
     } catch (e) { elLoadProducts(); }
   };
 
