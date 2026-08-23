@@ -3339,7 +3339,9 @@
   /* Stock-by-location grid: variant rows × store columns + a live row total.
      One place to set every variant's stock in every store. Wrapped so many
      stores scroll horizontally instead of bursting out of the narrow card. */
-  #pd-store-stocks { overflow-x: auto; }
+  /* Only scrolls when it genuinely has to. As an always-on scroll container it
+     clipped the right edge by a pixel even when everything fitted. */
+  #pd-store-stocks { overflow-x: auto; padding-right: 2px; }
   /* Column headers are sentence case at 13px weight 400. They were 10px
      uppercase in --f-mono — which is remapped to Inter, so it rendered as
      uppercase Inter, the exact thing the ban exists for. The whole grid also
@@ -3350,9 +3352,12 @@
      and last — is the one that loses and gets clipped. Reserving it means the
      count boxes give way instead, which is the right thing to sacrifice. */
   .pd-stock-matrix { width: 100%; border-collapse: collapse; font-size: 15px; table-layout: fixed; }
-  .pd-stock-matrix th.mtot, .pd-stock-matrix td.mtot { width: 68px; }
+  .pd-stock-matrix th.mtot, .pd-stock-matrix td.mtot { width: 78px; }
   .pd-stock-matrix th.vh { width: 30%; }
-  .pd-stock-matrix th, .pd-stock-matrix td { padding: 6px 0 6px 12px; text-align: right; }
+  /* Right padding on EVERY cell, including the last. It was 0, so the Total
+     column ended exactly on the table edge — flush against the scroll
+     container, which clipped the final pixel and read as a cut-off header. */
+  .pd-stock-matrix th, .pd-stock-matrix td { padding: 6px 8px 6px 12px; text-align: right; }
   /* The leading cell hugs the card edge whatever it is. Left-alignment belongs
      to the variant-name cell alone — with a single variant there is no name
      column, and the first STORE column must stay right-aligned with its box. */
