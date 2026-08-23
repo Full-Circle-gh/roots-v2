@@ -621,9 +621,16 @@ router.post('/api/retail-admin/store-status/store/:code', requireRetailAdmin, ex
 // act as closing Meituan — and the location master, which closes every
 // channel at a store, would otherwise leave the till selling from a shop the
 // operator had just marked shut. It needs no special-casing anywhere below:
-// it stores in channel_status like mini_app/web/eleme, serves every active
-// store (unlike gzgrocery, which is tianhe-only), and is integrated (unlike
-// eleme) because it is ours.
+// it stores in channel_status like mini_app/web/eleme, and serves every
+// active store (unlike gzgrocery, which is tianhe-only).
+//
+// eleme used to be excluded from `integrated` below (OAuth was dead, so there
+// was no real channel to open/close) — it's browser automation now
+// (lib/eleme-browser.js), stores in channel_status exactly like mini_app/web/
+// gzgrocery/pos with no special-casing needed here, and eleme-daemon.js
+// already reads this same table via channelClosedStores('eleme') to gate
+// stock pushes. Marking it integrated is what the Sales-page card needs to
+// unlock its toggle and show the per-location rows.
 const GRID_CHANNELS = ['mini_app', 'web', 'meituan', 'eleme', 'gzgrocery', 'pos'];
 function csStores(db, channel) {
   const all = db.prepare("SELECT code, name_en, name_cn, COALESCE(name_cn,name_en,code) AS name FROM retail_stores WHERE is_active=1 ORDER BY sort_order,id").all();
@@ -672,7 +679,7 @@ router.get('/api/retail-admin/channel-status', requireRetailAdmin, (req, res) =>
         if (ch === 'meituan') { const r = mt[s.code] || {}; cell.readOk = r.read_ok === 1; cell.pending = r.target_open != null; cell.statusDesc = r.status_desc || null; }
         return cell;
       });
-      return { channel: ch, integrated: ch !== 'eleme', single: ch === 'gzgrocery' ? 'tianhe' : null,
+      return { channel: ch, integrated: true, single: ch === 'gzgrocery' ? 'tianhe' : null,
                cells, cardOpen: cells.some((c) => c.open) };
     });
     const locations = stores.map((s) => {
