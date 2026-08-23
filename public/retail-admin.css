@@ -3125,13 +3125,13 @@
   /* The mirror of [data-pp-only]: a card heading that only repeats the pane
      heading standing above it on the page. One card carries it — Basics. */
   #pd-editor.pd-fullpage [data-dock-only] { display: none; }
-  /* Details holds exactly the four cards that move to the side column
-     (shipping, flags, free-of, notes), so on the page the pane is an empty
-     grid under a heading for nothing. Docked it is a real tab and stays. */
-  #pd-editor.pd-fullpage .pd-pane[data-pane="details"] { display: none; }
-  /* The footer is empty too now — status went up to the header, the actions
-     went out to the side column. */
+  /* The footer is empty on the page — the save status went up to the header
+     and the record's actions went to the foot of the index. */
   .pd-pp-mount #pd-editor .pu-editor-foot { display: none; }
+  /* Sales is the one block on the page you cannot change. On Paper it looked
+     like the cards around it that you can; on the raised surface it reads as
+     something reported to you. */
+  #pd-editor.pd-fullpage .pd-sales-card { background: var(--td-raised); }
   .pd-summary:empty { display: none; }
   /* Every pane on screen at once, each reading as its own section. The
      .is-active selector is repeated so this outranks the pane-entrance rule
@@ -3195,29 +3195,32 @@
   .pd-nav-i:hover { color: var(--td-text); background: rgba(var(--td-heat-rgb), .04); }
   .pd-nav-i.is-on { background: var(--td-raised); color: var(--td-text); font-weight: 500; }
   .pd-nav-i:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 2px; }
-  /* The side rail. Empty and inert in the dock; on the page the editor becomes
-     a two-column grid (see .pd-pp-mount #pd-editor below) and this is column
-     two. */
-  #pd-editor .pd-pp-side { display: none; }
-  .pd-pp-mount #pd-editor .pd-pp-side {
-    display: flex; flex-direction: column; gap: 20px; min-width: 0;
-    position: sticky; top: 76px;
+  /* Duplicate · Version history · Delete, moved into the foot of the index by
+     pdMoveFootActs(). Quiet full-width rows so they read as the tail of the
+     list rather than three buttons parked under it. */
+  .pd-pp-nav .pd-foot-acts {
+    flex-direction: column; align-items: stretch; gap: 2px;
+    margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--td-border);
   }
-  .pd-pp-mount #pd-editor .pd-pp-side:empty { display: none; }
-  /* The moved blocks were authored as grid children; here they are just cards
-     in a column. Their pdb-c* span classes are inert outside .pdb-grid. */
-  #pd-editor .pd-pp-side > .pdb-card,
-  #pd-editor .pd-pp-side > .pd-card { width: 100%; }
-  /* Sales at 320px: three numbers across is too tight, two rows of two is not. */
-  #pd-editor .pd-pp-side .pd-sales-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
-  /* Duplicate · Version history · Delete, stacked full-width rather than a row
-     that wraps into a ragged block at this width. */
-  #pd-editor .pd-pp-side .pd-foot-acts { flex-direction: column; align-items: stretch; gap: 8px; }
-  #pd-editor .pd-pp-side .pd-foot-acts .btn { justify-content: center; }
-  /* And below this the index goes too — it would eat a third of the width. */
+  .pd-pp-nav .pd-foot-acts .btn {
+    justify-content: flex-start; border-color: transparent; background: none;
+    padding: 7px 10px; font-weight: 400; color: var(--td-text2);
+  }
+  .pd-pp-nav .pd-foot-acts .btn:hover { background: rgba(var(--td-heat-rgb), .04); color: var(--td-text); }
+  /* Narrow: the index would eat a third of the width, so it goes — but the
+     record's actions live inside it, and hiding the whole <nav> would take
+     Duplicate, Version history and Delete off the page entirely. So the rows
+     go and the <nav> stays, ordered BELOW the form, which puts the actions
+     exactly where the footer would have put them. */
   @media (max-width: 900px) {
     .pd-pp-grid { grid-template-columns: minmax(0, 1fr); }
-    .pd-pp-nav { display: none; }
+    .pd-pp-nav { position: static; order: 2; }
+    #pd-pp-navrows { display: none; }
+    .pd-pp-nav .pd-foot-acts {
+      flex-direction: row; flex-wrap: wrap; gap: 8px;
+      margin-top: 0; padding-top: 20px;
+    }
+    .pd-pp-nav .pd-foot-acts .btn { border-color: var(--td-border); }
   }
   .pd-pp-crumb { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--td-text2); margin-bottom: 16px; }
   .pd-pp-crumb button {
@@ -3240,26 +3243,6 @@
   .pd-pp-mount #pd-editor {
     width: auto; height: auto; max-width: 100%; max-height: none;
     border: 0; background: none; border-radius: 0; box-shadow: none;
-    /* Form, then the side rail. The head and foot are display:none here, so
-       they take no track; only .pu-editor-body and .pd-pp-side are laid out. */
-    display: grid; grid-template-columns: minmax(0, 1fr) 320px;
-    gap: 32px; align-items: start;
-  }
-  /* Below this the side rail has no honest width left: it drops under the form
-     and the page becomes the two-column layout — the same answer the narrow
-     case would have reached anyway.
-     1400 and not 1240, which is what the content column needs: the query reads
-     the VIEWPORT, and the rail eats 236px of it before this page sees a pixel.
-     Three columns need 180 + 32 + 560 + 32 + 320 = 1124 of content, so
-     1124 + 236 (rail) + 48 (main's gutters) ≈ 1408. A folded rail gives the
-     layout 174px back and it simply gets roomier — no second breakpoint for a
-     state the query cannot read anyway. */
-  @media (max-width: 1400px) {
-    .pd-pp-mount #pd-editor { grid-template-columns: minmax(0, 1fr); }
-    .pd-pp-mount #pd-editor .pd-pp-side {
-      position: static;
-      display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-    }
   }
   .pd-pp-mount #pd-editor .pu-editor-body { overflow: visible; overscroll-behavior: auto; }
   .pd-pp-mount #pd-editor .pu-editor-head,

@@ -2417,52 +2417,35 @@ function pdMoveHeadState(where) {
   if (foot && status) foot.insertBefore(status, foot.firstChild);
   if (band && tags) band.insertBefore(tags, band.firstChild);
 }
-// ── The page's side column ──────────────────────────────────────────────────
-// Two kinds of block get out of the form's way while the full page is open:
-// the one you READ (sales — the only block on the page you cannot change), and
-// the ones you SET ONCE when a product is created (how it ships, what it is
-// free of, the flags, the internal note). Docked they are fine inline: the
-// drawer shows one pane at a time, so nothing is competing. Expanded, all four
-// panes are on screen at once and those blocks cost as much page as the price.
+// ── The record's actions, in the index ────────────────────────────
+// Duplicate, Version history and Delete are authored in the editor's footer.
+// Docked that is right — the drawer is one screen tall and the footer is always
+// in view. On the page the footer sits below every section, which put the
+// destructive one at the bottom of the longest scroll on the page. They move to
+// the foot of the index instead: reachable from anywhere, in the way of nothing.
 //
-// They are MOVED, not re-rendered — same rule as the editor itself. Every move
-// remembers the parent and the sibling it left, so collapsing puts each block
-// back exactly where it was authored rather than somewhere that merely looks
-// right today.
-const PD_SIDE_BLOCK_IDS = [
-  'pd-sales-card', 'pd-sec-shipping', 'pd-sec-flags', 'pd-sec-freeof', 'pd-sec-notes',
-];
-let _pdSideHomes = null;
+// Moved, not re-rendered — same rule as the editor itself. The move remembers
+// the parent and the sibling it left, so collapsing puts it back where it was
+// authored rather than somewhere that merely looks right today.
+let _pdActsHome = null;
 
-function pdMoveSideBlocks(where) {
+function pdMoveFootActs(where) {
+  const acts = document.querySelector('.pd-foot-acts');
+  if (!acts) return;
   if (where === 'ppage') {
-    const side = document.getElementById('pd-pp-side');
-    // Already out there. Moving again would record the side column as each
-    // block's home and strand them there on collapse.
-    if (!side || _pdSideHomes) return;
-    _pdSideHomes = [];
-    const take = (el) => {
-      if (!el) return;
-      _pdSideHomes.push({ el, parent: el.parentElement, next: el.nextElementSibling });
-      side.appendChild(el);
-    };
-    PD_SIDE_BLOCK_IDS.forEach(id => take(document.getElementById(id)));
-    // Duplicate / Version history / Delete travel with them. At the end of the
-    // form they sat below three screens of fields, which put the destructive
-    // one at the bottom of the longest scroll on the page.
-    take(document.querySelector('#pd-editor .pd-foot-acts'));
+    const nav = document.getElementById('pd-pp-nav');
+    // Already out there. Moving again would record the index as its home and
+    // strand it there on collapse.
+    if (!nav || _pdActsHome) return;
+    _pdActsHome = { parent: acts.parentElement, next: acts.nextElementSibling };
+    nav.appendChild(acts);
     return;
   }
-  if (!_pdSideHomes) return;
-  // Reverse order matters: each block's remembered `next` sibling is itself a
-  // block that moved, so restoring back-to-front means the anchor is always
-  // home before the thing that points at it.
-  for (const h of _pdSideHomes.slice().reverse()) {
-    if (!h.parent) continue;
-    const anchor = h.next && h.next.parentElement === h.parent ? h.next : null;
-    h.parent.insertBefore(h.el, anchor);
-  }
-  _pdSideHomes = null;
+  if (!_pdActsHome || !_pdActsHome.parent) { _pdActsHome = null; return; }
+  const h = _pdActsHome;
+  const anchor = h.next && h.next.parentElement === h.parent ? h.next : null;
+  h.parent.insertBefore(acts, anchor);
+  _pdActsHome = null;
 }
 
 // ── The section index ───────────────────────────────────────────────────────
@@ -2479,14 +2462,15 @@ const PD_PAGE_SECTIONS = [
   { sel: ".pd-pane[data-pane='stock']",  en: 'Stock',               cn: '库存' },
   { sel: '#pd-sec-sizes',                en: 'Sizes',               cn: '规格' },
   { sel: '#pd-sec-more',                 en: 'Sell it in more ways', cn: '更多售卖方式' },
-  { sel: ".pd-pane[data-pane='page']",   en: 'The shop page',       cn: '页面' },
+  { sel: ".pd-pane[data-pane='page']",    en: 'Page',               cn: '页面' },
+  { sel: ".pd-pane[data-pane='details']", en: 'Details',            cn: '详情' },
 ];
 let _pdNavScroll = null;
 let _pdNavObs = null;
 let _pdNavObsTimer = null;
 
 function pdRenderPageNav() {
-  const nav = document.getElementById('pd-pp-nav');
+  const nav = document.getElementById('pd-pp-navrows');
   if (!nav) return;
   // Only sections that actually rendered something. A product with no sizes
   // has a #pd-sec-sizes that exists but stands zero pixels tall, and an index
@@ -2513,7 +2497,7 @@ function pdRenderPageNav() {
 // different heights and "which one is mostly visible" gives a different (and
 // wrong) answer for a short block sitting under a tall one.
 function pdNavSync() {
-  const nav = document.getElementById('pd-pp-nav');
+  const nav = document.getElementById('pd-pp-navrows');
   if (!nav) return;
   const items = Array.from(nav.querySelectorAll('.pd-nav-i'));
   if (!items.length) return;
@@ -2576,7 +2560,7 @@ function pdExpand(section) {
   document.getElementById('tab-products')?.classList.add('pd-page-open');
   stage.style.display = '';
   pdMoveHeadState('ppage');
-  pdMoveSideBlocks('ppage');
+  pdMoveFootActs('ppage');
   pdSyncPageHead();
   pdSyncFullscreenBtn(true);
   window.scrollTo({ top: 0, behavior: 'auto' });
@@ -2599,8 +2583,8 @@ function pdCollapseToPanel() {
   // parked in the title row and they ride a `display:none` container back into
   // invisibility while the drawer shows an empty footer.
   pdMoveHeadState('dock');
-  // Same reason, and same order — the side column is inside the stage.
-  pdMoveSideBlocks('dock');
+  // Same reason, and same order — the index is inside the stage.
+  pdMoveFootActs('dock');
   pdBindPageNav(false);
   pdMoveEditor('dock');
   if (stage) stage.style.display = 'none';
