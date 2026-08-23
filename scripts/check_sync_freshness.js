@@ -51,15 +51,16 @@
  *      Not a pass. A check that cannot run must refuse.
  *
  * USAGE
- *   node scripts/check_sync_freshness.js            # Postgres (post-flip), via psql
- *   node scripts/check_sync_freshness.js --sqlite   # the live SQLite file
- *   node scripts/check_sync_freshness.js --sqlite --db /path/to/roots.db
+ *   node scripts/check_sync_freshness.js                 # the live SQLite file
+ *   node scripts/check_sync_freshness.js --db /path/to/roots.db
  *   node scripts/check_sync_freshness.js --minutes 30
  *
- * Postgres is read by shelling out to `sudo -u postgres psql`, exactly as
- * scripts/postgres-full-copy/checks.py and drift.sh do, and NOT through
- * lib/pg.js — that would need TACET_PG_* from .env, which only server.js parses
- * (G27), so a plain `node` process would exit before reading anything.
+ * THE EXIT CODES ARE THE POINT: 0 fresh, 1 stale, 2 REFUSED. Two is not a pass.
+ * A source that is absent or unreadable is reported as such and never as
+ * silence-means-fine — see docs/tacet-operating-findings.md, PART 2.
+ *
+ * This read Postgres as well until 2026-08-23. That cluster is gone and the
+ * branch with it; nothing else about the check changed.
  */
 
 const path = require('path');
@@ -69,7 +70,11 @@ const { execFileSync } = require('child_process');
 const ROOT = path.resolve(__dirname, '..');
 const argv = process.argv.slice(2);
 
-const useSqlite = argv.includes('--sqlite');
+// SQLite is the ONLY source. Tacet's Postgres cluster was dropped 2026-08-23
+// (decisions §24, THE POSTGRES MIGRATION IS CANCELLED). `--sqlite` is accepted
+// and ignored so existing callers and runbook notes do not break; there is no
+// longer anything else to select.
+void argv.includes('--sqlite');
 const at = (flag) => { const i = argv.indexOf(flag); return i !== -1 ? argv[i + 1] : undefined; };
 
 const DB_PATH = at('--db') || path.join(ROOT, 'data', 'roots.db');
@@ -122,30 +127,8 @@ function readSqlite() {
   return out;
 }
 
-function readPg() {
-  const out = [];
-  for (const l of LOGS) {
-    let raw;
-    try {
-      raw = execFileSync('sudo', ['-u', 'postgres', 'psql', '-d', 'tacet', '-tA', '-F', '|',
-        '-v', 'ON_ERROR_STOP=1', '-c',
-        `select coalesce(max(${l.col})::text,''), `
-        + `coalesce(extract(epoch from (now() - max(${l.col})))::bigint, -1) from ${l.table};`],
-        { encoding: 'utf8', timeout: 15000 });
-    } catch (e) {
-      out.push({ ...l, error: (e.stderr || e.message || '').toString().trim().split('\n')[0] });
-      continue;
-    }
-    const line = String(raw).trim();
-    if (!line) { out.push({ ...l, error: 'psql returned nothing' }); continue; }
-    const [newest, age] = line.split('|');
-    out.push({ ...l, newest: newest || null, age: age === '-1' ? null : Number(age) });
-  }
-  return out;
-}
-
 // ── report ─────────────────────────────────────────────────────────────────
-const source = useSqlite ? `SQLite ${DB_PATH}` : 'PostgreSQL "tacet" (via sudo -u postgres psql)';
+const source = `SQLite ${DB_PATH}`;
 console.log('══ sync-log freshness ══');
 console.log(`  source : ${source}`);
 console.log(`  window : ${WINDOW_MIN} minutes`);
@@ -153,7 +136,7 @@ console.log('  (window is ~7x the largest gap observed between consecutive rows 
 console.log('   which was 133 seconds on qingyun_sync_log, measured 2026-08-23)');
 console.log('');
 
-const rows = useSqlite ? readSqlite() : readPg();
+const rows = readSqlite();
 
 // Every log erroring means the source is not answering at all — refuse rather
 // than report three stale lines and a verdict, which would read as a finding.
