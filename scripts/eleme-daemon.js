@@ -157,7 +157,8 @@ async function processStockQueue(stores) {
 
   const rows = db.prepare(`
     SELECT q.*, p.name_cn, p.name_en,
-           COALESCE(m.extend_code, p.sku) AS sku
+           COALESCE(m.extend_code, p.sku) AS sku,
+           m.eleme_name AS map_eleme_name
       FROM eleme_sync_queue q
       LEFT JOIN store_products p ON p.id = q.product_id
       LEFT JOIN eleme_product_map m
@@ -201,8 +202,12 @@ async function processStockQueue(stores) {
         db.prepare(`UPDATE eleme_sync_queue SET status='processing', attempts=attempts+1 WHERE id=?`).run(row.id);
       }
 
+      // Eleme has no extCode/货号 to match on yet (ELEME_BROWSER_RECON.md), so a
+      // product only resolves by NAME — prefer the operator-confirmed Eleme
+      // listing name (eleme_product_map.eleme_name) over the raw Roots name,
+      // the same override meituan-daemon.js honours for the identical reason.
       const batchItems = pushRows.map(row => ({
-        row, targetCn: row.name_cn, targetEn: row.name_en, sku: row.sku, newQty: row.new_qty,
+        row, targetCn: row.map_eleme_name || row.name_cn, targetEn: row.name_en, sku: row.sku, newQty: row.new_qty,
       }));
       const results = await browser.batchUpdateStock(batchItems);
 
@@ -223,7 +228,14 @@ async function processStockQueue(stores) {
           // Deferred by risk-control, not a real failure — requeue and refund the
           // attempt so it retries once cleared (no burned attempts).
           db.prepare(`UPDATE eleme_sync_queue SET status='pending', attempts=attempts-1 WHERE id=?`).run(row.id);
-        } else if (transient && (row.attempts || 0) < 3) {
+        } else if (transient && (row.attempts || 0) + 1 < 3) {
+          // row.attempts is the PRE-increment value from the SELECT above (the
+          // UPDATE that bumped it doesn't mutate this in-memory row) — +1 checks
+          // whether the count the retry query will actually see next time is
+          // still under the cap. Without it, a row's 3rd attempt (attempts now
+          // really 3) kept re-marking 'pending' here, but status='pending' AND
+          // attempts<3 never selects it again — stuck forever, invisible to both
+          // the retry query and the terminal-error branch below.
           db.prepare(`UPDATE eleme_sync_queue SET status='pending', last_error='transient push failure — will retry' WHERE id=?`).run(row.id);
         } else {
           db.prepare(`UPDATE eleme_sync_queue SET status='error', processed_at=CURRENT_TIMESTAMP, last_error=? WHERE id=?`)
