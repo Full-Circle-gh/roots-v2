@@ -5474,6 +5474,8 @@
   .mt-name-input::placeholder { color: var(--td-text2); }
   .mt-sub { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin-top: 8px; }
   .mt-sub b { font-weight: 500; color: var(--td-text); }
+  .mt-link { color: var(--td-text); text-decoration: underline; text-underline-offset: 2px; }
+  .mt-link:hover { color: var(--td-dusk); }
   .mt-cell-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
   .mt-empty { padding: 24px; text-align: center; font: 400 15px var(--f-sans); color: var(--td-text2); }
 

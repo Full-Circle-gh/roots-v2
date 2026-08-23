@@ -324,6 +324,13 @@
   // Replaces the two-button segmented control. "Multi-size" is the new one and
   // the reason the specs are captured: 15 of 265 listings at 天河 hold more
   // than one 规格, and those are exactly the ones whose stock can go wrong.
+  // Meituan's merchant product list. This exact URL is the one
+  // lib/meituan-browser.js navigates to, so it is known good. There is no
+  // verified per-listing deep link — the driver reaches individual products
+  // through the API, never a page route — so this opens the list and the row
+  // above names the listing to search for.
+  const MT_PRODUCTS_URL = 'https://e.waimai.meituan.com/#/gw/static_resource/product#/listView';
+
   const MT_CHIPS = [
     { id: 'all', en: 'All',             cn: '全部' },
     { id: 'att', en: 'Needs attention', cn: '待处理' },
@@ -511,7 +518,10 @@
             ' data-pid="' + p.id + '" data-store-id="' + storeA.id + '" data-store-code="' + esc(storeA.code) + '"' +
             ' onblur="mtSaveMap(this)" onkeydown="if(event.key===\'Enter\')this.blur()">' +
             (multi ? '<div class="mt-sub">' +
-              esc(cuT('This listing holds several sizes.', '该商品含多个规格。')) + '</div>' : '') +
+              esc(cuT('Several sizes — the stock sent here lands on all of them.',
+                      '多个规格 — 推送的库存会应用到全部规格。')) +
+              ' <a class="mt-link" href="' + MT_PRODUCTS_URL + '" target="_blank" rel="noopener">' +
+              esc(cuT('Set sizes on Meituan', '在美团设置规格')) + '</a></div>' : '') +
             ((last || toggle) ? '<div class="mt-cell-foot">' +
               (last ? '<span class="mt-pmeta">' + esc(last) + '</span>' : '') + toggle + '</div>' : '') +
             '</td>';
