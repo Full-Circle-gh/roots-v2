@@ -1,9 +1,11 @@
-# Tacet shared-core consolidation — decisions record, v4.64
+# Tacet shared-core consolidation — decisions record, v4.65
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-08-23 · v4.65 — §24 Database: **COPYING PRODUCTION DATA COPIES ITS OUTBOUND CHANNELS — NOW STRUCTURAL, NOT REMEMBERED.** `scripts/make_safe_db_copy.sh` is the only sanctioned way to copy `roots.db`: online `.backup`, severs every channel, **verifies and DELETES the copy if anything survived**. **The webhook was not the worst thing it carried** — the ORDER-group webhook, the Aliyun SMS secret (against 1,305 stored phone numbers), the Feie printer ukey, JD and KD100 courier credentials, 3,874 live auth tokens, a real push endpoint. **The cut is credentials and endpoints, not data**, so the copy stays useful. **And note how the webhook hid: it is a ROW in `storefront_config`, not a column** — a schema scan found 57 candidate columns and missed all 13 keys that mattered. **`/root/ops-alert.conf` mirrors the alert destination** outside the deploy tree (not under `public/`, which is served at `/assets`), 0600, atomic, written on every successful database read so a fresh box heals at boot. Five states red-proven **against a safe copy, per the rule above**; absent falls back and says so, absent-plus-renamed-database is the third state. Option (3) recorded as its expiry. **THE TWO UNTRACKED CRON SCRIPTS ARE UNTRACKED ON PURPOSE AND §24 ALREADY SAID SO** — committing them would move them off the path cron calls and make every backup tweak bounce the storefront. **The real gap is no off-box copy and nothing noticing if they stop** — and the class has NO detector, because `diagnose_deployed_tree.js` asks about the deploy tree and `/root/scripts` is outside the question. **AND EVERY RUNBOOK SAVE/RESTORE PAIR WAS AUDITED:** the crontab now verifies with `diff` (catching a mid-window edit a blind restore would discard); `.env.pre-cutover` is an ORPHANED SAVE nothing restores; and **H4's loop does `cat /root/flip-offset 2>/dev/null || echo 1`, so a missing offset silently becomes 1, T2 reads the whole log, and the trigger is RED ON ITS FIRST TICK for the wrong reason.** That last one is this session's own anti-pattern in three characters of shell.
 
 2026-08-23 · v4.64 — §24 Database: **WIDENING THE HEALTH PROBE CREATED A CUTOVER HAZARD IN THE SAME PASS, AND "STOP THE DAEMONS" HAS NEVER MEANT THE CRON JOBS.** `health-watchdog` runs from **root's crontab, not pm2**, so G22 never touched it — and from F1 the app's routes fail by design, so ~4 minutes in it would `pm2 restart roots-v2`: back onto SQLite with the database renamed away, before G2, **adding a restart to the count H5 uses to tell a flap from a crash**, and paging about it through an `ops-alert` that cannot read the renamed file. **One restart, not a loop** (`!state.down`). **Runbook F0 disables it before F1, G9 restores it after, H8 row 3b restores it on the ROLLBACK path** — a rollback that leaves monitoring off is worse than the flip that turned it off. **The scheduling space was closed, not sampled**: root + user crontabs, /etc/crontab, /etc/cron.d, cron.{hourly,daily,weekly,monthly}, systemd timers, `at`, and pm2's own `cron_restart` (zero) — **four project jobs, two of them in `/root/scripts/` outside the deploy tree and untracked.** **AND RECORDED AS WHAT IT DID: the old watchdog did not merely miss a dead app, it sent ✅ RECOVERED and cleared `down`** against an app 500ing on every route — it closed a live incident and destroyed the evidence there was one. Restart sensitivity rose with the fix; `HEALTH_FAILS` 2→3 is the knob and is **deliberately not turned yet**. **`ops-alert` now revalidates its handle by inode** (one stat per call, unmeasurable beside an HTTPS POST) — red-proven, and the OLD build proved itself by *succeeding*: it delivered an alert read from a file no longer at that path. ⚠️ **That proof sent three real messages to the ops WeCom group** — the harness copied the live database and inherited its webhook; recorded so the next harness neuters it first. **And the write path is now checked by OBSERVING a write rather than making one** — `scripts/check_sync_freshness.js`, N=15 min from a measured 133 s worst gap, exit 2 when it cannot read, in H4's slow loop and deliberately NOT in the watchdog, because a standing check cannot know that 闪购 is quiet after 20:15 by design.
 
@@ -2800,6 +2802,83 @@ Python randomises string hashing per process, so a set's iteration order is **st
 **THE PROOF THAT CATCHES IT IS `PYTHONHASHSEED` AT TWO VALUES, PLUS A FRESH PROCESS.** `derive_copy_order()` was proven four ways — twice in one process, once fresh, and again under `PYTHONHASHSEED=12345` and `=999` — all four byte-identical. **An in-process assertion alone would have proven nothing.**
 
 **THE FIX IS DULLER THAN THE BUG:** iterate sorted lists, never a set or a dict, anywhere the output order is meaningful. Say so in the docstring, because the next person to tidy the code will reach for a set.
+
+### RULE — COPYING PRODUCTION DATA COPIES ITS OUTBOUND CHANNELS — 2026-08-23
+
+**A proof harness copied `data/roots.db` into a scratch tree and sent three real messages to the live ops WeCom group.** Nothing was wrong with the harness except that it copied the database, and **the database carries the webhook**. Reporting it was necessary; leaving the next person a note telling them to remember would not have been.
+
+**`scripts/make_safe_db_copy.sh` is now the only sanctioned way to copy `roots.db`.** It takes an online `.backup` (WAL-safe), severs every outbound channel, **verifies the severing, and DELETES the copy if anything survived** — because a half-neutered copy is worse than none: it looks safe.
+
+**WHAT THE COPY CARRIED, and this is the part worth reading rather than the fix.** The webhook was not the only way out, and it was not even the worst:
+
+| Channel | What a harness could have done |
+|---|---|
+| `system_alerts.wecom_webhook` | page the ops group — what actually happened |
+| **`notifications.wecom_order_webhook`** | **page the ORDER group** — the people who pack food |
+| `integrations.aliyun_sms.ak_secret` | **send SMS to real customers**, against 1,305 stored phone numbers |
+| `integrations.feie.ukey` | print on real kitchen paper |
+| `integrations.jd.*`, `integrations.kd100.*` | courier APIs — create real shipments; `kd100.callback` points back at production |
+| `retail_auth_tokens` (3,874 rows) | act as a signed-in customer |
+| `tenant_operator_push_subs.endpoint` | push to a real device — and an endpoint IS the channel, with no credential in front of it |
+
+**THE CUT IS CREDENTIALS AND ENDPOINTS, NOT DATA.** You cannot text a customer without the SMS secret and you cannot print without the printer key, so severing the channels neutralises every path out **while leaving the rows intact and the copy actually useful**. Push endpoints are the exception and are cleared as data, because there is no credential in front of them.
+
+**AND NOTE HOW THE WEBHOOK HID.** It is not a column called `webhook` — it is a ROW in `storefront_config` whose `key` is `system_alerts.wecom_webhook`. **A scan of the schema cannot see it**, exactly as A NAME HELD AS DATA IS INVISIBLE TO A SCAN OF CODE predicts. Sweeping column names found 57 candidates and missed every one of the 13 that mattered; the config keys had to be listed separately.
+
+**Proven both ways on 2026-08-23:** a raw `cp` gives `alertStatus {enabled: true}` — a harness there reaches the live group. Via the script: `{enabled: false}`, and `sendOpsAlert` returns false having sent nothing.
+
+---
+
+### THE ALERT DESTINATION NOW MIRRORS TO A FILE OUTSIDE THE DEPLOY TREE — 2026-08-23
+
+**`/root/ops-alert.conf`**, `0600 root:root`, written atomically, read in preference to the database.
+
+**WHERE IT LIVES IS AS LOAD-BEARING AS THAT IT EXISTS.** Not under `public/`, which is served at `/assets` and would make the webhook world-fetchable — and that is not hypothetical, 2.14 MB of stale admin front-end was fetchable over HTTPS until this week. Not anywhere in `/root/roots-v2` at all: the installer only ever COPIES, so a file inside the tree survives its own deletion forever, and a rollback rewrites the tree.
+
+**IT IS WRITTEN ON EVERY SUCCESSFUL DATABASE READ, not only when someone changes a setting.** Save-path alone would leave a fresh box with no file until somebody happened to edit an alert setting; writing on read means the first process to ask heals it, which in practice is boot — `scripts/qingyun-daemon.js` calls `alertEnabled()` in `main()`. It writes only when the content differs, so the hot path is a stat.
+
+**ONE DELIBERATE DEVIATION FROM "ABSENT MEANS THE THIRD STATE", STATED PLAINLY.** An absent file falls back to the database and reports which source answered. Making absence a hard fault would have silenced every alert on every box that had not yet booted since this shipped — a rule enforced into an outage. **What must never happen is absent reading as SWITCHED OFF, and it does not: absent-AND-database-unreadable is the third state, loudly.**
+
+**DISAGREEMENT IS REPORTED AND THE FILE WINS.** Two sources of truth become a bug the moment nobody can tell which answered, so the message names both destinations rather than both flags — an earlier draft said *file says ENABLED, database says ENABLED*, which is accurate and useless.
+
+**FIVE STATES RED-PROVEN, and per the rule above, against a database made safe by `make_safe_db_copy.sh` rather than a raw copy:** file absent (falls back, then heals itself — the file appeared after the first call); file present and correct (`source: /root/ops-alert.conf`); file present but corrupt (says so, falls back); file and database disagreeing (names both destinations, uses the file); and **file absent with the database renamed exactly as F1 does** — `{enabled: false, unreadable: true}` and `CANNOT READ ALERT CONFIG`.
+
+**EXPIRY, so the second source of truth does not become permanent.** Option (3) — reading the setting through `lib/db-driver.js` so it follows the flip to Postgres — is the destination once the window closes. The file exists because during the window the alerting layer must not depend on the database being migrated. **After the window that argument expires and so should the file.**
+
+---
+
+### TWO CRON SCRIPTS LIVE OUTSIDE GIT ON PURPOSE, AND NOTHING WATCHES THEM — 2026-08-23
+
+**Correcting the framing before the finding: this is not undocumented.** §24's local-backup-retention entry (v4.26, 2026-08-11) already says **`/root/scripts` IS NOT IN GIT, AND WHAT IS PUT THERE IS LOST ON A BOX REBUILD**, and says why — a file under `scripts/` ships on the next deploy and bounces pm2. **The decision is sound and it is recorded.** `/root/check-nesting.js` is a third file kept there for the same reason.
+
+**So committing them would not help, and would actively hurt.** They would land at `/root/roots-v2/scripts/`, which is **not the path cron calls**, so the crontab would need editing too — and from then on every retention tweak to a backup script would restart the storefront. **That is precisely the trade they were moved to avoid.**
+
+**THE REAL GAP IS TWO THINGS, AND NEITHER IS VERSION CONTROL.**
+
+1. **No off-box copy.** `roots-backup.sh` is the hourly SQLite tier — 12 hourly, 30 daily, optional Aliyun OSS upload of the daily. `prune-deploy-backups.sh` holds 14 days of `/root/backups/deploy-*`. **The scripts that make the backups are themselves backed up nowhere**, and a box rebuild loses them at exactly the moment their output matters most. `prune-deploy-backups.sh` says so in its own header — *NOT IN GIT. This file exists only on the box and is lost on a rebuild* — **a warning stored on the disk it warns about.**
+2. **Nothing notices if they stop.** `scripts/health-watchdog.js` mentions backups zero times. Nothing checks backup freshness or age. If `roots-backup.sh` stopped tonight, `/root/backups/hourly/` would simply stop growing and **the first person to find out would be whoever needed a restore.** (Working today: 12 hourly, 30 daily, last run 12:00:50, 443 MB, method `sqlite3 .backup`.)
+
+**AND THIS CLASS HAS NO DETECTOR AT ALL.** `scripts/diagnose_deployed_tree.js` compares the DEPLOY TREE against the repository. `/root/scripts` is not in the deploy tree, so it is not merely absent from the manifest — **it is outside the question the tool asks.** The same is true of crontabs. **Recommendation: leave them untracked, add an off-box copy, and add a backup-freshness assertion somewhere that is watched.** Not built here.
+
+---
+
+### THREE RUNBOOK STEPS SAVE STATE AND ONE SUBSTITUTES A NUMBER FOR IT — 2026-08-23
+
+**Every restore in this document was audited for a check, because an instruction is not a check.**
+
+**The one that was already right:** `data/roots.db.pre-cutover` has a full refusal ladder — R2 missing, R3 fails `integrity_check`, R4 was written after the flip. That is the standard the other three are measured against.
+
+**1. The crontab (F0 → G9 / H8 3b) — FIXED HERE.** Both restores now run `diff <(crontab -l) /root/crontab.pre-cutover && echo CRON_RESTORED_EXACTLY`. No script was needed; `diff` is the check. **It also catches a case nobody would have thought about: a cron entry added by someone else DURING the window, which a blind `crontab /root/crontab.pre-cutover` would silently discard.**
+
+**2. `.env.pre-cutover` (G2) — AN ORPHANED SAVE.** It is copied at G2 and **is not what restores anything**: H8 row 2 comments `TACET_DB` out instead. It is referenced exactly once, as advice under G3's wrong-port case, and never verified against the live `.env`. **A save with no restore step is a save nobody will trust at 4am.** Marked in H8; either use it or stop taking it.
+
+**3. `/root/flip-offset` (F1) — AND THIS ONE IS WORSE THAN UNVERIFIED.** H4's fast loop reads it as:
+
+```
+B=$(cat /root/flip-offset 2>/dev/null || echo 1)
+```
+
+**A missing offset silently becomes 1**, so T2 reads the error log from the beginning, every historical error line counts, and against **a threshold of ONE** the trigger is red on its first tick for a reason that has nothing to do with the flip. **At 3am that reads as roll back.** It is the session's own anti-pattern in three characters of shell: `|| echo 1` swallows the missing-file case and substitutes a plausible number. **T2 cannot be evaluated without the offset, so a missing offset must stop the loop, not guess.** Recorded rather than changed — the loop is pasted into a laptop terminal by hand, and editing the document does not edit the copy already running.
 
 ### "STOP THE DAEMONS" HAS NEVER MEANT THE CRON JOBS — FOUND 2026-08-23
 

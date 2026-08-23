@@ -1026,9 +1026,15 @@ ssh root@47.239.89.63 "wc -c /root/.pm2/logs/roots-v2-error.log && tail -n 40 /r
 ssh root@47.239.89.63 "crontab /root/crontab.pre-cutover && crontab -l | grep -n health-watchdog"
 ```
 
-**GOOD** — the health-watchdog line is back with no `#CUTOVER` prefix.
+**THEN VERIFY IT, because an instruction is not a check** — and every other restore in this document has one. No script is needed; `diff` is the check:
 
-**BAD** — `/root/crontab.pre-cutover` is missing. Then restore by hand — the line is:
+```bash
+ssh root@47.239.89.63 "diff <(crontab -l) /root/crontab.pre-cutover && echo CRON_RESTORED_EXACTLY"
+```
+
+**GOOD** — `CRON_RESTORED_EXACTLY`, and the health-watchdog line is back with no `#CUTOVER` prefix. **`diff` exits non-zero and prints the difference if anything at all moved**, which also catches the case nobody thinks about: a cron entry added or edited by someone else DURING the window, which a blind `crontab /root/crontab.pre-cutover` would silently throw away.
+
+**BAD** — `diff` reports a difference, or `/root/crontab.pre-cutover` is missing. **A missing save file is not a reason to skip this step** — restore by hand; the line is:
 
 ```
 */2 * * * * cd /root/roots-v2 && /usr/bin/node scripts/health-watchdog.js >> /var/log/roots-health.log 2>&1
@@ -1278,6 +1284,8 @@ a `console.error` line in a log file. **No driver switch can reach this. It read
 
 **Run them on the laptop, over SSH. Not on the box — this is GAP G25, B18, and it is a constraint rather than a preference.** A loop running *on* the box **dies with the box, and its silence is indistinguishable from everything being fine** — which is exactly what you are already expecting once alerting is off. That is not hypothetical: the 2026-06-28 outage was a box that wedged with sshd, nginx and the app all accepting TCP and returning zero bytes, and it stayed dark because nothing off-box noticed. **The one observation only an off-box watcher can make — “the box stopped answering” — is the single most important thing it can tell you, and it is the one thing an on-box loop can never say.**
 
+🔴 **AND THE LOOP SUBSTITUTES A NUMBER WHEN `/root/flip-offset` IS MISSING, WHICH IS WORSE THAN FAILING.** The line is `B=$(cat /root/flip-offset 2>/dev/null || echo 1)`. **A missing offset silently becomes 1**, so T2 reads the error log FROM THE BEGINNING — every historical error line counts, and against a threshold of ONE the trigger is red on its first tick, for a reason that has nothing to do with the flip. **On the night that reads as "roll back".** A missing offset must REFUSE, not default: `B=$(cat /root/flip-offset)` with no fallback stops the loop and tells you why, and stopping is the correct answer because **T2 cannot be evaluated at all without it**. Recorded 2026-08-23, not changed — the loop is copied to a laptop terminal by hand and editing it here does not edit the copy someone already pasted.
+
 **Do not put a helper script in `scripts/` to make this tidier.** A file under `scripts/` **ships on the next deploy and bounces pm2**, which is the last thing you want mid-window. Everything here is self-contained on the laptop except `/root/flip-offset`, which lives outside the application directory on purpose.
 
 ### The fast loop — 60 seconds. Start it BEFORE the flip.
@@ -1373,7 +1381,7 @@ ssh root@47.239.89.63 "cd /root/roots-v2 && node scripts/check_sync_freshness.js
 ssh root@47.239.89.63 "tail -20 /var/log/roots-health.log"
 ```
 
-- A **watchdog bounce is always preceded** by `[health] app probe FAILED (2/2) http://127.0.0.1:4000/` and **followed** by an `[ops-alert] SUPPRESSED … 🔴 roots-v2 storefront DOWN` line in this same file — suppressed, because alerting is dead (H4), which is why you are reading a log instead of a phone.
+- A **watchdog bounce is always preceded** by `[health] app probe FAILED (2/2) http://127.0.0.1:4000/ [— and READ THE BRACKET, which the old probe did not print]`. **That bracket is the four status codes** — `/ 200 /api/retail/categories 500 /api/retail/config 200 /api/retail/products 500` or similar. It tells you *which* endpoint broke, which under a flip is usually the whole diagnosis: **a 500 on the product and category paths with `/` still at 200 is a query failing, not a process dying.** The line is also **followed** by an `[ops-alert] SUPPRESSED … 🔴 roots-v2 storefront DOWN` line in this same file — suppressed, because alerting is dead (H4), which is why you are reading a log instead of a phone.
 - A **pm2 crash-restart leaves nothing here at all.**
 
 **So: `restarts=` moved AND a health-log line at the same minute → watchdog. `restarts=` moved AND no health-log line → the process died on its own.**
@@ -1602,9 +1610,9 @@ ssh root@47.239.89.63 "find /root -name 'roots.db*' -newermt '-2 days' -ls 2>/de
 | # | What it has to do | Mechanism |
 |---|---|---|
 | 1 | Stop the application accepting new writes | ✅ **the tool does it** — `pm2 stop` on `roots-v2` and every `*-daemon.js`, discovered by `pm_exec_path` and never by a name list. G16 is still open as a *product* gap; the rollback does not need it |
-| 2 | Point the application back at SQLite | ✅ `TACET_DB` is **commented out rather than deleted**, so `.env` still records that a flip happened and was undone. *(This row said "G2 does not exist in either direction" until 2026-08-20 and was stale from `2961d3d`.)* |
+| 2 | Point the application back at SQLite ⚠️ **and note that `.env.pre-cutover`, saved at G2, is NOT what restores it** — this row comments `TACET_DB` out instead. The saved copy is referenced once, as advice under G3's wrong-port case, and is never verified against the live `.env`. **A save with no restore step is a save nobody will trust at 4am**; either use it here or stop taking it. Recorded 2026-08-23 | ✅ `TACET_DB` is **commented out rather than deleted**, so `.env` still records that a flip happened and was undone. *(This row said "G2 does not exist in either direction" until 2026-08-20 and was stale from `2961d3d`.)* |
 | 3 | Restore `data/roots.db` from `data/roots.db.pre-cutover` | ✅ a rename — **step F1 exists precisely so this is possible** |
-| 3b | **Put the cron jobs back** — `crontab /root/crontab.pre-cutover` | ⚠️ **manual, and easy to forget precisely because the rollback is the stressful path.** F0 disabled the health watchdog. **A rollback that leaves monitoring off is worse than the flip that turned it off**: you are back on SQLite, believing you are safe, with nothing watching. Do this BEFORE you go to bed, not in the morning |
+| 3b | **Put the cron jobs back AND CHECK THEY WENT BACK** — `crontab /root/crontab.pre-cutover` then `diff <(crontab -l) /root/crontab.pre-cutover && echo CRON_RESTORED_EXACTLY` | ⚠️ **manual, and easy to forget precisely because the rollback is the stressful path.** F0 disabled the health watchdog. **A rollback that leaves monitoring off is worse than the flip that turned it off**: you are back on SQLite, believing you are safe, with nothing watching, and **no detector in this project looks at crontabs** — `diagnose_deployed_tree.js` compares the deploy tree and cannot see them. The `diff` is the whole of the safety net. Do this BEFORE you go to bed |
 | 4 | Bring SQLite up to date with everything Postgres accepted since the flip | 🔴 **none, and never will be** — a reverse copy is a **rejected option**, not an unbuilt one (§24 v4.46, four reasons). `rollback-delta-report.js` lists what was left instead |
 | 5 | Undo the app directory rename and the gzgrocery table rename | 🔴 **none** — both ride with the flip deliberately, and standalone the directory rename breaks the SQLite path, pm2, Actions, `deploy-apply.sh` and probably nginx at once |
 | 6 | Restart every pm2 process, not just `roots-v2` | ✅ **the tool does it** — the same discovered list, restarted with `--update-env`, browser holders deliberately excluded because bouncing one costs a risk-control challenge. **The ordered per-process *cutover* procedure is still missing (G21); the rollback's own restart is not** |

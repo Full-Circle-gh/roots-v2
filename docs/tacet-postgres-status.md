@@ -1,4 +1,4 @@
-# The Postgres migration — status, v2.9
+# The Postgres migration — status, v3.0
 
 **2026-08-10 · A LIVING DOCUMENT. Both halves, in one place: what is built, and what is left.**
 Covers 2026-08-03 onwards. Read-only in itself — no code change ever accompanies it.
@@ -192,6 +192,10 @@ Type: **C** conversion · **F** fix · **D** design question · **O** operationa
 | 61 | ✅ **CLOSED 2026-08-23 — the three observation instruments reported cannot-see as benign.** `ops-alert` said *alerts disabled* when the DB was unreadable; `alert-latch`'s read path swallowed the recovery ✅; `health-watchdog` accepted any HTTP status and **declared RECOVERED against an app 500ing on every route**. All three fixed and red-proven; the watchdog now uses `deploy-apply.sh`'s four-path probe. ⚠️ **Open beside it: after F1 alerting fails PARTIALLY** (cached fd survives a rename) — cost of a uniform fix reported, decision outstanding | F | §24 THE OBSERVATION LAYER REPORTED CANNOT-SEE AS A BENIGN STATE |
 
 | 62 | 🔴 **`health-watchdog` runs from CRON, not pm2 — "the daemons stop for the flip" never covered it.** Widening its probe (2026-08-23) made it restart the app ~4 min into the F1 window. **Closed in the runbook, not the code**: F0 disables the cron before F1, G9 restores, H8 row 3b restores on rollback. Scheduling space closed across cron/systemd/at/pm2 `cron_restart` — 4 project jobs, 2 untracked in `/root/scripts/`. ⚠️ **Restart sensitivity rose with the fix; `HEALTH_FAILS` 2→3 is the knob, not turned yet** | O | §24 "STOP THE DAEMONS" HAS NEVER MEANT THE CRON JOBS |
+
+| 63 | ⚠️ **Two cron scripts live in `/root/scripts`, untracked ON PURPOSE, and NOTHING WATCHES THEM.** `roots-backup.sh` (hourly SQLite tier) and `prune-deploy-backups.sh` (14-day deploy retention). §24 v4.26 records why they are outside the tree and it is a sound trade — committing them moves them off the path cron calls and makes every tweak bounce pm2. **The gap is (a) no off-box copy of the scripts and (b) nothing notices if either stops** — `health-watchdog` mentions backups zero times. **This class has NO detector: `diagnose_deployed_tree.js` asks about the DEPLOY TREE, and `/root/scripts` and crontabs are outside the question it asks** | O | §24 TWO CRON SCRIPTS LIVE OUTSIDE GIT ON PURPOSE |
+
+| 64 | 🔴 **H4's watch loop substitutes a number for a missing `/root/flip-offset`.** `B=$(cat /root/flip-offset 2>/dev/null || echo 1)` — a missing offset becomes 1, T2 reads the error log from byte one, every historical error counts, and **against a threshold of ONE the trigger is red on its first tick for a reason unrelated to the flip.** At 3am that reads as *roll back*. Must refuse, not guess. Recorded not changed: the loop is pasted into a laptop terminal by hand | F | §24 THREE RUNBOOK STEPS SAVE STATE AND ONE SUBSTITUTES A NUMBER |
 
 ### After the flip — explicitly not preconditions
 
