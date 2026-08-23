@@ -2254,26 +2254,10 @@
   }
   #tab-products > .pa-head-row > .pa-head-id { min-width: 0; }
   #tab-products > .pa-head-row .pa-pagetitle { margin: 0; }
-  /* Status line — 15px, Graphite, sentence case, tabular. Work waiting only. */
-  .pa-status-line {
-    font: 400 15px var(--f-sans); color: var(--td-text2);
-    font-variant-numeric: tabular-nums; margin-top: 2px;
-  }
-  .pa-status-line[hidden] { display: none; }
-  /* The facts in the status line are filters. They stay typographically part of
-     the sentence — same size, same Graphite, no button chrome — and only admit
-     to being pressable on hover/focus and when they are the live filter. A
-     control that shouts here would turn the calmest line on the page into a
-     toolbar; §1.7 still owns this slot and it is state, not an action bar. */
-  .pa-status-jump {
-    font: inherit; color: inherit; background: none; border: 0; padding: 0;
-    cursor: pointer; font-variant-numeric: tabular-nums;
-    border-bottom: 1px solid transparent;
-  }
-  .pa-status-jump:hover { color: var(--td-text); border-bottom-color: var(--td-border); }
-  .pa-status-jump:focus-visible { outline: 2px solid var(--td-dusk); outline-offset: 2px; border-radius: 3px; }
-  .pa-status-jump.is-on { color: var(--td-text); font-weight: 500; border-bottom-color: var(--td-text); }
-  .pa-status-sep { color: var(--td-text2); }
+  /* The status line is gone. It carried "12 sold out · 30 low on stock", and
+     those two are tiles now — §1.7 forbids a line that restates what the
+     tiles already say, and a header whose only honest line would do that is
+     finished with the title alone. */
   /* Adding a product is the page's one primary action AND its one Dusk element,
      so it sits on the title's line at the far right — never among the filters. */
   #tab-products > .pa-head-row > .pa-addsplit { margin-left: auto; }
@@ -2299,9 +2283,17 @@
   .pa-tile-n { font-size: 30px; font-weight: 500; line-height: 1.1; margin-top: 4px; font-variant-numeric: tabular-nums; }
   .pa-tile-d { font-size: 13px; color: var(--td-text2); }
   .pa-tile-d b { font-weight: 400; font-variant-numeric: tabular-nums; }
-  /* A tile with a real count to worry about tints its number, never its ground. */
-  #pa-kpi-dead-tile .pa-tile-n { color: var(--td-brick-ink); }
+  /* §1.10 — colour is status, never decoration, and it tints the NUMBER, never
+     the tile's ground. Brick means a shopper cannot buy it; amber warns that
+     they soon won't be able to; sage is the all-clear. "Going nowhere" is an
+     observation rather than a fault, so it stays plain ink — it was brick, and
+     that made three red numbers in a row shout at equal volume about three
+     very different things. */
+  .pa-tile.is-bad  .pa-tile-n { color: var(--td-brick-ink); }
+  .pa-tile.is-warn .pa-tile-n { color: var(--td-amber-ink); }
   #pa-kpi-promo-tile .pa-tile-n { color: var(--td-sage-ink); }
+  /* Zero is good news, and good news is not red. */
+  .pa-tile.is-clear .pa-tile-n { color: var(--td-text); }
   /* auto-fit already reflows on its own; the phone just needs one column. */
   @media (max-width: 560px) { .pa-pulse { grid-template-columns: 1fr; } }
   .pa-info-wrap { position: relative; display: inline-flex; align-items: center; }

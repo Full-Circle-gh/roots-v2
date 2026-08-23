@@ -303,10 +303,6 @@ function prodSetHelp(view) {
   const say = (pair) => (typeof cuT === 'function') ? cuT(pair[0], pair[1]) : pair[0];
   const title = document.getElementById('pa-pagetitle');
   if (title) title.textContent = say(m.title);
-  // The status line belongs to the catalogue's own numbers; the other two
-  // sub-views are their own pages and carry no work count of ours.
-  const line = document.getElementById('pa-status-line');
-  if (line && view !== 'catalog') line.hidden = true;
 }
 // Paint the default (catalogue) help on load and keep it in the live language.
 (function initProdHelp() {
@@ -1086,32 +1082,25 @@ function paRenderKpis(animate) {
     if (animate) dashCountUp(el, n); else el.textContent = fcNum(n);
   };
   set('pa-kpi-live', live);
-  // The pulse is four tiles: Active, Disabled, and (when they have anything to
-  // say) Going nowhere and On promotion. Sold out and Low stock are NOT tiles —
-  // they are work waiting, so they ride in the header's status line below.
+  // Out of stock and Low stock are tiles again — they are the two numbers an
+  // operator acts on, so they get the biggest, most clickable thing on the
+  // page rather than a line of text above it. The header goes back to the
+  // title alone: §1.7 bans restating what the tiles already say, and a page
+  // whose only honest line would do that is finished with just its title.
   set('pa-kpi-active', live);
   set('pa-kpi-total', rows.length);
+  set('pa-kpi-oos', oos);
+  set('pa-kpi-low', low);
   set('pa-kpi-drafts', drafts);
-  // §1.7 status line — work waiting, never population, and only when a real
-  // number is behind it. Nothing waiting = no line at all, which is a finished
-  // header rather than a gap. The dash is banned here as everywhere.
-  // Each fact IS its filter. These two are the most actionable numbers on the
-  // page; leaving them as plain text made the operator read "12 sold out" and
-  // then go hunting in a dropdown for the list behind it. A1 exists to answer
-  // "what needs me right now" in one click, so the answer is the control.
-  {
-    const el = document.getElementById('pa-status-line');
-    if (el) {
-      const bit = (status, n, label) =>
-        `<button type="button" class="pa-status-jump${PA_STATUS === status ? ' is-on' : ''}"`
-        + ` onclick="paSetStatus('${status}')">${fcNum(n)} ${label}</button>`;
-      const bits = [];
-      if (oos) bits.push(bit('oos', oos, cuT('sold out', '缺货')));
-      if (low) bits.push(bit('low', low, cuT('low on stock', '库存偏低')));
-      el.innerHTML = bits.join('<span class="pa-status-sep"> · </span>');
-      el.hidden = !bits.length;
-    }
-  }
+  // A tile with nothing to report stops shouting: zero sold out is good news,
+  // and good news is not red. The colour is earned by a real count, never worn
+  // by the tile just for being that tile.
+  const tone = (id, n) => {
+    const el = document.getElementById(id);
+    if (el) el.classList.toggle('is-clear', !n);
+  };
+  tone('pa-kpi-oos-tile', oos);
+  tone('pa-kpi-low-tile', low);
   // Light up whichever jump drives the active quick-filter (none when 'all').
   const tiles = { live: 'pa-kpi-live-tile', restock: 'pa-kpi-restock-tile', oos: 'pa-kpi-oos-tile', low: 'pa-kpi-low-tile', drafts: 'pa-kpi-drafts-tile', dead: 'pa-kpi-dead-tile', promo: 'pa-kpi-promo-tile' };
   for (const [status, id] of Object.entries(tiles)) {

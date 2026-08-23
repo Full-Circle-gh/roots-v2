@@ -4292,7 +4292,6 @@
     <div class="pa-head-row">
       <div class="pa-head-id">
         <h2 class="pa-pagetitle" id="pa-pagetitle" data-no-i18n>Products</h2>
-        <div class="pa-status-line" id="pa-status-line" data-no-i18n hidden></div>
       </div>
       <div class="pa-addsplit" id="pa-addsplit">
         <button class="btn btn-primary pa-addsplit-main" id="pa-wizard-btn" type="button" onclick="pwOpen()" style="white-space:nowrap;"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M8 2.5l1.2 2.8L12 6.5 9.2 7.7 8 10.5 6.8 7.7 4 6.5l2.8-1.2z"/><path d="M12.5 10.5l.5 1.2 1.2.5-1.2.5-.5 1.2-.5-1.2-1.2-.5 1.2-.5z"/></svg>Add product · 新增产品</button>
@@ -4332,6 +4331,18 @@
         <span class="pa-tile-l">Active in shop · 已上架</span>
         <span class="pa-tile-n" id="pa-kpi-active">—</span>
         <span class="pa-tile-d" data-no-i18n>of <b id="pa-kpi-total">—</b></span>
+      </button>
+      <!-- The two that are actual work, so they sit second and third — right
+           after the headline count and before the states nobody has to act on. -->
+      <button type="button" class="pa-tile is-bad" id="pa-kpi-oos-tile" onclick="paSetStatus('oos')" title="Show sold-out products · 仅显示缺货产品">
+        <span class="pa-tile-l">Out of stock · 缺货</span>
+        <span class="pa-tile-n" id="pa-kpi-oos">—</span>
+        <span class="pa-tile-d">Live but unbuyable · 已上架但无法购买</span>
+      </button>
+      <button type="button" class="pa-tile is-warn" id="pa-kpi-low-tile" onclick="paSetStatus('low')" title="Show low-stock products · 仅显示库存偏低产品">
+        <span class="pa-tile-l">Low stock · 库存偏低</span>
+        <span class="pa-tile-n" id="pa-kpi-low">—</span>
+        <span class="pa-tile-d">Running out soon · 即将售罄</span>
       </button>
       <button type="button" class="pa-tile" id="pa-kpi-drafts-tile" onclick="paSetStatus('drafts')" title="Show disabled products · 仅显示已下架产品">
         <span class="pa-tile-l">Disabled · 已下架</span>
