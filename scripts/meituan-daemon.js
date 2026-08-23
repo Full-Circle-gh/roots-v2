@@ -44,7 +44,7 @@ try {
 // covered side of the boundary. Proven by scripts/diagnose_seam_statements.js.
 const { seam } = require('../lib/db-seam');
 const db = seam(require('../database'));
-const { getBrowser, closeAll } = require('../lib/meituan-browser');
+const { getBrowser, closeAll, closeStore } = require('../lib/meituan-browser');
 const { sweepStockDrift } = require('../lib/meituan-drift-sweep');
 const { stallTick } = require('../lib/meituan-queue-stall');
 const { sendOpsAlert } = require('../lib/ops-alert');
@@ -53,6 +53,10 @@ const { latchStore } = require('../lib/alert-latch');
 // Opening hours off the store's own row, cached — so an admin edit takes effect
 // without a restart. Same module qingyun-daemon reads.
 const { storeHours, within } = require('../lib/store-hours');
+// The other half of "should this store be worked at all": the operator's own
+// on/off switch on the Sales page. Opening hours pause a store for the night;
+// this parks one that has been taken off the channel until further notice.
+const { channelLive, closedReason, refresh: refreshChannelLive, MEITUAN } = require('../lib/channel-live');
 
 // Stores handled by a DIFFERENT channel daemon (e.g. yuexiu on 闪购/shangou-sync).
 // Listed here so THIS 外卖 daemon never polls their (logged-out) e.waimai session or
@@ -139,6 +143,96 @@ function isStoreOpen(storeCode, now = new Date()) {
   // picks up an admin edit within CACHE_MS without a restart.
   const hours = storeHours(storeCode) || LEGACY_STORE_HOURS[storeCode] || null;
   return within(hours, { openGraceMin: OPEN_GRACE_MIN, closeGraceMin: OPEN_GRACE_MIN, now });
+}
+
+// ── Channel park (operator switched this store off) ──────────────────────────
+// A closed store is not a slow store: nothing about it will change until someone
+// flips it back on, so every browser-touching path below skips it entirely and
+// every canary treats it as excused. Distinct from isStoreOpen, which only means
+// "shut for the night" and comes back on its own in the morning.
+//
+// What deliberately keeps running for a parked store:
+//   • syncBusinessStatus, but only when a command is actually pending — that is
+//     the path that reopens it, and gating it would deadlock the store shut.
+//   • sweepStaleOrders, which reads the DB first and only touches a browser when
+//     the store still has a non-terminal order in the window. Orders in flight
+//     when the switch was thrown still get to finish; once they have, the sweep
+//     costs one indexed query and stops there on its own.
+// Queued stock rows are LEFT PENDING, never dropped, so a reopen resyncs from
+// exactly where this stopped.
+const parkFlagged = {};      // storeCode -> logged the park transition once
+const unparkedThisCycle = new Set(); // stores that came back on this tick
+
+function isParked(storeCode) { return !channelLive(MEITUAN, storeCode); }
+
+// Park/unpark bookkeeping for one store: logs each transition once, reaps the
+// store's browser on the way in, and forces a fresh read on the way out.
+// Returns true when the store is parked right now.
+function parkTick(storeCode) {
+  const parked = isParked(storeCode);
+  if (parked && !parkFlagged[storeCode]) {
+    parkFlagged[storeCode] = true;
+    const why = closedReason(MEITUAN, storeCode);
+    const txt = why === 'location_closed'
+      ? 'location closed on the Sales page — parking every Meituan job for this store'
+      : 'Meituan channel closed for this store — parking every Meituan job for it';
+    log(storeCode, txt);
+    logSync(storeCode, 'channel_parked', 'ok', { reason: why }, null);
+    // Give the RAM, the proxy exit and the login session back; a reopen relaunches
+    // from the saved session. Held back while an order is still in flight: the
+    // trailing sweep would only relaunch the browser a minute later, and a
+    // needless cold start is exactly what earns a 验证中心 challenge.
+    if (!anyInFlightOrders([storeCode])) closeStoreBrowser(storeCode).catch(() => {});
+  } else if (!parked && parkFlagged[storeCode]) {
+    parkFlagged[storeCode] = false;
+    log(storeCode, 'store switched back on — resuming Meituan sync');
+    logSync(storeCode, 'channel_resumed', 'ok', null, null);
+    // The queue backlog built up while parked should go out on THIS cycle, not
+    // after another drift-sweep interval.
+    unparkedThisCycle.add(storeCode);
+  }
+  return parked;
+}
+
+async function closeStoreBrowser(storeCode) {
+  try { await closeStore(storeCode); }
+  catch (e) { log(storeCode, `browser close on park failed: ${e.message}`); }
+}
+
+// How long to wait between checks once there is nothing left to do at all. Set
+// just above lib/channel-live's cache so a reopen is noticed on the first or
+// second tick — a minute or two, not a restart.
+const PARKED_IDLE_MS = Number(process.env.MEITUAN_PARKED_IDLE_MS || 60_000);
+
+// An operator's open/close command still waiting to be applied. It is the ONLY
+// thing that runs for a parked store, and the reason a fully-parked daemon has
+// to wake up and do real work rather than idle: applying it is what reopens the
+// shop.
+function anyPendingStatusCommand(codes) {
+  if (!codes.length) return false;
+  try {
+    const ph = codes.map(() => '?').join(',');
+    return !!db.prepare(
+      `SELECT 1 FROM store_business_status WHERE store_code IN (${ph}) AND target_open IS NOT NULL`
+    ).get(...codes);
+  } catch (_) { return true; } // can't tell → stay awake rather than strand a command
+}
+
+// Orders that were already in flight when the switch was thrown. They still have
+// to reach a terminal status, so a daemon holding one never goes fully idle —
+// sweepStaleOrders is their only remaining path.
+function anyInFlightOrders(codes) {
+  if (!codes.length) return false;
+  try {
+    const ph = codes.map(() => '?').join(',');
+    return !!db.prepare(`
+      SELECT 1 FROM meituan_order_import i
+        JOIN retail_orders o ON o.id = i.retail_order_id
+       WHERE i.store_code IN (${ph})
+         AND o.status IN ('paid','preparing','dispatched')
+         AND o.placed_at >= datetime('now', ?)
+    `).get(...codes, `-${ORDER_SWEEP_DAYS} days`);
+  } catch (_) { return true; } // can't tell → keep sweeping rather than strand an order
 }
 
 // Tier 1 fingerprint reduction: never act on an exact fixed cadence. Each
@@ -420,7 +514,7 @@ function noteOrderFetchOk(storeCode) { lastOrderFetchOk[storeCode] = Date.now();
 function heartbeatTick(storeCode) {
   const now = Date.now();
   const bd = browserDown[storeCode];
-  const excused = !isStoreOpen(storeCode) || inVerifyCooldown(storeCode)
+  const excused = !isStoreOpen(storeCode) || isParked(storeCode) || inVerifyCooldown(storeCode)
                   || bindingSuspected(storeCode) || (bd && bd.since != null);
   if (excused || lastOrderFetchOk[storeCode] == null) { lastOrderFetchOk[storeCode] = now; return; }
   const stale = now - lastOrderFetchOk[storeCode] >= HEARTBEAT_STALE_MS;
@@ -760,6 +854,7 @@ function pushableStores(stores) {
     .map(s => s.storeCode)
     .filter(code => !SKIP_STORES.includes(code))
     .filter(code => isStoreOpen(code))
+    .filter(code => !isParked(code))   // switched off on the Sales page — rows wait
     .filter(code => !inVerifyCooldown(code))
     .filter(code => !bindingSuspected(code));
 }
@@ -1081,7 +1176,10 @@ async function processListingJobs() {
   `).all()
     // Leave 闪购 stores' jobs for the shangou daemon — this 外卖 browser can't
     // reach shangoue.meituan.com, so grabbing them would only error the job.
-    .filter(job => !SKIP_STORES.includes(job.store_code));
+    .filter(job => !SKIP_STORES.includes(job.store_code))
+    // A parked store's job waits too, still 'pending', rather than being failed
+    // against a channel nobody is serving — it runs when the store comes back.
+    .filter(job => !isParked(job.store_code));
 
   if (!jobs.length) return;
 
@@ -1232,6 +1330,11 @@ async function syncBusinessStatus(storeCode) {
   catch (_) { cmd = null; }
   const due = Date.now() - (lastStatusRead[storeCode] || 0) >= STATUS_READ_MS;
   if (!cmd && !due) return;
+  // Parked store: the 3-minute status READ is the one browser call that would
+  // otherwise keep running against a shop nobody is serving, so drop it — but
+  // never drop a pending COMMAND. Reopening writes target_open, which lands here
+  // on the very next cycle and is what takes the store out of the park.
+  if (!cmd && isParked(storeCode)) return;
 
   try {
     const browser = await getBrowser(storeCode);
@@ -1296,10 +1399,44 @@ async function main() {
   // 0 = check on the first cycle, so a deploy landing into a stalled queue says
   // so immediately instead of waiting out the interval.
   let lastQueueStallCheck = 0;
+  let idleFlagged = false; // log the fully-parked idle once per transition
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const now = Date.now();
+
+    // Park bookkeeping FIRST, before the proxy probe: one read of the operator's
+    // switches per cycle, logged on each transition. Everything below asks
+    // isParked(), served from the same cached snapshot — and a daemon whose every
+    // store is switched off shouldn't be curl-ing a proxy on the way to nothing.
+    for (const s of stores) parkTick(s.storeCode);
+    if (unparkedThisCycle.size) {
+      // A store just came back: re-read the switches now (don't serve a stale
+      // snapshot to this cycle's work) and run the drift sweep straight away so
+      // the backlog it accumulated while parked goes out on this pass.
+      refreshChannelLive();
+      lastDriftSweep = 0;
+      unparkedThisCycle.clear();
+    }
+    // Nothing left to serve: every store off, no open/close command waiting, no
+    // order still in flight. This is the daemon "shut down" — no proxy probe, no
+    // browser, no login, no pages — on a slow tick that only watches for the
+    // switch coming back on. It costs three indexed reads a minute.
+    const storeCodes = stores.map(s => s.storeCode);
+    const allParked = storeCodes.every(code => isParked(code));
+    if (allParked && !anyPendingStatusCommand(storeCodes) && !anyInFlightOrders(storeCodes)) {
+      if (!idleFlagged) {
+        idleFlagged = true;
+        console.log(`[meituan-daemon] ${new Date().toISOString()} every store is switched off — idling `
+          + '(no polling, no pushes, no login). Queued stock rows stay pending and go out on reopen.');
+      }
+      await sleep(jitter(PARKED_IDLE_MS));
+      continue;
+    }
+    if (idleFlagged) {
+      idleFlagged = false;
+      console.log(`[meituan-daemon] ${new Date().toISOString()} work to do again — resuming normal cycle`);
+    }
 
     // Proxy health-gate: if the shared proxy can't reach Meituan, PAUSE all work
     // this cycle. A dead proxy otherwise cascades into page-load timeouts, browser
@@ -1313,7 +1450,9 @@ async function main() {
 
     if (!(await proxyHealthy())) {
       proxyFailStreak++;
-      if (!alerts['proxy_down'] && proxyFailStreak >= PROXY_DOWN_GRACE) {
+      // Don't page when the only stores behind this proxy are switched off — the
+      // outage is real but nobody is being served, so it isn't an incident yet.
+      if (!alerts['proxy_down'] && proxyFailStreak >= PROXY_DOWN_GRACE && !allParked) {
         alerts['proxy_down'] = true;
         console.log(`[meituan-daemon] ${new Date().toISOString()} PROXY UNREACHABLE (${maskProxy(activeProxy())}) — pausing sync until it recovers (the session is NOT logged out)`);
         for (const s of stores) logSync(s.storeCode, 'proxy_down', 'error', null, 'proxy cannot reach Meituan — sync paused');
@@ -1354,16 +1493,20 @@ async function main() {
           logSync(s.storeCode, 'poll_resumed', 'ok', null, 'within opening hours');
         }
         return open;
-      }).filter(s => !inVerifyCooldown(s.storeCode)); // skip stores in a verify cool-down
+      })
+      .filter(s => !isParked(s.storeCode))            // switched off on the Sales page
+      .filter(s => !inVerifyCooldown(s.storeCode));   // skip stores in a verify cool-down
       for (let i = 0; i < openStores.length; i++) {
         await pollOrders(openStores[i]);
         if (i < openStores.length - 1) await sleep(jitter(8000, 0.5));
       }
     }
 
-    // Trailing sweep for late 已完成 flips. Runs regardless of open/closed (orders
-    // complete after close), but only touches a browser when a store actually has
-    // a non-terminal order in the window — sweepStaleOrders guards on that.
+    // Trailing sweep for late 已完成 flips. Runs regardless of open/closed AND of
+    // the park (orders complete after close, and an order in flight when the
+    // channel was switched off still has to finish), but only touches a browser
+    // when a store actually has a non-terminal order in the window —
+    // sweepStaleOrders guards on that, so a long-parked store costs one query.
     if (now - lastOrderSweep >= ORDER_SWEEP_MS) {
       lastOrderSweep = now;
       await autoDeliverPastEta(); // time-based delivered flip (no browser)
@@ -1381,7 +1524,11 @@ async function main() {
     if (now - lastDriftSweep >= DRIFT_SWEEP_MS) {
       lastDriftSweep = now;
       sweepStockDrift(db, {
-        storeCodes: stores.map(s => s.storeCode), // getStoreConfigs already drops SKIP_STORES
+        // getStoreConfigs already drops SKIP_STORES; parked stores come out here
+        // so a shop nobody is serving doesn't grow a queue it can't drain — and
+        // doesn't trip the sweep's own alerting. The rows already queued stay
+        // pending, and the sweep re-runs the moment the store is switched back on.
+        storeCodes: stores.map(s => s.storeCode).filter(code => !isParked(code)),
         channel: '外卖', log, logSync, sendOpsAlert, alerts,
       });
     }

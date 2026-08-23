@@ -285,6 +285,16 @@ function meituanStoreHealth(db) {
   // store is reported plainly, never as a fault.
   const lastPause  = db.prepare("SELECT MAX(created_at) AS t FROM meituan_sync_log WHERE store_code = ? AND event_type = 'poll_paused'");
   const lastResume = db.prepare("SELECT MAX(created_at) AS t FROM meituan_sync_log WHERE store_code = ? AND event_type = 'poll_resumed'");
+  // Switched off on the Sales page. Same shape as the nightly pause pair, and the
+  // same rule: a store nobody is serving is reported plainly, never as a fault.
+  // It also has to CLEAR a standing fault, because the daemon stops writing to
+  // this log the moment it parks — 越秀 would otherwise have shown "is signed
+  // out · Sign in again" for as long as the shop stayed shut, an alarm about a
+  // session nobody intends to restore. The fault is not gone; it is not the
+  // operator's problem until they reopen, and the reopen re-detects it in a
+  // couple of minutes.
+  const lastPark   = db.prepare("SELECT MAX(created_at) AS t FROM meituan_sync_log WHERE store_code = ? AND event_type = 'channel_parked'");
+  const lastUnpark = db.prepare("SELECT MAX(created_at) AS t FROM meituan_sync_log WHERE store_code = ? AND event_type = 'channel_resumed'");
   const lastOkPush = db.prepare(`
     SELECT MAX(created_at) AS t FROM meituan_sync_log
      WHERE store_code = ? AND event_type = 'stock_push' AND status = 'ok'
@@ -327,6 +337,9 @@ function meituanStoreHealth(db) {
     const pausedAt  = lastPause.get(st.code)?.t || null;
     const resumedAt = lastResume.get(st.code)?.t || null;
     const closed = !!(pausedAt && (!resumedAt || String(pausedAt) > String(resumedAt)));
+    const parkedAt   = lastPark.get(st.code)?.t || null;
+    const unparkedAt = lastUnpark.get(st.code)?.t || null;
+    const parked = !!(parkedAt && (!unparkedAt || String(parkedAt) > String(unparkedAt)));
     const q = queueRow.get(st.code) || {};
     const live = liveCount.get(st.code)?.n || 0;
     return {
@@ -334,11 +347,13 @@ function meituanStoreHealth(db) {
       code: st.code,
       name: st.name,
       nameEn: st.nameEn || st.name,
-      blocked:    !!blockedEvent && !recovered,
-      blockedBy:  blockedEvent && !recovered ? blockedEvent.event_type : null,
-      blockedAt:  blockedEvent && !recovered ? blockedEvent.created_at : null,
-      blockedMsg: blockedEvent && !recovered ? (blockedEvent.error_msg || null) : null,
+      blocked:    !!blockedEvent && !recovered && !parked,
+      blockedBy:  blockedEvent && !recovered && !parked ? blockedEvent.event_type : null,
+      blockedAt:  blockedEvent && !recovered && !parked ? blockedEvent.created_at : null,
+      blockedMsg: blockedEvent && !recovered && !parked ? (blockedEvent.error_msg || null) : null,
       closed,
+      parked,
+      parkedAt: parked ? parkedAt : null,
       lastPushAt: ok,
       pending:    Number(q.pending    || 0),
       // Rows the daemon claimed and never finished. Counted nowhere before, so

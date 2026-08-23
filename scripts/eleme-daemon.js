@@ -79,9 +79,12 @@ try {
 // covered side of the boundary. Proven by scripts/diagnose_seam_statements.js.
 const { seam } = require('../lib/db-seam');
 const db = seam(require('../database'));
-const { getBrowser } = require('../lib/eleme-browser');
+const { getBrowser, closeStore } = require('../lib/eleme-browser');
 const { sendOpsAlert } = require('../lib/ops-alert');
-const { channelClosedStores } = require('../lib/inventory');
+// The operator's own on/off switch on the Sales page. Opening hours pause a
+// store for the night; this parks one that has been taken off the channel until
+// further notice. Shared with the two Meituan daemons so all three agree.
+const { channelLive, closedReason, refresh: refreshChannelLive } = require('../lib/channel-live');
 // Per-store opening hours. A merchant backend that keeps refreshing at 4am is
 // itself a bot tell, so order polling sleeps when the shop is shut. Stores with no
 // hours on file come back null → treated as always-open, so a new store is never
@@ -100,6 +103,10 @@ const INTERNAL_BASE  = `http://127.0.0.1:${INTERNAL_PORT}`;
 // Order polling has been failing this long before it pages anyone — roughly six
 // missed polls, so a proxy blip or a single browser relaunch stays quiet.
 const ORDER_DOWN_AFTER_MS = 30 * 60_000;
+// How long to wait between checks once there is nothing left to do at all. Set
+// just above lib/channel-live's cache so a reopen is noticed on the first or
+// second tick — a minute or two, not a restart.
+const PARKED_IDLE_MS = Number(process.env.ELEME_PARKED_IDLE_MS || 60_000);
 
 function internalSecret() {
   return process.env.ELEME_INTERNAL_SECRET || 'eleme-daemon-internal';
@@ -107,6 +114,65 @@ function internalSecret() {
 
 function isStoreOpen(storeCode, now = new Date()) {
   return within(storeHours(storeCode), { openGraceMin: OPEN_GRACE_MIN, closeGraceMin: OPEN_GRACE_MIN, now });
+}
+
+// ── Channel park (operator switched this store off) ──────────────────────────
+// A closed store is not a slow store: nothing about it will change until someone
+// flips it back on, so every Eleme job below skips it — no order polls, no stock
+// pushes, no catalogue refresh, no login attempts, no pages. Distinct from
+// isStoreOpen, which only means "shut for the night".
+//
+// The one exception is an order that was already in flight when the switch was
+// thrown: pollOrders is Eleme's ONLY path for advancing a mirrored order's
+// status (there is no separate stale-order sweep here, unlike the Meituan
+// daemons), so a parked store keeps polling until its last order is terminal and
+// then goes quiet on its own. Closing the channel must not strand an order a
+// customer is waiting on.
+//
+// Queued stock rows are LEFT PENDING, never dropped, so a reopen resyncs from
+// exactly where this stopped.
+const parkFlagged = {};              // storeCode -> logged the park transition once
+const unparkedThisCycle = new Set(); // stores that came back on this tick
+
+function isParked(storeCode) { return !channelLive('eleme', storeCode); }
+
+function parkTick(storeCode) {
+  const parked = isParked(storeCode);
+  if (parked && !parkFlagged[storeCode]) {
+    parkFlagged[storeCode] = true;
+    const why = closedReason('eleme', storeCode);
+    log(storeCode, why === 'location_closed'
+      ? 'location closed on the Sales page — parking every Eleme job for this store'
+      : 'Eleme channel closed for this store — parking every Eleme job for it');
+    logSync(storeCode, 'channel_parked', 'ok', { reason: why }, null);
+    // Give the RAM and the login session back; a reopen relaunches from the
+    // saved session. Only once the last in-flight order has landed.
+    if (!hasInFlightOrders(storeCode)) closeStore(storeCode).catch(() => {});
+  } else if (!parked && parkFlagged[storeCode]) {
+    parkFlagged[storeCode] = false;
+    log(storeCode, 'store switched back on — resuming Eleme sync');
+    logSync(storeCode, 'channel_resumed', 'ok', null, null);
+    unparkedThisCycle.add(storeCode);
+  }
+  return parked;
+}
+
+// How far back to look for an order that still has somewhere to go. Matches the
+// Meituan daemons' sweep window.
+const IN_FLIGHT_DAYS = Number(process.env.ELEME_IN_FLIGHT_DAYS) || 3;
+
+// Does this store still hold a mirrored Eleme order in a non-terminal status?
+// Unknown reads as YES — keep polling rather than strand a live order.
+function hasInFlightOrders(storeCode) {
+  try {
+    return !!db.prepare(`
+      SELECT 1 FROM eleme_order_import i
+        JOIN retail_orders o ON o.id = i.retail_order_id
+       WHERE i.store_code = ?
+         AND o.status IN ('paid','preparing','dispatched')
+         AND o.placed_at >= datetime('now', ?)
+    `).get(storeCode, `-${IN_FLIGHT_DAYS} days`);
+  } catch (_) { return true; }
 }
 
 // Bounded JSON for the columns we archive — a raw order payload is unbounded in
@@ -422,13 +488,12 @@ async function refreshOrderStatus(storeCode, order) {
 async function processStockQueue(stores) {
   if (!stores.length) return;
 
-  // Stores the operator has CLOSED for the Eleme channel (Sales-page close
-  // matrix, channel_status.channel='eleme'). Honour it like Meituan honours its
-  // opening hours: skip the push and leave rows pending so stock re-syncs the
-  // moment the store is reopened — never silently drops the update.
-  let elemeClosed = new Set();
-  try { elemeClosed = channelClosedStores('eleme'); } catch (_) {}
-  const eligible = stores.map(s => s.store_code).filter(c => !elemeClosed.has(c));
+  // Stores the operator has CLOSED for the Eleme channel, or whose whole location
+  // is shut (Sales-page close matrix — see lib/channel-live). Honour it like
+  // Meituan honours its opening hours: skip the push and leave rows pending so
+  // stock re-syncs the moment the store is reopened — never silently drops the
+  // update.
+  const eligible = stores.map(s => s.store_code).filter(c => !isParked(c));
   if (!eligible.length) return;
   const ph = eligible.map(() => '?').join(',');
 
@@ -454,7 +519,7 @@ async function processStockQueue(stores) {
   for (const s of stores) configByCode[s.store_code] = s;
 
   for (const [storeCode, items] of Object.entries(byStore)) {
-    if (!eligible.includes(storeCode)) continue; // guard — state can shift between query and push
+    if (!eligible.includes(storeCode) || isParked(storeCode)) continue; // guard — state can shift between query and push
     const cfg = configByCode[storeCode];
     if (!cfg) continue;
 
@@ -627,6 +692,7 @@ async function main() {
     : '[eleme-daemon] order polling disabled (ELEME_ORDER_POLL=0)');
   recoverOrphanedProcessing();
   lastOrphanSweep = Date.now();
+  let idleFlagged = false; // log the fully-parked idle once per transition
 
   while (true) {
     if (Date.now() - lastOrphanSweep >= ORPHAN_SWEEP_MS) {
@@ -636,16 +702,44 @@ async function main() {
     if (!elemeEnabled()) { await sleep(jitter(QUEUE_CHECK_MS)); continue; }
 
     const configs = getStoreConfigs();
+
+    // Park bookkeeping: one read of the operator's switches per cycle, logged on
+    // each transition. Everything below asks isParked(), served from the same
+    // cached snapshot.
+    for (const cfg of configs) parkTick(cfg.store_code);
+    if (unparkedThisCycle.size) { refreshChannelLive(); unparkedThisCycle.clear(); }
+    // Nothing left to serve: every store switched off and no order still in
+    // flight. This is the daemon "shut down" — no browser, no login, no pages —
+    // on a slow tick that only watches for the switch coming back on.
+    const live = configs.filter(cfg => !isParked(cfg.store_code) || hasInFlightOrders(cfg.store_code));
+    if (configs.length && !live.length) {
+      if (!idleFlagged) {
+        idleFlagged = true;
+        console.log(`[eleme-daemon] ${new Date().toISOString()} every store is switched off — idling `
+          + '(no polling, no pushes, no login). Queued stock rows stay pending and go out on reopen.');
+      }
+      await sleep(jitter(PARKED_IDLE_MS));
+      continue;
+    }
+    if (idleFlagged) {
+      idleFlagged = false;
+      console.log(`[eleme-daemon] ${new Date().toISOString()} work to do again — resuming normal cycle`);
+    }
+
     if (Date.now() - lastCatalogueRefresh >= CATALOGUE_REFRESH_MS) {
       lastCatalogueRefresh = Date.now();
-      await refreshCatalogueCache(configs); // runs before the queue check so a first-boot admin visit isn't empty for 30 min
+      // Parked stores drop out: refreshing a catalogue nobody can sell from is a
+      // browser call and a login attempt for nothing. It re-runs on reopen.
+      await refreshCatalogueCache(configs.filter(cfg => !isParked(cfg.store_code)));
     }
     // Order poll — per store, on its own jittered ~5 min schedule, independent of
-    // the 10s stock-queue tick. Gated on opening hours only, NOT on the channel
-    // close switch: closing the channel stops new orders arriving on Eleme but
-    // must not strand the ones already in flight.
+    // the 10s stock-queue tick. Gated on opening hours, and on the channel close
+    // switch EXCEPT while an order is still in flight: closing the channel stops
+    // new orders arriving on Eleme but must not strand the ones already placed,
+    // and this poll is their only path to a terminal status (there is no separate
+    // stale-order sweep here). Once the last one lands, the store goes quiet.
     if (ORDER_POLL_ON) {
-      for (const cfg of configs) {
+      for (const cfg of live) {
         const code = cfg.store_code;
         if (Date.now() < (nextOrderPollAt[code] || 0)) continue;
         if (!isStoreOpen(code)) { nextOrderPollAt[code] = Date.now() + jitter(ORDER_POLL_MS, 0.4); continue; }

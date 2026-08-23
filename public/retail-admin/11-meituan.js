@@ -247,7 +247,19 @@
     const notice = document.getElementById('mt-notice');
     if (notice) {
       const bad = rows.filter(r => r.blocked)[0];
-      if (!bad) { notice.innerHTML = ''; }
+      // A store switched off on the Sales page is closed, not broken. Say so
+      // plainly, with nothing to fix and no button — the sync starts itself the
+      // moment the store is switched back on. This takes priority over a fault,
+      // because a fault at a shop that isn't trading is not today's problem.
+      const off = rows.filter(r => r.parked)[0];
+      if (off) {
+        const who = mtStoreName(off.code, cn) || off.name;
+        notice.innerHTML = '<div class="mt-notice calm"><span class="dot"></span>' +
+          '<div class="m"><b>' + esc(cuT(who + ' is closed. Meituan sync is paused.',
+                                         who + ' 已关闭，美团同步已暂停。')) + '</b>' +
+          '<div class="sub">' + esc(cuT('Stock updates are queued and go out when you switch the store back on.',
+                                        '库存更新已排队，门店重新开启后自动推送。')) + '</div></div></div>';
+      } else if (!bad) { notice.innerHTML = ''; }
       else {
         const who  = mtStoreName(bad.code, cn) || bad.name;
         const what = MT_BLOCK_TXT[bad.blockedBy] || ['is not syncing', '同步已停'];

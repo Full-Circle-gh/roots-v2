@@ -5547,6 +5547,10 @@
      are healthy the page opens on the work, the way Orders does. ─────────── */
   .mt-notice { display: flex; align-items: center; gap: 16px; background: var(--td-surface); border: 1px solid var(--td-amber); border-radius: 14px; padding: 16px 24px; margin-bottom: 32px; }
   .mt-notice .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--td-amber); flex: none; }
+  /* Switched off on the Sales page: closed, not broken. Same shell, no alarm
+     colour and no action — the sync restarts itself on reopen. */
+  .mt-notice.calm { border-color: var(--td-border); }
+  .mt-notice.calm .dot { background: var(--td-text2); }
   .mt-notice .m { flex: 1; min-width: 0; font: 400 15px/1.6 var(--f-sans); color: var(--td-text); }
   .mt-notice .m b { font-weight: 500; }
   .mt-notice .sub { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin-top: 4px; }

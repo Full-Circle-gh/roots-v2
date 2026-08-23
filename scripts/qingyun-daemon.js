@@ -52,6 +52,10 @@ const phoneCn = require('../lib/phone-cn'); // is this a number a rider can call
 // Hold-vs-refuse decision + the statements that implement it (see lib/qingyun-queue).
 const qingyunQueue = require('../lib/qingyun-queue');
 const { storeHours, within } = require('../lib/store-hours'); // opening hours, for the alert window
+// Is the LOCATION trading at all? Delivery tracking doesn't belong to one sales
+// channel, it belongs to the shop — so it follows the Sales page's location card
+// rather than any single channel cell. Same module the channel daemons use.
+const { storeLive, refresh: refreshChannelLive } = require('../lib/channel-live');
 
 const STORES = (process.env.QINGYUN_STORES || 'tianhe')
   .split(',').map(s => s.trim()).filter(Boolean);
@@ -85,9 +89,81 @@ const LEGACY_ALERT_HOURS = {
 };
 // Escape hatch for a genuine 24h store, or for testing an alert path on demand.
 const ALERT_ALWAYS = process.env.QINGYUN_ALERT_ALWAYS === '1';
+// How long to wait between checks once every location is parked. Set just above
+// lib/channel-live's cache so a reopen is noticed on the first or second tick.
+const PARKED_IDLE_MS = Number(process.env.QINGYUN_PARKED_IDLE_MS || 60_000);
+
+// ── Location park (the shop is closed until further notice) ─────────────────
+// Opening hours mute the PAGES overnight (alertsAllowed, below) but tracking
+// itself stays on round the clock, on purpose: a rider dispatched at 20:10 is
+// still on the road at 20:40. A location switched OFF on the Sales page is a
+// different thing — it isn't shut for the night, it isn't trading at all — and
+// there is nothing for this daemon to track there until someone switches it back
+// on. So it parks: no polling, no browser, no login, no pages.
+//
+// Held back by anything still in motion, because a shop can be closed with a
+// rider halfway to a customer: a store keeps polling while it has an undelivered
+// job or a queued push, and goes quiet only once both are empty. This is also why
+// the park is checked per store — one location closing must not mute the other.
+const parkFlagged = {};              // storeCode -> logged the park transition once
+const unparkedThisCycle = new Set(); // stores that came back on this tick
+
+// Anything still in motion for this store: an undelivered job, or a push that
+// hasn't reached the courier yet. Unknown reads as YES — keep tracking rather
+// than abandon a delivery a customer is waiting on.
+//
+// ⚠️ Bounded by RECENCY, and that bound is the whole difference between a park
+// and a permanent wedge. A same-city delivery is done in hours; a job still at
+// orderStatus 20 weeks later is not in motion, it is stranded — 越秀 holds nine
+// of them from early July, frozen when its Qingyun session died. Without the
+// window those nine would hold this daemon awake forever, on a shop that has
+// been shut since. Anything stale enough to fall outside it is a data problem
+// for someone to look at, not a reason to keep a browser running.
+const LIVE_WORK_DAYS = Number(process.env.QINGYUN_LIVE_WORK_DAYS) || 2;
+
+function hasLiveDeliveryWork(storeCode) {
+  const since = `-${LIVE_WORK_DAYS} days`;
+  try {
+    const job = db.prepare(`
+      SELECT 1 FROM delivery_jobs
+       WHERE store_code = ? AND COALESCE(superseded, 0) = 0
+         AND COALESCE(order_status, 0) < ?
+         AND COALESCE(updated_at, created_at) >= datetime('now', ?)
+    `).get(storeCode, DELIVERED_STATUS, since);
+    if (job) return true;
+    return !!db.prepare(`
+      SELECT 1 FROM qingyun_push_queue
+       WHERE store_code = ? AND status IN ('pending','processing','ready')
+         AND COALESCE(updated_at, created_at) >= datetime('now', ?)
+    `).get(storeCode, since);
+  } catch (_) { return true; }
+}
+
+function isParked(storeCode) {
+  return !storeLive(storeCode) && !hasLiveDeliveryWork(storeCode);
+}
+
+function parkTick(storeCode) {
+  const parked = isParked(storeCode);
+  if (parked && !parkFlagged[storeCode]) {
+    parkFlagged[storeCode] = true;
+    log(storeCode, 'location closed on the Sales page and nothing left in motion — '
+      + 'parking delivery tracking until it reopens');
+    logSync(storeCode, 'tracking_parked', 'ok', null, null);
+  } else if (!parked && parkFlagged[storeCode]) {
+    parkFlagged[storeCode] = false;
+    log(storeCode, 'location back on — resuming delivery tracking');
+    logSync(storeCode, 'tracking_resumed', 'ok', null, null);
+    unparkedThisCycle.add(storeCode);
+  }
+  return parked;
+}
 
 // True when a page for this store would reach someone who can act on it.
+// A parked store is never one of them: nobody is going to walk to a box for a
+// shop that isn't trading, which is the whole point of the park.
 function alertsAllowed(storeCode, now = new Date()) {
+  if (isParked(storeCode)) return false;
   if (ALERT_ALWAYS) return true;
   const hours = storeHours(storeCode) || LEGACY_ALERT_HOURS[storeCode] || null;
   return within(hours, {
@@ -960,10 +1036,30 @@ async function main() {
   let gap = jitter(POLL_MS, 0.3);
   let last = 0;
   const warmupFlagged = {};  // store_code → log the cold-Chrome hold once per transition
+  let idleFlagged = false;   // log the fully-parked idle once per transition
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const now = Date.now();
+
+    // Park bookkeeping FIRST, before the proxy probe: a daemon whose every store
+    // is switched off shouldn't be curl-ing a proxy on the way to doing nothing.
+    for (const s of STORES) parkTick(s);
+    if (unparkedThisCycle.size) { refreshChannelLive(); unparkedThisCycle.clear(); }
+    if (STORES.every(code => isParked(code))) {
+      if (!idleFlagged) {
+        idleFlagged = true;
+        console.log(`[qingyun-daemon] ${new Date().toISOString()} every location is closed and nothing is `
+          + 'in motion — idling (no polling, no browser, no pages) until one reopens. '
+          + 'The holder browsers are separate processes: pm2 stop qingyun-chrome* to free them too.');
+      }
+      await sleep(jitter(PARKED_IDLE_MS));
+      continue;
+    }
+    if (idleFlagged) {
+      idleFlagged = false;
+      console.log(`[qingyun-daemon] ${new Date().toISOString()} a location is back — resuming delivery tracking`);
+    }
 
     if (!(await proxyHealthy())) {
       proxyFailStreak++;
@@ -997,6 +1093,7 @@ async function main() {
       last = now;
       gap = jitter(POLL_MS, 0.3);
       for (const storeCode of STORES) {
+        if (isParked(storeCode)) continue; // shop closed, nothing in motion
         // Each store has its own holder Chrome (own CDP port) — skip only the one
         // that just relaunched, and only until it's warm. A skipped poll costs one
         // cycle; hitting a cold browser costs a 30-min risk-control cool-down.
