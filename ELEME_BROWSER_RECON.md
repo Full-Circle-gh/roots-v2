@@ -144,7 +144,51 @@ One ordering difference from Meituan, on purpose: Eleme's `骑手已接单` clas
 **Not built:** accept-order, history sweeps, and anything that un-masks customer
 PII.
 
-### 🔴 BLOCKER, found live 2026-08-24: the orders micro-frontend is NOT authenticated standalone
+### ✅ RESOLVED 2026-08-24 — but read this before touching the order path
+
+*(The blocker below was found and fixed the same day. The diagnosis is kept
+because it corrects a statement at the top of this file, and because three
+plausible fixes were tried and could never have worked.)*
+
+**Fix:** the orders tab loads `melody.shop.ele.me/app/shop/<id>/order` and every
+order RPC is evaluated in the **`napos-order-pc` IFRAME** — the only context that
+is both authenticated and origin-correct. `_rpc` accepts a Frame or a Page (they
+differ only in `isClosed` vs `isDetached`); `_rpcOrder` **refuses** when the frame
+is gone rather than falling back to `this.page`, which is both the wrong origin
+and the wrong session. `ELEME_ORDER_ROUTE` overrides the shell path.
+
+**A second bug hid behind the first.** Once authenticated, the reader announced
+"no orders" while actually reading `PollingService.nonCoreOrders` — a summary feed
+of tab counts. Two causes, both fixed:
+
+- one loose regex plus Map iteration order let the *newest* match win. Method
+  matching is now a **priority list**, most specific first, and the first tier with
+  an answer wins outright. `nonCoreOrders` is not a list source at all;
+  `unprocessedOrders` ranks last (narrower question); `queryExceptionInfo` ranks
+  last for voids because it answers with **counts, not rows**.
+- `queryInProcessOrders` returns `result: null` when nothing is in flight, and the
+  response hook discarded that as unusable. An ncp reply **with the `result` key
+  present** is a legitimate *empty* answer. The discriminator is the KEY, not the
+  value — a reply with no `result` key is the `{name,message,meta}` error shape.
+
+**Verified live 2026-08-24 07:48 Beijing:** list read from
+`OrderWebService.queryInProcessOrders` (empty — correct, the shop opens 10:00);
+refund queue reporting `exceptionalOrderCount` / `cancelOrderCount` /
+`refundOrderCount` / `fastRefundOrderCount`, all zero. Order polling is ON and
+gated to 10:00–20:00. `ELEME_FORCE_OPEN_MINUTES=N` is a self-expiring override for
+reading outside hours.
+
+**🔴 Still unproven, and it needs one real order:** whether Eleme delivery orders
+appear in the PC backend at all, or are handled only in the merchant **app**. The
+instrument is in place — the daemon logs the tab COUNTS on every empty read.
+Non-zero counts during business hours means the PC backend sees orders and this
+approach is sound; zero counts while orders are being served means it does not.
+Everything downstream (field names, Tier 1 detail, restock, the 元/分 money unit)
+stays unproven until that order lands.
+
+---
+
+#### The original diagnosis: the orders micro-frontend is NOT authenticated standalone
 
 The build above is deployed and its reader works, but it cannot read anything yet,
 and the reason is worth writing down because it invalidates an assumption at the
@@ -185,10 +229,8 @@ than only that it was. `{name,message,meta}` is the order services' error shape;
 it is not the ncp `{result,error}` envelope, so a "result null" check reads an
 auth failure as an empty shop.
 
-**Holding state:** `ELEME_ORDER_POLL=0` is set in `.env` on the box, so the daemon
-makes no order requests at all rather than repeating unauthenticated ones every
-5 minutes. Stock push is untouched and healthy. Remove that line to re-enable once
-the shell-iframe load lands.
+*(Holding state at the time was `ELEME_ORDER_POLL=0`. Now `=1` and hours-gated —
+see the RESOLVED section above.)*
 
 ## Build plan (mirror Meituan)
 
