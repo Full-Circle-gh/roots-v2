@@ -41,10 +41,16 @@ router.get('/api/retail-admin/meituan/products', requireRetailAdmin, (req, res) 
        ORDER BY p.name_cn, p.variant_group_id, p.id
     `).all();
 
+    // multiSize = the mapped listing holds more than one 规格. Read from the
+    // specs the listing job captures, so the page can offer a "Multi-size"
+    // filter and, later, say which size a product is. 15 of 265 listings at
+    // 天河 are multi-size; those are the ones where stock can go wrong.
     const maps = db.prepare(`
       SELECT m.product_id, m.retail_store_id, m.store_code,
              m.meituan_name, m.sync_enabled,
-             m.last_pushed_qty, m.last_pushed_at
+             m.last_pushed_qty, m.last_pushed_at,
+             (SELECT COUNT(*) FROM meituan_listing_specs ls
+               WHERE ls.store_code = m.store_code AND ls.listing_name = m.meituan_name) AS specCount
         FROM meituan_product_map m
     `).all();
 

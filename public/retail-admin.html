@@ -10836,14 +10836,20 @@
   </section>
 
   <!-- ── Meituan Sync ── -->
+  <!-- ══════════════════════════════════════════════════════════════════════
+       MEITUAN CHANNEL PAGE — rebuilt from scratch 2026-08-23 to
+       reference/meituan-page-v2-mockup.html (option 1), drawn against Orders.
+       Header, tile row, chip filters, toolbar, table: every shape is one the
+       Orders page already uses.
+
+       What the old page had and this one does not: a four-cell KPI strip, two
+       store cards, an amber attention banner (the "Not matched" tile says it
+       and the chips act on it), a segmented filter (chips), a channel on/off
+       switch and Connect another store (both setup — they live on Sales), and
+       a "How matching works" disclosure in the header (§1.7 allows three
+       elements; the hint now sits on the rows that need it).
+       ══════════════════════════════════════════════════════════════════════ -->
   <section id="tab-meituan">
-    <!-- §1.7 page header: title, status line, one Dusk CTA. Three elements,
-         there is no fourth. What used to be here is gone: a bilingual title
-         glued into one node, a purpose line ("Stock stays in sync…", banned
-         because it reads the same every day), the channel switch occupying the
-         slot §1.7 reserves for the Dusk action, and a "How matching works"
-         disclosure. The title carries both languages as sibling blocks, so the
-         source keeps both strings and the screen shows exactly one. -->
     <div class="mt-pagehead">
       <div class="mt-pagehead-t">
         <h2 data-lang-block="en">Meituan</h2>
@@ -10854,32 +10860,15 @@
         title="Read the live Meituan listings and link them to your products">Match names · 匹配名称</button>
     </div>
 
-    <!-- The switch is a setting, not the page action, so it sits in the body. -->
-    <div class="mt-chanrow">
-      <label class="mt-chan" title="Turn the whole Meituan channel on or off">
-        <span class="lab" id="mt-enable-txt">Channel on · 渠道开启</span>
-        <input type="checkbox" id="mt-enable" onchange="mtToggleChannel(this.checked)">
-      </label>
-    </div>
+    <!-- Three tiles + a notice, both painted by mtRenderHead() from /status. -->
+    <div class="mt-tiles" id="mt-tiles"></div>
+    <div id="mt-notice"></div>
 
-    <div class="mt-stores" id="mt-stores"></div>
-
-    <!-- The two setup actions the scrapped Configure panel carried. Quiet, at
-         the end of the store region: they are rare, and neither is the page. -->
-    <div class="mt-storefoot">
-      <button class="btn btn-sm" onclick="if(window.igRelayWizard)igRelayWizard('meituan')">Connect another store · 连接其他门店</button>
-      <button class="mt-help" onclick="if(window.igHelp)igHelp('meituan')">Get help · 获取帮助</button>
-    </div>
-
-    <!-- Sub-tabs: one job per view. Counts are filled in by JS. -->
     <div class="mt-tabs" role="tablist">
       <button id="mt-tab-products" class="mt-tab active" role="tab" onclick="mtView('products')">
         Products · 商品 <span class="n" id="mt-tabn-products" data-no-i18n></span></button>
       <button id="mt-tab-bundles" class="mt-tab" role="tab" onclick="mtView('bundles')">
         Bundles · 套餐 <span class="n" id="mt-tabn-bundles" data-no-i18n></span></button>
-          <!-- Activity: the sync log. /status has always returned recentStock +
-           recentSystem and nothing on this page rendered them — the Eleme page
-           shows both. -->
       <button id="mt-tab-activity" class="mt-tab" role="tab" onclick="mtView('activity')">
         Activity · 同步日志</button>
       <span class="mt-tabs-grow"></span>
@@ -10888,76 +10877,38 @@
         title="Queue a fresh stock push for every mapped product">Sync now · 立即同步</button>
     </div>
 
-    <!-- ══ Products view — the tab's real work: the mapping table ══ -->
     <div id="mt-view-products" class="mt-view">
-
-    <!-- Shown ONLY while active products are live on neither store; the single
-         home of the guided Match-names flow (fetch → match → review picks). -->
-    <div id="mt-attn" class="mt-attn" hidden>
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px;flex:none"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/></svg>
-      <div class="atxt" id="mt-attn-txt" data-no-i18n></div>
-      <!-- Match names moved to the header CTA: it is the page action, and one
-           Dusk element per screen is the rule. This banner is now just the fact. -->
+      <div class="mt-chips" id="mt-chips" data-no-i18n></div>
+      <div class="mt-tools">
+        <select class="mt-sel" id="mt-store-filter" data-no-i18n onchange="mtSetStore(this.value)"></select>
+        <input class="mt-search" id="mt-search" type="text"
+               data-ph-en="Search product, SKU or listing name…" data-ph-cn="搜索商品、货号或美团商品名…"
+               placeholder="Search product, SKU or listing name…" oninput="mtFilterProducts()">
+      </div>
+      <div class="mt-tablewrap">
+        <table id="mt-products-table">
+          <thead>
+            <tr>
+              <th style="width:38%">Product · 商品</th>
+              <th id="mt-th-store-0" style="width:31%">Tianhe delivery · 天河外卖</th>
+              <th id="mt-th-store-1" style="width:31%">Yuexiu instant · 越秀闪购</th>
+            </tr>
+          </thead>
+          <tbody id="mt-products-body" data-no-i18n></tbody>
+        </table>
+      </div>
     </div>
 
-    <!-- Toolbar — search + status filter only; setup actions live in the banner -->
-    <div class="pa-toolbar">
-      <input id="mt-search" type="text" data-ph-en="Search products" data-ph-cn="搜索商品" placeholder="Search products" oninput="mtFilterProducts()">
-      <div class="mt-seg" role="tablist" aria-label="Filter products">
-        <button id="mt-seg-all" class="active" role="tab" onclick="mtSetFilter('all')">All · 全部</button>
-        <button id="mt-seg-att" role="tab" onclick="mtSetFilter('att')">Needs attention · 待处理</button>
-      </div>
-      <div id="mt-count" class="pa-count" data-no-i18n></div>
-    </div>
-    <details class="mt-how">
-      <summary>How matching works · 匹配原理</summary>
-      <div data-lang-block="en">
-        <b>Tianhe</b> (delivery) matches by listing name — Match names links by SKU (货号) first when the Meituan listing has one, then by name.
-        <b>Yuexiu</b> (instant) matches automatically by SKU (货号) and is read-only.
-      </div>
-      <div data-lang-block="cn">
-        <b>天河</b>(外卖)按商品名称匹配 —— 「匹配名称」会优先按货号关联,其次按名称。
-        <b>越秀</b>(闪购)按货号自动匹配,只读。
-      </div>
-    </details>
-
-    <!-- Product mapping table -->
-    <div id="mt-products-wrap" style="overflow-x:auto">
-      <table id="mt-products-table" class="data-table" style="min-width:640px;font-size:13px">
-        <thead>
-          <tr>
-            <th style="width:38%">Product · 商品</th>
-            <th id="mt-th-store-0" style="width:31%">Tianhe delivery — by name · 天河外卖 — 按名称</th>
-            <th id="mt-th-store-1" style="width:31%">Yuexiu instant — auto by SKU · 越秀闪购 — 货号自动</th>
-          </tr>
-        </thead>
-        <tbody id="mt-products-body" data-no-i18n>
-          <tr><td colspan="3" class="muted" style="padding:24px;text-align:center">Loading…</td></tr>
-        </tbody>
-      </table>
-    </div>
-    </div><!-- /mt-view-products -->
-
-    <!-- Orders view removed — Meituan orders appear on the main Orders page
-         like every other channel; a second ledger here was duplicate noise. -->
-
-    <!-- ══ Bundles view — Meituan-only combos (套餐) ══ -->
     <div id="mt-view-bundles" class="mt-view" hidden>
-      <div class="pa-toolbar">
-        <span class="muted" style="font-size:12.5px;max-width:56ch">
-          Combos sold on Meituan that use up your products. Stock syncs as the most the components can still make. · 美团套餐:库存按组成商品可做的最大份数自动同步。
-        </span>
-        <span style="flex:1 1 auto"></span>
-        <button class="btn btn-sm" onclick="mtSuggestBundles()" title="Scan the Meituan titles read during Match names for combo-looking entries. · 从匹配名称时读取的美团标题中找出套餐。">Suggest bundles · 套餐建议</button>
-        <button class="btn btn-sm btn-primary" onclick="mtEditBundle()">+ Add bundle · 新增套餐</button>
+      <div class="mt-tools">
+        <span class="mt-upd" style="flex:1 1 auto">Combos sold on Meituan that use up your products. Stock syncs as the most the components can still make. · 美团套餐:库存按组成商品可做的最大份数自动同步。</span>
+        <button class="btn btn-sm" onclick="mtSuggestBundles()">Suggest bundles · 套餐建议</button>
+        <button class="btn btn-sm btn-primary" onclick="mtEditBundle()">Add bundle · 新增套餐</button>
       </div>
       <div id="mt-bundle-suggest"></div>
-      <div class="mt-card" id="mt-bundles-card">
-        <div id="mt-bundles-list" data-no-i18n></div>
-      </div>
+      <div class="mt-card"><div id="mt-bundles-list" data-no-i18n></div></div>
     </div>
 
-    <!-- ══ Activity view — what the sync actually did ══ -->
     <div id="mt-view-activity" class="mt-view" hidden>
       <div class="mt-act-h">Stock pushes · 库存推送</div>
       <div class="mt-log" id="mt-log-stock" data-no-i18n></div>
@@ -11276,13 +11227,6 @@
       </div>
       <!-- §1.7: no create action on this page, so the Dusk slot stays empty
            rather than take a secondary. Push all stock sits by the tabs. -->
-    </div>
-
-    <div class="el-chanrow">
-      <label class="el-chan" title="Turn the whole Eleme channel on or off">
-        <span class="lab" id="el-enable-txt">Channel off · 渠道已关闭</span>
-        <input type="checkbox" id="el-enable" onchange="elToggleEnabled(this.checked)">
-      </label>
     </div>
 
     <!-- One card per store, from /eleme/status.stores. A store is blocked when
