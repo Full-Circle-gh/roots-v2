@@ -345,18 +345,10 @@ function dashInit() {
     if (DASH_DATA) { dashRenderHeadlines(); dashRenderFacts(); }
     dashReadRender(); dashNotesRender(); dashAskChipsRender(); dashAskRender();
   });
-  // Initial 30d window. On a phone (≤720px) the pull happens at boot because
-  // the phone dashboard (rmRenderDash) renders straight from DASH_DATA. On
-  // desktop the deep Reports build (~28 aggregate queries) is DEFERRED to the
-  // first Reports visit — at boot it used to queue ahead of the visible cards
-  // and was the main reason the dashboard sat on "Loading…".
-  const phoneMq = window.matchMedia && window.matchMedia('(max-width: 720px)');
-  dashSetRange('30', { defer: !(phoneMq && phoneMq.matches) });
-  // …and if a desktop window is later narrowed past the phone breakpoint, the
-  // phone dashboard needs the data it was never sent. Pull it once, on cross.
-  if (phoneMq && phoneMq.addEventListener) {
-    phoneMq.addEventListener('change', e => { if (e.matches && !DASH_DATA) dashLoad(); });
-  }
+  // Initial 30d window. The deep Reports build (~28 aggregate queries) is
+  // DEFERRED to the first Reports visit — at boot it used to queue ahead of
+  // the visible cards and was the main reason the dashboard sat on "Loading…".
+  dashSetRange('30', { defer: true });
   dashHeroInit();      // today pulse: presence + today KPIs + activity polling
   tdInit();            // Tacet dashboard: The Recap + attention cards + date
 }
@@ -559,7 +551,7 @@ async function dashHeroLoadPresence() {
     // the count, and a label. At zero the count hides (CSS via .is-zero) and
     // the label carries the whole sentence.
     const num = $('#db-live-num');
-    if (num) dashCountUp(num, v);   // keep a plain number — rmRenderDash reads it
+    if (num) dashCountUp(num, v);
     const wrap = $('#td-live');
     if (wrap) { wrap.classList.toggle('is-on', v > 0); wrap.classList.toggle('is-zero', v === 0); }
     const lbl = $('#td-live-lbl');
@@ -2985,7 +2977,6 @@ function dashRenderAll() {
   dashRenderHeadlines();
   dashRenderFacts();
   dashReadMaybeLoad();
-  if (window.rmRenderDash) rmRenderDash();   // mobile Variant A hero + tiles (≤720px)
 }
 
 function dashRenderKpis() {

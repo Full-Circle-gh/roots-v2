@@ -1539,11 +1539,6 @@
          unfinished (part 17), gone at 100%. -->
     <div id="setup-dash-card" style="display:none"></div>
 
-    <!-- Mobile dashboard (Variant A) — untouched this pass. Rendered by
-         rmRenderDash from the same DASH_DATA; the desktop td-* surface below
-         is hidden ≤720px, this is hidden on desktop. -->
-    <div id="rm-dash" aria-live="polite"></div>
-
     <!-- ── Tacet dashboard — one question: is everything okay? ──
          1. Needs you  — every fire, one line each. First, full width, and not
             in the card grid at all, so nothing can move it or hide it. Absent
@@ -1557,7 +1552,9 @@
          The page title lives INSIDE this wrapper on purpose: .td-wrap carries
          both the width cap and the container query the card grid resolves its
          columns from, so header and cards cannot drift apart — there is only
-         one element to edit. Hidden as one on mobile, as before. -->
+         one element to edit. Visible at every width — the grid already falls
+         back to one column with no container-query match, so phones get this
+         same surface rather than a separate mobile dashboard. -->
     <div class="td-wrap">
 
     <div class="db-head td-head">
@@ -2011,23 +2008,12 @@
       </div>
     </aside>
 
-    <!-- Mobile dashboard report — full-screen push surface (Variant A).
-         Phone-only. Filled by openDashReport from the live DASH_DATA
-         aggregates (the same numbers the desktop charts use). Kept inside
-         #tab-dashboard so it hides with the tab automatically. -->
-    <section id="rm-dash-report" aria-hidden="true" aria-label="Report · 报表">
-      <div class="rm-dh-rnav">
-        <button type="button" class="rm-dh-back" aria-label="Back · 返回"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
-        <span class="rm-dh-rtitle"></span>
-      </div>
-      <div class="rm-dh-rbody"></div>
-    </section>
   </section>
 
   <!-- ─── REPORTS — historical analytics (formerly the Dashboard's deep-dive
        fold). Date range + store scope drive the KPI strip and every chart
        below; all container ids are unchanged so the chart renderers in
-       03-dashboard.js and the phone report clones keep working. -->
+       03-dashboard.js keep working. -->
   <section id="tab-reports">
     <div class="db-head td-head">
       <h2 style="margin:0">Reports · 报表</h2>
@@ -2058,9 +2044,7 @@
     </div>
 
     <!-- Chapter rail — one screen answers one question (spec:
-         reference/reports-ai-mockup.html). Every chart container id below is
-         UNCHANGED so the phone dashboard (rmRenderDash clones by id) keeps
-         working; chapters only show/hide wrappers. -->
+         reference/reports-ai-mockup.html). Chapters only show/hide wrappers. -->
     <div class="db-chtabs" id="db-chtabs" role="tablist">
       <button data-ch="overview" class="active">Overview · 总览</button>
       <button data-ch="sales">Sales · 销售</button>
@@ -12947,392 +12931,10 @@
 </script>
 
 <script>
-/* ════════════════════════════════════════════════════════════════════
-   MOBILE DASHBOARD — Variant A (full-screen push). Renders the SAME live
-   DASH_DATA the desktop bento/deep-dive use as a dark live hero + a grid of
-   report tiles on phones (≤720px). Tap a tile → a full-screen report pushes
-   in (#rm-dash-report), its body built from the same aggregates — the
-   complex charts (status/payment/heatmap/composition/tiers/customers/geo/
-   scenes/products) are cloned straight from the desktop nodes dashRenderAll
-   already populated; the headline KPIs + trend sparkline are reformatted via
-   dashMoney/dashNum/dashSparkline. Period chips reuse dashSetRange (which
-   reloads + re-renders). No backend change; desktop untouched (the surfaces
-   are display:none above 720px). See memory: feature_operator_mobile_miniapp. */
-(function () {
-  function el(id) { return document.getElementById(id); }
-  function esc(s) { return (typeof escapeHtml === 'function') ? escapeHtml(s) : String(s == null ? '' : s); }
-  function money(n, dp) { return (typeof dashMoney === 'function') ? dashMoney(n, dp) : ('¥' + Number(n || 0)); }
-  function num(n) { return (typeof dashNum === 'function') ? dashNum(n) : String(n || 0); }
-  function spark(vals) { return (typeof dashSparkline === 'function') ? dashSparkline((vals || []).map(Number)) : ''; }
-  // Reuse the desktop-rendered chart node's markup (always populated by
-  // dashRenderAll, even while hidden). Falls back to a calm placeholder.
-  function clone(id) { var n = el(id); var h = n ? n.innerHTML : ''; return h || '<div class="rm-dh-empty">No data · 暂无</div>'; }
-
-  var PERIODS = [['today', 'Today'], ['7', '7d'], ['30', '30d'], ['90', '90d']];
-  var RNG_LABEL = { today: 'today · 今日', '7': '7d', '30': '30d', '90': '90d' };
-  function activeRange() { var b = document.querySelector('#db-range-seg button.active'); return b ? b.dataset.range : '30'; }
-  function trendVals(metric) { var t = (typeof DASH_DATA !== 'undefined' && DASH_DATA && DASH_DATA.trend) || []; return t.map(function (p) { return Number(p[metric] || 0); }); }
-
-  // ── count-up: the headline numbers roll up like the desktop dashboard ──
-  // Each animatable figure is rendered as a marker span carrying its raw
-  // target + a formatter key; after the wholesale innerHTML rebuild we tween
-  // them via the desktop's dashCountUp. A per-key cache makes the first paint
-  // roll from 0 → value while later refreshes leave unchanged numbers at rest
-  // (only a genuinely changed value, e.g. a range switch, re-rolls).
-  var CU_FMT = {
-    rev:  function (n) { return money(Math.round(n)); },
-    aov:  function (n) { return money(n, 2); },
-    int:  function (n) { return num(Math.round(n)); },
-    plus: function (n) { return '+' + num(Math.round(n)); },
-    pct:  function (n) { return n.toFixed(1) + '%'; }
-  };
-  var rmCuPrev = {};
-  function cu(key, to, f, fallback) {
-    return '<span class="rm-cu" data-k="' + key + '" data-to="' + (Number(to) || 0) + '" data-f="' + f + '">' + fallback + '</span>';
-  }
-  function animateNums(scope) {
-    if (!scope || typeof dashCountUp !== 'function') return;
-    var nodes = scope.querySelectorAll('.rm-cu');
-    for (var i = 0; i < nodes.length; i++) {
-      var n = nodes[i], key = n.getAttribute('data-k');
-      var to = Number(n.getAttribute('data-to')) || 0;
-      var f = CU_FMT[n.getAttribute('data-f')] || CU_FMT.int;
-      n._cuVal = (rmCuPrev[key] != null) ? rmCuPrev[key] : 0;
-      rmCuPrev[key] = to;
-      dashCountUp(n, to, f, 1000);
-    }
-  }
-
-  var IC = {
-    sales: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>',
-    orders: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>',
-    customers: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
-    conv: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
-    products: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3h18l-2 14H5L3 3z"/><circle cx="9" cy="20" r="1.5"/><circle cx="17" cy="20" r="1.5"/><path d="M8 7h8"/></svg>',
-    ops: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>',
-    chevron: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>'
-  };
-
-  function mini(v, k) { return '<div class="m"><div class="v">' + v + '</div><div class="k">' + k + '</div></div>'; }
-  function tile(r, ic, lab, val, spk) {
-    return '<button class="rm-dh-tile" data-r="' + r + '"><span class="ic">' + (IC[ic] || '') + '</span>' +
-      '<span class="lab">' + lab + '</span><span class="val">' + val + '</span><span class="spk">' + spk + '</span></button>';
-  }
-
-  // ── Combined design pieces: carousel KPI card + accordion section ──
-  function kcard(sheet, lab, valHtml, delta, sparkMetric) {
-    var dl = (delta == null) ? '' :
-      '<div class="delta ' + (delta >= 0 ? 'up' : 'down') + '">' + (delta >= 0 ? '▲' : '▼') + ' ' + Math.abs(delta).toFixed(1) + '%</div>';
-    return '<button class="rm-dh-kpi" data-sheet="' + sheet + '">' +
-      '<div class="lab">' + lab + '</div><div class="val">' + valHtml + '</div>' + dl +
-      '<div class="spk">' + spark(trendVals(sparkMetric)) + '</div></button>';
-  }
-  // The inline Revenue-trend charts render as a flat curve; on their own they
-  // can't be read. Wire each .rm-dh-trend into the shared sparkline-scrub system
-  // (dot + tip) so it reveals each point's date + revenue. On desktop that's
-  // hover; on touch it's PRESS-AND-HOLD — a plain tap or a scroll-swipe that
-  // starts on the chart must NOT trigger it (that fought the page scroll), so we
-  // only engage after the finger has held still for a moment. Once engaged, you
-  // can slide along the line to scrub; the reading lingers briefly on release.
-  var _trendTipTimer = null;     // fade-out timer after the finger lifts
-  var _lpTimer = null;           // long-press arming timer
-  var _lpActive = false;         // are we currently scrubbing via touch?
-  var _lpStart = null;           // touch origin, to tell a hold from a scroll
-  var LP_DELAY = 280, LP_SLOP = 8;
-  function trendLabels() {
-    var t = (typeof DASH_DATA !== 'undefined' && DASH_DATA && DASH_DATA.trend) || [];
-    return t.map(function (p) { return String(p.bucket || ''); });
-  }
-  function sparkTouchStart(e) {
-    if (!e.touches || !e.touches[0]) return;
-    var w = e.currentTarget, t = e.touches[0];
-    _lpStart = { x: t.clientX, y: t.clientY };
-    _lpActive = false;
-    if (_trendTipTimer) { clearTimeout(_trendTipTimer); _trendTipTimer = null; }
-    if (_lpTimer) clearTimeout(_lpTimer);
-    // Arm: if the finger is still here and hasn't wandered after LP_DELAY, the
-    // intent is "read", not "scroll" — engage the scrub and nudge a haptic.
-    _lpTimer = setTimeout(function () {
-      _lpActive = true;
-      w.classList.add('is-reading');
-      if (navigator.vibrate) { try { navigator.vibrate(12); } catch (err) {} }
-      if (typeof dashSparkMove === 'function')
-        dashSparkMove({ currentTarget: w, clientX: _lpStart.x });
-    }, LP_DELAY);
-  }
-  function sparkTouchMove(e) {
-    if (!e.touches || !e.touches[0]) return;
-    var t = e.touches[0];
-    if (!_lpActive) {
-      // Still arming: any real movement means the user is scrolling — disarm and
-      // let the page scroll normally (we never called preventDefault).
-      if (_lpStart && (Math.abs(t.clientX - _lpStart.x) > LP_SLOP || Math.abs(t.clientY - _lpStart.y) > LP_SLOP)) {
-        if (_lpTimer) { clearTimeout(_lpTimer); _lpTimer = null; }
-      }
-      return;
-    }
-    // Engaged: track the finger along the line and hold the page still.
-    e.preventDefault();
-    if (typeof dashSparkMove === 'function')
-      dashSparkMove({ currentTarget: e.currentTarget, clientX: t.clientX });
-  }
-  function sparkTouchEnd(e) {
-    var w = e.currentTarget;
-    if (_lpTimer) { clearTimeout(_lpTimer); _lpTimer = null; }
-    if (!_lpActive) return;   // was a tap or a scroll — nothing was shown
-    _lpActive = false;
-    if (_trendTipTimer) clearTimeout(_trendTipTimer);
-    _trendTipTimer = setTimeout(function () {
-      w.classList.remove('is-reading');
-      if (typeof dashSparkLeave === 'function') dashSparkLeave({ currentTarget: w });
-    }, 2200);
-  }
-  function wireTrendSparks(root) {
-    if (!root || typeof dashRenderSpark !== 'function') return;
-    var nodes = root.querySelectorAll('.rm-dh-trend'), i, w;
-    for (i = 0; i < nodes.length; i++) {
-      w = nodes[i];
-      if (w._trendWired) continue;
-      w._trendWired = true;
-      dashRenderSpark(w, trendVals('revenue'), trendLabels(), money);
-      w.addEventListener('mousemove', dashSparkMove);
-      w.addEventListener('mouseleave', dashSparkLeave);
-      w.addEventListener('touchstart', sparkTouchStart, { passive: true });
-      w.addEventListener('touchmove', sparkTouchMove, { passive: false });
-      w.addEventListener('touchend', sparkTouchEnd);
-      w.addEventListener('touchcancel', sparkTouchEnd);
-    }
-  }
-  // Replay the bar-fill sweep inside `scope`. Removing the class + forcing a
-  // reflow before re-adding restarts the CSS animation even on the same DOM
-  // (accordion bodies persist across opens), so bars fill from empty every time
-  // a section is unfolded — not just on first render.
-  function sweepBars(scope) {
-    if (!scope) return;
-    scope.classList.remove('rm-barsweep');
-    void scope.offsetWidth;  // force reflow so the re-added animation restarts
-    scope.classList.add('rm-barsweep');
-  }
-  function accItem(s) {
-    return '<div class="rm-dh-ai' + (s.open ? ' open' : '') + '" data-acc="' + s.id + '">' +
-      '<button class="rm-dh-ai-head"><span class="ic">' + (IC[s.ic] || '') + '</span>' +
-        '<span class="tx"><span class="t">' + s.t + '</span></span>' +
-        (s.v ? '<span class="hv ' + (s.vc || '') + '">' + s.v + '</span>' : '') +
-        '<span class="chev">' + IC.chevron + '</span></button>' +
-      '<div class="rm-dh-ai-body"><div class="inner"><div class="rm-dh-ai-pad">' + s.body + '</div></div></div></div>';
-  }
-
-  window.rmRenderDash = function () {
-    var wrap = el('rm-dash');
-    if (!wrap || typeof DASH_DATA === 'undefined' || !DASH_DATA) return;
-    var k = DASH_DATA.kpis || {}, d = DASH_DATA.deltas || {};
-    var rng = activeRange();
-    var convNull = (k.conversion_rate == null);
-    var conv = convNull ? '—' : (k.conversion_rate.toFixed(1) + '%');
-    var live = (el('db-live-num') || {}).textContent; if (!live || live === '—') live = '0';
-
-    var chips = PERIODS.map(function (p) {
-      return '<button data-r="' + p[0] + '"' + (p[0] === rng ? ' class="active"' : '') + '>' + p[1] + '</button>';
-    }).join('');
-
-    var dr = d.revenue;
-    var deltaHtml = (dr == null) ? '' :
-      '<span class="rm-dh-delta ' + (dr >= 0 ? 'up' : 'down') + '">' + (dr >= 0 ? '▲' : '▼') + ' ' + Math.abs(dr).toFixed(1) + '%</span>';
-
-    // Slim live hero (from A) — headline + liveness; the KPIs move to the carousel.
-    var hero =
-      '<div class="rm-dh-hero">' +
-        '<div class="rm-dh-live"><span class="d"></span> Right now · ' + esc(live) + ' viewing</div>' +
-        '<div class="rm-dh-big">' + cu('hero-rev', k.revenue, 'rev', money(k.revenue)) + '</div>' +
-        '<div class="rm-dh-cap">Revenue · ' + esc(RNG_LABEL[rng] || rng) + ' ' + deltaHtml + '</div>' +
-      '</div>';
-
-    // Swipeable KPI carousel (from C) — each card opens a breakdown sheet (from B).
-    var carousel =
-      kcard('orders', 'Orders · 订单', cu('c-ord', k.orders, 'int', num(k.orders)), d.orders, 'orders') +
-      kcard('sales', 'Avg order · 客单', cu('c-aov', k.aov, 'aov', money(k.aov, 2)), d.aov, 'revenue') +
-      kcard('traffic', 'Conversion · 转化', (convNull ? '—' : cu('c-conv', k.conversion_rate, 'pct', conv)), null, 'orders') +
-      kcard('traffic', 'Refund rate · 退款率', ((k.refund_rate || 0).toFixed(1) + '%'), null, 'orders') +
-      kcard('traffic', 'Visits · 访问', cu('c-vis', k.visits, 'int', num(k.visits)), d.visits, 'visits') +
-      kcard('customers', 'New cust. · 新客', cu('c-new', k.new_customers, 'plus', '+' + num(k.new_customers)), d.new_customers, 'new_customers');
-    var dots = '<i class="on"></i><i></i><i></i><i></i><i></i><i></i>';
-
-    // Inline accordion report sections (from C) — bodies cloned from the same
-    // desktop chart nodes dashRenderAll already populated (no extra fetch).
-    var SECS = [
-      { id: 'trend', ic: 'sales', t: 'Revenue trend · 营收趋势', v: money(k.revenue), vc: 'brass', open: true, body: '<div class="rm-dh-trend">' + spark(trendVals('revenue')) + '</div>' },
-      { id: 'status', ic: 'orders', t: 'Order status · 订单状态', v: num(k.orders), open: true, body: clone('db-funnel') },
-      { id: 'payment', ic: 'orders', t: 'Payment & delivery · 支付配送', v: '', open: false, body: clone('db-splits') },
-      { id: 'products', ic: 'products', t: 'Top products · 热销', v: '', open: false, body: clone('db-products') },
-      { id: 'customers', ic: 'customers', t: 'Top customers · 客户榜', v: '', open: false, body: clone('db-customers') },
-      { id: 'tiers', ic: 'customers', t: 'Customer tiers · 等级分布', v: '', open: false, body: clone('db-tiers') },
-      { id: 'geo', ic: 'sales', t: 'By city · 地域分布', v: '', open: false, body: clone('db-geo') }
-    ];
-    var acc = SECS.map(accItem).join('');
-
-    wrap.innerHTML =
-      '<div class="rm-dh-title"><h2>Dashboard · 概览</h2></div>' +
-      '<div class="rm-dh-periods">' + chips + '</div>' +
-      hero +
-      '<div class="rm-dh-hint">Swipe the stats · tap any for the full breakdown · 滑动查看</div>' +
-      '<div class="rm-dh-carousel">' + carousel + '</div>' +
-      '<div class="rm-dh-dots">' + dots + '</div>' +
-      '<div class="rm-dh-acc">' + acc + '</div>';
-    animateNums(wrap);   // roll the headline figures up (desktop dashCountUp)
-    wireTrendSparks(wrap);  // make the inline Revenue-trend chart tappable
-    // Sweep the bars in the default-open sections so they fill on refresh.
-    var openSecs = wrap.querySelectorAll('.rm-dh-ai.open');
-    for (var oi = 0; oi < openSecs.length; oi++) sweepBars(openSecs[oi]);
-  };
-
-  // ── reports (full-screen push bodies) ──
-  function block(h, inner) { return '<div class="rm-dh-block"><div class="h">' + h + '</div>' + inner + '</div>'; }
-  function kpis(items) {
-    return '<div class="rm-dh-kpis">' + items.map(function (x) {
-      return '<div class="rm-dh-stat"><div class="lbl">' + x[0] + '</div><div class="v ' + (x[2] || '') + '">' + x[1] + '</div></div>';
-    }).join('') + '</div>';
-  }
-
-  var REPORTS = {
-    sales: { title: 'Sales · 销售', body: function () {
-      var k = DASH_DATA.kpis || {}, c = (k.conversion_rate == null) ? '—' : (k.conversion_rate.toFixed(1) + '%');
-      return kpis([['Revenue · 营收', money(k.revenue), 'brass'], ['Avg order · 客单价', money(k.aov, 2), ''], ['Orders · 订单', num(k.orders), ''], ['Conversion · 转化', c, '']]) +
-        block('Revenue trend · 营收趋势', '<div class="rm-dh-trend">' + spark(trendVals('revenue')) + '</div>') +
-        block('Revenue composition · 收入构成', clone('db-composition'));
-    } },
-    orders: { title: 'Orders · 订单', body: function () {
-      return block('Order status · 订单状态', clone('db-funnel')) +
-        block('Payment &amp; delivery · 支付与配送', clone('db-splits')) +
-        block('When orders land · 下单时段', '<div class="rm-dh-heatscroll">' + clone('db-heatmap') + '</div>');
-    } },
-    customers: { title: 'Customers · 客户', body: function () {
-      var nvr = DASH_DATA.new_vs_returning || {}, k = DASH_DATA.kpis || {};
-      return kpis([['Buyers · 买家', num(nvr.buyers), ''], ['New · 新客', num(nvr.new_buyers), 'brass'], ['Returning · 回头', num(nvr.returning_buyers), ''], ['New (period) · 期内新客', num(k.new_customers), '']]) +
-        block('Tier distribution · 等级分布', clone('db-tiers')) +
-        block('Top customers · 客户榜', clone('db-customers')) +
-        block('By city · 地域分布', clone('db-geo'));
-    } },
-    traffic: { title: 'Conversion · 转化', body: function () {
-      var k = DASH_DATA.kpis || {}, c = (k.conversion_rate == null) ? '—' : (k.conversion_rate.toFixed(1) + '%');
-      return kpis([['Visits · 访问', num(k.visits), ''], ['Sessions · 会话', num(k.sessions), ''], ['Conversion · 转化', c, 'brass'], ['Refund rate · 退款率', (k.refund_rate || 0).toFixed(1) + '%', '']]) +
-        block('Acquisition funnel · 转化漏斗', clone('db-acqfunnel')) +
-        block('Traffic &amp; entry scenes · 流量与场景', clone('db-traffic'));
-    } },
-    ops: { title: 'Operations · 运营', body: function () {
-      return block('Order pipeline · 订单流水', clone('db-funnel'));
-    } },
-    catalog: { title: 'Top products · 热销', body: function () {
-      return block('Best sellers · 热销榜', clone('db-products'));
-    } }
-  };
-
-  function openReport(r) {
-    var rep = REPORTS[r], panel = el('rm-dash-report');
-    if (!rep || !panel) return;
-    panel.querySelector('.rm-dh-rtitle').textContent = rep.title.replace(/&amp;/g, '&');
-    var body = panel.querySelector('.rm-dh-rbody');
-    body.innerHTML = rep.body();
-    wireTrendSparks(body);
-    sweepBars(body);
-    body.scrollTop = 0;
-    panel.classList.add('show');
-    panel.setAttribute('aria-hidden', 'false');
-    document.documentElement.classList.add('rm-noscroll');
-  }
-  function closeReport() {
-    var panel = el('rm-dash-report'); if (!panel) return;
-    panel.classList.remove('show');
-    panel.setAttribute('aria-hidden', 'true');
-    document.documentElement.classList.remove('rm-noscroll');
-  }
-
-  // Mirror the live presence count into the mobile hero as the poller ticks.
-  window.rmDashSetLive = function (n) {
-    var c = document.querySelector('#rm-dash .rm-dh-live');
-    if (c) c.innerHTML = '<span class="d"></span> Right now · ' + esc(String(n)) + ' viewing';
-  };
-
-  // ── breakdown sheet (Combined design) — reuses the shared .rm-sheet styling;
-  //    a card in the KPI carousel opens the same REPORTS body the push used. ──
-  function ensureDhSheet() {
-    if (el('rm-dh-scrim')) return;
-    var scrim = document.createElement('div');
-    scrim.className = 'rm-sheet-scrim'; scrim.id = 'rm-dh-scrim';
-    var sheet = document.createElement('div');
-    sheet.className = 'rm-sheet'; sheet.id = 'rm-dh-sheet';
-    sheet.setAttribute('role', 'dialog'); sheet.setAttribute('aria-modal', 'true');
-    sheet.innerHTML =
-      '<div class="rm-sheet-grip"><span></span></div>' +
-      '<div class="rm-sheet-head"><h3 id="rm-dh-sheet-title"></h3><button class="rm-sheet-close" id="rm-dh-sheet-x" aria-label="Close · 关闭">✕</button></div>' +
-      '<div class="rm-sheet-body" id="rm-dh-sheet-body"></div>';
-    document.body.appendChild(scrim); document.body.appendChild(sheet);
-    scrim.addEventListener('click', closeDhSheet);
-    el('rm-dh-sheet-x').addEventListener('click', closeDhSheet);
-  }
-  function openMetricSheet(key) {
-    var rep = REPORTS[key]; if (!rep) return;
-    ensureDhSheet();
-    el('rm-dh-sheet-title').textContent = rep.title.replace(/&amp;/g, '&');
-    var body = el('rm-dh-sheet-body'); body.innerHTML = rep.body(); wireTrendSparks(body); sweepBars(body); body.scrollTop = 0;
-    el('rm-dh-scrim').classList.add('show'); el('rm-dh-sheet').classList.add('show');
-    document.documentElement.classList.add('rm-noscroll');
-  }
-  function closeDhSheet() {
-    var s = el('rm-dh-sheet'), sc = el('rm-dh-scrim'); if (!s) return;
-    s.classList.remove('show'); sc.classList.remove('show');
-    document.documentElement.classList.remove('rm-noscroll');
-  }
-  window.rmDashCloseSheet = closeDhSheet;
-
-  function bind() {
-    var wrap = el('rm-dash');
-    if (wrap && !wrap._rmBound) {
-      wrap._rmBound = true;
-      wrap.addEventListener('click', function (e) {
-        var chip = e.target.closest('.rm-dh-periods button');
-        if (chip) { if (typeof dashSetRange === 'function') dashSetRange(chip.dataset.r); return; }
-        var kc = e.target.closest('.rm-dh-kpi');
-        if (kc) { openMetricSheet(kc.dataset.sheet); return; }
-        var head = e.target.closest('.rm-dh-ai-head');
-        if (head) {
-          var sec = head.closest('.rm-dh-ai');
-          var opened = sec.classList.toggle('open');
-          if (opened) sweepBars(sec);  // fill the bars as the section unfolds
-          return;
-        }
-      });
-      // KPI carousel: the dot pager follows the horizontal scroll position.
-      wrap.addEventListener('scroll', function (e) {
-        var car = e.target.closest && e.target.closest('.rm-dh-carousel'); if (!car) return;
-        var i = Math.round(car.scrollLeft / 176);  // card 165 + gap 11
-        var dots = wrap.querySelectorAll('.rm-dh-dots i');
-        for (var j = 0; j < dots.length; j++) dots[j].classList.toggle('on', j === i);
-      }, true);
-    }
-    var panel = el('rm-dash-report');
-    if (panel && !panel._rmBound) {
-      panel._rmBound = true;
-      var back = panel.querySelector('.rm-dh-back');
-      if (back) back.addEventListener('click', closeReport);
-    }
-  }
-  // Switching tabs hides #tab-dashboard (and the fixed report with it), but the
-  // scroll-lock would linger — release it on any nav tap.
-  document.addEventListener('click', function (e) {
-    if (e.target.closest && e.target.closest('#rm-bottomnav [data-go], .rm-sheet-list [data-go]')) { closeReport(); closeDhSheet(); }
-  }, true);
-
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bind);
-  else bind();
-})();
-</script>
-
-<script>
 /* KPI rail pagers — drive the swipe dots under the Orders & Customers KPI
    strips (phone only; on desktop the strip is a full grid with no overflow).
    The active dot tracks scroll position proportionally so the first dot lights
-   at the start and the last at the end of the rail. Mirrors the dashboard
-   carousel's dot pager. */
+   at the start and the last at the end of the rail. */
 (function () {
   function wire(railId, dotsId) {
     var rail = document.getElementById(railId), dots = document.getElementById(dotsId);
