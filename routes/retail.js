@@ -277,7 +277,11 @@ const MEDIA_INLINE_MIME = new Set([
 // Keys whose prefix is in this set are FILTERED OUT of the public
 // /api/retail/config response — they hold third-party API secrets
 // (kd100 key, JD app_secret, etc.) and must never reach the mini app.
-const PRIVATE_CONFIG_PREFIXES = ['integrations.', 'printer.'];
+// 'reviews.topup' is operator-only: publishing it would announce, to anyone
+// who opens /api/retail/config, that the store seeds its own reviews.
+// 'reviews.reward' is deliberately NOT private — it is an offer to the
+// customer, and the mini app reads the amount straight from here.
+const PRIVATE_CONFIG_PREFIXES = ['integrations.', 'printer.', 'reviews.topup'];
 
 function loadConfig() {
   const rows = tdb().prepare('SELECT key, value_json FROM storefront_config').all();

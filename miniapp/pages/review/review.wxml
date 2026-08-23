@@ -69,8 +69,8 @@
 <!-- Sticky submit -->
 <view class="submit-bar">
   <view class="submit-meta">
-    <view class="points-sticker f-toni">+10 {{lang === 'cn' ? '积分' : 'PTS'}}</view>
-    <view class="submit-note f-aleo">{{copy.pointsNote}}</view>
+    <view wx:if="{{rewardPoints}}" class="points-sticker f-toni">+{{rewardPoints}} {{lang === 'cn' ? '积分' : 'PTS'}}</view>
+    <view class="submit-note f-aleo">{{rewardPoints ? copy.pointsNote : copy.noteNoPoints}}</view>
   </view>
   <view class="submit-btn f-gothic {{(!rating || saving) ? 'disabled' : ''}}" bindtap="submit">
     {{saving ? copy.saving : copy.submit}} <text wx:if="{{!saving}}" class="arrow">→</text>
