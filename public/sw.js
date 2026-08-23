@@ -10,8 +10,12 @@
 //
 // Bump CACHE on every UI shape change to force every client to evict
 // its old shell on next load (activate handler deletes all old caches).
-const CACHE = 'roots-v2-shell-v778-meituan-dialogs';
-const SHELL = ['/', '/login'];
+const CACHE = 'roots-v2-shell-v779-tacet-mobile-pwa';
+// '/m' is Tacet Mobile — the phone companion, and the one shell here that is
+// meant to be INSTALLED rather than visited. An installed app that opens to a
+// browser error the first time the signal drops is not an app, so its shell is
+// pre-cached with the others.
+const SHELL = ['/', '/login', '/m'];
 
 // Heuristic — request that wants HTML?
 function isHTMLRequest(req) {
