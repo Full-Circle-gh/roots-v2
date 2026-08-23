@@ -213,9 +213,14 @@ const VOUCHERS = [
   { id: 3, code: 'OVER200', name_en: 'Big baskets', name_cn: '大额订单', discount_type: 'fixed', discount_value: 30, min_order: 200, per_customer_limit: 1, used_count: 12, expires_at: '2026-07-31', is_active: 1 },
 ];
 
+// flash_state / flash_stock_limit / flash_starts_at / flash_ends_at — the keys
+// mapFlash actually reads.
 const FLASH = [
-  { id: 1, product_id: 41, name_en: 'Lemongrass Kombucha', name_cn: '香茅康普茶', sku: '2-110', flash_price: 20, sell_price: 29, flash_limit: 120, flash_sold: 86, flash_start: '2026-08-22 12:00:00', flash_end: '2026-08-22 14:00:00', is_published: 1 },
-  { id: 2, product_id: 42, name_en: 'Coconut Flakes', name_cn: '椰子片', sku: '4-290', flash_price: 16, sell_price: 23, flash_start: '2026-08-29 09:00:00', flash_end: '2026-08-31 21:00:00', is_published: 1 },
+  { id: 41, name_en: 'Lemongrass Kombucha', name_cn: '香茅康普茶', sku: '2-110', flash_price: 20, sell_price: 29,
+    flash_state: 'active', flash_stock_limit: 120, flash_sold: 86,
+    flash_starts_at: '2026-08-23 12:00:00', flash_ends_at: '2026-08-23 14:00:00', is_published: 1 },
+  { id: 42, name_en: 'Coconut Flakes', name_cn: '椰子片', sku: '4-290', flash_price: 16, sell_price: 23,
+    flash_state: 'upcoming', flash_starts_at: '2026-08-29 09:00:00', flash_ends_at: '2026-08-31 21:00:00', is_published: 1 },
 ];
 
 const BROADCASTS = [
@@ -268,8 +273,8 @@ function fakeServer() {
       if(p.indexOf('/vouchers')===0) return {success:true,data:VOUCHERS};
       if(p.indexOf('/flash-sales')===0) return {success:true,data:FLASH};
       if(p.indexOf('/broadcasts')===0) return {success:true,data:BROADCASTS};
-      // The two the dot reads. `since` is the client's stored last-seen stamp:
-      // an empty one means "never opened the inbox", so everything counts.
+      // The two the dot reads. The since= param is the client's stored
+      // last-seen stamp; an empty one means never opened, so everything counts.
       if(p.indexOf('/reviews/unseen-count')===0)
         return {success:true,data:{count: /since=$|since=&|^\\/reviews\\/unseen-count$/.test(p)?2:0, latest:'2026-08-22 12:00:00'}};
       if(p.indexOf('/feedback/unseen-count')===0)

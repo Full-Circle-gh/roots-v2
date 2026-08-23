@@ -60,7 +60,7 @@ for (const t of ['home', 'orders', 'customers', 'products', 'more']) CASES['tab:
 
 // The probe, run inside the app page after it has settled.
 const PROBE = `
-  var VW = 390, out = { wide: [], clip: [], tiny: [], doc: 0 };
+  var VW = 390, out = { wide: [], clip: [], tiny: [], edge: [], doc: 0 };
   out.doc = document.documentElement.scrollWidth;
   var all = document.querySelectorAll('#app *');
   for (var i = 0; i < all.length; i++) {
@@ -79,6 +79,19 @@ const PROBE = `
     if (clips && el.scrollWidth > el.clientWidth + 1 && el.children.length === 0) {
       var txt = (el.innerText || '').trim();
       if (txt) out.clip.push({ t: txt.slice(0, 60), over: el.scrollWidth - el.clientWidth, box: el.clientWidth });
+    }
+    // A small control whose tap target touches the screen edge. The browser's
+    // own scroll indicator and the edge-swipe gesture live in that strip, so a
+    // reach for the button catches them instead — which is exactly what the
+    // account avatar did until its header stopped pulling itself 6px past the
+    // padding. Full-width controls (the tab bar) are meant to reach the edge.
+    // Not a chip in a scrolling strip (it is meant to run off the edge and be
+    // dragged back), and not a tab-bar button (the bar spans the full width by
+    // design, and its five buttons divide it).
+    var edgeExempt = inScroller || el.closest('.tabbar');
+    if (!edgeExempt && (el.tagName === 'BUTTON' || el.tagName === 'A') && r.width < VW * 0.6 && r.height > 20) {
+      var gapR = VW - r.right, gapL = r.left;
+      if (gapR < 8 || gapL < 8) out.edge.push({ t: (el.getAttribute('aria-label') || el.innerText || '').trim().slice(0, 30), l: Math.round(gapL), r: Math.round(gapR) });
     }
     var fs2 = parseFloat(cs.fontSize);
     if (el.children.length === 0 && (el.innerText || '').trim() && fs2 && fs2 < 11) {
@@ -108,7 +121,7 @@ function main() {
      <iframe src="p.html"></iframe>`);
 
   const names = Object.keys(CASES).filter((n) => !FILTER || n.includes(FILTER)).sort();
-  const clips = []; const wides = []; const tinies = [];
+  const clips = []; const wides = []; const tinies = []; const edges = [];
   let scanned = 0;
   for (const name of names) {
     const boot = `<script>addEventListener("load",function(){try{${SEED}${ROWS}${CASES[name]}}catch(e){}
@@ -128,6 +141,7 @@ function main() {
     for (const w of g.wide) wides.push([name, `${w.cls}: w=${w.w} right=${w.right} "${w.t}"`]);
     for (const c of g.clip) clips.push([name, c.t, c.over, c.box]);
     for (const t of g.tiny) tinies.push([name, `${t.px}px "${t.t}"`]);
+    for (const e of (g.edge || [])) edges.push([name, `"${e.t}" left ${e.l}px right ${e.r}px from the edge`]);
   }
   fs.rmSync(dir, { recursive: true, force: true });
 
@@ -144,12 +158,18 @@ function main() {
     console.log('');
   } else console.log('BELOW 11px — none.\n');
 
+  if (edges.length) {
+    console.log(`TAP TARGET ON THE EDGE — ${edges.length}:`);
+    for (const line of [...new Set(edges.map((x) => `${x[0]}  ${x[1]}`))].slice(0, 20)) console.log(`  ${line}`);
+    console.log('');
+  } else console.log('TAP TARGET ON THE EDGE — none.\n');
+
   // Clipping: report all, fail on the clear-cut kind.
   const uniq = new Map();
   for (const [n, t, over, box] of clips) { const k = t; if (!uniq.has(k)) uniq.set(k, { n, t, over, box }); }
   const list = [...uniq.values()].sort((a, b) => b.over - a.over);
   console.log(`CLIPPED TEXT — ${list.length} distinct:`);
   for (const c of list.slice(0, 40)) console.log(`  ${String(c.over).padStart(4)}px over (box ${c.box})  ${c.n}  "${c.t}"`);
-  process.exit(wides.length ? 1 : 0);
+  process.exit(wides.length || edges.length ? 1 : 0);
 }
 main();
