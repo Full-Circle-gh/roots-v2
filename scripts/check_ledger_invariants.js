@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// GAP G27. Nothing but server.js used to parse .env, so this script saw no
-// TACET_PG_* and lib/pg refused to build a pool -- an environment failure
-// wearing the clothes of a data finding. Loaded here, before anything reaches
-// for a connection, so a missing variable is reported as a missing variable.
+// .env is parsed here, before anything reaches for a connection, so a missing
+// variable is reported as a missing variable rather than as a data finding.
+// Extracted from server.js as lib/load-env.js because .env is NOT shell-
+// sourceable -- see that file's header. (This began as GAP G27 of the Postgres
+// migration, cancelled 2026-08-23; the loader outlived it and is still right.)
 require('../lib/load-env').loadEnv();
 //
 // check_ledger_invariants.js — the twelve checks that say whether the money
@@ -84,7 +85,6 @@ require('../lib/load-env').loadEnv();
 //
 // USAGE
 //   node scripts/check_ledger_invariants.js --db /tmp/a-copy-of-roots.db
-//   node scripts/check_ledger_invariants.js --pg
 //   node scripts/check_ledger_invariants.js --db <path> --limit 40
 //
 // EXIT CODE
@@ -110,7 +110,14 @@ const DEFAULT_LIMIT = 20;
 
 // ── Arguments ─────────────────────────────────────────────────────────────
 const argv = process.argv.slice(2);
-const usePg = argv.includes('--pg');
+if (argv.includes('--pg')) {
+  // The Postgres migration was cancelled 2026-08-23 and lib/pg.js is gone.
+  // This REFUSES rather than falling back to SQLite: a check that silently
+  // answers a different question than the one asked is the failure mode this
+  // whole script exists to avoid. See docs/tacet-operating-findings.md.
+  console.error('[check_ledger_invariants] --pg is gone. Tacet is on SQLite; there is no Postgres to check.');
+  process.exit(2);
+}
 const dbFlagAt = argv.indexOf('--db');
 if (dbFlagAt !== -1 && !argv[dbFlagAt + 1]) {
   console.error('[check_ledger_invariants] --db needs a path argument.');
@@ -128,7 +135,7 @@ const dbPath = dbFlagAt !== -1
 
 // ── Backends ──────────────────────────────────────────────────────────────
 // Both expose query(sql, params) -> Promise<rows[]>. Async even on SQLite,
-// because that is the contract pg needs and §24's whole point is that call
+// because that was the contract pg would have needed and §24's point is that call
 // sites should not change shape at the cutover.
 
 /**
@@ -145,7 +152,7 @@ const dbPath = dbFlagAt !== -1
 function openSqlite(file) {
   if (!fs.existsSync(file)) {
     console.error(`[check_ledger_invariants] no database at ${file}`);
-    console.error('  Pass --db <path> to a COPY, or --pg to check PostgreSQL instead.');
+    console.error('  Pass --db <path> to a COPY.');
     process.exit(2);
   }
   try {
@@ -173,40 +180,6 @@ function openSqlite(file) {
       close: async () => db.close(),
     };
   }
-}
-
-/**
- * PostgreSQL through the application's own pool, inside a READ ONLY
- * transaction so the server refuses any write regardless of what is issued.
- * Placeholders are rewritten ? -> $1, $2, … since the SQL below is authored in
- * the SQLite style.
- */
-async function openPg() {
-  let pool;
-  try {
-    ({ pool } = require('../lib/pg'));
-  } catch (e) {
-    console.error('[check_ledger_invariants] could not open the PostgreSQL pool.');
-    console.error(`  ${e.message}`);
-    process.exit(2);
-  }
-  const client = await pool.connect();
-  await client.query('BEGIN READ ONLY');
-  let n = 0;
-  const toPg = (sql) => sql.replace(/\?/g, () => `$${++n}`);
-  return {
-    name: 'postgres (READ ONLY transaction) via lib/pg.js',
-    query: async (sql, params = []) => {
-      n = 0;
-      const r = await client.query(toPg(sql), params);
-      return r.rows;
-    },
-    close: async () => {
-      await client.query('COMMIT');
-      client.release();
-      await pool.end();
-    },
-  };
 }
 
 // ── THE CHECKS ────────────────────────────────────────────────────────────
@@ -701,7 +674,7 @@ function printRows(rows, limit) {
 
 // ── Main ──────────────────────────────────────────────────────────────────
 async function main() {
-  const db = usePg ? await openPg() : openSqlite(dbPath);
+  const db = openSqlite(dbPath);
 
   console.log('');
   console.log('LEDGER INVARIANTS');

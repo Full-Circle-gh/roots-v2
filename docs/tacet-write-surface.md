@@ -1,14 +1,14 @@
 # What writes to this database — the write surface, v1.0
 
-**2026-08-23 · A survey of the SQLite system as it stands today.** Not about Postgres. It was produced during the Postgres work, it is worth more now than it was for the flip, and it is kept here so that it does not retire with `docs/tacet-postgres-cutover-runbook.md`.
+**2026-08-23 · A survey of the SQLite system as it stands today.** Not about Postgres. It was produced during the Postgres work, it is worth more now than it was for the flip, and it is kept here because the runbook it came from was deleted with the migration.
 
-**READ THIS BEFORE ANYTHING THAT TAKES THE DATABASE AWAY** — a restore, a rename, a maintenance window, a box move, a backup you intend to trust, or any question that starts *"if we stopped the app, would anything still be writing?"*. The answer to that last one is **yes**, and this page is the list.
+**THIS FILE IS NOW THE ONLY RECORD OF ITS SUBJECT.** The runbook it was extracted from was deleted on 2026-08-23. **READ IT BEFORE ANYTHING THAT TAKES THE DATABASE AWAY** — a restore, a rename, a maintenance window, a box move, a backup you intend to trust, or any question that starts *"if we stopped the app, would anything still be writing?"*. The answer to that last one is **yes**, and this page is the list.
 
 ---
 
 ## ⚠️ THIS IS A RE-DERIVATION, NOT A TRANSCRIPTION — AND THAT IS ITSELF THE FIRST FINDING
 
-**The original survey was never committed anywhere.** It was done in a working session, its conclusions were used, and the only trace of it that reached the repository is the four-row cron table in the retired runbook's step F0 and the cost-of-stopping paragraph in its C1. **Everything else — the process count, the scheduler count, the read-triggered writes, the callback classification — existed only in a conversation.**
+**The original survey was never committed anywhere.** It was done in a working session, its conclusions were used, and the only trace of it that reached the repository was the four-row cron table in the runbook's step F0 and the cost-of-stopping paragraph in its C1 — **and that file is now deleted too.** **Everything else — the process count, the scheduler count, the read-triggered writes, the callback classification — existed only in a conversation.**
 
 **So this file re-measures rather than remembers.** Every number below was derived at head `576f8f81` with the instrument named beside it. **Where a re-derived figure differs from what was carried in memory, the re-derived figure is the one written down and the difference is recorded rather than reconciled away.**
 
@@ -151,4 +151,4 @@
 
 - `docs/tacet-operating-findings.md` — the findings from the same work that are not about Postgres
 - `docs/tacet-consolidation-decisions.md` §24 *THE POSTGRES MIGRATION IS CANCELLED. TACET STAYS ON SQLITE* — why the migration this came from stopped
-- `docs/tacet-postgres-cutover-runbook.md` — **RETIRED.** Its F0 and C1 hold the original four-row cron table and the cost-of-stopping paragraph this file expands
+- ~~`docs/tacet-postgres-cutover-runbook.md`~~ — **DELETED 2026-08-23.** It held the original four-row cron table and the cost-of-stopping paragraph. **Both are re-derived above, which is why deleting it was safe** — and recoverable from git history if the procedure walk is ever wanted again.

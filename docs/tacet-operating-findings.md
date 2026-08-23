@@ -67,7 +67,7 @@
 
 ## 1.5 The crontab same-store pipeline — it reads and writes one store with nothing in between
 
-**The shape**, from the retired runbook's F0:
+**The shape**, from the deleted runbook's F0 — **and it is still the shape anyone will reach for the next time a cron entry needs editing on this box:**
 
 ```
 crontab -l | sed 's|...|...|' | crontab -
@@ -207,4 +207,4 @@ else { debug('[restart] process not online, starting it'); return God.startProce
 
 - `docs/tacet-write-surface.md` — what writes to this database, from where, on what schedule
 - `docs/tacet-consolidation-decisions.md` §24 — the decisions record; owns the reasoning behind every item above and wins on any disagreement with this file
-- `docs/tacet-postgres-cutover-runbook.md` — **RETIRED.** Where several of these were first written down
+- ~~`docs/tacet-postgres-cutover-runbook.md`~~ — **DELETED 2026-08-23.** Where several of these were first written down. **They are restated in full here** so nothing depends on it; git history has it if the original wording is ever wanted.
