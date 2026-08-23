@@ -5403,8 +5403,11 @@
   .mt-pagehead h2 { font: 500 24px/1.3 var(--f-sans); letter-spacing: -.01em; text-transform: none; color: var(--td-text); margin: 0; }
   .mt-status { font: 400 15px/1.6 var(--f-sans); color: var(--td-text2); margin: 4px 0 0; font-variant-numeric: tabular-nums; }
   .mt-status .att { color: var(--td-amber-ink); }
-  .mt-pagehead .btn-primary { background: var(--td-dusk); border-color: var(--td-dusk); color: #fff; }
-  .mt-pagehead .btn-primary:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); opacity: 1; }
+  /* ⚠️ Must out-specify #tab-meituan .btn-primary above. That rule is (1,1,0)
+     and a two-class selector is only (0,2,0), so the Ink treatment was winning
+     and the page's one Dusk element rendered navy. */
+  #tab-meituan .mt-pagehead .btn-primary { background: var(--td-dusk); border-color: var(--td-dusk); color: #fff; }
+  #tab-meituan .mt-pagehead .btn-primary:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); opacity: 1; }
 
   /* ── Tile row — Orders' opening shape ───────────────────────────────────── */
   .mt-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 32px; }
@@ -5594,6 +5597,14 @@
     --brass-hi:    var(--td-amber);
     --danger:      var(--td-brick-ink);
   }
+
+  /* Base .btn-primary is built on --brass, which this tab remaps to Amber — so
+     without this every primary button here comes out amber and Amber stops
+     meaning "warning". A strong in-page action is Ink. The Eleme header has no
+     create action, so §1.7 leaves its Dusk slot empty and there is no Dusk rule
+     to pair with this one. */
+  #tab-eleme .btn-primary { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
+  #tab-eleme .btn-primary:hover { background: var(--td-text); border-color: var(--td-text); opacity: .88; }
 
   .el-pagehead { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; flex-wrap: wrap; margin-bottom: 32px; }
   .el-pagehead-t { min-width: 0; flex: 1 1 340px; }
