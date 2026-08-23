@@ -243,6 +243,82 @@ router.post('/api/retail-admin/eleme/products/:id/map', requireRetailAdmin, expr
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
+// Per-store health, on the same contract as the Meituan page's store cards.
+//
+// A store is blocked when it cannot push at all: no shop id linked (never set
+// up) or no saved session (needs a login). Unlike Meituan there is no
+// needs_login event to read — eleme_sync_log only carries stock_push rows — so
+// the session file on disk is the signal, exactly as /eleme/stores reports it.
+//
+// A run of push errors is deliberately NOT "blocked": pushes fail for ordinary
+// reasons (a renamed listing, a 审核 queue) while the channel itself is fine,
+// and colouring that amber would cry wolf on the one state that means "a
+// person is needed".
+function elemeStoreHealth(db) {
+  const stores = db.prepare(`
+    SELECT s.id, s.code, COALESCE(s.name_cn, s.name_en, s.code) AS name,
+           e.shop_id, e.shop_name
+      FROM retail_stores s
+      LEFT JOIN eleme_shops e ON e.retail_store_id = s.id
+     WHERE s.is_active = 1
+     ORDER BY s.sort_order, s.id
+  `).all();
+
+  const sessionDir = path.join(__dirname, '..', 'data', 'eleme-sessions');
+  const queueRow = db.prepare(`
+    SELECT
+      SUM(CASE WHEN status = 'pending'    THEN 1 ELSE 0 END) AS pending,
+      SUM(CASE WHEN status = 'processing' THEN 1 ELSE 0 END) AS processing,
+      SUM(CASE WHEN status = 'error' AND processed_at >= datetime('now','-1 day') THEN 1 ELSE 0 END) AS failed
+      FROM eleme_sync_queue WHERE store_code = ?
+  `);
+  const lastPush = db.prepare(`
+    SELECT MAX(created_at) AS t FROM eleme_sync_log
+     WHERE store_code = ? AND event_type = 'stock_push' AND status = 'ok'
+  `);
+  const lastOrder = db.prepare(
+    'SELECT MAX(imported_at) AS t FROM eleme_order_import WHERE store_code = ?');
+  const liveCount = db.prepare(`
+    SELECT COUNT(*) AS n FROM eleme_product_map m
+      JOIN store_products p ON p.id = m.product_id
+     WHERE m.store_code = ? AND m.sync_enabled = 1 AND p.is_active = 1
+  `);
+  // The catalogue cache is what the name + size pickers read. Stale or missing
+  // is worth saying on the card: without it an operator cannot map anything.
+  const cat = db.prepare(`
+    SELECT COUNT(*) AS n, MAX(updated_at) AS t FROM eleme_catalogue_cache WHERE store_code = ?
+  `);
+  const activeProducts = db.prepare(
+    'SELECT COUNT(*) AS n FROM store_products WHERE is_active = 1').get()?.n || 0;
+
+  return stores.map(st => {
+    let sessionActive = false;
+    try { sessionActive = fs.existsSync(path.join(sessionDir, `${st.code}-session.json`)); } catch (e) {}
+    const shopSet = !!(st.shop_id && String(st.shop_id).trim());
+    const q = queueRow.get(st.code) || {};
+    const live = liveCount.get(st.code)?.n || 0;
+    const c = cat.get(st.code) || {};
+    return {
+      id: st.id,
+      code: st.code,
+      name: st.name,
+      shopId: st.shop_id || null,
+      shopName: st.shop_name || null,
+      blocked: !shopSet || !sessionActive,
+      blockedBy: !shopSet ? 'no_shop' : (!sessionActive ? 'needs_login' : null),
+      lastPushAt:  lastPush.get(st.code)?.t || null,
+      lastOrderAt: lastOrder.get(st.code)?.t || null,
+      pending:    Number(q.pending    || 0),
+      processing: Number(q.processing || 0),
+      failed:     Number(q.failed     || 0),
+      live,
+      unmatched: Math.max(0, activeProducts - live),
+      catalogueCount: Number(c.n || 0),
+      catalogueAt: c.t || null,
+    };
+  });
+}
+
 // ── Status dashboard ───────────────────────────────────────────────────────────
 router.get('/api/retail-admin/eleme/status', requireRetailAdmin, (req, res) => {
   const db = tdb();
@@ -268,7 +344,9 @@ router.get('/api/retail-admin/eleme/status', requireRetailAdmin, (req, res) => {
       SELECT eleme_order_id, store_code, datetime(imported_at,'+8 hours') AS imported_at, status
         FROM eleme_order_import ORDER BY imported_at DESC LIMIT 5
     `).all();
-    res.json({ success: true, queuePending, queueError, mappedCount, recentStock, recentSystem, lastOrder });
+    let stores = [];
+    try { stores = elemeStoreHealth(db); } catch (e) { stores = []; }
+    res.json({ success: true, stores, queuePending, queueError, mappedCount, recentStock, recentSystem, lastOrder });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 

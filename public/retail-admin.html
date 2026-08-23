@@ -11269,99 +11269,81 @@
 
   <!-- ── Eleme Sync ── -->
   <section id="tab-eleme">
-    <h2>饿了么同步 · Eleme Sync</h2>
-    <p class="helper" data-lang-block="en" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
-      Eleme uses a real open API (no robot, no QR re-logins). Connect each store once, map products
-      by 货号 (SKU), and stock auto-pushes whenever it changes. New Eleme orders import here and deduct stock.
-    </p>
-    <p class="helper" data-lang-block="cn" style="margin: calc(-1 * var(--s2)) 0 var(--s4);">
-      饿了么使用官方开放接口(无需机器人、无需扫码重登)。每个门店连接一次,按货号映射商品,库存变动即自动推送。
-      新订单会导入并自动扣减库存。
-    </p>
-
-    <!-- Feature switch + per-store connection -->
-    <div id="el-conn-card" style="margin-bottom:18px;border:1px solid var(--line);border-radius:8px;overflow:hidden">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);background:var(--bg-elev-1)">
-        <b style="font-size:14px">Eleme channel · 饿了么渠道</b>
-        <label class="toggle-label" title="Turn the Eleme channel on or off for this store">
-          <input type="checkbox" id="el-enable" onchange="elToggleEnabled(this.checked)">
-          <span id="el-enable-txt" class="muted" style="font-weight:400">Off · 关闭</span>
-        </label>
+    <!-- Same four parts as the Meituan page: §1.7 header, one card per store,
+         sub-tabs, the work. What went: a title with both languages glued into
+         one node, two purpose-line paragraphs (§1.7 bans them — they describe
+         what the page is for and read the same every day), four KPI tiles that
+         summed the stores into numbers that could not say which store was
+         unwell, and an orders card that has never held a row. -->
+    <div class="el-pagehead">
+      <div class="el-pagehead-t">
+        <h2 data-lang-block="en">Eleme</h2>
+        <h2 data-lang-block="cn">饿了么</h2>
+        <p class="el-status" id="el-status" data-no-i18n></p>
       </div>
-      <div id="el-conn-note" class="muted" style="font-size:12px;margin:0;padding:8px 14px 0"></div>
-      <div id="el-stores" style="padding:6px 14px 12px"></div>
+      <!-- §1.7: no create action on this page, so the Dusk slot stays empty
+           rather than take a secondary. Push all stock sits by the tabs. -->
     </div>
 
-    <!-- Sync health KPIs -->
-    <div class="fc-kpis" id="el-kpis">
-      <div class="fc-kpi accent">
-        <div class="lbl">Daemon · 同步服务</div>
-        <div class="val" id="el-kpi-daemon">—</div>
-        <div class="sub">auto · 自动同步</div>
+    <div class="el-chanrow">
+      <label class="el-chan" title="Turn the whole Eleme channel on or off">
+        <span class="lab" id="el-enable-txt">Channel off · 渠道已关闭</span>
+        <input type="checkbox" id="el-enable" onchange="elToggleEnabled(this.checked)">
+      </label>
+    </div>
+
+    <!-- One card per store, from /eleme/status.stores. A store is blocked when
+         it cannot push at all: no shop id linked, or no saved login session. -->
+    <div class="el-stores" id="el-stores"></div>
+
+    <div class="el-tabs" role="tablist">
+      <button id="el-tab-products" class="el-tab active" role="tab" onclick="elView('products')">
+        Products · 商品 <span class="n" id="el-count" data-no-i18n></span></button>
+      <button id="el-tab-activity" class="el-tab" role="tab" onclick="elView('activity')">
+        Activity · 同步日志</button>
+      <span class="el-tabs-grow"></span>
+      <span class="el-upd" id="el-upd" data-no-i18n></span>
+      <button class="btn btn-sm" id="el-pushall-btn" onclick="elPushAll()"
+        title="Queue a fresh stock push for every mapped product">Push all stock · 推送全部库存</button>
+    </div>
+
+    <div id="el-view-products" class="el-view">
+      <div class="pa-toolbar">
+        <input id="el-search" type="text" data-ph-en="Search products" data-ph-cn="搜索商品" placeholder="Search products" oninput="elFilterProducts()">
       </div>
-      <div class="fc-kpi" id="el-kpi-mapped-tile">
-        <div class="lbl">Mapped · 已映射</div>
-        <div class="val" id="el-kpi-mapped">—</div>
-        <div class="sub">products synced · 同步商品</div>
-      </div>
-      <div class="fc-kpi" id="el-kpi-queue-tile">
-        <div class="lbl">Queue · 待推送</div>
-        <div class="val" id="el-kpi-queue">—</div>
-        <div class="sub">pending push · 待推送</div>
-      </div>
-      <div class="fc-kpi" id="el-kpi-order-tile">
-        <div class="lbl">Last order · 最近订单</div>
-        <div class="val" id="el-kpi-order">—</div>
-        <div class="sub" id="el-kpi-order-sub">no orders yet · 暂无订单</div>
+      <details class="el-how">
+        <summary>How matching works · 匹配原理</summary>
+        <div data-lang-block="en">
+          Eleme listings carry no article number, so a product is matched by picking its
+          exact listing name. A listing that holds several sizes needs the size picked too,
+          otherwise the stock pushed to it is a guess.
+        </div>
+        <div data-lang-block="cn">
+          饿了么商品没有货号,只能按商品名精确匹配。若该商品含多个规格,还需选择规格,
+          否则推送的库存并不准确。
+        </div>
+      </details>
+      <div id="el-catalogue-caption" class="el-cap" data-no-i18n></div>
+
+      <div class="el-tablewrap">
+        <table id="el-products-table" class="pa-table">
+          <thead>
+            <tr>
+              <th>Product · 商品</th>
+              <th>SKU · 货号</th>
+              <th id="el-th-stores">Sync per store · 各门店同步</th>
+            </tr>
+          </thead>
+          <tbody id="el-tbody" data-no-i18n></tbody>
+        </table>
       </div>
     </div>
 
-    <!-- Incoming Eleme orders — read-only record -->
-    <div id="el-orders-card" style="margin-bottom:18px;border:1px solid var(--line);border-radius:8px;overflow:hidden">
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line);background:var(--bg-elev-1)">
-        <b style="font-size:14px">Incoming Eleme orders · 饿了么订单
-          <span id="el-orders-count" class="muted" style="font-weight:400"></span></b>
-        <button class="btn btn-sm" onclick="elLoadOrders()" title="Refresh">↻ Refresh</button>
-      </div>
-      <p class="muted" style="font-size:12px;margin:0;padding:8px 14px 0">
-        Record only — these are managed on Eleme; the store does not print them.
-      </p>
-      <div id="el-orders-list" style="padding:6px 14px 12px"></div>
-    </div>
-
-    <!-- Mapping toolbar -->
-    <div class="pa-toolbar">
-      <input id="el-search" type="text" data-ph-en="Search products" data-ph-cn="搜索商品" placeholder="Search products" oninput="elFilterProducts()">
-      <div id="el-count" class="pa-count" data-no-i18n></div>
-      <span style="flex:1 1 auto"></span>
-      <button class="btn btn-sm btn-primary" id="el-pushall-btn" onclick="elPushAll()">Push all stock · 推送全部库存</button>
-    </div>
-    <div id="el-catalogue-caption" class="muted" data-no-i18n style="font-size:11.5px;padding:0 2px 8px"></div>
-
-    <!-- Mapping table — rendered in one language under data-no-i18n -->
-    <div style="overflow:auto;border:1px solid var(--line);border-radius:8px;margin-top:10px">
-      <table class="pa-table" style="width:100%;border-collapse:collapse">
-        <thead>
-          <tr>
-            <th style="text-align:left">Product · 商品</th>
-            <th style="text-align:left">SKU · 货号</th>
-            <th id="el-th-stores">Stores · 门店</th>
-          </tr>
-        </thead>
-        <tbody id="el-tbody" data-no-i18n></tbody>
-      </table>
-    </div>
-
-    <!-- Recent stock pushes (per product, success/fail) -->
-    <div style="margin-top:18px">
-      <b style="font-size:14px">Recent pushes · 最近推送</b>
-      <div id="el-log-stock" data-no-i18n style="margin-top:8px;font-size:12px;font-family:var(--mono,monospace);max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px 10px"></div>
-    </div>
-
-    <!-- Sync log (system events) -->
-    <div style="margin-top:18px">
-      <b style="font-size:14px">Sync log · 同步日志</b>
-      <div id="el-log-sys" data-no-i18n style="margin-top:8px;font-size:12px;font-family:var(--mono,monospace);max-height:220px;overflow:auto;border:1px solid var(--line);border-radius:8px;padding:8px 10px"></div>
+    <div id="el-view-activity" class="el-view" hidden>
+      <div class="el-act-h">Stock pushes · 库存推送</div>
+      <div class="el-log" id="el-log-stock" data-no-i18n></div>
+      <div class="el-act-h">Sync events · 系统事件</div>
+      <div class="el-log" id="el-log-sys" data-no-i18n></div>
     </div>
   </section>
 
