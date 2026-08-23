@@ -2890,8 +2890,13 @@ async function vaPersist() {
 // NOT written here — it's per-store (retail_store_stock), owned by the
 // Stock-by-location grid; writing the flat stock_qty would fight that ledger.
 // Partial PATCH — only the listed fields change.
-async function vaPersistSiblings() {
-  const dirty = VA_MEMBERS.filter(v => !v.self && v._dirty);
+//
+// oosPolicy: non-null when the self product's "When out of stock" setting
+// changed THIS save — in that case every sibling gets it too (even ones with
+// no other pending edit), so the whole size family always agrees. null means
+// unchanged — skip untouched siblings as before.
+async function vaPersistSiblings(oosPolicy) {
+  const dirty = VA_MEMBERS.filter(v => !v.self && (v._dirty || oosPolicy != null));
   for (const v of dirty) {
     const body = {};
     if (v.price !== '' && v.price != null) body.sell_price = v.price;
@@ -2902,6 +2907,7 @@ async function vaPersistSiblings() {
     // stores NULL (no strike-through). v.compare is loaded from the row, so a
     // price-only edit re-sends the existing value (a no-op) rather than wiping it.
     body.compare_at_price = (v.compare === '' || v.compare == null) ? 0 : v.compare;
+    if (oosPolicy != null) body.oos_policy = oosPolicy;
     if (!Object.keys(body).length) { v._dirty = false; continue; }
     let j;
     try { j = await api('/api/retail-admin/products/' + v.id, { method: 'PATCH', body }); }
@@ -4397,6 +4403,10 @@ async function pdSaveCore() {
   let id, body;
   try { ({ id, body } = pdCollectBody()); }
   catch (e) { throw new Error('Couldn’t read the form · 读取表单失败: ' + (e && e.message || e)); }
+  // Snapshot the policy this product carried BEFORE this save, so we can tell
+  // below whether the operator actually changed it (and only then re-push it
+  // to sibling sizes — see the vaPersistSiblings call further down).
+  const prevOosPolicy = id ? ((PA_PRODUCTS || []).find(x => x.id === Number(id)) || {}).oos_policy : undefined;
   const url = id ? '/api/retail-admin/products/' + id : '/api/retail-admin/products';
   const r = await fetch(url, { method: id ? 'PATCH' : 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   const j = await r.json();
@@ -4440,7 +4450,15 @@ async function pdSaveCore() {
   // so it stays fatal (a failure here really IS a save failure).
   const sid = id ? Number(id) : (j.data && j.data.id);
   if (sid != null && VA_ID === sid && (VA_MEMBERS.length >= 2 || VA_HAD_GROUP)) {
-    await vaPersist(); await vaPersistSiblings();
+    await vaPersist();
+    // Sizes of one product share one out-of-stock rule — "Sold out everywhere"
+    // on the Big bottle has to mean the Small one too, or a shopper sees SOLD
+    // OUT on one size and PRE-ORDER on the other for what reads as one product.
+    // Only push it when it actually changed this save (not on every autosave
+    // tick), so editing an unrelated field doesn't spam every sibling with a
+    // no-op PATCH + version-history row.
+    const oosChanged = prevOosPolicy !== undefined && prevOosPolicy !== body.oos_policy;
+    await vaPersistSiblings(oosChanged ? body.oos_policy : null);
   }
 
   _pdGalleryDirty = false;  // images are now persisted; don't resend until changed again
