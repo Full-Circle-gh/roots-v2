@@ -76,11 +76,24 @@ const ROWS = `
 // Enough server-shaped state that screens which read live data render their real
 // branch rather than their loading one. Deliberately minimal: a screen that
 // needs more than this to paint is a screen that will break on a slow network.
+// Real sentences, not single letters. This block used to seed 'K', 'M', 'A',
+// 'F', 'Q' — enough for a sweep that only asks whether a screen paints, and it
+// is shared with scripts/shoot_mobile.js, where it overwrote the fake server's
+// config and left every screenshot of About, FAQ, Legal and Pop-ups showing a
+// column of single characters. A fixture that renders as nonsense makes the
+// screen look broken to the only check that can see it.
 const SEED = `
-  state.cfg={faq:{questions:[{q_en:'Q',q_cn:'问',a_en:'A',a_cn:'答'}]},
-    legal:{terms:{body_en:'T',updated_at:'2026-05-01'},privacy:{body_en:'P',updated_at:'2026-05-01'}},
-    popups:{list:[{title_en:'Hi',body_en:'B',enabled:true,start_at:'2026-08-18'}]},
-    about:{content:{kicker_en:'K',manifesto_en:'M',founder_name_en:'A',founder_title_en:'F',founder_quote_en:'Q'}}};
+  state.cfg={faq:{questions:[{q_en:'Where is my order?',q_cn:'我的订单到哪了？',
+      a_en:'Every order gets a tracking link the moment it leaves the store.',a_cn:'订单出库时会收到物流链接。',group_en:'Orders',group_cn:'订单'}]},
+    legal:{terms:{body_en:'These terms cover everything you buy from Roots, in store and in the mini app.',updated_at:'2026-05-01'},
+           privacy:{body_en:'We keep your phone number and your addresses, and nothing else you have not given us.',updated_at:'2026-05-01'}},
+    popups:{list:[{name:'Autumn promo',title_en:'20% off',body_en:'This week only.',enabled:true,pages:['home'],frequency:'once',start_at:'2026-08-18'}]},
+    about:{content:{kicker_en:'Our story',kicker_cn:'我们的故事',
+      manifesto_en:'We started with one shelf of ferments and a very small van.',manifesto_cn:'我们从一架发酵食品和一辆小货车开始。',
+      founder_kicker_en:'Who runs it',founder_kicker_cn:'主理人',
+      founder_name_en:'Mei Chen',founder_name_cn:'陈玫',
+      founder_title_en:'Founder',founder_title_cn:'创始人',
+      founder_quote_en:'Good food should not be a special occasion.',founder_quote_cn:'好食物不该只在特别的日子。'}}};
   state.setup={percent:71,requiredDone:5,requiredTotal:7,steps:[{key:'store',done:true},{key:'wechat',done:false}]};
   state.zones=[1,2,3]; state.printer={auto_print:true};
   state.stores=[{id:1,name_en:'Tianhe store',name_cn:'天河店'},{id:2,name_en:'Panyu store',name_cn:'番禺店'}];
@@ -189,7 +202,6 @@ function buildCases(src) {
     'sheet:po-loading': "state.posTried=true;state.poList=[];APP.cmd('push','purchasing');state.poId=4;render()",
     'sheet:po-receive-ask': "state.posTried=true;state.poList=[];APP.cmd('push','purchasing');state.poId=4;state.poDetail={id:4,po_number:'RPO-0004',supplier:'F',status:'Ordered',total_cost:1,items:[]};render();APP.cmd('poStatus','Delivered')",
     'sheet:account': "APP.cmd('overflow')",
-    'sheet:create': "APP.cmd('create','coupon')",
     'sheet:cust-points': "" + ROWS + "state.customers=DB.customers.slice();state.custLoaded=true;APP.cmd('tab','customers');state.custId=1;state.custDetail={customer:{nickname:'A',tier_key:'tree',points_balance:120,balance:8},stats:{orders:{}}};render();APP.cmd('adjustPoints')",
     'sheet:cust-block': "" + ROWS + "state.customers=DB.customers.slice();state.custLoaded=true;APP.cmd('tab','customers');state.custId=1;state.custDetail={customer:{nickname:'A',tier_key:'tree',is_blocked:1},stats:{orders:{}}};render();APP.cmd('toggleBlock')",
     'sheet:mark-paid': "" + ROWS + "DB.orders[0]._id=1;DB.orders[0].raw='pending_payment';state.liveOrders=DB.orders;APP.cmd('tab','orders');APP.cmd('openOrder',DB.orders[0].id);APP.cmd('markPaid')",
@@ -336,6 +348,41 @@ function main() {
     if (hits) {
       console.error(`FAIL static — ${hits} reference${hits === 1 ? '' : 's'} to the 'noop' command.`);
       console.error("A control wired to noop is a control that lies. Give it a destination or stop drawing it as a control.");
+      process.exit(1);
+    }
+  }
+
+  // ── Static pass: no command nothing can reach ──────────────────────────
+  // The mirror of the noop check above, and it caught something worse. The
+  // CREATE SHEET — new coupon, new flash sale, new broadcast — had a submit
+  // handler that read, in full:
+  //
+  //     reg('submitCreate', ()=>{ state.createKind=null; showToast('Created'); })
+  //
+  // It closed itself, said Created, and sent nothing anywhere. The only reason
+  // it never lied to an operator is that nothing in the file called
+  // APP.cmd('create'), so the sheet could not be opened at all — which is not a
+  // safe place to leave a form, because the next person adds a "+" button and
+  // ships it. `saveStock` was the same: a Receive stock button whose handler
+  // was one toast, reachable only through a flag no mapper sets.
+  //
+  // A command's name reaches a handler as a STRING, so the check is on strings:
+  // a name that appears only at its own reg() has no way in. That covers the
+  // template-built call sites too — APP.cmd('${cmd}') where cmd came from a
+  // list of quoted names, which is how the customer sheet's four actions and
+  // every chipRow filter are wired.
+  {
+    const raw = (src.match(/<script>([\s\S]*?)<\/script>/) || [])[1] || '';
+    const js5 = raw.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+    const names = [...new Set([...js5.matchAll(/\breg\(\s*'([a-zA-Z_$][\w$]*)'/g)].map((m) => m[1]))];
+    const orphans = names.filter((n) => {
+      const asString = (js5.match(new RegExp("'" + n + "'", 'g')) || []).length;
+      const asMember = (js5.match(new RegExp('\\bCMD\\.' + n + '\\b', 'g')) || []).length;
+      return asString + asMember <= 1;
+    }).sort();
+    if (orphans.length) {
+      for (const n of orphans) console.error(`FAIL static — reg('${n}') is registered but nothing can reach it`);
+      console.error(`\n${orphans.length} unreachable command${orphans.length === 1 ? '' : 's'}. Wire it or delete it — an unreachable handler is a lie waiting for a button.`);
       process.exit(1);
     }
   }

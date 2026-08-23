@@ -1020,6 +1020,34 @@ only it has something to explain.
 | Customers | The sort control sat right-aligned and alone on an otherwise empty row, reading as a stray label rather than a control |
 | Media, Customers, Order sheet | "1 images", "1 orders", "1 parcels" |
 
+### A form that said Created and sent nothing
+
+The create sheet — new coupon, new flash sale, new broadcast — had a submit
+handler that read, in full:
+
+```js
+reg('submitCreate', ()=>{ state.createKind=null; showToast('Created'); });
+```
+
+It closed itself, said Created, and sent nothing anywhere. The only reason it
+never lied to an operator is that **nothing in the file called
+`APP.cmd('create')`** — the sheet could not be opened at all. That is not a safe
+place to leave a form: the next person adds a "+" button and ships it. §4 has
+already settled that authoring stays on the desktop, so the sheet has no
+destination to be wired to. It is deleted, with all six of its commands.
+
+`saveStock` was the same shape: a Receive stock button whose handler was one
+`showToast`, reachable only through `isPO`, which no order mapper sets.
+Receiving happens in `sheetPO` now, which asks first and PUTs. `qsInc`/`qsDec`
+went too — Quick stock has counted in Products since the parity sweep.
+
+**A static guard now fails the build on a registered command nothing can
+reach.** It is the mirror of the `noop` check, and the more useful half: `noop`
+catches a control wired to nothing, this catches a handler waiting for a
+control. A command's name reaches its handler as a string, so the check is on
+strings — a name that appears only at its own `reg()` has no way in, which
+covers the template-built call sites too.
+
 ### Sales had never been looked at
 
 `SUBS.sales` is assigned to the SUBS object *after* its literal — it moved there

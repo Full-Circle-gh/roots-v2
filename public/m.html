@@ -237,7 +237,7 @@ const state = {
   fapiao:null, fapiaoLoading:false, fapiaoBusy:false, fapiaoTried:false, printerTried:false,
   ordersView:null, ordersTotal:null, ordersLoading:false, ordersMore:false,
   storeF:'all', stores:null, orderQ:'',
-  reply:null, thread:null, createKind:null, createValue:10, createActive:true,
+  reply:null, thread:null,
   poList:null, posErr:null, posTried:false, poSeg:'open', poId:null,
   act:null, actErr:null, actTried:false, actRange:'today', actSource:'', actMore:false,
   cats:null, catCounts:null, catsErr:null, catsTried:false, catTop:null,
@@ -263,7 +263,7 @@ const state = {
   liveOrders:null, liveDetail:null, liveKpis:null, liveVitals:null, liveAttn:null,
   liveStatusCounts:null, liveChannelCounts:null, liveInvoiceCounts:null, liveProductsLoaded:false,
   custLoading:false, custMetaLoaded:false, detailMounted:false, mirrorTried:false, ent:{}, me:null,
-  qs:{oat:8,nuts:0,carrot:42},
+
   /* Coupon switches only, keyed c_<CODE>. This map used to also carry
      membership / affiliate / social / faq / feedback / autoprint / autoroute /
      lowstock / popups — nine names that read like feature flags and that
@@ -776,19 +776,24 @@ function revWrite(r,visible){
 }
 reg('closeReply', ()=>{ state.reply=null; state.thread=null; render(); });
 
-reg('create', k=>{ state.createKind=k; state.createValue=10; state.createActive=true; render(); });
-reg('closeCreate', ()=>{ state.createKind=null; render(); });
-reg('submitCreate', ()=>{ state.createKind=null; showToast(T('Created','已创建')); });
-reg('createValInc', ()=>{ state.createValue++; render(); });
-reg('createValDec', ()=>{ state.createValue=Math.max(0,state.createValue-1); render(); });
-reg('toggleCreateActive', ()=>{ state.createActive=!state.createActive; render(); });
+/* The create sheet is gone, and so is every command behind it. It offered a
+   coupon, a flash sale and a broadcast, and its submit handler was
+   `state.createKind=null; showToast('Created')` — it closed itself and said
+   Created, and sent nothing anywhere. Nothing could reach it: no control in
+   this file ever called APP.cmd('create'), which is the only reason it never
+   lied to anybody. That is not a safe place to leave a form. Authoring stays
+   on the desktop — §4 of the parity doc settled that — so the sheet has no
+   destination to be wired to, and leaving it here only invites a "+" button.
+
+   `saveStock` went with it: a Receive stock button reachable only through
+   `isPO`, which no order mapper sets, whose handler was one showToast. A
+   purchase order is received in sheetPO now, which actually PUTs. */
 reg('toggleCoupon', code=>toggleCoupon(code));
 reg('recallBroadcast', id=>recallBroadcast(Number(id)));
 reg('togglePrint', ()=>togglePrint());
 reg('toggleFapiao', ()=>toggleFapiao());
-reg('qsInc', n=>{ state.qs[n]=(state.qs[n]||0)+1; render(); });
-reg('qsDec', n=>{ state.qs[n]=Math.max(0,(state.qs[n]||0)-1); render(); });
-reg('saveStock', ()=>showToast(T('Stock received','已入库')));
+/* qsInc/qsDec went the same way: Quick stock has counted in Products since the
+   parity sweep, and these two moved a number nothing ever saved. */
 reg('signout', ()=>{
   state.overflow=false; showToast(T('Signing out…','正在退出…')); render();
   fetch('/api/backend/logout',{method:'POST',credentials:'same-origin'})
@@ -1720,7 +1725,10 @@ function affStatus(r){
     ? {label:T('Still earning','持续分成'), tone:'dusk'}
     : {label:T('Rewarded','已奖励'), tone:'success'};
   if(r.status==='void') return {label:T('Voided','已作废'), tone:'muted'};
-  return {label:T('Waiting for first order','待首单'), tone:'warning'};
+  // 'Waiting', the same word as the chip that filters to it. The long form
+  // ran nearly the width of the card and made the row's own two names the
+  // second thing the eye found.
+  return {label:T('Waiting','待首单'), tone:'warning'};
 }
 function affPill(r){
   const st=affStatus(r);
@@ -2943,7 +2951,7 @@ const SUBS={
       ${(c&&c.founder_name_en)?`<div class="card" style="padding:16px">
         <div class="eyebrow">${pick('founder_kicker_en','founder_kicker_cn')}</div>
         <div style="font-size:15px;font-weight:500;margin-top:8px">${pick('founder_name_en','founder_name_cn')}</div>
-        <div style="font-size:13px;color:var(--text-secondary)">${pick('founder_title_en','founder_title_cn')}</div>
+        <div style="font-size:13px;color:var(--text-secondary);margin-top:2px">${pick('founder_title_en','founder_title_cn')}</div>
         ${c.founder_quote_en?`<div style="font-size:15px;color:var(--text-secondary);line-height:1.6;margin-top:8px">${pick('founder_quote_en','founder_quote_cn')}</div>`:''}</div>`:''}
       ${desktopNote()}</div>`;
   }},
@@ -4238,8 +4246,10 @@ function orderItemsBlock(o){
     </div></div>`;
 }
 function orderActionRow(o,isPO){
-  if(isPO) return `<div style="display:flex;align-items:center;gap:8px;margin-top:12px">
-    <button class="btn2" style="flex:1" onclick="APP.cmd('saveStock')">${T('Receive stock','入库')}</button></div>`;
+  // A purchase order has no customer-order action. It used to be offered a
+  // Receive stock button whose handler was a toast; receiving happens in
+  // sheetPO, which asks first and PUTs.
+  if(isPO) return '';
   if(o._id==null) return '';   // sample data in the static preview: no live order to act on
   const next=orderNext(o);
   const busy=state.orderBusy;
@@ -4430,26 +4440,6 @@ function sheetReply(){
        ${th?`<textarea id="mReply" placeholder="${T('Write a reply…','写下回复…')}" style="min-height:52px;max-height:120px;resize:none"></textarea>`:''}
        <button class="btn2" style="width:100%" ${state.replyBusy?'disabled':''} onclick="APP.cmd('sendReplyText',(document.getElementById('mReply')||{}).value)">${state.replyBusy?T('Sending…','发送中…'):T('Send reply','发送回复')}</button>
        ${th?`<div style="font-size:12px;color:var(--text-secondary);text-align:center">${foot}</div>`:''}</div></div>`;
-}
-function sheetCreate(){
-  const cfg={coupon:{title:T('New coupon','新建优惠券'),ph:'WELCOME10',unit:'%',showValue:true,verb:T('Create coupon','创建优惠券')},
-    flash:{title:T('New flash sale','新建秒杀'),ph:T('Lunch flash','午市闪购'),unit:'%',showValue:true,verb:T('Schedule flash','排期秒杀')},
-    broadcast:{title:T('New broadcast','新建广播'),ph:T('Message title','消息标题'),showValue:false,verb:T('Send broadcast','发送广播')}}[state.createKind];
-  if(!cfg) return '';
-  return `<div class="scrim" style="z-index:45" onclick="APP.cmd('closeCreate')"></div>
-   <div class="sheet" style="top:120px;z-index:46;overflow:hidden">
-     <div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
-       <div style="display:flex;align-items:center;justify-content:space-between;gap:8px"><button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" onclick="APP.cmd('closeCreate')">${ic('x',22,2)}</button>
-       <span style="flex:1;font-size:17px;font-weight:500">${cfg.title}</span><span style="width:36px;flex:none"></span></div></div>
-     <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;background:var(--bg)">
-       <div><div class="eyebrow" style="padding:0 2px 7px;letter-spacing:.05em">${T('Title','标题')}</div><input placeholder="${cfg.ph}"></div>
-       ${cfg.showValue?`<div class="card" style="padding:16px"><div class="eyebrow">${T('Value','面额')}</div>
-         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:12px">
-           <button class="stepbtn" onclick="APP.cmd('createValDec')">${ic('minus',18,2.25)}</button>
-           <span class="num" style="font-size:26px;font-weight:500">${state.createValue}${cfg.unit}</span>
-           <button class="stepbtn" onclick="APP.cmd('createValInc')">${ic('plus',18,2.25)}</button></div></div>`:''}
-       <div style="display:flex;align-items:center;gap:12px;background:var(--surface-card);border:1px solid var(--border-default);border-radius:14px;padding:14px"><span style="flex:1;font-size:15px">${T('Active','启用')}</span>${toggle(state.createActive,"APP.cmd('toggleCreateActive')")}</div></div>
-     <div style="flex:none;padding:12px 16px calc(env(safe-area-inset-bottom,0px) + 16px);border-top:1px solid var(--border-default);background:var(--surface-card)"><button class="cta" onclick="APP.cmd('submitCreate')">${cfg.verb}</button></div></div>`;
 }
 /* Who is signed in, in the operator's own words. The four positions are the
    ones the backend recognises; anything else is an owner/admin/staff login and
@@ -5154,7 +5144,6 @@ function render(){
   if(state.productSku) html += sheetProduct();
   if(state.reply!=null) html += sheetReply();
   if(state.poId!=null) html += sheetPO();
-  if(state.createKind) html += sheetCreate();
   if(state.search) html += sheetSearch();
   if(state.toast) html += `<div class="toast">${state.toast}</div>`;
   app.innerHTML = html;

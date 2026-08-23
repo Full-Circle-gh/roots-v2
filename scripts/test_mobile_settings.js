@@ -225,7 +225,9 @@ CASES.push(['the referral ledger', AFF, [
   ['the code used',             `txt('content').includes('CHEN24')`],
   ['the reward paid',           `txt('content').includes('¥20')`],
   ['a converted one says so',   `txt('content').includes('first order #412')`],
-  ['a waiting one is named',    `txt('content').includes('Waiting for first order')`],
+  // 'Waiting', the same word as the chip that filters to it — the long form ran
+  // nearly the card's width and outsized the two names the row is about.
+  ['a waiting one is named',    `txt('content').includes('Waiting')`],
   ['still earning is its own state', `txt('content').includes('Still earning')`],
   ['a voided one gives the reason',  `txt('content').includes('duplicate account')`],
 ]]);
