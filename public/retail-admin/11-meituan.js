@@ -33,6 +33,7 @@
       throw e;
     }
     mtLoadBundles();
+    mtLoadListingsCache(); // read-only — whatever a past Match-names run cached, for the name-input autocomplete
     mtStartPolling();
     // The product table and bundles list are rendered in ONE language (cuT)
     // under data-no-i18n containers, so the auto-translator never touches
@@ -223,6 +224,35 @@
     mtFilterProducts();
   };
 
+  // ── Listing-name autocomplete (same concept as the Eleme tab's) ─────────────
+  // The Tianhe delivery name field (mt-name-input below) was blind free text —
+  // whatever a "Match names" run last cached in _listings is the real source
+  // of truth, so read it on load too (GET only, no scrape) rather than only
+  // populating it as a side effect of running the bulk matcher.
+  async function mtLoadListingsCache() {
+    try {
+      const r = await api('/api/retail-admin/meituan/listings');
+      _listings = (r && r.listings) || {};
+    } catch (e) { /* leave whatever _listings already had */ }
+    mtRenderListingDatalists();
+  }
+
+  // One <datalist> per store (their catalogues differ) — datalists have no
+  // visible presence, so they live in a hidden container appended once.
+  function mtRenderListingDatalists() {
+    let host = document.getElementById('mt-listings-datalists');
+    if (!host) {
+      host = document.createElement('div');
+      host.id = 'mt-listings-datalists';
+      host.style.display = 'none';
+      document.body.appendChild(host);
+    }
+    host.innerHTML = Object.keys(_listings).map(code => {
+      const opts = (_listings[code] || []).map(n => `<option value="${esc(n)}">`).join('');
+      return `<datalist id="mt-listings-dl-${esc(code)}">${opts}</datalist>`;
+    }).join('');
+  }
+
   // ── Products ───────────────────────────────────────────────────────────────
   async function mtLoadProducts() {
     const tbody = document.getElementById('mt-products-body');
@@ -344,6 +374,7 @@
           : '';
         colA = `<div>${pillA}</div>
           <input type="text" class="form-control mt-name-input" style="font-size:12px;margin-top:5px"
+            list="mt-listings-dl-${esc(storeA.code)}"
             placeholder="${esc(cuT('Meituan delivery name', '美团外卖商品名'))}"
             value="${esc(mapA.meituan_name || '')}"
             data-pid="${p.id}" data-store-id="${storeA.id}" data-store-code="${storeA.code}"
@@ -513,6 +544,7 @@
         }
         _listings = (data && data.listings) || {};
         _listingSkus = (data && data.skus) || {};
+        mtRenderListingDatalists();
         const errs = ((data && data.jobs) || []).filter(j => j.status === 'error');
         if (errs.length && !Object.values(_listings).some(l => l.length)) {
           throw new Error(errs[0].error || cuT('could not read the listings — is the sync service logged in?', '无法读取商品 —— 同步服务是否已登录?'));
@@ -787,6 +819,7 @@
       .filter(Boolean);
     // de-dupe while preserving order
     _listings[code] = Array.from(new Set(names));
+    mtRenderListingDatalists();
 
     if (!_listings[code].length) { toast(cuT('Paste at least one title.', '请至少粘贴一个名称。'), 'error'); return; }
     mtClosePaste();
