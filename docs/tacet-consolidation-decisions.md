@@ -1,9 +1,11 @@
-# Tacet shared-core consolidation — decisions record, v4.69
+# Tacet shared-core consolidation — decisions record, v4.70
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-08-23 · v4.70 — §24 Ops: **TWO TRAPS FOUND LOOKING FOR AN OFF SWITCH, neither specific to 闪购.** 🔴 **`pm2 stop` is not durable on this box** — read from pm2's source, `God.restartProcessId` falls through to `startProcessId` when a process is not online, and `bounce_daemon` runs `pm2 restart` on any `lib/*` change, **so a hand-stopped daemon returns on the next shared deploy** — within hours at 48 deploys per two days. Use `pm2 delete` or a config gate. ⚠️ **`SHANGOU_STORES=` empty does not disable anything**: `('' || 'yuexiu')` falls back, and the only value yielding an empty list is a **bare comma**. A flag whose obvious value is a no-op and whose working value is punctuation. §24 **AN INSTRUMENT CAN BE RIGHT AND UNREAD**: `isColdStartChallenge` printed the correct diagnosis 113 times — *right after a browser relaunch, session intact* — and nobody walked one step further to ask why the browser was relaunching. Not a missing detector; a correct one read as noise, partly because its own message ends *no action needed*, true of the session and silent about the cause.
 
 2026-08-23 · v4.69 — §24 Channels: 🔴 **THE 闪购 CHALLENGES ARE A PROXY FLAP, NOT A BROWSER CRASH.** `shangou-chrome` logs `proxy switch — relaunching Chrome`: the residential tunnel flaps, `proxy-watchdog` fails the channel over, Chrome's proxy is a launch argument so the holder relaunches, the fresh browser hits 闪购 cold and 风控 answers 418. **`isColdStartChallenge` had been saying so all along.** **Why Yuexiu and not Tianhe:** tianhe falls back residential→**GZ datacenter**→direct and stays on a Guangzhou IP; **yuexiu has no middle rung and lands on direct — a Hong Kong IP**, a Guangzhou store suddenly calling from abroad. **The hysteresis is one-sided** — `FAIL_THRESHOLD=2` to go DOWN but **UP on the first success** — so a marginal tunnel oscillates: 4 transitions in 11 minutes, each relaunching 2 browsers. Its own comment names the harm it half-prevents, *thrashing browser relaunches*. Rare for 2 months, **resumes 08-22 12:00**, 11 switches today. **Persisting `verifyState` fixes 23 of 113; this is the other 90** — and a persistent back-off alone would have made a flapping tunnel look like a permanently quiet channel.
 
@@ -3185,6 +3187,33 @@ One self-referencing edge exists on each side (`retail_media_folders`). It is ex
 
 **THE EXIT CODE IS UNCHANGED AND STILL REPORTS DIFFERENCES ONLY.** Scope is disclosed in the output, not folded into the code, because a caller that has always read `0` as *no differences* must keep reading it that way. **The line a human reads is the one that changed.**
 
+### RULE — AN INSTRUMENT CAN BE RIGHT AND UNREAD — 2026-08-23
+
+**`isColdStartChallenge` had the answer to the 闪购 challenges from the first one, and printed it every time.** Its message reads *right after a browser relaunch — session intact; the cool-down clears it on its own*. That is the correct diagnosis. It was written into the log 113 times and nobody followed it back the one further step to *why is the browser relaunching*.
+
+**This is not a missing detector. It is a detector that fired, was correct, and was read as noise** — because it appeared beside a wall of Chrome GLib/DBus/Vulkan warnings, and because its own message ends reassuringly (*no action needed*), which is true about the session and silent about the cause.
+
+**Same family as A CHECK THAT CANNOT RUN MUST REFUSE and the manifest nobody regenerated, but the failure is one step further along.** There the instrument was absent or broken. Here it worked. **The output existed and the chain from it was never walked.** An instrument that explains a symptom in terms of another symptom has done its job and is not finished being useful.
+
+---
+
+### TWO OPERATIONAL TRAPS FOUND LOOKING FOR AN OFF SWITCH — 2026-08-23
+
+**Neither is about 闪购. Both apply to anything on this box.**
+
+**1. `pm2 stop` IS NOT DURABLE HERE.** Read out of pm2's own source rather than assumed: `God.restartProcessId` ends
+
+```js
+else { debug('[restart] process not online, starting it'); return God.startProcessId(id, cb); }
+```
+
+so `pm2 restart <name>` **starts a stopped process**. `bounce_daemon` in `scripts/deploy-apply.sh` runs exactly that on any `lib/*` change. **A daemon stopped by hand comes back on the next shared deploy** — at 48 deploys in two days, within hours, silently, and the operator who stopped it has no reason to look. **If something must stay down across a deploy it has to be `pm2 delete`d or gated in config, not stopped.**
+
+**2. A DISABLE FLAG THAT DOES NOT DISABLE.** `const SHANGOU_STORES = (process.env.SHANGOU_STORES || 'yuexiu').split(',').map(s => s.trim()).filter(Boolean);`
+
+**Setting `SHANGOU_STORES=` empty does nothing** — an empty string is falsy, so `||` substitutes the default and the daemon carries on polling the store you just tried to switch off. The only value that yields an empty list is a **bare comma**, which is truthy, splits to two empties, and filters to nothing. **A flag whose obvious value is a no-op, and whose working value is a punctuation mark.** The `|| default` idiom does this everywhere it appears over a list; it cannot express *explicitly none*.
+
+---
 ### 🔴 THE 闪购 CHALLENGES ARE A PROXY FLAP, NOT A BROWSER CRASH — 2026-08-23
 
 **Chrome is not dying. It is being deliberately relaunched, and the trigger is one line in its own log:**
