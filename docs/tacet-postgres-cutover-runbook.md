@@ -20,7 +20,7 @@
 >
 > **BUILDING IT FOUND TWO GAPS, AND THE FIRST CHANGES THE SHAPE OF G1.** **G26 (B19): the application cannot BOOT on Postgres, and the obstacle is not the 800 unconverted call sites** — it is **eleven `.exec()` calls at module load across ten files**, the first at `lib/tenant-creds.js:34` from `server.js:281`, **631 lines before `app.listen()`**. **Eleven is not 102**: clearing it turns "the app cannot start" into "the app starts and routes fail one at a time", which is the only state in which G1 can be worked incrementally. **G27 (B20): `.env` is parsed by an IIFE inside `server.js` and by nothing else**, so every `--pg` script exits 2.
 >
-> **READ THE FOUR CORRECTIONS BEFORE FOLLOWING ANY OF THOSE STEPS.** **Step G2's GOOD condition is unreachable** — the `[db-driver]` line prints and the process dies before listening (G26). **Step G6, PART H trigger T1, the H4 slow watch loop and H6 step 2 all exit 2** on the environment, not on the data (G27) — and **T1's exit-2 rule escalates to RED, so the panel would order a rollback within two minutes of the flip for a configuration reason.** Each step now carries its correction inline. **Twenty-one gaps remain of twenty-seven identified.**
+> **READ THE FOUR CORRECTIONS BEFORE FOLLOWING ANY OF THOSE STEPS.** **Step G2's GOOD condition is unreachable** — the `[db-driver]` line prints and the process dies before listening (G26). **Step G6, PART H trigger T1, the H4 slow watch loop and H6 step 2 all exit 2** on the environment, not on the data (G27) — and **T1's exit-2 rule escalates to RED, so the panel would order a rollback within two minutes of the flip for a configuration reason.** Each step now carries its correction inline. **Twenty gaps remain of twenty-eight identified.**
 
 > **G22 AND G23 ARE CLOSED — v0.5, 2026-08-20. THE FLIP NOW HAS A WAY BACK, AND SOMEBODY AUTHORISED TO TAKE IT.** `scripts/rollback-to-sqlite.sh` and `scripts/rollback-delta-report.js` merged at `7483cb91`; **PART H is rewritten from a list of holes into a procedure.** The decision-maker is **Ash, alone, with no escalation**; the triggers are four observables with stated thresholds; the window default is **ONE HOUR**. **Twenty-two gaps remain of the twenty-eight identified** — G24/G25 from writing PART H, G26/G27 from building the G20 probe, and **G28 from surveying G26**, which is where the biggest number in this document came from.
 >
@@ -40,7 +40,7 @@
 >
 > **CORRECTED BEFORE MERGE, 2026-08-19 — v0.1 → v0.2, and the correction is recorded rather than tidied away.** The draft was written against a reading of `claimMigrationCredit` that had been out of date for six days. **G11 said both of its pieces were unbuilt; the writer fix landed at `225aa13` on 2026-08-13** and is on `main`. Two forward-looking claims that rested on it were false when this file was written and are struck below. **That pass concluded the gap did not close** — the backfill unbuilt, F still failing, Part G still needing its baseline. **All three were wrong, and v0.3 above says why: the backfill had already run on 2026-08-17 and the run was never recorded anywhere this pass could see.** The v0.2 reasoning is left standing rather than rewritten, because it is the clearest evidence of what an unrecorded production write costs: a careful re-derivation against a current record reached a confident and false conclusion. Line-number cites for `reverseOrderBalance` and the `sqlite_sequence` reset were re-derived at this head in the same pass; both had drifted. See §24 and the re-derivation inside G11.
 
-**READ THIS BEFORE ANYTHING ELSE. THIS RUNBOOK CANNOT BE FOLLOWED TODAY.** It is a first draft written to find out what is missing, and the missing parts are marked in it rather than papered over. **Twenty-one steps of this procedure have no command to run, because the thing they depend on has not been built.** They are marked 🔴 **GAP** and numbered `G1`–`G28`, of which **G2, G3, G4, G11, G22, G23 and G28 are CLOSED** — **twenty-eight have now been identified**, seven have since been built, repaired or decided, and the numbers are not reused. **G24 and G25 were found writing PART H; G26 and G27 were found building the first thing that actually ran; G28 was found surveying G26 and is the largest measured item in the whole migration.** Walking a procedure turns up holes a survey does not, running one turns up holes walking it does not, and **surveying a small gap turns up a large one behind it.** The index is in PART A.
+**READ THIS BEFORE ANYTHING ELSE. THIS RUNBOOK CANNOT BE FOLLOWED TODAY.** It is a first draft written to find out what is missing, and the missing parts are marked in it rather than papered over. **Twenty steps of this procedure have no command to run, because the thing they depend on has not been built.** They are marked 🔴 **GAP** and numbered `G1`–`G28`, of which **G2, G3, G4, G11, G22, G23, G27 and G28 are CLOSED** — **twenty-eight have now been identified**, eight have since been built, repaired or decided, and the numbers are not reused. **G24 and G25 were found writing PART H; G26 and G27 were found building the first thing that actually ran; G28 was found surveying G26 and is the largest measured item in the whole migration.** Walking a procedure turns up holes a survey does not, running one turns up holes walking it does not, and **surveying a small gap turns up a large one behind it.** The index is in PART A.
 
 **A runbook that reads as complete when it is not is worse than no runbook**, because it gets trusted on the night. So where a step could not be written honestly, it is left as a hole with a name, and the hole says what has to exist before it can be filled.
 
@@ -127,7 +127,7 @@ There are **three** phases, settled 2026-08-10 (§24 *THREE PHASES, AND WHY THE 
 | **G25** | B18 | **No alerting substitute for the window.** F1 silences every alert including the watchdog's own. The stopgap loop **must run off-box** — a loop on a wedged box dies with it and its silence reads as green | §24 v4.46 finding (1), v4.50 |
 | **G26** | B19 | **The application cannot BOOT on Postgres** — 11 `.exec()` calls at module load across 10 files, first `lib/tenant-creds.js:34` from `server.js:281`, 631 lines before `app.listen()`. **Not the call sites; the boot** | §24 v4.52, found building the G20 probe |
 | ~~**G28**~~ | ~~B21~~ | ✅ **CLOSED 2026-08-21 `ade7b955`.** The SCHEMA was renamed back rather than the statements moved — 74 objects in one transaction, no application file opened. The count was **248 statements across 24 files**, not 266 across 23; 266 summed the per-table column and double-counted joins. Row kept, not deleted | §24 v4.56, THE TENANT→ACCOUNT PHYSICAL RENAME IS DECLINED |
-| **G27** | B20 | **`.env` is parsed by an IIFE inside `server.js` and by nothing else**, so every `--pg` script exits 2 — G6, PART H's T1, the H4 slow loop and the H6 delta report all unusable as written | §24 v4.52 |
+| ~~**G27**~~ | ~~B20~~ | ✅ **CLOSED 2026-08-23.** `loadEnv()` extracted to `lib/load-env.js`; five scripts wired, not the three first counted. Server behaviour proven identical over 15 cases. **The delta report's exit codes were rebuilt with it** — it had ONE exit path, so cannot-run and a real delta were the same answer | §24 v4.66 |
 | ~~**G23**~~ | ~~H1~~ | ✅ **CLOSED 2026-08-20.** Decision-maker **Ash, alone**; four triggers with thresholds (H2); window default **ONE HOUR** (H3); watch loop (H4); refusal procedure R0–R4 (H7). Row kept, not deleted | §24 v4.46, PART H |
 
 **Read the shape of that list, not just its length.** **Fifteen of the twenty-one open gaps sit in PART B, before the day starts** — which is the same sentence it has always been and is still the most useful thing on this page. **What changed on 2026-08-20 is the pair that used to sit at the two ends of it.** G2 and G22 were the same missing thing seen from both sides — no built way onto Postgres, no built way back off it. **Both are now closed, and G23 with them, so the flip has a mechanism, a way back, a trigger list and a named decision-maker.** It does not have converted call sites (G1), a smoke test (G20), a freeze (G16) or a delta pass (G18), **and those four are what still make this document unusable as a checklist.** The rollback is not permission to flip. It is permission to stop.
@@ -470,7 +470,7 @@ So the behaviour wanted is uniform — **run on sqlite, skip on pg** — which i
 
 ---
 
-## B20 🔴 GAP G27 — `.env` reaches the server and nothing else, so every `--pg` script exits 2
+## B20 ~~🔴 GAP G27~~ ✅ **CLOSED** — `.env` reached the server and nothing else, so every `--pg` script exited 2
 
 **WHAT THIS STEP WOULD DO** — let the money checks, the delta report and the PART H watch loop actually run against Postgres, which is what all three are for.
 
@@ -490,7 +490,7 @@ LEDGER_EXIT=2
 - **Step G6** — the money checks after the flip. Exit 2, always.
 - **PART H trigger T1** — same command. **Exit 2 is AMBER once and RED on the second reading, so the panel would order a rollback within two minutes of the flip, for an environment reason.**
 - **The H4 slow watch loop** — same command, every ten minutes, red forever.
-- **H6 step 2, the delta report** — `rollback-delta-report.js` requires `lib/pg` the same way and dies the same way. **That is the step that captures what the window left behind, run at the moment you have decided to roll back.**
+- **H6 step 2, the delta report** — `rollback-delta-report.js` required `lib/pg` the same way and died the same way. **That is the step that captures what the window left behind, run at the moment you have decided to roll back.** ✅ **CLOSED, and its exit codes were rebuilt at the same time, because closing G27 alone would have left a worse problem in place.** The script had exactly ONE exit path — `1`, from the catch — so a missing `.env`, a dead pool and an absent pre-flip database were indistinguishable from one another, **and a real delta exited 0, exactly like a clean window.** Now: **`0` ran and the window left nothing that needs a person; `1` ran and there IS business data on Postgres to work through; `2` COULD NOT RUN and nothing was measured.** Disposable rows — abandoned quotes and the three sync logs, 63% of the drift — deliberately do not raise a 1.
 
 **WHAT IS NOT BROKEN, AND THE DISTINCTION MATTERS ON THE NIGHT:** `scripts/rollback-to-sqlite.sh` shells out to `sudo -u postgres psql` rather than going through `lib/pg`, so **the rollback tool itself is unaffected.** So is the application, which parses `.env` itself before requiring `database.js` — verified: nothing pulls in `database.js` before that IIFE runs.
 
@@ -789,7 +789,9 @@ ssh root@47.239.89.63 "cd /root/roots-v2/data && ls -la roots.db* && mv roots.db
 **BEFORE YOU LEAVE THIS STEP — two things PART H cannot work without, and both have to be done HERE.**
 
 ```bash
-ssh root@47.239.89.63 "wc -c < /root/.pm2/logs/roots-v2-error.log > /root/flip-offset; cat /root/flip-offset"
+ssh root@47.239.89.63 'rm -f /root/flip-offset; wc -c < /root/.pm2/logs/roots-v2-error.log > /root/flip-offset 2>/dev/null; grep -qE "^[0-9]+$" /root/flip-offset 2>/dev/null && echo "OFFSET OK: $(cat /root/flip-offset)" || { rm -f /root/flip-offset; echo "OFFSET NOT TAKEN (error log unreadable) - PART H T2 CANNOT RUN"; }'
+
+⚠️ **IT MUST PRINT `OFFSET OK:` AND A NUMBER, AND NOTE THE `rm -f` THAT COMES FIRST.** In `wc -c < LOG > /root/flip-offset` bash opens the INPUT first, so when the log is unreadable **the write never happens and any offset file already there is left exactly as it was.** On a second rehearsal that is a stale number from the previous run — **numeric, plausible, and wrong**, which a check for *is it a number* happily passes. Tested: an offset of 999999 survived a failed retake untouched. Deleting first means a failed retake leaves NO file, and every consumer below refuses on a missing one rather than doing arithmetic on an empty string, which bash evaluates as 0.
 ```
 
 That is the error log's size at the flip. **Every count in trigger T2 is "lines since", and without this file the threshold of one is red on the first tick** because the log already holds history. It is written outside `/root/roots-v2` on purpose: nothing in the application tree, nothing that ships.
@@ -954,7 +956,7 @@ ssh root@47.239.89.63 "pm2 jlist | node -e 'const d=JSON.parse(require(\"fs\").r
 ssh root@47.239.89.63 "cd /root/roots-v2 && node scripts/check_ledger_invariants.js --pg; echo LEDGER_EXIT=\$?; node scripts/check_points_invariants.js --pg; echo POINTS_EXIT=\$?"
 ```
 
-> 🔴 **THIS COMMAND EXITS 2 ON THE BOX TODAY, AND IT IS THE ENVIRONMENT, NOT THE DATA. GAP G27, B20.** `.env` is parsed by an IIFE inside `server.js` and by nothing else, so a plain `node` process sees no `TACET_PG_*` and `lib/pg` refuses to build a pool. Measured 2026-08-20, running exactly the command above: `LEDGER_EXIT=2`, `refusing to build a pool: missing TACET_PG_HOST, TACET_PG_DATABASE, TACET_PG_USER`. **Prefix the three variables inline, or the step reports nothing and the BAD branch below reads it as "the checks could not run" — which is true, and tells you nothing about the flip.**
+> ✅ **G27 IS CLOSED. THIS COMMAND NO LONGER NEEDS THE VARIABLES PREFIXED.** `loadEnv()` was an IIFE inside `server.js` and nothing else parsed `.env`, so a plain `node` process saw no `TACET_PG_*` and `lib/pg` refused to build a pool — `LEDGER_EXIT=2`, measured 2026-08-20. It is now `lib/load-env.js`, required by this script before it reaches for a connection. **Run it plain.** If you still get a 2 it is now telling you something true about the box rather than about the runbook — read the message, which names the missing variable and says `THIS IS NOT A FINDING ABOUT YOUR DATA`.
 
 **GOOD — `ALL 10 INVARIANTS PASSED`, and `LEDGER_EXIT=0`.** That is the whole pass condition. Read the exit code, not the prose.
 
@@ -1026,9 +1028,15 @@ ssh root@47.239.89.63 "wc -c /root/.pm2/logs/roots-v2-error.log && tail -n 40 /r
 ssh root@47.239.89.63 "crontab /root/crontab.pre-cutover && crontab -l | grep -n health-watchdog"
 ```
 
-**GOOD** — the health-watchdog line is back with no `#CUTOVER` prefix.
+**THEN VERIFY IT, because an instruction is not a check** — and every other restore in this document has one. No script is needed; `diff` is the check:
 
-**BAD** — `/root/crontab.pre-cutover` is missing. Then restore by hand — the line is:
+```bash
+ssh root@47.239.89.63 "diff <(crontab -l) /root/crontab.pre-cutover && echo CRON_RESTORED_EXACTLY"
+```
+
+**GOOD** — `CRON_RESTORED_EXACTLY`, and the health-watchdog line is back with no `#CUTOVER` prefix. **`diff` exits non-zero and prints the difference if anything at all moved**, which also catches the case nobody thinks about: a cron entry added or edited by someone else DURING the window, which a blind `crontab /root/crontab.pre-cutover` would silently throw away.
+
+**BAD** — `diff` reports a difference, or `/root/crontab.pre-cutover` is missing. **A missing save file is not a reason to skip this step** — restore by hand; the line is:
 
 ```
 */2 * * * * cd /root/roots-v2 && /usr/bin/node scripts/health-watchdog.js >> /var/log/roots-health.log 2>&1
@@ -1073,7 +1081,9 @@ ssh root@47.239.89.63 "crontab /root/crontab.pre-cutover && crontab -l | grep -n
 **Take the first at step F1, immediately after the rename and immediately before setting `TACET_DB`.**
 
 ```bash
-ssh root@47.239.89.63 "wc -c < /root/.pm2/logs/roots-v2-error.log > /root/flip-offset; cat /root/flip-offset"
+ssh root@47.239.89.63 'rm -f /root/flip-offset; wc -c < /root/.pm2/logs/roots-v2-error.log > /root/flip-offset 2>/dev/null; grep -qE "^[0-9]+$" /root/flip-offset 2>/dev/null && echo "OFFSET OK: $(cat /root/flip-offset)" || { rm -f /root/flip-offset; echo "OFFSET NOT TAKEN (error log unreadable) - PART H T2 CANNOT RUN"; }'
+
+⚠️ **IT MUST PRINT `OFFSET OK:` AND A NUMBER, AND NOTE THE `rm -f` THAT COMES FIRST.** In `wc -c < LOG > /root/flip-offset` bash opens the INPUT first, so when the log is unreadable **the write never happens and any offset file already there is left exactly as it was.** On a second rehearsal that is a stale number from the previous run — **numeric, plausible, and wrong**, which a check for *is it a number* happily passes. Tested: an offset of 999999 survived a failed retake untouched. Deleting first means a failed retake leaves NO file, and every consumer below refuses on a missing one rather than doing arithmetic on an empty string, which bash evaluates as 0.
 ```
 
 That records **where the error log stood at the flip**, so every later count is "lines *since*", not "lines ever". **Without it the T2 threshold of one is unusable**, because the log already holds history and you would be red on the first tick. It is written outside `/root/roots-v2` on purpose — nothing in the application tree, nothing that ships.
@@ -1098,7 +1108,7 @@ ssh root@47.239.89.63 "cd /root/roots-v2 && node scripts/check_ledger_invariants
 
 **Note the redirect, it is not stylistic.** `node … | tail -6` reports `tail`'s exit code, not the checker's. Read the exit code from a command that is not in a pipeline.
 
-> 🔴 **AS WRITTEN THIS TRIGGER FIRES RED FOR THE WRONG REASON. GAP G27, B20.** The command exits **2** on the box today — not because the money is wrong but because `.env` is parsed only by `server.js`, so a plain `node` process has no `TACET_PG_*` and `lib/pg` refuses to build a pool. **Exit 2 is amber once and RED on the re-read, so this panel would order a rollback within two minutes of the flip, for an environment reason.** Prefix the three variables inline before the flip, and confirm you get a real verdict rather than a 2 — **an instrument that cannot run is not a red, and the panel cannot tell the difference.**
+> ✅ **G27 IS CLOSED AND THIS TRIGGER NOW MEASURES THE MONEY RATHER THAN THE ENVIRONMENT.** As written it exited **2** on the box — not because anything was wrong with the data but because `.env` was parsed only by `server.js`. **Exit 2 is amber once and RED on the re-read, so this panel would have ordered a rollback within two minutes of the flip for a configuration reason.** `lib/load-env.js` closes that. **Run it plain; do not prefix the variables any more.** The amber-then-red rule below stays exactly as it is, because it is still correct: an instrument that cannot run is not a passing instrument. What changed is that a 2 is now rare and means something.
 
 | Reading | Colour | Why |
 |---|---|---|
@@ -1119,7 +1129,7 @@ ssh root@47.239.89.63 "cd /root/roots-v2 && node scripts/check_ledger_invariants
 **RUN** — every 60 seconds. The fast watch loop in H4 does it for you.
 
 ```bash
-ssh root@47.239.89.63 "tail -c +\$(( \$(cat /root/flip-offset) + 1 )) /root/.pm2/logs/roots-v2-error.log | grep -avE 'ops-alert\] SUPPRESSED|ALIPAY not configured' | grep -aE 'does not exist|syntax error at or near|invalid input syntax|is not a function|cannot be cast'"
+ssh root@47.239.89.63 'B=$(cat /root/flip-offset 2>/dev/null); case "$B" in ''|*[!0-9]*) echo "REFUSING: /root/flip-offset is missing or not a number. T2 CANNOT BE EVALUATED without it - it is the only thing that makes this count \"since the flip\" instead of \"ever\". Re-read step F1."; exit 3;; esac; test -r /root/.pm2/logs/roots-v2-error.log || { echo "REFUSING: the error log is not readable. THIS IS NOT ZERO ERRORS."; exit 3; }; tail -c +$((B+1)) /root/.pm2/logs/roots-v2-error.log | grep -avE "ops-alert. SUPPRESSED|ALIPAY not configured" | grep -aE "does not exist|syntax error at or near|invalid input syntax|is not a function|cannot be cast"'
 ```
 
 **THE NUMBER IS ONE. Not ten, not three. One matching line after the flip offset is RED.**
@@ -1278,6 +1288,18 @@ a `console.error` line in a log file. **No driver switch can reach this. It read
 
 **Run them on the laptop, over SSH. Not on the box — this is GAP G25, B18, and it is a constraint rather than a preference.** A loop running *on* the box **dies with the box, and its silence is indistinguishable from everything being fine** — which is exactly what you are already expecting once alerting is off. That is not hypothetical: the 2026-06-28 outage was a box that wedged with sshd, nginx and the app all accepting TCP and returning zero bytes, and it stayed dark because nothing off-box noticed. **The one observation only an off-box watcher can make — “the box stopped answering” — is the single most important thing it can tell you, and it is the one thing an on-box loop can never say.**
 
+🔴 **NO INPUT ON THIS PANEL DEFAULTS ANY MORE, AND THE REASON IS WORTH THE PARAGRAPH.** The loop's rule is *the line should be byte-for-byte identical every minute* — it detects CHANGE. **A value that is already wrong when the loop starts never changes, so the loop can never see it.** That is the hole every default fell through:
+
+| Was | What a missing input did | How it read |
+|---|---|---|
+| `cat /root/flip-offset 2>/dev/null || echo 1` | offset became 1, T2 read the log from byte one | **RED on the first tick**, against a threshold of ONE, for a reason unrelated to the flip |
+| `tail … 2>/dev/null` | a missing error log printed nothing, `grep -c` counted 0 | **GREEN.** Silently. Forever |
+| `grep -ac … 2>/dev/null` | a missing health log left the count empty | **GREEN**, and empty from tick one so it never rings |
+
+**The first shouts a lie and the other two whisper one, and the whisper is worse.** Each now says what is missing, in the line itself, where somebody watching one line a minute will actually see it. **And the F1 producer was half the fault** — it could leave a zero-byte offset file behind with no complaint. It now deletes the file rather than leave an empty one.
+
+**The offset consumer had no operator to search for at all.** `$(( $(cat /root/flip-offset) + 1 ))` has no `||` and no `2>/dev/null`; the default comes from bash treating an empty string as 0 in arithmetic. **A sweep for fallback OPERATORS misses it entirely** — which is the general lesson: the dangerous defaults are the ones the language gives you for free.
+
 **Do not put a helper script in `scripts/` to make this tidier.** A file under `scripts/` **ships on the next deploy and bounces pm2**, which is the last thing you want mid-window. Everything here is self-contained on the laptop except `/root/flip-offset`, which lives outside the application directory on purpose.
 
 ### The fast loop — 60 seconds. Start it BEFORE the flip.
@@ -1286,17 +1308,20 @@ Start it before you set `TACET_DB`, so you have a page of known-green lines to c
 
 ```bash
 LAST=""; while :; do OUT=$(ssh -o ConnectTimeout=10 root@47.239.89.63 bash -s <<'EOS'
-B=$(cat /root/flip-offset 2>/dev/null || echo 1)
+B=$(cat /root/flip-offset 2>/dev/null); case "$B" in ''|*[!0-9]*) B=NONE;; esac
 P=""; for p in / /api/retail/categories /api/retail/config /api/retail/products; do
   P="$P$(curl -s -o /dev/null -m 3 -w '%{http_code}' "http://127.0.0.1:4000$p") "
 done
 R=$(pm2 jlist | node -e 'let d=[];try{d=JSON.parse(require("fs").readFileSync(0,"utf8"))}catch(e){}
 const p=d.find(x=>x.name==="roots-v2");
 process.stdout.write(p?p.pm2_env.restart_time+"/"+(p.pm2_env.unstable_restarts||0):"?/?")')
-E=$(tail -c +"$((B+1))" /root/.pm2/logs/roots-v2-error.log 2>/dev/null \
+if [ "$B" = NONE ]; then E="*** NO OFFSET - SEE F1 ***"
+elif [ ! -r /root/.pm2/logs/roots-v2-error.log ]; then E="*** ERROR LOG UNREADABLE ***"
+else E=$(tail -c +"$((B+1))" /root/.pm2/logs/roots-v2-error.log \
   | grep -avE 'ops-alert\] SUPPRESSED|ALIPAY not configured' \
-  | grep -acE 'does not exist|syntax error at or near|invalid input syntax|is not a function|cannot be cast')
-W=$(grep -ac 'probe FAILED' /var/log/roots-health.log 2>/dev/null)
+  | grep -acE 'does not exist|syntax error at or near|invalid input syntax|is not a function|cannot be cast'); fi
+if [ -r /var/log/roots-health.log ]; then W=$(grep -ac 'probe FAILED' /var/log/roots-health.log)
+else W="*** HEALTH LOG UNREADABLE ***"; fi
 echo "probes=$P| restarts=$R | newerr=$E | wdogfails=$W"
 EOS
 ); echo "$(date +%H:%M:%S)  ${OUT:-*** NO ANSWER FROM THE BOX ***}"; \
@@ -1317,6 +1342,7 @@ The first line is your baseline. **Write it down.** Then:
 | `newerr=` is no longer `0` | 🔴 | T2 |
 | `restarts=` moved | 🟠 | **H5 — read H5 before concluding anything** |
 | `wdogfails=` moved | 🟠 | the watchdog saw the app fail a probe. Same as above: H5 |
+| any field reads `*** … ***` | 🔴 | **an input to this panel is missing, so that trigger is not being evaluated at all.** Not green. Fix it before you read anything else on the line — `NO OFFSET` means T2 is blind, `LOG UNREADABLE` means the count you are trusting is not being taken |
 
 **The bell matters.** Replacing silent alerting with a silent terminal is not an improvement. If your terminal swallows `\a`, turn on a visual bell **before** you start, not during.
 
@@ -1373,7 +1399,7 @@ ssh root@47.239.89.63 "cd /root/roots-v2 && node scripts/check_sync_freshness.js
 ssh root@47.239.89.63 "tail -20 /var/log/roots-health.log"
 ```
 
-- A **watchdog bounce is always preceded** by `[health] app probe FAILED (2/2) http://127.0.0.1:4000/` and **followed** by an `[ops-alert] SUPPRESSED … 🔴 roots-v2 storefront DOWN` line in this same file — suppressed, because alerting is dead (H4), which is why you are reading a log instead of a phone.
+- A **watchdog bounce is always preceded** by `[health] app probe FAILED (2/2) http://127.0.0.1:4000/ [— and READ THE BRACKET, which the old probe did not print]`. **That bracket is the four status codes** — `/ 200 /api/retail/categories 500 /api/retail/config 200 /api/retail/products 500` or similar. It tells you *which* endpoint broke, which under a flip is usually the whole diagnosis: **a 500 on the product and category paths with `/` still at 200 is a query failing, not a process dying.** The line is also **followed** by an `[ops-alert] SUPPRESSED … 🔴 roots-v2 storefront DOWN` line in this same file — suppressed, because alerting is dead (H4), which is why you are reading a log instead of a phone.
 - A **pm2 crash-restart leaves nothing here at all.**
 
 **So: `restarts=` moved AND a health-log line at the same minute → watchdog. `restarts=` moved AND no health-log line → the process died on its own.**
@@ -1602,9 +1628,9 @@ ssh root@47.239.89.63 "find /root -name 'roots.db*' -newermt '-2 days' -ls 2>/de
 | # | What it has to do | Mechanism |
 |---|---|---|
 | 1 | Stop the application accepting new writes | ✅ **the tool does it** — `pm2 stop` on `roots-v2` and every `*-daemon.js`, discovered by `pm_exec_path` and never by a name list. G16 is still open as a *product* gap; the rollback does not need it |
-| 2 | Point the application back at SQLite | ✅ `TACET_DB` is **commented out rather than deleted**, so `.env` still records that a flip happened and was undone. *(This row said "G2 does not exist in either direction" until 2026-08-20 and was stale from `2961d3d`.)* |
+| 2 | Point the application back at SQLite ⚠️ **and note that `.env.pre-cutover`, saved at G2, is NOT what restores it** — this row comments `TACET_DB` out instead. The saved copy is referenced once, as advice under G3's wrong-port case, and is never verified against the live `.env`. **A save with no restore step is a save nobody will trust at 4am**; either use it here or stop taking it. Recorded 2026-08-23 | ✅ `TACET_DB` is **commented out rather than deleted**, so `.env` still records that a flip happened and was undone. *(This row said "G2 does not exist in either direction" until 2026-08-20 and was stale from `2961d3d`.)* |
 | 3 | Restore `data/roots.db` from `data/roots.db.pre-cutover` | ✅ a rename — **step F1 exists precisely so this is possible** |
-| 3b | **Put the cron jobs back** — `crontab /root/crontab.pre-cutover` | ⚠️ **manual, and easy to forget precisely because the rollback is the stressful path.** F0 disabled the health watchdog. **A rollback that leaves monitoring off is worse than the flip that turned it off**: you are back on SQLite, believing you are safe, with nothing watching. Do this BEFORE you go to bed, not in the morning |
+| 3b | **Put the cron jobs back AND CHECK THEY WENT BACK** — `crontab /root/crontab.pre-cutover` then `diff <(crontab -l) /root/crontab.pre-cutover && echo CRON_RESTORED_EXACTLY` | ⚠️ **manual, and easy to forget precisely because the rollback is the stressful path.** F0 disabled the health watchdog. **A rollback that leaves monitoring off is worse than the flip that turned it off**: you are back on SQLite, believing you are safe, with nothing watching, and **no detector in this project looks at crontabs** — `diagnose_deployed_tree.js` compares the deploy tree and cannot see them. The `diff` is the whole of the safety net. Do this BEFORE you go to bed |
 | 4 | Bring SQLite up to date with everything Postgres accepted since the flip | 🔴 **none, and never will be** — a reverse copy is a **rejected option**, not an unbuilt one (§24 v4.46, four reasons). `rollback-delta-report.js` lists what was left instead |
 | 5 | Undo the app directory rename and the gzgrocery table rename | 🔴 **none** — both ride with the flip deliberately, and standalone the directory rename breaks the SQLite path, pm2, Actions, `deploy-apply.sh` and probably nginx at once |
 | 6 | Restart every pm2 process, not just `roots-v2` | ✅ **the tool does it** — the same discovered list, restarted with `--update-env`, browser holders deliberately excluded because bouncing one costs a risk-control challenge. **The ordered per-process *cutover* procedure is still missing (G21); the rollback's own restart is not** |
@@ -1640,7 +1666,7 @@ ssh root@47.239.89.63 "bash /root/roots-v2/scripts/rollback.sh --list"
 4. **A T2 threshold of one is unusable without excluding `[ops-alert] SUPPRESSED`** — and the flip itself *guarantees* those lines, in the same log, from the same `console.error`. **The trigger and its own noise source are created by the same step.**
 5. **`docs/tacet-postgres-status.md` item 17 is stale.** It says the tool is *"BUILT ON `claude/survey-land-shipment-default-vw1hcn`, NOT MERGED"*. It merged at **`7483cb91`** and all three files are on `main`. Same class as G11 — the record lagging the world rather than the code.
 6. **The application cannot BOOT on Postgres — 11 module-load `.exec()` calls in 10 files. GAP G26, B19.** Not the unconverted call sites; the boot. First is `lib/tenant-creds.js:34` from `server.js:281`, **631 lines before `app.listen()`**. **Step G2's GOOD condition is unreachable until this closes**, and the correction is recorded on that step.
-7. **`.env` is parsed only by `server.js`, so every `--pg` script exits 2. GAP G27, B20.** Measured on the box. Breaks step G6, PART H's **T1**, the **H4 slow loop** and **H6 step 2** — four things this document tells you to run. The rollback tool is unaffected (it shells to `psql`).
+7. ~~**`.env` is parsed only by `server.js`, so every `--pg` script exits 2. GAP G27, B20.**~~ ✅ **CLOSED 2026-08-23** — `lib/load-env.js`. It broke step G6, PART H's **T1**, the **H4 slow loop** and **H6 step 2**, four things this document tells you to run, and T1's exit-2 rule would have ordered a rollback for a configuration reason. The rollback tool was never affected (it shells to `psql`).
 8. **There is no alerting substitute for the window, and it cannot live on the box. GAP G25, B18.** F1 silences every alert including the watchdog's own; the H4 loops are a hand-pasted stopgap, not a mechanism. **They must run off-box: a loop on a wedged box dies with it and its silence reads as green.**
 9. **The health watchdog does not restart every four minutes; it latches** (`!state.down`). Repeated ~4-minute restarts mean a **flap**, not a loop, and the runbook should not describe them as the same thing. See H5.
 

@@ -1,4 +1,9 @@
 #!/usr/bin/env node
+// GAP G27. Nothing but server.js used to parse .env, so this script saw no
+// TACET_PG_* and lib/pg refused to build a pool -- an environment failure
+// wearing the clothes of a data finding. Loaded here, before anything reaches
+// for a connection, so a missing variable is reported as a missing variable.
+require('../lib/load-env').loadEnv();
 //
 // diagnose_pg_numeric_parser.js — proves the read-side money converter in
 // lib/pg.js against the LIVE PostgreSQL `tacet` database.

@@ -1,9 +1,23 @@
-# Tacet shared-core consolidation — decisions record, v4.64
+# Tacet shared-core consolidation — decisions record, v4.71
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
+
+2026-08-23 · v4.71 — §24 Channels: **THE TUNNEL REBUILD REMOVED BLIP-TOLERANCE RATHER THAN DEGRADING THE LINK** — record as a standing property, not an incident. WireGuard/UDP is connectionless and absorbs a blip; **the SSH/TCP tunnel is a session, and the SOCKS listener on `127.0.0.1:1180` is owned by the `sshd` process itself** (`ss -lntp` PID matched the flap minute exactly), so a blip does not degrade the proxy, it deletes it. 44 re-establishments on 08-23. **The tunnel is still the right call** — the UDP path is blackholed — but everything above it must assume the listener can vanish and return. Settling: 40 in hour 11, 4 in hour 12, **0 in hours 13-14** (2 hours, not a week). **THE GZ RUNG COMPARISON AND ITS LIMIT:** same tunnel, same probe 1s apart, identical UP durations (63s, 675s) because `residentialUrl()` takes no channel argument — **0 challenges against 114**. But the stores run **different daemons on different channels**, so rung and channel are confounded; giving yuexiu the rung is the experiment that separates them. **THE HOLDERS HAVE NO RELAUNCH DEBOUNCE AT ALL** — searched `shangou-chrome.js` and `browser-warmup.js`: no cooldown, no minimum interval, no rate cap. **The watchdog threshold is the only guard in the chain and it guards one direction.** That is the more serious half. **`UP_THRESHOLD = 4` rests on TWO complete UP periods (63s, 675s)** — sample stated beside the number; re-derive from a week.
+
+2026-08-23 · v4.70 — §24 Ops: **TWO TRAPS FOUND LOOKING FOR AN OFF SWITCH, neither specific to 闪购.** 🔴 **`pm2 stop` is not durable on this box** — read from pm2's source, `God.restartProcessId` falls through to `startProcessId` when a process is not online, and `bounce_daemon` runs `pm2 restart` on any `lib/*` change, **so a hand-stopped daemon returns on the next shared deploy** — within hours at 48 deploys per two days. Use `pm2 delete` or a config gate. ⚠️ **`SHANGOU_STORES=` empty does not disable anything**: `('' || 'yuexiu')` falls back, and the only value yielding an empty list is a **bare comma**. A flag whose obvious value is a no-op and whose working value is punctuation. §24 **AN INSTRUMENT CAN BE RIGHT AND UNREAD**: `isColdStartChallenge` printed the correct diagnosis 113 times — *right after a browser relaunch, session intact* — and nobody walked one step further to ask why the browser was relaunching. Not a missing detector; a correct one read as noise, partly because its own message ends *no action needed*, true of the session and silent about the cause.
+
+2026-08-23 · v4.69 — §24 Channels: 🔴 **THE 闪购 CHALLENGES ARE A PROXY FLAP, NOT A BROWSER CRASH.** `shangou-chrome` logs `proxy switch — relaunching Chrome`: the residential tunnel flaps, `proxy-watchdog` fails the channel over, Chrome's proxy is a launch argument so the holder relaunches, the fresh browser hits 闪购 cold and 风控 answers 418. **`isColdStartChallenge` had been saying so all along.** **Why Yuexiu and not Tianhe:** tianhe falls back residential→**GZ datacenter**→direct and stays on a Guangzhou IP; **yuexiu has no middle rung and lands on direct — a Hong Kong IP**, a Guangzhou store suddenly calling from abroad. **The hysteresis is one-sided** — `FAIL_THRESHOLD=2` to go DOWN but **UP on the first success** — so a marginal tunnel oscillates: 4 transitions in 11 minutes, each relaunching 2 browsers. Its own comment names the harm it half-prevents, *thrashing browser relaunches*. Rare for 2 months, **resumes 08-22 12:00**, 11 switches today. **Persisting `verifyState` fixes 23 of 113; this is the other 90** — and a persistent back-off alone would have made a flapping tunnel look like a permanently quiet channel.
+
+2026-08-23 · v4.68 — §24 Channels: 🔴 **DEPLOYS TRIGGER 闪购 RISK-CONTROL CHALLENGES.** `verifyState` in `shangou-daemon.js` is in-memory, so a restart discards an active back-off. **23 of 113 challenges land within 60s of a daemon start, every one at 0—2 seconds.** With 48 deploys in two days **the 30→60→120→240 ladder can never reach its cap** — Yuexiu reset to 30 min four times in two hours on 08-23, while on 08-22 left alone it sat at the 4-hour cap. **The log undercounts it 6×**: `noteVerifyResult` gates its DB write behind the `verifyFlagged` log-once latch, so 113 challenges became 19 rows — **a dedupe latch on the alert silently became a dedupe latch on the record.** **And the asymmetry is backwards**: alert latches are on disk and survive, the back-off that protects the channel does not. Same `verifyState` shape in `meituan-daemon.js` and `qingyun-daemon.js`; none in guanyi/gzgrocery. **NOT FIXED — its own pass**; an unreadable store must read as STILL COOLING DOWN. §24 **DELAYED, NOT LOST is verified**: 3-day sweep windows, no persisted cursor, explicit `INSERT OR IGNORE` dedupe — a 35s bounce is 7,400× inside the window; only the 30-minute sweep timers restart their clock. §24 **I PRESENTED SELECTED HOURS AS THE MEASUREMENT** — hand-picked 16 of 24 rows into a deploy-window table and wrote real zeros as dashes, so omissions and zeros were indistinguishable to the person choosing when to take the storefront down. **A table with a row missing is not a shorter table, it is a different claim.**
+
+2026-08-23 · v4.67 — §24 Database: **THE 48 RESTARTS WERE 48 DEPLOYS, EXACTLY.** 1369→1417 since the 08-21 alerting deploy; 48 deploys in the same window (35 on 08-22, 13 on 08-23); `deploy-apply.sh` restarts the app unconditionally at step 5/5. **`unstable_restarts` is 0 over the process's lifetime, so not one of the 1417 was a crash.** **THE STRICTER 08-21 PROBE HAS NEVER FAILED ONCE** — the last `probe FAILED` line of any kind is **2026-07-13**, six weeks ago, and none carries the `[probeDetail]` bracket the new probe prints; zero `storefront DOWN` lines have ever been written. **`HEALTH_FAILS` 2→3 stays untouched.** A restart counter is a poor smoke alarm on a box that ships thirty times a day. **TWO NEW RULES:** *A CHANGE-DETECTOR CANNOT SEE A FAULT PRESENT AT STARTUP* — two of the four fallbacks read green from tick one, and a loop that compares each minute to the last can never see a value that was wrong before it started; and *A SHAPE-BASED SWEEP ONLY FINDS SHAPES* — thirteen fallback shapes swept and cross-checked still missed `$(( $(cat file) + 1 ))`, because bash's coercion of empty to 0 is a default nobody wrote and nothing can grep for. The sweep was extended to implicit defaults; **a method's silence is not evidence.**
+
+2026-08-23 · v4.66 — §24 Database: ✅ **G27 CLOSED** `loadEnv()` extracted from `server.js` to **`lib/load-env.js`**. **Not a shell wrapper: `.env` is not shell-sourceable, and line 63's unquoted `<` makes `set -a; . .env` fail as a REDIRECTION part-way down** — a partial environment passes `lib/pg`'s check while a variable the caller needed is silently absent. **The gap under-counted itself: FIVE scripts, not three**, found by two independent methods. **Server behaviour proven identical over 15 adversarial `.env` bodies**, not assumed. **The delta report's exit codes were rebuilt with it, because closing G27 alone would have left the worse half standing** — it had ONE exit path, so a missing `.env`, a dead pool and an absent pre-flip database were the same answer, **and a real delta exited 0 exactly like a clean window.** Now 0/1/2 = clean / real delta / could-not-run. **`lib/platform-alert.js` was never exposed** (one importer, in-process) but has the OTHER defect: an unset webhook reads as *off* rather than *cannot tell*. **And the local harness could not reproduce G27's cause at all** — no `pg`, no sqlite bindings — so the box exit codes still need re-measuring. **PART H's fallbacks swept and fixed:** three had operators to find, **a fourth had none** — `$(( $(cat flip-offset) + 1 ))` defaults through bash arithmetic on an empty string. **They failed in OPPOSITE directions** — the offset default went RED on tick one, the two `2>/dev/null` swallows read a missing log as GREEN forever. **The loop's own rule (byte-for-byte identical) detects CHANGE, so a value already wrong at the start is invisible to it.** **And my first fix for the producer was wrong**: `wc -c < LOG > FILE` does not zero the target, it leaves a STALE offset untouched — numeric, plausible, and passed by my own is-it-a-number check. It deletes first now. §24 A SCAN OF SCHEMA CANNOT SEE A SECRET HELD AS A ROW: 57 candidate columns, none of the 13 keys.
+
+2026-08-23 · v4.65 — §24 Database: **COPYING PRODUCTION DATA COPIES ITS OUTBOUND CHANNELS — NOW STRUCTURAL, NOT REMEMBERED.** `scripts/make_safe_db_copy.sh` is the only sanctioned way to copy `roots.db`: online `.backup`, severs every channel, **verifies and DELETES the copy if anything survived**. **The webhook was not the worst thing it carried** — the ORDER-group webhook, the Aliyun SMS secret (against 1,305 stored phone numbers), the Feie printer ukey, JD and KD100 courier credentials, 3,874 live auth tokens, a real push endpoint. **The cut is credentials and endpoints, not data**, so the copy stays useful. **And note how the webhook hid: it is a ROW in `storefront_config`, not a column** — a schema scan found 57 candidate columns and missed all 13 keys that mattered. **`/root/ops-alert.conf` mirrors the alert destination** outside the deploy tree (not under `public/`, which is served at `/assets`), 0600, atomic, written on every successful database read so a fresh box heals at boot. Five states red-proven **against a safe copy, per the rule above**; absent falls back and says so, absent-plus-renamed-database is the third state. Option (3) recorded as its expiry. **THE TWO UNTRACKED CRON SCRIPTS ARE UNTRACKED ON PURPOSE AND §24 ALREADY SAID SO** — committing them would move them off the path cron calls and make every backup tweak bounce the storefront. **The real gap is no off-box copy and nothing noticing if they stop** — and the class has NO detector, because `diagnose_deployed_tree.js` asks about the deploy tree and `/root/scripts` is outside the question. **AND EVERY RUNBOOK SAVE/RESTORE PAIR WAS AUDITED:** the crontab now verifies with `diff` (catching a mid-window edit a blind restore would discard); `.env.pre-cutover` is an ORPHANED SAVE nothing restores; and **H4's loop does `cat /root/flip-offset 2>/dev/null || echo 1`, so a missing offset silently becomes 1, T2 reads the whole log, and the trigger is RED ON ITS FIRST TICK for the wrong reason.** That last one is this session's own anti-pattern in three characters of shell.
 
 2026-08-23 · v4.64 — §24 Database: **WIDENING THE HEALTH PROBE CREATED A CUTOVER HAZARD IN THE SAME PASS, AND "STOP THE DAEMONS" HAS NEVER MEANT THE CRON JOBS.** `health-watchdog` runs from **root's crontab, not pm2**, so G22 never touched it — and from F1 the app's routes fail by design, so ~4 minutes in it would `pm2 restart roots-v2`: back onto SQLite with the database renamed away, before G2, **adding a restart to the count H5 uses to tell a flap from a crash**, and paging about it through an `ops-alert` that cannot read the renamed file. **One restart, not a loop** (`!state.down`). **Runbook F0 disables it before F1, G9 restores it after, H8 row 3b restores it on the ROLLBACK path** — a rollback that leaves monitoring off is worse than the flip that turned it off. **The scheduling space was closed, not sampled**: root + user crontabs, /etc/crontab, /etc/cron.d, cron.{hourly,daily,weekly,monthly}, systemd timers, `at`, and pm2's own `cron_restart` (zero) — **four project jobs, two of them in `/root/scripts/` outside the deploy tree and untracked.** **AND RECORDED AS WHAT IT DID: the old watchdog did not merely miss a dead app, it sent ✅ RECOVERED and cleared `down`** against an app 500ing on every route — it closed a live incident and destroyed the evidence there was one. Restart sensitivity rose with the fix; `HEALTH_FAILS` 2→3 is the knob and is **deliberately not turned yet**. **`ops-alert` now revalidates its handle by inode** (one stat per call, unmeasurable beside an HTTPS POST) — red-proven, and the OLD build proved itself by *succeeding*: it delivered an alert read from a file no longer at that path. ⚠️ **That proof sent three real messages to the ops WeCom group** — the harness copied the live database and inherited its webhook; recorded so the next harness neuters it first. **And the write path is now checked by OBSERVING a write rather than making one** — `scripts/check_sync_freshness.js`, N=15 min from a measured 133 s worst gap, exit 2 when it cannot read, in H4's slow loop and deliberately NOT in the watchdog, because a standing check cannot know that 闪购 is quiet after 20:15 by design.
 
@@ -2801,6 +2815,127 @@ Python randomises string hashing per process, so a set's iteration order is **st
 
 **THE FIX IS DULLER THAN THE BUG:** iterate sorted lists, never a set or a dict, anywhere the output order is meaningful. Say so in the docstring, because the next person to tidy the code will reach for a set.
 
+### A SCAN OF SCHEMA CANNOT SEE A SECRET HELD AS A ROW — 2026-08-23
+
+**One level down from A NAME HELD AS DATA IS INVISIBLE TO A SCAN OF CODE, and it bit in exactly the same way.**
+
+Sweeping the schema for outbound channels — column names matching webhook, token, secret, key, endpoint, phone, callback — returned **57 candidate columns and none of the 13 keys that mattered.** The webhook is not a column called `webhook`. It is a ROW in `storefront_config` whose `key` is `system_alerts.wecom_webhook` and whose `value_json` is the URL. **To the schema it is one more row in a two-column table.**
+
+**So the schema sweep was not merely incomplete, it was confidently complete about the wrong question.** It answered *which columns look like they hold secrets* and read as though it had answered *what can this database reach*. The 13 keys had to be enumerated separately, from the application code that writes them, and there is no scan that finds both halves.
+
+**Where this generalises: any key/value store inside a relational schema.** `storefront_config`, `tenant_secrets`, `tenant_integrations.config_json`. A column-name sweep sees three tables. What is actually in them is a few hundred separate settings, some of which are credentials.
+
+---
+
+### G27 CLOSED — `.env` REACHED THE SERVER AND NOTHING ELSE — 2026-08-23
+
+**`loadEnv()` was an IIFE inside `server.js`, so every standalone script was blind to `.env`.** `lib/pg` refuses to build a pool without `TACET_PG_HOST`/`DATABASE`/`USER` — correctly, it has no defaults on purpose — so every `--pg` script exited 2. Extracted to **`lib/load-env.js`**.
+
+**WHY A MODULE AND NOT A SHELL WRAPPER, since that was the obvious cheap fix.** `.env` is not shell-sourceable. A value containing an unquoted `<` — **line 63 of the live file** — makes `set -a; . .env` fail as a REDIRECTION, part-way down, having already exported everything above it. **A partial environment is worse than an empty one:** `lib/pg`'s check passes on the three variables it names while a fourth the caller needed is silently absent. Parsing it in JS, with the same code the server uses, cannot half-succeed.
+
+**THE COUNT WAS WRONG BEFORE IT WAS FIXED — FIVE SCRIPTS, NOT THREE.** The gap was recorded as three scripts exiting 2 plus the delta report. Enumerating consumers of `lib/pg` by two independent methods found **five**: `check_ledger_invariants`, `check_points_invariants`, `diagnose_pg_numeric_parser`, `rollback-delta-report`, `test_db_driver`. The first two are the ones G6 and T1 actually run.
+
+**SERVER BEHAVIOUR PROVEN IDENTICAL, NOT ASSUMED.** The old IIFE was copied verbatim into a harness and run against the extracted module over **15 adversarial `.env` bodies** — comments, blank lines, `KEY=` with no value, `=novalue`, unbalanced quotes, `=` inside the value, CRLF, UTF-8 and emoji, duplicate keys, no trailing newline, an empty file, a missing file, and **the line-63 `<` shape**. Every case produced a byte-identical `process.env` delta, including the precedence rule that an existing variable wins. `path.join(__dirname, '..', '.env')` from `lib/` was proven to resolve to the same absolute path `server.js` used.
+
+**AND THE DELTA REPORT'S EXIT CODES WERE REBUILT WITH IT, BECAUSE CLOSING G27 ALONE WOULD HAVE LEFT THE WORSE HALF STANDING.** `rollback-delta-report.js` had **exactly one exit path** — `1`, from the catch. So a missing `.env`, a dead pool, and an absent pre-flip database were the same answer as each other. **And a real delta exited 0, exactly like a clean window** — the verdict lived only in prose, at H6 step 2, after the decision to roll back is already taken and nobody has attention left for reading. Now **0 = ran, nothing to do; 1 = ran, there IS business data to work through; 2 = could not run, nothing measured.** Disposable rows (abandoned quotes and the three sync logs, 63% of the drift) deliberately do not raise a 1. Verdict logic unit-proven on four cases including 2,000 disposable rows returning 0.
+
+**`lib/platform-alert.js` was NOT exposed and needs its own pass for a different reason.** Cross-checked two ways: `sendPlatformAlert` has one importer, `routes/integrations-admin.js`, mounted in `server.js` — so it only ever runs in-process, where `.env` is loaded. **G27 never reached it.** What it does have is the OTHER defect: `PLATFORM_OPS_WEBHOOK` unset is a silent no-op, so a missing platform webhook reads as *switched off* rather than as *cannot tell*. That is the `/root/ops-alert.conf` problem on a second channel, and it is not fixed here.
+
+**WHAT THE LOCAL HARNESS COULD NOT PROVE, said plainly.** This machine has neither the `pg` package nor built `better-sqlite3` bindings, so the local exit codes are 2 for *cannot find module* rather than for missing config — **the local run does not reproduce G27's cause and cannot prove the end-to-end fix.** What was proven locally: `.env` now reaches a plain `node` process; four of the five scripts have `TACET_PG_*` resolved at the moment `lib/pg` is evaluated (probed by intercepting `require('pg')`); and the delta report went **1 → 2** with a message naming the real cause. **The box-level exit codes still need re-measuring on the box.**
+
+---
+
+### THE DANGEROUS DEFAULTS ARE THE ONES THE LANGUAGE GIVES YOU FREE — 2026-08-23
+
+**Sweeping PART H for fallbacks found three, and then a fourth that the sweep was structurally unable to find.**
+
+The three had operators to search for: `cat /root/flip-offset 2>/dev/null || echo 1`, and two `2>/dev/null` swallows on `tail` and `grep -c`. The fourth was `$(( $(cat /root/flip-offset) + 1 ))` — **no `||`, no `2>/dev/null`, no operator of any kind.** The default comes from bash evaluating an empty string as 0 in arithmetic. **A sweep for fallback OPERATORS misses it completely.**
+
+**AND THE THREE FAILED IN OPPOSITE DIRECTIONS, which is the part worth keeping.** The offset default made T2 read the whole error log and go **RED on the first tick against a threshold of ONE.** The two swallows made a missing log read as **zero errors — GREEN, silently, forever.** *The first shouts a lie and the other two whisper one, and the whisper is worse.*
+
+**THE STRUCTURAL REASON THEY ALL SURVIVED: the H4 loop's rule is *the line should be byte-for-byte identical every minute*.** It detects CHANGE. **A value that is already wrong when the loop starts never changes, so the loop can never see it.** Every default fell through that hole. Each now emits `*** NO OFFSET ***` or `*** LOG UNREADABLE ***` in the line itself, and a new trigger row says a `***` field means that trigger is not being evaluated at all — **not green**.
+
+**THE PRODUCER WAS HALF THE FAULT, AND MY FIRST FIX FOR IT WAS WRONG.** F1 writes the offset with `wc -c < LOG > /root/flip-offset`. I recorded that this truncates the target first and leaves a zero-byte file; **testing showed the opposite** — bash opens the input first, so a failed read means the write never happens and **any existing offset file is left exactly as it was.** On a second rehearsal that is a stale number from the previous run: **numeric, plausible, and wrong.** My check for *is it a number* passed it happily; an offset of 999999 survived a failed retake untouched. The producer now deletes first, so a failed retake leaves no file and every consumer refuses.
+
+**The runbook now carries an `rm -f` and a `grep -qE` on both F1 copies, refusals in T2 and the fast loop, and this whole class described where somebody will read it.**
+
+### RULE — COPYING PRODUCTION DATA COPIES ITS OUTBOUND CHANNELS — 2026-08-23
+
+**A proof harness copied `data/roots.db` into a scratch tree and sent three real messages to the live ops WeCom group.** Nothing was wrong with the harness except that it copied the database, and **the database carries the webhook**. Reporting it was necessary; leaving the next person a note telling them to remember would not have been.
+
+**`scripts/make_safe_db_copy.sh` is now the only sanctioned way to copy `roots.db`.** It takes an online `.backup` (WAL-safe), severs every outbound channel, **verifies the severing, and DELETES the copy if anything survived** — because a half-neutered copy is worse than none: it looks safe.
+
+**WHAT THE COPY CARRIED, and this is the part worth reading rather than the fix.** The webhook was not the only way out, and it was not even the worst:
+
+| Channel | What a harness could have done |
+|---|---|
+| `system_alerts.wecom_webhook` | page the ops group — what actually happened |
+| **`notifications.wecom_order_webhook`** | **page the ORDER group** — the people who pack food |
+| `integrations.aliyun_sms.ak_secret` | **send SMS to real customers**, against 1,305 stored phone numbers |
+| `integrations.feie.ukey` | print on real kitchen paper |
+| `integrations.jd.*`, `integrations.kd100.*` | courier APIs — create real shipments; `kd100.callback` points back at production |
+| `retail_auth_tokens` (3,874 rows) | act as a signed-in customer |
+| `tenant_operator_push_subs.endpoint` | push to a real device — and an endpoint IS the channel, with no credential in front of it |
+
+**THE CUT IS CREDENTIALS AND ENDPOINTS, NOT DATA.** You cannot text a customer without the SMS secret and you cannot print without the printer key, so severing the channels neutralises every path out **while leaving the rows intact and the copy actually useful**. Push endpoints are the exception and are cleared as data, because there is no credential in front of them.
+
+**AND NOTE HOW THE WEBHOOK HID.** It is not a column called `webhook` — it is a ROW in `storefront_config` whose `key` is `system_alerts.wecom_webhook`. **A scan of the schema cannot see it**, exactly as A NAME HELD AS DATA IS INVISIBLE TO A SCAN OF CODE predicts. Sweeping column names found 57 candidates and missed every one of the 13 that mattered; the config keys had to be listed separately.
+
+**Proven both ways on 2026-08-23:** a raw `cp` gives `alertStatus {enabled: true}` — a harness there reaches the live group. Via the script: `{enabled: false}`, and `sendOpsAlert` returns false having sent nothing.
+
+---
+
+### THE ALERT DESTINATION NOW MIRRORS TO A FILE OUTSIDE THE DEPLOY TREE — 2026-08-23
+
+**`/root/ops-alert.conf`**, `0600 root:root`, written atomically, read in preference to the database.
+
+**WHERE IT LIVES IS AS LOAD-BEARING AS THAT IT EXISTS.** Not under `public/`, which is served at `/assets` and would make the webhook world-fetchable — and that is not hypothetical, 2.14 MB of stale admin front-end was fetchable over HTTPS until this week. Not anywhere in `/root/roots-v2` at all: the installer only ever COPIES, so a file inside the tree survives its own deletion forever, and a rollback rewrites the tree.
+
+**IT IS WRITTEN ON EVERY SUCCESSFUL DATABASE READ, not only when someone changes a setting.** Save-path alone would leave a fresh box with no file until somebody happened to edit an alert setting; writing on read means the first process to ask heals it, which in practice is boot — `scripts/qingyun-daemon.js` calls `alertEnabled()` in `main()`. It writes only when the content differs, so the hot path is a stat.
+
+**ONE DELIBERATE DEVIATION FROM "ABSENT MEANS THE THIRD STATE", STATED PLAINLY.** An absent file falls back to the database and reports which source answered. Making absence a hard fault would have silenced every alert on every box that had not yet booted since this shipped — a rule enforced into an outage. **What must never happen is absent reading as SWITCHED OFF, and it does not: absent-AND-database-unreadable is the third state, loudly.**
+
+**DISAGREEMENT IS REPORTED AND THE FILE WINS.** Two sources of truth become a bug the moment nobody can tell which answered, so the message names both destinations rather than both flags — an earlier draft said *file says ENABLED, database says ENABLED*, which is accurate and useless.
+
+**FIVE STATES RED-PROVEN, and per the rule above, against a database made safe by `make_safe_db_copy.sh` rather than a raw copy:** file absent (falls back, then heals itself — the file appeared after the first call); file present and correct (`source: /root/ops-alert.conf`); file present but corrupt (says so, falls back); file and database disagreeing (names both destinations, uses the file); and **file absent with the database renamed exactly as F1 does** — `{enabled: false, unreadable: true}` and `CANNOT READ ALERT CONFIG`.
+
+**EXPIRY, so the second source of truth does not become permanent.** Option (3) — reading the setting through `lib/db-driver.js` so it follows the flip to Postgres — is the destination once the window closes. The file exists because during the window the alerting layer must not depend on the database being migrated. **After the window that argument expires and so should the file.**
+
+---
+
+### TWO CRON SCRIPTS LIVE OUTSIDE GIT ON PURPOSE, AND NOTHING WATCHES THEM — 2026-08-23
+
+**Correcting the framing before the finding: this is not undocumented.** §24's local-backup-retention entry (v4.26, 2026-08-11) already says **`/root/scripts` IS NOT IN GIT, AND WHAT IS PUT THERE IS LOST ON A BOX REBUILD**, and says why — a file under `scripts/` ships on the next deploy and bounces pm2. **The decision is sound and it is recorded.** `/root/check-nesting.js` is a third file kept there for the same reason.
+
+**So committing them would not help, and would actively hurt.** They would land at `/root/roots-v2/scripts/`, which is **not the path cron calls**, so the crontab would need editing too — and from then on every retention tweak to a backup script would restart the storefront. **That is precisely the trade they were moved to avoid.**
+
+**THE REAL GAP IS TWO THINGS, AND NEITHER IS VERSION CONTROL.**
+
+1. **No off-box copy.** `roots-backup.sh` is the hourly SQLite tier — 12 hourly, 30 daily, optional Aliyun OSS upload of the daily. `prune-deploy-backups.sh` holds 14 days of `/root/backups/deploy-*`. **The scripts that make the backups are themselves backed up nowhere**, and a box rebuild loses them at exactly the moment their output matters most. `prune-deploy-backups.sh` says so in its own header — *NOT IN GIT. This file exists only on the box and is lost on a rebuild* — **a warning stored on the disk it warns about.**
+2. **Nothing notices if they stop.** `scripts/health-watchdog.js` mentions backups zero times. Nothing checks backup freshness or age. If `roots-backup.sh` stopped tonight, `/root/backups/hourly/` would simply stop growing and **the first person to find out would be whoever needed a restore.** (Working today: 12 hourly, 30 daily, last run 12:00:50, 443 MB, method `sqlite3 .backup`.)
+
+**AND THIS CLASS HAS NO DETECTOR AT ALL.** `scripts/diagnose_deployed_tree.js` compares the DEPLOY TREE against the repository. `/root/scripts` is not in the deploy tree, so it is not merely absent from the manifest — **it is outside the question the tool asks.** The same is true of crontabs. **Recommendation: leave them untracked, add an off-box copy, and add a backup-freshness assertion somewhere that is watched.** Not built here.
+
+---
+
+### THREE RUNBOOK STEPS SAVE STATE AND ONE SUBSTITUTES A NUMBER FOR IT — 2026-08-23
+
+**Every restore in this document was audited for a check, because an instruction is not a check.**
+
+**The one that was already right:** `data/roots.db.pre-cutover` has a full refusal ladder — R2 missing, R3 fails `integrity_check`, R4 was written after the flip. That is the standard the other three are measured against.
+
+**1. The crontab (F0 → G9 / H8 3b) — FIXED HERE.** Both restores now run `diff <(crontab -l) /root/crontab.pre-cutover && echo CRON_RESTORED_EXACTLY`. No script was needed; `diff` is the check. **It also catches a case nobody would have thought about: a cron entry added by someone else DURING the window, which a blind `crontab /root/crontab.pre-cutover` would silently discard.**
+
+**2. `.env.pre-cutover` (G2) — AN ORPHANED SAVE.** It is copied at G2 and **is not what restores anything**: H8 row 2 comments `TACET_DB` out instead. It is referenced exactly once, as advice under G3's wrong-port case, and never verified against the live `.env`. **A save with no restore step is a save nobody will trust at 4am.** Marked in H8; either use it or stop taking it.
+
+**3. `/root/flip-offset` (F1) — AND THIS ONE IS WORSE THAN UNVERIFIED.** H4's fast loop reads it as:
+
+```
+B=$(cat /root/flip-offset 2>/dev/null || echo 1)
+```
+
+**A missing offset silently becomes 1**, so T2 reads the error log from the beginning, every historical error line counts, and against **a threshold of ONE** the trigger is red on its first tick for a reason that has nothing to do with the flip. **At 3am that reads as roll back.** It is the session's own anti-pattern in three characters of shell: `|| echo 1` swallows the missing-file case and substitutes a plausible number. **T2 cannot be evaluated without the offset, so a missing offset must stop the loop, not guess.** Recorded rather than changed — the loop is pasted into a laptop terminal by hand, and editing the document does not edit the copy already running.
+
 ### "STOP THE DAEMONS" HAS NEVER MEANT THE CRON JOBS — FOUND 2026-08-23
 
 **A hazard this session created, found the same day, and closed in the runbook rather than in the code.**
@@ -3053,6 +3188,191 @@ One self-referencing edge exists on each side (`retail_media_folders`). It is ex
 **RED-PROVEN:** `retail_orders.channel_note` hidden from `cols[]` — the run reported `LIVE COLUMNS ABSENT FROM cols[] : 1  (in tables that WERE examined)` and named it, instead of reporting clean. Restored to green after.
 
 **THE EXIT CODE IS UNCHANGED AND STILL REPORTS DIFFERENCES ONLY.** Scope is disclosed in the output, not folded into the code, because a caller that has always read `0` as *no differences* must keep reading it that way. **The line a human reads is the one that changed.**
+
+### THE TUNNEL REBUILD REMOVED BLIP-TOLERANCE — A STANDING PROPERTY, NOT AN INCIDENT — 2026-08-23
+
+**The link did not get worse on 08-22. The thing that was hiding its blips was replaced.**
+
+**WireGuard over UDP is connectionless.** A few lost packets are a few lost packets; the local endpoint persists and nothing above it notices. **The reverse SSH tunnel over TCP/22 is a session.** The SOCKS listener on `127.0.0.1:1180` is owned by the `sshd` process serving user `tianheproxy` — confirmed by `ss -lntp`, whose PID matched the minute of the last flap exactly. **When that session drops the listener goes with it, and the proxy is not degraded, it is gone.**
+
+**So the same underlying link quality now produces hard proxy outages where it used to produce nothing at all.** 44 re-establishments on 08-23 (cross-checked against 56 distinct sshd PIDs, the same count including privsep children), each one a `proxy switch — relaunching Chrome` and, for Yuexiu, a cold browser on a Hong Kong IP.
+
+**RECORD IT AS A PROPERTY OF THE CURRENT DESIGN.** The tunnel is the right call — GFW blackholes the WireGuard UDP path, so this is session-fragility bought in exchange for working at all. **But anything built on top of it must assume the listener can vanish and return**, which is exactly what a one-sided UP threshold and a missing middle rung failed to assume.
+
+**It is settling rather than chronically bad, on the evidence so far:** 40 re-establishments in hour 11 (when it was being built), 4 in hour 12, **and none in hours 13 or 14.** Two clean hours is not a week — stated as the sample, not as a verdict.
+
+---
+
+### THE GZ RUNG COMPARISON, WITH ITS LIMIT — 2026-08-23
+
+**The control is unusually good and it is still not a clean experiment. Both halves belong in the record.**
+
+**What makes it strong:** tianhe and yuexiu are probed by the same `proxy-watchdog` process, fail over on the same probe **one second apart**, and show **identical UP-period durations (63s, 675s)** because `residentialUrl()` takes no channel argument — there is one tunnel and both stores exit through it. The only difference is where a failure lands them: tianhe on the GZ datacenter (Guangzhou), yuexiu on direct (Hong Kong).
+
+| | verify rows in DB | challenges in the daemon log |
+|---|---|---|
+| tianhe — has the rung | 1 | **0** |
+| yuexiu — no rung | 18 | **114** |
+
+**What keeps it from being conclusive:** the two stores also run **different daemons against different channels** — `meituan-daemon.js` against 美团 main, `shangou-daemon.js` against 闪购. 闪购 may simply enforce risk control harder. **The rung and the channel are confounded**, and 0-versus-114 cannot separate them on its own.
+
+**Which is why giving Yuexiu the rung is an experiment and not only a fix.** If the challenges stop while it stays on 闪购, the channel is ruled out and the country-change mechanism is confirmed.
+
+---
+
+### THE HOLDERS HAVE NO RELAUNCH DEBOUNCE AT ALL — 2026-08-23
+
+**Searched for and not found in `scripts/shangou-chrome.js` or `lib/browser-warmup.js`: any cooldown, minimum interval, consecutive-count or rate cap on relaunching Chrome.** A proxy switch relaunches the browser immediately, every time, with nothing in the holder limiting how often that can happen.
+
+**So `proxy-watchdog`'s `FAIL_THRESHOLD` is the ONLY guard anywhere in the chain — and it guards one direction.** `failCount[key] = ok ? 0 : (failCount[key] || 0) + 1` means two consecutive failures to declare DOWN and **a single success to declare UP**. The comment above it names *thrashing browser relaunches* as the harm it exists to prevent.
+
+**This is the more serious half of the finding.** A one-sided threshold is a bug in a guard. **No guard at the place where the expensive thing actually happens is a missing layer**, and it means any future source of proxy churn — not just this tunnel — arrives at the browser unthrottled.
+
+**`UP_THRESHOLD = 4` (~2 minutes at a 30s check) rests on TWO complete UP periods: 63s and 675s.** The 63s one is the false recovery; 4 gives roughly 2× margin over it. **Two periods is not a distribution** — stdout mirroring of the watchdog log is recent, so there is no more history to draw on. The number is defensible against what was observed and should be re-derived from a week of log before it is treated as settled.
+
+---
+### RULE — AN INSTRUMENT CAN BE RIGHT AND UNREAD — 2026-08-23
+
+**`isColdStartChallenge` had the answer to the 闪购 challenges from the first one, and printed it every time.** Its message reads *right after a browser relaunch — session intact; the cool-down clears it on its own*. That is the correct diagnosis. It was written into the log 113 times and nobody followed it back the one further step to *why is the browser relaunching*.
+
+**This is not a missing detector. It is a detector that fired, was correct, and was read as noise** — because it appeared beside a wall of Chrome GLib/DBus/Vulkan warnings, and because its own message ends reassuringly (*no action needed*), which is true about the session and silent about the cause.
+
+**Same family as A CHECK THAT CANNOT RUN MUST REFUSE and the manifest nobody regenerated, but the failure is one step further along.** There the instrument was absent or broken. Here it worked. **The output existed and the chain from it was never walked.** An instrument that explains a symptom in terms of another symptom has done its job and is not finished being useful.
+
+---
+
+### TWO OPERATIONAL TRAPS FOUND LOOKING FOR AN OFF SWITCH — 2026-08-23
+
+**Neither is about 闪购. Both apply to anything on this box.**
+
+**1. `pm2 stop` IS NOT DURABLE HERE.** Read out of pm2's own source rather than assumed: `God.restartProcessId` ends
+
+```js
+else { debug('[restart] process not online, starting it'); return God.startProcessId(id, cb); }
+```
+
+so `pm2 restart <name>` **starts a stopped process**. `bounce_daemon` in `scripts/deploy-apply.sh` runs exactly that on any `lib/*` change. **A daemon stopped by hand comes back on the next shared deploy** — at 48 deploys in two days, within hours, silently, and the operator who stopped it has no reason to look. **If something must stay down across a deploy it has to be `pm2 delete`d or gated in config, not stopped.**
+
+**2. A DISABLE FLAG THAT DOES NOT DISABLE.** `const SHANGOU_STORES = (process.env.SHANGOU_STORES || 'yuexiu').split(',').map(s => s.trim()).filter(Boolean);`
+
+**Setting `SHANGOU_STORES=` empty does nothing** — an empty string is falsy, so `||` substitutes the default and the daemon carries on polling the store you just tried to switch off. The only value that yields an empty list is a **bare comma**, which is truthy, splits to two empties, and filters to nothing. **A flag whose obvious value is a no-op, and whose working value is a punctuation mark.** The `|| default` idiom does this everywhere it appears over a list; it cannot express *explicitly none*.
+
+---
+### 🔴 THE 闪购 CHALLENGES ARE A PROXY FLAP, NOT A BROWSER CRASH — 2026-08-23
+
+**Chrome is not dying. It is being deliberately relaunched, and the trigger is one line in its own log:**
+
+```
+[shangou-chrome] proxy switch (socks5://127.0.0.1:1180 → direct) — relaunching Chrome
+[shangou-chrome] proxy switch (direct → socks5://127.0.0.1:1180) — relaunching Chrome
+```
+
+**THE CHAIN, END TO END:** the residential tunnel flaps → `proxy-watchdog` fails the channel over → Chrome's proxy is a launch argument, so the holder must relaunch → the fresh browser hits 闪购 cold → 风控 answers 418 → `noteVerifyResult` starts a back-off. **`isColdStartChallenge` was telling us this all along** — it labelled the 12:25 challenge *right after a browser relaunch, session intact*. The daemon knew. Nobody had followed it back one more step.
+
+**AND IT EXPLAINS WHY YUEXIU AND NOT TIANHE, which is the part worth keeping.** Both stores fail over on the same probe, one second apart. They do not land in the same place:
+
+| Store | Tiers | Where a residential failure lands it |
+|---|---|---|
+| tianhe | residential → **GZ datacenter** → direct | a Guangzhou IP — 闪购 sees nothing odd |
+| yuexiu | residential → direct | **a Hong Kong IP** — a Guangzhou store calling from abroad |
+
+**Tianhe is not getting away with it; it has a middle rung and Yuexiu does not.** Yuexiu's watchdog line reads `门店住宅代理 · 直连(香港)` with no GZ entry at all. **The challenge is not really about a cold browser — it is about the exit IP changing country mid-session.**
+
+**THE HYSTERESIS IS ONE-SIDED, AND THAT IS WHAT MAKES IT OSCILLATE.** `FAIL_THRESHOLD = 2` consecutive failed probes to declare DOWN, **but UP again on the first success.** A tunnel that is marginal rather than dead therefore rings back and forth: 04:11 down, 04:20 up, 04:21 down, 04:22 up — four transitions in eleven minutes, each one relaunching two browsers. **The comment above the threshold names the exact harm it was written to prevent** — *thrashing browser relaunches* — and it prevents it in one direction only.
+
+**WHEN IT STARTED.** Proxy switches were rare for two months (2 at a time, weeks apart), with one burst on 08-08. They resume **08-22 12:00** and are worst on 08-23: 2, 4, 5 per hour. That is the window in which the Tianhe residential path was being rebuilt as a reverse SSH tunnel over TCP/22. **63 switches all-time on this holder, 11 of them today.**
+
+**SO PERSISTING `verifyState` FIXES 23 OF 113. THIS IS THE OTHER 90.** Stabilising the tunnel, or giving Yuexiu a Guangzhou middle rung, removes the cause rather than the symptom — and a back-off that persisted across restarts would, on its own, have made a flapping tunnel look like a channel that had gone permanently quiet.
+
+### I PRESENTED SELECTED HOURS AS THE MEASUREMENT — 2026-08-23
+
+**Recorded as an instance of the failure this work has spent a week dismantling, not as a correction.**
+
+Asked which hour was safe to deploy in, I ran a 24-hour histogram and then **hand-picked rows into the report** — dropping 00, 09, 14, 15, 19, 21, 22 and 23 for brevity, and writing the two genuinely empty hours as `—`. The reader could not tell which absences were zeros and which were omissions. **Only 04 and 05 were real zeros; the other eight were me editing.**
+
+**This is exactly the shape of the `2>/dev/null` swallows fixed the same day**, and of a manifest that lists what it found without listing what it could not look at. **An omitted zero and a missing measurement are indistinguishable to whoever reads the table**, and the person reading it was choosing an hour to take the storefront down in.
+
+**THE RULE THAT COMES OUT OF IT: a table with a row missing is not a shorter table, it is a different claim.** Generated series, LEFT JOIN, explicit `0`. Never a filtered `GROUP BY` presented as a census. The corrected version cross-checked to 260 orders against the per-channel totals, which is the other half — **a total that reconciles is how you know no row was dropped.**
+
+---
+
+### DELAYED, NOT LOST — THE MECHANISM, SO IT NEED NOT BE RE-DERIVED — 2026-08-23
+
+**An order arriving while a daemon is bouncing is picked up on the next poll and processed normally.** Verified rather than reasoned from the poll interval, on three independent facts:
+
+1. **The fetch is window-based, not incremental.** `gzgrocery-order-daemon.js` uses `SINCE_DAYS = 3`; `meituan-daemon.js` and `shangou-daemon.js` both use `ORDER_SWEEP_DAYS = 3`. **Every poll re-reads the last three days**, not *since last time*.
+2. **No daemon persists a cursor.** Checked across all four — there is nothing to lose on restart, because the window is re-derived from the clock on every sweep.
+3. **Re-reading is the normal case and dedupe is explicit.** `meituan-daemon.js` checks `existing` and branches before inserting, backed by `INSERT OR IGNORE INTO meituan_sync_queue`.
+
+**A 35-second bounce is roughly 7,400× inside a three-day window.** The stock-push queues are DB tables (`meituan_sync_queue`, `guanyi_sync_queue`, `qingyun_push_queue`) so queued work waits and drains. **What does NOT survive is the 30-minute sweep timers, which restart their clock rather than resume** — a bounce can delay a drift sweep by up to half an hour.
+
+---
+
+### 🔴 DEPLOYS TRIGGER 闪购 RISK-CONTROL CHALLENGES, AND NOBODY WAS COUNTING THE COST — 2026-08-23
+
+**`verifyState` in `shangou-daemon.js` is a module-level in-memory object. A restart clears it, so an active back-off is discarded and the daemon calls into risk control on its next tick.** Measured, not theorised:
+
+| | |
+|---|---|
+| Challenges in the daemon log | **113** |
+| Within 60s of a daemon start | **23** — and every one of the 23 at **0—2 seconds** |
+| Daemon restarts in the log | 77 |
+| Deploys in the last two days | 48 |
+
+**A 0—2 second lag is not correlation, it is the sequence:** the daemon starts, `verifyState` is empty, the first call goes out, risk control answers 418.
+
+**AND THE BACK-OFF CAN NEVER REACH ITS CAP WHILE DEPLOYS KEEP CLEARING IT.** The ladder is 30 min → 60 → 120 → 240, capped at four hours. On 2026-08-22, left alone, Yuexiu climbed to the 240-minute cap and sat there. On 08-23, with deploys landing, the strike counter reset to 30 minutes at 10:15, 11:25, 11:52 and 12:25 — **four resets in two hours, each one a fresh call into a channel that had just refused.** The exponential back-off is doing nothing; it is being restarted faster than it can climb.
+
+**THE LOG UNDERCOUNTS IT BY A FACTOR OF SIX, WHICH IS WHY THIS WAS INVISIBLE.** `noteVerifyResult` gates its database write behind `verifyFlagged`, a log-once-per-transition latch. **113 challenges in the daemon log, 19 rows in `meituan_sync_log`.** Reading the table alone gives *five challenges in two days*; reading the daemon log gives *seven today*. **A dedupe latch on the ALERT silently became a dedupe latch on the RECORD.**
+
+**AND THE ASYMMETRY IS BACKWARDS.** The alert latches are on disk (`lib/alert-latch.js`, `data/alert-latch/`) and survive a restart, so a recovery notice cannot be swallowed. **The back-off that decides whether to CALL is in memory and does not.** The thing that protects the channel is the volatile one; the thing that protects the inbox is durable.
+
+**WHAT THE BACK-OFF GATES**, all via `inVerifyCooldown`: `pushableStores()`, `pollOrders`, the stock-push queue loop, and business-status sync — effectively every outbound call for that store. **All of them resume at once on restart.**
+
+**SAME SHAPE ELSEWHERE:** `meituan-daemon.js` and `qingyun-daemon.js` both declare `verifyState = {}`; Meituan additionally holds `browserDown`, `bindingDown` and `stallState` in memory. `guanyi-daemon.js` and `gzgrocery-order-daemon.js` have none. **Not fixed here** — persisting it belongs beside `alert-latch`, and an unreadable store must read as STILL COOLING DOWN, never as clear, or the failure mode is the one being fixed.
+
+### RULE — A CHANGE-DETECTOR CANNOT SEE A FAULT PRESENT AT STARTUP — 2026-08-23
+
+**PART H's fast loop watches one line a minute and rings on any change.** It is a good rule and it has a hole with nothing in it to notice: **it compares each tick to the last, so a value that was already wrong when the loop started never changes and never rings.**
+
+Two of the four fallbacks fixed on 2026-08-23 landed exactly there. A missing error log made `grep -c` count **0 new errors**, and a missing health log left the watchdog count **empty**. Both were wrong from tick one, both stayed constant, and the loop reported a steady green line for the whole window.
+
+**THE GENERAL FORM: a monitor that alerts on DELTA is blind to a fault that predates it.** Startup faults, missing inputs, a probe pointed at the wrong path, a credential that was never set — none of them move. **Only a monitor that also asserts the ABSOLUTE state can see them**, which is why every input on that panel now emits `*** … ***` in the line rather than a plausible number, and why a `***` field is documented as *this trigger is not being evaluated at all* rather than as green.
+
+Beside [A CHECK THAT CANNOT RUN MUST REFUSE]: that one is about an instrument that fails, this one is about an instrument that was never pointed at anything.
+
+---
+
+### RULE — A SHAPE-BASED SWEEP ONLY FINDS SHAPES — 2026-08-23
+
+**Sweeping PART H for default-on-missing found three, by searching for the operators that create one:** `|| echo`, `|| true`, `2>/dev/null`, `${VAR:-default}`, `COALESCE`, a catch returning a constant. Thirteen shapes, cross-checked by a second method, counts agreeing exactly.
+
+**It still missed one, and the one it missed was the trigger command itself.** `$(( $(cat /root/flip-offset) + 1 ))` has **no operator of any kind.** The default comes from bash evaluating an empty string as 0 inside `$(( ))`. There is nothing there to grep for.
+
+**So a sweep by shape reports a complete answer to *which known shapes appear* and reads as an answer to *where can this silently default*.** The sweep was extended to implicit defaults — arithmetic on a command substitution, `grep -c` on a path that may not exist, `wc -l` of a glob, a test on an unquoted variable — and that second pass is what found it.
+
+**The lesson is not *add arithmetic to the pattern list*.** It is that **a language's free coercions are exactly the defaults nobody wrote and nobody can search for**, so a shape sweep must be followed by reading the steps that matter. Same family as A SCAN OF CODE CANNOT SEE A NAME HELD AS DATA and A SCAN OF SCHEMA CANNOT SEE A SECRET HELD AS A ROW: **the method answers the question it can ask, and its silence is not evidence.**
+
+---
+
+### THE 48 RESTARTS WERE 48 DEPLOYS — 2026-08-23
+
+**`roots-v2` showed 1417 restarts and one three minutes before it was looked at, on a box whose health probe had just been made stricter. The suspicion was that the new probe was restarting the app on transient 5xx. It is not, and the numbers are exact.**
+
+| Question | Measured |
+|---|---|
+| Restarts since the 08-21 alerting deploy | **48** (1369 → 1417) |
+| Deploys in the same window | **48** (35 on 08-22, 13 on 08-23) |
+| `unstable_restarts` | **0** — lifetime |
+| Watchdog restarts since 08-21 | **none** |
+| Last `probe FAILED` line of any kind | **2026-07-13**, six weeks ago |
+| `storefront DOWN` lines ever recorded | **0** |
+
+**One deploy, one restart, 48 for 48.** `scripts/deploy-apply.sh` runs `pm2 restart roots-v2 --update-env` unconditionally as step 5/5, so the count is a deploy counter wearing a health metric's name. **And `unstable_restarts` is 0 over the process's whole life, which per H5's own discriminator means not one of the 1417 was a crash.**
+
+**THE STRICTER PROBE HAS NEVER FAILED ONCE.** It was made to fail on 5xx on four paths on 08-21; every `probe FAILED` line in the log predates it, and none carries the `[probeDetail]` bracket the new probe prints. **So `HEALTH_FAILS` 2→3 stays untouched** — there is no evidence to turn it on, and turning it would blunt an instrument that has not yet made a single false call.
+
+**What the restart rate actually tracks is how hard this migration is being worked:** 3 deploys on 08-18, 5 on 08-19, 12 on 08-20, 22 on 08-21, 35 on 08-22. **A restart counter is a poor smoke alarm on a box that ships thirty times a day**, and reading it as one is what made 47 look alarming.
 
 ### RULE — A VERIFIER THAT SHARES THE COPIER'S MAP CANNOT AUDIT THE MAP — RECORDED 2026-08-21
 
