@@ -232,8 +232,22 @@ const rawCaptured = {}; // store_code → true once we've logged a raw order sam
 
 // ── Stock push ────────────────────────────────────────────────────────────────
 
+// Which of this daemon's stores can be pushed to RIGHT NOW. Resolved BEFORE the
+// query, because the query has a LIMIT: skipping a store afterwards is not a
+// filter, it is starvation. The 外卖 daemon learned this on 2026-08-22, when 137
+// rows for a store it does not own filled all 40 slots and 天河 went 19 hours
+// without a stock push — its rows untouched at attempts=0, so nothing looked
+// broken anywhere. The same shape reaches here through a store that is merely
+// CLOSED or inside a verify cool-down: its backlog would take the window every
+// cycle and the store that is actually trading would never get a turn.
+function pushableStores() {
+  return SHANGOU_STORES.filter(code => isStoreOpen(code) && !inVerifyCooldown(code));
+}
+
 async function processStockQueue() {
-  const placeholders = SHANGOU_STORES.map(() => '?').join(',');
+  const eligible = pushableStores();
+  if (!eligible.length) return;
+  const placeholders = eligible.map(() => '?').join(',');
   // The queue's product_id is a store_products.id (the canonical retail catalogue
   // the stock/order paths key off) — NOT the legacy `products` kitchen table, whose
   // ids diverge for some SKUs (e.g. Hummus = store_products 360 but products 17).
@@ -251,17 +265,18 @@ async function processStockQueue() {
      WHERE q.status = 'pending' AND q.attempts < 3 AND q.store_code IN (${placeholders})
      ORDER BY q.created_at
      LIMIT 40
-  `).all(...SHANGOU_STORES);
+  `).all(...eligible);
   if (!rows.length) return;
 
   const byStore = {};
   for (const row of rows) (byStore[row.store_code] = byStore[row.store_code] || []).push(row);
 
   for (const [storeCode, items] of Object.entries(byStore)) {
-    if (!isStoreOpen(storeCode)) continue;
-    // In a verify cool-down: leave rows pending and flush after it passes — a push
-    // now would only re-hit risk-control.
-    if (inVerifyCooldown(storeCode)) continue;
+    // pushableStores() already excluded every store that must not be pushed to —
+    // closed on Meituan, or inside a verify cool-down where a push would only
+    // re-hit risk-control. This repeats the check only because state can change
+    // between the query and the push; it is a guard, no longer the filter.
+    if (!eligible.includes(storeCode)) continue;
 
     // Collapse to the latest qty per product/bundle.
     const latest = new Map(); const superseded = [];

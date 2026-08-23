@@ -98,6 +98,7 @@ it('rows the drain already burned through are still excluded', () => {
 // ── The shipped code must actually have these properties ────────────────────
 const DAEMON = fs.readFileSync(path.join(__dirname, 'meituan-daemon.js'), 'utf8');
 const ADMIN  = fs.readFileSync(path.join(__dirname, '..', 'routes', 'meituan-admin.js'), 'utf8');
+const SHANGOU = fs.readFileSync(path.join(__dirname, 'shangou-daemon.js'), 'utf8');
 
 it('the daemon filters by store inside the query, before the LIMIT', () => {
   const q = DAEMON.match(/FROM meituan_sync_queue q[\s\S]*?LIMIT 40/);
@@ -119,6 +120,24 @@ it('a queue that stops draining raises an alert on its own', () => {
   assert.match(DAEMON, /function queueStallTick\(/, 'no stock-write counterpart to the order heartbeat');
   assert.match(DAEMON, /queue_stalled/);
   assert.match(DAEMON, /queueStallTick\(stores\)/, 'the canary must actually be called from the loop');
+});
+
+it('the 闪购 daemon resolves eligibility before its LIMIT too', () => {
+  // Same window, same shape of mistake available: 闪购 used to take the 40 oldest
+  // rows for its stores and only then skip the ones that were closed or cooling
+  // down. With one store that is invisible; the day a second 闪购 store exists, a
+  // shut store's backlog owns the window and the trading one never drains.
+  const q = SHANGOU.match(/FROM meituan_sync_queue q[\s\S]*?LIMIT 40/);
+  assert.ok(q, 'drain query not found');
+  assert.ok(q[0].indexOf('store_code IN') < q[0].indexOf('LIMIT 40'),
+    'the window must be store-filtered in SQL, before the LIMIT');
+  const fn = SHANGOU.match(/function pushableStores\([\s\S]*?\n}/);
+  assert.ok(fn, '闪购 must resolve its pushable set up front, like 外卖');
+  for (const gate of ['isStoreOpen', 'inVerifyCooldown']) {
+    assert.ok(fn[0].includes(gate), `pushableStores must account for ${gate}`);
+  }
+  assert.ok(!/for \(const \[storeCode, items\][\s\S]{0,200}?if \(!isStoreOpen\(storeCode\)\) continue;/.test(SHANGOU),
+    'the open-hours skip must not be the per-row filter after the window');
 });
 
 it('the admin queue counter counts the status the daemon writes', () => {
