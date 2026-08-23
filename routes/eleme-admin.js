@@ -85,6 +85,27 @@ router.post('/api/retail-admin/eleme/enable', requireRetailAdmin, express.json()
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
+// ── Catalogue cache (Eleme-name autocomplete source) ────────────────────────────
+// Written by scripts/eleme-daemon.js (the only process holding a live Eleme
+// session); this just reads it. `refreshedAt` is the oldest row's timestamp
+// (a partial refresh mid-write would otherwise report the newest row's time
+// as if the whole set were that fresh) so the UI can be honest about staleness.
+router.get('/api/retail-admin/eleme/catalogue', requireRetailAdmin, (req, res) => {
+  const db = tdb();
+  try {
+    const storeCode = String(req.query.storeCode || '').trim();
+    if (!storeCode) return res.status(400).json({ success: false, error: 'storeCode required' });
+    const rows = db.prepare(`
+      SELECT name, stock, updated_at FROM eleme_catalogue_cache
+       WHERE store_code = ? ORDER BY name
+    `).all(storeCode);
+    const refreshedAt = rows.length
+      ? rows.reduce((min, r) => (r.updated_at < min ? r.updated_at : min), rows[0].updated_at)
+      : null;
+    res.json({ success: true, data: rows, refreshedAt });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
 // ── Stores + connection state ──────────────────────────────────────────────────
 // Eleme is browser automation (lib/eleme-browser.js), not OAuth — the open
 // platform rejects our single-store accounts (see ELEME_BROWSER_RECON.md).

@@ -4720,6 +4720,27 @@ db.exec(`
   );
 `);
 
+// A cached copy of each store's live Eleme listing names, refreshed
+// periodically by eleme-daemon.js (lib/eleme-browser.js's catalogueSnapshot).
+// Eleme's real catalogue only exists inside the daemon's browser session — a
+// separate process from this admin server — so the admin can't fetch it live
+// on page load without driving a second, competing browser login. This table
+// is the bridge: the daemon writes it, the admin API just reads it. Powers
+// the "Eleme listing name" autocomplete in the product mapping table (built
+// after a live mismatch — a hand-typed name used the wrong apostrophe
+// character and silently failed every push).
+db.exec(`
+  CREATE TABLE IF NOT EXISTS eleme_catalogue_cache (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_code      TEXT NOT NULL,
+    name            TEXT NOT NULL,
+    item_global_id  TEXT,
+    stock           INTEGER,
+    updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(store_code, name)
+  );
+`);
+
 // ── Guanyi ERP sync (gzgrocery backoffice, 2026-06-24) ──────────────────────
 // Mirrors the Meituan sync layer for a second sales channel: 管易C-ERP
 // (v2.guanyierp.com). Roots has a limited sub-account that sees only Roots
