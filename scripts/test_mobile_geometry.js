@@ -60,7 +60,40 @@ for (const t of ['home', 'orders', 'customers', 'products', 'more']) CASES['tab:
 
 // The probe, run inside the app page after it has settled.
 const PROBE = `
-  var VW = 390, out = { wide: [], clip: [], tiny: [], edge: [], doc: 0 };
+  var VW = 390, out = { wide: [], clip: [], tiny: [], edge: [], headGap: null, doc: 0 };
+  // The page head is a band closed by a hairline. Whatever comes next must not
+  // sit ON that hairline — moving the status line up into the band removed the
+  // spacer it had been providing, and Orders' filter chips came to rest exactly
+  // on the rule. Measured, not eyeballed: the gap from the head's bottom border
+  // to the top of the first thing under it.
+  (function(){
+    var head = document.querySelector('#content > div[style*="border-bottom"]');
+    if (!head) return;
+    var next = head.nextElementSibling;
+    while (next && !next.getBoundingClientRect().height) next = next.nextElementSibling;
+    if (!next) return;
+    // The first thing that actually PAINTS — text, a border, or a fill. A
+    // wrapper that pads its contents starts at the rule and looks like a
+    // zero gap while the ink it holds sits comfortably below; measuring the
+    // wrapper reported every screen as broken, including the ones that were
+    // fine, which is worse than not measuring at all.
+    var top = null;
+    var kids = next.querySelectorAll('*');
+    var all = [next].concat([].slice.call(kids));
+    for (var q = 0; q < all.length; q++) {
+      var e = all[q], b = e.getBoundingClientRect();
+      if (!b.height) continue;
+      var st = getComputedStyle(e);
+      if (st.visibility === 'hidden' || st.display === 'none') continue;
+      var paints = (e.children.length === 0 && (e.innerText || '').trim())
+        || st.backgroundColor !== 'rgba(0, 0, 0, 0)'
+        || parseFloat(st.borderTopWidth) > 0 || parseFloat(st.borderWidth) > 0
+        || st.backgroundImage !== 'none';
+      if (!paints) continue;
+      if (top == null || b.top < top) top = b.top;
+    }
+    if (top != null) out.headGap = Math.round(top - head.getBoundingClientRect().bottom);
+  })();
   out.doc = document.documentElement.scrollWidth;
   var all = document.querySelectorAll('#app *');
   for (var i = 0; i < all.length; i++) {
@@ -121,7 +154,7 @@ function main() {
      <iframe src="p.html"></iframe>`);
 
   const names = Object.keys(CASES).filter((n) => !FILTER || n.includes(FILTER)).sort();
-  const clips = []; const wides = []; const tinies = []; const edges = [];
+  const clips = []; const wides = []; const tinies = []; const edges = []; const headGaps = [];
   let scanned = 0;
   for (const name of names) {
     const boot = `<script>addEventListener("load",function(){try{${SEED}${ROWS}${CASES[name]}}catch(e){}
@@ -138,6 +171,7 @@ function main() {
     scanned++;
     let g; try { g = JSON.parse(m[1]); } catch (e) { continue; }
     if (g.doc > 391) wides.push([name, `page scrolls sideways (${g.doc}px)`]);
+    if (g.headGap != null && g.headGap < 8) headGaps.push([name, g.headGap]);
     for (const w of g.wide) wides.push([name, `${w.cls}: w=${w.w} right=${w.right} "${w.t}"`]);
     for (const c of g.clip) clips.push([name, c.t, c.over, c.box]);
     for (const t of g.tiny) tinies.push([name, `${t.px}px "${t.t}"`]);
@@ -164,12 +198,18 @@ function main() {
     console.log('');
   } else console.log('TAP TARGET ON THE EDGE — none.\n');
 
+  if (headGaps.length) {
+    console.log(`CONTENT ON THE HEADER RULE — ${headGaps.length}:`);
+    for (const [n, g] of headGaps) console.log(`  ${n}  ${g}px below the hairline`);
+    console.log('');
+  } else console.log('CONTENT ON THE HEADER RULE — none.\n');
+
   // Clipping: report all, fail on the clear-cut kind.
   const uniq = new Map();
   for (const [n, t, over, box] of clips) { const k = t; if (!uniq.has(k)) uniq.set(k, { n, t, over, box }); }
   const list = [...uniq.values()].sort((a, b) => b.over - a.over);
   console.log(`CLIPPED TEXT — ${list.length} distinct:`);
   for (const c of list.slice(0, 40)) console.log(`  ${String(c.over).padStart(4)}px over (box ${c.box})  ${c.n}  "${c.t}"`);
-  process.exit(wides.length || edges.length ? 1 : 0);
+  process.exit(wides.length || edges.length || headGaps.length ? 1 : 0);
 }
 main();

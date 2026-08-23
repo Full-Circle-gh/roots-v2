@@ -76,4 +76,40 @@ const CASES = [
   ]],
 ];
 
+// A promised ship DATE has no clock in it. It was going through fmtDay, which
+// answers a timestamp due today with the time of day — so an order to ship
+// today read "12:00 AM", a midnight nobody set, on the row a shop scans to see
+// what it owes today.
+const today = new Date(Date.now() + 8 * 3600 * 1000).toISOString().slice(0, 10);
+const plus = (n) => new Date(Date.now() + 8 * 3600 * 1000 + n * 86400000).toISOString().slice(0, 10);
+
+CASES.push(['a ship date due today says Today', ONE_ORDER + `
+  DB.orders=[]; state.ordersView=[mapOrderRow({id:1,order_no:'RT-1',status:'paid',channel:'wechat',
+    recipient_name:'A', total:10, placed_at:'${today} 09:00:00', fulfillment_type:'delivery',
+    promised_ship_date:'${today}'})];
+  state.liveOrders=state.ordersView; state.ordersLoading=false; APP.cmd('tab','orders');`, [
+  ['it says Today',       `txt('content').includes('Today')`],
+  ['NOT a midnight time', `!txt('content').includes('12:00 AM') && !txt('content').includes('00:00')`],
+]]);
+
+CASES.push(['tomorrow says Tomorrow', ONE_ORDER + `
+  DB.orders=[]; state.ordersView=[mapOrderRow({id:1,order_no:'RT-1',status:'paid',channel:'wechat',
+    recipient_name:'A', total:10, placed_at:'${today} 09:00:00', fulfillment_type:'delivery',
+    promised_ship_date:'${plus(1)}'})];
+  state.liveOrders=state.ordersView; state.ordersLoading=false; APP.cmd('tab','orders');`, [
+  ['it says Tomorrow', `txt('content').includes('Tomorrow')`],
+]]);
+
+CASES.push(['a date further out still reads as a date', ONE_ORDER + `
+  DB.orders=[]; state.ordersView=[mapOrderRow({id:1,order_no:'RT-1',status:'paid',channel:'wechat',
+    recipient_name:'A', total:10, placed_at:'${today} 09:00:00', fulfillment_type:'delivery',
+    promised_ship_date:'${plus(9)}'})];
+  state.liveOrders=state.ordersView; state.ordersLoading=false; APP.cmd('tab','orders');`, [
+  // Scoped: the row also carries the order's PLACED time, which is a real
+  // clock and must stay.
+  ['a month and a day',   `/[A-Z][a-z]{2} \\d{1,2}/.test(txt('content'))`],
+  ['no midnight in it',   `!txt('content').includes('12:00 AM')`],
+  ['and not Today either', `!txt('content').includes('Today')`],
+]]);
+
 run('order writes', CASES);

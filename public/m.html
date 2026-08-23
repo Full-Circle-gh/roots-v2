@@ -1213,7 +1213,10 @@ function ordersHeader(){
     {key:'meituan',en:'Meituan',zh:'美团',count:cCount('meituan')},{key:'gzgrocery',en:'gzgrocery',zh:'gzgrocery',count:cCount('gzgrocery')},{key:'manual',en:'Manual',zh:'手动',count:cCount('manual')}];
   const stores=state.stores||[];
   const st=[{key:'all',en:'All stores',zh:'全部门店'}].concat(stores.map(s=>({key:String(s.id),en:s.name_en||s.name||('#'+s.id),zh:s.name_cn||s.name_en||s.name||('#'+s.id)})));
-  return `<div style="padding:0 0 16px">
+  /* 14px of top padding: the first chip row used to sit exactly ON the head's
+     hairline. Nothing else on the screen touches that line and this should
+     not either. */
+  return `<div style="padding:14px 0 16px">
     ${state.orderQ?`<div style="padding:0 16px 8px"><button onclick="APP.cmd('clearOrderSearch')" class="chip on" style="max-width:100%"><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${T('Search','搜索')}: ${state.orderQ}</span>${ic('x',14,2)}</button></div>`:''}
     ${chipRow(sc,state.statusF,'statusF')}<div style="height:8px"></div>${chipRow(cc,state.channelF,'channelF')}
     ${stores.length>1?`<div style="height:8px"></div>${chipRow(st,state.storeF,'storeF')}`:''}</div>`;
@@ -4519,7 +4522,7 @@ function screenCustomers(){
   const chans=[{key:'all',en:'All channels',zh:'全部渠道'},{key:'wechat',en:'Mini app',zh:'小程序'},
     {key:'web',en:'Web',zh:'网页'},{key:'manual',en:'Added by staff',zh:'员工添加'}];
   return `${pageHead({title:T('Customers','顾客'), controls:true})}
-    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:0 16px 12px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px;padding:14px 16px 12px">
       <span class="num" style="font-size:13px;color:var(--text-secondary);min-width:0;line-height:1.5">${pulse||''}</span>
       <button onclick="APP.cmd('custSortPick')" style="flex:none;display:inline-flex;align-items:center;gap:4px;background:none;border:none;padding:2px 0;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--text-primary)">${custSortLabel()} ${ic('chevron-down',14,2)}</button>
     </div>
@@ -4826,7 +4829,7 @@ function prodFiltered(){
 const PROD_VIEWS=[['catalogue',['Catalogue','目录'],'products'],['activity',['Stock activity','库存流水'],'activity'],['categories',['Categories','分类'],'categories']];
 function screenProducts(){
   const v=state.prodView||'catalogue';
-  const strip=`<div class="hscroll" style="display:flex;gap:24px;padding:0 16px;border-bottom:1px solid var(--border-default)">
+  const strip=`<div class="hscroll" style="display:flex;gap:24px;padding:8px 16px 0;border-bottom:1px solid var(--border-default)">
     ${PROD_VIEWS.map(([k,label])=>{const on=k===v;
       return `<button onclick="APP.cmd('prodView','${k}')" style="position:relative;flex:none;height:44px;padding:0;border:none;background:none;cursor:pointer;font-family:inherit;font-size:15px;white-space:nowrap;font-weight:${on?'500':'400'};color:${on?'var(--text-primary)':'var(--text-secondary)'}">
         ${T(...label)}${on?`<span style="position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--text-primary)"></span>`:''}</button>`;}).join('')}
@@ -4940,7 +4943,7 @@ function pageHead({title, status, cta, back, controls}){
      scroll indicator and the edge-swipe gesture live, so reaching for it
      caught the scrollbar instead. The icons still read as flush; it is the
      44px target underneath them that needed the room. */
-  return `<div style="border-bottom:1px solid var(--border-default);padding:calc(env(safe-area-inset-top,0px) + ${back?'10px':'14px'}) 10px 10px 16px">
+  return `<div style="border-bottom:1px solid var(--border-default);padding:calc(env(safe-area-inset-top,0px) + ${back?'10px':'14px'}) 10px 14px 16px">
     ${back?`<button onclick="APP.cmd('back')" style="display:flex;align-items:center;gap:6px;margin:0 0 6px -4px;padding:8px 4px;background:none;border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;color:var(--text-secondary)">${ic('chevron-left',16,2)}${back}</button>`:''}
     <div style="display:flex;align-items:center;gap:12px;min-height:38px;padding-right:${right?'0':'10px'}">
       <h1 style="flex:1;min-width:0;margin:0;font-size:20px;font-weight:500;letter-spacing:-.01em;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${title}</h1>
@@ -4952,7 +4955,11 @@ function pageHead({title, status, cta, back, controls}){
          part of the head, and on Orders it floated between the rule and the
          filter chips belonging to neither. §1.7 is one head: title, status,
          then the line that closes it. */''}
-    ${status?`<p class="num" style="margin:8px 0 0;padding-right:10px;font-size:15px;color:var(--text-secondary);line-height:1.4">${status}</p>`:''}
+    ${/* 3px, not 8. The title and its status line are one thing — a name and
+         what it currently amounts to — and they were reading as two stacked
+         items. Tight to the title, with the band's own bottom padding giving
+         them room above the rule instead. */''}
+    ${status?`<p class="num" style="margin:3px 0 0;padding-right:10px;font-size:15px;color:var(--text-secondary);line-height:1.35">${status}</p>`:''}
   </div>`;
 }
 function tabbar(){
@@ -5041,6 +5048,21 @@ function fmtDay(v){ const d=_date(v); if(!d) return '';
     ? d.toLocaleDateString('en-US', thisYear?{month:'short',day:'numeric'}:{month:'short',day:'numeric',year:'numeric'})
     : (thisYear ? (d.getMonth()+1)+'月'+d.getDate()+'日'
                 : d.getFullYear()+'年'+(d.getMonth()+1)+'月'+d.getDate()+'日'); }
+/* fmtDay is for a TIMESTAMP: today's entry is most usefully a clock time. A
+   promised ship date is a DATE — there is no clock in it — and putting one
+   through fmtDay printed "12:00 AM" for anything due today, a midnight nobody
+   set, on the row where a shop reads what it owes today. Same ladder,
+   different word for today. */
+function fmtDateOnly(v){
+  const d=_date(v); if(!d) return '';
+  const now=new Date(), same=(a,b)=>a.toDateString()===b.toDateString();
+  if(same(d,now)) return T('Today','今天');
+  const t=new Date(now); t.setDate(t.getDate()+1);
+  if(same(d,t)) return T('Tomorrow','明天');
+  const y=new Date(now); y.setDate(y.getDate()-1);
+  if(same(d,y)) return T('Yesterday','昨天');
+  return fmtDay(v);
+}
 async function apiRaw(path){
   const r=await fetch(API+path,{credentials:'same-origin',headers:{accept:'application/json'}});
   if(r.status===401||r.status===403){ location.href='/backend/login'; throw new Error('auth'); }
@@ -5232,7 +5254,7 @@ function shipByPlan(r){
     label:r.delivery_slot_label||T('During pickup hours','营业时间内自取'),
     sub:T('pickup','自提'), when:r.scheduled_for||null, basis:'arrival', done};
   if(r.promised_ship_date){
-    const ship=fmtDay(r.promised_ship_date), arr=r.promised_delivery_date?fmtDay(r.promised_delivery_date):'';
+    const ship=fmtDateOnly(r.promised_ship_date), arr=r.promised_delivery_date?fmtDateOnly(r.promised_delivery_date):'';
     return {kind:'batch', label:arr||ship,
       sub:arr?T('made fresh · ship '+ship,'现做 · '+ship+'发货'):T('made fresh','现做'),
       when:r.promised_ship_date, basis:'arrival', done};
