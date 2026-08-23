@@ -337,7 +337,7 @@ const SHIPTO_GAP_MS    = Number(process.env.GZGROCERY_SHIPTO_GAP_MS || 400);
 async function backfillShipTo(client, storeId) {
   if (MODE !== 'live' || SHIPTO_PER_CYCLE <= 0) return;
   const rows = db.prepare(
-    `SELECT order_id, status, customer, date_added, items_json, reversed
+    `SELECT order_id, status, customer, date_added, items_json, reversed, decremented
        FROM gzgrocery_orders
       WHERE our_units > 0 AND COALESCE(address_json,'') = ''
       ORDER BY order_id DESC LIMIT ?`
@@ -354,10 +354,14 @@ async function backfillShipTo(client, storeId) {
     ).run(shipTo.recipientName || null, shipTo.recipientPhone || null, shipTo.addressFull || null,
       JSON.stringify({ region: shipTo.region || '', street: shipTo.street || '',
         postcode: shipTo.postcode || '', contacter: shipTo.contacter || '' }), row.order_id);
-    // Push the same ship-to onto the display mirror the drawer reads.
+    // Push the same ship-to onto the display mirror the drawer reads. Only for
+    // orders we actually counted — same gate as backfillGzMirrors. An order that
+    // was never decremented (e.g. its status never parsed, so it never went
+    // ACTIVE) has no mirror on purpose, and filling in an address is not a
+    // reason to invent one and show it in the list as delivered.
     let ours = [];
     try { ours = JSON.parse(row.items_json || '[]'); } catch { ours = []; }
-    if (ours.length) {
+    if (ours.length && row.decremented) {
       try {
         ensureGzMirror({ orderId: row.order_id, status: row.status, customer: row.customer,
           dateAdded: row.date_added, ours, storeId, voided: !!row.reversed, shipTo });

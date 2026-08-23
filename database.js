@@ -2,46 +2,24 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-// ═══ THE DRIVER BRANCH (G2) — THE ONLY EDIT THIS FILE CARRIES ════════════
+// ═══ ONE DRIVER. SQLITE. ══════════════════════════════════════
 //
-// This file is the construction point: it builds the handle at `new Database(...)`
-// below and exports it at the bottom, and 94 files require it — 47 in runtime
-// code, 47 in scripts/, including all six channel daemons. Most bind it at
-// require time rather than per call, so this is the one place a single decision
-// reaches all of them. Decisions §24 (CUTOVER SEQUENCING) settled that the switch
-// lives here and not in lib/db-seam.js, which receives an already-built handle
-// and can neither substitute a driver nor alter return types.
+// A `TACET_DB` driver branch stood here from 2026-08-19 to 2026-08-23, selecting
+// a Postgres handle via lib/db-driver.js, lib/pg.js and lib/pg-handle.js. The
+// migration was cancelled (decisions §24, THE POSTGRES MIGRATION IS CANCELLED)
+// and all three modules are deleted. The branch is removed with them.
 //
-// THE BRANCH IS AN EARLY RETURN, NOT AN `if/else` AROUND THE FILE, AND THAT IS
-// THE POINT. Everything below this block is byte-for-byte what it was before —
-// the diff that introduced this branch inserts lines and modifies none. That is
-// the proof that the SQLite path is unchanged, and it is a stronger proof than
-// any test could give: there is no altered line for a behaviour change to hide in.
-// A top-level `return` is valid in CommonJS (the module body is a function), and
-// it is what keeps that property. Do not restructure this into an if/else.
+// IF A SECOND DRIVER IS EVER WANTED, THIS IS STILL THE PLACE, AND THE REASON IS
+// UNCHANGED: this file is the construction point. It builds the handle at
+// `new Database(...)` below and exports it at the bottom, and ~94 files require
+// it, most binding it at require time rather than per call. lib/db-seam.js
+// cannot do the job — it receives an already-built handle and can neither
+// substitute a driver nor alter return types.
 //
-// UNDER POSTGRES NOTHING BELOW RUNS, WHICH IS DELIBERATE AND LOAD-BEARING. The
-// rest of this file is a schema manager, not a connection module: it opens the
-// SQLite file, sets two SQLite pragmas, execs schema.sql, and runs 305
-// `addColumn()` calls whose "already migrated" case is a catch on
-// /duplicate column/i — better-sqlite3's message text. None of that is valid or
-// wanted against Postgres, whose duplicate-column message does not match that
-// regex and would therefore throw rather than skip.
-// lib/pg.js is required HERE and nowhere else in the application (G3). It was
-// built 2026-08-08 and wired to nothing until now; requiring it is also what arms
-// the global numeric type parser, without which money read back from Postgres
-// arrives as text. Its own load-time throw on missing TACET_PG_* config is kept
-// deliberately — see its header: "a missing or stray variable would then connect
-// somewhere unintended rather than failing". Selecting Postgres without telling
-// the process where Postgres is should stop the boot, not connect to a guess.
-const { IS_POSTGRES } = require('./lib/db-driver');
-if (IS_POSTGRES) {
-  const { pool } = require('./lib/pg');
-  const { makePooledPgHandle } = require('./lib/pg-handle');
-  module.exports = makePooledPgHandle(pool);
-  return;
-}
-
+// AND READ §24 (f) BEFORE BUILDING ONE. The cancelled attempt made the two
+// handles deliberately incompatible and then needed 2,835 call sites converted
+// before anything could run. A synchronous `.query(text, params)` on this handle
+// is the shape that would have allowed it to be done a file at a time.
 const DATA_DIR = path.join(__dirname, 'data');
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
