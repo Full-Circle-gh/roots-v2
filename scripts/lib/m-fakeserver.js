@@ -44,12 +44,15 @@ const D = {
     baseline: { revenue: 2840, orders: 16, new_customers: 5 },
     new_vs_returning: { buyers: 17, returning_buyers: 9 },
     funnel: { paid: 7, preparing: 3 } },
+  // `waiting_since` — the field oldestMins actually reads. Sending placed_at
+  // made every fire lose its "oldest 2d" line, which looked like the app
+  // dropping it and was this file getting the column name wrong.
   '/dashboard/ops': {
-    unhandled: { count: 3, items: [{ placed_at: '2026-08-22 07:10:00' }, { placed_at: '2026-08-22 09:40:00' }] },
-    refunds: { count: 1, items: [{ placed_at: '2026-08-22 08:00:00' }] },
-    awaiting_restock: { count: 2, items: [{ placed_at: '2026-08-20 12:00:00' }] },
-    invoices: { count: 2, items: [] },
-    payment_unconfirmed: { count: 2, unread: 1, items: [{ placed_at: '2026-08-22 10:00:00' }] },
+    unhandled: { count: 3, items: [{ waiting_since: '2026-08-22 07:10:00' }, { waiting_since: '2026-08-22 09:40:00' }] },
+    refunds: { count: 1, items: [{ waiting_since: '2026-08-22 08:00:00' }] },
+    awaiting_restock: { count: 2, items: [{ waiting_since: '2026-08-20 12:00:00' }] },
+    invoices: { count: 2, items: [{ waiting_since: '2026-08-21 09:00:00' }] },
+    payment_unconfirmed: { count: 2, unread: 1, items: [{ waiting_since: '2026-08-22 10:00:00' }] },
     out_of_stock: { count: 2 }, low_stock: { count: 5 },
   },
   '/dashboard/activity': { rows: [
