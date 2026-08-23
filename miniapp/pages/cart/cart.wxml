@@ -18,7 +18,11 @@
          that zone can reach. -->
     <view wx:if="{{shipState === 'bar'}}" class="progress-card">
       <view class="progress-text">
-        <text wx:if="{{!unlocked}}"><block wx:if="{{lang === 'cn'}}">再差 <text class="f-bear strong">¥{{remaining}}</text> 即可<text class="f-bear strong">免运费</text>。</block><block wx:else>You're <text class="f-bear strong">¥{{remaining}}</text> away from <text class="f-bear strong">free shipping.</text></block></text>
+        <!-- The gaps around the bold runs are MARGINS (.gap-x / .gap-l), not
+             source spaces. WXML trims whitespace where a text node meets a
+             tag, so a typed space next to <text> is dropped and the sentence
+             renders as "You're¥103away from". -->
+        <text wx:if="{{!unlocked}}"><block wx:if="{{lang === 'cn'}}">再差<text class="f-bear strong gap-x">¥{{remaining}}</text>即可<text class="f-bear strong">免运费</text>。</block><block wx:else>You're<text class="f-bear strong gap-x">¥{{remaining}}</text>away from<text class="f-bear strong gap-l">free shipping.</text></block></text>
         <text wx:else><text class="f-bear strong">{{lang === 'cn' ? '已享免运费。' : 'Free shipping unlocked.'}}</text></text>
       </view>
       <view class="progress-bar">

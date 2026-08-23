@@ -39,6 +39,14 @@
 }
 .progress-text { font-family: var(--f-aleo); font-size: calc(26rpx * var(--font-scale)); }
 .progress-text .strong { font-family: var(--f-bear); }
+/* Word gaps around the bold runs. They can't be typed as spaces in the WXML:
+   whitespace where a text node meets a <text> tag is trimmed at compile, which
+   ran "You're ¥103 away from free shipping." together as "You're¥103away from".
+   Horizontal margin on an inline run is the one gap the compiler can't eat.
+   gap-x = space on both sides (the amount), gap-l = space before it only.
+   Scales with the text so it stays a word gap at every --font-scale. */
+.progress-text .gap-x { margin: 0 calc(8rpx * var(--font-scale)); }
+.progress-text .gap-l { margin-left: calc(8rpx * var(--font-scale)); }
 .progress-bar {
   margin-top: 16rpx;
   height: 16rpx;
