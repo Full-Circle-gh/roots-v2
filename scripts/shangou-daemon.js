@@ -250,14 +250,17 @@ function pushableStores() {
 // everywhere it is set up, so an ABSENT key means ON. Only an explicit false
 // stops it — otherwise the first deploy of this switch would silently take a
 // working channel down.
-// Per-store switch. The channel flag above is all-or-nothing; this is one
-// store. Same default: absent key means on.
+// Per-store switch: the Sales card's per-location toggle
+// (store_business_status.target_open). The channel flag above is all-or-nothing;
+// this is one store. target_open only, never is_open — a shop closed for the
+// night still wants accurate stock at open. Absent means on.
 function storePushEnabled(storeCode) {
   if (!storeCode) return true;
   try {
-    const row = db.prepare("SELECT value_json FROM storefront_config WHERE key = ?")
-                  .get('meituan.store.' + storeCode + '.enabled');
-    return row ? JSON.parse(row.value_json) !== false : true;
+    const row = db.prepare('SELECT target_open FROM store_business_status WHERE store_code = ?')
+                  .get(storeCode);
+    return !row || row.target_open === null || row.target_open === undefined
+      ? true : row.target_open === 1;
   } catch { return true; }
 }
 

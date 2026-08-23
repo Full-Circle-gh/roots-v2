@@ -262,7 +262,7 @@
         const what = MT_BLOCK_TXT[st.blockedBy] || ['is not syncing', '\u540c\u6b65\u5df2\u505c'];
         let state, cls;
         if (off) {
-          state = cuT('Paused — the daemon skips this store', '\u5df2\u6682\u505c \u2014 \u540c\u6b65\u670d\u52a1\u4e0d\u518d\u5904\u7406\u8be5\u95e8\u5e97');
+          state = cuT('Closed on Sales — not syncing', '在销售页已关闭 — 不再同步');
           cls = ' off';
         } else if (st.blocked) {
           const bits = [];
@@ -280,10 +280,6 @@
             '<span class="dot"></span><span class="nm">' + esc(who) + '</span>' +
             '<span class="st">' + esc(state) + '</span>' +
             (st.blocked && !off ? mtFixAction(st.code) : '') +
-            '<label class="sw" title="' + esc(cuT('Sync this store on or off', '\u5f00\u5173\u8be5\u95e8\u5e97\u7684\u540c\u6b65')) + '">' +
-              '<span class="lab">' + esc(off ? cuT('Paused', '\u5df2\u6682\u505c') : cuT('Syncing', '\u540c\u6b65\u4e2d')) + '</span>' +
-              '<input type="checkbox" ' + (off ? '' : 'checked') +
-              ' onchange="mtToggleStore(\'' + esc(st.code) + '\', this.checked)"></label>' +
           '</div>';
       }).join('');
     }
@@ -333,25 +329,6 @@
         esc(r.store_code || '-') + ']</span> ' + body + '</div>';
     }).join('');
   }
-
-  // Turn one store's sync off or on. Off drops what that store had waiting —
-  // a queue for a store nothing can reach is not work in progress. On queues a
-  // fresh full push, because after a pause only the CURRENT stock is worth
-  // sending, not a day of stale intermediate values.
-  window.mtToggleStore = async function (code, on) {
-    try {
-      const r = await api('/api/retail-admin/meituan/stores/' + encodeURIComponent(code) + '/enable',
-                          { method: 'POST', body: { enabled: !!on } });
-      if (window.toast) {
-        toast(on
-          ? cuT('Syncing ' + code + ' \u00b7 ' + (r.queued || 0) + ' queued',
-                code + ' \u5df2\u6062\u590d\u540c\u6b65 \u00b7 \u5df2\u6392\u961f ' + (r.queued || 0))
-          : cuT('Paused ' + code + ' \u00b7 ' + (r.dropped || 0) + ' waiting updates dropped',
-                code + ' \u5df2\u6682\u505c \u00b7 \u4e22\u5f03 ' + (r.dropped || 0) + ' \u6761\u5f85\u63a8\u9001'));
-      }
-      mtLoadStatus();
-    } catch (e) { mtLoadStatus(); }
-  };
 
   // ── Sync now (push all) ──────────────────────────────────────────────────────
   // force=true is the "push while closed" path: it forwards a force flag so a
