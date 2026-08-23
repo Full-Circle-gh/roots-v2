@@ -1973,12 +1973,20 @@ async function pdOpen(id) {
   // Header identity strip: product thumbnail, SKU · shop-state subtitle, bundle pill.
   { const th = document.getElementById('pd-head-thumb');
     if (th) { const img = p && (p.image_data || p.image_url); th.style.backgroundImage = img ? 'url("' + img + '")' : ''; }
+    // The subtitle is identity only now — the code and how many sizes it comes
+    // in. Shop state left it for a tag on the row below, because a switch
+    // written as prose reads as a fact about the product rather than a thing
+    // you can change.
     const sub = document.getElementById('pd-head-sub');
-    if (sub) sub.textContent = p
-      ? ((p.sku ? 'SKU ' + p.sku : cuT('No SKU', '无货号')) + ' · ' + (p.is_published === 1 ? cuT('In the shop', '已上架') : cuT('Disabled', '已下架')))
-      : cuT('Not saved yet', '尚未保存');
-    const bp = document.getElementById('pd-head-bundlepill');
-    if (bp) bp.style.display = (p && (p.is_bundle || p.bundle_mode === 'prepacked')) ? '' : 'none'; }
+    if (sub) {
+      if (!p) { sub.textContent = cuT('Not saved yet', '尚未保存'); }
+      else {
+        const bits = [p.sku ? 'SKU ' + p.sku : cuT('No SKU', '无货号')];
+        const sizes = (VA_MEMBERS || []).length;
+        if (sizes > 1) bits.push(sizes + ' ' + cuT('sizes', '规格'));
+        sub.textContent = bits.join(' · ');
+      }
+    } }
   set('pd-name-en', p && p.name_en); set('pd-name-cn', p && p.name_cn);
   set('pd-price', p ? p.sell_price : ''); set('pd-compare', p && p.compare_at_price);
   set('pd-sku', p && p.sku); set('pd-weight', p && p.size);
@@ -2014,6 +2022,7 @@ async function pdOpen(id) {
   document.getElementById('pd-ship-land').checked = !localOnly && (!p || modes.includes('land'));
   pdShipModeChanged();
   document.getElementById('pd-published').checked = p ? p.is_published === 1 : false;
+  pdRenderHeadTags();   // the header's shop tag reads that checkbox, so paint after it
   // Photo gallery — start empty, then (for an existing product) pull the
   // ordered list from the lightweight images endpoint. New products start blank.
   _pdGallery = []; _pdGalleryDirty = false; _pdGalleryInherited = false;
@@ -2279,6 +2288,45 @@ async function pdRestoreVersion(versionId) {
     toast(cuT('Restored to the chosen version.', '已还原到所选版本。'));
   } catch (e) { toast(cuT('Restore failed: ', '还原失败:') + e.message, 'err'); }
 }
+// ── The drawer header's state row ───────────────────────────────────────────
+// Shop state first, and it is a control: tapping it publishes or hides the
+// product. #pd-published stays the single source of truth — this paints from
+// it and writes back to it, so the Basics switch and this tag can never
+// disagree. After it come the states worth knowing before you edit: sold out,
+// and bundle. Three is the ceiling (§1.10a); a fourth belongs in a pane.
+function pdRenderHeadTags() {
+  const box = document.getElementById('pd-head-tags');
+  if (!box) return;
+  const pub = !!(document.getElementById('pd-published') || {}).checked;
+  const p = (PA_PRODUCTS || []).find(x => x.id === _pdSelectedId) || null;
+  const tags = [];
+  tags.push(
+    `<button type="button" class="pd-tag pd-tag-shop${pub ? ' is-live' : ' is-off'}"`
+    + ` onclick="pdToggleShopTag()"`
+    + ` title="${pub ? cuT('Live in the shop — tap to hide', '已上架 — 点按下架')
+                     : cuT('Hidden from shoppers — tap to publish', '未上架 — 点按上架')}"`
+    + ` aria-pressed="${pub}">`
+    + (pub ? cuT('In shop', '已上架') : cuT('Hidden', '未上架'))
+    + '<span class="pd-tag-sw"></span></button>');
+  if (p && !p.ship_from_supplier && _paStockOf(p) <= 0) {
+    tags.push(`<span class="pd-tag is-warn"><i></i>${cuT('Sold out', '缺货')}</span>`);
+  }
+  if (p && (p.is_bundle || p.bundle_mode === 'prepacked')) {
+    tags.push(`<span class="pd-tag is-fact">${cuT('Bundle', '套装')}</span>`);
+  }
+  box.innerHTML = tags.join('');
+}
+// Flip it here and the Basics switch moves with it, because they are the same
+// checkbox. Autosave is scheduled by hand: setting .checked in code fires no
+// change event, so the editor's own input listener would never hear it.
+function pdToggleShopTag() {
+  const cb = document.getElementById('pd-published');
+  if (!cb) return;
+  cb.checked = !cb.checked;
+  pdRenderHeadTags();
+  pdScheduleAutosave();
+}
+
 // ── Two zoom levels on one editor ───────────────────────────────────────────
 // Docked, #pd-editor sits in the right column beside the list and shows the
 // quick fields plus a summary row for anything with sub-rows. Expanded, the
@@ -4469,6 +4517,9 @@ function pdWireAutosave() {
     if (!t || !t.closest) return;
     if (t.id === 'pd-img-file') return;  // file picker handled via gallery mutations
     if (t.closest('input, select, textarea, [contenteditable], .pd-rte')) pdScheduleAutosave();
+    // The header's shop tag and the Basics switch are one value seen twice —
+    // whichever the operator moved, the other has to follow in the same tick.
+    if (t.id === 'pd-published') pdRenderHeadTags();
     // Editing the description or the Product details boxes makes a built design stale.
     if (t.closest('.pd-rte') || (t.id && t.id.indexOf('pd-fact-') === 0) || t.id === 'pd-name-en' || t.id === 'pd-name-cn' || t.id === 'pd-weight') pdMarkDesignStale();
   };

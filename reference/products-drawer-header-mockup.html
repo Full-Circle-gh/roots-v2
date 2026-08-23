@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — Products drawer header options</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   PRODUCTS — the drawer header, four options. Static, no data.
+   Tokens are the live --td-* block, verbatim. Inter only,
+   sentence case, two weights, tabular numbers.
+   Every frame is the SAME 480px drawer at the SAME moment:
+   a long-named product, saved, live in the shop, 3 sizes.
+   Chrome around the drawer is cropped, never drawn.
+   ============================================================ */
+:root {
+  --td-surface:#18233A; --td-raised:#1E2A44; --td-border:#2A3550;
+  --td-text:#FBF9F4; --td-text2:#9AA3B2; --td-heat-rgb:251,249,244;
+  --td-dusk:#6E67AF; --td-sage:#A3B49F; --td-sage-tint:#1E2C26; --td-sage-ink:#A3B49F;
+  --td-amber:#C9954A; --td-amber-tint:#33290F; --td-amber-ink:#C9954A;
+  --td-brick:#B4533E; --td-brick-tint:#351B14; --td-brick-ink:#D07A66;
+  --td-paper:#111A2B;
+}
+:root[data-theme="light"] {
+  --td-surface:#FFFFFF; --td-raised:#F6F3EC; --td-border:#E4E0D5;
+  --td-text:#111A2B; --td-text2:#58606E; --td-heat-rgb:17,26,43;
+  --td-sage-tint:#EDF1EC; --td-sage-ink:#4A6249;
+  --td-amber-tint:#F7EEDE; --td-amber-ink:#8A6425;
+  --td-brick-tint:#F6E7E3; --td-brick-ink:#B4533E;
+  --td-paper:#FBF9F4;
+}
+:root { --f:"Inter",-apple-system,system-ui,sans-serif; --ease:cubic-bezier(.16,1,.3,1); }
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--f);font-size:15px;line-height:1.6;color:var(--td-text);background:var(--td-paper)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+.num{font-variant-numeric:tabular-nums}
+
+.bar{position:sticky;top:0;z-index:9;display:flex;gap:18px;align-items:center;
+  padding:10px 24px;background:var(--td-text);color:var(--td-paper);font-size:13px}
+.bar b{font-weight:500}
+.bar label{display:inline-flex;gap:6px;align-items:center;cursor:pointer;opacity:.75}
+.wrap{max-width:1180px;margin:0 auto;padding:40px 24px 96px}
+.opt{margin-bottom:56px}
+.opt-h{font-size:18px;font-weight:500;margin-bottom:4px}
+.opt-s{font-size:13px;color:var(--td-text2);margin-bottom:20px;max-width:64ch;text-wrap:pretty}
+.opt-s b{font-weight:500;color:var(--td-text)}
+.row{display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap}
+
+/* the drawer, at its real width */
+.dw{width:480px;flex:none;border:1px solid var(--td-border);border-radius:14px;overflow:hidden;
+  background:var(--td-paper);box-shadow:0 1px 2px rgba(17,26,43,.05),0 4px 16px rgba(17,26,43,.04)}
+.hd{padding:16px 18px;border-bottom:1px solid var(--td-border)}
+.thumb{width:44px;height:44px;flex:none;border-radius:10px;background:var(--td-raised);
+  border:1px solid var(--td-border);display:grid;place-items:center;color:var(--td-text2)}
+.thumb svg{width:18px;height:18px}
+.thumb.sm{width:38px;height:38px}
+.name{font-size:18px;font-weight:500;line-height:1.3}
+.name.clip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sku{font-size:13px;color:var(--td-text2);font-variant-numeric:tabular-nums}
+.x{width:32px;height:32px;flex:none;border-radius:8px;display:grid;place-items:center;color:var(--td-text2)}
+.x:hover{background:rgba(var(--td-heat-rgb),.05);color:var(--td-text)}
+.btn{height:32px;padding:0 12px;border:1px solid var(--td-border);border-radius:8px;
+  background:var(--td-surface);font-size:13px;font-weight:500;display:inline-flex;
+  align-items:center;gap:7px;white-space:nowrap}
+.btn:hover{border-color:var(--td-text2)}
+.btn svg{width:14px;height:14px}
+.saved{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--td-text2);white-space:nowrap}
+.saved i{width:7px;height:7px;border-radius:50%;background:var(--td-sage-ink);flex:none}
+
+/* tags */
+.tags{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tag{display:inline-flex;align-items:center;gap:6px;height:24px;padding:0 10px;border-radius:999px;
+  font-size:13px;white-space:nowrap;border:1px solid transparent}
+.tag i{width:6px;height:6px;border-radius:50%;background:currentColor;flex:none}
+.tag.live{background:var(--td-sage-tint);color:var(--td-sage-ink)}
+.tag.off{background:var(--td-raised);color:var(--td-text2);border-color:var(--td-border)}
+.tag.fact{background:var(--td-raised);color:var(--td-text2);border-color:var(--td-border)}
+.tag.warn{background:var(--td-amber-tint);color:var(--td-amber-ink)}
+/* a tag that is also the switch */
+.tag.toggle{cursor:pointer;padding-right:4px}
+.tag.toggle .sw{width:28px;height:16px;border-radius:999px;background:var(--td-sage-ink);
+  position:relative;flex:none;margin-left:2px}
+.tag.toggle .sw::after{content:"";position:absolute;top:2px;left:14px;width:12px;height:12px;
+  border-radius:50%;background:#fff}
+.tag.off .sw{background:var(--td-border)}
+.tag.off .sw::after{left:2px}
+
+/* tabs + body stub, so each header is judged in place */
+.tabs{display:flex;gap:20px;padding:0 18px;border-bottom:1px solid var(--td-border)}
+.tab{padding:12px 0 11px;font-size:15px;color:var(--td-text2);position:relative}
+.tab.on{color:var(--td-text);font-weight:500}
+.tab.on::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--td-text)}
+.body{padding:18px}
+.card{border:1px solid var(--td-border);border-radius:14px;background:var(--td-surface);padding:16px}
+.card-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+/* Sentence case, 13px, weight 400 — the live one is "SALES", 10px, weight 600,
+   uppercase, which breaks three separate rules at once (§1.6, §1.3). */
+.card-h .t{font-size:13px;color:var(--td-text2)}
+.ranges{display:inline-flex;gap:4px}
+.ranges button{font-size:13px;padding:3px 10px;border-radius:999px;border:1px solid var(--td-border);color:var(--td-text2)}
+.ranges button.on{background:var(--td-text);border-color:var(--td-text);color:var(--td-paper)}
+.kpis{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.kpis .v{font-size:18px;font-weight:500;font-variant-numeric:tabular-nums}
+.kpis .l{font-size:13px;color:var(--td-text2)}
+
+.note{font-size:13px;color:var(--td-text2);max-width:34ch;flex:1;min-width:220px}
+.note b{color:var(--td-text);font-weight:500;display:block;margin-bottom:6px}
+.note ul{margin:0 0 0 16px}
+.note li{margin-bottom:6px}
+.bad{color:var(--td-brick-ink)}
+.good{color:var(--td-sage-ink)}
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <b>Drawer header — four options</b>
+  <span style="opacity:.6">480px · same product, same moment, in all four</span>
+  <span style="flex:1"></span>
+  <label><input type="checkbox" onclick="document.documentElement.setAttribute('data-theme',this.checked?'dark':'light')"> Dark</label>
+</div>
+
+<div class="wrap">
+
+<!-- ── TODAY ─────────────────────────────────────────────── -->
+<div class="opt">
+  <div class="opt-h">Today — what's wrong with it</div>
+  <div class="opt-s">Four things compete for one 480px row, so the name loses and wraps to three lines. The shop state — the most consequential switch on the product — is buried in a sentence next to the SKU, where it reads as metadata rather than something you can change.</div>
+  <div class="row">
+    <div class="dw">
+      <div class="hd">
+        <div style="display:flex;align-items:center;gap:13px">
+          <span class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.7"/><path d="m21 16-5-5L4.5 20.5"/></svg></span>
+          <div style="min-width:0;flex:1">
+            <div class="name" style="max-width:120px">Hazelnut-Chocolate Spread</div>
+            <div class="sku" style="max-width:120px">SKU 2-450 · In the shop</div>
+          </div>
+          <span class="saved"><i></i>All changes saved</span>
+          <button class="btn">Expand</button>
+          <button class="x">✕</button>
+        </div>
+      </div>
+      <div class="tabs"><span class="tab on">Basics</span><span class="tab">Stock</span><span class="tab">Page</span><span class="tab">Details</span></div>
+      <div class="body"><div class="card"><div class="card-h"><span class="t" style="text-transform:uppercase;font-size:10px;font-weight:600;letter-spacing:.1em">Sales</span><span class="ranges"><button>7d</button><button class="on">30d</button><button>90d</button></span></div>
+        <div class="kpis"><div><div class="v num">6</div><div class="l">units sold</div></div><div><div class="v num">¥445</div><div class="l">revenue</div></div><div><div class="v num">#62 / 192</div><div class="l">rank</div></div></div></div></div>
+    </div>
+    <div class="note">
+      <b>Faults</b>
+      <ul>
+        <li class="bad">Name wraps to three lines</li>
+        <li class="bad">Shop state is prose, not a control</li>
+        <li class="bad">"All changes saved" outranks the title for space</li>
+        <li class="bad">"SALES" is uppercase, 10px, weight 600 — breaks §1.6 and §1.3</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ── OPTION A ──────────────────────────────────────────── -->
+<div class="opt">
+  <div class="opt-h">A · Two rows — identity, then state</div>
+  <div class="opt-s">The name gets the full width and never wraps. Everything that isn't the name drops to a second row: shop state as a tag on the left, save status and the two buttons on the right. <b>Closest to what's there now</b>, and the smallest change to build.</div>
+  <div class="row">
+    <div class="dw">
+      <div class="hd">
+        <div style="display:flex;align-items:center;gap:12px">
+          <span class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.7"/><path d="m21 16-5-5L4.5 20.5"/></svg></span>
+          <div style="min-width:0;flex:1">
+            <div class="name clip">Hazelnut-Chocolate Spread</div>
+            <div class="sku">SKU 2-450</div>
+          </div>
+          <button class="x">✕</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:14px">
+          <span class="tag live"><i></i>In shop</span>
+          <span class="tag fact">3 sizes</span>
+          <span style="flex:1"></span>
+          <span class="saved"><i></i>Saved</span>
+          <button class="btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</button>
+        </div>
+      </div>
+      <div class="tabs"><span class="tab on">Basics</span><span class="tab">Stock</span><span class="tab">Page</span><span class="tab">Details</span></div>
+      <div class="body"><div class="card"><div class="card-h"><span class="t">Sales</span><span class="ranges"><button>7d</button><button class="on">30d</button><button>90d</button></span></div>
+        <div class="kpis"><div><div class="v num">6</div><div class="l">units sold</div></div><div><div class="v num">¥445</div><div class="l">revenue</div></div><div><div class="v num">#62 / 192</div><div class="l">rank</div></div></div></div></div>
+    </div>
+    <div class="note">
+      <b>Trade</b>
+      <ul>
+        <li class="good">Name never wraps</li>
+        <li class="good">Shop state is a tag you can see at a glance</li>
+        <li>Header is two rows tall (~112px)</li>
+        <li>The tag shows state but doesn't change it — the switch stays in Basics</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ── OPTION B ──────────────────────────────────────────── -->
+<div class="opt">
+  <div class="opt-h">B · The tag is the switch</div>
+  <div class="opt-s">Same two rows as A, but the shop tag <b>is</b> the control — tap it and the product goes live or dark, with the switch built into the pill. The one thing an operator most often opens a product to do stops being four clicks deep in Basics.</div>
+  <div class="row">
+    <div class="dw">
+      <div class="hd">
+        <div style="display:flex;align-items:center;gap:12px">
+          <span class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.7"/><path d="m21 16-5-5L4.5 20.5"/></svg></span>
+          <div style="min-width:0;flex:1">
+            <div class="name clip">Hazelnut-Chocolate Spread</div>
+            <div class="sku">SKU 2-450 · 3 sizes</div>
+          </div>
+          <button class="x">✕</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:14px">
+          <button class="tag live toggle">In shop <span class="sw"></span></button>
+          <span style="flex:1"></span>
+          <span class="saved"><i></i>Saved</span>
+          <button class="btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</button>
+        </div>
+      </div>
+      <div class="tabs"><span class="tab on">Basics</span><span class="tab">Stock</span><span class="tab">Page</span><span class="tab">Details</span></div>
+      <div class="body"><div class="card"><div class="card-h"><span class="t">Sales</span><span class="ranges"><button>7d</button><button class="on">30d</button><button>90d</button></span></div>
+        <div class="kpis"><div><div class="v num">6</div><div class="l">units sold</div></div><div><div class="v num">¥445</div><div class="l">revenue</div></div><div><div class="v num">#62 / 192</div><div class="l">rank</div></div></div></div></div>
+    </div>
+    <div class="note">
+      <b>Trade</b>
+      <ul>
+        <li class="good">Everything A gives, plus the commonest action is one tap</li>
+        <li class="good">"3 sizes" folds into the SKU line, so the tag row stays quiet</li>
+        <li>Two places now publish a product — here and the Basics switch. They must move together or one will lie.</li>
+        <li class="bad">A tag that toggles is a pattern this admin doesn't use yet</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ── OPTION C ──────────────────────────────────────────── -->
+<div class="opt">
+  <div class="opt-h">C · Quiet header, state in the tabs</div>
+  <div class="opt-s">The header carries only the name and the way out. Shop state, sizes and anything else move onto the tab strip as a small mark, so the top of the drawer stays one line tall and the tabs carry the product's condition.</div>
+  <div class="row">
+    <div class="dw">
+      <div class="hd" style="padding:14px 18px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <span class="thumb sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.7"/><path d="m21 16-5-5L4.5 20.5"/></svg></span>
+          <div style="min-width:0;flex:1">
+            <div class="name clip" style="font-size:16px">Hazelnut-Chocolate Spread</div>
+            <div class="sku">SKU 2-450 · In shop · Saved</div>
+          </div>
+          <button class="btn" style="padding:0 10px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></button>
+          <button class="x">✕</button>
+        </div>
+      </div>
+      <div class="tabs"><span class="tab on">Basics</span><span class="tab">Stock <span class="tag fact" style="height:18px;padding:0 7px;font-size:13px">180</span></span><span class="tab">Page</span><span class="tab">Details</span></div>
+      <div class="body"><div class="card"><div class="card-h"><span class="t">Sales</span><span class="ranges"><button>7d</button><button class="on">30d</button><button>90d</button></span></div>
+        <div class="kpis"><div><div class="v num">6</div><div class="l">units sold</div></div><div><div class="v num">¥445</div><div class="l">revenue</div></div><div><div class="v num">#62 / 192</div><div class="l">rank</div></div></div></div></div>
+    </div>
+    <div class="note">
+      <b>Trade</b>
+      <ul>
+        <li class="good">Shortest header — one row, ~68px, most room for the form</li>
+        <li class="good">Expand becomes an icon, so the name gets more width</li>
+        <li class="bad">Shop state is back to being prose in a subtitle — the thing you asked to fix</li>
+        <li class="bad">An icon-only Expand is easy to miss</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ── OPTION D ──────────────────────────────────────────── -->
+<div class="opt">
+  <div class="opt-h">D · Worst case — every state at once</div>
+  <div class="opt-s">Option B, drawn against the ugliest product in the catalogue: a long name, sold out, out of date, a bundle, unsaved. Any header that survives this survives the catalogue. <b>Design for this frame, not the tidy one.</b></div>
+  <div class="row">
+    <div class="dw">
+      <div class="hd">
+        <div style="display:flex;align-items:center;gap:12px">
+          <span class="thumb"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8.5" cy="9.5" r="1.7"/><path d="m21 16-5-5L4.5 20.5"/></svg></span>
+          <div style="min-width:0;flex:1">
+            <div class="name clip">Roasted Pumpkin Seed Butter, Large</div>
+            <div class="sku">SKU SPR-PSB-480 · 3 sizes</div>
+          </div>
+          <button class="x">✕</button>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:14px;flex-wrap:wrap">
+          <button class="tag off toggle">Hidden <span class="sw"></span></button>
+          <span class="tag warn"><i></i>Sold out</span>
+          <span class="tag fact">Bundle</span>
+          <span style="flex:1"></span>
+          <span class="saved" style="color:var(--td-amber-ink)"><i style="background:var(--td-amber-ink)"></i>Saving…</span>
+          <button class="btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg>Expand</button>
+        </div>
+      </div>
+      <div class="tabs"><span class="tab on">Basics</span><span class="tab">Stock</span><span class="tab">Page</span><span class="tab">Details</span></div>
+      <div class="body"><div class="card"><div class="card-h"><span class="t">Sales</span><span class="ranges"><button>7d</button><button class="on">30d</button><button>90d</button></span></div>
+        <div class="kpis"><div><div class="v num">0</div><div class="l">units sold</div></div><div><div class="v num">¥0</div><div class="l">revenue</div></div><div><div class="v num">No sales</div><div class="l">rank</div></div></div></div></div>
+    </div>
+    <div class="note">
+      <b>What it proves</b>
+      <ul>
+        <li class="good">Tags wrap to a second line rather than pushing Expand off the edge</li>
+        <li class="good">Three tags is the realistic ceiling — §1.10a caps a stack at three</li>
+        <li class="good">Save status changes colour and word together, so "Saving…" is never mistaken for saved</li>
+        <li>If a product ever needs a fourth tag, the fourth belongs in the pane, not the header</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<div class="opt">
+  <div class="opt-h">Fixed in all four, regardless of which wins</div>
+  <div class="opt-s">
+    <b>Sales</b> is sentence case at 13px, weight 400. Live it is <span class="bad">"SALES" — uppercase, 10px, weight 600</span>, which breaks the uppercase ban (§1.6) and the type scale (§1.3, no size under 13px, no weight over 500) in one label. Every <code>.pd-sec-h</code> and <code>.pd-card-h</code> in the editor has the same problem, so it is one rule to fix, not one label.
+  </div>
+</div>
+
+</div>
+</body>
+</html>

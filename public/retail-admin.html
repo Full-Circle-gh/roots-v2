@@ -4464,21 +4464,27 @@
           <p class="pd-empty-sub">…or click <b>Step by step</b> above to create a new one. · 或点击上方「分步添加」创建新产品。</p>
         </div>
         <div class="pu-editor" id="pd-editor" style="display:none;">
+        <!-- Two rows. The name owns the first one outright, so it stops
+             wrapping to three lines at 480px; everything that is state rather
+             than identity drops to the second. The shop tag IS the publish
+             switch — putting a product live is the commonest reason to open
+             one, and it was four clicks deep in Basics. That switch and this
+             tag are one value: pdRenderHeadTags repaints from #pd-published,
+             which stays the only source of truth. -->
         <div class="pu-editor-head">
           <div class="pd-head-id">
             <div class="pd-head-thumb" id="pd-head-thumb"></div>
             <div class="pd-head-txt">
-              <div class="pd-head-titlerow">
-                <h3 id="pd-title" style="margin:0;">Product · 产品</h3>
-                <span class="pa-pill pa-pill-bundle" id="pd-head-bundlepill" style="display:none;">Bundle · 套装</span>
-              </div>
+              <h3 id="pd-title" style="margin:0;">Product · 产品</h3>
               <div class="pd-head-sub" id="pd-head-sub"></div>
             </div>
+            <button class="pd-head-x" type="button" onclick="pdClose()" title="Close · 关闭" aria-label="Close"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
           </div>
-          <div class="pd-head-actions">
+          <div class="pd-head-state">
+            <div class="pd-head-tags" id="pd-head-tags"></div>
+            <span class="pd-head-sp"></span>
             <span id="pd-save-status" class="pd-save-status" aria-live="polite"></span>
             <button class="btn btn-sm" id="pd-expand-btn" type="button" onclick="pdToggleFullscreen()" title="Open the full product page · 打开完整产品页"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M3 6V3h3M13 6V3h-3M3 10v3h3M13 10v3h-3"/></svg>Expand · 展开</button>
-            <button class="btn btn-sm" type="button" onclick="pdClose()" title="Close · 关闭" aria-label="Close"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
           </div>
         </div>
         <div class="pu-editor-body pe-body">
