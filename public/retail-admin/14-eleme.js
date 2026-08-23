@@ -404,11 +404,28 @@
 
   window.elFilterProducts = function () { elRenderProducts(); };
 
+  // The visible stores, honouring the store filter.
+  function elShownStores() {
+    return _stores.filter(st => !_elStore || st.code === _elStore);
+  }
+
+  // colgroup + header, built from the store list so N stores work. Product
+  // takes a third; the stores split what is left evenly.
+  function elRenderTableHead() {
+    const cg = document.getElementById('el-colgroup');
+    const hr = document.getElementById('el-headrow');
+    if (!cg || !hr) return;
+    const shown = elShownStores();
+    const rest = shown.length ? Math.floor(66 / shown.length) : 66;
+    cg.innerHTML = '<col style="width:34%">' +
+      shown.map(() => '<col style="width:' + rest + '%">').join('');
+    hr.innerHTML = '<th>' + esc(cuT('Product', '\u5546\u54c1')) + '</th>' +
+      shown.map(st => '<th>' + esc(elStoreName(st)) + '</th>').join('');
+  }
+
   function elRenderProducts() {
     const tbody = document.getElementById('el-tbody');
     if (!tbody) return;
-    const th = document.getElementById('el-th-stores');
-    if (th) th.textContent = cuT('Sync per store', '\u5404\u95e8\u5e97\u540c\u6b65');
 
     // Text match covers the SKU and the mapped listing name too — the two
     // things you actually have in front of you when hunting a row.
@@ -427,81 +444,73 @@
     if (cnt) cnt.textContent = String(rows.length);
     elRenderHead();
     elRenderChips();
+    elRenderTableHead();
 
+    const shown = elShownStores();
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="3" class="el-empty">' + cuT('Nothing here.', '\u6682\u65e0\u5546\u54c1\u3002') + '</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="' + (shown.length + 1) + '" class="el-empty">' +
+        cuT('Nothing here.', '\u6682\u65e0\u5546\u54c1\u3002') + '</td></tr>';
       return;
     }
 
     tbody.innerHTML = rows.map(p => {
       const base = cuT(p.name_en || p.name_cn, p.name_cn || p.name_en);
       const alt  = cuT(p.name_cn || '', p.name_en || '');
-      // Size variants are separate products sharing a variant_group_id, so two
-      // sizes arrive as two rows with the SAME name — the label is what tells
-      // them apart.
-      const nameCell = '<div class="el-pcell"><div>' +
-        '<div class="el-pname">' + esc(base) +
+      // SKU rides in the product cell as a chip, as on Meituan — it is a fact
+      // about the product, not a column's worth of page.
+      const nameCell = '<div class="el-pname">' + esc(base) +
           (p.variant_label ? ' <span class="vl">\u00b7 ' + esc(p.variant_label) + '</span>' : '') + '</div>' +
         (alt && alt !== base ? '<div class="el-pmeta">' + esc(alt) + '</div>' : '') +
-        '</div></div>';
+        (p.sku ? '<span class="el-psku">' + esc(p.sku) + '</span>' : '');
 
-      const stores = _stores
-        .filter(st => !_elStore || st.code === _elStore)
-        .map(st => {
-          const m = (p.stores || {})[st.code];
-          const on = !!(m && Number(m.sync_enabled) === 1);
-          const mappedName = (m && m.eleme_name) || '';
-          const specs = elSpecsFor(st.code, mappedName);
-          const chosen = String((m && m.spec_id) || '');
-          // A listing with several sizes and none picked cannot be pushed
-          // accurately — the driver falls back to a rule that writes a made-up
-          // number to every size. That is the one state worth colouring.
-          const needsSize = on && specs.length > 1 && !chosen;
-          const pill = !mappedName ? '<span class="el-pill att"><span class="d"></span>' + cuT('Add name', '\u5f85\u586b\u540d\u79f0') + '</span>'
-            : needsSize ? '<span class="el-pill att"><span class="d"></span>' + cuT('Pick a size', '\u5f85\u9009\u89c4\u683c') + '</span>'
-            : on ? '<span class="el-pill ok"><span class="d"></span>' + cuT('Synced', '\u5df2\u540c\u6b65') + '</span>'
-            : '<span class="el-pill off"><span class="d"></span>' + cuT('Sync off', '\u5df2\u5173\u95ed') + '</span>';
-          const last = (m && m.last_pushed_at)
-            ? '<div class="el-pmeta">' + esc(cuT('pushed ', '\u63a8\u9001\u4e8e ') + (fmtAgo(m.last_pushed_at) || '')) + '</div>'
-            : '';
-          // The name field is an autocomplete against the real catalogue, not
-          // free text: a hand-typed name once used a curly apostrophe and
-          // silently failed every push.
-          return '<div class="el-cellstore">' +
-            '<div class="el-cellhd">' + pill +
-              '<span class="nm">' + esc(elStoreName(st)) + '</span>' +
-              '<label class="toggle-label" title="' + esc(cuT('Sync on / off', '\u540c\u6b65\u5f00\u5173')) + '">' +
-                '<input type="checkbox" ' + (on ? 'checked' : '') +
-                ' onchange="elToggleSync(' + p.id + ', ' + st.id + ", '" + esc(st.code) + "', this.checked)\"></label>" +
-            '</div>' +
-            '<div class="el-fieldrow">' +
-            '<input type="text" class="inp el-nameinp" data-no-i18n' +
-              ' list="el-catalogue-dl-' + esc(st.code) + '"' +
-              ' placeholder="' + esc(cuT('Eleme listing name', '\u9976\u4e86\u4e48\u5546\u54c1\u540d')) + '"' +
-              ' value="' + esc(mappedName) + '"' +
-              ' onchange="elSetElemeName(' + p.id + ', ' + st.id + ", '" + esc(st.code) + "', this.value)\">" +
-            (specs.length > 1
-              ? '<select data-no-i18n class="inp el-size' + (needsSize ? ' warn' : '') + '"' +
-                ' title="' + esc(cuT('Which size inside this listing', '\u5bf9\u5e94\u8be5\u5546\u54c1\u7684\u54ea\u4e2a\u89c4\u683c')) + '"' +
-                ' onchange="elSetElemeSpec(' + p.id + ', ' + st.id + ", '" + esc(st.code) + "', this.value, this.options[this.selectedIndex].dataset.label || '')\">" +
-                '<option value="" data-label="">' + esc(cuT('Pick a size\u2026', '\u9009\u62e9\u89c4\u683c\u2026')) + '</option>' +
-                specs.map((sp, i) => {
-                  const lbl = elSpecLabel(sp, i);
-                  return '<option value="' + esc(sp.specGlobalId) + '" data-label="' + esc(sp.name || lbl) + '"' +
-                    (String(sp.specGlobalId) === chosen ? ' selected' : '') + '>' + esc(lbl) + '</option>';
-                }).join('') +
-                '</select>'
-              : '') +
-            '</div>' +
-            last +
-          '</div>';
-        }).join('');
+      const cells = shown.map(st => {
+        const m = (p.stores || {})[st.code];
+        const on = !!(m && Number(m.sync_enabled) === 1);
+        const mappedName = (m && m.eleme_name) || '';
+        const specs = elSpecsFor(st.code, mappedName);
+        const chosen = String((m && m.spec_id) || '');
+        // A listing with several sizes and none picked cannot be pushed
+        // accurately — the driver falls back to a rule that writes a made-up
+        // number to every size. That is the one state worth colouring.
+        const needsSize = on && specs.length > 1 && !chosen;
+        const pill = !mappedName ? '<span class="el-pill att"><span class="d"></span>' + cuT('Add name', '\u5f85\u586b\u540d\u79f0') + '</span>'
+          : needsSize ? '<span class="el-pill att"><span class="d"></span>' + cuT('Pick a size', '\u5f85\u9009\u89c4\u683c') + '</span>'
+          : on ? '<span class="el-pill ok"><span class="d"></span>' + cuT('Synced', '\u5df2\u540c\u6b65') + '</span>'
+          : '<span class="el-pill off"><span class="d"></span>' + cuT('Sync off', '\u5df2\u5173\u95ed') + '</span>';
+        const last = (m && m.last_pushed_at)
+          ? '<div class="el-pmeta">' + esc(cuT('pushed ', '\u63a8\u9001\u4e8e ') + (fmtAgo(m.last_pushed_at) || '')) + '</div>'
+          : '';
+        // The name field is an autocomplete against the real catalogue, not
+        // free text: a hand-typed name once used a curly apostrophe and
+        // silently failed every push.
+        return '<td>' +
+          '<div class="el-cellhd">' + pill +
+            '<label class="toggle-label" title="' + esc(cuT('Sync on / off', '\u540c\u6b65\u5f00\u5173')) + '">' +
+              '<input type="checkbox" ' + (on ? 'checked' : '') +
+              ' onchange="elToggleSync(' + p.id + ', ' + st.id + ", '" + esc(st.code) + "', this.checked)\"></label>" +
+          '</div>' +
+          '<input type="text" class="inp el-nameinp" data-no-i18n' +
+            ' list="el-catalogue-dl-' + esc(st.code) + '"' +
+            ' placeholder="' + esc(cuT('Eleme listing name', '\u9976\u4e86\u4e48\u5546\u54c1\u540d')) + '"' +
+            ' value="' + esc(mappedName) + '"' +
+            ' onchange="elSetElemeName(' + p.id + ', ' + st.id + ", '" + esc(st.code) + "', this.value)\">" +
+          (specs.length > 1
+            ? '<select data-no-i18n class="inp el-size' + (needsSize ? ' warn' : '') + '"' +
+              ' title="' + esc(cuT('Which size inside this listing', '\u5bf9\u5e94\u8be5\u5546\u54c1\u7684\u54ea\u4e2a\u89c4\u683c')) + '"' +
+              ' onchange="elSetElemeSpec(' + p.id + ', ' + st.id + ", '" + esc(st.code) + "', this.value, this.options[this.selectedIndex].dataset.label || '')\">" +
+              '<option value="" data-label="">' + esc(cuT('Pick a size\u2026', '\u9009\u62e9\u89c4\u683c\u2026')) + '</option>' +
+              specs.map((sp, i) => {
+                const lbl = elSpecLabel(sp, i);
+                return '<option value="' + esc(sp.specGlobalId) + '" data-label="' + esc(sp.name || lbl) + '"' +
+                  (String(sp.specGlobalId) === chosen ? ' selected' : '') + '>' + esc(lbl) + '</option>';
+              }).join('') +
+              '</select>'
+            : '') +
+          last +
+        '</td>';
+      }).join('');
 
-      return '<tr>' +
-        '<td>' + nameCell + '</td>' +
-        '<td>' + (p.sku ? '<span class="el-psku">' + esc(p.sku) + '</span>' : '') + '</td>' +
-        '<td>' + (stores || '<span class="el-pill off">\u2014</span>') + '</td>' +
-      '</tr>';
+      return '<tr><td>' + nameCell + '</td>' + cells + '</tr>';
     }).join('');
   }
 

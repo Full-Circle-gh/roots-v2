@@ -11275,16 +11275,12 @@
 
       <div class="el-tablewrap">
         <table id="el-products-table">
-          <!-- The sync column carries a field, a size picker and a switch per
-               store; SKU carries a short code. Weight them accordingly. -->
-          <colgroup><col style="width:26%"><col style="width:10%"><col style="width:64%"></colgroup>
-          <thead>
-            <tr>
-              <th>Product · 商品</th>
-              <th>SKU · 货号</th>
-              <th id="el-th-stores">Sync per store · 各门店同步</th>
-            </tr>
-          </thead>
+          <!-- colgroup + head are rendered from the store list (elRenderTableHead)
+               so the table follows however many stores are active. Plain
+               percentages only: under table-layout:fixed a math function on a
+               col width is silently ignored and the column goes auto. -->
+          <colgroup id="el-colgroup"></colgroup>
+          <thead><tr id="el-headrow"></tr></thead>
           <tbody id="el-tbody" data-no-i18n></tbody>
         </table>
       </div>
