@@ -1,5 +1,5 @@
 {
-  "name": "Quick Stock · 库存",
+  "name": "Quick stock · 库存",
   "short_name": "Stock",
   "id": "/stock",
   "description": "Fast mobile stock counts for shop staff",
@@ -8,8 +8,8 @@
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui", "browser"],
   "orientation": "portrait",
-  "background_color": "#16161a",
-  "theme_color": "#16161a",
+  "background_color": "#FBF9F4",
+  "theme_color": "#FBF9F4",
   "lang": "en",
   "icons": [
     { "src": "/stock-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },

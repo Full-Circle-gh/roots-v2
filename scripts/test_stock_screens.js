@@ -1,0 +1,276 @@
+#!/usr/bin/env node
+/**
+ * Quick stock — every state rendered headless, plus the Tacet rules that a
+ * render cannot see.
+ *
+ * Why this exists: public/stock.html is one file that paints by rebuilding its
+ * own innerHTML, and it is the surface with the fewest human eyes on it — shop
+ * staff use it on a phone, in a kitchen, and never file a bug. So the check is
+ * "did anything throw, and does each state say its own sentence", across every
+ * screen, both languages, both themes and both modes.
+ *
+ * The static passes guard the design rules that survive a render: the dead
+ * palette, uppercase, half-pixel sizes, weights above 500, off-scale sizes and
+ * radii, a Dusk fill (this page's Dusk budget is zero — every write here is the
+ * operator counting their own shelf), a bilingual pair whose Chinese half is
+ * English, a native dialog, and a failure sent out as a toast.
+ *
+ * Needs a Chromium. Set CHROME_BIN, or let it find Playwright's.
+ */
+'use strict';
+
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { execFileSync } = require('child_process');
+
+const APP = path.join(__dirname, '..', 'public', 'stock.html');
+const src = fs.readFileSync(APP, 'utf8');
+
+const CSS = (src.match(/<style>([\s\S]*?)<\/style>/) || [])[1] || '';
+// Comments explain the rules and quote the values they forbid, so every check
+// below reads the declarations, not the prose around them.
+const CSS_CODE = CSS.replace(/\/\*[\s\S]*?\*\//g, ' ');
+const SRC_CODE = src.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/<!--[\s\S]*?-->/g, ' ');
+const RAW_JS = (src.match(/<script>\n\(function[\s\S]*?<\/script>/) || [])[0] || '';
+const JS = RAW_JS.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/(^|[^:])\/\/[^\n]*/g, '$1 ');
+
+const problems = [];
+function fail(msg) { problems.push(msg); }
+
+// ── The dead palette. Rebrand hygiene (§1.16): the lime accent and the
+// charcoal surfaces are the previous brand, and one survivor re-seeds it.
+{
+  const dead = ['#ccd900', '#dde858', '#16161a', '#1f1f24', '#efe9da', '#fbf8ee',
+    '--accent', '--bg-app', '--bg-pane', '--bg-elev', '--accent-ink', '--line-strong'];
+  for (const d of dead) if (SRC_CODE.includes(d)) fail(`dead token "${d}" still in the file`);
+}
+
+// ── §1.6: there is no licensed uppercase in Tacet.
+if (/text-transform\s*:\s*uppercase/i.test(CSS_CODE)) fail('text-transform: uppercase');
+
+// ── §1.3: no half-pixels, no weight above 500, no Fraunces in product UI.
+for (const m of CSS_CODE.matchAll(/(\d*\.\d+)px/g)) fail(`half-pixel size ${m[1]}px`);
+for (const m of CSS_CODE.matchAll(/font-weight\s*:\s*([a-z0-9]+)/g)) {
+  if (!['400', '500', 'inherit'].includes(m[1])) fail(`font-weight ${m[1]} — Tacet has 400 and 500`);
+}
+if (/Fraunces/i.test(SRC_CODE)) fail('Fraunces appears in product UI');
+
+// ── §1.3: six type steps, no others.
+{
+  const scale = new Set(['13px', '15px', '18px', '24px', '30px']);
+  for (const m of CSS_CODE.matchAll(/font-size\s*:\s*([\d.]+px)/g)) {
+    if (!scale.has(m[1])) fail(`off-scale font-size ${m[1]}`);
+  }
+}
+
+// ── §1.4: 8px controls, 14px cards, pills full. Nothing else.
+{
+  const ok = new Set(['0', '8px', '14px', '999px', '50%']);
+  for (const m of CSS_CODE.matchAll(/border-radius\s*:\s*([^;}]+)/g)) {
+    for (const v of m[1].trim().split(/\s+/)) if (!ok.has(v)) fail(`off-system radius "${v}"`);
+  }
+}
+
+// ── §1.8: this page spends no Dusk. Dusk means tacet acted, and nothing on
+// this page is tacet acting — the focus ring (exempt, rule 3) and the mark's
+// own dot are the only places the colour is allowed to appear.
+{
+  const fills = [...CSS_CODE.matchAll(/background\s*:\s*var\(--dusk\)/g)].length;
+  if (fills) fail(`${fills} Dusk fill(s) — Quick stock's Dusk budget is zero`);
+  const duskTint = [...CSS_CODE.matchAll(/background\s*:\s*var\(--dusk-tint\)/g)].length;
+  if (duskTint > 1) fail(`${duskTint} Dusk-tint surfaces — only the avatar earns one`);
+}
+
+// ── §1.11: both halves of every pair, or half the staff read English.
+{
+  const cjk = (s) => /[一-鿿]/.test(s);
+  for (const m of JS.matchAll(/(^|[^\w$.])t\(\s*'((?:[^'\\]|\\.)*)'\s*,\s*'((?:[^'\\]|\\.)*)'\s*\)/g)) {
+    const en = m[2], zh = m[3];
+    if (cjk(zh)) continue;
+    if (/[A-Za-z]{3}/.test(zh) && zh === en) fail(`bilingual pair "${en}" has no Chinese`);
+    else if (/[A-Za-z]{4,}\s+[A-Za-z]{3,}/.test(zh)) fail(`bilingual pair "${en}" has no Chinese`);
+  }
+}
+
+// ── A native dialog is not a Tacet surface: it is uppercase-buttoned system
+// chrome the product cannot style, quiet or translate. Decisions are made in
+// the page.
+for (const d of ['window.confirm(', 'window.alert(', 'window.prompt(']) {
+  if (JS.includes(d)) fail(`${d} — a decision belongs in the page, not in a system dialog`);
+}
+
+// ── §1.12: toasts confirm, they never report a failure. A failed write renders
+// where the operator is looking and stays until they act on it.
+if (/toast\([^)]*,\s*'err'/.test(JS)) fail("toast(msg, 'err') — a failure must not leave in a toast");
+if (/function toast\s*\(\s*msg\s*,/.test(JS)) fail('toast() still takes a kind argument');
+
+// ── A1: a Worklist updates itself — no refresh button, no live indicator.
+if (/id="refreshBtn"/.test(src)) fail('a refresh button — a Worklist keeps itself current (A1)');
+
+// ── The mark: §8a holds the stroke at 1.6px optically. Scaled from the
+// viewBox it resolves to 0.64px and the mark quietly disappears.
+if (!/vector-effect:non-scaling-stroke;stroke-width:1\.6/.test(CSS_CODE)) {
+  fail('the topbar mark is not held at a 1.6px optical stroke (§8a)');
+}
+
+if (problems.length) {
+  for (const p of problems) console.error(`FAIL static — ${p}`);
+  console.error(`\n${problems.length} design-rule violation${problems.length === 1 ? '' : 's'}.`);
+  process.exit(1);
+}
+
+// ── Render pass ─────────────────────────────────────────────────────────
+function findChrome() {
+  if (process.env.CHROME_BIN) return process.env.CHROME_BIN;
+  try {
+    const p = require('playwright').chromium.executablePath();
+    if (p && fs.existsSync(p)) return p;
+  } catch (e) { /* playwright not installed here */ }
+  const guesses = ['/opt/pw-browsers/chromium', '/usr/bin/chromium', '/usr/bin/chromium-browser',
+    '/usr/bin/google-chrome', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'];
+  for (const g of guesses) { if (fs.existsSync(g)) return g; }
+  const pw = '/opt/pw-browsers';
+  if (fs.existsSync(pw)) {
+    for (const d of fs.readdirSync(pw)) {
+      const p = path.join(pw, d, 'chrome-linux', 'chrome');
+      if (fs.existsSync(p)) return p;
+    }
+  }
+  return null;
+}
+
+const CTX = {
+  enabled: true, mode: 'recount',
+  user: { name: 'Asher', full_access: true },
+  stores: [{ id: 1, name_en: 'Tianhe', name_cn: '天河店', code: 'TH' }],
+};
+const TWO_STORES = { stores: [CTX.stores[0], { id: 2, name_en: 'Panyu', name_cn: '番禺店', code: 'PY' }] };
+const ROWS = [
+  { product_id: 7, name_en: 'Hummus Asli', name_cn: '鹰嘴豆泥', sku: '1-10', physical_qty: 11, restock_target: 5 },
+  { product_id: 8, name_en: 'Turkish Tomato Salad', name_cn: '土耳其番茄沙拉', sku: '1-15', physical_qty: 0, restock_target: 5 },
+  { product_id: 9, name_en: 'Arugula-Basil Pesto', name_cn: '芝麻菜青酱', sku: '1-20', physical_qty: 3, restock_target: 6 },
+];
+const STOCKED = [ROWS[0]];
+
+// The page is the whole app: it self-authenticates and reads two endpoints.
+// The stub answers both, and can fail either one — half the states on this
+// screen only exist when the network says no.
+function stub(o) {
+  return '<script>\n' +
+    'window.__e=[];\n' +
+    'addEventListener("error",function(e){window.__e.push(e.message)},true);\n' +
+    'addEventListener("unhandledrejection",function(e){window.__e.push("rejection: "+((e.reason&&e.reason.message)||e.reason))});\n' +
+    'var CTX=' + JSON.stringify(o.ctx) + ',STOCK=' + JSON.stringify(o.rows) + ',FAIL=' + JSON.stringify(o.fail || {}) + ';\n' +
+    'window.fetch=function(url){url=String(url);var body;\n' +
+    '  if(url.indexOf("/quick-stock/context")>-1) body=FAIL.context?{success:false,error:"context down"}:{success:true,data:CTX};\n' +
+    '  else if(/\\/stock\\/\\d+$/.test(url)) body=FAIL.write?{success:false,error:"write down"}:{success:true,data:{}};\n' +
+    '  else if(/\\/stock$/.test(url)) body=FAIL.stock?{success:false,error:"stock down"}:{success:true,data:STOCK};\n' +
+    '  else body={success:true,data:{}};\n' +
+    '  return Promise.resolve({status:200,json:function(){return Promise.resolve(body)}});};\n' +
+    '</scr' + 'ipt>';
+}
+
+const CASES = {
+  'list': { rows: ROWS, expect: ['Quick stock', 'Sold out', 'Running low', 'Hummus Asli'],
+    absent: ['In stock'] },                       // a well-stocked row wears no pill (§1.10)
+  'list-cn': { rows: ROWS, pre: "localStorage.setItem('roots-admin-lang','cn');", expect: ['快速库存', '售罄', '库存偏低'] },
+  'list-dark': { rows: ROWS, pre: "localStorage.setItem('roots_theme','dark');", expect: ['Hummus Asli'],
+    theme: 'dark' },
+  'single-store-hides-picker': { rows: ROWS, expect: ['Quick stock'], absent: ['Tianhe'] },
+  'two-stores-shows-picker': { rows: ROWS, ctxPatch: TWO_STORES, expect: ['Tianhe'] },
+  'add-mode': { rows: ROWS, ctxPatch: { mode: 'add' }, expect: ['Add stock', '+0'], absent: ['Sold out'] },
+  'empty': { rows: [], expect: ['Nothing to count here yet.'] },
+  'no-results': { rows: ROWS, expect: ['No products match', 'Clear search'],
+    js: "var q=document.getElementById('q');q.value='zzz';q.dispatchEvent(new Event('input'));" },
+  'filter-out-none': { rows: STOCKED, expect: ['No products are sold out.', 'Show all'],
+    js: "document.querySelector('.chip[data-filter=\"out\"]').click();" },
+  'load-error': { rows: ROWS, fail: { stock: true }, expect: ['The shelf didn’t load.', 'Try again'] },
+  'context-error': { rows: ROWS, fail: { context: true }, expect: ['That didn’t load'] },
+  'off': { rows: ROWS, ctxPatch: { enabled: false }, expect: ['Quick stock is off'] },
+  'nostore': { rows: ROWS, ctxPatch: { stores: [] }, expect: ['No store assigned'] },
+  'keypad': { rows: ROWS, expect: ['Set count', 'Save', 'Hummus Asli'], opens: 'kpSheet',
+    js: "document.querySelector('.row .qty').click();" },
+  'store-sheet': { rows: ROWS, ctxPatch: TWO_STORES, expect: ['Choose store', 'Panyu'], opens: 'storeSheet',
+    js: "document.getElementById('storeBtn').click();" },
+  'account-sheet': { rows: ROWS, expect: ['Signed in as Asher', 'Language', 'Appearance', 'Sign out'],
+    absent: ['Cancel'],                            // the confirm is asked for, not standing open
+    opens: 'acctSheet', js: "document.getElementById('acctBtn').click();" },
+  'sign-out-confirm': { rows: ROWS, expect: ['Sign out', 'Cancel'], opens: 'acctSheet',
+    js: "document.getElementById('acctBtn').click();document.getElementById('signOutBtn').click();" },
+  'write-in-flight': { rows: ROWS, expect: ['Saving'],
+    js: "document.querySelector('.row .plus').click();" },
+  'write-error': { rows: ROWS, fail: { write: true }, wait: 1600, expect: ['Didn’t save', 'Retry'],
+    js: "document.querySelector('.row .plus').click();" },
+  'add-error': { rows: ROWS, ctxPatch: { mode: 'add' }, fail: { write: true }, wait: 1800,
+    expect: ['Didn’t add', 'Retry'], js: "document.querySelector('.row .plus').click();" },
+};
+
+function main() {
+  const chrome = findChrome();
+  if (!chrome) {
+    console.log('SKIP — no Chromium found. Set CHROME_BIN to run the render pass.');
+    process.exit(0);
+  }
+  // No network in a test runner: the font stylesheet would hold the page open
+  // until it times out.
+  const base = src.replace(/<link rel="stylesheet" media="print"[\s\S]*?>\n/, '');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'stock-screens-'));
+  const failures = [];
+
+  for (const [name, c] of Object.entries(CASES)) {
+    const ctx = Object.assign({}, CTX, c.ctxPatch || {});
+    const wait = c.wait || 400;
+    // Assertions read what the STAFFER sees — innerText, not the DOM dump: the
+    // dump carries every comment and every sheet parked off-screen, so a
+    // substring check against it passes on prose and on states nobody opened.
+    const probe = '<script>addEventListener("load",function(){setTimeout(function(){' +
+      'try{' + (c.js || '') + '}catch(e){window.__e.push("case: "+e.message)}' +
+      'setTimeout(function(){var n=document.querySelectorAll("#app *").length;' +
+      'var seen=(document.getElementById("app").innerText||"").replace(/\\s+/g," ");' +
+      'var sheets=[].slice.call(document.querySelectorAll(".sheet.show"));' +
+      'seen+=" "+sheets.map(function(s){return s.innerText.replace(/\\s+/g," ")}).join(" ");' +
+      'document.body.setAttribute("data-seen",seen);' +
+      'document.body.setAttribute("data-open",sheets.map(function(s){return s.id}).join(","));' +
+      'document.title=window.__e.length?("ERR "+window.__e.join(" | ")):("OK "+n);},' + wait + ');},80)});</scr' + 'ipt>';
+    // The preference script goes in the HEAD, ahead of the page's own theme and
+    // language boot — set after it, a preference is one the page has already read.
+    const pre = c.pre ? '<script>' + c.pre + '</scr' + 'ipt>' : '';
+    const html = base
+      .replace('<head>', '<head>' + pre)
+      .replace('<body>', '<body>' + stub({ ctx: ctx, rows: c.rows, fail: c.fail }))
+      .replace('</body>', probe + '</body>');
+    const file = path.join(dir, name.replace(/[^a-z0-9]/gi, '_') + '.html');
+    fs.writeFileSync(file, html);
+    let out = '';
+    try {
+      out = execFileSync(chrome, ['--headless=new', '--disable-gpu', '--no-sandbox',
+        '--window-size=402,874', '--virtual-time-budget=6000', '--dump-dom', 'file://' + file],
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 40000 });
+    } catch (e) { failures.push([name, 'chrome failed: ' + e.message]); continue; }
+    const title = (out.match(/<title>([^<]*)<\/title>/) || [])[1] || 'no title';
+    if (!title.startsWith('OK')) { failures.push([name, title]); continue; }
+    const nodes = Number((title.match(/^OK (\d+)/) || [])[1] || 0);
+    if (nodes < 12) { failures.push([name, `painted only ${nodes} nodes`]); continue; }
+    const seen = (out.match(/data-seen="([^"]*)"/) || [])[1] || '';
+    const open = (out.match(/data-open="([^"]*)"/) || [])[1] || '';
+    for (const want of c.expect || []) {
+      if (!seen.includes(want)) failures.push([name, `never says “${want}”`]);
+    }
+    for (const no of c.absent || []) {
+      if (seen.includes(no)) failures.push([name, `says “${no}” and should not`]);
+    }
+    if (c.opens && open !== c.opens) failures.push([name, `opened “${open || 'nothing'}”, expected “${c.opens}”`]);
+    if (c.theme && !out.includes(`data-theme="${c.theme}"`)) failures.push([name, `did not render in the ${c.theme} theme`]);
+  }
+
+  fs.rmSync(dir, { recursive: true, force: true });
+  if (failures.length) {
+    for (const [name, why] of failures) console.error(`FAIL ${name} — ${why}`);
+    console.error(`\n${failures.length} of ${Object.keys(CASES).length} screens failed.`);
+    process.exit(1);
+  }
+  console.log(`ok — ${Object.keys(CASES).length} screens rendered, no uncaught errors; design rules hold.`);
+}
+
+main();

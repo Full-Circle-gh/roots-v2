@@ -1,12 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="112" fill="#16161a"/>
-  <g fill="none" stroke="#ccd900" stroke-width="26" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M120 168 256 96l136 72-136 72-136-72Z"/>
-    <path d="M120 168v176l136 72 136-72V168"/>
-    <path d="M256 240v176"/>
-  </g>
-  <g stroke="#16161a" stroke-width="26" stroke-linecap="round">
-    <path d="M196 318h120" stroke="#ccd900"/>
-    <path d="M256 258v120" stroke="#ccd900"/>
+  <!-- The Tacet app icon: Ink rounded square (radius ≈ 22% of width), Paper
+       wave, Dusk dot — docs/tacet-design-system.md §8. The path is the mark's
+       own, used verbatim; only the stroke is set optically for this size (§8a).
+       The decay must stay visible: big swings left, a dead-flat line right. -->
+  <rect width="512" height="512" rx="112" fill="#111A2B"/>
+  <g transform="translate(61 190) scale(1.2)">
+    <path d="M20 55 C30 15, 40 95, 50 55 C59 22, 68 88, 77 55 C85 30, 93 80, 101 55
+             C109 38, 117 72, 125 55 C133 44, 141 66, 149 55 C160 50, 171 60, 182 55
+             C215 55, 260 55, 305 55"
+          fill="none" stroke="#FBF9F4" stroke-width="12" stroke-linecap="round"/>
+    <circle cx="305" cy="55" r="17" fill="#6E67AF"/>
   </g>
 </svg>
