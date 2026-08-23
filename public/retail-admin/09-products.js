@@ -71,13 +71,14 @@ async function paSaveLowStockDefault(val) {
     if (st) st.textContent = cuT('Save failed', '保存失败');
   }
 }
-// Product layout: 'grid' (rich cards) | 'compact' (denser) | 'list' (one row
-// each). Separate from the "View" display-tweaks popover; persisted per-browser.
-let PA_VIEW = (() => { try { const v = localStorage.getItem('pa-view'); return (v === 'grid' || v === 'compact' || v === 'list') ? v : 'list'; } catch { return 'list'; } })();
+// Product layout: 'grid' (rich cards) | 'list' (the table). Separate from the
+// "View" display-tweaks popover; persisted per-browser. 'compact' is retired —
+// its button was hidden, so the mode could only be reached by an old stored
+// value; anyone still carrying one lands on 'list'.
+let PA_VIEW = (() => { try { const v = localStorage.getItem('pa-view'); return (v === 'grid' || v === 'list') ? v : 'list'; } catch { return 'list'; } })();
 function paSetView(v) {
-  // Docked editor locks the list to the split layout — ignore grid/compact taps.
-  if (_paEditorOpen && v !== 'list') return;
-  PA_VIEW = (v === 'compact' || v === 'list') ? v : 'grid';
+  // The editor is a drawer over the list now, so no layout is locked by it.
+  PA_VIEW = (v === 'list') ? 'list' : 'grid';
   try { localStorage.setItem('pa-view', PA_VIEW); } catch {}
   PA_PAGE = 1;
   paRender();
@@ -96,10 +97,22 @@ let PA_STATUS = 'all';
 // filtered grid share one source.
 let PA_HI = null;
 const PA_HI_SETS = { dead: new Set(), promo: new Set() };
-function paSetStatus(v) {
-  PA_STATUS = (PA_STATUS === v) ? 'all' : v;   // click the active tile to clear
+// Status has two faces — the pulse tiles and the filter row's dropdown — and
+// one value. A tile toggles (clicking the active one clears back to 'all');
+// the dropdown always sets exactly what was picked, so it passes `false` to
+// opt out of the toggle. Whichever moved, both are repainted from PA_STATUS.
+function paSetStatus(v, toggle) {
+  PA_STATUS = (toggle !== false && PA_STATUS === v) ? 'all' : v;
   PA_PAGE = 1;
+  paSyncStatusFilter();
   paRender();
+}
+function paSyncStatusFilter() {
+  const sel = document.getElementById('pa-statusfilter');
+  if (!sel) return;
+  // A status with no option of its own (nothing today, but the tiles and the
+  // dashboard deep-links can both set one) shows as All rather than blank.
+  sel.value = [...sel.options].some(o => o.value === PA_STATUS) ? PA_STATUS : 'all';
 }
 // Stock to judge OOS / Low against, honouring the "Stock for" switcher: when a
 // single store is selected (and its per-store map has loaded) use that store's
@@ -221,219 +234,11 @@ function _paPagerHtml(total, pages, start, shown, showSizeSel) {
       </div>
     </div>`;
 }
-
-// Block schema. Adding a new block type requires:
-//   1) An entry here (label + factory for empty data)
-//   2) Editor HTML branch in paRenderSelectedEditor()
-//   3) Empty-check in paBlocksCollect()
-//   4) Renderer in miniapp/components/product-blocks/*
-// Block-type registry — full Roots PDP v1 system. Visual rendering lives
-// in miniapp/components/product-blocks/* — keep this list in lock-step.
-const PA_BLOCK_TYPES = [
-  {
-    type: 'spec_strip', glyph: '📋',
-    label_en: '📋 Spec Strip — three meta facts',
-    label_cn: '📋 规格条 — 三项基础信息',
-    name_en: 'Spec Strip', name_cn: '规格条',
-    make: () => ({ cells: [
-      { k_en: 'Type',   k_cn: '类型', v_en: '', v_cn: '' },
-      { k_en: 'Net Wt', k_cn: '净重', v_en: '', v_cn: '' },
-      { k_en: 'Origin', k_cn: '产地', v_en: '', v_cn: '' },
-    ] }),
-  },
-  {
-    type: 'hero_intro', glyph: '📖',
-    label_en: '📖 Hero Intro — editorial paragraph + pull-out phrase',
-    label_cn: '📖 开篇引言 — 大段编辑文字 + 点睛短句',
-    name_en: 'Hero Intro', name_cn: '开篇引言',
-    make: () => ({ kicker_en: '', kicker_cn: '', body_en: '', body_cn: '', highlight_en: '', highlight_cn: '' }),
-  },
-  {
-    type: 'why', glyph: '✓',
-    label_en: '✓ Why People Choose It — 3-5 numbered claims',
-    label_cn: '✓ 为什么选它 — 3-5 条编号短句',
-    name_en: 'Why People Choose It', name_cn: '为什么选它',
-    make: () => ({ rows: [ { claim_en: '', claim_cn: '' }, { claim_en: '', claim_cn: '' }, { claim_en: '', claim_cn: '' } ] }),
-  },
-  {
-    type: 'ingredients_chips', glyph: '🌿',
-    label_en: '🌿 Ingredients · Chip Cloud — pills with optional % + hero',
-    label_cn: '🌿 配料 · 云标签 — 圆角标签,可选百分比/主料',
-    name_en: 'Ingredients · Chips', name_cn: '配料 · 云标签',
-    make: () => ({ items: [ { name_en: '', name_cn: '', pct: '', lead: false } ] }),
-  },
-  {
-    type: 'ingredients_line', glyph: '🌱',
-    label_en: '🌱 Ingredients · Editorial Line — typographic run',
-    label_cn: '🌱 配料 · 编辑式排版 — 大字一行体',
-    name_en: 'Ingredients · Line', name_cn: '配料 · 编辑式',
-    make: () => ({ items: [ { name_en: '', name_cn: '', pct: '', lead: false } ] }),
-  },
-  {
-    type: 'allergen_card', glyph: '⚠️',
-    label_en: '⚠️ Allergen Card — Contains / May contain',
-    label_cn: '⚠️ 过敏原卡 — 含有 / 可能含有微量',
-    name_en: 'Allergen Card', name_cn: '过敏原卡',
-    make: () => ({ contains_en: '', contains_cn: '', may_contain_en: '', may_contain_cn: '' }),
-  },
-  {
-    type: 'how_to_use', glyph: '🍽',
-    label_en: '🍽 How To Use Grid — 6 or 8 usage moments',
-    label_cn: '🍽 用法宫格 — 6 或 8 种用法',
-    name_en: 'How To Use', name_cn: '用法宫格',
-    make: () => ({ tiles: Array.from({ length: 6 }, () => (
-      { icon: '', label_en: '', label_cn: '', sub_en: '', sub_cn: '' }
-    )) }),
-  },
-  {
-    type: 'storage_box', glyph: '❄',
-    label_en: '❄ Storage Box — two paired condition cards + note',
-    label_cn: '❄ 储存条件 — 双卡片 + 备注',
-    name_en: 'Storage Box', name_cn: '储存条件',
-    make: () => ({
-      left:  { icon: '🌡', head_en: 'Unopened',      head_cn: '未开封', num_en: 'Cool & dry',  num_cn: '阴凉干燥', unit_en: 'Store away from heat and moisture',                    unit_cn: '远离高温和潮湿',           alt: false },
-      right: { icon: '❄', head_en: 'After opening', head_cn: '开封后', num_en: 'Refrigerate', num_cn: '冷藏',     unit_en: 'Stir well, seal tightly, refrigerate for best texture', unit_cn: '搅拌均匀，密封冷藏以保持最佳口感', alt: true  },
-      note_en: 'Natural oil separation may occur — this is normal. Stir before each use.',
-      note_cn: '天然油脂分离属正常现象,每次使用前请搅拌。',
-    }),
-  },
-  {
-    type: 'notes_callout', glyph: '✱',
-    label_en: '✱ Notes Callout — italic fine-print band',
-    label_cn: '✱ 备注说明 — 斜体小字提示',
-    name_en: 'Notes Callout', name_cn: '备注说明',
-    make: () => ({ text_en: '', text_cn: '' }),
-  },
-  {
-    type: 'big_stat', glyph: '✨',
-    label_en: '✨ Big Stat — one huge number on a brand slab',
-    label_cn: '✨ 大数字 — 醒目数字 + 短宣言',
-    name_en: 'Big Stat', name_cn: '大数字',
-    // bg: lime / carrot / pink / corn / sky / lotus / papaya
-    make: () => ({ stat: '', what_en: '', what_cn: '', claim_en: '', claim_cn: '', bg: 'lime' }),
-  },
-  {
-    type: 'pull_quote', glyph: '❝',
-    label_en: '❝ Pull Quote — editorial sourcing note',
-    label_cn: '❝ 引文 — 编辑式产地/来源短语',
-    name_en: 'Pull Quote', name_cn: '引文',
-    make: () => ({ text_en: '', text_cn: '', who_en: '', who_cn: '' }),
-  },
-];
-
-// ─── IP characters — Roots-brand line-art mascots used in the colophon.
-// The mini-app auto-picks a character by product category if none is
-// set; the office can override per product in the modal. Keep in sync
-// with the files in miniapp/assets/brand/ + public/brand/.
-const PA_IP_CHARACTERS = [
-  { key: 'soilsoul',       label: 'Soil & Soul' },
-  { key: 'skater',         label: 'Skater'      },
-  { key: 'kombucha-gang',  label: 'Kombucha'    },
-  { key: 'flex',           label: 'Flex'        },
-  { key: 'radishes',       label: 'Radishes'    },
-  { key: 'mushroom',       label: 'Mushroom'    },
-  { key: 'peas',           label: 'Peas'        },
-  { key: 'onion',          label: 'Onion'       },
-  { key: 'broccoli',       label: 'Broccoli'    },
-  { key: 'hula',           label: 'Hula'        },
-];
-
-// ─── Page presets — preset block recipes that mirror the two reference
-// products from the v1 design (Green Chili Dip · Hazel Chocolate Spread).
-// One click pre-fills a coherent block stack so the office doesn't have
-// to assemble the same scaffolding for every new product. After applying,
-// every block is still individually editable.
-//
-// Adding a new preset = one entry below. `blocks` is an array of
-// `{ type, ...data }` — same shape stored in description_blocks.
-// Each preset = a STRUCTURE recipe (block types, order, row counts) with
-// every content field empty. Office fills the words per product. Default
-// cell labels (Type / Net Wt / Origin) and storage icons (❄ / 📅 / 🌡)
-// remain because they're part of the visual contract — easy to change
-// per product if needed but useful starting prompts.
-const PA_PAGE_PRESETS = [
-  {
-    id: 'editorial_light',
-    label_en: 'Editorial Light — Green Chili Dip layout',
-    label_cn: '清淡编辑风 — 青辣椒酱版式',
-    desc_en: 'Spec · story · why × 3 · chip-cloud ingredients · 6-tile how-to · storage · allergen · notes',
-    desc_cn: '规格 · 故事 · 3 条理由 · 配料云标签 · 6 用法 · 储存 · 过敏原 · 备注',
-    blocks: [
-      { type: 'spec_strip', cells: [
-        { k_en: 'Type',   k_cn: '类型', v_en: '', v_cn: '' },
-        { k_en: 'Net Wt', k_cn: '净重', v_en: '', v_cn: '' },
-        { k_en: 'Origin', k_cn: '产地', v_en: '', v_cn: '' },
-      ] },
-      { type: 'hero_intro', kicker_en: '', kicker_cn: '', body_en: '', body_cn: '', highlight_en: '', highlight_cn: '' },
-      { type: 'why', rows: [
-        { claim_en: '', claim_cn: '' },
-        { claim_en: '', claim_cn: '' },
-        { claim_en: '', claim_cn: '' },
-      ] },
-      { type: 'ingredients_chips', items: [
-        { name_en: '', name_cn: '', pct: '', lead: true  },
-        { name_en: '', name_cn: '', pct: '', lead: false },
-        { name_en: '', name_cn: '', pct: '', lead: false },
-        { name_en: '', name_cn: '', pct: '', lead: false },
-        { name_en: '', name_cn: '', pct: '', lead: false },
-        { name_en: '', name_cn: '', pct: '', lead: false },
-        { name_en: '', name_cn: '', pct: '', lead: false },
-      ] },
-      { type: 'how_to_use', tiles: Array.from({ length: 6 }, () => (
-        { icon: '', label_en: '', label_cn: '', sub_en: '', sub_cn: '' }
-      )) },
-      { type: 'storage_box',
-        left:  { icon: '🌡', head_en: 'Unopened',      head_cn: '未开封', num_en: 'Cool & dry',  num_cn: '阴凉干燥', unit_en: 'Store away from heat and moisture',                    unit_cn: '远离高温和潮湿',           alt: false },
-        right: { icon: '❄', head_en: 'After opening', head_cn: '开封后', num_en: 'Refrigerate', num_cn: '冷藏',     unit_en: 'Stir well, seal tightly, refrigerate for best texture', unit_cn: '搅拌均匀，密封冷藏以保持最佳口感', alt: true  },
-        note_en: 'Natural oil separation may occur — this is normal. Stir before each use.',
-        note_cn: '天然油脂分离属正常现象,每次使用前请搅拌。' },
-      { type: 'allergen_card', contains_en: '', contains_cn: '', may_contain_en: '', may_contain_cn: '' },
-      { type: 'notes_callout', text_en: '', text_cn: '' },
-    ],
-  },
-  {
-    id: 'editorial_bold',
-    label_en: 'Editorial Bold — Hazel Chocolate Spread layout',
-    label_cn: '醒目编辑风 — 榛子巧克力酱版式',
-    desc_en: 'Spec · story · big stat · why × 5 · editorial-line ingredients · pull quote · 8-tile how-to · storage · allergen · notes',
-    desc_cn: '规格 · 故事 · 大数字 · 5 条理由 · 配料编辑式 · 引文 · 8 用法 · 储存 · 过敏原 · 备注',
-    blocks: [
-      { type: 'spec_strip', cells: [
-        { k_en: 'Type',   k_cn: '类型', v_en: '', v_cn: '' },
-        { k_en: 'Net Wt', k_cn: '净重', v_en: '', v_cn: '' },
-        { k_en: 'Origin', k_cn: '产地', v_en: '', v_cn: '' },
-      ] },
-      { type: 'hero_intro', kicker_en: '', kicker_cn: '', body_en: '', body_cn: '', highlight_en: '', highlight_cn: '' },
-      { type: 'big_stat', stat: '', what_en: '', what_cn: '', claim_en: '', claim_cn: '', bg: 'lime' },
-      { type: 'why', rows: [
-        { claim_en: '', claim_cn: '' },
-        { claim_en: '', claim_cn: '' },
-        { claim_en: '', claim_cn: '' },
-        { claim_en: '', claim_cn: '' },
-        { claim_en: '', claim_cn: '' },
-      ] },
-      { type: 'ingredients_line', items: [
-        { name_en: '', name_cn: '', pct: '', lead: false },
-        { name_en: '', name_cn: '', pct: '', lead: false },
-        { name_en: '', name_cn: '', pct: '', lead: false },
-        { name_en: '', name_cn: '', pct: '', lead: false },
-        { name_en: '', name_cn: '', pct: '', lead: false },
-        { name_en: '', name_cn: '', pct: '', lead: false },
-        { name_en: '', name_cn: '', pct: '', lead: false },
-      ] },
-      { type: 'pull_quote', text_en: '', text_cn: '', who_en: '', who_cn: '' },
-      { type: 'how_to_use', tiles: Array.from({ length: 8 }, () => (
-        { icon: '', label_en: '', label_cn: '', sub_en: '', sub_cn: '' }
-      )) },
-      { type: 'storage_box',
-        left:  { icon: '🌡', head_en: 'Unopened',      head_cn: '未开封', num_en: 'Cool & dry',  num_cn: '阴凉干燥', unit_en: 'Store away from heat and moisture',                    unit_cn: '远离高温和潮湿',           alt: false },
-        right: { icon: '❄', head_en: 'After opening', head_cn: '开封后', num_en: 'Refrigerate', num_cn: '冷藏',     unit_en: 'Stir well, seal tightly, refrigerate for best texture', unit_cn: '搅拌均匀，密封冷藏以保持最佳口感', alt: true  },
-        note_en: 'Natural oil separation may occur — this is normal. Stir before each use.', note_cn: '天然油脂分离属正常现象,每次使用前请搅拌。' },
-      { type: 'allergen_card', contains_en: '', contains_cn: '', may_contain_en: '', may_contain_cn: '' },
-      { type: 'notes_callout', text_en: '', text_cn: '' },
-    ],
-  },
-];
+// The Designer Sections block registries (PA_BLOCK_TYPES / PA_IP_CHARACTERS /
+// PA_PAGE_PRESETS) and the ~960-line editor engine that read them are GONE.
+// They backed #pa-edit-bg, a modal nothing on this page could open — the live
+// implementation is public/product-editor.html, which owns its own copy. Two
+// engines for one job is how they drift; this was the one nobody could reach.
 
 document.querySelector('[data-tab="products"]').addEventListener('click', () => {
   if (!PA_LOADED) { PA_LOADED = true; paLoad(); }
@@ -483,61 +288,25 @@ function prodShowView(view) {
   prodSetHelp(view);
 }
 
-// ── Page header — both the title and the ⓘ tooltip follow whichever sub-view
-// is on screen. The title says WHERE you are (Catalogue / Stock activity /
-// Categories); the ⓘ carries that view's one-time "what is this" copy, kept
-// out of the way because a user needs it once. Both repaint with the live
-// language. ──
+// ── Page header — the title follows whichever sub-view is on screen.
+// The ⓘ and its per-view "what is this" copy are RETIRED: §1.7 allows the
+// header three elements (title · status line · one Dusk CTA) and there is no
+// fourth. The status line — real work waiting, painted by paRenderKpis — is a
+// better use of the same space than teaching copy behind a tooltip. ──
 const PROD_VIEW_META = {
-  catalog: {
-    title: ['Your catalogue', '您的目录'],
-    help: ['Photo, category, SKU, stock and price in one scannable list. Search or filter, click any product to open it.',
-           '照片、分类、货号、库存和价格，一目了然。搜索或筛选，点击任意商品即可打开。'],
-  },
-  activity: {
-    title: ['Stock activity', '库存流水'],
-    help: ["What moved today, and what needs a look. Every stock change across every channel, one line each — pick a channel tab to filter; Export CSV downloads the view you're looking at. Times are Guangzhou local.",
-           '今天动了什么、哪里需要看一眼。各渠道的每一次库存变动，一行一条 —— 点渠道页签可筛选；导出 CSV 即当前视图。时间为广州本地时间。'],
-  },
-  categories: {
-    title: ['Categories', '分类'],
-    help: ['How the shop shelves are arranged. Top categories are the left rail; subcategories are the section headings. Rename anything and every product on it follows. A category with nothing published stays out of the shop on its own.',
-           '店面货架的排列方式。主分类即左栏，子分类即区块标题。重命名后，该分类下的所有产品会自动跟随。没有上架产品的分类不会出现在店面。'],
-  },
+  catalog:    { title: ['Products', '产品'] },
+  activity:   { title: ['Stock activity', '库存流水'] },
+  categories: { title: ['Categories', '分类'] },
 };
-let _prodHelpView = 'catalog';
 function prodSetHelp(view) {
-  _prodHelpView = PROD_VIEW_META[view] ? view : 'catalog';
-  const m = PROD_VIEW_META[_prodHelpView];
+  const m = PROD_VIEW_META[PROD_VIEW_META[view] ? view : 'catalog'];
   const say = (pair) => (typeof cuT === 'function') ? cuT(pair[0], pair[1]) : pair[0];
   const title = document.getElementById('pa-pagetitle');
   if (title) title.textContent = say(m.title);
-  const help = document.getElementById('pa-info-text');
-  if (help) help.textContent = say(m.help);
-  // The ⓘ lives in the page body now (#pa-info-wrap, beside the per-view title),
-  // on both desktop and phone — no topbar mirror to keep in sync any more.
-}
-// Click/tap toggles the tooltip open (hover + keyboard focus are handled in
-// CSS); an outside click closes it. Sticky-open is what makes it usable on
-// touch, where :hover never fires.
-function prodToggleHelp(e) {
-  if (e) { e.stopPropagation(); e.preventDefault(); }
-  // Toggle the in-content ⓘ (#pa-info-wrap) — the only one now, on every width.
-  const wrap = (e && e.currentTarget && e.currentTarget.closest('.pa-info-wrap'))
-             || document.getElementById('pa-info-wrap');
-  if (!wrap) return;
-  const open = wrap.classList.toggle('open');
-  wrap.querySelector('.pa-info')?.setAttribute('aria-expanded', open ? 'true' : 'false');
-  if (open) setTimeout(() => document.addEventListener('click', prodCloseHelp), 0);
-  else document.removeEventListener('click', prodCloseHelp);
-}
-function prodCloseHelp(e) {
-  const wrap = document.getElementById('pa-info-wrap');
-  if (wrap && !(e && wrap.contains(e.target))) {
-    wrap.classList.remove('open');
-    wrap.querySelector('.pa-info')?.setAttribute('aria-expanded', 'false');
-  }
-  document.removeEventListener('click', prodCloseHelp);
+  // The status line belongs to the catalogue's own numbers; the other two
+  // sub-views are their own pages and carry no work count of ours.
+  const line = document.getElementById('pa-status-line');
+  if (line && view !== 'catalog') line.hidden = true;
 }
 // Paint the default (catalogue) help on load and keep it in the live language.
 (function initProdHelp() {
@@ -732,22 +501,21 @@ async function paLoadStoreStock() {
 function paRenderStoreSeg() {
   const bar = document.getElementById('pa-store-seg');
   if (!bar) return;
-  // Only the overview table (list view, editor closed) has an editable Stock
-  // column — hide the switcher everywhere else so it can't imply it does nothing.
-  const overview = PA_VIEW === 'list' && !_paEditorOpen;
-  if (CATALOG_MODE === 'upstream' || PA_STORES.length < 2 || !overview) { bar.style.display = 'none'; return; }
-  // Two-location list shows every store's stock in its own column, so the
-  // single-store switcher is redundant — hide it once per-store columns are on.
-  if (_paListStores().length) { bar.style.display = 'none'; return; }
-  const btn = (key, label) =>
-    `<button type="button" class="pa-store-btn${PA_STORE === key ? ' active' : ''}" onclick="paSetStore(${key === 'all' ? "'all'" : key})">${label}</button>`;
-  const btns = [btn('all', cuT('All', '全部'))]
-    .concat(PA_STORES.map(s => btn(s.id, escapeHtml(cuT(s.name_en || s.code, s.name_cn || s.name_en || s.code)))))
-    .join('');
+  // First of the filter row's two dropdowns. It used to be a segmented control
+  // that hid itself in every configuration it could reach — below two stores
+  // there was nothing to switch, and at two or more the per-store columns made
+  // it redundant, so it was unreachable in practice. As a filter it always has
+  // a job: it scopes which store the KPI counts and the status quick-filters
+  // answer for, whether or not each store also has its own column.
+  if (CATALOG_MODE === 'upstream' || PA_STORES.length < 2) { bar.style.display = 'none'; return; }
+  const opt = (key, label) =>
+    `<option value="${key}"${String(PA_STORE) === String(key) ? ' selected' : ''}>${escapeHtml(label)}</option>`;
   bar.innerHTML =
-    `<span class="pa-store-lbl">${cuT('Stock for', '库存门店')}</span>` +
-    `<span class="pa-store-btns">${btns}</span>`;
-  bar.style.display = 'flex';
+    `<select class="pa-store-sel" title="${cuT('Which store the counts answer for', '统计以哪个门店为准')}" onchange="paSetStore(this.value === 'all' ? 'all' : Number(this.value))">`
+    + opt('all', cuT('All stores', '全部门店'))
+    + PA_STORES.map(s => opt(s.id, cuT(s.name_en || s.code, s.name_cn || s.name_en || s.code))).join('')
+    + '</select>';
+  bar.style.display = '';
 }
 
 function paSetStore(key) {
@@ -927,17 +695,6 @@ function _paHasBlocks(p) {
   return !!p.has_blocks;
 }
 
-// Status marks (Designed/Plain + Draft) — used by the List view rows. The
-// Designed/Plain state is a single sparkle glyph rather than a text pill: lit
-// sage when the product has designer sections, faint when it doesn't. Saves
-// the ~70px a "DESIGNED" pill cost on every row; the title carries the words.
-function _paPills(p) {
-  const designed = _paHasBlocks(p);
-  const pub = p.is_published === 1;
-  return `<span class="pa-status-icon${designed ? ' is-designed' : ' is-plain'}"
-      title="${designed ? 'Designer sections authored · 已配置设计板块' : 'No designer sections yet · 尚未配置设计板块'}">${PA_ICON_SPARKLE}</span>
-    ${pub ? '' : '<span class="pa-pill pa-pill-draft" title="Not published in mini-app · 未在小程序上架">Draft</span>'}`;
-}
 
 // Overview table status cell — one badge answering "can a shopper buy this
 // right now": Disabled (nothing live) beats Sold out (live but nothing on the
@@ -1329,21 +1086,25 @@ function paRenderKpis(animate) {
     if (animate) dashCountUp(el, n); else el.textContent = fcNum(n);
   };
   set('pa-kpi-live', live);
-  // Hero stat: Active is the number the operator scans first, so it's the big
-  // figure ("N of TOTAL products"); the proportion bar + legend under it show
-  // the live-vs-disabled split. Active + Disabled always equal Total — same
-  // is_published split as the Drafts jump tile below.
+  // The pulse is four tiles: Active, Disabled, and (when they have anything to
+  // say) Going nowhere and On promotion. Sold out and Low stock are NOT tiles —
+  // they are work waiting, so they ride in the header's status line below.
   set('pa-kpi-active', live);
   set('pa-kpi-total', rows.length);
-  const barFill = document.getElementById('pa-kpi-bar-fill');
-  if (barFill) barFill.style.width = (rows.length ? Math.round((live / rows.length) * 100) : 0) + '%';
-  set('pa-kpi-restock', oos + low);   // everything that needs buying back
-  set('pa-kpi-oos', oos);
-  set('pa-kpi-low', low);
   set('pa-kpi-drafts', drafts);
-  const oosTile = document.getElementById('pa-kpi-oos-tile'); if (oosTile) oosTile.classList.toggle('alert', oos > 0);
-  const lowTile = document.getElementById('pa-kpi-low-tile'); if (lowTile) lowTile.classList.toggle('alert', low > 0);
-  const restockTile = document.getElementById('pa-kpi-restock-tile'); if (restockTile) restockTile.classList.toggle('alert', (oos + low) > 0);
+  // §1.7 status line — work waiting, never population, and only when a real
+  // number is behind it. Nothing waiting = no line at all, which is a finished
+  // header rather than a gap. The dash is banned here as everywhere.
+  {
+    const el = document.getElementById('pa-status-line');
+    if (el) {
+      const bits = [];
+      if (oos) bits.push(fcNum(oos) + ' ' + cuT('sold out', '缺货'));
+      if (low) bits.push(fcNum(low) + ' ' + cuT('low on stock', '库存偏低'));
+      el.textContent = bits.join(' · ');
+      el.hidden = !bits.length;
+    }
+  }
   // Light up whichever jump drives the active quick-filter (none when 'all').
   const tiles = { live: 'pa-kpi-live-tile', restock: 'pa-kpi-restock-tile', oos: 'pa-kpi-oos-tile', low: 'pa-kpi-low-tile', drafts: 'pa-kpi-drafts-tile', dead: 'pa-kpi-dead-tile', promo: 'pa-kpi-promo-tile' };
   for (const [status, id] of Object.entries(tiles)) {
@@ -1585,34 +1346,6 @@ async function paBulkDelete() {
   PA_SELECTED = new Set();
   await paLoad();
 }
-async function paBulkSetPublished(want) {
-  const idset = new Set(PA_FILTERED_IDS || []);
-  const targets = (PA_PRODUCTS || []).filter(p => idset.has(p.id) && (p.is_published === 1 ? 1 : 0) !== want).map(p => p.id);
-  if (!targets.length) return;
-  const ask = want
-    ? cuT('Publish ' + targets.length + ' product(s)? They will go live in the shop.', '确定上架 ' + targets.length + ' 件商品?它们将在店面显示。')
-    : cuT('Hide ' + targets.length + ' product(s)? They will be removed from the shop.', '确定下架 ' + targets.length + ' 件商品?它们将从店面移除。');
-  if (!(await askConfirm({
-    title: ask,
-    confirmLabel: want ? cuT('Publish', '上架') : cuT('Hide', '下架'),
-  }))) return;
-  toast(cuT('Working…', '处理中…'));
-  let done = 0, fail = 0;
-  for (const id of targets) {
-    try {
-      const r = await fetch('/api/retail-admin/products/' + id, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ is_published: want }),
-      });
-      const j = await r.json().catch(() => ({}));
-      if (r.ok && j && j.success !== false) done++; else fail++;
-    } catch (e) { fail++; }
-  }
-  toast(fail
-    ? cuT(done + ' done, ' + fail + ' failed', done + ' 成功,' + fail + ' 失败')
-    : cuT((want ? 'Published ' : 'Hidden ') + done + ' ✓', '已处理 ' + done + ' 件 ✓'), fail ? 'err' : 'ok');
-  await paLoad();
-}
 let PA_ORDERED_UNIT_IDS = [];
 let _PA_RENDER_LANG_HOOKED = false;
 function paRender() {
@@ -1702,34 +1435,24 @@ function paRender() {
       : (total ? _paPagerHtml(total, pages, start, pageUnits.length, !_paEditorOpen) : '');
   }
 
-  // Reflect the active layout in the toolbar segmented control. While the editor
-  // is docked the list is locked to the split layout, so the grid/compact buttons
-  // are disabled (only re-enabled once the editor closes).
+  // Reflect the active layout in the toolbar segmented control. Nothing is
+  // disabled any more — the drawer sits over the list, so either layout is
+  // legal with a product open.
   document.querySelectorAll('#pa-view-seg .pa-view-btn').forEach(b => {
     b.classList.toggle('active', b.dataset.view === PA_VIEW);
-    const lockable = b.dataset.view !== 'list';
-    b.disabled = _paEditorOpen && lockable;
   });
 
-  // Sync the split-view container with the chosen layout: list = split (editor
-  // docked on the right), grid/compact = list-only (catalogue scan, full width).
-  // Expanding no longer squeezes this row — the editor leaves it entirely for
-  // #pd-pagestage — so there's nothing to defer to here any more.
-  const _paSplit = document.getElementById('pa-split');
-  if (_paSplit) {
-    // Full width whenever the editor is closed — grid/compact scan AND the new
-    // list-view "overview" table both span the page. Opening a product (or "+
-    // Add product" from any view) docks the editor and splits the row.
-    _paSplit.classList.toggle('pa-split-listonly', !_paEditorOpen);
-  }
+  // Nothing to sync here any more: the list always spans the content column,
+  // whether the drawer is open, closed or expanded to the full page.
 
   if (PA_VIEW === 'list') {
-    // The list is the same table whether or not a product is open — opening one
-    // no longer demotes it to a strip of names. What changes is how many columns
-    // it can afford beside the 452px panel: docked, Category and SKU fold into a
-    // meta line under the product's name and the rest of the columns stay put.
+    // One table, always the same columns. Opening a product no longer changes
+    // it at all — the editor is a drawer over the top, so the list keeps the
+    // full content column and never reflows underneath it. Columns are never
+    // folded away either: at a narrow width the table scrolls sideways rather
+    // than hiding a column, which is the rule two Batch-0 pages proved.
     const overview = true;
-    const docked = _paEditorOpen;
+    const docked = false;
     // Two-location list: one editable stock column per store, both always visible
     // (the Shop toggle column is retired — publish still lives in the grid/card
     // view, bulk actions, and the editor). Falls back to one combined Stock
@@ -1737,17 +1460,14 @@ function paRender() {
     const listStores = _paListStores();
     grid.className = 'pa-list pa-list-rich'
       + (listStores.length ? ' pa-multistock' : '')
-      + (docked ? ' pa-list-docked' : '')
       + (reorderActive ? ' pa-reorder' : '')
       + (PA_SELECT_MODE ? ' pa-selecting' : '');
-    // Drive the grid track list so header + rows + reorder/select modes stay in
-    // lockstep: img · name · [category · SKU] · [one column per store] · price ·
-    // status. The two bracketed columns are the ones the docked width can't hold.
+    // Track list, in lockstep with the header and the reorder/select modes:
+    // img · name · category · SKU · [one column per store] · price · status.
     {
-      const stockTracks = (listStores.length ? listStores.map(() => '96px').join(' ') : '96px');
-      grid.style.setProperty('--pa-grid', docked
-        ? `40px minmax(0,1fr) ${stockTracks} 92px 96px`
-        : `46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) ${stockTracks} 116px 104px`);
+      const stockTracks = (listStores.length ? listStores.map(() => '104px').join(' ') : '104px');
+      grid.style.setProperty('--pa-grid',
+        `46px minmax(0,1fr) minmax(110px,0.8fr) minmax(90px,0.7fr) ${stockTracks} 116px 104px`);
     }
     // Snapshot the on-screen unit order as lists of product ids (a variant group
     // moves as one block). paRowDrop reads this to compute the new sequence.
@@ -1816,22 +1536,8 @@ function paRender() {
           <div class="pa-col-status">${_paStatusCell(u)}</div>
         </div>`;
       }
-      // Slim two-line row: one language (live cuT), 30px photo, name on top with
-      // the SKU (or "N sizes" for a family) as a muted grey line underneath.
-      // Keeps the list narrow while the SKU stays visible without a hover.
-      const nameTxt = escapeHtml(cuT(p.name_en || p.name_cn || '—', p.name_cn || p.name_en || '—'));
-      const meta = u.group
-        ? `${u.members.length} ${cuT('sizes', '规格')}`
-        : (p.sku ? escapeHtml(p.sku) : '');
-      return `
-        <div class="pa-row pa-row-1l" onclick="paOpenEdit(${p.id})">
-          <div class="pa-row-img">${img ? `<img src="${escapeAttr(img)}" loading="lazy" alt="">` : PA_ICON_BROKEN}</div>
-          <div class="pa-row-main" data-no-i18n>
-            <div class="pa-row-name">${nameTxt}</div>
-            ${meta ? `<div class="pa-row-sub"><span class="pa-row-meta">${meta}</span></div>` : ''}
-          </div>
-          <div class="pa-row-pills">${_paPills(p)}</div>
-        </div>`;
+      // No second row shape any more. The slim name-and-pills row existed only
+      // for the narrow docked list, and the editor stopped being a column.
     }).join('');
     paApplyRowSelection();
     return;
@@ -2189,59 +1895,6 @@ function pdSetPageTabChip(on) {
   el.textContent = cuT('Designed', '已设计');
   el.style.display = '';
 }
-async function pdSaveStoreStocks() {
-  const box = document.getElementById('pd-store-stocks');
-  if (!box) return;
-  const msg = document.getElementById('pd-store-stocks-msg');
-  const inputs = Array.from(box.querySelectorAll('input[data-store-id]'));
-  const changed = inputs.filter(i => String(i.value) !== String(i.dataset.orig));
-  if (!changed.length) { if (msg) msg.textContent = 'No changes · 无改动'; return; }
-  const btn = document.getElementById('pd-store-stocks-save');
-  if (btn) btn.disabled = true;
-  if (msg) msg.textContent = cuT('Saving…', '保存中…');
-  let fail = 0;
-  for (const inp of changed) {
-    const qty = Math.max(0, parseInt(inp.value, 10) || 0);
-    const pid = inp.dataset.variantId;
-    try {
-      const r = await fetch('/api/retail-admin/stores/' + inp.dataset.storeId + '/stock/' + pid, {
-        method: 'PATCH', credentials: 'same-origin',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ physical_qty: qty, reason: 'manual' }),
-      });
-      const j = await r.json().catch(() => ({}));
-      if (r.ok && j && j.success !== false) { inp.value = qty; inp.dataset.orig = String(qty); _paStockMirror(pid, inp.dataset.storeId, qty); }
-      else { fail++; }
-    } catch (e) { fail++; }
-  }
-  if (btn) btn.disabled = false;
-  if (fail) { toast('Some stock updates failed · 部分库存更新失败', 'err'); if (msg) msg.textContent = ''; }
-  else { toast('Stock updated · 库存已更新'); if (msg) msg.textContent = 'Saved · 已保存'; }
-  // Recompute per-variant totals from the live cells and mirror to the table.
-  const totals = {};
-  inputs.forEach(i => { const v = i.dataset.variantId; totals[v] = (totals[v] || 0) + Math.max(0, parseInt(i.value, 10) || 0); });
-  VA_STORE_TOTALS = totals;
-  (VA_MEMBERS || []).forEach(m => { if (totals[m.id] != null) m.stock = totals[m.id]; });
-  if (document.getElementById('pd-variants') && VA_ID != null) vaRender();
-}
-// "Save & next" — flush the current product's autosave, then open the next one
-// in the on-screen list order (flipping pages if needed). Built for clearing a
-// big draft backlog without round-tripping through the list each time.
-async function pdSaveNext() {
-  const ids = PA_ORDERED_UNIT_IDS || [];
-  const idx = _pdSelectedId == null ? -1 : ids.indexOf(_pdSelectedId);
-  if (idx < 0) { toast(cuT('Open a product first', '请先打开一个产品'), 'err'); return; }
-  if (idx >= ids.length - 1) { toast(cuT('That was the last product', '已是最后一个产品'), 'ok'); return; }
-  const nextId = ids[idx + 1];
-  const btn = document.getElementById('pd-savenext-btn');
-  if (btn) { btn.disabled = true; btn.style.opacity = '.6'; }
-  try { await pdAutoSaveNow(); } catch (e) {}
-  if (btn) { btn.disabled = false; btn.style.opacity = ''; }
-  // Editor is open here, so pages are the fixed docked size (18), not the
-  // overview "Per page" choice — keep the page math in lock-step with paRender.
-  PA_PAGE = Math.floor((idx + 1) / PA_DOCK_PAGE_SIZE) + 1;
-  pdOpen(nextId);
-}
 // Supplier-direct items hold no stock of ours, so the "When out of stock" policy
 // is meaningless for them — swap it for the "Supplier out — pause selling" switch.
 // Called on open and whenever the "Ships directly from supplier" flag is toggled.
@@ -2427,13 +2080,10 @@ async function pdLoadSales(id) {
 // (where listonly hides the editor); reveal it so the new product isn't
 // invisible behind the catalogue.
 function pdShowDocked() {
-  const empty = document.getElementById('pd-empty');
-  const ed    = document.getElementById('pd-editor');
-  const split = document.getElementById('pa-split');
+  const ed = document.getElementById('pd-editor');
   _paEditorOpen = true;
-  if (split) split.classList.remove('pa-split-listonly');
-  if (empty) empty.style.display = 'none';
-  if (ed)    ed.style.display = '';
+  if (ed) ed.style.display = '';
+  pdOpenDrawer();
   // Every open lands on the Basics pane — no matter which pane was showing when
   // the previous product was closed.
   pdTab('basics');
@@ -2441,25 +2091,35 @@ function pdShowDocked() {
   // async and each repaints again as it lands, so this only has to be right for
   // the fields already in the form.
   pdRenderSummaries();
-  // The docked list pages by 18 while the overview pages by 50/100/200/All, so
-  // the product just clicked from a long overview page may fall on a different
-  // 18-row page. Jump to the page that holds it (using the full ordered unit
-  // list from the prior render) so its row stays visible beside the editor.
-  if (_pdSelectedId != null) {
-    const idx = PA_ORDERED_UNIT_IDS.indexOf(_pdSelectedId);
-    if (idx >= 0) PA_PAGE = Math.floor(idx / PA_DOCK_PAGE_SIZE) + 1;
-  }
-  // Repaint the list into its compact docked form (it shares the row with the
-  // now-visible editor) before measuring the editor's position for the scroll.
+  // The list is untouched by the drawer now — it keeps its own page size and
+  // its own scroll position, and the row stays lit where the operator left it.
   paRender();
-  // With the whole page scrolling (no internal editor scroll), picking a
-  // product low in a long list would render the editor above the fold. Bring
-  // its top just under the sticky header (98px) — but only if it's meaningfully
-  // out of view, so clicking through items near the top doesn't jump around.
-  if (ed) {
-    const targetY = Math.max(0, window.scrollY + ed.getBoundingClientRect().top - 110);
-    if (Math.abs(targetY - window.scrollY) > 40) window.scrollTo({ top: targetY, behavior: 'smooth' });
-  }
+}
+// ── The drawer, opened and closed ───────────────────────────────────────────
+// Esc closes it (§1.13), but never while a nested overlay owns the key — the
+// lightbox, the library picker and the version-history modal all sit on top of
+// the drawer and each closes itself first.
+function pdOpenDrawer() {
+  const bg = document.getElementById('pd-bg');
+  const scrim = document.getElementById('pd-scrim');
+  if (bg) bg.classList.add('is-open');
+  if (scrim) scrim.classList.add('is-open');
+  document.addEventListener('keydown', pdDrawerEsc);
+}
+function pdCloseDrawer() {
+  const bg = document.getElementById('pd-bg');
+  const scrim = document.getElementById('pd-scrim');
+  if (bg) bg.classList.remove('is-open');
+  if (scrim) scrim.classList.remove('is-open');
+  document.removeEventListener('keydown', pdDrawerEsc);
+}
+function pdDrawerEsc(e) {
+  if (e.key !== 'Escape') return;
+  // Anything stacked over the drawer answers Esc before the drawer does.
+  if (document.querySelector('#pd-lightbox, body > .pu-editor-bg, .pm-pick-bg')) return;
+  const rte = document.getElementById('pd-desc-rich');
+  if (rte && rte.classList.contains('pd-rte-fs')) return;   // fullscreen editor first
+  pdClose();
 }
 // Focused-panes tab switch — show one pane (Basics/Stock/Page/Details) at a
 // time. Pure show/hide; every field stays in the DOM so saves/loads are
@@ -2488,10 +2148,9 @@ function pdClose() {
   // editor doesn't close the page; the list stays put.)
   _pdSelectedId = null;
   _paEditorOpen = false;
-  const empty = document.getElementById('pd-empty');
-  const ed    = document.getElementById('pd-editor');
-  if (ed)    ed.style.display = 'none';
-  if (empty) empty.style.display = '';
+  const ed = document.getElementById('pd-editor');
+  pdCloseDrawer();
+  if (ed) ed.style.display = 'none';
   _pdGallery = []; _pdGalleryDirty = false;
   const ri = document.getElementById('pd-desc-rich'); if (ri) ri.classList.remove('pd-rte-fs');
   document.body.classList.remove('pd-rte-fs-lock');
@@ -2619,10 +2278,13 @@ function pdExpand(section) {
   const stage = document.getElementById('pd-pagestage');
   if (!ed || !stage || ed.style.display === 'none') return;   // nothing open
   ed.classList.add('pd-fullpage');
+  // Leaving the drawer for the page: the drawer chrome and its scrim go first,
+  // or a fixed-position shell would follow the editor out and cover the page.
+  pdCloseDrawer();
   pdMoveEditor('ppage');
-  // The full page REPLACES the catalogue — title, sub-view switch, health band,
-  // toolbar and the list row all step aside, and the breadcrumb becomes the way
-  // back. One class does it so nothing has to remember an inline display value.
+  // The full page REPLACES the catalogue — title, sub-view switch, pulse,
+  // chips, toolbar and the list all step aside, and the breadcrumb becomes the
+  // way back. One class does it so nothing has to remember an inline display.
   document.getElementById('tab-products')?.classList.add('pd-page-open');
   stage.style.display = '';
   pdSyncPageHead();
@@ -2642,6 +2304,9 @@ function pdCollapseToPanel() {
   pdMoveEditor('dock');
   if (stage) stage.style.display = 'none';
   document.getElementById('tab-products')?.classList.remove('pd-page-open');
+  // Back to the glance: the drawer comes with it, but only if a product is
+  // actually open — collapsing on the way to closing must not re-open it.
+  if (_paEditorOpen) pdOpenDrawer();
   pdSyncFullscreenBtn(false);
   // State can have moved while the page was open (a size added, a bundle set
   // up, a description written) — repaint the summaries that stand for it.
@@ -2992,13 +2657,6 @@ function vaField(id, key, val) {
   else if (key === 'published') v.published = val ? 1 : 0;
   else if (key === 'compare') v.compare = (val === '' ? '' : Math.max(0, parseFloat(val) || 0));
   v._dirty = true;
-}
-// Stock edits also re-tint the row (out-of-stock = red) live, without a full
-// re-render that would drop input focus.
-function vaStockInput(id, el) {
-  vaField(id, 'stock', el.value);
-  const row = el.closest('.va-row');
-  if (row) row.classList.toggle('va-oos', el.value !== '' && Number(el.value) <= 0);
 }
 // The self row's photo IS the main product photo — jump up to the gallery
 // (above) rather than editing it twice from two places.
@@ -4520,11 +4178,6 @@ function pdFactsSet(f) {
     set('pd-fact-' + dom + '-cn', o[col + '_cn']);
   }
 }
-// Product details is collapsed by default; click the header to expand/fold.
-function pdFactsToggle() {
-  const sec = document.getElementById('pd-facts');
-  if (sec) sec.classList.toggle('pd-facts-collapsed');
-}
 // "Auto-fill from text" — read the description (or a pasted blob) and let the
 // AI split it into the Product details boxes. Same engine that already reads
 // descriptions; fills empty boxes and refreshes found ones for review.
@@ -4878,966 +4531,6 @@ async function pdDelete() {
   } catch (e) { toast('Delete failed · 删除失败: ' + e.message, 'err'); }
 }
 
-// Paint the IP character tiles. The hidden input #pa-edit-colophon-character
-// holds the office's pick (empty string = auto by category). Clicking a
-// tile sets it; clicking again on the same tile (or the "Auto" button)
-// clears the override.
-function paRenderColophonGrid() {
-  const grid = document.getElementById('pa-colophon-grid'); if (!grid) return;
-  const current = (document.getElementById('pa-edit-colophon-character').value || '').trim();
-  grid.innerHTML = PA_IP_CHARACTERS.map(c => `
-    <div class="pa-colophon-tile ${current === c.key ? 'active' : ''}" onclick="paPickColophonChar('${c.key}')" title="${escapeAttr(c.label)}">
-      <img src="/assets/brand/ip-${c.key}.jpg" alt="${escapeAttr(c.label)}" loading="lazy">
-      <span class="pa-colophon-tile-label">${escapeHtml(c.label)}</span>
-    </div>
-  `).join('');
-}
-function paPickColophonChar(key) {
-  const input = document.getElementById('pa-edit-colophon-character');
-  // Click same tile again → un-pick (back to auto)
-  input.value = input.value === key ? '' : key;
-  paRenderColophonGrid();
-  paRenderPreview();
-}
-function paClearColophonChar() {
-  document.getElementById('pa-edit-colophon-character').value = '';
-  paRenderColophonGrid();
-  paRenderPreview();
-}
-
-// Paint the preset cards into the modal. Renders once per modal-open;
-// the cards don't depend on the current product so this is idempotent.
-function paRenderPresets() {
-  const row = document.getElementById('pa-presets-row'); if (!row) return;
-  if (row.children.length) return; // already painted
-  row.innerHTML = PA_PAGE_PRESETS.map(p => `
-    <button type="button" class="pa-preset-card" onclick="paApplyPreset('${p.id}')">
-      <span class="pa-preset-card-label">${escapeHtml(p.label_en)}<br>${escapeHtml(p.label_cn)}</span>
-      <span class="pa-preset-card-desc">${escapeHtml(p.desc_en)}<br>${escapeHtml(p.desc_cn)}</span>
-    </button>
-  `).join('');
-}
-
-// Apply a preset's blocks to the current product. If there are existing
-// blocks, confirm before overwriting so the office doesn't lose work.
-// New ids are generated so the existing tab/selection state cleanly
-// rebuilds against the fresh stack.
-async function paApplyPreset(id) {
-  const preset = PA_PAGE_PRESETS.find(p => p.id === id); if (!preset) return;
-  const existing = (window._paBlocks || []).length;
-  if (existing > 0) {
-    const ok = await askConfirm({
-      title: 'Apply this preset? · 套用此版型?',
-      body: 'It will REPLACE the ' + existing + ' block(s) currently on this product. · 将替换当前产品上的 ' + existing + ' 个板块,无法撤销。',
-      confirmLabel: 'Apply · 套用',
-      danger: true,
-    });
-    if (!ok) return;
-  }
-  // Deep-clone the preset blocks (so editing one product doesn't mutate
-  // the preset definition for subsequent products) and assign fresh ids.
-  window._paBlocks = preset.blocks.map(b => ({
-    ...JSON.parse(JSON.stringify(b)),
-    id: paBlocksGenId(),
-  }));
-  PA_SELECTED_BLOCK_ID = window._paBlocks[0]?.id || null;
-  paRenderAll();
-}
-function paCloseEdit() {
-  document.getElementById('pa-edit-bg').classList.remove('show');
-  PA_CURRENT = null;
-  PA_SELECTED_BLOCK_ID = null;
-}
-
-// Track which block is currently being edited (only one form on screen).
-let PA_SELECTED_BLOCK_ID = null;
-// Single entry-point that repaints both halves of the editor — used after
-// any structural change (add / delete / reorder / select).
-function paRenderAll() {
-  paRenderTabs();
-  paRenderSelectedEditor();
-  paRenderPreview();
-}
-// Live-preview repaint only — called on every keystroke in the form fields
-// so the right pane tracks edits without flicker.
-function paLivePreview() {
-  paBlocksSyncFromDOM();
-  paRenderPreview();
-  // The tab label may show a body excerpt; refresh those too without
-  // re-rendering the form (which would steal focus).
-  paRefreshTabLabels();
-}
-
-async function paSaveEdit() {
-  if (!PA_CURRENT) return;
-  const body = {
-    keywords_en:           document.getElementById('pa-edit-keywords-en').value.trim() || null,
-    keywords_cn:           document.getElementById('pa-edit-keywords-cn').value.trim() || null,
-    tagline_en:            document.getElementById('pa-edit-tagline-en').value.trim()  || null,
-    tagline_cn:            document.getElementById('pa-edit-tagline-cn').value.trim()  || null,
-    colophon_character:    document.getElementById('pa-edit-colophon-character').value.trim() || null,
-    colophon_tagline_en:   document.getElementById('pa-edit-colophon-tagline-en').value.trim() || null,
-    colophon_tagline_cn:   document.getElementById('pa-edit-colophon-tagline-cn').value.trim() || null,
-    description_blocks:    paBlocksCollect(),
-  };
-  try {
-    const r = await fetch('/api/retail-admin/products/' + PA_CURRENT.id, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    const j = await r.json();
-    if (!j.success) throw new Error(j.error || 'save_failed');
-    // Patch the cached row in PA_PRODUCTS so the grid card updates without
-    // a full refetch (faster + preserves scroll/filter state).
-    const idx = PA_PRODUCTS.findIndex(x => x.id === PA_CURRENT.id);
-    if (idx >= 0) PA_PRODUCTS[idx] = { ...PA_PRODUCTS[idx], ...j.data };
-    paCloseEdit();
-    paRender();
-  } catch (e) {
-    toast('Save failed · 保存失败: ' + e.message, 'err');
-  }
-}
-
-// ── Block editor (lives only inside the products modal) ─────────────────
-function paBlocksGenId() { return 'b' + Math.random().toString(36).slice(2, 9); }
-
-function paBlocksPopulatePicker() {
-  const pick = document.getElementById('pa-blocks-picker');
-  if (pick && pick.options.length <= 1) {
-    PA_BLOCK_TYPES.forEach(t => {
-      const o = document.createElement('option');
-      o.value = t.type;
-      o.textContent = t.label_en + ' · ' + t.label_cn;
-      pick.appendChild(o);
-    });
-  }
-}
-
-function paBlocksAdd(type) {
-  if (!type) return;
-  const def = PA_BLOCK_TYPES.find(t => t.type === type); if (!def) return;
-  paBlocksSyncFromDOM();
-  if (!window._paBlocks) window._paBlocks = [];
-  const nb = { id: paBlocksGenId(), type, ...def.make() };
-  window._paBlocks.push(nb);
-  PA_SELECTED_BLOCK_ID = nb.id;
-  paRenderAll();
-  // Scroll the new block row into view in the palette panel
-  setTimeout(() => {
-    const row = document.querySelector(`.pa-block-row[data-blockid="${nb.id}"]`);
-    if (row) row.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, 30);
-}
-async function paBlocksRemove(id) {
-  if (!(await askConfirm({ title: 'Delete this section? · 删除此板块?', confirmLabel: 'Delete · 删除', danger: true }))) return;
-  paBlocksSyncFromDOM();
-  const arr = window._paBlocks || [];
-  const i = arr.findIndex(b => b.id === id);
-  if (i < 0) return;
-  arr.splice(i, 1);
-  // Move selection to the sibling closest to where the deleted block sat.
-  if (PA_SELECTED_BLOCK_ID === id) {
-    PA_SELECTED_BLOCK_ID = arr[Math.min(i, arr.length - 1)]?.id || null;
-  }
-  paRenderAll();
-}
-function paBlocksMove(id, dir) {
-  paBlocksSyncFromDOM();
-  const arr = window._paBlocks || [];
-  const i = arr.findIndex(b => b.id === id);
-  const j = i + dir;
-  if (i < 0 || j < 0 || j >= arr.length) return;
-  [arr[i], arr[j]] = [arr[j], arr[i]];
-  paRenderAll();
-}
-function paBlocksSelect(id) {
-  paBlocksSyncFromDOM();
-  PA_SELECTED_BLOCK_ID = id;
-  paRenderAll();
-}
-// Pull values from the currently-mounted block editor back into the
-// in-memory model. Only ONE block's form is in the DOM at a time
-// (split-pane editor shows the selected block only), so we look up that
-// block by its data-blockid and copy its data-bkey inputs across. This
-// runs before any structural change (add/delete/reorder/save) and on
-// every keystroke (via paLivePreview) so the model stays current.
-// Pull values from the currently-mounted block editor back into the
-// in-memory model. Handles four input shapes via attribute hints:
-//   [data-bkey]                  → b[key] = value
-//   [data-cellidx][data-bkey]    → b.cells[idx][key] = value     (spec_strip)
-//   [data-rowidx][data-bkey]     → b.rows[idx][key] / b.items[idx][key] / b.tiles[idx][key]
-//   [data-sub][data-bkey]        → b[sub][key] = value           (storage_box.left/right)
-// Checkboxes use .checked instead of .value. Number inputs are kept as
-// strings here — type coercion happens at save / preview render time.
-function paBlocksSyncFromDOM() {
-  const mount = document.getElementById('pa-block-editor-mount'); if (!mount) return;
-  const card = mount.querySelector('[data-blockid]'); if (!card) return;
-  const id = card.getAttribute('data-blockid');
-  const b = (window._paBlocks || []).find(x => x.id === id); if (!b) return;
-  card.querySelectorAll('[data-bkey]').forEach(el => {
-    const k    = el.getAttribute('data-bkey');
-    const val  = el.type === 'checkbox' ? !!el.checked : el.value;
-    const cIdx = el.getAttribute('data-cellidx');
-    const rIdx = el.getAttribute('data-rowidx');
-    const sub  = el.getAttribute('data-sub');
-    if (cIdx != null) {
-      if (!Array.isArray(b.cells)) b.cells = [];
-      b.cells[+cIdx] = { ...(b.cells[+cIdx] || {}), [k]: val };
-    } else if (rIdx != null) {
-      // why → rows, ingredients → items, how_to_use → tiles
-      const arrKey = b.type === 'why' ? 'rows'
-                   : (b.type === 'ingredients_chips' || b.type === 'ingredients_line') ? 'items'
-                   : b.type === 'how_to_use' ? 'tiles'
-                   : null;
-      if (arrKey) {
-        if (!Array.isArray(b[arrKey])) b[arrKey] = [];
-        b[arrKey][+rIdx] = { ...(b[arrKey][+rIdx] || {}), [k]: val };
-      }
-    } else if (sub) {
-      b[sub] = { ...(b[sub] || {}), [k]: val };
-    } else {
-      b[k] = val;
-    }
-  });
-}
-
-// ── Tabs strip — one tab per block, click to select for editing ─────
-// Glyphs + names are derived from the PA_BLOCK_TYPES registry so adding
-// a new type only requires one entry above; tab strip, editor header,
-// and sub-labels all pick it up automatically.
-const PA_TYPE_GLYPH = Object.fromEntries(PA_BLOCK_TYPES.map(t => [t.type, t.glyph]));
-const PA_TYPE_NAME  = Object.fromEntries(PA_BLOCK_TYPES.map(t => [t.type, { en: t.name_en, cn: t.name_cn }]));
-// Legacy alias — older saves used `stat_callout` for the Big Stat block.
-PA_TYPE_GLYPH.stat_callout = PA_TYPE_GLYPH.stat_callout || '✨';
-PA_TYPE_NAME.stat_callout  = PA_TYPE_NAME.stat_callout  || { en: 'Big Stat', cn: '大数字' };
-
-function _paBlockSubLabel(b) {
-  // Sub-label = the first 40 chars of the block's headline content, so
-  // the tab strip reads like a TOC. Each branch picks the most
-  // representative field for that block type.
-  const trim = s => (s || '').toString().trim();
-  const head = s => trim(s).slice(0, 40) + (trim(s).length > 40 ? '…' : '');
-
-  if (b.type === 'hero_intro') {
-    return head(b.body_en || b.body_cn || b.highlight_en || b.highlight_cn || b.kicker_en || b.kicker_cn);
-  }
-  if (b.type === 'stat_callout' || b.type === 'big_stat') {
-    return [trim(b.stat), trim(b.what_en || b.what_cn || b.claim_en || b.claim_cn)].filter(Boolean).join(' · ');
-  }
-  if (b.type === 'allergen_card') {
-    return head(b.contains_en || b.contains_cn);
-  }
-  if (b.type === 'spec_strip') {
-    const cells = Array.isArray(b.cells) ? b.cells : [];
-    return cells.map(c => trim(c.v_en || c.v_cn)).filter(Boolean).slice(0, 3).join(' · ').slice(0, 40);
-  }
-  if (b.type === 'why') {
-    const r = (b.rows || [])[0] || {};
-    return head(r.claim_en || r.claim_cn);
-  }
-  if (b.type === 'ingredients_chips' || b.type === 'ingredients_line') {
-    const items = b.items || [];
-    return items.map(it => trim(it.name_en || it.name_cn)).filter(Boolean).slice(0, 4).join(', ').slice(0, 40);
-  }
-  if (b.type === 'how_to_use') {
-    const tiles = b.tiles || [];
-    return tiles.map(t => trim(t.label_en || t.label_cn)).filter(Boolean).slice(0, 4).join(' · ').slice(0, 40);
-  }
-  if (b.type === 'storage_box') {
-    return [b.left?.head_en || b.left?.head_cn, b.right?.head_en || b.right?.head_cn].filter(Boolean).join(' · ');
-  }
-  if (b.type === 'notes_callout') {
-    return head(b.text_en || b.text_cn);
-  }
-  if (b.type === 'pull_quote') {
-    return head(b.text_en || b.text_cn);
-  }
-  return '';
-}
-function paRenderTabs() {
-  const list = document.getElementById('pa-blocks-list'); if (!list) return;
-  const blocks = window._paBlocks || [];
-  if (!blocks.length) {
-    list.innerHTML = '<div class="helper" style="padding:14px 6px;text-align:center;font-size:11px;line-height:1.5">No sections yet.<br>Use the dropdown above<br>to add your first. · 暂无板块。</div>';
-    return;
-  }
-  list.innerHTML = blocks.map((b, i) => {
-    const glyph  = PA_TYPE_GLYPH[b.type] || '🧩';
-    const tName  = (PA_TYPE_NAME[b.type] || { en: b.type, cn: '' });
-    const sub    = _paBlockSubLabel(b);
-    const active = b.id === PA_SELECTED_BLOCK_ID ? ' active' : '';
-    return `<div class="pa-block-row${active}" data-blockid="${b.id}" onclick="paBlocksSelect('${b.id}')" title="${escapeAttr(tName.en + (tName.cn ? ' · ' + tName.cn : ''))}">
-      <div class="pbr-icon">${glyph}</div>
-      <div class="pbr-info">
-        <div class="pbr-name">${escapeHtml(tName.en)}</div>
-        ${sub ? `<div class="pbr-sub">${escapeHtml(sub)}</div>` : ''}
-      </div>
-      <div class="pbr-num">${i + 1}</div>
-    </div>`;
-  }).join('');
-}
-// Update tab sub-labels in place (called on keystroke so the form doesn't
-// re-render and steal focus). Cheap full innerHTML refresh — tabs are tiny.
-function paRefreshTabLabels() {
-  const blocks = window._paBlocks || [];
-  blocks.forEach(b => {
-    const row = document.querySelector(`.pa-block-row[data-blockid="${b.id}"]`);
-    if (!row) return;
-    const subEl = row.querySelector('.pbr-sub');
-    const sub = _paBlockSubLabel(b);
-    if (sub) {
-      if (subEl) subEl.textContent = sub;
-      else {
-        const div = document.createElement('div');
-        div.className = 'pbr-sub';
-        div.textContent = sub;
-        const info = row.querySelector('.pbr-info');
-        if (info) info.appendChild(div);
-      }
-    } else if (subEl) subEl.remove();
-  });
-}
-
-// ── Selected-block editor — one form pane for the currently-selected block ─
-// ── Selected-block editor — one form pane per block type ──────────────
-// Per-type form helpers are dispatched from paRenderSelectedEditor based
-// on the selected block's `type`. Array-shaped blocks (why / ingredients /
-// how_to_use) use the small `paArrAdd/Remove` helpers below to mutate the
-// model and re-render. Single-shape blocks just bind data-bkey inputs.
-
-function _paBlockEditorBody(b) {
-  // Convenience pre-syncs:
-  const v = (k) => escapeAttr(b[k] || '');
-  const t = (k) => escapeHtml(b[k] || '');
-
-  // -------- spec_strip --------
-  if (b.type === 'spec_strip') {
-    const cells = Array.isArray(b.cells) && b.cells.length
-      ? b.cells
-      : [{ k_en:'Type',k_cn:'类型',v_en:'',v_cn:'' },
-         { k_en:'Net Wt',k_cn:'净重',v_en:'',v_cn:'' },
-         { k_en:'Origin',k_cn:'产地',v_en:'',v_cn:'' }];
-    return `
-      <div class="helper" style="margin:-4px 0 10px">Meta facts shown as a quiet strip under the product header. Labels are caps; values are serif. Designed for 3 cells but you can add/remove as needed. · 产品头部下方的安静一行,小标签 + 衬线值。默认 3 格,可按需增删。</div>
-      ${cells.map((c, i) => `
-        <div class="pa-edit-section" style="padding:9px 11px;background:var(--bg-pane);margin-bottom:8px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-            <span class="pa-edit-section-title">Cell · 第 ${i + 1} 格</span>
-            <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','cells',${i})" ${cells.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
-          </div>
-          <div class="pa-edit-grid-2">
-            <div class="field"><label class="stacked">Label EN · 标签(英文)</label><input data-cellidx="${i}" data-bkey="k_en" type="text" value="${escapeAttr(c.k_en || '')}" placeholder="Type"></div>
-            <div class="field"><label class="stacked">Label 中文</label><input data-cellidx="${i}" data-bkey="k_cn" type="text" value="${escapeAttr(c.k_cn || '')}" placeholder="类型"></div>
-            <div class="field"><label class="stacked">Value EN · 值(英文)</label><input data-cellidx="${i}" data-bkey="v_en" type="text" value="${escapeAttr(c.v_en || '')}" placeholder="Refrigerated dip"></div>
-            <div class="field"><label class="stacked">Value 中文</label><input data-cellidx="${i}" data-bkey="v_cn" type="text" value="${escapeAttr(c.v_cn || '')}" placeholder="冷藏蘸酱"></div>
-          </div>
-        </div>`).join('')}
-      <button type="button" class="btn" style="margin-top:6px" onclick="paArrAdd('${b.id}','cells',{k_en:'',k_cn:'',v_en:'',v_cn:''})">+ Add cell · 添加一格</button>`;
-  }
-
-  // -------- hero_intro --------
-  if (b.type === 'hero_intro') {
-    return `
-      <div class="pa-edit-grid-2">
-        <div class="field"><label class="stacked">Kicker EN · 引题(英文)</label>
-          <input data-bkey="kicker_en" type="text" value="${v('kicker_en')}" placeholder="The story">
-          <div class="helper">Optional caps prefix above the paragraph (e.g. "The story", "Mature · clean · no shortcuts"). · 段落上方的小标题(大写,可选)。</div>
-        </div>
-        <div class="field"><label class="stacked">Kicker 中文</label>
-          <input data-bkey="kicker_cn" type="text" value="${v('kicker_cn')}" placeholder="故事">
-        </div>
-        <div class="field" style="grid-column:span 2"><label class="stacked">Body EN · 正文</label>
-          <textarea data-bkey="body_en" rows="5">${t('body_en')}</textarea>
-        </div>
-        <div class="field" style="grid-column:span 2"><label class="stacked">Body 中文</label>
-          <textarea data-bkey="body_cn" rows="5">${t('body_cn')}</textarea>
-        </div>
-        <div class="field"><label class="stacked">Highlight EN · 重点(英文)</label>
-          <input data-bkey="highlight_en" type="text" value="${v('highlight_en')}" placeholder="just enough heat to wake things up">
-          <div class="helper">If this phrase appears in the body, it renders inline on a lime slab. If not, falls back to the kicker slot above. · 若该短语出现在正文中,会以青柠色块呈现;否则回退到上方引题位置。</div>
-        </div>
-        <div class="field"><label class="stacked">Highlight 中文</label>
-          <input data-bkey="highlight_cn" type="text" value="${v('highlight_cn')}" placeholder="刚好够把舌头叫醒">
-        </div>
-      </div>`;
-  }
-
-  // -------- why --------
-  if (b.type === 'why') {
-    const rows = Array.isArray(b.rows) ? b.rows : [];
-    return `
-      <div class="helper" style="margin:-4px 0 14px">3–5 single-sentence benefits. Numbered ledger on the mini-app. · 3-5 条单句卖点,小程序中编号呈现。</div>
-      ${rows.map((r, i) => `
-        <div class="pa-edit-section" style="padding:12px 14px;background:var(--bg-pane);margin-bottom:10px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-            <span class="pa-edit-section-title">${String(i + 1).padStart(2, '0')}</span>
-            <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','rows',${i})" ${rows.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
-          </div>
-          <div class="pa-edit-grid-2">
-            <div class="field"><label class="stacked">Claim EN · 说明(英文)</label><input data-rowidx="${i}" data-bkey="claim_en" type="text" value="${escapeAttr(r.claim_en || '')}" placeholder="Fresh herb flavor with controlled heat."></div>
-            <div class="field"><label class="stacked">Claim 中文</label><input data-rowidx="${i}" data-bkey="claim_cn" type="text" value="${escapeAttr(r.claim_cn || '')}" placeholder="鲜草本风味,可控辣度。"></div>
-          </div>
-        </div>`).join('')}
-      <button type="button" class="btn" style="margin-top:6px" onclick="paArrAdd('${b.id}','rows',{claim_en:'',claim_cn:''})" ${rows.length >= 5 ? 'disabled' : ''}>+ Add claim · 添加</button>`;
-  }
-
-  // -------- ingredients_chips / ingredients_line --------
-  if (b.type === 'ingredients_chips' || b.type === 'ingredients_line') {
-    const items = Array.isArray(b.items) ? b.items : [];
-    const isChips = b.type === 'ingredients_chips';
-    return `
-      <div class="helper" style="margin:-4px 0 14px">
-        ${isChips
-          ? 'Pill cloud. Mark one item as the <b>hero</b> chip and add a <b>%</b> for any item ≥ 10%. · 圆角标签,可标记一个主料,加百分比。'
-          : 'Editorial single-line run with lime-dot separators. Best for clean lists ≤ 10 items. · 编辑式一行体,适合简洁列表。'}
-      </div>
-      ${items.map((it, i) => `
-        <div class="pa-edit-section" style="padding:12px 14px;background:var(--bg-pane);margin-bottom:10px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-            <span class="pa-edit-section-title">${String(i + 1).padStart(2, '0')}</span>
-            <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','items',${i})" ${items.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
-          </div>
-          <div class="pa-edit-grid-2">
-            <div class="field"><label class="stacked">Name EN · 名称(英文)</label><input data-rowidx="${i}" data-bkey="name_en" type="text" value="${escapeAttr(it.name_en || '')}" placeholder="Fresh cilantro"></div>
-            <div class="field"><label class="stacked">Name 中文</label><input data-rowidx="${i}" data-bkey="name_cn" type="text" value="${escapeAttr(it.name_cn || '')}" placeholder="鲜香菜"></div>
-            <div class="field"><label class="stacked">% (optional)</label><input data-rowidx="${i}" data-bkey="pct" type="number" min="0" max="100" value="${escapeAttr(it.pct == null ? '' : it.pct)}" placeholder="38"></div>
-            <div class="field"><label class="stacked">Hero · 主料</label>
-              <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-1);cursor:pointer">
-                <input data-rowidx="${i}" data-bkey="lead" type="checkbox" ${it.lead ? 'checked' : ''}>
-                <span>Inverted hero chip · 反色主料标签</span>
-              </label>
-            </div>
-          </div>
-        </div>`).join('')}
-      <button type="button" class="btn" style="margin-top:6px" onclick="paArrAdd('${b.id}','items',{name_en:'',name_cn:'',pct:'',lead:false})">+ Add ingredient · 添加配料</button>`;
-  }
-
-  // -------- allergen_card --------
-  if (b.type === 'allergen_card') {
-    return `
-      <div class="pa-edit-grid-2">
-        <div class="field"><label class="stacked">Contains EN · 包含(英文)</label>
-          <input data-bkey="contains_en" type="text" value="${v('contains_en')}" placeholder="Tree nuts, Hazelnuts">
-          <div class="helper">Comma-separated · berry strong chips. Leave blank for "None declared". · 逗号分隔,显示为深莓色标签。留空显示"无声明"。</div>
-        </div>
-        <div class="field"><label class="stacked">Contains 中文 · 含有</label>
-          <input data-bkey="contains_cn" type="text" value="${v('contains_cn')}" placeholder="树坚果,榛子">
-        </div>
-        <div class="field"><label class="stacked">May Contain EN · 可能含有(英文)</label>
-          <input data-bkey="may_contain_en" type="text" value="${v('may_contain_en')}" placeholder="Other tree nuts, soy">
-          <div class="helper">Comma-separated · corn soft chips. · 逗号分隔,显示为玉米色软标签。</div>
-        </div>
-        <div class="field"><label class="stacked">May Contain 中文 · 可能含有</label>
-          <input data-bkey="may_contain_cn" type="text" value="${v('may_contain_cn')}" placeholder="其他树坚果、大豆">
-        </div>
-      </div>`;
-  }
-
-  // -------- how_to_use --------
-  if (b.type === 'how_to_use') {
-    const tiles = Array.isArray(b.tiles) ? b.tiles : [];
-    return `
-      <div class="helper" style="margin:-4px 0 14px">6 tiles (3-col grid) or 8 tiles (4-col grid) — never 5 or 7. Each tile: emoji + caps label + optional italic sub-line. · 6 块 (3 列) 或 8 块 (4 列),emoji + 标签 + 可选副标题。</div>
-      ${tiles.map((tl, i) => `
-        <div class="pa-edit-section" style="padding:12px 14px;background:var(--bg-pane);margin-bottom:10px">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-            <span class="pa-edit-section-title">${String(i + 1).padStart(2, '0')}</span>
-            <button type="button" class="btn danger" style="padding:3px 9px;font-size:11px" onclick="paArrRemove('${b.id}','tiles',${i})" ${tiles.length <= 1 ? 'disabled' : ''}>Remove · 删除</button>
-          </div>
-          <div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:10px">
-            <div class="field"><label class="stacked">Icon · 图标</label><input data-rowidx="${i}" data-bkey="icon" type="text" value="${escapeAttr(tl.icon || '')}" placeholder="🥖" style="text-align:center;font-size:18px"></div>
-            <div class="field"><label class="stacked">Label EN · 标签(英文)</label><input data-rowidx="${i}" data-bkey="label_en" type="text" value="${escapeAttr(tl.label_en || '')}" placeholder="Toast"></div>
-            <div class="field"><label class="stacked">Label 中文</label><input data-rowidx="${i}" data-bkey="label_cn" type="text" value="${escapeAttr(tl.label_cn || '')}" placeholder="吐司"></div>
-            <div></div>
-            <div class="field"><label class="stacked">Sub EN (optional) · 副标(英文,可选)</label><input data-rowidx="${i}" data-bkey="sub_en" type="text" value="${escapeAttr(tl.sub_en || '')}" placeholder="over eggs"></div>
-            <div class="field"><label class="stacked">Sub 中文 (optional)</label><input data-rowidx="${i}" data-bkey="sub_cn" type="text" value="${escapeAttr(tl.sub_cn || '')}" placeholder="盖在鸡蛋上"></div>
-          </div>
-        </div>`).join('')}
-      <button type="button" class="btn" style="margin-top:6px" onclick="paArrAdd('${b.id}','tiles',{icon:'',label_en:'',label_cn:'',sub_en:'',sub_cn:''})" ${tiles.length >= 8 ? 'disabled' : ''}>+ Add tile · 添加用法</button>`;
-  }
-
-  // -------- storage_box --------
-  if (b.type === 'storage_box') {
-    const L = b.left  || {};
-    const R = b.right || {};
-    const card = (which, c) => `
-      <div class="pa-edit-section" style="padding:12px 14px;background:var(--bg-pane);margin-bottom:10px">
-        <div class="pa-edit-section-title" style="margin-bottom:8px">${which === 'left' ? 'Left card · 左卡' : 'Right card · 右卡'}</div>
-        <div style="display:grid;grid-template-columns:60px 1fr 1fr;gap:10px">
-          <div class="field"><label class="stacked">Icon · 图标</label><input data-sub="${which}" data-bkey="icon" type="text" value="${escapeAttr(c.icon || '')}" placeholder="❄" style="text-align:center;font-size:18px"></div>
-          <div class="field"><label class="stacked">Head EN · 标题(英文)</label><input data-sub="${which}" data-bkey="head_en" type="text" value="${escapeAttr(c.head_en || '')}" placeholder="Refrigerated"></div>
-          <div class="field"><label class="stacked">Head 中文</label><input data-sub="${which}" data-bkey="head_cn" type="text" value="${escapeAttr(c.head_cn || '')}" placeholder="冷藏"></div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px">
-          <div class="field"><label class="stacked">Big word EN · 大字(英文)</label><input data-sub="${which}" data-bkey="num_en" type="text" value="${escapeAttr(c.num_en || c.num || '')}" placeholder="Cool & dry"></div>
-          <div class="field"><label class="stacked">Big word CN · 大字(中文)</label><input data-sub="${which}" data-bkey="num_cn" type="text" value="${escapeAttr(c.num_cn || '')}" placeholder="阴凉干燥"></div>
-        </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px">
-          <div class="field"><label class="stacked">Unit EN · 单位(英文)</label><input data-sub="${which}" data-bkey="unit_en" type="text" value="${escapeAttr(c.unit_en || '')}" placeholder="Store away from heat"></div>
-          <div class="field"><label class="stacked">Unit 中文</label><input data-sub="${which}" data-bkey="unit_cn" type="text" value="${escapeAttr(c.unit_cn || '')}" placeholder="远离高温和潮湿"></div>
-        </div>
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-1);margin-top:10px;cursor:pointer">
-          <input data-sub="${which}" data-bkey="alt" type="checkbox" ${c.alt ? 'checked' : ''}>
-          <span>Inverted (ink fill, oat text) · 反色卡片</span>
-        </label>
-      </div>`;
-    return `
-      <div class="helper" style="margin:-4px 0 14px">Two paired condition cards. Keep one inverted so they read as a set. · 双卡片成对,其中一张反色形成对比。</div>
-      ${card('left',  L)}
-      ${card('right', R)}
-      <div class="pa-edit-grid-2" style="margin-top:8px">
-        <div class="field"><label class="stacked">After-opening note EN · 开封后备注(英文)</label><input data-bkey="note_en" type="text" value="${v('note_en')}" placeholder="After opening · refrigerate"></div>
-        <div class="field"><label class="stacked">After-opening note 中文</label><input data-bkey="note_cn" type="text" value="${v('note_cn')}" placeholder="开封后冷藏"></div>
-      </div>`;
-  }
-
-  // -------- notes_callout --------
-  if (b.type === 'notes_callout') {
-    return `
-      <div class="helper" style="margin:-4px 0 14px">Fine-print band — "shake before use", warnings, sourcing notes. Max ~3 lines. · 小字注释,如「使用前摇匀」等。</div>
-      <div class="pa-edit-grid-2">
-        <div class="field" style="grid-column:span 2"><label class="stacked">Text EN · 文字(英文)</label>
-          <textarea data-bkey="text_en" rows="3">${t('text_en')}</textarea>
-        </div>
-        <div class="field" style="grid-column:span 2"><label class="stacked">Text 中文</label>
-          <textarea data-bkey="text_cn" rows="3">${t('text_cn')}</textarea>
-        </div>
-      </div>`;
-  }
-
-  // -------- big_stat --------
-  if (b.type === 'big_stat' || b.type === 'stat_callout') {
-    const bgOpts = ['lime','carrot','pink','corn','sky','lotus','papaya','cucumber'];
-    return `
-      <div class="pa-edit-grid-2">
-        <div class="field" style="grid-column:span 2"><label class="stacked">Stat · 数字</label>
-          <input data-bkey="stat" type="text" value="${v('stat')}" placeholder="81%" style="font-size:22px;font-weight:700;text-align:center">
-          <div class="helper">e.g. <code>81%</code>, <code>500g</code>, <code>0g</code> · 例如</div>
-        </div>
-        <div class="field"><label class="stacked">What EN · 内容(英文)</label>
-          <input data-bkey="what_en" type="text" value="${v('what_en')}" placeholder="HAZELNUTS">
-          <div class="helper">Caps label under the stat. · 数字下方的大写小标题。</div>
-        </div>
-        <div class="field"><label class="stacked">What 中文</label>
-          <input data-bkey="what_cn" type="text" value="${v('what_cn')}" placeholder="榛子">
-        </div>
-        <div class="field" style="grid-column:span 2"><label class="stacked">Claim EN (optional) · 说明(英文,可选)</label>
-          <input data-bkey="claim_en" type="text" value="${v('claim_en')}" placeholder="Nuts first, not sugar.">
-          <div class="helper">Italic one-liner under the what-label. · 内容标签下方的斜体一行说明。</div>
-        </div>
-        <div class="field" style="grid-column:span 2"><label class="stacked">Claim 中文 (optional)</label>
-          <input data-bkey="claim_cn" type="text" value="${v('claim_cn')}" placeholder="坚果当先,不靠糖分。">
-        </div>
-        <div class="field" style="grid-column:span 2"><label class="stacked">Slab colour · 色块颜色</label>
-          <select data-bkey="bg">
-            ${bgOpts.map(c => `<option value="${c}" ${b.bg === c ? 'selected' : ''}>${c}</option>`).join('')}
-          </select>
-        </div>
-      </div>`;
-  }
-
-  // -------- pull_quote --------
-  if (b.type === 'pull_quote') {
-    return `
-      <div class="helper" style="margin:-4px 0 14px">Editorial sourcing/producer quote on warm tan background. First-person voice from the kitchen. · 编辑式引文,温色背景,第一人称。</div>
-      <div class="pa-edit-grid-2">
-        <div class="field" style="grid-column:span 2"><label class="stacked">Quote EN · 引文(英文)</label>
-          <textarea data-bkey="text_en" rows="3" placeholder='"Our hazelnuts are slow-roasted in small batches…"'>${t('text_en')}</textarea>
-        </div>
-        <div class="field" style="grid-column:span 2"><label class="stacked">Quote 中文</label>
-          <textarea data-bkey="text_cn" rows="3" placeholder='"我们的榛子在小批量中慢烘…"'>${t('text_cn')}</textarea>
-        </div>
-        <div class="field"><label class="stacked">Attribution EN · 引用来源(英文)</label>
-          <input data-bkey="who_en" type="text" value="${v('who_en')}" placeholder="Our kitchen · Guangzhou">
-        </div>
-        <div class="field"><label class="stacked">Attribution 中文</label>
-          <input data-bkey="who_cn" type="text" value="${v('who_cn')}" placeholder="我们的厨房 · 广州">
-        </div>
-      </div>`;
-  }
-
-  return `<div class="helper" style="padding:8px 0">Unknown block type · 未知板块类型: <code>${escapeHtml(b.type || '')}</code></div>`;
-}
-
-function paRenderSelectedEditor() {
-  const mount = document.getElementById('pa-block-editor-mount'); if (!mount) return;
-  const blocks = window._paBlocks || [];
-  if (!blocks.length) {
-    mount.innerHTML = '<div class="pa-blocks-empty">No sections yet. Use the <strong>+ Add section</strong> dropdown on the left to compose a designed page.<br>暂无板块。在左侧下拉选择类型开始排版。</div>';
-    return;
-  }
-  let b = blocks.find(x => x.id === PA_SELECTED_BLOCK_ID);
-  if (!b) { b = blocks[0]; PA_SELECTED_BLOCK_ID = b.id; }
-
-  const tName = PA_TYPE_NAME[b.type] || { en: b.type, cn: '' };
-  const glyph = PA_TYPE_GLYPH[b.type] || '🧩';
-  const body  = _paBlockEditorBody(b);
-
-  mount.innerHTML = `
-    <div class="pa-inspector-head" data-blockid="${b.id}">
-      <div class="pa-inspector-head-left">
-        <div class="pa-inspector-icon">${glyph}</div>
-        <span class="pa-inspector-title">${escapeHtml(tName.en)}</span>
-        ${tName.cn ? `<span class="pa-inspector-sub">· ${escapeHtml(tName.cn)}</span>` : ''}
-      </div>
-      <div class="pa-inspector-actions">
-        <button type="button" class="btn" title="Move up · 上移" onclick="paBlocksMove('${b.id}', -1)">↑</button>
-        <button type="button" class="btn" title="Move down · 下移" onclick="paBlocksMove('${b.id}', 1)">↓</button>
-        <button type="button" class="btn danger" title="Delete block · 删除板块" onclick="paBlocksRemove('${b.id}')">✕</button>
-      </div>
-    </div>
-    <div class="pa-inspector-body">
-      ${body}
-    </div>`;
-
-  // Wire keystroke → live preview
-  mount.querySelectorAll('[data-bkey]').forEach(el => {
-    const ev = el.type === 'checkbox' ? 'change' : 'input';
-    el.addEventListener(ev, paLivePreview);
-  });
-}
-
-// Array-mutating helpers used by the Why / Ingredients / How-to-use editor
-// forms. They sync the DOM first (so in-flight edits to OTHER rows aren't
-// lost), mutate the selected block's array, then re-render the editor.
-function paArrAdd(blockId, key, factory) {
-  paBlocksSyncFromDOM();
-  const b = (window._paBlocks || []).find(x => x.id === blockId); if (!b) return;
-  if (!Array.isArray(b[key])) b[key] = [];
-  b[key].push(typeof factory === 'function' ? factory() : { ...factory });
-  paRenderAll();
-}
-function paArrRemove(blockId, key, idx) {
-  paBlocksSyncFromDOM();
-  const b = (window._paBlocks || []).find(x => x.id === blockId); if (!b) return;
-  if (!Array.isArray(b[key])) return;
-  if (b[key].length <= 1) return; // keep at least one row
-  b[key].splice(idx, 1);
-  paRenderAll();
-}
-
-function paBlocksCollect() {
-  paBlocksSyncFromDOM();
-  // Drop blocks where every meaningful field is empty so we don't save
-  // ghost rows the office added but never filled. Filtering is per-type
-  // so the test for "empty" matches the type's shape.
-  const out = (window._paBlocks || []).filter(b => {
-    if (b.type === 'hero_intro')     return !!(b.body_en || b.body_cn || b.highlight_en || b.highlight_cn || b.kicker_en || b.kicker_cn);
-    if (b.type === 'stat_callout' || b.type === 'big_stat')
-                                     return !!(b.stat || b.what_en || b.what_cn || b.claim_en || b.claim_cn);
-    if (b.type === 'allergen_card')  return !!(b.contains_en || b.contains_cn || b.may_contain_en || b.may_contain_cn);
-    if (b.type === 'spec_strip')     return (b.cells || []).some(c => c.v_en || c.v_cn || c.k_en || c.k_cn);
-    if (b.type === 'why')            return (b.rows  || []).some(r => r.claim_en || r.claim_cn);
-    if (b.type === 'ingredients_chips' || b.type === 'ingredients_line')
-                                     return (b.items || []).some(it => it.name_en || it.name_cn);
-    if (b.type === 'how_to_use')     return (b.tiles || []).some(t => t.label_en || t.label_cn || t.icon);
-    if (b.type === 'storage_box')    {
-      const hasCard = c => c && (c.head_en || c.head_cn || c.num_en || c.num_cn || c.num || c.unit_en || c.unit_cn);
-      return hasCard(b.left) || hasCard(b.right) || b.note_en || b.note_cn;
-    }
-    if (b.type === 'notes_callout')  return !!(b.text_en || b.text_cn);
-    if (b.type === 'pull_quote')     return !!(b.text_en || b.text_cn || b.who_en || b.who_cn);
-    return true;
-  });
-  return out.length ? out : null;
-}
-
-// ── Live phone-frame preview ─────────────────────────────────────────────
-// Mirrors what miniapp/components/product-blocks/* will render — kept in
-// lock-step so the office sees the real visual while editing.
-function _paInlineHl(body, phrase) {
-  if (!phrase || !body) return { html: escapeHtml(body || ''), loose: '' };
-  const idx = body.toLowerCase().indexOf(phrase.toLowerCase());
-  if (idx < 0) return { html: escapeHtml(body), loose: phrase };
-  return {
-    html: escapeHtml(body.slice(0, idx))
-        + '<span class="pa-prev-hero-hl">' + escapeHtml(body.slice(idx, idx + phrase.length)) + '</span>'
-        + escapeHtml(body.slice(idx + phrase.length)),
-    loose: '',
-  };
-}
-function _paSplitChips(s) {
-  return String(s || '').split(/[,、，]/g).map(x => x.trim()).filter(Boolean);
-}
-// Render one block as preview HTML. We render EN side by default (the
-// office can re-open the preview in CN once a language toggle is added).
-// Each branch here mirrors the matching WXML in product-blocks/ so the
-// office sees roughly what they'll get on the phone.
-function _paPreviewBlockHtml(b) {
-  const esc = escapeHtml;
-  const pickT = (en, cn) => ((en || '').trim() || (cn || '').trim());
-
-  if (b.type === 'spec_strip') {
-    const cells = (b.cells || []).map(c => ({
-      k: pickT(c.k_en, c.k_cn),
-      v: pickT(c.v_en, c.v_cn),
-    })).filter(c => c.k || c.v);
-    if (!cells.length) return '';
-    return `<div class="pa-prev-block pa-prev-spec">
-      ${cells.map(c => `<div class="pa-prev-spec-cell">
-        ${c.k ? `<div class="pa-prev-spec-k">${esc(c.k)}</div>` : ''}
-        ${c.v ? `<div class="pa-prev-spec-v">${esc(c.v)}</div>` : ''}
-      </div>`).join('')}
-    </div>`;
-  }
-
-  if (b.type === 'hero_intro') {
-    const body    = pickT(b.body_en, b.body_cn);
-    const phrase  = pickT(b.highlight_en, b.highlight_cn);
-    const kicker  = pickT(b.kicker_en, b.kicker_cn);
-    if (!body && !phrase && !kicker) return '';
-    const m = _paInlineHl(body, phrase);
-    const lead = kicker || m.loose;
-    return `<div class="pa-prev-block pa-prev-hero">
-      ${lead ? `<div class="pa-prev-hero-lead">${esc(lead)}</div>` : ''}
-      ${body ? `<div class="pa-prev-hero-body">${m.html}</div>` : ''}
-    </div>`;
-  }
-
-  if (b.type === 'why') {
-    const rows = (b.rows || []).map(r => pickT(r.claim_en, r.claim_cn)).filter(Boolean);
-    if (!rows.length) return '';
-    return `<div class="pa-prev-block pa-prev-why">
-      <div class="pa-prev-why-head">
-        <span class="pa-prev-why-l">Why people choose it</span>
-        <span class="pa-prev-why-r">${String(rows.length).padStart(2, '0')}</span>
-      </div>
-      ${rows.map((c, i) => `<div class="pa-prev-why-row ${i === 0 ? 'first' : ''}">
-        <span class="pa-prev-why-n">${String(i + 1).padStart(2, '0')}</span>
-        <span class="pa-prev-why-claim">${esc(c)}</span>
-      </div>`).join('')}
-    </div>`;
-  }
-
-  if (b.type === 'ingredients_chips') {
-    const items = (b.items || []).map(it => ({
-      name: pickT(it.name_en, it.name_cn),
-      pct:  it.pct != null && it.pct !== '' ? Number(it.pct) : null,
-      lead: !!it.lead,
-    })).filter(it => it.name);
-    if (!items.length) return '';
-    return `<div class="pa-prev-block pa-prev-ing">
-      <div class="pa-prev-section-head">
-        <span class="pa-prev-section-h3">Ingredients</span>
-        <span class="pa-prev-section-tag">${items.length} items · chips</span>
-      </div>
-      <div class="pa-prev-ing-chips">
-        ${items.map(it => `<span class="pa-prev-chip ${it.lead ? 'lead' : ''}">
-          ${esc(it.name)}
-          ${it.pct != null && !isNaN(it.pct) && it.pct >= 10 ? `<span class="pa-prev-chip-pct">${it.pct}%</span>` : ''}
-        </span>`).join('')}
-      </div>
-    </div>`;
-  }
-
-  if (b.type === 'ingredients_line') {
-    const items = (b.items || []).map(it => ({
-      name: pickT(it.name_en, it.name_cn),
-      pct:  it.pct != null && it.pct !== '' ? Number(it.pct) : null,
-    })).filter(it => it.name);
-    if (!items.length) return '';
-    const run = items.map((it, i) => {
-      const sep = i > 0 ? '<span class="pa-prev-ing-line-sep"></span>' : '';
-      const pct = it.pct != null && !isNaN(it.pct) ? `<span class="pa-prev-ing-line-pct"> ${it.pct}%</span>` : '';
-      return `${sep}${esc(it.name)}${pct}`;
-    }).join(' ');
-    return `<div class="pa-prev-block pa-prev-ing">
-      <div class="pa-prev-section-head">
-        <span class="pa-prev-section-h3">Ingredients</span>
-        <span class="pa-prev-section-tag">editorial run</span>
-      </div>
-      <div class="pa-prev-ing-line">${run}</div>
-    </div>`;
-  }
-
-  if (b.type === 'allergen_card') {
-    const contains   = _paSplitChips(b.contains_en || b.contains_cn);
-    const mayContain = _paSplitChips(b.may_contain_en || b.may_contain_cn);
-    const chips = (arr, cls) => arr.map(c => `<span class="pa-prev-allergen-chip ${cls}">${esc(c)}</span>`).join('');
-    return `<div class="pa-prev-block pa-prev-allergen">
-      <div class="pa-prev-allergen-top">
-        <span class="pa-prev-allergen-ttl"><span class="pa-prev-allergen-warn">!</span> Allergens</span>
-        <span class="pa-prev-allergen-meta">GB-7718</span>
-      </div>
-      <div class="pa-prev-allergen-row">
-        <span class="pa-prev-allergen-lbl">Contains</span>
-        <span class="pa-prev-allergen-chips">${contains.length ? chips(contains, 'strong') : '<span class="pa-prev-allergen-empty">None declared</span>'}</span>
-      </div>
-      ${mayContain.length ? `<div class="pa-prev-allergen-row">
-        <span class="pa-prev-allergen-lbl">May contain<br>traces of</span>
-        <span class="pa-prev-allergen-chips">${chips(mayContain, 'soft')}</span>
-      </div>` : ''}
-    </div>`;
-  }
-
-  if (b.type === 'how_to_use') {
-    const tiles = (b.tiles || []).map(t => ({
-      icon: t.icon || '',
-      lbl:  pickT(t.label_en, t.label_cn),
-      sub:  pickT(t.sub_en, t.sub_cn),
-    })).filter(t => t.lbl || t.icon);
-    if (!tiles.length) return '';
-    const cols = tiles.length >= 8 ? 4 : 3;
-    return `<div class="pa-prev-block pa-prev-how">
-      <div class="pa-prev-section-head">
-        <span class="pa-prev-section-h3">How to use</span>
-        <span class="pa-prev-section-tag">${tiles.length} moments</span>
-      </div>
-      <div class="pa-prev-how-grid" style="grid-template-columns:repeat(${cols},1fr)">
-        ${tiles.map(t => `<div class="pa-prev-how-tile">
-          ${t.icon ? `<span class="pa-prev-how-ic">${esc(t.icon)}</span>` : ''}
-          ${t.lbl  ? `<span class="pa-prev-how-lbl">${esc(t.lbl)}</span>` : ''}
-          ${t.sub  ? `<span class="pa-prev-how-sub">${esc(t.sub)}</span>` : ''}
-        </div>`).join('')}
-      </div>
-    </div>`;
-  }
-
-  if (b.type === 'storage_box') {
-    const cardHtml = (c) => {
-      if (!c) return '';
-      const head = pickT(c.head_en, c.head_cn);
-      const unit = pickT(c.unit_en, c.unit_cn);
-      const num  = (pickT(c.num_en, c.num_cn) || c.num || '').toString();
-      if (!head && !num && !unit) return '';
-      return `<div class="pa-prev-storage-card ${c.alt ? 'alt' : ''}">
-        ${c.icon ? `<span class="pa-prev-storage-ic">${esc(c.icon)}</span>` : ''}
-        ${head ? `<div class="pa-prev-storage-head">${esc(head)}</div>` : ''}
-        ${num ? `<div class="pa-prev-storage-num">${esc(num)}</div>` : ''}
-        ${unit ? `<div class="pa-prev-storage-unit">${esc(unit)}</div>` : ''}
-      </div>`;
-    };
-    const L = cardHtml(b.left);
-    const R = cardHtml(b.right);
-    const note = pickT(b.note_en, b.note_cn);
-    if (!L && !R && !note) return '';
-    return `<div class="pa-prev-block pa-prev-storage">
-      <div class="pa-prev-section-head">
-        <span class="pa-prev-section-h3">Storage</span>
-        <span class="pa-prev-section-tag">keep it right</span>
-      </div>
-      <div class="pa-prev-storage-pair">${L}${R}</div>
-      ${note ? `<div class="pa-prev-storage-note">${esc(note)}</div>` : ''}
-    </div>`;
-  }
-
-  if (b.type === 'notes_callout') {
-    const text = pickT(b.text_en, b.text_cn);
-    if (!text) return '';
-    return `<div class="pa-prev-block pa-prev-notes"><div class="pa-prev-notes-p">${esc(text)}</div></div>`;
-  }
-
-  if (b.type === 'big_stat' || b.type === 'stat_callout') {
-    const stat  = (b.stat || '').toString().trim();
-    const what  = pickT(b.what_en || b.claim_en, b.what_cn || b.claim_cn);
-    const claim = pickT(b.sub_en || b.claim_en, b.sub_cn || b.claim_cn);
-    if (!stat && !what && !claim) return '';
-    // Slab background — direct hex map keeps the preview self-contained
-    // (the mini-app side reads var(--lime) etc. inside the component scope).
-    const BG = {
-      lime: '#CCD900', carrot: '#FF6B0C', pink: '#F4B8CB',
-      corn: '#F2CA6C', sky: '#B2CFED', lotus: '#EEB8E4',
-      papaya: '#FFAF60', cucumber: '#A8D185',
-    };
-    const bg = BG[b.bg] || BG.lime;
-    return `<div class="pa-prev-block pa-prev-stat" style="background:${bg}">
-      ${stat ? `<div class="pa-prev-stat-num">${esc(stat)}</div>` : ''}
-      ${what ? `<div class="pa-prev-stat-claim">${esc(what)}</div>` : ''}
-      ${claim ? `<div class="pa-prev-stat-sub">${esc(claim)}</div>` : ''}
-    </div>`;
-  }
-
-  if (b.type === 'pull_quote') {
-    const text = pickT(b.text_en, b.text_cn);
-    const who  = pickT(b.who_en,  b.who_cn);
-    if (!text && !who) return '';
-    return `<div class="pa-prev-block pa-prev-pullquote">
-      ${text ? `<div class="pa-prev-pullquote-p">"${esc(text)}"</div>` : ''}
-      ${who  ? `<div class="pa-prev-pullquote-who">${esc(who)}</div>` : ''}
-    </div>`;
-  }
-
-  return '';
-}
-// Mirror of the mini-app's category → IP-character mapping in product.js.
-// Keep this synced so the retail-admin preview shows the same default
-// character the customer will actually see on the phone.
-const PA_COLOPHON_AUTO_MAP = [
-  [/(sauce|dip|condiment|paste|chutney)/, 'soilsoul'],
-  [/(spread|butter|jam)/,                  'skater'],
-  [/(drink|kombucha|juice|beverage|tea)/,  'kombucha-gang'],
-  [/(protein|powder|supplement|flour)/,    'flex'],
-  [/(root|tuber|carrot|radish|beet)/,      'radishes'],
-  [/(fungi|mushroom)/,                     'mushroom'],
-  [/(legume|bean|pea|lentil|chickpea)/,    'peas'],
-  [/(onion|allium|garlic|leek)/,           'onion'],
-  [/(broccoli|cabbage|leafy|green)/,       'broccoli'],
-];
-function _paResolveColophonChar(override, category) {
-  if (override) return override;
-  const cat = (category || '').toLowerCase();
-  const hit = PA_COLOPHON_AUTO_MAP.find(([rx]) => rx.test(cat));
-  return hit ? hit[1] : 'soilsoul';
-}
-
-function paRenderPreview() {
-  const screen = document.getElementById('pa-preview-screen'); if (!screen || !PA_CURRENT) return;
-  const p = PA_CURRENT;
-  // Read latest values directly from inputs (no full DOM sync — these
-  // are simple text inputs that we read by id every paint).
-  const kwEN = document.getElementById('pa-edit-keywords-en').value || '';
-  const kwCN = document.getElementById('pa-edit-keywords-cn').value || '';
-  const tgEN = document.getElementById('pa-edit-tagline-en').value  || '';
-  const tgCN = document.getElementById('pa-edit-tagline-cn').value  || '';
-  const keywords = kwEN || kwCN;
-  const tagline  = tgEN || tgCN;
-  const otherLang = p.name_cn || '';
-
-  // Colophon state
-  const colChar    = (document.getElementById('pa-edit-colophon-character').value || '').trim();
-  const colTagEN   = (document.getElementById('pa-edit-colophon-tagline-en').value || '').trim();
-  const colTagCN   = (document.getElementById('pa-edit-colophon-tagline-cn').value || '').trim();
-  const colResChar = _paResolveColophonChar(colChar, p.category);
-  const colResTag  = colTagEN || colTagCN || 'From Soil to Soul';
-  const colIsAuto  = !colChar;
-
-  const img = p.image_data || p.image_url || '';
-  const heroStyle = img ? `background-image:url('${escapeAttr(img)}'); background-color:transparent;` : '';
-  const blocksHtml = (window._paBlocks || []).map(_paPreviewBlockHtml).filter(Boolean).join('');
-
-  screen.innerHTML = `
-    <div class="pa-prev-hero" style="${heroStyle}">${img ? '' : '🛍'}</div>
-    <div class="pa-prev-body">
-      <div class="pa-prev-name">${escapeHtml(p.name_en || '—')}</div>
-      ${(otherLang || keywords) ? `<div class="pa-prev-subtitle">
-        ${otherLang ? escapeHtml(otherLang) : ''}${otherLang && keywords ? ' · ' : ''}${keywords ? escapeHtml(keywords) : ''}
-      </div>` : ''}
-      ${tagline ? `<div class="pa-prev-tagline">${escapeHtml(tagline)}</div>` : ''}
-      ${blocksHtml || (!keywords && !tagline ? '<div class="pa-prev-empty">No designer sections yet. Add one to compose the page.</div>' : '')}
-      <div class="pa-prev-colophon">
-        <img class="pa-prev-colophon-img" src="/assets/brand/ip-${colResChar}.jpg" alt="">
-        <div class="pa-prev-colophon-tagline">${escapeHtml(colResTag)}</div>
-        <div class="pa-prev-colophon-meta">
-          <span class="pa-prev-colophon-rule"></span>
-          <span>Roots · ESTD 2017</span>
-          <span class="pa-prev-colophon-rule"></span>
-        </div>
-        ${colIsAuto ? '<div class="pa-prev-colophon-auto">auto · 自动</div>' : ''}
-      </div>
-    </div>`;
-}
-
-// Wire chrome inputs once on first script eval; they live in static markup,
-// so a single hook is enough for the lifetime of the page.
-[
-  'pa-edit-keywords-en', 'pa-edit-keywords-cn',
-  'pa-edit-tagline-en',  'pa-edit-tagline-cn',
-  'pa-edit-colophon-tagline-en', 'pa-edit-colophon-tagline-cn',
-].forEach(id => {
-  const el = document.getElementById(id);
-  if (el) el.addEventListener('input', paRenderPreview);
-});
 
 // ════════════════════════════════════════════════════════════════════════════
 // GUIDED PRODUCT WIZARD (PC) — "Add a product" made simple for non-tech sellers.

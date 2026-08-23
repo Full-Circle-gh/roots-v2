@@ -4282,24 +4282,18 @@
 
   <!-- ─── PRODUCTS ─── -->
   <section id="tab-products">
-    <!-- Page head, per the locked mockup: the eyebrow names the section, the
-         title says it in the operator's own words, the lede says what the page
-         is for. Bilingual halves ride as separate blocks (never glued). -->
-    <div class="t-ord-eyebrow">Products · 产品</div>
-    <!-- Title row + ⓘ. Both the title and the ⓘ tooltip follow whichever
-         sub-view is on screen — Catalogue / Stock activity / Categories —
-         painted by prodSetHelp() in 09-products.js (data-no-i18n:
-         the live language is written straight into it by cuT). The "what is
-         this" copy is one-time teaching text, so it rides behind the ⓘ (hover
-         or tap) instead of standing on the page. -->
+    <!-- §1.7 page header — three elements, no fourth: title · status line ·
+         one Dusk CTA. The section-label eyebrow is retired product-wide
+         (the rail already says where you are), and the ⓘ went with it: the
+         status line answers "what needs me" better than teaching copy behind
+         a tooltip. The status line reports WORK WAITING, never population —
+         "209 products" is a census and belongs in a tile if anywhere.
+         Painted by paRenderKpis(); the title still follows the sub-view. -->
     <div class="pa-head-row">
-      <h2 class="pa-pagetitle" id="pa-pagetitle" data-no-i18n>Your catalogue</h2>
-      <span class="pa-info-wrap" id="pa-info-wrap">
-        <button type="button" class="pa-info" id="pa-info-btn" aria-label="What is this page?" aria-expanded="false" onclick="prodToggleHelp(event)">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><line x1="12" y1="11" x2="12" y2="16.5"/><circle cx="12" cy="7.5" r=".7" fill="currentColor" stroke="none"/></svg>
-        </button>
-        <span class="pa-info-pop" role="tooltip"><span id="pa-info-text" data-no-i18n></span></span>
-      </span>
+      <div class="pa-head-id">
+        <h2 class="pa-pagetitle" id="pa-pagetitle" data-no-i18n>Products</h2>
+        <div class="pa-status-line" id="pa-status-line" data-no-i18n hidden></div>
+      </div>
       <div class="pa-addsplit" id="pa-addsplit">
         <button class="btn btn-primary pa-addsplit-main" id="pa-wizard-btn" type="button" onclick="pwOpen()" style="white-space:nowrap;"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M8 2.5l1.2 2.8L12 6.5 9.2 7.7 8 10.5 6.8 7.7 4 6.5l2.8-1.2z"/><path d="M12.5 10.5l.5 1.2 1.2.5-1.2.5-.5 1.2-.5-1.2-1.2-.5 1.2-.5z"/></svg>Step by step · 分步添加</button>
         <button class="btn btn-primary pa-addsplit-caret" id="pa-add-caret" type="button" aria-haspopup="true" aria-label="More ways to add · 更多添加方式" title="More ways to add · 更多添加方式" onclick="paAddMenu(this)"><svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"/></svg></button>
@@ -4320,76 +4314,75 @@
          about the catalogue. -->
     <div class="stk-views" id="stk-views" data-cap="activity:view categories:view">
       <button type="button" class="stk-view on" id="stk-view-btn-catalog" onclick="prodShowView('catalog')">Catalogue · 目录</button>
-      <button type="button" class="stk-view" id="stk-view-btn-activity" data-cap="activity:view" onclick="prodShowView('activity')"><i class="stk-view-dot" id="stk-view-dot" hidden></i>Stock activity · 库存流水</button>
+      <button type="button" class="stk-view" id="stk-view-btn-activity" data-cap="activity:view" onclick="prodShowView('activity')">Stock activity · 库存流水</button>
       <button type="button" class="stk-view" id="stk-view-btn-categories" data-cap="categories:view" onclick="prodShowView('categories')">Categories · 分类</button>
     </div>
 
     <div id="prod-view-catalog">
 
-    <!-- Catalogue health — the Recap band. One calm line: how many products are
-         live, plus one-click jumps to the buckets that actually need the operator
-         (sold out / low / drafts). Values are computed in-browser by
-         paRenderKpis(); the jump buttons reuse the paSetStatus() quick-filter and
-         its .pa-kpi-on highlight. The low-stock threshold knob sits in the sub-bar
-         below (out of the main scan path). -->
-    <div class="pa-recap-card" id="pa-kpis">
-      <div class="pa-recap">
-      <div class="pa-recap-hero">
-        <div class="pa-recap-cap">Active · 已上架</div>
-        <div class="pa-recap-n"><span id="pa-kpi-active">—</span> <span class="pa-recap-u"><span>of · 共</span> <b id="pa-kpi-total" data-no-i18n>—</b> <span>products · 件</span></span></div>
-        <!-- Proportion bar — at a glance, how much of the whole catalogue is live
-             vs disabled. Sage fill = active share; the cream track = the rest. -->
-        <div class="pa-recap-bar"><span class="pa-recap-bar-fill" id="pa-kpi-bar-fill"></span></div>
-        <!-- Legend is a colour key for the bar only — the actual counts live in
-             the headline (Active) and the Disabled jump tile, so no numbers here. -->
-        <div class="pa-recap-legend">
-          <span><span class="pa-recap-sw sw-active"></span><span>Active · 已上架</span></span>
-          <span><span class="pa-recap-sw sw-dis"></span><span>Disabled · 已下架</span></span>
-        </div>
-      </div>
-      <div class="pa-recap-rule"></div>
-      <div class="pa-recap-jump">
-        <span class="pa-recap-jlbl">Jump to · 快捷筛选</span>
-        <button type="button" class="pa-jump" id="pa-kpi-oos-tile" onclick="paSetStatus('oos')" title="Show sold-out products · 仅显示缺货产品">
-          <span class="pa-jump-dot is-out"></span><span class="pa-jump-n" id="pa-kpi-oos">—</span><span class="pa-jump-l">Sold out · 缺货</span>
-        </button>
-        <button type="button" class="pa-jump" id="pa-kpi-low-tile" onclick="paSetStatus('low')" title="Show low-stock products · 仅显示库存偏低产品">
-          <span class="pa-jump-dot is-low"></span><span class="pa-jump-n" id="pa-kpi-low">—</span><span class="pa-jump-l">Low stock · 库存偏低</span>
-        </button>
-        <button type="button" class="pa-jump" id="pa-kpi-drafts-tile" onclick="paSetStatus('drafts')" title="Show disabled products · 仅显示已下架产品">
-          <span class="pa-jump-dot is-draft"></span><span class="pa-jump-n" id="pa-kpi-drafts">—</span><span class="pa-jump-l">Disabled · 已下架</span>
-        </button>
-        <button type="button" class="pa-jump" id="pa-kpi-dead-tile" onclick="paSetStatus('dead')" title="No sale in 30 days · 30 天无销量" hidden>
-          <span class="pa-jump-dot is-dead"></span><span class="pa-jump-n" id="pa-kpi-dead">—</span><span class="pa-jump-l">Going nowhere · 无人问津</span>
-        </button>
-        <button type="button" class="pa-jump" id="pa-kpi-promo-tile" onclick="paSetStatus('promo')" title="On a flash sale right now · 正在闪购" hidden>
-          <span class="pa-jump-dot is-promo"></span><span class="pa-jump-n" id="pa-kpi-promo">—</span><span class="pa-jump-l">On promotion · 促销中</span>
-        </button>
-      </div>
-      </div>
+    <!-- §1.1a row 3 — the pulse. Four tiles, one row, never two; each jumps to
+         its matching filter via paSetStatus() and lights with .pa-kpi-on.
+         Sold out and Low stock are NOT here — they are work waiting, so they
+         ride in the header's status line instead, and §1.7's non-duplication
+         rule keeps them from being said twice. The old Active hero, proportion
+         bar and legend are gone: the Active tile carries the same fact in
+         fewer marks. Dead + Promotion auto-hide at zero (paRenderHighlights). -->
+    <div class="pa-pulse" id="pa-kpis">
+      <button type="button" class="pa-tile" id="pa-kpi-live-tile" onclick="paSetStatus('live')" title="Show products that are live in the shop · 仅显示已上架产品">
+        <span class="pa-tile-l">Active in shop · 已上架</span>
+        <span class="pa-tile-n" id="pa-kpi-active">—</span>
+        <span class="pa-tile-d" data-no-i18n>of <b id="pa-kpi-total">—</b></span>
+      </button>
+      <button type="button" class="pa-tile" id="pa-kpi-drafts-tile" onclick="paSetStatus('drafts')" title="Show disabled products · 仅显示已下架产品">
+        <span class="pa-tile-l">Disabled · 已下架</span>
+        <span class="pa-tile-n" id="pa-kpi-drafts">—</span>
+        <span class="pa-tile-d">Hidden from shoppers · 顾客看不到</span>
+      </button>
+      <button type="button" class="pa-tile" id="pa-kpi-dead-tile" onclick="paSetStatus('dead')" title="No sale in 30 days · 30 天无销量" hidden>
+        <span class="pa-tile-l">Going nowhere · 无人问津</span>
+        <span class="pa-tile-n" id="pa-kpi-dead">—</span>
+        <span class="pa-tile-d">No sale in 30 days · 30 天无销量</span>
+      </button>
+      <button type="button" class="pa-tile" id="pa-kpi-promo-tile" onclick="paSetStatus('promo')" title="On a flash sale right now · 正在闪购" hidden>
+        <span class="pa-tile-l">On promotion · 促销中</span>
+        <span class="pa-tile-n" id="pa-kpi-promo">—</span>
+        <span class="pa-tile-d">Flash sale running · 闪购进行中</span>
+      </button>
     </div>
     <!-- Categories as chips: one tap, the count in view, nothing to open.
          #pa-filter below is still the value everything reads — the chips just
          write to it (paPickCat), so paRender and the subcategory select never
          had to learn a second way to ask which category is on. -->
     <div class="pa-chips" id="pa-chips"></div>
+    <!-- §1.1a row 5 — the filter row: two dropdowns, then one wide search, in
+         that order. The store switcher is the first dropdown; Status is the
+         second, and it is where the `restock` filter finally gets a control
+         (until now it could only be reached from a dashboard tile). Category
+         is NOT here — it is the chip row above, the primary axis. -->
     <div class="pa-toolbar">
-      <input id="pa-search" type="text" data-ph-en="Search by name, SKU…" data-ph-cn="按名称、SKU 搜索…" placeholder="Search by name, SKU…">
+      <div id="pa-store-seg" class="pa-store-seg"></div>
+      <select id="pa-statusfilter" title="Filter by status · 按状态筛选" onchange="paSetStatus(this.value, false)">
+        <option value="all">Status: All · 全部状态</option>
+        <option value="live">Active in shop · 已上架</option>
+        <option value="drafts">Disabled · 已下架</option>
+        <option value="oos">Sold out · 缺货</option>
+        <option value="low">Low stock · 库存偏低</option>
+        <option value="restock">Needs restock · 需补货</option>
+        <option value="dead">Going nowhere · 无人问津</option>
+        <option value="promo">On promotion · 促销中</option>
+      </select>
+      <input id="pa-search" type="text" data-ph-en="Filter these products" data-ph-cn="筛选产品" placeholder="Filter these products">
       <select id="pa-filter" class="pa-filter-hidden" title="Filter by category · 按分类筛选">
         <option value="all">All categories · 全部分类</option>
       </select>
       <select id="pa-subfilter" title="Filter by subcategory · 按子分类筛选" style="display:none">
         <option value="all">All subcategories · 全部子分类</option>
       </select>
-      <!-- Add product — one split button. The main click starts the step-by-step
-           wizard (the recommended path); the caret drops to the two ways to add
-           so the blank-form option no longer competes for its own slot. -->
       <div id="pa-view-seg" class="pa-view-seg" role="group" aria-label="Product layout · 产品布局">
         <button type="button" class="pa-view-btn" data-view="list" title="List view · 列表视图" aria-label="List view"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/></svg></button>
         <button type="button" class="pa-view-btn" data-view="grid" title="Grid view · 网格视图" aria-label="Grid view"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="8" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/><rect x="13" y="13" width="8" height="8" rx="1.5"/></svg></button>
-        <button type="button" class="pa-view-btn" data-view="compact" title="Compact view · 紧凑视图" aria-label="Compact view"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9.5" y="2" width="5" height="5" rx="1"/><rect x="17" y="2" width="5" height="5" rx="1"/><rect x="2" y="9.5" width="5" height="5" rx="1"/><rect x="9.5" y="9.5" width="5" height="5" rx="1"/><rect x="17" y="9.5" width="5" height="5" rx="1"/><rect x="2" y="17" width="5" height="5" rx="1"/><rect x="9.5" y="17" width="5" height="5" rx="1"/><rect x="17" y="17" width="5" height="5" rx="1"/></svg></button>
       </div>
-      <div class="ovp-wrap" style="margin-left:auto">
+      <div class="ovp-wrap">
         <button class="btn btn-sm" id="pv-btn" onclick="pvToggle()" aria-haspopup="true" title="Display options · 显示选项">View · 视图</button>
         <div id="pv-pop" class="ovp" hidden>
           <div class="ovp-head">Display options · 显示选项</div>
@@ -4425,8 +4418,10 @@
     <!-- Sub-bar (one row): store switcher + shown-count. The low-stock threshold
          moved to Settings → Operations → Stores; bulk actions are now a permanent
          bar above the list (no separate Bulk button). -->
+    <!-- The store switcher moved up into the filter row (it narrows records,
+         so it belongs with the other two dropdowns). What is left here is the
+         shown-count, which sits with the list it counts. -->
     <div class="pa-subbar">
-      <div id="pa-store-seg" class="pa-store-seg" style="display:none"></div>
       <div id="pa-count" class="pa-count"></div>
     </div>
 
@@ -4448,7 +4443,10 @@
            Product Page Editor window (launched from the button below). Docked
            in the right column; #pd-empty is the placeholder shown when nothing
            is selected. ── -->
-      <div id="pd-bg" class="pa-split-editor">
+      <!-- Scrim behind the drawer: the list stays readable but not clickable,
+           because a drawer is one record at a time. Clicking it closes. -->
+      <div id="pd-scrim" onclick="pdClose()" aria-hidden="true"></div>
+      <div id="pd-bg" class="pa-split-editor" role="dialog" aria-modal="true" aria-label="Product details">
         <div id="pd-empty" class="pd-empty">
           <p class="pd-empty-h">Pick a product on the left · 在左侧选择产品</p>
           <p class="pd-empty-sub">…or click <b>Step by step</b> above to create a new one. · 或点击上方「分步添加」创建新产品。</p>
@@ -4827,92 +4825,9 @@
       <div id="pd-pp-mount" class="pd-pp-mount"></div>
     </div>
 
-    <!-- ── Designer Sections editor modal — split-pane (forms + live preview) ── -->
-    <div id="pa-edit-bg" class="pu-editor-bg">
-      <div class="pu-editor pa-modal">
-        <div class="pu-editor-head">
-          <div style="min-width:0">
-            <h3 id="pa-edit-name" style="margin:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></h3>
-            <div id="pa-edit-sub" class="helper" style="margin-top:2px"></div>
-          </div>
-          <button class="btn" onclick="paCloseEdit()">Close · 关闭</button>
-        </div>
-
-        <div class="pa-edit-body">
-          <!-- LEFT: block list (vertical palette) -->
-          <div class="pa-edit-palette">
-            <div class="pa-edit-palette-head">
-              <span class="pa-edit-palette-title">🎨 Sections · 板块</span>
-              <select id="pa-blocks-picker" onchange="paBlocksAdd(this.value);this.value=''" style="font-size:11px;padding:5px 8px;font-weight:500;width:100%">
-                <option value="">+ Add section… · 添加板块…</option>
-              </select>
-            </div>
-            <div id="pa-blocks-list" class="pa-edit-palette-scroll"></div>
-          </div>
-
-          <!-- CENTER: phone canvas (the big focal point — mirrors CMS canvas) -->
-          <div class="pa-edit-canvas">
-            <div class="pa-prev-frame">
-              <div class="pa-prev-screen" id="pa-preview-screen"></div>
-            </div>
-          </div>
-
-          <!-- RIGHT: inspector panel (chrome + colophon + presets + block form) -->
-          <div class="pa-edit-inspector">
-            <div class="pa-edit-inspector-scroll">
-              <!-- Card chrome: keywords + tagline -->
-              <div class="pa-inspector-chrome">
-                <div class="pa-chrome">
-                  <div class="pa-chrome-title">Card chrome · 卡片元素</div>
-                  <div class="pa-chrome-grid">
-                    <div class="field"><label class="stacked">Keywords EN · 关键词(英文)</label><input id="pa-edit-keywords-en" type="text" placeholder="e.g. raw, alive"></div>
-                    <div class="field"><label class="stacked">Keywords 中文</label><input id="pa-edit-keywords-cn" type="text" placeholder="例如:鲜活"></div>
-                    <div class="field"><label class="stacked">Tagline EN · 标语(英文)</label><input id="pa-edit-tagline-en" type="text" placeholder="e.g. Your gut deserves better"></div>
-                    <div class="field"><label class="stacked">Tagline 中文</label><input id="pa-edit-tagline-cn" type="text" placeholder="例如:肠道值得更好的关怀"></div>
-                  </div>
-                </div>
-
-                <!-- Colophon — collapsible to save space -->
-                <details class="pa-colophon-details">
-                  <summary>Colophon · 片尾签名</summary>
-                  <div class="pa-chrome">
-                    <div style="display:flex;align-items:center;justify-content:space-between;margin:0 0 6px;gap:8px;flex-wrap:wrap">
-                      <span class="helper" style="font-size:11px">IP character · 角色 <span style="opacity:.7">(auto-pick if blank)</span></span>
-                      <button type="button" class="btn" style="padding:3px 8px;font-size:11px" onclick="paClearColophonChar()">Auto · 自动</button>
-                    </div>
-                    <div id="pa-colophon-grid" class="pa-colophon-grid"></div>
-                    <div class="pa-chrome-grid" style="margin-top:10px">
-                      <div class="field"><label class="stacked">Tagline EN</label><input id="pa-edit-colophon-tagline-en" type="text" placeholder="From Soil to Soul"></div>
-                      <div class="field"><label class="stacked">Tagline 中文</label><input id="pa-edit-colophon-tagline-cn" type="text" placeholder="从土壤到灵魂"></div>
-                    </div>
-                    <input type="hidden" id="pa-edit-colophon-character" value="">
-                  </div>
-                </details>
-              </div>
-
-              <!-- Presets -->
-              <div class="pa-inspector-presets">
-                <div class="pa-presets">
-                  <div class="pa-presets-head">
-                    <span class="pa-presets-title">Start from a preset · 套用版型</span>
-                    <span class="pa-presets-hint helper">Pre-fills a coherent block stack. · 套用一套连贯板块。</span>
-                  </div>
-                  <div class="pa-presets-row" id="pa-presets-row"></div>
-                </div>
-              </div>
-
-              <!-- Block inspector form -->
-              <div id="pa-block-editor-mount"></div>
-            </div>
-          </div>
-        </div>
-
-        <div class="pu-editor-foot">
-          <button class="btn" onclick="paCloseEdit()">Cancel · 取消</button>
-          <button class="btn btn-primary" onclick="paSaveEdit()">💾 Save · 保存</button>
-        </div>
-      </div>
-    </div>
+    <!-- The Designer Sections modal (#pa-edit-bg) is GONE. Nothing on this
+         page could open it — the live block editor is product-editor.html,
+         reached from the editor's Page tab. Its ~1,170-line engine went too. -->
 
     </div><!-- /#prod-view-catalog -->
 
