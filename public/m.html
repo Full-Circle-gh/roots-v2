@@ -241,6 +241,8 @@ const state = {
   affiliate:null, affiliateTried:false, affRows:null, affSeg:'', affErr:null, invSeg:'all', invLoaded:false,
   geo:null, geoTried:false, chan:null, chanTried:false, sales:null, salesSummary:null, dlvBusy:false, dlvErr:null,
   chanSheet:null, chanBusy:null, chanErr:null,
+  team:null, teamTried:false, teamErr:null, teamEnforce:false, teamBusy:null, teamActErr:null,
+  trend:null, trendKey:null, trendErr:null, trendRange:'7', trendMetric:'revenue',
   recap:null, recapTried:false, recapSince:0, reallyAway:false, pos:'default',
   overflow:false, search:false, detailId:null, detailActions:false, productSku:null,
   orderBusy:null, orderErr:null, replyBusy:false, replyErr:null, revBusy:null, revErr:null, parcelBusy:null,
@@ -824,6 +826,48 @@ reg('signout', ()=>{
 });
 reg('enable', f=>{ if(FEATURES.includes(f)) toggleFeature(f); });
 reg('toggleFeature', k=>toggleFeature(k));
+/* Switching one person off. The confirm says what it costs and what it does
+   not — an account that cannot sign in still owns everything it did, and the
+   first worry about deactivating somebody mid-shift is whether their orders go
+   with them. The server's own refusals (yourself, the last owner) are surfaced
+   verbatim: they are already bilingual and they say exactly which rule was hit,
+   which is more use than a generic "that did not save". */
+reg('teamToggle', id=>{
+  if(state.teamBusy) return;
+  const u=(state.team||[]).find(x=>String(x.id)===String(id)); if(!u) return;
+  // The handler checks the rules too, not just the renderer. Drawing no tap
+  // target is a guard the VIEW enforces, and APP.cmd is reachable without it —
+  // so a row that says "the only owner" could still have been walked into a
+  // confirm for something the server was always going to refuse.
+  if(!TEAM_CAN_MANAGE()) return;
+  if(u.isActive&&teamLockReason(u)) return;
+  const next=!u.isActive, who=u.displayName||u.username;
+  state.ask={
+    title: next ? T('Let '+who+' sign in again?', '恢复 '+who+' 的登录？')
+                : T('Switch '+who+' off?', '停用 '+who+'？'),
+    body: next ? T('They get their role back, exactly as it was.','其角色权限将完全恢复。')
+               : T('They cannot sign in on any device from now on. Everything they have already done stays as it is, under their name.',
+                   '此后无法在任何设备登录。此前的所有操作记录保持不变，仍记在其名下。'),
+    confirmLabel: next?T('Let them in','恢复'):T('Switch off','停用'), danger:!next,
+    run:()=>{
+      state.teamBusy=u.id; state.teamActErr=null; render();
+      apiWrite('/api/backend/team/'+u.id,{is_active:next},'PUT').then(()=>{
+        u.isActive=next; state.teamBusy=null; render();
+        showToast(next?T('Can sign in again','已恢复登录'):T('Switched off','已停用'));
+      }).catch(e=>{
+        state.teamBusy=null;
+        if(String(e.message)==='auth') return;
+        // The route's own words — "You can't deactivate your own account",
+        // "The tenant needs at least one active owner" — already bilingual and
+        // already specific.
+        state.teamActErr=e.message||T('That did not save. Nothing has changed.','没有保存成功。数据没有变化。');
+        render();
+      });
+    }};
+  render();
+});
+reg('trendRange', v=>{ state.trendRange=v; render(); loadTrend(); });
+reg('trendMetric', v=>{ state.trendMetric=v; render(); });
 reg('openChannel', k=>{ state.chanSheet=k; state.chanErr=null; render(); });
 reg('closeChannel', ()=>{ state.chanSheet=null; state.chanErr=null; render(); });
 /* One store on one channel. `next` arrives as '1' or '0' from the template —
@@ -1642,7 +1686,7 @@ function screenSales(){
    Catalogue, Categories and Stock activity are gone from this list: they are
    sub-views of Products now, and a page reachable two ways drifts in one. */
 const MORE_GROUPS=[
-  {h:['Operations','运营'],rows:[['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购']]},
+  {h:['Operations','运营'],rows:[['inbox','message-square-text','Inbox','消息'],['sales','store','Sales','销售'],['trend','trending-up','Trend','趋势'],['delivery','truck','Delivery','配送'],['invoices','receipt','Invoices','发票'],['purchasing','shopping-cart','Purchasing','采购']]},
   {h:['Marketing','营销'],rows:[['coupons','ticket','Coupons','优惠券'],['flash','zap','Flash sales','秒杀'],['popups','app-window','Pop-ups','弹窗'],['affiliate','share-2','Affiliate','分销'],['sharecards','gift','Share cards','分享卡片'],['broadcasts','megaphone','Broadcasts','广播'],['social','quote','Social proof','社交证明']]},
   {h:['Loyalty & Wallet','会员与钱包'],rows:[['membership','award','Membership','会员积分'],['wallet','wallet','Top-up','充值'],['leaderboard','trophy','Leaderboard','排行榜'],['voting','vote','Voting','投票']]},
   {h:['Content','内容'],rows:[['editor','pen-tool','Editor','编辑器'],['about','info','About page','关于页'],['media','image','Media','媒体库'],['legal','scale','Legal pages','法律条款'],['faq','circle-help','FAQ & help','常见问题']]},
@@ -3173,6 +3217,8 @@ const SUBS={
      expecting a screen and get told to go elsewhere. Products carries the
      counting. The Quick Stock FEATURE switch in Settings is a different thing
      and stays: it decides whether staff can open the /stock app at all. */
+  trend:{title:['Trend','趋势'],status:()=>statusTrend(),render:()=>screenTrend()},
+  team:{title:['Team','团队'],status:()=>statusTeam(),render:()=>screenTeam()},
   operations:{title:['Operations','运营'],render:()=>screenOperations()},
   settings:{title:['Settings','设置'],render:()=>screenSettings()},
   mirror_meituan:{title:['Meituan','美团'],render:()=>mirrorScreen('meituan',T('Read-only mirror. Manage in the Meituan app.','只读镜像，请在美团后台管理。'))},
@@ -3481,7 +3527,7 @@ function FEATURE_ROWS(){
 }
 function screenSettings(){
   const groups=[
-    {h:T('Store','店铺'),rows:[{label:T('Store profile','店铺资料'),value:T('on desktop','在电脑端')},{label:T('Operations','运营'),cmd:"APP.cmd('push','operations')",chev:true}]},
+    {h:T('Store','店铺'),rows:[{label:T('Store profile','店铺资料'),value:T('on desktop','在电脑端')},{label:T('Operations','运营'),cmd:"APP.cmd('push','operations')",chev:true},{label:T('Team','团队'),cmd:"APP.cmd('push','team')",chev:true}]},
     {h:T('Notifications','通知'),rows:[{label:T('Live updates','实时更新'),tgl:'__live'},{label:T('Sound','提示音'),tgl:'__sound'}]},
     {h:T('Features','功能'),rows:FEATURE_ROWS()},
     // No Auto-print row here. It used to sit in this group, in Operations, AND
@@ -3561,7 +3607,7 @@ function orderNext(o){
 /* A write helper that keeps the server's own words. api() throws away the body,
    and the body is where the reason lives. */
 async function apiWrite(path, body, method){
-  const r=await fetch(API+path,{method:method||'POST',credentials:'same-origin',
+  const r=await fetch(apiURL(path),{method:method||'POST',credentials:'same-origin',
     headers:{'content-type':'application/json',accept:'application/json'},body:JSON.stringify(body||{})});
   if(r.status===401||r.status===403){ location.href='/backend/login'; throw new Error('auth'); }
   let j=null; try{ j=await r.json(); }catch(e){}
@@ -4609,6 +4655,217 @@ function sheetReply(){
        <button class="btn2" style="width:100%" ${state.replyBusy?'disabled':''} onclick="APP.cmd('sendReplyText',(document.getElementById('mReply')||{}).value)">${state.replyBusy?T('Sending…','发送中…'):T('Send reply','发送回复')}</button>
        ${th?`<div style="font-size:12px;color:var(--text-secondary);text-align:center">${foot}</div>`:''}</div></div>`;
 }
+/* ==========================================================================
+   Trend (desktop: 03-dashboard.js, the Reports tab's Trend chapter)
+   --------------------------------------------------------------------------
+   Everything else on this phone is TODAY. Home fetches
+   /dashboard?from=today&to=today, and the only date range anywhere in the file
+   was Stock activity's. "Is this week better than last?" is a question you ask
+   standing in the shop, and the phone could not answer it at any length.
+
+   Not the desktop's Reports. That has four chapters, ~28 aggregate queries and
+   an AI read; a chart with hover columns and a shared y-scale is a desktop
+   affordance and stays there. What travels is the shape of the line and three
+   numbers under it — which is all the endpoint's own `trend` array has ever
+   been, one bucket per day of {bucket, orders, revenue, visits}. The phone was
+   already calling this endpoint. It just never asked for more than one day.
+
+   The money gate is the Recap's: a warehouse, dispatch or customer-service
+   account sees orders and visits and no revenue at all — including as the
+   default metric, because a tile that shows money for half a second before
+   hiding it has already shown it.
+   ========================================================================== */
+const TREND_RANGES=[['7','7 days','7 天'],['30','30 days','30 天'],['90','90 days','90 天']];
+const TREND_METRICS=[['revenue','Revenue','营收'],['orders','Orders','订单'],['visits','Visits','访问']];
+function trendMetric(){
+  const m=state.trendMetric;
+  return (m==='revenue'&&recapNoMoney()) ? 'orders' : m;
+}
+function loadTrend(force){
+  const key=state.trendRange;
+  if(state.trendKey===key&&!force) return;
+  state.trendKey=key; state.trend=null; state.trendErr=null;
+  const to=GZ_ISO().slice(0,10);
+  const from=(()=>{ const d=new Date(to+'T00:00:00'); d.setDate(d.getDate()-(Number(key)-1));
+    return d.toISOString().slice(0,10); })();
+  api('/dashboard?from='+from+'&to='+to).then(d=>{
+    if(state.trendKey!==key) return;   // a later range won the race
+    state.trend=Array.isArray(d&&d.trend)?d.trend:[];
+    render();
+  }).catch(e=>{ if(String(e.message)==='auth') return;
+    if(state.trendKey!==key) return;
+    state.trendErr=E('Could not load the trend.','加载趋势失败。'); render(); });
+}
+/* A line, and nothing else — no axes, no grid, no hover. At 390px an axis label
+   is unreadable and a hover column has nothing to hover with. The shape is the
+   point; the numbers under it carry the values. */
+function sparkline(vals,tone){
+  const n=vals.length; if(!n) return '';
+  const W=1000,H=200,pad=6;
+  const max=Math.max(1,...vals);
+  const x=i=>pad+(n===1?(W-2*pad)/2:(i/(n-1))*(W-2*pad));
+  const y=v=>pad+(H-2*pad)-(v/max)*(H-2*pad);
+  const pts=vals.map((v,i)=>x(i).toFixed(1)+','+y(v).toFixed(1));
+  const area='M'+x(0).toFixed(1)+','+(H-pad)+' L'+pts.join(' L')+' L'+x(n-1).toFixed(1)+','+(H-pad)+' Z';
+  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="display:block;width:100%;height:96px" aria-hidden="true">
+    <path d="${area}" fill="var(--${tone}-tint)"></path>
+    <path d="M${pts.join(' L')}" fill="none" stroke="var(--${tone}-ink)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" vector-effect="non-scaling-stroke"></path>
+    <circle cx="${x(n-1).toFixed(1)}" cy="${y(vals[n-1]).toFixed(1)}" r="7" fill="var(--${tone}-ink)"></circle></svg>`;
+}
+function statusTrend(){
+  const t=state.trend; if(!t||!t.length) return '';
+  const m=trendMetric();
+  const total=t.reduce((a,p)=>a+(Number(p[m])||0),0);
+  const lbl=TREND_METRICS.find(x=>x[0]===m);
+  return (m==='revenue'?money0(CUR,total):Math.round(total).toLocaleString())
+    + ' ' + T(lbl[1],lbl[2]).toLowerCase()
+    + ' · ' + T('last '+state.trendRange+' days','近 '+state.trendRange+' 天');
+}
+function screenTrend(){
+  loadTrend();
+  const m=trendMetric();
+  const metrics=TREND_METRICS.filter(x=>!(x[0]==='revenue'&&recapNoMoney()));
+  const chips=(list,cur,cmd)=>`<div style="display:flex;gap:3px;background:var(--surface-raised);border-radius:11px;padding:3px">
+    ${list.map(([k,en,zh])=>`<button onclick="APP.cmd('${cmd}','${k}')" style="flex:1;padding:8px;border:none;border-radius:9px;cursor:pointer;font-family:inherit;font-size:13.5px;font-weight:500;
+      background:${cur===k?'var(--surface-card)':'transparent'};color:${cur===k?'var(--text-primary)':'var(--text-secondary)'};box-shadow:${cur===k?'0 1px 3px rgba(17,26,43,.08)':'none'}">${T(en,zh)}</button>`).join('')}</div>`;
+  const head=`<div style="padding:14px 16px 0;display:flex;flex-direction:column;gap:8px">
+    ${chips(TREND_RANGES,state.trendRange,'trendRange')}
+    ${metrics.length>1?chips(metrics,m,'trendMetric'):''}</div>`;
+  if(state.trendErr) return `${head}<div style="padding:16px">
+    <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${state.trendErr}</span></div></div>`;
+  if(!state.trend) return `${head}<div style="padding:44px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const t=state.trend;
+  if(!t.length) return head+nothingYet(T('Nothing in this window','该时段没有数据'),
+    T('No day in this range has anything on it yet. A shorter window may.','所选时段内还没有任何数据，可以试试更短的区间。'));
+  const vals=t.map(p=>Number(p[m])||0);
+  const total=vals.reduce((a,v)=>a+v,0);
+  const days=vals.length;
+  const fmt=v=>m==='revenue'?money0(CUR,v):Math.round(v).toLocaleString();
+  // The best day is worth naming — it is the one a shop remembers, and it is
+  // the only point on the line the eye asks about.
+  let bi=0; for(let i=1;i<days;i++) if(vals[i]>vals[bi]) bi=i;
+  const tone=m==='revenue'?'sage':m==='orders'?'dusk':'amber';
+  const fact=(label,value,sub)=>`<div style="min-width:0">
+    <div style="font-size:13px;color:var(--text-secondary)">${label}</div>
+    <div class="num" style="font-size:18px;font-weight:500;line-height:1.4;margin-top:2px">${value}</div>
+    ${sub?`<div class="num" style="font-size:12.5px;color:var(--text-secondary)">${sub}</div>`:''}</div>`;
+  return `${head}<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:14px">
+    <div class="card" style="padding:16px 14px 12px">${sparkline(vals,tone)}
+      <div class="num" style="display:flex;justify-content:space-between;font-size:12px;color:var(--text-secondary);padding:8px 2px 0">
+        <span>${escAttr(fmtDateOnly(t[0].bucket))}</span><span>${escAttr(fmtDateOnly(t[days-1].bucket))}</span></div></div>
+    <div class="card" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;padding:16px">
+      ${fact(T('Total','合计'),fmt(total))}
+      ${fact(T('Busiest day','最高的一天'),fmt(vals[bi]),escAttr(fmtDateOnly(t[bi].bucket)))}
+      ${fact(T('A typical day','日均'),fmt(total/days))}
+      ${fact(T('Days counted','统计天数'),String(days))}
+    </div>
+    ${recapNoMoney()?noteBar(T('Revenue is not shown on this account.','此账号不显示营收。')):''}
+    ${noteBar(T('Charts, chapters and the per-store breakdown are on desktop.','图表、分章与分门店明细在电脑端。'))}</div>`;
+}
+
+/* ==========================================================================
+   Team (desktop: 02-settings-ops.js, the Team tab)
+   --------------------------------------------------------------------------
+   The one desktop tab no parity pass had ever looked at — it appears nowhere
+   in docs/tacet-mobile-parity.md, not even as a decided-against row.
+
+   Inviting somebody, assigning a role and setting a per-capability permission
+   matrix is authoring, and stays on the desktop. What belongs on a phone is the
+   other half: WHO HAS ACCESS, and switching one of them off in a hurry. A
+   staffer walks out mid-shift, a phone goes missing, and the answer should not
+   be "find a laptop".
+
+   The two rules that make this safe are the server's, not this screen's — it
+   refuses to deactivate you, and it refuses to leave the shop with no active
+   owner (backend-team.js). The screen states both rather than letting a thumb
+   discover them as a 400: the row says why it cannot be switched, before it is
+   tapped.
+   ========================================================================== */
+function loadTeam(force){
+  if(state.teamTried&&!force) return;
+  state.teamTried=true;
+  api('/api/backend/team').then(d=>{
+    state.team=Array.isArray(d&&d.team)?d.team:[];
+    state.teamEnforce=!!(d&&d.rbacEnforce); state.teamErr=null; render();
+  }).catch(e=>{ if(String(e.message)==='auth') return;
+    state.teamErr=E('Could not load the team.','加载团队失败。'); render(); });
+}
+// Only these two can change a roster; requireCap('team:manage') is what the
+// server checks, and drawing an action a staff account cannot use is the kind
+// of promise this app has spent a long time removing.
+const TEAM_CAN_MANAGE=()=>['owner','admin'].includes((state.me&&state.me.role)||'');
+function teamActiveOwners(){ return (state.team||[]).filter(u=>u.role==='owner'&&u.isActive).length; }
+/* Why this person cannot be switched off, or '' if they can. The server owns
+   these rules; this is the same two, said early. */
+function teamLockReason(u){
+  if(!u.isActive) return '';
+  // Lower case: these are clauses in the row's own list of facts now, not
+  // labels of their own — "Owner · seen 8:10 AM · this is you".
+  if(u.isSelf) return T('this is you','这是你自己');
+  if(u.role==='owner'&&teamActiveOwners()<=1) return T('the only owner','唯一的负责人');
+  return '';
+}
+function statusTeam(){
+  const t=state.team; if(!t) return '';
+  const on=t.filter(u=>u.isActive).length, off=t.length-on;
+  return on+' '+T(on===1?'person with access':'people with access','人可登录')
+    + (off?' · '+T(off+(off===1?' switched off':' switched off'),off+' 人已停用'):'');
+}
+function screenTeam(){
+  loadTeam();
+  if(state.teamErr) return `<div style="padding:14px 16px 24px">
+    <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${state.teamErr}</span></div></div>`;
+  if(!state.team) return `<div style="padding:48px 24px;text-align:center;font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`;
+  const rows=state.team;
+  if(!rows.length) return nothingYet(T('Nobody else yet','暂无其他成员'),
+    T('People are invited on desktop, with a role and the stores they can see. Once they exist you can check who has access from here, and switch someone off.',
+      '成员在电脑端邀请，并设置角色与可见门店。添加后可在此查看谁能登录，并可停用某人。'));
+  const store=id=>{ const st=(state.stores||[]).find(x=>String(x.id)===String(id));
+    return st?(LANG==='en'?(st.name_en||st.name_cn):(st.name_cn||st.name_en)):null; };
+  const can=TEAM_CAN_MANAGE();
+  return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
+    ${state.teamActErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+      <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+      <span style="font-size:14px;color:var(--brick-ink)">${escAttr(String(state.teamActErr))}</span></div>`:''}
+    <div class="list">${rows.map((u,i)=>{
+      const busy=state.teamBusy===u.id;
+      const lock=teamLockReason(u);
+      const tap=(can&&!lock&&!state.teamBusy)?`APP.cmd('teamToggle',${u.id})`:'';
+      const rl=ROLE_NAMES[u.role];
+
+      // Role, store, last seen, and why it cannot be switched — four facts that
+      // do not fit one nowrap line beside a pill and a chevron, so the line
+      // WRAPS instead of ellipsing. Clipped, the fact being lost was "never
+      // signed in", which is the one that says an invite never landed.
+      const sub=[rl?T(...rl):u.role, u.retailStoreId?store(u.retailStoreId):null,
+                 u.lastLogin?T('seen '+fmtDay(u.lastLogin),'最近 '+fmtDay(u.lastLogin)):T('never signed in','从未登录'),
+                 lock||null]
+                .filter(Boolean).join(' · ');
+      const Tag=tap?'button':'div';
+      return `${i?'<div class="sep" style="margin-left:14px"></div>':''}
+      <${Tag} ${tap?`onclick="${tap}"`:''} style="display:flex;align-items:center;gap:12px;width:100%;padding:14px;background:transparent;border:none;${tap?'cursor:pointer;':''}font-family:inherit;text-align:left${u.isActive?'':';opacity:.62'}">
+        <span style="width:34px;height:34px;flex:none;border-radius:8px;background:var(--dusk-tint);color:var(--dusk-ink);display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:500">${escAttr(((u.displayName||u.username||'·').trim().charAt(0)||'·').toUpperCase())}</span>
+        <span style="flex:1;min-width:0;display:flex;flex-direction:column">
+          <span style="font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(u.displayName||u.username)}</span>
+          <span class="num" style="font-size:12.5px;color:var(--text-secondary);margin-top:2px;line-height:1.45">${escAttr(sub)}</span></span>
+        <span style="display:flex;align-items:center;gap:9px;flex:none">
+          <span class="pill" style="background:${u.isActive?PILL.success[0]:PILL.muted[0]};color:${u.isActive?PILL.success[1]:PILL.muted[1]}">${
+            busy?T('Saving…','保存中…'):(u.isActive?T('Can sign in','可登录'):T('Off','已停用'))}</span>
+          ${tap?`<span style="color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`:''}</span></${Tag}>`;
+    }).join('')}</div>
+    ${/* One bar, for the fact with a consequence — roles that shape the view
+          but stop nothing are worth knowing about. The rest is the quiet
+          centred line every other screen uses to say where authoring lives. */''}
+    ${state.teamEnforce?'':noteBar(T('Roles shape what people see, but the server is not enforcing them yet — that switch is on desktop.','角色仅影响界面显示，服务端尚未强制执行 — 该开关在电脑端。'))}
+    <div style="text-align:center;font-size:12.5px;color:var(--text-secondary);line-height:1.5">${
+      can?T('Inviting someone, and what each role can reach, are set on desktop.','邀请成员及各角色权限在电脑端设置。')
+         :T('Only an owner or an admin can switch someone off.','仅负责人或管理员可以停用成员。')}</div></div>`;
+}
+
 /* Who is signed in, in the operator's own words. The four positions are the
    ones the backend recognises; anything else is an owner/admin/staff login and
    is named rather than labelled. */
@@ -5340,8 +5597,13 @@ function wireDrag(){
    the app — the long-tail marketing/loyalty screens stay on sample data for now.
    ========================================================================== */
 const API='/api/retail-admin';
+/* Almost everything the phone reads lives under /api/retail-admin, so api()
+   prefixes it. Team does not — the roster is /api/backend/team, shared with the
+   backend's own login and session routes — so a path that already starts at
+   /api/ is taken as given rather than prefixed into /api/retail-admin/api/... */
+const apiURL = p => String(p).indexOf('/api/')===0 ? p : API+p;
 async function api(path){
-  const r=await fetch(API+path,{credentials:'same-origin',headers:{accept:'application/json'}});
+  const r=await fetch(apiURL(path),{credentials:'same-origin',headers:{accept:'application/json'}});
   // Match the desktop backend's auth-fail target. Redirecting to '/' would loop
   // once the store root serves this app to phones (root → 401 → root → …).
   if(r.status===401||r.status===403){ location.href='/backend/login'; throw new Error('auth'); }
@@ -5390,7 +5652,7 @@ function fmtDateOnly(v){
   return fmtDay(v);
 }
 async function apiRaw(path){
-  const r=await fetch(API+path,{credentials:'same-origin',headers:{accept:'application/json'}});
+  const r=await fetch(apiURL(path),{credentials:'same-origin',headers:{accept:'application/json'}});
   if(r.status===401||r.status===403){ location.href='/backend/login'; throw new Error('auth'); }
   if(!r.ok) throw new Error('HTTP '+r.status);
   return r.json();

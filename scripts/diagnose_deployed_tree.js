@@ -297,7 +297,7 @@ function main() {
 // MANIFEST_SW_NORMALIZED is public/sw.js hashed with its CACHE stamp replaced by
 // the literal <STAMP>, matching what SW_STAMP_RE does to the deployed copy.
 // ════════════════════════════════════════════════════════════════════════════
-const MANIFEST_COMMIT = '60fe3cc97156ad0ccedf514515bd2f881ec10586';
+const MANIFEST_COMMIT = '3f4b75dda4ca5e35c1a60dcc498bf3ee5aa69e7e';
 const MANIFEST_SW_NORMALIZED = '111c63ee2b74d2eb289b23ecbfad6d5c51399ffa';
 const MANIFEST = {
   "database.js": 'bb24a6f850c1eb2973b20043439d2eb2e6b09a23',
@@ -378,7 +378,7 @@ const MANIFEST = {
   "middleware/auth.js": 'ae2a99cf84911db6d3d3534a73c683341bf41dc1',
   "middleware/public-tenant.js": 'b93126509f30ddf8b1ab4c10a829938b09bffffd',
   "package-lock.json": '85ea48c75a6a1d7ead42fc9accac62cecfb6aecb',
-  "package.json": 'd60dcd681e8341f58a36f2119af0c32203d3c96a',
+  "package.json": '1b79fa51d3fbfe5080f0a6362217893de80ee8b9',
   "public/app.html": '7cf3cd97a50b20a483ae750d947afbbfa7fcfd21',
   "public/app.html.bak": '5991891f0060f97c4660f4d25b26a422d6845b9e',
   "public/apple-touch-icon.png": '52f0d35477978e0bcccf81dff1a2fa4237ca97ae',
@@ -427,7 +427,7 @@ const MANIFEST = {
   "public/kitchen-manifest.webmanifest": '14730d4ecbb233e21159ed4f70efa284c72affb8',
   "public/kitchen.html": '7805616f936788285c8ca44ed7a8b57dea6dc624',
   "public/login.html": '5cd46e9cc5a747c4717ff2a3f4f76364a6b5e308',
-  "public/m.html": 'ce3587c4739fcc8a75b528759ef48406f8f99dff',
+  "public/m.html": '9a1e51fc62d9216f0f89fad3e8024a48a2154d48',
   "public/manifest.webmanifest": '0f6513b9b45220bc3f4d6dcf7e240ef98ea5c9e0',
   "public/pos-icon-192-maskable.png": '8176b34f04d6338f0df79779241a15997e0c0a90',
   "public/pos-icon-192.png": '0a85c313e45e17625a93a8a01fae2143b01db519',
@@ -638,7 +638,7 @@ const MANIFEST = {
   "scripts/import_yogurt.js": 'dc910766d21c7fde8e7148bd1ed4875d5987c44a',
   "scripts/inherit_variant_blocks.js": '1367334aa2b283c224d6ec9794591d46ef5a2229',
   "scripts/install-backup-cron.sh": '6e7b462be54bfc9f3ccaa6c0c2db7eae08ffb05e',
-  "scripts/lib/m-fakeserver.js": 'e53a62ab58142ec7c77e535b0079b68347325b8d',
+  "scripts/lib/m-fakeserver.js": '394b9a73e1648e8dfa8ad1cf5c7cbf29b9f06f56',
   "scripts/lib/m-probe.js": 'c502819f23b1f1323ba556c447ec1543a223654e',
   "scripts/make_bundle_images.js": 'd0ad5851d41f60ed7793e9e96ceba3d1b8e16999',
   "scripts/make_desktop_mocks.py": '5887577ba76d0c33ae65a7814a1126501d600d18',
@@ -821,6 +821,8 @@ const MANIFEST = {
   "scripts/test_mobile_sales.js": '463c66cb19b43b6c8e865f71320eae5757921762',
   "scripts/test_mobile_screens.js": 'be29842d7f711afc30a138b27c7ac7879bd93a15',
   "scripts/test_mobile_settings.js": '8155a7c348f52b69dcac7e509a69338269c35c24',
+  "scripts/test_mobile_team.js": 'd54437c7016825800d5649bbf285a82902102130',
+  "scripts/test_mobile_trend.js": 'e557fdc6debf89d6dec2a5b63a62cb944877045c',
   "scripts/test_mobile_voting.js": '1199c84452c8c45b18e93196aef06dbbbdf2a69d',
   "scripts/test_needs_point.js": '948cbcfba5df5b717d077b175bce2520d5ddf49e',
   "scripts/test_needs_point_client.js": '3623d7cce6ec2ac2f9bcd2d85461dcd7b7d75f17',
