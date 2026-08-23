@@ -2230,13 +2230,14 @@
   #tab-products > .pa-pagetitle { margin: 0; }
   /* Title row + ⓘ. The old standing lede is gone; its "what is this" copy now
      rides in the tooltip below, one-time teaching text kept out of the way. */
-  /* ── §1.1 the content column ───────────────────────────────────────────────
-     Capped at 1120px, but LEFT-ALIGNED in <main>, not centred. <main> already
-     is the column (1440px, offset by the rail); centring inside it pushed
-     Products ~270px right of where Orders starts, so the two pages no longer
-     shared a left edge — the one thing that makes them read as one product.
-     The editor doesn't compete for this width — it is a drawer over it. */
-  #tab-products { max-width: 1120px; }
+  /* ── The content column ────────────────────────────────────────────────────
+     No cap of its own. <main> IS the column — 1440px, offset by the rail — and
+     #tab-orders takes all of it. §1.1 says 1120px, but the rulebook also says
+     Orders' design is final and that where the two disagree the page wins; a
+     Products page 320px narrower than the Orders page it is meant to match is
+     the disagreement showing. A 1120px cap also left a third of a wide screen
+     empty next to a table that has nine columns and 209 rows to show.
+     Still never full-bleed: main's own 1440px is the ceiling. */
 
   /* The title. It used to be styled by `:is(#tab-orders, …, #tab-products) > h2`
      in the skin — a DIRECT-child selector — and the §1.7 header nests the h2
