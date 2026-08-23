@@ -95,10 +95,18 @@ router.get('/api/retail-admin/eleme/catalogue', requireRetailAdmin, (req, res) =
   try {
     const storeCode = String(req.query.storeCode || '').trim();
     if (!storeCode) return res.status(400).json({ success: false, error: 'storeCode required' });
-    const rows = db.prepare(`
-      SELECT name, stock, updated_at FROM eleme_catalogue_cache
+    const raw = db.prepare(`
+      SELECT name, stock, specs, updated_at FROM eleme_catalogue_cache
        WHERE store_code = ? ORDER BY name
     `).all(storeCode);
+    // `specs` is the JSON array of sizes behind this one listing name (written
+    // by the daemon). Parsed here so the admin can offer a size picker; a row
+    // cached before that column existed simply has none.
+    const rows = raw.map(r => {
+      let specs = [];
+      try { specs = r.specs ? JSON.parse(r.specs) : []; } catch (_) { specs = []; }
+      return { name: r.name, stock: r.stock, updated_at: r.updated_at, specs: Array.isArray(specs) ? specs : [] };
+    });
     const refreshedAt = rows.length
       ? rows.reduce((min, r) => (r.updated_at < min ? r.updated_at : min), rows[0].updated_at)
       : null;
@@ -150,6 +158,35 @@ router.post('/api/retail-admin/eleme/shop', requireRetailAdmin, express.json(), 
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
+// Merge one incoming /map body over the row already in eleme_product_map.
+//
+// The write below is a WHOLE-ROW upsert, so any column the caller didn't send
+// would be wiped. The rule here: `undefined` keeps what's stored, an explicit
+// null or '' clears it. (Before this, every caller had to echo eleme_name back
+// on a sync toggle or silently lose the operator's override.)
+//
+// The one non-obvious part is the size. A size id belongs to ONE listing, so if
+// the listing name just changed and no size came with it, the stored pick now
+// points at a size on a different listing — drop it rather than push against
+// it. Exported for tests; pure, no DB.
+function mergeMapFields(cur, body) {
+  const keep = (incoming, existing) => {
+    if (incoming === undefined) return existing == null ? null : existing;
+    const v = incoming == null ? '' : String(incoming).trim();
+    return v || null;
+  };
+  const nextExtend = keep(body.extendCode, cur.extend_code);
+  const nextName   = keep(body.elemeName,  cur.eleme_name);
+  const nameChanged = nextName !== (cur.eleme_name == null ? null : cur.eleme_name);
+  const specGiven   = body.specId !== undefined;
+  return {
+    nextExtend,
+    nextName,
+    nextSpecId:   specGiven ? keep(body.specId, null)   : (nameChanged ? null : (cur.spec_id   || null)),
+    nextSpecName: specGiven ? keep(body.specName, null) : (nameChanged ? null : (cur.spec_name || null)),
+  };
+}
+
 // ── Product mapping ────────────────────────────────────────────────────────────
 router.get('/api/retail-admin/eleme/products', requireRetailAdmin, (req, res) => {
   const db = tdb();
@@ -164,6 +201,7 @@ router.get('/api/retail-admin/eleme/products', requireRetailAdmin, (req, res) =>
     `).all();
     const maps = db.prepare(`
       SELECT product_id, retail_store_id, store_code, extend_code, eleme_name,
+             spec_id, spec_name,
              sync_enabled, last_pushed_qty, last_pushed_at
         FROM eleme_product_map
     `).all();
@@ -179,24 +217,27 @@ router.get('/api/retail-admin/eleme/products', requireRetailAdmin, (req, res) =>
 router.post('/api/retail-admin/eleme/products/:id/map', requireRetailAdmin, express.json(), (req, res) => {
   const db = tdb();
   const productId = parseInt(req.params.id, 10);
-  const { storeId, storeCode, extendCode, elemeName, syncEnabled, remove } = req.body || {};
+  const { storeId, storeCode, extendCode, elemeName, specId, specName, syncEnabled, remove } = req.body || {};
   if (!storeId || !storeCode) return res.status(400).json({ success: false, error: 'storeId and storeCode required' });
   try {
     if (remove) {
       db.prepare('DELETE FROM eleme_product_map WHERE product_id = ? AND retail_store_id = ?').run(productId, storeId);
       return res.json({ success: true, deleted: true });
     }
+    const cur = db.prepare('SELECT * FROM eleme_product_map WHERE product_id = ? AND retail_store_id = ?')
+                  .get(productId, storeId) || {};
+    const { nextExtend, nextName, nextSpecId, nextSpecName } =
+      mergeMapFields(cur, { extendCode, elemeName, specId, specName });
     db.prepare(`
       INSERT INTO eleme_product_map
-        (product_id, retail_store_id, store_code, extend_code, eleme_name, sync_enabled, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        (product_id, retail_store_id, store_code, extend_code, eleme_name, spec_id, spec_name, sync_enabled, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
       ON CONFLICT(retail_store_id, product_id) DO UPDATE SET
         extend_code = excluded.extend_code, eleme_name = excluded.eleme_name,
+        spec_id = excluded.spec_id, spec_name = excluded.spec_name,
         store_code = excluded.store_code, sync_enabled = excluded.sync_enabled,
         updated_at = CURRENT_TIMESTAMP
-    `).run(productId, storeId, storeCode,
-           extendCode ? String(extendCode).trim() : null,
-           elemeName ? String(elemeName).trim() : null,
+    `).run(productId, storeId, storeCode, nextExtend, nextName, nextSpecId, nextSpecName,
            syncEnabled === undefined ? 1 : (syncEnabled ? 1 : 0));
     res.json({ success: true });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
@@ -324,3 +365,4 @@ router.get('/eleme/oauth/callback', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.mergeMapFields = mergeMapFields;

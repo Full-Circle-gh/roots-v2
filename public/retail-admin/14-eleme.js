@@ -131,6 +131,27 @@
     elRenderProducts(); // re-render so the name inputs pick up list= now that options exist
   };
 
+  // Every size (规格) behind one Eleme listing name, from the cached catalogue.
+  // One listing can hold "小" and "大" behind a single name — that is exactly the
+  // case the size picker below exists for.
+  function elSpecsFor(storeCode, name) {
+    const key = String(name || '').trim();
+    if (!key) return [];
+    const rows = (_catalogue[storeCode] && _catalogue[storeCode].rows) || [];
+    const hit = rows.find(r => String(r.name || '').trim() === key);
+    return (hit && Array.isArray(hit.specs)) ? hit.specs : [];
+  }
+
+  // Short label for one size in the dropdown. Eleme leaves `name` blank on some
+  // listings, so fall back to price, then to a plain number; the current stock
+  // rides along because it is often the only thing telling two blanks apart.
+  function elSpecLabel(sp, i) {
+    const base = (sp.name || '').trim()
+      || (sp.price != null ? '¥' + sp.price : '')
+      || (cuT('Size ', '规格 ') + (i + 1));
+    return sp.stock != null ? base + ' · ' + sp.stock : base;
+  }
+
   function elRenderCatalogueCaption() {
     const el = document.getElementById('el-catalogue-caption');
     if (!el || !_stores.length) return;
@@ -288,10 +309,22 @@
     const cnt = document.getElementById('el-count');
     if (cnt) cnt.textContent = `${rows.length}`;
     tbody.innerHTML = rows.map(p => {
-      const nm = cuT(p.name_en || p.name_cn, p.name_cn || p.name_en);
+      const base = cuT(p.name_en || p.name_cn, p.name_cn || p.name_en);
+      // Size variants are separate products sharing a variant_group_id, so two
+      // sizes arrive here as two rows with the SAME name — indistinguishable
+      // without the label. 11-meituan.js has always printed it; this table
+      // didn't, which is why variants read as duplicates.
+      const nm = p.variant_label ? base + ' · ' + p.variant_label : base;
       const cells = _stores.map(s => {
         const m = (p.stores || {})[s.code];
         const on = m && Number(m.sync_enabled) === 1;
+        const mappedName = (m && m.eleme_name) || '';
+        const specs = elSpecsFor(s.code, mappedName);
+        const chosen = String((m && m.spec_id) || '');
+        // A listing with several sizes and no size chosen can't be pushed
+        // accurately — the driver falls back to a rule that writes a made-up
+        // number to every size. Flag it rather than let it run silently.
+        const guessing = on && specs.length > 1 && !chosen;
         // Eleme has no extCode/货号 to match on yet, so a wrong/missing name
         // here is the single most common reason a push fails — this input is
         // the operator's escape hatch (ELEME_BROWSER_RECON.md). It's an
@@ -307,8 +340,22 @@
           <input type="text" class="inp" style="width:130px;font-size:11px" data-no-i18n
                  list="el-catalogue-dl-${esc(s.code)}"
                  placeholder="${cuT('Eleme listing name', '饿了么商品名')}"
-                 value="${esc(m && m.eleme_name || '')}"
+                 value="${esc(mappedName)}"
                  onchange="elSetElemeName(${p.id}, ${s.id}, '${s.code}', this.value)">
+          ${specs.length > 1 ? `
+          <select class="inp" data-no-i18n
+                  style="width:118px;font-size:11px${guessing ? ';border-color:var(--warn,#b8860b)' : ''}"
+                  title="${cuT('Which size inside this listing', '对应该商品的哪个规格')}"
+                  onchange="elSetElemeSpec(${p.id}, ${s.id}, '${s.code}', this.value, this.options[this.selectedIndex].dataset.label || '')">
+            <option value="" data-label="">${cuT('Pick size…', '选择规格…')}</option>
+            ${specs.map((sp, i) => {
+              const lbl = elSpecLabel(sp, i);
+              return `<option value="${esc(sp.specGlobalId)}" data-label="${esc(sp.name || lbl)}"${
+                String(sp.specGlobalId) === chosen ? ' selected' : ''}>${esc(lbl)}</option>`;
+            }).join('')}
+          </select>` : ''}
+          ${guessing ? `<span title="${cuT('This listing has several sizes and none is picked — the stock pushed to it is a guess.', '该商品有多个规格且未选择 — 推送的库存并不准确。')}"
+                 style="color:var(--warn,#b8860b);font-size:11px;font-weight:700">!</span>` : ''}
         </div>`;
       }).join('');
       return `<tr style="border-top:1px solid var(--line)">
@@ -329,7 +376,8 @@
       // in reverse).
       await api('/api/retail-admin/eleme/products/' + productId + '/map', {
         method: 'POST',
-        body: on ? { storeId, storeCode, syncEnabled: 1, elemeName: (cur && cur.eleme_name) || null }
+        body: on ? { storeId, storeCode, syncEnabled: 1, elemeName: (cur && cur.eleme_name) || null,
+                     specId: (cur && cur.spec_id) || null, specName: (cur && cur.spec_name) || null }
                  : { storeId, storeCode, remove: 1 },
       });
       // Reflect locally without a full reload.
@@ -338,6 +386,8 @@
         if (on) p.stores[storeCode] = { ...(cur || {}), sync_enabled: 1 };
         else delete p.stores[storeCode];
       }
+      // repaint: the "no size picked" warning only applies once sync is on
+      elRenderProducts();
     } catch (e) { elLoadProducts(); }
   };
 
@@ -356,8 +406,48 @@
       });
       if (p) {
         p.stores = p.stores || {};
-        p.stores[storeCode] = { ...(cur || {}), eleme_name: name || null, sync_enabled: cur ? Number(cur.sync_enabled) : 0 };
+        // A size id belongs to one listing, so pointing at a different listing
+        // drops the old pick (the server does the same) — then repaint, because
+        // the new listing has its own sizes to offer.
+        const kept = (cur && cur.eleme_name) === (name || null);
+        p.stores[storeCode] = {
+          ...(cur || {}),
+          eleme_name: name || null,
+          spec_id:   kept ? (cur && cur.spec_id)   || null : null,
+          spec_name: kept ? (cur && cur.spec_name) || null : null,
+          sync_enabled: cur ? Number(cur.sync_enabled) : 0,
+        };
       }
+      elRenderProducts();
+      if (window.toast) toast(cuT('Saved · 已保存', '已保存'));
+    } catch (e) { elLoadProducts(); }
+  };
+
+  // Save WHICH size inside the listing this product is. One Eleme listing can
+  // hold several sizes behind one name; without this the pusher can't tell them
+  // apart and falls back to a rule that writes a made-up number to every size
+  // (live at 天河: two Roots sizes on one listing overwrote each other every
+  // cycle, one pushing 9999 and the other 0). Like the name field, it does NOT
+  // touch sync_enabled — the checkbox stays the only way to turn pushing on.
+  window.elSetElemeSpec = async function (productId, storeId, storeCode, specId, specName) {
+    const p = _products.find(x => x.id === productId);
+    const cur = p && (p.stores || {})[storeCode];
+    try {
+      await api('/api/retail-admin/eleme/products/' + productId + '/map', {
+        method: 'POST',
+        body: {
+          storeId, storeCode,
+          elemeName: (cur && cur.eleme_name) || null,
+          specId: specId || null,
+          specName: specId ? (specName || null) : null,
+          syncEnabled: cur ? Number(cur.sync_enabled) : 0,
+        },
+      });
+      if (p) {
+        p.stores = p.stores || {};
+        p.stores[storeCode] = { ...(cur || {}), spec_id: specId || null, spec_name: specId ? (specName || null) : null };
+      }
+      elRenderProducts();
       if (window.toast) toast(cuT('Saved · 已保存', '已保存'));
     } catch (e) { elLoadProducts(); }
   };

@@ -158,7 +158,8 @@ async function processStockQueue(stores) {
   const rows = db.prepare(`
     SELECT q.*, p.name_cn, p.name_en,
            COALESCE(m.extend_code, p.sku) AS sku,
-           m.eleme_name AS map_eleme_name
+           m.eleme_name AS map_eleme_name,
+           m.spec_id    AS map_spec_id
       FROM eleme_sync_queue q
       LEFT JOIN store_products p ON p.id = q.product_id
       LEFT JOIN eleme_product_map m
@@ -208,6 +209,9 @@ async function processStockQueue(stores) {
       // the same override meituan-daemon.js honours for the identical reason.
       const batchItems = pushRows.map(row => ({
         row, targetCn: row.map_eleme_name || row.name_cn, targetEn: row.name_en, sku: row.sku, newQty: row.new_qty,
+        // Which size inside that listing, when the operator picked one. Without
+        // it a multi-size listing falls back to a guess that fabricates stock.
+        specGlobalId: row.map_spec_id || null,
       }));
       const results = await browser.batchUpdateStock(batchItems);
 
@@ -316,10 +320,15 @@ async function refreshCatalogueCache(configs) {
       const tx = db.transaction(() => {
         db.prepare('DELETE FROM eleme_catalogue_cache WHERE store_code = ?').run(cfg.store_code);
         const ins = db.prepare(`
-          INSERT INTO eleme_catalogue_cache (store_code, name, item_global_id, stock, updated_at)
-          VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+          INSERT INTO eleme_catalogue_cache (store_code, name, item_global_id, stock, specs, updated_at)
+          VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         `);
-        for (const it of snap) ins.run(cfg.store_code, it.name, it.itemGlobalId, it.stock);
+        // specs = every size behind this listing name, so the admin can offer a
+        // "which size" picker without driving its own browser login.
+        for (const it of snap) {
+          ins.run(cfg.store_code, it.name, it.itemGlobalId, it.stock,
+                  (it.specs && it.specs.length) ? JSON.stringify(it.specs) : null);
+        }
       });
       tx();
       log(cfg.store_code, `catalogue cache refreshed: ${snap.length} item(s)`);

@@ -4740,6 +4740,17 @@ db.exec(`
     UNIQUE(store_code, name)
   );
 `);
+// One Eleme listing can hold several sizes (规格) behind one name — a size picker
+// on the customer's side. `specs` is the JSON array of them, written by the
+// daemon from the same catalogue read that fills the row above:
+// [{ specGlobalId, name, price, stock }]. Without it the admin has no way to
+// offer "which size is this", so both Roots size-variants pointed at the one
+// listing name and their pushes overwrote each other (天河, 17 groups).
+addColumn('eleme_catalogue_cache', 'specs', 'TEXT');
+// The size the operator picked, resolved against specs above. spec_id already
+// existed on the table (declared, never written); spec_name is display-only so
+// the admin can show the choice back without re-reading the catalogue.
+addColumn('eleme_product_map', 'spec_name', 'TEXT');
 
 // ── Guanyi ERP sync (gzgrocery backoffice, 2026-06-24) ──────────────────────
 // Mirrors the Meituan sync layer for a second sales channel: 管易C-ERP
