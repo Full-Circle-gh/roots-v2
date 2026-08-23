@@ -5598,8 +5598,24 @@
   .mt-name-input::placeholder { color: var(--td-text2); }
   .mt-sub { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin-top: 8px; }
   .mt-sub b { font-weight: 500; color: var(--td-text); }
-  .mt-link { color: var(--td-text); text-decoration: underline; text-underline-offset: 2px; }
-  .mt-link:hover { color: var(--td-dusk); }
+
+  /* Which 规格 of a shared listing a product is. background-COLOR, never the
+     `background` shorthand, and the chevron declared in full — the shorthand
+     resets repeat/position and the global select rule then tiles its arrow
+     across the width (the Add-bundle dialog bug, css:5546). Amber until it is
+     answered: an unanswered one is writing the same count to every option. */
+  .mt-spec {
+    display: block; width: 100%; margin-top: 8px;
+    font: 400 15px var(--f-sans); color: var(--td-text);
+    background-color: var(--td-surface);
+    border: 1px solid var(--td-border); border-radius: 8px;
+    padding: 8px 40px 8px 16px;
+    appearance: none; -webkit-appearance: none; cursor: pointer;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2358606E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat: no-repeat; background-position: right 16px center;
+  }
+  .mt-spec.warn { border-color: var(--td-amber); }
+
   .mt-cell-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
   .mt-empty { padding: 24px; text-align: center; font: 400 15px var(--f-sans); color: var(--td-text2); }
 
@@ -5628,10 +5644,6 @@
   .mt-pill.ok  { background: var(--td-sage-tint);  color: var(--td-sage-ink); }
   .mt-pill.att { background: var(--td-amber-tint); color: var(--td-amber-ink); }
   .mt-pill.off { background: var(--td-raised);     color: var(--td-text2); }
-
-  /* Size picker on a multi-size listing, and the flag when none is chosen. */
-  .mt-size { margin-top: 8px; font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; }
-  .mt-size.warn { border-color: var(--td-amber); }
 
   /* ── Views ──────────────────────────────────────────────────────────────── */
   .mt-view[hidden] { display: none; }

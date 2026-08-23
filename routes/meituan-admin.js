@@ -41,21 +41,44 @@ router.get('/api/retail-admin/meituan/products', requireRetailAdmin, (req, res) 
        ORDER BY p.name_cn, p.variant_group_id, p.id
     `).all();
 
-    // multiSize = the mapped listing holds more than one 规格. Read from the
-    // specs the listing job captures, so the page can offer a "Multi-size"
-    // filter and, later, say which size a product is. 15 of 265 listings at
-    // 天河 are multi-size; those are the ones where stock can go wrong.
+    // A listing can hold more than one 规格, and the 货号 on them says which
+    // kind it is. No 货号 → add-ons on ONE product ("单点 OnlyWrap" plus a
+    // sauce); a 货号 per option → real variants of DIFFERENT products (the
+    // soap's scents, the sorbet's pack counts). The driver pushes each kind
+    // differently, so send the 货号 with the option name and let the page say
+    // which it is. 15 of 265 listings at 天河 have options.
+    const specIndex = {};
+    try {
+      const specRows = db.prepare(`
+        SELECT store_code, listing_name, spec, sku_code, sku_id
+          FROM meituan_listing_specs
+         ORDER BY store_code, listing_name, id
+      `).all();
+      for (const r of specRows) {
+        const byStore = specIndex[r.store_code] = specIndex[r.store_code] || {};
+        (byStore[r.listing_name] = byStore[r.listing_name] || []).push({
+          spec:  String(r.spec || '').trim(),
+          sku:   String(r.sku_code || '').trim(),
+          skuId: String(r.sku_id || '').trim(),
+        });
+      }
+    } catch (_) { /* specs table may predate this feature on old boxes */ }
+
     const maps = db.prepare(`
       SELECT m.product_id, m.retail_store_id, m.store_code,
              m.meituan_name, m.sync_enabled,
-             m.last_pushed_qty, m.last_pushed_at,
-             (SELECT COUNT(*) FROM meituan_listing_specs ls
-               WHERE ls.store_code = m.store_code AND ls.listing_name = m.meituan_name) AS specCount
+             m.meituan_sku_id AS specSkuId, m.meituan_spec AS specLabel,
+             m.last_pushed_qty, m.last_pushed_at
         FROM meituan_product_map m
     `).all();
 
     const mapIndex = {};
     for (const m of maps) {
+      const specs = ((specIndex[m.store_code] || {})[m.meituan_name] || []).filter(o => o.spec);
+      m.specCount = specs.length;
+      // Only the multi-option listings carry their names: a one-spec listing has
+      // nothing to say, and 265 single names per store is payload for nobody.
+      if (specs.length > 1) m.specs = specs;
       if (!mapIndex[m.product_id]) mapIndex[m.product_id] = {};
       mapIndex[m.product_id][m.store_code] = m;
     }
@@ -109,6 +132,15 @@ router.post('/api/retail-admin/meituan/products/:id/map', requireRetailAdmin, ex
       return res.json({ success: true, deleted: true });
     }
 
+    // A chosen 规格 belongs to the listing it was chosen on. Point the row at a
+    // different listing and that choice is about a listing this product no
+    // longer syncs to, so clear it rather than push stock at a stranger's
+    // option. Same rule as eleme-admin.js mergeMapFields().
+    const cur = db.prepare(
+      'SELECT meituan_name FROM meituan_product_map WHERE product_id = ? AND retail_store_id = ?'
+    ).get(productId, storeId);
+    const renamed = cur && String(cur.meituan_name || '').trim() !== meituanName.trim();
+
     db.prepare(`
       INSERT INTO meituan_product_map
         (product_id, retail_store_id, store_code, meituan_name, sync_enabled, updated_at)
@@ -120,6 +152,57 @@ router.post('/api/retail-admin/meituan/products/:id/map', requireRetailAdmin, ex
         updated_at   = CURRENT_TIMESTAMP
     `).run(productId, storeId, storeCode, meituanName.trim(), syncEnabled ? 1 : 0);
 
+    if (renamed) {
+      db.prepare(`UPDATE meituan_product_map SET meituan_sku_id = NULL, meituan_spec = NULL
+                   WHERE product_id = ? AND retail_store_id = ?`).run(productId, storeId);
+    }
+
+    res.json({ success: true, specCleared: !!renamed });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// ── POST /api/retail-admin/meituan/products/:id/spec ──────────────────────
+// Which 规格 of the mapped listing this product is. Only listings that hold
+// several ask for it, and only the ones whose options carry their own 货号 —
+// a wrap's "+哈里萨辣酱" is an add-on of the same product and the driver's rule
+// handles it, while the sorbet's "一个 / 两个 / 买四送一" are three separate Roots
+// products sharing one listing, which is what needs telling apart.
+// Empty specSkuId → back to the rule.
+router.post('/api/retail-admin/meituan/products/:id/spec', requireRetailAdmin, express.json(), (req, res) => {
+  const db = tdb();
+  const productId = parseInt(req.params.id);
+  const { storeId, specSkuId, specLabel } = req.body || {};
+  if (!storeId) return res.status(400).json({ success: false, error: 'storeId required' });
+
+  try {
+    const pick = String(specSkuId || '').trim() || null;
+
+    // An option belongs to ONE product: that is the whole point of picking. If
+    // another product on this store already holds it, release it there rather
+    // than refuse — otherwise swapping two products' options would mean
+    // clearing one first, and two rows claiming one option pushes two different
+    // counts at it. The released row goes back to amber, which is honest: it
+    // now has no option again.
+    if (pick) {
+      db.prepare(`
+        UPDATE meituan_product_map
+           SET meituan_sku_id = NULL, meituan_spec = NULL, updated_at = CURRENT_TIMESTAMP
+         WHERE retail_store_id = ? AND meituan_sku_id = ? AND product_id <> ?
+      `).run(storeId, pick, productId);
+    }
+
+    const r = db.prepare(`
+      UPDATE meituan_product_map
+         SET meituan_sku_id = ?, meituan_spec = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE product_id = ? AND retail_store_id = ?
+    `).run(pick,
+           String(specLabel || '').trim() || null,
+           productId, storeId);
+    // No row means the product isn't mapped to a listing yet — there is no
+    // listing to have an option ON, so this is a stale page, not a save.
+    if (!r.changes) return res.status(404).json({ success: false, error: 'no mapping for this product and store' });
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });

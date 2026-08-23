@@ -209,7 +209,11 @@
     const st = document.getElementById('mt-status');
     if (st) {
       let html = esc(cuT(live + ' live', live + ' 个已上架'));
-      if (att) html += ' · ' + esc(cuT(att + ' unmatched', att + ' 个未匹配'));
+      // Says the same word as the chip it counts: the tile and the filter must
+      // not disagree about what those rows are. Not "unmatched" anymore — the
+      // count now also holds rows that ARE matched to a listing but not to one
+      // of its options.
+      if (att) html += ' · ' + esc(cuT(att + ' need attention', att + ' 个待处理'));
       const bad = rows.filter(r => r.blocked);
       if (bad.length) {
         const names = bad.map(r => mtStoreName(r.code, cn) || r.name).join(', ');
@@ -321,21 +325,18 @@
 
   // ── Toolbar: segmented filter ────────────────────────────────────────────────
   // ── Chip filters + store filter (Orders' filter row) ───────────────────────
-  // Replaces the two-button segmented control. "Multi-size" is the new one and
+  // Replaces the two-button segmented control. "Has options" is the new one and
   // the reason the specs are captured: 15 of 265 listings at 天河 hold more
-  // than one 规格, and those are exactly the ones whose stock can go wrong.
-  // Meituan's merchant product list. This exact URL is the one
-  // lib/meituan-browser.js navigates to, so it is known good. There is no
-  // verified per-listing deep link — the driver reaches individual products
-  // through the API, never a page route — so this opens the list and the row
-  // above names the listing to search for.
-  const MT_PRODUCTS_URL = 'https://e.waimai.meituan.com/#/gw/static_resource/product#/listView';
+  // than one 规格. Two kinds live under that one chip — a wrap's options are
+  // sauce add-ons on the same product, while the soap's scents and the sorbet's
+  // pack counts are separate products sharing a listing. Only the second kind
+  // has anything to fix.
 
   const MT_CHIPS = [
     { id: 'all', en: 'All',             cn: '全部' },
     { id: 'att', en: 'Needs attention', cn: '待处理' },
     { id: 'ok',  en: 'Synced',          cn: '已同步' },
-    { id: 'ms',  en: 'Multi-size',      cn: '多规格' },
+    { id: 'ms',  en: 'Has options',     cn: '有选项' },
   ];
 
   function mtChipMatch(p, id) {
@@ -432,11 +433,33 @@
       ? cuT('Last', '上次') + ' ' + map.last_pushed_qty + ' · ' + fmtAgo(map.last_pushed_at)
       : '';
   }
-  // A product needs attention when it's active but live on NEITHER store.
+  // A product needs attention when it's active but live on NEITHER store, or
+  // when it IS live and syncing but nobody has said which 规格 of a shared
+  // listing it is — that one looks healthy and pushes the same number to every
+  // option of the listing, which is worse than not pushing at all.
   function mtNeedsAttention(p) {
     const a = _storeA && p.stores && p.stores[_storeA.code] && p.stores[_storeA.code].meituan_name;
     const b = _storeB && p.stores && p.stores[_storeB.code] && p.stores[_storeB.code].meituan_name;
-    return !a && !b;
+    if (!a && !b) return true;
+    return Object.values(p.stores || {}).some(mtNeedsSpec);
+  }
+
+  // The options (规格) behind a listing, and which kind they are. A 货号 per
+  // option means separate products share the listing (the sorbet's pack counts,
+  // the hand soap's scents) and each Roots product must say which one it is.
+  // No 货号 means they are add-ons of this same product (a wrap plus a sauce),
+  // which lib/meituan-browser.js _applyStockRule already opens and closes as a
+  // set — nothing to pick.
+  function mtSpecs(map) { return Array.isArray(map && map.specs) ? map.specs : []; }
+  function mtIsShared(map) {
+    const sp = mtSpecs(map);
+    return sp.length > 1 && sp.every(o => o.sku);
+  }
+  // Syncing to a shared listing with no option chosen — the state that needs a
+  // person. Sync off is not it: nothing is being written.
+  function mtNeedsSpec(map) {
+    return !!(map && map.meituan_name && map.sync_enabled !== 0 &&
+              mtIsShared(map) && !map.specSkuId);
   }
 
   function mtRenderProducts(filtered) {
@@ -500,28 +523,41 @@
         else {
           const hasName = !!mapA.meituan_name;
           const syncOn  = hasName && mapA.sync_enabled !== 0;
+          // "Synced" on a shared listing with no option chosen would be a lie:
+          // it pushes, and it pushes to every option at once.
+          const needsSpec = mtNeedsSpec(mapA);
           const pill = !hasName ? mtPill('att', cuT('Add name', '待填名称'))
-            : (syncOn ? mtPill('ok', cuT('Synced', '已同步')) : mtPill('off', cuT('Sync off', '已关闭')));
+            : !syncOn ? mtPill('off', cuT('Sync off', '已关闭'))
+            : needsSpec ? mtPill('att', cuT('Pick an option', '待选规格'))
+            : mtPill('ok', cuT('Synced', '已同步'));
           const last = mtLast(mapA);
           const toggle = hasName
             ? '<label class="toggle-label" title="' + cuT('Sync on / off', '同步开关') +
               '"><input type="checkbox" ' + (syncOn ? 'checked' : '') +
               ' data-pid="' + p.id + '" onchange="mtToggleSync(this)"></label>'
             : '';
-          // A listing that holds several sizes cannot be pushed accurately
-          // until one is chosen — the driver would guess otherwise.
-          const multi = Number(mapA.specCount || 0) > 1;
+          // A listing can hold several 规格 (see mtIsShared): a shared listing
+          // gets the picker, an add-on listing gets a sentence saying what the
+          // rule already does with it.
+          const specs  = mtSpecs(mapA);
+          const multi  = specs.length > 1;
+          const shared = mtIsShared(mapA);
+          const chosen = String(mapA.specSkuId || '');
           colA = '<td>' + pill +
             '<input type="text" class="mt-name-input" list="mt-listings-dl-' + esc(storeA.code) + '"' +
             ' placeholder="' + esc(cuT('Meituan delivery name', '美团外卖商品名')) + '"' +
             ' value="' + esc(mapA.meituan_name || '') + '"' +
             ' data-pid="' + p.id + '" data-store-id="' + storeA.id + '" data-store-code="' + esc(storeA.code) + '"' +
             ' onblur="mtSaveMap(this)" onkeydown="if(event.key===\'Enter\')this.blur()">' +
-            (multi ? '<div class="mt-sub">' +
-              esc(cuT('Several sizes — the stock sent here lands on all of them.',
-                      '多个规格 — 推送的库存会应用到全部规格。')) +
-              ' <a class="mt-link" href="' + MT_PRODUCTS_URL + '" target="_blank" rel="noopener">' +
-              esc(cuT('Set sizes on Meituan', '在美团设置规格')) + '</a></div>' : '') +
+            (multi ? (shared ? mtSpecPicker(p, storeA, specs, chosen)
+                             : '<div class="mt-sub">' +
+                               esc(cuT(specs.length + ' options: ', specs.length + ' 个选项：')) +
+                               esc(specs.map(o => o.spec).join(' · ')) +
+                               '<div>' + esc(cuT('The count goes to ', '库存数发到「')) +
+                               '<b>' + esc(specs[0].spec) + '</b>' +
+                               esc(cuT('. The add-ons open and close with it.',
+                                       '」。加料选项随之开关。')) +
+                               '</div></div>') : '') +
             ((last || toggle) ? '<div class="mt-cell-foot">' +
               (last ? '<span class="mt-pmeta">' + esc(last) + '</span>' : '') + toggle + '</div>' : '') +
             '</td>';
@@ -555,6 +591,26 @@
       return '<tr data-pid="' + p.id + '" class="mt-product-row' + (anyMapped ? '' : ' mt-unmapped') + '">' +
         '<td>' + nameCell + '</td>' + colA + colB + '</tr>';
     }).join('');
+  }
+
+  // Which 规格 of a shared listing this product is. The option text already
+  // carries the 货号 ("一个 3-120*1(100克)"), so it needs no second column — and
+  // it is the operator's own listing text, which is what they will recognise.
+  // Unanswered is amber, because a shared listing with no answer is pushing the
+  // same number to every option right now.
+  function mtSpecPicker(p, store, specs, chosen) {
+    return '<div class="mt-sub">' +
+      esc(cuT(specs.length + ' products share this listing — which one is this?',
+              '有 ' + specs.length + ' 个商品共用此商品页 — 这是哪一项？')) + '</div>' +
+      '<select class="mt-spec' + (chosen ? '' : ' warn') + '"' +
+      ' data-pid="' + p.id + '" data-store-id="' + store.id + '"' +
+      ' data-store-code="' + esc(store.code) + '" onchange="mtSetSpec(this)">' +
+      '<option value="">' + esc(cuT('Pick an option…', '选择规格…')) + '</option>' +
+      specs.map(o =>
+        '<option value="' + esc(o.skuId) + '" data-label="' + esc(o.spec) + '"' +
+        (String(o.skuId) === chosen ? ' selected' : '') + '>' + esc(o.spec) + '</option>'
+      ).join('') +
+      '</select>';
   }
 
   // ── Suggested listing name ───────────────────────────────────────────────────
@@ -1020,11 +1076,14 @@
         body: JSON.stringify({ storeId: parseInt(storeId), storeCode, meituanName: name, syncEnabled: 1 }),
       });
       // Update local cache, then repaint so the Tianhe status pill (Synced /
-      // Add name) and the sync toggle reflect the new mapping.
+      // Add name) and the sync toggle reflect the new mapping. A chosen 规格
+      // belonged to the old listing — the route drops it, so drop it here too
+      // rather than show a picker holding an option this listing never had.
       if (product) {
         if (!product.stores) product.stores = {};
         if (name) {
-          product.stores[storeCode] = { ...(product.stores[storeCode] || {}), meituan_name: name, sync_enabled: 1 };
+          product.stores[storeCode] = { ...(product.stores[storeCode] || {}), meituan_name: name,
+                                        sync_enabled: 1, specSkuId: null, specLabel: null };
         } else {
           delete product.stores[storeCode];
         }
@@ -1034,6 +1093,29 @@
       toast(cuT('Save failed: ', '保存失败:') + e.message, 'error');
     }
     input.style.opacity = '';
+  };
+
+  // ── Which option on a shared listing ────────────────────────────────────────
+  window.mtSetSpec = async function (sel) {
+    const pid       = sel.dataset.pid;
+    const storeId   = sel.dataset.storeId;
+    const label     = (sel.options[sel.selectedIndex] || {}).dataset?.label || '';
+
+    sel.style.opacity = '0.5';
+    try {
+      await api(`/api/retail-admin/meituan/products/${pid}/spec`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeId: parseInt(storeId), specSkuId: sel.value, specLabel: label }),
+      });
+      // Reload rather than patch the cache: taking an option releases it from
+      // whichever product held it before, and that OTHER row has to repaint too
+      // (back to amber). A patch can only fix the row in front of you.
+      await mtLoadProducts();
+    } catch (e) {
+      toast(cuT('Save failed: ', '保存失败:') + e.message, 'error');
+    }
+    sel.style.opacity = '';
   };
 
   // ── Toggle sync ─────────────────────────────────────────────────────────────
