@@ -6047,8 +6047,29 @@ async function api(path){
 // promised ship date on the wrong calendar day for anyone west of Greenwich
 // while the order's placed_at beside it was right. Pin the date-only form to
 // local midnight so both forms mean the same thing.
-const _date=v=>{ if(!v) return null; let t=String(v).replace(' ','T');
+//
+// 🔴 And a timestamp WITH a time in it carries no zone marker either. SQLite
+// writes 'YYYY-MM-DD HH:MM:SS' in UTC — CURRENT_TIMESTAMP is UTC, always — and
+// every engine reads a zoneless string as LOCAL, so in Guangzhou (UTC+8) this
+// helper moved every stamp in the app back eight hours. A customer who opened
+// the mini app forty minutes ago read "seen 2:04 PM" on a 22:53 phone; an order
+// placed a minute ago aged to "8h" in ageShort; anything that happened between
+// midnight and 08:00 GZ was filed under "Yesterday". The list was never wrong
+// about WHO was most recent — the server orders it — only about WHEN, which is
+// the whole reason the operator reads the column.
+//
+// The desktop already names this bug class twice and fixes it the same way
+// (courierAgeMs in retail-admin/04-orders.js, parse() in td-datetime.js: "the
+// 'Z' is not optional"). The phone had its own parser and never got the rule.
+// Only zoneless values are stamped — a value that already carries Z or ±HH:MM
+// is left exactly as it came, and the date-only form stays literal, because a
+// calendar day is not an instant and converting one can move it a day.
+const _date=v=>{ if(!v) return null;
+  if(Object.prototype.toString.call(v)==='[object Date]') return isNaN(v.getTime())?null:v;
+  if(typeof v==='number'){ const n=new Date(v); return isNaN(n.getTime())?null:n; }
+  let t=String(v).trim().replace(' ','T');
   if(/^\d{4}-\d{2}-\d{2}$/.test(t)) t+='T00:00:00';
+  else if(!/[zZ]$|[+-]\d\d:?\d\d$/.test(t)) t+='Z';
   const d=new Date(t); return isNaN(d)?null:d; };
 function fmtTime(v){ const d=_date(v); if(!d) return '';
   return LANG==='en' ? d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})

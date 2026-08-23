@@ -675,6 +675,10 @@ async function refreshOrderStatus(storeCode, order) {
         meituanOrderNo: order.meituanOrderNo, statusDesc: order.statusDesc, eta: order.eta,
         preOrderAt: order.preOrderAt, note: order.note,
         needsCutlery: order.needsCutlery, placedAt: order.placedAt,
+        // The rest of the same payload (rider, settlement, customer). Sent on
+        // EVERY poll rather than only at import: at import an order has no rider
+        // yet, so the delivery record exists only on later reads.
+        channel: order.channel,
       }),
     });
     if (res.ok) {
@@ -802,7 +806,9 @@ async function processStockQueue(stores) {
   const rows = db.prepare(`
     SELECT q.*, p.name_cn, p.name_en,
            COALESCE(mm.meituan_sku, p.sku) AS sku,
-           mm.meituan_name AS map_meituan_name
+           mm.meituan_name AS map_meituan_name,
+           mm.meituan_sku_id AS map_spec_sku_id,
+           mm.meituan_spec   AS map_spec_label
       FROM meituan_sync_queue q
       LEFT JOIN store_products p ON p.id = q.product_id
       LEFT JOIN meituan_product_map mm
@@ -870,6 +876,11 @@ async function processStockQueue(stores) {
           targetCn: isBundle ? row.meituan_name : (row.map_meituan_name || row.name_cn),
           targetEn: isBundle ? null : row.name_en,
           sku:      isBundle ? null : row.sku,
+          // Which 规格 of the listing this product is, when several Roots
+          // products share one (the sorbet's pack counts). Set in the admin;
+          // without it the driver writes the same count to every option.
+          specSkuId: isBundle ? null : row.map_spec_sku_id,
+          specLabel: isBundle ? null : row.map_spec_label,
           newQty:   row.new_qty,
         };
       });

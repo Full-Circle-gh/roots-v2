@@ -74,7 +74,13 @@ STALE_TMP_DAYS=2
 # --- PostgreSQL --------------------------------------------------------------
 # PG_DB empty disables the Postgres tier entirely, so this script stays correct
 # on a box where Postgres is not installed.
-PG_DB=tacet
+# ⚠ EMPTY ON PURPOSE SINCE 2026-08-23. The Postgres migration was cancelled and
+# the `tacet` cluster was dropped (decisions §24). Setting this back to `tacet`
+# with no cluster running makes the preflight below FAIL THE WHOLE RUN — the
+# SQLite backups included — because a database it cannot reach is a hard error,
+# correctly. The off-site dumps from 08-21/22/23 age out of the 30-day daily
+# retention around 2026-09-22; after that there is nothing to restore.
+PG_DB=
 PG_SUPERUSER=postgres      # peer-auth identity; see the header — no password
 PG_DUMP_NAME=tacet.dump    # custom format (-Fc): compressed internally, and
                            # pg_restore can list it, restore selectively, and

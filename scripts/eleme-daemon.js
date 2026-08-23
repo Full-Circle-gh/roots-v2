@@ -7,15 +7,37 @@
 // client) is dead; nothing in this file calls it any more.
 //
 // Every ~10s: drain eleme_sync_queue → push stock changes to Eleme via the browser.
+// Every ~5min per store: read the order list and mirror new orders into roots.
 //
-// Orders are NOT wired yet. The recon captured the RPC method names
-// (OrderWebService.queryInProcessOrders, PollingService.unprocessedOrders, …) but
-// no live order, so the payload shapes are unknown — see lib/eleme-browser.js's
-// getPendingOrders/acceptOrder stubs and ELEME_BROWSER_RECON.md. Wire order
-// polling into the loop below once that lands (mirror scripts/meituan-daemon.js's
-// pollOrders/ingestOrder shape — this file intentionally does not build out the
-// full alerting/heartbeat machinery meituan-daemon.js has until there's an order
-// path to protect too).
+// ORDER COLLECTION (Tier 0 + Tier 1) — what this reads, and what it deliberately
+// does not, because every extra request is detection surface:
+//
+//   Tier 0, free: everything in the order list the poll reads anyway — order id
+//     and 流水号, real placed-at time, status label, delivery ETA, 预订单 window,
+//     customer note, cutlery, per-line names/qty/prices, and the address/phone
+//     ALREADY MASKED by Eleme (隐私号). No extra call for any of it.
+//   Tier 1, one call per NEW order: the order-detail read, which a merchant's own
+//     UI fires when a card is opened — so our call rate tracks the real order
+//     rate. Adds the money split Eleme won't put in the list (merchant income
+//     after commission, platform-vs-merchant discount, packaging/delivery fees).
+//     Never fires on a re-poll of an order we already have.
+//
+// Cancels and refunds are read too, from the queue the merchant page already
+// polls (a voided order LEAVES the in-process list, so the list alone can never
+// see one). Confirmed voids return their stock through the ledgered adjuster; see
+// routes/eleme-internal.js for the once-only / re-deduct guards.
+//
+// NOT collected, on purpose: anything that UN-MASKS a customer (the real number
+// behind the 隐私号, the full address, the name) — Eleme audits those reads per
+// view and an automated pattern is exactly what that audit is for, and it is a
+// PIPL problem regardless of detection; bulk export endpoints; deep history
+// backfills; reviews and market/competitor analytics. None of it is needed to
+// mirror an order.
+//
+// The recon captured the order RPC method NAMES and no payloads, so the reader in
+// lib/eleme-browser.js prefers to READ WHAT THE PAGE ITSELF FETCHES rather than
+// issue its own call — see the rung ladder there. Shape probing is off unless
+// ELEME_ORDER_PROBE=1.
 //
 // Start:  pm2 start scripts/eleme-daemon.js --name eleme-sync
 // Logs:   pm2 logs eleme-sync
@@ -27,6 +49,13 @@
 //
 // Prereqs: each store linked to its Eleme shop via eleme_shops (shop_id set), and
 // storefront_config 'eleme.enabled' = true.
+//
+// Order-related env (all optional):
+//   ELEME_ORDER_POLL=0            turn order polling off entirely
+//   ELEME_ORDER_TIER1=0           order list only, skip the per-order detail read
+//   ELEME_ORDER_PROBE=1           allow the last-resort request-shape probe
+//   ELEME_ORDER_DETAIL_METHOD=…   name the detail RPC once it's been observed
+//   ELEME_MONEY_SCALE=yuan|fen    pin the wire money unit (default: auto-detect)
 
 'use strict';
 
@@ -53,10 +82,42 @@ const db = seam(require('../database'));
 const { getBrowser } = require('../lib/eleme-browser');
 const { sendOpsAlert } = require('../lib/ops-alert');
 const { channelClosedStores } = require('../lib/inventory');
+// Per-store opening hours. A merchant backend that keeps refreshing at 4am is
+// itself a bot tell, so order polling sleeps when the shop is shut. Stores with no
+// hours on file come back null → treated as always-open, so a new store is never
+// silently muted.
+const { storeHours, within } = require('../lib/store-hours');
 // Ops-alert latches that survive a restart (see lib/alert-latch).
 const { latchStore } = require('../lib/alert-latch');
 
 const QUEUE_CHECK_MS = 10_000; // stock push cadence
+const ORDER_POLL_MS  = 300_000; // per-store order read, jittered ±40% (matches meituan-daemon)
+const ORDER_POLL_ON  = process.env.ELEME_ORDER_POLL !== '0';
+const TIER1_DETAIL   = process.env.ELEME_ORDER_TIER1 !== '0';
+const OPEN_GRACE_MIN = 30;      // poll a little either side of opening hours
+const INTERNAL_PORT  = process.env.PORT || 3000;
+const INTERNAL_BASE  = `http://127.0.0.1:${INTERNAL_PORT}`;
+// Order polling has been failing this long before it pages anyone — roughly six
+// missed polls, so a proxy blip or a single browser relaunch stays quiet.
+const ORDER_DOWN_AFTER_MS = 30 * 60_000;
+
+function internalSecret() {
+  return process.env.ELEME_INTERNAL_SECRET || 'eleme-daemon-internal';
+}
+
+function isStoreOpen(storeCode, now = new Date()) {
+  return within(storeHours(storeCode), { openGraceMin: OPEN_GRACE_MIN, closeGraceMin: OPEN_GRACE_MIN, now });
+}
+
+// Bounded JSON for the columns we archive — a raw order payload is unbounded in
+// principle and this table is kept forever.
+function safeJson(value, cap = 20000) {
+  if (value == null) return null;
+  try {
+    const s = JSON.stringify(value);
+    return s.length > cap ? s.slice(0, cap) : s;
+  } catch { return null; }
+}
 
 // Stores handled by a different daemon/channel — never poll or push them here.
 const SKIP_STORES = (process.env.ELEME_SKIP_STORES || '')
@@ -138,6 +199,233 @@ function noteVerifyResult(storeCode, challenged) {
     logSync(storeCode, 'verify_cleared', 'ok', null, 'verification cleared — sync resumed');
     sendOpsAlert(`✅ 饿了么 ${storeCode} 风控已清除，同步恢复\nEleme ${storeCode} verification cleared — sync resumed`);
   }
+}
+
+// Order polling down. Deliberately slower to fire than the login/verify latches
+// above: those detect a state a human must fix, this one mostly catches transient
+// network/browser trouble that heals itself, so it waits ORDER_DOWN_AFTER_MS of
+// unbroken failure before paging.
+const lastOrderPollOk = {};
+
+function noteOrderPollResult(storeCode, ok, errMsg) {
+  const key = 'order_poll_down:' + storeCode;
+  const now = Date.now();
+  if (ok) {
+    lastOrderPollOk[storeCode] = now;
+    if (alerts[key]) {
+      alerts[key] = false;
+      logSync(storeCode, 'order_poll_recovered', 'ok', null, 'Eleme order polling recovered');
+      sendOpsAlert(`✅ 饿了么 ${storeCode} 订单读取已恢复\nEleme ${storeCode} order polling recovered`);
+    }
+    return;
+  }
+  if (!lastOrderPollOk[storeCode]) { lastOrderPollOk[storeCode] = now; return; }
+  if (now - lastOrderPollOk[storeCode] < ORDER_DOWN_AFTER_MS) return;
+  if (alerts[key]) return;
+  alerts[key] = true;
+  logSync(storeCode, 'order_poll_down', 'error', null, errMsg || 'Eleme order polling failing');
+  sendOpsAlert(`🔴 饿了么 ${storeCode} 订单已超过30分钟读取失败，新订单可能未入库\nEleme ${storeCode} order polling has been failing for 30+ min — new orders may not be mirrored`);
+}
+
+// ── Order polling ────────────────────────────────────────────────────────────
+
+// The first payload of each kind, structure only (values stripped by
+// shapeDigest), written to the sync log once per process. This is the artefact
+// that closes the recon's open TODO: the first live order prints Eleme's real
+// field names, so the candidate-key lists in lib/eleme-browser.js can be replaced
+// with the actual ones instead of another capture session.
+const shapeLogged = {};
+function logOrderShapes(storeCode, browser) {
+  for (const kind of ['list', 'detail', 'void']) {
+    const key = storeCode + ':' + kind;
+    const digest = browser.orderShapes && browser.orderShapes[kind];
+    if (!digest || shapeLogged[key]) continue;
+    shapeLogged[key] = true;
+    logSync(storeCode, 'order_shape', 'ok', { kind, digest });
+    log(storeCode, `${kind} payload shape recorded to eleme_sync_log (${digest.length} chars)`);
+  }
+  // The request side, once per process. Values kept (query params, no customer
+  // data) — this is what shows the real tab/queryType a replay had to fill blind.
+  const rqKey = storeCode + ':requests';
+  if (!shapeLogged[rqKey]) {
+    const snap = browser.orderRequestSnapshot ? browser.orderRequestSnapshot() : null;
+    if (snap && Object.keys(snap).length) {
+      shapeLogged[rqKey] = true;
+      logSync(storeCode, 'order_rpc_requests', 'ok', snap);
+      log(storeCode, `observed ${Object.keys(snap).length} order RPC request body/bodies → eleme_sync_log`);
+    }
+  }
+}
+
+// Everything the order carries that has no retail_orders column of its own —
+// archived beside the import row so a wrong ELEME_MONEY_SCALE guess, or a later
+// margin question, is answerable from stored data instead of a re-read.
+function archiveFields(order) {
+  return {
+    daySeq: order.daySeq,
+    moneyDivisor: order.moneyDivisor,
+    merchantIncome: order.merchantIncome,
+    commission: order.commission,
+    platformSubsidy: order.platformSubsidy,
+    shopDiscount: order.shopDiscount,
+    packagingFee: order.packagingFee,
+    deliveryFee: order.deliveryFee,
+    refundDesc: order.refundDesc,
+    // Both already masked by Eleme — kept for rider contact / routing, never
+    // un-masked (see the Tier 3 note in the file header).
+    addressMasked: order.addressMasked,
+    phoneMasked: order.phoneMasked,
+    detail: order.rawDetail || null,
+  };
+}
+
+async function pollOrders(cfg) {
+  const storeCode = cfg.store_code;
+  const storeId   = cfg.store_id;
+  let browser;
+  try {
+    browser = await getBrowser(storeCode, cfg.shop_id);
+    const orders = await browser.getPendingOrders();
+
+    noteLoginResult(storeCode, browser.loggedIn);
+    noteVerifyResult(storeCode, browser.verificationRequired);
+    logOrderShapes(storeCode, browser);
+    // A challenge isn't a poll failure — it's already alerted on its own latch,
+    // and counting it here would page twice for one cause.
+    if (!browser.verificationRequired) noteOrderPollResult(storeCode, true);
+
+    for (const order of orders) {
+      if (!order.elemeOrderId) continue;
+
+      const existing = db.prepare(
+        'SELECT id FROM eleme_order_import WHERE eleme_order_id = ?'
+      ).get(order.elemeOrderId);
+      if (existing) {
+        // Already mirrored — keep Eleme's status label current and move on. No
+        // detail read: Tier 1 is once per order, not once per poll.
+        await refreshOrderStatus(storeCode, order);
+        continue;
+      }
+
+      log(storeCode, `new order ${order.elemeOrderId}`);
+
+      // Tier 1 — the one extra call, and only for an order we've never seen.
+      if (TIER1_DETAIL) {
+        try {
+          const detail = await browser.getOrderDetail(order.elemeOrderId);
+          if (detail) browser.mergeOrderDetail(order, detail);
+        } catch (e) {
+          log(storeCode, `order detail read failed for ${order.elemeOrderId}: ${e.message}`);
+        }
+      }
+
+      const rootsOrderId = await ingestOrder(storeId, storeCode, order);
+
+      db.prepare(`
+        INSERT OR IGNORE INTO eleme_order_import
+          (eleme_order_id, retail_order_id, store_code, status, raw_payload, detail_json)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `).run(order.elemeOrderId, rootsOrderId || null, storeCode,
+             rootsOrderId ? 'imported' : 'error',
+             safeJson(order.raw), safeJson(archiveFields(order)));
+
+      logSync(storeCode, 'order_import', rootsOrderId ? 'ok' : 'error',
+        { elemeOrderId: order.elemeOrderId, rootsOrderId, items: (order.items || []).length,
+          total: order.total, status: order.statusDesc });
+    }
+
+    // Voids. These have dropped OUT of the list above, so they are read from the
+    // refund/exception queue and pushed through the same status refresh — which is
+    // what actually returns the stock. Only orders we already mirror are touched;
+    // a void for an order we never imported has nothing to give back.
+    await pollVoidedOrders(storeCode, browser);
+  } catch (err) {
+    log(storeCode, `pollOrders error: ${err.message}`);
+    logSync(storeCode, 'order_poll', 'error', null, err.message);
+    noteOrderPollResult(storeCode, false, err.message);
+  }
+}
+
+// Read Eleme's refund/exception queue and refresh any of those orders we hold.
+// The refresh endpoint decides whether a label is a CONFIRMED void and does the
+// restock; this only has to deliver the label. Best-effort — never breaks the poll.
+async function pollVoidedOrders(storeCode, browser) {
+  let voided = [];
+  try {
+    voided = await browser.getVoidedOrders();
+  } catch (e) {
+    log(storeCode, `getVoidedOrders failed: ${e.message}`);
+    return;
+  }
+  if (!voided.length) return;
+
+  let touched = 0;
+  for (const order of voided) {
+    if (!order.elemeOrderId || !order.statusDesc) continue;
+    const held = db.prepare(
+      'SELECT retail_order_id FROM eleme_order_import WHERE eleme_order_id = ?'
+    ).get(order.elemeOrderId);
+    if (!held || !held.retail_order_id) continue; // never mirrored — nothing to undo
+    await refreshOrderStatus(storeCode, order);
+    touched++;
+  }
+  if (touched) log(storeCode, `refund/exception queue: refreshed ${touched} of ${voided.length} order(s)`);
+}
+
+// Create the order + deduct stock through the internal API (localhost only).
+// Returns the new retail_order.id, or null on failure.
+async function ingestOrder(storeId, storeCode, order) {
+  try {
+    const res = await fetch(`${INTERNAL_BASE}/api/internal/eleme/ingest-order`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Internal-Secret': internalSecret() },
+      body: JSON.stringify({ storeId, storeCode, order }),
+    });
+    if (!res.ok) {
+      log(storeCode, `ingestOrder HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+      return null;
+    }
+    const data = await res.json();
+    return data.orderId || null;
+  } catch (err) {
+    log(storeCode, `ingestOrder fetch error: ${err.message}`);
+    return null;
+  }
+}
+
+// Refresh an already-mirrored order's Eleme status label (server-side no-op when
+// nothing changed). Best-effort — a failed refresh must never break the poll.
+async function refreshOrderStatus(storeCode, order) {
+  if (!order.statusDesc) return;
+  try {
+    const res = await fetch(`${INTERNAL_BASE}/api/internal/eleme/update-order-status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Internal-Secret': internalSecret() },
+      // The platform-owned extras ride along too, so an order mirrored before this
+      // build parsed them backfills itself instead of staying permanently blank.
+      body: JSON.stringify({
+        elemeOrderId: order.elemeOrderId, statusDesc: order.statusDesc, eta: order.eta,
+        preOrderAt: order.preOrderAt, note: order.note,
+        needsCutlery: order.needsCutlery, placedAt: order.placedAt,
+      }),
+    });
+    if (res.ok) {
+      const data = await res.json().catch(() => ({}));
+      if (data.changed) log(storeCode, `order ${order.elemeOrderId} status → ${order.statusDesc}`);
+      // Stock moving on a void is worth its own line: it is the one thing here
+      // that changes inventory rather than just a label.
+      if (data.restocked) {
+        log(storeCode, `order ${order.elemeOrderId} voided — returned ${data.restocked} line(s) to stock`);
+        logSync(storeCode, 'order_void_restock', 'ok',
+          { elemeOrderId: order.elemeOrderId, statusDesc: order.statusDesc, lines: data.restocked });
+      }
+      if (data.rededucted) {
+        log(storeCode, `order ${order.elemeOrderId} revived — re-deducted ${data.rededucted} line(s)`);
+        logSync(storeCode, 'order_void_rededuct', 'ok',
+          { elemeOrderId: order.elemeOrderId, statusDesc: order.statusDesc, lines: data.rededucted });
+      }
+    }
+  } catch (err) { log(storeCode, `refreshOrderStatus error: ${err.message}`); }
 }
 
 // ── Stock push queue ──────────────────────────────────────────────────────────
@@ -309,6 +597,9 @@ let lastOrphanSweep = 0;
 // Refresh a DB copy periodically instead; the admin API just reads that.
 const CATALOGUE_REFRESH_MS = 30 * 60_000;
 let lastCatalogueRefresh = 0;
+// storeCode → epochMs the next order poll is due. Empty at boot, so every store
+// polls once immediately and then settles onto its own jittered cadence.
+const nextOrderPollAt = {};
 
 async function refreshCatalogueCache(configs) {
   for (const cfg of configs) {
@@ -342,7 +633,9 @@ async function refreshCatalogueCache(configs) {
 
 async function main() {
   console.log('[eleme-daemon] starting (browser automation — see ELEME_BROWSER_RECON.md)');
-  console.log('[eleme-daemon] order polling not wired yet — stock push only, until a live order is captured');
+  console.log(ORDER_POLL_ON
+    ? `[eleme-daemon] order polling on (~${Math.round(ORDER_POLL_MS / 60000)} min/store, Tier 1 detail ${TIER1_DETAIL ? 'on' : 'off'})`
+    : '[eleme-daemon] order polling disabled (ELEME_ORDER_POLL=0)');
   recoverOrphanedProcessing();
   lastOrphanSweep = Date.now();
 
@@ -358,6 +651,20 @@ async function main() {
       lastCatalogueRefresh = Date.now();
       await refreshCatalogueCache(configs); // runs before the queue check so a first-boot admin visit isn't empty for 30 min
     }
+    // Order poll — per store, on its own jittered ~5 min schedule, independent of
+    // the 10s stock-queue tick. Gated on opening hours only, NOT on the channel
+    // close switch: closing the channel stops new orders arriving on Eleme but
+    // must not strand the ones already in flight.
+    if (ORDER_POLL_ON) {
+      for (const cfg of configs) {
+        const code = cfg.store_code;
+        if (Date.now() < (nextOrderPollAt[code] || 0)) continue;
+        if (!isStoreOpen(code)) { nextOrderPollAt[code] = Date.now() + jitter(ORDER_POLL_MS, 0.4); continue; }
+        nextOrderPollAt[code] = Date.now() + jitter(ORDER_POLL_MS, 0.4);
+        await pollOrders(cfg);
+      }
+    }
+
     await processStockQueue(configs);
     await sleep(jitter(QUEUE_CHECK_MS));
   }

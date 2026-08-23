@@ -40,8 +40,10 @@
     // The product table and bundles list are rendered in ONE language (cuT)
     // under data-no-i18n containers, so the auto-translator never touches
     // them — repaint ourselves when the operator flips EN/CN.
-    // Static chrome (headers, buttons) is handled by the "EN · CN" splitter.
+    // Buttons and the remaining static chrome are handled by the "EN · CN"
+    // splitter; the column headings are data now, so they repaint here too.
     if (window.onLangChange) onLangChange(function () {
+      mtRenderTableHead();
       mtFilterProducts();
       mtRenderBundles();
     });
@@ -137,27 +139,38 @@
       // Try to guess 天河 / 越秀 by code or name
       _storeA = _stores.find(s => s.code === 'tianhe' || s.name?.includes('天河')) || _stores[0] || null;
       _storeB = _stores.find(s => s.code === 'yuexiu' || s.name?.includes('越秀')) || _stores[1] || null;
-      // Column headers are static bilingual markup ("Tianhe delivery · 天河外卖")
-      // localized by the EN/CN splitter — no JS header-setting needed.
+      mtRenderTableHead();
     } catch (e) {
       console.warn('[meituan] loadStores error', e);
     }
     mtRenderStoreFilter();
   }
 
+  // The columns are named after the stores themselves — "Tianhe delivery" and
+  // "Yuexiu instant" carried the matching mode in the heading, which the column
+  // already says (the Yuexiu cells talk about 货号 throughout). Because the text
+  // is data now rather than the splitter's static "EN · CN" markup, it has to be
+  // repainted on a language flip like everything else the JS writes.
+  function mtRenderTableHead() {
+    const cn = document.documentElement.dataset.uiLang === 'cn';
+    const h0 = document.getElementById('mt-th-store-0');
+    const h1 = document.getElementById('mt-th-store-1');
+    if (h0 && _storeA) h0.textContent = mtStoreName(_storeA.code, cn);
+    if (h1 && _storeB) h1.textContent = mtStoreName(_storeB.code, cn);
+  }
+
   // ── Status ─────────────────────────────────────────────────────────────────
   // Populates the fc-kpis strip (matches the Products catalogue's KPI tiles).
-  function mtSetKpi(id, val) { const el = document.getElementById(id); if (el) el.textContent = val; }
   // mtAlertTile went with the strip: a tile that flips amber cannot say WHICH
   // store is unwell, which was the whole problem. The cards carry it now.
 
-  // English store labels keyed by code — the store record only carries a Chinese
-  // `name` (天河店 / 越秀店), so in the English log we derive a Latin name instead
-  // of falling through to the Chinese one.
-  const MT_STORE_EN = { tianhe: 'Tianhe', yuexiu: 'Yuexiu' };
+  // The store record carries both names; pick by the live language. This used to
+  // be a hardcoded {tianhe:'Tianhe', yuexiu:'Yuexiu'} map — tenant-specific, and
+  // it only covered the log, so the rest of the English UI still said 天河店.
   function mtStoreName(code, cn) {
-    if (cn === false && MT_STORE_EN[code]) return MT_STORE_EN[code];
-    return (_stores.find(s => s.code === code) || {}).name || code;
+    const st = _stores.find(s => s.code === code) || {};
+    const en = st.nameEn || st.name;
+    return (cn === false ? en : (st.name || en)) || code;
   }
 
   window.mtLoadStatus = async function () {
@@ -168,7 +181,6 @@
       mtRenderHead();
       mtRenderLog('mt-log-stock', s.recentStock, true);
       mtRenderLog('mt-log-sys', s.recentSystem, false);
-      mtSetKpi('mt-upd', cuT('Updated just now', '刚刚更新'));
     } catch (e) {
       // Cannot reach the admin API. Say so where the notice goes, rather than
       // leaving the last numbers on screen looking current.
@@ -179,7 +191,6 @@
           cuT('The numbers above are from the last successful check.', '上方数据为上次成功检查的结果。') +
           '</div></div></div>';
       }
-      mtSetKpi('mt-upd', cuT('Offline', '离线'));
     }
   };
 
@@ -209,7 +220,11 @@
     const st = document.getElementById('mt-status');
     if (st) {
       let html = esc(cuT(live + ' live', live + ' 个已上架'));
-      if (att) html += ' · ' + esc(cuT(att + ' unmatched', att + ' 个未匹配'));
+      // Says the same word as the chip it counts: the tile and the filter must
+      // not disagree about what those rows are. Not "unmatched" anymore — the
+      // count now also holds rows that ARE matched to a listing but not to one
+      // of its options.
+      if (att) html += ' · ' + esc(cuT(att + ' need attention', att + ' 个待处理'));
       const bad = rows.filter(r => r.blocked);
       if (bad.length) {
         const names = bad.map(r => mtStoreName(r.code, cn) || r.name).join(', ');
@@ -321,14 +336,18 @@
 
   // ── Toolbar: segmented filter ────────────────────────────────────────────────
   // ── Chip filters + store filter (Orders' filter row) ───────────────────────
-  // Replaces the two-button segmented control. "Multi-size" is the new one and
+  // Replaces the two-button segmented control. "Has options" is the new one and
   // the reason the specs are captured: 15 of 265 listings at 天河 hold more
-  // than one 规格, and those are exactly the ones whose stock can go wrong.
+  // than one 规格. Two kinds live under that one chip — a wrap's options are
+  // sauce add-ons on the same product, while the soap's scents and the sorbet's
+  // pack counts are separate products sharing a listing. Only the second kind
+  // has anything to fix.
+
   const MT_CHIPS = [
     { id: 'all', en: 'All',             cn: '全部' },
     { id: 'att', en: 'Needs attention', cn: '待处理' },
     { id: 'ok',  en: 'Synced',          cn: '已同步' },
-    { id: 'ms',  en: 'Multi-size',      cn: '多规格' },
+    { id: 'ms',  en: 'Has options',     cn: '有选项' },
   ];
 
   function mtChipMatch(p, id) {
@@ -425,11 +444,33 @@
       ? cuT('Last', '上次') + ' ' + map.last_pushed_qty + ' · ' + fmtAgo(map.last_pushed_at)
       : '';
   }
-  // A product needs attention when it's active but live on NEITHER store.
+  // A product needs attention when it's active but live on NEITHER store, or
+  // when it IS live and syncing but nobody has said which 规格 of a shared
+  // listing it is — that one looks healthy and pushes the same number to every
+  // option of the listing, which is worse than not pushing at all.
   function mtNeedsAttention(p) {
     const a = _storeA && p.stores && p.stores[_storeA.code] && p.stores[_storeA.code].meituan_name;
     const b = _storeB && p.stores && p.stores[_storeB.code] && p.stores[_storeB.code].meituan_name;
-    return !a && !b;
+    if (!a && !b) return true;
+    return Object.values(p.stores || {}).some(mtNeedsSpec);
+  }
+
+  // The options (规格) behind a listing, and which kind they are. A 货号 per
+  // option means separate products share the listing (the sorbet's pack counts,
+  // the hand soap's scents) and each Roots product must say which one it is.
+  // No 货号 means they are add-ons of this same product (a wrap plus a sauce),
+  // which lib/meituan-browser.js _applyStockRule already opens and closes as a
+  // set — nothing to pick.
+  function mtSpecs(map) { return Array.isArray(map && map.specs) ? map.specs : []; }
+  function mtIsShared(map) {
+    const sp = mtSpecs(map);
+    return sp.length > 1 && sp.every(o => o.sku);
+  }
+  // Syncing to a shared listing with no option chosen — the state that needs a
+  // person. Sync off is not it: nothing is being written.
+  function mtNeedsSpec(map) {
+    return !!(map && map.meituan_name && map.sync_enabled !== 0 &&
+              mtIsShared(map) && !map.specSkuId);
   }
 
   function mtRenderProducts(filtered) {
@@ -493,25 +534,41 @@
         else {
           const hasName = !!mapA.meituan_name;
           const syncOn  = hasName && mapA.sync_enabled !== 0;
+          // "Synced" on a shared listing with no option chosen would be a lie:
+          // it pushes, and it pushes to every option at once.
+          const needsSpec = mtNeedsSpec(mapA);
           const pill = !hasName ? mtPill('att', cuT('Add name', '待填名称'))
-            : (syncOn ? mtPill('ok', cuT('Synced', '已同步')) : mtPill('off', cuT('Sync off', '已关闭')));
+            : !syncOn ? mtPill('off', cuT('Sync off', '已关闭'))
+            : needsSpec ? mtPill('att', cuT('Pick an option', '待选规格'))
+            : mtPill('ok', cuT('Synced', '已同步'));
           const last = mtLast(mapA);
           const toggle = hasName
             ? '<label class="toggle-label" title="' + cuT('Sync on / off', '同步开关') +
               '"><input type="checkbox" ' + (syncOn ? 'checked' : '') +
               ' data-pid="' + p.id + '" onchange="mtToggleSync(this)"></label>'
             : '';
-          // A listing that holds several sizes cannot be pushed accurately
-          // until one is chosen — the driver would guess otherwise.
-          const multi = Number(mapA.specCount || 0) > 1;
+          // A listing can hold several 规格 (see mtIsShared): a shared listing
+          // gets the picker, an add-on listing gets a sentence saying what the
+          // rule already does with it.
+          const specs  = mtSpecs(mapA);
+          const multi  = specs.length > 1;
+          const shared = mtIsShared(mapA);
+          const chosen = String(mapA.specSkuId || '');
           colA = '<td>' + pill +
             '<input type="text" class="mt-name-input" list="mt-listings-dl-' + esc(storeA.code) + '"' +
             ' placeholder="' + esc(cuT('Meituan delivery name', '美团外卖商品名')) + '"' +
             ' value="' + esc(mapA.meituan_name || '') + '"' +
             ' data-pid="' + p.id + '" data-store-id="' + storeA.id + '" data-store-code="' + esc(storeA.code) + '"' +
             ' onblur="mtSaveMap(this)" onkeydown="if(event.key===\'Enter\')this.blur()">' +
-            (multi ? '<div class="mt-sub">' +
-              esc(cuT('This listing holds several sizes.', '该商品含多个规格。')) + '</div>' : '') +
+            (multi ? (shared ? mtSpecPicker(p, storeA, specs, chosen)
+                             : '<div class="mt-sub">' +
+                               esc(cuT(specs.length + ' options: ', specs.length + ' 个选项：')) +
+                               esc(specs.map(o => o.spec).join(' · ')) +
+                               '<div>' + esc(cuT('The count goes to ', '库存数发到「')) +
+                               '<b>' + esc(specs[0].spec) + '</b>' +
+                               esc(cuT('. The add-ons open and close with it.',
+                                       '」。加料选项随之开关。')) +
+                               '</div></div>') : '') +
             ((last || toggle) ? '<div class="mt-cell-foot">' +
               (last ? '<span class="mt-pmeta">' + esc(last) + '</span>' : '') + toggle + '</div>' : '') +
             '</td>';
@@ -547,6 +604,26 @@
     }).join('');
   }
 
+  // Which 规格 of a shared listing this product is. The option text already
+  // carries the 货号 ("一个 3-120*1(100克)"), so it needs no second column — and
+  // it is the operator's own listing text, which is what they will recognise.
+  // Unanswered is amber, because a shared listing with no answer is pushing the
+  // same number to every option right now.
+  function mtSpecPicker(p, store, specs, chosen) {
+    return '<div class="mt-sub">' +
+      esc(cuT(specs.length + ' products share this listing — which one is this?',
+              '有 ' + specs.length + ' 个商品共用此商品页 — 这是哪一项？')) + '</div>' +
+      '<select class="mt-spec' + (chosen ? '' : ' warn') + '"' +
+      ' data-pid="' + p.id + '" data-store-id="' + store.id + '"' +
+      ' data-store-code="' + esc(store.code) + '" onchange="mtSetSpec(this)">' +
+      '<option value="">' + esc(cuT('Pick an option…', '选择规格…')) + '</option>' +
+      specs.map(o =>
+        '<option value="' + esc(o.skuId) + '" data-label="' + esc(o.spec) + '"' +
+        (String(o.skuId) === chosen ? ' selected' : '') + '>' + esc(o.spec) + '</option>'
+      ).join('') +
+      '</select>';
+  }
+
   // ── Suggested listing name ───────────────────────────────────────────────────
   // On a Chinese marketplace the listing is the Chinese name; the variant label
   // is appended (full-width parens) so products that share a name_cn — the size
@@ -572,6 +649,31 @@
   // the escape hatch when the scrape can't reach Meituan.
   let _match = { stage: 'intro', applied: 0, failed: 0, running: false };
 
+  /* §1.13: a dialog closes on ✕ and on Esc. The listener is per-overlay and
+     comes off with it, so nothing accumulates across opens. `guard` lets the
+     match wizard refuse to close mid-run, the same way its scrim click does. */
+  function mtDlgShow(ov, close, guard) {
+    ov._mtEsc = function (e) {
+      if (e.key !== 'Escape') return;
+      if (guard && !guard()) return;
+      e.stopPropagation();
+      close();
+    };
+    document.addEventListener('keydown', ov._mtEsc);
+    document.body.appendChild(ov);
+    // Focus lands on the first real field, not on ✕ — which is what a plain
+    // document-order query returns, since the header comes first.
+    const first = ov.querySelector('.mt-dlg-bd input, .mt-dlg-bd select, .mt-dlg-bd textarea');
+    if (first) first.focus();
+  }
+  function mtDlgHide(id) {
+    const ov = document.getElementById(id);
+    if (!ov) return null;
+    if (ov._mtEsc) document.removeEventListener('keydown', ov._mtEsc);
+    ov.remove();
+    return ov;
+  }
+
   window.mtOpenMatch = function () {
     if (document.getElementById('mt-match-overlay')) return;
     _match = { stage: 'intro', applied: 0, failed: 0, running: false };
@@ -580,84 +682,104 @@
     ov.className = 'mt-ovl';
     ov.innerHTML = '<div class="mt-dlg" role="dialog" data-no-i18n><div id="mt-match-body"></div></div>';
     ov.addEventListener('click', e => { if (e.target === ov && !_match.running) mtMatchClose(); });
-    document.body.appendChild(ov);
+    mtDlgShow(ov, mtMatchClose, () => !_match.running);
     mtMatchRender();
   };
 
-  window.mtMatchClose = function () {
-    const ov = document.getElementById('mt-match-overlay');
-    if (ov) ov.remove();
-  };
+  window.mtMatchClose = function () { mtDlgHide('mt-match-overlay'); };
 
-  function mtMatchHead() {
-    return `<div class="mt-dlg-hd"><b>${cuT('Match names with Meituan', '与美团匹配商品名')}</b>
-      <button class="btn btn-sm" onclick="mtMatchClose()" aria-label="Close">✕</button></div>`;
+  // Close is a labelled button, not a glyph — and it is disabled while the run
+  // is reading, because the run cannot be cancelled today and a button that
+  // looks live but does nothing is worse than one that says it is unavailable.
+  function mtMatchHead(busy) {
+    return `<div class="mt-dlg-hd">${cuT('Match names with Meituan', '与美团匹配商品名')}
+      <span class="mt-tabs-grow"></span>
+      <button class="btn btn-sm" ${busy ? 'disabled' : 'onclick="mtMatchClose()"'}>${cuT('Close', '关闭')}</button></div>`;
   }
 
   function mtMatchRender() {
     const body = document.getElementById('mt-match-body');
     if (!body) return;
 
+    // 1 · Start. The system does not narrate itself in the first person — Tacet
+    // is composed, and "I'll read your product names" is not.
     if (_match.stage === 'intro') {
       body.innerHTML = mtMatchHead() + `
         <div class="mt-dlg-bd">
           <p>${cuT(
-            "I'll read your product names from the Meituan Tianhe store and match them to your products here. Takes about a minute — nothing changes on Meituan.",
-            '我会从美团天河店读取商品名称,并与这里的商品自动匹配。大约一分钟,不会改动美团上的任何内容。')}</p>
-          <button class="btn btn-sm btn-primary" onclick="mtMatchStart()">${cuT('Start matching', '开始匹配')}</button>
+            'Reads the product names from your Meituan Tianhe store and links them to the products here. It takes about a minute, and it changes nothing on Meituan.',
+            '\u4ece\u7f8e\u56e2\u5929\u6cb3\u5e97\u8bfb\u53d6\u5546\u54c1\u540d\u79f0\uff0c\u5e76\u4e0e\u8fd9\u91cc\u7684\u5546\u54c1\u5173\u8054\u3002\u5927\u7ea6\u4e00\u5206\u949f\uff0c\u4e0d\u4f1a\u6539\u52a8\u7f8e\u56e2\u4e0a\u7684\u4efb\u4f55\u5185\u5bb9\u3002')}</p>
+          <div><button class="btn btn-sm btn-primary" onclick="mtMatchStart()">${cuT('Start matching', '\u5f00\u59cb\u5339\u914d')}</button></div>
         </div>
         <div class="mt-dlg-ft">
           <span class="mt-tabs-grow"></span>
-          <button class="mt-tinylink" onclick="mtMatchClose();mtOpenPaste()">${cuT("Can't connect? Paste the names yourself", '无法连接?自己粘贴名称')}</button>
+          <button class="mt-tinylink" onclick="mtMatchClose();mtOpenPaste()">${cuT('Cannot connect? Paste the names yourself', '\u65e0\u6cd5\u8fde\u63a5\uff1f\u81ea\u5df1\u7c98\u8d34\u540d\u79f0')}</button>
         </div>`;
       return;
     }
 
+    // 2 · Reading. The bar cannot be a true percentage — the total only arrives
+    // with the last page — so it eases once and holds while the real counts
+    // underneath do the reporting.
     if (_match.stage === 'working') {
-      body.innerHTML = mtMatchHead() + `
+      const active = _products.filter(p => p.is_active).length;
+      body.innerHTML = mtMatchHead(true) + `
         <div class="mt-dlg-bd">
-          <p id="mt-match-prog">${cuT('Reading your Meituan listings…', '正在读取美团商品…')}</p>
+          <p id="mt-match-prog">${cuT('Reading your Meituan listings…', '\u6b63\u5728\u8bfb\u53d6\u7f8e\u56e2\u5546\u54c1\u2026')}</p>
+          <div class="mt-prog"><i></i></div>
+          <div class="mt-progsub" id="mt-match-sub">${esc(cuT(
+            'matching against ' + active + ' products', '\u5bf9\u6bd4 ' + active + ' \u4e2a\u5546\u54c1'))}</div>
         </div>`;
       return;
     }
 
-    // Results — matched count up top; only the leftovers ask for anything.
+    // 3 · Results, ordered by what each row costs a person: the good news as one
+    // quiet line, then the picks (one tap each), then the ones Meituan does not
+    // have at all.
     const amb = _review.ambiguous, unm = _review.unmatched;
+    const check = '<svg viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
     let html = mtMatchHead() + '<div class="mt-dlg-bd">';
-    html += `<div class="mt-okline">✓ ${cuT(
-      `${_match.applied} matched automatically`, `已自动匹配 ${_match.applied} 个`)}</div>`;
+    html += `<div class="mt-okline">${check}<span>${esc(cuT(
+      _match.applied + ' matched automatically', '\u5df2\u81ea\u52a8\u5339\u914d ' + _match.applied + ' \u4e2a'))}</span></div>`;
     if (_match.failed) {
-      html += `<p class="muted">${cuT(`${_match.failed} failed to save — try again in a minute.`, `${_match.failed} 个保存失败,请稍后重试。`)}</p>`;
+      html += `<p class="mt-progsub">${esc(cuT(
+        _match.failed + ' failed to save — try again in a minute.',
+        _match.failed + ' \u4e2a\u4fdd\u5b58\u5931\u8d25\uff0c\u8bf7\u7a0d\u540e\u91cd\u8bd5\u3002'))}</p>`;
     }
     if (amb.length) {
-      html += `<div class="mt-pickhd">${cuT(
-        `${amb.length} need your pick — tap the right Meituan listing:`,
-        `${amb.length} 个需要你选择 —— 点正确的美团名称:`)}</div>`;
-      html += amb.map((it, i) => `<div class="mt-pick">
-        <div class="pn">${esc(it.label)}</div>
-        <div class="chips">${it.candidates.map((c, j) =>
-          `<button class="mt-chip" onclick="mtMatchPick(${i},${j})">${esc(c)}</button>`).join('')}</div>
-      </div>`).join('');
+      html += `<div><div class="mt-pickhd">${esc(cuT(
+        amb.length + ' need your pick — choose the right Meituan listing',
+        amb.length + ' \u4e2a\u9700\u8981\u4f60\u9009\u62e9 \u2014 \u9009\u4e2d\u6b63\u786e\u7684\u7f8e\u56e2\u5546\u54c1'))}</div>
+        <div class="mt-picklist">` +
+        amb.map((it, i) => `<div class="mt-pick">
+          <div class="pn">${esc(it.label)}</div>
+          <div class="chips">${it.candidates.map((c, j) =>
+            `<button class="mt-chip" onclick="mtMatchPick(${i},${j})">${esc(c)}</button>`).join('')}</div>
+        </div>`).join('') + '</div></div>';
     }
     if (unm.length) {
-      html += `<div class="mt-pickhd">${cuT(
-        `${unm.length} not found on Meituan — stock won't sync until they're listed there:`,
-        `${unm.length} 个在美团上未找到 —— 上架前库存不会同步:`)}</div>`;
-      html += unm.map((it, i) => `<div class="mt-pick">
-        <div class="pn">${esc(it.label)}</div>
-        ${it.suggestion ? `<div class="chips"><button class="mt-chip" onclick="mtMatchFallback(${i})">${cuT('Use', '使用')} “${esc(it.suggestion)}”</button></div>` : ''}
-      </div>`).join('');
+      html += `<div><div class="mt-pickhd">${esc(cuT(
+        unm.length + ' are not on Meituan — their stock stays frozen until they are listed there',
+        unm.length + ' \u4e2a\u5728\u7f8e\u56e2\u4e0a\u672a\u627e\u5230 \u2014 \u4e0a\u67b6\u524d\u5e93\u5b58\u4e0d\u4f1a\u540c\u6b65'))}</div>
+        <div class="mt-picklist">` +
+        unm.map((it, i) => `<div class="mt-pickrow">
+          <span class="pn">${esc(it.label)}</span>
+          ${it.suggestion
+            ? `<button class="mt-chip" onclick="mtMatchFallback(${i})">${esc(cuT('Use', '\u4f7f\u7528'))} \u201c${esc(it.suggestion)}\u201d</button>`
+            : `<span class="mt-nosug">${esc(cuT('no suggestion', '\u65e0\u5efa\u8bae'))}</span>`}
+        </div>`).join('') + '</div>';
       if (unm.filter(u => u.suggestion).length > 1) {
-        html += `<div class="mt-right"><button class="btn btn-sm" onclick="mtMatchFallbackAll()">${cuT('Use suggested names for all', '全部使用建议名称')}</button></div>`;
+        html += `<div class="mt-right"><button class="btn btn-sm" onclick="mtMatchFallbackAll()">${cuT('Use suggested names for all', '\u5168\u90e8\u4f7f\u7528\u5efa\u8bae\u540d\u79f0')}</button></div>`;
       }
+      html += '</div>';
     }
     if (!amb.length && !unm.length) {
-      html += `<p class="muted">${cuT('Everything is matched.', '全部匹配完成。')}</p>`;
+      html += `<p class="mt-progsub">${cuT('Everything is matched.', '\u5168\u90e8\u5339\u914d\u5b8c\u6210\u3002')}</p>`;
     }
     html += `</div><div class="mt-dlg-ft">
-      <button class="mt-tinylink" onclick="mtMatchStartOver()">${cuT('Start over — clear all matched names', '重新开始 —— 清除所有已匹配名称')}</button>
+      <button class="mt-tinylink" onclick="mtMatchStartOver()">${cuT('Start over — clear every matched name', '\u91cd\u65b0\u5f00\u59cb \u2014 \u6e05\u9664\u6240\u6709\u5df2\u5339\u914d\u540d\u79f0')}</button>
       <span class="mt-tabs-grow"></span>
-      <button class="btn btn-sm btn-primary" onclick="mtMatchClose()">${cuT('Done', '完成')}</button>
+      <button class="btn btn-sm btn-primary" onclick="mtMatchClose()">${cuT('Done', '\u5b8c\u6210')}</button>
     </div>`;
     body.innerHTML = html;
   }
@@ -677,8 +799,12 @@
           await new Promise(res => setTimeout(res, 3000));
           data = await api('/api/retail-admin/meituan/listings');
           const total = Object.values(data.listings || {}).reduce((a, b) => a + b.length, 0);
-          const p = document.getElementById('mt-match-prog');
-          if (p) p.textContent = cuT(`Reading your Meituan listings… ${total} found`, `正在读取美团商品… 已读取 ${total} 个`);
+          const sub = document.getElementById('mt-match-sub');
+          if (sub) {
+            const active = _products.filter(x => x.is_active).length;
+            sub.textContent = cuT(`${total} listings read · matching against ${active} products`,
+                                  `已读取 ${total} 个商品 · 对比 ${active} 个商品`);
+          }
           if (!data.running) break;
         }
         _listings = (data && data.listings) || {};
@@ -914,8 +1040,7 @@
     ov.innerHTML = `
       <div class="mt-dlg" role="dialog">
         <div class="mt-dlg-hd">${cuT('Paste Meituan names', '\u7c98\u8d34\u7f8e\u56e2\u5546\u54c1\u540d')}
-          <span class="mt-tabs-grow"></span>
-          <button class="btn btn-sm" onclick="mtClosePaste()" aria-label="Close">\u2715</button></div>
+          <button class="mt-dlg-x" onclick="mtClosePaste()" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
         <div class="mt-dlg-bd"><div class="mt-form">
           <label class="mt-field">${cuT('Store', '\u95e8\u5e97')}
             <select id="mt-paste-store">${opts}</select>
@@ -933,13 +1058,10 @@
         </div>
       </div>`;
     ov.addEventListener('click', e => { if (e.target === ov) mtClosePaste(); });
-    document.body.appendChild(ov);
+    mtDlgShow(ov, mtClosePaste);
   };
 
-  window.mtClosePaste = function () {
-    const ov = document.getElementById('mt-paste-overlay');
-    if (ov) ov.remove();
-  };
+  window.mtClosePaste = function () { mtDlgHide('mt-paste-overlay'); };
 
   window.mtPasteApply = async function () {
     const sel  = document.getElementById('mt-paste-store');
@@ -983,11 +1105,14 @@
         body: JSON.stringify({ storeId: parseInt(storeId), storeCode, meituanName: name, syncEnabled: 1 }),
       });
       // Update local cache, then repaint so the Tianhe status pill (Synced /
-      // Add name) and the sync toggle reflect the new mapping.
+      // Add name) and the sync toggle reflect the new mapping. A chosen 规格
+      // belonged to the old listing — the route drops it, so drop it here too
+      // rather than show a picker holding an option this listing never had.
       if (product) {
         if (!product.stores) product.stores = {};
         if (name) {
-          product.stores[storeCode] = { ...(product.stores[storeCode] || {}), meituan_name: name, sync_enabled: 1 };
+          product.stores[storeCode] = { ...(product.stores[storeCode] || {}), meituan_name: name,
+                                        sync_enabled: 1, specSkuId: null, specLabel: null };
         } else {
           delete product.stores[storeCode];
         }
@@ -997,6 +1122,29 @@
       toast(cuT('Save failed: ', '保存失败:') + e.message, 'error');
     }
     input.style.opacity = '';
+  };
+
+  // ── Which option on a shared listing ────────────────────────────────────────
+  window.mtSetSpec = async function (sel) {
+    const pid       = sel.dataset.pid;
+    const storeId   = sel.dataset.storeId;
+    const label     = (sel.options[sel.selectedIndex] || {}).dataset?.label || '';
+
+    sel.style.opacity = '0.5';
+    try {
+      await api(`/api/retail-admin/meituan/products/${pid}/spec`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storeId: parseInt(storeId), specSkuId: sel.value, specLabel: label }),
+      });
+      // Reload rather than patch the cache: taking an option releases it from
+      // whichever product held it before, and that OTHER row has to repaint too
+      // (back to amber). A patch can only fix the row in front of you.
+      await mtLoadProducts();
+    } catch (e) {
+      toast(cuT('Save failed: ', '保存失败:') + e.message, 'error');
+    }
+    sel.style.opacity = '';
   };
 
   // ── Toggle sync ─────────────────────────────────────────────────────────────
@@ -1096,12 +1244,11 @@
 
     const ov = document.createElement('div');
     ov.id = 'mt-bundle-overlay';
-    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;display:flex;align-items:center;justify-content:center;padding:20px';
+    ov.className = 'mt-ovl';
     ov.innerHTML = `
       <div class="mt-dlg" role="dialog">
         <div class="mt-dlg-hd">${existing ? cuT('Edit bundle', '\u7f16\u8f91\u5957\u9910') : cuT('Add bundle', '\u65b0\u589e\u5957\u9910')}
-          <span class="mt-tabs-grow"></span>
-          <button class="btn btn-sm" onclick="mtCloseBundle()" aria-label="Close">\u2715</button></div>
+          <button class="mt-dlg-x" onclick="mtCloseBundle()" aria-label="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button></div>
         <div class="mt-dlg-bd"><div class="mt-form">
           <label class="mt-field">${cuT('Store', '\u95e8\u5e97')}
             <select id="mt-b-store">${_stores.map(s2 => `<option value="${esc(s2.code)}" ${s2.code === _bundleDraft.storeCode ? 'selected' : ''}>${esc(s2.name || s2.code)}</option>`).join('')}</select>
@@ -1129,7 +1276,7 @@
         </div>
       </div>`;
     ov.addEventListener('click', e => { if (e.target === ov) mtCloseBundle(); });
-    document.body.appendChild(ov);
+    mtDlgShow(ov, mtCloseBundle);
     mtRenderBundleComps();
   };
 
@@ -1147,7 +1294,7 @@
         <span class="cn">${esc(label || ('#' + c.productId))}</span>
         <span class="mt-hint">${cuT('qty', '\u6570\u91cf')}</span>
         <input type="number" min="1" value="${c.qty}" class="cq" onchange="mtBundleCompQty(${i}, this.value)">
-        <button class="btn btn-sm" onclick="mtBundleRemoveComp(${i})">✕</button>
+        <button class="rm" onclick="mtBundleRemoveComp(${i})" aria-label="${cuT('Remove', '移除')}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>`;
     }).join('');
   }
@@ -1178,7 +1325,7 @@
   };
   window.mtBundleCompQty = function (i, v) { if (_bundleDraft.components[i]) _bundleDraft.components[i].qty = Math.max(1, parseInt(v, 10) || 1); };
   window.mtBundleRemoveComp = function (i) { _bundleDraft.components.splice(i, 1); mtRenderBundleComps(); };
-  window.mtCloseBundle = function () { const ov = document.getElementById('mt-bundle-overlay'); if (ov) ov.remove(); _bundleDraft = null; };
+  window.mtCloseBundle = function () { mtDlgHide('mt-bundle-overlay'); _bundleDraft = null; };
 
   window.mtSaveBundle = async function () {
     const code  = document.getElementById('mt-b-store').value;

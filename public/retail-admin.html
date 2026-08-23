@@ -4560,9 +4560,14 @@
                 </div>
               </section>
 
-              <!-- Where it shows -->
+              <!-- Where it shows. Its own section on the page: it sat under the
+                   "Basics" heading, which is not what it is. Docked it stays a
+                   card inside the Basics pane with its own small heading, so
+                   the heading below is page-only and the card's is dock-only —
+                   the same pair the Basics card carries. -->
+              <div class="pd-pp-sech" data-pp-only="1">Where it shows · 分类与陈列</div>
               <section class="pdb-card pdb-c7" id="pd-sec-where">
-                <div class="pd-sec-h">Where it shows · 分类与陈列</div>
+                <div class="pd-sec-h" data-dock-only="1">Where it shows · 分类与陈列</div>
                 <div class="pdb-fields">
                   <div class="field"><label class="stacked">Shop section · 商店分区 <span class="muted" style="font-weight:400;">(left rail)</span></label>
                     <select id="pd-top-category" onchange="pdOnTopCatChange()"><option value="">— none · 无 —</option></select></div>
@@ -4651,12 +4656,17 @@
             <!-- Sizes live with Stock; bundles, add-ons and options are the
                  "sell it in more ways" group and carry their own heading on the
                  full page, so the two have separate jump targets from the dock. -->
-            <div class="pd-pp-sech" data-pp-only="1">Sizes · 规格</div>
+            <!-- One section, four rows. Sizes and the three "more ways" rows are
+                 the SAME component rendered four times — same box, same toggle,
+                 same title-and-summary line — so two headings made them look
+                 like two kinds of thing. They share one grid now, which is also
+                 what lets them sit two-up and lets an open row take the full
+                 width; split across two containers neither could.
+                 #pd-sec-sizes stays the id: the dock's summary rows jump here
+                 by it, and so does pdExpand('sizes'|'more'). -->
+            <div class="pd-pp-sech" data-pp-only="1">How it's sold · 售卖方式</div>
             <div class="pe-rows pdb-belowgrid pdb-vgrid pd-heavy" id="pd-sec-sizes">
             <div id="pd-variants" class="pd-variants"></div>
-            </div>
-            <div class="pd-pp-sech" data-pp-only="1">Sell it in more ways · 更多售卖方式</div>
-            <div class="pe-rows pdb-belowgrid pdb-vgrid pd-heavy" id="pd-sec-more">
             <div id="pd-bundle-product" class="pd-variants"></div>
             <div id="pd-bundle" class="pd-variants"></div>
             <div id="pd-options" class="pd-variants"></div>
@@ -4758,7 +4768,7 @@
               <!-- Shipping -->
               <section class="pdb-card pdb-c4" id="pd-sec-shipping">
                 <div class="pd-sec-h">Shipping · 配送方式</div>
-                <div style="display:flex;gap:14px 16px;align-items:center;flex-wrap:wrap;">
+                <div class="pd-chipset">
                   <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-ship-air" onchange="pdShipModeChanged('air')" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M21 15.5 13 13V6a1 1 0 0 0-2 0v7l-8 2.5V17l8-1.5V20l-2.5 1.5V23L12 22l3.5 1.5V21.5L13 20v-4.5l8 1.5z"/></svg> Air · 空运</label>
                   <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-ship-land" onchange="pdShipModeChanged('land')" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M2.5 6.5h11v8h-11z"/><path d="M13.5 9h4l4 3.5v2h-8z"/><circle cx="6.5" cy="16.5" r="1.6"/><circle cx="17.5" cy="16.5" r="1.6"/></svg> Land · 陆运</label>
                   <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-ship-local" onchange="pdShipModeChanged('local')" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M12 21s-6-5.2-6-10a6 6 0 0 1 12 0c0 4.8-6 10-6 10z"/><circle cx="12" cy="11" r="2.2"/></svg> Local only · 仅广州</label>
@@ -4769,7 +4779,7 @@
               <!-- Flags -->
               <section class="pdb-card pdb-c4" id="pd-sec-flags">
                 <div class="pd-sec-h">Flags · 标记</div>
-                <div style="display:flex;flex-direction:column;gap:9px;">
+                <div class="pd-chipset pd-chipset-col">
                   <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-is-market" style="width:15px;height:15px;"> Sold at markets · 市集销售</label>
                   <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:500;"><input type="checkbox" id="pd-is-batch-made" style="width:15px;height:15px;"> Made fresh in batches · 分批现做</label>
                   <!-- "Ships directly from supplier" moved to the Stock tab's
@@ -4781,8 +4791,8 @@
 
               <!-- Free of -->
               <section class="pdb-card pdb-c4" id="pd-sec-freeof">
-                <div class="pd-sec-h">Free of · 不含 <span class="muted" style="text-transform:none;letter-spacing:0;font-weight:400;">(tick what applies)</span></div>
-                <div id="pd-free-of" data-freeof-group="1" style="display:flex;flex-wrap:wrap;gap:10px 16px;">
+                <div class="pd-sec-h">Free of · 不含</div>
+                <div id="pd-free-of" class="pd-chipset" data-freeof-group="1">
                   <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" data-freeof-id="nuts" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M12 3a3.3 3.3 0 0 0-3 4.9c.3.5.5 1 .5 1.7s-.2 1.2-.5 1.8a3.3 3.3 0 1 0 6 0c-.3-.6-.5-1.1-.5-1.8s.2-1.2.5-1.7A3.3 3.3 0 0 0 12 3z"/><path d="M10 7.5h.01M14 7.5h.01M10.5 11h.01M13.5 11h.01"/></svg> Nuts · 无坚果</label>
                   <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" data-freeof-id="soy" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M12 21v-8"/><path d="M12 13c0-3-2-5.5-5.5-5.5 0 3 2 5.5 5.5 5.5z"/><path d="M12 11.5c0-2.6 2-4.8 5.2-4.8 0 2.6-2 4.8-5.2 4.8z"/></svg> Soy · 无大豆</label>
                   <label style="display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;"><input type="checkbox" data-freeof-id="gluten" style="width:15px;height:15px;"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--brass)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><path d="M12 21V8"/><path d="M12 8c-1.6 0-3-1.2-3-3.2 1.6 0 3 1.2 3 3.2zM12 8c1.6 0 3-1.2 3-3.2-1.6 0-3 1.2-3 3.2zM12 13c-1.6 0-3-1.2-3-3.2 1.6 0 3 1.2 3 3.2zM12 13c1.6 0 3-1.2 3-3.2-1.6 0-3 1.2-3 3.2z"/></svg> Gluten · 无麸质</label>
@@ -4810,6 +4820,12 @@
             <button class="btn pd-versions-btn" onclick="pdOpenVersions()" title="See every saved version of this product and roll back to any of them · 查看此产品的所有历史版本并还原"><svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M8 4v4l2.5 1.5"/><path d="M2.6 6.5A5.5 5.5 0 1 1 2.5 9"/><path d="M2.5 4v2.5H5"/></svg>Version history · 历史版本</button>
           </div>
         </div>
+        <!-- The page's second column. It lives INSIDE #pd-editor on purpose:
+             thousands of lines of this stylesheet are scoped `#pd-editor …`, so
+             a block moved outside the editor arrives stripped of its card, its
+             heading, its fields and its chips. Empty in the dock, filled by
+             pdMoveSideBlocks() only while the page is open. -->
+        <aside id="pd-pp-side" class="pd-pp-side"></aside>
       </div>
       </div><!-- /#pd-bg pa-split-editor -->
     </div><!-- /#pa-split -->
@@ -4825,37 +4841,24 @@
         <span class="pd-pp-sep">/</span>
         <span class="pd-pp-here" id="pd-pp-crumb-name" data-no-i18n></span>
       </div>
-      <div class="pd-pp-titlerow">
+      <!-- Header, on the same alignment grid as the columns below it. Two rows,
+           two columns: identity over the status line on the left, the record's
+           controls over its save state on the right. Everything the editor's own
+           head used to carry lives here (pdMoveHeadState). -->
+      <div class="pd-pp-head">
         <div class="pd-pp-title" data-no-i18n>
           <span id="pd-pp-name"></span>
           <span class="pd-pp-alt" id="pd-pp-name-alt"></span>
           <span id="pd-pp-badge"></span>
         </div>
         <div class="pd-pp-acts">
-          <!-- Where the editor's own state parks while the page is open.
-               pdExpand() moves #pd-save-status (normally in the footer, three
-               screens down) and #pd-head-tags (normally a full-width band of
-               its own above the sales card) in here; pdCollapseToPanel() puts
-               them back. Moving the nodes rather than rendering a second copy
-               keeps one id per control, so pdSetStatus / pdRenderHeadTags go
-               on working wherever they happen to be sitting. -->
-          <span id="pd-pp-state" class="pd-pp-state"></span>
+          <span id="pd-pp-tags" class="pd-pp-tags"></span>
           <button class="btn btn-sm" type="button" onclick="pdCollapseToPanel()" title="Back to the list and quick-edit panel · 返回列表与快捷面板"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>Collapse · 收起</button>
         </div>
+        <div class="pd-pp-sub" id="pd-pp-sub" data-no-i18n></div>
+        <div class="pd-pp-savestate" id="pd-pp-state"></div>
       </div>
-      <!-- Two columns: the section index, and the form. The right one is where
-           #pd-editor mounts — the same node that lives in the dock, unchanged.
-           The index is page furniture that only exists here.
-           The rows are rendered into #pd-pp-navrows rather than into the <nav>
-           itself, because the record's actions are MOVED in below them
-           (pdMoveFootActs) and a re-render of the rows must not take them with
-           it. Below 900px the index goes and the page is one column. -->
-      <div class="pd-pp-grid">
-        <nav id="pd-pp-nav" class="pd-pp-nav" aria-label="Sections · 分区">
-          <div id="pd-pp-navrows"></div>
-        </nav>
-        <div id="pd-pp-mount" class="pd-pp-mount"></div>
-      </div>
+      <div id="pd-pp-mount" class="pd-pp-mount"></div>
     </div>
 
     <!-- The Designer Sections modal (#pa-edit-bg) is GONE. Nothing on this
@@ -10872,7 +10875,6 @@
       <button id="mt-tab-activity" class="mt-tab" role="tab" onclick="mtView('activity')">
         Activity · 同步日志</button>
       <span class="mt-tabs-grow"></span>
-      <span class="mt-upd" id="mt-upd" data-no-i18n></span>
       <button class="btn btn-sm" id="mt-pushall-btn" onclick="mtPushAll()"
         title="Queue a fresh stock push for every mapped product">Sync now · 立即同步</button>
     </div>
@@ -10887,11 +10889,16 @@
       </div>
       <div class="mt-tablewrap">
         <table id="mt-products-table">
+          <!-- Plain percentages only: under table-layout:fixed a math function
+               on a col width is ignored and the column silently goes auto. -->
+          <colgroup><col style="width:34%"><col style="width:33%"><col style="width:33%"></colgroup>
           <thead>
             <tr>
-              <th style="width:38%">Product · 商品</th>
-              <th id="mt-th-store-0" style="width:31%">Tianhe delivery · 天河外卖</th>
-              <th id="mt-th-store-1" style="width:31%">Yuexiu instant · 越秀闪购</th>
+              <th>Product · 商品</th>
+              <!-- Filled from the store list by mtLoadStores, so the column is
+                   named whatever the store is called, in the live language. -->
+              <th id="mt-th-store-0" data-no-i18n></th>
+              <th id="mt-th-store-1" data-no-i18n></th>
             </tr>
           </thead>
           <tbody id="mt-products-body" data-no-i18n></tbody>
@@ -10901,7 +10908,7 @@
 
     <div id="mt-view-bundles" class="mt-view" hidden>
       <div class="mt-tools">
-        <span class="mt-upd" style="flex:1 1 auto">Combos sold on Meituan that use up your products. Stock syncs as the most the components can still make. · 美团套餐:库存按组成商品可做的最大份数自动同步。</span>
+        <span class="mt-hint" style="flex:1 1 auto">Combos sold on Meituan that use up your products. Stock syncs as the most the components can still make. · 美团套餐:库存按组成商品可做的最大份数自动同步。</span>
         <button class="btn btn-sm" onclick="mtSuggestBundles()">Suggest bundles · 套餐建议</button>
         <button class="btn btn-sm btn-primary" onclick="mtEditBundle()">Add bundle · 新增套餐</button>
       </div>
@@ -11229,9 +11236,10 @@
            rather than take a secondary. Push all stock sits by the tabs. -->
     </div>
 
-    <!-- One card per store, from /eleme/status.stores. A store is blocked when
-         it cannot push at all: no shop id linked, or no saved login session. -->
-    <div class="el-stores" id="el-stores"></div>
+    <!-- Three tiles and, only while a store needs a person, one notice.
+         Painted by elRenderHead() from /eleme/status.stores. -->
+    <div class="el-tiles" id="el-tiles"></div>
+    <div id="el-notice"></div>
 
     <div class="el-tabs" role="tablist">
       <button id="el-tab-products" class="el-tab active" role="tab" onclick="elView('products')">
@@ -11239,14 +11247,17 @@
       <button id="el-tab-activity" class="el-tab" role="tab" onclick="elView('activity')">
         Activity · 同步日志</button>
       <span class="el-tabs-grow"></span>
-      <span class="el-upd" id="el-upd" data-no-i18n></span>
       <button class="btn btn-sm" id="el-pushall-btn" onclick="elPushAll()"
         title="Queue a fresh stock push for every mapped product">Push all stock · 推送全部库存</button>
     </div>
 
     <div id="el-view-products" class="el-view">
-      <div class="pa-toolbar">
-        <input id="el-search" type="text" data-ph-en="Search products" data-ph-cn="搜索商品" placeholder="Search products" oninput="elFilterProducts()">
+      <div class="el-chips" id="el-chips" data-no-i18n></div>
+      <div class="el-tools">
+        <select class="el-sel" id="el-store-filter" data-no-i18n onchange="elSetStore(this.value)"></select>
+        <input class="el-search" id="el-search" type="text"
+               data-ph-en="Search product, SKU or listing name…" data-ph-cn="搜索商品、货号或饿了么商品名…"
+               placeholder="Search product, SKU or listing name…" oninput="elFilterProducts()">
       </div>
       <details class="el-how">
         <summary>How matching works · 匹配原理</summary>
@@ -11263,14 +11274,13 @@
       <div id="el-catalogue-caption" class="el-cap" data-no-i18n></div>
 
       <div class="el-tablewrap">
-        <table id="el-products-table" class="pa-table">
-          <thead>
-            <tr>
-              <th>Product · 商品</th>
-              <th>SKU · 货号</th>
-              <th id="el-th-stores">Sync per store · 各门店同步</th>
-            </tr>
-          </thead>
+        <table id="el-products-table">
+          <!-- colgroup + head are rendered from the store list (elRenderTableHead)
+               so the table follows however many stores are active. Plain
+               percentages only: under table-layout:fixed a math function on a
+               col width is silently ignored and the column goes auto. -->
+          <colgroup id="el-colgroup"></colgroup>
+          <thead><tr id="el-headrow"></tr></thead>
           <tbody id="el-tbody" data-no-i18n></tbody>
         </table>
       </div>

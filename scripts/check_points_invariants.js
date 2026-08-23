@@ -1,4 +1,10 @@
 #!/usr/bin/env node
+// .env is parsed here, before anything reaches for a connection, so a missing
+// variable is reported as a missing variable rather than as a data finding.
+// Extracted from server.js as lib/load-env.js because .env is NOT shell-
+// sourceable -- see that file's header. (This began as GAP G27 of the Postgres
+// migration, cancelled 2026-08-23; the loader outlived it and is still right.)
+require('../lib/load-env').loadEnv();
 //
 // check_points_invariants.js — the three invariants that prove no customer is
 // silently short of loyalty points.
@@ -72,7 +78,6 @@
 // USAGE
 //   node scripts/check_points_invariants.js                  # SQLite, data/roots.db
 //   node scripts/check_points_invariants.js --db /path/to/roots.db
-//   node scripts/check_points_invariants.js --pg             # PostgreSQL via lib/pg.js
 //
 // EXIT CODE
 //   0  every check passed
@@ -91,7 +96,14 @@ const EARN_SOURCES = ['order_earn', 'order_addon_earn'];
 
 // ── Arguments ─────────────────────────────────────────────────────────────
 const argv = process.argv.slice(2);
-const usePg = argv.includes('--pg');
+if (argv.includes('--pg')) {
+  // The Postgres migration was cancelled 2026-08-23 and lib/pg.js is gone.
+  // This REFUSES rather than falling back to SQLite: a check that silently
+  // answers a different question than the one asked is the failure mode this
+  // whole script exists to avoid. See docs/tacet-operating-findings.md.
+  console.error('[check_points_invariants] --pg is gone. Tacet is on SQLite; there is no Postgres to check.');
+  process.exit(2);
+}
 const dbFlagAt = argv.indexOf('--db');
 if (dbFlagAt !== -1 && !argv[dbFlagAt + 1]) {
   console.error('[check_points_invariants] --db needs a path argument.');
@@ -103,7 +115,7 @@ const dbPath = dbFlagAt !== -1
 
 // ── Backends ──────────────────────────────────────────────────────────────
 // Both expose the same shape: query(sql, params) -> Promise<rows[]>. Async even
-// on SQLite, because that is the contract pg will need and §24's whole point is
+// on SQLite, because that was the contract pg would have needed and §24's point is
 // that call sites should not change shape at the cutover.
 
 /**
@@ -120,7 +132,7 @@ const dbPath = dbFlagAt !== -1
 function openSqlite(file) {
   if (!fs.existsSync(file)) {
     console.error(`[check_points_invariants] no database at ${file}`);
-    console.error('  Pass --db <path>, or --pg to check PostgreSQL instead.');
+    console.error('  Pass --db <path>.');
     process.exit(2);
   }
   try {
@@ -150,40 +162,6 @@ function openSqlite(file) {
   }
 }
 
-/**
- * PostgreSQL through the application's own pool, inside a READ ONLY
- * transaction so the server refuses any write regardless of what is issued.
- * Placeholders are rewritten ? -> $1, $2, … since the SQL below is authored in
- * the SQLite style.
- */
-async function openPg() {
-  let pool;
-  try {
-    ({ pool } = require('../lib/pg'));
-  } catch (e) {
-    console.error('[check_points_invariants] could not open the PostgreSQL pool.');
-    console.error(`  ${e.message}`);
-    process.exit(2);
-  }
-  const client = await pool.connect();
-  await client.query('BEGIN READ ONLY');
-  let n = 0;
-  const toPg = (sql) => sql.replace(/\?/g, () => `$${++n}`);
-  return {
-    name: 'postgres (READ ONLY transaction) via lib/pg.js',
-    query: async (sql, params = []) => {
-      n = 0;
-      const r = await client.query(toPg(sql), params);
-      return r.rows;
-    },
-    close: async () => {
-      await client.query('COMMIT');
-      client.release();
-      await pool.end();
-    },
-  };
-}
-
 // ── The population every check is scoped to ───────────────────────────────
 // A paid order belonging to a real customer. paid_at rather than status,
 // because status keeps moving (preparing -> dispatched -> delivered) while
@@ -206,7 +184,7 @@ const money = (v) => (Number(v) || 0).toFixed(2);
 
 // ── Main ──────────────────────────────────────────────────────────────────
 async function main() {
-  const db = usePg ? await openPg() : openSqlite(dbPath);
+  const db = openSqlite(dbPath);
 
   console.log('');
   console.log('POINTS INVARIANTS');

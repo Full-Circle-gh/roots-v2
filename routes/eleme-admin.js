@@ -128,6 +128,7 @@ router.get('/api/retail-admin/eleme/stores', requireRetailAdmin, (req, res) => {
   try {
     const stores = db.prepare(`
       SELECT s.id, s.code, COALESCE(s.name_cn, s.name_en, s.code) AS name,
+             COALESCE(s.name_en, s.name_cn, s.code) AS nameEn,
              e.shop_id, e.shop_name,
              (e.shop_id IS NOT NULL AND e.shop_id <> '') AS connected
         FROM retail_stores s
@@ -194,20 +195,41 @@ router.get('/api/retail-admin/eleme/products', requireRetailAdmin, (req, res) =>
     const includeInactive = req.query.includeInactive === '1';
     const products = db.prepare(`
       SELECT p.id, p.name_cn, p.name_en, p.sku, p.category, p.is_active,
-             p.variant_label, p.variant_group_id
+             p.variant_label, p.variant_group_id, p.updated_at,
+             CASE WHEN (p.image_data IS NOT NULL AND p.image_data != '')
+                    OR (p.image_url  IS NOT NULL AND p.image_url  != '')
+                  THEN 1 ELSE 0 END AS has_image
         FROM store_products p
        ${includeInactive ? '' : 'WHERE p.is_active = 1'}
        ORDER BY p.name_cn, p.variant_group_id, p.id
     `).all();
     const maps = db.prepare(`
-      SELECT product_id, retail_store_id, store_code, extend_code, eleme_name,
-             spec_id, spec_name,
-             sync_enabled, last_pushed_qty, last_pushed_at
-        FROM eleme_product_map
+      SELECT m.product_id, m.retail_store_id, m.store_code, m.extend_code, m.eleme_name,
+             m.spec_id, m.spec_name,
+             m.sync_enabled, m.last_pushed_qty, m.last_pushed_at,
+             -- How many sizes the mapped listing holds. Drives the Multi-size
+             -- filter and the "pick a size" flag: on Eleme a size CAN be
+             -- targeted, so a multi-size listing with none picked is a real
+             -- gap, not just a note.
+             (SELECT json_array_length(c.specs) FROM eleme_catalogue_cache c
+               WHERE c.store_code = m.store_code AND c.name = m.eleme_name) AS specCount
+        FROM eleme_product_map m
     `).all();
     const idx = {};
     for (const m of maps) { (idx[m.product_id] = idx[m.product_id] || {})[m.store_code] = m; }
-    res.json({ success: true, data: products.map(p => ({ ...p, stores: idx[p.id] || {} })) });
+    // image = a small lazy thumbnail URL, never the blob — the list-image
+    // footgun. The public /image route serves store_products images on demand.
+    res.json({
+      success: true,
+      data: products.map(p => ({
+        ...p,
+        has_image: undefined,
+        image: p.has_image
+          ? `/api/retail/products/${p.id}/image?v=${encodeURIComponent(p.updated_at || '')}&w=96`
+          : null,
+        stores: idx[p.id] || {},
+      })),
+    });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 
@@ -257,6 +279,7 @@ router.post('/api/retail-admin/eleme/products/:id/map', requireRetailAdmin, expr
 function elemeStoreHealth(db) {
   const stores = db.prepare(`
     SELECT s.id, s.code, COALESCE(s.name_cn, s.name_en, s.code) AS name,
+             COALESCE(s.name_en, s.name_cn, s.code) AS nameEn,
            e.shop_id, e.shop_name
       FROM retail_stores s
       LEFT JOIN eleme_shops e ON e.retail_store_id = s.id
@@ -302,6 +325,7 @@ function elemeStoreHealth(db) {
       id: st.id,
       code: st.code,
       name: st.name,
+      nameEn: st.nameEn || st.name,
       shopId: st.shop_id || null,
       shopName: st.shop_name || null,
       blocked: !shopSet || !sessionActive,
