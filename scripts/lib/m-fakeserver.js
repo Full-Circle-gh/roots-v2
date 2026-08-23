@@ -79,11 +79,49 @@ const D = {
   '/printer': { auto_print: true },
   '/fapiao-settings': { autoIssue: false },
   '/alipay-manual': { enabled: true, account: 'Roots Ltd' },
-  '/channel-status': { channels: [
-    { channel: 'mini_app', integrated: true, cardOpen: true, stores: [{ name_en: 'Tianhe', open: true }] },
-    { channel: 'meituan', integrated: true, cardOpen: false, stores: [{ name_en: 'Tianhe', open: false }] },
-    { channel: 'web', integrated: true, cardOpen: true, stores: [] } ] },
-  '/sales/summary': { channels: { wechat: { orders: 20, revenue: 2100 }, web: { orders: 6, revenue: 640 }, meituan: { orders: 3, revenue: 260 } } },
+  // `cells`, and every channel in GRID_CHANNELS. This block sent `stores` and
+  // listed three of the six, so every card on the Sales board read "No stores"
+  // and half the board was missing — and nobody had ever seen it, because
+  // SUBS.sales is assigned after the object literal and neither the sweep nor
+  // the camera's regex found the screen at all. Shapes from
+  // routes/meituan-admin.js GET /channel-status and routes/retail.js
+  // GET /sales/summary; both answer at the top level, not under a data key.
+  '/channel-status': {
+    stores: [{ code: 'tianhe', name: '天河店', name_en: 'Tianhe', name_cn: '天河店' },
+             { code: 'panyu',  name: '番禺店', name_en: 'Panyu',  name_cn: '番禺店' }],
+    channels: [
+      { channel: 'mini_app', integrated: true, single: null, cardOpen: true,
+        cells: [{ storeCode: 'tianhe', name: 'Tianhe', nameEn: 'Tianhe', nameCn: '天河店', open: true },
+                { storeCode: 'panyu',  name: 'Panyu',  nameEn: 'Panyu',  nameCn: '番禺店', open: true }] },
+      { channel: 'web', integrated: true, single: null, cardOpen: true,
+        cells: [{ storeCode: 'tianhe', name: 'Tianhe', nameEn: 'Tianhe', nameCn: '天河店', open: true },
+                { storeCode: 'panyu',  name: 'Panyu',  nameEn: 'Panyu',  nameCn: '番禺店', open: false }] },
+      { channel: 'meituan', integrated: true, single: null, cardOpen: true,
+        cells: [{ storeCode: 'tianhe', name: 'Tianhe', nameEn: 'Tianhe', nameCn: '天河店', open: true, readOk: true },
+                { storeCode: 'panyu',  name: 'Panyu',  nameEn: 'Panyu',  nameCn: '番禺店', open: true, readOk: true }] },
+      { channel: 'eleme', integrated: false, single: null, cardOpen: false, cells: [] },
+      { channel: 'gzgrocery', integrated: true, single: 'tianhe', cardOpen: true,
+        cells: [{ storeCode: 'tianhe', name: 'Tianhe', nameEn: 'Tianhe', nameCn: '天河店', open: true }] },
+      { channel: 'pos', integrated: true, single: null, cardOpen: false,
+        cells: [{ storeCode: 'tianhe', name: 'Tianhe', nameEn: 'Tianhe', nameCn: '天河店', open: false },
+                { storeCode: 'panyu',  name: 'Panyu',  nameEn: 'Panyu',  nameCn: '番禺店', open: false }] },
+    ],
+    locations: [{ storeCode: 'tianhe', name: 'Tianhe', nameEn: 'Tianhe', nameCn: '天河店', allOpen: false },
+                { storeCode: 'panyu',  name: 'Panyu',  nameEn: 'Panyu',  nameCn: '番禺店', allOpen: false }],
+  },
+  '/sales/summary': {
+    channels: {
+      wechat:    { connected: true,  revenue: 2140.5, orders: 12, aov: 178.4, extra: 0 },
+      web:       { connected: true,  revenue: 612,    orders: 3,  aov: 204,   extra: 0 },
+      meituan:   { connected: true,  revenue: 288,    orders: 4,  aov: 72,    extra: 0 },
+      gzgrocery: { connected: true,  revenue: 1180,   orders: 2,  aov: 590,   extra: 0 },
+      eleme:     { connected: false, revenue: 0,      orders: 0,  aov: 0,     extra: 0 },
+      pos:       { connected: true,  revenue: 143,    orders: 6,  aov: 23.8,  extra: 9 },
+      direct:    { connected: true, intrinsic: true, revenue: 0, orders: 0, aov: 0, extra: 0 },
+    },
+    summary: { revenue: 4363.5, orders: 27, aov: 161.6, active: 5, total: 6,
+               topups_received: 0, store_credit_redeemed: 0 },
+  },
   '/tier-counts': { seed: 186, sprout: 44, tree: 12 },
   '/topup-packages': [ { id: 1, amount: 200, bonus_points: 20, title_en: 'Starter', title_cn: '入门', is_active: 1 },
                        { id: 2, amount: 500, bonus_points: 80, title_en: 'Regular', title_cn: '常用', is_active: 1 } ],
@@ -305,6 +343,13 @@ function fakeServer() {
       if(p.indexOf('/dashboard?')===0) return {success:true,data:D['/dashboard']};
       if(p.indexOf('/cms/layout')===0) return {success:true,data:D['/cms/layout']};
       if(p.indexOf('/media/list')===0) return {success:true,data:D['/media/list']};
+      // Top-level, not nested under a data key: both routes answer
+      // {success, channels, ...} and apiRaw/api read the envelope as-is. The
+      // generic D lookup below wraps it, which made Sales see no channels and
+      // paint its empty state with real fixtures sitting behind it.
+      // (No backticks in this comment — the whole file is one template literal.)
+      if(p.indexOf('/channel-status')===0) return Object.assign({success:true},D['/channel-status']);
+      if(p.indexOf('/sales/summary')===0) return Object.assign({success:true},D['/sales/summary']);
       if(p.indexOf('/meituan/status')===0) return Object.assign({success:true},D['/meituan/status']);
       if(p.indexOf('/meituan/orders')===0) return {success:true,data:D['/meituan/orders']};
       if(p.indexOf('/guanyi/pickups')===0) return Object.assign({success:true},D['/guanyi/pickups']);

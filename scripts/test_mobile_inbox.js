@@ -79,6 +79,19 @@ const CASES = [
     ['no reply count on a thread with none', `!/\\breplies\\b/.test(txt('content'))`],
     ['no opened-on line either',             `!/opened /.test(txt('content'))`],
   ]],
+  // A thread whose row is NOT in the list — a stale key, or a list refreshed
+  // while the sheet is open. The title used to be the list key itself, so the
+  // operator read "fb:1" where the customer's name belongs.
+  ['a thread with no row behind it', `DB.feedback=[]; state.fbLoaded=true; APP.cmd('push','inbox');
+    APP.cmd('openReply','fb:11'); state.thread={id:11,loading:false,msgs:[],name:'Wu Yaqi'}; render();`, [
+    ['titled with the name the server sent', `sheetText().includes('Wu Yaqi')`],
+    ['never with the internal key',          `!sheetText().includes('fb:11')`],
+  ]],
+  ['and with no name either', `DB.feedback=[]; state.fbLoaded=true; APP.cmd('push','inbox');
+    APP.cmd('openReply','fb:11'); state.thread={id:11,loading:false,msgs:[]}; render();`, [
+    ['says what it is',      `sheetText().includes('Conversation')`],
+    ['still not the key',    `!sheetText().includes('fb:11')`],
+  ]],
   ['thread sheet', OPEN_FEEDBACK + `APP.cmd('openReply','fb:11'); state.thread=${THREAD}; render();`, [
     ['the first turn is on screen',   `txt('mThread').includes('Checkout kept the pickup time')`],
     ['THE MIDDLE TURN is on screen',  `txt('mThread').includes('Thanks — we are looking at it')`],

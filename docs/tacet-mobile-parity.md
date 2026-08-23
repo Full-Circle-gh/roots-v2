@@ -915,6 +915,145 @@ from a previous product's sheet cannot be written to one of these.
 
 `scripts/test_mobile_products.js` — 16 assertions, 5 cases.
 
+## 3b. Looking at it
+
+Everything above was found by reading the desktop and asserting on text. This
+section is what a different method found: 339 screenshots — every screen, both
+themes, both languages — read one at a time.
+
+The tooling is `scripts/shoot_mobile.js` (the camera, which takes its case list
+from the sweep so a screen cannot be photographed in a state the sweep never
+renders) and `scripts/test_mobile_geometry.js` (five measurements at 390px).
+Both matter, and neither substitutes for the other: measurements found nothing
+this round — no overflow, no sub-11px type, no clipped text, no tap target on an
+edge — while looking found twenty-odd real defects, none of which any assertion
+on text could have failed on.
+
+Two things about the camera are worth knowing before trusting a shot. Chrome
+clamps `--window-size` to a 500px minimum, so a true 390px viewport needs the
+app inside a 390px iframe pinned left. And Lucide is a CDN script this container
+cannot reach, so for most of this pass **every icon was invisible** — `ic()`
+emitted an empty `<svg>` of the right size. The geometry stayed honest; the
+reading did not, and I chased a chevron-down dropdown and an overflow button as
+bugs before working out they were holes. The camera stubs the icon set now.
+
+### The dark theme was never given its own colours
+
+The four `--*-tint` tokens were declared once, in `:root`, and never in the dark
+block — so a Sage icon tile, an Amber count badge and a Brick warning banner all
+kept their paper-coloured fill on a near-black page. Home drew seven cream slabs
+down the side of "Needs you".
+
+Twenty hardcoded `#5F7357` / `#8A6425` / `#B07E31` hexes had the same problem
+from the other side: `#5F7357` on a `#182236` card is 2.6:1, so every "3
+delivered", every amber warning and every success pill went nearly invisible the
+moment the phone switched to dark.
+
+Both are tokens now — `--sage-ink`, `--amber-ink`, `--brick-ink`, `--dusk-ink` —
+carrying the values `public/stock.html` had already settled on, so the two phone
+surfaces are one palette. Every text use of a hue became its ink (88 of them);
+`--amber` and `--brick` are fills only. **A static guard fails the build when a
+tint or ink is defined for one theme only, and when a hue is used as text on its
+own tint** — the second half caught six more sites that were wrong in the LIGHT
+theme too, Amber #C9954A on Amber-tint being 2.2:1.
+
+The off toggle was `--border-strong`, which is Graphite: a near-black slab with a
+white knob in it, reading as a second ON in a different colour.
+
+### Dates arrived as columns and stayed that way
+
+Purchasing printed four raw `YYYY-MM-DD`s, Pop-ups printed one twice — in the
+pill and again three lines below it — and a flash sale starting today read
+"12:00 PM · 12:00 PM–2:00 PM", because `fmtDay` collapses to a bare time when
+the date is today. §1.18 says English reads Aug 16.
+
+`_date` was itself inconsistent: a bare date parsed as UTC midnight while a
+timestamp parsed as local, so a promised ship date sat on the wrong calendar day
+for anyone west of Greenwich.
+
+**The sweep reads the painted text of all 113 screens and fails on a
+`\d{4}-\d{2}-\d{2}`.**
+
+### Said twice
+
+| Where | What it said twice |
+|---|---|
+| Coupons | The discount, once as the title (a fallback when the coupon has no name) and once as the fact |
+| Coupons | "Applied for new signups" and "New signups", two pills a word apart |
+| Invoices | The order number, as the headline and again as the subtitle — and none of the invoice title, tax ID or type the desktop leads with, so you could not tell whose invoice was waiting |
+| Purchasing | "Late" in a pill and "· late" nine pixels below it |
+| Order sheet | "Today · today" — the urgency pill echoing a date that now renders as a word |
+| Pop-ups | "Ended 2026-07-01" in the pill, "2026-07-01" three lines down |
+
+### One switch in three places
+
+Auto-print receipts was in Settings → Automation, in Operations, and in Delivery
+— where printing receipts has nothing to do with delivery zones. Flipping it in
+one left the other two stale until the next render. Operations owns it, as the
+desktop's printer settings do.
+
+### The status line, on every page
+
+The user's own note, on a screenshot of Orders: *"this line should be part of
+the top bar under orders, same for every page I think it's the right thing"*.
+§1.7 agrees. But `SUBS` had no way to declare one, so every pushed screen opened
+with its summary as the first grey row of the BODY — indistinguishable from
+content, and pushing the real content down a line. `SUBS` entries carry
+`status()` now: Purchasing, Pop-ups, Categories, Editor, Top-up and Customers.
+
+The Editor's case was the clearest: a published page's card held two facts and
+nothing else — "3 blocks live" and a Published pill — which is a status line
+wearing a card's clothes. Only an unpublished draft gets a card now, because
+only it has something to explain.
+
+### The rest
+
+| Screen | What looking found |
+|---|---|
+| Home | The ops queue glued "oldest" onto a sentence: "oldest 1 couldn't be read" |
+| Meituan | Empty state said "No pickups recorded yet" about a channel that has orders |
+| Both mirrors | The read-only note sat stranded between two cards, appearing to annotate whichever one it landed under; the record list had no heading, so the first card read as an orphan |
+| Inbox | A feedback thread put the bare word "Customer" on a line of its own, and clipped the report that opened the thread to one line at 80% opacity while a follow-up message got the emphasis |
+| Order sheet | A missing address and a missing routing reason each rendered as a lone em dash on its own line |
+| Purchasing | Both store names and both product names joined with a dot — the only two places in the app that did not resolve a bilingual pair by language |
+| Top-up | The tender printed as the raw enum, `wechat`, long after the order sheet had learned to say WeChat |
+| Customers | The sort control sat right-aligned and alone on an otherwise empty row, reading as a stray label rather than a control |
+| Media, Customers, Order sheet | "1 images", "1 orders", "1 parcels" |
+
+### Sales had never been looked at
+
+`SUBS.sales` is assigned to the SUBS object *after* its literal — it moved there
+when Customers and Products took the bottom nav — and both the sweep and the
+camera discovered screens by matching keys **inside** the literal. So Sales was
+never rendered by the sweep, never measured by the geometry check, never
+photographed, and had no probe. Neither did the Inbox, which had explicit cases
+written by hand and so looked covered.
+
+Both harnesses match the assignment form too now, and the sweep counts 115
+screens where it counted 113. `scripts/test_mobile_sales.js` is the screen's
+first test — 15 assertions.
+
+What the fixture was hiding, once the screen finally rendered: it sent `stores`
+where `GET /channel-status` sends `cells`, so every card read "No stores", and
+it listed three of the six channels in `GRID_CHANNELS`. And `loadChannels`
+fetched `{channels, summary}` and kept only `channels` — so the day's total,
+the one number this screen is opened for, was fetched and thrown away on every
+open. It is the header's status line now.
+
+### And the fake server, three more times
+
+`scripts/lib/m-fakeserver.js` got another three column names wrong —
+`retail_vouchers` is `type`/`value`/`min_subtotal`/`title_en`, the invoices route
+returns `placed_at`/`invoice_issued_at`/`invoice_file_url`, and its counts are
+`{requested, issued}`. Every coupon rendered "¥0 off" with no rule and no title;
+every invoice date rendered as an em dash. Both looked exactly like the app
+failing to map a row.
+
+That is nine times now. The rule at the top of that file stands and is worth
+restating: **copy the column name from the route's SELECT, never from what the
+phone happens to read.** A fake server answering in the phone's own vocabulary
+hides the bugs it exists to find, and — worse — invents ones that are not there.
+
 ## 4. Open questions
 
 Not gaps — decisions that are the shop's to make, not this file's.

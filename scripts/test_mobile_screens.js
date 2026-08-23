@@ -87,7 +87,16 @@ const SEED = `
 `;
 
 function buildCases(src) {
-  const subs = [...src.matchAll(/\n {2}([a-z_0-9]+):\{title:/g)].map((m) => m[1]);
+  // Two patterns, because SUBS is written two ways: most screens are keys of
+  // the object literal, and two — inbox and sales — are assigned to it
+  // afterwards, when they left the bottom nav. Matching only the literal meant
+  // SALES had never been rendered by this sweep, measured by the geometry
+  // check, or photographed. A screen nothing visits is a screen nobody knows
+  // is broken.
+  const subs = [
+    ...[...src.matchAll(/\n {2}([a-z_0-9]+):\{title:/g)].map((m) => m[1]),
+    ...[...src.matchAll(/\nSUBS\.([a-z_0-9]+)\s*=\s*\{title:/g)].map((m) => m[1]),
+  ];
   const cases = {};
   for (const t of ['home', 'orders', 'customers', 'products', 'more']) cases['tab:' + t] = `APP.cmd('tab','${t}')`;
   for (const k of subs) cases['push:' + k] = `APP.cmd('push','${k}')`;

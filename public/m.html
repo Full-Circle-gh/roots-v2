@@ -218,7 +218,7 @@ const state = {
   prodQ:'', prodStatus:'all', prodCat:'all', catalogueTried:false, catalogueLoading:false,
   workOpen:false, workEvents:null, workLoading:false, workErr:null, vchSeg:'on',
   affiliate:null, affiliateTried:false, affRows:null, affSeg:'', affErr:null, invSeg:'all', invLoaded:false,
-  geo:null, geoTried:false, chan:null, chanTried:false, sales:null,
+  geo:null, geoTried:false, chan:null, chanTried:false, sales:null, salesSummary:null,
   recap:null, recapTried:false, recapSince:0, reallyAway:false, pos:'default',
   overflow:false, search:false, detailId:null, detailActions:false, productSku:null,
   orderBusy:null, orderErr:null, replyBusy:false, replyErr:null, revBusy:null, revErr:null, parcelBusy:null,
@@ -707,7 +707,10 @@ function loadThread(id){
       msgs:Array.isArray(d&&d.messages)?d.messages:[],
       photos:(()=>{ let ph=d&&d.photos; if(typeof ph==='string'){ try{ ph=JSON.parse(ph||'[]'); }catch(e){ ph=[]; } }
         return Array.isArray(ph)?ph:[]; })(),
-      page:(d&&d.page_context)||null, appVersion:(d&&d.app_version)||null};
+      page:(d&&d.page_context)||null, appVersion:(d&&d.app_version)||null,
+      // buildFeedbackThread returns customer_name and the phone threw it away,
+      // so the sheet's title fell back to the list key and read "fb:1".
+      name:(d&&d.customer_name)||null};
     render();
   }).catch(e=>{
     if(!state.thread||state.thread.id!==id) return;
@@ -1411,6 +1414,11 @@ const CHAN_META={
   gzgrocery:{icon:'warehouse',en:'gzgrocery ERP',zh:'gzgrocery',key:'gzgrocery',mirror:'gzgrocery'},
   pos:{icon:'store',en:'In store',zh:'门店',key:'pos'},
 };
+function statusSales(){
+  const su=state.salesSummary; if(!su) return '';
+  const n=Number(su.orders||0);
+  return money0(CUR,su.revenue||0)+' '+T('today','今日')+' · '+n+' '+T(n===1?'order':'orders','单');
+}
 function screenSales(){
   loadChannels();
   const d=state.chan;
@@ -1425,7 +1433,7 @@ function screenSales(){
     ? {sev:'amber', text:T(closed.length===1
         ? CHAN_META[closed[0].channel].en+' is closed everywhere'
         : closed.length+' channels are closed everywhere',
-        closed.length===1 ? CHAN_META[closed[0].channel].zh+' 全部门店已关闭' : closed.length+' 个渠道全部门店已关闭')}
+        closed.length===1 ? CHAN_META[closed[0].channel].zh+' 已全部关闭' : closed.length+' 个渠道已全部关闭')}
     : {sev:'sage', text:T('Every channel is open','所有渠道均已开启')};
   return `<div style="padding:14px 16px 24px;display:flex;flex-direction:column;gap:12px">
     <div style="display:flex;align-items:center;gap:10px;background:var(--surface-raised);border-radius:14px;padding:13px 16px">
@@ -3000,7 +3008,7 @@ const SUBS={
    places. Both keep every screen they had; the inbox also rides every top-level
    page header, so it is never more than one tap away. */
 SUBS.inbox={title:['Inbox','消息'],render:()=>screenInbox()};
-SUBS.sales={title:['Sales','销售'],render:()=>screenSales()};
+SUBS.sales={title:['Sales','销售'],status:()=>statusSales(),render:()=>screenSales()};
 
 /* Pausing a coupon is the one marketing action a phone should have: it is a
    single field on a single record, and it is what an operator reaches for when
@@ -3753,7 +3761,11 @@ async function loadChannels(){
   // that it showed the mock's "28 orders · ¥7,120".
   try{ state.chan=await apiRaw('/channel-status'); }catch(e){}
   render();
-  try{ const d=await api('/sales/summary'); state.sales=(d&&d.channels)||null; }catch(e){}
+  // The endpoint answers {channels, summary} and only `channels` was kept, so
+  // the day's total — the one number this screen exists to give you — was
+  // fetched and thrown away on every open.
+  try{ const d=await api('/sales/summary');
+    state.sales=(d&&d.channels)||null; state.salesSummary=(d&&d.summary)||null; }catch(e){}
   render();
 }
 async function loadMedia(){
@@ -4392,8 +4404,13 @@ function threadBody(){
       `<a href="${escAttr(u)}" target="_blank" rel="noopener" style="width:64px;height:64px;border-radius:9px;overflow:hidden;border:1px solid var(--border-default);background-image:url('${String(u).replace(/'/g,'%27')}');background-size:cover;background-position:center;display:block"></a>`).join('')}</div>`:''}`;
 }
 function sheetReply(){
-  const r=findReview(state.reply)||{cust:[state.reply,state.reply],text:['','']};
+  // The fallback used to be the LIST KEY — `fb:1`, an internal identifier — as
+  // both halves of the customer's name, which is what the sheet titles itself
+  // with. It shows whenever the row is not in the list: a stale key, a list
+  // refreshed while the sheet is open, or a thread reached from anywhere else.
   const th=state.thread;
+  const r=findReview(state.reply)
+    || {cust:(th&&th.name)?[th.name,th.name]:[T('Conversation','对话'),T('Conversation','对话')], text:['','']};
   const foot = th
     ? T('The customer gets this in their mini-app inbox.','顾客会在小程序消息中收到。')
     : T('Replies show under the review in the mini app, signed with the store name.','回复会显示在小程序的评价下方，署名为店铺名称。');
@@ -4807,20 +4824,35 @@ function sheetCustomer(){
           <span style="flex:1"></span>
           <button class="iconbtn" onclick="APP.cmd('closeCustomer')" aria-label="${T('Close','关闭')}">${ic('x',20,2)}</button>
         </div>
-        <div class="num" style="margin-top:4px;font-size:13px;color:var(--text-secondary)">${c.phone||'—'}</div>
-      ${d?`<div style="display:flex;align-items:center;gap:8px;margin-top:16px">
-        <button class="btn2" style="flex:1;min-width:0" ${state.custBusy?'disabled':''} onclick="APP.cmd('adjustPoints')">${state.custBusy==='points'?T('Saving…','保存中…'):T('Adjust points','调整积分')}</button>
-        <button class="btn2" style="width:44px;padding:0;flex:none" ${state.custBusy?'disabled':''} onclick="APP.cmd('editCustomer')" aria-label="${T('Edit profile','编辑资料')}">${ic('pencil',20)}</button>
-        <button class="btn2" style="width:44px;padding:0;flex:none" ${state.custBusy?'disabled':''} onclick="APP.cmd('messageCustomer')" aria-label="${T('Message','发消息')}">${ic('message-square-text',20)}</button>
-        <button class="btn2" style="width:44px;padding:0;flex:none" ${state.custBusy?'disabled':''} onclick="APP.cmd('adjustWallet')" aria-label="${T('Adjust wallet','调整钱包')}">${ic('wallet',20)}</button>
-        <button class="btn2" style="width:44px;padding:0;flex:none" ${state.custBusy?'disabled':''} onclick="APP.cmd('toggleBlock')" aria-label="${c.is_blocked?T('Unblock','解除封禁'):T('Block','封禁')}">${ic(c.is_blocked?'lock-open':'ban',20)}</button>
+        ${c.phone?`<div class="num" style="margin-top:4px;font-size:13px;color:var(--text-secondary)">${c.phone}</div>`:''}
+      ${/* Four labelled buttons, and Block is not one of them.
+            This row was one worded button and four bare 44px squares —
+            pencil, speech bubble, wallet, ban — with the words only in an
+            aria-label, which a thumb cannot read. Two of those four write
+            money and one locks the customer out of their account, side by
+            side, told apart by a glyph. Every action says what it is now,
+            and blocking moved to the bottom of the sheet, away from the
+            routine ones: it is the only thing here that takes something
+            away from a person. */''}
+      ${d?`<div style="display:flex;align-items:stretch;gap:8px;margin-top:16px">
+        ${[['adjustPoints','coins',T('Points','积分'),'points'],
+           ['adjustWallet','wallet',T('Wallet','钱包'),'wallet'],
+           ['messageCustomer','message-square-text',T('Message','发消息'),'message'],
+           ['editCustomer','pencil',T('Edit','编辑'),'edit']]
+          .map(([cmd,icon,label,busy])=>`<button class="btn2" style="flex:1;min-width:0;flex-direction:column;gap:4px;padding:9px 4px;height:auto"
+            ${state.custBusy?'disabled':''} onclick="APP.cmd('${cmd}')">${ic(icon,19)}
+            <span style="font-size:12px;font-weight:400;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%">${state.custBusy===busy?T('Saving…','保存中…'):label}</span></button>`).join('')}
       </div>`:''}
       </div>
       <div style="flex:1;min-height:0;overflow-y:auto;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 24px)">
         ${state.custErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint);margin-bottom:16px">
           <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
           <span style="font-size:14px;color:var(--brick-ink)">${state.custErr}</span></div>`:''}
-        ${body}</div>
+        ${body}
+        ${d?`<div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border-default);display:flex;justify-content:center">
+          <button style="font-size:13.5px;font-weight:500;color:${c.is_blocked?'var(--text-primary)':'var(--brick-ink)'};background:transparent;border:none;cursor:pointer;font-family:inherit;padding:8px 12px"
+            ${state.custBusy?'disabled':''} onclick="APP.cmd('toggleBlock')">${state.custBusy==='block'?T('Saving…','保存中…')
+              :(c.is_blocked?T('Unblock this customer','解除封禁'):T('Block this customer','封禁该顾客'))}</button></div>`:''}</div>
     </div>`;
 }
 
