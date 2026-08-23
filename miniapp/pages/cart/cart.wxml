@@ -8,17 +8,21 @@
   </view>
 
   <block wx:if="{{items.length}}">
-    <!-- Free-shipping line. Store policy, not a promise about this cart: the
-         customer is never asked for an address at or before the cart, so any
-         zone the server resolves is a guess and a per-zone figure would claim
-         more than we know. No progress fill, no "unlocked" — there is nothing
-         here to complete. `shipState` is 'none' when the resolved zone has no
-         free-shipping state at all, or when nothing has been fetched; then the
-         line doesn't render. The per-zone sentences still live at checkout,
-         where the address is real. -->
-    <view wx:if="{{shipState === 'policy'}}" class="progress-card">
+    <!-- Free-shipping bar: how far the basket still is from free delivery, and
+         a fill that closes as it grows. The figure is the delivery zone's own
+         threshold where an address resolves, so it agrees with what checkout
+         will charge; the store-wide figure only stands in when no address is
+         on file. `shipState` is 'none' when the resolved zone has no
+         free-shipping state at all, or when nothing has been fetched yet —
+         then the bar doesn't render rather than promise a figure no cart in
+         that zone can reach. -->
+    <view wx:if="{{shipState === 'bar'}}" class="progress-card">
       <view class="progress-text">
-        <text class="f-bear strong">{{lang === 'cn' ? '满 ¥' + threshold + ' 包邮' : 'Free shipping ¥' + threshold + '+'}}</text>
+        <text wx:if="{{!unlocked}}"><block wx:if="{{lang === 'cn'}}">再差 <text class="f-bear strong">¥{{remaining}}</text> 即可<text class="f-bear strong">免运费</text>。</block><block wx:else>You're <text class="f-bear strong">¥{{remaining}}</text> away from <text class="f-bear strong">free shipping.</text></block></text>
+        <text wx:else><text class="f-bear strong">{{lang === 'cn' ? '已享免运费。' : 'Free shipping unlocked.'}}</text></text>
+      </view>
+      <view class="progress-bar">
+        <view class="progress-fill" style="width: {{pct}}%;"></view>
       </view>
     </view>
 

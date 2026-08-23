@@ -868,23 +868,27 @@ router.get('/api/retail/pickup-stores', (req, res) => {
 // so this resolves one — the id the customer last selected at checkout, else
 // their default saved address.
 //
-// That resolution is a GUESS, and the mini-app cart no longer prices against
-// it. There is no address step anywhere at or before the cart: the id is
-// written merely by opening checkout, an address-book pick reaches this query
-// only through the same is_default flag a years-old default carries, and an
-// address typed at checkout but not yet saved leaves the id pointing at a row
-// the order won't use. The states are indistinguishable from here, so a
-// zone-derived figure — named or not — lends the guess an authority it hasn't
-// got. The cart states store policy instead: `policy_threshold`, the global
-// figure, true for the store regardless of which address wins.
+// `threshold` is the resolved zone's own figure, so the bar quotes the number
+// that address will actually be charged against — the store-wide figure only
+// stands in when no address resolves. Both the mini-app cart and the web store
+// (public/shop.html:3459) read it and nothing else.
 //
-// The guess still earns one job, and only in the conservative direction:
+// That resolution is a guess in one respect: there is no address step at or
+// before the cart, so the id can be stale — it is written merely by opening
+// checkout, an address-book pick reaches this query only through the same
+// is_default flag a years-old default carries, and an address typed at
+// checkout but not yet saved leaves the id pointing at a row the order won't
+// use. A wrong-but-named zone is still better than a store figure that
+// contradicts the delivery line on the very next screen; where the guess is
+// stale, checkout's quote — which has the real address — is what wins.
+//
 // `reachable` (via freeShippingTargetFor, which asks the pricing engine rather
-// than reading a column the engine sometimes ignores) can WITHHOLD the line
-// when the resolved zone has no free-shipping state at all. It never asserts.
+// than reading a column the engine sometimes ignores) WITHHOLDS the bar when
+// the resolved zone has no free-shipping state at all, so no cart advertises a
+// target it can never hit.
 //
-// `threshold` stays zone-derived and first in the payload for the web store,
-// which reads d.threshold and nothing else (public/shop.html:3459).
+// `policy_threshold` is the store-wide figure, kept in the payload for callers
+// that want the policy rather than this zone's number.
 router.get('/api/retail/free-shipping-threshold', requireRetailAuth, (req, res) => {
   try {
     // Prefer an explicit address_id (the one the customer last selected at
@@ -908,9 +912,8 @@ router.get('/api/retail/free-shipping-threshold', requireRetailAuth, (req, res) 
       ? freeShippingTargetFor(zone, 'standard')
       : { threshold: null, reachable: false };
 
-    // The store-wide figure. Not derived from the guessed zone, so it stays
-    // true whichever address the order finally goes to — which is what lets
-    // the cart state it as policy rather than as a promise.
+    // The store-wide figure. Stands in where no address resolved, and stays
+    // in the payload as `policy_threshold` for callers that want the policy.
     const globalFree = Number(cfgValue('fees.freeShippingThreshold', db.FREE_SHIPPING_THRESHOLD_DEFAULT)) || 0;
 
     res.set('Cache-Control', 'no-store');
@@ -919,14 +922,14 @@ router.get('/api/retail/free-shipping-threshold', requireRetailAuth, (req, res) 
       data: {
         threshold: zone && target.reachable ? target.threshold : globalFree,
         source: zone ? 'zone' : 'global',
-        // What the mini-app cart states. Always the store figure.
+        // The store-wide policy figure, whichever zone resolved.
         policy_threshold: globalFree,
         // Present when an address resolved. The cart uses it only to know a
-        // zone WAS resolved (so `reachable` means something); it no longer
-        // renders the name.
+        // zone WAS resolved (so `reachable` means something); it doesn't
+        // render the name.
         zone: zone ? { name_en: zone.name_en || '', name_cn: zone.name_cn || '' } : null,
-        // False when the engine won't ever hand this zone a ¥0 delivery line.
-        // The cart's one use of the guess: withhold the line, never make one.
+        // False when the engine won't ever hand this zone a ¥0 delivery line;
+        // the cart then withholds the bar entirely.
         reachable: !!(zone && target.reachable),
       },
     });
@@ -7077,6 +7080,11 @@ function autoDispatchQingyunForTenant() {
           WHERE order_id = ? AND COALESCE(mode,'') != 'supplier'`
       ).run(o.id);
     } catch (e) { console.warn('[auto-dispatch] shipment mirror', o.id, e.message); }
+    // The rider picking up IS the forward transition into fulfilment, so the
+    // unreserved (out-of-GZ / scheduled) stock is decremented here for the same
+    // reason PATCH /status does it. Idempotent.
+    try { prepareCommitUnreservedOrder(o.id, { actorLabel: 'Auto · rider picked up' }); }
+    catch (e) { console.warn('[auto-dispatch] prepareCommit', o.id, e.message); }
     try { logActivity(null, 'system', 'status_change', 'retail_order', o.id, { from: o.status, to: 'dispatched', reason: 'qingyun_pickup' }, null); } catch {}
     try { notifyOrderStatusChange(o.id, 'dispatched'); } catch (e) { console.warn('[auto-dispatch] notify', o.id, e.message); }
     fired++;
@@ -23024,6 +23032,16 @@ router.post('/api/retail-admin/orders/:id/shipments/:sid/dispatch',
     firstDispatch = true;
   }
 
+  // Dispatching a PARCEL is a forward transition into fulfilment exactly like
+  // clicking "Start preparing" / "Mark dispatched" is, so it owes the same stock
+  // decrement. Without this an out-of-GZ / scheduled order that ships parcel-by-
+  // parcel walks paid → dispatched here, never touches PATCH /status, and its
+  // physical_qty is never deducted — silently, because isStockPending() only
+  // flags 'paid' orders, so the "Stock pending" badge vanishes with the flip.
+  // Idempotent: a no-op for the second parcel and for orders already committed.
+  try { prepareCommitUnreservedOrder(id, { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null }); }
+  catch (e) { console.error('[inventory.prepareCommit (parcel dispatch)]', e); }
+
   logActivity(req.user.id, req.user.username, 'shipment_dispatched', 'retail_order', id,
     { shipment_id: sid, mode: ship.mode, first: firstDispatch }, req.ip);
   if (firstDispatch) {
@@ -23166,6 +23184,12 @@ router.post('/api/retail-admin/orders/:id/shipments/:sid/deliver',
       try { notifyOrderStatusChange(id, 'delivered'); } catch (e) { /* best-effort */ }
     }
   }
+
+  // Same rule as the parcel-dispatch handler above: this stamps dispatched_at
+  // too, so a single-parcel order can land paid → delivered here without ever
+  // passing PATCH /status. Idempotent.
+  try { prepareCommitUnreservedOrder(id, { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null }); }
+  catch (e) { console.error('[inventory.prepareCommit (parcel deliver)]', e); }
 
   logActivity(req.user.id, req.user.username, 'shipment_delivered', 'retail_order', id,
     { shipment_id: sid, mode: ship.mode }, req.ip);
@@ -25817,6 +25841,10 @@ router.post('/api/retail-admin/orders/:id/jd-waybill', requireRetailAdmin, expre
       "UPDATE retail_orders SET status = 'dispatched', dispatched_at = COALESCE(dispatched_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(id);
     firstDispatch = true;
   }
+  // Minting a JD waybill ships the parcel, so it owes the stock decrement the
+  // bulk waybill-paste path already does (see PUT /tracking/bulk). Idempotent.
+  try { prepareCommitUnreservedOrder(id, { actorUserId: req.user.id, actorLabel: req.user.display_name || req.user.username || null }); }
+  catch (e) { console.error('[inventory.prepareCommit (jd waybill)]', e); }
   logActivity(req.user.id, req.user.username, 'jd_waybill_created', 'retail_order', id,
     { waybill, product, shipment_id: shipment.id, package_count: packageCount }, req.ip);
   if (firstDispatch) { try { notifyOrderStatusChange(id, 'dispatched'); } catch (e) { /* best-effort */ } }
