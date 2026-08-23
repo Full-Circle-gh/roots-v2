@@ -4523,27 +4523,18 @@
                 </div>
               </section>
 
-              <!-- Availability: publish switch + status -->
-              <section class="pdb-card pdb-c5 pdb-avail">
-                <div class="pd-sec-h">Availability · 是否上架</div>
-                <!-- "Show in shop" is the tag in the drawer header now — one
-                     switch, in the one place that never scrolls away. The input
-                     STAYS here and stays the single source of truth: pdCollectBody
-                     reads it, pdApplySnapshot writes it, and the header tag paints
-                     from it. Hidden, not deleted. -->
-                <input type="checkbox" id="pd-published" hidden>
-                <div class="field"><label class="stacked">Status · 状态</label>
-                  <!-- Seasonal and Coming Soon are gone: no shopper query has
-                       ever read `status`, so both told a customer nothing and a
-                       "Coming Soon" product with stock was purchasable anyway.
-                       What is left still matters staff-side — Inactive drops a
-                       product out of stock alerts, the dashboard cards, POS and
-                       the kitchen list. -->
-                  <select id="pd-status">
-                    <option value="Active">Active · 在售</option>
-                    <option value="Inactive">Inactive · 停售</option>
-                  </select></div>
-              </section>
+              <!-- The Availability card is gone. Its publish switch became the
+                   header tag, and Status went with it: store_products.status is
+                   read in exactly ONE place — the dashboard's restock cards
+                   (retail.js:14662) — and that query already requires
+                   is_published, so the field's only possible job was hiding a
+                   live product from your own restock card. 247 of 248 rows were
+                   Active; it never carried meaning. The publish checkbox stays
+                   here, hidden, as the value the header tag reads and writes.
+                   With no #pd-status in the DOM, pdCollectBody falls back to
+                   "Active" on every save, so any stray value heals itself the
+                   next time a product is touched. -->
+              <input type="checkbox" id="pd-published" hidden>
 
               <!-- Photos -->
               <section class="pdb-card pdb-c5 pdb-photos">

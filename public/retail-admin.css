@@ -11488,9 +11488,7 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   #pd-editor .pd-pane > .pd-row2 + .pd-row2 { margin-top: 14px; }
   #pd-editor .pd-fieldstack > .field + .field { margin-top: 12px; }
   /* Availability: the publish switch and Status sit side by side up top. */
-  #pd-editor .pd-avail { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: stretch; }
-  #pd-editor .pd-avail-status { justify-content: center; }
-  @media (max-width: 880px) { #pd-editor .pd-avail { grid-template-columns: 1fr; } }
+
 
   /* Sourcing choice (Stock pane): two clickable cards standing in for the
      single pd-ship-from-supplier checkbox, so the choice and its effect
