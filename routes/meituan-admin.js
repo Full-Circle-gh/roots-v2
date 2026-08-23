@@ -248,9 +248,11 @@ router.post('/api/retail-admin/meituan/enable', requireRetailAdmin, express.json
 // read so the store lines can show a paused store as paused.
 function csStorePushEnabled(db, code) {
   try {
-    const row = db.prepare('SELECT target_open FROM store_business_status WHERE store_code = ?').get(code);
-    return !row || row.target_open === null || row.target_open === undefined
-      ? true : row.target_open === 1;
+    const row = db.prepare('SELECT target_open, is_open FROM store_business_status WHERE store_code = ?').get(code);
+    if (!row) return true;
+    if (row.target_open === 0 || row.target_open === 1) return row.target_open === 1;
+    if (row.is_open === 0 || row.is_open === 1) return row.is_open === 1;
+    return true;
   } catch (e) { return true; }
 }
 
