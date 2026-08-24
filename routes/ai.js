@@ -2480,7 +2480,7 @@ const TOOL_HANDLERS = {
       products_with_recipe_link:cnt(`SELECT COUNT(*) AS c FROM products WHERE COALESCE(is_active,1)=1 AND recipe_id IS NOT NULL`),
       ingredients_active:       cnt(`SELECT COUNT(*) AS c FROM ingredients WHERE COALESCE(is_active,1)=1`),
       ingredients_total:        cnt(`SELECT COUNT(*) AS c FROM ingredients`),
-      suppliers:                cnt(`SELECT COUNT(*) AS c FROM suppliers`),
+      suppliers:                cnt(`SELECT COUNT(*) AS c FROM suppliers WHERE COALESCE(tenant_id,1) = 1`),
       purchase_orders_total:    cnt(`SELECT COUNT(*) AS c FROM purchase_orders`),
       purchase_orders_open:     cnt(`SELECT COUNT(*) AS c FROM purchase_orders WHERE status IN ('Requested','Ordered')`),
       sales_entries_total:      cnt(`SELECT COUNT(*) AS c FROM sales_entries`),
@@ -2554,9 +2554,10 @@ const TOOL_HANDLERS = {
                       created_at,
                       (SELECT MAX(date) FROM purchase_orders WHERE supplier = suppliers.name) AS last_po_date,
                       (SELECT COUNT(*)  FROM purchase_orders WHERE supplier = suppliers.name) AS po_count
-                 FROM suppliers`;
+                 FROM suppliers
+                WHERE COALESCE(tenant_id,1) = 1`;
     const args = [];
-    if (search) { sql += ' WHERE LOWER(name) LIKE LOWER(?)'; args.push('%'+search+'%'); }
+    if (search) { sql += ' AND LOWER(name) LIKE LOWER(?)'; args.push('%'+search+'%'); }
     sql += ' ORDER BY name LIMIT ?'; args.push(Math.min(limit, 500));
     const rows = db.prepare(sql).all(...args);
     return { count: rows.length, suppliers: rows };
