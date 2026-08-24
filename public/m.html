@@ -4432,7 +4432,7 @@ function refundPanel(o){
     ${r.lines?`<div style="background:var(--surface-card);border-radius:10px;padding:10px 12px">
       <span class="eyebrow" style="display:block;margin-bottom:6px">${T('The lines they picked','顾客选择的商品')}</span>
       ${r.lines.map(l=>`<div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:13.5px;padding:2px 0">
-        <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(l.name)} ×${l.qty}</span>
+        <span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(T(l.name[0],l.name[1]))} ×${l.qty}</span>
         <span class="num" style="flex:none">${money(CUR,l.amount)}</span></div>`).join('')}</div>`:''}
     ${figs?`<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">${figs}</div>`:''}
     ${r.method?`<div class="num" style="font-size:12.5px;color:var(--text-secondary)">${T('Paid by '+r.method,'退款方式 '+r.method)}${r.ref?' · '+escAttr(r.ref):''}</div>`:''}
@@ -4493,7 +4493,7 @@ function addonTimeline(o){
     <div style="display:flex;flex-direction:column;gap:10px;margin-top:9px">
       ${o.addons.map(a=>`<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
         <span style="min-width:0">
-          <span style="display:block;font-size:14px;font-weight:500">${a.items.length?a.items.map(it=>escAttr(it.name)+' ×'+it.qty).join('、'):T('Items added','已加单')}</span>
+          <span style="display:block;font-size:14px;font-weight:500">${a.items.length?a.items.map(it=>escAttr(T(it.name[0],it.name[1]))+' ×'+it.qty).join('、'):T('Items added','已加单')}</span>
           <span class="num" style="display:block;font-size:12.5px;color:var(--text-secondary);margin-top:2px">${fmtDay(a.when)}</span></span>
         <span class="num" style="flex:none;font-size:14px">+${money(CUR,a.amount)}</span></div>`).join('')}
     </div></div>`;
@@ -4602,7 +4602,7 @@ function sheetOrderDetail(){
          <div class="num" style="font-size:15px;margin-top:7px">${T(...o.cust)} · ${o.phone}</div>
          <div style="font-size:13.5px;color:var(--text-secondary);margin-top:2px">${
            o.counter?T('Handed over at the till','已在前台交付')
-           :o.pickup?(o.pickupStore?T('Collects at '+o.pickupStore,'自提门店 '+o.pickupStore):T('Collects in store','到店自提'))
+           :o.pickup?(o.pickupStore?T('Collects at '+o.pickupStore[0],'自提门店 '+o.pickupStore[1]):T('Collects in store','到店自提'))
            :o.addr?T(...o.addr):T('No address on file','没有收货地址')}</div>
          ${o.custId!=null?`<button onclick="APP.cmd('openCustomerFromOrder',${o.custId})" style="display:inline-flex;align-items:center;gap:5px;margin-top:10px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 12px;cursor:pointer;font-family:inherit">${ic('user',14)} ${T('View customer','查看顾客')}</button>`:''}</div>
        <!-- Payment reads as the tender and nothing else: the WeChat mark plus the
@@ -4631,7 +4631,7 @@ function sheetOrderDetail(){
            <span style="display:flex;align-items:center;gap:6px;font-size:12.5px;font-weight:500;color:var(--amber-ink)">
              <span style="width:6px;height:6px;border-radius:50%;background:var(--amber);flex:none"></span>${T('The nearer store was short on','就近门店缺货')}</span>
            <div style="margin-top:6px;display:flex;flex-direction:column;gap:3px">${o.shortItems.map(nm=>
-             `<span style="font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(nm)}</span>`).join('')}</div></div>`:''}</div>
+             `<span style="font-size:13.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(T(nm[0],nm[1]))}</span>`).join('')}</div></div>`:''}</div>
        ${o.receipt?`<div class="card" style="padding:14px"><div style="display:flex;align-items:center;justify-content:space-between;gap:10px"><span class="eyebrow">${T('Receipt','小票')}</span>
          <button onclick="APP.cmd('reprint')" style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--text-secondary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:8px;cursor:pointer;padding:5px 9px;font-family:inherit">${ic('printer',15)} ${T('Reprint','重打')}</button></div>
          <div style="display:flex;align-items:center;gap:7px;margin-top:8px"><span style="display:flex;color:var(--sage-ink)">${ic('check',16,2.25)}</span><span style="font-size:14.5px">${T(...o.receipt)}</span></div></div>`:''}`}
@@ -4650,11 +4650,15 @@ function sheetOrderDetail(){
    against the Graphite of a plain ×1 — and this is that rule. */
 function itemRow(it){
   const sku=it[3], img=it[4], opts=it[5];
+  // ITEM_TUPLE hands us a [en, zh] pair; a hand-seeded tuple (the probe
+  // fixtures) still hands a plain string. Indexing a string would print its
+  // first LETTER as the product name, so accept both shapes.
+  const nm=Array.isArray(it[1])?T(it[1][0],it[1][1]):it[1];
   const qty=Number(it[0])||1, many=qty>1;
   return `<div style="display:flex;align-items:center;gap:12px;padding:10px;border:1px solid var(--border-default);border-radius:14px;background:var(--surface-card)">
     <span style="width:44px;height:44px;border-radius:10px;flex:none;overflow:hidden;background:var(--surface-raised);border:1px solid var(--border-default);display:flex;align-items:center;justify-content:center;color:var(--text-secondary)${img?`;background-image:url('${String(img).replace(/'/g,'%27')}');background-size:cover;background-position:center;border-color:transparent`:''}">${img?'':ic('package',22)}</span>
     <span style="flex:1;min-width:0">
-      <span style="display:block;font-size:14.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${it[1]}</span>
+      <span style="display:block;font-size:14.5px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(nm)}</span>
       ${opts?`<span style="display:block;font-size:13px;font-weight:500;color:var(--text-primary);margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(T(...opts))}</span>`:''}
       ${sku?`<span class="num" style="display:inline-flex;align-items:center;gap:4px;font-size:10.5px;color:var(--text-secondary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:6px;padding:1px 6px;margin-top:4px">${ic('barcode',11)}${sku}</span>`:''}
     </span>
@@ -7187,7 +7191,15 @@ function itemOpts(it){
   const en=side(false), zh=side(true);
   return en||zh?[en||zh, zh||en]:null;
 }
-const ITEM_TUPLE=it=>[it.qty||it.quantity||1, it.name_en||it.name||it.name_cn||'Item', money(CUR,it.price||it.unit_price||0), it.sku||'', it.image_url||it.image||'', itemOpts(it)];
+/* The name travels as a [en, zh] PAIR, resolved by T() at render time — not
+   picked here. mapDetail's result is cached in state.liveDetail and the language
+   toggle only re-renders (it never refetches), so a name resolved at map time
+   would keep speaking the old language until the next fetch. Everything else in
+   this file picks with LANG for the same reason; this line alone read name_en
+   first whatever the language, so a Chinese operator got English product names. */
+const ITEM_TUPLE=it=>[it.qty||it.quantity||1,
+  [it.name_en||it.name||it.name_cn||'Item', it.name_cn||it.name||it.name_en||'Item'],
+  money(CUR,it.price||it.unit_price||0), it.sku||'', it.image_url||it.image||'', itemOpts(it)];
 function mapDetail(o){
   const base=mapOrderRow(o);
   base.items=(o.items||[]).map(ITEM_TUPLE);
@@ -7228,7 +7240,8 @@ function mapDetail(o){
   base.fulfil_counts=o.fulfillment?{done:o.fulfillment.dispatched,total:o.fulfillment.total}:null;
   base.addons=(o.addons||[]).filter(a=>(a.items||[]).length||Number(a.amount)).map(a=>({
     when:a.paid_at||null, amount:Number(a.amount)||0,
-    items:(a.items||[]).map(it=>({name:it.name_en||it.name_cn||'', qty:it.qty||1})),
+    // Same [en, zh] pair as ITEM_TUPLE, and for the same reason — see there.
+    items:(a.items||[]).map(it=>({name:[it.name_en||it.name_cn||'', it.name_cn||it.name_en||''], qty:it.qty||1})),
   }));
   base.addonTotal=Number(o.addon_total)||0;
   base.proof=o.alipay_proof_image||null;                    // the screenshot itself
@@ -7237,8 +7250,10 @@ function mapDetail(o){
     title:o.invoice_title||'', taxId:o.invoice_tax_id||'', email:o.invoice_email||'',
     number:o.invoice_number||'', file:o.invoice_file_url||'', issuedAt:o.invoice_issued_at||'',
   }:null;
+  // [en, zh] pair like the rest — "自提门店 Tianhe Store" read half-translated.
   base.pickupStore=(o.fulfillment_type==='pickup')
-    ?((o.address&&(o.address.store_name_en||o.address.store_name_cn))||o.store_name_en||o.store_code||'')
+    ?[((o.address&&(o.address.store_name_en||o.address.store_name_cn))||o.store_name_en||o.store_code||''),
+      ((o.address&&(o.address.store_name_cn||o.address.store_name_en))||o.store_name_cn||o.store_name_en||o.store_code||'')]
     :null;
   base.stockPending=!!o.stock_pending;
   // The refund panel. The phone had the ACTIONS — approve, reject, pay out —
@@ -7260,7 +7275,9 @@ function mapDetail(o){
       if(!Array.isArray(L)||!L.length) return null;
       const by=new Map((o.items||[]).map(it=>[it.id,it]));
       return L.map(l=>{ const it=by.get(l.item_id);
-        return {name:it?(it.name_en||it.name_cn||('#'+l.item_id)):('#'+l.item_id), qty:l.qty||1, amount:Number(l.amount)||0}; }); })(),
+        // [en, zh] pair, resolved by T() at render — see ITEM_TUPLE.
+        return {name:it?[it.name_en||it.name_cn||('#'+l.item_id), it.name_cn||it.name_en||('#'+l.item_id)]:[('#'+l.item_id),('#'+l.item_id)],
+                qty:l.qty||1, amount:Number(l.amount)||0}; }); })(),
   }:null;
   // The ship-by plan, so the drawer states the promise the order was sold on
   // rather than making the operator infer it from the list row they came from.
@@ -7273,7 +7290,8 @@ function mapDetail(o){
     if(!pids.length) return null;
     const by=new Map((o.items||[]).map(it=>[it.product_id,it]));
     return pids.map(pid=>{ const it=by.get(pid);
-      return it?(it.name_en||it.name_cn||('#'+pid)):('#'+pid); }); })();
+      // [en, zh] pair, resolved by T() at render — see ITEM_TUPLE.
+      return it?[it.name_en||it.name_cn||('#'+pid), it.name_cn||it.name_en||('#'+pid)]:[('#'+pid),('#'+pid)]; }); })();
   base.routedByArea=o.routed_by_distance===0;
   if(o.subtotal!=null||o.shipping_fee!=null){
     base.breakdown=[['Subtotal',money(CUR,o.subtotal!=null?o.subtotal:o.total)]].concat(o.shipping_fee?[['Delivery',money(CUR,o.shipping_fee)]]:[]);
