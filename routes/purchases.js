@@ -211,6 +211,20 @@ function postPOExpenses(poId) {
   }
 }
 
+// One PO, kitchen scope only. The LIST has filtered on scope since retail
+// purchasing landed in the same table; every by-id route did not, so a kitchen
+// user holding `purchases` could read and mutate a retail PO through the
+// kitchen API. Mirrors getRetailPO() in routes/retail-purchasing.js, which has
+// always had both predicates.
+//
+// tenant_id is COALESCEd rather than compared bare so a row that predates the
+// column, or somehow holds NULL, still reads as Roots' rather than vanishing.
+function getKitchenPO(id) {
+  return db.prepare(
+    "SELECT * FROM purchase_orders WHERE id = ? AND COALESCE(scope,'kitchen') = 'kitchen' AND COALESCE(tenant_id,1) = 1"
+  ).get(id);
+}
+
 // GET all POs
 router.get('/api/purchases', requireAuth, requirePermission('purchases'), (req, res) => {
   const { status, search, month } = req.query;
@@ -239,7 +253,7 @@ router.get('/api/purchases', requireAuth, requirePermission('purchases'), (req, 
 
 // GET single PO with line items
 router.get('/api/purchases/:id', requireAuth, requirePermission('purchases'), (req, res) => {
-  const po = db.prepare('SELECT * FROM purchase_orders WHERE id = ?').get(req.params.id);
+  const po = getKitchenPO(req.params.id);
   if (!po) return res.status(404).json({ error: 'Not found · 未找到' });
   const items = db.prepare('SELECT * FROM po_line_items WHERE po_id = ? ORDER BY sort_order').all(po.id);
   res.json({ success: true, data: { ...po, items } });
@@ -381,7 +395,7 @@ router.put('/api/purchases/:id', requireAuth, requirePermission('purchases'), (r
 router.put('/api/purchases/:id/status', requireAuth, requirePermission('purchases'), (req, res) => {
   const { status } = req.body || {};
   if (!['Requested','Ordered','Delivered'].includes(status)) return res.status(400).json({ error: 'Invalid status · 状态无效' });
-  const po = db.prepare('SELECT id, status FROM purchase_orders WHERE id = ?').get(req.params.id);
+  const po = getKitchenPO(req.params.id);
   if (!po) return res.status(404).json({ error: 'PO not found · 采购单未找到' });
   db.prepare('UPDATE purchase_orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(status, req.params.id);
   // First-time delivery → seed qty_received from qty so the receive UI has
@@ -486,7 +500,7 @@ router.put('/api/purchases/:id/receive', requireAuth, requirePermission('purchas
 router.get('/api/purchases/:id/expense-status', requireAuth, requirePermission('purchases'), (req, res) => {
   const poId = parseInt(req.params.id, 10);
   if (!poId) return res.status(400).json({ error: 'invalid PO id · 采购单 ID 无效' });
-  const po = db.prepare('SELECT id, status, date, po_number FROM purchase_orders WHERE id = ?').get(poId);
+  const po = getKitchenPO(poId);
   if (!po) return res.status(404).json({ error: 'PO not found · 采购单未找到' });
   const rows = db.prepare(`SELECT category, amount FROM expense_entries WHERE po_id = ? ORDER BY id`).all(poId);
   const total = rows.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
@@ -533,7 +547,7 @@ router.post('/api/purchases/:id/order', requireAuth, requirePermission('purchase
   try {
     const poId = parseInt(req.params.id, 10);
     if (!poId) return res.status(400).json({ error: 'invalid PO id · 采购单 ID 无效' });
-    const src = db.prepare('SELECT * FROM purchase_orders WHERE id = ?').get(poId);
+    const src = getKitchenPO(poId);
     if (!src) return res.status(404).json({ error: 'PO not found · 采购单未找到' });
     const defer = Array.isArray(req.body?.defer_line_ids) ? req.body.defer_line_ids.map(n => parseInt(n,10)).filter(Boolean) : [];
 
@@ -580,7 +594,7 @@ router.post('/api/purchases/:id/order', requireAuth, requirePermission('purchase
 // > 0) into a fresh Requested PO linked back via backorder_of. Used when the
 // supplier short-shipped and you want to keep tracking the unfulfilled qty.
 router.post('/api/purchases/:id/backorder', requireAuth, requirePermission('purchases'), (req, res) => {
-  const src = db.prepare('SELECT * FROM purchase_orders WHERE id = ?').get(req.params.id);
+  const src = getKitchenPO(req.params.id);
   if (!src) return res.status(404).json({ error: 'PO not found · 采购单未找到' });
   const lines = db.prepare(`SELECT * FROM po_line_items WHERE po_id = ?
     AND (COALESCE(qty_received, qty) < qty)
@@ -631,7 +645,7 @@ function clearPOExpenses(poId) {
 // po_number, today's date). Items are copied verbatim. Useful for recurring
 // orders to the same supplier.
 router.post('/api/purchases/:id/duplicate', requireAuth, requirePermission('purchases'), (req, res) => {
-  const src = db.prepare('SELECT * FROM purchase_orders WHERE id = ?').get(req.params.id);
+  const src = getKitchenPO(req.params.id);
   if (!src) return res.status(404).json({ error: 'PO not found · 采购单未找到' });
   const items = db.prepare('SELECT * FROM po_line_items WHERE po_id = ? ORDER BY sort_order').all(src.id);
 
