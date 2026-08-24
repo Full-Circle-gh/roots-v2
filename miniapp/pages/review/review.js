@@ -74,6 +74,12 @@ const COPY_EN = {
   tellLabel: 'TELL US MORE',
   placeholder: 'Real fruit really comes through. Tangy without the burn. Will reorder.',
   photoLabel: 'PHOTO',
+  // Deliberately no figure. The sticker used to read "+10 PTS" — a number
+  // nobody had checked against the store's economy, where a point is worth
+  // ¥1 and a customer earns one by spending ¥100. Ten points for a review
+  // meant paying out what a ¥1,000 order earns. Saying "points" and giving
+  // the real amount on success cannot go out of step with the server.
+  pointsSticker: 'EARN POINTS',
   pointsNote: 'Reviews earn points and help other shoppers.',
   // Shown instead when no reward is on offer — never promise points we
   // aren't paying.
@@ -92,6 +98,7 @@ const COPY_CN = {
   tellLabel: '说说看',
   placeholder: '果味十足,酸度刚好,会回购。',
   photoLabel: '照片',
+  pointsSticker: '可得积分',
   pointsNote: '评价可得积分,也能帮到其他买家。',
   noteNoPoints: '帮助其他买家做选择。',
   submit: '提交评价',
