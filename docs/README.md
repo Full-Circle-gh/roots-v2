@@ -116,7 +116,7 @@ There were **7+ scattered copies** of these docs across `Desktop/`, `tacent/`, `
 - **orphan-CSS sweep** — dead card-body CSS from the five removed cards + the Today-chart CSS. Harmless (matches no DOM). A hygiene commit; rides whenever.
 - **Unhandled age threshold** — deferred per spec; tune once the card is live and you see real ages.
 - **Gate B** (money-card presence → `data-cap="reports:view"`) — precondition met (`roots-warehouse` caps come back narrow, lacking `reports:view`), still on the `body.pos-*` CSS gate. Move it after watching one live non-owner session, per the fail-open rule.
-- **mobile `#rm-dash`** — the phone dashboard is a parallel surface, untouched by this batch. Its own later pass.
+- ~~**mobile `#rm-dash`**~~ — **REMOVED 2026-08-24.** Not a parallel surface after all: phones have been served Tacet Mobile (`m.html`) since 2026-07-12, so this ≤720px layer in the desktop shell was dead on every phone. Deleted rather than given its own pass.
 
 
 - **Shadow mode** — decided, not built. Deny-by-default, log-don't-block, ~a week of real traffic. **Until it runs, `rbac_enforce` stays off** and `PERMISSIONS_PLAN.md` §11's three blockers stay open. Flipping the flag now is worse than leaving it off — you'd believe you were protected.

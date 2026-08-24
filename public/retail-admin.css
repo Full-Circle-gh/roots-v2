@@ -2135,65 +2135,6 @@
     transition-timing-function: cubic-bezier(.33, 0, .25, 1);
   }
 
-  /* ── Bars come alive: every magnitude bar inside a mobile report card sweeps
-     out from the left when its card mounts or unfolds — on dashboard refresh
-     (default-open sections), on each accordion unfold, and in the report
-     push/sheet screens. The .rm-barsweep trigger is (re)applied by JS so the
-     sweep replays on every open. Covers both bar markups: the .db-track fill
-     spans (Order status, Payment & delivery) and the --mag ::before bars (Top
-     products / customers / tiers). Rows cascade via a small per-row stagger. */
-  .rm-barsweep .db-track > span,
-  .rm-barsweep .has-bar::before {
-    transform-origin: left center;
-    animation: db-bar-grow .7s cubic-bezier(.22,.61,.36,1) both;
-  }
-  .rm-barsweep .db-bar-row:nth-child(1) .db-track > span, .rm-barsweep .has-bar:nth-child(1)::before { animation-delay: .03s; }
-  .rm-barsweep .db-bar-row:nth-child(2) .db-track > span, .rm-barsweep .has-bar:nth-child(2)::before { animation-delay: .09s; }
-  .rm-barsweep .db-bar-row:nth-child(3) .db-track > span, .rm-barsweep .has-bar:nth-child(3)::before { animation-delay: .15s; }
-  .rm-barsweep .db-bar-row:nth-child(4) .db-track > span, .rm-barsweep .has-bar:nth-child(4)::before { animation-delay: .21s; }
-  .rm-barsweep .db-bar-row:nth-child(5) .db-track > span, .rm-barsweep .has-bar:nth-child(5)::before { animation-delay: .27s; }
-  .rm-barsweep .db-bar-row:nth-child(6) .db-track > span, .rm-barsweep .has-bar:nth-child(6)::before { animation-delay: .33s; }
-  .rm-barsweep .db-bar-row:nth-child(7) .db-track > span, .rm-barsweep .has-bar:nth-child(7)::before { animation-delay: .39s; }
-  .rm-barsweep .db-bar-row:nth-child(n+8) .db-track > span, .rm-barsweep .has-bar:nth-child(n+8)::before { animation-delay: .45s; }
-  @media (prefers-reduced-motion: reduce) {
-    .rm-barsweep .db-track > span, .rm-barsweep .has-bar::before { animation: none; }
-  }
-
-  /* ── #1 takes a bow: when a Top-products / Best-sellers list lands (after the
-     fold opens, or when a report screen mounts), the leading row briefly pops
-     and lifts, then settles — drawing the eye to the top seller. Keyed on the
-     same .rm-barsweep trigger that JS replays on every open, and delayed so it
-     fires once the fold has finished, not mid-slide. ──────────────────────── */
-  .rm-barsweep .db-list > .db-row:first-child {
-    position: relative; z-index: 2; transform-origin: center;
-    animation: dbRowPop 1.05s cubic-bezier(.34,1.4,.5,1) both;
-    animation-delay: .5s;
-  }
-  @keyframes dbRowPop {
-    0%   { transform: scale(1); box-shadow: 0 0 0 rgba(18,22,26,0); }
-    35%  { transform: scale(1.05); box-shadow: 0 10px 26px rgba(18,22,26,.16); }
-    100% { transform: scale(1); box-shadow: 0 0 0 rgba(18,22,26,0); }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .rm-barsweep .db-list > .db-row:first-child { animation: none; }
-  }
-
-  /* ── EKG reveal: on the mobile dashboard the sparklines + revenue trend wipe
-     in left→right like a heart monitor — the whole curve (line + area wash) is
-     uncovered by an animating clip, so the line is ALWAYS fully drawn and can
-     never look broken (an earlier stroke-dash approach left dotted gaps once the
-     non-scaling stroke + stretched viewBox defeated pathLength). Fires on every
-     (re)render since rmRenderDash rebuilds the SVGs — on refresh + range switch.
-     The end-dot waits for the wipe to arrive, then fades/scales in. ───────── */
-  #rm-dash .db-spark { animation: dbSparkWipe 1.15s cubic-bezier(.4,.1,.2,1) both; }
-  #rm-dash .rm-dh-trend .db-spark { animation-duration: 1.5s; }   /* the big chart reveals a touch slower */
-  #rm-dash .rm-dh-trend .db-spark-dot { animation: dbSparkDotIn .45s ease backwards; animation-delay: 1.35s; }
-  @keyframes dbSparkWipe { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
-  @keyframes dbSparkDotIn { from { opacity: 0; transform: scale(.2); } to { opacity: 1; transform: scale(1); } }
-  @media (prefers-reduced-motion: reduce) {
-    #rm-dash .db-spark, #rm-dash .rm-dh-trend .db-spark-dot { animation: none; }
-  }
-
   /* ═══════════════════════════════════════════════════════════════════
      PRODUCTS TAB — mini-app product surface editor
      ═══════════════════════════════════════════════════════════════════ */
@@ -8704,186 +8645,6 @@
   }
 
   /* ════════════════════════════════════════════════════════════════════
-     MOBILE DASHBOARD REDESIGN — Variant A "full-screen push".
-     Phone-only (≤720px). The desktop bento + deep-dive are hidden; the SAME
-     live DASH_DATA renders as a dark live hero + a grid of report tiles
-     (#rm-dash, fed by rmRenderDash from dashRenderAll). Tap a tile → a
-     full-screen report pushes in (#rm-dash-report), its body built from the
-     same aggregates the desktop charts use (cloned/reformatted — no second
-     fetch, no backend change). Period chips drive dashSetRange. Theme-aware;
-     desktop untouched. Sibling of the Orders redesign.
-     Built to match design bundle: mobile/dashboard-a.html.
-     See memory: feature_operator_mobile_miniapp.
-     ════════════════════════════════════════════════════════════════════ */
-  #rm-dash { display: none; }
-  #rm-dash-report { display: none; }
-  @media (max-width: 720px) {
-    /* Desktop dashboard surfaces off; the mobile view replaces them. */
-    #tab-dashboard .db-head,
-    #tab-dashboard .td-wrap { display: none; }
-    #rm-dash { display: block; }
-
-    /* Compact one-line header — eyebrow + title share a baseline row so the
-       dashboard's front door (period chips + live hero) sits higher. */
-    .rm-dh-title { display: flex; align-items: baseline; gap: 8px; padding: 0 2px; }
-    .rm-dh-title .eyebrow { font: 500 10px/1 var(--f-mono); letter-spacing: .18em; text-transform: uppercase; color: var(--brass); }
-    .rm-dh-title h2 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -.02em; }
-
-    /* period chips */
-    .rm-dh-periods { display: flex; gap: 7px; margin: 8px 0 4px; }
-    .rm-dh-periods button {
-      flex: 1; height: 36px; border-radius: 10px;
-      border: 1px solid var(--line-soft); background: var(--bg-pane);
-      color: var(--text-3); font: 500 13px var(--f-sans); cursor: pointer;
-      -webkit-tap-highlight-color: transparent;
-    }
-    .rm-dh-periods button.active { background: var(--text-1); color: var(--bg-pane); border-color: var(--text-1); }
-
-    /* dark live hero (always dark, like the desktop #db-hero) */
-    .rm-dh-hero {
-      margin: 8px 0 4px; padding: 16px; border-radius: 18px; color: #F2EFE7;
-      background: linear-gradient(160deg, #15130E, #221C12);
-      box-shadow: 0 18px 40px -24px rgba(40, 34, 20, .7);
-    }
-    .rm-dh-live { display: flex; align-items: center; gap: 7px; font: 500 10px var(--f-mono); letter-spacing: .18em; text-transform: uppercase; color: var(--td-sage-ink); }
-    .rm-dh-live .d { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 0 rgba(163, 180, 159, .6); animation: rmDhPulse 2s infinite; }
-    @keyframes rmDhPulse { 0% { box-shadow: 0 0 0 0 rgba(163, 180, 159, .5); } 70% { box-shadow: 0 0 0 7px rgba(163, 180, 159, 0); } 100% { box-shadow: 0 0 0 0 rgba(163, 180, 159, 0); } }
-    .rm-dh-big { font: 600 42px var(--f-sans); letter-spacing: -.03em; margin: 10px 0 2px; font-variant-numeric: tabular-nums; }
-    .rm-cu { font-variant-numeric: tabular-nums; }
-    .rm-dh-cap { font-size: 12px; color: #B9B3A4; display: flex; align-items: center; gap: 8px; }
-    .rm-dh-cap .rm-dh-delta.up { color: #9FC6A3; }
-    .rm-dh-cap .rm-dh-delta.down { color: #D9A38A; }
-    .rm-dh-mini { display: flex; gap: 18px; margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255, 255, 255, .12); }
-    .rm-dh-mini .m { min-width: 0; }
-    .rm-dh-mini .v { font: 600 18px var(--f-sans); font-variant-numeric: tabular-nums; }
-    .rm-dh-mini .k { font: 500 9px var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--td-text2); margin-top: 2px; }
-
-    /* report tile grid */
-    .rm-dh-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
-    .rm-dh-tile {
-      text-align: left; background: var(--bg-pane); border: 1px solid var(--line-soft);
-      border-radius: 16px; padding: 14px; cursor: pointer; min-height: 116px;
-      display: flex; flex-direction: column; transition: transform .08s;
-      -webkit-tap-highlight-color: transparent; color: inherit;
-    }
-    .rm-dh-tile:active { transform: scale(.98); }
-    .rm-dh-tile .ic { width: 32px; height: 32px; border-radius: 9px; background: var(--bg-elev-1); display: flex; align-items: center; justify-content: center; color: var(--brass); margin-bottom: auto; flex: none; }
-    .rm-dh-tile .ic svg { width: 17px; height: 17px; }
-    .rm-dh-tile .lab { font: 500 9.5px var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--text-3); margin-top: 12px; }
-    .rm-dh-tile .val { font: 600 22px var(--f-sans); letter-spacing: -.02em; margin-top: 3px; color: var(--text-1); font-variant-numeric: tabular-nums; }
-    .rm-dh-tile .spk { margin-top: 8px; height: 26px; color: var(--accent); }
-    .rm-dh-tile .spk .db-spark { width: 100%; height: 100%; display: block; }
-
-    .rm-dh-tile.wide { grid-column: 1 / -1; flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; min-height: 0; }
-    .rm-dh-tile.wide .l { display: flex; align-items: center; gap: 12px; min-width: 0; }
-    .rm-dh-tile.wide .ic { margin: 0; }
-    .rm-dh-tile.wide .tx { min-width: 0; display: flex; flex-direction: column; }
-    .rm-dh-tile.wide .lab { margin: 0; }
-    .rm-dh-tile.wide .val { margin: 2px 0 0; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .rm-dh-tile.alarm .ic { background: var(--warn-wash, rgba(201, 149, 74, .16)); }
-    .rm-dh-badge { flex: none; font: 600 11px var(--f-sans); color: var(--brass); background: var(--warn-wash, rgba(201, 149, 74, .16)); padding: 4px 10px; border-radius: 999px; }
-    .rm-dh-tile.wide .arrow { color: var(--text-3); flex: none; display: flex; }
-    .rm-dh-tile.wide .arrow svg { width: 18px; height: 18px; }
-    .rm-dh-empty { text-align: center; color: var(--text-3); padding: 30px 16px; font-size: 13px; }
-
-    /* ── full-screen report (push). Lives inside #tab-dashboard, so it hides
-       automatically when another tab becomes active (section{display:none}). ── */
-    #rm-dash-report {
-      display: flex; flex-direction: column; position: fixed; inset: 0; z-index: 80;
-      background: var(--bg-app); transform: translateX(100%);
-      /* visibility:hidden at rest so the panel can't flash at the right edge if
-         the transform animates on first paint; the delayed visibility flip keeps
-         it on-screen through the .3s slide-out when closing. */
-      visibility: hidden;
-      transition: transform .55s cubic-bezier(.22, .61, .36, 1), visibility 0s linear .55s;
-    }
-    #rm-dash-report.show { transform: none; visibility: visible; transition: transform .55s cubic-bezier(.22, .61, .36, 1); }
-    @media (prefers-reduced-motion: reduce) { #rm-dash-report { transition: none; } }
-    .rm-dh-rnav {
-      flex: none; display: flex; align-items: center; gap: 4px; padding: 0 8px;
-      padding-top: env(safe-area-inset-top); min-height: 54px;
-      background: var(--bg-pane); border-bottom: 1px solid var(--line-soft);
-    }
-    .rm-dh-back { width: 42px; height: 42px; border: 0; border-radius: 11px; background: transparent; color: var(--text-1); display: flex; align-items: center; justify-content: center; cursor: pointer; }
-    .rm-dh-back:active { background: var(--bg-elev-1); }
-    .rm-dh-back svg { width: 22px; height: 22px; }
-    .rm-dh-rtitle { font: 600 16px var(--f-sans); color: var(--text-1); }
-    .rm-dh-rbody { flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 14px 16px calc(30px + env(safe-area-inset-bottom)); }
-
-    .rm-dh-block { background: var(--bg-pane); border: 1px solid var(--line-soft); border-radius: 14px; padding: 15px; margin-bottom: 14px; }
-    .rm-dh-block > .h { font: 500 10px var(--f-mono); letter-spacing: .16em; text-transform: uppercase; color: var(--brass); margin-bottom: 12px; }
-    .rm-dh-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
-    .rm-dh-stat { background: var(--bg-pane); border: 1px solid var(--line-soft); border-radius: 12px; padding: 12px 13px; }
-    .rm-dh-stat .lbl { font-size: 11px; color: var(--text-3); }
-    .rm-dh-stat .v { font: 600 20px var(--f-sans); color: var(--text-1); margin-top: 3px; font-variant-numeric: tabular-nums; }
-    .rm-dh-stat .v.brass { color: var(--brass); }
-    .rm-dh-trend { position: relative; height: 120px; color: var(--accent); touch-action: pan-y; cursor: crosshair; }
-    /* Faint cue while a long-press reading is active. */
-    .rm-dh-trend.is-reading { background: color-mix(in srgb, var(--accent) 5%, transparent); border-radius: 8px; }
-    .rm-dh-trend .db-spark { width: 100%; height: 100%; display: block; }
-    .rm-dh-heatscroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-
-    /* ── Combined design: swipeable KPI carousel + inline accordion ──
-       Layered over the Variant-A hero. The carousel scans secondary KPIs
-       (each card opens a .rm-sheet breakdown); the accordion expands report
-       sections in place (bodies cloned from the same desktop chart nodes).
-       Built to match design bundle: mobile/dashboard-combined.html. */
-    .rm-dh-hint { display: flex; align-items: center; gap: 8px; margin: 12px 2px 2px; font-size: 11.5px; color: var(--text-3); }
-    .rm-dh-carousel {
-      display: flex; gap: 11px; overflow-x: auto; margin: 8px -2px 0; padding: 0 2px 6px;
-      scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch;
-    }
-    .rm-dh-carousel::-webkit-scrollbar { display: none; }
-    .rm-dh-kpi {
-      flex: 0 0 165px; scroll-snap-align: start; text-align: left; color: inherit;
-      background: var(--bg-pane); border: 1px solid var(--line-soft); border-radius: 16px;
-      padding: 15px; cursor: pointer; transition: transform .08s; -webkit-tap-highlight-color: transparent;
-    }
-    .rm-dh-kpi:active { transform: scale(.98); }
-    .rm-dh-kpi .lab { font: 500 9.5px var(--f-mono); letter-spacing: .14em; text-transform: uppercase; color: var(--text-3); }
-    .rm-dh-kpi .val { font: 600 26px var(--f-sans); letter-spacing: -.02em; margin-top: 4px; color: var(--text-1); font-variant-numeric: tabular-nums; }
-    .rm-dh-kpi .delta { font: 500 11px var(--f-mono); margin-top: 4px; }
-    .rm-dh-kpi .delta.up { color: var(--td-sage-ink); }
-    .rm-dh-kpi .delta.down { color: var(--danger, #b1483a); }
-    .rm-dh-kpi .spk { display: block; margin-top: 11px; height: 30px; color: var(--accent); }
-    .rm-dh-kpi .spk .db-spark { width: 100%; height: 100%; display: block; }
-    .rm-dh-dots { display: flex; gap: 5px; justify-content: center; padding: 2px 0 4px; }
-    .rm-dh-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--line); transition: width .2s, background .2s; }
-    .rm-dh-dots i.on { background: var(--brass); width: 16px; border-radius: 3px; }
-
-    /* Swipe-dot pager for the Orders / Customers KPI strips. Hidden by default —
-       on desktop those strips are a full grid (no overflow); the mobile rule
-       below (in the max-width:720px block) flips it on. Mirrors .rm-dh-dots. */
-    .fc-kpi-dots { display: none; gap: 5px; justify-content: center; padding: 0 0 10px; margin-top: -4px; }
-    .fc-kpi-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--line); transition: width .2s, background .2s; }
-    .fc-kpi-dots i.on { background: var(--brass); width: 16px; border-radius: 3px; }
-    /* Phone-only: reveal the swipe dots under the scrollable KPI strips. Must
-       come AFTER the display:none default above so it wins on equal specificity. */
-    @media (max-width: 720px) { .fc-kpi-dots { display: flex; } }
-
-    .rm-dh-acc { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
-    .rm-dh-ai { background: var(--bg-pane); border: 1px solid var(--line-soft); border-radius: 15px; overflow: hidden; }
-    .rm-dh-ai-head {
-      display: flex; align-items: center; gap: 12px; width: 100%; padding: 15px;
-      border: 0; background: transparent; cursor: pointer; text-align: left; color: inherit;
-      font-family: inherit; -webkit-tap-highlight-color: transparent;
-    }
-    .rm-dh-ai-head .ic { width: 32px; height: 32px; border-radius: 10px; background: var(--bg-elev-1); display: flex; align-items: center; justify-content: center; color: var(--brass); flex: none; }
-    .rm-dh-ai-head .ic svg { width: 17px; height: 17px; }
-    .rm-dh-ai-head .tx { flex: 1; min-width: 0; }
-    .rm-dh-ai-head .t { font: 600 14.5px var(--f-sans); color: var(--text-1); display: block; }
-    .rm-dh-ai-head .hv { font: 600 15px var(--f-sans); color: var(--text-1); margin-right: 4px; font-variant-numeric: tabular-nums; }
-    .rm-dh-ai-head .hv.brass { color: var(--brass); }
-    .rm-dh-ai-head .chev { color: var(--text-3); transition: transform .5s cubic-bezier(.22,.61,.36,1); display: flex; flex: none; }
-    .rm-dh-ai-head .chev svg { width: 18px; height: 18px; }
-    .rm-dh-ai.open .rm-dh-ai-head .chev { transform: rotate(90deg); }
-    .rm-dh-ai-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows .55s cubic-bezier(.22,.61,.36,1); }
-    .rm-dh-ai.open .rm-dh-ai-body { grid-template-rows: 1fr; }
-    .rm-dh-ai-body > .inner { overflow: hidden; }
-    .rm-dh-ai-pad { padding: 0 14px 16px; }
-  }
-
-  /* ════════════════════════════════════════════════════════════════════
      MOBILE SETTINGS REDESIGN — Variant A "settings hub" (iOS-Settings depth).
      Phone-only (≤720px). On desktop the settings sidebar (#settings-nav) and
      body (.settings-body, which holds every .sub-panel + the shared save bar)
@@ -9793,8 +9554,7 @@
      span won is used rather than left sitting beside them. */
   .bn-mgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px 20px; margin-bottom: 20px; }
   .td-span .bn-mgrid { grid-template-columns: none; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 22px 32px; }
-  /* A spanning card's one-row-across cannot hold on a restricted role's phone,
-     which keeps this desktop surface instead of #rm-dash. Two up there. */
+  /* A spanning card's one-row-across cannot hold on a phone. Two up there. */
   @media (max-width: 720px) {
     .bn-mgrid,
     .td-span .bn-mgrid { grid-template-columns: 1fr 1fr; grid-auto-flow: row; }
@@ -11444,8 +11204,6 @@
      tdAttnRender) IS their dashboard. They keep the block that matches
      their job: warehouse gets Inventory + On-the-way/Drafts, dispatch
      gets On-the-road/Ready + Delivery, customer-service gets Delivery.
-   · On phones those positions keep this same card surface instead of
-     the revenue-led mobile variant (#rm-dash).
    · store-manager keeps the full pulse but locked to their store.
    ════════════════════════════════════════════════════════════════ */
 /* The Recap is now shown to every role (role-filtered + money-free in
@@ -11485,14 +11243,6 @@ body.pos-store-manager .td-block[data-block="onroad"], body.pos-store-manager .t
 body.pos-dispatch .td-block[data-block="inventory"], body.pos-dispatch .td-block[data-block="delivery"],
 body.pos-customer-service .td-block[data-block="inventory"], body.pos-customer-service .td-block[data-block="delivery"],
 body.pos-warehouse .td-block[data-block="delivery"] { display: none; }
-@media (max-width: 720px) {
-  body.pos-warehouse #tab-dashboard .td-wrap,
-  body.pos-customer-service #tab-dashboard .td-wrap,
-  body.pos-dispatch #tab-dashboard .td-wrap { display: block; }
-  body.pos-warehouse #rm-dash,
-  body.pos-customer-service #rm-dash,
-  body.pos-dispatch #rm-dash { display: none; }
-}
 
 /* ════════════════════════════════════════════════════════════════════
    SHARED PAGER — Orders · Customers  (markup: rmRenderPager, 01-core.js)

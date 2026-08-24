@@ -231,7 +231,7 @@ This is the same consolidation v1 already recorded for *Channels → Sales* and 
 
 ### Shipped new (2)
 
-- **Reports** (`tab-reports`, order:3) — range bar (Today/7d/30d/90d + custom dates + store filter) → **chapter rail** (Overview · Sales · Customers · Products & traffic) → KPI strip → **The read** (the AI's plain-words analysis) → charts. Shares `03-dashboard.js`; chart container ids are deliberately unchanged so the phone dashboard's `rmRenderDash` clone-by-id keeps working. Chapters only show/hide wrappers.
+- **Reports** (`tab-reports`, order:3) — range bar (Today/7d/30d/90d + custom dates + store filter) → **chapter rail** (Overview · Sales · Customers · Products & traffic) → KPI strip → **The read** (the AI's plain-words analysis) → charts. Shares `03-dashboard.js`; chapters only show/hide wrappers. (The phone dashboard that cloned these container ids was deleted 2026-08-24 — phones get `m.html`.)
 - **Team** (`tab-team`, order:16) — stats → **`tm-enforce`** master switch (sage when on) → member list with role pills (owner / staff / op) + per-member Edit → Add member. Carries its own `:root` block from `backend-team.html` (`retail-admin.html:10041`).
 
 ### Flattened (3)

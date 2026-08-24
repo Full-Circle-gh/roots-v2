@@ -185,7 +185,7 @@ Each row deep-links to the place the fire is put out. Rows are counts + one line
 3. **The boot splash listens for two signals.** `data-app-ready` stamps only when Today *and* The Recap paint (`dashMarkReady`). Rename either and boot feels broken (8s failsafe masks it — worse).
 4. **Every card's renderer registers in `onLangChange` or its `cuT()` copy freezes** in the first-paint language. ~10 registrations exist because each card needed one. New/merged cards follow the pattern. **Do not copy Reports' glued `${en} · ${cn}` idiom** (`dashRangeFoot`, `dashRenderTiers`) into dashboard code.
 5. **Role gating already works** (`DASH_POS_CARDS` / `dashPosWants`). The card sets above are a re-mapping of that system, not a new one.
-6. **The mobile dashboard (`#rm-dash`) is a parallel surface.** This spec covers desktop; mobile follows after, per the standing mobile-v2 note. Don't let scope drift there (it has, twice).
+6. ~~**The mobile dashboard (`#rm-dash`) is a parallel surface.**~~ **REMOVED 2026-08-24 — there is no `#rm-dash`.** Phones have been served Tacet Mobile (`public/m.html`) since 2026-07-12 (`a19b70af`), so the ≤720px layer inside the desktop shell was unreachable from a phone — it rendered only when a *desktop* browser was narrowed. CSS, markup and `rmRenderDash` are deleted; narrow desktop now reflows the desktop dashboard. Mobile dashboard work belongs in `m.html`. (This is the surface scope drifted into, twice — it was already dead both times.)
 7. **Dead weight to remove while in there:** the `#db-bento`-scoped CSS (the element no longer exists) — but **not** the un-scoped `.db-tile*` primitives, which Reports still uses.
 8. **`#td-live` is a sage presence poll, not SSE and not Dusk.** Correct on both counts; keep both.
 
