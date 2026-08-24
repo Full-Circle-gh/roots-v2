@@ -403,6 +403,21 @@ try {
     db.prepare("INSERT INTO _migrations (name) VALUES (?)").run('seed_item_kinds_v1');
   }
 } catch (e) { console.error('[migration seed_item_kinds_v1]', e); }
+// Repair: production carries only four of the five kinds — 'other' is missing,
+// while one live row still holds item_kind='other'. That row's edit form shows
+// NOTHING selected in the Kind picker, so a save silently rewrites it to the
+// first option. Seed the missing row rather than rewrite the data.
+// Its own migration name because seed_item_kinds_v1 is already recorded as
+// applied and will never run again. One-shot for the same reason: an operator
+// who deliberately removes a kind from the editable list should not have it
+// reappear on the next deploy.
+try {
+  const ranOther = db.prepare('SELECT 1 FROM _migrations WHERE name = ?').get('seed_item_kind_other_v1');
+  if (!ranOther) {
+    db.prepare("INSERT OR IGNORE INTO categories (kind, name, sort_order) VALUES ('item_kind', 'other', 4)").run();
+    db.prepare('INSERT INTO _migrations (name) VALUES (?)').run('seed_item_kind_other_v1');
+  }
+} catch (e) { console.error('[migration seed_item_kind_other_v1]', e); }
 // Payment methods used on the supplier form. Stored in the editable
 // categories table so admin can add/remove options without a code change.
 try {

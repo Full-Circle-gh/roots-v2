@@ -188,7 +188,7 @@ const TAB_CAP = {
   media: 'media:view', reviews: 'reviews:view', feedback: 'feedback:view',
   delivery: 'delivery:view', meituan: 'meituan:view', guanyi: 'guanyi:view',
   integrations: 'integrations:view', eleme: 'eleme:view',
-  activity: 'activity:view', purchasing: 'purchasing:view',
+  activity: 'activity:view', purchasing: 'purchasing:view', materials: 'materials:view',
   config: ['settings:shop', 'settings:push', 'settings:payments', 'stores:view', 'shipping:config'],
 };
 // Rail folders, recounted after the gates (§2.5 of the drill-down amendment).
@@ -867,6 +867,8 @@ const RAIL_STANDIN = {
   'product-editor': 'mini-app-editor',
   // New order is a sub-page of Orders (§1.7a takeover) — the parent stays lit.
   'orders-new': 'orders',
+  // One material is a sub-page of Materials, the same takeover.
+  'materials-record': 'materials',
 };
 
 var _railAnimTimer = null;  // var: the helpers below are hoisted and may be

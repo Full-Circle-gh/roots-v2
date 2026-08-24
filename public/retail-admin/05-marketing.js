@@ -1290,6 +1290,10 @@ const FEATURE_HOMES = {
   faq:         '#tab-faq',
   quickStock:  '#qs-home',
   kitchenAdd:  '#ka-home',
+  // Materials' own page is a rail tab, not a Settings panel — so its switch
+  // lives in Settings → Operations beside Quick Stock, next to the other two
+  // things a tenant turns on or off wholesale.
+  materials:   '#mat-settings-home',
 };
 let _cfgCache = {};
 // Inject an on/off bar + an "off / enable" card at the top of each feature's home

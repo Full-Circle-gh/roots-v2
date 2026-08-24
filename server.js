@@ -368,6 +368,7 @@ app.use('/api/pay', require('./middleware/public-tenant').publicTenantScope);
 app.use(require('./routes/retail'));
 app.use(require('./routes/retail-inventory'));
 app.use(require('./routes/retail-purchasing')); // online store buying dept: suppliers + retail POs
+app.use(require('./routes/retail-materials')); // Materials (物料) — the shared ingredients masterlist, backend door
 app.use(require('./routes/retail-setup')); // new-tenant "Open your store" setup guide (auto-detected checklist)
 app.use(require('./routes/retail-page-templates')); // product editor: imported custom templates
 app.use('/api/internal/meituan', require('./routes/meituan-internal')); // daemon-only, localhost

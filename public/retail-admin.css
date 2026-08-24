@@ -3841,6 +3841,7 @@
   body:not(.ent-socialProof) [data-feat="socialProof"],
   body:not(.ent-quickStock)  [data-feat="quickStock"],
   body:not(.ent-kitchenAdd)  [data-feat="kitchenAdd"],
+  body:not(.ent-materials)   [data-feat="materials"],
   body:not(.ent-faq)         [data-feat="faq"] { display: none !important; }
   /* Inbox group holds ONLY Reviews + Feedback — hide it only when NEITHER is
      entitled (off items just dim inside it, so the group still has something). */
@@ -3853,6 +3854,16 @@
   body.ent-socialProof:not(.feat-socialProof) .tabs [data-feat="socialProof"],
   body.ent-quickStock:not(.feat-quickStock)   .tabs [data-feat="quickStock"],
   body.ent-faq:not(.feat-faq)                 .tabs [data-feat="faq"] { opacity: .5; }
+  /* Materials is the exception to the dim-with-an-OFF-pill rule above, and it is
+     deliberate. Option B dims rather than hides because the feature's own page
+     is where its switch lives — you sit on that row to turn it back on. The
+     Materials switch does NOT live on the Materials page; it is in Settings →
+     Operations. So a dimmed row here would lead to a page that still works,
+     wearing a badge that says it doesn't. Hidden is the honest answer; the
+     switch is still reachable where it actually is.
+     Scoped to .tabs so it never reaches #mat-settings-home, which carries the
+     same data-feat and must keep showing its own switch while off. */
+  body.ent-materials:not(.feat-materials) .tabs [data-feat="materials"] { display: none !important; }
   body.ent-membership:not(.feat-membership) .tabs [data-feat="membership"]::after,
   body.ent-affiliate:not(.feat-affiliate)   .tabs [data-feat="affiliate"]::after,
   body.ent-reviews:not(.feat-reviews)       .tabs [data-feat="reviews"]::after,
@@ -3942,12 +3953,14 @@
   body.ent-socialProof:not(.feat-socialProof) #tab-social     > :not(.feat-bar):not(.feat-off),
   body.ent-quickStock:not(.feat-quickStock)   #qs-home > :not(.feat-bar):not(.feat-off),
   body.ent-kitchenAdd:not(.feat-kitchenAdd)   #ka-home > :not(.feat-bar):not(.feat-off),
+  body.ent-materials:not(.feat-materials)     #mat-settings-home > :not(.feat-bar):not(.feat-off),
   body.ent-faq:not(.feat-faq)                 #tab-faq        > :not(.feat-bar):not(.feat-off) { display: none !important; }
   body.ent-membership:not(.feat-membership)   #tab-membership .feat-off,
   body.ent-feedback:not(.feat-feedback)       #tab-feedback   .feat-off,
   body.ent-socialProof:not(.feat-socialProof) #tab-social     .feat-off,
   body.ent-quickStock:not(.feat-quickStock)   #qs-home .feat-off,
   body.ent-kitchenAdd:not(.feat-kitchenAdd)   #ka-home .feat-off,
+  body.ent-materials:not(.feat-materials)     #mat-settings-home .feat-off,
   body.ent-faq:not(.feat-faq)                 #tab-faq        .feat-off { display: block; }
   /* feature on/off bar + enable card (mounted at the top of each feature page).
      Tacet-native: quiet card, ink primary action — amber/brass stay reserved
@@ -11796,4 +11809,180 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
     font-size: 13px; font-weight: 500; letter-spacing: 0;
     text-transform: none; text-align: left;
     padding: 12px 14px; border-bottom: 1px solid var(--td-border);
+  }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Materials (物料) — #tab-materials (list) + #tab-materials-record (record)
+   Painted by public/retail-admin/18-materials.js.
+
+   ONE layer, on the --td-* tokens the rest of the Tacet surfaces already use.
+   Every class is mat-* and every rule is scoped to one of the two sections:
+   the base stylesheet owns short names like .right / .lbl / .hint, and an
+   unscoped rule here would reach them across the whole admin.
+
+   mat-, not mt- — Meituan owns mt-.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+  #tab-materials h1, #tab-materials h3,
+  #tab-materials-record h1, #tab-materials-record h3 {
+    font-family: var(--f-sans); font-weight: 500; color: var(--td-text);
+    text-transform: none; letter-spacing: -.01em; margin: 0;
+  }
+
+  /* ── page head ── */
+  #tab-materials .mat-pagehead { margin: 2px 0 0; }
+  #tab-materials .mat-eyebrow { font: 500 11px var(--f-sans); letter-spacing: .14em;
+    text-transform: uppercase; color: var(--td-text2); margin: 0 0 6px; }
+  #tab-materials .mat-title { font-size: 24px; margin: 0 0 5px; }
+  #tab-materials .mat-sub { font-size: 13.5px; color: var(--td-text2); max-width: 64ch; margin: 0; }
+
+  /* ── kind chips — the count is the point, so it reads as the number ── */
+  #tab-materials .mat-chiprow { display: flex; gap: 8px; flex-wrap: wrap; margin: 22px 0 0; }
+  #tab-materials .mat-chip { appearance: none; cursor: pointer;
+    background: transparent; border: 1px solid var(--td-border); border-radius: 999px;
+    padding: 6px 14px; font: 400 13px var(--f-sans); color: var(--td-text2);
+    display: inline-flex; align-items: baseline; gap: 8px;
+    transition: color .2s cubic-bezier(.16,1,.3,1), border-color .2s cubic-bezier(.16,1,.3,1); }
+  #tab-materials .mat-chip:hover { color: var(--td-text); border-color: var(--td-text2); }
+  #tab-materials .mat-chip.on { color: var(--td-paper); background: var(--td-text); border-color: var(--td-text); }
+  #tab-materials .mat-chip b { font-weight: 600; font-size: 12.5px; }
+
+  /* ── filters ── */
+  #tab-materials .mat-filters { display: flex; align-items: center; gap: 10px;
+    flex-wrap: wrap; margin: 18px 0 16px; }
+  #tab-materials .mat-spacer { margin-left: auto; }
+  #tab-materials .mat-srch { position: relative; display: inline-flex; align-items: center; min-width: 260px; }
+  #tab-materials .mat-srch .mat-ic { position: absolute; left: 11px; color: var(--td-text2); pointer-events: none; }
+  #tab-materials .mat-srch .mat-input { padding-left: 34px; }
+  #tab-materials .mat-sel { width: auto; min-width: 160px; }
+  #tab-materials .mat-check { display: inline-flex; align-items: center; gap: 7px;
+    font: 400 13px var(--f-sans); color: var(--td-text2); cursor: pointer; }
+
+  /* ── shared controls (both sections) ── */
+  #tab-materials .mat-input, #tab-materials-record .mat-input {
+    border: 1px solid var(--td-border); border-radius: 8px; background: var(--td-surface, #fff);
+    padding: 9px 12px; font: 400 14px var(--f-sans); color: var(--td-text); width: 100%; }
+  #tab-materials .mat-input:focus, #tab-materials-record .mat-input:focus {
+    outline: none; border-color: var(--td-dusk); }
+  #tab-materials-record textarea.mat-input { resize: vertical; }
+  #tab-materials select.mat-input, #tab-materials-record select.mat-input { color-scheme: dark; }
+  :root[data-theme="light"] #tab-materials select.mat-input,
+  :root[data-theme="light"] #tab-materials-record select.mat-input { color-scheme: light; }
+
+  #tab-materials .mat-btn, #tab-materials-record .mat-btn {
+    display: inline-flex; align-items: center; gap: 7px; cursor: pointer;
+    background: transparent; border: 1px solid var(--td-border); border-radius: 9px;
+    padding: 8px 14px; font: 400 13.5px var(--f-sans); color: var(--td-text);
+    transition: border-color .2s cubic-bezier(.16,1,.3,1), background .2s cubic-bezier(.16,1,.3,1); }
+  #tab-materials .mat-btn:hover, #tab-materials-record .mat-btn:hover { border-color: var(--td-text2); }
+  #tab-materials .mat-btn.primary, #tab-materials-record .mat-btn.primary {
+    background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
+  #tab-materials .mat-btn.primary:hover, #tab-materials-record .mat-btn.primary:hover { background: #232f47; }
+  #tab-materials .mat-btn.ghost, #tab-materials-record .mat-btn.ghost {
+    border-color: transparent; color: var(--td-text2); }
+  #tab-materials .mat-btn.ghost:hover, #tab-materials-record .mat-btn.ghost:hover {
+    color: var(--td-text); background: var(--td-raised); }
+  #tab-materials-record .mat-btn.danger { border-color: transparent; color: var(--td-brick-ink); }
+  #tab-materials-record .mat-btn.danger:hover { background: var(--td-brick-tint); }
+  #tab-materials .mat-btn.sm, #tab-materials-record .mat-btn.sm { padding: 5px 11px; font-size: 13px; }
+  #tab-materials .mat-ic, #tab-materials-record .mat-ic { display: inline-flex; align-items: center; }
+  #tab-materials .mat-ic svg, #tab-materials-record .mat-ic svg { width: 14px; height: 14px; display: block; }
+  #tab-materials-record .mat-btn svg { width: 15px; height: 15px; }
+
+  #tab-materials .mat-card, #tab-materials-record .mat-card {
+    background: var(--td-surface, #fff); border: 1px solid var(--td-border);
+    border-radius: 14px; clip-path: inset(0 round 14px); }
+  #tab-materials .mat-num, #tab-materials-record .mat-num,
+  #tab-materials .mat-mono, #tab-materials-record .mat-mono {
+    font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+  #tab-materials .mat-sub2, #tab-materials-record .mat-sub2 {
+    font-size: 12.5px; color: var(--td-text2); margin-top: 2px; }
+  #tab-materials .mat-per, #tab-materials-record .mat-per {
+    color: var(--td-text2); font-weight: 400; font-size: 12px; }
+
+  /* ── table ── */
+  #tab-materials .mat-tblwrap { overflow-x: auto; }
+  #tab-materials .mat-tbl { width: 100%; border-collapse: collapse; font-size: 14px; }
+  #tab-materials .mat-tbl th { text-align: left; font: 500 11px var(--f-sans); letter-spacing: .08em;
+    text-transform: uppercase; color: var(--td-text2); background: transparent;
+    padding: 14px 16px 10px; border-bottom: 1px solid var(--td-border); white-space: nowrap; }
+  #tab-materials .mat-tbl td { padding: 13px 16px; border-bottom: 1px solid var(--td-border); vertical-align: middle; }
+  #tab-materials .mat-tbl tr:last-child td { border-bottom: none; }
+  #tab-materials .mat-tbl tbody tr { cursor: pointer; transition: background .2s cubic-bezier(.16,1,.3,1); }
+  #tab-materials .mat-tbl tbody tr:hover { background: var(--td-raised); }
+  #tab-materials .mat-tbl .right { text-align: right; }
+  #tab-materials .mat-name { font-weight: 500; color: var(--td-text); }
+  #tab-materials .mat-tag { display: inline-flex; align-items: center;
+    border: 1px solid var(--td-border); border-radius: 6px; padding: 2px 8px;
+    font-size: 12px; color: var(--td-text2); white-space: nowrap; }
+
+  /* ── empty / loading ── */
+  #tab-materials .mat-loading { color: var(--td-text2); padding: 40px 0; text-align: center; }
+  #tab-materials .mat-emptyline, #tab-materials-record .mat-emptyline {
+    text-align: center; color: var(--td-text2); font-size: 13px; padding: 16px 8px; }
+  #tab-materials .mat-empty { text-align: center; padding: 54px 24px 58px; }
+  #tab-materials .mat-empty-ico { color: var(--td-text2); margin: 0 auto 6px; }
+  #tab-materials .mat-empty-ico svg { width: 34px; height: 34px; margin: 0 auto; }
+  #tab-materials .mat-empty h3 { font-size: 17px; margin: 8px 0 6px; }
+  #tab-materials .mat-empty p { font-size: 13.5px; color: var(--td-text2); max-width: 46ch; margin: 0 auto; }
+
+  /* ══ THE RECORD — a full page, not a drawer ═══════════════════════════════
+     Same takeover mechanism as Orders → New order (body.ord-viewing): while
+     body.mat-viewing is set, main pins below the 56px topbar and clips, every
+     other section is display:none, and this one — out-specificity-ing the
+     generic `main > section { display:none }` via its id — owns the fixed
+     content height and scrolls inside .mat-scroll. Rail + topbar stay put. */
+  body.mat-viewing main > section { display: none; }
+  body.mat-viewing main { padding: 56px 0 0; overflow: hidden; }
+  body.mat-viewing main > section#tab-materials-record.active {
+    display: flex; flex-direction: column;
+    height: calc(100vh - 56px); min-height: 0; overflow: hidden;
+  }
+  body.mat-viewing #tab-materials-record .mat-scroll { flex: 1; min-height: 0; overflow: auto; }
+  #tab-materials-record .mat-page { padding: 22px var(--s6) var(--s6); }
+
+  /* One exit, one title, the two actions — nothing else in the bar. */
+  #tab-materials-record .mat-rechead { display: flex; align-items: center; gap: 14px;
+    flex-wrap: wrap; margin-bottom: 22px; }
+  #tab-materials-record .mat-rectitle { font-size: 21px; }
+  #tab-materials-record .mat-recacts { margin-left: auto; display: flex; gap: 9px; }
+
+  /* Two columns: the form, and the read-only history beside it. The side column
+     is a real grid track, not a float — it drops under the form on a narrow
+     window rather than squeezing the fields. */
+  #tab-materials-record .mat-recgrid { display: grid; grid-template-columns: minmax(0,1fr) 320px;
+    gap: 18px; align-items: start; }
+  #tab-materials-record .mat-reccol, #tab-materials-record .mat-recside {
+    display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+
+  #tab-materials-record .mat-blk { padding: 22px 24px; }
+  #tab-materials-record .mat-blk-h { font-size: 15px; margin: 0 0 16px; }
+  #tab-materials-record .mat-fgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 22px; }
+  #tab-materials-record .mat-fgrid[hidden] { display: none; }
+  #tab-materials-record .mat-fgrid + .mat-fgrid { margin-top: 16px; }
+  #tab-materials-record .mat-f { display: flex; flex-direction: column; min-width: 0; }
+  #tab-materials-record .mat-f .lbl { font-weight: 500; color: var(--td-text); font-size: 13px; margin-bottom: 6px; }
+  #tab-materials-record .mat-f .hint { font-size: 12px; color: var(--td-text2); margin-top: 5px; }
+  #tab-materials-record .mat-check { display: inline-flex; align-items: center; gap: 8px;
+    font: 400 13px var(--f-sans); color: var(--td-text2); cursor: pointer; }
+  #tab-materials-record .mat-freebox { margin-top: 16px; }
+
+  /* The derived cost, and — when it cannot be derived — the reason why. A blank
+     here would read as "zero", which is the one thing it never means. */
+  #tab-materials-record .mat-costline { margin-top: 16px; padding-top: 14px;
+    border-top: 1px solid var(--td-border); font-size: 13.5px; color: var(--td-text2); }
+  #tab-materials-record .mat-costline b { font-size: 17px; font-weight: 600; color: var(--td-text); margin-left: 6px; }
+  #tab-materials-record .mat-costwhy { color: var(--td-amber-ink); }
+
+  #tab-materials-record .mat-mini { display: flex; flex-direction: column; }
+  #tab-materials-record .mat-minirow { display: flex; align-items: baseline;
+    justify-content: space-between; gap: 12px; padding: 8px 0;
+    border-bottom: 1px solid var(--td-border); font-size: 13px; }
+  #tab-materials-record .mat-minirow:last-child { border-bottom: none; }
+
+  @media (max-width: 1100px) {
+    #tab-materials-record .mat-recgrid { grid-template-columns: minmax(0,1fr); }
+  }
+  @media (max-width: 760px) {
+    #tab-materials-record .mat-fgrid { grid-template-columns: 1fr; }
   }

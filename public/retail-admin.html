@@ -1292,6 +1292,15 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2 7h11v9H2z"/><path d="M13 10h4l4 3v3h-8"/><circle cx="6" cy="19" r="1.8"/><circle cx="17" cy="19" r="1.8"/></svg>
     Purchasing · 采购
   </button>
+  <!-- Materials (物料) — what the business buys and holds but doesn't sell.
+       Purchasing's sibling: a PO orders a material, the masterlist outlives the
+       order. data-feat gates the whole row on the tenant switch (Settings →
+       Operations); when Materials is off the row is gone, not dimmed — the FAQ
+       precedent, because a rail tab that leads nowhere is worse than silence. -->
+  <button data-tab="materials" data-feat="materials" onclick="matInit()" style="order:9">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 4 7v10l8 4 8-4V7Z"/><path d="M4 7l8 4 8-4M12 11v10"/></svg>
+    Materials · 物料
+  </button>
 
   <!-- Content — a FOLDER, not a destination (rail drill-down amendment §2.2,
        2026-07-29). It was "Editor": a group that was also a live tab, the only
@@ -10114,6 +10123,20 @@
             </div>
           </div>
 
+          <!-- ── Materials (物料) ── -->
+          <!-- The on/off switch (.feat-bar) and the "off" card are injected at
+               the top of #mat-settings-home by mountFeatureControls()
+               (05-marketing.js), driven by FEATURE_CATALOG/FEATURE_HOMES.
+               Everything below is the "on" content. -->
+          <div id="mat-settings-home" data-feat="materials">
+            <div class="group-card">
+              <div class="group-card-head">
+                <h3>Materials · 物料</h3>
+                <div class="muted">The list of everything you buy and hold but don't sell — ingredients, packaging, equipment, supplies. Each one records what you pay per pack, and the cost per unit is worked out from that, so recipes and purchase orders price themselves. Turn this off if you don't stock anything: the Materials tab disappears from the sidebar. · 你采购并库存但不出售的物品清单 —— 原料、包装、设备、耗材。每条记录整包价格,并据此折算单位成本,配方与采购单即可自动计价。若你无需库存,可关闭此功能:侧边栏中的“物料”将不再显示。</div>
+              </div>
+            </div>
+          </div>
+
           <!-- ── Order routing: Maps geocoding ── -->
           <div class="group-card">
             <div class="group-card-head">
@@ -11014,6 +11037,35 @@
            Full Circle identity) is gone; the purchasing pane renders its own
            Tacet page-head + sub-nav in 16-purchasing.js (puChrome). -->
       <div id="pu2-root" data-no-i18n></div>
+    </div>
+  </section>
+
+  <!-- ── Materials (物料) ────────────────────────────────────────────────
+       Two SIBLING sections, not one root with swapped screens: the record is a
+       full page reached through the RAIL_STANDIN takeover (01-core.js), the
+       same shape Orders → New order uses. Both are painted by
+       retail-admin/18-materials.js; data-no-i18n because every string in them
+       is either baked by cuT() or outside-system text (names, SKUs). -->
+  <section id="tab-materials">
+    <div id="mat-root" data-no-i18n></div>
+  </section>
+
+  <section id="tab-materials-record">
+    <div class="mat-scroll" id="mat-rec-scroll">
+      <div class="mat-page" data-no-i18n>
+        <div class="mat-rechead">
+          <button type="button" class="mat-btn ghost sm" onclick="matRecordBack()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m14 18-6-6 6-6"/></svg>
+            <span id="mat-rec-backlbl"></span>
+          </button>
+          <h1 class="mat-rectitle" id="mat-rec-title"></h1>
+          <div class="mat-recacts">
+            <button type="button" class="mat-btn danger" id="mat-rec-arch" data-cap="materials:edit" onclick="matArchive()"></button>
+            <button type="button" class="mat-btn primary" id="mat-rec-save" data-cap="materials:edit" onclick="matSave()"></button>
+          </div>
+        </div>
+        <div id="mat-rec-body"></div>
+      </div>
     </div>
   </section>
 
@@ -12119,6 +12171,12 @@
 <script src="/assets/retail-admin/15-integrations.js"></script>
 <script src="/assets/retail-admin/16-purchasing.js"></script>
 <script src="/assets/retail-admin/17-setup-guide.js"></script>
+<!-- The one cost derivation, shared with the server (lib/ingredient-cost.js).
+     Loaded over HTTP rather than copied, so the Materials form can never do
+     different maths from the route that stores the number. Must come BEFORE
+     18-materials.js, which reads its unit tables at paint time. -->
+<script src="/lib/ingredient-cost.js"></script>
+<script src="/assets/retail-admin/18-materials.js"></script>
 
 <!-- Live Preview drawer — mounts an iframe of /storefront in a phone frame -->
 <aside id="live-preview-drawer" class="side-drawer dw-live-preview" aria-hidden="true">
