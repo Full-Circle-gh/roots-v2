@@ -65,7 +65,7 @@ for (const t of ['home', 'orders', 'customers', 'products', 'more']) CASES['tab:
 
 // The probe, run inside the app page after it has settled.
 const PROBE = `
-  var VW = 390, out = { wide: [], clip: [], tiny: [], edge: [], headGap: null, doc: 0 };
+  var VW = 390, out = { wide: [], clip: [], tiny: [], edge: [], headGap: null, doc: 0, tall: null };
   // The page head is a band closed by a hairline. Whatever comes next must not
   // sit ON that hairline — moving the status line up into the band removed the
   // spacer it had been providing, and Orders' filter chips came to rest exactly
@@ -99,7 +99,26 @@ const PROBE = `
     }
     if (top != null) out.headGap = Math.round(top - head.getBoundingClientRect().bottom);
   })();
-  out.doc = document.documentElement.scrollWidth;
+  /* The app is as tall as the screen, and its last row — the tab bar — is on
+     it. Both halves get measured, because the way this breaks is that the app
+     is laid out against a viewport height the phone has since changed its mind
+     about: everything inside is correct, the box holding it is simply taller
+     than the glass, and the bar spends the whole session below the fold with
+     nothing able to scroll it back. See the data-boot="viewport" script. */
+  (function(){
+    var app=document.getElementById('app'), bar=document.querySelector('.tabbar');
+    if(!app) return;
+    var a=app.getBoundingClientRect();
+    out.tall={ app:Math.round(a.height), win:innerHeight,
+      bar: bar?Math.round(bar.getBoundingClientRect().bottom):null };
+  })();
+  // The scroller, not the document. html and body are overflow:hidden now — the
+  // page cannot be dragged in either direction, by design (see "The app, not
+  // the page" in m.html) — so documentElement.scrollWidth is clamped to the
+  // viewport and this check could never fire again. .content is where the app
+  // actually scrolls, and its scrollWidth still grows with anything too wide.
+  out.doc = (function(){ var c=document.getElementById('content');
+    return c ? c.scrollWidth : document.documentElement.scrollWidth; })();
   var all = document.querySelectorAll('#app *');
   for (var i = 0; i < all.length; i++) {
     var el = all[i], r = el.getBoundingClientRect();
@@ -159,7 +178,7 @@ function main() {
      <iframe src="p.html"></iframe>`);
 
   const names = Object.keys(CASES).filter((n) => !FILTER || n.includes(FILTER)).sort();
-  const clips = []; const wides = []; const tinies = []; const edges = []; const headGaps = [];
+  const clips = []; const wides = []; const tinies = []; const edges = []; const headGaps = []; const offs = [];
   let scanned = 0;
   for (const name of names) {
     const boot = `<script>addEventListener("load",function(){try{${SEED}${ROWS}${CASES[name]}}catch(e){}
@@ -175,7 +194,11 @@ function main() {
     if (!m) { const t = (out.match(/<title>([^<]*)<\/title>/) || [])[1] || ''; if (t.startsWith('ERR')) console.error(`  ! ${name}: ${t}`); continue; }
     scanned++;
     let g; try { g = JSON.parse(m[1]); } catch (e) { continue; }
-    if (g.doc > 391) wides.push([name, `page scrolls sideways (${g.doc}px)`]);
+    if (g.doc > 391) wides.push([name, `content scrolls sideways (${g.doc}px)`]);
+    if (g.tall) {
+      if (Math.abs(g.tall.app - g.tall.win) > 1) offs.push([name, `the app is ${g.tall.app}px tall in a ${g.tall.win}px screen`]);
+      else if (g.tall.bar != null && g.tall.bar > g.tall.win + 1) offs.push([name, `the tab bar ends ${g.tall.bar - g.tall.win}px below the screen`]);
+    }
     if (g.headGap != null && g.headGap < 8) headGaps.push([name, g.headGap]);
     for (const w of g.wide) wides.push([name, `${w.cls}: w=${w.w} right=${w.right} "${w.t}"`]);
     for (const c of g.clip) clips.push([name, c.t, c.over, c.box]);
@@ -190,6 +213,12 @@ function main() {
     for (const [n, w] of wides.slice(0, 40)) console.log(`  ${n}  ${w}`);
     console.log('');
   } else console.log('OVERFLOW — none. No screen is wider than the phone.\n');
+
+  if (offs.length) {
+    console.log(`OFF THE BOTTOM OF THE SCREEN — ${offs.length}:`);
+    for (const [n, w] of offs.slice(0, 20)) console.log(`  ${n}  ${w}`);
+    console.log('');
+  } else console.log('OFF THE BOTTOM OF THE SCREEN — none. The app fits the screen and the tab bar is on it.\n');
 
   if (tinies.length) {
     console.log(`BELOW 11px — ${tinies.length}:`);
@@ -215,6 +244,6 @@ function main() {
   const list = [...uniq.values()].sort((a, b) => b.over - a.over);
   console.log(`CLIPPED TEXT — ${list.length} distinct:`);
   for (const c of list.slice(0, 40)) console.log(`  ${String(c.over).padStart(4)}px over (box ${c.box})  ${c.n}  "${c.t}"`);
-  process.exit(wides.length || edges.length || headGaps.length ? 1 : 0);
+  process.exit(wides.length || edges.length || headGaps.length || offs.length ? 1 : 0);
 }
 main();
