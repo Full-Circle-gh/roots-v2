@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — Meituan product mapping, lighter directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================================
+   MEITUAN -> PRODUCTS TAB — three lighter directions. Static, no live data.
+
+   The complaint: the shipped table is heavy. Every row carries a bordered
+   input, a pill, an explanation sentence and a timestamp — whether or not
+   anything is wrong. 231 healthy rows shout as loudly as the 5 broken ones.
+
+   What every direction below removes (the shared diet):
+     1. The per-row input. A name that is already correct is TEXT. The field
+        appears on click. (Removes ~40 bordered boxes per screen.)
+     2. The "Synced" pill. All-clear is a sage dot; the listing name beside it
+        is the proof. A pill is for a state that is NOT the default.
+     3. The per-row instruction sentence ("No listing carries SKU 5-30 yet —
+        add it on the marketplace and this links itself"). It is identical on
+        every unlinked row, so it is said ONCE, at the group.
+     4. The per-row "Last 18 - 5h ago". Push freshness is a page fact, not a
+        row fact — the store lines above the table already report it. Kept on
+        hover, and in direction C's panel.
+     5. The SKU chip's border and fill. A SKU is quiet metadata: graphite
+        text, tabular figures.
+     6. Thumbnails 40px -> 32px. Rows go from ~100px to 48px.
+
+   A - Quiet table   — same three columns, one line per cell. Safest.
+   B - Exceptions    — the work, grouped by reason, above a folded "Working".
+   C - List + panel  — one-line list, all editing in a panel to the right.
+
+   Tokens are the live --td-* block from public/retail-admin.css (dark :root +
+   light [data-theme]), pasted verbatim. English only. No monospace anywhere.
+   ============================================================================ */
+
+:root {
+  /* Tacet tokens — dark theme first (admin default). Paper/Ink swap in
+     light; sage/amber/brick hold their roles in both. */
+  --td-surface:    #18233A;
+  --td-raised:     #1E2A44;
+  --td-border:     #2A3550;
+  --td-header:     #364058;
+  --td-unseen:     #182329;
+  --td-text:       #FBF9F4;
+  --td-text2:      #9AA3B2;
+  --td-heat-rgb:   251, 249, 244;
+  --td-dusk:       #6E67AF;
+  --td-dusk-hi:    #7E77BF;
+  --td-dusk-tint:  #262A4A;
+  --td-sage:       #A3B49F;
+  --td-sage-tint:  #1E2C26;
+  --td-sage-ink:   #A3B49F;
+  --td-amber:      #C9954A;
+  --td-amber-tint: #33290F;
+  --td-amber-ink:  #C9954A;
+  --td-brick:      #B4533E;
+  --td-brick-tint: #351B14;
+  --td-brick-ink:  #D07A66;
+  /* The page ground is not in the --td-* block (the shell owns it): Ink in
+     dark, Paper in light, per tacet-design-system.md section 1. */
+  --td-paper:      #12161A;
+}
+:root[data-theme="light"] {
+  --td-surface:    #FFFFFF;
+  --td-raised:     #F6F3EC;
+  --td-border:     #E4E0D5;
+  --td-header:     #DAD5C6;
+  --td-unseen:     #F4F5F0;
+  --td-text:       #111A2B;
+  --td-text2:      #58606E;
+  --td-heat-rgb:   17, 26, 43;
+  --td-dusk-tint:  #EEEDF6;
+  --td-sage-tint:  #EDF1EC;
+  --td-sage-ink:   #4A6249;
+  --td-amber-tint: #F7EEDE;
+  --td-amber-ink:  #8A6425;
+  --td-brick-tint: #F6E7E3;
+  --td-brick-ink:  #B4533E;
+  --td-paper:      #FBF9F4;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--td-text);
+  background: var(--td-paper);
+  -webkit-font-smoothing: antialiased;
+}
+.num { font-variant-numeric: tabular-nums; }
+
+/* ── mockup chrome (not part of the design) ──────────────────────────────── */
+.sheet { max-width: 1180px; margin: 0 auto; padding: 48px 32px 96px; }
+.sheet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 48px; }
+.sheet-head h1 { font-size: 24px; font-weight: 500; letter-spacing: -0.01em; }
+.sheet-head p { font-size: 15px; color: var(--td-text2); margin-top: 4px; max-width: 680px; }
+.themebtn {
+  font: 400 13px/1 inherit; color: var(--td-text2); background: var(--td-surface);
+  border: 1px solid var(--td-border); border-radius: 999px; padding: 8px 16px; cursor: pointer; flex: none;
+}
+.themebtn:hover { color: var(--td-text); }
+.caption { margin: 0 0 16px; font-size: 13px; color: var(--td-text2); }
+.caption b { font-weight: 500; color: var(--td-text); }
+.frame {
+  background: var(--td-paper); border: 1px solid var(--td-border); border-radius: 14px;
+  padding: 32px; margin-bottom: 16px;
+  box-shadow: 0 1px 2px rgba(17,26,43,0.05), 0 4px 16px rgba(17,26,43,0.04);
+}
+.notes { margin: 0 0 64px; padding-left: 18px; font-size: 13px; color: var(--td-text2); }
+.notes li { margin-bottom: 4px; }
+.notes b { font-weight: 500; color: var(--td-text); }
+
+/* ── page header (1.7): title, status line, one Dusk action ──────────────── */
+.ph { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; margin-bottom: 24px; }
+.ph h2 { font-size: 24px; font-weight: 500; letter-spacing: -0.01em; }
+.ph .status { font-size: 15px; color: var(--td-text2); margin-top: 4px; }
+.ph .status .att { color: var(--td-amber-ink); }
+.btn-dusk {
+  font: 500 15px/1 inherit; color: #FBF9F4; background: var(--td-dusk);
+  border: 0; border-radius: 8px; padding: 12px 20px; cursor: pointer; flex: none;
+  transition: background 200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.btn-dusk:hover { background: var(--td-dusk-hi); }
+.btn-sec {
+  font: 400 13px/1 inherit; color: var(--td-text2); background: transparent;
+  border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; cursor: pointer;
+}
+.btn-sec:hover { color: var(--td-text); }
+
+/* ── filter chips ────────────────────────────────────────────────────────── */
+.chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.chip {
+  font: 400 13px/1 inherit; color: var(--td-text2); background: var(--td-surface);
+  border: 1px solid var(--td-border); border-radius: 999px; padding: 8px 16px; cursor: pointer;
+}
+.chip .c { font-variant-numeric: tabular-nums; margin-left: 4px; opacity: .7; }
+.chip.on { background: var(--td-text); border-color: var(--td-text); color: var(--td-paper); }
+.chip:not(.on):hover { color: var(--td-text); }
+
+/* ── the shared row parts ────────────────────────────────────────────────── */
+.thumb {
+  width: 32px; height: 32px; border-radius: 8px; flex: none;
+  background: var(--td-raised); border: 1px solid var(--td-border);
+}
+.pcell { display: flex; align-items: center; gap: 16px; min-width: 0; }
+.pname { font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.psku { font-size: 13px; color: var(--td-text2); font-variant-numeric: tabular-nums; margin-left: 8px; }
+
+.dot { width: 8px; height: 8px; border-radius: 999px; flex: none; display: inline-block; }
+.dot.ok   { background: var(--td-sage); }
+.dot.att  { background: var(--td-amber); }
+.dot.none { background: transparent; border: 1px solid var(--td-text2); opacity: .6; }
+
+.state { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.state .txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.state .txt.quiet { color: var(--td-text2); }
+/* a name that is text until you click it */
+.editable { border-bottom: 1px dashed transparent; cursor: text; }
+tr:hover .editable, .lrow:hover .editable { border-bottom-color: var(--td-border); }
+.needs { color: var(--td-amber-ink); }
+
+/* ── table ───────────────────────────────────────────────────────────────── */
+table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+thead th {
+  background: var(--td-header); color: var(--td-text);
+  font: 500 13px/1.6 inherit; text-align: left; white-space: nowrap;
+  padding: 8px 16px; border-bottom: 1px solid var(--td-border);
+}
+tbody td { padding: 8px 16px; border-bottom: 1px solid var(--td-border); vertical-align: middle; height: 48px; }
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr:hover td { background: var(--td-unseen); }
+.tbl { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; overflow: hidden; }
+
+/* the option picker exists only on the rows that need one */
+select.spec {
+  font: 400 13px/1 inherit; color: var(--td-text); background: var(--td-surface);
+  border: 1px solid var(--td-amber); border-radius: 8px; padding: 8px 32px 8px 8px; max-width: 100%;
+  -webkit-appearance: none; appearance: none; cursor: pointer;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2358606E' stroke-width='2' stroke-linecap='round'><path d='M6 9l6 6 6-6'/></svg>");
+  background-repeat: no-repeat; background-position: right 8px center;
+}
+input.name {
+  font: 400 15px/1 inherit; color: var(--td-text); background: var(--td-surface);
+  border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; width: 100%;
+}
+input.name::placeholder { color: var(--td-text2); }
+
+/* ── B - exception groups ────────────────────────────────────────────────── */
+.group { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px; margin-bottom: 16px; overflow: hidden; }
+.group > header { display: flex; align-items: baseline; gap: 8px; padding: 16px 24px 8px; }
+.group > header .t { font-size: 18px; font-weight: 500; }
+.group > header .n { font-size: 15px; color: var(--td-text2); font-variant-numeric: tabular-nums; }
+.group .why { padding: 0 24px 16px; font-size: 13px; color: var(--td-text2); max-width: 720px; }
+.group .why b { font-weight: 500; color: var(--td-text); }
+.lrow { display: flex; align-items: center; gap: 16px; padding: 8px 24px; border-top: 1px solid var(--td-border); min-height: 48px; }
+.lrow .who { flex: 1 1 40%; min-width: 0; }
+.lrow .fix { flex: 1 1 45%; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.lrow .store { flex: 0 0 80px; font-size: 13px; color: var(--td-text2); }
+.group .more { padding: 8px 24px 16px; border-top: 1px solid var(--td-border); }
+.folded {
+  display: flex; align-items: center; gap: 16px;
+  background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px;
+  padding: 16px 24px; font-size: 15px; color: var(--td-text2);
+}
+.folded .n { color: var(--td-text); font-variant-numeric: tabular-nums; }
+.folded .sp { flex: 1; }
+.allclear { display: inline-flex; align-items: center; gap: 8px; color: var(--td-text); }
+
+/* ── C - list + panel ────────────────────────────────────────────────────── */
+.split { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; align-items: start; }
+.list { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; overflow: hidden; }
+.list .lhead { display: flex; align-items: center; gap: 16px; background: var(--td-header); padding: 8px 16px; font-size: 13px; font-weight: 500; border-bottom: 1px solid var(--td-border); }
+.list .lhead .sp { flex: 1; }
+.list .lhead .col { width: 56px; text-align: center; }
+.list .lrow { padding: 8px 16px; cursor: pointer; }
+.list .lrow:first-of-type { border-top: 0; }
+.list .lrow:hover { background: var(--td-unseen); }
+.list .lrow.sel { background: var(--td-unseen); box-shadow: inset 4px 0 0 var(--td-sage); }
+.list .lrow .who { flex: 1; }
+.list .lrow .dots { display: flex; gap: 16px; flex: none; }
+.list .lrow .dots span { width: 56px; display: flex; justify-content: center; }
+.panel { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px; padding: 24px; position: sticky; top: 24px; }
+.panel .ptop { display: flex; gap: 16px; align-items: center; margin-bottom: 16px; }
+.panel .ptop .thumb { width: 48px; height: 48px; }
+.panel .ptop .t { font-size: 18px; font-weight: 500; }
+.panel .ptop .s { font-size: 13px; color: var(--td-text2); font-variant-numeric: tabular-nums; }
+.pblock { border-top: 1px solid var(--td-border); padding-top: 16px; margin-top: 16px; }
+.pblock .ph2 { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.pblock .ph2 .nm { font-size: 15px; font-weight: 500; }
+.pblock .lbl { font-size: 13px; color: var(--td-text2); margin-bottom: 4px; }
+.pblock .fact { font-size: 13px; color: var(--td-text2); margin-top: 8px; }
+.pblock .fact b { font-weight: 500; color: var(--td-text); }
+
+/* the sync toggle, unchanged */
+.tog { position: relative; width: 36px; height: 20px; flex: none; }
+.tog i { position: absolute; inset: 0; border-radius: 999px; background: var(--td-raised); border: 1px solid var(--td-border); }
+.tog b { position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 999px; background: var(--td-text2); transition: 300ms cubic-bezier(0.16, 1, 0.3, 1); }
+.tog.on i { background: var(--td-sage-tint); border-color: var(--td-sage); }
+.tog.on b { left: 19px; background: var(--td-sage-ink); }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <div class="sheet-head">
+    <div>
+      <h1>Meituan product mapping — lighter directions</h1>
+      <p>The same data as the live Products tab, three ways. All three drop the per-row input box, the Synced pill, the repeated instruction sentence and the per-row timestamp. That is where the weight was.</p>
+    </div>
+    <button class="themebtn" onclick="document.documentElement.dataset.theme = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light'">Dark / light</button>
+  </div>
+
+  <!-- ═══════════════════════ A - QUIET TABLE ═══════════════════════════ -->
+  <p class="caption"><b>A - Quiet table</b> — same three columns, one line per cell. A healthy row is a sage dot and the listing name; only a row that needs a person grows a control.</p>
+  <div class="frame">
+
+    <div class="ph">
+      <div>
+        <h2>Meituan</h2>
+        <p class="status num">248 live &middot; <span class="att">5 need attention</span></p>
+      </div>
+      <button class="btn-dusk">Match names</button>
+    </div>
+
+    <div class="chips">
+      <button class="chip on">All <span class="c num">248</span></button>
+      <button class="chip">Needs attention <span class="c num">5</span></button>
+      <button class="chip">Synced <span class="c num">231</span></button>
+      <button class="chip">Has options <span class="c num">14</span></button>
+    </div>
+
+    <div class="tbl">
+      <table>
+        <colgroup><col style="width:38%"><col style="width:34%"><col style="width:28%"></colgroup>
+        <thead>
+          <tr><th>Product</th><th>Tianhe</th><th>Yuexiu</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><div class="pcell"><span class="thumb"></span><span class="pname">NOW Foods Double-Strength Iron<span class="psku num">5-30</span></span></div></td>
+            <td><div class="state"><span class="dot att"></span><span class="txt needs">Add a delivery name</span></div></td>
+            <td><div class="state"><span class="dot none"></span><span class="txt quiet">Not linked</span></div></td>
+          </tr>
+          <tr>
+            <td><div class="pcell"><span class="thumb"></span><span class="pname">Oatly Barista<span class="psku num">6-32</span></span></div></td>
+            <td>
+              <div class="state" style="gap:16px">
+                <span class="dot att"></span>
+                <select class="spec">
+                  <option>Which of the 3 options is this?</option>
+                  <option>1 bottle (4-770 x1) 1L</option>
+                  <option>2 bottles (4-771 x2) 2L</option>
+                  <option>Case of 6 (4-772 x6)</option>
+                </select>
+              </div>
+            </td>
+            <td><div class="state"><span class="dot none"></span><span class="txt quiet">Not linked</span></div></td>
+          </tr>
+          <tr title="Last push 2 units, 4h ago">
+            <td><div class="pcell"><span class="thumb"></span><span class="pname">Three-Bean Tempeh<span class="psku num">3-110</span></span></div></td>
+            <td><div class="state"><span class="dot ok"></span><span class="txt editable">Mix Beans Tempeh (frozen)</span></div></td>
+            <td><div class="state"><span class="dot ok"></span><span class="txt quiet">Mix Beans Tempeh 200g</span></div></td>
+          </tr>
+          <tr title="Last push 4 units, 5h ago">
+            <td><div class="pcell"><span class="thumb"></span><span class="pname">Smooth Sesame Tahini (Hulled)<span class="psku num">4-650</span></span></div></td>
+            <td><div class="state"><span class="dot ok"></span><span class="txt editable">Hulled Sesame Tahini</span></div></td>
+            <td><div class="state"><span class="dot ok"></span><span class="txt quiet">Hulled Sesame Tahini 410g</span></div></td>
+          </tr>
+          <tr title="Last push 3 units, 5h ago">
+            <td><div class="pcell"><span class="thumb"></span><span class="pname">Whole Sesame Tahini (Unhulled)<span class="psku num">4-640</span></span></div></td>
+            <td><div class="state"><span class="dot ok"></span><span class="txt editable">Whole Sesame Tahini</span></div></td>
+            <td><div class="state"><span class="dot ok"></span><span class="txt quiet">Whole Sesame Tahini 410g</span></div></td>
+          </tr>
+          <tr title="Last push 6 units, 5h ago">
+            <td><div class="pcell"><span class="thumb"></span><span class="pname">Hummus Asli<span class="psku num">2-210</span></span></div></td>
+            <td><div class="state"><span class="dot ok"></span><span class="txt editable">Hummus Asli 200g</span></div></td>
+            <td><div class="state"><span class="dot ok"></span><span class="txt quiet">Hummus Asli 200g</span></div></td>
+          </tr>
+          <tr>
+            <td><div class="pcell"><span class="thumb"></span><span class="pname">Cashew Cream Cheese<span class="psku num">2-240</span></span></div></td>
+            <td><div class="state"><span class="dot none"></span><span class="txt quiet">Sync off</span></div></td>
+            <td><div class="state"><span class="dot ok"></span><span class="txt quiet">Cashew Cream Cheese 150g</span></div></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+  <ul class="notes">
+    <li>Rows are <b>48px</b> against about 100px today — seven rows fit where three did.</li>
+    <li>The Yuexiu sentence survives in the <b>empty state</b> and behind the column header, not on every row. A row just says Not linked.</li>
+    <li>Last push moves to the row's hover text; the store lines above the table already report freshness per store.</li>
+    <li>Cheapest to ship: same markup, same columns, same filters — only the cell contents change.</li>
+  </ul>
+
+  <!-- ═══════════════════════ B - EXCEPTIONS FIRST ══════════════════════ -->
+  <p class="caption"><b>B - Exceptions first</b> — the page opens on the rows that need a person, grouped by reason, each group explaining itself once. The 231 healthy products fold into a single line.</p>
+  <div class="frame">
+
+    <div class="ph">
+      <div>
+        <h2>Meituan</h2>
+        <p class="status num">5 need attention &middot; 231 synced</p>
+      </div>
+      <button class="btn-dusk">Match names</button>
+    </div>
+
+    <div class="group">
+      <header><span class="t">Add a delivery name</span><span class="n num">2</span></header>
+      <p class="why">Tianhe matches by the listing's name, so stock stays frozen until the name is here. Start typing and the live listing titles appear.</p>
+      <div class="lrow">
+        <div class="who pcell"><span class="thumb"></span><span class="pname">NOW Foods Double-Strength Iron<span class="psku num">5-30</span></span></div>
+        <div class="store">Tianhe</div>
+        <div class="fix"><input class="name" placeholder="Delivery name"></div>
+      </div>
+      <div class="lrow">
+        <div class="who pcell"><span class="thumb"></span><span class="pname">Kimchi, small jar<span class="psku num">3-420</span></span></div>
+        <div class="store">Tianhe</div>
+        <div class="fix"><input class="name" placeholder="Delivery name"></div>
+      </div>
+    </div>
+
+    <div class="group">
+      <header><span class="t">Say which option this is</span><span class="n num">1</span></header>
+      <p class="why">Three products share one listing. Until this is answered <b>the same count goes to all three options</b>, which is worse than not pushing at all.</p>
+      <div class="lrow">
+        <div class="who pcell"><span class="thumb"></span><span class="pname">Oatly Barista<span class="psku num">6-32</span></span></div>
+        <div class="store">Tianhe</div>
+        <div class="fix">
+          <select class="spec">
+            <option>Pick an option...</option>
+            <option>1 bottle (4-770 x1) 1L</option>
+            <option>2 bottles (4-771 x2) 2L</option>
+            <option>Case of 6 (4-772 x6)</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div class="group">
+      <header><span class="t">Waiting on a SKU at Yuexiu</span><span class="n num">17</span></header>
+      <p class="why">Yuexiu links itself by SKU. These products are usually already listed there and simply missing the number — add it on the listing and the link appears here on its own. Nothing to do in this page.</p>
+      <div class="lrow">
+        <div class="who pcell"><span class="thumb"></span><span class="pname">NOW Foods Double-Strength Iron<span class="psku num">5-30</span></span></div>
+        <div class="store">Yuexiu</div>
+        <div class="fix"><span class="txt quiet">No listing carries 5-30 yet</span></div>
+      </div>
+      <div class="lrow">
+        <div class="who pcell"><span class="thumb"></span><span class="pname">Oatly Barista<span class="psku num">6-32</span></span></div>
+        <div class="store">Yuexiu</div>
+        <div class="fix"><span class="txt quiet">No listing carries 6-32 yet</span></div>
+      </div>
+      <div class="more"><button class="btn-sec">Show the other 15</button></div>
+    </div>
+
+    <div class="folded">
+      <span class="allclear"><span class="dot ok"></span>Working</span>
+      <span class="sp"></span>
+      <span><span class="n num">231</span> products synced on both stores &middot; last push <span class="num">5h</span> ago</span>
+      <button class="btn-sec">Show all</button>
+    </div>
+
+  </div>
+  <ul class="notes">
+    <li>Each explanation is written <b>once per group</b> instead of once per row — the single biggest source of noise on the page today.</li>
+    <li>Show all swaps the groups for direction A's table, so this is A plus a triage layer, not a second page to maintain.</li>
+    <li>The Yuexiu group is honest that there is <b>nothing to do here</b>, which the current wording buries in 17 identical sentences.</li>
+    <li>When nothing is wrong, the whole page is one line: Working, 248 products synced. That is the point.</li>
+  </ul>
+
+  <!-- ═══════════════════════ C - LIST + PANEL ══════════════════════════ -->
+  <p class="caption"><b>C - List and panel</b> — the list is one line per product with a state dot per store and no controls at all. Every field exists once, in the panel, for the product you picked.</p>
+  <div class="frame">
+
+    <div class="ph">
+      <div>
+        <h2>Meituan</h2>
+        <p class="status num">248 live &middot; <span class="att">5 need attention</span></p>
+      </div>
+      <button class="btn-dusk">Match names</button>
+    </div>
+
+    <div class="split">
+      <div class="list">
+        <div class="lhead"><span>Product</span><span class="sp"></span><span class="col">Tianhe</span><span class="col">Yuexiu</span></div>
+        <div class="lrow">
+          <div class="who pcell"><span class="thumb"></span><span class="pname">NOW Foods Double-Strength Iron<span class="psku num">5-30</span></span></div>
+          <div class="dots"><span><span class="dot att"></span></span><span><span class="dot none"></span></span></div>
+        </div>
+        <div class="lrow sel">
+          <div class="who pcell"><span class="thumb"></span><span class="pname">Oatly Barista<span class="psku num">6-32</span></span></div>
+          <div class="dots"><span><span class="dot att"></span></span><span><span class="dot none"></span></span></div>
+        </div>
+        <div class="lrow">
+          <div class="who pcell"><span class="thumb"></span><span class="pname">Three-Bean Tempeh<span class="psku num">3-110</span></span></div>
+          <div class="dots"><span><span class="dot ok"></span></span><span><span class="dot ok"></span></span></div>
+        </div>
+        <div class="lrow">
+          <div class="who pcell"><span class="thumb"></span><span class="pname">Smooth Sesame Tahini (Hulled)<span class="psku num">4-650</span></span></div>
+          <div class="dots"><span><span class="dot ok"></span></span><span><span class="dot ok"></span></span></div>
+        </div>
+        <div class="lrow">
+          <div class="who pcell"><span class="thumb"></span><span class="pname">Whole Sesame Tahini (Unhulled)<span class="psku num">4-640</span></span></div>
+          <div class="dots"><span><span class="dot ok"></span></span><span><span class="dot ok"></span></span></div>
+        </div>
+        <div class="lrow">
+          <div class="who pcell"><span class="thumb"></span><span class="pname">Hummus Asli<span class="psku num">2-210</span></span></div>
+          <div class="dots"><span><span class="dot ok"></span></span><span><span class="dot ok"></span></span></div>
+        </div>
+        <div class="lrow">
+          <div class="who pcell"><span class="thumb"></span><span class="pname">Cashew Cream Cheese<span class="psku num">2-240</span></span></div>
+          <div class="dots"><span><span class="dot none"></span></span><span><span class="dot ok"></span></span></div>
+        </div>
+        <div class="lrow">
+          <div class="who pcell"><span class="thumb"></span><span class="pname">Kimchi, small jar<span class="psku num">3-420</span></span></div>
+          <div class="dots"><span><span class="dot att"></span></span><span><span class="dot ok"></span></span></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="ptop">
+          <span class="thumb"></span>
+          <div><div class="t">Oatly Barista</div><div class="s num">6-32</div></div>
+        </div>
+
+        <div class="pblock">
+          <div class="ph2"><span class="nm">Tianhe</span><span class="tog on"><i></i><b></b></span></div>
+          <div class="lbl">Delivery name</div>
+          <input class="name" value="Oatly Barista 1L">
+          <div class="lbl" style="margin-top:16px">Three products share this listing — which is this one?</div>
+          <select class="spec" style="width:100%">
+            <option>Pick an option...</option>
+            <option>1 bottle (4-770 x1) 1L</option>
+            <option>2 bottles (4-771 x2) 2L</option>
+            <option>Case of 6 (4-772 x6)</option>
+          </select>
+          <div class="fact">Last push <b class="num">18</b> &middot; <span class="num">5h</span> ago</div>
+        </div>
+
+        <div class="pblock">
+          <div class="ph2"><span class="nm">Yuexiu</span><span class="tog"><i></i><b></b></span></div>
+          <div class="state"><span class="dot none"></span><span class="txt quiet">Not linked</span></div>
+          <div class="fact">Yuexiu links by SKU. No listing carries <b class="num">6-32</b> yet — add it there and this links itself.</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <ul class="notes">
+    <li>The list holds <b>no form controls at all</b>, so it stays one line per product however many fields a mapping grows later.</li>
+    <li>Best of the three for working a product in depth; costs one click before you can type, which a bulk name-filling pass would feel.</li>
+    <li>The two dots answer "is everything connected?" at a glance — the Board question, at product scale.</li>
+    <li>Most new code of the three: a selection model, a panel, and a narrower list.</li>
+  </ul>
+
+</div>
+</body>
+</html>
