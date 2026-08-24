@@ -3879,6 +3879,14 @@ WHAT A MERGE OF THIS DOES NOT DO: It does not fix the live blank checkout. Confi
 
 **Open, not decided here:** the Chinese label for Materials; paid entitlement wiring; whether purchased quantity converts to stocked quantity.
 
+### §28 addendum — Materials Phase 1 build decisions
+
+Three decisions made after §28 was written, correcting the first build plan:
+
+1. **Materials gets a tenant-level on/off switch**, not role-based gating alone. Same mechanism as Quick Stock / Add Stock (`FEATURE_CATALOG`, `mountFeatureControls`, `setFeatureEnabled`) — an operator preference today, with a real entitlement ceiling wired in whenever billing lands. Role-based capability (`materials:view`/`materials:edit`) still governs who *within* an enabled tenant can use it — the two are independent axes, both needed.
+2. **Purchase-line creation for materials is not indefinitely deferred.** It must ship before Roots is migrated off the kitchen app — Roots' only current path to purchase materials is through kitchen POs, and losing that with no replacement breaks live purchasing. It does not need to land in the same commit as Materials records; it is the required next piece of work, sequenced immediately after. **Roots must not be cut over from the kitchen app until this is live and verified.**
+3. **The Materials record opens as a full page**, confirmed as a deliberate choice despite Materials and Purchasing being described as siblings elsewhere in this plan, and despite Purchasing itself using the hybrid drawer-plus-Expand pattern (§1.13). This was weighed and decided anyway — do not "correct" it back to a drawer or hybrid in a future session on the grounds of matching Purchasing.
+
 ## 29. Related documents
 
 - docs/tacet-glossary.md — binding definitions, v1.4, 2026-07-31. The words in this document are used with the meanings defined there.
