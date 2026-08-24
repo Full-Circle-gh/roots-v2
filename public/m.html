@@ -246,6 +246,29 @@ button,a,.row,.chip,.stepbtn{touch-action:manipulation}
 @keyframes tFade{from{opacity:0}to{opacity:1}}
 @keyframes tRise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .breathe{animation:tBreathe 2.4s ease-in-out infinite}
+
+/* ── Boot splash ───────────────────────────────────────────────────────────
+   #app starts with this markup already inside it (see body below), not
+   empty — this file is a single ~600KB document and the OS-generated PWA
+   splash (icon + name, nothing else) is all a phone has to show until every
+   byte of it has arrived AND the trailing <script> has run. On a slow
+   connection that gap is seconds of blank screen. HTML paints as it streams
+   in, ahead of a blocking <script>, so this markup shows the moment it has
+   downloaded — well before the script that builds the real app. render()
+   always does app.innerHTML = ... (see render()), so the very first render
+   overwrites this wholesale; nothing here is ever cleaned up by hand. */
+.boot{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:var(--bg)}
+.boot-mark{display:flex;flex-direction:column;align-items:center;gap:20px}
+.boot-path{stroke-dasharray:820;stroke-dashoffset:820;animation:tDraw .9s var(--ease-settle) forwards}
+.boot-dot{opacity:0;animation:tFade .3s var(--ease-settle) forwards .7s,tBreathe 2.4s ease-in-out infinite 1s}
+.boot-word{display:flex;flex-direction:column;align-items:center;gap:6px;opacity:0;animation:tRise .45s var(--ease-settle) forwards .8s}
+@keyframes tDraw{to{stroke-dashoffset:0}}
+/* The staged entrance leans on animation-delay, which the reduced-motion rule
+   above (line ~260) does not zero — only duration. Without this, "reduced
+   motion" would still mean staring at an empty splash for the better part of
+   a second. Here it means what it should: the mark and its label are simply
+   there, first frame. */
+@media (prefers-reduced-motion:reduce){.boot-path{stroke-dashoffset:0}.boot-dot,.boot-word{opacity:1}}
 /* Every render() replaces the whole tree, so a `.rise` card is a brand-new DOM
    node each time and its fade/slide-up entrance replays — fine for the first
    paint, but loadLive()'s data trickles in across a dozen independent fetches
@@ -306,7 +329,16 @@ input:focus,textarea:focus{outline:none;border-color:var(--border-focus)}
 </style>
 </head>
 <body>
-<div id="app"></div>
+<div id="app"><div class="boot" aria-hidden="true"><div class="boot-mark">
+  <svg width="176" height="57" viewBox="0 0 340 110" fill="none" style="overflow:visible">
+    <path class="boot-path" d="M20 55 C30 15, 40 95, 50 55 C59 22, 68 88, 77 55 C85 30, 93 80, 101 55 C109 38, 117 72, 125 55 C133 44, 141 66, 149 55 C160 50, 171 60, 182 55 C215 55, 260 55, 305 55" stroke="var(--text-primary)" stroke-width="3.5" stroke-linecap="round"/>
+    <circle class="boot-dot" cx="305" cy="55" r="5" fill="var(--dusk)"/>
+  </svg>
+  <div class="boot-word">
+    <span style="font-size:20px;font-weight:500;letter-spacing:.2em;color:var(--text-primary)">tacet</span>
+    <span style="font-size:12px;font-weight:400;letter-spacing:.12em;text-transform:uppercase;color:var(--text-secondary)">store</span>
+  </div>
+</div></div></div>
 <script>
 "use strict";
 /* ---- Lucide icon → inline SVG string (same builder as the mockup) ---- */
