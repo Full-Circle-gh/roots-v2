@@ -31,6 +31,11 @@
      Served no-store and skipped by the service worker: a stale money formula
      is worse than none. Loads before any form can call it. -->
 <script src="/lib/ingredient-cost.js"></script>
+<!-- The one RECIPE cost breakdown, shared with the server (lib/recipe-cost.js),
+     on the same terms. The recipe card, the Cost Sheet's first paint and its
+     live retype all read window.RootsRecipeCost; the Excel export requires the
+     same file from Node. Loads before any recipe screen can call it. -->
+<script src="/lib/recipe-cost.js"></script>
 <!-- Full Circle chrome type — IBM Plex Sans / Mono (+ SC for 中文), mirroring
      /retail-admin. Falls back to system fonts if the CDN is unreachable. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -6480,29 +6485,39 @@ async function viewRecipe(id) {
   const ings = rec.ingredients||[];
   _recipeScale = 1;  // reset scaler each time a recipe view opens
 
-  // Calculate costs
-  let ingTotal=0, missingCount=0;
-  const ingRows = ings.map(i=>{
-    // Free by design is a real zero: it adds nothing and is NOT missing.
-    const free = !!i.master_free;
-    const cpu = i.master_cost||0;
-    const line = free ? 0 : (cpu>0 ? i.qty*cpu : null);
-    if (line===null) missingCount++;
-    else ingTotal += line;
-    return {...i, cpu, line, free};
-  });
-
+  // Calculate costs — via the shared derivation (lib/recipe-cost.js), the same
+  // file the Cost Sheet and the Excel export read. This screen used to carry its
+  // own copy of the formula; free-by-design handling, the missing-cost rule and
+  // the servings>0?servings:1 packaging guard all now live in one place.
   const costData = rec.costData||{};
-  const labour = parseFloat(costData.labour||0);
-  const packaging = parseFloat(costData.packaging||0);
-  const overhead = parseFloat(costData.overhead_pct||0);
-  const servings = parseFloat(rec.servings||0);
-  const packTotal = packaging * (servings>0?servings:1);
-  const batchCost = ingTotal + labour + packTotal + (ingTotal*overhead/100);
-  const cpServ = servings>0 ? batchCost/servings : null;
-  const sellPrice = parseFloat(costData.sell_price||0);
-  const margin = (sellPrice>0&&cpServ!==null) ? sellPrice-cpServ : null;
-  const foodCostPct = (sellPrice>0&&cpServ!==null) ? cpServ/sellPrice*100 : null;
+  const _lib = _recipeCostLib();
+  if (!_lib) return;
+  const _c = _lib.computeRecipeCost({ recipe: rec, ingredients: ings, costData });
+
+  // The row objects keep the FULL ingredient record (notes, substitutes, the
+  // master_* join columns) and take only the three computed fields from the
+  // breakdown. _c.lines is built by mapping over `ings` in order, so index
+  // alignment is guaranteed. Spreading the original rather than using _c.lines
+  // directly is what keeps the table markup below untouched — it reads
+  // i.name_en, which the breakdown's line objects call `name`.
+  const ingRows = ings.map((i, n) => ({
+    ...i,
+    cpu:  _c.lines[n].costPerUnit,
+    line: _c.lines[n].lineCost,
+    free: _c.lines[n].freeByDesign,
+  }));
+  const ingTotal     = _c.ingredientCost;
+  const missingCount = _c.zeroCostIngredientLines;
+  const labour       = _c.labour;
+  const packaging    = _c.packaging;
+  const overhead     = _c.overheadPct;
+  const servings     = _c.servings;
+  const packTotal    = _c.packagingTotal;
+  const batchCost    = _c.batchCost;
+  const cpServ       = _c.costPerServing;
+  const sellPrice    = _c.sellPrice;
+  const margin       = _c.marginPerServing;
+  const foodCostPct  = _c.foodCostPct;
   const barColor = foodCostPct===null?'#ccc':foodCostPct<25?'#6db33f':foodCostPct<35?'#e07b50':'#e05252';
 
   document.getElementById('main').innerHTML = `
@@ -6552,7 +6567,7 @@ async function viewRecipe(id) {
         // Build a compact, interactive cost summary card. Toggle "with/without
         // packaging" on the headline number; show a stacked breakdown bar so
         // the user can see at a glance how the cost is composed.
-        const overheadCost = ingTotal*overhead/100;
+        const overheadCost = _c.overheadAmount;
         const batchNoPkg   = ingTotal + labour + overheadCost;
         const batchWithPkg = batchNoPkg + packTotal;
         const cpServNoPkg  = servings>0 ? batchNoPkg/servings   : null;
@@ -6693,6 +6708,21 @@ async function viewRecipe(id) {
         </div>
       </div>`).join('')}
     </div>`:''}`;
+}
+
+// The shared recipe cost derivation, or a loud, legible failure. lib/recipe-cost.js
+// is served no-store from /lib/recipe-cost.js; if that request failed the file
+// defines nothing and every cost on these screens would otherwise come out as an
+// opaque TypeError. Refusing to paint is deliberate — the alternative is a screen
+// full of confident ¥0.00, and a silently wrong cost is worse than an obvious
+// break. Same principle as poUnitOptions() and the rest of the ingredient form.
+function _recipeCostLib() {
+  const lib = window.RootsRecipeCost;
+  if (!lib) {
+    toast('Cost formula failed to load · 成本公式加载失败 — reload the page · 请刷新页面', 'error');
+    return null;
+  }
+  return lib;
 }
 
 // ── Recipe Form ───────────────────────────────────────────────────────────────
@@ -7644,32 +7674,47 @@ async function showCostSheet(id) {
   const ings = rec.ingredients||[];
   const costData = rec.costData||{};
 
-  let ingTotal=0, missingCount=0;
-  const ingRows = ings.map(i=>{
-    // Same rule as the recipe card: free by design costs zero and is not missing.
-    const free=!!i.master_free;
-    const cpu=i.master_cost||0;
-    const line=free?0:(cpu>0?i.qty*cpu:null);
-    if(line===null) missingCount++; else ingTotal+=line;
-    return{...i,cpu,line,free};
-  });
+  // Ingredient subtotal + missing-cost count come from the shared derivation
+  // (lib/recipe-cost.js). They do not depend on the cost-sheet inputs, so they
+  // are computed once here and reused by every renderCS() repaint below.
+  const _lib = _recipeCostLib();
+  if (!_lib) return;
+  const _cBase = _lib.computeRecipeCost({ recipe: rec, ingredients: ings, costData });
+  const ingTotal     = _cBase.ingredientCost;
+  const missingCount = _cBase.zeroCostIngredientLines;
 
   const overlay = mkOverlay('costSheetOverlay');
   overlay.querySelector('.overlay-box').style.maxWidth='800px';
 
   function renderCS(cd) {
-    const labour=parseFloat(cd.labour||0), packaging=parseFloat(cd.packaging||0),
-          overhead=parseFloat(cd.overhead_pct||0), sellPrice=parseFloat(cd.sell_price||0),
-          servings=parseFloat(rec.servings||0);
-    const packTotal=packaging*(servings>0?servings:1);
-    const batchCost=ingTotal+labour+packTotal+(ingTotal*overhead/100);
-    const cpServ=servings>0?batchCost/servings:null;
-    const batch=parseFloat(rec.batch_size)||0;
-    const cpGram=batch>0?batchCost/batch:null;
-    const margin=sellPrice>0&&cpServ!==null?sellPrice-cpServ:null;
-    const fcPct=sellPrice>0&&cpServ!==null?cpServ/sellPrice*100:null;
-    const targetFC=parseFloat(cd.target_food_cost||30);
-    const suggestSell=cpServ!==null&&targetFC>0?cpServ/(targetFC/100):null;
+    // `cd` is the LIVE cost-sheet state, which on a repaint carries values read
+    // out of the form. Coerce to numbers before handing them over — the shared
+    // module's `parseFloat(cd.target_food_cost || 30)` takes a different branch
+    // for the string '0' (truthy, parses to 0) than for the number 0 (falsy,
+    // becomes 30). csUpdate() does the same coercion for the same reason.
+    const _c = _lib.computeRecipeCost({
+      recipe: rec,
+      ingredients: ings,
+      costData: {
+        labour:           parseFloat(cd.labour||0),
+        packaging:        parseFloat(cd.packaging||0),
+        overhead_pct:     parseFloat(cd.overhead_pct||0),
+        sell_price:       parseFloat(cd.sell_price||0),
+        target_food_cost: parseFloat(cd.target_food_cost||30),
+      },
+    });
+    const labour=_c.labour, packaging=_c.packaging,
+          overhead=_c.overheadPct, sellPrice=_c.sellPrice,
+          servings=_c.servings;
+    const packTotal=_c.packagingTotal;
+    const batchCost=_c.batchCost;
+    const cpServ=_c.costPerServing;
+    const batch=_c.batchSize;
+    const cpGram=_c.costPerGram;
+    const margin=_c.marginPerServing;
+    const fcPct=_c.foodCostPct;
+    const targetFC=_c.targetFoodCost;
+    const suggestSell=_c.suggestedSellPrice;
     const barColor=fcPct===null?'#e8e0d8':fcPct<25?'#6db33f':fcPct<35?'#e07b50':'#e05252';
 
     const box = document.querySelector('#costSheetOverlay .overlay-box');
@@ -7764,9 +7809,13 @@ async function showCostSheet(id) {
         <button class="btn btn-primary" style="min-width:200px" onclick="saveCostSheet(${rec.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" width="14" height="14" style="vertical-align:-3px;margin-right:6px"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>Save Cost Data 保存</button>
       </div>`;
 
-    // Store for live updates
+    // Store for live updates. csUpdate() gets the ingredient LINES rather than a
+    // cached subtotal, so it can call the shared derivation with the same inputs
+    // this paint used instead of carrying its own copy of the formula. (The old
+    // `window._csIngTotal` scalar went with that copy — it had exactly one
+    // reader, and the shared call replaced it.)
     window._csRecipe = rec;
-    window._csIngTotal = ingTotal;
+    window._csIngs = ings;
   }
 
   renderCS(costData);
@@ -7958,21 +8007,32 @@ function savePackTypesFromDOM() {
 function csUpdate() {
   const rec = window._csRecipe;
   if (!rec) return;
-  const ingTotal = window._csIngTotal||0;
+  // Every value here is read out of a form input, so it arrives as a STRING.
+  // Coerce at this boundary and hand the shared derivation numbers: it applies
+  // `parseFloat(cd.target_food_cost || 30)`, and the string '0' is truthy where
+  // the number 0 is not — passing raw input.value would make a zeroed target
+  // food cost mean 0 here and 30 everywhere else.
   const labour=parseFloat(document.getElementById('cs_labour')?.value)||0;
   const packaging=parseFloat(document.getElementById('cs_packaging')?.value)||0;
   const overhead=parseFloat(document.getElementById('cs_overhead')?.value)||0;
   const sellPrice=parseFloat(document.getElementById('cs_sell')?.value)||0;
-  const servings=parseFloat(rec.servings||0);
-  const batch=parseFloat(rec.batch_size||0);
   const targetFC=parseFloat(document.getElementById('cs_target')?.value)||30;
-  const packTotal=packaging*(servings>0?servings:1);
-  const batchCost=ingTotal+labour+packTotal+(ingTotal*overhead/100);
-  const cpServ=servings>0?batchCost/servings:null;
-  const cpGram=batch>0?batchCost/batch:null;
-  const margin=sellPrice>0&&cpServ!==null?sellPrice-cpServ:null;
-  const fcPct=sellPrice>0&&cpServ!==null?cpServ/sellPrice*100:null;
-  const suggestSell=cpServ!==null&&targetFC>0?cpServ/(targetFC/100):null;
+  const _lib = _recipeCostLib();
+  if (!_lib) return;
+  const _c = _lib.computeRecipeCost({
+    recipe: rec,
+    ingredients: window._csIngs || [],
+    costData: {
+      labour, packaging, overhead_pct: overhead,
+      sell_price: sellPrice, target_food_cost: targetFC,
+    },
+  });
+  const batchCost=_c.batchCost;
+  const cpServ=_c.costPerServing;
+  const cpGram=_c.costPerGram;
+  const margin=_c.marginPerServing;
+  const fcPct=_c.foodCostPct;
+  const suggestSell=_c.suggestedSellPrice;
   const barColor=fcPct===null?'#e8e0d8':fcPct<25?'#6db33f':fcPct<35?'#e07b50':'#e05252';
 
   const set=(id,val)=>{const el=document.getElementById(id);if(el)el.textContent=val;};
