@@ -1440,7 +1440,7 @@ function recapCard(){
         `<div style="display:flex;align-items:flex-start;gap:11px">
            <span style="width:7px;height:7px;border-radius:50%;background:var(--accent);flex:none;margin-top:7px"></span>
            <span style="font-size:15px;line-height:1.5">${r}</span></div>`).join('')}</div>`;
-  return `<div class="rise" style="background:var(--surface-raised);border-radius:var(--radius-card);padding:0 24px 24px;color:var(--text-primary)">
+  return `<div class="rise" style="background:var(--surface-raised);border-radius:var(--radius-card);padding:16px;color:var(--text-primary)">
     <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:16px">
       <span style="font-size:18px;font-weight:500">${recapTitle()}</span>
       <span class="num" style="font-size:13px;color:var(--text-secondary)">${recapSinceLabel()}</span></div>
@@ -1508,7 +1508,7 @@ function screenHome(){
     ? today.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})
     : (today.getMonth()+1)+'月'+today.getDate()+'日 周'+'日一二三四五六'[today.getDay()];
   return `${pageHead({title:T(...GREET[greetKey()]), status:dateLine, controls:true})}
-  <div style="padding:0 16px 24px;display:flex;flex-direction:column;gap:16px">
+  <div style="padding:16px 16px 24px;display:flex;flex-direction:column;gap:16px">
     ${recapCard()}
     ${fires&&fires.length?`<div class="rise" style="animation-delay:.06s">
       <div style="padding:2px 4px 8px;font-size:18px;font-weight:500">${T('Needs you','需要处理')}</div>
