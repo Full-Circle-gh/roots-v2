@@ -1180,7 +1180,6 @@ async function loadOrders(opts = {}) {
     } catch (e) {
       if (!silent && myReq === _ORDERS_REQ_ID) {
         tbody.innerHTML = `<tr><td colspan="10" class="err">Failed: ${escapeHtml(e.message)}</td></tr>`;
-        if (window.rmRenderOrderCards) rmRenderOrderCards(null, e.message);
       }
       return;
     }
@@ -1246,7 +1245,6 @@ async function loadOrders(opts = {}) {
       </td></tr>`;
       _ORDERS_SEEN_IDS = new Set();
       _ORDERS_NOTIFIED_IDS = new Set();
-      if (window.rmRenderOrderCards) rmRenderOrderCards([]);
       return;
     }
 
@@ -1304,7 +1302,6 @@ async function loadOrders(opts = {}) {
         <td class="muted oc-placed" style="font-size: 11px">${formatDate(o.placed_at)}</td>
       </tr>`;
     }).join('');
-    if (window.rmRenderOrderCards) rmRenderOrderCards(j.data);
 
     _ORDERS_SEEN_IDS = newIds;
     _ORDERS_NOTIFIED_IDS = actionableIds;
@@ -5033,10 +5030,6 @@ document.addEventListener('click', (e) => {
   if (e.target.closest('.tdlg-scrim')) return;
   // Dashboard activity rows open the order drawer on click — that same click
   // bubbles here, so exempt them or the drawer closes the instant it opens.
-  // .rm-ocard / .rm-cucard = the mobile order/customer cards (Variant A), which
-  // also open their detail drawer on tap. .rm-sheet = the shared mobile
-  // Sort/Manage bottom sheet, whose "Open full details" row opens the order
-  // drawer — without this the opening tap bubbles here and closes it instantly.
   // .td-nrow = the "Needs you" rows (delivery, refunds, awaiting restock,
   // invoices, restock), each of which jumps to a filtered list or opens a
   // drawer. .td-attn-row = the Inventory card's running-low rows, which open the
@@ -5047,7 +5040,7 @@ document.addEventListener('click', (e) => {
   // build and still did nothing: openOrder() adds .open synchronously, this
   // listener then ran on the SAME click and closed it again before paint — so
   // it read as a dead link rather than as a drawer that flashed.
-  if (e.target.closest('tr.order-row, tr.cul-row, tr.vch-row, .db-feed-row, .dp-work-row, .td-nrow, .td-attn-row, .rm-ocard, .rm-cucard, .rm-sheet')) return;
+  if (e.target.closest('tr.order-row, tr.cul-row, tr.vch-row, .db-feed-row, .dp-work-row, .td-nrow, .td-attn-row')) return;
   const sel = window.getSelection && window.getSelection();
   if (sel && sel.toString().length > 0) return;
   // Same topmost + back-to-customer semantics as Esc, over the dw-dismiss set,
