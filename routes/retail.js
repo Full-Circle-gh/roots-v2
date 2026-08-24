@@ -17314,7 +17314,25 @@ router.get('/api/retail-admin/affiliate/referrals', requireRetailAdmin, (req, re
 
   const where  = [];
   const params = [];
-  if (status && ['joined','ordered','void'].includes(status)) { where.push('r.status = ?'); params.push(status); }
+  if (status === 'still') {
+    // The admin ledger's "Still earning" pill. Not a stored status — it is the
+    // same predicate the per-row lifetime_active flag and the still_earning
+    // summary figure use, so the three can never disagree: a converted friend
+    // whose referrer is still inside the lifetime-share window. With the rate
+    // off there is nothing to list, and saying so beats listing every
+    // rewarded row under a heading that claims they are still paying.
+    const sl = affiliateSettings();
+    const slRate   = Number(sl.lifetimeRatePercent) || 0;
+    const slMonths = Number(sl.lifetimeMonths) || 0;
+    if (slRate > 0) {
+      where.push("r.status = 'ordered'");
+      if (slMonths > 0) { where.push("r.joined_at >= datetime('now', ?)"); params.push(`-${slMonths} months`); }
+    } else {
+      where.push('1 = 0');
+    }
+  } else if (status && ['joined','ordered','void'].includes(status)) {
+    where.push('r.status = ?'); params.push(status);
+  }
   if (q) {
     const like = '%' + q + '%';
     where.push(`(r.code_used LIKE ? OR cr.nickname LIKE ? OR cr.phone LIKE ?

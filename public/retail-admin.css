@@ -3938,8 +3938,11 @@
   /* 3 — entitled but off: inside the feature's own page, hide the real config and
      show the enable card. .feat-bar (the switch) + .feat-off are spared. */
   .feat-off { display: none; }
+  /* #tab-affiliate is deliberately absent from BOTH lists below: that page
+     owns its own program card, which states the off case in place, and its
+     settings + past referrals stay readable while the program is off so an
+     operator can set the offer up before turning it on. */
   body.ent-membership:not(.feat-membership)   #tab-membership > :not(.feat-bar):not(.feat-off),
-  body.ent-affiliate:not(.feat-affiliate)     #tab-affiliate  > :not(.feat-bar):not(.feat-off),
   body.ent-reviews:not(.feat-reviews)         #tab-reviews    > :not(.feat-bar):not(.feat-off),
   body.ent-feedback:not(.feat-feedback)       #tab-feedback   > :not(.feat-bar):not(.feat-off),
   body.ent-socialProof:not(.feat-socialProof) #tab-social     > :not(.feat-bar):not(.feat-off),
@@ -3947,7 +3950,6 @@
   body.ent-kitchenAdd:not(.feat-kitchenAdd)   #ka-home > :not(.feat-bar):not(.feat-off),
   body.ent-faq:not(.feat-faq)                 #tab-faq        > :not(.feat-bar):not(.feat-off) { display: none !important; }
   body.ent-membership:not(.feat-membership)   #tab-membership .feat-off,
-  body.ent-affiliate:not(.feat-affiliate)     #tab-affiliate  .feat-off,
   body.ent-reviews:not(.feat-reviews)         #tab-reviews    .feat-off,
   body.ent-feedback:not(.feat-feedback)       #tab-feedback   .feat-off,
   body.ent-socialProof:not(.feat-socialProof) #tab-social     .feat-off,

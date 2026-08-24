@@ -1281,7 +1281,9 @@ function applyFeatureGates(cfg) {
 // Where each toggleable feature's switch + "off" card mount.
 const FEATURE_HOMES = {
   membership:  '#tab-membership',
-  affiliate:   '#tab-affiliate',
+  // affiliate is NOT here on purpose: the Affiliate page owns its own program
+  // card (afxRenderProgram), which writes the same features.affiliate key. Two
+  // switches for one setting is how they drift apart.
   reviews:     '#tab-reviews',
   feedback:    '#tab-feedback',
   socialProof: '#tab-social',
