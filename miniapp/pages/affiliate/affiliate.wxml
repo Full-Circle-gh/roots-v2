@@ -118,8 +118,15 @@
     <view class="modal" catchtap>
       <view class="modal-kicker f-toni">{{copy.shareTitle}}</view>
       <view class="modal-title f-bear">{{shareBodyResolved}}</view>
-      <view class="modal-code f-bear">{{code}}</view>
+      <view wx:if="{{qrImage}}" class="modal-qr-wrap">
+        <image class="modal-qr" src="{{qrImage}}" mode="widthFix" show-menu-by-longpress="{{true}}"/>
+        <view class="modal-qr-hint f-aleo">{{copy.qrHint}}</view>
+      </view>
+      <view wx:elif="{{qrLoading}}" class="modal-qr-state f-aleo">{{copy.qrLoadingLabel}}</view>
+      <view wx:elif="{{qrErrorText}}" class="modal-qr-state f-aleo">{{qrErrorText}}</view>
+      <view class="modal-code f-bear {{qrImage ? 'small' : ''}}">{{code}}</view>
       <view class="modal-actions">
+        <view wx:if="{{qrImage}}" class="modal-btn f-gothic tap" bindtap="saveQr">{{copy.saveQr}}</view>
         <view class="modal-btn f-gothic tap" bindtap="copyCode">{{copy.copy}}</view>
         <view class="modal-btn f-gothic tap" bindtap="closeQr">{{copy.close}}</view>
       </view>

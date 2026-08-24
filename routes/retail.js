@@ -17021,6 +17021,62 @@ router.get('/api/retail/affiliate', requireRetailAuth, (req, res) => {
   });
 });
 
+// Per-code cache for the customer's own mini-program QR (wxacode) image. A
+// referral code is permanent once minted (ensureReferralCode never rotates
+// an existing one — only an admin-triggered reissue nulls it), so the image
+// WeChat returns for it never changes either. Caching avoids re-hitting
+// WeChat's (rate-limited) getwxacodeunlimit every time a customer reopens the
+// share sheet. Keyed by tenant+code so two tenants' AppIDs can never collide
+// on the same short code. A reissued code just mints a fresh cache entry —
+// the old one ages out unused, nothing to actively evict.
+const _wxacodeCache = new Map();   // `${tenantId}:${code}` -> { buf, expiresAt }
+const WXACODE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+
+// Customer: their own referral code as a scannable mini-program QR, so they
+// can share an image instead of typing/pasting the code text. Scanning it
+// launches the mini app straight to Home with the code pre-filled in the
+// apply box — home.js's onLoad decodes `ref=` out of the scene the same way
+// it already reads `?ref=` from a tapped share link (see onShareAppMessage).
+// Falls back to 501 in DEV mode (no WeChat merchant creds), matching the
+// admin CMS preview QR — the mini-app then just shows code text + copy.
+router.get('/api/retail/affiliate/qr', requireRetailAuth, async (req, res) => {
+  if (getTenantCreds(currentTenantId()).wechat.devMode) {
+    return res.status(501).json({ success: false, error: 'wechat_creds_not_configured' });
+  }
+  const code = ensureReferralCode(req.customer.id);
+  if (!code) return res.status(409).json({ success: false, error: 'no_code' });
+
+  const cacheKey = `${currentTenantId()}:${code}`;
+  const hit = _wxacodeCache.get(cacheKey);
+  if (hit && Date.now() < hit.expiresAt) {
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Cache-Control', 'private, max-age=86400');
+    return res.send(hit.buf);
+  }
+
+  try {
+    const body = {
+      scene:      `ref=${code}`,          // e.g. "ref=ROOTS-TC92T7" — well under the 32-char scene budget
+      page:       'pages/home/home',
+      check_path: false,
+      env_version: 'release',             // the live app, not the draft/trial build
+      width:      420,
+    };
+    const { resp, json, token } = await wxApiPost('/wxa/getwxacodeunlimit', body);
+    if (!token) return res.status(503).json({ success: false, error: 'no_access_token' });
+    // A JSON reply is a failure — a successful call answers with image bytes.
+    if (json) return res.status(502).json({ success: false, error: 'wxacode_failed', detail: json });
+    const buf = Buffer.from(await resp.arrayBuffer());
+    _wxacodeCache.set(cacheKey, { buf, expiresAt: Date.now() + WXACODE_CACHE_TTL_MS });
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Cache-Control', 'private, max-age=86400');
+    res.send(buf);
+  } catch (e) {
+    console.error('[affiliate/qr]', e);
+    res.status(500).json({ success: false, error: 'qr_failed', message: e.message });
+  }
+});
+
 // Apply a referral code. One-shot per customer; rejected if:
 //   • affiliate program is disabled
 //   • customer already applied a code (regardless of status)

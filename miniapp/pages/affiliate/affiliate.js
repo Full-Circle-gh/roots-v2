@@ -62,6 +62,15 @@ const COPY = {
     toastCopied:   'Code copied',
     toastApplied:  'Code applied',
     toastShareSoon: 'Tap "..." and pick Moments to share.',
+    qrLoadingLabel: 'Generating your QR…',
+    qrErrorText:    "Couldn't generate a QR code right now.",
+    qrHint:         'Scan to open Roots with your code applied.',
+    saveQr:         'SAVE',
+    toastSaved:     'Saved to Photos',
+    toastSaveFailed: "Couldn't save the image",
+    qrPermTitle:    'Photos access needed',
+    qrPermBody:     'Allow photo access in Settings to save your QR code.',
+    qrPermOpen:     'Open Settings',
     errAlreadyReferred: 'You already applied a code.',
     errNotFound:        'Code not found.',
     errCannotSelf:      "That's your own code.",
@@ -109,6 +118,15 @@ const COPY = {
     toastCopied:   '已复制',
     toastApplied:  '邀请码已应用',
     toastShareSoon: '点右上角"..."分享到朋友圈',
+    qrLoadingLabel: '生成中…',
+    qrErrorText:    '暂时无法生成二维码。',
+    qrHint:         '扫码打开 Roots,自动带上你的邀请码。',
+    saveQr:         '保存',
+    toastSaved:     '已保存到相册',
+    toastSaveFailed: '保存失败',
+    qrPermTitle:    '需要相册权限',
+    qrPermBody:     '请在设置中允许访问相册,以保存邀请二维码。',
+    qrPermOpen:     '前往设置',
     errAlreadyReferred: '你已应用过邀请码。',
     errNotFound:        '邀请码不存在。',
     errCannotSelf:      '不能填自己的邀请码。',
@@ -136,6 +154,9 @@ Page({
     stats: { earned: '0.00', total_invites: 0, joined: 0, converted: 0 },
     invites: [],
     showQrModal: false,
+    qrImage: '',      // data: URI, filled in lazily the first time the modal opens
+    qrLoading: false,
+    qrErrorText: '',
     how3subResolved: '',
     taglineResolved: '',
     shareBodyResolved: '',
@@ -244,12 +265,63 @@ Page({
     wx.showToast({ title: this.data.copy.toastShareSoon, icon: 'none', duration: 2500 });
   },
 
-  showQr() {
+  async showQr() {
     this.setData({ showQrModal: true });
+    // The code is permanent for this customer, so one fetch per page
+    // instance is enough — reopening the modal just reuses _qrBuf/qrImage.
+    if (this._qrBuf || this.data.qrLoading) return;
+    this.setData({ qrLoading: true, qrErrorText: '' });
+    try {
+      const buf = await api.requestBuffer('/api/retail/affiliate/qr');
+      this._qrBuf = buf;
+      this.setData({ qrImage: 'data:image/jpeg;base64,' + wx.arrayBufferToBase64(buf), qrLoading: false });
+    } catch (e) {
+      // Most likely dev mode (no WeChat merchant creds yet) or a transient
+      // WeChat API failure — either way, fall back to code text + Copy,
+      // which the modal already offers regardless of QR state.
+      this.setData({ qrLoading: false, qrErrorText: this.data.copy.qrErrorText });
+    }
   },
 
   closeQr() {
     this.setData({ showQrModal: false });
+  },
+
+  // The QR image also has native show-menu-by-longpress (Save/Forward), but
+  // that gesture isn't obvious to everyone, so this button exercises the
+  // same wx.saveImageToPhotosAlbum path explicitly.
+  saveQr() {
+    if (!this._qrBuf) return;
+    const c = this.data.copy;
+    const fs = wx.getFileSystemManager();
+    const path = `${wx.env.USER_DATA_PATH}/roots-referral-qr.jpg`;
+    fs.writeFile({
+      filePath: path,
+      data: this._qrBuf,
+      encoding: 'binary',
+      success: () => {
+        wx.saveImageToPhotosAlbum({
+          filePath: path,
+          success: () => wx.showToast({ title: c.toastSaved, icon: 'success' }),
+          fail: (e) => {
+            // The one common, actionable failure: the customer previously
+            // denied photo-album access. Point them at Settings rather than
+            // just failing silently a second time.
+            if (e && e.errMsg && e.errMsg.indexOf('auth deny') !== -1) {
+              wx.showModal({
+                title: c.qrPermTitle,
+                content: c.qrPermBody,
+                confirmText: c.qrPermOpen,
+                success: (r) => { if (r.confirm) wx.openSetting(); },
+              });
+            } else {
+              wx.showToast({ title: c.toastSaveFailed, icon: 'none' });
+            }
+          },
+        });
+      },
+      fail: () => wx.showToast({ title: c.toastSaveFailed, icon: 'none' }),
+    });
   },
 
   onApplyInput(e) {

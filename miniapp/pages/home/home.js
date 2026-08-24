@@ -92,6 +92,19 @@ Page({
     // the ref code so the affiliate apply box can pre-fill it later.
     if (query && query.ref) {
       try { wx.setStorageSync('pending_ref', String(query.ref).toUpperCase().slice(0, 32)); } catch (e) {}
+    } else if (query && query.scene) {
+      // Scanning the customer's own referral QR (a wxacode minted by
+      // GET /api/retail/affiliate/qr, scene="ref=CODE") lands here too, but a
+      // wxacode's scene is NOT parsed into ordinary query params by WeChat —
+      // it arrives as its own raw, URL-encoded `scene` string that has to be
+      // decoded and parsed by hand, same as app.js's capturePreviewLaunch.
+      try {
+        const scene = decodeURIComponent(query.scene);
+        const parts = Object.fromEntries(
+          scene.split('&').map(kv => kv.split('=')).filter(p => p.length === 2)
+        );
+        if (parts.ref) wx.setStorageSync('pending_ref', String(parts.ref).toUpperCase().slice(0, 32));
+      } catch (e) {}
     }
     // Onboarding gating — mode + version come from /api/retail/config
     // (cfg.onboarding.show_to / cfg.onboarding.version, edited in /cms).

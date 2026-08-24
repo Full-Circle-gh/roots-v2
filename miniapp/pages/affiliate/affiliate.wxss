@@ -383,7 +383,35 @@
   border: 3rpx solid var(--ink);
   margin: 0 44rpx;
   width: 600rpx;
+  max-height: 86vh;
+  overflow-y: auto;
+  box-sizing: border-box;
   padding: 36rpx 32rpx;
+}
+.modal-qr-wrap {
+  margin-top: 24rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.modal-qr {
+  width: 100%;
+  max-width: 420rpx;
+  border: 3rpx solid var(--ink);
+  background: #fff;
+}
+.modal-qr-hint {
+  margin-top: 12rpx;
+  font-size: calc(20rpx * var(--font-scale));
+  color: var(--forest);
+  text-align: center;
+}
+.modal-qr-state {
+  margin-top: 24rpx;
+  padding: 48rpx 0;
+  text-align: center;
+  font-size: calc(22rpx * var(--font-scale));
+  color: var(--olive);
 }
 .modal-kicker {
   font-size: calc(20rpx * var(--font-scale));
@@ -405,6 +433,12 @@
   padding: 20rpx 24rpx;
   text-align: center;
   border: 3rpx solid var(--ink);
+}
+/* Once the QR is the primary artifact, the code is a caption, not the hero. */
+.modal-code.small {
+  font-size: calc(26rpx * var(--font-scale));
+  margin: 20rpx 0 4rpx;
+  padding: 12rpx 16rpx;
 }
 .modal-actions {
   display: flex; gap: 12rpx;

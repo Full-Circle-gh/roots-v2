@@ -87,6 +87,33 @@ function request(path, opts = {}, _retried = false) {
   });
 }
 
+// Binary GET (e.g. a generated QR/wxacode image). Separate from request()
+// because that always asks WeChat for dataType 'json' — fine for the API
+// responses this app mostly deals with, but it would mangle a JPEG body.
+// This asks for responseType 'arraybuffer' instead and resolves the raw
+// bytes; the caller base64-encodes them for an <image> src.
+function requestBuffer(path) {
+  const app = getApp();
+  const token = app?.globalData?.token || '';
+  const headers = {};
+  if (token) headers.Authorization = 'Bearer ' + token;
+  if (_wxAppId) headers['x-wx-appid'] = _wxAppId;
+  return new Promise((resolve, reject) => {
+    wx.request({
+      url: BASE + path,
+      method: 'GET',
+      header: headers,
+      responseType: 'arraybuffer',
+      timeout: 15000,
+      success: (res) => {
+        if (res.statusCode >= 400) return reject(new Error('http_' + res.statusCode));
+        resolve(res.data);
+      },
+      fail: (e) => reject(new Error('network_' + (e?.errMsg || 'unknown'))),
+    });
+  });
+}
+
 module.exports = {
   BASE,
   get:    (path, opts = {})       => request(path, { ...opts, method: 'GET' }),
@@ -95,4 +122,5 @@ module.exports = {
   patch:  (path, data, opts = {}) => request(path, { ...opts, method: 'PATCH', data }),
   del:    (path, opts = {})       => request(path, { ...opts, method: 'DELETE' }),
   request,
+  requestBuffer,
 };
