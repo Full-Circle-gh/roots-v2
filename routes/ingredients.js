@@ -3,6 +3,27 @@ const db = require('../database');
 const { requireAuth, requirePermission, requireDelete, logActivity } = require('../middleware/auth');
 const router = express.Router();
 
+// A UNIQUE violation on `sku` is now reachable in a way it was not before:
+// archiving keeps the code (§18 SKU on archive), so the row holding it may be
+// one the user cannot see in any list. Saying only "SKU already exists" would
+// leave them hunting for a conflict that is invisible by design. Mirrors the
+// same handler in routes/recipes.js, which has always had to explain this.
+function skuClashMessage(sku, excludeId) {
+  if (!sku) return 'SKU already exists · SKU已存在';
+  const owner = excludeId
+    ? db.prepare('SELECT id, name_en, is_active FROM ingredients WHERE sku = ? AND id != ?').get(sku, excludeId)
+    : db.prepare('SELECT id, name_en, is_active FROM ingredients WHERE sku = ?').get(sku);
+  if (!owner) return 'SKU already exists · SKU已存在';
+  if (!owner.is_active) {
+    return `SKU "${sku}" belongs to an archived item ("${owner.name_en}", #${owner.id}). `
+         + 'Archived codes are kept on purpose so old orders and reports keep pointing at the right thing. '
+         + `Pick a different SKU. · SKU "${sku}" 属于已归档物料（"${owner.name_en}"，#${owner.id}）。`
+         + '归档物料保留其编号,以免历史订单与报表指向错误。请改用其他 SKU。';
+  }
+  return `SKU "${sku}" is already used by "${owner.name_en}" (#${owner.id}). `
+       + `· SKU "${sku}" 已被 "${owner.name_en}"（#${owner.id}）使用。`;
+}
+
 // Lightweight column set for the LIST endpoint. The Items table doesn't
 // render image_data (a base64 product photo) or supplier_qr_data (a base64
 // WeChat QR), but SELECT * was shipping both for every row — pushing the
@@ -86,7 +107,7 @@ router.post('/api/ingredients', requireAuth, requirePermission('ingredients'), (
     logActivity(req.user.id, req.user.username, 'create', 'ingredient', result.lastInsertRowid, { name_en }, req.ip);
     res.json({ success: true, id: result.lastInsertRowid });
   } catch(e) {
-    if (e.message.includes('UNIQUE')) return res.status(400).json({ error: 'SKU already exists · SKU已存在' });
+    if (e.message.includes('UNIQUE')) return res.status(400).json({ error: skuClashMessage(sku, null) });
     res.status(500).json({ error: e.message });
   }
 });
@@ -162,7 +183,7 @@ router.put('/api/ingredients/:id', requireAuth, requirePermission('ingredients')
     logActivity(req.user.id, req.user.username, 'update', 'ingredient', req.params.id, { name_en, ...(backfilled.lines ? { backfilled } : {}) }, req.ip);
     res.json({ success: true, backfilled });
   } catch(e) {
-    if (e.message.includes('UNIQUE')) return res.status(400).json({ error: 'SKU already exists · SKU已存在' });
+    if (e.message.includes('UNIQUE')) return res.status(400).json({ error: skuClashMessage(sku, req.params.id) });
     res.status(500).json({ error: e.message });
   }
 });
@@ -240,11 +261,27 @@ router.patch('/api/ingredients/bulk-update', requireAuth, requirePermission('ing
 
 // DELETE (soft delete)
 router.delete('/api/ingredients/:id', requireAuth, requireDelete, requirePermission('ingredients'), (req, res) => {
-  // Release the SKU on delete so the code can be reused. sku is UNIQUE, and a
-  // soft-deleted row would otherwise reserve it forever; SQLite allows many
-  // NULLs in a UNIQUE column, so nulling it frees the namespace without
-  // dropping the row (recipes/POs still reference ingredient_id).
-  db.prepare('UPDATE ingredients SET is_active = 0, sku = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id);
+  // THE SKU IS KEPT. It used to be nulled here, to free the code for reuse —
+  // sku is UNIQUE and an archived row would otherwise hold it forever. That
+  // reasoning is sound about the constraint and wrong about the decision:
+  //
+  //   docs/tacet-consolidation-decisions.md §18 SKU on archive
+  //   "An archived product KEEPS its SKU permanently. The code is never
+  //    released for reuse. Reason: a reused code makes historical orders and
+  //    reports point at the wrong thing."
+  //
+  // A collision on re-creating an archived code is therefore the CORRECT
+  // outcome, not a problem to design around, and the create/update handlers
+  // above say which archived item holds it rather than just refusing.
+  //
+  // The sibling half already worked this way: routes/recipes.js soft-deletes
+  // with `SET is_active = 0` alone and has done since it was written.
+  //
+  // 148 rows were archived before this change and have already lost their SKU.
+  // They are not repaired here — that is a data decision, and the codes are
+  // mostly unrecoverable (see the PR: 144 of 148 predate the oldest surviving
+  // backup, and only 5 survive as a snapshot on a PO line or recipe row).
+  db.prepare('UPDATE ingredients SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id);
   logActivity(req.user.id, req.user.username, 'delete', 'ingredient', req.params.id, null, req.ip);
   res.json({ success: true });
 });
