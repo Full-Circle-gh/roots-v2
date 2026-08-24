@@ -117,6 +117,34 @@ html.includes('apple-mobile-web-app-capable')
 const sw = fs.readFileSync(path.join(PUB, 'sw.js'), 'utf8');
 /const SHELL = \[[^\]]*'\/m'/.test(sw)
   ? ok("sw.js pre-caches the /m shell") : bad("sw.js SHELL does not include '/m' — the app has no offline shell");
+// The pre-cached shell is stored under '/m'; every real launch asks for
+// '/m?from=app' (start_url) or '/m?from=app&to=orders' (a shortcut). Without
+// ignoreSearch the match misses on all of them and the shell above is dead
+// weight — cached on every phone and never once served.
+/ignoreSearch/.test(sw)
+  ? ok('sw.js matches the shell past the query string')
+  : bad("sw.js matches HTML exactly — '/m?from=app' will never find the pre-cached '/m'");
+// fetch() does not reject on a network that hangs, so network-first without a
+// deadline is network-only, and a launch on a dead VPN never paints.
+/HTML_NET_TIMEOUT_MS/.test(sw)
+  ? ok('sw.js gives a launch a deadline before it opens from cache')
+  : bad('sw.js waits on the network forever — a hanging network freezes the app on its splash screen');
+
+// Nothing on another host may sit on the critical path. A blocking stylesheet
+// or a plain <script src> from a CDN the phone cannot reach does not fail — it
+// hangs, and the app draws nothing at all until it does.
+// <noscript> is not on the critical path for a browser that runs this app.
+const head = html.slice(0, html.indexOf('</head>')).replace(/<noscript>[\s\S]*?<\/noscript>/g, '');
+const blockingJS = (head.match(/<script\b[^>]*\bsrc=["']https?:\/\/[^>]*>/g) || [])
+  .filter((t) => !/\bdefer\b|\basync\b/.test(t));
+blockingJS.length === 0
+  ? ok('no render-blocking third-party script in the head')
+  : bad('render-blocking CDN script in the head: ' + blockingJS.join(' '));
+const blockingCSS = (head.match(/<link\b[^>]*\bstylesheet\b[^>]*>/g) || [])
+  .filter((t) => /href=["']https?:\/\//.test(t) && !/media=["']print["']/.test(t));
+blockingCSS.length === 0
+  ? ok('no render-blocking third-party stylesheet in the head')
+  : bad('render-blocking CDN stylesheet in the head: ' + blockingCSS.join(' '));
 
 // ── Browser pass ───────────────────────────────────────────────────────────
 const CHROME = findChrome();
@@ -139,6 +167,12 @@ const TYPES = { '.html': 'text/html', '.js': 'application/javascript', '.png': '
   '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json', '.ico': 'image/x-icon' };
 function serve() {
   return new Promise((resolve) => {
+    // The interesting failure is not a server that refuses — it is one that
+    // accepts the request and never answers. That is what a dropped VPN or a
+    // dead bar of signal looks like from inside fetch(), and the only network
+    // failure a browser will wait out indefinitely instead of reporting.
+    const state = { hang: false, dead: false };
+    const sockets = new Set();
     const srv = http.createServer((req, res) => {
       const p = req.url.split('?')[0];
       // The extensionless routes server.js hands to a file: '/' and '/m' are
@@ -152,17 +186,29 @@ function serve() {
       if (!abs.startsWith(PUB) || !fs.existsSync(abs) || fs.statSync(abs).isDirectory()) {
         res.writeHead(404).end('no'); return;
       }
+      // Held open, never completed — see state above.
+      if (state.hang && path.extname(abs) === '.html') return;
+      // Gone: the connection drops. This is the failure fetch() does report,
+      // and the one the cache fallback is supposed to answer.
+      if (state.dead && path.extname(abs) === '.html') { req.socket.destroy(); return; }
       const h = { 'Content-Type': TYPES[path.extname(abs)] || 'text/plain' };
       if (file === 'sw.js') h['Service-Worker-Allowed'] = '/';
       res.writeHead(200, h).end(fs.readFileSync(abs));
     });
-    srv.listen(0, '127.0.0.1', () => resolve({ srv, base: 'http://127.0.0.1:' + srv.address().port }));
+    // A held-open request keeps its socket alive, and srv.close() waits for
+    // every one of them. Track them so the test can end.
+    srv.on('connection', (s) => { sockets.add(s); s.on('close', () => sockets.delete(s)); });
+    srv.listen(0, '127.0.0.1', () => resolve({
+      srv, state,
+      base: 'http://127.0.0.1:' + srv.address().port,
+      cutTheLine: () => { for (const s of sockets) s.destroy(); sockets.clear(); },
+    }));
   });
 }
 
 async function run() {
   const { chromium, devices } = require('playwright');
-  const { srv, base } = await serve();
+  const { srv, base, state, cutTheLine } = await serve();
   const browser = await chromium.launch({ executablePath: CHROME });
   const ctx = await browser.newContext({ ...devices['Pixel 7'], hasTouch: true, isMobile: true });
   // Without it every /api/retail-admin call 401s and the app bounces to login.
@@ -264,6 +310,63 @@ async function run() {
   (await page.locator('.tabbar').count()) ? ok('an unknown ?to= falls back to Home') : bad('an unknown ?to= broke the app');
 
   errs.length ? bad('uncaught page errors: ' + errs.join(' | ')) : ok('no uncaught page errors');
+
+  // ── Launching when the network will not answer ─────────────────────────
+  // The freeze this exists to catch: an installed app has no address bar and
+  // no reload button. If its launch navigation never resolves, the phone shows
+  // the OS splash screen — the launcher icon on the manifest's background
+  // colour — with nothing to tap, for as long as the socket stays open. Every
+  // check below therefore asks one question: does the app OPEN.
+  console.log('\nlaunch, on a network that has stopped answering');
+
+  // (a) The network hangs. The shell is in the cache; the app must stop
+  //     waiting and use it.
+  state.hang = true;
+  const t0 = Date.now();
+  let opened = true;
+  try { await open(base + '/m?from=app'); } catch (e) { opened = false; }
+  const secs = ((Date.now() - t0) / 1000).toFixed(1);
+  opened
+    ? ok(`the app opens from cache when the network hangs (${secs}s)`)
+    : bad(`the app never opened on a hanging network — this is the splash-screen freeze (gave up after ${secs}s)`);
+  state.hang = false;
+  cutTheLine();
+  // Back onto a live page. When the check above fails the tab is left mid-
+  // navigation, and everything after it would report that instead of its own
+  // answer — a broken worker should fail one check, not swallow the rest.
+  try { await open(base + '/m'); } catch (e) {}
+
+  // (b) No network at all, launched the way the home-screen icon and the
+  //     shortcuts launch it — with a query string. install() pre-caches a bare
+  //     '/m', so this is the check an exact caches.match() fails while looking
+  //     like it works.
+  //
+  // First put the cache back to a fresh install. This session has since cached
+  // those exact query-string URLs by visiting them online, and leaving them
+  // there would let an exact match pass on entries a real first launch, from a
+  // phone that has only ever been offline, would not have.
+  try {
+    await page.evaluate(async () => {
+      for (const name of await caches.keys()) {
+        const c = await caches.open(name);
+        for (const req of await c.keys()) if (new URL(req.url).search) await c.delete(req);
+      }
+    });
+  } catch (e) { bad('could not reset the cache to a fresh install: ' + e.message); }
+  // Playwright's setOffline is deliberately not used here: it emulates the
+  // page's network, not the service worker's, so the worker goes on fetching
+  // happily and the check passes without ever testing anything. Killing the
+  // connection server-side is the real thing.
+  state.dead = true;
+  for (const u of ['/m?from=app', '/m?from=app&to=orders']) {
+    let up = true;
+    try { await open(base + u); } catch (e) { up = false; }
+    up ? ok(`first launch with no network: ${u} opens from the pre-cached shell`)
+       : bad(`first launch with no network: ${u} got no shell — the pre-cached '/m' was never found`);
+  }
+  state.dead = false;
+
   await browser.close();
+  cutTheLine();
   srv.close();
 }

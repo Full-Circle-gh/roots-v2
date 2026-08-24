@@ -143,7 +143,7 @@ module.exports = [
   {
     files: ['scripts/test_mobile_pwa.js'],
     languageOptions: {
-      globals: { document: 'readonly', window: 'readonly', location: 'readonly', navigator: 'readonly' },
+      globals: { document: 'readonly', window: 'readonly', location: 'readonly', navigator: 'readonly', caches: 'readonly' },
     },
   },
 

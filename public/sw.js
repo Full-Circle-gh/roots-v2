@@ -1,16 +1,19 @@
 // Roots v2 — minimal service worker.
 // Strategy:
-//   • HTML pages (/, /kitchen, /stock, /login):  NETWORK-FIRST. Always
-//     try to get the freshest shell. Fall back to cache only when offline.
-//     This is what was missing in earlier versions — a stale cached
-//     shell could outlive a route fix and silently break PWA install.
+//   • HTML pages (/, /kitchen, /stock, /login, /m):  NETWORK-FIRST, on a
+//     deadline. Always try for the freshest shell — a stale cached shell
+//     outliving a route fix is what silently broke PWA install in earlier
+//     versions. But "network-first" cannot mean "wait forever": a network
+//     that hangs rather than fails leaves an installed app on its splash
+//     screen indefinitely, so past HTML_NET_TIMEOUT_MS we open from cache
+//     and keep the fetch running to freshen it. See htmlResponse().
 //   • Web manifests + icons + JS/CSS/etc.: stale-while-revalidate
 //     (instant from cache, refresh in background).
 //   • API requests: network-only, never cached.
 //
 // Bump CACHE on every UI shape change to force every client to evict
 // its old shell on next load (activate handler deletes all old caches).
-const CACHE = 'roots-v2-shell-v833-reviews-console';
+const CACHE = 'roots-v2-shell-v834-mobile-launch';
 // '/m' is Tacet Mobile — the phone companion, and the one shell here that is
 // meant to be INSTALLED rather than visited. An installed app that opens to a
 // browser error the first time the signal drops is not an app, so its shell is
@@ -26,7 +29,15 @@ function isHTMLRequest(req) {
 }
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil((async () => {
+    const c = await caches.open(CACHE);
+    // One add() per URL rather than addAll(): addAll is all-or-nothing, so a
+    // single route answering badly mid-deploy rejects the whole install, the
+    // new worker never activates, and every phone quietly stays on the old
+    // shell with no sign that anything went wrong.
+    await Promise.all(SHELL.map(u => c.add(u).catch(() => {})));
+    await self.skipWaiting();
+  })());
 });
 
 self.addEventListener('activate', (e) => {
@@ -142,6 +153,79 @@ self.addEventListener('notificationclick', (e) => {
   })());
 });
 
+// ─── Opening the app ─────────────────────────────────────────────
+// How long a navigation waits for the network before it opens from cache
+// instead. This number is the difference between an app and a splash screen.
+//
+// fetch() does not reject on a network that has simply stopped answering. A
+// phone on a VPN that has dropped, or a bar of signal that is really none,
+// leaves the promise pending for as long as the OS allows — minutes. Until it
+// settles the navigation has no response, nothing paints, and an installed app
+// sits on its launch icon with no address bar to retry from and nothing to tap.
+// The shell needed to draw that app was in the cache the whole time.
+//
+// Four seconds is longer than any healthy launch and shorter than anyone's
+// patience. Past it we open from the shell we already have and leave the fetch
+// running, so the cache is current again for the launch after this one.
+const HTML_NET_TIMEOUT_MS = 4000;
+
+// A SHELL path is served from a file, identically, whatever query string it is
+// asked for with — server.js hands '/m' the same m.html every time, and the
+// '?from=' and '?to=' the app launches with are read by the page's own script,
+// never by the server. Only for those paths is one cache entry per path the
+// right answer; anywhere else a query string may well pick the page, and
+// serving a neighbouring variant would be worse than serving nothing.
+const SHELL_PATHS = new Set(SHELL);
+
+// The cached shell for a request, past the query string when the path allows.
+//
+// This is the difference between the pre-cached shell working and merely
+// existing. SHELL stores '/m', but the installed app's start_url is
+// '/m?from=app' and its home-screen shortcuts add '&to=orders' — an exact
+// match misses every one of them, so the shell that '/m' is in SHELL to
+// provide would never once be found on a real launch.
+function cachedShell(request) {
+  const path = new URL(request.url).pathname;
+  return caches.match(request, { ignoreSearch: SHELL_PATHS.has(path) });
+}
+
+// Cache a page under the same key cachedShell() will look for: the bare path
+// for a shell, so one entry serves every launch variant instead of the cache
+// growing a copy of a 500KB file per shortcut; the full URL for anything else.
+function cacheHTML(url, response) {
+  const key = SHELL_PATHS.has(url.pathname) ? url.pathname : url.href;
+  const clone = response.clone();
+  return caches.open(CACHE).then(c => c.put(key, clone)).catch(() => {});
+}
+
+async function htmlResponse(e) {
+  const url = new URL(e.request.url);
+  const net = fetch(e.request).then((res) => {
+    if (res && res.ok) cacheHTML(url, res);
+    return res;
+  });
+  // Keep the worker alive for the refresh even when the race below has already
+  // answered from cache and the response is long since delivered.
+  const settled = net.catch(() => null);
+  e.waitUntil(settled);
+
+  const cached = await cachedShell(e.request);
+  // Nothing to fall back to — a first visit, or a page outside the shell.
+  // Waiting for the network is the only option worth having.
+  if (!cached) {
+    const res = await settled;
+    return res || new Response('Offline', { status: 503, statusText: 'Offline' });
+  }
+  // Give the network its deadline. Whatever it says inside that window wins,
+  // errors included: a 500 from a bad deploy is news, and papering over it with
+  // yesterday's shell would hide it. Silence is the only thing we override.
+  let timer;
+  const deadline = new Promise((r) => { timer = setTimeout(() => r(null), HTML_NET_TIMEOUT_MS); });
+  const won = await Promise.race([settled, deadline]);
+  clearTimeout(timer);
+  return won || cached;
+}
+
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   // API: always network, never cached.
@@ -155,22 +239,9 @@ self.addEventListener('fetch', (e) => {
   // Same-origin only — third-party CDNs (polyfill, fonts) bypass us.
   if (url.origin !== location.origin) return;
 
-  // HTML — network-first. The cache is just a backup for offline.
+  // HTML — network-first, with a deadline. See htmlResponse().
   if (isHTMLRequest(e.request)) {
-    e.respondWith((async () => {
-      try {
-        const fresh = await fetch(e.request);
-        if (fresh && fresh.ok) {
-          // Cache the latest copy in case the user goes offline next.
-          const clone = fresh.clone();
-          caches.open(CACHE).then(c => c.put(e.request, clone));
-        }
-        return fresh;
-      } catch {
-        const cached = await caches.match(e.request);
-        return cached || new Response('Offline', { status: 503, statusText: 'Offline' });
-      }
-    })());
+    e.respondWith(htmlResponse(e));
     return;
   }
 

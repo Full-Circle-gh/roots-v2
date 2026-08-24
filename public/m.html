@@ -120,10 +120,34 @@
     } catch (e) {}
   })();
 </script>
+<!-- ── Nothing off this machine is allowed to hold up the launch ───────────
+     Both of these live on hosts an operator's phone may have no route to: a
+     VPN that has dropped, a hotel network, or simply mainland China, where
+     fonts.googleapis.com and unpkg.com do not answer at all. Neither refuses
+     the connection — they hang, which is the one failure a browser waits out
+     rather than reports.
+
+     Loaded the ordinary way, a stylesheet blocks first paint and a plain
+     <script src> in the head blocks the parser. So an installed app whose two
+     CDNs are unreachable draws nothing: no shell, no error, no address bar —
+     just the launch icon on the splash screen for as long as the sockets stay
+     open. The whole app was already sitting in the file by then.
+
+     So: the font sheet comes in as print media and promotes itself to all once
+     it has actually arrived (the browser does not block paint on a print
+     stylesheet), and the icon set is deferred. Both are pure upgrades — the
+     font stack below falls back through Noto Sans SC and system-ui, and ic()
+     already renders an empty glyph and re-renders when the icon set turns up.
+     That "Lucide loads async" re-render at the bottom of this file was written
+     for exactly this and, until now, never had a reason to fire. -->
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+SC:wght@400;500&display=swap">
-<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js"></script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+SC:wght@400;500&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Noto+Sans+SC:wght@400;500&display=swap"></noscript>
+<!-- onload, not just the poll at the bottom: deferred means the icon set
+     arrives after the app has already drawn itself once without it, and this
+     fills the glyphs in on that same frame rather than up to 80ms later. -->
+<script defer src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.min.js" onload="try{render()}catch(e){}"></script>
 <style>
 /* ===========================================================================
    Tacet Mobile — monitoring-first phone companion.
