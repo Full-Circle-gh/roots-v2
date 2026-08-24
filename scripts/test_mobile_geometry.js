@@ -44,7 +44,13 @@ function findChrome() {
 
 // Cases come from the sweep, so a screen cannot be measured in a state the
 // sweep never renders — or missed by being added to only one list.
-const sweep = fs.readFileSync(path.join(__dirname, 'test_mobile_screens.js'), 'utf8');
+// Line endings are normalised on the way in. The slice below searches for an LF
+// boundary, and a Windows checkout hands us CRLF — indexOf then returns -1,
+// slice(start, -1) swallows the rest of the file, and the extracted body fails
+// to parse. That killed this whole check on Windows while it passed on the Linux
+// runner, so the breakage was invisible to CI.
+const sweep = fs.readFileSync(path.join(__dirname, 'test_mobile_screens.js'), 'utf8')
+  .replace(/\r\n/g, '\n');
 const grab = (n) => { const i = sweep.indexOf(`const ${n} = \``); return sweep.slice(sweep.indexOf('`', i) + 1, sweep.indexOf('`;', i)); };
 const ROWS = grab('ROWS');
 const SEED = grab('SEED');
