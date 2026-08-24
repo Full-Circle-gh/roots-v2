@@ -1299,12 +1299,20 @@ function mountFeatureControls() {
   for (const f of FEATURE_CATALOG) {
     if (ENTITLEMENTS[f.key] === false) continue;   // not entitled → no controls
     const host = document.querySelector(FEATURE_HOMES[f.key]);
-    if (!host || host.querySelector(':scope > .feat-bar')) continue;
+    if (!host) continue;
+    // A page may nominate WHERE the switch goes. A4 wants the master
+    // switch first in the console, and on a page that is a list plus a
+    // console (Reviews, Team) the console is not the top of the page.
+    // No mount point → the historical behaviour, first child of the host.
+    const mount = host.querySelector('[data-feat-mount]');
+    const target = mount || host;
+    // Guard at any depth, or a mounted bar would be re-added on every call.
+    if (host.querySelector('.feat-bar')) continue;
     const bar = document.createElement('div');
     bar.className = 'feat-bar';
     bar.innerHTML =
       '<div><div class="feat-bar-t">' + f.en + ' · ' + f.cn + '</div>' +
-      '<div class="feat-bar-d">' + f.desc + '</div></div>' +
+      '<div class="feat-bar-d" data-feat-desc="' + f.key + '">' + f.desc + '</div></div>' +
       '<label class="fc-switch"><input type="checkbox" data-feat-toggle="' + f.key + '">' +
       '<span class="fc-switch-track"></span>' +
       '<span class="feat-bar-state" data-feat-state="' + f.key + '"></span></label>';
@@ -1314,8 +1322,8 @@ function mountFeatureControls() {
       '<h3>' + f.en + ' is off · ' + f.cn + '已关闭</h3>' +
       '<p>Customers don\'t see this while it\'s off. Turn it on to set it up. · 关闭期间顾客看不到此功能,开启后即可配置。</p>' +
       '<button class="btn btn-primary" data-feat-enable="' + f.key + '">Turn on · 开启</button>';
-    host.insertBefore(off, host.firstChild);
-    host.insertBefore(bar, host.firstChild);
+    target.insertBefore(off, target.firstChild);
+    target.insertBefore(bar, target.firstChild);
     bar.querySelector('input').addEventListener('change', e => setFeatureEnabled(f.key, e.target.checked));
     off.querySelector('button').addEventListener('click', () => setFeatureEnabled(f.key, true));
   }
@@ -1325,6 +1333,13 @@ function mountFeatureControls() {
 function syncFeatureToggles() {
   for (const f of FEATURE_CATALOG) {
     const on = document.body.classList.contains('feat-' + f.key);
+    // A4: the consequence follows the state. Features without descOn/descOff
+    // keep showing their static description.
+    if (f.descOn && f.descOff) {
+      document.querySelectorAll('[data-feat-desc="' + f.key + '"]').forEach(d => {
+        d.textContent = on ? f.descOn : f.descOff;
+      });
+    }
     document.querySelectorAll('[data-feat-toggle="' + f.key + '"]').forEach(i => { i.checked = on; });
     document.querySelectorAll('[data-feat-state="' + f.key + '"]').forEach(s => {
       s.textContent = on ? 'On · 开' : 'Off · 关';

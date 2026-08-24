@@ -4000,14 +4000,12 @@
      settings + past referrals stay readable while the program is off so an
      operator can set the offer up before turning it on. */
   body.ent-membership:not(.feat-membership)   #tab-membership > :not(.feat-bar):not(.feat-off),
-  body.ent-reviews:not(.feat-reviews)         #tab-reviews    > :not(.feat-bar):not(.feat-off),
   body.ent-feedback:not(.feat-feedback)       #tab-feedback   > :not(.feat-bar):not(.feat-off),
   body.ent-socialProof:not(.feat-socialProof) #tab-social     > :not(.feat-bar):not(.feat-off),
   body.ent-quickStock:not(.feat-quickStock)   #qs-home > :not(.feat-bar):not(.feat-off),
   body.ent-kitchenAdd:not(.feat-kitchenAdd)   #ka-home > :not(.feat-bar):not(.feat-off),
   body.ent-faq:not(.feat-faq)                 #tab-faq        > :not(.feat-bar):not(.feat-off) { display: none !important; }
   body.ent-membership:not(.feat-membership)   #tab-membership .feat-off,
-  body.ent-reviews:not(.feat-reviews)         #tab-reviews    .feat-off,
   body.ent-feedback:not(.feat-feedback)       #tab-feedback   .feat-off,
   body.ent-socialProof:not(.feat-socialProof) #tab-social     .feat-off,
   body.ent-quickStock:not(.feat-quickStock)   #qs-home .feat-off,
@@ -12786,3 +12784,43 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 .rvw-empty { padding: 48px 24px; text-align: center; }
 .rvw-empty-t { font-size: 18px; font-weight: 500; }
 .rvw-empty-d { font-size: 15px; color: var(--td-text2, #58606E); margin-top: 8px; }
+
+/* ── Reviews · Set up (A4 Console) ─────────────────────────────────────
+   A4: master switch first with its consequence in words, then group cards
+   whose rows are label + one-line description left and ONE control right.
+   No Dusk anywhere below — config is never the AI acting.
+
+   Reviews is deliberately absent from the display:none gating above, for
+   the reason A4 gives and the reason the Affiliate exemption already
+   records: an operator should be able to set the reward and the tags up
+   BEFORE turning the feature on. Off dims the console to 55% instead. */
+  /* The mount is excluded IN this selector rather than exempted by a second
+     rule: a separate :not-free exemption loses on specificity (5 class-level
+     simple selectors here against 3) and the switch stays dimmed. */
+  body.ent-reviews:not(.feat-reviews) #tab-reviews > :not(.feat-bar):not(.feat-off):not([data-feat-mount]) {
+    opacity: .55; pointer-events: none;
+  }
+
+  .rvw-setup { margin-top: 48px; padding-top: 32px; border-top: 1px solid var(--td-border, #E4E0D5); }
+  .rvw-setup-t { font-size: 18px; font-weight: 500; }
+  .rvw-setup-d { font-size: 15px; color: var(--td-text2, #58606E); margin-top: 6px; }
+
+  .rvw-set { border: 1px solid var(--td-border, #E4E0D5); border-radius: 14px; background: var(--td-surface, #fff); padding: 24px; margin-top: 24px; }
+  .rvw-set-t { font-size: 18px; font-weight: 500; }
+  .rvw-set-note { font-size: 13px; line-height: 1.6; color: var(--td-text2, #58606E); margin-top: 8px; }
+  .rvw-set-note b { font-weight: 500; color: var(--td-text, #111A2B); }
+  .rvw-set-row { display: flex; align-items: center; gap: 24px; padding: 16px 0; border-bottom: 1px solid var(--td-border, #E4E0D5); }
+  .rvw-set-row:first-of-type { margin-top: 8px; }
+  .rvw-set-row.is-last { border-bottom: 0; padding-bottom: 0; }
+  .rvw-set-rowl { flex: 1; min-width: 0; }
+  .rvw-set-label { font-size: 15px; }
+  .rvw-set-desc { font-size: 13px; color: var(--td-text2, #58606E); margin-top: 3px; line-height: 1.5; }
+  .rvw-set-ctl { flex: none; }
+  .rvw-set-state { font-size: 13px; color: var(--td-text2, #58606E); }
+  .rvw-set-num { width: 96px; height: 34px; padding: 0 12px; border: 1px solid var(--td-border, #E4E0D5); border-radius: 8px; background: var(--td-surface, #fff); color: var(--td-text, #111A2B); font: 400 15px var(--f-sans); text-align: right; font-variant-numeric: tabular-nums; }
+  .rvw-set-foot { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--td-border, #E4E0D5); }
+  .rvw-set-hint { font-size: 13px; color: var(--td-text2, #58606E); font-variant-numeric: tabular-nums; }
+  .rvw-set-save, .rvw-set-act { padding: 7px 14px; border-radius: 8px; background: transparent; color: var(--td-text, #111A2B); font: 400 13px var(--f-sans); cursor: pointer; white-space: nowrap; }
+  .rvw-set-save { border: 1px solid var(--td-text, #111A2B); }
+  .rvw-set-act { border: 1px solid var(--td-border, #E4E0D5); }
+  .rvw-set-save:hover, .rvw-set-act:hover { background: var(--td-raised, #F6F3EC); }

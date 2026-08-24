@@ -1566,8 +1566,12 @@ const FEATURE_CATALOG = [
     desc: 'Roots Club tiers and the points shown to shoppers. · 会员等级与向顾客展示的积分。' },
   { key: 'affiliate',   en: 'Referral program',    cn: '推荐计划',   def: true,
     desc: 'On/off for the whole referral program — when off, shoppers can\'t apply codes or earn rewards, and the admin tab is hidden. · 推荐计划总开关:关闭后顾客无法使用邀请码或获得奖励,后台标签页也会隐藏。' },
+  // A4: the master switch says what STATE the feature is in, not what it is.
+  // descOn/descOff are optional; a feature without them keeps using `desc`.
   { key: 'reviews',     en: 'Product reviews',      cn: '商品评价',   def: true,
-    desc: 'Customer reviews and the review-tag editor. · 顾客评价与评价标签编辑。' },
+    desc: 'Customer reviews and the review-tag editor. · 顾客评价与评价标签编辑。',
+    descOn:  'On. Customers can review delivered orders, and reviews show on product pages. · 已开启:顾客可对已送达订单发表评价,评价会显示在商品页。',
+    descOff: 'Off. Nobody can leave a review, and the ones you have are hidden from shoppers. · 已关闭:顾客无法发表评价,现有评价对顾客不可见。' },
   { key: 'feedback',    en: 'Customer feedback',    cn: '用户反馈',   def: true,
     desc: 'The "Found a bug?" inbox from the mini-app Me page. · 来自小程序“我的”页面的反馈收件箱。' },
   { key: 'socialProof', en: 'Social proof',         cn: '社交证明',   def: true,

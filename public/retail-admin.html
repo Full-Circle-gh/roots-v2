@@ -8304,109 +8304,114 @@
     <div class="rvw-list" id="rvw-list"></div>
     <div class="rvw-pager" id="rvw-pager" hidden></div>
 
-    <!-- Reward for reviewing — sits ABOVE auto top-up on purpose: earning real
-         reviews is the fix, seeding them is the patch. -->
-    <div class="card" style="margin-top: var(--s5);">
-      <div class="row" style="justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
-        <h3 style="font-size: 13px; margin: 0;">Reward for reviewing · 评价奖励</h3>
-        <div class="muted" style="font-size: 11px;" id="rrw-stats"></div>
-      </div>
-      <div class="muted" style="font-size: 11px; margin-bottom: 12px;">
-        Gives a customer points for reviewing something they bought. Most shoppers never review unless there is a
-        reason to — this is the setting that grows your real reviews instead of seeded ones.
-        · 顾客对已购商品发表评价即可获得积分。多数顾客没有理由就不会评价——这项设置用于增加真实评价,而非种子评价。
-      </div>
-      <div class="muted" style="font-size: 11px; margin-bottom: 12px;">
+
+    <!-- ── Set up ──────────────────────────────────────────────────────────
+         A4 Console (patterns §2). A4 names the precedent for a page that is
+         both: "Team is a Console + a member list." The queue above is the
+         list; everything below is the console — read rarely, changed rarely.
+         Every group carries a stable id so the command palette can jump to
+         it. No Dusk down here: config is never the AI acting (§1.8 rule 6). -->
+    <div class="rvw-setup">
+      <div class="rvw-setup-t">Set up · 设置</div>
+      <div class="rvw-setup-d">Read rarely, changed rarely. · 很少查看,很少更改。</div>
+    </div>
+
+    <!-- The master switch mounts HERE rather than at the top of the section:
+         mountFeatureControls() honours an explicit [data-feat-mount]. A4 wants
+         the master switch first in the console, and the console comes after
+         the work. -->
+    <div data-feat-mount></div>
+
+    <div class="rvw-set" id="rvw-set-reward">
+      <div class="rvw-set-t">Reward for reviewing · 评价奖励</div>
+      <div class="rvw-set-note">
         <b>The reward never depends on the star rating.</b> A 1★ review earns exactly what a 5★ review earns.
         Paying for good ratings specifically is illegal, and it also makes the reviews worthless to read.
         · <b>奖励与评分高低无关。</b>1 星评价与 5 星评价获得的积分完全相同。仅为好评付费属违法行为,也会让评价失去参考价值。
       </div>
-      <div class="row" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Status · 状态</label>
-          <label class="fc-switch">
+      <div class="rvw-set-row">
+        <div class="rvw-set-rowl">
+          <div class="rvw-set-label">Reward reviewers · 发放奖励</div>
+          <div class="rvw-set-desc">Points for leaving a review, whatever the rating. · 顾客发表评价即可获得积分,与评分无关。</div>
+        </div>
+        <div class="rvw-set-ctl">          <label class="fc-switch">
             <input type="checkbox" id="rrw-enabled" onchange="rrwSyncLabel()">
             <span class="fc-switch-track"></span>
-            <span id="rrw-status-label" style="font-size: 12px;">OFF · 关闭</span>
-          </label>
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Points per review · 每条评价积分</label>
-          <input type="number" id="rrw-points" min="0" max="10000" step="1" value="20" style="width: 130px;">
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Most rewarded per order · 每单最多奖励</label>
-          <input type="number" id="rrw-max" min="1" max="50" step="1" value="1" style="width: 150px;">
-        </div>
+            <span id="rrw-status-label" class="rvw-set-state">Off · 关闭</span>
+          </label></div>
       </div>
-      <div class="muted" style="font-size: 11px; margin: 8px 0 12px;">
-        The per-order cap stops a ten-item order becoming ten rewards. Points expire on the same clock as points
-        earned from orders. · 每单上限可避免十件商品的订单产生十份奖励。积分有效期与订单积分相同。
+      <div class="rvw-set-row">
+        <div class="rvw-set-rowl">
+          <div class="rvw-set-label">Points per review · 每条评价积分</div>
+          <div class="rvw-set-desc">Credited when the review posts. · 评价提交后立即到账。</div>
+        </div>
+        <div class="rvw-set-ctl"><input type="number" id="rrw-points" class="rvw-set-num" min="0" max="10000" step="1" value="20"></div>
       </div>
-      <div class="row" style="gap: 8px; align-items: center; flex-wrap: wrap;">
-        <button class="btn btn-primary btn-sm" type="button" onclick="saveReviewReward()">Save · 保存</button>
-        <span id="rrw-note" class="muted" style="font-size: 12px;"></span>
+      <div class="rvw-set-row is-last">
+        <div class="rvw-set-rowl">
+          <div class="rvw-set-label">Most rewarded per order · 每单最多奖励</div>
+          <div class="rvw-set-desc">Stops a ten-item order becoming ten rewards. · 避免十件商品的订单产生十份奖励。</div>
+        </div>
+        <div class="rvw-set-ctl"><input type="number" id="rrw-max" class="rvw-set-num" min="1" max="50" step="1" value="1"></div>
+      </div>
+      <div class="rvw-set-foot">
+        <button class="rvw-set-save" type="button" onclick="saveReviewReward()">Save · 保存</button>
+        <span id="rrw-stats" class="rvw-set-hint"></span>
+        <span id="rrw-note" class="rvw-set-hint"></span>
       </div>
     </div>
-    <!-- Auto top-up — holds thin products at a review floor by seeding the
-         shortfall. Sits with the tag editor below the daily moderation queue
-         because it is set once and then left alone. -->
-    <div class="card" style="margin-top: var(--s5);">
-      <div class="row" style="justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
-        <h3 style="font-size: 13px; margin: 0;">Auto top-up · 自动补充</h3>
-        <div class="muted" style="font-size: 11px;">Off by default. · 默认关闭。</div>
-      </div>
-      <div class="muted" style="font-size: 11px; margin-bottom: 12px;">
-        Keeps every published product at a minimum number of reviews. Anything below the line is topped up
-        automatically, so a new product arrives with reviews already on it and never shows an empty rating.
-        · 让每个已上架商品保持最少的评价数量。低于设定值的商品会自动补足,新品上架即带有评价,不会出现空白评分。
-      </div>
-      <div class="muted" style="font-size: 11px; margin-bottom: 12px;">
+
+    <div class="rvw-set" id="rvw-set-topup">
+      <div class="rvw-set-t">Auto top-up · 自动补充</div>
+      <div class="rvw-set-note">
         <b>These are seeded reviews, not customer ones</b> — written from the built-in copy, signed with made-up
-        names, and marked <b>Seeded</b> in the table above. No customer, order or real name is ever used.
+        names, and marked <b>Seeded</b> in the list above. No customer, order or real name is ever used.
         Products listed in the last 24 hours are left alone.
         · <b>补充的是种子评价,并非顾客评价</b>:文案由系统生成,署名为虚构昵称,在上方列表中标记为 <b>Seeded</b>。
         不会使用任何顾客、订单或真实姓名。上架未满 24 小时的商品不会补充。
       </div>
-      <div class="row" style="gap: 12px; align-items: flex-start; flex-wrap: wrap;">
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Status · 状态</label>
-          <label class="fc-switch">
+      <div class="rvw-set-row">
+        <div class="rvw-set-rowl">
+          <div class="rvw-set-label">Keep products topped up · 保持补充</div>
+          <div class="rvw-set-desc">Fills anything below the line, and checks again every few hours. · 自动补足低于设定值的商品,每几小时检查一次。</div>
+        </div>
+        <div class="rvw-set-ctl">          <label class="fc-switch">
             <input type="checkbox" id="rtu-enabled" onchange="rtuSyncLabel()">
             <span class="fc-switch-track"></span>
-            <span id="rtu-status-label" style="font-size: 12px;">OFF · 关闭</span>
-          </label>
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Minimum reviews · 最少评价数</label>
-          <input type="number" id="rtu-min" min="1" max="20" step="1" value="3" style="width: 110px;">
-        </div>
-        <div class="field" style="margin: 0;">
-          <label class="stacked">Most to add per run · 每次最多添加</label>
-          <input type="number" id="rtu-max" min="1" max="500" step="1" value="50" style="width: 130px;">
-        </div>
+            <span id="rtu-status-label" class="rvw-set-state">Off · 关闭</span>
+          </label></div>
       </div>
-      <div class="muted" style="font-size: 11px; margin: 8px 0 12px;">
-        The cap stops the first run flooding the whole catalogue. It checks again every few hours, so a big
-        backlog clears over a day or so. · 该上限可避免首次运行时一次性铺满整个商品库。系统每几小时检查一次,
-        积压的商品会在一天左右内补齐。
+      <div class="rvw-set-row">
+        <div class="rvw-set-rowl">
+          <div class="rvw-set-label">Minimum reviews per product · 每个商品最少评价数</div>
+          <div class="rvw-set-desc">A new product arrives with reviews already on it. · 新品上架即带有评价,不会出现空白评分。</div>
+        </div>
+        <div class="rvw-set-ctl"><input type="number" id="rtu-min" class="rvw-set-num" min="1" max="20" step="1" value="3"></div>
       </div>
-      <div class="row" style="gap: 8px; align-items: center; flex-wrap: wrap;">
-        <button class="btn btn-primary btn-sm" type="button" onclick="saveReviewTopup()">Save · 保存</button>
-        <button class="btn btn-sm" type="button" onclick="runReviewTopupNow()">Run now · 立即运行</button>
-        <span id="rtu-estimate" class="muted" style="font-size: 12px;"></span>
+      <div class="rvw-set-row is-last">
+        <div class="rvw-set-rowl">
+          <div class="rvw-set-label">Most to add per run · 每次最多添加</div>
+          <div class="rvw-set-desc">Stops the first run flooding the whole catalogue. · 避免首次运行时一次性铺满整个商品库。</div>
+        </div>
+        <div class="rvw-set-ctl"><input type="number" id="rtu-max" class="rvw-set-num" min="1" max="500" step="1" value="50"></div>
+      </div>
+      <div class="rvw-set-foot">
+        <button class="rvw-set-save" type="button" onclick="saveReviewTopup()">Save · 保存</button>
+        <button class="rvw-set-act" type="button" onclick="runReviewTopupNow()">Run now · 立即运行</button>
+        <span id="rtu-estimate" class="rvw-set-hint"></span>
       </div>
     </div>
-    <!-- Tag-chip editor — setup done rarely, so it sits below the daily moderation queue. -->
-    <div class="card" style="margin-top: var(--s5);">
-      <div class="row" style="justify-content: space-between; align-items: baseline; margin-bottom: 8px;">
-        <h3 style="font-size: 13px; margin: 0;">Review tags · 评价标签</h3>
-        <div class="muted" style="font-size: 11px;">Customers tap these chips when leaving a review. Edit labels and colours — the new wording appears in the mini app within ~60s (config cache TTL). · 顾客提交评价时点击的标签;修改文案与颜色后,小程序约 60 秒内生效(配置缓存)。</div>
+
+    <div class="rvw-set" id="rvw-set-tags">
+      <div class="rvw-set-t">Review tags · 评价标签</div>
+      <div class="rvw-set-note">
+        Customers tap these when leaving a review; new wording reaches the mini app within about a minute.
+        <b>id</b> is the slug stored in the database — change it only if no review has used the tag yet, or older
+        reviews lose their chip. Lowercase letters and hyphens only.
+        · 顾客提交评价时点击的标签,修改后约一分钟内在小程序生效。<b>id</b> 是存入数据库的标识符——
+        仅在还没有评价使用过该标签时才可修改,否则旧评价会丢失对应的标签。只能使用小写字母和连字符。
       </div>
-      <div class="muted" style="font-size: 11px; margin-bottom: 12px;">
-        <b>id</b> is the slug stored in the database — change it only if no reviews have used the tag yet, otherwise older reviews lose their chip. Lowercase letters + hyphens only. · <b>id</b> 是存入数据库的标识符——仅在还没有评价使用过该标签时才可修改,否则旧评价会丢失对应的标签。只能使用小写字母和连字符。
-      </div>
-      <div class="table-wrap" style="margin-bottom: 12px;">
+      <div class="table-wrap" style="margin-top: 16px;">
         <table id="rtags-table">
           <thead><tr>
             <th style="width: 150px;">id</th>
@@ -8418,10 +8423,10 @@
           <tbody><tr><td colspan="5" class="muted">Loading…</td></tr></tbody>
         </table>
       </div>
-      <div class="row" style="gap: 12px;">
-        <button class="btn" onclick="addReviewTag()">+ Add tag · 添加标签</button>
-        <button class="btn btn-primary" onclick="saveReviewTags()">Save tags · 保存标签</button>
-        <button class="btn" onclick="loadReviewTags()" style="margin-left: auto;">Reset (reload from server) · 重置(从服务端重新加载)</button>
+      <div class="rvw-set-foot">
+        <button class="rvw-set-save" type="button" onclick="saveReviewTags()">Save tags · 保存标签</button>
+        <button class="rvw-set-act" type="button" onclick="addReviewTag()">+ Add tag · 添加标签</button>
+        <button class="rvw-set-act" type="button" onclick="loadReviewTags()">Reset · 重置</button>
       </div>
     </div>
   </section>
