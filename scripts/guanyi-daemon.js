@@ -18,6 +18,7 @@
 
 const path = require('path');
 const fs   = require('fs');
+const { execFile } = require('child_process');
 const envFile = path.join(__dirname, '../.env');
 try {
   require('dotenv').config({ path: envFile });
@@ -91,6 +92,42 @@ const loginFailStreak = {};   // storeCode -> consecutive failed probes
 const downFlagged     = {};   // storeCode -> already alerted for this outage
 const healedOnce      = {};   // storeCode -> heal has run since process start
 let _lastHealthAt = 0;
+
+// ── Proxy health gate (mirrors meituan/shangou/qingyun-daemon) ────────────────
+// A dead proxy makes fetchListings() fail exactly the way an expired session
+// does — both come back null — so without this gate processSessionHealth blamed
+// EVERY failure on the login and paged ops to burn ~6 min on a manual headed
+// re-login (scripts/guanyi-login.js) even when the real fix was the proxy.
+// Guanyi has no failover watchdog (a static per-store env var, unlike Meituan's
+// proxy-manager), so this probes exactly what guanyi-browser.js's
+// resolveProxy(storeCode) would launch Chrome on. Direct mode (no proxy
+// configured) is always "healthy" — a no-op there.
+const GUANYI_BASE_URL      = 'https://v2.guanyierp.com';
+const PROXY_DOWN_GRACE     = Number(process.env.GUANYI_PROXY_DOWN_GRACE || LOGIN_DOWN_GRACE);
+const proxyFailStreak = {};   // storeCode -> consecutive failed probes
+const proxyDownFlagged = {};  // storeCode -> already alerted for this outage
+function activeProxy(storeCode) {
+  return (storeCode && process.env[`GUANYI_PROXY_${String(storeCode).toUpperCase()}`])
+    || process.env.GUANYI_PROXY_URL || '';
+}
+function proxyHealthy(storeCode, timeoutSec = 8) {
+  const proxy = activeProxy(storeCode);
+  if (!proxy) return Promise.resolve(true);
+  // curl wants socks5h:// for remote DNS through a SOCKS5 exit — plain socks5://
+  // resolves locally, which fails on a residential path Chrome handles fine.
+  const probeUrl = proxy.startsWith('socks5://') ? 'socks5h://' + proxy.slice(9) : proxy;
+  return new Promise((resolve) => {
+    execFile('curl',
+      ['-s', '-o', '/dev/null', '-w', '%{http_code}', '-x', probeUrl,
+       '--max-time', String(timeoutSec), `${GUANYI_BASE_URL}/`],
+      { timeout: (timeoutSec + 4) * 1000 },
+      (_err, stdout) => {
+        const code = parseInt(String(stdout).trim(), 10) || 0;
+        resolve(code >= 200 && code < 600);
+      });
+  });
+}
+function maskProxy(u) { return String(u || '').replace(/:[^:@/]+@/, ':****@'); }
 
 // Don't fire on an exact fixed cadence.
 function jitter(baseMs, frac = 0.3) {
@@ -603,6 +640,29 @@ async function processSessionHealth() {
   _lastHealthAt = now;
 
   for (const storeCode of guanyiStoreCodes()) {
+    // Rule out the proxy before blaming the login — a dead proxy fails
+    // fetchListings() the same way an expired session does, and the fix is
+    // completely different (nobody needs to touch a browser for this one).
+    if (!(await proxyHealthy(storeCode))) {
+      proxyFailStreak[storeCode] = (proxyFailStreak[storeCode] || 0) + 1;
+      log(storeCode, `health: proxy unreachable (${proxyFailStreak[storeCode]}/${PROXY_DOWN_GRACE}) — not blaming the session`);
+      if (!proxyDownFlagged[storeCode] && proxyFailStreak[storeCode] >= PROXY_DOWN_GRACE) {
+        proxyDownFlagged[storeCode] = true;
+        logSync(storeCode, 'proxy_down', 'error', null, 'proxy cannot reach Guanyi — stock push paused (not logged out)');
+        sendOpsAlert(
+          `🔴 管易 ${storeCode} 代理掉线，无法连接，库存推送已暂停（未掉登录）\n` +
+          `Guanyi ${storeCode} proxy down (${maskProxy(activeProxy(storeCode))}) — stock push paused, session is NOT logged out, no need to re-run guanyi-login.js`
+        );
+      }
+      continue; // skip the login-fail streak entirely — this isn't a login problem
+    }
+    if (proxyDownFlagged[storeCode]) {
+      proxyDownFlagged[storeCode] = false;
+      logSync(storeCode, 'proxy_up', 'ok', null, 'proxy reachable again — stock push resumed');
+      sendOpsAlert(`✅ 管易 ${storeCode} 代理已恢复，库存推送继续\nGuanyi ${storeCode} proxy recovered — stock push resumed`);
+    }
+    proxyFailStreak[storeCode] = 0;
+
     let listing = null;
     try {
       const browser = await getBrowser(storeCode);
@@ -648,7 +708,7 @@ async function processSessionHealth() {
 
 async function main() {
   console.log(`[guanyi-daemon] starting (pickup-mode=${PICKUP_MODE}, reconcile=${RECONCILE_MS}ms, cap=${PICKUP_CAP}, ` +
-              `health=${HEALTH_MS}ms grace=${LOGIN_DOWN_GRACE}, autoheal=${AUTOHEAL ? 'on' : 'off'})`);
+              `health=${HEALTH_MS}ms grace=${LOGIN_DOWN_GRACE}, proxyGrace=${PROXY_DOWN_GRACE}, autoheal=${AUTOHEAL ? 'on' : 'off'})`);
   // eslint-disable-next-line no-constant-condition
   while (true) {
     // Health first: it owns the login alert and the heal, and a dead session makes
