@@ -4836,27 +4836,61 @@
          views differ only in the chrome around them and in which of the pane's
          .pd-summary / .pd-heavy blocks CSS shows. Hidden until Expand. ── -->
     <div id="pd-pagestage" class="pd-pagestage" style="display:none;">
+      <!-- The crumb is the ONLY way out, and it is also the eyebrow (§1.7a).
+           It used to end in the product's name, which printed the name twice
+           inside 60px — the title two lines down is the name. And the Collapse
+           button that used to sit top-right called this exact same function:
+           one exit drawn twice. It is gone. -->
       <div class="pd-pp-crumb">
-        <button type="button" onclick="pdCollapseToPanel()"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Products · 产品</button>
-        <span class="pd-pp-sep">/</span>
-        <span class="pd-pp-here" id="pd-pp-crumb-name" data-no-i18n></span>
+        <button type="button" onclick="pdCollapseToPanel()" title="Back to the list and quick-edit panel · 返回列表与快捷面板"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Products · 产品</button>
       </div>
-      <!-- Header, on the same alignment grid as the columns below it. Two rows,
-           two columns: identity over the status line on the left, the record's
-           controls over its save state on the right. Everything the editor's own
-           head used to carry lives here (pdMoveHeadState). -->
-      <div class="pd-pp-head">
-        <div class="pd-pp-title" data-no-i18n>
-          <span id="pd-pp-name"></span>
-          <span class="pd-pp-alt" id="pd-pp-name-alt"></span>
-          <span id="pd-pp-badge"></span>
+      <!-- Header, on the same alignment grid as the columns below it. The
+           product's own photo leads, because the biggest view of one product
+           should show the product; the drawer header has carried one all along
+           and the page dropped it. The picture makes the identity block two
+           lines tall, which gives the state block on the right two lines to
+           match — so the save line stops hanging alone under a control.
+           Everything the editor's own head used to carry lives here
+           (pdMoveHeadState). -->
+      <div class="pd-pp-head" id="pd-pp-head">
+        <div class="pd-pp-id">
+          <div class="pd-pp-thumb" id="pd-pp-thumb"></div>
+          <div class="pd-pp-idtxt">
+            <div class="pd-pp-title" data-no-i18n>
+              <span id="pd-pp-name"></span>
+              <span class="pd-pp-alt" id="pd-pp-name-alt"></span>
+              <span id="pd-pp-badge"></span>
+            </div>
+            <div class="pd-pp-sub" id="pd-pp-sub" data-no-i18n></div>
+          </div>
         </div>
-        <div class="pd-pp-acts">
+        <div class="pd-pp-acts" id="pd-pp-acts">
           <span id="pd-pp-tags" class="pd-pp-tags"></span>
-          <button class="btn btn-sm" type="button" onclick="pdCollapseToPanel()" title="Back to the list and quick-edit panel · 返回列表与快捷面板"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>Collapse · 收起</button>
+          <div class="pd-pp-savestate" id="pd-pp-state"></div>
         </div>
-        <div class="pd-pp-sub" id="pd-pp-sub" data-no-i18n></div>
-        <div class="pd-pp-savestate" id="pd-pp-state"></div>
+      </div>
+      <!-- ── The condensed header ────────────────────────────────────────────
+           This page is three screens tall and writes on every keystroke, so the
+           one line that says it saved cannot be the first thing to scroll away
+           (§1.7: the page header is never scrolled away). Past the header, this
+           56px bar takes over: which product, whether it is in the shop,
+           whether it saved, and the way out.
+
+           It carries no control the resting header does not — it IS the header,
+           smaller. The shop switch and the save state are the SAME two nodes,
+           moved in and out (pdPinHead), never a second copy, because there is
+           only one of each and a duplicate would drift.
+
+           The bar is sticky with a negative bottom margin, so it takes no room
+           in the flow: shrinking a sticky header in place would yank the whole
+           page up by its own height the moment it condensed. The 1px sentinel
+           above it is what the observer watches. ── -->
+      <div class="pd-pp-sentinel" id="pd-pp-sentinel" aria-hidden="true"></div>
+      <div class="pd-pp-bar" id="pd-pp-bar">
+        <div class="pd-pp-bar-thumb" id="pd-pp-bar-thumb"></div>
+        <div class="pd-pp-bar-name" id="pd-pp-bar-name" data-no-i18n></div>
+        <span class="pd-pp-bar-sp"></span>
+        <button type="button" class="pd-pp-bar-back" onclick="pdCollapseToPanel()" title="Back to the list and quick-edit panel · 返回列表与快捷面板"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Products · 产品</button>
       </div>
       <div id="pd-pp-mount" class="pd-pp-mount"></div>
     </div>

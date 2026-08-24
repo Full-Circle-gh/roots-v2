@@ -3201,30 +3201,82 @@
     font: 400 13px var(--f-sans); color: var(--td-text2);
   }
   .pd-pp-crumb button:hover { color: var(--td-text); }
-  .pd-pp-sep { opacity: .5; }
-  .pd-pp-here { color: var(--td-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* ── The page header ──────────────────────────────────────────────────────
-     Two rows on two columns, so the four things it carries line up instead of
-     floating: title over status line on the left, controls over save state on
-     the right, both right-hand cells aligned to the same edge as the column
-     below them. `align-items: baseline` on the top row sits the switch and the
-     Collapse button on the title's baseline rather than its box. */
+     Two blocks side by side, each two lines tall, so nothing floats: the
+     product's photo and its name over the status line on the left; the shop
+     switch over the save state on the right, both flush to the same edge as
+     the column below them.
+
+     It used to be a 1fr/auto grid with four cells, and the save state sat in
+     the fourth one alone under a button with 700px of empty header beside it.
+     Giving the left block a picture is what makes both sides two lines tall. */
   .pd-pp-head {
-    display: grid; grid-template-columns: minmax(0, 1fr) auto;
-    align-items: baseline; column-gap: 24px; row-gap: 6px;
-    padding-bottom: 20px; margin-bottom: 28px;
+    display: flex; align-items: flex-start; gap: 24px;
+    padding-bottom: 22px; margin-bottom: 28px;
     border-bottom: 1px solid var(--td-border);
   }
-  .pd-pp-title { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; font: 500 24px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); min-width: 0; }
+  .pd-pp-id { display: flex; gap: 16px; min-width: 0; flex: 1; }
+  /* The product's own photo. Same node type as the drawer's .pd-head-thumb but
+     its own element — the drawer's lives inside #pd-editor and thousands of
+     rules are scoped there, so it cannot simply be moved out here. With no
+     image it is a quiet raised tile, never a broken-picture glyph. */
+  .pd-pp-thumb {
+    width: 56px; height: 56px; border-radius: 12px; flex: none;
+    border: 1px solid var(--td-border);
+    background: var(--td-raised) no-repeat center / cover;
+  }
+  .pd-pp-idtxt { min-width: 0; }
+  .pd-pp-title { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; font: 500 26px var(--f-sans); letter-spacing: -.015em; line-height: 1.25; color: var(--td-text); min-width: 0; }
   .pd-pp-alt { font-size: 15px; font-weight: 400; color: var(--td-text2); }
-  .pd-pp-acts { display: flex; align-items: center; gap: 12px; flex: none; justify-self: end; }
+  .pd-pp-acts { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; flex: none; padding-top: 4px; }
   .pd-pp-tags { display: flex; align-items: center; gap: 8px; }
   .pd-pp-tags:empty { display: none; }
   /* The status line: SKU, where it shows, price. Real values, read from the
      form — never a description of the page. */
-  .pd-pp-sub { font-size: 15px; color: var(--td-text2); font-variant-numeric: tabular-nums; min-width: 0; }
+  .pd-pp-sub { font-size: 15px; color: var(--td-text2); font-variant-numeric: tabular-nums; min-width: 0; margin-top: 4px; }
   .pd-pp-sub:empty { display: none; }
-  .pd-pp-savestate { justify-self: end; display: flex; align-items: center; }
+  .pd-pp-savestate { display: flex; align-items: center; }
+
+  /* ── The condensed header ─────────────────────────────────────────────────
+     Takes over once the resting header has scrolled past, so the page never
+     stops saying which product you are in and whether it saved (§1.7 — the
+     page header is never scrolled away).
+
+     `top: 56px` is the exact topbar height, the same figure .pa-rowhead uses
+     two thousand lines up; the bar pins flush under it with no gap, so it is
+     square-topped rather than rounded — a rounded edge there reads as a
+     floating pill instead of an attached bar.
+
+     The negative bottom margin takes the bar out of the flow entirely. That is
+     the whole reason this is a second element rather than the header shrinking
+     in place: a sticky box that shrinks gives back its own height, and the
+     page below it jumps up by 60-odd pixels at the moment it condenses. */
+  .pd-pp-sentinel { height: 1px; margin-bottom: -1px; }
+  .pd-pp-bar {
+    position: sticky; top: 56px; z-index: 5;
+    /* -56, not -57: box-sizing is border-box product-wide (top of this file),
+       so the hairline is inside the 56px, not added to it. */
+    margin-bottom: -56px;
+    display: flex; align-items: center; gap: 14px;
+    height: 56px; background: var(--td-paper);
+    border-bottom: 1px solid var(--td-border);
+    visibility: hidden; opacity: 0;
+    transition: opacity .15s var(--ease-out, ease);
+  }
+  .pd-pagestage.is-pinned .pd-pp-bar { visibility: visible; opacity: 1; }
+  .pd-pp-bar-thumb {
+    width: 28px; height: 28px; border-radius: 7px; flex: none;
+    border: 1px solid var(--td-border);
+    background: var(--td-raised) no-repeat center / cover;
+  }
+  .pd-pp-bar-name { font: 500 15px var(--f-sans); color: var(--td-text); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pd-pp-bar-sp { flex: 1; min-width: 8px; }
+  .pd-pp-bar-back { display: inline-flex; align-items: center; gap: 6px; padding: 0; background: none; border: 0; cursor: pointer; font: 400 13px var(--f-sans); color: var(--td-text2); white-space: nowrap; }
+  .pd-pp-bar-back:hover { color: var(--td-text); }
+  /* Inside the bar the two live nodes sit on one line, save state first: it is
+     a report and reads left-to-right ahead of the switch, which is a control. */
+  .pd-pp-bar .pd-pp-acts { flex-direction: row; align-items: center; gap: 14px; padding-top: 0; }
+  .pd-pp-bar .pd-pp-savestate { order: -1; }
   /* Inside the stage the editor is the page, not a card floating on it. */
   .pd-pp-mount #pd-editor {
     width: auto; height: auto; max-width: 100%; max-height: none;
@@ -3296,8 +3348,13 @@
     }
   }
   @media (max-width: 720px) {
-    .pd-pp-head { grid-template-columns: minmax(0, 1fr); }
-    .pd-pp-acts, .pd-pp-savestate { justify-self: start; }
+    .pd-pp-head { flex-direction: column; gap: 14px; }
+    .pd-pp-acts { flex-direction: row; align-items: center; gap: 14px; padding-top: 0; }
+    /* The bar stays at phone width — the topbar is locked at 56px on every
+       screen (§1.1), so it pins to the same line — but the name has to give
+       way to the two things that change. */
+    .pd-pp-bar { gap: 10px; }
+    .pd-pp-bar-thumb { display: none; }
   }
   .pd-pp-mount #pd-editor .pu-editor-body { overflow: visible; overscroll-behavior: auto; }
   .pd-pp-mount #pd-editor .pu-editor-head,

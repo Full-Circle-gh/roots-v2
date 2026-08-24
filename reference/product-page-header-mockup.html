@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>tacet — Expanded product page header</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<style>
+/* ============================================================
+   TACET — THE EXPANDED PRODUCT PAGE HEADER. Static mockup.
+   Built to docs/tacet-desktop-patterns.md v4.6.
+
+   Region: the header of #pd-pagestage — crumb, title, status
+   line, shop switch, save state, Collapse. Nothing below the
+   hairline is designed here; the two columns under it are
+   drawn as flat blocks only so the alignment grid reads.
+
+   Archetype: §1.7a sub-page header — back link (which IS the
+   eyebrow) · title · up to two exits. The stage is 1220px and
+   the editor under it is a 1fr / 340px grid with a 32px gap,
+   so every frame here is 1220px and lines up with that.
+
+   Zero Dusk. Nothing in this header is the system acting —
+   the switch, the exit and the save state are all the
+   operator's own work or a report on it (§1.8).
+
+   Inter only. 26 / 24 / 15 / 13. Two weights, 400 and 500.
+   Sentence case, no uppercase (§1.6). Tabular figures. There
+   is no monospace anywhere in Tacet.
+
+   English-only. The record's second name is real data and it
+   keeps its slot; it is rendered in English here because a
+   mockup is English-only, and the build reads the record.
+
+   CHROME IS QUOTED, NEVER DRAWN (§0). No rail, no topbar.
+   Do not implement shell furniture from this file.
+
+   Tokens are the LIVE --td-* block copied verbatim from
+   retail-admin.css (:root dark + :root[data-theme="light"]).
+   ============================================================ */
+
+:root {
+  --td-surface:    #18233A;
+  --td-raised:     #1E2A44;
+  --td-border:     #2A3550;
+  --td-header:     #364058;
+  --td-unseen:     #182329;
+  --td-text:       #FBF9F4;
+  --td-text2:      #9AA3B2;
+  --td-heat-rgb:   251, 249, 244;
+  --td-dusk:       #6E67AF;
+  --td-dusk-hi:    #7E77BF;
+  --td-dusk-tint:  #262A4A;
+  --td-sage:       #A3B49F;
+  --td-sage-tint:  #1E2C26;
+  --td-sage-ink:   #A3B49F;
+  --td-amber:      #C9954A;
+  --td-amber-tint: #33290F;
+  --td-amber-ink:  #C9954A;
+  --td-brick:      #B4533E;
+  --td-brick-tint: #351B14;
+  --td-brick-ink:  #D07A66;
+  --td-paper:      #111A2B;
+}
+:root[data-theme="light"] {
+  --td-surface:    #FFFFFF;
+  --td-raised:     #F6F3EC;
+  --td-border:     #E4E0D5;
+  --td-header:     #DAD5C6;
+  --td-unseen:     #F4F5F0;
+  --td-text:       #111A2B;
+  --td-text2:      #58606E;
+  --td-heat-rgb:   17, 26, 43;
+  --td-dusk-tint:  #EEEDF6;
+  --td-sage-tint:  #EDF1EC;
+  --td-sage-ink:   #4A6249;
+  --td-amber-tint: #F7EEDE;
+  --td-amber-ink:  #8A6425;
+  --td-brick-tint: #F6E7E3;
+  --td-brick-ink:  #B4533E;
+  --td-paper:      #FBF9F4;
+}
+
+:root { --f: "Inter", -apple-system, system-ui, sans-serif; --ease: cubic-bezier(.16,1,.3,1); }
+* { margin:0; padding:0; box-sizing:border-box }
+body { font-family:var(--f); font-size:15px; line-height:1.6; color:var(--td-text); background:var(--td-paper); -webkit-font-smoothing:antialiased }
+button { font:inherit; color:inherit; background:none; border:0; cursor:pointer }
+.num { font-variant-numeric: tabular-nums }
+
+/* ── mockup chrome (not part of the design) ─────────────────── */
+.bar { position:sticky; top:0; z-index:20; display:flex; gap:18px; align-items:center;
+  padding:10px 24px; background:var(--td-text); color:var(--td-paper); font-size:13px }
+.bar b { font-weight:500 }
+.bar label { display:inline-flex; gap:6px; align-items:center; cursor:pointer; opacity:.75 }
+.wrap { max-width:1316px; margin:0 auto; padding:40px 24px 120px }
+.opt { margin-bottom:64px }
+.opt-h { font-size:18px; font-weight:500; margin-bottom:4px }
+.opt-h .pick { display:inline-block; margin-left:10px; padding:1px 9px; border-radius:999px;
+  background:var(--td-sage-tint); color:var(--td-sage-ink); font-size:12px; font-weight:500; vertical-align:2px }
+.opt-s { font-size:13px; color:var(--td-text2); margin-bottom:20px; max-width:74ch; text-wrap:pretty }
+.opt-s b { font-weight:500; color:var(--td-text) }
+.faults { margin:18px 0 0; padding:0; list-style:none; max-width:74ch }
+.faults li { font-size:13px; color:var(--td-text2); padding:7px 0 7px 26px; position:relative; border-top:1px solid var(--td-border) }
+.faults li:first-child { border-top:0 }
+.faults li b { font-weight:500; color:var(--td-text) }
+.faults li::before { content:""; position:absolute; left:6px; top:15px; width:6px; height:6px;
+  border-radius:50%; background:var(--td-brick-ink); opacity:.75 }
+.faults.good li::before { background:var(--td-sage-ink) }
+
+/* the stage, at its real width */
+.stage { width:1220px; max-width:100%; background:var(--td-paper);
+  border:1px solid var(--td-border); border-radius:14px; padding:28px 32px 0;
+  box-shadow:0 1px 2px rgba(17,26,43,.05), 0 4px 16px rgba(17,26,43,.04) }
+.scroller { height:400px; overflow-y:auto; overflow-x:hidden; padding:0 }
+.scroller .stage-inner { padding:28px 32px 32px }
+
+/* ── the live components, quoted ────────────────────────────── */
+.crumb { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--td-text2); margin-bottom:16px }
+.crumb button { display:inline-flex; align-items:center; gap:6px; font:400 13px var(--f); color:var(--td-text2) }
+.crumb button:hover { color:var(--td-text) }
+.crumb .sep { opacity:.5 }
+.crumb .here { color:var(--td-text) }
+
+.tag { display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 10px;
+  border-radius:999px; font:500 13px var(--f); white-space:nowrap; border:1px solid transparent }
+.tag i { width:6px; height:6px; border-radius:50%; background:currentColor; flex:none }
+.tag.warn { background:var(--td-amber-tint); color:var(--td-amber-ink) }
+.tag.fact { background:var(--td-raised); color:var(--td-text2); border-color:var(--td-border) }
+.tag.shop { cursor:pointer; padding-right:4px }
+.tag.shop.live { background:var(--td-sage-tint); color:var(--td-sage-ink) }
+.tag.shop.off { background:var(--td-raised); color:var(--td-text2); border-color:var(--td-border) }
+.sw { width:28px; height:16px; border-radius:999px; position:relative; flex:none; margin-left:2px; background:var(--td-border) }
+.sw::after { content:""; position:absolute; top:2px; left:2px; width:12px; height:12px; border-radius:50%;
+  background:#fff; box-shadow:0 1px 2px rgba(17,26,43,.2) }
+.tag.shop.live .sw { background:var(--td-sage-ink) }
+.tag.shop.live .sw::after { left:14px }
+
+.save { font:500 13px var(--f); color:var(--td-text2); display:inline-flex; align-items:center; gap:6px; white-space:nowrap }
+.save::before { content:""; width:7px; height:7px; border-radius:50%; background:currentColor; opacity:.55 }
+.save.saved { color:var(--td-sage-ink) }
+.save.saving { color:var(--td-amber-ink) }
+
+.btn { display:inline-flex; align-items:center; gap:6px; font:500 14px var(--f); border-radius:8px;
+  border:1px solid var(--td-border); background:var(--td-surface); color:var(--td-text); padding:10px 16px }
+.btn:hover { border-color:var(--td-text2) }
+.btn svg { width:16px; height:16px; flex:none }
+.btn.sm { font-size:13px; padding:8px 14px }
+
+/* product thumbnail — the docked drawer header already has one (.pd-head-thumb) */
+.thumb { flex:none; border-radius:12px; background:var(--td-raised); border:1px solid var(--td-border);
+  display:grid; place-items:center; color:var(--td-text2); overflow:hidden }
+.thumb svg { width:40%; height:40%; opacity:.6 }
+.thumb.s56 { width:56px; height:56px }
+.thumb.s28 { width:28px; height:28px; border-radius:7px }
+.thumb.shot { background:linear-gradient(150deg, #E8DFCD, #CFC0A4) }
+[data-theme="dark"] .thumb.shot { background:linear-gradient(150deg, #2A3550, #3A4560) }
+
+/* ── TODAY ──────────────────────────────────────────────────── */
+.t-head { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:baseline;
+  column-gap:24px; row-gap:6px; padding-bottom:20px; margin-bottom:28px; border-bottom:1px solid var(--td-border) }
+.t-title { display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; font:500 24px var(--f);
+  letter-spacing:-.01em; min-width:0 }
+.t-alt { font-size:15px; font-weight:400; color:var(--td-text2) }
+.t-acts { display:flex; align-items:center; gap:12px; flex:none; justify-self:end }
+.t-sub { font-size:15px; color:var(--td-text2); font-variant-numeric:tabular-nums }
+.t-state { justify-self:end; display:flex; align-items:center }
+
+/* ── A ──────────────────────────────────────────────────────── */
+.a-head { display:flex; align-items:flex-start; gap:24px; padding-bottom:20px; margin-bottom:28px;
+  border-bottom:1px solid var(--td-border) }
+.a-id { min-width:0; flex:1 }
+.a-title { font:500 26px var(--f); letter-spacing:-.015em; line-height:1.2 }
+.a-title .alt { font-size:15px; font-weight:400; color:var(--td-text2); margin-left:12px; letter-spacing:0 }
+.a-sub { font-size:15px; color:var(--td-text2); font-variant-numeric:tabular-nums; margin-top:5px }
+.a-state { display:flex; align-items:center; gap:16px; flex:none; padding-top:6px }
+
+/* ── B / C ──────────────────────────────────────────────────── */
+.b-head { display:flex; align-items:flex-start; gap:20px; padding-bottom:22px; margin-bottom:28px;
+  border-bottom:1px solid var(--td-border) }
+.b-id { display:flex; gap:16px; min-width:0; flex:1 }
+.b-txt { min-width:0 }
+.b-title { font:500 26px var(--f); letter-spacing:-.015em; line-height:1.25 }
+.b-title .alt { font-size:15px; font-weight:400; color:var(--td-text2); margin-left:12px; letter-spacing:0 }
+.b-sub { font-size:15px; color:var(--td-text2); font-variant-numeric:tabular-nums; margin-top:4px }
+.b-state { flex:none; display:flex; flex-direction:column; align-items:flex-end; gap:10px; padding-top:4px }
+.b-state .line2 { display:flex; align-items:center; gap:10px }
+
+/* the condensed bar that stays (option C) */
+.c-sticky { position:sticky; top:0; z-index:5; display:flex; align-items:center; gap:14px;
+  height:56px; padding:0 32px; margin:0 -32px 0; background:var(--td-paper);
+  border-bottom:1px solid var(--td-border) }
+.c-sticky .nm { font:500 15px var(--f); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0 }
+.c-sticky .sp { flex:1 }
+.c-sticky .back { display:inline-flex; align-items:center; gap:6px; font:400 13px var(--f); color:var(--td-text2) }
+.c-sticky .back:hover { color:var(--td-text) }
+
+/* ── D ──────────────────────────────────────────────────────── */
+.d-head { padding-bottom:22px; margin-bottom:28px; border-bottom:1px solid var(--td-border) }
+.d-row1 { display:flex; align-items:flex-start; gap:20px }
+.d-facts { display:flex; gap:44px; margin-top:18px; padding-left:72px }
+.d-fact .k { font-size:13px; color:var(--td-text2) }
+.d-fact .v { font-size:15px; font-variant-numeric:tabular-nums; margin-top:1px }
+
+/* ── the page under the header (flat blocks, not a design) ──── */
+.below { display:grid; grid-template-columns:minmax(0,1fr) 340px; gap:32px; align-items:start; padding-bottom:32px }
+.blk { border:1px solid var(--td-border); border-radius:14px; background:var(--td-surface) }
+.blk + .blk { margin-top:20px }
+.blk .bh { height:15px; width:32%; margin:18px 18px 0; border-radius:4px; background:var(--td-raised) }
+.blk .bl { height:9px; margin:14px 18px 0; border-radius:4px; background:var(--td-raised); opacity:.7 }
+.blk .bl:last-child { margin-bottom:20px }
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <b>Expanded product page — the header, five ways</b>
+  <span style="opacity:.6">1220px stage · same product, same moment, in all of them</span>
+  <span style="flex:1"></span>
+  <label><input type="checkbox" onclick="document.documentElement.setAttribute('data-theme', this.checked ? 'dark' : 'light')"> Dark</label>
+</div>
+
+<div class="wrap">
+
+<!-- ═══════════════ TODAY ═══════════════ -->
+<div class="opt">
+  <div class="opt-h">Today</div>
+  <div class="opt-s">Redrawn from the live markup and stylesheet, not from memory. Four things in a two-by-two grid, about 150px of page spent before the first field, and the product itself never appears.</div>
+  <div class="stage">
+    <div class="crumb">
+      <button type="button"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Products</button>
+      <span class="sep">/</span>
+      <span class="here">Hazelnut-Chocolate Spread</span>
+    </div>
+    <div class="t-head">
+      <div class="t-title">Hazelnut-Chocolate Spread <span class="t-alt">Cacao-Hazelnut Spread</span></div>
+      <div class="t-acts">
+        <button type="button" class="tag shop live">In shop<span class="sw"></span></button>
+        <button type="button" class="btn sm"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7"/></svg>Collapse</button>
+      </div>
+      <div class="t-sub num">SKU 2-450 · Dry &amp; Pantry, Nut Butters · ¥89</div>
+      <div class="t-state"><span class="save saved">All changes saved</span></div>
+    </div>
+    <div class="below">
+      <div>
+        <div class="blk"><div class="bh"></div><div class="bl"></div><div class="bl" style="width:70%"></div><div class="bl" style="width:84%"></div></div>
+        <div class="blk"><div class="bh" style="width:22%"></div><div class="bl"></div><div class="bl" style="width:60%"></div></div>
+      </div>
+      <div>
+        <div class="blk"><div class="bh" style="width:44%"></div><div class="bl"></div><div class="bl" style="width:66%"></div></div>
+        <div class="blk"><div class="bh" style="width:38%"></div><div class="bl"></div></div>
+      </div>
+    </div>
+  </div>
+  <ul class="faults">
+    <li><b>The name is printed twice</b> inside 60px — once as the tail of the crumb, once as the title. The crumb's job is to say where you came <i>from</i>.</li>
+    <li><b>Two controls, one action.</b> The crumb's back button and Collapse both call the same function. §1.7a allows two exits; it does not allow one exit drawn twice.</li>
+    <li><b>The save state is orphaned</b> — a lone right-aligned line hanging under a button, with 700px of empty header beside it.</li>
+    <li><b>The product is not on its own page.</b> The docked drawer header carries a thumbnail; the full page drops it, so the biggest view of one product shows no picture of it.</li>
+    <li><b>It scrolls away.</b> The page is three screens tall and writes on every keystroke, but the line telling you it saved is at the top. §1.7 says the page header is never scrolled away.</li>
+  </ul>
+</div>
+
+<!-- ═══════════════ A ═══════════════ -->
+<div class="opt">
+  <div class="opt-h">A · One exit, one line</div>
+  <div class="opt-s">The smallest honest change. The crumb drops the product name and <b>becomes the only way out</b> — Collapse goes, because it was the same button. Shop switch and save state sit together on the title's baseline, so nothing floats. Title up to 26px, because on this page the name is the page.</div>
+  <div class="stage">
+    <div class="crumb">
+      <button type="button"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Products</button>
+    </div>
+    <div class="a-head">
+      <div class="a-id">
+        <div class="a-title">Hazelnut-Chocolate Spread<span class="alt">Cacao-Hazelnut Spread</span></div>
+        <div class="a-sub num">SKU 2-450 · Dry &amp; Pantry, Nut Butters · ¥89</div>
+      </div>
+      <div class="a-state">
+        <span class="save saved">All changes saved</span>
+        <button type="button" class="tag shop live">In shop<span class="sw"></span></button>
+      </div>
+    </div>
+    <div class="below">
+      <div>
+        <div class="blk"><div class="bh"></div><div class="bl"></div><div class="bl" style="width:70%"></div><div class="bl" style="width:84%"></div></div>
+        <div class="blk"><div class="bh" style="width:22%"></div><div class="bl"></div><div class="bl" style="width:60%"></div></div>
+      </div>
+      <div>
+        <div class="blk"><div class="bh" style="width:44%"></div><div class="bl"></div><div class="bl" style="width:66%"></div></div>
+        <div class="blk"><div class="bh" style="width:38%"></div><div class="bl"></div></div>
+      </div>
+    </div>
+  </div>
+  <ul class="faults good">
+    <li>Saves a whole row and about 34px. Four elements become three.</li>
+    <li>Nothing new to build — two nodes move, one is deleted.</li>
+  </ul>
+  <ul class="faults">
+    <li><b>Costs the word "Collapse".</b> An operator who has never expanded a product no longer sees that a compact view exists. The crumb still returns them to the list with the panel open, so nothing is lost but the label.</li>
+  </ul>
+</div>
+
+<!-- ═══════════════ B ═══════════════ -->
+<div class="opt">
+  <div class="opt-h">B · Put the product on its own page</div>
+  <div class="opt-s">A's header plus the thumbnail the drawer already has, at 56px. The image makes the left block two lines tall, which gives the right block two lines to match — so the shop switch and the save state stack cleanly instead of one hanging alone. You can tell at a glance you opened the right record.</div>
+  <div class="stage">
+    <div class="crumb">
+      <button type="button"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Products</button>
+    </div>
+    <div class="b-head">
+      <div class="b-id">
+        <div class="thumb s56 shot"></div>
+        <div class="b-txt">
+          <div class="b-title">Hazelnut-Chocolate Spread<span class="alt">Cacao-Hazelnut Spread</span></div>
+          <div class="b-sub num">SKU 2-450 · Dry &amp; Pantry, Nut Butters · ¥89</div>
+        </div>
+      </div>
+      <div class="b-state">
+        <button type="button" class="tag shop live">In shop<span class="sw"></span></button>
+        <span class="save saved">All changes saved</span>
+      </div>
+    </div>
+    <div class="below">
+      <div>
+        <div class="blk"><div class="bh"></div><div class="bl"></div><div class="bl" style="width:70%"></div><div class="bl" style="width:84%"></div></div>
+        <div class="blk"><div class="bh" style="width:22%"></div><div class="bl"></div><div class="bl" style="width:60%"></div></div>
+      </div>
+      <div>
+        <div class="blk"><div class="bh" style="width:44%"></div><div class="bl"></div><div class="bl" style="width:66%"></div></div>
+        <div class="blk"><div class="bh" style="width:38%"></div><div class="bl"></div></div>
+      </div>
+    </div>
+  </div>
+  <ul class="faults good">
+    <li>Both sides of the header are two lines tall. Nothing floats and nothing is orphaned.</li>
+    <li>The thumbnail is a node that already exists and is already painted — it moves, like everything else on this page.</li>
+  </ul>
+  <ul class="faults">
+    <li><b>A product with no image gets a grey tile</b> at 56px, which is louder than the 44px one in the drawer. It has to read as a quiet placeholder, never as a broken picture. Drawn in the worst case below.</li>
+  </ul>
+</div>
+
+<!-- ═══════════════ C ═══════════════ -->
+<div class="opt">
+  <div class="opt-h">C · B, and it stays with you<span class="pick">Recommended</span></div>
+  <div class="opt-s">B at rest. Scroll, and the header condenses into a 56px bar that holds the name, the shop switch, the save state and the way out. This page is three screens tall and writes on every keystroke — <b>the one line that says it saved cannot be the line that scrolls away first</b>. §1.7 already asks for this: the page header is never scrolled away.</div>
+  <div class="opt-s"><b>Scroll inside the frame.</b> It is live.</div>
+  <div class="stage scroller">
+    <div class="stage-inner">
+      <div class="crumb">
+        <button type="button"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Products</button>
+      </div>
+      <div class="b-head">
+        <div class="b-id">
+          <div class="thumb s56 shot"></div>
+          <div class="b-txt">
+            <div class="b-title">Hazelnut-Chocolate Spread<span class="alt">Cacao-Hazelnut Spread</span></div>
+            <div class="b-sub num">SKU 2-450 · Dry &amp; Pantry, Nut Butters · ¥89</div>
+          </div>
+        </div>
+        <div class="b-state">
+          <button type="button" class="tag shop live">In shop<span class="sw"></span></button>
+          <span class="save saved">All changes saved</span>
+        </div>
+      </div>
+      <div class="c-sticky">
+        <div class="thumb s28 shot"></div>
+        <div class="nm">Hazelnut-Chocolate Spread</div>
+        <span class="sp"></span>
+        <span class="save saved">All changes saved</span>
+        <button type="button" class="tag shop live">In shop<span class="sw"></span></button>
+        <button type="button" class="back"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Products</button>
+      </div>
+      <div class="below" style="padding-top:24px">
+        <div>
+          <div class="blk"><div class="bh"></div><div class="bl"></div><div class="bl" style="width:70%"></div><div class="bl" style="width:84%"></div><div class="bl" style="width:52%"></div></div>
+          <div class="blk"><div class="bh" style="width:22%"></div><div class="bl"></div><div class="bl" style="width:60%"></div><div class="bl" style="width:76%"></div></div>
+          <div class="blk"><div class="bh" style="width:30%"></div><div class="bl"></div><div class="bl" style="width:66%"></div></div>
+        </div>
+        <div>
+          <div class="blk"><div class="bh" style="width:44%"></div><div class="bl"></div><div class="bl" style="width:66%"></div></div>
+          <div class="blk"><div class="bh" style="width:38%"></div><div class="bl"></div><div class="bl" style="width:80%"></div></div>
+          <div class="blk"><div class="bh" style="width:52%"></div><div class="bl"></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <ul class="faults good">
+    <li>You always know which product you are typing into and whether it saved, on every one of the three screens.</li>
+    <li>The bar carries no control the resting header does not — it is the same header, smaller.</li>
+  </ul>
+  <ul class="faults">
+    <li><b>The only frame here that adds a state to build.</b> One sticky element and one condensed layout, and it has to sit under the 56px topbar rather than over it.</li>
+  </ul>
+</div>
+
+<!-- ═══════════════ D ═══════════════ -->
+<div class="opt">
+  <div class="opt-h">D · The header names its facts</div>
+  <div class="opt-s">The run-on status line splits into labelled facts — SKU, category, price — spread across the width the header currently wastes. Reads faster because each number is named, and the empty middle earns its keep.</div>
+  <div class="stage">
+    <div class="crumb">
+      <button type="button"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Products</button>
+    </div>
+    <div class="d-head">
+      <div class="d-row1">
+        <div class="b-id">
+          <div class="thumb s56 shot"></div>
+          <div class="b-txt">
+            <div class="b-title">Hazelnut-Chocolate Spread<span class="alt">Cacao-Hazelnut Spread</span></div>
+          </div>
+        </div>
+        <div class="b-state">
+          <button type="button" class="tag shop live">In shop<span class="sw"></span></button>
+          <span class="save saved">All changes saved</span>
+        </div>
+      </div>
+      <div class="d-facts">
+        <div class="d-fact"><div class="k">SKU</div><div class="v num">2-450</div></div>
+        <div class="d-fact"><div class="k">Category</div><div class="v">Dry &amp; Pantry, Nut Butters</div></div>
+        <div class="d-fact"><div class="k">Price</div><div class="v num">¥89</div></div>
+        <div class="d-fact"><div class="k">In stock</div><div class="v num">64</div></div>
+      </div>
+    </div>
+    <div class="below">
+      <div>
+        <div class="blk"><div class="bh"></div><div class="bl"></div><div class="bl" style="width:70%"></div><div class="bl" style="width:84%"></div></div>
+        <div class="blk"><div class="bh" style="width:22%"></div><div class="bl"></div><div class="bl" style="width:60%"></div></div>
+      </div>
+      <div>
+        <div class="blk"><div class="bh" style="width:44%"></div><div class="bl"></div><div class="bl" style="width:66%"></div></div>
+        <div class="blk"><div class="bh" style="width:38%"></div><div class="bl"></div></div>
+      </div>
+    </div>
+  </div>
+  <ul class="faults">
+    <li><b>This is a KPI tile row without the tiles.</b> §1.1a puts the pulse in region 3, under the header — a header that grows a fact strip is taking a region that is not its own.</li>
+    <li><b>It grows.</b> Four facts today, and every future field will make a case for being the fifth. The status line resists that because it is one sentence.</li>
+    <li><b>Stock is already on the page</b>, twice — the side column and the stock block. A third copy in the header breaks the non-duplication rule (§1.7).</li>
+  </ul>
+</div>
+
+<!-- ═══════════════ WORST CASE ═══════════════ -->
+<div class="opt">
+  <div class="opt-h">Worst case — option C, against the ugliest record</div>
+  <div class="opt-s">A long name with nowhere to break, no photograph, hidden from the shop, sold out, a bundle, and mid-save. Any header that survives this survives the catalogue. <b>Judge the options against this frame, not the tidy one.</b></div>
+  <div class="stage">
+    <div class="crumb">
+      <button type="button"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Products</button>
+    </div>
+    <div class="b-head">
+      <div class="b-id">
+        <div class="thumb s56"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></div>
+        <div class="b-txt">
+          <div class="b-title">Winter Gift Box — Hazelnut-Chocolate Spread, Almond Butter &amp; Oat Crackers<span class="alt">Winter Selection Box</span></div>
+          <div class="b-sub num">SKU 2-450-GIFT-WNTR · Gifting, Hampers &amp; Boxes · ¥289</div>
+        </div>
+      </div>
+      <div class="b-state">
+        <div class="line2">
+          <span class="tag warn"><i></i>Sold out</span>
+          <span class="tag fact">Bundle</span>
+          <button type="button" class="tag shop off">Hidden<span class="sw"></span></button>
+        </div>
+        <span class="save saving">Saving…</span>
+      </div>
+    </div>
+    <div class="below">
+      <div><div class="blk"><div class="bh"></div><div class="bl"></div><div class="bl" style="width:70%"></div></div></div>
+      <div><div class="blk"><div class="bh" style="width:44%"></div><div class="bl"></div></div></div>
+    </div>
+  </div>
+  <div class="opt-s" style="margin-top:22px">And the other end of it — a product created ten seconds ago, with a name and nothing else. Empty facts drop out rather than showing a slot, so the header shrinks to what is true.</div>
+  <div class="stage">
+    <div class="crumb">
+      <button type="button"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>Products</button>
+    </div>
+    <div class="b-head">
+      <div class="b-id">
+        <div class="thumb s56"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg></div>
+        <div class="b-txt">
+          <div class="b-title">Rye Sourdough</div>
+        </div>
+      </div>
+      <div class="b-state">
+        <button type="button" class="tag shop off">Hidden<span class="sw"></span></button>
+        <span class="save saved">All changes saved</span>
+      </div>
+    </div>
+    <div class="below">
+      <div><div class="blk"><div class="bh"></div><div class="bl"></div><div class="bl" style="width:70%"></div></div></div>
+      <div><div class="blk"><div class="bh" style="width:44%"></div><div class="bl"></div></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ FIXED REGARDLESS ═══════════════ -->
+<div class="opt" style="margin-bottom:0">
+  <div class="opt-h">Fixed in every one of them, whichever wins</div>
+  <ul class="faults good">
+    <li><b>The crumb stops repeating the name.</b> It reads "Products" and nothing else; the title two lines below is the name.</li>
+    <li><b>One exit, not two.</b> The crumb is the way out, and it is the eyebrow — §1.7a. The Collapse button is the same action drawn a second time, and it goes.</li>
+    <li><b>The save state gets a partner.</b> It never sits alone under a control with an empty row beside it.</li>
+    <li><b>Every empty fact disappears.</b> No blank slot, no dash — the dash is banned across Tacet.</li>
+    <li><b>Still zero Dusk.</b> Nothing in this header is the system acting on its own.</li>
+  </ul>
+</div>
+
+</div>
+</body>
+</html>

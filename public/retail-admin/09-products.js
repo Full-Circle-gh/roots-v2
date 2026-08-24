@@ -2524,6 +2524,8 @@ function pdExpand(section) {
   pdSyncPageHead();
   pdSyncFullscreenBtn(true);
   window.scrollTo({ top: 0, behavior: 'auto' });
+  // After the scroll home, so the observer's first report is the true one.
+  pdWatchPin(true);
   if (section) {
     // 'sizes' and 'more' were two sections and are now one ("How it's sold"),
     // so both dock summary rows land on the same block. The two names stay
@@ -2538,6 +2540,10 @@ function pdCollapseToPanel() {
   const ed = document.getElementById('pd-editor');
   const stage = document.getElementById('pd-pagestage');
   if (ed) ed.classList.remove('pd-fullpage');
+  // Unpin FIRST. The condensed bar is holding .pd-pp-acts, which is where the
+  // shop switch and the save state are parked; hand it back to the header
+  // before pdMoveHeadState comes looking for them.
+  pdWatchPin(false);
   // Status and shop switch come home BEFORE the stage is hidden — leave them
   // parked in the title row and they ride a `display:none` container back into
   // invisibility while the drawer shows an empty footer.
@@ -2566,6 +2572,50 @@ function pdSyncFullscreenBtn(on) {
 }
 // The Expand button now toggles between the two zoom levels.
 function pdToggleFullscreen() { pdIsExpanded() ? pdCollapseToPanel() : pdExpand(); }
+
+// ── The condensed header ────────────────────────────────────────────────────
+// The full page is three screens tall and writes on every keystroke, so the
+// one line that says it saved cannot be the first thing to scroll away (§1.7:
+// the page header is never scrolled away). Past the header, #pd-pp-bar takes
+// over: which product, whether it is in the shop, whether it saved, the way
+// out.
+//
+// The switch and the save state are the SAME nodes in both places — .pd-pp-acts
+// moves into the bar and back, which is this page's one rule about live state
+// kept once more: move the node, never render a second one. Two copies of a
+// switch is two things to keep in step, and they drift.
+//
+// The name is the single exception, because a bar that names the record cannot
+// borrow the node from a header that is off screen. Both are painted in the
+// same pass of pdSyncPageHead, so they cannot disagree.
+let _pdPinObs = null;
+function pdPinHead(on) {
+  const stage = document.getElementById('pd-pagestage');
+  const bar   = document.getElementById('pd-pp-bar');
+  const acts  = document.getElementById('pd-pp-acts');
+  const head  = document.getElementById('pd-pp-head');
+  if (!stage || !bar || !acts || !head) return;
+  if (!!on === stage.classList.contains('is-pinned')) return;
+  stage.classList.toggle('is-pinned', !!on);
+  // Ahead of the back button, so the way out stays last in the row and last in
+  // the tab order — same order as the resting header, where it is the crumb.
+  if (on) bar.insertBefore(acts, bar.querySelector('.pd-pp-bar-back'));
+  else head.appendChild(acts);
+}
+// Watch a 1px sentinel sitting where the bar would pin, rather than listening
+// to scroll: the browser reports the crossing once instead of on every frame.
+function pdWatchPin(on) {
+  if (_pdPinObs) { _pdPinObs.disconnect(); _pdPinObs = null; }
+  if (!on) { pdPinHead(false); return; }
+  const sent = document.getElementById('pd-pp-sentinel');
+  if (!sent || typeof IntersectionObserver !== 'function') return;
+  // -56px = the topbar's locked height, which is also where the bar perches,
+  // so the sentinel leaves the box at exactly the moment the bar gets there.
+  _pdPinObs = new IntersectionObserver(
+    (entries) => { for (const e of entries) pdPinHead(!e.isIntersecting); },
+    { rootMargin: '-56px 0px 0px 0px', threshold: 0 });
+  _pdPinObs.observe(sent);
+}
 // Breadcrumb + title of the full page, read from the live form so a rename
 // typed a second ago is already reflected up top.
 function pdSyncPageHead() {
@@ -2573,14 +2623,23 @@ function pdSyncPageHead() {
   const alt = (document.getElementById('pd-name-cn').value || '').trim();
   const shown = nm || alt || cuT('New product', '新产品');
   const set = (id, txt) => { const el = document.getElementById(id); if (el) el.textContent = txt; };
-  set('pd-pp-crumb-name', shown);
   set('pd-pp-name', shown);
   set('pd-pp-name-alt', nm && alt ? alt : '');
+  // The condensed bar says the name too. It is the only thing on this page
+  // rendered twice, and only because the bar has to name the record while the
+  // header that names it is off screen — both are painted here, in one pass,
+  // so they cannot disagree.
+  set('pd-pp-bar-name', shown);
+  const p = (PA_PRODUCTS || []).find(x => x.id === _pdSelectedId);
+  // The product's own photo, at both sizes. No image is a quiet raised tile —
+  // the same tile the drawer header shows — never a placeholder graphic.
+  { const img = p && (p.image_data || p.image_url);
+    for (const id of ['pd-pp-thumb', 'pd-pp-bar-thumb']) {
+      const th = document.getElementById(id);
+      if (th) th.style.backgroundImage = img ? 'url("' + img + '")' : '';
+    } }
   const badge = document.getElementById('pd-pp-badge');
-  if (badge) {
-    const p = (PA_PRODUCTS || []).find(x => x.id === _pdSelectedId);
-    badge.innerHTML = p ? _paStatusCell({ p, group: null }) : '';
-  }
+  if (badge) badge.innerHTML = p ? _paStatusCell({ p, group: null }) : '';
   // The line under the title: the few facts that identify this record without
   // scrolling to them. Read from the live form, so a SKU typed a second ago is
   // already up here. Anything blank drops out rather than showing an empty slot.
