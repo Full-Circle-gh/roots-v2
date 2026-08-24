@@ -7958,20 +7958,10 @@
         padding-top: 16px; border-top: 1px solid var(--td-border); text-wrap: pretty;
       }
 
-      /* ── stats ── */
-      #tab-affiliate .afx-stats { display: flex; gap: 16px; margin-top: 24px; flex-wrap: wrap; }
-      #tab-affiliate .afx-stat {
-        flex: 1 1 200px; min-width: 0; background: var(--td-surface);
-        border: 1px solid var(--td-border); border-radius: 14px; padding: 16px 24px;
-      }
-      #tab-affiliate .afx-stat .k { font-size: 13px; color: var(--td-text2); }
-      #tab-affiliate .afx-stat .v {
-        font-size: 30px; font-weight: 500; letter-spacing: -.01em; line-height: 1.15;
-        font-variant-numeric: tabular-nums; margin-top: 4px;
-      }
-      #tab-affiliate .afx-stat .s { font-size: 13px; color: var(--td-text2); margin-top: 4px; }
-      #tab-affiliate .afx-stat .skel {
-        height: 26px; width: 64%; border-radius: 8px; background: var(--td-raised);
+      /* A figure that has not arrived shows its own absence rather than a zero —
+         ¥0 and "not loaded yet" are different claims. */
+      #tab-affiliate .afx-fig .skel {
+        height: 30px; width: 64%; border-radius: 8px; background: var(--td-raised);
         margin: 8px 0 4px; animation: afxPulse 1.4s ease-in-out infinite;
       }
 
@@ -8158,7 +8148,47 @@
       #tab-affiliate .afx-savebar-msg { flex: 1; min-width: 200px; font-size: 15px; color: var(--td-text); }
       #tab-affiliate .afx-savebar-msg b { font-weight: 500; }
 
-      #tab-affiliate .afx-page > .td-head { animation: afxSettle .35s var(--afx-ease) 1; }
+      #tab-affiliate .afx-page > .td-head { animation: afxSettle .35s var(--afx-ease) 1; align-items: flex-start; }
+      #tab-affiliate .td-hd-sub { font-variant-numeric: tabular-nums; font-size: 15px; }
+
+      /* ── the verdict: the page's answer to "is this working" ── */
+      #tab-affiliate .afx-verdict { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px; padding: 32px; }
+      #tab-affiliate .afx-verdict .lead { font-size: 18px; font-weight: 500; max-width: 68ch; text-wrap: pretty; }
+      #tab-affiliate .afx-verdict .sub { font-size: 15px; color: var(--td-text2); margin-top: 8px; max-width: 74ch; text-wrap: pretty; }
+      #tab-affiliate .afx-figs {
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 24px;
+        margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--td-border);
+      }
+      #tab-affiliate .afx-fig .k { font-size: 13px; color: var(--td-text2); }
+      #tab-affiliate .afx-fig .v {
+        font-size: 30px; font-weight: 500; letter-spacing: -.01em; line-height: 1.15;
+        font-variant-numeric: tabular-nums; margin-top: 4px;
+      }
+      #tab-affiliate .afx-fig .s { font-size: 13px; color: var(--td-text2); margin-top: 4px; }
+
+      /* ── where a customer can find it ── */
+      #tab-affiliate .afx-place { display: flex; align-items: center; gap: 16px; padding: 16px 0; border-top: 1px solid var(--td-border); flex-wrap: wrap; }
+      #tab-affiliate .afx-place:first-of-type { border-top: 0; padding-top: 0; }
+      #tab-affiliate .afx-place .pt { flex: 1; min-width: 240px; }
+      #tab-affiliate .afx-place .pt .t { font-size: 15px; font-weight: 500; }
+      #tab-affiliate .afx-place .pt .s { font-size: 13px; color: var(--td-text2); margin-top: 4px; text-wrap: pretty; }
+      #tab-affiliate .afx-link {
+        font-family: inherit; font-size: 13px; font-weight: 500; color: var(--td-text);
+        background: none; border: 0; padding: 0; cursor: pointer; white-space: nowrap;
+        text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--td-text) 45%, transparent); text-underline-offset: 2px;
+      }
+      #tab-affiliate .afx-link:hover { text-decoration-color: var(--td-text); }
+
+      /* ── the offer, as one line you can open ── */
+      #tab-affiliate .afx-offerline { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; }
+      #tab-affiliate .afx-offerline .ot { flex: 1; min-width: 280px; }
+      #tab-affiliate .afx-offerline .h { font-size: 18px; font-weight: 500; margin-top: 4px; font-variant-numeric: tabular-nums; }
+      #tab-affiliate .afx-offerline .s { font-size: 13px; color: var(--td-text2); margin-top: 4px; text-wrap: pretty; }
+      #tab-affiliate #afx-settings[hidden] { display: none; }
+      #tab-affiliate #afx-settings .afx-col { margin-top: 16px; }
+
+      /* a row the ledger cannot resolve on its own gets its reason inline */
+      #tab-affiliate .afx-why { font-size: 13px; color: var(--td-text2); margin-top: 8px; max-width: 52ch; text-wrap: pretty; white-space: normal; }
 
       @media (max-width: 720px) {
         #tab-affiliate .afx-savebar { left: 0; }
@@ -8170,7 +8200,7 @@
         #tab-affiliate .afx-savebar,
         #tab-affiliate .afx-confirm,
         #tab-affiliate .afx-rowconfirm .in { animation: none; }
-        #tab-affiliate .afx-stat .skel { animation: none; }
+        #tab-affiliate .afx-fig .skel { animation: none; }
       }
     </style>
 
@@ -8178,14 +8208,19 @@
          status line — Affiliate has no queue of work waiting on the operator,
          so there is no honest number to put there (the Customers precedent). -->
     <div class="afx-page">
-      <div class="td-head"><div class="td-hd-col"><h2>Affiliate · 分销</h2></div></div>
+      <div class="td-head">
+        <div class="td-hd-col"><h2>Affiliate · 分销</h2><p class="td-hd-sub" id="afx-statusline" data-no-i18n></p></div>
+        <div class="td-head-sp"></div>
+        <div id="afx-headcta" data-no-i18n></div>
+      </div>
 
       <!-- Every region below is rendered by afx* in retail-admin/10-extras.js and
            carries its own EN/中文 through cuT, hence data-no-i18n. -->
-      <div id="afx-program"  data-no-i18n></div>
-      <div id="afx-stats"    data-no-i18n></div>
-      <div id="afx-settings" data-no-i18n></div>
-      <div id="afx-ledger"   data-no-i18n></div>
+      <div id="afx-verdict"    data-no-i18n></div>
+      <div id="afx-placements" data-no-i18n></div>
+      <div id="afx-offer"      data-no-i18n></div>
+      <div id="afx-settings"   data-no-i18n hidden></div>
+      <div id="afx-ledger"     data-no-i18n></div>
     </div>
 
     <input type="file" id="afx-share-file" accept="image/png,image/jpeg" style="display: none;">

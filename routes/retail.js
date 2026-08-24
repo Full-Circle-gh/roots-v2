@@ -17305,6 +17305,102 @@ router.patch('/api/retail-admin/affiliate/settings', requireRetailAdmin, express
   res.json({ success: true, data: affiliateSettings() });
 });
 
+// The Affiliate page's opening question is "is this working", and every figure
+// it needs to answer that lives somewhere different — customers, orders, the
+// mini-app layout config. One read, once per page open, rather than four.
+//
+// A NOTE ON `blocked`, which is the whole reason this endpoint exists: a
+// referral sits in 'joined' until the friend's FIRST paid order fires the
+// bounty (creditReferralReward). If that friend had ALREADY paid for something
+// before the code was applied, the guard refuses — correctly — and the row can
+// never convert. Nothing said so, so the admin ledger showed those rows as
+// "Waiting" forever, indistinguishable from one that might convert tomorrow.
+// The predicate below is deliberately the SAME `paid_at IS NOT NULL` test the
+// payout guard uses, so the page and the money can never disagree.
+router.get('/api/retail-admin/affiliate/overview', requireRetailAdmin, (req, res) => {
+  const s = affiliateSettings();
+
+  const cust = tdb().prepare(
+    `SELECT COUNT(*) AS total,
+            COALESCE(SUM(CASE WHEN referral_code IS NOT NULL AND referral_code <> '' THEN 1 ELSE 0 END), 0) AS with_code
+       FROM retail_customers`
+  ).get();
+
+  const agg = tdb().prepare(
+    `SELECT COUNT(*) AS referrals,
+            COALESCE(SUM(CASE WHEN status = 'ordered' THEN reward_amount ELSE 0 END), 0) AS paid_out,
+            COALESCE(SUM(CASE WHEN status = 'ordered' THEN referee_reward_amount ELSE 0 END), 0) AS paid_out_referee
+       FROM retail_referrals`
+  ).get();
+
+  // Referrals that can never pay out: still 'joined', but the friend has
+  // already paid for an order, so the first-order bounty has had its chance.
+  const stuck = tdb().prepare(
+    `SELECT COUNT(*) AS n FROM retail_referrals r
+      WHERE r.status = 'joined'
+        AND EXISTS (SELECT 1 FROM retail_orders o
+                     WHERE o.customer_id = r.invitee_id AND o.paid_at IS NOT NULL)`
+  ).get().n;
+
+  // What referred friends have actually spent SINCE they joined — the only
+  // half of the ledger the page could never show, and the one that decides
+  // whether the offer is cheap or expensive.
+  const spend = tdb().prepare(
+    `SELECT COALESCE(SUM(o.total), 0) AS s
+       FROM retail_orders o
+       JOIN retail_referrals r ON r.invitee_id = o.customer_id
+      WHERE o.paid_at IS NOT NULL AND o.paid_at >= r.joined_at`
+  ).get().s;
+
+  let lifetimePaid = 0;
+  try {
+    lifetimePaid = tdb().prepare(
+      `SELECT COALESCE(SUM(commission_amount), 0) AS s FROM retail_lifetime_commissions WHERE reversed_at IS NULL`
+    ).get().s;
+  } catch { /* table not present on this tenant */ }
+
+  // Where a customer can actually meet the invite. Both are read from the LIVE
+  // config a customer sees, never the CMS draft.
+  const cfgJson = (key) => {
+    try {
+      const row = tdb().prepare('SELECT value_json FROM storefront_config WHERE key = ?').get(key);
+      return row ? JSON.parse(row.value_json) : null;
+    } catch { return null; }
+  };
+  const rows = cfgJson('me_page.rows');
+  let mePage = { present: false, enabled: false, position: 0, total: 0 };
+  if (Array.isArray(rows)) {
+    const shown = rows.filter(r => r && r.enabled !== false);
+    const i = shown.findIndex(r => r && r.id === 'affiliate');
+    mePage = {
+      present: rows.some(r => r && r.id === 'affiliate'),
+      enabled: i !== -1,
+      position: i === -1 ? 0 : i + 1,
+      total: shown.length,
+    };
+  }
+  const home = cfgJson('home.layout');
+  const onHome = Array.isArray(home) && home.some(b => b && b.type === 'affiliate_block');
+
+  res.json({
+    success: true,
+    data: {
+      enabled:   s.enabled,
+      offer:     { referrer: Number(s.rewardPerOrder) || 0, friend: Number(s.rewardReferee) || 0,
+                   lifetimeRatePercent: Number(s.lifetimeRatePercent) || 0,
+                   lifetimeMonths: Number(s.lifetimeMonths) || 0 },
+      customers: { total: cust.total || 0, withCode: cust.with_code || 0 },
+      counts:    { referrals: agg.referrals || 0, stuck },
+      money:     {
+        paidOut:      Number((Number(agg.paid_out || 0) + Number(agg.paid_out_referee || 0) + Number(lifetimePaid || 0)).toFixed(2)),
+        lifetimePaid: Number(Number(lifetimePaid || 0).toFixed(2)),
+        friendSpend:  Number(Number(spend || 0).toFixed(2)),
+      },
+      placements: { mePage, onHome },
+    },
+  });
+});
+
 router.get('/api/retail-admin/affiliate/referrals', requireRetailAdmin, (req, res) => {
   const q       = String(req.query.q || '').trim();
   const status  = String(req.query.status || '').trim();
@@ -17374,6 +17470,16 @@ router.get('/api/retail-admin/affiliate/referrals', requireRetailAdmin, (req, re
     for (const row of rows) {
       row.lifetime_active = (rate0 > 0 && row.status === 'ordered'
         && (months0 === 0 || (cutoff && new Date(String(row.joined_at).replace(' ', 'T')) >= cutoff))) ? 1 : 0;
+    }
+    // Same predicate as /affiliate/overview's `stuck`: a 'joined' referral whose
+    // friend has already paid for an order can never convert, because the
+    // first-order bounty has had its chance and refused. Without this the row
+    // reads "Waiting" for the rest of time.
+    const blocked = tdb().prepare(
+      `SELECT 1 FROM retail_orders WHERE customer_id = ? AND paid_at IS NOT NULL LIMIT 1`
+    );
+    for (const row of rows) {
+      row.blocked = (row.status === 'joined' && blocked.get(row.invitee_id)) ? 1 : 0;
     }
   }
 

@@ -61,6 +61,9 @@ const AFX = {
   rowBusy: false,
   saving: false, saveErr: '', saveSaid: false,
   uploading: false,
+  ov: null,              // the overview read: reach, money, placements
+  ovErr: '',
+  settingsOpen: false,   // the offer card's settings disclosure
   settingsErr: '',       // the settings column could not be LOADED
   progErr: '',           // turning the program on/off failed
   picErr: '',            // the share picture upload failed
@@ -91,6 +94,22 @@ function afxProgramOn() { return document.body.classList.contains('feat-affiliat
 function afxLifeOn(c) { return Number((c || {}).lifetimeRatePercent) > 0; }
 function afxNum(v) { const n = parseFloat(String(v).replace(/[^0-9.]/g, '')); return Number.isFinite(n) ? n : 0; }
 
+// ── the overview read ───────────────────────────────────────────
+// One call for everything the top of the page asserts: how many customers hold
+// a code, what has been paid against what referred friends spent, and where a
+// customer can actually meet the invite.
+async function afxLoadOverview() {
+  try {
+    const r = await api('/api/retail-admin/affiliate/overview');
+    AFX.ov = r.data || null;
+    AFX.ovErr = '';
+  } catch (e) {
+    AFX.ov = null;
+    AFX.ovErr = afxWhy(e);
+  }
+  afxRenderHead(); afxRenderVerdict(); afxRenderPlacements();
+}
+
 // ── settings load / save ────────────────────────────────────────
 function afxBlankCfg() {
   return { rewardPerOrder: 0, rewardReferee: 0, lifetimeRatePercent: 0, lifetimeMonths: 12, codePrefix: 'ROOTS-', shareImage: '' };
@@ -117,7 +136,7 @@ async function afxLoadSettings() {
     AFX.saved = { ...AFX.cfg };
     AFX.settingsErr = afxWhy(e);
   }
-  afxRenderSettings(); afxRenderStats(); afxRenderLedger(); afxRenderSaveBar();
+  afxRenderSettings(); afxRenderOffer(); afxRenderLedger(); afxRenderSaveBar();
 }
 
 function afxChanged(keys) {
@@ -142,8 +161,9 @@ async function afxSave() {
     // The repeat-order share drives a stat tile, a filter pill and a row badge.
     if (afxLifeOn(AFX.cfg) !== before) {
       if (!afxLifeOn(AFX.cfg) && AFX.filter === 'still') { AFX.filter = ''; AFX.page = 1; }
-      afxRenderStats(); afxLoadReferrals();
+      afxLoadReferrals();
     }
+    afxRenderOffer(); afxLoadOverview();
   } catch (e) {
     AFX.saving = false;
     AFX.saveErr = afxWhy(e);
@@ -153,7 +173,7 @@ async function afxSave() {
 function afxDiscard() {
   AFX.cfg = { ...AFX.saved };
   AFX.lifeArm = false; AFX.saveErr = '';
-  afxRenderSettings(); afxRenderSaveBar();
+  afxRenderSettings(); afxRenderOffer(); afxRenderSaveBar();
 }
 
 // ── program on/off ──────────────────────────────────────────────
@@ -162,7 +182,7 @@ function afxDiscard() {
 // what happened inline instead of flying a toast in (Marketing precedent #7).
 async function afxSetProgram(on) {
   if (AFX.progBusy) return;
-  AFX.progBusy = true; afxRenderProgram();
+  AFX.progBusy = true; afxRenderVerdict();
   try {
     const { data: c } = await api('/api/retail-admin/config', { method: 'PUT', body: { 'features.affiliate': !!on } });
     if (typeof _cfgCache !== 'undefined') _cfgCache = c;
@@ -173,76 +193,179 @@ async function afxSetProgram(on) {
     AFX.progErr = afxWhy(e);
   }
   AFX.progBusy = false;
-  afxRenderProgram(); afxRenderStats(); afxRenderSettings();
+  afxRenderAll();
+  afxLoadOverview();
 }
 
-function afxRenderProgram() {
-  const host = $('#afx-program'); if (!host) return;
-  const on = afxProgramOn();
-  const h = on ? afT('Referral program — on.', '推荐计划 — 已开启。')
-               : afT('Off.', '已关闭。');
-  const c = on
-    ? afT('Customers share a personal code; both sides are rewarded automatically.',
-          '顾客分享自己的专属邀请码,双方自动获得奖励。')
-    : afT('Customers can’t join, share codes, or earn — the Refer a friend page is hidden in your shop.',
-          '顾客无法加入、分享邀请码或获得奖励 — 店内的“推荐好友”页面已隐藏。');
-  host.innerHTML = `<div class="afx-card">
-      <div class="afx-prog">
-        <div class="afx-prog-t"><div class="h">${h}</div><div class="c">${c}</div></div>
-        <button class="afx-sw${on ? ' on' : ''}" role="switch" aria-checked="${on}"
-                aria-label="${afT('Referral program', '推荐计划')}"
-                ${AFX.progBusy ? 'disabled' : ''} data-afx="program"></button>
-      </div>
-      <div class="afx-prog-note">${AFX.progErr
-        ? `<span style="color:var(--td-brick-ink)">${escapeHtml(AFX.progErr)}</span>`
-        : afT('Anyone mid-referral keeps their history, and rewards already in wallets stay.',
-              '正在推荐中的顾客保留记录,已入钱包的奖励不受影响。')}</div>
-    </div>`;
+// ── the header ──────────────────────────────────────────────────
+// Status line first (§1.7): a real number, and the one that matters here is
+// how many people are carrying a code versus how many have used one. The Dusk
+// CTA is rendered ONLY when there is something to do about it — once the invite
+// is on the home layout the slot is empty, which the header contract allows.
+function afxRenderHead() {
+  const line = $('#afx-statusline');
+  const cta = $('#afx-headcta');
+  const o = AFX.ov;
+  if (line) {
+    line.textContent = !o ? ''
+      : !afxProgramOn() ? afT('The program is off', '推荐计划已关闭')
+      : o.counts.referrals === 0
+        ? afT(o.customers.withCode + ' customers hold a code · none has used one',
+              o.customers.withCode + ' 位顾客持有邀请码 · 尚无人使用')
+        : afT(o.customers.withCode + ' customers hold a code · ' + o.counts.referrals + ' used',
+              o.customers.withCode + ' 位顾客持有邀请码 · ' + o.counts.referrals + ' 次使用');
+  }
+  if (cta) {
+    cta.innerHTML = (o && afxProgramOn() && !o.placements.onHome)
+      ? `<button class="afx-btn dusk" data-afx="go-home-layout">${afT('Put the invite on the home screen', '把邀请放到首页')}</button>`
+      : '';
+  }
 }
 
-// ── stats ───────────────────────────────────────────────────────
-function afxRenderStats() {
-  const host = $('#afx-stats'); if (!host) return;
-  // The tile counts what the SERVER is paying on, so it follows the saved
-  // setting — an unsaved edit must not conjure a figure that isn't true yet.
-  const life = afxLifeOn(AFX.saved);
-  const labels = [
-    afT('Friends joined', '好友加入'),
-    afT('Placed first order', '完成首单'),
-    afT('Rewards paid', '已发奖励'),
-  ];
-  if (life) labels.push(afT('Still earning', '持续分成'));
+// ── the verdict: what the page is actually for ──────────────────
+function afxFig(k, v, s) {
+  return `<div class="afx-fig"><div class="k">${k}</div><div class="v">${v}</div><div class="s">${s}</div></div>`;
+}
+function afxRenderVerdict() {
+  const host = $('#afx-verdict'); if (!host) return;
+  const o = AFX.ov;
 
-  const s = AFX.summary;
-  if (!s || AFX.ledger === 'error') {
-    host.innerHTML = `<div class="afx-stats">${labels.map(k =>
-      `<div class="afx-stat"><div class="k">${k}</div><div class="skel"></div></div>`).join('')}</div>`;
+  if (!afxProgramOn()) {
+    host.innerHTML = `<div class="afx-verdict">
+        <div class="lead">${afT('The referral program is off.', '推荐计划已关闭。')}</div>
+        <div class="sub">${afT(
+          'Customers can’t join, share codes, or earn — the Refer a friend page is hidden in your shop. Anyone mid-referral keeps their history, and rewards already in wallets stay.',
+          '顾客无法加入、分享邀请码或获得奖励 — 店内的“推荐好友”页面已隐藏。正在推荐中的顾客保留记录,已入钱包的奖励不受影响。')}</div>
+        <div style="margin-top: 24px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap">
+          <button class="afx-btn ink" data-afx="program-on" ${AFX.progBusy ? 'disabled' : ''}>${
+            AFX.progBusy ? `<span class="afx-spin"></span>${afT('Turning on…', '开启中…')}` : afT('Turn it on', '开启')}</button>
+          ${AFX.progErr ? `<span style="font-size: 13px; color: var(--td-brick-ink)">${escapeHtml(AFX.progErr)}</span>` : ''}
+        </div>
+      </div>`;
     return;
   }
 
-  const total = Number(s.total || 0);
-  const converted = Number(s.converted || 0);
-  const pct = total > 0 ? Math.round((converted / total) * 100) : 0;
-  const delta = Number(s.joined_this_month || 0) - Number(s.joined_last_month || 0);
-  const vs = delta > 0 ? afT('+' + delta + ' vs last month', '较上月 +' + delta)
-           : delta < 0 ? afT(delta + ' vs last month', '较上月 ' + delta)
-           : afT('level with last month', '与上月持平');
-  const lifePaid = Number(s.lifetime_paid || 0);
-  const paid = (Number(s.paid_out) || 0) + lifePaid;
-  const paidSub = lifePaid > 0
-    ? afT('incl. ¥' + afxMoney(lifePaid) + ' from repeat orders', '含复购分成 ¥' + afxMoney(lifePaid))
-    : afT('to referrer wallets', '入推荐人钱包');
+  if (!o) {
+    host.innerHTML = `<div class="afx-verdict"><div class="afx-figs" style="margin-top: 0; padding-top: 0; border-top: 0">${
+      [afT('Paid out', '已发出'), afT('Referred friends have spent', '被推荐好友消费'), afT('Each referral costs', '每次推荐成本')]
+        .map(k => `<div class="afx-fig"><div class="k">${k}</div><div class="skel"></div></div>`).join('')}</div></div>`;
+    return;
+  }
 
-  const tiles = [
-    [labels[0], String(total), vs],
-    [labels[1], String(converted), total > 0 ? afT(pct + '% of joined', '占加入的 ' + pct + '%') : afT('No orders yet', '暂无订单')],
-    [labels[2], '¥' + afxMoney(paid), paidSub],
-  ];
-  if (life) tiles.push([labels[3], String(Number(s.still_earning || 0)), afT('in the earning window', '在分成周期内')]);
+  const withCode = o.customers.withCode;
+  const used = o.counts.referrals;
+  const lead = used === 0
+    ? afT(withCode + ' customers are carrying a referral code. None of them has used it.',
+          withCode + ' 位顾客持有邀请码,尚无人使用。')
+    : used === 1
+      ? afT(withCode + ' customers are carrying a referral code. One of them has used it.',
+            withCode + ' 位顾客持有邀请码,其中 1 位使用过。')
+      : afT(withCode + ' customers are carrying a referral code. ' + used + ' have used one.',
+            withCode + ' 位顾客持有邀请码,其中 ' + used + ' 位使用过。');
 
-  host.innerHTML = `<div class="afx-stats">${tiles.map(t =>
-    `<div class="afx-stat"><div class="k">${t[0]}</div><div class="v">${t[1]}</div><div class="s">${t[2]}</div></div>`
-  ).join('')}</div>`;
+  // The honest second sentence depends on what is actually in the way. Placement
+  // first — a code nobody can find is the only explanation worth offering before
+  // the offer itself is questioned.
+  const sub = !o.placements.onHome
+    ? afT('The offer is live and the codes exist. What is missing is somewhere for a customer to see the invite — it is not on your home screen.',
+          '奖励已生效,邀请码也已发出。缺的是让顾客看到邀请的位置 — 首页上没有它。')
+    : used === 0
+      ? afT('The invite is on the home screen and the codes exist. Nobody has shared one yet.',
+            '邀请已在首页,邀请码也已发出,但还没有人分享。')
+      : afT('Rewards are paid automatically the moment a friend’s first order is marked paid.',
+            '好友首单标记为已付款时,奖励自动发放。');
+
+  const cost = Number(o.offer.referrer) + Number(o.offer.friend);
+  const paid = Number(o.money.paidOut);
+  const spend = Number(o.money.friendSpend);
+  const figs =
+    afxFig(afT('You have paid out', '已发出奖励'), '¥' + afxMoney(paid),
+           paid > 0
+             ? (o.money.lifetimePaid > 0
+                 ? afT('incl. ¥' + afxMoney(o.money.lifetimePaid) + ' from repeat orders', '含复购分成 ¥' + afxMoney(o.money.lifetimePaid))
+                 : afT('to referrer and friend wallets', '进入推荐人与好友钱包'))
+             : afT('no referral has converted', '尚无推荐达成')) +
+    afxFig(afT('Referred friends have spent', '被推荐好友消费'), '¥' + afxMoney(spend),
+           spend > 0
+             ? afT('since they joined', '自加入起')
+             : afT('nothing to weigh it against', '暂无可对比的数字')) +
+    afxFig(afT('Each referral costs', '每次推荐成本'), '¥' + afxMoney(cost),
+           afT('¥' + afxMoney(o.offer.referrer) + ' to them, ¥' + afxMoney(o.offer.friend) + ' to the friend',
+               '推荐人 ¥' + afxMoney(o.offer.referrer) + ',好友 ¥' + afxMoney(o.offer.friend)));
+
+  host.innerHTML = `<div class="afx-verdict">
+      <div class="lead">${lead}</div>
+      <div class="sub">${sub}</div>
+      <div class="afx-figs">${figs}</div>
+    </div>`;
+}
+
+// ── where a customer can find it ────────────────────────────────
+// Read from the LIVE mini-app config, never the CMS draft — what a customer can
+// reach today is the only version of this worth reporting.
+function afxRenderPlacements() {
+  const host = $('#afx-placements'); if (!host) return;
+  const o = AFX.ov;
+  if (!o || !afxProgramOn()) { host.innerHTML = ''; return; }
+  const p = o.placements;
+
+  const pill = (kind, label) => `<span class="afx-pill ${kind}">${label}</span>`;
+  const row = (t, s, right) => `<div class="afx-place"><div class="pt"><div class="t">${t}</div><div class="s">${s}</div></div>${right}</div>`;
+
+  const me = p.mePage.enabled
+    ? row(afT('Me tab', '“我的”页面'),
+          afT('Row ' + p.mePage.position + ' of ' + p.mePage.total + ' on the account screen.',
+              '账户页第 ' + p.mePage.position + ' 行,共 ' + p.mePage.total + ' 行。'),
+          pill('sage', afT('Showing', '展示中')))
+    : row(afT('Me tab', '“我的”页面'),
+          afT('The row exists but is switched off.', '该入口存在,但已关闭。'),
+          pill('neutral', afT('Hidden', '已隐藏')));
+
+  const home = p.onHome
+    ? row(afT('Home screen', '首页'),
+          afT('An invite block is on the live layout.', '首页布局中已有邀请模块。'),
+          pill('sage', afT('Showing', '展示中')))
+    : row(afT('Home screen', '首页'),
+          afT('The first thing every customer sees. There is no invite block on it.',
+              '每位顾客最先看到的页面,目前没有邀请模块。'),
+          pill('brick', afT('Not there', '未添加')) +
+          `<button class="afx-link" data-afx="go-home-layout">${afT('Add one in the Mini App Editor', '在小程序编辑器中添加')}</button>`);
+
+  host.innerHTML = `<div class="afx-card" style="margin-top: 24px">
+      <div class="afx-card-lbl">${afT('Where a customer can find it', '顾客在哪里能看到')}</div>
+      ${row(afT('Refer a friend page', '推荐好友页面'),
+            afT('The program’s home in your shop. It cannot be turned off separately.', '推荐计划在店内的主页面,无法单独关闭。'),
+            pill('neutral', afT('Always on', '始终开启')))}
+      ${me}
+      ${home}
+    </div>`;
+}
+
+// ── the offer, as one line you can open ─────────────────────────
+function afxRenderOffer() {
+  const host = $('#afx-offer'); if (!host) return;
+  if (!AFX.cfg || !afxProgramOn()) { host.innerHTML = ''; return; }
+  const c = AFX.cfg;
+  const life = afxLifeOn(c);
+  const tail = life
+    ? afT(', plus ' + c.lifetimeRatePercent + '% of what the friend spends' +
+            (Number(c.lifetimeMonths) === 0 ? ' for as long as they keep buying' : ' for ' + c.lifetimeMonths + ' months'),
+          ',另加好友消费额的 ' + c.lifetimeRatePercent + '%' +
+            (Number(c.lifetimeMonths) === 0 ? ',不设期限' : ',持续 ' + c.lifetimeMonths + ' 个月'))
+    : '';
+  host.innerHTML = `<div class="afx-card" style="margin-top: 24px">
+      <div class="afx-offerline">
+        <div class="ot">
+          <div class="afx-card-lbl" style="margin-bottom: 0">${afT('The offer', '奖励方案')}</div>
+          <div class="h">${afT('Give ¥' + afxMoney(c.rewardReferee) + ', get ¥' + afxMoney(c.rewardPerOrder) + tail + '.',
+                               '给出 ¥' + afxMoney(c.rewardReferee) + ',获得 ¥' + afxMoney(c.rewardPerOrder) + tail + '。')}</div>
+          <div class="s">${afT('Paid into the referrer’s wallet the moment a friend’s first order is marked paid.',
+                               '好友首单标记为已付款时,奖励即刻进入推荐人钱包。')}</div>
+        </div>
+        <button class="afx-btn sec" data-afx="settings-toggle">${
+          AFX.settingsOpen ? afT('Done', '完成') : afT('Change the offer', '修改方案')}</button>
+      </div>
+    </div>`;
 }
 
 // ── settings column ─────────────────────────────────────────────
@@ -349,7 +472,24 @@ function afxRenderSettings() {
       </div>
     </div>`;
 
-  host.innerHTML = `<div class="afx-col">${offer}${repeat}${codes}${share}</div>`;
+  // Turning the whole program off is rare and consequential, so it lives at the
+  // bottom of the settings disclosure rather than on the page — but it has to
+  // live SOMEWHERE, and this page is now its only home.
+  const program = `<div class="afx-card">
+      <div class="afx-optin">
+        <div class="afx-optin-t">
+          <div class="h">${afT('Referral program', '推荐计划')}</div>
+          <div class="s">${afT('Turning it off hides the Refer a friend page. Anyone mid-referral keeps their history, and rewards already in wallets stay.',
+                               '关闭后将隐藏“推荐好友”页面。正在推荐中的顾客保留记录,已入钱包的奖励不受影响。')}</div>
+        </div>
+        <button class="afx-sw on" role="switch" aria-checked="true"
+                aria-label="${afT('Referral program', '推荐计划')}"
+                ${AFX.progBusy ? 'disabled' : ''} data-afx="program-off"></button>
+      </div>
+      ${AFX.progErr ? `<div class="afx-note" style="color: var(--td-brick-ink)">${escapeHtml(AFX.progErr)}</div>` : ''}
+    </div>`;
+
+  host.innerHTML = `<div class="afx-col">${offer}${repeat}${codes}${share}${program}</div>`;
 }
 
 function afxRestate() {
@@ -420,12 +560,20 @@ async function afxLoadReferrals() {
     AFX.ledgerErr = afxWhy(e);
     AFX.ledger = 'error';
   }
-  afxRenderStats();
   afxRenderLedger();
 }
 
 function afxStatusCell(r) {
   if (r.status === 'void')    return `<span class="afx-st"><span class="afx-pill brick">${afT('Voided', '已作废')}</span></span>`;
+  // A 'joined' row whose friend has already paid for something can never
+  // convert — the first-order bounty has had its chance. Saying "Waiting" here
+  // is the page claiming a future that will not arrive.
+  if (r.blocked) {
+    return `<span class="afx-st"><span class="afx-pill brick">${afT('Can’t be rewarded', '无法发放')}</span></span>` +
+      `<div class="afx-why">${afT(
+        'This friend had already bought from you before the code was used, so it was not a first order. Nothing will change on its own.',
+        '该好友在使用邀请码之前已经下过单,因此不算首单。此状态不会自行改变。')}</div>`;
+  }
   if (r.status === 'joined')  return `<span class="afx-st"><span class="afx-pill amber">${afT('Waiting', '待首单')}</span></span>`;
   // Graphite/neutral, not Dusk — "Still earning" is state, and the page's one
   // Dusk element is Save changes.
@@ -439,7 +587,8 @@ function afxStatusCell(r) {
 // back 409 is the page claiming something untrue.
 function afxActionCell(r) {
   const off = AFX.rowBusy ? ' disabled' : '';    // §1.12 — no second click while one is in flight
-  if (r.status === 'joined') return `<button class="afx-btn ghost sm"${off} data-afx="void:${r.id}">${afT('Void', '作废')}</button>`;
+  if (r.status === 'joined') return `<button class="afx-btn ghost sm"${off} data-afx="void:${r.id}">${
+    r.blocked ? afT('Close it', '关闭') : afT('Void', '作废')}</button>`;
   if (r.status === 'void')   return `<button class="afx-btn ghost sm"${off} data-afx="restore:${r.id}">${afT('Restore', '恢复')}</button>`;
   return '';
 }
@@ -459,7 +608,7 @@ function afxRow(r) {
   return `<tr>
       <td><a data-afx="cust:${r.referrer_id}">${referrer}</a></td>
       <td><a data-afx="cust:${r.invitee_id}">${friend}</a></td>
-      <td>${afxStatusCell(r)}</td>
+      <td style="vertical-align: top">${afxStatusCell(r)}</td>
       <td><span class="afx-dim">${escapeHtml(r.code_used || '')}</span></td>
       <td>${first}</td>
       <td class="num">${earned}</td>
@@ -470,9 +619,15 @@ function afxRow(r) {
 function afxRowConfirm(r) {
   const c = AFX.rowConfirm;
   const busy = AFX.rowBusy;
+  // A blocked row was never going to pay out, so the warning that fits an open
+  // referral would be false here. Closing it is bookkeeping, not a decision.
+  const blocked = !!(AFX.rows.find(x => x.id === c.id) || {}).blocked;
   const body = c.kind === 'void'
-    ? `<p>${afT('Void this referral? The referrer won’t be rewarded when this friend places their first order.',
-                '作废这条推荐记录?该好友首单时,推荐人将不会获得奖励。')}</p>
+    ? `<p>${blocked
+        ? afT('Close this referral? It can’t be rewarded either way — this only takes it off the list.',
+              '关闭这条推荐记录?它本来就无法发放奖励,此操作只是把它从列表中移除。')
+        : afT('Void this referral? The referrer won’t be rewarded when this friend places their first order.',
+              '作废这条推荐记录?该好友首单时,推荐人将不会获得奖励。')}</p>
        <div class="row">
          <input class="afx-reason" data-afx-reason value="${escapeAttr(c.reason || '')}"
                 placeholder="${afT('Why (kept on the record)', '原因(将记录在案)')}">
@@ -671,21 +826,33 @@ document.addEventListener('click', e => {
   const a = t.dataset.afx;
   e.preventDefault();
 
-  if (a === 'program')  { afxSetProgram(!afxProgramOn()); return; }
+  if (a === 'program-on')  { afxSetProgram(true); return; }
+  if (a === 'program-off') { afxSetProgram(false); return; }
   if (a === 'reload-settings') { afxLoadSettings(); return; }
+  // The one Dusk action on the page: the invite has no home-screen block, and
+  // the Mini App Editor is where one gets added.
+  if (a === 'go-home-layout') { goTab('mini-app-editor'); return; }
+  if (a === 'settings-toggle') {
+    AFX.settingsOpen = !AFX.settingsOpen;
+    const box = $('#afx-settings');
+    if (box) box.hidden = !AFX.settingsOpen;
+    afxRenderOffer();
+    if (AFX.settingsOpen && box) box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    return;
+  }
 
   // Arming the repeat-order share is a money decision, so it asks first;
   // turning it off is instant (Marketing precedent #8).
   if (a === 'life') {
     if (afxLifeOn(AFX.cfg)) { AFX.cfg.lifetimeRatePercent = 0; AFX.lifeArm = false; }
     else { AFX.lifeArm = true; }
-    afxRenderSettings(); afxRenderSaveBar(); return;
+    afxRenderSettings(); afxRenderOffer(); afxRenderSaveBar(); return;
   }
   if (a === 'life-confirm') {
     AFX.cfg.lifetimeRatePercent = Number(AFX.saved.lifetimeRatePercent) > 0
       ? Number(AFX.saved.lifetimeRatePercent) : AFX_LIFETIME_START_PCT;
     AFX.lifeArm = false;
-    afxRenderSettings(); afxRenderSaveBar(); return;
+    afxRenderSettings(); afxRenderOffer(); afxRenderSaveBar(); return;
   }
   if (a === 'life-cancel') { AFX.lifeArm = false; afxRenderSettings(); return; }
 
@@ -727,6 +894,7 @@ document.addEventListener('input', e => {
   AFX.cfg[key] = key === 'codePrefix' ? t.value.toUpperCase() : afxNum(t.value);
   const restate = $('#afx-restate'); if (restate) restate.innerHTML = afxRestate();
   const note = $('#afx-life-note');  if (note) note.innerHTML = afxLifeNote();
+  afxRenderOffer();
   afxRenderSaveBar();
 });
 
@@ -739,7 +907,8 @@ document.addEventListener('change', e => {
 
 // ── boot ────────────────────────────────────────────────────────
 function afxRenderAll() {
-  afxRenderProgram(); afxRenderStats(); afxRenderSettings(); afxRenderLedger(); afxRenderSaveBar();
+  afxRenderHead(); afxRenderVerdict(); afxRenderPlacements();
+  afxRenderOffer(); afxRenderSettings(); afxRenderLedger(); afxRenderSaveBar();
 }
 function afxBoot() {
   if (AFX.booted) return;
@@ -748,6 +917,7 @@ function afxBoot() {
   // arrives shows the operator a figure that was never their setting. The
   // column stays empty until it can tell the truth.
   afxRenderAll();
+  afxLoadOverview();
   afxLoadSettings();
   afxLoadReferrals();
 }
