@@ -203,9 +203,12 @@ router.get('/api/retail-admin/eleme/products', requireRetailAdmin, (req, res) =>
        ${includeInactive ? '' : 'WHERE p.is_active = 1'}
        ORDER BY p.name_cn, p.variant_group_id, p.id
     `).all();
+    // A product can claim several options of one listing (a multipack sells the
+    // same bottle as 1 / 3 / 6), so this is one row per CLAIM, folded below into
+    // one entry per (product, store) carrying its claims.
     const maps = db.prepare(`
-      SELECT m.product_id, m.retail_store_id, m.store_code, m.extend_code, m.eleme_name,
-             m.spec_id, m.spec_name,
+      SELECT m.id, m.product_id, m.retail_store_id, m.store_code, m.extend_code, m.eleme_name,
+             m.spec_id, m.spec_name, m.spec_key, m.units_per_pack,
              m.sync_enabled, m.last_pushed_qty, m.last_pushed_at,
              -- How many sizes the mapped listing holds. Drives the Multi-size
              -- filter and the "pick a size" flag: on Eleme a size CAN be
@@ -214,9 +217,42 @@ router.get('/api/retail-admin/eleme/products', requireRetailAdmin, (req, res) =>
              (SELECT json_array_length(c.specs) FROM eleme_catalogue_cache c
                WHERE c.store_code = m.store_code AND c.name = m.eleme_name) AS specCount
         FROM eleme_product_map m
+       ORDER BY m.product_id, m.store_code, m.id
     `).all();
+
+    // Which product owns each option, so the page can say "claimed by X" instead
+    // of letting two products quietly fight over one stock box (live at 天河: a
+    // whole loaf and a 3-slice pack both pointed at one option and overwrote each
+    // other every cycle). Keyed by store → option, value = the claiming product.
+    const optionOwners = {};
+    for (const m of maps) {
+      if (!m.spec_key || !m.eleme_name) continue;
+      (optionOwners[m.store_code] = optionOwners[m.store_code] || {})[m.spec_key] =
+        { product_id: m.product_id, eleme_name: m.eleme_name };
+    }
+
     const idx = {};
-    for (const m of maps) { (idx[m.product_id] = idx[m.product_id] || {})[m.store_code] = m; }
+    for (const m of maps) {
+      const byStore = (idx[m.product_id] = idx[m.product_id] || {});
+      const entry = byStore[m.store_code] || (byStore[m.store_code] = {
+        product_id: m.product_id, retail_store_id: m.retail_store_id, store_code: m.store_code,
+        extend_code: m.extend_code, eleme_name: m.eleme_name, specCount: m.specCount,
+        // The switch is per product+store, not per option: every claim of one
+        // product on one store shares it, so the panel keeps ONE toggle.
+        sync_enabled: 0, claims: [],
+        // The first claim's push facts double as the row's, so the list can keep
+        // showing "last pushed" without knowing about claims at all.
+        spec_id: null, spec_name: null, last_pushed_qty: null, last_pushed_at: null,
+      });
+      if (Number(m.sync_enabled) === 1) entry.sync_enabled = 1;
+      entry.claims.push({
+        id: m.id, spec_key: m.spec_key || '', spec_id: m.spec_id, spec_name: m.spec_name,
+        units_per_pack: Number(m.units_per_pack) || 1,
+        last_pushed_qty: m.last_pushed_qty, last_pushed_at: m.last_pushed_at,
+      });
+      if (entry.spec_id == null && m.spec_id) { entry.spec_id = m.spec_id; entry.spec_name = m.spec_name; }
+      if (entry.last_pushed_at == null) { entry.last_pushed_qty = m.last_pushed_qty; entry.last_pushed_at = m.last_pushed_at; }
+    }
     // image = a small lazy thumbnail URL, never the blob — the list-image
     // footgun. The public /image route serves store_products images on demand.
     res.json({
@@ -229,6 +265,7 @@ router.get('/api/retail-admin/eleme/products', requireRetailAdmin, (req, res) =>
           : null,
         stores: idx[p.id] || {},
       })),
+      optionOwners,
     });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
@@ -236,6 +273,11 @@ router.get('/api/retail-admin/eleme/products', requireRetailAdmin, (req, res) =>
 // Upsert/clear a product's Eleme mapping for one store. By default Eleme maps by
 // 货号 (the product's SKU), so a row only needs to exist to ENABLE sync; the
 // extendCode/elemeName fields are optional overrides.
+//
+// A product may hold several CLAIMS here — one per option of the listing — and
+// the listing name, the 货号 override and the sync switch belong to all of them
+// at once. So this endpoint writes across every claim the product holds, and
+// /claim below is the only thing that adds or removes one.
 router.post('/api/retail-admin/eleme/products/:id/map', requireRetailAdmin, express.json(), (req, res) => {
   const db = tdb();
   const productId = parseInt(req.params.id, 10);
@@ -246,22 +288,138 @@ router.post('/api/retail-admin/eleme/products/:id/map', requireRetailAdmin, expr
       db.prepare('DELETE FROM eleme_product_map WHERE product_id = ? AND retail_store_id = ?').run(productId, storeId);
       return res.json({ success: true, deleted: true });
     }
-    const cur = db.prepare('SELECT * FROM eleme_product_map WHERE product_id = ? AND retail_store_id = ?')
+    // The base row (spec_key = '') is the one that means "the listing as a
+    // whole". A product that has claimed options has no base row, so read any
+    // claim for the fields they share.
+    const cur = db.prepare(`SELECT * FROM eleme_product_map
+                             WHERE product_id = ? AND retail_store_id = ?
+                             ORDER BY spec_key = '' DESC, id LIMIT 1`)
                   .get(productId, storeId) || {};
     const { nextExtend, nextName, nextSpecId, nextSpecName } =
       mergeMapFields(cur, { extendCode, elemeName, specId, specName });
-    db.prepare(`
-      INSERT INTO eleme_product_map
-        (product_id, retail_store_id, store_code, extend_code, eleme_name, spec_id, spec_name, sync_enabled, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      ON CONFLICT(retail_store_id, product_id) DO UPDATE SET
-        extend_code = excluded.extend_code, eleme_name = excluded.eleme_name,
-        spec_id = excluded.spec_id, spec_name = excluded.spec_name,
-        store_code = excluded.store_code, sync_enabled = excluded.sync_enabled,
-        updated_at = CURRENT_TIMESTAMP
-    `).run(productId, storeId, storeCode, nextExtend, nextName, nextSpecId, nextSpecName,
-           syncEnabled === undefined ? 1 : (syncEnabled ? 1 : 0));
-    res.json({ success: true });
+    const sync = syncEnabled === undefined ? 1 : (syncEnabled ? 1 : 0);
+    const renamed = nextName !== (cur.eleme_name == null ? null : cur.eleme_name);
+
+    db.transaction(() => {
+      const claims = db.prepare('SELECT COUNT(*) AS n FROM eleme_product_map WHERE product_id = ? AND retail_store_id = ?')
+                       .get(productId, storeId).n;
+      if (claims) {
+        // An option belongs to the listing it was picked on, so pointing this
+        // product at a DIFFERENT listing retires every option claim rather than
+        // pushing stock at a stranger's stock box — the rule mergeMapFields()
+        // applies to a single pick, applied to all of them.
+        if (renamed) {
+          db.prepare(`DELETE FROM eleme_product_map
+                       WHERE product_id = ? AND retail_store_id = ? AND spec_key <> ''`)
+            .run(productId, storeId);
+        }
+        db.prepare(`UPDATE eleme_product_map
+                       SET extend_code = ?, eleme_name = ?, store_code = ?, sync_enabled = ?,
+                           updated_at = CURRENT_TIMESTAMP
+                     WHERE product_id = ? AND retail_store_id = ?`)
+          .run(nextExtend, nextName, storeCode, sync, productId, storeId);
+      }
+      // No claim yet, or the rename just cleared them all: leave the product with
+      // a base row so the name and the switch have somewhere to live.
+      const left = db.prepare('SELECT COUNT(*) AS n FROM eleme_product_map WHERE product_id = ? AND retail_store_id = ?')
+                     .get(productId, storeId).n;
+      if (!left) {
+        const keepSpec = !renamed && nextSpecId;
+        db.prepare(`
+          INSERT INTO eleme_product_map
+            (product_id, retail_store_id, store_code, extend_code, eleme_name,
+             spec_id, spec_name, spec_key, units_per_pack, sync_enabled, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, CURRENT_TIMESTAMP)
+        `).run(productId, storeId, storeCode, nextExtend, nextName,
+               keepSpec ? nextSpecId : null, keepSpec ? nextSpecName : null,
+               keepSpec ? String(nextSpecId) : '', sync);
+      }
+    })();
+    res.json({ success: true, specCleared: !!renamed });
+  } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// ── POST /api/retail-admin/eleme/products/:id/claim ────────────────────────
+// Claim ONE option of the mapped listing for this product, or release it.
+//
+// This is what a multipack needs: "咖啡大师 Oatly Barista" sells the same bottle
+// as 1瓶 / 3瓶 / 6瓶, each its own stock box on Eleme, so one product holds three
+// claims — each carrying how many units a sale of it eats. It is also how two
+// DIFFERENT products (the hand soap's scents) sit behind one listing without
+// overwriting each other, at one unit apiece.
+//
+// `units` is typed by the operator rather than read out of the option name: the
+// catalogue already writes the same thing three ways (X3, *2, 3-260X2), and a
+// number guessed wrong here silently multiplies every future deduction.
+router.post('/api/retail-admin/eleme/products/:id/claim', requireRetailAdmin, express.json(), (req, res) => {
+  const db = tdb();
+  const productId = parseInt(req.params.id, 10);
+  const { storeId, storeCode, elemeName, specId, specName, units, on } = req.body || {};
+  if (!storeId || !storeCode) return res.status(400).json({ success: false, error: 'storeId and storeCode required' });
+  const key = String(specId == null ? '' : specId).trim();
+  if (!key) return res.status(400).json({ success: false, error: 'specId required' });
+  try {
+    const cur = db.prepare(`SELECT * FROM eleme_product_map
+                             WHERE product_id = ? AND retail_store_id = ?
+                             ORDER BY spec_key = '' DESC, id LIMIT 1`)
+                  .get(productId, storeId) || {};
+    const name = String(elemeName || cur.eleme_name || '').trim() || null;
+    if (!name) return res.status(400).json({ success: false, error: 'no listing mapped yet' });
+
+    if (on === false) {
+      db.transaction(() => {
+        db.prepare('DELETE FROM eleme_product_map WHERE product_id = ? AND retail_store_id = ? AND spec_key = ?')
+          .run(productId, storeId, key);
+        // Releasing the last option would leave the product with no row at all
+        // and lose the listing name with it, so fall back to a base row.
+        const left = db.prepare('SELECT COUNT(*) AS n FROM eleme_product_map WHERE product_id = ? AND retail_store_id = ?')
+                       .get(productId, storeId).n;
+        if (!left) {
+          db.prepare(`
+            INSERT INTO eleme_product_map
+              (product_id, retail_store_id, store_code, extend_code, eleme_name, spec_key, units_per_pack, sync_enabled, updated_at)
+            VALUES (?, ?, ?, ?, ?, '', 1, ?, CURRENT_TIMESTAMP)
+          `).run(productId, storeId, storeCode, cur.extend_code || null, name, Number(cur.sync_enabled) === 1 ? 1 : 0);
+        }
+      })();
+      return res.json({ success: true, released: true });
+    }
+
+    // Refuse an option another product already holds. Two claims on one box is
+    // the exact state that had them overwriting each other every push cycle, and
+    // saying whose it is beats a bare "conflict".
+    const taken = db.prepare(`
+      SELECT m.product_id, COALESCE(p.name_en, p.name_cn) AS name
+        FROM eleme_product_map m LEFT JOIN store_products p ON p.id = m.product_id
+       WHERE m.retail_store_id = ? AND m.eleme_name = ? AND m.spec_key = ? AND m.product_id <> ?
+    `).get(storeId, name, key, productId);
+    if (taken) {
+      return res.status(409).json({ success: false, error: 'option already claimed',
+                                    takenBy: taken.product_id, takenByName: taken.name || null });
+    }
+
+    const per = Math.max(1, parseInt(units, 10) || 1);
+    db.transaction(() => {
+      // The base row means "the whole listing", which an explicit option
+      // replaces — otherwise the product would push twice, once at a box and
+      // once at the driver's guess.
+      db.prepare(`DELETE FROM eleme_product_map
+                   WHERE product_id = ? AND retail_store_id = ? AND spec_key = ''`)
+        .run(productId, storeId);
+      db.prepare(`
+        INSERT INTO eleme_product_map
+          (product_id, retail_store_id, store_code, extend_code, eleme_name,
+           spec_id, spec_name, spec_key, units_per_pack, sync_enabled, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(retail_store_id, product_id, spec_key) DO UPDATE SET
+          eleme_name = excluded.eleme_name, spec_id = excluded.spec_id,
+          spec_name = excluded.spec_name, store_code = excluded.store_code,
+          units_per_pack = excluded.units_per_pack, updated_at = CURRENT_TIMESTAMP
+      `).run(productId, storeId, storeCode, cur.extend_code || null, name,
+             key, specName ? String(specName).trim() : null, key, per,
+             Number(cur.sync_enabled) === 1 ? 1 : 0);
+    })();
+    res.json({ success: true, units: per });
   } catch (e) { res.status(500).json({ success: false, error: e.message }); }
 });
 

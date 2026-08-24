@@ -87,6 +87,7 @@ const { channelClosedStores } = require('../lib/inventory');
 // hours on file come back null → treated as always-open, so a new store is never
 // silently muted.
 const { storeHours, within } = require('../lib/store-hours');
+const { packQty } = require('../lib/pack-units');
 // Ops-alert latches that survive a restart (see lib/alert-latch).
 const { latchStore } = require('../lib/alert-latch');
 
@@ -456,11 +457,18 @@ async function processStockQueue(stores) {
   if (!eligible.length) return;
   const ph = eligible.map(() => '?').join(',');
 
+  // One row per CLAIM: a product that holds several options of one listing (a
+  // multipack — 1瓶 / 3瓶 / 6瓶 of the same bottle, each its own stock box on
+  // Eleme) fans a single queue row out into one push per box. The queue row's
+  // own verdict is then decided once from all of them.
   const rows = db.prepare(`
     SELECT q.*, p.name_cn, p.name_en,
            COALESCE(m.extend_code, p.sku) AS sku,
+           m.id         AS map_id,
            m.eleme_name AS map_eleme_name,
-           m.spec_id    AS map_spec_id
+           m.spec_id    AS map_spec_id,
+           m.spec_name  AS map_spec_name,
+           COALESCE(m.units_per_pack, 1) AS map_units
       FROM eleme_sync_queue q
       LEFT JOIN store_products p ON p.id = q.product_id
       LEFT JOIN eleme_product_map m
@@ -482,26 +490,36 @@ async function processStockQueue(stores) {
     const cfg = configByCode[storeCode];
     if (!cfg) continue;
 
-    // Collapse to the latest qty per product; retire superseded rows.
+    // Collapse to the latest qty per target, where the target is the stock box —
+    // collapsing on the product alone would push one of a multipack's boxes and
+    // silently drop the rest.
     const latest = new Map();
     const superseded = [];
     for (const row of items) {
-      const key = `p:${row.product_id}`;
+      const key = row.map_id ? `p:${row.product_id}:m${row.map_id}` : `p:${row.product_id}`;
       const prev = latest.get(key);
       if (prev) superseded.push(prev);
       latest.set(key, row);
     }
+    const pushRows = Array.from(latest.values());
+    // Retire a superseded queue row only if NO surviving push still rides on it:
+    // one queue row now feeds several pushes, and an older row that lost one box
+    // to a newer row may still own the others.
+    const liveQueueIds = new Set(pushRows.map(r => r.id));
     for (const row of superseded) {
+      if (liveQueueIds.has(row.id)) continue;
       db.prepare(`UPDATE eleme_sync_queue SET status='done', processed_at=CURRENT_TIMESTAMP, last_error='superseded' WHERE id=?`).run(row.id);
     }
-    const pushRows = Array.from(latest.values());
 
     let browser;
     try {
       browser = await getBrowser(storeCode, cfg.shop_id);
 
-      for (const row of pushRows) {
-        db.prepare(`UPDATE eleme_sync_queue SET status='processing', attempts=attempts+1 WHERE id=?`).run(row.id);
+      // Once per QUEUE row — pushRows can hold the same row several times (one
+      // per claimed box), and counting each as an attempt would burn the retry
+      // budget in a single cycle.
+      for (const id of new Set(pushRows.map(r => r.id))) {
+        db.prepare(`UPDATE eleme_sync_queue SET status='processing', attempts=attempts+1 WHERE id=?`).run(id);
       }
 
       // Eleme has no extCode/货号 to match on yet (ELEME_BROWSER_RECON.md), so a
@@ -509,7 +527,10 @@ async function processStockQueue(stores) {
       // listing name (eleme_product_map.eleme_name) over the raw Roots name,
       // the same override meituan-daemon.js honours for the identical reason.
       const batchItems = pushRows.map(row => ({
-        row, targetCn: row.map_eleme_name || row.name_cn, targetEn: row.name_en, sku: row.sku, newQty: row.new_qty,
+        row, targetCn: row.map_eleme_name || row.name_cn, targetEn: row.name_en, sku: row.sku,
+        // What this box can sell, not what the shelf holds: a 6-bottle option fed
+        // the raw count would offer 40 six-packs off 40 bottles.
+        newQty: packQty(row.new_qty, row.map_units),
         // Which size inside that listing, when the operator picked one. Without
         // it a multi-size listing falls back to a guess that fabricates stock.
         specGlobalId: row.map_spec_id || null,
@@ -520,15 +541,38 @@ async function processStockQueue(stores) {
       noteVerifyResult(storeCode, browser.verificationRequired);
       const challenged = browser.verificationRequired;
 
+      // Record what each BOX did, then decide each QUEUE ROW once: a row that fed
+      // three boxes is only done when all three took the number, and must stay
+      // pending if any of them still needs another go.
+      const verdicts = new Map(); // queue row id -> { row, ok, transient }
       for (const res of results) {
         const { row, newQty, ok, transient } = res;
-        if (ok) {
-          db.prepare(`UPDATE eleme_sync_queue SET status='done', processed_at=CURRENT_TIMESTAMP, last_error=NULL WHERE id=?`).run(row.id);
+        const v = verdicts.get(row.id) || { row, ok: true, transient: false };
+        v.ok = v.ok && !!ok;
+        if (!ok && transient) v.transient = true;
+        verdicts.set(row.id, v);
+        if (ok && row.map_id) {
           db.prepare(`UPDATE eleme_product_map
                          SET last_pushed_qty=?, last_pushed_at=CURRENT_TIMESTAMP
-                       WHERE retail_store_id=? AND product_id=?`)
-            .run(newQty, row.retail_store_id, row.product_id);
-          logSync(storeCode, 'stock_push', 'ok', { product_id: row.product_id, sku: row.sku, qty: newQty });
+                       WHERE id=?`)
+            .run(newQty, row.map_id);
+        }
+        if (ok) {
+          logSync(storeCode, 'stock_push', 'ok', {
+            product_id: row.product_id, sku: row.sku, qty: newQty,
+            spec: row.map_spec_name || null, units: Number(row.map_units) || 1,
+          });
+        }
+      }
+
+      for (const res of Array.from(verdicts.values())) {
+        const { row, ok, transient } = res;
+        // The shelf count, not one box's share of it: this verdict covers every
+        // box the row fed, and naming one of their numbers would read as the
+        // whole row's.
+        const newQty = row.new_qty;
+        if (ok) {
+          db.prepare(`UPDATE eleme_sync_queue SET status='done', processed_at=CURRENT_TIMESTAMP, last_error=NULL WHERE id=?`).run(row.id);
         } else if (challenged) {
           // Deferred by risk-control, not a real failure — requeue and refund the
           // attempt so it retries once cleared (no burned attempts).

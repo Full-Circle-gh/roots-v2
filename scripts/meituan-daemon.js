@@ -53,6 +53,7 @@ const { latchStore } = require('../lib/alert-latch');
 // Opening hours off the store's own row, cached — so an admin edit takes effect
 // without a restart. Same module qingyun-daemon reads.
 const { storeHours, within } = require('../lib/store-hours');
+const { packQty } = require('../lib/pack-units');
 
 // Stores handled by a DIFFERENT channel daemon (e.g. yuexiu on 闪购/shangou-sync).
 // Listed here so THIS 外卖 daemon never polls their (logged-out) e.waimai session or
@@ -823,12 +824,20 @@ async function processStockQueue(stores) {
   const eligible = pushableStores(stores);
   if (!eligible.length) return;
   const ph = eligible.map(() => '?').join(',');
+  //
+  // The join is one row per CLAIM, so a product that holds several options of one
+  // listing (a multipack: 1瓶 / 3瓶 / 6瓶 of the same bottle, each its own stock
+  // box on Meituan) fans a single queue row out into one push per box. Everything
+  // downstream that used to be "per queue row" is now per (queue row × claim),
+  // and the queue row's own verdict is decided once from all of them.
   const rows = db.prepare(`
     SELECT q.*, p.name_cn, p.name_en,
            COALESCE(mm.meituan_sku, p.sku) AS sku,
-           mm.meituan_name AS map_meituan_name,
+           mm.id             AS map_id,
+           mm.meituan_name   AS map_meituan_name,
            mm.meituan_sku_id AS map_spec_sku_id,
-           mm.meituan_spec   AS map_spec_label
+           mm.meituan_spec   AS map_spec_label,
+           COALESCE(mm.units_per_pack, 1) AS map_units
       FROM meituan_sync_queue q
       LEFT JOIN store_products p ON p.id = q.product_id
       LEFT JOIN meituan_product_map mm
@@ -858,28 +867,40 @@ async function processStockQueue(stores) {
 
     // Collapse to the latest qty per product/bundle so we push each target once,
     // not replay every intermediate change. Older same-target rows are retired.
+    // The target is the stock box, so a product with several claims keeps one
+    // entry per claim — collapsing on the product alone would push one box and
+    // silently drop the others.
     const latest = new Map(); // key -> row
     const superseded = [];
     for (const row of items) {
-      const key = row.bundle_id ? `b:${row.bundle_id}` : `p:${row.product_id}`;
+      const key = row.bundle_id ? `b:${row.bundle_id}`
+                : row.map_id    ? `p:${row.product_id}:m${row.map_id}`
+                                : `p:${row.product_id}`;
       const prev = latest.get(key);
       if (prev) superseded.push(prev);
       latest.set(key, row);
     }
+    const pushRows = Array.from(latest.values());
+    // Retire a superseded queue row only if NO surviving push still rides on it:
+    // one queue row now feeds several pushes, and an older row that lost one of
+    // its boxes to a newer row may still own the rest.
+    const liveQueueIds = new Set(pushRows.map(r => r.id));
     for (const row of superseded) {
+      if (liveQueueIds.has(row.id)) continue;
       db.prepare(`UPDATE meituan_sync_queue SET status='done', processed_at=CURRENT_TIMESTAMP, last_error='superseded' WHERE id=?`)
         .run(row.id);
     }
-    const pushRows = Array.from(latest.values());
 
     let browser;
     try {
       browser = await getBrowser(storeCode);
 
-      // Mark the rows we're about to push as processing.
-      for (const row of pushRows) {
+      // Mark the rows we're about to push as processing. Once per QUEUE row —
+      // pushRows can hold the same row several times (one per claimed box), and
+      // counting each as an attempt would burn the retry budget in one cycle.
+      for (const id of new Set(pushRows.map(r => r.id))) {
         db.prepare(`UPDATE meituan_sync_queue SET status='processing', attempts=attempts+1 WHERE id=?`)
-          .run(row.id);
+          .run(id);
       }
 
       // Bundle rows target a Meituan listing by name; product rows by the
@@ -901,7 +922,9 @@ async function processStockQueue(stores) {
           // without it the driver writes the same count to every option.
           specSkuId: isBundle ? null : row.map_spec_sku_id,
           specLabel: isBundle ? null : row.map_spec_label,
-          newQty:   row.new_qty,
+          // What the box can sell, not what the shelf holds. A 6-bottle option
+          // fed the raw count would offer 40 six-packs off 40 bottles.
+          newQty: isBundle ? row.new_qty : packQty(row.new_qty, row.map_units),
         };
       });
 
@@ -918,22 +941,43 @@ async function processStockQueue(stores) {
       const bindingLost = browser.bindingLost;
       if (bindingLost) noteBindingResult(storeCode, true);
 
+      // Record what each BOX did, then decide each QUEUE ROW once: a row that fed
+      // three boxes is only done when all three took the number, and must stay
+      // pending if any of them still needs another go.
+      const verdicts = new Map(); // queue row id -> { row, ok, transient }
       for (const res of results) {
         const { row, isBundle, newQty, ok, transient } = res;
+        const v = verdicts.get(row.id) || { row, ok: true, transient: false };
+        v.ok = v.ok && !!ok;
+        if (!ok && transient) v.transient = true;
+        verdicts.set(row.id, v);
         if (ok) {
-          db.prepare(`UPDATE meituan_sync_queue SET status='done', processed_at=CURRENT_TIMESTAMP, last_error=NULL WHERE id=?`)
-            .run(row.id);
           if (isBundle) {
             db.prepare(`UPDATE meituan_bundles SET last_pushed_qty=?, last_pushed_at=CURRENT_TIMESTAMP WHERE id=?`)
               .run(newQty, row.bundle_id);
-          } else {
-            db.prepare(`UPDATE meituan_product_map SET last_pushed_qty=?, last_pushed_at=CURRENT_TIMESTAMP WHERE retail_store_id=? AND product_id=?`)
-              .run(newQty, row.retail_store_id, row.product_id);
+          } else if (row.map_id) {
+            db.prepare(`UPDATE meituan_product_map SET last_pushed_qty=?, last_pushed_at=CURRENT_TIMESTAMP WHERE id=?`)
+              .run(newQty, row.map_id);
           }
           logSync(storeCode, 'stock_push', 'ok',
             { name_en: isBundle ? row.meituan_name : row.name_en,
               name_cn: isBundle ? row.meituan_name : row.name_cn,
+              spec: isBundle ? null : (row.map_spec_label || null),
+              units: isBundle ? null : (Number(row.map_units) || 1),
               sku: isBundle ? null : row.sku, qty: newQty, bundle: isBundle });
+        }
+      }
+
+      for (const res of Array.from(verdicts.values())) {
+        const { row, ok, transient } = res;
+        const isBundle = !!row.bundle_id;
+        // The shelf count, not one box's share of it: this verdict covers every
+        // box the row fed, and naming one of their numbers would read as the
+        // whole row's.
+        const newQty = row.new_qty;
+        if (ok) {
+          db.prepare(`UPDATE meituan_sync_queue SET status='done', processed_at=CURRENT_TIMESTAMP, last_error=NULL WHERE id=?`)
+            .run(row.id);
         } else if (challenged) {
           // Deferred by risk-control, not a real failure — requeue and refund the
           // attempt so it retries once the cool-down passes (no burned attempts).

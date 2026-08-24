@@ -32,7 +32,7 @@ const { ShangouBrowser } = require('../lib/shangou-browser');
   const upsert = db.prepare(`
     INSERT INTO meituan_product_map (retail_store_id, product_id, store_code, meituan_name, sync_enabled)
     VALUES (?, ?, ?, ?, 1)
-    ON CONFLICT(retail_store_id, product_id)
+    ON CONFLICT(retail_store_id, product_id, spec_key)
     DO UPDATE SET meituan_name = excluded.meituan_name, sync_enabled = 1, updated_at = CURRENT_TIMESTAMP
   `);
 

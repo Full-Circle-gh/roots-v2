@@ -2819,6 +2819,17 @@ addColumn('retail_orders', 'channel_dest_lng',   'REAL');
 // key on the id instead — collecting it costs nothing and cannot be backfilled.
 addColumn('retail_order_items', 'channel_food_id', 'TEXT');
 
+// How many units of the product ONE of this line took off the shelf. 1 for
+// everything sold as itself; more when the channel option was a pack — Meituan
+// and Eleme both sell "咖啡大师 Oatly Barista" as 1瓶 / 3瓶 / 6瓶 behind one
+// listing, and a sale of the last one is six bottles.
+//
+// Stored on the line rather than looked up at refund time: the claim that says
+// "this option is six" can be re-pointed or released later, and a return has to
+// give back what the sale actually took, not what the mapping says today. qty
+// stays what the customer bought — one six-pack is one line of one.
+addColumn('retail_order_items', 'pack_units', 'INTEGER NOT NULL DEFAULT 1');
+
 // Store pickup: a store is offered as a pickup point at checkout only when
 // this flag is on (admin toggles it per store in the mini-app backend).
 // Independent of is_active routing — a store can fulfill deliveries without
@@ -4796,6 +4807,106 @@ addColumn('eleme_product_map', 'spec_name', 'TEXT');
 // makes a wrong money-unit guess (ELEME_MONEY_SCALE) recoverable from stored
 // data instead of needing the order re-read from Eleme.
 addColumn('eleme_order_import', 'detail_json', 'TEXT');
+
+// ── One claim per option, and how many units that option sells ──────────────
+// Both channel maps were UNIQUE(retail_store_id, product_id): a Roots product
+// could point at exactly ONE 规格. That is wrong for a multipack listing —
+// "咖啡大师 Oatly Barista" sells the same bottle as 1瓶 / 3瓶 / 6瓶, three
+// options behind one name, each with its own stock box on the platform. One row
+// claimed one box; the other two kept the 999/9999 the merchant first typed and
+// sold without limit, and a 6-bottle sale deducted one bottle.
+//
+// A map row is now a claim on ONE option, and a product may hold several:
+//
+//   • units_per_pack — how many Roots units one sale of this option consumes.
+//     The push writes floor(stock / units); an order deducts qty × units. 1 for
+//     every row that already existed, which is what they all meant.
+//
+//   • spec_key — which option this row claims, '' meaning the listing as a whole
+//     (what every pre-existing row means, and what a single-option listing still
+//     means). Kept as a plain column rather than an expression index so every
+//     ON CONFLICT target stays a column list.
+//
+// Two unique indexes take over from the dropped constraint:
+//   • (store, product, spec_key) — a product claims an option at most once.
+//   • (store, listing, spec_key) for a real option — an option belongs to at
+//     most one product, so two products can't overwrite each other's box.
+//
+// The second one can legitimately fail to build on an existing DB: 天河 has two
+// Roots products (a whole loaf and a 3-slice pack) both claiming one Eleme
+// option, which is the exact collision it exists to stop. A live conflict is
+// the operator's to resolve in the admin, not a reason to refuse to boot — so
+// it logs what collided and carries on, and the admin write path enforces the
+// same rule for anything new.
+const PACK_MAPS = [
+  { table: 'meituan_product_map', listing: 'meituan_name', spec: 'meituan_sku_id', label: 'meituan_spec' },
+  { table: 'eleme_product_map',   listing: 'eleme_name',   spec: 'spec_id',        label: 'spec_name'    },
+];
+
+for (const m of PACK_MAPS) {
+  addColumn(m.table, 'units_per_pack', 'INTEGER NOT NULL DEFAULT 1');
+  addColumn(m.table, 'spec_key',       "TEXT NOT NULL DEFAULT ''");
+
+  // Backfill the key from whichever spec column the row already carried. The id
+  // is preferred; the label is the fallback for a row mapped before ids were
+  // read (Meituan has 3 of those, and a label is still a stable key for a
+  // listing whose options are named). Only rows that are still blank, so this
+  // is idempotent and never overwrites a key the admin has since written.
+  try {
+    db.prepare(`
+      UPDATE ${m.table}
+         SET spec_key = COALESCE(NULLIF(TRIM(${m.spec}), ''), NULLIF(TRIM(${m.label}), ''), '')
+       WHERE spec_key = ''
+    `).run();
+  } catch (e) { console.error(`[pack-claims] ${m.table} spec_key backfill:`, e.message); }
+
+  // Drop UNIQUE(retail_store_id, product_id). SQLite can't drop a constraint in
+  // place, so rebuild the table verbatim with that one line removed. Idempotent:
+  // skips a table that no longer declares it.
+  try {
+    const row = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name=?").get(m.table);
+    if (row && row.sql && /UNIQUE\s*\(\s*retail_store_id\s*,\s*product_id\s*\)/i.test(row.sql)) {
+      const newSql = row.sql
+        .replace(/,?\s*UNIQUE\s*\(\s*retail_store_id\s*,\s*product_id\s*\)/i, '');
+      db.pragma('foreign_keys = OFF');
+      try {
+        db.transaction(() => {
+          db.exec(`ALTER TABLE ${m.table} RENAME TO ${m.table}__packmig`);
+          db.exec(newSql);
+          db.exec(`INSERT INTO ${m.table} SELECT * FROM ${m.table}__packmig`);
+          db.exec(`DROP TABLE ${m.table}__packmig`);
+        })();
+      } finally { db.pragma('foreign_keys = ON'); }
+      console.log(`[pack-claims] ${m.table}: product uniqueness moved to the option`);
+    }
+  } catch (e) { console.error(`[pack-claims] ${m.table} rebuild:`, e.message); }
+
+  try {
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS ux_${m.table}_claim
+               ON ${m.table} (retail_store_id, product_id, spec_key)`);
+  } catch (e) { console.error(`[pack-claims] ${m.table} claim index:`, e.message); }
+
+  try {
+    db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS ux_${m.table}_option
+               ON ${m.table} (retail_store_id, ${m.listing}, spec_key)
+            WHERE spec_key <> '' AND ${m.listing} IS NOT NULL`);
+  } catch (e) {
+    // Name the collision rather than just the failure — "index not created" is
+    // not actionable, "these two products claim this option" is.
+    let detail = '';
+    try {
+      detail = db.prepare(`
+        SELECT GROUP_CONCAT(x, ' | ') AS s FROM (
+          SELECT ${m.listing} || ' [' || spec_key || '] ×' || COUNT(*) AS x
+            FROM ${m.table}
+           WHERE spec_key <> '' AND ${m.listing} IS NOT NULL
+           GROUP BY retail_store_id, ${m.listing}, spec_key
+          HAVING COUNT(*) > 1)
+      `).get()?.s || '';
+    } catch (_) {}
+    console.error(`[pack-claims] ${m.table}: two products share one option, left unindexed — ${detail || e.message}`);
+  }
+}
 
 // ── Guanyi ERP sync (gzgrocery backoffice, 2026-06-24) ──────────────────────
 // Mirrors the Meituan sync layer for a second sales channel: 管易C-ERP

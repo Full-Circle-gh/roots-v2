@@ -5762,23 +5762,49 @@
   .mt-sub, .el-sub { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin-top: 8px; }
   .mt-sub b, .el-sub b { font-weight: 500; color: var(--td-text); }
 
-  /* Which 规格 of a shared listing a product is (Meituan), and which size
-     inside a listing it is (Eleme). background-COLOR, never the `background`
-     shorthand, and the chevron declared in full — the shorthand resets
-     repeat/position and the global select rule then tiles its arrow across the
-     width (the Add-bundle dialog bug, css:5546). Amber until it is answered:
-     an unanswered one is writing the same count to every option. */
-  .mt-spec, .el-spec {
-    display: block; width: 100%;
-    font: 400 15px var(--f-sans); color: var(--td-text);
-    background-color: var(--td-surface);
-    border: 1px solid var(--td-border); border-radius: 8px;
-    padding: 8px 48px 8px 16px;
-    appearance: none; -webkit-appearance: none; cursor: pointer;
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2358606E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
-    background-repeat: no-repeat; background-position: right 16px center;
+  /* Which 规格 of a shared listing this product is — one row per option, on both
+     channels, because both hang the same structure off one listing name. A row
+     is a claim: ticked = this product's, with how many units one sale of it
+     takes. Several ticked at once is a multipack (1瓶 / 3瓶 / 6瓶 of one bottle);
+     one ticked each across several products is a shared listing (the soap's
+     scents). Greyed = another product holds it, and it is not this page's to
+     take. */
+  .mt-opts, .el-opts { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+  .mt-opt, .el-opt {
+    display: flex; align-items: center; gap: 12px;
+    padding: 8px 16px; border: 1px solid var(--td-border); border-radius: 8px;
+    background: var(--td-surface); cursor: pointer;
   }
-  .mt-spec.warn, .el-spec.warn { border-color: var(--td-amber); }
+  .mt-opt.on, .el-opt.on { border-color: var(--td-sage); }
+  .mt-opt.taken, .el-opt.taken { cursor: default; background: var(--td-bg); }
+  .mt-opt-nm, .el-opt-nm { flex: 1; min-width: 0; font: 400 15px var(--f-sans); color: var(--td-text); overflow-wrap: anywhere; }
+  .mt-opt.taken .mt-opt-nm, .el-opt.taken .el-opt-nm { color: var(--td-text2); }
+  .mt-opt-by, .el-opt-by { font: 400 13px var(--f-sans); color: var(--td-text2); flex: none; }
+  .mt-opt-u,  .el-opt-u  { display: inline-flex; align-items: center; gap: 8px; font: 400 13px var(--f-sans); color: var(--td-text2); flex: none; }
+
+  /* The base field rule is an ATTRIBUTE selector (`input[type="number"]`, class
+     specificity), so a bare `.el-units` loses to it and the box renders full
+     width. The panel ancestor is what wins it back — same footgun as the name
+     input above, keep the extra weight if you touch this. */
+  .mt-panel input.mt-units, .el-panel input.el-units {
+    width: 56px; padding: 4px 8px; text-align: right;
+    font: 400 15px var(--f-sans); color: var(--td-text);
+    background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 6px;
+    font-variant-numeric: tabular-nums;
+  }
+  .mt-panel input.mt-units:disabled, .el-panel input.el-units:disabled { color: var(--td-text2); background: var(--td-bg); }
+
+  .mt-panel .mt-opt input[type="checkbox"], .el-panel .el-opt input[type="checkbox"] {
+    appearance: none; -webkit-appearance: none; margin: 0; flex: none;
+    width: 18px; height: 18px; border-radius: 4px;
+    border: 1px solid var(--td-border); background: var(--td-surface); cursor: pointer;
+  }
+  .mt-panel .mt-opt input[type="checkbox"]:checked, .el-panel .el-opt input[type="checkbox"]:checked {
+    background-color: var(--td-sage); border-color: var(--td-sage);
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='20 6 9 17 4 12'/></svg>");
+    background-repeat: no-repeat; background-position: center;
+  }
+  .mt-panel .mt-opt input[type="checkbox"]:disabled, .el-panel .el-opt input[type="checkbox"]:disabled { cursor: default; opacity: .4; }
 
   /* The sync switch. On the old table it hid until the row was hovered, because
      248 of them at once was noise; in the panel there is exactly one per store

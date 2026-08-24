@@ -11,6 +11,7 @@
   let _initiated = false;
   let _lastStores = [];  // last /status.stores, so the status line can repaint
   let _elFilter = 'all';  // chip filter: all | att | ok | size
+  let _optionOwners = {};  // store code -> option id -> the product holding it
   let _elStore  = '';     // store filter: '' = all stores
   let _elSel    = null;   // product id the panel is showing
   let _catalogue = {}; // storeCode -> [{name, stock, updated_at}], see elLoadCatalogue
@@ -203,12 +204,12 @@
   }
 
   // Needs attention: not mapped anywhere, or mapped to a listing that holds
-  // several sizes with none picked — on Eleme a size CAN be targeted, so that
-  // second case is a real gap, not a note.
+  // several options with none claimed — on Eleme an option CAN be targeted, so
+  // that second case is a real gap, not a note.
   function elNeedsAttention(p) {
     const maps = Object.values(p.stores || {});
     if (!maps.some(m => m.eleme_name)) return true;
-    return maps.some(m => m.eleme_name && Number(m.specCount || 0) > 1 && !m.spec_id);
+    return maps.some(m => m.eleme_name && Number(m.specCount || 0) > 1 && !elClaims(m).length);
   }
 
   // -- Chip + store filters ---------------------------------------------------
@@ -216,14 +217,14 @@
     { id: 'all',  en: 'All',            cn: '\u5168\u90e8' },
     { id: 'att',  en: 'Needs attention', cn: '\u5f85\u5904\u7406' },
     { id: 'ok',   en: 'Synced',          cn: '\u5df2\u540c\u6b65' },
-    { id: 'size', en: 'Needs a size',    cn: '\u5f85\u9009\u89c4\u683c' },
+    { id: 'size', en: 'Needs an option', cn: '\u5f85\u9009\u89c4\u683c' },
   ];
 
   function elChipMatch(p, id) {
     const maps = Object.values(p.stores || {});
     if (id === 'att')  return elNeedsAttention(p);
     if (id === 'ok')   return maps.some(m => m.eleme_name);
-    if (id === 'size') return maps.some(m => m.eleme_name && Number(m.specCount || 0) > 1 && !m.spec_id);
+    if (id === 'size') return maps.some(m => m.eleme_name && Number(m.specCount || 0) > 1 && !elClaims(m).length);
     return true;
   }
 
@@ -401,6 +402,9 @@
     try {
       const r = await api('/api/retail-admin/eleme/products');
         _products = r.data || [];
+        // Which product holds each option, so a row can say whose it is instead
+        // of letting two products quietly push at one stock box.
+        _optionOwners = r.optionOwners || {};
       elRenderProducts();
       elRenderHead();  // counts only exist now
       elRenderChips();
@@ -452,8 +456,8 @@
     // A listing with several sizes and none picked cannot be pushed accurately
     // — the driver falls back to a rule that writes a made-up number to every
     // size. That is the one state worth colouring.
-    if (Number(map.specCount || 0) > 1 && !map.spec_id) {
-      return { k: 'att', t: cuT('Pick a size', '待选规格') };
+    if (Number(map.specCount || 0) > 1 && !elClaims(map).length) {
+      return { k: 'att', t: cuT('Pick an option', '待选规格') };
     }
     return { k: 'ok', t: cuT('Synced', '已同步') };
   }
@@ -589,7 +593,7 @@
     const on     = Number(m.sync_enabled) === 1;
     const name   = m.eleme_name || '';
     const specs  = elSpecsFor(st.code, name);
-    const chosen = String(m.spec_id || '');
+    const claims = elClaims(m);
     const cached = ((_catalogue[st.code] || {}).rows || []).length;
 
     if (!elStoreConnected(st.code)) {
@@ -630,24 +634,48 @@
               '尚未读取该门店的商品目录,暂无可选项。')) + '</div>';
     }
 
-    // Which size inside the listing. One Eleme listing can hold several sizes
-    // behind one name; without this the pusher cannot tell them apart and falls
-    // back to a rule that writes a made-up number to every size.
+    // Which options of the listing this product is, and how many units each one
+    // sells. A listing can hold several: sometimes different products behind one
+    // name (the hand soap's scents, one option each), sometimes the SAME product
+    // in packs (1瓶 / 3瓶 / 6瓶 of one bottle, all three this product's). Every
+    // option has its own stock box on Eleme, so an unclaimed one keeps whatever
+    // number the merchant first typed and sells without limit.
     if (specs.length > 1) {
+      const owners = _optionOwners[st.code] || {};
       body +=
         '<div class="el-plbl">' +
-          esc(cuT('This listing holds ' + specs.length + ' sizes — which one is this?',
-                  '该商品有 ' + specs.length + ' 个规格 — 这是哪一个？')) + '</div>' +
-        '<select data-no-i18n class="el-spec' + (chosen ? '' : ' warn') + '"' +
-        ' onchange="elSetElemeSpec(' + p.id + ', ' + st.id + ", '" + esc(st.code) +
-          "', this.value, this.options[this.selectedIndex].dataset.label || '')\">" +
-        '<option value="" data-label="">' + esc(cuT('Pick a size…', '选择规格…')) + '</option>' +
-        specs.map((sp, i) => {
-          const lbl = elSpecLabel(sp, i);
-          return '<option value="' + esc(sp.specGlobalId) + '" data-label="' + esc(sp.name || lbl) + '"' +
-            (String(sp.specGlobalId) === chosen ? ' selected' : '') + '>' + esc(lbl) + '</option>';
-        }).join('') +
-        '</select>';
+          esc(cuT('Which options is this product?', '这是该商品的哪些规格？')) + '</div>' +
+        '<div class="el-opts">' + specs.map((sp, i) => {
+          const id    = String(sp.specGlobalId);
+          const mine  = claims.find(c => String(c.spec_key) === id);
+          const owner = owners[id];
+          const other = owner && Number(owner.product_id) !== Number(p.id) ? owner : null;
+          const args  = p.id + ', ' + st.id + ", '" + esc(st.code) + "', '" + esc(id) + "', '" +
+                        esc(sp.name || elSpecLabel(sp, i)) + "'";
+          return '<label class="el-opt' + (mine ? ' on' : '') + (other ? ' taken' : '') + '">' +
+            '<input type="checkbox" ' + (mine ? 'checked' : '') + (other ? ' disabled' : '') +
+              ' onchange="elClaimOption(' + args + ', this.checked)">' +
+            '<span class="el-opt-nm" data-no-i18n>' + esc(elSpecLabel(sp, i)) + '</span>' +
+            (other
+              ? '<span class="el-opt-by">' + esc(cuT('claimed by another product', '已被其他商品占用')) + '</span>'
+              : '<span class="el-opt-u">' +
+                  '<input type="number" min="1" step="1" class="el-units"' +
+                    (mine ? '' : ' disabled') +
+                    ' value="' + (mine ? Number(mine.units_per_pack) || 1 : 1) + '"' +
+                    ' onchange="elSetUnits(' + args + ', this.value)">' +
+                  esc(cuT('units', '份')) +
+                '</span>') +
+            '</label>';
+        }).join('') + '</div>';
+
+      // One-time help, on the products that need it: the unit count is the whole
+      // point of the list and there is nothing on screen that explains it.
+      if (!claims.length) {
+        body += '<div class="el-sub">' +
+          esc(cuT('Tick every option this product is sold as. "Units" is how many of it one sale takes ' +
+                  '— a 3-bottle option is 3.',
+                  '勾选该商品在售的所有规格。「份」是每卖出一份消耗的数量 — 三瓶装填 3。')) + '</div>';
+      }
     } else if (name && Number(m.specCount || 0) > 1 && !cached) {
       // The state says "Pick a size" off the server's count, but the sizes
       // themselves come from the cached catalogue — say that rather than show
@@ -658,7 +686,15 @@
                 '该商品有多个规格,但尚未读取该门店的商品目录,暂无可选规格。')) + '</div>';
     }
 
-    if (m.last_pushed_at) {
+    // What each claimed option last took. With one claim this is the old single
+    // line; with several, one line each — a shared "last pushed" would be the
+    // first box's number standing in for all of them.
+    const pushed = claims.filter(c => c.last_pushed_at);
+    if (pushed.length > 1) {
+      body += pushed.map(c => '<div class="el-pfact" data-no-i18n>' +
+        esc((c.spec_name || '') + ' · ' + (c.last_pushed_qty != null ? c.last_pushed_qty + ' · ' : '') +
+            (fmtAgo(c.last_pushed_at) || '')) + '</div>').join('');
+    } else if (m.last_pushed_at) {
       body += '<div class="el-pfact">' +
         esc(cuT('Last', '上次') + ' ' + (m.last_pushed_qty != null ? m.last_pushed_qty + ' · ' : '') +
             (fmtAgo(m.last_pushed_at) || '')) + '</div>';
@@ -684,10 +720,10 @@
       // would be hardest to explain.
       await api('/api/retail-admin/eleme/products/' + productId + '/map', {
         method: 'POST',
+        // No option fields: they live on the claims now, and /map writes the
+        // switch across every one of them.
         body: { storeId, storeCode, syncEnabled: on ? 1 : 0,
-                elemeName: (cur && cur.eleme_name) || null,
-                specId:   (cur && cur.spec_id)   || null,
-                specName: (cur && cur.spec_name) || null },
+                elemeName: (cur && cur.eleme_name) || null },
       });
       // Reflect locally without a full reload.
       if (p) {
@@ -714,51 +750,106 @@
       });
       if (p) {
         p.stores = p.stores || {};
-        // A size id belongs to one listing, so pointing at a different listing
-        // drops the old pick (the server does the same) — then repaint, because
-        // the new listing has its own sizes to offer.
+        // An option belongs to one listing, so pointing at a different listing
+        // drops every claim (the server does the same) — then repaint, because
+        // the new listing has its own options to offer.
         const kept = (cur && cur.eleme_name) === (name || null);
         p.stores[storeCode] = {
           ...(cur || {}),
           eleme_name: name || null,
+          claims:    kept ? elClaims(cur) : [],
           spec_id:   kept ? (cur && cur.spec_id)   || null : null,
           spec_name: kept ? (cur && cur.spec_name) || null : null,
           sync_enabled: cur ? Number(cur.sync_enabled) : 0,
         };
+        if (!kept) {
+          const owners = _optionOwners[storeCode] || {};
+          for (const k of Object.keys(owners)) {
+            if (Number(owners[k].product_id) === Number(productId)) delete owners[k];
+          }
+        }
       }
       elRenderProducts();
       if (window.toast) toast(cuT('Saved', '已保存'));
     } catch (e) { elLoadProducts(); }
   };
 
-  // Save WHICH size inside the listing this product is. One Eleme listing can
-  // hold several sizes behind one name; without this the pusher can't tell them
-  // apart and falls back to a rule that writes a made-up number to every size
-  // (live at 天河: two Roots sizes on one listing overwrote each other every
-  // cycle, one pushing 9999 and the other 0). Like the name field, it does NOT
-  // touch sync_enabled — the checkbox stays the only way to turn pushing on.
-  window.elSetElemeSpec = async function (productId, storeId, storeCode, specId, specName) {
+  // A product's claims on this store, oldest first. The API sends them on the
+  // map entry; older payloads (a page left open across a deploy) have none, so
+  // fall back to the single pick they did carry.
+  function elClaims(m) {
+    if (!m) return [];
+    if (Array.isArray(m.claims)) return m.claims.filter(c => c && c.spec_key);
+    return m.spec_id ? [{ spec_key: String(m.spec_id), spec_id: m.spec_id, spec_name: m.spec_name, units_per_pack: 1 }] : [];
+  }
+
+  // Claim one option of the listing for this product, or release it.
+  //
+  // One Eleme listing can hold several options behind one name and each has its
+  // own stock box. Until this existed a product could point at ONE of them, so a
+  // multipack's other boxes kept the number the merchant first typed (9999 at
+  // 天河) and sold without limit, while two products sharing a listing overwrote
+  // each other every cycle. Like the name field it does NOT touch sync_enabled —
+  // the switch stays the only way to turn pushing on.
+  window.elClaimOption = async function (productId, storeId, storeCode, specId, specName, on) {
+    const p = _products.find(x => x.id === productId);
+    const cur = p && (p.stores || {})[storeCode];
+    const claims = elClaims(cur);
+    const units = on ? (Number(elUnitsInput(specId)) || 1) : 1;
+    try {
+      const r = await api('/api/retail-admin/eleme/products/' + productId + '/claim', {
+        method: 'POST',
+        body: { storeId, storeCode, elemeName: (cur && cur.eleme_name) || null,
+                specId, specName, units, on: !!on },
+      });
+      if (p && cur) {
+        const next = claims.filter(c => String(c.spec_key) !== String(specId));
+        if (on) next.push({ spec_key: String(specId), spec_id: specId, spec_name: specName,
+                            units_per_pack: (r && r.units) || units });
+        p.stores[storeCode] = { ...cur, claims: next };
+        const owners = _optionOwners[storeCode] = _optionOwners[storeCode] || {};
+        if (on) owners[String(specId)] = { product_id: productId, eleme_name: cur.eleme_name };
+        else delete owners[String(specId)];
+      }
+      elRenderProducts();
+      if (window.toast) toast(cuT('Saved', '已保存'));
+    } catch (e) {
+      // A 409 means another product already holds it. The page thought otherwise,
+      // so reload rather than leave a tick that isn't real.
+      if (window.toast) toast(cuT('That option belongs to another product.', '该规格已被其他商品占用。'), 'error');
+      elLoadProducts();
+    }
+  };
+
+  // How many units of this product one sale of the option takes. Typed, not read
+  // off the option name: the catalogue writes the same thing three ways (X3, *2,
+  // 3-260X2), and a number guessed wrong here silently multiplies every future
+  // deduction.
+  window.elSetUnits = async function (productId, storeId, storeCode, specId, specName, value) {
+    const units = Math.max(1, parseInt(value, 10) || 1);
     const p = _products.find(x => x.id === productId);
     const cur = p && (p.stores || {})[storeCode];
     try {
-      await api('/api/retail-admin/eleme/products/' + productId + '/map', {
+      await api('/api/retail-admin/eleme/products/' + productId + '/claim', {
         method: 'POST',
-        body: {
-          storeId, storeCode,
-          elemeName: (cur && cur.eleme_name) || null,
-          specId: specId || null,
-          specName: specId ? (specName || null) : null,
-          syncEnabled: cur ? Number(cur.sync_enabled) : 0,
-        },
+        body: { storeId, storeCode, elemeName: (cur && cur.eleme_name) || null,
+                specId, specName, units, on: true },
       });
-      if (p) {
-        p.stores = p.stores || {};
-        p.stores[storeCode] = { ...(cur || {}), spec_id: specId || null, spec_name: specId ? (specName || null) : null };
+      if (p && cur) {
+        p.stores[storeCode] = { ...cur, claims: elClaims(cur).map(c =>
+          String(c.spec_key) === String(specId) ? { ...c, units_per_pack: units } : c) };
       }
       elRenderProducts();
       if (window.toast) toast(cuT('Saved', '已保存'));
     } catch (e) { elLoadProducts(); }
   };
+
+  // The units box sits beside the checkbox, so ticking one reads the number the
+  // operator already typed rather than resetting it to 1.
+  function elUnitsInput(specId) {
+    const el = document.querySelector('#el-panel .el-opt input[onchange*="' + specId + '"].el-units');
+    return el ? el.value : 1;
+  }
 
   window.elPushAll = async function () {
     const btn = document.getElementById('el-pushall-btn');

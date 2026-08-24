@@ -20,6 +20,7 @@
   let _mtFilter  = 'all';  // chip filter: all | att | ok | ms
   let _mtStore   = '';     // store filter: '' = all stores
   let _mtSel     = null;   // product id the panel is showing
+  let _optionOwners = {};  // store code -> option id -> the product holding it
 
   // ── Entry point ────────────────────────────────────────────────────────────
   window.mtAdminInit = async function () {
@@ -450,6 +451,9 @@
       // variants; the mapping list filters back to active in mtRenderProducts.
       const res = await api('/api/retail-admin/meituan/products?includeInactive=1');
       _products = res.data || [];
+      // Which product holds each option, so a row can say whose it is instead of
+      // letting two products quietly push at one stock box.
+      _optionOwners = res.optionOwners || {};
       mtFilterProducts();
     } catch (e) {
       body.innerHTML = `<div class="mt-empty">${escape(e.message)}</div>`;
@@ -457,10 +461,18 @@
   }
 
   // "Last 18 · 1d ago" footnote for a store mapping (safe inside data-no-i18n).
+  // What was last pushed. With several claimed options that is several numbers —
+  // one line each, because a shared "last pushed" would be the first box's number
+  // standing in for all of them.
   function mtLast(map) {
+    const pushed = mtClaims(map).filter(c => c.last_pushed_at);
+    if (pushed.length > 1) {
+      return pushed.map(c => (c.specLabel || '') + ' · ' +
+        (c.last_pushed_qty != null ? c.last_pushed_qty + ' · ' : '') + fmtAgo(c.last_pushed_at));
+    }
     return (map && map.last_pushed_at)
-      ? cuT('Last', '上次') + ' ' + map.last_pushed_qty + ' · ' + fmtAgo(map.last_pushed_at)
-      : '';
+      ? [cuT('Last', '上次') + ' ' + map.last_pushed_qty + ' · ' + fmtAgo(map.last_pushed_at)]
+      : [];
   }
   // A product needs attention when it's active but live on NEITHER store, or
   // when it IS live and syncing but nobody has said which 规格 of a shared
@@ -484,11 +496,20 @@
     const sp = mtSpecs(map);
     return sp.length > 1 && sp.every(o => o.sku);
   }
-  // Syncing to a shared listing with no option chosen — the state that needs a
+  // A product's claims on this store, oldest first. The API sends them on the
+  // map entry; an older payload (a page left open across a deploy) has none, so
+  // fall back to the single pick it did carry.
+  function mtClaims(map) {
+    if (!map) return [];
+    if (Array.isArray(map.claims)) return map.claims.filter(c => c && c.spec_key);
+    return map.specSkuId ? [{ spec_key: String(map.specSkuId), specSkuId: map.specSkuId,
+                              specLabel: map.specLabel, units_per_pack: 1 }] : [];
+  }
+  // Syncing to a shared listing with no option claimed — the state that needs a
   // person. Sync off is not it: nothing is being written.
   function mtNeedsSpec(map) {
     return !!(map && map.meituan_name && map.sync_enabled !== 0 &&
-              mtIsShared(map) && !map.specSkuId);
+              mtIsShared(map) && !mtClaims(map).length);
   }
 
   // ── One product, one store: the state, in one word ──────────────────────────
@@ -669,7 +690,7 @@
       const specs   = mtSpecs(map);
       const multi   = specs.length > 1;
       const shared  = mtIsShared(map);
-      const chosen  = String(map.specSkuId || '');
+      const claims  = mtClaims(map);
       const toggle  = hasName
         ? '<label class="toggle-label" title="' + esc(cuT('Sync on / off', '同步开关')) +
           '"><input type="checkbox" ' + (syncOn ? 'checked' : '') +
@@ -688,7 +709,7 @@
         // A listing can hold several 规格 (see mtIsShared): a shared listing
         // gets the picker, an add-on listing gets a sentence saying what the
         // rule already does with it.
-        (multi ? (shared ? mtSpecPicker(p, store, specs, chosen)
+        (multi ? (shared ? mtOptionList(p, store, specs, claims)
                          : '<div class="mt-sub">' +
                            esc(cuT(specs.length + ' options: ', specs.length + ' 个选项：')) +
                            esc(specs.map(o => o.spec).join(' · ')) +
@@ -714,27 +735,50 @@
     }
 
     return '<div class="mt-pblock">' + body +
-      (last ? '<div class="mt-pfact">' + esc(last) + '</div>' : '') + '</div>';
+      last.map(t => '<div class="mt-pfact" data-no-i18n>' + esc(t) + '</div>').join('') + '</div>';
   }
 
-  // Which 规格 of a shared listing this product is. The option text already
-  // carries the 货号 ("一个 3-120*1(100克)"), so it needs no second column — and
-  // it is the operator's own listing text, which is what they will recognise.
-  // Unanswered is amber, because a shared listing with no answer is pushing the
-  // same number to every option right now.
-  function mtSpecPicker(p, store, specs, chosen) {
+  // Which 规格 of a shared listing this product is, and how many units each one
+  // sells. The option text already carries the 货号 ("一个 3-120*1(100克)"), so it
+  // needs no second column — and it is the operator's own listing text, which is
+  // what they will recognise.
+  //
+  // Several options can be the SAME product in packs ("咖啡大师 Oatly Barista" as
+  // 1瓶 / 3瓶 / 6瓶 of one bottle), so this is a list of ticks rather than one
+  // pick. Every option has its own stock box on Meituan: an unclaimed one keeps
+  // whatever number the merchant first typed and sells without limit.
+  function mtOptionList(p, store, specs, claims) {
+    const owners = (_optionOwners[store.code] || {});
     return '<div class="mt-plbl">' +
-      esc(cuT(specs.length + ' products share this listing — which one is this?',
-              '有 ' + specs.length + ' 个商品共用此商品页 — 这是哪一项？')) + '</div>' +
-      '<select class="mt-spec' + (chosen ? '' : ' warn') + '"' +
-      ' data-pid="' + p.id + '" data-store-id="' + store.id + '"' +
-      ' data-store-code="' + esc(store.code) + '" onchange="mtSetSpec(this)">' +
-      '<option value="">' + esc(cuT('Pick an option…', '选择规格…')) + '</option>' +
-      specs.map(o =>
-        '<option value="' + esc(o.skuId) + '" data-label="' + esc(o.spec) + '"' +
-        (String(o.skuId) === chosen ? ' selected' : '') + '>' + esc(o.spec) + '</option>'
-      ).join('') +
-      '</select>';
+      esc(cuT('Which options is this product?', '这是该商品的哪些规格？')) + '</div>' +
+      '<div class="mt-opts">' + specs.map(o => {
+        const id    = String(o.skuId || '');
+        const mine  = claims.find(c => String(c.spec_key) === id);
+        const owner = owners[id];
+        const other = owner && Number(owner.product_id) !== Number(p.id) ? owner : null;
+        const data  = ' data-pid="' + p.id + '" data-store-id="' + store.id + '"' +
+                      ' data-store-code="' + esc(store.code) + '"' +
+                      ' data-sku-id="' + esc(id) + '" data-label="' + esc(o.spec) + '"';
+        return '<label class="mt-opt' + (mine ? ' on' : '') + (other ? ' taken' : '') + '">' +
+          '<input type="checkbox" ' + (mine ? 'checked' : '') + (other ? ' disabled' : '') +
+            data + ' onchange="mtClaimOption(this)">' +
+          '<span class="mt-opt-nm" data-no-i18n>' + esc(o.spec) + '</span>' +
+          (other
+            ? '<span class="mt-opt-by">' + esc(cuT('claimed by another product', '已被其他商品占用')) + '</span>'
+            : '<span class="mt-opt-u">' +
+                '<input type="number" min="1" step="1" class="mt-units"' + (mine ? '' : ' disabled') +
+                  ' value="' + (mine ? Number(mine.units_per_pack) || 1 : 1) + '"' +
+                  data + ' onchange="mtSetUnits(this)">' +
+                esc(cuT('units', '份')) +
+              '</span>') +
+          '</label>';
+      }).join('') + '</div>' +
+      (claims.length ? '' :
+        '<div class="mt-sub">' +
+          esc(cuT('Tick every option this product is sold as. "Units" is how many of it one sale takes ' +
+                  '— a 3-bottle option is 3.',
+                  '勾选该商品在售的所有规格。「份」是每卖出一份消耗的数量 — 三瓶装填 3。')) +
+        '</div>');
   }
 
   // ── Suggested listing name ───────────────────────────────────────────────────
@@ -1225,7 +1269,7 @@
         if (!product.stores) product.stores = {};
         if (name) {
           product.stores[storeCode] = { ...(product.stores[storeCode] || {}), meituan_name: name,
-                                        sync_enabled: 1, specSkuId: null, specLabel: null };
+                                        sync_enabled: 1, claims: [], specSkuId: null, specLabel: null };
         } else {
           delete product.stores[storeCode];
         }
@@ -1237,28 +1281,47 @@
     input.style.opacity = '';
   };
 
-  // ── Which option on a shared listing ────────────────────────────────────────
-  window.mtSetSpec = async function (sel) {
-    const pid       = sel.dataset.pid;
-    const storeId   = sel.dataset.storeId;
-    const label     = (sel.options[sel.selectedIndex] || {}).dataset?.label || '';
+  // ── Which options on a shared listing, and what each one sells ──────────────
+  // Claim an option for this product, or release it. Several at once is a
+  // multipack (1瓶 / 3瓶 / 6瓶 of one bottle); one apiece across products is a
+  // shared listing (the soap's scents).
+  window.mtClaimOption = async function (box) {
+    const row   = box.closest('.mt-opt');
+    const units = row ? (row.querySelector('.mt-units') || {}).value : 1;
+    return mtSaveClaim(box, box.checked, box.checked ? units : 1);
+  };
 
-    sel.style.opacity = '0.5';
+  // How many units of this product one sale of the option takes. Typed, not read
+  // off the option name: the catalogue writes the same thing three ways (X3, *2,
+  // 3-260X2), and a number guessed wrong here silently multiplies every future
+  // deduction.
+  window.mtSetUnits = async function (input) { return mtSaveClaim(input, true, input.value); };
+
+  async function mtSaveClaim(el, on, units) {
+    const pid     = el.dataset.pid;
+    const storeId = el.dataset.storeId;
+
+    el.style.opacity = '0.5';
     try {
-      await api(`/api/retail-admin/meituan/products/${pid}/spec`, {
+      await api(`/api/retail-admin/meituan/products/${pid}/claim`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ storeId: parseInt(storeId), specSkuId: sel.value, specLabel: label }),
+        body: JSON.stringify({ storeId: parseInt(storeId), storeCode: el.dataset.storeCode,
+                               specSkuId: el.dataset.skuId, specLabel: el.dataset.label,
+                               units: Math.max(1, parseInt(units, 10) || 1), on: !!on }),
       });
       // Reload rather than patch the cache: taking an option releases it from
       // whichever product held it before, and that OTHER row has to repaint too
       // (back to amber). A patch can only fix the row in front of you.
       await mtLoadProducts();
     } catch (e) {
+      // A 409 means another product already holds it — the page thought
+      // otherwise, so the reload above is what makes the tick honest again.
       toast(cuT('Save failed: ', '保存失败:') + e.message, 'error');
+      await mtLoadProducts();
     }
-    sel.style.opacity = '';
-  };
+    el.style.opacity = '';
+  }
 
   // ── Toggle sync ─────────────────────────────────────────────────────────────
   window.mtToggleSync = async function (checkbox) {

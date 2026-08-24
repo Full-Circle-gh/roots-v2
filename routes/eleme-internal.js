@@ -24,6 +24,7 @@ const router  = express.Router();
 const { seam } = require('../lib/db-seam');
 const db      = seam(require('../database'));
 const inventory = require('../lib/inventory');
+const { packUnits, packDeduct } = require('../lib/pack-units');
 
 const INTERNAL_SECRET = process.env.ELEME_INTERNAL_SECRET || 'eleme-daemon-internal';
 
@@ -110,7 +111,49 @@ function isConfirmedVoid(desc) {
   return /已取消|交易取消|订单取消|已关闭|交易关闭|已退款|退款成功|退款完成|全额退款|已撤销/.test(d);
 }
 
+// The claim that says which option of a listing this line was sold as, and how
+// many units of the product that option holds. One Eleme listing can sell the
+// same bottle as 1瓶 / 3瓶 / 6瓶; the option name is the only thing on the line
+// that tells them apart, so a line with no option name deliberately finds
+// nothing here rather than guess a pack size.
+function claimForLine(item, storeId) {
+  const spec = normName(item.specName);
+  if (!spec || !storeId) return null;
+  const rows = db.prepare(`
+    SELECT p.id, p.name_cn, p.name_en, m.eleme_name, m.spec_name, m.units_per_pack
+      FROM eleme_product_map m
+      JOIN store_products p ON p.id = m.product_id
+     WHERE m.retail_store_id = ? AND m.spec_key <> '' AND m.spec_name IS NOT NULL
+  `).all(storeId);
+  if (!rows.length) return null;
+  const listing = normName(item.name);
+  // The option name has to match exactly; the listing name only has to be
+  // consistent, because Eleme trims and re-pads it on the order line.
+  const cands = rows.filter(r => {
+    if (normName(r.spec_name) !== spec) return false;
+    if (!listing) return true;
+    const mn = normName(r.eleme_name);
+    return !mn || mn === listing || mn.includes(listing) || listing.includes(mn);
+  });
+  return cands.length === 1 ? cands[0] : null;
+}
+
+// How many units one of this product takes off the shelf when the option it was
+// sold as is unknown. Only answerable when the product holds exactly ONE claim —
+// with several (a multipack) the line could be any of them, and 1 is the only
+// value that can't over-deduct. The caller says so in the match reason.
+function fallbackUnits(storeId, productId) {
+  try {
+    const rows = db.prepare(
+      'SELECT units_per_pack FROM eleme_product_map WHERE retail_store_id = ? AND product_id = ?'
+    ).all(storeId, productId);
+    if (rows.length === 1) return { units: packUnits(rows[0].units_per_pack), sure: true };
+    return { units: 1, sure: rows.every(r => packUnits(r.units_per_pack) === 1) };
+  } catch (_) { return { units: 1, sure: true }; }
+}
+
 // Resolve one Eleme line item to a store_product. Order, most reliable first:
+//   0. a claimed option (the only path that knows the line's pack size)
 //   1. 货号 / extendCode → store_products.sku
 //   2. eleme_product_map by Eleme listing name (per store)
 //   3. unique active name match (CJK then English)
@@ -126,13 +169,22 @@ function resolveProduct(item, storeId) {
     unitPrice: Number.isFinite(unit) ? unit : (Number.isFinite(line) && qty > 0 ? line / qty : null),
     lineTotal: Number.isFinite(line) ? line : (Number.isFinite(unit) ? unit * qty : null),
     specName: item.specName || null,
+    // How many units of the product this line took, per unit sold. 1 unless the
+    // option it was sold as is a pack.
+    units: 1,
   };
   const apply = (p, by) => { out.productId = p.id; out.nameCn = p.name_cn; out.nameEn = p.name_en; out.matchBy = by; };
+
+  // 0. The option this line names, claimed by exactly one product. Ahead of the
+  // 货号 path on purpose: a pack option's code is a variant of the base one, and
+  // resolving on the code alone loses which pack it was.
+  const claim = claimForLine(item, storeId);
+  if (claim) { apply(claim, 'claim'); out.units = packUnits(claim.units_per_pack); return out; }
 
   if (item.sku) {
     const p = db.prepare('SELECT id, name_cn, name_en FROM store_products WHERE sku = ? AND is_active = 1').get(item.sku)
            || db.prepare('SELECT id, name_cn, name_en FROM store_products WHERE sku = ?').get(item.sku);
-    if (p) { apply(p, 'sku'); return out; }
+    if (p) { apply(p, 'sku'); return withFallbackUnits(out, storeId); }
     out.matchBy = 'sku_unknown';
   }
 
@@ -153,7 +205,7 @@ function resolveProduct(item, storeId) {
         });
         if (cands.length === 1) hit = cands[0];
       }
-      if (hit) { apply(hit, 'map'); return out; }
+      if (hit) { apply(hit, 'map'); return withFallbackUnits(out, storeId); }
     }
   }
 
@@ -165,6 +217,17 @@ function resolveProduct(item, storeId) {
   if (matches.length !== 1 && en) matches = db.prepare('SELECT id, name_cn, name_en FROM store_products WHERE is_active = 1 AND name_en LIKE ?').all(`%${en.trim()}%`);
   if (matches.length === 1) { apply(matches[0], 'name'); }
   else if (!out.matchBy || out.matchBy === 'sku_unknown') out.matchBy = matches.length > 1 ? 'ambiguous' : 'unmatched';
+  return withFallbackUnits(out, storeId);
+}
+
+// Applied to every non-claim path: a product with one claim lends its pack size,
+// a product with several can't (the line didn't say which option), and that case
+// is named so it shows up in the unsynced log rather than deducting quietly.
+function withFallbackUnits(out, storeId) {
+  if (!out.productId || !storeId) return out;
+  const { units, sure } = fallbackUnits(storeId, out.productId);
+  out.units = units;
+  if (!sure) out.matchBy = (out.matchBy || 'matched') + '+pack_unknown';
   return out;
 }
 
@@ -231,11 +294,12 @@ router.post('/ingest-order', (req, res) => {
         // from later.
         db.prepare(`
           INSERT INTO retail_order_items
-            (order_id, product_id, name_cn, name_en, sku, qty, unit_price, line_total)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (order_id, product_id, name_cn, name_en, sku, qty, unit_price, line_total, pack_units)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(oid, it.productId, it.nameCn, it.nameEn, it.sku || null, it.qty,
                it.unitPrice != null ? it.unitPrice : 0,
-               it.lineTotal != null ? it.lineTotal : 0);
+               it.lineTotal != null ? it.lineTotal : 0,
+               packUnits(it.units));
       }
       return oid;
     })();
@@ -246,12 +310,15 @@ router.post('/ingest-order', (req, res) => {
       if (!it.productId) { unresolved.push({ name: it.name, sku: it.sku, qty: it.qty, reason: it.matchBy }); continue; }
       const cur  = db.prepare('SELECT physical_qty FROM retail_store_stock WHERE store_id = ? AND product_id = ?').get(storeId, it.productId);
       const oldQ = cur ? cur.physical_qty : 0;
+      // One six-pack is one line of one, and six off the shelf.
+      const took = packDeduct(it.qty, it.units);
       inventory.adjustStock({
         storeId, productId: it.productId,
-        newPhysicalQty: Math.max(0, oldQ - it.qty),
+        newPhysicalQty: Math.max(0, oldQ - took),
         actorLabel: 'Eleme order',
         reason: 'eleme_order',
-        note: `Eleme ${ref}${order.daySeq != null ? ` #${order.daySeq}` : ''} — ${it.nameEn} x${it.qty}`,
+        note: `Eleme ${ref}${order.daySeq != null ? ` #${order.daySeq}` : ''} — ${it.nameEn} x${it.qty}` +
+              (took !== it.qty ? ` (${took} units)` : ''),
       });
       deducted++;
     }
@@ -366,7 +433,8 @@ router.post('/update-order-status', (req, res) => {
     const confirmedVoid   = isConfirmedVoid(desc);
     const alreadyRestored = !!prev && prev.channel_stock_restored === 1;
     const orderLines = () => db.prepare(
-      'SELECT product_id, name_en, qty FROM retail_order_items WHERE order_id = ? AND product_id IS NOT NULL'
+      `SELECT product_id, name_en, qty, COALESCE(pack_units, 1) AS pack_units
+         FROM retail_order_items WHERE order_id = ? AND product_id IS NOT NULL`
     ).all(imp.retail_order_id);
     const stockOf = (pid) => {
       const cur = db.prepare('SELECT physical_qty FROM retail_store_stock WHERE store_id = ? AND product_id = ?')
@@ -382,7 +450,7 @@ router.post('/update-order-status', (req, res) => {
         for (const it of orderLines()) {
           inventory.adjustStock({
             storeId: prev.store_id, productId: it.product_id,
-            newPhysicalQty: stockOf(it.product_id) + it.qty,
+            newPhysicalQty: stockOf(it.product_id) + packDeduct(it.qty, it.pack_units),
             actorLabel: 'Eleme cancel',
             reason: 'eleme_cancel',
             note: `Eleme ${String(elemeOrderId)} ${internal || 'void'} — restored ${it.name_en} x${it.qty}`,
@@ -401,7 +469,7 @@ router.post('/update-order-status', (req, res) => {
         for (const it of orderLines()) {
           inventory.adjustStock({
             storeId: prev.store_id, productId: it.product_id,
-            newPhysicalQty: Math.max(0, stockOf(it.product_id) - it.qty),
+            newPhysicalQty: Math.max(0, stockOf(it.product_id) - packDeduct(it.qty, it.pack_units)),
             actorLabel: 'Eleme uncancel',
             reason: 'eleme_uncancel',
             note: `Eleme ${String(elemeOrderId)} back to ${desc} — re-deducted ${it.name_en} x${it.qty}`,

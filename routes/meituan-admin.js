@@ -64,23 +64,54 @@ router.get('/api/retail-admin/meituan/products', requireRetailAdmin, (req, res) 
       }
     } catch (_) { /* specs table may predate this feature on old boxes */ }
 
+    // One row per CLAIM: a product can hold several options of one listing (a
+    // multipack sells the same bottle as 1瓶 / 3瓶 / 6瓶, each with its own stock
+    // box on Meituan), folded below into one entry per (product, store).
     const maps = db.prepare(`
-      SELECT m.product_id, m.retail_store_id, m.store_code,
-             m.meituan_name, m.sync_enabled,
+      SELECT m.id, m.product_id, m.retail_store_id, m.store_code,
+             m.meituan_name, m.sync_enabled, m.spec_key, m.units_per_pack,
              m.meituan_sku_id AS specSkuId, m.meituan_spec AS specLabel,
              m.last_pushed_qty, m.last_pushed_at
         FROM meituan_product_map m
+       ORDER BY m.product_id, m.store_code, m.id
     `).all();
+
+    // Which product owns each option, so the page can say "claimed by X" rather
+    // than let two products quietly fight over one stock box.
+    const optionOwners = {};
+    for (const m of maps) {
+      if (!m.spec_key || !m.meituan_name) continue;
+      (optionOwners[m.store_code] = optionOwners[m.store_code] || {})[m.spec_key] =
+        { product_id: m.product_id, meituan_name: m.meituan_name };
+    }
 
     const mapIndex = {};
     for (const m of maps) {
-      const specs = ((specIndex[m.store_code] || {})[m.meituan_name] || []).filter(o => o.spec);
-      m.specCount = specs.length;
-      // Only the multi-option listings carry their names: a one-spec listing has
-      // nothing to say, and 265 single names per store is payload for nobody.
-      if (specs.length > 1) m.specs = specs;
-      if (!mapIndex[m.product_id]) mapIndex[m.product_id] = {};
-      mapIndex[m.product_id][m.store_code] = m;
+      const byStore = (mapIndex[m.product_id] = mapIndex[m.product_id] || {});
+      let entry = byStore[m.store_code];
+      if (!entry) {
+        const specs = ((specIndex[m.store_code] || {})[m.meituan_name] || []).filter(o => o.spec);
+        entry = byStore[m.store_code] = {
+          product_id: m.product_id, retail_store_id: m.retail_store_id, store_code: m.store_code,
+          meituan_name: m.meituan_name,
+          // The switch is per product+store, not per option: every claim of one
+          // product on one store shares it, so the panel keeps ONE toggle.
+          sync_enabled: 0, claims: [],
+          specCount: specs.length,
+          specSkuId: null, specLabel: null, last_pushed_qty: null, last_pushed_at: null,
+        };
+        // Only the multi-option listings carry their names: a one-spec listing has
+        // nothing to say, and 265 single names per store is payload for nobody.
+        if (specs.length > 1) entry.specs = specs;
+      }
+      if (Number(m.sync_enabled) === 1) entry.sync_enabled = 1;
+      entry.claims.push({
+        id: m.id, spec_key: m.spec_key || '', specSkuId: m.specSkuId, specLabel: m.specLabel,
+        units_per_pack: Number(m.units_per_pack) || 1,
+        last_pushed_qty: m.last_pushed_qty, last_pushed_at: m.last_pushed_at,
+      });
+      if (entry.specSkuId == null && m.specSkuId) { entry.specSkuId = m.specSkuId; entry.specLabel = m.specLabel; }
+      if (entry.last_pushed_at == null) { entry.last_pushed_qty = m.last_pushed_qty; entry.last_pushed_at = m.last_pushed_at; }
     }
 
     res.json({
@@ -95,6 +126,7 @@ router.get('/api/retail-admin/meituan/products', requireRetailAdmin, (req, res) 
           : null,
         stores: mapIndex[p.id] || {},
       })),
+      optionOwners,
     });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
@@ -133,30 +165,40 @@ router.post('/api/retail-admin/meituan/products/:id/map', requireRetailAdmin, ex
       return res.json({ success: true, deleted: true });
     }
 
-    // A chosen 规格 belongs to the listing it was chosen on. Point the row at a
-    // different listing and that choice is about a listing this product no
-    // longer syncs to, so clear it rather than push stock at a stranger's
-    // option. Same rule as eleme-admin.js mergeMapFields().
+    // A chosen 规格 belongs to the listing it was chosen on. Point the product at
+    // a different listing and every option claim is about a listing it no longer
+    // syncs to, so drop them rather than push stock at a stranger's option.
+    // Same rule as eleme-admin.js mergeMapFields().
+    const name = meituanName.trim();
     const cur = db.prepare(
-      'SELECT meituan_name FROM meituan_product_map WHERE product_id = ? AND retail_store_id = ?'
+      `SELECT meituan_name FROM meituan_product_map
+        WHERE product_id = ? AND retail_store_id = ?
+        ORDER BY spec_key = '' DESC, id LIMIT 1`
     ).get(productId, storeId);
-    const renamed = cur && String(cur.meituan_name || '').trim() !== meituanName.trim();
+    const renamed = cur && String(cur.meituan_name || '').trim() !== name;
 
-    db.prepare(`
-      INSERT INTO meituan_product_map
-        (product_id, retail_store_id, store_code, meituan_name, sync_enabled, updated_at)
-      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-      ON CONFLICT(retail_store_id, product_id) DO UPDATE SET
-        meituan_name = excluded.meituan_name,
-        store_code   = excluded.store_code,
-        sync_enabled = excluded.sync_enabled,
-        updated_at   = CURRENT_TIMESTAMP
-    `).run(productId, storeId, storeCode, meituanName.trim(), syncEnabled ? 1 : 0);
-
-    if (renamed) {
-      db.prepare(`UPDATE meituan_product_map SET meituan_sku_id = NULL, meituan_spec = NULL
-                   WHERE product_id = ? AND retail_store_id = ?`).run(productId, storeId);
-    }
+    db.transaction(() => {
+      if (renamed) {
+        db.prepare(`DELETE FROM meituan_product_map
+                     WHERE product_id = ? AND retail_store_id = ? AND spec_key <> ''`)
+          .run(productId, storeId);
+      }
+      // The name and the switch belong to the product on this store, so they go
+      // to every claim it still holds.
+      db.prepare(`UPDATE meituan_product_map
+                     SET meituan_name = ?, store_code = ?, sync_enabled = ?, updated_at = CURRENT_TIMESTAMP
+                   WHERE product_id = ? AND retail_store_id = ?`)
+        .run(name, storeCode, syncEnabled ? 1 : 0, productId, storeId);
+      const left = db.prepare('SELECT COUNT(*) AS n FROM meituan_product_map WHERE product_id = ? AND retail_store_id = ?')
+                     .get(productId, storeId).n;
+      if (!left) {
+        db.prepare(`
+          INSERT INTO meituan_product_map
+            (product_id, retail_store_id, store_code, meituan_name, spec_key, units_per_pack, sync_enabled, updated_at)
+          VALUES (?, ?, ?, ?, '', 1, ?, CURRENT_TIMESTAMP)
+        `).run(productId, storeId, storeCode, name, syncEnabled ? 1 : 0);
+      }
+    })();
 
     res.json({ success: true, specCleared: !!renamed });
   } catch (e) {
@@ -164,47 +206,97 @@ router.post('/api/retail-admin/meituan/products/:id/map', requireRetailAdmin, ex
   }
 });
 
-// ── POST /api/retail-admin/meituan/products/:id/spec ──────────────────────
-// Which 规格 of the mapped listing this product is. Only listings that hold
-// several ask for it, and only the ones whose options carry their own 货号 —
-// a wrap's "+哈里萨辣酱" is an add-on of the same product and the driver's rule
-// handles it, while the sorbet's "一个 / 两个 / 买四送一" are three separate Roots
-// products sharing one listing, which is what needs telling apart.
-// Empty specSkuId → back to the rule.
-router.post('/api/retail-admin/meituan/products/:id/spec', requireRetailAdmin, express.json(), (req, res) => {
+// ── POST /api/retail-admin/meituan/products/:id/claim ─────────────────────
+// Claim ONE 规格 of the mapped listing for this product, or release it.
+//
+// A listing can hold several options and the 货号 on them says what kind they
+// are. No 货号 → add-ons on ONE product ("单点 OnlyWrap" plus a sauce), which the
+// driver's rule already handles. A 货号 per option → separate stock boxes, and
+// those are what get claimed here: either as a multipack of one product
+// ("咖啡大师 Oatly Barista" as 1瓶 / 3瓶 / 6瓶, one product, three claims) or as
+// different products behind one name (the soap's scents, one claim apiece).
+//
+// `units` — how many Roots units one sale of this option consumes — is typed by
+// the operator, not read out of the option name: the catalogue already writes
+// the same thing three ways (X3, *2, 3-260X2), and a number guessed wrong here
+// silently multiplies every future deduction.
+router.post('/api/retail-admin/meituan/products/:id/claim', requireRetailAdmin, express.json(), (req, res) => {
   const db = tdb();
   const productId = parseInt(req.params.id);
-  const { storeId, specSkuId, specLabel } = req.body || {};
+  const { storeId, storeCode, specSkuId, specLabel, units, on } = req.body || {};
   if (!storeId) return res.status(400).json({ success: false, error: 'storeId required' });
+  const key = String(specSkuId || '').trim();
+  if (!key) return res.status(400).json({ success: false, error: 'specSkuId required' });
 
   try {
-    const pick = String(specSkuId || '').trim() || null;
-
-    // An option belongs to ONE product: that is the whole point of picking. If
-    // another product on this store already holds it, release it there rather
-    // than refuse — otherwise swapping two products' options would mean
-    // clearing one first, and two rows claiming one option pushes two different
-    // counts at it. The released row goes back to amber, which is honest: it
-    // now has no option again.
-    if (pick) {
-      db.prepare(`
-        UPDATE meituan_product_map
-           SET meituan_sku_id = NULL, meituan_spec = NULL, updated_at = CURRENT_TIMESTAMP
-         WHERE retail_store_id = ? AND meituan_sku_id = ? AND product_id <> ?
-      `).run(storeId, pick, productId);
-    }
-
-    const r = db.prepare(`
-      UPDATE meituan_product_map
-         SET meituan_sku_id = ?, meituan_spec = ?, updated_at = CURRENT_TIMESTAMP
-       WHERE product_id = ? AND retail_store_id = ?
-    `).run(pick,
-           String(specLabel || '').trim() || null,
-           productId, storeId);
+    const cur = db.prepare(
+      `SELECT * FROM meituan_product_map
+        WHERE product_id = ? AND retail_store_id = ?
+        ORDER BY spec_key = '' DESC, id LIMIT 1`
+    ).get(productId, storeId);
     // No row means the product isn't mapped to a listing yet — there is no
     // listing to have an option ON, so this is a stale page, not a save.
-    if (!r.changes) return res.status(404).json({ success: false, error: 'no mapping for this product and store' });
-    res.json({ success: true });
+    if (!cur) return res.status(404).json({ success: false, error: 'no mapping for this product and store' });
+    const name = String(cur.meituan_name || '').trim();
+    const code = storeCode || cur.store_code;
+
+    if (on === false) {
+      db.transaction(() => {
+        db.prepare('DELETE FROM meituan_product_map WHERE product_id = ? AND retail_store_id = ? AND spec_key = ?')
+          .run(productId, storeId, key);
+        // Releasing the last option would leave the product with no row at all
+        // and lose the listing name with it, so fall back to a base row.
+        const left = db.prepare('SELECT COUNT(*) AS n FROM meituan_product_map WHERE product_id = ? AND retail_store_id = ?')
+                       .get(productId, storeId).n;
+        if (!left) {
+          db.prepare(`
+            INSERT INTO meituan_product_map
+              (product_id, retail_store_id, store_code, meituan_name, spec_key, units_per_pack, sync_enabled, updated_at)
+            VALUES (?, ?, ?, ?, '', 1, ?, CURRENT_TIMESTAMP)
+          `).run(productId, storeId, code, name, Number(cur.sync_enabled) === 1 ? 1 : 0);
+        }
+      })();
+      return res.json({ success: true, released: true });
+    }
+
+    // An option belongs to ONE product: that is the whole point of claiming. If
+    // another product on this store already holds it, say whose it is rather
+    // than let two rows push two different counts at one box.
+    const taken = db.prepare(`
+      SELECT m.product_id, COALESCE(p.name_en, p.name_cn) AS name
+        FROM meituan_product_map m LEFT JOIN store_products p ON p.id = m.product_id
+       WHERE m.retail_store_id = ? AND m.spec_key = ? AND m.product_id <> ?
+    `).get(storeId, key, productId);
+    if (taken) {
+      return res.status(409).json({ success: false, error: 'option already claimed',
+                                    takenBy: taken.product_id, takenByName: taken.name || null });
+    }
+
+    const per = Math.max(1, parseInt(units, 10) || 1);
+    db.transaction(() => {
+      // The base row means "the whole listing", which an explicit option
+      // replaces — otherwise the product would push twice, once at a box and
+      // once at the driver's guess.
+      db.prepare(`DELETE FROM meituan_product_map
+                   WHERE product_id = ? AND retail_store_id = ? AND spec_key = ''`)
+        .run(productId, storeId);
+      db.prepare(`
+        INSERT INTO meituan_product_map
+          (product_id, retail_store_id, store_code, meituan_name, meituan_sku,
+           meituan_sku_id, meituan_spec, spec_key, units_per_pack, sync_enabled, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(retail_store_id, product_id, spec_key) DO UPDATE SET
+          meituan_name   = excluded.meituan_name,
+          meituan_sku_id = excluded.meituan_sku_id,
+          meituan_spec   = excluded.meituan_spec,
+          store_code     = excluded.store_code,
+          units_per_pack = excluded.units_per_pack,
+          updated_at     = CURRENT_TIMESTAMP
+      `).run(productId, storeId, code, name, cur.meituan_sku || null,
+             key, String(specLabel || '').trim() || null, key, per,
+             Number(cur.sync_enabled) === 1 ? 1 : 0);
+    })();
+    res.json({ success: true, units: per });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }

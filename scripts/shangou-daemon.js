@@ -287,6 +287,13 @@ async function processStockQueue() {
   // Joining `products` here pulled the WRONG name/sku for divergent-id products and
   // could resolve the push to the wrong 闪购 listing by 货号. The roots SKU is
   // COALESCE(mm.meituan_sku, p.sku) — that 货号 maps to the 闪购 sourceFoodCode.
+  //
+  // spec_key = '' takes the product's claim on the listing AS A WHOLE. A map row
+  // may now claim one 规格 of a multi-option listing (a pack size), which is an
+  // 外卖 shape — 闪购 matches by 货号 and has no option to target. Without this the
+  // join fans a single queue row into one copy per claim, and the collapse below
+  // (keyed by product) would mark the SAME queue row superseded and processing in
+  // the same pass.
   const rows = db.prepare(`
     SELECT q.*, p.name_cn, p.name_en,
            COALESCE(mm.meituan_sku, p.sku) AS sku,
@@ -295,6 +302,7 @@ async function processStockQueue() {
       LEFT JOIN store_products p ON p.id = q.product_id
       LEFT JOIN meituan_product_map mm
              ON mm.product_id = q.product_id AND mm.retail_store_id = q.retail_store_id
+            AND mm.spec_key = ''
      WHERE q.status = 'pending' AND q.attempts < 3 AND q.store_code IN (${placeholders})
      ORDER BY q.created_at
      LIMIT 40
@@ -695,7 +703,7 @@ async function autoMapStore(storeCode) {
   const upsertMap = db.prepare(`
     INSERT INTO meituan_product_map (retail_store_id, product_id, store_code, meituan_name, sync_enabled)
     VALUES (?, ?, ?, ?, 1)
-    ON CONFLICT(retail_store_id, product_id) DO UPDATE SET
+    ON CONFLICT(retail_store_id, product_id, spec_key) DO UPDATE SET
       meituan_name = excluded.meituan_name, sync_enabled = 1, updated_at = CURRENT_TIMESTAMP
   `);
   const insListing = db.prepare(

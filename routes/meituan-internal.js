@@ -12,6 +12,7 @@ const router  = express.Router();
 const { seam } = require('../lib/db-seam');
 const db      = seam(require('../database'));
 const inventory = require('../lib/inventory');
+const { packUnits, packDeduct } = require('../lib/pack-units');
 
 const INTERNAL_SECRET = process.env.MEITUAN_INTERNAL_SECRET || 'meituan-daemon-internal';
 
@@ -35,9 +36,76 @@ function normName(s) {
     .toLowerCase();
 }
 
+// The claim that says which 规格 of a listing this line was sold as, and how many
+// units of the product that option holds. One listing sells the same bottle as
+// 1瓶 / 3瓶 / 6瓶, and the 货号 on the line ("4-770 X3") is what tells them apart.
+//
+// The line's code is resolved through the scraped catalogue to the option's
+// skuId, which is what a claim is keyed on. Falling back to the option LABEL
+// matters: the three oldest claims were made before ids were read, and a label
+// is still a stable key for a listing whose options are named.
+function claimForLine(item, storeId, storeCode) {
+  if (!storeId) return null;
+  // The 货号 is the only thing on a Meituan line that names the option. Without
+  // one there is nothing here to match, and guessing a pack size off the listing
+  // name would multiply the deduction on the strength of a guess.
+  const code = String(item.sku || '').trim();
+  if (!code) return null;
+
+  const claims = db.prepare(`
+    SELECT p.id, p.name_cn, p.name_en, m.meituan_name, m.meituan_spec, m.spec_key, m.units_per_pack
+      FROM meituan_product_map m
+      JOIN store_products p ON p.id = m.product_id
+     WHERE m.retail_store_id = ? AND m.spec_key <> ''
+  `).all(storeId);
+  if (!claims.length) return null;
+
+  if (code && storeCode) {
+    let ids = [];
+    try {
+      ids = db.prepare(
+        'SELECT sku_id FROM meituan_listing_specs WHERE store_code = ? AND TRIM(sku_code) = ?'
+      ).all(storeCode, code).map(r => String(r.sku_id || '').trim()).filter(Boolean);
+    } catch (_) { /* specs table may predate this feature on old boxes */ }
+    for (const id of ids) {
+      const hit = claims.filter(c => c.spec_key === id);
+      if (hit.length === 1) return hit[0];
+    }
+  }
+
+  // No id to go on — match the option's own label, which carries the same code.
+  // NOT normName() here: it drops everything in parentheses, which is exactly
+  // where the 货号 lives ("3瓶 (4-770 X3)(3升)" normalises to "3瓶"), so the code
+  // could never be found in it. Case and spacing are all that need flattening.
+  if (code) {
+    const flat = t => String(t || '').replace(/\s+/g, '').toLowerCase();
+    const wanted = flat(code);
+    const hit = claims.filter(c => flat(c.meituan_spec).includes(wanted));
+    if (hit.length === 1) return hit[0];
+  }
+  return null;
+}
+
+// How many units one of this product takes off the shelf when the option it was
+// sold as is unknown. Only answerable when the product holds exactly ONE claim —
+// with several (a multipack) the line could be any of them, and 1 is the only
+// value that can't over-deduct. The caller says so in the match reason.
+function fallbackUnits(storeId, productId) {
+  try {
+    const rows = db.prepare(
+      'SELECT units_per_pack FROM meituan_product_map WHERE retail_store_id = ? AND product_id = ?'
+    ).all(storeId, productId);
+    if (rows.length === 1) return { units: packUnits(rows[0].units_per_pack), sure: true };
+    return { units: 1, sure: rows.every(r => packUnits(r.units_per_pack) === 1) };
+  } catch (_) { return { units: 1, sure: true }; }
+}
+
 // Resolve one parsed Meituan line-item to a store_product.
 //
 // Resolution order, most reliable first:
+//   0. A claimed 规格 — the only path that knows the line's pack size, and ahead
+//      of the SKU token because a pack's code is a variant of the base product's
+//      (the sorbet's "3-120*5"), so the token alone loses which pack it was.
 //   1. Inline "(\d+-\d+)" SKU token the merchant encodes in the spec name.
 //   2. meituan_product_map — the SAME Roots↔Meituan bridge stock-push uses. The
 //      operator maps each product to its exact Meituan listing title, so when the
@@ -47,10 +115,29 @@ function normName(s) {
 //      them. Without this, such lines silently failed to deduct stock.
 //   3. UNIQUE active name match (CJK core, then English) as a last resort.
 // Ambiguous/no match → productId null (not deducted, surfaced as unresolved).
-function resolveProduct(item, storeId) {
+function resolveProduct(item, storeId, storeCode) {
   const qty = parseInt(item.qty, 10) || 0;
-  const out = { name: item.name, sku: item.sku || null, qty, productId: null, nameCn: item.name, nameEn: item.name, matchBy: null };
+  const out = { name: item.name, sku: item.sku || null, qty, productId: null, nameCn: item.name, nameEn: item.name, matchBy: null,
+                // How many units of the product this line took, per unit sold.
+                // 1 unless the option it was sold as is a pack.
+                units: 1 };
   const apply = (p, by) => { out.productId = p.id; out.nameCn = p.name_cn; out.nameEn = p.name_en; out.matchBy = by; };
+
+  // Applied to every path that resolves a PRODUCT but not an option: a product
+  // with one claim lends its pack size, a product with several can't (the line
+  // didn't say which), and that case is named so it surfaces in the sync log
+  // rather than deducting quietly.
+  const withUnits = () => {
+    if (!out.productId || !storeId) return out;
+    const { units, sure } = fallbackUnits(storeId, out.productId);
+    out.units = units;
+    if (!sure) out.matchBy = (out.matchBy || 'matched') + '+pack_unknown';
+    return out;
+  };
+
+  // 0. The option this line names, claimed by exactly one product.
+  const claim = claimForLine(item, storeId, storeCode);
+  if (claim) { apply(claim, 'claim'); out.units = packUnits(claim.units_per_pack); return out; }
 
   // 1. Inline SKU token. Prefer the explicit skuCode Meituan sends; fall back to a
   // "(\d+-\d+)" token the merchant encodes in the listing/spec name. Meituan
@@ -61,7 +148,7 @@ function resolveProduct(item, storeId) {
   if (skuToken) {
     const p = db.prepare('SELECT id, name_cn, name_en FROM store_products WHERE sku = ? AND is_active = 1').get(skuToken)
            || db.prepare('SELECT id, name_cn, name_en FROM store_products WHERE sku = ?').get(skuToken);
-    if (p) { apply(p, 'sku'); out.sku = skuToken; return out; }
+    if (p) { apply(p, 'sku'); out.sku = skuToken; return withUnits(); }
     // Token didn't resolve — fall through to the map/name strategies rather than
     // stranding the line on a stale or mistyped SKU code.
     out.matchBy = 'sku_unknown';
@@ -87,7 +174,7 @@ function resolveProduct(item, storeId) {
         });
         if (cands.length === 1) hit = cands[0];
       }
-      if (hit) { apply(hit, 'map'); return out; }
+      if (hit) { apply(hit, 'map'); return withUnits(); }
     }
   }
 
@@ -100,7 +187,7 @@ function resolveProduct(item, storeId) {
   if (matches.length !== 1 && en) matches = db.prepare('SELECT id, name_cn, name_en FROM store_products WHERE is_active = 1 AND name_en LIKE ?').all(`%${en.trim()}%`);
   if (matches.length === 1) { apply(matches[0], 'name'); }
   else if (!out.matchBy || out.matchBy === 'sku_unknown') out.matchBy = matches.length > 1 ? 'ambiguous' : 'unmatched';
-  return out;
+  return withUnits();
 }
 
 // ── The extras the order payload already carried ─────────────────────────────
@@ -264,7 +351,7 @@ router.post('/ingest-order', (req, res) => {
     const orderNo  = `MT${datePart}${rand}`;
     const ref      = order.meituanOrderNo || orderNo;
 
-    const items = (order.items || []).map(it => resolveProduct(it, storeId)).filter(i => i.qty > 0);
+    const items = (order.items || []).map(it => resolveProduct(it, storeId, storeCode)).filter(i => i.qty > 0);
     const total = parseFloat(order.total) || 0;
     // Real platform status label (拣货中 / 配送中 / 已完成 / 已取消 …). The internal
     // `status` stays 'paid' — this is a read-only mirror we never fulfil ourselves
@@ -377,11 +464,12 @@ router.post('/ingest-order', (req, res) => {
         db.prepare(`
           INSERT INTO retail_order_items
             (order_id, product_id, name_cn, name_en, sku, qty, unit_price, line_total,
-             channel_food_id, options_json)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             channel_food_id, options_json, pack_units)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(oid, it.productId, it.nameCn, it.nameEn, it.sku || null, it.qty,
                fnum(it.unitPrice) || 0, fnum(it.lineTotal) || 0,
-               it.foodId || null, it.options ? JSON.stringify(it.options) : null);
+               it.foodId || null, it.options ? JSON.stringify(it.options) : null,
+               packUnits(it.units));
       }
       return oid;
     })();
@@ -398,13 +486,16 @@ router.post('/ingest-order', (req, res) => {
       // On-hand can't cover the line (oversell, or an already-negative row). We
       // still clamp at 0 so a channel oversell can't drive us negative, but flag
       // the shortfall (below) instead of letting it vanish into the clamp.
-      if (oldQ < it.qty) oversold.push({ name: it.nameEn, sku: it.sku, have: oldQ, want: it.qty });
+      // One six-pack is one line of one, and six off the shelf.
+      const took = packDeduct(it.qty, it.units);
+      if (oldQ < took) oversold.push({ name: it.nameEn, sku: it.sku, have: oldQ, want: took });
       inventory.adjustStock({
         storeId, productId: it.productId,
-        newPhysicalQty: Math.max(0, oldQ - it.qty),
+        newPhysicalQty: Math.max(0, oldQ - took),
         actorLabel: 'Meituan order',
         reason: 'meituan_order',
-        note: `Meituan ${ref}${order.daySeq != null ? ` #${order.daySeq}` : ''} — ${it.nameEn} x${it.qty}`,
+        note: `Meituan ${ref}${order.daySeq != null ? ` #${order.daySeq}` : ''} — ${it.nameEn} x${it.qty}` +
+              (took !== it.qty ? ` (${took} units)` : ''),
       });
       deducted++;
     }
@@ -685,7 +776,8 @@ router.post('/update-order-status', (req, res) => {
     const confirmedVoid   = isConfirmedVoid(desc);
     const alreadyRestored = !!prev && prev.channel_stock_restored === 1;
     const orderLines = () => db.prepare(
-      'SELECT product_id, name_en, qty FROM retail_order_items WHERE order_id = ? AND product_id IS NOT NULL'
+      `SELECT product_id, name_en, qty, COALESCE(pack_units, 1) AS pack_units
+         FROM retail_order_items WHERE order_id = ? AND product_id IS NOT NULL`
     ).all(imp.retail_order_id);
     const stockOf = (pid) => {
       const cur = db.prepare('SELECT physical_qty FROM retail_store_stock WHERE store_id = ? AND product_id = ?')
@@ -698,7 +790,7 @@ router.post('/update-order-status', (req, res) => {
         for (const it of orderLines()) {
           inventory.adjustStock({
             storeId: prev.store_id, productId: it.product_id,
-            newPhysicalQty: stockOf(it.product_id) + it.qty,
+            newPhysicalQty: stockOf(it.product_id) + packDeduct(it.qty, it.pack_units),
             actorLabel: 'Meituan cancel',
             reason: 'meituan_cancel',
             note: `Meituan ${String(meituanOrderNo)} ${internal || 'void'} — restored ${it.name_en} x${it.qty}`,
@@ -716,7 +808,7 @@ router.post('/update-order-status', (req, res) => {
         for (const it of orderLines()) {
           inventory.adjustStock({
             storeId: prev.store_id, productId: it.product_id,
-            newPhysicalQty: Math.max(0, stockOf(it.product_id) - it.qty),
+            newPhysicalQty: Math.max(0, stockOf(it.product_id) - packDeduct(it.qty, it.pack_units)),
             actorLabel: 'Meituan uncancel',
             reason: 'meituan_uncancel',
             note: `Meituan ${String(meituanOrderNo)} back to ${desc} — re-deducted ${it.name_en} x${it.qty}`,

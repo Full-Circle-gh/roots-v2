@@ -148,7 +148,7 @@ async function main() {
   const upsert = db.prepare(`
     INSERT INTO eleme_product_map (retail_store_id, product_id, store_code, eleme_name, sync_enabled, updated_at)
     VALUES (?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
-    ON CONFLICT(retail_store_id, product_id) DO UPDATE SET
+    ON CONFLICT(retail_store_id, product_id, spec_key) DO UPDATE SET
       eleme_name = excluded.eleme_name, sync_enabled = 1, updated_at = CURRENT_TIMESTAMP
   `);
   const tx = db.transaction(() => {
