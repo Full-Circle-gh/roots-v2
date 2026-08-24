@@ -1154,10 +1154,10 @@ function dashOpenCustomerFromFeed(customerId) {
 // has loaded.
 function dashOpenFeedbackFromFeed(feedbackId) {
   closeDrawer('#db-activity-drawer');
-  // dashJumpTab looked for a RAIL button, and Feedback has not had one since
-  // Inbox moved to the topbar — so this jump has been landing nowhere. The
-  // Inbox door clicks the dropdown's own button, which is what both navigates
-  // and fires the tab's first load.
+  // dashJumpTab looks for a RAIL button, and Feedback has not had one since
+  // Inbox moved to the topbar — so this jump was landing nowhere, and an
+  // activity-feed click on a bug report did nothing at all. Goes through the
+  // Inbox door now, which also marks the queue seen.
   dashOpenFeedback();
   const id = Number(feedbackId);
   if (!feedbackId || Number.isNaN(id) || id <= 0) return;
@@ -1346,11 +1346,20 @@ function dashOpenInvoices() {
 }
 
 // The two Inbox queues — Reviews and Feedback — are NOT rail tabs. They live in
-// the topbar Inbox dropdown, and their menu buttons carry both the navigation
-// (an inline onclick: goTab + mark-seen + close the menu) AND the listener that
-// performs each tab's first load. So the door has to CLICK that button: goTab()
-// alone lights the section and leaves the table on its "Loading…"/empty state,
-// because the first-open loader hangs off the button, not off goTab.
+// the topbar Inbox dropdown, so `dashJumpTab` (which queries `.tabs [data-tab]`)
+// cannot reach either one, and this is the door instead.
+//
+// It CLICKS the menu button rather than calling goTab, for what the button does
+// either side of the navigation: `_markInboxSeenNow` and `closeInboxMenu`. An
+// operator who reaches the queue from a fire has read it, so the unseen badge
+// must clear exactly as it does when they use the menu — a red dot still sitting
+// on the Inbox icon after they have just worked the list is the badge lying.
+// goTab alone leaves it lit.
+//
+// It does NOT click for the loading, any more: `TAB_INIT` registers
+// reviewsTabInit/feedbackTabInit, so goTab populates both tabs on its own now.
+// Both are idempotent (`if (LOADED) return`), so the click reaching the button's
+// own listener AND goTab's TAB_INIT dispatch loads once, not twice.
 //
 // Hidden inside a collapsed dropdown is no obstacle — a programmatic click on a
 // hidden button fires its handlers all the same.

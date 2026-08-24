@@ -413,9 +413,11 @@ console.log('\n4 · the doors — the Inbox dropdown, clicked');
 
 const OPEN_INBOX_SRC = sliceBlock(DASH_JS, 'function dashOpenInbox(which)');
 
-it('the door clicks the Inbox menu button, which is what loads the tab', () => {
-  // goTab() alone lights the section and leaves the table empty: each tab's
-  // first load hangs off that button's own click listener, not off goTab.
+it('the door clicks the Inbox menu button, not goTab', () => {
+  // For what the button does either side of the navigation: mark-seen and
+  // close-menu. An operator who reached the queue from a fire has read it, so
+  // the unseen badge has to clear the same way it does from the menu — goTab
+  // alone leaves a red dot sitting on a list they have just worked.
   const clicked = [];
   const ctx = {
     document: {
@@ -434,6 +436,23 @@ it('a missing button is reported, not thrown', () => {
   vm.createContext(ctx);
   new vm.Script(`${OPEN_INBOX_SRC}; var __ok = dashOpenInbox('reviews');`).runInContext(ctx);
   assert.strictEqual(ctx.__ok, false);
+});
+
+it('the click cannot load either tab twice', () => {
+  // The click reaches the button's own listener AND, through the inline onclick,
+  // goTab's TAB_INIT dispatch — both of which call the same init. That is only
+  // safe because each init early-returns on its loaded flag. Lose the guard and
+  // every door click becomes two of every fetch behind it.
+  const CONTENT_JS = fs.readFileSync(
+    path.join(ROOT, 'public', 'retail-admin', '07-content-billing.js'), 'utf8');
+  const CORE_JS = fs.readFileSync(path.join(ROOT, 'public', 'retail-admin', '01-core.js'), 'utf8');
+  for (const [init, flag] of [['reviewsTabInit', 'REVIEWS_LOADED'], ['feedbackTabInit', 'FEEDBACK_LOADED']]) {
+    const body = sliceBlock(CONTENT_JS, `function ${init}()`);
+    assert.ok(new RegExp(`if\\s*\\(${flag}\\)\\s*return`).test(body),
+      `${init} lost its idempotence guard — the door now double-loads`);
+    assert.ok(new RegExp(`${init}`).test(sliceBlock(CORE_JS, 'const TAB_INIT =')),
+      `${init} is not registered in TAB_INIT`);
+  }
 });
 
 it('nothing routes either queue through dashJumpTab any more', () => {
