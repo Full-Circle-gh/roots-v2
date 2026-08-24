@@ -10,7 +10,7 @@
 //
 // Bump CACHE on every UI shape change to force every client to evict
 // its old shell on next load (activate handler deletes all old caches).
-const CACHE = 'roots-v2-shell-v848-recap-rhythm';
+const CACHE = 'roots-v2-shell-v849-one-recipe-cost';
 // '/m' is Tacet Mobile — the phone companion, and the one shell here that is
 // meant to be INSTALLED rather than visited. An installed app that opens to a
 // browser error the first time the signal drops is not an app, so its shell is
@@ -146,10 +146,11 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   // API: always network, never cached.
   if (url.pathname.startsWith('/api/')) return;
-  // The shared cost formula: network only. The server sends it no-store; this
-  // is the belt to that pair of braces. A cached money formula would go on
+  // The shared cost formulas: network only. The server sends them no-store;
+  // this is the belt to that pair of braces. A cached money formula would go on
   // disagreeing with the server until the cache was evicted.
   if (url.pathname === '/lib/ingredient-cost.js') return;
+  if (url.pathname === '/lib/recipe-cost.js') return;
   // Only handle GETs.
   if (e.request.method !== 'GET') return;
   // Same-origin only — third-party CDNs (polyfill, fonts) bypass us.

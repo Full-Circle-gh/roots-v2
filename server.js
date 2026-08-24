@@ -216,6 +216,26 @@ app.get('/lib/ingredient-cost.js', (req, res) => {
   });
 });
 
+// The recipe cost breakdown (lib/recipe-cost.js), served to the recipe detail
+// card and the Cost Sheet on exactly the same terms as the ingredient helper
+// above: read per request so the bytes always match the file on disk, no-store
+// so a browser cannot run yesterday's money formula, and skipped by the service
+// worker (public/sw.js) so a phone cannot either. The Excel export route
+// requires this same file from Node — one file, two runtimes, no second copy.
+app.get('/lib/recipe-cost.js', (req, res) => {
+  fs.readFile(path.join(__dirname, 'lib', 'recipe-cost.js'), 'utf8', (err, src) => {
+    if (err) {
+      console.error('[recipe cost helper] could not be read:', err.message);
+      return res.status(500).type('text/plain').send('/* recipe cost helper unavailable */');
+    }
+    res.set('Content-Type', 'application/javascript; charset=utf-8');
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
+    res.send(src);
+  });
+});
+
 // PWA assets — must be served from root for the service worker to claim "/" scope
 app.get('/sw.js', (req, res) => {
   res.set('Service-Worker-Allowed', '/');
