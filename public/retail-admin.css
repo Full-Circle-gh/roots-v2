@@ -5548,17 +5548,21 @@
   /* ── One line per store. Not the old cards: a dot, a name, a state, the one
      action that unblocks it, and the store's own switch. A store that needs a
      person turns amber; the rest stay quiet. */
-  .mt-storelines { display: flex; flex-direction: column; margin-bottom: 32px; border: 1px solid var(--td-border); border-radius: 14px; background: var(--td-surface); }
-  .mt-storeline { display: flex; align-items: center; gap: 16px; padding: 16px 24px; flex-wrap: wrap; }
-  .mt-storeline + .mt-storeline { border-top: 1px solid var(--td-border); }
-  .mt-storeline .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--td-sage); flex: none; }
-  .mt-storeline.att .dot { background: var(--td-amber); }
-  .mt-storeline.off .dot { background: var(--td-text2); }
-  .mt-storeline .nm { font: 500 15px var(--f-sans); color: var(--td-text); }
-  .mt-storeline .st { font: 400 15px var(--f-sans); color: var(--td-text2); flex: 1 1 240px; min-width: 0; }
-  .mt-storeline.att .st { color: var(--td-amber-ink); }
-  /* Sync now lives on the tile whose number it changes. */
-  .mt-tile .act { margin-top: 16px; }
+  .mt-storelines, .el-storelines { display: flex; flex-direction: column; margin-bottom: 32px; border: 1px solid var(--td-border); border-radius: 14px; background: var(--td-surface); }
+  .mt-storeline, .el-storeline { display: flex; align-items: center; gap: 16px; padding: 16px 24px; flex-wrap: wrap; }
+  .mt-storeline + .mt-storeline, .el-storeline + .el-storeline { border-top: 1px solid var(--td-border); }
+  .mt-storeline .dot, .el-storeline .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--td-sage); flex: none; }
+  .mt-storeline.att .dot, .el-storeline.att .dot { background: var(--td-amber); }
+  .mt-storeline.off .dot, .el-storeline.off .dot { background: var(--td-text2); }
+  .mt-storeline .nm, .el-storeline .nm { font: 500 15px var(--f-sans); color: var(--td-text); }
+  .mt-storeline .st, .el-storeline .st { font: 400 15px var(--f-sans); color: var(--td-text2); flex: 1 1 240px; min-width: 0; }
+  .mt-storeline.att .st, .el-storeline.att .st { color: var(--td-amber-ink); }
+  /* A blocked Eleme store is unblocked by naming its shop, so that line carries
+     a field and a button rather than only a state. */
+  .el-storeline .shopinp { font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; max-width: 176px; }
+  .el-storeline .shopinp::placeholder { color: var(--td-text2); }
+  /* Sync now / Push all stock lives on the tile whose number it changes. */
+  .mt-tile .act, .el-tile .act { margin-top: 16px; }
 
   /* ── Sub-tabs ───────────────────────────────────────────────────────────── */
   .mt-tabs { display: flex; align-items: center; gap: 24px; border-bottom: 1px solid var(--td-border); margin: 0 0 16px; }
@@ -5593,108 +5597,123 @@
   .mt-search { flex: 1 1 280px; font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; }
   .mt-search::placeholder { color: var(--td-text2); }
 
-  /* ── List + panel ────────────────────────────────────────────────────────
-     2026-08-24, to reference/meituan-mapping-light-mockup.html (direction C).
-     What it replaces: a three-column table whose every row carried a bordered
-     input, a status pill, an explanation sentence and a push timestamp —
-     ~100px per product, and the 231 healthy rows shouted as loudly as the 5
-     broken ones.
+  /* ── List + panel — BOTH channel pages ───────────────────────────────────
+     Meituan 2026-08-24, to reference/meituan-mapping-light-mockup.html
+     (direction C); Eleme ported onto the same shapes the same week.
+
+     What it replaces: a table whose every row carried a bordered input, a
+     status pill, an explanation sentence and a push timestamp — ~100px per
+     product whether or not anything was wrong, so the healthy hundreds shouted
+     as loudly as the handful that needed a person.
 
      The rule that keeps it light: THE LIST HOLDS NO CONTROLS. One line per
-     product and a state dot per store; the name field, the option picker, the
-     sync switch and the sentences all live in the panel, once, for the row you
-     picked. A mapping can grow a fourth field without the list growing a pixel.
+     product and a state dot per store; the name field, the size/option picker,
+     the sync switch and the sentences all live in the panel, once, for the row
+     you picked. A mapping can grow a fourth field without the list growing a
+     pixel.
+
+     ⚠️ One rule set, two prefixes — `.mt-` (Meituan) and `.el-` (Eleme) — and
+     every selector below carries BOTH. That is deliberate: the two pages are
+     the same pattern, and a rule that exists for only one of them is how the
+     pattern drifts apart. When you add a rule here, add both twins. Anything
+     genuinely specific to one channel goes in that channel's own block.
 
      The list keeps the table's two load-bearing habits: a band pinned at
      top:56px (the exact topbar height, so it sits flush) and therefore NO
      overflow on its wrapper — overflow:hidden on an ancestor kills
      position:sticky. That is also why the box is square rather than rounded:
      a rounded band pinned under the topbar reads as a floating pill. */
-  /* 340px for the panel: at the 996px reference width (a 1280 window minus
-     the rail and gutters) that leaves the list ~600px, enough for a product
-     name to read before it ellipses. The panel's widest control is the name
-     field, which fits 292px of text. */
-  .mt-split { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
-  .mt-list { min-width: 0; border: 1px solid var(--td-border); background: var(--td-surface); }
-  .mt-lhead {
+  .mt-split, .el-split { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+  /* 340px for the panel: at the 996px reference width (a 1280 window minus the
+     rail and gutters) that leaves the list ~600px, enough for a product name to
+     read before it ellipses. The panel's widest control is the name field,
+     which fits 292px of text. */
+  .mt-list, .el-list { min-width: 0; border: 1px solid var(--td-border); background: var(--td-surface); }
+  .mt-lhead, .el-lhead {
     position: sticky; top: 56px; z-index: 5;
     display: flex; align-items: center; gap: 16px;
     background: var(--td-header); color: var(--td-text);
     font: 500 13px var(--f-sans); text-transform: none; letter-spacing: 0;
     padding: 8px 16px; border-bottom: 1px solid var(--td-border);
   }
-  .mt-lhead .who { flex: 1; min-width: 0; }
-  .mt-lhead .dots { display: flex; gap: 16px; flex: none; }
-  .mt-lhead .dots > span { width: 64px; text-align: center; white-space: nowrap; }
-  .mt-lhead .dots > span[hidden] { display: none; }
+  .mt-lhead .who, .el-lhead .who { flex: 1; min-width: 0; }
+  .mt-lhead .dots, .el-lhead .dots { display: flex; gap: 16px; flex: none; }
+  .mt-lhead .dots > span, .el-lhead .dots > span { width: 64px; text-align: center; white-space: nowrap; }
+  .mt-lhead .dots > span[hidden], .el-lhead .dots > span[hidden] { display: none; }
 
   /* A row is a button: keyboard reach and focus come free, and there is
      nothing else in the row to tab to. */
-  .mt-lrow {
+  .mt-lrow, .el-lrow {
     display: flex; align-items: center; gap: 16px; width: 100%; text-align: left;
     font: 400 15px var(--f-sans); color: var(--td-text);
     background: none; border: 0; border-top: 1px solid var(--td-border);
     padding: 8px 16px; min-height: 48px; cursor: pointer;
   }
-  .mt-lrow:first-child { border-top: 0; }
-  .mt-lrow:hover { background: var(--td-raised); }
-  .mt-lrow:focus-visible { outline: 2px solid var(--td-sage); outline-offset: -2px; }
+  .mt-lrow:first-child, .el-lrow:first-child { border-top: 0; }
+  .mt-lrow:hover, .el-lrow:hover { background: var(--td-raised); }
+  .mt-lrow:focus-visible, .el-lrow:focus-visible { outline: 2px solid var(--td-sage); outline-offset: -2px; }
   /* The picked row, marked the way an unseen order is: an inset edge, never a
      border — a marker that changes row height makes the list jump. */
-  .mt-lrow.sel { background: var(--td-unseen); box-shadow: inset 4px 0 0 var(--td-sage); }
-  .mt-lrow .mt-dots { display: flex; gap: 16px; flex: none; }
-  .mt-dcell { width: 64px; display: flex; justify-content: center; }
-  .mt-dot { width: 8px; height: 8px; border-radius: 999px; flex: none; display: inline-block; }
-  .mt-dot.ok   { background: var(--td-sage); }
-  .mt-dot.att  { background: var(--td-amber); }
-  .mt-dot.off  { background: var(--td-text2); }
-  .mt-dot.none { background: transparent; box-shadow: inset 0 0 0 1px var(--td-text2); opacity: .6; }
+  .mt-lrow.sel, .el-lrow.sel { background: var(--td-unseen); box-shadow: inset 4px 0 0 var(--td-sage); }
+  .mt-lrow .mt-dots, .el-lrow .el-dots { display: flex; gap: 16px; flex: none; }
+  .mt-dcell, .el-dcell { width: 64px; display: flex; justify-content: center; }
+  .mt-dot, .el-dot { width: 8px; height: 8px; border-radius: 999px; flex: none; display: inline-block; }
+  .mt-dot.ok,   .el-dot.ok   { background: var(--td-sage); }
+  .mt-dot.att,  .el-dot.att  { background: var(--td-amber); }
+  .mt-dot.off,  .el-dot.off  { background: var(--td-text2); }
+  .mt-dot.none, .el-dot.none { background: transparent; box-shadow: inset 0 0 0 1px var(--td-text2); opacity: .6; }
 
-  .mt-pcell { display: flex; align-items: center; gap: 16px; flex: 1; min-width: 0; }
-  .mt-thumb { width: 32px; height: 32px; border-radius: 8px; object-fit: cover; border: 1px solid var(--td-border); flex: none; background: var(--td-raised); }
-  .mt-thumb-ph { width: 32px; height: 32px; border-radius: 8px; background: var(--td-raised); border: 1px solid var(--td-border); flex: none; }
-  .mt-pname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .mt-psku { flex: none; }
-  .mt-pname .vl { color: var(--td-text2); }
-  .mt-pmeta { font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 4px; }
-  .mt-pmeta.num { font-variant-numeric: tabular-nums; }
+  .mt-pcell, .el-pcell { display: flex; align-items: center; gap: 16px; flex: 1; min-width: 0; }
+  .mt-thumb, .el-thumb { width: 32px; height: 32px; border-radius: 8px; object-fit: cover; border: 1px solid var(--td-border); flex: none; background: var(--td-raised); }
+  .mt-thumb-ph, .el-thumb-ph { width: 32px; height: 32px; border-radius: 8px; background: var(--td-raised); border: 1px solid var(--td-border); flex: none; }
+  .mt-pname, .el-pname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mt-pname .vl, .el-pname .vl { color: var(--td-text2); }
+  .mt-pmeta, .el-pmeta { font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 4px; }
+  .mt-pmeta.num, .el-pmeta.num { font-variant-numeric: tabular-nums; }
   /* Quiet metadata, so it is text — the bordered chip it used to be gave a SKU
      the weight of a control. */
-  .mt-psku { font: 400 13px var(--f-sans); color: var(--td-text2); margin-left: 8px; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .mt-empty { padding: 24px; text-align: center; font: 400 15px var(--f-sans); color: var(--td-text2); }
+  .mt-psku, .el-psku { flex: none; font: 400 13px var(--f-sans); color: var(--td-text2); margin-left: 8px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .mt-empty, .el-empty { padding: 24px; text-align: center; font: 400 15px var(--f-sans); color: var(--td-text2); }
 
   /* The panel. Sticky below the topbar so it stays with you down a 248-row
      list; it stops being sticky when the grid stacks. */
-  .mt-panel {
+  .mt-panel, .el-panel {
     position: sticky; top: 72px;
     background: var(--td-surface); border: 1px solid var(--td-border);
     border-radius: 14px; padding: 24px;
   }
   /* With no rows there is no panel, so the list takes the whole width rather
-     than sitting beside a 380px gap. */
-  .mt-split:has(> .mt-panel[hidden]) { grid-template-columns: 1fr; }
-  .mt-ptop { display: flex; align-items: center; gap: 16px; }
-  .mt-ptop .mt-thumb, .mt-ptop .mt-thumb-ph { width: 48px; height: 48px; }
-  .mt-pttl { min-width: 0; }
-  .mt-ptop .mt-pname { font-weight: 500; white-space: normal; }
-  .mt-pblock { border-top: 1px solid var(--td-border); margin-top: 16px; padding-top: 16px; }
-  .mt-pbh { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-  .mt-pbh .nm { font: 500 15px var(--f-sans); color: var(--td-text); }
-  .mt-pstate { display: flex; align-items: center; gap: 8px; font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 4px; }
-  .mt-plbl { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin: 16px 0 4px; }
-  .mt-pval { font: 400 15px/1.6 var(--f-sans); color: var(--td-text); margin-top: 8px; overflow-wrap: anywhere; }
-  .mt-pfact { font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 8px; font-variant-numeric: tabular-nums; }
-  .mt-name-input { display: block; width: 100%; font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; }
-  .mt-name-input::placeholder { color: var(--td-text2); }
-  .mt-sub { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin-top: 8px; }
-  .mt-sub b { font-weight: 500; color: var(--td-text); }
+     than sitting beside a 340px gap. */
+  .mt-split:has(> .mt-panel[hidden]), .el-split:has(> .el-panel[hidden]) { grid-template-columns: 1fr; }
+  .mt-ptop, .el-ptop { display: flex; align-items: center; gap: 16px; }
+  .mt-ptop .mt-thumb, .mt-ptop .mt-thumb-ph,
+  .el-ptop .el-thumb, .el-ptop .el-thumb-ph { width: 48px; height: 48px; }
+  .mt-pttl, .el-pttl { min-width: 0; }
+  .mt-ptop .mt-pname, .el-ptop .el-pname { font-weight: 500; white-space: normal; }
+  .mt-pblock, .el-pblock { border-top: 1px solid var(--td-border); margin-top: 16px; padding-top: 16px; }
+  .mt-pbh, .el-pbh { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .mt-pbh .nm, .el-pbh .nm { font: 500 15px var(--f-sans); color: var(--td-text); }
+  .mt-pstate, .el-pstate { display: flex; align-items: center; gap: 8px; font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 4px; }
+  .mt-plbl, .el-plbl { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin: 16px 0 4px; }
+  .mt-pval, .el-pval { font: 400 15px/1.6 var(--f-sans); color: var(--td-text); margin-top: 8px; overflow-wrap: anywhere; }
+  .mt-pfact, .el-pfact { font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 8px; font-variant-numeric: tabular-nums; }
+  /* `input.` and the panel ancestor are load-bearing, not decoration: the base
+     field rule is `input[type="text"], … select, textarea`, and an ATTRIBUTE
+     selector carries class-level specificity — so a bare `.mt-name-input`
+     (0,1,0) loses to it (0,1,1) and the field silently rendered at 13px/6px
+     beside a 15px/8px select. Keep the extra weight if you touch this. */
+  .mt-panel input.mt-name-input, .el-panel input.el-name-input { display: block; width: 100%; font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; }
+  .mt-panel input.mt-name-input::placeholder, .el-panel input.el-name-input::placeholder { color: var(--td-text2); }
+  .mt-sub, .el-sub { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin-top: 8px; }
+  .mt-sub b, .el-sub b { font-weight: 500; color: var(--td-text); }
 
-  /* Which 规格 of a shared listing a product is. background-COLOR, never the
-     `background` shorthand, and the chevron declared in full — the shorthand
-     resets repeat/position and the global select rule then tiles its arrow
-     across the width (the Add-bundle dialog bug, css:5546). Amber until it is
-     answered: an unanswered one is writing the same count to every option. */
-  .mt-spec {
+  /* Which 规格 of a shared listing a product is (Meituan), and which size
+     inside a listing it is (Eleme). background-COLOR, never the `background`
+     shorthand, and the chevron declared in full — the shorthand resets
+     repeat/position and the global select rule then tiles its arrow across the
+     width (the Add-bundle dialog bug, css:5546). Amber until it is answered:
+     an unanswered one is writing the same count to every option. */
+  .mt-spec, .el-spec {
     display: block; width: 100%;
     font: 400 15px var(--f-sans); color: var(--td-text);
     background-color: var(--td-surface);
@@ -5704,28 +5723,38 @@
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2358606E' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
     background-repeat: no-repeat; background-position: right 16px center;
   }
-  .mt-spec.warn { border-color: var(--td-amber); }
+  .mt-spec.warn, .el-spec.warn { border-color: var(--td-amber); }
 
   /* The sync switch. On the old table it hid until the row was hovered, because
-     248 of them at once was noise; in the panel there is exactly one and it is
-     the store block's own control, so it is simply visible. */
-  .mt-panel .toggle-label { display: inline-flex; align-items: center; }
-  .mt-panel .toggle-label input { appearance: none; -webkit-appearance: none; margin: 0; width: 32px; height: 18px; border-radius: 999px; background: var(--td-border); border: none; position: relative; cursor: pointer; transition: background 200ms cubic-bezier(.16,1,.3,1); flex: none; }
-  .mt-panel .toggle-label input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 999px; background: var(--td-surface); transition: left 200ms cubic-bezier(.16,1,.3,1); }
-  .mt-panel .toggle-label input:checked { background: var(--td-sage); }
-  .mt-panel .toggle-label input:checked::after { left: 17px; }
-  .mt-panel .toggle-label input:focus-visible { outline: 2px solid var(--td-sage); outline-offset: 2px; }
+     248 of them at once was noise; in the panel there is exactly one per store
+     block and it is that block's own control, so it is simply visible. */
+  .mt-panel .toggle-label, .el-panel .toggle-label { display: inline-flex; align-items: center; }
+  .mt-panel .toggle-label input, .el-panel .toggle-label input { appearance: none; -webkit-appearance: none; margin: 0; width: 32px; height: 18px; border-radius: 999px; background: var(--td-border); border: none; position: relative; cursor: pointer; transition: background 200ms cubic-bezier(.16,1,.3,1); flex: none; }
+  .mt-panel .toggle-label input::after, .el-panel .toggle-label input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 999px; background: var(--td-surface); transition: left 200ms cubic-bezier(.16,1,.3,1); }
+  .mt-panel .toggle-label input:checked, .el-panel .toggle-label input:checked { background: var(--td-sage); }
+  .mt-panel .toggle-label input:checked::after, .el-panel .toggle-label input:checked::after { left: 17px; }
+  .mt-panel .toggle-label input:focus-visible, .el-panel .toggle-label input:focus-visible { outline: 2px solid var(--td-sage); outline-offset: 2px; }
   @media (prefers-reduced-motion: reduce) {
-    .mt-panel .toggle-label input, .mt-panel .toggle-label input::after { transition: none; }
+    .mt-panel .toggle-label input, .mt-panel .toggle-label input::after,
+    .el-panel .toggle-label input, .el-panel .toggle-label input::after { transition: none; }
+  }
+
+  /* A command to run on the box, on a store line. Not a monospace face — Tacet
+     has none, and --f-mono is aliased to Inter — so the box is what marks it as
+     something to copy verbatim. */
+  .mt-cmd, .el-cmd {
+    font: 400 13px var(--f-sans); color: var(--td-text2);
+    background: var(--td-raised); border: 1px solid var(--td-border);
+    border-radius: 8px; padding: 4px 8px; white-space: nowrap;
+    overflow-x: auto; max-width: 100%;
   }
 
   /* Below ~1100px the panel has nowhere to sit beside the list, so it stacks
      above it — above, not below, because it is the thing you just acted on. */
   @media (max-width: 1100px) {
-    .mt-split { grid-template-columns: 1fr; }
-    .mt-panel { position: static; order: -1; }
+    .mt-split, .el-split { grid-template-columns: 1fr; }
+    .mt-panel, .el-panel { position: static; order: -1; }
   }
-
   /* ── Views ──────────────────────────────────────────────────────────────── */
   .mt-view[hidden] { display: none; }
   .mt-act-h { font: 500 18px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); margin: 0 0 16px; }
@@ -5916,22 +5945,6 @@
      Eleme's alone now — but the band and the wrapper keep the same two habits,
      because the list inherited them rather than dropping them. When Eleme is
      ported onto the channel-page pattern, it inherits them too. */
-  .el-tablewrap { border: 1px solid var(--td-border); background: var(--td-surface); }
-  #el-products-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  #el-products-table thead th {
-    position: sticky; top: 56px; z-index: 5;
-    background: var(--td-header); color: var(--td-text);
-    font: 500 13px var(--f-sans); letter-spacing: 0; text-transform: none; text-align: left;
-    padding: 8px 16px; border-bottom: 1px solid var(--td-border); border-radius: 0; white-space: nowrap;
-  }
-  #el-products-table td {
-    padding: 16px; border-top: 1px solid var(--td-border); border-bottom: 0;
-    vertical-align: top; font-size: 15px; color: var(--td-text);
-  }
-  #el-products-table tbody tr:hover { background: var(--td-raised); }
-  /* Long listing names must wrap inside their fixed column, never widen it. */
-  #el-products-table td { overflow-wrap: anywhere; }
-
   /* ══ Eleme channel page ══════════════════════════════════════════════════
      Ported onto the same pattern as the Meituan tab. The page previously had
      ZERO css rules — every colour and size lived in an inline style attribute,
@@ -5970,20 +5983,11 @@
   .el-status { font: 400 15px/1.6 var(--f-sans); color: var(--td-text2); margin: 4px 0 0; font-variant-numeric: tabular-nums; }
   .el-status .att { color: var(--td-amber-ink); }
 
-  .el-chanrow { display: flex; align-items: center; justify-content: flex-end; margin-bottom: 16px; }
-  .el-chan { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
-  .el-chan .lab { font: 400 13px var(--f-sans); color: var(--td-text2); }
-  .el-chan input { appearance: none; -webkit-appearance: none; margin: 0; width: 36px; height: 20px; border-radius: 999px; background: var(--td-border); border: none; position: relative; cursor: pointer; transition: background 200ms cubic-bezier(.16,1,.3,1); flex: none; }
-  .el-chan input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 14px; height: 14px; border-radius: 999px; background: var(--td-surface); transition: left 200ms cubic-bezier(.16,1,.3,1); }
-  .el-chan input:checked { background: var(--td-sage); }
-  .el-chan input:checked::after { left: 19px; }
-  .el-chan input:focus-visible { outline: 2px solid var(--td-sage); outline-offset: 2px; }
-
-  /* ── Tile row + one notice, the same shape the Meituan page uses (which is
-     the shape the Orders page uses). Replaces the store cards: the tiles
-     headline the numbers an operator acts on and split each per store
-     underneath, and health is not permanent furniture — the notice exists only
-     while a store needs a person. */
+  /* ── Tile row + one line per store, the same shape the Meituan page uses
+     (which is the shape the Orders page uses). The tiles headline the numbers
+     an operator acts on and split each per store underneath; the store lines
+     carry each store's health, its catalogue freshness and the one action that
+     unblocks it. */
   .el-tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; margin-bottom: 32px; }
   .el-tile { background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 14px; padding: 24px; }
   .el-tile .k { font: 400 13px var(--f-sans); color: var(--td-text2); }
@@ -5991,13 +5995,6 @@
   .el-tile .v.att { color: var(--td-amber-ink); }
   .el-tile .s { font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 8px; font-variant-numeric: tabular-nums; }
   @media (max-width: 900px) { .el-tiles { grid-template-columns: 1fr; } }
-
-  .el-notice { display: flex; align-items: center; gap: 16px; background: var(--td-surface); border: 1px solid var(--td-amber); border-radius: 14px; padding: 16px 24px; margin-bottom: 32px; }
-  .el-notice .dot { width: 8px; height: 8px; border-radius: 999px; background: var(--td-amber); flex: none; }
-  .el-notice .m { flex: 1; min-width: 0; font: 400 15px/1.6 var(--f-sans); color: var(--td-text); }
-  .el-notice .m b { font-weight: 500; }
-  .el-notice .sub { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin-top: 4px; }
-  .el-notice .inp { max-width: 176px; }
 
   /* Chip filters + toolbar, as on Meituan. "Needs a size" is Eleme-only and
      earns its place: here a size CAN be targeted, so a multi-size listing with
@@ -6019,29 +6016,10 @@
   .el-search { flex: 1 1 280px; font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; }
   .el-search::placeholder { color: var(--td-text2); }
 
-  /* Table cells */
-  .el-pcell { display: flex; gap: 16px; }
-  .el-thumb { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; border: 1px solid var(--td-border); flex: none; background: var(--td-raised); }
-  .el-thumb-ph { width: 40px; height: 40px; border-radius: 8px; background: var(--td-raised); border: 1px solid var(--td-border); flex: none; }
-  .el-pname { font-weight: 500; }
-  .el-pname .vl { font-weight: 400; color: var(--td-text2); }
-  .el-pmeta { font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 4px; }
-  .el-psku { display: inline-block; margin-top: 8px; font: 400 13px var(--f-sans); color: var(--td-text2); background: var(--td-raised); border: 1px solid var(--td-border); border-radius: 8px; padding: 0 8px; font-variant-numeric: tabular-nums; }
-  .el-pill { display: inline-flex; align-items: center; gap: 8px; font: 500 13px var(--f-sans); border-radius: 999px; padding: 0 8px; }
-  .el-pill .d { width: 8px; height: 8px; border-radius: 999px; background: currentColor; flex: none; }
-  .el-pill.ok  { background: var(--td-sage-tint);  color: var(--td-sage-ink); }
-  .el-pill.att { background: var(--td-amber-tint); color: var(--td-amber-ink); }
-  .el-pill.off { background: var(--td-raised);     color: var(--td-text2); }
-  .el-cellsub { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin-top: 8px; }
-  .el-empty { padding: 24px; text-align: center; font: 400 15px var(--f-sans); color: var(--td-text2); }
-  /* One store per cell now, so no in-cell separator is needed. */
-  .el-cellhd { display: flex; align-items: center; gap: 8px; }
-  .el-cellhd .nm { font: 400 13px var(--f-sans); color: var(--td-text2); }
-
   /* §1.3: body is lh 1.6, 1.7 for CJK runs — half of every label here is 中文. */
   html[data-ui-lang="cn"] #tab-eleme { line-height: 1.7; }
   html[data-ui-lang="cn"] #tab-eleme .el-status,
-  html[data-ui-lang="cn"] #tab-eleme .el-notice .m { line-height: 1.7; }
+  html[data-ui-lang="cn"] #tab-eleme .el-storeline .st { line-height: 1.7; }
 
   .el-tabs { display: flex; align-items: center; gap: 24px; border-bottom: 1px solid var(--td-border); margin: 0 0 16px; }
   .el-tab { appearance: none; background: none; border: none; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 8px 0; font: 500 13px var(--f-sans); color: var(--td-text2); cursor: pointer; display: flex; align-items: center; gap: 8px; }
@@ -6053,31 +6031,6 @@
   .el-tabs-grow { flex: 1 1 auto; }
   .el-tabs .btn { align-self: center; margin-bottom: 8px; }
 
-  .el-how { margin: 0 0 16px; font: 400 13px var(--f-sans); color: var(--td-text2); }
-  .el-how summary { cursor: pointer; }
-  .el-how > div { margin-top: 8px; padding: 16px 24px; background: var(--td-raised); border: 1px solid var(--td-border); border-radius: 14px; max-width: 70ch; }
-  .el-cap { font: 400 13px var(--f-sans); color: var(--td-text2); margin: 0 0 16px; font-variant-numeric: tabular-nums; }
-
-  /* The size picker on a multi-size listing, and the flag for one with no size
-     chosen — the only state on this table that needs a person. */
-  .el-nameinp { display: block; width: 100%; margin-top: 8px; font: 400 15px var(--f-sans); }
-  .el-size { display: block; width: 100%; margin-top: 8px; font: 400 15px var(--f-sans); }
-  .el-size.warn { border-color: var(--td-amber); }
-  .el-guess { font: 500 13px var(--f-sans); color: var(--td-amber-ink); }
-
-  #el-products-table .toggle-label { display: inline-flex; align-items: center; opacity: 0; transition: opacity 200ms cubic-bezier(.16,1,.3,1); }
-  #el-products-table tr:hover .toggle-label,
-  #el-products-table .toggle-label:focus-within,
-  #el-products-table .toggle-label:has(input:not(:checked)) { opacity: 1; }
-  #el-products-table .toggle-label input { appearance: none; -webkit-appearance: none; margin: 0; width: 32px; height: 18px; border-radius: 999px; background: var(--td-border); border: none; position: relative; cursor: pointer; transition: background 200ms cubic-bezier(.16,1,.3,1); flex: none; }
-  #el-products-table .toggle-label input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 999px; background: var(--td-surface); transition: left 200ms cubic-bezier(.16,1,.3,1); }
-  #el-products-table .toggle-label input:checked { background: var(--td-sage); }
-  #el-products-table .toggle-label input:checked::after { left: 17px; }
-  @media (prefers-reduced-motion: reduce) {
-    #el-products-table .toggle-label, #el-products-table .toggle-label input,
-    #el-products-table .toggle-label input::after { transition: none; }
-  }
-
   .el-act-h { font: 500 18px var(--f-sans); letter-spacing: -.01em; color: var(--td-text); margin: 0 0 16px; }
   .el-act-h + .el-log { margin-bottom: 32px; }
   .el-log { font: 400 13px/1.7 var(--f-sans); max-height: 264px; overflow: auto; border: 1px solid var(--td-border); border-radius: 14px; padding: 16px 24px; background: var(--td-surface); color: var(--td-text2); font-variant-numeric: tabular-nums; }
@@ -6085,9 +6038,6 @@
   .el-log .bad { color: var(--td-brick-ink); }
   .el-log .empty { color: var(--td-text2); }
 
-  @media (prefers-reduced-motion: reduce) {
-    .el-chan input, .el-chan input::after { transition: none; }
-  }
 
 
 

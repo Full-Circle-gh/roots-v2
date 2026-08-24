@@ -11361,12 +11361,19 @@
 
   <!-- ── Eleme Sync ── -->
   <section id="tab-eleme">
-    <!-- Same four parts as the Meituan page: §1.7 header, one card per store,
-         sub-tabs, the work. What went: a title with both languages glued into
-         one node, two purpose-line paragraphs (§1.7 bans them — they describe
-         what the page is for and read the same every day), four KPI tiles that
-         summed the stores into numbers that could not say which store was
-         unwell, and an orders card that has never held a row. -->
+    <!-- Same four parts as the Meituan page: §1.7 header, tiles, one line per
+         store, sub-tabs, the work. What went: a title with both languages glued
+         into one node, two purpose-line paragraphs (§1.7 bans them — they
+         describe what the page is for and read the same every day), four KPI
+         tiles that summed the stores into numbers that could not say which
+         store was unwell, and an orders card that has never held a row.
+
+         2026-08-24: the mapping table became a list + panel, the same one the
+         Meituan page ships (.el-split below, styled by the shared block in
+         retail-admin.css). The "How matching works" disclosure and the
+         catalogue caption went with it — the first is one-time help that now
+         sits in the panel on the products that need it, the second is per-store
+         and now rides on that store's line. -->
     <div class="el-pagehead">
       <div class="el-pagehead-t">
         <h2 data-lang-block="en">Eleme</h2>
@@ -11374,13 +11381,16 @@
         <p class="el-status" id="el-status" data-no-i18n></p>
       </div>
       <!-- §1.7: no create action on this page, so the Dusk slot stays empty
-           rather than take a secondary. Push all stock sits by the tabs. -->
+           rather than take a secondary. Push all stock sits on the tile whose
+           number it changes. -->
     </div>
 
-    <!-- Three tiles and, only while a store needs a person, one notice.
-         Painted by elRenderHead() from /eleme/status.stores. -->
+    <!-- Three tiles, then one line per store — both painted by elRenderHead()
+         from /eleme/status.stores. The line carries that store's state, how
+         fresh its catalogue is (the name and size pickers read that cache, so
+         a stale one is worth saying) and the one action that unblocks it. -->
     <div class="el-tiles" id="el-tiles"></div>
-    <div id="el-notice"></div>
+    <div class="el-storelines" id="el-storelines"></div>
 
     <div class="el-tabs" role="tablist">
       <button id="el-tab-products" class="el-tab active" role="tab" onclick="elView('products')">
@@ -11388,8 +11398,8 @@
       <button id="el-tab-activity" class="el-tab" role="tab" onclick="elView('activity')">
         Activity · 同步日志</button>
       <span class="el-tabs-grow"></span>
-      <button class="btn btn-sm" id="el-pushall-btn" onclick="elPushAll()"
-        title="Queue a fresh stock push for every mapped product">Push all stock · 推送全部库存</button>
+      <!-- Push all stock moved onto the tile whose number it changes; beside
+           the tabs it had nothing to relate to, since tabs switch views. -->
     </div>
 
     <div id="el-view-products" class="el-view">
@@ -11400,30 +11410,23 @@
                data-ph-en="Search product, SKU or listing name…" data-ph-cn="搜索商品、货号或饿了么商品名…"
                placeholder="Search product, SKU or listing name…" oninput="elFilterProducts()">
       </div>
-      <details class="el-how">
-        <summary>How matching works · 匹配原理</summary>
-        <div data-lang-block="en">
-          Eleme listings carry no article number, so a product is matched by picking its
-          exact listing name. A listing that holds several sizes needs the size picked too,
-          otherwise the stock pushed to it is a guess.
+      <!-- The list holds NO controls: one line per product, one state dot per
+           store. The name field, the size picker, the sync switch and the
+           sentences live in the panel, once, for the row you picked — so the
+           list stays one line however many stores this channel grows.
+           The dot columns are rendered from the store list (elRenderListHead),
+           so N stores work. -->
+      <div class="el-split">
+        <div class="el-list">
+          <div class="el-lhead">
+            <span class="who">Product · 商品</span>
+            <span class="dots" id="el-lh-stores" data-no-i18n></span>
+          </div>
+          <div id="el-list-body" data-no-i18n></div>
         </div>
-        <div data-lang-block="cn">
-          饿了么商品没有货号,只能按商品名精确匹配。若该商品含多个规格,还需选择规格,
-          否则推送的库存并不准确。
-        </div>
-      </details>
-      <div id="el-catalogue-caption" class="el-cap" data-no-i18n></div>
-
-      <div class="el-tablewrap">
-        <table id="el-products-table">
-          <!-- colgroup + head are rendered from the store list (elRenderTableHead)
-               so the table follows however many stores are active. Plain
-               percentages only: under table-layout:fixed a math function on a
-               col width is silently ignored and the column goes auto. -->
-          <colgroup id="el-colgroup"></colgroup>
-          <thead><tr id="el-headrow"></tr></thead>
-          <tbody id="el-tbody" data-no-i18n></tbody>
-        </table>
+        <!-- hidden until the first render puts a product in it: an empty
+             bordered card while the list loads is noise, not a state. -->
+        <aside class="el-panel" id="el-panel" data-no-i18n hidden></aside>
       </div>
     </div>
 

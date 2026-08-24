@@ -301,8 +301,8 @@
         '{step:\'creds\', store:\'' + esc(code) + '\'})">' + cuT('Sign in again', '重新登录') + '</button>';
     }
     const isInstant = _storeB && code === _storeB.code;
-    return '<code class="mt-psku">' + esc(isInstant ? 'node scripts/shangou-export-session.js'
-                                                    : 'node scripts/meituan-login.js ' + code) + '</code>';
+    return '<code class="mt-cmd">' + esc(isInstant ? 'node scripts/shangou-export-session.js'
+                                                   : 'node scripts/meituan-login.js ' + code) + '</code>';
   }
 
   function mtRenderLog(id, rows, isStock) {
