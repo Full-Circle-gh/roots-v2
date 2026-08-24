@@ -10856,6 +10856,23 @@ function annotateShipBy(r) {
   }
   return r;
 }
+// Pulls province/city/district off the 省/市/区 administrative-suffix markers
+// in a run-on Chinese address string, e.g. gzgrocery's dispatch-note scrape
+// ("广东省广州市花都区新华秀全街道中诚璟泷湾1栋1402" — one token, no separators,
+// because that source never carries structured city/district fields at all).
+// Returns null when the string doesn't open with a recognisable region trail,
+// so a genuinely freeform address is left for the caller's own fallback.
+function splitCnAddressByMarkers(raw) {
+  const s = String(raw || '').trim();
+  if (!/[一-鿿]/.test(s)) return null;
+  // Bare "州" is deliberately excluded from the city marker: 广州/福州/苏州/杭州
+  // etc. carry it as part of the city NAME (not a suffix) and always spell out
+  // 市 right after it in stored addresses — matching bare "州" grabs "广州" and
+  // leaves the real "市" stranded in the district group.
+  const m = /^(.*?(?:省|自治区))?(.*?(?:市|自治州|地区|盟))(.*?(?:区|县|市|旗))?/.exec(s);
+  if (!m || !m[2]) return null;
+  return { province: (m[1] || '').trim(), city: m[2].trim(), district: (m[3] || '').trim() };
+}
 // Adds a short shipping destination to an order list row so operators can see
 // WHERE a parcel is headed without opening each order. Pulls city + district
 // from the structured address_json (falling back to the leading tokens of the
@@ -10880,11 +10897,22 @@ function annotateShipTo(r) {
     } catch (_) { /* malformed JSON — fall through to address_full */ }
   }
   if (!city && r.address_full) {
-    // address_full = "province city district address detail" joined by spaces.
-    const parts = String(r.address_full).trim().split(/\s+/);
-    province = parts[0] || '';
-    city = parts[1] || parts[0] || '';
-    district = parts[2] || '';
+    const raw = String(r.address_full).trim();
+    const parts = raw.split(/\s+/);
+    if (parts.length > 1) {
+      // address_full = "province city district address detail" joined by
+      // spaces (manual admin orders).
+      province = parts[0] || '';
+      city = parts[1] || parts[0] || '';
+      district = parts[2] || '';
+    } else {
+      // No spaces to split on — a run-on string (gzgrocery). Pull the region
+      // off its 省/市/区 markers instead, or the whole address renders as a
+      // fake "city" in the list.
+      const cjk = splitCnAddressByMarkers(raw);
+      if (cjk) { province = cjk.province; city = cjk.city; district = cjk.district; }
+      else { city = raw; }
+    }
   }
   if (!city && !province) return r;
   // Resolve to canonical Chinese + English so the list can render in whichever
