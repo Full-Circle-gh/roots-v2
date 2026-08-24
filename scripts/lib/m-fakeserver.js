@@ -200,6 +200,16 @@ const ORDERS = [
     alipay_ocr_verdict: 'mismatch', subtotal: 700, shipping_fee: 26 },
 ];
 
+// An order the list never returns. A customer's older orders are pages down the
+// Orders list or behind whichever filter is on, so the record has to be able to
+// open one the app does not hold — this is the row that proves it, defined once
+// and served both as the record's third recent order and as /orders/207.
+const ARCHIVED_ORDER = { id: 207, order_no: 'RT-…207', channel: 'wechat', recipient_name: 'Chen Meiling',
+  nickname: 'Chen Meiling', recipient_phone: '138****2841', total: 88.5, placed_at: '2026-07-02 11:20:00',
+  status: 'delivered', ship_city: 'Guangzhou', ship_district: 'Tianhe', store_name_en: 'Tianhe store',
+  store_name_cn: '天河店', item_count: 2, unit_count: 3, payment_method: 'wechat',
+  fulfillment_type: 'delivery', subtotal: 76.5, shipping_fee: 12, seen_at: '2026-07-02 11:40:00' };
+
 // Column names from the real SELECT: lifetime_spend, orders_count (subquery
 // alias), last_login_at — not `total_spent` / `last_seen`, which the first
 // draft invented and which made every customer read "¥0 · never signed in".
@@ -303,6 +313,7 @@ function fakeServer() {
     var D=${dump(D)}, ORDERS=${dump(ORDERS)}, CUSTOMERS=${dump(CUSTOMERS)}, PRODUCTS=${dump(PRODUCTS)},
         INVOICES=${dump(INVOICES)}, ACTIVITY=${dump(ACTIVITY)}, ACT_SUMMARY=${dump(ACT_SUMMARY)},
         ACT_DIGEST=${dump(ACT_DIGEST)}, REFERRALS=${dump(REFERRALS)}, TOPUPS=${dump(TOPUPS)},
+        ARCHIVED_ORDER=${dump(ARCHIVED_ORDER)},
         VOUCHERS=${dump(VOUCHERS)}, FLASH=${dump(FLASH)}, BROADCASTS=${dump(BROADCASTS)},
         REVIEWS=${dump(REVIEWS)}, FEEDBACK=${dump(FEEDBACK)};
     function body(u){
@@ -310,17 +321,33 @@ function fakeServer() {
         tenant:{id:1,name:'Roots',entitlements:{}}}};
       var p=u.replace(/^.*\\/api\\/retail-admin/,'');
       if(p.indexOf('/orders?')===0) return {success:true,data:ORDERS,meta:{total:31}};
-      if(/^\\/orders\\/\\d+$/.test(p)) return {success:true,data:Object.assign({},ORDERS[0],{
-        items:[{name_en:'Organic carrots 500g',name_cn:'有机胡萝卜 500g',qty:1,unit_price:18,line_total:18},
-               {name_en:'Oat milk 1L',name_cn:'燕麦奶 1L',qty:2,unit_price:32,line_total:64}],
-        subtotal:300, delivery_fee:12, ship_name:'Chen Meiling', ship_phone:'138****2841',
-        ship_address:'12 Linhe Rd, Tianhe, Guangzhou', shipments:[]})};
+      // Answers for the id that was ASKED for. It used to hand back ORDERS[0]
+      // whatever the path said, which is fine for a tap on the list (the row is
+      // already the right order) and wrong for every other way in: the customer
+      // record opens an order by id, matches the number that comes back against
+      // the one it asked for, and would have been told a different order.
+      if(/^\\/orders\\/\\d+$/.test(p)){
+        var oid=Number(p.slice(8));
+        var base=ORDERS.concat([ARCHIVED_ORDER]).filter(function(o){return o.id===oid;})[0]
+          || Object.assign({},ORDERS[0],{id:oid,order_no:'RT-…'+oid,seen_at:null});
+        return {success:true,data:Object.assign({},base,{
+          items:[{name_en:'Organic carrots 500g',name_cn:'有机胡萝卜 500g',qty:1,unit_price:18,line_total:18},
+                 {name_en:'Oat milk 1L',name_cn:'燕麦奶 1L',qty:2,unit_price:32,line_total:64}],
+          subtotal:300, delivery_fee:12, ship_name:'Chen Meiling', ship_phone:'138****2841',
+          ship_address:'12 Linhe Rd, Tianhe, Guangzhou', shipments:[]})};
+      }
       if(p.indexOf('/customers?pageSize=1&')===0) return {success:true,data:[],
         segments:{all:242,new_week:6,sleeping:31,blocked:1},returning:{buyers:17,returners:9},customers_on_file:242};
       if(p.indexOf('/customers?')===0) return {success:true,data:CUSTOMERS,meta:{total:242}};
       if(/^\\/customers\\/\\d+$/.test(p)) return {success:true,data:{customer:CUSTOMERS[0],
         stats:{orders:{count:24,total:6240,avg:260},points:2410,wallet:82,joined:'2025-04-02'},
-        recent_orders:ORDERS.slice(0,2), addresses:[{line:'12 Linhe Rd, Tianhe',is_default:1}]}};
+        recent_orders:ORDERS.slice(0,2).concat([ARCHIVED_ORDER]).map(function(o){
+          // The route selects placed_at AS created_at, so the record's rows do
+          // not carry placed_at at all — which is exactly why the date under
+          // each one rendered blank for as long as it did.
+          return {id:o.id,order_no:o.order_no,status:o.status,total:o.total,created_at:o.placed_at};
+        }),
+        addresses:[{line:'12 Linhe Rd, Tianhe',is_default:1}]}};
       if(p.indexOf('/products?')===0) return {success:true,data:PRODUCTS};
       if(p.indexOf('/invoices')===0) return {success:true,data:INVOICES,counts:{requested:1,issued:2}};
       if(p.indexOf('/activity?')===0) return {success:true,total:3,rows:ACTIVITY,summary:ACT_SUMMARY,digest:ACT_DIGEST};

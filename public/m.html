@@ -466,6 +466,11 @@ const state = {
   liveOrders:null, liveDetail:null, liveKpis:null, liveVitals:null, liveAttn:null,
   liveStatusCounts:null, liveChannelCounts:null, liveInvoiceCounts:null, liveProductsLoaded:false,
   custLoading:false, custMetaLoaded:false, detailMounted:false, mirrorTried:false, ent:{}, me:null,
+  /* The order sheet, when the thing that opened it was the customer record.
+     detailFetch says the sheet has nothing to draw yet and must hold the
+     screen; orderOverCust says which of the two sheets is on top, which
+     decides both their z-indexes and the order Back closes them in. */
+  detailFetch:false, orderOverCust:false,
   /* One per sheet that keeps reading after it opens — see sheetCustomer. */
   custMounted:false, prodMounted:false, poMounted:false,
 
@@ -545,7 +550,12 @@ reg('ordersRetry', ()=>{ state.ordersLoadErr=null; loadOrdersPage(); });
 reg('custRetry', ()=>{ state.custLoadErr=null; loadCustomers(); });
 reg('ordersClear', ()=>{ state.statusF='all'; state.channelF='all'; state.storeF='all'; state.orderQ=''; loadOrdersPage(); });
 reg('openOrder', id=>{ state.detailId=id; state.drag=0; render(); });
-reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; state.orderErr=null; state.orderBusy=null; render(); });
+reg('closeOrder', ()=>{ state.detailId=null; state.detailActions=false; state.orderErr=null; state.orderBusy=null;
+  /* Both belong to the order, not to the app: leaving orderOverCust set
+     would push the NEXT customer record under a sheet that is no longer
+     there, and leaving detailFetch set would draw the loading shell over
+     the next order that has not finished reading. */
+  state.orderOverCust=false; state.detailFetch=false; render(); });
 reg('detailActions', ()=>{ state.detailActions=true; render(); });
 reg('closeActions', ()=>{ state.detailActions=false; render(); });
 reg('closeAsk', ()=>{ state.ask=null; state.askErr=null; render(); });
@@ -719,6 +729,9 @@ reg('custClear', ()=>{ state.custSeg='all'; state.custTier='all'; state.custChan
    puts that order straight back. */
 reg('openCustomerFromOrder', id=>{
   state.detailActions=false;
+  // The record goes back on top: this is order → record, whichever way round
+  // the pair was stacked a moment ago (see openCustOrder).
+  state.orderOverCust=false;
   CMD.openCustomer(id);
 });
 /* custMounted is set AFTER the first render, so the sheet rises once and then
@@ -4422,13 +4435,41 @@ function invoiceBlock(o){
     ${!issued?`<div style="font-size:12.5px;color:var(--text-secondary);margin-top:10px">${T('Issuing it is a desktop job.','开具发票请在电脑端。')}</div>`:''}
   </div>`;
 }
+/* The sheet's chrome around a read that has not landed yet.
+   Every other way into an order goes through a row the app already holds, so
+   there has always been something to paint on the first frame. An order opened
+   from the customer record is different: the tenth-oldest order of a customer
+   is not on the page of the list this app loaded, and often is not in it at
+   all — findOrder returns nothing and the sheet used to return nothing with
+   it, so the tap painted a blank screen until the fetch came back, and painted
+   nothing ever if it failed. This is the number that was tapped, a Close that
+   works, and one line saying which of the two it is doing. */
+function sheetOrderShell(){
+  const noAnim=state.detailMounted?'animation:none;':'';
+  return `<div class="scrim" style="z-index:45;${noAnim}" onclick="APP.cmd('closeOrder')"></div>
+   <div class="sheet" id="detailSheet" style="top:46px;overflow:hidden;z-index:46;${noAnim}">
+     <div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)">
+       <div class="grabber"></div>
+       <div style="display:flex;align-items:center;gap:12px;min-width:0">
+         <span class="num" style="font-size:18px;font-weight:500;letter-spacing:-.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escAttr(state.detailId)}</span>
+         <span style="flex:1"></span>
+         <button class="iconbtn" style="width:40px;height:40px" onclick="APP.cmd('closeOrder')" aria-label="${T('Close','关闭')}">${ic('x',22,2)}</button>
+       </div></div>
+     <div style="flex:1;min-height:0;overflow-y:auto;padding:16px 16px calc(env(safe-area-inset-bottom,0px) + 24px)">
+       ${state.orderErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
+         <span style="flex:none;color:var(--brick-ink);display:flex;margin-top:2px">${ic('triangle-alert',18)}</span>
+         <span style="font-size:14px;color:var(--brick-ink)">${state.orderErr}</span></div>`
+       :`<div style="font-size:15px;color:var(--text-secondary)">${T('Loading…','加载中…')}</div>`}</div>
+   </div>`;
+}
 /* The hoisted tracking block is the ORDER-level waybill, which is the primary
    shipment's and only that one. On a split order it would show the Air parcel's
    number at the top, repeat it inside the Air card, and never mention the Land
    one — so once an order has parcels, each card carries its own and the hoisted
    block stands down. */
 function sheetOrderDetail(){
-  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId); if(!o) return '';
+  const o=(state.liveDetail&&state.liveDetail.id===state.detailId)?state.liveDetail:findOrder(state.detailId);
+  if(!o) return state.detailFetch?sheetOrderShell():'';
   const isPO=!!o.supplier;
   const trans=state.dragging?'none':'transform .3s var(--ease-settle)';
   // On the fetch re-render the sheet is already up — skip the slide-up/fade so it
@@ -5353,6 +5394,44 @@ const custRow=(l,r,sub)=>`<div style="display:flex;align-items:flex-start;justif
   <span class="num" style="flex:none;font-size:14.5px;text-align:right">${r}</span></div>`;
 const custList=rows=>rows.length?`<div class="list">${rows.map((r,i)=>(i?'<div class="sep"></div>':'')+r).join('')}</div>`:'';
 
+/* The orders themselves, and every one of them opens.
+   This block was five inert lines. An operator reading a customer's history
+   could see that one of their orders came to ¥117.50 and had no way from here
+   to find out what was in it, whether it shipped, or where it went: the number
+   had to be memorised, the record closed, the Orders tab opened and searched —
+   and a customer's tenth-oldest order is not on the page the list has loaded,
+   so often that search found nothing either. The row carries the order's
+   numeric id, which is the whole of what the detail read needs, so the order
+   opens over the record and closing it puts the record straight back.
+
+   Two smaller things were wrong with the line as it stood. The date under the
+   number was blank on every row — the query is `placed_at AS created_at` and
+   this read `r.placed_at`, a field no row has — and the status was missing
+   entirely, so a refunded order and a delivered one read identically.
+
+   The onclick carries the INDEX into recent_orders, never the order number:
+   the number is written into a JS string literal inside an HTML attribute, and
+   the same rule that keeps category names out of chip keys applies here. */
+function custRecentOrders(d){
+  const rows=(d.recent_orders||[]).slice(0,5);
+  if(!rows.length) return '';
+  return custSection(T('Recent orders','最近订单'), `<div class="list">${rows.map((r,i)=>{
+    const sk=ORDER_STATUS[r.status]||null;
+    const sub=[fmtDay(r.created_at||r.placed_at), sk?T(sk[1],sk[2]):''].filter(Boolean).join(' · ');
+    // The id is what the detail read is addressed by. Without one there is
+    // nothing to open, so the row stays a line of text and keeps the chevron
+    // to itself — a chevron on a row that cannot go anywhere is a promise.
+    const go=r.id!=null;
+    const inner=`<span style="flex:1;min-width:0">
+          <span class="num" style="display:block;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escAttr(r.order_no||('#'+r.id))}</span>
+          ${sub?`<span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${sub}</span>`:''}</span>
+        <span class="num" style="flex:none;font-size:15px">${money(CUR,r.total)}</span>
+        ${go?`<span style="flex:none;color:var(--text-secondary);display:flex">${ic('chevron-right')}</span>`:''}`;
+    return `${i?'<div class="sep"></div>':''}
+      ${go?`<button class="row" style="gap:12px" onclick="APP.cmd('openCustOrder',${i})">${inner}</button>`
+          :`<div class="row" style="gap:12px;cursor:default">${inner}</div>`}`;
+  }).join('')}</div>`);
+}
 /* What this person actually buys — the desktop's Top items. */
 function custTopItems(d){
   const t=(d.top_items||[]).slice(0,5);
@@ -5441,14 +5520,7 @@ function sheetCustomer(){
       ${snap(T('Since','注册于'),since)}
     </div>
     <p style="margin:8px 0 0;font-size:13px;color:var(--text-secondary)">${T('Ordered is the goods total before discounts — the same measure the list column shows.','消费为折扣前的商品金额 — 与列表口径一致。')}</p>
-    ${(d.recent_orders||[]).length?`<div style="margin-top:16px">
-      <div style="font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${T('Recent orders','最近订单')}</div>
-      <div class="list">${d.recent_orders.slice(0,5).map((r,i)=>`${i?'<div class="sep"></div>':''}
-        <div style="display:flex;align-items:center;gap:16px;padding:12px 16px">
-          <span style="flex:1;min-width:0">
-            <span class="num" style="display:block;font-size:15px">${r.order_no||('#'+r.id)}</span>
-            <span class="num" style="display:block;font-size:13px;color:var(--text-secondary)">${fmtDay(r.placed_at)}</span></span>
-          <span class="num" style="flex:none;font-size:15px">${money(CUR,r.total)}</span></div>`).join('')}</div></div>`:''}
+    ${custRecentOrders(d)}
     ${(d.addresses||[]).length?`<div style="margin-top:16px">
       <div style="font-size:13px;font-weight:500;color:var(--text-secondary);margin-bottom:8px">${T('Addresses','地址')}</div>
       <div class="list">${d.addresses.slice(0,3).map((a,i)=>`${i?'<div class="sep"></div>':''}
@@ -5472,8 +5544,16 @@ function sheetCustomer(){
      same guard. z-index puts the record ABOVE the order it was opened from
      (46) and below the ask sheet its own Points and Wallet buttons open (49). */
   const noAnim=state.custMounted?'animation:none;':'';
-  return `<div class="scrim" style="z-index:47;${noAnim}" onclick="APP.cmd('closeCustomer')"></div>
-    <div class="sheet" id="custSheet" style="top:46px;overflow:hidden;z-index:48;${noAnim}">
+  /* The stack turns over when the record is the thing that opened the order.
+     A Recent orders row puts the order ON TOP, which is the only place it can
+     be — a sheet the operator just asked for, painted underneath the one they
+     asked from, is a tap that did nothing. So the record steps DOWN to 43/44,
+     under the order's 45/46, rather than the order climbing over 48 and into
+     the ask sheet's 49. Back and the order's own Close both take the order off
+     first and leave the record exactly where it was. */
+  const [zScrim,zSheet]=state.orderOverCust?[43,44]:[47,48];
+  return `<div class="scrim" style="z-index:${zScrim};${noAnim}" onclick="APP.cmd('closeCustomer')"></div>
+    <div class="sheet" id="custSheet" style="top:46px;overflow:hidden;z-index:${zSheet};${noAnim}">
       <div style="flex:none;padding:8px 16px 16px;border-bottom:1px solid var(--border-default)">
         <div class="grabber"></div>
         <div style="display:flex;align-items:center;gap:16px">
@@ -5837,7 +5917,7 @@ function wireDrag(){
   let y0=0;
   const down=e=>{ state.dragging=true; y0=(e.touches?e.touches[0].clientY:e.clientY); };
   const move=e=>{ if(!state.dragging) return; const dy=Math.max(0,(e.touches?e.touches[0].clientY:e.clientY)-y0); const s=document.getElementById('detailSheet'); if(s) s.style.transform=`translateY(${dy}px)`; state.drag=dy; };
-  const up=()=>{ if(!state.dragging) return; state.dragging=false; if(state.drag>110){ state.drag=0; state.detailId=null; render(); } else { state.drag=0; const s=document.getElementById('detailSheet'); if(s){ s.style.transition='transform .3s var(--ease-settle)'; s.style.transform='translateY(0)'; } } };
+  const up=()=>{ if(!state.dragging) return; state.dragging=false; if(state.drag>110){ state.drag=0; CMD.closeOrder(); } else { state.drag=0; const s=document.getElementById('detailSheet'); if(s){ s.style.transition='transform .3s var(--ease-settle)'; s.style.transform='translateY(0)'; } } };
   h.addEventListener('pointerdown',down); window.addEventListener('pointermove',move); window.addEventListener('pointerup',up);
   h.addEventListener('touchstart',down,{passive:true}); window.addEventListener('touchmove',move,{passive:true}); window.addEventListener('touchend',up);
 }
@@ -5959,9 +6039,19 @@ function layers(){
   // about to render anyway. One repaint per Back press.
   for(let i=0;i<state.stack.length;i++) L.push(()=>{ state.stack.pop(); });
   // Order first, record second: the record opens ON TOP of the order it was
-  // opened from, and Back closes this list in reverse — topmost first.
-  if(state.detailId) L.push(()=>{ state.detailId=null; });
-  if(state.custId) L.push(()=>{ state.custId=null; });
+  // opened from, and Back closes this list in reverse — topmost first. When the
+  // record is what opened the ORDER — a Recent orders row — the pair is stacked
+  // the other way up and this list has to follow it, or Back takes away the
+  // record underneath and leaves the order it was reached from sitting alone.
+  const dropOrder=()=>{ state.detailId=null; state.orderOverCust=false; state.detailFetch=false; };
+  const dropCust=()=>{ state.custId=null; };
+  if(state.orderOverCust){
+    if(state.custId) L.push(dropCust);
+    if(state.detailId) L.push(dropOrder);
+  } else {
+    if(state.detailId) L.push(dropOrder);
+    if(state.custId) L.push(dropCust);
+  }
   if(state.productSku) L.push(()=>{ state.productSku=null; });
   if(state.poId!=null) L.push(()=>{ state.poId=null; });
   if(state.chanSheet) L.push(()=>{ state.chanSheet=null; });
@@ -7053,6 +7143,9 @@ reg('openOrder', id=>{
   });
   state.detailId=id; state.drag=0; state.liveDetail=null; state.detailMounted=false;
   state.orderErr=null; state.orderBusy=null;
+  // A tap on the LIST always has its row, so there is nothing to hold the
+  // screen for, and a record open behind this one stays where it belongs.
+  state.detailFetch=false; state.orderOverCust=false;
   if(row&&row._id!=null){
     render();
     // Sheet has animated once now — suppress the slide-up on the fetch re-render
@@ -7060,6 +7153,55 @@ reg('openOrder', id=>{
     state.detailMounted=true;
     api('/orders/'+row._id).then(o=>{ if(state.detailId===id){ state.liveDetail=mapDetail(o); render(); } }).catch(()=>{});
   } else { render(); state.detailMounted=true; }
+});
+/* An order opened from the customer record's Recent orders.
+   Two things make this different from a tap on the Orders list. The row is an
+   INDEX into the record's own array rather than an order number, because the
+   number would have to survive being written into a JS string literal inside
+   an HTML attribute, and an apostrophe in one would end that literal early.
+   And the order is very often not in the list this app has loaded — a
+   customer's older orders are pages down it, or behind whichever filter is on
+   — so there is no row to fall back on and the sheet is built from the read
+   alone; sheetOrderShell holds the screen while that read is in flight.
+
+   The read is authoritative about the order's own number: detailId is set
+   again from what came back, because sheetOrderDetail matches the two and a
+   record row whose order_no is stale, or absent, would otherwise leave the
+   sheet waiting on a match that can never happen.
+
+   There is one detailId, so opening an order here REPLACES an order the record
+   was itself opened from, and closing this one lands on the record rather than
+   on that one. That is deliberate: the order it replaced was placed by this
+   same customer, so it is a row in the list the operator is looking at — one
+   tap away, in the place they would look for it. */
+reg('openCustOrder', i=>{
+  const r=((state.custDetail&&state.custDetail.recent_orders)||[])[i];
+  if(!r||r.id==null) return;
+  const no=r.order_no||('#'+r.id);
+  /* The read below stamps seen_at server-side, exactly as a tap on the list
+     does, so the row's dot goes out here too — in BOTH lists, because the
+     drawer reads one and the dot the other. Without this an order first opened
+     from a record kept its dot until the next reload, having already been seen. */
+  [state.ordersView,state.liveOrders].forEach(list=>{
+    if(Array.isArray(list)){ const row=list.find(o=>o._id===r.id); if(row) row.isNew=false; }
+  });
+  state.detailId=no; state.drag=0; state.liveDetail=null; state.detailMounted=false;
+  state.detailActions=false; state.orderErr=null; state.orderBusy=null;
+  state.orderOverCust=true; state.detailFetch=true;
+  render();
+  state.detailMounted=true;
+  api('/orders/'+r.id).then(o=>{
+    if(state.detailId!==no) return;
+    const d=mapDetail(o);
+    state.liveDetail=d; state.detailId=d.id; state.detailFetch=false; render();
+  }).catch(e=>{
+    // A redirect to the login page is already under way — an error painted over
+    // a screen that is leaving is noise nobody can act on.
+    if(String(e.message)==='auth'||state.detailId!==no) return;
+    state.orderErr=T('This order could not be opened. Close and try again.',
+                     '无法打开该订单，请关闭后重试。');
+    render();
+  });
 });
 
 /* The operator's role, the same read the desktop bootstraps RA_POS from. It
