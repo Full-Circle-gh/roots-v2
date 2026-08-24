@@ -103,10 +103,20 @@ function sliceTemplate(src, anchor) {
 
 // ── The predicates, lifted out of routes/retail.js ────────────────────────
 // EVALUATED, not pattern-matched: what runs below is the string the route hands
-// to SQLite.
+// to SQLite. The ONE shared clause (REVIEW_WAITING_SQL) plus every query that
+// wraps it, so a change to the clause moves all of them at once — which is the
+// property this whole file exists to hold.
+const WAITING_SRC = sliceStatement(RETAIL_JS, 'const REVIEW_WAITING_SQL =');
 const RV_OPEN_SRC = sliceStatement(RETAIL_JS, 'const RV_OPEN =');
 const rvSql = (anchor) => vm.runInNewContext(
-  `(() => { ${RV_OPEN_SRC} return ${sliceTemplate(RETAIL_JS, anchor)}; })()`, {});
+  `(() => { ${WAITING_SRC} ${RV_OPEN_SRC} return ${sliceTemplate(RETAIL_JS, anchor)}; })()`, {});
+// The Reviews page's own two queries, read the same way — the whole point of the
+// shared clause is that these are the SAME string, and only a test can hold that.
+const pageSql = (anchor) => vm.runInNewContext(
+  `(() => { ${WAITING_SRC} return ${sliceTemplate(RETAIL_JS, anchor)}; })()`, {});
+const PAGE_SUMMARY_SQL = pageSql('const q1 = tdb().prepare(');
+const PAGE_LOW_SQL = pageSql('summary.waiting_low = tdb().prepare(');
+const DISMISS_SELECT_SQL = pageSql('const waiting = tdb().prepare(');
 const RV_COUNT_SQL = rvSql('const rvCount = tdb().prepare(');
 const RV_LOW_SQL = rvSql('const rvLow = tdb().prepare(');
 const RV_ITEMS_SQL = rvSql('const rvItems = tdb().prepare(');
@@ -132,16 +142,18 @@ let rseq = 0;
 function seedReview(db, row = {}) {
   const r = {
     rating: 5, comment: 'Lovely.', reply: null, is_visible: 1,
-    created_at: '2026-08-20 09:00:00', ...row,
+    dismissed_at: null, created_at: '2026-08-20 09:00:00', ...row,
   };
   // The id is set explicitly and shared with the three FK columns: the returned
   // handle has to BE the row's id for the ordering assertions to mean anything,
   // and rseq keeps climbing across the fresh database each case opens.
   const n = ++rseq;
   db.prepare(`INSERT INTO retail_reviews
-      (id, customer_id, product_id, order_id, rating, comment, reply, is_visible, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(n, n, n, n, r.rating, r.comment, r.reply, r.is_visible, r.created_at);
+      (id, customer_id, product_id, order_id, rating, comment, reply, is_visible,
+       dismissed_at, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(n, n, n, n, r.rating, r.comment, r.reply, r.is_visible,
+      r.dismissed_at, r.created_at);
   return n;
 }
 const rvCount = (db) => db.prepare(RV_COUNT_SQL).get().n;
@@ -183,9 +195,46 @@ const fbIds = (db) => fbItems(db).map(r => r.id);
 // ─────────────────────────────────────────────────────────────────────────
 console.log('\n1 · the reviews queue is the Reviews page\'s queue');
 
-it('a review with no reply is in it', () => {
+it('a written review with no reply is in it', () => {
   const db = freshDb();
   seedReview(db);
+  assert.strictEqual(rvCount(db), 1);
+});
+
+it('a RATING-ONLY review is not — there is nothing to answer', () => {
+  // The clause that made this queue reachable. 12 of its 18 rows were these:
+  // five stars, no words, sometimes a tag. Nobody is waiting on a reply to a
+  // silence, so counting them made the one number the page exists to drive to
+  // zero impossible to move.
+  const db = freshDb();
+  seedReview(db, { comment: null });
+  assert.strictEqual(rvCount(db), 0);
+});
+
+it('and neither is a tags-only one — a tag is not a comment', () => {
+  // The row renders as "No comment — tags only". The tags are the customer
+  // picking from OUR list, not writing to us.
+  const db = freshDb();
+  seedReview(db, { comment: '' });
+  seedReview(db, { comment: '   ' });
+  assert.strictEqual(rvCount(db), 0);
+});
+
+it('a dismissed review is not in it, and nothing was published to get it out', () => {
+  const db = freshDb();
+  const id = seedReview(db, { dismissed_at: '2026-08-24 13:30:00' });
+  assert.strictEqual(rvCount(db), 0);
+  // The whole point of the column: the queue cleared and `reply` — the public
+  // seller response — is untouched.
+  const row = db.prepare('SELECT reply, reply_at FROM retail_reviews WHERE id = ?').get(id);
+  assert.strictEqual(row.reply, null);
+  assert.strictEqual(row.reply_at, null);
+});
+
+it('putting one back returns it to the queue', () => {
+  const db = freshDb();
+  const id = seedReview(db, { dismissed_at: '2026-08-24 13:30:00' });
+  db.prepare('UPDATE retail_reviews SET dismissed_at = NULL WHERE id = ?').run(id);
   assert.strictEqual(rvCount(db), 1);
 });
 
@@ -249,6 +298,43 @@ it('the clock is when the CUSTOMER posted it', () => {
   const db = freshDb();
   seedReview(db, { created_at: '2026-08-07 01:22:29' });
   assert.strictEqual(rvItems(db)[0].waiting_since, '2026-08-07 01:22:29');
+});
+
+it('the page, its count and the dashboard fire run the SAME clause', () => {
+  // Not "equivalent" — the same text. Four readers used to carry four copies,
+  // and a copy is how the fire and the chip it opens end up disagreeing about
+  // one number. Every query below must contain the shared clause verbatim.
+  const clause = vm.runInNewContext(`(() => { ${WAITING_SRC} return REVIEW_WAITING_SQL('r'); })()`, {});
+  for (const [name, sql] of [
+    ['dashboard count', RV_COUNT_SQL], ['dashboard items', RV_ITEMS_SQL],
+    ['page summary', PAGE_SUMMARY_SQL], ['page low count', PAGE_LOW_SQL],
+    ['bulk-dismiss set', DISMISS_SELECT_SQL],
+  ]) {
+    assert.ok(sql.includes(clause), `${name} is not using REVIEW_WAITING_SQL`);
+  }
+  // And the list route's chip filter, which pushes it through the UNION rewriter.
+  assert.ok(/where\.push\('\(' \+ REVIEW_WAITING_SQL\('r'\) \+ '\)'\)/.test(RETAIL_JS),
+    "the Needs-reply chip filter is not using the shared clause");
+  // The clause is WRITTEN exactly once — inside REVIEW_WAITING_SQL, where the
+  // alias is still a `${a}` placeholder — and nowhere is it spelled out against
+  // a fixed alias. That second assertion is the one that catches the next
+  // copy-paste: an alias-baked `r.reply IS NULL` is what a fifth reader looks
+  // like when somebody adds one in a hurry.
+  const defs = (RETAIL_JS.match(/\$\{a\}\.reply IS NULL OR TRIM\(\$\{a\}\.reply\) = ''/g) || []).length;
+  assert.strictEqual(defs, 1, `the clause is written ${defs} times — exactly one definition may exist`);
+  const baked = (RETAIL_JS.match(/r\.reply IS NULL/g) || []).length
+              + (RETAIL_JS.match(/\(reply IS NULL OR TRIM\(reply\)/g) || []).length;
+  assert.strictEqual(baked, 0, `${baked} hand-copied alias-baked copies of the clause survive`);
+});
+
+it('the bulk action reads its set from the DB, never from the client', () => {
+  // A page of 50 cannot dismiss a queue of 300, and an id list built when the
+  // page was drawn would sweep up a review a colleague answered since.
+  const route = sliceBlock(RETAIL_JS, "router.post('/api/retail-admin/reviews/dismiss-waiting'");
+  assert.ok(/const waiting = tdb\(\)\.prepare\(/.test(route), 'the set is not read from the database');
+  assert.ok(!/req\.body[^;]*ids/.test(route), 'the route is taking an id list from the client');
+  assert.ok(/queue_changed/.test(route), 'the stale-count guard is gone');
+  assert.ok(!/reply\s*=/.test(route), 'the bulk action is writing to the PUBLIC reply column');
 });
 
 // ─────────────────────────────────────────────────────────────────────────

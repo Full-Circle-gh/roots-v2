@@ -1599,10 +1599,95 @@ function rvwStars(n) {
   return '★'.repeat(on) + '<span class="rvw-off">' + '★'.repeat(5 - on) + '</span>';
 }
 
-// A real review nobody has answered yet. Seeded rows are excluded by
-// definition — there is no customer on the other end of one.
+// A real review someone is still waiting on. The client mirror of
+// REVIEW_WAITING_SQL (routes/retail.js) — read that comment for why each clause
+// is here; keep the two in step, because this one decides which side of the
+// "Handled" rule a row falls on in the Everything view while the server decides
+// the COUNT, and a disagreement shows up as a group whose size contradicts the
+// chip above it.
+//
+//   • seeded rows never qualify — no customer on the other end of one;
+//   • no reply yet;
+//   • the customer actually WROTE something (tags are not a comment) — a
+//     rating-only review is not a person waiting on an answer;
+//   • not dismissed — read, and judged to need no public answer.
 function rvwNeedsReply(r) {
-  return r.source !== 'synthetic' && !(r.reply && String(r.reply).trim());
+  if (r.source === 'synthetic') return false;
+  if (r.reply && String(r.reply).trim()) return false;
+  if (!(r.comment && String(r.comment).trim())) return false;
+  if (r.dismissed_at) return false;
+  return true;
+}
+
+// Clear the whole waiting queue in one action. Nothing is published: this sets
+// dismissed_at, which is a note to ourselves, where `reply` is a note to the
+// customer.
+//
+// The confirm names the low-rated count out loud when there is one. Quietly
+// burying an unread complaint under a bulk action is the single mistake this
+// queue exists to prevent, and an operator who is told "2 of these are rated 3
+// or less" before they click can go and read those two. Telling them afterwards
+// would be an apology, not a choice.
+async function rvwDismissAll(btn) {
+  const n = parseInt((btn && btn.dataset.n) || '0', 10);
+  if (!n) return;
+  const low = Number((RVW_META && RVW_META.summary && RVW_META.summary.waiting_low) || 0);
+  const body = [
+    cuT('They leave the queue. Nothing is sent to the customer and nothing appears in the shop — a reply is a separate action.',
+        '它们将从待处理列表移除。不会向顾客发送任何内容，店铺中也不会显示 — 回复是单独的操作。'),
+    low ? cuT(`${low} of them ${low === 1 ? 'is' : 'are'} rated 3 or less.`, `其中 ${low} 条评分为 3 星或更低。`) : '',
+  ].filter(Boolean).join(' ');
+  const ok = await askConfirm({
+    title: cuT(`Mark all ${n} as handled?`, `将全部 ${n} 条标记为已处理？`),
+    body,
+    confirmLabel: cuT('Mark as handled', '标记为已处理'),
+    // Danger styling only when a complaint is in the set. On a queue of
+    // thank-yous this is housekeeping, and dressing housekeeping in red is how
+    // a red confirm stops meaning anything.
+    danger: low > 0,
+  });
+  if (!ok) return;
+  btn.disabled = true;
+  try {
+    // `expect` is the count on the button. The server refuses and reports both
+    // numbers if the queue moved under us — a colleague answering one while
+    // this dialog was open must not turn "all 6" into a silent 5 or 7.
+    // The OBJECT, not a JSON string: api() only sets Content-Type when it does
+    // the stringifying itself, and without that header express.json() leaves
+    // req.body empty — the `expect` guard would have been silently skipped on
+    // every call.
+    const r = await api('/api/retail-admin/reviews/dismiss-waiting', {
+      method: 'POST', body: { expect: n },
+    });
+    const d = (r && r.data) || {};
+    toast(cuT(`${d.dismissed || 0} marked as handled`, `已标记 ${d.dismissed || 0} 条为已处理`));
+  } catch (e) {
+    // The one error worth its own words: the queue changed, so nothing happened
+    // and the operator needs to look again rather than retry blindly.
+    toast(e.code === 'queue_changed'
+      ? cuT('The queue changed — nothing was marked. Reloading.', '待处理列表已变化 — 未做任何更改。正在重新加载。')
+      : cuT('That did not save. Nothing has changed.', '没有保存成功。数据没有变化。'));
+  }
+  btn.disabled = false;
+  await loadReviews();
+  // The dashboard's Needs-you fire reads the same queue, so it is wrong the
+  // moment this succeeds. Repaint it now instead of leaving a stale count up
+  // for the rest of the 60s poll.
+  if (typeof tdOpsLoad === 'function') tdOpsLoad();
+}
+
+// Put one back. Pairs with the bulk action above: without it, an accidental
+// click could only be undone by writing a public reply — the exact thing
+// dismissing exists to avoid.
+async function rvwUndismiss(id) {
+  try {
+    await api(`/api/retail-admin/reviews/${id}/undismiss`, { method: 'POST' });
+    toast(cuT('Back in the queue', '已放回待处理'));
+  } catch (e) {
+    toast(cuT('That did not save. Nothing has changed.', '没有保存成功。数据没有变化。'));
+  }
+  await loadReviews();
+  if (typeof tdOpsLoad === 'function') tdOpsLoad();
 }
 
 function rvwGo(page) {
@@ -1672,6 +1757,20 @@ function rvwRenderHead(meta) {
     q.hidden = true;
   }
 
+  // Clear-the-queue, beside the number it clears. It states the count in its
+  // own label — "Mark all 6 as handled" — because a bulk action whose scope you
+  // have to infer from which chip is lit is the one people click by mistake.
+  //
+  // "Handled", never "replied": nothing is published. See the dismiss route.
+  // Hidden at zero along with the number, so a clear queue offers no button to
+  // press.
+  const bulk = $('#rvw-bulk');
+  if (bulk) {
+    bulk.hidden = !(open > 0);
+    bulk.textContent = cuT('Mark all ' + open + ' as handled', '将全部 ' + open + ' 条标记为已处理');
+    bulk.dataset.n = String(open);
+  }
+
   // The seeded-review automation, reported where the operator can see it.
   const auto = $('#rvw-auto');
   if (s.seeded) {
@@ -1728,7 +1827,12 @@ function rvwRenderList(rows) {
       + open.map(r => rvwRow(r, false)).join('');
   }
   if (done.length) {
-    html += '<div class="rvw-group">' + escapeHtml(cuT('Handled', '已处理')) + '</div>'
+    // Was "Handled", which stopped being true when rating-only reviews left the
+    // queue: nobody handled a five-star with no comment, it simply never needed
+    // anything. This group now holds three different things — answered,
+    // dismissed, and nothing-to-answer — and the one honest label for all three
+    // is what it is NOT.
+    html += '<div class="rvw-group">' + escapeHtml(cuT('Not waiting on you', '无需回复')) + '</div>'
       + done.map(r => rvwRow(r, true)).join('');
   }
   list.innerHTML = html;
@@ -1758,7 +1862,14 @@ function rvwRow(r, done) {
   const reply = r.reply
     ? '<div class="rvw-reply"><div class="rvw-reply-k">' + escapeHtml(cuT('Your reply', '商家回复')) + '</div>'
       + '<div class="rvw-reply-t">' + escapeHtml(r.reply) + '</div></div>'
-    : '';
+    // Left the queue without an answer. Says which of the two it was, and
+    // offers the way back — an accidental bulk click must not be undoable only
+    // by publishing a reply, which is what dismissing exists to avoid.
+    : (r.dismissed_at
+      ? '<div class="rvw-handled">' + escapeHtml(cuT('Handled — no reply sent', '已处理 — 未回复'))
+        + ' <button type="button" class="rvw-act" onclick="rvwUndismiss(' + r.id + ')">'
+        + escapeHtml(cuT('Put back', '放回待处理')) + '</button></div>'
+      : '');
 
   const text = r.comment
     ? '<div class="rvw-text">' + escapeHtml(r.comment) + '</div>'
@@ -2059,6 +2170,17 @@ function reviewsTabInit() {
   rvwWireSearch();
 }
 document.querySelector('[data-tab="reviews"]').addEventListener('click', reviewsTabInit);
+
+// The head line, the chips, the rows and the new bulk button are all built with
+// cuT() from data this page holds, not from markup the i18n walker can reach —
+// so a language toggle left every one of them in the old language until the next
+// load. The bulk button is the worst of them to leave stale: its label carries
+// the COUNT, so it is the one string on the page an operator reads as a number.
+// One reload repaints all four consistently; half-translating the page would be
+// worse than leaving it alone.
+if (window.onLangChange) {
+  onLangChange(() => { if (REVIEWS_LOADED) loadReviews(); });
+}
 
 // Search runs as you type, debounced. Wired once, on first open of the tab,
 // because the markup is in the document from the start but the tab may

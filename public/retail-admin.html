@@ -8151,6 +8151,11 @@
     <div class="rvw-queue" id="rvw-queue" hidden>
       <div class="rvw-queue-n num" id="rvw-queue-n">—</div>
       <div class="rvw-queue-l" id="rvw-queue-l">Waiting on a reply · 待回复</div>
+      <!-- Clear the queue. Its label is written by rvwRenderHead and carries the
+           COUNT, so data-no-i18n: the walker must not touch a string the JS owns.
+           "Handled", not "replied" — it publishes nothing. -->
+      <button type="button" class="rvw-bulk" id="rvw-bulk" data-no-i18n hidden
+              onclick="rvwDismissAll(this)"></button>
     </div>
 
     <div class="rvw-chips" id="rvw-chips"></div>

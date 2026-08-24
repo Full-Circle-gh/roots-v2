@@ -1484,6 +1484,17 @@ addColumn('retail_reviews', 'reply_at', 'DATETIME');
 // verdict callback can release its own holds without ever un-hiding a review
 // a human moderator deliberately hid.
 addColumn('retail_reviews', 'sec_hold', 'INTEGER DEFAULT 0');
+// The operator has READ this review and decided it needs no public answer — a
+// duplicate, a thank-you with nothing to reply to, something already handled by
+// phone. It leaves the triage queue and NOTHING is published.
+//
+// It needs its own column because the only other field that could clear that
+// queue is `reply`, and `reply` is the PUBLIC seller response rendered under
+// the review in the shop. Using it to make a worklist number go down would put
+// text in front of customers for a reason that has nothing to do with them.
+// Deliberately NOT on retail_synthetic_reviews: seeded rows never enter the
+// queue in the first place.
+addColumn('retail_reviews', 'dismissed_at', 'DATETIME');
 
 // Synthetic ("seeded") product reviews — social-proof copy written by staff,
 // NOT by a real buyer. Kept in their OWN table, fully decoupled from

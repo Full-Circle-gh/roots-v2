@@ -11647,6 +11647,19 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 .rvw-queue { display: flex; align-items: baseline; gap: 12px; margin-bottom: 24px; }
 .rvw-queue-n { font-size: 30px; font-weight: 500; line-height: 1; font-variant-numeric: tabular-nums; }
 .rvw-queue-l { font-size: 13px; color: var(--td-text2, #58606E); }
+/* Clear-the-queue, pushed to the far end of the queue line so it sits opposite
+   the number it clears rather than beside the words. Secondary, never
+   .btn-primary: that class is amber at weight 600 (§1.10 — amber is a STATUS
+   colour, and this is an action, not a status). */
+.rvw-bulk { margin-left: auto; font: inherit; font-size: 13px; font-weight: 400;
+  padding: 7px 14px; border-radius: 8px; cursor: pointer;
+  color: var(--td-text, #1A1D23); background: var(--td-raised, #F4F2EC);
+  border: 1px solid var(--td-line, #E2DED2); }
+.rvw-bulk:hover { background: var(--td-line, #E2DED2); }
+.rvw-bulk:disabled { opacity: .55; cursor: default; }
+/* A row that left the queue without a reply. Quieter than "Replied" on
+   purpose — it records a judgement, not an answer. */
+.rvw-handled { font-size: 12px; color: var(--td-text2, #58606E); }
 
 .rvw-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
 /* Pill, matching the Orders filter strip (.status-chip, radius 999). Orders
