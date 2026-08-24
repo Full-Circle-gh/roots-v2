@@ -1495,7 +1495,7 @@ Component({
             kicker:   lang.pick(b.kicker_en, b.kicker_cn, L),
             headline,
             pointsLabel: showPts
-              ? (L === 'cn' ? `${pts} 积分 · 抵 ¥${ptsValue}` : `${pts} pts · 抵¥${ptsValue}`)
+              ? (L === 'cn' ? `${pts} 积分 · 抵 ¥${ptsValue}` : `${pts} pts · ¥${ptsValue}`)
               : '',
             pointsNum:   showPts ? String(pts) : '',
             pointsCnyLabel: showPts

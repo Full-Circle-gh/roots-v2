@@ -252,7 +252,7 @@
     var kicker = pick(b.kicker_en, b.kicker_cn);
     var ctaLabel = pick(b.cta_label_en, b.cta_label_cn);
     var ctaTarget = b.cta_target || '';
-    var pointsLabel = showPts ? (CN() ? (pts + ' 积分 · 抵 ¥' + ptsValue) : (pts + ' pts · 抵¥' + ptsValue)) : '';
+    var pointsLabel = showPts ? (CN() ? (pts + ' 积分 · 抵 ¥' + ptsValue) : (pts + ' pts · ¥' + ptsValue)) : '';
     var pointsCnyLabel = showPts ? (CN() ? ('积分 · 抵 ¥' + ptsValue) : ('pts · ¥' + ptsValue)) : '';
 
     var isDesign = view === 'classic' || view === 'wallet' || view === 'coin';
