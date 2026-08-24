@@ -41,6 +41,22 @@ const DEFAULT_TAGS = [
   { id: 'will-buy',  en: 'Will reorder',    cn: '会回购', color: 'pink'     },
 ];
 
+// The submit bar advertises points for reviewing. Both the amount and whether
+// it is offered at all are operator settings (storefront_config reviews.reward,
+// public via /api/retail/config), so the sticker reads them live instead of
+// hardcoding a number.
+//
+// It hardcoded "+10 PTS" for a long time while the server awarded nothing —
+// a promise on screen that was never paid. Reading the live value is what stops
+// that happening again: if the operator turns the reward off, the sticker goes
+// with it.
+function reviewRewardPoints() {
+  const r = getApp()?.globalData?.config?.reviews?.reward;
+  if (!r || !r.enabled) return 0;
+  const pts = Math.floor(Number(r.points));
+  return pts > 0 ? pts : 0;
+}
+
 function tagListFromConfig() {
   const cfg = getApp()?.globalData?.config;
   const list = cfg?.reviews?.tags;
@@ -59,6 +75,9 @@ const COPY_EN = {
   placeholder: 'Real fruit really comes through. Tangy without the burn. Will reorder.',
   photoLabel: 'PHOTO',
   pointsNote: 'Reviews earn points and help other shoppers.',
+  // Shown instead when no reward is on offer — never promise points we
+  // aren't paying.
+  noteNoPoints: 'Helps other shoppers decide.',
   submit: 'SUBMIT REVIEW',
   saving: 'SUBMITTING…',
   submitted: 'Thank you!',
@@ -74,6 +93,7 @@ const COPY_CN = {
   placeholder: '果味十足,酸度刚好,会回购。',
   photoLabel: '照片',
   pointsNote: '评价可得积分,也能帮到其他买家。',
+  noteNoPoints: '帮助其他买家做选择。',
   submit: '提交评价',
   saving: '提交中…',
   submitted: '感谢您的反馈',
@@ -117,6 +137,7 @@ Page({
     saving: false,
     lang: 'en',
     copy: COPY_EN,
+    rewardPoints: 0,
   },
 
   onLoad(query) {
@@ -139,6 +160,7 @@ Page({
       _selectedTagIds: selected,
       lang,
       copy,
+      rewardPoints: reviewRewardPoints(),
     });
   },
 
@@ -216,14 +238,23 @@ Page({
       }
       const photoUrls = uploaded.map(u => u.url);
 
-      await api.post('/api/retail/products/' + this.data.productId + '/reviews', {
+      const res = await api.post('/api/retail/products/' + this.data.productId + '/reviews', {
         order_id: this.data.orderId,
         rating: this.data.rating,
         comment,
         tags: tagIds,
         photos: photoUrls,
       });
-      wx.showToast({ title: this.data.copy.submitted, icon: 'success' });
+      // Confirm the points from the SERVER's answer, not from what the sticker
+      // promised — the per-order cap means the second review on one order
+      // earns nothing, and saying "+20" there would be a lie.
+      const earned = Math.floor(Number(res && res.points_awarded)) || 0;
+      wx.showToast({
+        title: earned
+          ? (this.data.lang === 'cn' ? '+' + earned + ' 积分' : '+' + earned + ' points')
+          : this.data.copy.submitted,
+        icon: 'success',
+      });
       setTimeout(() => wx.navigateBack(), 800);
     } catch (e) {
       this.setData({ saving: false });

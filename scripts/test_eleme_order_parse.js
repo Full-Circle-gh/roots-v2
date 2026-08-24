@@ -324,5 +324,62 @@ section('J · Meituan and Eleme agree on what restocks');
   }
 }
 
+
+// ── K. The order list must come from the order list ─────────────────────────
+// A live regression, 2026-08-24: the reader announced "no orders" while actually
+// reading PollingService.nonCoreOrders — a summary feed carrying only tab counts.
+// Cause was a single loose regex plus Map iteration order, so whichever matching
+// call happened to be newest won. A later tier is a WORSE answer, not an equal
+// one, so recency must never promote it.
+section('K · method selection is by priority, not recency');
+{
+  const pick = (entries, res) => {
+    const b = new ElemeBrowser('sel', '1');
+    b._log = () => {};
+    for (const [name, at, result] of entries) b._orderRpcResult.set(name, { at, result });
+    const hit = b._observedResult(res, 0);
+    return hit && hit.method;
+  };
+  const LIST = [/queryInProcessOrders/i, /queryOrderList|orderList/i, /unprocessedOrders/i];
+
+  ok('the real list beats a NEWER summary feed',
+    pick([
+      ['PollingService.nonCoreOrders', 2000, { urgeOrderCount: 0 }],
+      ['OrderWebService.queryInProcessOrders', 1000, { orders: [] }],
+    ], LIST) === 'OrderWebService.queryInProcessOrders');
+
+  ok('nonCoreOrders is not a list source at all',
+    pick([['PollingService.nonCoreOrders', 2000, { urgeOrderCount: 0 }]], LIST) === null);
+
+  ok('unprocessedOrders is used only when nothing better answered',
+    pick([['PollingService.unprocessedOrders', 1000, { orders: [] }]], LIST)
+      === 'PollingService.unprocessedOrders');
+
+  ok('...and never outranks the real list',
+    pick([
+      ['PollingService.unprocessedOrders', 9000, { orders: [] }],
+      ['OrderWebService.queryInProcessOrders', 1, { orders: [] }],
+    ], LIST) === 'OrderWebService.queryInProcessOrders');
+
+  // Same shape for the void queue: queryExceptionInfo answers with counts, not
+  // rows, so it must rank below the calls that actually carry orders.
+  const VOID = [/abnormalOrders/i, /refundOrders|cancelOrders/i, /queryExceptionInfo/i];
+  ok('abnormalOrders outranks the counts-only exception call',
+    pick([
+      ['ShopQueryService.queryExceptionInfo', 9000, { refundOrderCount: 0 }],
+      ['PollingService.abnormalOrders', 1, { orders: [] }],
+    ], VOID) === 'PollingService.abnormalOrders');
+
+  // An authenticated ncp reply with result:null is an EMPTY answer, not junk.
+  // Dropping it is what made the reader fall through to a lesser call.
+  const b = new ElemeBrowser('empty', '1');
+  b._log = () => {};
+  ok('result:null still parses as zero orders, not a crash',
+    Array.isArray(b.parseOrderPayload(null)) && b.parseOrderPayload(null).length === 0);
+  ok('counts-only payload yields no order rows', b.parseOrderPayload({ urgeOrderCount: 0 }).length === 0);
+  ok('...and the counts are surfaced for diagnosis',
+    b.lastOrderCounts && b.lastOrderCounts.urgeOrderCount === 0, b.lastOrderCounts);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);
