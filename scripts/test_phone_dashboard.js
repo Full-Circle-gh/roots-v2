@@ -42,7 +42,7 @@ function it(name, fn) {
 const ROOT = path.join(__dirname, '..');
 const M_HTML = fs.readFileSync(path.join(ROOT, 'public', 'm.html'), 'utf8');
 
-/** A braced block (function declaration), anchor → its matching `}`. */
+/** A braced block — declaration or const arrow — anchor → its matching `}`. */
 function sliceBlock(src, anchor) {
   const start = src.indexOf(anchor);
   assert.notStrictEqual(start, -1, `not found in the shipped file: ${anchor}`);
@@ -73,7 +73,11 @@ const SRC = [
   sliceLines(M_HTML, 'const money0=(cur,n)=>', 1),
   sliceLines(M_HTML, 'const DOW_ABBR_EN=', 2),
   sliceBlock(M_HTML, 'function deltaText(cur, base, bl)'),
-  sliceLines(M_HTML, 'const _date=v=>', 1),
+  // _date is a const arrow, not a declaration, but its body is a braced block
+  // all the same — so slice it by its braces. It was one line until the phone
+  // learned to stamp zoneless timestamps with Z; a fixed line count silently
+  // cut the body in half the moment it grew.
+  sliceBlock(M_HTML, 'const _date=v=>'),
   sliceBlock(M_HTML, 'function oldestMins(items)'),
   sliceBlock(M_HTML, 'function oldestOf(items)'),
   sliceBlock(M_HTML, 'function opsFires()'),
@@ -142,47 +146,64 @@ console.log('\n2 · the delta — the desktop’s rules, on a screen with no hov
 
 const BL = { days: 3, weekday: 6, clipped: false };   // three Saturdays behind us
 
+/* deltaText mints its pair inside the vm realm, so the array carries THAT
+   realm’s Array.prototype and deepStrictEqual refuses it on prototype alone.
+   Copy it across before comparing; null (no baseline at all) passes through. */
+const delta = (...a) => { const r = C.deltaText(...a); return Array.isArray(r) ? Array.from(r) : r; };
+
+/* deltaText returns a bilingual PAIR now, not one resolved string. The Today
+   tiles are built once at boot and only resolve it with T(...d) at render — a
+   pre-resolved string froze every comparison in whatever language the app
+   happened to boot in. Both halves are asserted here: a translation dropped on
+   one side is the same bug wearing the other language. */
 it('a whole percent, never the raw decimal', () => {
   // "−23.8%" claims a precision twenty orders cannot support.
-  assert.strictEqual(C.deltaText(20, { delta: -23.8 }, BL), '▼ 24% vs last 3 Sat');
-  assert.strictEqual(C.deltaText(7296, { delta: 78.2 }, BL), '▲ 78% vs last 3 Sat');
+  assert.deepStrictEqual(delta(20, { delta: -23.8 }, BL),
+    ['▼ 24% vs last 3 Sat', '▼ 24% 较前 3 个周六']);
+  assert.deepStrictEqual(delta(7296, { delta: 78.2 }, BL),
+    ['▲ 78% vs last 3 Sat', '▲ 78% 较前 3 个周六']);
 });
 
 it('it names the baseline instead of saying "a typical day"', () => {
-  assert.strictEqual(C.deltaText(1, { delta: 5 }, { days: 1, weekday: 1, clipped: false }),
-    '▲ 5% vs last 1 Mon');
+  assert.deepStrictEqual(delta(1, { delta: 5 }, { days: 1, weekday: 1, clipped: false }),
+    ['▲ 5% vs last 1 Mon', '▲ 5% 较前 1 个周一']);
   // The CALL, not the phrase — the comment above deltaText quotes the old
   // label to explain what it replaced, and matching prose would fail on that.
   assert.ok(!/T\('vs a typical day'/.test(M_HTML), 'the vague label is back in the code');
 });
 
 it('a clipped baseline says so — a slow morning is not a collapse', () => {
-  assert.ok(/by now/.test(C.deltaText(1, { delta: -40 }, { ...BL, clipped: true })));
+  const [en, cn] = delta(1, { delta: -40 }, { ...BL, clipped: true });
+  assert.ok(/ by now$/.test(en), en);
+  assert.ok(/同一时段$/.test(cn), cn);
 });
 
 it('nothing yet today is a calm dash, never ▼100%', () => {
-  assert.strictEqual(C.deltaText(0, { delta: -100 }, BL), 'none yet today');
+  assert.deepStrictEqual(delta(0, { delta: -100 }, BL),
+    ['none yet today', '今日暂无']);
 });
 
 it('no same-weekday history reads as new, not as a percentage of nothing', () => {
-  assert.strictEqual(C.deltaText(5, { delta: null }, BL), 'new');
-  assert.strictEqual(C.deltaText(5, { delta: 10 }, null), 'new');
-  assert.strictEqual(C.deltaText(5, { delta: 10 }, { days: 0 }), 'new');
+  assert.deepStrictEqual(delta(5, { delta: null }, BL), ['new', '新']);
+  assert.deepStrictEqual(delta(5, { delta: 10 }, null), ['new', '新']);
+  assert.deepStrictEqual(delta(5, { delta: 10 }, { days: 0 }), ['new', '新']);
 });
 
 it('flat is ±0%, not an arrow in either direction', () => {
-  assert.strictEqual(C.deltaText(5, { delta: 0.2 }, BL), '±0% vs last 3 Sat');
+  assert.deepStrictEqual(delta(5, { delta: 0.2 }, BL),
+    ['±0% vs last 3 Sat', '±0% 较前 3 个周六']);
 });
 
 it('a metric with NO baseline says nothing at all', () => {
   // Average order value has none. The tile used to print the comparison label
-  // with no comparison under it, which reads as a broken tile.
-  assert.strictEqual(C.deltaText(270, undefined, BL), '');
-  assert.strictEqual(C.deltaText(270, null, BL), '');
+  // with no comparison under it, which reads as a broken tile. null, and the
+  // renderer drops the whole line rather than reserving space for an empty one.
+  assert.strictEqual(delta(270, undefined, BL), null);
+  assert.strictEqual(delta(270, null, BL), null);
 });
 
 it('the Avg. order tile is wired to that silence, and renders no line for it', () => {
-  assert.ok(/T\('Avg\. order','客单价'\), money\(CUR, ord\? rev\/ord : 0\), ''\]/.test(M_HTML),
+  assert.ok(/\['Avg\. order','客单价'\], money\(CUR, ord\? rev\/ord : 0\), null\]/.test(M_HTML),
     'Avg. order must pass an empty delta, not a bare label');
   assert.ok(/\$\{d\?`<span class="num"[^`]*`:''\}/.test(M_HTML),
     'the delta span must be conditional, or an empty one still takes the space');

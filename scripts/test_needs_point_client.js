@@ -240,6 +240,10 @@ async function runOpenOrder(order, opts, { qpNodeExists = true, scrollThrows = f
     mountCourierMap: () => {},
     qpInitMap: () => { seen.qpInit++; },
     escapeHtml: (s) => String(s),
+    // openOrder’s failure card runs its label through the admin’s bilingual
+    // helper. Stubbed to the English half — the same fallback 01-core.js uses
+    // when cuT has not loaded — so the card still reads “Failed” here.
+    cuT: (en) => en,
   };
   vm.createContext(ctx);
   new vm.Script(`${FOCUS_FN}\n${OPEN_ORDER}`).runInContext(ctx);
@@ -305,10 +309,17 @@ it('the focus call is positioned after the catch block, not inside the try', () 
   // Positional, so a future edit that drags it back into the try is caught
   // even if no test happens to throw from the scroll.
   const fn = slice(ORDERS_JS, 'async function openOrder(id, opts = {})');
-  const catchAt = fn.indexOf('} catch (e) {');
-  const failCard = fn.indexOf('order-card err">Failed');
+  // Anchored on the card's CLASS, not the word printed on it: "Failed" went
+  // through cuT() in the bilingual pass, and the English-literal anchor this
+  // used to carry then matched nothing — which surfaced as "could not locate
+  // the catch" rather than as the stale anchor it was.
+  const failCard = fn.indexOf('order-card err"');
+  assert.ok(failCard > -1, 'could not locate openOrder\'s failure card');
+  // The OUTER catch — the one that paints that card. The best-effort map
+  // try/catches above it match the same text, so read backwards from the card.
+  const catchAt = fn.lastIndexOf('} catch (e) {', failCard);
+  assert.ok(catchAt > -1, 'could not locate openOrder\'s catch');
   const call = fn.indexOf("if (opts.focus === 'point'");
-  assert.ok(catchAt > -1 && failCard > catchAt, 'could not locate openOrder\'s catch');
   assert.ok(call > -1, 'the focus call is gone');
   assert.ok(call > failCard, 'the focus call must come AFTER the catch that paints the Failed card');
 });
