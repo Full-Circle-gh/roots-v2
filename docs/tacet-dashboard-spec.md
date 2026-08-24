@@ -1,4 +1,4 @@
-# Tacet dashboard — simplification spec, v1.1
+# Tacet dashboard — simplification spec, v1.2
 
 **2026-07-17 · Decided with Ash. This is the product decision; the survey behind it is recorded in the session notes. Joins the canonical folder between the specimens doc and the rulebook.**
 
@@ -108,6 +108,27 @@ Each row deep-links to the place the fire is put out. Rows are counts + one line
 **So the spec's one-line "restock + inbound problems" hid one cheap card and one multi-day feature.** Restock ships with the warehouse commit. **Inbound problems does not** — it's carved out until its own scoping answers the expected-arrival-date question.
 
 **One judgment call, Ash's:** dedup. If restock is a Needs-you row *and* the Inventory block still shows low-stock in its footer, the same fire appears twice — against "appears here and nowhere-else-first." Decide at build whether the Inventory footer's restock line stays once Needs-you carries it.
+
+---
+
+## The two Inbox rows — added 2026-08-24
+
+**Reviews to answer** and **Feedback to answer**. Both pass the two disciplines: a customer is waiting on words, and one click on the row is the place those words get written. Amber, both — nothing here is money or a delivery going wrong; it is work waiting.
+
+**They count what their own page counts, and nothing else.**
+
+- *Reviews to answer* = a REAL review with an empty merchant reply — the same rule behind the Reviews page's "Needs reply" chip. Seeded reviews are excluded on both sides (nobody is waiting on the other end of one), hidden ones are included on both sides. If the fire and the chip ever disagree, one of them is wrong. The row also names how many are **low-rated** (`rating <= 3`), because nine polite five-stars and nine one-stars are the same number and not the same afternoon.
+- *Feedback to answer* = a thread whose newest customer turn is newer than the last time an operator opened it — plus one guard the Feedback list does not need: **the thread must actually have a customer turn.** Staff can start a thread themselves, and on one of those `admin_read_at` is null until somebody re-opens it, so the bare rule would raise a fire about the operator's own unanswered message. Same discipline the Inbox badge's unseen-count already applies.
+
+**Data source:** two keys on `/api/retail-admin/dashboard/ops` — `reviews_unanswered {count, low, items}` and `feedback_waiting {count, items}`. No new route, no new poll, and **not store-scoped**: neither table carries a store, and a review is about a product rather than a shelf, so the header's store picker deliberately leaves both counts alone.
+
+**The doors** are the topbar Inbox dropdown's own two buttons, clicked programmatically (`dashOpenReviews` / `dashOpenFeedback`). Not `goTab` and not `dashJumpTab`: neither queue has had a rail button since Inbox moved to the topbar, and each tab's first load hangs off that button's own listener — `goTab` alone lights the section and leaves the table empty. `dashJumpTab('feedback')` had been failing that way silently in the activity feed's jump-to-report; it now goes through the same door.
+
+**Feature-gated, and this one fails closed.** A tenant who switched Reviews or Feedback off is not filling that queue any more, so its backlog is not a fire. The page itself stays reachable — feature-off dims a rail row, it does not hide it.
+
+**Same two rows on the phone** (`m.html`, `opsFires`), off the same keys. Home used to build a reviews row out of `DB.reviews` — the list the Inbox screen fetches — so the fire only existed *after* the operator had gone and looked, which is the one moment they no longer need telling. It carried no age, and feedback had no row at all.
+
+**Latency:** the ops poll, so within 60s of the review landing (or immediately on the next SSE activity nudge). The nudge's own signature watches orders, customers and stock — deliberately not reviews, whose `MAX(created_at)` has no index to ride and would be scanned every 5 seconds.
 
 ---
 

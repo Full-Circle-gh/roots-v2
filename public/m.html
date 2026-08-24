@@ -800,6 +800,10 @@ reg('workOpenRow', i=>{
   if(e.ref_type==='guanyi'){ CMD.mirror('gzgrocery'); return; }
 });
 reg('inboxSeg', s=>{ state.inboxSeg=s; render(); });
+/* Open the Inbox ON the queue that raised the fire. Same two steps the activity
+   feed's feedback jump takes (set the segment, then push), named once so the
+   Needs-you rows do not each repeat them. */
+reg('inboxGo', s=>{ state.inboxSeg=s; CMD.push('inbox'); });
 reg('poSeg', v=>{ state.poSeg=v; render(); });
 reg('pollOpen', id=>{ state.pollOpen = state.pollOpen===Number(id) ? null : Number(id); render(); });
 /* Opening a poll makes it visible to every customer; closing one stops the
@@ -1443,13 +1447,7 @@ function vitalsBlock(){
     </div></div>`;
 }
 function screenHome(){
-  const A=state.liveAttn||{};
   const fires=opsFires()||[];
-  // Reviews are the one fire the ops snapshot does not carry — it watches
-  // orders and stock, not the inbox — so it is added here from the inbox's own
-  // count rather than left off the only screen that lists what is waiting.
-  if(A.reviews) fires.push({sev:'amber',icon:'message-square-text',
-    label:T('Reviews to reply','待回复评价'),n:A.reviews,meta:'',go:"APP.cmd('push','inbox')",mins:null});
   /* This tile used to fall back to ¥12,840 · 37 orders · ¥347 · 1,204 visitors
      — four numbers typed into a mockup, under the heading "Today", on the
      first screen the app opens. Nothing else in the app was in a worse place
@@ -4112,6 +4110,26 @@ function opsFires(){
   add(c('unhandled'),'amber','package',T('Orders to start','待开始备货'),c('unhandled'),items('unhandled'),'',"APP.cmd('ordersGo','paid')");
   add(c('awaiting_restock'),'amber','clock',T('Orders awaiting restock','订单待补货'),c('awaiting_restock'),items('awaiting_restock'),'',"APP.cmd('ordersGo','restock')");
   add(c('invoices'),'amber','receipt',T('Invoices to issue','待开发票'),c('invoices'),items('invoices'),'',"APP.cmd('push','invoices')");
+  /* The inbox, from the snapshot rather than from whatever this phone happened
+     to have loaded. Home used to build the reviews row out of DB.reviews — the
+     list the Inbox screen fetches — so the fire only existed AFTER the operator
+     had already gone and looked, which is the one moment they no longer need
+     telling. It carried no age either, and feedback had no row at all. Both are
+     keys on /dashboard/ops now, counted the same way the pages they open count
+     them. Feature-gated: a shop that switched Reviews off is not filling that
+     queue, so its backlog is not a fire. */
+  if(c('reviews_unanswered')&&featOn('reviews')){
+    const rv=o.reviews_unanswered, k=Number(rv.low||0), a=oldestOf(items('reviews_unanswered'));
+    // Nine polite five-stars and nine one-stars are the same number and not the
+    // same afternoon, so the low-rated count leads and the age follows it.
+    const meta=[k>0?T(k+' low-rated',k+' 条低评分'):'', a?T('oldest '+a,'最久 '+a):''].filter(Boolean).join(T(', ','，'));
+    f.push({sev:'amber',icon:'star',label:T('Reviews to answer','评价待回复'),n:rv.count,
+      meta,age:false,go:"APP.cmd('inboxGo','reviews')",mins:oldestMins(items('reviews_unanswered'))});
+  }
+  if(c('feedback_waiting')&&featOn('feedback')){
+    add(true,'amber','message-square-text',T('Feedback to answer','反馈待回复'),
+      c('feedback_waiting'),items('feedback_waiting'),'',"APP.cmd('inboxGo','feedback')");
+  }
   const oos=c('out_of_stock'), low=c('low_stock');
   if(oos+low){
     // The pill counts what is actually OUT; the line names the rest. One number
@@ -4274,8 +4292,7 @@ async function loadInbox(){
   try{ const rv=await api('/reviews?limit=30'); const list=Array.isArray(rv)?rv:(rv.reviews||[]);
     // Same rule as the coupon ledgers: a shop with no reviews must see none,
     // not the three the mock ships with.
-    DB.reviews=list.map(mapReview); state.revLoaded=true;
-    state.liveAttn=Object.assign({},state.liveAttn||{},{reviews:DB.reviews.filter(r=>!r.reply).length}); render();
+    DB.reviews=list.map(mapReview); state.revLoaded=true; render();
   }catch(e){}
   try{ const r=await api('/feedback'); const rows=Array.isArray(r)?r:(r&&r.data); if(rows) { DB.feedback=rows.map(mapFeedback); render(); } }catch(e){}
 }
@@ -7277,7 +7294,9 @@ async function loadLive(){
     // exist, so this number was always the fake fallback). Prefer the dedicated
     // order-status-counts endpoint below; fall back to the dashboard funnel.
     const bs=d.funnel||d.byStatus||{};
-    state.liveAttn={ ship:(bs.paid?bs.paid.n:null), reviews:null, low:null };
+    // No `reviews` key any more: Home reads that fire off /dashboard/ops, which
+    // knows the count without this phone having opened the Inbox first.
+    state.liveAttn={ ship:(bs.paid?bs.paid.n:null), low:null };
   }catch(e){ if(String(e.message)==='auth') return; }
   // orders list (the heart of the app). The Recap no longer derives anything
   // from it — it reads the activity feed since you last left, like the desktop.
@@ -7290,7 +7309,7 @@ async function loadLive(){
   }catch(e){}
   // reviews (inbox)
   try{ const rv=await api('/reviews?limit=30'); const list=Array.isArray(rv)?rv:(rv.reviews||[]);
-    DB.reviews=list.map(mapReview); state.revLoaded=true; state.liveAttn=Object.assign({},state.liveAttn,{reviews:list.filter(r=>!(r.reply&&String(r.reply).trim())).length});
+    DB.reviews=list.map(mapReview); state.revLoaded=true;
   }catch(e){}
   // low-stock count for the Home attention row
   // Low = a shelf that needs buying back. A draft is neither low nor out, so

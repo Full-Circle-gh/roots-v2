@@ -68,12 +68,19 @@ const CASES = [
   ['the needs-you queue is the ops snapshot', `state.ops={
       unhandled:{count:3,items:[{waiting_since:'2026-08-22 07:00:00'}]},
       payment_unconfirmed:{count:2,unread:1,items:[{waiting_since:'2026-08-22 10:00:00'}]},
-      refunds:{count:1,items:[]}, out_of_stock:{count:2}, low_stock:{count:5}};
-    state.liveAttn={reviews:2}; APP.cmd('tab','home');`, [
+      refunds:{count:1,items:[]}, out_of_stock:{count:2}, low_stock:{count:5},
+      reviews_unanswered:{count:4,low:2,items:[{waiting_since:'2026-08-20 09:00:00'}]},
+      feedback_waiting:{count:1,items:[{waiting_since:'2026-08-22 08:00:00'}]}};
+    state.liveAttn={}; APP.cmd('tab','home');`, [
     ['orders to start',       `txt('content').includes('Orders to start')`],
     ['refunds waiting',       `txt('content').includes('Refunds waiting')`],
     ['restock, counting what is OUT', `txt('content').includes('Restock needed') && txt('content').includes('out of stock, 5 running low')`],
-    ['reviews, which the ops snapshot does not carry', `txt('content').includes('Reviews to reply')`],
+    // Both inbox queues, from the snapshot — the reviews row used to be built
+    // from DB.reviews, so it only appeared after the operator had opened the
+    // Inbox, and feedback had no row at all.
+    ['reviews, from the snapshot', `txt('content').includes('Reviews to answer')`],
+    ['and how many are unhappy',   `txt('content').includes('2 low-rated')`],
+    ['feedback, from the snapshot',`txt('content').includes('Feedback to answer')`],
     ['a queue with a clock is aged',   `/oldest \\d+[mhd]/.test(txt('content'))`],
     // The unreadable-proofs fire passes a SENTENCE as its sub-line, and the row
     // used to glue "oldest" onto the front of it: "oldest 1 couldn't be read".

@@ -14601,6 +14601,14 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
   // one — which for this block is the correct degradation: it is absent at zero
   // by design, so a failure looks exactly like "nothing is parked".
   let needs_point = { count: 0, items: [] };
+  // Customer reviews nobody has answered, and feedback threads waiting on a
+  // reply. Both are the same shape as their siblings so the Needs-you card can
+  // read them the same way, with one difference stated out loud: NEITHER IS
+  // STORE-SCOPED. Neither table carries a store_id, and a review is about a
+  // product rather than a shelf, so the header's store picker deliberately
+  // leaves these two counts alone — they read the same in every store view.
+  let reviews_unanswered = { count: 0, low: 0, items: [] };
+  let feedback_waiting   = { count: 0, items: [] };
 
   // Optional per-store scope (mirrors the dashboard's store picker). When a
   // store_id is supplied we count that store's own shelf (its retail_store_stock
@@ -15282,12 +15290,73 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
         parked_since: o.needs_point_at || null,
       })),
     };
+
+    // ── Reviews waiting on a reply ───────────────────────────────────────
+    // The SAME definition as the Reviews page's own "Needs reply" chip: a REAL
+    // review whose merchant reply is empty. Seeded (synthetic) rows are
+    // excluded there and excluded here — nobody is waiting on the other end of
+    // one — and the two numbers have to agree, or the fire counts one queue
+    // while the door it opens shows another.
+    //
+    // Hidden reviews are NOT excluded, for the same reason: the page counts
+    // them, so leaving them out here would make the dashboard quietly smaller
+    // than the queue it points at. A moderator who wants one gone answers or
+    // deletes it; hiding it from shoppers is not answering the customer.
+    const RV_OPEN = "(r.reply IS NULL OR TRIM(r.reply) = '')";
+    const rvCount = tdb().prepare(
+      `SELECT COUNT(*) AS n FROM retail_reviews r WHERE ${RV_OPEN}`
+    ).get().n;
+    // How many of the unanswered ones are unhappy. Exact, not derived from the
+    // capped preview, because the row says it in words. Same "Low rated"
+    // threshold (<= 3) the Reviews page's own chip uses.
+    const rvLow = tdb().prepare(
+      `SELECT COUNT(*) AS n FROM retail_reviews r WHERE ${RV_OPEN} AND r.rating <= 3`
+    ).get().n;
+    const rvItems = tdb().prepare(`
+      SELECT r.id, r.rating, r.product_id,
+             r.created_at AS waiting_since,
+             COALESCE(NULLIF(TRIM(p.name_en), ''), NULLIF(TRIM(p.name_cn), '')) AS product
+        FROM retail_reviews r
+        LEFT JOIN store_products p ON p.id = r.product_id
+       WHERE ${RV_OPEN}
+       ORDER BY r.created_at ASC LIMIT @preview
+    `).all({ preview: previewLimit });
+    reviews_unanswered = { count: rvCount, low: rvLow, items: rvItems };
+
+    // ── Feedback threads waiting on a reply ──────────────────────────────
+    // "Waiting" is the list's own needs_reply rule — the customer's latest turn
+    // is newer than the last time an operator opened the thread, which covers a
+    // brand-new report (admin_read_at NULL) and a fresh follow-up alike.
+    //
+    // Plus one guard the list does not need and this card does: the thread must
+    // actually HAVE a customer turn. Staff can start a thread themselves (a
+    // direct message to a customer), and on one of those admin_read_at is null
+    // until somebody re-opens it — so the bare needs_reply rule would raise a
+    // fire about the operator's own unanswered message. Same discipline the
+    // unseen-count endpoint already applies to the Inbox badge.
+    const FB_WAITING =
+      "(f.admin_read_at IS NULL"
+      + "   OR datetime(COALESCE(f.last_customer_msg_at, f.created_at)) > datetime(f.admin_read_at))"
+      + " AND (COALESCE(f.initiated_by, 'customer') = 'customer' OR f.last_customer_msg_at IS NOT NULL)";
+    const fbCount = tdb().prepare(
+      `SELECT COUNT(*) AS n FROM retail_feedback f WHERE ${FB_WAITING}`
+    ).get().n;
+    const fbItems = tdb().prepare(`
+      SELECT f.id, f.kind,
+             COALESCE(f.last_customer_msg_at, f.created_at) AS waiting_since,
+             COALESCE(NULLIF(TRIM(c.nickname), ''), NULLIF(TRIM(f.customer_name), '')) AS buyer
+        FROM retail_feedback f
+        LEFT JOIN retail_customers c ON c.id = f.customer_id
+       WHERE ${FB_WAITING}
+       ORDER BY waiting_since ASC LIMIT @preview
+    `).all({ preview: previewLimit });
+    feedback_waiting = { count: fbCount, items: fbItems };
   } catch (e) {
     console.error('[dashboard/ops]', e.message);
   }
 
   res.set('Cache-Control', 'no-store');
-  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, awaiting_restock, payment_mismatch, payment_unconfirmed, needs_point, server_now: Date.now() } });
+  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, awaiting_restock, payment_mismatch, payment_unconfirmed, needs_point, reviews_unanswered, feedback_waiting, server_now: Date.now() } });
 });
 
 // Admin CRUD for vouchers.
