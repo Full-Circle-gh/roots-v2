@@ -12,6 +12,7 @@
   let _lastStores = [];  // last /status.stores, so the status line can repaint
   let _elFilter = 'all';  // chip filter: all | att | ok | size
   let _elStore  = '';     // store filter: '' = all stores
+  let _elSel    = null;   // product id the panel is showing
   let _catalogue = {}; // storeCode -> [{name, stock, updated_at}], see elLoadCatalogue
 
   // ── Entry point ────────────────────────────────────────────────────────────
@@ -67,8 +68,8 @@
       if (cb) cb.checked = _enabled;
       const txt = document.getElementById('el-enable-txt');
       if (txt) {
-        txt.textContent = _enabled ? cuT('Channel on · 渠道开启', '渠道开启')
-                                   : cuT('Channel off · 渠道已关闭', '渠道已关闭');
+        txt.textContent = _enabled ? cuT('Channel on', '渠道开启')
+                                   : cuT('Channel off', '渠道已关闭');
       }
       // The standing setup instruction went with the connection card: it is
       // one-time help, and a store that needs it now says so on its own card.
@@ -81,8 +82,8 @@
       _enabled = !!on;
       const txt = document.getElementById('el-enable-txt');
       if (txt) {
-        txt.textContent = on ? cuT('Channel on · 渠道开启', '渠道开启')
-                             : cuT('Channel off · 渠道已关闭', '渠道已关闭');
+        txt.textContent = on ? cuT('Channel on', '渠道开启')
+                             : cuT('Channel off', '渠道已关闭');
       }
     } catch (e) {
       const cb = document.getElementById('el-enable');
@@ -143,37 +144,61 @@
 
     const tiles = document.getElementById('el-tiles');
     if (tiles) {
-      const tile = (k, v, sub, warn) =>
+      const tile = (k, v, sub, warn, extra) =>
         '<div class="el-tile"><div class="k">' + esc(k) + '</div>' +
         '<div class="v' + (warn ? ' att' : '') + '">' + esc(String(v)) + '</div>' +
-        '<div class="s">' + esc(sub) + '</div></div>';
+        '<div class="s">' + esc(sub) + '</div>' + (extra || '') + '</div>';
+      // Push all stock sits on the tile whose number it changes — beside the
+      // tabs it had nothing to relate to, since tabs switch views.
+      const pushBtn = '<div class="act"><button class="btn btn-sm" id="el-pushall-btn" onclick="elPushAll()"' +
+        ' title="' + esc(cuT('Queue a fresh stock push for every mapped product',
+                             '为所有已匹配商品排队推送库存')) + '">' +
+        esc(cuT('Push all stock', '推送全部库存')) + '</button></div>';
       tiles.innerHTML =
-        tile(cuT('Live on Eleme', '\u5df2\u4e0a\u67b6\u9976\u4e86\u4e48'), live, per('live'), false) +
-        tile(cuT('Need attention', '\u5f85\u5904\u7406'), att,
-             cuT('unmatched, or missing a size', '\u672a\u5339\u914d\uff0c\u6216\u672a\u9009\u89c4\u683c'), att > 0) +
-        tile(cuT('Stock updates waiting', '\u5f85\u63a8\u9001\u5e93\u5b58'), waiting, per('pending'), false);
+        tile(cuT('Live on Eleme', '已上架饿了么'), live, per('live'), false) +
+        tile(cuT('Need attention', '待处理'), att,
+             cuT('unmatched, or missing a size', '未匹配，或未选规格'), att > 0) +
+        tile(cuT('Stock updates waiting', '待推送库存'), waiting, per('pending'), false, pushBtn);
     }
 
-    const notice = document.getElementById('el-notice');
-    if (notice) {
-      const bad = rows.filter(r => r.blocked)[0];
-      if (!bad) { notice.innerHTML = ''; return; }
-      const what = EL_BLOCK_TXT[bad.blockedBy] || ['is not syncing', '\u540c\u6b65\u5df2\u505c'];
-      const cat = bad.catalogueCount
-        ? cuT(bad.catalogueCount + ' listings read', '\u5df2\u8bfb\u53d6 ' + bad.catalogueCount + ' \u4e2a\u5546\u54c1')
-        : cuT('no catalogue read yet, so nothing can be matched there',
-              '\u5c1a\u672a\u8bfb\u53d6\u5546\u54c1\u76ee\u5f55\uff0c\u65e0\u6cd5\u5339\u914d');
-      // The one action that unblocks it. Linking a shop id is a field; signing
-      // in needs a human at a browser on the box, so that one is the command.
-      const act = bad.blockedBy === 'no_shop'
-        ? '<input id="el-shop-' + bad.id + '" class="inp el-nameinp" placeholder="' +
-            cuT('Eleme shop id', '\u9976\u4e86\u4e48\u5e97\u94faID') + '">' +
-          '<button class="btn btn-sm btn-primary" onclick="elSetShop(' + bad.id + ", '" + esc(bad.code) + "')\">" +
-            cuT('Link shop', '\u5173\u8054\u5e97\u94fa') + '</button>'
-        : '<code class="el-psku">node scripts/eleme-login.js ' + esc(bad.code) + ' ' + esc(bad.shopId || '') + '</code>';
-      notice.innerHTML = '<div class="el-notice"><span class="dot"></span>' +
-        '<div class="m"><b>' + esc(elStoreName(bad) + ' ' + cuT(what[0], what[1])) + '.</b>' +
-        '<div class="sub">' + esc(cat) + '</div></div>' + act + '</div>';
+    // One line per store: state, catalogue freshness, and the one action that
+    // unblocks it. Replaces the single notice — a notice could only ever show
+    // the FIRST unwell store, and it said nothing at all about a healthy one.
+    const lines = document.getElementById('el-storelines');
+    if (lines) {
+      lines.innerHTML = rows.map(st => {
+        const what = EL_BLOCK_TXT[st.blockedBy] || ['is not syncing', '同步已停'];
+        // The name and size pickers read the cached catalogue, so how fresh it
+        // is belongs on the store it belongs to.
+        const cat = st.catalogueCount
+          ? cuT(st.catalogueCount + ' listings read', '已读取 ' + st.catalogueCount + ' 个商品') +
+            (st.catalogueAt ? ' · ' + fmtAgo(st.catalogueAt) : '')
+          : cuT('no catalogue read yet, so nothing can be matched here',
+                '尚未读取商品目录，无法匹配');
+        let state, cls;
+        if (st.blocked) {
+          state = cuT(what[0], what[1]) + ' · ' + cat;
+          cls = ' att';
+        } else {
+          const n = Number(st.pending || 0) + Number(st.processing || 0);
+          state = (n ? cuT(n + ' stock updates waiting', n + ' 条库存待推送')
+                     : cuT('Up to date', '已是最新')) + ' · ' + cat;
+          cls = '';
+        }
+        // The one action that unblocks it. Linking a shop id is a field; signing
+        // in needs a human at a browser on the box, so that one is the command.
+        const act = !st.blocked ? ''
+          : st.blockedBy === 'no_shop'
+            ? '<input id="el-shop-' + st.id + '" class="shopinp" placeholder="' +
+                esc(cuT('Eleme shop id', '饿了么店铺ID')) + '">' +
+              '<button class="btn btn-sm btn-primary" onclick="elSetShop(' + st.id + ", '" + esc(st.code) + "')\">" +
+                esc(cuT('Link shop', '关联店铺')) + '</button>'
+            : '<code class="el-cmd">node scripts/eleme-login.js ' + esc(st.code) + ' ' + esc(st.shopId || '') + '</code>';
+        return '<div class="el-storeline' + cls + '">' +
+            '<span class="dot"></span><span class="nm">' + esc(elStoreName(st)) + '</span>' +
+            '<span class="st">' + esc(state) + '</span>' + act +
+          '</div>';
+      }).join('');
     }
   }
 
@@ -258,8 +283,7 @@
       } catch (e) { _catalogue[s.code] = { rows: [], refreshedAt: null }; }
     }
     elRenderCatalogueDatalists();
-    elRenderCatalogueCaption();
-    elRenderProducts(); // re-render so the name inputs pick up list= now that options exist
+    elRenderProducts(); // re-render so the name input picks up list= now that options exist
   };
 
   // Every size (规格) behind one Eleme listing name, from the cached catalogue.
@@ -283,12 +307,6 @@
     return sp.stock != null ? base + ' · ' + sp.stock : base;
   }
 
-  function elRenderCatalogueCaption() {
-    const el = document.getElementById('el-catalogue-caption');
-    if (!el || !_stores.length) return;
-    el.textContent = _stores.map(s => `${elStoreName(s)}: ${elCatalogueCaption(s.code)}`).join('   ·   ');
-  }
-
   // One <datalist> per store (their Eleme catalogues differ) — datalists have
   // no visible presence, so they live in a hidden container appended once.
   function elRenderCatalogueDatalists() {
@@ -304,17 +322,6 @@
       const opts = rows.map(r => `<option value="${esc(r.name)}">`).join('');
       return `<datalist id="el-catalogue-dl-${esc(s.code)}">${opts}</datalist>`;
     }).join('');
-  }
-
-  // Freshness caption, e.g. "204 listings · updated 12 min ago". Shown once
-  // above the mapping table so it's clear when the autocomplete data is stale
-  // (the daemon refreshes it every ~30 min).
-  function elCatalogueCaption(storeCode) {
-    const c = _catalogue[storeCode];
-    if (!c || !c.rows.length) return cuT('no catalogue cached yet', '暂无缓存目录');
-    const mins = c.refreshedAt ? Math.max(0, Math.round((Date.now() - Date.parse(c.refreshedAt.replace(' ', 'T') + 'Z')) / 60000)) : null;
-    const age = mins == null ? '' : (mins < 1 ? cuT(' · just now', ' · 刚刚') : cuT(` · updated ${mins} min ago`, ` · ${mins} 分钟前更新`));
-    return `${c.rows.length}${cuT(' listings', ' 个商品')}${age}`;
   }
 
   window.elSetShop = async function (storeId, storeCode) {
@@ -407,28 +414,58 @@
     return _stores.filter(st => !_elStore || st.code === _elStore);
   }
 
-  // colgroup + header, built from the store list so N stores work. Product
-  // takes a third; the stores split what is left evenly.
-  function elRenderTableHead() {
-    const cg = document.getElementById('el-colgroup');
-    const hr = document.getElementById('el-headrow');
-    if (!cg || !hr) return;
-    const shown = elShownStores();
-    const rest = shown.length ? Math.floor(66 / shown.length) : 66;
-    cg.innerHTML = '<col style="width:34%">' +
-      shown.map(() => '<col style="width:' + rest + '%">').join('');
-    hr.innerHTML = '<th>' + esc(cuT('Product', '\u5546\u54c1')) + '</th>' +
-      shown.map(st => '<th>' + esc(elStoreName(st)) + '</th>').join('');
+  // One dot column per visible store, named after the store. Built from the
+  // store list so N stores work, and repainted on a language flip like
+  // everything else the JS writes.
+  function elRenderListHead() {
+    const box = document.getElementById('el-lh-stores');
+    if (!box) return;
+    box.innerHTML = elShownStores().map(st => '<span>' + esc(elStoreName(st)) + '</span>').join('');
   }
 
-  function elRenderProducts() {
-    const tbody = document.getElementById('el-tbody');
-    if (!tbody) return;
+  // ── One product, one store: the state, in one word ──────────────────────────
+  // The list draws it as a dot and nothing else; the panel draws the same state
+  // with its word beside it. Both read this, so a dot and its explanation can
+  // never disagree.
+  //
+  // Every store on Eleme is matched by hand — there are no article numbers — so
+  // a missing name is always WORK here. On the Meituan page one store links
+  // itself by 货号 and "not linked" there is a fact rather than a job; this page
+  // has no such case, which is why every state below is amber or better.
+  // A store with no Eleme shop linked yet cannot hold a mapping at all. Without
+  // this its column reads "Add name" on EVERY product — 198 amber dots for one
+  // missing shop id, which is the noise this page was rebuilt to stop. The
+  // store's own line already says what it needs; the products stay quiet.
+  // Signed-out is deliberately NOT this case: that store has a shop, its
+  // mappings are real, and a missing name there is still work.
+  function elStoreConnected(code) {
+    const st = _stores.find(x => x.code === code);
+    return !!(st && st.shop_id && String(st.shop_id).trim());
+  }
 
+  function elStoreState(map, storeCode) {
+    if (storeCode && !elStoreConnected(storeCode)) {
+      return { k: 'none', t: cuT('Store not connected', '门店未关联') };
+    }
+    if (!map || !map.eleme_name) return { k: 'att', t: cuT('Add name', '待填名称') };
+    if (Number(map.sync_enabled) !== 1) return { k: 'off', t: cuT('Sync off', '已关闭') };
+    // A listing with several sizes and none picked cannot be pushed accurately
+    // — the driver falls back to a rule that writes a made-up number to every
+    // size. That is the one state worth colouring.
+    if (Number(map.specCount || 0) > 1 && !map.spec_id) {
+      return { k: 'att', t: cuT('Pick a size', '待选规格') };
+    }
+    return { k: 'ok', t: cuT('Synced', '已同步') };
+  }
+
+  // The rows the filters leave standing, in list order. The panel and the list
+  // both need this set — the panel to know whether its product is still on
+  // screen, the list to draw it — so it is worked out once.
+  function elVisibleList() {
     // Text match covers the SKU and the mapped listing name too — the two
     // things you actually have in front of you when hunting a row.
     const q = (document.getElementById('el-search')?.value || '').trim().toLowerCase();
-    const rows = _products
+    return _products
       .filter(p => Number(p.is_active) !== 0)
       .filter(p => elChipMatch(p, _elFilter))
       .filter(elStorePass)
@@ -437,84 +474,197 @@
         || (p.name_en || '').toLowerCase().includes(q)
         || (p.sku || '').toLowerCase().includes(q)
         || Object.values(p.stores || {}).some(m => (m.eleme_name || '').toLowerCase().includes(q)));
+  }
+
+  function elRenderProducts() {
+    const body = document.getElementById('el-list-body');
+    if (!body) return;
+    const rows = elVisibleList();
 
     const cnt = document.getElementById('el-count');
-    if (cnt) cnt.textContent = String(rows.length);
+    if (cnt) cnt.textContent = String(_products.filter(p => Number(p.is_active) !== 0).length || '');
     elRenderHead();
     elRenderChips();
-    elRenderTableHead();
+    elRenderListHead();
 
-    const shown = elShownStores();
+    // The panel always holds a product while there is one to hold: an operator
+    // who filters down to "Needs a size" should land on the first thing that
+    // needs them, not on an empty panel with one more click to make.
+    if (!rows.some(p => p.id === _elSel)) _elSel = rows.length ? rows[0].id : null;
+
     if (!rows.length) {
-      tbody.innerHTML = '<tr><td colspan="' + (shown.length + 1) + '" class="el-empty">' +
-        cuT('Nothing here.', '\u6682\u65e0\u5546\u54c1\u3002') + '</td></tr>';
+      body.innerHTML = '<div class="el-empty">' + cuT('Nothing here.', '暂无商品。') + '</div>';
+      elRenderPanel();
       return;
     }
 
-    tbody.innerHTML = rows.map(p => {
+    const shown = elShownStores();
+    body.innerHTML = rows.map(p => {
       const base = cuT(p.name_en || p.name_cn, p.name_cn || p.name_en);
-      const alt  = cuT(p.name_cn || '', p.name_en || '');
-      // SKU rides in the product cell as a chip, as on Meituan — it is a fact
-      // about the product, not a column's worth of page.
       const thumb = p.image
         ? '<img class="el-thumb" loading="lazy" src="' + esc(p.image) + '" alt="">'
         : '<span class="el-thumb-ph"></span>';
-      const nameCell = '<div class="el-pcell">' + thumb + '<div>' +
-        '<div class="el-pname">' + esc(base) +
-          (p.variant_label ? ' <span class="vl">\u00b7 ' + esc(p.variant_label) + '</span>' : '') + '</div>' +
-        (alt && alt !== base ? '<div class="el-pmeta">' + esc(alt) + '</div>' : '') +
-        (p.sku ? '<span class="el-psku">' + esc(p.sku) + '</span>' : '') +
-        '</div></div>';
 
-      const cells = shown.map(st => {
-        const m = (p.stores || {})[st.code];
-        const on = !!(m && Number(m.sync_enabled) === 1);
-        const mappedName = (m && m.eleme_name) || '';
-        const specs = elSpecsFor(st.code, mappedName);
-        const chosen = String((m && m.spec_id) || '');
-        // A listing with several sizes and none picked cannot be pushed
-        // accurately — the driver falls back to a rule that writes a made-up
-        // number to every size. That is the one state worth colouring.
-        const needsSize = on && specs.length > 1 && !chosen;
-        const pill = !mappedName ? '<span class="el-pill att"><span class="d"></span>' + cuT('Add name', '\u5f85\u586b\u540d\u79f0') + '</span>'
-          : needsSize ? '<span class="el-pill att"><span class="d"></span>' + cuT('Pick a size', '\u5f85\u9009\u89c4\u683c') + '</span>'
-          : on ? '<span class="el-pill ok"><span class="d"></span>' + cuT('Synced', '\u5df2\u540c\u6b65') + '</span>'
-          : '<span class="el-pill off"><span class="d"></span>' + cuT('Sync off', '\u5df2\u5173\u95ed') + '</span>';
-        const last = (m && m.last_pushed_at)
-          ? '<div class="el-pmeta">' + esc(cuT('pushed ', '\u63a8\u9001\u4e8e ') + (fmtAgo(m.last_pushed_at) || '')) + '</div>'
-          : '';
-        // The name field is an autocomplete against the real catalogue, not
-        // free text: a hand-typed name once used a curly apostrophe and
-        // silently failed every push.
-        return '<td>' +
-          '<div class="el-cellhd">' + pill +
-            '<label class="toggle-label" title="' + esc(cuT('Sync on / off', '\u540c\u6b65\u5f00\u5173')) + '">' +
-              '<input type="checkbox" ' + (on ? 'checked' : '') +
-              ' onchange="elToggleSync(' + p.id + ', ' + st.id + ", '" + esc(st.code) + "', this.checked)\"></label>" +
-          '</div>' +
-          '<input type="text" class="inp el-nameinp" data-no-i18n' +
-            ' list="el-catalogue-dl-' + esc(st.code) + '"' +
-            ' placeholder="' + esc(cuT('Eleme listing name', '\u9976\u4e86\u4e48\u5546\u54c1\u540d')) + '"' +
-            ' value="' + esc(mappedName) + '"' +
-            ' onchange="elSetElemeName(' + p.id + ', ' + st.id + ", '" + esc(st.code) + "', this.value)\">" +
-          (specs.length > 1
-            ? '<select data-no-i18n class="inp el-size' + (needsSize ? ' warn' : '') + '"' +
-              ' title="' + esc(cuT('Which size inside this listing', '\u5bf9\u5e94\u8be5\u5546\u54c1\u7684\u54ea\u4e2a\u89c4\u683c')) + '"' +
-              ' onchange="elSetElemeSpec(' + p.id + ', ' + st.id + ", '" + esc(st.code) + "', this.value, this.options[this.selectedIndex].dataset.label || '')\">" +
-              '<option value="" data-label="">' + esc(cuT('Pick a size\u2026', '\u9009\u62e9\u89c4\u683c\u2026')) + '</option>' +
-              specs.map((sp, i) => {
-                const lbl = elSpecLabel(sp, i);
-                return '<option value="' + esc(sp.specGlobalId) + '" data-label="' + esc(sp.name || lbl) + '"' +
-                  (String(sp.specGlobalId) === chosen ? ' selected' : '') + '>' + esc(lbl) + '</option>';
-              }).join('') +
-              '</select>'
-            : '') +
-          last +
-        '</td>';
+      // One dot per store, in the order the header names them. A dot carries
+      // its store and its state as the row's accessible name, so the list is
+      // readable without the colour.
+      const say = [];
+      const dots = shown.map(st => {
+        const s2 = elStoreState((p.stores || {})[st.code], st.code);
+        say.push(elStoreName(st) + ' ' + s2.t);
+        return '<span class="el-dcell"><span class="el-dot ' + s2.k + '" title="' +
+          esc(elStoreName(st) + ' · ' + s2.t) + '"></span></span>';
       }).join('');
 
-      return '<tr><td>' + nameCell + '</td>' + cells + '</tr>';
+      return '<button type="button" class="el-lrow' + (p.id === _elSel ? ' sel' : '') + '"' +
+        ' data-pid="' + p.id + '" onclick="elSelect(' + p.id + ')"' +
+        ' aria-label="' + esc(base + (p.sku ? ' ' + p.sku : '') + ' · ' + say.join(' · ')) + '">' +
+        // The SKU is a sibling of the name, not inside it: it is what an
+        // operator searches by, and inside the name it would be the first thing
+        // the ellipsis ate.
+        '<span class="el-pcell">' + thumb +
+        '<span class="el-pname">' + esc(base) +
+          (p.variant_label ? ' <span class="vl">· ' + esc(p.variant_label) + '</span>' : '') + '</span>' +
+        (p.sku ? '<span class="el-psku">' + esc(p.sku) + '</span>' : '') + '</span>' +
+        '<span class="el-dots">' + dots + '</span></button>';
     }).join('');
+
+    elRenderPanel();
+  }
+
+  // Picking a row moves the panel, nothing else. `focusName` is the click path:
+  // landing on a product with no listing name yet puts the cursor in the first
+  // empty field, so filling names is click-type-click-type with no reach for
+  // the mouse in between. A repaint (a save, a poll, a language flip) never
+  // steals focus, because it does not come through here.
+  window.elSelect = function (pid, focusName) {
+    _elSel = Number(pid);
+    document.querySelectorAll('#el-list-body .el-lrow').forEach(el => {
+      el.classList.toggle('sel', Number(el.dataset.pid) === _elSel);
+    });
+    elRenderPanel();
+    if (focusName !== false) {
+      const empty = document.querySelector('#el-panel .el-name-input[value=""]');
+      if (empty) empty.focus();
+    }
+  };
+
+  // ── The panel — every field, once ───────────────────────────────────────────
+  // Everything that used to be repeated on every row lives here for the one
+  // product in front of you: the listing name, the size picker, the sync
+  // switch, the push footnote — and the sentence about how Eleme matching
+  // works, which used to be a standing disclosure above the whole table and now
+  // appears only on a product that has not been matched yet.
+  function elRenderPanel() {
+    const panel = document.getElementById('el-panel');
+    if (!panel) return;
+    const p = _products.find(x => x.id === _elSel);
+    // No product means no ROWS — the list auto-selects whenever it has any — so
+    // the panel goes away rather than sitting there as an empty card telling
+    // you to pick something the list has already said it does not have.
+    if (!p) { panel.hidden = true; panel.innerHTML = ''; return; }
+    panel.hidden = false;
+
+    const base = cuT(p.name_en || p.name_cn, p.name_cn || p.name_en);
+    const alt  = cuT(p.name_cn || '', p.name_en || '');
+    const thumb = p.image
+      ? '<img class="el-thumb" loading="lazy" src="' + esc(p.image) + '" alt="">'
+      : '<span class="el-thumb-ph"></span>';
+
+    panel.innerHTML =
+      '<div class="el-ptop">' + thumb + '<div class="el-pttl">' +
+        '<div class="el-pname">' + esc(base) +
+          (p.variant_label ? ' <span class="vl">· ' + esc(p.variant_label) + '</span>' : '') + '</div>' +
+        (alt && alt !== base ? '<div class="el-pmeta">' + esc(alt) + '</div>' : '') +
+        (p.sku ? '<div class="el-pmeta num">' + esc(p.sku) + '</div>' : '') +
+      '</div></div>' +
+      elShownStores().map(st => elPanelStore(p, st)).join('');
+  }
+
+  // One store's block. Every store on Eleme is matched by hand, so every block
+  // is editable — there is no read-only twin the way the Meituan page has one.
+  function elPanelStore(p, st) {
+    const m      = (p.stores || {})[st.code] || {};
+    const s2     = elStoreState(m, st.code);
+    const on     = Number(m.sync_enabled) === 1;
+    const name   = m.eleme_name || '';
+    const specs  = elSpecsFor(st.code, name);
+    const chosen = String(m.spec_id || '');
+    const cached = ((_catalogue[st.code] || {}).rows || []).length;
+
+    if (!elStoreConnected(st.code)) {
+      return '<div class="el-pblock">' +
+        '<div class="el-pbh"><span class="nm">' + esc(elStoreName(st)) + '</span></div>' +
+        '<div class="el-pstate"><span class="el-dot ' + s2.k + '"></span>' + esc(s2.t) + '</div>' +
+        '<div class="el-sub">' + esc(cuT('Nothing can be matched here until this store has an Eleme shop linked — the store line above the tabs takes the shop id.',
+                                         '关联饿了么店铺后才能在此匹配 — 请在上方门店行填写店铺ID。')) + '</div>' +
+        '</div>';
+    }
+
+    const toggle = '<label class="toggle-label" title="' + esc(cuT('Sync on / off', '同步开关')) + '">' +
+      '<input type="checkbox" ' + (on ? 'checked' : '') +
+      ' onchange="elToggleSync(' + p.id + ', ' + st.id + ", '" + esc(st.code) + "', this.checked)\"></label>";
+
+    // The name field is an autocomplete against the real catalogue, not free
+    // text: a hand-typed name once used a curly apostrophe and silently failed
+    // every push. Labelled, so no placeholder — the placeholder used to BE the
+    // label on the table, and keeping both says the same words twice.
+    let body =
+      '<div class="el-pbh"><span class="nm">' + esc(elStoreName(st)) + '</span>' + toggle + '</div>' +
+      '<div class="el-pstate"><span class="el-dot ' + s2.k + '"></span>' + esc(s2.t) + '</div>' +
+      '<div class="el-plbl">' + esc(cuT('Eleme listing name', '饿了么商品名')) + '</div>' +
+      '<input type="text" class="el-name-input" data-no-i18n' +
+        ' list="el-catalogue-dl-' + esc(st.code) + '"' +
+        ' value="' + esc(name) + '"' +
+        ' onchange="elSetElemeName(' + p.id + ', ' + st.id + ", '" + esc(st.code) + "', this.value)\">";
+
+    // One-time help, on the products that need it rather than standing above
+    // the whole page: Eleme listings carry no article number, so the name IS
+    // the match and it has to be the exact one.
+    if (!name) {
+      body += '<div class="el-sub">' + esc(cached
+        ? cuT('Eleme listings have no article number, so the name is the match — pick one of the ' +
+              cached + ' read from this store.',
+              '饿了么商品没有货号,只能按商品名精确匹配 — 请从该门店已读取的 ' + cached + ' 个商品中选择。')
+        : cuT('No catalogue has been read from this store yet, so there is nothing to pick from.',
+              '尚未读取该门店的商品目录,暂无可选项。')) + '</div>';
+    }
+
+    // Which size inside the listing. One Eleme listing can hold several sizes
+    // behind one name; without this the pusher cannot tell them apart and falls
+    // back to a rule that writes a made-up number to every size.
+    if (specs.length > 1) {
+      body +=
+        '<div class="el-plbl">' +
+          esc(cuT('This listing holds ' + specs.length + ' sizes — which one is this?',
+                  '该商品有 ' + specs.length + ' 个规格 — 这是哪一个？')) + '</div>' +
+        '<select data-no-i18n class="el-spec' + (chosen ? '' : ' warn') + '"' +
+        ' onchange="elSetElemeSpec(' + p.id + ', ' + st.id + ", '" + esc(st.code) +
+          "', this.value, this.options[this.selectedIndex].dataset.label || '')\">" +
+        '<option value="" data-label="">' + esc(cuT('Pick a size…', '选择规格…')) + '</option>' +
+        specs.map((sp, i) => {
+          const lbl = elSpecLabel(sp, i);
+          return '<option value="' + esc(sp.specGlobalId) + '" data-label="' + esc(sp.name || lbl) + '"' +
+            (String(sp.specGlobalId) === chosen ? ' selected' : '') + '>' + esc(lbl) + '</option>';
+        }).join('') +
+        '</select>';
+    } else if (name && Number(m.specCount || 0) > 1 && !cached) {
+      // The state says "Pick a size" off the server's count, but the sizes
+      // themselves come from the cached catalogue — say that rather than show
+      // an empty picker.
+      body += '<div class="el-sub">' +
+        esc(cuT('This listing holds several sizes, but no catalogue has been read from this store yet, ' +
+                'so there is no size to pick.',
+                '该商品有多个规格,但尚未读取该门店的商品目录,暂无可选规格。')) + '</div>';
+    }
+
+    if (m.last_pushed_at) {
+      body += '<div class="el-pfact">' +
+        esc(cuT('Last', '上次') + ' ' + (m.last_pushed_qty != null ? m.last_pushed_qty + ' · ' : '') +
+            (fmtAgo(m.last_pushed_at) || '')) + '</div>';
+    }
+
+    return '<div class="el-pblock">' + body + '</div>';
   }
 
   window.elToggleSync = async function (productId, storeId, storeCode, on) {
@@ -525,17 +675,24 @@
       // row, so omitting it here would silently null out an override the
       // operator already set (elSetElemeName below has the matching problem
       // in reverse).
+      //
+      // Off now KEEPS the row and clears sync_enabled; it used to DELETE it,
+      // throwing away the listing name and the chosen size with it. The daemon
+      // pushes on sync_enabled = 1, so both spellings stop the pushing — only
+      // one of them also discards what the operator typed. In the panel the
+      // switch sits right beside that name, which is exactly where losing it
+      // would be hardest to explain.
       await api('/api/retail-admin/eleme/products/' + productId + '/map', {
         method: 'POST',
-        body: on ? { storeId, storeCode, syncEnabled: 1, elemeName: (cur && cur.eleme_name) || null,
-                     specId: (cur && cur.spec_id) || null, specName: (cur && cur.spec_name) || null }
-                 : { storeId, storeCode, remove: 1 },
+        body: { storeId, storeCode, syncEnabled: on ? 1 : 0,
+                elemeName: (cur && cur.eleme_name) || null,
+                specId:   (cur && cur.spec_id)   || null,
+                specName: (cur && cur.spec_name) || null },
       });
       // Reflect locally without a full reload.
       if (p) {
         p.stores = p.stores || {};
-        if (on) p.stores[storeCode] = { ...(cur || {}), sync_enabled: 1 };
-        else delete p.stores[storeCode];
+        p.stores[storeCode] = { ...(cur || {}), sync_enabled: on ? 1 : 0 };
       }
       // repaint: the "no size picked" warning only applies once sync is on
       elRenderProducts();
@@ -570,7 +727,7 @@
         };
       }
       elRenderProducts();
-      if (window.toast) toast(cuT('Saved · 已保存', '已保存'));
+      if (window.toast) toast(cuT('Saved', '已保存'));
     } catch (e) { elLoadProducts(); }
   };
 
@@ -599,19 +756,19 @@
         p.stores[storeCode] = { ...(cur || {}), spec_id: specId || null, spec_name: specId ? (specName || null) : null };
       }
       elRenderProducts();
-      if (window.toast) toast(cuT('Saved · 已保存', '已保存'));
+      if (window.toast) toast(cuT('Saved', '已保存'));
     } catch (e) { elLoadProducts(); }
   };
 
   window.elPushAll = async function () {
     const btn = document.getElementById('el-pushall-btn');
-    if (btn) { btn.disabled = true; btn.textContent = cuT('Queuing… · 排队中…', '排队中…'); }
+    if (btn) { btn.disabled = true; btn.textContent = cuT('Queuing…', '排队中…'); }
     try {
       const r = await api('/api/retail-admin/eleme/push-all', { method: 'POST' });
       if (window.toast) toast(cuT(`Queued ${r.queued} product(s)`, `已排队 ${r.queued} 个商品`));
       elLoadStatus();
     } catch (e) {} finally {
-      if (btn) { btn.disabled = false; btn.textContent = cuT('Push all stock · 推送全部库存', '推送全部库存'); }
+      if (btn) { btn.disabled = false; btn.textContent = cuT('Push all stock', '推送全部库存'); }
     }
   };
 
