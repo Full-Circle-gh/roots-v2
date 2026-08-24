@@ -57,9 +57,13 @@ async function loadAlipayManual() {
     if (age) age.value = d.proofAgeMin || '';
     if (key) {
       key.value = '';
-      key.placeholder = d.hasKey ? (d.keyMasked + ' · leave blank to keep · 留空保持不变')
-                       : d.serverKeyAvailable ? 'Using the existing server key — leave blank · 已使用服务器密钥,可留空'
-                       : 'sk-ant-… · paste once · 粘贴一次';
+      // cuT(), not a glued string: a placeholder is an attribute, so the
+      // " · " walker never sees it and both languages would show at once.
+      key.placeholder = d.hasKey
+        ? cuT(d.keyMasked + ' — leave blank to keep', d.keyMasked + ' — 留空保持不变')
+        : d.serverKeyAvailable
+          ? cuT('Using the existing server key — leave blank', '已使用服务器密钥,可留空')
+          : cuT('sk-ant-… — paste once', 'sk-ant-… — 粘贴一次');
     }
     _alipayOcrToggle();
     _alipayManualQr = null;   // existing image stays unless operator picks a new one
@@ -437,8 +441,12 @@ async function loadShippingIntegrations() {
     const jCc = document.getElementById('jd-customer_code');
     const jEv = document.getElementById('jd-env');
     if (jAk) jAk.value = d.app_key || '';
-    if (jAs) jAs.placeholder = d.app_secret_masked   ? `${d.app_secret_masked} · leave blank to keep · 留空保持不变`   : 'paste app_secret · 粘贴 app_secret';
-    if (jAt) jAt.placeholder = d.access_token_masked ? `${d.access_token_masked} · leave blank to keep · 留空保持不变` : 'paste access_token · 粘贴 access_token';
+    if (jAs) jAs.placeholder = d.app_secret_masked
+      ? cuT(d.app_secret_masked + ' — leave blank to keep', d.app_secret_masked + ' — 留空保持不变')
+      : cuT('paste app_secret', '粘贴 app_secret');
+    if (jAt) jAt.placeholder = d.access_token_masked
+      ? cuT(d.access_token_masked + ' — leave blank to keep', d.access_token_masked + ' — 留空保持不变')
+      : cuT('paste access_token', '粘贴 access_token');
     if (jCc) jCc.value = d.customer_code || '';
     if (jEv) jEv.value = d.env || 'production';
     const jChip = document.getElementById('jd-chip');
@@ -456,7 +464,9 @@ async function loadShippingIntegrations() {
     const fUser = document.getElementById('feie-user');
     const fUkey = document.getElementById('feie-ukey');
     if (fUser) fUser.value = f.user || '';
-    if (fUkey) fUkey.placeholder = f.ukey_masked ? `${f.ukey_masked} · leave blank to keep · 留空保持不变` : 'paste USERKEY from dev console · 从开发者后台粘贴 USERKEY';
+    if (fUkey) fUkey.placeholder = f.ukey_masked
+      ? cuT(f.ukey_masked + ' — leave blank to keep', f.ukey_masked + ' — 留空保持不变')
+      : cuT('paste USERKEY from dev console', '从开发者后台粘贴 USERKEY');
     const fChip = document.getElementById('feie-chip');
     if (fChip) fChip.innerHTML = f.enabled
       ? '<span style="background:#d1fae5;color:#065f46;padding:2px 9px;border-radius:99px;font-size:11px;font-weight:700">✓ LIVE · 已启用</span>'
