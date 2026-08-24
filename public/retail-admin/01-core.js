@@ -856,7 +856,12 @@ const RAIL_PARENT = {
 // there, just permanently dark. goTab's manual-activation fallback (below) now
 // fires this directly so opening a channel admin from the Sales page actually
 // populates it instead of showing a stale/empty section.
-const TAB_INIT = { meituan: 'mtAdminInit', guanyi: 'gyAdminInit', eleme: 'elAdminInit' };
+const TAB_INIT = {
+  meituan: 'mtAdminInit', guanyi: 'gyAdminInit', eleme: 'elAdminInit',
+  // The two topbar Inbox tabs. Rail-less, so goTab() always takes the manual
+  // path and TAB_INIT is the only thing that loads them.
+  reviews: 'reviewsTabInit', feedback: 'feedbackTabInit',
+};
 const RAIL_STANDIN = {
   meituan: 'sales', guanyi: 'sales', gzgrocery: 'sales', eleme: 'sales',
   'product-editor': 'mini-app-editor',

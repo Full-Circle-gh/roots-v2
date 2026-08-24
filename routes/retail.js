@@ -18321,7 +18321,11 @@ router.get('/api/retail-admin/reviews', requireRetailAdmin, (req, res) => {
        COUNT(*) AS total
        FROM retail_reviews`
   ).get();
-  if (synthOk) {
+  // The chip counts describe the WHOLE set, so they cannot be gated on
+  // synthOk — that flag also means "this query suppressed the seeded arm".
+  // Gated on it, picking the Needs-reply chip made Everything read 21
+  // instead of 653: the count followed the filter instead of describing it.
+  if (synthReviewsTableExists()) {
     const ss = tdb().prepare(
       `SELECT
          SUM(CASE WHEN is_visible = 1 THEN 1 ELSE 0 END) AS visible,
