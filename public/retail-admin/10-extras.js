@@ -595,15 +595,24 @@ function afxActionCell(r) {
 
 function afxRow(r) {
   if (AFX.rowConfirm && AFX.rowConfirm.id === r.id) return afxRowConfirm(r);
-  const referrer = escapeHtml(r.referrer_nickname || ('#' + r.referrer_id));
-  const friend   = escapeHtml(r.invitee_nickname  || ('#' + r.invitee_id));
+  // WeChat nicknames are optional, and "#231" tells the operator nothing they
+  // can act on. The phone is what they would actually search a customer by.
+  const who = (nick, phone, id) => escapeHtml(nick || phone || ('#' + id));
+  const referrer = who(r.referrer_nickname, r.referrer_phone, r.referrer_id);
+  const friend   = who(r.invitee_nickname,  r.invitee_phone,  r.invitee_id);
   const ordered = r.status === 'ordered' || !!r.first_paid_order_id;
   const when = ordered ? (tdWhen(r.rewarded_at || r.joined_at, 'date') || '') : '';
   const first = !ordered ? `<span class="afx-dim">${afT('Not yet', '尚未下单')}</span>`
     : when ? `<span class="afx-num">${escapeHtml(when)}</span>`
     : `<span class="afx-dim">${afT('Date not recorded', '未记录日期')}</span>`;
-  const earned = Number(r.reward_amount) > 0
-    ? `<span class="afx-num">¥${afxMoney(r.reward_amount)}</span>`
+  // reward_amount is what the row is HOLDING IN RESERVE, not what was paid —
+  // it is set when the referral is created and survives whatever happens next.
+  // Only an 'ordered' row ever moved money, so every other row earned ¥0.
+  // Printing the reserved figure under a heading that says "Earned" was the
+  // page claiming a payment that never happened.
+  const paid = r.status === 'ordered' ? (Number(r.reward_amount) || 0) : 0;
+  const earned = paid > 0
+    ? `<span class="afx-num">¥${afxMoney(paid)}</span>`
     : `<span class="afx-dim afx-num">¥0</span>`;
   return `<tr>
       <td><a data-afx="cust:${r.referrer_id}">${referrer}</a></td>
