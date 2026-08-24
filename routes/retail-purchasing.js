@@ -24,6 +24,8 @@ const express = require('express');
 const db = require('../database');
 const { tdb, currentTenantId } = require('../lib/tenant-db');
 const inventory = require('../lib/inventory');
+// Finance category text — the one normalisation. See lib/category-text.js.
+const { storeCategory } = require('../lib/category-text');
 const { logActivity } = require('../middleware/auth');
 const { requireRetailAdmin } = require('./retail');
 
@@ -744,7 +746,7 @@ router.post('/api/retail-admin/purchases/:id/backorder', requireRetailAdmin, (re
       lines.forEach((l, i) => {
         const outstanding = (parseFloat(l.qty) || 0) - (l.qty_received == null ? 0 : parseFloat(l.qty_received) || 0);
         ins.run(newId, l.store_product_id, l.name_en, l.name_cn, l.sku, outstanding, l.unit || 'pcs',
-          l.cost_per_unit, outstanding * (parseFloat(l.cost_per_unit) || 0), l.expense_category,
+          l.cost_per_unit, outstanding * (parseFloat(l.cost_per_unit) || 0), storeCategory(db, l.expense_category),
           l.supplier_name || null, l.purchase_channel || null, l.note || null, i);
       });
       return newId;
@@ -783,7 +785,7 @@ function insertLineItems(poId, items, headerSupplier) {
     const status = VALID_INVOICE.has(item.invoice_status) ? item.invoice_status : 'not_received';
     insertItem.run(
       poId, item.store_product_id || null, item.name_en || '', item.name_cn || null, item.sku || null,
-      qty, item.unit || 'pcs', cpu, qty * cpu, item.expense_category || null,
+      qty, item.unit || 'pcs', cpu, qty * cpu, storeCategory(db, item.expense_category),
       item.supplier_name || headerSupplier || null, item.purchase_channel || null, status,
       (item.note || '').trim() || null, i,
     );

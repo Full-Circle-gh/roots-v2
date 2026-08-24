@@ -8,6 +8,8 @@ const { requireAuth, requirePermission, requireDelete, logActivity } = require('
 // The one cost-per-recipe-unit derivation — shared so purchasing cannot drift
 // from what the ingredient form computes. See lib/ingredient-cost.js.
 const { deriveCostPerUnit, normaliseUnit } = require('../lib/ingredient-cost');
+// Finance category text — the one normalisation. See lib/category-text.js.
+const { storeCategory } = require('../lib/category-text');
 const router = express.Router();
 
 // Web Push helpers — fan-out to subscribed devices when a PO event
@@ -323,7 +325,7 @@ router.post('/api/purchases', requireAuth, requirePermission('purchases'), (req,
         }
         insertItem.run(
           poId, item.ingredient_id||null, item.name_en||'', item.name_cn||null, item.sku||null,
-          item.qty||0, item.unit || null, item.cost_per_unit||0, total, item.expense_category||null,
+          item.qty||0, item.unit || null, item.cost_per_unit||0, total, storeCategory(db, item.expense_category),
           lineSupplier, item.purchase_channel || null,
           status, (item.note||'').trim() || null, i
         );
@@ -363,7 +365,7 @@ router.put('/api/purchases/:id', requireAuth, requirePermission('purchases'), (r
       }
       insertItem.run(
         req.params.id, item.ingredient_id||null, item.name_en||'', item.name_cn||null, item.sku||null,
-        item.qty||0, item.unit || null, item.cost_per_unit||0, total, item.expense_category||null,
+        item.qty||0, item.unit || null, item.cost_per_unit||0, total, storeCategory(db, item.expense_category),
         lineSupplier, item.purchase_channel || null,
         status, (item.note||'').trim() || null, i
       );
@@ -625,7 +627,7 @@ router.post('/api/purchases/:id/backorder', requireAuth, requirePermission('purc
       // Carry supplier_name + purchase_channel + note forward; invoice_received
       // resets to false on the back-order so the new line tracks its own
       // separate fulfilment.
-      ins.run(newId, l.ingredient_id, l.name_en, l.name_cn, l.sku, outstanding, l.unit, l.cost_per_unit, total, l.expense_category,
+      ins.run(newId, l.ingredient_id, l.name_en, l.name_cn, l.sku, outstanding, l.unit, l.cost_per_unit, total, storeCategory(db, l.expense_category),
         l.supplier_name || null, l.purchase_channel || null, l.note || null, i);
     });
     return { newId, po_number };
@@ -670,7 +672,7 @@ router.post('/api/purchases/:id/duplicate', requireAuth, requirePermission('purc
     // those are per-delivery; a duplicate PO is a fresh order so blank-out
     // makes sense. supplier_name + purchase_channel + note ARE carried forward
     // since the buyer is likely re-ordering from the same place.
-    items.forEach(i => ins.run(newId, i.ingredient_id, i.name_en, i.name_cn, i.sku, i.qty, i.unit, i.cost_per_unit, i.total_cost, i.expense_category,
+    items.forEach(i => ins.run(newId, i.ingredient_id, i.name_en, i.name_cn, i.sku, i.qty, i.unit, i.cost_per_unit, i.total_cost, storeCategory(db, i.expense_category),
       i.supplier_name || null, i.purchase_channel || null, i.note || null, null, null, i.sort_order));
     return { newId, po_number };
   });
