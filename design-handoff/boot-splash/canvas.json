@@ -1,0 +1,10 @@
+{
+  "artboards": [
+    { "file": "Before.dc.html", "x": 0, "y": 0, "w": 390, "h": 844, "title": "Before · default splash" },
+    { "file": "Main.dc.html", "x": 470, "y": 0, "w": 390, "h": 844, "title": "After · boot loading" }
+  ],
+  "annotations": [
+    { "id": "brief-note", "x": 0, "y": -110, "w": 800, "text": "Today's boot screen is the OS-generated PWA splash: manifest icon + name, nothing else. The redesign uses the mark's own story — a settling waveform — as the load state, so the wait is the brand instead of a blank default." }
+  ],
+  "launch": { "view": "canvas" }
+}

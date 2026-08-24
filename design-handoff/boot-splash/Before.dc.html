@@ -1,0 +1,48 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    :root{
+      --td-paper:#FBF9F4; --td-text:#111A2B; --td-text2:#58606E;
+      --ui:'Inter','Source Han Sans SC','PingFang SC',system-ui,sans-serif;
+    }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:var(--ui)}
+    a{color:var(--td-text);text-decoration:underline}
+    a:hover{color:var(--td-text)}
+    .screen{width:390px;height:844px;background:var(--td-paper);
+      position:relative;overflow:hidden}
+    .icon{position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);
+      width:112px;height:112px;border-radius:20px;background:#F6F3EC;
+      box-shadow:0 1px 2px rgba(17,26,43,.06);
+      display:flex;align-items:center;justify-content:center}
+    .icon svg{width:66px;height:24px}
+    .name{position:absolute;left:0;right:0;top:78%;text-align:center;
+      font-size:15px;color:var(--td-text2)}
+    .note{position:absolute;left:16px;right:16px;bottom:20px;
+      font-size:12px;line-height:1.5;color:var(--td-text2);text-align:center}
+  </style>
+</helmet>
+
+<div class="screen">
+  <div class="icon">
+    <svg viewBox="0 0 340 110" fill="none" aria-hidden="true">
+      <path d="M20 55 C30 15, 40 95, 50 55 C59 22, 68 88, 77 55 C85 30, 93 80, 101 55 C109 38, 117 72, 125 55 C133 44, 141 66, 149 55 C160 50, 171 60, 182 55 C215 55, 260 55, 305 55" stroke="#111A2B" stroke-width="8.8" stroke-linecap="round"/>
+      <circle cx="305" cy="55" r="13" fill="#6E67AF"/>
+    </svg>
+  </div>
+  <div class="name">Tacet · store</div>
+  <div class="note">Today — the OS-generated splash: icon, name, nothing else</div>
+</div>
+</x-dc>
+<script data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {}
+</script>
+</body>
+</html>
