@@ -268,10 +268,28 @@ const DASH_CARD_CAP = {
   // dashCardWants treats an unknown key as "always show", which would put a fire
   // on the dashboard of an operator with no way to act on it.
   orders:   'orders:view',
+  // The two Inbox queues. Gated on MODERATE, not view: the test for a Needs-you
+  // row is "can the operator click it and resolve it", and resolving one of
+  // these means writing the reply. A read-only operator would get a fire they
+  // can only look at.
+  reviews:  'reviews:moderate',
+  feedback: 'feedback:moderate',
 };
 function dashCardWants(kind) {
   const cap = DASH_CARD_CAP[kind];
   return cap === undefined ? true : _capAllows(cap);   // _capAllows: can()/canAny() (01-core.js)
+}
+// Is a switchable feature actually running for this tenant? body.feat-<key> is
+// seeded at boot (02-settings-ops.js) from entitlement + the operator's own
+// on/off preference, well before the first ops poll lands.
+//
+// Unlike the capability gate above this one fails CLOSED, and deliberately: a
+// tenant who turned Reviews off is not filling that queue any more, so nagging
+// them about its backlog from the front door would be a fire nobody lit. The
+// page itself stays reachable (feature-off dims a rail row, it doesn't hide it)
+// — this only decides whether the dashboard raises its hand.
+function dashFeatOn(key) {
+  return document.body.classList.contains('feat-' + key);
 }
 
 // ── Per-store filter ───────────────────────────────────────────────────────
@@ -345,18 +363,10 @@ function dashInit() {
     if (DASH_DATA) { dashRenderHeadlines(); dashRenderFacts(); }
     dashReadRender(); dashNotesRender(); dashAskChipsRender(); dashAskRender();
   });
-  // Initial 30d window. On a phone (≤720px) the pull happens at boot because
-  // the phone dashboard (rmRenderDash) renders straight from DASH_DATA. On
-  // desktop the deep Reports build (~28 aggregate queries) is DEFERRED to the
-  // first Reports visit — at boot it used to queue ahead of the visible cards
-  // and was the main reason the dashboard sat on "Loading…".
-  const phoneMq = window.matchMedia && window.matchMedia('(max-width: 720px)');
-  dashSetRange('30', { defer: !(phoneMq && phoneMq.matches) });
-  // …and if a desktop window is later narrowed past the phone breakpoint, the
-  // phone dashboard needs the data it was never sent. Pull it once, on cross.
-  if (phoneMq && phoneMq.addEventListener) {
-    phoneMq.addEventListener('change', e => { if (e.matches && !DASH_DATA) dashLoad(); });
-  }
+  // Initial 30d window. The deep Reports build (~28 aggregate queries) is
+  // DEFERRED to the first Reports visit — at boot it used to queue ahead of the
+  // visible cards and was the main reason the dashboard sat on "Loading…".
+  dashSetRange('30', { defer: true });
   dashHeroInit();      // today pulse: presence + today KPIs + activity polling
   tdInit();            // Tacet dashboard: The Recap + attention cards + date
 }
@@ -559,7 +569,7 @@ async function dashHeroLoadPresence() {
     // the count, and a label. At zero the count hides (CSS via .is-zero) and
     // the label carries the whole sentence.
     const num = $('#db-live-num');
-    if (num) dashCountUp(num, v);   // keep a plain number — rmRenderDash reads it
+    if (num) dashCountUp(num, v);
     const wrap = $('#td-live');
     if (wrap) { wrap.classList.toggle('is-on', v > 0); wrap.classList.toggle('is-zero', v === 0); }
     const lbl = $('#td-live-lbl');
@@ -1144,7 +1154,11 @@ function dashOpenCustomerFromFeed(customerId) {
 // has loaded.
 function dashOpenFeedbackFromFeed(feedbackId) {
   closeDrawer('#db-activity-drawer');
-  dashJumpTab('feedback');
+  // dashJumpTab looks for a RAIL button, and Feedback has not had one since
+  // Inbox moved to the topbar — so this jump was landing nowhere, and an
+  // activity-feed click on a bug report did nothing at all. Goes through the
+  // Inbox door now, which also marks the queue seen.
+  dashOpenFeedback();
   const id = Number(feedbackId);
   if (!feedbackId || Number.isNaN(id) || id <= 0) return;
   // The tab's first open kicks off an async loadFeedback(); poll briefly for
@@ -1330,6 +1344,53 @@ function dashOpenInvoices() {
   const chip = document.querySelector('#orders-status-chips .status-chip[data-status="needs_invoice"]');
   if (chip && typeof setOrderStatus === 'function' && !chip.classList.contains('active')) setOrderStatus(chip);
 }
+
+// The two Inbox queues — Reviews and Feedback — are NOT rail tabs. They live in
+// the topbar Inbox dropdown, so `dashJumpTab` (which queries `.tabs [data-tab]`)
+// cannot reach either one, and this is the door instead.
+//
+// It CLICKS the menu button rather than calling goTab, for what the button does
+// either side of the navigation: `_markInboxSeenNow` and `closeInboxMenu`. An
+// operator who reaches the queue from a fire has read it, so the unseen badge
+// must clear exactly as it does when they use the menu — a red dot still sitting
+// on the Inbox icon after they have just worked the list is the badge lying.
+// goTab alone leaves it lit.
+//
+// It does NOT click for the loading, any more: `TAB_INIT` registers
+// reviewsTabInit/feedbackTabInit, so goTab populates both tabs on its own now.
+// Both are idempotent (`if (LOADED) return`), so the click reaching the button's
+// own listener AND goTab's TAB_INIT dispatch loads once, not twice.
+//
+// Hidden inside a collapsed dropdown is no obstacle — a programmatic click on a
+// hidden button fires its handlers all the same.
+function dashOpenInbox(which) {
+  const btn = document.querySelector(`#tbInboxMenu [data-tab="${which}"]`)
+           || document.querySelector(`[data-tab="${which}"]`);
+  if (!btn) return false;
+  btn.click();
+  return true;
+}
+// The Reviews queue opens on its own "Needs reply" chip — which is already the
+// page's default filter, so this only has to put it back when the operator left
+// the page on a different one.
+function dashOpenReviews() {
+  if (!dashOpenInbox('reviews')) return;
+  if (typeof rvwSetFilter === 'function' && RVW_FILTER !== 'needs') {
+    // First open kicks off its own load; setting the filter before that lands
+    // would be overtaken by it. A short poll waits for the list to exist, then
+    // re-filters — and does nothing at all when 'needs' is already showing.
+    let tries = 0;
+    const tick = () => {
+      if (document.querySelector('#rvw-chips .rvw-chip')) {
+        if (RVW_FILTER !== 'needs') rvwSetFilter('needs');
+        return;
+      }
+      if (tries++ < 30) setTimeout(tick, 150);
+    };
+    tick();
+  }
+}
+function dashOpenFeedback() { dashOpenInbox('feedback'); }
 
 // Programmatic tab-switch — clicks the tab button so the global switcher
 // runs (closes drawers, updates active classes, etc.). Returns true if the
@@ -2396,6 +2457,12 @@ const TD_ATTN_ICON = {
   // siblings (brand rule: stroke SVG, never emoji, never a glyph in a text node
   // — a bare ¥ would inherit the row's font and refuse the severity tint).
   yuan:  '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="m8.5 7.5 3.5 5 3.5-5"/><path d="M9 13h6M9 16h6M12 12.5V18"/></svg>',
+
+  // The two Inbox queues wear the same marks their menu rows do — a star for
+  // Reviews, a report bubble for Feedback — so the fire and the door it opens
+  // are recognisably the same thing.
+  star:  '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 2.6 5.27 5.82.85-4.21 4.1.99 5.78L12 16.27 6.8 19l.99-5.78-4.21-4.1 5.82-.85Z"/></svg>',
+  chat:  '<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3h8a2 2 0 0 1 2 2v10l-4-3H8a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="M12 6.5v3"/><path d="M12 12h.01"/></svg>',
 };
 
 // ── Running-low rolling window ─────────────────────────────────────────────
@@ -2664,6 +2731,46 @@ function tdAttnRender() {
       label: cuT('Invoices to issue', '待开发票'),
       n: inv.count, mins: tdOldestMins(inv.items),
       cta: cuT('Open invoices', '前往开票'), go: 'dashOpenInvoices()',
+    });
+  }
+
+  // Reviews nobody has answered — a customer wrote to the shop in public and
+  // the shop has not written back. Amber, not brick: nothing here is money or a
+  // delivery going wrong, it is work waiting. The low-rated count is what makes
+  // the row worth reading before you click it — nine polite five-stars and nine
+  // one-stars are the same number and not remotely the same afternoon.
+  const rv = DASH_OPS.reviews_unanswered || { count: 0, low: 0, items: [] };
+  if (rv.count && dashCardWants('reviews') && dashFeatOn('reviews')) {
+    const k = Number(rv.low || 0);
+    fires.push({
+      sev: 'amber', icon: 'star',
+      label: cuT('Reviews to answer', '评价待回复'),
+      n: rv.count,
+      // From when the customer posted it. Reviews go stale in days rather than
+      // minutes, which dashAgeShort already says in the right unit.
+      mins: tdOldestMins(rv.items),
+      // Same words as the Reviews page's own chip, so the row and the page it
+      // opens name the same thing. Comma, never " · " — the i18n walker splits
+      // a constructed line on the middot.
+      state: k > 0 ? cuT(`${k} low-rated`, `${k} 条低评分`) : null,
+      cta: cuT('Open reviews', '前往评价'), go: 'dashOpenReviews()',
+    });
+  }
+
+  // Feedback threads with the customer's turn newest — a bug report nobody has
+  // opened, or an answer to our own reply that is still sitting there. The one
+  // queue on this card where the customer is waiting on WORDS rather than on
+  // stock, money or a driver.
+  const fb = DASH_OPS.feedback_waiting || { count: 0, items: [] };
+  if (fb.count && dashCardWants('feedback') && dashFeatOn('feedback')) {
+    fires.push({
+      sev: 'amber', icon: 'chat',
+      label: cuT('Feedback to answer', '反馈待回复'),
+      n: fb.count,
+      // From the customer's latest turn — how long THEY have been waiting, not
+      // how old the thread is.
+      mins: tdOldestMins(fb.items),
+      cta: cuT('Open feedback', '前往反馈'), go: 'dashOpenFeedback()',
     });
   }
 
@@ -2985,7 +3092,6 @@ function dashRenderAll() {
   dashRenderHeadlines();
   dashRenderFacts();
   dashReadMaybeLoad();
-  if (window.rmRenderDash) rmRenderDash();   // mobile Variant A hero + tiles (≤720px)
 }
 
 function dashRenderKpis() {

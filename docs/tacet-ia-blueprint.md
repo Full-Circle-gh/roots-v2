@@ -26,7 +26,7 @@ Every navigable surface of the **Tacet** desktop admin, how it's grouped, the or
 
 ## 1. Shape of the app
 
-A single-page admin shell. One left **rail** of tabs (three **drill-down folders** + flat tabs — see §3), a persistent **topbar**, and a swappable content area where exactly one `<section id="tab-…">` is visible at a time. On phones the rail is replaced by a bottom nav (`#rm-bottomnav`) that mirrors the rail via `data-go`.
+A single-page admin shell. One left **rail** of tabs (three **drill-down folders** + flat tabs — see §3), a persistent **topbar**, and a swappable content area where exactly one `<section id="tab-…">` is visible at a time. ~~On phones the rail is replaced by a bottom nav (`#rm-bottomnav`).~~ **REMOVED 2026-08-24.** Phones have been served Tacet Mobile (`public/m.html`) since 2026-07-12 (`a19b70af`), so every `≤720px` layer inside `retail-admin` was unreachable from a phone; all of them are deleted. The shell has one navigation surface now: the rail, at every width.
 
 - **One global JS scope** across 17 `NN-*.js` parts; load order matters.
 - **One section visible at a time**; `goTab(tab)` switches and fires that tab's init.
@@ -231,7 +231,7 @@ This is the same consolidation v1 already recorded for *Channels → Sales* and 
 
 ### Shipped new (2)
 
-- **Reports** (`tab-reports`, order:3) — range bar (Today/7d/30d/90d + custom dates + store filter) → **chapter rail** (Overview · Sales · Customers · Products & traffic) → KPI strip → **The read** (the AI's plain-words analysis) → charts. Shares `03-dashboard.js`; chart container ids are deliberately unchanged so the phone dashboard's `rmRenderDash` clone-by-id keeps working. Chapters only show/hide wrappers.
+- **Reports** (`tab-reports`, order:3) — range bar (Today/7d/30d/90d + custom dates + store filter) → **chapter rail** (Overview · Sales · Customers · Products & traffic) → KPI strip → **The read** (the AI's plain-words analysis) → charts. Shares `03-dashboard.js`; chapters only show/hide wrappers. (The phone dashboard that cloned these container ids was deleted 2026-08-24 — phones get `m.html`.)
 - **Team** (`tab-team`, order:16) — stats → **`tm-enforce`** master switch (sage when on) → member list with role pills (owner / staff / op) + per-member Edit → Add member. Carries its own `:root` block from `backend-team.html` (`retail-admin.html:10041`).
 
 ### Flattened (3)

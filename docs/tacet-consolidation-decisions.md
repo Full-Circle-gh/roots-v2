@@ -1,10 +1,14 @@
-# Tacet shared-core consolidation — decisions record, v4.72
+# Tacet shared-core consolidation — decisions record, v4.74
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-08-24 · v4.74 — §28's vocabulary consequences are MARKED IN THE SECTIONS THEY LAND ON, not left to be discovered. v4.73 recorded the supersessions in this changelog only, where a reader who opens §21 to find out what the modules are never sees them. Eight sections now carry a marker: §1, §3, §7, §8, §17, §19, §21, §22. **Six are VOCABULARY ONLY and say so in the marker's first line** — §3's two separate lists, §7's unit model, §8's packaging-as-stock, §17's two positions, §19's category separation and §22's stage 6 are all unchanged decisions wearing a changed word, and a reader must not conclude any of them was reversed. **Two are substantive.** §1 and §21 both claim FOUR front ends including PRODUCTION; there are three, because Production is a module and no separate app will be built. §21 carries both kinds at once — ITEMS→MATERIALS is a rename, FOUR FRONT ENDS is wrong — and its marker separates them rather than letting one excuse the other. §22 item 9's deferred *"Production app merging into Tacet"* is void, not deferred, while the rest of that item stands. Nothing is deleted or rewritten: the record is a history. Docs only; no code changed.
+
+2026-08-24 · v4.73 — the PRODUCTION MODULE is recorded as §28: Production is a module inside Tacet, not an application, and no separate Production app will be built. **MATERIALS** becomes the tenant-facing name for stocked things a tenant buys and does not sell; **Items is rejected** for colliding with Products in conversation, **Ingredients** for excluding every non-food business. The build route is to GENERALISE THE KITCHEN MACHINERY rather than rebuild on retail rails — the kitchen half already holds unit conversion and purchase-cost write-back, and retail purchasing holds neither. **Schema identifiers are NOT renamed**: `ingredients`, `ingredient_id`, `buy_unit` stay, deferred rather than cancelled, and must be their own change with a backup taken immediately before. Phase 1 is Materials and Purchases only; Recipes deferred, which is what keeps Products and the storefront out of scope. **This changes vocabulary and app structure decided earlier and edits none of it**, per the house convention: §1 Architecture and §21 Modules both name PRODUCTION as one of four front ends and ITEMS as a module, and §3, §7, §8, §17 and §19 all speak of ITEMS — a reader meeting those should read the app as a module and the word as Materials. §22's deferred *"Production app merging into Tacet"* describes a merge that now has nothing to merge. Related documents moves from §28 to §29; nothing cross-references either number. A new decision that supersedes vocabulary without reversing a rule, hence a patch.
 
 2026-08-23 · v4.72 — §24 Database: 🔴 **THE POSTGRES MIGRATION IS CANCELLED. TACET STAYS ON SQLITE.** Ash's call, after the `.prepare` survey: **2,835 `.prepare` call sites in the runtime** (`server.js` 12 / `database.js` 228 / `routes/` 2,414 / `lib/` 175 / `middleware/` 6), **zero `.query` call sites**, **all 39 files in `routes/` affected** — and `lib/pg-handle.js` refuses `.prepare` BY DESIGN, because an adapter would hand 3,339 sites a Promise where a row is expected and the application would compute wrong answers across every route rather than crash, with a customer as the first evidence. **The 27 "converted" sites were not converted**: the wrapper moved, the 70 `tx.prepare(` statements inside it did not, so a converted block dies on its first statement exactly like an unconverted one. **Runbook B19 is superseded in place** — clearing G26 does NOT turn *"the app cannot start"* into *"the app starts and individual routes fail"*; it does not start, and every route fails on its first line. **It stopped because multi-tenancy already works** (`TENANT_DATA_ISOLATION=1`, five per-tenant files, Roots in `roots.db`) and **no measured constraint was being hit**; the cost was not proportionate. Restart conditions are stated as conditions, not as a plan. **The one path that would have worked is recorded so it is not rediscovered**: a synchronous `.query(text, params)` on the SQLite handle, convert a file at a time under real traffic, driver switch as a config change last. **All 20 open gaps CLOSED — MIGRATION CANCELLED.** ⚠ **AND THEN SCRAPPED OUTRIGHT, SAME DAY — the "retired rather than deleted" this line first carried is corrected here per rule 5, not tidied away.** **52 files deleted**, the cutover runbook, the status document and the nine schema records among them, **the `tacet` cluster dropped**, and `drift_guard.py` went with `plan.json` so **nothing now detects SQLite schema drift** (13 objects drifted in 18 days when last measured). `lib/db-seam.js`, `lib/db-transaction.js` and their suites are KEPT — live SQLite code, 28 running `withTransaction` call sites. The findings that outlive the migration are in `docs/tacet-operating-findings.md`, the write surface in `docs/tacet-write-surface.md`. See the ADDENDUM on the entry.
 
@@ -222,6 +226,8 @@ FOUR front ends. The front end is the ONLY app-specific layer; everything beneat
 - ONLINE STORE — customers. One shop per account, appearing as a website and as a WeChat mini-program, with further surfaces possible later. All surfaces show the same shop; an account configures it once. Read-only with respect to the modules.
 - BACK OFFICE — Tacet staff only.
 
+> ⚠️ **THE FRONT-END COUNT IS SUPERSEDED — §28, 2026-08-24. PRODUCTION IS NOT A FRONT END.** It is a MODULE inside Tacet; no separate Production application exists and none will be built, so *"merges into Tacet later, leaving three"* describes a merge with nothing to merge. There are THREE front ends: Tacet, the online store, and the Back Office. **The rest of this list stands** — the front end really is the only app-specific layer, and everything beneath it really is shared. That was the claim Production-as-a-module makes truer, not falser.
+
 ### Back end
 - ONE service, ONE API. Not one per app.
 - A set of SHARED MODULES, each built once. Eight named so far: Locations, Products, Items, Stock, Users, Orders, Purchasing, Recipes. MORE WILL BE NAMED — eight is not a ceiling. Already visible but not yet specified: suppliers, customers, marketing, content and media, integrations, reporting, billing.
@@ -258,6 +264,8 @@ v0.1 stated one table with a SELLABLE switch. WITHDRAWN. The correct model:
 - The bridge between the two is a RECIPE. Packing is production: bulk item in, product out.
 - Worked example the model must support exactly as described: buy cashews (item) → produce cream (item) → produce cheese (product, from cream) AND pack cream into jars (product, from cream). The kitchen's bulk cream and the store's jarred cream are genuinely different things with separate stock. This is intended, not duplication.
 - Confirmed: the store never sells directly from a kitchen container. Everything sold is packed first.
+
+> ⚠️ **VOCABULARY ONLY — THE DECISION ITSELF STANDS.** §28 renames ITEMS to MATERIALS as the tenant-facing word (2026-08-24); *item* was ambiguous with *product* in conversation. **Nothing in this section is reversed** — two separate lists, two tables, separate stock, no sellable switch, and a recipe as the only bridge are all still the model, and the cashews→cream→cheese worked example still describes exactly what must be supported. Read ITEMS as MATERIALS throughout.
 
 ## 4. Product fields
 
@@ -301,12 +309,16 @@ This supersedes the alternative of assigning an owning side per shared field, an
 - Products are counted in whole units.
 - SUBJECT TO §0: units of measure are per business. Grams and kilograms are Roots' choice, not Tacet's default. A business working in pounds and ounces must be equally well served.
 
+> ⚠️ **VOCABULARY ONLY — THE DECISION ITSELF STANDS.** Read *item* as MATERIAL throughout (§28, 2026-08-24). **The unit model is untouched** — one stocking unit per material, purchasing in any unit with a stored conversion, recipes always in the stocking unit. One open question this section does not settle is recorded in §28: whether a purchased quantity converts to a stocked quantity at all. Nothing in the code does that conversion today.
+
 ## 8. Packaging
 
 - Jars, lids, labels and bags are ITEMS. Bought, stocked, costed and TRACKED by quantity.
 - Consumed by the packing step, so cost rolls up automatically.
 - Displayed separately from ingredients on screen — ingredients in one group, packaging in another. One mechanism underneath.
 - Reason for tracking rather than costing only: running out of jars stops production exactly as running out of an ingredient does.
+
+> ⚠️ **VOCABULARY ONLY — THE DECISION ITSELF STANDS.** Jars, lids, labels and bags are MATERIALS (§28, 2026-08-24). **The decision stands and this section is now easier to state**, because *material* covers packaging without the strain *ingredient* put on it — which is the same reason the word changed. Live data agrees: 145 of the 630 rows in `ingredients` are already `item_kind = packaging`.
 
 ## 9. Locations
 
@@ -421,6 +433,8 @@ ONE state with two positions:
 - IN USE
 - ARCHIVED — removed from recipe pickers and purchase screens, retained in historical batches and orders
 
+> ⚠️ **VOCABULARY ONLY — THE DECISION ITSELF STANDS.** This is MATERIAL STATE (§28, 2026-08-24). **The two positions are unchanged.** Note for anyone implementing it: the live behaviour does NOT match this yet — archiving an ingredient also destroyed its SKU until 2026-08-24, against §18.
+
 ## 18. SKU on archive
 
 - An archived product KEEPS its SKU permanently. The code is never released for reuse.
@@ -434,6 +448,8 @@ ONE state with two positions:
 - ITEMS: their own separate category list, for finding things in the kitchen.
 - DELETED: the legacy free-text `category` column on products, and the hardcoded fallback seed tree.
 - Reason for separation: customer categories are shop navigation; item categories are a filing system. They would never share vocabulary.
+
+> ⚠️ **VOCABULARY ONLY — THE DECISION ITSELF STANDS.** Read ITEMS as MATERIALS (§28, 2026-08-24), and *"for finding things in the kitchen"* as *for finding things in the store room* — a hardware shop files materials too. **The separation itself stands**, and the reasoning for it is if anything stronger under the new word: a material category is a filing system, a product category is shop navigation.
 
 ## 20. Deletion policy
 
@@ -454,6 +470,14 @@ Locations · Products · Items · Stock · Users · Orders · Purchasing · Reci
 - Not every front end uses every module. Items and Recipes are Production-only until the apps merge. Locations, Products, Stock, Users and Orders are used by both.
 - FOUR front ends exist, not three: Tacet, Production, the customer-facing online store, and the Back Office. The online store is not a separately maintained app — it reads the same Products, Stock and Locations modules. What a customer sees is the same data staff edit, never a copy.
 
+> ⚠️ **TWO THINGS IN THIS SECTION ARE SUPERSEDED BY §28 (2026-08-24), AND THEY ARE NOT THE SAME KIND OF CHANGE. NEITHER IS EDITED.**
+>
+> **1. ITEMS — vocabulary only. The module stands.** The module is now MATERIALS. *Items* was ambiguous with *Products* in conversation, which is exactly the confusion the line below it warns against. **PRODUCTS and MATERIALS remain SEPARATE modules and must still never be presented, grouped or built as one** — that instruction is unchanged and the rename does not soften it.
+>
+> **2. FOUR FRONT ENDS — the substance is wrong, not the wording.** There are THREE: Tacet, the online store, and the Back Office. Production is a MODULE inside Tacet, not a front end, and no separate Production application will be built. The sentence *"Items and Recipes are Production-only until the apps merge"* has no merge to wait for; those modules are gated by whether a tenant has the Production module enabled, not by which app someone opened.
+>
+> The paragraph's other claim — that the online store is not separately maintained and reads the same modules — **is untouched and still correct.**
+
 ## 22. Rollout order and priority — REVISED 2026-07-31
 
 CONTEXT: a second business is a TARGET, months away. No specific customer is waiting. Confirmed: no blackout periods, and nothing needs to jump the queue.
@@ -467,6 +491,14 @@ CONTEXT: a second business is a TARGET, months away. No specific customer is wai
 7. PURCHASING.
 8. ORDERS. Includes retiring `meituan_stores` and the separate production sales log.
 9. DEFERRED, after all of the above: multi-currency, additional languages, and the Production app merging into Tacet. These are entangled with everything being rebuilt; doing them first means doing them twice.
+
+> ⚠️ **ITEM 9 IS PART-VOID AND ITEM 6 IS VOCABULARY ONLY — §28, 2026-08-24.**
+>
+> **Item 9: "the Production app merging into Tacet" IS NOT DEFERRED, IT IS CANCELLED.** There is no Production app to merge; Production is a module inside Tacet. Multi-currency and additional languages are still deferred exactly as written, so the item is not struck out — only its third clause is void.
+>
+> **Item 6: "PRODUCTS AND ITEMS" reads PRODUCTS AND MATERIALS.** Vocabulary only; the stage, its position in the order and its dependencies are unchanged.
+>
+> **The ordering is not otherwise reopened by §28.** §28 scopes phase 1 to Materials and Purchases, with Recipes deferred — which is a scope statement about the Production module, not a re-cut of this list.
 
 NEW ACCOUNTS START IN TACET. DECIDED, recorded as a decision rather than an assumption. To be revisited when Production can be sold on its own — a business that only manufactures would otherwise start in an app about selling to customers.
 
@@ -3829,7 +3861,25 @@ WHERE THIS IS WRITTEN DOWN NEXT TO THE SWITCH: JSON has no comments, so the reas
 
 WHAT A MERGE OF THIS DOES NOT DO: It does not fix the live blank checkout. Configuration reaches customers only on a republish, and a republish builds `roots-v2\miniapp` — the main working folder — not a worktree. The page stays blank until someone republishes from a main folder that carries this change.
 
-## 28. Related documents
+## 28. Production module — naming and build route
+
+**Decision.** Production is a MODULE within Tacet, not a separate app. Tenants who enable it gain screens; tenants who do not see nothing. There is no separate Production application and none will be built.
+
+**Materials is the tenant-facing name** for stocked things a tenant buys and holds but does not sell. It covers food, packaging, equipment and supplies without favouring any trade. "Items" is rejected — it collides with Products in conversation. "Ingredients" is rejected as tenant-facing vocabulary — it excludes every non-food business, in violation of §0.
+
+**Build route: generalise the existing kitchen machinery. Do not rebuild on retail rails.** The kitchen half already has the two hardest pieces — unit conversion (lib/ingredient-cost.js, already the repo's unit authority, not merely its cost authority) and purchase-cost write-back. Retail purchasing has neither, and its receive path silently skips any line without a store_product_id. Rebuilding on retail would mean writing both from scratch and discarding a working implementation.
+
+**Schema names are NOT renamed at this time.** `ingredients`, `ingredient_id`, `buy_unit` and related identifiers stay as they are. Rationale: 453 references across 41 files, ~2,900 lines of route code, against a word no tenant ever reads. The rename is deferred, not cancelled, and must be its own change with a backup taken immediately before — never folded into feature work.
+
+**What DOES get renamed is anything a tenant can see:** rail labels, page titles, headings, form labels, and stored strings that surface in reports.
+
+**Supporting evidence.** Only 61% of the `ingredients` table is food (live: 383 food, 145 packaging, 52 retail, 49 equipment, 1 other). The table was already broadened by the `item_kind` column, added with the stated intent of covering everything the buying department orders. It is already a materials table wearing a kitchen name.
+
+**Phase 1 scope: Materials and Purchases only. Recipes are deferred.** Without recipes nothing is made from anything, so nothing consumes anything — which means phase 1 requires no change to Products and no change to the storefront.
+
+**Open, not decided here:** the Chinese label for Materials; paid entitlement wiring; whether purchased quantity converts to stocked quantity.
+
+## 29. Related documents
 
 - docs/tacet-glossary.md — binding definitions, v1.4, 2026-07-31. The words in this document are used with the meanings defined there.
 - docs/tacet-desktop-patterns.md — the rulebook for how a desktop admin page is put together, v4.2, 2026-08-03. Prescriptive except on Orders: when a rule and an unbuilt page disagree, that document wins.

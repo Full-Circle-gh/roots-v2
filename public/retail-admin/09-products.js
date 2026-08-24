@@ -298,8 +298,13 @@ const PROD_VIEW_META = {
   activity:   { title: ['Stock activity', '库存流水'] },
   categories: { title: ['Categories', '分类'] },
 };
+// Which sub-view the header is currently describing. prodSetHelp() is the
+// only writer; initProdHelp() below re-reads it so a language change repaints
+// the view that is actually on screen rather than always the catalogue.
+let _prodHelpView = 'catalog';
 function prodSetHelp(view) {
-  const m = PROD_VIEW_META[PROD_VIEW_META[view] ? view : 'catalog'];
+  _prodHelpView = PROD_VIEW_META[view] ? view : 'catalog';
+  const m = PROD_VIEW_META[_prodHelpView];
   const say = (pair) => (typeof cuT === 'function') ? cuT(pair[0], pair[1]) : pair[0];
   const title = document.getElementById('pa-pagetitle');
   if (title) title.textContent = say(m.title);

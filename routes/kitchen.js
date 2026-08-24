@@ -5,6 +5,7 @@ const express = require('express');
 const { seam } = require('../lib/db-seam');
 const db = seam(require('../database'));
 const { requireAuth, requirePermission, logActivity } = require('../middleware/auth');
+const { storeCategory } = require('../lib/category-text');
 const router = express.Router();
 
 // GET last-ordered qty per ingredient. Used by the kitchen-order autocomplete
@@ -156,7 +157,7 @@ router.post('/api/kitchen/submit', requireAuth, requirePermission('kitchen'), (r
         poId, item.ingredient_id || null,
         item.name_en || '', item.name_cn || null, item.sku || null,
         qty, item.unit || null, costPerUnit, totalCost,
-        item.expense_category || null, i
+        storeCategory(db, item.expense_category), i
       );
     });
     return { poId, po_number };

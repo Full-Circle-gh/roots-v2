@@ -75,8 +75,7 @@ function cuSegment(btn, seg) {
 // was the redundancy the strip already had.
 //
 // CU_TIER_FILTERS stays a Set even though the dropdown picks one value at a
-// time — cuMobTier() and the phone chip row share it, and reshaping it here
-// would silently break the phone list.
+// time.
 const CU_TIER_ORDER = ['tree', 'root', 'sprout', 'seed'];
 // value → [EN, 中文]. Labels follow ordChannelLabel() in 04-orders.js, which is
 // what the operator reads on every order row: WeChat / Web / Manual. The stored
@@ -139,13 +138,6 @@ function cuTierFilterClear() { cuPickTier(''); }
 function cuTierFilterRemove() { cuPickTier(''); }
 
 function cuPaintTierFilterUI() {
-  const active = CU_TIER_FILTERS.size > 0;
-  // Mirror into the phone quick-tier chips (single-select there).
-  const mob = document.getElementById('cu-mob-tiers');
-  if (mob) mob.querySelectorAll('.cu-tchip').forEach(b => {
-    const v = b.dataset.v || '';
-    b.classList.toggle('on', v ? (CU_TIER_FILTERS.size === 1 && CU_TIER_FILTERS.has(v)) : !active);
-  });
   cuPaintFilterBar();
 }
 
@@ -291,11 +283,6 @@ function cuRenderKpis() {
     bTile.classList.toggle('is-hidden', _CU_BLOCKED === 0);
     bTile.classList.toggle('alert', _CU_BLOCKED > 0);
     if (_CU_BLOCKED > 0) dashCountUp($('#cu-kpi-blocked'), _CU_BLOCKED);
-  }
-  const dots = document.getElementById('cu-stat-dots');
-  if (dots) {
-    const pips = dots.querySelectorAll('i');
-    if (pips[4]) pips[4].style.display = _CU_BLOCKED > 0 ? '' : 'none';
   }
   // All four chips carry their real count. A chip with nothing to report shows
   // NO number — never a zero, which reads as a measurement rather than an
@@ -667,14 +654,12 @@ async function _cuLoad(opts) {
     if (silent) return;
     tbody.innerHTML = cuErrorRow();
     cuKpisNotLoaded();
-    if (window.rmRenderCustomerCards) rmRenderCustomerCards(null, 'Network error · 网络错误');
     return;
   }
   if (!j.success) {
     if (silent) return;
     tbody.innerHTML = cuErrorRow();
     cuKpisNotLoaded();
-    if (window.rmRenderCustomerCards) rmRenderCustomerCards(null, 'Failed to load · 加载失败');
     return;
   }
   // A newer load started while this fetch was in the air — its result is the
@@ -796,30 +781,14 @@ async function _cuLoad(opts) {
     onPage: p => {
       CU_PAGE = p;
       cuLoad();
-      // Land on the top of the new page, not the foot of it. The desktop table
-      // is display:none on phones, so scroll whichever list is really visible.
-      const tbl   = document.getElementById('cu-table');
-      const cards = document.getElementById('rm-cu-cards');
-      const target = (cards && cards.offsetParent) ? cards : tbl;
-      if (target) target.scrollIntoView({ block: 'start', behavior: 'smooth' });
+      // Land on the top of the new page, not the foot of it.
+      const tbl = document.getElementById('cu-table');
+      if (tbl) tbl.scrollIntoView({ block: 'start', behavior: 'smooth' });
     },
     onSize: s => { CU_PAGE_SIZE = s; CU_PAGE = 1; cuLoad(); },
   });
-  if (window.rmRenderCustomerCards) rmRenderCustomerCards(rows);  // phone card list (same data)
 }
 
-// Phone tier-chip filter — drives the same CU_TIER_FILTERS the desktop Tier
-// column popover uses, so there's a single filter source of truth (the chip
-// row is CSS-shown only on phones; the column popover is desktop-only).
-function cuMobTier(btn, v) {
-  CU_TIER_FILTERS.clear();
-  if (v) CU_TIER_FILTERS.add(v);
-  cuPaintTierFilterUI();
-  const bar = document.getElementById('cu-mob-tiers');
-  if (bar) bar.querySelectorAll('.cu-tchip').forEach(b => b.classList.toggle('on', b === btn));
-  CU_PAGE = 1;
-  cuLoad();
-}
 
 async function cuOpenDetail(id, restore = null) {
   const drawer = document.getElementById('cu-drawer');

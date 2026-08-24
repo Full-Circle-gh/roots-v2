@@ -216,10 +216,9 @@ Three bugs were the code asserting something no data supported.
   will see it until a real legacy customer walks in.
 - **`retail_customers.source` is written only by the admin create endpoint**,
   which has never run in production. It is correct and simply unexercised.
-- **The mobile card path (`rmRenderCustomerCards`) was surveyed but not
-  rebuilt.** Its seams are documented in `MEMORY.md`; the tail call at the
-  bottom of `cuLoad()` is the one that matters — drop it and the phone list
-  goes permanently blank with no error.
+- ~~**The mobile card path (`rmRenderCustomerCards`) was surveyed but not
+  rebuilt.**~~ **REMOVED 2026-08-24.** Phones have been served Tacet Mobile (`public/m.html`) since 2026-07-12 (`a19b70af`), so every `≤720px` layer inside `retail-admin` was unreachable from a phone; all of them are deleted. The card path and its tail call in `cuLoad()` are
+  deleted; there is no phone list here to blank.
 
 ## Reality check (house rule, unchanged)
 

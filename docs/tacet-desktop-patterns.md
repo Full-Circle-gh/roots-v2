@@ -136,9 +136,9 @@ here has not been added — it has been invented.**
 pages** — the 34 sections riding `retail-admin.html`. It does **not** govern
 the satellite apps (`tacet-ia-blueprint.md` §11 — Profile, Mini App Editor,
 Product Page Editor), which are separate documents with their own chrome, nor
-**mobile**, where `#rm-bottomnav` and the More sheet are a genuinely different
-surface that legitimately carries theme and language. Those two exclusions are
-deliberate. Anything else is not excluded.
+~~**mobile**, where `#rm-bottomnav` and the More sheet are a genuinely different
+surface.~~ **REMOVED 2026-08-24.** Phones have been served Tacet Mobile (`public/m.html`) since 2026-07-12 (`a19b70af`), so every `≤720px` layer inside `retail-admin` was unreachable from a phone; all of them are deleted. Tacet Mobile (`m.html`) is the phone surface and has its
+own document. Only the satellite-app exclusion remains. Anything else is not excluded.
 
 **Why this exists.** §1.1 has now been wrong about the topbar three times: a
 stale code comment laundered through a survey (2026-07-17), a rule that
@@ -1395,7 +1395,7 @@ charts        one question per chart
 - **Chapter rail is a sub-view strip** (§1.7), not chips: it swaps content, it doesn't narrow records.
 - **The read sits above the charts**, not below. Plain words first; evidence after. This is the brand — state the outcome, imply the effort.
 - Charts: no gridlines, no axis box, no gradient. One accent per chart, and only if it means something.
-- **Chart container ids are load-bearing** — the phone dashboard clones by id (`rmRenderDash`). Chapters show/hide wrappers only. Do not rename ids during the rebuild without checking mobile.
+- **Chart container ids are no longer load-bearing for mobile.** The phone dashboard that cloned them by id (`rmRenderDash`) was deleted 2026-08-24 — phones get `m.html`. Ids still matter to `03-dashboard.js` itself, and chapters still show/hide wrappers only, but renaming one no longer risks a phone surface.
 
 **Assigned:** Reports
 

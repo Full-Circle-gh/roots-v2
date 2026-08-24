@@ -1,4 +1,4 @@
-# Tacet dashboard — simplification spec, v1.1
+# Tacet dashboard — simplification spec, v1.3
 
 **2026-07-17 · Decided with Ash. This is the product decision; the survey behind it is recorded in the session notes. Joins the canonical folder between the specimens doc and the rulebook.**
 
@@ -111,6 +111,45 @@ Each row deep-links to the place the fire is put out. Rows are counts + one line
 
 ---
 
+## The two Inbox rows — added 2026-08-24
+
+**Reviews to answer** and **Feedback to answer**. Both pass the two disciplines: a customer is waiting on words, and one click on the row is the place those words get written. Amber, both — nothing here is money or a delivery going wrong; it is work waiting.
+
+**They count what their own page counts, and nothing else.**
+
+- *Reviews to answer* = **`REVIEW_WAITING_SQL`** (`routes/retail.js`), which is one shared clause with four readers: this fire, the phone's copy of it, the Reviews page's chip, and that page's list filter. Not four copies — a copy is how a fire and the queue it opens end up disagreeing, and when they disagree one of the two numbers is lying. Three clauses:
+  1. no reply yet;
+  2. **the customer actually wrote something.** A five-star with an empty comment is not a person waiting on an answer, and tags are not a comment. This is what makes the queue reachable: **12 of its first 18 rows were rating-only**, so the one number the page exists to drive to zero was counting reviews no reply was owed on. A number you cannot move is not a worklist, it is decoration;
+  3. **not dismissed** — read, and judged to need no public answer (see below).
+
+  Seeded reviews are excluded on both sides (nobody is waiting on the other end of one); hidden ones are included on both sides, because hiding a review takes it off the storefront and does not answer the person who wrote it. The row also names how many are **low-rated** (`rating <= 3`), because nine polite five-stars and nine one-stars are the same number and not the same afternoon.
+
+### Clearing the queue without saying anything to anyone
+
+**`dismissed_at` on `retail_reviews`, and one bulk action** — "Mark all N as handled", beside the number it clears, stating the count in its own label because a bulk action whose scope you infer from which chip is lit is the one people click by mistake.
+
+**Why a new column rather than writing a reply.** `reply` is the **public seller response rendered under the review in the shop**. Clearing a triage queue through it would publish text to customers to make an internal number go down, and a canned answer on reviews nobody has read tells every one of those customers they were answered when they were not. `dismissed_at` is a note to ourselves; `reply` is a note to the customer. **Never conflate them.**
+
+**Three disciplines on the bulk action:**
+- **The set is computed server-side** from the same clause, never taken from the client. A page of 50 cannot dismiss a queue of 300, and an id list built when the page was drawn would sweep up a review a colleague answered since.
+- **The count on the button is sent back as `expect`.** If the queue moved, the server does nothing and reports both numbers — "Mark all 6 as handled" quietly dismissing 9 is the button lying about its own scope.
+- **The confirm names the low-rated count out loud** when there is one, and only then wears danger styling. Burying an unread complaint under a bulk click is the single mistake this queue exists to prevent; telling the operator afterwards would be an apology, not a choice. There is also a per-row **Put back**, because the alternative way to undo an accidental dismissal would be publishing a reply.
+
+**One knock-on:** the Everything view's second group was called "Handled". That stopped being true when rating-only reviews left the queue — nobody handled them, they never needed anything — so it now reads **"Not waiting on you"**, the one label true of all three things in it (answered, dismissed, nothing-to-answer).
+- *Feedback to answer* = a thread whose newest customer turn is newer than the last time an operator opened it — plus one guard the Feedback list does not need: **the thread must actually have a customer turn.** Staff can start a thread themselves, and on one of those `admin_read_at` is null until somebody re-opens it, so the bare rule would raise a fire about the operator's own unanswered message. Same discipline the Inbox badge's unseen-count already applies.
+
+**Data source:** two keys on `/api/retail-admin/dashboard/ops` — `reviews_unanswered {count, low, items}` and `feedback_waiting {count, items}`. No new route, no new poll, and **not store-scoped**: neither table carries a store, and a review is about a product rather than a shelf, so the header's store picker deliberately leaves both counts alone.
+
+**The doors** are the topbar Inbox dropdown's own two buttons, clicked programmatically (`dashOpenReviews` / `dashOpenFeedback`). Not `goTab` and not `dashJumpTab`: neither queue has had a rail button since Inbox moved to the topbar, and each tab's first load hangs off that button's own listener — `goTab` alone lights the section and leaves the table empty. `dashJumpTab('feedback')` had been failing that way silently in the activity feed's jump-to-report; it now goes through the same door.
+
+**Feature-gated, and this one fails closed.** A tenant who switched Reviews or Feedback off is not filling that queue any more, so its backlog is not a fire. The page itself stays reachable — feature-off dims a rail row, it does not hide it.
+
+**Same two rows on the phone** (`m.html`, `opsFires`), off the same keys. Home used to build a reviews row out of `DB.reviews` — the list the Inbox screen fetches — so the fire only existed *after* the operator had gone and looked, which is the one moment they no longer need telling. It carried no age, and feedback had no row at all.
+
+**Latency:** the ops poll, so within 60s of the review landing (or immediately on the next SSE activity nudge). The nudge's own signature watches orders, customers and stock — deliberately not reviews, whose `MAX(created_at)` has no index to ride and would be scanned every 5 seconds.
+
+---
+
 ## "Payment doesn't match" — the definition
 
 **A payment mismatch is an order still in `pending_payment` whose Alipay proof was READ and REJECTED** (`alipay_ocr_verdict = 'mismatch'`). The customer uploaded a screenshot, the vision read succeeded, and `validateAlipayProof` refused it: a short amount, a payee that isn't ours, a receipt outside the freshness window, or a screenshot/transaction already spent on another order. Auto-flip never fires on a mismatch, so the order stays unpaid.
@@ -185,7 +224,7 @@ Each row deep-links to the place the fire is put out. Rows are counts + one line
 3. **The boot splash listens for two signals.** `data-app-ready` stamps only when Today *and* The Recap paint (`dashMarkReady`). Rename either and boot feels broken (8s failsafe masks it — worse).
 4. **Every card's renderer registers in `onLangChange` or its `cuT()` copy freezes** in the first-paint language. ~10 registrations exist because each card needed one. New/merged cards follow the pattern. **Do not copy Reports' glued `${en} · ${cn}` idiom** (`dashRangeFoot`, `dashRenderTiers`) into dashboard code.
 5. **Role gating already works** (`DASH_POS_CARDS` / `dashPosWants`). The card sets above are a re-mapping of that system, not a new one.
-6. **The mobile dashboard (`#rm-dash`) is a parallel surface.** This spec covers desktop; mobile follows after, per the standing mobile-v2 note. Don't let scope drift there (it has, twice).
+6. ~~**The mobile dashboard (`#rm-dash`) is a parallel surface.**~~ **REMOVED 2026-08-24 — there is no `#rm-dash`.** Phones have been served Tacet Mobile (`public/m.html`) since 2026-07-12 (`a19b70af`), so the ≤720px layer inside the desktop shell was unreachable from a phone — it rendered only when a *desktop* browser was narrowed. CSS, markup and `rmRenderDash` are deleted; narrow desktop now reflows the desktop dashboard. Mobile dashboard work belongs in `m.html`. (This is the surface scope drifted into, twice — it was already dead both times.)
 7. **Dead weight to remove while in there:** the `#db-bento`-scoped CSS (the element no longer exists) — but **not** the un-scoped `.db-tile*` primitives, which Reports still uses.
 8. **`#td-live` is a sage presence poll, not SSE and not Dusk.** Correct on both counts; keep both.
 

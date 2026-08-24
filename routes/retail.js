@@ -14601,6 +14601,14 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
   // one — which for this block is the correct degradation: it is absent at zero
   // by design, so a failure looks exactly like "nothing is parked".
   let needs_point = { count: 0, items: [] };
+  // Customer reviews nobody has answered, and feedback threads waiting on a
+  // reply. Both are the same shape as their siblings so the Needs-you card can
+  // read them the same way, with one difference stated out loud: NEITHER IS
+  // STORE-SCOPED. Neither table carries a store_id, and a review is about a
+  // product rather than a shelf, so the header's store picker deliberately
+  // leaves these two counts alone — they read the same in every store view.
+  let reviews_unanswered = { count: 0, low: 0, items: [] };
+  let feedback_waiting   = { count: 0, items: [] };
 
   // Optional per-store scope (mirrors the dashboard's store picker). When a
   // store_id is supplied we count that store's own shelf (its retail_store_stock
@@ -15282,12 +15290,74 @@ router.get('/api/retail-admin/dashboard/ops', requireRetailAdmin, (req, res) => 
         parked_since: o.needs_point_at || null,
       })),
     };
+
+    // ── Reviews waiting on a reply ───────────────────────────────────────
+    // Literally the same clause the Reviews page's "Needs reply" chip counts —
+    // REVIEW_WAITING_SQL, shared rather than copied, because a fire that
+    // disagrees with the queue it opens means one of the two is lying.
+    //
+    // Seeded (synthetic) rows can't enter: they live in another table and this
+    // query never names it. Nobody is waiting on the other end of one.
+    //
+    // Hidden reviews ARE counted, deliberately. Hiding a review takes it off
+    // the storefront; it does not answer the person who wrote it. The page
+    // counts them, so leaving them out here would make the dashboard quietly
+    // smaller than the list it points at.
+    const RV_OPEN = '(' + REVIEW_WAITING_SQL('r') + ')';
+    const rvCount = tdb().prepare(
+      `SELECT COUNT(*) AS n FROM retail_reviews r WHERE ${RV_OPEN}`
+    ).get().n;
+    // How many of the unanswered ones are unhappy. Exact, not derived from the
+    // capped preview, because the row says it in words. Same "Low rated"
+    // threshold (<= 3) the Reviews page's own chip uses.
+    const rvLow = tdb().prepare(
+      `SELECT COUNT(*) AS n FROM retail_reviews r WHERE ${RV_OPEN} AND r.rating <= 3`
+    ).get().n;
+    const rvItems = tdb().prepare(`
+      SELECT r.id, r.rating, r.product_id,
+             r.created_at AS waiting_since,
+             COALESCE(NULLIF(TRIM(p.name_en), ''), NULLIF(TRIM(p.name_cn), '')) AS product
+        FROM retail_reviews r
+        LEFT JOIN store_products p ON p.id = r.product_id
+       WHERE ${RV_OPEN}
+       ORDER BY r.created_at ASC LIMIT @preview
+    `).all({ preview: previewLimit });
+    reviews_unanswered = { count: rvCount, low: rvLow, items: rvItems };
+
+    // ── Feedback threads waiting on a reply ──────────────────────────────
+    // "Waiting" is the list's own needs_reply rule — the customer's latest turn
+    // is newer than the last time an operator opened the thread, which covers a
+    // brand-new report (admin_read_at NULL) and a fresh follow-up alike.
+    //
+    // Plus one guard the list does not need and this card does: the thread must
+    // actually HAVE a customer turn. Staff can start a thread themselves (a
+    // direct message to a customer), and on one of those admin_read_at is null
+    // until somebody re-opens it — so the bare needs_reply rule would raise a
+    // fire about the operator's own unanswered message. Same discipline the
+    // unseen-count endpoint already applies to the Inbox badge.
+    const FB_WAITING =
+      "(f.admin_read_at IS NULL"
+      + "   OR datetime(COALESCE(f.last_customer_msg_at, f.created_at)) > datetime(f.admin_read_at))"
+      + " AND (COALESCE(f.initiated_by, 'customer') = 'customer' OR f.last_customer_msg_at IS NOT NULL)";
+    const fbCount = tdb().prepare(
+      `SELECT COUNT(*) AS n FROM retail_feedback f WHERE ${FB_WAITING}`
+    ).get().n;
+    const fbItems = tdb().prepare(`
+      SELECT f.id, f.kind,
+             COALESCE(f.last_customer_msg_at, f.created_at) AS waiting_since,
+             COALESCE(NULLIF(TRIM(c.nickname), ''), NULLIF(TRIM(f.customer_name), '')) AS buyer
+        FROM retail_feedback f
+        LEFT JOIN retail_customers c ON c.id = f.customer_id
+       WHERE ${FB_WAITING}
+       ORDER BY waiting_since ASC LIMIT @preview
+    `).all({ preview: previewLimit });
+    feedback_waiting = { count: fbCount, items: fbItems };
   } catch (e) {
     console.error('[dashboard/ops]', e.message);
   }
 
   res.set('Cache-Control', 'no-store');
-  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, awaiting_restock, payment_mismatch, payment_unconfirmed, needs_point, server_now: Date.now() } });
+  res.json({ success: true, data: { low_stock: low, out_of_stock, refunds, delivery_alerts, invoices, unhandled, awaiting_restock, payment_mismatch, payment_unconfirmed, needs_point, reviews_unanswered, feedback_waiting, server_now: Date.now() } });
 });
 
 // Admin CRUD for vouchers.
@@ -17608,6 +17678,38 @@ const REVIEW_MAX_PHOTOS = 6;
 // rather than throwing on a hot customer path. Synthetic ids are surfaced to
 // the client as NEGATIVE numbers so they never collide with real review ids
 // (the mini-app uses `id` as a wx:key).
+// ── "Waiting on a reply" — ONE definition, four readers ────────────────────
+// The Reviews page's chip, that page's list filter, the dashboard's Needs-you
+// fire and the phone's copy of that fire all count THIS and nothing else. It
+// used to be the same string pasted into each of them, which is exactly how a
+// fire and the queue it opens get to disagree — and when they disagree, one of
+// the two numbers is lying to the operator.
+//
+// Three clauses, and every one of them is a decision:
+//
+//   1. No reply yet. The obvious half.
+//
+//   2. THE CUSTOMER ACTUALLY WROTE SOMETHING. A five-star with an empty comment
+//      is not a person waiting on an answer — there is nothing to answer, and
+//      tags are not a comment. This clause is why the queue can reach zero at
+//      all: 12 of its 18 rows were rating-only, so the one number the page
+//      exists to drive down was counting reviews no reply was owed on, and no
+//      amount of work could clear them. A number you cannot move is not a
+//      worklist, it is decoration.
+//
+//   3. Not dismissed. The operator read it and decided it needs no public
+//      answer. That needs its own column because the only other field on offer
+//      — `reply` — is the PUBLIC seller response rendered under the review in
+//      the shop: clearing a triage queue through it would publish text to
+//      customers to make a number go down.
+//
+// Takes the alias so the list route's UNION rewriter and the dashboard's own
+// query read the same clause rather than two hand-copied versions of it.
+const REVIEW_WAITING_SQL = (a = 'r') =>
+  `(${a}.reply IS NULL OR TRIM(${a}.reply) = '')`
+  + ` AND ${a}.comment IS NOT NULL AND TRIM(${a}.comment) <> ''`
+  + ` AND ${a}.dismissed_at IS NULL`;
+
 function synthReviewsTableExists() {
   try {
     return !!tdb().prepare(
@@ -18254,7 +18356,7 @@ router.get('/api/retail-admin/reviews', requireRetailAdmin, (req, res) => {
   // customer waiting on an answer, so letting them into the queue would pad
   // the one number this page exists to drive to zero.
   const needsReply = req.query.needs_reply === '1';
-  if (needsReply) where.push("(r.reply IS NULL OR TRIM(r.reply) = '')");
+  if (needsReply) where.push('(' + REVIEW_WAITING_SQL('r') + ')');
   // The is_visible/rating/product_id filters apply identically to both the
   // real and synthetic review tables. Build the WHERE for each alias.
   const whereFor = (alias) => where.length
@@ -18270,7 +18372,7 @@ router.get('/api/retail-admin/reviews', requireRetailAdmin, (req, res) => {
   const unionSql = synthOk
     ? `UNION ALL
            SELECT 'synthetic' AS source, s.id, s.rating, s.comment, s.is_visible, s.created_at,
-                  s.tags_json, NULL AS photos_json, s.reply, s.reply_at,
+                  s.tags_json, NULL AS photos_json, s.reply, s.reply_at, NULL AS dismissed_at,
                   s.product_id, NULL AS order_id, NULL AS customer_id,
                   p.name_en AS product_name_en, p.name_cn AS product_name_cn,
                   s.reviewer_name AS customer_name, NULL AS customer_avatar, NULL AS order_no
@@ -18281,7 +18383,7 @@ router.get('/api/retail-admin/reviews', requireRetailAdmin, (req, res) => {
   const rows = tdb().prepare(
     `SELECT * FROM (
            SELECT 'real' AS source, r.id, r.rating, r.comment, r.is_visible, r.created_at,
-                  r.tags_json, r.photos_json, r.reply, r.reply_at,
+                  r.tags_json, r.photos_json, r.reply, r.reply_at, r.dismissed_at,
                   r.product_id, r.order_id, r.customer_id,
                   p.name_en  AS product_name_en, p.name_cn AS product_name_cn,
                   c.nickname AS customer_name, c.avatar_url AS customer_avatar,
@@ -18321,7 +18423,11 @@ router.get('/api/retail-admin/reviews', requireRetailAdmin, (req, res) => {
        COUNT(*) AS total
        FROM retail_reviews`
   ).get();
-  if (synthOk) {
+  // The chip counts describe the WHOLE set, so they cannot be gated on
+  // synthOk — that flag also means "this query suppressed the seeded arm".
+  // Gated on it, picking the Needs-reply chip made Everything read 21
+  // instead of 653: the count followed the filter instead of describing it.
+  if (synthReviewsTableExists()) {
     const ss = tdb().prepare(
       `SELECT
          SUM(CASE WHEN is_visible = 1 THEN 1 ELSE 0 END) AS visible,
@@ -18337,11 +18443,19 @@ router.get('/api/retail-admin/reviews', requireRetailAdmin, (req, res) => {
   // one page of 50 cannot tell you how many of 253 are waiting.
   try {
     const q1 = tdb().prepare(
-      "SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM retail_reviews" +
-      " WHERE (reply IS NULL OR TRIM(reply) = '')"
+      `SELECT COUNT(*) AS n, MIN(r.created_at) AS oldest FROM retail_reviews r
+        WHERE ${REVIEW_WAITING_SQL('r')}`
     ).get();
     summary.needs_reply = q1.n || 0;
     summary.oldest_unanswered = q1.oldest || null;
+    // How many of the WAITING ones are unhappy. The bulk "mark as handled"
+    // confirm names this out loud: burying an unread 1-star under a bulk action
+    // is the one mistake this queue exists to prevent, so the operator is told
+    // before they click, not after.
+    summary.waiting_low = tdb().prepare(
+      `SELECT COUNT(*) AS n FROM retail_reviews r
+        WHERE ${REVIEW_WAITING_SQL('r')} AND r.rating <= 3`
+    ).get().n || 0;
     summary.low = tdb().prepare('SELECT COUNT(*) AS n FROM retail_reviews WHERE rating <= 3').get().n || 0;
     summary.new_week = tdb().prepare(
       "SELECT COUNT(*) AS n FROM retail_reviews WHERE datetime(created_at) > datetime('now', '-7 days')"
@@ -18407,6 +18521,65 @@ router.patch('/api/retail-admin/reviews/:id', requireRetailAdmin, express.json()
     logActivity(req.user.id, req.user.username, reply ? 'reply' : 'reply_clear',
       synthetic ? 'retail_synthetic_review' : 'retail_review', id, { has_reply: !!reply }, req.ip);
   }
+  res.json({ success: true });
+});
+
+// Clear the triage queue in one action: mark every review that is waiting on a
+// reply as HANDLED, without writing a word anywhere a customer can see it.
+//
+// What it is not: it does not post a reply. `reply` is the public seller
+// response under the review in the shop, and a bulk canned answer on reviews
+// nobody has read is worse than an empty queue — it tells every one of those
+// customers they were answered when they were not.
+//
+// The set is computed HERE from REVIEW_WAITING_SQL, not taken from the client:
+//   • a page of 50 cannot dismiss a queue of 300, and a client-sent id list
+//     would silently do half the job while the button said "all";
+//   • a review answered by a colleague thirty seconds ago is no longer waiting,
+//     so it must not be swept up by an id list built before that happened.
+//
+// `expect` is the count the button had on it when the operator clicked. If the
+// queue has changed since the page was drawn we do NOTHING and report both
+// numbers, because "Mark all 6 as handled" quietly dismissing 9 is the button
+// lying about its own scope. The client re-reads and asks again.
+router.post('/api/retail-admin/reviews/dismiss-waiting', requireRetailAdmin, express.json(), (req, res) => {
+  const waiting = tdb().prepare(
+    `SELECT r.id, r.rating FROM retail_reviews r WHERE ${REVIEW_WAITING_SQL('r')}`
+  ).all();
+  const expect = req.body && req.body.expect != null ? parseInt(req.body.expect, 10) : null;
+  if (expect != null && !Number.isNaN(expect) && expect !== waiting.length) {
+    return res.status(409).json({
+      success: false, error: 'queue_changed',
+      data: { expected: expect, actual: waiting.length },
+    });
+  }
+  if (!waiting.length) return res.json({ success: true, data: { dismissed: 0, low_rated: 0 } });
+  const ids = waiting.map(r => r.id);
+  const lowRated = waiting.filter(r => Number(r.rating) <= 3).length;
+  // One statement, one transaction — a half-dismissed queue would leave the
+  // page and the dashboard disagreeing about a number that was correct a moment
+  // ago, which is the failure this whole predicate exists to prevent.
+  tdb().prepare(
+    `UPDATE retail_reviews SET dismissed_at = CURRENT_TIMESTAMP
+      WHERE id IN (${ids.map(() => '?').join(',')})`
+  ).run(...ids);
+  // Logged as ONE entry naming the count and how many were unhappy, so the
+  // audit trail can answer "who cleared 40 reviews, and were any of them
+  // complaints" without replaying forty rows.
+  logActivity(req.user.id, req.user.username, 'reviews_dismiss_waiting', 'retail_review', null,
+    { count: ids.length, low_rated: lowRated }, req.ip);
+  res.json({ success: true, data: { dismissed: ids.length, low_rated: lowRated } });
+});
+
+// Put one dismissed review BACK in the queue. The bulk action above is the kind
+// of click that gets made by accident, and without this the only way back is a
+// public reply — the exact thing the dismissal existed to avoid.
+router.post('/api/retail-admin/reviews/:id/undismiss', requireRetailAdmin, (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const row = tdb().prepare('SELECT id FROM retail_reviews WHERE id = ?').get(id);
+  if (!row) return res.status(404).json({ success: false, error: 'not_found' });
+  tdb().prepare('UPDATE retail_reviews SET dismissed_at = NULL WHERE id = ?').run(id);
+  logActivity(req.user.id, req.user.username, 'review_undismiss', 'retail_review', id, {}, req.ip);
   res.json({ success: true });
 });
 
