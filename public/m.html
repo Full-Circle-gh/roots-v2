@@ -36,6 +36,54 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="application-name" content="Tacet">
 <meta name="apple-mobile-web-app-title" content="Tacet">
+<script data-boot="viewport">
+  /* How tall the app is, measured rather than declared — and re-measured every
+     time that answer can change.
+
+     The app is one box that fills the screen, with the tab bar as its last row.
+     Sizing that box in CSS looks obvious and is not: 100vh on a phone is the
+     height with the browser's toolbar HIDDEN, so the bar it ends with sits a
+     toolbar's worth below the glass. 100dvh is meant to be the honest number
+     and mostly is — but not at launch. The value a phone reports for the frame
+     or two after the app opens is whatever the viewport was before it settled,
+     the tab bar is laid out against that, and nothing tells the page to think
+     again: the bar is simply missing until something resizes the window. Which
+     is exactly what dragging the app small and back does, and why doing that
+     brought it back.
+
+     window.innerHeight is the number that means what we want — the part of the
+     screen there is actually room to draw in — so it becomes --app-h and the
+     app is that tall. Re-measured on everything that can move it: the toolbar
+     collapsing as a list scrolls (visualViewport, which fires when a plain
+     resize does not), rotation, coming back from the app switcher, and a few
+     frames after launch for the settling this exists to catch.
+
+     Keeping the app exactly the size of the visible area is also what keeps
+     html and body from having anything to scroll — see "The app, not the page"
+     in the stylesheet. The two halves are one fix. */
+  (function () {
+    var d = document.documentElement, last = 0;
+    function fit() {
+      var h = window.innerHeight;
+      // A zero is a browser mid-launch with nothing to say yet; writing it
+      // would collapse the app to nothing and the next tick would have to
+      // undo it. Keeping the last good answer is always better than that.
+      if (!h || h === last) return;
+      last = h;
+      d.style.setProperty('--app-h', h + 'px');
+    }
+    fit();
+    ['resize', 'orientationchange', 'pageshow', 'load'].forEach(function (e) {
+      window.addEventListener(e, fit);
+    });
+    // iOS collapses its toolbar without firing a window resize; the visual
+    // viewport is the only thing that notices.
+    if (window.visualViewport) window.visualViewport.addEventListener('resize', fit);
+    if (window.requestAnimationFrame) requestAnimationFrame(fit);
+    [60, 250, 800].forEach(function (ms) { setTimeout(fit, ms); });
+  })();
+</script>
+
 <!-- The attribute on the tag below is load-bearing, not decoration:
      scripts/test_mobile_screens.js and friends find the app's own code by
      matching the first script tag with no attributes on it, and a second bare
@@ -131,8 +179,12 @@ html,body{margin:0;height:100%}
 body{background:#E9E5DC;font-family:var(--font-ui);color:var(--text-primary)}
 button,input,textarea{font-family:inherit}
 
+/* --app-h is measured, not declared — see the data-boot="viewport" script in
+   the head for why 100dvh is not trustworthy at launch. The two heights before
+   it are the fallbacks, in order of how much they can be relied on. */
 #app{position:relative;display:flex;flex-direction:column;overflow:hidden;
-  width:100vw;height:100vh;height:100dvh;background:var(--bg);color:var(--text-primary)}
+  width:100vw;height:100vh;height:100dvh;height:var(--app-h,100dvh);
+  background:var(--bg);color:var(--text-primary)}
 @media (min-width:520px){
   body{display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
   #app{width:402px;height:min(874px,calc(100vh - 48px));border-radius:44px;
@@ -142,7 +194,8 @@ button,input,textarea{font-family:inherit}
      the real thing, and a real thing does not draw a picture of a handset
      around itself inside its own window. */
   :root[data-standalone] body{display:block;padding:0}
-  :root[data-standalone] #app{width:100vw;height:100vh;height:100dvh;border-radius:0;box-shadow:none}
+  :root[data-standalone] #app{width:100vw;height:100vh;height:100dvh;height:var(--app-h,100dvh);
+       border-radius:0;box-shadow:none}
 }
 
 /* ── The app, not the page ────────────────────────────────────────────────
