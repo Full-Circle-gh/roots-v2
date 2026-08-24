@@ -18132,15 +18132,33 @@ router.get('/api/retail-admin/reviews', requireRetailAdmin, (req, res) => {
     where.push('r.product_id = ?');
     args.push(productId);
   }
+  // Free-text search over the comment and the product name, so staff can find
+  // a review by what it SAYS or what it is about, rather than being asked for
+  // a numeric product id nobody knows.
+  const q = String(req.query.q || '').trim();
+  if (q) {
+    where.push('(r.comment LIKE ? OR p.name_en LIKE ? OR p.name_cn LIKE ?)');
+    const like = '%' + q.replace(/[%_]/g, (c) => '\\' + c) + '%';
+    args.push(like, like, like);
+  }
+  // Low-rated: the reviews most worth a human reading them.
+  const lowOnly = req.query.low === '1';
+  if (lowOnly) where.push('r.rating <= 3');
+  // "Needs reply" is REAL reviews only, deliberately: a seeded review has no
+  // customer waiting on an answer, so letting them into the queue would pad
+  // the one number this page exists to drive to zero.
+  const needsReply = req.query.needs_reply === '1';
+  if (needsReply) where.push("(r.reply IS NULL OR TRIM(r.reply) = '')");
   // The is_visible/rating/product_id filters apply identically to both the
   // real and synthetic review tables. Build the WHERE for each alias.
   const whereFor = (alias) => where.length
-    ? 'WHERE ' + where.map(c => c.replace(/^r\./, alias + '.')).join(' AND ')
+    ? 'WHERE ' + where.map(c => c.replace(/\br\./g, alias + '.')).join(' AND ')
     : '';
   // Reviews moderation list blends real customer reviews and synthetic
   // (seeded) ones into a single feed, tagged by `source` so the UI can show a
   // "seeded" badge + a hard-remove button on synthetic rows only.
-  const synthOk = synthReviewsTableExists();
+  // Real-only when the queue is the filter — see the needs_reply note above.
+  const synthOk = synthReviewsTableExists() && !needsReply;
   const realWhere = whereFor('r');
   const synthWhere = whereFor('s');
   const unionSql = synthOk
@@ -18177,9 +18195,15 @@ router.get('/api/retail-admin/reviews', requireRetailAdmin, (req, res) => {
     photos: parseJsonArray(r.photos_json),
     tags_json: undefined, photos_json: undefined,
   }));
-  const realTotal = tdb().prepare(`SELECT COUNT(*) AS n FROM retail_reviews r ${realWhere}`).get(...args).n;
+  const realTotal = tdb().prepare(
+    `SELECT COUNT(*) AS n FROM retail_reviews r
+       LEFT JOIN store_products p ON p.id = r.product_id ${realWhere}`
+  ).get(...args).n;
   const synthTotal = synthOk
-    ? tdb().prepare(`SELECT COUNT(*) AS n FROM retail_synthetic_reviews s ${synthWhere}`).get(...args).n
+    ? tdb().prepare(
+        `SELECT COUNT(*) AS n FROM retail_synthetic_reviews s
+           LEFT JOIN store_products p ON p.id = s.product_id ${synthWhere}`
+      ).get(...args).n
     : 0;
   const total = realTotal + synthTotal;
   // Aggregate counts for the filter chips so staff can see "12 hidden"
@@ -18202,6 +18226,33 @@ router.get('/api/retail-admin/reviews', requireRetailAdmin, (req, res) => {
     summary.visible = (summary.visible || 0) + (ss.visible || 0);
     summary.hidden  = (summary.hidden  || 0) + (ss.hidden  || 0);
     summary.total   = (summary.total   || 0) + (ss.total   || 0);
+  }
+  // Queue counts. Computed here rather than inferred from the rows, because
+  // one page of 50 cannot tell you how many of 253 are waiting.
+  try {
+    const q1 = tdb().prepare(
+      "SELECT COUNT(*) AS n, MIN(created_at) AS oldest FROM retail_reviews" +
+      " WHERE (reply IS NULL OR TRIM(reply) = '')"
+    ).get();
+    summary.needs_reply = q1.n || 0;
+    summary.oldest_unanswered = q1.oldest || null;
+    summary.low = tdb().prepare('SELECT COUNT(*) AS n FROM retail_reviews WHERE rating <= 3').get().n || 0;
+    summary.new_week = tdb().prepare(
+      "SELECT COUNT(*) AS n FROM retail_reviews WHERE datetime(created_at) > datetime('now', '-7 days')"
+    ).get().n || 0;
+    if (synthReviewsTableExists()) {
+      summary.low += tdb().prepare('SELECT COUNT(*) AS n FROM retail_synthetic_reviews WHERE rating <= 3').get().n || 0;
+      summary.new_week += tdb().prepare(
+        "SELECT COUNT(*) AS n FROM retail_synthetic_reviews WHERE datetime(created_at) > datetime('now', '-7 days')"
+      ).get().n || 0;
+      summary.seeded = tdb().prepare('SELECT COUNT(*) AS n FROM retail_synthetic_reviews').get().n || 0;
+    } else {
+      summary.seeded = 0;
+    }
+  } catch (e) {
+    // A missing count degrades the header to fewer numbers; it must never
+    // take the list down with it.
+    console.error('[reviews summary]', e.message);
   }
   res.json({
     success: true,

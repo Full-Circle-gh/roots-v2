@@ -1570,100 +1570,245 @@ let REVIEWS_LOADED = false;
 // composer can pre-fill the existing reply without a refetch.
 let REVIEWS_BY_KEY = {};
 
+// Filter axes. `needs` is the default view: the page opens on the work,
+// not the archive. Kept in module state so paging and search compose with
+// whichever chip is active.
+let RVW_FILTER = 'needs';
+let RVW_PAGE   = 0;
+let RVW_LIMIT  = 50;
+let RVW_Q      = '';
+let RVW_META   = null;
+
+// §1.18 — the surface language picks the convention. tdWhen owns the eight
+// names for the whole product; this page never formats a date by hand.
+function rvwWhen(iso) {
+  if (!iso) return '';
+  if (typeof tdWhen === 'function') { try { return tdWhen(iso, 'dateTime'); } catch (_) {} }
+  return String(iso).slice(0, 16);
+}
+
+// Whole days since `iso`, for "oldest unanswered is N days old".
+function rvwDaysSince(iso) {
+  const t = Date.parse(String(iso || '').replace(' ', 'T') + 'Z');
+  if (!Number.isFinite(t)) return null;
+  return Math.max(0, Math.floor((Date.now() - t) / 86400000));
+}
+
+function rvwStars(n) {
+  const on = Math.max(0, Math.min(5, parseInt(n, 10) || 0));
+  return '★'.repeat(on) + '<span class="rvw-off">' + '★'.repeat(5 - on) + '</span>';
+}
+
+// A real review nobody has answered yet. Seeded rows are excluded by
+// definition — there is no customer on the other end of one.
+function rvwNeedsReply(r) {
+  return r.source !== 'synthetic' && !(r.reply && String(r.reply).trim());
+}
+
+function rvwGo(page) {
+  RVW_PAGE = Math.max(0, page || 0);
+  RVW_Q = ($('#rv-q') && $('#rv-q').value.trim()) || '';
+  loadReviews();
+}
+function rvwSetFilter(key) {
+  RVW_FILTER = key;
+  rvwGo(0);
+}
+function rvwSetLimit(n) {
+  RVW_LIMIT = n;
+  rvwGo(0);
+}
+
 async function loadReviews() {
-  const tbody = $('#reviews-table tbody');
-  tbody.innerHTML = '<tr><td colspan="7" class="muted">Loading… · 加载中…</td></tr>';
+  const list = $('#rvw-list');
+  list.innerHTML = '<div class="rvw-empty"><div class="rvw-empty-d">' + cuT('Loading…', '加载中…') + '</div></div>';
   const qs = new URLSearchParams();
-  const vis    = $('#rv-visible').value;
-  const rating = $('#rv-rating').value;
-  const pid    = $('#rv-product').value.trim();
-  if (vis !== '')  qs.set('visible', vis);
-  if (rating)      qs.set('rating', rating);
-  if (pid)         qs.set('product_id', pid);
-  qs.set('limit', '100');
+  if (RVW_FILTER === 'needs')  qs.set('needs_reply', '1');
+  if (RVW_FILTER === 'low')    qs.set('low', '1');
+  if (RVW_FILTER === 'hidden') qs.set('visible', '0');
+  const rating = $('#rv-rating') && $('#rv-rating').value;
+  if (rating) qs.set('rating', rating);
+  if (RVW_Q) qs.set('q', RVW_Q);
+  qs.set('limit', String(RVW_LIMIT));
+  qs.set('offset', String(RVW_PAGE * RVW_LIMIT));
   try {
     const { data, meta } = await api('/api/retail-admin/reviews?' + qs.toString());
-    const s = meta?.summary;
-    $('#rv-summary').textContent = s
-      ? cuT(`${s.total} total · ${s.visible || 0} visible · ${s.hidden || 0} hidden`, `共 ${s.total} · 显示 ${s.visible || 0} · 隐藏 ${s.hidden || 0}`)
-      : '';
-    if (!data.length) {
-      tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="icon">' + ICONS.empty + '</div><h3>No reviews match · 无匹配评价</h3><p class="muted">Adjust the filters above, or wait for delivered orders. · 请调整上方筛选,或等待订单送达。</p></div></td></tr>';
-      return;
-    }
+    RVW_META = meta || null;
     REVIEWS_BY_KEY = {};
     for (const r of data) REVIEWS_BY_KEY[`${r.source || 'real'}:${r.id}`] = r;
-    tbody.innerHTML = data.map(renderReviewRow).join('');
+    rvwRenderHead(meta);
+    rvwRenderChips(meta);
+    rvwRenderList(data);
+    rvwRenderPager(meta);
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="7" class="err">${cuT('Failed', '失败')}: <span data-no-i18n>${escapeHtml(e.message)}</span></td></tr>`;
+    list.innerHTML = '<div class="rvw-empty"><div class="rvw-empty-t">' + cuT('Could not load reviews', '无法加载评价')
+      + '</div><div class="rvw-empty-d" data-no-i18n>' + escapeHtml(e.message) + '</div></div>';
   }
 }
 
-function renderReviewRow(r) {
-  const stars = '★'.repeat(r.rating) + '<span style="color:var(--text-4)">' + '★'.repeat(5 - r.rating) + '</span>';
-  const productName = r.product_name_en || r.product_name_cn || ('#' + r.product_id);
-  const productSub  = r.product_name_cn && r.product_name_en ? r.product_name_cn : '';
+// §1.7 — title plus a status line of real numbers, sentence case.
+function rvwRenderHead(meta) {
+  const s = (meta && meta.summary) || {};
+  const total = s.total || 0;
+  const open  = s.needs_reply || 0;
+  const parts = [
+    cuT(total + ' reviews', total + ' 条评价'),
+    cuT(open + ' waiting on a reply', open + ' 条待回复'),
+  ];
+  if (s.hidden) parts.push(cuT(s.hidden + ' hidden', s.hidden + ' 条已隐藏'));
+  const days = rvwDaysSince(s.oldest_unanswered);
+  if (open && days !== null) {
+    parts.push(days === 0
+      ? cuT('oldest is from today', '最早一条是今天')
+      : cuT('oldest is ' + days + ' days old', '最早一条已等待 ' + days + ' 天'));
+  }
+  $('#rvw-status').textContent = parts.join(' · ');
+
+  const q = $('#rvw-queue');
+  if (open > 0) {
+    $('#rvw-queue-n').textContent = String(open);
+    q.hidden = false;
+  } else {
+    q.hidden = true;
+  }
+
+  // The seeded-review automation, reported where the operator can see it.
+  const auto = $('#rvw-auto');
+  if (s.seeded) {
+    $('#rvw-auto-text').textContent = cuT(s.seeded + ' seeded reviews', '种子评价 ' + s.seeded + ' 条');
+    auto.hidden = false;
+  } else {
+    auto.hidden = true;
+  }
+}
+
+// A1 — the primary axis is chips with live counts, never a <select>.
+function rvwRenderChips(meta) {
+  const s = (meta && meta.summary) || {};
+  const defs = [
+    ['needs',  cuT('Needs reply', '待回复'),  s.needs_reply],
+    ['all',    cuT('Everything', '全部'),     s.total],
+    ['low',    cuT('Low rated', '低评分'),    s.low],
+    ['hidden', cuT('Hidden', '已隐藏'),       s.hidden],
+  ];
+  $('#rvw-chips').innerHTML = defs.map(([key, label, n]) => (
+    '<button type="button" class="rvw-chip" aria-pressed="' + (RVW_FILTER === key) + '"'
+    + ' onclick="rvwSetFilter(\'' + key + '\')">' + escapeHtml(label)
+    + (n == null ? '' : '<span class="rvw-chip-n">' + n + '</span>') + '</button>'
+  )).join('');
+}
+
+function rvwRenderList(rows) {
+  const list = $('#rvw-list');
+  if (!rows.length) {
+    // §1.12 — no-results is its own state, and it says what to change.
+    list.innerHTML = '<div class="rvw-empty"><div class="rvw-empty-t">'
+      + escapeHtml(RVW_FILTER === 'needs'
+        ? cuT('Nothing waiting on a reply', '没有待回复的评价')
+        : cuT('No reviews match', '没有符合条件的评价'))
+      + '</div><div class="rvw-empty-d">'
+      + escapeHtml(RVW_FILTER === 'needs'
+        ? cuT('Every customer review has an answer.', '每条顾客评价都已回复。')
+        : cuT('Try another filter, or clear the search.', '请更换筛选条件,或清除搜索。'))
+      + '</div></div>';
+    return;
+  }
+  // In the combined view, the queue floats to the top under its own
+  // heading and handled work sits below — B's whole point. A filtered
+  // view is already one thing, so it renders flat.
+  if (RVW_FILTER !== 'all') {
+    list.innerHTML = rows.map(r => rvwRow(r, false)).join('');
+    return;
+  }
+  const open = rows.filter(rvwNeedsReply);
+  const done = rows.filter(r => !rvwNeedsReply(r));
+  let html = '';
+  if (open.length) {
+    html += '<div class="rvw-group">' + escapeHtml(cuT('Waiting on a reply', '待回复')) + '</div>'
+      + open.map(r => rvwRow(r, false)).join('');
+  }
+  if (done.length) {
+    html += '<div class="rvw-group">' + escapeHtml(cuT('Handled', '已处理')) + '</div>'
+      + done.map(r => rvwRow(r, true)).join('');
+  }
+  list.innerHTML = html;
+}
+
+function rvwRow(r, done) {
   const synthetic = r.source === 'synthetic';
-  const customer = r.customer_name || (synthetic ? '—' : ('#' + r.customer_id));
-  const orderNo = r.order_no ? `<span class="muted" style="font-size: 11px;">${escapeHtml(r.order_no)}</span>` : '';
-  // Admin-only badge so staff can tell seeded reviews apart (customers never
-  // see this — the storefront shows them as ordinary reviews).
-  const seededBadge = synthetic
-    ? `<span class="pill neutral" style="font-size: 9px; margin-left: 4px;" title="${escapeAttr(cuT('Seeded review (not a real purchase)','种子评价(非真实购买)'))}">${escapeHtml(cuT('Seeded','种子'))}</span>`
-    : '';
+  const src = synthetic ? 'synthetic' : 'real';
+  const product = r.product_name_en || r.product_name_cn || ('#' + r.product_id);
+  const who = r.customer_name || (synthetic ? '—' : ('#' + r.customer_id));
 
-  const tagsHtml = (r.tags || []).map(id => {
-    const label = (REVIEW_TAG_LABELS[id] || [id])[0];
-    return `<span class="pill neutral" style="font-size: 10px; margin-right: 4px;">${escapeHtml(label)}</span>`;
-  }).join('');
+  const marks = [];
+  if (!r.is_visible) marks.push('<span class="rvw-mark is-hidden">' + escapeHtml(cuT('Hidden', '已隐藏')) + '</span>');
+  // §1.10 — colour carries state, not decoration. A low score is the one
+  // thing on this page that genuinely wants attention.
+  if (r.rating <= 3) marks.push('<span class="rvw-mark is-low">' + escapeHtml(cuT('Low rated', '低评分')) + '</span>');
+  if (synthetic) marks.push('<span class="rvw-mark is-seeded">' + escapeHtml(cuT('Seeded', '种子')) + '</span>');
 
-  const photosHtml = (r.photos || []).map(url => (
-    `<img src="${escapeAttr(url)}" onclick="openReviewLightbox(${JSON.stringify(url).replace(/"/g, '&quot;')})" style="width: 48px; height: 48px; object-fit: cover; border-radius: 4px; margin-right: 4px; cursor: zoom-in; vertical-align: middle;">`
+  const tags = (r.tags || []).map(id => (
+    '<span class="rvw-tag">' + escapeHtml((REVIEW_TAG_LABELS[id] || [id])[0]) + '</span>'
   )).join('');
 
-  const commentHtml = r.comment
-    ? `<div style="font-size: 12px; line-height: 1.4; max-width: 480px; white-space: pre-wrap; word-break: break-word;">${escapeHtml(r.comment)}</div>`
-    : '<div class="muted" style="font-size: 11px;">(no comment) · 无评论</div>';
+  const shots = (r.photos || []).map(url => (
+    '<img src="' + escapeAttr(url) + '" onclick="openReviewLightbox(\'' + escapeAttr(url) + '\')">'
+  )).join('');
 
-  // Merchant reply — a public seller response shown under the review on the
-  // storefront. When present, render it inline so staff see what's live.
-  const replyHtml = r.reply
-    ? `<div style="margin-top: 8px; padding: 6px 8px; border-left: 2px solid var(--accent); background: var(--bg-2, rgba(0,0,0,.03)); border-radius: 0 4px 4px 0; max-width: 480px;">
-         <div class="muted" style="font-size: 10px; font-weight: 600; letter-spacing: .04em;">${escapeHtml(cuT('YOUR REPLY', '商家回复'))}</div>
-         <div style="font-size: 12px; line-height: 1.4; white-space: pre-wrap; word-break: break-word;">${escapeHtml(r.reply)}</div>
-       </div>`
+  const reply = r.reply
+    ? '<div class="rvw-reply"><div class="rvw-reply-k">' + escapeHtml(cuT('Your reply', '商家回复')) + '</div>'
+      + '<div class="rvw-reply-t">' + escapeHtml(r.reply) + '</div></div>'
     : '';
 
-  return `
-    <tr data-id="${r.id}" ${r.is_visible ? '' : 'style="opacity:.55"'}>
-      <td><span style="color: var(--accent); font-size: 14px; letter-spacing: 1px;">${stars}</span></td>
-      <td>
-        <div style="font-weight: 600;">${escapeHtml(productName)}</div>
-        ${productSub ? `<div class="muted" style="font-size: 11px;">${escapeHtml(productSub)}</div>` : ''}
-        <div class="muted" style="font-size: 10px;">#${r.product_id}</div>
-      </td>
-      <td>
-        <div>${escapeHtml(customer)}${seededBadge}</div>
-        ${orderNo}
-      </td>
-      <td>
-        ${commentHtml}
-        ${tagsHtml ? `<div style="margin-top: 6px;">${tagsHtml}</div>` : ''}
-        ${photosHtml ? `<div style="margin-top: 8px;">${photosHtml}</div>` : ''}
-        ${replyHtml}
-      </td>
-      <td class="muted" style="font-size: 11px; white-space: nowrap;">${r.created_at ? r.created_at.slice(0, 16) : ''}</td>
-      <td><span class="pill ${r.is_visible ? 'pub' : 'draft'}"><span class="dot"></span>${r.is_visible ? 'Visible · 显示' : 'Hidden · 隐藏'}</span></td>
-      <td style="white-space: nowrap;">
-        <button class="btn btn-sm" onclick="replyReview(${r.id}, '${synthetic ? 'synthetic' : 'real'}')">
-          ${r.reply ? 'Edit reply · 编辑回复' : 'Reply · 回复'}
-        </button>
-        <button class="btn btn-sm" onclick="toggleReview(${r.id}, ${r.is_visible ? 0 : 1}, '${synthetic ? 'synthetic' : 'real'}')">
-          ${r.is_visible ? 'Hide · 隐藏' : 'Restore · 恢复'}
-        </button>
-        ${synthetic ? `<button class="btn btn-sm" style="color: var(--danger, #c0392b);" onclick="deleteReview(${r.id})">Remove · 删除</button>` : ''}
-      </td>
-    </tr>`;
+  const text = r.comment
+    ? '<div class="rvw-text">' + escapeHtml(r.comment) + '</div>'
+    : '<div class="rvw-text is-empty">' + escapeHtml(
+        (r.tags || []).length ? cuT('No comment — tags only', '无评论 — 仅标签') : cuT('No comment', '无评论')
+      ) + '</div>';
+
+  const cls = 'rvw-row' + (done ? ' is-done' : '') + (r.is_visible ? '' : ' is-hidden');
+  return '<div class="' + cls + '" data-id="' + r.id + '">'
+    + '<div class="rvw-stars">' + rvwStars(r.rating) + '</div>'
+    + '<div class="rvw-body">' + text
+    + '<div class="rvw-meta"><span>' + escapeHtml(product) + '</span>'
+    + '<span class="rvw-sep">·</span><span>' + escapeHtml(who) + '</span>'
+    + '<span class="rvw-sep">·</span><span class="num">' + escapeHtml(rvwWhen(r.created_at)) + '</span>'
+    + tags + marks.join('') + '</div>'
+    + (shots ? '<div class="rvw-shots">' + shots + '</div>' : '')
+    + reply + '</div>'
+    + '<div class="rvw-acts">'
+    + '<button type="button" class="rvw-act' + (r.reply ? '' : ' is-primary') + '"'
+    + ' onclick="replyReview(' + r.id + ', \'' + src + '\')">'
+    + escapeHtml(r.reply ? cuT('Edit reply', '编辑回复') : cuT('Reply', '回复')) + '</button>'
+    + '<button type="button" class="rvw-act" onclick="toggleReview(' + r.id + ', ' + (r.is_visible ? 0 : 1) + ', \'' + src + '\')">'
+    + escapeHtml(r.is_visible ? cuT('Hide', '隐藏') : cuT('Restore', '恢复')) + '</button>'
+    + (synthetic
+      ? '<button type="button" class="rvw-act is-danger" onclick="deleteReview(' + r.id + ')">'
+        + escapeHtml(cuT('Remove', '删除')) + '</button>'
+      : '')
+    + '</div></div>';
+}
+
+// A1 — a pager is required wherever the set is unbounded. 253 rows with no
+// pager is how the list silently stopped at 100 for months.
+function rvwRenderPager(meta) {
+  const el = $('#rvw-pager');
+  const total = (meta && meta.total) || 0;
+  if (!total) { el.hidden = true; return; }
+  const from = RVW_PAGE * RVW_LIMIT + 1;
+  const to = Math.min(total, (RVW_PAGE + 1) * RVW_LIMIT);
+  const last = RVW_PAGE + 1 >= Math.ceil(total / RVW_LIMIT);
+  const sizes = [50, 100, 200].map(n => (
+    '<button type="button" class="rvw-page" aria-pressed="' + (RVW_LIMIT === n) + '"'
+    + ' onclick="rvwSetLimit(' + n + ')">' + n + '</button>'
+  )).join('');
+  el.innerHTML = '<div class="rvw-pager-n">' + escapeHtml(cuT(from + '–' + to + ' of ' + total, total + ' 条中的 ' + from + '–' + to)) + '</div>'
+    + '<div class="rvw-pager-b">' + sizes
+    + '<button type="button" class="rvw-page" ' + (RVW_PAGE === 0 ? 'disabled' : '')
+    + ' onclick="rvwGo(' + (RVW_PAGE - 1) + ')">' + escapeHtml(cuT('Previous', '上一页')) + '</button>'
+    + '<button type="button" class="rvw-page" ' + (last ? 'disabled' : '')
+    + ' onclick="rvwGo(' + (RVW_PAGE + 1) + ')">' + escapeHtml(cuT('Next', '下一页')) + '</button></div>';
+  el.hidden = false;
 }
 
 async function toggleReview(id, visible, source) {
@@ -1877,8 +2022,28 @@ document.querySelector('[data-tab="reviews"]').addEventListener('click', () => {
     loadReviewTags().then(loadReviews);
     loadReviewTopup(true);
     loadReviewReward(true);
+    rvwWireSearch();
   }
 });
+
+// Search runs as you type, debounced. Wired once, on first open of the tab,
+// because the markup is in the document from the start but the tab may
+// never be visited.
+let RVW_SEARCH_WIRED = false;
+function rvwWireSearch() {
+  if (RVW_SEARCH_WIRED) return;
+  const box = $('#rv-q');
+  if (!box) return;
+  RVW_SEARCH_WIRED = true;
+  let t = null;
+  box.addEventListener('input', () => {
+    clearTimeout(t);
+    t = setTimeout(() => rvwGo(0), 250);
+  });
+  box.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); clearTimeout(t); rvwGo(0); }
+  });
+}
 
 // ═══════════════════════════════════════════════════════════════════
 // FEEDBACK TAB — read-only inbox of customer bug reports from the mini app

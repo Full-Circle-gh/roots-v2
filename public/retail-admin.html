@@ -8194,55 +8194,46 @@
 
   <!-- ─── REVIEWS ─── -->
   <section id="tab-reviews" data-feat="reviews">
-    <h2>Customer reviews · 顾客评价</h2>
-    <div class="muted" style="font-size: 12px; margin-top: -6px; margin-bottom: var(--s4);">
-      Customer reviews collected from the mini app after a delivered order. Hidden reviews are dropped from
-      the public product detail. Customers can't edit a review once submitted; if they ask for a change,
-      hide the bad one and let them write another from the order page.
-      · 订单送达后从小程序收集的顾客评价。被隐藏的评价不会出现在对外的产品详情页。评价提交后顾客无法修改;若需更改,可隐藏原评价,让顾客从订单页重新撰写一条。
+    <!-- Reviews · A1 Worklist (patterns §4). The page opens on the queue,
+         not the archive: what is still waiting on a human comes first, and
+         everything already handled sits below it. -->
+    <div class="rvw-head">
+      <div>
+        <h2 class="rvw-title">Reviews · 评价</h2>
+        <div class="rvw-status num" id="rvw-status"></div>
+      </div>
+      <!-- §1.8 rule 2: an automation indicator is exempt from the one-Dusk
+           budget. It reports that tacet acted; it is not a call to action. -->
+      <div class="rvw-auto" id="rvw-auto" hidden><span class="rvw-auto-dot"></span><span id="rvw-auto-text"></span></div>
     </div>
 
-    <div class="row" style="gap: 12px; margin-bottom: var(--s4); flex-wrap: wrap; align-items: center;">
-      <div class="field" style="margin: 0;">
-        <label class="stacked">Visibility · 可见度</label>
-        <select id="rv-visible" onchange="loadReviews()">
-          <option value="">All · 全部</option>
-          <option value="1">Visible only · 仅显示可见的</option>
-          <option value="0">Hidden only · 仅显示隐藏的</option>
-        </select>
-      </div>
-      <div class="field" style="margin: 0;">
-        <label class="stacked">Rating · 评分</label>
-        <select id="rv-rating" onchange="loadReviews()">
-          <option value="">Any · 任意</option>
-          <option value="5">★★★★★ (5)</option>
-          <option value="4">★★★★ (4)</option>
-          <option value="3">★★★ (3)</option>
-          <option value="2">★★ (2)</option>
-          <option value="1">★ (1)</option>
-        </select>
-      </div>
-      <div class="field" style="margin: 0; flex: 1; min-width: 160px;">
-        <label class="stacked">Product ID · 产品 ID</label>
-        <input type="number" id="rv-product" placeholder="(any)" onchange="loadReviews()" style="width: 100%;">
-      </div>
-      <div id="rv-summary" class="muted" style="font-size: 12px; align-self: flex-end; padding-bottom: 8px;"></div>
+    <!-- One number, not a tile grid. A1 forbids padding a thin pulse into
+         fake density, and the real counts (2 low-rated, 1 new this week)
+         cannot fill three tiles honestly. The queue is the number. -->
+    <div class="rvw-queue" id="rvw-queue" hidden>
+      <div class="rvw-queue-n num" id="rvw-queue-n">—</div>
+      <div class="rvw-queue-l" id="rvw-queue-l">Waiting on a reply · 待回复</div>
     </div>
 
-    <div class="table-wrap">
-      <table id="reviews-table">
-        <thead><tr>
-          <th style="width: 90px;">Rating · 评分</th>
-          <th>Product · 产品</th>
-          <th>Customer · 顾客</th>
-          <th>Review · 评价</th>
-          <th style="width: 130px;">Date · 日期</th>
-          <th style="width: 90px;">Status · 状态</th>
-          <th style="width: 100px;"></th>
-        </tr></thead>
-        <tbody><tr><td colspan="7" class="muted">Loading…</td></tr></tbody>
-      </table>
+    <div class="rvw-chips" id="rvw-chips"></div>
+
+    <div class="rvw-tools">
+      <label class="rvw-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input type="search" id="rv-q" placeholder="Search reviews and products · 搜索评价与商品">
+      </label>
+      <select id="rv-rating" onchange="rvwGo(0)">
+        <option value="">Any rating · 任意评分</option>
+        <option value="5">5 stars · 5 星</option>
+        <option value="4">4 stars · 4 星</option>
+        <option value="3">3 stars · 3 星</option>
+        <option value="2">2 stars · 2 星</option>
+        <option value="1">1 star · 1 星</option>
+      </select>
     </div>
+
+    <div class="rvw-list" id="rvw-list"></div>
+    <div class="rvw-pager" id="rvw-pager" hidden></div>
 
     <!-- Reward for reviewing — sits ABOVE auto top-up on purpose: earning real
          reviews is the fix, seeding them is the patch. -->
