@@ -1883,19 +1883,26 @@ function closeReviewLightbox() {
 // Points for the ACT of reviewing, never for a good rating. Settings ride the
 // shared config PUT under reviews.reward; server side lives beside the review
 // submit route in routes/retail.js.
+// Set while a load() writes the server state into the form, so the change
+// handlers below do not immediately save it straight back.
+let RVW_HYDRATING = false;
+
 function rrwSyncLabel() {
   const on = !!$("#rrw-enabled").checked;
-  $("#rrw-status-label").textContent = on ? cuT("ON", "开启") : cuT("OFF", "关闭");
+  $("#rrw-status-label").textContent = on ? cuT("On", "开启") : cuT("Off", "关闭");
+  if (!RVW_HYDRATING) saveReviewReward();
 }
 
 async function loadReviewReward(fillForm) {
   try {
     const { data } = await api("/api/retail-admin/reviews/reward");
     if (fillForm) {
+      RVW_HYDRATING = true;
       $("#rrw-enabled").checked = !!data.enabled;
       $("#rrw-points").value = data.points;
       $("#rrw-max").value = data.max_per_order;
       rrwSyncLabel();
+      RVW_HYDRATING = false;
     }
     $("#rrw-stats").textContent = data.grants
       ? cuT(data.grants + " rewarded · " + data.points_given + " points given",
@@ -1918,7 +1925,7 @@ async function saveReviewReward() {
       method: "PUT",
       body: { "reviews.reward": { enabled, points, max_per_order: max } },
     });
-    toast(cuT("Saved", "已保存"));
+    await loadReviewReward(false);
     // Customers only find out there is a reward if the mini app says so, and
     // that copy ships with a republish — flag it rather than let the switch
     // look like the whole job.
@@ -1926,27 +1933,63 @@ async function saveReviewReward() {
       ? cuT("On. The mini app needs a republish before shoppers are told about it.",
             "已开启。需重新发布小程序,顾客才会看到该奖励提示。")
       : "";
-    await loadReviewReward(false);
+    rvwSavedHint("#rrw-stats");
   } catch (e) {
     toast(cuT("Save failed", "保存失败") + ": " + e.message, "err");
   }
 }
-function rtuSyncLabel() {
-  const on = !!$("#rtu-enabled").checked;
-  $("#rtu-status-label").textContent = on ? cuT("ON", "开启") : cuT("OFF", "关闭");
+// Turning this ON starts publishing made-up reviews, so it asks — but only
+// on the off→on transition. Asking again on every later edit while it is
+// already on would train the operator to click through it.
+async function rtuSyncLabel() {
+  const el = $("#rtu-enabled");
+  const on = !!el.checked;
+  $("#rtu-status-label").textContent = on ? cuT("On", "开启") : cuT("Off", "关闭");
+  if (RVW_HYDRATING) return;
+  if (on) {
+    const min = parseInt($("#rtu-min").value, 10) || 3;
+    const ok = await askConfirm({
+      title: cuT(
+        "Turn on auto top-up? Every published product below " + min + " reviews will be filled with seeded reviews under made-up names. Customers see them as ordinary reviews.",
+        "开启自动补充?所有评价数低于 " + min + " 条的已上架商品,都会以虚构昵称补充种子评价。顾客看到的与普通评价无异。"
+      ),
+      confirmLabel: cuT("Turn on", "开启"),
+    });
+    if (!ok) {
+      el.checked = false;
+      $("#rtu-status-label").textContent = cuT("Off", "关闭");
+      return;
+    }
+  }
+  saveReviewTopup();
 }
 
 // Paint the "N products are below the line" hint. Also the only place that
 // reads the saved settings back, so the form always reflects the server.
+// A saved-just-now line in the group that saved, instead of a toast for
+// every field blur.
+function rvwSavedHint(sel) {
+  const el = $(sel);
+  if (!el) return;
+  const restore = el.textContent;
+  el.textContent = cuT("Saved", "已保存");
+  clearTimeout(el.__savedT);
+  el.__savedT = setTimeout(() => {
+    if (el.textContent === cuT("Saved", "已保存")) el.textContent = restore;
+  }, 1400);
+}
+
 async function loadReviewTopup(fillForm) {
   const out = $("#rtu-estimate");
   try {
     const { data } = await api("/api/retail-admin/reviews/topup");
     if (fillForm) {
+      RVW_HYDRATING = true;
       $("#rtu-enabled").checked = !!data.enabled;
       $("#rtu-min").value = data.min_reviews;
       $("#rtu-max").value = data.max_per_run;
       rtuSyncLabel();
+      RVW_HYDRATING = false;
     }
     if (!data.available) {
       out.textContent = cuT("Not available on this database.", "此数据库不支持。");
@@ -1974,25 +2017,13 @@ async function saveReviewTopup() {
   if (!(min >= 1 && min <= 20))  { toast(cuT("Minimum must be 1–20", "最少评价数需为 1–20"), "err"); return; }
   if (!(max >= 1 && max <= 500)) { toast(cuT("Per-run cap must be 1–500", "每次上限需为 1–500"), "err"); return; }
   const enabled = !!$("#rtu-enabled").checked;
-  // Turning it ON publishes made-up reviews to shoppers, so make the operator
-  // say yes to that in words rather than to a switch they may have nudged.
-  if (enabled) {
-    const ok = await askConfirm({
-      title: cuT(
-        "Turn on auto top-up? Every published product below " + min + " reviews will be filled with seeded reviews under made-up names. Customers see them as ordinary reviews.",
-        "开启自动补充?所有评价数低于 " + min + " 条的已上架商品,都会以虚构昵称补充种子评价。顾客看到的与普通评价无异。"
-      ),
-      confirmLabel: cuT("Turn on", "开启"),
-    });
-    if (!ok) return;
-  }
   try {
     await api("/api/retail-admin/config", {
       method: "PUT",
       body: { "reviews.topup": { enabled, min_reviews: min, max_per_run: max } },
     });
-    toast(cuT("Saved", "已保存"));
     await loadReviewTopup(false);
+    rvwSavedHint("#rtu-estimate");
   } catch (e) {
     toast(cuT("Save failed", "保存失败") + ": " + e.message, "err");
   }

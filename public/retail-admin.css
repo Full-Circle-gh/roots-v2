@@ -12735,7 +12735,10 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
 .rvw-queue-l { font-size: 13px; color: var(--td-text2, #58606E); }
 
 .rvw-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
-.rvw-chip { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 14px; border-radius: 8px; border: 1px solid var(--td-border, #E4E0D5); background: transparent; color: var(--td-text, #111A2B); font: 400 13px var(--f-sans); cursor: pointer; }
+/* Pill, matching the Orders filter strip (.status-chip, radius 999). Orders
+     sets 12px/600 there; kept at 13px/400 here because §1.3 has no 12px step and
+     no weight above 500 — same shape, without importing the drift. */
+  .rvw-chip { display: inline-flex; align-items: center; gap: 7px; height: 32px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--td-border, #E4E0D5); background: transparent; color: var(--td-text, #111A2B); font: 400 13px var(--f-sans); cursor: pointer; }
 .rvw-chip .rvw-chip-n { color: var(--td-text2, #58606E); font-variant-numeric: tabular-nums; }
 .rvw-chip[aria-pressed="true"] { background: var(--td-text, #111A2B); color: var(--td-paper, #FBF9F4); border-color: var(--td-text, #111A2B); }
 .rvw-chip[aria-pressed="true"] .rvw-chip-n { color: inherit; opacity: .7; }
@@ -12824,3 +12827,20 @@ body:has(#tab-membership.active) { background: var(--td-paper); }
   .rvw-set-save { border: 1px solid var(--td-text, #111A2B); }
   .rvw-set-act { border: 1px solid var(--td-border, #E4E0D5); }
   .rvw-set-save:hover, .rvw-set-act:hover { background: var(--td-raised, #F6F3EC); }
+
+  /* The master switch card needs the same air as a section title owes its
+     content (§1.4: 16 minimum, and default to the larger option). It was
+     landing hard against "Read rarely, changed rarely." */
+  #tab-reviews [data-feat-mount] { display: block; margin-top: 24px; }
+  #tab-reviews [data-feat-mount] .feat-bar { margin: 0; }
+
+  /* The base `th` rule is 11px / weight 600 / uppercase — three things the
+     scale does not have (§1.3) plus the §1.6 ban. Orders overrides it; this
+     table never did, so its headers shipped as "ID" and "ENGLISH LABEL".
+     Same treatment Orders uses: raised band, 13px, 500, sentence case. */
+  #rtags-table thead th {
+    background: var(--td-raised); color: var(--td-text2);
+    font-size: 13px; font-weight: 500; letter-spacing: 0;
+    text-transform: none; text-align: left;
+    padding: 12px 14px; border-bottom: 1px solid var(--td-border);
+  }
