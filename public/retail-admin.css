@@ -10010,6 +10010,12 @@
   #prod-view-purchasing .pu2-pill.brick { background: var(--td-brick-tint); color: var(--td-brick-ink); }
   #prod-view-purchasing .pu2-pill.dusk  { background: var(--td-dusk-tint);  color: var(--td-dusk); }
 
+  /* Materials Phase 1b — the one tag that marks a PO line as a material
+     instead of a product, next to its name in the line list / receive rows /
+     search picker. Reuses the neutral grey pill; no new colour, per the
+     "colour is status, never decoration" rule this screen already follows. */
+  #prod-view-purchasing .pu2-mattag { padding: 2px 8px; font-size: 10.5px; margin-right: 6px; vertical-align: middle; }
+
   /* cards + table */
   #prod-view-purchasing .pu2-card { background: var(--td-surface, #fff); border: 1px solid var(--td-border);
     border-radius: 14px; box-shadow: 0 1px 2px rgba(17,26,43,.05), 0 4px 16px rgba(17,26,43,.04); }
