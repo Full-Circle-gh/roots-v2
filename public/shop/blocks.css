@@ -100,7 +100,7 @@
 .shop-blocks .sb-greet-inline { padding: calc(22 * var(--u)) calc(28 * var(--u)); }
 .shop-blocks .sb-gr-inline-row { display: flex; align-items: center; gap: calc(18 * var(--u)); }
 .shop-blocks .sb-gr-inline-copy { flex: 1; min-width: 0; }
-.shop-blocks .sb-gr-pts-pill { flex-shrink: 0; padding: calc(10 * var(--u)) calc(18 * var(--u)); border: calc(2 * var(--u)) solid currentColor; border-radius: calc(999 * var(--u)); font-family: var(--f-gothic); font-size: calc(22 * var(--u) * var(--font-scale)); }
+.shop-blocks .sb-gr-pts-pill { flex-shrink: 0; padding: calc(16 * var(--u)) calc(26 * var(--u)); border: calc(3 * var(--u)) solid currentColor; border-radius: calc(999 * var(--u)); font-family: var(--f-gothic); font-size: calc(30 * var(--u) * var(--font-scale)); font-weight: 700; }
 .shop-blocks .sb-greet-split, .shop-blocks .sb-greet-banner { margin: 0; }
 .shop-blocks .sb-gr-split-row { display: flex; align-items: stretch; gap: calc(20 * var(--u)); }
 .shop-blocks .sb-gr-split-left { flex: 1; min-width: 0; }

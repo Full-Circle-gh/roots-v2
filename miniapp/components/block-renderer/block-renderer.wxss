@@ -2946,11 +2946,12 @@ button.cp-cta::after { border: none; }
 .gr-inline-copy { flex: 1; min-width: 0; }
 .gr-pts-pill {
   flex-shrink: 0;
-  padding: 10rpx 18rpx;
-  border: 2rpx solid currentColor;
+  padding: 16rpx 26rpx;
+  border: 3rpx solid currentColor;
   border-radius: 999rpx;
   font-family: var(--f-gothic);
-  font-size: calc(22rpx * var(--font-scale));
+  font-size: calc(30rpx * var(--font-scale));
+  font-weight: 700;
   letter-spacing: 0.04em;
 }
 
