@@ -1663,7 +1663,12 @@
     var fgDefault = view === 'stat' ? 'lime-leaf' : 'ink';
     var bg = color(b.bg_color || bgDefault), fg = color(b.fg_color || fgDefault);
     var af = (ctx.config && ctx.config.affiliate) || {};
-    var reward = Number(af.reward_per_order) || 30;
+    // "You" (the referrer) and "them" (the invited friend) are tracked as two
+    // independent amounts — never assume they're equal.
+    var rewardYou = Number(af.reward_per_order) || 30;
+    var rewardThem = Number(af.reward_referee) || 0;
+    var lifeRate = Number(af.lifetime_rate_percent) || 0;
+    var lifeMonths = Number(af.lifetime_months) || 0;
     var stats = af.stats || {};
     var code = af.code || '';
     var en = !CN();
@@ -1673,8 +1678,18 @@
       ? (en ? '¥' + earned.toFixed(0) + ' earned · ' + invited + ' invited' : '已赚 ¥' + earned.toFixed(0) + ' · 已邀请 ' + invited)
       : '';
     var kicker = pick(b.kicker_en, b.kicker_cn) || (en ? 'REFER A FRIEND' : '推广计划');
-    var title = pick(b.title_en, b.title_cn) || (en ? 'Get ¥' + reward + '. Give ¥' + reward + '.' : '各得 ¥' + reward + '。');
+    var defaultTitle = rewardThem > 0
+      ? (en ? 'Get ¥' + rewardYou + '. Give ¥' + rewardThem + '.' : '你得 ¥' + rewardYou + '，好友得 ¥' + rewardThem + '。')
+      : (en ? 'Get ¥' + rewardYou + ' per friend.' : '每位好友 ¥' + rewardYou + '。');
+    var title = pick(b.title_en, b.title_cn) || defaultTitle;
     var subtitle = pick(b.subtitle_en, b.subtitle_cn) || (en ? 'Share your code — when a friend orders, you both win.' : '分享邀请码,好友下单后双方各得奖励。');
+    // Repeat-order revenue share — only worth a line when the admin has
+    // actually turned it on (rate > 0).
+    var lifetimeLine = lifeRate > 0
+      ? (en
+          ? '+ ' + lifeRate + '% of their orders for ' + (lifeMonths > 0 ? lifeMonths + ' months' : 'life')
+          : '另享好友日后订单 ' + lifeRate + '%' + (lifeMonths > 0 ? '，持续 ' + lifeMonths + ' 个月' : '，长期有效'))
+      : '';
     var accent = color(b.accent_color || 'ink');
     var copyLabel = en ? 'COPY' : '复制', shareLabel = en ? 'SHARE' : '分享';
     var codeLabel = en ? 'YOUR CODE' : '邀请码';
@@ -1705,7 +1720,7 @@
         '<div class="sb-aff-stat-num">¥' + earned.toFixed(0) + '</div>' +
         '<div class="sb-aff-stat-sub">' + escapeHtml(hasActivity
           ? (en ? 'from ' + invited + ' friend' + (invited === 1 ? '' : 's') : '来自 ' + invited + ' 位好友')
-          : (en ? '¥' + reward + ' per friend who orders' : '每位下单的好友 ¥' + reward)) + '</div>' +
+          : (en ? '¥' + rewardYou + ' per friend who orders' : '每位下单的好友 ¥' + rewardYou)) + '</div>' +
         (!enabled ? '<div class="sb-aff-stat-disabled">' + disabledMsg + '</div>'
           : code ? '<div class="sb-aff-stat-code-pill">' + escapeHtml(code) + '</div>' +
             '<div class="sb-aff-stat-actions">' + copyBtn('sb-aff-stat-copy') + shareBtn('sb-aff-stat-share') + '</div>'
@@ -1722,6 +1737,7 @@
           : code ? '<div class="sb-aff-receipt-row"><span class="sb-aff-receipt-lbl">' + codeLabel + '</span>' +
             '<span class="sb-aff-receipt-val">' + escapeHtml(code) + '</span></div>' +
             (statsLabel ? '<div class="sb-aff-receipt-row sb-aff-receipt-row-muted"><span class="sb-aff-receipt-lbl">STATS</span><span class="sb-aff-receipt-val">' + escapeHtml(statsLabel) + '</span></div>' : '') +
+            (lifetimeLine ? '<div class="sb-aff-receipt-row sb-aff-receipt-row-muted"><span class="sb-aff-receipt-lbl">BONUS</span><span class="sb-aff-receipt-val">' + escapeHtml(lifetimeLine) + '</span></div>' : '') +
             sep + '<div class="sb-aff-receipt-actions">' + copyBtn('sb-aff-receipt-copy', 'background:' + attr(accent)) + shareBtn('sb-aff-receipt-share') + '</div>'
           : ctaWrap('login', '<div class="sb-aff-receipt-signin">' + signinHint + '</div>')) +
         '</div>';
@@ -1730,7 +1746,8 @@
     return '<div class="sb-aff-blk sb-aff-card" style="background:' + attr(bg) + ';color:' + attr(fg) + '">' +
       '<div class="sb-aff-head"><div class="sb-aff-kicker">' + escapeHtml(kicker) + '</div>' +
       '<div class="sb-aff-title">' + escapeHtml(title) + '</div>' +
-      '<div class="sb-aff-sub">' + escapeHtml(subtitle) + '</div></div>' +
+      '<div class="sb-aff-sub">' + escapeHtml(subtitle) + '</div>' +
+      (lifetimeLine ? '<div class="sb-aff-lifetime">' + escapeHtml(lifetimeLine) + '</div>' : '') + '</div>' +
       (!enabled ? '<div class="sb-aff-disabled">' + disabledMsg + '</div>'
         : code ? '<div class="sb-aff-code-row"><div class="sb-aff-code-pill">' +
           '<span class="sb-aff-code-lbl">' + codeLabel + '</span>' +

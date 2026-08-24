@@ -1389,7 +1389,12 @@ Component({
           out.bg = color(b.bg_color || bgDefault);
           out.fg = color(b.fg_color || fgDefault);
           const af = this.properties.affiliate || {};
-          const reward = Number(af.reward_per_order) || 30;
+          // "You" (the referrer) and "them" (the invited friend) are tracked as
+          // two independent amounts — never assume they're equal.
+          const rewardYou  = Number(af.reward_per_order) || 30;
+          const rewardThem = Number(af.reward_referee) || 0;
+          const lifeRate   = Number(af.lifetime_rate_percent) || 0;
+          const lifeMonths = Number(af.lifetime_months) || 0;
           const stats  = af.stats || {};
           const code   = af.code || '';
           const en = L === 'en';
@@ -1403,10 +1408,20 @@ Component({
               ? `¥${earnedNum.toFixed(0)} earned · ${invitedNum} invited`
               : `已赚 ¥${earnedNum.toFixed(0)} · 已邀请 ${invitedNum}`;
           }
+          const defaultTitle = rewardThem > 0
+            ? (en ? `Get ¥${rewardYou}. Give ¥${rewardThem}.` : `你得 ¥${rewardYou}，好友得 ¥${rewardThem}。`)
+            : (en ? `Get ¥${rewardYou} per friend.` : `每位好友 ¥${rewardYou}。`);
+          // Repeat-order revenue share — only worth a line when the admin has
+          // actually turned it on (rate > 0).
+          const lifetimeLine = lifeRate > 0
+            ? (en
+                ? `+ ${lifeRate}% of their orders for ${lifeMonths > 0 ? `${lifeMonths} months` : 'life'}`
+                : `另享好友日后订单 ${lifeRate}%${lifeMonths > 0 ? `，持续 ${lifeMonths} 个月` : '，长期有效'}`)
+            : '';
           out.affiliateCard = {
             view,
             kicker:     lang.pick(b.kicker_en, b.kicker_cn, L) || (en ? 'REFER A FRIEND' : '推广计划'),
-            title:      lang.pick(b.title_en,  b.title_cn,  L) || (en ? `Get ¥${reward}. Give ¥${reward}.` : `各得 ¥${reward}。`),
+            title:      lang.pick(b.title_en,  b.title_cn,  L) || defaultTitle,
             subtitle:   lang.pick(b.subtitle_en, b.subtitle_cn, L) || (en ? 'Share your code — when a friend orders, you both win.' : '分享邀请码,好友下单后双方各得奖励。'),
             code,
             codePlaceholder: en ? '——' : '——',
@@ -1417,11 +1432,12 @@ Component({
             ctaTarget:  b.cta_target || 'affiliate',
             accent:     color(b.accent_color || 'ink'),
             statsLabel,
+            lifetimeLine,
             // Stat-view specific: separate "headline number" + "supporting line"
             statHeadline: en ? `¥${earnedNum.toFixed(0)}` : `¥${earnedNum.toFixed(0)}`,
             statSubline:  hasActivity
               ? (en ? `from ${invitedNum} friend${invitedNum === 1 ? '' : 's'}` : `来自 ${invitedNum} 位好友`)
-              : (en ? `¥${reward} per friend who orders` : `每位下单的好友 ¥${reward}`),
+              : (en ? `¥${rewardYou} per friend who orders` : `每位下单的好友 ¥${rewardYou}`),
             statCta:    en ? 'INVITE A FRIEND →' : '邀请好友 →',
             // Receipt-view specific decorations
             receiptStub: en ? 'ROOTS · REFER' : 'ROOTS · 推广',

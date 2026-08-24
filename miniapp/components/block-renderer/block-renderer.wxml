@@ -980,6 +980,7 @@
     <view wx:if="{{affiliateCard.kicker}}" class="aff-kicker">{{affiliateCard.kicker}}</view>
     <view wx:if="{{affiliateCard.title}}" class="aff-title">{{affiliateCard.title}}</view>
     <view wx:if="{{affiliateCard.subtitle}}" class="aff-sub">{{affiliateCard.subtitle}}</view>
+    <view wx:if="{{affiliateCard.lifetimeLine}}" class="aff-lifetime">{{affiliateCard.lifetimeLine}}</view>
   </view>
   <view wx:if="{{!affiliateCard.enabled}}" class="aff-disabled">{{affiliateCard.disabledMsg}}</view>
   <block wx:elif="{{affiliateCard.code}}">
@@ -1048,6 +1049,10 @@
     <view wx:if="{{affiliateCard.statsLabel}}" class="aff-receipt-row aff-receipt-row-muted">
       <text class="aff-receipt-lbl">STATS</text>
       <text class="aff-receipt-val">{{affiliateCard.statsLabel}}</text>
+    </view>
+    <view wx:if="{{affiliateCard.lifetimeLine}}" class="aff-receipt-row aff-receipt-row-muted">
+      <text class="aff-receipt-lbl">BONUS</text>
+      <text class="aff-receipt-val">{{affiliateCard.lifetimeLine}}</text>
     </view>
     <view class="aff-receipt-sep">- - - - - - - - - - - - - - - - - -</view>
     <view class="aff-receipt-actions">

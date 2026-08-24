@@ -2482,6 +2482,14 @@ button.cp-cta::after { border: none; }
   margin-top: 12rpx;
   opacity: 0.85;
 }
+.aff-lifetime {
+  font-family: var(--f-gothic);
+  font-weight: 600;
+  font-size: calc(20rpx * var(--font-scale));
+  line-height: 1.4;
+  margin-top: 8rpx;
+  opacity: 0.95;
+}
 .aff-code-row {
   display: flex;
   align-items: stretch;

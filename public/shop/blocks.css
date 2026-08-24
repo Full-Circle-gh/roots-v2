@@ -1733,6 +1733,14 @@
   margin-top: calc(12 * var(--u));
   opacity: 0.85;
 }
+.shop-blocks .sb-aff-lifetime {
+  font-family: var(--f-gothic);
+  font-weight: 600;
+  font-size: calc(calc(20 * var(--u)) * var(--font-scale));
+  line-height: 1.4;
+  margin-top: calc(8 * var(--u));
+  opacity: 0.95;
+}
 .shop-blocks .sb-aff-code-row {
   display: flex;
   align-items: stretch;

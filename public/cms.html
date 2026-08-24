@@ -4314,6 +4314,7 @@
   .b-affiliate .af-kicker { font: 700 9px var(--bf-toni); letter-spacing: .22em; opacity: .7; }
   .b-affiliate .af-ttl    { font: 500 20px var(--bf-bear); line-height: 1; letter-spacing: -.01em; margin-top: 3px; }
   .b-affiliate .af-sub    { font: 500 11px var(--bf-aleo); line-height: 1.4; margin-top: 6px; opacity: .85; }
+  .b-affiliate .af-lifetime { font: 600 10px var(--bf-gothic); line-height: 1.4; margin-top: 4px; opacity: .95; }
   .b-affiliate .af-code-row { display: flex; gap: 6px; align-items: stretch; }
   .b-affiliate .af-code-pill {
     flex: 1; min-width: 0;
@@ -5826,7 +5827,7 @@ const TWEAK_BG_VALUES  = ['paper', 'grid', 'studio'];
     // Categories + products are page-agnostic; load once. flashSales is
     // refreshed every 60s by a background timer (see below) so the
     // flash_sale_strip preview reflects what customers actually see.
-    const [catsResp, prodsResp, flashResp, pollsResp, vouchersResp] = await Promise.all([
+    const [catsResp, prodsResp, flashResp, pollsResp, vouchersResp, affiliateResp] = await Promise.all([
       // Categories are the TOP nodes of the 2-level category tree (the legacy
       // categories table is gone — the tree is the only category system). Each
       // top → { id, name (EN, matches products.category), name_cn }.
@@ -5838,12 +5839,16 @@ const TWEAK_BG_VALUES  = ['paper', 'grid', 'studio'];
       api('/api/retail-admin/polls').catch(() => ({ data: [] })),
       // Real coupons for the coupon_block picker (active ones only).
       api('/api/retail-admin/vouchers').catch(() => ({ data: [] })),
+      // The affiliate_block preview mirrors the live-configured deal (give /
+      // get amounts + repeat-order %) instead of hardcoded placeholder numbers.
+      api('/api/retail-admin/affiliate/settings').catch(() => ({ data: {} })),
     ]);
     state.categories = (catsResp?.data || []).map(t => ({ id: t.id, name: t.name, name_cn: t.name_cn || '' }));
     state.products = prodsResp.data || [];
     state.flashSales = flashResp?.data || [];
     state.polls = pollsResp?.data || [];
     state.vouchers = (vouchersResp?.data || []).filter(v => v.is_active);
+    state.affiliateSettings = affiliateResp?.data || {};
     setInterval(async () => {
       try {
         const r = await fetch('/api/retail/flash-sales', { credentials: 'same-origin' }).then(r => r.json());
@@ -8390,8 +8395,11 @@ function makeBlock(type) {
         id, type,
         view: 'card',  // card | strip | stat | receipt
         kicker_en: 'REFER A FRIEND', kicker_cn: '推广计划',
-        title_en: 'Get ¥30. Give ¥30.',
-        title_cn: '各得 ¥30。',
+        // title_en/cn left blank on purpose: the preview + live renderer both
+        // compute "Get ¥X. Give ¥Y." from the actual configured deal when the
+        // fields are empty, so a fresh block never bakes in a stale number.
+        // Fill these in only to override the auto-generated copy.
+        title_en: '', title_cn: '',
         subtitle_en: 'Share your code — when a friend orders, you both win.',
         subtitle_cn: '分享邀请码,好友下单后双方各得奖励。',
         bg_color: 'lime-leaf', fg_color: 'ink',
@@ -10265,10 +10273,29 @@ function renderBlockBody(b) {
       const t = getBi(b, 'title');
       const sub = pickLang(b.subtitle_en, b.subtitle_cn);
       const cta = pickLang(b.cta_label_en, b.cta_label_cn);
-      // Preview uses a placeholder code so the admin sees the layout filled in.
+      // Preview uses a placeholder code + activity numbers so the admin sees
+      // the layout filled in — but the deal terms themselves (give/get,
+      // repeat-order %) mirror the actual configured settings, same as the
+      // live customer-facing banner, so this never shows a stale offer.
       const previewCode = 'ROOTS-AB12CD';
       const previewStats = b.show_stats !== false
         ? (state.lang === 'cn' ? '已赚 ¥60 · 已邀请 4' : '¥60 earned · 4 invited')
+        : '';
+      const afx = state.affiliateSettings || {};
+      const afxRewardYou  = Number(afx.rewardPerOrder) || 20;
+      const afxRewardThem = Number(afx.rewardReferee) || 0;
+      const afxLifeRate   = Number(afx.lifetimeRatePercent) || 0;
+      const afxLifeMonths = Number(afx.lifetimeMonths) || 0;
+      const afxDefaultTitle = afxRewardThem > 0
+        ? (state.lang === 'cn' ? `你得 ¥${afxRewardYou}，好友得 ¥${afxRewardThem}。` : `Get ¥${afxRewardYou}. Give ¥${afxRewardThem}.`)
+        : (state.lang === 'cn' ? `每位好友 ¥${afxRewardYou}。` : `Get ¥${afxRewardYou} per friend.`);
+      // Respects an admin-authored title/subtitle override; otherwise mirrors
+      // the current deal so the preview updates the moment settings change.
+      const titleHtml = biLabel(t.en, t.cn) || escapeHtml(afxDefaultTitle);
+      const lifetimeLine = afxLifeRate > 0
+        ? (state.lang === 'cn'
+            ? `另享好友日后订单 ${afxLifeRate}%${afxLifeMonths > 0 ? `，持续 ${afxLifeMonths} 个月` : '，长期有效'}`
+            : `+ ${afxLifeRate}% of their orders for ${afxLifeMonths > 0 ? `${afxLifeMonths} months` : 'life'}`)
         : '';
       const lblCode  = state.lang === 'cn' ? '邀请码' : 'YOUR CODE';
       const lblCopy  = state.lang === 'cn' ? '复制' : 'COPY';
@@ -10307,10 +10334,11 @@ function renderBlockBody(b) {
         d.innerHTML = `
           <div class="af-receipt-stub">${state.lang === 'cn' ? 'ROOTS · 推广' : 'ROOTS · REFER'}</div>
           <div class="af-kicker">${biLabel(k.en, k.cn)}</div>
-          <div class="af-receipt-title">${biLabel(t.en, t.cn)}</div>
+          <div class="af-receipt-title">${titleHtml}</div>
           <div class="af-receipt-sep">- - - - - - - - - - - - - - - - - -</div>
           <div class="af-receipt-row"><span class="af-receipt-lbl">${lblCode}</span><span class="af-receipt-val">${previewCode}</span></div>
           ${previewStats ? `<div class="af-receipt-row af-receipt-row-muted"><span class="af-receipt-lbl">STATS</span><span class="af-receipt-val">${escapeHtml(previewStats)}</span></div>` : ''}
+          ${lifetimeLine ? `<div class="af-receipt-row af-receipt-row-muted"><span class="af-receipt-lbl">BONUS</span><span class="af-receipt-val">${escapeHtml(lifetimeLine)}</span></div>` : ''}
           <div class="af-receipt-sep">- - - - - - - - - - - - - - - - - -</div>
           <div class="af-receipt-actions">
             <div class="af-copy" style="background:${affCopyCss}">${lblCopy}</div>
@@ -10323,8 +10351,9 @@ function renderBlockBody(b) {
       d.innerHTML = `
         <div class="af-head">
           <div class="af-kicker">${biLabel(k.en, k.cn)}</div>
-          <div class="af-ttl">${biLabel(t.en, t.cn)}</div>
+          <div class="af-ttl">${titleHtml}</div>
           ${sub ? `<div class="af-sub">${escapeHtml(sub)}</div>` : ''}
+          ${lifetimeLine ? `<div class="af-lifetime">${escapeHtml(lifetimeLine)}</div>` : ''}
         </div>
         <div class="af-code-row">
           <div class="af-code-pill">

@@ -16987,9 +16987,13 @@ router.get('/api/retail/affiliate', requireRetailAuth, (req, res) => {
   res.json({
     success: true,
     data: {
-      enabled:          s.enabled,
-      reward_per_order: s.rewardPerOrder,
-      reward_referee:   s.rewardReferee,
+      enabled:              s.enabled,
+      reward_per_order:     s.rewardPerOrder,
+      reward_referee:       s.rewardReferee,
+      // Repeat-order revenue share, so the banner can advertise the ongoing
+      // % on top of the one-shot bounty above (0 ⇒ that feature is off).
+      lifetime_rate_percent: s.lifetimeRatePercent,
+      lifetime_months:       s.lifetimeMonths,
       // Absolutize the share picture so the mini-app can pass WeChat a real
       // URL; already-absolute (http/data:) values pass through untouched.
       share_image:      s.shareImage
