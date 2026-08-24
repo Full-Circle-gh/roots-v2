@@ -604,8 +604,23 @@ function serveRetailAdmin(req, res) {
   // (same escape hatch as /cms). WeChat's in-app browser (MicroMessenger) counts
   // as mobile. The companion self-auths against /api/retail-admin/* just like the
   // desktop shell, so the session/suspended gate above still applies first.
+  //
+  // Sec-CH-UA-Mobile is Chromium's low-entropy Client Hint — sent on every
+  // request with no Accept-CH round trip, '?1' for a mobile UI and '?0' for
+  // desktop. It's the header that actually flips when someone picks "Request
+  // Desktop Site" on Android Chrome; the User-Agent string itself doesn't
+  // reliably drop "Mobile"/"Android" when that happens, which is why the
+  // toggle used to still land people on Tacet Mobile, just stretched into a
+  // phone-frame mockup by its own wide-viewport styling. Trust the hint when
+  // a Chromium browser sends it. Safari, Firefox, and WeChat's in-app
+  // browser don't send Client Hints at all, so they fall back to the UA
+  // regex below — unchanged, and fine, since WeChat's browser has no
+  // desktop-site toggle to begin with.
   const ua = req.get('user-agent') || '';
-  const isMobile = /Android|iPhone|iPod|Windows Phone|Mobile|MicroMessenger/i.test(ua);
+  const chMobile = req.get('sec-ch-ua-mobile');
+  const isMobile = chMobile
+    ? chMobile === '?1'
+    : /Android|iPhone|iPod|Windows Phone|Mobile|MicroMessenger/i.test(ua);
   if (isMobile && req.query.desktop !== '1') {
     return res.sendFile(path.join(__dirname, 'public', 'm.html'));
   }
