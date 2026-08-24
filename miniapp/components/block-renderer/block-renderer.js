@@ -1393,6 +1393,11 @@ Component({
           // two independent amounts — never assume they're equal.
           const rewardYou  = Number(af.reward_per_order) || 30;
           const rewardThem = Number(af.reward_referee) || 0;
+          // The repeat-order share is granted per relationship by admin choice,
+          // not a blanket perk — /api/retail/affiliate deliberately no longer
+          // sends these, so lifeRate/lifeMonths stay 0 and lifetimeLine below
+          // stays blank. Do not re-source these from a global setting; that
+          // would advertise the share to customers who may never be granted it.
           const lifeRate   = Number(af.lifetime_rate_percent) || 0;
           const lifeMonths = Number(af.lifetime_months) || 0;
           const stats  = af.stats || {};

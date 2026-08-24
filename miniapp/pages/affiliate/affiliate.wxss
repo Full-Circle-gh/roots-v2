@@ -38,6 +38,12 @@
   color: var(--forest);
   margin-top: 20rpx;
 }
+.head .fine {
+  font-size: calc(18rpx * var(--font-scale));
+  letter-spacing: 0.02em;
+  color: var(--olive);
+  margin-top: 10rpx;
+}
 
 /* Stats strip — dark slab w/ accent numerals */
 .stats {
@@ -241,6 +247,12 @@
   align-items: center;
 }
 .apply-btn.disabled { opacity: 0.4; }
+.apply-note {
+  margin-top: 12rpx;
+  color: var(--olive);
+  font-size: calc(20rpx * var(--font-scale));
+  letter-spacing: 0.02em;
+}
 .apply-err {
   margin-top: 12rpx;
   color: var(--berry);

@@ -347,11 +347,16 @@ function afxRenderOffer() {
   if (!AFX.cfg || !afxProgramOn()) { host.innerHTML = ''; return; }
   const c = AFX.cfg;
   const life = afxLifeOn(c);
+  // The repeat-order share is opt-in per referral (granted from the ledger
+  // below), never a blanket term of the offer — so this line describes the
+  // terms IF you grant it, not what every referral gets.
   const tail = life
     ? afT(', plus ' + c.lifetimeRatePercent + '% of what the friend spends' +
-            (Number(c.lifetimeMonths) === 0 ? ' for as long as they keep buying' : ' for ' + c.lifetimeMonths + ' months'),
+            (Number(c.lifetimeMonths) === 0 ? ' for as long as they keep buying' : ' for ' + c.lifetimeMonths + ' months') +
+            ' — for referrals you choose to grant it to',
           ',另加好友消费额的 ' + c.lifetimeRatePercent + '%' +
-            (Number(c.lifetimeMonths) === 0 ? ',不设期限' : ',持续 ' + c.lifetimeMonths + ' 个月'))
+            (Number(c.lifetimeMonths) === 0 ? ',不设期限' : ',持续 ' + c.lifetimeMonths + ' 个月') +
+            ' — 仅限您选定授予的推荐关系')
     : '';
   host.innerHTML = `<div class="afx-card" style="margin-top: 24px">
       <div class="afx-offerline">
@@ -415,23 +420,23 @@ function afxRenderSettings() {
   // ── repeat orders (lifetime share) ──
   const arm = AFX.lifeArm
     ? `<div class="afx-confirm">
-         <p>${afT('This pays referrers a share of every future order their friends place.',
-                  '这会让推荐人从好友之后的每一笔订单中持续获得分成。')}</p>
+         <p>${afT('This turns on the ability to grant a share of future orders — you’ll still pick which referrals get it, one at a time, from the ledger below.',
+                  '这将开启授予分成的能力 — 您仍需在下方推荐记录中逐条选择哪些推荐关系可获得分成。')}</p>
          <div class="row">
            <button class="afx-btn ink sm" data-afx="life-confirm">${afT('Confirm', '确认')}</button>
            <button class="afx-btn ghost sm" data-afx="life-cancel">${afT('Cancel', '取消')}</button>
          </div>
        </div>` : '';
   const lifeBody = life
-    ? `<div class="afx-optin-body">${afT('The referrer also earns', '推荐人还可获得好友消费额的')}${afxField('lifetimeRatePercent', c.lifetimeRatePercent, { suffix: '%', label: afT('Share of repeat orders', '复购分成比例') })}${afT('of everything their friend spends, for', '作为分成,持续')}${afxField('lifetimeMonths', c.lifetimeMonths, { label: afT('Months the share lasts', '分成持续月数') })}${afT('months after joining.', '个月(自好友加入起算)。')}
+    ? `<div class="afx-optin-body">${afT('When granted, the referrer earns', '一旦授予,推荐人可获得好友消费额的')}${afxField('lifetimeRatePercent', c.lifetimeRatePercent, { suffix: '%', label: afT('Share of repeat orders', '复购分成比例') })}${afT('of everything their friend spends, for', '作为分成,持续')}${afxField('lifetimeMonths', c.lifetimeMonths, { label: afT('Months the share lasts', '分成持续月数') })}${afT('months after you grant it.', '个月(自您授予之日起算)。')}
          <div class="afx-note" id="afx-life-note">${afxLifeNote()}</div>
        </div>` : '';
   const repeat = `<div class="afx-card">
       <div class="afx-optin">
         <div class="afx-optin-t">
           <div class="h">${afT('Keep rewarding repeat orders', '持续奖励复购')}</div>
-          <div class="s">${afT('Reward the referrer on their friend’s later orders, not just the first.',
-                               '不止首单 — 好友之后的订单也让推荐人获得分成。')}</div>
+          <div class="s">${afT('Not a blanket perk — you grant it one referral at a time, from the ledger below, on friends who’ve already ordered.',
+                               '并非人人可享 — 您在下方推荐记录中逐条授予,仅限已下单的好友。')}</div>
         </div>
         <button class="afx-sw${life ? ' on' : ''}" role="switch" aria-checked="${life}"
                 aria-label="${afT('Keep rewarding repeat orders', '持续奖励复购')}" data-afx="life"></button>
@@ -502,10 +507,10 @@ function afxRestate() {
 function afxLifeNote() {
   const c = AFX.cfg || {};
   return Number(c.lifetimeMonths) === 0
-    ? afT('Set to 0 months, the share has no end date — the referrer keeps earning from that friend for good.',
-          '设为 0 个月即不设期限 — 推荐人将一直从该好友的订单中获得分成。')
-    : afT('Counted from the day the friend joined. Set 0 months for no end date. Nothing is clawed back when the window closes.',
-          '自好友加入当天起算。设为 0 即不设期限。周期结束后不会追回已发放的分成。');
+    ? afT('Set to 0 months, a grant has no end date — the referrer keeps earning from that friend for good.',
+          '设为 0 个月即不设期限 — 一旦授予,推荐人将一直从该好友的订单中获得分成。')
+    : afT('Counted from the day you grant it, not the day the friend joined. Set 0 months for no end date. Nothing is clawed back when the window closes.',
+          '自您授予之日起算,而非好友加入之日。设为 0 即不设期限。周期结束后不会追回已发放的分成。');
 }
 
 // ── ledger ──────────────────────────────────────────────────────
@@ -590,6 +595,16 @@ function afxActionCell(r) {
   if (r.status === 'joined') return `<button class="afx-btn ghost sm"${off} data-afx="void:${r.id}">${
     r.blocked ? afT('Close it', '关闭') : afT('Void', '作废')}</button>`;
   if (r.status === 'void')   return `<button class="afx-btn ghost sm"${off} data-afx="restore:${r.id}">${afT('Restore', '恢复')}</button>`;
+  // The repeat-order share is granted one relationship at a time — this is
+  // where "specific people the admin chooses" actually happens. Only offered
+  // once the referral converted (there's an order to take a % of) and while
+  // the feature has a rate set; otherwise the button would promise a payout
+  // the server has nowhere to compute.
+  if (r.status === 'ordered' && r.lifetime_grantable) {
+    return r.lifetime_granted_at
+      ? `<button class="afx-btn ghost sm"${off} data-afx="lifetime-revoke:${r.id}">${afT('Revoke share', '取消分成')}</button>`
+      : `<button class="afx-btn sec sm"${off} data-afx="lifetime-grant:${r.id}">${afT('Grant share', '授予分成')}</button>`;
+  }
   return '';
 }
 
@@ -769,6 +784,22 @@ async function afxRestore(id) {
     afxRenderLedger();
   }
 }
+// Grant/revoke is a per-row pick, not a money move by itself (the commission
+// only starts flowing on the friend's next paid order) — no confirm step,
+// unlike void. A failed toggle just leaves the row as it was and toasts why.
+async function afxLifetimeGrant(id, granted) {
+  if (AFX.rowBusy) return;
+  AFX.rowBusy = true; afxRenderLedger();
+  try {
+    await api('/api/retail-admin/affiliate/referrals/' + id + '/lifetime-grant', { method: 'PATCH', body: { granted } });
+    AFX.rowBusy = false;
+    afxLoadReferrals();
+  } catch (e) {
+    AFX.rowBusy = false;
+    afxRenderLedger();
+    toast(afxWhy(e));
+  }
+}
 
 // ── save bar ────────────────────────────────────────────────────
 function afxSaveMessage() {
@@ -881,6 +912,8 @@ document.addEventListener('click', e => {
   if (a === 'row-cancel')       { AFX.rowConfirm = null; afxRenderLedger(); return; }
   if (a.startsWith('void-yes:'))    { afxVoid(+a.slice(9)); return; }
   if (a.startsWith('restore-yes:')) { afxRestore(+a.slice(12)); return; }
+  if (a.startsWith('lifetime-grant:'))  { afxLifetimeGrant(+a.slice(15), true);  return; }
+  if (a.startsWith('lifetime-revoke:')) { afxLifetimeGrant(+a.slice(16), false); return; }
 
   // ONE way to open a customer. The old build called cuOpenDetail() for the
   // referrer and cuOpen() for the friend — and cuOpen() does not exist, so

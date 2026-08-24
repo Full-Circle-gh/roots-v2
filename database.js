@@ -3620,6 +3620,12 @@ db.exec(`CREATE TABLE IF NOT EXISTS retail_referrals (
   UNIQUE(invitee_id)
 )`);
 addColumn('retail_referrals', 'referee_reward_amount', 'REAL NOT NULL DEFAULT 0');
+// Repeat-order (lifetime) share is opt-in PER relationship, not a blanket perk
+// every referral gets — an admin hand-picks which referrals earn it (Affiliate
+// tab ledger). NULL = not granted (the default for every row). Non-NULL is the
+// timestamp the grant was made, which also anchors that relationship's earning
+// window (affiliate.lifetimeMonths from settings, e.g. 12 = one year).
+addColumn('retail_referrals', 'lifetime_granted_at', 'DATETIME');
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_referrals_referrer ON retail_referrals(referrer_id, status)'); } catch {}
 try { db.exec('CREATE INDEX IF NOT EXISTS idx_retail_referrals_order ON retail_referrals(first_paid_order_id)'); } catch {}
 

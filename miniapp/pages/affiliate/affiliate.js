@@ -45,6 +45,7 @@ const COPY = {
     how3sub:       '¥{r} to your wallet',
     yourInvites:   'YOUR INVITES',
     applyHead:     'GOT A CODE?',
+    applyNote:     'New customers only — for your very first order.',
     applyPlaceholder: 'ROOTS-XXXXXX',
     apply:         'APPLY',
     referredByLabel: 'INVITED BY',
@@ -66,6 +67,7 @@ const COPY = {
     errCannotSelf:      "That's your own code.",
     errProgram:         'Program is not running right now.',
     errMutual:          'You and that friend can\'t refer each other.',
+    errExisting:        'This offer is for new customers only.',
     errGeneric:         "Couldn't apply that code. Please try again.",
   },
   cn: {
@@ -90,6 +92,7 @@ const COPY = {
     how3sub:       '到账 ¥{r}',
     yourInvites:   '我的邀请',
     applyHead:     '有邀请码?',
+    applyNote:     '仅限新顾客首单使用。',
     applyPlaceholder: '请输入邀请码',
     apply:         '确认',
     referredByLabel: '邀请人',
@@ -111,6 +114,7 @@ const COPY = {
     errCannotSelf:      '不能填自己的邀请码。',
     errProgram:         '推广计划暂未开放。',
     errMutual:          '互相邀请不可叠加。',
+    errExisting:        '该活动仅限新顾客参与。',
     errGeneric:         '邀请码应用失败,请重试。',
   },
 };
@@ -200,7 +204,9 @@ Page({
         rewardReferee: refereeReward,
         shareImage: data.share_image || '',
         referredBy: data.referred_by || null,
-        canApply: !data.referred_by && data.enabled !== false,
+        // New customers only — a customer with a prior paid order can't apply
+        // a code even if they haven't been referred yet (see POST .../apply).
+        canApply: !data.referred_by && data.enabled !== false && data.is_new_customer !== false,
         stats: {
           earned: (Number(data.stats?.earned) || 0).toFixed(2),
           total_invites: data.stats?.total_invites || 0,
@@ -269,6 +275,7 @@ Page({
         cannot_refer_self: c.errCannotSelf,
         program_disabled:  c.errProgram,
         mutual_referral:   c.errMutual,
+        existing_customer: c.errExisting,
       };
       // Only show mapped, localized messages. Unknown backend codes / raw
       // transport strings (e.g. 'network_…', 'server_error_500') would leak

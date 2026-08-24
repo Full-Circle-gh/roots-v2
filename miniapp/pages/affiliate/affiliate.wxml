@@ -16,6 +16,7 @@
         <view><text class="hl">{{copy.title2}}</text>.</view>
       </view>
       <view class="sub f-aleo">{{taglineResolved}}</view>
+      <view class="fine f-aleo">{{copy.applyNote}}</view>
     </view>
 
     <!-- Stats strip -->
@@ -82,6 +83,7 @@
                value="{{applyInput}}" bindinput="onApplyInput" maxlength="32"/>
         <view class="apply-btn f-gothic tap {{applyInput ? '' : 'disabled'}}" bindtap="applyCode">{{copy.apply}}</view>
       </view>
+      <view class="apply-note f-aleo">{{copy.applyNote}}</view>
       <view wx:if="{{applyError}}" class="apply-err f-aleo">{{applyError}}</view>
     </view>
     <view wx:elif="{{referredBy}}" class="applied">

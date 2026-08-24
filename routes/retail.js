@@ -16984,16 +16984,25 @@ router.get('/api/retail/affiliate', requireRetailAuth, (req, res) => {
        LEFT JOIN retail_customers c ON c.id = me.referred_by_customer_id
       WHERE me.id = ?`
   ).get(req.customer.id);
+  // Applying a code is a new-customer offer (see POST .../apply) — tell the
+  // mini-app up front so it can hide the apply box instead of only surfacing
+  // the refusal after the customer types a code in.
+  const isNewCustomer = !tdb().prepare(
+    'SELECT 1 FROM retail_orders WHERE customer_id = ? AND paid_at IS NOT NULL LIMIT 1'
+  ).get(req.customer.id);
   res.json({
     success: true,
     data: {
       enabled:              s.enabled,
       reward_per_order:     s.rewardPerOrder,
       reward_referee:       s.rewardReferee,
-      // Repeat-order revenue share, so the banner can advertise the ongoing
-      // % on top of the one-shot bounty above (0 ⇒ that feature is off).
-      lifetime_rate_percent: s.lifetimeRatePercent,
-      lifetime_months:       s.lifetimeMonths,
+      is_new_customer:      isNewCustomer,
+      // Deliberately NOT surfacing lifetime_rate_percent / lifetime_months here.
+      // The repeat-order share is now granted per relationship, admin's pick —
+      // not something every customer who shares their code is entitled to — so
+      // the invite screen/home banner must not advertise it as a blanket offer.
+      // (Admin-side surfaces still read the real settings via the admin-only
+      // /affiliate/settings and /affiliate/overview endpoints.)
       // Absolutize the share picture so the mini-app can pass WeChat a real
       // URL; already-absolute (http/data:) values pass through untouched.
       share_image:      s.shareImage
@@ -17015,6 +17024,11 @@ router.get('/api/retail/affiliate', requireRetailAuth, (req, res) => {
 // Apply a referral code. One-shot per customer; rejected if:
 //   • affiliate program is disabled
 //   • customer already applied a code (regardless of status)
+//   • customer already has a prior paid order — this offer is for NEW
+//     customers only, so we refuse the apply outright rather than letting an
+//     existing customer bind a referrer and quietly get voided later (see
+//     creditReferralReward's 'not_first_order' void, which stays as a
+//     defensive backstop for rows that predate this check)
 //   • code doesn't match anyone, or matches the same customer
 //   • the inviter has themselves been referred BY this customer (would
 //     create a 2-cycle; cheap protection against trivial loops)
@@ -17027,6 +17041,12 @@ router.post('/api/retail/affiliate/apply', requireRetailAuth, express.json(), (r
   const me = tdb().prepare('SELECT id, referred_by_customer_id FROM retail_customers WHERE id = ?').get(req.customer.id);
   if (me.referred_by_customer_id) {
     return res.status(409).json({ success: false, error: 'already_referred' });
+  }
+  const priorOrder = tdb().prepare(
+    'SELECT 1 FROM retail_orders WHERE customer_id = ? AND paid_at IS NOT NULL LIMIT 1'
+  ).get(me.id);
+  if (priorOrder) {
+    return res.status(409).json({ success: false, error: 'existing_customer' });
   }
   const inviter = tdb().prepare('SELECT id, referred_by_customer_id FROM retail_customers WHERE referral_code = ?').get(raw);
   if (!inviter)         return res.status(404).json({ success: false, error: 'code_not_found' });
@@ -17134,6 +17154,14 @@ function creditReferralReward(orderId) {
 // wallet store credit through the same retail_topup_transactions ledger
 // (payment_method='lifetime_commission'), so it appears in wallet history.
 //
+// OPT-IN PER RELATIONSHIP: unlike the one-shot bounty, this is NOT something
+// every referral earns just because the feature is on — an admin hand-picks
+// which specific referrer/invitee pairs get it (retail_referrals.lifetime_granted_at,
+// set via PATCH .../referrals/:id/lifetime-grant). affiliate.lifetimeRatePercent
+// and .lifetimeMonths still control the RATE and DURATION once granted; they no
+// longer decide WHO — that's the point of granting per relationship rather than
+// flipping one global switch.
+//
 // ONE LEVEL ONLY: we credit the invitee's DIRECT referrer and stop. We never walk
 // further up the referral chain — multi-level payout is 三级分销/传销, which
 // Chinese law and WeChat's platform rules ban (and Tencent auto-detects, killing
@@ -17148,22 +17176,26 @@ function creditLifetimeCommission(orderId) {
   if (!(rate > 0)) return;                          // dormant until a % is set in admin
   const o = tdb().prepare('SELECT id, customer_id, status, total, paid_at FROM retail_orders WHERE id = ?').get(orderId);
   if (!o || o.status !== 'paid') return;
-  // Who referred this customer? Permanent 1:1 link stamped on the customer row.
-  // referral_applied_at is the window anchor (when the friend joined).
-  const cust = tdb().prepare('SELECT referred_by_customer_id, referral_applied_at FROM retail_customers WHERE id = ?').get(o.customer_id);
-  const referrerId = cust && cust.referred_by_customer_id;
-  if (!referrerId) return;                          // not an invited customer
+  // Was THIS SPECIFIC relationship granted the share? (Not just "is this
+  // customer invited by someone" — that's every referral; granting is opt-in.)
+  // Voided relationships can't be granted (see the grant endpoint) and are
+  // excluded here too, defensively.
+  const ref = tdb().prepare(
+    "SELECT referrer_id, lifetime_granted_at FROM retail_referrals WHERE invitee_id = ? AND status != 'void'"
+  ).get(o.customer_id);
+  if (!ref || !ref.lifetime_granted_at) return;     // not granted for this friend
+  const referrerId = ref.referrer_id;
   if (referrerId === o.customer_id) return;         // defensive: never self-pay
   // Time-limited share: the referrer only earns on this friend's orders for
-  // `lifetimeMonths` after they joined (12 = one year; 0 = forever). Past the
+  // `lifetimeMonths` after the grant (12 = one year; 0 = forever). Past the
   // window we just stop earning — no clawback. Anchored on the order's paid_at
-  // vs the join date so promoted/back-dated orders are judged by when they paid,
-  // not "now". If the join timestamp is missing (legacy bind), we don't block.
+  // vs the grant date so promoted/back-dated orders are judged by when they paid,
+  // not "now".
   const months = Number(s.lifetimeMonths) || 0;
-  if (months > 0 && cust.referral_applied_at) {
+  if (months > 0) {
     const chk = tdb().prepare(
       "SELECT julianday(?) <= julianday(?, ?) AS ok"
-    ).get(o.paid_at || new Date().toISOString(), cust.referral_applied_at, '+' + months + ' months');
+    ).get(o.paid_at || new Date().toISOString(), ref.lifetime_granted_at, '+' + months + ' months');
     if (!chk || !chk.ok) return;                    // outside the earning window
   }
   // Skip the invitee's FIRST paid order — that one belongs to the bounty. An
@@ -17515,16 +17547,18 @@ router.get('/api/retail-admin/affiliate/referrals', requireRetailAdmin, (req, re
   if (status === 'still') {
     // The admin ledger's "Still earning" pill. Not a stored status — it is the
     // same predicate the per-row lifetime_active flag and the still_earning
-    // summary figure use, so the three can never disagree: a converted friend
-    // whose referrer is still inside the lifetime-share window. With the rate
-    // off there is nothing to list, and saying so beats listing every
-    // rewarded row under a heading that claims they are still paying.
+    // summary figure use, so the three can never disagree: a row this admin
+    // GRANTED the repeat-order share to, and whose window (from the grant, not
+    // the join) hasn't closed yet. With the rate off, or nothing granted,
+    // there is nothing to list, and saying so beats listing every rewarded row
+    // under a heading that claims they are still paying.
     const sl = affiliateSettings();
     const slRate   = Number(sl.lifetimeRatePercent) || 0;
     const slMonths = Number(sl.lifetimeMonths) || 0;
     if (slRate > 0) {
       where.push("r.status = 'ordered'");
-      if (slMonths > 0) { where.push("r.joined_at >= datetime('now', ?)"); params.push(`-${slMonths} months`); }
+      where.push('r.lifetime_granted_at IS NOT NULL');
+      if (slMonths > 0) { where.push("r.lifetime_granted_at >= datetime('now', ?)"); params.push(`-${slMonths} months`); }
     } else {
       where.push('1 = 0');
     }
@@ -17549,7 +17583,7 @@ router.get('/api/retail-admin/affiliate/referrals', requireRetailAdmin, (req, re
   const rows = tdb().prepare(
     `SELECT r.id, r.referrer_id, r.invitee_id, r.code_used, r.status,
             r.reward_amount, r.first_paid_order_id, r.joined_at, r.rewarded_at,
-            r.voided_at, r.voided_reason,
+            r.voided_at, r.voided_reason, r.lifetime_granted_at,
             cr.nickname AS referrer_nickname, cr.phone AS referrer_phone,
             ci.nickname AS invitee_nickname,  ci.phone AS invitee_phone
        FROM retail_referrals r
@@ -17560,18 +17594,24 @@ router.get('/api/retail-admin/affiliate/referrals', requireRetailAdmin, (req, re
        LIMIT ? OFFSET ?`
   ).all(...params, pageSize, offset);
 
-  // Per-row "still earning" flag: a converted friend whose referrer is still
-  // inside the lifetime-share window (rate on, and within `months` of joining).
-  // Lets the ledger show the dusk "Still earning" badge vs plain "Rewarded".
+  // Per-row "still earning" flag: THIS row was granted the repeat-order share
+  // and is still inside its window (rate on, granted, and within `months` of
+  // the grant — not the join). Lets the ledger show the "Still earning" badge
+  // vs plain "Rewarded", and tells the grant button whether to offer
+  // Grant vs Revoke.
   {
     const s0 = affiliateSettings();
     const rate0 = Number(s0.lifetimeRatePercent) || 0;
     const months0 = Number(s0.lifetimeMonths) || 0;
-    let cutoff = null;
-    if (rate0 > 0 && months0 > 0) { cutoff = new Date(); cutoff.setMonth(cutoff.getMonth() - months0); }
     for (const row of rows) {
-      row.lifetime_active = (rate0 > 0 && row.status === 'ordered'
-        && (months0 === 0 || (cutoff && new Date(String(row.joined_at).replace(' ', 'T')) >= cutoff))) ? 1 : 0;
+      let active = rate0 > 0 && row.status === 'ordered' && !!row.lifetime_granted_at;
+      if (active && months0 > 0) {
+        const cutoff = new Date();
+        cutoff.setMonth(cutoff.getMonth() - months0);
+        active = new Date(String(row.lifetime_granted_at).replace(' ', 'T')) >= cutoff;
+      }
+      row.lifetime_active = active ? 1 : 0;
+      row.lifetime_grantable = rate0 > 0 && row.status === 'ordered' ? 1 : 0;
     }
     // Same predicate as /affiliate/overview's `stuck`: a 'joined' referral whose
     // friend has already paid for an order can never convert, because the
@@ -17600,14 +17640,15 @@ router.get('/api/retail-admin/affiliate/referrals', requireRetailAdmin, (req, re
   const rate   = Number(s.lifetimeRatePercent) || 0;
   const months = Number(s.lifetimeMonths) || 0;
 
-  // "Still earning" = converted friends whose referrer still earns lifetime
-  // share from them: only when the rate is on, and (if a window is set) the
-  // friend joined within `months` of now. months = 0 means "forever".
+  // "Still earning" = referrals GRANTED the repeat-order share whose window
+  // (from the grant, not the join) hasn't closed: only when the rate is on,
+  // and (if a window is set) the grant happened within `months` of now.
+  // months = 0 means "forever".
   let still_earning = 0;
   if (rate > 0) {
     still_earning = months > 0
-      ? tdb().prepare(`SELECT COUNT(*) AS n FROM retail_referrals WHERE status = 'ordered' AND joined_at >= datetime('now', ?)`).get(`-${months} months`).n
-      : tdb().prepare(`SELECT COUNT(*) AS n FROM retail_referrals WHERE status = 'ordered'`).get().n;
+      ? tdb().prepare(`SELECT COUNT(*) AS n FROM retail_referrals WHERE status = 'ordered' AND lifetime_granted_at IS NOT NULL AND lifetime_granted_at >= datetime('now', ?)`).get(`-${months} months`).n
+      : tdb().prepare(`SELECT COUNT(*) AS n FROM retail_referrals WHERE status = 'ordered' AND lifetime_granted_at IS NOT NULL`).get().n;
   }
 
   // Lifetime commissions actually credited (not clawed back). Older tenants may
@@ -17670,6 +17711,33 @@ router.patch('/api/retail-admin/affiliate/referrals/:id', requireRetailAdmin, ex
   tdb().prepare(`UPDATE retail_referrals SET ${updates.join(', ')} WHERE id = ?`).run(...params);
   logActivity(req.user.id, req.user.username, 'update', 'referral', id, b, req.ip);
   res.json({ success: true, data: tdb().prepare('SELECT * FROM retail_referrals WHERE id = ?').get(id) });
+});
+
+// Grant or revoke the repeat-order (lifetime) share for ONE specific referral
+// relationship — the "who". The rate/months in affiliate settings are the
+// "how much/how long" once granted; they no longer decide who earns it.
+// Only a converted ('ordered') referral can be granted — there is nothing to
+// take a percentage OF until the friend has bought something — and only while
+// the feature itself has a rate set (nothing to grant if lifetimeRatePercent
+// is 0). Revoking just clears the grant; it never claws back commissions
+// already paid while it was active (same no-clawback stance as the window
+// closing on its own).
+router.patch('/api/retail-admin/affiliate/referrals/:id/lifetime-grant', requireRetailAdmin, express.json(), (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!Number.isFinite(id)) return res.status(400).json({ success: false, error: 'bad_id' });
+  const row = tdb().prepare('SELECT id, status, lifetime_granted_at FROM retail_referrals WHERE id = ?').get(id);
+  if (!row) return res.status(404).json({ success: false, error: 'not_found' });
+  const granted = !!req.body?.granted;
+  if (granted) {
+    const s = affiliateSettings();
+    if (!(Number(s.lifetimeRatePercent) > 0)) return res.status(409).json({ success: false, error: 'lifetime_rate_off' });
+    if (row.status !== 'ordered') return res.status(409).json({ success: false, error: 'not_converted' });
+    tdb().prepare('UPDATE retail_referrals SET lifetime_granted_at = CURRENT_TIMESTAMP WHERE id = ?').run(id);
+  } else {
+    tdb().prepare('UPDATE retail_referrals SET lifetime_granted_at = NULL WHERE id = ?').run(id);
+  }
+  logActivity(req.user.id, req.user.username, granted ? 'affiliate_lifetime_grant' : 'affiliate_lifetime_revoke', 'referral', id, {}, req.ip);
+  res.json({ success: true, data: tdb().prepare('SELECT id, lifetime_granted_at FROM retail_referrals WHERE id = ?').get(id) });
 });
 
 // Reissue a customer's referral code (e.g., admin wants a new one after a
