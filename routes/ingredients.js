@@ -1,6 +1,10 @@
 const express = require('express');
 const db = require('../database');
 const { requireAuth, requirePermission, requireDelete, logActivity } = require('../middleware/auth');
+// Finance category text — the one normalisation, applied at every point of
+// storage. See lib/category-text.js for why a pasted Kangxi radical made one
+// category read as two in every report.
+const { storeCategory } = require('../lib/category-text');
 const router = express.Router();
 
 // A UNIQUE violation on `sku` is now reachable in a way it was not before:
@@ -100,7 +104,7 @@ router.post('/api/ingredients', requireAuth, requirePermission('ingredients'), (
            cost_per_unit||0, buy_price||0,
            supplier||null, supplier_platform||null, supplier_link||null, supplier_qr_data||null, image_data||null,
            allergens ? (Array.isArray(allergens) ? allergens.join(', ') : String(allergens)) : null, notes||null,
-           accounting_category || null, item_kind || 'food', free_by_design ? 1 : 0);
+           storeCategory(db, accounting_category), item_kind || 'food', free_by_design ? 1 : 0);
     if (buy_price > 0) {
       db.prepare('INSERT INTO ingredient_price_history (ingredient_id,price,buy_unit,source,recorded_by) VALUES (?,?,?,?,?)').run(result.lastInsertRowid, buy_price, buy_unit||'kg', 'manual', req.user.username);
     }
@@ -129,7 +133,7 @@ router.put('/api/ingredients/:id', requireAuth, requirePermission('ingredients')
            cost_per_unit||0, buy_price||0,
            supplier||null, supplier_platform||null, supplier_link||null, supplier_qr_data||null, image_data||null,
            allergens ? (Array.isArray(allergens) ? allergens.join(', ') : String(allergens)) : null, notes||null,
-           accounting_category || null, item_kind || existing.item_kind || 'food',
+           storeCategory(db, accounting_category), item_kind || existing.item_kind || 'food',
            free_by_design ? 1 : 0, req.params.id);
     // Record price change
     if (buy_price && buy_price !== existing.buy_price) {
@@ -148,8 +152,12 @@ router.put('/api/ingredients/:id', requireAuth, requirePermission('ingredients')
     // Expenses moves the amounts from "未分类 Uncategorized" into the
     // correct bucket without manager action.
     let backfilled = { lines: 0, pos_reposted: 0 };
-    const newCat   = accounting_category || null;
-    const oldCat   = existing.accounting_category || null;
+    // Both sides normalised: `newCat` is what the UPDATE above just stored, and
+    // `oldCat` has to be compared against it on the same footing. Comparing a
+    // normalised new value with a raw old one would read a pure glyph repair as
+    // a category CHANGE and rewrite every historical line for no reason.
+    const newCat   = storeCategory(db, accounting_category);
+    const oldCat   = storeCategory(db, existing.accounting_category);
     if (newCat && newCat !== oldCat) {
       // Update PO lines that are blank OR were carrying the old category.
       // Lines a buyer has explicitly overridden to a different non-blank
@@ -235,7 +243,10 @@ router.patch('/api/ingredients/bulk-update', requireAuth, requirePermission('ing
     if (!Object.prototype.hasOwnProperty.call(updates, f)) continue;
     const v = updates[f];
     if (v !== null && typeof v !== 'string') return res.status(400).json({ error: `${f} must be string or null` });
-    sets.push(`${f} = ?`); args.push(v && v.trim() ? v.trim() : null);
+    // accounting_category goes through the finance-category normaliser; the
+    // rest keep the plain trim they already had.
+    sets.push(`${f} = ?`);
+    args.push(f === 'accounting_category' ? storeCategory(db, v) : (v && v.trim() ? v.trim() : null));
   }
   if (Object.prototype.hasOwnProperty.call(updates, 'is_active')) {
     const n = updates.is_active === 1 || updates.is_active === '1' || updates.is_active === true ? 1 : 0;
@@ -348,7 +359,7 @@ router.post('/api/ingredients/bulk', requireAuth, requirePermission('ingredients
         ing.pack_contents_qty||null, ing.pack_contents_unit||null,
         ing.cost_per_unit||0, ing.buy_price||0,
         ing.supplier||null, ing.supplier_platform||null, ing.supplier_link||null,
-        ing.notes||null, ing.accounting_category||null, ing.item_kind || 'food'
+        ing.notes||null, storeCategory(db, ing.accounting_category), ing.item_kind || 'food'
       );
       if (result.changes > 0) {
         imported++;

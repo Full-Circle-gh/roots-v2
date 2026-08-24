@@ -1053,7 +1053,7 @@
       }).catch(function(){});
     }
     function compose(){
-      panel.innerHTML=head('New request · 新建',true)+'<div style="padding:12px 14px;overflow:auto"><input id="sp-subj" placeholder="Subject · 主题" style="width:100%;border:1px solid '+LINE+';border-radius:8px;padding:9px;font:14px inherit;margin-bottom:9px;box-sizing:border-box"><textarea id="sp-msg" placeholder="How can we help? · 需要什么帮助?" style="width:100%;height:120px;border:1px solid '+LINE+';border-radius:8px;padding:9px;font:14px inherit;box-sizing:border-box;resize:vertical"></textarea><button id="sp-send" style="width:100%;background:'+AC+';color:'+FG+';border:0;border-radius:8px;padding:10px;font:600 13px/1 inherit;cursor:pointer;margin-top:10px">Send · 发送</button><div id="sp-err" style="color:#c0392b;font-size:12px;margin-top:8px"></div></div>'; wire();
+      panel.innerHTML=head('New request · 新建',true)+'<div style="padding:12px 14px;overflow:auto"><input id="sp-subj" data-ph-en="Subject" data-ph-cn="主题" placeholder="Subject" style="width:100%;border:1px solid '+LINE+';border-radius:8px;padding:9px;font:14px inherit;margin-bottom:9px;box-sizing:border-box"><textarea id="sp-msg" data-ph-en="How can we help?" data-ph-cn="需要什么帮助?" placeholder="How can we help?" style="width:100%;height:120px;border:1px solid '+LINE+';border-radius:8px;padding:9px;font:14px inherit;box-sizing:border-box;resize:vertical"></textarea><button id="sp-send" style="width:100%;background:'+AC+';color:'+FG+';border:0;border-radius:8px;padding:10px;font:600 13px/1 inherit;cursor:pointer;margin-top:10px">Send · 发送</button><div id="sp-err" style="color:#c0392b;font-size:12px;margin-top:8px"></div></div>'; wire();
       panel.querySelector('#sp-send').addEventListener('click',function(){
         var msg=panel.querySelector('#sp-msg').value.trim(); if(!msg){ panel.querySelector('#sp-err').textContent='Enter your message · 请输入内容'; return; }
         fetch('/api/backend/support',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({subject:panel.querySelector('#sp-subj').value.trim(),message:msg})})
@@ -1066,7 +1066,7 @@
         var t=((j&&j.tickets)||[]).filter(function(x){return String(x.id)===String(id);})[0]; var th=panel.querySelector('#sp-th'); if(!t||!th){ list(); return; }
         var h='<div style="font-weight:600;margin-bottom:10px">'+esc(t.subject||'(no subject)')+'</div>';
         (t.messages||[]).forEach(function(m){ var me=m.senderKind==='merchant'; h+='<div style="margin-bottom:9px;text-align:'+(me?'right':'left')+'"><div style="display:inline-block;max-width:85%;text-align:left;background:'+(me?'#eef3ee':'#f5f2ea')+';border:1px solid '+LINE+';border-radius:10px;padding:8px 10px;font-size:13px;line-height:1.4"><div style="font-size:10px;color:#999;margin-bottom:3px">'+esc(m.senderName||(me?'You':'Support'))+'</div>'+esc(m.body)+'</div></div>'; });
-        if(t.status!=='resolved'){ h+='<textarea id="sp-rmsg" placeholder="Reply · 回复" style="width:100%;height:64px;border:1px solid '+LINE+';border-radius:8px;padding:8px;font:14px inherit;box-sizing:border-box;resize:vertical;margin-top:6px"></textarea><button id="sp-rsend" style="width:100%;background:'+AC+';color:'+FG+';border:0;border-radius:8px;padding:9px;font:600 13px/1 inherit;cursor:pointer;margin-top:8px">Send · 发送</button>'; }
+        if(t.status!=='resolved'){ h+='<textarea id="sp-rmsg" data-ph-en="Reply" data-ph-cn="回复" placeholder="Reply" style="width:100%;height:64px;border:1px solid '+LINE+';border-radius:8px;padding:8px;font:14px inherit;box-sizing:border-box;resize:vertical;margin-top:6px"></textarea><button id="sp-rsend" style="width:100%;background:'+AC+';color:'+FG+';border:0;border-radius:8px;padding:9px;font:600 13px/1 inherit;cursor:pointer;margin-top:8px">Send · 发送</button>'; }
         else { h+='<div style="color:#888;font-size:12px;text-align:center;margin-top:8px">Resolved · 已解决</div>'; }
         th.innerHTML=h;
         var rs=panel.querySelector('#sp-rsend'); if(rs)rs.addEventListener('click',function(){ var m=panel.querySelector('#sp-rmsg').value.trim(); if(!m)return; fetch('/api/backend/support/'+id+'/reply',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:m})}).then(function(r){return r.json();}).then(function(){ thread(id); }).catch(function(){}); });
@@ -2728,7 +2728,7 @@
                      the catch-all bucket keeps a readable trail. -->
                 <div class="onw-f" id="onw-channel-note-wrap" hidden>
                   <label for="onw-channel-note">Where did it come from? · 具体来源</label>
-                  <input class="onw-in" id="onw-channel-note" maxlength="200" placeholder="e.g. Xiaohongshu message · 例如：小红书私信">
+                  <input class="onw-in" id="onw-channel-note" maxlength="200" data-ph-en="e.g. Xiaohongshu message" data-ph-cn="例如：小红书私信" placeholder="e.g. Xiaohongshu message">
                 </div>
                 <div class="onw-err" id="onw-err-route" data-no-i18n hidden></div>
               </div>
@@ -4430,7 +4430,7 @@
                        product, not a fact about how many you have — and on the
                        Stock tab it sat directly above the counts, pushing the
                        numbers people came for below the fold. -->
-                  <div class="field"><label class="stacked">SKU · 货号</label><input type="text" id="pd-sku" placeholder="required · 必填"></div>
+                  <div class="field"><label class="stacked">SKU · 货号</label><input type="text" id="pd-sku" data-ph-en="required" data-ph-cn="必填" placeholder="required"></div>
                 </div>
               </section>
 
@@ -4854,7 +4854,7 @@
       <span style="flex:1"></span>
       <span class="act-search">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-        <input id="act-search" type="text" placeholder="SKU / name / order · 货号 / 名称 / 订单" oninput="clearTimeout(window._actSearchT);window._actSearchT=setTimeout(()=>actLoad(true),300)">
+        <input id="act-search" type="text" data-ph-en="SKU / name / order" data-ph-cn="货号 / 名称 / 订单" placeholder="SKU / name / order" oninput="clearTimeout(window._actSearchT);window._actSearchT=setTimeout(()=>actLoad(true),300)">
       </span>
       <button class="act-export" type="button" onclick="actExportCsv()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11"/><path d="m7 11 5 5 5-5"/><path d="M5 20h14"/></svg>
@@ -5860,7 +5860,7 @@
           </select>
           <!-- Secondary picker: product -->
           <div id="pu-cta_product_wrap" style="margin-top: 8px; display: none;">
-            <input type="text" id="pu-cta_product_search" class="pg-in" placeholder="Type to search products by name or SKU… · 按名称或货号搜索" style="margin-bottom: 6px;">
+            <input type="text" id="pu-cta_product_search" class="pg-in" data-ph-en="Type to search products by name or SKU…" data-ph-cn="按名称或货号搜索" placeholder="Type to search products by name or SKU…" style="margin-bottom: 6px;">
             <select id="pu-cta_target_product" size="6" class="pg-sel" style="font-family: var(--f-mono); font-size: 12px;"></select>
           </div>
           <!-- Secondary picker: category -->
@@ -7220,7 +7220,7 @@
             <span class="dlvwiz-cl">
               <span class="dlvwiz-ct">Just my city · 只送本市</span>
               <span class="dlvwiz-cs">The city your store is in. · 门店所在的城市。</span>
-              <span class="dlvwiz-inl"><input type="text" id="dlvwiz-city" class="dlvwiz-in wide" placeholder="Your city · 你的城市" onclick="event.stopPropagation()"></span>
+              <span class="dlvwiz-inl"><input type="text" id="dlvwiz-city" class="dlvwiz-in wide" data-ph-en="Your city" data-ph-cn="你的城市" placeholder="Your city" onclick="event.stopPropagation()"></span>
             </span>
           </button>
 
@@ -7421,9 +7421,9 @@
             <div class="field" style="margin: 0; grid-column: 1 / -1;">
               <label class="stacked">By weight (optional) · 按重量计费(可选)</label>
               <span class="dz-hours-pair">
-                <input type="number" id="dz-gz-w1" placeholder="First kg ¥ · 首重">
+                <input type="number" id="dz-gz-w1" data-ph-en="First kg ¥" data-ph-cn="首重" placeholder="First kg ¥">
                 <span class="dash">+</span>
-                <input type="number" id="dz-gz-wx" placeholder="Extra/kg ¥ · 续重">
+                <input type="number" id="dz-gz-wx" data-ph-en="Extra/kg ¥" data-ph-cn="续重" placeholder="Extra/kg ¥">
               </span>
             </div>
           </div>
@@ -8324,7 +8324,7 @@
       <div class="drawer-body fb-thread" id="fb-thread-body"></div>
       <div class="drawer-foot" style="flex-direction:column;align-items:stretch;gap:8px">
         <textarea id="fb-reply-input" class="fb-reply-input" rows="3"
-          placeholder="Write a reply… · 输入回复…" maxlength="4000"></textarea>
+          data-ph-en="Write a reply…" data-ph-cn="输入回复…" placeholder="Write a reply…" maxlength="4000"></textarea>
         <div style="display:flex;justify-content:flex-end;gap:8px">
           <button class="btn" onclick="closeDrawer('#fb-drawer')">Close · 关闭</button>
           <button class="btn btn-primary" id="fb-reply-send" onclick="sendFeedbackReply()">Send reply · 发送回复</button>
@@ -9582,7 +9582,7 @@
                 </div>
                 <div class="field" style="margin: 0;">
                   <label class="stacked">App Secret · 应用 Secret</label>
-                  <input type="password" id="wecom-app-secret" autocomplete="off" placeholder="paste app Secret · 粘贴应用 Secret" style="width: 100%; font-family: monospace;">
+                  <input type="password" id="wecom-app-secret" autocomplete="off" data-ph-en="paste app Secret" data-ph-cn="粘贴应用 Secret" placeholder="paste app Secret" style="width: 100%; font-family: monospace;">
                 </div>
                 <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                   <button type="button" class="btn" style="font-size: 12px; padding: 5px 12px" onclick="saveWecomApp()">Save · 保存</button>
@@ -9650,11 +9650,11 @@
                   <div id="alipay-ocr-fields" style="margin-top:10px;">
                     <div class="field" style="margin: 0 0 8px;">
                       <label class="stacked">Anthropic API key (sk-…) · 密钥</label>
-                      <input type="password" id="alipay-manual-key" autocomplete="off" placeholder="sk-ant-… · paste once, leave blank to keep · 留空则保持不变" style="width: 100%; font-family: monospace;">
+                      <input type="password" id="alipay-manual-key" autocomplete="off" data-ph-en="sk-ant-… · paste once, leave blank to keep" data-ph-cn="留空则保持不变" placeholder="sk-ant-… · paste once, leave blank to keep" style="width: 100%; font-family: monospace;">
                     </div>
                     <div class="field" style="margin: 0 0 8px;">
                       <label class="stacked">Accepted payee names · 收款方名称(可多个)</label>
-                      <input type="text" id="alipay-manual-payee" placeholder="哈素萌, 玲 — separate with commas · 多个用逗号分隔" style="width: 100%;">
+                      <input type="text" id="alipay-manual-payee" data-ph-en="哈素萌, 玲 — separate with commas" data-ph-cn="多个用逗号分隔" placeholder="哈素萌, 玲 — separate with commas" style="width: 100%;">
                       <div class="muted" style="margin-top:4px; line-height:1.5;">List every name your 收钱码 can show and any one is enough to pass. The success screen shows the shop's display name (哈素萌); the 账单详情 page the customer opens later shows the registered name instead (*玲(个人)) — list both, or leave blank to skip this check. Stars, brackets and spaces are ignored. · 请列出收钱码可能显示的所有名称,命中任一即通过。支付成功页显示店铺名(哈素萌),顾客事后打开的账单详情页显示的是账户全称(*玲(个人)) — 两个都填,或留空则不检查。星号、括号、空格自动忽略。</div>
                     </div>
                     <div class="field" style="margin: 0 0 8px;">
@@ -9709,7 +9709,7 @@
                 </div>
                 <div class="field" style="margin: 0 0 8px;">
                   <label class="stacked">AccessKey Secret · 访问密钥</label>
-                  <input type="password" id="aliyun_sms-ak_secret" autocomplete="off" placeholder="paste AccessKey Secret · 粘贴 AccessKey Secret" style="width: 100%; font-family: monospace;">
+                  <input type="password" id="aliyun_sms-ak_secret" autocomplete="off" data-ph-en="paste AccessKey Secret" data-ph-cn="粘贴 AccessKey Secret" placeholder="paste AccessKey Secret" style="width: 100%; font-family: monospace;">
                 </div>
                 <div class="field" style="margin: 0 0 8px;">
                   <label class="stacked">Signature (签名) · 短信签名</label>
@@ -9725,7 +9725,7 @@
                 </div>
                 <div class="field" style="margin: 10px 0 0;">
                   <label class="stacked">Test to this phone · 测试发送至此手机号</label>
-                  <input type="text" id="aliyun_sms-testphone" placeholder="11-digit mainland mobile · 11 位手机号" style="width: 100%; font-family: monospace;">
+                  <input type="text" id="aliyun_sms-testphone" data-ph-en="11-digit mainland mobile" data-ph-cn="11 位手机号" placeholder="11-digit mainland mobile" style="width: 100%; font-family: monospace;">
                 </div>
                 <div style="margin-top: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                   <button type="button" class="btn" style="font-size: 12px; padding: 5px 12px" onclick="_saveAliyunSms()">Save · 保存</button>
@@ -11102,7 +11102,7 @@
     <!-- MAPPING — setup surface; the 189-row table loads only when this opens -->
     <div class="gy-panel" id="gy-panel-mapping">
       <div class="pa-toolbar">
-        <input id="gy-search" type="text" placeholder="Search products · 搜索商品" oninput="gyFilterProducts()">
+        <input id="gy-search" type="text" data-ph-en="Search products" data-ph-cn="搜索商品" placeholder="Search products" oninput="gyFilterProducts()">
         <label style="font-size:13px;display:flex;align-items:center;gap:6px;cursor:pointer;white-space:nowrap">
           <input type="checkbox" id="gy-show-unmapped" onchange="gyFilterProducts()"> Show unmapped only · 仅未映射
         </label>
@@ -11603,7 +11603,7 @@
           </div>
           <div class="tm-field">
             <label class="tm-flabel" for="tmIPass">Temporary password · 初始密码</label>
-            <input class="tm-input" id="tmIPass" type="text" autocomplete="off" spellcheck="false" placeholder="min 10 characters · 至少 10 位" />
+            <input class="tm-input" id="tmIPass" type="text" autocomplete="off" spellcheck="false" data-ph-en="min 10 characters" data-ph-cn="至少 10 位" placeholder="min 10 characters" />
           </div>
         </div>
         <button type="submit" id="tmInviteBtn" class="tm-btn-primary" style="width:100%">Create sign-in · 创建账户</button>
@@ -11661,7 +11661,7 @@
       </div>
       <div class="tm-field">
         <label class="tm-flabel" for="tmEPass">Reset password · 重置密码</label>
-        <input class="tm-input" id="tmEPass" type="text" autocomplete="off" spellcheck="false" placeholder="Leave blank to keep · 留空则不变" />
+        <input class="tm-input" id="tmEPass" type="text" autocomplete="off" spellcheck="false" data-ph-en="Leave blank to keep" data-ph-cn="留空则不变" placeholder="Leave blank to keep" />
       </div>
 
       <div class="tm-trow">
