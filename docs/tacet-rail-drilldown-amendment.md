@@ -224,7 +224,7 @@ The count is taken **after all three gates** (capability, feature flag, data pre
 ## 4. Out of scope — do not touch
 
 - **The topbar.** Locked: fixed 56px, no fold, no collapse. Brand stays in the topbar (§1.1c). This amendment gives no one a reason to revisit that.
-- **The phone bottom nav** (`#rm-bottomnav`). Dashboard / Orders / Customers / Products / More, unchanged. **There is no drill-down on phones.** If a later pass tries to "make mobile consistent," the answer is no — a 5-item bottom bar and a 14-item column are different problems.
+- ~~**The phone bottom nav** (`#rm-bottomnav`).~~ **REMOVED 2026-08-24.** Phones have been served Tacet Mobile (`public/m.html`) since 2026-07-12 (`a19b70af`), so every `≤720px` layer inside `retail-admin` was unreachable from a phone; all of them are deleted. The bottom nav is gone with them. Phone navigation is Tacet Mobile's own, and the "don't make mobile consistent with the rail" rule now applies to `m.html` instead — a bottom bar and a 14-item column are still different problems.
 - **Rail order.** The `order:9` collision (Products / Purchasing) and the gaps at 1, 5, 7, 13 stay exactly as they are. Renumber during Batch 1 as already planned, not here.
 - **Group membership.** Nothing moves between folders in this change.
 

@@ -70,7 +70,7 @@ This is `tacet-session-handoff.md` §7's failure mode with an extra hop: the sur
 
 ## 🔑 The docs' topbar exists — on mobile
 
-The phone shell's **"More" sheet** (`buildMore` / `rm-sheet-ctl`, `retail-admin.html:11113`) carries **Theme** (`:11117`) **and EN / 中文** (`:11119`). It's built into `#rm-bottomnav` (`:810`) — mobile chrome, not the desktop topbar.
+~~The phone shell's **"More" sheet** (`buildMore` / `rm-sheet-ctl`) carried **Theme** and **EN / 中文**.~~ **REMOVED 2026-08-24.** Phones have been served Tacet Mobile (`public/m.html`) since 2026-07-12 (`a19b70af`), so `retail-admin`'s own phone chrome was unreachable from a phone; the bottom nav and the More sheet are deleted. Theme and language now live only where the desktop topbar puts them.
 
 **So §1.1 isn't describing a fiction. It's describing the mobile More sheet and attributing it to desktop.** Two real surfaces, collapsed into one wrong rule.
 
@@ -87,7 +87,7 @@ Persistent across every page:
 5. **Inbox** — `#tbInbox:918` → Reviews / Feedback
 6. **Account / avatar** — `#acct:943` → Profile / Appearance(theme) / Sign out; opens My Info modal `#profModal:981`
 7. **Left rail nav** — `.tabs` column (brand head `:1001`). **Manage team now lives here**, moved off the account dropdown (`:1209`)
-8. **Mobile only** — `#rm-bottomnav:810` (Home / Orders / Customers / Products / More), theme + language in the More sheet
+8. ~~**Mobile only** — `#rm-bottomnav` (Home / Orders / Customers / Products / More), theme + language in the More sheet~~ — **REMOVED 2026-08-24**, see above
 
 **Not global chrome:** language, sound (both Profile iframe), live-poll dot (doesn't exist).
 **Global, but inside the avatar menu, not loose:** theme.

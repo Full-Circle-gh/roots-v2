@@ -229,11 +229,6 @@ function applyCapGates() {
     if (cap === undefined) return;
     btn.style.display = _capAllows(cap) ? '' : 'none';
   });
-  document.querySelectorAll('#rm-bottomnav [data-go]').forEach(btn => {
-    const cap = TAB_CAP[btn.dataset.go];
-    if (cap === undefined) return;
-    btn.style.display = _capAllows(cap) ? '' : 'none';
-  });
   // Generic hook: tag any button/section with data-cap="x" (or "x y" for any-of)
   // and it disappears for operators without it. Used by section files in later phases.
   document.querySelectorAll('[data-cap]').forEach(el => {
