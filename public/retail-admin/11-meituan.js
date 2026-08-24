@@ -19,6 +19,7 @@
   let _lastStores = [];  // last /status.stores, so the status line can repaint
   let _mtFilter  = 'all';  // chip filter: all | att | ok | ms
   let _mtStore   = '';     // store filter: '' = all stores
+  let _mtSel     = null;   // product id the panel is showing
 
   // ── Entry point ────────────────────────────────────────────────────────────
   window.mtAdminInit = async function () {
@@ -43,7 +44,7 @@
     // Buttons and the remaining static chrome are handled by the "EN · CN"
     // splitter; the column headings are data now, so they repaint here too.
     if (window.onLangChange) onLangChange(function () {
-      mtRenderTableHead();
+      mtRenderListHead();
       mtFilterProducts();
       mtRenderBundles();
     });
@@ -139,22 +140,22 @@
       // Try to guess 天河 / 越秀 by code or name
       _storeA = _stores.find(s => s.code === 'tianhe' || s.name?.includes('天河')) || _stores[0] || null;
       _storeB = _stores.find(s => s.code === 'yuexiu' || s.name?.includes('越秀')) || _stores[1] || null;
-      mtRenderTableHead();
+      mtRenderListHead();
     } catch (e) {
       console.warn('[meituan] loadStores error', e);
     }
     mtRenderStoreFilter();
   }
 
-  // The columns are named after the stores themselves — "Tianhe delivery" and
-  // "Yuexiu instant" carried the matching mode in the heading, which the column
-  // already says (the Yuexiu cells talk about 货号 throughout). Because the text
-  // is data now rather than the splitter's static "EN · CN" markup, it has to be
+  // The dot columns are named after the stores themselves — "Tianhe delivery"
+  // and "Yuexiu instant" carried the matching mode in the heading, which the
+  // panel already says (its 越秀 block talks about 货号). Because the text is
+  // data now rather than the splitter's static "EN · CN" markup, it has to be
   // repainted on a language flip like everything else the JS writes.
-  function mtRenderTableHead() {
+  function mtRenderListHead() {
     const cn = document.documentElement.dataset.uiLang === 'cn';
-    const h0 = document.getElementById('mt-th-store-0');
-    const h1 = document.getElementById('mt-th-store-1');
+    const h0 = document.getElementById('mt-lh-store-0');
+    const h1 = document.getElementById('mt-lh-store-1');
     if (h0 && _storeA) h0.textContent = mtStoreName(_storeA.code, cn);
     if (h1 && _storeB) h1.textContent = mtStoreName(_storeB.code, cn);
   }
@@ -411,16 +412,16 @@
 
   window.mtSetStore = function (code) {
     _mtStore = code || '';
-    const th0 = document.getElementById('mt-th-store-0');
-    const th1 = document.getElementById('mt-th-store-1');
-    if (th0) th0.hidden = !!(_mtStore && _storeA && _mtStore !== _storeA.code);
-    if (th1) th1.hidden = !!(_mtStore && _storeB && _mtStore !== _storeB.code);
+    const lh0 = document.getElementById('mt-lh-store-0');
+    const lh1 = document.getElementById('mt-lh-store-1');
+    if (lh0) lh0.hidden = !!(_mtStore && _storeA && _mtStore !== _storeA.code);
+    if (lh1) lh1.hidden = !!(_mtStore && _storeB && _mtStore !== _storeB.code);
     mtRenderChips();
     mtFilterProducts();
   };
 
   // Chip counts must be filtered the same way the rows are, or the chips claim
-  // 248 while the table shows 40. Mirrors the store filter in mtRenderProducts.
+  // 248 while the list shows 40. Mirrors the store filter in mtVisibleList.
   function mtStorePass(p) {
     if (!_mtStore) return true;
     return !!(p.stores || {})[_mtStore] || mtNeedsAttention(p);
@@ -442,8 +443,8 @@
 
   // ── Products ───────────────────────────────────────────────────────────────
   async function mtLoadProducts() {
-    const tbody = document.getElementById('mt-products-body');
-    tbody.innerHTML = '<tr><td colspan="3" class="mt-empty">' + cuT('Loading…', '\u52a0\u8f7d\u4e2d\u2026') + '</td></tr>';
+    const body = document.getElementById('mt-products-body');
+    body.innerHTML = '<div class="mt-empty">' + cuT('Loading…', '加载中…') + '</div>';
     try {
       // includeInactive so the bundle-component picker can attach paused
       // variants; the mapping list filters back to active in mtRenderProducts.
@@ -451,14 +452,10 @@
       _products = res.data || [];
       mtFilterProducts();
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="3" class="mt-empty">${escape(e.message)}</td></tr>`;
+      body.innerHTML = `<div class="mt-empty">${escape(e.message)}</div>`;
     }
   }
 
-  // One status pill (Tea = live, Brass = needs action, neutral = not on store).
-  function mtPill(kind, label) {
-    return '<span class="mt-pill ' + kind + '"><span class="d"></span>' + esc(label) + '</span>';
-  }
   // "Last 18 · 1d ago" footnote for a store mapping (safe inside data-no-i18n).
   function mtLast(map) {
     return (map && map.last_pushed_at)
@@ -494,21 +491,44 @@
               mtIsShared(map) && !map.specSkuId);
   }
 
-  function mtRenderProducts(filtered) {
+  // ── One product, one store: the state, in one word ──────────────────────────
+  // The list draws it as a dot and nothing else; the panel draws the same state
+  // with its word beside it. Both read this, so a dot and its explanation can
+  // never disagree.
+  //
+  // `editable` is 天河 外卖, where a missing name is WORK — the operator types
+  // it here and stock stays frozen until they do. 越秀 闪购 links itself by
+  // 货号, so "not linked" there is a fact about the listing, not a job on this
+  // page: neutral, never amber.
+  function mtStoreState(map, editable) {
+    if (!map || !map.meituan_name) {
+      return editable ? { k: 'att',  t: cuT('Add name', '待填名称') }
+                      : { k: 'none', t: cuT('Not linked', '未关联') };
+    }
+    if (map.sync_enabled === 0)  return { k: 'off', t: cuT('Sync off', '已关闭') };
+    if (mtNeedsSpec(map))        return { k: 'att', t: cuT('Pick an option', '待选规格') };
+    return editable ? { k: 'ok', t: cuT('Synced', '已同步') }
+                    : { k: 'ok', t: cuT('Linked by SKU', '按货号关联') };
+  }
+
+  // The rows the filters leave standing, in list order. The panel and the list
+  // both need this set — the panel to know whether its product is still on
+  // screen, the list to draw it — so it is worked out once.
+  function mtVisibleList(filtered) {
     // Active only; the bundle picker loads inactive variants separately.
     const base = (filtered || _products).filter(p => p.is_active);
     // Chip + store filters. A store filter narrows the rows to ones that store
     // actually has something to say about, and hides the other column.
-    const list = base.filter(p => mtChipMatch(p, _mtFilter)).filter(p => {
+    return base.filter(p => mtChipMatch(p, _mtFilter)).filter(p => {
       if (!_mtStore) return true;
       return !!(p.stores || {})[_mtStore] || mtNeedsAttention(p);
     });
-    const tbody = document.getElementById('mt-products-body');
-    if (!tbody) return;
-    const storeA = _storeA, storeB = _storeB;
-    const showA = !(_mtStore && storeA && _mtStore !== storeA.code);
-    const showB = !(_mtStore && storeB && _mtStore !== storeB.code);
-    const cols  = 1 + (showA ? 1 : 0) + (showB ? 1 : 0);
+  }
+
+  function mtRenderProducts(filtered) {
+    const list = mtVisibleList(filtered);
+    const body = document.getElementById('mt-products-body');
+    if (!body) return;
 
     const total = _products.filter(p => p.is_active).length;
     const tabn = document.getElementById('mt-tabn-products');
@@ -516,9 +536,14 @@
     mtRenderHead();      // the tiles read the product list, so repaint them here
     mtRenderChips();
 
+    // The panel always holds a product while there is one to hold: an operator
+    // who filters down to "Needs attention" should land on the first thing that
+    // needs them, not on an empty panel with one more click to make.
+    if (!list.some(p => p.id === _mtSel)) _mtSel = list.length ? list[0].id : null;
+
     if (!list.length) {
-      tbody.innerHTML = '<tr><td colspan="' + cols + '" class="mt-empty">' +
-        cuT('Nothing here.', '暂无商品。') + '</td></tr>';
+      body.innerHTML = '<div class="mt-empty">' + cuT('Nothing here.', '暂无商品。') + '</div>';
+      mtRenderPanel();
       return;
     }
 
@@ -530,99 +555,166 @@
       dup[k] = (dup[k] || 0) + 1;
     }
 
-    tbody.innerHTML = list.map(p => {
-      const mapA = storeA ? (p.stores[storeA.code] || {}) : {};
-      const mapB = storeB ? (p.stores[storeB.code] || {}) : {};
-      const anyMapped = mapA.meituan_name || mapB.meituan_name;
+    const storeA = _storeA, storeB = _storeB;
+    const showA = !(_mtStore && storeA && _mtStore !== storeA.code);
+    const showB = !(_mtStore && storeB && _mtStore !== storeB.code);
+    const cn = document.documentElement.dataset.uiLang === 'cn';
 
+    body.innerHTML = list.map(p => {
       const nm1 = cuT(p.name_en || p.name_cn || '', p.name_cn || p.name_en || '');
-      const nm2 = cuT(p.name_cn || '', p.name_en || '');
       const tag = p.variant_label ? ' <span class="vl">· ' + esc(p.variant_label) + '</span>'
         : (dup[(p.name_cn || '') + '|' + (p.name_en || '')] > 1 ? ' <span class="vl">· #' + p.id + '</span>' : '');
       const thumb = p.image
         ? '<img class="mt-thumb" loading="lazy" src="' + esc(p.image) + '" alt="">'
         : '<span class="mt-thumb-ph"></span>';
-      const nameCell = '<div class="mt-pcell">' + thumb + '<div>' +
-        '<div class="mt-pname">' + esc(nm1) + tag + '</div>' +
-        (nm2 && nm2 !== nm1 ? '<div class="mt-pmeta">' + esc(nm2) + '</div>' : '') +
-        (p.sku ? '<span class="mt-psku">' + esc(p.sku) + '</span>' : '') +
-        '</div></div>';
 
-      // Tianhe matches by listing name, so this column is editable.
-      let colA = '';
-      if (showA) {
-        if (!storeA) colA = '<td><span class="mt-pill off">—</span></td>';
-        else {
-          const hasName = !!mapA.meituan_name;
-          const syncOn  = hasName && mapA.sync_enabled !== 0;
-          // "Synced" on a shared listing with no option chosen would be a lie:
-          // it pushes, and it pushes to every option at once.
-          const needsSpec = mtNeedsSpec(mapA);
-          const pill = !hasName ? mtPill('att', cuT('Add name', '待填名称'))
-            : !syncOn ? mtPill('off', cuT('Sync off', '已关闭'))
-            : needsSpec ? mtPill('att', cuT('Pick an option', '待选规格'))
-            : mtPill('ok', cuT('Synced', '已同步'));
-          const last = mtLast(mapA);
-          const toggle = hasName
-            ? '<label class="toggle-label" title="' + cuT('Sync on / off', '同步开关') +
-              '"><input type="checkbox" ' + (syncOn ? 'checked' : '') +
-              ' data-pid="' + p.id + '" onchange="mtToggleSync(this)"></label>'
-            : '';
-          // A listing can hold several 规格 (see mtIsShared): a shared listing
-          // gets the picker, an add-on listing gets a sentence saying what the
-          // rule already does with it.
-          const specs  = mtSpecs(mapA);
-          const multi  = specs.length > 1;
-          const shared = mtIsShared(mapA);
-          const chosen = String(mapA.specSkuId || '');
-          colA = '<td>' + pill +
-            '<input type="text" class="mt-name-input" list="mt-listings-dl-' + esc(storeA.code) + '"' +
-            ' placeholder="' + esc(cuT('Meituan delivery name', '美团外卖商品名')) + '"' +
-            ' value="' + esc(mapA.meituan_name || '') + '"' +
-            ' data-pid="' + p.id + '" data-store-id="' + storeA.id + '" data-store-code="' + esc(storeA.code) + '"' +
-            ' onblur="mtSaveMap(this)" onkeydown="if(event.key===\'Enter\')this.blur()">' +
-            (multi ? (shared ? mtSpecPicker(p, storeA, specs, chosen)
-                             : '<div class="mt-sub">' +
-                               esc(cuT(specs.length + ' options: ', specs.length + ' 个选项：')) +
-                               esc(specs.map(o => o.spec).join(' · ')) +
-                               '<div>' + esc(cuT('The count goes to ', '库存数发到「')) +
-                               '<b>' + esc(specs[0].spec) + '</b>' +
-                               esc(cuT('. The add-ons open and close with it.',
-                                       '」。加料选项随之开关。')) +
-                               '</div></div>') : '') +
-            ((last || toggle) ? '<div class="mt-cell-foot">' +
-              (last ? '<span class="mt-pmeta">' + esc(last) + '</span>' : '') + toggle + '</div>' : '') +
-            '</td>';
-        }
+      // One dot per store, in the order the header names them. A dot carries
+      // its store and its state as the row's accessible name, so the list is
+      // readable without the colour.
+      const say = [];
+      const dots = [[storeA, showA, true], [storeB, showB, false]].map(([st, show, editable]) => {
+        if (!show) return '';
+        if (!st) return '<span class="mt-dcell"></span>';
+        const s = mtStoreState((p.stores || {})[st.code], editable);
+        const who = mtStoreName(st.code, cn) || st.name;
+        say.push(who + ' ' + s.t);
+        return '<span class="mt-dcell"><span class="mt-dot ' + s.k + '" title="' + esc(who + ' · ' + s.t) + '"></span></span>';
+      }).join('');
+
+      return '<button type="button" class="mt-lrow' + (p.id === _mtSel ? ' sel' : '') + '"' +
+        ' data-pid="' + p.id + '" onclick="mtSelect(' + p.id + ')"' +
+        ' aria-label="' + esc(nm1 + (p.sku ? ' ' + p.sku : '') + ' · ' + say.join(' · ')) + '">' +
+        // The SKU is a sibling of the name, not inside it: it is what an
+        // operator searches by, and inside the name it would be the first
+        // thing the ellipsis ate.
+        '<span class="mt-pcell">' + thumb +
+        '<span class="mt-pname">' + esc(nm1) + tag + '</span>' +
+        (p.sku ? '<span class="mt-psku">' + esc(p.sku) + '</span>' : '') + '</span>' +
+        '<span class="mt-dots">' + dots + '</span></button>';
+    }).join('');
+
+    mtRenderPanel();
+  }
+
+  // Picking a row moves the panel, nothing else. `focusName` is the click path:
+  // landing on a product whose delivery name is still empty puts the cursor in
+  // the field, so filling names is click-type-click-type with no reach for the
+  // mouse in between. A repaint (a save, a poll, a language flip) never steals
+  // focus, because it does not come through here.
+  window.mtSelect = function (pid, focusName) {
+    _mtSel = Number(pid);
+    document.querySelectorAll('#mt-products-body .mt-lrow').forEach(el => {
+      el.classList.toggle('sel', Number(el.dataset.pid) === _mtSel);
+    });
+    mtRenderPanel();
+    if (focusName !== false) {
+      const p = _products.find(x => x.id === _mtSel);
+      const map = p && _storeA ? (p.stores || {})[_storeA.code] : null;
+      if (p && _storeA && !(map && map.meituan_name)) {
+        const input = document.querySelector('#mt-panel .mt-name-input');
+        if (input) input.focus();
       }
+    }
+  };
 
-      // Yuexiu is read-only: the 闪购 daemon links it by 货号.
-      let colB = '';
-      if (showB) {
-        if (!storeB) colB = '<td><span class="mt-pill off">—</span></td>';
-        else if (mapB.meituan_name) {
-          const on = mapB.sync_enabled !== 0;
-          const last = mtLast(mapB);
-          colB = '<td>' + (on ? mtPill('ok', cuT('Linked by SKU', '按货号关联'))
-                              : mtPill('off', cuT('Sync off', '已关闭'))) +
-            '<div class="mt-sub">' + esc(mapB.meituan_name) + '</div>' +
-            (last ? '<div class="mt-pmeta">' + esc(last) + '</div>' : '') + '</td>';
-        } else {
+  // ── The panel — every field, once ───────────────────────────────────────────
+  // Everything that used to be repeated on 248 rows lives here for the one
+  // product in front of you: the name field, the option picker, the sync
+  // switch, the push footnote, and the sentence explaining what 闪购 is waiting
+  // for. The list stays one line per product because none of this is in it.
+  function mtRenderPanel() {
+    const panel = document.getElementById('mt-panel');
+    if (!panel) return;
+    const p = _products.find(x => x.id === _mtSel);
+    // No product means no ROWS — the list auto-selects whenever it has any — so
+    // the panel goes away rather than sitting there as an empty card telling
+    // you to pick something the list has already said it does not have.
+    if (!p) { panel.hidden = true; panel.innerHTML = ''; return; }
+    panel.hidden = false;
+
+    const nm1 = cuT(p.name_en || p.name_cn || '', p.name_cn || p.name_en || '');
+    const nm2 = cuT(p.name_cn || '', p.name_en || '');
+    const thumb = p.image
+      ? '<img class="mt-thumb" loading="lazy" src="' + esc(p.image) + '" alt="">'
+      : '<span class="mt-thumb-ph"></span>';
+
+    const showA = !(_mtStore && _storeA && _mtStore !== _storeA.code);
+    const showB = !(_mtStore && _storeB && _mtStore !== _storeB.code);
+
+    panel.innerHTML =
+      '<div class="mt-ptop">' + thumb + '<div class="mt-pttl">' +
+        '<div class="mt-pname">' + esc(nm1) +
+          (p.variant_label ? ' <span class="vl">· ' + esc(p.variant_label) + '</span>' : '') + '</div>' +
+        (nm2 && nm2 !== nm1 ? '<div class="mt-pmeta">' + esc(nm2) + '</div>' : '') +
+        (p.sku ? '<div class="mt-pmeta num">' + esc(p.sku) + '</div>' : '') +
+      '</div></div>' +
+      (showA && _storeA ? mtPanelStore(p, _storeA, true)  : '') +
+      (showB && _storeB ? mtPanelStore(p, _storeB, false) : '');
+  }
+
+  // One store's block. 天河 is editable (it matches by listing name); 越秀 is
+  // read-only, because the 闪购 daemon owns that mapping by 货号 and a field
+  // here would be a control that quietly does nothing.
+  function mtPanelStore(p, store, editable) {
+    const cn   = document.documentElement.dataset.uiLang === 'cn';
+    const map  = (p.stores || {})[store.code] || {};
+    const s    = mtStoreState(map, editable);
+    const who  = mtStoreName(store.code, cn) || store.name;
+    const last = mtLast(map);
+
+    let body = '';
+    if (editable) {
+      const hasName = !!map.meituan_name;
+      const syncOn  = hasName && map.sync_enabled !== 0;
+      const specs   = mtSpecs(map);
+      const multi   = specs.length > 1;
+      const shared  = mtIsShared(map);
+      const chosen  = String(map.specSkuId || '');
+      const toggle  = hasName
+        ? '<label class="toggle-label" title="' + esc(cuT('Sync on / off', '同步开关')) +
+          '"><input type="checkbox" ' + (syncOn ? 'checked' : '') +
+          ' data-pid="' + p.id + '" onchange="mtToggleSync(this)"></label>'
+        : '';
+      body =
+        '<div class="mt-pbh"><span class="nm">' + esc(who) + '</span>' + toggle + '</div>' +
+        '<div class="mt-pstate"><span class="mt-dot ' + s.k + '"></span>' + esc(s.t) + '</div>' +
+        // Labelled, so no placeholder: the placeholder used to BE the label on
+        // the table, and keeping both said the same words twice.
+        '<div class="mt-plbl">' + esc(cuT('Meituan delivery name', '美团外卖商品名')) + '</div>' +
+        '<input type="text" class="mt-name-input" list="mt-listings-dl-' + esc(store.code) + '"' +
+        ' value="' + esc(map.meituan_name || '') + '"' +
+        ' data-pid="' + p.id + '" data-store-id="' + store.id + '" data-store-code="' + esc(store.code) + '"' +
+        ' onblur="mtSaveMap(this)" onkeydown="if(event.key===\'Enter\')this.blur()">' +
+        // A listing can hold several 规格 (see mtIsShared): a shared listing
+        // gets the picker, an add-on listing gets a sentence saying what the
+        // rule already does with it.
+        (multi ? (shared ? mtSpecPicker(p, store, specs, chosen)
+                         : '<div class="mt-sub">' +
+                           esc(cuT(specs.length + ' options: ', specs.length + ' 个选项：')) +
+                           esc(specs.map(o => o.spec).join(' · ')) +
+                           '<div>' + esc(cuT('The count goes to ', '库存数发到「')) +
+                           '<b>' + esc(specs[0].spec) + '</b>' +
+                           esc(cuT('. The add-ons open and close with it.',
+                                   '」。加料选项随之开关。')) +
+                           '</div></div>') : '');
+    } else {
+      const sk = (p.sku || '').trim();
+      body =
+        '<div class="mt-pbh"><span class="nm">' + esc(who) + '</span></div>' +
+        '<div class="mt-pstate"><span class="mt-dot ' + s.k + '"></span>' + esc(s.t) + '</div>' +
+        (map.meituan_name
+          ? '<div class="mt-pval">' + esc(map.meituan_name) + '</div>'
           // Not "list it on Meituan": the product is often already listed there
           // and merely missing its 货号, which is why the auto-map cannot see it.
-          const sk = (p.sku || '').trim();
-          colB = '<td>' + mtPill('off', cuT('Not linked', '未关联')) +
-            '<div class="mt-sub">' + (sk
+          : '<div class="mt-sub">' + (sk
               ? esc(cuT('No listing carries SKU ', '暂无商品使用货号 ')) + '<b>' + esc(sk) + '</b>' +
                 esc(cuT(' yet — add it on 闪购 and this links itself', ' — 在闪购填写后会自动关联'))
               : esc(cuT('This product has no SKU, so it cannot be matched here',
-                        '该商品没有货号,无法在此匹配'))) + '</div></td>';
-        }
-      }
+                        '该商品没有货号,无法在此匹配'))) + '</div>');
+    }
 
-      return '<tr data-pid="' + p.id + '" class="mt-product-row' + (anyMapped ? '' : ' mt-unmapped') + '">' +
-        '<td>' + nameCell + '</td>' + colA + colB + '</tr>';
-    }).join('');
+    return '<div class="mt-pblock">' + body +
+      (last ? '<div class="mt-pfact">' + esc(last) + '</div>' : '') + '</div>';
   }
 
   // Which 规格 of a shared listing this product is. The option text already
@@ -631,7 +723,7 @@
   // Unanswered is amber, because a shared listing with no answer is pushing the
   // same number to every option right now.
   function mtSpecPicker(p, store, specs, chosen) {
-    return '<div class="mt-sub">' +
+    return '<div class="mt-plbl">' +
       esc(cuT(specs.length + ' products share this listing — which one is this?',
               '有 ' + specs.length + ' 个商品共用此商品页 — 这是哪一项？')) + '</div>' +
       '<select class="mt-spec' + (chosen ? '' : ' warn') + '"' +

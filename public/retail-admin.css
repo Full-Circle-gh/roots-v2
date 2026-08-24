@@ -5591,15 +5591,98 @@
   .mt-search { flex: 1 1 280px; font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; }
   .mt-search::placeholder { color: var(--td-text2); }
 
-  /* ── Table ──────────────────────────────────────────────────────────────── */
-  .mt-pcell { display: flex; gap: 16px; }
-  .mt-thumb { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; border: 1px solid var(--td-border); flex: none; background: var(--td-raised); }
-  .mt-thumb-ph { width: 40px; height: 40px; border-radius: 8px; background: var(--td-raised); border: 1px solid var(--td-border); flex: none; }
-  .mt-pname { font-weight: 500; }
-  .mt-pname .vl { font-weight: 400; color: var(--td-text2); }
+  /* ── List + panel ────────────────────────────────────────────────────────
+     2026-08-24, to reference/meituan-mapping-light-mockup.html (direction C).
+     What it replaces: a three-column table whose every row carried a bordered
+     input, a status pill, an explanation sentence and a push timestamp —
+     ~100px per product, and the 231 healthy rows shouted as loudly as the 5
+     broken ones.
+
+     The rule that keeps it light: THE LIST HOLDS NO CONTROLS. One line per
+     product and a state dot per store; the name field, the option picker, the
+     sync switch and the sentences all live in the panel, once, for the row you
+     picked. A mapping can grow a fourth field without the list growing a pixel.
+
+     The list keeps the table's two load-bearing habits: a band pinned at
+     top:56px (the exact topbar height, so it sits flush) and therefore NO
+     overflow on its wrapper — overflow:hidden on an ancestor kills
+     position:sticky. That is also why the box is square rather than rounded:
+     a rounded band pinned under the topbar reads as a floating pill. */
+  /* 340px for the panel: at the 996px reference width (a 1280 window minus
+     the rail and gutters) that leaves the list ~600px, enough for a product
+     name to read before it ellipses. The panel's widest control is the name
+     field, which fits 292px of text. */
+  .mt-split { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; align-items: start; }
+  .mt-list { min-width: 0; border: 1px solid var(--td-border); background: var(--td-surface); }
+  .mt-lhead {
+    position: sticky; top: 56px; z-index: 5;
+    display: flex; align-items: center; gap: 16px;
+    background: var(--td-header); color: var(--td-text);
+    font: 500 13px var(--f-sans); text-transform: none; letter-spacing: 0;
+    padding: 8px 16px; border-bottom: 1px solid var(--td-border);
+  }
+  .mt-lhead .who { flex: 1; min-width: 0; }
+  .mt-lhead .dots { display: flex; gap: 16px; flex: none; }
+  .mt-lhead .dots > span { width: 64px; text-align: center; white-space: nowrap; }
+  .mt-lhead .dots > span[hidden] { display: none; }
+
+  /* A row is a button: keyboard reach and focus come free, and there is
+     nothing else in the row to tab to. */
+  .mt-lrow {
+    display: flex; align-items: center; gap: 16px; width: 100%; text-align: left;
+    font: 400 15px var(--f-sans); color: var(--td-text);
+    background: none; border: 0; border-top: 1px solid var(--td-border);
+    padding: 8px 16px; min-height: 48px; cursor: pointer;
+  }
+  .mt-lrow:first-child { border-top: 0; }
+  .mt-lrow:hover { background: var(--td-raised); }
+  .mt-lrow:focus-visible { outline: 2px solid var(--td-sage); outline-offset: -2px; }
+  /* The picked row, marked the way an unseen order is: an inset edge, never a
+     border — a marker that changes row height makes the list jump. */
+  .mt-lrow.sel { background: var(--td-unseen); box-shadow: inset 4px 0 0 var(--td-sage); }
+  .mt-lrow .mt-dots { display: flex; gap: 16px; flex: none; }
+  .mt-dcell { width: 64px; display: flex; justify-content: center; }
+  .mt-dot { width: 8px; height: 8px; border-radius: 999px; flex: none; display: inline-block; }
+  .mt-dot.ok   { background: var(--td-sage); }
+  .mt-dot.att  { background: var(--td-amber); }
+  .mt-dot.off  { background: var(--td-text2); }
+  .mt-dot.none { background: transparent; box-shadow: inset 0 0 0 1px var(--td-text2); opacity: .6; }
+
+  .mt-pcell { display: flex; align-items: center; gap: 16px; flex: 1; min-width: 0; }
+  .mt-thumb { width: 32px; height: 32px; border-radius: 8px; object-fit: cover; border: 1px solid var(--td-border); flex: none; background: var(--td-raised); }
+  .mt-thumb-ph { width: 32px; height: 32px; border-radius: 8px; background: var(--td-raised); border: 1px solid var(--td-border); flex: none; }
+  .mt-pname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mt-psku { flex: none; }
+  .mt-pname .vl { color: var(--td-text2); }
   .mt-pmeta { font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 4px; }
-  .mt-psku { display: inline-block; margin-top: 8px; font: 400 13px var(--f-sans); color: var(--td-text2); background: var(--td-raised); border: 1px solid var(--td-border); border-radius: 8px; padding: 0 8px; font-variant-numeric: tabular-nums; }
-  .mt-name-input { display: block; width: 100%; margin-top: 8px; font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; }
+  .mt-pmeta.num { font-variant-numeric: tabular-nums; }
+  /* Quiet metadata, so it is text — the bordered chip it used to be gave a SKU
+     the weight of a control. */
+  .mt-psku { font: 400 13px var(--f-sans); color: var(--td-text2); margin-left: 8px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .mt-empty { padding: 24px; text-align: center; font: 400 15px var(--f-sans); color: var(--td-text2); }
+
+  /* The panel. Sticky below the topbar so it stays with you down a 248-row
+     list; it stops being sticky when the grid stacks. */
+  .mt-panel {
+    position: sticky; top: 72px;
+    background: var(--td-surface); border: 1px solid var(--td-border);
+    border-radius: 14px; padding: 24px;
+  }
+  /* With no rows there is no panel, so the list takes the whole width rather
+     than sitting beside a 380px gap. */
+  .mt-split:has(> .mt-panel[hidden]) { grid-template-columns: 1fr; }
+  .mt-ptop { display: flex; align-items: center; gap: 16px; }
+  .mt-ptop .mt-thumb, .mt-ptop .mt-thumb-ph { width: 48px; height: 48px; }
+  .mt-pttl { min-width: 0; }
+  .mt-ptop .mt-pname { font-weight: 500; white-space: normal; }
+  .mt-pblock { border-top: 1px solid var(--td-border); margin-top: 16px; padding-top: 16px; }
+  .mt-pbh { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .mt-pbh .nm { font: 500 15px var(--f-sans); color: var(--td-text); }
+  .mt-pstate { display: flex; align-items: center; gap: 8px; font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 4px; }
+  .mt-plbl { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin: 16px 0 4px; }
+  .mt-pval { font: 400 15px/1.6 var(--f-sans); color: var(--td-text); margin-top: 8px; overflow-wrap: anywhere; }
+  .mt-pfact { font: 400 13px var(--f-sans); color: var(--td-text2); margin-top: 8px; font-variant-numeric: tabular-nums; }
+  .mt-name-input { display: block; width: 100%; font: 400 15px var(--f-sans); color: var(--td-text); background: var(--td-surface); border: 1px solid var(--td-border); border-radius: 8px; padding: 8px 16px; }
   .mt-name-input::placeholder { color: var(--td-text2); }
   .mt-sub { font: 400 13px/1.6 var(--f-sans); color: var(--td-text2); margin-top: 8px; }
   .mt-sub b { font-weight: 500; color: var(--td-text); }
@@ -5610,7 +5693,7 @@
      across the width (the Add-bundle dialog bug, css:5546). Amber until it is
      answered: an unanswered one is writing the same count to every option. */
   .mt-spec {
-    display: block; width: 100%; margin-top: 8px;
+    display: block; width: 100%;
     font: 400 15px var(--f-sans); color: var(--td-text);
     background-color: var(--td-surface);
     border: 1px solid var(--td-border); border-radius: 8px;
@@ -5621,34 +5704,25 @@
   }
   .mt-spec.warn { border-color: var(--td-amber); }
 
-  .mt-cell-foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-  .mt-empty { padding: 24px; text-align: center; font: 400 15px var(--f-sans); color: var(--td-text2); }
-
-  /* Per-row sync switch. The old sheet hid this until the row was hovered and
-     the rebuild sweep took that rule with everything else — so a bare native
-     checkbox turned up on all 248 rows. It is a switch, like the channel one,
-     and it stays quiet until you are on the row (or it is off, which is worth
-     seeing). */
-  #mt-products-table .toggle-label { display: inline-flex; align-items: center; opacity: 0; transition: opacity 200ms cubic-bezier(.16,1,.3,1); }
-  #mt-products-table tr:hover .toggle-label,
-  #mt-products-table .toggle-label:focus-within,
-  #mt-products-table .toggle-label:has(input:not(:checked)) { opacity: 1; }
-  #mt-products-table .toggle-label input { appearance: none; -webkit-appearance: none; margin: 0; width: 32px; height: 18px; border-radius: 999px; background: var(--td-border); border: none; position: relative; cursor: pointer; transition: background 200ms cubic-bezier(.16,1,.3,1); flex: none; }
-  #mt-products-table .toggle-label input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 999px; background: var(--td-surface); transition: left 200ms cubic-bezier(.16,1,.3,1); }
-  #mt-products-table .toggle-label input:checked { background: var(--td-sage); }
-  #mt-products-table .toggle-label input:checked::after { left: 17px; }
-  #mt-products-table .toggle-label input:focus-visible { outline: 2px solid var(--td-sage); outline-offset: 2px; }
+  /* The sync switch. On the old table it hid until the row was hovered, because
+     248 of them at once was noise; in the panel there is exactly one and it is
+     the store block's own control, so it is simply visible. */
+  .mt-panel .toggle-label { display: inline-flex; align-items: center; }
+  .mt-panel .toggle-label input { appearance: none; -webkit-appearance: none; margin: 0; width: 32px; height: 18px; border-radius: 999px; background: var(--td-border); border: none; position: relative; cursor: pointer; transition: background 200ms cubic-bezier(.16,1,.3,1); flex: none; }
+  .mt-panel .toggle-label input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 12px; height: 12px; border-radius: 999px; background: var(--td-surface); transition: left 200ms cubic-bezier(.16,1,.3,1); }
+  .mt-panel .toggle-label input:checked { background: var(--td-sage); }
+  .mt-panel .toggle-label input:checked::after { left: 17px; }
+  .mt-panel .toggle-label input:focus-visible { outline: 2px solid var(--td-sage); outline-offset: 2px; }
   @media (prefers-reduced-motion: reduce) {
-    #mt-products-table .toggle-label, #mt-products-table .toggle-label input,
-    #mt-products-table .toggle-label input::after { transition: none; }
+    .mt-panel .toggle-label input, .mt-panel .toggle-label input::after { transition: none; }
   }
 
-  /* Status pills. Text on a tint is always the -ink variant. */
-  .mt-pill { display: inline-flex; align-items: center; gap: 8px; font: 500 13px var(--f-sans); border-radius: 999px; padding: 0 8px; }
-  .mt-pill .d { width: 8px; height: 8px; border-radius: 999px; background: currentColor; flex: none; }
-  .mt-pill.ok  { background: var(--td-sage-tint);  color: var(--td-sage-ink); }
-  .mt-pill.att { background: var(--td-amber-tint); color: var(--td-amber-ink); }
-  .mt-pill.off { background: var(--td-raised);     color: var(--td-text2); }
+  /* Below ~1100px the panel has nowhere to sit beside the list, so it stacks
+     above it — above, not below, because it is the thing you just acted on. */
+  @media (max-width: 1100px) {
+    .mt-split { grid-template-columns: 1fr; }
+    .mt-panel { position: static; order: -1; }
+  }
 
   /* ── Views ──────────────────────────────────────────────────────────────── */
   .mt-view[hidden] { display: none; }
@@ -5821,7 +5895,7 @@
   .mt-tinylink:hover { color: var(--td-text); }
 
 
-  /* ── Both channel tables follow the Orders table's rules (retail-admin.html
+  /* ── The Eleme table follows the Orders table's rules (retail-admin.html
      :278). Two of them are load-bearing:
 
      table-layout: fixed + a <colgroup> of PLAIN PERCENTAGES. Auto layout let
@@ -5833,22 +5907,28 @@
      no gap. That needs NO overflow on the wrapper (overflow:hidden on an
      ancestor kills position:sticky), which is why the wrapper below is a plain
      bordered box and the band is square: Orders makes the same trade, and a
-     rounded band pinned under the topbar reads as a floating pill. */
-  .mt-tablewrap, .el-tablewrap { border: 1px solid var(--td-border); background: var(--td-surface); }
-  #mt-products-table, #el-products-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  #mt-products-table thead th, #el-products-table thead th {
+     rounded band pinned under the topbar reads as a floating pill.
+
+     Meituan used to share every rule here. It moved to a list + panel on
+     2026-08-24 (.mt-split above) and its selectors came out, so this block is
+     Eleme's alone now — but the band and the wrapper keep the same two habits,
+     because the list inherited them rather than dropping them. When Eleme is
+     ported onto the channel-page pattern, it inherits them too. */
+  .el-tablewrap { border: 1px solid var(--td-border); background: var(--td-surface); }
+  #el-products-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  #el-products-table thead th {
     position: sticky; top: 56px; z-index: 5;
     background: var(--td-header); color: var(--td-text);
     font: 500 13px var(--f-sans); letter-spacing: 0; text-transform: none; text-align: left;
     padding: 8px 16px; border-bottom: 1px solid var(--td-border); border-radius: 0; white-space: nowrap;
   }
-  #mt-products-table td, #el-products-table td {
+  #el-products-table td {
     padding: 16px; border-top: 1px solid var(--td-border); border-bottom: 0;
     vertical-align: top; font-size: 15px; color: var(--td-text);
   }
-  #mt-products-table tbody tr:hover, #el-products-table tbody tr:hover { background: var(--td-raised); }
+  #el-products-table tbody tr:hover { background: var(--td-raised); }
   /* Long listing names must wrap inside their fixed column, never widen it. */
-  #mt-products-table td, #el-products-table td { overflow-wrap: anywhere; }
+  #el-products-table td { overflow-wrap: anywhere; }
 
   /* ══ Eleme channel page ══════════════════════════════════════════════════
      Ported onto the same pattern as the Meituan tab. The page previously had

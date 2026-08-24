@@ -10842,8 +10842,9 @@
   <!-- ══════════════════════════════════════════════════════════════════════
        MEITUAN CHANNEL PAGE — rebuilt from scratch 2026-08-23 to
        reference/meituan-page-v2-mockup.html (option 1), drawn against Orders.
-       Header, tile row, chip filters, toolbar, table: every shape is one the
-       Orders page already uses.
+       Header, tile row, chip filters, toolbar: every shape is one the Orders
+       page already uses. The mapping table it shipped with became a list +
+       panel on 2026-08-24 — see the comment on .mt-split below.
 
        What the old page had and this one does not: a four-cell KPI strip, two
        store cards, an amber attention banner (the "Not matched" tile says it
@@ -10889,22 +10890,37 @@
                data-ph-en="Search product, SKU or listing name…" data-ph-cn="搜索商品、货号或美团商品名…"
                placeholder="Search product, SKU or listing name…" oninput="mtFilterProducts()">
       </div>
-      <div class="mt-tablewrap">
-        <table id="mt-products-table">
-          <!-- Plain percentages only: under table-layout:fixed a math function
-               on a col width is ignored and the column silently goes auto. -->
-          <colgroup><col style="width:34%"><col style="width:33%"><col style="width:33%"></colgroup>
-          <thead>
-            <tr>
-              <th>Product · 商品</th>
-              <!-- Filled from the store list by mtLoadStores, so the column is
-                   named whatever the store is called, in the live language. -->
-              <th id="mt-th-store-0" data-no-i18n></th>
-              <th id="mt-th-store-1" data-no-i18n></th>
-            </tr>
-          </thead>
-          <tbody id="mt-products-body" data-no-i18n></tbody>
-        </table>
+      <!-- ══════════════════════════════════════════════════════════════════
+           List + panel, 2026-08-24, to reference/meituan-mapping-light-mockup
+           .html (direction C). It replaces a three-column table that carried a
+           bordered text input, a status pill, an explanation sentence and a
+           push timestamp on EVERY row — ~100px per product whether or not
+           anything was wrong, with 231 healthy rows shouting as loudly as the
+           5 broken ones.
+
+           The list holds NO controls: one line per product, a state dot per
+           store. Every field exists once, in the panel, for the product you
+           picked. So the list stays one line however many fields a mapping
+           grows later, and the per-row instruction sentence — identical on
+           every unlinked row — is said once, where it applies.
+           ══════════════════════════════════════════════════════════════════ -->
+      <div class="mt-split">
+        <div class="mt-list">
+          <div class="mt-lhead">
+            <span class="who">Product · 商品</span>
+            <span class="dots">
+              <!-- Filled from the store list by mtLoadStores, so each dot
+                   column is named whatever the store is called, in the live
+                   language. -->
+              <span id="mt-lh-store-0" data-no-i18n></span>
+              <span id="mt-lh-store-1" data-no-i18n></span>
+            </span>
+          </div>
+          <div id="mt-products-body" data-no-i18n></div>
+        </div>
+        <!-- hidden until the first render puts a product in it: an empty
+             bordered card while the list loads is noise, not a state. -->
+        <aside class="mt-panel" id="mt-panel" data-no-i18n hidden></aside>
       </div>
     </div>
 
