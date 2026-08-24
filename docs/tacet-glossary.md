@@ -1,14 +1,18 @@
 # Tacet glossary
 
-**These are the binding definitions for Tacet. Every document, every UI string and every new identifier uses these words with these meanings. Where existing code or documentation uses a different word for the same thing, the code is what needs changing, not this list. v1.6, 2026-08-05.**
+**These are the binding definitions for Tacet. Every document, every UI string and every new identifier uses these words with these meanings. Where existing code or documentation uses a different word for the same thing, the code is what needs changing, not this list. v1.7, 2026-08-24.**
+
+**v1.7, 2026-08-24** — MATERIAL, MATERIALS SCREEN and PRODUCTION MODULE added, per the consolidation decisions record §28. ITEM is superseded by MATERIAL and PRODUCTION (the app) by PRODUCTION MODULE; both are marked in place rather than deleted, because they are the words every earlier document uses. The MODULE list and the States section are updated to read MATERIALS. INGREDIENT stays retired — its retirement now points at MATERIAL rather than ITEM.
 
 ---
 
 ## The things you stock
 
-- ITEM — something held in stock and never sold. Raw materials, packaging, part-made goods. Production app only.
+- ITEM — something held in stock and never sold. Raw materials, packaging, part-made goods. Production app only. ⚠️ **SUPERSEDED 2026-08-24 — the word is MATERIAL.** Rejected for colliding with PRODUCT in conversation; see the consolidation decisions record §28. The definition itself is unchanged and is now carried by MATERIAL below. Left standing rather than deleted, because ITEM is the word every document written before this date uses.
+- MATERIAL — a stocked thing a tenant buys and holds but does not sell. Food, packaging, equipment, supplies. Has stock and a cost; has no price and no storefront listing. Contrast with PRODUCT, which is what a customer buys. The database calls these `ingredients` for historical reasons; that name is never shown to a tenant.
+- MATERIALS SCREEN — the screen where a tenant manages their materials. Appears only for tenants with the Production module enabled.
 - PRODUCT — something sold to customers. Visible in both apps.
-- Items and products are two separate lists. A thing is one or the other, never both. The bridge between them is a recipe.
+- Materials and products are two separate lists. A thing is one or the other, never both. The bridge between them is a recipe.
 
 ## Places
 
@@ -61,7 +65,7 @@ Both halves are required. The storefront order daemon resolves store and pricing
 ## States
 
 - Products have one state with three positions: IN SHOP, NOT IN SHOP, ARCHIVED.
-- Items have one state with two positions: IN USE, ARCHIVED.
+- Materials have one state with two positions: IN USE, ARCHIVED.
 - ARCHIVED — hidden from lists and pickers, retained in history, never deleted.
 
 ## Codes
@@ -72,10 +76,11 @@ Both halves are required. The storefront order daemon resolves store and pricing
 ## The system and its apps
 
 - TACET — the product itself, and the name of its main staff app: selling, customers, orders.
-- PRODUCTION — the staff app for making things. Merges into Tacet later. Not to be confused with the PRODUCTION flag on a location.
+- PRODUCTION — the staff app for making things. Merges into Tacet later. Not to be confused with the PRODUCTION flag on a location. ⚠️ **SUPERSEDED 2026-08-24 — Production is a MODULE, not an app, and no separate Production app will be built.** There is therefore no merge to perform. See PRODUCTION MODULE below and the consolidation decisions record §28.
+- PRODUCTION MODULE — the optional module that adds materials handling to Tacet. Phase 1 adds Materials and extends Purchases. Recipes are planned for a later phase. Not an app; not a separate product; not built for Roots.
 - ONLINE STORE — customers. Defined in full under Selling.
 - BACK OFFICE — Tacet's own staff app, for running Tacet itself. Separate login. Nothing in it is ever shown to an account.
-- MODULE — one shared piece of the back end, built once and used by any front end. Locations, Products, Items, Stock, Users, Orders, Purchasing and Recipes are modules; more will be named.
+- MODULE — one shared piece of the back end, built once and used by any front end. Locations, Products, Materials, Stock, Users, Orders, Purchasing and Recipes are modules; more will be named.
 - ACCOUNT — one business using Tacet. A company signing up creates a Tacet account. It holds the apps it uses, its users, its settings, its plan and its invoices, and its own settings: language, currency, units of measure, time zone, sales channels. "Business" remains acceptable as the everyday word in prose, but ACCOUNT is the term for the record in the system.
 - ACCOUNT SETTINGS — where an account is managed from inside the apps: plan, invoices, users, business settings, and each user's own personal settings. Reached the same way from any app.
 
@@ -97,7 +102,8 @@ Correct: "an account has customers." Wrong: "our customers" when an account is m
 - STORE APP — the main app is simply Tacet.
 - KITCHEN APP — now the production app.
 - KITCHEN, as a location type — now the production flag.
-- INGREDIENT, as a distinct entity from an item — ingredients are items.
+- INGREDIENT, as a distinct entity from a material — ingredients are materials. Retired as TENANT-FACING vocabulary in particular: it excludes every non-food business. **It survives as a code identifier and is not a defect awaiting a fix** — `ingredients`, `ingredient_id` and the routes under `/api/ingredients` keep their names; the rename is deferred, per the consolidation decisions record §28.
+- ITEM, as the name for a stocked thing that is never sold — the word is MATERIAL.
 - MARKET / RETAIL STORE, as separate concepts — both are locations.
 - SHOPPER — the word is CUSTOMER.
 - GUANYI — the channel is GZGROCERY. Retired 2026-08-04. Do not use it in documentation, briefs, UI copy, API paths or new code. It survives in the live schema and in stored data values pending the rename described in the consolidation decisions record.

@@ -1,10 +1,12 @@
-# Tacet shared-core consolidation — decisions record, v4.72
+# Tacet shared-core consolidation — decisions record, v4.73
 
 **2026-07-31 · A living record of what has been decided so far for the Tacet shared-core consolidation, so the decisions stop living in chat. Supersedes v0.1. The questions in §23 Open questions are NOT decided and must not be treated as settled.**
 
 2026-08-03 · v1.0 — records the PostgreSQL database decision (§24). Note: v0.9 exists on an unmerged parallel branch (docs-glossary-stock-model-abi0fp) with different content; main skips to v1.0 to avoid a duplicate v0.9.
 
 
+
+2026-08-24 · v4.73 — the PRODUCTION MODULE is recorded as §28: Production is a module inside Tacet, not an application, and no separate Production app will be built. **MATERIALS** becomes the tenant-facing name for stocked things a tenant buys and does not sell; **Items is rejected** for colliding with Products in conversation, **Ingredients** for excluding every non-food business. The build route is to GENERALISE THE KITCHEN MACHINERY rather than rebuild on retail rails — the kitchen half already holds unit conversion and purchase-cost write-back, and retail purchasing holds neither. **Schema identifiers are NOT renamed**: `ingredients`, `ingredient_id`, `buy_unit` stay, deferred rather than cancelled, and must be their own change with a backup taken immediately before. Phase 1 is Materials and Purchases only; Recipes deferred, which is what keeps Products and the storefront out of scope. **This changes vocabulary and app structure decided earlier and edits none of it**, per the house convention: §1 Architecture and §21 Modules both name PRODUCTION as one of four front ends and ITEMS as a module, and §3, §7, §8, §17 and §19 all speak of ITEMS — a reader meeting those should read the app as a module and the word as Materials. §22's deferred *"Production app merging into Tacet"* describes a merge that now has nothing to merge. Related documents moves from §28 to §29; nothing cross-references either number. A new decision that supersedes vocabulary without reversing a rule, hence a patch.
 
 2026-08-23 · v4.72 — §24 Database: 🔴 **THE POSTGRES MIGRATION IS CANCELLED. TACET STAYS ON SQLITE.** Ash's call, after the `.prepare` survey: **2,835 `.prepare` call sites in the runtime** (`server.js` 12 / `database.js` 228 / `routes/` 2,414 / `lib/` 175 / `middleware/` 6), **zero `.query` call sites**, **all 39 files in `routes/` affected** — and `lib/pg-handle.js` refuses `.prepare` BY DESIGN, because an adapter would hand 3,339 sites a Promise where a row is expected and the application would compute wrong answers across every route rather than crash, with a customer as the first evidence. **The 27 "converted" sites were not converted**: the wrapper moved, the 70 `tx.prepare(` statements inside it did not, so a converted block dies on its first statement exactly like an unconverted one. **Runbook B19 is superseded in place** — clearing G26 does NOT turn *"the app cannot start"* into *"the app starts and individual routes fail"*; it does not start, and every route fails on its first line. **It stopped because multi-tenancy already works** (`TENANT_DATA_ISOLATION=1`, five per-tenant files, Roots in `roots.db`) and **no measured constraint was being hit**; the cost was not proportionate. Restart conditions are stated as conditions, not as a plan. **The one path that would have worked is recorded so it is not rediscovered**: a synchronous `.query(text, params)` on the SQLite handle, convert a file at a time under real traffic, driver switch as a config change last. **All 20 open gaps CLOSED — MIGRATION CANCELLED.** ⚠ **AND THEN SCRAPPED OUTRIGHT, SAME DAY — the "retired rather than deleted" this line first carried is corrected here per rule 5, not tidied away.** **52 files deleted**, the cutover runbook, the status document and the nine schema records among them, **the `tacet` cluster dropped**, and `drift_guard.py` went with `plan.json` so **nothing now detects SQLite schema drift** (13 objects drifted in 18 days when last measured). `lib/db-seam.js`, `lib/db-transaction.js` and their suites are KEPT — live SQLite code, 28 running `withTransaction` call sites. The findings that outlive the migration are in `docs/tacet-operating-findings.md`, the write surface in `docs/tacet-write-surface.md`. See the ADDENDUM on the entry.
 
@@ -3829,7 +3831,25 @@ WHERE THIS IS WRITTEN DOWN NEXT TO THE SWITCH: JSON has no comments, so the reas
 
 WHAT A MERGE OF THIS DOES NOT DO: It does not fix the live blank checkout. Configuration reaches customers only on a republish, and a republish builds `roots-v2\miniapp` — the main working folder — not a worktree. The page stays blank until someone republishes from a main folder that carries this change.
 
-## 28. Related documents
+## 28. Production module — naming and build route
+
+**Decision.** Production is a MODULE within Tacet, not a separate app. Tenants who enable it gain screens; tenants who do not see nothing. There is no separate Production application and none will be built.
+
+**Materials is the tenant-facing name** for stocked things a tenant buys and holds but does not sell. It covers food, packaging, equipment and supplies without favouring any trade. "Items" is rejected — it collides with Products in conversation. "Ingredients" is rejected as tenant-facing vocabulary — it excludes every non-food business, in violation of §0.
+
+**Build route: generalise the existing kitchen machinery. Do not rebuild on retail rails.** The kitchen half already has the two hardest pieces — unit conversion (lib/ingredient-cost.js, already the repo's unit authority, not merely its cost authority) and purchase-cost write-back. Retail purchasing has neither, and its receive path silently skips any line without a store_product_id. Rebuilding on retail would mean writing both from scratch and discarding a working implementation.
+
+**Schema names are NOT renamed at this time.** `ingredients`, `ingredient_id`, `buy_unit` and related identifiers stay as they are. Rationale: 453 references across 41 files, ~2,900 lines of route code, against a word no tenant ever reads. The rename is deferred, not cancelled, and must be its own change with a backup taken immediately before — never folded into feature work.
+
+**What DOES get renamed is anything a tenant can see:** rail labels, page titles, headings, form labels, and stored strings that surface in reports.
+
+**Supporting evidence.** Only 61% of the `ingredients` table is food (live: 383 food, 145 packaging, 52 retail, 49 equipment, 1 other). The table was already broadened by the `item_kind` column, added with the stated intent of covering everything the buying department orders. It is already a materials table wearing a kitchen name.
+
+**Phase 1 scope: Materials and Purchases only. Recipes are deferred.** Without recipes nothing is made from anything, so nothing consumes anything — which means phase 1 requires no change to Products and no change to the storefront.
+
+**Open, not decided here:** the Chinese label for Materials; paid entitlement wiring; whether purchased quantity converts to stocked quantity.
+
+## 29. Related documents
 
 - docs/tacet-glossary.md — binding definitions, v1.4, 2026-07-31. The words in this document are used with the meanings defined there.
 - docs/tacet-desktop-patterns.md — the rulebook for how a desktop admin page is put together, v4.2, 2026-08-03. Prescriptive except on Orders: when a rule and an unbuilt page disagree, that document wins.
