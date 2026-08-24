@@ -246,7 +246,15 @@ button,a,.row,.chip,.stepbtn{touch-action:manipulation}
 @keyframes tFade{from{opacity:0}to{opacity:1}}
 @keyframes tRise{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 .breathe{animation:tBreathe 2.4s ease-in-out infinite}
-.rise{animation:tRise .5s var(--ease-settle) both}
+/* Every render() replaces the whole tree, so a `.rise` card is a brand-new DOM
+   node each time and its fade/slide-up entrance replays — fine for the first
+   paint, but loadLive()'s data trickles in across a dozen independent fetches
+   that each call render() on their own timer, so the entrance kept replaying
+   across the whole screen for a couple of seconds after open and read as
+   flicker rather than a settle. html.settled (added right after the critical
+   above-the-fold render in loadLive — see there) turns it off once that first
+   paint has landed, so later renders paint their final state directly. */
+html:not(.settled) .rise{animation:tRise .5s var(--ease-settle) both}
 .hscroll{scrollbar-width:none;-ms-overflow-style:none;overflow-x:auto}
 .hscroll::-webkit-scrollbar{display:none}
 @media (prefers-reduced-motion:reduce){*{animation-duration:.001ms!important}}
@@ -1432,7 +1440,7 @@ function recapCard(){
         `<div style="display:flex;align-items:flex-start;gap:11px">
            <span style="width:7px;height:7px;border-radius:50%;background:var(--accent);flex:none;margin-top:7px"></span>
            <span style="font-size:15px;line-height:1.5">${r}</span></div>`).join('')}</div>`;
-  return `<div class="rise" style="background:var(--surface-raised);border-radius:var(--radius-card);padding:24px;color:var(--text-primary)">
+  return `<div class="rise" style="background:var(--surface-raised);border-radius:var(--radius-card);padding:0 24px 24px;color:var(--text-primary)">
     <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:16px">
       <span style="font-size:18px;font-weight:500">${recapTitle()}</span>
       <span class="num" style="font-size:13px;color:var(--text-secondary)">${recapSinceLabel()}</span></div>
@@ -7729,6 +7737,11 @@ async function loadLive(){
   // counting everything that is not 'on' would put unpublished work in it.
   try{ state.liveAttn=Object.assign({},state.liveAttn||{},{low:DB.products.filter(p=>p.kind==='restock'||p.kind==='off').length}); }catch(e){}
   render();
+  // The above-the-fold data (role, KPIs, vitals) just painted with its entrance
+  // animation; every render from here on — the secondary fetches below, plus
+  // whatever loadRecap()/loadOps() resolve to later — should land in place
+  // without replaying it. See the `.rise` rule in <style>.
+  document.documentElement.classList.add('settled');
 
   // ---- secondary screens: fetch in parallel, each falls back to its sample data ----
   const set=(fn)=>{ try{ fn(); }catch(e){} render(); };
