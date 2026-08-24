@@ -2046,16 +2046,19 @@ async function runReviewTopupNow() {
   }
 }
 
-document.querySelector('[data-tab="reviews"]').addEventListener('click', () => {
-  if (!REVIEWS_LOADED) {
-    REVIEWS_LOADED = true;
-    // Tags first so the reviews table can render with the right labels.
-    loadReviewTags().then(loadReviews);
-    loadReviewTopup(true);
-    loadReviewReward(true);
-    rvwWireSearch();
-  }
-});
+// Named so TAB_INIT can dispatch it (01-core.js). Reaching this tab from
+// anywhere other than the Inbox menu — the command palette, a deep link,
+// any goTab() caller — used to land on an empty page.
+function reviewsTabInit() {
+  if (REVIEWS_LOADED) return;
+  REVIEWS_LOADED = true;
+  // Tags first so the reviews table can render with the right labels.
+  loadReviewTags().then(loadReviews);
+  loadReviewTopup(true);
+  loadReviewReward(true);
+  rvwWireSearch();
+}
+document.querySelector('[data-tab="reviews"]').addEventListener('click', reviewsTabInit);
 
 // Search runs as you type, debounced. Wired once, on first open of the tab,
 // because the markup is in the document from the start but the tab may
@@ -2162,12 +2165,13 @@ function renderFeedbackRow(f) {
     </tr>`;
 }
 
-document.querySelector('[data-tab="feedback"]').addEventListener('click', () => {
-  if (!FEEDBACK_LOADED) {
-    FEEDBACK_LOADED = true;
-    loadFeedback();
-  }
-});
+// Same gap as reviewsTabInit above — Feedback is the other topbar Inbox tab.
+function feedbackTabInit() {
+  if (FEEDBACK_LOADED) return;
+  FEEDBACK_LOADED = true;
+  loadFeedback();
+}
+document.querySelector('[data-tab="feedback"]').addEventListener('click', feedbackTabInit);
 
 // ── Feedback thread drawer — read the conversation and reply ───────────────
 let _fbThreadId = null;

@@ -24,6 +24,8 @@ const express = require('express');
 const db = require('../database');
 const { tdb, currentTenantId } = require('../lib/tenant-db');
 const inventory = require('../lib/inventory');
+// Finance category text — the one normalisation. See lib/category-text.js.
+const { storeCategory } = require('../lib/category-text');
 const { logActivity } = require('../middleware/auth');
 const { requireRetailAdmin } = require('./retail');
 
@@ -215,7 +217,10 @@ router.post('/api/retail-admin/suppliers', requireRetailAdmin, express.json(), (
   const b = req.body || {};
   const name = (b.name || '').trim();
   if (!name) return res.status(400).json({ success: false, error: 'name_required' });
-  if (db.prepare('SELECT id FROM suppliers WHERE name = ?').get(name)) {
+  // Scoped: without the tenant predicate one tenant's supplier name blocked
+  // every other tenant from creating the same name (§0). The UNIQUE index on
+  // suppliers.name is still global — see the PR, it needs a table rebuild.
+  if (db.prepare('SELECT id FROM suppliers WHERE name = ? AND COALESCE(tenant_id,1) = ?').get(name, currentTenantId())) {
     return res.status(409).json({ success: false, error: 'name_taken' });
   }
   const info = db.prepare(`
@@ -241,7 +246,7 @@ router.put('/api/retail-admin/suppliers/:id', requireRetailAdmin, express.json()
   if ('name' in b) {
     const name = (b.name || '').trim();
     if (!name) return res.status(400).json({ success: false, error: 'name_required' });
-    const dup = db.prepare('SELECT id FROM suppliers WHERE name = ? AND id != ?').get(name, s.id);
+    const dup = db.prepare('SELECT id FROM suppliers WHERE name = ? AND id != ? AND COALESCE(tenant_id,1) = ?').get(name, s.id, currentTenantId());
     if (dup) return res.status(409).json({ success: false, error: 'name_taken' });
     b.name = name;
   }
@@ -255,7 +260,7 @@ router.put('/api/retail-admin/suppliers/:id', requireRetailAdmin, express.json()
   if ('is_active' in b) { sets.push('is_active = ?'); vals.push(b.is_active ? 1 : 0); }
   if (!sets.length) return res.json({ success: true });
   vals.push(s.id);
-  db.prepare(`UPDATE suppliers SET ${sets.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...vals);
+  db.prepare(`UPDATE suppliers SET ${sets.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND COALESCE(tenant_id,1) = ?`).run(...vals, currentTenantId());
   // Historical POs keep the old supplier name on purpose — they're a snapshot
   // of what was ordered from whom at the time (same rule as the kitchen side).
   logActivity(req.user.id, req.user.username, 'update', 'supplier', s.id, b, req.ip);
@@ -266,14 +271,14 @@ router.put('/api/retail-admin/suppliers/:id', requireRetailAdmin, express.json()
 router.delete('/api/retail-admin/suppliers/:id', requireRetailAdmin, (req, res) => {
   const s = db.prepare('SELECT id FROM suppliers WHERE id = ? AND tenant_id = ?').get(req.params.id, currentTenantId());
   if (!s) return res.status(404).json({ success: false, error: 'not_found' });
-  db.prepare('UPDATE suppliers SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(s.id);
+  db.prepare('UPDATE suppliers SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND COALESCE(tenant_id,1) = ?').run(s.id, currentTenantId());
   logActivity(req.user.id, req.user.username, 'delete', 'supplier', s.id, {}, req.ip);
   res.json({ success: true });
 });
 
 // Documents — base64 data URI payloads (images / PDFs), 10MB per file.
 router.post('/api/retail-admin/suppliers/:id/documents', requireRetailAdmin, express.json({ limit: '15mb' }), (req, res) => {
-  const s = db.prepare('SELECT id FROM suppliers WHERE id = ?').get(req.params.id);
+  const s = db.prepare('SELECT id FROM suppliers WHERE id = ? AND COALESCE(tenant_id,1) = ?').get(req.params.id, currentTenantId());
   if (!s) return res.status(404).json({ success: false, error: 'not_found' });
   const b = req.body || {};
   if (!b.data || typeof b.data !== 'string') return res.status(400).json({ success: false, error: 'data_required' });
@@ -741,7 +746,7 @@ router.post('/api/retail-admin/purchases/:id/backorder', requireRetailAdmin, (re
       lines.forEach((l, i) => {
         const outstanding = (parseFloat(l.qty) || 0) - (l.qty_received == null ? 0 : parseFloat(l.qty_received) || 0);
         ins.run(newId, l.store_product_id, l.name_en, l.name_cn, l.sku, outstanding, l.unit || 'pcs',
-          l.cost_per_unit, outstanding * (parseFloat(l.cost_per_unit) || 0), l.expense_category,
+          l.cost_per_unit, outstanding * (parseFloat(l.cost_per_unit) || 0), storeCategory(db, l.expense_category),
           l.supplier_name || null, l.purchase_channel || null, l.note || null, i);
       });
       return newId;
@@ -780,7 +785,7 @@ function insertLineItems(poId, items, headerSupplier) {
     const status = VALID_INVOICE.has(item.invoice_status) ? item.invoice_status : 'not_received';
     insertItem.run(
       poId, item.store_product_id || null, item.name_en || '', item.name_cn || null, item.sku || null,
-      qty, item.unit || 'pcs', cpu, qty * cpu, item.expense_category || null,
+      qty, item.unit || 'pcs', cpu, qty * cpu, storeCategory(db, item.expense_category),
       item.supplier_name || headerSupplier || null, item.purchase_channel || null, status,
       (item.note || '').trim() || null, i,
     );

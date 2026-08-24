@@ -1,7 +1,32 @@
 const express = require('express');
 const db = require('../database');
 const { requireAuth, requirePermission, requireDelete, logActivity } = require('../middleware/auth');
+// Finance category text — the one normalisation, applied at every point of
+// storage. See lib/category-text.js for why a pasted Kangxi radical made one
+// category read as two in every report.
+const { storeCategory } = require('../lib/category-text');
 const router = express.Router();
+
+// A UNIQUE violation on `sku` is now reachable in a way it was not before:
+// archiving keeps the code (§18 SKU on archive), so the row holding it may be
+// one the user cannot see in any list. Saying only "SKU already exists" would
+// leave them hunting for a conflict that is invisible by design. Mirrors the
+// same handler in routes/recipes.js, which has always had to explain this.
+function skuClashMessage(sku, excludeId) {
+  if (!sku) return 'SKU already exists · SKU已存在';
+  const owner = excludeId
+    ? db.prepare('SELECT id, name_en, is_active FROM ingredients WHERE sku = ? AND id != ?').get(sku, excludeId)
+    : db.prepare('SELECT id, name_en, is_active FROM ingredients WHERE sku = ?').get(sku);
+  if (!owner) return 'SKU already exists · SKU已存在';
+  if (!owner.is_active) {
+    return `SKU "${sku}" belongs to an archived item ("${owner.name_en}", #${owner.id}). `
+         + 'Archived codes are kept on purpose so old orders and reports keep pointing at the right thing. '
+         + `Pick a different SKU. · SKU "${sku}" 属于已归档物料（"${owner.name_en}"，#${owner.id}）。`
+         + '归档物料保留其编号,以免历史订单与报表指向错误。请改用其他 SKU。';
+  }
+  return `SKU "${sku}" is already used by "${owner.name_en}" (#${owner.id}). `
+       + `· SKU "${sku}" 已被 "${owner.name_en}"（#${owner.id}）使用。`;
+}
 
 // Lightweight column set for the LIST endpoint. The Items table doesn't
 // render image_data (a base64 product photo) or supplier_qr_data (a base64
@@ -79,14 +104,14 @@ router.post('/api/ingredients', requireAuth, requirePermission('ingredients'), (
            cost_per_unit||0, buy_price||0,
            supplier||null, supplier_platform||null, supplier_link||null, supplier_qr_data||null, image_data||null,
            allergens ? (Array.isArray(allergens) ? allergens.join(', ') : String(allergens)) : null, notes||null,
-           accounting_category || null, item_kind || 'food', free_by_design ? 1 : 0);
+           storeCategory(db, accounting_category), item_kind || 'food', free_by_design ? 1 : 0);
     if (buy_price > 0) {
       db.prepare('INSERT INTO ingredient_price_history (ingredient_id,price,buy_unit,source,recorded_by) VALUES (?,?,?,?,?)').run(result.lastInsertRowid, buy_price, buy_unit||'kg', 'manual', req.user.username);
     }
     logActivity(req.user.id, req.user.username, 'create', 'ingredient', result.lastInsertRowid, { name_en }, req.ip);
     res.json({ success: true, id: result.lastInsertRowid });
   } catch(e) {
-    if (e.message.includes('UNIQUE')) return res.status(400).json({ error: 'SKU already exists · SKU已存在' });
+    if (e.message.includes('UNIQUE')) return res.status(400).json({ error: skuClashMessage(sku, null) });
     res.status(500).json({ error: e.message });
   }
 });
@@ -108,7 +133,7 @@ router.put('/api/ingredients/:id', requireAuth, requirePermission('ingredients')
            cost_per_unit||0, buy_price||0,
            supplier||null, supplier_platform||null, supplier_link||null, supplier_qr_data||null, image_data||null,
            allergens ? (Array.isArray(allergens) ? allergens.join(', ') : String(allergens)) : null, notes||null,
-           accounting_category || null, item_kind || existing.item_kind || 'food',
+           storeCategory(db, accounting_category), item_kind || existing.item_kind || 'food',
            free_by_design ? 1 : 0, req.params.id);
     // Record price change
     if (buy_price && buy_price !== existing.buy_price) {
@@ -127,8 +152,12 @@ router.put('/api/ingredients/:id', requireAuth, requirePermission('ingredients')
     // Expenses moves the amounts from "未分类 Uncategorized" into the
     // correct bucket without manager action.
     let backfilled = { lines: 0, pos_reposted: 0 };
-    const newCat   = accounting_category || null;
-    const oldCat   = existing.accounting_category || null;
+    // Both sides normalised: `newCat` is what the UPDATE above just stored, and
+    // `oldCat` has to be compared against it on the same footing. Comparing a
+    // normalised new value with a raw old one would read a pure glyph repair as
+    // a category CHANGE and rewrite every historical line for no reason.
+    const newCat   = storeCategory(db, accounting_category);
+    const oldCat   = storeCategory(db, existing.accounting_category);
     if (newCat && newCat !== oldCat) {
       // Update PO lines that are blank OR were carrying the old category.
       // Lines a buyer has explicitly overridden to a different non-blank
@@ -162,7 +191,7 @@ router.put('/api/ingredients/:id', requireAuth, requirePermission('ingredients')
     logActivity(req.user.id, req.user.username, 'update', 'ingredient', req.params.id, { name_en, ...(backfilled.lines ? { backfilled } : {}) }, req.ip);
     res.json({ success: true, backfilled });
   } catch(e) {
-    if (e.message.includes('UNIQUE')) return res.status(400).json({ error: 'SKU already exists · SKU已存在' });
+    if (e.message.includes('UNIQUE')) return res.status(400).json({ error: skuClashMessage(sku, req.params.id) });
     res.status(500).json({ error: e.message });
   }
 });
@@ -214,7 +243,10 @@ router.patch('/api/ingredients/bulk-update', requireAuth, requirePermission('ing
     if (!Object.prototype.hasOwnProperty.call(updates, f)) continue;
     const v = updates[f];
     if (v !== null && typeof v !== 'string') return res.status(400).json({ error: `${f} must be string or null` });
-    sets.push(`${f} = ?`); args.push(v && v.trim() ? v.trim() : null);
+    // accounting_category goes through the finance-category normaliser; the
+    // rest keep the plain trim they already had.
+    sets.push(`${f} = ?`);
+    args.push(f === 'accounting_category' ? storeCategory(db, v) : (v && v.trim() ? v.trim() : null));
   }
   if (Object.prototype.hasOwnProperty.call(updates, 'is_active')) {
     const n = updates.is_active === 1 || updates.is_active === '1' || updates.is_active === true ? 1 : 0;
@@ -240,11 +272,27 @@ router.patch('/api/ingredients/bulk-update', requireAuth, requirePermission('ing
 
 // DELETE (soft delete)
 router.delete('/api/ingredients/:id', requireAuth, requireDelete, requirePermission('ingredients'), (req, res) => {
-  // Release the SKU on delete so the code can be reused. sku is UNIQUE, and a
-  // soft-deleted row would otherwise reserve it forever; SQLite allows many
-  // NULLs in a UNIQUE column, so nulling it frees the namespace without
-  // dropping the row (recipes/POs still reference ingredient_id).
-  db.prepare('UPDATE ingredients SET is_active = 0, sku = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id);
+  // THE SKU IS KEPT. It used to be nulled here, to free the code for reuse —
+  // sku is UNIQUE and an archived row would otherwise hold it forever. That
+  // reasoning is sound about the constraint and wrong about the decision:
+  //
+  //   docs/tacet-consolidation-decisions.md §18 SKU on archive
+  //   "An archived product KEEPS its SKU permanently. The code is never
+  //    released for reuse. Reason: a reused code makes historical orders and
+  //    reports point at the wrong thing."
+  //
+  // A collision on re-creating an archived code is therefore the CORRECT
+  // outcome, not a problem to design around, and the create/update handlers
+  // above say which archived item holds it rather than just refusing.
+  //
+  // The sibling half already worked this way: routes/recipes.js soft-deletes
+  // with `SET is_active = 0` alone and has done since it was written.
+  //
+  // 148 rows were archived before this change and have already lost their SKU.
+  // They are not repaired here — that is a data decision, and the codes are
+  // mostly unrecoverable (see the PR: 144 of 148 predate the oldest surviving
+  // backup, and only 5 survive as a snapshot on a PO line or recipe row).
+  db.prepare('UPDATE ingredients SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id);
   logActivity(req.user.id, req.user.username, 'delete', 'ingredient', req.params.id, null, req.ip);
   res.json({ success: true });
 });
@@ -311,7 +359,7 @@ router.post('/api/ingredients/bulk', requireAuth, requirePermission('ingredients
         ing.pack_contents_qty||null, ing.pack_contents_unit||null,
         ing.cost_per_unit||0, ing.buy_price||0,
         ing.supplier||null, ing.supplier_platform||null, ing.supplier_link||null,
-        ing.notes||null, ing.accounting_category||null, ing.item_kind || 'food'
+        ing.notes||null, storeCategory(db, ing.accounting_category), ing.item_kind || 'food'
       );
       if (result.changes > 0) {
         imported++;

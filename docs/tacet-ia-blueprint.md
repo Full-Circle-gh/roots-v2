@@ -26,7 +26,7 @@ Every navigable surface of the **Tacet** desktop admin, how it's grouped, the or
 
 ## 1. Shape of the app
 
-A single-page admin shell. One left **rail** of tabs (three **drill-down folders** + flat tabs — see §3), a persistent **topbar**, and a swappable content area where exactly one `<section id="tab-…">` is visible at a time. On phones the rail is replaced by a bottom nav (`#rm-bottomnav`) that mirrors the rail via `data-go`.
+A single-page admin shell. One left **rail** of tabs (three **drill-down folders** + flat tabs — see §3), a persistent **topbar**, and a swappable content area where exactly one `<section id="tab-…">` is visible at a time. ~~On phones the rail is replaced by a bottom nav (`#rm-bottomnav`).~~ **REMOVED 2026-08-24.** Phones have been served Tacet Mobile (`public/m.html`) since 2026-07-12 (`a19b70af`), so every `≤720px` layer inside `retail-admin` was unreachable from a phone; all of them are deleted. The shell has one navigation surface now: the rail, at every width.
 
 - **One global JS scope** across 17 `NN-*.js` parts; load order matters.
 - **One section visible at a time**; `goTab(tab)` switches and fires that tab's init.
