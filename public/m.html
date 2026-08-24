@@ -251,9 +251,9 @@ button,a,.row,.chip,.stepbtn{touch-action:manipulation}
    #app starts with this markup already inside it (see body below), not
    empty — this file is a single ~600KB document and the OS-generated PWA
    splash (icon + name, nothing else) is all a phone has to show until every
-   byte of it has arrived AND the trailing <script> has run. On a slow
+   byte of it has arrived AND the trailing script block has run. On a slow
    connection that gap is seconds of blank screen. HTML paints as it streams
-   in, ahead of a blocking <script>, so this markup shows the moment it has
+   in, ahead of a blocking script tag, so this markup shows the moment it has
    downloaded — well before the script that builds the real app. render()
    always does app.innerHTML = ... (see render()), so the very first render
    overwrites this wholesale; nothing here is ever cleaned up by hand. */
