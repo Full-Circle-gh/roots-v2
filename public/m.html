@@ -435,6 +435,14 @@ const state = {
      of these screens into a confident "none" for the length of a fetch. */
   vchLoaded:false, flashLoaded:false, bcLoaded:false, revLoaded:false,
   inboxUnseen:null, inboxPolled:false,
+  /* New orders that arrived since this phone last looked at Orders. Counted by
+     the server (status is a shared fact), so handling an order on the desktop
+     puts the phone's dot out on its next poll. */
+  ordersUnseen:0,
+  /* One word for whether this phone rings when the app is shut: unknown until
+     asked, then unsupported / needs-install (iOS, not on the home screen) /
+     blocked (refused in the phone's own settings) / off / on. */
+  push:'unknown', pushBusy:false,
   ops:null, opsLoading:false, featBusy:null, featErr:null,
   media:null, mediaLoading:false, mediaTried:false, mediaBusy:null, mediaErr:null,
   fapiao:null, fapiaoLoading:false, fapiaoBusy:false, fapiaoTried:false, printerTried:false,
@@ -507,7 +515,12 @@ const CMD={}; function reg(n,f){CMD[n]=f;}
    dispatcher cannot feed. */
 window.APP={cmd:(n,...a)=>{ if(CMD[n]) CMD[n](...a); }};
 
-reg('tab', t=>{ state.stack=[]; state.tab=t; state.detailId=null; render();
+reg('tab', t=>{ state.stack=[]; state.tab=t; state.detailId=null;
+  /* Opening Orders IS reading them — the same rule the inbox already follows.
+     Stamped before the render so the dot goes out on the tap rather than on
+     the next poll fifteen seconds later. */
+  if(t==='orders') markOrdersSeen();
+  render();
   if(t==='customers' && !state.custLoaded && !state.custLoading) loadCustomers();
   if(t==='orders' && !state.ordersView && !state.ordersLoading) loadOrdersPage(); });
 reg('back', ()=>{ if(state.stack.length) pop(); });
@@ -532,8 +545,27 @@ function applyTheme(){
 const M_LANG_KEY='tacet-m-lang';
 reg('toggleLang', ()=>{ state.lang=state.lang==='en'?'zh':'en'; LANG=state.lang; document.documentElement.lang=state.lang;
   try{ localStorage.setItem(M_LANG_KEY,state.lang); }catch(e){} render(); });
-reg('toggleSound', ()=>{ state.sound=!state.sound; render(); });
-reg('toggleLive', ()=>{ state.live=!state.live; render(); });
+/* Both switches used to be decoration: they flipped a boolean nothing read and
+   forgot it at the next launch. They are wired now — Live updates runs the
+   new-order poll, Sound rings the chime it finds — and they are remembered for
+   the same reason the theme and the language are. An operator who silences the
+   phone at 11pm has silenced it, not silenced it until they reopen the app.
+
+   Own keys, not the desktop's: 'tacet-orders-sound-on' belongs to the PC in
+   front of the packing bench, and a phone in a pocket is a different room. */
+const M_SOUND_KEY='tacet-m-sound', M_LIVE_KEY='tacet-m-live';
+try{ if(localStorage.getItem(M_SOUND_KEY)==='0') state.sound=false;
+     if(localStorage.getItem(M_LIVE_KEY)==='0')  state.live=false; }catch(e){}
+reg('toggleSound', ()=>{ state.sound=!state.sound; render();
+  try{ localStorage.setItem(M_SOUND_KEY,state.sound?'1':'0'); }catch(e){}
+  /* Turning it on plays the ding once. It is the only way to answer "is this
+     thing loud enough?" without waiting for a real order — and the tap that
+     turned it on is also the gesture iOS requires before any page may make a
+     sound at all, so this is where the audio actually gets unlocked. */
+  if(state.sound) playOrderChime(true); });
+reg('toggleLive', ()=>{ state.live=!state.live; render();
+  try{ localStorage.setItem(M_LIVE_KEY,state.live?'1':'0'); }catch(e){}
+  if(state.live) pollUnseenOrders(); });
 reg('openSearch', ()=>{ state.overflow=false; state.search=true; render(); });
 reg('closeSearch', ()=>{ state.search=false; render(); });
 /* Opening the inbox IS reading it — the desktop stamps last-seen the moment
@@ -543,7 +575,7 @@ reg('statusF', f=>{ state.statusF=f; loadOrdersPage(); });
 reg('channelF', f=>{ state.channelF=f; loadOrdersPage(); });
 reg('storeF', v=>{ state.storeF=v; loadOrdersPage(); });
 reg('ordersMore', ()=>{ if(!state.ordersLoading) loadOrdersPage(true); });
-reg('ordersGo', f=>{ state.stack=[]; state.tab='orders'; state.statusF=f; state.channelF='all'; state.orderQ=''; loadOrdersPage(); });
+reg('ordersGo', f=>{ state.stack=[]; state.tab='orders'; state.statusF=f; state.channelF='all'; state.orderQ=''; markOrdersSeen(); loadOrdersPage(); });
 reg('orderSearch', q=>{ state.orderQ=q||''; state.search=false; state.tab='orders'; state.stack=[]; loadOrdersPage(); });
 reg('clearOrderSearch', ()=>{ state.orderQ=''; loadOrdersPage(); });
 reg('ordersRetry', ()=>{ state.ordersLoadErr=null; loadOrdersPage(); });
@@ -3747,10 +3779,34 @@ function FEATURE_ROWS(){
   return FEATURE_CATALOG.filter(f=>featEntitled(f.key))
     .map(f=>({label:T(f.en,f.zh), feat:f.key, note:featOn(f.key)?null:T(f.offEn,f.offZh)}));
 }
+/* Three rows, in the order an operator meets them: whether the app watches at
+   all, whether it makes a sound when it does, and whether any of that reaches
+   a phone that is asleep in a pocket. The third is the only one that needs a
+   line of explanation, because it is the only one whose answer depends on the
+   phone's own settings rather than on this app. */
+function PUSH_NOTE(){
+  return state.push==='on'        ? T('A new order wakes this phone even when Tacet is shut.','新订单会唤醒此手机，即使 Tacet 已关闭。')
+       : state.push==='off'       ? T('Right now a new order only makes a sound while Tacet is open.','目前只有在 Tacet 打开时，新订单才会提醒。')
+       : state.push==='blocked'   ? T('Notifications are switched off for this site in your phone settings.','手机设置中已禁止本站发送通知。')
+       : state.push==='needs-install' ? T('Add Tacet to your home screen first — iPhone allows this only for installed apps.','请先将 Tacet 添加到主屏幕 — iPhone 仅允许已安装的应用推送。')
+       : state.push==='unsupported' ? T('This browser cannot deliver them.','此浏览器无法接收推送。')
+       : null;
+}
+function NOTIFICATION_ROWS(){
+  const rows=[
+    {label:T('Live updates','实时更新'),tgl:'__live'},
+    {label:T('Sound','提示音'),tgl:'__sound'},
+    {label:T('Alert me when Tacet is closed','应用关闭时也提醒我'),tgl:'__push',note:PUSH_NOTE()},
+  ];
+  /* Only once it is on, and only then: a test that cannot arrive is a button
+     that teaches the operator to distrust the ones that can. */
+  if(state.push==='on') rows.push({label:T('Send a test alert','发送测试提醒'),cmd:"APP.cmd('pushTest')",chev:true});
+  return rows;
+}
 function screenSettings(){
   const groups=[
     {h:T('Store','店铺'),rows:[{label:T('Store profile','店铺资料'),value:T('on desktop','在电脑端')},{label:T('Operations','运营'),cmd:"APP.cmd('push','operations')",chev:true},{label:T('Team','团队'),cmd:"APP.cmd('push','team')",chev:true}]},
-    {h:T('Notifications','通知'),rows:[{label:T('Live updates','实时更新'),tgl:'__live'},{label:T('Sound','提示音'),tgl:'__sound'}]},
+    {h:T('Notifications','通知'),rows:NOTIFICATION_ROWS()},
     {h:T('Features','功能'),rows:FEATURE_ROWS()},
     // No Auto-print row here. It used to sit in this group, in Operations, AND
     // in Delivery — one switch in three places, two of them a tap away from the
@@ -3784,6 +3840,17 @@ function screenSettings(){
           : `<span style="font-size:13px;color:var(--text-secondary)">${T('Loading…','加载中…')}</span>`)
       : r.tgl==='__live'?toggle(state.live,"APP.cmd('toggleLive')")
       : r.tgl==='__sound'?toggle(state.sound,"APP.cmd('toggleSound')")
+      /* A switch is drawn only where flipping it can actually change
+         something. Blocked or unsupported gets a word instead — an operator
+         who taps a switch that springs back has been told nothing. */
+      : r.tgl==='__push'?(state.pushBusy
+          ? `<span style="font-size:13px;color:var(--text-secondary)">${T('Working…','处理中…')}</span>`
+          : (state.push==='on'||state.push==='off')
+            ? toggle(state.push==='on',"APP.cmd('togglePush')")
+            : `<button onclick="APP.cmd('togglePush')" style="background:none;border:none;padding:0;font-family:inherit;font-size:13px;color:var(--text-secondary);cursor:pointer">${
+                state.push==='needs-install'?T('Add to home screen','添加到主屏幕')
+                :state.push==='blocked'?T('Blocked','已禁止')
+                :T('Unavailable','不可用')}</button>`)
       : r.feat ? (state.featBusy===r.feat
           ? `<span style="font-size:13px;color:var(--text-secondary)">${T('Saving…','保存中…')}</span>`
           : toggle(featOn(r.feat),`APP.cmd('toggleFeature','${r.feat}')`))
@@ -5784,10 +5851,156 @@ function loadInboxUnseen(force){
     state.inboxUnseen=n; render();
   }).catch(()=>{});
 }
+
+/* ── The new-order chime ───────────────────────────────────────────────────
+   Settings has said "Sound" since this app shipped and the phone has never
+   made one. The switch flipped a boolean nothing read, and nothing on the
+   phone was watching for an order to arrive in the first place: orders are
+   fetched when you OPEN the Orders tab and never again, so a phone sitting on
+   Home at the counter learned about an order when somebody thought to pull
+   down. The desktop has had the ding since it had orders
+   (retail-admin/04-orders.js) — the phone simply never got it.
+
+   Same two notes as the desktop, deliberately: G5 → C6, a sine pair 160ms
+   apart. One store, one sound, whichever screen it comes out of. Synthesised
+   rather than an .mp3 so there is no asset to ship, cache-bust, or lose to the
+   service worker.
+
+   The volume is the desktop's (0.18 peak). A phone speaker is not a laptop's,
+   but louder here reads as an alarm, and an order arriving is not an alarm. */
+let _chimeCtx=null;
+/* Autoplay policy, and iOS's is the strict one: a page may only build or
+   resume an AudioContext inside a user gesture, and iOS re-suspends it every
+   time the app goes to the background. So it is armed on the first touch of
+   the session and re-woken whenever the app comes back to the front — by then
+   the operator has tapped SOMETHING, and the context is already warm when a
+   poll 20 seconds later wants to ring it. */
+function unlockChime(){
+  try{
+    if(!_chimeCtx){ const AC=window.AudioContext||window.webkitAudioContext; if(!AC) return null; _chimeCtx=new AC(); }
+    if(_chimeCtx.state==='suspended') _chimeCtx.resume().catch(()=>{});
+  }catch(e){ return null; }
+  return _chimeCtx;
+}
+['pointerdown','touchstart','click','keydown'].forEach(ev=>
+  window.addEventListener(ev,unlockChime,{once:true,capture:true,passive:true}));
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&_chimeCtx) unlockChime(); });
+/* `force` is the Settings preview — it rings even from the row that is about
+   to be switched on, which is the only way to hear what you are turning on. */
+function playOrderChime(force){
+  if(!state.sound&&!force) return;
+  /* A phone lives in a pocket, on silent, in a shop with a fan running. The
+     buzz is the half of the notification that survives all three — same
+     signal, different sense. Guarded: desktops and iOS Safari have no
+     vibrator and answer undefined. */
+  try{ if(navigator.vibrate) navigator.vibrate([60,90,60]); }catch(e){}
+  const ctx=unlockChime(); if(!ctx) return;
+  try{
+    const now=ctx.currentTime;
+    [[784,0],[1047,0.16]].forEach(([freq,at])=>{
+      const osc=ctx.createOscillator(), gain=ctx.createGain();
+      osc.type='sine'; osc.frequency.value=freq;
+      const t=now+at;
+      gain.gain.setValueAtTime(0.0001,t);
+      gain.gain.exponentialRampToValueAtTime(0.18,t+0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001,t+0.42);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(t); osc.stop(t+0.45);
+    });
+  }catch(e){}
+}
+
+/* ── What the chime listens to ─────────────────────────────────────────────
+   /orders/unseen-count — the same endpoint and the same 15s cadence as the
+   desktop, so the two agree about what "new" means instead of each deciding.
+   The server counts orders still in their just-placed state (paid /
+   awaiting_restock) placed after this phone's last-seen stamp, which is what
+   makes the dot go out everywhere the moment ANYONE handles the order, on any
+   device. Marketplace mirrors (Meituan, gzgrocery) are excluded server-side —
+   they are a ledger we copy, not work this store picks up.
+
+   The ding fires on a genuine INCREASE only, and never on the first poll of a
+   session: a backlog of eleven unhandled orders from yesterday lights the dot,
+   it does not play eleven dings at a phone being unlocked. */
+const M_ORDERS_SEEN_KEY='tacet.m.ordersSeen';
+const ORDERS_POLL_MS=15000;
+let _ordersUnseenPrev=null, _ordersPollBusy=false;
+function ordersSeenAt(){ try{ return localStorage.getItem(M_ORDERS_SEEN_KEY)||''; }catch(e){ return ''; } }
+function markOrdersSeen(){
+  try{ localStorage.setItem(M_ORDERS_SEEN_KEY,new Date().toISOString()); }catch(e){}
+  state.ordersUnseen=0; _ordersUnseenPrev=0;
+}
+/* Its own fetch, deliberately NOT api(). api() sends a 401 straight to
+   /backend/login, which is right for a tap the operator just made and wrong for
+   a heartbeat: a session that lapses overnight, or one restart of the box, and
+   every phone in the shop navigates itself to a login screen from inside a
+   pocket — the app the operator left open is simply gone when they pick it up.
+   A background check that cannot be heard should not be able to move the app
+   either. On any failure it goes quiet and tries again in fifteen seconds; the
+   operator's next real tap gets the honest bounce. */
+function fetchUnseenOrders(){
+  return fetch(apiURL('/orders/unseen-count?since='+encodeURIComponent(ordersSeenAt())),
+               {credentials:'same-origin',headers:{accept:'application/json'}})
+    .then(r=>r.ok?r.json():null)
+    .then(j=>(j&&j.data!==undefined)?j.data:j);
+}
+function pollUnseenOrders(){
+  if(!state.live||_ordersPollBusy) return;
+  /* One request in flight at a time. Coming back to the app fires focus AND
+     visibilitychange together, and two answers racing to compare themselves
+     against the same previous count is two dings for one order. */
+  _ordersPollBusy=true;
+  return fetchUnseenOrders().then(d=>{
+    _ordersPollBusy=false;
+    if(!d) return;
+    const n=Number(d.count||0);
+    const arrived=_ordersUnseenPrev!==null&&n>_ordersUnseenPrev;
+    const litBefore=state.ordersUnseen>0;
+    _ordersUnseenPrev=n; state.ordersUnseen=n;
+    /* Seen BEFORE the repaint, not after: the operator standing on the Orders
+       list is looking at the thing the dot points at, and stamping first means
+       the toast below draws over a tab bar that is already clean. */
+    if(state.tab==='orders'&&!state.stack.length) markOrdersSeen();
+    /* Rings even while the operator is standing on the Orders list. The desktop
+       treats that tab as "already seen" and stays quiet, which is fair on a
+       monitor you are facing; a phone is face-down on the counter with the
+       Orders list still open behind the lock screen, and silence there is the
+       exact complaint. */
+    if(arrived){
+      playOrderChime();
+      showToast(n>1?T(n+' new orders',n+' 个新订单'):T('New order','新订单'));
+      return;   // showToast has already repainted
+    }
+    /* Everything below is why this does NOT render on every tick. render()
+       rewrites the whole app in one innerHTML, so a repaint every fifteen
+       seconds would throw away the scroll position of whatever list the
+       operator is reading and the caret of whatever field they are typing in —
+       four times a minute, forever, for a dot that did not move. It repaints
+       when the dot actually changes state and at no other time. */
+    if((state.ordersUnseen>0)!==litBefore) render();
+  }).catch(()=>{ _ordersPollBusy=false; });
+}
+(function startOrdersPoll(){
+  /* Not gated on document.hidden the way the desktop's poller is. A hidden tab
+     on a monitor has nobody in front of it; a phone with the screen off is in
+     the apron pocket of the person the ding is FOR. The browser throttles a
+     background timer to about a minute on its own, which is the right cost. */
+  setTimeout(pollUnseenOrders,1200);
+  setInterval(pollUnseenOrders,ORDERS_POLL_MS);
+  /* Coming back to the app re-checks immediately rather than waiting out the
+     rest of a throttled interval — a phone picked up should already know. */
+  window.addEventListener('focus',pollUnseenOrders);
+  document.addEventListener('visibilitychange',()=>{ if(!document.hidden) pollUnseenOrders(); });
+})();
+
 /* The list on screen, not a snapshot taken at boot. `seen_at` is stamped
    server-side the moment an order is opened, and openOrder clears the row
    locally too so the dot goes out on the tap rather than on the next reload. */
-function unseenOrders(){ return (state.ordersView||state.liveOrders||[]).some(o=>o.isNew); }
+/* Two sources, either one lights the dot: the rows this phone has actually
+   loaded, and the server's count of what is un-actioned — which is the only
+   one that knows about an order that arrived while the operator sat on Home
+   and never opened the list. */
+function unseenOrders(){ return state.ordersUnseen>0 || (state.ordersView||state.liveOrders||[]).some(o=>o.isNew); }
 function unseenReviews(){ return state.inboxUnseen==null?0:state.inboxUnseen; }
 function tabDot(k){ return k==='orders' ? unseenOrders() : k==='more' ? unseenReviews()>0 : false; }
 /* Unseen is one 6px Sage dot — never a count, never red. A count in the chrome
@@ -6199,6 +6412,159 @@ if('serviceWorker' in navigator && window.isSecureContext){
     if(e.data&&e.data.type==='sw-updated'&&!reloaded){ reloaded=true; location.reload(); }
   });
 }
+
+/* ── 5. Alerts when the app is closed (Web Push) ───────────────────
+   The chime above only exists while the app is running. Once the phone is
+   locked and the app is swapped out, no timer of ours fires — on iOS the page
+   is frozen outright — so an order that lands at 9pm waits until somebody
+   picks the phone up. Web Push is the only mechanism that survives that: the
+   server tells the phone's push service, the OS wakes the service worker, and
+   /sw.js draws a real notification whether or not this page still exists.
+
+   Every piece of that already shipped for the DESKTOP — routes/push.js, the
+   /api/backend/push/* endpoints, the push + notificationclick handlers in
+   sw.js, and the fan-out inside markOrderPaid() that alerts every operator of
+   the tenant on a new paid order. The phone was the one client that never
+   enrolled, so it was the one device that never rang.
+
+   Enrolment is EXPLICIT. A page may not ask for notification permission
+   unprompted — browsers punish that, and an operator who never asked for
+   alerts should not meet a permission sheet on their first launch. Settings
+   → Notifications carries the switch; nothing happens until it is tapped. */
+const PUSH_SUPPORTED = ('serviceWorker' in navigator) && ('PushManager' in window)
+                    && ('Notification' in window) && window.isSecureContext;
+/* iOS gives Web Push to INSTALLED apps only — Safari on iOS exposes no
+   PushManager at all until the app is on the home screen (16.4+). Worth saying
+   in its own words rather than as "your browser cannot do this", because the
+   operator is three taps away from being able to. */
+const PUSH_NEEDS_INSTALL = IS_IOS && !STANDALONE;
+function pushReg(){
+  if(!PUSH_SUPPORTED) return Promise.resolve(null);
+  return navigator.serviceWorker.getRegistration()
+    .then(r=>r?navigator.serviceWorker.ready
+              :navigator.serviceWorker.register('/sw.js',{scope:'/'}).then(()=>navigator.serviceWorker.ready))
+    .catch(()=>null);
+}
+function pushSub(){
+  return pushReg().then(r=>(r&&r.pushManager)?r.pushManager.getSubscription():null).catch(()=>null);
+}
+/* The VAPID public key arrives base64url; applicationServerKey wants bytes. */
+function b64ToU8(b64){
+  const pad='='.repeat((4-b64.length%4)%4);
+  const raw=atob((b64+pad).replace(/-/g,'+').replace(/_/g,'/'));
+  const arr=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++) arr[i]=raw.charCodeAt(i);
+  return arr;
+}
+/* Its own fetch, for the reason the order poll has one: these run at boot, and
+   a background call must never be able to throw a signed-out phone at a login
+   page before the operator has touched anything. */
+function pushFetch(path,body){
+  const opt={credentials:'same-origin'};
+  if(body!==undefined){ opt.method='POST'; opt.headers={'content-type':'application/json'};
+                        opt.body=JSON.stringify(body); }
+  return fetch(path,opt).then(r=>r.ok?r.json().catch(()=>({})):null).catch(()=>null);
+}
+/* Three sources that can disagree, reduced to one word. They disagree often:
+   the browser can hold a live subscription for a preference the operator
+   switched off on their laptop, and permission can read 'granted' for a device
+   that has since been unsubscribed. */
+function refreshPushState(){
+  if(!PUSH_SUPPORTED){ state.push=PUSH_NEEDS_INSTALL?'needs-install':'unsupported'; render(); return Promise.resolve(); }
+  if(Notification.permission==='denied'){ state.push='blocked'; render(); return Promise.resolve(); }
+  return Promise.all([pushSub(),pushFetch('/api/backend/push/pref')]).then(res=>{
+    const sub=res[0], pref=res[1];
+    /* The STORED intent wins over the live subscription. The desktop learned
+       this the hard way: an "off" the operator chose read back as "on" the
+       moment any other page re-enrolled this device's shared endpoint. */
+    const wanted = !pref || pref.enabled!==false;
+    state.push = (wanted && sub && Notification.permission==='granted') ? 'on' : 'off';
+    /* Permission granted, alerts wanted, and yet no live subscription: push
+       endpoints rotate and browsers drop them on their own schedule. Re-enrol
+       silently — no sheet, because permission was granted once already and
+       asking again is asking twice for the same answer. */
+    if(state.push==='off' && wanted && Notification.permission==='granted' && !sub){
+      return pushEnrol(true).then(()=>{ state.push='on'; render(); }).catch(()=>{ render(); });
+    }
+    render();
+  }).catch(()=>{});
+}
+/* `silent` is the re-enrolment above: it must never raise a permission sheet,
+   so it gives up rather than ask. */
+function pushEnrol(silent){
+  return pushFetch('/api/backend/push/vapid').then(v=>{
+    if(!v||!v.enabled||!v.publicKey) return Promise.reject('disabled');
+    return (Notification.permission==='granted'
+              ? Promise.resolve('granted')
+              : (silent?Promise.reject('denied'):Notification.requestPermission()))
+      .then(perm=>{
+        if(perm!=='granted') return Promise.reject('denied');
+        return pushReg().then(reg=>{
+          if(!reg||!reg.pushManager) return Promise.reject('nosw');
+          return reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:b64ToU8(v.publicKey)});
+        });
+      })
+      .then(sub=>{
+        const j=sub.toJSON();
+        return pushFetch('/api/backend/push/subscribe',{endpoint:j.endpoint,keys:j.keys})
+          .then(r=>{ if(!r) return Promise.reject('save');
+            /* An explicit yes lifts the stored mute — including the kitchen-side
+               one taken out alongside it on this same device. */
+            return pushFetch('/api/backend/push/pref',{enabled:true,endpoint:j.endpoint}); });
+      });
+  });
+}
+function pushDrop(){
+  /* The intent is recorded FIRST, and independently of the browser. If the
+     service worker or the subscription has gone missing the switch must still
+     mean off — the desktop shipped a silent false-off exactly this way, where
+     the toggle flipped and the next page load quietly undid it. */
+  return pushSub().then(sub=>{
+    const ep=sub?sub.endpoint:null;
+    return pushFetch('/api/backend/push/pref',{enabled:false,endpoint:ep}).then(()=>{
+      if(!sub) return;
+      return sub.unsubscribe().catch(()=>{})
+        .then(()=>pushFetch('/api/backend/push/unsubscribe',{endpoint:ep}));
+    });
+  });
+}
+reg('togglePush', ()=>{
+  if(state.pushBusy) return;
+  if(state.push==='blocked'){
+    showToast(T('Allow notifications for this site in your phone settings, then come back.',
+                '请先在手机设置中允许本站发送通知，再回来开启。')); return; }
+  /* On iOS the answer is not a toggle, it is the install sheet — so open that
+     instead of failing at a switch that cannot work yet. */
+  if(state.push==='needs-install'){ state.installSheet=true; render(); return; }
+  if(state.push!=='on'&&state.push!=='off') return;
+  const turningOn=state.push!=='on';
+  state.pushBusy=true; render();
+  (turningOn?pushEnrol(false):pushDrop())
+    .then(()=>{ state.pushBusy=false; state.push=turningOn?'on':'off'; render();
+      if(turningOn) showToast(T('This phone will ring for a new order.','新订单将在此手机提醒。')); })
+    .catch(err=>{ state.pushBusy=false; render();
+      showToast(err==='denied'
+        ? T('Allow notifications for this site in your phone settings, then come back.',
+            '请先在手机设置中允许本站发送通知，再回来开启。')
+        : err==='disabled'
+        ? T('Alerts are not set up on this workspace.','此工作区尚未启用推送。')
+        : T('That did not go through. Nothing has changed — try again.','没有成功。数据没有变化 — 请重试。'));
+      refreshPushState(); });
+});
+/* Sends one real push through the whole chain — server, push service, OS,
+   service worker. It is the only way to answer "will this actually wake my
+   phone?" without waiting for a customer to buy something, and it is what
+   separates a broken setup from a phone whose Do Not Disturb is eating it. */
+reg('pushTest', ()=>{
+  if(state.pushBusy) return;
+  state.pushBusy=true; render();
+  pushFetch('/api/backend/push/test',{}).then(j=>{
+    state.pushBusy=false; render();
+    showToast(j&&j.sent
+      ? T('Sent — look at your notifications.','已发送 — 请查看通知。')
+      : T('No device received it. Switch alerts off and on again.','没有设备收到。请将提醒关闭后重新开启。'));
+  });
+});
 
 /* ==========================================================================
    Live data — binds the core monitoring screens to the store backend's
@@ -7309,6 +7675,10 @@ async function loadLive(){
   api('/order-channel-counts').then(d=>set(()=>{ if(d) state.liveChannelCounts=d; })).catch(()=>{});
 
   loadInboxUnseen();
+  /* Asks nothing of the operator — it only reads what the browser and the
+     server already know, so Settings tells the truth the first time it is
+     opened rather than after a tap. */
+  refreshPushState();
   loadOps();
   api('/setup').then(d=>set(()=>{ if(d&&d.percent!=null) state.setup=d; })).catch(()=>{});
   api('/delivery-zones').then(r=>set(()=>{ if(Array.isArray(r)) state.zones=r; })).catch(()=>{});
@@ -7346,7 +7716,14 @@ document.documentElement.setAttribute('data-theme',state.theme);
    guessed at — the app opening somewhere the operator did not ask for is worse
    than it opening Home. */
 (function(){
-  let to=''; try{ to=new URLSearchParams(location.search).get('to')||''; }catch(e){}
+  let to='';
+  try{ const q=new URLSearchParams(location.search);
+       /* `to` is this app's own shortcut parameter, from the launcher's
+          long-press menu. `tab` belongs to the desktop admin — and a new-order
+          push carries /retail-admin?tab=orders, which the store host hands
+          straight back to this app on a phone. Without reading it the
+          notification an operator just tapped opened Home. */
+       to=q.get('to')||q.get('tab')||''; }catch(e){}
   if(!to) return;
   if(TAB_META[to]) state.tab=to;
   else if(SUBS[to]){ state.stack=[{route:to,title:SUBS[to].title}]; if(to==='inbox') markInboxSeen(); }
