@@ -15,9 +15,11 @@
 // here — the same deferral routes/retail-purchasing.js already carries for
 // suppliers / purchase_orders. Roots is the only live tenant today.
 //
-// Purchase LINES for materials are not here. Buying a material still runs
-// through the kitchen PO flow; wiring it into retail purchasing is Phase 1b and
-// blocks Roots' migration off the kitchen app (§28 addendum item 2).
+// Purchase LINES for materials are not here — a retail PO carrying a material
+// line lives entirely in routes/retail-purchasing.js (po_line_items.ingredient_id
+// as the alternative to store_product_id, mutually exclusive). Shipped as
+// Phase 1b (§28 addendum item 2); a material can still also be bought through
+// the kitchen PO flow, unchanged.
 
 const express = require('express');
 const db = require('../database');
@@ -154,17 +156,17 @@ router.get('/api/retail-admin/materials/:id', requireRetailAdmin, (req, res) => 
     'SELECT id, price, buy_unit, source, notes, recorded_at, recorded_by FROM ingredient_price_history WHERE ingredient_id = ? ORDER BY recorded_at DESC LIMIT 20'
   ).all(row.id);
 
-  // Bought in — KITCHEN purchase orders only. Retail POs link store_product_id
-  // and never ingredient_id (see routes/retail-purchasing.js), so joining them
-  // here would always return nothing while implying it had looked. Phase 1b is
-  // what makes a retail PO able to carry a material line.
+  // Bought in — BOTH doors. Phase 1b (§28 addendum item 2) let a retail PO
+  // carry a material line (routes/retail-purchasing.js), so this can no
+  // longer filter to scope='kitchen' only — a material bought through Roots'
+  // online-store purchasing needs to show up here too. po_number's own prefix
+  // (PO- vs RPO-) already tells the two apart, so no extra column is needed.
   const purchases = db.prepare(`
     SELECT po.id AS po_id, po.po_number, po.date, po.status, po.supplier,
            pli.qty, pli.unit, pli.cost_per_unit, pli.total_cost
       FROM po_line_items pli
       JOIN purchase_orders po ON po.id = pli.po_id
      WHERE pli.ingredient_id = ?
-       AND COALESCE(po.scope, 'kitchen') = 'kitchen'
      ORDER BY po.date DESC, po.id DESC
      LIMIT 20
   `).all(row.id);

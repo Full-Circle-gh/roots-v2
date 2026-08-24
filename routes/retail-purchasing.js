@@ -5,11 +5,17 @@
 // App Backend operator gate. Differences from the kitchen module:
 //   • POs carry scope='retail' + a retail_stores.id they restock into
 //     (kitchen POs stay scope='kitchen'; the kitchen list filters them apart)
-//   • Line items reference store_products (store_product_id), never ingredients
-//   • Receiving pushes goods into retail_store_stock via inventory.adjustStock,
-//     which writes the stock ledger AND fans out to Meituan/Guanyi/Eleme sync.
-//     po_line_items.stock_applied_qty remembers what's already been applied so
-//     a corrected receive only moves the difference (idempotent, both ways).
+//   • A line item reference EITHER store_products (store_product_id) OR
+//     ingredients (ingredient_id) — mutually exclusive, never both. A material
+//     line is Phase 1b (§28 addendum item 2): buying a material still needs a
+//     PO, but a material has no stock table, so its "receiving" is a price
+//     write-back (ingredient_price_history + the ±5% alert, via
+//     firePriceAlertsForPO — see below), never a call to inventory.adjustStock.
+//   • Receiving a PRODUCT line pushes goods into retail_store_stock via
+//     inventory.adjustStock, which writes the stock ledger AND fans out to
+//     Meituan/Guanyi/Eleme sync. po_line_items.stock_applied_qty remembers
+//     what's already been applied so a corrected receive only moves the
+//     difference (idempotent, both ways). A MATERIAL line never touches this.
 //   • Expense auto-posting mirrors routes/purchases.js postPOExpenses —
 //     retail POs land in Finance → Expenses the moment they're Ordered.
 //   • created_by stays NULL: it FKs kitchen `users`, and backend operators live
@@ -28,6 +34,13 @@ const inventory = require('../lib/inventory');
 const { storeCategory } = require('../lib/category-text');
 const { logActivity } = require('../middleware/auth');
 const { requireRetailAdmin } = require('./retail');
+// Materials Phase 1b (§28 addendum item 2): a retail PO line can carry
+// ingredient_id instead of store_product_id. Price history + the ±5% alert
+// for that line reuse routes/purchases.js's write-back verbatim — server.js
+// loads that module first (line ~344, before this one at ~370), so this
+// require resolves the already-cached router with firePriceAlertsForPO
+// attached to it. One alert path, not two.
+const { firePriceAlertsForPO } = require('./purchases');
 
 const router = express.Router();
 
@@ -96,11 +109,18 @@ function applyReceivedToStock(poId, req) {
   const po = getRetailPO(poId);
   if (!po || !po.store_id) return { applied: 0 };
   const lines = db.prepare(`
-    SELECT id, store_product_id, qty_received, damaged_qty, stock_applied_qty, name_en
+    SELECT id, store_product_id, ingredient_id, qty_received, damaged_qty, stock_applied_qty, name_en
       FROM po_line_items WHERE po_id = ?
   `).all(poId);
   let applied = 0;
   for (const l of lines) {
+    // Materials have no stock table (§28) — a material line's "receiving" is
+    // the price write-back firePriceAlertsForPO does on the Ordered/Delivered
+    // status transition (see the /status and /:id routes below), not a stock
+    // adjustment here. Deliberate no-op, not the old silent skip: that one
+    // dropped ANY line without a store_product_id, including one that should
+    // have priced a material and never did.
+    if (l.ingredient_id) continue;
     if (!l.store_product_id || l.qty_received == null) continue;
     // Whole units: retail_store_stock.physical_qty is an INTEGER, so both the
     // applied bookkeeping and the delta are rounded the same way — repeated
@@ -740,12 +760,12 @@ router.post('/api/retail-admin/purchases/:id/backorder', requireRetailAdmin, (re
         `Back-order from ${src.po_number}`, src.store_id, src.id, currentTenantId());
       const newId = r.lastInsertRowid;
       const ins = db.prepare(`INSERT INTO po_line_items
-        (po_id, store_product_id, name_en, name_cn, sku, qty, unit, cost_per_unit, total_cost,
+        (po_id, store_product_id, ingredient_id, name_en, name_cn, sku, qty, unit, cost_per_unit, total_cost,
          expense_category, supplier_name, purchase_channel, note, sort_order)
-        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
       lines.forEach((l, i) => {
         const outstanding = (parseFloat(l.qty) || 0) - (l.qty_received == null ? 0 : parseFloat(l.qty_received) || 0);
-        ins.run(newId, l.store_product_id, l.name_en, l.name_cn, l.sku, outstanding, l.unit || 'pcs',
+        ins.run(newId, l.store_product_id, l.ingredient_id, l.name_en, l.name_cn, l.sku, outstanding, l.unit || 'pcs',
           l.cost_per_unit, outstanding * (parseFloat(l.cost_per_unit) || 0), storeCategory(db, l.expense_category),
           l.supplier_name || null, l.purchase_channel || null, l.note || null, i);
       });
@@ -774,19 +794,43 @@ router.put('/api/retail-admin/purchases/:id/landed', requireRetailAdmin, express
   res.json({ success: true, posted });
 });
 
+// A line is a PRODUCT or a MATERIAL, never both — one PO can freely mix lines
+// of each kind, but no single line carries both ids. Checked up front, before
+// any row is written, so a bad request never leaves a half-inserted PO.
+function lineConflict(items) {
+  return (items || []).some(item => item.store_product_id && item.ingredient_id);
+}
+
 function insertLineItems(poId, items, headerSupplier) {
   const insertItem = db.prepare(`INSERT INTO po_line_items
-    (po_id, store_product_id, name_en, name_cn, sku, qty, unit, cost_per_unit, total_cost,
+    (po_id, store_product_id, ingredient_id, name_en, name_cn, sku, qty, unit, cost_per_unit, total_cost,
      expense_category, supplier_name, purchase_channel, invoice_status, note, sort_order)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+  // Material lines default unit + supplier from the ingredient master, same
+  // fallback order the kitchen insert path uses (routes/purchases.js). Unit
+  // matters beyond display: firePriceAlertsForPO refuses to write back a price
+  // whose line unit doesn't match ingredients.buy_unit, so defaulting a
+  // material line to the generic 'pcs' product default would silently make
+  // every material price alert impossible.
+  const ingStmt = db.prepare('SELECT supplier, buy_unit FROM ingredients WHERE id = ?');
   items.forEach((item, i) => {
     const qty = parseFloat(item.qty) || 0;
     const cpu = parseFloat(item.cost_per_unit) || 0;
     const status = VALID_INVOICE.has(item.invoice_status) ? item.invoice_status : 'not_received';
+    let unit = item.unit || null;
+    let supplierName = item.supplier_name || headerSupplier || null;
+    if (item.ingredient_id) {
+      const ing = ingStmt.get(item.ingredient_id);
+      if (ing) {
+        if (!unit) unit = ing.buy_unit || null;
+        if (!item.supplier_name && !headerSupplier && ing.supplier && ing.supplier.trim()) supplierName = ing.supplier.trim();
+      }
+    }
     insertItem.run(
-      poId, item.store_product_id || null, item.name_en || '', item.name_cn || null, item.sku || null,
-      qty, item.unit || 'pcs', cpu, qty * cpu, storeCategory(db, item.expense_category),
-      item.supplier_name || headerSupplier || null, item.purchase_channel || null, status,
+      poId, item.store_product_id || null, item.ingredient_id || null,
+      item.name_en || '', item.name_cn || null, item.sku || null,
+      qty, unit || 'pcs', cpu, qty * cpu, storeCategory(db, item.expense_category),
+      supplierName, item.purchase_channel || null, status,
       (item.note || '').trim() || null, i,
     );
   });
@@ -799,6 +843,7 @@ router.post('/api/retail-admin/purchases', requireRetailAdmin, express.json(), (
   if (!storeId || !inventory.getStore(storeId)) {
     return res.status(400).json({ success: false, error: 'store_required' });
   }
+  if (lineConflict(items)) return res.status(400).json({ success: false, error: 'line_conflict' });
   try {
     const po_number = nextRetailPONumber();
     const tx = db.transaction(() => {
@@ -835,6 +880,7 @@ router.put('/api/retail-admin/purchases/:id', requireRetailAdmin, express.json()
   if (!storeId || !inventory.getStore(storeId)) {
     return res.status(400).json({ success: false, error: 'store_required' });
   }
+  if (lineConflict(items)) return res.status(400).json({ success: false, error: 'line_conflict' });
   const tx = db.transaction(() => {
     db.prepare(`
       UPDATE purchase_orders SET date = ?, delivery_date = ?, supplier = ?, notes = ?, store_id = ?,
@@ -846,6 +892,12 @@ router.put('/api/retail-admin/purchases/:id', requireRetailAdmin, express.json()
     }
   });
   tx();
+  // Price write-back + ±5% alert for material lines — mirrors the kitchen
+  // items-PUT path (routes/purchases.js), which fires the same way on an
+  // items edit against an already-placed PO, not only on the status flip.
+  if (Array.isArray(items) && (po.status === 'Ordered' || po.status === 'Delivered')) {
+    firePriceAlertsForPO(po.id, po.status === 'Ordered' ? 'po_ordered' : 'po_delivery');
+  }
   postRetailPOExpenses(po.id);
   logActivity(req.user.id, req.user.username, 'update', 'purchase_order', po.id, { scope: 'retail' }, req.ip);
   res.json({ success: true });
@@ -862,6 +914,14 @@ router.put('/api/retail-admin/purchases/:id/status', requireRetailAdmin, express
   if (status === 'Delivered') {
     db.prepare('UPDATE po_line_items SET qty_received = COALESCE(qty_received, qty) WHERE po_id = ?').run(po.id);
     applyReceivedToStock(po.id, req);
+  }
+  // Price write-back + ±5% alert for material lines on this PO. Fires on
+  // Ordered too, not just Delivered — mirrors routes/purchases.js exactly:
+  // most POs sit at Ordered and never get an explicit Delivered flip, so
+  // gating only on Delivered would mean a material's price alert never fires
+  // in practice.
+  if (status === 'Ordered' || status === 'Delivered') {
+    firePriceAlertsForPO(po.id, status === 'Ordered' ? 'po_ordered' : 'po_delivery');
   }
   if (status === 'Ordered' || status === 'Delivered') postRetailPOExpenses(po.id);
   else db.prepare('DELETE FROM expense_entries WHERE po_id = ?').run(po.id);

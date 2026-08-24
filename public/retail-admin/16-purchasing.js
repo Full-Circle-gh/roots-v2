@@ -43,6 +43,7 @@
   let _showDisabled = false;
   let _pos = [];             // PO header rows
   const _prodCache = {};     // storeId → stock rows (picker + suggestions)
+  let _matCache = null;      // materials list (not store-scoped — one cache)
   let _hist = {};            // store_product_id → last-paid, for the open PO
   const _supCache = {};      // store_product_id → { suppliers[], last } price list
   let _pickP = null;         // product the supplier popover is open for
@@ -99,6 +100,11 @@
   }
   const storeLabel = p => esc([p.store_name_en, p.store_name_cn].filter(Boolean).join(' · ') || '—');
   const nameLabel = it => esc([it.name_en, it.name_cn].filter(Boolean).join(' · ') || '—');
+  // A material line next to a product line on the same PO — one small grey
+  // tag is the only thing that says which is which (colour stays status-only
+  // everywhere else on this screen, so this is text on the neutral pill, not
+  // a new colour).
+  const matBadge = it => it.ingredient_id ? `<span class="pu2-pill grey pu2-mattag">${esc(T('Material', '物料'))}</span>` : '';
 
   // ── entry (idempotent — prodShowView calls this every time the tab opens) ──
   window.puInit = async function () {
@@ -140,6 +146,23 @@
       _prodCache[storeId] = r.data || [];
     }
     return _prodCache[storeId];
+  }
+  // Materials — not store-scoped stock, so one cache serves every store.
+  // Gated by the 'materials' tenant feature (body.feat-materials, same class
+  // that hides the Materials tab) — a tenant with it off never sees a material
+  // in this picker, even though the API itself has no feature check (matches
+  // the Materials screen's own precedent: server enforces the door, the
+  // tenant-level on/off switch is UI-only, per §28 addendum item 1).
+  function materialsFeatureOn() {
+    return document.body.classList.contains('feat-materials');
+  }
+  async function materials() {
+    if (!materialsFeatureOn()) return [];
+    if (!_matCache) {
+      const r = await api('/api/retail-admin/materials');
+      _matCache = (r.data || []).filter(m => m.is_active);
+    }
+    return _matCache;
   }
   // The per-product supplier price list (who sells it, what we paid last time).
   // Cached per product; a product never bought before returns { suppliers: [] }.
@@ -347,7 +370,8 @@
           delivery_date: po.delivery_date || '', supplier: po.supplier || '',
           store_id: po.store_id, notes: po.notes || '',
           items: (po.items || []).map(i => ({
-            store_product_id: i.store_product_id, name_en: i.name_en, name_cn: i.name_cn,
+            store_product_id: i.store_product_id, ingredient_id: i.ingredient_id,
+            name_en: i.name_en, name_cn: i.name_cn,
             sku: i.sku, qty: i.qty, unit: i.unit, cost_per_unit: i.cost_per_unit,
             expense_category: i.expense_category || '', purchase_channel: i.purchase_channel || '',
             supplier_name: i.supplier_name || '', current_stock: i.current_stock,
@@ -459,7 +483,7 @@
 
       <div class="pu2-card pu2-wizcard">
         <div class="pu2-f" style="max-width:520px;position:relative">
-          <span class="lbl">${esc(T('Add products', '添加商品'))}</span>
+          <span class="lbl">${esc(materialsFeatureOn() ? T('Add products & materials', '添加商品或物料') : T('Add products', '添加商品'))}</span>
           <span class="pu2-search full">
             <span class="pu2-ic">${I.search}</span>
             <input id="pu2-picker" type="text" placeholder="${esc(T('Search by name or SKU', '按名称或货号搜索'))}" oninput="puPickerInput()" autocomplete="off">
@@ -521,15 +545,25 @@
     const body = document.getElementById('pu2-linebody');
     if (!body) return;
     if (!_edit.items.length) {
-      body.innerHTML = `<tr class="pu2-noline"><td colspan="6">${esc(T('No products yet — search or pick a suggestion above.', '还没有商品——在上方搜索或选择推荐。'))}</td></tr>`;
+      const emptyMsg = materialsFeatureOn()
+        ? T('Nothing yet — search or pick a suggestion above.', '还没有内容——在上方搜索或选择推荐。')
+        : T('No products yet — search or pick a suggestion above.', '还没有商品——在上方搜索或选择推荐。');
+      body.innerHTML = `<tr class="pu2-noline"><td colspan="6">${esc(emptyMsg)}</td></tr>`;
       return;
     }
     body.innerHTML = _edit.items.map((it, i) => {
       const lineTotal = (parseFloat(it.qty) || 0) * (parseFloat(it.cost_per_unit) || 0);
       const supLabel = it.supplier_name ? esc(it.supplier_name) : esc(T('Choose supplier', '选择供应商'));
+      // A material has no per-supplier price list to pop open (that popover is
+      // built from retail PO history keyed on store_product_id — see
+      // routes/retail-purchasing.js /products/:spid/suppliers), so its
+      // supplier reads as plain text instead of a clickable chip.
+      const supBlock = it.ingredient_id
+        ? `<div class="pu2-supline"><span class="sub">${supLabel}</span></div>`
+        : `<div class="pu2-supline"><span class="pu2-supchip" onclick="puPick(${it.store_product_id})">${supLabel} <span class="swap">▾</span></span></div>`;
       return `<tr>
-        <td>${nameLabel(it)}${it.sku ? `<div class="sub pu2-mono">${esc(it.sku)}</div>` : ''}
-          <div class="pu2-supline"><span class="pu2-supchip" onclick="puPick(${it.store_product_id})">${supLabel} <span class="swap">▾</span></span></div></td>
+        <td>${matBadge(it)}${nameLabel(it)}${it.sku ? `<div class="sub pu2-mono">${esc(it.sku)}</div>` : ''}
+          ${supBlock}</td>
         <td class="right pu2-num" style="color:var(--td-text2)">${it.current_stock != null ? it.current_stock : '—'}</td>
         <td>
           <span class="pu2-qty">
@@ -589,12 +623,17 @@
       const list = document.getElementById('pu2-picker-list');
       if (!list) return;
       if (!q) { list.style.display = 'none'; return; }
-      let prods = [];
-      try { prods = await products(_edit.store_id); } catch (e) { toast(e.message, 'err'); return; }
-      const hits = prods.filter(p => `${p.name_en || ''} ${p.name_cn || ''} ${p.sku || ''}`.toLowerCase().includes(q)).slice(0, 30);
-      list.innerHTML = hits.length
-        ? hits.map(p => `<div class="pu2-pick" onclick="puPick(${p.product_id})">${nameLabel(p)}<span class="sub pu2-mono">${esc(p.sku || '')} · ${esc(T('stock', '库存'))} ${p.physical_qty}</span></div>`).join('')
-        : `<div class="pu2-pick muted">${esc(T('No match', '无匹配'))}</div>`;
+      let prods = [], mats = [];
+      try {
+        [prods, mats] = await Promise.all([products(_edit.store_id), materials()]);
+      } catch (e) { toast(e.message, 'err'); return; }
+      const prodHits = prods.filter(p => `${p.name_en || ''} ${p.name_cn || ''} ${p.sku || ''}`.toLowerCase().includes(q)).slice(0, 30);
+      const matHits = mats.filter(m => `${m.name_en || ''} ${m.name_cn || ''} ${m.sku || ''}`.toLowerCase().includes(q)).slice(0, 30);
+      const rows = [
+        ...prodHits.map(p => `<div class="pu2-pick" onclick="puPick(${p.product_id})">${nameLabel(p)}<span class="sub pu2-mono">${esc(p.sku || '')} · ${esc(T('stock', '库存'))} ${p.physical_qty}</span></div>`),
+        ...matHits.map(m => `<div class="pu2-pick" onclick="puPickMaterial(${m.id})">${matBadge({ ingredient_id: m.id })}${nameLabel(m)}<span class="sub pu2-mono">${esc(m.sku || '')}</span></div>`),
+      ];
+      list.innerHTML = rows.length ? rows.join('') : `<div class="pu2-pick muted">${esc(T('No match', '无匹配'))}</div>`;
       list.style.display = '';
     }, 150);
   };
@@ -616,6 +655,23 @@
     else addOrSetLine(p, _edit.supplier || '', null);   // nothing on file → blank line
   };
 
+  // Picking a material — no per-supplier price list to compare (materials
+  // don't carry retail PO history the way store_products do), so it drops
+  // straight onto the line, defaulting the supplier + unit + price from the
+  // material's own master record. Unit MUST default to buy_unit, not 'pcs' —
+  // firePriceAlertsForPO (routes/purchases.js) refuses to write back a price
+  // whose line unit doesn't match ingredients.buy_unit.
+  window.puPickMaterial = async function (ingredientId) {
+    const mats = await materials();
+    const m = mats.find(x => x.id === ingredientId);
+    if (!m) return;
+    const pk = document.getElementById('pu2-picker');
+    if (pk) pk.value = '';
+    const pl = document.getElementById('pu2-picker-list');
+    if (pl) pl.style.display = 'none';
+    addOrSetMaterialLine(m);
+  };
+
   // Add the line if new, or just retarget its supplier + price if it's already
   // on the order. Never bumps quantity — that's the steppers' job.
   function addOrSetLine(p, supplierName, cost) {
@@ -631,6 +687,20 @@
     it.supplier_name = supplierName || '';
     if (cost != null && cost !== '') it.cost_per_unit = cost;
     puCloseSupPop();
+    renderLines(); renderSuggestions();
+  }
+
+  function addOrSetMaterialLine(m) {
+    let it = _edit.items.find(x => x.ingredient_id === m.id);
+    if (!it) {
+      it = {
+        ingredient_id: m.id, name_en: m.name_en, name_cn: m.name_cn, sku: m.sku,
+        qty: 1, unit: m.buy_unit || 'pcs', cost_per_unit: m.buy_price || 0,
+        expense_category: m.accounting_category || '', purchase_channel: '',
+        current_stock: null, supplier_name: m.supplier || '',
+      };
+      _edit.items.push(it);
+    }
     renderLines(); renderSuggestions();
   }
 
@@ -720,7 +790,8 @@
       store_id: _edit.store_id,
       notes: _edit.notes || null,
       items: _edit.items.map(it => ({
-        store_product_id: it.store_product_id, name_en: it.name_en, name_cn: it.name_cn, sku: it.sku,
+        store_product_id: it.store_product_id, ingredient_id: it.ingredient_id,
+        name_en: it.name_en, name_cn: it.name_cn, sku: it.sku,
         qty: parseFloat(it.qty) || 0, unit: it.unit || 'pcs',
         cost_per_unit: parseFloat(it.cost_per_unit) || 0,
         expense_category: it.expense_category || null, purchase_channel: it.purchase_channel || null,
@@ -885,7 +956,7 @@
     const priceNote = it.cost_per_unit != null
       ? `${money(it.cost_per_unit)} ${esc(T('each', '每件'))}` : '';
     return `<tr data-line="${it.id}">
-      <td>${nameLabel(it)}${priceNote ? `<div class="sub pu2-num">${priceNote}</div>` : ''}</td>
+      <td>${matBadge(it)}${nameLabel(it)}${priceNote ? `<div class="sub pu2-num">${priceNote}</div>` : ''}</td>
       <td class="right pu2-num">${it.qty} ${esc(it.unit || '')}</td>
       <td><span class="pu2-qty"><input type="number" min="0" step="1" class="pu2-rq pu2-num" placeholder="${it.qty}" value="${it.qty_received != null ? it.qty_received : ''}" ${dis}></span></td>
       <td><span class="pu2-qty"><input type="number" min="0" step="1" class="pu2-rd pu2-num" value="${it.damaged_qty || ''}" ${dis}></span></td>
@@ -1006,7 +1077,8 @@
         id: null, po_number: null, date: todayGz(), delivery_date: '',
         supplier: po.supplier || '', store_id: po.store_id || _stores[0]?.id || null, notes: '',
         items: (po.items || []).map(i => ({
-          store_product_id: i.store_product_id, name_en: i.name_en, name_cn: i.name_cn, sku: i.sku,
+          store_product_id: i.store_product_id, ingredient_id: i.ingredient_id,
+          name_en: i.name_en, name_cn: i.name_cn, sku: i.sku,
           qty: i.qty, unit: i.unit || 'pcs', cost_per_unit: i.cost_per_unit,
           expense_category: i.expense_category || '', purchase_channel: i.purchase_channel || '',
           current_stock: i.current_stock,
