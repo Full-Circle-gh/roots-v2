@@ -99,7 +99,13 @@ const PROBE = `
     }
     if (top != null) out.headGap = Math.round(top - head.getBoundingClientRect().bottom);
   })();
-  out.doc = document.documentElement.scrollWidth;
+  // The scroller, not the document. html and body are overflow:hidden now — the
+  // page cannot be dragged in either direction, by design (see "The app, not
+  // the page" in m.html) — so documentElement.scrollWidth is clamped to the
+  // viewport and this check could never fire again. .content is where the app
+  // actually scrolls, and its scrollWidth still grows with anything too wide.
+  out.doc = (function(){ var c=document.getElementById('content');
+    return c ? c.scrollWidth : document.documentElement.scrollWidth; })();
   var all = document.querySelectorAll('#app *');
   for (var i = 0; i < all.length; i++) {
     var el = all[i], r = el.getBoundingClientRect();
@@ -175,7 +181,7 @@ function main() {
     if (!m) { const t = (out.match(/<title>([^<]*)<\/title>/) || [])[1] || ''; if (t.startsWith('ERR')) console.error(`  ! ${name}: ${t}`); continue; }
     scanned++;
     let g; try { g = JSON.parse(m[1]); } catch (e) { continue; }
-    if (g.doc > 391) wides.push([name, `page scrolls sideways (${g.doc}px)`]);
+    if (g.doc > 391) wides.push([name, `content scrolls sideways (${g.doc}px)`]);
     if (g.headGap != null && g.headGap < 8) headGaps.push([name, g.headGap]);
     for (const w of g.wide) wides.push([name, `${w.cls}: w=${w.w} right=${w.right} "${w.t}"`]);
     for (const c of g.clip) clips.push([name, c.t, c.over, c.box]);

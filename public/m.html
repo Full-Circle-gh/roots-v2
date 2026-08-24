@@ -153,8 +153,17 @@ button,input,textarea{font-family:inherit}
    Pull-to-reload is the sharpest of them: dragging a list past its top RELOADS
    an installed app, which throws away every screen it was on and every sheet
    it had open, for a gesture people make by accident all day. It is replaced,
-   not just removed — see wirePull() for the refresh that takes its place. */
-html,body{overscroll-behavior:none}
+   not just removed — see wirePull() for the refresh that takes its place.
+
+   The document itself never scrolls either. It had nothing to scroll TO — the
+   app is one 100dvh box — but a phone browser makes the page taller than the
+   part of it you can see, by exactly the height of its own toolbar, and that
+   difference is draggable. Dragging it took the tab bar off the bottom of the
+   screen and would not give it back until the toolbar came out of hiding, which
+   is not a gesture anybody knows to make. overflow:hidden goes on BOTH html and body:
+   on body alone iOS ignores it. The one scroller left is .content, which is
+   where scrolling was always meant to happen. */
+html,body{overscroll-behavior:none;overflow:hidden}
 .content{overscroll-behavior-y:contain}
 /* Tapping a control should not paint its label blue and offer to copy it.
    Selection stays ON everywhere else on purpose: an address, a phone number
@@ -404,6 +413,8 @@ const state = {
   liveOrders:null, liveDetail:null, liveKpis:null, liveVitals:null, liveAttn:null,
   liveStatusCounts:null, liveChannelCounts:null, liveInvoiceCounts:null, liveProductsLoaded:false,
   custLoading:false, custMetaLoaded:false, detailMounted:false, mirrorTried:false, ent:{}, me:null,
+  /* One per sheet that keeps reading after it opens — see sheetCustomer. */
+  custMounted:false, prodMounted:false, poMounted:false,
 
   /* Coupon switches only, keyed c_<CODE>. This map used to also carry
      membership / affiliate / social / faq / feedback / autoprint / autoroute /
@@ -625,7 +636,7 @@ reg('openProduct', sku=>{
   state.productSku=sku; state.prodErr=null; state.prodBusy=false;
   const p=DB.products.find(x=>x.sku===sku);
   (state.prodStores||[]).forEach(st=>{ delete sheetStep['st_'+st.id]; });
-  render();
+  state.prodMounted=false; render(); state.prodMounted=true;
   if(p&&p._id!=null) loadProductStock(p._id);
 });
 reg('closeProduct', ()=>{ state.productSku=null; render(); });
@@ -644,14 +655,23 @@ reg('custSearch', v=>{ const el=document.getElementById('mCustQ');
   state.custQ=String(v||''); state.focus={id:'mCustQ',pos:el?el.selectionStart:null}; render(); });
 reg('custSearchGo', ()=>loadCustomers());
 reg('custClear', ()=>{ state.custSeg='all'; state.custTier='all'; state.custChan='all'; state.custQ=''; loadCustomers(); });
-/* From an order to the person who placed it — the desktop's "› #id" link. */
+/* From an order to the person who placed it — the desktop's "› #id" link.
+   The record opens OVER the order. This used to close the order, empty the
+   pushed-screen stack and move the whole app to the Customers tab, then start
+   a fresh read of the customer LIST on the way past — so one tap threw away
+   the screen you were on, replaced it with a list nobody asked for, and left
+   the record itself riding on top of three renders it had to survive. The
+   question the button answers is "who is this?", and the answer is no use if
+   reading it loses the order you were reading it for: closing the record now
+   puts that order straight back. */
 reg('openCustomerFromOrder', id=>{
-  state.detailId=null; state.detailActions=false;
-  state.stack=[]; state.tab='customers';
-  if(!state.custLoaded&&!state.custLoading) loadCustomers();
+  state.detailActions=false;
   CMD.openCustomer(id);
 });
-reg('openCustomer', id=>{ state.custId=id; state.custDetail=null; state.custErr=null; state.custBusy=null; render(); loadCustomerDetail(id); });
+/* custMounted is set AFTER the first render, so the sheet rises once and then
+   holds still through every render its own reads cause. See sheetCustomer. */
+reg('openCustomer', id=>{ state.custId=id; state.custDetail=null; state.custErr=null; state.custBusy=null;
+  state.custMounted=false; render(); state.custMounted=true; loadCustomerDetail(id); });
 reg('closeCustomer', ()=>{ state.custId=null; state.custDetail=null; render(); });
 reg('prodView', v=>{ state.prodView=v; render(); });
 reg('prodStatus', v=>{ state.prodStatus=(state.prodStatus===v?'all':v); render(); });
@@ -815,7 +835,8 @@ reg('catTop', v=>{ state.catTop=v||null; render(); });
 reg('actRange', v=>{ state.actRange=v; state.act=null; state.actTried=false; render(); loadActivity(); });
 reg('actSource', v=>{ state.actSource=v; state.act=null; state.actTried=false; render(); loadActivity(); });
 reg('actMore', ()=>{ if(state.actMore) return; state.actMore=true; render(); loadActivity(true); });
-reg('openPO', id=>{ state.poId=Number(id); state.poDetail=null; state.poErr=null; state.poBusy=false; render();
+reg('openPO', id=>{ state.poId=Number(id); state.poDetail=null; state.poErr=null; state.poBusy=false;
+  state.poMounted=false; render(); state.poMounted=true;
   api('/purchases/'+Number(id)).then(d=>{ if(state.poId!==Number(id)) return; state.poDetail=d; render(); })
     .catch(e=>{ if(state.poId!==Number(id)||String(e.message)==='auth') return;
       state.poErr=E('Could not load this order.','无法加载这张采购单。'); state.poDetail={id:Number(id),items:[]}; render(); }); });
@@ -3017,8 +3038,9 @@ function sheetPO(){
     <div style="display:flex;align-items:center;justify-content:space-between;gap:8px">
       <button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" onclick="APP.cmd('closePO')">${ic('x',22,2)}</button>
       <span class="num" style="flex:1;font-size:17px;font-weight:500;min-width:0">${title}</span>${right||'<span style="width:36px;flex:none"></span>'}</div></div>`;
-  if(!d) return `<div class="scrim" style="z-index:45" onclick="APP.cmd('closePO')"></div>
-    <div class="sheet" style="top:120px;z-index:46;overflow:hidden">${head(T('Loading…','加载中…'))}
+  const noAnim=state.poMounted?'animation:none;':'';
+  if(!d) return `<div class="scrim" style="z-index:45;${noAnim}" onclick="APP.cmd('closePO')"></div>
+    <div class="sheet" style="top:120px;z-index:46;overflow:hidden;${noAnim}">${head(T('Loading…','加载中…'))}
       <div style="flex:1;min-height:0;padding:40px 16px;text-align:center;font-size:15px;color:var(--text-secondary);background:var(--bg)">${T('Loading…','加载中…')}</div></div>`;
   const items=d.items||[];
   const lines=items.length;
@@ -3031,8 +3053,8 @@ function sheetPO(){
     : d.status==='Ordered'
       ? {label:T('Everything arrived','全部到货'),status:'Delivered'}
       : null;
-  return `<div class="scrim" style="z-index:45" onclick="APP.cmd('closePO')"></div>
-   <div class="sheet" style="top:76px;z-index:46;overflow:hidden">
+  return `<div class="scrim" style="z-index:45;${noAnim}" onclick="APP.cmd('closePO')"></div>
+   <div class="sheet" style="top:76px;z-index:46;overflow:hidden;${noAnim}">
      ${head(escAttr(d.po_number||('#'+d.id)),poPill(d))}
      <div style="flex:1;min-height:0;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;background:var(--bg)">
        ${state.poErr?`<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;border-radius:14px;background:var(--brick-tint)">
@@ -4404,7 +4426,7 @@ function sheetOrderDetail(){
            o.counter?T('Handed over at the till','已在前台交付')
            :o.pickup?(o.pickupStore?T('Collects at '+o.pickupStore,'自提门店 '+o.pickupStore):T('Collects in store','到店自提'))
            :o.addr?T(...o.addr):T('No address on file','没有收货地址')}</div>
-         ${o.custId!=null?`<button onclick="APP.cmd('openCustomerFromOrder',${o.custId})" style="display:inline-flex;align-items:center;gap:5px;margin-top:10px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 12px;cursor:pointer;font-family:inherit">${ic('user',14)} ${T('Open their record','查看顾客')}</button>`:''}</div>
+         ${o.custId!=null?`<button onclick="APP.cmd('openCustomerFromOrder',${o.custId})" style="display:inline-flex;align-items:center;gap:5px;margin-top:10px;font-size:13px;font-weight:500;color:var(--text-primary);background:var(--surface-raised);border:1px solid var(--border-default);border-radius:9px;padding:7px 12px;cursor:pointer;font-family:inherit">${ic('user',14)} ${T('View customer','查看顾客')}</button>`:''}</div>
        <!-- Payment reads as the tender and nothing else: the WeChat mark plus the
             word. The status word is dropped when it agrees with the pill in the
             sheet's own title bar (Paid, three centimetres above) and kept only
@@ -4729,8 +4751,9 @@ function stockCard(p){
 }
 function sheetProduct(){
   const p=DB.products.find(x=>x.sku===state.productSku); if(!p) return '';
-  return `<div class="scrim" style="z-index:45" onclick="APP.cmd('closeProduct')"></div>
-   <div class="sheet" style="top:120px;z-index:46;overflow:hidden">
+  const noAnim=state.prodMounted?'animation:none;':'';
+  return `<div class="scrim" style="z-index:45;${noAnim}" onclick="APP.cmd('closeProduct')"></div>
+   <div class="sheet" style="top:120px;z-index:46;overflow:hidden;${noAnim}">
      <div style="flex:none;padding:8px 12px 12px;border-bottom:1px solid var(--border-default)"><div class="grabber"></div>
        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:8px">
          <button class="iconbtn" style="width:36px;height:36px;margin-left:-4px" onclick="APP.cmd('closeProduct')">${ic('x',22,2)}</button>
@@ -5386,8 +5409,18 @@ function sheetCustomer(){
       d.diagnostics && d.diagnostics.unavailable ? T('Diagnostics could not be read.','诊断数据读取失败。')
       : d.diagnostics && d.diagnostics.error_count_7d ? T(d.diagnostics.error_count_7d+' app errors in 7 days', '近 7 天 '+d.diagnostics.error_count_7d+' 次报错')
       : T('No app errors in 7 days','近 7 天无报错')}</div>`;
-  return `<div class="scrim" onclick="APP.cmd('closeCustomer')"></div>
-    <div class="sheet" style="top:46px;overflow:hidden">
+  /* Every sheet is rebuilt from scratch on each render, so its rise replays
+     every time — and this one renders again the moment its read lands. A replay
+     is not a flicker: the sheet drops back to translateY(100%), parked below the
+     bottom of the screen, while the scrim fades from nothing, so what an
+     operator sees is the list behind it at full brightness with a strip of
+     something at the very bottom edge, and no way to close either. The order
+     sheet has guarded this with detailMounted since it was written; this is the
+     same guard. z-index puts the record ABOVE the order it was opened from
+     (46) and below the ask sheet its own Points and Wallet buttons open (49). */
+  const noAnim=state.custMounted?'animation:none;':'';
+  return `<div class="scrim" style="z-index:47;${noAnim}" onclick="APP.cmd('closeCustomer')"></div>
+    <div class="sheet" id="custSheet" style="top:46px;overflow:hidden;z-index:48;${noAnim}">
       <div style="flex:none;padding:8px 16px 16px;border-bottom:1px solid var(--border-default)">
         <div class="grabber"></div>
         <div style="display:flex;align-items:center;gap:16px">
@@ -5872,8 +5905,10 @@ function layers(){
   // state.stack.pop(), not pop(): the helper renders, and the caller here is
   // about to render anyway. One repaint per Back press.
   for(let i=0;i<state.stack.length;i++) L.push(()=>{ state.stack.pop(); });
-  if(state.custId) L.push(()=>{ state.custId=null; });
+  // Order first, record second: the record opens ON TOP of the order it was
+  // opened from, and Back closes this list in reverse — topmost first.
   if(state.detailId) L.push(()=>{ state.detailId=null; });
+  if(state.custId) L.push(()=>{ state.custId=null; });
   if(state.productSku) L.push(()=>{ state.productSku=null; });
   if(state.poId!=null) L.push(()=>{ state.poId=null; });
   if(state.chanSheet) L.push(()=>{ state.chanSheet=null; });
