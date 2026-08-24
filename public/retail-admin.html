@@ -7843,230 +7843,353 @@
   <!-- ─── AFFILIATE ─── -->
   <section id="tab-affiliate" data-feat="affiliate">
     <style>
-      /* ═══ AFFILIATE — Tacet-native rebuild (2026-07-11) ═══════════════════
-         Mockup: reference/affiliate-redesign-mockup.html (option A).
-         The page answers one question: who do I owe, and is this working?
-         Data first (left column: stats + ledger); rewards + share card sit in
-         a calm right rail. All child classes are af2-/afc- prefixed and the
-         inputs are scoped under #tab-affiliate so base retail-admin.css can't
-         leak in (see reference-tacet-section-class-collisions). Dusk appears
-         once: the "Tacet pays these out" automation note. Same API payloads &
-         input IDs as before — this is a re-layout, not a data change. */
+      /* ═══ AFFILIATE — built from scratch 2026-08-24 ═══════════════════════
+         Source of truth: the Tacet design-system project's "Affiliate — page
+         (A1·A2·A3)" specimen (affiliate-page.html / affiliate.css /
+         affiliate.js). The previous af2-/afc- two-column build was deleted
+         outright, not patched — none of its markup, CSS or JS survives.
 
-      /* paper ground bled over <main>'s padding — same trick #tab-flash uses */
+         Where the specimen and docs/tacet-desktop-patterns.md v4.6 disagree,
+         the rulebook wins (a mockup is not authority):
+           · no section label and no purpose line in the header (§1.7, both
+             retired) — the page opens on the title;
+           · the six-step type scale (13 · 15 · 18 · 24 · 30) and two weights
+             (400 · 500) replace the specimen's 12/14/16 and half-pixels;
+           · 8px space scale; 14px card radius, 8px control radius;
+           · hairlines not shadows, except the one permitted ambient shadow on
+             the pinned save bar, which floats over content.
+
+         Dusk budget: exactly ONE Dusk element on the page — "Save changes" in
+         the save bar. Every toggle is the merchant acting, so every toggle
+         uses the Graphite on-state (--td-text2), never Dusk, never Ink.
+
+         All child classes are afx- prefixed and every control is scoped under
+         #tab-affiliate so base retail-admin.css cannot leak in
+         (reference-tacet-section-class-collisions). */
+
       #tab-affiliate {
-        /* Render in Inter like the mockup (base admin body is IBM Plex, which
-           never matched). Remap BOTH sans + mono so codes/amounts are Inter too
-           — the mockup uses no typewriter monospace. Same trick as #tab-dashboard. */
+        /* Render in Inter like the rest of the Tacet layer — the base admin
+           body is IBM Plex, which this design was never drawn against. Both
+           sans AND mono are remapped: the specimen has no typewriter face, so
+           codes and amounts are Inter with tabular figures instead. */
         --f-sans: 'Inter', 'IBM Plex Sans SC', 'PingFang SC', 'Hiragino Sans GB', system-ui, sans-serif;
         --f-mono: 'Inter', 'IBM Plex Sans SC', 'PingFang SC', 'Hiragino Sans GB', system-ui, sans-serif;
+        --afx-ease: cubic-bezier(0.16, 1, 0.3, 1);
         font-family: var(--f-sans);
-        /* This section was authored against a --tacet-* token set that does NOT
-           exist in this app; alias it to the real Tacet-native --td-* layer so
-           badge tints, the dusk note, sage/amber colours actually resolve
-           (otherwise they fall back to transparent / inherited = washed out). */
-        --tacet-dusk: var(--td-dusk); --tacet-dusk-tint: var(--td-dusk-tint);
-        --tacet-sage: var(--td-sage); --tacet-sage-tint: var(--td-sage-tint); --tacet-sage-ink: var(--td-sage-ink);
-        --tacet-amber-tint: var(--td-amber-tint); --tacet-amber-ink: var(--td-amber-ink);
-        --tacet-brick: var(--td-brick); --tacet-brick-tint: var(--td-brick-tint);
-        --tacet-ink: var(--td-text); --tacet-paper: var(--td-paper);
-        /* warm cream ground like the mockup (--td-paper = #FBF9F4), not the
-           greyer --bg-app (#E8E5DC). */
+        font-size: 15px;
+        line-height: 1.6;
+        color: var(--td-text);
+        /* Warm paper ground bled over <main>'s padding, the same trick
+           #tab-dashboard uses, so the cards sit on cream and not on the
+           greyer --bg-app. */
         background: var(--td-paper);
         margin: calc(-1 * (var(--s6) + 56px)) calc(-1 * var(--s6)) calc(-1 * var(--s7));
-        padding: calc(var(--s6) + 56px) var(--s6) var(--s7);
+        padding: calc(var(--s6) + 56px) var(--s6) 160px;
         min-height: 100vh;
       }
+      #tab-affiliate .afx-page { max-width: 1120px; }
+      #tab-affiliate .afx-num { font-variant-numeric: tabular-nums; }
 
-      /* two-column shell */
-      #tab-affiliate .af2-wrap { display: grid; grid-template-columns: minmax(0,1fr) 360px; gap: 24px; align-items: start; margin-top: 20px; }
-      @media (max-width: 980px) { #tab-affiliate .af2-wrap { grid-template-columns: 1fr; } }
-      #tab-affiliate .af2-side { position: sticky; top: 72px; display: flex; flex-direction: column; gap: 16px; }
-      @media (max-width: 980px) { #tab-affiliate .af2-side { position: static; } }
+      /* ── motion (§1.5): everything settles, nothing pops ── */
+      @keyframes afxSettle { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+      @keyframes afxFlagIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+      @keyframes afxRise   { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+      @keyframes afxSpin   { to { transform: rotate(360deg); } }
+      @keyframes afxPulse  { 0%, 100% { opacity: .45; } 50% { opacity: .9; } }
 
-      /* stat row — thin, not boxed */
-      .af2-stats { display: flex; gap: 36px; flex-wrap: wrap; padding: 4px 2px 22px; }
-      .af2-stat .af2-sk { font-size: 12px; color: var(--text-3); margin-bottom: 6px; }
-      .af2-stat .af2-sv { font-size: 25px; font-weight: 500; line-height: 1; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
-      .af2-stat .af2-sd { font-size: 11.5px; color: var(--text-3); margin-top: 6px; }
+      /* ── cards ── */
+      #tab-affiliate .afx-card {
+        background: var(--td-surface); border: 1px solid var(--td-border);
+        border-radius: 14px; padding: 24px;
+      }
+      #tab-affiliate .afx-card + .afx-card { margin-top: 24px; }
+      #tab-affiliate .afx-card-t { font-size: 18px; font-weight: 500; letter-spacing: -.005em; }
+      #tab-affiliate .afx-card-lbl { font-size: 13px; font-weight: 500; color: var(--td-text2); margin-bottom: 16px; }
+      #tab-affiliate .afx-note { font-size: 13px; color: var(--td-text2); line-height: 1.55; text-wrap: pretty; margin-top: 16px; }
 
-      /* filters */
-      .af2-filters { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 16px; }
-      .af2-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
-      .af2-seg button { border: 0; background: transparent; font: 500 12.5px var(--f-sans); color: var(--text-2); padding: 6px 15px; cursor: pointer; transition: background .15s var(--ease-out), color .15s var(--ease-out); }
-      .af2-seg button:hover { color: var(--text-1); }
-      .af2-seg button.on { background: var(--tacet-ink); color: var(--tacet-paper); }
-      [data-theme="dark"] .af2-seg button.on { background: var(--tacet-paper); color: var(--tacet-ink); }
-      .af2-search { display: flex; align-items: center; gap: 8px; margin-left: auto; border: 1px solid var(--line); border-radius: var(--r-md); padding: 7px 12px; color: var(--text-3); background: var(--bg-input); }
-      #tab-affiliate .af2-search input { border: 0; outline: 0; background: transparent; font: 400 13px var(--f-sans); color: var(--text-1); width: 210px; }
-      .af2-refresh { display: inline-flex; align-items: center; gap: 7px; font: 500 13px var(--f-sans); color: var(--text-2); background: transparent; border: 1px solid var(--line); border-radius: var(--r-md); padding: 7px 13px; cursor: pointer; transition: border-color .2s var(--ease-out), color .2s var(--ease-out); }
-      .af2-refresh:hover { color: var(--text-1); border-color: var(--text-3); }
-      .af2-refresh svg { width: 15px; height: 15px; }
+      /* ── buttons ── */
+      #tab-affiliate .afx-btn {
+        font-family: inherit; font-size: 15px; font-weight: 500; line-height: 1;
+        border-radius: 8px; padding: 0 16px; height: 40px; cursor: pointer;
+        border: 1px solid transparent; white-space: nowrap;
+        display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+        transition: background .2s var(--afx-ease), border-color .2s var(--afx-ease), color .2s var(--afx-ease);
+      }
+      #tab-affiliate .afx-btn.sm { height: 32px; padding: 0 12px; font-size: 13px; }
+      /* The one Dusk element on the page. */
+      #tab-affiliate .afx-btn.dusk { background: var(--td-dusk); color: #fff; border-color: var(--td-dusk); }
+      #tab-affiliate .afx-btn.dusk:hover { background: var(--td-dusk-hi); border-color: var(--td-dusk-hi); }
+      #tab-affiliate .afx-btn.ink { background: var(--td-text); color: var(--td-paper); border-color: var(--td-text); }
+      #tab-affiliate .afx-btn.ink:hover { background: color-mix(in srgb, var(--td-text) 88%, var(--td-paper)); }
+      #tab-affiliate .afx-btn.sec { background: var(--td-surface); color: var(--td-text); border-color: var(--td-border); }
+      #tab-affiliate .afx-btn.sec:hover { border-color: var(--td-text2); }
+      #tab-affiliate .afx-btn.ghost { background: none; border-color: transparent; color: var(--td-text2); padding: 0 8px; }
+      #tab-affiliate .afx-btn.ghost:hover { color: var(--td-text); }
+      #tab-affiliate .afx-btn[disabled] { opacity: .45; cursor: not-allowed; pointer-events: none; }
+      #tab-affiliate .afx-btn svg { width: 16px; height: 16px; flex: none; }
+      #tab-affiliate .afx-spin {
+        width: 14px; height: 14px; border-radius: 999px; flex: none;
+        border: 2px solid currentColor; border-top-color: transparent;
+        animation: afxSpin .7s linear infinite;
+      }
 
-      /* ledger — a columnar table, matching the mockup */
-      .af2-card { background: var(--bg-pane); border: 1px solid var(--line); border-radius: var(--r-xl); overflow: hidden; }
-      .af2-tbl { width: 100%; border-collapse: collapse; }
-      .af2-tbl thead th { text-align: left; font: 500 11px var(--f-sans); letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); padding: 13px 16px; border-bottom: 1px solid var(--line); white-space: nowrap; }
-      .af2-tbl thead th.af2-r { text-align: right; }
-      .af2-tbl tbody td { padding: 14px 16px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
-      .af2-tbl tbody tr:last-child td { border-bottom: none; }
-      .af2-tbl tbody tr:hover { background: var(--bg-elev-1); }
-      .af2-flow { display: flex; align-items: center; gap: 12px; min-width: 0; }
-      .af2-av { width: 32px; height: 32px; border-radius: 50%; flex: none; background: var(--bg-elev-1); color: var(--text-3); display: grid; place-items: center; font: 500 12px var(--f-sans); }
-      .af2-who { min-width: 0; }
-      .af2-nm { font-size: 14px; font-weight: 500; line-height: 1.3; }
-      .af2-nm a { color: var(--text-1); text-decoration: none; }
-      .af2-nm a:hover { text-decoration: underline; text-underline-offset: 2px; }
-      .af2-nm .arw { color: var(--text-3); margin: 0 5px; }
-      .af2-sub { font-size: 12px; color: var(--text-3); margin-top: 3px; }
-      .af2-code { font-family: var(--f-mono); font-size: 12.5px; color: var(--text-2); white-space: nowrap; }
-      .af2-when { font-size: 12.5px; color: var(--text-3); white-space: nowrap; }
-      .af2-amt { font-family: var(--f-mono); font-size: 14px; font-weight: 600; color: var(--text-1); text-align: right; white-space: nowrap; }
-      .af2-amt.zero { color: var(--text-3); font-weight: 400; }
-      .af2-actcell { text-align: right; white-space: nowrap; }
-      .af2-acts { display: inline-flex; align-items: center; gap: 6px; opacity: 0; transition: opacity .15s var(--ease-out); }
-      .af2-tbl tbody tr:hover .af2-acts { opacity: 1; }
-      @media (hover: none) { .af2-acts { opacity: 1; } }
-      @media (max-width: 760px) { .af2-hide-sm { display: none; } }
+      /* ── switch — Graphite on-state, never Dusk (the merchant is acting) ── */
+      #tab-affiliate .afx-sw {
+        flex: 0 0 44px; width: 44px; height: 24px; border-radius: 999px;
+        background: var(--td-border); border: 0; position: relative; cursor: pointer;
+        transition: background .2s var(--afx-ease); margin-top: 4px; padding: 0;
+      }
+      #tab-affiliate .afx-sw::after {
+        content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px;
+        border-radius: 999px; background: #fff; box-shadow: 0 1px 2px rgba(17, 26, 43, .25);
+        transition: transform .2s var(--afx-ease);
+      }
+      #tab-affiliate .afx-sw.on { background: var(--td-text2); }
+      #tab-affiliate .afx-sw.on::after { transform: translateX(20px); }
+      #tab-affiliate .afx-sw[disabled] { opacity: .45; cursor: not-allowed; }
 
-      /* Tacet status badges (replace the old lime/black pills) */
-      .af2-badge { display: inline-flex; align-items: center; gap: 6px; font: 500 11.5px var(--f-sans); border-radius: 999px; padding: 3px 11px; white-space: nowrap; }
-      .af2-badge .bdot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
-      .af2-badge.wait { background: var(--tacet-amber-tint); color: var(--tacet-amber-ink); }
-      .af2-badge.done { background: var(--tacet-sage-tint); color: var(--tacet-sage-ink); }
-      .af2-badge.void { background: transparent; border: 1px solid var(--line); color: var(--text-3); }
+      /* ── program card ── */
+      #tab-affiliate .afx-prog { display: flex; align-items: flex-start; gap: 16px; }
+      #tab-affiliate .afx-prog-t { flex: 1; min-width: 0; }
+      #tab-affiliate .afx-prog-t .h { font-size: 18px; font-weight: 500; }
+      #tab-affiliate .afx-prog-t .c { font-size: 15px; color: var(--td-text2); margin-top: 4px; max-width: 64ch; text-wrap: pretty; }
+      #tab-affiliate .afx-prog-note {
+        font-size: 13px; color: var(--td-text2); margin-top: 16px;
+        padding-top: 16px; border-top: 1px solid var(--td-border); text-wrap: pretty;
+      }
 
-      .af2-empty { padding: 44px 20px; text-align: center; }
-      .af2-empty .lead { font-size: 14px; color: var(--text-1); margin-bottom: 4px; }
-      .af2-empty .sub { font-size: 12.5px; color: var(--text-3); }
+      /* ── stats ── */
+      #tab-affiliate .afx-stats { display: flex; gap: 16px; margin-top: 24px; flex-wrap: wrap; }
+      #tab-affiliate .afx-stat {
+        flex: 1 1 200px; min-width: 0; background: var(--td-surface);
+        border: 1px solid var(--td-border); border-radius: 14px; padding: 16px 24px;
+      }
+      #tab-affiliate .afx-stat .k { font-size: 13px; color: var(--td-text2); }
+      #tab-affiliate .afx-stat .v {
+        font-size: 30px; font-weight: 500; letter-spacing: -.01em; line-height: 1.15;
+        font-variant-numeric: tabular-nums; margin-top: 4px;
+      }
+      #tab-affiliate .afx-stat .s { font-size: 13px; color: var(--td-text2); margin-top: 4px; }
+      #tab-affiliate .afx-stat .skel {
+        height: 26px; width: 64%; border-radius: 8px; background: var(--td-raised);
+        margin: 8px 0 4px; animation: afxPulse 1.4s ease-in-out infinite;
+      }
 
-      /* ── right rail: the Dusk automation note (the ONE Dusk element) ── */
-      .af2-auto { display: flex; gap: 11px; align-items: flex-start; background: var(--tacet-dusk-tint); border-radius: var(--r-lg); padding: 14px 16px; }
-      .af2-auto .ld { width: 7px; height: 7px; border-radius: 50%; background: var(--tacet-dusk); margin-top: 5px; flex: none; animation: af2Breathe 2.4s var(--ease-out) infinite; }
-      .af2-auto .at { font-size: 13px; font-weight: 500; color: var(--tacet-dusk); }
-      .af2-auto .ad { font-size: 12px; color: var(--text-2); line-height: 1.5; margin-top: 3px; }
-      @keyframes af2Breathe { 0%,100% { opacity: 1; } 50% { opacity: .45; } }
-      @media (prefers-reduced-motion: reduce) { .af2-auto .ld { animation: none; } }
+      /* ── settings: one comfortable reading column ── */
+      #tab-affiliate .afx-col { max-width: 680px; margin-top: 24px; }
+      #tab-affiliate .afx-lead { font-size: 15px; margin-bottom: 16px; }
+      #tab-affiliate .afx-sent { font-size: 15px; line-height: 2.2; }
+      #tab-affiliate .afx-sent .who { color: var(--td-text2); }
+      #tab-affiliate .afx-restate { font-size: 15px; color: var(--td-text2); margin-top: 16px; }
+      #tab-affiliate .afx-restate b { color: var(--td-text); font-weight: 500; }
 
-      /* ── settings + share cards ── */
-      .afc { background: var(--bg-pane); border: 1px solid var(--line); border-radius: var(--r-xl); padding: 22px; }
-      .afc-h { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
-      .afc-sub { font-size: 12px; color: var(--text-3); margin-bottom: 16px; line-height: 1.5; }
-      .afc-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 11px 0; border-top: 1px solid var(--line-soft); }
-      .afc-row:first-of-type { border-top: none; padding-top: 0; }
-      .afc-label { font-size: 13px; color: var(--text-1); }
-      .afc-q { display: inline-grid; place-items: center; width: 15px; height: 15px; border-radius: 50%; border: 1px solid var(--line); color: var(--text-3); font-size: 10px; cursor: help; vertical-align: middle; margin-left: 4px; }
-      .afc-affix { display: inline-flex; align-items: center; gap: 6px; color: var(--text-3); font-family: var(--f-mono); font-size: 12.5px; }
-      #tab-affiliate .afc-inp { width: 76px; text-align: right; font: 400 13.5px var(--f-mono); color: var(--text-1); background: var(--bg-input); border: 1px solid var(--line); border-radius: var(--r-md); padding: 7px 10px; outline: none; transition: border-color .2s var(--ease-out); }
-      #tab-affiliate .afc-inp:focus { border-color: var(--tacet-dusk); }
-      #tab-affiliate .afc-inp.wide { width: 122px; text-align: left; text-transform: uppercase; letter-spacing: .04em; }
+      /* inline amount field, sits in the sentence */
+      #tab-affiliate .afx-amt {
+        display: inline-flex; align-items: center; height: 32px;
+        border: 1px solid var(--td-border); border-radius: 8px;
+        background: var(--td-surface); padding: 0 4px 0 8px;
+        vertical-align: middle; margin: 0 4px;
+        transition: border-color .2s var(--afx-ease);
+      }
+      #tab-affiliate .afx-amt:focus-within { border-color: var(--td-text2); }
+      #tab-affiliate .afx-amt .cur { color: var(--td-text2); font-size: 13px; }
+      #tab-affiliate .afx-amt.suffix .cur { order: 2; }
+      #tab-affiliate .afx-amt input {
+        width: 48px; border: 0; outline: none; background: none; font-family: inherit;
+        font-size: 15px; font-weight: 500; color: var(--td-text);
+        font-variant-numeric: tabular-nums; padding: 0 4px; -moz-appearance: textfield;
+      }
+      #tab-affiliate .afx-amt input::-webkit-outer-spin-button,
+      #tab-affiliate .afx-amt input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+      #tab-affiliate .afx-amt.wide input { width: 128px; text-transform: uppercase; letter-spacing: .04em; font-weight: 400; }
 
-      .afc-share .afc-sub { margin-bottom: 12px; }
-      #af-share-preview img { width: 100%; aspect-ratio: 5 / 4; object-fit: cover; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--bg-elev-1); display: block; }
-      .afc-noimg { aspect-ratio: 5 / 4; border: 1px dashed var(--line); border-radius: var(--r-md); display: grid; place-items: center; text-align: center; padding: 20px; color: var(--text-3); font-size: 12px; line-height: 1.5; }
-      /* designed default preview (matches the mockup) when no custom picture set */
-      .afc-card { aspect-ratio: 5 / 4; border-radius: var(--r-md); border: 1px solid var(--line); background: linear-gradient(160deg, #EEEBE2, var(--bg-elev-1)); display: grid; place-items: center; text-align: center; padding: 20px; }
-      [data-theme="dark"] .afc-card { background: linear-gradient(160deg, #2A3242, #222937); }
-      .afc-card .cw { font-family: 'Fraunces', Georgia, serif; font-weight: 300; font-size: 22px; letter-spacing: .18em; color: var(--text-1); }
-      .afc-card .cl { font-size: 12px; color: var(--text-2); margin-top: 8px; }
-      .afc-card .cc { margin-top: 14px; font-size: 12.5px; color: var(--text-1); border: 1px dashed var(--text-3); border-radius: 6px; padding: 4px 12px; letter-spacing: .06em; font-family: var(--f-mono); display: inline-block; }
-      .afc-note { font-size: 11.5px; color: var(--text-3); margin-top: 8px; line-height: 1.5; }
-      .afc-srow { display: flex; gap: 8px; margin-top: 12px; }
+      /* opt-in block (lifetime share) */
+      #tab-affiliate .afx-optin { display: flex; align-items: flex-start; gap: 16px; }
+      #tab-affiliate .afx-optin-t { flex: 1; min-width: 0; }
+      #tab-affiliate .afx-optin-t .h { font-size: 18px; font-weight: 500; }
+      #tab-affiliate .afx-optin-t .s { font-size: 13px; color: var(--td-text2); margin-top: 4px; text-wrap: pretty; }
+      #tab-affiliate .afx-optin-body {
+        margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--td-border);
+        font-size: 15px; line-height: 2.2;
+      }
+      #tab-affiliate .afx-confirm {
+        margin-top: 16px; padding: 16px; border: 1px solid var(--td-border);
+        border-radius: 8px; background: var(--td-raised);
+        animation: afxFlagIn .2s var(--afx-ease) 1;
+      }
+      #tab-affiliate .afx-confirm p { font-size: 15px; line-height: 1.5; margin: 0 0 16px; text-wrap: pretty; }
+      #tab-affiliate .afx-confirm .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+      #tab-affiliate .afx-reason {
+        flex: 1; min-width: 180px; height: 32px; border: 1px solid var(--td-border);
+        border-radius: 8px; background: var(--td-surface); padding: 0 8px;
+        font-family: inherit; font-size: 13px; color: var(--td-text); outline: none;
+      }
+      #tab-affiliate .afx-reason:focus { border-color: var(--td-text2); }
 
-      /* rail buttons */
-      .af2-btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; font: 500 13px var(--f-sans); border-radius: var(--r-md); border: 1px solid var(--line); background: var(--bg-pane); color: var(--text-1); padding: 8px 14px; cursor: pointer; transition: border-color .2s var(--ease-out), background .2s var(--ease-out); white-space: nowrap; }
-      .af2-btn:hover { border-color: var(--text-3); }
-      .af2-btn.ghost { border-color: transparent; color: var(--text-2); }
-      .af2-btn.ghost:hover { color: var(--text-1); background: var(--bg-elev-1); }
-      .af2-btn.sm { padding: 5px 12px; font-size: 12.5px; }
-      .af2-save { width: 100%; background: var(--text-1); border-color: var(--text-1); color: var(--bg-app); padding: 10px 16px; }
-      .af2-save:hover { background: #24304A; border-color: #24304A; color: var(--paper, #FBF9F4); }
-      [data-theme="dark"] #tab-affiliate .af2-save:hover { background: #EAE7DF; border-color: #EAE7DF; }
+      /* share picture */
+      #tab-affiliate .afx-share-row { display: flex; gap: 16px; align-items: flex-start; }
+      #tab-affiliate .afx-share-thumb {
+        flex: 0 0 152px; width: 152px; aspect-ratio: 5 / 4; border-radius: 8px;
+        border: 1px solid var(--td-border); overflow: hidden; background: var(--td-raised);
+        display: grid; place-items: center; text-align: center; padding: 8px;
+      }
+      #tab-affiliate .afx-share-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      #tab-affiliate .afx-share-thumb .ph { font-size: 13px; color: var(--td-text2); line-height: 1.5; }
+      #tab-affiliate .afx-share-ctl { flex: 1; min-width: 0; }
+      #tab-affiliate .afx-share-actions { display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+
+      /* ── pills ── */
+      #tab-affiliate .afx-pill {
+        display: inline-flex; align-items: center; gap: 4px; height: 24px; padding: 0 8px;
+        border-radius: 999px; font-size: 13px; font-weight: 500; white-space: nowrap;
+      }
+      #tab-affiliate .afx-pill.neutral { background: var(--td-raised); color: var(--td-text2); border: 1px solid var(--td-border); }
+      #tab-affiliate .afx-pill.sage  { background: var(--td-sage-tint);  color: var(--td-sage-ink); }
+      #tab-affiliate .afx-pill.amber { background: var(--td-amber-tint); color: var(--td-amber-ink); }
+      #tab-affiliate .afx-pill.brick { background: var(--td-brick-tint); color: var(--td-brick-ink); }
+
+      /* ── ledger ── */
+      #tab-affiliate .afx-ledger { margin-top: 32px; }
+      #tab-affiliate .afx-ledger-h { font-size: 18px; font-weight: 500; margin-bottom: 16px; }
+      #tab-affiliate .afx-bar { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
+      #tab-affiliate .afx-seg {
+        display: inline-flex; border: 1px solid var(--td-border); border-radius: 8px;
+        background: var(--td-surface); padding: 4px; gap: 4px;
+      }
+      #tab-affiliate .afx-seg button {
+        font-family: inherit; font-size: 13px; font-weight: 500; color: var(--td-text2);
+        background: none; border: 0; border-radius: 8px; padding: 0 12px; height: 32px;
+        cursor: pointer; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap;
+        transition: background .2s var(--afx-ease), color .2s var(--afx-ease);
+      }
+      #tab-affiliate .afx-seg button:hover { color: var(--td-text); }
+      #tab-affiliate .afx-seg button.on { background: var(--td-text); color: var(--td-paper); }
+      #tab-affiliate .afx-seg .c { font-variant-numeric: tabular-nums; font-weight: 400; opacity: .72; }
+      #tab-affiliate .afx-bar-sp { flex: 1; }
+      #tab-affiliate .afx-search {
+        flex: 0 0 264px; display: flex; align-items: center; gap: 8px; height: 40px;
+        padding: 0 12px; border: 1px solid var(--td-border); border-radius: 8px;
+        background: var(--td-surface); transition: border-color .2s var(--afx-ease);
+      }
+      #tab-affiliate .afx-search:focus-within { border-color: var(--td-text2); }
+      #tab-affiliate .afx-search svg { width: 16px; height: 16px; color: var(--td-text2); flex: none; }
+      #tab-affiliate .afx-search input {
+        flex: 1; min-width: 0; border: 0; outline: none; background: none;
+        font-family: inherit; font-size: 15px; color: var(--td-text);
+      }
+      #tab-affiliate .afx-search input::placeholder { color: var(--td-text2); }
+
+      #tab-affiliate .afx-tblcard {
+        background: var(--td-surface); border: 1px solid var(--td-border);
+        border-radius: 14px; overflow: hidden;
+      }
+      /* A reload holds the rows it already has, dimmed, instead of blinking the
+         table out from under the operator on every keystroke. */
+      #tab-affiliate .afx-tblcard.afx-stale { opacity: .5; transition: opacity .2s var(--afx-ease); }
+      #tab-affiliate .afx-tblwrap { overflow-x: auto; }
+      #tab-affiliate .afx-tbl { width: 100%; border-collapse: collapse; font-size: 15px; min-width: 840px; }
+      /* Cream header on white rows (§1.4). Single-line labels, no sub-labels. */
+      #tab-affiliate .afx-tbl thead th {
+        background: var(--td-raised); text-align: left; font-size: 13px; font-weight: 500;
+        color: var(--td-text2); padding: 12px 16px; border-bottom: 1px solid var(--td-border);
+        white-space: nowrap; text-transform: none; letter-spacing: normal;
+      }
+      #tab-affiliate .afx-tbl th.num, #tab-affiliate .afx-tbl td.num { text-align: right; font-variant-numeric: tabular-nums; }
+      #tab-affiliate .afx-tbl th.act, #tab-affiliate .afx-tbl td.act { text-align: right; }
+      #tab-affiliate .afx-tbl tbody tr { border-bottom: 1px solid var(--td-border); }
+      #tab-affiliate .afx-tbl tbody tr:last-child { border-bottom: 0; }
+      #tab-affiliate .afx-tbl tbody tr:hover { background: rgba(var(--td-heat-rgb), .03); }
+      #tab-affiliate .afx-tbl td { padding: 12px 16px; vertical-align: middle; color: var(--td-text); white-space: nowrap; }
+      #tab-affiliate .afx-tbl a {
+        color: var(--td-text); text-decoration: underline;
+        text-decoration-color: color-mix(in srgb, var(--td-text) 45%, transparent);
+        text-underline-offset: 2px; cursor: pointer;
+      }
+      #tab-affiliate .afx-tbl a:hover { text-decoration-color: var(--td-text); }
+      #tab-affiliate .afx-st { display: inline-flex; align-items: center; gap: 8px; }
+      #tab-affiliate .afx-dim { color: var(--td-text2); }
+      #tab-affiliate .afx-rowconfirm { padding: 16px; }
+      #tab-affiliate .afx-rowconfirm .in {
+        border: 1px solid var(--td-border); border-radius: 8px; background: var(--td-raised);
+        padding: 16px; animation: afxFlagIn .2s var(--afx-ease) 1; white-space: normal;
+      }
+      #tab-affiliate .afx-rowconfirm p { font-size: 15px; line-height: 1.5; margin: 0 0 16px; text-wrap: pretty; }
+      #tab-affiliate .afx-rowconfirm .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+      #tab-affiliate .afx-pagi {
+        display: flex; align-items: center; gap: 16px; margin-top: 16px;
+        font-size: 13px; color: var(--td-text2);
+      }
+      #tab-affiliate .afx-pagi .sp { flex: 1; }
+      #tab-affiliate .afx-pnav {
+        width: 32px; height: 32px; display: grid; place-items: center;
+        border: 1px solid var(--td-border); border-radius: 8px;
+        background: var(--td-surface); color: var(--td-text); cursor: pointer;
+        transition: border-color .2s var(--afx-ease);
+      }
+      #tab-affiliate .afx-pnav:hover { border-color: var(--td-text2); }
+      #tab-affiliate .afx-pnav[disabled] { opacity: .4; cursor: not-allowed; }
+      #tab-affiliate .afx-pnav svg { width: 16px; height: 16px; }
+
+      /* ── empty / error states ── */
+      #tab-affiliate .afx-state { padding: 64px 24px; text-align: center; max-width: 480px; margin: 0 auto; }
+      #tab-affiliate .afx-state .wave { color: var(--td-text2); opacity: .5; width: 104px; margin: 0 auto 16px; display: block; }
+      #tab-affiliate .afx-state .ei {
+        width: 48px; height: 48px; border-radius: 999px; background: var(--td-amber-tint);
+        color: var(--td-amber-ink); display: grid; place-items: center; margin: 0 auto 16px;
+      }
+      #tab-affiliate .afx-state .ei svg { width: 24px; height: 24px; }
+      #tab-affiliate .afx-state h3 { font-size: 18px; font-weight: 500; margin: 0 0 8px; text-transform: none; letter-spacing: normal; color: var(--td-text); }
+      #tab-affiliate .afx-state p { font-size: 15px; color: var(--td-text2); line-height: 1.6; margin: 0; text-wrap: pretty; }
+      #tab-affiliate .afx-state .afx-btn { margin-top: 16px; }
+
+      /* ── save bar — pinned to the bottom of the content column ── */
+      #tab-affiliate .afx-savebar {
+        position: fixed; left: var(--rail-w); right: 0; bottom: 0; z-index: 11;
+        background: var(--td-surface); border-top: 1px solid var(--td-border);
+        /* The one permitted ambient shadow (§1.4) — this floats over content. */
+        box-shadow: 0 1px 2px rgba(17, 26, 43, .05), 0 4px 16px rgba(17, 26, 43, .04);
+        animation: afxRise .35s var(--afx-ease) 1;
+      }
+      #tab-affiliate .afx-savebar-in { max-width: 1120px; padding: 16px var(--s6); }
+      #tab-affiliate .afx-savebar-say { font-size: 13px; color: var(--td-text2); margin-bottom: 8px; text-wrap: pretty; }
+      #tab-affiliate .afx-savebar-say.bad { color: var(--td-brick-ink); }
+      #tab-affiliate .afx-savebar-main { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+      #tab-affiliate .afx-savebar-msg { flex: 1; min-width: 200px; font-size: 15px; color: var(--td-text); }
+      #tab-affiliate .afx-savebar-msg b { font-weight: 500; }
+
+      #tab-affiliate .afx-page > .td-head { animation: afxSettle .35s var(--afx-ease) 1; }
+
+      @media (max-width: 720px) {
+        #tab-affiliate .afx-savebar { left: 0; }
+        #tab-affiliate .afx-savebar-in { padding: 16px; }
+        #tab-affiliate .afx-share-row { flex-direction: column; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #tab-affiliate .afx-page > .td-head,
+        #tab-affiliate .afx-savebar,
+        #tab-affiliate .afx-confirm,
+        #tab-affiliate .afx-rowconfirm .in { animation: none; }
+        #tab-affiliate .afx-stat .skel { animation: none; }
+      }
     </style>
 
-    <div class="td-head">
-      <div class="td-greet-col">
-        <h2 style="margin: 0">Refer a friend · 推荐好友</h2>
-        <p class="td-greet-sub">Customers share a personal code. When a friend places their first paid order, both sides are rewarded — automatically. You only step in to void or adjust. · 顾客分享自己的专属推荐码。当好友完成首笔付费订单后,双方自动获得奖励。您只需在需要时作废或调整。</p>
-      </div>
+    <!-- §1.7 header: the title alone. No section label, no purpose line, and no
+         status line — Affiliate has no queue of work waiting on the operator,
+         so there is no honest number to put there (the Customers precedent). -->
+    <div class="afx-page">
+      <div class="td-head"><div class="td-hd-col"><h2>Affiliate · 分销</h2></div></div>
+
+      <!-- Every region below is rendered by afx* in retail-admin/10-extras.js and
+           carries its own EN/中文 through cuT, hence data-no-i18n. -->
+      <div id="afx-program"  data-no-i18n></div>
+      <div id="afx-stats"    data-no-i18n></div>
+      <div id="afx-settings" data-no-i18n></div>
+      <div id="afx-ledger"   data-no-i18n></div>
     </div>
 
-    <div class="af2-wrap">
-      <!-- LEFT: the data you came for -->
-      <div class="af2-main">
-        <div class="af2-stats" id="af-stats" data-no-i18n></div>
-
-        <div class="af2-filters">
-          <div class="af2-seg" id="af-seg">
-            <button data-st="" class="on" onclick="afSetStatus('')">All · 全部</button>
-            <button data-st="joined" onclick="afSetStatus('joined')">Waiting · 待首单</button>
-            <button data-st="ordered" onclick="afSetStatus('ordered')">Rewarded · 已奖励</button>
-            <button data-st="void" onclick="afSetStatus('void')">Voided · 已作废</button>
-          </div>
-          <input type="hidden" id="af-status" value="">
-          <label class="af2-search">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-            <input type="text" id="af-q" placeholder="Name, phone or code · 姓名、电话或邀请码" oninput="afDebouncedLoad()">
-          </label>
-          <button class="af2-refresh" onclick="afLoadReferrals()">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
-            Refresh · 刷新
-          </button>
-        </div>
-
-        <div class="af2-card" id="af-ledger" data-no-i18n></div>
-      </div>
-
-      <!-- RIGHT: automation note + settings + share card -->
-      <aside class="af2-side">
-        <div class="af2-auto">
-          <span class="ld"></span>
-          <div>
-            <div class="at">Tacet pays these out · 由 Tacet 自动发放</div>
-            <div class="ad">Rewards land in the referrer's wallet the moment a friend's first order is marked paid. · 好友首单付款后,奖励即刻入推荐人钱包。</div>
-          </div>
-        </div>
-
-        <div class="afc">
-          <div class="afc-h">Rewards · 奖励</div>
-          <div class="afc-sub">Applies while the program is on. Turn it on or off in Settings → Features. · 计划启用时生效。开关位于“设置 → 功能”。</div>
-
-          <div class="afc-row">
-            <span class="afc-label">For the referrer · 给推荐人</span>
-            <span class="afc-affix">¥<input type="number" id="af-reward" class="afc-inp" placeholder="30" min="0" step="0.5"></span>
-          </div>
-          <div class="afc-row">
-            <span class="afc-label">For the friend · 给好友</span>
-            <span class="afc-affix">¥<input type="number" id="af-reward-referee" class="afc-inp" placeholder="0" min="0" step="0.5"></span>
-          </div>
-          <div class="afc-row">
-            <span class="afc-label">Lifetime share · 长期分成<span class="afc-q" title="A cut of every repeat order the friend places after their first — credited to the referrer. Set 0 to turn off. · 好友复购订单的分成比例,存入推荐人钱包。设 0 关闭。">i</span></span>
-            <span class="afc-affix"><input type="number" id="af-lifetime-rate" class="afc-inp" placeholder="0" min="0" max="50" step="0.5" style="width: 56px;">%</span>
-          </div>
-          <div class="afc-row">
-            <span class="afc-label">Share lasts · 分成持续</span>
-            <span class="afc-affix"><input type="number" id="af-lifetime-months" class="afc-inp" placeholder="12" min="0" max="120" step="1" style="width: 56px;">mo · 月</span>
-          </div>
-          <div class="afc-row">
-            <span class="afc-label">Code prefix · 邀请码前缀</span>
-            <input type="text" id="af-prefix" class="afc-inp wide" placeholder="ROOTS-" maxlength="12">
-          </div>
-        </div>
-
-        <div class="afc afc-share">
-          <div class="afc-h">Share card · 分享卡片</div>
-          <div class="afc-sub">The picture a customer sees when forwarding their invite in WeChat. Wide shape (5:4). The ¥-amount and code are added as text — leave them out of the picture. · 顾客在微信转发邀请时看到的图片。建议 5:4。金额与邀请码会自动叠加为文字,请勿放进图片。</div>
-          <input type="hidden" id="af-share-image">
-          <div id="af-share-preview"></div>
-          <div class="afc-srow">
-            <button class="af2-btn sm" onclick="document.getElementById('af-share-file').click()">Replace picture · 更换图片</button>
-            <input type="file" id="af-share-file" accept="image/png,image/jpeg" style="display: none;">
-          </div>
-        </div>
-
-        <button class="af2-btn af2-save" onclick="afSaveSettings()">Save changes · 保存更改</button>
-      </aside>
-    </div>
+    <input type="file" id="afx-share-file" accept="image/png,image/jpeg" style="display: none;">
+    <div id="afx-savebar" data-no-i18n></div>
   </section>
 
   <!-- ─── REVIEWS ─── -->
