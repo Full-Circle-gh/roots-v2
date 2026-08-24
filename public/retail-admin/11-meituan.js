@@ -427,6 +427,22 @@
     return !!(p.stores || {})[_mtStore] || mtNeedsAttention(p);
   }
 
+  // ── Listing-name autocomplete ─────────────────────────────────────
+  // Without this the delivery-name field is blind free text: the datalist it
+  // points at only exists after a Match-names run or a Paste in the SAME
+  // session. Whatever the last scrape cached is already on the server, so read
+  // it on load (GET only, no scrape) and the picker is there from the start.
+  async function mtLoadListingsCache() {
+    try {
+      const r = await api('/api/retail-admin/meituan/listings');
+      _listings    = (r && r.listings) || {};
+      _listingSkus = (r && r.skus) || {};
+    } catch (e) { /* leave whatever _listings already had */ }
+    mtRenderListingDatalists();
+  }
+
+  // One <datalist> per store (their catalogues differ) — datalists have no
+  // visible presence, so they live in a hidden container appended once.
   function mtRenderListingDatalists() {
     let host = document.getElementById('mt-listings-datalists');
     if (!host) {
