@@ -20,9 +20,16 @@
 // scp, no restart: the browser layer notices a newer session file on its own.
 "use strict";
 const http = require("http");
+const fs = require("fs");
 const { spawn } = require("child_process");
 
 const REPO = "/root/roots-v2";
+// Where a launched login's own output goes. It used to go to /dev/null, which
+// is fine right up until a login does not appear and there is nothing whatever
+// to look at: the page reports success as soon as spawn() returns, so a child
+// that dies a second later is indistinguishable from one that worked. Beside
+// the pm2 logs, because that is where somebody debugging this already is.
+const LOG_FILE = "/root/.pm2/logs/ops-screen-login.log";
 
 // Every login this screen can start. Adding a channel is one entry: the script
 // must be a HEADED login that self-closes and writes its own session file.
@@ -47,18 +54,44 @@ function launch(id) {
     const mins = Math.round((Date.now() - running.startedAt) / 60000);
     return { ok: false, msg: `${running.label} is already open (${mins} min ago). Finish or wait for it to close.` };
   }
-  const child = spawn("node", [job.script, ...job.args], {
+  // Keep the child's output. Falls back to discarding it rather than refusing to
+  // launch — a login with no log beats no login.
+  let out = "ignore";
+  try {
+    out = fs.openSync(LOG_FILE, "a");
+    fs.writeSync(out, `\n=== ${new Date().toISOString()} ${id} (${job.script} ${job.args.join(" ")})\n`);
+  } catch (e) {
+    console.error(`[ops-screen] cannot open ${LOG_FILE} (${e.message}) — launching without a log`);
+  }
+
+  // process.execPath, not "node": spawn() would resolve that off PATH, and a pm2
+  // daemon's PATH is whatever shell started it — often a different, older Node
+  // than the one an operator gets interactively. The script would then die on
+  // syntax it cannot parse, instantly and (before the log above) invisibly. This
+  // is by definition the interpreter already running this server.
+  const child = spawn(process.execPath, [job.script, ...job.args], {
     cwd: REPO,
     env: { ...process.env, DISPLAY: ":99" },
     detached: true,
-    stdio: "ignore",
+    stdio: out === "ignore" ? "ignore" : ["ignore", out, out],
   });
-  // A ChildProcess 'error' (missing node, REPO path gone) with no listener is an
-  // uncaught exception — it would take this control server down with it, and the
-  // one thing it must never do is be unavailable when a channel needs a re-login.
+  // A ChildProcess 'error' (REPO path gone, interpreter unusable) with no listener
+  // is an uncaught exception — it would take this control server down with it, and
+  // the one thing it must never do is be unavailable when a channel needs a re-login.
+  const release = () => { if (running && running.pid === child.pid) running = null; };
   child.on("error", (e) => {
     console.error(`[ops-screen] launch failed for ${id}: ${e.message}`);
-    if (running && running.id === id) running = null;
+    release();
+  });
+  // And free the screen the moment the login is actually over. Without this the
+  // lock ran for its full seven minutes no matter what, so a child that died two
+  // seconds in left the operator locked out of retrying — while the page went on
+  // insisting a window was open, which is the worst possible thing to be told
+  // when you are standing there looking at an empty screen.
+  child.on("exit", (code, signal) => {
+    if (out !== "ignore") { try { fs.closeSync(out); } catch (_) { /* already gone */ } }
+    if (code !== 0) console.error(`[ops-screen] ${id} exited ${signal || code} — see ${LOG_FILE}`);
+    release();
   });
   child.unref();
   running = { id, label: job.label, pid: child.pid, startedAt: Date.now() };
